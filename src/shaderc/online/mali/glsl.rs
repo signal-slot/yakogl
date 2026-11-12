@@ -81,6 +81,9 @@ struct Tree<'m, 'a> {
     /// The position of each value's instruction in `m.nodes`.
     pos: &'a mut [u32],
     changed: bool,
+    /// The stage is a fragment shader whose float default is highp
+    /// (mod.rs `FsPrecision::highp`).
+    highp_fragment: bool,
 }
 
 /// A child of an expression record in [`dsw`]: an expression or a leaf.
@@ -128,7 +131,11 @@ impl<'s> Shape<'s> {
 /// Run the passes on `m`: the run-time index trees ([`ilt_trees`]), then
 /// GLSL's two. `None`: they change nothing (and refuse nothing);
 /// otherwise the stage's instructions and their shape after them.
-pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<Rewritten<'s>>, MaliError> {
+pub(super) fn passes<'s>(
+    m: &Module<'_>,
+    highp_fragment: bool,
+    scratch: &Arena<'s>,
+) -> Result<Option<Rewritten<'s>>, MaliError> {
     let trees = ilt_trees(m, scratch)?;
     let shaped;
     let m = match trees {
@@ -148,7 +155,7 @@ pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<R
     let uses = scratch.alloc_filled(n, Use::None).map_err(oom)?;
     let locals = scratch.alloc_filled(m.locals.len(), (0u16, 0u16, 0u16)).map_err(oom)?;
     let pos = scratch.alloc_filled(n, u32::MAX).map_err(oom)?;
-    let mut t = Tree { m, instrs, comps, uses, locals, pos, changed: false };
+    let mut t = Tree { m, instrs, comps, uses, locals, pos, changed: false, highp_fragment };
     t.count();
     t.rebalance()?;
     t.reassociate()?;
@@ -1584,7 +1591,20 @@ impl Tree<'_, '_> {
             let w = usize::from(self.comps[p]).clamp(1, 4);
             let swizzle: [u8; 4] = core::array::from_fn(|i| c.swizzle[s[k].swizzle[i] as usize & 3]);
             let IrOp::ConstF32(v) = self.instrs[c.val.0 as usize] else { continue };
-            let one = swizzle[..w].iter().all(|&l| v[l as usize & 3] == 0x3f80_0000);
+            let read = &swizzle[..w];
+            let one = read.iter().all(|&l| v[l as usize & 3] == 0x3f80_0000);
+            /* a vector whose lanes differ and one of which is 0.0 or 1.0
+             * (`x * -vec2(1.0, 2.0)`, `x * -vec2(0.0, 2.0)`) in a highp
+             * fragment shader: Mesa folds those lanes away (`FADD.f32 r1,
+             * r1^, r1^` for the 2.0 lane alone, a pushed constant for the
+             * 0.0 lane), ours keeps the product (negmul_highp_lanes*). The
+             * same vectors are byte-equal in a mediump fragment shader and
+             * in the vertex stage (negmul_mediump_lanes*, negmul_vs_lanes) */
+            let splat = read.iter().all(|&l| v[l as usize & 3] == v[read[0] as usize & 3]);
+            let folded_lane = read.iter().any(|&l| matches!(v[l as usize & 3] & !F32_NEG_ZERO, 0 | 0x3f80_0000));
+            if self.highp_fragment && !splat && folded_lane {
+                return Err(MaliError::ArithConstant);
+            }
             let other = s[1 - k];
             /* `is_used_by_non_fsat` (nir_search_helpers.h:477-492): read by
              * `fsat` alone. The rule still fires in that pass, as the
@@ -1819,6 +1839,9 @@ impl Tree<'_, '_> {
         }
     }
 }
+
+/// The bits of `-0.0` in fp32.
+const F32_NEG_ZERO: u32 = 0x8000_0000;
 
 /// [`remap_srcs`] with a mutable closure.
 fn remap_srcs_mut(op: &mut IrOp, f: &mut impl FnMut(&mut Src)) {

@@ -6474,6 +6474,29 @@ fn a_negated_literal_product_read_by_fsat_alone_is_left_as_written() {
     }
 }
 
+/// A negated vector literal whose lanes differ and one of which is 0.0 or
+/// 1.0 (`a2 * -vec2(1.0, 2.0)`, `a2 * -vec2(0.0, 2.0)`): in a highp
+/// fragment shader Mesa folds those lanes and ours does not (other words at
+/// 72d17d74f and on main), refused ([`MaliError::ArithConstant`]); in a
+/// mediump fragment shader and in the vertex stage the rewrite is
+/// byte-equal, as is a highp vector without such a lane.
+#[test]
+fn a_negated_vector_literal_with_a_lane_mesa_folds_is_refused_where_it_differs() {
+    for (name, _, fs, json) in [pair!("negmul_highp_lanes_one"), pair!("negmul_highp_lanes_zero")] {
+        assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::ArithConstant, "{name}");
+    }
+    for (name, vs, fs, json) in [
+        pair!("negmul_mediump_lanes_one"),
+        pair!("negmul_mediump_lanes_zero"),
+        pair!("negmul_vs_lanes"),
+        pair!("negmul_highp_vector"),
+    ] {
+        let r = std::panic::catch_unwind(|| check_linked(vs, fs, json));
+        assert!(r.is_ok(), "{name}");
+    }
+}
+
 /// A mediump fragment shader's matrix uniform is refused before its block
 /// is laid out (select.rs `UboLayout::fs16` takes floats, vectors, vec4
 /// arrays and ints), so the layout's `split` mark for a matrix, which it
@@ -6707,7 +6730,7 @@ fn glsl_passes_of(stage: u32, src: &str) -> Vec<ir::Op> {
     let _k = store::test_keep();
     store::with_scratch(|s| {
         let l = codegen::lower_source(stage, src.as_bytes(), &[], s).expect("the front end takes it");
-        match super::glsl::passes(&l.module, s).expect("the passes take it") {
+        match super::glsl::passes(&l.module, false, s).expect("the passes take it") {
             Some((instrs, _)) => instrs.to_vec(),
             None => l.module.instrs.to_vec(),
         }
@@ -6752,12 +6775,13 @@ fn glsl_rebalances_the_trees_it_takes() {
         let whole = "precision highp float; uniform float a, b, c, d; void main(){ float s = a + b + c + d; \
                      gl_FragColor = vec4(s, s, s, 1.0); }";
         let l = codegen::lower_source(SHC_STAGE_FRAGMENT, whole.as_bytes(), &[], s).expect("the front end");
-        assert!(super::glsl::passes(&l.module, s).expect("the passes").is_none());
+        assert!(super::glsl::passes(&l.module, false, s).expect("the passes").is_none());
         /* two constants: no rebalance; the swap makes them meet */
         let two = "precision highp float; uniform float a, b; void main(){ float s = (a + 1.0 + b + 2.0) * a; \
                    gl_FragColor = vec4(s, s, s, 1.0); }";
         let l = codegen::lower_source(SHC_STAGE_FRAGMENT, two.as_bytes(), &[], s).expect("the front end");
-        let (instrs, _) = super::glsl::passes(&l.module, s).expect("the passes").expect("the constants reassociated");
+        let (instrs, _) =
+            super::glsl::passes(&l.module, false, s).expect("the passes").expect("the constants reassociated");
         assert!(instrs.iter().any(|o| *o == ir::Op::ConstF32([3.0f32.to_bits(); 4])), "{instrs:?}");
     })
     .expect("the scratch arena is free");
