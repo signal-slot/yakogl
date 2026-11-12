@@ -343,6 +343,19 @@ Mali back end, not in the shared front end.
 - The instruction stream, `comps`, `nodes` and the declarations do not
   change. The new tables are read by `mali/` only; `gpu-v3d`,
   `gpu-vivante`, `gpu-powervr` and the offline table never read them.
+- The widths step D.1 learned (a built-in's steps, an increment's sum, a
+  conversion) go to a table of their own, `Module::lanes`, read through
+  `Module::lanes_of`: `comps` keeps what the other back ends read
+  before, because the PowerVR selector computes the lanes `comps` says
+  and recording them in `comps` moved its words (`pow` of a `const`
+  exponent; lower.rs `powervr_word_pins`). `lanes` is exact where a step
+  reads a one-lane value lane for lane (`length`'s square root of its
+  dot). It over-estimates `refract`'s scalar `k` chain: those steps read
+  `splat(dot)`, so every lane holds the scalar and a later step reads
+  `sqrt(k)` lane for lane; recording one lane would say those lanes do
+  not exist. Mesa has a scalar `k`; a precision back end that tells
+  scalar lanes apart (the late rule) must not take `lanes` as a scalar
+  count there, or must refuse `refract`.
 - The cost they see: two more arena slices per compile (one byte per
   instruction, one per local) in the shared scratch arena (`store.rs`
   `with_scratch`). A shader near the arena's limit could meet
