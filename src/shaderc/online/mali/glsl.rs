@@ -124,7 +124,10 @@ impl<'s> Shape<'s> {
         's: 'x,
     {
         let (nodes, body) = self.nodes.unwrap_or((m.nodes, m.body));
-        Module { instrs, comps: self.comps, nodes, body, ..*m }
+        /* The passes rewrite instructions (and `ilt_trees` renumbers
+         * them) without carrying the precision tables: the result has none
+         * (ir.rs `Module::prec`), so a reader of precision refuses it. */
+        Module { instrs, comps: self.comps, nodes, body, prec: &[], local_prec: &[], ..*m }
     }
 }
 
@@ -140,7 +143,15 @@ pub(super) fn passes<'s>(
     let shaped;
     let m = match trees {
         Some(t) => {
-            shaped = Module { instrs: t.instrs, comps: t.comps, nodes: t.nodes, body: t.body, ..*m };
+            shaped = Module {
+                instrs: t.instrs,
+                comps: t.comps,
+                nodes: t.nodes,
+                body: t.body,
+                prec: &[],
+                local_prec: &[],
+                ..*m
+            };
             &shaped
         }
         None => m,
