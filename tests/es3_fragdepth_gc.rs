@@ -344,3 +344,94 @@ fn a_linear_target_keeps_early_z_off_for_both_programs() {
         assert_eq!((r.pe_bits, r.ra_word), (0, 0x1500_0030));
     }
 }
+
+/// The four draws of [`draws`]'s kind plus depth testing off, for a layout
+/// and a sample count.
+fn draws_on(writes_z: bool, color: ColorLayout, msaa: bool) -> [EarlyZInput; 4] {
+    let base = EarlyZInput { writes_z, msaa, ..EarlyZInput::gc7000(color) };
+    [
+        EarlyZInput { depth_enabled: true, depth_func_always: false, depth_write: true, ..base },
+        EarlyZInput { depth_enabled: true, depth_func_always: false, ..base },
+        EarlyZInput { depth_enabled: true, depth_write: true, ..base },
+        base,
+    ]
+}
+
+/// (early_test, early_write, PE_DEPTH_CONFIG bits, RA_EARLY_DEPTH) of the four
+/// draws of [`draws_on`]: less+write, less/no write, always+write, depth off.
+type Want = [(bool, bool, u32, u32); 4];
+
+/// Early Z for every colour layout, with and without MSAA, for a depth writer
+/// and the control (a program that does not write depth).
+///
+/// Where each word comes from (early_z.rs, Mesa `etna_update_zsa`):
+/// - `Absent` (a depth-only FBO) and `Tiled` allow early Z, `Linear` denies
+///   it (etnaviv_state.c:1005-1023, `early_z_allowed`): Absent == Tiled.
+/// - a writer is never early (:1029 write, :1039 test): a draw that writes or
+///   tests depth is late, so EARLY_Z and DISABLE_ZS stay clear and
+///   WRITE_DISABLE is set: RA 0x15000030 (BASE | FORWARD_W | FORWARD_Z | WD).
+/// - a non-writer on an allowed target is early: less+write 0x05000031 with
+///   EARLY_Z 0x10000 | DISABLE_ZS 0x01000000 (nothing is late, :1049),
+///   less/no write 0x15000031 (the write is not early), always+write
+///   0x05000030 with DISABLE_ZS alone (no test).
+/// - depth testing off: nothing early or late, DISABLE_ZS, WRITE_DISABLE:
+///   PE 0x01000000, RA 0x15000030.
+/// - MSAA adds LATE_DEPTH_MSAA 0x02000000 to the RA word iff some half of
+///   the draw is late (:1073): so 0x17000030 for the late words, never for an
+///   all-early or depth-off draw.
+#[test]
+fn early_z_words_for_every_layout_and_sample_count() {
+    const LATE: u32 = 0x1500_0030;
+    const LATE_MS: u32 = 0x1700_0030;
+    let late = |ms: bool| (false, false, 0u32, if ms { LATE_MS } else { LATE });
+    let off = (false, false, 0x0100_0000u32, LATE);
+    let early: Want = [
+        (true, true, 0x0101_0000, 0x0500_0031),
+        (true, false, 0x0101_0000, 0x1500_0031),
+        (false, true, 0x0100_0000, 0x0500_0030),
+        off,
+    ];
+    let denied = |ms: bool| -> Want { [late(ms), late(ms), late(ms), off] };
+    for msaa in [false, true] {
+        for (layout, writer, want) in [
+            (ColorLayout::Absent, true, denied(msaa)),
+            (ColorLayout::Tiled, true, denied(msaa)),
+            (ColorLayout::Linear, true, denied(msaa)),
+            (ColorLayout::Absent, false, early),
+            (ColorLayout::Tiled, false, early),
+            (ColorLayout::Linear, false, denied(msaa)),
+        ] {
+            for (i, (inp, (t, wr, pe, ra))) in draws_on(writer, layout, msaa).iter().zip(want).enumerate() {
+                let r = early_z(inp);
+                let what = format!("{layout:?} msaa={msaa} writer={writer} draw {i}");
+                assert_eq!(r.allowed, layout != ColorLayout::Linear, "{what}: allowed");
+                assert_eq!((r.early_test, r.early_write), (t, wr), "{what}");
+                assert_eq!(r.pe_bits, pe, "{what}: PE bits {:#x}", r.pe_bits);
+                assert_eq!(r.ra_word, ra, "{what}: RA_EARLY_DEPTH {:#x}", r.ra_word);
+            }
+        }
+    }
+}
+
+/// What the back end emits today is the Linear answer for every target:
+/// `draw_early_z` takes only `writes_z`, so no colour target, an MSAA target
+/// and a tiled target all get the words of a linear single-sample one. This
+/// pins that, and that the rule differs for a depth-only target (the control
+/// would be early): a finding, not a failure.
+#[test]
+fn the_back_end_words_do_not_follow_the_layout_or_the_samples() {
+    use yakogl::vivante::early_z::draw_early_z;
+    for writer in [true, false] {
+        let r = draw_early_z(writer);
+        assert_eq!((r.pe_bits & 0x1_0000, r.ra_word), (0, 0x1500_0030), "writer={writer}");
+        let rule = early_z(&EarlyZInput {
+            depth_enabled: true,
+            depth_func_always: false,
+            depth_write: true,
+            writes_z: writer,
+            ..EarlyZInput::gc7000(ColorLayout::Absent)
+        });
+        assert_eq!(rule.early_test, !writer, "writer={writer}: the rule on a depth-only target");
+        assert_eq!(rule.ra_word != r.ra_word, !writer);
+    }
+}
