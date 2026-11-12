@@ -1201,16 +1201,18 @@ check "prompt-go.py: LOAD (${got:-none}), where U-Boot loads the image and goes,
 
 # prompt-reads.py's and prompt-go.py's own self-tests (a fake board on a
 # pty), before the process check below, so that it covers what they start.
-# The last line names the checks run and planned, and how many failed.
+# The last line names the checks run and how many failed, and every check
+# line of the tool that did not run (none kept by hand: a skipped check line
+# fails it).
 for t in prompt-reads prompt-go; do
 	got=$(python3 -I "$here/../uboot-t6/$t.py" --self-test 2>&1 | tail -n 1)
 	check "$t.py --self-test ('$got')" \
-		"$(grep -qE "^$t self-test: ([0-9]+) checks run \(planned \1\), 0 failed\$" <<<"$got"; echo $?)"
+		"$(grep -qE "^$t self-test: [1-9][0-9]* checks run, 0 failed\$" <<<"$got"; echo $?)"
 done
 # stage.sh and prompt-go.sh's dry run against a fake ssh.
 got=$(bash "$here/../uboot-t6/selftest.sh" 2>&1 | tail -n 1)
 check "uboot-t6/selftest.sh ('$got')" \
-	"$(grep -qE '^uboot-t6 selftest: ([0-9]+) checks run \(planned \1\), 0 failed$' <<<"$got"; echo $?)"
+	"$(grep -qE '^uboot-t6 selftest: [1-9][0-9]* checks run, 0 failed$' <<<"$got"; echo $?)"
 
 # The stand-in UART's wire, by its pid.
 kill "$wire_pid" 2>/dev/null

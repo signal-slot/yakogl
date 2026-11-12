@@ -10,11 +10,19 @@
 #   BOARD_HOST=root@<t6> driver/tools/uboot-t6/stage.sh check <zephyr.bin> <fingerprint>
 #   BOARD_HOST=root@<t6> driver/tools/uboot-t6/stage.sh undo <fingerprint>
 #
-# <fingerprint> is a file on THIS host: the sha256 of every file under /boot
-# except /boot/yakogl, sorted by name. `stage` writes it when it does not
-# exist yet, before anything is written on the board; when it exists, `stage`
-# goes on only if /boot still matches it. Every command then compares /boot
-# with it again after its own change, so a stock file that changed is named.
+# <fingerprint> is a file on THIS host: the sha256 of every regular file and
+# the target of every symbolic link under /boot except /boot/yakogl, sorted
+# by name. `stage` writes it when it does not exist yet, before anything is
+# written on the board; when it exists, `stage` and `check` go on only if
+# /boot still matches it. Every command compares /boot with it again after
+# its own change, so a stock file that changed is named. `undo` removes
+# /boot/yakogl even when a stock file changed since `stage` (a kernel update
+# under Armbian does that): it names the difference and exits 1 after the
+# removal.
+#
+# A /boot/yakogl that is a symbolic link, or that holds one, is refused by
+# `stage` and `check`: a write through it would land outside /boot/yakogl.
+# `undo`'s rm -rf removes the link itself, never what it points to.
 #
 # What it writes on the board, and nothing else: the directory /boot/yakogl
 # (mode 0755), one file in it per image (mode 0644, through a .part file in
@@ -57,33 +65,44 @@ if [ -n "$IMG" ]; then
 fi
 
 board() { timeout 120 ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$BOARD_HOST" "$@"; }
-# Every file under /boot but the staged directory, by name.
-FINGERPRINT="find /boot -path $STAGE_DIR -prune -o -type f -print0 | sort -z | xargs -0 -r sha256sum"
+# Every regular file under /boot but the staged directory, by name, then
+# every symbolic link and its target.
+FINGERPRINT="find /boot -path $STAGE_DIR -prune -o -type f -print0 | sort -z | xargs -0 -r sha256sum;
+find /boot -path $STAGE_DIR -prune -o -type l -printf 'link %p -> %l\\n' | sort"
 fingerprint() { board "$FINGERPRINT" </dev/null; }
 
 # ---- the board, read only --------------------------------------------------
 facts=$(board 'printf "compatible=%s\n" "$(tr "\0" " " </proc/device-tree/compatible)"
 printf "uid=%s\n" "$(id -u)"
-printf "boot=%s\n" "$([ -d /boot ] && [ ! -L /boot ] && echo dir)"' </dev/null) ||
+printf "boot=%s\n" "$([ -d /boot ] && [ ! -L /boot ] && echo dir)"
+printf "stage_links=%s\n" "$(if [ -L '"$STAGE_DIR"' ]; then echo link; elif [ -d '"$STAGE_DIR"' ]; then find '"$STAGE_DIR"' -type l | head -n 1; fi)"' </dev/null) ||
 	refuse "cannot read the board's facts over ssh ($BOARD_HOST)"
 fact() { printf '%s\n' "$facts" | sed -n "s/^$1=//p" | head -1; }
 case "$(fact compatible)" in *friendlyarm,nanopc-t6*) ;; *) refuse "$BOARD_HOST is not a NanoPC-T6: compatible '$(fact compatible)'" ;; esac
 [ "$(fact uid)" = 0 ] || refuse "$BOARD_HOST is not root (/boot is root's)"
 [ "$(fact boot)" = dir ] || refuse "/boot on $BOARD_HOST is not a directory"
+if [ -n "$(fact stage_links)" ]; then
+	[ "$CMD" = undo ] || refuse "$STAGE_DIR is a symbolic link or holds one ($(fact stage_links)): a write through it would leave /boot/yakogl"
+	echo "stage.sh: $STAGE_DIR is a symbolic link or holds one ($(fact stage_links)); rm -rf removes the links, not their targets"
+fi
 
 now=$(fingerprint) || refuse "cannot read the fingerprint of /boot"
 [ -n "$now" ] || refuse "the fingerprint of /boot is empty: no stock file found"
 same_as_recorded() { diff <(printf '%s\n' "$1") "$FP" >/dev/null; }
+differed=0
 if [ -f "$FP" ]; then
 	if ! same_as_recorded "$now"; then
 		diff <(printf '%s\n' "$now") "$FP" | sed 's/^/  /' >&2 || true
 		[ "$CMD" = stage ] && refuse "/boot's files differ from $FP (lines above: < now, > recorded)"
-		fail "/boot's files differ from $FP before this command (lines above: < now, > recorded)"
+		[ "$CMD" = check ] && fail "/boot's files differ from $FP (lines above: < now, > recorded)"
+		echo "stage.sh: /boot's files differ from $FP already, not by this tool (lines above); $STAGE_DIR is removed all the same" >&2
+		differed=1
+	else
+		echo "stage.sh: /boot matches $FP ($(wc -l <"$FP") entries)"
 	fi
-	echo "stage.sh: /boot matches $FP ($(wc -l <"$FP") files)"
 elif [ "$CMD" = stage ]; then
 	printf '%s\n' "$now" >"$FP" || die "cannot write $FP"
-	echo "stage.sh: /boot's fingerprint written to $FP ($(wc -l <"$FP") files), before anything on the board"
+	echo "stage.sh: /boot's fingerprint written to $FP ($(wc -l <"$FP") entries), before anything on the board"
 else
 	die "$FP: no such file (stage writes it)"
 fi
@@ -111,6 +130,7 @@ fi
 after=$(fingerprint) || fail "cannot read the fingerprint of /boot again"
 if ! same_as_recorded "$after"; then
 	diff <(printf '%s\n' "$after") "$FP" | sed 's/^/  /' >&2 || true
+	[ "$differed" = 0 ] || fail "$STAGE_DIR is gone; /boot's other files differ from $FP, as they did before undo (lines above)"
 	fail "/boot's other files differ from $FP after $CMD (lines above)"
 fi
 case "$CMD" in

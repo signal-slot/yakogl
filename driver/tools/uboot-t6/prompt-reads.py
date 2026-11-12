@@ -505,17 +505,46 @@ class FakeBoard(threading.Thread):
             self.done.set()
 
 
+class Checks:
+    """A self-test's checks, with no count kept by hand: every line of the
+    test function that calls check() must have run by the end (a check in a
+    loop counts once it has run), else the summary names the lines."""
+
+    def __init__(self, fn):
+        self.fn, self.ran, self.failed, self.n = fn, set(), [], 0
+
+    def __call__(self, cond, what):
+        self.n += 1
+        self.ran.add(sys._getframe(1).f_lineno)
+        if not cond:
+            self.failed.append(what)
+            print("FAIL: " + what)
+
+    def lines(self):
+        """The lines of the test function that call check()."""
+        code = self.fn.__code__
+        with open(code.co_filename) as f:
+            src = f.read().splitlines()
+        out = []
+        for i in range(code.co_firstlineno, len(src)):
+            if src[i][:1] not in ("", " ", "#"):
+                break                       # the next top-level statement
+            if re.match(r"\s*check\(", src[i]):
+                out.append(i + 1)
+        return out
+
+    def summary(self, name):
+        not_run = [n for n in self.lines() if n not in self.ran]
+        print("%s self-test: %d checks run, %d failed%s" % (
+            name, self.n, len(self.failed),
+            ", check lines not run: " + " ".join(map(str, not_run)) if not_run else ""))
+        return 0 if not self.failed and self.n > 0 and not not_run else 1
+
+
 def self_test():
     import pty
     import tempfile
-    failed = []
-    count = [0]
-
-    def check(cond, what):
-        count[0] += 1
-        if not cond:
-            failed.append(what)
-            print("FAIL: " + what)
+    check = Checks(self_test)
 
     def case(**kw):
         master, slave = pty.openpty()
@@ -627,9 +656,7 @@ def self_test():
     check(probed_pmic(" pmic          0  [ + ]   rk8xx   `-- a;reset\n") is None,
           "probed_pmic: a name that would not be an allowed command is not used")
 
-    planned = 104
-    print("prompt-reads self-test: %d checks run (planned %d), %d failed" % (count[0], planned, len(failed)))
-    return 0 if not failed and count[0] == planned else 1
+    return check.summary("prompt-reads")
 
 
 def main(argv):

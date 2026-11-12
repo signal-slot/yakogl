@@ -2,7 +2,8 @@
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
  * FriendlyElec NanoPC-T6 (RK3588), CPU 0 only, as an image kexec'd out of
- * Armbian (driver/docs/nanopc-t6-mali.md, "Z1").
+ * Armbian (driver/docs/nanopc-t6-mali.md, "Z1") or started by U-Boot's `go`
+ * from the eMMC (driver/tools/uboot-t6/README.md, "The route").
  *
  * The SoC (GICv3, the arch timer at 24 MHz, PSCI over SMC, uart2/uart3) is
  * Zephyr's rk3588.dtsi. This file adds:

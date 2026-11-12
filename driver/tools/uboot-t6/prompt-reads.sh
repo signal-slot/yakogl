@@ -43,6 +43,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 K=$HERE/../kexec-zephyr
 PY=$HERE/prompt-reads.py
+TOOL=prompt-reads
 
 die() { echo "prompt-reads.sh: $*" >&2; exit 2; }
 refuse() {
@@ -74,19 +75,12 @@ case "$selftest" in
 esac
 
 # ---- 2. the board, read only -----------------------------------------------
-board() { timeout 30 ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$BOARD_HOST" "$@" </dev/null; }
+# shellcheck source=prompt-lib.sh
+. "$HERE/prompt-lib.sh"
 # who_remote, defined on the board ahead of the commands that call it: the
 # remote sessions without this ssh command's own (who_remote.sh).
 WHO_REMOTE=$(cat "$K/who_remote.sh") || die "cannot read $K/who_remote.sh"
-STATE='
-printf "compatible=%s\n" "$(tr "\0" " " </proc/device-tree/compatible)"
-printf "uid=%s\n" "$(id -u)"
-printf "uptime=%s\n" "$(cut -d" " -f1 /proc/uptime)"
-printf "system=%s\n" "$(systemctl is-system-running 2>/dev/null || true)"
-printf "boot_id=%s\n" "$(cat /proc/sys/kernel/random/boot_id)"
-printf "kexec_loaded=%s\n" "$(cat /sys/kernel/kexec_loaded)"
-printf "gpu_users=%s\n" "$(fuser /dev/dri/* 2>/dev/null | tr -s " " || true)"
-printf "who_remote=%s\n" "$(who_remote)"
+STATE="$T6_STATE_COMMON"'
 printf "console_login=%s\n" "$(systemctl is-active serial-getty@ttyS2.service 2>/dev/null || true)"'
 facts=$(board "$WHO_REMOTE$STATE") || refuse "cannot read the board's facts over ssh ($BOARD_HOST)"
 fact() { printf '%s\n' "$facts" | sed -n "s/^$1=//p" | head -1; }
@@ -116,20 +110,7 @@ fi
 [ -n "${T6_HAND:-}" ] || refuse "--go needs T6_HAND=<who can cut the board's power>: a run that stops at the U-Boot prompt (exit 5) leaves the board there"
 { [ -n "${T6_RECORD_DIR:-}" ] && [ -d "$T6_RECORD_DIR" ]; } ||
 	refuse "--go needs T6_RECORD_DIR=<an existing directory outside the checkout> for the run's record"
-[ -n "${T6_UART:-}" ] || refuse "--go needs T6_UART=<the host tty on the T6's debug UART>"
-[ -c "$T6_UART" ] && [ -r "$T6_UART" ] && [ -w "$T6_UART" ] ||
-	refuse "T6_UART $T6_UART is not a character device this user can read and write"
-if fuser "$T6_UART" >/dev/null 2>&1; then
-	refuse "T6_UART $T6_UART is already open (pids $(fuser "$T6_UART" 2>/dev/null | tr -s " " | cut -c1-80)): a second reader would split the bytes; stop the other capture first"
-fi
-# raw, no echo, before prompt-reads.py opens it: with echo on, the tty would
-# send every received byte back to the board (nanopc-t6.sh does the same).
-UART_STTY=(1500000 raw -echo -icrnl -ixon cs8 -cstopb -parenb clocal)
-stty -F "$T6_UART" "${UART_STTY[@]}" || refuse "stty on $T6_UART failed"
-uart_mode=$(stty -F "$T6_UART" -a | tr "\n;" "  ") || refuse "stty -a on $T6_UART failed"
-for w in 'speed 1500000' ' -echo ' ' -icrnl ' ' -ixon ' ' cs8 ' ' -cstopb ' ' -parenb ' ' clocal ' ' -opost ' ' -icanon '; do
-	[[ " $uart_mode " == *"$w"* ]] || refuse "$T6_UART does not read back '${w# }' after stty: $uart_mode"
-done
+uart_ready
 
 # Before the lock: board_lock.sh chains the EXIT trap it finds.
 tmp=$(mktemp -d)
@@ -168,49 +149,7 @@ rec "board boot_id $old_boot, up $(fresh_fact uptime) s; hand at the power switc
 
 python3 -I "$PY" run "$T6_UART" "$REC" >"$tmp/py.out" 2>&1 &
 py_pid=$!
-n=0
-until grep -q 'listening, nothing written' "$tmp/py.out" 2>/dev/null; do
-	n=$((n + 1))
-	if [ "$n" -gt 50 ] || ! kill -0 "$py_pid" 2>/dev/null; then
-		sed 's/^/  /' "$tmp/py.out" >&2
-		rec "prompt-reads.py did not start listening: the board was not rebooted" >&2
-		exit 3
-	fi
-	sleep 0.2
-done
-rec "prompt-reads.py listens on the UART (pid $py_pid, nothing written)"
-
-t0=$(date +%s)
-rec "rebooting the board over ssh (systemctl reboot)"
-# The connection may drop before the command's status comes back.
-board 'systemctl reboot' >/dev/null 2>&1 || true
-
-py_rc=0
-wait "$py_pid" || py_rc=$?
-py_pid=
-while IFS= read -r line; do rec "$line"; done <"$tmp/py.out"
+wait_listening
+reboot_and_wait_tool
 rec "prompt-reads.py exit $py_rc, $(( $(date +%s) - t0 )) s after the reboot command; answers.txt $(grep -c '^## ' "$REC/answers.txt" 2>/dev/null || echo 0) command(s)"
-
-# Whatever the verdict, the board is looked for: a command that made U-Boot
-# reset the board ends in Armbian too.
-deadline=$(( $(date +%s) + 180 ))
-while [ "$(date +%s)" -lt "$deadline" ]; do
-	now_boot=$(board 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)
-	if [ -n "$now_boot" ] && [ "$now_boot" != "$old_boot" ]; then
-		rec "back in Armbian $(( $(date +%s) - t0 )) s after the reboot command (boot_id $now_boot, up $(board 'cut -d" " -f1 /proc/uptime') s)"
-		echo "prompt-reads.sh: record $REC"
-		exit "$py_rc"
-	fi
-	sleep 5
-done
-if [ -n "${now_boot:-}" ]; then
-	rec "the same Linux still runs (boot_id unchanged): the reboot did not happen" >&2
-elif [ "$py_rc" = 5 ]; then
-	rec "the board is at its U-Boot prompt and stays there: it needs $T6_HAND at its power switch" >&2
-	echo "prompt-reads.sh: record $REC"
-	exit 5
-else
-	rec "no Armbian $(( $(date +%s) - t0 )) s after the reboot command: the board needs $T6_HAND at its power switch" >&2
-fi
-echo "prompt-reads.sh: record $REC"
-exit 1
+exit_when_back

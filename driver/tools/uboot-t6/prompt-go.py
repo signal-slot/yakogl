@@ -44,7 +44,8 @@ address is the image's link address, 0x10000000 (nanopc_t6.dts zephyr,sram;
 board_lock_selftest.sh compares LOAD with it).
 
 Exit: 0 the image ran, its verdict is PASS and Linux's login came back. 2
-usage. 3 no autoboot line in time (nothing written). 4 the autoboot was
+usage. 12 no autoboot line in time (nothing written; not 3, which
+prompt-go.sh keeps for "refused before the reboot"). 4 the autoboot was
 missed (one space written, Linux booted). 5 stopped at the prompt (an echo
 that never matched, a command without an answer, the prompt lost): the board
 stays at the U-Boot prompt until its power is cut. 6 an answer differed,
@@ -171,7 +172,7 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
         try:
             say("listening, nothing written (waiting up to %d s for the autoboot line)" % boot_wait)
             if not con.wait_for(P.AUTOBOOT, boot_wait):
-                raise P.Stop(3, "no autoboot line in %d s: nothing was written" % boot_wait)
+                raise P.Stop(12, "no autoboot line in %d s after the reboot: nothing was written" % boot_wait)
             con.armed = True
             con.buf = b""
             con.write(b" ")
@@ -260,23 +261,27 @@ class FakeGo(P.FakeBoard):
     def __init__(self, master, name, size, crc, how="ok", lines=None):
         words = dict(P.PMU_OFF)
         words[LOAD + MAGIC_OFF] = 0x12345678 if how == "magic" else IMAGE_MAGIC
-        mode = "ok"
+        mode = "noautoboot" if how == "noautoboot" else "ok"
         super().__init__(master, mode=mode, words=words)
         self.name, self.size, self.crc, self.how = name, size, crc, how
         self.lines = image_lines() if lines is None else lines
 
     def answer(self, cmd):
         if cmd.startswith("ext4size "):
+            if self.how == "size-text":
+                return "Failed to mount ext2 filesystem...\r\n"
             return "** File not found %s **\r\n" % cmd.split()[-1] if self.how == "missing" else ""
         if cmd == "printenv filesize":
             return "filesize=%x\r\n" % (self.size + (4 if self.how == "size" else 0))
         if cmd.startswith("ext4load "):
             if self.how == "load":
                 return "Failed to load '%s'\r\n" % cmd.split()[-1]
-            return "%d bytes read in 31 ms (13.2 MiB/s)\r\n" % self.size
+            return "%d bytes read in 31 ms (13.2 MiB/s)\r\n" % (self.size - (512 if self.how == "load-n" else 0))
         if cmd.startswith("crc32 "):
             crc = self.crc ^ (1 if self.how == "crc" else 0)
-            return "crc32 for %08x ... %08x ==> %08x\r\n" % (LOAD, LOAD + self.size - 1, crc)
+            # crc-range: the right CRC over another range (one byte short)
+            last = LOAD + self.size - (2 if self.how == "crc-range" else 1)
+            return "crc32 for %08x ... %08x ==> %08x\r\n" % (LOAD, last, crc)
         return super().answer(cmd)
 
     def after_enter(self, cmd):
@@ -309,15 +314,8 @@ def self_test():
     import pty
     import tempfile
     import termios
-    failed = []
-    count = [0]
+    check = P.Checks(self_test)
     name, size, crc = "t6_hello.bin", 0x2a5c0, 0x1b2c3d4e
-
-    def check(cond, what):
-        count[0] += 1
-        if not cond:
-            failed.append(what)
-            print("FAIL: " + what)
 
     def case(how="ok", lines=None):
         master, slave = pty.openpty()
@@ -355,12 +353,17 @@ def self_test():
     check(files.get("verdict.txt", b"").rstrip().endswith(b"VERDICT t6_hello PASS"), "ok: verdict.txt says PASS")
 
     # 2. Each answer that differs: refused before go, reset entered, Linux back.
-    for how, at in (("missing", 0), ("size", 1), ("load", 2), ("magic", 3), ("crc", 4)):
+    for how, at in (("missing", 0), ("size-text", 0), ("size", 1), ("load", 2), ("load-n", 2), ("magic", 3),
+                    ("crc", 4), ("crc-range", 4)):
         rc, f, files = case(how)
         check(rc == 8 and f.entered == cmds[:at + 1] + ["reset"],
               "%s: exit 8, %s refused, reset entered, no go (rc %d, %r)" % (how, cmds[at], rc, f.entered))
         check(f.shell == b"" and b"REFUSED before go" in files.get("typed.log", b""),
               "%s: the refusal is in typed.log, nothing reached Linux" % how)
+
+    # 2b. No autoboot line after the reboot: nothing written, its own code.
+    rc, f, _ = case("noautoboot")
+    check(rc == 12 and f.got == b"", "no autoboot line: exit 12, nothing written (rc %d, %r)" % (rc, f.got))
 
     # 3. The prompt lost after ext4load: nothing more is typed, no go, no reset.
     rc, f, _ = case("lost")
@@ -400,9 +403,7 @@ def self_test():
     # 8. The CRC is zlib's.
     check("%08x" % zlib.crc32(b"123456789") == "cbf43926", "crc: zlib's CRC-32 of '123456789' is cbf43926")
 
-    planned = 53
-    print("prompt-go self-test: %d checks run (planned %d), %d failed" % (count[0], planned, len(failed)))
-    return 0 if not failed and count[0] == planned else 1
+    return check.summary("prompt-go")
 
 
 def args_ok(name, size, crc):

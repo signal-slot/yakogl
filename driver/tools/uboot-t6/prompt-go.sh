@@ -18,8 +18,8 @@
 # only) that the board runs Armbian and holds the same bytes as
 # /boot/yakogl/<name of zephyr.bin>, prints the commands and what each
 # answer must be, and changes nothing anywhere.
-# With --go it runs prompt-go.py's self-test (a fake board on a pty), takes
-# the board lock (../kexec-zephyr/board_lock.sh; it
+# With --go it checks T6_HAND, T6_RECORD_DIR and T6_UART, runs prompt-go.py's
+# self-test (a fake board on a pty), takes the board lock (../kexec-zephyr/board_lock.sh; it
 # refuses, never waits, while anyone holds it: see LOCK_WAIT), reads the
 # board's state again under the lock, starts prompt-go.py on the UART,
 # waits until that listens, and only then reboots the board over ssh
@@ -40,20 +40,23 @@
 # answers.txt (each command and its answer), image.log (the UART from `go`
 # to Linux's login), verdict.txt (t6-verdict.sh, T6_ROUTE=uboot).
 #
-# Exit: prompt-go.py's code (0 the verdict PASS and Armbian back; 3 no
-# autoboot line, nothing written; 4 the autoboot was missed, Linux booted;
+# Exit: prompt-go.py's code (0 the verdict PASS and Armbian back; 12 no
+# autoboot line after the reboot, nothing written; 4 the autoboot was
+# missed, Linux booted;
 # 5 stopped at the U-Boot prompt, the board stays there until its power is
 # cut; 6 refused at the prompt, `reset` entered, no Linux login; 7 a
 # command made U-Boot reset the board; 8 an answer differed: no `go`,
 # `reset` entered, Armbian back; 9 `go` not answered; 10 the image
 # started, no Linux login; 11 the verdict FAIL, Armbian back), 1 when the
 # board did not come back into Armbian, 2 usage or a missing tool, 3
-# refused before anything was changed.
+# refused before anything was changed (the board was not rebooted: 3 has
+# only this meaning here).
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 K=$HERE/../kexec-zephyr
 PY=$HERE/prompt-go.py
+TOOL=prompt-go
 # The window nanopc_t6.dts links the image into (zephyr,sram).
 # ../kexec-zephyr/board_lock_selftest.sh fails when these differ from it.
 WINDOW_BASE=$((0x10000000))
@@ -122,17 +125,10 @@ echo "image: $IMG, $size bytes, crc32 $crc, sha256 $sha, linked at $load"
 echo "image: WDT0 TOP $top, lifetime $lifetime s, proof $proof: the image ends by $image_wait s after go at the latest"
 
 # ---- 2. the board, read only -----------------------------------------------
-board() { timeout 30 ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$BOARD_HOST" "$@" </dev/null; }
+# shellcheck source=prompt-lib.sh
+. "$HERE/prompt-lib.sh"
 WHO_REMOTE=$(cat "$K/who_remote.sh") || die "cannot read $K/who_remote.sh"
-STATE='
-printf "compatible=%s\n" "$(tr "\0" " " </proc/device-tree/compatible)"
-printf "uid=%s\n" "$(id -u)"
-printf "uptime=%s\n" "$(cut -d" " -f1 /proc/uptime)"
-printf "system=%s\n" "$(systemctl is-system-running 2>/dev/null || true)"
-printf "boot_id=%s\n" "$(cat /proc/sys/kernel/random/boot_id)"
-printf "kexec_loaded=%s\n" "$(cat /sys/kernel/kexec_loaded)"
-printf "gpu_users=%s\n" "$(fuser /dev/dri/* 2>/dev/null | tr -s " " || true)"
-printf "who_remote=%s\n" "$(who_remote)"
+STATE="$T6_STATE_COMMON"'
 printf "boot_dev=%s\n" "$(findmnt -n -o SOURCE --target /boot 2>/dev/null || true)"
 printf "staged=%s\n" "$(sha256sum '"$STAGE_DIR/$NAME"' 2>/dev/null | cut -d" " -f1)"'
 facts=$(board "$WHO_REMOTE$STATE") || refuse "cannot read the board's facts over ssh ($BOARD_HOST)"
@@ -167,27 +163,16 @@ fi
 
 
 # ---- 3. the run -------------------------------------------------------------
+[ -n "${T6_HAND:-}" ] || refuse "--go needs T6_HAND=<who can cut the board's power>: an image that stops before it arms WDT0, or a run that stops at the U-Boot prompt, leaves the board there"
+{ [ -n "${T6_RECORD_DIR:-}" ] && [ -d "$T6_RECORD_DIR" ]; } ||
+	refuse "--go needs T6_RECORD_DIR=<an existing directory outside the checkout> for the run's record"
+uart_ready
 # The tool, without a board, before anything reaches it.
 selftest=$(python3 -I "$PY" --self-test 2>&1 | tail -1) || die "prompt-go.py --self-test failed: $selftest"
 case "$selftest" in
 *", 0 failed") echo "$selftest" ;;
 *) die "prompt-go.py --self-test: $selftest" ;;
 esac
-[ -n "${T6_HAND:-}" ] || refuse "--go needs T6_HAND=<who can cut the board's power>: an image that stops before it arms WDT0, or a run that stops at the U-Boot prompt, leaves the board there"
-{ [ -n "${T6_RECORD_DIR:-}" ] && [ -d "$T6_RECORD_DIR" ]; } ||
-	refuse "--go needs T6_RECORD_DIR=<an existing directory outside the checkout> for the run's record"
-[ -n "${T6_UART:-}" ] || refuse "--go needs T6_UART=<the host tty on the T6's debug UART>"
-[ -c "$T6_UART" ] && [ -r "$T6_UART" ] && [ -w "$T6_UART" ] ||
-	refuse "T6_UART $T6_UART is not a character device this user can read and write"
-if fuser "$T6_UART" >/dev/null 2>&1; then
-	refuse "T6_UART $T6_UART is already open (pids $(fuser "$T6_UART" 2>/dev/null | tr -s " " | cut -c1-80)): a second reader would split the bytes; stop the other capture first"
-fi
-UART_STTY=(1500000 raw -echo -icrnl -ixon cs8 -cstopb -parenb clocal)
-stty -F "$T6_UART" "${UART_STTY[@]}" || refuse "stty on $T6_UART failed"
-uart_mode=$(stty -F "$T6_UART" -a | tr "\n;" "  ") || refuse "stty -a on $T6_UART failed"
-for w in 'speed 1500000' ' -echo ' ' -icrnl ' ' -ixon ' ' cs8 ' ' -cstopb ' ' -parenb ' ' clocal ' ' -opost ' ' -icanon '; do
-	[[ " $uart_mode " == *"$w"* ]] || refuse "$T6_UART does not read back '${w# }' after stty: $uart_mode"
-done
 
 # Before the lock: board_lock.sh chains the EXIT trap it finds.
 tmp=$(mktemp -d)
@@ -228,47 +213,8 @@ rec "board boot_id $old_boot, up $(fresh_fact uptime) s; hand at the power switc
 
 python3 -I "$PY" run "$T6_UART" "$REC" "$NAME" "$size" "$crc" "$PROBE" "$image_wait" >"$tmp/py.out" 2>&1 &
 py_pid=$!
-n=0
-until grep -q 'listening, nothing written' "$tmp/py.out" 2>/dev/null; do
-	n=$((n + 1))
-	if [ "$n" -gt 50 ] || ! kill -0 "$py_pid" 2>/dev/null; then
-		sed 's/^/  /' "$tmp/py.out" >&2
-		rec "prompt-go.py did not start listening: the board was not rebooted" >&2
-		exit 3
-	fi
-	sleep 0.2
-done
-rec "prompt-go.py listens on the UART (pid $py_pid, nothing written)"
-
-t0=$(date +%s)
-rec "rebooting the board over ssh (systemctl reboot)"
-board 'systemctl reboot' >/dev/null 2>&1 || true
-
-py_rc=0
-wait "$py_pid" || py_rc=$?
-py_pid=
-while IFS= read -r line; do rec "$line"; done <"$tmp/py.out"
+wait_listening
+reboot_and_wait_tool
 rec "prompt-go.py exit $py_rc, $(( $(date +%s) - t0 )) s after the reboot command"
 [ ! -f "$REC/verdict.txt" ] || rec "verdict: $(tail -n 1 "$REC/verdict.txt")"
-
-deadline=$(( $(date +%s) + 180 ))
-while [ "$(date +%s)" -lt "$deadline" ]; do
-	now_boot=$(board 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)
-	if [ -n "$now_boot" ] && [ "$now_boot" != "$old_boot" ]; then
-		rec "back in Armbian $(( $(date +%s) - t0 )) s after the reboot command (boot_id $now_boot, up $(board 'cut -d" " -f1 /proc/uptime') s)"
-		echo "prompt-go.sh: record $REC"
-		exit "$py_rc"
-	fi
-	sleep 5
-done
-if [ -n "${now_boot:-}" ]; then
-	rec "the same Linux still runs (boot_id unchanged): the reboot did not happen" >&2
-elif [ "$py_rc" = 5 ]; then
-	rec "the board is at its U-Boot prompt and stays there: it needs $T6_HAND at its power switch" >&2
-	echo "prompt-go.sh: record $REC"
-	exit 5
-else
-	rec "no Armbian $(( $(date +%s) - t0 )) s after the reboot command: the board needs $T6_HAND at its power switch" >&2
-fi
-echo "prompt-go.sh: record $REC"
-exit 1
+exit_when_back
