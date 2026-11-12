@@ -18,21 +18,24 @@
 //!
 //! 1. A read is one frame: a command byte, the register address as two
 //!    bytes, low byte first (`reg_bits` 16, `REGMAP_ENDIAN_LITTLE`), then
-//!    the values (drivers/mfd/rk8xx-spi.c:17-18, 30-35, 66-83). The command
+//!    the values (drivers/mfd/rk8xx-spi.c:19-21, 33-39, 63-85). The command
 //!    is `RK806_CMD_READ` 0 | `RK806_CMD_CRC_DIS` 0 | (count - 1) in bits
-//!    3:0; bit 7 is `RK806_CMD_WRITE` (include/linux/mfd/rk808.h:693-698).
+//!    3:0; bit 7 is `RK806_CMD_WRITE` (include/linux/mfd/rk808.h:693-697).
 //! 2. `RK806_POWER_EN0` 0x00 holds DCDC1..4: bit n (n = 0..3) reads 1 when
 //!    DCDCn+1 is on; bits 7:4 are the write-enable twins
-//!    (`ENABLE_MASK`, rk808-regulator.c:73; `rk806_reg` dcdc-reg1,
-//!    :1126-1129; rk808.h:435).
+//!    (`ENABLE_MASK`, drivers/regulator/rk808-regulator.c:73; `rk806_reg`
+//!    dcdc-reg1, :1126-1129; include/linux/mfd/rk808.h:435).
 //! 3. `RK806_BUCK1_ON_VSEL` 0x1a is DCDC1's voltage: 500 mV + 6.25 mV ·
 //!    sel for sel 0..159, 1500 mV + 25 mV · (sel - 160) for 160..235,
-//!    3400 mV above (`rk806_buck_voltage_ranges`, rk808-regulator.c:
-//!    1114-1118; rk808.h:461). `RK806_BUCK1_CONFIG` 0x10 (rk808.h:451).
+//!    3400 mV above (`rk806_buck_voltage_ranges`,
+//!    drivers/regulator/rk808-regulator.c:1114-1118;
+//!    include/linux/mfd/rk808.h:461). `RK806_BUCK1_CONFIG` 0x10
+//!    (include/linux/mfd/rk808.h:451).
 //! 4. On the NanoPC-T6, vdd_gpu_s0 is DCDC1 (`dcdc-reg1`, regulator-boot-on,
-//!    not always-on; rk3588-nanopc-t6.dtsi:812-821), the GPU's and PD_GPU's
-//!    supply (:349-351, 628-630). The PMIC is SPI2 chip select 0 at most
-//!    1 MHz, mode 0 (:755-766).
+//!    not always-on;
+//!    arch/arm64/boot/dts/rockchip/rk3588-nanopc-t6.dtsi:812-821), the
+//!    GPU's and PD_GPU's supply (:349-351, 628-630). The PMIC is SPI2 chip
+//!    select 0 at most 1 MHz, mode 0 (:755-766).
 //!
 //! Measured on the T6 under Armbian (2026-10-19, debugfs regmap of
 //! spi2.0, read only): `POWER_EN0` 0x0f, `POWER_SLP_EN0` 0xe0,
