@@ -234,6 +234,26 @@ struct osal_zephyr_v3d_init {
  * sample written for every board passes no board argument. */
 const struct osal_zephyr_v3d_init *osal_zephyr_v3d_default_platform(void);
 
+/* ---- Zephyr init argument, Mali (NanoPC-T6) ---------------------------- *
+ *
+ * Passed as init()'s `platform_arg` on a CONFIG_YAKOGL_GPU_MALI image
+ * (src/osal/zephyr_mali.c): the CSF firmware the MCU boots, the board's
+ * mali_csffw.bin as the image embeds it (driver/src/fw/mali_csffw_blob.h,
+ * made by driver/tools/mkmalifw.sh, never committed). NULL takes
+ * osal_zephyr_mali_default_platform()'s; none at all is refused.
+ */
+struct osal_zephyr_mali_init {
+	const void *fw;
+	size_t fw_len;
+};
+/* The platform the Mali OSAL uses when init() gets none (EGL_DEFAULT_DISPLAY):
+ * NULL by default (weak); an image that embeds the firmware defines it. */
+const struct osal_zephyr_mali_init *osal_zephyr_mali_default_platform(void);
+/* The Mali OSAL's close record (zephyr_mali.c): kicks submitted and
+ * completed, carve-out pages in use and at most, frees held and refused,
+ * and the sched refusal that stopped it, if one did. printk only. */
+void osal_mali_diag_print(void);
+
 /* The V3D OSAL's job record, for a sample that prints one at the end of a
  * run (v3d_gl_test's frozen record): the command-list registers after the
  * first job that completed and at the first that did not (or "none"), the

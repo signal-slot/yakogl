@@ -151,9 +151,15 @@
 //! page's record of a panthor session shows a 4096-byte ring. panthor never
 //! lets more be in flight than the ring holds: the DRM scheduler's credit
 //! limit is the ring's size in instructions (panthor_sched.c:3322), each job
-//! charged its padded count (`calc_job_credits`, :3122-3131). We refuse a
-//! job that would overwrite what the stream has not consumed instead
-//! ([`SchedRefusal::RingOverflow`]).
+//! charged its padded count (`calc_job_credits`, :3122-3131), and a job's
+//! credits come back when its done fence signals, that is when the sync
+//! object reached its number (`group_sync_upd_work`, :2932-2937;
+//! `drm_sched_job_done`, scheduler/sched_main.c:372). The caller of
+//! [`submit`] counts the same way (its `in_flight` bytes), and a job that
+//! would not fit is refused instead of held back
+//! ([`SchedRefusal::RingOverflow`]). The output page's `extract` plays no
+//! part: the firmware publishes it later than the sync object moves
+//! (issue #4515), see [`submit`].
 //!
 //! # Completion
 //!
@@ -1151,10 +1157,11 @@ fn job_params(cs: &Cs, queue: &Queue, j: &Job) -> Result<job::JobParams, Refused
 ///
 /// 1. checks before any write: a pending stream event ([`cs_events`]), the
 ///    job's words ([`job_params`]; `seqno` above the sync object's), the
-///    ring's room between the input page's `insert` and the output page's
-///    `extract` ([`job::check_ring_fit`]: [`SchedRefusal::RingOverflow`]
-///    with the free bytes, where panthor's DRM scheduler would hold the job
-///    back, :3322);
+///    ring's room: its size less `in_flight`, the bytes of the jobs the
+///    caller has not yet seen complete ([`job::check_ring_fit`] from
+///    `insert - in_flight`: [`SchedRefusal::RingOverflow`] with the free
+///    bytes, where panthor's DRM scheduler would hold the job back until
+///    its credits fit, :3322);
 /// 2. [`job::job_block`] (:3039-3120) copied into the ring at `insert &
 ///    (size - 1)`, wrapping at its end (`copy_instrs_to_ringbuf`,
 ///    :2969-2994), each 64-bit word as its low then its high half;
@@ -1166,6 +1173,22 @@ fn job_params(cs: &Cs, queue: &Queue, j: &Job) -> Result<job::JobParams, Refused
 ///
 /// `seqno` is the value the job's `SYNC_ADD64` of 1 brings the sync object
 /// to: one more than the jobs before it (:3165-3169), the caller's count.
+///
+/// `in_flight` is panthor's credit count in bytes: [`job::JOB_BYTES`] for
+/// each job submitted whose number the caller has not yet read from the
+/// sync object. The room is not measured from the output page's `extract`,
+/// which the board's firmware publishes later than the sync object moves
+/// (issue #4515): a ring whose jobs all completed is free even while
+/// `extract` lags. Why the sync object is enough: a job's `SYNC_ADD64` is
+/// its word 9, after `WAIT` on every scoreboard (word 8), so words 0 to 9
+/// ran when its number is visible. Words 10 to 15, the `ERROR_BARRIER` and
+/// five zero words of the padding, may not have run yet; they are written
+/// again only by the job one ring later, at the same offset, and every
+/// [`job::job_block`] has the same six words there
+/// ([`job::JOB_TAIL`]), so that write changes no word the stream has yet
+/// to read. panthor has the same order: its credits come back on the done
+/// fence, which follows the sync object.
+#[allow(clippy::too_many_arguments)]
 pub fn submit(
     m: &impl Mmio,
     gpu: usize,
@@ -1174,6 +1197,7 @@ pub fn submit(
     s: &Started,
     j: &Job,
     seqno: u64,
+    in_flight: u64,
 ) -> Result<Submitted, Refused> {
     cs_events(m, cs)?;
     let p = job_params(cs, queue, j)?;
@@ -1185,7 +1209,8 @@ pub fn submit(
     if !insert.is_multiple_of(8) {
         return Err((SchedRefusal::RingInsert, insert as u32));
     }
-    job::check_ring_fit(queue.ring_size, insert, extract, job::JOB_BYTES as u32)?;
+    // a count above insert wraps the start past insert: refused as no room
+    job::check_ring_fit(queue.ring_size, insert, insert.wrapping_sub(in_flight), job::JOB_BYTES as u32)?;
     let block = job::job_block(&p);
     let ring_offset = job::ring_offset(insert, queue.ring_size);
     for (i, w) in block.iter().enumerate() {
@@ -1372,47 +1397,123 @@ pub fn wait(
     sub: &Submitted,
     delay_us: &mut impl FnMut(u32),
 ) -> Result<Waited, WaitRefused> {
+    wait_seqno(m, gpu, iface, csg, cs, s, sub.seqno, delay_us)
+}
+
+/// [`wait`] for the sync object to reach `target`, the [`Submitted::seqno`]
+/// of a job submitted earlier: the same looks, the same 5 s budget counted
+/// from this call, the same stop and terminate on its timeout. An OSAL that
+/// keeps jobs in flight waits for an older job's number this way.
+#[allow(clippy::too_many_arguments)]
+pub fn wait_seqno(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    s: &Started,
+    target: u64,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Waited, WaitRefused> {
+    match poll_for(m, gpu, iface, csg, cs, s, target, JOB_TIMEOUT_US, delay_us)? {
+        Ok(w) => Ok(w),
+        Err(t) => {
+            // the record's words as the timeout found them, before the ends move them
+            let mut r = refused_at(m, cs, s, (SchedRefusal::JobTimeout, 0), t);
+            r.refused.1 = r.seqno as u32;
+            r.ended = Some(stop_and_terminate(m, gpu, iface, csg, cs, delay_us));
+            Err(r)
+        }
+    }
+}
+
+/// The sync object polled for `target` as [`wait_seqno`] polls it, for at
+/// most `budget_us` (rounded up to [`JOB_POLL_US`], at most
+/// [`JOB_TIMEOUT_US`]): `Ok(None)` when the budget ran out, and then
+/// nothing is stopped: the job may still complete. Ours: the OSAL's `wait`
+/// with a timeout shorter than panthor's job timeout.
+#[allow(clippy::too_many_arguments)]
+pub fn poll_seqno(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    s: &Started,
+    target: u64,
+    budget_us: u32,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Option<Waited>, WaitRefused> {
+    let budget = budget_us.min(JOB_TIMEOUT_US).next_multiple_of(JOB_POLL_US);
+    Ok(poll_for(m, gpu, iface, csg, cs, s, target, budget, delay_us)?.ok())
+}
+
+/// The sync object's `seqno` now, with no wait and no event acknowledged:
+/// [`SchedRefusal::SyncObjError`] when its `status` is non-zero,
+/// [`SchedRefusal::Read64Unstable`] when `seqno` does not settle. What an
+/// OSAL's `completed` reads.
+pub fn completed_seqno(m: &impl Mmio, s: &Started) -> Result<u64, Refused> {
+    let status = m.read32(s.syncobj_cpu + offset_of!(SyncObj64, status));
+    if status != 0 {
+        return Err((SchedRefusal::SyncObjError, status));
+    }
+    read64_stable(m, s.syncobj_cpu + offset_of!(SyncObj64, seqno))
+}
+
+/// The [`WaitRefused`] of `refused` after `us` microseconds, the words read
+/// now.
+fn refused_at(m: &impl Mmio, cs: &Cs, s: &Started, refused: Refused, us: u32) -> WaitRefused {
+    let o = |f: usize| cs.output + f;
+    let info = match refused.0 {
+        SchedRefusal::CsFault => read64(m, o(offset_of!(CsOutput, fault_info))),
+        SchedRefusal::CsFatal => read64(m, o(offset_of!(CsOutput, fatal_info))),
+        _ => 0,
+    };
+    let at = s.syncobj_cpu + offset_of!(SyncObj64, seqno);
+    let (seqno, seqno_unstable) = match read64_stable(m, at) {
+        Ok(v) => (v, false),
+        Err(_) => (read64(m, at), true),
+    };
+    WaitRefused {
+        refused,
+        info,
+        seqno,
+        status_cmd_ptr: read64(m, o(offset_of!(CsOutput, status_cmd_ptr))),
+        seqno_unstable,
+        us,
+        ended: None,
+    }
+}
+
+/// [`poll_job`] every [`JOB_POLL_US`] until `target` is reached (`Ok(Ok)`),
+/// a look refuses (`Err`), or `budget_us` has passed (`Ok(Err)` with the
+/// microseconds polled).
+#[allow(clippy::too_many_arguments)]
+fn poll_for(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    s: &Started,
+    target: u64,
+    budget_us: u32,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Result<Waited, u32>, WaitRefused> {
     let mut acks = Acks::default();
     let mut t = 0;
-    let refused = |refused: Refused, us: u32| {
-        let o = |f: usize| cs.output + f;
-        let info = match refused.0 {
-            SchedRefusal::CsFault => read64(m, o(offset_of!(CsOutput, fault_info))),
-            SchedRefusal::CsFatal => read64(m, o(offset_of!(CsOutput, fatal_info))),
-            _ => 0,
-        };
-        let at = s.syncobj_cpu + offset_of!(SyncObj64, seqno);
-        let (seqno, seqno_unstable) = match read64_stable(m, at) {
-            Ok(v) => (v, false),
-            Err(_) => (read64(m, at), true),
-        };
-        WaitRefused {
-            refused,
-            info,
-            seqno,
-            status_cmd_ptr: read64(m, o(offset_of!(CsOutput, status_cmd_ptr))),
-            seqno_unstable,
-            us,
-            ended: None,
-        }
-    };
     loop {
-        match poll_job(m, gpu, iface, csg, cs, s, sub.seqno, &mut acks) {
-            Ok(Poll::Done(seqno)) => return Ok(Waited { seqno, us: t, sync_updates: acks.sync_updates }),
+        match poll_job(m, gpu, iface, csg, cs, s, target, &mut acks) {
+            Ok(Poll::Done(seqno)) => return Ok(Ok(Waited { seqno, us: t, sync_updates: acks.sync_updates })),
             Ok(Poll::Pending) => {}
-            Err(r) => return Err(refused(r, t)),
+            Err(r) => return Err(refused_at(m, cs, s, r, t)),
         }
-        if t >= JOB_TIMEOUT_US {
-            break;
+        if t >= budget_us {
+            return Ok(Err(t));
         }
         delay_us(JOB_POLL_US);
         t += JOB_POLL_US;
     }
-    // the record's words as the timeout found them, before the ends move them
-    let mut r = refused((SchedRefusal::JobTimeout, 0), t);
-    r.refused.1 = r.seqno as u32;
-    r.ended = Some(stop_and_terminate(m, gpu, iface, csg, cs, delay_us));
-    Err(r)
 }
 
 /// What [`drained`] saw.
@@ -1462,12 +1563,10 @@ const _: () = assert!(CS_ACK_WAIT_US.is_multiple_of(JOB_POLL_US));
 /// only when it programs a slot (`cs_slot_prog_locked`, :1061) and for
 /// its idle check (`input->insert == output->extract`,
 /// `cs_slot_sync_queue_state_locked`); it has no such wait. Ours: the
-/// record needs to know when the firmware publishes `extract`, and a
-/// driver that runs more than one job needs it too: [`submit`] measures
-/// the ring's room from the output page's `extract`
-/// ([`job::check_ring_fit`]), so a job submitted before `extract` caught
-/// up is refused as [`SchedRefusal::RingOverflow`] although the ring is
-/// free.
+/// record needs to know when the firmware publishes `extract`. A driver
+/// that runs more than one job does not wait for it: [`submit`] takes the
+/// ring's room from the jobs the caller saw complete, as panthor's
+/// credits.
 pub fn drained(
     m: &impl Mmio,
     gpu: usize,
@@ -2500,7 +2599,7 @@ mod tests {
     }
 
     fn do_submit(mcu: &Mcu, s: &Started, seqno: u64) -> Result<Submitted, Refused> {
-        submit(mcu, GPU, &cs0(), &QUEUE, s, &STREAM, seqno)
+        submit(mcu, GPU, &cs0(), &QUEUE, s, &STREAM, seqno, 0)
     }
 
     fn do_wait(mcu: &Mcu, s: &Started, sub: &Submitted) -> (Result<Waited, WaitRefused>, u64) {
@@ -2643,15 +2742,32 @@ mod tests {
     fn ring_overflow_is_refused_with_nothing_written_and_no_doorbell() {
         let mcu = Mcu::new();
         let s = started(&mcu);
-        // 64 bytes free: insert one lap ahead of extract less 64
+        let sub = |in_flight| submit(&mcu, GPU, &cs0(), &QUEUE, &s, &STREAM, 1, in_flight);
+        // 64 bytes free: jobs not seen complete hold all of the ring but 64
         mcu.put64(at(QUEUE.input_va), 0x1000);
-        mcu.put64(at(QUEUE.output_va), 64);
-        assert_eq!(do_submit(&mcu, &s, 1), Err((SchedRefusal::RingOverflow, 64)));
+        assert_eq!(sub(0x1000 - 64), Err((SchedRefusal::RingOverflow, 64)));
         // a full ring
-        mcu.put64(at(QUEUE.output_va), 0);
-        assert_eq!(do_submit(&mcu, &s, 1), Err((SchedRefusal::RingOverflow, 0)));
+        assert_eq!(sub(0x1000), Err((SchedRefusal::RingOverflow, 0)));
+        // more in flight than was ever inserted: no room either
+        assert_eq!(sub(0x1001), Err((SchedRefusal::RingOverflow, 0)));
         assert_eq!(mcu.log(), vec![]);
         assert_eq!(mcu.runs.get(), 0);
+    }
+
+    /// The room is the caller's count, not the output page's `extract`:
+    /// with `extract` a whole ring behind `insert` (the board's firmware
+    /// publishes it late, issue #4515) and every job seen complete, the
+    /// next job goes on.
+    #[test]
+    fn a_ring_whose_jobs_completed_has_room_while_extract_lags() {
+        let mcu = Mcu::new();
+        let s = started(&mcu);
+        mcu.put64(at(QUEUE.input_va), 0x1000);
+        mcu.put64(at(QUEUE.output_va), 0);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        assert_eq!((sub.start, sub.end, sub.ring_offset), (0x1000, 0x1080, 0));
+        // the input page's extract is still the output page's (:3193)
+        assert_eq!(mcu.read64(at(QUEUE.input_va + offset_of!(RingbufInput, extract) as u32)), 0);
     }
 
     #[test]
@@ -2669,7 +2785,7 @@ mod tests {
             (STREAM, cs0(), 0, (SchedRefusal::JobParams, 5)),
         ];
         for (j, cs, seqno, want) in cases {
-            assert_eq!(submit(&mcu, GPU, &cs, &QUEUE, &s, &j, seqno), Err(want), "{j:?} {cs:?}");
+            assert_eq!(submit(&mcu, GPU, &cs, &QUEUE, &s, &j, seqno, 0), Err(want), "{j:?} {cs:?}");
         }
         consumed(&mcu, 4);
         assert_eq!(do_submit(&mcu, &s, 1), Err((SchedRefusal::RingInsert, 4)));

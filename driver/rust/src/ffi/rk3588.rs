@@ -1089,6 +1089,380 @@ pub unsafe extern "C" fn yd_t6_submit(
     }
 }
 
+/// `struct yd_t6_osal_mem`: what the Zephyr Mali OSAL
+/// (src/osal/zephyr_mali.c) runs on, every backing mapped uncached for the
+/// CPU and used by nothing else: `fw` the arena the firmware's sections
+/// are placed in ([`crate::board::nanopc_t6_osal::place_sections`]); `pool`
+/// AS0's table pages (`pool_pages` 4 KiB pages at physical `tables_pa`);
+/// `queue` the queue's AS0 memory (user pages, suspend buffers); `ring`,
+/// `heap_pool`, `heap_chunks` and `carve` the group VM's four regions
+/// (`YD_T6_OSAL_*_VA`); `vm_pool` the group VM's table pages.
+#[cfg(any(feature = "mali", test))]
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct YdT6OsalMem {
+    pub fw: YdT6FwBacking,
+    pub pool: *mut u8,
+    pub pool_pages: u32,
+    pub tables_pa: u64,
+    pub queue: YdT6FwBacking,
+    pub ring: YdT6FwBacking,
+    pub heap_pool: YdT6FwBacking,
+    pub heap_chunks: YdT6FwBacking,
+    pub carve: YdT6FwBacking,
+    pub vm_pool: *mut u8,
+    pub vm_pool_pages: u32,
+    pub vm_tables_pa: u64,
+}
+
+#[cfg(all(any(feature = "mali", test), target_pointer_width = "64"))]
+const _: () = assert!(size_of::<YdT6OsalMem>() == 192);
+
+/// `struct osal_gpu_mem` (include/gles_osal.h), which this crate cannot
+/// import from the library: the same fields at the same offsets.
+#[cfg(any(feature = "mali", test))]
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct OsalGpuMem {
+    pub cpu: *mut core::ffi::c_void,
+    pub gpu: u64,
+    pub phys: u64,
+    pub size: usize,
+    pub impl_: *mut core::ffi::c_void,
+}
+
+#[cfg(all(any(feature = "mali", test), target_pointer_width = "64"))]
+const _: () = assert!(size_of::<OsalGpuMem>() == 40);
+
+/// The one OSAL of the image and the delay its waits poll with. The OSAL
+/// contract is one thread (include/gles_osal.h, "threads"): the library
+/// calls the ops one at a time, so the cell is never reached twice at once.
+#[cfg(feature = "mali")]
+struct OsalCell(core::cell::UnsafeCell<(crate::board::nanopc_t6_osal::Osal, Option<extern "C" fn(u32)>)>);
+
+// SAFETY: see above; nothing but the yd_t6_osal_* entries touches it.
+#[cfg(feature = "mali")]
+unsafe impl Sync for OsalCell {}
+
+#[cfg(feature = "mali")]
+static OSAL: OsalCell = OsalCell(core::cell::UnsafeCell::new((crate::board::nanopc_t6_osal::Osal::EMPTY, None)));
+
+/// The OSAL and its delay.
+///
+/// # Safety
+/// Called from the yd_t6_osal_* entries only, which the library calls from
+/// its one thread, never two at once (the cell's doc).
+#[cfg(feature = "mali")]
+unsafe fn osal() -> &'static mut (crate::board::nanopc_t6_osal::Osal, Option<extern "C" fn(u32)>) {
+    // SAFETY: the caller's contract.
+    unsafe { &mut *OSAL.0.get() }
+}
+
+#[cfg(feature = "mali")]
+fn osal_hw() -> Hw {
+    // SAFETY: the addresses the OSAL touches are the GPU's registers (the
+    // `gpu` mapping yd_t6_osal_up was given) and the uncached memory of
+    // its `struct yd_t6_osal_mem`.
+    unsafe { Hw::new() }
+}
+
+/// Bring the Mali OSAL up ([`crate::board::nanopc_t6_osal::Osal::up`]):
+/// the firmware's sections placed in `mem->fw`, Z1 to Z3 over them and
+/// `mem->pool` (the arguments as [`yd_t6_fw_up`] documents them), then the
+/// group over `mem`'s regions. 0 when up (or already up), `-EIO` when a
+/// step stopped (`out->step` says which, as for [`yd_t6_submit`]; Z1's
+/// whole record is `z1`, as [`yd_t6_fw_up`] gives it),
+/// `-EINVAL` for a null or misaligned argument, a firmware that does not
+/// parse or an `mem->fw` too small for its sections. `delay_us` is kept
+/// for the waits of the later calls.
+///
+/// # Safety
+/// As [`yd_t6_submit`]'s for the register mappings, `blob`, `clean`,
+/// `delay_us`, `on_handover` and `z1`; every backing of `mem` the memory at its
+/// `pa` for `size` bytes, mapped uncached, used by this OSAL alone for as
+/// long as the image runs, `mem->pool` and `mem->vm_pool` valid for writes
+/// of their pages and the memory at `tables_pa` and `vm_tables_pa`. One
+/// thread only (include/gles_osal.h).
+#[cfg(feature = "mali")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn yd_t6_osal_up(
+    cru: usize,
+    pmu: usize,
+    spi2: usize,
+    qos: usize,
+    gpu: usize,
+    blob: *const u8,
+    blob_len: usize,
+    timer_hz: u32,
+    mem: *const YdT6OsalMem,
+    clean: Option<extern "C" fn(usize, usize) -> i32>,
+    delay_us: Option<extern "C" fn(u32)>,
+    on_handover: Option<extern "C" fn(*const YdT6GpuUp)>,
+    z1: *mut YdT6GpuUp,
+    out: *mut YdT6SubmitUp,
+) -> i32 {
+    use crate::board::nanopc_t6_osal::{place_sections, OsalMem};
+    use crate::board::nanopc_t6_sections::Backing;
+    use crate::board::nanopc_t6_submit::{GroupBacking, McuBacking, SubmitUp, QUEUE_MCU_VA};
+    use crate::gpu::mali::pgtable::{Table, PAGE};
+    let (Some(clean), Some(delay), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
+    if out.is_null() || z1.is_null() || blob.is_null() || mem.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (z, blob) = unsafe { (*mem, core::slice::from_raw_parts(blob, blob_len)) };
+    let aligned = |p: *mut u8| !p.is_null() && (p as usize).is_multiple_of(PAGE as usize);
+    if !aligned(z.pool) || !aligned(z.vm_pool) || z.pool_pages == 0 || z.vm_pool_pages == 0 {
+        return -EINVAL;
+    }
+    let arena = Backing { pa: z.fw.pa, cpu: z.fw.cpu, size: z.fw.size };
+    let Some((backings, n)) = place_sections(blob, arena) else { return -EINVAL };
+    // SAFETY: the caller's contract; 4 KiB aligned covers u64's alignment.
+    let (pool, vm_pool) = unsafe {
+        (
+            core::slice::from_raw_parts_mut(z.pool.cast::<Table>(), z.pool_pages as usize),
+            core::slice::from_raw_parts_mut(z.vm_pool.cast::<Table>(), z.vm_pool_pages as usize),
+        )
+    };
+    // SAFETY: the caller's contract: each backing the OSAL's alone,
+    // uncached, the memory at its physical address.
+    let back = |b: YdT6FwBacking| unsafe { GroupBacking::new(b.pa, b.cpu, b.size) };
+    let mem = OsalMem {
+        queue: McuBacking { va: QUEUE_MCU_VA, pa: z.queue.pa, cpu: z.queue.cpu, size: z.queue.size },
+        ring: back(z.ring),
+        heap_pool: back(z.heap_pool),
+        heap_chunks: back(z.heap_chunks),
+        carve: back(z.carve),
+        vm_pool,
+        vm_tables_pa: z.vm_tables_pa,
+    };
+    // SAFETY: one thread (the contract).
+    let s = unsafe { osal() };
+    s.1 = Some(delay);
+    let mut o = SubmitUp::default();
+    let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
+    let r = s.0.up(
+        &osal_hw(),
+        crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu },
+        blob,
+        &backings[..n],
+        pool,
+        z.tables_pa,
+        timer_hz,
+        mem,
+        &|a, n| clean(a, n),
+        &mut |us| delay(us),
+        &mut |h| {
+            let h = YdT6GpuUp::from(h);
+            on_handover(&h);
+        },
+        &mut g,
+        &mut o,
+    );
+    // SAFETY: the caller's contract.
+    unsafe {
+        *z1 = YdT6GpuUp::from(&g);
+        *out = o;
+    }
+    if r.is_ok() {
+        0
+    } else {
+        -EIO
+    }
+}
+
+#[cfg(feature = "mali")]
+fn fill_mem(out: &mut OsalGpuMem, a: &crate::board::nanopc_t6_osal::Alloc) {
+    *out = OsalGpuMem {
+        cpu: a.cpu as *mut core::ffi::c_void,
+        gpu: a.gpu,
+        phys: a.phys,
+        size: a.size,
+        impl_: a.handle as *mut core::ffi::c_void,
+    };
+}
+
+/// `gpu_alloc` ([`crate::board::nanopc_t6_osal::Osal::alloc`]): 0 and
+/// `*out`, or a negative errno.
+///
+/// # Safety
+/// `out` is valid for a write; after [`yd_t6_osal_up`], one thread only.
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_alloc(size: usize, out: *mut OsalGpuMem) -> i32 {
+    // SAFETY: the caller's contract.
+    let (s, out) = unsafe { (osal(), out.as_mut()) };
+    let Some(out) = out else { return -EINVAL };
+    match s.0.alloc(size) {
+        Ok(a) => {
+            fill_mem(out, &a);
+            0
+        }
+        Err(e) => e,
+    }
+}
+
+/// `gpu_free` ([`crate::board::nanopc_t6_osal::Osal::free`]): `*mem`
+/// cleared either way; 0 for an empty one.
+///
+/// # Safety
+/// As [`yd_t6_osal_alloc`]; `mem` a descriptor this OSAL filled.
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_free(mem: *mut OsalGpuMem) -> i32 {
+    // SAFETY: the caller's contract.
+    let (s, mem) = unsafe { (osal(), mem.as_mut()) };
+    let Some(m) = mem else { return -EINVAL };
+    let rc = if m.impl_.is_null() { 0 } else { s.0.free(&osal_hw(), m.gpu, m.impl_ as usize) };
+    *m = OsalGpuMem { cpu: core::ptr::null_mut(), gpu: 0, phys: 0, size: 0, impl_: core::ptr::null_mut() };
+    rc
+}
+
+/// `map_phys` ([`crate::board::nanopc_t6_osal::Osal::window`]): `*out`
+/// with a null `impl` (nothing to free), or a negative errno.
+///
+/// # Safety
+/// As [`yd_t6_osal_alloc`].
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_map_phys(phys: u64, size: usize, out: *mut OsalGpuMem) -> i32 {
+    // SAFETY: the caller's contract.
+    let (s, out) = unsafe { (osal(), out.as_mut()) };
+    let Some(out) = out else { return -EINVAL };
+    match s.0.window(phys, size) {
+        Ok(a) => {
+            fill_mem(out, &a);
+            0
+        }
+        Err(e) => e,
+    }
+}
+
+/// `submit` of an `osal_mali_kick` ([`crate::board::nanopc_t6_osal::Osal::submit`]):
+/// the fence, or a negative errno.
+///
+/// # Safety
+/// After [`yd_t6_osal_up`], one thread only.
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_submit(stream_gpu: u64, stream_bytes: u32) -> i64 {
+    // SAFETY: the caller's contract.
+    let s = unsafe { osal() };
+    let Some(delay) = s.1 else { return -i64::from(EINVAL) };
+    s.0.submit(&osal_hw(), stream_gpu, stream_bytes, &mut |us| delay(us))
+}
+
+/// `wait` ([`crate::board::nanopc_t6_osal::Osal::wait`]): 0, 1 on a
+/// timeout, or a negative errno.
+///
+/// # Safety
+/// As [`yd_t6_osal_submit`].
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_wait(fence: i64, timeout_us: i64) -> i32 {
+    // SAFETY: the caller's contract.
+    let s = unsafe { osal() };
+    let Some(delay) = s.1 else { return -EINVAL };
+    s.0.wait(&osal_hw(), fence, timeout_us, &mut |us| delay(us))
+}
+
+/// `completed` ([`crate::board::nanopc_t6_osal::Osal::completed`]).
+///
+/// # Safety
+/// As [`yd_t6_osal_submit`].
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_completed() -> i64 {
+    // SAFETY: the caller's contract.
+    unsafe { osal() }.0.completed(&osal_hw())
+}
+
+/// `OSAL_QUERY_MALI_GPU`'s answer into `*out` (`struct osal_mali_gpu`):
+/// 0, or `-EINVAL` before [`yd_t6_osal_up`] or for a null `out`.
+///
+/// # Safety
+/// `out` null or valid for a write; one thread only.
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_gpu(out: *mut crate::board::nanopc_t6_osal::OsalMaliGpu) -> i32 {
+    // SAFETY: the caller's contract.
+    let (s, out) = unsafe { (osal(), out.as_mut()) };
+    match (s.0.gpu_info(), out) {
+        (Some(g), Some(out)) => {
+            *out = g;
+            0
+        }
+        _ => -EINVAL,
+    }
+}
+
+/// `OSAL_QUERY_MALI_TILER_HEAP`'s answer into `*out` (`struct
+/// osal_mali_heap`): 0, or `-EINVAL` as [`yd_t6_osal_gpu`].
+///
+/// # Safety
+/// As [`yd_t6_osal_gpu`].
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_heap(out: *mut crate::gpu::mali::heap::OsalMaliHeap) -> i32 {
+    // SAFETY: the caller's contract.
+    let (s, out) = unsafe { (osal(), out.as_mut()) };
+    match (s.0.heap(), out) {
+        (Some(h), Some(out)) => {
+            *out = h;
+            0
+        }
+        _ => -EINVAL,
+    }
+}
+
+/// The OSAL's counts for its log: kicks submitted and completed, pages in
+/// use now and at most, frees held and refused; and the sched refusal that
+/// stopped it (`dead_refusal` 0 for none) with its value. 0, or `-EINVAL`
+/// for a null `out`.
+///
+/// # Safety
+/// As [`yd_t6_osal_gpu`].
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_counts(out: *mut YdT6OsalCounts) -> i32 {
+    // SAFETY: the caller's contract.
+    let (s, out) = unsafe { (osal(), out.as_mut()) };
+    let Some(out) = out else { return -EINVAL };
+    let o = &s.0;
+    let (submitted, completed) = o.fences();
+    let (dead_refusal, dead_value) = o.dead().map_or((0, 0), |(r, v)| (r as u32, v));
+    *out = YdT6OsalCounts {
+        submitted,
+        completed,
+        live_pages: o.live_pages as u32,
+        live_pages_high: o.live_pages_high as u32,
+        held: o.held() as u32,
+        refused_frees: o.refused_frees,
+        dead_refusal,
+        dead_value,
+    };
+    0
+}
+
+/// `struct yd_t6_osal_counts` ([`yd_t6_osal_counts`]).
+#[cfg(any(feature = "mali", test))]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct YdT6OsalCounts {
+    pub submitted: u64,
+    pub completed: u64,
+    pub live_pages: u32,
+    pub live_pages_high: u32,
+    pub held: u32,
+    pub refused_frees: u32,
+    pub dead_refusal: u32,
+    pub dead_value: u32,
+}
+
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(size_of::<YdT6OsalCounts>() == 40);
+
 #[cfg(all(test, feature = "mali"))]
 mod fw_tests {
     use super::*;
@@ -1381,6 +1755,87 @@ mod fw_tests {
         // one assert per field and one for the size, each naming yd_t6_submit
         let n = H.lines().filter(|l| l.starts_with("_Static_assert(") && l.contains("yd_t6_submit")).count();
         assert!(n >= 49, "{n} _Static_assert lines name yd_t6_submit");
+    }
+
+    #[test]
+    fn the_c_header_has_the_osal_numbers_and_layout() {
+        use crate::board::nanopc_t6_osal as osal;
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let def64 = |name: &str| -> u64 {
+            let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
+            let v = l.split_whitespace().nth(2).expect(name);
+            let v = v.trim_end_matches("ull").trim_end_matches('u');
+            match v.strip_prefix("0x") {
+                Some(h) => u64::from_str_radix(h, 16),
+                None => v.parse(),
+            }
+            .unwrap_or_else(|_| panic!("{name}"))
+        };
+        for (name, v) in [
+            ("YD_T6_OSAL_QUEUE_VA", osal::QUEUE_VA),
+            ("YD_T6_OSAL_QUEUE_SIZE", crate::board::nanopc_t6_submit::QUEUE_VM_BYTES),
+            ("YD_T6_OSAL_HEAP_POOL_VA", osal::HEAP_POOL_VA),
+            ("YD_T6_OSAL_HEAP_POOL_SIZE", crate::board::nanopc_t6_submit::HEAP_POOL_SIZE),
+            ("YD_T6_OSAL_HEAP_CHUNK_VA", osal::HEAP_CHUNK_VA),
+            ("YD_T6_OSAL_HEAP_CHUNK", u64::from(osal::HEAP_CHUNK_SIZE)),
+            ("YD_T6_OSAL_CARVE_VA", osal::CARVE_VA),
+            ("YD_T6_OSAL_CARVE_MAX", (osal::MAX_CARVE_PAGES as u64) * crate::gpu::mali::pgtable::PAGE),
+        ] {
+            assert_eq!(def64(name), v, "{name}");
+        }
+        let mut pins = vec![
+            ("sizeof(struct yd_t6_osal_mem)".to_string(), size_of::<YdT6OsalMem>()),
+            ("sizeof(struct yd_t6_osal_counts)".into(), size_of::<YdT6OsalCounts>()),
+        ];
+        macro_rules! field {
+            ($t:ident, $c:literal, $($f:ident),*) => { $( pins.push((
+                format!("offsetof(struct {}, {})", $c, stringify!($f)), offset_of!($t, $f))); )* };
+        }
+        field!(
+            YdT6OsalMem,
+            "yd_t6_osal_mem",
+            fw,
+            pool,
+            pool_pages,
+            tables_pa,
+            queue,
+            ring,
+            heap_pool,
+            heap_chunks,
+            carve,
+            vm_pool,
+            vm_pool_pages,
+            vm_tables_pa
+        );
+        field!(
+            YdT6OsalCounts,
+            "yd_t6_osal_counts",
+            submitted,
+            completed,
+            live_pages,
+            live_pages_high,
+            held,
+            refused_frees,
+            dead_refusal,
+            dead_value
+        );
+        for (what, v) in &pins {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
+        // the library's struct osal_gpu_mem (include/gles_osal.h)
+        assert_eq!(
+            [
+                offset_of!(OsalGpuMem, cpu),
+                offset_of!(OsalGpuMem, gpu),
+                offset_of!(OsalGpuMem, phys),
+                offset_of!(OsalGpuMem, size),
+                offset_of!(OsalGpuMem, impl_)
+            ],
+            [0, 8, 16, 24, 32]
+        );
+        let lib = include_str!("../../../../include/gles_osal.h");
+        assert!(lib.contains("struct osal_gpu_mem {\n\tvoid     *cpu;"), "gles_osal.h's struct osal_gpu_mem");
     }
 
     #[test]

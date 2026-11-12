@@ -6,10 +6,10 @@
 # driver/drivers/<class>/ that register them with Zephyr's driver model; and
 # the PowerVR GPU's rgxlayer (group A, step 6: the layer under the vendored
 # DDK's rgxstartstop.c / rgxfwimageutils.c, exported with the DDK's C names).
-# No dependencies at all -- in particular not the `zephyr` crate, which at our
-# pin supports applications only (no device registration, no devicetree
-# instances, no ISR hookup). Everything the code needs from the OS comes in
-# through `struct yd_env` (include/yakogl_drivers.h).
+# No dependencies at all (the host tests have one, below) -- in particular not
+# the `zephyr` crate, which at our pin supports applications only (no device
+# registration, no devicetree instances, no ISR hookup). Everything the code
+# needs from the OS comes in through `struct yd_env` (include/yakogl_drivers.h).
 #
 # Built as a staticlib for aarch64-unknown-none-softfloat: this code runs at
 # PRE_KERNEL_1 and inside ISRs, where arm64 Zephyr forbids the FP registers.
@@ -69,3 +69,11 @@ pvr-grow-scene = ["pvr"]
 # The Vivante GC7000 kernel side (gpu::vivante): power, identify, reset, MMU,
 # ring, interrupt; i.MX 8M Plus images with YAKOGL_DRV_GPU_VIVANTE.
 vivante = ["imx8mp"]
+
+# The host tests only: the Zephyr Mali OSAL's test (board::nanopc_t6_osal)
+# draws the L2 triangle through the GL stack and its `gpu-mali` backend over
+# the OSAL's logic and the Z4 MCU model. The image configuration of the Mali
+# build, as tools/mali/panthor takes it: no OSAL feature (the test installs
+# its ops), the in-process compiler, no table.
+[dev-dependencies]
+yakogl = { path = "../..", default-features = false, features = ["gpu-mali", "shaderc-online", "no-shader-table"] }

@@ -11,10 +11,11 @@ stable Rust cannot define.
 
 Zephyr has one such translation unit per GPU, because the driver underneath is
 a different driver: `zephyr.c` for the PowerVR BXS-4-64, `zephyr_gc.c` for
-the Vivante GC7000UL and `zephyr_v3d.c` for the Broadcom V3D 4.2. All define
-`osal_zephyr_ops`, the module build compiles exactly one of them
-(`CONFIG_YAKOGL_GPU_*`), and nothing above the OSAL knows which. Two more
-files serve all three: `zephyr_shaderc_scratch.c` and `zephyr_timing.c`.
+the Vivante GC7000UL, `zephyr_v3d.c` for the Broadcom V3D 4.2 and
+`zephyr_mali.c` for the Arm Mali-G610. All define `osal_zephyr_ops`, the
+module build compiles exactly one of them (`CONFIG_YAKOGL_GPU_*`), and nothing
+above the OSAL knows which. Two more files serve all of them:
+`zephyr_shaderc_scratch.c` and `zephyr_timing.c`.
 
 ## Files (all under `yakogl/src/osal/`)
 
@@ -24,6 +25,7 @@ files serve all three: `zephyr_shaderc_scratch.c` and `zephyr_timing.c`.
 | `zephyr.c`        | Zephyr backend for the PowerVR — wraps the silicon-proven bring-up driver. |
 | `zephyr_gc.c`     | Zephyr backend for the Vivante GC7000UL — wraps the driver's render service (`driver/src/vivante/gc_render.h`). Compiled instead of `zephyr.c` when `CONFIG_YAKOGL_GPU_VIVANTE=y`. |
 | `zephyr_v3d.c`, `zephyr_v3d.h` | Zephyr backend for the Broadcom V3D 4.2 (Raspberry Pi 4). The V3D has no firmware, no ring and no Zephyr driver, so this file is the whole render service, on the driver's OS-free steps (`driver/src/v3d/v3d_hw.c`). Compiled instead of `zephyr.c` for the V3D. |
+| `zephyr_mali.c`   | Zephyr backend for the Arm Mali-G610 (NanoPC-T6). The OSAL's logic is Rust in the drivers crate (`driver/rust/src/board/nanopc_t6_osal.rs`, the `yd_t6_osal_*` entries: the GPU and its CSF firmware brought up, one group with one stream, a carve-out mapped whole, each kick one job on the ring); this file holds the image's memory, the register mappings, the watchdog-feeding delay and the table. Compiled for `CONFIG_YAKOGL_GPU_MALI=y`. |
 | `zephyr_shaderc_scratch.c` | The memory the in-process shader compiler works in: one static region, lent once at boot, sized by `CONFIG_YAKOGL_SHADERC_SCRATCH_BYTES`. Shared by the three Zephyr backends. |
 | `zephyr_timing.c` | The time answers every Zephyr OSAL gives (`OSAL_QUERY_CLOCK_NS`, `OSAL_QUERY_DRAW_STATS`), in one place so the three cannot drift apart. |
 | `baremetal.c`     | Bare-metal backend skeleton — direct MMIO + static carveout; proves the portability seam (2nd backend, same interface). The board registers its addresses and hooks first (`include/gles_osal_baremetal.h`, `osal_bm_board_config()`); init refuses without them (see below). |

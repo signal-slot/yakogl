@@ -73,6 +73,22 @@ config YAKOGL_GPU_V3D
 	  docs/online-shaderc/v3d-backend.md, "M6", says what is drawn and what
 	  is refused by name.
 
+config YAKOGL_GPU_MALI
+	bool "Arm Mali-G610 (NanoPC-T6, RK3588)"
+	depends on YAKOGL_SHADERC_ONLINE
+	depends on YAKOGL_NANOPC_T6
+	select NOCACHE_MEMORY
+	help
+	  The Mali backend (src/mali): CSF command streams and the frame
+	  descriptors, submitted by the OSAL in src/osal/zephyr_mali.c over our
+	  own kernel side (driver/rust: gpu::mali, board::nanopc_t6_osal): the
+	  GPU powered and the CSF firmware booted (Z1-Z3), one command stream
+	  group with one stream started, each kick one job on its ring. The
+	  in-process compiler is this GPU's only shader back end. The image
+	  passes the firmware in struct osal_zephyr_mali_init (osal_internal.h).
+	  What the OSAL refuses instead of recovering (a GPU fault, a full tiler
+	  heap, the 5 s job timeout) is listed in board::nanopc_t6_osal.
+
 endchoice
 
 config YAKOGL_PVR_POOL_RECLAIM
@@ -345,6 +361,30 @@ config YAKOGL_V3D_CARVEOUT_TOP_BELOW
 	  Opt-in until the regression set has run with it; the close record's
 	  "carve-out find" line prints the setting, the free runs and the
 	  longest.
+
+config YAKOGL_MALI_CARVEOUT_BYTES
+	int "Mali carve-out (bytes)"
+	depends on YAKOGL_GPU_MALI
+	range 4096 268435456
+	default 33554432
+	help
+	  The memory every Mali buffer comes from: a __nocache static of the
+	  image, mapped whole in the GPU's address space at init, handed out in
+	  whole pages. The backend's own buffers take about 4 MiB (two frame
+	  slots); textures, vertex buffers and surfaces take the rest. At most
+	  256 MiB (board::nanopc_t6_osal::MAX_CARVE_PAGES). The image's RAM must
+	  hold it besides the kernel.
+
+config YAKOGL_MALI_HEAP_CHUNKS
+	int "Mali tiler heap: 2 MiB chunks, all made at init"
+	depends on YAKOGL_GPU_MALI
+	range 1 64
+	default 5
+	help
+	  The tiler heap's chunks. The heap does not grow (a full heap is the
+	  job's fault, refused: board::nanopc_t6_osal), so it starts with all of
+	  them. 5 is Mesa's initial count for this GPU (2 MiB chunks; Mesa grows
+	  to 64).
 
 config YAKOGL_DRAW_STEP_STATS
 	bool "Time every draw's steps (src/draw_steps.rs) and keep the totals"

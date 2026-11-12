@@ -105,6 +105,17 @@ pub const fn error_barrier() -> u64 {
     47u64 << 56
 }
 
+/// The word of [`job_block`] that is the `SYNC_ADD64` (:3089): the job's
+/// number is visible in the sync object once it ran.
+pub const JOB_SYNC_WORD: usize = 9;
+
+/// The words of every [`job_block`] after its `SYNC_ADD64`: the
+/// `ERROR_BARRIER` (:3092) and the padding to a cache line (:3116-3119).
+/// They do not depend on the job, so a block written over one whose
+/// number the sync object already shows changes none of the words that
+/// job may not have run yet ([`super::submit`]'s room).
+pub const JOB_TAIL: [u64; JOB_WORDS - JOB_SYNC_WORD - 1] = [error_barrier(), 0, 0, 0, 0, 0];
+
 /// What `get_job_cs_params` gathers (:3005-3030), without the profiling
 /// fields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,9 +187,13 @@ pub const fn job_block(p: &JobParams) -> [u64; JOB_WORDS] {
     b[6] = mov48(a, p.sync_addr); // :3083
     b[7] = mov48(v, 1); // :3085
     b[8] = wait(p.waitall_mask); // :3087
-    b[9] = sync_add64(a, v); // :3089
-    b[10] = error_barrier(); // :3092
-    b // :3116-3119: words 11..16 stay zero
+    b[JOB_SYNC_WORD] = sync_add64(a, v); // :3089
+    let mut i = 0;
+    while i < JOB_TAIL.len() {
+        b[JOB_SYNC_WORD + 1 + i] = JOB_TAIL[i]; // :3092, then :3116-3119's zeroes
+        i += 1;
+    }
+    b
 }
 
 /// Bytes the stream has not consumed: `insert - extract`. Both are the
@@ -353,6 +368,27 @@ mod tests {
         assert_eq!(check_params(&JobParams { addr_reg: 91, ..p }), Err(ParamsError::RegisterRange(91)));
         assert_eq!(check_params(&JobParams { waitall_mask: 0, ..p }), Err(ParamsError::WaitMask(0)));
         assert_eq!(check_params(&JobParams { waitall_mask: 1 << 16, ..p }), Err(ParamsError::WaitMask(1 << 16)));
+    }
+
+    /// Two jobs as unlike as the parameters allow end in the same words
+    /// after their `SYNC_ADD64`.
+    #[test]
+    fn the_words_after_the_sync_add64_are_the_same_for_every_job() {
+        let a = params();
+        let b = JobParams {
+            addr_reg: 0,
+            cs_start: 0xffff_ffff_ffc0,
+            cs_size: 8,
+            sync_addr: 0x1000,
+            last_flush: !0,
+            waitall_mask: 1,
+        };
+        for p in [a, b] {
+            let block = job_block(&p);
+            assert_eq!(block[JOB_SYNC_WORD], sync_add64(p.addr_reg, val_reg(p.addr_reg)));
+            assert_eq!(block[JOB_SYNC_WORD + 1..], JOB_TAIL);
+        }
+        assert_ne!(job_block(&a)[..JOB_SYNC_WORD], job_block(&b)[..JOB_SYNC_WORD]);
     }
 
     #[test]

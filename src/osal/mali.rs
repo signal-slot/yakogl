@@ -15,8 +15,9 @@
 //! The OSAL owns the address space, the queue and the heap; the backend
 //! owns what it writes into its buffers. An OSAL answers the two queries
 //! only when it can submit to a Mali queue: the development OSAL over
-//! panthor (tools/mali/panthor, `yakogl_mali_panthor::osal`), later the
-//! Zephyr kernel side (driver/rust/src/gpu/mali, milestone Z4). The C
+//! panthor (tools/mali/panthor, `yakogl_mali_panthor::osal`) and the Zephyr
+//! one over our own kernel side (src/osal/zephyr_mali.c over
+//! driver/rust/src/board/nanopc_t6_osal.rs). The C
 //! mirrors are `struct osal_mali_gpu`, `osal_mali_heap` and `osal_mali_kick`
 //! in osal_internal.h, beside the query ids; `yakogl-tools abi-layout` pins
 //! both sides (src/abi_layout.rs, src/abi_layout_check.c), and the test

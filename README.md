@@ -169,7 +169,8 @@ turn it into a header with `driver/tools/mkfwblob.sh`.
   OSALs, which are C for now (thin glue over C APIs; their move to Rust is open
   work, #19): Zephyr, one translation unit per GPU (`zephyr.c`
   over the PowerVR render service, `zephyr_gc.c` for the GC7000, `zephyr_v3d.c`
-  for the V3D) with `zephyr_shaderc_scratch.c` (the compiler's regions) and
+  for the V3D, `zephyr_mali.c` for the Mali-G610) with
+  `zephyr_shaderc_scratch.c` (the compiler's regions) and
   `zephyr_timing.c`; `baremetal.c`; `linux.c` (a host build with no GPU, for
   AddressSanitizer runs and the host harness).
 - `src/gl_internal.h`, `src/gl_context.h`, `src/backend.h`, `src/pvr/pvr_backend.h`,
