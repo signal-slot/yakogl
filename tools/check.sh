@@ -184,7 +184,7 @@ scope_of_path() {
   # under the three directories below, and the 4.2 rows are reached as before.
   src/shaderc/online/v3d/* | driver/src/v3d/* | tools/v3d/*) echo "v3d v3d71" ;;
   src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
-  src/shaderc/online/mali/* | src/mali/* | tools/mali/*) echo mali ;;
+  src/shaderc/online/mali/* | src/mali/* | tools/mali/* | tests/mali_*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
   src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc*) echo vivante ;;
@@ -1973,6 +1973,9 @@ step "test    $MALI_CONFIG (--lib mali::, every declared test: packers and ISA v
 # behaviour and the ignored tests of the 4x result (not run).
 step "test    $MALI_CONFIG (tests/es3_msaa_mali.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test es3_msaa_mali
+# The levels and the mip filter the GL core hands the Mali for a 3D texture.
+step "test    $MALI_CONFIG (tests/mali_3d_levels.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test mali_3d_levels
 # src/mali/genxml/v10.rs and v10_cases.rs are what tools/mali/gen_pack_rs.py
 # makes from the vendored v10.xml, byte for byte (third_party/mesa-26.2.1/UPSTREAM,
 # "Used by"); a failing generator prints nothing and so differs too.

@@ -96,6 +96,7 @@ want tests/es3_fragdepth_gc.rs vivante
 want tests/es3_fragdepth_cases.rs "vivante v3d"
 want src/mali/backend.rs mali
 want src/mali/genxml/v10.rs mali
+want tests/mali_3d_levels.rs mali
 want src/shaderc/online/mali/mod.rs mali
 want tools/mali/gen_pack_rs.py mali
 want src/shaderc/online/mali/isa/v10.rs mali

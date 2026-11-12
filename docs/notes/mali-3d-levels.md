@@ -75,9 +75,9 @@ array, mipmapped 2D) do not go through `volume_of` and keep their bytes:
 their tests (`a_two_layer_array_chain_is_the_shim_s`,
 `a_nearest_mipmapped_chain_is_the_board_s`, ...) are unchanged and pass.
 
-## 4. Left: the GL core's hand-over (outside this item)
+## 4. The GL core's hand-over (done in `src/gl/draw.rs`, pinned by `tests/mali_3d_levels.rs`)
 
-What case 206 still needs, in `src/gl/draw.rs` where a texture binding is
+What case 206 needed, and the draw now does, in `src/gl/draw.rs` where a texture binding is
 filled (after `sampling_fields`, beside the PowerVR's `native_vol` block): for
 a `GLES_TEXTYPE_3D` binding of a grid (`t.grid_cols != 0`) on this backend,
 `mip_levels` = the grid levels held and written (`grid_level_held`, the
