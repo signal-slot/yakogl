@@ -19,6 +19,9 @@ pub mod dw_hdmi_tx;
 /// armed (the RK3588's WDT0).
 #[cfg(any(feature = "rk3588", test))]
 pub mod dw_wdt;
+/// The RK3588 Samsung HDMI/DP combo PHY (HDPTX) in HDMI TMDS mode.
+#[cfg(any(feature = "rk3588", test))]
+pub mod hdptx;
 #[cfg(any(feature = "imx8mp", test))]
 pub mod imx8mp_hdmi_phy;
 #[cfg(any(feature = "imx8mp", test))]
