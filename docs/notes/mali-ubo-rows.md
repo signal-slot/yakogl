@@ -147,8 +147,7 @@ frame:
 - Arm C stays `TexCount` (a refusal test) until the texture-2 item lowers the
   second look-up; then `unitype_166c` is byte-equal (116 words, 30 FAU words).
 - `tools/mali/corpus-verdicts.txt` has no row for 166 (`shp_src` builds its
-  shaders); nothing moves there. The `MALI_TESTS` count in `tools/mali/gate.env`
-  grows by the tests added.
+  shaders); nothing moves there.
 
 ## What this note did not do
 

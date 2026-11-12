@@ -545,7 +545,7 @@ it.
 **The regression set**, green at every commit:
 - every population byte-equal (VS `cmul`/`cdiv`/`cpack`; FS `sel_*`; the
   triangle samples);
-- `MALI_TESTS`;
+- the Mali test row: every test declared in `MALI_TEST_SOURCES` passes;
 - `tools/mali/corpus-verdicts.txt`: a verdict may only move forward;
 - the board sweep's PASS set may not shrink.
 
@@ -619,10 +619,12 @@ nothing else (fmt, the Mali clippy and `--lib mali::` tests, the two generated
 tables, the aarch64 check, `yakogl-mali-panthor`, pan_shc when `MESA_PAN_TREE`
 is set, otherwise a gap line). CI = `tools/check.sh --changed <base>`, which
 selects the same scope for a diff under `src/mali`, `src/shaderc/online/mali`
-and `tools/mali`. The test-count pin is `MALI_TESTS` in `tools/mali/gate.env`,
-not in `tools/check.sh`: editing `tools/check.sh` selects every row, so a pin
-there made each Mali pull request run the whole gate. A Mali change does not
-touch `tools/check.sh`.
+and `tools/mali`. The Mali test row passes when the tests that passed are
+the `#[test]` functions of the sources listed as `MALI_TEST_SOURCES` in
+`tools/mali/gate.env`: no count is kept, so a change that adds or removes a
+test edits neither that file nor `tools/check.sh` (editing `tools/check.sh`
+selects every row). The list changes only when Mali tests appear in a new
+place.
 
 Zephyr main has the RK3588 SoC (GICv3, arch timer, ns16550 UARTs, a generic CRU
 reset driver, SCMI over SMC with an SCMI clock driver) and the boards

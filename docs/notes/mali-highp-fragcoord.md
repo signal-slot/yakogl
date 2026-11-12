@@ -224,9 +224,7 @@ tests, in the style of `the_texture_population_is_byte_equal_to_mesa_26_2_1`,
    program that needs an unavailable row is refused, not compiled as fp16
    (one assertion in the `tests.rs:859-880` list); (c) every mediump population
    stays byte-equal (nothing to add, nothing may move); (d) `corpus-verdicts.txt`
-   unchanged or forward only; (e) `MALI_TESTS` in `tools/mali/gate.env` moves by
-   the number of tests added (that file is under `tools/mali/**`: coordinate
-   with the running `frame-msaa-zs`, rebase on it).
+   unchanged or forward only.
 7. **Board.** Sweep cases 28 and 29 PASS and cases already PASS stay PASS
    (the plan's acceptance, run by the item that has the board).
 

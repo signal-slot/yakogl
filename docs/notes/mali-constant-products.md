@@ -378,8 +378,7 @@ Tests (`src/shaderc/online/mali/tests.rs`):
   pinned in the same test as the next refusal of that shape, not a fold
   defect.
 * Unchanged and passing: `the_flattened_ifs_are_byte_equal_to_mesa_26_2_1`
-  (case 71), the `algfold_*` sentinels and the rest of the Mali lib tests
-  (`MALI_TESTS` 386 -> 388, `tools/mali/gate.env`).
+  (case 71), the `algfold_*` sentinels and the rest of the Mali lib tests.
 
 Corpus (`tools/mali/corpus-verdicts.sh --write`): only
 `es100/loopcarry.frag` moves, to `ok`; no other source reached the new rule

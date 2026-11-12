@@ -320,8 +320,8 @@ It was run twice and the six files are identical. Shim:
 
 Tests to move with it: `src/mali/frame_blend_tests.rs:225-235` (the refusal
 row of MIN and of `const` stays only for what is still refused: its MIN is now
-built), `src/mali/backend_tests.rs:895-900`, the `NOT_BUILT_BLEND_SHADER`
-rows at `:1081`/`:1124`, and `MALI_TESTS` in `tools/mali/gate.env`. The gl_test
+built), `src/mali/backend_tests.rs:895-900` and the `NOT_BUILT_BLEND_SHADER`
+rows at `:1081`/`:1124`. The gl_test
 sweep: 211 and 190 turn from refused to PASS only on a T6 run; a Mesa
 reference for 190 on the board is the `mesarefs4` item.
 

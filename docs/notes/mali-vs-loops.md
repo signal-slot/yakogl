@@ -297,7 +297,7 @@ independent structures, and the back-end passes -- `sched.rs`, `ra.rs`, `flow.rs
   testdata is out of its contract); its stderr above (29 instructions, 11
   registers) is the check until then.
 - `corpus-verdicts.sh --write` moves lines 68 and 70 of
-  `corpus-verdicts.txt`; `MALI_TESTS` in `tools/mali/gate.env` counted.
+  `corpus-verdicts.txt`.
 
 ## 5. What it moves
 

@@ -341,7 +341,7 @@ read two FAU slots).
   fact (registers, preload, the FAU table), helper threads on, two
   `.shadow.` look-ups, and the two refusals of section 5's first rows.
   `es300_layersunused_step_is_byte_equal_to_mesa_26_2_1` pins the side
-  effect of the `Bnot` arm. `tools/mali/gate.env` `MALI_TESTS` 403 -> 405.
+  effect of the `Bnot` arm.
 * `tools/mali/corpus-verdicts.txt`: one line moved forward
   (`es300/layersunused.frag: ok`); no other verdict changed. The ES 1.00
   mediump programs that read gl_FragCoord (prec_84, tri_fragcoord,

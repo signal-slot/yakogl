@@ -468,7 +468,7 @@ fp16 operation on texels.
 ### Proposed items and #33 text
 
 - `mixed-hdr-44-49`: steps 1-4; moves `es300/hdrsample.frag` to `ok` in
-  `corpus-verdicts.txt` and MALI_TESTS via `tools/mali/check.sh`. Touches
+  `corpus-verdicts.txt`, checked with `tools/mali/check.sh`. Touches
   `nir_fs.rs`, `select.rs`, `mod.rs`, `tests.rs`: serialise with the other
   compiler lowerings.
 - `mixed-ifelse-loop-ref`: done (item `ref-ifelse-loop`):

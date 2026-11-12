@@ -1139,6 +1139,117 @@ for line in sys.stdin:
   fi
 }
 
+# declared_tests <source>...: the name of every #[test] function the sources
+# declare, one per line. A source is
+#   <dir>              every .rs file under it,
+#   <file.rs>          the file,
+#   <file.rs>#<item>   one item of the file: the inline `mod <item> {` block
+#                      (its nested modules too) or the `#[test] fn <item>`.
+# A declaration is a line that is `#[test]` alone, which is how rustfmt
+# writes it (the gate's fmt row); its name is on the first `fn` line after
+# it. A `//` comment line declares nothing. A module's block ends at the `}`
+# under its `mod` line's own indentation (rustfmt again).
+# A source that does not exist, or names no test, is a mistake in the list
+# and an error, never zero tests. So is a `#[test]` with no `fn` after it.
+# The scan is of the text, not of the compiler's view: a test the scan
+# misreads does not go unseen, tests_as_declared reports it from one side or
+# the other.
+declared_tests() {
+  local s file item f names
+  [ $# -gt 0 ] || { echo "declared_tests: no source given" >&2; return 1; }
+  for s in "$@"; do
+    file=${s%%#*}
+    item=
+    [ "$file" = "$s" ] || item=${s#*#}
+    if [ -n "$item" ] && ! [[ $item =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      echo "$s: '$item' is not the name of a module or a function" >&2
+      return 1
+    fi
+    if [ -n "$item" ] && [ ! -f "$file" ]; then
+      echo "$s: an item is named in a file, and $file is not one" >&2
+      return 1
+    fi
+    [ -e "$file" ] || { echo "$s: no such file or directory" >&2; return 1; }
+    names=$(find "$file" -type f -name '*.rs' | LC_ALL=C sort | while IFS= read -r f; do
+      awk -v item="$item" -v src="$s" '
+        function fail(msg) { print msg > "/dev/stderr"; bad = 1 }
+        {
+          line = $0
+          sub(/^[ \t]+/, "", line)
+          sub(/[ \t\r]+$/, "", line)
+          if (item != "" && !inmod && line ~ ("^(pub([(][a-z]+[)])? )?mod " item " [{]$")) {
+            indent = $0
+            sub(/[^ \t].*$/, "", indent)
+            inmod = 1
+            found++
+            next
+          }
+          if (inmod && $0 == indent "}") inmod = 0
+          if (line ~ /^\/\//) next
+          if (line == "#[test]") {
+            if (pending) fail(FILENAME ":" pending ": #[test] with no fn after it")
+            pending = NR
+            next
+          }
+          if (pending && match(line, /(^|[ \t])fn [A-Za-z_][A-Za-z0-9_]*/)) {
+            name = substr(line, RSTART, RLENGTH)
+            sub(/^.*fn /, "", name)
+            pending = 0
+            if (item == "" || inmod) print name
+            else if (name == item) { found++; print name }
+          }
+        }
+        END {
+          if (pending) fail(FILENAME ":" pending ": #[test] with no fn after it")
+          if (item != "" && found != 1)
+            fail(src ": " found + 0 " item(s) of that name (a `mod " item " {` block or a `#[test] fn " item "`), exactly one is needed")
+          exit bad
+        }' "$f" || exit 1
+    done) || return 1
+    [ -n "$names" ] || { echo "$s: no #[test] in it" >&2; return 1; }
+    printf '%s\n' "$names"
+  done
+}
+
+# tests_as_declared <source>...: stdin is the libtest log of one test binary
+# (cargo_test prints it, for a binary run now and for one that passed on
+# main). Passes when the log's result line says all passed, none failed and
+# none ignored, and the tests that passed are the tests the sources declare
+# (declared_tests), name by name, a name declared twice having passed twice.
+# This is what a pinned count ("exactly N passed") stood for, without the
+# number: a test that is no longer compiled, or that the row's filter no
+# longer selects, is "declared, did not run"; a test the filter selects from
+# a place the row does not list is "ran, no listed source declares it". A
+# change that adds or removes a test edits nothing here.
+tests_as_declared() {
+  local log declared ran results passed named missing extra n
+  log=$(cat)
+  declared=$(declared_tests "$@" 2>&1) || { printf '%s\n' "$declared"; return 1; }
+  results=$(printf '%s\n' "$log" | grep -c '^test result:')
+  [ "$results" = 1 ] ||
+    { echo "$results 'test result:' line(s); the log of exactly one test binary is expected"; return 1; }
+  passed=$(printf '%s\n' "$log" | sed -nE 's/^test result: ok\. ([0-9]+) passed; 0 failed; 0 ignored;.*/\1/p')
+  [ -n "$passed" ] ||
+    { echo "not 'ok. N passed; 0 failed; 0 ignored': $(printf '%s\n' "$log" | grep '^test result:')"; return 1; }
+  ran=$(printf '%s\n' "$log" | sed -nE 's/^test ([^ ]+)( - should panic)? \.\.\. ok$/\1/p')
+  named=$(printf '%s\n' "$ran" | grep -c .)
+  [ "$named" = "$passed" ] ||
+    { echo "the result line says $passed passed, the log names $named passed test(s)"; return 1; }
+  missing=$(LC_ALL=C comm -23 <(printf '%s\n' "$declared" | LC_ALL=C sort) <(printf '%s\n' "$ran" | sed 's/.*:://' | LC_ALL=C sort))
+  extra=$(LC_ALL=C comm -13 <(printf '%s\n' "$declared" | LC_ALL=C sort) <(printf '%s\n' "$ran" | sed 's/.*:://' | LC_ALL=C sort) | LC_ALL=C sort -u)
+  if [ -n "$missing" ]; then
+    printf '%s\n' "$missing" |
+      sed 's/^/declared, did not run (not compiled, or the filter of the row does not select it): /'
+  fi
+  # By its path in the binary. When the name also passed from a listed
+  # source, the paths of all its tests: the names alone cannot tell which.
+  for n in $extra; do
+    printf '%s\n' "$ran" | grep -E "(^|::)$n\$" | sed 's/^/ran, no listed source declares it: /'
+  done
+  [ -z "$missing" ] && [ -z "$extra" ] || return 1
+  echo "$passed passed: every #[test] of $*"
+}
+
 # One binary's nextest verdict. $1 is nextest's log, $2 the binary id, $3 the
 # number of tests nextest selected in it (`cargo nextest list`; a feature set
 # can leave a test file with none). Prints the binary's result lines
@@ -1265,6 +1376,14 @@ if [ "${1-}" = "--test-keys" ]; then
 fi
 if [ "${1-}" = "--nextest-verdict" ]; then
   nextest_verdict "${2:?usage: tools/check.sh --nextest-verdict <nextest.log> <binary id> <tests selected>}" "${3:?binary id}" "${4:?tests selected}"
+  exit $?
+fi
+# --tests-as-declared <libtest log> <source>...: tests_as_declared on a log
+# file (tools/check_testcache_selftest.sh).
+if [ "${1-}" = "--tests-as-declared" ]; then
+  tad_log=${2:?usage: tools/check.sh --tests-as-declared <libtest log> <source>...}
+  shift 2
+  tests_as_declared "$@" < "$tad_log"
   exit $?
 fi
 if [ "${1-}" = "--cargo-test" ]; then
@@ -1781,31 +1900,31 @@ step "test    $V3D_ES2_CONFIG (tests/es3_mrt_gl.rs)" \
 # the selector's population (testdata/sel_*) byte-equal too, the board's
 # 25.0.7 differences pinned, every reachable gap reached by name (the filters are
 # the `mali::` modules and the triangle sample's Mali test; a bare "mali"
-# would also match every "normalize" test). Exactly
-# MALI_TESTS (tools/mali/gate.env) must pass, so a test that stops being compiled, or a filter
-# that stops matching, turns the row red.
+# would also match every "normalize" test). The tests that pass must be the
+# tests that MALI_TEST_SOURCES (tools/mali/gate.env) declare, so a test that
+# stops being compiled, or a filter that stops matching, turns the row red.
 MALI_CONFIG="host-test,gpu-mali,shaderc-online,no-shader-table"
-# The pin is in tools/mali/gate.env, so a Mali change that moves it reaches
-# the mali scope only (this script is scope `all`).
-MALI_PIN_FILE=tools/mali/gate.env
-MALI_TESTS=
+# Where the Mali tests are declared is in tools/mali/gate.env, so a Mali
+# change that adds a place reaches the mali scope only (this script is scope
+# `all`).
+MALI_GATE_ENV=tools/mali/gate.env
+MALI_TEST_SOURCES=()
 # shellcheck source=tools/mali/gate.env
-[ -r "$MALI_PIN_FILE" ] && . "$MALI_PIN_FILE"
+[ -r "$MALI_GATE_ENV" ] && . "$MALI_GATE_ENV"
 mali_lib_tests() {
-  local out passed
-  [ -n "$MALI_TESTS" ] ||
-    { echo "no MALI_TESTS pin: $MALI_PIN_FILE is missing or does not set it"; return 1; }
+  local out
+  [ "${#MALI_TEST_SOURCES[@]}" -gt 0 ] ||
+    { echo "no MALI_TEST_SOURCES: $MALI_GATE_ENV is missing or does not set it"; return 1; }
   out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$MALI_CONFIG" --lib \
     mali:: the_triangle_sample_shaders_build_on_the_mali 2>&1) ||
     { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
   printf '%s\n' "$out" | grep -E '^test result'
-  passed=$(printf '%s\n' "$out" | sed -nE 's/^test result: ok\. ([0-9]+) passed; 0 failed; 0 ignored.*/\1/p' | head -1)
-  [ "$passed" = "$MALI_TESTS" ] ||
-    { echo "${passed:-no} Mali test(s) passed with none failed or ignored; the row expects exactly $MALI_TESTS (the pin is in $MALI_PIN_FILE)"; return 1; }
+  printf '%s\n' "$out" | tests_as_declared "${MALI_TEST_SOURCES[@]}" ||
+    { echo "the Mali tests that passed are not the tests declared in MALI_TEST_SOURCES ($MALI_GATE_ENV)"; return 1; }
 }
 scope mali local
 step "clippy  $MALI_CONFIG" cargo clippy --no-default-features --features "$MALI_CONFIG" --all-targets
-step "test    $MALI_CONFIG (--lib mali::, $MALI_TESTS tests: packers and ISA vs Mesa and the board)" mali_lib_tests
+step "test    $MALI_CONFIG (--lib mali::, every declared test: packers and ISA vs Mesa and the board)" mali_lib_tests
 # ES 3.0 multisample renderbuffers on the Mali: the pins of today's one-sample
 # behaviour and the ignored tests of the 4x result (not run).
 step "test    $MALI_CONFIG (tests/es3_msaa_mali.rs)" \

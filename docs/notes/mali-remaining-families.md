@@ -97,7 +97,7 @@ test is the IR shape (`glsl_rebalances_the_trees_it_takes` style) plus the
 chain's NIR order above. Case 80 itself needs, in order: this, the
 mixed-precision item (triage-mixed), dynamic indexing of locals (`Ilt` +
 `CSEL` ladder, from `unitype_80`), then the pin of `other_80_matdyn`. Do not
-write `other_80_matdyn` into `MALI_TESTS` before it is byte-equal.
+add the `other_80_matdyn` test before it is byte-equal.
 
 **State after item `chain-80` (`chain-matlocal` done; case 80 stops at
 `IndexedLocal`).** What the IR keeps of a matrix local is enough after all:

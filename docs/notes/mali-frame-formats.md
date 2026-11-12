@@ -307,5 +307,4 @@ frame change plus removing a backend refusal. Case 54 touches the most places
 (`TargetFormat` is matched everywhere in `frame.rs`) but is mechanical once the
 dump fixes the five values above. None needs a compiler change. After each:
 the sweep's PASS set may only grow (cases 4, 52, 54 are REFUSED in
-`2026-10-23-s6-discard`), and `MALI_TESTS` in `tools/mali/gate.env` moves with
-the tests added.
+`2026-10-23-s6-discard`).
