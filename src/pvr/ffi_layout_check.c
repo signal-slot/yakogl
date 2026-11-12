@@ -277,6 +277,12 @@ int pvr_pds_render_vertex_program_ids(uint64_t vs_usc_exec_offset, uint32_t vs_t
 				      int has_slc_mcu_cache_controls, uint32_t vertex_id_reg,
 				      uint32_t instance_id_reg, uint32_t *data_out, uint32_t *code_out,
 				      struct pvr_pds_render_vertex_info *info);
+int pvr_pds_render_vertex_program_ids_base(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
+					   const struct pvr_pds_render_stream *streams, uint32_t num_streams,
+					   int has_slc_mcu_cache_controls, uint32_t vertex_id_reg,
+					   uint32_t instance_id_reg, uint32_t instance_id_base,
+					   uint32_t *data_out, uint32_t *code_out,
+					   struct pvr_pds_render_vertex_info *info);
 int pvr_pds_render_coeff_program(int uses_w, int uses_z, int uses_pntc,
 				 const struct pvr_pds_coeff_varying *varyings,
 				 uint32_t num_varyings, uint32_t *data_out, uint32_t *code_out,

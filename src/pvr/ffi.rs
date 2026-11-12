@@ -557,6 +557,23 @@ extern "C" {
         code_out: *mut u32,
         info: *mut PvrPdsRenderVertexInfo,
     ) -> i32;
+    /// As [`pvr_pds_render_vertex_program_ids`], and gl_InstanceID starts at
+    /// `instance_id_base` (Mesa's `instance_id_modifier`; ignored without an
+    /// instance register). A base != 0 needs 2 more data dwords and 1 more
+    /// code dword than the `_ids` sizes.
+    pub fn pvr_pds_render_vertex_program_ids_base(
+        vs_usc_exec_offset: u64,
+        vs_temps: u32,
+        streams: *const PvrPdsVertexStream,
+        num_streams: u32,
+        has_slc_mcu_cache_controls: i32,
+        vertex_id_reg: u32,
+        instance_id_reg: u32,
+        instance_id_base: u32,
+        data_out: *mut u32,
+        code_out: *mut u32,
+        info: *mut PvrPdsRenderVertexInfo,
+    ) -> i32;
     /// Coefficient (DOUTI) program: `data_out` >= 2 * (varyings + 2) + 2
     /// dwords (padded to 4), `code_out` >= varyings + 2 (W and the point
     /// coordinate ahead of the varyings).

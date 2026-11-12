@@ -15,6 +15,18 @@ permanent test, `the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_
 counted). P1, P3 and V1 remain open; the section 5 board re-check is due
 after they land.
 
+**Update (2026-11-12): P1 has landed (plan #325, item instanceid).** The PowerVR
+back end calls `pvr_pds_render_vertex_program_ids_base` with
+`GlesDraw::instance_id` (Mesa's `instance_id_modifier`; Mesa itself uses it
+per clear rect, `rogue/pvr_clear.c`, `pvr_blit.c`), the refusal in
+`pvr_backend_draw` is gone, and a chunked instanced draw passes each chunk's
+first instance as the base (`VDATA_DWORDS` +2, `VCODE_DWORDS` +1). The
+line numbers below are the pre-P1 ones (`backend.rs` 4585, 4820, 5548, 7530 were
+5527, 6149, 7014, 9123 at `e69e221c`); the bullets about the refusal and the
+chunk rule describe the old code, and the claim that Mesa never sets the
+modifier is stale. Tests: `tests/es3_pvr_instanceid.rs`,
+`tests/es3_pvr_instanceid_pds.rs`. P1b and P3 remain open.
+
 ## Summary
 
 The six dEQP-GLES3 cases
