@@ -311,6 +311,58 @@ Still open (not measured):
 4. Whether the instruction cache needs code padded or aligned beyond 64
    bytes.
 
+## The STM32MP257F-DK's GC8000
+
+The same Rust kernel side also targets the STM32MP257F-DK's GPU (Cortex-A35
+image, plan #322, issues #7 and #1281). Nothing below was run on the DK by
+this document's author; the one board fact it quotes, the identity, is what
+Linux read there (issue #1281, as the pre-study records it). How it differs
+from the i.MX8MP's GC7000UL:
+
+- **Identity.** model 0x8000, revision 0x6205, product 0x80003, eco 0; the
+  table-driven row is `hw::DB_STM32MP257F`, `GCNANOULTRA31_VIP2`, customer not
+  matched (`driver/rust/src/gpu/vivante/hw.rs:107-135`; the ST row of the
+  golden-stream shim is 3dd64152). Limits are Mesa's st row and Linux's hwdb
+  (`hw.rs:104-106`); 16 streams against the i.MX8MP's 8 (pre-study, section
+  5.2, Q1 in `docs/notes/pre-study-stm32mp257f-dk.md:816`). The
+  board image refuses any other model and revision with one line and resets
+  through PSCI (`driver/zephyr/lib/board/stm32mp2/gc_power_mp2.c:13-18`).
+- **Power.** Not the GPC and CCM of the i.MX8MP: the `vivante,gc` node has no
+  "gpc" or "ccm" ranges, so `gpu_vivante_gc_rust.c` calls the weak
+  `gc_board_power_on` (31e07d90), which `gc_power_mp2.c:9-12` implements
+  through `yd_mp2_gpu_power_on`: OP-TEE's SCMI pseudo-TA (PERFORMANCE domain 1,
+  POWER domain 0), then the gate and reset in `RCC_GPUCFGR` (offset 0x83C),
+  then `HI_IDLE_STATE` until idle. The order and the register are in
+  `driver/rust/src/soc/stm32mp2/power.rs:4-24` and `rcc.rs:4,31-32`; the
+  offset is "unconfirmed from RM0457" there.
+- **No IOMMU.** The GPU node has no `iommus` (ST's `stm32mp255.dtsi:169-183`,
+  pre-study Q10, `docs/notes/pre-study-stm32mp257f-dk.md:825`), so the
+  carveout is mapped flat in the GPU's own MMU v2, as on the i.MX8MP.
+- **Carveout.** 64 MiB no-map `gpu-reserved` at 0xfa800000, below 4 GiB
+  (`driver/zephyr/lib/board/stm32mp2/app.overlay:6-8`, pre-study Q10); the
+  binding asks for at least 64 MiB (`driver/dts/bindings/gpu/vivante,gc.yaml:40`).
+- **Interrupt.** GIC SPI 183, register block 0x48280000, 0x800 bytes
+  (`app.overlay:5-6`). Nothing at or above 0x800 is read from the CPU
+  (`gc_power_mp2.c:19-20`, as in "Hardware findings that still hold").
+- **Samples.** `gc_fence` and `gc_clear` build for the DK's A35, with the
+  power through `stm32mp2_gpu.h` (31e07d90, `driver/samples/zephyr/gc_fence/README.md`,
+  `gc_clear/README.md`). That commit's message says "Not run on a board".
+
+Still unverified on the board (pre-study, "What needs the board" and its
+open questions; issue #1281):
+
+1. Power-up through SCMI and RCC from our own image: that OP-TEE accepts the
+   requests without a panic (Q3), the reset bit's polarity (`rcc.rs:18`), and
+   that the reset reaches idle.
+2. CHIP_MODEL/CHIP_REV read from U-Boot's `go`, and HI_INTR_ENBL reading
+   back.
+3. The customer id (the row says 0x15, Q1), the core clock rate (Q3,
+   `app.overlay:8-10`), the arch timer rate (Q6) and the state U-Boot hands
+   over (Q8).
+4. SPI 183 reaching the A35 and the fence interrupt arriving (Q6).
+5. The carveout's memory attributes and coherence with the A35 (Q14).
+6. Everything past `gc_clear`: the triangle, the GL sample and the display.
+
 ## Board runs, and what is left
 
 Done on the Verdin iMX8M Plus, C kernel against Rust kernel, byte-identical
