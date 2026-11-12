@@ -80,3 +80,4 @@ drop | login-at-host | tools/cts/mali-slice-redact.py | root[@]board\b | input o
 drop | login-at-host | tools/cts/mali-slice-redact.py | root[@]192\.0\.2\.7\b | input of a redaction test (RFC 5737 address)
 drop | tailnet-dns | tools/cts/mali-slice-redact.py | \bboard-1\.example\.ts\.net\b | input of a redaction test under the reserved example name (RFC 2606)
 drop | email | tools/cts/mali-slice-redact.py | serial-getty[@]ttyS2\.service\b | systemd unit instance in the tool's help, not an address
+drop | email | driver/tools/uboot-t6/prompt-reads.sh | serial-getty[@]ttyS2\.service\b | systemd unit instance the tool asks the board about, not an address

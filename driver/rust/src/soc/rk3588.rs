@@ -808,7 +808,8 @@ mod tests {
     /// The CRU and the PMU as the T6 read under Armbian, 2026-10-19, with
     /// the GPU runtime-suspended; a write with a hiword mask changes only
     /// the bits it enables. PD_GPU follows its control registers after
-    /// `lag` reads of its status.
+    /// `lag` reads of its status; its idle bits clear only once it is
+    /// powered.
     struct Soc {
         regs: RefCell<std::collections::HashMap<usize, u32>>,
         writes: RefCell<Vec<(usize, u32)>>,
@@ -865,7 +866,10 @@ mod tests {
                 if gate & 1 == 0 && !self.dead {
                     *r.get_mut(&(PMU + pd_gpu::REPAIR_STATUS)).unwrap() |= 2;
                 }
-                if req & 1 == 0 {
+                // the idle bits follow a released request only in a powered
+                // domain: the T6 at its U-Boot prompt reads the request
+                // clear and both bits set, with PD_GPU off
+                if req & 1 == 0 && r[&(PMU + pd_gpu::REPAIR_STATUS)] & 2 != 0 {
                     *r.get_mut(&(PMU + pd_gpu::BUS_IDLE_ACK)).unwrap() &= !1;
                     *r.get_mut(&(PMU + pd_gpu::BUS_IDLE_ST)).unwrap() &= !1;
                 }
@@ -1062,6 +1066,13 @@ mod tests {
     }
 
     #[test]
+    fn the_clock_u_boot_leaves_is_moved_to_cpll_over_5() {
+        // what the T6's U-Boot prompt read: the SPLL, divider field 0
+        let (soc, r) = set_from(0x1f80);
+        assert_moved_to_cpll_over_5(&soc, r);
+    }
+
+    #[test]
     fn the_stacks_divider_is_set_to_1_after_the_source() {
         let soc = Soc::t6_suspended(0);
         soc.regs.borrow_mut().insert(SEL158, 0x5f24);
@@ -1214,6 +1225,55 @@ mod tests {
         let pmu: Vec<_> = soc.writes.borrow().iter().filter(|w| w.0 >= PMU).copied().collect();
         assert_eq!(pmu, vec![(PMU + pd_gpu::PWR_GATE, 0x0001_0000), (PMU + pd_gpu::BUS_IDLE_REQ, 0x0001_0000)]);
         assert!(PdGpuRegs::read(&soc, PMU).usable());
+    }
+
+    /// The PMU and the GPU's gates as the T6 read at its U-Boot prompt,
+    /// 2026-11-12: PD_GPU off, its idle request clear, its acknowledge and
+    /// idle bits set, the GPU clock gates open. `STATUS` was not read there
+    /// and keeps Armbian's value.
+    fn t6_at_u_boot(lag: u32) -> Soc {
+        let soc = Soc::t6_suspended(lag);
+        for (a, v) in [
+            (pd_gpu::PWR_GATE, 0xfff9),
+            (pd_gpu::BUS_IDLE_REQ, 0),
+            (pd_gpu::BUS_IDLE_ACK, 0x0002_1fff),
+            (pd_gpu::BUS_IDLE_ST, 0x0002_1fff),
+            (pd_gpu::REPAIR_STATUS, 0xfff7_0001),
+        ] {
+            soc.regs.borrow_mut().insert(PMU + a, v);
+        }
+        soc.regs.borrow_mut().insert(CRU_BASE + clkgate_con(66), 0x04);
+        soc
+    }
+
+    #[test]
+    fn pd_gpu_on_from_the_state_u_boot_leaves() {
+        let soc = t6_at_u_boot(3);
+        // off, and the idle bits stay set while it is: read twice, past the lag
+        for _ in 0..2 {
+            let off = PdGpuRegs::read(&soc, PMU);
+            assert_eq!(
+                (off.pwr_gate, off.idle_req, off.idle_ack, off.idle_st, off.repair),
+                (0xfff9, 0, 0x0002_1fff, 0x0002_1fff, 0xfff7_0001)
+            );
+            assert!(!off.usable());
+        }
+        let mut slept = 0;
+        let on = pd_gpu_on(&soc, CRU_BASE, PMU, &mut |us| slept += us).unwrap();
+        assert_eq!(on, PdOn { opened: 0, was_on: false, waited_us: [3, 0, 0] });
+        assert_eq!(slept, 3);
+        // the idle request is already clear: its write changes nothing, the
+        // acknowledge follows the power
+        assert_eq!(
+            *soc.writes.borrow(),
+            vec![(PMU + pd_gpu::PWR_GATE, 0x0001_0000), (PMU + pd_gpu::BUS_IDLE_REQ, 0x0001_0000)]
+        );
+        let now = PdGpuRegs::read(&soc, PMU);
+        assert_eq!(
+            (now.pwr_gate, now.idle_req, now.idle_ack, now.idle_st, now.repair),
+            (0xfff8, 0, 0x0002_1ffe, 0x0002_1ffe, 0xfff7_0003)
+        );
+        assert!(now.usable());
     }
 
     #[test]

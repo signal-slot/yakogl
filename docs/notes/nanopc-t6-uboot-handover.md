@@ -4,10 +4,10 @@
 
 Status: design note. The clock, power and QoS decisions (sections 1, 2 and 7)
 are merged code with host tests. The U-Boot and eMMC facts (section 4) were
-measured read-only under Armbian; the load route (section 5) is a proposal
-whose load addresses are not measured yet, with a script draft in
-driver/tools/uboot-t6/t6-zephyr.cmd (never run). The entry audit (section 6)
-follows. The U-Boot prompt reads (section 3) are drafted and not run.
+measured read-only under Armbian and, on 2026-11-12, at the U-Boot prompt with
+the tool of section 3. The load route (section 5) has not run: the script draft
+driver/tools/uboot-t6/t6-zephyr.cmd cannot run on this U-Boot build, and the
+route that replaces it is issue #4627. The entry audit (section 6) follows.
 
 Why: every Z1 to Z4 image so far runs after Armbian by kexec, on the GPU clock
 and power state Linux left. Stage 5's product form is U-Boot booting Zephyr
@@ -87,7 +87,8 @@ supply check; tests `a_powered_down_pll_is_powered_through_its_write_mask_and_wa
 and `a_gpu_clock_on_a_powered_down_pll_is_powered_before_pd_gpu`.
 
 Not decided here: whether SCMI clock 5 (U-Boot's view) agrees with the CRU.
-Section 3 reads both. The QoS words are section 7.
+The U-Boot build on the board has no `clk` command, so only the CRU words were
+read (section 4 (c)). The QoS words are section 7.
 
 ## 2. The GPU power-on from U-Boot's state
 
@@ -161,61 +162,63 @@ Stops 9 to 13 never write the PMU. After 12 and 13 whether the enable
 reached the PMIC is unknown; the supply fields of `GpuUp` (`supply_enabled`,
 `supply_after`, `supply_waited_us`) show what was read.
 
-Not measured, for the U-Boot session: how fast DCDC1 actually ramps, and
-whether U-Boot leaves PD_GPU powered with its idle request still set (the
-`pd_gpu_on` test `a_powered_domain_with_its_idle_request_set_is_released_from_idle`
-covers the model, not the board).
+Measured at the U-Boot prompt (section 4 (c)): U-Boot leaves PD_GPU off, with
+its idle request clear and its idle ack and state set. That is one of the two
+"off" rows; which one is not measured, because the prompt has no command that
+reads the RK806 (the image's hand-over report reads `POWER_EN0` over SPI2 on
+its first run from U-Boot). Also not measured: how fast DCDC1 actually ramps.
+The `pd_gpu_on` test
+`a_powered_domain_with_its_idle_request_set_is_released_from_idle` covers a
+state U-Boot did not show.
 
 ## 3. The U-Boot prompt read procedure
 
-Draft, not run. Every step is a read: no write, no `mw`, no `bootm`/`booti`,
-nothing flashed. It waits for the owner's go-ahead with someone at the power
-switch. The UART path and the board's address come from the environment, never
-from this note. The board is shared with other work under Linux: reboot into
-U-Boot only when told.
+The procedure is a tool: driver/tools/uboot-t6/prompt-reads.sh (README.md
+beside it). It reboots the board into U-Boot, stops autoboot on the debug UART,
+enters the reads below in this order, and leaves with `reset`; U-Boot then
+boots Armbian by itself. Every step is a read: no write, no `mw`, no
+`bootm`/`booti`/`go`, nothing flashed. The UART path and the board's address
+come from the environment, never from this note. It ran on 2026-11-12 (record
+`20261112-184729-t6-uboot-reads`); the answers are in section 4 (c) and in
+issue #26.
 
-Preconditions: the board stopped at U-Boot's prompt (autoboot interrupted),
-nothing run before. Log everything the console prints. Record each answer in
-section 4 and in issue #26.
-
-1. **Version and environment.** `version`, `printenv`. Read-only.
+1. **Version and environment.** `version`, `help`, `printenv`, `bdinfo`,
+   `dm tree`. `dm tree` comes before any PMIC command (section 6).
 2. **The PMU, PD_GPU.** `md.l` one word each, from 0xfd8d8000: `PWR_GATE`
    (+0x14c), `BUS_IDLE_REQ` (+0x10c), `BUS_IDLE_ACK` (+0x118), `BUS_IDLE_ST`
-   (+0x120), `REPAIR_STATUS` (+0x290). Read-only. Off after Linux's kexec reads
-   0xffff in the gate word and 0xfad50001 in the status word. Decides: which row
-   of the section 2 table U-Boot hands over.
-3. **The RK806.** `pmic dump`, or `regulator dev vdd_gpu_s0` then `regulator
-   status`, when U-Boot's driver has the supply; otherwise record that it does
-   not (the image reads it over SPI2 itself). Wanted: `POWER_EN0` (Linux and
-   the image read 0x0f), `POWER_SLP_EN0` (register 0x06, Linux reads 0xe0), `BUCK1_CONFIG` (register
-   0x10, 0xa4), `BUCK1_ON_VSEL` (register 0x1a, 0x1c = 675 mV;
-   ip/rk806.rs:46-48, :179). Read-only: never `regulator value` or
-   `regulator enable`, which write. Decides: whether DCDC1 is on, and for an
-   off supply whether `BUCK1_ON_VSEL` covers 675 mV (`SupplyBelowOpp`).
-4. **The CRU.** `md.l` of 0xfd7c0578 (`CLKSEL_CON(158)`; Linux leaves 0x1f24),
+   (+0x120), `REPAIR_STATUS` (+0x290). Off after Linux's kexec reads 0xffff in
+   the gate word and 0xfad50001 in the status word. Decides: which row of the
+   section 2 table U-Boot hands over.
+3. **The CRU.** `md.l` of 0xfd7c0578 (`CLKSEL_CON(158)`; Linux leaves 0x1f24),
    0xfd7c057c (`CLKSEL_CON(159)`), 0xfd7c0908 (`CLKGATE_CON(66)`),
    `MODE_CON0` (0xfd7c0280), the CPLL `PLL_CON` words (index 104 to 110, from
    0xfd7c01a0) and the GPLL ones (112 to 118, from 0xfd7c01c0). Then
-   `clk dump` (the rates U-Boot believes, SCMI clock 5 included). Read-only.
+   `clk dump` (the rates U-Boot believes, SCMI clock 5 included).
    Decision rules, from section 1: 0x1f24 with the CPLL at 1500 MHz means no CRU
-   write; bit 14 set, a mux past 4 or a divider off the table means
+   write; bit 14 set, the SPLL, a mux past 4 or a divider off the table means
    `gpu_clock_set` writes CPLL / 5; a CPLL at another rate means
    `ClockSetRefused`, nothing written, and the image needs another target.
+4. **The watchdog and the eMMC.** `wdt list`, `mmc list`, `mmc dev 0` (selects,
+   writes nothing), `mmc info`, `mmc part`, `ext4ls mmc 0:1 /`,
+   `ext4ls mmc 0:1 /boot`. Never `mmc write`, `ext4write` or `saveenv`.
 5. **The QoS words.** Only if step 2 shows PD_GPU on (reading an unpowered
    domain's block can fault the bus; this ordering is a safety assumption, not
    a measured fact): `md.l` of the five words (+0x08 to +0x18) of each of the
-   four blocks at 0xfdf35000, 0xfdf35200, 0xfdf35400 and 0xfdf35600.
-   Read-only. Linux reads `PRIORITY` 0x80000000 and 0 in the other four words;
-   what the image applies after the power-on is section 7.
-6. **The eMMC.** `mmc list`, `mmc dev 0` (selects, writes nothing), `mmc part`,
-   then `ext4ls mmc 0:<n> /` (or `ls`) for each partition section 4 names.
-   Read-only. Never `mmc write`, `ext4write` or `saveenv`.
-7. **Leave.** Have the person at the power switch return the board to Linux. Do
-   not `bootm`, `booti` or `go`.
+   four blocks at 0xfdf35000, 0xfdf35200, 0xfdf35400 and 0xfdf35600. Linux
+   reads `PRIORITY` 0x80000000 and 0 in the other four words; what the image
+   applies after the power-on is section 7.
+6. **The RK806.** Only if `dm tree` shows the PMIC already probed: `pmic list`,
+   `pmic dev <its name>`, `pmic dump`. Wanted: `POWER_EN0` (Linux and the image
+   read 0x0f), `POWER_SLP_EN0` (register 0x06, Linux reads 0xe0),
+   `BUCK1_CONFIG` (register 0x10, 0xa4), `BUCK1_ON_VSEL` (register 0x1a, 0x1c =
+   675 mV; ip/rk806.rs:46-48, :179). Never a `regulator` command: `regulator
+   value` and `regulator enable` write. Decides: whether DCDC1 is on, and for
+   an off supply whether `BUCK1_ON_VSEL` covers 675 mV (`SupplyBelowOpp`).
+7. **Leave.** `reset`. Never `bootm`, `booti` or `go`.
 
-Issue text for the session: "NanoPC-T6: U-Boot hand-over reads (needs the
-owner)": run this procedure at the U-Boot prompt with someone at the power
-switch, reads only, record the answers here and in #26.
+A command the build lacks answers "Unknown command", which is itself the
+answer: on this build `clk dump`, `wdt list` and the three `pmic` commands
+(section 4 (c)).
 
 ## 4. Measured U-Boot and eMMC facts
 
@@ -233,8 +236,7 @@ No host name, address or partition UUID is recorded here.
 | `boot_targets` starts `mmc1 mmc0 ...` | `strings` over the U-Boot image |
 | No `extlinux.conf` exists, only `boot.scr` | `lsblk -f`, then listing the mounted `/boot` |
 
-Which index is the eMMC on the real U-Boot (`mmc1 mmc0`) is not measured: it
-needs `mmc list` at the prompt (section 3, step 6). Below, `<dev>` stands for it.
+At the prompt the eMMC is `mmc 0` ((c) below).
 
 (b) The eMMC, from `lsblk -f`, `blkid` and `df`:
 
@@ -247,8 +249,29 @@ Board state under Armbian, same session: the GPU sits at 300 MHz
 (`CLKSEL_CON(158)` 0x1f24), vdd_gpu_s0 is enabled at 675 mV, PD_GPU is off.
 This is the first row of the section 2 table.
 
-Still to read from U-Boot itself (section 3): `printenv`, `mmc list`, `mmc dev`,
-and the PMU, CRU and RK806 state that U-Boot hands over.
+(c) At the U-Boot prompt, 2026-11-12, by the tool of section 3 (record
+`20261112-184729-t6-uboot-reads`). No MAC address, serial number or partition
+UUID is recorded here.
+
+| Fact | Command that produced it |
+|---|---|
+| U-Boot 2026.07_armbian; `bootcmd` is `bootflow scan -lb`, `bootdelay` 1, `boot_targets` is `mmc1 nvme mmc0 scsi usb pxe dhcp spi` | `version`, `printenv` |
+| `kernel_addr_r` 0x02000000, `fdt_addr_r` 0x12000000, `scriptaddr` 0x00c00000, `loadaddr` 0xc00800 | `printenv` |
+| DRAM banks at 0x200000 (0xefe00000 bytes), 0x100000000 (0x100000000 bytes) and 0x2f0000000 (0x10000000 bytes) | `bdinfo` |
+| U-Boot itself is at the top of the first bank: `relocaddr` 0xefec1000, `fdt_blob` 0xedbd07e0, `sp start` 0xedbd07d0; below 4 GiB it reserves only 0xecbcd000-0xecbcffff and 0xecbd07d0-0xefffffff. The window 0x10000000-0x1fffffff is free | `bdinfo` |
+| The eMMC is `mmc 0` (`mmc@fe2e0000`); `mmc@fe2c0000` is `mmc 1`. HS200, 8-bit, one GPT partition, the ext4 root (`mmc 0:1`) | `mmc list`, `mmc info`, `mmc part`, `ext4ls` |
+| `/boot` holds Armbian's `Image`, `dtb`, `uInitrd`, `boot.cmd` and `boot.scr`, and no `yakogl` directory | `ext4ls mmc 0:1 /boot` |
+| PD_GPU is off, its idle request clear: `PWR_GATE` 0x0000fff9, `BUS_IDLE_REQ` 0, `BUS_IDLE_ACK` and `BUS_IDLE_ST` 0x00021fff, `REPAIR_STATUS` 0xfff70001 | `md.l` |
+| The GPU clock is on the SPLL: `CLKSEL_CON(158)` 0x00001f80 (mux 4, divider field 0, bit 14 clear). `CLKSEL_CON(159)` 0, `CLKGATE_CON(66)` 0x00000004 | `md.l` |
+| The CPLL is at 1500 MHz in normal mode (`MODE_CON0` 0x00000545; `PLL_CON` words 0xfa, 0x42, 0, 0, 0, 0, 0x9c00); the GPLL at 1188 MHz (0xc6, 0x42, 0, 0, 0, 0, 0x9400) | `md.l` |
+| U-Boot probes the RK806 (`pmic@0` under `spi@feb20000`) and all its regulators on every boot, before any command is entered | `dm tree` |
+| The CRU driver is probed; the PMU and the QoS blocks have no probed driver; there is no watchdog device | `dm tree` |
+| The build has no `setexpr`, `dcache`, `icache`, `clk`, `wdt`, `pmic` or `ext4write` command; it has `ext4size`, `ext4load`, `md`, `crc32`, `go` and `reset` | `help`; "Unknown command" for `clk dump`, `wdt list`, `pmic list` |
+
+What these decide: the clock is section 1's **Move** case (SPLL, with the CPLL
+at `SET_CPLL_HZ` in normal mode), so `gpu_clock_set` writes CPLL / 5. PD_GPU is
+off, so the QoS words were not read. DCDC1's state was not read (no `pmic`
+command).
 
 ## 5. The proposed ext4load route
 
@@ -256,16 +279,14 @@ U-Boot's default boot is `bootflow scan -lb`, which walks `boot_targets`, finds
 a bootable partition and runs its `boot.scr` (Armbian's). The image reaches the
 CPU the way the Verdin route does (docs/standalone-boot.md):
 
-1. A script (a replacement `boot.scr`, or one the existing flow runs) runs
-   `ext4load mmc <dev>:1 <addr> /boot/<image>.bin`. Partition 1 is the only
-   ext4 partition and `/boot` is on it, so the image file is
-   `/boot/<image>.bin`.
+1. `ext4load mmc 0:1 <addr> /boot/yakogl/<image>.bin`. Partition 1 is the only
+   ext4 partition and `/boot` is on it.
 2. Then `go <addr>` or `booti <addr> - <fdt>`.
 
 Which applies: the Z images are flat binaries linked at one fixed physical
-address, with `CONFIG_AARCH64_IMAGE_HEADER` (kexec_zephyr.c:436 refuses an image
-without the arm64 Image header; nanopc_t6.dts:10: `zephyr,sram` is 256 MiB at
-0x10000000; nanopc-t6.sh:104-107 the same window). So:
+address, with `CONFIG_AARCH64_IMAGE_HEADER` (kexec_zephyr.c:447 refuses an image
+without the arm64 Image header; nanopc_t6.dts:52-58: `zephyr,sram` is 256 MiB at
+0x10000000; nanopc-t6.sh:106-107 the same window). So:
 
 - `go 0x10000000` is the route: it jumps to the first byte, the header's branch,
   with no device tree and no relocation. The load address must be the link
@@ -275,33 +296,34 @@ without the arm64 Image header; nanopc_t6.dts:10: `zephyr,sram` is 256 MiB at
   to a fixed address, so `booti` adds risk for no gain. Use it only if `go`
   is refused.
 
-What the script must do besides the two commands (section 6):
+What has to happen besides the two commands (section 6):
 
-- flush and disable the data cache before `go`, as the Verdin route does
-  (standalone-boot.md:78);
-- arm a watchdog the image can feed: U-Boot runs none and the Linux watchdog
-  that covers kexec runs does not exist (standalone-boot.md:85);
-- set a one-shot variable with its undo, because U-Boot's `bootcmd` reruns after
-  the image's PSCI reset and would load the image again.
+- the image must not run on stale cache contents: the Verdin route flushes and
+  disables the data cache before `go` (standalone-boot.md:78);
+- a watchdog the image can feed must be armed: U-Boot runs none and the Linux
+  watchdog that covers kexec runs does not exist (standalone-boot.md:85).
 
-The script draft is driver/tools/uboot-t6/t6-zephyr.cmd (README.md beside it),
-never run on a board. It sizes the file with `ext4size` (:42), refuses outside
-0x40 to 0x10000000 bytes, `ext4load`s to 0x10000000, checks the size read back,
-the `ARM\x64` magic at byte 56 and the header's `image_size` against the
-256 MiB window (:75-89), turns the instruction and data caches off (:100) and
-runs `go 0x10000000` (:104). Its mmc device `0:1` is a default, not a
-measurement (:19). It writes nothing to any disk or to the saved environment;
-its variables are `t6z_*`, in RAM. It differs from the list above in two
-points: no one-shot variable, because nothing is saved and a reset returns to
-`bootflow scan -lb` (:34-36); and no watchdog is armed: the script prints that
-the watchdog marker is not checked (:37), so that step stays open.
+No one-shot variable is needed: U-Boot's environment is never saved, so after
+the image's reset `bootcmd` is `bootflow scan -lb` again and boots Armbian.
 
-Load addresses: not measured yet. They are U-Boot's compiled-in `kernel_addr_r`,
-`fdt_addr_r`, `scriptaddr` and `loadaddr`; the draft's `load mmc 0:1
-${scriptaddr}` line needs `scriptaddr` set. The image's link address,
-0x10000000, is from the repo. That the 256 MiB window, 0x10000000-0x1fffffff,
-is free of U-Boot's and the trusted firmware's own memory is a read for
-section 3, not a fact (`bdinfo` at the prompt shows U-Boot's).
+On this U-Boot build neither can be a U-Boot command: it has no `dcache`,
+`icache` or `wdt` command (section 4 (c)). So the image does both itself, and
+the commands are entered by the runner on the UART, each answer checked on the
+host: `ext4size`, `ext4load` to 0x10000000, `md.l` of the `ARM\x64` magic at
+byte 56, `crc32` of the loaded bytes against the host's, `go 0x10000000`
+(driver/tools/uboot-t6/README.md, "The route"; issue #4627). None of this has
+run on the board.
+
+The script draft driver/tools/uboot-t6/t6-zephyr.cmd does the same checks as
+one U-Boot script, with `setexpr`, `icache off` and `dcache off`. It cannot run
+on this build and was never run.
+
+Load addresses (section 4 (c)): `kernel_addr_r` 0x02000000, `fdt_addr_r`
+0x12000000, `scriptaddr` 0x00c00000, `loadaddr` 0xc00800. The route uses none
+of them: the load address is the image's link address, 0x10000000, from the
+repo. `bdinfo` shows the 256 MiB window, 0x10000000-0x1fffffff, free of
+U-Boot's own memory. The trusted firmware's memory is not in `bdinfo`; under
+Linux `nanopc-t6.sh` reads the same window free from `/proc/iomem`.
 
 Source citations, U-Boot v2026.07 (commit `ece349ad`) and Armbian's U-Boot
 build (commit `fc874938`), confirmed by the uboot-src-lines item:
@@ -322,13 +344,16 @@ differs). It is source reading, not measurement. The rows this note carries
 this note's handoff, so the findings that bear on the route are listed here by
 what they are, not by row number:
 
-- Cache and MMU at `go`: the image assumes MMU and caches off. Fix: the
-  script's flush and `dcache off`, or `CONFIG_ARM64_BOOT_DISABLE_DCACHE=y` in the
-  board defconfig (not done).
-- The watchdog: arm WDT0 in the script before `go` (not done).
-- The one-shot variable (section 5).
-- RK806 on SPI2: probing it from U-Boot's `pmic`, `regulator` or `sf` commands
-  writes `SYS_CFG3`. Run the `dm tree` and `md` reads of section 3 first.
+- Cache and MMU at `go`: the image assumes MMU and caches off, and U-Boot has
+  them on. This build has no `dcache` or `icache` command (section 4 (c)), so
+  the fix is in the image's entry: flush its own range, then turn the MMU and
+  caches off (issue #4627; not done).
+- The watchdog: this build has no `wdt` command and no watchdog device, so the
+  image arms WDT0 itself, as after kexec. That WDT0's clock is open under
+  U-Boot is not measured.
+- RK806 on SPI2: probing it from U-Boot writes `SYS_CFG3`. This build probes it
+  by itself on every boot (`dm tree`, section 4 (c)), so the write is part of
+  the state U-Boot hands over, not something a command at the prompt adds.
 - UART2: read from offset 4, because offset 0 pops a received byte.
 - `CNTFRQ_EL0` and the `SCTLR_EL2` bits are not printed by the early banner
   (a small item after #341 that touches `ffi/rk3588.rs` and the header).
