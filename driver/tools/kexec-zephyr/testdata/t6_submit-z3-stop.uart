@@ -24,7 +24,18 @@ t6_submit: section 5: VA 0x01000000, 256 KiB, backing 0x100d0000 at PA 0x100d000
 t6_submit: section 6: VA 0x04000000, 64 KiB, backing 0x10110000 at PA 0x10110000
 t6_submit: pool 0x10027000 at PA 0x10027000 (16 pages)
 t6_submit: Z3: rc -5 step 3, 12 ms
-t6_submit: Z3: stop 3 refusal 2 detail 0x0000000000000000 acked 0x00000000
+t6_submit: Z3: stop 5 refusal 3 detail 0x00000000000a9fff acked 0x00000000
+t6_submit: PD_GPU at hand-over: PWR_GATE 0x0000ffff STATUS 0x2457ffff BUS_IDLE_REQ 0x0000e3cf ACK 0x000affff ST 0x000affff REPAIR_STATUS 0xfad40001: off or idle
+t6_submit: CRU at hand-over: CLKSEL_CON(158) 0x00001f60 CLKSEL_CON(159) 0x00000000 CLKGATE_CON(66) 0x000000d6 MODE_CON0 0x00000545 PLL_CON 0x000001a9 0x00002083 0x00000000: clk_gpu_src 850000000 Hz
+t6_submit: SPI2 gates CLKGATE_CON(14) 0x00000000, opened 0x0
+t6_submit: SPI2 as found: CTRLR0 0x00002c01 CTRLR1 0x00000000 SSIENR 0x0 SER 0x0 BAUDR 0xc6 SR 0x0000000c RXFLR 0x0 VERSION 0x00110002
+t6_submit: RK806 at hand-over: POWER_EN0 0x0f POWER_SLP_EN0 0xe0 BUCK1_CONFIG 0xa4 BUCK1_ON_VSEL 0x30: vdd_gpu_s0 on, 800000 uV
+t6_submit: clock set: kept 1, CPLL 1500000000 Hz, wrote CLKSEL_CON(158) 0x00000000 (159) 0x00000000, now 0x00001f60 0x00000000: clk_gpu_src 850000000 Hz
+t6_submit: vdd_gpu_s0 enable: not sent; POWER_EN0 0x00 BUCK1_ON_VSEL 0x00 after, waited 0 us
+t6_submit: GPU PLL on: PLL_CON6 0x00004000 at hand-over, was on 0, waited 10 us, PLL_CON6 0x0000a400
+t6_submit: PD_GPU on: gates opened 0xd2, was on 0, waited 6/1000/0 us
+t6_submit: PD_GPU after: PWR_GATE 0x00000000 STATUS 0x2457ffff BUS_IDLE_REQ 0x0000a3cf ACK 0x000a9fff ST 0x000a9fff REPAIR_STATUS 0xfad50001: off or idle
+t6_submit: Z1 stopped: stop 5 (PD_GPU did not come on), refusal 3, detail 0x00000000000a9fff
 t6_submit: Z4a: step 2 refusal 3 detail 0x0000000000000000
 t6_submit: Z4b: AS_PRESENT 0x00000000 L2_FEATURES 0x00000000 as0_tables_used 0 vm_tables_used 0 suspend_size 0 protm_suspend_size 0
 t6_submit: Z4c: heap ctx 0x0000000000000000 chunk 0x0000000000000000 chunk_size 0 stride 0

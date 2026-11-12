@@ -834,7 +834,8 @@ const fn page_up(n: u32) -> u64 {
 /// [`fw_up`]'s, and Z4 goes on with them: `pool` must keep Z3's tables (its
 /// pages after Z3's `tables_used` hold the queue memory's tables; they were
 /// zeroed by Z3's build), `clean` cleans the table pages Z4 writes. `mem`
-/// is the memory Z4 adds ([`Z4Mem`]); `frame` the frame.
+/// is the memory Z4 adds ([`Z4Mem`]); `frame` the frame. `z1` is
+/// [`fw_up`]'s: Z1's whole record.
 #[allow(clippy::too_many_arguments)]
 pub fn submit_up(
     m: &impl Mmio,
@@ -849,6 +850,7 @@ pub fn submit_up(
     clean: &impl Fn(usize, usize) -> i32,
     delay_us: &mut impl FnMut(u32),
     on_handover: &mut impl FnMut(&GpuUp),
+    z1: &mut GpuUp,
 ) -> SubmitUp {
     let mut o = SubmitUp { digest: frame.digest, ..SubmitUp::default() };
     if let Err((why, v)) = check_frame(frame, mem.vm) {
@@ -865,7 +867,7 @@ pub fn submit_up(
     };
 
     // Z3
-    o.fw = fw_up(m, b, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover);
+    o.fw = fw_up(m, b, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1);
     if o.fw.step != nanopc_t6_fw::STEP_NONE {
         o.stopped(STEP_FW, o.fw.step, 0);
         return o;
@@ -1482,6 +1484,7 @@ pub(crate) mod tests {
             &|a, n| z.t6.clean(a, n),
             &mut |us| slept += u64::from(us),
             &mut |_| {},
+            &mut GpuUp::default(),
         );
         (o, slept, pool, vm_pool)
     }
@@ -1592,6 +1595,7 @@ pub(crate) mod tests {
             &|a, n| t6.clean(a, n),
             &mut |_| {},
             &mut |_| {},
+            &mut GpuUp::default(),
         );
         assert_eq!((z3.step, z3.tables_used, z3.ping_acked), (nanopc_t6_fw::STEP_NONE, 7, 1));
         let predicted = SubmitUp {
@@ -1986,6 +1990,7 @@ pub(crate) mod tests {
             &|a, n| z.t6.clean(a, n),
             &mut |_| {},
             &mut |_| {},
+            &mut GpuUp::default(),
         );
         assert_eq!((o.step, o.refusal, o.detail), (STEP_QUEUE_MEM, 1, 0x2000));
         // a queue page over a firmware section: AS0 refuses the map
@@ -2008,6 +2013,7 @@ pub(crate) mod tests {
             &|a, n| z.t6.clean(a, n),
             &mut |_| {},
             &mut |_| {},
+            &mut GpuUp::default(),
         );
         assert_eq!((o.step, o.refusal, o.detail), (STEP_AS0_MAP, PtRefusal::AlreadyMapped as u32, 0x0400_0000));
     }

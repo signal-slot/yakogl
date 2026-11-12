@@ -27,6 +27,12 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
   PASS or FAIL. It embeds the same never-committed
   `driver/src/fw/mali_csffw_blob.h`. Host side only, not run on the board
   (`driver/docs/nanopc-t6-mali.md`, "Z4 board procedure").
+- `nanopc_t6/common/t6_z1.c`: Z1's record (the hand-over, the clock set,
+  the supply, each step of the power-on), shared by the four probes that
+  run Z1's power-on: `t6_gpu` prints it on every run, the others when the
+  power-on stops. `common/test/t6_z1_test.c` prints a stop record on the
+  host; `driver/tools/kexec-zephyr/t6-verdict-test.sh` builds it and checks
+  the Z1 stop fixtures against it.
 - `stm32mp257f_dk/mp2_identify`: the STM32MP257F-DK's return-trial image, the
   hand-over record and OP-TEE's watchdog armed at boot, then PSCI reset.
 - `rpi_5/*`: the Raspberry Pi 5 probes (`tools/probes/rpi_5/README.md`).

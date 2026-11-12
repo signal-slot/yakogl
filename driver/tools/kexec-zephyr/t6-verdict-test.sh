@@ -9,7 +9,10 @@
 #
 # The fixtures are the predicted records (driver/docs/nanopc-t6-mali.md:
 # Z1's measured t6_hello and t6_gpu lines, Z2's "The expected uart2 record" with
-# P = 0x10027000 and B = 0x10037000), not board output.
+# P = 0x10027000 and B = 0x10037000), not board output. The Z1 stop fixtures
+# (t6_mmu-z1stop, t6_fw-z1fail, t6_submit-z3-stop) carry Z1's record as
+# tools/probes/nanopc_t6/common/t6_z1.c prints it: the host cc builds that file
+# with common/test/t6_z1_test.c, and its lines must be the fixture's.
 set -euo pipefail
 export LC_ALL=C
 
@@ -76,6 +79,12 @@ check t6_mmu-probe-fail 1 "VERDICT t6_mmu FAIL (2 of $MMU)" "$((MMU - 2)) 1 1" t
 : >"$WORK/empty.log"
 check t6_mmu-empty 1 "VERDICT t6_mmu FAIL ($MMU of $MMU)" "0 $MMU 0" t6_mmu "$WORK/empty.log"
 
+# Z1 stopped in t6_mmu (stop 5, the record of 2026-11-11 13:13): the Z1 line
+# differs, Z1's record follows it (8 lines judged, ok), Z2's 12 lines are
+# missing and the FAIL line stands for PASS
+Z1=8
+check t6_mmu-z1stop 1 "VERDICT t6_mmu FAIL (14 of $((MMU + Z1)))" "$((MMU + Z1 - 14)) 12 2" t6_mmu "$D/t6_mmu-z1stop.uart"
+
 # another probe's record
 check t6_gpu-over-mmu 1 "VERDICT t6_gpu FAIL ($((GPU - 10)) of $GPU)" "10 $((GPU - 10)) 0" t6_gpu "$D/t6_mmu-pass.uart"
 
@@ -87,9 +96,14 @@ check t6_gpu-pass 0 'VERDICT t6_gpu PASS' "$GPU 0 0" t6_gpu "$D/t6_gpu-pass.uart
 FW=31
 check t6_fw-pass 0 'VERDICT t6_fw PASS' "$FW 0 0" t6_fw "$D/t6_fw-pass.uart"
 check t6_fw-missing 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 1 0" t6_fw "$D/t6_fw-missing.uart"
-# Z1 refused (step 3): the rc line differs, so does the stop line, the FAIL
-# line stands for PASS (differs, it names the step) and the record never came
-check t6_fw-z1fail 1 "VERDICT t6_fw FAIL (10 of $FW)" "$((FW - 9)) 7 3" t6_fw "$D/t6_fw-z1fail.uart"
+# Z1 refused (step 3; NPLL did not lock, stop 4): the rc line differs, so does
+# the stop line, the FAIL line stands for PASS (differs, it names the step)
+# and the Z3 record never came; Z1's record follows the stop line (8 ok)
+check t6_fw-z1fail 1 "VERDICT t6_fw FAIL (10 of $((FW + Z1)))" "$((FW + Z1 - 9)) 7 3" t6_fw "$D/t6_fw-z1fail.uart"
+# the same stop from an image that does not print Z1's record: its 8 lines
+# are named missing
+sed '/^t6_fw: Z3: stop /,/^t6_fw: Z1 stopped: /{/^t6_fw: Z3: stop /!d}' "$D/t6_fw-z1fail.uart" >"$WORK/z1bare.log"
+check t6_fw-z1-no-record 1 "VERDICT t6_fw FAIL (18 of $((FW + Z1)))" "$((FW - 9)) 15 3" t6_fw "$WORK/z1bare.log"
 # stops at boot with no GLB version (step 5, VersionZero): the rc line, the
 # version, the interface and the configuration lines differ or are missing
 check t6_fw-boot-stop 1 "VERDICT t6_fw FAIL (7 of $FW)" "$((FW - 6)) 2 5" t6_fw "$D/t6_fw-boot-stop.uart"
@@ -110,9 +124,10 @@ SUB=40
 check t6_submit-pass 0 'VERDICT t6_submit PASS' "$SUB 0 0" t6_submit "$D/t6_submit-pass.uart"
 # wait timeout (step 14, refusal 19): Z4a, Z4e (extract and seqno 0) and the FAIL line differ
 check t6_submit-wait-timeout 1 "VERDICT t6_submit FAIL (3 of $SUB)" "$((SUB - 3)) 0 3" t6_submit "$D/t6_submit-wait-timeout.uart"
-# Z3 stopped (Z1 refused): the rc line, Z4a..Z4e (zeros), the FAIL line and the
-# stop line differ, the 7 record lines are missing
-check t6_submit-z3-stop 1 "VERDICT t6_submit FAIL (15 of $SUB)" "26 7 8" t6_submit "$D/t6_submit-z3-stop.uart"
+# Z3 stopped (Z1 refused, stop 5): the rc line, Z4a..Z4e (zeros), the FAIL line
+# and the stop line differ, the 7 record lines are missing; Z1's record
+# follows the stop line (8 ok)
+check t6_submit-z3-stop 1 "VERDICT t6_submit FAIL (15 of $((SUB + Z1)))" "$((26 + Z1)) 7 8" t6_submit "$D/t6_submit-z3-stop.uart"
 # cut after Z4f: Z4g, Z4h, Z4i, PASS and the reset line missing
 check t6_submit-missing 1 "VERDICT t6_submit FAIL (5 of $SUB)" "$((SUB - 5)) 5 0" t6_submit "$D/t6_submit-missing.uart"
 # the watchdog reset the probe during the Z4 wait: the capture ends after the
@@ -132,6 +147,32 @@ check t6_submit-pixels 1 "VERDICT t6_submit FAIL (1 of $SUB)" "$((SUB - 1)) 0 1"
 # a Z3 stop line is a differing line for t6_submit as for t6_fw
 sed '/Z3: rc 0/a t6_submit: Z3: stop 5 refusal 5 detail 0x0000000000000000 acked 0x00000000' "$D/t6_submit-pass.uart" >"$WORK/stop.log"
 check t6_submit-stop-line 1 "VERDICT t6_submit FAIL (1 of $SUB)" "$SUB 0 1" t6_submit "$WORK/stop.log"
+
+# Z1's record in the stop fixtures is what t6_z1.c prints (host cc, the
+# probes' printk as printf): a fixture cannot drift from the code
+P=$(cd "$HERE/../../.." && pwd)/tools/probes/nanopc_t6/common
+if ! command -v cc >/dev/null 2>&1; then
+	echo "FAIL t6_z1.c host build: no cc on PATH"
+	fails=$((fails + 1))
+elif ! cc -std=c11 -Wall -Wextra -Werror -I"$P/test" -I"$P" -I"$HERE/../../rust/include" \
+	"$P/t6_z1.c" "$P/test/t6_z1_test.c" -o "$WORK/t6_z1_test"; then
+	echo "FAIL t6_z1.c host build"
+	fails=$((fails + 1))
+else
+	for c in t6_mmu:pd:t6_mmu-z1stop t6_fw:pll:t6_fw-z1fail t6_submit:pd:t6_submit-z3-stop; do
+		IFS=: read -r probe stop fx <<<"$c"
+		runs=$((runs + 1))
+		"$WORK/t6_z1_test" "$probe" "$stop" >"$WORK/z1.want"
+		sed -n "/^$probe: PD_GPU at hand-over/,/^$probe: Z1 stopped: /p" "$D/$fx.uart" >"$WORK/z1.got"
+		if [ -s "$WORK/z1.want" ] && cmp -s "$WORK/z1.want" "$WORK/z1.got"; then
+			echo "ok   $fx: Z1's record is t6_z1.c's ($(wc -l <"$WORK/z1.want") lines)"
+		else
+			echo "FAIL $fx: Z1's record is not what t6_z1.c prints"
+			diff "$WORK/z1.want" "$WORK/z1.got" | sed 's/^/     /' || true
+			fails=$((fails + 1))
+		fi
+	done
+fi
 
 # usage
 rc=0

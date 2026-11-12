@@ -751,6 +751,7 @@ fn fw_up_run(
     clean: extern "C" fn(usize, usize) -> i32,
     delay_us: extern "C" fn(u32),
     on_handover: extern "C" fn(*const YdT6GpuUp),
+    z1: &mut crate::board::nanopc_t6_gpu::GpuUp,
 ) -> crate::board::nanopc_t6_fw::FwUp {
     crate::board::nanopc_t6_fw::fw_up(
         m,
@@ -766,6 +767,7 @@ fn fw_up_run(
             let h = YdT6GpuUp::from(h);
             on_handover(&h);
         },
+        z1,
     )
 }
 
@@ -781,14 +783,16 @@ fn fw_up_run(
 /// `pool` is `pool_pages` 4 KiB pages at physical `tables_pa`, written by
 /// this call; `timer_hz` is CNTFRQ_EL0; `clean` cleans the data cache over
 /// a range to the point of coherency, 0 on success; `on_handover` as
-/// [`yd_t6_gpu_up`]'s.
+/// [`yd_t6_gpu_up`]'s. `z1` receives Z1's whole record as [`yd_t6_gpu_up`]
+/// writes its `out` (all zero when the run stopped before Z1), so a probe
+/// can explain a stop at `YD_T6_FW_STEP_GPU`.
 ///
 /// # Safety
 /// The bases are mapped device memory; `blob` is valid for `blob_len` bytes
 /// and `backings` for `n_backings` entries; each backing's `cpu` is the
 /// memory at its `pa` for `size` bytes, writable by this call (the shared
 /// section's mapped uncached); `pool` is valid for writes of `pool_pages` *
-/// 4096 bytes and is the memory at `tables_pa`; `out` is valid.
+/// 4096 bytes and is the memory at `tables_pa`; `z1` and `out` are valid.
 #[cfg(feature = "mali")]
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
@@ -809,12 +813,14 @@ pub unsafe extern "C" fn yd_t6_fw_up(
     clean: Option<extern "C" fn(usize, usize) -> i32>,
     delay_us: Option<extern "C" fn(u32)>,
     on_handover: Option<extern "C" fn(*const YdT6GpuUp)>,
+    z1: *mut YdT6GpuUp,
     out: *mut YdT6FwUp,
 ) -> i32 {
     use crate::board::nanopc_t6_sections::Backing;
     use crate::gpu::mali::pgtable::{Table, PAGE};
     let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
     if out.is_null()
+        || z1.is_null()
         || blob.is_null()
         || backings.is_null()
         || pool.is_null()
@@ -837,9 +843,25 @@ pub unsafe extern "C" fn yd_t6_fw_up(
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
     let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
-    let o = fw_up_run(&hw, b, blob, &placed[..given.len()], pages, tables_pa, timer_hz, clean, delay_us, on_handover);
+    let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
+    let o = fw_up_run(
+        &hw,
+        b,
+        blob,
+        &placed[..given.len()],
+        pages,
+        tables_pa,
+        timer_hz,
+        clean,
+        delay_us,
+        on_handover,
+        &mut g,
+    );
     // SAFETY: the caller's contract.
-    unsafe { *out = o };
+    unsafe {
+        *z1 = YdT6GpuUp::from(&g);
+        *out = o;
+    }
     if o.step == crate::board::nanopc_t6_fw::STEP_NONE {
         0
     } else {
@@ -900,6 +922,7 @@ fn submit_run(
     clean: extern "C" fn(usize, usize) -> i32,
     delay_us: extern "C" fn(u32),
     on_handover: extern "C" fn(*const YdT6GpuUp),
+    z1: &mut crate::board::nanopc_t6_gpu::GpuUp,
 ) -> YdT6SubmitUp {
     crate::board::nanopc_t6_submit::submit_up(
         m,
@@ -917,6 +940,7 @@ fn submit_run(
             let h = YdT6GpuUp::from(h);
             on_handover(&h);
         },
+        z1,
     )
 }
 
@@ -928,8 +952,8 @@ fn submit_run(
 /// frame written at its VAs, one job submitted and waited for (5 s), the
 /// group stopped and terminated, the target read back. 0 when every step
 /// ran (`out->step` is `YD_T6_SUBMIT_STEP_NONE`), `-EIO` when one stopped
-/// (`out->step` says which; Z3's own record is `out->fw`), `-EINVAL` for a
-/// null or misaligned argument.
+/// (`out->step` says which; Z3's own record is `out->fw`, Z1's is `z1` as
+/// [`yd_t6_fw_up`] writes it), `-EINVAL` for a null or misaligned argument.
 ///
 /// # Safety
 /// As [`yd_t6_fw_up`]'s; and `mem` is valid, each backing in it the memory
@@ -957,6 +981,7 @@ pub unsafe extern "C" fn yd_t6_submit(
     clean: Option<extern "C" fn(usize, usize) -> i32>,
     delay_us: Option<extern "C" fn(u32)>,
     on_handover: Option<extern "C" fn(*const YdT6GpuUp)>,
+    z1: *mut YdT6GpuUp,
     out: *mut YdT6SubmitUp,
 ) -> i32 {
     use crate::board::nanopc_t6_sections::Backing;
@@ -964,6 +989,7 @@ pub unsafe extern "C" fn yd_t6_submit(
     use crate::gpu::mali::pgtable::{Table, PAGE};
     let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
     if out.is_null()
+        || z1.is_null()
         || blob.is_null()
         || backings.is_null()
         || pool.is_null()
@@ -1002,6 +1028,7 @@ pub unsafe extern "C" fn yd_t6_submit(
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
     let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
+    let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
     let o = submit_run(
         &hw,
         b,
@@ -1015,9 +1042,13 @@ pub unsafe extern "C" fn yd_t6_submit(
         clean,
         delay_us,
         on_handover,
+        &mut g,
     );
     // SAFETY: the caller's contract.
-    unsafe { *out = o };
+    unsafe {
+        *z1 = YdT6GpuUp::from(&g);
+        *out = o;
+    }
     if o.step == crate::board::nanopc_t6_submit::STEP_NONE {
         0
     } else {
@@ -1095,22 +1126,46 @@ mod fw_tests {
         let bk = backings(&blob);
         let mut pool = vec![[0u64; ENTRIES]; 16];
         MODEL.with(|m| m.set(&t6));
-        let o =
-            fw_up_run(&t6, B, &blob, &bk, &mut pool, TABLES_PA, RK3588_TIMER_HZ, clean_model, no_delay, no_handover);
+        let o = fw_up_run(
+            &t6,
+            B,
+            &blob,
+            &bk,
+            &mut pool,
+            TABLES_PA,
+            RK3588_TIMER_HZ,
+            clean_model,
+            no_delay,
+            no_handover,
+            &mut Default::default(),
+        );
         assert_eq!((o.step, o.stop, o.refusal, o.detail), (fwb::STEP_NONE, 0, 0, [0, 0]));
         assert_eq!((o.version, o.image_version, o.sections), (0x0105_0000, 0x0105_0000, 4));
         assert_eq!((o.ping_acked, o.mcu_status, o.tables_used), (1, 1, 7));
         assert_eq!((o.gpu_id, o.flushed, o.clean_rc), (0xa867_0005, 4, 0));
         assert_eq!((o.glb_input, o.glb_output), (0x0400_2000, 0x0400_6000));
         // the backings' order is the file's: a short list is the placement's refusal
-        let o =
-            fw_up_run(&t6, B, &blob, &bk[..3], &mut pool, TABLES_PA, RK3588_TIMER_HZ, clean_ok, no_delay, no_handover);
+        let o = fw_up_run(
+            &t6,
+            B,
+            &blob,
+            &bk[..3],
+            &mut pool,
+            TABLES_PA,
+            RK3588_TIMER_HZ,
+            clean_ok,
+            no_delay,
+            no_handover,
+            &mut Default::default(),
+        );
         assert_eq!((o.step, o.detail), (fwb::STEP_PLACE, [3, 0]));
     }
 
     #[test]
     fn the_entry_refuses_null_and_misaligned_arguments() {
         let mut out = FwUp::default();
+        let mut g = YdT6GpuUp::default();
+        let z1: *mut YdT6GpuUp = &mut g;
         let mut pool = vec![0u8; 8192];
         let bk = [YdT6FwBacking::default()];
         let blob = [0u8; 4];
@@ -1136,6 +1191,7 @@ mod fw_tests {
                 clean,
                 Some(no_delay),
                 Some(no_handover),
+                z1,
                 out,
             )
         };
@@ -1310,6 +1366,7 @@ mod fw_tests {
             clean_model,
             no_delay,
             no_handover,
+            &mut Default::default(),
         );
         assert_eq!((o.step, o.refusal, o.detail), (sub::STEP_NONE, 0, 0));
         assert_eq!((o.fw.step, o.fw.ping_acked, o.as0_tables_used, o.vm_tables_used), (0, 1, 8, 10));
@@ -1322,6 +1379,8 @@ mod fw_tests {
     fn the_z4_entry_refuses_null_and_misaligned_arguments() {
         use crate::board::nanopc_t6_submit::SubmitUp;
         let mut out = SubmitUp::default();
+        let mut g = YdT6GpuUp::default();
+        let z1: *mut YdT6GpuUp = &mut g;
         let mut pool = vec![0u8; 8192 * 2];
         let bk = [YdT6FwBacking::default()];
         let blob = [0u8; 4];
@@ -1353,6 +1412,7 @@ mod fw_tests {
                 Some(clean_ok),
                 Some(no_delay),
                 Some(no_handover),
+                z1,
                 out,
             )
         };

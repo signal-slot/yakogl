@@ -7,8 +7,10 @@
  * reads what the kexec from Linux handed over -- PD_GPU in the PMU, the
  * GPU's clock in the CRU, vdd_gpu_s0 in the RK806 over SPI2, read only --
  * and this prints it before anything is written; then PD_GPU on, the GPU's
- * identity, a soft reset and the L2 on. The last line is PASS or FAIL with
- * the step that stopped; the board then resets back into Armbian.
+ * identity, a soft reset and the L2 on. The lines are Z1's record
+ * (../common/t6_z1.c, which the later probes print on a Z1 stop). The last
+ * line is PASS or FAIL with the step that stopped; the board then resets back
+ * into Armbian.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/sys/device_mmio.h>
@@ -16,67 +18,17 @@
 #include <zephyr/kernel/mm.h>
 
 #include <stdbool.h>
-#include <stddef.h>
 
 #include <nanopc_t6.h>
 #include <yakogl_drivers.h>
+
+#include "t6_z1.h"
 
 #define CRU_PHYS  0xfd7c0000UL
 #define PMU_PHYS  0xfd8d8000UL
 #define SPI2_PHYS 0xfeb20000UL
 #define QOS_PHYS  0xfdf35000UL
 #define GPU_PHYS  0xfb000000UL
-
-/* driver/rust/src/ffi/rk3588.rs pins the same layout. */
-BUILD_ASSERT(sizeof(struct yd_t6_gpu_up) == 4 * 125, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, rk806) == 4 * 18, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, ident) == 4 * 65, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, stop) == 4 * 108, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, clock_kept) == 4 * 112, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, supply_waited_us) == 4 * 124,
-	     "struct yd_t6_gpu_up moved");
-
-static const char *const stop_name[] = {
-	[YD_T6_GPU_STOP_NONE] = "none",
-	[YD_T6_GPU_STOP_SPI_GATE] = "an SPI2 gate stays closed",
-	[YD_T6_GPU_STOP_RK806_READ] = "an RK806 read failed",
-	[YD_T6_GPU_STOP_SUPPLY_OFF] = "vdd_gpu_s0 (RK806 DCDC1) is off while PD_GPU reads powered",
-	[YD_T6_GPU_STOP_CLOCK] = "the GPU clock has no rate, the supply is below its OPP or its PLL "
-				 "did not lock",
-	[YD_T6_GPU_STOP_PD] = "PD_GPU did not come on",
-	[YD_T6_GPU_STOP_NOT_G610] = "GPU_ID is not 0xa8670005",
-	[YD_T6_GPU_STOP_RESET] = "the soft reset did not complete",
-	[YD_T6_GPU_STOP_L2] = "the L2 did not come up",
-	[YD_T6_GPU_STOP_CLOCK_SET_REFUSED] = "the GPU clock is on no OPP rate and the CPLL is not "
-					     "1500 MHz (nothing written)",
-	[YD_T6_GPU_STOP_CLOCK_READ_BACK] = "the clock set did not read back",
-	[YD_T6_GPU_STOP_SUPPLY_BELOW_OPP] = "BUCK1_ON_VSEL is below the OPP voltage for the clock",
-	[YD_T6_GPU_STOP_SUPPLY_RAMP_TIMEOUT] = "DCDC1 did not read on after the enable frame",
-	[YD_T6_GPU_STOP_RK806_WRITE] = "the DCDC1-enable frame could not be sent",
-};
-
-/* How far the run got when it stopped at `s`, in the order of the steps (the
- * numbers of the causes are in the order they were added, so 9..13 cannot be
- * compared with 5..8): 5 and more means PD_GPU was tried, 6 the GPU_ID was
- * read, 8 the reset ran. Stops 1..4, 9 and 10 (and 11 with refusal 0) come
- * before PD_GPU and before on_handover; the others are after on_handover. */
-static unsigned int progress(uint32_t s)
-{
-	switch (s) {
-	case YD_T6_GPU_STOP_PD:
-		return 5;
-	case YD_T6_GPU_STOP_NOT_G610:
-		return 6;
-	case YD_T6_GPU_STOP_RESET:
-		return 7;
-	case YD_T6_GPU_STOP_L2:
-		return 8;
-	case YD_T6_GPU_STOP_NONE:
-		return 100;
-	default:
-		return 0;
-	}
-}
 
 static bool handed_over;
 
@@ -85,43 +37,10 @@ static void delay_us(uint32_t us)
 	k_busy_wait(us);
 }
 
-static void print_pd(const char *when, const uint32_t r[6])
-{
-	printk("t6_gpu: PD_GPU %s: PWR_GATE 0x%08x STATUS 0x%08x BUS_IDLE_REQ 0x%08x "
-	       "ACK 0x%08x ST 0x%08x REPAIR_STATUS 0x%08x: %s\n",
-	       when, r[0], r[1], r[2], r[3], r[4], r[5],
-	       (r[5] & 0x2) && !((r[2] | r[3] | r[4]) & 0x1) ? "on" : "off or idle");
-}
-
-static void print_ident(const char *when, const uint32_t i[16])
-{
-	printk("t6_gpu: GPU %s: GPU_ID 0x%08x L2_FEATURES 0x%08x TILER 0x%08x MEM 0x%08x MMU 0x%08x "
-	       "AS_PRESENT 0x%08x CSF_ID 0x%08x\n",
-	       when, i[0], i[1], i[2], i[3], i[4], i[5], i[6]);
-	printk("t6_gpu: GPU %s: SHADER_PRESENT 0x%08x%08x TILER_PRESENT 0x%08x%08x L2_PRESENT "
-	       "0x%08x%08x COHERENCY_FEATURES 0x%08x GPU_STATUS 0x%08x MCU_STATUS 0x%08x\n",
-	       when, i[8], i[7], i[10], i[9], i[12], i[11], i[13], i[14], i[15]);
-}
-
 static void on_handover(const struct yd_t6_gpu_up *h)
 {
-	print_pd("at hand-over", h->pd_before);
-	printk("t6_gpu: CRU at hand-over: CLKSEL_CON(158) 0x%08x CLKSEL_CON(159) 0x%08x "
-	       "CLKGATE_CON(66) 0x%08x MODE_CON0 0x%08x PLL_CON 0x%08x 0x%08x 0x%08x: "
-	       "clk_gpu_src %u Hz\n",
-	       h->clock[0], h->clock[1], h->clock[2], h->clock[3], h->clock[4], h->clock[5],
-	       h->clock[6], h->gpu_src_hz[0]);
+	t6_z1_print_handover("t6_gpu", h);
 	handed_over = true;
-	printk("t6_gpu: SPI2 gates CLKGATE_CON(14) 0x%08x, opened 0x%x\n", h->spi_gate14,
-	       h->spi_opened);
-	printk("t6_gpu: SPI2 as found: CTRLR0 0x%08x CTRLR1 0x%08x SSIENR 0x%x SER 0x%x BAUDR 0x%x "
-	       "SR 0x%08x RXFLR 0x%x VERSION 0x%08x\n",
-	       h->spi_found[0], h->spi_found[1], h->spi_found[2], h->spi_found[3], h->spi_found[4],
-	       h->spi_found[5], h->spi_found[6], h->spi_found[7]);
-	printk("t6_gpu: RK806 at hand-over: POWER_EN0 0x%02x POWER_SLP_EN0 0x%02x BUCK1_CONFIG "
-	       "0x%02x BUCK1_ON_VSEL 0x%02x: vdd_gpu_s0 %s, %u uV\n",
-	       h->rk806[0], h->rk806[1], h->rk806[2], h->rk806[3],
-	       (h->rk806[0] & 0x1) ? "on" : "off", h->vdd_gpu_uv);
 	t6_watchdog_feed();
 }
 
@@ -149,54 +68,13 @@ int main(void)
 		printk("t6_gpu: FAIL: yd_t6_gpu_up refused its arguments\n");
 		t6_reset_to_linux("t6_gpu done");
 	}
-	/* Stops 1..4 and the causes added after them (9, 10, and 11 with refusal 0) come
-	 * before the hand-over report, so the test is whether on_handover was called, not a
-	 * comparison of stop numbers. A stop before the clock set has the clock as found
-	 * and the supply as read so far. */
-	if (o.stop != YD_T6_GPU_STOP_NONE && !handed_over) {
-		on_handover(&o);
-	}
-	printk("t6_gpu: clock set: kept %u, CPLL %u Hz, wrote CLKSEL_CON(158) 0x%08x (159) 0x%08x, "
-	       "now 0x%08x 0x%08x: clk_gpu_src %u Hz\n",
-	       o.clock_kept, o.clock_cpll_hz[0], o.clock_wrote[0], o.clock_wrote[1], o.clock_sel[0],
-	       o.clock_sel[1], o.clock_set_hz[0]);
-	printk("t6_gpu: vdd_gpu_s0 enable: %s; POWER_EN0 0x%02x BUCK1_ON_VSEL 0x%02x after, waited "
-	       "%u us\n",
-	       o.supply_enabled ? "frame sent" : "not sent", o.supply_after[0], o.supply_after[1],
-	       o.supply_waited_us);
-	if (o.stop == YD_T6_GPU_STOP_NONE || progress(o.stop) >= 5) {
-		printk("t6_gpu: GPU PLL on: PLL_CON6 0x%08x at hand-over, was on %u, waited %u us, "
-		       "PLL_CON6 0x%08x\n",
-		       o.clock[7], o.pll_on[0], o.pll_on[1], o.pll_on[2]);
-		printk("t6_gpu: PD_GPU on: gates opened 0x%x, was on %u, waited %u/%u/%u us\n",
-		       o.pd_opened, o.pd_was_on, o.pd_waited_us[0], o.pd_waited_us[1],
-		       o.pd_waited_us[2]);
-		print_pd("after", o.pd_after);
-	}
-	if (o.stop == YD_T6_GPU_STOP_NONE || progress(o.stop) >= 6) {
-		for (int b = 0; b < 4; b++) {
-			printk("t6_gpu: qos_gpu_m%d: 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x\n", b,
-			       o.qos[b][0], o.qos[b][1], o.qos[b][2], o.qos[b][3], o.qos[b][4]);
-		}
-		print_ident("after power-on", o.ident);
-	}
-	if (o.stop == YD_T6_GPU_STOP_NONE || progress(o.stop) >= 8) {
-		printk("t6_gpu: soft reset: GPU_INT_RAWSTAT 0x%08x before the clear, 0x%08x after; "
-		       "RESET_COMPLETED after %u polls of 1 us\n",
-		       o.reset[0], o.reset[1], o.reset[2]);
-		print_ident("after reset", o.ident_after_reset);
-	}
+	t6_z1_print_record("t6_gpu", &o, handed_over);
 	if (o.stop == YD_T6_GPU_STOP_NONE) {
-		printk("t6_gpu: L2 mask 0x%x: L2_READY 0x%x before L2_PWRON, 0x%x after; waited %u/%u "
-		       "polls\n",
-		       o.l2_mask[0], o.l2_ready_before[0], o.l2_ready[0], o.l2_waited_us[0],
-		       o.l2_waited_us[1]);
 		printk("t6_gpu: PASS: GPU_ID 0x%08x, L2 ready, %lld ms\n", o.ident[0],
 		       (long long)(k_uptime_get() - t0));
 	} else {
 		printk("t6_gpu: FAIL: stop %u (%s), refusal %u, detail 0x%08x%08x\n", o.stop,
-		       o.stop < ARRAY_SIZE(stop_name) ? stop_name[o.stop] : "unknown", o.refusal,
-		       o.detail[1], o.detail[0]);
+		       t6_z1_stop_name(o.stop), o.refusal, o.detail[1], o.detail[0]);
 	}
 	t6_reset_to_linux("t6_gpu done");
 }

@@ -24,7 +24,9 @@ endif()
 target_compile_definitions(app PRIVATE T6_GPU_BUILD="${T6_GPU_BUILD}")
 message(STATUS "t6_gpu build: ${T6_GPU_BUILD}")
 
-target_sources(app PRIVATE src/main.c)
+# Z1's record, shared by the probes that run Z1's power-on.
+target_sources(app PRIVATE src/main.c ../common/t6_z1.c)
+target_include_directories(app PRIVATE ../common)
 
 # Zero warnings in our C files: tools/check.sh builds this sample with
 # -DYAKOGL_WERROR=ON (the "zephyr" rows); off by default.

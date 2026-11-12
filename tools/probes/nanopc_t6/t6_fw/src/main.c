@@ -11,6 +11,8 @@
  * board glue has armed WDT0 (nanopc_t6.c). yd_t6_fw_up runs Z1's power-on,
  * Z2's AS0 over every section, the load and the MCU's boot (GLB version, the
  * global configuration, one PING); main() prints its record and PASS or FAIL.
+ * When Z1's power-on stops, it prints Z1's record as t6_gpu prints it
+ * (../common/t6_z1.c) before the FAIL line.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/kernel/internal/mm.h>
@@ -24,6 +26,8 @@
 
 #include <nanopc_t6.h>
 #include <yakogl_drivers.h>
+
+#include "t6_z1.h"
 
 #include "fw/mali_csffw_blob.h"
 
@@ -144,6 +148,7 @@ int main(void)
 {
 	mm_reg_t cru, pmu, spi2, qos, gpu;
 	struct yd_t6_fw_backing backings[SECTIONS];
+	static struct yd_t6_gpu_up z1; /* 500 bytes: not on main()'s stack */
 	struct yd_t6_fw_up o = { 0 };
 	int64_t t0;
 	int rc;
@@ -182,7 +187,7 @@ int main(void)
 	t0 = k_uptime_get();
 	rc = yd_t6_fw_up(cru, pmu, spi2, qos, gpu, mali_csffw_blob, MALI_CSFFW_SIZE, backings,
 			 SECTIONS, t6_fw_pool, POOL_PAGES, k_mem_phys_addr(t6_fw_pool), TIMER_HZ,
-			 clean, delay_us, on_handover, &o);
+			 clean, delay_us, on_handover, &z1, &o);
 	t6_watchdog_feed();
 	printk("t6_fw: Z3: rc %d step %u, %lld ms\n", rc, o.step, (long long)(k_uptime_get() - t0));
 
@@ -200,6 +205,9 @@ int main(void)
 	} else {
 		printk("t6_fw: Z3: stop %u refusal %u detail 0x%08x%08x acked 0x%08x\n", o.stop,
 		       o.refusal, o.detail[1], o.detail[0], o.acked);
+		if (o.step == YD_T6_FW_STEP_GPU) {
+			t6_z1_print_stop("t6_fw", &z1);
+		}
 		if (o.step >= YD_T6_FW_STEP_BOOT) {
 			print_record(&o);
 		}

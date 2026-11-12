@@ -480,9 +480,12 @@ int yd_t6_mmu_up(uintptr_t gpu, uint32_t mmu_features, void *pool, uint32_t pool
  * them for the board's file), 4 KiB aligned. gpu maps 0xfb000000 for
  * 0x280000 bytes (the doorbells). timer_hz is CNTFRQ_EL0 (24000000).
  * clean() cleans the data cache over a range, 0 on success. on_handover as
- * yd_t6_gpu_up's. 0 when every step ran (out->step YD_T6_FW_STEP_NONE),
- * -EIO when one stopped (out->step says which), -EINVAL for a null or
- * misaligned argument. A 64-bit value is two words, lo first. */
+ * yd_t6_gpu_up's; *z1 receives Z1's whole record as yd_t6_gpu_up writes its
+ * out (all zero when the run stopped before Z1), so a stop at
+ * YD_T6_FW_STEP_GPU can be explained. 0 when every step ran (out->step
+ * YD_T6_FW_STEP_NONE), -EIO when one stopped (out->step says which),
+ * -EINVAL for a null or misaligned argument. A 64-bit value is two words,
+ * lo first. */
 #define YD_T6_FW_STEP_NONE    0 /* every step ran: GLB version = the image's, PING acknowledged */
 #define YD_T6_FW_STEP_PARSE   1 /* the image was refused (refusal: its error, detail: its value) */
 #define YD_T6_FW_STEP_PLACE   2 /* the backings do not fit the sections (refusal: why, detail: the section) */
@@ -545,7 +548,8 @@ int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uin
 		uint32_t n_backings, void *pool, uint32_t pool_pages, uint64_t tables_pa,
 		uint32_t timer_hz, int (*clean)(uintptr_t addr, size_t len),
 		void (*delay_us)(uint32_t us),
-		void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_fw_up *out);
+		void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
+		struct yd_t6_fw_up *out);
 
 /* Z4, in one run (board::nanopc_t6_submit over gpu::mali::sched, heap and
  * the generated frame board::nanopc_t6_frame; feature mali): Z3 as
@@ -564,7 +568,8 @@ int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uin
  * its sync object waited for (5 s); the group stopped and terminated; the
  * target read back and counted. 0 when every step ran (out->step
  * YD_T6_SUBMIT_STEP_NONE), -EIO when one stopped (out->step says which;
- * out->fw is Z3's record), -EINVAL for a null or misaligned argument. */
+ * out->fw is Z3's record, *z1 Z1's as yd_t6_fw_up writes it), -EINVAL for
+ * a null or misaligned argument. */
 #define YD_T6_SUBMIT_STEP_NONE       0
 #define YD_T6_SUBMIT_STEP_FRAME      1 /* the frame or its memory refused (refusal: YD_T6_FRAME_*, detail: the value) */
 #define YD_T6_SUBMIT_STEP_FW         2 /* Z3 stopped (refusal: fw.step; fw holds Z3's record) */
@@ -683,7 +688,8 @@ int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, ui
 		 uint32_t n_backings, void *pool, uint32_t pool_pages, uint64_t tables_pa,
 		 uint32_t timer_hz, const struct yd_t6_submit_mem *mem,
 		 int (*clean)(uintptr_t addr, size_t len), void (*delay_us)(uint32_t us),
-		 void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_submit_up *out);
+		 void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
+		 struct yd_t6_submit_up *out);
 
 /* ---- TI SN65DSI83/84 (ip::sn65dsi8x; yakogl,sn65dsi8x) ------------------
  * I2C bus 0 of the env is the bridge; GPIO line 0 its EN pin, line 1 the

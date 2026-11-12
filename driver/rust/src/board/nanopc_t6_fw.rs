@@ -186,7 +186,9 @@ impl FwUp {
 /// cache over `(address, length)` to the point of coherency and returns 0
 /// (`sys_cache_data_flush_range`), for the tables and for each loaded
 /// section. `delay_us` waits; `on_handover` is Z1's, called before the first
-/// PMU or GPU write.
+/// PMU or GPU write. `z1` receives Z1's whole record ([`gpu_up`]'s), so a
+/// stop at [`STEP_GPU`] can be explained from it; it is left as given when
+/// the run stopped before Z1 (parse, place).
 #[allow(clippy::too_many_arguments)]
 pub fn fw_up(
     m: &impl Mmio,
@@ -199,6 +201,7 @@ pub fn fw_up(
     clean: &impl Fn(usize, usize) -> i32,
     delay_us: &mut impl FnMut(u32),
     on_handover: &mut impl FnMut(&GpuUp),
+    z1: &mut GpuUp,
 ) -> FwUp {
     let mut o = FwUp::default();
     let img = match fw::parse(blob) {
@@ -221,6 +224,7 @@ pub fn fw_up(
     };
 
     let g = gpu_up(m, b, delay_us, on_handover);
+    *z1 = g;
     o.gpu_id = g.ident_after_reset.gpu_id;
     o.shader_present = lo_hi(g.ident_after_reset.shader_present);
     o.mmu_features = g.ident_after_reset.mmu_features;
@@ -309,7 +313,9 @@ pub(crate) mod tests {
     use crate::gpu::mali::pgtable::{PtRefusal, ENTRIES, PAGE};
     use crate::gpu::mali::{self, CMD_SOFT_RESET, GPU_CMD, GPU_INT_CLEAR, GPU_INT_RAWSTAT, IRQ_RESET_COMPLETED};
     use crate::ip::rockchip_spi;
-    use crate::soc::rk3588::{self, clkgate_con, clksel_con, pd_gpu, pll_con, CRU_BASE, MODE_CON0, PMU_BASE};
+    use crate::soc::rk3588::{
+        self, clkgate_con, clksel_con, pd_gpu, pll_con, PdGpuRegs, CRU_BASE, MODE_CON0, PMU_BASE,
+    };
     use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
 
@@ -525,7 +531,19 @@ pub(crate) mod tests {
     }
 
     fn run_in(t6: &T6, blob: &[u8], backings: &[Backing], pool: &mut [Table]) -> FwUp {
-        fw_up(t6, B, blob, backings, pool, TABLES_PA, RK3588_TIMER_HZ, &|a, n| t6.clean(a, n), &mut |_| {}, &mut |_| {})
+        fw_up(
+            t6,
+            B,
+            blob,
+            backings,
+            pool,
+            TABLES_PA,
+            RK3588_TIMER_HZ,
+            &|a, n| t6.clean(a, n),
+            &mut |_| {},
+            &mut |_| {},
+            &mut GpuUp::default(),
+        )
     }
 
     fn run_with(t6: &T6, blob: &[u8], backings: &[Backing], pages: usize) -> FwUp {
@@ -687,9 +705,27 @@ pub(crate) mod tests {
         let blob = synth::small();
         let t6 = T6::handed_over(blob.clone());
         t6.soc.borrow_mut().insert(GPU + mali::GPU_ID, 0xa867_0001);
-        let o = run(&t6, &blob);
+        let mut z1 = GpuUp::default();
+        let mut pool = vec![[0u64; ENTRIES]; 16];
+        let clean = |a, n| t6.clean(a, n);
+        let o = fw_up(
+            &t6,
+            B,
+            &blob,
+            &backings(&blob),
+            &mut pool,
+            TABLES_PA,
+            RK3588_TIMER_HZ,
+            &clean,
+            &mut |_| {},
+            &mut |_| {},
+            &mut z1,
+        );
         let stop = nanopc_t6_gpu::Stop::NotG610 as u32;
         assert_eq!((o.step, o.stop, o.refusal, o.detail), (STEP_GPU, stop, 0, [0xa867_0001, 0]));
+        // Z1's own record comes out whole, the hand-over state included
+        assert_eq!((z1.stop, z1.ident.gpu_id), (nanopc_t6_gpu::Stop::NotG610, 0xa867_0001));
+        assert_eq!(z1.pd_before, PdGpuRegs::read(&T6::handed_over(blob.clone()), B.pmu));
         assert!(t6.writes().iter().all(|w| w.0 != GPU + MCU_CONTROL && w.0 != GPU + GPU_CMD));
 
         // 6 table pages, 7 needed: AS0 is never enabled, the MCU never started

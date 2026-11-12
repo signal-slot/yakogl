@@ -40,6 +40,10 @@
 # its PA must be the same number. The tables, walk, enable and PASS lines
 # are compared against them.
 #
+# t6_mmu, t6_fw, t6_submit: when Z1's power-on stopped (t6_mmu's "Z1: rc"
+# not 0, the "Z3: rc" line's step 3), Z1's record (table_z1_stop) is
+# expected after the line that reports the stop; the verdict stays FAIL.
+#
 # t6_fw: JOB_INT_RAWSTAT must have bit 31 set and the GLB req and ack words
 # agree on the acknowledged bits; hooks check both.
 #
@@ -60,6 +64,11 @@ usage() { echo "usage: $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit} <uart.log>" >
 PROBE=$1
 LOG=$2
 [ -r "$LOG" ] || { echo "t6-verdict.sh: $LOG: not readable" >&2; exit 2; }
+
+# ---- the log ----------------------------------------------------------------
+# uart.log as the UART gave it: CR LF from the early banner and the console,
+# maybe NULs or line noise around the jump and the resets.
+mapfile -t LINES < <(tr -d '\r\000' <"$LOG")
 
 # ---- the tables -------------------------------------------------------------
 TPL=()  # the templates, in order
@@ -145,6 +154,35 @@ table_t6_gpu() {
 	table_reset t6_gpu
 }
 
+# a line of the log matches the ERE $1
+seen_line() {
+	local l
+	for l in "${LINES[@]}"; do
+		[[ $l =~ $1 ]] && return 0
+	done
+	return 1
+}
+
+# table_z1_stop <probe>: Z1's record as a probe after t6_gpu prints it when
+# Z1's power-on stops (tools/probes/nanopc_t6/common/t6_z1.c,
+# t6_z1_print_stop): the hand-over lines, the clock set, the supply enable
+# and the stop line, which names the stop. A stopped run's values are not
+# predicted: each line is checked for its form only, and a record without
+# them (an image that does not print them) is named line by line. The lines
+# of the steps the run reached (PLL, PD_GPU, identity, reset) depend on the
+# stop and are not judged.
+table_z1_stop() {
+	local p=$1
+	e "$p: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: {s}"
+	e "$p: CRU at hand-over: CLKSEL_CON(158) 0x{x8} CLKSEL_CON(159) 0x{x8} CLKGATE_CON(66) 0x{x8} MODE_CON0 0x{x8} PLL_CON 0x{x8} 0x{x8} 0x{x8}: clk_gpu_src {d} Hz"
+	e "$p: SPI2 gates CLKGATE_CON(14) 0x{x8}, opened 0x{x}"
+	e "$p: SPI2 as found: CTRLR0 0x{x8} CTRLR1 0x{x8} SSIENR 0x{x} SER 0x{x} BAUDR 0x{x} SR 0x{x8} RXFLR 0x{x} VERSION 0x{x8}"
+	e "$p: RK806 at hand-over: POWER_EN0 0x{x} POWER_SLP_EN0 0x{x} BUCK1_CONFIG 0x{x} BUCK1_ON_VSEL 0x{x}: vdd_gpu_s0 {s}, {d} uV"
+	e "$p: clock set: kept {d}, CPLL {d} Hz, wrote CLKSEL_CON(158) 0x{x8} (159) 0x{x8}, now 0x{x8} 0x{x8}: clk_gpu_src {d} Hz"
+	e "$p: vdd_gpu_s0 enable: {s}; POWER_EN0 0x{x} BUCK1_ON_VSEL 0x{x} after, waited {d} us"
+	e "$p: Z1 stopped: stop {d} ({s}), refusal {d}, detail 0x{x16}"
+}
+
 hex16() { printf '%016x' "$1"; }
 
 # P and B (from the pool line or the environment) and what the doc's
@@ -179,6 +217,8 @@ table_t6_mmu() {
 	e 't6_mmu: build {s}'
 	e 't6_mmu: WDT0 period 22369 ms, fed until 60000 ms of uptime'
 	e 't6_mmu: Z1: rc 0 stop 0 refusal 0: GPU_ID 0xa8670005 MMU_FEATURES 0x00002830 AS_PRESENT 0x000000ff L2_READY 0x1'
+	# Z1 stopped (rc not 0): its record follows
+	if seen_line '^t6_mmu: Z1: rc -[0-9]+ '; then table_z1_stop t6_mmu; fi
 	if [ -n "${T6_POOL_PA:-}" ] || [ -n "${T6_BACKING_PA:-}" ]; then
 		: "${T6_POOL_PA:?T6_BACKING_PA needs T6_POOL_PA too}" "${T6_BACKING_PA:?T6_POOL_PA needs T6_BACKING_PA too}"
 		V[P]=$(nm_hex "$T6_POOL_PA")
@@ -255,6 +295,8 @@ table_t6_fw() {
 	table_boot
 	table_fw_image t6_fw
 	table_z3_record t6_fw
+	# Z1 stopped (step 3, YD_T6_FW_STEP_GPU): its record follows the stop line
+	if seen_line '^t6_fw: Z3: rc -?[0-9]+ step 3,'; then table_z1_stop t6_fw; fi
 	e 't6_fw: PASS' 't6_fw: (PASS|FAIL)'
 	table_reset t6_fw
 }
@@ -276,6 +318,8 @@ table_t6_submit() {
 	table_boot
 	table_fw_image t6_submit
 	table_z3_record t6_submit
+	# Z1 stopped (Z3's step 3): its record follows the Z3 stop line
+	if seen_line '^t6_submit: Z3: rc -?[0-9]+ step 3,'; then table_z1_stop t6_submit; fi
 	e 't6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000' 't6_submit: Z4a:'
 	e 't6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used {d} vm_tables_used 10 suspend_size 0 protm_suspend_size 0' 't6_submit: Z4b:'
 	e 't6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64' 't6_submit: Z4c:'
@@ -339,11 +383,6 @@ to_ere() {
 		esac
 	done
 }
-
-# ---- the log ----------------------------------------------------------------
-# uart.log as the UART gave it: CR LF from the early banner and the console,
-# maybe NULs or line noise around the jump and the resets.
-mapfile -t LINES < <(tr -d '\r\000' <"$LOG")
 
 cur=0 bad=0 total=${#TPL[@]}
 for ((i = 0; i < total; i++)); do
