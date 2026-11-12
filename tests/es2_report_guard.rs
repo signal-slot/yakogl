@@ -777,3 +777,97 @@ fn glsl_es_300_is_refused_and_es_100_has_one_draw_buffer() {
     assert!(!ok, "gl_FragData[1] compiled: gl_MaxDrawBuffers is not 1");
     assert!(!log.is_empty(), "gl_FragData[1] refused with no info log");
 }
+
+/* ---- compressed formats ------------------------------------------------------ */
+
+/// ES 2.0 3.7.3 (es_full_spec_2.0.25): GL_NUM_COMPRESSED_TEXTURE_FORMATS and
+/// GL_COMPRESSED_TEXTURE_FORMATS list the formats glCompressedTexImage2D
+/// accepts, and core ES 2.0 has none of its own: only what the claimed
+/// extensions add. GL_EXTENSIONS claims GL_OES_compressed_ETC1_RGB8_texture
+/// (GL_ETC1_RGB8_OES) and the ETC2 pair (`extension_list_is_exact`):
+/// RGB8_ETC2 and RGBA8_ETC2_EAC. The sRGB and punch-through ETC2 and the EAC
+/// R11/RG11 formats are ES 3.0 core (ES 3.0 3.8.5, table 3.19) and no claimed
+/// extension names them, so the list is those three, in that order, on every
+/// back end (the sRGB classes are not stored under REPORT_ES2:
+/// `stored_compressed_format`, src/gl/texture.rs). Plan #354, item
+/// es2-compressed-guard.
+#[test]
+fn compressed_texture_format_list_is_the_three_claimed() {
+    let _g = context();
+    assert_eq!(geti(GL_NUM_COMPRESSED_TEXTURE_FORMATS), Ok(3), "GL_NUM_COMPRESSED_TEXTURE_FORMATS");
+    let mut formats = [0x5A5A; 8];
+    // SAFETY: room for eight values, more than the count pinned above.
+    unsafe { glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, formats.as_mut_ptr()) };
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(
+        formats,
+        [
+            GL_ETC1_RGB8_OES as GLint,
+            GL_COMPRESSED_RGB8_ETC2 as GLint,
+            GL_COMPRESSED_RGBA8_ETC2_EAC as GLint,
+            0x5A5A,
+            0x5A5A,
+            0x5A5A,
+            0x5A5A,
+            0x5A5A
+        ],
+        "GL_COMPRESSED_TEXTURE_FORMATS (exactly three, nothing written past them)"
+    );
+}
+
+/// The ES 3.0-only compressed names, which no extension GL_EXTENSIONS claims
+/// adds to ES 2.0: glCompressedTexImage2D answers GL_INVALID_ENUM (ES 2.0
+/// 3.7.3: `internalformat` must be an accepted compressed format; 2.5: an
+/// unaccepted enum is GL_INVALID_ENUM) and the texture keeps the level it had.
+#[test]
+fn es3_only_compressed_formats_are_invalid_enum() {
+    const GL_COMPRESSED_R11_EAC: GLenum = 0x9270;
+    const GL_COMPRESSED_SIGNED_R11_EAC: GLenum = 0x9271;
+    const GL_COMPRESSED_RG11_EAC: GLenum = 0x9272;
+    const GL_COMPRESSED_SIGNED_RG11_EAC: GLenum = 0x9273;
+    const GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2: GLenum = 0x9276;
+    const GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2: GLenum = 0x9277;
+    let _g = context();
+    // One 4x4 block: 8 bytes, 16 for the formats with a second plane.
+    let block = [0u8; 16];
+    let four_blocks = [0u8; 32];
+    for (name, format, bytes) in [
+        ("GL_COMPRESSED_R11_EAC", GL_COMPRESSED_R11_EAC, 8),
+        ("GL_COMPRESSED_SIGNED_R11_EAC", GL_COMPRESSED_SIGNED_R11_EAC, 8),
+        ("GL_COMPRESSED_RG11_EAC", GL_COMPRESSED_RG11_EAC, 16),
+        ("GL_COMPRESSED_SIGNED_RG11_EAC", GL_COMPRESSED_SIGNED_RG11_EAC, 16),
+        ("GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2", GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, 8),
+        ("GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2", GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2, 8),
+        ("GL_COMPRESSED_SRGB8_ETC2", GL_COMPRESSED_SRGB8_ETC2, 8),
+        ("GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC", GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC, 16),
+    ] {
+        let mut t = 0;
+        // SAFETY: one name; the buffers hold the blocks the calls read.
+        unsafe {
+            glGenTextures(1, &mut t);
+            glBindTexture(GL_TEXTURE_2D, t);
+            // The level the refused call must leave alone: 8x8 RGB8_ETC2.
+            glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGB8_ETC2, 8, 8, 0, 32, four_blocks.as_ptr().cast());
+            assert_eq!(name_of(err()), name_of(GL_NO_ERROR), "{name}: the RGB8_ETC2 setup upload");
+            glCompressedTexImage2D(GL_TEXTURE_2D, 0, format, 4, 4, 0, bytes, block.as_ptr().cast());
+            assert_eq!(name_of(err()), name_of(GL_INVALID_ENUM), "{name}: glCompressedTexImage2D");
+            // Unchanged: still 8x8, so a 4x4 sub-block at (4, 4) fits ...
+            glCompressedTexSubImage2D(GL_TEXTURE_2D, 0, 4, 4, 4, 4, GL_COMPRESSED_RGB8_ETC2, 8, block.as_ptr().cast());
+            assert_eq!(name_of(err()), name_of(GL_NO_ERROR), "{name}: the level was replaced (size)");
+            // ... and the format is still RGB8_ETC2, not the refused one.
+            glCompressedTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                4,
+                4,
+                GL_COMPRESSED_RGBA8_ETC2_EAC,
+                16,
+                block.as_ptr().cast(),
+            );
+            assert_eq!(name_of(err()), name_of(GL_INVALID_OPERATION), "{name}: the level was replaced (format)");
+            glDeleteTextures(1, &t);
+        }
+    }
+}
