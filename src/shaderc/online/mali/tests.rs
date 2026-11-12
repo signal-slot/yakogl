@@ -1971,7 +1971,8 @@ fn a_highp_varying_read_in_part_is_compacted_as_mesa_26_2_1() {
 /// (fsload_mat2, fsload_mat3) and, in a highp shader, per lane read
 /// (fsload_hp_mat2); a colour that holds a highp varying's lane keeps the
 /// lanes read (fsload_hp_var2); the colour's own lanes are converted in
-/// the colour's order (fsload_order, intloop_ifloop: the pair z,w first).
+/// the colour's order (fsload_order, intloop_ifloop: the pair z,w first);
+/// gl_PointCoord is loaded `.v2` where x alone is read (fsload_pcv).
 #[test]
 fn varyings_sharing_a_slot_are_loaded_per_slot_as_mesa_26_2_1() {
     let pair = |n: &'static str| match n {
@@ -2006,6 +2007,12 @@ fn varyings_sharing_a_slot_are_loaded_per_slot_as_mesa_26_2_1() {
         })
         .collect();
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+    /* a points draw: the fragment program and the varying program (case
+     * 105's test) */
+    let (fs, json) = (td!("fsload_pcv.frag"), td!("fsload_pcv.expect.json"));
+    let (v, f) = compile_linked(POINTS_VS, fs);
+    check_fs_stage(&f, POINTS_VS, fs, json, VIEWPORT_64X64);
+    assert_words("fsload_pcv vs.varying", &vs_regions(&v).1, &region(json, "vs.varying").expect("vs.varying").words);
 }
 
 /// Shapes whose load or conversions Mesa makes in a form the selection has
