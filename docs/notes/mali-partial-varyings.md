@@ -187,6 +187,29 @@ that measures it.
    element only the colour's words read is sunk there too, after the
    conversions (uniidx_j).
 
+## A new colour leaf
+
+A leaf of the selection's pair graph (nir_fs.rs `Leaf`) that converts a
+varying's lane joins the steps above in five places, or the shader is
+refused by name (`FsVaryingLoad`):
+
+1. `conversion_order`'s `lanes_of` names its lanes: as the colour's own
+   lane when it stands at a root (converted at the store, in the colour's
+   order), as a tree lane otherwise (converted at its load).
+2. `select` sets its conversion form (`conv_form`: a pair or a lane
+   alone) for each lane it reads.
+3. A leaf that reads a load raw (no conversion) is named in `select`'s
+   `raw_read`, so the load is made where its key stands and not at the
+   store after it.
+4. `kept_whole`'s colour arm names the kind of node it reads, measured
+   lowered or fp32; any other kind is refused.
+5. It reaches a lane through `Fs::lane_of` (via `index`), never through
+   the location: a merged lane lives in another varying's slot (step 3).
+
+The highp path (`select_highp`) converts each load's lanes at the load
+(`convert(.., None)`) and does not follow step 5's store rule; a leaf
+there takes no part in it.
+
 ## Pins
 
 `src/shaderc/online/mali/tests.rs`:
