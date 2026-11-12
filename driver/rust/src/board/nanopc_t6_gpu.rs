@@ -46,7 +46,12 @@
 use crate::gpu::mali::{self, Ident, L2On, Reset};
 use crate::ip::{rk806, rockchip_spi};
 use crate::mmio::Mmio;
-use crate::soc::rk3588::{self, ClockRefusal, ClockSet, GpuClock, PdGpuRegs, PdOn, PllOn};
+use crate::soc::rk3588::{self, ClockRefusal, ClockSet, GpuClock, PdGpuRegs, PdOn, PllOn, QosPolicy};
+
+/// The GPU QoS words `gpu_up` writes after the power-on. Every Z1-Z4 board run
+/// so far worked under Linux's zeroed QoS, so the U-Boot route applies the
+/// same; [`QosPolicy::Reset`] is the alternative a board session may try.
+pub const GPU_QOS_POLICY: QosPolicy = QosPolicy::LinuxZero;
 
 /// The physical blocks this touches, mapped by the caller.
 #[derive(Clone, Copy, Debug)]
@@ -313,6 +318,8 @@ pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handov
         }
     }
     o.pd_after = PdGpuRegs::read(m, b.pmu);
+    // the QoS blocks sit inside PD_GPU: only now. MMIO writes only, so no Stop.
+    rk3588::qos_apply(m, GPU_QOS_POLICY);
     for (blk, words) in o.qos.iter_mut().enumerate() {
         for (w, off) in words.iter_mut().zip(rk3588::QOS_WORDS) {
             *w = m.read32(b.qos + 0x200 * blk + off);
@@ -1120,5 +1127,58 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The QoS words read back as `GPU_QOS_POLICY` after `gpu_up`, from
+    /// Linux's and U-Boot's starting states, and the QoS writes are exactly
+    /// QOS_GPU[i] + QOS_POLICY_WORDS, after the PD_GPU power-on writes.
+    #[test]
+    fn gpu_up_applies_the_qos_policy_after_the_power_on() {
+        let starts: [(&str, fn() -> T6); 3] = [
+            ("linux, pd_gpu on", T6::handed_over_domain_on),
+            ("uboot, dcdc1 on", T6::handed_over),
+            ("uboot, dcdc1 off", || T6::handed_over_supply_off(0xa4)),
+        ];
+        let want = GPU_QOS_POLICY.values();
+        for (what, mk) in starts {
+            let pd_off = what != "linux, pd_gpu on";
+            let t6 = mk();
+            let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+            assert_eq!(o.stop, Stop::None, "{what}");
+            for (blk, base) in rk3588::QOS_GPU.into_iter().enumerate() {
+                let regs = t6.regs.borrow();
+                assert_eq!(rk3588::QOS_POLICY_WORDS.map(|w| regs[&(base + w)]), want, "{what}");
+                assert_eq!(o.qos[blk][1..4], want, "{what}");
+            }
+            let writes = t6.writes.borrow();
+            let in_qos = |a: usize| (QOS..QOS + 0x800).contains(&a);
+            let expect: Vec<usize> =
+                rk3588::QOS_GPU.iter().flat_map(|b| rk3588::QOS_POLICY_WORDS.map(|w| b + w)).collect();
+            let got: Vec<usize> = writes.iter().filter(|w| in_qos(w.0)).map(|w| w.0).collect();
+            assert_eq!(got, expect, "{what}");
+            let first_qos = writes.iter().position(|w| in_qos(w.0)).unwrap();
+            let pmu = |i: &usize| (PMU_BASE..PMU_BASE + 0x400).contains(&writes[*i].0);
+            let last_pmu = (0..writes.len()).rev().find(pmu);
+            assert_eq!(last_pmu.is_some(), pd_off, "{what}");
+            if let Some(i) = last_pmu {
+                assert!(i < first_qos, "{what}: PMU write {i} after QoS write {first_qos}");
+            }
+        }
+    }
+
+    /// A stop before the PD_GPU power-on writes no QoS word.
+    #[test]
+    fn gpu_up_stops_before_the_power_on_write_no_qos_word() {
+        // PD_GPU on, DCDC1 off: refused before the power-on
+        let t6 = T6::handed_over_domain_on();
+        t6.rk806.borrow_mut().insert(0x00, 0x0e);
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!(o.stop, Stop::SupplyOff);
+        assert!(t6.writes.borrow().iter().all(|w| !(QOS..QOS + 0x800).contains(&w.0)));
+        // PD_GPU off, DCDC1 off and its enable never takes
+        let t6 = T6 { dcdc1_ramp: None, ..T6::handed_over_supply_off(0xa4) };
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_ne!(o.stop, Stop::None);
+        assert!(t6.writes.borrow().iter().all(|w| !(QOS..QOS + 0x800).contains(&w.0)));
     }
 }
