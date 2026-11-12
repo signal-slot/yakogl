@@ -19,6 +19,7 @@
 //!
 //! A score here says only that nothing these programs cover differs.
 
+use super::bir;
 use super::fau::FauWord;
 use super::isa;
 use super::{MaliError, MaliShader, Section, VaryingSlot};
@@ -2906,6 +2907,348 @@ fn a_vertex_cube_look_up_at_a_constant_lane_is_byte_equal_to_mesa_26_2_1() {
         assert!(texts.iter().any(|t| t.starts_with(op) && t.contains("0x3F800000")), "{op}: {texts:?}");
     }
     assert!(texts.iter().any(|t| t.starts_with("TEX_SINGLE") && t.contains(".cube.explicit")), "{texts:?}");
+}
+
+/* ---- the per-source table against Mesa's valhall.c (#4574) ---------- */
+
+/// The `valhall_opcodes[]` entry Mesa selects for `op` (`BI_OPCODE_<name>`
+/// in valhall.c), or None for a pseudo-op Mesa's table has no entry for
+/// (its `va_src_info` reads a zeroed entry; ours are lowered or fused before
+/// the passes that read [`bir::src_info`]). The match has no wildcard: a new
+/// op names its entry here, and [`ALL_OPS`] lists it.
+fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
+    use bir::Op as O;
+    Some(match op {
+        O::Nop => "NOP",
+        O::MovI32 => "MOV_I32",
+        O::IaddImmI32(_) => "IADD_IMM_I32",
+        O::FaddImmF32(_) => "FADD_IMM_F32",
+        O::FaddImmV2f16(_) => "FADD_IMM_V2F16",
+        O::FmaF32 => "FMA_F32",
+        O::FmaV2f16 => "FMA_V2F16",
+        O::FaddV2f16 => "FADD_V2F16",
+        O::FaddF32 => "FADD_F32",
+        O::FrcpF32 => "FRCP_F32",
+        O::FrcpF16 => "FRCP_F16",
+        O::FmaxF32 => "FMAX_F32",
+        O::FmaxV2f16 => "FMAX_V2F16",
+        O::FminF32 => "FMIN_F32",
+        O::FminV2f16 => "FMIN_V2F16",
+        O::FabsnegF32 | O::FabsnegV2f16 | O::FclampF32 | O::FclampV2f16 => return None,
+        O::FcmpOrF32 { .. } => "FCMP_OR_F32",
+        O::FcmpOrV2f16 { .. } => "FCMP_OR_V2F16",
+        O::IcmpOrS32 { .. } => "ICMP_OR_S32",
+        O::IcmpOrU32 { .. } => "ICMP_OR_U32",
+        O::IcmpOrV2u16 { .. } => "ICMP_OR_V2U16",
+        /* `BI_MUX_BIT` is a mode of MUX.i32 */
+        O::MuxI32 | O::MuxBitI32 => "MUX_I32",
+        O::Cubeface1 => "CUBEFACE1",
+        O::Cubeface2 => "CUBEFACE2_V9",
+        O::CubeSsel => "CUBE_SSEL",
+        O::CubeTsel => "CUBE_TSEL",
+        O::MuxV2i16 => "MUX_V2I16",
+        O::CselU32 => "CSEL_U32",
+        O::CselS32 { .. } => "CSEL_S32",
+        O::IabsS32 => "IABS_S32",
+        O::ImulI32 => "IMUL_I32",
+        O::IsubS32 => "ISUB_S32",
+        O::U32ToF32 => "U32_TO_F32",
+        O::F32ToU32 => "F32_TO_U32",
+        O::LshiftXorI32 => "LSHIFT_XOR_I32",
+        O::Clper => "CLPER_I32",
+        O::FroundF32 { .. } => "FROUND_F32",
+        O::FroundV2f16 { .. } => "FROUND_V2F16",
+        O::FrsqF32 => "FRSQ_F32",
+        O::FrsqF16 => "FRSQ_F16",
+        O::FsinTableU6 => "FSIN_TABLE_U6",
+        O::FcosTableU6 => "FCOS_TABLE_U6",
+        O::FmaRscaleF32 => "FMA_RSCALE_F32",
+        O::FrexpeF32 { .. } => "FREXPE_F32",
+        O::FaddLscaleF32 => "FADD_LSCALE_F32",
+        O::FlogdF32 => "FLOGD_F32",
+        O::FexpF32 => "FEXP_F32",
+        O::F32ToS32 => "F32_TO_S32",
+        O::S32ToF32 => "S32_TO_F32",
+        O::IaddS32 => "IADD_S32",
+        O::S16ToS32 => "S16_TO_S32",
+        O::U16ToU32 => "U16_TO_U32",
+        O::U16ToF32 => "U16_TO_F32",
+        O::F16ToF32 => "F16_TO_F32",
+        O::F16ToS32 => "F16_TO_S32",
+        O::U8ToF32 => "U8_TO_F32",
+        O::V2f32ToV2f16 => "V2F32_TO_V2F16",
+        O::MkvecV2i16 => "MKVEC_V2I16",
+        O::IaddV2u16 => "IADD_V2U16",
+        O::MkvecV2i8 => "MKVEC_V2I8",
+        O::ShaddxS64 => "SHADDX_S64",
+        O::LdAttrImm { .. } => "LD_ATTR_IMM",
+        O::LeaBufImm { .. } => "LEA_BUF_IMM",
+        O::StoreI32 { .. } => "STORE_I32",
+        O::StoreI16 { .. } => "STORE_I16",
+        O::LdVarBufImmF32 { .. } => "LD_VAR_BUF_IMM_F32",
+        O::LdVarSpecialF32 { .. } => "LD_VAR_SPECIAL",
+        O::LdVarImmF32 { .. } => "LD_VAR_IMM",
+        O::Atest => "ATEST",
+        O::ZsEmit { .. } => "ZS_EMIT",
+        O::Blend { .. } => "BLEND",
+        O::BranchzI { .. } => "BRANCHZI",
+        O::LshiftAndI32 => "LSHIFT_AND_I32",
+        O::LshiftOrI32 => "LSHIFT_OR_I32",
+        O::LshiftAndV2i16 => "LSHIFT_AND_V2I16",
+        O::LshiftOrV2i16 => "LSHIFT_OR_V2I16",
+        O::LshiftXorV2i16 => "LSHIFT_XOR_V2I16",
+        O::RshiftAndI32 => "RSHIFT_AND_I32",
+        O::RshiftOrI32 => "RSHIFT_OR_I32",
+        /* the compiler's ARSHIFT is RSHIFT with the arithmetic bit
+         * (valhall.c.py SKIP: "Disassembly aliases") */
+        O::ArshiftOrI32 => "RSHIFT_OR_I32",
+        O::LdPka { words: 1, half: true } => "LD_PKA_I16",
+        O::LdPka { words: 1, .. } => "LD_PKA_I32",
+        O::LdPka { words: 2, .. } => "LD_PKA_I64",
+        O::LdPka { words: 3, .. } => "LD_PKA_I96",
+        O::LdPka { .. } => "LD_PKA_I128",
+        O::LdTile { .. } => "LD_TILE",
+        O::Branchz { .. } => "BRANCHZ_I16",
+        O::Phi | O::Collect | O::Split | O::DiscardB32 => return None,
+        O::DiscardF32 { .. } => "DISCARD_F32",
+        O::TexSingle { .. } => "TEX_SINGLE",
+    })
+}
+
+/// Every op of [`bir::Op`], one value per variant (each width of LD_PKA).
+const ALL_OPS: [bir::Op; 97] = {
+    use bir::{Access, Cmpf, LodMode, Op as O, ResultType, Round, TexDim, VaryingName};
+    let (cmpf, result) = (Cmpf::Eq, ResultType::M1);
+    [
+        O::Nop,
+        O::MovI32,
+        O::IaddImmI32(0),
+        O::FaddImmF32(0),
+        O::FaddImmV2f16(0),
+        O::FmaF32,
+        O::FmaV2f16,
+        O::FaddV2f16,
+        O::FaddF32,
+        O::FrcpF32,
+        O::FrcpF16,
+        O::FmaxF32,
+        O::FmaxV2f16,
+        O::FminF32,
+        O::FminV2f16,
+        O::FabsnegF32,
+        O::FabsnegV2f16,
+        O::FclampF32,
+        O::FclampV2f16,
+        O::FcmpOrF32 { cmpf, result },
+        O::FcmpOrV2f16 { cmpf, result },
+        O::IcmpOrS32 { cmpf, result },
+        O::IcmpOrU32 { cmpf, result },
+        O::IcmpOrV2u16 { cmpf, result },
+        O::MuxI32,
+        O::MuxBitI32,
+        O::Cubeface1,
+        O::Cubeface2,
+        O::CubeSsel,
+        O::CubeTsel,
+        O::MuxV2i16,
+        O::CselU32,
+        O::CselS32 { cmpf },
+        O::IabsS32,
+        O::ImulI32,
+        O::IsubS32,
+        O::U32ToF32,
+        O::F32ToU32,
+        O::LshiftXorI32,
+        O::Clper,
+        O::FroundF32 { round: Round::Rtn },
+        O::FroundV2f16 { round: Round::Rtn },
+        O::FrsqF32,
+        O::FrsqF16,
+        O::FsinTableU6,
+        O::FcosTableU6,
+        O::FmaRscaleF32,
+        O::FrexpeF32 { log: false },
+        O::FaddLscaleF32,
+        O::FlogdF32,
+        O::FexpF32,
+        O::F32ToS32,
+        O::S32ToF32,
+        O::IaddS32,
+        O::S16ToS32,
+        O::U16ToU32,
+        O::U16ToF32,
+        O::F16ToF32,
+        O::F16ToS32,
+        O::U8ToF32,
+        O::V2f32ToV2f16,
+        O::MkvecV2i16,
+        O::IaddV2u16,
+        O::MkvecV2i8,
+        O::ShaddxS64,
+        O::LdAttrImm { index: 0, vecsize: 4 },
+        O::LeaBufImm { table: 0, index: 0 },
+        O::StoreI32 { access: Access::Istream },
+        O::StoreI16 { access: Access::Istream },
+        O::LdVarBufImmF32 { index: 0, vecsize: 4, flat: false },
+        O::LdVarSpecialF32 { name: VaryingName::Point, vecsize: 2 },
+        O::LdVarImmF32 { table: 0, index: 0, vecsize: 4 },
+        O::Atest,
+        O::ZsEmit { z: true, s: true },
+        O::Blend { sr_count: 4, f32: false, u32: false },
+        O::BranchzI { eq: true },
+        O::LshiftAndI32,
+        O::LshiftOrI32,
+        O::LshiftAndV2i16,
+        O::LshiftOrV2i16,
+        O::LshiftXorV2i16,
+        O::RshiftAndI32,
+        O::RshiftOrI32,
+        O::ArshiftOrI32,
+        O::LdPka { words: 1, half: true },
+        O::LdPka { words: 1, half: false },
+        O::LdPka { words: 2, half: false },
+        O::LdPka { words: 3, half: false },
+        O::LdPka { words: 4, half: false },
+        O::LdTile { vecsize: 4, f16: true },
+        O::Branchz { target: 0, eq: true },
+        O::Phi,
+        O::DiscardF32 { cmpf },
+        O::DiscardB32,
+        O::TexSingle {
+            sr_count: 2,
+            mask: 0xf,
+            f16: true,
+            skip: false,
+            lod: LodMode::Computed,
+            dim: TexDim::D2,
+            shadow: false,
+        },
+        O::Collect,
+        O::Split,
+    ]
+};
+
+/// `va_swap_12` (valhall.h): the ops whose BIR sources 1 and 2 are the
+/// entry's 2 and 1.
+fn va_swap_12(name: &str) -> bool {
+    name == "BLEND" || ["LSHIFT_", "RSHIFT_"].iter().any(|p| name.starts_with(p))
+}
+
+/// [`bir::src_info`], [`bir::nr_srcs`], [`bir::nr_staging_srcs`] and
+/// [`bir::is_signed`] of every op equal the facts of Mesa 26.2.1's
+/// generated valhall.c (tools/mali/testdata/valhall_src_info.txt, made by
+/// tools/mali/valhall_src_info.py): `va_src_info(op, s)` of each source,
+/// `va_swap_12` applied, every field this back end reads. A wrong flag
+/// picks another constant encoding in `va_lookup_constant` (fau.rs
+/// `lookup`): the cube ops' `swizzle` made 0.5 an fp16 half of the table
+/// where Mesa pushes the word (#4574).
+#[test]
+fn the_source_table_equals_mesa_26_2_1_valhall_c() {
+    let mesa: Vec<Vec<&str>> = include_str!("../../../../tools/mali/testdata/valhall_src_info.txt")
+        .lines()
+        .map(|l| l.split(' ').collect())
+        .collect();
+    let mut differ = Vec::new();
+    for op in ALL_OPS {
+        let Some(name) = mesa_opcode(op) else { continue };
+        let e = mesa.iter().find(|e| e[0] == name).unwrap_or_else(|| panic!("{name} is not in valhall.c"));
+        let (signed, staging, srcs) = (e[1] == "1", e[2].parse::<usize>().unwrap(), e[3].parse::<usize>().unwrap());
+        if bir::is_signed(op) != signed {
+            differ.push(format!("{op:?} ({name}): is_signed {} / Mesa {signed}", bir::is_signed(op)));
+        }
+        if bir::nr_staging_srcs(op) != staging || bir::nr_srcs(op) != srcs {
+            differ.push(format!(
+                "{op:?} ({name}): sources {}+{} / Mesa {staging}+{srcs}",
+                bir::nr_staging_srcs(op),
+                bir::nr_srcs(op)
+            ));
+        }
+        for s in 0..staging + srcs {
+            let k = if va_swap_12(name) && (s == 1 || s == 2) { 3 - s } else { s };
+            let (flags, bits) = e[4 + k].split_once('/').unwrap();
+            let flags: Vec<&str> = flags.split(',').collect();
+            let has = |f: &str| flags.contains(&f);
+            let m = bir::SrcInfo {
+                absneg: has("absneg"),
+                swizzle: has("swizzle"),
+                notted: has("notted"),
+                widen: has("widen"),
+                lanes: has("lanes"),
+                halfswizzle: has("halfswizzle"),
+                lane: has("lane"),
+                combine: has("combine"),
+                bits: bits.parse().unwrap(),
+            };
+            let ours = bir::src_info(op, s);
+            if ours != m {
+                differ.push(format!("{op:?} ({name}) source {s}:\n  ours {ours:?}\n  Mesa {m:?}"));
+            }
+        }
+    }
+    assert!(differ.is_empty(), "{} differences:\n{}", differ.len(), differ.join("\n"));
+}
+
+/* ---- a cube direction lane that is not in the ISA's table (#4574) ---- */
+
+/// A constant lane of a cube direction that the ISA's 32-bit table does not
+/// hold (0.5): the cube ops' sources have no swizzle (valhall.c CUBEFACE1,
+/// CUBEFACE2_V9, CUBE_SSEL, CUBE_TSEL: `.swizzle = 0`), so Mesa's
+/// `va_lookup_constant` does not demote it to an fp16 half of the table
+/// (`0x38000000.h1`) and `va_lower_constants` pushes the word 0x3F000000 as
+/// a FAU constant. `stage` names the program that holds the cube ops; every
+/// program of the pair is the shim's to the byte (`--uniform-values`).
+fn check_cube_direction_lane_from_fau(name: &str, vs: &str, fs: &str, json: &str, stage: u32) {
+    let (v, f) = check_linked(vs, fs, json);
+    let (s, code) = if stage == SHC_STAGE_VERTEX { (&v, vs_regions(&v).1) } else { (&f, trim(&f.code)) };
+    assert!(s.info.fau.contains(&FauWord::Constant(0x3f00_0000)), "{name}: 0.5 is a FAU word: {:?}", s.info.fau);
+    let texts: Vec<String> = code.iter().map(|w| text(*w)).collect();
+    assert!(!texts.iter().any(|t| t.starts_with("CUBE") && t.contains("0x38000000")), "{name}: {texts:?}");
+}
+
+/// `textureCube(s, vec3(1.0, b1, 0.5), u)` in a mediump fragment shader:
+/// the cube look-up with a bias. The four cube ops are Mesa's words (0.5
+/// the FAU word `u2.w1`) and the FAU the shim's; the program as a whole is
+/// not yet: the bias arm orders the cube ops and the bias's conversion
+/// otherwise and its texel registers differ (#4547).
+#[test]
+fn a_cube_direction_lane_of_one_half_with_a_bias_reads_mesa_26_2_1_fau_word() {
+    let (vs, fs, json) = (td!("cube_fau_bias.vert"), td!("cube_fau_bias.frag"), td!("cube_fau_bias.expect.json"));
+    let (_, f) = compile_linked(vs, fs);
+    let rf = region(json, "fs.fragment").expect("fs.fragment");
+    let cube = |words: &[u64]| -> Vec<u64> {
+        let mut c: Vec<u64> = words.iter().copied().filter(|w| text(*w).starts_with("CUBE")).collect();
+        c.sort_unstable();
+        c
+    };
+    let ours = cube(&trim(&f.code));
+    assert_eq!(ours.len(), 4, "{:?}", ours.iter().map(|w| text(*w)).collect::<Vec<_>>());
+    assert_eq!(ours, cube(&rf.words), "the cube ops' words");
+    let names = uniform_names(vs, fs);
+    let uv = |d: u16| uniform_value(&names, &f.uniforms, d);
+    assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &uv);
+}
+
+/// `textureLod(s, vec3(a2, 0.5), 0.0)` in a mediump ES 3.00 fragment shader.
+#[test]
+fn a_cube_direction_lane_of_one_half_at_mediump_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) = (td!("cube_fau_es3lod.vert"), td!("cube_fau_es3lod.frag"), td!("cube_fau_es3lod.expect.json"));
+    check_cube_direction_lane_from_fau("es3lod", vs, fs, json, SHC_STAGE_FRAGMENT);
+}
+
+/// `textureLod(s, vec3(1.0, b1, 0.5), 0.0)` in a highp ES 3.00 fragment
+/// shader.
+#[test]
+fn a_cube_direction_lane_of_one_half_at_highp_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("cube_fau_es3highp.vert"), td!("cube_fau_es3highp.frag"));
+    check_cube_direction_lane_from_fau("es3highp", vs, fs, td!("cube_fau_es3highp.expect.json"), SHC_STAGE_FRAGMENT);
+}
+
+/// `textureCubeLod(s, vec3(1.0, a_b.x, 0.5), 0.0)` in a vertex shader (its
+/// varying program).
+#[test]
+fn a_vertex_cube_direction_lane_of_one_half_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) = (td!("cube_fau_vslod.vert"), td!("cube_fau_vslod.frag"), td!("cube_fau_vslod.expect.json"));
+    check_cube_direction_lane_from_fau("vslod", vs, fs, json, SHC_STAGE_VERTEX);
 }
 
 /// gl_test case 41 (`es3cube`, tools/shaders/es300/cube.{vert,frag} as
