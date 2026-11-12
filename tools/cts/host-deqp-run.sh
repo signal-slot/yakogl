@@ -82,7 +82,10 @@
 #             whose status changed ("case: old -> new"; "-" is a case absent from
 #             that run), then the totals per status for both runs. Unset: nothing
 #             printed. --compare-only=OLD,NEW prints this for two run directories
-#             and builds and runs nothing.
+#             and builds and runs nothing. The <Result StatusCode= line is read
+#             with its dEQP indentation. Either side parsing to no result at all
+#             (no case with a StatusCode) is an error with a message, never a
+#             silent "no changes".
 #   OUT       run directory             (default <repo>/build/host-deqp/run-<commit>,
 #             run-<commit>-powervr for the PowerVR)
 #   JOBS      chunks in parallel         (default nproc - 2)
@@ -93,22 +96,42 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 
 # case_status DIR: "<case> <TAB> <status>" for every case the logs of run DIR
-# began, sorted; a case that began and has no result is Incomplete.
+# began, sorted; a case that began and has no result is Incomplete. dEQP
+# indents the <Result> element by its nesting level (a space per level, as in
+# testdata/by-message.qpa), so the match allows leading whitespace: an
+# anchored one parsed every real run into Incomplete and the compare then
+# reported "no changes" over that (the control run of plan #350, 2026-11-12).
 case_status() {
     cat "$1"/c_*.qpa 2>/dev/null | awk '
         /^#beginTestCaseResult /{c=$2; st[c]="Incomplete"}
-        c != "" && /^<Result StatusCode="/{s=$0; sub(/^<Result StatusCode="/, "", s); sub(/".*/, "", s); st[c]=s}
+        c != "" && /^[[:space:]]*<Result[[:space:]]+StatusCode="/{s=$0; sub(/^[[:space:]]*<Result[[:space:]]+StatusCode="/, "", s); sub(/".*/, "", s); st[c]=s}
         END{for (c in st) print c "\t" st[c]}' | sort
 }
 
 # compare_runs OLD NEW: the cases whose status differs, then the totals.
+# A side with no parsed result at all is an error, not a comparison of zero
+# changes: that is exactly what a .qpa the parser reads nothing of looks like
+# (the indented <Result> line the anchored pattern used to miss). Both sides
+# are materialised to files so this can be checked before anything prints.
 compare_runs() {
-    local old=$1 new=$2 f
+    local old=$1 new=$2 f os ns rc n_old n_new
     for f in "$old" "$new"; do
         ls "$f"/c_*.qpa > /dev/null 2>&1 ||
             { echo "host-deqp-run: $f is not a run directory (no c_*.qpa)" >&2; return 1; }
     done
+    os=$(mktemp) ns=$(mktemp)
+    case_status "$old" > "$os"
+    case_status "$new" > "$ns"
+    n_old=$(awk -F'\t' '$2 != "Incomplete" {n++} END {print n + 0}' "$os")
+    n_new=$(awk -F'\t' '$2 != "Incomplete" {n++} END {print n + 0}' "$ns")
+    if [ "$n_old" -eq 0 ] || [ "$n_new" -eq 0 ]; then
+        echo "host-deqp-run: $old parses to $n_old case result(s), $new to $n_new;" >&2
+        echo "host-deqp-run:   a side without a single <Result StatusCode= is an empty run or an unreadable log, not \"no changes\"" >&2
+        rm -f "$os" "$ns"
+        return 1
+    fi
     echo "host-deqp-run: compare $new with $old (HOST-ONLY)"
+    rc=0
     awk -F'\t' '
         FNR == NR {o[$1] = $2; next}
         {n[$1] = $2}
@@ -127,7 +150,9 @@ compare_runs() {
             for (s in tn) st[s] = 1
             printf "host-deqp-run: %-16s %10s %10s\n", "status", "old", "new"
             for (s in st) printf "host-deqp-run: %-16s %10d %10d\n", s, to[s], tn[s] | "sort"
-        }' <(case_status "$old") <(case_status "$new")
+        }' "$os" "$ns" || rc=$?
+    rm -f "$os" "$ns"
+    return $rc
 }
 
 LIB_ARGS=()
