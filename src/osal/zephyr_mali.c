@@ -240,14 +240,16 @@ void osal_mali_diag_print(void)
 	       c.live_pages_high, (unsigned int)(MALI_CARVE / PAGE), c.held, c.refused_frees,
 	       c.dead_refusal, c.dead_value);
 	printk("osal(mali): restarts %u (last by sched refusal %u, 0x%x); tiler OOMs %u grown, "
-	       "%u with no chunk; heap %u of %u chunk(s)\n",
+	       "%u with no chunk; heap %u of %u chunk(s); group %s\n",
 	       c.restarts, c.last_refusal, c.last_value, c.oom_chunks, c.oom_no_chunk,
-	       c.heap_chunks, (unsigned int)MALI_CHUNKS);
+	       c.heap_chunks, (unsigned int)MALI_CHUNKS,
+	       c.unended ? "may still run" : c.dead_refusal != 0 || c.down ? "ended" : "running");
 }
 
 /* One line per group restart a call just caused, with the sched refusal
  * that caused it (driver/rust/src/gpu/mali/sched.rs, SchedRefusal) and the
- * kicks it lost up to; one line when the OSAL stops (needs a GPU reset).
+ * kicks it lost up to; one line when the OSAL stops, saying whether the
+ * group ended or may still run (then it needs a GPU reset).
  * The OSAL's own numbers: 28 TilerOomCounts, 29 HeapGrow, 30 HeapRemake,
  * 31 RestartBudget (the value: the refusal that would have restarted the
  * group), 32 CacheFlush (the GPU cache clean after the group's end did not
@@ -266,9 +268,11 @@ static void note_restart(void)
 	}
 	if (c.dead_refusal != 0 && !s.stopped) {
 		s.stopped = true;
-		printk("osal(mali): stopped by sched refusal %u (0x%x) after kick %llu: needs a GPU "
-		       "reset; every later kick is -EIO\n",
-		       c.dead_refusal, c.dead_value, (unsigned long long)c.submitted);
+		printk("osal(mali): stopped by sched refusal %u (0x%x) after kick %llu: %s; every "
+		       "later kick is -EIO\n",
+		       c.dead_refusal, c.dead_value, (unsigned long long)c.submitted,
+		       c.unended ? "the group may still run, memory kept (needs a GPU reset)" :
+				   "the group ended");
 	}
 }
 
