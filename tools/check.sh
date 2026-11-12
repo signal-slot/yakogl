@@ -1832,6 +1832,13 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_msaa_pvr.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_msaa_pvr
 step "test    host-test,gpu-vivante,shaderc-online (tests/es3_msaa_gc.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_msaa_gc
+# Flat shading on the V3D and the GC7000UL (docs/notes/es3-flatshading.md): a
+# regression guard that pins the provoking vertex (the last), the flat flags
+# and the native primitive of every mode. Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_flatshade_guard.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_flatshade_guard
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_flatshade_guard.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_flatshade_guard
 # The `msaa-fbo` feature (no effect yet) builds with each GPU's host
 # configuration, so a later item that reads it starts from a tree that
 # compiles.
