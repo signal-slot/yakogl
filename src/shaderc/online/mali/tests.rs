@@ -6535,6 +6535,30 @@ fn a_mediump_fragment_matrix_uniform_is_refused_before_the_push() {
     }
 }
 
+/// The products the `fsat` guard does not take, outside its measured
+/// forms (a highp fragment shader's product of one or two lanes): refused
+/// as [`MaliError::ArithConstant`], as at 72d17d74f. Each compiled at
+/// 4f08f41e5 with other words than Mesa 26.2.1's, or was refused under
+/// another name: a vertex position's clamp (28 words, Mesa 27: Mesa drops
+/// the 1/w clamp's `FMAX`), its `.xy` (refused as `PositionLane`), a highp
+/// vec3 (Mesa loads the varying as v4, ours v3), and a product stored to a
+/// local that two clamps read (Mesa folds the clamp into the `FMA`).
+#[test]
+fn a_negated_literal_clamp_outside_the_measured_forms_is_refused() {
+    for (name, vs, fs, json, stage) in [
+        (pair!("negsat_vs_clamp"), SHC_STAGE_VERTEX),
+        (pair!("negsat_vs_clamp_xy"), SHC_STAGE_VERTEX),
+        (pair!("negsat_vec3"), SHC_STAGE_FRAGMENT),
+        (pair!("negsat_local"), SHC_STAGE_FRAGMENT),
+    ]
+    .map(|((n, v, f, j), st)| (n, v, f, j, st))
+    {
+        assert!(json.contains("\"regions\""), "{name}: the reference");
+        let src = if stage == SHC_STAGE_VERTEX { vs } else { fs };
+        assert_eq!(gap(stage, src), MaliError::ArithConstant, "{name}");
+    }
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,
