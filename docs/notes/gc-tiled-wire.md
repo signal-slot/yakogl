@@ -30,6 +30,59 @@ Sources:
   TS-cleared target. It is in review and not on this tip, so this note calls
   it "the ts-golden mode".
 
+## Status (plan #355, 2026-11-12): W1 to W5 built on the host, behind `gc_tiled_rt`
+
+W1 to W5 are in the tree, behind the knob `gc_tiled_rt` (`gc_debug_set_tiled_rt`,
+`test-knobs`, default off; gl_test and glmark2 set it with
+`CONFIG_GL_TEST_GC_TILED_RT` and `CONFIG_GLMARK2_GC_TILED_RT`). With the knob
+off every stream is today's. No board has run them: see
+`x2-glmark2-slow-scenes.md`.
+
+| item | where | host test |
+|---|---|---|
+| W1 registers | `regs.rs` (the `GC_TS_*`, RS, `PE_MEM_CONFIG` and `TX_CTRL` bits) | `regs::mesa_header::ts_rs_consts_match_state_3d` |
+| W2 one RS emitter | `backend.rs` `emit_rs` and `RsBlit` already served the resolve, the flip study and `tiled_copy`; the shadow's tile-in and copy back are its fourth and fifth callers (`tiled_rt::tile_in`, `untile`) | `tiled_rt::tests`, the RS interpreter of `backend_tests_tiled_rt.rs` |
+| W3 depth layouts | `ds_cache.rs` `Surface::layout`, `select_in`, `layout_free`, `pe_private` | `a_depth_surface_keeps_its_layout_while_it_holds_contents` and the three after it |
+| W4 shadows | `tiled_rt.rs`, `backend.rs` `tiled_rt_spec`, `tiled_rt_enter`, `frame_submit` | `a_depth_tested_draw_renders_into_a_tiled_shadow_the_rs_copies_back` and the five after it |
+| W5 early depth | `backend.rs` `tiled_ez`, `draw_ez`, `emit_pe_state`, `emit_ra_state`, `pe_key` | `a_draw_into_a_tiled_shadow_takes_early_depth_and_nothing_else_does` |
+
+Where the code differs from the design below:
+
+- **The RS strides.** A TILED side's stride is its row stride times 4 with
+  SOURCE_TILED or DEST_TILED in RS_CONFIG, and **no** `TILING` bit: Mesa sets
+  that bit for a super-tiled side only (`etna_compile_rs_state`,
+  `etnaviv_rs.c:84-132`, read in Mesa 26.2.1), as `tiled_copy.rs` already does.
+  The W4 text above says `| TILING`.
+- **One round trip a stream, no cross-kick state.** The note keeps a shadow
+  in step with the storage across kicks (`InStep | ShadowNewer | StorageNewer`)
+  and tiles in only after a CPU write, through a `storage_current` hook in the
+  GL core. The code tracks one shadow in the open stream (`tiled_rt::Track`:
+  `Active`, `InStep`), tiles in with the RS at the first shadow draw of a
+  stream unless that draw opens with a whole colour clear, copies back at the
+  stream's end or before the first draw that takes no shadow, and forgets it
+  at the kick. That costs one more RS copy a stream when the draw does not
+  clear, and needs no GL-core change: the board has to say whether the cost
+  matters (session A).
+- **The room for the copy back** is reserved (`tiled_rt::RESERVE_WORDS`, taken
+  from the stream's capacity while a shadow is `Active`, as the occlusion
+  query's suspend does), so a full stream cannot lose it.
+- **An RS clear into the shadow** fills the shadow's whole (exact) size; the
+  colour clear stays the RS fill and only the address and stride change.
+- **A depth surface keeps its layout while a plane holds contents.** A draw
+  that wants the other layout is refused with `-ENOTSUP` and a line
+  (`ds_cache::select_in`); a whole clear's value is layout-free. A shadow
+  draw whose depth is live and linear is drawn as before. This is the cost
+  of W3's "a non-private surface keeps Linear" without a conversion: an
+  application that alternates one depth renderbuffer between a shadow draw
+  and a draw that cannot take a shadow, without clearing it, is refused.
+- **Discard keeps the test early.** Mesa's rule (`etna_update_zsa`) for a
+  program that discards is an early test and a late write; the host test pins
+  that, not "no early depth at all".
+- **The TEXKILL scan** is not cached by code address (the `DiscardCache` of
+  `shader.rs` stays unused): a scan is one pass over the program words per
+  shadow draw, and a stale answer after a program's memory is reused would
+  render wrongly.
+
 ## Answer in short
 
 - **Early depth reaches terrain soonest, and with the least risk, through items

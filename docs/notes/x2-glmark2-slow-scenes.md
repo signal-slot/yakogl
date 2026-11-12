@@ -27,13 +27,36 @@ The earlier `rc=5 verdict=not_back` runs (terrain at `de737051`, then the
 dtpu session) came from the runner losing the board, not from a measured
 hang; they give no ms a frame either.
 
+## Second attempt (plan #355, 2026-11-12): still no measurement
+
+The worker that ran this item (host `orion`, no `target:x2` lease in the
+task) could not reach the board either, so no jump was made and no image was
+built for the board:
+
+- `getent hosts armadillo` returned nothing (the name does not resolve here).
+- `tools/board.sh x2 status` stopped before touching the board:
+  `BOARD_HOST: set BOARD_HOST=user@host of the board` (the task carried no
+  board access).
+- `ask_farm` answered that the board is `root@armadillo` over Tailscale and
+  that login is accepted from the nodes Lepton, Lepton-local, hx90,
+  n5max-local, nuc and system76 only; `orion` is not one of them. The
+  console (CP2102N) is plugged into n5max and is read-only.
+
+The board was not touched. The work that did not need it is on the host:
+`docs/notes/gc-tiled-wire.md` W1 to W5 behind the `gc_tiled_rt` knob
+(`gc_debug_set_tiled_rt`, default off), see its "Status" section. The
+off/on pair of its "session A" is what the board still has to run.
+
 ## What is left
 
-Rerun from a machine that pings the board by name and logs in with a persisted key (see the checks above):
+Rerun from one of the nodes that log in (see the checks above), with
+`target:x2` and `target:x2-console` leased:
 
 ```sh
 tools/cts/x2-glmark2-scenes.sh --commit 72972ba4 <outdir> terrain shadow refract
 tools/cts/x2-glmark2-scenes.sh --commit origin/main <outdir> terrain shadow refract
+# session A, on the commit that has gc_tiled_rt: the same, off and then on
+tools/cts/x2-glmark2-scenes.sh --commit origin/main --conf CONFIG_GLMARK2_GC_TILED_RT=y <outdir> terrain shadow refract
 ```
 
 The per-scene expectations from the host profile stay in

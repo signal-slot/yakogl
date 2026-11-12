@@ -5708,3 +5708,6 @@ fn the_dtpu_knob_samples_the_depth_surface_in_place() {
     assert!(!gc_depth_sampled(id, 64, 64));
     assert!(rig.faults().is_empty());
 }
+
+#[path = "backend_tests_tiled_rt.rs"]
+mod tiled_rt_tests;

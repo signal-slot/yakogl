@@ -1575,6 +1575,13 @@ KNOBS_TESTS=(
   vivante::backend::backend_tests::a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on
   vivante::backend::backend_tests::a_4x_rgb565_target_resolves_as_r5g6b5
   vivante::backend::backend_tests::msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples
+  vivante::backend::backend_tests::tiled_rt_tests::a_depth_tested_draw_renders_into_a_tiled_shadow_the_rs_copies_back
+  vivante::backend::backend_tests::tiled_rt_tests::a_draw_into_a_tiled_shadow_takes_early_depth_and_nothing_else_does
+  vivante::backend::backend_tests::tiled_rt_tests::draws_that_do_not_qualify_for_a_shadow_are_drawn_as_before
+  vivante::backend::backend_tests::tiled_rt_tests::a_shadow_draw_that_clears_the_colour_tiles_nothing_in
+  vivante::backend::backend_tests::tiled_rt_tests::a_draw_elsewhere_finds_the_shadow_written_back_and_a_return_needs_no_tile_in
+  vivante::backend::backend_tests::tiled_rt_tests::released_storage_is_never_written_back_by_the_stream
+  vivante::backend::backend_tests::tiled_rt_tests::the_copy_back_survives_a_stream_filled_with_shadow_draws
   gl::egl::tests::the_gc7000_offers_the_multisampled_config_while_msaa_is_on
   gl::texture::tests::the_gc7000_narrow_la_knob_selects_the_rgba8_store
   gl::framebuffer::tests::kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache
@@ -3034,7 +3041,7 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 # them.
 KNOB_VIVANTE_SYMBOLS="gc_debug_depth_tpu gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_depth_tpu gc_debug_set_flip_experiment gc_debug_set_msaa
-gc_debug_set_narrow_la gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
+gc_debug_set_narrow_la gc_debug_set_tiled_rt gc_debug_tiled_rt gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
 KNOB_POWERVR_SYMBOLS="pvr_debug_narrow_la pvr_debug_set_narrow_la pvr_debug_set_split_zs pvr_debug_split_zs"
 RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference
   driver/rust/src/errno_numbers.rs driver/compat driver/src/pvr/generated third_party/mesa-26.2.1
