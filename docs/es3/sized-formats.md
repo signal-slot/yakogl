@@ -100,6 +100,24 @@ change; the tests state the expectation per mask.
 * A texture of these formats is no render target except `RGB10_A2` (its own
   surface on the V3D, `RGBA8` elsewhere) (`framebuffer.rs` attachment guard).
 
+## Compressed formats decoded into these classes
+
+Six of ES 3.0's ten ETC2/EAC compressed formats have no storage class of
+their own: `glCompressedTexImage2D`/`3D` decode them at upload
+(`src/gl/etc2.rs`) into a sized format of this table, so the mask above
+decides whether a build stores them (`src/gl/texture.rs` `DECODED_ETC2`):
+
+| compressed format | decoded into | class (best first) |
+|---|---|---|
+| `R11_EAC`, `SIGNED_R11_EAC` | `R16F` | `R16F` |
+| `RG11_EAC`, `SIGNED_RG11_EAC` | `RG16F` | `RGBA16F` |
+| `RGB8_PUNCHTHROUGH_ALPHA1_ETC2` | `RGBA8` | `RGBA8` |
+| `SRGB8_PUNCHTHROUGH_ALPHA1_ETC2` | `SRGB8_ALPHA8` | `SRGB8_A8` |
+
+The other four (`RGB8_ETC2`, `SRGB8_ETC2`, `RGBA8_ETC2_EAC`,
+`SRGB8_ALPHA8_ETC2_EAC`) stay blocks. Design and the dEQP tolerance:
+`docs/notes/etc2-eac.md`.
+
 ## Not done (left to other items)
 
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).

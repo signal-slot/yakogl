@@ -475,6 +475,7 @@ const _: () = assert!(offset_of!(crate::gl::context::GlTexture, storage_deferred
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, rgba32f) == 246);
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, unsized_depth) == 247);
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, depth_texels_newer) == 248);
+const _: () = assert!(offset_of!(crate::gl::context::GlTexture, etc2_decoded) == 249);
 #[cfg(feature = "gpu-powervr")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 1296);
 #[cfg(feature = "gpu-vivante")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 2504);
 #[cfg(feature = "gpu-v3d")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 1480);
