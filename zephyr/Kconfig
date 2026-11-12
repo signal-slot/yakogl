@@ -86,8 +86,13 @@ config YAKOGL_GPU_MALI
 	  group with one stream started, each kick one job on its ring. The
 	  in-process compiler is this GPU's only shader back end. The image
 	  passes the firmware in struct osal_zephyr_mali_init (osal_internal.h).
-	  What the OSAL refuses instead of recovering (a GPU fault, a full tiler
-	  heap, the 5 s job timeout) is listed in board::nanopc_t6_osal.
+	  A tiler out-of-memory event grows the heap (YAKOGL_MALI_HEAP_CHUNKS).
+	  A GPU fault or fatal, a progress timeout, a sync object error, an
+	  out-of-memory the heap refuses or the 5 s job timeout loses the kicks
+	  in flight (a wait on them returns -EIO) and restarts the group, at
+	  most 16 times in an image; each restart prints one UART line. Errors
+	  that need a GPU reset, or one past the 16, leave the OSAL dead: every
+	  later kick is -EIO. board::nanopc_t6_osal ("Recovery") lists them.
 
 endchoice
 
