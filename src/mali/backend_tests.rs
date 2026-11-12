@@ -1227,6 +1227,52 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         assert_eq!(got, not_built(NOT_BUILT_VERTEX_TEXTURES), "two vertex samplers");
         reached.push(NOT_BUILT_VERTEX_TEXTURES);
     });
+    /* a cube look-up (fstex_cube_whole: `textureCube(u_s, v_dir)`, its
+     * direction an attribute passed through): a complete cube of six faces
+     * is built; a unit with no texture, or an incomplete cube, would be GL's
+     * black texel as a 2D image under a `.cube` look-up, which has no
+     * reference: refused by name */
+    let cube_vs = "attribute vec4 a_pos; attribute vec3 a_dir; varying vec3 v_dir; \
+                   void main() { v_dir = a_dir; gl_Position = a_pos; }";
+    let cube_fs = include_str!("../../tools/mali/testdata/fstex_cube_whole.frag");
+    // SAFETY: a valid out-parameter.
+    assert_eq!(unsafe { m_alloc(0, 16 * 96 * 4, OSAL_MEM_DATA, &mut texels) }, 0);
+    with_programs(cube_vs, cube_fs, |vs, fs| {
+        let mut draw = base;
+        (draw.vs, draw.fs) = (vs, fs);
+        draw.num_attribs = 2;
+        draw.attribs[1] = GlesAttrib { vi_reg: 1, components: 3, cpu: uv.as_ptr().cast(), ..draw.attribs[0] };
+        draw.num_textures = 1;
+        draw.textures[0] = backend::GlesTextureBind {
+            unit: 0,
+            format: backend::GLES_TEXFMT_RGBA8,
+            type_: backend::GLES_TEXTYPE_CUBE,
+            layers: 6,
+            base_gpu: texels.gpu,
+            width: 16,
+            height: 96,
+            stride_texels: 16,
+            bytes: 16 * 96 * 4,
+            ..backend::GlesTextureBind::ZERO
+        };
+        let mut unbound = draw;
+        unbound.num_textures = 0;
+        let mut incomplete = draw;
+        incomplete.textures[0].incomplete = 1;
+        let cases: Vec<Case> = vec![
+            ("a complete cube map", why(&draw), built),
+            ("a cube look-up, no texture on its unit", why(&unbound), not_built(NOT_BUILT_CUBE_INCOMPLETE)),
+            ("a cube look-up, an incomplete cube map", why(&incomplete), not_built(NOT_BUILT_CUBE_INCOMPLETE)),
+        ];
+        for (what, got, want) in &cases {
+            assert_eq!(got, want, "{what}");
+            if let Err(Fail::Frame(FrameError::NotBuilt(l) | FrameError::Invalid(l))) = got {
+                reached.push(*l);
+            }
+        }
+    });
+    // SAFETY: the texels allocated above; no frame holds them now.
+    unsafe { m_free(&mut texels) };
     let lines = [
         NO_MALI_PROGRAM,
         INVALID_NO_TARGET,
@@ -1260,6 +1306,7 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         INVALID_TEXTURE_STORAGE,
         NOT_BUILT_TEXTURE_FEEDBACK,
         NOT_BUILT_VERTEX_TEXTURES,
+        NOT_BUILT_CUBE_INCOMPLETE,
         frame::INVALID_TEXTURE_ALIGN,
         frame::NOT_BUILT_TEXTURE_SIZE,
     ];
