@@ -8,7 +8,8 @@
 //! status the board reads back (driver/docs/nanopc-t6-display.md, sections
 //! 1, 5 and 7 row D1). The power domain PD_VOP, the clocks, the pixel clock
 //! and the GRF writes are the caller's (`soc::rk3588`, step D4/D7); this
-//! module only computes the `vop_grf` word (the `vo1_grf` one is `ip::dw_hdmi_qp`'s).
+//! module only computes the `vop_grf` word (the `vo1_grf` one is the HDMI
+//! controller module's, see fact 10).
 //!
 //! Facts from Linux v6.18 (GPL-2.0: facts and file:line only, nothing
 //! transcribed). `h:` is drivers/gpu/drm/rockchip/rockchip_drm_vop2.h, `c:`
@@ -81,8 +82,11 @@
 //!     `vop_grf` `GRF_VOP_CON2` 0x08 bit 1 (HDMI1 bit 4) = 1 with its
 //!     write-enable bit (h:400, r:1699, r:1712). The sync field in `vo1_grf`
 //!     `GRF_VO1_CON0` (0x00 bits 6:5, HDMI1 8:7; h:401, r:1700-1701, r:1713)
-//!     is not this module's: the HDMI controller module (`ip::dw_hdmi_qp`,
-//!     step D6) owns it, so there is one formula. For reading it: Linux
+//!     is not this module's: the HDMI controller module owns it, so there is
+//!     one formula (step D6: `crate::ip::dw_hdmi_qp`, file
+//!     driver/rust/src/ip/dw_hdmi_qp.rs, functions `linux_sync_field` and
+//!     `vo1_con0_sync_word`; that module lands before any step that writes
+//!     the word). For reading it: Linux
 //!     builds a polarity word with bit 0 for a positive HSYNC, bit 1 for a
 //!     positive VSYNC and bit 3 for an inverted pixel clock (c:1655-1661,
 //!     vop.h:346-347, h:770) and passes that word, not the mode's flags, to
