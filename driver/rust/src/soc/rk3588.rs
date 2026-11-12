@@ -2,8 +2,10 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The Rockchip RK3588: the CRU clock gates a driver here needs open, the
 //! GPU's clock as the CRU sets it (read, and put on a rate of the GPU OPP
-//! table when it is not on one), and the GPU power domain (PD_GPU) in the
-//! PMU.
+//! table when it is not on one), and the PMU power domains: one table
+//! ([`DOMAINS`]: PD_GPU and the display's PD_VOP, PD_VO0, PD_VO1) and one
+//! on / off sequence for all of them ([`pd_on`], [`pd_off`]). The display's
+//! clocks and resets are in `rk3588_display`.
 //!
 //! Facts from Linux v6.18 (GPL-2.0: facts and file:line only, nothing
 //! transcribed):
@@ -482,7 +484,7 @@ pub const PMU_BASE: usize = 0xfd8d_8000;
 
 /// PD_GPU in the PMU: `rk3588_pmu` and its `RK3588_PD_GPU` entry
 /// (drivers/pmdomain/rockchip/pm-domains.c, v6.18: the `RK3588_PD_GPU` row :1277,
-/// `rk3588_pmu` :1493-1503; `DOMAIN_M_O_R`, :154-171). Each control
+/// `rk3588_pmu` :1493-1506; `DOMAIN_M_O_R`, :154-171). Each control
 /// register takes a write-enable twin of its bit in 31:16.
 ///
 /// - `PWR_GATE` 0x14c bit 0: 1 = powered off. On: write `1 << 16`.
@@ -507,19 +509,21 @@ pub const PMU_BASE: usize = 0xfd8d_8000;
 /// 0x000a9fff. Active (genpd "on"): 0xfffe, 0xfad50003, 0x83ce, 0x000a9ffe,
 /// 0x000a9ffe: exactly bit 0 (bit 1 of `REPAIR_STATUS`) moves.
 pub mod pd_gpu {
-    pub const PWR_GATE: usize = 0x14c;
-    pub const STATUS: usize = 0x180;
-    pub const BUS_IDLE_REQ: usize = 0x10c;
-    pub const BUS_IDLE_ACK: usize = 0x118;
-    pub const BUS_IDLE_ST: usize = 0x120;
-    pub const REPAIR_STATUS: usize = 0x290;
+    use super::{pmu, PD_GPU};
 
-    pub const PWR_BIT: u32 = 1 << 0;
-    pub const REPAIR_ON_BIT: u32 = 1 << 1;
-    pub const IDLE_BIT: u32 = 1 << 0;
+    pub const PWR_GATE: usize = pmu::PWR;
+    pub const STATUS: usize = pmu::STATUS;
+    pub const BUS_IDLE_REQ: usize = pmu::REQ;
+    pub const BUS_IDLE_ACK: usize = pmu::ACK;
+    pub const BUS_IDLE_ST: usize = pmu::IDLE;
+    pub const REPAIR_STATUS: usize = pmu::REPAIR_STATUS;
+
+    pub const PWR_BIT: u32 = PD_GPU.pwr;
+    pub const REPAIR_ON_BIT: u32 = PD_GPU.repair;
+    pub const IDLE_BIT: u32 = PD_GPU.idle;
 
     /// Linux's wait for each step (pm-domains.c v6.18: :404, :413, :599).
-    pub const WAIT_US: u32 = 10_000;
+    pub const WAIT_US: u32 = pmu::WAIT_US;
 }
 
 /// The GPU QoS blocks restored after a power-on (`qos_gpu_m0..m3`,
@@ -569,9 +573,181 @@ pub fn qos_apply(m: &impl Mmio, base: usize, policy: QosPolicy) {
     }
 }
 
-/// The PMU's PD_GPU registers at one moment.
+/// The PMU registers every power domain uses (`rk3588_pmu`, pm-domains.c
+/// v6.18:1493-1506, offsets :1494-1502). A domain's power, memory-power and idle-request
+/// registers are these plus the domain's word offset (0 or 4, its row in
+/// [`DOMAINS`]); the idle acknowledge, idle state and repair status are one
+/// word for all domains. Every control register takes a write-enable twin
+/// of its bits in 31:16 (`DOMAIN_M_O_R`, :154-171: `pwr_w_mask`,
+/// `req_w_mask`).
+pub mod pmu {
+    pub const PWR: usize = 0x14c;
+    pub const STATUS: usize = 0x180;
+    pub const REQ: usize = 0x10c;
+    pub const IDLE: usize = 0x120;
+    pub const ACK: usize = 0x118;
+    pub const MEM_PWR: usize = 0x1a0;
+    pub const CHAIN_STATUS: usize = 0x1f0;
+    pub const MEM_STATUS: usize = 0x1f8;
+    pub const REPAIR_STATUS: usize = 0x290;
+
+    /// Linux's bound for every poll (pm-domains.c v6.18: :404, :413, :526,
+    /// :540, :554, :599).
+    pub const WAIT_US: u32 = 10_000;
+    /// The pause after the memory chain reads on, before the memory power
+    /// pulse (pm-domains.c v6.18:534).
+    pub const MEM_SETTLE_US: u32 = 20;
+}
+
+/// A power domain of the PMU: one row of `rk3588_pm_domains`
+/// (pm-domains.c v6.18:1276-1306, macro `DOMAIN_RK3588` :335-336, which
+/// gives the idle acknowledge the idle state's mask), the clocks its node
+/// names in rk3588-base.dtsi and the domain it sits in there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Domain {
+    pub name: &'static str,
+    /// `RK3588_PD_*` (include/dt-bindings/power/rk3588-power.h).
+    pub id: u32,
+    /// Word offset of the power and memory-power registers (`p_offset`).
+    pub pwr_word: usize,
+    /// Power-off bit (`pwr`): 1 = off.
+    pub pwr: u32,
+    /// Word offset of the memory status and chain status (`m_offset`).
+    pub mem_word: usize,
+    /// Memory status bit (`m_status`), 0 for none: 1 = memory off.
+    pub mem: u32,
+    /// Repair status bit (`r_status`): 1 = powered.
+    pub repair: u32,
+    /// Word offset of the idle request register (`r_offset`).
+    pub req_word: usize,
+    /// Idle request bits (`req`): 1 = idle requested.
+    pub req: u32,
+    /// Its bits in the idle acknowledge and the idle state (`idle`): 1 =
+    /// acknowledged, idle.
+    pub idle: u32,
+    /// The domain this one sits in (its `id`), `None` at the top level.
+    pub parent: Option<u32>,
+    /// The CRU gates on while the domain switches: the node's `clocks` and
+    /// the gates they hang from, a parent before its child.
+    pub clocks: &'static [Gate],
+}
+
+/// PD_GPU (rk3588-power.h:26, pm-domains.c:1277). Its clocks are
+/// [`gpu_clk::GATES`] (rk3588-base.dtsi:892-902: `CLK_GPU`,
+/// `CLK_GPU_COREGROUP`, `CLK_GPU_STACKS` and their source).
+pub const PD_GPU: Domain = Domain {
+    name: "gpu",
+    id: 12,
+    pwr_word: 0,
+    pwr: 1 << 0,
+    mem_word: 0,
+    mem: 0,
+    repair: 1 << 1,
+    req_word: 0,
+    req: 1 << 0,
+    idle: 1 << 0,
+    parent: None,
+    clocks: &gpu_clk::GATES,
+};
+
+/// PD_VOP (rk3588-power.h:46, pm-domains.c:1294): VOP2 and its IOMMU.
+/// Clocks (rk3588-base.dtsi:1020-1024): `PCLK_VOP_ROOT` 52/3,
+/// `HCLK_VOP_ROOT` 52/2, `ACLK_VOP` 52/9 from `aclk_vop_root` 52/0 through
+/// the `aclk_vop_sub_src` mux (clk-rk3588.c:1908-1919, 1926, 2089).
+pub const PD_VOP: Domain = Domain {
+    name: "vop",
+    id: 24,
+    pwr_word: 4,
+    pwr: 1 << 1,
+    mem_word: 0,
+    mem: 1 << 25,
+    repair: 1 << 16,
+    req_word: 0,
+    req: (1 << 13) | (1 << 14),
+    idle: (1 << 13) | (1 << 14),
+    parent: None,
+    clocks: &[Gate { con: 52, bit: 0 }, Gate { con: 52, bit: 9 }, Gate { con: 52, bit: 2 }, Gate { con: 52, bit: 3 }],
+};
+
+/// PD_VO0 (rk3588-power.h:47, pm-domains.c:1295), inside PD_VOP
+/// (rk3588-base.dtsi:1031-1042). The HDMI path does not use it; it is here
+/// because PD_VOP goes off only after it. Clocks: `ACLK_VO0_ROOT` 55/0,
+/// `HCLK_VO0_ROOT` 55/1, `HCLK_VO0_S_ROOT` 55/2, `PCLK_VO0_ROOT` 55/3,
+/// `PCLK_VO0_S_ROOT` 55/4, `hclk_vo0` 55/5 (linked to `HCLK_VOP_ROOT`
+/// 52/2), `aclk_hdcp0_pre` 55/9 (linked to `ACLK_VOP_LOW_ROOT` 52/1),
+/// `ACLK_HDCP0` 55/12, `HCLK_HDCP0` 55/13 (clk-rk3588.c:1800-1814,
+/// 1911-1916, 2328-2331, 2428-2429).
+pub const PD_VO0: Domain = Domain {
+    name: "vo0",
+    id: 25,
+    pwr_word: 4,
+    pwr: 1 << 2,
+    mem_word: 0,
+    mem: 1 << 26,
+    repair: 1 << 17,
+    req_word: 0,
+    req: 1 << 15,
+    idle: 1 << 15,
+    parent: Some(24),
+    clocks: &[
+        Gate { con: 52, bit: 1 },
+        Gate { con: 52, bit: 2 },
+        Gate { con: 55, bit: 0 },
+        Gate { con: 55, bit: 1 },
+        Gate { con: 55, bit: 2 },
+        Gate { con: 55, bit: 3 },
+        Gate { con: 55, bit: 4 },
+        Gate { con: 55, bit: 5 },
+        Gate { con: 55, bit: 9 },
+        Gate { con: 55, bit: 12 },
+        Gate { con: 55, bit: 13 },
+    ],
+};
+
+/// PD_VO1 (rk3588-power.h:48, pm-domains.c:1296): the HDMI TX
+/// controllers. Its idle request is bit 0 of the second request word, its
+/// acknowledge and idle state bit 16. Clocks (rk3588-base.dtsi:1044-1056):
+/// `ACLK_VO1USB_TOP_ROOT` 74/0 and `HCLK_VO1USB_TOP_ROOT` 74/2 (both
+/// critical, the links of `aclk_hdcp1_pre` and `hclk_vo1`),
+/// `PCLK_VO1_ROOT` 59/4, `PCLK_VO1_S_ROOT` 59/5, `HCLK_VO1_S_ROOT` 59/3,
+/// `HCLK_HDCP1` 60/6 from `hclk_vo1` 59/9 from `hclk_vo1_root` 59/2,
+/// `ACLK_HDCP1` 60/5 from `aclk_hdcp1_pre` 59/6 from `aclk_hdcp1_root`
+/// 59/0, `ACLK_HDMIRX_ROOT` 59/1 (clk-rk3588.c:1890-1907, 1920-1925,
+/// 2316-2319, 2430-2431).
+pub const PD_VO1: Domain = Domain {
+    name: "vo1",
+    id: 26,
+    pwr_word: 4,
+    pwr: 1 << 3,
+    mem_word: 0,
+    mem: 1 << 27,
+    repair: 1 << 18,
+    req_word: 4,
+    req: 1 << 0,
+    idle: 1 << 16,
+    parent: None,
+    clocks: &[
+        Gate { con: 74, bit: 0 },
+        Gate { con: 74, bit: 2 },
+        Gate { con: 59, bit: 4 },
+        Gate { con: 59, bit: 5 },
+        Gate { con: 59, bit: 3 },
+        Gate { con: 59, bit: 2 },
+        Gate { con: 59, bit: 9 },
+        Gate { con: 60, bit: 6 },
+        Gate { con: 59, bit: 0 },
+        Gate { con: 59, bit: 6 },
+        Gate { con: 60, bit: 5 },
+        Gate { con: 59, bit: 1 },
+    ],
+};
+
+/// The domains this module switches.
+pub const DOMAINS: [Domain; 4] = [PD_GPU, PD_VOP, PD_VO0, PD_VO1];
+
+/// A domain's PMU registers at one moment: the words its row selects.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct PdGpuRegs {
+pub struct PdRegs {
     pub pwr_gate: u32,
     pub status: u32,
     pub idle_req: u32,
@@ -580,51 +756,99 @@ pub struct PdGpuRegs {
     pub repair: u32,
 }
 
-impl PdGpuRegs {
-    /// Read them. Nothing is written; the PMU is always powered.
-    pub fn read(m: &impl Mmio, pmu: usize) -> PdGpuRegs {
-        PdGpuRegs {
-            pwr_gate: m.read32(pmu + pd_gpu::PWR_GATE),
-            status: m.read32(pmu + pd_gpu::STATUS),
-            idle_req: m.read32(pmu + pd_gpu::BUS_IDLE_REQ),
-            idle_ack: m.read32(pmu + pd_gpu::BUS_IDLE_ACK),
-            idle_st: m.read32(pmu + pd_gpu::BUS_IDLE_ST),
-            repair: m.read32(pmu + pd_gpu::REPAIR_STATUS),
+/// PD_GPU's registers ([`PdRegs`] of [`PD_GPU`]); the name the board code
+/// and its record use.
+pub type PdGpuRegs = PdRegs;
+
+impl PdRegs {
+    /// Read `d`'s words. Nothing is written; the PMU is always powered.
+    pub fn of(m: &impl Mmio, pmu: usize, d: &Domain) -> PdRegs {
+        PdRegs {
+            pwr_gate: m.read32(pmu + pmu::PWR + d.pwr_word),
+            status: m.read32(pmu + pmu::STATUS),
+            idle_req: m.read32(pmu + pmu::REQ + d.req_word),
+            idle_ack: m.read32(pmu + pmu::ACK),
+            idle_st: m.read32(pmu + pmu::IDLE),
+            repair: m.read32(pmu + pmu::REPAIR_STATUS),
         }
     }
 
-    /// Powered (`REPAIR_STATUS` bit 1) and out of idle (no request, no
-    /// acknowledge, not idle): the GPU's registers can be read.
+    /// PD_GPU's words.
+    pub fn read(m: &impl Mmio, pmu: usize) -> PdRegs {
+        PdRegs::of(m, pmu, &PD_GPU)
+    }
+
+    /// `d` is powered (its repair status bit).
+    pub const fn powered(&self, d: &Domain) -> bool {
+        self.repair & d.repair != 0
+    }
+
+    /// `d` is powered and out of idle: no idle request bit, no acknowledge
+    /// bit and no idle state bit of `d` set. Each of the three alone keeps
+    /// the domain from being usable: an acknowledge without the idle
+    /// state is a handshake still under way. Its blocks' registers can be
+    /// read only when this holds.
+    pub const fn usable_of(&self, d: &Domain) -> bool {
+        self.powered(d) && self.idle_req & d.req == 0 && (self.idle_ack | self.idle_st) & d.idle == 0
+    }
+
+    /// PD_GPU is usable ([`PdRegs::usable_of`]).
     pub const fn usable(&self) -> bool {
-        self.repair & pd_gpu::REPAIR_ON_BIT != 0
-            && (self.idle_req | self.idle_ack | self.idle_st) & pd_gpu::IDLE_BIT == 0
+        self.usable_of(&PD_GPU)
     }
 }
 
-/// Why [`pd_gpu_on`] stopped. The value crosses to C, one number per cause.
+/// Why a domain switch stopped. The value crosses to C, one number per
+/// cause.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum PdRefusal {
-    /// A GPU clock gate still reads gated after its write.
+    /// A clock gate of the domain still reads gated after its write.
     GateStuck = 1,
-    /// `REPAIR_STATUS` bit 1 did not read 1 within [`pd_gpu::WAIT_US`].
+    /// The repair status bit did not reach the state asked for within
+    /// [`pmu::WAIT_US`].
     PowerTimeout = 2,
-    /// `BUS_IDLE_ACK` bit 0 did not clear.
+    /// The idle acknowledge did not reach the state asked for.
     IdleAckTimeout = 3,
-    /// `BUS_IDLE_ST` bit 0 did not clear.
+    /// The idle state did not reach the state asked for.
     IdleTimeout = 4,
+    /// The memory chain status did not read on (power-on memory reset).
+    MemChainTimeout = 5,
+    /// The memory status did not read off during the memory power pulse.
+    MemOffTimeout = 6,
+    /// The memory status did not read on again after it.
+    MemOnTimeout = 7,
+    /// The domain's parent is not usable: it goes on first.
+    ParentOff = 8,
+    /// A domain inside this one is still powered: it goes off first.
+    ChildOn = 9,
 }
 
-/// What [`pd_gpu_on`] did.
+/// A refused domain switch: which domain, why, and the word read last
+/// (the register the step polled, the gate's CLKGATE_CON, or for
+/// `ParentOff` / `ChildOn` the repair status).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PdError {
+    /// The domain asked to switch.
+    pub domain: &'static str,
+    pub why: PdRefusal,
+    pub read: u32,
+    /// For `ParentOff` the parent that is not usable, for `ChildOn` the
+    /// child that is still powered; `None` for the other causes.
+    pub cause: Option<&'static str>,
+}
+
+/// What [`pd_on`] or [`pd_off`] did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PdOn {
-    /// The gates of [`gpu_clk::GATES`] it opened, as a bit mask of their
-    /// CLKGATE_CON(66) bits.
+    /// The gates it opened. From [`pd_gpu_on`]: a bit mask of their
+    /// CLKGATE_CON(66) bits. From [`pd_on`] / [`pd_off`]: bit i is the
+    /// domain's `clocks[i]`.
     pub opened: u32,
-    /// The domain read on before anything was written (power and idle
-    /// steps skipped).
+    /// The domain already read in the state asked for before anything was
+    /// written to the PMU (the power and idle steps skipped).
     pub was_on: bool,
-    /// Microseconds each wait took (power, idle ack, idle).
+    /// Microseconds each wait took: power, idle acknowledge, idle state.
     pub waited_us: [u32; 3],
 }
 
@@ -646,49 +870,199 @@ fn wait(
     None
 }
 
-/// Power PD_GPU on in Linux's order (see [`pd_gpu`]): open the GPU clock
-/// gates, clear the power gate, wait for the domain, leave bus idle, wait
-/// for the acknowledge and the idle status. A domain already on and out of
-/// idle is left as it is (only the gates are opened). "On" is
-/// [`PdGpuRegs::usable`]: powered and the idle request released, acknowledged
-/// and not idle; a domain that is powered with its idle request still set
-/// (a state Linux does not leave, possible after an earlier stage) runs the
-/// whole sequence, whose power wait passes at once and whose idle step
-/// releases the request. The supply
-/// (vdd_gpu_s0) is not touched: the caller checks it first. The QoS words
-/// are not written: the caller reads them back.
+/// The domain of [`DOMAINS`] with `id`.
+fn domain_by_id(id: u32) -> Option<&'static Domain> {
+    let mut i = 0;
+    while i < DOMAINS.len() {
+        if DOMAINS[i].id == id {
+            return Some(&DOMAINS[i]);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Open `d`'s clocks, parent first: the mask of [`PdOn::opened`] by index.
+fn open_clocks(m: &impl Mmio, cru: usize, d: &Domain) -> Result<u32, PdError> {
+    let mut opened = 0;
+    for (i, g) in d.clocks.iter().enumerate() {
+        match gate_open(m, cru, *g) {
+            Ok(true) => opened |= 1 << i,
+            Ok(false) => {}
+            Err(now) => return Err(PdError { domain: d.name, why: PdRefusal::GateStuck, read: now, cause: None }),
+        }
+    }
+    Ok(opened)
+}
+
+/// Poll `bits` of the word at `addr` until they read `want`, or refuse with
+/// `why` for `d`.
+fn wait_bits(
+    m: &impl Mmio,
+    addr: usize,
+    bits: u32,
+    want: u32,
+    d: &Domain,
+    why: PdRefusal,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<u32, PdError> {
+    wait(m, addr, pmu::WAIT_US, delay_us, |v| v & bits == want).ok_or_else(|| PdError {
+        domain: d.name,
+        why,
+        read: m.read32(addr),
+        cause: None,
+    })
+}
+
+/// Ask for idle (`idle` true) or release it, and wait for the acknowledge
+/// and the idle state to follow (`rockchip_pmu_set_idle_request`,
+/// pm-domains.c v6.18:376-422). The waited microseconds of the two polls.
+///
+/// The acknowledge poll is Linux's: all of `d.idle` set, or all clear
+/// (:399-404). The idle-state poll asking for idle is Linux's too (all set,
+/// `rockchip_pmu_domain_is_idle` :338-346 with :411-413). On release Linux
+/// waits only for "not all set", which for PD_VOP's two bits passes with
+/// one bus interface still idle; this waits for all clear, the state
+/// [`PdRegs::usable_of`] asks before a block is touched and the state the
+/// acknowledge poll just required. A bit that stays set is an
+/// `IdleTimeout` for the domain, not a domain reported usable with half
+/// its bus idle.
+fn idle_request(
+    m: &impl Mmio,
+    pmu: usize,
+    d: &Domain,
+    idle: bool,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<[u32; 2], PdError> {
+    let req = d.req;
+    m.write32(pmu + pmu::REQ + d.req_word, (req << 16) | if idle { req } else { 0 });
+    let want = if idle { d.idle } else { 0 };
+    let ack = wait_bits(m, pmu + pmu::ACK, d.idle, want, d, PdRefusal::IdleAckTimeout, delay_us)?;
+    let st = wait_bits(m, pmu + pmu::IDLE, d.idle, want, d, PdRefusal::IdleTimeout, delay_us)?;
+    Ok([ack, st])
+}
+
+/// The memory reset after a power-on of a domain whose memory read on
+/// while the domain was off (`rockchip_pmu_domain_mem_reset`, pm-domains.c
+/// v6.18:518-563, called from :591-595): wait for the memory chain, pause
+/// [`pmu::MEM_SETTLE_US`], memory power off and wait for it, memory power
+/// on and wait for it.
+fn mem_reset(m: &impl Mmio, pmu: usize, d: &Domain, delay_us: &mut impl FnMut(u32)) -> Result<(), PdError> {
+    let mem_status = pmu + pmu::MEM_STATUS + d.mem_word;
+    let mem_pwr = pmu + pmu::MEM_PWR + d.pwr_word;
+    wait_bits(m, pmu + pmu::CHAIN_STATUS + d.mem_word, d.mem, d.mem, d, PdRefusal::MemChainTimeout, delay_us)?;
+    delay_us(pmu::MEM_SETTLE_US);
+    m.write32(mem_pwr, (d.pwr << 16) | d.pwr);
+    wait_bits(m, mem_status, d.mem, d.mem, d, PdRefusal::MemOffTimeout, delay_us)?;
+    m.write32(mem_pwr, d.pwr << 16);
+    wait_bits(m, mem_status, d.mem, 0, d, PdRefusal::MemOnTimeout, delay_us)?;
+    Ok(())
+}
+
+/// Power `d` on in Linux's order (`rockchip_pd_power`, pm-domains.c
+/// v6.18:615-660; `rockchip_do_pmu_set_power_domain`, :565-613): open the
+/// domain's clocks, clear the power bit, the memory reset when the memory
+/// read on before, wait for the repair status, release the idle request and
+/// wait for the acknowledge and the idle state.
+///
+/// A domain already usable ([`PdRegs::usable_of`]) is not written (only its
+/// gates are opened). One that is powered with its idle request still set
+/// runs the sequence: the power wait passes at once and the idle step
+/// releases the request; it gets no memory reset (that is for a domain
+/// coming from off). A parent that is not usable refuses before anything is
+/// written, naming the parent. Not done here: the domain's supply (PD_GPU's
+/// vdd_gpu_s0, `need_regulator` true at pm-domains.c:1277; false for the
+/// display rows), which the caller turns on first; the QoS restore (the
+/// caller's) and the firmware notice (SIP `SUSPEND_MODE`, system suspend
+/// only).
 ///
 /// `delay_us` waits that many microseconds.
+pub fn pd_on(
+    m: &impl Mmio,
+    cru: usize,
+    pmu: usize,
+    d: &Domain,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<PdOn, PdError> {
+    if let Some(p) = d.parent.and_then(domain_by_id) {
+        let regs = PdRegs::of(m, pmu, p);
+        if !regs.usable_of(p) {
+            return Err(PdError { domain: d.name, why: PdRefusal::ParentOff, read: regs.repair, cause: Some(p.name) });
+        }
+    }
+    let mut out = PdOn { opened: open_clocks(m, cru, d)?, ..PdOn::default() };
+    let now = PdRegs::of(m, pmu, d);
+    if now.usable_of(d) {
+        out.was_on = true;
+        return Ok(out);
+    }
+    let mem_reset_due = d.mem != 0 && !now.powered(d) && m.read32(pmu + pmu::MEM_STATUS + d.mem_word) & d.mem == 0;
+    m.write32(pmu + pmu::PWR + d.pwr_word, d.pwr << 16);
+    if mem_reset_due {
+        mem_reset(m, pmu, d, delay_us)?;
+    }
+    out.waited_us[0] =
+        wait_bits(m, pmu + pmu::REPAIR_STATUS, d.repair, d.repair, d, PdRefusal::PowerTimeout, delay_us)?;
+    let [ack, st] = idle_request(m, pmu, d, false, delay_us)?;
+    out.waited_us[1] = ack;
+    out.waited_us[2] = st;
+    Ok(out)
+}
+
+/// Power `d` off in Linux's order (`rockchip_pd_power`, pm-domains.c
+/// v6.18:615-660): open the domain's clocks, ask for idle and wait for the
+/// acknowledge and the idle state, set the power bit, wait for the repair
+/// status to clear. The caller has saved what it needs from the domain's
+/// blocks (their registers do not survive) and stopped them. A domain with
+/// a powered domain inside it refuses before anything is written, naming
+/// the child; one that reads off is not written to the PMU (its gates are
+/// opened). The clocks are left open.
+pub fn pd_off(
+    m: &impl Mmio,
+    cru: usize,
+    pmu: usize,
+    d: &Domain,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<PdOn, PdError> {
+    let repair = m.read32(pmu + pmu::REPAIR_STATUS);
+    for c in DOMAINS.iter().filter(|c| c.parent == Some(d.id)) {
+        if repair & c.repair != 0 {
+            return Err(PdError { domain: d.name, why: PdRefusal::ChildOn, read: repair, cause: Some(c.name) });
+        }
+    }
+    let mut out = PdOn { opened: open_clocks(m, cru, d)?, ..PdOn::default() };
+    let now = PdRegs::of(m, pmu, d);
+    if !now.powered(d) {
+        out.was_on = true;
+        return Ok(out);
+    }
+    let [ack, st] = idle_request(m, pmu, d, true, delay_us)?;
+    out.waited_us[1] = ack;
+    out.waited_us[2] = st;
+    m.write32(pmu + pmu::PWR + d.pwr_word, (d.pwr << 16) | d.pwr);
+    out.waited_us[0] = wait_bits(m, pmu + pmu::REPAIR_STATUS, d.repair, 0, d, PdRefusal::PowerTimeout, delay_us)?;
+    Ok(out)
+}
+
+/// Power PD_GPU on: [`pd_on`] of [`PD_GPU`], with the opened gates as their
+/// CLKGATE_CON(66) bits and the refusal as the pair the board record keeps.
+/// The supply (vdd_gpu_s0) is not touched: the caller checks it first. The
+/// QoS words are not written: the caller reads them back.
 pub fn pd_gpu_on(
     m: &impl Mmio,
     cru: usize,
     pmu: usize,
     delay_us: &mut impl FnMut(u32),
 ) -> Result<PdOn, (PdRefusal, u32)> {
-    let mut out = PdOn::default();
-    for g in gpu_clk::GATES {
-        match gate_open(m, cru, g) {
-            Ok(true) => out.opened |= 1 << g.bit,
-            Ok(false) => {}
-            Err(now) => return Err((PdRefusal::GateStuck, now)),
+    let mut on = pd_on(m, cru, pmu, &PD_GPU, delay_us).map_err(|e| (e.why, e.read))?;
+    let by_index = on.opened;
+    on.opened = 0;
+    for (i, g) in PD_GPU.clocks.iter().enumerate() {
+        if by_index & (1 << i) != 0 {
+            on.opened |= 1 << g.bit;
         }
     }
-    if PdGpuRegs::read(m, pmu).usable() {
-        out.was_on = true;
-        return Ok(out);
-    }
-    m.write32(pmu + pd_gpu::PWR_GATE, pd_gpu::PWR_BIT << 16);
-    let addr = pmu + pd_gpu::REPAIR_STATUS;
-    out.waited_us[0] = wait(m, addr, pd_gpu::WAIT_US, delay_us, |v| v & pd_gpu::REPAIR_ON_BIT != 0)
-        .ok_or((PdRefusal::PowerTimeout, m.read32(addr)))?;
-    m.write32(pmu + pd_gpu::BUS_IDLE_REQ, pd_gpu::IDLE_BIT << 16);
-    let addr = pmu + pd_gpu::BUS_IDLE_ACK;
-    out.waited_us[1] = wait(m, addr, pd_gpu::WAIT_US, delay_us, |v| v & pd_gpu::IDLE_BIT == 0)
-        .ok_or((PdRefusal::IdleAckTimeout, m.read32(addr)))?;
-    let addr = pmu + pd_gpu::BUS_IDLE_ST;
-    out.waited_us[2] = wait(m, addr, pd_gpu::WAIT_US, delay_us, |v| v & pd_gpu::IDLE_BIT == 0)
-        .ok_or((PdRefusal::IdleTimeout, m.read32(addr)))?;
-    Ok(out)
+    Ok(on)
 }
 
 /// SPI2, the RK806's bus on the NanoPC-T6: `PCLK_SPI2` is CLKGATE_CON(14)
