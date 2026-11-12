@@ -2212,6 +2212,15 @@ fn equal_varying_lanes_are_merged_as_mesa_26_2_1() {
      * block by block, nir_opt_varyings.c:3150-3160) */
     let (vs, fs, json) = (td!("fsload_dup_if.vert"), td!("fsload_dup_if.frag"), td!("fsload_dup_if.expect.json"));
     check_linked_for("fsload_dup_if", vs, fs, json);
+    /* a lane written before or after the `if`, equal to one it writes
+     * alike (the outputs are stored at the shader's end) */
+    for (name, vs, fs, json) in [
+        ("fsload_dup_if2", td!("fsload_dup_if2.vert"), td!("fsload_dup_if2.frag"), td!("fsload_dup_if2.expect.json")),
+        ("fsload_dup_if3", td!("fsload_dup_if3.vert"), td!("fsload_dup_if3.frag"), td!("fsload_dup_if3.expect.json")),
+        ("fsload_dup_if4", td!("fsload_dup_if4.vert"), td!("fsload_dup_if4.frag"), td!("fsload_dup_if4.expect.json")),
+    ] {
+        check_linked_for(name, vs, fs, json);
+    }
     /* a join of two values in both: refused, not merged (its vertex
      * words are not this back end's) */
     let (vs, fs) = (td!("fsload_dup_phi.vert"), td!("fsload_dup_phi.frag"));
