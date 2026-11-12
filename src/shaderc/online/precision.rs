@@ -1639,7 +1639,7 @@ mod tests {
             sources(&root.join(d), &mut files);
         }
         let mut buf = std::vec![0u8; 1 << 23];
-        let (mut compiled, mut bad) = (0usize, Vec::new());
+        let (mut compiled, mut bad, mut unknown) = (0usize, Vec::new(), Vec::<String>::new());
         for f in &files {
             let Ok(src) = std::fs::read_to_string(f) else { continue };
             let stage = if f.extension().is_some_and(|x| x == "vert") { Stage::Vertex } else { Stage::Fragment };
@@ -1691,13 +1691,23 @@ mod tests {
                     Op::Tex { ret: super::super::ir::ScalarType::F32, .. } => true,
                     _ => float_value(m, ValueId(i as u32), 0),
                 };
-                if p == Prec::Unknown || (float && p == Prec::None) {
+                if p == Prec::Unknown {
+                    let rel = f.strip_prefix(root).unwrap_or(f).display().to_string();
+                    if !unknown.contains(&rel) {
+                        unknown.push(rel);
+                    }
+                } else if float && p == Prec::None {
                     bad.push(std::format!("{}: %{i} {p:?} {op:?}", f.display()));
                 }
             }
         }
         std::println!("{compiled} of {} shaders compiled", files.len());
         assert!(compiled > 900, "{compiled} shaders compiled");
+        /* The shaders with a refusal for the width pass, by name: one
+         * value is Unknown in the dead-cube shader below, `asin(float(k))`
+         * of a global `k` NIR may prove constant (fourth review). None
+         * under tools/mali/testdata. */
+        assert_eq!(unknown, ["tests/fixtures/deqp_random_dead_cube/all_features.fragment.96.frag"], "Unknown values");
         assert!(bad.is_empty(), "{} values with no class:\n{}", bad.len(), bad[..bad.len().min(20)].join("\n"));
     }
 
@@ -2006,6 +2016,32 @@ mod tests {
         for arg in ["f(p.y)", "g(p.y)"] {
             let g = vs(&src(arg));
             assert!(!g.prec.contains(&Prec::Unknown), "{arg}");
+        }
+    }
+
+    /// Fourth review: NIR proves a value constant after inlining and
+    /// propagation, which the front end cannot see. Probes p4/f06 (`highp
+    /// float t = 0.1; f(t)`: `load_const (0x3dccc000)`, `fpow`) and p4/f09
+    /// (`t` set in an `if`: a `bcsel` of 0x3e99a000 and 0x3dccc000, then
+    /// `fpow`): Mesa uses the fp16 values, we read 32 bits. So an argument
+    /// of pow, asin or acos is Unknown unless it is known to vary: it reads
+    /// an input or a uniform (or a parameter given one). A whitelist of the
+    /// non-constant, not a list of constant forms. (A highp local read by
+    /// pow directly makes the call High, unlowered, which Mesa computes at
+    /// 32 bits too.)
+    #[test]
+    fn an_argument_not_known_to_vary_into_pow_is_unknown() {
+        let head = "attribute mediump vec4 q; varying highp vec4 v; uniform highp float uh;\n\
+                    mediump float f(mediump float e){ return pow(q.z, e); }\n";
+        for body in
+            ["highp float t = 0.1; v = vec4(f(t));", "highp float t = 0.1; if (uh > 0.0) t = 0.3; v = vec4(f(t));"]
+        {
+            let g = vs(&std::format!("{head}void main(){{ gl_Position = p; {body} }}"));
+            assert!(g.prec.contains(&Prec::Unknown), "{body}");
+        }
+        for body in ["v = vec4(f(uh));", "v = vec4(f(p.y * 2.0));", "v = vec4(pow(q.z, uh + p.x));"] {
+            let g = vs(&std::format!("{head}void main(){{ gl_Position = p; {body} }}"));
+            assert!(!g.prec.contains(&Prec::Unknown), "{body}");
         }
     }
 
