@@ -26,6 +26,7 @@
 //! previous Linux keeps uart2 clocked (it is its console, `console=ttyS2`).
 
 use crate::mmio::Mmio;
+use core::num::NonZeroU64;
 
 /// `RBR` / `THR` (with `LCR.DLAB` clear).
 pub const THR: usize = 0x00;
@@ -97,18 +98,25 @@ impl<'a, M: Mmio> Tx<'a, M> {
         if v < 0 {
             self.byte(b'-');
         }
+        // The divisor is a NonZeroU64, so the divisions have no
+        // division-by-zero panic path: this runs with the MMU off, where the
+        // panic machinery's memcpy faults (check_early_hooks.cmake walks it).
+        const TEN: NonZeroU64 = NonZeroU64::new(10).unwrap();
         let mut u = v.unsigned_abs();
-        let mut div = 1u64;
-        while u / div >= 10 {
-            div *= 10;
+        let mut div = NonZeroU64::MIN;
+        while let Some(next) = div.checked_mul(TEN) {
+            if next.get() > u {
+                break;
+            }
+            div = next;
         }
         loop {
             self.byte(b'0' + (u / div) as u8);
             u %= div;
-            if div == 1 {
-                break;
+            match NonZeroU64::new(div.get() / 10) {
+                Some(d) => div = d,
+                None => break,
             }
-            div /= 10;
         }
     }
 }
@@ -235,13 +243,13 @@ pub(crate) mod tests {
         tx.byte(b' ');
         tx.hex(0x0000_0004_8800_003f, 16);
         tx.byte(b' ');
-        for v in [0, 7, 10, -5, 22369, i64::MIN] {
+        for v in [0, 7, 9, 10, 99, 100, -5, 22369, i64::MAX, i64::MIN] {
             tx.dec(v);
             tx.byte(b',');
         }
         assert_eq!(
             String::from_utf8(u.sent()).unwrap(),
-            "0x80000000 0x000000048800003f 0,7,10,-5,22369,-9223372036854775808,"
+            "0x80000000 0x000000048800003f 0,7,9,10,99,100,-5,22369,9223372036854775807,-9223372036854775808,"
         );
     }
 }
