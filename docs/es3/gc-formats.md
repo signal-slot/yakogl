@@ -97,10 +97,10 @@ core's `no_alpha` (a GL_RGB / GL_LUMINANCE base) turns the alpha swizzle into
 | `GLES_TEXFMT_RGBA32I` | none | RGBA | - | no | yes, as two planes (HALTI5) | no | not here (section 3) | linear; none | as RGBA32UI | `F:230`; `S:423-429`; `X:96` |
 | `GLES_TEXFMT_RGBA32F` | none | RGBA | - | no | yes, as two planes (HALF_FLOAT) | no | - | linear; none | two G32R32F planes, as RGBA32UI; the GL core stores RGBA32F / RGB32F / RG32F in RGBA16F on this back end meanwhile (`docs/es3/sized-formats.md`) | `F:233`; `S:423-429`; `X:77` |
 | `GLES_TEXFMT_SRGB8_A8` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | no | yes (HALTI0) | yes | - | `SAMP_CTRL1.SRGB`; none | - (the RGBA8 row of the linear twin, `F:278`; no INT_FILTER for sRGB, `F:317-318`) | `D:246-247`; `S:406-407` |
-| `GLES_TEXFMT_R32UI` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); built, still outside the mask | no (r32-rg32-classes sets it) | - | linear; none | - (GL_R32UI is stored in RGBA32UI meanwhile, which this back end refuses; one format for both signs, no CONFIG2 bit for 32-bit channels, `D:187-189`) | `F:137,286-291`; `X:95` |
-| `GLES_TEXFMT_R32I` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); built, still outside the mask | no (r32-rg32-classes sets it) | - | linear; none | - (as R32UI, in RGBA32I meanwhile) | `F:136,286-291`; `X:95` |
-| `GLES_TEXFMT_RG32UI` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); built, still outside the mask | no (r32-rg32-classes sets it) | - | linear; none | - (as R32UI; the table's EXT_G32R32F, `F:209`, is replaced on HALTI5) | `F:209,286-291`; `X:96` |
-| `GLES_TEXFMT_RG32I` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); built, still outside the mask | no (r32-rg32-classes sets it) | - | linear; none | - (as RG32UI, in RGBA32I meanwhile) | `F:210,286-291`; `X:96` |
+| `GLES_TEXFMT_R32UI` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (GL_R32UI is stored in RGBA32UI meanwhile, which this back end refuses; one format for both signs, no CONFIG2 bit for 32-bit channels, `D:187-189`) | `F:137,286-291`; `X:95` |
+| `GLES_TEXFMT_R32I` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (as R32UI, in RGBA32I meanwhile) | `F:136,286-291`; `X:95` |
+| `GLES_TEXFMT_RG32UI` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); in the mask (gc-r32-flip) | yes | - | linear; none | - (as R32UI; the table's EXT_G32R32F, `F:209`, is replaced on HALTI5) | `F:209,286-291`; `X:96` |
+| `GLES_TEXFMT_RG32I` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); in the mask (gc-r32-flip) | yes | - | linear; none | - (as RG32UI, in RGBA32I meanwhile) | `F:210,286-291`; `X:96` |
 | `GLES_TEXFMT_R8_SNORM` | `TEXTURE_FORMAT_EXT_R8_SNORM` | RGBA | - | no | yes (HALTI1: snorm: `TEXTURE_FORMAT_EXT_R8_SNORM`, 0x0e); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8_SNORM, then RGBA16F meanwhile) | `F:89`; `X:80` |
 | `GLES_TEXFMT_RG8_SNORM` | `TEXTURE_FORMAT_EXT_G8R8_SNORM` | RGBA | - | no | yes (HALTI1: snorm: `TEXTURE_FORMAT_EXT_G8R8_SNORM`, 0x0f); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8_SNORM, then RGBA16F meanwhile) | `F:119`; `X:81` |
 | `GLES_TEXFMT_R8UI` | `TEXTURE_FORMAT_EXT_R8I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R8I`, 0x15); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8UI meanwhile) | `F:90`; `X:85` |
@@ -177,11 +177,11 @@ Built (host only; nothing here has run on the GPU):
    as RGBA16F is (`tiled_copy.rs` `wide_texels`, by size).
 2. Integer look-ups select (section 3).
 
-**In `GC_SAMPLED_TEXFMTS`** (`src/backend.rs`): the eight classes above are
-in the mask, so the GL core stores them natively on this back end;
+**In `GC_SAMPLED_TEXFMTS`** (`src/backend.rs`): the eight classes above and
+R32UI, R32I, RG32UI, RG32I are in the mask, so the GL core stores them natively on this back end;
 `GLES_TEXFMT_RGB10A2` stays out for the reason `PVR_SAMPLED_TEXFMTS` gives.
 The test fails when the mask and the `in mask` column disagree. Still unsupported
-(refused or kept in a fallback class): RGBA32F/UI/I, R32I/UI, RG32I/UI (ETC2 RGB is `EXT_NONE` and decodes all its modes). The two compressed
+(refused or kept in a fallback class): RGBA32F/UI/I (ETC2 RGB is `EXT_NONE` and decodes all its modes). The two compressed
 sRGB ETC2 classes are in the mask too (etc2-srgb-gc): the GL core stores
 GL_COMPRESSED_SRGB8_ETC2 and GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC as blocks
 and lists them in GL_COMPRESSED_TEXTURE_FORMATS (5 formats), sampled as the
@@ -189,9 +189,10 @@ linear twin's block format with `SAMP_CTRL1.SRGB` (section 2).
 
 Left:
 
-4. RGBA32F/I/UI as two planes (section 3), and R32I/UI, RG32I/UI as their own
-   classes: the TE samples them as `EXT_R32I` / `EXT_G32R32I` (`F:286-291`),
-   but the GL core has no class for them and stores them in RGBA32UI/I.
+4. RGBA32F/I/UI as two planes (section 3). R32I/UI and RG32I/UI are their own
+   classes in the mask (gc-r32-flip): the TE samples them as `EXT_R32I` /
+   `EXT_G32R32I` (`F:286-291`). A texture colour attachment of them waits for
+   the GL core's `integer_texture_surface` rows (item gl-r32-surface).
 5. R8, RG8 and the R/RG snorm and integer formats in their own narrow
    classes (Mesa's EXT_R8 / G8R8 / R8I / G8R8I / R16I / G16R16I rows): memory
    only, the RGBA classes sample the same values.

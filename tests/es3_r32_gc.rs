@@ -17,13 +17,9 @@
 //!   the texels out of the submitted stream (R32: the linear storage at its
 //!   stride; RG32: the tiled copy, byte-exact against a model).
 //!
-//! The upload tests need the classes in the sampled mask. The mask hook
-//! (`backend::TEST_EXTRA_SAMPLED`) is `#[cfg(test)]` of the library, so no
-//! integration test can set it; the classes are not in `GC_SAMPLED_TEXFMTS`
-//! until item gc-r32-flip. Until then the upload tests find them closed, say
-//! so on stderr and check the closed state (the GL core refuses the format:
-//! GL_INVALID_OPERATION from glTexImage2D). From the flip on they run for
-//! real.
+//! The four classes are in `GC_SAMPLED_TEXFMTS` (item gc-r32-flip), so the
+//! upload tests run for real, and `the_gl_core_stores_the_32_bit_integer_formats_here`
+//! checks what the GL core does with the eight 32-bit integer formats.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_r32_gc
@@ -38,6 +34,7 @@ use std::sync::Mutex;
 use yakogl::backend::*;
 use yakogl::gl::consts::*;
 use yakogl::gl::draw::*;
+use yakogl::gl::framebuffer::*;
 use yakogl::gl::program::*;
 use yakogl::gl::shader::*;
 use yakogl::gl::state::*;
@@ -449,21 +446,13 @@ fn upload(c: &Class, w: u32, h: u32, m: &[u32]) -> GLenum {
     }
 }
 
-/// Closed classes: the GL core stores no texture of them for this back end.
-/// Open ones: the draw links with the integer sampler, binds a descriptor
+/// The draw links with the integer sampler, binds a descriptor
 /// with the class's words, and the texels are where the descriptor says.
 #[test]
 fn an_uploaded_texture_is_described_and_laid_out() {
     for c in &CLASSES {
         for (w, h) in [(13u32, 6u32), (5, 9), (16, 4), (8, 8)] {
-            if !open(c.1) {
-                eprintln!("{}: not in GC_SAMPLED_TEXFMTS; the upload is not exercised (gc-r32-flip)", c.0);
-                on_gc7000(|| {
-                    let m = model(c.5, w, h);
-                    assert_eq!(upload(c, w, h, &m), GL_INVALID_OPERATION, "{}: a closed class is refused", c.0);
-                });
-                break;
-            }
+            assert!(open(c.1), "{}: in GC_SAMPLED_TEXFMTS", c.0);
             on_gc7000(|| {
                 let m = model(c.5, w, h);
                 assert_eq!(upload(c, w, h, &m), GL_NO_ERROR, "{} {w}x{h}: glTexImage2D", c.0);
@@ -502,5 +491,70 @@ fn an_uploaded_texture_is_described_and_laid_out() {
                 }
             });
         }
+    }
+}
+
+/// RC17 (dEQP fbo.completeness `renderable.texture.*32*`): the GL core no
+/// longer refuses the 32-bit integer formats of one and two channels as
+/// textures, and still refuses the three- and four-channel ones (the
+/// two-plane path of docs/es3/gc-formats.md section 3). The mask holds the
+/// four classes, `storage_in` answers each format's own class, glTexImage2D
+/// and glTexStorage2D raise nothing, and a texture colour attachment is made
+/// without error; its status is INCOMPLETE_ATTACHMENT until the GL core's
+/// `integer_texture_surface` has rows for the classes (item gl-r32-surface).
+#[test]
+fn the_gl_core_stores_the_32_bit_integer_formats_here() {
+    use yakogl::gl::es3_formats::find;
+    let own = [
+        (GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, GLES_TEXFMT_R32UI),
+        (GL_R32I, GL_RED_INTEGER, GL_INT, GLES_TEXFMT_R32I),
+        (GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT, GLES_TEXFMT_RG32UI),
+        (GL_RG32I, GL_RG_INTEGER, GL_INT, GLES_TEXFMT_RG32I),
+    ];
+    let wide = [
+        (GL_RGB32UI, GL_RGB_INTEGER, GL_UNSIGNED_INT),
+        (GL_RGB32I, GL_RGB_INTEGER, GL_INT),
+        (GL_RGBA32UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT),
+        (GL_RGBA32I, GL_RGBA_INTEGER, GL_INT),
+    ];
+    for (internal, format, ty, class) in own {
+        assert!(open(class), "class {class}: in the mask");
+        assert_eq!(find(internal).expect("an ES 3.0 format").1.storage_in(GC_SAMPLED_TEXFMTS), Some(class));
+        on_gc7000(|| {
+            // SAFETY: plain GL calls; no pixels.
+            unsafe {
+                let mut tex = [0; 2];
+                glGenTextures(2, tex.as_mut_ptr());
+                glBindTexture(GL_TEXTURE_2D, tex[0]);
+                glTexImage2D(GL_TEXTURE_2D, 0, internal as GLint, 16, 16, 0, format, ty, core::ptr::null());
+                assert_eq!(glGetError(), GL_NO_ERROR, "0x{internal:x}: glTexImage2D");
+                glBindTexture(GL_TEXTURE_2D, tex[1]);
+                glTexStorage2D(GL_TEXTURE_2D, 1, internal, 16, 16);
+                assert_eq!(glGetError(), GL_NO_ERROR, "0x{internal:x}: glTexStorage2D");
+                let mut fb = 0;
+                glGenFramebuffers(1, &mut fb);
+                glBindFramebuffer(GL_FRAMEBUFFER, fb);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[1], 0);
+                assert_eq!(glGetError(), GL_NO_ERROR, "0x{internal:x}: the attachment");
+                assert_eq!(
+                    glCheckFramebufferStatus(GL_FRAMEBUFFER),
+                    GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
+                    "0x{internal:x}: no surface class yet (gl-r32-surface)"
+                );
+            }
+        });
+    }
+    for (internal, format, ty) in wide {
+        assert_eq!(find(internal).expect("an ES 3.0 format").1.storage_in(GC_SAMPLED_TEXFMTS), None);
+        on_gc7000(|| {
+            // SAFETY: a plain GL call; no pixels.
+            unsafe {
+                let mut t = 0;
+                glGenTextures(1, &mut t);
+                glBindTexture(GL_TEXTURE_2D, t);
+                glTexImage2D(GL_TEXTURE_2D, 0, internal as GLint, 16, 16, 0, format, ty, core::ptr::null());
+                assert_eq!(glGetError(), GL_INVALID_OPERATION, "0x{internal:x}: still refused");
+            }
+        });
     }
 }
