@@ -237,9 +237,8 @@ fn le(words: &[u32]) -> Vec<u8> {
 /// docs/notes/mali-frame-refusals.md section 8): `pos` per vertex (6 x 16
 /// bytes), `offs` and `icol` at offsets 0 and 8 of two 24-byte records,
 /// `1D POT Divisor` with `Divisor R` 1, and INSTANCE_COUNT 4. The addresses
-/// are the run's allocation, so the Buffers are compared with ours. A
-/// divisor past `MAX_INSTANCE_DIVISOR` (3 not a power of two, 4 above it)
-/// is refused by name, before any word.
+/// are the run's allocation, so the Buffers are compared with ours. Other
+/// divisors: [`every_divisor_is_mesa_s`].
 #[test]
 fn a_divisor_of_two_is_case_141_s() {
     let instances = VertexBuffer { gpu: INSTANCES, size: 2 * 24 };
@@ -286,8 +285,57 @@ fn a_divisor_of_two_is_case_141_s() {
     let bufs = le(&[buffer(GRID, 0x60), buffer(INSTANCES, 0x30), buffer(INSTANCES + 8, 0x28)].concat());
     assert!(find(&desc, &bufs).is_some(), "the three Buffers {bufs:02x?}");
     assert_eq!(regs_at_idvs(&words).get(&R_INSTANCE_COUNT), Some(&4), "r34");
-    for divisor in [3, 4] {
-        let refused = [attrs[0], VertexAttribute { instance_divisor: divisor, ..attrs[1] }, attrs[2]];
-        assert_eq!(build(4, &refused), Err(FrameError::NotBuilt(NOT_BUILT_INSTANCE_DIVISOR)), "divisor {divisor}");
+}
+
+/// Divisors past 2, each a one-float per-instance attribute (`R32F RGB1`,
+/// `Frequency: Instance`, `Offset enable` false, its own Buffer), as Mesa
+/// 26.2.1 on drm-shim wrote them (`tools/mali/drm_shim_ref.sh run` with
+/// `--instances 4`): gl_test case 221's draw (vsfma_221_instmix.vert,
+/// `--divisors 0,1,3`, stride 8) gives 3 as `1D NPOT Divisor`, `Divisor R`
+/// 1, `E` 0, `D` 0x2aaaaaab; a vertex shader of three float inputs at
+/// `--divisors 0,4,7,65535` (stride 12) gives 4 as `1D POT Divisor`, `R` 2,
+/// and 7 and 65535 as `1D NPOT Divisor` with `R/E/D` 2/1/0x12492492 and
+/// 15/0/0x8001 (`pan_compute_npot_divisor`, pan_encoder.h:97-113). Each
+/// Attribute is those decoded fields packed, compared whole.
+#[test]
+fn every_divisor_is_mesa_s() {
+    let instances = VertexBuffer { gpu: INSTANCES, size: 2 * 24 };
+    let pos = VertexAttribute {
+        buffer: VertexBuffer { gpu: GRID, size: 6 * 16 },
+        offset: 0,
+        stride: 16,
+        components: 4,
+        instance_divisor: 0,
+    };
+    /* (divisor, stride, attribute type, Divisor R, E, D) */
+    let mesa = [
+        (3, 8, AttributeType::_1D_NPOT_DIVISOR, 1, 0, 0x2aaa_aaab),
+        (4, 12, AttributeType::_1D_POT_DIVISOR, 2, 0, 0),
+        (7, 12, AttributeType::_1D_NPOT_DIVISOR, 2, 1, 0x1249_2492),
+        (65535, 12, AttributeType::_1D_NPOT_DIVISOR, 15, 0, 0x8001),
+    ];
+    for (k, stride, attribute_type, divisor_r, divisor_e, divisor_d) in mesa {
+        if attribute_type == AttributeType::_1D_NPOT_DIVISOR {
+            assert_eq!(npot_divisor(k), (divisor_r, divisor_e, divisor_d), "divisor {k}");
+        }
+        let a = VertexAttribute { buffer: instances, offset: 0, stride, components: 1, instance_divisor: k };
+        let (_, desc) = build(4, &[pos, a]).unwrap();
+        let want = Attribute {
+            attribute_type,
+            offset_enable: false,
+            format: Format::R32F.0 << 12 | RgbComponentOrder::RGB1.0,
+            table: 2,
+            frequency: AttributeFrequency::INSTANCE,
+            divisor_r,
+            divisor_e,
+            offset: 0,
+            buffer_index: 1,
+            stride,
+            divisor_d,
+            ..Default::default()
+        }
+        .pack()
+        .unwrap();
+        assert!(find(&desc, &want).is_some(), "divisor {k}: {want:02x?}");
     }
 }

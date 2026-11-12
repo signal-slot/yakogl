@@ -616,7 +616,6 @@ fn each_draw_not_built_is_refused_by_name() {
         instance_divisor: 0,
     }];
     let five = [VertexAttribute { components: 5, ..attributes[0] }];
-    let divisor_three = [VertexAttribute { instance_divisor: 3, ..attributes[0] }];
     let seventeen = [attributes[0]; 17];
     let draw = DrawCall {
         zs: DepthStencilState::OFF,
@@ -665,18 +664,6 @@ fn each_draw_not_built_is_refused_by_name() {
         (
             FrameInput { zs: None, target: Target { width: 0, ..target }, clear_rgba: Some([0.0; 4]), draw: None },
             NOT_BUILT_EMPTY_TARGET,
-        ),
-        (
-            f(DrawCall {
-                zs: DepthStencilState::OFF,
-                colour_mask: 0xf,
-                front_cw: false,
-                cull: Cull::None,
-                instance_count: 2,
-                attributes: &divisor_three,
-                ..draw
-            }),
-            NOT_BUILT_INSTANCE_DIVISOR,
         ),
         (
             f(DrawCall { zs: DepthStencilState::OFF, colour_mask: 0xf, front_cw: false, attributes: &five, ..draw }),
@@ -766,7 +753,7 @@ fn each_draw_not_built_is_refused_by_name() {
             assert_ne!(a, b);
         }
     }
-    assert_eq!(seen.len(), 12);
+    assert_eq!(seen.len(), 11);
     /* a stage with varyings and no varying program is the record's defect */
     let input = f(DrawCall { zs: DepthStencilState::OFF, colour_mask: 0xf, front_cw: false, vs: &vs_vary, ..draw });
     let mut desc_m = vec![0u8; 0x1000];

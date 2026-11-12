@@ -932,8 +932,20 @@ divisors are all powers of two.
 
 What still differs from Mesa's words for case 141's draw: only the buffer
 addresses (Buffers 0-2, bytes 8-15), which are allocation. Every Attribute
-byte, the Buffers' type and size words and r33-r37 are equal. NPOT
-divisors (`1D NPOT Divisor`, `Divisor D`/`E`) remain unbuilt and unpinned.
+byte, the Buffers' type and size words and r33-r37 are equal.
+
+**Every divisor (2026-11-12, gl_test case 221).** The first way. Mesa
+26.2.1 on drm-shim gives case 221's divisor 3 as `1D NPOT Divisor`,
+`Divisor R` 1, `E` 0, `D` 0x2aaaaaab, and a run at `--divisors 0,4,7,65535`
+gives 4 as `1D POT Divisor` `R` 2, 7 as `R/E/D` 2/1/0x12492492 and 65535 as
+15/0/0x8001 (`pan_compute_npot_divisor`, pan_encoder.h:97-113).
+`frame::npot_divisor` computes them; `check_draw` refuses no divisor
+(`NOT_BUILT_INSTANCE_DIVISOR` is gone), and `MAX_INSTANCE_DIVISOR` is
+0xffff, the largest `GlesAttrib::divisor` holds, so the GL core never
+draws a Mali instanced draw instance by instance (that path would read
+`gl_InstanceID` 0: the Mali backend does not read `GlesDraw::instance_id`).
+`frame_instance_tests.rs` `every_divisor_is_mesa_s` compares the four
+Attributes with those decoded fields packed.
 
 ---
 

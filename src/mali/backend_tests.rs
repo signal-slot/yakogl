@@ -1024,7 +1024,7 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("a divisor-1 attribute in a buffer object, 40 instances, is built", why(&per_instance), built),
             ("a staged per-instance attribute (divisor 0 read as 1) is built", why(&per_instance_staged), built),
             ("a divisor of 2 is built (case 141)", why(&divisor_two), built),
-            ("a divisor of 3", why(&divisor_three), not_built(frame::NOT_BUILT_INSTANCE_DIVISOR)),
+            ("a divisor of 3 is built (case 221)", why(&divisor_three), built),
             ("a clear of a window target is built", why(&window_clear), built),
         ];
         /* the clear quad with no clear program */
@@ -1250,7 +1250,6 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         NOT_BUILT_ATTRIBUTE,
         NOT_BUILT_ATTRIBUTE_BUFFER_SIZE,
         NOT_BUILT_ATTRIBUTE_RECORDS,
-        frame::NOT_BUILT_INSTANCE_DIVISOR,
         NOT_BUILT_PRELOAD_PROGRAM,
         frame::NOT_BUILT_PRELOAD_STRIDE,
         INVALID_INDEX_SIZE,
@@ -3967,7 +3966,7 @@ fn the_first_refusal_is_kept_whole() {
     assert_eq!(r.get(), None, "nothing refused yet");
     let long: &'static str = Box::leak("x".repeat(crate::osal::OSAL_LOG_LINE_MAX * 2).into_boxed_str());
     r.note(long);
-    r.note(frame::NOT_BUILT_INSTANCE_DIVISOR);
+    r.note(frame::NOT_BUILT_PRELOAD_STRIDE);
     assert_eq!(r.get(), Some(long));
 }
 
