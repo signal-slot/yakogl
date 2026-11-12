@@ -32,12 +32,13 @@
 # record directory and are never copied into the tree, an issue or a pull
 # request as they are.
 #
-# Exit: prompt-reads.py's code (0 done; 3 no autoboot line, nothing written;
+# Exit: prompt-reads.py's code (0 done; 12 no autoboot line after the
+# reboot, nothing written;
 # 4 the autoboot was missed, Linux booted; 5 stopped at the U-Boot prompt,
 # the board stays there until its power is cut; 6 `reset` entered, no Linux
 # login; 7 a command made U-Boot reset the board, Linux booted), 1 when the
 # board did not come back into Armbian, 2 usage or a missing tool, 3 refused
-# before anything was changed.
+# before anything was changed (only that: the board was not rebooted).
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
