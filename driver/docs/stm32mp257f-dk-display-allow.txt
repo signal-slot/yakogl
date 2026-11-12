@@ -30,7 +30,11 @@
 # The bases are ST's device trees: LTDC display-controller@48010000
 # (stm32mp251.dtsi:2150), DSI host and wrapper 0x48000000
 # (stm32mp255.dtsi:123-133), RCC 0x44200000, SYSCFG 0x44230000.
-# Left out on purpose, because a read changes hardware state:
+# Left out on purpose, because a read changes hardware state (the FIFO pop
+# and read-to-clear are the DWC DSI host's documented behaviour; dw-mipi-dsi.c
+# reads GEN_PLD_DATA only in dw_mipi_dsi_read and INT_ST0/1 only in
+# dw_mipi_dsi_clear_err; no I2C or GPIO register is read, the ADV7535 goes
+# through regmap debugfs):
 #   DSI_GEN_PLD_DATA 0x48000070 (a read pops the receive FIFO),
 #   DSI_INT_ST0 0x480000bc and DSI_INT_ST1 0x480000c0 (read-to-clear in
 #   dw-mipi-dsi.c, which reads them to clear the flags).
@@ -38,10 +42,25 @@
 #   the RCC FLEXGEN/XBAR registers behind FLEXGEN_27, FLEXGEN_28 and
 #   ICN_DISPLAY (those clocks are SCMI's, OP-TEE's), the DSI PHY test
 #   registers beyond DSI_PTCR0/1.
-# The RIFSC base 0x42080000 and its register offsets (RISC_SECCFGRx 0x10 +
-# 4x, PRIVCFGRx 0x30 + 4x, LOCKRx 0x50 + 4x, CIDCFGR 0x100 + 8n, SEMCR
-# 0x104 + 8n) are from the generic STM32 RIF layout and are NOT confirmed in
-# RM0457; a refused read is reported as ERR and does not stop the dump.
+# The RIFSC base 0x42080000 (bus@42080000, stm32mp251.dtsi, reg 0x1000) and
+# its layout are confirmed against ST's sources: SECCFGRx 0x10 + 4x, PRIVCFGRx
+# 0x30 + 4x, RCFGLOCKRx 0x50 + 4x (x = id / 32, bit id % 32), PERn_CIDCFGR
+# 0x100 + 8n, PERn_SEMCR 0x104 + 8n (L drivers/bus/stm32_rifsc.c
+# RIFSC_RISC_SECCFGR0/PRIVCFGR0/PER0_CIDCFGR/PER0_SEMCR, which reads them
+# from the non-secure side for its debugfs; O core/drivers/firewall/
+# stm32_rifsc.c _RIFSC_RISC_SECCFGR0 0x10, _PRIVCFGR0 0x30, _RCFGLOCKR0 0x50,
+# _PER0_CIDCFGR 0x100, _PER0_SEMCR 0x104, _OFFSET_PERX_CIDCFGR 0x8, tag
+# 4.0.0-stm32mp-r3.1). The ids are the access-controllers of stm32mp251.dtsi
+# and stm32mp255.dtsi: I2C2 42, LTDC cmn 80, DSI 81, LTDC l1l2 119, l3 120,
+# rot 121 (RCC itself is 156). A refused read is reported as ERR and does not
+# stop the dump.
+# RCC_LTDCCFGR 0x840 and RCC_DSICFGR 0x844 are L drivers/clk/stm32/
+# stm32mp25_rcc.h (RCC_I2C2CFGR 0x7a8, FINDIV0..63CFGR 0x1224..0x1320, XBAR0..
+# 63CFGR 0x1018..0x1114 are not read). SYSCFG_DISPLAYCLKCR 0x5000, mask 0x3
+# is L drivers/clk/stm32/clk-stm32mp25-syscfg.c; SYSCFG is syscon@44230000.
+# Only the registers Linux's drivers name are read in the DSI blocks (no
+# reserved or undocumented offset, so no read can fault); DSI_WIER 0x408 and
+# DSI_WIFCR 0x410 are the STM32 DSI wrapper's, not named by dw_mipi_dsi-stm.c.
 #
 # LTDC global block 0x00-0x90 (IDR, LCR, SSCR ... FUT), then layers 1 to 3.
 #@read 0x48010000 37 LTDC
@@ -92,7 +111,7 @@
 #@name 0x48010338 LTDC_L3CFBLR
 #
 # DSI host map, without the three read-sensitive registers above.
-#@read 0x48000000 28 DSI
+#@read 0x48000000 27 DSI
 #@name 0x48000000 DSI_VERSION
 #@name 0x48000004 DSI_PWR_UP
 #@name 0x48000008 DSI_CLKMGR_CFG
@@ -110,8 +129,9 @@
 #@name 0x4800005c DSI_VID_VFP_LINES
 #@name 0x48000060 DSI_VID_VACTIVE_LINES
 #@name 0x48000068 DSI_CMD_MODE_CFG
-#@read 0x48000074 18 DSI
+#@read 0x48000074 7 DSI
 #@name 0x48000074 DSI_CMD_PKT_STATUS
+#@read 0x48000094 10 DSI
 #@name 0x48000094 DSI_LPCLK_CTRL
 #@name 0x48000098 DSI_PHY_TMR_LPCLK_CFG
 #@name 0x4800009c DSI_PHY_TMR_CFG
@@ -120,16 +140,22 @@
 #@name 0x480000b0 DSI_PSR
 #@name 0x480000b4 DSI_PTCR0
 #@name 0x480000b8 DSI_PTCR1
-#@read 0x480000c4 79 DSI
+#@read 0x480000c4 2 DSI
 #@name 0x480000c4 DSI_INT_MSK0
 #@name 0x480000c8 DSI_INT_MSK1
-# ST wrapper 0x400-0x44c (dw_mipi_dsi-stm.c:37-90).
-#@read 0x48000400 20 DSI_W
+#@read 0x480000f4 1 DSI_PHY_TMR_RD_CFG
+# DSI_GEN_HDR 0x6c is skipped as well (a trigger for a packet; the read
+# returns nothing the comparison uses).
+# ST wrapper 0x400-0x43c (dw_mipi_dsi-stm.c:37-90): WCFGR..WIFCR, WPCR0, then
+# WPCR1..WRPCR2; 0x414 and 0x41c-0x42c are reserved and not read.
+#@read 0x48000400 5 DSI_W
 #@name 0x48000400 DSI_WCFGR
 #@name 0x48000404 DSI_WCR
 #@name 0x48000408 DSI_WIER
 #@name 0x4800040c DSI_WISR
 #@name 0x48000410 DSI_WIFCR
+#@read 0x48000418 1 DSI_WPCR0
+#@read 0x48000430 4 DSI_W
 #@name 0x48000430 DSI_WPCR1
 #@name 0x48000434 DSI_WRPCR0
 #@name 0x48000438 DSI_WRPCR1
@@ -147,7 +173,7 @@
 # (I2C2), 80 (LTDC common), 81 (DSI), 119 (LTDC l1l2), 120 (l3), 121 (rot).
 #@read 0x42080010 4 RIFSC_SECCFGR
 #@read 0x42080030 4 RIFSC_PRIVCFGR
-#@read 0x42080050 4 RIFSC_LOCKR
+#@read 0x42080050 4 RIFSC_RCFGLOCKR
 #@read 0x42080250 2 RIFSC_E42_I2C2
 #@read 0x42080380 4 RIFSC_E80_E81_LTDC_DSI
 #@read 0x420804b8 6 RIFSC_E119_E120_E121_LTDC
