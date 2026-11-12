@@ -52,13 +52,13 @@ ece349ad):
   calls the address in place with `argc`, `argv`, no relocation, and without
   `cleanup_before_linux`/`bootm_final` (compare arch/arm/lib/bootm.c:257-270,
   where booti's path does them). Hence the script runs `icache off` and
-  `dcache off` itself (cmd/cache.c:24 and :53; arm64 `dcache_disable` flushes
+  `dcache off` itself (cmd/cache.c:17 and :46; arm64 `dcache_disable` flushes
   and clears SCTLR.C and SCTLR.M, arch/arm/cpu/armv8/cache_v8.c:897-919):
   `driver/tools/kexec-zephyr/nanopc-t6.sh` enters the image with the MMU and
   caches off, and the image's `reset.S` clears only SCTLR.A at EL1 and EL2
   (Zephyr `arch/arm64/core/reset.S:63-65, 77-79`), not M or C.
 - `ext4load` is `U_BOOT_CMD(ext4load ...)` at cmd/ext4.c:86 (do_ext4_load
-  :50); the load sets `filesize` (fs/fs.c:865), `ext4size` sets it too
+  :48); the load sets `filesize` (fs/fs.c:865), `ext4size` sets it too
   (fs/fs.c:787).
 
 Not part of this draft: entering at EL2 with U-Boot's HCR_EL2 and GIC state,
@@ -118,6 +118,15 @@ A directory entry `/boot/yakogl` is the only change on the partition, and
 ## Not compiled here
 
 `mkimage` is not installed on the host. One was built from the v2026.07
-tree (tools-only, mkimage alone) but this session could not run it, so the
-script's compilation with `mkimage -T script` is unchecked: the owner's host
-runs the command above before staging.
+tree (`make sandbox_defconfig tools-only`, builds clean) but running it was
+refused in both sessions that tried, so the script's compilation with
+`mkimage -T script` is unchecked: the owner's host runs the command above
+(and `dumpimage -l` on the result) before staging.
+
+The commands and variables the script uses were checked against the v2026.07
+source instead: `exit` (cmd/exit.c:22), `itest` incl. `-lt`/`-gt` and `*addr`
+(cmd/itest.c), `setexpr` (cmd/setexpr.c), `ext4size`/`ext4load`
+(cmd/ext4.c:73, :86), `icache`/`dcache` (cmd/cache.c), `go` (cmd/boot.c:50),
+and `scriptaddr=0x00c00000` for the RK3588 (include/configs/rk3588_common.h:22).
+The `${filesize}` comparisons use `itest`, not `test`: `filesize` is hex
+without `0x` and `test` reads base 0 (cmd/test.c:152-173).
