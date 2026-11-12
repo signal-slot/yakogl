@@ -6559,6 +6559,25 @@ fn a_negated_literal_clamp_outside_the_measured_forms_is_refused() {
     }
 }
 
+/// A `-0.0` that folds from other values in a compare: `-z` of a local
+/// `float z = 0.0` is the local itself, +0.0, as Mesa's rule makes it
+/// (glsl.rs `Tree::plus_zero`; byte-equal, highp select and mediump
+/// discard, both `0x0.neg` at 4f08f41e5). A product of literals that folds
+/// to -0.0 (`-1.0 * 0.0`) and a vector of -0.0 lanes (`lessThan(a2,
+/// vec2(-0.0, -0.0))`) have no +0.0 at the compare: refused
+/// ([`MaliError::NegZeroShared`]), both other words at 4f08f41e5.
+#[test]
+fn a_negative_zero_folded_from_other_values_is_mesa_s_or_refused() {
+    for (name, vs, fs, json) in [pair!("negzero_neg_local"), pair!("negzero_neg_local_mediump")] {
+        let r = std::panic::catch_unwind(|| check_linked(vs, fs, json));
+        assert!(r.is_ok(), "{name}");
+    }
+    for (name, _, fs, json) in [pair!("negzero_folded"), pair!("negzero_vector")] {
+        assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::NegZeroShared, "{name}");
+    }
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,

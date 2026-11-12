@@ -1848,10 +1848,18 @@ impl Tree<'_, '_> {
     fn plus_zero(&self, s: Src, w: usize) -> Result<Option<Src>, MaliError> {
         let lanes = |v: &[u32; 4], sw: &[u8; 4], k: u32| sw[..w].iter().all(|&c| v[c as usize & 3] == k);
         match self.instrs.get(s.val.0 as usize) {
+            /* `fneg` of a value that is +0.0 in the lanes read: a zero
+             * literal, or a local, a product of literals or a vector that
+             * folds to it (`float z = 0.0; a < -z`); the compare reads that
+             * value itself, which is +0.0 */
             Some(&IrOp::Alu(AluOp::Fneg, [c, ..])) => {
-                let Some(&IrOp::ConstF32(v)) = self.instrs.get(c.val.0 as usize) else { return Ok(None) };
                 let swizzle = core::array::from_fn(|i| c.swizzle[s.swizzle[i] as usize & 3]);
-                Ok(lanes(&v, &swizzle, 0).then_some(Src { val: c.val, swizzle }))
+                let inner = Src { val: c.val, swizzle };
+                match self.const_lanes(inner, 0) {
+                    Some(v) if v[..w].iter().all(|&x| x == 0) => Ok(Some(inner)),
+                    Some(v) if v[..w].contains(&0) => Err(MaliError::NegZeroShared),
+                    _ => Ok(None),
+                }
             }
             Some(&IrOp::ConstF32(v)) if lanes(&v, &s.swizzle, F32_NEG_ZERO) => {
                 match self.zero_for_compares(s.val.0 as usize) {
@@ -1865,7 +1873,62 @@ impl Tree<'_, '_> {
                 }
                 Ok(None)
             }
+            /* any other value that folds to -0.0 in a lane read (`-1.0 *
+             * 0.0`, a vector built of -0.0 lanes): Mesa compares with
+             * +0.0 there, and the IR has none at the compare */
+            _ if self.const_lanes(s, 0).is_some_and(|v| v[..w].contains(&F32_NEG_ZERO)) => {
+                Err(MaliError::NegZeroShared)
+            }
             _ => Ok(None),
+        }
+    }
+
+    /// The fp32 bits `s` reads in each lane, when it folds to constants:
+    /// a literal, an `fneg`, a product or a sum of constants (rounded as
+    /// fp32, as NIR's constant folding does), or a local whose every lane
+    /// read one store writes. `None`: not a constant (or too deep).
+    fn const_lanes(&self, s: Src, depth: usize) -> Option<[u32; 4]> {
+        if depth > 8 {
+            return None;
+        }
+        let at = |v: [u32; 4]| core::array::from_fn(|i| v[s.swizzle[i] as usize & 3]);
+        match *self.instrs.get(s.val.0 as usize)? {
+            IrOp::ConstF32(v) => Some(at(v)),
+            IrOp::Alu(AluOp::Fneg, [a, ..]) => Some(at(self.const_lanes(a, depth + 1)?.map(|x| x ^ F32_NEG_ZERO))),
+            IrOp::Alu(op @ (AluOp::Fmul | AluOp::Fadd), [a, b, _]) => {
+                let (x, y) = (self.const_lanes(a, depth + 1)?, self.const_lanes(b, depth + 1)?);
+                let f = |i: usize| {
+                    let (p, q) = (f32::from_bits(x[i]), f32::from_bits(y[i]));
+                    if op == AluOp::Fmul {
+                        (p * q).to_bits()
+                    } else {
+                        (p + q).to_bits()
+                    }
+                };
+                Some(at(core::array::from_fn(f)))
+            }
+            IrOp::LoadLocal { local, index: None, .. } => {
+                let mut v = [0u32; 4];
+                for (l, out) in v.iter_mut().enumerate() {
+                    let mut found = None;
+                    for op in self.instrs.iter() {
+                        let IrOp::StoreLocal { local: to, index, src, write_mask } = *op else { continue };
+                        if to != local || write_mask & (1 << l) == 0 {
+                            continue;
+                        }
+                        if index.is_some() || found.is_some() {
+                            return None;
+                        }
+                        let lane = Src { val: src.val, swizzle: [src.swizzle[l]; 4] };
+                        found = Some(self.const_lanes(lane, depth + 1)?[0]);
+                    }
+                    /* a lane no store writes has no value: a NaN, which is
+                     * neither zero */
+                    *out = found.unwrap_or(0x7fc0_0001);
+                }
+                Some(at(v))
+            }
+            _ => None,
         }
     }
 
