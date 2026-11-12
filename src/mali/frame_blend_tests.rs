@@ -302,13 +302,13 @@ fn testdata_words(text: &str) -> Vec<u64> {
 }
 
 /// The blend shaders the frame compiles for case 211's constant colour at
-/// 4x and case 190's columns 3 and 4 at 1x (`shader_equation`, then
+/// 4x and case 190's columns 3 and 4 at 1x (`shader_key`, then
 /// src/shaderc/online/mali/blend.rs) are the drm-shim's (Mesa 26.2.1), word
 /// for word, each under the key it was recorded with
 /// (docs/notes/mali-blend-shaders.md section 5).
 #[test]
 fn the_reference_blend_shaders_are_the_drm_shim_s_words() {
-    use super::blend::shader_equation;
+    use super::blend::shader_key;
     use crate::shaderc::online::{mali::blend::shader, store};
     let (c, _) = mode("const");
     let rgba8 = TargetFormat::Rgba8888;
@@ -318,7 +318,7 @@ fn the_reference_blend_shaders_are_the_drm_shim_s_words() {
         (case190(4), 1, include_str!("../../tools/mali/testdata/blend_case190_col4.words")),
     ];
     for (b, samples, text) in files {
-        let eq = shader_equation(&b, 0xf, samples, rgba8).expect("a built key");
+        let eq = shader_key(&b, 0xf, samples, rgba8, true).expect("a built key");
         let mut words = store::with_scratch(|sc| {
             let mut out = [0u64; 64];
             shader(&mut out, sc, eq, 0xed000).map(|s| s.code.to_vec()).expect("the blend shader compiles")
@@ -334,19 +334,20 @@ fn the_reference_blend_shaders_are_the_drm_shim_s_words() {
     assert_eq!(testdata_words(files[0].2).len(), 22);
     assert_eq!(testdata_words(files[1].2).len(), 16);
     assert_eq!(testdata_words(files[2].2).len(), 17);
-    /* the key: the sample count, the mask and the format are in it; a MIN
-     * channel's factors are not read (st/mesa's ONE, ONE match too) */
-    let one = shader_equation(&c, 0xf, 1, rgba8).expect("1x: case 8's");
-    assert_ne!(Some(one), shader_equation(&c, 0xf, 4, rgba8), "the sample count");
-    assert!(shader_equation(&case190(3), 0xf, 4, rgba8).is_none(), "column 3 at 4x");
-    assert!(shader_equation(&case190(3), 0x7, 1, rgba8).is_none(), "column 3 masked");
-    assert!(shader_equation(&case190(4), 0xf, 1, TargetFormat::Rgb565).is_none(), "column 4 into RGB565");
+    /* the key: the sample count and the mask are in it, the target is
+     * RGBA8, a colour mask writing nothing needs no blend shader */
+    let one = shader_key(&c, 0xf, 1, rgba8, true).expect("1x: case 8's");
+    assert_ne!(Some(one), shader_key(&c, 0xf, 4, rgba8, true), "the sample count");
+    assert_ne!(shader_key(&case190(3), 0x7, 1, rgba8, true), shader_key(&case190(3), 0xf, 1, rgba8, true), "the mask");
+    assert!(shader_key(&case190(4), 0xf, 1, TargetFormat::Rgb565, true).is_none(), "column 4 into RGB565");
+    assert!(shader_key(&case190(4), 0, 1, rgba8, true).is_none(), "nothing written");
+    assert!(shader_key(&case190(4), 0xf, 2, rgba8, true).is_none(), "2x");
+    assert_ne!(shader_key(&c, 0xf, 1, rgba8, false), Some(one), "the colour's type");
+    /* a MIN channel's factors are not read: st/mesa's ONE, ONE and the GL
+     * state's SRC_ALPHA, ONE_MINUS_SRC_ALPHA are one shader */
     let mut min_one = case190(3);
     (min_one.rgb.src, min_one.rgb.dst) = (Factor::ONE, Factor::ONE);
-    assert_eq!(shader_equation(&min_one, 0xf, 1, rgba8), shader_equation(&case190(3), 0xf, 1, rgba8));
-    let mut max = case190(3);
-    max.rgb.func = Func::Max;
-    assert!(shader_equation(&max, 0xf, 1, rgba8).is_none(), "MAX has no reference");
+    assert_eq!(shader_key(&min_one, 0xf, 1, rgba8, true), shader_key(&case190(3), 0xf, 1, rgba8, true));
 }
 
 const BLENDSHADER: &str = include_str!("../../tools/mali/board-dump/blendshader-2026-10-24.txt");

@@ -202,12 +202,12 @@ pub const INVALID_OQ_ALIGN: &str = "mali frame: an occlusion counter not 8-byte 
 /// `pan_blend_can_fixed_function`; or constants that differ between the
 /// channels read, `pan_blend_is_homogenous_constant`, `panfrost_get_blend`)
 /// drawn without one ([`DrawCall::blend_shader`]): the backend builds the
-/// constant colour's blend shaders into a single-sampled RGBA8 target
-/// written whole, case 211's 4x constant colour and case 190's GL_MIN and
-/// ONE_MINUS_DST_ALPHA columns (src/mali/blend.rs `shader_equation`); no
-/// other.
+/// blend shader of any equation and colour mask into an RGBA8 target at 1x
+/// or 4x (src/mali/blend.rs `shader_key`) unless its compile refuses it
+/// (src/shaderc/online/mali/blend_nir.rs: a transform or condition of
+/// Mesa's it does not build); no other target.
 pub const NOT_BUILT_BLEND_SHADER: &str =
-    "mali frame: a blend shader other than a constant colour's (min/max, SRC_ALPHA_SATURATE, unmatched factors, separate colour and alpha, a masked, 4x or non-RGBA8 target) is not built yet";
+    "mali frame: a blend shader into a target other than RGBA8 at 1x or 4x, or one the blend shader compiler refuses, is not built yet";
 /// [`DrawCall::blend_shader`] not on 16 bytes, outside the fragment
 /// program's 4 GiB window (the descriptor holds its low 32 bits, Mesa
 /// 26.2.1 pan_cmdstream.c:365-377), or given for a draw whose blend the
@@ -220,8 +220,8 @@ pub const NOT_BUILT_SAMPLES: &str = "mali frame: a target of other than 1 or 4 s
 /// does not run on floats (`blend::can_fixed_function_float`: a factor
 /// other than ZERO, ONE, SRC_ALPHA and ONE_MINUS_SRC_ALPHA, min or max):
 /// Mesa 26.2.1 runs it in a blend shader (`panfrost_get_blend`,
-/// pan_context.c:170-200), which `blend::shader_equation` builds for
-/// RGBA8888 only. The float equations and colour masks are built, with
+/// pan_context.c:170-200), which `blend::shader_key` builds for RGBA8888
+/// only. The float equations and colour masks are built, with
 /// the frame's tile buffer in RGBA16F ([`OpenFrame::float_blend`]).
 pub const NOT_BUILT_FLOAT_BLEND: &str =
     "mali frame: a blend into an RGBA16F target that needs a blend shader (a factor other than ZERO, ONE, SRC_ALPHA or ONE_MINUS_SRC_ALPHA, min or max) is not built yet";

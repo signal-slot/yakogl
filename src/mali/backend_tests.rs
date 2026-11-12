@@ -866,6 +866,8 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         let mut rgba16f_blend = blend;
         rgba16f_blend.target_format = backend::GLES_SURF_RGBA16F;
         let rgba16f_masked = state(|d| (d.target_format, d.color_mask) = (backend::GLES_SURF_RGBA16F, 0x7));
+        let mut rgb565_min = min_blend;
+        rgb565_min.target_format = backend::GLES_SURF_RGB565;
         let mut rgba16f_min = min_blend;
         rgba16f_min.target_format = backend::GLES_SURF_RGBA16F;
         let mut bad_blend = blend;
@@ -979,22 +981,19 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("a stencil test with a D24S8", why(&with_ds(stencil)), built),
             ("a D24S8 smaller than the target", why(&small_ds), not_built(NOT_BUILT_ZS_SIZE)),
             ("a fixed-function blend is built", why(&blend), built),
-            ("a min blend needs a blend shader", why(&min_blend), not_built(frame::NOT_BUILT_BLEND_SHADER)),
+            ("a min blend runs in Mesa's blend shader", why(&min_blend), built),
+            (
+                "a min blend into RGB565 needs a blend shader not built",
+                why(&rgb565_min),
+                not_built(frame::NOT_BUILT_BLEND_SHADER),
+            ),
             ("a constant colour of three values runs in a blend shader", why(&const_blend), built),
-            (
-                "a constant colour's blend shader through a colour mask",
-                why(&const_blend_masked),
-                not_built(frame::NOT_BUILT_BLEND_SHADER),
-            ),
+            ("a constant colour's blend shader through a colour mask", why(&const_blend_masked), built),
             ("case 211's constant colour at 4x runs in Mesa's blend shader", why(&const_blend_4x), built),
-            (
-                "case 211's 4x blend shader through a colour mask",
-                why(&const_blend_4x_masked),
-                not_built(frame::NOT_BUILT_BLEND_SHADER),
-            ),
+            ("case 211's 4x blend shader through a colour mask", why(&const_blend_4x_masked), built),
             ("case 190's GL_MIN column runs in Mesa's blend shader", why(&blend_190_3), built),
             ("case 190's ONE_MINUS_DST_ALPHA column runs in Mesa's blend shader", why(&blend_190_4), built),
-            ("case 190's GL_MIN column at 4x", why(&blend_190_3_4x), not_built(frame::NOT_BUILT_BLEND_SHADER)),
+            ("case 190's GL_MIN column at 4x runs in Mesa's blend shader", why(&blend_190_3_4x), built),
             ("a blend code that is not the core's", why(&bad_blend), invalid(INVALID_BLEND_CODE)),
             ("face culling", why(&cull), built),
             ("a cull code that is not the core's", why(&bad_cull), invalid(INVALID_CULL)),
@@ -1413,6 +1412,48 @@ fn mesa_s_blend_shader_words_are_uploaded_where_the_descriptor_points() {
             let flags = DcdFlags0::unpack(&reg_at_idvs(&stream, 57).unwrap().to_le_bytes()[..4].try_into().unwrap());
             assert_eq!(flags.unwrap().evaluate_per_sample, d.samples == 4, "{what}: per-sample evaluation");
         }
+    });
+}
+
+/// A highp ES 3.00 colour reaches the blend shader as fp32 (Mesa keys the
+/// shader on the fragment shader's `blend[0].type`, pan_context.c:210-216:
+/// the fragment program's `BLEND.v4.f32` leaves r0-r3): a min blend's
+/// shader is Mesa's for an fp32 colour (`pan_shc --blend` with `f32`,
+/// tools/mali/testdata/blend_min_f32.words), not the mediump colour's.
+#[test]
+fn a_highp_colour_s_blend_shader_reads_it_as_fp32() {
+    const HIGHP_FS: &str =
+        "#version 300 es\nprecision highp float;\nout vec4 c;\nvoid main() { c = vec4(0.25, 0.5, 0.75, 1.0); }\n";
+    let want: Vec<u64> = include_str!("../../tools/mali/testdata/blend_min_f32.words")
+        .lines()
+        .map(|l| u64::from_str_radix(l.trim(), 16).expect("a hex word"))
+        .collect();
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = target();
+    with_programs(TRI_VS, HIGHP_FS, |vs, fs| {
+        let mut d = triangle(t, &VERTICES);
+        (d.vs, d.fs, d.blend) = (vs, fs, true);
+        (d.blend_eq_rgb, d.blend_eq_alpha) = (crate::shaderc::SHC_BLEND_MIN as u8, crate::shaderc::SHC_BLEND_MIN as u8);
+        let one = crate::shaderc::SHC_BF_ONE as u8;
+        (d.blend_src_rgb, d.blend_dst_rgb, d.blend_src_alpha, d.blend_dst_alpha) = (one, one, one, one);
+        assert_eq!(why(&d), Ok(()));
+        let before = with(|m| m.submits.len());
+        assert_eq!(draw_flush(&d), 0);
+        let stream = with(|m| m.submits[before..].last().expect("a frame").1.clone());
+        let blend_va = reg_at_idvs(&stream, 50).expect("a blend descriptor") & !63;
+        let bd = with(|m| m.read(blend_va, crate::mali::genxml::v10::Blend::LENGTH));
+        let pc = u64::from(u32::from_le_bytes(bd[12..16].try_into().unwrap()));
+        let code = with(|m| {
+            m.bufs
+                .iter()
+                .map(|b| (b.gpu & !0xffff_ffff) | pc)
+                .find(|&va| m.find(va, 8 * want.len()).is_some())
+                .map(|va| m.read(va, 8 * want.len()))
+        })
+        .expect("a buffer at the shader's address");
+        let got: Vec<u64> = code.chunks(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())).collect();
+        assert_eq!(got, want, "the fp32 colour's blend shader");
     });
 }
 

@@ -7,11 +7,10 @@
 //! (src/panfrost/lib/pan_blend.c, unless said otherwise), for the
 //! UNORM targets (`is_float` false) and, by [`can_fixed_function_float`],
 //! the RGBA16F one (`is_float` true). An equation Mesa
-//! runs in a blend shader runs in one when src/shaderc/online/mali/blend.rs
-//! builds it ([`shader_equation`]: the constant colour's equations at 1x,
-//! case 211's 4x constant colour, case 190's GL_MIN and
-//! ONE_MINUS_DST_ALPHA columns), and is refused by the frame builder by
-//! name otherwise.
+//! runs in a blend shader when src/shaderc/online/mali/blend.rs builds it
+//! ([`shader_key`]: an RGBA8 target at 1x or 4x, any equation and colour
+//! mask its compile does not refuse), and is refused by the frame builder
+//! by name otherwise.
 
 use super::genxml::v10::{BlendEquation, BlendFunction, BlendOperandA, BlendOperandB, BlendOperandC};
 
@@ -288,43 +287,61 @@ pub fn needs_shader(b: &Blending, colour: &[f32; 4]) -> bool {
     !(can_fixed_function(b) && constant(constant_mask(b), colour).is_some())
 }
 
-/// The blend shader of `b` written through `color_mask` into a target of
-/// `samples` and `format` that src/shaderc/online/mali/blend.rs builds
-/// (Mesa's cache key without the constants, G/pan_blend_cso.c:59-98): all
-/// four channels into RGBA8, ADD or MIN on each channel group, the factors
-/// ZERO, ONE, the constant colour, SRC_ALPHA and the inverses of the
-/// constant colour, SRC_ALPHA and DST_ALPHA, and of those the equations
-/// `blend::builds` takes (the constant colour's at 1x, case 211's at 4x,
-/// case 190's columns 3 and 4). None for any other key, which stays
-/// refused.
-pub fn shader_equation(
+/// The key of `b`'s blend shader written through `color_mask` into a
+/// target of `samples` and `format`, the fragment program's colour fp16 when
+/// `colour_f16`, else fp32 (Mesa's cache key without the constants,
+/// G/pan_blend_cso.c:59-98, `src0_type` the program's `blend[0].type`,
+/// G/pan_context.c:210-216), for the targets src/shaderc/online/mali/
+/// blend.rs builds: RGBA8, 1x or 4x. None for any other target, which stays
+/// refused; a key the compiler does not build as Mesa does is refused by
+/// its compile. A MIN or MAX channel's factors are not read
+/// (`nir_blend_factored`): the key holds ONE, ONE for them, so the GL
+/// factors left behind do not make another shader of the same words.
+pub fn shader_key(
     b: &Blending,
     color_mask: u32,
     samples: u32,
     format: super::frame::TargetFormat,
-) -> Option<crate::shaderc::online::mali::blend::Equation> {
-    use crate::shaderc::online::mali::blend::{builds, Channel as C, Equation, Factor as F};
-    if color_mask != 0xf || format != super::frame::TargetFormat::Rgba8888 {
+    colour_f16: bool,
+) -> Option<crate::shaderc::online::mali::blend::Key> {
+    use crate::shaderc::online::mali::blend as sb;
+    if color_mask & 0xf == 0 || format != super::frame::TargetFormat::Rgba8888 || !matches!(samples, 1 | 4) {
         return None;
     }
-    let factor = |f: Factor| match (f.base, f.invert) {
-        (Base::One, false) => Some(F::One),
-        (Base::One, true) => Some(F::Zero),
-        (Base::ConstColor, false) => Some(F::Const),
-        (Base::ConstColor, true) => Some(F::InvConst),
-        (Base::SrcAlpha, false) => Some(F::SrcAlpha),
-        (Base::SrcAlpha, true) => Some(F::InvSrcAlpha),
-        (Base::DstAlpha, true) => Some(F::InvDstAlpha),
-        _ => None,
+    let factor = |f: Factor| sb::Factor {
+        base: match f.base {
+            Base::One => sb::Base::One,
+            Base::SrcColor => sb::Base::SrcColor,
+            Base::SrcAlpha => sb::Base::SrcAlpha,
+            Base::DstAlpha => sb::Base::DstAlpha,
+            Base::DstColor => sb::Base::DstColor,
+            Base::SrcAlphaSaturate => sb::Base::SrcAlphaSaturate,
+            Base::ConstColor => sb::Base::ConstColor,
+            Base::ConstAlpha => sb::Base::ConstAlpha,
+        },
+        invert: f.invert,
     };
-    /* a MIN channel reads no factor (`nir_blend_factored`) */
-    let channel = |c: Channel| match c.func {
-        Func::Add => Some(C::add(factor(c.src)?, factor(c.dst)?)),
-        Func::Min => Some(C::MIN),
-        _ => None,
+    let channel = |c: Channel| {
+        let factored = matches!(c.func, Func::Add | Func::Subtract | Func::ReverseSubtract);
+        sb::Channel {
+            func: match c.func {
+                Func::Add => sb::Func::Add,
+                Func::Subtract => sb::Func::Subtract,
+                Func::ReverseSubtract => sb::Func::ReverseSubtract,
+                Func::Min => sb::Func::Min,
+                Func::Max => sb::Func::Max,
+            },
+            src: factor(if factored { c.src } else { Factor::ONE }),
+            dst: factor(if factored { c.dst } else { Factor::ONE }),
+        }
     };
-    let eq = Equation { rgb: channel(b.rgb)?, alpha: channel(b.alpha)?, samples: u8::try_from(samples).ok()? };
-    builds(eq).then_some(eq)
+    Some(sb::Key {
+        rgb: channel(b.rgb),
+        alpha: channel(b.alpha),
+        mask: (color_mask & 0xf) as u8,
+        samples: samples as u8,
+        colour_f32: !colour_f16,
+    })
 }
 
 /// `pan_blend_to_fixed_function_equation` (:606-631) with blending on.

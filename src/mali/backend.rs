@@ -657,8 +657,8 @@ where
     }
 }
 
-/// The longest blend shader kept: Mesa's for case 211's equation is 22
-/// instructions, padded to 32 words.
+/// The longest blend shader kept: the longest of dEQP-GLES2's is 22
+/// instructions (tools/mali/testdata/blend_deqp.words), padded to 32 words.
 const BLEND_SHADER_WORDS: usize = 32;
 
 /// The blend shaders compiled so far, one per equation (Mesa caches them on
@@ -668,17 +668,19 @@ const BLEND_SHADERS: usize = 8;
 
 #[derive(Clone, Copy)]
 struct BlendShaderProgram {
-    eq: crate::shaderc::online::mali::blend::Equation,
+    eq: crate::shaderc::online::mali::blend::Key,
     /// 0: a free entry.
     n: usize,
     words: [u64; BLEND_SHADER_WORDS],
 }
 
 const NO_BLEND_SHADER: BlendShaderProgram = BlendShaderProgram {
-    eq: crate::shaderc::online::mali::blend::Equation::both(
-        crate::shaderc::online::mali::blend::Factor::Zero,
-        crate::shaderc::online::mali::blend::Factor::Zero,
-    ),
+    eq: {
+        use crate::shaderc::online::mali::blend::{Base, Channel, Factor, Func, Key};
+        let zero = Factor { base: Base::One, invert: true };
+        let c = Channel { func: Func::Add, src: zero, dst: zero };
+        Key { rgb: c, alpha: c, mask: 0, samples: 0, colour_f32: false }
+    },
     n: 0,
     words: [0; BLEND_SHADER_WORDS],
 };
@@ -691,7 +693,7 @@ const BLEND_SHADER_RGBA8: u32 = 0xed000;
 /// The blend shader of `eq`, from the cache or compiled now
 /// (src/shaderc/online/mali/blend.rs); None when it does not compile, which
 /// the frame builder then refuses by name.
-fn blend_shader(g: &mut MaliState, eq: crate::shaderc::online::mali::blend::Equation) -> Option<BlendShaderProgram> {
+fn blend_shader(g: &mut MaliState, eq: crate::shaderc::online::mali::blend::Key) -> Option<BlendShaderProgram> {
     if let Some(p) = g.blend_shaders.iter().find(|p| p.n != 0 && p.eq == eq) {
         return Some(*p);
     }
@@ -743,14 +745,15 @@ impl DrawBlendShader {
 }
 
 /// The blend shader a draw needs (`blend::needs_shader`) and that is built
-/// here (`blend::shader_equation`: the constant colour's equations into an
-/// RGBA8 target written whole, single-sampled or case 211's at 4x, and case
-/// 190's columns 3 and 4), compiled. None for a draw that needs none, or one
-/// not built (the frame builder refuses that draw by name).
+/// here (`blend::shader_key`: an RGBA8 target, 1x or 4x, the fragment
+/// program's colour fp16 or fp32), compiled. None
+/// for a draw that needs none, or one not built (the frame builder refuses
+/// that draw by name).
 fn draw_blend_shader(
     g: &mut MaliState,
     d: &GlesDraw,
     target: &frame::Target,
+    colour_f16: bool,
 ) -> Result<Option<DrawBlendShader>, FrameError> {
     let mask = if d.color_write { d.color_mask & 0xf } else { 0 };
     if !d.blend || mask == 0 || depth_only(d) {
@@ -760,7 +763,7 @@ fn draw_blend_shader(
     if !blend::needs_shader(&b, &d.blend_color) {
         return Ok(None);
     }
-    let eq = blend::shader_equation(&b, u32::from(mask), target.samples, target.format);
+    let eq = blend::shader_key(&b, u32::from(mask), target.samples, target.format, colour_f16);
     Ok(eq.and_then(|eq| blend_shader(g, eq)).map(|p| DrawBlendShader::of(&p.words[..p.n])))
 }
 
@@ -2997,7 +3000,11 @@ fn add_to_open(g: &mut MaliState, d: &GlesDraw, ctx: &frame::Context) -> Result<
     let occlusion = query_counter(g, d.occlusion_query);
     texture_ready(g, d)?;
     let copied = sampled_binds(d).any(|t| t.incomplete == 0 && needs_copy(t));
-    let blend = draw_blend_shader(g, d, &target)?;
+    /* the colour type the fragment program writes (Mesa's blend[0].type) */
+    // SAFETY: `programs` found the fragment record non-null; it lives in
+    // the compiler's keep arena past this draw.
+    let colour_f16 = unsafe { MaliShader::of(&*d.fs) }.is_some_and(|r| r.colour_f16);
+    let blend = draw_blend_shader(g, d, &target, colour_f16)?;
     let draw = |fr: &mut frame::OpenFrame, a: &mut Arenas, cs: &mut Stream| {
         /* with the draw, so that a refused draw leaves no preload behind */
         if let Some((p, z, s, cleared)) = zs_preload {

@@ -2624,7 +2624,23 @@ if command -v cc >/dev/null 2>&1; then
     done
     [ "$total" -eq 5 ] || { echo "pan_shc: $total regions compared, 5 planned"; return 1; }
     echo "pan_shc: 5 regions compared (planned 5), 0 differ"
+    # The blend shader references (README-pan_shc.md "Blend shaders"):
+    # pan_shc --blend on every key of blend_deqp.words and blend_random.sha
+    # gives their bytes again, and blend_nir_rules.rs is what
+    # gen_blend_nir_rules.py makes from this tree's NIR algebraic rules.
+    local shc=$MESA_PAN_TREE/build-pan/src/panfrost/pan_shc/pan_shc
+    python3 -I tools/mali/blend_deqp_ref.py list | "$shc" --blend >"$dir/blend_deqp.json" 2>/dev/null &&
+      python3 -I tools/mali/blend_deqp_ref.py words "$dir/blend_deqp.json" | cmp - tools/mali/testdata/blend_deqp.words ||
+      { echo "pan_shc --blend: not blend_deqp.words"; return 1; }
+    python3 -I tools/mali/blend_deqp_ref.py random | "$shc" --blend >"$dir/blend_random.json" 2>/dev/null &&
+      python3 -I tools/mali/blend_deqp_ref.py digest "$dir/blend_random.json" | cmp - tools/mali/testdata/blend_random.sha ||
+      { echo "pan_shc --blend: not blend_random.sha"; return 1; }
+    echo "pan_shc --blend: blend_deqp.words and blend_random.sha made again, byte-equal"
     exec 8>&-
+    PYTHONDONTWRITEBYTECODE=1 python3 -I tools/mali/gen_blend_nir_rules.py "$MESA_PAN_TREE" |
+      cmp - src/shaderc/online/mali/blend_nir_rules.rs ||
+      { echo "blend_nir_rules.rs: not what gen_blend_nir_rules.py makes from MESA_PAN_TREE"; return 1; }
+    echo "blend_nir_rules.rs == gen_blend_nir_rules.py on MESA_PAN_TREE"
   }
   # pan_ref_diff.py and ref_cases.py without a Mesa tree: the committed
   # pan_shc outputs (testdata/pan_shc-out) against the committed expect.json
@@ -2658,9 +2674,9 @@ if command -v cc >/dev/null 2>&1; then
   step "run     mali sweep_passsets self-test" sweep_passsets_selftest
   step "run     mali valhall_src_info self-test" valhall_src_info_selftest
   if [ -n "${MESA_PAN_TREE:-}" ]; then
-    step "run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair (MESA_PAN_TREE)" pan_shc_check
+    step "run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair, the blend references, blend_nir_rules.rs (MESA_PAN_TREE)" pan_shc_check
   else
-    gap "mali pan_shc on the tri pair: no MESA_PAN_TREE (tools/mali/build_pan_shc.sh makes one)"
+    gap "mali pan_shc on the tri pair, the blend references and blend_nir_rules.rs: no MESA_PAN_TREE (tools/mali/build_pan_shc.sh makes one)"
   fi
   # The GL suite every board runs, compiled on the host for the PowerVR arm
   # (GL_TEST_HOST) and the GC7000 arm (GL_TEST_USER); the V3D arm is
