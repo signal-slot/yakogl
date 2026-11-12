@@ -84,6 +84,13 @@ want tools/mali/check.sh mali
 want tools/vivante/es100.py "vivante mali"
 want tests/v3d_cube_noseamless.rs v3d
 want tests/depth_resolve_v3d.rs v3d
+# gl_FragDepth's host tests (#340): each GPU's fragdepth rows only, and the
+# cases file both GPUs'
+want tests/es3_fragdepth_v3d.rs v3d
+want tests/es3_fragdepth_v3d_state.rs v3d
+want tests/es3_fragdepth_v3d_sim.rs v3d
+want tests/es3_fragdepth_gc.rs vivante
+want tests/es3_fragdepth_cases.rs "vivante v3d"
 want src/mali/backend.rs mali
 want src/mali/genxml/v10.rs mali
 want src/shaderc/online/mali/mod.rs mali
@@ -133,7 +140,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/standalone-boot.md)
-expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 226 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 232 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -248,7 +255,7 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables 
 # the control: the full plan keeps its rows, the table row once, before the
 # first CONFIGS row that reads the tables
 out=$(plan src/gl/draw.rs)
-# 230 rows: ok plus gaps, because a row whose tool this host lacks is a gap
+# 236 rows: ok plus gaps, because a row whose tool this host lacks is a gap
 # here and a plan row on the gate host; the sum is the same on both. (Seven
 # more for the direct boot: am62p-mkboot.py, the second-stage vectors, the
 # yakogl-boot-stage2 clippy, test and softfloat rows, boot_stage2.h's layout
@@ -262,17 +269,31 @@ out=$(plan src/gl/draw.rs)
 # build, tally and symbols self-tests; two for the rpi_5
 # probes: their images and the fdt_walk host test; one more for the dEQP
 # GLES3 corpus line, a gap here, where the plans run with no layout; one for
-# the NanoPC-T6 verdict tool's self-test, driver/tools/kexec-zephyr/t6-verdict-test.sh.)
+# the NanoPC-T6 verdict tool's self-test, driver/tools/kexec-zephyr/t6-verdict-test.sh;
+# six for the gl_FragDepth host tests: the GC7000UL writer and its
+# early-Z rule words, the V3D writer, its shader record's and CFG_BITS' words
+# and its interpreter values, and tests/es3_fragdepth_cases.rs on each of the
+# two GPUs.)
 checks=$((checks + 1))
 line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
 total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
-[ "$total" = 230 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 230:$line"; fails=$((fails + 1)); }
+[ "$total" = 236 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 236:$line"; fails=$((fails + 1)); }
 count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
 order "full plan: the tables before their first reader" "$gen" \
   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
 # no reader selected, no table row (a docs change)
 out=$(plan docs/standalone-boot.md)
 count "docs: no table row" "precompiled tables for the tier" 0 "$out"
+# The gl_FragDepth host rows (#340): each GPU's fragdepth test reaches its own
+# rows, and the cases file both of them.
+out=$(plan tests/es3_fragdepth_v3d_sim.rs)
+expect "fragdepth: the V3D sim test reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_fragdepth_v3d_sim.rs\)$' "$out"
+expect "fragdepth: it does not reach the GC7000UL writer row" '^skip  test    host-test,gpu-vivante,shaderc-online \(tests/es3_fragdepth_gc.rs\)$' "$out"
+out=$(plan tests/es3_fragdepth_gc.rs)
+expect "fragdepth: the GC7000UL test reaches its row" '^plan  test    host-test,gpu-vivante,shaderc-online \(tests/es3_fragdepth_gc.rs\)$' "$out"
+expect "fragdepth: a GC7000UL change skips the V3D writer row" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_fragdepth_v3d.rs\)$' "$out"
+out=$(plan tests/es3_fragdepth_cases.rs)
+count "fragdepth: the cases file reaches its two rows" '^plan  test    .*es3_fragdepth_cases.rs\)$' 2 "$out"
 # --local: a shared-layer change runs the local set only
 local_plan() {
   ZEPHYR_WS=$PWD/build/check/plan-ws YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS="$1" tools/check.sh --local HEAD 2>&1 |
