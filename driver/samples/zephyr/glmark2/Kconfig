@@ -36,6 +36,17 @@ config GLMARK2_PVR_ONE_KICK_IN_FLIGHT
 	  (docs/notes/pvr-fence-wait.md, "The next
 	  experiment"). A measurement knob: off for a score.
 
+config GLMARK2_GC_TILED_RT
+	bool "GC7000: tiled render targets and early depth (measurement)"
+	depends on YAKOGL_DRV_GPU_VIVANTE
+	select YAKOGL_TEST_KNOBS
+	help
+	  Calls gc_debug_set_tiled_rt(1) before the first scene: the Vivante
+	  backend's tiled shadow targets, resolved by the RS in the same stream,
+	  and early depth into them (docs/notes/gc-tiled-wire.md). The knob
+	  exists only with CONFIG_YAKOGL_TEST_KNOBS, which this selects.
+	  A measurement knob: off for a score.
+
 config GLMARK2_FRAME_DUMP
 	bool "Print each scene's last frame as text on the console"
 	help

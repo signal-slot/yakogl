@@ -362,6 +362,16 @@ config GC_GL_TEST_SKIP
 	  the rest readable while it is worked on. A skipped case counts as
 	  neither a pass nor a failure, so the pass count stays honest.
 
+config GL_TEST_GC_TILED_RT
+	bool "Turn the GC7000's tiled render targets on (a measurement, off in products)"
+	select YAKOGL_TEST_KNOBS
+	default n
+	help
+	  Calls gc_debug_set_tiled_rt(1) before the cases
+	  (docs/notes/gc-tiled-wire.md): tiled shadow targets resolved by the
+	  RS in the same stream, and early depth into them. Off, the cases run
+	  as before.
+
 config GC_GL_TEST_MSAA
 	bool "Turn the GC7000's 4x MSAA on (a measurement, off in products)"
 	depends on YAKOGL_TEST_KNOBS

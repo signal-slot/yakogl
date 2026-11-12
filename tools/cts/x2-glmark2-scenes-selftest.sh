@@ -167,6 +167,27 @@ nd=$(grep -c 'args=--dry-run x2 run ' "$STUB_LOG")
 [ "$n" = 5 ] && [ "$nd" = 5 ] && ok "dry-run: every board.sh call carries --dry-run" || bad "dry-run: $nd of $n calls"
 check "dry-run: table still printed" "terrain	${MAIN2:0:8}	0x1000" "$out"
 
+# ---- --conf: an allowlist, a tag in the commit column and the directory ------------------
+run --dry-run --conf CONFIG_GLMARK2_GC_TILED_RT=y "$T/o10" terrain
+rc_is "--conf accepted key: exit 0" 0 "$rc"
+check "--conf: -D passed to west build" "-DCONFIG_GLMARK2_GC_TILED_RT=y" "$(grep '^west' "$STUB_LOG")"
+check "--conf: commit column carries +tiled_rt" "terrain	${MAIN2:0:8}+tiled_rt	0x1000" "$out"
+[ -d "$T/o10/terrain-tiled_rt" ] && ok "--conf: record dir suffixed" || bad "--conf: no $T/o10/terrain-tiled_rt"
+run --dry-run "$T/o10" terrain
+absent "no --conf: no -D of the knob" "GC_TILED_RT" "$(grep '^west' "$STUB_LOG")"
+absent "no --conf: plain commit column" "+tiled_rt" "$out"
+[ -d "$T/o10/terrain" ] && ok "off and on runs share one outdir" || bad "no plain record dir beside the tagged one"
+run --dry-run --conf CONFIG_GLMARK2_GC_TILED_RT=y --conf CONFIG_GLMARK2_GC_TILED_RT=n "$T/o11" terrain
+check "--conf repeated: both passed" "-DCONFIG_GLMARK2_GC_TILED_RT=n" "$(grep '^west' "$STUB_LOG")"
+run --dry-run --conf CONFIG_GLMARK2_FRAME_DUMP=y "$T/o12" terrain
+rc_is "--conf key outside the allowlist: refused (exit 2)" 2 "$rc"
+check "--conf refusal: the message" "not in the allowlist" "$out"
+[ ! -s "$STUB_LOG" ] && ok "--conf refused: no build, no board call" || bad "--conf refused: stub was called"
+run --dry-run --conf 'CONFIG_GLMARK2_GC_TILED_RT=y;x' "$T/o12" terrain
+rc_is "--conf odd value: refused" 2 "$rc"
+run --dry-run --conf "$T/o12" terrain
+rc_is "--conf without KEY=VAL: refused" 2 "$rc"
+
 # ---- the board does not come back: stop, no retry -----------------------------------------
 STUB_FAIL_SEL=0x1001 run "$T/o9" terrain refract
 rc_is "board not back: exit 5" 5 "$rc"

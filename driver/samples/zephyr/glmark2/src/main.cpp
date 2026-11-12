@@ -138,6 +138,9 @@ void yakogl_gl_error_tag(uint32_t tag);
 uint32_t yakogl_gl_errors_kept(void);
 int yakogl_gl_error_first(uint32_t i, uint32_t *code, uint32_t *tag, char *name, size_t cap);
 }
+#if defined(CONFIG_GLMARK2_GC_TILED_RT)
+extern "C" void gc_debug_set_tiled_rt(int on); /* the Vivante backend's test knob */
+#endif
 #if defined(CONFIG_YAKOGL_GPU_V3D)
 extern "C" {
 #include "zephyr_v3d.h" /* YakoGL src/osal: osal_v3d_last_completed_job_us */
@@ -1462,6 +1465,11 @@ int run()
     /* A measurement arm: every swap waits for its own kick. */
     pvr_backend_set_option(PVR_BACKEND_OPT_ONE_IN_FLIGHT, 1);
     printk("glmark2: PVR_BACKEND_OPT_ONE_IN_FLIGHT=1 (one kick in flight; a measurement, not a score)\n");
+#endif
+#if defined(CONFIG_GLMARK2_GC_TILED_RT)
+    /* A measurement arm: tiled render targets and early depth (gc_tiled_rt). */
+    gc_debug_set_tiled_rt(1);
+    printk("glmark2: gc_tiled_rt=1 (tiled render targets; a measurement, not a score)\n");
 #endif
 
     ResultsFile &results = ResultsFile::get();

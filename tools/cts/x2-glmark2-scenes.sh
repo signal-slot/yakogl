@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-#   tools/cts/x2-glmark2-scenes.sh [--dry-run] [--commit <rev>] <outdir> <scene>...
+#   tools/cts/x2-glmark2-scenes.sh [--dry-run] [--commit <rev>] [--conf KEY=VAL]... <outdir> <scene>...
 #
 # Per-scene glmark2 PERF runs on the Armadillo-X2 (kexec-dev, a development
 # run) in one command. For each scene: one glmark2 image for
@@ -14,6 +14,13 @@
 # v0..v3). One table at the end, one row a run:
 #
 #   scene  commit  selector  verdict line  record words  decoded  ms/frame
+#
+# --conf KEY=VAL (repeatable): passed to the west build as -DKEY=VAL. Only
+# CONFIG_GLMARK2_GC_TILED_RT is accepted (the gc_tiled_rt test knob of
+# docs/notes/gc-tiled-wire.md, session A); any other key is refused (exit 2).
+# The table's commit column then reads <sha8>+tiled_rt (=VAL when VAL is not
+# y), and the build and record directories of a scene get a -tiled_rt suffix,
+# so an off and an on run share one <outdir>.
 #
 # ms/frame is page 0's v1 (the frame, t2 - t0, in us) / 1000; '-' elsewhere.
 # These are X2 development numbers: they go into commit messages, docs/notes/
@@ -61,17 +68,34 @@ MARKER='gc_wdog_arm: armed'
 die() { echo "x2-glmark2-scenes: $1" >&2; exit "${2:-2}"; }
 
 DRY=0 COMMIT=HEAD
+CONFS=() TAG= DSUF=
+CONF_ALLOW=(CONFIG_GLMARK2_GC_TILED_RT)
 while [ $# -gt 0 ]; do
     case $1 in
     --dry-run) DRY=1; shift ;;
     --commit) [ $# -ge 2 ] || die "--commit needs a revision"; COMMIT=$2; shift 2 ;;
-    -h | --help) sed -n '5,50p' "$0"; exit 0 ;;
+    --conf)
+        [ $# -ge 2 ] || die "--conf needs KEY=VAL"
+        [[ $2 =~ ^([A-Za-z0-9_]+)=([A-Za-z0-9_]+)$ ]] || die "--conf '$2': KEY=VAL, letters, digits and _ only"
+        ckey=${BASH_REMATCH[1]} cval=${BASH_REMATCH[2]}
+        case " ${CONF_ALLOW[*]} " in
+        *" $ckey "*) ;;
+        *) die "refused: --conf key '$ckey' is not in the allowlist (${CONF_ALLOW[*]})" ;;
+        esac
+        CONFS+=("-D$ckey=$cval")
+        ctag=${ckey#CONFIG_GLMARK2_GC_}
+        ctag=$(tr '[:upper:]' '[:lower:]' <<< "$ctag")
+        [ "$cval" = y ] || ctag=$ctag=$cval
+        TAG=$TAG+$ctag
+        DSUF=$DSUF-${ctag//=/_}
+        shift 2 ;;
+    -h | --help) sed -n '5,58p' "$0"; exit 0 ;;
     --) shift; break ;;
     -*) die "unknown option $1" ;;
     *) break ;;
     esac
 done
-[ $# -ge 2 ] || die "usage: x2-glmark2-scenes.sh [--dry-run] [--commit <rev>] <outdir> <scene>..."
+[ $# -ge 2 ] || die "usage: x2-glmark2-scenes.sh [--dry-run] [--commit <rev>] [--conf KEY=VAL]... <outdir> <scene>..."
 OUT=$1
 shift
 SCENES=("$@")
@@ -121,12 +145,12 @@ ytools() {
 
 # ---- one image a scene ---------------------------------------------------------
 build_image() {
-    local scene=$1 b=$OUT/build/$1 mods
+    local scene=$1 b=$OUT/build/$1$DSUF mods
     mods=$("${X2SC_MODULES_SH:-$HERE/zephyr-modules.sh}" "$ZEPHYR_WS") || die "zephyr-modules.sh failed"
     mkdir -p "$OUT/build"
     (cd "$ZEPHYR_WS" && "$WEST" build -p always -b "$ZBOARD" -d "$b" "$SRC/driver/samples/zephyr/glmark2" -- \
         "-DZEPHYR_MODULES=$mods" "-DGLMARK2_SRC=$GLMARK2_SRC" \
-        "-DCONFIG_GLMARK2_ARGS=\"-b $scene\"") > "$b.log" 2>&1 < /dev/null ||
+        "-DCONFIG_GLMARK2_ARGS=\"-b $scene\"" ${CONFS[@]+"${CONFS[@]}"}) > "$b.log" 2>&1 < /dev/null ||
         die "build of $scene failed (see $b.log)" 4
     [ -s "$b/zephyr/zephyr.bin" ] || die "build of $scene left no $b/zephyr/zephyr.bin" 4
     grep -aqF "$MARKER" "$b/zephyr/zephyr.bin" ||
@@ -142,7 +166,7 @@ run_one() {
     local scene=$1 sel=$2 name rc line verdict rec words dec ms v1 label
     label=${sel:-none}
     if [ -n "$sel" ]; then name=${scene//[:=]/_}-p$((sel & 0xff)); else name=${scene//[:=]/_}-nosel; fi
-    local logdir=$OUT/${scene//[:=]/_}
+    local logdir=$OUT/${scene//[:=]/_}$DSUF
     mkdir -p "$logdir"
     # no NETBOOT_NO_WATCHDOG, no BOARD_UART, whatever the caller exported
     local -a envc=(env -u NETBOOT_NO_WATCHDOG -u BOARD_UART -u SEL)
@@ -169,7 +193,7 @@ run_one() {
         fi
     fi
     [ "$DRY" = 1 ] && [ -z "$line" ] && line="(dry-run, rc=$rc)"
-    row "$scene" "$SHORT" "$label" "${line:-no verdict line, rc=$rc}" "$words" "$dec" "$ms"
+    row "$scene" "$SHORT$TAG" "$label" "${line:-no verdict line, rc=$rc}" "$words" "$dec" "$ms"
     case $rc in
     0 | 4) ;;
     *) STOP=$rc ;;

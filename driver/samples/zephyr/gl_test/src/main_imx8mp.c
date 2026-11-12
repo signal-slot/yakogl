@@ -468,6 +468,15 @@ int main(void)
 		LOG_INF("gc_gl_test: shc_debug_uniidx=1 (no clamp before the offset multiply)");
 	}
 #endif
+#ifdef CONFIG_GL_TEST_GC_TILED_RT
+	{
+		extern void gc_debug_set_tiled_rt(int on);
+
+		/* before the first case: the backend reads it per scene */
+		gc_debug_set_tiled_rt(1);
+		LOG_INF("gc_gl_test: gc_tiled_rt=1 (tiled render targets and early depth on)");
+	}
+#endif
 	gl_test_skip = CONFIG_GC_GL_TEST_SKIP;
 	LOG_INF("gc_gl_test: case %d on the GC7000UL%s%s", CONFIG_GC_GL_TEST_CASE,
 		CONFIG_GC_GL_TEST_SKIP[0] ? ", skipping " : "", CONFIG_GC_GL_TEST_SKIP);
