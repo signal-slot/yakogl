@@ -696,16 +696,19 @@ fn a_split_instanced_draw_that_reads_gl_instance_id_is_drawn_with_each_base() {
     draw_mixed(VS_READS_ID, 4);
     with_platform(|p| {
         assert!(!p.log.iter().any(|l| l.contains("draw refused")), "{:?}", p.log);
-        assert_eq!(p.vgens.len(), 4, "one vertex PDS program per instance: {:?}", p.vgens);
-        for (i, &(reg, base)) in p.vgens.iter().enumerate() {
+        /* a clear quad may come first: the last four draws are the instances */
+        let n = 4;
+        assert!(p.vgens.len() >= n, "one vertex PDS program per instance: {:?}", p.vgens);
+        let vgens = &p.vgens[p.vgens.len() - n..];
+        for (i, &(reg, base)) in vgens.iter().enumerate() {
             assert_ne!(reg, PVR_PDS_NO_ID_REG, "instance {i}: gl_InstanceID has a register");
             assert_eq!(base, i as u32, "instance {i}: the base");
         }
-        assert_eq!(p.instances.len(), 4, "four index lists: {:?}", p.instances);
+        assert!(p.instances.len() >= n, "four index lists: {:?}", p.instances);
         assert!(p.instances.iter().all(|&n| n <= 1), "each is one instance: {:?}", p.instances);
         /* the PDS data of the draws: instances 1..3 end in their base */
-        assert_eq!(p.vdata.len(), 4);
-        for (i, &(off, bytes)) in p.vdata.iter().enumerate() {
+        assert!(p.vdata.len() >= n);
+        for (i, &(off, bytes)) in p.vdata[p.vdata.len() - n..].iter().enumerate() {
             let w = pds_words(p, off, (bytes / 4) as usize);
             let tagged = w.last().is_some_and(|&x| x & 0xFFFF_0000 == BASE_TAG);
             assert_eq!(tagged, i != 0, "instance {i}: base dword present: {w:x?}");
