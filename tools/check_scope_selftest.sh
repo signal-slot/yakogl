@@ -87,6 +87,13 @@ want tools/mali/check.sh mali
 want tools/vivante/es100.py "vivante mali"
 want tests/v3d_cube_noseamless.rs v3d
 want tests/depth_resolve_v3d.rs v3d
+# gl_FragDepth's host tests (#340): each GPU's fragdepth rows only, and the
+# cases file both GPUs'
+want tests/es3_fragdepth_v3d.rs v3d
+want tests/es3_fragdepth_v3d_state.rs v3d
+want tests/es3_fragdepth_v3d_sim.rs v3d
+want tests/es3_fragdepth_gc.rs vivante
+want tests/es3_fragdepth_cases.rs "vivante v3d"
 want src/mali/backend.rs mali
 want src/mali/genxml/v10.rs mali
 want src/shaderc/online/mali/mod.rs mali
@@ -301,6 +308,16 @@ order "full plan: the tables before their first reader" "$gen" \
 # no reader selected, no table row (a docs change)
 out=$(plan docs/standalone-boot.md)
 count "docs: no table row" "precompiled tables for the tier" 0 "$out"
+# The gl_FragDepth host rows (#340): each GPU's fragdepth test reaches its own
+# rows, and the cases file both of them.
+out=$(plan tests/es3_fragdepth_v3d_sim.rs)
+expect "fragdepth: the V3D sim test reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_fragdepth_v3d_sim.rs\)$' "$out"
+expect "fragdepth: it does not reach the GC7000UL writer row" '^skip  test    host-test,gpu-vivante,shaderc-online \(tests/es3_fragdepth_gc.rs\)$' "$out"
+out=$(plan tests/es3_fragdepth_gc.rs)
+expect "fragdepth: the GC7000UL test reaches its row" '^plan  test    host-test,gpu-vivante,shaderc-online \(tests/es3_fragdepth_gc.rs\)$' "$out"
+expect "fragdepth: a GC7000UL change skips the V3D writer row" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_fragdepth_v3d.rs\)$' "$out"
+out=$(plan tests/es3_fragdepth_cases.rs)
+count "fragdepth: the cases file reaches its two rows" '^plan  test    .*es3_fragdepth_cases.rs\)$' 2 "$out"
 # --local: a shared-layer change runs the local set only
 local_plan() {
   ZEPHYR_WS=$PWD/build/check/plan-ws YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS="$1" tools/check.sh --local HEAD 2>&1 |
