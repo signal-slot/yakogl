@@ -1,0 +1,5 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* The STM32MP257F-DK's A35: the board layer's GPU node and carve-out, as
+ * gc_fence and gc_clear take them (examples/zephyr.cmake). */
+#include "../../../../zephyr/lib/board/stm32mp2/app.overlay"

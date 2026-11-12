@@ -1,14 +1,15 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# gl_test (Zephyr: Verdin AM62P, Verdin iMX8M Plus, Armadillo-X2, Raspberry Pi 4)
+# gl_test (Zephyr: Verdin AM62P, Verdin iMX8M Plus, Armadillo-X2, STM32MP257F-DK, Raspberry Pi 4)
 
 Runs `driver/tools/pvrlab/gl_test.c`, YakoGL's on-silicon test suite, on the
-three GPUs: the Verdin AM62P's PowerVR, the i.MX8M Plus's Vivante GC7000UL
-and the Pi 4's V3D. It is one sample for every board: the Zephyr board (`-b`)
-picks the GPU, `src/main_am62p.c`, `main_imx8mp.c` or `main_rpi4.c` (the lines
-that start the back end and the board's way to give a verdict) and the files
-in `boards/` (`imx8mp.conf` and `armadillo_x2.conf` are added by
-`CMakeLists.txt` for the i.MX8M Plus boards). The options of each GPU are in
+GPUs: the Verdin AM62P's PowerVR, the i.MX8M Plus's Vivante GC7000UL, the
+STM32MP257F-DK's Vivante GCNanoUltra31 and the Pi 4's V3D. It is one sample
+for every board: the Zephyr board (`-b`) picks the GPU, `src/main_am62p.c`,
+`main_imx8mp.c`, `main_stm32mp2.c` or `main_rpi4.c` (the lines that start the
+back end and the board's way to give a verdict) and the files in `boards/`
+(`imx8mp.conf` and `armadillo_x2.conf` are added by `CMakeLists.txt` for the
+i.MX8M Plus boards, the board layer's `stm32mp2/app.conf` for the DK). The options of each GPU are in
 their own menu of `Kconfig`. Every case reads its pixels back and prints
 `gl_test: case N <name>: PASS/FAIL`; a run ends with
 `gl_test: all: N of M cases failed`. The header comment of `gl_test.c` lists
@@ -121,6 +122,55 @@ at `{0, 0}`. Every such clear stored 0, while the path case 13 uses was
 correct. Case 53 now checks both paths (checks 1-2: the clear alone, then
 drawn over; checks 3-4: a draw takes the clear along). When a probe isolates
 the thing under test, check that it has not moved it onto different code.
+
+## STM32MP257F-DK, Cortex-A35 (Vivante GCNanoUltra31)
+
+The DK's GPU (model 0x8000, revision 0x6205; #1281) runs the same suite
+through `src/main_stm32mp2.c` and the board layer (`yakogl_board.h`,
+`driver/zephyr/lib/board/stm32mp2`), as `gc_fence` and `gc_clear` do, not the
+i.MX8MP's `yakogl_gc_board`. Before `main()` the layer powers the GPU for the
+driver (`gc_power_mp2.c`: SCMI over OP-TEE, the RCC gate and reset; anything
+but 0x8000/0x6205 is refused with a PSCI reset) and arms OP-TEE's watchdog;
+the run ends with the record and PSCI SYSTEM_RESET back into ST's Linux, at
+`CONFIG_YAKOGL_STM32MP2_LIFETIME_S` (100 s here) at the latest. The board
+files are the board layer's `app.conf` (added by `CMakeLists.txt`) and
+`app.overlay` (included by `boards/stm32mp257f_dk_stm32mp257fxx_a35.overlay`),
+and `boards/stm32mp257f_dk_stm32mp257fxx_a35.conf` for gl_test's own (the
+board layer on, the lifetime).
+
+```sh
+# from the top of a west workspace made from yakogl's west.yml (../README.md)
+# the first board run: case 1 ("uniform") alone
+west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d build/gl_test_mp2 \
+    yakogl/driver/samples/zephyr/gl_test -- -DYAKOGL_WERROR=ON \
+    -DCONFIG_GL_TEST_MP2_SET_HEAD=y
+```
+
+Run it with `tools/board-stm32mp2.sh` (the one-shot from the DK's own U-Boot,
+back into ST's Linux; its header comment has the steps).
+
+Kconfig (`Kconfig`, the STM32MP257F-DK menu):
+
+- `GL_TEST_MP2_CASE`: the case to run, 7 the regression set (the default).
+- `GL_TEST_MP2_SET_HEAD` (off by default): run only the first
+  `GL_TEST_MP2_SET_HEAD_CASES` cases of the regression set, in its order
+  (`SET_ORDER`, `driver/tools/pvrlab/runner/src/lib.rs`), instead of
+  `GL_TEST_MP2_CASE`. With the default of 1 that is case 1, "uniform" (one
+  fragment-uniform draw, read back), alone: the DK's first GL run
+  (`gc_gl_triangle`, `docs/notes/pre-study-stm32mp257f-dk.md` row P7). 2 adds
+  case 2 (texture), and so on; more than one case runs on one context as a
+  list.
+
+The console has every case's line and `gl_test: all:`; the record is the
+`yk-record:` line on USART2, kind CASE as on the i.MX8MP: one case gives
+w1 = case << 16 | first bad check << 8 | status (1 pass, 2 a check failed,
+3 failed with no check, 5 no GPU; check 255 none) with w2, w3 the checks made
+and 0, or what the bad check read and wanted; a set or a head of more than
+one case gives the set summary (status 7). Raise the lifetime (and the
+runner's `RUN_BOUND`, 120 s) for anything longer than a few cases: past it
+the layer resets the board in the middle of the suite.
+
+Built for the DK with `-Werror`; not run on the board yet.
 
 ## Raspberry Pi 4 (V3D 4.2)
 
