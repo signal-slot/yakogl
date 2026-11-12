@@ -40,9 +40,16 @@ How etnaviv writes the format: `translate_texture_format` (`F:275-294`)
 returns the table's `.tex` (`F:86-273`); a value with `EXT_FORMAT` goes into
 `TEXDESC_CONFIG1.FORMAT_EXT` with `CONFIG0.FORMAT` 0, any other into
 `CONFIG0.FORMAT` (`D:179-186`). The swizzle is the view's, in
-`CONFIG1.SWIZZLE_*` (`get_texture_swiz`, `F:346-384`): identity for every
-format of ours (the gallium view of a GL texture is identity; only R8_UNORM,
-emulated with L8, and DXT1_RGB patch it). A pure signed-integer format with
+`CONFIG1.SWIZZLE_*` (`get_texture_swiz`, `F:346-384`): the format's own
+channels with the view's GL_TEXTURE_SWIZZLE_* on top (R8_UNORM, emulated
+with L8, and DXT1_RGB patch it). This back end composes the same way:
+`descriptor_swizzle` (`src/vivante/texture.rs`) takes the format's channels
+(identity, with the no-alpha ONE and the depth-luminance (d, d, d, 1)) and
+applies `GlesTextureBind::swizzle` (`swizzle_source`) on top; the wrap in
+the W direction (`SAMP_CTRL0`) is `wrap_r` for a 3D texture. Both are in
+the tree (`840ea7ec`; `tests/es3_tex_swizzle_gc.rs`,
+`docs/notes/gc-texture-swizzle-wrap.md`). A 128-bit class keeps the identity
+swizzle (below, section 3). A pure signed-integer format with
 8- or 16-bit channels also sets `CONFIG2.SIGNED_INT8` / `SIGNED_INT16`
 (`D:187-189`; `X:165-166`). `SAMP_CTRL0.INT_FILTER` is set for a unorm,
 non-sRGB format that is not R10G10B10A2 or ETC2 R11/RG11, outside 3D, without
@@ -67,7 +74,9 @@ EXT_texture_border_clamp); etnaviv maps it to CLAMP_TO_EDGE ("XXX",
 descriptor's border words (`T:170,194-200`; no reference in `D`). The GL
 core's `no_alpha` (a GL_RGB / GL_LUMINANCE base) turns the alpha swizzle into
 `1`, and `depth_luminance` the green and blue into `R`, for every class
-(`texture.rs` `format_words`); the column is the swizzle without them.
+(`texture.rs` `format_words`); the column is the swizzle without them, and without the GL
+swizzle of the binding (section 1), which is composed on top for every class
+but the 128-bit ones.
 
 | class | TE format | swizzle | CONFIG2 | INT_FILTER | GC7000UL samples it | in mask | integer sampler | sRGB, border | Mesa's fallback | Mesa |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -93,14 +102,14 @@ core's `no_alpha` (a GL_RGB / GL_LUMINANCE base) turns the alpha swizzle into
 | `GLES_TEXFMT_RGBA8I` | `TEXTURE_FORMAT_EXT_A8B8G8R8I` | RGBA | `SIGNED_INT8` | no | yes (HALTI2: integer) | yes | `isampler*`: the bytes, sign-extended by CONFIG2 | linear; none | - | `F:160`; `D:187-189`; `X:87,165` |
 | `GLES_TEXFMT_RGBA16UI` | `TEXTURE_FORMAT_EXT_A16B16G16R16I` | RGBA | - | no | yes (HALTI2: integer) | yes | `usampler*`: the halves, zero-extended | linear; none | - (R16/RG16 have EXT_R16I/EXT_G16R16I, `F:102-103,147-148`) | `F:201`; `D:187-189`; `X:90` |
 | `GLES_TEXFMT_RGBA16I` | `TEXTURE_FORMAT_EXT_A16B16G16R16I` | RGBA | `SIGNED_INT16` | no | yes (HALTI2: integer) | yes | `isampler*`: the halves, sign-extended by CONFIG2 | linear; none | - | `F:202`; `D:187-189`; `X:90,166` |
-| `GLES_TEXFMT_RGBA32UI` | none | RGBA | - | no | yes, as two planes (HALTI5) | no | not here (section 3) | linear; none | two G32R32I planes (R,G then B,A), a companion sampler slot and the shader's two look-ups joined (`etnaviv_nir_lower_128bit.c:89-170`; `etnaviv_texture_state.c:286-296,516-557`); R32UI and RG32UI are EXT_R32I / EXT_G32R32I on HALTI5 (`F:286-291`) | `F:229`; `S:423-429`; `X:96` |
+| `GLES_TEXFMT_RGBA32UI` | none | RGBA | - | no | yes, as two planes (HALTI5); the path is in the tree, inert | no (pending item gc-wide128-flip) | `usampler*`/`isampler*`: the planes' R,G halves joined (section 3), not offered | linear; none | two G32R32I planes (R,G then B,A), a companion sampler slot and the shader's two look-ups joined (`etnaviv_nir_lower_128bit.c:89-170`; `etnaviv_texture_state.c:286-296,516-557`); R32UI and RG32UI are EXT_R32I / EXT_G32R32I on HALTI5 (`F:286-291`) | `F:229`; `S:423-429`; `X:96` |
 | `GLES_TEXFMT_RGBA32I` | none | RGBA | - | no | yes, as two planes (HALTI5) | no | not here (section 3) | linear; none | as RGBA32UI | `F:230`; `S:423-429`; `X:96` |
-| `GLES_TEXFMT_RGBA32F` | none | RGBA | - | no | yes, as two planes (HALF_FLOAT) | no | - | linear; none | two G32R32F planes, as RGBA32UI; the GL core stores RGBA32F / RGB32F / RG32F in RGBA16F on this back end meanwhile (`docs/es3/sized-formats.md`) | `F:233`; `S:423-429`; `X:77` |
+| `GLES_TEXFMT_RGBA32F` | none | RGBA | - | no | yes, as two planes (HALF_FLOAT); the path is in the tree, inert | no (pending item gc-wide128-flip) | - | linear; none | two G32R32F planes, as RGBA32UI; until the flip the GL core stores RGBA32F / RGB32F / RG32F in RGBA16F on this back end (`docs/es3/sized-formats.md`) | `F:233`; `S:423-429`; `X:77` |
 | `GLES_TEXFMT_SRGB8_A8` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | no | yes (HALTI0) | yes | - | `SAMP_CTRL1.SRGB`; none | - (the RGBA8 row of the linear twin, `F:278`; no INT_FILTER for sRGB, `F:317-318`) | `D:246-247`; `S:406-407` |
-| `GLES_TEXFMT_R32UI` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (GL_R32UI is stored in RGBA32UI meanwhile, which this back end refuses; one format for both signs, no CONFIG2 bit for 32-bit channels, `D:187-189`) | `F:137,286-291`; `X:95` |
-| `GLES_TEXFMT_R32I` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (as R32UI, in RGBA32I meanwhile) | `F:136,286-291`; `X:95` |
+| `GLES_TEXFMT_R32UI` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (own class since gc-r32-flip, `b5e04b14`; before it GL_R32UI was stored in RGBA32UI, which this back end refuses. One format for both signs, no CONFIG2 bit for 32-bit channels, `D:187-189`) | `F:137,286-291`; `X:95` |
+| `GLES_TEXFMT_R32I` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (as R32UI; before the flip it was stored in RGBA32I) | `F:136,286-291`; `X:95` |
 | `GLES_TEXFMT_RG32UI` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); in the mask (gc-r32-flip) | yes | - | linear; none | - (as R32UI; the table's EXT_G32R32F, `F:209`, is replaced on HALTI5) | `F:209,286-291`; `X:96` |
-| `GLES_TEXFMT_RG32I` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); in the mask (gc-r32-flip) | yes | - | linear; none | - (as RG32UI, in RGBA32I meanwhile) | `F:210,286-291`; `X:96` |
+| `GLES_TEXFMT_RG32I` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); in the mask (gc-r32-flip) | yes | - | linear; none | - (as RG32UI; before the flip it was stored in RGBA32I) | `F:210,286-291`; `X:96` |
 | `GLES_TEXFMT_R8_SNORM` | `TEXTURE_FORMAT_EXT_R8_SNORM` | RGBA | - | no | yes (HALTI1: snorm: `TEXTURE_FORMAT_EXT_R8_SNORM`, 0x0e); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8_SNORM, then RGBA16F meanwhile) | `F:89`; `X:80` |
 | `GLES_TEXFMT_RG8_SNORM` | `TEXTURE_FORMAT_EXT_G8R8_SNORM` | RGBA | - | no | yes (HALTI1: snorm: `TEXTURE_FORMAT_EXT_G8R8_SNORM`, 0x0f); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8_SNORM, then RGBA16F meanwhile) | `F:119`; `X:81` |
 | `GLES_TEXFMT_R8UI` | `TEXTURE_FORMAT_EXT_R8I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R8I`, 0x15); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8UI meanwhile) | `F:90`; `X:85` |
@@ -142,34 +151,40 @@ NEAREST filters (the GL core, `docs/es3/sized-formats.md`); `INT_FILTER` is
 off for every integer class (`F:313-315`: unorm only), and the descriptor
 carries no other filter state.
 
-**The 128-bit classes are not decoded.** The TE has no 128-bit format. Mesa
-splits RGBA32F/I/UI into two G32R32 planes in its own resource layout, binds a
-companion sampler slot to the second plane, and rewrites each look-up into two
-whose R,G halves it joins (`etnaviv_nir_lower_128bit.c:89-170`, keyed per
-draw on `tex_is_128bit`). Here the GL core keeps the 16-byte texels
-interleaved, the compiler has no per-draw key for the sampler's format, and a
-`usampler2D` names an RGBA8UI and an RGBA32UI texture alike, so the same
-program would need both shapes: not attempted. `gc_texfmt` reports them as
-not decoded; none is in the mask, so the GL core never stores one here, and
-a binding of one that arrived anyway would sample the back end's black texel,
-with a log line naming the class (`emit_slot`), not texels read as another
-format.
+**The 128-bit classes are not decoded as one format.** The TE has no 128-bit
+format. Mesa splits RGBA32F/I/UI into two G32R32 planes in its own resource
+layout, binds a companion sampler slot to the second plane, and rewrites each
+look-up into two whose R,G halves it joins (`etnaviv_nir_lower_128bit.c:89-170`,
+keyed per draw on `tex_is_128bit`). Here the GL core keeps the 16-byte texels
+interleaved, and a `usampler2D` names an RGBA8UI and an RGBA32UI texture
+alike, so the same program needs both shapes: the compiler's plane join
+(`src/shaderc/online/vivante/wide128.rs`) is chosen per draw
+(`src/gl/draw.rs`, `wide128_variant`, from `vivante::texture::wide128_sampled`).
+`gc_texfmt` still reports the classes as not decoded, and none is in the
+mask, so the GL core never stores one here; a binding of one that arrived
+anyway samples the back end's black texel, with a log line naming the class
+(`emit_slot`), not texels read as another format.
 
 The back-end half of Mesa's design is in, kept inert behind the mask:
 the tiled copy de-interleaves 16-byte texels into two page-aligned G32R32
 planes, and `emit_slot` emits the descriptor pair (`EXT_G32R32F` /
 `EXT_G32R32I`) at the unit's slot and at a companion packed after the
 stage's own slots. It runs only for a class `sampled_texfmts()` holds,
-which today is a host test's `TEST_EXTRA_SAMPLED` and nothing else.
-The design, the companion-slot policy and what is left (the compiler join,
-then the flip) are in `docs/notes/gc-128bit-texture-sampling.md`.
+which today is a host test's `TEST_EXTRA_SAMPLED` and nothing else
+(`tests/es3_wide128_gc.rs`, `es3_wide128_planes_gc.rs`,
+`es3_wide128_slots_gc.rs`). The compiler's join is in the tree too. What is
+left is the flip, **pending: item gc-wide128-flip** (and plan 310's
+wide128-flip), which adds RGBA32F/UI/I to `GC_SAMPLED_TEXFMTS`. The design
+and the companion-slot policy are in
+`docs/notes/gc-128bit-texture-sampling.md`; the GL texture swizzle on these
+classes (ignored until the join learns it) in `docs/notes/gc-128bit-swizzle.md`.
 
 ## 4. Status and what is left
 
 Built (host only; nothing here has run on the GPU):
 
 1. The descriptor decodes R11G11B10F, RGB9E5, RGB10A2, RGB10A2UI,
-   RGBA8_SNORM, RGBA8UI/I and RGBA16UI/I (section 2), in dEQP case-count
+   RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I and R32I/UI, RG32I/UI (section 2), in dEQP case-count
    order (the 16- and 8-bit integer formats first, about 205 mustpass cases
    each in `texture.format` + `texture.specification`; snorm 101; RGB10_A2UI,
    R11F_G11F_B10F, RGB9_E5 and RGB10_A2 about 25 each). A 16-bit integer
@@ -178,10 +193,12 @@ Built (host only; nothing here has run on the GPU):
 2. Integer look-ups select (section 3).
 
 **In `GC_SAMPLED_TEXFMTS`** (`src/backend.rs`): the eight classes above and
-R32UI, R32I, RG32UI, RG32I are in the mask, so the GL core stores them natively on this back end;
-`GLES_TEXFMT_RGB10A2` stays out for the reason `PVR_SAMPLED_TEXFMTS` gives.
-The test fails when the mask and the `in mask` column disagree. Still unsupported
-(refused or kept in a fallback class): RGBA32F/UI/I (ETC2 RGB is `EXT_NONE` and decodes all its modes). The two compressed
+R32UI, R32I, RG32UI, RG32I (`b5e04b14`) are in the mask, so the GL core
+stores them natively on this back end; `GLES_TEXFMT_RGB10A2` stays out for
+the reason `PVR_SAMPLED_TEXFMTS` gives. The test fails when the mask and the
+`in mask` column disagree. Still unsupported (refused or kept in a fallback
+class): RGBA32F/UI/I, whose sampling is in the tree but not offered (pending,
+item gc-wide128-flip). The two compressed
 sRGB ETC2 classes are in the mask too (etc2-srgb-gc): the GL core stores
 GL_COMPRESSED_SRGB8_ETC2 and GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC as blocks
 and lists them in GL_COMPRESSED_TEXTURE_FORMATS (5 formats), sampled as the
@@ -189,10 +206,14 @@ linear twin's block format with `SAMP_CTRL1.SRGB` (section 2).
 
 Left:
 
-4. RGBA32F/I/UI as two planes (section 3). R32I/UI and RG32I/UI are their own
-   classes in the mask (gc-r32-flip): the TE samples them as `EXT_R32I` /
-   `EXT_G32R32I` (`F:286-291`). A texture colour attachment of them waits for
-   the GL core's `integer_texture_surface` rows (item gl-r32-surface).
+4. RGBA32F/I/UI as two planes (section 3): the back end and the compiler
+   join are in the tree, inert; the mask flip is pending (item
+   gc-wide128-flip). R32I/UI and RG32I/UI are their own classes in the mask
+   (`b5e04b14`): the TE samples them as `EXT_R32I` / `EXT_G32R32I`
+   (`F:286-291`). Their texture colour attachment has
+   `integer_texture_surface` rows (`6c5b004f`, `src/gl/framebuffer.rs`) and a
+   host test (`tests/es3_int32_rt_gc.rs`); the board has not run it
+   (`docs/es3/int-rt-gc.md`).
 5. R8, RG8 and the R/RG snorm and integer formats in their own narrow
    classes (Mesa's EXT_R8 / G8R8 / R8I / G8R8I / R16I / G16R16I rows): memory
    only, the RGBA classes sample the same values.
@@ -222,8 +243,10 @@ Read: with the eight classes in the mask, 136 + 307 = 443 cases get past upload 
 compile that the integer sampler refusal would otherwise stop, and 204 of the
 205 remaining upload refusals (64 + 141) are the 32-bit integer formats
 (R/RG/RGB/RGBA 32I/UI, the RGBA32UI/I class, section 3); the other is
-`specification.random_teximage2d.cube_7`, not traced. Whether those cases then pass
-is the board's to say (verdin-imx8mp; no GPU result exists for any of this).
+`specification.random_teximage2d.cube_7`, not traced. The run predates the R32I/UI and
+RG32I/UI classes (`b5e04b14`), the GL texture swizzle (`840ea7ec`) and the
+`integer_texture_surface` rows (`6c5b004f`); it was not repeated here.
+Whether those cases then pass is the board's to say (verdin-imx8mp; no GPU result exists for any of this).
 
 The compressed sRGB ETC2 classes in the mask (etc2-srgb-gc) were not
 measured with this run: the host that made the change had no VK-GL-CTS

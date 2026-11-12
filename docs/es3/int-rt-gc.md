@@ -277,12 +277,26 @@ Nothing here has run on the GPU. What a session should check, cheapest first:
    `fragment_out.array.*` ones of them (several targets of the format) are
    refused by `draw_one`, as item 3b says. Of `fbo`, 96 cases draw now
    (`color`, `render`, `blit`, `completeness`, `invalidate` on the four);
-   the 32 left are the RGBA32I/UI blits (8) and RG32I/UI *texture*
-   attachments (24: the GL core has no RG32I/UI texture class yet, the
-   formats-gc item), not the render target.
+   the 32 left were the RGBA32I/UI blits (8) and RG32I/UI *texture*
+   attachments (24: the GL core had no RG32I/UI texture class then), not the
+   render target. The attachments have a class and surface rows since
+   `b5e04b14` and `6c5b004f` (R32I/UI and RG32I/UI; host test
+   `tests/es3_int32_rt_gc.rs`); the table was not re-measured. The RGBA32I/UI
+   blits stay refused (section 2).
 4. `functional.color_clear.*int*` and the `shaders.builtin_functions` groups
    that render into integer renderbuffers (es3-inventory's bucket for
    int-rt-gl): the clear quad's raw constants.
+4a. R32I/UI and RG32I/UI as **texture** colour attachments
+   (`fbo.completeness.renderable.texture.color0.r32i` and the like,
+   `renderable.texture.*32*`): the classes are in `GC_SAMPLED_TEXFMTS` and
+   `integer_texture_surface` has their rows, with the 64-bit RG32I/UI through
+   the tiled shadow; host-tested only (`tests/es3_int32_rt_gc.rs`).
+4b. A fourth colour target: `DRAW_TARGETS` stays 3, the back end's fourth
+   output is host-tested (`tests/es3_mrt4_gc.rs`), and the board check is
+   `docs/notes/gc-mrt4-board-check.md`. A 64-bit integer target beside any
+   other is still refused (item 3b); RGBA32I/UI would take two PE targets,
+   which makes a fourth target matter for them
+   (`docs/notes/gc-128bit-render-targets.md`).
 5. `rgba32i`/`rgba32ui` cases: refused (`GL_INVALID_OPERATION`, the log line),
    so they fail rather than pass; they stop failing only with section 2's
    two-plane path or with `FRAMEBUFFER_UNSUPPORTED` (NotSupported). Lifting
