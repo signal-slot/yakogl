@@ -1,0 +1,9 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+17	T6S1R17	90	done	9	0	0	yes	yes	yakogl-mali-exit: draws=1260 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+18	T6S1R18	15	done	5	0	0	yes	yes	yakogl-mali-exit: draws=30 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+19	T6S1R19	343	done	5	0	0	yes	yes	yakogl-mali-exit: draws=0 refused=455 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: an integer or boolean value is not lowered yet) gpu_faults=0 job_timeouts=0
+20	T6S1R20	336	done	6	0	0	yes	yes	yakogl-mali-exit: draws=0 refused=430 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: an integer or boolean value is not lowered yet) gpu_faults=0 job_timeouts=0
+21	T6S1R21	294	done	5	0	0	yes	yes	yakogl-mali-exit: draws=0 refused=369 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: an integer or boolean value is not lowered yet) gpu_faults=0 job_timeouts=0
+22	T6S1R22	294	done	5	0	0	yes	yes	yakogl-mali-exit: draws=0 refused=184 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: an integer or boolean value is not lowered yet) gpu_faults=0 job_timeouts=0
+23	T6S1R23	203	done	5	0	0	yes	yes	yakogl-mali-exit: draws=0 refused=7 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rew
+24	T6S1R24	374	done	5	0	0	yes	yes	yakogl-mali-exit: draws=0 refused=3 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet) gpu_faults=0 job_timeouts
