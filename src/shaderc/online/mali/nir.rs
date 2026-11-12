@@ -3137,24 +3137,24 @@ pub fn build<'s>(
      * merges (`deduplicate_outputs`): [`super::link::VaryingConsts::push_equal`] */
     let decls: [Option<&ir::IoDecl<'_>>; MAX_VARYINGS] =
         core::array::from_fn(|i| m.outputs.iter().filter(|o| o.kind == IoKind::Varying).nth(i));
-    /* a lane's value, and whether a vertex `if` writes it: Mesa compares
-     * the stores block by block (nir_opt_varyings.c:3150-3160), so two
-     * lanes an `if` writes alike, joined to the same value, are equal
-     * (b15), a lane the `if` writes is not equal to one written before it,
-     * and a phi of two values has no reference. The interpolation
-     * qualifier is the fragment shader's ([`super::link::VaryingConsts::class`]'s
-     * reader, nir_fs.rs `layout`) */
+    /* a lane's value: the vertex shader's outputs are temporaries stored
+     * at its end (`nir_lower_io_passes`, nir_lower_io.c:1434-1453), so
+     * deduplicate_outputs compares the values the lanes hold there,
+     * wherever a vertex `if` wrote them (b15: equal on both sides; v01,
+     * v15, v19: one lane before or after the `if`). A join of two values
+     * (a select or a phi) Mesa merges too (b13 stores two lanes), but its
+     * vertex words for the join are not this back end's (the third
+     * review's b14): those lanes stay apart and the program is refused
+     * (`VaryingDuplicate`). The interpolation qualifier is the fragment
+     * shader's ([`super::link::VaryingConsts::class`]'s reader, nir_fs.rs
+     * `layout`) */
     let lane_at = |o: &ir::IoDecl<'_>, c: usize| {
         let l = varyings.get(o.location as usize).copied().flatten()?;
         let phi = phis & (1 << (o.location as usize * 4 + c)) != 0;
         match l[c & 3] {
-            /* the join's select or phi of two values: Mesa merges two
-             * such lanes (b13 stores two), but its vertex words for the
-             * join are not this back end's (the third review's b14), so
-             * the lanes stay apart and the program is refused */
             Val::Lane(n, _) if phi && matches!(vs.nodes[n as usize].kind, Kind::Phi | Kind::Alu(Alu::Bcsel)) => None,
             Val::Lane(n, _) if vs.nodes[n as usize].kind == Kind::Phi => None,
-            Val::Lane(n, _) if !vs.convergent(n) => Some((l[c & 3], phi)),
+            Val::Lane(n, _) if !vs.convergent(n) => Some(l[c & 3]),
             _ => None,
         }
     };
