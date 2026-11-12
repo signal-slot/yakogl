@@ -24,6 +24,9 @@ extern "C" {
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 #include "sample_glue.h"
+#ifdef CONFIG_YAKOGL_BOARD_STM32MP2
+#include "yakogl_board.h"
+#endif
 #ifdef CONFIG_YAKOGL_GPU_POWERVR
 void pvr_set_native_cube(int on);
 extern int pvr_native_cube;   /* src/shaderc/mod.rs: the switch itself */
@@ -184,5 +187,11 @@ extern "C" int main(void)
         rc = -2;
     }
     deqp_log_summary();
+#ifdef CONFIG_YAKOGL_BOARD_STM32MP2
+    /* the STM32MP257F-DK: "deqp: PASS"/"FAIL", the yk-record line and PSCI
+     * SYSTEM_RESET back into ST's Linux (board_stm32mp2.c) */
+    board_finish("deqp", rc);
+#else
     return pvr_sample_finish(rc);
+#endif
 }

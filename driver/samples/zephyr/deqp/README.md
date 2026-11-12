@@ -54,3 +54,32 @@ Configuration that matters:
   and a 64 MiB C heap.
 - A 600 s bounded watchdog feed on the AM62P. The online compiler takes about
   0.2 s per shader on the A53, so size a run's case list to that budget.
+
+## STM32MP257F-DK (A35)
+
+```sh
+# stage 1 with the DK's flags (-mcpu=cortex-a35), in a directory of its own
+BOARD=stm32mp257f_dk/stm32mp257fxx/a35 WORK=$DEPS/deqp-stage1-stm32mp2 \
+CFLAGS=-O2 CXXFLAGS=-O2 ZEPHYR_BASE=... ZEPHYR_MODULES=... tools/cts/cts-build-zephyr.sh
+# stage 2
+west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 driver/samples/zephyr/deqp -- \
+    -DZEPHYR_MODULES="$ZEPHYR_MODULES" -DYAKOGL_WERROR=ON \
+    -DDEQP_SRC=$DEPS/deqp-stage1-stm32mp2/cts -DDEQP_BUILD=$DEPS/deqp-stage1-stm32mp2/build \
+    -DCONFIG_DEQP_CASE='"dEQP-GLES2.functional.prerequisite.*"'
+```
+
+The DK runs on the board layer (`driver/zephyr/lib/board/stm32mp2`, its
+`app.conf` and `app.overlay`), as gc_fence, gc_clear and gl_test: the layer
+powers the GPU, arms OP-TEE's watchdog and feeds it for
+`CONFIG_YAKOGL_STM32MP2_LIFETIME_S` (600 s here, one group), and
+`board_finish()` ends the run with `deqp: PASS`/`FAIL`, the yk-record line
+and PSCI SYSTEM_RESET into ST's Linux. The case lines go to USART2. The
+image links at 0xa0000000 in the 256 MiB `zephyr,sram` with the i.MX8MP's
+160 MiB heap; the GPU carve-out is the board's 64 MiB at 0xfa800000.
+At 5b3c0a47 the gles2 image is a 10.2 MiB `zephyr.bin` (the test data
+embedded; bootfs has about 34 MiB free) with a 221.8 MiB footprint
+(text 7.5, rodata 1.8, bss 50.7, noinit 161.0 with the heap), inside the
+runner's 0xa0000000..0xb0000000.
+`tools/board-stm32mp2.sh` stages `zephyr.bin` on bootfs (`/boot/yakogl`) and
+waits `RUN_BOUND` (120 s by default) for the end line: give a dEQP run
+`RUN_BOUND=600` or more.
