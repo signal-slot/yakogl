@@ -2051,11 +2051,15 @@ impl<'s> Nir<'s> {
             }
             /* `fmul(fneg(a), b)` is `fneg(fmul(a, b))`, `a` the fneg's source
              * on whichever side it stood (nir_opt_algebraic.py:2387, a
-             * commutative match); the shader's own products */
-            Alu::Fmul if self.user && self.is_alu(a, Alu::Fneg) && self.is_alu(b, Alu::Fneg) => {
+             * commutative match); the viewport transform's products too,
+             * which bifrost's optimisation loop runs the rules on after
+             * `nir_lower_viewport_transform` (a negated position lane,
+             * `gl_Position = -a_position`, negmul_vs_neg: the fneg moves to
+             * the transform's `ffma`, `FMA.f32 r0, r0^.neg, u0.w0, u0.w1`) */
+            Alu::Fmul if self.is_alu(a, Alu::Fneg) && self.is_alu(b, Alu::Fneg) => {
                 return Err(MaliError::ArithConstant);
             }
-            Alu::Fmul if self.user && (self.is_alu(a, Alu::Fneg) || self.is_alu(b, Alu::Fneg)) => {
+            Alu::Fmul if self.is_alu(a, Alu::Fneg) || self.is_alu(b, Alu::Fneg) => {
                 let (n, other) = if self.is_alu(a, Alu::Fneg) { (a, b) } else { (b, a) };
                 let Val::Lane(id, _) = n else { return Err(MaliError::Defect(Defect::IrIndex)) };
                 let inner = self.nodes[id as usize].src[0];
