@@ -5858,6 +5858,27 @@ fn kept_whole(f: &Fs<'_>, m: &Module<'_>, loc: u8, node: u16, roots: &[Val]) -> 
      * when lower_precision lowers that tree, which it does when every lane
      * is mediump */
     let colour = f.colour.ok_or(MaliError::NoColour)?;
+    /* a colour lane is lowered with a tree only when its dereference is
+     * an operation's operand or is stored to a local lower_precision
+     * lowers (a constructor's temporary, a mediump local: `vec4(a.x, ..)`,
+     * fsload_v4_one; c05's `t.x = p.y`);
+     * an assignment to the colour itself, `gl_FragColor.xy = a.xy`, has no
+     * tree to lower and keeps the lanes read (fsload_bare1-3) */
+    let output_shadow = |l: ir::LocalId| {
+        m.locals.get(l.0 as usize).is_some_and(|d| {
+            d.name == "gl_FragColor" || m.outputs.iter().any(|o| o.kind == IoKind::Colour && o.name == d.name)
+        })
+    };
+    let lowered_deref = m.instrs.iter().enumerate().any(|(i, op)| {
+        matches!(*op, ir::Op::LoadInput { slot: IoSlot::Varying(v), .. } if v == loc)
+            && m.instrs.iter().any(|o| match *o {
+                ir::Op::StoreLocal { local, src, .. } => src.val.0 as usize == i && !output_shadow(local),
+                /* an operation of the tree, which the walk may have folded
+                 * (fsconv_fold2's `p.x + 0.0`) */
+                ir::Op::Alu(a, srcs) => srcs[..a.arity()].iter().any(|x| x.val.0 as usize == i),
+                _ => false,
+            })
+    });
     if !reads(&colour) {
         /* no fp16 operation and no colour lane reads it: a cube look-up's
          * direction, read raw at fp32 (varyconst_101_cubebias: the lanes
@@ -5868,6 +5889,9 @@ fn kept_whole(f: &Fs<'_>, m: &Module<'_>, loc: u8, node: u16, roots: &[Val]) -> 
             nd.kind != Kind::Tex && reads(&src[..arity]) && reached(id, nd.width)
         });
         return if other { Err(MaliError::FsVaryingLoad) } else { Ok(false) };
+    }
+    if !lowered_deref {
+        return Ok(false);
     }
     let (mut fp32, mut unknown) = (false, false);
     for v in colour {
