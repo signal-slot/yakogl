@@ -339,8 +339,8 @@ shader's cube look-up with a bias is item cubebias101's.
    each lane converted alone (`FADD.f32 rN.h0, rM^, 0x0.neg`) then
    `MKVEC.v2i16 x.h0, y.h0`. Only for a load that holds lanes no one reads
    (`vec4(v.x, v.z, ..)`, cmp_xz.expect.json): `v.xzyw` of a load whose
-   every lane is read stays `ColourForm`. 78's fragment shader alone (no link) also reads
-   `v_after.z`, which splits the matrix over two slots; the word then takes
+   every lane is read stays `ColourForm`. 78's fragment shader alone (no
+   link) also reads `v_after.z`, which splits the matrix over two slots; the word then takes
    its two lanes from two such loads. That is only the shader object's
    record, which glCompileShader needs (the link reads both records,
    backend.rs `link_by_sources`) and the link replaces with the one compiled
