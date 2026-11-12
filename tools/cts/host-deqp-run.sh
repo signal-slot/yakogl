@@ -70,6 +70,12 @@
 #             build. Without any, the directory and the cmake line are unchanged.
 #             The arguments are recorded in $OUT/commit ("lib-cmake-args=...")
 #             and the default run directory name gets the same -x<cksum>.
+#   EXTRA_FEATURES  extra cargo features for the library, comma separated
+#             (EXTRA_FEATURES=pvr-instance-divisor): appended to the feature list
+#             the CMake options give, passed as -DYAKOGL_EXTRA_FEATURES=... like a
+#             LIB_CMAKE_ARGS entry (own build directory and run name suffix,
+#             recorded in $OUT/commit).
+#             Unset: nothing changes.
 #   COMPARE   an earlier run directory (--compare=DIR): after the run (or --report)
 #             each case's status in $OUT is compared with the same case in DIR
 #             (the <Result StatusCode> of the c_*.qpa logs). One line per case
@@ -127,6 +133,9 @@ compare_runs() {
 LIB_ARGS=()
 # shellcheck disable=SC2206  # LIB_CMAKE_ARGS is split on blanks on purpose
 [ -z "${LIB_CMAKE_ARGS:-}" ] || LIB_ARGS=($LIB_CMAKE_ARGS)
+# Extra cargo features of the library: -DYAKOGL_EXTRA_FEATURES (capi/yakogl_capi.cmake)
+# is one more library option, so the library gets its own build directory.
+[ -z "${EXTRA_FEATURES:-}" ] || LIB_ARGS+=("-DYAKOGL_EXTRA_FEATURES=$EXTRA_FEATURES")
 # Options equal to the environment variables below, for callers that cannot set
 # them: --gpu=G --module=M --cts=DIR --out=DIR --chunk=N --jobs=N --native-3d=V
 # (before the filter); --gpu=pvr is --gpu=powervr.
