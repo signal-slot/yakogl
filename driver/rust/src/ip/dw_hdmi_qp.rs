@@ -29,7 +29,9 @@
 //!    `MAINUNIT_1_INT_MASK_N` 0x3024 = 0 (qp.h:761, :776), then
 //!    `TIMER_BASE_CONFIG0` 0x80 (qp.h:35) = 428571429, the reference clock in
 //!    Hz as Linux assumes it ([`LINUX_TIMER_BASE_HZ`]); the board passes the
-//!    rate the dump's `clk_summary` gives (note, U14). Linux then resets and
+//!    rate the dump's `clk_summary` gives (note, U14). The T6 measured
+//!    `clk_hdmitx0_ref` = 428571429 Hz under Linux 6.18 on 2026-11-12, so
+//!    the value is confirmed for this board. Linux then resets and
 //!    sets up the I2C master (`I2CM_*` 0xe0-0x118, qp.h:56-80) and clears
 //!    its done / NACK interrupts in `MAINUNIT_1_INT_CLEAR` 0x3028: that is
 //!    EDID, step D10, and nothing here reads or writes those registers.
@@ -57,6 +59,14 @@
 //! 7. Words that request an action are never read: `GLOBAL_SWRESET_REQUEST`
 //!    0x40, `TMDS_FIFO_CONTROL0` 0x974, `PKTSCHED_PKT_SEND` 0xab0 (qp.h:23,
 //!    :183, :216; note section 6). Nothing here reads them or writes them.
+//! 8. Left out, besides the I2C master, InfoFrames and audio: scrambling
+//!    (Linux uses it only above 340 MHz, which [`tmds_char_rate`] refuses),
+//!    CEC, HDCP 1.4, and the main interrupt (Linux requests it, qp.c:1071;
+//!    here its masks stay 0 and nothing takes it: every status is polled).
+//! 9. Nothing here waits on hot-plug: [`hpd`] is a single read for the
+//!    status line. The T6's panel gives no hot-plug level and no EDID
+//!    (board, Linux 6.18, 2026-11-12), so the board uses one fixed mode and
+//!    [`Sink::Dvi`]; Linux too picks DVI when there is no EDID.
 //!
 //! The RK3588 glue (glue, and dtsi:1606-1630: the controller's
 //! `rockchip,grf` is sys_grf 0xfd58c000, its `rockchip,vo-grf` is vo1_grf
@@ -307,6 +317,8 @@ pub struct BindParams {
     pub core_id: u32,
     /// The controller's reference clock in Hz (`TIMER_BASE_CONFIG0`):
     /// [`LINUX_TIMER_BASE_HZ`] unless the dump's `clk_summary` says another.
+    /// The T6's `clk_hdmitx0_ref` is 428571429 Hz (measured 2026-11-12,
+    /// Linux 6.18), equal to [`LINUX_TIMER_BASE_HZ`].
     pub timer_base_hz: u32,
 }
 
@@ -333,8 +345,11 @@ pub fn ident(m: &impl Mmio, ctrl: usize) -> Ident {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum Refusal {
-    /// `CORE_ID` is not the one the board expects: another block, or a
-    /// controller whose clocks or domain are off. Nothing was written.
+    /// `CORE_ID` is not the one the board expects (another block at that
+    /// address). Nothing was written. This is no guard against a controller
+    /// whose clocks or PD_VO1 are off: on the RK3588 such a read can stall
+    /// the bus and never return. The caller (D7) runs the power and clock
+    /// step (D4) before [`bind`].
     WrongId = 1,
     /// `TIMER_BASE_CONFIG0` read back other than written.
     TimerReadBack = 2,
@@ -343,6 +358,9 @@ pub enum Refusal {
     /// `LINK_CONFIG0` or `HDCP2LOGIC_CONFIG0` read back without the bits
     /// just written.
     EnableReadBack = 4,
+    /// The port is not the one of the controller base (`Port::of_base`), or
+    /// the base is no controller. `found` is the base. Nothing was written.
+    PortMismatch = 5,
 }
 
 /// A refusal and the value it is about (the id found, the word read back,
@@ -356,8 +374,14 @@ pub struct Refused {
 /// Bind the controller of `port` at `b`: check its identity, then the glue
 /// words 1-4, the controller's interrupt masks and timer base (fact 2),
 /// then glue word 5 (module text). The controller's clocks and PD_VO1 must
-/// be on (D4). A wrong identity refuses before any write, GRF included.
+/// be on (D4) before this is called: the first read is the identity.
+/// `port` must be the one of `b.ctrl` ([`Port::of_base`], as the glue tells
+/// it, glue:467-477). A port that disagrees or a wrong identity refuses
+/// before any write, GRF included.
 pub fn bind(m: &impl Mmio, b: &Bases, port: Port, p: &BindParams) -> Result<Ident, Refused> {
+    if Port::of_base(b.ctrl) != Some(port) {
+        return Err(Refused { why: Refusal::PortMismatch, found: b.ctrl as u32 });
+    }
     let id = ident(m, b.ctrl);
     if id.core_id != p.core_id {
         return Err(Refused { why: Refusal::WrongId, found: id.core_id });
@@ -409,6 +433,13 @@ pub const fn link_config0_for(found: u32, sink: Sink) -> u32 {
 /// Start the TMDS link for `sink` (fact 3): the HDCP2 bypass, then the
 /// operating mode, each one bit read-modify-written and read back. The PHY
 /// must already be powered at the mode's [`tmds_char_rate`] (D5).
+///
+/// The rate is not checked here (that would need the mode as a parameter):
+/// the caller runs [`tmds_char_rate`] first and does not enable a mode it
+/// refuses, as Linux rejects such a mode before its enable (qp.c:901-909).
+/// Both words are always written, also when the bit is already as wanted;
+/// Linux skips an unchanged write (qp.c:165-168), so the two differ only in
+/// a register trace, not in the hardware state.
 pub fn enable(m: &impl Mmio, ctrl: usize, sink: Sink) -> Result<(), Refused> {
     m.modify32(ctrl + reg::HDCP2LOGIC_CONFIG0, HDCP2_BYPASS, HDCP2_BYPASS);
     let h = m.read32(ctrl + reg::HDCP2LOGIC_CONFIG0);
@@ -483,9 +514,11 @@ mod tests {
     // The model's own addresses and offsets, restated from the sources (not
     // shared with the driver, so a wrong constant cannot agree with itself).
     const CTRL: usize = 0xfde8_0000;
+    const CTRL1: usize = 0xfdea_0000;
     const SYS: usize = 0xfd58_c000;
     const VO1: usize = 0xfd5a_8000;
     const B: Bases = Bases { ctrl: CTRL, sys_grf: SYS, vo1_grf: VO1 };
+    const B1: Bases = Bases { ctrl: CTRL1, ..B };
     /// A test value only: the real one comes from the dump (D0).
     const ID: u32 = 0x1234_5678;
     const P: BindParams = BindParams { core_id: ID, timer_base_hz: 428_571_429 };
@@ -496,7 +529,7 @@ mod tests {
         W(usize, u32),
     }
 
-    /// The controller (32-bit words up to 0x482c), sys_grf and vo1_grf with
+    /// Both controllers (32-bit words up to 0x482c), sys_grf and vo1_grf with
     /// hiword-masked writes. It fails the test on a read of a request word,
     /// any access to the I2C master, an access outside the blocks or past
     /// the last register, and a GRF write with a value bit outside its mask.
@@ -518,7 +551,12 @@ mod tests {
                 opmode_stuck: false,
             };
             s.set(CTRL, ID);
+            s.set(CTRL1, ID);
             s
+        }
+        /// The controller offset of `a`, or `None` for a GRF address.
+        fn ctrl_off(a: usize) -> Option<usize> {
+            [CTRL, CTRL1].into_iter().find(|b| (*b..*b + 0x2_0000).contains(&a)).map(|b| a - b)
         }
         fn set(&self, a: usize, v: u32) {
             self.regs.borrow_mut().insert(a, v);
@@ -534,8 +572,7 @@ mod tests {
         }
         fn check(&self, a: usize) {
             assert_eq!(a % 4, 0, "unaligned {a:#x}");
-            if (CTRL..CTRL + 0x2_0000).contains(&a) {
-                let o = a - CTRL;
+            if let Some(o) = Soc::ctrl_off(a) {
                 assert!(o <= 0x482c, "past the last controller register: {o:#x}");
                 assert!(!(0xe0..=0x118).contains(&o), "I2C master register {o:#x} touched (D10)");
             } else {
@@ -550,8 +587,8 @@ mod tests {
     impl Mmio for Soc {
         fn read32(&self, a: usize) -> u32 {
             self.check(a);
-            for o in [0x40, 0x974, 0xab0] {
-                assert_ne!(a, CTRL + o, "request word {o:#x} read");
+            if let Some(o) = Soc::ctrl_off(a) {
+                assert!(![0x40, 0x974, 0xab0].contains(&o), "request word {o:#x} read");
             }
             let v = self.get(a);
             self.ops.borrow_mut().push(Op::R(a, v));
@@ -560,8 +597,8 @@ mod tests {
         fn write32(&self, a: usize, v: u32) {
             self.check(a);
             self.ops.borrow_mut().push(Op::W(a, v));
-            if a >= CTRL {
-                match a - CTRL {
+            if let Some(o) = Soc::ctrl_off(a) {
+                match o {
                     0x80 if self.timer_dead => {}
                     0x968 if self.opmode_stuck => self.set(a, (v & !0x10) | (self.get(a) & 0x10)),
                     _ => self.set(a, v),
@@ -664,12 +701,42 @@ mod tests {
     #[test]
     fn port_1_uses_its_own_bits_and_con6() {
         let s = Soc::new();
-        bind(&s, &B, Port::Hdmi1, &P).unwrap();
+        bind(&s, &B1, Port::Hdmi1, &P).unwrap();
         let w = s.writes();
         assert_eq!(w[0], (VO1 + 0x18, 0x2e00_2e00));
         assert_eq!(w[2], (VO1 + 0x24, 0x1000_1000));
         assert_eq!(w[3], (SYS + 0x308, 0x8000_8000));
         assert_eq!(w[7], (SYS + 0x308, 0xc000_4000));
+    }
+
+    /// The port follows the controller base (glue:467-477): a port that
+    /// disagrees with it, or a base that is no controller, is refused before
+    /// any write, so one controller is never bound with the other's GRF bits.
+    #[test]
+    fn a_port_that_is_not_the_controllers_is_refused_with_nothing_written() {
+        for (b, port) in [(B, Port::Hdmi1), (B1, Port::Hdmi0), (Bases { ctrl: CTRL + 0x1000, ..B }, Port::Hdmi0)] {
+            let s = Soc::new();
+            s.set(b.ctrl, ID);
+            let r = bind(&s, &b, port, &P);
+            assert_eq!(
+                r,
+                Err(Refused { why: Refusal::PortMismatch, found: b.ctrl as u32 }),
+                "{port:?} at {:#x}",
+                b.ctrl
+            );
+            assert!(s.writes().is_empty(), "{:?}", s.writes());
+        }
+    }
+
+    #[test]
+    fn each_port_reads_its_own_hpd_level() {
+        let s = Soc::new();
+        for (level, hdmi0, hdmi1) in [(1u32 << 16, true, false), (1 << 24, false, true), (0, false, false)] {
+            // the measured board value 0x240 under the level bits
+            s.set(SYS + 0x384, 0x240 | level);
+            assert_eq!((hpd(&s, SYS, Port::Hdmi0), hpd(&s, SYS, Port::Hdmi1)), (hdmi0, hdmi1), "{level:#x}");
+            assert_eq!(status(&s, CTRL1, SYS, Port::Hdmi1).hpd, hdmi1);
+        }
     }
 
     #[test]
@@ -743,6 +810,8 @@ mod tests {
         let m = VideoMode { pixel_clock_hz: 148_500_000, ..WUXGA_60_RB };
         assert_eq!(tmds_char_rate(&m), Ok(148_500_000));
         assert_eq!(tmds_char_rate(&VideoMode { pixel_clock_hz: 25_200_000, ..m }), Ok(25_200_000));
+        // the T6's fixed mode, 1024x768 at 60 Hz
+        assert_eq!(tmds_char_rate(&VideoMode { pixel_clock_hz: 65_000_000, ..m }), Ok(65_000_000));
         assert_eq!(tmds_char_rate(&VideoMode { pixel_clock_hz: 340_000_000, ..m }), Ok(340_000_000));
         let over = VideoMode { pixel_clock_hz: 340_000_001, ..m };
         assert_eq!(tmds_char_rate(&over), Err(Refused { why: Refusal::TmdsRate, found: 340_000_001 }));
@@ -781,8 +850,7 @@ mod tests {
         ident(&s, CTRL);
         hpd(&s, SYS, Port::Hdmi0);
         for a in s.reads().into_iter().chain(s.writes().into_iter().map(|w| w.0)) {
-            if a >= CTRL {
-                let o = a - CTRL;
+            if let Some(o) = Soc::ctrl_off(a) {
                 assert!(![0x40, 0x974, 0xab0].contains(&o) && !(0xe0..=0x118).contains(&o), "{o:#x}");
             }
         }
