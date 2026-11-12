@@ -105,6 +105,85 @@ else
 	fail "golden pins modes '$list' ($modes lines), want 1 8 15"
 fi
 
+# cs_decode.py on a GC8000 stream: a pipe select at 0x03800 (a TS field mask
+# shared the number), PS_END_PC at 0x01000 (a fill-mode flag did), a BLT state,
+# and the commands that take operand words (DRAW_INSTANCED is how Mesa draws on
+# a Halti2+ part: its count and start were printed as commands of their own).
+# The register names come from the headers committed under driver/src/vivante/hw.
+ROOT=$(cd "$HERE/../.." && pwd)
+HW=$ROOT/driver/src/vivante/hw
+python3 -I - "$TMP/gc8000.raw" <<'PY'
+import struct, sys
+def ls(a, v):
+    w = [(1 << 27) | (len(v) << 16) | (a // 4)] + v
+    return w + [0] * (len(w) % 2)
+w = (ls(0x3800, [0]) + ls(0x1000, [7]) + ls(0x140b8, [1]) + [0x60040001, 3, 0, 0]
+     + [0x78000002, 0xffff1000] + [0x40000002, 0x2000]
+     + [0x50000004, 0x3000, 4, 0x4000] + [0x10000000, 0])
+open(sys.argv[1], "wb").write(struct.pack("<%uI" % len(w), *w))
+PY
+run_gate python3 -I "$HERE/cs_decode.py" "$TMP/gc8000.raw" --raw --regs "$HW/state_3d.xml.h" --regs2 "$HW/state.xml.h"
+if [ "$rc" -eq 0 ] && diff "$TMP/out" "$HERE/testdata/gc8000-stream.golden" >"$TMP/diff"; then
+	pass
+else
+	fail "cs_decode.py on a GC8000 stream differs from testdata/gc8000-stream.golden (rc=$rc)"
+	head -20 "$TMP/diff" >&2
+fi
+
+# A missing register header is said on stderr, not silently printed as addresses.
+run_gate python3 -I "$HERE/cs_decode.py" "$TMP/gc8000.raw" --raw --regs "$TMP/nope.h" --regs2 "$TMP/nope2.h"
+if [ "$rc" -eq 0 ] && grep -q '^warning: --regs ' "$TMP/err"; then
+	pass
+else
+	fail "cs_decode.py with a missing header: want a warning on stderr (rc=$rc)"
+fi
+
+# No dump at all is an exit status, not a trace.
+run_gate python3 -I "$HERE/cs_decode.py" "$TMP/no-such-dump"
+if [ "$rc" -ne 0 ] && ! grep -q Traceback "$TMP/err"; then pass; else fail "cs_decode.py without a dump (rc=$rc)"; fi
+
+# golden against a stand-in tree: the build directory is found as build-host,
+# and cs_golden runs with the etnaviv loader forced (the stub fails without it,
+# as a host with a GPU of its own does).
+GT=$TMP/goldtree
+mkdir -p "$GT/src/etnaviv/hw" "$GT/src/etnaviv/drm-shim" "$GT/include/GLES2" \
+	"$GT/build-host/lib" "$GT/bin"
+: >"$GT/src/etnaviv/hw/state_3d.xml.h"
+: >"$GT/include/GLES2/gl2.h"
+echo ETNA_SHIM_CS_DUMP >"$GT/src/etnaviv/drm-shim/etnaviv_noop.c"
+: >"$GT/build-host/lib/libetnaviv_noop_drm_shim.so"
+: >"$GT/build-host/lib/libEGL.so"
+: >"$GT/build-host/lib/libGLESv2.so"
+cat >"$GT/bin/cc" <<'CC'
+#!/bin/sh
+# stands in for the compiler: the -o file is a cs_golden that needs the loader override
+while [ $# -gt 0 ]; do
+	if [ "$1" = -o ]; then out=$2; fi
+	shift
+done
+cat >"$out" <<'STUB'
+#!/bin/sh
+if [ "${MESA_LOADER_DRIVER_OVERRIDE:-}" != etnaviv ]; then
+	echo "libEGL warning: egl: failed to create dri2 screen" >&2
+	exit 1
+fi
+echo "renderer: Vivante GC8000 rev 6205" >&2
+: >"$ETNA_SHIM_CS_DUMP"
+STUB
+chmod +x "$out"
+CC
+chmod +x "$GT/bin/cc"
+for m in 1 8 15; do
+	echo "mode $m renderer: Vivante GC8000 rev 6205 pe_mem_config=same ts_mem_config=same other=0"
+done >"$TMP/want"
+run_gate env MESA_ETNA_TREE="$GT" CC="$GT/bin/cc" GATE_ST_WANT_FILE="$TMP/want" "$GATE" golden
+if [ "$rc" -eq 0 ] && grep -q 'signature matches' "$TMP/out"; then
+	pass
+else
+	fail "golden on a stand-in tree with build-host (rc=$rc)"
+	cat "$TMP/out" "$TMP/err" >&2
+fi
+
 # Both scripts parse.
 for s in "$GATE" "$HERE/gate_st_selftest.sh"; do
 	if bash -n "$s"; then pass; else fail "bash -n $s"; fi
