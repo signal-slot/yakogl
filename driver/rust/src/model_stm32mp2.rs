@@ -211,6 +211,47 @@ const PERF_ATTR_POWER_MW: u32 = 1 << 16;
 const GPU_PD: u32 = 0;
 const CPU_PERF: u32 = 0;
 const GPU_PERF: u32 = 1;
+const P_CLOCK: u8 = 0x14;
+const P_VOLTAGE: u8 = 0x17;
+const M_CLOCK_DESCRIBE_RATES: u8 = 0x4;
+const M_CLOCK_RATE_SET: u8 = 0x5;
+const M_CLOCK_RATE_GET: u8 = 0x6;
+const M_CLOCK_CONFIG_SET: u8 = 0x7;
+const M_VOLT_CONFIG_SET: u8 = 0x5;
+const M_VOLT_CONFIG_GET: u8 = 0x6;
+const M_VOLT_LEVEL_GET: u8 = 0x8;
+/// Protocol versions the model answers: clock 3.0, voltage 1.0 (the model's
+/// choice; the note cites no PROTOCOL_VERSION for them).
+const CLOCK_VERSION: u32 = 0x3_0000;
+const VOLTAGE_VERSION: u32 = 0x1_0000;
+const RATE_FLAG_ASYNC: u32 = 1;
+
+/// The exported clocks of the display path, (id, name, rate at boot in Hz):
+/// bringup note "Clocks, resets, supplies, RIF and pins: who sets what",
+/// rows 9 to 15 (`stm32mp25-clks.h` ids; boot rates from the OP-TEE
+/// `...-rcc.dtsi`). `ICN_DISPLAY` and the GPIO bus clocks have no rate in the
+/// note: the model reports 0. Only `FLEXGEN_27` has `ALLOW_SET_RATE` (row 9;
+/// row 10: `FLEXGEN_28` allows no rate change); the others answer DENIED.
+pub const DISPLAY_CLOCKS: [(u32, &str, u64); 6] = [
+    (3, "ICN_DISPLAY", 0),
+    (12, "FLEXGEN_12", 100_000_000),
+    (27, "FLEXGEN_27", 148_500_000),
+    (28, "FLEXGEN_28", 27_000_000),
+    (90, "GPIOB", 0),
+    (94, "GPIOF", 0),
+];
+/// The clock whose rate CLOCK_RATE_SET may change (`ALLOW_SET_RATE`, row 9).
+const CLOCK_SETTABLE: u32 = 27;
+
+/// The voltage domains of the display path, (id, name, on at boot, level in
+/// microvolt): rows 18 and 19. The levels are the model's choice (the note
+/// has none).
+pub const DISPLAY_VOLTAGES: [(u32, &str, bool, i32); 4] = [
+    (11, "vddcore", true, 800_000),
+    (14, "v1v8", true, 1_800_000),
+    (16, "v3v3", true, 3_300_000),
+    (21, "ldo5", false, 5_000_000),
+];
 
 /// The model's starting state and its answers.
 #[derive(Clone, Debug)]
@@ -239,6 +280,16 @@ pub struct Mp2Config {
     pub identity: u32,
     /// `HI_IDLE_STATE` never reports every module idle.
     pub never_idle: bool,
+    /// Serve SCMI clock (0x14) and voltage-domain (0x17) for the DK's
+    /// display path ([`DISPLAY_CLOCKS`], [`DISPLAY_VOLTAGES`]) as OP-TEE
+    /// does. Off (the default): both protocols stay unsupported
+    /// ([`Fault::Protocol`]), as before. The state accessors work either way.
+    pub display_scmi: bool,
+    /// Rates CLOCK_RATE_SET accepts per clock id (anything else is
+    /// OUT_OF_RANGE) and CLOCK_DESCRIBE_RATES lists. A clock not named here
+    /// accepts any rate and describes its current one. The model does not
+    /// round (the rounding is OP-TEE's divider search, not modelled).
+    pub clock_rates: Vec<(u32, Vec<u64>)>,
 }
 
 impl Default for Mp2Config {
@@ -258,6 +309,8 @@ impl Default for Mp2Config {
             customer_id: 0,
             identity: 0,
             never_idle: false,
+            display_scmi: false,
+            clock_rates: Vec::new(),
         }
     }
 }
@@ -325,6 +378,11 @@ struct State {
     /// the server changes nothing.
     forced: Vec<(u8, u8, i32)>,
     transport_error: Option<i32>,
+    /// (enabled, rate) per exported clock: every clock starts disabled
+    /// ("Default OFF for RIF issues", the note after row 21).
+    clocks: BTreeMap<u32, (bool, u64)>,
+    /// On or off per voltage domain.
+    volts: BTreeMap<u32, bool>,
 }
 
 /// The model. See the module text.
@@ -357,6 +415,8 @@ impl Mp2Model {
             log: Vec::new(),
             forced: Vec::new(),
             transport_error: None,
+            clocks: DISPLAY_CLOCKS.iter().map(|&(id, _, hz)| (id, (false, hz))).collect(),
+            volts: DISPLAY_VOLTAGES.iter().map(|&(id, _, on, _)| (id, on)).collect(),
             cfg,
         };
         Mp2Model(RefCell::new(s))
@@ -421,6 +481,21 @@ impl Mp2Model {
 
     pub fn domain_on(&self) -> bool {
         self.0.borrow().domain_on
+    }
+
+    /// Whether the agent enabled SCMI clock `id` (false for an unknown id).
+    pub fn clock_enabled(&self, id: u32) -> bool {
+        self.0.borrow().clocks.get(&id).is_some_and(|c| c.0)
+    }
+
+    /// The rate of SCMI clock `id` in Hz (0 for an unknown id).
+    pub fn clock_rate(&self, id: u32) -> u64 {
+        self.0.borrow().clocks.get(&id).map_or(0, |c| c.1)
+    }
+
+    /// Whether SCMI voltage domain `id` is on (false for an unknown id).
+    pub fn voltage_on(&self, id: u32) -> bool {
+        self.0.borrow().volts.get(&id).copied().unwrap_or(false)
     }
 
     pub fn rcc(&self) -> u32 {
@@ -559,6 +634,9 @@ impl Mp2Model {
     }
 
     fn answer(s: &mut State, kind: u32, proto: u8, msg: u8, a: &[u32], ragged: bool) -> (i32, Vec<u32>) {
+        if s.cfg.display_scmi && (proto == P_CLOCK || proto == P_VOLTAGE) {
+            return Self::answer_display(s, kind, proto, msg, a, ragged);
+        }
         if proto != P_POWER && proto != P_PERF {
             s.log.push(Event::Fault(Fault::Protocol { proto, msg }));
             return (scmi::STATUS_NOT_SUPPORTED, vec![]);
@@ -669,6 +747,122 @@ impl Mp2Model {
                     s.log.push(Event::Fault(Fault::CpuDomain { msg }));
                 }
                 (0, vec![s.levels[d as usize]])
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl Mp2Model {
+    /// SCMI clock (0x14) and voltage-domain (0x17), as OP-TEE serves them
+    /// (`core/drivers/scmi-msg/clock.c`, `voltage_domain.c`; the note rows
+    /// are in the module's constants).
+    fn answer_display(s: &mut State, kind: u32, proto: u8, msg: u8, a: &[u32], ragged: bool) -> (i32, Vec<u32>) {
+        use scmi::{STATUS_INVALID_PARAMETERS as INVALID, STATUS_NOT_FOUND as NOT_FOUND};
+        if let Some(f) = s.forced.iter().find(|f| (f.0, f.1) == (proto, msg)) {
+            return (f.2, vec![]);
+        }
+        let want = match (proto, msg) {
+            (_, M_VERSION) | (_, M_ATTRIBUTES) => 0,
+            (P_CLOCK, M_DOMAIN_ATTRIBUTES) | (P_CLOCK, M_CLOCK_RATE_GET) => 1,
+            (P_CLOCK, M_CLOCK_DESCRIBE_RATES) | (P_CLOCK, M_CLOCK_CONFIG_SET) => 2,
+            (P_CLOCK, M_CLOCK_RATE_SET) => 4,
+            (P_VOLTAGE, M_DOMAIN_ATTRIBUTES) | (P_VOLTAGE, M_VOLT_CONFIG_GET) | (P_VOLTAGE, M_VOLT_LEVEL_GET) => 1,
+            (P_VOLTAGE, M_VOLT_CONFIG_SET) => 2,
+            _ => return (scmi::STATUS_NOT_SUPPORTED, vec![]),
+        };
+        if kind != 0 || ragged || a.len() != want {
+            return (scmi::STATUS_PROTOCOL_ERROR, vec![]);
+        }
+        match (proto, msg) {
+            (P_CLOCK, M_VERSION) => (0, vec![CLOCK_VERSION]),
+            (P_VOLTAGE, M_VERSION) => (0, vec![VOLTAGE_VERSION]),
+            // The number of domains, bits 15:0.
+            (P_CLOCK, M_ATTRIBUTES) => (0, vec![s.clocks.len() as u32]),
+            (P_VOLTAGE, M_ATTRIBUTES) => (0, vec![s.volts.len() as u32]),
+            (P_CLOCK, M_DOMAIN_ATTRIBUTES) => {
+                let Some(&(on, _)) = s.clocks.get(&a[0]) else { return (NOT_FOUND, vec![]) };
+                let name = DISPLAY_CLOCKS.iter().find(|c| c.0 == a[0]).map_or("", |c| c.1);
+                // Attributes (bit 0: enabled), the name, the enable delay.
+                let mut v = vec![on as u32];
+                v.extend(name_words(name));
+                v.push(0);
+                (0, v)
+            }
+            (P_CLOCK, M_CLOCK_DESCRIBE_RATES) => {
+                let Some(&(_, hz)) = s.clocks.get(&a[0]) else { return (NOT_FOUND, vec![]) };
+                let list = match s.cfg.clock_rates.iter().find(|c| c.0 == a[0]) {
+                    Some(c) => c.1.clone(),
+                    None => vec![hz],
+                };
+                let first = a[1] as usize;
+                if first > list.len() {
+                    return (scmi::STATUS_OUT_OF_RANGE, vec![]);
+                }
+                let n = (list.len() - first).min(scmi::MAX_DESCRIBED_RATES);
+                let remaining = (list.len() - first - n) as u32;
+                let mut v = vec![n as u32 | remaining << 16];
+                for r in &list[first..first + n] {
+                    v.extend([*r as u32, (*r >> 32) as u32]);
+                }
+                (0, v)
+            }
+            (P_CLOCK, M_CLOCK_RATE_GET) => {
+                let Some(&(_, hz)) = s.clocks.get(&a[0]) else { return (NOT_FOUND, vec![]) };
+                (0, vec![hz as u32, (hz >> 32) as u32])
+            }
+            (P_CLOCK, M_CLOCK_RATE_SET) => {
+                let (flags, id) = (a[0], a[1]);
+                let hz = a[2] as u64 | (a[3] as u64) << 32;
+                if !s.clocks.contains_key(&id) {
+                    return (NOT_FOUND, vec![]);
+                }
+                if flags & RATE_FLAG_ASYNC != 0 {
+                    return (scmi::STATUS_NOT_SUPPORTED, vec![]);
+                }
+                if flags > 0xf {
+                    return (INVALID, vec![]);
+                }
+                if id != CLOCK_SETTABLE {
+                    return (scmi::STATUS_DENIED, vec![]);
+                }
+                if s.cfg.clock_rates.iter().any(|c| c.0 == id && !c.1.contains(&hz)) {
+                    return (scmi::STATUS_OUT_OF_RANGE, vec![]);
+                }
+                s.clocks.get_mut(&id).unwrap().1 = hz;
+                (0, vec![])
+            }
+            (P_CLOCK, M_CLOCK_CONFIG_SET) => {
+                // Bits 1:0 the enable state (1 enable, 0 disable).
+                if a[1] > 1 {
+                    return (INVALID, vec![]);
+                }
+                let Some(c) = s.clocks.get_mut(&a[0]) else { return (NOT_FOUND, vec![]) };
+                c.0 = a[1] == 1;
+                (0, vec![])
+            }
+            (P_VOLTAGE, M_DOMAIN_ATTRIBUTES) => {
+                let Some(d) = DISPLAY_VOLTAGES.iter().find(|d| d.0 == a[0]) else { return (NOT_FOUND, vec![]) };
+                let mut v = vec![0];
+                v.extend(name_words(d.1));
+                (0, v)
+            }
+            (P_VOLTAGE, M_VOLT_CONFIG_SET) => {
+                // Architectural mode: 0x7 on, 0 off.
+                if a[1] != scmi::VOLTAGE_CONFIG_ON && a[1] != scmi::VOLTAGE_CONFIG_OFF {
+                    return (INVALID, vec![]);
+                }
+                let Some(on) = s.volts.get_mut(&a[0]) else { return (NOT_FOUND, vec![]) };
+                *on = a[1] == scmi::VOLTAGE_CONFIG_ON;
+                (0, vec![])
+            }
+            (P_VOLTAGE, M_VOLT_CONFIG_GET) => {
+                let Some(&on) = s.volts.get(&a[0]) else { return (NOT_FOUND, vec![]) };
+                (0, vec![if on { scmi::VOLTAGE_CONFIG_ON } else { scmi::VOLTAGE_CONFIG_OFF }])
+            }
+            (P_VOLTAGE, M_VOLT_LEVEL_GET) => {
+                let Some(d) = DISPLAY_VOLTAGES.iter().find(|d| d.0 == a[0]) else { return (NOT_FOUND, vec![]) };
+                (0, vec![d.3 as u32])
             }
             _ => unreachable!(),
         }
@@ -1008,6 +1202,174 @@ mod tests {
         // The transport failure (token 10): the request, an empty reply.
         assert_eq!(msgs[10].0, [0, 0x44, 0x28, 0]);
         assert!(msgs[10].1.is_empty());
+    }
+
+    fn display() -> Mp2Model {
+        Mp2Model::with_config(Mp2Config { display_scmi: true, ..Default::default() })
+    }
+
+    const CLK: u8 = 0x14;
+    const VOLT: u8 = 0x17;
+
+    /// Note rows 9 to 15 and the text after row 21: every exported clock
+    /// starts disabled for the agent ("Default OFF for RIF issues"), at the
+    /// boot rates of OP-TEE's flexgen configuration.
+    #[test]
+    fn mp2_model_display_clocks_start_disabled_at_boot_rates() {
+        let m = display();
+        let mut c = Client::new(m.scmi());
+        for (id, rate) in [(27, 148_500_000), (28, 27_000_000), (12, 100_000_000), (3, 0), (90, 0), (94, 0)] {
+            assert!(!m.clock_enabled(id), "{id}");
+            assert_eq!(m.clock_rate(id), rate, "{id}");
+            assert_eq!(c.clock_rate_get(id), Ok(rate), "{id}");
+            assert_eq!(c.clock_attributes(id).map(|a| a.0), Ok(false), "{id}");
+        }
+        let (_, name) = c.clock_attributes(27).unwrap();
+        assert_eq!(&name[..10], b"FLEXGEN_27");
+        assert_eq!(name[10], 0);
+        assert_eq!(c.version(CLK), Ok(CLOCK_VERSION));
+        // Raw: CLOCK_ATTRIBUTES of 28 = header, status, attributes, name, delay.
+        let r = words(&raw(&m, &[scmi::header(CLK, 3, 5), 28]));
+        assert_eq!(r.len(), 8);
+        assert_eq!(&r[1..3], &[0, 0]);
+        assert_eq!(r[3].to_le_bytes(), *b"FLEX");
+        assert!(m.faults().is_empty());
+    }
+
+    /// Rows 9, 10, 13, 15: CONFIG_SET enables and disables (raw and client).
+    #[test]
+    fn mp2_model_display_clock_config_set_enables_and_disables() {
+        let m = display();
+        let r = words(&raw(&m, &[scmi::header(CLK, 7, 1), 27, 1]));
+        assert_eq!(r, vec![scmi::header(CLK, 7, 1), 0]);
+        assert!(m.clock_enabled(27));
+        assert!(!m.clock_enabled(28));
+        let mut c = Client::new(m.scmi());
+        for id in [28, 12, 90, 94, 3] {
+            assert_eq!(c.clock_config_set(id, scmi::CLOCK_ENABLE), Ok(()));
+            assert!(m.clock_enabled(id), "{id}");
+            assert_eq!(c.clock_attributes(id).map(|a| a.0), Ok(true));
+        }
+        assert_eq!(c.clock_config_set(28, scmi::CLOCK_DISABLE), Ok(()));
+        assert!(!m.clock_enabled(28));
+        // Reserved enable-state bits.
+        assert_eq!(c.clock_config_set(28, 2), Err(scmi::Error::Status(scmi::STATUS_INVALID_PARAMETERS)));
+        assert!(!m.clock_enabled(28));
+    }
+
+    /// Row 9: RATE_SET of FLEXGEN_27 (74.25 MHz for 720p) is stored and
+    /// RATE_GET returns it; row 10: FLEXGEN_28 allows no rate change.
+    #[test]
+    fn mp2_model_display_clock_rate_set_get() {
+        let m = display();
+        // Raw: flags 0, clock 27, 74 250 000 Hz as low and high words.
+        let r = words(&raw(&m, &[scmi::header(CLK, 5, 2), 0, 27, 74_250_000, 0]));
+        assert_eq!(r, vec![scmi::header(CLK, 5, 2), 0]);
+        assert_eq!(m.clock_rate(27), 74_250_000);
+        let r = words(&raw(&m, &[scmi::header(CLK, 6, 3), 27]));
+        assert_eq!(r, vec![scmi::header(CLK, 6, 3), 0, 74_250_000, 0]);
+        let mut c = Client::new(m.scmi());
+        assert_eq!(c.clock_rate_set(27, 0x1_0000_0001), Ok(()));
+        assert_eq!(c.clock_rate_get(27), Ok(0x1_0000_0001));
+        assert_eq!(c.clock_rate_set(28, 54_000_000), Err(scmi::Error::Status(scmi::STATUS_DENIED)));
+        assert_eq!(m.clock_rate(28), 27_000_000);
+        // The rate set does not enable the clock.
+        assert!(!m.clock_enabled(27));
+    }
+
+    /// Row 9: a configured list of allowed rates (PLL8 / 4, 6, 8, 10).
+    #[test]
+    fn mp2_model_display_clock_allowed_rates() {
+        let rates = vec![148_500_000, 99_000_000, 74_250_000, 59_400_000];
+        let m = Mp2Model::with_config(Mp2Config {
+            display_scmi: true,
+            clock_rates: vec![(27, rates.clone())],
+            ..Default::default()
+        });
+        let mut c = Client::new(m.scmi());
+        assert_eq!(c.clock_rate_set(27, 74_250_000), Ok(()));
+        assert_eq!(c.clock_rate_set(27, 74_000_000), Err(scmi::Error::Status(scmi::STATUS_OUT_OF_RANGE)));
+        assert_eq!(m.clock_rate(27), 74_250_000);
+        let d = c.clock_describe_rates(27).unwrap();
+        assert!(!d.range);
+        assert_eq!((d.count, d.remaining), (4, 0));
+        assert_eq!(&d.rates[..4], &rates[..]);
+        // Without a list: the current rate.
+        let d = c.clock_describe_rates(28).unwrap();
+        assert_eq!((d.count, d.rates[0]), (1, 27_000_000));
+    }
+
+    /// Unknown clock ids are NOT_FOUND on every message that names one.
+    #[test]
+    fn mp2_model_display_unknown_clock_is_not_found() {
+        let m = display();
+        let nf = scmi::Error::Status(scmi::STATUS_NOT_FOUND);
+        let mut c = Client::new(m.scmi());
+        assert_eq!(c.clock_rate_get(26), Err(nf));
+        assert_eq!(c.clock_rate_set(26, 1), Err(nf));
+        assert_eq!(c.clock_config_set(0, 1), Err(nf));
+        assert_eq!(c.clock_attributes(1000).map(|a| a.0), Err(nf));
+        assert_eq!(c.clock_describe_rates(91).map(|d| d.count), Err(nf));
+        assert!(!m.clock_enabled(26));
+        assert!(m.faults().is_empty(), "served, not a Fault::Protocol");
+    }
+
+    /// Row 18: vddcore (11), v1v8 (14), v3v3 (16) are on at boot; row 19:
+    /// LDO5 (21) is off until CONFIG_SET 0x7.
+    #[test]
+    fn mp2_model_display_voltage_domains_boot_state() {
+        let m = display();
+        let mut c = Client::new(m.scmi());
+        for id in [11, 14, 16] {
+            assert!(m.voltage_on(id), "{id}");
+            assert_eq!(c.voltage_config_get(id), Ok(scmi::VOLTAGE_CONFIG_ON), "{id}");
+        }
+        assert!(!m.voltage_on(21));
+        assert_eq!(c.voltage_config_get(21), Ok(scmi::VOLTAGE_CONFIG_OFF));
+        assert_eq!(c.version(VOLT), Ok(VOLTAGE_VERSION));
+        assert_eq!(c.voltage_domain_count(), Ok(4));
+        assert_eq!(&c.voltage_domain_name(21).unwrap()[..4], b"ldo5");
+        assert_eq!(c.voltage_level_get(16), Ok(3_300_000));
+        // Raw CONFIG_GET of 14: header, status, 0x7.
+        assert_eq!(words(&raw(&m, &[scmi::header(VOLT, 6, 4), 14])), vec![scmi::header(VOLT, 6, 4), 0, 7]);
+    }
+
+    /// Row 19: LDO5 CONFIG_SET 0x7 then CONFIG_GET back, then off again.
+    #[test]
+    fn mp2_model_display_ldo5_on_and_off() {
+        let m = display();
+        let r = words(&raw(&m, &[scmi::header(VOLT, 5, 1), 21, 7]));
+        assert_eq!(r, vec![scmi::header(VOLT, 5, 1), 0]);
+        assert!(m.voltage_on(21));
+        let mut c = Client::new(m.scmi());
+        assert_eq!(c.voltage_config_get(21), Ok(scmi::VOLTAGE_CONFIG_ON));
+        assert_eq!(c.voltage_config_set(21, scmi::VOLTAGE_CONFIG_OFF), Ok(()));
+        assert!(!m.voltage_on(21));
+        assert_eq!(c.voltage_config_get(21), Ok(scmi::VOLTAGE_CONFIG_OFF));
+        assert_eq!(c.voltage_config_set(21, scmi::VOLTAGE_CONFIG_ON), Ok(()));
+        assert!(m.voltage_on(21));
+        // Other modes are not architectural on/off.
+        assert_eq!(c.voltage_config_set(21, 3), Err(scmi::Error::Status(scmi::STATUS_INVALID_PARAMETERS)));
+        assert!(m.voltage_on(21));
+        // The other domains are untouched; an unknown one is NOT_FOUND.
+        assert!(m.voltage_on(14));
+        let nf = scmi::Error::Status(scmi::STATUS_NOT_FOUND);
+        assert_eq!(c.voltage_config_set(22, 7), Err(nf));
+        assert_eq!(c.voltage_config_get(0), Err(nf));
+        assert!(!m.voltage_on(22));
+    }
+
+    /// Without `display_scmi` the voltage protocol stays unsupported, and the
+    /// accessors still show the boot state.
+    #[test]
+    fn mp2_model_display_scmi_is_opt_in() {
+        let m = Mp2Model::new();
+        assert!(!m.clock_enabled(27));
+        assert_eq!(m.clock_rate(27), 148_500_000);
+        assert!(!m.voltage_on(21));
+        let mut c = Client::new(m.scmi());
+        assert_eq!(c.voltage_config_get(21), Err(scmi::Error::Status(scmi::STATUS_NOT_SUPPORTED)));
+        assert_eq!(m.faults(), vec![Fault::Protocol { proto: 0x17, msg: 6 }]);
     }
 
     #[test]
