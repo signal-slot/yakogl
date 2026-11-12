@@ -6578,6 +6578,31 @@ fn a_negative_zero_folded_from_other_values_is_mesa_s_or_refused() {
     }
 }
 
+/// A `-x` in a compare whose `x` the -0.0 rule cannot fold (glsl.rs
+/// `Tree::fold`): `-abs(0.0)`, `-min(0.0, 1.0)`, `-float(k)` of a
+/// `const int`, `-float(false)`, a local stored twice (highp and mediump),
+/// a lane stored twice, and a local stored in an unrolled loop. NIR folds
+/// each to -0.0 and nir_opt_algebraic.py:771-776 makes it 0.0; at
+/// c43649b30 each kept `0x0.neg`. Refused by name
+/// ([`MaliError::NegZeroShared`]): the rule passes only operands it can
+/// fold or can show are no constant.
+#[test]
+fn a_negated_operand_the_zero_rule_cannot_fold_is_refused() {
+    for (name, _, fs, json) in [
+        pair!("negzero_abs"),
+        pair!("negzero_min"),
+        pair!("negzero_int"),
+        pair!("negzero_bool"),
+        pair!("negzero_two_stores"),
+        pair!("negzero_two_stores_mediump"),
+        pair!("negzero_lane_two_stores"),
+        pair!("negzero_loop_store"),
+    ] {
+        assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::NegZeroShared, "{name}");
+    }
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,
