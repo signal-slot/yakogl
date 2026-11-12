@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict gc-triangle model=PASS apex-red=PASS apex-green=FAIL apex-blue=PASS outside=PASS covered=PASS final=FAIL record=FAIL:kind=21
+1 checks, 1 failed

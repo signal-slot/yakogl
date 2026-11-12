@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict gpu-idle reset-idle=FAIL:absent idle=FAIL verdict=FAIL
+1 checks, 1 failed

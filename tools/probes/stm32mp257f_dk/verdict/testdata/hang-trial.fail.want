@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict hang-trial banner=PASS hang-line=PASS no-psci-reset=FAIL
+1 checks, 1 failed

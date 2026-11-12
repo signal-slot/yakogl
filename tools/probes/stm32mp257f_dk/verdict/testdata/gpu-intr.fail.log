@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=1 x0=0x80000000 x1=0x0 x2=0x0 x3=0x0 pc=0xa0000000 cntfrq=24000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 1234 ticks
+mp2_gpu: build test
+mp2_gpu: gpu intr_enbl wrote 0xffffffff read 0x00000000, then 0
+mp2_gpu: verdict FAIL intr_enbl rc=-5 kind=3 step=0 a=0xffffffff b=0x0
