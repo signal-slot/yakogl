@@ -416,6 +416,7 @@ struct Var<'a> {
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Konst {
     Bool(bool),
+    /// A float: an f32 value, held exactly.
     Num(f64),
 }
 
@@ -699,11 +700,16 @@ impl<'x, 'a> Scan<'x, 'a> {
         }
     }
 
-    /// The value of the scalar constant expression `e` where this module
-    /// works it out: literals, `const` scalars, `!`, `-`, `&&`, `||`, `^^`
-    /// and the compares of two such values. `None` for anything else (a
-    /// built-in call, a constructor, a vector): `ast_to_hir` may still
-    /// fold it, and then a caller records [`Prec::Unknown`].
+    /// The value of the scalar constant expression `e`, for the forms
+    /// measured against Mesa 26.2.1 (review probes p01, p11, u3, u7): bool
+    /// and float literals and `const` scalars of them; `!`, `&&`, `||`,
+    /// `^^`, `==` and `!=` of bools; unary `-` and `+`, `+ - *` in 32-bit
+    /// floats and the compares of floats; one component of a `vecN` of
+    /// float scalars. `None` for every other form: an int or uint (wrapping,
+    /// division, shifts, `0u - 1u`, third review B-C), a conversion or a
+    /// converting constructor (`ivec2(1.5, 0.0).x`, B-D), a bool constructor,
+    /// a matrix, a built-in. `ast_to_hir` may still fold those, and the
+    /// caller records [`Prec::Unknown`] rather than guess.
     fn constant(&self, e: ExprId) -> Option<Konst> {
         let num = |k: Option<Konst>| match k {
             Some(Konst::Num(x)) => Some(x),
@@ -716,8 +722,6 @@ impl<'x, 'a> Scan<'x, 'a> {
         Some(match *self.ast.expr(e) {
             Expr::BoolLit(b) => Konst::Bool(b),
             Expr::FloatLit(x) => Konst::Num(f64::from(x)),
-            Expr::IntLit(x) => Konst::Num(f64::from(x as i32)),
-            Expr::UintLit(x) => Konst::Num(f64::from(x)),
             Expr::Ident(n) => self.lookup(n)?.value?,
             Expr::Unary(UnOp::Not, x) => Konst::Bool(!boolean(self.constant(x))?),
             Expr::Unary(UnOp::Minus, x) => Konst::Num(-num(self.constant(x))?),
@@ -726,7 +730,10 @@ impl<'x, 'a> Scan<'x, 'a> {
              * `vec2(1.0, 0.0).x` */
             Expr::Field(b, field) if field.len() == 1 => {
                 let Expr::Call { name, args } = *self.ast.expr(b) else { return None };
-                sema::constructor_type(name, self.ast.es3)?;
+                /* a float vector of float scalars: no conversion */
+                if !matches!(sema::constructor_type(name, self.ast.es3)?, BaseType::Vec(_)) {
+                    return None;
+                }
                 let k = match field.as_bytes()[0] {
                     b'x' | b'r' | b's' => 0,
                     b'y' | b'g' | b't' => 1,
@@ -735,7 +742,7 @@ impl<'x, 'a> Scan<'x, 'a> {
                     _ => return None,
                 };
                 let ids = &self.ast.expr_ids[args.indices()];
-                if ids.iter().any(|&x| self.ty(x).components() != 1) {
+                if ids.iter().any(|&x| self.ty(x) != BaseType::Float) {
                     return None;
                 }
                 let x = if ids.len() == 1 { ids[0] } else { *ids.get(k)? };
@@ -744,24 +751,16 @@ impl<'x, 'a> Scan<'x, 'a> {
             Expr::Binary(op, x, y) => {
                 let (a, b) = (self.constant(x)?, self.constant(y)?);
                 match (op, a, b) {
-                    /* GLSL's arithmetic: 32-bit floats, 32-bit wrapping
-                     * ints, as ast_to_hir folds them */
+                    /* 32-bit floats, as ast_to_hir folds them
+                     * (ir_expression_operation.py:646, the C operator on
+                     * the operand type) */
                     (BinOp::Add | BinOp::Sub | BinOp::Mul, Konst::Num(a), Konst::Num(b)) => {
-                        if is_int(self.ty(e)) {
-                            let (a, b) = (a as i32, b as i32);
-                            Konst::Num(f64::from(match op {
-                                BinOp::Add => a.wrapping_add(b),
-                                BinOp::Sub => a.wrapping_sub(b),
-                                _ => a.wrapping_mul(b),
-                            }))
-                        } else {
-                            let (a, b) = (a as f32, b as f32);
-                            Konst::Num(f64::from(match op {
-                                BinOp::Add => a + b,
-                                BinOp::Sub => a - b,
-                                _ => a * b,
-                            }))
-                        }
+                        let (a, b) = (a as f32, b as f32);
+                        Konst::Num(f64::from(match op {
+                            BinOp::Add => a + b,
+                            BinOp::Sub => a - b,
+                            _ => a * b,
+                        }))
                     }
                     (BinOp::AndAnd, Konst::Bool(a), Konst::Bool(b)) => Konst::Bool(a && b),
                     (BinOp::OrOr, Konst::Bool(a), Konst::Bool(b)) => Konst::Bool(a || b),
@@ -1944,6 +1943,44 @@ mod tests {
                 vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4((({cond}) ? q.y : h.z) * q.x); }}"));
             assert_eq!(alu(&g, AluOp::Fmul).last(), Some(&M), "{cond}");
         }
+    }
+
+    /// Third review B-C, B-D: the `?:` evaluator is a whitelist of forms
+    /// measured against Mesa. uint arithmetic wraps on the u32 lane in Mesa
+    /// (`0u - 1u > 5u` is true, probe p3/u1: a 16-bit product), and a
+    /// converting constructor converts (`ivec2(1.5, 0.0).x == 1` is true,
+    /// p3/u2). Neither is evaluated here: the `?:` is Unknown, never the
+    /// wrong side. Int arithmetic, shifts, division, conversions and bool or
+    /// int constructors are not evaluated either.
+    #[test]
+    fn a_condition_outside_the_measured_forms_is_unknown() {
+        let head = "attribute mediump vec4 q; attribute highp vec4 h; varying highp vec4 v;\n";
+        for cond in [
+            "ivec2(1.5, 0.0).x == 1",
+            "1 + 2 == 3",
+            "(-1 < 0) == true",
+            "bvec2(true, false).x",
+            "int(1.5) == 1",
+            "5 / 2 == 2",
+        ] {
+            let g =
+                vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4((({cond}) ? q.x : h.x) * q.y); }}"));
+            assert_eq!(alu(&g, AluOp::Fmul).last(), Some(&Prec::Unknown), "{cond}");
+        }
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let g = compile(
+            "#version 300 es\nin highp vec4 p; in mediump vec4 q; in highp vec4 h; out highp vec4 v;\n\
+             void main(){ gl_Position = p; v = vec4((0u - 1u > 5u ? q.x : h.x) * q.y); }",
+            Stage::Vertex,
+        );
+        assert_eq!(alu(&g, AluOp::Fmul).last(), Some(&Prec::Unknown), "0u - 1u > 5u");
+        /* the measured forms still choose */
+        let g = vs(&std::format!(
+            "{head}void main(){{ gl_Position = p; v = vec4(((0.1 + 0.2 > 0.3) ? h.x : q.x) * q.y); }}"
+        ));
+        assert_eq!(alu(&g, AluOp::Fmul).last(), Some(&M), "0.1 + 0.2 > 0.3 is false in f32");
     }
 
     #[test]
