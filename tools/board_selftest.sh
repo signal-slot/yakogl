@@ -1401,7 +1401,7 @@ mkdir -p "$S/t6"
 t6run() {
     local c=$1 u=$2
     shift 2
-    T6_OUT=$(env BOARD_HOST=root@t6fake-host BOARD_UART=/dev/ttyFAKE-T6 T6_HAND=selftest "$@" T6_RUNNER="$S/fake-nanopc-t6.sh" \
+    T6_OUT=$(env BOARD_HOST=tester@t6fake-host BOARD_UART=/dev/ttyFAKE-T6 T6_HAND=selftest "$@" T6_RUNNER="$S/fake-nanopc-t6.sh" \
         FAKE_T6="$c" FAKE_T6_UART="$u" FAKE_T6_ARGS="$S/t6/args" PATH="$S/okstub:$PATH" "$B" nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/t6/$c-${u##*/}" 2>&1)
     T6_RC=$?
     T6_RD=$(ls -d "$S/t6/$c-${u##*/}"/*/ 2>/dev/null | head -1)
@@ -1418,7 +1418,7 @@ check "nanopc-t6: the runner's record moved into the run directory (no <date>-t6
     eval '[ -n "$T6_RD" ] && ! ls -d "$T6_RD"/*-t6 > /dev/null 2>&1 && cmp -s "$T6_RD/console.txt" "$KT/t6_hello-pass.uart" &&
           [ "$(grep -cE "  (uart.log|record.txt|linux-before.dmesg-w|linux-after.dmesg|kexec.log|meta.txt)$" "$T6_RD/INDEX.txt")" = 6 ]'
 check "nanopc-t6: the record names neither the board's host nor the UART path (redacted), the hand stays" \
-    eval '! grep -rq "t6fake-host\|ttyFAKE-T6" "$T6_RD" && grep -q "board root@<board-host>," "$T6_RD/record.txt" &&
+    eval '! grep -rq "t6fake-host\|ttyFAKE-T6" "$T6_RD" && grep -q "board tester@<board-host>," "$T6_RD/record.txt" &&
           grep -q "read only): <BOARD_UART> ->" "$T6_RD/record.txt" && grep -q "hand at the power switch: selftest" "$T6_RD/record.txt"'
 check "nanopc-t6: the board lease taken before the runner and given back at the end; no other board command" \
     eval '[ "$(grep -c "^ssh .*yakogl-board.lease" "$S/t6/ssh.log")" = 2 ] && [ "$(grep -c "^ssh .*uname -n" "$S/t6/ssh.log")" = 1 ] &&
