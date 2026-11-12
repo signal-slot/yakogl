@@ -77,6 +77,7 @@
 
 use crate::env::Env;
 use crate::errno::{EINVAL, ENODEV, ETIMEDOUT};
+use crate::ip::dw_mipi_dsi::{flags, DphyTiming, Format as HostFormat, Link, Phy};
 use crate::mmio::{field, get, Mmio};
 use crate::ylog;
 
@@ -710,6 +711,84 @@ pub fn power_off(m: &impl Mmio, base: usize) {
     update(m, base, r::WCR, r::WCR_DSIEN, 0);
 }
 
+/// The host's [`Phy`] hooks over this wrapper: `dw_mipi_dsi_phy_ops`
+/// (include/drm/bridge/dw_mipi_dsi.h:33-44) as ST's MP25 glue fills it
+/// (`dw_mipi_dsi_stm_phy_141_ops`, `:1235-1241`).
+///
+/// `lane_mbps` is `get_lane_mbps` (`:445-484`): the lane rate from the link
+/// (`mode_valid`'s `lane_kbps_for`, `:1140-1144`), the PLL search for half of
+/// it (`:339-397`), the rate in whole Mbit/s (`:478`). It keeps the PLL and
+/// the colour coding; `init` programs that PLL with [`init`] (the rate in
+/// kbit/s, not Linux's truncated Mbit/s, see the module text). `timing` is
+/// `get_timing` (`:1002-1018`), `power_on`/`power_off` are `:828-848`. ST's
+/// 141 ops have no `get_esc_clk_rate` (the host's default 20 MHz holds), and
+/// the PLL lock is in the host's `PHY_STATUS` (the default
+/// `lock_in_phy_status`). `init` waits for the clock lane's stop state itself
+/// (`enable_pll`, `:531-537`), so its error is the host's step 3.
+pub struct StmDsiPhy {
+    pub base: usize,
+    /// `CK_KER_DSIPHY`, Hz.
+    pub ref_hz: u32,
+    /// Set by `lane_mbps`.
+    pll: Option<(Pll, ColorCoding)>,
+}
+
+impl StmDsiPhy {
+    pub const fn new(base: usize, ref_hz: u32) -> Self {
+        StmDsiPhy { base, ref_hz, pll: None }
+    }
+
+    /// The PLL `lane_mbps` chose for the last link.
+    pub fn pll(&self) -> Option<&Pll> {
+        self.pll.as_ref().map(|p| &p.0)
+    }
+}
+
+impl Phy for StmDsiPhy {
+    fn lane_mbps(&mut self, _m: &impl Mmio, link: &Link) -> Result<u32, i32> {
+        let format = match link.format {
+            HostFormat::Rgb888 => MipiFormat::Rgb888,
+            HostFormat::Rgb666 => MipiFormat::Rgb666,
+            HostFormat::Rgb666Packed => MipiFormat::Rgb666Packed,
+            HostFormat::Rgb565 => MipiFormat::Rgb565,
+        };
+        let burst = link.flags & flags::MODE_VIDEO_BURST != 0;
+        let kbps = lane_kbps_for(link.mode.pixel_clock_hz / 1000, format.bpp(), link.lanes, burst);
+        if !(LANE_MIN_KBPS..=LANE_MAX_KBPS).contains(&kbps) {
+            return Err(-EINVAL);
+        }
+        ccf(self.ref_hz / 1000)?;
+        let pll = search(self.ref_hz / 1000, kbps / 2)?;
+        self.pll = Some((pll, format.coding()));
+        Ok(pll.lane_mbps())
+    }
+
+    fn timing(&self, lane_mbps: u32) -> Result<DphyTiming, i32> {
+        let h = hs_transition(lane_mbps);
+        Ok(DphyTiming {
+            data_hs2lp: u32::from(h.data_hs2lp),
+            data_lp2hs: u32::from(h.data_lp2hs),
+            clk_hs2lp: u32::from(h.clk_hs2lp),
+            clk_lp2hs: u32::from(h.clk_lp2hs),
+        })
+    }
+
+    fn init(&mut self, m: &impl Mmio, env: &impl Env) -> Result<(), i32> {
+        let (pll, coding) = self.pll.ok_or(-EINVAL)?;
+        let done = init(m, env, self.base, self.ref_hz, pll.lane_kbps(), coding)?;
+        self.pll = Some((done, coding));
+        Ok(())
+    }
+
+    fn power_on(&mut self, m: &impl Mmio) {
+        power_on(m, self.base);
+    }
+
+    fn power_off(&mut self, m: &impl Mmio) {
+        power_off(m, self.base);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1096,5 +1175,167 @@ mod tests {
         assert_eq!(MipiFormat::Rgb666.coding() as u32, 4);
         assert_eq!(MipiFormat::Rgb666Packed.coding() as u32, 3);
         assert_eq!(MipiFormat::Rgb565.coding() as u32, 0);
+    }
+
+    /// The joint bring-up of `dw_mipi_dsi::attach` over [`StmDsiPhy`] for CEA
+    /// 720p60 (74.25 MHz) on 4 lanes, RGB888, ADV7535 flags, in the order of
+    /// dw-mipi-dsi.c `dw_mipi_dsi_mode_set` (:979-1023) then `atomic_enable`
+    /// (:1046-1055): `get_lane_mbps` (:989) and `get_timing` (:856) before
+    /// the first host write, the host's PHY registers (:899-935), the
+    /// wrapper's `init` (:1010, dw_mipi_dsi-stm.c:399-442) between them and
+    /// the release of `PHY_RSTZ` (:909-927), the two frames (:1016), command
+    /// mode (:1019), `power_on` (:1021, dw_mipi_dsi-stm.c:828-836) and last
+    /// video mode (:1052).
+    #[test]
+    fn joint_720p60_four_lane_bring_up_with_the_host() {
+        use crate::ip::dw_mipi_dsi as host;
+        use crate::ip::dw_mipi_dsi::regs as h;
+        use crate::video::VideoMode;
+
+        /// One register file for the host half and the wrapper half of the
+        /// block. The clock lane reaches its stop state once the wrapper has
+        /// written `PCTLR` 0x7 (PWEN, DEN, CKEN: the PHY out of reset); the
+        /// PLL locks once `PHY_RSTZ` is 0xf and `WRPCR2.PLLEN` is set.
+        struct Joint(Pin);
+        impl Mmio for Joint {
+            fn read32(&self, addr: usize) -> u32 {
+                let v = match Pin::off(addr) {
+                    h::PHY_STATUS => {
+                        let rstz = self.0.peek(h::PHY_RSTZ);
+                        let pllen = self.0.peek(r::WRPCR2) & r::WRPCR2_PLLEN != 0;
+                        (if rstz & 7 == 7 { h::PHY_STOP_STATE_CLK_LANE } else { 0 })
+                            | (if rstz == 0xf && pllen { h::PHY_LOCK } else { 0 })
+                    }
+                    h::CMD_PKT_STATUS => h::GEN_CMD_EMPTY | h::GEN_PLD_W_EMPTY,
+                    h::VERSION => h::HWVER_141 | 0x2a,
+                    o => self.0.peek(o),
+                };
+                self.0.trace.borrow_mut().push(R(Pin::off(addr)));
+                v
+            }
+            fn write32(&self, addr: usize, val: u32) {
+                self.0.write32(addr, val)
+            }
+            fn read8(&self, _: usize) -> u8 {
+                unreachable!()
+            }
+            fn write8(&self, _: usize, _: u8) {
+                unreachable!()
+            }
+        }
+        impl Env for Joint {
+            fn busy_wait_us(&self, us: u32) {
+                self.0.busy_wait_us(us)
+            }
+            fn sleep_ms(&self, ms: u32) {
+                self.0.sleep_ms(ms)
+            }
+            fn log_str(&self, level: Level, line: &str) {
+                self.0.log_str(level, line)
+            }
+            fn i2c_write(&self, _: u32, _: &[u8]) -> Result<(), i32> {
+                unreachable!()
+            }
+            fn i2c_write_read(&self, _: u32, _: &[u8], _: &mut [u8]) -> Result<(), i32> {
+                unreachable!()
+            }
+            fn gpio_set(&self, _: u32, _: bool) -> Result<(), i32> {
+                unreachable!()
+            }
+        }
+
+        let mode = VideoMode {
+            pixel_clock_hz: 74_250_000,
+            hactive: 1280,
+            hfront: 110,
+            hsync: 40,
+            hback: 220,
+            vactive: 720,
+            vfront: 5,
+            vsync: 5,
+            vback: 20,
+            hsync_high: true,
+            vsync_high: true,
+            de_high: true,
+        };
+        let link = Link { mode, lanes: 4, channel: 0, format: HostFormat::Rgb888, flags: flags::ADV7535 };
+        let dsi = Joint(Pin::default());
+        let mut phy = StmDsiPhy::new(BASE, REF_HZ);
+        let plan = host::attach(&dsi, &dsi, BASE, &mut phy, &link).unwrap();
+
+        // Values passed between the modules. Lane rate: 74250 kHz x 24 / 4
+        // = 445 500 kbit/s (dw_mipi_dsi-stm.c:1140-1144, non-burst), PLL
+        // out half of it; 27 MHz x 66 / (4 x 2) is exact. The host gets the
+        // whole Mbit/s (:478), 445.
+        let pll = *phy.pll().unwrap();
+        assert_eq!((pll.idf, pll.ndiv, pll.odf), (4, 66, 2));
+        assert_eq!(plan.lane_mbps, 445);
+        assert_eq!(pll.lane_kbps(), 445_500);
+        // The lane byte clock the lanes run at: 445.5 Mbit/s / 8.
+        assert_eq!(pll.byte_clock_hz(), 55_687_500);
+        // Escape clock: no get_esc_clk_rate on the 141 ops, so the host's
+        // 20 MHz: (445 >> 3) / 20 + 1 = 3 (dw-mipi-dsi.c:673-681).
+        assert_eq!(plan.esc_div, 3);
+        assert_eq!(dsi.0.peek(h::CLKMGR_CFG), h::clkmgr_cfg(0, 3));
+        // hstt_phy_141_table row for 445 Mbit/s (dw_mipi_dsi-stm.c:1003-1015).
+        let t = hs_transition(445);
+        assert_eq!(plan.timing.data_hs2lp, u32::from(t.data_hs2lp));
+        assert_eq!(plan.timing.data_lp2hs, u32::from(t.data_lp2hs));
+        assert_eq!(plan.timing.clk_hs2lp, u32::from(t.clk_hs2lp));
+        assert_eq!(plan.timing.clk_lp2hs, u32::from(t.clk_lp2hs));
+        assert_eq!(
+            (t.clk_lp2hs, t.clk_hs2lp, t.data_lp2hs, t.data_hs2lp),
+            (65, 40, 49, 23),
+            "row 450 of hstt_phy_141_table"
+        );
+        assert_eq!(dsi.0.peek(h::PHY_TMR_CFG), h::phy_tmr_cfg_v131(23, 49), "dw-mipi-dsi.c:872");
+        assert_eq!(dsi.0.peek(h::PHY_TMR_LPCLK_CFG), h::phy_tmr_lpclk_cfg(40, 65), "dw-mipi-dsi.c:883");
+        assert_eq!(dsi.0.peek(h::PHY_IF_CFG), h::phy_if_cfg(host::PHY_STOP_WAIT, 4));
+        // The wrapper's PLL registers are the ones [`init_sequence_720p_four_lanes`] pins.
+        assert_eq!(dsi.0.peek(r::WPCR1), 0x1628);
+        assert_eq!(dsi.0.peek(r::WRPCR0), 0x403);
+        assert_eq!(dsi.0.peek(r::WRPCR1), 0x1910_004b);
+        assert_eq!(dsi.0.peek(r::WRPCR2) & r::WRPCR2_PLLEN, r::WRPCR2_PLLEN);
+        assert_eq!(dsi.0.peek(r::WCFGR), 5 << 1, "COLMUX RGB888, video mode");
+        assert_eq!(dsi.0.peek(r::WCR) & r::WCR_DSIEN, r::WCR_DSIEN, "power_on");
+
+        // Order across the modules; video_on is atomic_enable (:1052), after the receiver is ready.
+        let tr_attach = dsi.0.trace();
+        assert!(!tr_attach.contains(&W(h::MODE_CFG, h::ENABLE_VIDEO_MODE)), "attach leaves command mode");
+        host::video_on(&dsi, BASE, &link);
+        let w = dsi.0.writes();
+        let at = |off: u32, val: Option<u32>| {
+            w.iter()
+                .position(|&(o, v)| o == off && val.is_none_or(|x| x == v))
+                .unwrap_or_else(|| panic!("no write {off:#x}"))
+        };
+        let last = |off: u32, val: u32| w.iter().rposition(|&x| x == (off, val)).unwrap();
+        // host reset first (:683), then the host's PHY timing, interface
+        let pwr_down = at(h::PWR_UP, Some(0));
+        let tmr = at(h::PHY_TMR_CFG, None);
+        let ifcfg = at(h::PHY_IF_CFG, None);
+        // wrapper init (:1010): WCFGR first, PLL registers, PLLEN
+        let wcfgr = at(r::WCFGR, None);
+        let wpcr1 = at(r::WPCR1, None);
+        let pllen = at(r::WRPCR2, Some(0x101));
+        // the host releases the PHY (:914) after the wrapper's PLLEN
+        let release = at(h::PHY_RSTZ, Some(0xf));
+        let cmd_mode = last(h::MODE_CFG, h::ENABLE_CMD_MODE);
+        let dsien = at(r::WCR, Some(r::WCR_DSIEN));
+        let video = last(h::MODE_CFG, h::ENABLE_VIDEO_MODE);
+        assert!(pwr_down < tmr && tmr < ifcfg, "host PHY timing and interface (:849-897)");
+        assert!(ifcfg < wcfgr, "phy_ops->init (:1010) after the host's PHY registers");
+        assert!(wcfgr < wpcr1 && wpcr1 < pllen);
+        assert!(pllen < release, "the wrapper's PLLEN (dw_mipi_dsi-stm.c:537) before PHY_RSTZ all on (:914)");
+        assert!(release < cmd_mode && cmd_mode < dsien, "command mode (:1019) then power_on (:1021)");
+        assert!(dsien < video, "video mode last (:1052)");
+        // the PHY's stop-state wait (PSR) and the host's PHY_STATUS polls are the same register
+        let tr = dsi.0.trace();
+        assert!(tr.contains(&R(r::PSR)));
+        // the two-frame wait between the release and command mode (:1016)
+        assert_eq!(plan.settle_ms, 34);
+        let release_ev = tr.iter().position(|e| *e == W(h::PHY_RSTZ, 0xf)).unwrap();
+        let cmd_ev = tr.iter().rposition(|e| *e == W(h::MODE_CFG, h::ENABLE_CMD_MODE)).unwrap();
+        assert!(tr[release_ev..cmd_ev].contains(&Wait(34_000)));
     }
 }
