@@ -1325,26 +1325,7 @@ Found while writing this back end, in shared front-end code. They are not fixed
 here: a change in `builtin_call.rs` or `lower.rs` changes what the PowerVR and
 GC7000 back ends compute, so it needs their board regressions.
 
-**1. A built-in's width is unrecorded (a gap, not a wrong value).** A built-in
-emitted through `builtin_call.rs` (`Componentwise` `abs` at :164, `max` at :177)
-leaves its entry in `Module::comps` at 0, "unrecorded", so `comps_of` answers its
-fallback 4 for `abs()` or `max()` of a `vec2`. A plain `u + u` records 2.
-
-- Repro:
-  `cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --lib -- a_builtin_on_a_vec2_records_two_lanes --ignored --nocapture`
-  prints `[(Fabs, Some(0), 4), (Fmax, Some(0), 4), (Fadd, Some(2), 2), ...]`
-  (op, recorded width, `comps_of`).
-- Why it cannot draw wrong: `comps_of`'s contract is "an over-estimate, never a
-  wrong narrow answer" (`ir.rs:656-658`), and every store bounds its own lanes.
-  `StoreLocal` has `write_mask`. A varying store takes its lane count from the
-  declaration's `components` (`v3d/prepare.rs:386-394`). The V3D leaves a lane
-  whose source lanes do not exist uncomputed, and the PowerVR's `result_lanes`
-  (`powervr/select.rs:2465-2466`) computes lanes nothing reads.
-- The cost: wasted lanes (instructions and registers), not pixels.
-- The fix belongs in the built-in emitter: record the argument's width, which the
-  checker already knows.
-
-**2. The `Bool` comment in `ir.rs` is stale.** It says "0 or 1 in an integer
+**1. The `Bool` comment in `ir.rs` is stale.** It says "0 or 1 in an integer
 lane", but every producer writes all ones for true: `eval.rs` (`bits_of_bool`),
 the PowerVR's constants, the GC7000's comparisons (its `B2f` is an AND mask that
 relies on it), and the V3D. Only `B2f`/`B2i` give a bool a numeric value. `ir.rs`

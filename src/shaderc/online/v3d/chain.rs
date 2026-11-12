@@ -1912,14 +1912,11 @@ mod tests {
         });
     }
 
-    /// Front-end report (the width table, ir.rs `Module::comps`): a
-    /// built-in emitted through builtin_call.rs (`abs`, `max` of a vec2)
-    /// leaves its width UNRECORDED (0), so `comps_of` answers the documented
-    /// over-estimate 4, while `u + u` records 2. Why it cannot draw wrong on
-    /// the V3D: every store bounds its lanes by the destination (a varying
-    /// by its declaration's `components`, a local by `write_mask`), and a
-    /// lane whose source lanes do not exist is left uncomputed (prepare.rs),
-    /// so the two extra lanes are never read. It costs work, not pixels.
+    /// The width table (ir.rs `Module::comps`) of a built-in emitted
+    /// through builtin_call.rs (`abs`, `max` of a vec2): the call's width,
+    /// recorded by lower.rs `Sink::emit` as `u + u` records 2. Unrecorded
+    /// until then (comps 0, `comps_of` 4): the V3D left the lanes past the
+    /// width uncomputed (prepare.rs), so it cost work, not pixels.
     fn builtin_widths(src: &str) -> Vec<(ir::AluOp, Option<u8>, u8)> {
         let mut out = Vec::new();
         store::with_scratch(|a| {
@@ -1936,7 +1933,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "front-end gap: built-in widths unrecorded (comps 0 -> fallback 4); costs lanes, not pixels; see v3d-backend.md"]
     fn a_builtin_on_a_vec2_records_two_lanes() {
         let w = builtin_widths(
             "precision mediump float; uniform vec2 u; \
@@ -1946,11 +1942,7 @@ mod tests {
         std::println!("{w:?}");
         for (k, _, c) in &w {
             if matches!(k, ir::AluOp::Fabs | ir::AluOp::Fmax) {
-                assert_eq!(
-                    *c, 2,
-                    "front-end gap: {k:?} of a vec2 leaves its width unrecorded (comps 0 -> fallback 4); \
-                     costs lanes, not pixels; see v3d-backend.md, Open reports to the front end: {w:?}"
-                );
+                assert_eq!(*c, 2, "{k:?} of a vec2 records two lanes: {w:?}");
             }
         }
     }
