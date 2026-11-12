@@ -684,17 +684,19 @@ fn a_shutdown_not_acknowledged_keeps_the_frees_held() {
     freed_pages_stay_held(&mut r, &a);
 }
 
-/// Twenty restarts, a good kick after each: every lost fence stays `-EIO`
-/// past the [`LOST_RANGES`] kept (an older lost range is held by the floor),
-/// every good one above the floor 0.
+/// [`RESTART_BUDGET`] restarts, a good kick after each: every lost fence
+/// stays `-EIO`, every good one 0. The next error ends the group (stopped
+/// and terminated, so the held frees go back) and the OSAL is dead
+/// ([`SchedRefusal::RestartBudget`] with the refusal that would have
+/// restarted it); every later kick is `-EIO`.
 #[test]
-fn twenty_restarts_keep_every_lost_fence_lost_and_every_good_one_good() {
+fn errors_past_the_restart_budget_end_the_group_and_leave_the_osal_dead() {
     let mut r = rig();
     queue_init(&mut r);
     let s = stream(&mut r);
     let mut lost = vec![];
     let mut good = vec![];
-    for _ in 0..20 {
+    for _ in 0..RESTART_BUDGET {
         r.z.fail_at(r.z.calls() + 1, Fail::Fault(1));
         let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
         assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
@@ -703,16 +705,26 @@ fn twenty_restarts_keep_every_lost_fence_lost_and_every_good_one_good() {
         assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), 0);
         good.push(f);
     }
-    assert_eq!((r.osal.restarts, word(&s)), (20, 20));
+    assert_eq!((r.osal.restarts, word(&s), r.osal.dead()), (RESTART_BUDGET, u64::from(RESTART_BUDGET), None));
+
+    // one more: the group ends, nothing starts again
+    r.z.fail_at(r.z.calls() + 1, Fail::Fault(1));
+    let a = r.osal.alloc(4096).unwrap();
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
+    lost.push(f);
+    let budget = (SchedRefusal::RestartBudget, SchedRefusal::CsFault as u32);
+    assert_eq!((r.osal.restarts, r.osal.dead(), r.osal.unended()), (RESTART_BUDGET, Some(budget), false));
+    assert_eq!(r.osal.last_error(), Some((SchedRefusal::CsFault, 1)));
+    assert_eq!(csg_state(&r), csf::CSG_STATE_TERMINATE);
+    assert_eq!(r.osal.held(), 0, "the group ended: the free went back");
+    assert_eq!(r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay), -i64::from(EIO));
     for f in lost {
         assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO, "lost {f}");
     }
-    // the four oldest ranges dropped: the floor is the fourth's end, and
-    // the three good fences below it read as lost
-    let below = good.iter().filter(|&&f| r.osal.wait(&*r.z, f, -1, &mut no_delay) == -EIO).count();
-    assert_eq!(below, 20 - LOST_RANGES - 1);
-    for f in &good[20 - LOST_RANGES - 1..] {
-        assert_eq!(r.osal.wait(&*r.z, *f, -1, &mut no_delay), 0, "good {f}");
+    for f in good {
+        assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), 0, "good {f}");
     }
 }
 

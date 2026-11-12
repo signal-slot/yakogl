@@ -56,6 +56,8 @@
 //! the queue-init stream (`HEAP_SET` of the heap context, Z4's
 //! [`z4::QUEUE_INIT`], at [`INIT_VA`]) run and waited for, since a new
 //! stream has no heap context. The next kick goes on with the next fence.
+//! At most [`RESTART_BUDGET`] restarts in an image: the error after the
+//! last ends the group (stopped and terminated) and leaves the OSAL dead.
 //! panthor goes on after a `CS_FAULT` (the stream reaches its
 //! `ERROR_BARRIER`) and never starts a failed group again (user space makes
 //! a new one, panthor_sched.c:1925-1931); here every error takes the one
@@ -113,10 +115,18 @@ pub const MAX_CARVE_PAGES: usize = 64 * 1024;
 /// kept (`-ENOSPC`), as src/osal/pending_frees.h does without its wait.
 pub const PENDING_FREES: usize = 256;
 
-/// Lost fence ranges a wait still answers `-EIO` for, one a restart; a
-/// fence at or below an older one's end is `-EIO` too (the safe side: the
-/// backend waits for each frame's fence once, two frames in flight).
-pub const LOST_RANGES: usize = 16;
+/// Restarts in one image; the error after the last ends the group and
+/// leaves the OSAL dead ([`SchedRefusal::RestartBudget`]). Why 16: a
+/// restart (a terminate, a start in the same slot, a queue-init job) has
+/// not yet run on the board, and a fault that comes back on every kick
+/// would otherwise drive one such cycle and one UART line per kick, for
+/// the whole of a dEQP run. 16 is far above what a GL run that works needs
+/// (none), and it keeps every lost fence known exactly ([`LOST_RANGES`]).
+/// Raise it once a board run has shown restarts work.
+pub const RESTART_BUDGET: u32 = 16;
+/// Lost fence ranges a wait answers `-EIO` for: one a restart, one for
+/// the error past the budget or the shutdown. Every range is kept.
+pub const LOST_RANGES: usize = RESTART_BUDGET as usize + 1;
 /// Where a restart's queue-init stream lies: the queue region's page after
 /// the 16-byte sync object, from the next 64-byte boundary (the ring and
 /// the sync object take [`RING_SIZE`] + 16 bytes of the region's
@@ -323,11 +333,9 @@ pub struct Osal {
     completed: u64,
     /// Fence = base + the ring's sequence number (the module doc).
     base: u64,
-    /// Lost fences, inclusive ranges, oldest first; at or below `lost_floor`
-    /// lost too ([`LOST_RANGES`]).
+    /// Lost fences, inclusive ranges, oldest first ([`LOST_RANGES`]).
     lost: [(u64, u64); LOST_RANGES],
     n_lost: usize,
-    lost_floor: u64,
     dead: Option<Dead>,
     /// [`Osal::shutdown`] ended the group.
     down: bool,
@@ -383,7 +391,6 @@ impl Osal {
         base: 0,
         lost: [(0, 0); LOST_RANGES],
         n_lost: 0,
-        lost_floor: 0,
         dead: None,
         down: false,
         unended: false,
@@ -800,13 +807,13 @@ impl Osal {
         Some(ended)
     }
 
-    /// Fences `from..=to` lost; the oldest range dropped into
-    /// `lost_floor` when [`LOST_RANGES`] are kept.
+    /// Fences `from..=to` lost. [`LOST_RANGES`] holds every range the
+    /// restart budget and the shutdown can make; were it full, the last
+    /// range would grow to `to` (the safe side: a good fence read lost).
     fn lose(&mut self, from: u64, to: u64) {
         if self.n_lost == LOST_RANGES {
-            self.lost_floor = self.lost[0].1;
-            self.lost.copy_within(1.., 0);
-            self.n_lost -= 1;
+            self.lost[LOST_RANGES - 1].1 = to;
+            return;
         }
         self.lost[self.n_lost] = (from, to);
         self.n_lost += 1;
@@ -814,7 +821,7 @@ impl Osal {
 
     /// `fence` was lost to a restart ([`Osal::lose`]).
     fn is_lost(&self, fence: u64) -> bool {
-        fence <= self.lost_floor || self.lost[..self.n_lost].iter().any(|&(a, b)| (a..=b).contains(&fence))
+        self.lost[..self.n_lost].iter().any(|&(a, b)| (a..=b).contains(&fence))
     }
 
     /// After `why`, which needs panthor's GPU reset: a group state none of
@@ -834,8 +841,9 @@ impl Osal {
     /// the heap made again ([`Osal::remake_heap`]), CSG 0 / CS 0 started
     /// again ([`sched::restart`]), the queue-init job run and waited for
     /// ([`Osal::run_init`]). `-EIO` either way: the kick that saw `why` is
-    /// lost. A step refused, or `why` one that needs a GPU reset
-    /// ([`Osal::needs_reset`]), leaves the OSAL dead.
+    /// lost. A step refused, `why` one that needs a GPU reset
+    /// ([`Osal::needs_reset`]), or the [`RESTART_BUDGET`] spent (the group
+    /// then ended and not started again) leaves the OSAL dead.
     fn recover(&mut self, m: &impl Mmio, why: Dead, ended: Option<Ended>, delay_us: &mut impl FnMut(u32)) -> i32 {
         let Some(u) = self.up else { return -EINVAL };
         self.last_error = Some(why);
@@ -861,6 +869,9 @@ impl Osal {
             return self.stop(r);
         }
         self.drain();
+        if self.restarts == RESTART_BUDGET {
+            return self.stop((SchedRefusal::RestartBudget, why.0 as u32));
+        }
         if let Err(r) = self.remake_heap(&u) {
             return self.stop(r);
         }

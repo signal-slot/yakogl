@@ -631,6 +631,10 @@ pub enum SchedRefusal {
     /// its tiler heap could not be made again as it was (the value: the
     /// OSAL's code for it).
     HeapRemake = 30,
+    /// Ours, the Zephyr OSAL's: an error after its last allowed restart
+    /// (`RESTART_BUDGET`) ended the group instead of starting it again
+    /// (the value: the refusal that would have restarted it).
+    RestartBudget = 31,
 }
 
 /// The ring's size as panthor's queue creation accepts it
@@ -1959,7 +1963,7 @@ pub fn stop_and_terminate(
 mod tests {
     use super::*;
 
-    const ALL: [SchedRefusal; 30] = [
+    const ALL: [SchedRefusal; 31] = [
         SchedRefusal::RingSize,
         SchedRefusal::RingUnmapped,
         SchedRefusal::UserPagesUnmapped,
@@ -1990,6 +1994,7 @@ mod tests {
         SchedRefusal::TilerOomCounts,
         SchedRefusal::HeapGrow,
         SchedRefusal::HeapRemake,
+        SchedRefusal::RestartBudget,
     ];
 
     #[test]
@@ -2011,6 +2016,7 @@ mod tests {
             (SchedRefusal::TilerOomCounts, 28),
             (SchedRefusal::HeapGrow, 29),
             (SchedRefusal::HeapRemake, 30),
+            (SchedRefusal::RestartBudget, 31),
         ];
         for (r, n) in pinned {
             assert_eq!(r as u32, n, "{r:?}");
