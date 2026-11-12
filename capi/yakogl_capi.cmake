@@ -206,6 +206,11 @@ function(yakogl_add_capi_archive)
   if(YAKOGL_TEST_KNOBS)
     list(APPEND _features "test-knobs")
   endif()
+  # ES 3.0 multisample renderbuffers (the crate's `msaa-fbo`), a global too:
+  # off unless a build tree asks for 4x framebuffers.
+  if(YAKOGL_MSAA_FBO)
+    list(APPEND _features "msaa-fbo")
+  endif()
   # The gl_test runner (the crate's `gl-test-runner`): the walker of
   # tools/pvrlab/gl_test.c, in every archive a build of that file links and
   # in no other.
