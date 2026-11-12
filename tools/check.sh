@@ -183,11 +183,14 @@ scope_of_path() {
   # *_71*) and by the shared V3D files 7.1 builds from; all of them are
   # under the three directories below, and the 4.2 rows are reached as before.
   src/shaderc/online/v3d/* | driver/src/v3d/* | tools/v3d/*) echo "v3d v3d71" ;;
-  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/depth_resolve_v3d*) echo v3d ;;
+  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
   src/shaderc/online/mali/* | src/mali/* | tools/mali/*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
-  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_*) echo vivante ;;
+  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc*) echo vivante ;;
+  # gl_FragDepth's shape test (tests/es3_fragdepth_cases.rs) pins its verdicts
+  # on both GPUs: a change there reaches both fragdepth rows, and nothing else
+  tests/es3_fragdepth_cases*) echo "vivante v3d" ;;
   src/shaderc/online/powervr/* | src/pvr/* | driver/src/pvr/* | driver/src/pvr_* | driver/src/fw/* | driver/compat/* | tools/pvr/* | tools/pco_shc/* | tools/pco-isa/* | tools/isa-extract/* | tools/glsl2usc.sh | driver/tools/offsetof/* | tests/reference/* | driver/rust/src/soc/am62p/* | tools/ti-zephyr/* | tools/ti-trm/*) echo pvr ;;
   driver/tools/pvrlab/*) echo gltest ;;
   tools/yakogl-tools/*) echo toolscrate ;;
@@ -1607,6 +1610,20 @@ step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --featur
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
   knobs_lib_tests "$KNOBS_POWERVR_CONFIG" "${KNOBS_POWERVR_TESTS[@]}"
 
+# gl_FragDepth on the GC7000UL (plan #340, docs/notes/gl-fragdepth.md): the
+# depth written, clamped, to r0.z with `viv.ps_depth_out_reg` 0 and
+# `writes_depth` 1, the `gl_FragCoord` copy that keeps the pixel's depth a
+# shader writes and reads, the written values run through the tests/common
+# interpreter, and the early-Z rule's PE_DEPTH_CONFIG and RA_EARLY_DEPTH
+# words (tests/es3_fragdepth_gc.rs); and the GC7000UL half of the nine dEQP
+# fragdepth shapes (tests/es3_fragdepth_cases.rs; its V3D half runs in the
+# V3D rows below). Compiles to nothing under report-es2.
+scope vivante
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_fragdepth_gc.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_fragdepth_gc
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_fragdepth_cases.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_fragdepth_cases
+
 # The Raspberry Pi 4's V3D (`gpu-v3d`). Its only shader back end is the
 # in-process compiler and it has no offline table, so its one host
 # configuration is the image's feature set plus `host-test` (lib.rs refuses
@@ -1822,6 +1839,24 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)" \
 # to nothing under report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_fragdepth
+# gl_FragDepth on the V3D (plan #340, docs/notes/gl-fragdepth.md): the TLB Z
+# write per pixel in place of the pass-through Z from the FEP, the
+# `writes_z`/`disable_ez` program data and the value each writer computes, run
+# on the 4.2 and 7.1 interpreters (tests/es3_fragdepth_v3d.rs); the shader
+# record's "fragment shader does Z writes" bit and the binner's early Z bits
+# of such a program, packed by the real job builder
+# (tests/es3_fragdepth_v3d_state.rs); the written values, lane by lane, on the
+# interpreter (tests/es3_fragdepth_v3d_sim.rs); and the V3D half of the nine
+# dEQP fragdepth shapes (tests/es3_fragdepth_cases.rs; its GC7000UL half runs
+# in the vivante rows above). Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_fragdepth_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_fragdepth_v3d
+step "test    $V3D_CONFIG (tests/es3_fragdepth_v3d_state.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_fragdepth_v3d_state
+step "test    $V3D_CONFIG (tests/es3_fragdepth_v3d_sim.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_fragdepth_v3d_sim
+step "test    $V3D_CONFIG (tests/es3_fragdepth_cases.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_fragdepth_cases
 # ES 3.0 multisample renderbuffers, the pin files of docs/notes/es3-msaa-renderbuffers.md:
 # today's one-sample behaviour of the GL core and of each back end, and the
 # ignored tests of the expected result (not run). Compile to nothing under
