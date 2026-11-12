@@ -250,7 +250,9 @@ void osal_mali_diag_print(void)
  * kicks it lost up to; one line when the OSAL stops (needs a GPU reset).
  * The OSAL's own numbers: 28 TilerOomCounts, 29 HeapGrow, 30 HeapRemake,
  * 31 RestartBudget (the value: the refusal that would have restarted the
- * group; 27 is the Z4 record's DrainTimeout, which the OSAL never meets). */
+ * group), 32 CacheFlush (the GPU cache clean after the group's end did not
+ * complete); 27 is the Z4 record's DrainTimeout, which the OSAL never
+ * meets. */
 static void note_restart(void)
 {
 	struct yd_t6_osal_counts c;
