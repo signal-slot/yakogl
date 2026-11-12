@@ -83,12 +83,16 @@
 //! errors that need a reset), the GPU may still run it ([`Osal::unended`]):
 //! the held frees stay held and `alloc` is `-EIO`, so no page a kick used
 //! is handed out again. The same after a shutdown whose terminate was not
-//! acknowledged. A restart refused after its start was asked (the start
-//! not acknowledged, or the queue-init job refused) leaves the new group
-//! stopped and terminated where panthor would terminate it, and not
-//! ended where panthor would reset the GPU ([`Osal::end_failed_restart`]);
-//! the counts' `unended` and the UART's stop line say which. `map_phys`
-//! outside the carve-out is `-ENOTSUP`.
+//! acknowledged. A refused GPU cache clean after an acknowledged end keeps
+//! the memory too ([`Osal::memory_kept`]), but the group is known ended:
+//! the two facts are kept apart. A refused CS stop alone changes neither;
+//! the terminate after it decides (counted, [`Osal::stops_refused`]). A
+//! restart refused after its start was asked (the start not
+//! acknowledged, or the queue-init job refused) leaves the new group
+//! stopped and terminated, or not ended where panthor would reset the GPU
+//! ([`Osal::end_failed_restart`]); the counts' `unended`, `memory_kept`
+//! and the UART's stop line say which. `map_phys` outside the carve-out is
+//! `-ENOTSUP`.
 
 use super::nanopc_t6_gpu::{Bases, GpuUp};
 use super::nanopc_t6_sections::Backing;
@@ -346,10 +350,15 @@ pub struct Osal {
     dead: Option<Dead>,
     /// [`Osal::shutdown`] ended the group.
     down: bool,
-    /// The group's end was not acknowledged (or never asked, for an error
-    /// that needs a GPU reset): the GPU may still run it and write what its
-    /// kicks used. Held frees then stay held and [`Osal::alloc`] refuses.
+    /// The group is not known ended: its terminate was not acknowledged,
+    /// or never asked for an error that needs a GPU reset. The GPU may
+    /// still run it and write what its kicks used. Implies `memory_kept`.
     unended: bool,
+    /// The memory the group's kicks used is kept: held frees stay held and
+    /// [`Osal::alloc`] refuses. Set when the group is not known ended, and
+    /// when the GPU cache clean after an acknowledged end was refused (a
+    /// dirty line may still be written back).
+    memory_kept: bool,
     /// Restarts so far, and what caused the last.
     pub restarts: u32,
     last_error: Option<Dead>,
@@ -367,6 +376,9 @@ pub struct Osal {
     /// `CS_TILER_OOM`s answered with a chunk, and with none.
     pub oom_chunks: u32,
     pub oom_no_chunk: u32,
+    /// CS 0 stops not acknowledged at a group's end (its terminate then
+    /// decides whether the group ended).
+    pub stops_refused: u32,
 }
 
 fn bit(map: &[u64], i: usize) -> bool {
@@ -393,13 +405,16 @@ pub struct Shutdown {
 }
 
 impl Shutdown {
-    /// The C entry's answer (`yd_t6_osal_shutdown`): 0 when the group was
-    /// stopped, terminated and the caches cleaned; `-EIO` when the stop or
+    /// The C entry's answer (`yd_t6_osal_shutdown`), from the terminate
+    /// and the clean, as [`Osal::unended`] and [`Osal::memory_kept`] are:
+    /// 0 when the group was terminated and the caches cleaned; `-EIO` when
     /// the terminate was refused (the group may still run, the memory is
     /// kept); `-ETIMEDOUT` when the group ended but the clean was refused
-    /// (the memory is kept).
+    /// (the memory is kept). A refused stop alone does not change it: the
+    /// terminate that follows ends the group (counted in
+    /// [`Osal::stops_refused`]).
     pub fn code(&self) -> i32 {
-        if self.ended.stop.is_err() || self.ended.terminate.is_err() {
+        if self.ended.terminate.is_err() {
             -EIO
         } else if !self.cleaned {
             -ETIMEDOUT
@@ -429,6 +444,7 @@ impl Osal {
         dead: None,
         down: false,
         unended: false,
+        memory_kept: false,
         restarts: 0,
         last_error: None,
         heap_pool: None,
@@ -439,6 +455,7 @@ impl Osal {
         live_pages: 0,
         live_pages_high: 0,
         refused_frees: 0,
+        stops_refused: 0,
         oom_chunks: 0,
         oom_no_chunk: 0,
     };
@@ -619,9 +636,16 @@ impl Osal {
         self.down
     }
 
-    /// The group may still run: its end was not acknowledged.
+    /// The group may still run: it is not known ended.
     pub fn unended(&self) -> bool {
         self.unended
+    }
+
+    /// The memory the group's kicks used is kept ([`Osal::memory_kept`]
+    /// field doc): after a group that is not known ended, or a refused
+    /// cache clean.
+    pub fn memory_kept(&self) -> bool {
+        self.memory_kept
     }
 
     /// What caused the last restart ([`Osal::recover`]) or the stop.
@@ -670,14 +694,14 @@ impl Osal {
 
     /// `gpu_alloc`: `size` bytes, rounded up to whole pages, first fit in
     /// the carve-out. `-EINVAL` for no bytes or before [`Osal::up`],
-    /// `-ENOMEM` when no run of free pages is long enough, `-EIO` when the
-    /// group may still run ([`Osal::unended`]): a page freed by one of its
-    /// kicks is not handed out again.
+    /// `-ENOMEM` when no run of free pages is long enough, `-EIO` while the
+    /// memory is kept ([`Osal::memory_kept`]): a page freed by one of the
+    /// group's kicks is not handed out again.
     pub fn alloc(&mut self, size: usize) -> Result<Alloc, i32> {
         if self.up.is_none() || size == 0 {
             return Err(-EINVAL);
         }
-        if self.unended {
+        if self.memory_kept {
             return Err(-EIO);
         }
         let n = size.div_ceil(PAGE as usize);
@@ -717,10 +741,10 @@ impl Osal {
     }
 
     /// Give back every held free whose fence has completed; none while the
-    /// group may still run ([`Osal::unended`]): a lost fence is complete,
-    /// but its kick may still write.
+    /// memory is kept ([`Osal::memory_kept`]): a lost fence is complete,
+    /// but its kick may still write, or a dirty line be written back.
     fn drain(&mut self) {
-        if self.unended {
+        if self.memory_kept {
             return;
         }
         let mut k = 0;
@@ -838,19 +862,37 @@ impl Osal {
             self.completed = self.submitted;
         }
         self.down = true;
-        self.unended = ended.terminate.is_err();
         let mut cleaned = false;
-        if !self.unended {
+        if self.note_end(&ended) {
             match self.clean_caches(m, delay_us) {
                 Ok(()) => cleaned = true,
                 Err(r) => {
-                    self.unended = true;
+                    self.memory_kept = true;
                     self.stop(r);
                 }
             }
         }
         self.drain();
         Some(Shutdown { ended, cleaned })
+    }
+
+    /// The group not known ended: it may still run, and its memory is
+    /// kept.
+    fn not_ended(&mut self) {
+        self.unended = true;
+        self.memory_kept = true;
+    }
+
+    /// What a group's end answered: a refused stop counted, a refused
+    /// terminate made the group not known ended. True when the group ended.
+    fn note_end(&mut self, e: &Ended) -> bool {
+        if e.stop.is_err() {
+            self.stops_refused += 1;
+        }
+        if e.terminate.is_err() {
+            self.not_ended();
+        }
+        e.terminate.is_ok()
     }
 
     /// The GPU's L2 and LSC cleaned and invalidated after the group's end,
@@ -924,16 +966,15 @@ impl Osal {
             self.completed = self.submitted;
         }
         if Self::needs_reset(why) {
-            self.unended = true;
+            self.not_ended();
             return self.stop(why);
         }
         let ended = ended.unwrap_or_else(|| sched::stop_and_terminate(m, self.gpu, &u.iface, &u.csg, &u.cs, delay_us));
-        if let Err(r) = ended.terminate {
-            self.unended = true;
-            return self.stop(r);
+        if !self.note_end(&ended) {
+            return self.stop(ended.terminate.err().unwrap_or(why));
         }
         if let Err(r) = self.clean_caches(m, delay_us) {
-            self.unended = true;
+            self.memory_kept = true;
             return self.stop(r);
         }
         self.drain();
@@ -958,17 +999,22 @@ impl Osal {
 
     /// A restart refused after the old group ended (the heap made again,
     /// the caches cleaned): the OSAL is dead with `why`, and what the new
-    /// group is, is made known ([`Osal::unended`]), as panthor does for
-    /// the same failures. A queue of the group that faults can never run
-    /// again (`group_can_run`, panthor_sched.c:1925-1931) and the next tick
-    /// terminates its slot (`tick_ctx_apply`, :2195-2207): here CS 0 is
-    /// stopped and CSG 0 terminated at once, the group ended when the
-    /// terminate is acknowledged. A timeout's own end (`ended`) decides
-    /// the same way. A start or group update that is not acknowledged
-    /// makes panthor reset the GPU (`panthor_device_schedule_reset`,
-    /// :2297-2301; and the errors of [`Osal::needs_reset`]): the group may
-    /// still start, so it is not ended. A refusal before the start was
-    /// asked (CSG 0's `req` still `TERMINATE`) leaves the group ended.
+    /// group is, is made known ([`Osal::unended`]).
+    ///
+    /// A start or group update that is not acknowledged makes panthor reset
+    /// the GPU (`panthor_device_schedule_reset`, panthor_sched.c:2297-2301),
+    /// with no terminate: those, and the other errors of
+    /// [`Osal::needs_reset`], leave the group not known ended. Every other
+    /// refusal comes after the start was asked (`sched::restart` refuses
+    /// before it only with `CsgStateUnknown` or `CsgSlotBusy`, both
+    /// needs-reset): the group is ended, as every error ends the group in
+    /// this OSAL (the module doc, "Recovery"), by panthor's mechanism for a
+    /// group that cannot run: the tick terminates its slot (`tick_ctx_apply`,
+    /// :2195-2207, `group_can_run` :1925-1931). panthor makes a group unable
+    /// to run on a `CS_FATAL` (:1370) but lets a stream go on after a
+    /// `CS_FAULT`; ending it after a fault is this OSAL's choice. Here CS 0
+    /// is stopped and CSG 0 terminated at once; a timeout's own end
+    /// (`ended`) is used when the wait made one.
     fn end_failed_restart(
         &mut self,
         m: &impl Mmio,
@@ -978,15 +1024,12 @@ impl Osal {
     ) -> i32 {
         let Some(u) = self.up else { return self.stop(why) };
         if let Some(e) = ended {
-            self.unended = e.terminate.is_err();
+            self.note_end(&e);
         } else if Self::needs_reset(why) {
-            self.unended = true;
+            self.not_ended();
         } else {
-            let req = m.read32(u.csg.input + core::mem::offset_of!(csf::CsgInput, req));
-            if req & csf::CSG_STATE_MASK != csf::CSG_STATE_TERMINATE {
-                let e = sched::stop_and_terminate(m, self.gpu, &u.iface, &u.csg, &u.cs, delay_us);
-                self.unended = e.terminate.is_err();
-            }
+            let e = sched::stop_and_terminate(m, self.gpu, &u.iface, &u.csg, &u.cs, delay_us);
+            self.note_end(&e);
         }
         self.stop(why)
     }

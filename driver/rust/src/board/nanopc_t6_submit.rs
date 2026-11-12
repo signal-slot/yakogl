@@ -1475,6 +1475,9 @@ pub(crate) mod tests {
         pub(crate) deaf_to_start: Cell<bool>,
         /// Terminate requests the firmware still acknowledges; `None`: all.
         pub(crate) terminates_left: Cell<Option<u32>>,
+        /// CS 0's stop requests the firmware does not acknowledge (its state
+        /// field stays as it was; the group's terminate still is).
+        pub(crate) deaf_to_stop: Cell<bool>,
     }
 
     /// An error the model raises at a `CALL` ([`Z4::fail_at`]).
@@ -1574,6 +1577,7 @@ pub(crate) mod tests {
                 flush_stuck: Cell::new(false),
                 deaf_to_start: Cell::new(false),
                 terminates_left: Cell::new(None),
+                deaf_to_stop: Cell::new(false),
             }
         }
         /// Raise `f` at the `n`-th `CALL` counted from the model's start
@@ -1707,7 +1711,9 @@ pub(crate) mod tests {
             self.ack_field(sreq, sack, streams);
             if streams & 1 != 0 {
                 let (req, ack) = (CS_IN + offset_of!(CsInput, req), CS_OUT + offset_of!(CsOutput, ack));
-                self.ack_field(req, ack, CS_ACK_MASK);
+                let stop = self.w(req) & CS_STATE_MASK == CS_STATE_STOP;
+                let mask = if stop && self.deaf_to_stop.get() { CS_ACK_MASK & !CS_STATE_MASK } else { CS_ACK_MASK };
+                self.ack_field(req, ack, mask);
                 if self.oom.get() && (self.w(req) ^ self.w(ack)) & CS_TILER_OOM == 0 {
                     let start = self.w64(CS_IN + offset_of!(CsInput, heap_start));
                     self.heap_starts.borrow_mut().push(start);

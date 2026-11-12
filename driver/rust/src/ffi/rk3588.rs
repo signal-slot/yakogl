@@ -1475,6 +1475,8 @@ pub unsafe extern "C" fn yd_t6_osal_counts(out: *mut YdT6OsalCounts) -> i32 {
         heap_chunks: o.heap_chunks().len() as u32,
         unended: u32::from(o.unended()),
         down: u32::from(o.is_down()),
+        memory_kept: u32::from(o.memory_kept()),
+        stops_refused: o.stops_refused,
     };
     0
 }
@@ -1500,10 +1502,12 @@ pub struct YdT6OsalCounts {
     pub heap_chunks: u32,
     pub unended: u32,
     pub down: u32,
+    pub memory_kept: u32,
+    pub stops_refused: u32,
 }
 
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(size_of::<YdT6OsalCounts>() == 72);
+const _: () = assert!(size_of::<YdT6OsalCounts>() == 80);
 
 #[cfg(all(test, feature = "mali"))]
 mod fw_tests {
@@ -1868,7 +1872,9 @@ mod fw_tests {
             oom_no_chunk,
             heap_chunks,
             unended,
-            down
+            down,
+            memory_kept,
+            stops_refused
         );
         for (what, v) in &pins {
             let pin = format!("_Static_assert({what} == {v},");

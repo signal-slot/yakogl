@@ -717,6 +717,54 @@ fn a_restart_whose_start_is_not_acknowledged_is_not_known_ended() {
     assert!(r.osal.unended());
 }
 
+/// A shutdown whose CS stop is refused but whose terminate is acknowledged:
+/// the group ended and the caches were cleaned, so the memory goes back
+/// and the answer is the clean end's; the refused stop is counted on its
+/// own.
+#[test]
+fn a_shutdown_whose_stop_alone_is_refused_still_ends_the_group() {
+    let mut r = rig();
+    let s = stream(&mut r);
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), 0);
+    let a = r.osal.alloc(4096).unwrap();
+    r.z.deaf_to_stop.set(true);
+    let e = r.osal.shutdown(&*r.z, &mut no_delay).unwrap();
+    assert!(e.ended.stop.is_err() && e.ended.terminate.is_ok() && e.cleaned, "{e:?}");
+    assert_eq!(e.code(), 0);
+    assert_eq!((r.osal.unended(), r.osal.memory_kept(), r.osal.stops_refused), (false, false, 1));
+    assert_eq!(csg_state(&r), csf::CSG_STATE_TERMINATE);
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
+    assert_eq!(r.osal.held(), 0, "the group ended: the free goes back at once");
+}
+
+/// A refused cache clean keeps the memory, but the group's terminate was
+/// acknowledged: the group is known ended. Two facts, kept apart; the
+/// same after a restart's clean.
+#[test]
+fn a_refused_cache_clean_keeps_the_memory_of_an_ended_group() {
+    let mut r = rig();
+    let s = stream(&mut r);
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), 0);
+    r.z.flush_stuck.set(true);
+    let e = r.osal.shutdown(&*r.z, &mut no_delay).unwrap();
+    assert_eq!(e.code(), -ETIMEDOUT);
+    assert_eq!((r.osal.unended(), r.osal.memory_kept()), (false, true));
+    assert_eq!(r.osal.alloc(4096), Err(-EIO));
+
+    let mut r = rig();
+    queue_init(&mut r);
+    let s = stream(&mut r);
+    r.z.fail_at(2, Fail::Fault(1));
+    r.z.flush_stuck.set(true);
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
+    assert_eq!(r.osal.dead().map(|d| d.0), Some(SchedRefusal::CacheFlush));
+    assert_eq!((r.osal.unended(), r.osal.memory_kept()), (false, true));
+    assert_eq!(csg_state(&r), csf::CSG_STATE_TERMINATE);
+}
+
 /// A kick that completed before an error, though no call had seen it yet,
 /// is not lost: the restart reads the sync object before it marks the
 /// kicks not complete as lost.
