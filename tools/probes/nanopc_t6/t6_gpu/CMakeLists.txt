@@ -24,6 +24,21 @@ endif()
 target_compile_definitions(app PRIVATE T6_GPU_BUILD="${T6_GPU_BUILD}")
 message(STATUS "t6_gpu build: ${T6_GPU_BUILD}")
 
+# The GPU QoS policy gpu_up applies after the PD_GPU power-on, chosen at build
+# time; the record names the one that ran:
+#   west build ... -- -DT6_GPU_QOS=reset      (the reset values)
+#   west build ... -- -DT6_GPU_QOS=linux-zero (the default)
+set(T6_GPU_QOS "linux-zero" CACHE STRING "GPU QoS policy: linux-zero or reset")
+if(T6_GPU_QOS STREQUAL "reset")
+  set(T6_GPU_QOS_ID 1)
+elseif(T6_GPU_QOS STREQUAL "linux-zero")
+  set(T6_GPU_QOS_ID 2)
+else()
+  message(FATAL_ERROR "T6_GPU_QOS must be reset or linux-zero, not '${T6_GPU_QOS}'")
+endif()
+target_compile_definitions(app PRIVATE T6_GPU_QOS_POLICY=${T6_GPU_QOS_ID})
+message(STATUS "t6_gpu QoS policy: ${T6_GPU_QOS}")
+
 # Z1's record, shared by the probes that run Z1's power-on.
 target_sources(app PRIVATE src/main.c ../common/t6_z1.c)
 target_include_directories(app PRIVATE ../common)

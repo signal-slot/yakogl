@@ -397,7 +397,19 @@ struct yd_t6_gpu_up {
 	uint32_t supply_after[2]; /* POWER_EN0 (the last of the poll), BUCK1_ON_VSEL after the
 				 * enable; 0 when none was sent */
 	uint32_t supply_waited_us; /* how long DCDC1 took to read on */
+	/* appended: the GPU QoS policy (the words above are unmoved) */
+	uint32_t qos_policy;    /* YD_T6_QOS_* applied after the power-on, 0 when the run stopped
+				 * before it */
+	uint32_t qos_words[3];  /* qos_gpu_m0 QOS_MODE, QOS_BANDWIDTH, QOS_SATURATION read back */
 };
+
+#define YD_T6_QOS_RESET      1 /* MODE 3, BANDWIDTH 0x12d, SATURATION 0x40: the reset values */
+#define YD_T6_QOS_LINUX_ZERO 2 /* all three 0, what Linux reads with the GPU active (default) */
+
+/* Choose the policy yd_t6_gpu_up applies to the four GPU QoS blocks after the power-on.
+ * Call before yd_t6_gpu_up; -EINVAL (nothing changed) for any other id. The record's
+ * qos_policy names the one that ran. */
+int yd_t6_gpu_qos_policy(uint32_t id);
 
 int yd_t6_gpu_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
 		 void (*delay_us)(uint32_t us),

@@ -61,6 +61,12 @@ int main(void)
 	device_map(&gpu, GPU_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	t6_watchdog_feed();
 
+	/* -DT6_GPU_QOS=reset|linux-zero at build time (CMakeLists.txt) */
+	if (yd_t6_gpu_qos_policy(T6_GPU_QOS_POLICY) != 0) {
+		printk("t6_gpu: FAIL: QoS policy %d unknown\n", T6_GPU_QOS_POLICY);
+		t6_reset_to_linux("t6_gpu done");
+	}
+
 	t0 = k_uptime_get();
 	rc = yd_t6_gpu_up(cru, pmu, spi2, qos, gpu, delay_us, on_handover, &o);
 	t6_watchdog_feed();
