@@ -146,3 +146,4 @@ if [ "$n_bad" -gt 0 ]; then
     exit 1
 fi
 echo "host-deqp-compare-selftest: $n_ok checks passed"
+echo "selftest ok"

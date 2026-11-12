@@ -576,6 +576,8 @@ and commit at once need their own `OUT=`. On 2026-10-08 the gles3 `info`
 cases reported `OpenGL ES 3.0 YakoGL` and `OpenGL ES GLSL ES 3.00`
 (HOST-ONLY).
 
+`tools/cts/host-deqp-compare-selftest.sh` checks `--compare-only` on hand-written fake run directories (indented and unindented `<Result` lines, an empty side refused); no build, no dEQP.
+
 **Extra cargo features.** `EXTRA_FEATURES='a,b' tools/cts/host-deqp-run.sh ...`
 appends those features to the ones the CMake options give (it is
 `-DYAKOGL_EXTRA_FEATURES=a,b`, a `LIB_CMAKE_ARGS` entry: its own library
