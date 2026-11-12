@@ -186,6 +186,34 @@ Concretely, for `refl-long-name`:
   `docs/es3-cts-failures.md:253` row flips from "decision needed"; the
   `docs/es3/` rows are the es3-docs item's to move.
 
+## As implemented (`refl-long-name`, 2026-11-12, on main `207aa018`)
+
+The decision holds; two details of section 4 came out differently, and the
+code is the reference:
+
+- No "truncated" marker is written into the 64-byte field. The field keeps
+  the plain 63-byte prefix; a row whose field the reflection cut is named by
+  the online record's name pool (`src/shaderc/online/backend.rs`
+  `keep_names`, `pooled_uniform_name`: row index -> whole name, the
+  `Kept::names` beside `ShcBlocks`). A cut row two reflection rows of
+  different names could be is left out of the pool.
+- `reject_truncated_names` keeps its uniform arm, narrowed: a full uniform
+  field is accepted when the pool names its row (`link::whole_uniform_row`),
+  default-block uniforms included, and still refused when the pool cannot
+  name it, for a table shader and in a build without the online compiler.
+
+The GL core reads every uniform row's name through
+`shaderc::uniform_row_name` (the pool's name, else the field):
+`glGetActiveUniform`, `GL_UNIFORM_NAME_LENGTH`, `glGetUniformIndices`,
+`GL_ACTIVE_UNIFORM_MAX_LENGTH`, the location table and its lookups, the
+struct-member key, the PowerVR `pvr_layers_` row match (`src/gl/draw.rs`) and
+the transform-feedback capture's row match (`src/gl/tf_capture.rs`) have no
+length cap left; the caller's `bufSize` is the only cut. No ABI offset moved
+(`src/abi_layout.rs`, `src/abi_layout_check.c` unchanged).
+`tests/es3_uniform_block_long_name.rs` pins section 5 on PowerVR, GC7000UL
+and V3D; `tests/es3_shaderc_corpus.rs` is 3,459 / 2 / 2,135 / 0 on each GPU,
+`uniform_block` 66 / 0.
+
 ## What this note did not do
 
 No code was changed and nothing was executed; the dEQP case text was read

@@ -59,6 +59,7 @@ info | email | tools/vivante/*.patch | @gmail\.com\b | upstream: etnaviv author 
 # reserved (RFC 2606); the addresses are private-range inputs of a redaction
 # or refusal test.
 drop | email | tools/board_selftest.sh | tester[@]pi5-fake\.example\b | RFC 2606 .example fake BOARD_HOST of the pi5 dry-run self-test
+drop | login-at-host | tools/board_selftest.sh | root[@]t6fake-host\b | fake BOARD_HOST of the nanopc-t6 run self-test (its ssh stub answers uname -n with it)
 drop | private-ipv4 | tools/board_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a fake ssh error that must be redacted
 drop | private-ipv4 | tools/board_selftest.sh | \b10\.20\.30\.40\b | private-range input of a redaction test: console line that redact_run rewrites
 drop | login-at-host | tools/board_selftest.sh | root[@]t6fake-host\b | fake BOARD_HOST of the NanoPC-T6 run self-test (a look-alike, never a real host; stub ssh answers it): the test checks that no record carries it
