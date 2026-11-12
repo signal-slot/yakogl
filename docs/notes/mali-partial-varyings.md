@@ -116,31 +116,36 @@ that measures it.
    before `nir_opt_varyings_bulk` at :1524): `nir_lower_vars_to_ssa`
    makes a local the value stored, the whole-identity folds of step 5
    remove `* 1.0` and `+ 0.0`, `f2f32(f2fmp(a))` is `a`
-   (nir_opt_algebraic.py:1991) and DCE drops a dead tree. A varying is
+   (nir_opt_algebraic.py:1991), copy propagation makes a vector of one
+   value's lanes a swizzle of it, and DCE drops a dead tree. A varying is
    kept whole only where an `f2fmp` of it survives those passes
-   (`kept_whole`, `colour_keeps_whole`):
+   (`kept_whole`, `colour_keeps_whole`). A colour store is judged by the
+   lanes it writes, each followed through locals stored once in that
+   lane, swizzles and whole identities (`ir_colour_lane`):
    - Kept whole: a mediump float varying of a mediump shader that an fp16
-     operation reads (fsvec_*, discard_81_branchquad, intloop_*), or that
-     a colour store takes in a constructor beside another value (a
-     constant, another varying, an operation): `f2f32` then reads the
-     vector, not the `f2fmp` (cmp_*, fsload_*, case 105, c05, c20).
-     Every lane of that colour is a constant, a mediump varying's lane, a
-     mediump uniform's component, an fp16 texel, gl_PointCoord or fp16
-     arithmetic.
-   - The lanes read alone: a colour store of the varying's dereference
-     through locals stored once, swizzles and whole identities
+     operation reads (fsvec_*, discard_81_branchquad, intloop_*); a
+     varying whose lane a colour store writes beside a constant, another
+     varying's lane or gl_PointCoord, which `f2f32` reads as one vector
+     (fsload_v4_one, cmp_*, fsload_ctor3-5, case 105); a lane the store
+     writes from a local of several stores, beside a constant
+     (intloop_ifloop).
+   - The lanes read alone: a colour store whose written lanes are all the
+     varying's, one swizzle of its `f2fmp` that the link cancels
      (`gl_FragColor.xy = a.xy`, a mediump local read back, `a.xy *
-     vec2(1.0)`: fsload_bare1-4, fsload_cancel1-8); a constructor of the
-     varying's lanes alone, one vector of its `f2fmp` after copy
-     propagation (fsload_cancel10-11); a tree no colour store reads, dead
-     at the link (fsload_cancel9); a highp shader, a highp varying and an
-     integer one (fsload_highp, fsload_hp_var2, intbool_89_flatlast); a
-     colour with an fp32 lane, a highp varying's, uniform's or texel's or
-     an fp32 operation's (fsload_hp_var2, case 89); a varying only a cube
+     vec2(1.0)`, `vec4(a.x, a.y, a.x, a.y)`, `t.xy` of `vec4(a.xy, 0.5,
+     1.0)`: fsload_bare1-4, fsload_cancel1-8, fsload_cancel10-11,
+     fsload_ctor1); a tree no colour store reads, dead at the link
+     (fsload_cancel9); a highp shader, a highp varying and an integer one
+     (fsload_highp, fsload_hp_var2, intbool_89_flatlast); a colour with an
+     fp32 lane, a highp varying's, uniform's or texel's or an fp32
+     operation's (fsload_hp_var2, case 89); a varying only a cube
      direction reads raw (varyconst_101_cubebias).
    - A matrix is kept per column, each column its own deref (fsload_mat2:
      `.v2`; fsload_mat3: `.v3`).
-   - Any other colour lane or reader is refused (`FsVaryingLoad`).
+   - Any other colour lane or reader is refused (`FsVaryingLoad`): a
+     written lane beside a value of no measured kind (an fp16 operation's
+     lane, a uniform's, a texel: uniidx_j), or an unknown lane of the
+     varying alone.
 3. **Compaction** (nir_fs.rs `layout`). `compact_varyings`
    (nir_opt_varyings.c:5491-5560) gives every kept lane the next scalar
    slot in the order of step 1. A vertex shader's constant lane is
