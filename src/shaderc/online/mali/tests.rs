@@ -3015,7 +3015,8 @@ fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
     })
 }
 
-/// Every op of [`bir::Op`], one value per variant (each width of LD_PKA).
+/// Every op of [`bir::Op`], one value per variant (each width of LD_PKA);
+/// [`all_ops_holds_every_variant_of_op`] fails while a variant is missing.
 const ALL_OPS: [bir::Op; 97] = {
     use bir::{Access, Cmpf, LodMode, Op as O, ResultType, Round, TexDim, VaryingName};
     let (cmpf, result) = (Cmpf::Eq, ResultType::M1);
@@ -3127,6 +3128,38 @@ const ALL_OPS: [bir::Op; 97] = {
         O::Split,
     ]
 };
+
+/// The variant names of `pub enum Op` in bir.rs's own text: each line of
+/// the enum's body at its first indentation that starts with a capital
+/// letter (a field, a doc comment or a closing brace does not).
+fn op_variants_in_bir_rs() -> std::collections::BTreeSet<&'static str> {
+    let body = include_str!("bir.rs").split("\npub enum Op {\n").nth(1).expect("bir.rs declares `pub enum Op`");
+    let body = body.split("\n}\n").next().expect("the enum's closing brace");
+    body.lines()
+        .filter_map(|l| l.strip_prefix("    "))
+        .filter(|l| l.starts_with(|c: char| c.is_ascii_uppercase()))
+        .map(|l| l.split(|c: char| !c.is_ascii_alphanumeric()).next().unwrap_or(""))
+        .collect()
+}
+
+/// [`ALL_OPS`] holds every variant of [`bir::Op`] and nothing else, so
+/// [`the_source_table_equals_mesa_26_2_1_valhall_c`] compares every op: a
+/// variant added to bir.rs fails here until it is listed (and
+/// [`mesa_opcode`], whose match is exhaustive, does not compile until it
+/// names the variant's entry).
+#[test]
+fn all_ops_holds_every_variant_of_op() {
+    let listed: std::collections::BTreeSet<String> = ALL_OPS
+        .iter()
+        .map(|op| format!("{op:?}").split(|c: char| !c.is_ascii_alphanumeric()).next().unwrap_or("").to_string())
+        .collect();
+    let declared: std::collections::BTreeSet<String> =
+        op_variants_in_bir_rs().into_iter().map(str::to_string).collect();
+    assert!(declared.len() > 80, "the enum's text was not read: {declared:?}");
+    let missing: Vec<_> = declared.difference(&listed).collect();
+    let extra: Vec<_> = listed.difference(&declared).collect();
+    assert!(missing.is_empty() && extra.is_empty(), "not in ALL_OPS: {missing:?}; not an Op variant: {extra:?}");
+}
 
 /// `va_swap_12` (valhall.h): the ops whose BIR sources 1 and 2 are the
 /// entry's 2 and 1.
