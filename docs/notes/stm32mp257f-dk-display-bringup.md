@@ -17,7 +17,10 @@ the chain. This note does not repeat those; it checks them against the trees
 and adds what they leave open: the SCMI clock *enables* (not only the rates),
 the HDMI 5 V supply, the I2C bus's clocks and pins, the LTDC's bus master,
 the 720p numbers and the frame buffer. Where this note differs from D349 it
-says so.
+says so. #349's other DK note, the board-run record
+`docs/notes/stm32mp257f-dk-bringup.md` (main `b5af4554`; cited **B349:**`line`),
+carries the run order and the supply guide every board item of this path
+follows; "Plan #349's notes: cross-check" cites it against this note.
 
 ## Sources, and how to read the citations
 
@@ -29,7 +32,8 @@ says so.
 | **U** | ST U-Boot, `STMicroelectronics/u-boot` | tag `v2023.10-stm32mp-r3.1` (commit `f8917a01`) |
 | **T** | ST TF-A, `STMicroelectronics/arm-trusted-firmware` | tag `v2.10-stm32mp-r3.1` (commit `104df653`) |
 | **P** | this repository | base `1e4eefe8` |
-| **D349** | `docs/notes/stm32mp257f-dk-display.md` | main `42dae4ba` |
+| **D349** | `docs/notes/stm32mp257f-dk-display.md` (#349's display study) | main `42dae4ba`; in this tree since that merge |
+| **B349** | `docs/notes/stm32mp257f-dk-bringup.md` (#349's board-run record: the eight steps, the supply guide, its *not run yet* verdicts) | main `b5af4554`, unchanged since; its supply-sources study has no note of its own, and B349:271-273 says so |
 
 All five trees are cloned (depth 1) under `$CONNECTED_DEPS_DIR/st-src/`
 (`linux-r3.1`, `linux-mainline`, `st-optee-r3.1`, `u-boot-r3.1`,
@@ -610,6 +614,45 @@ answers most of them by reading, before anything is written.
     controller (0x41) on the same bus are left alone.
 12. **RM0457, UM3385, MB1605.** Unread (see "Sources"); every offset and bit
     above waits for RM0457, the supplies and the HPD wiring for MB1605.
+
+## Plan #349's notes: cross-check
+
+Plan #349 has merged. Its two DK notes are committed: `docs/notes/stm32mp257f-dk-display.md` (main `42dae4ba`; the **D349** of "Sources", now in this tree) and `docs/notes/stm32mp257f-dk-bringup.md` (main `b5af4554`; **B349**), the board-run record the DK's board items follow — its eight steps (B349:26-43) run the return trial and the GPU path before this one, and it hands P8 to the two display notes (B349:329-332). Both notes read the same ST tags, so a confirmation below is a second pair of eyes on the same citations, not a re-derivation. #349's supply-sources study produced no note of its own: its findings live in B349's supply section, and B349:271-273 itself warns that the study's report is not in the tree.
+
+**Confirmations.**
+
+- **The display path.** B349:329-332 names P8 as LTDC → DSI → ADV7535 → HDMI; D349's chain and register tables (D349:30-45, D349:56-72) match "The chain on one page" block for block — LTDC 0x48010000 with SPI 158/159, DSI 0x48000000 on four lanes, I2C2 0x40130000 with PF2 SCL / PF0 SDA AF9, PB6 reset, PB4 interrupt, the ADV7535 maps 0x3d / 0x3c / 0x3f / 0x38. The LVDS finding is the same in both (ST's board file enables the bridge, U-Boot unbinds it without a panel; D349:546-551, here in "Corrections").
+- **The HDMI connector.** D349:43-44 and D349:293-297: type A connector, +5 V from `LDO5` (`v5v_hdmi`), not marked always-on or boot-on in OP-TEE's DK file — row 19 and "The ADV7535" hold the same; this note adds the SCMI domain id 21 and the server-side "starts disabled for the agent". Both leave the same two questions to the board (D349:505-507 against open question 3): `LDO5`'s state at hand-over, and the connector's pull-up wiring, which waits for MB1605 in both notes. This note's [D] that a sink needs +5 V on the connector to answer DDC meets no opposite claim in D349.
+- **The ADV7535's supplies.** D349:293-295 (1.8 V from `BUCK5` for `avdd`, `dvdd`, `pvdd`, `a2vdd`, `v1p2`; 3.3 V from `BUCK7` for `v3p3`) is the same device-tree reading as row 18; D349:453-455 ("Rails": the BUCKs are on because the board is already running — "check, do not assume") is the caution row 18's `CONFIG_GET` implements.
+- **Hand-over.** The runner starts our image with `go` after `dcache off; icache off` (B349:59-60); the `mp2-handover:` readings of #349's steps 1-4 (B349:64-83) will print EL2 with MMU and caches off — the premise of item (4) in "Cache maintenance": nothing of ours dirty at entry.
+- **U-Boot's residue.** D349:407-432 reaches this note's conclusion for row 6 and open question 6: on a DK with no LVDS panel the LTDC probe fails, the clocks may be left on, the reset as it was, nothing lit. Both mark it [D] and both ask the board to read `RCC_LTDCCFGR`, `RCC_DSICFGR` and `DISPLAYCLKCR` first.
+
+**Extensions.**
+
+- **The board's own supply — the rule this note lacked.** This note covers the rails at PMIC level; the board-level supply is B349's: the DK's only supply is its USB-C cable (B349:262-263, pre-study `:783-785`), a brown-out can reboot or stall mid-run and reads like a hardware fault, and the discriminator is the new boot's BL2 `Reset reason:` line, which the runner's capture already holds (B349:264-282; the supply-sources study's report is not in the tree, B349:271-273, so neither note quotes the line's exact text). A power-on-class reset, or no BL2 lines at all, names a supply loss (B349:282). The order B349:284-289 gives — the cable and the supply **before** any register-level theory, before blaming SCMI, the GIC or the GPU — is what every board row below reads first; the plan states the same for this path.
+- **The SCMI session is answered upstream of this path.** B349:130-136: `mp2_gpu`'s run is the first session from our image to the SCMI pseudo-TA; whether OP-TEE accepts a non-Linux client's `TEE_LOGIN_REE_KERNEL` is open there, "ACCESS_DENIED here is a finding, not a fault", and every request is logged before it is sent — the same rule rows 9 and 10 cite. #349 runs that step before any display board item (B349:26-33), so open question 10 has an answer on file before this path sends its clock and voltage requests. (Item scmi-session-study studies the question itself; this note's "Our SCMI codec" paragraph is theirs to bring current.)
+- **Coherence, and a 720p-shaped buffer.** B349:221-227: `gc_triangle`'s run also exercises the carveout at 0xfa800000 with the CPU reading back GPU-written memory — pre-study Q14, the question "Cache maintenance" says no source answers — and `CONFIG_GC_TRIANGLE_LINEAR_OUT` resolves a 1280x720 linear scan-out-shaped buffer, named there as groundwork for this display step. Both land on "Frame buffer placement": the maintenance rules and the 720p sizes.
+- **The scan-out buffer's home.** D349:393-398 concludes that any normal DDR the A35 can write is the scan-out buffer, the carveout included, *if* the LTDC master passes the RISAF filter as the GPU master does (D349's open question 2, the same as open question 1 here). "Frame buffer placement" and "Framebuffer memory and bus-master access" narrow that: 0xb0000000 for the test pattern, the carveout for the GPU's frame, the LTDC secure-layer areas out. No conflict; the narrowing is this note's.
+
+**Contradictions, explicit.**
+
+1. **The safe first mode.** D349:272-273: "the safe first mode is 1080p60, 4 lanes, which needs no lane change" — 720p moved to 3 lanes by ST's own fix-up (D349:269-271), 1080p60 sitting exactly on the bridge's 148.5 MHz ceiling (D349:265-267), and D349's open question 11 again says "First run: fixed 1080p60" (D349:534-536). This note, following the plan's 1280x720, runs 720p first — 3 lanes as the board's own ST driver does, 4 lanes as the comparison ("The lane count at 720p is a difference between the trees", open question 4). **The two notes recommend opposite first runs.** Both recommendations are [D]; no source decides. The lane question stays open question 4, and what the farm's HDMI capture accepts (item kvm-mode-study) may decide which picture can be judged at all. Recorded as a disagreement, not resolved here.
+2. **SCMI at 1080p60.** D349:362: "1080p60 needs no SCMI clock request at all". This note's rows 9 to 10 and "What changes against D349": the *rate* needs none, the *enables* (FLEXGEN_27, FLEXGEN_28, FLEXGEN_12, GPIOB, GPIOF) go through SCMI `CONFIG_SET` in every case. Flagged against D349 when this section was written; it stands. Item scmi-session-study decides whether our image's agent may switch these on at all; B349:130-133 is the run that first tests the transport.
+
+## Board scan-out record (not run yet)
+
+Nothing here has run, and it cannot yet: the DK's board time sits behind #349's eight steps (B349:26-43), connected serializes it, and #349's own verdicts are all *not run yet* too (B349:292-307). The shape follows `driver/docs/imx8mp-display-cold.md`'s "Board plan" — staged runs with read-backs between them, the golden comparison against a Linux dump, the picture judged last — with the row shape of #349's verdict table (B349:292-307): one row per run, replaced by the board item that runs it with its verdict, its date and the runner's record directory; the current results then move to `tools/cts/RESULTS.md` and `tools/cts/STATUS.md` (B349:10-16; the CTS half waits for plan #336). The `commit` and `runner` cells come from the record itself: the runner writes its build, the board, the boot backend, the image hash and the verdict line into `INDEX.txt` (`tools/board-stm32mp2.sh:588-600`).
+
+Rows run on the DK (`resource:<dk>`, with its console resource `resource:<dk-console>` and reset resource `resource:<dk-reset>`) through `tools/board-stm32mp2.sh`; the picture is judged from the HDMI capture resource (`resource:<dk-hdmi-kvm>`) with `tools/probes/stm32mp257f_dk/display_check/colorbars.py`. Boot files: the runner's `install` prints its exact undo before changing anything, every run is a one-shot boot U-Boot clears before loading, and the hook never edits ST's `bootcmd` contents (B349:52-58) — a row is "restored" when the one-shot cleared the boot or the `undo` ran, and the record says which. A failing row is read against the supply guide (B349:260-289) before any register-level theory. `MP2_HOLD_S` holds the board after the result line so the capture can take a screenshot; the probe must keep scanning out for at least the hold (`tools/board-stm32mp2.sh:162-175`).
+
+| commit | image | runner | verdict lines (expected) | observation | stock boot files |
+| --- | --- | --- | --- | --- | --- |
+| <record> | ST's Linux (no image; item linux-dump) | `tools/probes/stm32mp257f_dk/linux_display_dump/run_dump.sh`, read-only | none: a reference reading, no probe verdict | the display registers and the sink's EDID as ST's Linux drives HDMI; seeds the golden comparison (item linux-golden) | untouched by this row — **not run yet** |
+| <record> | `mp2_display_state` | `tools/board-stm32mp2.sh run <img> <rec> mp2_display_state` | the probe's state lines | open questions 1 to 6 decided by reading: the RIMC and RISAF4 state, `RCC_LTDCCFGR`, `RCC_DSICFGR`, `RCC_I2C2CFGR`, `DISPLAYCLKCR`, the flexgen and SCMI clock states | restored after the run — **not run yet** |
+| <record> | `mp2_display`, staged bring-up (the probe names its stops) | the same call, one row per stage once run | each stage's own line; the names are item probe-skel's to fix — none is pre-filled here | the clock table's rows 6 to 8 read back; the DSI PHY lock and the clock lane's stop state; the ADV7535 register read-backs | restored after each stage — **not run yet** |
+| <record> | `mp2_display`, first picture: 1280x720 colour bars, lane count per contradiction 1 above | the same with `MP2_HOLD_S=<n>` | the probe's result line, and the capture judged bar by bar by `colorbars.py`; the record carries the reading, not a format | the bars on the HDMI capture; the LTDC's own frame check once the CRC item lands | restored after the run — **not run yet** |
+
+The `mp2_display` verdict line itself and the GPU-rendered scan-out row belong to the board items that produce them (board-display; gpu-scanout, ordered after #349's triangle-run per the plan): this skeleton leaves them open.
 
 ## Corrections and additions to the pre-study and to D349 (not made there)
 
