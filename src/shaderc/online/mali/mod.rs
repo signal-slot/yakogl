@@ -167,6 +167,11 @@ pub enum MaliError {
     /// `reassociate_constant`), `fneg(fneg(a))`, a constant in a front-end
     /// `ffma`.
     ArithConstant,
+    /// A `-0.0` a compare reads that another value reads too, or that the
+    /// compare reads through a variable (glsl.rs `Tree::neg_zero_compares`):
+    /// Mesa's rule makes the compare's operand 0.0 (nir_opt_algebraic.py:
+    /// 771-776) after copy propagation; the IR has no +0.0 of its own there.
+    NegZeroShared,
     /// A chain GLSL's `do_rebalance_tree` may reassociate.
     Rebalance,
     /// A constant operation whose value is not a plain float.
@@ -295,7 +300,7 @@ pub enum MaliError {
 
 impl MaliError {
     /// Every gap, for the tests that check the messages are distinct.
-    pub const GAPS: [MaliError; 61] = [
+    pub const GAPS: [MaliError; 62] = [
         MaliError::LinkedVertexNotLowered,
         MaliError::BlendVariantNotLowered,
         MaliError::ControlFlow,
@@ -311,6 +316,7 @@ impl MaliError {
         MaliError::UboFallback,
         MaliError::UboRowsFull,
         MaliError::ArithConstant,
+        MaliError::NegZeroShared,
         MaliError::Rebalance,
         MaliError::ConstantFold,
         MaliError::FusedMultiplyAdd,
@@ -395,6 +401,9 @@ impl MaliError {
             }
             MaliError::UboRowsFull => {
                 "Valhall: a uniform block of more than 256 rows (uniforms and array elements) or 512 words, or a loaded one of more than 32 rows, is not lowered yet"
+            }
+            MaliError::NegZeroShared => {
+                "Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet"
             }
             MaliError::ArithConstant => {
                 "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet"

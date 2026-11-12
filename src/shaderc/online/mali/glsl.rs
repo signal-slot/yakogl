@@ -162,7 +162,7 @@ pub(super) fn passes<'s>(
     t.negneg();
     t.neg_products()?;
     t.neg_compares()?;
-    t.neg_zero_compares();
+    t.neg_zero_compares()?;
     if !t.changed && trees.is_none() {
         return Ok(None);
     }
@@ -1773,9 +1773,13 @@ impl Tree<'_, '_> {
     /// `DISCARD.f32.lt r0, 0x0`, `-0.0 == v.x` is `DISCARD.f32.eq r0^.h0,
     /// 0x0` (tools/mali/testdata/negzero_*). The IR's `Fle(a, b)` is NIR's
     /// `fge(b, a)`, so it takes the `fge` rule.
-    fn neg_zero_compares(&mut self) {
+    fn neg_zero_compares(&mut self) -> Result<(), MaliError> {
         let n = self.instrs.len();
         let mut any = false;
+        /* each compare decides on the constants as written; a constant
+         * whose -0.0 lanes the compares turn into 0.0 is rewritten after
+         * all of them (a `feq(-0.0, a)` after another compare of the same
+         * constant still sees -0.0 and turns round) */
         for i in 0..n {
             let IrOp::Alu(op @ (AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne), mut s) = self.instrs[i] else {
                 continue;
@@ -1783,7 +1787,7 @@ impl Tree<'_, '_> {
             let w = usize::from(self.comps[i]).clamp(1, 4);
             let mut zero = [false; 2];
             for k in 0..2 {
-                if let Some(z) = self.plus_zero(s[k], w) {
+                if let Some(z) = self.plus_zero(s[k], w)? {
                     s[k] = z;
                     zero[k] = true;
                 }
@@ -1802,41 +1806,102 @@ impl Tree<'_, '_> {
             self.instrs[i] = IrOp::Alu(op, s);
             any = true;
         }
+        for c in 0..n {
+            let IrOp::ConstF32(v) = self.instrs[c] else { continue };
+            if v.contains(&F32_NEG_ZERO) && self.zero_for_compares(c) == Some(true) {
+                self.instrs[c] = IrOp::ConstF32(v.map(|x| if x == F32_NEG_ZERO { 0 } else { x }));
+            }
+        }
         if any {
             self.changed = true;
             self.count();
         }
+        Ok(())
     }
 
-    /// `s`'s `w` lanes read as `+0.0` where they are `-0.0`: an `fneg` of
-    /// a constant zero read through (the GLSL `-0.0`), or a constant whose
-    /// lanes are `-0.0` and which only compares read, made `+0.0` in place.
-    /// `None`: a lane read is not `-0.0`.
-    fn plus_zero(&mut self, s: Src, w: usize) -> Option<Src> {
+    /// `s`'s `w` lanes read as `+0.0` where they are `-0.0`, for a compare:
+    /// an `fneg` of a constant zero read through (the GLSL `-0.0`), or a
+    /// constant whose lanes are `-0.0`, which [`Tree::neg_zero_compares`]
+    /// makes `+0.0` once every compare has decided. `None`: a lane read is
+    /// not `-0.0`. Refused ([`MaliError::NegZeroShared`]): a `-0.0`
+    /// constant that another value reads too, or that a compare reads with
+    /// other lanes (its words would change under it), and a `-0.0` the
+    /// compare reads through a local (`const float z = -0.0;`, `vec2 z =
+    /// vec2(-0.0);`), which Mesa's copy propagation hands to the rule and
+    /// for which the IR has no `+0.0` at the compare.
+    fn plus_zero(&self, s: Src, w: usize) -> Result<Option<Src>, MaliError> {
         let lanes = |v: &[u32; 4], sw: &[u8; 4], k: u32| sw[..w].iter().all(|&c| v[c as usize & 3] == k);
-        match *self.instrs.get(s.val.0 as usize)? {
-            IrOp::Alu(AluOp::Fneg, [c, ..]) => {
-                let IrOp::ConstF32(v) = *self.instrs.get(c.val.0 as usize)? else { return None };
+        match self.instrs.get(s.val.0 as usize) {
+            Some(&IrOp::Alu(AluOp::Fneg, [c, ..])) => {
+                let Some(&IrOp::ConstF32(v)) = self.instrs.get(c.val.0 as usize) else { return Ok(None) };
                 let swizzle = core::array::from_fn(|i| c.swizzle[s.swizzle[i] as usize & 3]);
-                lanes(&v, &swizzle, 0).then_some(Src { val: c.val, swizzle })
+                Ok(lanes(&v, &swizzle, 0).then_some(Src { val: c.val, swizzle }))
             }
-            IrOp::ConstF32(v) if lanes(&v, &s.swizzle, 0x8000_0000) => {
-                let compares_only = self.instrs.iter().all(|op| match *op {
-                    IrOp::Alu(AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne, _) => true,
-                    o => {
-                        let mut reads = false;
-                        o.for_each_src(|x| reads |= x.val == s.val);
-                        !reads
-                    }
-                });
-                if !compares_only {
-                    return None;
+            Some(&IrOp::ConstF32(v)) if lanes(&v, &s.swizzle, F32_NEG_ZERO) => {
+                match self.zero_for_compares(s.val.0 as usize) {
+                    Some(true) => Ok(Some(s)),
+                    _ => Err(MaliError::NegZeroShared),
                 }
-                self.instrs[s.val.0 as usize] = IrOp::ConstF32(v.map(|x| if x == 0x8000_0000 { 0 } else { x }));
-                Some(s)
             }
-            _ => None,
+            Some(&IrOp::LoadLocal { local, index: None, .. }) => {
+                if s.swizzle[..w].iter().any(|&l| self.stored_neg_zero(local, l & 3)) {
+                    return Err(MaliError::NegZeroShared);
+                }
+                Ok(None)
+            }
+            _ => Ok(None),
         }
+    }
+
+    /// Constant `c` is read by compares alone, each of which reads only
+    /// its `-0.0` lanes (`Some(true)`); `Some(false)`: another reader, or a
+    /// compare reading another lane; `None`: no reader.
+    fn zero_for_compares(&self, c: usize) -> Option<bool> {
+        let IrOp::ConstF32(v) = self.instrs[c] else { return Some(false) };
+        let mut read = false;
+        for (j, op) in self.instrs.iter().enumerate() {
+            match *op {
+                IrOp::Alu(AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne, s) => {
+                    let w = usize::from(self.comps[j]).clamp(1, 4);
+                    for x in &s[..2] {
+                        if x.val.0 as usize == c {
+                            read = true;
+                            if !x.swizzle[..w].iter().all(|&l| v[l as usize & 3] == F32_NEG_ZERO) {
+                                return Some(false);
+                            }
+                        }
+                    }
+                }
+                o => {
+                    let mut reads = false;
+                    o.for_each_src(|x| reads |= x.val.0 as usize == c);
+                    if reads {
+                        return Some(false);
+                    }
+                }
+            }
+        }
+        read.then_some(true)
+    }
+
+    /// Some store of local `local` writes `-0.0` into its lane `l`: a
+    /// constant lane `-0.0`, or an `fneg` of a constant zero.
+    fn stored_neg_zero(&self, local: crate::shaderc::online::ir::LocalId, l: u8) -> bool {
+        self.instrs.iter().any(|op| {
+            let IrOp::StoreLocal { local: at, index: None, src, write_mask } = *op else { return false };
+            if at != local || write_mask & (1 << l) == 0 {
+                return false;
+            }
+            let lane = src.swizzle[l as usize] as usize & 3;
+            match self.instrs.get(src.val.0 as usize) {
+                Some(IrOp::ConstF32(v)) => v[lane] == F32_NEG_ZERO,
+                Some(&IrOp::Alu(AluOp::Fneg, [c, ..])) => matches!(
+                    self.instrs.get(c.val.0 as usize),
+                    Some(IrOp::ConstF32(v)) if v[c.swizzle[lane] as usize & 3] == 0
+                ),
+                _ => false,
+            }
+        })
     }
 }
 

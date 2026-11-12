@@ -1025,6 +1025,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::UboFallback
         | E::UboRowsFull
         | E::ArithConstant
+        | E::NegZeroShared
         | E::Rebalance
         | E::ConstantFold
         | E::FusedMultiplyAdd
@@ -1082,6 +1083,7 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; attribute float q; void main(){ gl_Position = vec4(vec2(3.0) * (q * 0.75), 0.0, 1.0); }", MaliError::ArithConstant),
         /* fmul(fneg(a), fneg(b)) */
         (VS, "attribute vec2 p; attribute vec2 q; void main(){ gl_Position = vec4((-p) * (-q), 0.0, 1.0); }", MaliError::ArithConstant),
+        (FS, "precision mediump float; varying vec2 a2; const float z = -0.0; void main() { if (z == a2.x) discard; gl_FragColor = vec4(1.0); }", MaliError::NegZeroShared),
         (VS, "uniform mat2 m; attribute vec2 p; void main(){ gl_Position = vec4(m * p, 0.0, 1.0); }", MaliError::UniformType),
         (VS, "uniform vec3 u[2]; void main(){ gl_Position = vec4(u[1], 1.0); }", MaliError::UniformArray),
         /* an fp16 uniform that is an array (a plain one is case 19's,
@@ -1268,7 +1270,7 @@ fn every_reachable_gap_is_reached_by_an_es100_source() {
         assert!(reached.contains(e.message()), "no case reaches {e:?}");
     }
     assert_eq!(reached.len(), reachable.len(), "a case reaches a gap classified unreachable");
-    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (61, 56, 5), "gaps: all, reachable, unreachable");
+    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (62, 57, 5), "gaps: all, reachable, unreachable");
 }
 
 /// The front end's verdict on gl_FragData[1] (the reason FragOutput is
@@ -6494,6 +6496,28 @@ fn a_negated_vector_literal_with_a_lane_mesa_folds_is_refused_where_it_differs()
     ] {
         let r = std::panic::catch_unwind(|| check_linked(vs, fs, json));
         assert!(r.is_ok(), "{name}");
+    }
+}
+
+/// A `-0.0` constant two compares read (`vec2(-0.0).x` in `<`, then
+/// `vec2(-0.0).y == a2.y`): each compare decides on the constant as
+/// written, so the `==` still turns round to `a2.y == 0.0`
+/// (glsl.rs `Tree::neg_zero_compares`; at 72d17d74f the first rewrote the
+/// constant in place and the second missed its turn). Byte-equal. A
+/// `-0.0` a compare reads through a variable (`const float z = -0.0;`, a
+/// local, a local also stored to the colour, a `const vec2`) is refused by
+/// name ([`MaliError::NegZeroShared`]): each compiled with other words.
+#[test]
+fn a_shared_negative_zero_turns_each_compare_or_is_refused() {
+    for (name, vs, fs, json) in [pair!("negzero_shared_lt_eq"), pair!("negzero_shared_eq_eq")] {
+        let r = std::panic::catch_unwind(|| check_linked(vs, fs, json));
+        assert!(r.is_ok(), "{name}");
+    }
+    for (name, _, fs, json) in
+        [pair!("negzero_const"), pair!("negzero_local_store"), pair!("negzero_const_vector"), pair!("negzero_local")]
+    {
+        assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::NegZeroShared, "{name}");
     }
 }
 
