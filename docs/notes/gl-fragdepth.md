@@ -2,11 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gl_FragDepth: the contract on the GC7000UL, V3D and PowerVR back ends
 
-Written from `origin/main` at `de737051`. Function and constant names are
+Written from `origin/main` at `de737051`, early-Z and V3D test
+paragraphs refreshed at `007ac36e`. Function and constant names are
 the address; line numbers drift. Nothing here is measured on a board: the
 dEQP-GLES3 `shaders.fragdepth.write` (8) and `.compare` (7) cases were
 refused at compile on every GPU, and this note says what each back end now
-compiles and which state it sets, and what is still pending.
+compiles and which state it sets, and what is still open.
 
 ## 1. The front end
 
@@ -37,26 +38,37 @@ Compiler, done:
   `gl_FragCoord` from a copy of r0 made before the first instruction
   (`select.rs`, "gl_FragDepth and gl_FragCoord share r0"), in a loop too.
 
-Early Z, **pending** (item `gc-fragdepth-earlyz`): `src/vivante/early_z.rs`
-holds the rule as a pure function (`early_z`, from Mesa's `etna_update_zsa`);
-`EarlyZInput::writes_z` ("the fragment shader writes depth,
-`ps_depth_out_reg >= 0`") turns the early test and the early write off.
-Its own header says nothing in the back end calls it. `src/vivante/backend.rs`
-does not: `emit_ra_state` writes `GC_RA_EARLY_DEPTH_WRITE_DISABLE` and no
-`RA_EARLY_DEPTH_TEST_ENABLE` for every draw, and the PE depth config
-(`GC_PE_DEPTH_CONFIG`, the `pe_depth` word in `emit_pe_state`) never sets
-`GC_PE_DEPTH_EARLY_Z`; `early_depth_is_never_enabled_and_the_rasteriser_never_writes_z`
-(`backend_tests.rs`) pins that. So early Z is off for a depth-writing
-program only because it is off for every program on today's linear targets.
-Nothing in `src/vivante/` reads `ps_depth_out_reg` or `writes_depth`, and no
-PE "depth from the pixel shader" word is emitted; a depth-writing program
-compiles and links but the back end does not yet program the PE for it.
+Early Z, done (`b3f42d14`): `src/vivante/early_z.rs` holds the rule as a
+pure function (`early_z`, :131, from Mesa's `etna_update_zsa`);
+`EarlyZInput::writes_z` ("the fragment shader writes depth") turns the early
+test and the early write off. `draw_early_z(writes_z)` (:186) is the rule for
+a linear target. `src/vivante/backend.rs` calls it with
+`d.fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG` in `emit_pe_state` (:1559,
+only the `GC_PE_DEPTH_EARLY_Z` bit of `pe_bits`) and `emit_ra_state` (:1833,
+the whole `GC_RA_EARLY_DEPTH` word, with a `debug_assert_eq!` against the
+old constant). Every colour surface the back end renders to is linear, which
+the rule denies for every program, so the emitted words are the same with and
+without a depth write: `RA_EARLY_DEPTH` 0x15000030 (WRITE_DISABLE, no
+TEST_ENABLE) and no `GC_PE_DEPTH_EARLY_Z`; a depth-writing program differs
+from the others only on a tiled target, where the rule gives the same words
+but with early test and early write off (below). The back end emits no PE
+"depth from the pixel shader" word; the depth comes from the
+`ps_depth_out_reg` in the shader record (whether the hardware needs a
+further bit is open: Mesa etnaviv is not read into this tree for it).
 
 Tests: `tests/es3_fragdepth_gc.rs` pins the build, r0 as the depth register,
 the write to `r0.z` alone by the last instruction, the clamp, the
-`gl_FragCoord` copy, the dEQP shaders, and (`5fa91ff6`) the rule's answer
-for `writes_z` derived from the compiled record: early test, early write,
-PE_DEPTH_CONFIG bits and RA_EARLY_DEPTH word. It calls the rule, not the
+`gl_FragCoord` copy and the dEQP shaders. For the words:
+`early_z_is_off_for_a_depth_writing_program_and_on_for_one_that_is_not`
+derives `writes_z` from the compiled record and pins the rule on a tiled
+target (the writer: early test and write off, `RA_EARLY_DEPTH` 0x15000030,
+no PE bits; a program without a depth write keeps them, e.g. 0x05000031 with
+PE bits 0x01010000); `the_back_end_words_say_early_z_off_for_both_programs`
+pins what `draw_early_z` gives the back end;
+`a_linear_target_keeps_early_z_off_for_both_programs` pins the linear case.
+`early_depth_is_never_enabled_and_the_rasteriser_never_writes_z`
+(`src/vivante/backend_tests.rs:1750`) pins the words of a submitted draw.
+The tests call the rule and the submitted words, not a tiled draw through the
 back end.
 
 ## 3. V3D (`8a5da05e`, `de737051`)
@@ -90,12 +102,25 @@ back end.
   writers, pins one per-pixel TLBU depth write and its config word before the
   colour, and runs the QPU interpreters for the written value (constant,
   uniform, varying, conditional, loop-carried, before a uniform or a
-  divergent `break`, with a discard). The interpreters have no depth buffer,
-  so the depth test is not modelled; the record bits are not asserted in the
-  host test either (the chain's `a_shader_that_writes_gl_fragdepth_writes_its_own_z`
-  unit test pins `writes_z`/`disable_ez`). A test of the packed shader
-  record is **pending** (items `v3d-fragdepth-state`, `v3d-fragdepth-sim`,
-  in review at the time of writing).
+  divergent `break`, with a discard).
+  `tests/es3_fragdepth_v3d_state.rs` compiles the writer, hands its program
+  data to the real C job builder and pins the shader record: "fragment shader
+  does Z writes" (bit 8) and "turn off early Z test" (bit 9) set for the
+  writer and clear for a control, the two records differing in those bits
+  alone (`the_depth_writers_shader_record_says_writes_z_and_early_z_off`,
+  `the_two_records_differ_in_the_two_bits_alone`); the CFG_BITS early-Z bits
+  and the RCL early-Z-disable stay as for every draw
+  (`cfg_bits_keep_early_z_off_for_both_programs`,
+  `the_rcl_common_packet_disables_early_z_for_both_programs`: the job builder
+  never turns early Z on). The Rust `programs` (`src/v3d/backend.rs:3683`)
+  copies `writes_z` and `disable_ez` and has no test of its own.
+  `tests/es3_fragdepth_v3d_sim.rs` pins the written value in the QPU
+  interpreter (a constant as its f32 bits, a computed depth per lane, no
+  clamp by the compiler, the shader's own clamp, a one-arm write, a
+  discarded lane). `tests/es3_fragdepth_cases.rs` builds every dEQP shape on
+  both back ends (`every_fragdepth_shape_builds_with_writes_z_and_disable_ez`
+  for V3D). The interpreters have no depth buffer, so the depth test by the
+  written value (`fragdepth.compare.*`) is not modelled and is open.
 
 ## 4. PowerVR (`7bfac242`; plan #325 `fragdepth`)
 
@@ -123,16 +148,20 @@ no reference to `writes_depth`, `writes_z` or `ps_depth_out_reg`; each back
 end reads the fact from the compiled program it already receives: PowerVR and
 GC7000UL `ShcShader::writes_depth` (the GC also `viv.ps_depth_out_reg`), V3D
 `ShcV3dFs::writes_z` / `disable_ez`. The GC back end's early-depth decision
-is the one place that will need it (section 2), and it can take it from the
+is the one place that needs it (section 2), and it takes it from the
 `GcDraw` shader it already has. Nothing in the GL state (`depth_test`,
 `depth_write`) changes: those still gate the test and the write, the
 program's depth only replaces the interpolated value that is tested.
 
 ## Pending, in one list
 
-- GC7000UL back end: call the early-depth rule, with `writes_z` from the
-  record, and emit the PE/RA words (`gc-fragdepth-earlyz`); program the PE to
-  take depth from the pixel shader if the hardware needs a bit for it (the
-  source for that word is Mesa etnaviv, not yet read into this tree).
-- V3D: the packed record and a depth test in the host model.
+- A gate row for the fragdepth tests: `tools/check.sh` has one only for
+  `tests/es3_pvr_fragdepth.rs`; `es3_fragdepth_gc`, `es3_fragdepth_v3d`,
+  `es3_fragdepth_v3d_state`, `es3_fragdepth_v3d_sim` and
+  `es3_fragdepth_cases` are not in it (items `gc-fragdepth-row`,
+  `v3d-fragdepth-row`).
+- GC7000UL on a tiled colour target: the back end renders to linear targets
+  only, so the writer's early-Z-off words are pinned through the rule, not
+  through a draw.
+- V3D: the depth test by the written value in the host model.
 - Board verdicts for all three: the i.MX8MP, Pi 4 and AM62P trees.
