@@ -929,6 +929,7 @@ fn lower_ordered<'a>(
         cur_class: Prec::None,
         slot_prec: None,
         pinned: AVec::new(),
+        const_params: AVec::new(),
         nodes: AVec::new(),
         inputs: AVec::new(),
         outputs: AVec::new(),
@@ -1026,6 +1027,11 @@ struct Lower<'x, 'a> {
     /// Float constants a full-width built-in reads at their fp16 value
     /// ([`Lower::full_width_args`]).
     pinned: AVec<'a, u32>,
+    /// The parameters of the bodies being inlined whose argument is a
+    /// constant (or reads such a parameter), by inline depth: Mesa folds
+    /// them into the inlined body, so a full-width built-in reading one
+    /// takes the constant's fp16 value ([`Lower::full_width_args`]).
+    const_params: AVec<'a, (u32, &'a str)>,
     nodes: AVec<'a, Node>,
     inputs: AVec<'a, IoDecl<'a>>,
     outputs: AVec<'a, IoDecl<'a>>,
@@ -4309,6 +4315,17 @@ impl<'a> Lower<'_, 'a> {
         }
         for (&e, op) in ids.iter().zip(ops) {
             let Operand::Value { src, .. } = *op else { continue };
+            /* a parameter that takes a constant: Mesa folds the constant
+             * into the inlined body, so the parameter's `f2fmp` becomes the
+             * fp16 constant (third review B-E, probe p3/u5); the lowering
+             * reads the parameter's 32-bit slot or the caller's value, and
+             * has no form for that rounding */
+            if self.mentions_const_param(e, 0) {
+                if let Some(x) = self.prec.as_mut_slice().get_mut(src.val.0 as usize) {
+                    *x = Prec::Unknown;
+                }
+                continue;
+            }
             if !self.precs.folds(e) {
                 continue;
             }
@@ -4333,6 +4350,25 @@ impl<'a> Lower<'_, 'a> {
             }
         }
         Ok(())
+    }
+
+    /// `e` reads a parameter of the innermost inlined body that takes a
+    /// constant ([`Lower::const_params`]).
+    fn mentions_const_param(&self, e: ExprId, depth: u32) -> bool {
+        if depth > 64 {
+            return true;
+        }
+        match *self.ast.expr(e) {
+            Expr::Ident(n) => self.const_params.as_slice().iter().any(|&(d, p)| d == self.inline_depth && p == n),
+            Expr::Call { args, .. } | Expr::ArrayCtor { args, .. } => {
+                args.indices().any(|i| self.mentions_const_param(self.ast.expr_ids[i], depth + 1))
+            }
+            _ => {
+                let mut c = [ExprId(0); 3];
+                let n = self.expr_children(e, &mut c);
+                c[..n].iter().any(|&x| self.mentions_const_param(x, depth + 1))
+            }
+        }
     }
 
     /// The definition a call names, resolved against the argument types.
@@ -4669,10 +4705,22 @@ impl<'a> Lower<'_, 'a> {
         /* The callee's returns are its own: a `return` in a loop of the
          * callee must leave the callee, not the caller's loop around the
          * call. */
+        /* which parameters take a constant: decided in the caller's frame */
+        let marks = self.const_params.len();
+        for (p, &arg) in param_ids.iter().zip(arg_ids) {
+            if let Some(pname) = p.name {
+                if self.precs.folds(arg) || self.mentions_const_param(arg, 0) {
+                    self.const_params.push(self.a, (self.inline_depth + 1, pname))?;
+                }
+            }
+        }
         let caller_ret = self.ret.take();
         self.inline_depth += 1;
         let r = self.inline_body(name, body, want, out);
         self.inline_depth -= 1;
+        while self.const_params.len() > marks {
+            self.const_params.pop();
+        }
         self.ret = caller_ret;
         while self.scope.len() > caller_top {
             self.scope.pop();
