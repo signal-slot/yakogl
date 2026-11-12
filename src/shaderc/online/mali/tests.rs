@@ -6393,6 +6393,24 @@ fn a_negated_literal_product_without_a_transcription_is_refused() {
     assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::ArithConstant);
 }
 
+/// A mediump discard that compares two varying lanes, of one varying
+/// (`v.y < v.x`, `v.y >= v.x`) or of two (`v.x < w.x`): Mesa compares the
+/// fp32 lanes (`DISCARD.f32.lt r1^, r0^`, 8 words), ours narrowed both
+/// and compared the halves (10 words) on main. Refused by name until the
+/// rule is transcribed (issue #4569 c); the references are kept. A highp
+/// shader's (no narrowing) is byte-equal.
+#[test]
+fn a_mediump_discard_of_two_varying_lanes_is_refused() {
+    for (name, _, fs, json) in
+        [pair!("discard16_two_lanes"), pair!("discard16_two_lanes_ge"), pair!("discard16_two_varyings")]
+    {
+        assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::FsOperandForm, "{name}");
+    }
+    let (_, vs, fs, json) = pair!("discard_highp_two_lanes");
+    check_linked(vs, fs, json);
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,
