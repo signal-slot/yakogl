@@ -1118,11 +1118,12 @@ in-process compiler's scratch, the OSAL's memory (the 64 MiB carve-out, the
 tiler heap's chunks, the firmware arena, the queue memory), dEQP's code, and
 the 64 MiB C heap every board's dEQP image has. 128 MiB is 55 MiB short of
 it. The probes take under 6 MiB; their RAM use counts the
-page-frame table, which Zephyr sizes for the whole of `zephyr,sram`. Three
+page-frame table, which Zephyr sizes for the whole of `zephyr,sram`. Four
 places hold the window: the dts, `nanopc-t6.sh` (`WINDOW_BASE`,
-`WINDOW_SIZE`) and the U-Boot script (`driver/tools/uboot-t6/t6-zephyr.cmd`,
-`t6z_load`, `t6z_window`); `driver/tools/kexec-zephyr/board_lock_selftest.sh`
-fails when the two scripts differ from the dts. Two limits come with the
+`WINDOW_SIZE`) and the U-Boot runner (`driver/tools/uboot-t6/prompt-go.sh`,
+`WINDOW_BASE` and `WINDOW_SIZE`; `prompt-go.py`, `LOAD`);
+`driver/tools/kexec-zephyr/board_lock_selftest.sh` fails when one of the
+runners differs from the dts. Two limits come with the
 size. `CONFIG_KERNEL_VM_SIZE` (the board defconfig, 512 MiB) must reach
 past the window: `k_mem_map`'s free virtual range runs from the image's end
 to `KERNEL_VM_BASE + KERNEL_VM_SIZE`, so with Zephyr's 8 MiB default

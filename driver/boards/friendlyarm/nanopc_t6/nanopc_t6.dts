@@ -11,8 +11,9 @@
  *   image is linked and loaded. 256 MiB holds the dEQP-GLES2 image with the
  *   Mali OSAL (187408 KB: the GL core, the in-process compiler's scratch, the
  *   OSAL's 64 MiB carve-out and dEQP's 64 MiB C heap); the probes use under
- *   6 MiB. driver/tools/kexec-zephyr/nanopc-t6.sh (WINDOW_SIZE) and
- *   driver/tools/uboot-t6/t6-zephyr.cmd (t6z_window) hold the same window;
+ *   6 MiB. driver/tools/kexec-zephyr/nanopc-t6.sh (WINDOW_SIZE),
+ *   driver/tools/uboot-t6/prompt-go.sh (WINDOW_BASE, WINDOW_SIZE) and
+ *   prompt-go.py (LOAD) hold the same window;
  *   driver/tools/kexec-zephyr/board_lock_selftest.sh compares them with
  *   this node's reg. The
  *   defconfig's KERNEL_VM_SIZE must reach past this size (nanopc_t6.c
