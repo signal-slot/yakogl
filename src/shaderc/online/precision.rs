@@ -1983,6 +1983,32 @@ mod tests {
         assert_eq!(alu(&g, AluOp::Fmul).last(), Some(&M), "0.1 + 0.2 > 0.3 is false in f32");
     }
 
+    /// Third review B-E: a constant passed through a user function's
+    /// parameter into pow, asin or acos. Mesa inlines and folds the
+    /// parameter's `f2fmp` to the fp16 constant (probe p3/u5: `load_const
+    /// (0x3dccc000)`, `fpow`); with a value that is no constant (p3/x1,
+    /// `f(p.y)`) it reads the 32-bit value, as we do. The lowering does not
+    /// carry the constant into the body, so that read records Unknown.
+    #[test]
+    fn a_constant_through_a_parameter_into_pow_is_unknown() {
+        let src = |arg: &str| {
+            std::format!(
+                "attribute mediump vec4 q; varying highp vec4 v; const mediump float E = 0.1;\n\
+                 mediump float f(const in mediump float e){{ return pow(q.z, e); }}\n\
+                 mediump float g(mediump float e){{ return f(e); }}\n\
+                 void main(){{ gl_Position = p; v = vec4({arg}); }}"
+            )
+        };
+        for arg in ["f(E)", "g(E)", "f(0.1)"] {
+            let g = vs(&src(arg));
+            assert!(g.prec.contains(&Prec::Unknown), "{arg}: the exponent read");
+        }
+        for arg in ["f(p.y)", "g(p.y)"] {
+            let g = vs(&src(arg));
+            assert!(!g.prec.contains(&Prec::Unknown), "{arg}");
+        }
+    }
+
     #[test]
     fn f16_exact_knows_the_f16_values() {
         for x in [0.0f32, -0.0, 1.0, 1.5, 65504.0, -2.0, 6.103_515_6e-5, 5.960_464_5e-8, 0.000_122_070_31] {
