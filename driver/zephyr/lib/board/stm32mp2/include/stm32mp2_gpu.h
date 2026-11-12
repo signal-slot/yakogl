@@ -40,7 +40,7 @@ struct yd_mp2_gpu {
 	yd_mp2_gpu_log_fn log; /* may be NULL */
 	void *log_ctx;
 	uint32_t idle_reads;   /* bound of every idle poll; 0: 1000 */
-	uint32_t channel;      /* the SCMI channel, 0 on the DK */
+	uint32_t channel;      /* the SCMI channel: 0, the only one power_on takes */
 };
 
 /* err.kind */
@@ -114,7 +114,9 @@ _Static_assert(sizeof(struct yd_mp2_gpu_reset) == 32, "struct yd_mp2_gpu_reset i
  * back; the RCC gate on, reset asserted and released, read back;
  * HI_IDLE_STATE until idle. The session is closed after, also on a failure.
  * A refused or failed SCMI step stops at once: no RCC write follows it.
- * -EIO (err says why), -ETIMEDOUT (not idle), -EFAULT (window), -EINVAL. */
+ * -EIO (err says why), -ETIMEDOUT (not idle), -EFAULT (window), -EINVAL
+ * (a NULL argument, or a channel other than 0, before any SMC: err OPTEE
+ * step 1, a 0x101, b the channel). */
 int32_t yd_mp2_gpu_power_on(const struct yd_mp2_gpu *g, struct yd_mp2_gpu_up *out);
 
 /* The identity registers and the hardware database row. -ENODEV when the

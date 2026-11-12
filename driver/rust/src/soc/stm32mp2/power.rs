@@ -17,7 +17,8 @@
 //!    [`Config::idle_reads`] times.
 //!
 //! Power-down is the reverse: reset asserted, gate off, then POWER
-//! (PROTOCOL_VERSION, POWER_STATE_SET off, POWER_STATE_GET). The performance
+//! (PROTOCOL_VERSION, POWER_STATE_GET, and only if the domain is on
+//! POWER_STATE_SET off and POWER_STATE_GET; [`power_down`] says why). The performance
 //! level is left as it is: nothing was changed there that needs undoing
 //! (with [`Level::Current`]), and a later power-up sets it again.
 //!
@@ -42,6 +43,13 @@ use crate::mmio::Mmio;
 pub const PERF_DOMAIN: u32 = 1;
 /// The GPU's power domain, `PD_SCMI_GPU` (`st,stm32mp25-power.h:9`).
 pub const POWER_DOMAIN: u32 = 0;
+/// The SCMI channel: OP-TEE's mailbox 0, agent 1, the only one on the
+/// pseudo-TA's message transport and the only one with performance domains
+/// (`scmi_server_scpfw.c:482`, `:504-509`; `config_all.c:603`). Channel 1
+/// is the Cortex-M33's SMT mailbox: a message for it asserts in a debug
+/// OP-TEE (`mod_optee_mbx.c:88-89`), and in a release one is handed to the
+/// wrong transport.
+pub const SCMI_CHANNEL: u32 = 0;
 /// The token of every message.
 pub const TOKEN: u16 = 1;
 /// The protocol major version both protocols must report (SCP-firmware's
@@ -332,8 +340,19 @@ pub fn power_up<T: Transport, M: Mmio, L: Log, R: FnMut(usize) -> u32>(
     Err(Error::IdleTimeout { reads: cfg.idle_reads, last })
 }
 
-/// Power the GPU down: reset asserted, gate off, then power domain 0 off and
-/// read back. The performance level is not touched.
+/// Power the GPU down: reset asserted, gate off, then power domain 0 read
+/// and, only when it is on, switched off and read back. The performance
+/// level is not touched.
+///
+/// The read first: after an ON that failed in the driver (a regulator or
+/// PLL3 error, GENERIC_ERROR), SCP-firmware's power-domain module keeps ON as
+/// the requested state while ST's GPU driver still holds OFF
+/// (`mod_power_domain.c:866`, `mod_stm32_pd.c:63-65`, `:109-117`). An OFF
+/// then reaches the driver, which returns without reporting a transition, so
+/// no reply is ever sent: the channel stays locked (`mod_optee_mbx.c:93`,
+/// `mod_msg_smt.c:294-296`) and the next SCMI request of any agent sleeps for
+/// ever under the server's lock (`arch_main.c:96`). POWER_STATE_GET answers
+/// the domain's current state (`mod_power_domain.c:1021`), OFF in that case.
 pub fn power_down<T: Transport, M: Mmio, L: Log>(
     scmi: &mut T,
     rcc: &GpuRcc<M>,
@@ -343,7 +362,19 @@ pub fn power_down<T: Transport, M: Mmio, L: Log>(
     rcc.assert_reset();
     rcc.disable_clock();
     log_fmt(log, format_args!("rcc gpucfgr 0x{:08x}", rcc.status().raw));
-    power_state(scmi, log, cfg.power_domain, scmi::POWER_OFF, Step::PowerOff, Step::PowerOffCheck)
+    check_version(scmi, log, Step::PowerVersion, scmi::PROTO_POWER)?;
+    let d = cfg.power_domain;
+    let now = call(scmi, log, Step::PowerOffCheck, scmi::PROTO_POWER, scmi::POWER_STATE_GET, &[d], 1)?[0];
+    if now == scmi::POWER_OFF {
+        log_fmt(log, format_args!("power domain {} already off", d));
+        return Ok(());
+    }
+    call(scmi, log, Step::PowerOff, scmi::PROTO_POWER, scmi::POWER_STATE_SET, &[0, d, scmi::POWER_OFF], 0)?;
+    let got = call(scmi, log, Step::PowerOffCheck, scmi::PROTO_POWER, scmi::POWER_STATE_GET, &[d], 1)?[0];
+    if got != scmi::POWER_OFF {
+        return Err(Error::Readback { step: Step::PowerOffCheck, want: scmi::POWER_OFF, got });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -517,7 +548,7 @@ mod tests {
 
     #[test]
     fn constants() {
-        assert_eq!((PERF_DOMAIN, POWER_DOMAIN, TOKEN), (1, 0, 1));
+        assert_eq!((PERF_DOMAIN, POWER_DOMAIN, TOKEN, SCMI_CHANNEL), (1, 0, 1, 0));
         assert_eq!(IDLE_STATE as u32, crate::gpu::vivante::regs::VIVS_HI_IDLE_STATE);
         assert_eq!(IDLE_MASK, !crate::gpu::vivante::regs::VIVS_HI_IDLE_STATE_AXI_LP);
         assert_eq!(Config::DK.level, Level::Current);
@@ -600,24 +631,119 @@ mod tests {
 
     #[test]
     fn power_down_order_bytes_and_lines() {
-        let s = vec![pair("req_pd_protocol_version"), pair("req_pd_state_set_off"), pair("req_pd_state_get_off")];
+        let s = vec![
+            pair("req_pd_protocol_version"),
+            ok("req_pd_state_get_on", "rep_pd_state_get_on"),
+            pair("req_pd_state_set_off"),
+            pair("req_pd_state_get_off"),
+        ];
         let mut r = rig(s, 0x102);
         r.down(&Config::DK).unwrap();
         let mut want = vec![Ev::RccR(0x102), Ev::RccW(0x103), Ev::RccR(0x103), Ev::RccW(0x101), Ev::RccR(0x101)];
-        want.extend(scmi_evs(&["req_pd_protocol_version", "req_pd_state_set_off", "req_pd_state_get_off"]));
+        want.extend(scmi_evs(&[
+            "req_pd_protocol_version",
+            "req_pd_state_get_on",
+            "req_pd_state_set_off",
+            "req_pd_state_get_off",
+        ]));
         assert_eq!(r.events(), want);
+        assert!(r.t.steps.is_empty());
         assert_eq!(
             r.log.0,
             [
                 "rcc gpucfgr 0x00000101",
                 "scmi > 00440400",
                 "scmi < 004404000000000000000200",
+                "scmi > 0544040000000000",
+                "scmi < 054404000000000000000000",
                 "scmi > 04440400000000000000000000000040",
                 "scmi < 0444040000000000",
                 "scmi > 0544040000000000",
                 "scmi < 054404000000000000000040",
             ]
         );
+    }
+
+    #[test]
+    fn power_down_of_a_domain_already_off_sends_no_set() {
+        // After an ON that failed in ST's driver an OFF is never answered
+        // (mod_stm32_pd.c:63-65), and the server hangs: read first, and send
+        // no POWER_STATE_SET when the domain reads off.
+        let s = vec![pair("req_pd_protocol_version"), ok("req_pd_state_get_on", "rep_pd_state_get_off")];
+        let mut r = rig(s, 0x102);
+        r.down(&Config::DK).unwrap();
+        assert!(r.t.steps.is_empty());
+        assert_eq!(r.log.0.last().unwrap(), "power domain 0 already off");
+        assert!(!r.events().contains(&Ev::Scmi("req_pd_state_set_off")));
+    }
+
+    #[test]
+    fn power_down_refused_set_and_readback() {
+        let s = vec![
+            pair("req_pd_protocol_version"),
+            ok("req_pd_state_get_on", "rep_pd_state_get_on"),
+            ("req_pd_state_set_off", Ok(status_reply("req_pd_state_set_off", scmi::STATUS_GENERIC_ERROR))),
+        ];
+        let mut r = rig(s, 0x102);
+        assert_eq!(r.down(&Config::DK), Err(Error::Refused { step: Step::PowerOff, status: Status::GenericError }));
+        let s = vec![
+            pair("req_pd_protocol_version"),
+            ok("req_pd_state_get_on", "rep_pd_state_get_on"),
+            pair("req_pd_state_set_off"),
+            ok("req_pd_state_get_off", "rep_pd_state_get_on"),
+        ];
+        let mut r = rig(s, 0x102);
+        assert_eq!(r.down(&Config::DK), Err(Error::Readback { step: Step::PowerOffCheck, want: 0x4000_0000, got: 0 }));
+    }
+
+    #[test]
+    fn requests_stay_off_optee_traps() {
+        // Every request power_up and power_down send, checked against the
+        // inputs that hang or panic ST's SCMI server: power-domain message
+        // ids 6 and 7 have no handler (mod_scmi_power_domain.c:158-176,
+        // :1023); domain 1 ("system") never answers an OFF (mod_stm32_pd.c:
+        // 36-42); a state other than ON or OFF that passes the mask is never
+        // answered (mod_power_domain.c:1542-1543, mod_scmi_power_domain.c:
+        // 1231); performance domain 0 is the CPU's (scmi_server_scpfw.c:
+        // 358-383).
+        let names = [
+            "req_perf_protocol_version",
+            "req_perf_level_get",
+            "req_perf_level_set",
+            "req_pd_protocol_version",
+            "req_pd_state_set_on",
+            "req_pd_state_get_on",
+            "req_pd_state_set_off",
+            "req_pd_state_get_off",
+        ];
+        for n in names {
+            let b = v(n);
+            let w = |i: usize| scmi::word(&b, i);
+            let hdr = w(0);
+            let (msg, kind, proto, token) = (hdr & 0xff, (hdr >> 8) & 3, (hdr >> 10) & 0xff, hdr >> 18);
+            assert_eq!((kind, token), (0, TOKEN as u32), "{n}");
+            match proto as u8 {
+                scmi::PROTO_POWER => {
+                    assert!([0, 4, 5].contains(&msg), "{n}");
+                    if msg == 4 {
+                        assert_eq!(b.len(), 16, "{n}");
+                        assert_eq!((w(1), w(2)), (0, POWER_DOMAIN), "{n}: flags, domain");
+                        assert!([scmi::POWER_ON, scmi::POWER_OFF].contains(&w(3)), "{n}");
+                    }
+                    if msg == 5 {
+                        assert_eq!((b.len(), w(1)), (8, POWER_DOMAIN), "{n}");
+                    }
+                }
+                scmi::PROTO_PERF => {
+                    assert!([0, 7, 8].contains(&msg), "{n}");
+                    if msg != 0 {
+                        assert_eq!(w(1), PERF_DOMAIN, "{n}");
+                    }
+                }
+                p => panic!("{n}: protocol {p:#x}"),
+            }
+        }
+        assert_eq!((scmi::POWER_ON, scmi::POWER_OFF), (0, 0x4000_0000));
     }
 
     /// Refuse step `at` of the power-up with `reply`; nothing after it is
@@ -676,6 +802,16 @@ mod tests {
         b[2] = 0x08;
         let (e, _) = refused_at(0, Ok(b));
         assert_eq!(e, Err(Error::Echo { step: Step::PerfVersion, sent: 0x0004_4c00, got: 0x0008_4c00 }));
+    }
+
+    #[test]
+    fn reply_never_written_stops_before_rcc() {
+        // A dropped message comes back as the whole cleared reply buffer
+        // (mod_msg_smt.c:286-296, scmi.c:170-174): header 0, never a success.
+        for at in 0..UP.len() {
+            let (e, _) = refused_at(at, Ok(vec![0; MAX_MSG]));
+            assert!(matches!(e, Err(Error::Echo { got: 0, .. })), "{at}: {e:?}");
+        }
     }
 
     #[test]
