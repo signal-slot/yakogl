@@ -2019,7 +2019,9 @@ fn varyings_sharing_a_slot_are_loaded_per_slot_as_mesa_26_2_1() {
 /// no reference for, each refused by name; each reference holds the load:
 /// both lanes of an aligned pair beside constants (Mesa converts the pair
 /// once, `V2F32_TO_V2F16 r0, r2^, r3^`), a discard's compare of y and the
-/// colour's x (Mesa's pair with y low, `V2F32_TO_V2F16 r0, r1^, r0^`), and
+/// colour's x (Mesa's pair with y low, `V2F32_TO_V2F16 r0, r1^, r0^`), a
+/// sum with zeros of both signs (no identity at the link by the source,
+/// nir_search.c:282-285, and no shape that tells its order), and
 /// dFdy of a vec2's second lane (Mesa converts that lane alone, `FADD.f32
 /// r0.h0, r1^`).
 #[test]
@@ -2027,6 +2029,7 @@ fn a_load_or_conversion_with_no_reference_is_refused() {
     let cases = [
         (td!("fsload_mk_pair.frag"), td!("fsload_mk_pair.expect.json"), MaliError::FsVaryingLoad, ".v4"),
         (td!("fsload_disc_col.frag"), td!("fsload_disc_col.expect.json"), MaliError::FsVaryingLoad, ".v4"),
+        (td!("fsload_zeros.frag"), td!("fsload_zeros.expect.json"), MaliError::FsVaryingLoad, ".v4"),
         (td!("fsload_deriv2.frag"), td!("fsload_deriv2.expect.json"), MaliError::FsOperandForm, ".v2"),
     ];
     for (fs, json, want, width) in cases {
