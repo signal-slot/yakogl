@@ -2876,19 +2876,21 @@ if command -v python3 >/dev/null 2>&1; then
     # deflate and uncompressed ones without it, so their presence is asserted,
     # not assumed from the row's verified line.
     [ -f "$d/ok-lz4-mixed.img" ] || {
-      echo "stage2-vectors wrote no LZ4 vectors (ok-lz4-mixed.img): the lz4 command left PATH during the run"
+      echo "stage2-vectors wrote no LZ4 vectors (ok-lz4-mixed.img): the lz4 program (\$LZ4 or lz4 on PATH) went away during the run"
       return 1
     }
   }
   # One row either way, so the plan has the same rows on a host with the lz4
   # command and on one without: a gap in the row's place names what was not
   # checked, as the MESA_PAN_TREE row above.
-  # lz4 is in the ZEPHYR_WS entry's packages (tools/cts/deps.toml), so
-  # tools/setup-gate-host.sh --install brings it to a gate host.
-  if command -v lz4 > /dev/null 2>&1; then
+  # The lz4 program is the one tools/am62p-mkboot.py runs: $LZ4 when it is
+  # non-empty (the LZ4 entry of tools/cts/deps.toml, exported by
+  # tools/cts/deps-env.sh), else lz4 on PATH (also in the ZEPHYR_WS entry's
+  # packages, which tools/setup-gate-host.sh --install brings to a gate host).
+  if command -v "${LZ4:-lz4}" > /dev/null 2>&1; then
     step "tools   am62p second stage: mkboot images (stored, deflate, LZ4) decoded by the loader's Rust" stage2_vectors_check
   else
-    gap "am62p second stage: mkboot images decoded by the loader's Rust: no lz4 command (deps.toml ZEPHYR_WS packages: Debian lz4, app-arch/lz4; tools/setup-gate-host.sh --install): the second-stage vectors were NOT decoded"
+    gap "am62p second stage: mkboot images decoded by the loader's Rust: no lz4 program (\$LZ4 names none and lz4 is not on PATH; build the deps.toml LZ4 entry: tools/cts/deps-env.sh --build LZ4, or install Debian lz4 / app-arch/lz4: tools/setup-gate-host.sh --install): the second-stage vectors were NOT decoded"
   fi
   # The i.MX8MP netboot's verdicts
   # (docs/notes/imx8mp-netboot.md) are tools/board.sh's
