@@ -2,8 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali Z4: what Z4 needs from `csf.rs` (follow-up list)
 
-**Status: design only; the `csf.rs` change waits for this plan's sched work to
-merge.** Z4 (`driver/rust/src/gpu/mali/sched.rs` and its `job` submodule) may
+**Status: G1, G2 and G4 are in `csf.rs` (the three items `sched.rs` marked
+"Not in [`csf`]"); G3 and G5-G16 are still local in `sched.rs`, or not yet
+written.** Z4 (`driver/rust/src/gpu/mali/sched.rs` and its `job` submodule) may
 not edit `driver/rust/src/gpu/mali/csf.rs` (Z3's firmware interface). Every
 CSF item Z4 needs that `csf.rs` lacks is defined locally in `sched.rs` for
 now; this note is the list of what must move into `csf.rs`, entry by entry,

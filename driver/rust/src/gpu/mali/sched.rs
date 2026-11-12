@@ -407,9 +407,9 @@
 pub mod job;
 
 use super::csf::{
-    self, Cs, CsInput, CsOutput, Csg, CsgInput, CsgOutput, Iface, McuMemory, CSG_ENDPOINT_CONFIG, CSG_STATE_MASK,
-    CSG_STATE_START, CSG_STATE_TERMINATE, CS_EVT_MASK, CS_EXTRACT_EVENT, CS_FATAL, CS_FAULT, CS_IDLE_EMPTY,
-    CS_IDLE_SYNC_WAIT, CS_PROTM_PENDING, CS_STATE_MASK, CS_STATE_START, CS_TILER_OOM,
+    self, Cs, CsInput, CsOutput, Csg, CsgInput, CsgOutput, Iface, McuMemory, RingbufInput, RingbufOutput,
+    CSG_ENDPOINT_CONFIG, CSG_STATE_MASK, CSG_STATE_START, CSG_STATE_TERMINATE, CS_EVT_MASK, CS_EXTRACT_EVENT, CS_FATAL,
+    CS_FAULT, CS_IDLE_EMPTY, CS_IDLE_SYNC_WAIT, CS_PROTM_PENDING, CS_STATE_MASK, CS_STATE_START, CS_TILER_OOM,
 };
 use super::Ident;
 use crate::mmio::Mmio;
@@ -455,8 +455,6 @@ pub const CSG_PRIORITY: u32 = MAX_CSG_PRIO;
 /// Mesa's Gallium driver asks for (mesa:pan_csf.c:1824).
 pub const CSF_MAX_QUEUE_PRIO: u32 = 0xf;
 pub const QUEUE_PRIORITY: u32 = 1;
-/// `CSG_EP_REQ_PRIORITY_MASK` (panthor_fw.h:171). Not in [`csf`].
-pub const CSG_EP_REQ_PRIORITY_MASK: u32 = 0xf000_0000;
 
 /// The `ack_irq_mask` panthor writes for the group and the stream: every
 /// bit (panthor_sched.c:1070, 1344).
@@ -479,22 +477,6 @@ pub const CS_EVT_ACK: u32 = CS_FATAL | CS_FAULT;
 pub const EXCEPTION_CS_UNRECOVERABLE: u32 = 0x41;
 pub const EXCEPTION_CS_INHERIT_FAULT: u32 = 0x4b;
 
-/// `struct panthor_fw_ringbuf_input_iface` (panthor_fw.h:15-18): the
-/// stream's user input page. Not in [`csf`].
-#[repr(C)]
-pub struct RingbufInput {
-    pub insert: u64,
-    pub extract: u64,
-}
-
-/// `struct panthor_fw_ringbuf_output_iface` (panthor_fw.h:20-23): the
-/// stream's user output page. Not in [`csf`].
-#[repr(C)]
-pub struct RingbufOutput {
-    pub extract: u64,
-    pub active: u32,
-}
-
 /// `struct panthor_syncobj_64b` (panthor_sched.c:338-351): the job's
 /// completion, 16 bytes.
 #[repr(C)]
@@ -509,8 +491,6 @@ pub struct SyncObj64 {
 
 pub const SYNCOBJ_SIZE: u32 = size_of::<SyncObj64>() as u32;
 
-const _: () = assert!(size_of::<RingbufInput>() == 0x10);
-const _: () = assert!(size_of::<RingbufOutput>() == 0x10);
 const _: () = assert!(size_of::<SyncObj64>() == 0x10);
 const _: () = assert!(QUEUE_OUTPUT_OFFSET + size_of::<RingbufOutput>() as u32 <= QUEUE_IFACE_SIZE);
 
@@ -1066,7 +1046,7 @@ pub fn start(
         csg_req: m.read32(gi + offset_of!(CsgInput, req)),
         csg_ack: m.read32(go + offset_of!(CsgOutput, ack)),
         glb_doorbell_req: m.read32(iface.glb_input + offset_of!(csf::GlbInput, doorbell_req)),
-        priority: (endpoint_req & CSG_EP_REQ_PRIORITY_MASK) >> 28,
+        priority: csf::csg_ep_priority(endpoint_req),
         csg_ack_us,
         cs_ack_us,
     })
@@ -1712,7 +1692,8 @@ mod tests {
         assert_eq!(CS_START_MASK, 0x0517);
         assert_eq!(CSG_START_MASK, 0x17);
         assert_eq!(CS_EVT_ACK, 0xc000_0000);
-        assert_eq!(csf::csg_ep_req(0, 0, 0, CSG_PRIORITY), CSG_EP_REQ_PRIORITY_MASK);
+        assert_eq!(csf::csg_ep_req(0, 0, 0, CSG_PRIORITY), csf::CSG_EP_REQ_PRIORITY_MASK);
+        assert_eq!(csf::csg_ep_priority(csf::csg_ep_req(4, 4, 1, CSG_PRIORITY)), CSG_PRIORITY);
         // the endpoint word for the G610's shader_present 0x50005 (4 cores)
         // and its one tiler, at priority 0xf
         assert_eq!(csf::csg_ep_req(4, 4, 1, CSG_PRIORITY), 0xf001_0404);

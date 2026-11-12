@@ -270,6 +270,30 @@ pub const fn csg_ep_req(compute: u32, fragment: u32, tiler: u32, priority: u32) 
 }
 pub const CSG_EP_REQ_EXCL_COMPUTE: u32 = 1 << 20;
 pub const CSG_EP_REQ_EXCL_FRAGMENT: u32 = 1 << 21;
+/// `CSG_EP_REQ_PRIORITY_MASK` (panthor_fw.h:171), and the priority read
+/// back from the endpoint word after the start's acknowledge
+/// (panthor_sched.c:1140).
+pub const CSG_EP_REQ_PRIORITY_MASK: u32 = 0xf000_0000;
+pub const fn csg_ep_priority(endpoint_req: u32) -> u32 {
+    (endpoint_req & CSG_EP_REQ_PRIORITY_MASK) >> 28
+}
+
+/// `struct panthor_fw_ringbuf_input_iface` (panthor_fw.h:15-18): the
+/// stream's user input page. The host writes `insert` after the ring copy
+/// and syncs `extract` from the output page (panthor_sched.c:3188-3194).
+#[repr(C)]
+pub struct RingbufInput {
+    pub insert: u64,
+    pub extract: u64,
+}
+
+/// `struct panthor_fw_ringbuf_output_iface` (panthor_fw.h:20-23): the
+/// stream's user output page; `extract` is what the firmware consumed.
+#[repr(C)]
+pub struct RingbufOutput {
+    pub extract: u64,
+    pub active: u32,
+}
 
 /// `struct panthor_fw_cs_control_iface` (panthor_fw.h:25-34).
 #[repr(C)]
@@ -899,6 +923,8 @@ const _: () = assert!(size_of::<CsgOutput>() == 0x20);
 const _: () = assert!(size_of::<CsControl>() == 0xc);
 const _: () = assert!(size_of::<CsInput>() == 0x58);
 const _: () = assert!(size_of::<CsOutput>() == 0xd8);
+const _: () = assert!(size_of::<RingbufInput>() == 0x10);
+const _: () = assert!(size_of::<RingbufOutput>() == 0x10);
 
 #[cfg(test)]
 pub(crate) mod tests {
