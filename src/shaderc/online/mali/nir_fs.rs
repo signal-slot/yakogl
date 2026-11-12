@@ -822,11 +822,13 @@ pub struct Fs<'s> {
     /// Each varying location's first read (`u32::MAX`: not read).
     var_key: [u32; MAX_VARYINGS],
     /// Each varying location's lanes an fp16 `fmul` or `fadd` read and the
-    /// walk folded away (`x * 1.0`, `x + 0.0` of a lane pair, [`Fs::op`]):
-    /// at the link they are still an operation's operands, converted with
-    /// the tree's `f2fmp`, not at the colour's store
-    /// (sel_v_color_uv: `v_color * vec4(v_uv, 1.0, 1.0)` converts z,w
-    /// right after x,y).
+    /// walk folded away (`x * 1.0`, `x + 0.0` of a lane pair) where the
+    /// identity holds on some lanes of the operation only: at the link
+    /// the operation is still an fp16 one, so its operands are converted
+    /// with the tree's `f2fmp`, not at the colour's store (sel_v_color_uv:
+    /// `v_color * vec4(v_uv, 1.0, 1.0)` converts z,w right after x,y).
+    /// An identity on every lane is folded at the link (the walk's `Fmul`
+    /// and `Fadd` arm), so its operand is the colour's own lane.
     folded: [u8; MAX_VARYINGS],
     pcoord_key: u32,
     /// gl_FragCoord's first read in a highp shader ([`FRAG_Z`]).
@@ -1026,8 +1028,8 @@ impl<'s> Fs<'s> {
         let (cx, cy) = (matches!(x, Val::Const(_)), matches!(y, Val::Const(_)));
         let neg = |s: &Self, v: Val| matches!(s.alu_of(v), Some((Alu::Fneg, _)));
         match (a, rule) {
-            (AluOp::Fmul | AluOp::Fadd, Rule::IdentitySecond) => Ok(self.fold(x)),
-            (AluOp::Fmul | AluOp::Fadd, Rule::IdentityFirst) => Ok(self.fold(y)),
+            (AluOp::Fmul | AluOp::Fadd, Rule::IdentitySecond) => Ok(x),
+            (AluOp::Fmul | AluOp::Fadd, Rule::IdentityFirst) => Ok(y),
             /* `fmul(a, 0.0)` is 0.0 (nir_opt_algebraic.py's inexact rule, in
              * force without `precise`): case 122's `t.w * 0.0` (uniidx_i,
              * no FMA in Mesa's program). Like the others it holds for a
@@ -4501,6 +4503,14 @@ fn walk_nodes(
                 /* the rules run on 16-bit lane pairs: a rule holds for a
                  * pair when both its lanes' constants make it */
                 let ident: &[u32] = if a == AluOp::Fmul { &[F32_ONE] } else { &[0, F32_NEG_ZERO] };
+                /* an identity constant on every lane of the operation:
+                 * nir_opt_algebraic folds it at the link already (`fmul(a,
+                 * 1.0)`, `fadd(a, 0.0)`, nir_opt_algebraic.py:292, :236-237,
+                 * in gl_nir_opts, gl_nir_linker.c:102; a constant source
+                 * matches when every lane it reads is the constant,
+                 * nir_search.c:260-286): f07's `a.x * 1.0` is the colour's
+                 * own lane, converted at the store */
+                let whole = (0..2).any(|k| (0..w).all(|i| f.is_const(lane(vals, s[k], i), ident)));
                 for pair in (0..w).step_by(2) {
                     let lanes = pair..w.min(pair + 2);
                     let all = |k: usize, bits: &[u32]| lanes.clone().all(|i| f.is_const(lane(vals, s[k], i), bits));
@@ -4518,6 +4528,13 @@ fn walk_nodes(
                     for i in lanes.clone() {
                         let (x, y) = (f.fp16_operand(lane(vals, s[0], i)), f.fp16_operand(lane(vals, s[1], i)));
                         out[i] = f.op(a, x, y, at, rule)?;
+                        /* an identity on some lanes of the operation only:
+                         * at the link the operation is still an fp16 one
+                         * whose operand the tree's `f2fmp` converts
+                         * ([`Fs::folded`]) */
+                        if matches!(rule, Rule::IdentitySecond | Rule::IdentityFirst) && !whole {
+                            f.fold(out[i]);
+                        }
                     }
                 }
             }
