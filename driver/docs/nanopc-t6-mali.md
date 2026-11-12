@@ -805,9 +805,11 @@ milestones (Zephyr booted by U-Boot), as on every board.
   (ceb971bb scaffold, 29756d0e the call), the C entry `yd_t6_fw_up`
   (c022cbfc, fbbd4d71, in `driver/rust/src/ffi/rk3588.rs` and
   `yakogl_drivers.h`), `t6_fw`'s lines in `t6-verdict.sh` (08163414) and
-  the `t6_fw` gate row (370dd06b). Host side done; **the board run has
-  not happened** (below, "Z3 board procedure"). Z2, the step it stands
-  on, passed on 2026-11-11.
+  the `t6_fw` gate row (370dd06b). **The board run passed on 2026-11-12**
+  (`VERDICT t6_fw PASS`, the image of main `988639752`; below, "Z3 board
+  procedure", and `tools/cts/RESULTS.md`): a development result, by kexec
+  out of Armbian. The sign-off form (U-Boot starting the image) has not
+  run.
 - **Z4**: CSG 0 / CS 0 started from our kernel side; the L1 frame renders the same
   bytes as under panthor. From here the same back end and compiler run on Zephyr,
   and gl_test and dEQP move to the product form.
@@ -2104,11 +2106,20 @@ pass.
 
 ### Z3 board procedure
 
-Not run. Written 2026-11-05 from `board::nanopc_t6_fw` and the host tests
-over the MCU model, before any run; no value in it is measured on the
-board. A run whose record differs is a finding: record it as it came,
-never by changing the prediction. Z3 runs only after Z2 has passed, and
-reports to #7 (milestones: #26).
+Run on 2026-11-12 11:41 JST: **PASS** (`VERDICT t6_fw PASS`, 31 of 31
+lines of the predicted record seen; the image of main `988639752`,
+`t6_fw: build v0.1.0-986-g988639752`). The values the prediction left
+to the board: `boot_waited_us` 43, `init_ack_us` 32, `ping_ack_us` 5,
+`job_raw` 0x80000000, `cs0` features 0x0007085f (96 work registers, 8
+scoreboards), `glb_req` and `glb_ack` 0x0000050e; the firmware did not
+move the control block's offsets or strides. The row and the reading
+are in `tools/cts/RESULTS.md` ("Mali: NanoPC-T6 on Zephyr").
+
+The procedure below was written 2026-11-05 from `board::nanopc_t6_fw`
+and the host tests over the MCU model, before any run, and is kept as
+the way to run it again. A run whose record differs is a finding:
+record it as it came, never by changing the prediction. Z3 runs only
+after Z2 has passed, and reports to #7 (milestones: #26).
 
 **Preconditions** — all of them, or no run:
 
