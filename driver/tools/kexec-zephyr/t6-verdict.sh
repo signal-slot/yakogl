@@ -7,6 +7,8 @@
 #   driver/tools/kexec-zephyr/t6-verdict.sh <probe> <uart.log>
 #   T6_POOL_PA=<hex> T6_BACKING_PA=<hex> t6-verdict.sh t6_mmu <uart.log>
 #
+#   T6_ROUTE=uboot t6-verdict.sh <probe> <uart.log>
+#
 # probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit or t6_display. The expected lines are in order: the
 # early banner (T6:A .. T6:A3, board::nanopc_t6_early), the board glue's
 # lines (T6:B, the marker, the two GIC lines, the arming, T6:C, "board: watchdog
@@ -32,6 +34,14 @@
 # no candidate at all is "missing". One line each, with the expected and the
 # seen text; then "VERDICT <probe> PASS" (exit 0) or "VERDICT <probe> FAIL
 # (<n> of <m>)" (exit 1: n expected lines not ok, of m). Exit 2: usage.
+#
+# T6_ROUTE: how the image was started, kexec (the default, nanopc-t6.sh) or
+# uboot (U-Boot's `go`, driver/tools/uboot-t6/go-zephyr.sh). Two lines of the
+# boot depend on it. uboot expects the entry's T6:G line after T6:A (the MMU
+# and caches U-Boot left on were turned off, board::nanopc_t6_go), with the
+# window 0x10000000-0x20000000 cleaned. kexec expects the GICv3 line (Linux
+# left EOImode 1; nanopc_t6.c prints it only when it changed the mode);
+# uboot does not judge it: U-Boot does not touch the CPU interface.
 #
 # t6_mmu: P (t6_mmu_pool's PA) and B (t6_mmu_backing's) are taken from the
 # "pool" line, or from T6_POOL_PA and T6_BACKING_PA when set (step 1 of the
@@ -67,8 +77,10 @@
 set -euo pipefail
 export LC_ALL=C
 
-usage() { echo "usage: $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit|t6_display} <uart.log>" >&2; exit 2; }
+usage() { echo "usage: [T6_ROUTE=kexec|uboot] $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit|t6_display} <uart.log>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
+ROUTE=${T6_ROUTE:-kexec}
+case "$ROUTE" in kexec | uboot) ;; *) usage ;; esac
 PROBE=$1
 LOG=$2
 [ -r "$LOG" ] || { echo "t6-verdict.sh: $LOG: not readable" >&2; exit 2; }
@@ -100,6 +112,10 @@ table_boot() {
 	# banner_a_el2 with the VHE exit: HCR_EL2 found -> written (Z1 measured
 	# 0x000000048800003a -> 0x0000000080000002; not a prediction for a probe)
 	e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{x16} VBAR_EL2 0x{x16} -> 0x{x16}' 'T6:A EL'
+	# U-Boot's go: the SCTLR_EL2 values are recorded, the window predicted
+	if [ "$ROUTE" = uboot ]; then
+		e 'T6:G go: SCTLR_EL2 0x{x16} -> 0x{x16} (MMU, D-cache, I-cache off); 0x10000000-0x20000000 cleaned and invalidated to PoC, TLB and I-cache invalidated'
+	fi
 	e 'T6:A1 EL1 init done, MMU off'
 	e 'T6:A2 EL1, MMU off: arming WDT0'
 	# banner_a3: rc 0, CR read back 0x9 (WDT_EN, RMOD), TOP 13's period
@@ -107,11 +123,14 @@ table_boot() {
 	e 'T6:B console up (uart2 through the ns16550 driver)'
 	e 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000'
 	# printed when Linux left EOImode 1 (every kexec so far); the value is recorded
-	e 't6: GICv3 CPU interface: ICC_CTLR_EL1 0x{x} had EOImode 1 (the kernel before us), now 0'
-	# always printed: the active priorities and BPR1 as Linux left them,
-	# recorded (a bit set in AP1R0 is an interrupt not ended at the
-	# hand-over, issue #6366). 1 AP1R: ICC_CTLR_EL1 0x8402 says 5 priority
-	# bits (driver/rust/src/aarch64.rs, icc_ap1r_count)
+	if [ "$ROUTE" = kexec ]; then
+		e 't6: GICv3 CPU interface: ICC_CTLR_EL1 0x{x} had EOImode 1 (the kernel before us), now 0'
+	fi
+	# always printed, on both routes: the active priorities and BPR1 as the
+	# software before us left them, recorded (a bit set in AP1R0 is an
+	# interrupt not ended at the hand-over, issue #6366). 1 AP1R:
+	# ICC_CTLR_EL1 0x8402 says 5 priority bits (driver/rust/src/aarch64.rs,
+	# icc_ap1r_count)
 	e 't6: GICv3 CPU interface: ICC_AP1R0_EL1 0x{x8} ICC_BPR1_EL1 0x{x} as found, 1 ICC_AP1Rn_EL1 and ICC_BPR1_EL1 now 0'
 	# two printks, one line; as found depends on --no-linux-wdt (was stopped)
 	# or not (was running): recorded. CR after is WDT_EN | RMOD.
