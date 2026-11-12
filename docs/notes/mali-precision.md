@@ -48,6 +48,17 @@ reference arm (Mesa 26.2.1, GPU id 0xa867), the NIR read from the run's
   mediump, float none (the shader must declare one); `sampler2D` and
   `samplerCube` lowp in both stages. `reflect.rs:848-863` has the same
   table.
+- A `precision` statement inside a block or a function does not end with
+  it in Mesa: `add_default_precision_qualifier`
+  (`G/glsl_symbol_table.cpp:194-207`) replaces a default that exists in any
+  scope, so every later declaration, in any function, takes the new one.
+  Only a type with no default yet (the fragment stage's float) gets one
+  scoped to the block. [probe v_inner2, v_inner4: a vertex `{ precision
+  mediump float; }`, or one in another function, then `float u` is
+  `float16_t`; f_inner2: a mediump fragment shader's `{ precision highp
+  float; }` makes a later `float u` highp] `precision.rs` follows this
+  (`Defaults::leave`). The lowering refuses a `precision` statement inside
+  a body today ("this statement is not lowered yet").
 - Built-in variables (`G/builtin_variables.cpp`): `gl_Position` highp
   (`:1576`); `gl_PointSize` mediump in ES 1.00, highp in 3.00
   (`:1587-1591`); `gl_FragCoord` mediump in 1.00, highp in 3.00
