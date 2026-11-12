@@ -311,6 +311,21 @@ fn early_z_is_off_for_a_depth_writing_program_and_on_for_one_that_is_not() {
     }
 }
 
+/// The words the back end emits (`emit_ra_state` and `emit_pe_state` take them
+/// from `draw_early_z`): the same for a depth-writing and a non-writing
+/// program today, because every target is linear.
+#[test]
+fn the_back_end_words_say_early_z_off_for_both_programs() {
+    use yakogl::vivante::early_z::draw_early_z;
+    for src in [WRITE, NO_DEPTH] {
+        let c = compile(src).unwrap_or_else(|e| panic!("refused: {e}"));
+        let r = draw_early_z(writes_z(&c));
+        assert!(!r.allowed && !r.early_test && !r.early_write);
+        // the back end takes only EARLY_Z (0x10000) from pe_bits: DISABLE_ZS stays pe_zs.rs's
+        assert_eq!((r.pe_bits & 0x1_0000, r.ra_word), (0, 0x1500_0030));
+    }
+}
+
 /// On a linear target nothing is early either way (etnaviv_state.c:1018-1019),
 /// and the words are the ones the back end writes today.
 #[test]

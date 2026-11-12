@@ -34,6 +34,7 @@ use crate::util::{Global, ENOMEM};
 
 use super::cmd::GcCmd;
 use super::dedup::{self, Group};
+use super::early_z::draw_early_z;
 use super::internal::{GC_INTERNAL_CLEAR_PS, GC_INTERNAL_CLEAR_VS, GC_INTERNAL_TABLE};
 use super::kick::{GcKick, GC_KICK_MAGIC, GC_KICK_TAIL_BYTES};
 use super::pe_overwrite::{self, PeTarget};
@@ -1555,6 +1556,7 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
     if zs.disable_zs {
         pe_depth |= GC_PE_DEPTH_DISABLE_ZS;
     }
+    pe_depth |= draw_early_z(d.fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG).pe_bits & GC_PE_DEPTH_EARLY_Z;
     c.state(GC_PE_DEPTH_CONFIG, pe_depth);
     c.state(GC_PE_DEPTH_NEAR, 0.0f32.to_bits());
     c.state(GC_PE_DEPTH_FAR, 1.0f32.to_bits());
@@ -1824,10 +1826,13 @@ fn emit_ra_state(c: &mut GcCmd, d: &GcDraw) {
     /*
      * So: no RA_EARLY_DEPTH_TEST_ENABLE, and WRITE_DISABLE always. Mesa gates
      * the write-disable on early_zs, which needs the same early_z_allowed a
-     * linear colour target denies.
+     * linear colour target denies; a program that writes gl_FragDepth denies
+     * it too (early_z.rs), and the rule says so for both.
      */
     ra |= GC_RA_EARLY_DEPTH_WRITE_DISABLE;
-    c.state(GC_RA_EARLY_DEPTH, ra);
+    let ez = draw_early_z(d.fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG);
+    debug_assert_eq!(ez.ra_word, ra);
+    c.state(GC_RA_EARLY_DEPTH, ez.ra_word);
 }
 
 /// Which caches must be written back before this draw's state lands. Any
@@ -2061,6 +2066,8 @@ fn pe_key(k: &mut dedup::Key, d: &GcDraw, depth_stride: u32, depth_addr: u32) ->
     if wide_target(gl) {
         return false;
     }
+    /* the early-Z rule's writes_z input (emit_pe_state) */
+    k.u32(u32::from(d.fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG));
     k.u32(
         u32::from(d.is_clear)
             | u32::from(d.clear_color) << 1

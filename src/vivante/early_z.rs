@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The early-depth rule as a pure function (docs/notes/gc-tiled-targets.md,
-//! "(c) Early depth"). Nothing in the back end calls it yet: `emit_pe_state`
-//! and `emit_ra_state` still say "never", the answer for a linear target.
+//! "(c) Early depth"). `emit_pe_state` and `emit_ra_state` call
+//! it through `draw_early_z` (a linear target, plus the program's `writes_z`),
+//! and so still say "never".
 //!
 //! The rule is Mesa 26.2.1's `etna_update_zsa`
 //! (`src/gallium/drivers/etnaviv/etnaviv_state.c:992-1080`), with the inputs
@@ -175,6 +176,15 @@ pub fn early_z(i: &EarlyZInput) -> EarlyZ {
         }
     }
     EarlyZ { allowed, early_write: early_zs, early_test, late_write: late_zs, late_test, pe_bits, ra_word }
+}
+
+/// The rule for a draw of this back end: every colour surface it renders to is
+/// linear, which denies early depth outright, and a program that writes depth
+/// denies it by itself (`etnaviv_state.c:1029`, `:1039`). `emit_ra_state` and
+/// `emit_pe_state` take their words from here, so a tiled target only has to
+/// change the layout.
+pub fn draw_early_z(writes_z: bool) -> EarlyZ {
+    early_z(&EarlyZInput { writes_z, ..EarlyZInput::gc7000(ColorLayout::Linear) })
 }
 
 #[cfg(test)]
