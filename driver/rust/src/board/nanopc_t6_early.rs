@@ -120,7 +120,7 @@ pub fn banner_x<M: Mmio>(tx: &mut Tx<'_, M>, t: &El2Trap) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::aarch64::{HCR_EL2_AT_ENTRY, HCR_LINUX_VHE_HOST};
+    use crate::aarch64::{HCR_AMO, HCR_EL2_AT_ENTRY, HCR_LINUX_VHE_HOST, HCR_RW};
     use crate::ip::ns16550_tx::tests::{Op, Uart, BASE};
     use crate::ip::ns16550_tx::{LCR, LSR, THR};
 
@@ -184,5 +184,29 @@ mod tests {
             "T6:X EL2 exception, vector +0x400: ESR_EL2 0x0000000062380000 ELR_EL2 0x0000000010000f00 \
              FAR_EL2 0x0000000000000000 SPSR_EL2 0x00000000000003c5 HCR_EL2 0x0000000480000008; halted\r\n"
         );
+    }
+
+    #[test]
+    fn banner_a_prints_uboots_hcr_and_mmu_on_sctlr() {
+        // U-Boot v2026.07's `go` state: HCR_EL2 RW | AMO (start.S:127-130),
+        // SCTLR_EL2 with M, C, I set (cache_v8.c:817, :894, :1175); the
+        // reserved bits are illustrative.
+        let e = El2Entry {
+            hcr_found: HCR_RW | HCR_AMO,
+            hcr_now: Some(HCR_EL2_AT_ENTRY),
+            sctlr: 0x30c5_1835,
+            vbar_found: 0x0000_0000_0020_0800,
+            vbar_now: 0x1000_8000,
+        };
+        let (s, _) = sent(|tx| banner_a_el2(tx, &e));
+        assert_eq!(
+            s,
+            "T6:A EL2 HCR_EL2 0x0000000080000020 -> 0x0000000080000000 SCTLR_EL2 0x0000000030c51835 \
+             VBAR_EL2 0x0000000000200800 -> 0x0000000010008000\r\n"
+        );
+        // With the exit configured off the found value is printed as is.
+        let k = El2Entry { hcr_now: None, ..e };
+        let (s, _) = sent(|tx| banner_a_el2(tx, &k));
+        assert!(s.starts_with("T6:A EL2 HCR_EL2 0x0000000080000020 kept (VHE exit off) SCTLR_EL2 "), "{s}");
     }
 }
