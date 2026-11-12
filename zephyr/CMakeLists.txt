@@ -88,7 +88,8 @@ if(CONFIG_YAKOGL)
   # the choice picks here is the cargo feature, the C define, and which C parts
   # come with the backend: the PowerVR one calls the driver's OS-free command
   # generators through FFI and pins their structs, and the GC7000 has neither
-  # (it writes its own command stream), but it does bring an OSAL of its own.
+  # (it writes its own command stream), but it does bring an OSAL of its own,
+  # as the V3D and the Mali do.
   if(CONFIG_YAKOGL_GPU_VIVANTE)
     set(YAKOGL_GPU "vivante")
     set(YAKOGL_GPU_DEF "YAKOGL_GPU_VIVANTE")
@@ -108,6 +109,14 @@ if(CONFIG_YAKOGL)
       "${PVR_DRIVER_SRC}/v3d/v3d_frame.c"
       "${PVR_DRIVER_SRC}/v3d/v3d_hw.c"
       "${YAKOGL_SRC}/v3d/ffi_layout_check.c")
+  elseif(CONFIG_YAKOGL_GPU_MALI)
+    # The Mali-G610: the OSAL forwards every op to the kernel side in the
+    # yakogl-drivers archive (board::nanopc_t6_osal, features rk3588 mali,
+    # which CONFIG_YAKOGL_NANOPC_T6 gives it); the backend has no C part.
+    set(YAKOGL_GPU "mali")
+    set(YAKOGL_GPU_DEF "YAKOGL_GPU_MALI")
+    set(_yakogl_osal_c "${YAKOGL_SRC}/osal/zephyr_mali.c")
+    set(_yakogl_gpu_c "")
   else()
     set(YAKOGL_GPU "powervr")
     set(YAKOGL_GPU_DEF "YAKOGL_GPU_POWERVR")

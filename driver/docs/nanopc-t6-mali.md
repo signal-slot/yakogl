@@ -2563,7 +2563,12 @@ instant publish is its other setting, tested too). panthor has no such
 wait: it
 takes completion from the sync object and ring space from its
 scheduler's credits, and reads `output->extract` only when it programs
-a slot and for its idle check.
+a slot and for its idle check. `sched::submit` takes the ring's room the
+same way: its caller passes the bytes of the jobs it has not yet seen
+complete in the sync object (`in_flight`), so a late `extract` never
+refuses a job. Every job's words after its `SYNC_ADD64` (word 9) are the
+same six (`job::JOB_TAIL`), so the job one ring later may overwrite them
+before the stream has read them.
 
 **Time limit.** The wait on the sync object is bounded by `sched::wait`'s
 `JOB_TIMEOUT_US`, panthor's `JOB_TIMEOUT_MS`: 5 s (5000000 µs), counted

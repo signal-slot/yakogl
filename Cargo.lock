@@ -456,6 +456,9 @@ dependencies = [
 [[package]]
 name = "yakogl-drivers"
 version = "0.1.0"
+dependencies = [
+ "yakogl",
+]
 
 [[package]]
 name = "yakogl-example-triangle"

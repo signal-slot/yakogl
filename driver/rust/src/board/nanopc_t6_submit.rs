@@ -593,27 +593,33 @@ impl GroupVm for VmMap<'_> {
     }
 }
 
-/// The heap's two buffers where the frame names them, each inside a region:
-/// the pool at `heap_ctx_va`, the chunk at `heap_chunk_va`. The error: 1
-/// the pool, 2 the chunk not inside one region.
+/// The heap's buffers where the caller names them, each inside a region:
+/// the pool at `pool_va`, the chunks one after the other from `chunk_va`
+/// (the next at `chunk_va + made * size`). The error: 1 the pool, 2 a chunk
+/// not inside one region.
 struct VmHeap<'v> {
     vm: &'v VmMap<'v>,
     pool_va: u64,
     chunk_va: u64,
+    made: u64,
 }
 
 // SAFETY: every allocation is inside one GroupBacking (VmMap covers only
 // them), whose constructor's contract gives plain-pointer access to those
 // bytes, the GPU's at the same VA in the group VM, uncached; the pool and
-// the chunk do not overlap (check_frame, and the heap's own size checks).
+// the chunks do not overlap (check_frame, or the caller's regions, and the
+// heap's own size checks; each chunk after the one before).
 unsafe impl HeapMemory for VmHeap<'_> {
     type Error = u32;
     fn alloc(&mut self, size: u64, what: HeapObject) -> Result<Allocation, u32> {
         let (va, err): (u64, u32) = match what {
             HeapObject::Pool => (self.pool_va, 1),
-            HeapObject::Chunk => (self.chunk_va, 2),
+            HeapObject::Chunk => (self.chunk_va.checked_add(self.made * size).ok_or(2u32)?, 2),
         };
         let cpu = self.vm.at(va, size).ok_or(err)?;
+        if what == HeapObject::Chunk {
+            self.made += 1;
+        }
         Ok(Allocation { cpu, gpu: va, size })
     }
     fn free(&mut self, _: Allocation) {}
@@ -868,6 +874,243 @@ const fn page_up(n: u32) -> u64 {
     (n as u64).next_multiple_of(PAGE)
 }
 
+/// Where [`group_up`] makes the tiler heap: its pool at `pool_va` (heap
+/// 0's context is the pool's first slot), `chunks` chunks of `chunk_size`
+/// one after the other from `chunk_va`, each inside one region; at most
+/// [`MAX_HEAP_CHUNKS`]. The heap starts with all of them and never grows
+/// (`CS_TILER_OOM` is refused, sched.rs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HeapPlace {
+    pub pool_va: u64,
+    pub chunk_va: u64,
+    pub chunk_size: u32,
+    pub chunks: u32,
+}
+
+/// The most chunks [`HeapPlace`] makes: Mesa's `max_chunks`
+/// ([`HeapParams::MESA`]).
+pub const MAX_HEAP_CHUNKS: usize = 64;
+
+/// What [`group_up`] left running: the interface blocks, the identity, the
+/// queue and its start, the heap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GroupUp {
+    pub iface: Iface,
+    pub csg: Csg,
+    pub cs: Cs,
+    pub id: Ident,
+    pub queue: Queue,
+    pub started: Started,
+    pub heap: heap::OsalMaliHeap,
+}
+
+/// Z3, then everything up to a started CSG 0 / CS 0, recorded in `o` as
+/// [`submit_up`] records it: Z3 ([`fw_up`]), the interface read again, the
+/// queue's user pages and suspend buffers mapped in AS0 and flushed, the
+/// group VM built from `regions` over `mem.vm` (one backing per region, in
+/// order) and enabled in address space 1, the tiler heap made at `heap`,
+/// the queue's ring and sync object at `queue_va` (a [`Mapping::Queue`]
+/// region holding [`QUEUE_VM_BYTES`]), and [`sched::start`]. `None` when a
+/// step stopped (`o.step` names it); a refused start has been stopped and
+/// terminated. The arguments other than these are [`submit_up`]'s (`z1`
+/// among them: Z1's whole record). The
+/// regions are the caller's to check ([`check_frame`] does for a frame).
+#[allow(clippy::too_many_arguments)]
+pub fn group_up(
+    m: &impl Mmio,
+    b: Bases,
+    blob: &[u8],
+    backings: &[Backing],
+    pool: &mut [Table],
+    tables_pa: u64,
+    timer_hz: u32,
+    mem: Z4Mem<'_>,
+    regions: &[Region],
+    queue_va: u64,
+    heap: &HeapPlace,
+    clean: &impl Fn(usize, usize) -> i32,
+    delay_us: &mut impl FnMut(u32),
+    on_handover: &mut impl FnMut(&GpuUp),
+    z1: &mut GpuUp,
+    o: &mut SubmitUp,
+) -> Option<GroupUp> {
+    // Z3
+    o.fw = fw_up(m, b, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1);
+    if o.fw.step != nanopc_t6_fw::STEP_NONE {
+        o.stopped(STEP_FW, o.fw.step, 0);
+        return None;
+    }
+    // Z3 has parsed and placed both already: neither refuses here
+    let Ok(img) = fw::parse(blob) else {
+        o.stopped(STEP_IFACE, 0, 0);
+        return None;
+    };
+    let Ok(placement) = Placement::new(img.sections(), backings) else {
+        o.stopped(STEP_IFACE, 0, 0);
+        return None;
+    };
+    let fw_mem = McuMem::new(&placement, clean);
+    let (iface, csg, cs) = match rediscover(m, &fw_mem, &img) {
+        Ok(v) => v,
+        Err((why, v)) => {
+            o.stopped(STEP_IFACE, why as u32, u64::from(v));
+            return None;
+        }
+    };
+    let id: Ident = mali::ident(m, b.gpu);
+    o.as_present = id.as_present;
+    o.l2_features = id.l2_features;
+    if id.as_present & (1 << GROUP_AS) == 0 {
+        o.stopped(STEP_IDENT, 1, u64::from(id.as_present));
+        return None;
+    }
+
+    // AS0: the user pages, then the suspend buffers
+    o.suspend_size = csg.suspend_size;
+    o.protm_suspend_size = csg.protm_suspend_size;
+    let q = mem.queue;
+    let (susp, protm) = (page_up(csg.suspend_size), page_up(csg.protm_suspend_size));
+    let need = u64::from(QUEUE_IFACE_SIZE) + susp + protm;
+    if !u64::from(q.va).is_multiple_of(PAGE) || !q.pa.is_multiple_of(PAGE) || !(q.cpu as u64).is_multiple_of(PAGE) {
+        o.stopped(STEP_QUEUE_MEM, 2, u64::from(q.va));
+        return None;
+    }
+    if q.size < need || u64::from(q.va) + need > 1 << 32 {
+        o.stopped(STEP_QUEUE_MEM, 1, need);
+        return None;
+    }
+    let (input_va, output_va) = (q.va, q.va + QUEUE_OUTPUT_OFFSET);
+    let suspend_va = q.va + QUEUE_IFACE_SIZE;
+    let protm_va = suspend_va + susp as u32;
+    {
+        let used = o.fw.tables_used as usize;
+        if used == 0 || used > pool.len() {
+            o.stopped(STEP_AS0_MAP, crate::gpu::mali::pgtable::PtRefusal::BadPool as u32, u64::from(q.va));
+            return None;
+        }
+        // Z3's tables, reopened: its pages in use kept, the rest still zero
+        let mut t = Tables { pages: &mut *pool, pa: tables_pa, used };
+        let user = Prot { write: true, exec: false, cached: false };
+        let suspend = Prot { write: true, exec: false, cached: true };
+        if let Err(why) = t.map(u64::from(q.va), q.pa, u64::from(QUEUE_IFACE_SIZE), user) {
+            o.stopped(STEP_AS0_MAP, why as u32, u64::from(q.va));
+            return None;
+        }
+        if susp + protm != 0 {
+            let pa = q.pa + u64::from(QUEUE_IFACE_SIZE);
+            if let Err(why) = t.map(u64::from(suspend_va), pa, susp + protm, suspend) {
+                o.stopped(STEP_AS0_MAP, why as u32, u64::from(suspend_va));
+                return None;
+            }
+        }
+        o.as0_tables_used = t.used() as u32;
+        let pages = t.used_pages();
+        let rc = clean(pages.as_ptr() as usize, size_of_val(pages));
+        if rc != 0 {
+            o.stopped(STEP_CLEAN, 1, rc as u64);
+            return None;
+        }
+    }
+    // panthor_vm_map_pages: the flush after a map into a live VM
+    if let Err((why, v)) = mmu::hw_do_operation(m, b.gpu, 0, u64::from(q.va), need, FlushOp::Pt, delay_us) {
+        o.stopped(STEP_AS0_FLUSH, why as u32, u64::from(v));
+        return None;
+    }
+
+    // AS1: the regions, each as panthor would bind it
+    let root = {
+        let mut t = match Tables::new(mem.vm_pool, mem.vm_tables_pa) {
+            Ok(t) => t,
+            Err(why) => {
+                o.stopped(STEP_VM_MAP, why as u32, mem.vm_tables_pa);
+                return None;
+            }
+        };
+        if mem.vm.len() < regions.len() {
+            o.stopped(STEP_VM_MAP, 0, regions.len() as u64);
+            return None;
+        }
+        for (r, b) in regions.iter().zip(mem.vm) {
+            if let Err(why) = t.map(r.va, b.pa, r.size, r.mapping.prot()) {
+                o.vm_tables_used = t.used() as u32;
+                o.stopped(STEP_VM_MAP, why as u32, r.va);
+                return None;
+            }
+        }
+        o.vm_tables_used = t.used() as u32;
+        let pages = t.used_pages();
+        let rc = clean(pages.as_ptr() as usize, size_of_val(pages));
+        if rc != 0 {
+            o.stopped(STEP_CLEAN, 2, rc as u64);
+            return None;
+        }
+        t.root_pa()
+    };
+    let transcfg = mmu::transcfg(VA_BITS, false);
+    if let Err((why, v)) = mmu::as_enable(m, b.gpu, GROUP_AS, root, transcfg, MEMATTR_LIVE, delay_us) {
+        o.stopped(STEP_VM_ENABLE, why as u32, u64::from(v));
+        return None;
+    }
+    // the tiler heap
+    let vmap = VmMap { regions, vm: mem.vm };
+    let mut hm = VmHeap { vm: &vmap, pool_va: heap.pool_va, chunk_va: heap.chunk_va, made: 0 };
+    let mut list = [Allocation::default(); MAX_HEAP_CHUNKS];
+    let chunks = heap.chunks.min(MAX_HEAP_CHUNKS as u32);
+    let params = HeapParams {
+        initial_chunk_count: chunks,
+        chunk_size: heap.chunk_size,
+        max_chunks: chunks,
+        target_in_flight: HeapParams::MESA.target_in_flight,
+    };
+    let made = HeapPool::create(&mut hm, id.l2_features)
+        .and_then(|mut hp| heap::create(&mut hp, &mut hm, &params, &mut list).map(|h| (hp.stride(), h.osal())));
+    let heap = match made {
+        Ok((stride, h)) => {
+            o.heap_ctx = h.ctx_gpu;
+            o.heap_chunk = h.first_chunk_gpu;
+            o.heap_chunk_size = h.chunk_size;
+            o.heap_stride = stride;
+            h
+        }
+        Err(e) => {
+            let (code, v) = heap_error_code(&e);
+            o.stopped(STEP_HEAP, code, v);
+            return None;
+        }
+    };
+
+    // CSG 0 / CS 0
+    let group = Group::all_cores(
+        &id,
+        (csg.suspend_size != 0).then_some(suspend_va),
+        (csg.protm_suspend_size != 0).then_some(protm_va),
+    );
+    let queue = Queue {
+        ring_va: queue_va,
+        ring_size: RING_SIZE,
+        input_va,
+        output_va,
+        syncobj_va: queue_va + u64::from(RING_SIZE),
+        priority: QUEUE_PRIORITY,
+    };
+    let qmem = QueueMcu { fw: &fw_mem, q };
+    let s: Started = match sched::start(m, b.gpu, &qmem, &vmap, &id, &iface, &csg, &cs, &group, &queue, delay_us) {
+        Ok(s) => s,
+        Err((why, v)) => {
+            o.stopped(STEP_START, why as u32, u64::from(v));
+            o.ended(&sched::stop_and_terminate(m, b.gpu, &iface, &csg, &cs, delay_us));
+            return None;
+        }
+    };
+    o.csg_req = s.csg_req;
+    o.csg_ack = s.csg_ack;
+    o.cs_req = s.cs_req;
+    o.cs_ack = s.cs_ack;
+    o.csg_ack_us = s.csg_ack_us;
+    o.cs_ack_us = s.cs_ack_us;
+    Some(GroupUp { iface, csg, cs, id, queue, started: s, heap })
+}
+
 /// The run (see the module). `m`, `b`, `blob`, `backings`, `pool`,
 /// `tables_pa`, `timer_hz`, `clean`, `delay_us` and `on_handover` are
 /// [`fw_up`]'s, and Z4 goes on with them: `pool` must keep Z3's tables (its
@@ -905,178 +1148,37 @@ pub fn submit_up(
         return o;
     };
 
-    // Z3
-    o.fw = fw_up(m, b, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1);
-    if o.fw.step != nanopc_t6_fw::STEP_NONE {
-        o.stopped(STEP_FW, o.fw.step, 0);
-        return o;
-    }
-    // Z3 has parsed and placed both already: neither refuses here
-    let Ok(img) = fw::parse(blob) else {
-        o.stopped(STEP_IFACE, 0, 0);
-        return o;
-    };
-    let Ok(placement) = Placement::new(img.sections(), backings) else {
-        o.stopped(STEP_IFACE, 0, 0);
-        return o;
-    };
-    let fw_mem = McuMem::new(&placement, clean);
-    let (iface, csg, cs) = match rediscover(m, &fw_mem, &img) {
-        Ok(v) => v,
-        Err((why, v)) => {
-            o.stopped(STEP_IFACE, why as u32, u64::from(v));
-            return o;
-        }
-    };
-    let id: Ident = mali::ident(m, b.gpu);
-    o.as_present = id.as_present;
-    o.l2_features = id.l2_features;
-    if id.as_present & (1 << GROUP_AS) == 0 {
-        o.stopped(STEP_IDENT, 1, u64::from(id.as_present));
-        return o;
-    }
-
-    // AS0: the user pages, then the suspend buffers
-    o.suspend_size = csg.suspend_size;
-    o.protm_suspend_size = csg.protm_suspend_size;
-    let q = mem.queue;
-    let (susp, protm) = (page_up(csg.suspend_size), page_up(csg.protm_suspend_size));
-    let need = u64::from(QUEUE_IFACE_SIZE) + susp + protm;
-    if !u64::from(q.va).is_multiple_of(PAGE) || !q.pa.is_multiple_of(PAGE) || !(q.cpu as u64).is_multiple_of(PAGE) {
-        o.stopped(STEP_QUEUE_MEM, 2, u64::from(q.va));
-        return o;
-    }
-    if q.size < need || u64::from(q.va) + need > 1 << 32 {
-        o.stopped(STEP_QUEUE_MEM, 1, need);
-        return o;
-    }
-    let (input_va, output_va) = (q.va, q.va + QUEUE_OUTPUT_OFFSET);
-    let suspend_va = q.va + QUEUE_IFACE_SIZE;
-    let protm_va = suspend_va + susp as u32;
-    {
-        let used = o.fw.tables_used as usize;
-        if used == 0 || used > pool.len() {
-            o.stopped(STEP_AS0_MAP, crate::gpu::mali::pgtable::PtRefusal::BadPool as u32, u64::from(q.va));
-            return o;
-        }
-        // Z3's tables, reopened: its pages in use kept, the rest still zero
-        let mut t = Tables { pages: &mut *pool, pa: tables_pa, used };
-        let user = Prot { write: true, exec: false, cached: false };
-        let suspend = Prot { write: true, exec: false, cached: true };
-        if let Err(why) = t.map(u64::from(q.va), q.pa, u64::from(QUEUE_IFACE_SIZE), user) {
-            o.stopped(STEP_AS0_MAP, why as u32, u64::from(q.va));
-            return o;
-        }
-        if susp + protm != 0 {
-            let pa = q.pa + u64::from(QUEUE_IFACE_SIZE);
-            if let Err(why) = t.map(u64::from(suspend_va), pa, susp + protm, suspend) {
-                o.stopped(STEP_AS0_MAP, why as u32, u64::from(suspend_va));
-                return o;
-            }
-        }
-        o.as0_tables_used = t.used() as u32;
-        let pages = t.used_pages();
-        let rc = clean(pages.as_ptr() as usize, size_of_val(pages));
-        if rc != 0 {
-            o.stopped(STEP_CLEAN, 1, rc as u64);
-            return o;
-        }
-    }
-    // panthor_vm_map_pages: the flush after a map into a live VM
-    if let Err((why, v)) = mmu::hw_do_operation(m, b.gpu, 0, u64::from(q.va), need, FlushOp::Pt, delay_us) {
-        o.stopped(STEP_AS0_FLUSH, why as u32, u64::from(v));
-        return o;
-    }
-
-    // AS1: the frame's regions, each as panthor would bind it
-    let root = {
-        let mut t = match Tables::new(mem.vm_pool, mem.vm_tables_pa) {
-            Ok(t) => t,
-            Err(why) => {
-                o.stopped(STEP_VM_MAP, why as u32, mem.vm_tables_pa);
-                return o;
-            }
-        };
-        for (r, b) in frame.regions.iter().zip(mem.vm) {
-            if let Err(why) = t.map(r.va, b.pa, r.size, r.mapping.prot()) {
-                o.vm_tables_used = t.used() as u32;
-                o.stopped(STEP_VM_MAP, why as u32, r.va);
-                return o;
-            }
-        }
-        o.vm_tables_used = t.used() as u32;
-        let pages = t.used_pages();
-        let rc = clean(pages.as_ptr() as usize, size_of_val(pages));
-        if rc != 0 {
-            o.stopped(STEP_CLEAN, 2, rc as u64);
-            return o;
-        }
-        t.root_pa()
-    };
-    let transcfg = mmu::transcfg(VA_BITS, false);
-    if let Err((why, v)) = mmu::as_enable(m, b.gpu, GROUP_AS, root, transcfg, MEMATTR_LIVE, delay_us) {
-        o.stopped(STEP_VM_ENABLE, why as u32, u64::from(v));
-        return o;
-    }
-    // the tiler heap
-    let mut hm = VmHeap { vm: &vmap, pool_va: frame.heap_ctx_va, chunk_va: frame.heap_chunk_va };
-    let mut list = [Allocation::default(); 1];
-    let params = HeapParams {
-        initial_chunk_count: 1,
+    let heap = HeapPlace {
+        pool_va: frame.heap_ctx_va,
+        chunk_va: frame.heap_chunk_va,
         chunk_size: frame.heap_chunk_size,
-        max_chunks: 1,
-        target_in_flight: HeapParams::MESA.target_in_flight,
+        chunks: 1,
     };
-    let made = HeapPool::create(&mut hm, id.l2_features)
-        .and_then(|mut hp| heap::create(&mut hp, &mut hm, &params, &mut list).map(|h| (hp.stride(), h.osal())));
-    match made {
-        Ok((stride, h)) => {
-            o.heap_ctx = h.ctx_gpu;
-            o.heap_chunk = h.first_chunk_gpu;
-            o.heap_chunk_size = h.chunk_size;
-            o.heap_stride = stride;
-        }
-        Err(e) => {
-            let (code, v) = heap_error_code(&e);
-            o.stopped(STEP_HEAP, code, v);
-            return o;
-        }
-    }
-
-    // CSG 0 / CS 0
-    let group = Group::all_cores(
-        &id,
-        (csg.suspend_size != 0).then_some(suspend_va),
-        (csg.protm_suspend_size != 0).then_some(protm_va),
-    );
-    let queue = Queue {
-        ring_va: frame.queue_va,
-        ring_size: RING_SIZE,
-        input_va,
-        output_va,
-        syncobj_va: frame.queue_va + u64::from(RING_SIZE),
-        priority: QUEUE_PRIORITY,
+    let Some(up) = group_up(
+        m,
+        b,
+        blob,
+        backings,
+        pool,
+        tables_pa,
+        timer_hz,
+        mem,
+        frame.regions,
+        frame.queue_va,
+        &heap,
+        clean,
+        delay_us,
+        on_handover,
+        z1,
+        &mut o,
+    ) else {
+        return o;
     };
-    let qmem = QueueMcu { fw: &fw_mem, q };
+    let GroupUp { iface, csg, cs, queue, started: s, .. } = up;
     let end = |o: &mut SubmitUp, delay_us: &mut _| {
         o.ended(&sched::stop_and_terminate(m, b.gpu, &iface, &csg, &cs, delay_us));
         o.read_back(m, target, frame);
     };
-    let s: Started = match sched::start(m, b.gpu, &qmem, &vmap, &id, &iface, &csg, &cs, &group, &queue, delay_us) {
-        Ok(s) => s,
-        Err((why, v)) => {
-            o.stopped(STEP_START, why as u32, u64::from(v));
-            o.ended(&sched::stop_and_terminate(m, b.gpu, &iface, &csg, &cs, delay_us));
-            return o;
-        }
-    };
-    o.csg_req = s.csg_req;
-    o.csg_ack = s.csg_ack;
-    o.cs_req = s.cs_req;
-    o.cs_ack = s.cs_ack;
-    o.csg_ack_us = s.csg_ack_us;
-    o.cs_ack_us = s.cs_ack_us;
-
     // the frame at its VAs: the target filled, the blocks, the stream
     for i in 0..frame.target_bytes as usize / 4 {
         m.write32(target + 4 * i, FILL);
@@ -1095,7 +1197,7 @@ pub fn submit_up(
     // one job, its completion
     o.latest_flush = m.read32(b.gpu + LATEST_FLUSH_ID);
     let job = Job { cs_start: frame.cs_va, cs_size: 8 * frame.cs.len() as u32, latest_flush: o.latest_flush };
-    let sub = match sched::submit(m, b.gpu, &cs, &queue, &s, &job, SEQNO) {
+    let sub = match sched::submit(m, b.gpu, &cs, &queue, &s, &job, SEQNO, 0) {
         Ok(sub) => sub,
         Err((why, v)) => {
             o.stopped(STEP_SUBMIT, why as u32, u64::from(v));
@@ -1303,13 +1405,14 @@ pub(crate) mod tests {
     /// VA): the heap writes it through pointers. Knobs: `never_complete`
     /// ignores doorbell 1, `gpu_id` replaces `GPU_ID`. The identity
     /// registers Z3's model leaves at 0 read as the board's: `AS_PRESENT`
-    /// 0xff, `TILER_PRESENT` 1, `L2_FEATURES` 0x07120306; and the firmware
-    /// reports CSG 0's suspend sizes as the board's does,
+    /// 0xff, `TILER_PRESENT` 1, `L2_FEATURES` 0x07120306, `TILER_FEATURES`
+    /// 0x809 (8 hierarchy levels, which the Mali backend's frame needs); and
+    /// the firmware reports CSG 0's suspend sizes as the board's does,
     /// [`BOARD_SUSPEND_SIZE`] each.
     pub(crate) struct Z4 {
         pub(crate) t6: T6,
         rams: Vec<(u64, Ram)>,
-        target_va: u64,
+        target_va: Cell<u64>,
         log: RefCell<Vec<(usize, u32)>>,
         lag: u32,
         job_lag: u32,
@@ -1317,7 +1420,7 @@ pub(crate) mod tests {
         job_due: Cell<Option<u32>>,
         never_complete: bool,
         sync_status: u32,
-        paint: bool,
+        paint: Cell<bool>,
         gpu_id: Option<u32>,
         as_present: u32,
         calls: Cell<u32>,
@@ -1327,6 +1430,10 @@ pub(crate) mod tests {
         /// the same read, `extract` and the event only).
         pub(crate) publish_lag: Option<u32>,
         publish_due: Cell<Option<u32>>,
+        /// The firmware's own `extract`: where the stream has run to, which
+        /// the output page shows only once published. A doorbell runs on
+        /// from here, not from the output page, as the board's stream does
+        /// not run a job twice while `extract` lags.
         published: Cell<u64>,
         /// The late publish raises `CS_FAULT` on CS 0 too (fault word
         /// `EXCEPTION_CS_INHERIT_FAULT`).
@@ -1345,11 +1452,33 @@ pub(crate) mod tests {
             let rams = REGIONS.iter().map(|r| (r.va, Ram::new(r.size))).collect();
             Z4::with_rams(blob, rams, gen::TARGET_VA)
         }
+        /// The model with one allocation per `(va, size)` of the group VM,
+        /// painting no target until [`Z4::paint_at`] names one.
+        pub(crate) fn with_regions(blob: Vec<u8>, regions: &[(u64, u64)]) -> Z4 {
+            let rams = regions.iter().map(|&(va, size)| (va, Ram::new(size))).collect();
+            let z = Z4::with_rams(blob, rams, 0);
+            z.paint.set(false);
+            z
+        }
+        /// Paint the 64 x 64 target at `va` after each `CALL` from now on.
+        pub(crate) fn paint_at(&self, va: u64) {
+            self.target_va.set(va);
+            self.paint.set(true);
+        }
+        /// `CALL`s run so far.
+        pub(crate) fn calls(&self) -> u32 {
+            self.calls.get()
+        }
+        /// The output page's `extract`, as the firmware last published it.
+        pub(crate) fn output_extract(&self) -> u64 {
+            let out = MEM + self.w64(CS_IN + offset_of!(CsInput, ringbuf_output)) as usize;
+            self.w64(out + offset_of!(RingbufOutput, extract))
+        }
         fn with_rams(blob: Vec<u8>, rams: Vec<(u64, Ram)>, target_va: u64) -> Z4 {
             Z4 {
                 t6: T6::handed_over(blob).with_csg_suspend(BOARD_SUSPEND_SIZE, BOARD_SUSPEND_SIZE),
                 rams,
-                target_va,
+                target_va: Cell::new(target_va),
                 log: RefCell::new(vec![]),
                 lag: 3,
                 job_lag: 20,
@@ -1357,7 +1486,7 @@ pub(crate) mod tests {
                 job_due: Cell::new(None),
                 never_complete: false,
                 sync_status: 0,
-                paint: true,
+                paint: Cell::new(true),
                 gpu_id: None,
                 as_present: 0xff,
                 calls: Cell::new(0),
@@ -1450,7 +1579,7 @@ pub(crate) mod tests {
                         self.exec(self.w64(self.cpu(at + 8 * k)), regs);
                     }
                     self.calls.set(self.calls.get() + 1);
-                    if self.paint {
+                    if self.paint.get() {
                         self.paint_target();
                     }
                 }
@@ -1470,7 +1599,7 @@ pub(crate) mod tests {
             for y in 0..H as u64 {
                 for x in 0..W as u64 {
                     let px = if x < W as u64 / 2 { RED } else { BLUE };
-                    self.put(self.cpu(self.target_va + 4 * (y * W as u64 + x)), px);
+                    self.put(self.cpu(self.target_va.get() + 4 * (y * W as u64 + x)), px);
                 }
             }
         }
@@ -1480,7 +1609,7 @@ pub(crate) mod tests {
             let inp = MEM + self.w64(CS_IN + offset_of!(CsInput, ringbuf_input)) as usize;
             let out = MEM + self.w64(CS_IN + offset_of!(CsInput, ringbuf_output)) as usize;
             let insert = self.w64(inp + offset_of!(RingbufInput, insert));
-            let mut extract = self.w64(out + offset_of!(RingbufOutput, extract));
+            let mut extract = self.published.get();
             let mut regs = [0u64; 256];
             while extract < insert {
                 for i in 0..job::JOB_WORDS as u64 {
@@ -1539,6 +1668,7 @@ pub(crate) mod tests {
                 _ if a == GPU + mali::GPU_AS_PRESENT => self.as_present,
                 _ if a == GPU + mali::GPU_TILER_PRESENT => 1,
                 _ if a == GPU + mali::GPU_L2_FEATURES => 0x0712_0306,
+                _ if a == GPU + mali::GPU_TILER_FEATURES => 0x809,
                 _ => self.w(a),
             }
         }
@@ -2032,8 +2162,8 @@ pub(crate) mod tests {
 
     #[test]
     fn a_frame_the_gpu_never_draws_reads_back_as_the_fill() {
-        let mut z = Z4::new(synth::small());
-        z.paint = false;
+        let z = Z4::new(synth::small());
+        z.paint.set(false);
         let o = run(&z);
         assert_eq!((o.step, o.seqno), (STEP_NONE, 1));
         assert_eq!((o.red, o.blue, o.fill, o.other, o.pixels), (0, 0, 4096, 0, 4096));
