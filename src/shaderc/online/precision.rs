@@ -222,9 +222,13 @@ fn precision_of(b: u8) -> Precision {
 }
 
 /// `pop_stack_entry`'s join of two classes over a combined edge.
+///
+/// An [`Prec::Unknown`] operand (a class this module could not settle)
+/// leaves the result Unknown unless a High one decides it.
 fn join(x: Prec, y: Prec) -> Prec {
     match (x, y) {
         (Prec::High, _) | (_, Prec::High) => Prec::High,
+        (Prec::Unknown, _) | (_, Prec::Unknown) => Prec::Unknown,
         (Prec::Medium, _) | (_, Prec::Medium) => Prec::Medium,
         _ => Prec::None,
     }
@@ -363,6 +367,10 @@ const EMITS: u8 = 8;
 /// A call or constructor `ast_to_hir` folded whole: its own operations are
 /// the fold's, at 32 bits.
 const FOLDED: u8 = 16;
+/// A `?:` of a constant condition that is its first side ([`CHOSE_F`]:
+/// its second).
+const CHOSE_T: u8 = 32;
+const CHOSE_F: u8 = 64;
 
 #[derive(Clone, Copy)]
 struct Var<'a> {
@@ -374,6 +382,15 @@ struct Var<'a> {
     /// A sampler (or an array of them) declared lowp or mediump: a look-up
     /// through it is Medium (`handle_call`, :471-487).
     medium_sampler: bool,
+    /// A `const` scalar whose value [`Scan::constant`] works out.
+    value: Option<Konst>,
+}
+
+/// A scalar constant's value, as far as [`Scan::constant`] evaluates.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Konst {
+    Bool(bool),
+    Num(f64),
 }
 
 struct Scan<'x, 'a> {
@@ -467,7 +484,12 @@ impl<'x, 'a> Scan<'x, 'a> {
                 }
                 let folds = storage == StorageQualifier::Const && init.is_some_and(|e| self.folds(e));
                 let medium_sampler = ty.base.is_sampler() && matches!(p, Precision::Low | Precision::Medium);
-                self.vars.push(self.a, Var { name, class, folds, medium_sampler })?;
+                let value = if storage == StorageQualifier::Const && !ty.is_array() {
+                    init.and_then(|e| self.constant(e))
+                } else {
+                    None
+                };
+                self.vars.push(self.a, Var { name, class, folds, medium_sampler, value })?;
             }
             Decl::Struct { name, .. } => {
                 if let Some(d) = self.decls.get_mut(id.0 as usize) {
@@ -488,7 +510,7 @@ impl<'x, 'a> Scan<'x, 'a> {
                             let medium_sampler =
                                 p.ty.base.is_sampler() && matches!(pp, Precision::Low | Precision::Medium);
                             let class = handle(p.ty.base, pp);
-                            self.vars.push(self.a, Var { name, class, folds: false, medium_sampler })?;
+                            self.vars.push(self.a, Var { name, class, folds: false, medium_sampler, value: None })?;
                         }
                     }
                     self.stmt(b)?;
@@ -646,6 +668,49 @@ impl<'x, 'a> Scan<'x, 'a> {
         }
     }
 
+    /// The value of the scalar constant expression `e` where this module
+    /// works it out: literals, `const` scalars, `!`, `-`, `&&`, `||`, `^^`
+    /// and the compares of two such values. `None` for anything else (a
+    /// built-in call, a constructor, a vector): `ast_to_hir` may still
+    /// fold it, and then a caller records [`Prec::Unknown`].
+    fn constant(&self, e: ExprId) -> Option<Konst> {
+        let num = |k: Option<Konst>| match k {
+            Some(Konst::Num(x)) => Some(x),
+            _ => None,
+        };
+        let boolean = |k: Option<Konst>| match k {
+            Some(Konst::Bool(b)) => Some(b),
+            _ => None,
+        };
+        Some(match *self.ast.expr(e) {
+            Expr::BoolLit(b) => Konst::Bool(b),
+            Expr::FloatLit(x) => Konst::Num(f64::from(x)),
+            Expr::IntLit(x) => Konst::Num(f64::from(x as i32)),
+            Expr::UintLit(x) => Konst::Num(f64::from(x)),
+            Expr::Ident(n) => self.lookup(n)?.value?,
+            Expr::Unary(UnOp::Not, x) => Konst::Bool(!boolean(self.constant(x))?),
+            Expr::Unary(UnOp::Minus, x) => Konst::Num(-num(self.constant(x))?),
+            Expr::Unary(UnOp::Plus, x) => Konst::Num(num(self.constant(x))?),
+            Expr::Binary(op, x, y) => {
+                let (a, b) = (self.constant(x)?, self.constant(y)?);
+                match (op, a, b) {
+                    (BinOp::AndAnd, Konst::Bool(a), Konst::Bool(b)) => Konst::Bool(a && b),
+                    (BinOp::OrOr, Konst::Bool(a), Konst::Bool(b)) => Konst::Bool(a || b),
+                    (BinOp::XorXor | BinOp::Ne, Konst::Bool(a), Konst::Bool(b)) => Konst::Bool(a != b),
+                    (BinOp::Eq, Konst::Bool(a), Konst::Bool(b)) => Konst::Bool(a == b),
+                    (BinOp::Lt, Konst::Num(a), Konst::Num(b)) => Konst::Bool(a < b),
+                    (BinOp::Gt, Konst::Num(a), Konst::Num(b)) => Konst::Bool(a > b),
+                    (BinOp::Le, Konst::Num(a), Konst::Num(b)) => Konst::Bool(a <= b),
+                    (BinOp::Ge, Konst::Num(a), Konst::Num(b)) => Konst::Bool(a >= b),
+                    (BinOp::Eq, Konst::Num(a), Konst::Num(b)) => Konst::Bool(a == b),
+                    (BinOp::Ne, Konst::Num(a), Konst::Num(b)) => Konst::Bool(a != b),
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        })
+    }
+
     /// Whether a look-up through the sampler `e` returns a Medium value:
     /// the precision of the variable it reads (`variable_referenced`). A
     /// sampler in a struct reads the struct's variable, which has no
@@ -722,12 +787,22 @@ impl<'x, 'a> Scan<'x, 'a> {
                 self.scan(c)?;
                 self.scan(t)?;
                 self.scan(f)?;
-                if self.folds(c) {
-                    /* `ast_to_hir` takes the chosen side itself (:1973-1978);
-                     * which one is not worked out here, so the two are
-                     * joined */
-                    let flags = (self.info(t) | self.info(f)) & EMITS;
-                    self.set(e, Kind::Op, typed(join(self.class(t), self.class(f))), flags);
+                if self.folds(c) && !self.emits(t) && !self.emits(f) {
+                    /* `ast_to_hir` takes the chosen side itself when the
+                     * condition is a constant and neither side emits an
+                     * instruction (:1973-1978): the `?:` is that side, its
+                     * kind and its class. A condition not evaluated here is
+                     * a class not settled: Unknown. */
+                    match self.constant(c) {
+                        Some(Konst::Bool(b)) => {
+                            let x = if b { t } else { f };
+                            let flags = self.info(x) & (KIND_MASK | FOLDS | FOLDED);
+                            let chose = if b { CHOSE_T } else { CHOSE_F };
+                            let kind = self.kind(x);
+                            self.set(e, kind, self.class(x), (flags & !KIND_MASK) | chose);
+                        }
+                        _ => self.set(e, Kind::Op, typed(Prec::Unknown), 0),
+                    }
                 } else {
                     let c = self.temp_rule(&[t, f], |s, x| s.kind(x) == Kind::Const);
                     self.set(e, Kind::Temp, typed(c), EMITS);
@@ -789,6 +864,7 @@ impl<'x, 'a> Scan<'x, 'a> {
             let cx = if is_int(self.ty(x)) { Prec::High } else { self.class(x) };
             c = match (c, cx) {
                 (Prec::High, _) | (_, Prec::High | Prec::None) => Prec::High,
+                (Prec::Unknown, _) | (_, Prec::Unknown) => Prec::Unknown,
                 _ => Prec::Medium,
             };
         }
@@ -877,8 +953,12 @@ impl<'x, 'a> Scan<'x, 'a> {
             /* Medium when every argument that is not a constant is a
              * Medium root (:519-541) */
             _ => {
-                if ids.iter().all(|&x| self.folds(x) || self.class(x) == Prec::Medium) {
+                let open = |x: &ExprId| !self.folds(*x);
+                if ids.iter().filter(|x| open(x)).all(|&x| self.class(x) == Prec::Medium) {
                     Prec::Medium
+                } else if ids.iter().filter(|x| open(x)).all(|&x| matches!(self.class(x), Prec::Medium | Prec::Unknown))
+                {
+                    Prec::Unknown
                 } else {
                     Prec::High
                 }
@@ -917,6 +997,8 @@ impl<'x, 'a> Scan<'x, 'a> {
             Prec::High
         } else if !lowerable(ty) || ty.is_sampler() {
             Prec::None
+        } else if class == Prec::Unknown && !folded {
+            Prec::Unknown
         } else if lowered {
             Prec::Medium
         } else {
@@ -952,10 +1034,21 @@ impl<'x, 'a> Scan<'x, 'a> {
                 self.mark(r, j, folded);
             }
             Expr::Select(c, t, f) => {
-                let j = kind == Kind::Op && lowered;
                 self.mark(c, false, folded);
-                self.mark(t, j, folded);
-                self.mark(f, j, folded);
+                /* the chosen side of a constant condition is this node:
+                 * it gets this node's place; the other side is dropped by
+                 * Mesa and is a tree of its own here */
+                let info = self.info(e);
+                let (jt, jf) = match (info & CHOSE_T != 0, info & CHOSE_F != 0) {
+                    (true, _) => (joined, false),
+                    (_, true) => (false, joined),
+                    _ => {
+                        let j = kind == Kind::Op && lowered;
+                        (j, j)
+                    }
+                };
+                self.mark(t, jt, folded);
+                self.mark(f, jf, folded);
             }
             /* a dereference's children are separate trees; the array (or
              * struct) it reads is the same read */
@@ -1515,6 +1608,28 @@ mod tests {
         std::println!("{compiled} of {} shaders compiled", files.len());
         assert!(compiled > 900, "{compiled} shaders compiled");
         assert!(bad.is_empty(), "{} values with no class:\n{}", bad.len(), bad[..bad.len().min(20)].join("\n"));
+    }
+
+    /// A `?:` whose condition `ast_to_hir` evaluates is the chosen side
+    /// itself (ast_to_hir.cpp:1973-1978): joined with its parent. Mesa
+    /// (review probe sc3, drm-shim GLSL IR): `(true ? a.y : h.z) * a.x` is
+    /// `f162f(float16_t * (swiz y f2fmp(a)) (swiz x f2fmp(a)))`, a 16-bit
+    /// multiply. A condition this module cannot evaluate is Unknown.
+    #[test]
+    fn a_select_on_a_constant_condition_is_the_chosen_side() {
+        let head = "attribute mediump vec4 q; attribute highp vec4 h; varying highp vec4 v;\n";
+        let g = vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4((true ? q.y : h.z) * q.x); }}"));
+        assert_eq!(alu(&g, AluOp::Fmul), [M]);
+        assert_eq!(alu(&g, AluOp::Bcsel), [M], "the select stands for the chosen side");
+        let g = vs(&std::format!(
+            "{head}const bool B = false;\nvoid main(){{ gl_Position = p; v = vec4(B ? q.z : h.x * 2.0); }}"
+        ));
+        assert_eq!(alu(&g, AluOp::Fmul), [H], "the highp side is chosen");
+        let g = vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4((2.0 > 1.0 ? h.y : q.z) * q.x); }}"));
+        assert_eq!(alu(&g, AluOp::Fmul), [H]);
+        let g =
+            vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4((sin(0.5) > 0.3 ? q.y : h.z) * q.x); }}"));
+        assert_eq!(alu(&g, AluOp::Fmul), [Prec::Unknown], "a condition not evaluated here");
     }
 
     #[test]
