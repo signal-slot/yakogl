@@ -53,6 +53,15 @@ fn wrmask(s: Swz) -> Result<u32, MaliError> {
     }
 }
 
+/// A source this packer writes with no swizzle field although its entry has
+/// one: only the whole word.
+fn whole(s: &Src) -> Result<(), MaliError> {
+    if s.swz != Swz::H01 {
+        return Err(MaliError::Defect(Defect::Operand));
+    }
+    Ok(())
+}
+
 /// `va_pack_widen_f32` (va_pack.c:214-227): none, h0, h1 (`widen_m`).
 fn widen(s: Swz) -> Result<u32, MaliError> {
     match s {
@@ -195,6 +204,26 @@ fn fsrc(f: &mut Fill, i: &Ins, s: usize) -> Result<(), MaliError> {
     f.put(["widen0", "widen1", "widen2"][s], widen(x.swz)?)?;
     f.put(["neg0", "neg1", "neg2"][s], x.neg as u32)?;
     f.put(["abs0", "abs1", "abs2"][s], x.abs as u32)?;
+    Ok(())
+}
+
+/// `va_pack_alu`'s check of each source against its entry (va_pack.c:
+/// 627-687, through [`super::bir::src_info`], which equals valhall.c): a
+/// negate or absolute value where the entry has neither `absneg` nor
+/// `notted`, or a swizzle where it has no swizzle, widen, lane, lanes,
+/// half-swizzle or combine, is `invalid_instruction`. Refused here, so a
+/// modifier the op cannot hold is never dropped from a word (#4574: the
+/// cube ops, which have no swizzle, took a widened fp16 constant).
+fn check_sources(i: &Ins) -> Result<(), MaliError> {
+    let first = super::bir::nr_staging_srcs(i.op);
+    for s in first..first + super::bir::nr_srcs(i.op) {
+        let (x, info) = (&i.src[s], super::bir::src_info(i.op, s));
+        let modifier = info.absneg || info.notted;
+        let select = info.swizzle || info.widen || info.lane || info.lanes || info.halfswizzle || info.combine;
+        if ((x.neg || x.abs) && !modifier) || (x.swz != Swz::H01 && !select) {
+            return Err(MaliError::Defect(Defect::Operand));
+        }
+    }
     Ok(())
 }
 
@@ -352,8 +381,11 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("saturate", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
+        /* valhall.c gives the source a widen; the ISA table has no field
+         * for it, so a narrowed source is refused, never read whole */
         Op::U32ToF32 => {
             f = Fill::new(IsaOp::U32ToF32);
+            whole(&i.src[0])?;
             f.put("src0", src_byte(&i.src[0])?)?.put("round", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
@@ -434,8 +466,10 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("round", super::bir::Round::Rtz as u32)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
+        /* as U32_TO_F32 */
         Op::S32ToF32 => {
             f = Fill::new(IsaOp::S32ToF32);
+            whole(&i.src[0])?;
             f.put("src0", src_byte(&i.src[0])?)?.put("round", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
@@ -599,6 +633,8 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
         }
         Op::ShaddxS64 => {
             f = Fill::new(IsaOp::ShaddS64);
+            /* the offset's widen (valhall.c) is packed as none */
+            whole(&i.src[1])?;
             f.put("src0", src_byte(&i.src[0])?)?.put("src1", src_byte(&i.src[1])?)?;
             f.put("shift", 0)?.put("widen1", 0)?.put("dest_register_index", reg(i.dest[0].idx)?)?;
         }
@@ -694,6 +730,7 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
         Op::BranchzI { eq } => {
             f = Fill::new(IsaOp::Jump);
             /* .eq (not) or .ne, absolute, no lane combine (va_pack.c:493-505) */
+            whole(&i.src[0])?;
             f.put("src0", src_byte(&i.src[0])?)?.put("src1", src_byte(&i.src[1])?)?;
             f.put("not", eq as u32)?.put("combine", 0)?.put("address_mode", 1)?.put("conservative", 0)?;
         }
@@ -731,6 +768,10 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
              * a byte pair (`shift_bitwise_i16_lanes_m`: b00 4, as the
              * 32-bit b0) */
             f.put("src0", src_byte(&i.src[0])?)?.put("swz0", swz16(i.src[0].swz)?)?;
+            /* no 16-bit `inot` is selected: the `not` is packed as clear */
+            if i.src[1].neg {
+                return Err(MaliError::Defect(Defect::Operand));
+            }
             f.put("src2", src_byte(&i.src[1])?)?.put("not2", 0)?;
             f.put("src1", src_byte(&i.src[2])?)?.put("lanes1", byte_lane(i.src[2].swz)?)?;
             f.put("not_result", 0)?;
@@ -855,6 +896,8 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             return Err(MaliError::Defect(Defect::PseudoOp))
         }
     }
+    /* after the match, which refuses the pseudo-ops by name */
+    check_sources(i)?;
     tail(&mut f, i)?;
     let w = f.done()?;
     Ok(match i.op {
@@ -1070,5 +1113,25 @@ mod tests {
         assert_eq!(page(pack(Op::Clper, 3, &[r(1), lut(8).swz(Swz::B2)])), 0);
         assert_eq!(page(pack(Op::LshiftXorI32, 1, &[r(4), last(1), lut(11).swz(Swz::B2)])), 0);
         assert_eq!(page(pack(Op::LshiftXorI32, 1, &[lane_id(), last(1), lut(11).swz(Swz::B2)])), 3);
+    }
+
+    /// A modifier the op's entry has no field for is refused, never
+    /// dropped (va_pack.c `invalid_instruction`): a half of the table on
+    /// the cube ops (#4574), a negated move; and a narrowed source of
+    /// U32_TO_F32 or S32_TO_F32 (a widen in valhall.c, no field in the ISA
+    /// table).
+    #[test]
+    fn a_source_modifier_without_a_field_is_refused() {
+        let one = |op: Op, srcs: &[Src]| pack_one(&Ins::new(op, &[Dest { idx: Idx::Reg(0), swz: Swz::H01 }], srcs), 0);
+        let h1 = Src { swz: Swz::H11, ..lut(26) };
+        let refused = Err(MaliError::Defect(Defect::Operand));
+        assert_eq!(one(Op::Cubeface1, &[lut(16), r(1), h1]), refused);
+        assert_eq!(one(Op::CubeSsel, &[h1, lut(16), r(2)]), refused);
+        assert_eq!(one(Op::U32ToF32, &[Src { swz: Swz::H00, ..r(1) }]), refused);
+        assert_eq!(one(Op::S32ToF32, &[Src { swz: Swz::B0, ..lut(4) }]), refused);
+        assert_eq!(one(Op::MovI32, &[neg(r(1))]), refused);
+        /* the same sources without the modifier pack */
+        assert!(one(Op::Cubeface1, &[lut(16), r(1), lut(26)]).is_ok());
+        assert!(one(Op::S32ToF32, &[r(1)]).is_ok());
     }
 }
