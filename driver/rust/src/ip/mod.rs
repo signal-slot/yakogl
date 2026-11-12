@@ -47,6 +47,10 @@ pub mod ns16550_tx;
 /// The RK806 PMIC's read frames (read only), on any SPI host.
 #[cfg(any(feature = "rk3588", test))]
 pub mod rk806;
+/// The Rockchip IOMMU of a display controller, switched off (the RK3588's
+/// vop_mmu).
+#[cfg(any(feature = "rk3588", test))]
+pub mod rk_iommu;
 /// The Rockchip SPI controller as a polled host (the RK3588's SPI2).
 #[cfg(any(feature = "rk3588", test))]
 pub mod rockchip_spi;
@@ -65,3 +69,6 @@ pub mod stm32_i2c;
 pub mod stm32_ltdc;
 #[cfg(any(feature = "am62p", test))]
 pub mod ti_dss7;
+/// The RK3588's VOP2: one Esmart window on one video port, for HDMI.
+#[cfg(any(feature = "rk3588", test))]
+pub mod vop2;
