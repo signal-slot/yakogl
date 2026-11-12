@@ -119,6 +119,11 @@ vivante-depth-guard = ["gpu-vivante"]
 # its backend options marked TEST KNOB in src/pvr/pvr_backend.h, which
 # pvr_backend_set_option refuses without the feature.
 test-knobs = []
+# ES 3.0 multisample renderbuffers: a back end that can draw into and resolve
+# a 4x framebuffer reports max_samples = 4 under this feature (the
+# docs/notes/es3-msaa-renderbuffers.md capability). Off by default; without
+# it every back end reports one sample as before. No code reads it yet.
+msaa-fbo = []
 # Host tests only: links std so the test harness can unwind, and starts with a
 # null `g_backend` (the tests install mocks). Never enable it in a product:
 # it is a compile error on bare-metal targets and in the C archive.

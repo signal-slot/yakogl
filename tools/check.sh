@@ -1704,6 +1704,27 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)" \
 # to nothing under report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_fragdepth
+# ES 3.0 multisample renderbuffers, the pin files of docs/notes/es3-msaa-renderbuffers.md:
+# today's one-sample behaviour of the GL core and of each back end, and the
+# ignored tests of the expected result (not run). Compile to nothing under
+# report-es2.
+step "test    $V3D_CONFIG (tests/es3_msaa_gl.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_msaa_pvr.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_msaa_pvr
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_msaa_gc.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_msaa_gc
+# The `msaa-fbo` feature (no effect yet) builds with each GPU's host
+# configuration, so a later item that reads it starts from a tree that
+# compiles.
+msaa_fbo_builds() {
+  local c
+  for c in "$V3D_CONFIG" host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
+    host-test,gpu-mali,shaderc-online,no-shader-table; do
+    cargo check --no-default-features --features "$c,msaa-fbo" --lib || return 1
+  done
+}
+step "check   msaa-fbo on the four GPUs' host configurations" msaa_fbo_builds
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
@@ -1785,6 +1806,10 @@ mali_lib_tests() {
 scope mali local
 step "clippy  $MALI_CONFIG" cargo clippy --no-default-features --features "$MALI_CONFIG" --all-targets
 step "test    $MALI_CONFIG (--lib mali::, $MALI_TESTS tests: packers and ISA vs Mesa and the board)" mali_lib_tests
+# ES 3.0 multisample renderbuffers on the Mali: the pins of today's one-sample
+# behaviour and the ignored tests of the 4x result (not run).
+step "test    $MALI_CONFIG (tests/es3_msaa_mali.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test es3_msaa_mali
 # src/mali/genxml/v10.rs and v10_cases.rs are what tools/mali/gen_pack_rs.py
 # makes from the vendored v10.xml, byte for byte (third_party/mesa-26.2.1/UPSTREAM,
 # "Used by"); a failing generator prints nothing and so differs too.

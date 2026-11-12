@@ -595,11 +595,11 @@ options to cargo features (`gpu-<GPU>`, `shaderc-online`, `report-es2`,
 `-DYAKOGL_OSAL`, `-DYAKOGL_GPU`, `-DYAKOGL_SHADERC`, `-DYAKOGL_REPORT_ES2` and
 `-DYAKOGL_SHARED`, and CMake keeps the other cache entries of an existing build
 directory. So the with arm sets the option that maps to `msaa-fbo` once in that
-library directory, then runs the script (`<OPTION>` is the option item
-`gl-msaa-cap` adds to `capi/yakogl_capi.cmake` together with the feature):
+library directory, then runs the script (`YAKOGL_MSAA_FBO` is the option in
+`capi/yakogl_capi.cmake` and `CMakeLists.txt`, OFF by default):
 
 ```sh
-cmake -S . -B build/host-deqp/lib-v3d-es3 -D<OPTION>=ON   # lib-es3, lib-powervr-es3
+cmake -S . -B build/host-deqp/lib-v3d-es3 -DYAKOGL_MSAA_FBO=ON   # lib-es3, lib-powervr-es3
 GPU=v3d OUT=$PWD/build/host-deqp/msaa-v3d-on-fbo.msaa \
   tools/cts/host-deqp-run.sh dEQP-GLES3.functional.fbo.msaa.
 ```
@@ -607,7 +607,7 @@ GPU=v3d OUT=$PWD/build/host-deqp/msaa-v3d-on-fbo.msaa \
 Set it back to `OFF` before a without run: the library directory is shared,
 the run directories (`OUT=`) are not. Check that
 `build/host-deqp/lib-*-es3-build.log` shows the feature on cargo's line.
-**Until `gl-msaa-cap` adds the feature only the without run works.**
+**Until the back ends read the feature (items after `msaa-feature`) the with run changes nothing.**
 
 **Reading the counts.** Each run ends with `OUT/summary.txt`: the per-group
 table (Pass, Fail, NotSupported, ... per case group, `--by-group 3`) and the

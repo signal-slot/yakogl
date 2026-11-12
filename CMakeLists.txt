@@ -105,6 +105,9 @@ option(YAKOGL_REPORT_ES2 "report OpenGL ES 2.0 (default) rather than ES 3.0 from
 # The test knobs (the crate's `test-knobs` feature): the C entry points an
 # on-silicon suite sets to run an experiment's arms. OFF in a product build.
 option(YAKOGL_TEST_KNOBS "compile in the test knobs (gc_debug_set_msaa and the like); never in a product" OFF)
+# ES 3.0 multisample renderbuffers (the crate's `msaa-fbo` feature): 4x
+# framebuffers on the back ends that can draw and resolve them. OFF by default.
+option(YAKOGL_MSAA_FBO "report GL_MAX_SAMPLES 4 and draw into 4x framebuffers (the crate's msaa-fbo feature)" OFF)
 # The gl_test runner (the crate's `gl-test-runner` feature): the walker of
 # driver/tools/pvrlab/gl_test.c, which a build that links that file needs
 # (gl_test_run calls it). OFF in a product build.
