@@ -2890,19 +2890,19 @@ fn a_draw_that_reads_gl_instance_id_is_never_split_by_instances() {
 }
 
 /// One instance of an instanced draw the GL core draws instance by instance
-/// (GlesDraw::instance_id, a divisor past 1): the PDS starts the instance
-/// number at 0 for every draw, so a program that reads gl_InstanceID is
-/// refused, not drawn with 0. Instance 0, and a program that does not read
-/// it, are drawn. Revert check: without the refusal the first draw goes in.
+/// (GlesDraw::instance_id, a divisor past 1): drawn, whatever the instance,
+/// with the instance as the base of the vertex PDS (tests/es3_pvr_instanceid.rs
+/// reads the base back); a program that does not read gl_InstanceID is drawn
+/// too.
 #[test]
-fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_refused() {
+fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_drawn() {
     let rig = Rig::new();
     let mut fvs = *rig.fvs;
     fvs.vs_instance_id_reg1 = 3;
     let mut d = rig.draw(3);
     d.vs = &fvs;
     d.instance_id = 2;
-    assert_eq!(draw(&d), -EINVAL, "reads gl_InstanceID, instance 2");
+    assert_eq!(draw(&d), 0, "reads gl_InstanceID, instance 2");
     d.instance_id = 0;
     assert_eq!(draw(&d), 0, "instance 0");
     let mut e = rig.draw(3);
