@@ -33,7 +33,7 @@
  *     with CONFIG_POSIX_API four POSIX hooks at PRE_KERNEL_1 0 ran before
  *     the arming when it was one. check_early_hooks.cmake, run after every
  *     link, fails the build unless this hook is ours and calls the arming,
- *     and unless the code it reaches calls no memset/memcpy (below).
+ *     and unless the code it reaches passes the MMU-off checks (below).
  *     The arming results go to s_arm and s_arm_rc, which are __noinit: the
  *     BSS that z_prep_c zeroes afterwards does not hold them.
  *   The pre-arm window, before WDT0 is armed by this image: reset.S up to
@@ -166,7 +166,11 @@ static __noinit int s_arm_rc;
  * to Device memory, where the dc zva of a memset or an unaligned access
  * faults. yd_t6_early_arm writes its record one field at a time, and
  * check_early_hooks.cmake fails the build if anything this function reaches
- * calls memset, memcpy, memmove or an address in a register.
+ * calls memset, memcpy or memmove, branches through a register (br, blr and
+ * their pointer-authentication forms), or loads or stores at an immediate
+ * offset that is not a multiple of the access size. It cannot check that a
+ * base register holds an aligned address: that rests on the code (the record
+ * is a 4-byte aligned struct, the stack 16-byte aligned by reset.S).
  */
 void z_arm64_el1_plat_init(void);
 void z_arm64_el1_plat_init(void)

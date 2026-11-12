@@ -1178,17 +1178,25 @@ The glue (`driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c` over
   and only while the sample's `t6_watchdog_feed()` calls come at most
   `..._ALIVE_S` (5 s) apart (the rule is `board::nanopc_t6::feed_verdict`
   in the drivers crate, with host tests at its edges). Once WDT0 is armed,
-  the board resets at most 60 s + 22.4 s = 82.4 s after the arming,
-  whatever the image does next.
+  the board resets at most 60 s + 22.4 s = 82.4 s after uptime 0, whatever
+  the image does next. Uptime 0 is when the system timer starts
+  (PRE_KERNEL_2), after `z_prep_c` and the PRE_KERNEL_1 hooks; the arming
+  comes before `z_prep_c`, so the bound from the arming is 82.4 s plus that
+  stretch (not measured; it includes zeroing the BSS with the MMU off).
 - **The pre-arm window.** Before the arming, nothing of the image's own can
   reset the board: reset.S, the `T6:A` code, Zephyr's `z_arm64_el2_init`
   and `z_arm64_el1_init`. This is straight-line register code with no wait
   on a device and no memory but the stack; its length is not measured. A
   fault in it halts the CPU for good (`T6:X` at EL2). The build fails
   (`check_early_hooks.cmake`, after every link) unless the arming is called
-  from `z_arm64_el1_plat_init` and no code that runs with the MMU off calls
-  `memset`, `memcpy` or `memmove` (their `dc zva` and unaligned accesses
-  fault on the Device memory every access is then). With `--linux-wdt` the
+  from `z_arm64_el1_plat_init` and the code that runs with the MMU off
+  passes three checks: it calls no `memset`, `memcpy` or `memmove` (their
+  `dc zva` and unaligned accesses fault on the Device memory every access
+  is then), it branches through no register (`br`, `blr` and their
+  pointer-authentication forms: the walk could not follow them), and no
+  load or store has an immediate offset that is not a multiple of its
+  access size. Whether a base register holds an aligned address is not
+  checked; that rests on the code. With `--linux-wdt` the
   recipe covers it: `/dev/watchdog0` is opened in the jump's own ssh
   command, so WDT0 is already counting Linux's 44.7 s when the image
   starts, and nothing in Linux feeds or stops it across the kexec (linux
@@ -1351,6 +1359,13 @@ says where the image stopped:
 | `T6:B` | the first console line (ns16550 driver) | `printk` |
 | `T6:C` | WDT0 armed, before "board: watchdog armed" | `printk` |
 | `T6:X` | any exception taken to EL2 after `T6:A` | the EL2 vector table `T6:A` installs: `ESR_EL2`, `ELR_EL2`, `FAR_EL2`, `SPSR_EL2`, `HCR_EL2`, then halt |
+
+Between `T6:A3` and `T6:B` run `z_prep_c` (the BSS, the MMU tables and the
+`k_panic()` when the XLAT tables run out), `z_cstart`'s EARLY hooks, the
+SoC and board early hooks, the kernel pre-init entries and the PRE_KERNEL_1
+hooks before the console (the POSIX pools, with `CONFIG_POSIX_API`). WDT0
+already runs there: `T6:A3` with rc 0 and no `T6:B` is a stop in that
+stretch, and WDT0 resets the board one period (22.4 s) after the arming.
 
 The hooks are reset.S's, the earliest a board can own in the pinned Zephyr
 (af17c0c8 `arch/arm64/core/reset.S`: `WTEXT(z_arm64_el2_plat_prep_c)`, called
@@ -2025,7 +2040,8 @@ and ten `AS_STATUS` waits of at most 100 ms each, so Z2 adds at most
 about 1.3 s, under the 5 s the feeder allows between `t6_watchdog_feed()`
 calls (one before and one after each of `yd_t6_gpu_up` and
 `yd_t6_mmu_up`). A hang anywhere after the arming is reset by WDT0 at
-most 82.4 s after it (Z1: 60 s lifetime + 22.4 s period); before it, by
+most 82.4 s after uptime 0 (Z1: 60 s lifetime + 22.4 s period; the arming
+is a little earlier, before `z_prep_c`); before it, by
 Linux's watchdog (44.7 s from the open). If PSCI `SYSTEM_RESET` returns,
 WDT0 resets the board within one period. A stuck GPU register is a
 bounded refusal, not a hang: a read of the GPU with PD_GPU off would be
@@ -2588,8 +2604,8 @@ handover callback); the feeder's rule is as for Z2 and Z3 (`TOP` 13,
 `ALIVE_S` = 5 s apart, and until `LIFETIME_S` = 60 s of uptime). Z3's
 boot, the 5 s wait and the stop and terminate waits can together pass 5 s
 between calls: the feeding then stops and WDT0 resets the board within
-22.4 s of its last feed, at most 82.4 s after the arming, whatever the
-image does. Whether the probe also feeds inside the wait is not
+22.4 s of its last feed, at most 82.4 s after uptime 0 (the arming is a
+little earlier, before `z_prep_c`), whatever the image does. Whether the probe also feeds inside the wait is not
 assumed here.
 
 **Verdict.** `driver/tools/kexec-zephyr/t6-verdict.sh t6_submit

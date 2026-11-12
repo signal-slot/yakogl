@@ -5,7 +5,9 @@
 # weak defaults, or the image would start with no T6:A line, no HCR_EL2 fix
 # and no WDT0 while looking like it has all three (nanopc_t6.c, "Order");
 # WDT0 must be armed from z_arm64_el1_plat_init, before every init hook, and
-# the code that runs with the MMU off must not call memset/memcpy/memmove.
+# the code that runs with the MMU off must not call memset/memcpy/memmove,
+# branch through a register or use a load/store offset that is not a
+# multiple of its access size.
 #   cmake -DNM=<nm> -DOBJDUMP=<objdump> -DELF=<zephyr.elf> -P check_early_hooks.cmake
 execute_process(COMMAND "${NM}" "${ELF}" OUTPUT_VARIABLE syms RESULT_VARIABLE rc)
 if(NOT rc EQUAL 0)
@@ -57,10 +59,16 @@ endif()
 # With the MMU off every access is to Device memory: a memset may use dc zva
 # and a memcpy unaligned accesses, and both fault there, before any
 # watchdog or with one that then resets a board that printed nothing. Every
-# function the MMU-off code reaches by a direct branch is walked; a call
-# through a register (blr) cannot be followed and is refused as well.
+# function the MMU-off code reaches by a direct branch is walked. A branch
+# through a register cannot be followed and is refused: a call or a jump
+# (blr, br) and their pointer-authentication forms (blraa, blrab, blraaz,
+# blrabz, braa, brab, braaz, brabz). So is a load or store whose immediate
+# offset is not a multiple of its access size (a packed field gives one).
+# Not checked: whether a base register is aligned; nothing here can know
+# what an address register holds.
 set(todo z_arm64_el2_plat_prep_c z_arm64_el1_plat_prep_c z_arm64_el1_plat_init yd_t6_el2_trap)
 set(seen "")
+set(accesses 0)
 while(todo)
   list(POP_FRONT todo fn)
   if(fn IN_LIST seen)
@@ -71,9 +79,49 @@ while(todo)
     message(FATAL_ERROR "nanopc_t6: ${ELF}: the MMU-off code reaches ${fn} (walked: ${seen})")
   endif()
   disasm("${fn}" d)
-  if(d MATCHES "\tblr\t")
-    message(FATAL_ERROR "nanopc_t6: ${ELF}: ${fn}, run with the MMU off, calls through a register:\n${d}")
+  string(REGEX MATCH "[^\n]*\t(blr|br)(aa|ab|aaz|abz)?\t[^\n]*" ind "${d}")
+  if(ind)
+    message(FATAL_ERROR "nanopc_t6: ${ELF}: ${fn}, run with the MMU off, branches through a register "
+      "(the walk cannot follow it):\n${ind}")
   endif()
+  # Loads and stores with an immediate offset inside the brackets (pre-index
+  # and plain; a post-index access uses the base alone). The access size is
+  # the mnemonic's (b, h, sw) or the first register's (w, x, b, h, s, d, q).
+  string(REGEX MATCHALL "\t(ld|st)[a-z0-9]*\t[^\n]*\[[a-z0-9]+, #-?(0x)?[0-9a-f]+\]" mems "${d}")
+  foreach(a ${mems})
+    string(REGEX MATCH "\t((ld|st)[a-z0-9]*)\t([a-z])[0-9a-z]*,.*, #(-?(0x)?[0-9a-f]+)\]" m "${a}")
+    set(op "${CMAKE_MATCH_1}")
+    set(reg "${CMAKE_MATCH_3}")
+    set(off "${CMAKE_MATCH_4}")
+    if(op STREQUAL "")
+      continue()
+    endif()
+    if(op MATCHES "^(ld|st)[a-z]*(sb|b)$")
+      set(size 1)
+    elseif(op MATCHES "^(ld|st)[a-z]*(sh|h)$")
+      set(size 2)
+    elseif(op MATCHES "sw$")
+      set(size 4)
+    elseif(reg STREQUAL "w" OR reg STREQUAL "s")
+      set(size 4)
+    elseif(reg STREQUAL "x" OR reg STREQUAL "d")
+      set(size 8)
+    elseif(reg STREQUAL "q")
+      set(size 16)
+    elseif(reg STREQUAL "h")
+      set(size 2)
+    elseif(reg STREQUAL "b")
+      set(size 1)
+    else()
+      continue()
+    endif()
+    math(EXPR accesses "${accesses} + 1")
+    math(EXPR r "(${off}) % ${size}")
+    if(NOT r EQUAL 0)
+      message(FATAL_ERROR "nanopc_t6: ${ELF}: ${fn}, run with the MMU off, has an access whose offset "
+        "is not a multiple of its size ${size}:${a}")
+    endif()
+  endforeach()
   string(REGEX MATCHALL "\t(bl|b|b\\.[a-z]+|cbn?z|tbn?z)\t[^\n]*<[^>+]+>\n" calls "${d}")
   foreach(c ${calls})
     string(REGEX MATCH "<([^>+]+)>" m "${c}")
@@ -84,4 +132,6 @@ while(todo)
 endwhile()
 list(LENGTH seen n)
 message(STATUS "nanopc_t6: early hooks are the board glue's; EL2 vectors at 0x${vectors}; "
-  "WDT0 armed from z_arm64_el1_plat_init; ${n} MMU-off functions call no memset/memcpy")
+  "WDT0 armed from z_arm64_el1_plat_init; ${n} MMU-off functions call no memset/memcpy, "
+  "branch through no register; ${accesses} offsets are multiples of their access size "
+  "(base alignment is not checked)")

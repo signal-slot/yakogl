@@ -26,7 +26,8 @@ if(CONFIG_YAKOGL_NANOPC_T6)
   zephyr_include_directories(nanopc_t6)
   add_dependencies(yakogl_board_nanopc_t6 yakogl_drivers_rust)
   # The early banner's reset.S hooks and the WDT0 arming must be ours in
-  # the linked image, and its MMU-off code must call no memset/memcpy.
+  # the linked image, and its MMU-off code must call no memset/memcpy and
+  # branch through no register (nanopc_t6/check_early_hooks.cmake).
   set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
     COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DOBJDUMP=${CMAKE_OBJDUMP}
             -DELF=${ZEPHYR_BINARY_DIR}/${KERNEL_ELF_NAME}
