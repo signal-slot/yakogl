@@ -679,6 +679,13 @@ pub enum Prec {
     /// lowered tree, a lowered built-in's body); for a local, stored at 16
     /// bits.
     Medium,
+    /// A constant the front end folded at full width from an operation of
+    /// a Medium tree, where Mesa folds that operation at 16 bits from the
+    /// 16-bit operand and the two values differ: the reciprocal `x / c`
+    /// multiplies by, for a `c` with no exact 16-bit value. Its 16-bit
+    /// value is not this constant narrowed, so a back end that lowers
+    /// precision cannot take it as one.
+    Fold32,
 }
 
 /// One stage's IR: what the front end hands the code generator.
