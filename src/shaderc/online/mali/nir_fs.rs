@@ -4507,10 +4507,21 @@ fn walk_nodes(
                  * nir_opt_algebraic folds it at the link already (`fmul(a,
                  * 1.0)`, `fadd(a, 0.0)`, nir_opt_algebraic.py:292, :236-237,
                  * in gl_nir_opts, gl_nir_linker.c:102; a constant source
-                 * matches when every lane it reads is the constant,
-                 * nir_search.c:260-286): f07's `a.x * 1.0` is the colour's
-                 * own lane, converted at the store */
-                let whole = (0..2).any(|k| (0..w).all(|i| f.is_const(lane(vals, s[k], i), ident)));
+                 * matches when every lane it reads is the constant, the
+                 * sign of zero checked per lane, nir_search.c:260-286 and
+                 * :282-285, so `+ vec2(0.0, -0.0)` is no identity there):
+                 * f07's `a.x * 1.0` is the colour's own lane, converted at
+                 * the store */
+                let whole =
+                    (0..2).any(|k| ident.iter().any(|&b| (0..w).all(|i| f.is_const(lane(vals, s[k], i), &[b]))));
+                /* zeros of both signs on every lane (`+ vec2(0.0, -0.0)`):
+                 * no fold at the link by the source, and no measured shape
+                 * tells the tree's conversions from the colour's (n20's
+                 * order is both): refused */
+                let mixed = (0..2).any(|k| (0..w).all(|i| f.is_const(lane(vals, s[k], i), ident)));
+                if a == AluOp::Fadd && mixed && !whole {
+                    return Err(MaliError::FsVaryingLoad);
+                }
                 for pair in (0..w).step_by(2) {
                     let lanes = pair..w.min(pair + 2);
                     let all = |k: usize, bits: &[u32]| lanes.clone().all(|i| f.is_const(lane(vals, s[k], i), bits));
