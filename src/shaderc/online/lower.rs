@@ -6076,6 +6076,25 @@ impl<'a> Lower<'_, 'a> {
     /// shipped instruction order while keeping the algebra right.
     fn mat_times_vec(&mut self, m: ExprId, v: ExprId, n: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
         let vec = self.value(v, n, out)?;
+        self.mat_times_lowered(m, vec, n, out)
+    }
+
+    /// [`Lower::mat_times_column`] of the `n`-column matrix `m`, except
+    /// that under Mesa's order a product of two matrices times the vector,
+    /// `(A * B) * v`, is `A * (B * v)`: GLSL IR's algebraic pass rewrites
+    /// it before the matrix operations are lowered (opt_algebraic.cpp:240-251,
+    /// Mesa 26.2.1), two matrix-vector sums and no matrix product. Measured
+    /// on the Mali shim reference tools/mali/testdata/vsfma_chain.expect.json
+    /// (`projection * modelview * v`: `modelview`'s columns read first).
+    fn mat_times_lowered(&mut self, m: ExprId, vec: Src, n: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
+        if self.mat_order == ir::MatOrder::MesaGlsl {
+            if let Expr::Binary(BinOp::Mul, a, b) = *self.ast.expr(m) {
+                if let (BaseType::Mat(ca, _), BaseType::Mat(cb, _)) = (self.types.of(a).base, self.types.of(b).base) {
+                    let bv = self.mat_times_lowered(b, vec, cb, out)?;
+                    return self.mat_times_lowered(a, bv, ca, out);
+                }
+            }
+        }
         self.mat_times_column(m, vec, n, out)
     }
 
