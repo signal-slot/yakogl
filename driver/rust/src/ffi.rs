@@ -24,6 +24,8 @@ pub use imx8mp::*;
 pub use imx8mp_dsi::*;
 #[cfg(any(feature = "imx8mp", test))]
 pub use imx_wdog::*;
+#[cfg(any(feature = "stm32mp2", test))]
+pub use mp25_i2c::*;
 #[cfg(any(feature = "rk3588", test))]
 pub use rk3588::*;
 pub use sn65dsi8x::*;
@@ -54,6 +56,10 @@ mod imx8mp_dsi;
 /// driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c): src/ffi/imx_wdog.rs.
 #[cfg(any(feature = "imx8mp", test))]
 mod imx_wdog;
+/// The MP2's I2C controller (`yakogl,stm32mp2-i2c`, ip::stm32_i2c):
+/// src/ffi/mp25_i2c.rs, include/yakogl_mp25_i2c.h.
+#[cfg(any(feature = "stm32mp2", test))]
+mod mp25_i2c;
 /// The NanoPC-T6 board glue (ip::dw_wdt, soc::rk3588, aarch64; the shim is
 /// driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c): src/ffi/rk3588.rs.
 #[cfg(any(feature = "rk3588", test))]
