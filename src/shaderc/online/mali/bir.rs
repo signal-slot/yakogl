@@ -878,8 +878,9 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         /* IABS.s32 and IMUL.i32: integer sources that widen (valhall.c) */
         (Op::IabsS32, 0) | (Op::ImulI32, 0..=1) => info(false, false, true, false, 32),
         /* ISUB.s32 widens its sources as IADD.s32, and so do U32_TO_F32
-         * and S32_TO_F32 (the ISA table has no field for theirs); F32_TO_U32
-         * reads its float with abs and neg as F32_TO_S32 (valhall.c) */
+         * and S32_TO_F32 (the ISA table has no field for theirs: pack.rs
+         * refuses a narrowed source); F32_TO_U32 reads its float with abs
+         * and neg as F32_TO_S32 (valhall.c) */
         (Op::IsubS32, 0..=1) => info(false, false, true, false, 32),
         (Op::U32ToF32, 0) => info(false, false, true, false, 32),
         (Op::F32ToU32, 0) => info(true, false, false, false, 32),
