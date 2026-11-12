@@ -594,12 +594,11 @@ fn a_renderbuffer_of_each_is_a_complete_colour_attachment() {
 /// A texture of the four is stored (GC_SAMPLED_TEXFMTS holds their classes
 /// since gc-r32-flip; `es3_storage_or_refuse`, src/gl/texture.rs), so
 /// glTexImage2D and glTexStorage2D raise nothing and the attachment is made.
-/// The framebuffer is still INCOMPLETE_ATTACHMENT: `integer_texture_surface`
-/// (src/gl/framebuffer.rs) has no surface for the four (item gl-r32-surface);
-/// the status assertion flips with it (RC17, dEQP fbo.completeness
+/// The framebuffer is complete: `integer_texture_surface`
+/// (src/gl/framebuffer.rs) has a surface for the four (RC17, dEQP fbo.completeness
 /// `renderable.texture.*32*`).
 #[test]
-fn a_texture_of_each_is_stored_and_awaits_its_surface_as_attachment() {
+fn a_texture_of_each_is_stored_and_a_complete_attachment() {
     for t in &INT32 {
         on_gc7000(|| {
             let name = t.name();
@@ -624,8 +623,8 @@ fn a_texture_of_each_is_stored_and_awaits_its_surface_as_attachment() {
                 assert_eq!(glGetError(), GL_NO_ERROR, "{name}: the attachment itself");
                 assert_eq!(
                     glCheckFramebufferStatus(GL_FRAMEBUFFER),
-                    GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
-                    "{name}: a texture with no surface class yet (gl-r32-surface)"
+                    GL_FRAMEBUFFER_COMPLETE,
+                    "{name}: a texture has its own surface class (RC17)"
                 );
             }
         });

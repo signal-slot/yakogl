@@ -415,10 +415,12 @@ mod es3 {
         let _g = context();
         let mut made = 0;
         backend::HOST_INTEGER_RT_FORMATS.store(ALL_SURFACES, Ordering::Relaxed);
-        for (f, name, channels, ..) in INT_FORMATS {
+        for (f, name, channels, bits, _) in INT_FORMATS {
             let Some(tex) = int_texture(f) else { continue };
             made += 1;
-            let want = if channels == 4 || cfg!(feature = "gpu-powervr") {
+            // the GC samples and draws the 32-bit R and RG classes as their own surface (RC17)
+            let own = cfg!(feature = "gpu-vivante") && bits == 32;
+            let want = if channels == 4 || own || cfg!(feature = "gpu-powervr") {
                 GL_FRAMEBUFFER_COMPLETE
             } else {
                 GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT

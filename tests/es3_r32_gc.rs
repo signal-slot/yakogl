@@ -501,7 +501,7 @@ fn an_uploaded_texture_is_described_and_laid_out() {
 /// four classes, `storage_in` answers each format's own class, glTexImage2D
 /// and glTexStorage2D raise nothing, and a texture colour attachment is made
 /// without error; its status is INCOMPLETE_ATTACHMENT until the GL core's
-/// `integer_texture_surface` has rows for the classes (item gl-r32-surface).
+/// `integer_texture_surface` has rows for the classes (RC17).
 #[test]
 fn the_gl_core_stores_the_32_bit_integer_formats_here() {
     use yakogl::gl::es3_formats::find;
@@ -538,8 +538,8 @@ fn the_gl_core_stores_the_32_bit_integer_formats_here() {
                 assert_eq!(glGetError(), GL_NO_ERROR, "0x{internal:x}: the attachment");
                 assert_eq!(
                     glCheckFramebufferStatus(GL_FRAMEBUFFER),
-                    GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
-                    "0x{internal:x}: no surface class yet (gl-r32-surface)"
+                    GL_FRAMEBUFFER_COMPLETE,
+                    "0x{internal:x}: its own surface class (RC17)"
                 );
             }
         });
