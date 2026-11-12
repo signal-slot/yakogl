@@ -416,6 +416,12 @@ pub(crate) mod tests {
         pub(crate) fn uboot_supply_on(blob: Vec<u8>) -> T6 {
             T6::handed_over(blob)
         }
+        /// Every group's suspend buffer sizes as the firmware reports them
+        /// (`csf::tests::Mcu::csg_suspend`).
+        pub(crate) fn with_csg_suspend(mut self, size: u32, protm_size: u32) -> T6 {
+            self.mcu.csg_suspend = (size, protm_size);
+            self
+        }
         /// CLKSEL_CON(158) as given (the PVTPLL bit, a divider, a mux).
         pub(crate) fn with_clock(self, sel158: u32) -> T6 {
             self.soc.borrow_mut().insert(CRU_BASE + clksel_con(158), sel158);

@@ -1144,8 +1144,14 @@ pub(crate) mod tests {
     pub(crate) const VM_TABLES_PA: u64 = 0x1048_0000;
     const VM_PA: u64 = 0x1100_0000;
     const VM_BYTES: u64 = VA_END - VA + QUEUE_VM_BYTES;
+    /// The queue's AS0 backing: 1 MiB, as the probe's (the user pages and
+    /// the two suspend buffers take 64 KiB at the board's sizes).
     pub(crate) const QUEUE: McuBacking =
-        McuBacking { va: QUEUE_MCU_VA, pa: 0x1080_0000, cpu: MEM + 0x0500_0000, size: 0x2000 };
+        McuBacking { va: QUEUE_MCU_VA, pa: 0x1080_0000, cpu: MEM + 0x0500_0000, size: 0x10_0000 };
+    /// CSG 0's `suspend_size` and `protm_suspend_size` as the board's
+    /// firmware reports them (the first Z4 run, issue #4515): 25600 bytes
+    /// each, 7 pages rounded up.
+    pub(crate) const BOARD_SUSPEND_SIZE: u32 = 25600;
     /// The synthetic frame's group VM: the 2 MiB, then the queue's 8 KiB.
     const SYNTH_REGIONS: [Region; 2] = [
         Region { va: VA, size: VA_END - VA, mapping: Mapping::User },
@@ -1230,7 +1236,9 @@ pub(crate) mod tests {
     /// VA): the heap writes it through pointers. Knobs: `never_complete`
     /// ignores doorbell 1, `gpu_id` replaces `GPU_ID`. The identity
     /// registers Z3's model leaves at 0 read as the board's: `AS_PRESENT`
-    /// 0xff, `TILER_PRESENT` 1, `L2_FEATURES` 0x07120306.
+    /// 0xff, `TILER_PRESENT` 1, `L2_FEATURES` 0x07120306; and the firmware
+    /// reports CSG 0's suspend sizes as the board's does,
+    /// [`BOARD_SUSPEND_SIZE`] each.
     pub(crate) struct Z4 {
         pub(crate) t6: T6,
         rams: Vec<(u64, Ram)>,
@@ -1263,7 +1271,7 @@ pub(crate) mod tests {
         }
         fn with_rams(blob: Vec<u8>, rams: Vec<(u64, Ram)>, target_va: u64) -> Z4 {
             Z4 {
-                t6: T6::handed_over(blob),
+                t6: T6::handed_over(blob).with_csg_suspend(BOARD_SUSPEND_SIZE, BOARD_SUSPEND_SIZE),
                 rams,
                 target_va,
                 log: RefCell::new(vec![]),
@@ -1515,7 +1523,7 @@ pub(crate) mod tests {
         // group VM: L0, L1, L2 and one L3 for the frame's 2 MiB, one for the
         // ring and sync object after it
         assert_eq!((o.as0_tables_used, o.vm_tables_used), (8, 5));
-        assert_eq!((o.suspend_size, o.protm_suspend_size), (0, 0));
+        assert_eq!((o.suspend_size, o.protm_suspend_size), (BOARD_SUSPEND_SIZE, BOARD_SUSPEND_SIZE));
         // the heap where the frame names it, a 64-byte slot (L2 line 2^6)
         assert_eq!(
             (o.heap_ctx, o.heap_chunk, o.heap_chunk_size, o.heap_stride),
@@ -1560,6 +1568,19 @@ pub(crate) mod tests {
         let t = Tables { pages: &mut pool, pa: TABLES_PA, used: o.as0_tables_used as usize };
         assert_eq!(t.walk(u64::from(QUEUE_MCU_VA) + 0x1008).pa, Some(QUEUE.pa + 0x1008));
         assert_eq!(t.walk(0x0400_0000).pa, Some(o.fw.shared_pa[0] as u64));
+        // the suspend buffers after the user pages, 7 pages each (25600
+        // bytes rounded up), cached; nothing after them; CSG 0 given both
+        let (susp, protm) = (QUEUE_MCU_VA + 0x2000, QUEUE_MCU_VA + 0x9000);
+        for va in [susp, susp + 0x6ff8, protm, protm + 0x6ff8] {
+            let w = t.walk(u64::from(va));
+            assert_eq!(w.pa, Some(QUEUE.pa + u64::from(va - QUEUE_MCU_VA)), "{va:#x}");
+        }
+        assert_eq!(t.walk(u64::from(protm) + 0x7000).pa, None);
+        let csg_in = |f: usize| z.w64(CSG_IN + f);
+        assert_eq!(
+            (csg_in(offset_of!(CsgInput, suspend_buf)), csg_in(offset_of!(CsgInput, protm_suspend_buf))),
+            (u64::from(susp), u64::from(protm))
+        );
         // the order: AS1's tables, its UPDATE, the group's doorbell, the
         // stream's doorbell
         let as1 = GPU + mmu_as(GROUP_AS);
@@ -1620,9 +1641,9 @@ pub(crate) mod tests {
             // the chunk.
             as0_tables_used: 8,
             vm_tables_used: 10,
-            // model-only: the board's firmware reports CSG 0's sizes
-            suspend_size: 0,
-            protm_suspend_size: 0,
+            // the board's firmware's sizes (measured), which the model reports
+            suspend_size: BOARD_SUSPEND_SIZE,
+            protm_suspend_size: BOARD_SUSPEND_SIZE,
             // the heap: the trace's context, the file's chunk, 2 MiB, a 64-byte slot
             heap_ctx: 0x8000_0001_5000,
             heap_chunk: 0x8000_00a0_0000,
@@ -1997,7 +2018,8 @@ pub(crate) mod tests {
             &mut |_| {},
             &mut GpuUp::default(),
         );
-        assert_eq!((o.step, o.refusal, o.detail), (STEP_QUEUE_MEM, 1, 0x2000));
+        // the user pages and both suspend buffers: 8 KiB + 2 x 28 KiB
+        assert_eq!((o.step, o.refusal, o.detail), (STEP_QUEUE_MEM, 1, 0x1_0000));
         // a queue page over a firmware section: AS0 refuses the map
         let mut pool = vec![[0u64; ENTRIES]; 16];
         let mut vm_pool = vec![[0u64; ENTRIES]; 8];

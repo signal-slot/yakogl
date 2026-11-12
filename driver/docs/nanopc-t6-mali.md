@@ -201,7 +201,7 @@ expects):
 | `JOB_INT_RAWSTAT` bit 31 | rises within 1 s of `MCU_CONTROL` = 2; `MCU_STATUS` then 1 |
 | GLB `version` | 0x01050000 = **1.5.0**, the image header's version hash; `features` 0, `instr_features` 0x71 (the board's dmesg under panthor, read 2026-10-26: "CSF FW using interface v1.5.0, Features 0x0 Instrumentation features 0x71"; the image's control block holds the same 0 and 0x71 before boot) |
 | GLB input / output | 0x04002000 / 0x04006000; 8 groups, stride 0xa0 (the image's values; the firmware may rewrite them) |
-| CSG 0 | input 0x04003000, output 0x04007000, 8 streams of stride 0xc; `suspend_size` and `protm_suspend_size` 24577..28672 (the 7-page buffers panthor allocates, above) |
+| CSG 0 | input 0x04003000, output 0x04007000, 8 streams of stride 0xc; `suspend_size` and `protm_suspend_size` 25600 each (measured by Z4's first run, issue #4515; the 7-page buffers panthor allocates, above) |
 | CS 0 of CSG 0 | input 0x04003400, output 0x04007200; `features`: work registers 96 (`cs_reg_count`, measured under panthor), scoreboards 8 |
 | Written | `core_en_mask` 0x50005; `poweroff_timer` 235, `idle_timer` 19 (24 MHz ticks of 1024); `progress_timer` 0x271000; `ack_irq_mask` 0x0400050e; `req` 0x40e |
 | Acknowledged | `CFG_ALLOC_EN`, `CFG_POWEROFF_TIMER`, `CFG_PROGRESS_TIMER` within 100 ms; then **`PING`** (req bit 8 toggled, ack bit 8 follows) within 100 ms |
@@ -2447,7 +2447,7 @@ and a different board value is not a finding. The record is
 | `l2_features` | 0x07120306 | board-dependent |
 | `as0_tables_used` | 8 (Z3's tables and one L3 for the queue's pages) | board-dependent (Z3's count plus 1: 10 on the board's file) |
 | `vm_tables_used` | 10 | pinned (the group VM's L0; L1, L2 and three L3 for the 4 GiB block (queue, arenas, target); L1, L2 and two L3 for the kernel range (pool, chunk)) |
-| `suspend_size`, `protm_suspend_size` | 0, 0 | board-dependent (the firmware reports CSG 0's sizes) |
+| `suspend_size`, `protm_suspend_size` | 25600, 25600 | pinned (measured: the board's firmware reports them, issue #4515; the model reports the same, so the host test maps both buffers, 7 pages each, after the user pages) |
 | `heap_ctx` | 0x0000800000015000 | pinned (`HEAP_CTX_VA`, `HEAP_SET`'s operand) |
 | `heap_chunk` | 0x0000800000a00000 | pinned |
 | `heap_chunk_size` | 2097152 (2 MiB) | pinned |
@@ -2508,7 +2508,7 @@ carry them:
 
 ```
 t6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000
-t6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used {d} vm_tables_used 10 suspend_size 0 protm_suspend_size 0
+t6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used {d} vm_tables_used 10 suspend_size 25600 protm_suspend_size 25600
 t6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64
 t6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000011, acked in {d}/{d} us
 t6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000080 seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us
@@ -2528,6 +2528,7 @@ number: the verdict adds the first four and compares the sum with `{@P}`.
 
 **Pinned**, written out above and compared exactly: `step`, `refusal`
 and `detail` 0 (Z4a: a stopped run differs here); `vm_tables_used` 10;
+`suspend_size` and `protm_suspend_size` 25600;
 `heap_ctx` 0x0000800000015000, the heap chunk 0x0000800000a00000,
 `chunk_size` 2097152, stride 64; the CSG 0 request and acknowledge words
 0x00000011, CS 0's request 0x00000511 and acknowledge 0x00000011; `insert` and `extract` 0x80, `seqno`
@@ -2543,11 +2544,9 @@ Where the verdict and the prediction table above differ in strength
 (reported, the table is not changed): the table pins `sync_updates` 1,
 `cleared` 0 0 0 and the red and blue counts at 2048 each, while the
 verdict checks them for form only, so read them against the table by
-eye; the table calls `suspend_size` and `protm_suspend_size`
-board-dependent, while the verdict writes both as 0 (and `AS_PRESENT`
-0x000000ff, `L2_FEATURES` 0x07120306 as Z1 measured them): a board that
-reports other values makes Z4b differ, a finding to record, not a defect
-of the verdict. Every pinned value in the list above agrees with the
+eye; the verdict writes `AS_PRESENT` 0x000000ff and `L2_FEATURES`
+0x07120306 as Z1 measured them: a board that reports other values makes
+Z4b differ, a finding to record, not a defect of the verdict. Every pinned value in the list above agrees with the
 table.
 
 **A stopped Z4 run.** The probe prints its record anyway, with the

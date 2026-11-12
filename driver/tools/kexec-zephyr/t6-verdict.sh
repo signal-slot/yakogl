@@ -321,7 +321,7 @@ table_t6_submit() {
 	# Z1 stopped (Z3's step 3): its record follows the Z3 stop line
 	if seen_line '^t6_submit: Z3: rc -?[0-9]+ step 3,'; then table_z1_stop t6_submit; fi
 	e 't6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000' 't6_submit: Z4a:'
-	e 't6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used {d} vm_tables_used 10 suspend_size 0 protm_suspend_size 0' 't6_submit: Z4b:'
+	e 't6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used {d} vm_tables_used 10 suspend_size 25600 protm_suspend_size 25600' 't6_submit: Z4b:'
 	e 't6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64' 't6_submit: Z4c:'
 	e 't6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000011, acked in {d}/{d} us' 't6_submit: Z4d:'
 	e 't6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000080 seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us' 't6_submit: Z4e:'
