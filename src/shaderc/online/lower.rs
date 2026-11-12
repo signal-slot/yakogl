@@ -4285,7 +4285,14 @@ impl<'a> Lower<'_, 'a> {
          * sampler's class. */
         let look_up = matches!(ops.first(), Some(Operand::Sampler { .. }));
         let start = self.instrs.len() as u32;
-        let mut sink = Sink { l: self, out, width, look_up, start };
+        /* each value argument's width, by the type checker */
+        let mut args = [(u32::MAX, 0u8); MAX_BUILTIN_OPERANDS];
+        for (a, o) in args.iter_mut().zip(ops) {
+            if let Operand::Value { src, comps, .. } = *o {
+                *a = (src.val.0, comps);
+            }
+        }
+        let mut sink = Sink { l: self, out, width, look_up, start, args, steps: AVec::new() };
         let lowered = match builtin_call::lower_call(&mut sink, name, ops, want) {
             None if es3 => builtin_call::lower_es3(&mut sink, name, ops),
             r => r,
@@ -8938,9 +8945,43 @@ struct Sink<'s, 'x, 'a> {
     /// The first value of the expansion: a value at or past it is one of
     /// the expansion's own steps.
     start: u32,
+    /// Each value argument and its width.
+    args: [(u32, u8); MAX_BUILTIN_OPERANDS],
+    /// Each step of the expansion and the lanes it holds distinct values
+    /// in: 1 for a step whose lanes all hold one scalar.
+    steps: AVec<'a, (u32, u8)>,
 }
 
 impl Sink<'_, '_, '_> {
+    /// How many lanes of distinct values `alu` over `srcs` makes: the
+    /// widest source's, a reduction's one, `None` where a source's is not
+    /// known. A splat of a one-lane value is one lane, whatever lanes it
+    /// fills; a constant of the expansion's own takes any width.
+    fn distinct(&self, alu: ir::AluOp, srcs: &[Src; 3]) -> Option<u8> {
+        if alu.result_comps(4) == 1 {
+            return Some(1);
+        }
+        let instrs = self.l.instrs.as_slice();
+        let mut t = 0u8;
+        for s in &srcs[..alu.arity()] {
+            let id = s.val.0;
+            let w = match instrs.get(id as usize) {
+                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) if id >= self.start => continue,
+                _ => {
+                    if let Some(&(_, w)) = self.steps.as_slice().iter().find(|x| x.0 == id) {
+                        w
+                    } else if let Some(&(_, w)) = self.args.iter().find(|x| x.0 == id) {
+                        w
+                    } else {
+                        self.l.lanes.as_slice().get(id as usize).copied().filter(|c| (1..=4).contains(c))?
+                    }
+                }
+            };
+            t = t.max(w);
+        }
+        Some(if t == 0 { self.width } else { t })
+    }
+
     /// The width an `Alu` of the expansion over `srcs` records. One lane
     /// when every source that is not a constant of the expansion's own is
     /// a one-lane step of this expansion read lane for lane (the square
@@ -8989,7 +9030,17 @@ impl<'a> builtin_call::Emit<'a> for Sink<'_, '_, 'a> {
             Op::Alu(alu, srcs) => {
                 let w = self.alu_width(alu, &srcs);
                 let comps = op.stated_comps().unwrap_or(0);
-                self.l.push_lanes(op, comps, w)
+                /* `lanes` is exact or 0: a step that fills more lanes than
+                 * it has distinct values (refract's scalar `k` chain, read
+                 * through splats) records 0, not an over-estimate a
+                 * reader could trust (third review S-D) */
+                let t = self.distinct(alu, &srcs);
+                let exact = if t == Some(w) { w } else { 0 };
+                let v = self.l.push_lanes(op, comps, exact);
+                if let Ok(v) = v {
+                    self.steps.push(self.l.a, (v.0, t.unwrap_or(w)))?;
+                }
+                v
             }
             _ => self.l.push_instr(op),
         };
@@ -12550,7 +12601,7 @@ mod value_width_tests {
     /// `op`, in program order.
     fn all_comps_of(m: &ir::Module, op: ir::AluOp) -> std::vec::Vec<u8> {
         let ids = m.instrs.iter().enumerate().filter(|(_, o)| matches!(o, Op::Alu(x, _) if *x == op));
-        ids.map(|(i, _)| m.lanes_of(ValueId(i as u32))).collect()
+        ids.map(|(i, _)| m.lanes_of(ValueId(i as u32)).unwrap_or(0)).collect()
     }
 
     /// What `comps` records for every `Alu` using `op`: the width the
@@ -12591,7 +12642,13 @@ mod value_width_tests {
              varying vec2 v;\n\
              void main(){ gl_FragColor = vec4(smoothstep(0.2, 0.8, v), 0.5, 1.0); }",
         );
-        for op in [ir::AluOp::Fneg, ir::AluOp::Fadd, ir::AluOp::Frcp, ir::AluOp::Fmul, ir::AluOp::Fmax] {
+        /* the steps on the scalar edges alone (`-e0`, `e1 - e0`, its
+         * reciprocal) hold one scalar in every lane: not exact (0, third
+         * review S-D); every step that reads `v` is two lanes */
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fneg), [0]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Frcp), [0]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fadd)[0], 2, "v - e0");
+        for op in [ir::AluOp::Fmul, ir::AluOp::Fmax] {
             assert!(all_comps_of(&l.module, op).iter().all(|&c| c == 2), "{op:?} of smoothstep(vec2) is two lanes");
         }
         let mut b2 = [0u8; 1 << 19];
@@ -12650,7 +12707,12 @@ mod value_width_tests {
             "precision mediump float;\nvarying vec2 a;\nvarying vec2 n;\n\
              void main(){ gl_FragColor = vec4(refract(a, n, 0.5), 0.0, 1.0); }",
         );
-        assert!(all_comps_of(&l.module, ir::AluOp::Fsqrt).iter().all(|&c| c == 2), "refract's root of k");
+        /* refract's k chain holds one scalar in every lane (Mesa: a scalar
+         * `k`); two lanes would be an over-estimate a consumer could trust,
+         * one lane would say lane 1 is not there: not exact, 0 (third
+         * review S-D); its final vector `Ffma` and select are two lanes */
+        assert!(all_comps_of(&l.module, ir::AluOp::Fsqrt).iter().all(|&c| c == 0), "refract's root of k");
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Ffma), [2]);
         let mut b3 = [0u8; 1 << 19];
         let l = ir(
             &mut b3,

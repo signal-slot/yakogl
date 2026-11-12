@@ -348,14 +348,15 @@ Mali back end, not in the shared front end.
   `Module::lanes_of`: `comps` keeps what the other back ends read
   before, because the PowerVR selector computes the lanes `comps` says
   and recording them in `comps` moved its words (`pow` of a `const`
-  exponent; lower.rs `powervr_word_pins`). `lanes` is exact where a step
-  reads a one-lane value lane for lane (`length`'s square root of its
-  dot). It over-estimates `refract`'s scalar `k` chain: those steps read
-  `splat(dot)`, so every lane holds the scalar and a later step reads
-  `sqrt(k)` lane for lane; recording one lane would say those lanes do
-  not exist. Mesa has a scalar `k`; a precision back end that tells
-  scalar lanes apart (the late rule) must not take `lanes` as a scalar
-  count there, or must refuse `refract`.
+  exponent; lower.rs `powervr_word_pins`). `lanes` is exact or 0, and
+  `lanes_of` answers `None` for 0. It is exact where a step reads a
+  one-lane value lane for lane (`length`'s square root of its dot). A
+  step that fills more lanes than it has distinct values records 0:
+  `refract`'s scalar `k` chain (it reads `splat(dot)`, so every lane holds
+  the scalar, and a later step reads `sqrt(k)` lane for lane, so one lane
+  would say those lanes do not exist) and `smoothstep`'s scalar edges.
+  Mesa has a scalar there; a precision back end that tells scalar lanes
+  apart (the late rule) gets `None` and refuses.
 - The cost they see: two more arena slices per compile (one byte per
   instruction, one per local) in the shared scratch arena (`store.rs`
   `with_scratch`). A shader near the arena's limit could meet
