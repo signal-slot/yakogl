@@ -35,7 +35,9 @@
 //! the shape nir_lower_indirect_derefs_to_if_else_trees and
 //! `nir_vector_extract` give them (docs/notes/mali-indexed-locals.md).
 //! The ladders are lower.rs's, which the four back ends share; only this
-//! one rewrites them.
+//! one rewrites them. After them, NIR's rules on a compare with `-0.0`
+//! (`Tree::neg_zero_compares`), which both stages' builders would see too
+//! late: they fold the constant first.
 //!
 //! The IR keeps what these passes need: a local, a uniform and an input
 //! are loads at each read (GLSL's variable dereferences), a value with one
@@ -149,6 +151,7 @@ pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<R
     t.rebalance()?;
     t.reassociate()?;
     t.negneg();
+    t.neg_zero_compares();
     if !t.changed && trees.is_none() {
         return Ok(None);
     }
@@ -1530,6 +1533,85 @@ impl Tree<'_, '_> {
         if any {
             self.changed = true;
             self.count();
+        }
+    }
+}
+
+impl Tree<'_, '_> {
+    /// The rules of nir_opt_algebraic.py on a compare with `-0.0`
+    /// (:771-776): `flt` and `fge` take `0.0` on either side, `feq(-0.0,
+    /// a)` is `feq(a, 0.0)` and `fneu(a, -0.0)` is `fneu(0.0, a)`, each
+    /// matched both ways round (`feq` and `fneu` are commutative). They
+    /// fire in the first `nir_opt_algebraic` after the constant is folded
+    /// (`fneg(0.0)` is a GLSL `-0.0`), before any back end rule sees the
+    /// compare, so here on the IR, which the vertex and the fragment
+    /// builders both read. Measured: `if (v.x < -0.0) discard;` is
+    /// `DISCARD.f32.lt r0, 0x0`, `-0.0 == v.x` is `DISCARD.f32.eq r0^.h0,
+    /// 0x0` (tools/mali/testdata/negzero_*). The IR's `Fle(a, b)` is NIR's
+    /// `fge(b, a)`, so it takes the `fge` rule.
+    fn neg_zero_compares(&mut self) {
+        let n = self.instrs.len();
+        let mut any = false;
+        for i in 0..n {
+            let IrOp::Alu(op @ (AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne), mut s) = self.instrs[i] else {
+                continue;
+            };
+            let w = usize::from(self.comps[i]).clamp(1, 4);
+            let mut zero = [false; 2];
+            for k in 0..2 {
+                if let Some(z) = self.plus_zero(s[k], w) {
+                    s[k] = z;
+                    zero[k] = true;
+                }
+            }
+            if zero == [false; 2] {
+                continue;
+            }
+            let swap = match op {
+                AluOp::Feq => zero == [true, false],
+                AluOp::Fne => zero == [false, true],
+                _ => false,
+            };
+            if swap {
+                s.swap(0, 1);
+            }
+            self.instrs[i] = IrOp::Alu(op, s);
+            any = true;
+        }
+        if any {
+            self.changed = true;
+            self.count();
+        }
+    }
+
+    /// `s`'s `w` lanes read as `+0.0` where they are `-0.0`: an `fneg` of
+    /// a constant zero read through (the GLSL `-0.0`), or a constant whose
+    /// lanes are `-0.0` and which only compares read, made `+0.0` in place.
+    /// `None`: a lane read is not `-0.0`.
+    fn plus_zero(&mut self, s: Src, w: usize) -> Option<Src> {
+        let lanes = |v: &[u32; 4], sw: &[u8; 4], k: u32| sw[..w].iter().all(|&c| v[c as usize & 3] == k);
+        match *self.instrs.get(s.val.0 as usize)? {
+            IrOp::Alu(AluOp::Fneg, [c, ..]) => {
+                let IrOp::ConstF32(v) = *self.instrs.get(c.val.0 as usize)? else { return None };
+                let swizzle = core::array::from_fn(|i| c.swizzle[s.swizzle[i] as usize & 3]);
+                lanes(&v, &swizzle, 0).then_some(Src { val: c.val, swizzle })
+            }
+            IrOp::ConstF32(v) if lanes(&v, &s.swizzle, 0x8000_0000) => {
+                let compares_only = self.instrs.iter().all(|op| match *op {
+                    IrOp::Alu(AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne, _) => true,
+                    o => {
+                        let mut reads = false;
+                        o.for_each_src(|x| reads |= x.val == s.val);
+                        !reads
+                    }
+                });
+                if !compares_only {
+                    return None;
+                }
+                self.instrs[s.val.0 as usize] = IrOp::ConstF32(v.map(|x| if x == 0x8000_0000 { 0 } else { x }));
+                Some(s)
+            }
+            _ => None,
         }
     }
 }
