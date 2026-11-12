@@ -365,6 +365,50 @@ fn optee_close_bytes() {
 }
 
 #[test]
+fn optee_data_page_holds_a_whole_mailbox() {
+    // ST's SCP-firmware writes a reply of up to the channel's mailbox, 128
+    // bytes (config_all.c:690), whatever the size of our output memref
+    // (mod_msg_smt.c:166-178, :192-198, :302): the reply buffer is that long,
+    // inside the registered page, after the request.
+    assert_eq!(DATA_MAX, 128);
+    assert!(DATA_TX + DATA_MAX <= DATA_RX);
+    assert!(DATA_RX + DATA_MAX <= PAGE);
+    assert_eq!(DATA_MAX, scmi::MAX_MSG);
+    // Cookie 0 is OP-TEE's transient mappings' (thread_optee_smc.c:244,
+    // msg_param.c:78) in the same list a cookie lookup walks.
+    assert_ne!(SHM_COOKIE, 0);
+}
+
+#[test]
+fn optee_process_refuses_a_request_without_header() {
+    // mod_msg_smt.c:149-150 takes the payload size as the request's less 4
+    // unchecked: nothing shorter than the header reaches OP-TEE.
+    let mut shm = Shm::new();
+    let mut c = opened(&mut shm, vec![]);
+    let mut rx = [0u8; scmi::MAX_MSG];
+    assert_eq!(c.process(&[], &mut rx), Err(Error::TooShort));
+    assert_eq!(c.process(&[0; DATA_MIN - 1], &mut rx), Err(Error::TooShort));
+    assert_eq!(Error::TooShort.code(), 0x105);
+    assert_eq!(c.smc.calls.len(), 4);
+    assert!(!c.smc.log.iter().any(|l| matches!(l, Logged::Req(_))));
+}
+
+#[test]
+fn optee_reply_the_server_never_wrote() {
+    // A channel that is busy or not ready drops the message and returns
+    // success (mod_msg_smt.c:286-296, arch_main.c:88-106); the pseudo-TA then
+    // reports the output memref at the size we gave (scmi.c:170-174): 0x80
+    // bytes of the cleared buffer come back, header 0, which no request has.
+    let mut shm = Shm::new();
+    let mut frame = hex(INVOKE_PERF_LEVEL_GET_REPLY);
+    wr64(&mut frame, 96 + 16, DATA_MAX as u64);
+    let mut c = opened(&mut shm, vec![reply_bytes(frame)]);
+    let mut rx = [0xa5u8; scmi::MAX_MSG];
+    assert_eq!(c.process(&hex(REQ_PERF_LEVEL_GET), &mut rx), Ok(DATA_MAX));
+    assert!(rx.iter().all(|&b| b == 0));
+}
+
+#[test]
 fn optee_rpc_foreign_intr_resumes() {
     let mut shm = Shm::new();
     let intr = [0xffff_0004, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77];

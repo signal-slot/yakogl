@@ -137,12 +137,23 @@ pub const fn arg_size(n: usize) -> usize {
 /// (`core/include/kernel/thread.h:35`).
 pub const RPC_ARG_PARAMS: usize = 4;
 
-/// The cookie the data page is registered under.
+/// The cookie the data page is registered under. Never 0: OP-TEE registers
+/// the transient mappings of every argument page and page list under cookie
+/// 0 in the same list (`thread_optee_smc.c:244`, `msg_param.c:78`), and a
+/// lookup by cookie takes the first match (`mobj_dyn_shm.c:359-368`).
 pub const SHM_COOKIE: u64 = 1;
 /// Offsets in the data page: the SCMI request, the reply buffer.
 pub const DATA_TX: usize = 0;
 pub const DATA_RX: usize = 0x80;
+/// The longest request and reply: the channel's mailbox, 128 bytes on the
+/// STM32MP2 (`config_all.c:690` of ST's SCP-firmware product). The server
+/// writes its reply without looking at the size of our output buffer
+/// (`mod_msg_smt.c:166-178`, `:192-198`, `:302`), so the reply buffer must
+/// hold a whole mailbox.
 pub const DATA_MAX: usize = 0x80;
+/// The shortest request: the SCMI header. The server takes the payload's
+/// size as the request's less 4 without a check (`mod_msg_smt.c:149-150`).
+pub const DATA_MIN: usize = 4;
 
 /// RPC requests one call answers before it gives up.
 pub const MAX_RPC: u32 = 4096;
@@ -252,6 +263,8 @@ pub enum Error {
     NotOpen,
     /// The SCMI request is longer than [`DATA_MAX`].
     TooLong,
+    /// The SCMI request is shorter than [`DATA_MIN`] (no header).
+    TooShort,
 }
 
 impl Error {
@@ -267,6 +280,7 @@ impl Error {
             Error::Malformed => 0x102,
             Error::NotOpen => 0x103,
             Error::TooLong => 0x104,
+            Error::TooShort => 0x105,
         }
     }
 }
@@ -588,6 +602,9 @@ impl<'a, S: Smc> Client<'a, S> {
         }
         if tx.len() > DATA_MAX {
             return Err(Error::TooLong);
+        }
+        if tx.len() < DATA_MIN {
+            return Err(Error::TooShort);
         }
         self.smc.log(&Event::ScmiRequest(tx));
         self.shm.data[DATA_TX..DATA_TX + tx.len()].copy_from_slice(tx);
