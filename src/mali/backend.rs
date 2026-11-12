@@ -2170,6 +2170,7 @@ pub(super) fn texture_of(
                 wrap_s: bind.map_or(WrapMode::REPEAT, |t| wrap(t.wrap_s)),
                 wrap_t: bind.map_or(WrapMode::REPEAT, |t| wrap(t.wrap_t)),
                 wrap_r: bind.map_or(WrapMode::REPEAT, |t| wrap(t.wrap_r)),
+                compare: bind.and_then(compare_of),
             });
         }
     };
@@ -2302,7 +2303,18 @@ fn sampled(
         wrap_s: wrap_of(t.wrap_s),
         wrap_t: wrap_of(t.wrap_t),
         wrap_r: wrap_of(t.wrap_r),
+        compare: compare_of(t),
     }
+}
+
+/// The compare function of `t`'s sampler in GL's order
+/// ([`frame::SampledTexture::compare`]): `compare_op`'s bits 0-2 are GL's
+/// code less GL_NEVER, which is the `Func` value; bit 4 is GL_NONE, no
+/// compare (src/gl/draw.rs `compare_op`). Bit 3, a fixed-point depth whose
+/// reference GL clamps to [0, 1], is not read: the GL core keeps every depth
+/// texture as R32F texels, and no reference pins that clamp yet.
+fn compare_of(t: &backend::GlesTextureBind) -> Option<Func> {
+    (t.compare_op & 16 == 0).then_some(Func(u32::from(t.compare_op & 7)))
 }
 
 /// A 3D texture ([`SliceGrid`]) and the levels its binding names: each

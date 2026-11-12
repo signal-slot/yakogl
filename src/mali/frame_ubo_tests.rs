@@ -113,6 +113,7 @@ fn texture() -> SampledTexture {
         wrap_s: WrapMode::REPEAT,
         wrap_t: WrapMode::REPEAT,
         wrap_r: WrapMode::REPEAT,
+        compare: None,
     }
 }
 

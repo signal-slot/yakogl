@@ -87,8 +87,9 @@ r too) and `sampler2DArray` an 8x8x3 RGBA8 array (case 46, GL_NEAREST).
 halving; the array 2 layers) with GL_NEAREST_MIPMAP_NEAREST (case 206). A
 program without that first line takes the ES 2.0 path above unchanged.
 `usampler2D` / `isampler2D` get a 2x2 RGBA8UI / RGBA8I texture (nearest),
-`sampler2DShadow` gl_test case 218's 4x4 DEPTH_COMPONENT32F texture (nearest,
-GL_COMPARE_REF_TO_TEXTURE with GL_LESS), and
+`sampler2DShadow` gl_test case 218's 4x4 DEPTH_COMPONENT32F texture under
+GL_COMPARE_REF_TO_TEXTURE, as the case sets it: the first such sampler
+GL_LESS and GL_NEAREST, the next ones GL_GEQUAL and GL_LINEAR, and
 `--uniform-values` sets `int` / `ivecN` uniforms with glUniform*iv (the same
 16*(k+1)+c values, as integers).
 
@@ -130,6 +131,7 @@ GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES = 0x8D41, 0x88F0
 GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT = 0x8D00, 0x8D20
 GL_DEPTH_BUFFER_BIT, GL_STENCIL_BUFFER_BIT = 0x0100, 0x0400
 GL_DEPTH_TEST, GL_STENCIL_TEST, GL_LESS, GL_ALWAYS, GL_KEEP, GL_REPLACE = 0x0B71, 0x0B90, 0x0201, 0x0207, 0x1E00, 0x1E01
+GL_GEQUAL = 0x0206
 GL_BLEND = 0x0BE2
 BLEND_FACTORS = {
     "ZERO": 0, "ONE": 1, "SRC_COLOR": 0x0300, "ONE_MINUS_SRC_COLOR": 0x0301,
@@ -474,17 +476,23 @@ def main():
             what = "a 2x2 %s texture" % ("RGBA8UI" if ty == "usampler2D" else "RGBA8I")
         elif ty == "sampler2DShadow":
             # gl_test case 218's depth texture (4x4 DEPTH_COMPONENT32F) compared
-            # against the reference with GL_LESS (ES 3 path). The program's
-            # bytes do not depend on it (st_program.c:1239 lowers the compare
-            # for ARB programs only); the units the two samplers take do.
+            # against the reference (ES 3 path): u_near with GL_LESS and
+            # GL_NEAREST, u_lin with GL_GEQUAL and GL_LINEAR, which the
+            # samplers' descriptors show (Compare Function, filters). The
+            # program's bytes do not depend on it (st_program.c:1239 lowers
+            # the compare for ARB programs only); the units the two samplers
+            # take do.
             target = GL_TEXTURE_2D
             gl.glBindTexture(target, t)
             depth = (C.c_float * 16)(*[(1 + (x * 7 + y * 5) % 16) / 17.0 for y in range(4) for x in range(4)])
             gl.glTexImage2D(target, 0, GL_DEPTH_COMPONENT32F, 4, 4, 0, GL_DEPTH_COMPONENT, GL_FLOAT, depth)
+            first = not any(t2 == ty for _, t2 in samplers[:unit])
+            func, min_filter = (GL_LESS, GL_NEAREST) if first else (GL_GEQUAL, GL_LINEAR)
             gl.glTexParameteri(target, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE)
-            gl.glTexParameteri(target, GL_TEXTURE_COMPARE_FUNC, GL_LESS)
-            min_filter = GL_NEAREST
-            what = "a 4x4 DEPTH_COMPONENT32F texture compared with GL_LESS"
+            gl.glTexParameteri(target, GL_TEXTURE_COMPARE_FUNC, func)
+            mag_filter = min_filter
+            what = "a 4x4 DEPTH_COMPONENT32F texture compared with %s, %s" % (
+                ("GL_LESS", "nearest") if first else ("GL_GEQUAL", "linear"))
         else:
             target = GL_TEXTURE_2D
             gl.glBindTexture(target, t)
@@ -492,7 +500,7 @@ def main():
             gl.glTexImage2D(target, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, texels)
             min_filter = GL_NEAREST
             what = "a 2x2 RGBA8 texture"
-        if ty not in ("sampler3D", "sampler2DArray"):
+        if ty not in ("sampler3D", "sampler2DArray", "sampler2DShadow"):
             mag_filter = GL_NEAREST
         for pname, value in ((GL_TEXTURE_MIN_FILTER, min_filter), (GL_TEXTURE_MAG_FILTER, mag_filter),
                              (GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE), (GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)):
