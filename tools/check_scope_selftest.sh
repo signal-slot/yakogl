@@ -13,8 +13,8 @@ cd "$(dirname "$0")/.." || exit 2
 # change every plan here (the narrowed plan below sets it itself).
 unset YAKOGL_CHECK_CONFIGS
 # The same for MESA_V3D_TREE: with a built Mesa tree, check.sh plans three V3D
-# Mesa rows instead of four (no "build v3d mesa reference"), so every row
-# count below would be one less on a host that sets it.
+# Mesa rows instead of four (no "build v3d mesa reference"), so every plan
+# below would lose that row on a host that sets it.
 unset MESA_V3D_TREE
 # And MESA_PAN_TREE: the pan_shc row is a gap without it and a plan row with
 # it; the plans below are made without it.
@@ -29,10 +29,13 @@ export CONNECTED_DEPS_DIR=$PWD/build/check/no-layout
 unset CCFARM_DEPS_DIR
 fails=0
 checks=0
+# every scope a path below maps to; a row's `scope` line may name only these
+selectable=" all local licence "
 want() {
   local path=$1 scope=$2 got
   checks=$((checks + 1))
   got=$(tools/check.sh --scope-of "$path" | cut -d' ' -f2-)
+  selectable+="$got "
   if [ "$got" != "$scope" ]; then
     echo "FAIL $path: scope '$got', expected '$scope'"
     fails=$((fails + 1))
@@ -120,7 +123,7 @@ want docs/notes/x.md docs
 # (plan mode runs nothing, so the directory only has to exist).
 # The same for the glmark2 tree (the corpus row needs GLMARK2_SRC/src).
 # MESA_V3D_TREE is emptied (PLAN_V3D_TREE overrides it): set, it replaces the v3d Mesa reference build row
-# with nothing, so the plan's row count would depend on the host.
+# with nothing, so the plan's rows would depend on the host.
 mkdir -p build/check/plan-ws/zephyr build/check/plan-gm2/src
 plan() {
   ZEPHYR_WS=$PWD/build/check/plan-ws GLMARK2_SRC=$PWD/build/check/plan-gm2 MESA_V3D_TREE=${PLAN_V3D_TREE:-} \
@@ -132,8 +135,29 @@ expect() {
   checks=$((checks + 1))
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
+# same <label> <want lines> <got lines>: the two sets of lines are equal; a
+# failure names each line one side lacks. The checks below compare rows by
+# name, not by a count: a row added anywhere edits no number here.
+same() {
+  local label=$1 d
+  checks=$((checks + 1))
+  d=$(diff <(printf '%s\n' "$2" | grep . | sort) <(printf '%s\n' "$3" | grep . | sort) | grep '^[<>]')
+  [ -z "$d" ] || {
+    echo "FAIL $label:"
+    printf '%s\n' "$d" | sed 's/^< /  missing: /; s/^> /  extra:   /'
+    fails=$((fails + 1))
+  }
+}
+# rows <kinds> <plan output>: the names of the rows printed as one of <kinds>
+rows() { printf '%s\n' "$2" | grep -E "^($1) " | cut -c7-; }
 out=$(plan docs/standalone-boot.md)
-expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 226 skipped \(--changed HEAD, scopes: docs' "$out"
+docs_plan=$out
+expect "docs: the summary" '^check.sh: [0-9]+ ok, 0 failed, 0 gap\(s\).*skipped \(--changed HEAD, scopes: docs' "$out"
+# A docs change reaches the rows every change reaches and no other: the
+# shared rows (scope all) and the licence audit (scope licence, any path).
+same "docs: only the shared rows" "cargo fmt --check
+sha256  third_party files are the upstream files (UPSTREAM)
+tools   licence audit (SPDX header or allowlist row for every tracked file)" "$(rows 'plan|gap' "$out")"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -208,7 +232,7 @@ expect "gl_test: its cc arms" '^plan  cc      gl_test.c ' "$out"
 expect "gl_test: the shader header" '^plan  gen     gl_test_shaders' "$out"
 expect "gl_test: no host suite" '^skip  test    host-test,gpu-powervr$' "$out"
 out=$(plan "src/gl/draw.rs docs/x.md")
-expect "a shared layer: every row" '^check.sh: [12][0-9][0-9] ok, 0 failed, [0-9] gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)' "$out"
+expect "a shared layer: every row" '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)' "$out"
 expect "a shared layer: the path is named" '^      every row: src/gl/draw.rs$' "$out"
 # The tier tables are made exactly when a selected row reads them (#127):
 # with CONFIGS narrowed to a set without `precompiled-shaders`, the
@@ -248,25 +272,29 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables 
 # the control: the full plan keeps its rows, the table row once, before the
 # first CONFIGS row that reads the tables
 out=$(plan src/gl/draw.rs)
-# 230 rows: ok plus gaps, because a row whose tool this host lacks is a gap
-# here and a plan row on the gate host; the sum is the same on both. (Seven
-# more for the direct boot: am62p-mkboot.py, the second-stage vectors, the
-# yakogl-boot-stage2 clippy, test and softfloat rows, boot_stage2.h's layout
-# pins and the direct-boot images; one more for the Mali firmware row; two
-# for the partial render's load shader, tools/pco_shc/spm_load: its decode
-# row and its regenerate-and-compare row, a gap without PCO_SHC; one for
-# t6_fw's image, a gap without the Mali firmware; one for the v3d71 host checks, tools/v3d/check71.sh;
-# one for the STM32MP257F-DK runner's self-test, tools/board_stm32mp2_selftest.sh;
-# two for the NanoPC-T6 dEQP runner's and kmsg classifier's self-tests,
-# tools/cts/mali-deqp-selftest.sh and mali-kmsg-selftest.sh; three for the Mali glmark2
-# build, tally and symbols self-tests; two for the rpi_5
-# probes: their images and the fdt_walk host test; one more for the dEQP
-# GLES3 corpus line, a gap here, where the plans run with no layout; one for
-# the NanoPC-T6 verdict tool's self-test, driver/tools/kexec-zephyr/t6-verdict-test.sh.)
+# Every row is in it, as a plan row or a gap (a row whose tool this host
+# lacks is a gap here and a plan row on the gate host): none is skipped, and
+# its rows are the rows the docs plan above prints, planned or skipped. So a
+# row that a selection drops instead of skipping, or that is printed only
+# when its scope is selected, is named here. The one exception is the row
+# that makes the tier tables: it is planned only before a selected reader
+# (uses_tier_tables; "docs: no table row" below).
+same "full plan: no row skipped" "" "$(rows skip "$out")"
+same "full plan: the rows of every plan" \
+  "$(rows 'plan|gap|skip' "$docs_plan")
+gen     precompiled tables for the tier configurations" "$(rows 'plan|gap' "$out")"
+# Every scope a row names is one a path selects: a row under a scope that no
+# path maps to (scope_of_path) runs in the full plan only, never for a change
+# to its own files. The scopes reached through config_scopes are its GPUs and
+# precompile, named literally here as well.
 checks=$((checks + 1))
-line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
-total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
-[ "$total" = 230 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 230:$line"; fails=$((fails + 1)); }
+bad=$(grep -nE '^[[:space:]]*scope( |$)' tools/check.sh | while IFS=: read -r n rest; do
+  for w in $rest; do
+    case "$w" in scope | *[\$\"\(\)]*) continue ;; esac
+    case "$selectable" in *" $w "*) ;; *) echo "  tools/check.sh:$n: scope '$w'" ;; esac
+  done
+done)
+[ -z "$bad" ] || { echo "FAIL row scopes no path selects:"; printf '%s\n' "$bad"; fails=$((fails + 1)); }
 count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
 order "full plan: the tables before their first reader" "$gen" \
   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
