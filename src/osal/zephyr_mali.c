@@ -280,8 +280,10 @@ static void z_shutdown(void)
 
 	note_restart();
 	printk("osal(mali): shutdown: %s (%d)\n",
-	       rc == 0 ? "group stopped and terminated" :
-	       rc == -EINVAL ? "no group to end" : "stop or terminate refused", rc);
+	       rc == 0 ? "group stopped and terminated, GPU caches cleaned" :
+	       rc == -ETIMEDOUT ? "group stopped and terminated, GPU cache clean refused: memory kept" :
+	       rc == -EINVAL ? "no group to end" :
+	       "stop or terminate refused: the group may still run, memory kept", rc);
 	osal_mali_diag_print();
 }
 

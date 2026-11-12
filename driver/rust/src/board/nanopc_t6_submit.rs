@@ -1468,6 +1468,13 @@ pub(crate) mod tests {
         /// CS request is acknowledged (a stop or terminate that never
         /// completes).
         pub(crate) deaf: Cell<bool>,
+        /// `GPU_INT_RAWSTAT` reads with `CLEAN_CACHES_COMPLETED` set even
+        /// after a clear: a cache flush refuses (`FlushBitStuck`).
+        pub(crate) flush_stuck: Cell<bool>,
+        /// CSG start requests the firmware does not acknowledge.
+        pub(crate) deaf_to_start: Cell<bool>,
+        /// Terminate requests the firmware still acknowledges; `None`: all.
+        pub(crate) terminates_left: Cell<Option<u32>>,
     }
 
     /// An error the model raises at a `CALL` ([`Z4::fail_at`]).
@@ -1564,6 +1571,9 @@ pub(crate) mod tests {
                 halted: Cell::new(false),
                 sync_error: Cell::new(None),
                 deaf: Cell::new(false),
+                flush_stuck: Cell::new(false),
+                deaf_to_start: Cell::new(false),
+                terminates_left: Cell::new(None),
             }
         }
         /// Raise `f` at the `n`-th `CALL` counted from the model's start
@@ -1646,6 +1656,20 @@ pub(crate) mod tests {
             let rung = self.w(db_req) ^ self.w(db_ack);
             if self.deaf.get() {
                 return;
+            }
+            let csg_state = |at: usize| self.w(at) & CSG_STATE_MASK;
+            let (req_state, ack_state) =
+                (csg_state(CSG_IN + offset_of!(CsgInput, req)), csg_state(CSG_OUT + offset_of!(CsgOutput, ack)));
+            if req_state != ack_state {
+                if req_state == CSG_STATE_TERMINATE {
+                    match self.terminates_left.get() {
+                        Some(0) => return,
+                        Some(n) => self.terminates_left.set(Some(n - 1)),
+                        None => {}
+                    }
+                } else if self.deaf_to_start.get() {
+                    return;
+                }
             }
             self.ack_field(db_req, db_ack, rung);
             if rung & 1 == 0 {
@@ -1846,6 +1870,9 @@ pub(crate) mod tests {
                 _ if a == GPU + mali::GPU_TILER_PRESENT => 1,
                 _ if a == GPU + mali::GPU_L2_FEATURES => 0x0712_0306,
                 _ if a == GPU + mali::GPU_TILER_FEATURES => 0x809,
+                _ if a == GPU + mali::GPU_INT_RAWSTAT && self.flush_stuck.get() => {
+                    self.w(a) | mali::IRQ_CLEAN_CACHES_COMPLETED
+                }
                 _ => self.w(a),
             }
         }

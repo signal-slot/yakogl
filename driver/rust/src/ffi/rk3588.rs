@@ -1385,11 +1385,10 @@ pub unsafe extern "C" fn yd_t6_osal_completed() -> i64 {
     s.0.completed(&osal_hw(), &mut |us| delay(us))
 }
 
-/// `shutdown` ([`crate::board::nanopc_t6_osal::Osal::shutdown`]): 0 when
-/// the group was stopped and terminated, `-EIO` when either end was
-/// refused (the CSG's terminate not acknowledged needs a GPU reset), and
-/// `-EINVAL` when there was nothing to end (not up, already shut down, or
-/// dead).
+/// `shutdown` ([`crate::board::nanopc_t6_osal::Osal::shutdown`]): its
+/// [`crate::board::nanopc_t6_osal::Shutdown::code`] (0, `-EIO` or
+/// `-ETIMEDOUT`), or `-EINVAL` when there was nothing to end (not up,
+/// already shut down, or dead).
 ///
 /// # Safety
 /// As [`yd_t6_osal_submit`].
@@ -1399,11 +1398,7 @@ pub unsafe extern "C" fn yd_t6_osal_shutdown() -> i32 {
     // SAFETY: the caller's contract.
     let s = unsafe { osal() };
     let Some(delay) = s.1 else { return -EINVAL };
-    match s.0.shutdown(&osal_hw(), &mut |us| delay(us)) {
-        Some(e) if e.stop.is_ok() && e.terminate.is_ok() => 0,
-        Some(_) => -EIO,
-        None => -EINVAL,
-    }
+    s.0.shutdown(&osal_hw(), &mut |us| delay(us)).map_or(-EINVAL, |d| d.code())
 }
 
 /// `OSAL_QUERY_MALI_GPU`'s answer into `*out` (`struct osal_mali_gpu`):
