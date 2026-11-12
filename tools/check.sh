@@ -1810,6 +1810,9 @@ step "test    $MALI_CONFIG (--lib mali::, $MALI_TESTS tests: packers and ISA vs 
 # behaviour and the ignored tests of the 4x result (not run).
 step "test    $MALI_CONFIG (tests/es3_msaa_mali.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test es3_msaa_mali
+# The levels and the mip filter the GL core hands the Mali for a 3D texture.
+step "test    $MALI_CONFIG (tests/mali_3d_levels.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test mali_3d_levels
 # src/mali/genxml/v10.rs and v10_cases.rs are what tools/mali/gen_pack_rs.py
 # makes from the vendored v10.xml, byte for byte (third_party/mesa-26.2.1/UPSTREAM,
 # "Used by"); a failing generator prints nothing and so differs too.

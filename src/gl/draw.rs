@@ -4431,6 +4431,32 @@ fn build_common(
                 (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = s;
             }
             (tb.linear_filter, tb.min_linear, tb.mip_filter, tb.mip_levels) = sampling_fields(t);
+            /* The Mali builds a 3D grid with the whole chain it is told of
+             * (docs/notes/mali-3d-levels.md, sections 1 and 4): the GL core
+             * keeps a grid's `levels` at 1, so `sampling_fields` says one
+             * level and no mipmap filter. Here: the contiguous run of levels
+             * the application defined and the core holds, as far as
+             * GL_TEXTURE_MAX_LEVEL, and the filter from the minification
+             * filter. `tb.bytes` stays level 0's; the Mali's `volume_of`
+             * reads the levels after it. The PowerVR's grid keeps one level. */
+            if cfg!(feature = "gpu-mali") && t.grid_cols != 0 && tb.type_ == GLES_TEXTYPE_3D {
+                let cap = (t.max_level as usize + 1).min(super::context::CAP_MIP_LEVELS);
+                let mut n = 0usize;
+                while n < cap
+                    && t.level_defined & (1u16 << n) != 0
+                    && t.level_bad & (1u16 << n) == 0
+                    && (n == 0 || t.level_off[n] != 0)
+                {
+                    n += 1;
+                }
+                tb.mip_levels = n.max(1) as u8;
+                tb.mip_filter = match t.min_filter {
+                    _ if n < 2 => 0,
+                    GL_NEAREST_MIPMAP_LINEAR | GL_LINEAR_MIPMAP_LINEAR => 2,
+                    GL_NEAREST_MIPMAP_NEAREST | GL_LINEAR_MIPMAP_NEAREST => 1,
+                    _ => 0,
+                };
+            }
             /* The PowerVR's native 3D texture (gl::native_vol,
              * pvr_native_3d; docs/notes/pvr-3d-native.md), by the same rules
              * as the 2D array's: the program alone decides (the record's bit
