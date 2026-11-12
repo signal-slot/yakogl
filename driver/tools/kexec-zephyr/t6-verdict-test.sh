@@ -98,6 +98,16 @@ check t6_hello-ap1r-active 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$WOR
 # an image without the clear, or one that found SRE clear: that line missing
 sed 's/^t6: GICv3 CPU interface: ICC_AP1R0_EL1 .*/t6: GICv3 CPU interface: ICC_SRE_EL1 0x0, SRE clear: not touched/' "$D/t6_hello-pass.uart" >"$WORK/sre.log"
 check t6_hello-no-ap1r 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 1 0" t6_hello "$WORK/sre.log"
+
+# T6_ROUTE=uboot (U-Boot's go, t6_hello-uboot-pass: the predicted record,
+# not board output): the T6:G line in place of the GIC EOImode line, so the
+# count is the same. Each route's record judged as the other's names the one line.
+check t6_hello-uboot-pass 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$D/t6_hello-uboot-pass.uart" T6_ROUTE=uboot
+check t6_hello-uboot-as-kexec 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 1 0" t6_hello "$D/t6_hello-uboot-pass.uart"
+check t6_hello-kexec-as-uboot 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 1 0" t6_hello "$D/t6_hello-pass.uart" T6_ROUTE=uboot
+# a T6:G line that names another range differs
+sed 's/0x10000000-0x20000000 cleaned/0x10000000-0x10800000 cleaned/' "$D/t6_hello-uboot-pass.uart" >"$WORK/range.log"
+check t6_hello-uboot-range 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/range.log" T6_ROUTE=uboot
 check t6_gpu-pass 0 'VERDICT t6_gpu PASS' "$GPU 0 0" t6_gpu "$D/t6_gpu-pass.uart"
 # the crash kexec: PD_GPU handed over on, Z1 takes the GPU over (four lines)
 TAKE=4
@@ -294,6 +304,10 @@ rc=0
 bash "$V" t6_nonesuch "$D/t6_mmu-pass.uart" >/dev/null 2>&1 || rc=$?
 runs=$((runs + 1))
 if [ "$rc" = 2 ]; then echo "ok   unknown probe: rc 2"; else echo "FAIL unknown probe: rc $rc (want 2)"; fails=$((fails + 1)); fi
+rc=0
+T6_ROUTE=tftp bash "$V" t6_hello "$D/t6_hello-pass.uart" >/dev/null 2>&1 || rc=$?
+runs=$((runs + 1))
+if [ "$rc" = 2 ]; then echo "ok   unknown route: rc 2"; else echo "FAIL unknown route: rc $rc (want 2)"; fails=$((fails + 1)); fi
 
 if [ "$fails" -eq 0 ]; then
 	echo "t6-verdict-test: $runs ok"
