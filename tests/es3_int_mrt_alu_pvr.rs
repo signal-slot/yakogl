@@ -15,9 +15,14 @@
 //! arithmetic and no GL read-back.
 //!
 //! What holds today: every shape builds, writes pixel outputs 32 and 33
-//! once each, and the float output is packed (RGBA8). What does not: the
-//! integer output is packed like a colour too (unorm8, clamped to [0, 1]),
-//! so its pixel output is 0, not the integer; that test is `#[ignore]`.
+//! once each, and the float output is packed (RGBA8). What does not: under
+//! the default PowerVR variant an integer output beside a float output is
+//! packed as RGBA8 too, so the integer reads 0. This is the known gap RC1
+//! in docs/es3-cts-failures.md (mixed integer and float colour
+//! attachments); the fix is back-end work in src/pvr/backend.rs (plan
+//! #325). The integer test is `#[ignore]`d until that lands, and the
+//! byte-model assertions (PACKED_F, pixel outputs [32, 33]) will then need
+//! updating.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_int_mrt_alu_pvr
@@ -152,7 +157,7 @@ fn int_alu_next_to_float_builds_and_float_lands() {
 /// packs it as a colour, which is 0 for an integer under 2^23 read as a
 /// float.
 #[test]
-#[ignore = "an integer output beside a float one is packed as RGBA8 colour under the default variant: its pixel output holds 0, not the integer"]
+#[ignore = "RC1 (docs/es3-cts-failures.md): mixed integer and float colour outputs are packed as RGBA8, so the integer reads 0"]
 fn int_alu_next_to_float_lands() {
     for (vty, ty, loc, body, bits, want) in SHAPES {
         let src = fragment(vty, ty, loc, body);
