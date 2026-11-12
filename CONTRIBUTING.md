@@ -90,13 +90,13 @@ CI, a review, then the merge. Never push main by hand.
   the artefact" fail (`dep_info_within` compares the physical dep-info paths
   with the logical `$PWD`; `cd -P` at `tools/check.sh:107` is the fix, not
   applied, `docs/notes/gate-symlinked-path.md`).
-- `tools/check.sh --quick` is for the edit loop. It runs 181 of the
-  full plan's 225 rows (counted on 2026-11-12 at main `2a28f992` plus the
-  `t6-verdict.sh` row, with
+- `tools/check.sh --quick` is for the edit loop. It runs 182 of the
+  full plan's 226 rows (counted on 2026-11-12 at main `2a28f992` plus the
+  `t6-verdict.sh` row and the V3D `es3_float_target` row, with
   `YAKOGL_CHECK_PLAN=1`, which lists the rows and runs none; a row whose
   tool or file the host lacks is listed as a gap, and
-  `tools/check_scope_selftest.sh` pins the count, ok plus gaps: 220 ok and
-  5 gaps in the full plan there, 179 ok and 2 gaps for `--quick`). The runs
+  `tools/check_scope_selftest.sh` pins the count, ok plus gaps: 221 ok and
+  5 gaps in the full plan there, 180 ok and 2 gaps for `--quick`). The runs
   below are four rows older (177 rows). Measured on
   2026-11-10 from a fresh clone of `0f020431` at a canonical path on a 4 core
   host with two compiler slots, the layout exported, `lz4` on PATH and the
