@@ -87,6 +87,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 | Vertex array conversion | a buffer array the GPU cannot fetch as it lies (packed 2_10_10_10, `GL_HALF_FLOAT`, `GL_INT` / `GL_UNSIGNED_INT` through `glVertexAttribPointer`) is converted to float32 rows like a client array (`src/gl/draw.rs` `attrib_in_place_layout`); host only, `tests/es3_vertex_arrays.rs` | |
 | `layout(location)` on vertex inputs | `glBindAttribLocation` does not move a qualified input (`src/gl/program.rs` `ExplicitAttribs`), and an unqualified one takes the lowest free run clear of every `layout(location)` (`381b0f09`); host only, `tests/es3_attrib_location.rs`, host dEQP `attribute_location.mixed_max_attributes.*` 24 / 24 | Appendix A, T4 |
 | Typed current vertex value | `glVertexAttrib*` records float, int or uint beside the value, and the `GL_CURRENT_VERTEX_ATTRIB` getters convert as Mesa does (`bd114dcc`); host only, `tests/es3_current_attrib.rs`, host dEQP `state_query.shader` current and vertex-attrib queries 14 / 14 | Appendix A, T1 |
+| Vertex attribute divisors | GC7000UL: the array's own divisor in the vertex-stream state (`0x14680 + 4i`) with `max_instance_divisor` 0xffff, so a mixed-divisor draw is one `DRAW_INSTANCED` with `gl_InstanceID` 0..n-1 (`6c4759ea`, as Mesa etnaviv programs it); host only: the words pinned by `tests/gc_stream_divisor.rs` (`308dcf69`, `256ec05b`), a split draw that reads `gl_InstanceID` refused and counted (`7897e809`), and whether the front end takes a divisor above 1 not measured on a board (gl_test case 221, `bc2f3c34`, built not run) | Appendix A, T6 |
 | Multiple render targets | GL core: the draw-buffer count is the back end's `DRAW_TARGETS` (3 on every GPU); the framebuffer stores 4 colour points | RC14 |
 | PowerVR 2D-array and shadow sampling | built, host only: 2D arrays sampled by layer address (`e160bafb`, switch `pvr_native_array`, default off; the dEQP image flips it with `CONFIG_DEQP_PVR_NATIVE_ARRAY`, `1ddb0cf3`); every ES 3.00 shadow look-up form compiles and a LINEAR sampler over one level compares per texel (`d7b2cf8b`). Not done: mipmap and cube PCF, mirrored-repeat weights, ETC arrays | `docs/es3/pvr-2darray.md`, RC5, RC6 |
 | Texture swizzle and wrap R | the GL core hands both to the back end (`GlesTextureBind::swizzle`, `::wrap_r`, `e4f58cbe`); the V3D fills both (`18027de1`), the PowerVR and GC7000UL do not yet | `docs/es3/texture-host-repro.md` |
@@ -456,16 +457,25 @@ refuses `GL_HALF_FLOAT` and the packed types, and the getters refuse
   `negative_api.vertex_array` indexed-draw cases need transform feedback,
   which is built; they pass.
 - **T6, instancing with `gl_InstanceID` on the PowerVR and the GC7000UL**
-  (open): the 6 `instanced.*.mixed.*` cases. Both take divisor 1 only, so the
-  GL core draws instance by instance and `gl_InstanceID` starts at 0 in every
-  draw; the PowerVR refuses such a draw, and the GC7000UL now refuses it too
-  (host-checked): its online compiler records a program that reads
-  `gl_InstanceID` in `vs_instance_id_reg1`, the field `gc_draw` tests
-  (V0 in `docs/notes/instanceid-per-draw.md`); before that it drew the split
-  wrong, with no refusal and no log line. The six cases still fail on the
-  boards until `gl_InstanceID` is supplied per draw: PowerVR P1, Mesa's
-  PDS `instance_id_modifier` set to the draw's instance, then P3, hardware
-  divisors; GC7000UL V1, the stream divisor.
+  (open): the 6 `instanced.*.mixed.*` cases. The PowerVR takes divisor 1
+  only, so the GL core draws instance by instance and `gl_InstanceID` starts
+  at 0 in every draw; the PowerVR refuses such a draw. The GC7000UL takes a
+  hardware per-stream divisor since V1 (`6c4759ea`): the array's own divisor
+  rides in the vertex-stream state at `0x14680 + 4i` and
+  `max_instance_divisor` is 0xffff, so a mixed-divisor draw reaches the back
+  end as one `DRAW_INSTANCED` with `gl_InstanceID` 0..n-1, as Mesa etnaviv
+  programs it on every HALTI2+ part (this GPU is HALTI5). Host only:
+  `tests/gc_stream_divisor.rs` pins the divisor words (`308dcf69`, the third
+  stream `0x14688` since `256ec05b`), and a draw the core still splits (a
+  divisor above 0xffff) is refused and counted when its program reads
+  `gl_InstanceID` (V0, `7897e809`: the online compiler records it in
+  `vs_instance_id_reg1`, the field `gc_draw` tests). Whether this front end
+  takes a divisor above 1 is not measured: gl_test case 221 `instmix`
+  (`bc2f3c34`), the mixed-divisor draw with each instance's colour read back
+  and the case 141 control, is built and not run
+  (`docs/notes/instanceid-per-draw.md` section 5). T6 stays open with both
+  halves: the PowerVR half (P1, Mesa's PDS `instance_id_modifier` set to the
+  draw's instance, then P3, hardware divisors) and the GC7000UL board check.
   The V3D takes any divisor and is expected to pass.
 - **T7, the i.MX8MP and Pi 4 columns**: their first whole dEQP-GLES3 trees.
 
