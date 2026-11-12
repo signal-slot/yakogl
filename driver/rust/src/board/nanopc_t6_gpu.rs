@@ -46,7 +46,7 @@
 use crate::gpu::mali::{self, Ident, L2On, Reset};
 use crate::ip::{rk806, rockchip_spi};
 use crate::mmio::Mmio;
-use crate::soc::rk3588::{self, ClockRefusal, ClockSet, GpuClock, PdGpuRegs, PdOn, PllOn};
+use crate::soc::rk3588::{self, ClockRefusal, ClockSet, GpuClock, PdGpuRegs, PdOn, PllOn, QosPolicy};
 
 /// The physical blocks this touches, mapped by the caller.
 #[derive(Clone, Copy, Debug)]
@@ -164,6 +164,12 @@ pub const SUPPLY_BELOW_AFTER_ENABLE: u32 = 1;
 /// The wait between two `POWER_EN0` reads while DCDC1 comes on, in µs (each
 /// read is itself 4 frames, about 32 µs at 1 MHz).
 pub const SUPPLY_POLL_US: u32 = 100;
+
+/// The QoS words `gpu_up` writes after the power-on. Every Z1-Z4 board run
+/// so far worked under Linux's zeroed QoS, so the U-Boot route applies the
+/// same; `Reset` (the hardware reset values U-Boot leaves) is the
+/// alternative a board session may try.
+pub const GPU_QOS_POLICY: QosPolicy = QosPolicy::LinuxZero;
 
 /// Everything the run read, in the order it read it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -313,6 +319,7 @@ pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handov
         }
     }
     o.pd_after = PdGpuRegs::read(m, b.pmu);
+    rk3588::qos_apply(m, b.qos, GPU_QOS_POLICY);
     for (blk, words) in o.qos.iter_mut().enumerate() {
         for (w, off) in words.iter_mut().zip(rk3588::QOS_WORDS) {
             *w = m.read32(b.qos + 0x200 * blk + off);
@@ -411,7 +418,8 @@ mod tests {
     use std::collections::HashMap;
 
     const SPI: usize = rk3588::SPI2_BASE;
-    const QOS: usize = rk3588::QOS_GPU[0];
+    /// A mapped base that is not the physical address, as under Zephyr.
+    const QOS: usize = 0x7000_0000;
     const GPU: usize = 0xfb00_0000;
     const B: Bases = Bases { cru: CRU_BASE, pmu: PMU_BASE, spi2: SPI, qos: QOS, gpu: GPU };
 
@@ -730,6 +738,13 @@ mod tests {
         assert_eq!(o.vdd_gpu_uv, 675_000);
         assert!(o.pd_after.usable());
         assert_eq!(o.qos, [[0x8000_0000, 0, 0, 0, 0]; 4]);
+        let q = |blk: usize, off: usize| QOS + 0x200 * blk + off;
+        for blk in 0..4 {
+            for off in rk3588::QOS_POLICY_WORDS {
+                assert!(t6.writes.borrow().contains(&(q(blk, off), 0)));
+            }
+        }
+        assert!(t6.writes.borrow().iter().all(|w| !rk3588::QOS_GPU.iter().any(|&p| (p..p + 0x200).contains(&w.0))));
         assert_eq!(o.ident.gpu_id, 0xa867_0005);
         assert_eq!(o.ident_after_reset.shader_present, 0x50005);
         assert_eq!(o.l2.ready, 1);
