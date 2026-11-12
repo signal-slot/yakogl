@@ -24,7 +24,9 @@
 //! its own answer when this is wired in.
 #![allow(dead_code)]
 
+use super::pe_zs::{pe_zs, ZsFunc, ZsInput};
 use super::regs::*;
+use crate::backend::{GlesDraw, GlesStencilOp, GLES_CMP_ALWAYS, GLES_SOP_DECR_WRAP, GLES_SOP_KEEP};
 
 /// `VIVS_RA_EARLY_DEPTH_LATE_DEPTH_MSAA` (`hw/state_3d.xml.h:592`).
 pub const RA_EARLY_DEPTH_LATE_DEPTH_MSAA: u32 = 0x0200_0000;
@@ -185,6 +187,77 @@ pub fn early_z(i: &EarlyZInput) -> EarlyZ {
 /// change the layout.
 pub fn draw_early_z(writes_z: bool) -> EarlyZ {
     early_z(&EarlyZInput { writes_z, ..EarlyZInput::gc7000(ColorLayout::Linear) })
+}
+
+/// The early-depth decision's inputs for one draw of the back end, read from
+/// the `GlesDraw` as `emit_pe_state` and `pe_zs` read it (a pure function;
+/// `emit_ra_state` does not call it yet).
+///
+/// - depth: `pe_zs` with the draw's attachments: the test is on only with a
+///   depth or stencil attachment, `depth_func_always` is the GL function, the
+///   write is `pe_zs`'s (the test on and `glDepthMask`);
+/// - stencil: the GL test on with an attachment; per face the function
+///   ALWAYS and all three operations KEEP (`stencil_op` maps an unknown
+///   operation to KEEP too, and so does this);
+/// - `alpha_test`: GLES has none, always false; `msaa`: more than one sample;
+/// - colour: `Tiled` for a shadow target, `Linear` otherwise.
+///
+/// Policy over Mesa's rule, for the first wiring: a draw whose program
+/// discards or whose stencil operations modify the buffer keeps today's
+/// words (the colour is reported `Linear`, which denies early depth), though
+/// `etna_update_zsa` would still test early there. A clear quad is a draw in
+/// this back end, not an RS clear, and is denied the same way.
+///
+/// `writes_z` and `uses_discard` are the program's (`shader::discards`).
+pub fn input_of(gl: &GlesDraw, shadow: bool, writes_z: bool, uses_discard: bool, is_clear: bool) -> EarlyZInput {
+    let mut i =
+        EarlyZInput { writes_z, uses_discard, msaa: gl.samples > 1, ..EarlyZInput::gc7000(ColorLayout::Linear) };
+    if is_clear {
+        return i;
+    }
+    let has_depth = gl.depth_id != 0;
+    let has_stencil = gl.stencil_id != 0;
+    let zs = pe_zs(ZsInput {
+        depth_test: gl.depth_test,
+        depth_write: gl.depth_write,
+        stencil_test: gl.stencil,
+        has_depth_attachment: has_depth,
+        has_stencil_attachment: has_stencil,
+        ..ZsInput::default()
+    });
+    i.depth_enabled = gl.depth_test && (has_depth || has_stencil);
+    i.depth_func_always = zs.depth_func == ZsFunc::Always || gl.depth_func == GLES_CMP_ALWAYS;
+    i.depth_write = zs.depth_write;
+    if gl.stencil && (has_depth || has_stencil) {
+        let keep = |op: GlesStencilOp| op > GLES_SOP_DECR_WRAP || op == GLES_SOP_KEEP;
+        let face = |func, sfail, dpfail, dppass| StencilFace {
+            enabled: true,
+            func_always: func == GLES_CMP_ALWAYS,
+            ops_keep: keep(sfail) && keep(dpfail) && keep(dppass),
+        };
+        i.stencil = [
+            face(gl.stencil_func, gl.stencil_sfail, gl.stencil_dpfail, gl.stencil_dppass),
+            face(gl.stencil_back_func, gl.stencil_back_sfail, gl.stencil_back_dpfail, gl.stencil_back_dppass),
+        ];
+    }
+    let modifies = i.stencil.iter().any(|f| f.enabled && !f.ops_keep);
+    if shadow && !uses_discard && !modifies {
+        i.color = ColorLayout::Tiled;
+    }
+    i
+}
+
+/// A small stable key of a decision for `pe_key`: bit 0 early test, 1 early
+/// write, 2 late test, 3 late write, 4 `DISABLE_ZS`, 5 the MSAA late-depth
+/// flag. Equal keys emit equal `PE_DEPTH_CONFIG` and `RA_EARLY_DEPTH` bits
+/// for one GPU (`ra_write_depth` is a property of the chip and not in the key).
+pub fn decision_bits(e: &EarlyZ) -> u32 {
+    (e.early_test as u32)
+        | (e.early_write as u32) << 1
+        | (e.late_test as u32) << 2
+        | (e.late_write as u32) << 3
+        | ((e.pe_bits & GC_PE_DEPTH_DISABLE_ZS != 0) as u32) << 4
+        | ((e.ra_word & RA_EARLY_DEPTH_LATE_DEPTH_MSAA != 0) as u32) << 5
 }
 
 #[cfg(test)]
@@ -348,6 +421,102 @@ mod tests {
                 assert_eq!(r.ra_word & WD == 0, r.early_write, "{inp:?}");
                 assert!(!(r.early_test && r.late_test));
             }
+        }
+    }
+
+    fn gl_draw(depth_test: bool, depth_write: bool) -> GlesDraw {
+        let mut d = GlesDraw::ZERO;
+        d.depth_id = 1;
+        d.stencil_id = 1;
+        d.depth_test = depth_test;
+        d.depth_func = 1; /* LESS */
+        d.depth_write = depth_write;
+        d
+    }
+
+    /* tools/vivante/README.md, ts-golden mode 8: RA_EARLY_DEPTH 0x05000031 and
+     * PE_DEPTH_CONFIG 0x05051111 (of which EARLY_Z | DISABLE_ZS are 0x01010000) */
+    const GOLDEN8_RA: u32 = 0x0500_0031;
+    const GOLDEN8_PE: u32 = 0x0101_0000;
+    /* today's RA word: BASE | FORWARD_W | FORWARD_Z | WRITE_DISABLE */
+    const TODAY_RA: u32 = 0x1500_0030;
+
+    #[test]
+    fn a_depth_writing_draw_into_a_shadow_gives_golden_mode_8() {
+        let r = early_z(&input_of(&gl_draw(true, true), true, false, false, false));
+        assert!(r.early_test && r.early_write);
+        assert_eq!((r.pe_bits, r.ra_word), (GOLDEN8_PE, GOLDEN8_RA));
+        assert_eq!(decision_bits(&r), 0b10011);
+    }
+
+    #[test]
+    fn what_keeps_todays_words() {
+        let d = gl_draw(true, true);
+        let mut stencil = gl_draw(false, false);
+        stencil.stencil = true;
+        stencil.stencil_func = GLES_CMP_ALWAYS;
+        stencil.stencil_back_func = GLES_CMP_ALWAYS;
+        stencil.stencil_dppass = 2; /* REPLACE */
+        stencil.stencil_back_dppass = 2;
+        let cases = [
+            ("linear target", input_of(&d, false, false, false, false)),
+            ("discard", input_of(&d, true, false, true, false)),
+            ("writes_z", input_of(&d, true, true, false, false)),
+            ("clear quad", input_of(&d, true, false, false, true)),
+            ("always stencil, ops not keep", input_of(&stencil, true, false, false, false)),
+        ];
+        for (name, i) in cases {
+            let r = early_z(&i);
+            assert!(!r.early_test && !r.early_write, "{name}");
+            assert_eq!(r.pe_bits & EZ, 0, "{name}");
+            assert_eq!(r.ra_word, TODAY_RA, "{name}");
+        }
+    }
+
+    #[test]
+    fn input_of_reads_depth_stencil_and_samples_from_the_draw() {
+        /* no attachment: the PE skips depth whatever GL says */
+        let mut d = gl_draw(true, true);
+        d.depth_id = 0;
+        d.stencil_id = 0;
+        let i = input_of(&d, true, false, false, false);
+        assert!(!i.depth_enabled && !i.depth_write);
+        /* a test with ALWAYS is no test; a write needs the test on */
+        let mut d = gl_draw(true, true);
+        d.depth_func = GLES_CMP_ALWAYS;
+        assert!(input_of(&d, true, false, false, false).depth_func_always);
+        assert!(!input_of(&gl_draw(false, true), true, false, false, false).depth_write);
+        /* a comparing stencil is not a modification: early stays */
+        let mut s = gl_draw(true, true);
+        s.stencil = true;
+        s.stencil_func = 2;
+        let r = early_z(&input_of(&s, true, false, false, false));
+        assert!(r.early_test && r.early_write);
+        let mut m = gl_draw(true, true);
+        m.samples = 4;
+        assert!(input_of(&m, true, false, false, false).msaa);
+        assert_eq!(input_of(&gl_draw(true, true), true, false, false, false).color, Tiled);
+    }
+
+    #[test]
+    fn decision_bits_tell_every_word_apart() {
+        let mut seen = std::collections::BTreeMap::new();
+        for bits in 0u32..(1 << 8) {
+            let mut inp = write(Tiled);
+            inp.depth_enabled = bits & 1 != 0;
+            inp.depth_write = bits & 2 != 0;
+            inp.uses_discard = bits & 4 != 0;
+            inp.writes_z = bits & 8 != 0;
+            inp.msaa = bits & 16 != 0;
+            if bits & 64 != 0 {
+                inp.stencil = stencil_ops_replace();
+            }
+            if bits & 128 != 0 {
+                inp.color = Linear;
+            }
+            let r = early_z(&inp);
+            let words = (r.pe_bits, r.ra_word);
+            assert_eq!(*seen.entry(decision_bits(&r)).or_insert(words), words, "{inp:?}");
         }
     }
 
