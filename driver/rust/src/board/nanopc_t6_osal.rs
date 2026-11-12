@@ -47,8 +47,9 @@
 //! A fault, a fatal, a protected-mode or progress-timer event, an OOM the
 //! heap refuses, a sync object with an error, a 64-bit read that does not
 //! settle, or panthor's 5 s job timeout, seen by a wait, a submit or
-//! `completed`, restarts the group ([`Osal::recover`]): every kick not yet
-//! complete is lost (its fence completes, so the backend frees its slot,
+//! `completed`, restarts the group ([`Osal::recover`]): every kick the
+//! sync object does not show complete (read once, unless its `status` is
+//! the error) is lost (its fence completes, so the backend frees its slot,
 //! and a wait for it is `-EIO`), CS 0 is stopped and CSG 0 terminated
 //! (only then do the held frees go back), the heap made again, CSG 0 / CS 0 started
 //! again over the same memory with an empty ring ([`sched::restart`]), and
@@ -838,6 +839,12 @@ impl Osal {
     fn recover(&mut self, m: &impl Mmio, why: Dead, ended: Option<Ended>, delay_us: &mut impl FnMut(u32)) -> i32 {
         let Some(u) = self.up else { return -EINVAL };
         self.last_error = Some(why);
+        // a kick done before the error, which no call had seen yet, is not
+        // lost: one read of the sync object first (none on a sync object
+        // error: its seqno is then not trusted)
+        if let Ok(seqno) = sched::completed_seqno(m, &u.started) {
+            self.reached(seqno);
+        }
         // the lost fences complete now (the backend frees its slots), their
         // frees go back only once the group is known ended
         if self.completed < self.submitted {
