@@ -402,6 +402,10 @@ pub const REG_EDID_I2C_ADDR: u8 = 0x43;
 pub const REG_PACKET_I2C_ADDR: u8 = 0x45;
 pub const REG_EDID_SEGMENT: u8 = 0xc4;
 pub const REG_CEC_I2C_ADDR: u8 = 0xe1;
+pub const REG_INT0: u8 = 0x96;
+pub const REG_INT1: u8 = 0x97;
+/// INT0 bit 2: an EDID segment was read into the part's buffer.
+pub const INT0_EDID_READY: u8 = 1 << 2;
 pub const STATUS_HPD: u8 = 1 << 6;
 pub const STATUS_MONITOR_SENSE: u8 = 1 << 5;
 /// The main map's address on the DK.
@@ -517,8 +521,20 @@ impl Adv7535 {
             Map::Main => {
                 self.main_writes.push((p, b));
                 // The chip revision and the status are read-only.
-                if p != REG_CHIP_REVISION && p != REG_STATUS {
+                if p == REG_INT0 || p == REG_INT1 {
+                    // Write-1-to-clear interrupt status (adv7511_drv.c
+                    // writes the value it read back to clear it).
+                    self.main[p as usize] &= !b;
+                } else if p != REG_CHIP_REVISION && p != REG_STATUS {
                     self.main[p as usize] = b;
+                    if p == REG_EDID_SEGMENT {
+                        // The part reads the segment over DDC by itself and
+                        // flags EDID_READY (adv7511_wait_for_edid waits for
+                        // it); DDC_STATUS (0xc8) stays 0, so Linux's
+                        // "segment already read" shortcut (== 2) is never
+                        // taken.
+                        self.main[REG_INT0 as usize] |= INT0_EDID_READY;
+                    }
                 }
             }
             Map::Edid => {}
@@ -956,5 +972,217 @@ mod tests {
         let cr2 = (0x3d << 1) | (2 << 16) | CR2_START;
         bus.write32(BASE + CR2 as usize, cr2);
         bus.write32(BASE + CR2 as usize, cr2);
+    }
+
+    // ----------------------------------------- ip::adv7535 over ip::stm32_i2c
+
+    use crate::env::{Env, Level};
+    use crate::ip::adv7535::{self as adv7535, Bridge, Sink};
+    use crate::video;
+
+    /// The shim's job: bus ids of ip::adv7535 to the DK's I2C addresses, the
+    /// transfers through ip::stm32_i2c on the model.
+    struct DkEnv<'a>(&'a Mp25I2c);
+
+    fn addr_of(bus: u32) -> u8 {
+        match bus {
+            adv7535::BUS_MAIN => 0x3d,
+            adv7535::BUS_DSI_CEC => 0x3c,
+            adv7535::BUS_EDID => 0x3f,
+            adv7535::BUS_PACKET => 0x38,
+            _ => panic!("bus {bus}"),
+        }
+    }
+
+    impl Env for DkEnv<'_> {
+        fn busy_wait_us(&self, _us: u32) {}
+        fn sleep_ms(&self, _ms: u32) {}
+        fn log_str(&self, _l: Level, _line: &str) {}
+        fn i2c_write(&self, bus: u32, buf: &[u8]) -> Result<(), i32> {
+            drv::write(self.0, BASE, addr_of(bus), buf)
+        }
+        fn i2c_write_read(&self, bus: u32, w: &[u8], r: &mut [u8]) -> Result<(), i32> {
+            drv::write_read(self.0, BASE, addr_of(bus), w, r)
+        }
+        fn gpio_set(&self, _l: u32, _v: bool) -> Result<(), i32> {
+            Ok(())
+        }
+    }
+
+    const SINK: Sink = Sink { hdmi: true, vic: 4, aspect_16_9: true, refresh_hz: 60 };
+
+    /// The bus events folded into messages: (address, read, bytes).
+    fn messages(bus: &Mp25I2c) -> Vec<(u8, bool, Vec<u8>)> {
+        let mut m: Vec<(u8, bool, Vec<u8>)> = vec![];
+        for e in bus.bus() {
+            match e {
+                Bus::Start { addr, read, .. } => m.push((addr, read, vec![])),
+                Bus::Write(_, b) | Bus::Read(_, b) => m.last_mut().unwrap().2.push(b),
+                Bus::Nack(a) => m.push((a, false, vec![])),
+                Bus::Stop => {}
+            }
+        }
+        m
+    }
+
+    #[test]
+    fn adv7535_init_in_linux_probe_order() {
+        let (bus, adv) = up();
+        let env = DkEnv(&bus);
+        let found = Bridge::new(&env).init(&adv7535::Config::new(4)).unwrap();
+        assert_eq!(found.revision, 0x14);
+        // adv7511_drv.c reads the revision first (pointer write, then a
+        // read), before any store.
+        let m = messages(&bus);
+        assert_eq!(m[0], (0x3d, false, vec![0x00]));
+        assert_eq!(m[1], (0x3d, true, vec![0x14]));
+        // The stores in order, (address, register, value): adv7533_patch_
+        // registers (adv7533.c fixed registers), packet enables cleared, the
+        // three secondary addresses << 1, the CEC-map patch, power off (with
+        // adv7533_dsi_power_off) and CEC_CTRL power down.
+        let writes: Vec<(u8, u8, u8)> =
+            m.iter().filter(|(_, rd, b)| !rd && b.len() == 2).map(|(a, _, b)| (*a, b[0], b[1])).collect();
+        let want = [
+            (0x3d, 0x16, 0x20),
+            (0x3d, 0x9a, 0xe0),
+            (0x3d, 0xba, 0x70),
+            (0x3d, 0xde, 0x82),
+            (0x3d, 0xe4, 0x40),
+            (0x3d, 0xe5, 0x80),
+            (0x3d, 0x40, 0x00),
+            (0x3d, 0x44, 0x00),
+            (0x3d, 0x43, 0x7e),
+            (0x3d, 0x45, 0x70),
+            (0x3d, 0xe1, 0x78),
+            (0x3c, 0x15, 0xd0),
+            (0x3c, 0x17, 0xd0),
+            (0x3c, 0x24, 0x20),
+            (0x3c, 0x57, 0x11),
+            (0x3c, 0x05, 0xc8),
+            (0x3d, 0xd6, 0x00),
+            (0x3d, 0x41, 0x50),
+            (0x3d, 0x95, 0x00),
+            (0x3c, 0x03, 0x0b),
+            (0x3c, 0x27, 0x0b),
+            (0x3d, 0xe2, 0x01),
+        ];
+        assert_eq!(writes, want);
+        // And the register files hold them.
+        assert_eq!(adv.reg(0x16), 0x20);
+        assert_eq!(adv.reg(0x9a), 0xe0);
+        assert_eq!(adv.reg(0xe5), 0x80);
+        assert_eq!(adv.reg(REG_EDID_I2C_ADDR), 0x7e);
+        assert_eq!(adv.reg(REG_PACKET_I2C_ADDR), 0x70);
+        assert_eq!(adv.reg(REG_CEC_I2C_ADDR), 0x78);
+        assert_eq!(adv.reg(REG_POWER) & 0x40, 0x40, "left powered down");
+        assert_eq!(adv.reg(0xe2), 0x01);
+        assert_eq!(
+            (adv.cec(0x15), adv.cec(0x17), adv.cec(0x24), adv.cec(0x57), adv.cec(0x05)),
+            (0xd0, 0xd0, 0x20, 0x11, 0xc8)
+        );
+        assert_eq!((adv.cec(0x03), adv.cec(0x27)), (0x0b, 0x0b));
+    }
+
+    #[test]
+    fn adv7535_init_fails_in_reset_and_works_after_release() {
+        let (bus, adv) = Mp25I2c::dk(Adv7535Config { in_reset: true, ..Adv7535Config::default() });
+        drv::init(&bus, BASE, &cfg()).unwrap();
+        let env = DkEnv(&bus);
+        let b = Bridge::new(&env);
+        // The main address NACKs; the driver reports -EIO (no answer).
+        assert_eq!(b.init(&adv7535::Config::new(4)).err(), Some(-errno::EIO));
+        assert!(adv.main_writes().is_empty());
+        adv.set_reset(false);
+        assert_eq!(b.init(&adv7535::Config::new(4)).unwrap().revision, 0x14);
+        assert_eq!(adv.reg(0xe2), 0x01);
+    }
+
+    #[test]
+    fn adv7535_hpd_follows_the_model() {
+        let (bus, adv) = up();
+        let env = DkEnv(&bus);
+        let b = Bridge::new(&env);
+        b.init(&adv7535::Config::new(4)).unwrap();
+        assert_eq!(b.hpd(), Ok(true));
+        // adv7511_detect re-arms HPD sensing with the override bit.
+        assert_eq!(adv.reg(0xd6) & 0x40, 0x40);
+        adv.set_hpd(false);
+        assert_eq!(b.hpd(), Ok(false));
+        adv.set_hpd(true);
+        assert_eq!(b.hpd(), Ok(true));
+    }
+
+    #[test]
+    fn adv7535_edid_and_preferred_mode_720p_and_1080p() {
+        for (m, want) in [(EdidMode::P720, video::HD720_60), (EdidMode::P1080, video::FHD1080_60)] {
+            let edid = edid_block(m);
+            let (bus, adv) = Mp25I2c::dk(Adv7535Config { edid: edid.clone(), ..Adv7535Config::default() });
+            drv::init(&bus, BASE, &cfg()).unwrap();
+            let env = DkEnv(&bus);
+            let b = Bridge::new(&env);
+            b.init(&adv7535::Config::new(4)).unwrap();
+            let mut blk = [0u8; 128];
+            b.read_edid_block(0, &mut blk).unwrap();
+            assert_eq!(&blk[..], &edid[..], "{m:?}");
+            assert_eq!(video::edid_preferred(&blk), Ok(want), "{m:?}");
+            // Four 64-byte reads from the EDID map (a 256-byte segment), the
+            // part powered down again after.
+            assert_eq!(adv.edid_bytes_read(), 256, "{m:?}");
+            assert_eq!(adv.reg(REG_POWER) & 0x40, 0x40);
+            assert_eq!(adv.reg(REG_EDID_SEGMENT), 0);
+        }
+    }
+
+    #[test]
+    fn adv7535_edid_without_a_sink_is_enodev() {
+        let (bus, _adv) = Mp25I2c::dk(Adv7535Config { hpd: false, ..Adv7535Config::default() });
+        drv::init(&bus, BASE, &cfg()).unwrap();
+        let env = DkEnv(&bus);
+        let b = Bridge::new(&env);
+        b.init(&adv7535::Config::new(4)).unwrap();
+        let mut blk = [0u8; 128];
+        assert_eq!(b.read_edid_block(0, &mut blk), Err(-errno::ENODEV));
+    }
+
+    #[test]
+    fn adv7535_start_720p60_and_power_down() {
+        let (bus, adv) = up();
+        let env = DkEnv(&bus);
+        let b = Bridge::new(&env);
+        let acfg = adv7535::Config::new(4);
+        b.init(&acfg).unwrap();
+        b.start(&acfg, &video::HD720_60, &SINK).unwrap();
+        // Main map, as ip::adv7535's own start test pins it: POWER_DOWN
+        // cleared (0x50 -> 0x10), HPD override, HDMI mode, sync untouched.
+        assert_eq!(adv.reg(REG_POWER), 0x10);
+        assert_eq!(adv.reg(0xd6), 0x40);
+        assert_eq!(adv.reg(0xaf), 0x02);
+        assert_eq!(adv.reg(0x17), 0);
+        assert_eq!(adv.reg(0x4a) & 0xcc, 0);
+        // AVI infoframe from 0x52: version 2, length 13, PB1 0x10, PB2 0x28,
+        // PB4 = VIC 4; the header 0x82 plus the bytes sums to 0.
+        let avi: Vec<u8> = (0..16).map(|i| adv.reg(0x52 + i)).collect();
+        assert_eq!(&avi[..2], &[2, 13]);
+        assert_eq!(&avi[3..7], &[0x10, 0x28, 0x00, 4]);
+        assert_eq!(avi.iter().fold(0x82u8, |a, &b| a.wrapping_add(b)), 0);
+        assert_eq!((adv.reg(0x71), adv.reg(0x74)), (2, 1));
+        assert_eq!(adv.reg(0x44) & 0x10, 0x10, "AVI packet enabled");
+        // CEC/DSI map: lanes << 4, receiver on, test pattern off, the
+        // timing generator for 1650x750 on four lanes.
+        assert_eq!(adv.cec(0x1c), 0x40);
+        assert_eq!(adv.cec(0x27), 0xcb);
+        assert_eq!(adv.cec(0x03), 0x89);
+        assert_eq!(adv.cec(0x55), 0x00);
+        assert_eq!(adv.cec(0x16), 0x18);
+        let tg: Vec<u8> = (0x28..=0x37).map(|r| adv.cec(r)).collect();
+        assert_eq!(
+            tg,
+            [0x67, 0x20, 0x02, 0x80, 0x06, 0xe0, 0x0d, 0xc0, 0x2e, 0xe0, 0x00, 0x50, 0x00, 0x50, 0x01, 0x40]
+        );
+
+        b.power_down().unwrap();
+        assert_eq!(adv.reg(REG_POWER) & 0x40, 0x40);
+        assert_eq!(adv.reg(0xd6) & 0x40, 0);
+        assert_eq!((adv.cec(0x03), adv.cec(0x27)), (0x0b, 0x0b));
     }
 }
