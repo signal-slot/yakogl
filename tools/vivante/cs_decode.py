@@ -55,23 +55,47 @@ OPCODES = {
     0x09: "STALL",
     0x0a: "CALL",
     0x0b: "RETURN",
+    0x0c: "DRAW_INSTANCED",
     0x0d: "CHIP_SELECT",
-    0x0e: "DRAW_INSTANCED",
+    0x0f: "WAIT_FENCE",
+    0x10: "DRAW_INDIRECT",
+    0x13: "SNAP_PAGES",
 }
 
-def load_regs(path, prefix="VIVS_"):
-    """Name registers from Mesa's own register header, so the names in a diff
-    are the ones its source uses and nothing is named by hand (or wrongly)."""
+# Words a command takes, header included, padded to an even count as the
+# stream is. LOAD_STATE and STALL are handled by their own code. The ones the
+# table does not list are one header word (END, NOP, WAIT, RETURN, CHIP_SELECT).
+# DRAW_INSTANCED is what Mesa emits for every draw on a Halti2+ part, so a GC8000
+# stream is full of it: reading it as a bare header printed its vertex count
+# and start index as two more commands.
+PACKET_WORDS = {
+    0x05: 4,   # DRAW_PRIMITIVES: header, command, start, count
+    0x06: 6,   # DRAW_INDEXED_PRIMITIVES: five words and a pad
+    0x08: 2,   # LINK: header, address
+    0x0a: 4,   # CALL: header, address, return prefetch, return address
+    0x0c: 4,   # DRAW_INSTANCED: header, count, start and a pad
+    0x0f: 2,   # WAIT_FENCE: header, address
+    0x10: 2,   # DRAW_INDIRECT: header, address
+    0x13: 2,   # SNAP_PAGES: header and a pad
+}
+
+def load_candidates(path, prefix="VIVS_"):
+    """Every plain define of the header, in file order, with the arrays.
+
+    A rules-ng-ng header defines a register's fields next to it, and a field's
+    mask or flag is just another hex number: PE_DEPTH_CONFIG_WRITE_ENABLE is
+    0x1000, the address of PS_END_PC. So a plain define is only a candidate for
+    its value; Regs.name() decides which one is the register."""
     plain = re.compile(r"^#define\s+%s([A-Za-z0-9_]+)\s+0x([0-9a-fA-F]+)\s*$" % prefix)
     array = re.compile(r"^#define\s+%s([A-Za-z0-9_]+)\(i0\)\s+"
                        r"\s*\(0x([0-9a-fA-F]+)\s*\+\s*0x([0-9a-fA-F]+)\*\(i0\)\)" % prefix)
     size = re.compile(r"^#define\s+%s([A-Za-z0-9_]+)__LEN\s+0x([0-9a-fA-F]+)" % prefix)
-    names, arrays, lens = {}, {}, {}
+    cands, arrays, lens = [], {}, {}
 
     for line in open(path):
         m = plain.match(line)
         if m and not m.group(1).endswith(("__LEN", "__ESIZE")):
-            names.setdefault(int(m.group(2), 16), m.group(1))
+            cands.append((int(m.group(2), 16), m.group(1)))
             continue
         m = array.match(line)
         if m:
@@ -80,6 +104,17 @@ def load_regs(path, prefix="VIVS_"):
         m = size.match(line)
         if m:
             lens[m.group(1)] = int(m.group(2), 16)
+    return cands, arrays, lens
+
+
+def load_regs(path, prefix="VIVS_"):
+    """Name registers from Mesa's own register header, so the names in a diff
+    are the ones its source uses and nothing is named by hand (or wrongly).
+    The first define of a value wins; Regs does better for the state banks."""
+    cands, arrays, lens = load_candidates(path, prefix)
+    names = {}
+    for addr, nm in cands:
+        names.setdefault(addr, nm)
     return names, arrays, lens
 
 
@@ -96,26 +131,54 @@ class Regs:
     address the one starting closest below it wins.
     """
 
-    def __init__(self, header=None, header2=None):
+    # The BLT engine's states start here. The blitter has its own header, and
+    # the 3D one has nothing below this address that the BLT file also names.
+    BLT_FIRST = 0x14000
+
+    def __init__(self, header=None, header2=None, header3=None):
         self.names, self.arrays, self.lens = ({}, {}, {})
-        if header:
-            self.names, self.arrays, self.lens = load_regs(header)
-        if header2:
-            # The 3D header wins where both define an address: it is the one
-            # this GPU's 3D pipe is described by, and setdefault keeps it.
-            names2, arrays2, lens2 = load_regs(header2)
-            for addr, nm in names2.items():
-                self.names.setdefault(addr, nm)
-            for nm, v in arrays2.items():
+        cands = []
+        # The 3D header is listed first: it is the one this GPU's 3D pipe is
+        # described by, and of equally likely names the earlier one stays.
+        for path, floor in ((header, 0), (header2, 0), (header3, self.BLT_FIRST)):
+            if not path:
+                continue
+            c, arrays, lens = load_candidates(path)
+            cands += [(a, nm) for a, nm in c if a >= floor]
+            for nm, v in arrays.items():
                 self.arrays.setdefault(nm, v)
-            for nm, v in lens2.items():
+            for nm, v in lens.items():
                 self.lens.setdefault(nm, v)
+        self.names = self._pick(cands)
+        # An array with no __LEN ends where the next define begins, and a
+        # field's define bounds it as well as a register's does.
+        self.starts = sorted(set(a for a, _ in cands) |
+                             set(b for b, _ in self.arrays.values()))
         self.banks = self._banks()
+
+    def _pick(self, cands):
+        """One name per address: the register, not one of its fields.
+
+        A field's mask (__MASK, __SHIFT) is never a state. A field's flag can
+        equal a state's address, and the stream's pipe select at 0x03800 was
+        printed as TS_SAMPLER_CONFIG_UNK11__MASK, PS_END_PC as a fill-mode flag.
+        What tells a register from a field is how many other defines its name
+        extends: VS_END_PC extends the bank VS, PE_DEPTH_CONFIG_WRITE_ENABLE
+        extends the bank and the register PE_DEPTH_CONFIG. The fewest wins, and
+        a tie goes to the earlier define."""
+        known = set(nm for _, nm in cands) | set(self.arrays)
+        best = {}
+        for order, (addr, nm) in enumerate(cands):
+            if "__" in nm:
+                continue
+            depth = sum(1 for k in known if nm.startswith(k + "_"))
+            if addr not in best or (depth, order) < best[addr][0]:
+                best[addr] = ((depth, order), nm)
+        return {a: v[1] for a, v in best.items()}
 
     def _banks(self):
         """(base, name, stride, count) per array, sorted by base."""
-        starts = sorted(set(list(self.names) +
-                            [base for base, _ in self.arrays.values()]))
+        starts = self.starts
         banks = []
         for nm, (base, stride) in self.arrays.items():
             count = self.lens.get(nm)
@@ -254,6 +317,8 @@ def final_state(words, regs, state):
         i += 1
         if op == 0x09:
             i += 1
+        elif op in PACKET_WORDS:
+            i += PACKET_WORDS[op] - 1
     return state
 
 
@@ -280,12 +345,31 @@ def decode(words, out, regs, uniforms_only=False):
             if (1 + count) % 2:
                 i += 1  # the stream is padded to an even number of words
             continue
+        if op in PACKET_WORDS:
+            if not uniforms_only:
+                out.append(decode_packet(op, name, words[i:i + PACKET_WORDS[op]]))
+            i += PACKET_WORDS[op]
+            continue
         if not uniforms_only:
             out.append("%-12s 0x%08x" % (name or "OP_0x%02x" % op, w))
         i += 1
         if op == 0x09:
             i += 1  # STALL carries the source/destination word after it
     return out
+
+
+def decode_packet(op, name, ws):
+    """One line for a command that takes operand words, fields named."""
+    line = "%-12s 0x%08x" % (name, ws[0])
+    if op == 0x0c and len(ws) >= 3:
+        # header: instance count low, indexed, primitive type; then the count
+        # word (instance count high, vertex count) and the start index
+        line += " type=%u%s instances=%u vertices=%u start=%u" % (
+            (ws[0] >> 16) & 0xf, " INDEXED" if ws[0] & 0x100000 else "",
+            (ws[1] >> 24) << 16 | (ws[0] & 0xffff), ws[1] & 0xffffff, ws[2])
+    else:
+        line += "".join(" 0x%08x" % v for v in ws[1:])
+    return line
 
 
 def main():
@@ -305,6 +389,9 @@ def main():
     ap.add_argument("--regs2", default=DEFAULT_REGS2,
                     help="Mesa's state.xml.h, which names the GL block: the "
                          "semaphore, the stall token and GL_FLUSH_CACHE")
+    ap.add_argument("--regs3", default=None,
+                    help="Mesa's state_blt.xml.h, which names the blitter's "
+                         "states (default: beside --regs)")
     ap.add_argument("--mem", action="append", default=[],
                     help="a memory dump (ETNA_SHIM_MEM_DUMP / YAKOGL_MEM_DUMP): "
                          "the blocks the stream only points at")
@@ -320,8 +407,16 @@ def main():
         if not args.mem:
             sys.exit("--tex-desc needs a --mem dump to read the descriptor from")
 
+    regs3 = args.regs3
+    if not regs3 and args.regs:
+        regs3 = os.path.join(os.path.dirname(args.regs), "state_blt.xml.h")
+    for label, path in (("--regs", args.regs), ("--regs2", args.regs2)):
+        if not path or not os.path.exists(path):
+            print("warning: %s %s not found, its registers print as addresses"
+                  % (label, path), file=sys.stderr)
     regs = Regs(args.regs if args.regs and os.path.exists(args.regs) else None,
-                args.regs2 if args.regs2 and os.path.exists(args.regs2) else None)
+                args.regs2 if args.regs2 and os.path.exists(args.regs2) else None,
+                regs3 if regs3 and os.path.exists(regs3) else None)
     # No dump means the driver submitted nothing. That is an answer -- it is
     # how the missing depth-only clear was found -- so say it rather than
     # failing with a traceback that reads like a broken tool.
