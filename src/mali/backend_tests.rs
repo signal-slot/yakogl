@@ -3900,6 +3900,213 @@ mod gl {
             }
         }
     }
+
+    /// A 64x64 RGBA8 FBO bound and cleared, `program` linked and in use;
+    /// `draw` then makes the case's calls, and `check` gets the frames
+    /// submitted after init and the GL error after glReadPixels.
+    fn run_case(vs: &str, fs: &str, draw: &mut dyn FnMut(GLuint), check: impl FnOnce(&[Vec<u64>], GLenum)) {
+        let _rig = Rig::new(true);
+        assert_eq!(backend::init(), 0);
+        // SAFETY: the rig serialises the library; plain GL calls.
+        unsafe {
+            let ctx = context::gl_context_create(64, 64);
+            assert!(!ctx.is_null());
+            let (mut fbo, mut tex) = (0, 0);
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA as GLint, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null());
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+            glViewport(0, 0, 64, 64);
+            let p = glCreateProgram();
+            glAttachShader(p, shader(GL_VERTEX_SHADER, vs));
+            glAttachShader(p, shader(GL_FRAGMENT_SHADER, fs));
+            glLinkProgram(p);
+            let mut ok: GLint = 0;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+            assert_eq!(ok, 1, "the case's program links");
+            glUseProgram(p);
+            draw(p);
+            let mut px = vec![0u8; 64 * 64 * 4];
+            glReadPixels(0, 0, 64, 64, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr().cast());
+            let e = glGetError();
+            let frames: Vec<Vec<u64>> = with(|m| m.submits[1..].iter().map(|s| s.1.clone()).collect());
+            check(&frames, e);
+            context::gl_context_destroy(ctx);
+        }
+    }
+
+    /// Every 32-byte aligned block of the mock's buffers that `keep`
+    /// returns a value for.
+    fn scan<T>(keep: impl Fn(&[u8; 32]) -> Option<T>) -> Vec<T> {
+        with(|m| {
+            let mut out = Vec::new();
+            for b in &m.bufs {
+                // SAFETY: the buffer's own words.
+                let bytes = unsafe { core::slice::from_raw_parts(b.mem.as_ptr().cast::<u8>(), b.size) };
+                for c in bytes.as_chunks::<32>().0 {
+                    out.extend(keep(c));
+                }
+            }
+            out
+        })
+    }
+
+    /// gl_test case 218 (shadowcmp) through the GL core: a 4x4
+    /// DEPTH_COMPONENT32F texture on units 0 and 1, two sampler objects
+    /// (GL_LESS and nearest, GL_GEQUAL and linear, clamped), the case's
+    /// program (fsarith_218_shadowcmp). The frame's two samplers carry
+    /// Mesa's flipped functions, `Greater` nearest and `Lequal` linear
+    /// (frame_tex_tests.rs `shadow_samplers_are_case_218_s` pins every byte
+    /// against Mesa's); before the fix both were `Never`, which the board
+    /// read as 0 at every lit texel (tools/cts/log/2026-11-t6-sweep336).
+    #[test]
+    fn case_218_s_samplers_compare_as_mesa_s() {
+        use crate::gl::es3::{glBindSampler, glGenSamplers, glSamplerParameteri};
+        use crate::gl::program::{glGetAttribLocation, glGetUniformLocation, glUniform1i};
+        use crate::gl::texture::glActiveTexture;
+        use crate::mali::genxml::v10::{DescriptorType, Func};
+        const QUAD: [f32; 12] = [-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
+        let depth: Vec<f32> = (0..16).map(|i| (1 + ((i % 4) * 7 + (i / 4) * 5) % 16) as f32 / 17.0).collect();
+        let vs = include_str!("../../tools/mali/testdata/fsarith_218_shadowcmp.vert");
+        let fs = include_str!("../../tools/mali/testdata/fsarith_218_shadowcmp.frag");
+        run_case(
+            vs,
+            fs,
+            &mut |p| {
+                // SAFETY: plain GL calls; the arrays outlive the draw.
+                unsafe {
+                    let mut tex = 0;
+                    glGenTextures(1, &mut tex);
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, tex);
+                    let (ifmt, fmt) = (GL_DEPTH_COMPONENT32F as GLint, GL_DEPTH_COMPONENT);
+                    glTexImage2D(GL_TEXTURE_2D, 0, ifmt, 4, 4, 0, fmt, GL_FLOAT, depth.as_ptr().cast());
+                    glActiveTexture(GL_TEXTURE1);
+                    glBindTexture(GL_TEXTURE_2D, tex);
+                    let mut smp = [0; 2];
+                    glGenSamplers(2, smp.as_mut_ptr());
+                    for (i, &s) in smp.iter().enumerate() {
+                        let (func, filter) = if i == 0 { (GL_LESS, GL_NEAREST) } else { (GL_GEQUAL, GL_LINEAR) };
+                        glSamplerParameteri(s, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE as GLint);
+                        glSamplerParameteri(s, GL_TEXTURE_COMPARE_FUNC, func as GLint);
+                        glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER, filter as GLint);
+                        glSamplerParameteri(s, GL_TEXTURE_MAG_FILTER, filter as GLint);
+                        glSamplerParameteri(s, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE as GLint);
+                        glSamplerParameteri(s, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE as GLint);
+                        glBindSampler(i as GLuint, s);
+                    }
+                    glUniform1i(glGetUniformLocation(p, c"u_near".as_ptr()), 0);
+                    glUniform1i(glGetUniformLocation(p, c"u_lin".as_ptr()), 1);
+                    let loc = glGetAttribLocation(p, c"a_pos".as_ptr()) as GLuint;
+                    glEnableVertexAttribArray(loc);
+                    glVertexAttribPointer(loc, 2, GL_FLOAT, 0, 0, QUAD.as_ptr().cast());
+                    glDrawArrays(GL_TRIANGLES, 0, 6);
+                }
+            },
+            |frames, e| {
+                assert_eq!(e, GL_NO_ERROR);
+                assert_eq!(frames.len(), 1, "one frame");
+                let samplers = scan(|b| {
+                    Sampler::unpack(b)
+                        .ok()
+                        .filter(|s| s.type_ == DescriptorType::SAMPLER && s.compare_function != Func::NEVER)
+                        .map(|s| (s.compare_function, s.minify_nearest, s.magnify_nearest, s.wrap_mode_s))
+                });
+                use crate::mali::genxml::v10::WrapMode;
+                let clamp = WrapMode::CLAMP_TO_EDGE;
+                assert_eq!(
+                    samplers,
+                    [(Func::GREATER, true, true, clamp), (Func::LEQUAL, false, false, clamp)],
+                    "u_near's and u_lin's samplers"
+                );
+            },
+        );
+    }
+
+    /// gl_test case 221 (instmix) through the GL core: the case's program
+    /// (vsfma_221_instmix), a per-vertex vec4, a divisor-1 and a divisor-3
+    /// float, 4 instances, as glDrawArraysInstanced and as
+    /// glDrawElementsInstanced. Each is one frame of one RUN_IDVS with
+    /// INSTANCE_COUNT 4 (the core no longer draws it instance by instance,
+    /// which read gl_InstanceID 0 here), and the divisor-3 Attribute is
+    /// Mesa's `1D NPOT Divisor` (frame_instance_tests.rs
+    /// `every_divisor_is_mesa_s`).
+    #[test]
+    fn case_221_s_draws_are_one_instanced_draw_each() {
+        use crate::gl::buffer::{glBindBuffer, glBufferData, glGenBuffers};
+        use crate::gl::draw::{glDrawArraysInstanced, glDrawElementsInstanced};
+        use crate::gl::vertex::glVertexAttribDivisor;
+        use crate::mali::genxml::v10::{Attribute, AttributeFrequency, AttributeType, Format, RgbComponentOrder};
+        const QUAD6: [f32; 24] =
+            [-1., -1., 0., 1., 1., -1., 0., 1., 1., 1., 0., 1., -1., -1., 0., 1., 1., 1., 0., 1., -1., 1., 0., 1.];
+        const QUAD4: [f32; 16] = [-1., -1., 0., 1., 1., -1., 0., 1., 1., 1., 0., 1., -1., 1., 0., 1.];
+        const IDX: [u16; 6] = [0, 1, 2, 0, 2, 3];
+        const D1: [f32; 4] = [1.0, 0.5, 0.25, 0.75];
+        const D3: [f32; 2] = [0.25, 1.0];
+        let vs = include_str!("../../tools/mali/testdata/vsfma_221_instmix.vert");
+        let fs = include_str!("../../tools/mali/testdata/vsfma_221_instmix.frag");
+        for elements in [false, true] {
+            run_case(
+                vs,
+                fs,
+                &mut |_| {
+                    // SAFETY: plain GL calls; the arrays are statics.
+                    unsafe {
+                        let upload = |target: GLenum, bytes: &[u8]| {
+                            let mut b = 0;
+                            glGenBuffers(1, &mut b);
+                            glBindBuffer(target, b);
+                            glBufferData(target, bytes.len() as GLsizeiptr, bytes.as_ptr().cast(), GL_STATIC_DRAW);
+                        };
+                        let f = |v: &[f32]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+                        upload(GL_ARRAY_BUFFER, &f(if elements { &QUAD4 } else { &QUAD6 }));
+                        glVertexAttribPointer(0, 4, GL_FLOAT, 0, 16, core::ptr::null());
+                        glEnableVertexAttribArray(0);
+                        for (loc, data, divisor) in [(1, &D1[..], 1), (2, &D3[..], 3)] {
+                            upload(GL_ARRAY_BUFFER, &f(data));
+                            glVertexAttribPointer(loc, 1, GL_FLOAT, 0, 4, core::ptr::null());
+                            glEnableVertexAttribArray(loc);
+                            glVertexAttribDivisor(loc, divisor);
+                        }
+                        if elements {
+                            let idx: Vec<u8> = IDX.iter().flat_map(|x| x.to_le_bytes()).collect();
+                            upload(GL_ELEMENT_ARRAY_BUFFER, &idx);
+                            glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, core::ptr::null(), 4);
+                        } else {
+                            glDrawArraysInstanced(GL_TRIANGLES, 0, 6, 4);
+                        }
+                    }
+                },
+                |frames, e| {
+                    let kind = if elements { "elements" } else { "arrays" };
+                    assert_eq!(e, GL_NO_ERROR, "{kind}");
+                    assert_eq!(frames.len(), 1, "{kind}: one frame");
+                    let draws = regs_at_each_idvs(&frames[0]);
+                    assert_eq!(draws.len(), 1, "{kind}: one RUN_IDVS");
+                    assert_eq!(draws[0].get(&34), Some(&4), "{kind}: INSTANCE_COUNT (r34)");
+                    /* `a_d3`: R32F RGB1 at buffer 2, stride 4, divisor 3 */
+                    let want = Attribute {
+                        attribute_type: AttributeType::_1D_NPOT_DIVISOR,
+                        format: Format::R32F.0 << 12 | RgbComponentOrder::RGB1.0,
+                        table: 2,
+                        frequency: AttributeFrequency::INSTANCE,
+                        divisor_r: 1,
+                        divisor_e: 0,
+                        buffer_index: 2,
+                        stride: 4,
+                        divisor_d: 0x2aaa_aaab,
+                        ..Default::default()
+                    }
+                    .pack()
+                    .unwrap();
+                    assert_eq!(scan(|b| (b == &want).then_some(())).len(), 1, "{kind}: the divisor-3 Attribute");
+                },
+            );
+        }
+    }
 }
 
 /// Each RUN_IDVS's index buffer (d54), in stream order.
