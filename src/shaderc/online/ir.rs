@@ -661,6 +661,26 @@ pub struct VarDecl<'a> {
     pub array_len: u16,
 }
 
+/// GLSL ES precision lowering's verdict for one value (Mesa 26.2.1
+/// `lower_precision.cpp`), recorded by the front end in [`Module::prec`]
+/// and [`Module::local_prec`]. Only a back end that lowers precision reads
+/// it (the Mali's, `docs/notes/mali-precision.md`); the instructions are
+/// the same whatever it says.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[repr(u8)]
+pub enum Prec {
+    /// Not recorded, or a value with no float or bool width (an int, a
+    /// store).
+    #[default]
+    None,
+    /// Computed, or stored, at full width.
+    High,
+    /// Inside a tree Mesa computes at 16 bits before NIR's folds (a
+    /// lowered tree, a lowered built-in's body); for a local, stored at 16
+    /// bits.
+    Medium,
+}
+
 /// One stage's IR: what the front end hands the code generator.
 ///
 /// Every field borrows the scratch arena of the compile that built it.
@@ -699,6 +719,15 @@ pub struct Module<'a> {
     pub uniform_dwords: u16,
     pub uses_discard: bool,
     pub uses_front_facing: bool,
+    /// The [`Prec`] of each instruction, by the same `ValueId` as
+    /// [`Module::comps`]; for a `StoreOutput`, the output's declared
+    /// precision. Read it through [`Module::prec_of`]: a module built by
+    /// hand, or by a back end's rewrite that keeps no table, has none.
+    pub prec: &'a [Prec],
+    /// Whether each local is stored at 16 bits ([`Prec::Medium`]) or at
+    /// full width, by [`LocalId`]. Read it through
+    /// [`Module::local_prec_of`].
+    pub local_prec: &'a [Prec],
 }
 
 impl<'a> Module<'a> {
@@ -717,7 +746,21 @@ impl<'a> Module<'a> {
             uniform_dwords: 0,
             uses_discard: false,
             uses_front_facing: false,
+            prec: &[],
+            local_prec: &[],
         }
+    }
+
+    /// The [`Prec`] of the value `id`; [`Prec::None`] when the module
+    /// records none for it (an empty table, an id past it).
+    pub fn prec_of(&self, id: ValueId) -> Prec {
+        self.prec.get(id.0 as usize).copied().unwrap_or(Prec::None)
+    }
+
+    /// The [`Prec`] of the local `l`'s storage; [`Prec::None`] when the
+    /// module records none for it.
+    pub fn local_prec_of(&self, l: LocalId) -> Prec {
+        self.local_prec.get(l.0 as usize).copied().unwrap_or(Prec::None)
     }
 
     /// The nodes of `r`, or `&[]` when it runs past the array.
@@ -997,6 +1040,22 @@ mod tests {
         assert_eq!(m.comps_of(ValueId(0)), 2, "a load states the count it reads");
         assert_eq!(m.comps_of(ValueId(1)), 1, "a reduction states one lane");
         assert_eq!(m.comps_of(ValueId(2)), 4, "an ordinary ALU states nothing: over-estimate");
+    }
+
+    #[test]
+    fn a_precision_is_none_where_the_module_records_none() {
+        /* A hand-built module, or one a back end rewrote without the
+         * tables, answers None: not recorded, never a guessed width. */
+        let m = Module::empty(SHC_STAGE_VERTEX);
+        assert_eq!(m.prec_of(ValueId(0)), Prec::None);
+        assert_eq!(m.local_prec_of(LocalId(0)), Prec::None);
+        let prec = [Prec::High, Prec::Medium];
+        let local_prec = [Prec::Medium];
+        let m = Module { prec: &prec, local_prec: &local_prec, ..Module::empty(SHC_STAGE_VERTEX) };
+        assert_eq!(m.prec_of(ValueId(1)), Prec::Medium);
+        assert_eq!(m.prec_of(ValueId(2)), Prec::None, "past the table");
+        assert_eq!(m.local_prec_of(LocalId(0)), Prec::Medium);
+        assert_eq!(m.local_prec_of(LocalId(1)), Prec::None, "past the table");
     }
 
     #[test]

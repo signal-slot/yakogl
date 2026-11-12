@@ -955,6 +955,8 @@ fn lower_ordered<'a>(
         uniform_dwords: reflection.uniform_dwords,
         uses_discard: l.uses_discard,
         uses_front_facing: l.uses_front_facing,
+        prec: &[],
+        local_prec: &[],
     })
 }
 
