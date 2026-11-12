@@ -14,26 +14,34 @@
 //! Facts from Linux v6.18 drivers/spi/spi-rockchip.c (GPL-2.0: facts and
 //! file:line only, nothing transcribed):
 //!
-//! 1. Registers (:26-46): `CTRLR0` 0x00, `CTRLR1` 0x04 (frames - 1),
-//!    `SSIENR` 0x08 (1 enables), `SER` 0x0c (bit n = chip select n),
-//!    `BAUDR` 0x10 (an even divider of the controller clock), `TXFLR` 0x1c,
-//!    `RXFLR` 0x20 (FIFO levels), `SR` 0x24 (bit 0 busy), `IMR` 0x2c,
-//!    `ICR` 0x38, `DMACR` 0x3c, `VERSION` 0x48, `TXDR` 0x400, `RXDR` 0x800.
-//! 2. `CTRLR0` for a transfer (`rockchip_spi_config`, :531-615): the frame
-//!    format SPI, `BHT` 8 bit (bit 13), `SSD` one cycle (bit 10), `EM` big
-//!    endian (bit 11), data frame size 8 bit (`DFS` 1), the SPI mode in
-//!    bits 7:6, transmit-and-receive (`XFM` 0 in bits 19:18), host mode;
+//! 1. Registers (:26-46; `SR`'s bit fields, :121-128): `CTRLR0` 0x00,
+//!    `CTRLR1` 0x04 (frames - 1), `SSIENR` 0x08 (1 enables), `SER`
+//!    0x0c (bit n = chip select n), `BAUDR` 0x10 (an even divider of
+//!    the controller clock), `TXFLR` 0x1c, `RXFLR` 0x20 (FIFO levels),
+//!    `SR` 0x24 (bit 0 busy), `IMR` 0x2c, `ICR` 0x38, `DMACR` 0x3c,
+//!    `VERSION` 0x48, `TXDR` 0x400, `RXDR` 0x800.
+//! 2. `CTRLR0` for a transfer (`rockchip_spi_config`, :531-615; the
+//!    `CTRLR0` bit fields, :48-112): the frame format SPI, `BHT` 8 bit
+//!    (bit 13), `SSD` one cycle (bit 10), `EM` big endian (bit 11), data
+//!    frame size 8 bit (`DFS` 1), the SPI mode in bits 7:6,
+//!    transmit-and-receive (`XFM` 0 in bits 19:18), host mode;
 //!    `CTRLR1` = length - 1; `BAUDR` = 2 · ceil(clock / (2 · speed)).
-//!    `CTRLR0` is written only with the controller disabled (:592-596).
-//! 3. A transfer (`rockchip_spi_set_cs`, :239-280,
-//!    `rockchip_spi_prepare_irq`, :382-405): chip select set in `SER`,
-//!    `ICR` written with all ones, the controller enabled, the transmit FIFO
-//!    filled; the receive FIFO is read as `RXFLR` says.
+//!    `CTRLR0` is written only with the controller disabled (the writes
+//!    are :590 in `rockchip_spi_config` and :750 in `rockchip_spi_setup`;
+//!    probe leaves the chip disabled, :802; `rockchip_spi_transfer_one`
+//!    warns if it is enabled and busy before the config write, :688-689;
+//!    and it is disabled again at transfer end, :373, 419, 435).
+//! 3. A transfer (`rockchip_spi_set_cs`, :239-278,
+//!    `rockchip_spi_prepare_irq`, :382-405, `rockchip_spi_pio_reader`,
+//!    :320-352): chip select set in `SER`, `ICR` written with all ones,
+//!    the controller enabled, the transmit FIFO filled; the receive FIFO
+//!    is read as `RXFLR` says.
 //!
 //! What this does differently: it polls `RXFLR` instead of taking the
 //! interrupt, so it refuses a transfer longer than [`MAX_LEN`] (well inside
-//! any FIFO the driver detects, `ROCKCHIP_SPI_VER2_TYPE*` 64), and it masks
-//! the controller's interrupts (`IMR` 0).
+//! any FIFO the driver detects, `get_fifo_len`, :224-237:
+//! `ROCKCHIP_SPI_VER2_TYPE*` 64), and it masks the controller's
+//! interrupts (`IMR` 0).
 
 use crate::mmio::Mmio;
 
@@ -110,8 +118,9 @@ impl Host {
 /// `CTRLR0.XFM` receive only (bits 19:18 = 2, fact 2).
 pub const CTRLR0_XFM_RO: u32 = 2 << 18;
 
-/// Linux's `spi_write_then_read` on this controller (spi.c:4707-4757 and
-/// fact 3): one message, the chip select held across two transfers, `tx`
+/// Linux's `spi_write_then_read` on this controller (Linux v6.18
+/// drivers/spi/spi.c:4707-4757 and fact 3): one message, the chip select
+/// held across two transfers, `tx`
 /// sent transmit-and-receive with what comes back dropped, then `rx.len()`
 /// frames received in receive-only mode (`XFM` 2; the controller clocks
 /// them out on its own, nothing is written to `TXDR`).
@@ -134,9 +143,11 @@ pub fn write_then_read(
     r
 }
 
-/// One frame sent and nothing read: Linux's `spi_write`, one transfer under
-/// the chip select, the first half of [`write_then_read`] (spi.c:4707-4757
-/// and fact 3). The bytes go out in the same transmit-and-receive phase as
+/// One frame sent and nothing read: Linux's `spi_write` (Linux v6.18
+/// include/linux/spi/spi.h:1481-1490), one transfer under the chip select,
+/// the first half of [`write_then_read`] (Linux v6.18
+/// drivers/spi/spi.c:4707-4757 and fact 3). The bytes go out in the same
+/// transmit-and-receive phase as
 /// [`write_then_read`]'s command (the one measured on the T6), with what
 /// comes back dropped, then the bus is released; there is no receive phase
 /// after it, so no frame is clocked past `tx`. The same argument and
