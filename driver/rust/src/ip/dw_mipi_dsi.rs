@@ -1042,6 +1042,191 @@ mod tests {
         assert_eq!(hcomponent_lbcc(&ADV7535_720P, LANE_MBPS, 1650), 1238);
     }
 
+    /// CEA-861 VIC 16, 1920x1080 at 60 Hz: 148.5 MHz, H 1920 88 44 148 (+),
+    /// V 1080 4 5 36 (+), htotal 2200, vtotal 1125 (drm_edid.c:820-823).
+    const CEA_1080P60: VideoMode = VideoMode {
+        pixel_clock_hz: 148_500_000,
+        hactive: 1920,
+        hfront: 88,
+        hsync: 44,
+        hback: 148,
+        vactive: 1080,
+        vfront: 4,
+        vsync: 5,
+        vback: 36,
+        hsync_high: true,
+        vsync_high: true,
+        de_high: true,
+    };
+
+    /// A PHY that answers one fixed rate; the DK's two modes below differ in
+    /// it, the host's registers under test do not depend on its timing.
+    struct RatePhy(u32);
+
+    impl Phy for RatePhy {
+        fn lane_mbps(&mut self, _: &impl Mmio, _: &Link) -> Result<u32, i32> {
+            Ok(self.0)
+        }
+        fn timing(&self, _: u32) -> Result<DphyTiming, i32> {
+            Ok(TIMING_445)
+        }
+        fn init(&mut self, _: &impl Mmio, _: &impl Env) -> Result<(), i32> {
+            Ok(())
+        }
+    }
+
+    /// The DK's two modes on the ADV7535 (4 lanes, RGB888, adv7533.c's
+    /// flags: VIDEO | VIDEO_SYNC_PULSE | NO_EOT_PACKET | VIDEO_HSE, as the
+    /// module's `flags::ADV7535` cites at adv7533.c:152-153 and the
+    /// display-bringup note at adv7533.c:162-195 in ST's tree), with the
+    /// lane rate ST's dw_mipi_dsi-stm.c picks (non-burst, so no +20 %; PLL
+    /// out = clock x bpp / lanes / 2, lane rate = 2 x PLL out / 1000 kHz):
+    /// 720p 74250 x 24 / 4 / 2 = 222750 kHz -> 445 Mbit/s (445.5 exact at
+    /// the 27 MHz FLEXGEN_28 reference, 66 / 4 / 2; 40 MHz HSE: 445, see
+    /// `the_lane_rate_st_computes_for_720p_is_445`); 1080p 148500 x 24 / 4 /
+    /// 2 = 445500 kHz -> 891 Mbit/s (27 MHz x 66 / 4 / 1 exact), both inside
+    /// 80-2500 Mbit/s (ST dw_mipi_dsi-stm.c:127-128).
+    fn dk_link(mode: VideoMode) -> Link {
+        Link { mode, lanes: 4, channel: 0, format: Format::Rgb888, flags: flags::ADV7535 }
+    }
+
+    /// Everything the host holds after `attach` and `video_on`.
+    struct Pinned {
+        mode: VideoMode,
+        lane_mbps: u32,
+        clkmgr: u32,
+        pkt_size: u32,
+        hsa: u32,
+        hbp: u32,
+        hline: u32,
+        vsa: u32,
+        vbp: u32,
+        vfp: u32,
+        vactive: u32,
+        settle_ms: u32,
+    }
+
+    fn check_dk_mode(p: &Pinned) {
+        let link = dk_link(p.mode);
+        let (_, dsi, _, env) = rig(MP25_VERSION);
+        let mut phy = RatePhy(p.lane_mbps);
+        let plan = attach(&dsi, &env, BASE, &mut phy, &link).unwrap();
+        video_on(&dsi, BASE, &link);
+        let reg = |off: u32| dsi.regs.borrow()[(off / 4) as usize];
+        // dw_mipi_dsi_video_packet_config: the line in one packet (:745);
+        // the chunks and nulls stay 0 (:737-742)
+        assert_eq!(reg(r::VID_PKT_SIZE), p.pkt_size);
+        assert_eq!(reg(r::VID_NUM_CHUNKS), 0);
+        assert_eq!(reg(r::VID_NULL_SIZE), 0);
+        // dw_mipi_dsi_get_hcomponent_lbcc, non-burst (:776-808): ceil(x x
+        // clock x 24 / (4 x 8) / clock) = ceil(x x 3 / 4) lane byte clocks,
+        // each component of the mode, written by line_timer_config
+        // (:815-830): htotal, hsync_end - hsync_start, htotal - hsync_end
+        assert_eq!(reg(r::VID_HLINE_TIME), p.hline);
+        assert_eq!(reg(r::VID_HSA_TIME), p.hsa);
+        assert_eq!(reg(r::VID_HBP_TIME), p.hbp);
+        // dw_mipi_dsi_vertical_timing_config (:833-847), in lines
+        assert_eq!(reg(r::VID_VSA_LINES), p.vsa);
+        assert_eq!(reg(r::VID_VBP_LINES), p.vbp);
+        assert_eq!(reg(r::VID_VFP_LINES), p.vfp);
+        assert_eq!(reg(r::VID_VACTIVE_LINES), p.vactive);
+        // dw_mipi_dsi_video_mode_config (:598-626): LP in every blanking
+        // region (0x3f << 8), non-burst with sync pulses (type 0)
+        assert_eq!(reg(r::VID_MODE_CFG), 0x3f00);
+        // dw_mipi_dsi_set_mode (:628-648): video mode, clock lane in HS and
+        // continuous (adv7533's flags lack CLOCK_NON_CONTINUOUS)
+        assert_eq!(reg(r::MODE_CFG), r::ENABLE_VIDEO_MODE);
+        assert_eq!(reg(r::LPCLK_CTRL), r::PHY_TXREQUESTCLKHS);
+        assert_eq!(reg(r::PWR_UP), r::POWERUP);
+        // dw_mipi_dsi_phy_init (:888-897): 4 lanes is N_LANES 3, stop wait 0x20
+        assert_eq!(reg(r::PHY_IF_CFG), 0x2003);
+        // dw_mipi_dsi_dpi_config (:694-722): RGB888 is 24 bit (5), channel 0,
+        // both syncs and DE active high -> no polarity bits
+        assert_eq!(reg(r::DPI_COLOR_CODING), 0x5);
+        assert_eq!(reg(r::DPI_VCID), 0);
+        assert_eq!(reg(r::DPI_CFG_POL), 0);
+        // dw_mipi_dsi_packet_handler_config (:724-732): NO_EOT_PACKET clears
+        // EOTP_TX_EN
+        assert_eq!(reg(r::PCKHDL_CFG), r::CRC_RX_EN | r::ECC_RX_EN | r::BTA_EN);
+        // dw_mipi_dsi_init (:656-692): (lane_mbps >> 3) / 20 + 1
+        assert_eq!(reg(r::CLKMGR_CFG), p.clkmgr);
+        assert_eq!(
+            plan,
+            Plan {
+                lane_mbps: p.lane_mbps,
+                esc_div: p.clkmgr,
+                timing: TIMING_445,
+                hline: p.hline,
+                hsa: p.hsa,
+                hbp: p.hbp,
+                vsa: p.vsa,
+                vbp: p.vbp,
+                vfp: p.vfp,
+                vactive: p.vactive,
+                settle_ms: p.settle_ms,
+            }
+        );
+        // the sync pulses and the line add up: the line time is the active
+        // packet plus the three blanking parts, within the ceil's rounding
+        let active = hcomponent_lbcc(&link, p.lane_mbps, p.mode.hactive);
+        let sum = p.hsa + p.hbp + hcomponent_lbcc(&link, p.lane_mbps, p.mode.hfront) + active;
+        assert!(sum.abs_diff(p.hline) <= 3, "{sum} vs {}", p.hline);
+    }
+
+    #[test]
+    fn the_dk_720p60_over_four_lanes() {
+        // 1650 x 3 / 4 = 1237.5 -> 1238; 40 x 3 / 4 = 30; 220 x 3 / 4 = 165;
+        // 60 Hz: DIV_ROUND_UP(1000, 60) x 2 = 34 ms (:293)
+        check_dk_mode(&Pinned {
+            mode: CEA_720P60,
+            lane_mbps: 445,
+            clkmgr: 3, // (445 >> 3) / 20 + 1 = 55 / 20 + 1
+            pkt_size: 1280,
+            hsa: 30,
+            hbp: 165,
+            hline: 1238,
+            vsa: 5,
+            vbp: 20,
+            vfp: 5,
+            vactive: 720,
+            settle_ms: 34,
+        });
+    }
+
+    #[test]
+    fn the_dk_1080p60_over_four_lanes() {
+        // 2200 x 3 / 4 = 1650; (2052 - 2008 = 44) x 3 / 4 = 33; (2200 - 2052
+        // = 148) x 3 / 4 = 111, all exact; V: 1084 - 1080 = 4 front, 5 sync,
+        // 1125 - 1089 = 36 back
+        check_dk_mode(&Pinned {
+            mode: CEA_1080P60,
+            lane_mbps: 891,
+            clkmgr: 6, // (891 >> 3) / 20 + 1 = 111 / 20 + 1
+            pkt_size: 1920,
+            hsa: 33,
+            hbp: 111,
+            hline: 1650,
+            vsa: 5,
+            vbp: 36,
+            vfp: 4,
+            vactive: 1080,
+            settle_ms: 34,
+        });
+    }
+
+    #[test]
+    fn the_dk_modes_line_times_do_not_depend_on_the_lane_rate() {
+        // non-burst line times come from the pixel clock (:785-790), so the
+        // 3-lane 594 Mbit/s 720p option changes only the lane count's divisor:
+        // 1650 x 24 / 24 = 1650 (3 lanes x 8 bit)
+        let mut l = dk_link(CEA_720P60);
+        assert_eq!(hcomponent_lbcc(&l, 445, 1650), hcomponent_lbcc(&l, 594, 1650));
+        l.lanes = 3;
+        assert_eq!(hcomponent_lbcc(&l, 594, 1650), 1650);
+        assert_eq!(hcomponent_lbcc(&l, 594, 40), 40);
+        assert_eq!(hcomponent_lbcc(&l, 594, 220), 220);
+    }
+
     #[test]
     fn a_phy_that_never_locks_times_out_and_stops_there() {
         let (log, mut dsi, mut phy, env) = rig(MP25_VERSION);
