@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! GC7000 (i.MX8MP): the 4x4-tiled and 64x64 super-tiled address maps as
-//! pure functions (docs/notes/gc-tiled-targets.md, steps 2-5). **Not wired**:
-//! declared in `mod.rs`, nothing in the backend calls it yet.
+//! pure functions (docs/notes/gc-tiled-targets.md, steps 2-5). [`Layout`],
+//! [`padding`] and [`stride`] name the tiled shadow's and the depth surface's
+//! layout (`tiled_rt.rs`, `ds_cache.rs`); the address maps are the host
+//! tests' (`tests/gc_layout.rs`, the RS interpreter of `backend_tests.rs`).
 //!
 //! Self-contained on purpose: `core` only, no crate imports; the host test
 //! `tests/gc_layout.rs` takes it from the crate as `yakogl::vivante::layout`.

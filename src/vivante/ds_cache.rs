@@ -31,6 +31,7 @@
 //! every surface holding one, the draw is refused (src/ds_retention.rs).
 
 use super::backend::{g, heap_data};
+use super::layout::Layout;
 use crate::backend::GlesDraw;
 use crate::ds_retention::{self, Parked, Plane, DEPTH, STENCIL};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
@@ -93,6 +94,13 @@ struct Surface {
     /// What each plane holds for its object: Live or a clear value when
     /// this surface has the object's latest contents, Undefined otherwise.
     planes: [Plane; 2],
+    /// How the pixel engine lays the surface out: [`Layout::Linear`] (row
+    /// after row, what every surface here has been) or [`Layout::SuperTiled`],
+    /// which only a draw into a tiled colour shadow gives it
+    /// ([`pe_private`], `tiled_rt.rs`). A plane that holds contents is
+    /// never read or copied across layouts ([`copy_plane`], [`seed_depth`],
+    /// [`resolve_depth`]); a whole-clear value is layout-free.
+    layout: Layout,
 }
 
 impl Surface {
@@ -236,6 +244,31 @@ const fn align64(v: u32) -> u32 {
     (v + 63) & !63
 }
 
+/// Is `key`'s surface free to be `layout`: it has none in another layout, or
+/// that one holds no contents ([`select_in`] would change it)?
+pub fn layout_free(key: DsKey, layout: Layout) -> bool {
+    cache().entries.iter().flatten().all(|e| e.key != key || e.layout == layout || !e.holds_contents())
+}
+
+/// The layout of `key`'s surface, `Linear` while it has none.
+pub fn layout_of(key: DsKey) -> Layout {
+    cache().entries.iter().flatten().find(|e| e.key == key).map_or(Layout::Linear, |e| e.layout)
+}
+
+/// Is the depth/stencil of this draw read by nothing but the pixel engine?
+/// No plane is a texture's (bit 30 of the object id, `ds_object_id`), none is
+/// the window's (bit 31), scale 1, and the CPU has no texels for it
+/// (`depth_texels`). Only such a surface may leave `Linear`: a depth
+/// renderbuffer, which no CPU path reads (`gc-tiled-wire.md` W3).
+pub fn pe_private(gl: &GlesDraw, scale: u32) -> bool {
+    const TEXTURE: u32 = 1 << 30;
+    const WINDOW: u32 = 1 << 31;
+    scale == 1
+        && gl.depth_id != 0
+        && gl.depth_texels.is_null()
+        && [gl.depth_id, gl.stencil_id].iter().all(|id| id & (TEXTURE | WINDOW) == 0)
+}
+
 /// What [`select`] made current.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Selected {
@@ -273,6 +306,26 @@ pub fn select(
     kick: u32,
     seed: Option<ds_retention::DepthTexels>,
     pending: impl Fn(u32) -> bool,
+    finish: impl FnMut() -> i32,
+) -> Result<Selected, i32> {
+    select_in(Layout::Linear, key, w, h, guard, kick, seed, pending, finish)
+}
+
+/// [`select`] for a draw that wants the surface in `layout`. A surface of
+/// that key in another layout changes layout when no plane of it holds
+/// contents (`Undefined`, or a whole clear's value, which is the same in
+/// every layout); with a live plane `Err(-ENOTSUP)`, named once in the log:
+/// the contents are not remapped. [`layout_free`] asks first.
+#[allow(clippy::too_many_arguments)]
+pub fn select_in(
+    layout: Layout,
+    key: DsKey,
+    w: u32,
+    h: u32,
+    guard: usize,
+    kick: u32,
+    seed: Option<ds_retention::DepthTexels>,
+    pending: impl Fn(u32) -> bool,
     mut finish: impl FnMut() -> i32,
 ) -> Result<Selected, i32> {
     let c = cache();
@@ -285,6 +338,19 @@ pub fn select(
     let slot = match c.entries.iter().position(|e| e.as_ref().is_some_and(|e| e.key == key)) {
         Some(i) => {
             let e = c.entries[i].as_mut().expect("found above");
+            if e.layout != layout {
+                if e.holds_contents() {
+                    crate::glog_once!(
+                        "vivante: the depth/stencil of object 0x{:x} is live in a {:?} surface and this draw wants \
+                         it {:?}: the draw is refused (gc_tiled_rt)",
+                        if key.depth_id != 0 { key.depth_id } else { key.stencil_id },
+                        e.layout,
+                        layout
+                    );
+                    return Err(-crate::util::ENOTSUP);
+                }
+                e.layout = layout;
+            }
             if stride > e.stride || rows > e.rows {
                 /* grown: the old contents cannot be kept at a new stride */
                 let (s, r) = (stride.max(e.stride), rows.max(e.rows));
@@ -333,6 +399,7 @@ pub fn select(
                 written_by: 0,
                 stamp: 0,
                 planes: [Plane::UNDEFINED; 2],
+                layout,
             });
             note_peak(c);
             fresh = true;
@@ -398,6 +465,7 @@ pub fn select(
     let g = g();
     g.depth = e.mem;
     g.depth_stride = e.stride;
+    g.depth_layout = e.layout;
     g.depth_w = w;
     g.depth_h = e.rows;
     g.depth_surface_off = guard as u32;
@@ -468,6 +536,17 @@ fn copy_plane(
     finish: &mut impl FnMut() -> i32,
 ) -> Result<(), i32> {
     let (Some(s), Some(d)) = (c.entries[from].as_ref(), c.entries[to].as_ref()) else { return Err(-1) };
+    if s.layout != d.layout {
+        crate::glog_once!(
+            "vivante: the {} of object 0x{:x} is in a {:?} surface and the draw wants a {:?} one: not copied, the \
+             draw is refused",
+            if p == DEPTH { "depth" } else { "stencil" },
+            if p == DEPTH { d.key.depth_id } else { d.key.stencil_id },
+            s.layout,
+            d.layout
+        );
+        return Err(-crate::util::ENOTSUP);
+    }
     if s.stride != d.stride {
         crate::glog_once!(
             "vivante: the {} of object 0x{:x} is in a surface of another row stride ({} against {} bytes): not \
@@ -532,6 +611,14 @@ fn seed_depth(
     let Some(e) = c.entries[slot].as_ref() else { return Err(-1) };
     let busy = e.used_by != 0 && pending(e.used_by);
     let (scale, id) = (e.key.scale, e.key.depth_id);
+    if e.layout != Layout::Linear {
+        crate::glog_once!(
+            "vivante: draw refused: the depth the CPU wrote into object 0x{:x} cannot go into a {:?} surface",
+            id,
+            e.layout
+        );
+        return Err(-crate::util::ENOTSUP);
+    }
     if busy {
         let rc = finish();
         if rc != 0 {
@@ -619,6 +706,9 @@ pub unsafe fn resolve_depth(
     };
     if let Some(v) = e.planes[DEPTH].cleared_value() {
         return fill(f32::from_bits(v));
+    }
+    if e.layout != Layout::Linear {
+        return 1; /* PE-private (pe_private): no reader is meant to get here */
     }
     /* the wait may submit the open frame: nothing in the cache moves */
     let rc = wait_kick(e.written_by);

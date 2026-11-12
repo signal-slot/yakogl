@@ -636,6 +636,35 @@ pub const GC_STENCIL_OP_DECR_WRAP: u32 = 0x7;
 pub const GC_TS_FLUSH_CACHE: u32 = 0x00001650;
 pub const GC_TS_FLUSH: u32 = 0x00000001;
 pub const GC_TS_MEM_CONFIG: u32 = 0x00001654;
+pub const GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR: u32 = 0x0000_0001;
+pub const GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR: u32 = 0x0000_0002;
+pub const GC_TS_MEM_CONFIG_DEPTH_16BPP: u32 = 0x0000_0008;
+pub const GC_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE: u32 = 0x0000_0010;
+pub const GC_TS_MEM_CONFIG_COLOR_AUTO_DISABLE: u32 = 0x0000_0020;
+pub const GC_TS_COLOR_STATUS_BASE: u32 = 0x0000_1658;
+pub const GC_TS_COLOR_SURFACE_BASE: u32 = 0x0000_165c;
+pub const GC_TS_COLOR_CLEAR_VALUE: u32 = 0x0000_1660;
+pub const GC_TS_DEPTH_STATUS_BASE: u32 = 0x0000_1664;
+pub const GC_TS_DEPTH_SURFACE_BASE: u32 = 0x0000_1668;
+pub const GC_TS_DEPTH_CLEAR_VALUE: u32 = 0x0000_166c;
+pub const GC_TS_DEPTH_AUTO_DISABLE_COUNT: u32 = 0x0000_1670;
+pub const GC_TS_COLOR_AUTO_DISABLE_COUNT: u32 = 0x0000_1674;
+pub const GC_TS_COLOR_CLEAR_VALUE_EXT: u32 = 0x0000_16bc;
+/// TS_SAMPLER_CONFIG(i), _STATUS_BASE(i): the sampler's tile status.
+pub const fn ts_sampler_config(i: u32) -> u32 {
+    0x0000_1720 + 4 * i
+}
+pub const fn ts_sampler_status_base(i: u32) -> u32 {
+    0x0000_1740 + 4 * i
+}
+pub const GC_TS_SAMPLER_CONFIG_ENABLE: u32 = 0x0000_0001;
+/// PE_MEM_CONFIG: the colour / depth surface is read through its tile status.
+pub const fn pe_mem_config_color_ts_mode(x: u32) -> u32 {
+    (x & 1) << 24
+}
+pub const fn pe_mem_config_depth_ts_mode(x: u32) -> u32 {
+    (x & 1) << 26
+}
 
 // ---- global -------------------------------------------------------------
 
@@ -833,6 +862,7 @@ pub const fn texdesc_halign(x: u32) -> u32 {
 /// padded to 4 texels, or to 16 for the resolve engine.
 pub const GC_TEXTURE_HALIGN_FOUR: u32 = 0;
 pub const GC_TEXTURE_HALIGN_SIXTEEN: u32 = 1;
+pub const GC_TEXTURE_HALIGN_SUPER_TILED: u32 = 2;
 /// CONFIG1: the layers are an array, not the slices of a volume.
 pub const GC_TEXDESC_TEXTURE_ARRAY: u32 = 0x0100_0000;
 pub const GC_TEXDESC_CONFIG2: u32 = 0x6c;
@@ -1076,6 +1106,18 @@ pub const fn rs_fill_value(i: u32) -> u32 {
     0x00001640 + 4 * i
 }
 pub const GC_RS_EXTRA_CONFIG: u32 = 0x000016a0;
+/// RS_EXTRA_CONFIG TS_MODE: the source is read through its tile status.
+pub const fn rs_extra_ts_mode(x: u32) -> u32 {
+    (x & 1) << 24
+}
+pub const GC_RS_KICKER_INPLACE: u32 = 0x000016b0;
+/// A tiled destination (VIVS_RS_DEST_STRIDE_TILING / _SUPER_TILED_NEW).
+pub const GC_RS_DEST_STRIDE_TILING: u32 = 0x8000_0000;
+pub const GC_RS_DEST_STRIDE_SUPER_TILED_NEW: u32 = 0x0800_0000;
+/// CLEAR_CONTROL BITS(x): which bytes of the fill word the clear writes.
+pub const fn rs_clear_bits(x: u32) -> u32 {
+    x & 0xffff
+}
 pub const fn rs_extra_aa(x: u32) -> u32 {
     x & 0x3
 }
@@ -1096,6 +1138,16 @@ pub const GC_RS_FORMAT_A4R4G4B4: u32 = 0x00000001;
 pub const GC_RS_FORMAT_R5G6B5: u32 = 0x00000004;
 pub const GC_RS_FORMAT_X8R8G8B8: u32 = 0x00000005;
 pub const GC_RS_FORMAT_A8R8G8B8: u32 = 0x00000006;
+
+/// TX_CTRL of a sampler descriptor (VIVS_NTE_DESCRIPTOR_TX_CTRL): the tile
+/// status of the sampled surface.
+pub const GC_TX_CTRL_TS_ENABLE: u32 = 0x0000_0002;
+pub const fn tx_ctrl_ts_mode(x: u32) -> u32 {
+    x & 1
+}
+pub const fn tx_ctrl_ts_index(x: u32) -> u32 {
+    (x & 7) << 2
+}
 
 #[cfg(test)]
 mod mesa_header {
@@ -1145,5 +1197,77 @@ mod mesa_header {
             n += 1;
         }
         assert!(n >= 39, "only {n} GC_TEX_FORMAT_* consts found");
+    }
+
+    /// Every tile-status, resolve-engine and sampler-TS constant of this
+    /// file against its `VIVS_` define in driver/src/vivante/hw/state_3d.xml.h.
+    #[test]
+    fn ts_rs_consts_match_state_3d() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/driver/src/vivante/hw/state_3d.xml.h");
+        let text = std::fs::read_to_string(path).expect("read state_3d.xml.h");
+        let mut defs: HashMap<String, u32> = HashMap::new();
+        for line in text.lines() {
+            let mut it = line.split_whitespace();
+            if it.next() != Some("#define") {
+                continue;
+            }
+            let (Some(name), Some(val)) = (it.next(), it.next()) else {
+                continue;
+            };
+            if let Some(hex) = val.strip_prefix("0x") {
+                if let Ok(v) = u32::from_str_radix(hex, 16) {
+                    defs.insert(name.to_string(), v);
+                }
+            }
+        }
+        use super::*;
+        let consts: &[(&str, u32)] = &[
+            ("VIVS_TS_MEM_CONFIG_DEPTH_FAST_CLEAR", GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR),
+            ("VIVS_TS_MEM_CONFIG_COLOR_FAST_CLEAR", GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR),
+            ("VIVS_TS_MEM_CONFIG_DEPTH_16BPP", GC_TS_MEM_CONFIG_DEPTH_16BPP),
+            ("VIVS_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE", GC_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE),
+            ("VIVS_TS_MEM_CONFIG_COLOR_AUTO_DISABLE", GC_TS_MEM_CONFIG_COLOR_AUTO_DISABLE),
+            ("VIVS_TS_COLOR_STATUS_BASE", GC_TS_COLOR_STATUS_BASE),
+            ("VIVS_TS_COLOR_SURFACE_BASE", GC_TS_COLOR_SURFACE_BASE),
+            ("VIVS_TS_COLOR_CLEAR_VALUE", GC_TS_COLOR_CLEAR_VALUE),
+            ("VIVS_TS_DEPTH_STATUS_BASE", GC_TS_DEPTH_STATUS_BASE),
+            ("VIVS_TS_DEPTH_SURFACE_BASE", GC_TS_DEPTH_SURFACE_BASE),
+            ("VIVS_TS_DEPTH_CLEAR_VALUE", GC_TS_DEPTH_CLEAR_VALUE),
+            ("VIVS_TS_DEPTH_AUTO_DISABLE_COUNT", GC_TS_DEPTH_AUTO_DISABLE_COUNT),
+            ("VIVS_TS_COLOR_AUTO_DISABLE_COUNT", GC_TS_COLOR_AUTO_DISABLE_COUNT),
+            ("VIVS_TS_COLOR_CLEAR_VALUE_EXT", GC_TS_COLOR_CLEAR_VALUE_EXT),
+            ("VIVS_TS_SAMPLER_CONFIG_ENABLE", GC_TS_SAMPLER_CONFIG_ENABLE),
+            ("VIVS_RS_KICKER_INPLACE", GC_RS_KICKER_INPLACE),
+            ("VIVS_RS_DEST_STRIDE_TILING", GC_RS_DEST_STRIDE_TILING),
+            ("VIVS_RS_DEST_STRIDE_SUPER_TILED_NEW", GC_RS_DEST_STRIDE_SUPER_TILED_NEW),
+            ("VIVS_RS_CLEAR_CONTROL_MODE_ENABLED1", GC_RS_CLEAR_CONTROL_MODE_ENABLED1),
+            ("VIVS_RS_CLEAR_CONTROL_BITS__MASK", rs_clear_bits(u32::MAX)),
+            ("VIVS_RS_EXTRA_CONFIG_TS_MODE__MASK", rs_extra_ts_mode(1)),
+            ("VIVS_PE_MEM_CONFIG_COLOR_TS_MODE__MASK", pe_mem_config_color_ts_mode(1)),
+            ("VIVS_PE_MEM_CONFIG_DEPTH_TS_MODE__MASK", pe_mem_config_depth_ts_mode(1)),
+            ("VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_ENABLE", GC_TX_CTRL_TS_ENABLE),
+            ("VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_MODE__MASK", tx_ctrl_ts_mode(1)),
+            ("VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_INDEX__MASK", tx_ctrl_ts_index(7)),
+            ("VIVS_TS_SAMPLER_CONFIG(i0)", ts_sampler_config(0)),
+            ("VIVS_TS_SAMPLER_STATUS_BASE(i0)", ts_sampler_status_base(0)),
+        ];
+        for (name, got) in consts {
+            let want = match defs.get(*name) {
+                Some(v) => *v,
+                // the indexed defines are written `(0xNNNN + 0x4*(i0))`
+                None => {
+                    let line = text
+                        .lines()
+                        .find(|l| l.split_whitespace().nth(1) == Some(*name))
+                        .unwrap_or_else(|| panic!("{name} is not in the header"));
+                    let hex = line.split("(0x").nth(1).expect("indexed define").split_whitespace().next().unwrap();
+                    u32::from_str_radix(hex, 16).expect("hex")
+                }
+            };
+            assert_eq!(*got, want, "{name}");
+        }
+        assert_eq!(GC_TEXTURE_HALIGN_SUPER_TILED, 2);
+        assert_eq!(ts_sampler_config(3), 0x1720 + 12);
+        assert_eq!(ts_sampler_status_base(3), 0x1740 + 12);
     }
 }
