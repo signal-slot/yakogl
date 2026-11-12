@@ -204,10 +204,10 @@ pub const fn gpu_src_pll(src: GpuSrc) -> Option<Pll> {
 }
 
 /// `PLL_CON1` bit 13 of a `pll_rk3588`: 1 = the PLL is powered down, and
-/// `PLL_CON6` bit 15: 1 = it is locked (clk-pll.c `RK3588_PLLCON1_PWRDOWN`,
+/// `PLL_CON6` bit 15: 1 = it is locked (clk-pll.c v6.18:865-866 `RK3588_PLLCON1_PWRDOWN`,
 /// `RK3588_PLLCON6_LOCK_STATUS`). Linux powers a PLL down when its last
 /// consumer is disabled and leaves its `MODE_CON0` field alone
-/// (`rockchip_rk3588_pll_disable`), so a PLL in normal mode can have no
+/// (`rockchip_rk3588_pll_disable`, clk-pll.c v6.18:1019-1025), so a PLL in normal mode can have no
 /// output.
 ///
 /// Measured on the T6 under Armbian, 2026-11-11 (read-only), with the GPU
@@ -439,7 +439,7 @@ pub fn gpu_clock_set(m: &impl Mmio, cru: usize, found: &GpuClock) -> Result<Cloc
 }
 
 /// Linux's wait for a `pll_rk3588` to lock: 1000 µs, where the lock takes
-/// 250 input clock cycles typically and 500 at most (clk-pll.c
+/// 250 input clock cycles typically and 500 at most (clk-pll.c v6.18:868-885
 /// `rockchip_rk3588_pll_wait_lock`).
 pub const PLL_LOCK_WAIT_US: u32 = 1_000;
 
@@ -454,7 +454,7 @@ pub struct PllOn {
     pub con6: u32,
 }
 
-/// Power `pll` on as Linux does (clk-pll.c `rockchip_rk3588_pll_enable`):
+/// Power `pll` on as Linux does (clk-pll.c v6.18:1008-1017 `rockchip_rk3588_pll_enable`):
 /// clear [`PLL_CON1_PWRDOWN`] through its write-enable twin, then wait for
 /// [`PLL_CON6_LOCK`]. A PLL that reads powered is not written; its lock is
 /// still waited for. The rate words and `MODE_CON0` are left as they are.
@@ -477,7 +477,8 @@ pub fn pll_on(m: &impl Mmio, cru: usize, pll: Pll, delay_us: &mut impl FnMut(u32
 pub const PMU_BASE: usize = 0xfd8d_8000;
 
 /// PD_GPU in the PMU: `rk3588_pmu` and its `RK3588_PD_GPU` entry
-/// (pm-domains.c:1277, 1291-1300; `DOMAIN_M_O_R`, :154-171). Each control
+/// (drivers/pmdomain/rockchip/pm-domains.c, v6.18: the `RK3588_PD_GPU` row :1277,
+/// `rk3588_pmu` :1493-1503; `DOMAIN_M_O_R`, :154-171). Each control
 /// register takes a write-enable twin of its bit in 31:16.
 ///
 /// - `PWR_GATE` 0x14c bit 0: 1 = powered off. On: write `1 << 16`.
@@ -488,7 +489,7 @@ pub const PMU_BASE: usize = 0xfd8d_8000;
 ///   0x120 bit 0 to read 0 (`rockchip_pmu_set_idle_request`, :376-422).
 /// - No memory repair (`m_status` 0) and no clock-ungate register
 ///   (`rk3588_pmu` has no `clk_ungate_offset`).
-/// - The order of `rockchip_pd_power` (:620-660): the domain's clocks on
+/// - The order of `rockchip_pd_power` (:615-660): the domain's clocks on
 ///   (`CLK_GPU`, `CLK_GPU_COREGROUP`, `CLK_GPU_STACKS`, rk3588-base.dtsi:
 ///   892-902), power on, wait, leave idle, restore the QoS registers. Each
 ///   wait is 10 ms in Linux. After the power-on Linux also tells the
@@ -513,13 +514,13 @@ pub mod pd_gpu {
     pub const REPAIR_ON_BIT: u32 = 1 << 1;
     pub const IDLE_BIT: u32 = 1 << 0;
 
-    /// Linux's wait for each step (pm-domains.c:396, 412, 562).
+    /// Linux's wait for each step (pm-domains.c v6.18: :404, :413, :599).
     pub const WAIT_US: u32 = 10_000;
 }
 
 /// The GPU QoS blocks restored after a power-on (`qos_gpu_m0..m3`,
 /// rk3588-base.dtsi:1676-1694) and the five words of each
-/// (`QOS_PRIORITY` 0x08 .. `QOS_EXTCONTROL` 0x18, pm-domains.c:86-90).
+/// (`QOS_PRIORITY` 0x08 .. `QOS_EXTCONTROL` 0x18, pm-domains.c v6.18:86-90).
 /// Under Armbian with the GPU active (2026-10-19): `PRIORITY` 0x80000000,
 /// the other four 0, in all four blocks.
 pub const QOS_GPU: [usize; 4] = [0xfdf3_5000, 0xfdf3_5200, 0xfdf3_5400, 0xfdf3_5600];
@@ -1116,11 +1117,22 @@ mod tests {
                 soc.regs.borrow_mut().insert(CRU_BASE + pll_con(a), v);
             }
             soc.regs.borrow_mut().insert(SEL158, sel);
-            soc.regs.borrow_mut().insert(SEL159, 0x1);
+            // the Armbian state is the T6's own, with CLKSEL_CON(159) 0; the others start with an
+            // out-of-table stacks divider
+            soc.regs.borrow_mut().insert(SEL159, if sel == 0x1f24 { 0 } else { 0x1 });
             let found = gpu_clock(&soc, CRU_BASE);
             let r = gpu_clock_set(&soc, CRU_BASE, &found);
             assert!(r.is_ok(), "{sel:#x}: {r:?}");
-            for (a, _) in soc.writes.borrow().iter() {
+            if sel == 0x1f24 {
+                // Armbian's state is kept: no write at all
+                assert!(soc.writes.borrow().is_empty(), "{:x?}", soc.writes.borrow());
+            }
+            for (a, v) in soc.writes.borrow().iter() {
+                // the CRU's write-mask idiom: a non-zero mask in 31:16 and no
+                // bit of 15:0 outside it
+                let (mask, val) = (v >> 16, v & 0xffff);
+                assert!(mask != 0, "{sel:#x}: write {v:#x} to {a:#x} has no write enable");
+                assert!(val & !mask == 0, "{sel:#x}: write {v:#x} to {a:#x} sets bits outside its mask");
                 assert!(*a == SEL158 || *a == SEL159, "{sel:#x}: a write to {a:#x}");
                 // and in particular nothing in the PLL_CON / MODE_CON range (CRU + 0..0x300) or outside the CRU
                 assert!(*a >= CRU_BASE + 0x300 && *a < CRU_BASE + 0x1000);
