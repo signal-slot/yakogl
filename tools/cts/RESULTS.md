@@ -544,6 +544,7 @@ here when it has run.
 |---|---|---|---|---|---|
 | Z1, second half: the GPU power-on | `t6_gpu` | **PASS**, `VERDICT t6_gpu PASS`: `t6_gpu: PASS: GPU_ID 0xa8670005, L2 ready, 16 ms` | `v0.1.0-915-g1bac19568` (main `1bac19568`) | 2026-11-11 21:36 JST | `records/nanopc-t6/20261111-213650-t6` |
 | Z2: AS0 and a cache flush | `t6_mmu` | **PASS**, `VERDICT t6_mmu PASS`: `t6_mmu: PASS: AS0 on TRANSTAB 0x0000000010023000, three cache flush round trips, 13 ms` | `v0.1.0-913-g1f19113a3` (main `1f19113a3`) | 2026-11-11 21:01 JST | `records/nanopc-t6/20261111-210127-t6` |
+| Z3: the firmware boots | `t6_fw` | **PASS**, `VERDICT t6_fw PASS`: `t6_fw: Z3: rc 0 step 0, 4 ms`, `t6_fw: PASS` | `v0.1.0-986-g988639752` (main `988639752`) | 2026-11-12 11:41 JST | `records/nanopc-t6/20261112-114132-t6` |
 
 - Z2: every line of the predicted record was seen: Z1's power-on (`GPU_ID`
   0xa8670005, L2 ready), the cache flush round trip (2 polls of 1 µs), AS0's
@@ -574,7 +575,29 @@ here when it has run.
   power-on on a powered-down NPLL; the image's own reading of
   `MMU_INT_RAWSTAT`); both causes were corrected before this run
   (`driver/docs/nanopc-t6-mali.md`, "The runs of 2026-11-11").
-- Next: Z3 (`t6_fw`, the firmware boots). Z4 waits for Z3.
+- Z3: every line of the predicted record was seen (31 of 31). The image
+  carried the board's firmware file (282624 bytes, sha256
+  `a27847ea…a2405b`); its 7 loaded sections came up in AS0 on 9 of the 16
+  table pages with 7 flushes, 1 protected section skipped, every cache
+  clean rc 0. `MCU_STATUS` read 0 before and 1 after the start,
+  `JOB_INT_RAWSTAT` 0x80000000 (the global interface bit). The firmware
+  wrote its control block into our shared section: GLB version 1.5.0
+  (0x01050000, the image's), features 0, instr 0x71, 8 groups of stride
+  0xa0, the GLB, CSG 0 and CS 0 offsets as predicted. `GLB_REQ` and
+  `GLB_ACK` both read 0x0000050e after the configuration (init req 0x40e,
+  acked 0x10e) and the `PING`.
+- Z3, the values only the board could give: the MCU's interface
+  interrupt was seen 43 µs after the start (budget 1 s), the
+  configuration was acknowledged in 32 µs and the `PING` in 5 µs (budget
+  100 ms each), and CS 0's `features` word is 0x0007085f (96 work
+  registers and 8 scoreboards, the counts panthor reports on this board).
+  The firmware did not move the control block's offsets or strides.
+- Z3: the whole sequence took 4 ms. The board came back to Armbian
+  through the image's PSCI reset 28 s after the jump (`GLB_RST_ST` 0
+  before and after; Linux's watchdog was open at the jump, its `WDT_EN`
+  proof is in the record). Z3 is the GPU's own first walk of AS0's
+  tables, which Z2 by its design did not show.
+- Next: Z4 (`t6_submit`, one frame submitted from our kernel side).
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
