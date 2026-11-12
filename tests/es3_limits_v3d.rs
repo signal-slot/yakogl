@@ -537,13 +537,14 @@ fn the_aliased_ranges_are_float_pairs_the_v3d_draws() {
 /// `implementation_limits.compressed_texture_formats` and
 /// `num_compressed_texture_formats`, and the three
 /// `state_query.integers.compressed_texture_formats_*` value rows: today the
-/// V3D build stores and reports three formats — ETC1 and the two linear
-/// ETC2/EAC classes (`src/gl/texture.rs` `stored_compressed_formats`;
+/// V3D build stores and reports five formats — ETC1, the two linear ETC2/EAC
+/// classes and, since the V3D samples them (`V3D_SAMPLED_TEXFMTS`), the two
+/// sRGB ones (`src/gl/texture.rs` `stored_compressed_formats`;
 /// `es3_caps.rs` lists this as the formats-* gap: "ES 3.0 needs the ten
 /// ETC2/EAC formats"). The list is pinned exactly: the expected test asks
 /// for the ES 3.0 ten.
 #[test]
-fn the_compressed_format_list_is_the_three_stored_formats() {
+fn the_compressed_format_list_is_the_five_stored_formats() {
     let _lib = context();
     let n = Q::one(GL_NUM_COMPRESSED_TEXTURE_FORMATS);
     let list = Q::i(GL_COMPRESSED_TEXTURE_FORMATS);
@@ -555,7 +556,13 @@ fn the_compressed_format_list_is_the_three_stored_formats() {
     assert_eq!(want.len(), list.len(), "a format listed twice");
     assert_eq!(
         list,
-        vec![i64::from(GL_ETC1_RGB8_OES), i64::from(GL_COMPRESSED_RGB8_ETC2), i64::from(GL_COMPRESSED_RGBA8_ETC2_EAC),],
+        vec![
+            i64::from(GL_ETC1_RGB8_OES),
+            i64::from(GL_COMPRESSED_RGB8_ETC2),
+            i64::from(GL_COMPRESSED_RGBA8_ETC2_EAC),
+            i64::from(GL_COMPRESSED_SRGB8_ETC2),
+            i64::from(GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC),
+        ],
         "the stored compressed list moved; re-pin (owner: src/gl/texture.rs)"
     );
     assert!(!list.contains(&i64::from(GL_COMPRESSED_R11_EAC)), "the EAC set is not stored yet");

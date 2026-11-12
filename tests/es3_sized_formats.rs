@@ -19,11 +19,13 @@ use yakogl::gl::es3_formats::*;
 const MASKS: [(&str, u64); 3] =
     [("PowerVR", PVR_SAMPLED_TEXFMTS), ("GC7000UL", GC_SAMPLED_TEXFMTS), ("V3D 4.2", V3D_SAMPLED_TEXFMTS)];
 
-/// Every class this module can write, as a back end that samples them all.
+/// Every class this module can write, as a back end that samples them all
+/// (the V3D's linear ETC2 classes, which no format of this module is stored
+/// in, are among the bits of its mask).
 fn all_classes() -> u64 {
     (GLES_TEXFMT_R11G11B10F..=GLES_TEXFMT_RGBA32F)
         .chain(GLES_TEXFMT_R32UI..=GLES_TEXFMT_RG16I)
-        .fold(PVR_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
+        .fold(PVR_SAMPLED_TEXFMTS | V3D_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
 }
 
 /// The integer classes: an integer format is stored in one of them or
