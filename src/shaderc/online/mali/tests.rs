@@ -6450,6 +6450,20 @@ fn a_compare_of_a_negated_value_with_a_constant_is_mesa_s() {
     assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::ArithConstant);
 }
 
+/// A mediump fragment shader's matrix uniform is refused before its block
+/// is laid out (select.rs `UboLayout::fs16` takes floats, vectors, vec4
+/// arrays and ints), so the layout's `split` mark for a matrix, which it
+/// shares with the other two layouts, is not reached today.
+#[test]
+fn a_mediump_fragment_matrix_uniform_is_refused_before_the_push() {
+    for t in ["mat2", "mat3", "mat4"] {
+        let src = format!(
+            "precision mediump float; uniform {t} m; varying vec2 a2; void main() {{ gl_FragColor = vec4(a2 + m[1].xy, 0.0, 1.0); }}"
+        );
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::FsUniform, "{t}");
+    }
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,

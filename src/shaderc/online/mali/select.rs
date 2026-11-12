@@ -439,7 +439,9 @@ impl UboLayout {
             }
             for e in 0..u16::from(u.array_len.max(1)) {
                 l.push(u.dword_off + e * comps, comps, halves)?;
-                if u.array_len > 1 {
+                /* as the other two layouts mark them; a matrix does not
+                 * reach here today (the match above refuses it) */
+                if u.array_len > 1 || is_matrix(u.gl_type) {
                     l.split_last();
                 }
             }
