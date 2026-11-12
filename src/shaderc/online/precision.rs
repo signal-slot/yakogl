@@ -722,9 +722,47 @@ impl<'x, 'a> Scan<'x, 'a> {
             Expr::Unary(UnOp::Not, x) => Konst::Bool(!boolean(self.constant(x))?),
             Expr::Unary(UnOp::Minus, x) => Konst::Num(-num(self.constant(x))?),
             Expr::Unary(UnOp::Plus, x) => Konst::Num(num(self.constant(x))?),
+            /* a component of a constructor of scalar literals,
+             * `vec2(1.0, 0.0).x` */
+            Expr::Field(b, field) if field.len() == 1 => {
+                let Expr::Call { name, args } = *self.ast.expr(b) else { return None };
+                sema::constructor_type(name, self.ast.es3)?;
+                let k = match field.as_bytes()[0] {
+                    b'x' | b'r' | b's' => 0,
+                    b'y' | b'g' | b't' => 1,
+                    b'z' | b'b' | b'p' => 2,
+                    b'w' | b'a' | b'q' => 3,
+                    _ => return None,
+                };
+                let ids = &self.ast.expr_ids[args.indices()];
+                if ids.iter().any(|&x| self.ty(x).components() != 1) {
+                    return None;
+                }
+                let x = if ids.len() == 1 { ids[0] } else { *ids.get(k)? };
+                self.constant(x)?
+            }
             Expr::Binary(op, x, y) => {
                 let (a, b) = (self.constant(x)?, self.constant(y)?);
                 match (op, a, b) {
+                    /* GLSL's arithmetic: 32-bit floats, 32-bit wrapping
+                     * ints, as ast_to_hir folds them */
+                    (BinOp::Add | BinOp::Sub | BinOp::Mul, Konst::Num(a), Konst::Num(b)) => {
+                        if is_int(self.ty(e)) {
+                            let (a, b) = (a as i32, b as i32);
+                            Konst::Num(f64::from(match op {
+                                BinOp::Add => a.wrapping_add(b),
+                                BinOp::Sub => a.wrapping_sub(b),
+                                _ => a.wrapping_mul(b),
+                            }))
+                        } else {
+                            let (a, b) = (a as f32, b as f32);
+                            Konst::Num(f64::from(match op {
+                                BinOp::Add => a + b,
+                                BinOp::Sub => a - b,
+                                _ => a * b,
+                            }))
+                        }
+                    }
                     (BinOp::AndAnd, Konst::Bool(a), Konst::Bool(b)) => Konst::Bool(a && b),
                     (BinOp::OrOr, Konst::Bool(a), Konst::Bool(b)) => Konst::Bool(a || b),
                     (BinOp::XorXor | BinOp::Ne, Konst::Bool(a), Konst::Bool(b)) => Konst::Bool(a != b),
@@ -1884,6 +1922,28 @@ mod tests {
         let g = vs("uniform int i; varying highp vec4 v; const highp vec3 cv = vec3(0.1, 0.2, 0.3);\n\
                     void main(){ gl_Position = p; v = vec4(a * cv[i]); }");
         assert!(alu(&g, AluOp::Bcsel).iter().all(|&p| p == H));
+    }
+
+    /// Second review S-A: forms Mesa's rules decide that were Unknown.
+    /// A `const` variable argument of pow is folded by `ast_to_hir` and
+    /// passed to the mediump parameter: its fp16 value, so its read records
+    /// Medium (the slot holds the 32-bit value and the read narrows it). A
+    /// `?:` condition of literal arithmetic or of a component of a literal
+    /// vector is evaluated (Mesa folds both and takes the chosen side).
+    #[test]
+    fn mesa_s_rules_decide_more_constants() {
+        let g = vs(
+            "attribute mediump vec4 q; varying highp vec4 v; const mediump float E = 0.1; const highp float F = 0.2;\n\
+                    void main(){ gl_Position = p; v = vec4(pow(q.x, E), pow(q.y, F), 0.0, 1.0); }",
+        );
+        let loads = of(&g, |o| matches!(o, Op::LoadLocal { .. }));
+        assert_eq!(loads[..2], [M, M], "the two exponents, each read at its fp16 value");
+        let head = "attribute mediump vec4 q; attribute highp vec4 h; varying highp vec4 v;\n";
+        for cond in ["2.0 * 0.5 > 0.7", "vec2(1.0, 0.0).x > 0.5", "1.0 - 0.25 >= 0.75"] {
+            let g =
+                vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4((({cond}) ? q.y : h.z) * q.x); }}"));
+            assert_eq!(alu(&g, AluOp::Fmul).last(), Some(&M), "{cond}");
+        }
     }
 
     #[test]

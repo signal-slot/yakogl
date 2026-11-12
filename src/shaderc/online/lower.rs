@@ -4314,15 +4314,21 @@ impl<'a> Lower<'_, 'a> {
             }
             let i = src.val.0 as usize;
             let constant = matches!(self.instrs.as_slice().get(i), Some(Op::ConstF32(_)));
+            /* a `const` variable: ast_to_hir folds its read to its value,
+             * so the parameter gets that value's fp16 rounding; the slot
+             * holds the 32-bit value (`declare_var`), and this read of it,
+             * made for this argument, narrows it */
+            let read = matches!(self.instrs.as_slice().get(i), Some(Op::LoadLocal { index: None, .. })) && i >= start;
             let had = self.prec.as_slice().get(i).copied();
             let p = match (constant, i >= start, had) {
                 (true, true, _) | (true, false, Some(Prec::Medium)) => Prec::Medium,
+                _ if read => Prec::Medium,
                 _ => Prec::Unknown,
             };
             if let Some(x) = self.prec.as_mut_slice().get_mut(i) {
                 *x = p;
             }
-            if p == Prec::Medium {
+            if p == Prec::Medium && constant {
                 self.pinned.push(self.a, i as u32)?;
             }
         }
