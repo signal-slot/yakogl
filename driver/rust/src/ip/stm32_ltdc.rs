@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ST's LCD-TFT display controller (LTDC, 0x4801_0000 on the STM32MP25);
-//! follows Linux drm/stm/ltdc.c (+ ltdc.h), mainline master.
+//! follows Linux drm/stm/ltdc.c (+ ltdc.h), mainline master, and for the
+//! MP25 ST's downstream tree (github.com/STMicroelectronics/linux, tag
+//! v6.6-stm32mp-r3.1, commit 548f960c059b; ltdc.c is cited there as
+//! `r3.1 ltdc.c: function`, see the `mp25_*` tests).
 //!
 //! One layer (L1) scanned out with a mode's timings, as the DK's
 //! LTDC -> DSI -> ADV7535 -> HDMI path needs (docs/notes/pre-study-stm32mp257f-dk.md
@@ -30,8 +33,10 @@
 //!   `BPCR`, `AWCR`, `TWCR` are `(h << 16) | v` under mask 0x0FFF07FF;
 //!   `LIPCR` = `accum_act_h + 1`. Polarity is `GCR` bits 31 `HSPOL` (set for
 //!   a positive hsync), 30 `VSPOL`, 29 `DEPOL` (set for DE low), 28 `PCPOL`
-//!   (pixel data driven on the falling edge), written under mask
-//!   0xF0000000.
+//!   (pixel data driven on the falling edge), 16 `DEN` (dither, left off),
+//!   written under mask 0xF0010000 after the timings. The timing fields are
+//!   12 bits wide on every version but 0x010200 (`ltdc_conf_regs_a1`, used by
+//!   a2 too; `_a0` has 11-bit vertical fields).
 //! - Start (`ltdc_crtc_atomic_enable`, `ltdc_plane_atomic_update`,
 //!   `ltdc_encoder_enable`): `BCCR` background, `IER |= 0x46`
 //!   (FU warning/error, transfer error; the line interrupt is the vblank
@@ -39,7 +44,12 @@
 //!   `SRCR` `VBR`, bit 1), then `FUT` (0x90) = 128 where the version has the
 //!   FIFO threshold (a2), and `GCR_LTDCEN`. The reload bit is cleared by
 //!   the hardware when the shadow registers are taken over, so it is the
-//!   proof that frames are timed.
+//!   proof that frames are timed. ST's MP25 (r3.1) adds, per layer, the
+//!   burst length (`L1BLCR`, from the DT's `st,burstlen` / 8, 0 when absent;
+//!   only for `st,stm32mp21-ltdc`/`st,stm32mp25-ltdc`, so the caller passes
+//!   it in [`Output::burst_bytes`]), the default colour `L1DCCR` = black, the
+//!   blending order field (`BOR`, zpos 0) in `BFCR`, and `EDCR` = 0 (output
+//!   YCbCr conversion off, `ycbcr_output`).
 //! - Layer (`ltdc_plane_atomic_update`): `WHPCR`/`WVPCR` hold the window
 //!   plus the back porch read from `BPCR` (`x1 + 1 + ahbp`, `x0 + 1 + ahbp`),
 //!   `PFCR` the format code (mask 7), `CACR` = alpha >> 8, `BFCR` 0x607
@@ -57,9 +67,15 @@
 //!   error, `FUEIF` (6) FIFO underrun error. [`Ltdc::wait_frame`] polls
 //!   `LIF` with the interrupt masked.
 //! - Stop (`ltdc_plane_atomic_disable`, `ltdc_crtc_atomic_disable`,
-//!   `ltdc_encoder_disable`): `LXCR &= ~0x113`, `CACR` = 0, `IER &= ~0x46`,
-//!   reload (`L1RCR` `VBR`, or `SRCR` `IMR` immediate), then `GCR_LTDCEN`
-//!   cleared.
+//!   `ltdc_encoder_disable`): `LXCR &= ~0x513` (LEN, COLKEN, CLUTEN, HMEN,
+//!   SCEN), `CACR` = 0, `IER &= ~0x146` (the rotation underrun too), an
+//!   immediate reload (`L1RCR` or `SRCR` `IMR`, not waited for), then
+//!   `GCR_LTDCEN` cleared and, where `GC2R` bit 10 says the block can rotate,
+//!   `GCR_ROTEN`.
+//! - Probe (r3.1 `ltdc_get_caps`): `LCR` holds the layer count (clamped to
+//!   1..4; the MP25 hides L3 when its RIF firewall refuses it, which the
+//!   caller checks), the pad limit is 150 MHz for a1/a2 and the MP25 (`drv.c`
+//!   `stm_drm_plat_data_mp25`), 90 MHz for 0x010300, 65 MHz for 0x010200.
 
 use crate::env::{Env, Level};
 use crate::errno::{EINVAL, ENODEV, ETIMEDOUT};
@@ -73,6 +89,7 @@ pub const BPCR: u32 = 0x0c;
 pub const AWCR: u32 = 0x10;
 pub const TWCR: u32 = 0x14;
 pub const GCR: u32 = 0x18;
+pub const LCR: u32 = 0x04;
 pub const GC2R: u32 = 0x20;
 pub const SRCR: u32 = 0x24;
 pub const BCCR: u32 = 0x2c;
@@ -80,6 +97,7 @@ pub const IER: u32 = 0x34;
 pub const ISR: u32 = 0x38;
 pub const ICR: u32 = 0x3c;
 pub const LIPCR: u32 = 0x40;
+pub const EDCR: u32 = 0x60;
 pub const FUT: u32 = 0x90;
 
 pub const HWVER_10200: u32 = 0x01_0200;
@@ -90,13 +108,19 @@ pub const HWVER_40101: u32 = 0x04_0101;
 
 /// `GCR` bits.
 pub const GCR_LTDCEN: u32 = 1 << 0;
+pub const GCR_ROTEN: u32 = 1 << 2;
+pub const GCR_DEN: u32 = 1 << 16;
 pub const GCR_PCPOL: u32 = 1 << 28;
 pub const GCR_DEPOL: u32 = 1 << 29;
 pub const GCR_VSPOL: u32 = 1 << 30;
 pub const GCR_HSPOL: u32 = 1 << 31;
-const GCR_POL_MASK: u32 = 0xf000_0000;
+const GCR_POL_MASK: u32 = 0xf000_0000 | GCR_DEN;
 /// `GC2R[6:4]`: the bus width, `8 << BW` bits.
 const GC2R_BW: u32 = 0x70;
+/// `GC2R_ROTA`: the block can rotate the output.
+const GC2R_ROTA: u32 = 1 << 10;
+/// `LCR` clamp (`LTDC_MAX_LAYER`).
+const MAX_LAYERS: u32 = 4;
 /// `SRCR` / `L1RCR`.
 pub const RCR_IMR: u32 = 1 << 0;
 pub const RCR_VBR: u32 = 1 << 1;
@@ -105,19 +129,38 @@ pub const INT_LINE: u32 = 1 << 0;
 pub const INT_FU_WARN: u32 = 1 << 1;
 pub const INT_TRANSFER_ERR: u32 = 1 << 2;
 pub const INT_FU_ERR: u32 = 1 << 6;
+pub const INT_FU_ROT: u32 = 1 << 8;
 /// The error interrupts `ltdc_crtc_atomic_enable` unmasks (0x46).
 pub const IER_ERRORS: u32 = INT_FU_WARN | INT_TRANSFER_ERR | INT_FU_ERR;
-/// `LXCR`: layer enable, colour keying, CLUT, horizontal mirror.
+/// `LXCR`: layer enable, colour keying, CLUT, horizontal mirror, scaler.
 pub const LXCR_LEN: u32 = 1 << 0;
-const LXCR_MASK: u32 = 0x113;
-/// Timing registers' field masks (`(h << 16) | v`).
-const TIMING_MASK: u32 = 0x0fff_07ff;
+const LXCR_MASK: u32 = 0x513;
+/// Timing registers' field masks (`(h << 16) | v`): `ltdc_conf_regs_a0` has
+/// 11-bit vertical fields, `_a1` (a1 and a2) 12 bits.
+const fn timing_mask(hwver: u32) -> u32 {
+    if hwver == HWVER_10200 {
+        0x0fff_07ff
+    } else {
+        0x0fff_0fff
+    }
+}
+/// The 150 MHz pad limit of a1/a2 and the MP25, 90 MHz for 0x010300 and
+/// 65 MHz for 0x010200.
+const fn pad_max_hz(hwver: u32) -> u32 {
+    match hwver {
+        HWVER_10200 => 65_000_000,
+        HWVER_10300 => 90_000_000,
+        _ => 150_000_000,
+    }
+}
 /// `FUT_DFT`.
 pub const FUT_DEFAULT: u32 = 128;
 /// `BFCR` for a format with alpha (the default) and without.
 const BFCR_ALPHA: u32 = 0x607;
 const BFCR_NO_ALPHA: u32 = 0x405;
 const BFCR_MASK: u32 = 0x707;
+/// `LXBFCR_BOR` (blending order), a2 `dynamic_zorder`.
+const BFCR_BOR: u32 = 0x7_0000;
 const CACR_MASK: u32 = 0xff;
 const PFCR_MASK: u32 = 0x7;
 
@@ -170,7 +213,12 @@ pub struct LayerRegs {
     pub wvpcr: u32,
     pub pfcr: u32,
     pub cacr: u32,
+    pub dccr: u32,
     pub bfcr: u32,
+    /// The burst length register (a1, a2).
+    pub blcr: Option<u32>,
+    /// The planar/YCbCr configuration register (a2).
+    pub pcr: Option<u32>,
     pub cfbar: u32,
     pub cfblr: u32,
     pub cfblnr: u32,
@@ -184,7 +232,10 @@ const REGS_A0: LayerRegs = LayerRegs {
     wvpcr: 0x8c,
     pfcr: 0x94,
     cacr: 0x98,
+    dccr: 0x9c,
     bfcr: 0xa0,
+    blcr: None,
+    pcr: None,
     cfbar: 0xac,
     cfblr: 0xb0,
     cfblnr: 0xb4,
@@ -196,7 +247,10 @@ const REGS_A1: LayerRegs = LayerRegs {
     wvpcr: 0x90,
     pfcr: 0x98,
     cacr: 0x9c,
+    dccr: 0xa0,
     bfcr: 0xa4,
+    blcr: Some(0xa8),
+    pcr: None,
     cfbar: 0xac,
     cfblr: 0xb0,
     cfblnr: 0xb4,
@@ -208,7 +262,10 @@ const REGS_A2: LayerRegs = LayerRegs {
     wvpcr: 0x114,
     pfcr: 0x11c,
     cacr: 0x120,
+    dccr: 0x124,
     bfcr: 0x128,
+    blcr: Some(0x12c),
+    pcr: Some(0x130),
     cfbar: 0x134,
     cfblr: 0x138,
     cfblnr: 0x13c,
@@ -230,6 +287,10 @@ pub struct Output {
     pub pixel_data_negedge: bool,
     /// The background colour, 0x00RRGGBB (`BCCR`).
     pub background: u32,
+    /// The MP25's `L1BLCR` value, DT `st,burstlen` / 8 (0 = the maximum, as
+    /// when the property is absent); `None` leaves the register alone (MP1,
+    /// MP13).
+    pub burst_bytes: Option<u32>,
 }
 
 /// What [`Ltdc::configure`] settled on.
@@ -246,6 +307,10 @@ pub struct Ltdc {
     pub hwver: u32,
     /// `8 << GC2R[6:4]` bits, in bytes.
     pub bus_bytes: u32,
+    /// `LCR`, clamped to 1..4.
+    pub layers: u32,
+    /// `GC2R_ROTA`.
+    pub rotation: bool,
     regs: LayerRegs,
 }
 
@@ -272,8 +337,10 @@ impl Ltdc {
             HWVER_40100 | HWVER_40101 => REGS_A2,
             _ => return Err(-ENODEV),
         };
-        let bw = (rd(m, base, GC2R) & GC2R_BW) >> 4;
-        Ok(Ltdc { base, hwver, bus_bytes: (8 << bw) / 8, regs })
+        let gc2r = rd(m, base, GC2R);
+        let bw = (gc2r & GC2R_BW) >> 4;
+        let layers = rd(m, base, LCR).clamp(1, MAX_LAYERS);
+        Ok(Ltdc { base, hwver, bus_bytes: (8 << bw) / 8, layers, rotation: gc2r & GC2R_ROTA != 0, regs })
     }
 
     fn reload_reg(&self) -> u32 {
@@ -286,7 +353,12 @@ impl Ltdc {
     /// when a check fails.
     pub fn configure(&self, m: &impl Mmio, mode: &VideoMode, out: &Output, layer: &Layer) -> Result<Configured, i32> {
         mode.check()?;
-        if mode.hactive > 0xfff || mode.htotal() > 0x1000 || mode.vtotal() > 0x800 {
+        let vmax = if self.hwver == HWVER_10200 { 0x800 } else { 0x1000 };
+        if mode.hactive > 0xfff || mode.htotal() > 0x1000 || mode.vtotal() > vmax {
+            return Err(-EINVAL);
+        }
+        // ltdc_mode_valid: MODE_CLOCK_HIGH above the pad limit
+        if mode.pixel_clock_hz > pad_max_hz(self.hwver) {
             return Err(-EINVAL);
         }
         let cpp = layer.format.bytes_pp();
@@ -309,12 +381,17 @@ impl Ltdc {
             | if mode.vsync_high { GCR_VSPOL } else { 0 }
             | if mode.de_high { 0 } else { GCR_DEPOL }
             | if out.pixel_data_negedge { GCR_PCPOL } else { 0 };
-        upd(m, b, GCR, GCR_POL_MASK, pol);
-        upd(m, b, SSCR, TIMING_MASK, (hsync << 16) | vsync);
-        upd(m, b, BPCR, TIMING_MASK, (acc_hbp << 16) | acc_vbp);
-        upd(m, b, AWCR, TIMING_MASK, (acc_w << 16) | acc_h);
-        upd(m, b, TWCR, TIMING_MASK, ((mode.htotal() - 1) << 16) | (mode.vtotal() - 1));
+        let tm = timing_mask(self.hwver);
+        upd(m, b, SSCR, tm, (hsync << 16) | vsync);
+        upd(m, b, BPCR, tm, (acc_hbp << 16) | acc_vbp);
+        upd(m, b, AWCR, tm, (acc_w << 16) | acc_h);
+        upd(m, b, TWCR, tm, ((mode.htotal() - 1) << 16) | (mode.vtotal() - 1));
         wr(m, b, LIPCR, acc_h + 1);
+        upd(m, b, GCR, GCR_POL_MASK, pol);
+        if self.hwver >= HWVER_40100 {
+            // ycbcr_output: the output converter off (RGB out)
+            wr(m, b, EDCR, 0);
+        }
         wr(m, b, BCCR, out.background & 0x00ff_ffff);
         // the layer window: BPCR's back porch plus the window (x1 + 1 + ahbp)
         let r = &self.regs;
@@ -322,10 +399,21 @@ impl Ltdc {
         upd(m, b, r.wvpcr, 0x07ff_07ff, ((mode.vactive + acc_vbp) << 16) | (1 + acc_vbp));
         upd(m, b, r.pfcr, PFCR_MASK, layer.format.code(self.hwver));
         upd(m, b, r.cacr, CACR_MASK, 0xff);
-        upd(m, b, r.bfcr, BFCR_MASK, if layer.format.has_alpha() { BFCR_ALPHA } else { BFCR_NO_ALPHA });
+        wr(m, b, r.dccr, 0);
+        let bf = if layer.format.has_alpha() { BFCR_ALPHA } else { BFCR_NO_ALPHA };
+        // dynamic_zorder (a2): the blending order field, zpos 0
+        let bf_mask = if self.hwver >= HWVER_40100 { BFCR_MASK | BFCR_BOR } else { BFCR_MASK };
+        upd(m, b, r.bfcr, bf_mask, bf);
         wr(m, b, r.cfbar, layer.phys as u32);
         wr(m, b, r.cfblr, field(0xffff_0000, pitch) | line_length);
         upd(m, b, r.cfblnr, 0x7ff, mode.vactive);
+        if let Some(pcr) = r.pcr {
+            // ycbcr_input, an RGB framebuffer: the planar/YCbCr conversion off
+            wr(m, b, pcr, 0);
+        }
+        if let (Some(reg), Some(bytes)) = (r.blcr, out.burst_bytes) {
+            wr(m, b, reg, bytes);
+        }
         Ok(Configured { pitch, line_length })
     }
 
@@ -364,24 +452,20 @@ impl Ltdc {
     }
 
     /// Stop: the layer off with constant alpha 0, errors masked, the change
-    /// reloaded immediately where there is a global reload (`SRCR` `IMR`) or
-    /// at the next blank (`L1RCR` `VBR`, waited for), then `LTDCEN` cleared.
-    /// A controller whose clock stopped cannot take the reload; that is
-    /// reported and `LTDCEN` is cleared anyway.
-    pub fn disable(&self, m: &impl Mmio, env: &impl Env) -> Result<(), i32> {
+    /// reloaded immediately (`L1RCR` or `SRCR` `IMR`, as ltdc.c: the bit is
+    /// not waited for), then `LTDCEN` cleared and, on a block that can
+    /// rotate, `ROTEN`.
+    pub fn disable(&self, m: &impl Mmio, _env: &impl Env) -> Result<(), i32> {
         let b = self.base;
         upd(m, b, self.regs.cr, LXCR_MASK, 0);
         upd(m, b, self.regs.cacr, CACR_MASK, 0);
-        upd(m, b, IER, IER_ERRORS, 0);
-        let res = if self.regs.rcr.is_some() {
-            wr(m, b, self.reload_reg(), RCR_VBR);
-            self.wait_reload(m, env, RCR_VBR)
-        } else {
-            wr(m, b, SRCR, RCR_IMR);
-            Ok(())
-        };
+        upd(m, b, IER, IER_ERRORS | INT_FU_ROT, 0);
+        wr(m, b, self.reload_reg(), RCR_IMR);
         upd(m, b, GCR, GCR_LTDCEN, 0);
-        res
+        if self.rotation {
+            upd(m, b, GCR, GCR_ROTEN, 0);
+        }
+        Ok(())
     }
 
     /// Point the running layer at `phys` and wait for the reload.
@@ -563,29 +647,32 @@ mod tests {
         f.clear_log();
         let c = l.configure(&f, &M720, &Output::default(), &LAYER).unwrap();
         assert_eq!(c, Configured { pitch: 5120, line_length: 5127 });
-        // ltdc_crtc_mode_set_nofb: GCR polarity (HSPOL|VSPOL, DE high), then
-        // SSCR/BPCR/AWCR/TWCR, LIPCR; hsync 40-1, vsync 5-1, accum_hbp
+        // ltdc_crtc_mode_set_nofb: SSCR/BPCR/AWCR/TWCR, LIPCR, then GCR
+        // polarity (HSPOL|VSPOL, DE high) and (a2) EDCR 0; hsync 40-1, vsync 5-1, accum_hbp
         // 40+220-1, accum_vbp 5+20-1, +1280/+720, total 1649/749, LIPCR 745
         // (ltdc_crtc_atomic_enable: BCCR 0); ltdc_plane_atomic_update:
         // WHPCR/WVPCR = x1+1+ahbp, x0+1+ahbp; PFCR 0 (a2 ARGB/XRGB), CACR
         // 0xff, BFCR 0x405 (no alpha), CFBAR, CFBLR = pitch<<16 | cpp*w+8-1,
         // CFBLNR (a2: layer 1 at 0x100, ltdc_layer_regs_a2)
         let want = [
-            (GCR, GCR_HSPOL | GCR_VSPOL),
             (SSCR, (39 << 16) | 4),
             (BPCR, (259 << 16) | 24),
             (AWCR, (1539 << 16) | 744),
             (TWCR, (1649 << 16) | 749),
             (LIPCR, 745),
+            (GCR, GCR_HSPOL | GCR_VSPOL),
+            (EDCR, 0),
             (BCCR, 0),
             (0x110, (1539 << 16) | 260),
             (0x114, (744 << 16) | 25),
             (0x11c, 0),
             (0x120, 0xff),
+            (0x124, 0),
             (0x128, 0x405),
             (0x134, 0x9000_0000),
             (0x138, (5120 << 16) | 5127),
             (0x13c, 720),
+            (0x130, 0),
         ];
         assert_eq!(f.writes(), want);
         assert!(!l.is_running(&f));
@@ -646,8 +733,8 @@ mod tests {
 
     #[test]
     fn disable_clears_the_layer_then_ltdcen() {
-        // ltdc_plane_atomic_disable (LXCR &= ~0x113, CACR = 0, RCR = VBR),
-        // ltdc_crtc_atomic_disable (IER &= ~0x46), ltdc_encoder_disable
+        // ltdc_plane_atomic_disable (LXCR &= ~0x513, CACR = 0), r3.1
+        // ltdc_crtc_atomic_disable (IER &= ~0x146, a2: L1RCR = IMR, not VBR)
         let f = Fake::mp25();
         let e = TestEnv::default();
         let l = Ltdc::probe(&f, B).unwrap();
@@ -655,7 +742,7 @@ mod tests {
         l.enable(&f, &e).unwrap();
         f.clear_log();
         l.disable(&f, &e).unwrap();
-        assert_eq!(f.writes(), [(0x10c, 0), (0x120, 0), (IER, 0), (0x108, RCR_VBR), (GCR, GCR_HSPOL | GCR_VSPOL)]);
+        assert_eq!(f.writes(), [(0x10c, 0), (0x120, 0), (IER, 0), (0x108, RCR_IMR), (GCR, GCR_HSPOL | GCR_VSPOL)]);
         assert!(!l.is_running(&f));
     }
 
@@ -685,8 +772,174 @@ mod tests {
         assert_eq!(l.enable(&f, &e), Err(-ETIMEDOUT));
         assert!(*e.waited_us.borrow() >= u64::from(FRAME_WAIT_US));
         assert_eq!(l.wait_frame(&f, &e), Err(-ETIMEDOUT));
-        assert_eq!(l.disable(&f, &e), Err(-ETIMEDOUT));
+        // the immediate reload is not waited for (ltdc.c does not)
+        assert_eq!(l.disable(&f, &e), Ok(()));
         assert_eq!(f.peek(GCR) & GCR_LTDCEN, 0);
+    }
+
+    #[test]
+    fn mp25_caps_from_the_registers() {
+        // r3.1 ltdc.c ltdc_get_caps (2404-2590): nb_layers = clamp(LCR, 1, 4),
+        // GC2R_ROTA (bit 10) is crtc_rotation, HWVER_40100/40101 take
+        // LAY_OFS_1 (0x100), ltdc_layer_regs_a2, conf_regs_a1; drv.c
+        // stm_drm_plat_data_mp25 pad_max_freq_hz = 150 MHz
+        let f = Fake::mp25();
+        f.regs.borrow_mut().insert(B + LCR as usize, 3);
+        f.regs.borrow_mut().insert(B + GC2R as usize, (3 << 4) | (1 << 10));
+        let l = Ltdc::probe(&f, B).unwrap();
+        assert_eq!((l.layers, l.rotation, l.bus_bytes), (3, true, 8));
+        assert_eq!(l.regs, REGS_A2);
+        assert_eq!(REGS_A2.cr, 0x100 + 0x0c);
+        assert_eq!(REGS_A2.rcr, Some(0x100 + 0x08));
+        assert_eq!(REGS_A2.blcr, Some(0x100 + 0x2c));
+        assert_eq!(REGS_A2.dccr, 0x100 + 0x24);
+        assert_eq!(REGS_A2.pcr, Some(0x100 + 0x30));
+        f.regs.borrow_mut().insert(B + LCR as usize, 9);
+        assert_eq!(Ltdc::probe(&f, B).unwrap().layers, 4);
+        f.regs.borrow_mut().insert(B + LCR as usize, 0);
+        assert_eq!(Ltdc::probe(&f, B).unwrap().layers, 1);
+        assert_eq!(Ltdc::probe(&Fake::new(HWVER_40100, 3), B).unwrap().regs, REGS_A2);
+        assert_eq!(pad_max_hz(HWVER_40101), 150_000_000);
+        assert_eq!(pad_max_hz(HWVER_10300), 90_000_000);
+        assert_eq!(pad_max_hz(HWVER_10200), 65_000_000);
+    }
+
+    #[test]
+    fn mp25_masks_match_r3_1() {
+        // r3.1 ltdc.c 211-216: LXCR_MASK = LEN|COLKEN|CLUTEN|HMEN|SCEN = 0x513
+        assert_eq!(LXCR_MASK, 1 | 1 << 1 | 1 << 4 | 1 << 8 | 1 << 10);
+        // ltdc_conf_regs_a1 (506, a1 and a2): GENMASK(11,0) / (27,16); _a0: (10,0)
+        assert_eq!(timing_mask(HWVER_40101), 0x0fff_0fff);
+        assert_eq!(timing_mask(HWVER_20101), 0x0fff_0fff);
+        assert_eq!(timing_mask(HWVER_10200), 0x0fff_07ff);
+        // LXBFCR_BF2 (2,0) | BF1 (10,8) | BOR (18,16), ltdc.c 229-231
+        assert_eq!(BFCR_MASK | BFCR_BOR, 0x7_0707);
+        // ltdc_crtc_mode_set_nofb GCR update mask incl. GCR_DEN (bit 16)
+        assert_eq!(GCR_POL_MASK, GCR_HSPOL | GCR_VSPOL | GCR_DEPOL | GCR_PCPOL | GCR_DEN);
+        // ltdc_crtc_atomic_enable IER |= FUWIE|FUEIE|TERRIE; _disable also FURIE
+        assert_eq!((IER_ERRORS, IER_ERRORS | INT_FU_ROT), (0x46, 0x146));
+    }
+
+    #[test]
+    fn mp25_vertical_fields_are_12_bits_and_zpos_zero_clears_bor() {
+        // a 2200-line frame: TWCR vertical 2199 needs 12 bits (a2), not 11
+        let f = Fake::mp25();
+        f.regs.borrow_mut().insert(B + 0x128, 0x7_0000 | 0x707);
+        let l = Ltdc::probe(&f, B).unwrap();
+        let mut m = M720;
+        m.vactive = 2000;
+        m.vfront = 100;
+        m.vsync = 10;
+        m.vback = 90;
+        l.configure(&f, &m, &Output::default(), &LAYER).unwrap();
+        assert_eq!(f.peek(TWCR) & 0xfff, 2199);
+        // ltdc_plane_update: dynamic_zorder, BOR = normalized_zpos (0)
+        assert_eq!(f.peek(0x128), 0x405, "BOR cleared");
+        let g = Fake::new(HWVER_10200, 2);
+        let l = Ltdc::probe(&g, B).unwrap();
+        assert_eq!(l.configure(&g, &m, &Output::default(), &LAYER), Err(-EINVAL));
+    }
+
+    #[test]
+    fn mp25_pad_limit_refuses_fast_modes() {
+        // r3.1 ltdc_encoder_mode_valid (2325-2345): MODE_CLOCK_HIGH above
+        // pad_max_freq_hz (150 MHz on the MP25)
+        let f = Fake::mp25();
+        let l = Ltdc::probe(&f, B).unwrap();
+        let mut m = M720;
+        m.pixel_clock_hz = 150_000_000;
+        assert!(l.configure(&f, &m, &Output::default(), &LAYER).is_ok());
+        m.pixel_clock_hz = 150_000_001;
+        assert_eq!(l.configure(&f, &m, &Output::default(), &LAYER), Err(-EINVAL));
+    }
+
+    #[test]
+    fn mp25_burst_length_is_written_only_when_given() {
+        // r3.1 ltdc_load (2597): st,burstlen / 8, 0 when absent;
+        // ltdc_plane_update (1965): L1BLCR (0x12c on a2) for the mp21/mp25
+        // compatibles only, after CFBLNR and L1PCR
+        let f = Fake::mp25();
+        let l = Ltdc::probe(&f, B).unwrap();
+        f.clear_log();
+        l.configure(&f, &M720, &Output::default(), &LAYER).unwrap();
+        assert!(f.writes().iter().all(|w| w.0 != 0x12c));
+        f.clear_log();
+        let o = Output { burst_bytes: Some(64 / 8), ..Output::default() };
+        l.configure(&f, &M720, &o, &LAYER).unwrap();
+        assert_eq!(f.writes().last(), Some(&(0x12c, 8)));
+        let w = f.writes();
+        let pos = |off| w.iter().position(|e| e.0 == off).unwrap();
+        assert!(pos(0x13c) < pos(0x130) && pos(0x130) < pos(0x12c));
+    }
+
+    #[test]
+    fn mp25_disable_clears_rotation_and_does_not_wait() {
+        // r3.1 ltdc_crtc_atomic_disable (1176): GCR_ROTEN cleared when
+        // crtc_rotation; the IMR reload is not waited for
+        let f = Fake::mp25();
+        f.regs.borrow_mut().insert(B + GC2R as usize, (3 << 4) | (1 << 10));
+        let e = TestEnv::default();
+        let l = Ltdc::probe(&f, B).unwrap();
+        l.configure(&f, &M720, &Output::default(), &LAYER).unwrap();
+        l.enable(&f, &e).unwrap();
+        f.regs.borrow_mut().insert(B + IER as usize, 0x146);
+        f.regs.borrow_mut().insert(B + 0x10c, 0x513);
+        let waited = *e.waited_us.borrow();
+        l.disable(&f, &e).unwrap();
+        assert_eq!((f.peek(IER), f.peek(0x10c)), (0, 0));
+        assert_eq!(f.peek(GCR) & (GCR_LTDCEN | GCR_ROTEN), 0);
+        assert_eq!(*e.waited_us.borrow(), waited, "no wait on the reload");
+    }
+
+    /// The bars `colorbars.py` judges, parsed from its `BARS` table.
+    fn judge_bars() -> Vec<(String, [u8; 3])> {
+        const SRC: &str = include_str!("../../../../tools/probes/stm32mp257f_dk/display_check/colorbars.py");
+        let body = &SRC[SRC.find("\nBARS = [").expect("BARS table") + 9..];
+        let body = &body[..body.find("\n]").expect("end of BARS")];
+        body.lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| {
+                let l = l.trim().trim_end_matches(',');
+                let name = l.split('"').nth(1).expect("name");
+                let rgb = l.rsplit_once('(').expect("rgb").1.trim_end_matches(')');
+                let v: Vec<u8> = rgb.split(',').map(|c| c.trim().parse().unwrap()).collect();
+                (name.to_string(), [v[0], v[1], v[2]])
+            })
+            .collect()
+    }
+
+    #[test]
+    fn color_bars_are_the_ones_colorbars_py_judges() {
+        // tools/probes/stm32mp257f_dk/display_check/colorbars.py: 8 equal bars,
+        // left to right white yellow cyan green magenta red blue black. A
+        // 0xAARRGGBB word is B,G,R,A in XRGB8888 memory, as the layer reads it.
+        let want = judge_bars();
+        assert_eq!(
+            want.iter().map(|b| b.0.as_str()).collect::<Vec<_>>(),
+            ["white", "yellow", "cyan", "green", "magenta", "red", "blue", "black"]
+        );
+        for (width, height) in [(1280usize, 720usize), (1920, 1080), (800, 4), (1366, 3)] {
+            let stride = width + 16;
+            let mut buf = vec![0u32; stride * height];
+            fill_color_bars(&mut buf, width, height, stride);
+            for y in [0, height / 2, height - 1] {
+                let mut runs: Vec<(usize, usize)> = Vec::new(); // (bar index, width)
+                for x in 0..width {
+                    let px = buf[y * stride + x];
+                    assert_eq!(px >> 24, 0xff, "opaque");
+                    let rgb = [(px >> 16) as u8, (px >> 8) as u8, px as u8];
+                    let idx = want.iter().position(|b| b.1 == rgb).unwrap_or_else(|| panic!("{x},{y}: {px:#x}"));
+                    match runs.last_mut() {
+                        Some(r) if r.0 == idx => r.1 += 1,
+                        _ => runs.push((idx, 1)),
+                    }
+                }
+                let order: Vec<usize> = runs.iter().map(|r| r.0).collect();
+                assert_eq!(order, (0..8).collect::<Vec<_>>(), "{width}x{height} row {y}");
+                let (lo, hi) = (runs.iter().map(|r| r.1).min().unwrap(), runs.iter().map(|r| r.1).max().unwrap());
+                assert!(hi - lo <= 1, "{width}: bar widths {runs:?}");
+            }
+        }
     }
 
     #[test]
