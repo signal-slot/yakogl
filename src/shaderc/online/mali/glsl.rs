@@ -1803,7 +1803,7 @@ impl Tree<'_, '_> {
             let w = usize::from(self.comps[i]).clamp(1, 4);
             /* a compare of two constants folds to a constant boolean (no
              * operand is encoded; -0.0 and 0.0 compare the same) */
-            let constant = |x: Src| self.fold(x, 0, 0)[..w].iter().all(|l| l.maybe_const());
+            let constant = |x: Src| self.fold(x, 0, &Assumed::NONE)[..w].iter().all(|l| l.maybe_const());
             if constant(s[0]) && constant(s[1]) {
                 continue;
             }
@@ -1863,7 +1863,7 @@ impl Tree<'_, '_> {
             Some(&IrOp::Alu(AluOp::Fneg, [c, ..])) => {
                 let swizzle = core::array::from_fn(|i| c.swizzle[s.swizzle[i] as usize & 3]);
                 let inner = Src { val: c.val, swizzle };
-                let v = self.fold(inner, 0, 0);
+                let v = self.fold(inner, 0, &Assumed::NONE);
                 if v[..w].iter().all(|l| *l == Lane::K(0)) {
                     return Ok(Some(inner));
                 }
@@ -1883,7 +1883,7 @@ impl Tree<'_, '_> {
              * holding one): Mesa compares with +0.0 there, and the IR has
              * none at the compare */
             _ => {
-                let v = self.fold(s, 0, 0);
+                let v = self.fold(s, 0, &Assumed::NONE);
                 if v[..w].iter().any(|l| l.may_be_neg0()) {
                     return Err(MaliError::NegZeroShared);
                 }
@@ -1904,9 +1904,9 @@ impl Tree<'_, '_> {
     /// a sum of a value and its own negation). It may be a -0.0 when an
     /// operand may be negative or -0.0 (a product also with a zero
     /// constant; a select only through the operand it picks). A
-    /// local is the union of its stores; `visiting` holds the locals on the
-    /// path (a loop's local read through its own store adds nothing).
-    fn fold(&self, s: Src, depth: usize, visiting: u64) -> [Lane; 4] {
+    /// local is the union of its stores, a loop's run to a fixed point
+    /// ([`Assumed`]).
+    fn fold(&self, s: Src, depth: usize, assumed: &Assumed) -> [Lane; 4] {
         const UNKNOWN: [Lane; 4] = [Lane::Var { konst: true, neg0: true }; 4];
         const NONE: [Lane; 4] = [Lane::Var { konst: false, neg0: false }; 4];
         if depth > 12 {
@@ -1925,15 +1925,16 @@ impl Tree<'_, '_> {
             | IrOp::Tex { .. }
             | IrOp::TexSize { .. } => NONE,
             /* a negated zero is -0.0 */
-            IrOp::Alu(AluOp::Fneg, [a, ..]) => at(self.fold(a, depth + 1, visiting).map(|l| match l {
+            IrOp::Alu(AluOp::Fneg, [a, ..]) => at(self.fold(a, depth + 1, assumed).map(|l| match l {
                 Lane::K(x) => Lane::K(x ^ F32_NEG_ZERO),
                 Lane::Var { konst, .. } => Lane::Var { konst, neg0: konst },
+                Lane::Bot => Lane::Bot,
             })),
             IrOp::Alu(op, srcs) => {
                 let n = op.arity();
                 let mut lanes = [UNKNOWN; 3];
                 for (k, l) in lanes.iter_mut().enumerate().take(n) {
-                    *l = self.fold(srcs[k], depth + 1, visiting);
+                    *l = self.fold(srcs[k], depth + 1, assumed);
                 }
                 /* `a + -a` (nir_opt_algebraic.py's `fadd(a, fneg(a))` is 0.0) */
                 let neg_of = |q: Src, of: Src| matches!(self.instrs.get(q.val.0 as usize), Some(&IrOp::Alu(AluOp::Fneg, [t, ..])) if t.val == of.val);
@@ -1943,6 +1944,10 @@ impl Tree<'_, '_> {
                 at(core::array::from_fn(|i| {
                     let l: [Lane; 3] = core::array::from_fn(|k| lanes[k][i]);
                     let l = &l[..n];
+                    /* a value a loop has not made yet ([`Assumed`]) */
+                    if l.contains(&Lane::Bot) {
+                        return Lane::Bot;
+                    }
                     if let ([Lane::K(p), Lane::K(q)], AluOp::Fmul | AluOp::Fadd) = (l, op) {
                         let (p, q) = (f32::from_bits(*p), f32::from_bits(*q));
                         return Lane::K(if op == AluOp::Fmul { (p * q).to_bits() } else { (p + q).to_bits() });
@@ -1953,6 +1958,7 @@ impl Tree<'_, '_> {
                     let sign = |x: &Lane| match x {
                         Lane::K(k) => k & F32_NEG_ZERO != 0,
                         Lane::Var { neg0, .. } => *neg0,
+                        Lane::Bot => false,
                     };
                     /* a product is -0.0 with a zero and a negative factor:
                      * a -0.0 operand, a negative constant or a zero constant
@@ -1969,40 +1975,55 @@ impl Tree<'_, '_> {
                     Lane::Var { konst, neg0 }
                 }))
             }
+            /* a local is the union of its stores. A store that reads the
+             * local itself (a loop's `z = -z;`) reads what the stores make
+             * so far: from nothing ([`Lane::Bot`]) the union is run again
+             * until it no longer changes, as an unrolled loop's values are
+             * the stores' in turn. One that does not settle, or a local
+             * past the assumption table, is unknown */
             IrOp::LoadLocal { local, .. } => {
-                let bit = 1u64.checked_shl(local.0).unwrap_or(0);
-                if bit == 0 {
-                    return UNKNOWN;
+                if let Some(v) = assumed.get(local.0) {
+                    return at(v);
                 }
-                if visiting & bit != 0 {
-                    return NONE;
-                }
-                let mut v = NONE;
-                for (l, out) in v.iter_mut().enumerate() {
-                    let mut seen: Option<Lane> = None;
-                    for st in self.instrs.iter() {
-                        let IrOp::StoreLocal { local: to, src, write_mask, .. } = *st else { continue };
-                        if to != local || write_mask & (1 << l) == 0 {
-                            continue;
-                        }
-                        let lane = Src { val: src.val, swizzle: [src.swizzle[l]; 4] };
-                        let x = self.fold(lane, depth + 1, visiting | bit)[0];
-                        seen = Some(match (seen, x) {
-                            (None, x) => x,
-                            (Some(Lane::K(a)), Lane::K(b)) if a == b => Lane::K(a),
-                            (Some(a), b) => Lane::Var {
-                                konst: a.maybe_const() || b.maybe_const(),
-                                neg0: a.may_be_neg0() || b.may_be_neg0(),
-                            },
-                        });
+                let mut v = [Lane::Bot; 4];
+                for _ in 0..8 {
+                    let Some(inner) = assumed.with(local.0, v) else { return UNKNOWN };
+                    let next = self.stores_of(local, depth, &inner);
+                    if next == v {
+                        /* a lane no store writes has no value */
+                        return at(v.map(|l| if l == Lane::Bot { Lane::Var { konst: false, neg0: false } } else { l }));
                     }
-                    /* a lane no store writes has no value */
-                    *out = seen.unwrap_or(Lane::Var { konst: false, neg0: false });
+                    v = next;
                 }
-                at(v)
+                UNKNOWN
             }
             _ => UNKNOWN,
         }
+    }
+
+    /// The union of what the stores of `local` write in each lane, with
+    /// the locals of `assumed` read as it holds them ([`Tree::fold`]).
+    fn stores_of(&self, local: crate::shaderc::online::ir::LocalId, depth: usize, assumed: &Assumed) -> [Lane; 4] {
+        core::array::from_fn(|l| {
+            let mut seen = Lane::Bot;
+            for st in self.instrs.iter() {
+                let IrOp::StoreLocal { local: to, src, write_mask, .. } = *st else { continue };
+                if to != local || write_mask & (1 << l) == 0 {
+                    continue;
+                }
+                let lane = Src { val: src.val, swizzle: [src.swizzle[l]; 4] };
+                let x = self.fold(lane, depth + 1, assumed)[0];
+                seen = match (seen, x) {
+                    (Lane::Bot, x) | (x, Lane::Bot) => x,
+                    (Lane::K(a), Lane::K(b)) if a == b => Lane::K(a),
+                    (a, b) => Lane::Var {
+                        konst: a.maybe_const() || b.maybe_const(),
+                        neg0: a.may_be_neg0() || b.may_be_neg0(),
+                    },
+                };
+            }
+            seen
+        })
     }
 
     /// Constant `c` is read by compares alone, each of which reads only
@@ -2047,7 +2068,42 @@ const F32_NEG_ZERO: u32 = 0x8000_0000;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Lane {
     K(u32),
-    Var { konst: bool, neg0: bool },
+    Var {
+        konst: bool,
+        neg0: bool,
+    },
+    /// No value yet: a local's lane no store has made, while
+    /// [`Tree::fold`] runs a loop's stores to their fixed point.
+    Bot,
+}
+
+/// The locals [`Tree::fold`] is folding, each with what its stores make
+/// so far: a store that reads one of them reads that.
+#[derive(Clone, Copy)]
+struct Assumed {
+    ids: [u32; 8],
+    lanes: [[Lane; 4]; 8],
+    n: usize,
+}
+
+impl Assumed {
+    const NONE: Assumed = Assumed { ids: [0; 8], lanes: [[Lane::Bot; 4]; 8], n: 0 };
+
+    fn get(&self, id: u32) -> Option<[Lane; 4]> {
+        self.ids[..self.n].iter().position(|&x| x == id).map(|k| self.lanes[k])
+    }
+
+    /// This table and local `id` holding `v`; `None` when it is full.
+    fn with(&self, id: u32, v: [Lane; 4]) -> Option<Assumed> {
+        let mut a = *self;
+        if a.n == a.ids.len() {
+            return None;
+        }
+        a.ids[a.n] = id;
+        a.lanes[a.n] = v;
+        a.n += 1;
+        Some(a)
+    }
 }
 
 impl Lane {
@@ -2061,6 +2117,7 @@ impl Lane {
         match self {
             Lane::K(x) => x & !F32_NEG_ZERO == 0,
             Lane::Var { konst, .. } => konst,
+            Lane::Bot => false,
         }
     }
 
@@ -2069,6 +2126,7 @@ impl Lane {
         match self {
             Lane::K(x) => x == F32_NEG_ZERO,
             Lane::Var { neg0, .. } => neg0,
+            Lane::Bot => false,
         }
     }
 }
