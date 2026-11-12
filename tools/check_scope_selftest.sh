@@ -202,6 +202,7 @@ expect "nanopc_t6 glue: the GPU sample's image" '^plan  zephyr  nanopc_t6 t6_gpu
 expect "nanopc_t6 glue: the MMU probe's image" '^plan  zephyr  nanopc_t6 t6_mmu image' "$out"
 # Z3's probe (on a run, a gap naming the firmware without it, as the row below)
 expect "nanopc_t6 glue: the firmware probe's image" '^plan  zephyr  nanopc_t6 t6_fw image' "$out"
+expect "nanopc_t6 glue: the submit probe's image" '^plan  zephyr  nanopc_t6 t6_submit image \(Z4\)' "$out"
 expect "nanopc_t6 glue: the drivers crate tests" '^plan  test    yakogl-drivers' "$out"
 # the Mali firmware row (a plan row here; on a run, `needs` makes it a gap
 # naming the file where MALI_CSFFW or deps-env.sh's place has none)
