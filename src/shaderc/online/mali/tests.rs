@@ -2201,6 +2201,33 @@ fn a_conversion_the_link_undoes_keeps_the_lanes_read_as_mesa_26_2_1() {
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
 }
 
+/// A colour store keeps a varying whole only when the lanes it writes
+/// hold the varying beside another value (a constant, another varying, an
+/// fp16 operation's lane): `f2f32` then reads a vector, not the `f2fmp`.
+/// Lanes of the varying alone, through a constructor, are one swizzle of
+/// its `f2fmp`, which the link cancels (nir_fs.rs `colour_keeps_whole`):
+/// fsload_ctor1 keeps the lanes read; fsload_ctor3 (the constructor
+/// stored whole), fsload_ctor4 (`t.xz`, a lane beside a constant) and
+/// fsload_ctor5 (two varyings) keep them whole.
+#[test]
+fn a_colour_store_keeps_a_varying_whole_by_the_lanes_it_writes_as_mesa_26_2_1() {
+    let cases = [
+        ("fsload_ctor1", td!("fsload_ctor1.vert"), td!("fsload_ctor1.frag"), td!("fsload_ctor1.expect.json")),
+        ("fsload_ctor3", td!("fsload_ctor3.vert"), td!("fsload_ctor3.frag"), td!("fsload_ctor3.expect.json")),
+        ("fsload_ctor4", td!("fsload_ctor4.vert"), td!("fsload_ctor4.frag"), td!("fsload_ctor4.expect.json")),
+        ("fsload_ctor5", td!("fsload_ctor5.vert"), td!("fsload_ctor5.frag"), td!("fsload_ctor5.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
 /// Two lanes of equal value: Mesa's link keeps the first in the layout's
 /// order and reads the other from it (`deduplicate_outputs`,
 /// nir_opt_varyings.c:3253-3420). fsload_dup's `a.z` is `a.x` (`.v2`, two

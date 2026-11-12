@@ -118,7 +118,7 @@ tools/shaders/es100/uniidx_f.vert: ok
 tools/shaders/es100/uniidx_g.frag: ok
 tools/shaders/es100/uniidx_h.frag: ok
 tools/shaders/es100/uniidx_i.frag: ok
-tools/shaders/es100/uniidx_j.frag: ok
+tools/shaders/es100/uniidx_j.frag: Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet
 tools/shaders/es100/utri.frag: ok
 tools/shaders/es100/utri.vert: ok
 tools/shaders/es100/va.frag: ok

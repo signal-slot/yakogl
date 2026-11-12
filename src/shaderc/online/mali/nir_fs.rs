@@ -5887,11 +5887,6 @@ fn kept_whole(
         });
         return if other { Err(MaliError::FsVaryingLoad) } else { Ok(false) };
     }
-    /* the colour takes the lane through a value whose `f2fmp` the link
-     * keeps, or only through ones it undoes ([`colour_keeps_whole`]) */
-    if !colour_keeps_whole(m, loc, all_read)? {
-        return Ok(false);
-    }
     let (mut fp32, mut unknown) = (false, false);
     for v in colour {
         let n = match v {
@@ -5934,7 +5929,11 @@ fn kept_whole(
     }
     match (unknown, fp32) {
         (true, _) => Err(MaliError::FsVaryingLoad),
-        (false, fp32) => Ok(!fp32),
+        (false, true) => Ok(false),
+        /* a lowered colour: the lane keeps its varying whole through a
+         * value whose `f2fmp` the link keeps, not through ones it undoes
+         * ([`colour_keeps_whole`]) */
+        (false, false) => colour_keeps_whole(m, loc, all_read),
     }
 }
 
@@ -5942,93 +5941,60 @@ fn kept_whole(
 /// its lanes only through values whose conversion the link undoes
 /// (false). gl_nir_opts runs before `nir_opt_varyings_bulk`
 /// (gl_nir_linker.c:1441, :1524): `nir_lower_vars_to_ssa` makes a local
-/// a copy of what was stored, the whole-identity folds remove `* 1.0` and
-/// `+ 0.0` (nir_opt_algebraic.py:236-237, :292), `f2f32(f2fmp(a))` is `a`
-/// (:1991) and DCE drops a dead tree. So a colour store whose value is the
-/// varying's dereference, through locals stored once, swizzles and whole
-/// identities, converts nothing at the link: the lanes read
-/// (fsload_bare1-4, fsload_cancel1-9). A store of a constructor that holds
-/// the varying beside another value (a constant, another varying, an
-/// operation) keeps the conversion: `f2f32` reads the vector, not the
-/// `f2fmp` (fsload_v4_one, c20, c05, m28); a constructor of the varying's
-/// lanes alone is one vector of its `f2fmp` after copy propagation, which
-/// the cancel undoes (fsload_cancel10, fsload_cancel11). Any other value
-/// has no reference ([`MaliError::FsVaryingLoad`]) unless the colour reads
-/// every lane (`all_read`: kept or not, the layout is the same). Only the
-/// colour's stores are followed, so a dead tree reads nothing (k06).
+/// what was stored, the whole-identity folds remove `* 1.0` and `+ 0.0`
+/// (nir_opt_algebraic.py:236-237, :292), copy propagation makes a vector
+/// of one value's lanes a swizzle of it, `f2f32(f2fmp(a))` is `a` (:1991)
+/// and DCE drops a dead tree. Each colour store is judged by the lanes it
+/// writes, each followed through locals stored once in that lane,
+/// swizzles and whole identities ([`ir_colour_lane`]); every answer is a
+/// measured form (drm-shim references), anything else is refused
+/// ([`MaliError::FsVaryingLoad`]) unless the colour reads every lane of
+/// the varying (`all_read`: kept or not, the layout is the same):
+/// - every lane written is this varying's: one swizzle of its `f2fmp`,
+///   cancelled, the lanes read (fsload_bare1-4, fsload_cancel1-8,
+///   fsload_cancel10-11, fsload_ctor1: `t.xy` of `vec4(a.xy, 0.5, 1.0)`);
+/// - a lane of it beside a constant, another varying's lane or
+///   gl_PointCoord: `f2f32` reads a vector, the `f2fmp` survives, whole
+///   (fsload_v4_one, fsload_ctor3-5, cmp_axby, case 105's pointcoordvary);
+/// - a lane that is unknown but reaches the varying beside a constant
+///   (a local stored on several paths, `intloop_ifloop`'s `vec4(res.rgb,
+///   1.0)`): the constant makes a vector all the same, whole.
+///
+/// A store that writes no lane of it is not followed, so a dead tree reads
+/// nothing (fsload_cancel9).
 fn colour_keeps_whole(m: &Module<'_>, loc: u8, all_read: bool) -> Result<bool, MaliError> {
     use ir::Op;
-    let shadow = |l: ir::LocalId| ir_colour_local(m, l);
-    let stores = |l: ir::LocalId| {
-        m.instrs.iter().filter_map(move |op| match *op {
-            Op::StoreLocal { local, index: None, src, .. } if local == l => Some(src),
-            _ => None,
-        })
-    };
-    let once = |l: ir::LocalId| ir_stored_once(m, l);
-    let bare = |v: ir::ValueId| ir_bare_varying(m, v, 0);
-    /* the varying locations a value reads, through every store of a local */
-    fn reach(m: &Module<'_>, v: ir::ValueId, seen: &mut u64, depth: u8) -> u32 {
-        if depth > 32 {
-            return 0;
-        }
-        match m.def(v) {
-            Some(&ir::Op::LoadInput { slot: IoSlot::Varying(l), .. }) => 1 << (l & 31),
-            Some(&ir::Op::LoadLocal { local, .. }) => {
-                if *seen >> (local.0 & 63) & 1 != 0 {
-                    return 0;
-                }
-                *seen |= 1 << (local.0 & 63);
-                let mut r = 0;
-                for op in m.instrs {
-                    if let ir::Op::StoreLocal { local: l, src, .. } = *op {
-                        if l == local {
-                            r |= reach(m, src.val, seen, depth + 1);
-                        }
-                    }
-                }
-                r
-            }
-            Some(&ir::Op::Alu(a, s)) => s[..a.arity()].iter().fold(0, |r, x| r | reach(m, x.val, seen, depth + 1)),
-            _ => 0,
-        }
-    }
     let (mut whole, mut unsure) = (false, false);
     for op in m.instrs {
-        let v = match *op {
-            Op::StoreOutput { slot: IoSlot::FragColor(_), src } => src.val,
-            Op::StoreLocal { local, index: None, src, .. } if shadow(local) => src.val,
+        let (src, mask) = match *op {
+            Op::StoreOutput { slot: IoSlot::FragColor(_), src } => (src, 0xf),
+            Op::StoreLocal { local, index: None, src, write_mask } if ir_colour_local(m, local) => (src, write_mask),
             _ => continue,
         };
         /* the colour's own local, stored by its parts above */
-        if matches!(m.def(v), Some(&Op::LoadLocal { local, .. }) if shadow(local)) {
+        if matches!(m.def(src.val), Some(&Op::LoadLocal { local, .. }) if ir_colour_local(m, local)) {
             continue;
         }
-        if bare(v).is_some() || reach(m, v, &mut 0, 0) & 1 << (loc & 31) == 0 {
+        let (mut mine, mut beside, mut reaching, mut other) = (false, false, false, false);
+        for i in (0..4).filter(|&i| mask & 1 << i != 0) {
+            match ir_colour_lane(m, src.val, src.swizzle[i] & 3, 0) {
+                ColourLane::Varying(l) if l == loc => mine = true,
+                ColourLane::Varying(_) | ColourLane::Const | ColourLane::PointCoord => beside = true,
+                ColourLane::Unknown(reach) if reach & 1 << (loc & 31) != 0 => reaching = true,
+                ColourLane::Unknown(_) => other = true,
+            }
+        }
+        if !mine && !reaching {
             continue;
         }
-        /* a constructor (a local stored by parts, past its copies) */
-        let mut c = v;
-        while let Some(&Op::LoadLocal { local, index: None, .. }) = m.def(c) {
-            match once(local) {
-                Some(s) => c = s.val,
-                None => break,
-            }
-        }
-        match m.def(c) {
-            Some(&Op::LoadLocal { local, index: None, .. }) => {
-                /* of the varying's lanes alone: one vector of its `f2fmp`
-                 * after `nir_opt_copy_prop`, which the cancel then undoes
-                 * (fsload_cancel10: `vec4(a.x, a.y, a.x, a.y)` loads `.v2`) */
-                let mut only = true;
-                for s in stores(local) {
-                    only &= bare(s.val) == Some(loc);
-                }
-                whole |= !only;
-            }
-            /* an operation's value: an fp16 tree of it */
-            Some(&Op::Alu(..)) => whole = true,
-            _ => unsure = true,
+        if beside {
+            whole = true;
+        } else if mine && !reaching && !other {
+            /* the varying's lanes alone: cancelled at the link */
+        } else {
+            /* beside a value of no measured kind (an operation, a uniform,
+             * a texel: uniidx_j), or an unknown lane of it alone */
+            unsure = true;
         }
     }
     if whole {
@@ -6040,23 +6006,85 @@ fn colour_keeps_whole(m: &Module<'_>, loc: u8, all_read: bool) -> Result<bool, M
     }
 }
 
+/// What one lane of a colour store holds ([`ir_colour_lane`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ColourLane {
+    /// A lane of the varying at this location.
+    Varying(u8),
+    Const,
+    PointCoord,
+    /// Another value: the varying locations it may read (all of them when
+    /// not known).
+    Unknown(u32),
+}
+
+/// Lane `c` of value `v`, followed through locals with one store of that
+/// lane, swizzles and whole identities ([`ir_whole_identity`]). A value of
+/// a kind no reference names is [`ColourLane::Unknown`] with the varyings
+/// it reads.
+fn ir_colour_lane(m: &Module<'_>, v: ir::ValueId, c: u8, depth: u8) -> ColourLane {
+    if depth > 32 {
+        return ColourLane::Unknown(u32::MAX);
+    }
+    match m.def(v) {
+        Some(&ir::Op::LoadInput { slot: IoSlot::Varying(l), .. }) => ColourLane::Varying(l),
+        Some(&ir::Op::LoadInput { slot: IoSlot::PointCoord, .. }) => ColourLane::PointCoord,
+        Some(&ir::Op::ConstF32(_)) => ColourLane::Const,
+        Some(&ir::Op::LoadLocal { local, index: None, .. }) if !ir_colour_local(m, local) => {
+            let mut stores = m.instrs.iter().filter_map(|op| match *op {
+                ir::Op::StoreLocal { local: l, index: None, src, write_mask }
+                    if l == local && write_mask & 1 << c != 0 =>
+                {
+                    Some(src)
+                }
+                _ => None,
+            });
+            match (stores.next(), stores.next()) {
+                (Some(s), None) => ir_colour_lane(m, s.val, s.swizzle[c as usize & 3] & 3, depth + 1),
+                _ => ColourLane::Unknown(ir_reach(m, v, &mut 0, 0)),
+            }
+        }
+        Some(&ir::Op::Alu(a, s)) => match ir_whole_identity(m, a, &s, m.comps_of(v) as usize) {
+            Some(o) => ir_colour_lane(m, o.val, o.swizzle[c as usize & 3] & 3, depth + 1),
+            None => ColourLane::Unknown(ir_reach(m, v, &mut 0, 0)),
+        },
+        _ => ColourLane::Unknown(ir_reach(m, v, &mut 0, 0)),
+    }
+}
+
+/// The varying locations value `v` reads, through every store of a local.
+fn ir_reach(m: &Module<'_>, v: ir::ValueId, seen: &mut u64, depth: u8) -> u32 {
+    if depth > 32 {
+        return u32::MAX;
+    }
+    match m.def(v) {
+        Some(&ir::Op::LoadInput { slot: IoSlot::Varying(l), .. }) => 1 << (l & 31),
+        Some(&ir::Op::LoadLocal { local, .. }) => {
+            if *seen >> (local.0 & 63) & 1 != 0 {
+                return 0;
+            }
+            *seen |= 1 << (local.0 & 63);
+            let mut r = 0;
+            for op in m.instrs {
+                if let ir::Op::StoreLocal { local: l, src, .. } = *op {
+                    if l == local {
+                        r |= ir_reach(m, src.val, seen, depth + 1);
+                    }
+                }
+            }
+            r
+        }
+        Some(&ir::Op::Alu(a, s)) => s[..a.arity()].iter().fold(0, |r, x| r | ir_reach(m, x.val, seen, depth + 1)),
+        _ => 0,
+    }
+}
+
 /// Local `l` is the colour's own (`gl_FragColor` written by parts, an ES
 /// 3.00 output): its stores are the colour's ([`colour_keeps_whole`]).
 fn ir_colour_local(m: &Module<'_>, l: ir::LocalId) -> bool {
     m.locals.get(l.0 as usize).is_some_and(|d| {
         d.name == "gl_FragColor" || m.outputs.iter().any(|o| o.kind == IoKind::Colour && o.name == d.name)
     })
-}
-
-/// The one store of local `l`, if it has one only (a copy, which
-/// `nir_lower_vars_to_ssa` makes the stored value).
-fn ir_stored_once(m: &Module<'_>, l: ir::LocalId) -> Option<ir::Src> {
-    let mut it = m.instrs.iter().filter_map(|op| match *op {
-        ir::Op::StoreLocal { local, index: None, src, .. } if local == l => Some(src),
-        _ => None,
-    });
-    let first = it.next()?;
-    it.next().is_none().then_some(first)
 }
 
 /// The operand a whole identity leaves of `a` over `s` (`w` lanes): the
@@ -6077,22 +6105,6 @@ fn ir_whole_identity(m: &Module<'_>, a: AluOp, s: &[ir::Src; 3], w: usize) -> Op
         let c = &s[k].swizzle[..w.clamp(1, 4)];
         bits.iter().any(|&b| konst(s[k].val, c, b)).then_some(s[1 - k])
     })
-}
-
-/// The varying location value `v` is, through locals stored once,
-/// swizzles and whole identities; None for anything else.
-fn ir_bare_varying(m: &Module<'_>, v: ir::ValueId, depth: u8) -> Option<u8> {
-    if depth > 32 {
-        return None;
-    }
-    match *m.def(v)? {
-        ir::Op::LoadInput { slot: IoSlot::Varying(l), .. } => Some(l),
-        ir::Op::LoadLocal { local, index: None, .. } if !ir_colour_local(m, local) => {
-            ir_bare_varying(m, ir_stored_once(m, local)?.val, depth + 1)
-        }
-        ir::Op::Alu(a, s) => ir_bare_varying(m, ir_whole_identity(m, a, &s, m.comps_of(v) as usize)?.val, depth + 1),
-        _ => None,
-    }
 }
 
 /// `gl_type` names a float varying: a scalar, a vector or a matrix's
