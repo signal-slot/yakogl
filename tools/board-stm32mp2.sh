@@ -158,6 +158,20 @@
 #   MP2_BACKUP_DIR   where install keeps the pristine environment image
 #   RUN_BOUND, RETURN_BOUND  seconds to the image's end and to Linux after it
 #   WDOG_BOUND       with --expect-watchdog: seconds from the reboot to Linux
+#   MP2_HOLD_S       opt-in, unset = no hold (output unchanged): seconds to
+#                    hold after the image's "<prog>: PASS"/"FAIL" line, so an
+#                    observer (the KVM) can take a screenshot of a display
+#                    probe. When the line shows on the console the runner
+#                    prints "hold: result seen at <UTC ISO time>, holding <s>s",
+#                    waits that long without polling ssh, and goes on. The
+#                    runner cannot keep the image running: a display probe
+#                    must keep scanning out at least MP2_HOLD_S after its
+#                    result line, before it returns or resets. The bound to
+#                    Linux (RUN_BOUND + RETURN_BOUND, or WDOG_BOUND) is
+#                    extended by MP2_HOLD_S, so a hold does not turn a board
+#                    that is back into not_back; wait_bound in meta.txt
+#                    carries the extended value, hold_s the hold. The verdict
+#                    line is the same.
 #                    back (default 120)
 #   BOARD_END_RE     extended regex of the image's end line (the layer's)
 #   LOCK_WAIT, HOLD_MAX  see board_lock.sh
@@ -207,6 +221,12 @@ RUN_BOUND=${RUN_BOUND:-120}
 RETURN_BOUND=${RETURN_BOUND:-180}
 WDOG_BOUND=${WDOG_BOUND:-120}
 if [ "$EXPECT_WDOG" = 1 ]; then WAIT_BOUND=$WDOG_BOUND; else WAIT_BOUND=$((RUN_BOUND + RETURN_BOUND)); fi
+HOLD_S=${MP2_HOLD_S:-}
+case "$HOLD_S" in
+'') ;;
+*[!0-9]*) echo "board-stm32mp2.sh: MP2_HOLD_S must be whole seconds, got '$HOLD_S'" >&2; exit 2 ;;
+*) WAIT_BOUND=$((WAIT_BOUND + HOLD_S)) ;;
+esac
 HOLD_MAX=${HOLD_MAX:-$((RUN_BOUND + RETURN_BOUND + 300))}
 
 # The U-Boot side, exactly as installed (fw_printenv shows them byte for
@@ -647,6 +667,16 @@ console_check() {
     UART_REAL=$(readlink -f "$BOARD_UART")
     stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo 2> >(scrub >&2) || die "stty on BOARD_UART failed (no reboot)"
 }
+# hold_result_seen: the image's "<prog>: PASS|FAIL: " line is on the console
+# so far (console.txt for a device, console.ts for a bridge; either may carry
+# a timestamp before the line)
+hold_result_seen() {
+    local f
+    for f in "$RD/console.txt" "$RD/console.ts"; do
+        [ -f "$f" ] && tr -d '\0\r' < "$f" | grep -aqE '(^|[0-9. ])[A-Za-z0-9_]+: (PASS|FAIL): ' && return 0
+    done
+    return 1
+}
 capture_start() {
     if uart_is_bridge; then
         if [ "$DRY" = 1 ]; then
@@ -922,8 +952,15 @@ cmd_run() {
         echo "DRY host\$ the verdict line from the run directory"
         exit 0
     fi
+    HELD=0
     while :; do
         sleep 5
+        if [ -n "$HOLD_S" ] && [ "$HELD" = 0 ] && hold_result_seen; then
+            HELD=1
+            echo "hold: result seen at $(date -u +%Y-%m-%dT%H:%M:%SZ), holding ${HOLD_S}s"
+            meta hold_s "$HOLD_S"
+            sleep "$HOLD_S"
+        fi
         el=$(($(date +%s) - T_REBOOT))
         up=$(timeout 8 ssh "${SSH_OPTS[@]}" -o ConnectTimeout=5 "$BOARD_HOST" 'cut -d. -f1 /proc/uptime' 2>/dev/null)
         if [ -n "$up" ] && [ "$up" -lt "$el" ]; then break; fi

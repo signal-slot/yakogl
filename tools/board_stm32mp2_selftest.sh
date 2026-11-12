@@ -52,6 +52,10 @@
 #    hang line give watchdog_reset only when the banner and the hang line
 #    were seen, no PSCI line followed and the board came back; the fake board
 #    runs it live.
+# 8. MP2_HOLD_S: the dry run's wait is extended by the hold, a bad value is
+#    refused (rc 2), the live run prints the "hold:" line once the PASS line
+#    shows, records hold_s and the extended wait_bound, keeps the verdict
+#    line; without it no "hold:" line and no hold_s (cases in 1/2 and 6).
 # Prints "board_stm32mp2_selftest: N checks, F failed"; exit 0 only when F is
 # 0 and N is the pinned count. About 30 s (three live runs wait 5 s each).
 set -uo pipefail
@@ -59,7 +63,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=128
+WANT_CHECKS=135
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -204,6 +208,15 @@ check "run --expect-watchdog: WDOG_BOUND sets the wait" eval 'grep -q "<= 90 s" 
 check "dry runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
 
 echo "== 2. refusals that need no board"
+out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART MP2_HOLD_S=30 dry run "$S/img/mp2.bin" "$S/logs" hold 2>&1)
+rc=$?
+check "dry run with MP2_HOLD_S=30: rc 0, the wait is RUN_BOUND + RETURN_BOUND + 30 (<= 330 s), no hold line yet" \
+    eval '[ "$rc" = 0 ] && grep -q "<= 330 s" <<<"$out" && ! grep -q "^hold:" <<<"$out"'
+out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART MP2_HOLD_S=30 WDOG_BOUND=90 dry run --expect-watchdog "$S/img/mp2.bin" "$S/logs" holdw 2>&1)
+check "dry run --expect-watchdog with MP2_HOLD_S=30: the wait is WDOG_BOUND + 30 (<= 120 s)" eval 'grep -q "<= 120 s" <<<"$out"'
+out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART MP2_HOLD_S=abc dry run "$S/img/mp2.bin" "$S/logs" 2>&1)
+rc=$?
+check "MP2_HOLD_S that is not whole seconds: rc 2, named" eval '[ "$rc" = 2 ] && grep -q "MP2_HOLD_S must be whole seconds" <<<"$out"'
 out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART dry run "$S/img/nomarker.bin" "$S/logs" 2>&1)
 rc=$?
 check "an image without the watchdog marker: rc 3, REFUSED, names the marker and MP2_NO_WATCHDOG" \
@@ -646,6 +659,8 @@ check "live status: rc 0, 'install: ok', the env and bootfs devices, 'stock boot
 out=$(live run "$S/img/mp2.bin" "$S/live-logs" trial 2>&1)
 rc=$?
 rd=$(ls -d "$S"/live-logs/*-trial-* 2>/dev/null | head -1)
+trial_out=$out
+trial_rd=$rd
 check "live run (comes back): rc 0 and the verdict line byte for byte but the seconds: done, row, complete, pass:mp2_identify" \
     eval '[ "$rc" = 0 ] && grep -qE "^board-stm32mp2.sh stm32mp257f-dk trial rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:mp2_identify back_after=[0-9]+s$" <<<"$out"'
 check "live run: the verdict line has board.sh's shape (<runner> <board> <name> rc= verdict= boot= row boot_verdict= result= back_after=)" \
@@ -661,6 +676,20 @@ check "live run: one reboot, after the arm's write and its read-back (dd of=, sh
 check "live run: the wait is written in the record (wait_bound=2) and back_after is at least the 5 s poll" \
     eval 'grep -qx "wait_bound=2" "$rd/meta.txt" && [ "$(( $(sed -n "s/^t_back=//p" "$rd/meta.txt") - $(sed -n "s/^t_reboot=//p" "$rd/meta.txt") ))" -ge 5 ]'
 
+# the hold: the same run with MP2_HOLD_S=3 prints the hold line when the PASS line shows, waits, and the verdict line is the same
+: > "$F/ssh.log"
+out=$(MP2_HOLD_S=3 live run "$S/img/mp2.bin" "$S/live-logs" held 2>&1)
+rc=$?
+rd=$(ls -d "$S"/live-logs/*-held-* 2>/dev/null | head -1)
+check "live run with MP2_HOLD_S=3: rc 0, one 'hold: result seen at <UTC ISO>, holding 3s' line before the verdict, the verdict line the same as without" \
+    eval '[ "$rc" = 0 ] && [ "$(grep -c "^hold: " <<<"$out")" = 1 ] && grep -qE "^hold: result seen at [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z, holding 3s$" <<<"$out" &&
+          [ "$(grep -n "^hold: " <<<"$out" | cut -d: -f1)" -lt "$(grep -n "verdict=done" <<<"$out" | head -1 | cut -d: -f1)" ] &&
+          grep -qE "^board-stm32mp2.sh stm32mp257f-dk held rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:mp2_identify back_after=[0-9]+s$" <<<"$out"'
+check "live run with MP2_HOLD_S=3: the record has hold_s=3 and wait_bound=5 (the bound extended by the hold), back_after covers the hold" \
+    eval 'grep -qx "hold_s=3" "$rd/meta.txt" && grep -qx "wait_bound=5" "$rd/meta.txt" && [ "$(( $(sed -n "s/^t_back=//p" "$rd/meta.txt") - $(sed -n "s/^t_reboot=//p" "$rd/meta.txt") ))" -ge 8 ]'
+check "live run without MP2_HOLD_S (the first run): no hold line, no hold_s in the record" \
+    eval '! grep -q "^hold:" <<<"$trial_out" && ! grep -q "^hold_s=" "$trial_rd/meta.txt"'
+
 # a run that hangs on purpose: the console has the hang line and no PSCI line
 cp "$F/console.txt" "$F/console.pass"
 printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" "$HANG" | sed 's/^[0-9:]\{8\} //' > "$F/console.txt"
@@ -670,6 +699,7 @@ rc=$?
 rd=$(ls -d "$S"/live-logs/*-wdog-* 2>/dev/null | head -1)
 check "live run --expect-watchdog (comes back, hang line, no PSCI line): rc 0 and verdict=watchdog_reset, boot_verdict=hung" \
     eval '[ "$rc" = 0 ] && grep -qE "^board-stm32mp2.sh stm32mp257f-dk wdog rc=0 verdict=watchdog_reset boot=uboot-sd row boot_verdict=hung result=none back_after=[0-9]+s$" <<<"$out"'
+check "live run --expect-watchdog without MP2_HOLD_S: no hold line" eval '! grep -q "^hold:" <<<"$out"'
 check "live run --expect-watchdog: the record has expect_wdog=1 and wait_bound=2, the index shows the hang line, one reboot, the staged image removed" \
     eval 'grep -qx "expect_wdog=1" "$rd/meta.txt" && grep -qx "wait_bound=2" "$rd/meta.txt" && grep -q "mp2_hello: hanging on purpose" "$rd/INDEX.txt" &&
           [ "$(grep -c "systemctl reboot" "$F/ssh.log")" = 1 ] && [ -z "$(ls "$F"/boot/yakogl/once-*.bin 2>/dev/null)" ]'
