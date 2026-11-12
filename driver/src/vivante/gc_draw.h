@@ -58,6 +58,14 @@ static inline uint32_t gc_rgb(uint8_t r, uint8_t g, uint8_t b)
  * returns the fence; the caller waits. */
 int gc_draw_clear(const struct gc_target *t, uint32_t argb, uint32_t *fence_out);
 
+/* Copy `src` (its whole width x height) into the top left of `dst` with the
+ * resolve engine: both linear XRGB8888, `src->width` a multiple of 16 and
+ * `src->height` of 4, `dst` at least as large. For a scan-out buffer the
+ * display reads: the render target stays where the 3D pipe draws. Submits
+ * and returns the fence; the submit's epilogue flushes the colour cache. */
+int gc_draw_copy(const struct gc_target *src, const struct gc_target *dst,
+		 uint32_t *fence_out);
+
 /* Draw one triangle with the pass-through shaders, smooth shaded. Submits and
  * returns the fence. */
 int gc_draw_triangle(const struct gc_target *t, const struct gc_vertex v[3],

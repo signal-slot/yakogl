@@ -262,6 +262,82 @@ int gc_draw_clear(const struct gc_target *t, uint32_t argb, uint32_t *fence_out)
 }
 
 /* ------------------------------------------------------------------ *
+ * The copy to a second linear surface
+ *
+ * The resolve engine again (no BLT engine on either core), as Mesa's
+ * etna_try_rs_blit() (etnaviv_rs.c) programs it for a same-format blit
+ * with no tile status: the flush and stall before, TS_MEM_CONFIG 0, then
+ * etna_compile_rs_state()'s words for a linear source and destination
+ * (no TILED bits, strides unshifted, clear mode DISABLED) in
+ * etna_submit_rs_state()'s RS_NEW_BASEADDR order, single buffer around
+ * the kick.
+ * ------------------------------------------------------------------ */
+int gc_draw_copy(const struct gc_target *src, const struct gc_target *dst,
+		 uint32_t *fence_out)
+{
+	struct gc_cmd c;
+	int rc = check_target(src, true);
+
+	if (rc == 0) {
+		rc = check_target(dst, false);
+	}
+	if (rc) {
+		return rc;
+	}
+	/* Mesa's ETNA_RS_HEIGHT_MASK: a window height that is not a multiple
+	 * of 4 is not an RS blit (etna_try_rs_blit falls back). */
+	if (src->height & 3u) {
+		LOG_ERR("copy: height %u must be a multiple of 4 for the resolve engine",
+			src->height);
+		return -EINVAL;
+	}
+	if (dst->width < src->width || dst->height < src->height) {
+		LOG_ERR("copy: %ux%u does not fit in %ux%u", src->width, src->height,
+			dst->width, dst->height);
+		return -EINVAL;
+	}
+	rc = cmd_begin(&c);
+	if (rc) {
+		return rc;
+	}
+
+	gc_cmd_state(&c, VIVS_GL_FLUSH_CACHE,
+		     VIVS_GL_FLUSH_CACHE_COLOR | VIVS_GL_FLUSH_CACHE_DEPTH);
+	emit_stall(&c, SYNC_RECIPIENT_RA, SYNC_RECIPIENT_PE);
+	gc_cmd_state(&c, VIVS_TS_MEM_CONFIG, 0);
+
+	gc_cmd_state(&c, VIVS_RS_CONFIG,
+		     VIVS_RS_CONFIG_SOURCE_FORMAT(RS_FORMAT_A8R8G8B8) |
+		     VIVS_RS_CONFIG_DEST_FORMAT(RS_FORMAT_A8R8G8B8));
+	gc_cmd_state(&c, VIVS_RS_SOURCE_STRIDE, src->stride);
+	gc_cmd_state(&c, VIVS_RS_DEST_STRIDE, dst->stride);
+	gc_cmd_state(&c, VIVS_RS_PIPE_SOURCE_ADDR(0), src->gpu);
+	gc_cmd_state(&c, VIVS_RS_PIPE_DEST_ADDR(0), dst->gpu);
+	gc_cmd_state(&c, VIVS_RS_PIPE_OFFSET(0), 0);
+	gc_cmd_state(&c, VIVS_RS_PIPE_OFFSET(1), 0);
+	gc_cmd_state(&c, VIVS_RS_WINDOW_SIZE,
+		     VIVS_RS_WINDOW_SIZE_WIDTH(src->width) |
+		     VIVS_RS_WINDOW_SIZE_HEIGHT(src->height));
+	gc_cmd_state(&c, VIVS_RS_DITHER(0), 0xffffffff);
+	gc_cmd_state(&c, VIVS_RS_DITHER(1), 0xffffffff);
+	gc_cmd_state(&c, VIVS_RS_CLEAR_CONTROL, VIVS_RS_CLEAR_CONTROL_MODE_DISABLED);
+	for (uint32_t i = 0; i < VIVS_RS_FILL_VALUE__LEN; i++) {
+		gc_cmd_state(&c, VIVS_RS_FILL_VALUE(i), 0);
+	}
+	gc_cmd_state(&c, VIVS_RS_EXTRA_CONFIG, VIVS_RS_EXTRA_CONFIG_AA(0) |
+					       VIVS_RS_EXTRA_CONFIG_ENDIAN(ENDIAN_MODE_NO_SWAP));
+	gc_cmd_state(&c, VIVS_RS_SINGLE_BUFFER, VIVS_RS_SINGLE_BUFFER_ENABLE);
+	gc_cmd_state(&c, VIVS_RS_KICKER, 0xbeebbeeb);
+	gc_cmd_state(&c, VIVS_RS_SINGLE_BUFFER, 0);
+
+	emit_stall(&c, SYNC_RECIPIENT_RA, SYNC_RECIPIENT_PE);
+
+	LOG_DBG("copy: 0x%08x stride %u -> 0x%08x stride %u, %ux%u (%u dwords)", src->gpu,
+		src->stride, dst->gpu, dst->stride, src->width, src->height, c.n);
+	return cmd_submit(&c, GC_SUBMIT_FLUSH_COLOR, fence_out);
+}
+
+/* ------------------------------------------------------------------ *
  * M5: one triangle
  * ------------------------------------------------------------------ */
 

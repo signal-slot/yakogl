@@ -22,4 +22,49 @@ config GC_TRIANGLE_WAIT_MS
 	  gc_render_wait()'s bound. Past it the render service dumps the
 	  GPU's state, resets it, and the run fails at the wait.
 
+config GC_TRIANGLE_LINEAR_OUT
+	bool "Copy the drawn target to a linear XRGB8888 scan-out buffer"
+	help
+	  After the draw, gc_draw_copy() (the resolve engine: neither the
+	  i.MX8MP's GC7000UL nor the STM32MP257F's GC8000 has a BLT engine)
+	  copies the render target into the top left of a second linear
+	  XRGB8888 buffer, the kind a display controller scans out, and the
+	  apex, outside and covered checks run again on that copy, with every
+	  pixel of the window compared to the target and the rest of the
+	  buffer still holding the poison. Needs a height that is a multiple
+	  of 4. Off: the run is the plain triangle.
+
+if GC_TRIANGLE_LINEAR_OUT
+
+config GC_TRIANGLE_LINEAR_OUT_WIDTH
+	int "Scan-out buffer width, pixels (0: the target's)"
+	default 0
+	range 0 4096
+
+config GC_TRIANGLE_LINEAR_OUT_HEIGHT
+	int "Scan-out buffer height, pixels (0: the target's)"
+	default 0
+	range 0 4096
+
+config GC_TRIANGLE_LINEAR_OUT_PITCH
+	int "Scan-out buffer pitch, bytes (0: the width x 4 rounded up to 64)"
+	default 0
+	range 0 16384
+	help
+	  A multiple of 64 (the resolve engine's alignment, and the LTDC's
+	  burst) and at least the width x 4.
+
+config GC_TRIANGLE_LINEAR_OUT_ADDR
+	hex "Scan-out buffer physical address (0: allocated from the GPU carveout)"
+	default 0x0
+	help
+	  0 allocates the buffer from the GPU's carveout with two poisoned
+	  guard rows after it, and prints its address. Any other value is
+	  imported with gc_render_map_phys() (64-byte aligned, below 4 GiB,
+	  non-secure, the pitch x height bytes there are overwritten). An
+	  address inside the carveout is taken as it is, so it must lie past
+	  what the pool hands out (the carveout's top, for example).
+
+endif
+
 source "Kconfig.zephyr"
