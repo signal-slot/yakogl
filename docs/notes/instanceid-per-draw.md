@@ -17,7 +17,8 @@ counted). P1 and P3 remain open. **V1 has landed in `6c4759ea`**
 0xffff`): `GcStream` carries `GlesAttrib::divisor` in the 0x14680
 vertex-stream state, and the GL core splits a GC draw only for a divisor above
 0xffff. The host tests are in sections 3 and 4. The X2 board check (section 5)
-is open: no result of a V1 image is recorded in the tree.
+is not measured: the board run did not happen (no person declared at the X2),
+so no result of a V1 image is recorded in the tree.
 
 ## Summary
 
@@ -490,7 +491,13 @@ Board results (development runs on the X2, not conformance):
   expected pre-V1 behaviour (`max_instance_divisor` 1, the core draws instance
   by instance, V0 refuses the draws that read `gl_InstanceID`). It is not
   evidence about whether the FE takes divisors above 1.
-- **V1 images (case 221 `instmix`, case 141): open.** No result of either case
-  on an image with `6c4759ea` is recorded in the tree. Nothing is claimed
-  here. Plan item `x2-instmix` runs them; until a record lands, V1 is
-  host-tested only and V2 stays unplanned.
+- **V1 images (case 221 `instmix`, case 141): not measured.** The board
+  session `x2-instmix-v1` built both images but did not run them: it needs the
+  owner to declare a person at the X2 in the `target:x2` description, and that
+  declaration was not made. There is no image commit, verdict line or record
+  word to cite, so whether the GC7000UL FE honours divisors above 1 is still
+  unknown. Nothing is claimed here: V1 is host-tested only, the run stays
+  open, and V2 stays undecided (needed only if a run shows the FE ignores
+  divisors above 1). Rebuild the images (the earlier ones were removed with
+  their task), run `SEL=0 tools/board.sh x2 run <img> <logdir>` for case 221,
+  and run case 141 only if case 221 returns a verdict line.
