@@ -8,7 +8,7 @@
 //! status the board reads back (driver/docs/nanopc-t6-display.md, sections
 //! 1, 5 and 7 row D1). The power domain PD_VOP, the clocks, the pixel clock
 //! and the GRF writes are the caller's (`soc::rk3588`, step D4/D7); this
-//! module only computes the GRF words.
+//! module only computes the `vop_grf` word (the `vo1_grf` one is `ip::dw_hdmi_qp`'s).
 //!
 //! Facts from Linux v6.18 (GPL-2.0: facts and file:line only, nothing
 //! transcribed). `h:` is drivers/gpu/drm/rockchip/rockchip_drm_vop2.h, `c:`
@@ -77,11 +77,22 @@
 //!     `DCLK_DIV` 17:16, `PCLK_DIV` 18. HDMI1: bit 5, mux 19:18, 21:20, 22
 //!     (h:679-700). `DSP_IF_POL` gets bit 28 (`CFG_DONE_IMD`, h:717) and no
 //!     HDMI polarity. Written in the order `VP_CLK_CTRL`, `DSP_IF_EN`,
-//!     `DSP_IF_CTRL`, `DSP_IF_POL` (r:1773-1776). The HDMI sync polarity goes
-//!     to the GRFs (r:1690-1715, r:1660-1668, vop.h:346-347): `vop_grf`
-//!     `GRF_VOP_CON2` 0x08 bit 1 (HDMI1 bit 4) = 1; `vo1_grf` `GRF_VO1_CON0`
-//!     0x00 bits 6:5 (HDMI1 8:7) = bit 0 for a negative HSYNC, bit 1 for a
-//!     negative VSYNC (h:400-401); both with the write-enable mask in 31:16.
+//!     `DSP_IF_CTRL`, `DSP_IF_POL` (r:1773-1776). The VOP's own GRF word:
+//!     `vop_grf` `GRF_VOP_CON2` 0x08 bit 1 (HDMI1 bit 4) = 1 with its
+//!     write-enable bit (h:400, r:1699, r:1712). The sync field in `vo1_grf`
+//!     `GRF_VO1_CON0` (0x00 bits 6:5, HDMI1 8:7; h:401, r:1700-1701, r:1713)
+//!     is not this module's: the HDMI controller module (`ip::dw_hdmi_qp`,
+//!     step D6) owns it, so there is one formula. For reading it: Linux
+//!     builds a polarity word with bit 0 for a positive HSYNC, bit 1 for a
+//!     positive VSYNC and bit 3 for an inverted pixel clock (c:1655-1661,
+//!     vop.h:346-347, h:770) and passes that word, not the mode's flags, to
+//!     the RK3588 interface setup (c:1671); the field helper tests its
+//!     argument with the bits of the mode flags NHSYNC (bit 1) and NVSYNC
+//!     (bit 3) (r:1660-1668, include/uapi/drm/drm_mode.h:72, :74), so field
+//!     bit 0 follows a positive VSYNC, field bit 1 the clock inversion, and
+//!     HSYNC has no effect. Measured on the T6 (2026-11-12, Linux scanning
+//!     1024x768@60 with both syncs negative on both HDMI ports): `vo1_grf`
+//!     0x00 reads 0x00000000.
 //! 11. Overlay (h:513-530, h:725-746; r:2098-2271, r:2316-2341): `OVL_CTRL`
 //!     0x600 (`LAYERSEL_REGDONE_SEL` 31:30, `LAYERSEL_REGDONE_IMD` bit 28,
 //!     `YUV_MODE(vp)` bit vp), `OVL_LAYER_SEL` 0x604 (layer n's window id in
@@ -677,26 +688,18 @@ pub fn hdmi_route(m: &impl Mmio, base: usize, port: Vp, hdmi: HdmiPort) {
     modify(m, base, sys::DSP_IF_POL, sys::POL_CFG_DONE_IMD, sys::POL_CFG_DONE_IMD);
 }
 
-/// `GRF_VOP_CON2` in the VOP GRF and `GRF_VO1_CON0` in the VO1 GRF (fact 10).
+/// `GRF_VOP_CON2` in the VOP GRF (fact 10).
 pub const GRF_VOP_CON2: usize = 0x08;
-pub const GRF_VO1_CON0: usize = 0x00;
 
-/// The two GRF words an HDMI route needs (fact 10), mask in 31:16. The
-/// caller writes them: `vop_grf` + [`GRF_VOP_CON2`] and `vo1_grf` +
-/// [`GRF_VO1_CON0`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct HdmiGrf {
-    pub vop_con2: u32,
-    pub vo1_con0: u32,
-}
-
-pub const fn hdmi_grf(hdmi: HdmiPort, mode: &VideoMode) -> HdmiGrf {
-    let (en_bit, pol_shift) = match hdmi {
-        HdmiPort::Hdmi0 => (1, 5),
-        HdmiPort::Hdmi1 => (4, 7),
+/// The `GRF_VOP_CON2` word an HDMI route needs (fact 10), mask in 31:16.
+/// The caller writes it to `vop_grf` + [`GRF_VOP_CON2`]. The `vo1_grf` sync
+/// word is the HDMI controller module's (fact 10).
+pub const fn hdmi_vop_grf(hdmi: HdmiPort) -> u32 {
+    let bit = match hdmi {
+        HdmiPort::Hdmi0 => 1,
+        HdmiPort::Hdmi1 => 4,
     };
-    let pol = (!mode.hsync_high as u32) | (!mode.vsync_high as u32) << 1;
-    HdmiGrf { vop_con2: 1 << (en_bit + 16) | 1 << en_bit, vo1_con0: 0x3 << (pol_shift + 16) | pol << pol_shift }
+    1 << (bit + 16) | 1 << bit
 }
 
 /// Write the port's timing (fact 7): the pixel clock is set after this and
@@ -1506,7 +1509,7 @@ mod tests {
     }
 
     #[test]
-    fn the_hdmi_interface_dividers_and_grf_words() {
+    fn the_hdmi_interface_dividers_and_the_vop_grf_word() {
         let w = hdmi_if(Vp::Vp0, HdmiPort::Hdmi0);
         assert_eq!(w.clk_ctrl, 2);
         assert_eq!((w.if_en_mask, w.if_en), (1 << 3 | 3 << 16, 1 << 3));
@@ -1515,10 +1518,8 @@ mod tests {
         assert_eq!((w.if_en_mask, w.if_en), (1 << 5 | 3 << 18, 1 << 5 | 1 << 18));
         assert_eq!(w.if_ctrl, 2 << 20 | 1 << 22);
 
-        assert_eq!(hdmi_grf(HdmiPort::Hdmi0, &CEA_1080P60), HdmiGrf { vop_con2: 0x0002_0002, vo1_con0: 0x0060_0000 });
-        let neg = VideoMode { hsync_high: false, vsync_high: false, ..CEA_1080P60 };
-        assert_eq!(hdmi_grf(HdmiPort::Hdmi0, &neg).vo1_con0, 0x0060_0060);
-        assert_eq!(hdmi_grf(HdmiPort::Hdmi1, &neg), HdmiGrf { vop_con2: 0x0010_0010, vo1_con0: 0x0180_0180 });
+        assert_eq!(hdmi_vop_grf(HdmiPort::Hdmi0), 0x0002_0002);
+        assert_eq!(hdmi_vop_grf(HdmiPort::Hdmi1), 0x0010_0010);
     }
 
     #[test]
