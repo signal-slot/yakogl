@@ -1071,6 +1071,9 @@ pub(crate) mod tests {
         pub(crate) group_stride: Option<u32>,
         /// The GLB input and output page addresses the firmware writes.
         pub(crate) glb_pages: Option<(u32, u32)>,
+        /// Every group's `suspend_size` and `protm_suspend_size`, as the
+        /// firmware writes them (0 and 0: none asked for).
+        pub(crate) csg_suspend: (u32, u32),
     }
 
     impl Mcu {
@@ -1092,6 +1095,7 @@ pub(crate) mod tests {
                 status_after_boot: MCU_STATUS_ENABLED,
                 group_stride: None,
                 glb_pages: None,
+                csg_suspend: (0, 0),
             }
         }
         pub(crate) fn word(&self, a: usize) -> u32 {
@@ -1130,6 +1134,8 @@ pub(crate) mod tests {
                 let csg = base + GROUP_CONTROL_OFFSET + i * 0xa0;
                 self.put(csg + 4, base + 0x3000 + i * 0x80);
                 self.put(csg + 8, base + 0x7000 + i * 0x40);
+                self.put(csg + 12, self.csg_suspend.0);
+                self.put(csg + 16, self.csg_suspend.1);
                 self.put(csg + 20, 8);
                 self.put(csg + 24, 0xc);
                 for j in 0..8 {

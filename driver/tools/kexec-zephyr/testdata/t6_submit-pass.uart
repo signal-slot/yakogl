@@ -32,7 +32,7 @@ t6_submit: Z3: GLB input 0x04002000 output 0x04006000, CSG0 in 0x04003000 out 0x
 t6_submit: Z3: CORE_EN 0x0000000000050005, poweroff 0x000000eb progress 0x00271000 idle 0x00000013, ack_irq_mask 0x0400050e
 t6_submit: Z3: init req 0x0000040e acked 0x0000010e in 310 us, PING acked in 95 us, GLB req 0x0000050e ack 0x0000050e
 t6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000
-t6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used 8 vm_tables_used 10 suspend_size 0 protm_suspend_size 0
+t6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used 8 vm_tables_used 10 suspend_size 25600 protm_suspend_size 25600
 t6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64
 t6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000011, acked in 1/0 us
 t6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000080 seqno 0x0000000000000001 sync_status 0x00000000, wait 20 us
