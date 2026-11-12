@@ -635,6 +635,10 @@ pub enum SchedRefusal {
     /// (`RESTART_BUDGET`) ended the group instead of starting it again
     /// (the value: the refusal that would have restarted it).
     RestartBudget = 31,
+    /// Ours, the Zephyr OSAL's: the GPU's L2 and LSC clean and invalidate
+    /// after the group's end did not complete (the value: the
+    /// [`super::MaliRefusal`] number); its memory is then kept.
+    CacheFlush = 32,
 }
 
 /// The ring's size as panthor's queue creation accepts it
@@ -1963,7 +1967,7 @@ pub fn stop_and_terminate(
 mod tests {
     use super::*;
 
-    const ALL: [SchedRefusal; 31] = [
+    const ALL: [SchedRefusal; 32] = [
         SchedRefusal::RingSize,
         SchedRefusal::RingUnmapped,
         SchedRefusal::UserPagesUnmapped,
@@ -1995,6 +1999,7 @@ mod tests {
         SchedRefusal::HeapGrow,
         SchedRefusal::HeapRemake,
         SchedRefusal::RestartBudget,
+        SchedRefusal::CacheFlush,
     ];
 
     #[test]
@@ -2017,6 +2022,7 @@ mod tests {
             (SchedRefusal::HeapGrow, 29),
             (SchedRefusal::HeapRemake, 30),
             (SchedRefusal::RestartBudget, 31),
+            (SchedRefusal::CacheFlush, 32),
         ];
         for (r, n) in pinned {
             assert_eq!(r as u32, n, "{r:?}");

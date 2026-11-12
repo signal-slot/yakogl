@@ -1824,6 +1824,11 @@ pub(crate) mod tests {
                 None => {}
             }
         }
+        /// Every register write so far, in order (memory the model holds
+        /// is not logged).
+        pub(crate) fn writes(&self) -> Vec<(usize, u32)> {
+            self.log.borrow().clone()
+        }
         /// The index in the log of the first write of `v` to `a`.
         fn first(&self, a: usize, v: u32) -> Option<usize> {
             self.log.borrow().iter().position(|&w| w == (a, v))
