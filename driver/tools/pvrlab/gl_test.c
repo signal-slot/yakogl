@@ -897,9 +897,10 @@ static const EGLint s_window_single_buffer[] = { EGL_RENDER_BUFFER, EGL_SINGLE_B
  * it YAKOGL_GPU_VIVANTE (CMakeLists.txt). One GPU, two build systems.
  *
  * Four GPUs: GL_TEST_VIVANTE, GL_TEST_V3D (the Raspberry Pi 4, Zephyr only,
- * driver/samples/zephyr/gl_test on rpi_4b), GL_TEST_MALI (the NanoPC-T6 under
- * Armbian: tools/mali/panthor panthor-gltest, driver/docs/nanopc-t6-mali.md
- * "L3: gl_test under Armbian") and GL_TEST_PVR. A site that calls the
+ * driver/samples/zephyr/gl_test on rpi_4b), GL_TEST_MALI (the NanoPC-T6:
+ * under Armbian, tools/mali/panthor panthor-gltest, driver/docs/nanopc-t6-mali.md
+ * "L3: gl_test under Armbian"; on Zephyr, driver/samples/zephyr/gl_test on
+ * nanopc_t6) and GL_TEST_PVR. A site that calls the
  * PowerVR's knobs or counters is `#ifdef GL_TEST_PVR`; a site that leaves out
  * what one GPU lacks names that GPU. */
 #if defined(CONFIG_YAKOGL_GPU_VIVANTE) || defined(YAKOGL_GPU_VIVANTE)
@@ -909,7 +910,7 @@ static const EGLint s_window_single_buffer[] = { EGL_RENDER_BUFFER, EGL_SINGLE_B
 /* The OSAL's init argument (struct osal_zephyr_v3d_init: the V3D's clock
  * switch through the firmware mailbox), which only the board's sample has. */
 void *gl_test_v3d_osal_arg(void);
-#elif defined(YAKOGL_GPU_MALI)
+#elif defined(CONFIG_YAKOGL_GPU_MALI) || defined(YAKOGL_GPU_MALI)
 #define GL_TEST_MALI 1
 #else
 #define GL_TEST_PVR 1
@@ -24594,8 +24595,9 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 	(void)ppp_ctrl; (void)no_coalesce; (void)debug; (void)pretransform;
 	rc = g_osal->init(gl_test_v3d_osal_arg());
 #elif defined(GL_TEST_MALI)
-	/* No backend options; the OSAL (panthor-gltest installs it) opens the
-	 * render node itself. */
+	/* No backend options. Under Armbian the OSAL (panthor-gltest installs
+	 * it) opens the render node itself; on Zephyr NULL takes the image's
+	 * osal_zephyr_mali_default_platform() (the CSF firmware). */
 	(void)ppp_ctrl; (void)no_coalesce; (void)debug; (void)pretransform;
 	rc = g_osal->init(NULL);
 #else

@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # gl_test: the one GL suite image for the Verdin AM62P (PowerVR), the Verdin
 # iMX8M Plus and Armadillo-X2 (Vivante GC7000UL), the STM32MP257F-DK's A35
-# (Vivante GCNanoUltra31) and the Raspberry Pi 4 (V3D).
+# (Vivante GCNanoUltra31), the Raspberry Pi 4 (V3D) and the NanoPC-T6
+# (Mali-G610).
 # tools/pvrlab/gl_test.c is the on-silicon GL test suite of the Linux harness;
 # the same source runs here (printk instead of pr_info). The board is chosen by
 # the Zephyr board (-b) only; there is no per-board option here. What differs
@@ -129,6 +130,33 @@ elseif(CONFIG_YAKOGL_GPU_VIVANTE AND CONFIG_YAKOGL_STM32MP2)
   target_include_directories(app PRIVATE
     "${YAKOGL_DIR}/src/vivante"
     "${PVR_REPO}/src/vivante")
+elseif(CONFIG_YAKOGL_GPU_MALI)
+  # ---- NanoPC-T6, Mali-G610 ------------------------------------------------
+  # Through YakoGL's GL core, its in-process compiler and its Mali backend on
+  # the OSAL src/osal/zephyr_mali.c (our own kernel side, board::nanopc_t6_osal).
+  # The board glue (WDT0, the early banner, the PSCI reset back into Armbian)
+  # is driver/zephyr/lib/board/nanopc_t6, in every nanopc_t6 image.
+  if(NOT CONFIG_YAKOGL_NANOPC_T6)
+    message(FATAL_ERROR "gl_test: CONFIG_YAKOGL_GPU_MALI needs the nanopc_t6 board (CONFIG_YAKOGL_NANOPC_T6)")
+  endif()
+  execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
+                  OUTPUT_VARIABLE T6_GL_TEST_BUILD OUTPUT_STRIP_TRAILING_WHITESPACE
+                  ERROR_QUIET RESULT_VARIABLE describe_rc)
+  if(NOT describe_rc EQUAL 0 OR T6_GL_TEST_BUILD STREQUAL "")
+    set(T6_GL_TEST_BUILD "unknown")
+  endif()
+  target_compile_definitions(app PRIVATE T6_GL_TEST_BUILD="${T6_GL_TEST_BUILD}")
+  message(STATUS "gl_test (nanopc_t6) build: ${T6_GL_TEST_BUILD}")
+
+  # The CSF firmware, driver/src/fw/mali_csffw_blob.h (driver/tools/mkmalifw.sh;
+  # gitignored, never committed), is embedded by the board glue
+  # (driver/zephyr/lib/board/nanopc_t6/nanopc_t6_mali.c): the build stops at
+  # its include without it.
+  target_sources(app PRIVATE src/main_nanopc_t6.c)
+
+  # The GL ES 1.00 shader set, always: the in-process compiler is the Mali's
+  # only shader back end (as panthor-gltest builds gl_test.c, and the V3D).
+  target_compile_definitions(app PRIVATE GL_TEST_ES100=1)
 elseif(CONFIG_YAKOGL_GPU_VIVANTE)
   # ---- Verdin iMX8M Plus, Armadillo-X2: Vivante GC7000UL -------------------
   # Only the few lines that start the backend know which GPU this is, and they

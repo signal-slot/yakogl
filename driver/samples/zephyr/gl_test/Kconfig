@@ -522,5 +522,30 @@ config V3D_GL_TEST_HOLD_S
 	  board image is): the run plus the time the record stays readable.
 endmenu
 
+menu "gl_test on the NanoPC-T6 (Mali-G610)"
+	depends on YAKOGL_GPU_MALI
+
+config T6_GL_TEST_CASE
+	int "gl_test case to run (7 = the regression set)"
+	default 7
+	help
+	  The case numbers are driver/tools/pvrlab/gl_test.c's own; its
+	  header comment lists them. 7 walks the regression set (the
+	  runner's SET_ORDER) on one context.
+
+config T6_GL_TEST_CASES
+	string "Cases to run in order on one context, comma-separated (overrides T6_GL_TEST_CASE)"
+	default ""
+	help
+	  When set, the listed case numbers are walked through
+	  gl_test_set_list on one context, as the other boards' images do.
+	  A GPU fault or the 5 s job timeout fails its case and restarts
+	  the OSAL's group, at most 16 times in an image; an error that
+	  needs a GPU reset, or one past the 16, fails every later case
+	  (YAKOGL_GPU_MALI's help; board::nanopc_t6_osal, "Recovery").
+	  Empty: T6_GL_TEST_CASE.
+
+endmenu
+
 rsource "../common/Kconfig"
 source "Kconfig.zephyr"

@@ -3871,6 +3871,9 @@ zephyr_nanopc_t6_image() {
 # the file an existing header is used, as the AM62P rows use pvr_fw_blob.h.
 # The two rows may run at once (--jobs): each makes its own copy and renames
 # it into place, so neither build reads a header half written by the other.
+# zephyr_nanopc_t6_fw_image <fw> <name> [<sample> <dir>]: the probe
+# tools/probes/nanopc_t6/<name> by default; <name> also names the row's own
+# copy of the header.
 zephyr_nanopc_t6_fw_image() {
   local f="$1" probe="$2" h=driver/src/fw/mali_csffw_blob.h t="build/zephyr-werror/mali_csffw_blob.$2.h"
   if [ -f "$f" ]; then
@@ -3878,7 +3881,30 @@ zephyr_nanopc_t6_fw_image() {
     bash driver/tools/mkmalifw.sh "$f" "$t" || return 1
     cmp -s "$t" "$h" || { mkdir -p "${h%/*}" && cp "$t" "$h.$probe.new" && mv "$h.$probe.new" "$h"; } || return 1
   fi
-  zephyr_werror_image nanopc_t6 "tools/probes/nanopc_t6/$probe" "nanopc_$probe"
+  zephyr_werror_image nanopc_t6 "${3:-tools/probes/nanopc_t6/$probe}" "${4:-nanopc_$probe}"
+}
+# gl_test on the NanoPC-T6's Mali (driver/samples/zephyr/gl_test, boards/
+# nanopc_t6.conf): it builds with the firmware embedded (its link checks that
+# WDT0 is armed before every init hook, check_early_hooks.cmake), and
+# the image is one driver/tools/kexec-zephyr/nanopc-t6.sh would load: one
+# watchdog marker, the RAM footprint (the AArch64 header's image_size) inside
+# zephyr,sram (the window), and the file at most kexec_zephyr's 64 MiB
+# (IMG_MAX; the __nocache statics lie inside the file's span).
+zephyr_nanopc_t6_gltest_image() {
+  local dir=build/zephyr-werror/nanopc_t6-gl_test bin footprint size window marker
+  zephyr_nanopc_t6_fw_image "$1" gl_test gl_test nanopc_t6-gl_test || return 1
+  bin="$dir/zephyr/zephyr.bin"
+  marker=$(strings -n 20 "$bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
+  [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
+  footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
+  size=$(stat -c %s "$bin")
+  window=$(sed -n 's/^CONFIG_SRAM_SIZE=//p' "$dir/zephyr/.config")
+  [ -n "$window" ] && [ "$footprint" -le $((window * 1024)) ] || {
+    echo "the image needs $footprint bytes of RAM, zephyr,sram has ${window:-?} KiB"
+    return 1
+  }
+  [ "$size" -le $((64 << 20)) ] || { echo "zephyr.bin is $size bytes; kexec_zephyr reads at most 64 MiB"; return 1; }
+  grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
 }
 # No input key: an image's inputs include the west workspace and the Zephyr
 # SDK, thousands of files outside the checkout, and a module edited in place
@@ -3963,6 +3989,13 @@ if [ "$QUICK" -eq 0 ]; then
     needs_mali_csffw
     step "zephyr  nanopc_t6 t6_submit image (Z4), -Werror on our C files" \
       zephyr_nanopc_t6_fw_image "$mali_csffw" t6_submit
+    # gl_test on the Mali (the GL core, the online compiler, the Mali backend,
+    # the OSAL over our own kernel side): the same firmware, the same gap.
+    scope mali gltest drivers samples
+    needs_mali_csffw
+    step "zephyr  nanopc_t6 gl_test image (Mali), -Werror on our C files, fits the kexec window" \
+      zephyr_nanopc_t6_gltest_image "$mali_csffw"
+    scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
   else
