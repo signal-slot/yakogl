@@ -40,7 +40,7 @@ t6_submit: Z4f: latest_flush 0x00000000 sync_updates 0 status_cmd_ptr 0x00000000
 t6_submit: Z4g: stop 3 us refusal 0, terminate 1 us refusal 0, cleared 0 0 0
 t6_submit: Z4h: target red 0 blue 0 fill 4096 other 0 of 4096 pixels
 t6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc
-t6_submit: Z4j: drain 0 us refusal 0 extract 0x0000000000000000 sync_updates 0 cs_ack 0x00000000
+t6_submit: Z4j: drain 0 us refusal 0 extract 0x0000000000000000 sync_updates 0 cs_ack 0x00000000 cs_irq_acks 0 idle_acks 0
 t6_submit: Z4k: extract after the end 0x0000000000000000
 t6_submit: FAIL: Z4 step 14 (wait)
 t6: t6_submit done: PSCI SYSTEM_RESET at 214 ms (0 feeds)

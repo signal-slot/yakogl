@@ -115,7 +115,7 @@ static const struct t6_z4_region t6_z4_regions[YD_T6_SUBMIT_REGIONS] = {
 BUILD_ASSERT(YD_T6_SUBMIT_QUEUE_MCU_MIN <= QUEUE_MEM_SIZE, "queue memory");
 BUILD_ASSERT(sizeof(struct yd_t6_fw_up) == 192, "struct yd_t6_fw_up moved");
 BUILD_ASSERT(sizeof(struct yd_t6_fw_backing) == 24, "struct yd_t6_fw_backing moved");
-BUILD_ASSERT(sizeof(struct yd_t6_submit_up) == 424, "struct yd_t6_submit_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_submit_up) == 432, "struct yd_t6_submit_up moved");
 BUILD_ASSERT(sizeof(struct yd_t6_submit_mem) == 192, "struct yd_t6_submit_mem moved");
 
 #define GPU_MAP_SIZE 0x280000 /* the doorbells are at 0x80000 and up */
@@ -240,9 +240,9 @@ static void print_z4(const struct yd_t6_submit_up *o)
 	       o->blue, o->fill, o->other, o->pixels);
 	printk("t6_submit: Z4i: frame digest 0x%016llx\n", (unsigned long long)o->digest);
 	printk("t6_submit: Z4j: drain %u us refusal %u extract 0x%016llx sync_updates %u "
-	       "cs_ack 0x%08x\n",
+	       "cs_ack 0x%08x cs_irq_acks %u idle_acks %u\n",
 	       o->drain_us, o->drain_refusal, (unsigned long long)o->extract_drained,
-	       o->drain_sync_updates, o->drain_cs_ack);
+	       o->drain_sync_updates, o->drain_cs_ack, o->drain_cs_irq_acks, o->drain_idle_acks);
 	printk("t6_submit: Z4k: extract after the end 0x%016llx\n",
 	       (unsigned long long)o->extract_at_end);
 }

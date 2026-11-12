@@ -1292,6 +1292,18 @@ enum Poll {
     Pending,
 }
 
+/// The acknowledges [`poll_job`]'s looks made, counted only: what it
+/// writes does not depend on them.
+#[derive(Clone, Copy, Debug, Default)]
+struct Acks {
+    /// `CSG_SYNC_UPDATE` events.
+    sync_updates: u32,
+    /// Looks that set `cs_irq_ack` to `cs_irq_req` for CS 0's bit.
+    cs_irqs: u32,
+    /// `CSG_IDLE` events.
+    idles: u32,
+}
+
 /// One look at CSG 0, CS 0 and the sync object, in the order panthor's
 /// interrupt handling takes them (`sched_process_csg_irq_locked`,
 /// panthor_sched.c:1665-1723), every failure refused before a completion
@@ -1321,7 +1333,7 @@ fn poll_job(
     cs: &Cs,
     s: &Started,
     target: u64,
-    sync_updates: &mut u32,
+    acks: &mut Acks,
 ) -> Result<Poll, Refused> {
     let (req, ack) = (csg.input + offset_of!(CsgInput, req), csg.output + offset_of!(CsgOutput, ack));
     let (r, a) = (m.read32(req), m.read32(ack));
@@ -1336,12 +1348,16 @@ fn poll_job(
     let irq_req = m.read32(csg.output + offset_of!(CsgOutput, cs_irq_req));
     if (irq_req ^ m.read32(irq_ack)) & 1 << CS_SLOT != 0 {
         m.write32(irq_ack, irq_req);
+        acks.cs_irqs += 1;
         rung = true;
     }
     if events & CSG_EVT_ACK != 0 {
         csf::update_reqs(m, req, a, CSG_EVT_ACK);
         if events & csf::CSG_SYNC_UPDATE != 0 {
-            *sync_updates += 1;
+            acks.sync_updates += 1;
+        }
+        if events & csf::CSG_IDLE != 0 {
+            acks.idles += 1;
         }
         rung = true;
     }
@@ -1376,7 +1392,7 @@ pub fn wait(
     sub: &Submitted,
     delay_us: &mut impl FnMut(u32),
 ) -> Result<Waited, WaitRefused> {
-    let mut sync_updates = 0;
+    let mut acks = Acks::default();
     let mut t = 0;
     let refused = |refused: Refused, us: u32| {
         let o = |f: usize| cs.output + f;
@@ -1401,8 +1417,8 @@ pub fn wait(
         }
     };
     loop {
-        match poll_job(m, gpu, iface, csg, cs, s, sub.seqno, &mut sync_updates) {
-            Ok(Poll::Done(seqno)) => return Ok(Waited { seqno, us: t, sync_updates }),
+        match poll_job(m, gpu, iface, csg, cs, s, sub.seqno, &mut acks) {
+            Ok(Poll::Done(seqno)) => return Ok(Waited { seqno, us: t, sync_updates: acks.sync_updates }),
             Ok(Poll::Pending) => {}
             Err(r) => return Err(refused(r, t)),
         }
@@ -1428,6 +1444,11 @@ pub struct Drained {
     pub extract: u64,
     /// `CSG_SYNC_UPDATE` events acknowledged on the way.
     pub sync_updates: u32,
+    /// Looks that acknowledged CS 0's `cs_irq` bit (`cs_irq_ack` set to
+    /// `cs_irq_req`).
+    pub cs_irq_acks: u32,
+    /// `CSG_IDLE` events acknowledged on the way.
+    pub idle_acks: u32,
 }
 
 /// Why [`drained`] stopped short, with what it had seen until then.
@@ -1448,7 +1469,8 @@ const _: () = assert!(CS_ACK_WAIT_US.is_multiple_of(JOB_POLL_US));
 /// as [`poll_job`] does (refusing a progress timeout or a stream event,
 /// acknowledging `cs_irq`, `CSG_SYNC_UPDATE` and `CSG_IDLE` and ringing
 /// the group, refusing a sync object `status`), with the sequence number
-/// already reached. A refusal leaves the group running.
+/// already reached, and counts each of the three acknowledges. A refusal
+/// leaves the group running.
 ///
 /// Why: the sync object's `seqno` is written by the stream itself (its
 /// `SYNC_ADD64`), while `extract` and `CSG_SYNC_UPDATE` are the MCU
@@ -1476,11 +1498,14 @@ pub fn drained(
     delay_us: &mut impl FnMut(u32),
 ) -> Result<Drained, DrainRefused> {
     let mut d = Drained::default();
+    let mut acks = Acks::default();
     loop {
         let look = read64_stable(m, s.output_cpu + offset_of!(RingbufOutput, extract)).and_then(|extract| {
             d.extract = extract;
             let insert = read64(m, s.input_cpu + offset_of!(RingbufInput, insert));
-            poll_job(m, gpu, iface, csg, cs, s, 0, &mut d.sync_updates)?;
+            let polled = poll_job(m, gpu, iface, csg, cs, s, 0, &mut acks);
+            (d.sync_updates, d.cs_irq_acks, d.idle_acks) = (acks.sync_updates, acks.cs_irqs, acks.idles);
+            polled?;
             Ok(extract == insert)
         });
         match look {
@@ -2992,7 +3017,10 @@ mod tests {
         mcu.log.borrow_mut().clear();
         let (r, slept) = do_drained(&mcu, &s);
         let d = r.unwrap();
-        assert_eq!((d.extract, d.sync_updates), (128, 1));
+        // the late publish raised CS 0's cs_irq bit with the sync update
+        // (the first run's cleared[1] = 1): the drain counts its
+        // acknowledge
+        assert_eq!((d.extract, d.sync_updates, d.cs_irq_acks, d.idle_acks), (128, 1, 1, 0));
         assert_eq!(u64::from(d.us), slept);
         assert!(d.us > 0 && d.us.is_multiple_of(JOB_POLL_US), "{d:?}");
         // the events acknowledged as the wait's poll does: cs_irq_ack to
@@ -3020,8 +3048,24 @@ mod tests {
         assert_eq!(do_wait(&mcu, &s, &sub).0.unwrap().sync_updates, 1);
         mcu.log.borrow_mut().clear();
         let (r, slept) = do_drained(&mcu, &s);
-        assert_eq!((r, slept), (Ok(Drained { us: 0, extract: 128, sync_updates: 0 }), 0));
+        // the wait took the events: nothing left for the drain to count
+        let d = Drained { us: 0, extract: 128, ..Drained::default() };
+        assert_eq!((r, slept), (Ok(d), 0));
         assert_eq!(mcu.log(), vec![]);
+    }
+
+    #[test]
+    fn drained_counts_a_csg_idle_it_acknowledges() {
+        let mcu = Mcu::new();
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        do_wait(&mcu, &s, &sub).0.unwrap();
+        let ack = at(CSG_OUT) + offset_of!(CsgOutput, ack);
+        mcu.put(ack, mcu.word(ack) ^ csf::CSG_IDLE);
+        let (r, slept) = do_drained(&mcu, &s);
+        let d = Drained { us: 0, extract: 128, idle_acks: 1, ..Drained::default() };
+        assert_eq!((r, slept), (Ok(d), 0));
+        assert_eq!(mcu.word(at(CSG_IN)) ^ mcu.word(ack), 0);
     }
 
     #[test]
@@ -3032,7 +3076,7 @@ mod tests {
         assert_eq!(do_wait(&mcu, &s, &sub).0.unwrap().seqno, 1);
         mcu.log.borrow_mut().clear();
         let (r, slept) = do_drained(&mcu, &s);
-        let at = Drained { us: CS_ACK_WAIT_US, extract: 0, sync_updates: 0 };
+        let at = Drained { us: CS_ACK_WAIT_US, ..Drained::default() };
         assert_eq!(r, Err(DrainRefused { refused: (SchedRefusal::DrainTimeout, 0), at }));
         assert_eq!(slept, u64::from(CS_ACK_WAIT_US));
         // nothing pending was acknowledged, nothing written
@@ -3049,7 +3093,7 @@ mod tests {
         raise_event(&mcu, CS_FAULT);
         let (r, slept) = do_drained(&mcu, &s);
         // the extract was read before the events (published by then)
-        let at = Drained { us: 0, extract: 128, sync_updates: 0 };
+        let at = Drained { us: 0, extract: 128, ..Drained::default() };
         assert_eq!(
             (r, slept),
             (Err(DrainRefused { refused: (SchedRefusal::CsFault, EXCEPTION_CS_INHERIT_FAULT), at }), 0)
