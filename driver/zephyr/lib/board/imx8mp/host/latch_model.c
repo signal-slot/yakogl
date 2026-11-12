@@ -4,14 +4,17 @@
  * latch_model.c: the i.MX8MP board layer's show and VSYNC waits on the host.
  *
  * board_imx8mp.c is compiled unchanged against shim/ (Zephyr's kernel calls on
- * POSIX threads, gc_render_alloc on the C heap) and against the simulated
- * LCDIF below: imx8mp_display_set_fb() returns at the next multiple of the
- * period T, as the real one returns when the LCDIF clears SHADOW_LOAD_EN at
- * its next VSYNC. A frame of each application is played in the order its
- * sample calls EGL and the board (the draw is a sleep of D), and the run
- * prints how many panel periods a frame took. That is the number the
- * swap-interval wiring must not double (docs/notes/imx8mp-frame-floor.md,
- * "Waits per swap").
+ * the simulated clock of sim_kernel.c, gc_render_alloc on the C heap) and
+ * against the simulated LCDIF below: imx8mp_display_set_fb() returns at the
+ * next multiple of the period T, as the real one returns when the LCDIF
+ * clears SHADOW_LOAD_EN at its next VSYNC. A frame of each application is
+ * played in the order its sample calls EGL and the board (the draw is D of
+ * simulated time: the frame's whole CPU and GPU time, the window copy
+ * included), and the run prints how many panel periods a frame took. That is
+ * the number the swap-interval wiring must not double
+ * (docs/notes/imx8mp-frame-floor.md, "Waits per swap"). Time passes only by
+ * D and by the waits for T, never by the host's clock, so every run on every
+ * host prints the same numbers.
  *
  *   latch_model <app> <osal> [frames]
  *     app   panel    Slint, SINGLE_BUFFER, the panel's size: swap, then show
@@ -32,7 +35,7 @@
  *           wired    .wait_vblank calls yakogl_zephyr_wait_vblank
  *
  * Output, one line starting "app=": app, osal, buffers, view, periods/frame
- * (wall time over frames x T), latches/frame (set_fb calls), and in-place
+ * (simulated time over frames x T), latches/frame (set_fb calls), and in-place
  * draws: cluster frames submitted while the LCDIF still scanned the half
  * they write (the cluster's invariant; expected 0).
  */
@@ -51,20 +54,12 @@
 static int64_t s_period_us = 4000; /* T */
 static int64_t s_draw_us = 1200;   /* D: the frame's CPU and GPU time */
 
-/* ---- the simulated LCDIF ---------------------------------------------- */
-static pthread_mutex_t s_lcdif = PTHREAD_MUTEX_INITIALIZER;
+/* ---- the simulated LCDIF ----------------------------------------------
+ * One model thread runs at a time (sim_kernel.c), so its state needs no lock. */
 static uintptr_t s_scanned; /* what the LCDIF reads now */
 static unsigned long s_latches;
 
 const struct device model_gpu_device;
-
-static void sleep_until_us(int64_t t)
-{
-	struct timespec ts = { .tv_sec = t / 1000000, .tv_nsec = (t % 1000000) * 1000 };
-
-	while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) == EINTR) {
-	}
-}
 
 void imx8mp_display_geometry(uint32_t *width, uint32_t *height)
 {
@@ -75,9 +70,7 @@ void imx8mp_display_geometry(uint32_t *width, uint32_t *height)
 int imx8mp_display_on(uintptr_t fb_phys, uint32_t pitch)
 {
 	ARG_UNUSED(pitch);
-	pthread_mutex_lock(&s_lcdif);
 	s_scanned = fb_phys;
-	pthread_mutex_unlock(&s_lcdif);
 	return 0;
 }
 
@@ -91,22 +84,10 @@ int imx8mp_display_set_fb(uintptr_t fb_phys)
 {
 	int64_t now = model_now_us();
 
-	sleep_until_us((now / s_period_us + 1) * s_period_us);
-	pthread_mutex_lock(&s_lcdif);
+	model_sleep_until_us((now / s_period_us + 1) * s_period_us);
 	s_scanned = fb_phys;
 	s_latches++;
-	pthread_mutex_unlock(&s_lcdif);
 	return 0;
-}
-
-static uintptr_t scanned(void)
-{
-	uintptr_t p;
-
-	pthread_mutex_lock(&s_lcdif);
-	p = s_scanned;
-	pthread_mutex_unlock(&s_lcdif);
-	return p;
 }
 
 /* ---- the rest of what board_imx8mp.c links against --------------------- */
@@ -157,7 +138,7 @@ static void swap_interval_loop(int interval)
 
 static void draw(void)
 {
-	sleep_until_us(model_now_us() + s_draw_us);
+	model_sleep_until_us(model_now_us() + s_draw_us);
 }
 
 static void must_show(const struct board_window *w)
@@ -229,7 +210,7 @@ static void cluster_frame(void)
 		must_show(&s_half[s_cl_pending]);
 	}
 	/* the swap submits the frame: the half it writes must be off the panel */
-	if (scanned() == s_half[s_cl_half].phys) {
+	if (s_scanned == s_half[s_cl_half].phys) {
 		s_inplace_draws++;
 	}
 	swap_interval_loop(1);
@@ -304,6 +285,7 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	s_wired = strcmp(argv[2], "wired") == 0;
+	model_kernel_init();
 	if (argc > 3) {
 		frames = atoi(argv[3]);
 	}
@@ -314,19 +296,14 @@ int main(int argc, char **argv)
 		a->frame();
 	}
 	s_inplace_draws = 0;
-	pthread_mutex_lock(&s_lcdif);
 	l0 = s_latches;
-	pthread_mutex_unlock(&s_lcdif);
 	t0 = model_now_us();
 	for (int f = 0; f < frames; f++) {
 		a->frame();
 	}
 	const double periods = (double)(model_now_us() - t0) / (double)s_period_us / frames;
-
-	pthread_mutex_lock(&s_lcdif);
 	const double latches = (double)(s_latches - l0) / frames;
 
-	pthread_mutex_unlock(&s_lcdif);
 	printf("app=%s osal=%s buffers=%d view=%d interval=%d periods/frame=%.2f latches/frame=%.2f inplace-draws=%lu\n",
 	       a->name, argv[2], CONFIG_YAKOGL_BOARD_IMX8MP_SCREEN_BUFFERS,
 	       IS_ENABLED(CONFIG_YAKOGL_BOARD_SCANOUT_VIEW), a->interval, periods, latches,
