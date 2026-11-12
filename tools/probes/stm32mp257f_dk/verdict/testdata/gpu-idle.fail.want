@@ -1,0 +1,2 @@
+verdict gpu-idle reset-idle=FAIL:absent idle=FAIL verdict=FAIL
+1 checks, 1 failed

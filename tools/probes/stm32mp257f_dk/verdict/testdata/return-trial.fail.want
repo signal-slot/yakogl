@@ -1,0 +1,2 @@
+verdict return-trial banner=PASS psci-reset=FAIL
+1 checks, 1 failed

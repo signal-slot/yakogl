@@ -1,0 +1,2 @@
+verdict gc-fence model=PASS retired=FAIL irq=FAIL:0 final=FAIL record=FAIL:kind=2
+1 checks, 1 failed

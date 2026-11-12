@@ -1,0 +1,14 @@
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=1 x0=0x80000000 x1=0x0 x2=0x0 x3=0x0 pc=0xa0000000 cntfrq=24000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 1234 ticks
+gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xbc000000, timeout 32 s, PET every 1000 ms until 20000 ms of uptime
+*** Booting Zephyr OS build v0.0.0 ***
+mp2_gpu: build test
+mp2_gpu: powered: level 1 (found 1), rcc 0x00000002, idle 0x7fffffff after 1 reads
+mp2_gpu: model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x0000aaaa date=0x20200101 time=0x00000000 features=0x00000001 table=1 streams=16
+mp2_gpu: gpu intr_enbl wrote 0xffffffff read 0xffffffff, then 0
+mp2_gpu: reset: rcc 0x00000003 held, 0x00000002 released; idle 0x7fffffff after 1 reads
+mp2_gpu: verdict PASS model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x0000aaaa intr=ok idle=ok
+mp2: mp2_gpu done: PSCI SYSTEM_RESET at 900 ms

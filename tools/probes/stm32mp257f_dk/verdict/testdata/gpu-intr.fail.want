@@ -1,0 +1,2 @@
+verdict gpu-intr readback=FAIL:0x00000000 intr=FAIL
+1 checks, 1 failed

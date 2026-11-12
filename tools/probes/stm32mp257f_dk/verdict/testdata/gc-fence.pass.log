@@ -1,0 +1,13 @@
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=1 x0=0x80000000 x1=0x0 x2=0x0 x3=0x0 pc=0xa0000000 cntfrq=24000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 1234 ticks
+*** Booting Zephyr OS build v0.0.0 ***
+[00:00:01.000,000] <inf> gpu_gc: irq 215 connected
+gc_irq: spi=183 intid=215 enable=1 cfg=1 target=0x01 self=0x01 prio=0x80 group=1 pend=0 active=0 gicd_ctlr=0x13 typer=0x3e0 secext=1 gicc_ctlr=0x7 pmr=0xff route=ours
+gc_irq: igroupr=0xffffffff (GICD_IGROUPR5) bit23=1 expect=1 ok
+gc_fence: GPU model 0x8000 revision 0x6205 product 0x80003 customer 0x0000aaaa eco 0
+gc_fence: fence 1 irqs 1 elapsed 120 us irq-latency 100 us (completed 1, wait 0)
+yk-record: 594b0201 00000001 00000001 01000078
+gc_fence: PASS
