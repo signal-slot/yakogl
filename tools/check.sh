@@ -2642,8 +2642,18 @@ if command -v cc >/dev/null 2>&1; then
     printf '%s\n' "$out" | tail -4
     printf '%s\n' "$out" | grep -q '^Ran 25 tests in ' || { echo "sweep_passsets: not the 25 planned tests"; return 1; }
   }
+  # valhall_src_info.py (Mesa's valhall.c table as the facts the Mali
+  # test compares bir.rs with) on small tables written in the test: it reads
+  # the table's layout in full or fails naming the line; 7 planned tests.
+  valhall_src_info_selftest() {
+    local out
+    out=$(python3 -I tools/mali/test_valhall_src_info.py 2>&1) || { printf '%s\n' "$out" | tail -30; return 1; }
+    printf '%s\n' "$out" | tail -4
+    printf '%s\n' "$out" | grep -q '^Ran 7 tests in ' || { echo "valhall_src_info: not the 7 planned tests"; return 1; }
+  }
   step "run     mali pan_ref_diff and ref_cases self-test (no Mesa tree)" pan_ref_diff_selftest
   step "run     mali sweep_passsets self-test" sweep_passsets_selftest
+  step "run     mali valhall_src_info self-test" valhall_src_info_selftest
   if [ -n "${MESA_PAN_TREE:-}" ]; then
     step "run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair (MESA_PAN_TREE)" pan_shc_check
   else
