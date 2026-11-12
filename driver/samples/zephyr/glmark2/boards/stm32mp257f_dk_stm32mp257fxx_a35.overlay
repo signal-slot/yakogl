@@ -1,0 +1,35 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* The STM32MP257F-DK's A35: the board layer's GPU node (clock rate), as
+ * gl_test, gc_fence and gc_clear take it, and a larger carve-out than the
+ * board's. */
+#include "../../../../zephyr/lib/board/stm32mp2/app.overlay"
+
+/* A 240 MiB GPU carve-out instead of the board's 64 MiB gpu-reserved area at
+ * 0xfa800000 (driver/boards/st/stm32mp257f_dk), as the Verdin iMX8M Plus'
+ * glmark2 image takes (issue #814): every GC allocation of the scenes comes
+ * from this one pool, frees are held until their kick completes, and one
+ * scene's peak (terrain) is 51 MB on the host, more than 64 MiB holds with
+ * the scenes running one after another. ST's area cannot grow: System RAM
+ * ends at 0xfa7fffff, and U-Boot relocates just below that.
+ *
+ * Where: 0xb0000000, just above the image's 256 MiB (zephyr,sram at
+ * 0xa0000000, the link address) and far below U-Boot, which relocates to the
+ * top of usable RAM. It is System RAM in ST's Linux (0x84000000-0xfa7fffff),
+ * not a reserved area, so unlike gpu-reserved it is not known to be open to
+ * the GPU's bus master: the first run on the DK confirms it (gc_fence's
+ * carve-out check). Below 4 GiB and 4 MiB aligned, as the GC's MMU needs
+ * (mmu.rs); 240 MiB is 60 of the 64 slave tables the carve-out's head holds
+ * (gc_internal.h GC_STLB_COUNT). */
+/ {
+	reserved-memory {
+		gpu_carveout_glmark2: gpu-carveout@b0000000 {
+			reg = <0xb0000000 0x0f000000>;
+			no-map;
+		};
+	};
+};
+
+&gpu {
+	memory-region = <&gpu_carveout_glmark2>;
+};

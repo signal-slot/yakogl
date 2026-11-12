@@ -19,6 +19,18 @@ cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(PVR_REPO "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/yakogl_dir.cmake")
 
+# The STM32MP257F-DK's A35 takes the board layer's own app.conf (the Vivante
+# driver, OP-TEE's watchdog, no hold), as gl_test, gc_fence and gc_clear do;
+# boards/stm32mp257f_dk_stm32mp257fxx_a35.conf and .overlay add glmark2's own
+# needs. Zephyr merges EXTRA_CONF_FILE after the board's .conf, so app.conf
+# (HOLD_S=0) wins over prj.conf's.
+if(NOT BOARD AND DEFINED ENV{BOARD})
+  set(BOARD "$ENV{BOARD}")
+endif()
+if(BOARD MATCHES "^stm32mp257f_dk")
+  set(EXTRA_CONF_FILE "${PVR_REPO}/zephyr/lib/board/stm32mp2/app.conf" ${EXTRA_CONF_FILE})
+endif()
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(glmark2_zephyr)
 
