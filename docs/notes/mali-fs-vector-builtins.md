@@ -2,12 +2,14 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): fragment pow, normalize, reflect, length and fract
 
-**Status: design** (plan #336, issue #33). This note changes no code. It says,
-for each of the five GLSL built-ins in a fragment shader, which NIR Mesa
-26.2.1 lowers it to, which Valhall instructions Mesa emits for a small
-representative shader (quoted), which of them `src/shaderc/online/mali/`
-already makes and which are missing, which glmark2 shaders each unblocks, and
-in what order to implement them.
+**Status: items 1-4 of the mediump forms implemented, pow open** (plan #336,
+issue #33; see "Implementation order"). The note says, for each of the five
+GLSL built-ins in a fragment shader, which NIR Mesa 26.2.1 lowers it to,
+which Valhall instructions Mesa emits for a small representative shader
+(quoted), which of them `src/shaderc/online/mali/` made when the note was
+written and which were missing, which glmark2 shaders each unblocks, and in
+what order to implement them. The "Yakogl:" paragraphs describe the code
+before the implementation.
 
 ## How the words were made
 
@@ -542,23 +544,40 @@ covered here): light-refract needs it after `reflect`.
 
 ## Implementation order
 
+Each item's test is a row of `FSVEC_POPULATION` in
+`src/shaderc/online/mali/tests.rs`
+(`the_fsvec_population_is_byte_equal_to_mesa_26_2_1`: both vertex programs,
+the fragment program, the FAU words and the register counts, the pair
+compiled through the link).
+
 1. Commit the references: the 14 draws above as `tools/mali/testdata`
    fixtures (the shaders and the `extract --draw` JSON), re-made with the
    two commands of "How the words were made" and checked against the sha256
    table. The shim runs are done, and the `pow` fusion is confirmed in both
-   precisions.
+   precisions. **Done** (the `fsvec_*` fixtures).
 2. `length` and `normalize`: the mediump arms for `Fsqrt` and `Frsq`, the
    new `FRSQ.f16` / `FRCP.f16` ops and the scalar-splat multiply. Unblocks
    the `normalize`-only shaders (terrain-normalmap) once their other
-   refusals are gone.
+   refusals are gone. **Done** for both precisions. The mediump dot is
+   one 16-bit node a lane; `frsq` of a varying's lane, a uniform's or a
+   constant stays refused (fsarith_77_vtransc draws `FRSQ.f16` of a
+   uniform's half beside other gaps), and so does `frcp` alone (`1.0 / x`:
+   no reference).
 3. `fract` of a single mediump lane (the narrowing, then the `v2f16` pair)
-   and of three or four lanes.
+   and of three or four lanes. **Done** for one lane of a varying, both
+   precisions. Two or more lanes have no reference and stay refused. A
+   varying that a mediump shader's fp16 arithmetic reads is read whole by
+   the link (the shim's program stores four lanes for `fract(v.x)`).
 4. `reflect`: the `d+d` and negated-operand rewrites in `nir.rs` in the
    shim's operand order, then the mediump `Ffma` arm. Unblocks the light and
-   ideas shaders together with 2.
+   ideas shaders together with 2. **Done** for mediump (the rewrite is the
+   one-lane tree's, nir_fs.rs `lane_tree`). The highp form still differs:
+   its rewrite belongs to the fp32 rules of `nir.rs`.
 5. `pow`: `Alu::Flog2` / `Fexp2` (mali-transcendentals.md), `F32_TO_S32`
    without `.rtz`, then the fused multiply. Largest item, and the one most
-   glmark2 shaders wait for (12 of them).
+   glmark2 shaders wait for (12 of them). **Open**: it needs an
+   `Alu::Fexp2` in `nir.rs` (the mediump form is fp32 throughout: the
+   varying read raw, `y` widened by `F16_TO_F32`, the result narrowed).
 6. Host tests per item in `src/shaderc/online/mali/tests.rs` in the style of
    `check_fs_stage`; `tools/mali/corpus-verdicts.txt` and
    `sweep_passsets.py --delta tools/cts/log` move forward only.
