@@ -282,7 +282,7 @@ pub enum Refusal {
     /// An image register not above the one before it. Nothing was written.
     ImageOrder = 3,
     /// An image register this module writes itself (the full-word ROPLL
-    /// words and lane top 0x200, 0x206, 0x207). Nothing was written.
+    /// words). Nothing was written.
     ImageOwnWord = 4,
     /// No plan for the rate: 0, above [`TMDS_MAX_HZ`], or no S, M in range.
     Rate = 5,
@@ -335,7 +335,9 @@ pub struct Image<'a> {
     pub cmn: &'a [(u16, u32)],
     /// SB registers, stage 4.
     pub sb: &'a [(u16, u32)],
-    /// Lane-top registers, stage 4, between 0x200 and 0x206.
+    /// Lane-top registers, stage 4, written after 0x200 and before 0x206:
+    /// only 0x201-0x205, the registers Linux's lane-top table for TMDS up to
+    /// 340 MHz writes (hdptx.c:606-612).
     pub lane_top: &'a [(u16, u32)],
     /// Lane 0-3 registers, stage 4, before the lane reset is released.
     pub lanes: &'a [(u16, u32)],
@@ -354,7 +356,8 @@ const PLAN_WHOLE_WORDS: [u16; 8] = [
     reg::PLL_SDC_NUM,
     reg::PLL_SDC_DENO,
 ];
-const LANE_TOP_OWN: [u16; 3] = [reg::LANE_TOP_MODE, reg::LANE_TOP_BUS, reg::LANE_TOP_LANES];
+/// The lane-top registers an image may hold (hdptx.c:606-612).
+const LANE_TOP_IMAGE: (u16, u16) = (0x201, 0x205);
 
 fn check_section(words: &[(u16, u32)], ranges: &[(u16, u16)], own: &[u16]) -> Result<(), Refused> {
     let mut last: Option<u16> = None;
@@ -375,12 +378,12 @@ fn check_section(words: &[(u16, u32)], ranges: &[(u16, u16)], own: &[u16]) -> Re
 
 impl Image<'_> {
     /// Every register is inside its section's range (and so inside
-    /// [`RW_RANGES`]), each section ascends, and no register is one this
-    /// module writes itself.
+    /// [`RW_RANGES`]; lane top only 0x201-0x205), each section ascends, and
+    /// no CMN register is a ROPLL word the plan writes whole.
     pub fn check(&self) -> Result<(), Refused> {
         check_section(self.cmn, &RW_RANGES[0..1], &PLAN_WHOLE_WORDS)?;
         check_section(self.sb, &RW_RANGES[1..2], &[])?;
-        check_section(self.lane_top, &RW_RANGES[2..3], &LANE_TOP_OWN)?;
+        check_section(self.lane_top, &[LANE_TOP_IMAGE], &[])?;
         check_section(self.lanes, &RW_RANGES[3..7], &[])
     }
 }
@@ -764,9 +767,12 @@ pub struct PllOn {
 /// words. The PHY's clocks must be on and its APB reset released (D4).
 /// The image and the plan ([`Plan::is_valid`]) are checked before anything
 /// is touched.
-/// On a timeout the PLL is left as it stands (Linux does the same,
-/// hdptx.c:1038-1042, :1122-1124): [`power_off`] or the next [`pll_on`]
-/// starts over.
+/// On a `ClkRdyTimeout` the PHY is left as stage 3 made it (Linux does the
+/// same, hdptx.c:1038-1042, :1122-1124): `CON0` `PLL_EN`, `BIAS_EN` and
+/// `BGR_EN` set, init and cmn released, lane asserted, the image's CMN
+/// words and the plan written. [`power_off`] does nothing then, because it
+/// runs only when `PLL_LOCK_DONE` is set; only the next [`pll_on`] resets
+/// the PHY (its stage 1 asserts every reset and clears `CON0`).
 pub fn pll_on(m: &impl Mmio, host: &impl Host, b: &Bases, plan: &Plan, image: &Image) -> Result<PllOn, Refused> {
     image.check()?;
     if !plan.is_valid() {
@@ -809,6 +815,11 @@ pub fn pll_on(m: &impl Mmio, host: &impl Host, b: &Bases, plan: &Plan, image: &I
 /// lane reset released, then the lock poll. Returns the µs until
 /// `PHY_RDY` and `PLL_LOCK_DONE`. Runs after [`pll_on`]; the image is
 /// checked again before anything is touched.
+/// On a `LockTimeout` the PHY is left on, as Linux leaves it
+/// (hdptx.c:1470-1471 with :1148-1155): every reset released, `CON0`
+/// `PLL_EN`, `BIAS_EN` and `BGR_EN` set, `MODE_SEL` HDMI, all image words
+/// written. [`power_off`] turns it off only if `PLL_LOCK_DONE` is set by
+/// then; otherwise only the next [`pll_on`] resets the PHY.
 pub fn lanes_on(m: &impl Mmio, host: &impl Host, b: &Bases, image: &Image) -> Result<u32, Refused> {
     image.check()?;
     m.write32(b.grf + grf::CON0, CON0_MODE_HDMI);
@@ -1081,7 +1092,7 @@ mod tests {
     // board's. The real one is the D0 dump's register file.
     const CMN: [(u16, u32); 4] = [(0x08, 0x11), (0x5e, 0x0f), (0x86, 0x01), (0xa7, 0x22)];
     const SB: [(u16, u32); 2] = [(0x100, 0x33), (0x129, 0x44)];
-    const LTOP: [(u16, u32); 2] = [(0x201, 0x55), (0x229, 0x66)];
+    const LTOP: [(u16, u32); 2] = [(0x201, 0x55), (0x205, 0x66)];
     const LANES: [(u16, u32); 4] = [(0x300, 0x77), (0x32d, 0x78), (0x400, 0x79), (0x62d, 0x7a)];
     const IMG: Image = Image { cmn: &CMN, sb: &SB, lane_top: &LTOP, lanes: &LANES };
 
@@ -1175,7 +1186,7 @@ mod tests {
             (Image { cmn: &[(0x10, 0), (0x10, 1)], ..IMG }, Refusal::ImageOrder, 0x10),
             (Image { lanes: &[(0x400, 0), (0x300, 1)], ..IMG }, Refusal::ImageOrder, 0x300),
             (Image { cmn: &[(0x51, 0)], ..IMG }, Refusal::ImageOwnWord, 0x51),
-            (Image { lane_top: &[(0x206, 0)], ..IMG }, Refusal::ImageOwnWord, 0x206),
+            (Image { lane_top: &[(0x206, 0)], ..IMG }, Refusal::ImageSection, 0x206),
         ];
         for (img, why, n) in cases {
             assert_eq!(img.check(), Err(Refused { why, found: n as u32 }));
@@ -1190,9 +1201,11 @@ mod tests {
         for n in [0x51u16, 0x55, 0x59, 0x5a, 0x60, 0x65, 0x6c, 0x70] {
             assert_eq!(Image { cmn: &[(n, 0)], ..IMG }.check().unwrap_err().why, Refusal::ImageOwnWord);
         }
-        for n in [0x200u16, 0x207] {
-            assert_eq!(Image { lane_top: &[(n, 0)], ..IMG }.check().unwrap_err().why, Refusal::ImageOwnWord);
+        // lane top: only 0x201-0x205; 0x200, 0x206, 0x207 are the driver's
+        for n in [0x200u16, 0x206, 0x207, 0x208, 0x229] {
+            assert_eq!(Image { lane_top: &[(n, 0)], ..IMG }.check().unwrap_err().why, Refusal::ImageSection, "{n:#x}");
         }
+        assert_eq!(Image { lane_top: &[(0x201, 0), (0x205, 0)], ..IMG }.check(), Ok(()));
         // the read-modify-written ROPLL words may be in it
         assert_eq!(Image { cmn: &[(0x5e, 0), (0x64, 0), (0x69, 0), (0x86, 0)], ..IMG }.check(), Ok(()));
     }
