@@ -285,8 +285,26 @@ pub const fn vop_grf_con2_word(port: Port) -> u32 {
 }
 
 /// The 2-bit field Linux v6.18 writes into `GRF_VO1_CON0` for `mode` on an
-/// HDMI output: bit 0 = the mode's vsync is positive, bit 1 = 0 (module
-/// text; vop2_reg.c:1660-1668 over vop2.c:1655-1661).
+/// HDMI output: bit 0 = the mode's vsync is positive, bit 1 = 0; the hsync
+/// polarity has no effect. This is the one place that computes the field.
+///
+/// How Linux gets there: vop2.c:1655-1661 builds a flag word with bit 3
+/// `POLFLAG_DCLK_INV` (vop2.h:770), bit 0 for a positive hsync and bit 1 for
+/// a positive vsync (`rockchip_drm_vop.h:346-347`), and passes it on at
+/// vop2.c:1671; vop2_reg.c:1660-1668 tests that word against
+/// `DRM_MODE_FLAG_NHSYNC` (bit 1) and `NVSYNC` (bit 3) (`drm_mode.h:72`,
+/// `:74`), so field bit 0 is "vsync positive" and field bit 1 is
+/// `POLFLAG_DCLK_INV`; vop2_reg.c:1699-1701 and :1712-1714 write it to
+/// bits 6:5 (HDMI0) or 8:7 (HDMI1).
+///
+/// `POLFLAG_DCLK_INV` is set only when the CRTC state's `bus_flags` has
+/// `DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE` (vop2.c:1656). In v6.18 only the
+/// DSI2 and DP encoders fill `bus_flags` (`dw-mipi-dsi2-rockchip.c:272`,
+/// `dw_dp-rockchip.c:65`); the HDMI QP glue's check sets only the output
+/// mode and type (glue:137-148). So on an HDMI output field bit 1 is 0.
+///
+/// Measured (board, Linux 6.18, 2026-11-12, 1024x768 at 60 Hz with both
+/// syncs negative on both HDMI ports): vo1_grf 0x00 reads 0, as this gives.
 pub const fn linux_sync_field(mode: &VideoMode) -> u32 {
     if mode.vsync_high {
         1
@@ -666,6 +684,57 @@ mod tests {
         }
         // a field wider than 2 bits stays inside its place
         assert_eq!(vo1_con0_sync_word(Port::Hdmi0, 0xff), 0x0060_0060);
+    }
+
+    /// The T6's fixed mode, 1024x768 at 60 Hz (VESA DMT), both syncs
+    /// negative, as the board ran it under Linux.
+    const XGA_60: VideoMode = VideoMode {
+        pixel_clock_hz: 65_000_000,
+        hactive: 1024,
+        hfront: 24,
+        hsync: 136,
+        hback: 160,
+        vactive: 768,
+        vfront: 3,
+        vsync: 6,
+        vback: 29,
+        hsync_high: false,
+        vsync_high: false,
+        de_high: true,
+    };
+
+    /// vo1_grf 0x00 read 0x00000000 on the board (2026-11-12) with XGA_60
+    /// on both ports.
+    #[test]
+    fn the_measured_xga_mode_gives_field_0_and_the_measured_word() {
+        assert_eq!(linux_sync_field(&XGA_60), 0);
+        assert_eq!(vo1_con0_sync_word(Port::Hdmi0, linux_sync_field(&XGA_60)), 0x0060_0000);
+        assert_eq!(vo1_con0_sync_word(Port::Hdmi1, linux_sync_field(&XGA_60)), 0x0180_0000);
+        let s = Soc::new();
+        s.set(VO1, 0x0000_01e0); // both fields set before: the words clear them
+        s.write32(VO1, vo1_con0_sync_word(Port::Hdmi0, linux_sync_field(&XGA_60)));
+        s.write32(VO1, vo1_con0_sync_word(Port::Hdmi1, linux_sync_field(&XGA_60)));
+        assert_eq!(s.get(VO1), 0);
+    }
+
+    /// What Linux left in the GRFs with both ports bound (board, Linux 6.18,
+    /// 2026-11-12; no sink detected, output forced on): vo1_grf 0x0c and
+    /// 0x18 = 0x2e00, 0x24 = 0x1400; sys_grf SOC_CON2 0x5000. Binding both
+    /// ports from reset gives the same words; SOC_CON7 bits 12 and 13 are
+    /// set (the board read 0x3a00; bits 9 and 11 are another driver's).
+    #[test]
+    fn binding_both_ports_leaves_the_measured_grf_words() {
+        let s = Soc::new();
+        bind(&s, &B, Port::Hdmi0, &P).unwrap();
+        bind(&s, &B1, Port::Hdmi1, &P).unwrap();
+        assert_eq!((s.get(VO1 + 0x0c), s.get(VO1 + 0x18), s.get(VO1 + 0x24)), (0x2e00, 0x2e00, 0x1400));
+        assert_eq!(s.get(SYS + 0x308), 0x5000);
+        assert_eq!(s.get(SYS + 0x31c) & 0x3000, 0x3000);
+        // HDMI0 alone, as the T6 path binds it: its own bits only
+        let s = Soc::new();
+        bind(&s, &B, Port::Hdmi0, &P).unwrap();
+        assert_eq!((s.get(VO1 + 0x0c), s.get(VO1 + 0x18), s.get(VO1 + 0x24)), (0x2e00, 0, 0x0400));
+        assert_eq!(s.get(SYS + 0x308), 0x1000);
     }
 
     #[test]
