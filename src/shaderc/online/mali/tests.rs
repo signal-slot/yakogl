@@ -6603,6 +6603,26 @@ fn a_negated_operand_the_zero_rule_cannot_fold_is_refused() {
     }
 }
 
+/// A local an unrolled loop stores from itself (`z = -z;`, `z = z *
+/// -1.0;`, once or three times, highp and mediump): Mesa unrolls the loop,
+/// folds `z` to -0.0 and compares with 0.0 (nir_opt_algebraic.py:771-776).
+/// glsl.rs `Tree::fold` runs the local's stores to a fixed point, so the
+/// self-read is what the earlier stores make (0.0, then -0.0), and the
+/// compare is refused by name ([`MaliError::NegZeroShared`]); at eb11186b0
+/// the self-read was taken as no constant and each kept `0x0.neg`.
+#[test]
+fn a_loop_carried_negative_zero_is_refused() {
+    for (name, _, fs, json) in [
+        pair!("negzero_loop_neg1"),
+        pair!("negzero_loop_neg3"),
+        pair!("negzero_loop_mul"),
+        pair!("negzero_loop_neg1_mediump"),
+    ] {
+        assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::NegZeroShared, "{name}");
+    }
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,
