@@ -18,7 +18,7 @@
 //!
 //! The rule is GL core and the same on every GPU, so the file runs in every
 //! ES 3.0 host build: the PowerVR and GC7000 rows of tools/check.sh take it
-//! with the rest of tests/, and the V3D build by hand:
+//! with the rest of tests/, and the V3D build has a row of its own:
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_float_target

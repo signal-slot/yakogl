@@ -1673,6 +1673,9 @@ step "test    $V3D_CONFIG (tests/es3_occlusion_gl.rs)" \
 # the ES 2.0 report below runs the file's one test.
 step "test    $V3D_CONFIG (tests/es3_mrt_gl.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_mrt_gl
+# The float colour target decision of docs/notes/es3-float-targets.md on the V3D build (the PowerVR and GC7000 rows run it with the rest of tests/). Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_float_target.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_float_target
 # The EGL attribute lists of glmark2 and Slint on the Pi 4's
 # windows (the PowerVR and GC7000 rows above run it with the rest of tests/).
 step "test    $V3D_CONFIG (tests/egl_bench_configs.rs)" \
