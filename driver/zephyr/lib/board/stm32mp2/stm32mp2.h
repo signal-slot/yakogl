@@ -24,7 +24,7 @@
  * before any of Zephyr's code ran. */
 struct mp2_handover {
 	uint64_t seen;   /* MP2_HANDOVER_SEEN once the entry code ran */
-	uint64_t x[4];   /* x0-x3 at entry (booti: x0 the DTB, x1-x3 0) */
+	uint64_t x[4];   /* x0-x3 at entry (go: x0 0, x1 non-null, x2/x3 indeterminate) */
 	uint64_t el;     /* CurrentEL as read (EL in bits [3:2]) */
 	uint64_t sctlr;  /* SCTLR_EL2 at EL2, else SCTLR_EL1 */
 	uint64_t mpidr;  /* MPIDR_EL1 */
