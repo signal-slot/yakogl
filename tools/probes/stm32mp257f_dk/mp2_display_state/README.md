@@ -50,13 +50,13 @@ so no section number is claimed**, and every offset is from ST's trees as
 | Block (line prefix) | Base | What is read | RM0457 chapter | Source |
 | --- | --- | --- | --- | --- |
 | `rifsc` | 0x42080000 | `RISC_SECCFGR`, `RISC_PRIVCFGR`, `RISC_PERx_CIDCFGR`, `RISC_PERx_SEMCR` of the I2C2 (id 42), LTDC (80, 119 `l1l2`, 120 `l3`, 121 `rot`) and DSI (81); `RISC_RIMC_CR` and `RISC_RIMC_ATTR0..15` (the RIMU: which master the LTDC is, open question 2 of the note) | RIFSC (RISUP: the per-peripheral part; RIMU: the master part) | O `stm32_rifsc.c`, `stm32mp25-rifsc.h:51,85-86,118-120` |
-| `rcc` | 0x44200000 | `RCC_GPUCFGR` 0x83C (cross-check against mp2_gpu), `RCC_LTDCCFGR` 0x840, `RCC_DSICFGR` 0x844 (bit 0 reset, bit 1 clock, bit 2 sleep; DSI bit 12 `DSIBLSEL`, bit 15 `DSIPHYCKREFSEL` kernel-clock selects) | RCC | `driver/rust/src/soc/stm32mp2/rcc.rs` (0x83C), L `stm32mp25_rcc.h:439-440` |
+| `rcc` | 0x44200000 | `I2C2CFGR` 0x7A8, `GPIOBCFGR` 0x530, `GPIOFCFGR` 0x540, `XBAR27/28CFGR` 0x1084/0x1088, `PREDIV27/28` 0x1184/0x1188, `FINDIV27/28` 0x1290/0x1294, `PLL4CFGR1..5` 0x1360, `PLL8CFGR1..5` 0x1400 (ST `stm32mp25_rcc.h`), and `RCC_GPUCFGR` 0x83C (cross-check against mp2_gpu), `RCC_LTDCCFGR` 0x840, `RCC_DSICFGR` 0x844 (bit 0 reset, bit 1 clock, bit 2 sleep; DSI bit 12 `DSIBLSEL`, bit 15 `DSIPHYCKREFSEL` kernel-clock selects) | RCC | `driver/rust/src/soc/stm32mp2/rcc.rs` (0x83C), L `stm32mp25_rcc.h:439-440` |
 | `ltdc` | 0x48010000 | global block `IDR` ... `FUT` and layer 1 `L1C0R` ... `L1CFBLNR`; only when RIFSC opens ids 80 and 119 and `RCC_LTDCCFGR` shows the clock on and no reset | LTDC | L `stm32mp251.dtsi:2150`, `ltdc.c:64-94,461-505` |
 | `dsi` | 0x48000000 | DesignWare host (`VERSION` ... `PTCR0`) and ST wrapper (`WCFGR` ... `WRPCR2`, 0x400-0x43c); only when RIFSC opens id 81 and `RCC_DSICFGR` shows the clock on and no reset | DSI | L `stm32mp255.dtsi:123-134`, `dw_mipi_dsi-stm.c:37-107` |
-| `rcc_raw` | 0x44200000 | every non-zero word of the RCC page, raw (flexgen `FINDIV/PREDIV/XBAR`, `PLL4`/`PLL8`, the I2C2 and GPIO gates and kernel-clock selects: those offsets are not in this repository and are mapped to ST's `stm32mp25_rcc.h` offline) | RCC | |
+| `rcc_raw` | 0x44200000 | every non-zero word of RCC 0x000-0x14ff, raw (the rest of flexgen, PLL2/3/5-7, kernel-clock selects, mapped to ST's `stm32mp25_rcc.h` offline) | RCC | |
 | `gpiob`, `gpiof` | 0x44250000, 0x44290000 | `MODER`, `OTYPER`, `OSPEEDR`, `PUPDR`, `IDR`, `ODR`, `LCKR`, `AFRL`, `AFRH`, `SECCFGR`, `PRIVCFGR`: PB4 (ADV7535 interrupt), PB6 (ADV7535 reset), PF0 (I2C2 SDA), PF2 (I2C2 SCL, AF9) | GPIO | note, "Register blocks"; L `stm32mp25-pinctrl.dtsi:276-284`, `stm32mp257f-dk.dts:436-438` |
 | `syscfg` | 0x44235000 | `DISPLAYCLKCR` (2 bit mux: 0 `txbyteclk`, 1 `clk_pix_lvds`, 2 `ck_ker_ltdc`) | SYSCFG | L `clk-stm32mp25-syscfg.c:13-62` |
-| `risaf4` | 0x42100000 | `RISAF_CR` and regions 10 (GPU carveout, 0xfa800000), 13 (LTDC secure layer, 0xfe800000, 8 MiB), 14 (rotation, 0xff000000, 16 MiB): `CFGR`, `STARTR`, `ENDR`, `CIDCFGR` | RISAF (the RISAL/RISAB-style area registers) | O `...-rif.dtsi:984-995`, `stm32mp257f-dk-resmem.dtsi:175-183` |
+| `risaf4` | 0x420d0000 | `RISAF_CR` and regions 10 (GPU carveout, 0xfa800000), 13 (LTDC secure layer, 0xfe800000, 8 MiB), 14 (rotation, 0xff000000, 16 MiB): `CFGR`, `STARTR`, `ENDR`, `CIDCFGR` | RISAF (the RISAL/RISAB-style area registers) | O `...-rif.dtsi:984-995`, `stm32mp257f-dk-resmem.dtsi:175-183` |
 
 The I2C2 (the ADV7535's bus, 0x40130000, ST `stm32mp251.dtsi:935-937`, PF0 and
 PF2) is read through its RIFSC entry (id 42) and the pins; its own registers
@@ -67,8 +67,8 @@ its registers are not read.
 
 The RIFSC layout (0x10, 0x30, 0x100 + 8 * id), the RIMU offsets (0xC00,
 0xC10), the RCC LTDC/DSI offsets and the LTDC and DSI maps are the ones the
-note derives from the trees. **Least certain**: the RISAF4 base 0x42100000 and
-its region stride, the SYSCFG address (derived: base 0x44230000 + 0x5000), the
+note derives from the trees. **Least certain**: the RISAF4 region stride (the base 0x420d0000 is ST `stm32mp251.dtsi`) and
+(OP-TEE `stm32_risaf.c`, from memory), the SYSCFG address (derived: base 0x44230000 + 0x5000), the
 GPIO bank addresses (one 0x10000 step per bank from GPIOA 0x44240000; GPIOB is
 the note's) and whether the non-secure side may read the RCC page word by
 word. These sit last. A fault resets the board through the layer's handler
