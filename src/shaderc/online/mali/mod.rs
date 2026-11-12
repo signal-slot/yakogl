@@ -299,8 +299,9 @@ pub enum MaliError {
 }
 
 impl MaliError {
-    /// Every gap, for the tests that check the messages are distinct.
-    pub const GAPS: [MaliError; 62] = [
+    /// Every gap, for the tests that check the messages are distinct. A
+    /// slice, so that a new gap adds its own line and no count.
+    pub const GAPS: &'static [MaliError] = &[
         MaliError::LinkedVertexNotLowered,
         MaliError::BlendVariantNotLowered,
         MaliError::ControlFlow,
