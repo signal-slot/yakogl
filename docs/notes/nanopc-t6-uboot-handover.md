@@ -2,10 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # NanoPC-T6: the GPU hand-over from U-Boot (decisions, 2026-11-11)
 
-Status: design note, decisions part. The clock and power decisions below are
-merged code with host tests. The measured U-Boot and eMMC facts and the load
-route are pending (sections 4 and 5). The U-Boot prompt reads (section 3) are
-drafted and not run.
+Status: design note. The clock and power decisions (sections 1 and 2) are
+merged code with host tests. The U-Boot and eMMC facts (section 4) were
+measured read-only under Armbian; the load route (section 5) is a proposal
+whose load addresses are not measured yet. The entry audit (section 6) and the
+QoS state (section 7) follow. The U-Boot prompt reads (section 3) are drafted
+and not run.
 
 Why: every Z1 to Z4 image so far runs after Armbian by kexec, on the GPU clock
 and power state Linux left. Stage 5's product form is U-Boot booting Zephyr
@@ -203,8 +205,127 @@ switch, reads only, record the answers here and in #26.
 
 ## 4. Measured U-Boot and eMMC facts
 
-Filled from the t6-reads measurement (pending).
+Source: the read-only ssh session "t6-reads", plan #346 (no `records/` directory
+is named for it). Run under Armbian with nothing written, no kexec, no reboot.
+No host name, address or partition UUID is recorded here.
+
+(a) U-Boot, from the eMMC:
+
+| Fact | Command that produced it |
+|---|---|
+| U-Boot is 2026.07_armbian, on the eMMC | `strings` over the U-Boot image read from the eMMC (a read to a pipe); `cat /proc/cmdline` for how Linux was started |
+| The environment is never saved, so the compiled-in one is used | `fw_printenv` (absent, or without an environment location, so nothing to print); `strings` over the U-Boot image for the built-in default environment |
+| `bootcmd` is `bootflow scan -lb` | `strings` over the U-Boot image |
+| `boot_targets` starts `mmc1 mmc0 ...` | `strings` over the U-Boot image |
+| No `extlinux.conf` exists, only `boot.scr` | `lsblk -f`, then listing the mounted `/boot` |
+
+Which index is the eMMC on the real U-Boot (`mmc1 mmc0`) is not measured: it
+needs `mmc list` at the prompt (section 3, step 6). Below, `<dev>` stands for it.
+
+(b) The eMMC, from `lsblk -f`, `blkid` and `df`:
+
+- The only ext4 partition is `mmcblk0p1`, with 10G free. `/boot` is a directory
+  on it, not a partition of its own.
+- The other partitions' types are in the same `lsblk -f` output of t6-reads;
+  none is ext4. This note does not repeat their names, and no UUID.
+
+Board state under Armbian, same session: the GPU sits at 300 MHz
+(`CLKSEL_CON(158)` 0x1f24), vdd_gpu_s0 is enabled at 675 mV, PD_GPU is off.
+This is the first row of the section 2 table.
+
+Still to read from U-Boot itself (section 3): `printenv`, `mmc list`, `mmc dev`,
+and the PMU, CRU and RK806 state that U-Boot hands over.
 
 ## 5. The proposed ext4load route
 
-Filled from the t6-reads measurement (pending).
+U-Boot's default boot is `bootflow scan -lb`, which walks `boot_targets`, finds
+a bootable partition and runs its `boot.scr` (Armbian's). The image reaches the
+CPU the way the Verdin route does (docs/standalone-boot.md):
+
+1. A script (a replacement `boot.scr`, or one the existing flow runs) runs
+   `ext4load mmc <dev>:1 <addr> /boot/<image>.bin`. Partition 1 is the only
+   ext4 partition and `/boot` is on it, so the image file is
+   `/boot/<image>.bin`.
+2. Then `go <addr>` or `booti <addr> - <fdt>`.
+
+Which applies: the Z images are flat binaries linked at one fixed physical
+address, with `CONFIG_AARCH64_IMAGE_HEADER` (kexec_zephyr.c:436 refuses an image
+without the arm64 Image header; nanopc_t6.dts:10: `zephyr,sram` is 16 MiB at
+0x10000000; nanopc-t6.sh:104-106 the same window). So:
+
+- `go 0x10000000` is the route: it jumps to the first byte, the header's branch,
+  with no device tree and no relocation. The load address must be the link
+  address, 0x10000000.
+- `booti` also accepts an image with the header, but it wants a device tree and
+  may relocate to the header's text offset; the image has no tree and is linked
+  to a fixed address, so `booti` adds risk for no gain. Use it only if `go`
+  is refused.
+
+What the script must do besides the two commands (section 6):
+
+- flush and disable the data cache before `go`, as the Verdin route does
+  (standalone-boot.md:78);
+- arm a watchdog the image can feed: U-Boot runs none and the Linux watchdog
+  that covers kexec runs does not exist (standalone-boot.md:85);
+- set a one-shot variable with its undo, because U-Boot's `bootcmd` reruns after
+  the image's PSCI reset and would load the image again.
+
+Load addresses: not measured yet. They are U-Boot's compiled-in `kernel_addr_r`,
+`fdt_addr_r` and `loadaddr`, "measured by uboot-addrs" (a plan #346 item that
+had not landed when this note was written). The image's link address,
+0x10000000, is from the repo. That the 16 MiB window is free of U-Boot's and
+the trusted firmware's own memory is a read for section 3, not a fact.
+
+Source citations, U-Boot v2026.07 (commit `ece349ad`) and Armbian's U-Boot
+build (commit `fc874938`), confirmed by the uboot-src-lines item:
+`include/config_distro_bootcmd.h` (`scan_dev_for_boot`), `cmd/boot.c`
+(`do_go`), `arch/arm/lib/image.c` (the `booti` header checks) and Armbian's
+`boot.cmd`. The line numbers are in that item's report; its handoff did not
+carry them, so they are not written here.
+
+v2026.10 against v2026.07 for these files: the uboot-1026-diff item ran it, and
+its result was not in this note's handoff. Take it from that item's report
+before relying on a newer U-Boot.
+
+## 6. What the Z images assume Linux left, against U-Boot
+
+Source: the entry-audit item, done on mainline U-Boot source, not the board
+(the board's U-Boot is mainline-like; the vendor tree was checked only where it
+differs). It is source reading, not measurement. The rows this note carries
+(4, 5, 9 to 13, 17 and 18 of that audit) are in its report; its table was not in
+this note's handoff, so the findings that bear on the route are listed here by
+what they are, not by row number:
+
+- Cache and MMU at `go`: the image assumes MMU and caches off. Fix: the
+  script's flush and `dcache off`, or `CONFIG_ARM64_BOOT_DISABLE_DCACHE=y` in the
+  board defconfig (not done).
+- The watchdog: arm WDT0 in the script before `go` (not done).
+- The one-shot variable (section 5).
+- RK806 on SPI2: probing it from U-Boot's `pmic`, `regulator` or `sf` commands
+  writes `SYS_CFG3`. Run the `dm tree` and `md` reads of section 3 first.
+- UART2: read from offset 4, because offset 0 pops a received byte.
+- `CNTFRQ_EL0` and the `SCTLR_EL2` bits are not printed by the early banner
+  (a small item after #341 that touches `ffi/rk3588.rs` and the header).
+
+None of the changes the audit found was made by this plan.
+
+## 7. QoS
+
+The code at the tip this note was written against (e259c8d5 plus what is merged):
+
+- soc/rk3588.rs holds the choice: `QosPolicy` with `Reset` (`MODE` 3,
+  `BANDWIDTH` 0x12d, `SATURATION` 0x40, the values the image leaves) and
+  `LinuxZero` (all three 0, what Linux reads with the GPU active, 2026-10-26),
+  `QOS_POLICY_WORDS` (0x0c, 0x10, 0x14), and `qos_apply`, which writes those
+  three words in each of the four blocks at `QOS_GPU`: twelve writes,
+  `PRIORITY` and `EXTCONTROL` never. Tests:
+  `qos_reset_policy_writes_only_mode_bandwidth_saturation`,
+  `qos_linux_zero_policy_writes_only_mode_bandwidth_saturation`.
+- `gpu_up` does **not** apply it at this tip. It reads the five words of each of
+  the four blocks after the power-on into `GpuUp.qos` and writes none of them;
+  `qos_apply` has no caller in `driver/rust/src`. The item `qos-wire` (in
+  review) adds the call after the power-on; the record field naming the policy
+  is the later item `qos-select`. Until both land, a Z run leaves the QoS words
+  as the PD_GPU power-on gave them.
+- Which policy a real frame needs is open (nanopc-t6-mali.md "Open"): the
+  first Z4 frame runs once with each.
