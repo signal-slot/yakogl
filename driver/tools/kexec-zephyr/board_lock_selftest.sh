@@ -52,10 +52,22 @@
 # the check runs in is now left out (who_remote.sh); any other remote
 # session is still named.
 #
-# Needs bash and flock(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
+# A seventh, found on 2026-11-12 with the first t6_fw image (434272 bytes,
+# the firmware in it): nanopc-t6.sh refused it as lacking the "board:
+# watchdog armed" line, which it carries. The check was `strings | grep -q`
+# under `set -o pipefail`: grep left at the match, strings was still
+# writing and died of SIGPIPE, and the pipeline's status was 141, read as
+# "no such line". The smaller t6_mmu image had passed because strings had
+# finished before grep left. The runner now reads the image's strings once
+# and matches them from a here-string; the same shape on /proc/iomem went
+# with it. The check here is an image whose line is followed by 4 MiB of
+# text: it must get past that check (to the refusal of its TOP 9), and an
+# image without the line must still be refused for it.
+#
+# Needs bash, flock(1) and strings(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-planned=13
+planned=15
 run=0
 failed=0
 check() { # <what> <0 = ok>
@@ -67,8 +79,8 @@ check() { # <what> <0 = ok>
 		failed=$((failed + 1))
 	fi
 }
-for t in flock; do
-	command -v "$t" >/dev/null || { echo "board_lock_selftest: $t is missing: the lock cannot be tested"; exit 1; }
+for t in flock strings; do
+	command -v "$t" >/dev/null || { echo "board_lock_selftest: $t is missing: the lock and the runner's image checks cannot be tested"; exit 1; }
 done
 
 tmp=$(mktemp -d)
@@ -206,6 +218,31 @@ got=$(who_remote_on "user     pts/0        2026-11-11 04:01   .       $other (20
 $console")
 check "who_remote: a login on a pts is named ('$got')" \
 	"$([ "$got" = "user@pts/0(203.0.113.9) " ]; echo $?)"
+
+# nanopc-t6.sh's image checks, which run on this host before anything
+# reaches the board (BOARD_HOST is never contacted: both images are refused
+# first). t6_image <file> <line after the marker>: an AArch64 Image header,
+# a marker with TOP 9 (outside 11..15), the line, then 4 MiB of text.
+t6_image() {
+	{
+		head -c 56 /dev/zero
+		printf 'ARM\x64'
+		head -c 4 /dev/zero
+		printf 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 9; lifetime_s 60; alive_s 5; proof 0; load 0x10000000\0'
+		printf '%s\0' "$2"
+		yes 'text after the line, longer than twenty characters' | head -c $((4 << 20))
+	} > "$1"
+}
+t6_image "$tmp/armed.bin" 'board: watchdog armed'
+t6_image "$tmp/unarmed.bin" 'board: watchdog is not armed'
+err=$(BOARD_HOST=root@board.invalid bash "$t6" "$tmp/armed.bin" 2>&1 >/dev/null)
+rc=$?
+check "nanopc-t6.sh: an image whose 'board: watchdog armed' line is followed by 4 MiB of text gets past that check (rc $rc: $(head -n 1 <<<"$err"))" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: WDT0 TOP 9 outside 11..15' <<<"$err"; echo $?)"
+err=$(BOARD_HOST=root@board.invalid bash "$t6" "$tmp/unarmed.bin" 2>&1 >/dev/null)
+rc=$?
+check "nanopc-t6.sh: an image without the line is refused for it (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF "lacks the 'board: watchdog armed' line" <<<"$err"; echo $?)"
 
 # The test leaves no process behind: the sweep ends every marked process,
 # and a known one (the holder, still running here) shows that the search
