@@ -1,0 +1,181 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Bits of the STM32MP257F-DK display registers (LTDC, DSI host and ST wrapper,
+# the RCC and SYSCFG display registers) that may differ between the Rust
+# drivers (the model's image after the LTDC, DSI and ADV7535 bring-up of
+# driver/rust/src/ip/{stm32_ltdc,dw_mipi_dsi,stm32_dsi_phy,adv7535}.rs) and
+# the Linux dump the board task takes (stm32mp257f-dk-display-dump-linux.txt,
+# written by tools/probes/stm32mp257f_dk/linux_display_dump/).
+# Format: ADDRESS MASK REASON (hex, hex, text), as am62p-display-allow.txt and
+# x2-hdmi-allow.txt. MASK is the set of bits allowed to differ.
+#
+# Seeded before the dump exists: the entries below follow from what the
+# registers are (status, IRQ, counter and position registers, the frame
+# buffer addresses), not from a comparison. Entries the first comparison
+# finds are added below them with the RM0457 section that explains each, or
+# the driver changes instead. Section numbers are not given where RM0457 has
+# not been read (docs/notes/stm32mp257f-dk-display.md, "RM0457 is unread"):
+# the register is named and the chapter is the LTDC or DSI one.
+#
+# Sources of the offsets (L = Linux drivers/gpu/drm/stm, drm/bridge):
+#   LTDC  ltdc.c:69-94 (global block), :461-505 (layer table of the 40100
+#         family, layers at 0x100 + 0x100 * n), docs/notes/stm32mp257f-dk-display.md
+#   DSI   bridge/synopsys/dw-mipi-dsi.c (host map), dw_mipi_dsi-stm.c:37-107
+#         (ST wrapper at 0x400, DSI_PCTLR 0xa0, DSI_PSR 0xb0, DSI_PTCR0 0xb4)
+#
+# --- The read list (read by the Linux dump script, read only) ---
+# One line per block, in the form
+#   #@read ADDRESS WORDS NAME     WORDS consecutive 32-bit words from ADDRESS
+#   #@name ADDRESS NAME           the name of one word, else NAME+0xOFFSET
+# The bases are ST's device trees: LTDC display-controller@48010000
+# (stm32mp251.dtsi:2150), DSI host and wrapper 0x48000000
+# (stm32mp255.dtsi:123-133), RCC 0x44200000, SYSCFG 0x44230000.
+# Left out on purpose, because a read changes hardware state:
+#   DSI_GEN_PLD_DATA 0x48000070 (a read pops the receive FIFO),
+#   DSI_INT_ST0 0x480000bc and DSI_INT_ST1 0x480000c0 (read-to-clear in
+#   dw-mipi-dsi.c, which reads them to clear the flags).
+# Out of the list until the offsets are pinned (soc::stm32mp2 display ids):
+#   the RCC FLEXGEN/XBAR registers behind FLEXGEN_27, FLEXGEN_28 and
+#   ICN_DISPLAY (those clocks are SCMI's, OP-TEE's), the DSI PHY test
+#   registers beyond DSI_PTCR0/1.
+# The RIFSC base 0x42080000 and its register offsets (RISC_SECCFGRx 0x10 +
+# 4x, PRIVCFGRx 0x30 + 4x, LOCKRx 0x50 + 4x, CIDCFGR 0x100 + 8n, SEMCR
+# 0x104 + 8n) are from the generic STM32 RIF layout and are NOT confirmed in
+# RM0457; a refused read is reported as ERR and does not stop the dump.
+#
+# LTDC global block 0x00-0x90 (IDR, LCR, SSCR ... FUT), then layers 1 to 3.
+#@read 0x48010000 37 LTDC
+#@name 0x48010000 LTDC_IDR
+#@name 0x48010004 LTDC_LCR
+#@name 0x48010008 LTDC_SSCR
+#@name 0x4801000c LTDC_BPCR
+#@name 0x48010010 LTDC_AWCR
+#@name 0x48010014 LTDC_TWCR
+#@name 0x48010018 LTDC_GCR
+#@name 0x4801001c LTDC_GC1R
+#@name 0x48010020 LTDC_GC2R
+#@name 0x48010024 LTDC_SRCR
+#@name 0x48010028 LTDC_GACR
+#@name 0x4801002c LTDC_BCCR
+#@name 0x48010034 LTDC_IER
+#@name 0x48010038 LTDC_ISR
+#@name 0x48010040 LTDC_LIPCR
+#@name 0x48010044 LTDC_CPSR
+#@name 0x48010048 LTDC_CDSR
+#@name 0x48010060 LTDC_EDCR
+#@name 0x4801007c LTDC_CCRCR
+#@name 0x48010090 LTDC_FUT
+#@read 0x48010100 32 LTDC_L1
+#@name 0x48010108 LTDC_L1RCR
+#@name 0x4801010c LTDC_L1CR
+#@name 0x48010110 LTDC_L1WHPCR
+#@name 0x48010114 LTDC_L1WVPCR
+#@name 0x4801011c LTDC_L1PFCR
+#@name 0x48010120 LTDC_L1CACR
+#@name 0x48010124 LTDC_L1DCCR
+#@name 0x48010128 LTDC_L1BFCR
+#@name 0x4801012c LTDC_L1BLCR
+#@name 0x48010134 LTDC_L1CFBAR
+#@name 0x48010138 LTDC_L1CFBLR
+#@name 0x4801013c LTDC_L1CFBLNR
+#@name 0x48010174 LTDC_L1FPF0R
+#@name 0x48010178 LTDC_L1FPF1R
+#@read 0x48010200 32 LTDC_L2
+#@name 0x48010208 LTDC_L2RCR
+#@name 0x4801020c LTDC_L2CR
+#@name 0x48010234 LTDC_L2CFBAR
+#@name 0x48010238 LTDC_L2CFBLR
+#@read 0x48010300 32 LTDC_L3
+#@name 0x48010308 LTDC_L3RCR
+#@name 0x4801030c LTDC_L3CR
+#@name 0x48010334 LTDC_L3CFBAR
+#@name 0x48010338 LTDC_L3CFBLR
+#
+# DSI host map, without the three read-sensitive registers above.
+#@read 0x48000000 28 DSI
+#@name 0x48000000 DSI_VERSION
+#@name 0x48000004 DSI_PWR_UP
+#@name 0x48000008 DSI_CLKMGR_CFG
+#@name 0x48000010 DSI_DPI_COLOR_CODING
+#@name 0x48000014 DSI_DPI_CFG_POL
+#@name 0x4800002c DSI_PCKHDL_CFG
+#@name 0x48000034 DSI_MODE_CFG
+#@name 0x48000038 DSI_VID_MODE_CFG
+#@name 0x4800003c DSI_VID_PKT_SIZE
+#@name 0x48000048 DSI_VID_HSA_TIME
+#@name 0x4800004c DSI_VID_HBP_TIME
+#@name 0x48000050 DSI_VID_HLINE_TIME
+#@name 0x48000054 DSI_VID_VSA_LINES
+#@name 0x48000058 DSI_VID_VBP_LINES
+#@name 0x4800005c DSI_VID_VFP_LINES
+#@name 0x48000060 DSI_VID_VACTIVE_LINES
+#@name 0x48000068 DSI_CMD_MODE_CFG
+#@read 0x48000074 18 DSI
+#@name 0x48000074 DSI_CMD_PKT_STATUS
+#@name 0x48000094 DSI_LPCLK_CTRL
+#@name 0x48000098 DSI_PHY_TMR_LPCLK_CFG
+#@name 0x4800009c DSI_PHY_TMR_CFG
+#@name 0x480000a0 DSI_PCTLR
+#@name 0x480000a4 DSI_PHY_IF_CFG
+#@name 0x480000b0 DSI_PSR
+#@name 0x480000b4 DSI_PTCR0
+#@name 0x480000b8 DSI_PTCR1
+#@read 0x480000c4 79 DSI
+#@name 0x480000c4 DSI_INT_MSK0
+#@name 0x480000c8 DSI_INT_MSK1
+# ST wrapper 0x400-0x44c (dw_mipi_dsi-stm.c:37-90).
+#@read 0x48000400 20 DSI_W
+#@name 0x48000400 DSI_WCFGR
+#@name 0x48000404 DSI_WCR
+#@name 0x48000408 DSI_WIER
+#@name 0x4800040c DSI_WISR
+#@name 0x48000410 DSI_WIFCR
+#@name 0x48000430 DSI_WPCR1
+#@name 0x48000434 DSI_WRPCR0
+#@name 0x48000438 DSI_WRPCR1
+#@name 0x4800043c DSI_WRPCR2
+#
+# RCC: the two display gates and resets (RCC_LTDCCFGR 0x840, RCC_DSICFGR 0x844,
+# docs/notes/stm32mp257f-dk-display.md, "Clocks, resets, power and RIF").
+#@read 0x44200840 2 RCC
+#@name 0x44200840 RCC_LTDCCFGR
+#@name 0x44200844 RCC_DSICFGR
+# SYSCFG: DISPLAYCLKCR (+0x5000), the pixel clock mux (0 txbyteclk,
+# 1 clk_pix_lvds, 2 ck_ker_ltdc).
+#@read 0x44235000 1 SYSCFG_DISPLAYCLKCR
+# RIFSC: SECCFGR0-3, PRIVCFGR0-3, LOCKR0-3; then CIDCFGR/SEMCR of entry 42
+# (I2C2), 80 (LTDC common), 81 (DSI), 119 (LTDC l1l2), 120 (l3), 121 (rot).
+#@read 0x42080010 4 RIFSC_SECCFGR
+#@read 0x42080030 4 RIFSC_PRIVCFGR
+#@read 0x42080050 4 RIFSC_LOCKR
+#@read 0x42080250 2 RIFSC_E42_I2C2
+#@read 0x42080380 4 RIFSC_E80_E81_LTDC_DSI
+#@read 0x420804b8 6 RIFSC_E119_E120_E121_LTDC
+#
+# --- Allow-listed bits ---
+
+# LTDC interrupt and status (RM0457, LTDC chapter, "LTDC_ISR", "LTDC_CDSR",
+# "LTDC_CPSR", "LTDC_CCRCR"): events and positions sampled at an arbitrary time.
+0x48010038 0xffffffff LTDC_ISR: pending events (line, FIFO underrun, transfer error, register reload, CRC)
+0x48010048 0x0000000f LTDC_CDSR: VDES/HDES/VSYNCS/HSYNCS, the display status at the moment of the read
+0x48010044 0xffffffff LTDC_CPSR: current X and Y position, a counter
+0x4801007c 0xffffffff LTDC_CCRCR: CRC of the pixels so far, depends on the picture and the moment
+0x48010090 0xffffffff LTDC_FUT: FIFO underrun threshold, ours against Linux's (ltdc.c:267 default 128)
+
+# LTDC layer registers: the buffers are Linux's against ours; RCR carries the
+# self-clearing reload bits (IMR bit 0, VBR bit 1; ltdc.c:254).
+0x48010108 0x00000003 LTDC_L1RCR: reload request bits clear themselves
+0x48010134 0xffffffff LTDC_L1CFBAR: Linux's frame buffer against ours
+0x48010208 0x00000003 LTDC_L2RCR: likewise
+0x48010234 0xffffffff LTDC_L2CFBAR: likewise
+0x48010308 0x00000003 LTDC_L3RCR: likewise
+0x48010334 0xffffffff LTDC_L3CFBAR: likewise
+
+# DSI host (the DesignWare map, dw-mipi-dsi.c): status the link reports at
+# the moment of the read. The lock bit (bit 0 of DSI_PSR, PHY_STATUS in the
+# generic map) is NOT allowed to differ, only the lane states are.
+0x480000b0 0xfffffffe DSI_PSR: lane and direction status bits, stop states and ULPS sampled; PHY lock must match
+0x48000074 0xffffffff DSI_CMD_PKT_STATUS: command FIFO empty/full flags, sampled
+
+# DSI ST wrapper (dw_mipi_dsi-stm.c): interrupt and PLL status flags.
+0x4800040c 0xffffffff DSI_WISR: wrapper interrupt status flags, sampled (PLL lock/unlock events)
