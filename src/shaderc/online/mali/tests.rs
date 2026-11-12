@@ -2229,6 +2229,32 @@ fn a_vertex_matrix_product_with_a_w_of_one_is_byte_equal_to_mesa_26_2_1() {
     check_linked_for("mvstruct", vs, fs, td!("vsfold_mvstruct.expect.json"));
 }
 
+/* ---- the vertex fused multiply-add outside a uniform matrix's term
+ * (glmark2's `cross` and `P * M * v`, docs/notes/mali-vs-fma.md) ---- */
+
+/// `cross(n, t)`: the front end's `ffma(n.yzx, t.zxy, fneg(fmul(n.zxy,
+/// t.yzx)))` is what Mesa's late fusion makes of GLSL's `a.yzx * b.zxy -
+/// a.zxy * b.yzx`, one `FMA.f32 .., 0x0.neg` and one `FMA.f32 .., r^.neg`
+/// a lane (vsfma_cross, glmark2's bump-normals-tangent shape).
+#[test]
+fn a_vertex_cross_product_is_byte_equal_to_mesa_26_2_1() {
+    check_linked(td!("vsfma_cross.vert"), td!("vsfma_cross.frag"), td!("vsfma_cross.expect.json"));
+}
+
+/// `projection * modelview * v`, `v` a local `vec4(p, 1.0)`: Mesa
+/// computes `modelview * v` first (its `w` term an `FADD` of column 3,
+/// as `M * vec4(p, 1.0)`), then `projection` times that, 32 `FMA.f32` and
+/// 4 `FADD.f32` (vsfma_chain, glmark2's ideas shape). The shared product
+/// of case 181's control stays one unfused `FMA` with its users apart
+/// (vsfma_fma_vs_ctrl, the program of vsarith_181_fmactrl drawn with
+/// gl_ref.py's uniform values).
+#[test]
+fn a_vertex_matrix_times_matrix_times_vector_is_byte_equal_to_mesa_26_2_1() {
+    check_linked(td!("vsfma_chain.vert"), td!("vsfma_chain.frag"), td!("vsfma_chain.expect.json"));
+    let (vs, fs) = (td!("vsfma_fma_vs_ctrl.vert"), td!("vsfma_fma_vs_ctrl.frag"));
+    check_linked(vs, fs, td!("vsfma_fma_vs_ctrl.expect.json"));
+}
+
 /// The matrix terms by 1.0 or -1.0 no reference of this walk draws stay
 /// refused: `vec4(p.xy, 0.0, 1.0)` (S2, column 3 moved into the first
 /// term: vsfold_xy also stores a uniform varying, refused first), a `w`

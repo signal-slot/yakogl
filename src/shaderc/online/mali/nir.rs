@@ -2221,6 +2221,26 @@ fn is_fmod_const(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
     constant && x == srcs[2] && y == srcs[0]
 }
 
+/// A front-end `ffma` is GLSL's `cross(a, b)`: the front end writes it
+/// `ffma(a.yzx, b.zxy, fneg(fmul(a.zxy, b.yzx)))` (builtin_call.rs,
+/// "cross"), `srcs` the first three, the same `a` and `b` inside.
+fn is_cross(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
+    let alu = |src: ir::Src, op: AluOp| match m.def(src.val) {
+        Some(IrOp::Alu(o, s)) if *o == op => Some(*s),
+        _ => None,
+    };
+    let Some([p, q, _]) = alu(srcs[2], AluOp::Fneg).and_then(|[f, ..]| alu(f, AluOp::Fmul)) else {
+        return false;
+    };
+    let sw = |s: ir::Src, k: [u8; 3]| s.swizzle[..3] == k;
+    p.val == srcs[0].val
+        && q.val == srcs[1].val
+        && sw(srcs[0], [1, 2, 0])
+        && sw(srcs[1], [2, 0, 1])
+        && sw(p, [2, 0, 1])
+        && sw(q, [1, 2, 0])
+}
+
 /// GLSL's `mod(x, y)` as Mesa lowers `fmod` (`lower_fmod`,
 /// nir_opt_algebraic.py:2492): `fsub(x, fmul(y, ffloor(fdiv(x, y))))`, the
 /// `fsub` an `fadd` of the `fneg` (`lower_fsub`). `neg_floor` is the walked
@@ -2825,6 +2845,13 @@ pub fn build<'s>(
                         /* the front end's `mod(x, y)` of a constant `y`
                          * (gl_test case 221) */
                         AluOp::Ffma if is_fmod_const(m, &s) => vs_fmod(&mut vs, x(2), x(0), x(1))?,
+                        /* `cross(a, b)`: the front end's `ffma(a.yzx, b.zxy,
+                         * fneg(fmul(a.zxy, b.yzx)))` is what Mesa's late
+                         * fusion makes of GLSL's `a.yzx * b.zxy - a.zxy *
+                         * b.yzx`, the first product fused and the `fneg` the
+                         * addend's `.neg` (vsfma_cross.expect.json,
+                         * docs/notes/mali-vs-fma.md) */
+                        AluOp::Ffma if is_cross(m, &s) => vs.alu(Alu::Ffma, x(0), x(1), x(2))?,
                         AluOp::Ffma => return Err(MaliError::FusedMultiplyAdd),
                         AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 if l == 0 => {
                             vs.note(Prod::Dot);
