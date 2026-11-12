@@ -13,7 +13,7 @@
 #
 #   tools/board-stm32mp2.sh [--dry-run] status | install [image] | uninstall | disarm
 #   tools/board-stm32mp2.sh [--dry-run] probe <logdir>
-#   tools/board-stm32mp2.sh [--dry-run] run <image> <logdir> [name]
+#   tools/board-stm32mp2.sh [--dry-run] run [--expect-watchdog] <image> <logdir> [name]
 #   tools/board-stm32mp2.sh env-edit hook|unhook|arm|disarm <env.bin> <out.bin> [token file]
 #   tools/board-stm32mp2.sh tally <rundir>
 #   tools/board-stm32mp2.sh selftest          (tools/board_stm32mp2_selftest.sh, no board)
@@ -105,6 +105,20 @@
 #      copies (host names -> <board-host>, IPv4 -> 192.0.2.n, the console
 #      path or bridge -> <BOARD_UART>), prints the verdict line.
 #
+# "run --expect-watchdog" is the return trial of a run that hangs on purpose
+# (tools/probes/stm32mp257f_dk/mp2_hello built with CONFIG_MP2_HELLO_HANG=y:
+# interrupts locked, so neither the layer's lifetime timer nor a PSCI reset
+# can fire; OP-TEE's watchdog must reset the board in about 32 s). The wait is
+# then WDOG_BOUND s (default 120) from the reboot. The verdict is
+# verdict=watchdog_reset (rc 0) when the console has the banner and the hang
+# line "mp2_hello: hanging on purpose", no PSCI SYSTEM_RESET line followed
+# (neither "at <n> ms" nor "returned"), and the board came back to Linux over
+# ssh within the bound; boot_verdict is hung. Otherwise: psci_reset_before_wdog
+# (the layer or the image reset the board itself, rc 4), no_hang (the banner
+# but no hang line, rc 4), no_end_line (rc 4, no banner), not_back (rc 5). An
+# image that does not arm the watchdog itself needs MP2_NO_WATCHDOG=1 (BL2's
+# IWDG is what resets it), as for any run. The record carries expect_wdog=1.
+#
 # The verdict line:
 #   board-stm32mp2.sh stm32mp257f-dk <name> rc=<rc> verdict=<v> boot=uboot-sd <row|blind>
 #       boot_verdict=<bv> result=<pass:<prog>|fail:<prog>|none> back_after=<s>s
@@ -143,6 +157,8 @@
 #                    for a single copy)
 #   MP2_BACKUP_DIR   where install keeps the pristine environment image
 #   RUN_BOUND, RETURN_BOUND  seconds to the image's end and to Linux after it
+#   WDOG_BOUND       with --expect-watchdog: seconds from the reboot to Linux
+#                    back (default 120)
 #   BOARD_END_RE     extended regex of the image's end line (the layer's)
 #   LOCK_WAIT, HOLD_MAX  see board_lock.sh
 set -uo pipefail
@@ -154,9 +170,14 @@ BOARD=stm32mp257f-dk
 BOOT=uboot-sd
 
 DRY=0
+EXPECT_WDOG=0
 args=()
 for a in "$@"; do
-    if [ "$a" = --dry-run ]; then DRY=1; else args+=("$a"); fi
+    case "$a" in
+    --dry-run) DRY=1 ;;
+    --expect-watchdog) EXPECT_WDOG=1 ;;
+    *) args+=("$a") ;;
+    esac
 done
 set -- "${args[@]+"${args[@]}"}"
 usage() { sed -n '14,19p' "$SELF" >&2; exit 2; }
@@ -184,6 +205,8 @@ SU=${MP2_SUDO-}
 END_RE=${BOARD_END_RE:-'^mp2: .*: PSCI SYSTEM_RESET at [0-9]+ ms'}
 RUN_BOUND=${RUN_BOUND:-120}
 RETURN_BOUND=${RETURN_BOUND:-180}
+WDOG_BOUND=${WDOG_BOUND:-120}
+if [ "$EXPECT_WDOG" = 1 ]; then WAIT_BOUND=$WDOG_BOUND; else WAIT_BOUND=$((RUN_BOUND + RETURN_BOUND)); fi
 HOLD_MAX=${HOLD_MAX:-$((RUN_BOUND + RETURN_BOUND + 300))}
 
 # The U-Boot side, exactly as installed (fw_printenv shows them byte for
@@ -492,7 +515,8 @@ for row in sys.stdin.buffer:
 
 # verdict_line DIR: V_LINE and V_RC from the run's files (meta.txt, console.txt)
 verdict_line() {
-    local dir=$1 name back t0 t1 after con bv res v rc cycle blind
+    local dir=$1 name back t0 t1 after con bv res v rc cycle blind expect
+    expect=$(mget expect_wdog "$dir")
     name=$(mget name "$dir"); back=$(mget back "$dir"); blind=$(mget blind "$dir")
     t0=$(mget t_reboot "$dir"); t1=$(mget t_back "$dir"); cycle=$(mget rc_cycle "$dir")
     if [ -n "$t0" ] && [ -n "$t1" ] && [ "$back" = 1 ]; then after="$((t1 - t0))s"; else after=absent; fi
@@ -508,6 +532,7 @@ verdict_line() {
         if grep -qE "$END_RE" <<<"$p"; then bv=complete
         elif grep -qF 'PSCI SYSTEM_RESET returned' <<<"$p"; then bv=psci_returned
         elif grep -qE '^(MP2:B console up|mp2-handover: )' <<<"$p"; then bv=image_started
+            grep -qF 'mp2_hello: hanging on purpose' <<<"$p" && [ "$expect" = 1 ] && bv=hung
         elif grep -qF 'yakogl-mp2: go ' <<<"$p"; then bv=uboot_go
         else bv=not_started; fi
         local l
@@ -520,6 +545,9 @@ verdict_line() {
     elif [ "$blind" = 1 ]; then v=returned; rc=0
     elif [ "${res%%:*}" = fail ]; then v=failed; rc=4
     elif [ "$bv" = psci_returned ]; then v=psci_returned; rc=4
+    elif [ "$expect" = 1 ] && [ "$bv" = hung ]; then v=watchdog_reset; rc=0
+    elif [ "$expect" = 1 ] && [ "$bv" = complete ]; then v=psci_reset_before_wdog; rc=4
+    elif [ "$expect" = 1 ] && [ "$bv" = image_started ]; then v=no_hang; rc=4
     elif [ "$bv" = complete ]; then v=done; rc=0
     else v=no_end_line; rc=4; fi
     [ "$cycle" = 6 ] && [ "$rc" = 0 ] && rc=6
@@ -552,7 +580,7 @@ write_index() {
         echo "verdict: $V_LINE"
         echo "console lines of ours:"
         if [ -s "$dir/console.txt" ]; then
-            plain "$dir/console.txt" | grep -aE '^(yakogl-mp2: |MP2:|mp2: |mp2-handover: |[A-Za-z0-9_]+: (PASS|FAIL): |\*\*\* Booting Zephyr)' | sed 's/^/  /'
+            plain "$dir/console.txt" | grep -aE '^(yakogl-mp2: |MP2:|mp2: |mp2-handover: |[A-Za-z0-9_]+: (PASS|FAIL): |mp2_hello: hanging on purpose|\*\*\* Booting Zephyr)' | sed 's/^/  /'
         else
             echo "  none (no console: $(mget no_console_why "$dir"))"
         fi
@@ -822,6 +850,7 @@ cmd_run() {
     meta image "${IMG:+$(basename "$IMG")}"; meta image_sha256 "$IMG_SHA"; meta image_size "$IMG_SIZE"
     meta footprint "${footprint:-none}"; meta image_zephyr "$IMG_ZEPHYR"
     meta started "$(date '+%F %T')"
+    [ "$EXPECT_WDOG" = 1 ] && meta expect_wdog 1
     note "$NAME: build $(git -C "$REPO" describe --always --dirty 2>/dev/null || echo unknown) boot $BOOT image sha256 ${IMG_SHA:0:16} footprint ${footprint:-none}"
     [ "$BLIND" = 1 ] || console_check
     take_lock
@@ -852,7 +881,7 @@ cmd_run() {
     token=$(printf '%s' "$NAME-${IMG_SHA:0:16}-$(date +%s)" | tr -c 'A-Za-z0-9._-' '_')
     file="once-$token.bin"
     meta token "$token"
-    meta wait_bound "$((RUN_BOUND + RETURN_BOUND))"
+    meta wait_bound "$WAIT_BOUND"
     if [ "$DRY" = 1 ]; then
         echo "DRY board\$ ${SU}sh -c 'mkdir -p $STAGE_DIR && cat > $STAGE_DIR/$file.part && sync && mv $STAGE_DIR/$file.part $STAGE_DIR/$file && sync' < $IMG"
     else
@@ -887,7 +916,7 @@ cmd_run() {
     T_REBOOT=$(date +%s)
     meta t_reboot "$T_REBOOT"
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ wait until ssh answers from a new boot (uptime < time since the reboot), <= $((RUN_BOUND + RETURN_BOUND)) s"
+        echo "DRY host\$ wait until ssh answers from a new boot (uptime < time since the reboot), <= $WAIT_BOUND s"
         b "${SU}fw_printenv -n yako_once   # must print nothing"
         b "${SU}rm -f $STAGE_DIR/$file"
         echo "DRY host\$ the verdict line from the run directory"
@@ -898,7 +927,7 @@ cmd_run() {
         el=$(($(date +%s) - T_REBOOT))
         up=$(timeout 8 ssh "${SSH_OPTS[@]}" -o ConnectTimeout=5 "$BOARD_HOST" 'cut -d. -f1 /proc/uptime' 2>/dev/null)
         if [ -n "$up" ] && [ "$up" -lt "$el" ]; then break; fi
-        if [ "$el" -gt $((RUN_BOUND + RETURN_BOUND)) ]; then rcc=5; break; fi
+        if [ "$el" -gt "$WAIT_BOUND" ]; then rcc=5; break; fi
     done
     [ -n "$up" ] && meta up "$up"
     meta t_back "$(date +%s)"
