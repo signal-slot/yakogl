@@ -144,8 +144,14 @@ that measures it.
 5. **Conversions** (nir_fs.rs `conversion_order`, `select`).
    - The lanes a lowered tree reads are converted where its `f2fmp` stands,
      in lane order (`nir_lower_alu_width`), at their load: a compare's
-     before its discard, an operand's before its operation. So are lanes
-     an operation reads that the walk folds (`x * 1.0`: sel_v_color_uv).
+     before its discard, an operand's before its operation.
+   - An identity constant (`* 1.0`, `+ 0.0`) on every lane of an
+     operation is folded at the link (nir_opt_algebraic.py:292, :236-237,
+     in gl_nir_opts, gl_nir_linker.c:102; a constant matches when every
+     lane it reads is the constant, nir_search.c:260-286): its operand is
+     the colour's own lane (fsconv_fold1-3). On some lanes only, the
+     operation stays an fp16 one and its folded lanes are the tree's
+     (`Fs::folded`; sel_v_color_uv, fsconv_fold4).
    - The colour's own lanes lose their conversion at the link
      (`f2f32(f2fmp(a))` is `a`, nir_opt_algebraic.py:1991) and are
      converted at the colour's store (`nir_lower_mediump_io`,

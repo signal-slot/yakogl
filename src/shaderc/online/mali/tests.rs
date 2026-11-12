@@ -2070,6 +2070,32 @@ fn colour_lanes_are_converted_at_the_store_as_mesa_26_2_1() {
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
 }
 
+/// An identity constant on every lane of an fp16 operation (`a.x * 1.0`,
+/// `p.x + 0.0`, `(p * 1.0).x`) is folded by the link's nir_opt_algebraic,
+/// so its operand is the colour's own lane, converted at the store in the
+/// colour's order (fsconv_fold1-3); an identity on some lanes only keeps the
+/// operation an fp16 one, whose operands the tree converts (fsconv_fold4:
+/// `a * vec4(2.0, 2.0, 1.0, 1.0)` converts z,w with x,y). nir_fs.rs
+/// [`Fs::folded`].
+#[test]
+fn an_identity_on_every_lane_is_the_colour_s_own_lane_as_mesa_26_2_1() {
+    let cases = [
+        ("fsconv_fold1", td!("fsconv_fold1.vert"), td!("fsconv_fold1.frag"), td!("fsconv_fold1.expect.json")),
+        ("fsconv_fold2", td!("fsconv_fold2.vert"), td!("fsconv_fold2.frag"), td!("fsconv_fold2.expect.json")),
+        ("fsconv_fold3", td!("fsconv_fold3.vert"), td!("fsconv_fold3.frag"), td!("fsconv_fold3.expect.json")),
+        ("fsconv_fold4", td!("fsconv_fold4.vert"), td!("fsconv_fold4.frag"), td!("fsconv_fold4.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
 /// Two lanes of equal value: Mesa's link keeps the first in the layout's
 /// order and reads the other from it (`deduplicate_outputs`,
 /// nir_opt_varyings.c:3253-3420). fsload_dup's `a.z` is `a.x` (`.v2`, two
