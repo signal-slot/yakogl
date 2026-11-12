@@ -24,19 +24,19 @@
 /// The bytes of one ETC1 block (4x4 texels).
 pub(crate) const BLOCK_BYTES: usize = 8;
 
-fn get_bit(src: u64, bit: u32) -> u32 {
+pub(crate) fn get_bit(src: u64, bit: u32) -> u32 {
     ((src >> bit) & 1) as u32
 }
 
-fn get_bits(src: u64, low: u32, high: u32) -> u32 {
+pub(crate) fn get_bits(src: u64, low: u32, high: u32) -> u32 {
     ((src >> low) & ((1u64 << (high - low + 1)) - 1)) as u32
 }
 
-fn extend4_to_8(v: u32) -> i32 {
+pub(crate) fn extend4_to_8(v: u32) -> i32 {
     ((v << 4) | v) as i32
 }
 
-fn extend5_to_8(v: u32) -> i32 {
+pub(crate) fn extend5_to_8(v: u32) -> i32 {
     ((v << 3) | (v >> 2)) as i32
 }
 
@@ -48,7 +48,7 @@ fn extend5_delta3_to_8(base5: u32, delta3: u32) -> i32 {
     extend5_to_8(((base5 as i32 + delta) as u32) & 31)
 }
 
-const MODIFIERS: [[i32; 4]; 8] = [
+pub(crate) const MODIFIERS: [[i32; 4]; 8] = [
     [2, 8, -2, -8],
     [5, 17, -5, -17],
     [9, 29, -9, -29],

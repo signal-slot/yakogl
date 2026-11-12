@@ -261,7 +261,8 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
    Licence: Apache-2.0 (LICENSES/Apache-2.0.txt)
    Copyright 2014 The Android Open Source Project
    src/gl/etc1.rs (the ETC1 block decoder from
-   framework/common/tcuCompressedTexture.cpp), tools/v3d/tex_filter_ref.h,
+   framework/common/tcuCompressedTexture.cpp), src/gl/etc2.rs (the ETC2/EAC
+   decoder, modelled on the same file), tools/v3d/tex_filter_ref.h,
    tex_mip_case.h, tex_cubemip_case.h (reference arithmetic and geometry),
    and the patches tools/cts/cts-yakogl-*.patch.
    tools/cts/testdata/wedge-shaders/*.vert, *.frag: the four
