@@ -2870,6 +2870,7 @@ fn an_instanced_draw_past_the_budget_is_split_by_instances() {
     pvr_backend_set_option(PVR_BACKEND_OPT_PRIM_BUDGET, 0);
 }
 
+#[cfg(feature = "test-knobs")]
 #[test]
 fn a_draw_that_reads_gl_instance_id_is_split_by_instances_with_each_chunks_base() {
     /* the vertex fetch numbers instances per index list: each chunk passes
