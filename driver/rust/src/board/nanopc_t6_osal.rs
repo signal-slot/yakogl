@@ -48,9 +48,9 @@
 //! heap refuses, a sync object with an error, a 64-bit read that does not
 //! settle, or panthor's 5 s job timeout, seen by a wait, a submit or
 //! `completed`, restarts the group ([`Osal::recover`]): every kick not yet
-//! complete is lost (its fence completes, so the backend frees its slot
-//! and the held frees go back, and a wait for it is `-EIO`), CS 0 is
-//! stopped and CSG 0 terminated, the heap made again, CSG 0 / CS 0 started
+//! complete is lost (its fence completes, so the backend frees its slot,
+//! and a wait for it is `-EIO`), CS 0 is stopped and CSG 0 terminated
+//! (only then do the held frees go back), the heap made again, CSG 0 / CS 0 started
 //! again over the same memory with an empty ring ([`sched::restart`]), and
 //! the queue-init stream (`HEAP_SET` of the heap context, Z4's
 //! [`z4::QUEUE_INIT`], at [`INIT_VA`]) run and waited for, since a new
@@ -74,7 +74,11 @@
 //! state none of the four, a `CS_FATAL` of type `CS_UNRECOVERABLE`, a start
 //! or terminate not acknowledged, a restart or a queue-init job refused.
 //! The OSAL is then dead ([`Osal::dead`]): every later submit and wait is
-//! `-EIO`. `map_phys` outside the carve-out is `-ENOTSUP`.
+//! `-EIO`. When the group's end was not acknowledged, or not asked (the
+//! errors that need a reset), the GPU may still run it ([`Osal::unended`]):
+//! the held frees stay held and `alloc` is `-EIO`, so no page a kick used
+//! is handed out again. The same after a shutdown whose terminate was not
+//! acknowledged. `map_phys` outside the carve-out is `-ENOTSUP`.
 
 use super::nanopc_t6_gpu::{Bases, GpuUp};
 use super::nanopc_t6_sections::Backing;
@@ -326,6 +330,10 @@ pub struct Osal {
     dead: Option<Dead>,
     /// [`Osal::shutdown`] ended the group.
     down: bool,
+    /// The group's end was not acknowledged (or never asked, for an error
+    /// that needs a GPU reset): the GPU may still run it and write what its
+    /// kicks used. Held frees then stay held and [`Osal::alloc`] refuses.
+    unended: bool,
     /// Restarts so far, and what caused the last.
     pub restarts: u32,
     last_error: Option<Dead>,
@@ -377,6 +385,7 @@ impl Osal {
         lost_floor: 0,
         dead: None,
         down: false,
+        unended: false,
         restarts: 0,
         last_error: None,
         heap_pool: None,
@@ -567,6 +576,11 @@ impl Osal {
         self.down
     }
 
+    /// The group may still run: its end was not acknowledged.
+    pub fn unended(&self) -> bool {
+        self.unended
+    }
+
     /// What caused the last restart ([`Osal::recover`]) or the stop.
     pub fn last_error(&self) -> Option<Dead> {
         self.last_error
@@ -613,10 +627,15 @@ impl Osal {
 
     /// `gpu_alloc`: `size` bytes, rounded up to whole pages, first fit in
     /// the carve-out. `-EINVAL` for no bytes or before [`Osal::up`],
-    /// `-ENOMEM` when no run of free pages is long enough.
+    /// `-ENOMEM` when no run of free pages is long enough, `-EIO` when the
+    /// group may still run ([`Osal::unended`]): a page freed by one of its
+    /// kicks is not handed out again.
     pub fn alloc(&mut self, size: usize) -> Result<Alloc, i32> {
         if self.up.is_none() || size == 0 {
             return Err(-EINVAL);
+        }
+        if self.unended {
+            return Err(-EIO);
         }
         let n = size.div_ceil(PAGE as usize);
         let mut run = 0;
@@ -654,8 +673,13 @@ impl Osal {
         self.live_pages -= pages;
     }
 
-    /// Give back every held free whose fence has completed.
+    /// Give back every held free whose fence has completed; none while the
+    /// group may still run ([`Osal::unended`]): a lost fence is complete,
+    /// but its kick may still write.
     fn drain(&mut self) {
+        if self.unended {
+            return;
+        }
         let mut k = 0;
         while k < self.n_held {
             let h = self.held[k];
@@ -770,6 +794,7 @@ impl Osal {
             self.completed = self.submitted;
         }
         self.down = true;
+        self.unended = ended.terminate.is_err();
         self.drain();
         Some(ended)
     }
@@ -813,18 +838,22 @@ impl Osal {
     fn recover(&mut self, m: &impl Mmio, why: Dead, ended: Option<Ended>, delay_us: &mut impl FnMut(u32)) -> i32 {
         let Some(u) = self.up else { return -EINVAL };
         self.last_error = Some(why);
+        // the lost fences complete now (the backend frees its slots), their
+        // frees go back only once the group is known ended
         if self.completed < self.submitted {
             self.lose(self.completed + 1, self.submitted);
             self.completed = self.submitted;
-            self.drain();
         }
         if Self::needs_reset(why) {
+            self.unended = true;
             return self.stop(why);
         }
         let ended = ended.unwrap_or_else(|| sched::stop_and_terminate(m, self.gpu, &u.iface, &u.csg, &u.cs, delay_us));
         if let Err(r) = ended.terminate {
+            self.unended = true;
             return self.stop(r);
         }
+        self.drain();
         if let Err(r) = self.remake_heap(&u) {
             return self.stop(r);
         }
