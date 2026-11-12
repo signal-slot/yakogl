@@ -6285,6 +6285,47 @@ fn the_uniform_loads_push_mesa_s_words() {
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), UNILOAD_POPULATION.len(), failed.join("\n"));
 }
 
+/// A `-0.0` constant (issue #4569 a), each pair through the link against
+/// its drm-shim reference (`--uniform-values`): in a compare it is `0.0`
+/// (glsl.rs `neg_zero_compares`, nir_opt_algebraic.py:771-776), on either
+/// side of `<`, `<=`, `>`, `>=` and `==` in a discard, against a uniform,
+/// in a highp discard and select, in a vertex select and around a kept
+/// branch, `-0.0 == x` turned round to `x == 0.0`. A sum with it is the
+/// other value (:237), and stored it stays `-0.0` (mediump and highp):
+/// guards.
+const NEGZERO_POPULATION: [(&str, &str, &str, &str); 15] = [
+    pair!("negzero_discard_lt"),
+    pair!("negzero_discard_le"),
+    pair!("negzero_discard_gt"),
+    pair!("negzero_discard_ge"),
+    pair!("negzero_discard_eq"),
+    pair!("negzero_discard_first_eq"),
+    pair!("negzero_discard_first_lt"),
+    pair!("negzero_discard_uniform"),
+    pair!("negzero_highp_discard"),
+    pair!("negzero_highp_select"),
+    pair!("negzero_vs_select"),
+    pair!("negzero_branch"),
+    pair!("negzero_sum"),
+    pair!("negzero_store"),
+    pair!("negzero_highp_store"),
+];
+
+#[test]
+fn a_negative_zero_is_mesa_s_in_every_route() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in NEGZERO_POPULATION {
+        let r = std::panic::catch_unwind(|| {
+            check_linked(vs, fs, json);
+        });
+        if let Err(e) = r {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), NEGZERO_POPULATION.len(), failed.join("\n"));
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,
