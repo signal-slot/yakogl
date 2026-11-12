@@ -22,6 +22,14 @@
 //! Linux reboots the T6 this way: psci_sys_reset has priority 129
 //! (drivers/firmware/psci/psci.c:309-330), above dw_wdt's restart handler
 //! (128, drivers/watchdog/dw_wdt.c:653).
+//!
+//! **The two entry states.** Through Linux's kexec the image starts at EL2
+//! with `HCR_EL2` = [`HCR_LINUX_VHE_HOST`] (E2H set), the MMU off and the GICv3
+//! CPU interface in split EOI mode. Through U-Boot's `go` (U-Boot v2026.07, the
+//! cited tag; the facts are in the tests below) it starts at EL2 with E2H clear
+//! and AMO set, the EL2 MMU and both caches on, and the CPU interface as
+//! TF-A left it, because U-Boot does not touch it on the RK3588. The entry
+//! write of [`HCR_EL2_AT_ENTRY`] and the EOI mode reset are right for both.
 
 /// **EL2 as a VHE Linux leaves it.** A Linux that runs its kernel at EL2
 /// with the Virtualization Host Extensions (the T6's Armbian: dmesg "CPU
@@ -226,5 +234,60 @@ mod tests {
         assert_eq!(icc_ctlr_reset_mode(0x7, 0x0000_0400), None);
         // SRE off: the CPU interface is as it came out of reset
         assert_eq!(icc_ctlr_reset_mode(0x6, 0x0000_0402), None);
+    }
+
+    // U-Boot v2026.07 (GPL-2.0; facts and file:line only), `go` on the RK3588
+    // where TF-A hands BL33 over at EL2:
+    // - arch/arm/cpu/armv8/start.S:127-130: at EL2 it reads HCR_EL2 and, with
+    //   E2H clear, ORs in AMO (HCR_EL2_AMO_EL2, arch/arm/include/asm/system.h:87)
+    //   and writes it back. E2H set would take the label-1 branch (start.S:128)
+    //   and write no HCR_EL2. No other HCR_EL2 write on the path to `go`: the
+    //   armv8_switch_to_el2 macros (arch/arm/include/asm/macro.h:293-314) are
+    //   not reached, the CPU is already at EL2.
+    // - cmd/boot.c:18-22, 41: `go` is a plain call of the entry, no cleanup.
+    const UBOOT_HCR_AT_GO: u64 = HCR_RW | HCR_AMO;
+    // - SCTLR_EL2: MMU on (arch/arm/cpu/armv8/cache_v8.c:815-817 mmu_enable,
+    //   called from dcache_enable at :880-887), D-cache on (:894), I-cache on
+    //   (:1172-1175), all from enable_caches (cache_v8.c:1224-1227, reached from
+    //   common/board_r.c:108-113 initr_caches; arch/arm/mach-rockchip/board.c:209
+    //   is the ARM32-only override, #if !CONFIG_ARM64). The reserved bits are
+    //   illustrative; M, C and I are the facts.
+    const UBOOT_SCTLR_EL2_AT_GO: u64 = 0x30c5_0830 | (1 << 0) | (1 << 2) | (1 << 12);
+    // - GICv3 / ICC_*: start.S:301-319 gic_init_secure* run in lowlevel_init
+    //   only under CONFIG_GICV2/CONFIG_GICV3, and arch/arm/lib/gic_64.S:123-126
+    //   (the ICC_SRE_EL3 write) is EL3 code; GICV3 is a bare option
+    //   (arch/arm/Kconfig:129) that only ARCH_VERSAL selects (:1294) and
+    //   configs/nanopc-t6-rk3588_defconfig sets no GIC option. No ICC_* write
+    //   for EL1 anywhere in U-Boot's armv8 boot path: ICC_SRE_EL1 and
+    //   ICC_CTLR_EL1 are as TF-A left them (reset: SRE 0, EOImode 0; an Arm
+    //   architecture fact, not U-Boot's).
+
+    #[test]
+    fn uboot_go_state_needs_no_eoi_mode_write() {
+        // SRE off as out of reset: not reachable, nothing written
+        assert_eq!(icc_ctlr_reset_mode(0x0, 0x0000_0400), None);
+        // SRE on (a TF-A or driver that enabled it) with EOImode already 0
+        assert_eq!(icc_ctlr_reset_mode(0x7, 0x0000_0400), None);
+        assert_eq!(icc_ctlr_reset_mode(0x1, 0x0000_0000), None);
+        // and a U-Boot ICC_CTLR_EL1 with other bits set is never altered
+        assert_eq!(icc_ctlr_reset_mode(0x7, 0x0000_0001), None);
+    }
+
+    #[test]
+    fn the_entry_write_is_right_from_uboots_hcr() {
+        assert_eq!(UBOOT_HCR_AT_GO & HCR_E2H, 0);
+        assert_eq!(UBOOT_HCR_AT_GO, 0x8000_0020);
+        // The write is the whole register, so E2H clear is not special: the
+        // result is the same as from Linux's VHE value.
+        assert_eq!(HCR_EL2_AT_ENTRY & !HCR_RW, 0);
+        // Zephyr's EL2 init after the write sees RW only (AMO from U-Boot
+        // is dropped, as it would clear it itself): nothing for E2H to undo.
+        let zephyr_keeps = |hcr: u64| (hcr & !(HCR_IMO | HCR_AMO | HCR_TGE)) | HCR_RW;
+        assert_eq!(zephyr_keeps(HCR_EL2_AT_ENTRY), HCR_RW);
+        // Without the write, U-Boot's value would already be right too: the
+        // exit changes nothing Zephyr's init does not, so it is a no-op in effect.
+        assert_eq!(zephyr_keeps(UBOOT_HCR_AT_GO), zephyr_keeps(HCR_EL2_AT_ENTRY));
+        // The EL2 MMU is on at U-Boot's go, unlike Linux's kexec.
+        assert_eq!(UBOOT_SCTLR_EL2_AT_GO & 0x1005, 0x1005);
     }
 }
