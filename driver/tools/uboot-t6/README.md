@@ -20,14 +20,22 @@ prompt needs the owner with someone at the power switch.
    `/boot/yakogl/t6-zephyr.scr`. Nothing of the stock `/boot` is changed.
 3. At the U-Boot prompt: `load mmc 0:1 ${scriptaddr} /boot/yakogl/t6-zephyr.scr`
    then `source ${scriptaddr}`. The script (`t6-zephyr.cmd`) prints the undo,
-   sizes the file (`ext4size`), refuses outside 0x40..0x1000000 bytes, loads it
-   to 0x10000000 (`ext4load`), checks the size read back and the `ARM\x64`
-   magic at byte 56, flushes and turns the caches off, and runs `go 0x10000000`.
+   sizes the file (`ext4size`), refuses outside 0x40..0x10000000 bytes, loads it
+   to 0x10000000 (`ext4load`), checks the size read back, the `ARM\x64`
+   magic at byte 56 and that the header's `image_size` (the RAM the image
+   takes, `.bss` included) fits the window, flushes and turns the caches
+   off, and runs `go 0x10000000`.
    No `saveenv`, no write of any partition; its variables are all `t6z_*`.
 
-Link address and window: `driver/tools/kexec-zephyr/nanopc-t6.sh`
-(WINDOW_BASE 0x10000000, 16 MiB, the image's `load` marker field must equal
-it; its entry is the start of the segment). The mmc numbering in the script
+Link address and window: `nanopc_t6.dts`'s `zephyr,sram`, 256 MiB at
+0x10000000 (0x10000000-0x1fffffff); the script's `t6z_load`, `t6z_entry` and
+`t6z_window` and `driver/tools/kexec-zephyr/nanopc-t6.sh`'s WINDOW_BASE and
+WINDOW_SIZE hold the same values, and
+`driver/tools/kexec-zephyr/board_lock_selftest.sh` fails when one differs.
+The entry is the start of the image. What the script cannot check: that
+nothing U-Boot keeps (its relocated code, stack, heap and device tree) lies
+in the window. Under Linux, `nanopc-t6.sh` reads that from `/proc/iomem`;
+here `bdinfo` shows it (below). The mmc numbering in the script
 (`0:1`) is a default, not a measurement: the owner checks `mmc list` and
 `part list mmc 0` first and sets `t6z_dev` if it differs.
 
@@ -104,7 +112,9 @@ A directory entry `/boot/yakogl` is the only change on the partition, and
 
 - The first run at the U-Boot prompt, with someone at the power switch:
   `mmc list`, `part list mmc 0` (is `0:1` the eMMC's ext4?), `printenv
-  scriptaddr`, then the two commands of step 3. Reboot into U-Boot interrupts
+  scriptaddr`, `bdinfo` (`relocaddr`, `sp start`, `fdt_blob`:
+  each must be outside 0x10000000-0x1fffffff, and `scriptaddr` too), then
+  the two commands of step 3. Reboot into U-Boot interrupts
   autoboot at the prompt; no other command is needed.
 - "First run": if the console faults after `dcache off` (the MMU is off and
   U-Boot's own code may issue unaligned access), set `t6z_keepcache 1` before

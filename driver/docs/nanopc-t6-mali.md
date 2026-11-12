@@ -5,8 +5,9 @@
 **Z1 PASS 2026-10-19 00:57 JST, build 576065151**: `t6_hello`, kexec'd out of
 Armbian, ran on the board (console, WDT0 armed, 10 s on the system timer) and
 returned through PSCI `SYSTEM_RESET` in 45 s (records:
-`0dce654a8:tools/mali/board-ref/2026-10-19-z1/`). Open: the watchdog reset path has not
-been exercised (no hang has been left to WDT0 yet).
+`0dce654a8:tools/mali/board-ref/2026-10-19-z1/`). The watchdog reset path was
+measured the same day: a WDT0 timeout brings the SoC back into Armbian ("The
+watchdog proof and the trap").
 
 **Z2 PASS 2026-11-11 21:01 JST, build v0.1.0-913-g1f19113a3**: `t6_mmu`
 (main `1f19113a3`), kexec'd out of Armbian, enabled AS0 on its own page
@@ -1067,7 +1068,7 @@ rk3588-base.dtsi's):
 |---|---|---|
 | 0x00000000-0x001fffff | firmware: TF-A, the SCMI shared memory at 0x0010f000; not System RAM | live |
 | 0x02000000-0x0432ffff | Armbian's kernel image | dead |
-| **0x10000000-0x10ffffff** | **the Zephyr image** (`zephyr,sram`, 16 MiB; `t6_hello` uses 148 KiB) | ours |
+| **0x10000000-0x1fffffff** | **the Zephyr image** (`zephyr,sram`, 256 MiB; `t6_hello` takes 652 KB, most of it the page-frame table for the 256 MiB) | ours |
 | 0xcd400000-0xe13fffff | reserved by Linux | dead |
 | 0xe1440000-0xeb43ffff | hdmi-receiver CMA (nomap) | not ours |
 | 0x1_0022_0000-0x1_002f_ffff | the GIC's ITS and LPI tables (13 of 64 KiB, in Linux's log) | live: the redistributors keep them |
@@ -1085,7 +1086,29 @@ Linux kept there before does not matter. What stays live is outside it: the
 firmware below 0x00200000, the GIC tables above 4 GiB. It is 2 MiB aligned
 and below 4 GiB. `nanopc-t6.sh` checks all of this on the live board before
 a jump (one System RAM range, no `/proc/iomem` entry, no GIC table in
-Linux's log).
+Linux's log), and refuses when Linux's log names no GIC table (its ring
+wrapped), since the tables' place is then unknown.
+
+Why 256 MiB: the dEQP-GLES2 image with the Mali OSAL (`driver/samples/zephyr/
+deqp` on `nanopc_t6`) takes 151140 KB: the GL core's statics and the
+in-process compiler's scratch, the OSAL's `__nocache` memory (the 32 MiB
+carve-out, the tiler heap's chunks, the firmware arena, the queue memory),
+dEQP's code, and the 64 MiB C heap every board's dEQP image has. 128 MiB is
+19 MiB short of it. The probes take under 6 MiB; their RAM use counts the
+page-frame table, which Zephyr sizes for the whole of `zephyr,sram`. Three
+places hold the window: the dts, `nanopc-t6.sh` (`WINDOW_BASE`,
+`WINDOW_SIZE`) and the U-Boot script (`driver/tools/uboot-t6/t6-zephyr.cmd`,
+`t6z_load`, `t6z_window`); `driver/tools/kexec-zephyr/board_lock_selftest.sh`
+fails when the two scripts differ from the dts. Two limits come with the
+size. `CONFIG_KERNEL_VM_SIZE` (the board defconfig, 512 MiB) must reach
+past the window: `k_mem_map`'s free virtual range runs from the image's end
+to `KERNEL_VM_BASE + KERNEL_VM_SIZE`, so with Zephyr's 8 MiB default
+`device_map()` hands out addresses inside any image over 8 MiB (the board
+glue asserts it at build time). And `kexec_zephyr` reads at most 64 MiB of
+file (`IMG_MAX`), while Zephyr places the NOLOAD `nocache` section before
+initialised kernel sections, so the zeros of `__nocache` statics lie inside
+`zephyr.bin`: the Mali OSAL's carve-out counts against the file limit as
+well as the window.
 
 **Watchdog: WDT0, a DesignWare APB watchdog.** The facts, with sources:
 
@@ -1604,12 +1627,12 @@ the `t6_mmu` probe's `.bss`, inside the Z1 memory map's "ours" window.
 
 | Range (Z1's map) | What | Size |
 |---|---|---|
-| 0x10000000-0x10ffffff | the Zephyr image, as in Z1 | 16 MiB |
+| 0x10000000-0x1fffffff | the Zephyr image, as in Z1 | 256 MiB |
 | ... `.bss`, `t6_mmu_pool` | AS0's table pages, 4 KiB aligned; Z2 uses 4, Z3's sections need 9 | 16 pages, 64 KiB |
 | ... `.bss`, `t6_mmu_backing` | what the MCU's shared-interface section (VA 0x04000000) maps to | 64 KiB |
 
 Why there:
-- 0x10000000-0x10ffffff is the only range of the Z1 map that is ours after
+- 0x10000000-0x1fffffff is the only range of the Z1 map that is ours after
   the kexec. The Image header's `image_size` covers `.bss`, so
   `nanopc-t6.sh` loads the segment over all of it, and nothing else needs
   reserving.

@@ -34,9 +34,9 @@
 # proves the watchdog runs instead of assuming it: after the open it reads
 # WDT0's WDT_CR and WDT_TORR with mmio_rd, prints them ("linux-wdt: WDT0 CR
 # ..."), and jumps only when WDT_EN (bit 0) reads 1; otherwise it writes the
-# magic close and exits 98 without jumping. That WDT0's timeout resets this
-# SoC back into Armbian is still unproven (GLB_RST_ST after such a reset
-# says). If
+# magic close and exits 98 without jumping. A WDT0 timeout brings the SoC
+# back through U-Boot into Armbian (measured 2026-10-19, driver/docs/
+# nanopc-t6-mali.md, "The watchdog proof and the trap"). If
 # kexec_zephyr returns instead, the command writes the magic close 'V' and
 # closes the device, and Linux keeps feeding WDT0 from then on (the board's
 # nowayout is 0; watchdog_dev.c:942-990, the worker for a running watchdog
@@ -102,8 +102,9 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 # The window nanopc_t6.dts links the image into (zephyr,sram).
+# board_lock_selftest.sh, beside this, fails when these differ from it.
 WINDOW_BASE=$((0x10000000))
-WINDOW_SIZE=$((16 << 20))
+WINDOW_SIZE=$((256 << 20))
 STAGE=/tmp/yakogl-kexec
 
 die() { echo "nanopc-t6.sh: $*" >&2; exit 2; }
@@ -218,7 +219,9 @@ done <<<"$iomem"
 
 # The GIC's ITS and LPI tables: the redistributors and ITSs Linux enabled keep
 # them (EnableLPIs cannot be cleared again) and write the pending tables when an
-# LPI arrives, after the jump too. Their addresses are only in Linux's log.
+# LPI arrives, after the jump too. Their addresses are only in Linux's log;
+# when it names none (its ring wrapped), they are unknown, and so is whether
+# the window is free of them.
 gic=$(fact gic_tables)
 gic_n=0
 for t in $gic; do
@@ -227,19 +230,16 @@ for t in $gic; do
 		refuse "a GIC ITS/LPI table at 0x$t (64 KiB) is inside the window (Linux's dmesg)"
 	fi
 done
+[ "$gic_n" -gt 0 ] || refuse "Linux's log names no GIC ITS/LPI table (its ring wrapped?): whether one lies in the window is unknown; reboot the board into Armbian so that dmesg names them again"
 echo "board: $BOARD_HOST: $(fact compatible), Linux $(fact kernel), $(fact config_kexec), kexec_load_disabled 0, nothing loaded"
 echo "board: up $(fact uptime) s, systemd '$(fact system)', boot_id $(fact boot_id)"
 echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM and overlaps no /proc/iomem entry"
-if [ "$gic_n" -gt 0 ]; then
-	echo "board: the $gic_n GIC ITS/LPI tables Linux's log names are outside the window ($(printf '%s' "$gic" | tr ' ' ',' | sed 's/,$//'))"
-else
-	echo "board: Linux's log names no GIC ITS/LPI table (the ring wrapped?): not checked"
-fi
+echo "board: the $gic_n GIC ITS/LPI tables Linux's log names are outside the window ($(printf '%s' "$gic" | tr ' ' ',' | sed 's/,$//'))"
 echo "board: WDT0 under Linux: $(fact wdt_identity), state $(fact wdt_state), timeout $(fact wdt_timeout) s, nowayout $(fact wdt_nowayout), open by '$(fact wdt_users)' (the image arms it itself either way)"
 if [ "$LINUX_WDT" = 1 ]; then
 	[ "$(fact wdt_identity)" != absent ] || refuse "linux-wdt: the board has no /sys/class/watchdog/watchdog0 (--no-linux-wdt jumps without it)"
 	[ -z "$(fact wdt_users)" ] || refuse "linux-wdt: /dev/watchdog0 is already open by '$(fact wdt_users)'"
-	echo "board: linux-wdt (default): /dev/watchdog0 is opened right before the jump, WDT_CR.WDT_EN is read back, and the jump happens only when it is 1: WDT0 then resets the board about $(fact wdt_timeout) s after the open unless the image re-arms it (that its reset brings the SoC back is unproven)"
+	echo "board: linux-wdt (default): /dev/watchdog0 is opened right before the jump, WDT_CR.WDT_EN is read back, and the jump happens only when it is 1: WDT0 then resets the board about $(fact wdt_timeout) s after the open unless the image re-arms it"
 else
 	echo "board: --no-linux-wdt: nothing covers the image's pre-arm window; a hang there holds the board until its power is cut"
 fi

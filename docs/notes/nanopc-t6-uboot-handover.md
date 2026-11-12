@@ -264,8 +264,8 @@ CPU the way the Verdin route does (docs/standalone-boot.md):
 
 Which applies: the Z images are flat binaries linked at one fixed physical
 address, with `CONFIG_AARCH64_IMAGE_HEADER` (kexec_zephyr.c:436 refuses an image
-without the arm64 Image header; nanopc_t6.dts:10: `zephyr,sram` is 16 MiB at
-0x10000000; nanopc-t6.sh:104-106 the same window). So:
+without the arm64 Image header; nanopc_t6.dts:10: `zephyr,sram` is 256 MiB at
+0x10000000; nanopc-t6.sh:104-107 the same window). So:
 
 - `go 0x10000000` is the route: it jumps to the first byte, the header's branch,
   with no device tree and no relocation. The load address must be the link
@@ -285,21 +285,23 @@ What the script must do besides the two commands (section 6):
   the image's PSCI reset and would load the image again.
 
 The script draft is driver/tools/uboot-t6/t6-zephyr.cmd (README.md beside it),
-never run on a board. It sizes the file with `ext4size` (:40), refuses outside
-0x40 to 0x1000000 bytes, `ext4load`s to 0x10000000, checks the size read back
-and the `ARM\x64` magic at byte 56, turns the instruction and data caches off
-(:83) and runs `go 0x10000000` (:87). Its mmc device `0:1` is a default, not a
+never run on a board. It sizes the file with `ext4size` (:42), refuses outside
+0x40 to 0x10000000 bytes, `ext4load`s to 0x10000000, checks the size read back,
+the `ARM\x64` magic at byte 56 and the header's `image_size` against the
+256 MiB window (:75-89), turns the instruction and data caches off (:100) and
+runs `go 0x10000000` (:104). Its mmc device `0:1` is a default, not a
 measurement (:19). It writes nothing to any disk or to the saved environment;
 its variables are `t6z_*`, in RAM. It differs from the list above in two
 points: no one-shot variable, because nothing is saved and a reset returns to
-`bootflow scan -lb` (:32-34); and no watchdog is armed: the script prints that
-the watchdog marker is not checked (:35), so that step stays open.
+`bootflow scan -lb` (:34-36); and no watchdog is armed: the script prints that
+the watchdog marker is not checked (:37), so that step stays open.
 
 Load addresses: not measured yet. They are U-Boot's compiled-in `kernel_addr_r`,
 `fdt_addr_r`, `scriptaddr` and `loadaddr`; the draft's `load mmc 0:1
 ${scriptaddr}` line needs `scriptaddr` set. The image's link address,
-0x10000000, is from the repo. That the 16 MiB window is free of U-Boot's and
-the trusted firmware's own memory is a read for section 3, not a fact.
+0x10000000, is from the repo. That the 256 MiB window, 0x10000000-0x1fffffff,
+is free of U-Boot's and the trusted firmware's own memory is a read for
+section 3, not a fact (`bdinfo` at the prompt shows U-Boot's).
 
 Source citations, U-Boot v2026.07 (commit `ece349ad`) and Armbian's U-Boot
 build (commit `fc874938`), confirmed by the uboot-src-lines item:

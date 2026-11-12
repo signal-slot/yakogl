@@ -86,6 +86,13 @@ BUILD_ASSERT(DT_SAME_NODE(DT_CHOSEN(zephyr_console), UART2_NODE),
 	     "T6:B goes through the console, uart2 like the raw lines");
 BUILD_ASSERT(CONFIG_YAKOGL_NANOPC_T6_ALIVE_S < CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S,
 	     "the alive window is inside the lifetime");
+/* k_mem_map's (and so device_map's) free virtual range runs from the
+ * image's end to KERNEL_VM_BASE + KERNEL_VM_SIZE; the image may fill
+ * zephyr,sram, so the virtual space must reach past it, or the mappings land
+ * inside the image (nanopc_t6_defconfig). */
+BUILD_ASSERT(CONFIG_KERNEL_VM_BASE == CONFIG_SRAM_BASE_ADDRESS &&
+		     (uint64_t)CONFIG_SRAM_SIZE * 1024u < (uint64_t)CONFIG_KERNEL_VM_SIZE,
+	     "CONFIG_KERNEL_VM_SIZE must cover zephyr,sram and leave room for device_map");
 
 #ifdef CONFIG_YAKOGL_NANOPC_T6_WDT_PROOF
 #define T6_PROOF "1"

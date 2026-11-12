@@ -13,6 +13,17 @@ CONFIG_UART_NS16550_ACCESS_WORD_ONLY=y
 # footprint (driver/tools/kexec-zephyr/kexec_zephyr.c).
 CONFIG_AARCH64_IMAGE_HEADER=y
 
+# The kernel's virtual space starts at the image (KERNEL_VM_BASE is
+# zephyr,sram's 0x10000000) and must hold the whole 256 MiB window and, above
+# it, the device mappings (device_map: the GPU's 2.5 MiB, the CRU, the PMU,
+# ...). k_mem_map's free virtual range runs from the image's end to
+# KERNEL_VM_BASE + KERNEL_VM_SIZE (kernel/mmu.c virt_region_init); with
+# Zephyr's 8 MiB default it ends inside any image larger than 8 MiB, and
+# device_map() then hands out addresses inside the image. 512 MiB, as the
+# Pi 4's and the Verdins' dEQP images have. nanopc_t6.c asserts it covers
+# zephyr,sram.
+CONFIG_KERNEL_VM_SIZE=0x20000000
+
 # Non-secure EL1 under the RK3588's TF-A, as Zephyr's roc_rk3588_pc.
 CONFIG_ARMV8_A_NS=y
 CONFIG_CACHE_MANAGEMENT=y

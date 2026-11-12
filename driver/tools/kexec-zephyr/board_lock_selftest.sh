@@ -81,10 +81,18 @@
 # what is left is a `sleep 1`, so a holder that returns leaves no process
 # of its watchdog after 5 s either.
 #
+# A ninth, found on 2026-11-12 in a review of the T6 GL images: when Linux's
+# log named no GIC ITS/LPI table (its ring had wrapped), nanopc-t6.sh printed
+# "not checked" and --go went on, though a table in the window would be
+# overwritten by the image. It now refuses. The checks run nanopc-t6.sh on
+# made-up board facts (an `ssh` that prints them): the 256 MiB window on the
+# T6's /proc/iomem, an entry and a GIC table in the window's last part, and
+# --go with and without the tables named.
+#
 # Needs bash, flock(1) and strings(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-planned=20
+planned=27
 run=0
 failed=0
 check() { # <what> <0 = ok>
@@ -324,6 +332,84 @@ err=$(BOARD_HOST=root@board.invalid bash "$t6" "$tmp/unarmed.bin" 2>&1 >/dev/nul
 rc=$?
 check "nanopc-t6.sh: an image without the line is refused for it (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF "lacks the 'board: watchdog armed' line" <<<"$err"; echo $?)"
+
+# nanopc-t6.sh's checks of the board's facts, on made-up facts: an `ssh`
+# first in PATH prints $tmp/facts whatever it is asked, so no board is
+# contacted. The facts are the T6's under Armbian: one System RAM bank
+# 0x00200000-0xe143ffff, below 0x20000000 only the kernel's entries under
+# it, the GIC's ITS/LPI tables above 4 GiB. An image TOP 13 passes the image
+# checks. t6_board_run <iomem lines under the bank> <gic_tables> [--go]
+mkdir "$tmp/fakebin"
+printf '#!/bin/sh\ncat "%s/facts"\n' "$tmp" > "$tmp/fakebin/ssh"
+chmod +x "$tmp/fakebin/ssh"
+t6_image "$tmp/top13.bin" 'board: watchdog armed'
+sed -i 's/; top 9; /; top 13; /' "$tmp/top13.bin"
+t6_board_run() {
+	{
+		printf '%s\n' 'compatible=friendlyarm,nanopc-t6 rockchip,rk3588 ' kernel=6.18.55 \
+			kexec_load_disabled=0 kexec_loaded=0 config_kexec=CONFIG_KEXEC=y uid=0 \
+			wdt_identity=dw_wdt wdt_state=inactive wdt_timeout=44 wdt_nowayout=0 wdt_users= \
+			"gic_tables=$2" 'iomem<<' '00200000-e143ffff : System RAM'
+		printf '%s\n' "$1" '>>'
+	} > "$tmp/facts"
+	PATH=$tmp/fakebin:$PATH BOARD_HOST=root@board.invalid bash "$t6" "$tmp/top13.bin" ${3:+"$3"} 2>&1
+}
+kernel='  02000000-0432ffff : Kernel code'
+gic_out='100220000 100230000 1002f0000 '
+out=$(t6_board_run "$kernel" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: the dry run on the T6's facts finds the window 0x10000000-0x1fffffff free (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'window 0x10000000-0x1fffffff is inside System RAM and overlaps no /proc/iomem entry' <<<"$out"; echo $?)"
+out=$(t6_board_run "$kernel
+  1ff00000-1fffffff : reserved" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: an entry under the bank at the window's last MiB is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: the window overlaps: 1ff00000-1fffffff : reserved' <<<"$out"; echo $?)"
+out=$(t6_board_run "$kernel" '100220000 1fff0000 ')
+rc=$?
+check "nanopc-t6.sh: a GIC table in the window's last 64 KiB is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: a GIC ITS/LPI table at 0x1fff0000' <<<"$out"; echo $?)"
+# When dmesg names no table (its ring wrapped), where the tables are is
+# unknown: --go and the dry run refuse, they do not say "not checked" and go on.
+out=$(t6_board_run "$kernel" '' --go)
+rc=$?
+check "nanopc-t6.sh: --go refuses when Linux's log names no GIC table (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: Linux'"'"'s log names no GIC ITS/LPI table' <<<"$out"; echo $?)"
+out=$(t6_board_run "$kernel" "$gic_out" --go)
+rc=$?
+check "nanopc-t6.sh: --go with the tables named gets past the board checks to its own T6_HAND refusal (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --go needs T6_HAND' <<<"$out"; echo $?)"
+
+# The window is decided by nanopc_t6.dts (zephyr,sram) and held again where an
+# image is loaded into it: nanopc-t6.sh checks /proc/iomem over WINDOW_BASE
+# ..+WINDOW_SIZE, and the U-Boot script loads to t6z_load and refuses above
+# t6z_window. A window grown in the dts alone would leave the dry run
+# checking less RAM than the image takes as its own; one shrunk there would
+# leave U-Boot loading past it. Each must equal the node's reg.
+dts=$here/../../boards/friendlyarm/nanopc_t6/nanopc_t6.dts
+ub=$here/../uboot-t6/t6-zephyr.cmd
+reg=$(awk '/^\tzephyr_ram: memory@/ { n = 1 } n && /reg = / { print; exit }' "$dts")
+win_base= win_size=
+if [[ "$reg" =~ reg\ =\ \<(0x[0-9a-fA-F]+)\ DT_SIZE_M\(([0-9]+)\)\>\; ]]; then
+	win_base=$((BASH_REMATCH[1])) win_size=$((BASH_REMATCH[2] << 20))
+fi
+# NAME=$((<number> [<< <number>])) in nanopc-t6.sh, evaluated only in that form.
+script_value() {
+	local e
+	e=$(sed -n "s/^$1=\\\$((\\(.*\\)))\$/\\1/p" "$t6")
+	[[ "$e" =~ ^(0x[0-9a-fA-F]+|[0-9]+)(\ \<\<\ [0-9]+)?$ ]] && echo $((e))
+}
+got="$(script_value WINDOW_BASE) $(script_value WINDOW_SIZE)"
+check "nanopc-t6.sh: WINDOW_BASE WINDOW_SIZE ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_size: '${reg#"${reg%%[! 	]*}"}')" \
+	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_size" ]; echo $?)"
+uboot_value() {
+	local v
+	v=$(sed -n "s/^setenv $1 \\(0x[0-9a-fA-F]*\\)\$/\\1/p" "$ub")
+	[ -n "$v" ] && echo $((v))
+}
+got="$(uboot_value t6z_load) $(uboot_value t6z_entry) $(uboot_value t6z_window)"
+check "t6-zephyr.cmd: t6z_load t6z_entry t6z_window ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_base $win_size)" \
+	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_base $win_size" ]; echo $?)"
 
 # The test leaves no process behind: the sweep ends every marked process,
 # and a known one (the holder, still running here) shows that the search
