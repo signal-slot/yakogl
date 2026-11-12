@@ -126,7 +126,7 @@ pub const FHD1080_60: VideoMode = VideoMode {
 /// A base EDID block is good when it starts with the fixed header
 /// 00 ff ff ff ff ff ff 00 (VESA E-EDID 1.4 section 3.3) and its 128 bytes
 /// sum to 0 modulo 256 (section 3.3, byte 7Fh is the checksum). Linux
-/// drm_edid.c `edid_block_check` (v6.12) tolerates a header with up to two
+/// drm_edid.c `edid_block_check` (:1855-1880, v6.12) tolerates a header with up to two
 /// wrong bytes; a display driver that cannot re-read the sink does not.
 pub fn edid_block_ok(block: &[u8; 128]) -> bool {
     block[..8] == [0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00]
@@ -139,16 +139,18 @@ pub fn edid_block_ok(block: &[u8; 128]) -> bool {
 /// active and blanking as 8 + 4 bits (bytes 2-4, 5-7), sync offset and
 /// width as 8 + 2 bits (bytes 8-11), flags in byte 17. A zero pixel clock is
 /// a display descriptor, not a timing. Interlaced and anything but digital
-/// separate sync (bits 4:3 = 11) are refused, as is a sync that does not
-/// fit inside its blanking. The stereo bits are ignored. DE is active high:
-/// EDID has no DE polarity.
+/// separate sync (bits 4:3 = 11) are refused, as are stereo (bit 5, Linux
+/// refuses it at drm_edid.c:3494), a zero sync width (:3505) and a sync that
+/// does not fit inside its blanking (Linux clamps it, :3539-3550). Field
+/// decode: drm_edid.c:3473-3490 (v6.12); the sync polarity bits :3557-3560.
+/// DE is active high: EDID has no DE polarity.
 pub fn edid_dtd(d: &[u8; 18]) -> Option<VideoMode> {
     let clock10k = u32::from(d[0]) | u32::from(d[1]) << 8;
     if clock10k == 0 {
         return None;
     }
     let flags = d[17];
-    if flags & 0x80 != 0 || flags & 0x18 != 0x18 {
+    if flags & 0xa0 != 0 || flags & 0x18 != 0x18 {
         return None;
     }
     let hactive = u32::from(d[2]) | u32::from(d[4] & 0xf0) << 4;
@@ -160,7 +162,7 @@ pub fn edid_dtd(d: &[u8; 18]) -> Option<VideoMode> {
     let vfront = u32::from(d[10] >> 4) | u32::from(d[11] & 0x0c) << 2;
     let vsync = u32::from(d[10] & 0x0f) | u32::from(d[11] & 0x03) << 4;
     let (hfp_sync, vfp_sync) = (hfront + hsync, vfront + vsync);
-    if hfp_sync > hblank || vfp_sync > vblank {
+    if hsync == 0 || vsync == 0 || hfp_sync > hblank || vfp_sync > vblank {
         return None;
     }
     Some(VideoMode {
@@ -264,6 +266,13 @@ mod tests {
         assert_eq!(edid_dtd(&d), None);
         let mut d = DTD_720P;
         d[17] &= !0x10; // analog / composite sync
+        assert_eq!(edid_dtd(&d), None);
+        let mut d = DTD_720P;
+        d[17] |= 0x20; // stereo
+        assert_eq!(edid_dtd(&d), None);
+        let mut d = DTD_720P;
+        d[9] = 0; // zero hsync width
+        d[11] &= !0x30;
         assert_eq!(edid_dtd(&d), None);
         let mut d = DTD_720P;
         d[0] = 0;
