@@ -113,7 +113,14 @@
 # refusals (a crashkernel= already there, two extraargs= lines, undo without
 # set, a file changed after set, another board).
 #
-# Needs bash, flock(1) and strings(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
+# The T6's other runner on the lock, driver/tools/uboot-t6/prompt-reads.sh
+# (the reads at the U-Boot prompt), is held to the same rule: LOCK_WAIT 0
+# before it sources board_lock.sh. The tool it starts on the UART,
+# prompt-reads.py, has a self-test against a fake board on a pty (what it
+# types and when, and that it never types into Linux's root shell); the
+# check here runs it, so the gate does too.
+#
+# Needs bash, flock(1), strings(1) and python3. tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 run=0
@@ -205,6 +212,14 @@ src=$(grep -n '^\. "\$HERE/board_lock.sh"$' "$t6" | cut -d: -f1)
 def=$(grep -n '^LOCK_WAIT=\${LOCK_WAIT:-0}$' "$t6" | cut -d: -f1)
 later=$(awk -v a="${def:-0}" -v b="${src:-0}" 'NR > a && NR < b && /LOCK_WAIT=/' "$t6")
 check "nanopc-t6.sh: LOCK_WAIT defaults to 0 before it sources board_lock.sh (lines ${def:-none} < ${src:-none})" \
+	"$([ -n "$src" ] && [ -n "$def" ] && [ "$def" -lt "$src" ] && [ -z "$later" ]; echo $?)"
+
+# prompt-reads.sh, the same: LOCK_WAIT 0 before it sources board_lock.sh.
+ubr=$here/../uboot-t6/prompt-reads.sh
+src=$(grep -n '^\. "\$K/board_lock.sh"$' "$ubr" | cut -d: -f1)
+def=$(grep -n '^LOCK_WAIT=\${LOCK_WAIT:-0}$' "$ubr" | cut -d: -f1)
+later=$(awk -v a="${def:-0}" -v b="${src:-0}" 'NR > a && NR < b && /LOCK_WAIT=/' "$ubr")
+check "prompt-reads.sh: LOCK_WAIT defaults to 0 before it sources board_lock.sh (lines ${def:-none} < ${src:-none})" \
 	"$([ -n "$src" ] && [ -n "$def" ] && [ "$def" -lt "$src" ] && [ -z "$later" ]; echo $?)"
 
 # A holder whose output is piped returns when it ends, not after HOLD_MAX.
@@ -859,6 +874,13 @@ left=$(marked)
 left=${left//$'\n'/ }
 check "no process of the test is left (a known one found by the search: $found; left: ${left:-none})" \
 	"$([ "$found" = 1 ] && [ -z "$left" ]; echo $?)"
+
+# Last, because it takes about 30 s and the holder above lives 60 s.
+# prompt-reads.py's own self-test (a fake board on a pty): its last line
+# names the checks run and planned, and how many failed.
+got=$(python3 -I "$here/../uboot-t6/prompt-reads.py" --self-test 2>&1 | tail -n 1)
+check "prompt-reads.py --self-test ('$got')" \
+	"$(grep -qE '^prompt-reads self-test: ([0-9]+) checks run \(planned \1\), 0 failed$' <<<"$got"; echo $?)"
 
 not_run=
 while IFS=: read -r line _; do
