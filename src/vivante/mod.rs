@@ -61,6 +61,9 @@ pub mod pe_zs;
 pub mod profile;
 pub mod regs;
 pub mod rs_clear;
+/// A host-test interpreter of RS jobs over captured streams (test helper).
+#[cfg(feature = "host-test")]
+pub mod rs_interp;
 pub mod shader;
 pub mod state;
 pub mod texture;
