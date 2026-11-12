@@ -329,6 +329,10 @@ pub enum Op {
     FaddV2f16,
     FaddF32,
     FrcpF32,
+    /// `FRCP.f16 dest, x.hN`: one fp16 lane's reciprocal into the low
+    /// half (a mediump `frcp`, `bi_emit_alu` at 16 bits; fsvec_length_mediump's
+    /// `FRCP.f16 r0, r0^.h00`).
+    FrcpF16,
     /// `.nan_suppress`, the semantics `nir_fmax` gets (bifrost_compile.c).
     FmaxF32,
     /// The fp16 `fmax` of gl_PointSize's clamp (`nir_lower_point_size`),
@@ -453,6 +457,9 @@ pub enum Op {
         round: Round,
     },
     FrsqF32,
+    /// `FRSQ.f16 dest, x.hN`: one fp16 lane's reciprocal square root
+    /// (fsvec_normalize_mediump's `FRSQ.f16 r2, r2^.h00`).
+    FrsqF16,
     /// `FSIN_TABLE.u6 dest, x`: the sine table of `bi_lower_fsincos_32`'s
     /// argument in sixty-fourths of a quarter turn (offset 0).
     FsinTableU6,
@@ -826,6 +833,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::FaddF32 | Op::FmaxF32 | Op::FminF32, 0..=1) => info(true, true, false, false, 32),
         (Op::FmaxV2f16 | Op::FminV2f16, 0..=1) => info(true, true, false, false, 16),
         (Op::FrcpF32 | Op::FrsqF32 | Op::FroundF32 { .. }, 0) => info(true, true, false, false, 32),
+        (Op::FrcpF16 | Op::FrsqF16, 0) => info(true, true, false, false, 16),
         (Op::FroundV2f16 { .. }, 0) => info(true, true, false, false, 16),
         /* FSIN_TABLE and FCOS_TABLE read a plain word; FREXPE widens only
          * (widen0); FLOGD has widen and absneg (valhall.c) */
@@ -982,6 +990,8 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::FclampV2f16
         | Op::FrcpF32
         | Op::FrsqF32
+        | Op::FrcpF16
+        | Op::FrsqF16
         | Op::FsinTableU6
         | Op::FcosTableU6
         | Op::FrexpeF32 { .. }

@@ -83,6 +83,8 @@ const fn mods(op: Op) -> (u8, u8) {
         Op::CubeSsel | Op::CubeTsel => (0b11, 0b11),
         Op::FrcpF32
         | Op::FrsqF32
+        | Op::FrcpF16
+        | Op::FrsqF16
         | Op::FroundF32 { .. }
         | Op::FroundV2f16 { .. }
         | Op::F32ToS32
