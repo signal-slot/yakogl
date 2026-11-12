@@ -4266,7 +4266,8 @@ impl<'a> Lower<'_, 'a> {
          * coordinate, a 32-bit root (A.3); only the `Tex` is the
          * sampler's class. */
         let look_up = matches!(ops.first(), Some(Operand::Sampler { .. }));
-        let mut sink = Sink { l: self, out, width, look_up };
+        let start = self.instrs.len() as u32;
+        let mut sink = Sink { l: self, out, width, look_up, start };
         let lowered = match builtin_call::lower_call(&mut sink, name, ops, want) {
             None if es3 => builtin_call::lower_es3(&mut sink, name, ops),
             r => r,
@@ -5538,22 +5539,22 @@ impl<'a> Lower<'_, 'a> {
             return Ok(v);
         }
         match (from, to) {
-            (ir::ScalarType::I32, ir::ScalarType::F32) => self.alu(ir::AluOp::I2f, [v, v, v], out),
-            (ir::ScalarType::F32, ir::ScalarType::I32) => self.alu(ir::AluOp::F2i, [v, v, v], out),
-            (ir::ScalarType::Bool, ir::ScalarType::F32) => self.alu(ir::AluOp::B2f, [v, v, v], out),
-            (ir::ScalarType::Bool, ir::ScalarType::I32) => self.alu(ir::AluOp::B2i, [v, v, v], out),
-            (ir::ScalarType::F32, ir::ScalarType::Bool) => self.alu(ir::AluOp::F2b, [v, v, v], out),
-            (ir::ScalarType::I32, ir::ScalarType::Bool) => self.alu(ir::AluOp::I2b, [v, v, v], out),
+            (ir::ScalarType::I32, ir::ScalarType::F32) => self.alu_w(ir::AluOp::I2f, [v, v, v], want, out),
+            (ir::ScalarType::F32, ir::ScalarType::I32) => self.alu_w(ir::AluOp::F2i, [v, v, v], want, out),
+            (ir::ScalarType::Bool, ir::ScalarType::F32) => self.alu_w(ir::AluOp::B2f, [v, v, v], want, out),
+            (ir::ScalarType::Bool, ir::ScalarType::I32) => self.alu_w(ir::AluOp::B2i, [v, v, v], want, out),
+            (ir::ScalarType::F32, ir::ScalarType::Bool) => self.alu_w(ir::AluOp::F2b, [v, v, v], want, out),
+            (ir::ScalarType::I32, ir::ScalarType::Bool) => self.alu_w(ir::AluOp::I2b, [v, v, v], want, out),
             /* ES 3.00 section 5.4.1: between `int` and `uint` "the bit
              * pattern ... is preserved" -- the same value, no instruction
              * (ir.md: the front end reuses the ValueId). */
             (ir::ScalarType::I32, ir::ScalarType::U32) | (ir::ScalarType::U32, ir::ScalarType::I32) => Ok(v),
-            (ir::ScalarType::U32, ir::ScalarType::F32) => self.alu(ir::AluOp::U2f, [v, v, v], out),
-            (ir::ScalarType::F32, ir::ScalarType::U32) => self.alu(ir::AluOp::F2u, [v, v, v], out),
+            (ir::ScalarType::U32, ir::ScalarType::F32) => self.alu_w(ir::AluOp::U2f, [v, v, v], want, out),
+            (ir::ScalarType::F32, ir::ScalarType::U32) => self.alu_w(ir::AluOp::F2u, [v, v, v], want, out),
             /* A bool is 0 or all ones; `B2i` gives 0 or 1 and `I2b` tests
              * against 0, which is the same question for either signedness. */
-            (ir::ScalarType::Bool, ir::ScalarType::U32) => self.alu(ir::AluOp::B2i, [v, v, v], out),
-            (ir::ScalarType::U32, ir::ScalarType::Bool) => self.alu(ir::AluOp::I2b, [v, v, v], out),
+            (ir::ScalarType::Bool, ir::ScalarType::U32) => self.alu_w(ir::AluOp::B2i, [v, v, v], want, out),
+            (ir::ScalarType::U32, ir::ScalarType::Bool) => self.alu_w(ir::AluOp::I2b, [v, v, v], want, out),
             /* The equal pairs returned above; the compiler cannot see that
              * through the guard, and a silent `Ok(v)` here would hide a
              * conversion that was forgotten. */
@@ -8846,6 +8847,34 @@ struct Sink<'s, 'x, 'a> {
     /// The call is a look-up: what it emits besides the `Tex` (the
     /// divide of a projective form) records High.
     look_up: bool,
+    /// The first value of the expansion: a value at or past it is one of
+    /// the expansion's own steps.
+    start: u32,
+}
+
+impl Sink<'_, '_, '_> {
+    /// The width an `Alu` of the expansion over `srcs` records. One lane
+    /// when every source that is not a constant is a one-lane step of this
+    /// expansion (the square root of `length`'s dot): the operation reads
+    /// lane 0 of each and makes one value. Otherwise [`Sink::width`] by
+    /// [`ir::AluOp::result_comps`]: an argument read through a splat
+    /// (`smoothstep`'s scalar edge) still serves every lane.
+    fn alu_width(&self, alu: ir::AluOp, srcs: &[Src; 3]) -> u8 {
+        let instrs = self.l.instrs.as_slice();
+        let mut any = false;
+        for s in &srcs[..alu.arity()] {
+            match instrs.get(s.val.0 as usize) {
+                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) => continue,
+                _ if s.val.0 >= self.start && self.l.comps.as_slice().get(s.val.0 as usize) == Some(&1) => any = true,
+                _ => return alu.result_comps(self.width),
+            }
+        }
+        if any {
+            1
+        } else {
+            alu.result_comps(self.width)
+        }
+    }
 }
 
 impl<'a> builtin_call::Emit<'a> for Sink<'_, '_, 'a> {
@@ -8855,7 +8884,10 @@ impl<'a> builtin_call::Emit<'a> for Sink<'_, '_, 'a> {
             self.l.cur = Prec::High;
         }
         let v = match op {
-            Op::Alu(alu, _) => self.l.push_sized(op, alu.result_comps(self.width)),
+            Op::Alu(alu, srcs) => {
+                let w = self.alu_width(alu, &srcs);
+                self.l.push_sized(op, w)
+            }
             _ => self.l.push_instr(op),
         };
         self.l.cur = outer;
@@ -12460,6 +12492,42 @@ mod value_width_tests {
         );
         assert_eq!(comps_of(&l2.module, ir::AluOp::Fadd), 3, "the difference is three lanes");
         assert_eq!(comps_of(&l2.module, ir::AluOp::Fdot3), 1, "its dot is one");
+    }
+
+    /// A step after a reduction is one lane: `length`'s and `distance`'s
+    /// square root, `normalize`'s reciprocal square root. They read only
+    /// the dot inside the expansion; recording the operands' width (2 or
+    /// 3) was an over-estimate the Mali width pass reads as lanes (review
+    /// S1, probe v_sqlen; Mesa has a 16-bit scalar `sqrt`). A conversion
+    /// records its constructor's width: `float(k)` is one lane.
+    #[test]
+    fn a_step_after_a_reduction_and_a_conversion_record_their_own_width() {
+        let mut buf = [0u8; 1 << 19];
+        let l = ir(
+            &mut buf,
+            "precision mediump float;\n\
+             varying vec4 a;\n\
+             void main(){ gl_FragColor = vec4(length(a.xy), 1.0 / length(a.xyz), 0.0, 1.0); }",
+        );
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fsqrt), [1, 1]);
+        let mut b2 = [0u8; 1 << 19];
+        let l = ir(
+            &mut b2,
+            "precision mediump float;\n\
+             varying vec4 a;\n\
+             void main(){ gl_FragColor = vec4(normalize(a.xyz) * distance(a.xy, a.zw), 1.0); }",
+        );
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Frsq), [1]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fsqrt), [1]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fmul), [3, 3], "normalize's product, then the scale");
+        let mut b3 = [0u8; 1 << 19];
+        let l = ir(
+            &mut b3,
+            "precision mediump float;\n\
+             uniform int k;\n\
+             void main(){ gl_FragColor = vec4(float(k), vec3(k)); }",
+        );
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::I2f), [1, 3]);
     }
 
     /// `r--` and `r++` of a `vec2` write two lanes: the sum `step_by_one`
