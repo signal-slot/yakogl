@@ -85,7 +85,7 @@ References, read for this page:
 | Cores | shader_present 0x50005 (4 cores), 1 L2, 1 tiler; VA 48 bits, PA 40 bits; 8 AS | board dmesg; linux:`panthor_regs.h:23-33` |
 | Clocks | CLK_GPU / COREGROUP / STACKS (CRU 262-264), gates CLKGATE_CON(66) bits 4/6/7; rate through SCMI clock 5 (SMC 0x82000010) | linux:`rk3588-base.dtsi:453-457, 355-366`, `clk-rk3588.c:1354-1363` |
 | Power domain | PD_GPU 12, PMU 0xfd8d8000 (sequence below) | linux:`pm-domains.c:1277, 390-691` |
-| Supply | vdd_gpu_s0 = RK806 DCDC1 on SPI2 (0xfeb20000, 1 MHz); boot-on, **not** always-on; 675 mV at 300-600 MHz | linux:`rk3588-nanopc-t6.dtsi:755-824`, `rk3588-opp.dtsi:118-160`; board |
+| Supply | vdd_gpu_s0 = RK806 DCDC1 on SPI2 (0xfeb20000, 1 MHz); boot-on, **not** always-on; 675 mV at 300-600 MHz | linux:`rk3588-nanopc-t6.dtsi:755-823`, `rk3588-opp.dtsi:118-153`; board |
 | Clock now | 300 MHz from cpll at Z1's run of 2026-10-19, 850 MHz from npll on 2026-11-11 (devfreq simple_ondemand); Linux powers npll down while the GPU is suspended ("The GPU power-on") | board debugfs, `/dev/mem` |
 | Console | uart2, 1500000 baud | linux:`rk3588-nanopc-t6.dtsi:40-42` |
 
@@ -248,7 +248,7 @@ After Z3 the kernel side must ping at least every 12 s (`PING_INTERVAL_MS`).
   MCU address onto its own backing, with the protection panthor derives
   from the section's own flags (`section_prot`: writable only with `WR`,
   executable only with `EX`, GPU-cached only for `CACHED`, from
-  `panthor_fw_load_section_entry`'s flags, panthor_fw.c:584-592, and
+  `panthor_fw_load_section_entry`'s flags, panthor_fw.c:581-591, and
   `flags_to_prot`). On the board's file that is the 7 sections, 896 KiB:
   the data and code read-only, 0x02000000 and the shared section
   writable, only the code executable, all GPU-cached but the shared
@@ -347,7 +347,7 @@ under panthor (2026-10-26, record `e3d9b7470:tools/mali/board-ref/2026-10-26-ope
 sizes are not in any uAPI or debugfs field; the kernel buffers panthor allocates from
 them show in debugfs `gems` while a group exists: two "FW suspend buffer" objects of
 28672 bytes each (7 pages), one from `suspend_size` and one from `protm_suspend_size`
-(`panthor_sched.c:3506-3513`), so both fields are 24577..28672 and equal after
+(`panthor_sched.c:3506-3520`), so both fields are 24577..28672 and equal after
 page rounding; a group of one queue also has a 4096-byte sync object page, a 4096-byte
 ring buffer, an 8192-byte "Queue FW interface" (one 4 KiB input and one 4 KiB output
 page) and a 4096-byte "Group job stats" page. The seven "FW section" objects are
@@ -1550,7 +1550,7 @@ the jump and after the return).**
   the supply enabled through panthor's `mali-supply` even with the domain
   off: `regulator_summary` use count 1) and from the image. Nothing in
   Linux's kexec path turns it off (rk8xx_shutdown does nothing for the
-  RK806, rk8xx-core.c:667-693).
+  RK806, rk8xx-core.c:668-693).
 - **The RK806 read.** Read as Linux reads it (a 3-byte command, then a
   receive-only phase, one chip select; `spi_write_then_read`), the image
   gets Linux's values. The same command and one more frame in a single
@@ -1565,7 +1565,7 @@ the jump and after the return).**
   is only `assigned-clock-rates` at boot (panthor's probe prints 198 MHz:
   GPLL 1188 MHz / 6). The T6's BL31 is Rockchip's closed binary (v1.48,
   "v2.3-868-g040d2de11" on the UART), so what clock 5 does is not readable;
-  upstream TF-A's rk3588 SCMI clock writes the same `CLKSEL_CON(158)` and
+  upstream TF-A's (v2.13.0) rk3588 SCMI clock writes the same `CLKSEL_CON(158)` and
   switches it to the PVTPLL for 300-1000 MHz. So the image relies on the
   CRU as it reads it, rates it itself, and refuses the PVTPLL.
 - **Power-on to L2.** PD_GPU came on (`REPAIR_STATUS` 0xfad40003, bus out of
@@ -1770,7 +1770,7 @@ MCU's: `panthor_vm_active` always gives the MCU VM slot 0, `panthor_mmu.c:755-75
   other << 8)`, `CACHE_CLEAN` 1, `CACHE_INV` 2: L2 and LSC cleaned and
   invalidated 0x3304 (`FLUSH_MEM`), the L2 only 0x0304 (`FLUSH_PT`): the L2
   always cleaned and invalidated, the LSC only for `FLUSH_MEM`
-  (`panthor_mmu.c:574-590`; `panthor_regs.h:50-56`).
+  (`panthor_mmu.c:575-590`; `panthor_regs.h:50-56`).
 
 **The sequences.**
 
