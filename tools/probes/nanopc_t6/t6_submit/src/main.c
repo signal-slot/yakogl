@@ -15,6 +15,8 @@
  * t6-verdict.sh judges (a 64-bit field 0x%016llx, a register word 0x%08x, a
  * count or time decimal), then PASS or FAIL and the reset. Every Z4 region is __nocache storage with PA = CPU
  * address; the watchdog is fed around the call, by on_handover and by every delay_us.
+ * When Z1's power-on stops, Z1's record follows the Z3 stop line, as t6_gpu
+ * prints it (../common/t6_z1.c).
  */
 #include <zephyr/kernel.h>
 #include <zephyr/kernel/internal/mm.h>
@@ -28,6 +30,8 @@
 
 #include <nanopc_t6.h>
 #include <yakogl_drivers.h>
+
+#include "t6_z1.h"
 
 #include "fw/mali_csffw_blob.h"
 
@@ -239,6 +243,7 @@ int main(void)
 	mm_reg_t cru, pmu, spi2, qos, gpu;
 	struct yd_t6_fw_backing backings[SECTIONS];
 	struct yd_t6_submit_mem mem = { 0 };
+	static struct yd_t6_gpu_up z1; /* 500 bytes: not on main()'s stack */
 	static struct yd_t6_submit_up o;
 	int64_t t0;
 	int rc;
@@ -286,7 +291,7 @@ int main(void)
 	t0 = k_uptime_get();
 	rc = yd_t6_submit(cru, pmu, spi2, qos, gpu, mali_csffw_blob, MALI_CSFFW_SIZE, backings,
 			  SECTIONS, t6_submit_pool, POOL_PAGES, k_mem_phys_addr(t6_submit_pool),
-			  TIMER_HZ, &mem, clean, delay_us, on_handover, &o);
+			  TIMER_HZ, &mem, clean, delay_us, on_handover, &z1, &o);
 	t6_watchdog_feed();
 	printk("t6_submit: Z3: rc %d step %u, %lld ms\n", rc, o.fw.step,
 	       (long long)(k_uptime_get() - t0));
@@ -298,6 +303,9 @@ int main(void)
 			printk("t6_submit: Z3: stop %u refusal %u detail 0x%08x%08x acked 0x%08x\n",
 			       o.fw.stop, o.fw.refusal, o.fw.detail[1], o.fw.detail[0],
 			       o.fw.acked);
+		}
+		if (o.fw.step == YD_T6_FW_STEP_GPU) {
+			t6_z1_print_stop("t6_submit", &z1);
 		}
 		if (o.fw.step == YD_T6_FW_STEP_NONE || o.fw.step >= YD_T6_FW_STEP_BOOT) {
 			print_z3(&o.fw);

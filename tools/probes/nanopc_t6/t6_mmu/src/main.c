@@ -4,7 +4,8 @@
  * t6_mmu: Z2 on the NanoPC-T6 (driver/docs/nanopc-t6-mali.md, "Z2: AS0 and
  * a cache flush"). Before main() the board glue has armed WDT0
  * (nanopc_t6.c). This runs Z1's power-on (yd_t6_gpu_up, as t6_gpu) and
- * prints its outcome in one line; then yd_t6_mmu_up (board::nanopc_t6_mmu
+ * prints its outcome in one line (and, when it stops, Z1's record as t6_gpu
+ * prints it, ../common/t6_z1.c); then yd_t6_mmu_up (board::nanopc_t6_mmu
  * in the drivers crate): AS0 and the interrupt state as found, one cache
  * flush round trip, AS0's tables built in this image's .bss with the MCU's
  * shared-interface section (VA 0x04000000, 64 KiB) mapped to a buffer of
@@ -24,6 +25,8 @@
 
 #include <nanopc_t6.h>
 #include <yakogl_drivers.h>
+
+#include "t6_z1.h"
 
 #define CRU_PHYS  0xfd7c0000UL
 #define PMU_PHYS  0xfd8d8000UL
@@ -101,7 +104,7 @@ static bool reached(uint32_t stop, uint32_t step)
 int main(void)
 {
 	mm_reg_t cru, pmu, spi2, qos, gpu;
-	struct yd_t6_gpu_up z1;
+	struct yd_t6_gpu_up z1 = { 0 };
 	struct yd_t6_mmu_up o;
 	uint64_t tables_pa, backing_pa;
 	int64_t t0;
@@ -123,9 +126,14 @@ int main(void)
 	printk("t6_mmu: Z1: rc %d stop %u refusal %u: GPU_ID 0x%08x MMU_FEATURES 0x%08x "
 	       "AS_PRESENT 0x%08x L2_READY 0x%x\n",
 	       rc, z1.stop, z1.refusal, z1.ident[0], z1.ident[4], z1.ident[5], z1.l2_ready[0]);
+	if (rc == -EINVAL) {
+		printk("t6_mmu: FAIL: yd_t6_gpu_up refused its arguments\n");
+		t6_reset_to_linux("t6_mmu done");
+	}
 	if (rc != 0) {
+		t6_z1_print_stop("t6_mmu", &z1);
 		printk("t6_mmu: FAIL: Z1's power-on stopped (stop %u, refusal %u, detail "
-		       "0x%08x%08x); run t6_gpu for its lines\n",
+		       "0x%08x%08x)\n",
 		       z1.stop, z1.refusal, z1.detail[1], z1.detail[0]);
 		t6_reset_to_linux("t6_mmu done");
 	}

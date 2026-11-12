@@ -1860,9 +1860,12 @@ What each value is, and what a wrong one would mean:
   result belongs to; the WDT0 line is Z1's arming — period 22369 ms as
   measured, fed until 60000 ms of uptime as the lifetime says.
 - **`Z1: rc 0 …`.** As `t6_gpu` measured it. Anything else stops the
-  run there (`t6_mmu: FAIL: Z1's power-on stopped (stop N, refusal R,
-  detail 0x…); run t6_gpu for its lines`): a Z1 or hand-over
-  regression, not a Z2 one.
+  run there: Z1's record follows, the lines `t6_gpu` prints (the
+  hand-over, the clock set, the supply, each step reached) under
+  `t6_mmu:`, then `t6_mmu: Z1 stopped: stop N (name), refusal R, detail
+  0x…` and the FAIL line (`tools/probes/nanopc_t6/common/t6_z1.c`;
+  `t6_fw` and `t6_submit` print the same record after their Z3 stop
+  line). A Z1 or hand-over regression, not a Z2 one.
 - **`AS0 as found`.** `TRANSTAB`, `MEMATTR`, `STATUS`, `FAULTSTATUS`
   and `FAULTADDRESS` 0 after Z1's soft reset; `TRANSCFG` and `LOCKADDR`
   recorded, not predicted (Armbian's panthor had AS0 enabled, and how

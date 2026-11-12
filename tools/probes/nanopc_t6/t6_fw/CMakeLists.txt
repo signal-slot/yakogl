@@ -26,7 +26,9 @@ endif()
 target_compile_definitions(app PRIVATE T6_FW_BUILD="${T6_FW_BUILD}")
 message(STATUS "t6_fw build: ${T6_FW_BUILD}")
 
-target_sources(app PRIVATE src/main.c)
+# Z1's record, shared by the probes that run Z1's power-on.
+target_sources(app PRIVATE src/main.c ../common/t6_z1.c)
+target_include_directories(app PRIVATE ../common)
 # main.c includes "fw/mali_csffw_blob.h".
 target_include_directories(app PRIVATE "${PVR_REPO}/src")
 
