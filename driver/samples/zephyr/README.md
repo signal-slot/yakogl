@@ -33,6 +33,7 @@ board (`-b`) picks the GPU, and what differs per board is in the sample's
 | `examples/slint` | the Slint demo (outside this directory): kept working on every board, not a test or a benchmark |
 | `gc_fence` | Vivante bring-up: one kick whose fence retires through the interrupt (fence, interrupts, elapsed time) |
 | `gc_clear` | Vivante bring-up: a resolve-engine clear of a small target read back by the CPU (wrong pixels) |
+| `gc_triangle` | Vivante bring-up: one Gouraud triangle, its three apexes read back by the CPU (failing checks) |
 
 The earlier per-GPU samples (`gc_*`, `v3d_*`, `gl_triangle`, `gl_femtovg`, ...)
 are gone: their boards became board configurations of these, the probes that

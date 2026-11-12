@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config GC_TRIANGLE_WIDTH
+	int "Render target width, pixels (a multiple of 16)"
+	default 256
+	range 64 2048
+	help
+	  The clear's resolve engine takes widths in multiples of 16 only;
+	  the sample asserts it at build time.
+
+config GC_TRIANGLE_HEIGHT
+	int "Render target height, pixels"
+	default 128
+	range 64 2048
+
+config GC_TRIANGLE_WAIT_MS
+	int "Bound on the wait for each fence, ms"
+	default 1000
+	range 1 10000
+	help
+	  gc_render_wait()'s bound. Past it the render service dumps the
+	  GPU's state, resets it, and the run fails at the wait.
+
+source "Kconfig.zephyr"
