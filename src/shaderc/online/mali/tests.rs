@@ -2166,6 +2166,34 @@ fn equal_varying_lanes_are_merged_as_mesa_26_2_1() {
     check_linked_for("fsload_dup", td!("fsload_dup.vert"), td!("fsload_dup.frag"), td!("fsload_dup.expect.json"));
     let (vs, fs, json) = (td!("fsload_dup_swz.vert"), td!("fsload_dup_swz.frag"), td!("fsload_dup_swz.expect.json"));
     check_linked_for("fsload_dup_swz", vs, fs, json);
+    /* equal on both sides of a vertex `if` (Mesa compares the stores
+     * block by block, nir_opt_varyings.c:3150-3160) */
+    let (vs, fs, json) = (td!("fsload_dup_if.vert"), td!("fsload_dup_if.frag"), td!("fsload_dup_if.expect.json"));
+    check_linked_for("fsload_dup_if", vs, fs, json);
+    /* a join of two values in both: refused, not merged (its vertex
+     * words are not this back end's) */
+    let (vs, fs) = (td!("fsload_dup_phi.vert"), td!("fsload_dup_phi.frag"));
+    let _k = store::test_keep();
+    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
+        .expect("the scratch arena is free")
+        .expect("the vertex shader's constant lanes");
+    let f = store::with_scratch(|s| {
+        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
+    })
+    .expect("the scratch arena is free")
+    .expect("the fragment shader compiles for the vertex shader");
+    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    let r = store::with_scratch(|s| {
+        let pr = super::reads_at_vertex_locations(&pr, fs.as_bytes(), vs.as_bytes(), s)
+            .expect("both stages lower")
+            .expect("every read is a vertex output");
+        super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep()).map(|_| ())
+    })
+    .expect("the scratch arena is free");
+    match r {
+        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, MaliError::VaryingDuplicate),
+        other => panic!("fsload_dup_phi: the vertex shader is not refused by name: {other:?}"),
+    }
 }
 
 const SEL_U_FAU65: &str = td!("sel_u_fau65.vert");

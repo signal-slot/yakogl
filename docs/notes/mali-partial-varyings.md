@@ -141,7 +141,11 @@ that measures it.
    interpolation qualifier are equal (`get_input_qualifier`'s tables,
    nir_opt_varyings.c:3042-3136, 3298-3305): two flat ones merge
    (fsload_qual4); a flat and a smooth one stay apart, a layout refused
-   here (fsload_qual1-3: `VaryingNotFromAttribute`).
+   here (fsload_qual1-3: `VaryingNotFromAttribute`). Mesa compares the
+   stores block by block (:3150-3160): two lanes a vertex `if` writes
+   with the same value on both sides merge (fsload_dup_if); two that join
+   the same two values are refused, their join's vertex words not being
+   this back end's (fsload_dup_phi: `VaryingDuplicate`).
 4. **Loads.** `nir_unlower_io_to_vars` (st_program.c:872) makes one
    variable of each slot's lanes. The fragment shader loads a slot it
    reads a lane of at that width (`component + num_components`,
