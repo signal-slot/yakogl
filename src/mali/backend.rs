@@ -275,6 +275,13 @@ pub const NOT_BUILT_TEXTURE_FEEDBACK: &str =
 /// frame builds the vertex texture and sampler tables for one
 /// (`DrawCall::vs_texture`), and a look-up past it would read a descriptor
 /// out of the table (docs/notes/mali-vs-lookups.md §3.3 step 4).
+/// A cube map look-up (`TEX_SINGLE ... .cube`, [`MaliShader::cube_samplers`])
+/// whose unit has no complete cube map: GL reads (0, 0, 0, 1) there, which
+/// Mesa samples from a 1x1 cube of six faces (st/mesa's fallback texture,
+/// texobj.c `_mesa_get_fallback_texture`). This backend's black texel is a
+/// 2D image, and a cube look-up through a 2D descriptor has no reference.
+pub const NOT_BUILT_CUBE_INCOMPLETE: &str =
+    "mali: a cube map look-up whose unit has no complete cube map (GL's black texel as a cube) is not built yet";
 pub const NOT_BUILT_VERTEX_TEXTURES: &str = "mali: a vertex shader that reads more than one texture is not built yet";
 /// A frame starts from the old image and the preload program did not build
 /// at init (its log line says why).
@@ -2143,9 +2150,9 @@ fn fs_textures(
     if bindings.len() > frame::MAX_STAGE_TEXTURES {
         return Err(FrameError::NotBuilt(frame::NOT_BUILT_TEXTURE_SIZE));
     }
-    let mut out = [texture_of(sampled_bind(d, false, first), data)?; frame::MAX_STAGE_TEXTURES];
-    for (slot, &b) in out.iter_mut().zip(bindings).skip(1) {
-        *slot = texture_of(sampled_bind(d, false, b), data)?;
+    let mut out = [stage_texture(d, false, 0, first, data)?; frame::MAX_STAGE_TEXTURES];
+    for (i, (slot, &b)) in out.iter_mut().zip(bindings).enumerate().skip(1) {
+        *slot = stage_texture(d, false, i, b, data)?;
     }
     Ok(Some((out, bindings.len())))
 }
@@ -2154,10 +2161,33 @@ fn fs_textures(
 /// for a vertex shader that samples nothing.
 fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option<frame::SampledTexture>, FrameError> {
     match sampler_bindings(d, vertex) {
-        [b] => texture_of(sampled_bind(d, vertex, *b), data).map(Some),
+        [b] => stage_texture(d, vertex, 0, *b, data).map(Some),
         [] => Ok(None),
         _ => Err(FrameError::NotBuilt(NOT_BUILT_VERTEX_TEXTURES)),
     }
+}
+
+/// The texture at descriptor index `index` of the draw's fragment (or,
+/// `vertex`, vertex) shader, sampler binding `binding` ([`texture_of`]).
+/// A cube look-up needs a complete cube map on its unit: GL's black texel
+/// is bound as a 2D image here, so a unit with none, or an incomplete one,
+/// is refused by name ([`NOT_BUILT_CUBE_INCOMPLETE`]).
+fn stage_texture(
+    d: &GlesDraw,
+    vertex: bool,
+    index: usize,
+    binding: u8,
+    data: &mut Pool,
+) -> Result<frame::SampledTexture, FrameError> {
+    let bind = sampled_bind(d, vertex, binding);
+    let sh = if vertex { d.vs } else { d.fs };
+    // SAFETY: as in `sampler_bindings`.
+    let cubes = unsafe { sh.as_ref() }.and_then(MaliShader::of).map_or(0, |r| r.cube_samplers);
+    let cube = cubes.checked_shr(index as u32).is_some_and(|c| c & 1 != 0);
+    if cube && bind.is_none_or(|t| t.incomplete != 0) {
+        return Err(FrameError::NotBuilt(NOT_BUILT_CUBE_INCOMPLETE));
+    }
+    texture_of(bind, data)
 }
 
 /// The texture a look-up of `bind` reads: its

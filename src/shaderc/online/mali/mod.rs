@@ -669,6 +669,11 @@ pub struct MaliShader<'k> {
     /// `u_s0` .. `u_s15` of a vertex shader; each look-up's handle names
     /// its index, [`nir_fs::tex_handle`]).
     pub samplers: &'k [u8],
+    /// Bit i: the look-up at descriptor index i ([`MaliShader::samplers`]
+    /// `[i]`) is a cube map's (`TEX_SINGLE ... .cube`), whose texture
+    /// descriptor must be a cube's: the draw refuses a unit with no
+    /// complete cube map for it (src/mali/backend.rs `fs_textures`).
+    pub cube_samplers: u64,
     /// Fragment: the uniform block the program loads from memory (an
     /// `LD_PKA` of a uniform array element at a run-time index), in Mesa's
     /// packed layout ([`select::UboLayout`]'s rows), which the frame uploads
@@ -1203,6 +1208,7 @@ fn compile_stage<'s>(
         moved: &[],
         sampler: None,
         samplers: &[],
+        cube_samplers: 0,
         helper_threads: false,
         can_discard: false,
         ubo: &[],
@@ -1283,6 +1289,12 @@ fn compile_stage<'s>(
             sc.nsamplers = sc.nsamplers.max(i + 1);
         }
         sc.info.sampler = sc.samplers[..sc.nsamplers].first().copied();
+        for &id in &vs.order[..vs.len] {
+            if let nir::Kind::VsTex { cube: true, index, .. } = vs.nodes[id as usize].kind {
+                sc.info.cube_samplers |=
+                    1u64.checked_shl(u32::from(index)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            }
+        }
         if var.words > 0 {
             sc.info.secondary = Some(Secondary {
                 offset: (pos_words * 8) as u32,
@@ -1442,6 +1454,9 @@ fn compile_stage<'s>(
             sc.nsamplers = sc.nsamplers.max(i + 1);
         }
         sc.info.sampler = sc.samplers[..sc.nsamplers].first().copied();
+        for (_, t) in f.live_look_ups().filter(|(_, t)| t.cube.is_some()) {
+            sc.info.cube_samplers |= 1u64.checked_shl(u32::from(t.index)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+        }
         /* a program with an `LD_PKA` reads the block from memory: the frame
          * uploads it in this layout (Mesa's `ubo_mask` bit 0) */
         if f.nubo > 0 {
