@@ -25,6 +25,8 @@ pub use imx8mp_dsi::*;
 #[cfg(any(feature = "imx8mp", test))]
 pub use imx_wdog::*;
 #[cfg(any(feature = "stm32mp2", test))]
+pub use mp25_display::*;
+#[cfg(any(feature = "stm32mp2", test))]
 pub use mp25_i2c::*;
 #[cfg(any(feature = "rk3588", test))]
 pub use rk3588::*;
@@ -56,6 +58,12 @@ mod imx8mp_dsi;
 /// driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c): src/ffi/imx_wdog.rs.
 #[cfg(any(feature = "imx8mp", test))]
 mod imx_wdog;
+/// The STM32MP257F-DK's display path (`yakogl,stm32-ltdc`, `yakogl,stm32-dsi`,
+/// `yakogl,adv7535`; ip::stm32_ltdc, ip::dw_mipi_dsi over ip::stm32_dsi_phy,
+/// ip::adv7535, crate::video): src/ffi/mp25_display.rs,
+/// include/yakogl_mp25_display.h.
+#[cfg(any(feature = "stm32mp2", test))]
+mod mp25_display;
 /// The MP2's I2C controller (`yakogl,stm32mp2-i2c`, ip::stm32_i2c):
 /// src/ffi/mp25_i2c.rs, include/yakogl_mp25_i2c.h.
 #[cfg(any(feature = "stm32mp2", test))]
