@@ -1437,6 +1437,9 @@ pub struct DrainRefused {
     pub at: Drained,
 }
 
+// drained's look counts its budget in steps of JOB_POLL_US
+const _: () = assert!(CS_ACK_WAIT_US.is_multiple_of(JOB_POLL_US));
+
 /// The stream drained: after [`wait`] saw the job done, the output page's
 /// `extract` polled every [`JOB_POLL_US`] until it equals the input page's
 /// `insert`, within [`CS_ACK_WAIT_US`]; otherwise
@@ -1463,9 +1466,6 @@ pub struct DrainRefused {
 /// ([`job::check_ring_fit`]), so a job submitted before `extract` caught
 /// up is refused as [`SchedRefusal::RingOverflow`] although the ring is
 /// free.
-const _: () = assert!(CS_ACK_WAIT_US.is_multiple_of(JOB_POLL_US));
-
-#[allow(clippy::too_many_arguments)]
 pub fn drained(
     m: &impl Mmio,
     gpu: usize,
