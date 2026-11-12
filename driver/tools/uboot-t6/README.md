@@ -125,18 +125,54 @@ A directory entry `/boot/yakogl` is the only change on the partition, and
 - The GPU's clock, PD_GPU and vdd_gpu_s0 from U-Boot's state: the Z1 power-on
   was written for it (handover note), and is also unproven there.
 
-## Not compiled here
+## Compiled with v2026.07 mkimage
 
-`mkimage` is not installed on the host. One was built from the v2026.07
-tree (`make sandbox_defconfig tools-only`, builds clean) but running it was
-refused in both sessions that tried, so the script's compilation with
-`mkimage -T script` is unchecked: the owner's host runs the command above
-(and `dumpimage -l` on the result) before staging.
+The script compiles clean. The host had no `mkimage` installed, so the tools
+came from the v2026.07 tag (commit `ece349ad`, the commit U-Boot
+2026.07_armbian names) built host-tools-only:
 
-The commands and variables the script uses were checked against the v2026.07
-source instead: `exit` (cmd/exit.c:22), `itest` incl. `-lt`/`-gt` and `*addr`
-(cmd/itest.c), `setexpr` (cmd/setexpr.c), `ext4size`/`ext4load`
-(cmd/ext4.c:73, :86), `icache`/`dcache` (cmd/cache.c), `go` (cmd/boot.c:50),
-and `scriptaddr=0x00c00000` for the RK3588 (include/configs/rk3588_common.h:22).
+```sh
+make O=<build-dir> tools-only_defconfig
+# then, for a host without gnutls dev headers: drop CONFIG_TOOLS_MKEFICAPSULE
+# (scripts/config --disable TOOLS_MKEFICAPSULE; make olddefconfig)
+make O=<build-dir> tools-only
+```
+
+The build is clean; `mkimage -V` says `mkimage version 2026.07`. The compile
+of the draft:
+
+```sh
+mkimage -A arm64 -O linux -T script -C none -n t6-zephyr -d t6-zephyr.cmd t6-zephyr.scr
+```
+
+```
+Image Name:   t6-zephyr
+Created:      Thu Nov 12 22:25:20 2026
+Image Type:   AArch64 Linux Script (uncompressed)
+Data Size:    5020 Bytes = 4.90 KiB = 0.00 MiB
+Load Address: 00000000
+Entry Point:  00000000
+Contents:
+   Image 0: 5012 Bytes = 4.89 KiB = 0.00 MiB
+```
+
+`dumpimage -l` on the `.scr` prints the same lines. The `.cmd` is 5012
+bytes; the `.scr` is 5084: the 64-byte legacy image header, then the script
+type's size table — the file's 4-byte big-endian size, then a 4-byte 0
+end-of-list — then the script byte for byte (its last 5012 bytes compare
+equal to the draft; tools/mkimage.c:688-724). Load address and entry point
+are 0 in the header — a script image's address is `source`'s argument
+(`${scriptaddr}`), and the image's own load address is the script's
+`t6z_load`.
+
+The commands and variables the script uses stand checked against the
+v2026.07 source: `exit` (cmd/exit.c:22), `itest` incl. `-lt`/`-gt` and
+`*addr` (cmd/itest.c:36-50, :59-84; the `.b/.w/.l/.q` name suffix parses in
+cmd_get_data_size, common/command.c:469), `setexpr` with the same suffix
+(cmd/setexpr.c:410), `ext4size`/`ext4load` (cmd/ext4.c:73, :86),
+`icache`/`dcache` (cmd/cache.c), `go` (cmd/boot.c:50), and
+`scriptaddr=0x00c00000` for the RK3588 (include/configs/rk3588_common.h:22).
 The `${filesize}` comparisons use `itest`, not `test`: `filesize` is hex
-without `0x` and `test` reads base 0 (cmd/test.c:152-173).
+without `0x` and `test` reads base 0 (cmd/test.c:152-173). Compiling with
+`mkimage -T script` does not read the script body — it stores it — so the
+compile and these citations together stand for the hush check.
