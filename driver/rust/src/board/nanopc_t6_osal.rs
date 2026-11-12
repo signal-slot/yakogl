@@ -14,7 +14,7 @@
 //! | --- | --- | --- |
 //! | the ring and the sync object | [`QUEUE_VA`] | [`Mapping::Queue`]: no-exec, uncached |
 //! | the heap's pool (heap 0's context) | [`HEAP_POOL_VA`] | [`Mapping::Heap`] |
-//! | the heap's chunks, all made at the start | [`HEAP_CHUNK_VA`] | [`Mapping::Heap`] |
+//! | the heap's chunks, `heap_initial_chunks` made at the start, the rest on `CS_TILER_OOM` | [`HEAP_CHUNK_VA`] | [`Mapping::Heap`] |
 //! | the carve-out every `gpu_alloc` comes from | [`CARVE_VA`] | [`Mapping::User`]: executable, GPU-cached |
 //!
 //! The carve-out is mapped once, whole, so an allocation is a range of its
@@ -33,24 +33,81 @@
 //! sync object reaching it ([`Osal::wait`]); `completed` reads the sync
 //! object without waiting.
 //!
-//! What this does not do (K2): a fault, fatal, tiler OOM, protected-mode
-//! or progress event, a refused wait or the 5 s job timeout leaves the OSAL
-//! dead ([`Osal::dead`]): every later submit and wait is `-EIO`, nothing is
-//! reset or restarted. The heap never grows. `map_phys` outside the
-//! carve-out is `-ENOTSUP`.
+//! The tiler heap is the OSAL's: its pool in the pool region, its chunks
+//! in the chunk region's 2 MiB slots, lowest free first ([`HeapMem`]). It
+//! starts with `heap_initial_chunks` ([`OsalMem`]) and grows to every slot
+//! of the region: a `CS_TILER_OOM` seen by a wait, a submit or `completed`
+//! is handled as panthor's `group_process_tiler_oom` does
+//! ([`sched::service_tiler_oom`] with [`heap::grow`]); with no slot left,
+//! or more render passes in flight than the heap's target, it is answered
+//! with no chunk (panthor's `-ENOMEM`: the firmware waits).
+//!
+//! # Recovery
+//!
+//! A fault, a fatal, a protected-mode or progress-timer event, an OOM the
+//! heap refuses, a sync object with an error, a 64-bit read that does not
+//! settle, or panthor's 5 s job timeout, seen by a wait, a submit or
+//! `completed`, restarts the group ([`Osal::recover`]): every kick the
+//! sync object does not show complete (read once, unless its `status` is
+//! the error) is lost (its fence completes, so the backend frees its slot,
+//! and a wait for it is `-EIO`), CS 0 is stopped and CSG 0 terminated,
+//! the GPU's L2 and LSC cleaned and invalidated ([`Osal::clean_caches`];
+//! only then do the held frees go back), the heap made again, CSG 0 / CS 0 started
+//! again over the same memory with an empty ring ([`sched::restart`]), and
+//! the queue-init stream (`HEAP_SET` of the heap context, Z4's
+//! [`z4::QUEUE_INIT`], at [`INIT_VA`]) run and waited for, since a new
+//! stream has no heap context. The next kick goes on with the next fence.
+//! At most [`RESTART_BUDGET`] restarts in an image: the error after the
+//! last ends the group (stopped and terminated) and leaves the OSAL dead.
+//! panthor goes on after a `CS_FAULT` (the stream reaches its
+//! `ERROR_BARRIER`) and never starts a failed group again (user space makes
+//! a new one, panthor_sched.c:1925-1931); here every error takes the one
+//! path, and the module's one group is the one made again.
+//!
+//! Fences are the ring's sequence numbers plus a base: 0 until the first
+//! restart, then the fence before the queue-init job's, so that job (ring
+//! sequence number 1) is the last fence already complete and the next
+//! kick is `submitted + 1`.
+//!
+//! [`Osal::shutdown`] waits for the last kick, then stops CS 0 and
+//! terminates CSG 0, as panthor ends a destroyed group, and cleans the GPU
+//! caches as a restart does; later kicks are
+//! `-EIO` and frees give their pages back at once. A full pending-free
+//! queue waits for its oldest kick (src/osal/pending_frees.h's rule).
+//!
+//! What needs a GPU reset is not done (panthor resets the device): a group
+//! state none of the four, a `CS_FATAL` of type `CS_UNRECOVERABLE`, a start
+//! or terminate not acknowledged, a restart or a queue-init job refused.
+//! The OSAL is then dead ([`Osal::dead`]): every later submit and wait is
+//! `-EIO`. When the group's end was not acknowledged, or not asked (the
+//! errors that need a reset), the GPU may still run it ([`Osal::unended`]):
+//! the held frees stay held and `alloc` is `-EIO`, so no page a kick used
+//! is handed out again. The same after a shutdown whose terminate was not
+//! acknowledged. A refused GPU cache clean after an acknowledged end keeps
+//! the memory too ([`Osal::memory_kept`]), but the group is known ended:
+//! the two facts are kept apart. A refused CS stop alone changes neither;
+//! the terminate after it decides (counted, [`Osal::stops_refused`]). A
+//! restart refused after its start was asked (the start not
+//! acknowledged, or the queue-init job refused) leaves the new group
+//! stopped and terminated, or not ended where panthor would reset the GPU
+//! ([`Osal::end_failed_restart`]); the counts' `unended`, `memory_kept`
+//! and the UART's stop line say which. `map_phys` outside the carve-out is
+//! `-ENOTSUP`.
 
 use super::nanopc_t6_gpu::{Bases, GpuUp};
 use super::nanopc_t6_sections::Backing;
 use super::nanopc_t6_submit::{
     self as z4, GroupBacking, GroupUp, HeapPlace, Mapping, McuBacking, Region, SubmitUp, Z4Mem, HEAP_CTX_VA,
-    HEAP_POOL_SIZE, LATEST_FLUSH_ID, QUEUE_VM_BYTES,
+    HEAP_POOL_SIZE, LATEST_FLUSH_ID, MAX_HEAP_CHUNKS, QUEUE_VM_BYTES, RING_SIZE,
 };
-use crate::errno::{EINVAL, EIO, ENOMEM, ENOSPC, ENOTSUP};
-use crate::gpu::mali::heap::OsalMaliHeap;
+use crate::errno::{EBUSY, EINVAL, EIO, ENOMEM, ENOSPC, ENOTSUP, ETIMEDOUT};
+use crate::gpu::mali::heap::{
+    self, Allocation, HeapError, HeapMemory, HeapObject, HeapParams, HeapParts, HeapPool, OsalMaliHeap,
+};
 use crate::gpu::mali::pgtable::{Table, PAGE};
 use crate::gpu::mali::sched::job::JOB_BYTES;
-use crate::gpu::mali::sched::{self, Job, SchedRefusal, JOB_TIMEOUT_US};
-use crate::gpu::mali::{csf, fw};
+use crate::gpu::mali::sched::{self, Ended, Job, SchedRefusal, TilerOom, JOB_TIMEOUT_US};
+use crate::gpu::mali::{self as mali, csf, fw};
 use crate::mmio::Mmio;
 
 /// The group VM's regions (the module's table). The queue's is Z4's; the
@@ -69,6 +126,26 @@ pub const MAX_CARVE_PAGES: usize = 64 * 1024;
 /// kept (`-ENOSPC`), as src/osal/pending_frees.h does without its wait.
 pub const PENDING_FREES: usize = 256;
 
+/// Restarts in one image; the error after the last ends the group and
+/// leaves the OSAL dead ([`SchedRefusal::RestartBudget`]). Why 16: a
+/// restart (a terminate, a start in the same slot, a queue-init job) has
+/// not yet run on the board, and a fault that comes back on every kick
+/// would otherwise drive one such cycle and one UART line per kick, for
+/// the whole of a dEQP run. 16 is far above what a GL run that works needs
+/// (none), and it keeps every lost fence known exactly ([`LOST_RANGES`]).
+/// Raise it once a board run has shown restarts work.
+pub const RESTART_BUDGET: u32 = 16;
+/// Lost fence ranges a wait answers `-EIO` for: one a restart, one for
+/// the error past the budget or the shutdown. Every range is kept.
+pub const LOST_RANGES: usize = RESTART_BUDGET as usize + 1;
+/// Where a restart's queue-init stream lies: the queue region's page after
+/// the 16-byte sync object, from the next 64-byte boundary (the ring and
+/// the sync object take [`RING_SIZE`] + 16 bytes of the region's
+/// [`QUEUE_VM_BYTES`]). The ring itself is no-exec there, as panthor maps
+/// it, and the command stream frontend runs it.
+pub const INIT_VA: u64 = QUEUE_VA + RING_SIZE as u64 + 64;
+
+const _: () = assert!(INIT_VA + 8 * z4::QUEUE_INIT.len() as u64 <= QUEUE_VA + QUEUE_VM_BYTES);
 const _: () = assert!(HEAP_POOL_VA + HEAP_POOL_SIZE <= HEAP_CHUNK_VA);
 const _: () = assert!(QUEUE_VA + QUEUE_VM_BYTES <= HEAP_POOL_VA);
 
@@ -89,6 +166,9 @@ const _: () = assert!(core::mem::size_of::<OsalMaliGpu>() == 16);
 /// queue's AS0 memory (user pages, suspend buffers; at
 /// [`z4::QUEUE_MCU_VA`]), the four group-VM regions' backings (the
 /// module's table), and the group VM's table pages at `vm_tables_pa`.
+/// `heap_initial_chunks` of the chunk region's 2 MiB slots are the heap's
+/// at the start; the others are its growth (1 to all of them, at most
+/// [`MAX_HEAP_CHUNKS`]).
 pub struct OsalMem<'a> {
     pub queue: McuBacking,
     pub ring: GroupBacking,
@@ -97,6 +177,101 @@ pub struct OsalMem<'a> {
     pub carve: GroupBacking,
     pub vm_pool: &'a mut [Table],
     pub vm_tables_pa: u64,
+    pub heap_initial_chunks: u32,
+}
+
+/// The tiler heap's memory ([`HeapMemory`]): the pool region, handed out
+/// once, and the chunk region's 2 MiB slots, the lowest free first, each
+/// at its own VA ([`HEAP_CHUNK_VA`] plus its offset). The errors: 1 the
+/// pool asked twice or larger than its region, 2 a chunk of another size,
+/// 3 no slot free.
+struct HeapMem {
+    pool: GroupBacking,
+    chunks: GroupBacking,
+    pool_taken: bool,
+    slots: u32,
+    used: u64,
+}
+
+const _: () = assert!(MAX_HEAP_CHUNKS <= u64::BITS as usize);
+
+impl HeapMem {
+    const EMPTY: HeapMem = HeapMem {
+        // SAFETY: empty backings; nothing is read or written through them.
+        pool: unsafe { GroupBacking::new(0, 0, 0) },
+        chunks: unsafe { GroupBacking::new(0, 0, 0) },
+        pool_taken: false,
+        slots: 0,
+        used: 0,
+    };
+}
+
+// SAFETY: the pool and the chunk region are the OSAL's backings, mapped in
+// the group VM at HEAP_POOL_VA and HEAP_CHUNK_VA (`regions`) for the GPU
+// and uncached for the CPU, used by nothing else (OsalMem's contract, which
+// GroupBacking::new's carries); the pool is handed out once and each chunk
+// slot to one allocation at a time, so no two allocations overlap.
+unsafe impl HeapMemory for HeapMem {
+    type Error = u32;
+    fn alloc(&mut self, size: u64, what: HeapObject) -> Result<Allocation, u32> {
+        match what {
+            HeapObject::Pool => {
+                if self.pool_taken || size > self.pool.size() {
+                    return Err(1);
+                }
+                self.pool_taken = true;
+                Ok(Allocation { cpu: self.pool.cpu(), gpu: HEAP_POOL_VA, size })
+            }
+            HeapObject::Chunk => {
+                if size != u64::from(HEAP_CHUNK_SIZE) {
+                    return Err(2);
+                }
+                let i = (!self.used).trailing_zeros();
+                if i >= self.slots {
+                    return Err(3);
+                }
+                self.used |= 1 << i;
+                let off = u64::from(i) * size;
+                Ok(Allocation { cpu: self.chunks.cpu() + off as usize, gpu: HEAP_CHUNK_VA + off, size })
+            }
+        }
+    }
+    fn free(&mut self, a: Allocation) {
+        if a.gpu >= HEAP_CHUNK_VA {
+            let i = (a.gpu - HEAP_CHUNK_VA) / u64::from(HEAP_CHUNK_SIZE);
+            self.used &= !(1u64 << i);
+        }
+    }
+}
+
+/// The heap's `grow` for [`sched::service_tiler_oom`]: [`heap::grow`] of
+/// the heap at `parts` and `list` for the event's heap context and counts.
+/// Its value; 0 for panthor's `-ENOMEM` (more render passes in flight than
+/// the target, every chunk made, no slot: the firmware waits); any other
+/// refusal is [`SchedRefusal::HeapGrow`] with [`z4::heap_error_code`]'s
+/// number, as panthor makes the queue fatal (panthor_sched.c:1496-1499).
+fn grow_heap(
+    pool: Option<&HeapPool>,
+    mem: &mut HeapMem,
+    parts: &mut HeapParts,
+    list: &mut [Allocation],
+    e: &TilerOom,
+) -> Result<u64, (SchedRefusal, u32)> {
+    let refused = |code: u32| (SchedRefusal::HeapGrow, code);
+    let (Some(pool), Some(h)) = (pool, heap::Heap::from_parts(*parts, list)) else {
+        return Err(refused(z4::heap_error_code(&HeapError::<u32>::UnknownHeap { heap_gpu_va: e.heap_address }).0));
+    };
+    let mut heaps = [h];
+    match heap::grow(pool, mem, &mut heaps, e.heap_address, e.renderpasses_in_flight(), e.pending_frag_count()) {
+        Ok(v) => {
+            *parts = heaps[0].parts();
+            Ok(v)
+        }
+        Err(
+            HeapError::InFlightAboveTarget { .. } | HeapError::MaxChunksReached { .. } | HeapError::ChunkAlloc { .. },
+        ) => Ok(0),
+        Err(err) => Err(refused(z4::heap_error_code(&err).0)),
+    }
 }
 
 /// The group VM's regions over `mem`'s backings: each backing cut to whole
@@ -167,11 +342,43 @@ pub struct Osal {
     n_held: usize,
     submitted: u64,
     completed: u64,
+    /// Fence = base + the ring's sequence number (the module doc).
+    base: u64,
+    /// Lost fences, inclusive ranges, oldest first ([`LOST_RANGES`]).
+    lost: [(u64, u64); LOST_RANGES],
+    n_lost: usize,
     dead: Option<Dead>,
+    /// [`Osal::shutdown`] ended the group.
+    down: bool,
+    /// The group is not known ended: its terminate was not acknowledged,
+    /// or never asked for an error that needs a GPU reset. The GPU may
+    /// still run it and write what its kicks used. Implies `memory_kept`.
+    unended: bool,
+    /// The memory the group's kicks used is kept: held frees stay held and
+    /// [`Osal::alloc`] refuses. Set when the group is not known ended, and
+    /// when the GPU cache clean after an acknowledged end was refused (a
+    /// dirty line may still be written back).
+    memory_kept: bool,
+    /// Restarts so far, and what caused the last.
+    pub restarts: u32,
+    last_error: Option<Dead>,
+    /// The tiler heap: its pool, the heap less its chunk list, the list,
+    /// their memory, the chunks it starts with.
+    heap_pool: Option<HeapPool>,
+    heap_initial: u32,
+    heap: HeapParts,
+    heap_list: [Allocation; MAX_HEAP_CHUNKS],
+    heap_mem: HeapMem,
     /// Pages in use now and at most; frees refused (their pages kept).
     pub live_pages: usize,
     pub live_pages_high: usize,
     pub refused_frees: u32,
+    /// `CS_TILER_OOM`s answered with a chunk, and with none.
+    pub oom_chunks: u32,
+    pub oom_no_chunk: u32,
+    /// CS 0 stops not acknowledged at a group's end (its terminate then
+    /// decides whether the group ended).
+    pub stops_refused: u32,
 }
 
 fn bit(map: &[u64], i: usize) -> bool {
@@ -183,6 +390,37 @@ fn set(map: &mut [u64], i: usize, on: bool) {
         map[i / 64] |= 1 << (i % 64);
     } else {
         map[i / 64] &= !(1 << (i % 64));
+    }
+}
+
+/// What [`Osal::shutdown`] did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shutdown {
+    /// CS 0's stop and CSG 0's terminate.
+    pub ended: Ended,
+    /// The GPU's L2 and LSC cleaned after an acknowledged end
+    /// ([`Osal::clean_caches`]); false when the end was refused or the
+    /// clean was.
+    pub cleaned: bool,
+}
+
+impl Shutdown {
+    /// The C entry's answer (`yd_t6_osal_shutdown`), from the terminate
+    /// and the clean, as [`Osal::unended`] and [`Osal::memory_kept`] are:
+    /// 0 when the group was terminated and the caches cleaned; `-EIO` when
+    /// the terminate was refused (the group may still run, the memory is
+    /// kept); `-ETIMEDOUT` when the group ended but the clean was refused
+    /// (the memory is kept). A refused stop alone does not change it: the
+    /// terminate that follows ends the group (counted in
+    /// [`Osal::stops_refused`]).
+    pub fn code(&self) -> i32 {
+        if self.ended.terminate.is_err() {
+            -EIO
+        } else if !self.cleaned {
+            -ETIMEDOUT
+        } else {
+            0
+        }
     }
 }
 
@@ -200,10 +438,26 @@ impl Osal {
         n_held: 0,
         submitted: 0,
         completed: 0,
+        base: 0,
+        lost: [(0, 0); LOST_RANGES],
+        n_lost: 0,
         dead: None,
+        down: false,
+        unended: false,
+        memory_kept: false,
+        restarts: 0,
+        last_error: None,
+        heap_pool: None,
+        heap_initial: 0,
+        heap: HeapParts { id: 0, ctx_gpu: 0, chunk_size: 0, max_chunks: 0, target_in_flight: 0, chunk_count: 0 },
+        heap_list: [Allocation { cpu: 0, gpu: 0, size: 0 }; MAX_HEAP_CHUNKS],
+        heap_mem: HeapMem::EMPTY,
         live_pages: 0,
         live_pages_high: 0,
         refused_frees: 0,
+        stops_refused: 0,
+        oom_chunks: 0,
+        oom_no_chunk: 0,
     };
 
     /// Bring the GPU up and start the group (the module doc): Z1 to Z3 over
@@ -233,20 +487,24 @@ impl Osal {
             return Ok(());
         }
         let pages = (mem.carve.size() / PAGE) as usize;
-        if pages == 0 || pages > MAX_CARVE_PAGES {
+        if pages == 0 || pages > MAX_CARVE_PAGES || mem.ring.size() < QUEUE_VM_BYTES {
             o.step = z4::STEP_VM_MAP;
             o.refusal = 0;
-            o.detail = mem.carve.size();
+            o.detail = if mem.ring.size() < QUEUE_VM_BYTES { mem.ring.size() } else { mem.carve.size() };
             return Err(o.step);
         }
         let regions = regions(&mem);
+        let slots = (regions[2].size / u64::from(HEAP_CHUNK_SIZE)).min(MAX_HEAP_CHUNKS as u64) as u32;
+        let initial = mem.heap_initial_chunks;
+        if initial == 0 || initial > slots {
+            let e = HeapError::<u32>::InitialAboveMax { initial_chunk_count: initial, max_chunks: slots };
+            let (code, v) = z4::heap_error_code(if initial == 0 { &HeapError::ZeroInitialChunks } else { &e });
+            (o.step, o.refusal, o.detail) = (z4::STEP_HEAP, code, v);
+            return Err(o.step);
+        }
         let backs = [mem.ring, mem.heap_pool, mem.heap_chunks, mem.carve];
-        let heap = HeapPlace {
-            pool_va: HEAP_POOL_VA,
-            chunk_va: HEAP_CHUNK_VA,
-            chunk_size: HEAP_CHUNK_SIZE,
-            chunks: (regions[2].size / u64::from(HEAP_CHUNK_SIZE)) as u32,
-        };
+        let heap =
+            HeapPlace { pool_va: HEAP_POOL_VA, chunk_va: HEAP_CHUNK_VA, chunk_size: HEAP_CHUNK_SIZE, chunks: initial };
         let z4mem = Z4Mem { queue: mem.queue, vm: &backs, vm_pool: mem.vm_pool, vm_tables_pa: mem.vm_tables_pa };
         let up = z4::group_up(
             m,
@@ -268,11 +526,99 @@ impl Osal {
         )
         .ok_or(o.step)?;
         *self = Osal::EMPTY;
+        self.heap_mem = HeapMem { pool: mem.heap_pool, chunks: mem.heap_chunks, pool_taken: false, slots, used: 0 };
+        // the heap group_up made, made again by the OSAL's own memory so
+        // that it can grow it: the same bytes at the same addresses
+        let made = self.make_heap(up.id.l2_features, initial);
+        if let Err((code, v)) = made.and_then(|h| if h == up.heap { Ok(()) } else { Err((18, h.first_chunk_gpu)) }) {
+            (o.step, o.refusal, o.detail) = (z4::STEP_HEAP, code, v);
+            o.ended(&sched::stop_and_terminate(m, b.gpu, &up.iface, &up.csg, &up.cs, delay_us));
+            *self = Osal::EMPTY;
+            return Err(o.step);
+        }
         self.up = Some(up);
         self.gpu = b.gpu;
         self.carve = mem.carve;
         self.pages = pages;
+        self.heap_initial = initial;
         Ok(())
+    }
+
+    /// The tiler heap over [`HeapMem`]: its pool, then `initial` chunks of
+    /// Mesa's size, [`HeapMem`]'s slots its most; what the query answers.
+    /// [`Osal::up`] refuses one that is not group_up's (`STEP_HEAP`,
+    /// refusal 18 with its first chunk: the backend's tiler context names
+    /// that chunk). The error: [`z4::heap_error_code`]'s.
+    fn make_heap(&mut self, l2_features: u32, initial: u32) -> Result<OsalMaliHeap, (u32, u64)> {
+        let mut pool = HeapPool::create(&mut self.heap_mem, l2_features).map_err(|e| z4::heap_error_code(&e))?;
+        let params = self.heap_params(initial);
+        let h = heap::create(&mut pool, &mut self.heap_mem, &params, &mut self.heap_list)
+            .map_err(|e| z4::heap_error_code(&e))?;
+        let (parts, made) = (h.parts(), h.osal());
+        self.heap = parts;
+        self.heap_pool = Some(pool);
+        Ok(made)
+    }
+
+    fn heap_params(&self, initial: u32) -> HeapParams {
+        HeapParams {
+            initial_chunk_count: initial,
+            chunk_size: HEAP_CHUNK_SIZE,
+            max_chunks: self.heap_mem.slots,
+            target_in_flight: HeapParams::MESA.target_in_flight,
+        }
+    }
+
+    /// The heap given back and made again as [`Osal::up`] made it: its
+    /// grown chunks back in their slots, its context zeroed, its initial
+    /// chunks linked again in the same slots, so its first chunk, which the
+    /// backend's tiler context names, is where it was. Refused
+    /// ([`SchedRefusal::HeapRemake`]) with [`z4::heap_error_code`]'s number,
+    /// or 18 for a heap that is not `u`'s.
+    fn remake_heap(&mut self, u: &GroupUp) -> Result<(), Dead> {
+        let refused = |e: &HeapError<u32>| (SchedRefusal::HeapRemake, z4::heap_error_code(e).0);
+        let params = self.heap_params(self.heap_initial);
+        let unknown = HeapError::UnknownHeap { heap_gpu_va: self.heap.ctx_gpu };
+        let (Some(pool), Some(h)) = (self.heap_pool.as_mut(), heap::Heap::from_parts(self.heap, &mut self.heap_list))
+        else {
+            return Err(refused(&unknown));
+        };
+        let list = heap::destroy(pool, &mut self.heap_mem, h).map_err(|(e, _)| refused(&e))?;
+        let h = heap::create(pool, &mut self.heap_mem, &params, list).map_err(|e| refused(&e))?;
+        let (parts, made) = (h.parts(), h.osal());
+        self.heap = parts;
+        if made != u.heap {
+            return Err((SchedRefusal::HeapRemake, 18));
+        }
+        Ok(())
+    }
+
+    /// The `grow` [`sched::service_tiler_oom`] calls ([`grow_heap`]), each
+    /// answer counted.
+    fn grower(&mut self) -> impl FnMut(&TilerOom) -> Result<u64, (SchedRefusal, u32)> + '_ {
+        let (pool, mem, parts, list) =
+            (self.heap_pool.as_ref(), &mut self.heap_mem, &mut self.heap, &mut self.heap_list);
+        let (chunks, none) = (&mut self.oom_chunks, &mut self.oom_no_chunk);
+        move |e| {
+            let v = grow_heap(pool, mem, parts, list, e)?;
+            if v != 0 {
+                *chunks += 1;
+            } else {
+                *none += 1;
+            }
+            Ok(v)
+        }
+    }
+
+    /// The heap's chunks now, oldest first.
+    pub fn heap_chunks(&self) -> &[Allocation] {
+        &self.heap_list[..self.heap.chunk_count as usize]
+    }
+
+    /// A pending `CS_TILER_OOM` handled ([`sched::service_tiler_oom`]).
+    fn service(&mut self, m: &impl Mmio, u: &GroupUp) -> Result<(), Dead> {
+        let gpu = self.gpu;
+        sched::service_tiler_oom(m, gpu, &u.iface, &u.csg, &u.cs, &mut self.grower()).map(|_| ())
     }
 
     /// The group is up.
@@ -283,6 +629,28 @@ impl Osal {
     /// Why the OSAL stopped taking kicks, if it did.
     pub fn dead(&self) -> Option<Dead> {
         self.dead
+    }
+
+    /// [`Osal::shutdown`] ended the group.
+    pub fn is_down(&self) -> bool {
+        self.down
+    }
+
+    /// The group may still run: it is not known ended.
+    pub fn unended(&self) -> bool {
+        self.unended
+    }
+
+    /// The memory the group's kicks used is kept ([`Osal::memory_kept`]
+    /// field doc): after a group that is not known ended, or a refused
+    /// cache clean.
+    pub fn memory_kept(&self) -> bool {
+        self.memory_kept
+    }
+
+    /// What caused the last restart ([`Osal::recover`]) or the stop.
+    pub fn last_error(&self) -> Option<Dead> {
+        self.last_error
     }
 
     /// Kicks submitted, and the highest completed.
@@ -326,10 +694,15 @@ impl Osal {
 
     /// `gpu_alloc`: `size` bytes, rounded up to whole pages, first fit in
     /// the carve-out. `-EINVAL` for no bytes or before [`Osal::up`],
-    /// `-ENOMEM` when no run of free pages is long enough.
+    /// `-ENOMEM` when no run of free pages is long enough, `-EIO` while the
+    /// memory is kept ([`Osal::memory_kept`]): a page freed by one of the
+    /// group's kicks is not handed out again.
     pub fn alloc(&mut self, size: usize) -> Result<Alloc, i32> {
         if self.up.is_none() || size == 0 {
             return Err(-EINVAL);
+        }
+        if self.memory_kept {
+            return Err(-EIO);
         }
         let n = size.div_ceil(PAGE as usize);
         let mut run = 0;
@@ -367,8 +740,13 @@ impl Osal {
         self.live_pages -= pages;
     }
 
-    /// Give back every held free whose fence has completed.
+    /// Give back every held free whose fence has completed; none while the
+    /// memory is kept ([`Osal::memory_kept`]): a lost fence is complete,
+    /// but its kick may still write, or a dirty line be written back.
     fn drain(&mut self) {
+        if self.memory_kept {
+            return;
+        }
         let mut k = 0;
         while k < self.n_held {
             let h = self.held[k];
@@ -384,10 +762,15 @@ impl Osal {
 
     /// `gpu_free` of the allocation at `gpu` with `handle` ([`Alloc`]):
     /// held until the kick being recorded completes (fence `submitted +
-    /// 1`). `-EINVAL` for one this OSAL did not hand out or already freed;
-    /// `-ENOSPC` when [`PENDING_FREES`] are held and none has completed:
-    /// its pages are then kept for good and counted.
-    pub fn free(&mut self, m: &impl Mmio, gpu: u64, handle: usize) -> i32 {
+    /// 1`); after [`Osal::shutdown`] given back at once. `-EINVAL` for one
+    /// this OSAL did not hand out or already freed. With [`PENDING_FREES`]
+    /// held, src/osal/pending_frees.h's rule: the oldest held fence is
+    /// waited for (panthor's 5 s; an error restarts the group, which
+    /// completes every fence), and then the free is held; when that fence
+    /// is the kick being recorded, which no wait can complete, `-EBUSY`;
+    /// when the OSAL is dead, `-ENOSPC`. A refused free's pages are kept
+    /// for good and counted.
+    pub fn free(&mut self, m: &impl Mmio, gpu: u64, handle: usize, delay_us: &mut impl FnMut(u32)) -> i32 {
         let off = gpu.wrapping_sub(CARVE_VA);
         let first = (off / PAGE) as usize;
         if self.up.is_none()
@@ -403,12 +786,26 @@ impl Osal {
         }
         // a second free of the same pages finds the head already gone
         set(&mut self.head, first, false);
-        self.completed(m);
+        self.completed(m, delay_us);
         if self.n_held == PENDING_FREES {
-            self.refused_frees += 1;
-            return -ENOSPC;
+            // src/osal/pending_frees.h's rule: wait for the oldest fence,
+            // unless it is the kick being recorded
+            let oldest = self.held[..self.n_held].iter().map(|h| h.fence).min().unwrap_or(0);
+            if oldest > self.submitted {
+                self.refused_frees += 1;
+                return -EBUSY;
+            }
+            if self.runs() {
+                self.wait(m, oldest as i64, -1, delay_us);
+            }
+            if self.n_held == PENDING_FREES {
+                self.refused_frees += 1;
+                return -ENOSPC;
+            }
         }
-        self.held[self.n_held] = Held { first: first as u32, pages: handle as u32, fence: self.submitted + 1 };
+        // after the shutdown no kick comes: the pages go back at once
+        let fence = if self.down { self.submitted } else { self.submitted + 1 };
+        self.held[self.n_held] = Held { first: first as u32, pages: handle as u32, fence };
         self.n_held += 1;
         self.drain();
         0
@@ -434,19 +831,251 @@ impl Osal {
         -EIO
     }
 
+    /// The group takes kicks: neither dead nor shut down.
+    fn runs(&self) -> bool {
+        self.dead.is_none() && !self.down
+    }
+
+    /// `shutdown`: the last kick waited for (panthor's 5 s, an error
+    /// restarting the group as any wait's does), then the group ended as
+    /// panthor ends a destroyed one: `panthor_group_destroy`
+    /// (panthor_sched.c:3582-3611) marks it so that it cannot run
+    /// (`group_can_run`, :1925-1931) and the next tick terminates it. Here
+    /// CS 0 is stopped and CSG 0 terminated ([`sched::stop_and_terminate`])
+    /// at once, and a kick still not complete is lost. Later submits and
+    /// waits are `-EIO`; frees go on (nothing runs: every page held comes
+    /// back). The memory stays the image's. Both ends' results and whether
+    /// the GPU caches were cleaned after them ([`Shutdown`]); `None` when
+    /// the group is not up, already shut down, or dead (a dead OSAL's group
+    /// needs the GPU reset, not a terminate).
+    pub fn shutdown(&mut self, m: &impl Mmio, delay_us: &mut impl FnMut(u32)) -> Option<Shutdown> {
+        if !self.runs() {
+            return None;
+        }
+        if self.completed < self.submitted {
+            self.wait(m, self.submitted as i64, -1, delay_us);
+        }
+        let u = self.up.filter(|_| self.runs())?;
+        let ended = sched::stop_and_terminate(m, self.gpu, &u.iface, &u.csg, &u.cs, delay_us);
+        if self.completed < self.submitted {
+            self.lose(self.completed + 1, self.submitted);
+            self.completed = self.submitted;
+        }
+        self.down = true;
+        let mut cleaned = false;
+        if self.note_end(&ended) {
+            match self.clean_caches(m, delay_us) {
+                Ok(()) => cleaned = true,
+                Err(r) => {
+                    self.memory_kept = true;
+                    self.stop(r);
+                }
+            }
+        }
+        self.drain();
+        Some(Shutdown { ended, cleaned })
+    }
+
+    /// The group not known ended: it may still run, and its memory is
+    /// kept.
+    fn not_ended(&mut self) {
+        self.unended = true;
+        self.memory_kept = true;
+    }
+
+    /// What a group's end answered: a refused stop counted, a refused
+    /// terminate made the group not known ended. True when the group ended.
+    fn note_end(&mut self, e: &Ended) -> bool {
+        if e.stop.is_err() {
+            self.stops_refused += 1;
+        }
+        if e.terminate.is_err() {
+            self.not_ended();
+        }
+        e.terminate.is_ok()
+    }
+
+    /// The GPU's L2 and LSC cleaned and invalidated after the group's end,
+    /// before memory its kicks used is used again: a lost job never reached
+    /// its block's `FLUSH_CACHE2`, and a dirty line it left would be
+    /// written back later over the heap made again or a page handed out
+    /// again. panthor flushes so before it reuses GPU memory: an unmap
+    /// ends in `panthor_vm_flush_range` (panthor_mmu.c:935, :941), whose
+    /// operation is `GPU_CMD` `FLUSH_CACHES` with L2 and LSC clean and
+    /// invalidate (`mmu_hw_do_operation_locked`, :575-608). The command is
+    /// Z2's ([`mali::flush_caches`], the one Z2 ran on the board).
+    /// [`SchedRefusal::CacheFlush`] when it does not complete.
+    fn clean_caches(&self, m: &impl Mmio, delay_us: &mut impl FnMut(u32)) -> Result<(), Dead> {
+        let cln_inv = mali::CACHE_CLEAN | mali::CACHE_INV;
+        match mali::flush_caches(m, self.gpu, cln_inv, cln_inv, 0, delay_us) {
+            Ok(_) => Ok(()),
+            Err((why, _)) => Err((SchedRefusal::CacheFlush, why as u32)),
+        }
+    }
+
+    /// Fences `from..=to` lost. [`LOST_RANGES`] holds every range the
+    /// restart budget and the shutdown can make; were it full, the last
+    /// range would grow to `to` (the safe side: a good fence read lost).
+    fn lose(&mut self, from: u64, to: u64) {
+        if self.n_lost == LOST_RANGES {
+            self.lost[LOST_RANGES - 1].1 = to;
+            return;
+        }
+        self.lost[self.n_lost] = (from, to);
+        self.n_lost += 1;
+    }
+
+    /// `fence` was lost to a restart ([`Osal::lose`]).
+    fn is_lost(&self, fence: u64) -> bool {
+        self.lost[..self.n_lost].iter().any(|&(a, b)| (a..=b).contains(&fence))
+    }
+
+    /// After `why`, which needs panthor's GPU reset: a group state none of
+    /// the four (panthor_sched.c:1269-1270), a `CS_FATAL` of type
+    /// `CS_UNRECOVERABLE` (:1373-1377), a start or terminate not
+    /// acknowledged (:2239, :2298), and ours: CS 0's start not
+    /// acknowledged, the slot not free for the restart.
+    fn needs_reset(why: Dead) -> bool {
+        use SchedRefusal::*;
+        matches!(why.0, CsgStateUnknown | CsgStartAckTimeout | CsStartAckTimeout | CsgTerminateAckTimeout | CsgSlotBusy)
+            || (why.0 == CsFatal && csf::cs_exception_type(why.1) == sched::EXCEPTION_CS_UNRECOVERABLE)
+    }
+
+    /// The group restarted after `why` (the module doc, "Recovery"):
+    /// every kick not complete lost and its fence completed, CS 0 stopped
+    /// and CSG 0 terminated (`ended` when the timeout did both already),
+    /// the heap made again ([`Osal::remake_heap`]), CSG 0 / CS 0 started
+    /// again ([`sched::restart`]), the queue-init job run and waited for
+    /// ([`Osal::run_init`]). `-EIO` either way: the kick that saw `why` is
+    /// lost. A step refused, `why` one that needs a GPU reset
+    /// ([`Osal::needs_reset`]), or the [`RESTART_BUDGET`] spent (the group
+    /// then ended and not started again) leaves the OSAL dead.
+    fn recover(&mut self, m: &impl Mmio, why: Dead, ended: Option<Ended>, delay_us: &mut impl FnMut(u32)) -> i32 {
+        let Some(u) = self.up else { return -EINVAL };
+        self.last_error = Some(why);
+        // a kick done before the error, which no call had seen yet, is not
+        // lost: one read of the sync object first (none on a sync object
+        // error: its seqno is then not trusted)
+        if let Ok(seqno) = sched::completed_seqno(m, &u.started) {
+            self.reached(seqno);
+        }
+        // the lost fences complete now (the backend frees its slots), their
+        // frees go back only once the group is known ended
+        if self.completed < self.submitted {
+            self.lose(self.completed + 1, self.submitted);
+            self.completed = self.submitted;
+        }
+        if Self::needs_reset(why) {
+            self.not_ended();
+            return self.stop(why);
+        }
+        let ended = ended.unwrap_or_else(|| sched::stop_and_terminate(m, self.gpu, &u.iface, &u.csg, &u.cs, delay_us));
+        if !self.note_end(&ended) {
+            return self.stop(ended.terminate.err().unwrap_or(why));
+        }
+        if let Err(r) = self.clean_caches(m, delay_us) {
+            self.memory_kept = true;
+            return self.stop(r);
+        }
+        self.drain();
+        if self.restarts == RESTART_BUDGET {
+            return self.stop((SchedRefusal::RestartBudget, why.0 as u32));
+        }
+        if let Err(r) = self.remake_heap(&u) {
+            return self.stop(r);
+        }
+        let started =
+            match sched::restart(m, self.gpu, &u.iface, &u.csg, &u.cs, &u.group, &u.queue, &u.started, delay_us) {
+                Ok(s) => s,
+                Err(r) => return self.end_failed_restart(m, r, None, delay_us),
+            };
+        self.up = Some(GroupUp { started, ..u });
+        if let Err((r, ended)) = self.run_init(m, delay_us) {
+            return self.end_failed_restart(m, r, ended, delay_us);
+        }
+        self.restarts += 1;
+        -EIO
+    }
+
+    /// A restart refused after the old group ended (the heap made again,
+    /// the caches cleaned): the OSAL is dead with `why`, and what the new
+    /// group is, is made known ([`Osal::unended`]).
+    ///
+    /// A start or group update that is not acknowledged makes panthor reset
+    /// the GPU (`panthor_device_schedule_reset`, panthor_sched.c:2297-2301),
+    /// with no terminate: those, and the other errors of
+    /// [`Osal::needs_reset`], leave the group not known ended. Every other
+    /// refusal comes after the start was asked (`sched::restart` refuses
+    /// before it only with `CsgStateUnknown` or `CsgSlotBusy`, both
+    /// needs-reset): the group is ended, as every error ends the group in
+    /// this OSAL (the module doc, "Recovery"), by panthor's mechanism for a
+    /// group that cannot run: the tick terminates its slot (`tick_ctx_apply`,
+    /// :2195-2207, `group_can_run` :1925-1931). panthor makes a group unable
+    /// to run on a `CS_FATAL` (:1370) but lets a stream go on after a
+    /// `CS_FAULT`; ending it after a fault is this OSAL's choice. Here CS 0
+    /// is stopped and CSG 0 terminated at once; a timeout's own end
+    /// (`ended`) is used when the wait made one.
+    fn end_failed_restart(
+        &mut self,
+        m: &impl Mmio,
+        why: Dead,
+        ended: Option<Ended>,
+        delay_us: &mut impl FnMut(u32),
+    ) -> i32 {
+        let Some(u) = self.up else { return self.stop(why) };
+        if let Some(e) = ended {
+            self.note_end(&e);
+        } else if Self::needs_reset(why) {
+            self.not_ended();
+        } else {
+            let e = sched::stop_and_terminate(m, self.gpu, &u.iface, &u.csg, &u.cs, delay_us);
+            self.note_end(&e);
+        }
+        self.stop(why)
+    }
+
+    /// The queue-init stream ([`z4::QUEUE_INIT`]: `HEAP_SET` of the heap
+    /// context) written at [`INIT_VA`] and run as the restarted ring's
+    /// first job, waited for with panthor's 5 s. Its fence is `submitted`,
+    /// already complete: `base` is set so.
+    fn run_init(&mut self, m: &impl Mmio, delay_us: &mut impl FnMut(u32)) -> Result<(), (Dead, Option<Ended>)> {
+        let Some(u) = self.up else { return Err(((SchedRefusal::JobParams, 0), None)) };
+        let s = &u.started;
+        let cpu = s.syncobj_cpu + (INIT_VA - u.queue.syncobj_va) as usize;
+        for (i, w) in z4::QUEUE_INIT.iter().enumerate() {
+            m.write32(cpu + 8 * i, *w as u32);
+            m.write32(cpu + 8 * i + 4, (*w >> 32) as u32);
+        }
+        self.base = self.submitted.wrapping_sub(1);
+        let job = Job {
+            cs_start: INIT_VA,
+            cs_size: 8 * z4::QUEUE_INIT.len() as u32,
+            latest_flush: m.read32(self.gpu + LATEST_FLUSH_ID),
+        };
+        sched::submit(m, self.gpu, &u.cs, &u.queue, s, &job, 1, 0).map_err(|r| (r, None))?;
+        let gpu = self.gpu;
+        let r = sched::wait_seqno(m, gpu, &u.iface, &u.csg, &u.cs, s, 1, delay_us, &mut self.grower());
+        // a timeout's own stop and terminate are kept: they say whether the
+        // group ended
+        r.map(|_| ()).map_err(|r| (r.refused, r.ended))
+    }
+
     /// `submit` of a kick: one job whose `CALL` runs `stream_bytes` at
     /// `stream_gpu` ([`sched::submit`]), `latest_flush` the GPU's
-    /// `GPU_LATEST_FLUSH_ID` now; its fence, the job's sequence number.
-    /// The ring's room is the jobs not yet seen complete
-    /// ([`Osal::in_flight`]), as panthor's scheduler credits; a full ring
-    /// waits for the oldest job first, as panthor's scheduler holds a job
-    /// back until its credits fit, and then has room: a full ring is never
-    /// a refusal. `-EINVAL` for a stream outside the carve-out, not 64-byte
-    /// aligned or not a non-zero multiple of 8 bytes; `-EIO` when sched
-    /// refused or the wait for the oldest job did (the OSAL is then dead),
-    /// or it already was.
+    /// `GPU_LATEST_FLUSH_ID` now; its fence, `submitted + 1`. The ring's
+    /// room is the jobs not yet seen complete ([`Osal::in_flight`]), as
+    /// panthor's scheduler credits; a full ring waits for the oldest job
+    /// first, as panthor's scheduler holds a job back until its credits
+    /// fit, and then has room: a full ring is never a refusal and never
+    /// restarts the group. A pending tiler OOM is handled first; an error
+    /// seen here restarts the group ([`Osal::recover`]) and the kick goes
+    /// on the new ring. `-EINVAL` for a stream outside the carve-out, not
+    /// 64-byte aligned or not a non-zero multiple of 8 bytes; `-EIO` when
+    /// the OSAL is dead or the kick was refused twice.
     pub fn submit(&mut self, m: &impl Mmio, stream_gpu: u64, stream_bytes: u32, delay_us: &mut impl FnMut(u32)) -> i64 {
-        let Some(u) = self.up else { return -i64::from(EINVAL) };
+        if self.up.is_none() {
+            return -i64::from(EINVAL);
+        }
         let end = CARVE_VA + (self.pages as u64) * PAGE;
         if stream_gpu < CARVE_VA
             || !stream_gpu.is_multiple_of(64)
@@ -456,26 +1085,33 @@ impl Osal {
         {
             return -i64::from(EINVAL);
         }
-        if self.dead.is_some() {
-            return -i64::from(EIO);
-        }
-        let seqno = self.submitted + 1;
         let job =
             Job { cs_start: stream_gpu, cs_size: stream_bytes, latest_flush: m.read32(self.gpu + LATEST_FLUSH_ID) };
-        if self.in_flight() + JOB_BYTES > u64::from(u.queue.ring_size) {
-            // the oldest job's completion gives its JOB_BYTES back
-            if self.wait(m, (self.completed + 1) as i64, -1, delay_us) != 0 {
-                return -i64::from(EIO);
+        for _ in 0..2 {
+            let Some(u) = self.up.filter(|_| self.runs()) else { break };
+            if self.in_flight() + JOB_BYTES > u64::from(u.queue.ring_size) {
+                // the oldest job's completion gives its JOB_BYTES back; an
+                // error the wait meets restarts the group with an empty
+                // ring, or leaves the OSAL dead
+                self.wait(m, (self.completed + 1) as i64, -1, delay_us);
+            }
+            let Some(u) = self.up.filter(|_| self.runs()) else { break };
+            if let Err(why) = self.service(m, &u) {
+                self.recover(m, why, None, delay_us);
+                continue;
+            }
+            let ring = (self.submitted + 1).wrapping_sub(self.base);
+            match sched::submit(m, self.gpu, &u.cs, &u.queue, &u.started, &job, ring, self.in_flight()) {
+                Ok(_) => {
+                    self.submitted += 1;
+                    return self.submitted as i64;
+                }
+                Err(why) => {
+                    self.recover(m, why, None, delay_us);
+                }
             }
         }
-        let r = sched::submit(m, self.gpu, &u.cs, &u.queue, &u.started, &job, seqno, self.in_flight());
-        match r {
-            Ok(_) => {
-                self.submitted = seqno;
-                seqno as i64
-            }
-            Err(why) => i64::from(self.stop(why)),
-        }
+        -i64::from(EIO)
     }
 
     /// The ring bytes of the kicks not yet seen complete: panthor's
@@ -484,17 +1120,20 @@ impl Osal {
         (self.submitted - self.completed) * JOB_BYTES
     }
 
+    /// The sync object reached ring sequence number `seqno`.
     fn reached(&mut self, seqno: u64) {
-        self.completed = self.completed.max(seqno.min(self.submitted));
+        let fence = self.base.wrapping_add(seqno);
+        self.completed = self.completed.max(fence.min(self.submitted));
         self.drain();
     }
 
-    /// `wait` for `fence`: 0 once the sync object reached it. A timeout
-    /// below [`JOB_TIMEOUT_US`] polls for that long and returns 1 when it
-    /// runs out, the job left running ([`sched::poll_seqno`]); a negative
-    /// or longer one waits panthor's 5 s and on its timeout stops and
-    /// terminates the group ([`sched::wait_seqno`]). `-EINVAL` for a fence
-    /// never submitted; `-EIO` for a refusal (the OSAL is then dead).
+    /// `wait` for `fence`: 0 once the sync object reached it, `-EIO` for a
+    /// fence lost to a restart. A timeout below [`JOB_TIMEOUT_US`] polls
+    /// for that long and returns 1 when it runs out, the job left running
+    /// ([`sched::poll_seqno`]); a negative or longer one waits panthor's 5 s
+    /// ([`sched::wait_seqno`]). Either handles a tiler OOM; an error, the
+    /// 5 s timeout among them, restarts the group ([`Osal::recover`]) and is
+    /// `-EIO`: the fence is lost. `-EINVAL` for a fence never submitted.
     pub fn wait(&mut self, m: &impl Mmio, fence: i64, timeout_us: i64, delay_us: &mut impl FnMut(u32)) -> i32 {
         let Some(u) = self.up else { return -EINVAL };
         if fence <= 0 || fence as u64 > self.submitted {
@@ -502,40 +1141,50 @@ impl Osal {
         }
         let target = fence as u64;
         if target <= self.completed {
-            return 0;
+            return if self.is_lost(target) { -EIO } else { 0 };
         }
-        if self.dead.is_some() {
+        if !self.runs() {
             return -EIO;
         }
-        let (iface, csg, cs, s) = (&u.iface, &u.csg, &u.cs, &u.started);
+        let ring = target.wrapping_sub(self.base);
+        let (gpu, iface, csg, cs, s) = (self.gpu, &u.iface, &u.csg, &u.cs, &u.started);
         if (0..i64::from(JOB_TIMEOUT_US)).contains(&timeout_us) {
-            return match sched::poll_seqno(m, self.gpu, iface, csg, cs, s, target, timeout_us as u32, delay_us) {
+            let budget = timeout_us as u32;
+            let r = sched::poll_seqno(m, gpu, iface, csg, cs, s, ring, budget, delay_us, &mut self.grower());
+            return match r {
                 Ok(Some(w)) => {
                     self.reached(w.seqno);
                     0
                 }
                 Ok(None) => 1,
-                Err(r) => self.stop(r.refused),
+                Err(r) => self.recover(m, r.refused, r.ended, delay_us),
             };
         }
-        match sched::wait_seqno(m, self.gpu, iface, csg, cs, s, target, delay_us) {
+        let r = sched::wait_seqno(m, gpu, iface, csg, cs, s, ring, delay_us, &mut self.grower());
+        match r {
             Ok(w) => {
                 self.reached(w.seqno);
                 0
             }
-            Err(r) => self.stop(r.refused),
+            Err(r) => self.recover(m, r.refused, r.ended, delay_us),
         }
     }
 
     /// `completed`: the highest fence the sync object has reached, read
-    /// without waiting; held frees up to it given back. After a refusal
-    /// the last one known.
-    pub fn completed(&mut self, m: &impl Mmio) -> i64 {
-        if let (Some(u), None) = (self.up, self.dead) {
-            match sched::completed_seqno(m, &u.started) {
+    /// without waiting (a pending tiler OOM handled first, the group's
+    /// errors looked at, [`sched::group_errors`]); held frees up to it given
+    /// back. An error restarts the group ([`Osal::recover`]), which
+    /// completes every fence. Once dead, the last one known.
+    pub fn completed(&mut self, m: &impl Mmio, delay_us: &mut impl FnMut(u32)) -> i64 {
+        if let Some(u) = self.up.filter(|_| self.runs()) {
+            let r = self
+                .service(m, &u)
+                .and_then(|()| sched::group_errors(m, &u.csg, &u.cs))
+                .and_then(|()| sched::completed_seqno(m, &u.started));
+            match r {
                 Ok(v) => self.reached(v),
                 Err(why) => {
-                    self.stop(why);
+                    self.recover(m, why, None, delay_us);
                 }
             }
         }

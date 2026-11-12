@@ -1096,7 +1096,9 @@ pub unsafe extern "C" fn yd_t6_submit(
 /// AS0's table pages (`pool_pages` 4 KiB pages at physical `tables_pa`);
 /// `queue` the queue's AS0 memory (user pages, suspend buffers); `ring`,
 /// `heap_pool`, `heap_chunks` and `carve` the group VM's four regions
-/// (`YD_T6_OSAL_*_VA`); `vm_pool` the group VM's table pages.
+/// (`YD_T6_OSAL_*_VA`); `vm_pool` the group VM's table pages;
+/// `heap_initial_chunks` the tiler heap's chunks at the start (the others
+/// of `heap_chunks` are its growth).
 #[cfg(any(feature = "mali", test))]
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -1113,10 +1115,11 @@ pub struct YdT6OsalMem {
     pub vm_pool: *mut u8,
     pub vm_pool_pages: u32,
     pub vm_tables_pa: u64,
+    pub heap_initial_chunks: u32,
 }
 
 #[cfg(all(any(feature = "mali", test), target_pointer_width = "64"))]
-const _: () = assert!(size_of::<YdT6OsalMem>() == 192);
+const _: () = assert!(size_of::<YdT6OsalMem>() == 200);
 
 /// `struct osal_gpu_mem` (include/gles_osal.h), which this crate cannot
 /// import from the library: the same fields at the same offsets.
@@ -1236,6 +1239,7 @@ pub unsafe extern "C" fn yd_t6_osal_up(
         carve: back(z.carve),
         vm_pool,
         vm_tables_pa: z.vm_tables_pa,
+        heap_initial_chunks: z.heap_initial_chunks,
     };
     // SAFETY: one thread (the contract).
     let s = unsafe { osal() };
@@ -1314,7 +1318,8 @@ pub unsafe extern "C" fn yd_t6_osal_free(mem: *mut OsalGpuMem) -> i32 {
     // SAFETY: the caller's contract.
     let (s, mem) = unsafe { (osal(), mem.as_mut()) };
     let Some(m) = mem else { return -EINVAL };
-    let rc = if m.impl_.is_null() { 0 } else { s.0.free(&osal_hw(), m.gpu, m.impl_ as usize) };
+    let Some(delay) = s.1 else { return -EINVAL };
+    let rc = if m.impl_.is_null() { 0 } else { s.0.free(&osal_hw(), m.gpu, m.impl_ as usize, &mut |us| delay(us)) };
     *m = OsalGpuMem { cpu: core::ptr::null_mut(), gpu: 0, phys: 0, size: 0, impl_: core::ptr::null_mut() };
     rc
 }
@@ -1375,7 +1380,25 @@ pub unsafe extern "C" fn yd_t6_osal_wait(fence: i64, timeout_us: i64) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn yd_t6_osal_completed() -> i64 {
     // SAFETY: the caller's contract.
-    unsafe { osal() }.0.completed(&osal_hw())
+    let s = unsafe { osal() };
+    let Some(delay) = s.1 else { return -i64::from(EINVAL) };
+    s.0.completed(&osal_hw(), &mut |us| delay(us))
+}
+
+/// `shutdown` ([`crate::board::nanopc_t6_osal::Osal::shutdown`]): its
+/// [`crate::board::nanopc_t6_osal::Shutdown::code`] (0, `-EIO` or
+/// `-ETIMEDOUT`), or `-EINVAL` when there was nothing to end (not up,
+/// already shut down, or dead).
+///
+/// # Safety
+/// As [`yd_t6_osal_submit`].
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_shutdown() -> i32 {
+    // SAFETY: the caller's contract.
+    let s = unsafe { osal() };
+    let Some(delay) = s.1 else { return -EINVAL };
+    s.0.shutdown(&osal_hw(), &mut |us| delay(us)).map_or(-EINVAL, |d| d.code())
 }
 
 /// `OSAL_QUERY_MALI_GPU`'s answer into `*out` (`struct osal_mali_gpu`):
@@ -1417,9 +1440,11 @@ pub unsafe extern "C" fn yd_t6_osal_heap(out: *mut crate::gpu::mali::heap::OsalM
 }
 
 /// The OSAL's counts for its log: kicks submitted and completed, pages in
-/// use now and at most, frees held and refused; and the sched refusal that
-/// stopped it (`dead_refusal` 0 for none) with its value. 0, or `-EINVAL`
-/// for a null `out`.
+/// use now and at most, frees held and refused; the sched refusal that
+/// stopped it (`dead_refusal` 0 for none) with its value; the group's
+/// restarts and the refusal that caused the last (0 for none) with its
+/// value; tiler OOMs answered with a chunk and with none, and the heap's
+/// chunks now. 0, or `-EINVAL` for a null `out`.
 ///
 /// # Safety
 /// As [`yd_t6_osal_gpu`].
@@ -1432,6 +1457,7 @@ pub unsafe extern "C" fn yd_t6_osal_counts(out: *mut YdT6OsalCounts) -> i32 {
     let o = &s.0;
     let (submitted, completed) = o.fences();
     let (dead_refusal, dead_value) = o.dead().map_or((0, 0), |(r, v)| (r as u32, v));
+    let (last_refusal, last_value) = o.last_error().map_or((0, 0), |(r, v)| (r as u32, v));
     *out = YdT6OsalCounts {
         submitted,
         completed,
@@ -1441,6 +1467,16 @@ pub unsafe extern "C" fn yd_t6_osal_counts(out: *mut YdT6OsalCounts) -> i32 {
         refused_frees: o.refused_frees,
         dead_refusal,
         dead_value,
+        restarts: o.restarts,
+        last_refusal,
+        last_value,
+        oom_chunks: o.oom_chunks,
+        oom_no_chunk: o.oom_no_chunk,
+        heap_chunks: o.heap_chunks().len() as u32,
+        unended: u32::from(o.unended()),
+        down: u32::from(o.is_down()),
+        memory_kept: u32::from(o.memory_kept()),
+        stops_refused: o.stops_refused,
     };
     0
 }
@@ -1458,10 +1494,20 @@ pub struct YdT6OsalCounts {
     pub refused_frees: u32,
     pub dead_refusal: u32,
     pub dead_value: u32,
+    pub restarts: u32,
+    pub last_refusal: u32,
+    pub last_value: u32,
+    pub oom_chunks: u32,
+    pub oom_no_chunk: u32,
+    pub heap_chunks: u32,
+    pub unended: u32,
+    pub down: u32,
+    pub memory_kept: u32,
+    pub stops_refused: u32,
 }
 
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(size_of::<YdT6OsalCounts>() == 40);
+const _: () = assert!(size_of::<YdT6OsalCounts>() == 80);
 
 #[cfg(all(test, feature = "mali"))]
 mod fw_tests {
@@ -1805,7 +1851,8 @@ mod fw_tests {
             carve,
             vm_pool,
             vm_pool_pages,
-            vm_tables_pa
+            vm_tables_pa,
+            heap_initial_chunks
         );
         field!(
             YdT6OsalCounts,
@@ -1817,7 +1864,17 @@ mod fw_tests {
             held,
             refused_frees,
             dead_refusal,
-            dead_value
+            dead_value,
+            restarts,
+            last_refusal,
+            last_value,
+            oom_chunks,
+            oom_no_chunk,
+            heap_chunks,
+            unended,
+            down,
+            memory_kept,
+            stops_refused
         );
         for (what, v) in &pins {
             let pin = format!("_Static_assert({what} == {v},");

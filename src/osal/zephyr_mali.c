@@ -28,15 +28,21 @@
  *   wait        -> yd_t6_osal_wait: the sync object; panthor's 5 s job
  *                  timeout for a negative or longer timeout
  *   completed   -> yd_t6_osal_completed
+ *                  (each of the three handles a tiler OOM and, on a GPU
+ *                  error, restarts the group: one line per restart,
+ *                  note_restart below)
+ *   shutdown    -> yd_t6_osal_shutdown: the last kick waited for, CS 0
+ *                  stopped and CSG 0 terminated; then the counts
  *   query       -> OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP; the
  *                  clock and draw stats of zephyr_timing.c
  *   cache_*     -> nothing: every CPU view is uncached, and each job's
  *                  FLUSH_CACHE2 cleans the GPU's caches
  *
  * Absent: mmu_map, gpu_read/write, reg_*, wait_vblank, present (the board
- * has no display on Zephyr yet). What the Rust side refuses instead of
- * recovering (a GPU fault, the tiler heap running out, the job timeout:
- * the OSAL stops taking kicks) is listed in board::nanopc_t6_osal.
+ * has no display on Zephyr yet). A tiler out-of-memory event grows the
+ * heap, up to CONFIG_YAKOGL_MALI_HEAP_CHUNKS; a GPU fault, fatal or the
+ * job timeout loses the kicks in flight and restarts the group; what needs
+ * a GPU reset stops the OSAL (board::nanopc_t6_osal, "Recovery").
  *
  * Memory: __nocache statics (CONFIG_NOCACHE_MEMORY), physical address =
  * k_mem_phys_addr() of the CPU address, as the t6_* probes place theirs.
@@ -94,12 +100,15 @@ int yakogl_osal_zephyr_present(const struct osal_gpu_mem *mem, uint32_t width, u
 #define MALI_QUEUE_MEM (1024u * 1024u)
 #define MALI_CARVE CONFIG_YAKOGL_MALI_CARVEOUT_BYTES
 #define MALI_CHUNKS CONFIG_YAKOGL_MALI_HEAP_CHUNKS
+#define MALI_CHUNKS_INITIAL CONFIG_YAKOGL_MALI_HEAP_INITIAL_CHUNKS
 /* The group VM's tables, 4 KiB pages only: one level-3 table per 2 MiB of
  * the carve-out and the chunks, and the few above them for the four
  * regions (17 for a 16 MiB carve-out and one chunk, the host test's). */
 #define MALI_VM_POOL_PAGES (MALI_CARVE / (2u * 1024u * 1024u) + MALI_CHUNKS + 16)
 
 BUILD_ASSERT(MALI_CARVE % PAGE == 0, "the carve-out is whole pages");
+BUILD_ASSERT(MALI_CHUNKS_INITIAL >= 1 && MALI_CHUNKS_INITIAL <= MALI_CHUNKS,
+	     "the heap starts with 1 to YAKOGL_MALI_HEAP_CHUNKS chunks");
 BUILD_ASSERT(MALI_CARVE <= YD_T6_OSAL_CARVE_MAX, "the carve-out is at most YD_T6_OSAL_CARVE_MAX");
 
 static __nocache uint8_t mali_fw[MALI_FW_ARENA] __aligned(PAGE);
@@ -113,6 +122,8 @@ static __nocache uint8_t mali_vm_pool[MALI_VM_POOL_PAGES * PAGE] __aligned(PAGE)
 
 static struct {
 	bool inited;
+	uint32_t restarts; /* the last count note_restart printed */
+	bool stopped;      /* note_restart printed the stop */
 } s;
 
 static struct yd_t6_fw_backing backing(uint8_t *cpu, size_t size)
@@ -191,6 +202,7 @@ static int z_init(void *platform_arg)
 	mem.vm_pool = mali_vm_pool;
 	mem.vm_pool_pages = MALI_VM_POOL_PAGES;
 	mem.vm_tables_pa = k_mem_phys_addr(mali_vm_pool);
+	mem.heap_initial_chunks = MALI_CHUNKS_INITIAL;
 
 	t6_watchdog_feed();
 	rc = yd_t6_osal_up(cru, pmu, spi2, qos, gpu, arg->fw, arg->fw_len, T6_TIMER_HZ, &mem, clean,
@@ -208,10 +220,10 @@ static int z_init(void *platform_arg)
 		return rc;
 	}
 	s.inited = true;
-	printk("osal(mali): ready: gpu_id 0x%08x, heap ctx 0x%llx, %u chunk(s) of 0x%x, "
+	printk("osal(mali): ready: gpu_id 0x%08x, heap ctx 0x%llx, %u of %u chunk(s) of 0x%x, "
 	       "carve-out %u KiB at 0x%llx, csg ack %u us\n",
-	       o.fw.gpu_id, (unsigned long long)o.heap_ctx, (unsigned int)MALI_CHUNKS,
-	       o.heap_chunk_size, (unsigned int)(MALI_CARVE / 1024),
+	       o.fw.gpu_id, (unsigned long long)o.heap_ctx, (unsigned int)MALI_CHUNKS_INITIAL,
+	       (unsigned int)MALI_CHUNKS, o.heap_chunk_size, (unsigned int)(MALI_CARVE / 1024),
 	       (unsigned long long)YD_T6_OSAL_CARVE_VA, o.csg_ack_us);
 	return 0;
 }
@@ -227,12 +239,57 @@ void osal_mali_diag_print(void)
 	       (unsigned long long)c.submitted, (unsigned long long)c.completed, c.live_pages,
 	       c.live_pages_high, (unsigned int)(MALI_CARVE / PAGE), c.held, c.refused_frees,
 	       c.dead_refusal, c.dead_value);
+	printk("osal(mali): restarts %u (last by sched refusal %u, 0x%x); tiler OOMs %u grown, "
+	       "%u with no chunk; heap %u of %u chunk(s); group %s, memory %s; CS stops refused %u\n",
+	       c.restarts, c.last_refusal, c.last_value, c.oom_chunks, c.oom_no_chunk,
+	       c.heap_chunks, (unsigned int)MALI_CHUNKS,
+	       c.unended ? "may still run" : (c.dead_refusal != 0 || c.down) ? "ended" : "running",
+	       c.memory_kept ? "kept" : "not kept", c.stops_refused);
+}
+
+/* One line per group restart a call just caused, with the sched refusal
+ * that caused it (driver/rust/src/gpu/mali/sched.rs, SchedRefusal) and the
+ * kicks it lost up to; one line when the OSAL stops, saying whether the
+ * group ended or may still run (then it needs a GPU reset).
+ * The OSAL's own numbers: 28 TilerOomCounts, 29 HeapGrow, 30 HeapRemake,
+ * 31 RestartBudget (the value: the refusal that would have restarted the
+ * group), 32 CacheFlush (the GPU cache clean after the group's end did not
+ * complete); 27 is the Z4 record's DrainTimeout, which the OSAL never
+ * meets. */
+static void note_restart(void)
+{
+	struct yd_t6_osal_counts c;
+
+	if (yd_t6_osal_counts(&c) != 0)
+		return;
+	if (c.restarts != s.restarts) {
+		s.restarts = c.restarts;
+		printk("osal(mali): restart %u after sched refusal %u (0x%x): kicks up to %llu lost\n",
+		       c.restarts, c.last_refusal, c.last_value, (unsigned long long)c.submitted);
+	}
+	if (c.dead_refusal != 0 && !s.stopped) {
+		s.stopped = true;
+		printk("osal(mali): stopped by sched refusal %u (0x%x) after kick %llu: %s; every "
+		       "later kick is -EIO\n",
+		       c.dead_refusal, c.dead_value, (unsigned long long)c.submitted,
+		       c.unended     ? "the group may still run, memory kept (needs a GPU reset)" :
+		       c.memory_kept ? "the group ended, memory kept" :
+				       "the group ended");
+	}
 }
 
 static void z_shutdown(void)
 {
-	/* The group keeps running and the memory stays the GPU's: the GL core
-	 * owns its buffers until the image ends (K2 brings the terminate). */
+	/* The group ends; the memory stays the image's (the GL core owns its
+	 * buffers until the image ends). */
+	int rc = yd_t6_osal_shutdown();
+
+	note_restart();
+	printk("osal(mali): shutdown: %s (%d)\n",
+	       rc == 0 ? "group terminated, GPU caches cleaned" :
+	       rc == -ETIMEDOUT ? "group terminated, GPU cache clean refused: memory kept" :
+	       rc == -EINVAL ? "no group to end" :
+	       "terminate refused: the group may still run, memory kept", rc);
 	osal_mali_diag_print();
 }
 
@@ -284,19 +341,29 @@ static int64_t z_submit(const void *kick_desc, size_t kick_desc_len)
 {
 	const struct osal_mali_kick *k = kick_desc;
 
+	int64_t fence;
+
 	if (!k || kick_desc_len != sizeof(*k))
 		return -EINVAL;
-	return yd_t6_osal_submit(k->stream_gpu, k->stream_bytes);
+	fence = yd_t6_osal_submit(k->stream_gpu, k->stream_bytes);
+	note_restart();
+	return fence;
 }
 
 static int z_wait(int64_t fence, int64_t timeout_us)
 {
-	return yd_t6_osal_wait(fence, timeout_us);
+	int rc = yd_t6_osal_wait(fence, timeout_us);
+
+	note_restart();
+	return rc;
 }
 
 static int64_t z_completed(void)
 {
-	return yd_t6_osal_completed();
+	int64_t done = yd_t6_osal_completed();
+
+	note_restart();
+	return done;
 }
 
 static int z_query(uint32_t what, void *out, size_t out_sz)

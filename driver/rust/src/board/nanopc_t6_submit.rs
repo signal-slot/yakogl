@@ -823,7 +823,7 @@ impl SubmitUp {
     }
     /// The group's end, kept; a failure is the step only when nothing
     /// stopped before it.
-    fn ended(&mut self, e: &Ended) {
+    pub(crate) fn ended(&mut self, e: &Ended) {
         match e.stop {
             Ok(us) => self.stop_us = us,
             Err((why, v)) => {
@@ -877,8 +877,10 @@ const fn page_up(n: u32) -> u64 {
 /// Where [`group_up`] makes the tiler heap: its pool at `pool_va` (heap
 /// 0's context is the pool's first slot), `chunks` chunks of `chunk_size`
 /// one after the other from `chunk_va`, each inside one region; at most
-/// [`MAX_HEAP_CHUNKS`]. The heap starts with all of them and never grows
-/// (`CS_TILER_OOM` is refused, sched.rs).
+/// [`MAX_HEAP_CHUNKS`]. Z4's heap starts with all of them and never grows
+/// (its `sched::wait` refuses `CS_TILER_OOM`); the Zephyr OSAL makes the
+/// same heap again over its own memory and grows it
+/// (board::nanopc_t6_osal).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HeapPlace {
     pub pool_va: u64,
@@ -892,13 +894,14 @@ pub struct HeapPlace {
 pub const MAX_HEAP_CHUNKS: usize = 64;
 
 /// What [`group_up`] left running: the interface blocks, the identity, the
-/// queue and its start, the heap.
+/// group, the queue and its start, the heap.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GroupUp {
     pub iface: Iface,
     pub csg: Csg,
     pub cs: Cs,
     pub id: Ident,
+    pub group: Group,
     pub queue: Queue,
     pub started: Started,
     pub heap: heap::OsalMaliHeap,
@@ -1108,7 +1111,7 @@ pub fn group_up(
     o.cs_ack = s.cs_ack;
     o.csg_ack_us = s.csg_ack_us;
     o.cs_ack_us = s.cs_ack_us;
-    Some(GroupUp { iface, csg, cs, id, queue, started: s, heap })
+    Some(GroupUp { iface, csg, cs, id, group, queue, started: s, heap })
 }
 
 /// The run (see the module). `m`, `b`, `blob`, `backings`, `pool`,
@@ -1262,8 +1265,9 @@ pub(crate) mod tests {
     use crate::board::nanopc_t6_gpu;
     use crate::gpu::mali::csf::tests::{GPU, MEM};
     use crate::gpu::mali::csf::{
-        CsInput, CsOutput, CsgInput, CsgOutput, GlbInput, GlbOutput, CSG_REQ_MASK, CSG_STATE_MASK, CSG_STATE_TERMINATE,
-        CSG_SYNC_UPDATE, CS_EXTRACT_EVENT, CS_STATE_MASK, CS_STATE_STOP, RK3588_TIMER_HZ,
+        CsInput, CsOutput, CsgInput, CsgOutput, GlbInput, GlbOutput, CSG_PROGRESS_TIMER_EVENT, CSG_REQ_MASK,
+        CSG_STATE_MASK, CSG_STATE_TERMINATE, CSG_SYNC_UPDATE, CS_EXTRACT_EVENT, CS_FATAL, CS_FAULT, CS_STATE_MASK,
+        CS_STATE_STOP, CS_TILER_OOM, RK3588_TIMER_HZ,
     };
     use crate::gpu::mali::fw::synth;
     use crate::gpu::mali::mmu::{mmu_as, AS_COMMAND, AS_COMMAND_UPDATE, AS_TRANSTAB};
@@ -1403,7 +1407,23 @@ pub(crate) mod tests {
     /// the frame would (red left half, blue right) when `paint` says so. The
     /// group VM is real memory (`rams`, one allocation per region at its
     /// VA): the heap writes it through pointers. Knobs: `never_complete`
-    /// ignores doorbell 1, `gpu_id` replaces `GPU_ID`. The identity
+    /// ignores doorbell 1, `gpu_id` replaces `GPU_ID`. The tiler heap: a
+    /// stream word [`need_chunks`] (a model-only instruction) stops its job
+    /// before it runs anything when the model's heap holds fewer chunks
+    /// (`chunks`, [`Z4::set_chunks`]): `CS_TILER_OOM` raised with
+    /// `heap_address` the context the last `HEAP_SET` named and the counts
+    /// vt_start 2, vt_end 1, frag_end 0; the job runs again from its start
+    /// when the stream's bit of the group's `doorbell_req` is rung with the
+    /// event acknowledged and a non-zero `heap_start`, which counts as one
+    /// more chunk (each `heap_start` read so is kept, [`Z4::heap_starts`]);
+    /// a zero `heap_start` leaves it stopped, as the firmware waits. Errors
+    /// ([`Z4::fail_at`]): the n-th `CALL` from the model's start stops its
+    /// job before it runs and raises a `CS_FAULT` or `CS_FATAL` (with its
+    /// word) or `CSG_PROGRESS_TIMER_EVENT`, or stops it with no event (a
+    /// hang); or the job runs and its `SYNC_ADD64` writes a sync object
+    /// `status`. A stopped stream runs nothing until CSG 0 is terminated,
+    /// which also drops a pending OOM; a start after a terminate forgets
+    /// the `HEAP_SET` context. The identity
     /// registers Z3's model leaves at 0 read as the board's: `AS_PRESENT`
     /// 0xff, `TILER_PRESENT` 1, `L2_FEATURES` 0x07120306, `TILER_FEATURES`
     /// 0x809 (8 hierarchy levels, which the Mali backend's frame needs); and
@@ -1438,6 +1458,53 @@ pub(crate) mod tests {
         /// The late publish raises `CS_FAULT` on CS 0 too (fault word
         /// `EXCEPTION_CS_INHERIT_FAULT`).
         publish_fault: bool,
+        chunks: Cell<u32>,
+        oom: Cell<bool>,
+        heap_starts: RefCell<Vec<u64>>,
+        fails: RefCell<Vec<(u32, Fail)>>,
+        halted: Cell<bool>,
+        sync_error: Cell<Option<u32>>,
+        /// The firmware no longer answers the group's doorbell: no CSG or
+        /// CS request is acknowledged (a stop or terminate that never
+        /// completes).
+        pub(crate) deaf: Cell<bool>,
+        /// `GPU_INT_RAWSTAT` reads with `CLEAN_CACHES_COMPLETED` set even
+        /// after a clear: a cache flush refuses (`FlushBitStuck`).
+        pub(crate) flush_stuck: Cell<bool>,
+        /// CSG start requests the firmware does not acknowledge.
+        pub(crate) deaf_to_start: Cell<bool>,
+        /// Terminate requests the firmware still acknowledges; `None`: all.
+        pub(crate) terminates_left: Cell<Option<u32>>,
+        /// CS 0's stop requests the firmware does not acknowledge (its state
+        /// field stays as it was; the group's terminate still is).
+        pub(crate) deaf_to_stop: Cell<bool>,
+    }
+
+    /// An error the model raises at a `CALL` ([`Z4::fail_at`]).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum Fail {
+        /// `CS_FAULT` with this `fault` word.
+        Fault(u32),
+        /// `CS_FATAL` with this `fatal` word.
+        Fatal(u32),
+        /// `CSG_PROGRESS_TIMER_EVENT`.
+        Progress,
+        /// The job runs; its `SYNC_ADD64` writes this `status`.
+        SyncError(u32),
+        /// The job stops with no event.
+        Hang,
+    }
+
+    /// Why [`Z4::exec`] stopped a job.
+    enum Stop {
+        Oom,
+        Failed,
+    }
+
+    /// The model's instruction (opcode 0x7f, no Mali one): the job needs
+    /// the heap to hold `n` chunks ([`Z4`]).
+    pub(crate) const fn need_chunks(n: u32) -> u64 {
+        0x7f << 56 | n as u64
     }
 
     impl Z4 {
@@ -1469,6 +1536,11 @@ pub(crate) mod tests {
         pub(crate) fn calls(&self) -> u32 {
             self.calls.get()
         }
+        /// Where the stream has run to: the firmware's own `extract`, which
+        /// the output page shows only once published.
+        pub(crate) fn stream_extract(&self) -> u64 {
+            self.published.get()
+        }
         /// The output page's `extract`, as the firmware last published it.
         pub(crate) fn output_extract(&self) -> u64 {
             let out = MEM + self.w64(CS_IN + offset_of!(CsInput, ringbuf_output)) as usize;
@@ -1495,7 +1567,46 @@ pub(crate) mod tests {
                 publish_due: Cell::new(None),
                 published: Cell::new(0),
                 publish_fault: false,
+                chunks: Cell::new(0),
+                oom: Cell::new(false),
+                heap_starts: RefCell::new(vec![]),
+                fails: RefCell::new(vec![]),
+                halted: Cell::new(false),
+                sync_error: Cell::new(None),
+                deaf: Cell::new(false),
+                flush_stuck: Cell::new(false),
+                deaf_to_start: Cell::new(false),
+                terminates_left: Cell::new(None),
+                deaf_to_stop: Cell::new(false),
             }
+        }
+        /// Raise `f` at the `n`-th `CALL` counted from the model's start
+        /// (the first is 1; a `CALL` that fails is not counted, so the
+        /// next one has the same number), once; several are taken in the
+        /// order given.
+        pub(crate) fn fail_at(&self, n: u32, f: Fail) {
+            self.fails.borrow_mut().push((n, f));
+        }
+        /// The failure due at the next `CALL`, taken.
+        fn take_fail(&self) -> Option<Fail> {
+            let mut fails = self.fails.borrow_mut();
+            let i = fails.iter().position(|&(n, _)| n == self.calls.get() + 1)?;
+            Some(fails.remove(i).1)
+        }
+        /// The chunks the model's tiler heap holds ([`need_chunks`]).
+        pub(crate) fn set_chunks(&self, n: u32) {
+            self.chunks.set(n);
+        }
+        pub(crate) fn chunks(&self) -> u32 {
+            self.chunks.get()
+        }
+        /// Every `heap_start` read on an acknowledged `CS_TILER_OOM`.
+        pub(crate) fn heap_starts(&self) -> Vec<u64> {
+            self.heap_starts.borrow().clone()
+        }
+        /// The context the last `HEAP_SET` named.
+        pub(crate) fn heap_ctx(&self) -> Option<u64> {
+            self.heap_ctx.get()
         }
         /// The group VM's backings, one per allocation, in their order; the
         /// synthetic frame's two regions share the first.
@@ -1555,30 +1666,116 @@ pub(crate) mod tests {
             let (db_req, db_ack) =
                 (GLB_IN + offset_of!(GlbInput, doorbell_req), GLB_OUT + offset_of!(GlbOutput, doorbell_ack));
             let rung = self.w(db_req) ^ self.w(db_ack);
+            if self.deaf.get() {
+                return;
+            }
+            let csg_state = |at: usize| self.w(at) & CSG_STATE_MASK;
+            let (req_state, ack_state) =
+                (csg_state(CSG_IN + offset_of!(CsgInput, req)), csg_state(CSG_OUT + offset_of!(CsgOutput, ack)));
+            if req_state != ack_state {
+                if req_state == CSG_STATE_TERMINATE {
+                    match self.terminates_left.get() {
+                        Some(0) => return,
+                        Some(n) => self.terminates_left.set(Some(n - 1)),
+                        None => {}
+                    }
+                } else if self.deaf_to_start.get() {
+                    return;
+                }
+            }
             self.ack_field(db_req, db_ack, rung);
             if rung & 1 == 0 {
                 return;
             }
+            let state = || self.w(CSG_OUT + offset_of!(CsgOutput, ack)) & CSG_STATE_MASK;
+            let before = state();
             self.ack_field(CSG_IN + offset_of!(CsgInput, req), CSG_OUT + offset_of!(CsgOutput, ack), CSG_REQ_MASK);
+            if state() == CSG_STATE_TERMINATE {
+                // the group's end: its stream stops and its events go
+                self.halted.set(false);
+                self.oom.set(false);
+                self.sync_error.set(None);
+                self.job_due.set(None);
+            } else if before == CSG_STATE_TERMINATE {
+                // a new start: a new stream, with no heap context yet; it
+                // runs from the input page's extract (the driver's, 0 after
+                // sched::restart), and the old stream's late publish is gone
+                self.heap_ctx.set(None);
+                self.publish_due.set(None);
+                let inp = MEM + self.w64(CS_IN + offset_of!(CsInput, ringbuf_input)) as usize;
+                self.published.set(self.w64(inp + offset_of!(RingbufInput, extract)));
+            }
             let (sreq, sack) =
                 (CSG_IN + offset_of!(CsgInput, doorbell_req), CSG_OUT + offset_of!(CsgOutput, doorbell_ack));
             let streams = self.w(sreq) ^ self.w(sack);
             self.ack_field(sreq, sack, streams);
             if streams & 1 != 0 {
-                self.ack_field(CS_IN + offset_of!(CsInput, req), CS_OUT + offset_of!(CsOutput, ack), CS_ACK_MASK);
+                let (req, ack) = (CS_IN + offset_of!(CsInput, req), CS_OUT + offset_of!(CsOutput, ack));
+                let stop = self.w(req) & CS_STATE_MASK == CS_STATE_STOP;
+                let mask = if stop && self.deaf_to_stop.get() { CS_ACK_MASK & !CS_STATE_MASK } else { CS_ACK_MASK };
+                self.ack_field(req, ack, mask);
+                if self.oom.get() && (self.w(req) ^ self.w(ack)) & CS_TILER_OOM == 0 {
+                    let start = self.w64(CS_IN + offset_of!(CsInput, heap_start));
+                    self.heap_starts.borrow_mut().push(start);
+                    if start != 0 {
+                        self.chunks.set(self.chunks.get() + 1);
+                        self.oom.set(false);
+                        self.job_due.set(Some(self.job_lag));
+                    }
+                }
             }
         }
-        fn exec(&self, w: u64, regs: &mut [u64; 256]) {
+        /// `CS_TILER_OOM` raised on CS 0 (the model's doc).
+        fn raise_oom(&self) {
+            self.oom.set(true);
+            let o = |f: usize| CS_OUT + f;
+            self.put64(o(offset_of!(CsOutput, heap_address)), self.heap_ctx.get().unwrap_or(0));
+            self.put(o(offset_of!(CsOutput, heap_vt_start)), 2);
+            self.put(o(offset_of!(CsOutput, heap_vt_end)), 1);
+            self.put(o(offset_of!(CsOutput, heap_frag_end)), 0);
+            let ack = o(offset_of!(CsOutput, ack));
+            self.put(ack, self.w(ack) ^ CS_TILER_OOM);
+            let irq = CSG_OUT + offset_of!(CsgOutput, cs_irq_req);
+            self.put(irq, self.w(irq) ^ 1);
+        }
+        /// An error of [`Fail`] raised; the stream stops.
+        fn raise_fail(&self, f: Fail) {
+            self.halted.set(true);
+            let toggle = |a: usize, bit: u32| self.put(a, self.w(a) ^ bit);
+            let cs_event = |word: usize, v: u32, bit: u32| {
+                self.put(CS_OUT + word, v);
+                toggle(CS_OUT + offset_of!(CsOutput, ack), bit);
+                toggle(CSG_OUT + offset_of!(CsgOutput, cs_irq_req), 1);
+            };
+            match f {
+                Fail::Fault(v) => cs_event(offset_of!(CsOutput, fault), v, CS_FAULT),
+                Fail::Fatal(v) => cs_event(offset_of!(CsOutput, fatal), v, CS_FATAL),
+                Fail::Progress => toggle(CSG_OUT + offset_of!(CsgOutput, ack), CSG_PROGRESS_TIMER_EVENT),
+                Fail::SyncError(_) | Fail::Hang => {}
+            }
+        }
+        /// One instruction; `Err` when the job stops on it ([`need_chunks`],
+        /// [`Z4::fail_at`]).
+        fn exec(&self, w: u64, regs: &mut [u64; 256]) -> Result<(), Stop> {
             let r = |s: u32| (w >> s & 0xff) as usize;
             match w >> 56 {
                 1 => regs[r(48)] = w & 0xffff_ffff_ffff,
                 2 => regs[r(48)] = w & 0xffff_ffff,
+                0x7f if self.chunks.get() < w as u32 => return Err(Stop::Oom),
                 32 => {
+                    let fail = self.take_fail();
+                    if let Some(f) = fail.filter(|f| !matches!(f, Fail::SyncError(_))) {
+                        self.raise_fail(f);
+                        return Err(Stop::Failed);
+                    }
                     let (at, size) = (regs[r(40)], regs[r(32)]);
                     for k in 0..size / 8 {
-                        self.exec(self.w64(self.cpu(at + 8 * k)), regs);
+                        self.exec(self.w64(self.cpu(at + 8 * k)), regs)?;
                     }
                     self.calls.set(self.calls.get() + 1);
+                    if let Some(Fail::SyncError(v)) = fail {
+                        self.sync_error.set(Some(v));
+                    }
                     if self.paint.get() {
                         self.paint_target();
                     }
@@ -1591,9 +1788,13 @@ pub(crate) mod tests {
                     if at == SYNC_VA && self.sync_status != 0 {
                         self.put(c + offset_of!(SyncObj64, status), self.sync_status);
                     }
+                    if let Some(v) = self.sync_error.take() {
+                        self.put(c + offset_of!(SyncObj64, status), v);
+                    }
                 }
                 _ => {}
             }
+            Ok(())
         }
         fn paint_target(&self) {
             for y in 0..H as u64 {
@@ -1611,11 +1812,18 @@ pub(crate) mod tests {
             let insert = self.w64(inp + offset_of!(RingbufInput, insert));
             let mut extract = self.published.get();
             let mut regs = [0u64; 256];
-            while extract < insert {
-                for i in 0..job::JOB_WORDS as u64 {
-                    self.exec(self.w64(self.cpu(ring + ((extract + 8 * i) & (size - 1)))), &mut regs);
+            // a stream stopped on a tiler OOM runs nothing until answered,
+            // a failed one nothing until terminated
+            while extract < insert && !self.oom.get() && !self.halted.get() {
+                let word = |i: u64| self.w64(self.cpu(ring + ((extract + 8 * i) & (size - 1))));
+                match (0..job::JOB_WORDS as u64).try_for_each(|i| self.exec(word(i), &mut regs)) {
+                    Ok(()) => extract += job::JOB_BYTES,
+                    Err(Stop::Oom) => {
+                        self.raise_oom();
+                        break;
+                    }
+                    Err(Stop::Failed) => break,
                 }
-                extract += job::JOB_BYTES;
             }
             self.published.set(extract);
             match self.publish_lag {
@@ -1652,6 +1860,11 @@ pub(crate) mod tests {
                 None => {}
             }
         }
+        /// Every register write so far, in order (memory the model holds
+        /// is not logged).
+        pub(crate) fn writes(&self) -> Vec<(usize, u32)> {
+            self.log.borrow().clone()
+        }
         /// The index in the log of the first write of `v` to `a`.
         fn first(&self, a: usize, v: u32) -> Option<usize> {
             self.log.borrow().iter().position(|&w| w == (a, v))
@@ -1669,6 +1882,9 @@ pub(crate) mod tests {
                 _ if a == GPU + mali::GPU_TILER_PRESENT => 1,
                 _ if a == GPU + mali::GPU_L2_FEATURES => 0x0712_0306,
                 _ if a == GPU + mali::GPU_TILER_FEATURES => 0x809,
+                _ if a == GPU + mali::GPU_INT_RAWSTAT && self.flush_stuck.get() => {
+                    self.w(a) | mali::IRQ_CLEAN_CACHES_COMPLETED
+                }
                 _ => self.w(a),
             }
         }
