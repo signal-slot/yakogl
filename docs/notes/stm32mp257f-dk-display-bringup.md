@@ -41,7 +41,13 @@ All five trees are cloned (depth 1) under `$CONNECTED_DEPS_DIR/st-src/`
 `arch/arm64/boot/dts/st/`, of O under `core/arch/arm/dts/`. The GPL and BSD
 trees are read for facts only; nothing is copied (pre-study, "What was
 read"). **[D]** marks a fact that is derived (computed, or concluded from
-several citations) and not stated by one source. The board's own OP-TEE,
+several citations) and not stated by one source. The repository's own
+`driver/docs/stm32mp257f-dk-display-allow.txt` was checked against those
+trees in `57ffb670`: the RIFSC base 0x42080000 and the entry layout match
+ST's dtsi and RIFSC driver; the DSI read list skips the offsets ST's tree
+marks reserved; `DSI_WIER` / `DSI_WIFCR` rest on the convention "WIER enables
+what a read may return, WIFCR clears the flagged cause" — no source read
+spells it out [D]. The board's own OP-TEE,
 TF-A and U-Boot binaries are not known to be exactly these tags (pre-study
 table, rows *OP-TEE, TF-A* and *ST U-Boot*): every "left set by" below is
 what the tag's code and configuration do, to be confirmed by the read-only
@@ -55,7 +61,9 @@ in CID-encoded fonts and no PDF text tool is installed on this host. So, as
 in the pre-study (`:85-98`), **every register offset and bit below is the
 drivers' and unconfirmed against the manual**, and the board-level facts
 (supplies, pull-ups, the HPD wiring) are the device trees', not the
-schematic's.
+schematic's. A second pass for RM0457 on this farm failed the same way, so
+open questions 1, 7, 8, 9 and 12 are answered from ST's Linux and OP-TEE
+sources only, and **provisional**: they stand until the manuals are read.
 
 ## The chain on one page
 
@@ -95,6 +103,21 @@ schematic's.
   share RIFSC entry 119, layer 3 has 120; if 120 cannot be granted, Linux
   hides layer 3 and the CRC ("reserved for secure application",
   L:`ltdc.c:2445-2465`, `:2588-2589`). **Our image uses layer 1 only.**
+- **CRC support.** For this hardware ST's driver sets `caps.crc` (L:`ltdc.c:2566`,
+  the 0x40100/0x40101 branch) and clears it only when layer 3 is secure — for
+  `st,stm32mp25-ltdc`, `if (is_layer_secured) ldev->caps.crc = false;`
+  (L:`ltdc.c:2589-2590`; the flag is set at `:2460` when layer 3's RIF cannot
+  be granted, declared `:2407`). `caps.crc` selects the CRTC's CRC-capable
+  function table (L:`ltdc.c:2280-2282`, `:1548`). On the DK layer 3 is
+  non-secure (row 1), so the CRC is reachable for the probe too: `GCR_CRCEN`
+  (bit 19, L:`ltdc.c:142`), the computed value in `LTDC_CCRCR` (0x007C,
+  `:89`, read per frame at `:1054`), the error flag `ISR_CRCIF` (bit 7,
+  `:204`) with its enable `IER_CRCIE` (`:193`), and the driver skipping the
+  first two frames (`CRC_SKIP_FRAMES` 2, `:274`, used at `:1017`). **What
+  `CCRCR` computes is stated in none of the sources read** [D]; ltdc-crc-study
+  fixed the probe's use as comparative: `CCRCR` stable across frames of one
+  pattern and different when the pattern changes [D]. The algorithm waits for
+  RM0457 (open question 12).
 - **Formats.** `LxPFCR` codes on this version: 0 ARGB8888, 1 ABGR8888,
   2 RGBA8888, 3 BGRA8888, 4 RGB565, 5 BGR565, 6 RGB888, 7 none
   (L:`ltdc.c:318-326`); the rest through the flexible-format registers
@@ -206,7 +229,26 @@ schematic's.
   (O:`:456-459`); OP-TEE's SCMI server marks it disabled for the agent at
   boot because only always-on and boot-on regulators start enabled
   (O:`core/lib/scmi-server/scmi_regulator_consumer.c:102-117`). D349 says
-  the same ("not marked always-on or boot-on", D349:294-297).
+  the same ("not marked always-on or boot-on", D349:294-297). Checked
+  further for this pass: the DT declares the rail in bypass mode
+  (`st,regulator-bypass-microvolt = <5000000>`, O:`stm32mp257f-dk.dts:297`),
+  but the bypass bit reaches the PMIC only when a driver sets the rail's
+  voltage to the bypass level (written at O:`core/drivers/stm32mp_pmic2.c:208-211`,
+  cleared otherwise `:222-224`) — with the domain off at boot, nothing
+  writes it. Nothing in OP-TEE turns LDO5 on: `regulator_enable` is called
+  only for boot-on regulators (O:`scmi_regulator_consumer.c:111-117`), the
+  domain's initial state is a cached flag (`:149-153`; `default_enabled` fed
+  from it, O:`core/lib/scmi-server/SCP-firmware/product/optee-stm32mp2/fw/config_all.c:915`),
+  and the voltage `CONFIG_GET` answers from that cache, never from the PMIC
+  (O:`core/lib/scmi-server/SCP-firmware/module/optee/voltd_regulator/src/mod_optee_voltd_regulator.c:71-75`,
+  `:348`); only `CONFIG_SET` drives the PMIC (`:112-130`). So a `CONFIG_GET`
+  on domain 21 is OP-TEE's bookkeeping: it reads OFF for as long as no
+  agent's `CONFIG_SET` succeeded, whatever the PMIC output is, and LDO5's
+  real state at hand-over stays open question 3. `st,pwrctrl-sel = <0>` and
+  `st,pwrctrl-enable` (O:`stm32mp257f-dk.dts:298-299`) are among the
+  properties written to the PMIC at its DT init (property table
+  O:`core/drivers/stm32mp_pmic2.c:93-102`, applied `:455-470`); what the
+  PWRCTRL line does for LDO5 is the STPMIC25 datasheet's, unread.
 - **Reset and power-down.** `reset-gpios = <&gpiob 6 GPIO_ACTIVE_LOW>`
   (L:`stm32mp257f-dk.dts:438`). Linux's driver never drives it: the only GPIO
   it takes is an optional `pd` (L:`adv7511_drv.c:1248`), which the DK's node
@@ -274,22 +316,93 @@ config 0x7 = on and 0 = off in architectural mode
 | 3 | I2C2 registers: RIFSC 42 | OP-TEE: same (O:`...-rif.dtsi:50`; O:`stm32mp25-rifsc.h:51`) | nothing; read as row 1 | none |
 | 4 | LTDC's DMA master (RIMU) | OP-TEE: RIMU 11, 12 and 13, the only masters without a peripheral pairing, are CID0, non-secure, privileged, CID from the master (`RIF_CIDSEL_M`) (O:`...-rif.dtsi:636-638`; pairing table O:`stm32_rifsc.c:146-211`). **Which RIMU is the LTDC is not named in any source read** (open question 1) | nothing | none |
 | 5 | Frame-buffer memory (RISAF4) | OP-TEE: region 9 `linuxkernel1` 0x84000000-0xfa7fffff and region 10 `gpu_reserved` 0xfa800000-0xfe7fffff non-secure, read/write CID0 and CID1 (O:`...-rif.dtsi:980-986`, `:1001`; areas O:`stm32mp257f-dk-ca35tdcid-resmem.dtsi:122-129`) | place the buffer there (section "Frame buffer") | none |
-| 6 | LTDC bus + kernel clock gate, `RCC_LTDCCFGR` (0x44200840) bit 1; reset bit 0 | U-Boot: its LTDC probe enables both clocks (U:`drivers/video/stm32/stm32_ltdc.c:895-921`) and releases the reset only after a panel was found (`:962-1008`), which on a DK with no LVDS panel fails [D, D349:409-432]: gate possibly on, reset as the ROM left it | assert reset, gate on, release reset, read back (`set` asserts, L:`drivers/clk/stm32/clk-stm32mp25.c:550`, `:2329`; polarity D349:400-405). Guarded by RIFSC 80 (L:`clk-stm32mp25.c:2115`, `:2242`) | none |
-| 7 | DSI gate `RCC_DSICFGR` (0x44200844) bit 1, reset bit 0; muxes `DSIBLSEL` bit 12, `DSIPHYCKREFSEL` bit 15 | OP-TEE boot: PHY ref = FLEXGEN_28, lane byte = DSI PHY (O:`stm32mp257f-dk-ca35tdcid-rcc.dtsi:105-106`); gate and reset untouched by U-Boot on a DK [D] | gate on, reset pulse; **keep the two mux bits** (L:`clk-stm32mp25.c:233-234`, `:491`, `:2330`); guarded by RIFSC 81 (`:2114`, `:2238-2239`) | none |
-| 8 | Pixel-clock mux `SYSCFG_DISPLAYCLKCR` (0x44235000) = 2, `ck_ker_ltdc` | U-Boot writes 2 in its LTDC probe (U:`stm32_ltdc.c:321-323`, `:887`), if the probe ran (open question 6) | write 2 and read back (L:`drivers/clk/stm32/clk-stm32mp25-syscfg.c:13-17`, `:56-63`; Linux picks `ck_ker_ltdc` for any non-LVDS encoder, L:`ltdc.c:1114-1130`) | none |
+| 6 | LTDC bus + kernel clock gate, `RCC_LTDCCFGR` (0x44200840) bit 1; reset bit 0 | U-Boot: its LTDC probe **does run** on a DK (paragraph below) and enables both clocks (U:`drivers/video/stm32/stm32_ltdc.c:897-921`; the gate write is `RCC_LTDCCFGR` bit 1, U:`drivers/clk/stm32/clk-stm32-core.c:186-220` for the gate of U:`drivers/clk/stm32/clk-stm32mp25.c:453`); it releases the LTDC reset only after a panel was found (`:1002-1008`), and on a DK every port fails its panel search, so `return ret` at (`:979-981`) leaves the gate on and the reset as the ROM left it (D349:409-432) | assert reset, gate on, release reset, read back (`set` asserts, L:`drivers/clk/stm32/clk-stm32mp25.c:550`, `:2329`; polarity D349:400-405). Guarded by RIFSC 80 (L:`clk-stm32mp25.c:2115`, `:2242`) | none |
+| 7 | DSI gate `RCC_DSICFGR` (0x44200844) bit 1, reset bit 0; muxes `DSIBLSEL` bit 12, `DSIPHYCKREFSEL` bit 15 | OP-TEE boot: PHY ref = FLEXGEN_28, lane byte = DSI PHY (O:`stm32mp257f-dk-ca35tdcid-rcc.dtsi:105-106`); U-Boot: the DSI bridge probe, reached from the LTDC probe (U:`drivers/video/stm32/stm32_ltdc.c:771-772`), enables `pclk` (U:`drivers/video/stm32/stm32_dsi.c:991`) and releases the DSI reset (`:1010`) — and its rollback (`:1026-1030`) does not run when the panel search later fails at the LTDC; whether the supply requests the probe makes first (row 18's domains) succeed from U-Boot is one of the two sub-cases of the paragraph below, decided by the `RCC_DSICFGR` read | gate on, reset pulse; **keep the two mux bits** (L:`clk-stm32mp25.c:233-234`, `:491`, `:2330`); guarded by RIFSC 81 (`:2114`, `:2238-2239`) | none |
+| 8 | Pixel-clock mux `SYSCFG_DISPLAYCLKCR` (0x44235000) = 2, `ck_ker_ltdc` | U-Boot writes 2 in its LTDC probe, before that probe's panel search fails (U:`stm32_ltdc.c:321-323`, `:887`; the probe runs — paragraph below) | write 2 and read back (L:`drivers/clk/stm32/clk-stm32mp25-syscfg.c:13-17`, `:56-63`; Linux picks `ck_ker_ltdc` for any non-LVDS encoder, L:`ltdc.c:1114-1130`) | none |
 | 9 | `FLEXGEN_27`, the LTDC kernel clock's source | OP-TEE boot: cross-bar PLL8, divider 4: 148.5 MHz (O:`stm32mp257f-dk-ca35tdcid-rcc.dtsi:64`, `:189-196`; `rate / (findiv + 1)`, O:`core/drivers/clk/clk-stm32mp25.c:2987-3019`); the channel's cross-bar is enabled (`XBARxEN`, O:`clk-stm32mp25.c:2170-2181`) but the **output enable `FINDIVxEN` is not** (`:3178-3219`) and nothing in the chain is shown to set it on a DK (open question 2). TF-A sets no flexgen 12, 27, 28 and no PLL8 (T:`fdts/stm32mp257f-dk-ca35tdcid-rcc.dtsi`, by search) | nothing: the flexgen registers are RCC resource 27, secure, CID1 (O:`...-rif.dtsi:733`) | clock 0x14, id 27 (O:`core/include/dt-bindings/clock/stm32mp25-clks.h:427`): `CONFIG_SET` enable; for 720p `RATE_SET` 74 250 000 Hz (`ALLOW_SET_RATE`, O:`stm32mp25-st-scmi-cfg.dtsi:243-249`; 594 / 8 exactly, divider search O:`clk-stm32mp25.c:3025-3068`, set only the dividers, `:3140-3176`); `RATE_GET` back |
 | 10 | `FLEXGEN_28`, the DSI PHY reference | OP-TEE boot: PLL8 / 22 = 27 MHz (O:`...-rcc.dtsi:65`); output enable as row 9 | nothing (RCC resource 28 secure, O:`...-rif.dtsi:734`) | clock 0x14, id 28 (O:`stm32mp25-clks.h:428`): `CONFIG_SET` enable, `RATE_GET`; no rate change allowed (O:`stm32mp25-st-scmi-cfg.dtsi:251-256`) |
 | 11 | `ICN_DISPLAY`, the display interconnect | OP-TEE: critical in the ca35tdcid build, always on (O:`clk-stm32mp25.c:3554-3556`, `:3770`) | nothing | clock 0x14, id 3: `CONFIG_SET` enable is harmless; optional (O:`stm32mp25-st-scmi-cfg.dtsi:70-75`) |
 | 12 | `ICN_APB4` (LTDC, DSI APB) and `ICN_APB1` (I2C2 APB) | dividers of `ck_icn_ls_mcu`, no gate (O:`clk-stm32mp25.c:3843`, `:3846`); OP-TEE: `DIV_APB1`, `DIV_APB4` = 0 (O:`...-rcc.dtsi:29-32`) | nothing | none needed |
-| 13 | I2C2 kernel clock `FLEXGEN_12` (PLL4 1200 MHz / 12 = 100 MHz) | OP-TEE boot (O:`...-rcc.dtsi:49`, `:152-158`); output enable: U-Boot's touch-panel detection on the DK reads I2C2 (U:`stm32mp2.c:223-247`, `:336`; `CONFIG_SYS_I2C_STM32F7`, U:`configs/stm32mp25_defconfig:98-99`), so it is probably on [D] | nothing (RCC resource 12 secure, O:`...-rif.dtsi:718`) | clock 0x14, id 12 (O:`stm32mp25-clks.h:412`): `CONFIG_SET` enable; `RATE_GET` for the I2C timing |
-| 14 | I2C2 gate `RCC_I2C2CFGR` (0x442007A8) bit 1, reset bit 0 | U-Boot: probably on after the touch detection [D] | gate on, reset pulse (L:`clk-stm32mp25.c:514`, `:1100-1136`, `:2296`; offset L:`drivers/clk/stm32/stm32mp25_rcc.h:405`); guarded by RIFSC 42 (`:2075`, `:2150`) | none |
-| 15 | GPIOB, GPIOF bus clocks | U-Boot's pin control for I2C2 (GPIOF) and its LED/button GPIOs [D]; not shown for GPIOB | nothing (an SCMI clock, L:`stm32mp251.dtsi:2778`, `:2826`) | clock 0x14, ids 90 (GPIOB) and 94 (GPIOF) (O:`stm32mp25-clks.h:489`, `:493`; O:`stm32mp25-st-scmi-cfg.dtsi:641-646`, `:669-674`): `CONFIG_SET` enable |
+| 13 | I2C2 kernel clock `FLEXGEN_12` (PLL4 1200 MHz / 12 = 100 MHz) | OP-TEE boot (O:`...-rcc.dtsi:49`, `:152-158`); output enable: U-Boot's touch-panel detection on the DK reads I2C2 (U:`stm32mp2.c:223-247`, `:336`; `CONFIG_SYS_I2C_STM32F7`, U:`configs/stm32mp25_defconfig:98-99`) — the bus probe writes row 14's gate and pulses the reset, so it is probably on [D] | nothing (RCC resource 12 secure, O:`...-rif.dtsi:718`) | clock 0x14, id 12 (O:`stm32mp25-clks.h:412`): `CONFIG_SET` enable; `RATE_GET` for the I2C timing |
+| 14 | I2C2 gate `RCC_I2C2CFGR` (0x442007A8) bit 1, reset bit 0 | U-Boot: on — its I2C2 bus probe enables the gate and releases the reset (U:`drivers/i2c/stm32f7_i2c.c:899`, `:907`, `:909`), reached from its panel detection (U:`board/st/stm32mp2/stm32mp2.c:138`, called at `:238`); `go` runs no teardown (paragraph below) | gate on, reset pulse (L:`clk-stm32mp25.c:514`, `:1100-1136`, `:2296`; offset L:`drivers/clk/stm32/stm32mp25_rcc.h:405`); guarded by RIFSC 42 (`:2075`, `:2150`) | none |
+| 15 | GPIOB, GPIOF bus clocks | U-Boot's pin control for I2C2 (GPIOF) and its LED/button GPIOs [D]; a probed GPIO bank enables its bus clock (U:`drivers/gpio/stm32_gpio.c:415`, `:419`), but whether the GPIOB or GPIOF banks were probed on a DK is not established — open question 6's board read decides | nothing (an SCMI clock, L:`stm32mp251.dtsi:2778`, `:2826`) | clock 0x14, ids 90 (GPIOB) and 94 (GPIOF) (O:`stm32mp25-clks.h:489`, `:493`; O:`stm32mp25-st-scmi-cfg.dtsi:641-646`, `:669-674`): `CONFIG_SET` enable |
 | 16 | Pins PF0, PF2 (I2C2 SDA, SCL): pin RIF | OP-TEE: non-secure, unlocked (O:`...-rif.dtsi:429-433`) | mode AF, AF9, open drain, no pull (`MODER` 0x00, `OTYPER` 0x04, `PUPDR` 0x0c, `AFRL` 0x20, L:`drivers/pinctrl/stm32/pinctrl-stm32.c:41-50`); GPIOF at 0x44290000 (L:`stm32mp251.dtsi:2819-2829`) | none |
 | 17 | PB6 (ADV7535 reset), PB4 (its interrupt): pin RIF | OP-TEE: non-secure (O:`...-rif.dtsi:347-364`, pins 4 and 6 at `:353`, `:355`); nothing drives PB6 on a DK (above) | PB6 output, push-pull, low 1 ms, high, wait 10 ms (as U:`stm32mp2.c:186-203`); PB4 input, read `IDR` (0x10); GPIOB at 0x44250000 (L:`stm32mp251.dtsi:2771-2781`) | none |
-| 18 | ADV7535 1.8 V (`BUCK5`) and 3.3 V (`BUCK7`); DSI `vdda18` (`BUCK5`), `vdd` (`BUCK2`, vddcore) | OP-TEE: always on (O:`stm32mp257f-dk.dts:106-110`, `:169-173`, `:216-220`) | nothing | voltage 0x17, ids 14, 16, 11: `CONFIG_GET` to confirm on (0x7); no set needed |
-| 19 | HDMI +5 V, `LDO5` | not always on, not boot on (O:`stm32mp257f-dk.dts:293-300`); its hardware state at hand-over is the PMIC's (open question 3) | nothing | voltage 0x17, id 21: `CONFIG_GET`, then `CONFIG_SET` 0x7, `CONFIG_GET` back |
+| 18 | ADV7535 1.8 V (`BUCK5`) and 3.3 V (`BUCK7`); DSI `vdda18` (`BUCK5`), `vdd` (`BUCK2`, vddcore) | OP-TEE: always on (O:`stm32mp257f-dk.dts:106-110`, `:169-173`, `:216-220`) | nothing | voltage 0x17, ids 14, 16, 11: `CONFIG_GET` reads OP-TEE's flag — ON for these always-on domains, whatever the PMIC output is ("The ADV7535"); no set needed |
+| 19 | HDMI +5 V, `LDO5` | not always on, not boot on (O:`stm32mp257f-dk.dts:293-300`); its hardware state at hand-over is the PMIC's (open question 3) | nothing | voltage 0x17, id 21: `CONFIG_GET`, then `CONFIG_SET` 0x7, `CONFIG_GET` back — the `CONFIG_GET`s read OP-TEE's flag (OFF until some `CONFIG_SET` succeeded), only `CONFIG_SET` drives the PMIC ("The ADV7535") |
 | 20 | Power domain `d1_pd` (LTDC, DSI, I2C2) | the generic `st,stm32mp-pm-domain` (L:`stm32mp251.dtsi:189-193`); no SCMI domain behind it | nothing [D] | none |
 | 21 | Display interconnect QoS `SYSCFG_ICNLTDCBWLCR` (SYSCFG + 0x202C) | TF-A leaves it at its reset value; its write is commented out (T:`plat/st/stm32mp2/stm32mp2_syscfg.c:112`, `:545-561`) | nothing | none |
+
+**U-Boot's run on a DK, checked line by line (corrects uboot-ltdc-study).**
+The study handed in (issue #1281) that ST's U-Boot on a DK binds no LTDC,
+DSI, LVDS or I2C2 driver, writes none of `RCC_LTDCCFGR`, `RCC_DSICFGR`,
+`RCC_I2C2CFGR` and `SYSCFG DISPLAYCLKCR`, and that rows 6, 7, 8, 14 are
+therefore TF-A's or OP-TEE's. Checked against the r3.1 tag this premise does
+not hold; the verified chain:
+
+- **Bound, then probed.** `dm_init_and_scan(false)` binds every driver
+  without probing (U:`common/board_r.c:247`); the init sequence then calls
+  `stdio_add_devices` (U:`common/board_r.c:725` → U:`common/stdio.c:314`),
+  which — when the console is not in the environment, and
+  `CONFIG_SYS_CONSOLE_IS_IN_ENV` has no Kconfig entry in this tag and no
+  line in `stm32mp25_defconfig` [D] — probes **every video device**
+  (U:`common/stdio.c:343-364`, loop at `:356-364`), printing
+  `"Failed to probe video device"` for one that fails (`:362`): a DK boot
+  log should carry that line naming the LTDC, readable by the state probe's
+  capture [D]. Video and both bridge drivers are in the defconfig
+  (U:`configs/stm32mp25_defconfig:168-178`).
+- **The LTDC probe on a DK.** It first asks for the RIFSC grants of row 1
+  (U:`stm32_ltdc.c:844-869`), writes `DISPLAYCLKCR = 2` — "Set default
+  pixel clock to enable register access" (`:887`, constants `:321-323`) —
+  enables the bus and lcd clocks (`:904`, `:917`), and only then reads
+  `LTDC_IDR` (`:923`), accepting 0x40100/0x40101 (`:942-946`). It walks the
+  LTDC ports, "first for the DSI node and then for the LVDS" (comment
+  `:952-960`, loop `:969-977`); each attempt probes the bridge device
+  (`stm32_ltdc_display_init`, `:771-772`) and searches a panel behind it
+  (`:780`); a DK has no panel under either bridge, so the last port's error
+  returns at `:979-981`. Unreached after it: the panel timings,
+  `clk_set_rate`, the LTDC reset (`:1002-1008`), the bridge-dependent
+  `DISPLAYCLKCR` rewrites (`:1013-1018`), the backlight (`:1067`) — and
+  nothing already written is unwound. The gate stays on, `DISPLAYCLKCR`
+  stays 2, the LTDC reset stays as the ROM left it.
+- **The DSI bridge was probed before that failure**, from the DSI port
+  attempt: it requests its supplies `vdd` and `vdda18`
+  (U:`drivers/video/stm32/stm32_dsi.c:958`, `:971` — the SCMI regulators
+  `scmi_vddcore`/`scmi_v1v8` of U-Boot's DK file,
+  U:`arch/arm/dts/stm32mp257f-dk.dts:329-330`, domains 11 and 14) and
+  enables them (`:966`, `:979`). Two sub-cases, not decidable from the
+  sources: if a supply request errors on the board, the probe unwinds
+  (`:1026-1030`: clock off, supplies off) and `RCC_DSICFGR` is left as
+  OP-TEE's boot left it; if they pass, `pclk` is enabled (`:991`; the gate
+  of U:`drivers/clk/stm32/clk-stm32mp25.c:454`, `:595`) and the DSI reset
+  released (`:1010`), the version read passes at 1.41 (`:1013-1023`) — and
+  the probe returns `0` (`:1025`), so the panel failure afterwards is the
+  LTDC's and does not roll the DSI back. The board read of `RCC_DSICFGR`
+  (open question 6) decides which happened.
+- **I2C2 was probed too**: the panel detection's `i2c_read`
+  (U:`board/st/stm32mp2/stm32mp2.c:138`, called at `:238`) obtains the bus
+  device, whose probe enables the I2C2 bus clock and pulses its reset
+  (U:`drivers/i2c/stm32f7_i2c.c:899`, `:907`, `:909`).
+- **`go` runs no teardown — that is why these writes stand.** `do_go_exec`
+  (U:`cmd/boot.c:18`, called at `:41`) goes straight to the boot payload;
+  the driver-model teardown (`dm_remove_devices_flags`,
+  U:`drivers/core/root.c:225`, which frees drivers flagged
+  `DM_FLAG_OS_PREPARE`, U:`include/dm/device.h:59-63`, `:109` — a flag the
+  LTDC driver carries, U:`stm32_ltdc.c:1121`, and the GPIO driver too,
+  U:`drivers/gpio/stm32_gpio.c:463`) is called only from
+  `announce_and_cleanup` (U:`arch/arm/lib/bootm.c:54`, `:77`, `:80`), the
+  Linux bootm path. This image is handed over with `go`
+  (`tools/board-stm32mp2.sh:37-40`), so none of the enables is removed
+  before our image runs.
+
+So rows 6, 7, 8, 13, 14 above name U-Boot as the setter: the four registers
+are written by U-Boot proper on a DK, and the study's "no driver bound, so
+TF-A/OP-TEE left them" does not survive the check. What the study gets right
+is the last point — no teardown at `go` — and it is the reason the writes
+stand. What stays open to the board, read by
+`tools/probes/stm32mp257f_dk/mp2_display_state` (open question 6): which DSI
+sub-case happened, the absolute flexgen rates and output enables OP-TEE left
+(open question 2), and which GPIO bank gates were touched (row 15).
 
 What changes against D349: D349 says "1080p60 needs no SCMI clock request
 at all" (D349:362). The *rate* needs none, but OP-TEE's flexgen boot
@@ -318,6 +431,34 @@ defines base, power, performance, clock and reset (0x10, 0x11, 0x13, 0x14,
 need it (item soc-display). And the SCMI transport from our image has not
 run on the board in this tree (`tools/probes/stm32mp257f_dk/mp2_gpu/README.md:93`,
 "Not yet run on the board"; the open session question is pre-study Q3).
+
+**SCMI request rules (delivered by scmi-session-study).** Our image is agent
+1 on channel 0 of the OP-TEE pseudo-TA (O:`stm32mp25-st-scmi-cfg.dtsi:18-22`);
+its transport is still unproven (paragraph above) and the SCMI group of
+`tools/probes/stm32mp257f_dk/mp2_display_state` is the run that records it.
+The rules, and the server behaviour that makes each one a rule:
+
+- **Enable with `CONFIG_SET`, then verify the resource, never the reply
+  alone.** The server's state for a clock or voltage domain is its own
+  cached flag, answered from the cache: clocks through
+  `ctx->enabled` (O:`core/lib/scmi-server/SCP-firmware/module/optee/clock/src/mod_optee_clock.c:110-163`,
+  initial value `:426`), voltages likewise (O:`.../voltd_regulator/src/mod_optee_voltd_regulator.c:71-75`,
+  `:348` — "The ADV7535" above), and exported clocks start disabled for the
+  agent whatever runs in hardware ("Default OFF for RIF issues",
+  O:`core/lib/scmi-server/scmi_clock_consumer.c:275-280`, cited above).
+  So each `CONFIG_SET` is followed by `CLOCK_ATTRIBUTES`/`RATE_GET` and,
+  for what the display depends on, by the RCC read-backs of open question
+  2 and 6 — an SCMI success is intent, not state [D].
+- **`RATE_SET` only on 27.** Of the display clocks only FLEXGEN_27's export
+  carries `SCMI_CLOCK_ALLOW_SET_RATE` (O:`stm32mp25-st-scmi-cfg.dtsi:243-249`);
+  FLEXGEN_12 and FLEXGEN_28 are exported with `SCMI_CLOCK_DEFAULT_ENABLED`
+  only (`:134-139`, `:251-256`) — the server refuses rate changes on them,
+  and neither rate is ours to change.
+- **Never `CONFIG_SET` disable** [D]. Disabling FLEXGEN_12 stops I2C2's
+  kernel clock that the ADV7535 bus runs on; disabling 27 or 28 stops the
+  picture and the PHY reference; the server would carry the order out
+  (O:`mod_optee_clock.c:110-125`) — the restraint is ours, not the
+  server's.
 
 ## The LTDC pixel clock on the MP25
 
@@ -370,6 +511,28 @@ Our image is linked at 0xa0000000 and owns 256 MiB as `zephyr,sram`
 3. **Not** the two LTDC secure-layer areas at 0xfe800000 and 0xff000000
    (see "The secure layer"), not inside `zephyr,sram` (the image's own heap
    and stacks; also cacheable).
+
+### GPU buffer format (from scanout-format-study)
+
+The linear target `gc_triangle` resolves is the PE's `X8R8G8B8`:
+`VIVS_PE_COLOR_FORMAT_FORMAT(PE_FORMAT_X8R8G8B8)` with the four-component
+mask and `OVERWRITE` (P:`driver/src/vivante/gc_draw.c:476-479`), named
+`B8G8R8X8_UNORM` in the driver's own words (P:`driver/src/vivante/gc_draw.h:28`);
+the format table vendored in this tree equates `PIPE_FORMAT_XRGB8888_UNORM`
+with `PIPE_FORMAT_B8G8R8X8_UNORM` (P:`driver/src/v3d/generated/util/format/u_format_gen.h:616`).
+In memory the byte order is B, G, R, X, so a little-endian A35 reads one
+pixel as the word `0x00RRGGBB` [D]. The LTDC takes it unchanged through its
+format code 0 (ARGB8888 with constant alpha — the "Formats" bullet and
+L:`ltdc.c:318-326`): no byte or word swap on the scan-out side [D]. The
+buffer is mode-shaped: `OUT_W x OUT_H` at
+`OUT_PITCH = ROUND_UP(OUT_W * 4, 64)` (P:`driver/samples/zephyr/gc_triangle/src/main.c:266`,
+asserted `:272-276`), 4096-byte aligned by `gc_render_alloc` when
+`CONFIG_GC_TRIANGLE_LINEAR_OUT_ADDR` is 0 (`:297`), and the run prints its
+physical address (`gc_triangle: linear: ... phys 0x...`, `:347-349`). That
+`phys` is what `L1CFBAR` takes, unchanged: a DDR address inside the carveout,
+below 4 GiB (item 2 above). Its cache rules are item (3) of "Cache
+maintenance" below — the LTDC scans GPU-written memory needing no maintenance
+of its own.
 
 ## Framebuffer memory and bus-master access
 
@@ -592,12 +755,16 @@ answers most of them by reading, before anything is written.
 5. **The ADV7535's state with PB6 never driven.** Does 0x3d answer before our
    reset pulse (the pad's reset state and the board's pull, MB1605)? The
    probe reads 0x00 once before and once after the pulse.
-6. **What U-Boot left of the LTDC.** Whether ST's U-Boot probes the LTDC on a
-   DK at all (`DM_FLAG_OS_PREPARE`, U:`stm32_ltdc.c:1121`; video is in the
-   defconfig, U:`configs/stm32mp25_defconfig:168-178`) and so leaves the gate
-   on, `DISPLAYCLKCR` = 2 and the RIFSC grants taken: read `RCC_LTDCCFGR`,
-   `RCC_DSICFGR`, `RCC_I2C2CFGR`, `DISPLAYCLKCR`, `LTDC_IDR` (only if the gate
-   is on), the RIFSC entries of rows 1 to 3. D349's open question 4.
+6. **What U-Boot left of the LTDC.** Closed at the sources: ST's U-Boot
+   probes the LTDC, the DSI bridge and the LVDS bridge on a DK and I2C2 in
+   its panel detection, and writes `DISPLAYCLKCR` = 2 and the LTDC gate
+   before its panel search fails (paragraph "U-Boot's run on a DK"). Open to
+   the board, read by `tools/probes/stm32mp257f_dk/mp2_display_state`:
+   `RCC_LTDCCFGR`, `RCC_DSICFGR` (which DSI sub-case happened — supplies via
+   SCMI or not), `RCC_I2C2CFGR`, `DISPLAYCLKCR`, `LTDC_IDR` (only if the gate
+   is on), the RIFSC entries of rows 1 to 3, the GPIO bank gates of row 15,
+   and the `RATE_GET`/`CLOCK_ATTRIBUTES` answers naming the absolute flexgen
+   values (open question 2). D349's open question 4.
 7. **Can the non-secure side write SYSCFG + 0x5000?** Linux does (through a
    syscon regmap), so yes on this variant [D]; RM0457 says which SYSCFG
    registers are secure-only. Read it back after the write.
@@ -625,19 +792,19 @@ Plan #349 has merged. Its two DK notes are committed: `docs/notes/stm32mp257f-dk
 - **The HDMI connector.** D349:43-44 and D349:293-297: type A connector, +5 V from `LDO5` (`v5v_hdmi`), not marked always-on or boot-on in OP-TEE's DK file — row 19 and "The ADV7535" hold the same; this note adds the SCMI domain id 21 and the server-side "starts disabled for the agent". Both leave the same two questions to the board (D349:505-507 against open question 3): `LDO5`'s state at hand-over, and the connector's pull-up wiring, which waits for MB1605 in both notes. This note's [D] that a sink needs +5 V on the connector to answer DDC meets no opposite claim in D349.
 - **The ADV7535's supplies.** D349:293-295 (1.8 V from `BUCK5` for `avdd`, `dvdd`, `pvdd`, `a2vdd`, `v1p2`; 3.3 V from `BUCK7` for `v3p3`) is the same device-tree reading as row 18; D349:453-455 ("Rails": the BUCKs are on because the board is already running — "check, do not assume") is the caution row 18's `CONFIG_GET` implements.
 - **Hand-over.** The runner starts our image with `go` after `dcache off; icache off` (B349:59-60); the `mp2-handover:` readings of #349's steps 1-4 (B349:64-83) will print EL2 with MMU and caches off — the premise of item (4) in "Cache maintenance": nothing of ours dirty at entry.
-- **U-Boot's residue.** D349:407-432 reaches this note's conclusion for row 6 and open question 6: on a DK with no LVDS panel the LTDC probe fails, the clocks may be left on, the reset as it was, nothing lit. Both mark it [D] and both ask the board to read `RCC_LTDCCFGR`, `RCC_DSICFGR` and `DISPLAYCLKCR` first.
+- **U-Boot's residue.** D349:407-432 reaches this note's conclusion for row 6: on a DK with no panel the LTDC probe fails and nothing lights up. This note's pass sharpens it from *may* to *does* (paragraph "U-Boot's run on a DK", open question 6): the probe runs, the gate and `DISPLAYCLKCR` = 2 are written, and the DSI bridge and I2C2 are probed as a side effect. Both notes ask the board to read `RCC_LTDCCFGR`, `RCC_DSICFGR` and `DISPLAYCLKCR` first; the reads are now confirmation of a traced chain, not discovery.
 
 **Extensions.**
 
 - **The board's own supply — the rule this note lacked.** This note covers the rails at PMIC level; the board-level supply is B349's: the DK's only supply is its USB-C cable (B349:262-263, pre-study `:783-785`), a brown-out can reboot or stall mid-run and reads like a hardware fault, and the discriminator is the new boot's BL2 `Reset reason:` line, which the runner's capture already holds (B349:264-282; the supply-sources study's report is not in the tree, B349:271-273, so neither note quotes the line's exact text). A power-on-class reset, or no BL2 lines at all, names a supply loss (B349:282). The order B349:284-289 gives — the cable and the supply **before** any register-level theory, before blaming SCMI, the GIC or the GPU — is what every board row below reads first; the plan states the same for this path.
-- **The SCMI session is answered upstream of this path.** B349:130-136: `mp2_gpu`'s run is the first session from our image to the SCMI pseudo-TA; whether OP-TEE accepts a non-Linux client's `TEE_LOGIN_REE_KERNEL` is open there, "ACCESS_DENIED here is a finding, not a fault", and every request is logged before it is sent — the same rule rows 9 and 10 cite. #349 runs that step before any display board item (B349:26-33), so open question 10 has an answer on file before this path sends its clock and voltage requests. (Item scmi-session-study studies the question itself; this note's "Our SCMI codec" paragraph is theirs to bring current.)
+- **The SCMI session is answered upstream of this path.** B349:130-136: `mp2_gpu`'s run is the first session from our image to the SCMI pseudo-TA; whether OP-TEE accepts a non-Linux client's `TEE_LOGIN_REE_KERNEL` is open there, "ACCESS_DENIED here is a finding, not a fault", and every request is logged before it is sent — the same rule rows 9 and 10 cite. #349 runs that step before any display board item (B349:26-33), so open question 10 has an answer on file before this path sends its clock and voltage requests. scmi-session-study has since delivered: its rules are recorded in this note under "SCMI request rules"; the transport itself remains unproven until `mp2_display_state`'s SCMI group (or the GPU's next run) records it.
 - **Coherence, and a 720p-shaped buffer.** B349:221-227: `gc_triangle`'s run also exercises the carveout at 0xfa800000 with the CPU reading back GPU-written memory — pre-study Q14, the question "Cache maintenance" says no source answers — and `CONFIG_GC_TRIANGLE_LINEAR_OUT` resolves a 1280x720 linear scan-out-shaped buffer, named there as groundwork for this display step. Both land on "Frame buffer placement": the maintenance rules and the 720p sizes.
 - **The scan-out buffer's home.** D349:393-398 concludes that any normal DDR the A35 can write is the scan-out buffer, the carveout included, *if* the LTDC master passes the RISAF filter as the GPU master does (D349's open question 2, the same as open question 1 here). "Frame buffer placement" and "Framebuffer memory and bus-master access" narrow that: 0xb0000000 for the test pattern, the carveout for the GPU's frame, the LTDC secure-layer areas out. No conflict; the narrowing is this note's.
 
 **Contradictions, explicit.**
 
 1. **The safe first mode.** D349:272-273: "the safe first mode is 1080p60, 4 lanes, which needs no lane change" — 720p moved to 3 lanes by ST's own fix-up (D349:269-271), 1080p60 sitting exactly on the bridge's 148.5 MHz ceiling (D349:265-267), and D349's open question 11 again says "First run: fixed 1080p60" (D349:534-536). This note, following the plan's 1280x720, runs 720p first — 3 lanes as the board's own ST driver does, 4 lanes as the comparison ("The lane count at 720p is a difference between the trees", open question 4). **The two notes recommend opposite first runs.** Both recommendations are [D]; no source decides. The lane question stays open question 4, and what the farm's HDMI capture accepts (item kvm-mode-study) may decide which picture can be judged at all. Recorded as a disagreement, not resolved here.
-2. **SCMI at 1080p60.** D349:362: "1080p60 needs no SCMI clock request at all". This note's rows 9 to 10 and "What changes against D349": the *rate* needs none, the *enables* (FLEXGEN_27, FLEXGEN_28, FLEXGEN_12, GPIOB, GPIOF) go through SCMI `CONFIG_SET` in every case. Flagged against D349 when this section was written; it stands. Item scmi-session-study decides whether our image's agent may switch these on at all; B349:130-133 is the run that first tests the transport.
+2. **SCMI at 1080p60.** D349:362: "1080p60 needs no SCMI clock request at all". This note's rows 9 to 10 and "What changes against D349": the *rate* needs none, the *enables* (FLEXGEN_27, FLEXGEN_28, FLEXGEN_12, GPIOB, GPIOF) go through SCMI `CONFIG_SET` in every case. Flagged against D349 when this section was written; it stands. scmi-session-study has delivered its rules ("SCMI request rules"); whether our image's agent may switch these on at all still waits for a recorded session — B349:130-133 is the run that first tests the transport.
 
 ## Board scan-out record (not run yet)
 
@@ -668,3 +835,11 @@ The `mp2_display` verdict line itself and the GPU-rendered scan-out row belong t
 - D349:461 ("Pulse PB6"): right, and the reason is that no part of ST's
   chain drives PB6 on a DK: U-Boot's ADV753x detection is EV1-only
   (U:`stm32mp2.c:622-626`).
+- **uboot-ltdc-study's premise, refuted against the tags** (issue #1281):
+  the study reported no LTDC/DSI/LVDS/I2C2 driver bound on a DK, none of
+  `RCC_LTDCCFGR`, `RCC_DSICFGR`, `RCC_I2C2CFGR`, `SYSCFG DISPLAYCLKCR`
+  written, and proposed rows 6, 7, 8, 14 as TF-A's or OP-TEE's. The same
+  tags checked line by line do not sustain it — the drivers are bound and
+  probed on a DK, all four registers are written, and `go` indeed performs
+  no teardown, which is why those writes are what our image inherits
+  (paragraph "U-Boot's run on a DK"). The corrected rows stand there.
