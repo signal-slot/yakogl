@@ -102,6 +102,9 @@ pub mod ds_retention;
 pub mod gl;
 /// The NanoPC-T6's Mali-G610 backend (only in a `gpu-mali` build).
 pub mod mali;
+/// Each back end's pure 4x multisample framebuffer words (no backend uses
+/// them yet).
+pub mod msaa_hw;
 /// The samples every backend keeps for a multisample colour attachment
 /// between jobs, keyed by the GL object (no backend uses it yet).
 pub mod msaa_store;
