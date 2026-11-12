@@ -19,6 +19,7 @@
 #![cfg(all(
     feature = "host-test",
     feature = "gpu-powervr",
+    feature = "shaderc-online",
     not(feature = "no-shader-table"),
     target_os = "linux",
     any(target_arch = "x86_64", target_arch = "aarch64")
