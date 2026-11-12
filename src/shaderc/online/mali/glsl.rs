@@ -1569,12 +1569,13 @@ impl Tree<'_, '_> {
         let mut any = false;
         for p in 0..n {
             let IrOp::Alu(AluOp::Fmul, s) = self.instrs[p] else { continue };
-            let lit = |t: &Self, k: usize| -> Option<(usize, Src)> {
+            let lit = |t: &Self, q: usize, k: usize| -> Option<(usize, Src)> {
+                let IrOp::Alu(AluOp::Fmul, s) = *t.instrs.get(q)? else { return None };
                 let id = s[k].val.0 as usize;
                 let IrOp::Alu(AluOp::Fneg, [c, ..]) = *t.instrs.get(id)? else { return None };
                 matches!(t.instrs.get(c.val.0 as usize)?, IrOp::ConstF32(_)).then_some((id, c))
             };
-            let (k, (nid, c)) = match (lit(self, 0), lit(self, 1)) {
+            let (k, (nid, c)) = match (lit(self, p, 0), lit(self, p, 1)) {
                 (Some(_), Some(_)) => return Err(MaliError::ArithConstant),
                 (Some(x), None) => (0, x),
                 (None, Some(x)) => (1, x),
@@ -1585,14 +1586,24 @@ impl Tree<'_, '_> {
             let IrOp::ConstF32(v) = self.instrs[c.val.0 as usize] else { continue };
             let one = swizzle[..w].iter().all(|&l| v[l as usize & 3] == 0x3f80_0000);
             let other = s[1 - k];
-            let read_by = |t: &Self, id: usize, f: &dyn Fn(&IrOp) -> bool| {
-                t.instrs.iter().any(|op| {
-                    let mut r = false;
-                    op.for_each_src(|x| r |= x.val.0 as usize == id);
-                    r && f(op)
-                })
-            };
-            let clamped = read_by(self, p, &|op| matches!(op, IrOp::Alu(AluOp::Fmin | AluOp::Fmax, _)));
+            /* `is_used_by_non_fsat` (nir_search_helpers.h:477-492): read by
+             * `fsat` alone. The rule still fires in that pass, as the
+             * replaced `fmin` leaves its `fmax` in the program until DCE
+             * (nir_search.c:744-750), but :1105 turns `fsat(fneg(fmul(a,
+             * b)))` back into `fsat(fmul(fneg(a), b))`, the product as
+             * written (measured: negsat_clamp, negsat_clamp_one). Another
+             * product with a negated literal may be the same value in
+             * Mesa (CSE: two `a2 * -2.0` are one), read by more than the
+             * `fsat`: not taken then (negsat_twice) */
+            let twin = self.instrs.iter().enumerate().any(|(q, op)| {
+                q != p
+                    && matches!(*op, IrOp::Alu(AluOp::Fmul, _))
+                    && (lit(self, q, 0).is_some() || lit(self, q, 1).is_some())
+            });
+            if !twin && self.readers(p).count() > 0 && self.readers(p).all(|(j, _)| self.fsat_of(j, p)) {
+                continue;
+            }
+            let clamped = self.readers(p).any(|(_, op)| matches!(op, IrOp::Alu(AluOp::Fmin | AluOp::Fmax, _)));
             let placed = self.uses[nid] == Use::Alu(p as u32) && (other.val.0 as usize) < nid;
             let chain = matches!(self.instrs.get(other.val.0 as usize), Some(IrOp::Alu(AluOp::Fmul, _)));
             if one && !clamped {
@@ -1611,6 +1622,40 @@ impl Tree<'_, '_> {
             self.count();
         }
         Ok(())
+    }
+
+    /// The instructions that read value `id`, with their places.
+    fn readers(&self, id: usize) -> impl Iterator<Item = (usize, &IrOp)> + '_ {
+        self.instrs.iter().enumerate().filter(move |(_, op)| {
+            let mut r = false;
+            op.for_each_src(|x| r |= x.val.0 as usize == id);
+            r
+        })
+    }
+
+    /// Instruction `j`, a reader of `x`, is half of a `fsat` of it and
+    /// nothing else reads it: `fmax(x, 0.0)` read only by `fmin(.., 1.0)`,
+    /// either operand order (nir_opt_algebraic.py:1088, GLSL's `clamp(x,
+    /// 0.0, 1.0)`). The other order, `fmax(fmin(x, 1.0), 0.0)` (:1091), is
+    /// not taken: left alone it does not give Mesa's words (measured,
+    /// negsat_minmax), so it stays refused.
+    fn fsat_of(&self, j: usize, x: usize) -> bool {
+        let splat = |t: &Self, s: Src, k: u32| matches!(t.instrs.get(s.val.0 as usize), Some(IrOp::ConstF32(v)) if s.swizzle.iter().all(|&l| v[l as usize & 3] == k));
+        let pair = |t: &Self, id: usize, op: AluOp, k: u32, of: usize| match t.instrs.get(id) {
+            Some(&IrOp::Alu(o, [a, b, _])) if o == op => {
+                (a.val.0 as usize == of && splat(t, b, k)) || (b.val.0 as usize == of && splat(t, a, k))
+            }
+            _ => false,
+        };
+        let only_reader = |t: &Self, id: usize| match t.uses.get(id) {
+            Some(Use::Alu(r)) => Some(*r as usize),
+            _ => None,
+        };
+        let (zero, one) = (0, 0x3f80_0000);
+        if pair(self, j, AluOp::Fmax, zero, x) {
+            return only_reader(self, j).is_some_and(|r| pair(self, r, AluOp::Fmin, one, j));
+        }
+        false
     }
 
     /// The rules of nir_opt_algebraic.py on a compare of a negated value
