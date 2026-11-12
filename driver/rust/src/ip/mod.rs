@@ -6,15 +6,21 @@
 //! Register names and bits come from the generated map of the SoC the block
 //! was first written for, or, for an external part, from its data sheet.
 
+/// The ADV7535 HDMI transmitter on I2C, fed by MIPI DSI.
+#[cfg(any(feature = "stm32mp2", test))]
+pub mod adv7535;
 #[cfg(any(feature = "am62p", test))]
 pub mod cdns_dphy;
 #[cfg(any(feature = "am62p", test))]
 pub mod cdns_dsi;
 /// D-PHY timing arithmetic, any SoC with a D-PHY transmitter.
-#[cfg(any(feature = "imx8mp", test))]
+#[cfg(any(feature = "imx8mp", feature = "stm32mp2", test))]
 pub mod dphy_timing;
 #[cfg(any(feature = "imx8mp", test))]
 pub mod dw_hdmi_tx;
+/// The Synopsys DesignWare MIPI DSI host controller.
+#[cfg(any(feature = "stm32mp2", test))]
+pub mod dw_mipi_dsi;
 /// The DesignWare APB watchdog, armed by an image that no earlier stage
 /// armed (the RK3588's WDT0).
 #[cfg(any(feature = "rk3588", test))]
@@ -42,5 +48,14 @@ pub mod rockchip_spi;
 pub mod samsung_dsim;
 /// On I2C only, on any SoC: always built.
 pub mod sn65dsi8x;
+/// ST's DSI wrapper and its D-PHY PLL on the STM32MP25.
+#[cfg(any(feature = "stm32mp2", test))]
+pub mod stm32_dsi_phy;
+/// The STM32 I2C v2 controller as a polled master.
+#[cfg(any(feature = "stm32mp2", test))]
+pub mod stm32_i2c;
+/// ST's LCD-TFT display controller (LTDC).
+#[cfg(any(feature = "stm32mp2", test))]
+pub mod stm32_ltdc;
 #[cfg(any(feature = "am62p", test))]
 pub mod ti_dss7;
