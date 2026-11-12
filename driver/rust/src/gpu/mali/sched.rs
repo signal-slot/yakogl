@@ -1777,10 +1777,12 @@ mod tests {
         Cs { input: at(CS_IN), output: at(CS_OUT), features: 0x085f, ..Cs::default() }
     }
 
-    /// The bits of CS 0's `req` the board's firmware copies into `ack`: the
+    /// The bits of CS 0's `req` the model's firmware copies into `ack`: the
     /// state field and `CS_EXTRACT_EVENT`, not the idle bits
     /// (`CS_IDLE_SYNC_WAIT`, `CS_IDLE_EMPTY`) the start also sets. The first
-    /// NanoPC-T6 Z4 run (issue #4515) read `req` 0x0511, `ack` 0x0011.
+    /// NanoPC-T6 Z4 run (issue #4515) read `req` 0x0511, `ack` 0x0011; it
+    /// cannot tell a copy of bit 4 from an extract event's toggle (both
+    /// read 1).
     const CS_ACK_MASK: u32 = CS_STATE_MASK | CS_EXTRACT_EVENT;
 
     /// A stream event the model's firmware raises when CS 0 starts.
