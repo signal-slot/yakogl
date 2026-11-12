@@ -288,6 +288,13 @@ mod tests {
     /// Run the macro text at `el` with `sctlr` in `SCTLR_EL2`, `ctr` in
     /// `CTR_EL0` and the two symbols at `start` and `end`, up to its end.
     fn run(el: u64, sctlr: u64, ctr: u64, start: u64, end: u64) -> Run {
+        run_stuck(el, sctlr, 0, ctr, start, end)
+    }
+
+    /// [`run`] on a register whose `stuck` bits keep their found value
+    /// whatever is written: a turn-off that does not take. A read of
+    /// `SCTLR_EL2` shows them; a copy of the value written does not.
+    fn run_stuck(el: u64, sctlr: u64, stuck: u64, ctr: u64, start: u64, end: u64) -> Run {
         let prog: Vec<I> = lines().into_iter().map(decode).collect();
         let sym = |s: &str| match s {
             "__rom_region_start" => start,
@@ -319,7 +326,7 @@ mod tests {
                 I::MrsSctlr(d) => r.x[d] = r.sctlr,
                 I::MrsCtr(d) => r.x[d] = ctr,
                 I::MsrSctlr(n) => {
-                    r.sctlr = g(n);
+                    r.sctlr = (g(n) & !stuck) | (sctlr & stuck);
                     r.sctlr_writes.push(g(n));
                     r.events.push("msr".into());
                 }
@@ -384,6 +391,24 @@ mod tests {
         assert_eq!(r.dc_count, (WIN.1 - WIN.0) / 64);
         assert!(r.dc_strided, "one line after the other");
         assert_eq!(r.events, ["msr", "isb", "dc", "dsb sy", "ic iallu", "tlbi alle2", "dsb sy", "isb"]);
+    }
+
+    #[test]
+    fn x4_is_the_register_read_after_the_last_isb_so_a_turn_off_that_did_not_take_shows() {
+        // M stays set however the register is written: x4 must show it (the
+        // value T6:G prints and the verdict refuses), not the value written.
+        for stuck in [SCTLR_M, SCTLR_C, SCTLR_I] {
+            let r = run_stuck(2, UBOOT_SCTLR, stuck, CTR_A55, WIN.0, WIN.0 + 0x1000);
+            assert_eq!(r.sctlr_writes, vec![0x30c5_0830], "the write clears all three");
+            assert_eq!(r.x[4], 0x30c5_0830 | stuck, "x4 is read from SCTLR_EL2: {stuck:#x} still set");
+        }
+        // And the read is the last instruction that touches x4, after the
+        // last isb of the sequence.
+        let l = lines();
+        let last_isb = l.iter().rposition(|s| *s == "isb").unwrap();
+        let x4: Vec<usize> = l.iter().enumerate().filter(|(_, s)| regs(s).contains(&"x4")).map(|(i, _)| i).collect();
+        assert_eq!(x4.len(), 1, "one instruction names x4");
+        assert!(x4[0] > last_isb && l[x4[0]] == "mrs x4, sctlr_el2", "{}", l[x4[0]]);
     }
 
     #[test]
