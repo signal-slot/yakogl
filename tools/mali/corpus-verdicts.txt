@@ -77,7 +77,7 @@ tools/shaders/es100/matattr4.vert: ok
 tools/shaders/es100/matdyn.frag: ok
 tools/shaders/es100/matvary.frag: ok
 tools/shaders/es100/matvary.vert: ok
-tools/shaders/es100/mvstruct.vert: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
+tools/shaders/es100/mvstruct.vert: ok
 tools/shaders/es100/partial_varying.frag: ok
 tools/shaders/es100/partial_varying.vert: Valhall: a varying lane left unwritten is not lowered yet
 tools/shaders/es100/pointcoord.frag: ok

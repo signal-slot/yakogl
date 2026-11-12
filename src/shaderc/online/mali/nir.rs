@@ -2290,6 +2290,38 @@ pub(super) fn is_mat_term(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
     is_mat && splat && acc
 }
 
+/// A matrix product's sum before its last term is one term over a
+/// product, `ffma(c0, x, fmul(c1, y))` (`M * vec4(p.xy, 0.0, 1.0)`, the
+/// `z` term gone), each read once (`is_used_once`: the sum has no user
+/// yet, the product only the sum). Mesa moves the column 3 of a `w` of
+/// 1.0 into it (S2 of docs/notes/mali-vs-constant-products.md:
+/// `fadd(fadd(fmul, fmul), c3)` is `fadd(fmul(c1, y), fadd(fmul(c0, x),
+/// c3))`, nir_opt_algebraic.py:4358-4360, then `ffma(c0, x, c3)` for every
+/// lane before `ffma(c1, y, ..)`, vsfold_xy.expect.json).
+fn vs_two_term_sum(vs: &Nir<'_>, acc: Val) -> bool {
+    let users = |v: Val| match v {
+        Val::Lane(n, 0) => vs.uses(n).count(),
+        _ => usize::MAX,
+    };
+    match vs_alu_of(vs, acc) {
+        Some((Alu::Ffma, [_, _, f])) => {
+            users(acc) == 0 && users(f) == 1 && matches!(vs_alu_of(vs, f), Some((Alu::Fmul, _)))
+        }
+        _ => false,
+    }
+}
+
+/// The column of the mat4 a matrix product's term ([`is_mat_term`]) reads,
+/// 0 to 3.
+fn mat_column(m: &Module<'_>, srcs: &[ir::Src; 3]) -> Option<u16> {
+    match m.def(srcs[0].val) {
+        Some(IrOp::LoadUniform { dword_off, .. }) => {
+            uniform_of(m, *dword_off).ok().map(|(u, _)| (*dword_off - u.dword_off) / 4)
+        }
+        _ => None,
+    }
+}
+
 /// The ALU node a vertex value is, with its sources.
 fn vs_alu_of(vs: &Nir<'_>, v: Val) -> Option<(Alu, [Val; 3])> {
     match v {
@@ -2756,10 +2788,30 @@ pub fn build<'s>(
                         /* `a / b` is `a * rcp(b)` from the front end */
                         AluOp::Frcp => vs.alu(Alu::Frcp, x(0), Val::Undef, Val::Undef)?,
                         AluOp::Fmul => vs.alu(Alu::Fmul, x(0), x(1), Val::Undef)?,
-                        /* a matrix product's term by a constant 1.0 or -1.0:
-                         * NIR's rules (:311-314) meet it inside the vector
-                         * sums of the product, which no reference draws in
-                         * this stage */
+                        /* a matrix product's last term by a `w` of 1.0
+                         * (`M * vec4(p, 1.0)`): `fmul(c3, 1.0)` is `c3`
+                         * (nir_opt_algebraic.py:292) and the term `fadd(acc,
+                         * c3)`, the sum first as GLSL's `add(acc, term)`
+                         * (S1 of docs/notes/mali-vs-constant-products.md,
+                         * vsfold_one.expect.json's `FADD.f32 r1, r1^,
+                         * u9.w0`). A sum of two terms is S2, which moves the
+                         * column into the first term: its reference
+                         * (vsfold_xy) also stores a uniform varying, which
+                         * this walk refuses, so it is not drawn here
+                         * ([`vs_two_term_sum`]) */
+                        AluOp::Ffma
+                            if is_mat_term(m, &s) && mat_column(m, &s) == Some(3) && x(1) == Val::Const(F32_ONE) =>
+                        {
+                            if vs_two_term_sum(&vs, x(2)) {
+                                return Err(MaliError::ArithConstant);
+                            }
+                            vs.note(Prod::MatProduct);
+                            vs.alu(Alu::Fadd, x(2), x(0), Val::Undef)?
+                        }
+                        /* any other term by 1.0 or -1.0 (a `w` of -1.0, a
+                         * `z` of 1.0): NIR's rules
+                         * (:311-314) meet it inside the vector sums of the
+                         * product, which no reference draws in this stage */
                         AluOp::Ffma
                             if is_mat_term(m, &s)
                                 && [x(0), x(1)].iter().any(|v| matches!(v, Val::Const(F32_ONE | F32_MINUS_ONE))) =>
