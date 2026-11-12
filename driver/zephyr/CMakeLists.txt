@@ -337,3 +337,18 @@ if(CONFIG_YAKOGL_DRV_TISCI_ZEPHYR)
   zephyr_library_sources(${CMAKE_CURRENT_SOURCE_DIR}/../lib/tisci_zephyr/tisci_zephyr.c)
   zephyr_library_sources_ifdef(CONFIG_YAKOGL_DRV_TISCI_POWER_ON ${CMAKE_CURRENT_SOURCE_DIR}/../drivers/firmware/tisci_power_on.c)
 endif()
+
+# STM32MP257F-DK display path shells (Kconfig: YAKOGL_DRV_I2C_STM32MP2, _DSI_STM32,
+# _ADV7535, _DISPLAY_STM32_LTDC): no Rust yet, so outside the yakogl-drivers block.
+if(CONFIG_YAKOGL_DRV_I2C_STM32MP2 OR CONFIG_YAKOGL_DRV_DSI_STM32 OR CONFIG_YAKOGL_DRV_ADV7535 OR
+   CONFIG_YAKOGL_DRV_DISPLAY_STM32_LTDC)
+  zephyr_library_named(yakogl_stm32mp2_display)
+  zephyr_library_sources_ifdef(CONFIG_YAKOGL_DRV_I2C_STM32MP2
+    "${CMAKE_CURRENT_SOURCE_DIR}/../drivers/i2c/i2c_yakogl_stm32mp2.c")
+  zephyr_library_sources_ifdef(CONFIG_YAKOGL_DRV_DSI_STM32
+    "${CMAKE_CURRENT_SOURCE_DIR}/../drivers/mipi_dsi/dsi_yakogl_stm32.c")
+  zephyr_library_sources_ifdef(CONFIG_YAKOGL_DRV_ADV7535
+    "${CMAKE_CURRENT_SOURCE_DIR}/../drivers/display/bridge_adv7535.c")
+  zephyr_library_sources_ifdef(CONFIG_YAKOGL_DRV_DISPLAY_STM32_LTDC
+    "${CMAKE_CURRENT_SOURCE_DIR}/../drivers/display/display_yakogl_stm32_ltdc.c")
+endif()

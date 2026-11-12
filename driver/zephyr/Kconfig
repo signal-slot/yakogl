@@ -609,6 +609,81 @@ source "subsys/logging/Kconfig.template.log_config"
 
 endif # YAKOGL_DRV_SN65DSI8X
 
+# ---- STM32MP257F-DK display path (compiling shells so far; the register logic
+# is the follow-up items': ip::stm32_ltdc, dw_mipi_dsi, stm32_dsi_phy,
+# adv7535, stm32_i2c)
+
+config YAKOGL_DRV_I2C_STM32MP2
+	bool "STM32MP2 I2C controller on the A35 (yakogl,stm32mp2-i2c)"
+	default y
+	depends on DT_HAS_YAKOGL_STM32MP2_I2C_ENABLED
+	depends on SOC_SERIES_STM32MP2X_A35
+	select I2C
+	help
+	  driver/drivers/i2c/i2c_yakogl_stm32mp2.c: a polled I2C master for the
+	  DK's ADV7535 bus. A shell so far: every call returns -ENOSYS.
+
+config YAKOGL_DRV_I2C_STM32MP2_INIT_PRIORITY
+	int "Init priority of yakogl,stm32mp2-i2c"
+	depends on YAKOGL_DRV_I2C_STM32MP2
+	default 50
+
+config YAKOGL_DRV_DSI_STM32
+	bool "STM32MP25 MIPI DSI host (yakogl,stm32-dsi)"
+	default y
+	depends on DT_HAS_YAKOGL_STM32_DSI_ENABLED
+	depends on SOC_SERIES_STM32MP2X_A35
+	select MIPI_DSI
+	help
+	  driver/drivers/mipi_dsi/dsi_yakogl_stm32.c: the DesignWare DSI host
+	  with ST's D-PHY wrapper. A shell so far: attach, transfer and detach
+	  return -ENOSYS.
+
+config YAKOGL_DRV_DSI_STM32_INIT_PRIORITY
+	int "Init priority of yakogl,stm32-dsi"
+	depends on YAKOGL_DRV_DSI_STM32
+	default 77
+	help
+	  After the bridge it names (yakogl,adv7535, 75), before the LTDC (80).
+
+config YAKOGL_DRV_ADV7535
+	bool "ADV7535 DSI-to-HDMI bridge (yakogl,adv7535)"
+	default y
+	depends on DT_HAS_YAKOGL_ADV7535_ENABLED
+	depends on SOC_SERIES_STM32MP2X_A35
+	select I2C
+	select GPIO
+	help
+	  driver/drivers/display/bridge_adv7535.c: the bridge as a device on its
+	  I2C bus. A shell so far: nothing is programmed.
+
+config YAKOGL_DRV_ADV7535_INIT_PRIORITY
+	int "Init priority of yakogl,adv7535"
+	depends on YAKOGL_DRV_ADV7535
+	default 75
+	help
+	  After its I2C controller (50), before the DSI host (77) that names it.
+
+config YAKOGL_DRV_DISPLAY_STM32_LTDC
+	bool "STM32MP25 LTDC display (yakogl,stm32-ltdc)"
+	default y
+	depends on DT_HAS_YAKOGL_STM32_LTDC_ENABLED
+	depends on SOC_SERIES_STM32MP2X_A35
+	select DISPLAY
+	help
+	  driver/drivers/display/display_yakogl_stm32_ltdc.c: one linear layer
+	  scanning out a caller-provided frame buffer. A shell so far: the
+	  display API returns -ENOSYS.
+
+config YAKOGL_DRV_DISPLAY_STM32_LTDC_INIT_PRIORITY
+	int "Init priority of yakogl,stm32-ltdc"
+	depends on YAKOGL_DRV_DISPLAY_STM32_LTDC
+	default 80
+
+module = YAKOGL_DRV_STM32MP2_DISPLAY
+module-str = stm32mp2_display
+source "subsys/logging/Kconfig.template.log_config"
+
 rsource "lib/board/Kconfig"
 
 rsource "Kconfig.am62p"
