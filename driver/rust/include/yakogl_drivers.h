@@ -688,6 +688,8 @@ struct yd_t6_submit_up {
 	uint32_t drain_refusal;   /* 0, or the SchedRefusal (27: the drain's timeout, not a step) */
 	uint32_t drain_sync_updates; /* CSG_SYNC_UPDATE events the drain acknowledged */
 	uint32_t drain_cs_ack;    /* CS 0's ack right after the drain */
+	uint32_t drain_cs_irq_acks; /* the drain's looks that acknowledged CS 0's cs_irq bit */
+	uint32_t drain_idle_acks; /* CSG_IDLE events the drain acknowledged */
 };
 
 int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
@@ -1725,7 +1727,7 @@ _Static_assert(offsetof(struct yd_t6_submit_mem, regions) == 24, "yd_t6_submit_m
 _Static_assert(offsetof(struct yd_t6_submit_mem, vm_pool) == 168, "yd_t6_submit_mem.vm_pool");
 _Static_assert(offsetof(struct yd_t6_submit_mem, vm_pool_pages) == 176, "yd_t6_submit_mem.vm_pool_pages");
 _Static_assert(offsetof(struct yd_t6_submit_mem, vm_tables_pa) == 184, "yd_t6_submit_mem.vm_tables_pa");
-_Static_assert(sizeof(struct yd_t6_submit_up) == 424, "struct yd_t6_submit_up");
+_Static_assert(sizeof(struct yd_t6_submit_up) == 432, "struct yd_t6_submit_up");
 _Static_assert(offsetof(struct yd_t6_submit_up, step) == 0, "yd_t6_submit_up.step");
 _Static_assert(offsetof(struct yd_t6_submit_up, refusal) == 4, "yd_t6_submit_up.refusal");
 _Static_assert(offsetof(struct yd_t6_submit_up, detail) == 8, "yd_t6_submit_up.detail");
@@ -1772,6 +1774,8 @@ _Static_assert(offsetof(struct yd_t6_submit_up, drain_us) == 408, "yd_t6_submit_
 _Static_assert(offsetof(struct yd_t6_submit_up, drain_refusal) == 412, "yd_t6_submit_up.drain_refusal");
 _Static_assert(offsetof(struct yd_t6_submit_up, drain_sync_updates) == 416, "yd_t6_submit_up.drain_sync_updates");
 _Static_assert(offsetof(struct yd_t6_submit_up, drain_cs_ack) == 420, "yd_t6_submit_up.drain_cs_ack");
+_Static_assert(offsetof(struct yd_t6_submit_up, drain_cs_irq_acks) == 424, "yd_t6_submit_up.drain_cs_irq_acks");
+_Static_assert(offsetof(struct yd_t6_submit_up, drain_idle_acks) == 428, "yd_t6_submit_up.drain_idle_acks");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");

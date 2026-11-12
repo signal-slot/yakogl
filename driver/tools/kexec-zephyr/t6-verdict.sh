@@ -313,7 +313,7 @@ z4_pixels() {
 }
 
 # tools/probes/nanopc_t6/t6_submit/src/main.c: Z3's lines as t6_fw's, then
-# yd_t6_submit's record (SubmitUp, 424 bytes) in eleven lines, %016llx for the
+# yd_t6_submit's record (SubmitUp, 432 bytes) in eleven lines, %016llx for the
 # 64-bit words, %08x for the 32-bit words, %u for counts. The predicted values
 # are the_generated_frame_s_record_is_as_predicted's, over the MCU model; the
 # ones the first board run measured are pinned from it. A stopped run prints its record too (the
@@ -340,7 +340,7 @@ table_t6_submit() {
 	e 't6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc' 't6_submit: Z4i:'
 	# sched::drained and extract after the group's end: not measured on the
 	# board yet, form only (the commit that records the second run pins them)
-	e 't6_submit: Z4j: drain {d} us refusal {d} extract 0x{x16} sync_updates {d} cs_ack 0x{x8}' 't6_submit: Z4j:'
+	e 't6_submit: Z4j: drain {d} us refusal {d} extract 0x{x16} sync_updates {d} cs_ack 0x{x8} cs_irq_acks {d} idle_acks {d}' 't6_submit: Z4j:'
 	e 't6_submit: Z4k: extract after the end 0x{x16}' 't6_submit: Z4k:'
 	e 't6_submit: PASS' 't6_submit: (PASS|FAIL)'
 	table_reset t6_submit

@@ -2438,7 +2438,7 @@ constants and must read the same on the board; the "board-dependent" ones
 are the model's own (its register values, lags and microseconds, the
 synthetic firmware's sizes): the model's value is given for orientation
 and a different board value is not a finding. The record is
-`struct yd_t6_submit_up` (424 bytes, offsets asserted in
+`struct yd_t6_submit_up` (432 bytes, offsets asserted in
 `yakogl_drivers.h`).
 
 | field | predicted value | pinned or board-dependent |
@@ -2474,6 +2474,7 @@ and a different board value is not a finding. The record is
 | `drain_refusal`, `drain_sync_updates` | 0, 1 | not measured yet (27 `DrainTimeout` is recorded, not a step; any other refusal is step 17, `STEP_DRAIN`) |
 | `drain_cs_ack` | 0x11 | not measured yet (CS 0's `ack` right after the drain: whether the firmware toggles `CS_EXTRACT_EVENT` there) |
 | `extract_at_end` | 128 | not measured yet (`extract` after the group's stop and terminate) |
+| `drain_cs_irq_acks`, `drain_idle_acks` | 1, 0 | not measured yet (the drain's looks that acknowledged CS 0's `cs_irq` bit, and the `CSG_IDLE` events it acknowledged: the drain takes what the first run's terminate found pending, `cleared[1]` = 1, so it counts it) |
 
 A record whose pinned field differs is a finding, recorded as it came.
 
@@ -2490,8 +2491,9 @@ setting, tested too). The second run measures it: after the wait the
 probe runs `sched::drained` (polls until `extract` equals `insert`,
 within `CS_ACK_WAIT_US`, acknowledging the events as the wait does) and
 records the microseconds, the `extract` it ended with, its refusal, the
-sync updates it acknowledged, CS 0's `ack` after it, and `extract` once
-more after the group's end (Z4j, Z4k). panthor has no such wait: it
+sync updates, `cs_irq` bits and `CSG_IDLE` events it acknowledged, CS 0's
+`ack` after it, and `extract` once more after the group's end (Z4j,
+Z4k). panthor has no such wait: it
 takes completion from the sync object and ring space from its
 scheduler's credits, and reads `output->extract` only when it programs
 a slot and for its idle check.
@@ -2528,7 +2530,7 @@ carry them:
    build, WDT0, image, the 7 sections and the pool (`table_fw_image`),
    then `Z3: rc` and its seven record lines (`table_z3_record`). The Z3
    procedure above gives them; they are not repeated here.
-3. The eleven Z4 lines (`SubmitUp`, 424 bytes; 64-bit words print as
+3. The eleven Z4 lines (`SubmitUp`, 432 bytes; 64-bit words print as
    `%016llx`, 32-bit words as `%08x`, counts as `%u`), then `PASS`:
 
 ```
@@ -2541,7 +2543,7 @@ t6_submit: Z4f: latest_flush 0x{x8} sync_updates {d} status_cmd_ptr 0x0000000000
 t6_submit: Z4g: stop {d} us refusal 0, terminate {d} us refusal 0, cleared {d} {d} {d}
 t6_submit: Z4h: target red {@R} blue {@B} fill {@F} other {@O} of {@P} pixels
 t6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc
-t6_submit: Z4j: drain {d} us refusal {d} extract 0x{x16} sync_updates {d} cs_ack 0x{x8}
+t6_submit: Z4j: drain {d} us refusal {d} extract 0x{x16} sync_updates {d} cs_ack 0x{x8} cs_irq_acks {d} idle_acks {d}
 t6_submit: Z4k: extract after the end 0x{x16}
 t6_submit: PASS
 ```

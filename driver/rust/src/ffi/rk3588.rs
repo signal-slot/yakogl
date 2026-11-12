@@ -1336,16 +1336,18 @@ mod fw_tests {
             drain_us,
             drain_refusal,
             drain_sync_updates,
-            drain_cs_ack
+            drain_cs_ack,
+            drain_cs_irq_acks,
+            drain_idle_acks
         );
-        assert_eq!(pins.len(), 7 + 46);
+        assert_eq!(pins.len(), 7 + 48);
         for (what, v) in &pins {
             let pin = format!("_Static_assert({what} == {v},");
             assert!(H.contains(&pin), "{pin}");
         }
         // one assert per field and one for the size, each naming yd_t6_submit
         let n = H.lines().filter(|l| l.starts_with("_Static_assert(") && l.contains("yd_t6_submit")).count();
-        assert!(n >= 47, "{n} _Static_assert lines name yd_t6_submit");
+        assert!(n >= 49, "{n} _Static_assert lines name yd_t6_submit");
     }
 
     #[test]

@@ -751,9 +751,13 @@ pub struct SubmitUp {
     pub drain_refusal: u32,
     pub drain_sync_updates: u32,
     pub drain_cs_ack: u32,
+    /// The drain's looks that acknowledged CS 0's `cs_irq` bit, and the
+    /// `CSG_IDLE` events it acknowledged ([`sched::Drained`]).
+    pub drain_cs_irq_acks: u32,
+    pub drain_idle_acks: u32,
 }
 
-const _: () = assert!(size_of::<SubmitUp>() == 8 * 53);
+const _: () = assert!(size_of::<SubmitUp>() == 8 * 54);
 const _: () = assert!(align_of::<SubmitUp>() == 8);
 const _: () = assert!(offset_of!(SubmitUp, step) == 0);
 const _: () = assert!(offset_of!(SubmitUp, refusal) == 4);
@@ -802,6 +806,8 @@ const _: () = assert!(offset_of!(SubmitUp, drain_us) == 408);
 const _: () = assert!(offset_of!(SubmitUp, drain_refusal) == 412);
 const _: () = assert!(offset_of!(SubmitUp, drain_sync_updates) == 416);
 const _: () = assert!(offset_of!(SubmitUp, drain_cs_ack) == 420);
+const _: () = assert!(offset_of!(SubmitUp, drain_cs_irq_acks) == 424);
+const _: () = assert!(offset_of!(SubmitUp, drain_idle_acks) == 428);
 
 impl SubmitUp {
     fn stopped(&mut self, step: u32, refusal: u32, detail: u64) {
@@ -1126,6 +1132,7 @@ pub fn submit_up(
         o.extract_drained = d.extract;
         o.drain_us = d.us;
         o.drain_sync_updates = d.sync_updates;
+        (o.drain_cs_irq_acks, o.drain_idle_acks) = (d.cs_irq_acks, d.idle_acks);
         o.drain_cs_ack = m.read32(cs.output + offset_of!(csf::CsOutput, ack));
         if let Some((why, v)) = refused {
             o.drain_refusal = why as u32;
@@ -1635,6 +1642,8 @@ pub(crate) mod tests {
         // acknowledged; CS 0's ack as the start left it
         assert_eq!((o.extract_drained, o.drain_us, o.drain_refusal, o.drain_sync_updates), (128, 10, 0, 1));
         assert_eq!((o.drain_cs_ack, o.extract_at_end), (0x11, 128));
+        // the late publish's cs_irq bit taken by the drain, counted
+        assert_eq!((o.drain_cs_irq_acks, o.drain_idle_acks), (1, 0));
         // the end: both acknowledged at once, nothing left pending
         assert_eq!((o.stop_refusal, o.terminate_refusal), (0, 0));
         assert_eq!(o.cleared, [0, 0, 0]);
@@ -1793,6 +1802,10 @@ pub(crate) mod tests {
             drain_refusal: 0,
             drain_sync_updates: 1,
             drain_cs_ack: 0x11,
+            // CS 0's cs_irq bit, raised with the late sync update (the
+            // board's first run: cleared[1] = 1); no CSG_IDLE
+            drain_cs_irq_acks: 1,
+            drain_idle_acks: 0,
         };
         assert_eq!(o, predicted);
         // the digest as the doc and the probe carry it: the blocks and the
@@ -1879,8 +1892,14 @@ pub(crate) mod tests {
             ),
             format!("{p}i: frame digest {:#018x}", o.digest),
             format!(
-                "{p}j: drain {} us refusal {} extract {:#018x} sync_updates {} cs_ack {:#010x}",
-                o.drain_us, o.drain_refusal, o.extract_drained, o.drain_sync_updates, o.drain_cs_ack
+                "{p}j: drain {} us refusal {} extract {:#018x} sync_updates {} cs_ack {:#010x} cs_irq_acks {} idle_acks {}",
+                o.drain_us,
+                o.drain_refusal,
+                o.extract_drained,
+                o.drain_sync_updates,
+                o.drain_cs_ack,
+                o.drain_cs_irq_acks,
+                o.drain_idle_acks
             ),
             format!("{p}k: extract after the end {:#018x}", o.extract_at_end),
         ]
@@ -2141,6 +2160,7 @@ pub(crate) mod tests {
             (o.drain_us, o.drain_refusal, o.extract_drained, o.drain_sync_updates),
             (sched::CS_ACK_WAIT_US, SchedRefusal::DrainTimeout as u32, 0, 0)
         );
+        assert_eq!((o.drain_cs_irq_acks, o.drain_idle_acks), (0, 0));
         assert!(slept >= u64::from(sched::CS_ACK_WAIT_US));
         assert_eq!((o.stop_refusal, o.terminate_refusal, o.cleared), (0, 0, [0, 0, 0]));
         assert_eq!((o.extract_at_end, o.red, o.blue), (0, 2048, 2048));
@@ -2252,8 +2272,8 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_record_is_53_words_of_8_at_fixed_offsets_and_the_steps_are_numbered() {
-        assert_eq!((size_of::<SubmitUp>(), align_of::<SubmitUp>()), (424, 8));
+    fn the_record_is_54_words_of_8_at_fixed_offsets_and_the_steps_are_numbered() {
+        assert_eq!((size_of::<SubmitUp>(), align_of::<SubmitUp>()), (432, 8));
         assert_eq!(size_of::<FwUp>(), 192);
         assert_eq!(
             [
