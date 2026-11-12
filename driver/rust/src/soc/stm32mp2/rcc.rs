@@ -15,11 +15,15 @@
 //! - RM0457 could not be read (r-rm0457): **every offset and bit below is
 //!   unconfirmed against the manual.**
 //!
-//! Open question (RM0457 `RCC_GPUCFGR`): the reset bit's polarity. The MP2
-//! RCC's `xxRST` bits are written 1 to hold the peripheral in reset and 0 to
-//! release it; this module follows that convention ([`RESET`] set = asserted),
-//! but no open source read here states it for the GPU. Confirm before the
-//! first board write.
+//! Reset polarity (`RCC_GPUCFGR` bit 0): assert sets the bit, deassert clears
+//! it ([`RESET`] set = asserted). Derived from ST's reset driver, not read on
+//! the board: Linux `drivers/clk/stm32/reset-stm32.c:54-100` and `:123-136`
+//! (v6.6-stm32mp-r3.1) writes the bit to assert, clears it to deassert, then
+//! waits for it to read back zero; its `set_clr` is 0 for `LTDC_R` and `DSI_R`
+//! (docs/notes/stm32mp257f-dk-display.md, "Resets"). That is the same register
+//! family, not the GPU's own entry (`GPU_R`, id 75), and RM0457 is unread, so
+//! the GPU's polarity stays **unverified on the board** until the first
+//! `RCC_GPUCFGR` read-back.
 //!
 //! The RCC base is a parameter (the device tree's `rcc` node); the caller
 //! owns the power-domain order (SCMI first, then this module) and RIFSC.
@@ -30,8 +34,8 @@ use crate::mmio::Mmio;
 
 /// `RCC_GPUCFGR` offset (r-galcore, r-rcc-src; unconfirmed from RM0457).
 pub const GPUCFGR: usize = 0x83C;
-/// Bit 0: the GPU reset (`GPU_R`, reset id 75); 1 = asserted (see the open
-/// question in the module documentation).
+/// Bit 0: the GPU reset (`GPU_R`, reset id 75); 1 = asserted (derived from
+/// ST's reset driver, see the module documentation; not read on the board).
 pub const RESET: u32 = 1 << 0;
 /// Bit 1: the gate of both GPU clocks (`CK_BUS_GPU` 91 and `CK_KER_GPU` 340);
 /// 1 = clocks run.
