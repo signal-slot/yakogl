@@ -128,7 +128,8 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
      * coordinate's level, at full width: High. */
     let precs = !m.prec.is_empty();
     let mut prec: AVec<Prec> = AVec::with_capacity(a, if precs { total } else { 0 })?;
-    let laned = !m.lanes.is_empty();
+    /* carried only when in step: a stale table is dropped, not renumbered */
+    let laned = !m.lanes.is_empty() && m.lanes.len() == m.instrs.len();
     let mut lanes: AVec<u8> = AVec::with_capacity(a, if laned { total } else { 0 })?;
     for (i, op) in m.instrs.iter().enumerate() {
         let mut op = map_op(*op, &map);
@@ -192,7 +193,7 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
             instrs: instrs.into_slice(),
             comps: if sized { comps.into_slice() } else { m.comps },
             prec: if precs { prec.into_slice() } else { m.prec },
-            lanes: if laned { lanes.into_slice() } else { m.lanes },
+            lanes: if laned { lanes.into_slice() } else { &[] },
             nodes: nodes.into_slice(),
             body,
             ..m
@@ -464,6 +465,21 @@ mod tests {
          * then 1.25 and 2.25 unchanged */
         let (v, _) = run(true, 0.25, 1.0);
         assert_eq!(v[0], -1.0 + 1.25 + 2.25);
+    }
+
+    /// A `lanes` table out of step with the instructions is not carried
+    /// over as if it were in step (third review S-E): the remapped module
+    /// has none, so `lanes_of` answers None rather than a stale width.
+    #[test]
+    fn a_lanes_table_out_of_step_is_dropped() {
+        store::with_scratch(|a| {
+            let text = a.alloc_str(VS_2D).unwrap();
+            let mut l = super::super::lower::compile_to_ir(a, Stage::Vertex, text).expect("lowers");
+            l.module.lanes = &l.module.lanes[..1];
+            let l = remap_mag_switch(a, l, 1).unwrap();
+            assert!(l.module.lanes.is_empty(), "{:?}", l.module.lanes);
+        })
+        .unwrap();
     }
 
     /// No bit, or no look-up of the bit's binding: the module is returned
