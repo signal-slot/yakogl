@@ -35,9 +35,11 @@
 //! the shape nir_lower_indirect_derefs_to_if_else_trees and
 //! `nir_vector_extract` give them (docs/notes/mali-indexed-locals.md).
 //! The ladders are lower.rs's, which the four back ends share; only this
-//! one rewrites them. After them, NIR's rules on a compare with `-0.0`
-//! (`Tree::neg_zero_compares`), which both stages' builders would see too
-//! late: they fold the constant first.
+//! one rewrites them. After them, three of NIR's rules on a negated
+//! constant, which both stages' builders would see too late (they fold
+//! `fneg(literal)` first): a product with one (`Tree::neg_products`), a
+//! compare of a negated value with a constant (`Tree::neg_compares`) and
+//! a compare with `-0.0` (`Tree::neg_zero_compares`).
 //!
 //! The IR keeps what these passes need: a local, a uniform and an input
 //! are loads at each read (GLSL's variable dereferences), a value with one
@@ -152,6 +154,7 @@ pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<R
     t.reassociate()?;
     t.negneg();
     t.neg_products()?;
+    t.neg_compares()?;
     t.neg_zero_compares();
     if !t.changed && trees.is_none() {
         return Ok(None);
@@ -1601,6 +1604,90 @@ impl Tree<'_, '_> {
             self.instrs[nid] = IrOp::Alu(AluOp::Fmul, [Src { val: c.val, swizzle }, other, other]);
             self.comps[nid] = self.comps[p];
             self.instrs[p] = IrOp::Alu(AluOp::Fneg, [Src::id(ValueId(nid as u32)); 3]);
+            any = true;
+        }
+        if any {
+            self.changed = true;
+            self.count();
+        }
+        Ok(())
+    }
+
+    /// The rules of nir_opt_algebraic.py on a compare of a negated value
+    /// with a constant (:765-770): `flt(fneg(a), #b)` is `flt(fneg(b), a)`,
+    /// `flt(#b, fneg(a))` is `flt(a, fneg(b))`, the same for `fge`;
+    /// `feq` either way round is `feq(a, fneg(b))` and `fneu`
+    /// `fneu(fneg(b), a)` (both commutative). On the IR (`Fle(x, y)` is
+    /// `fge(y, x)`) a `<` or `<=` swaps its operands. The constant is
+    /// a literal (`#b`, its `fneg` read through when it is one), negated in
+    /// place, so a literal must be read by this compare alone; otherwise
+    /// refused
+    /// ([`MaliError::ArithConstant`]). Measured: `if (-u.x > 0.5)` around
+    /// a kept branch, a highp `if (-v.x < 0.5) discard;`, a vertex select
+    /// (tools/mali/testdata/negcmp_*).
+    fn neg_compares(&mut self) -> Result<(), MaliError> {
+        let n = self.instrs.len();
+        let mut any = false;
+        for i in 0..n {
+            let IrOp::Alu(op @ (AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne), s) = self.instrs[i] else {
+                continue;
+            };
+            let neg_of = |t: &Self, x: Src| match t.instrs.get(x.val.0 as usize) {
+                Some(&IrOp::Alu(AluOp::Fneg, [a, ..]))
+                    if !matches!(t.instrs.get(a.val.0 as usize), Some(IrOp::ConstF32(_))) =>
+                {
+                    Some(Src { val: a.val, swizzle: core::array::from_fn(|l| a.swizzle[x.swizzle[l] as usize & 3]) })
+                }
+                _ => None,
+            };
+            /* the constant `b`, a literal or a negated literal: its value
+             * instruction and whether it is negated already */
+            let const_of = |t: &Self, x: Src| match t.instrs.get(x.val.0 as usize) {
+                Some(IrOp::ConstF32(_)) => Some((x.val.0 as usize, false)),
+                Some(&IrOp::Alu(AluOp::Fneg, [c, ..]))
+                    if matches!(t.instrs.get(c.val.0 as usize), Some(IrOp::ConstF32(_))) =>
+                {
+                    Some((c.val.0 as usize, true))
+                }
+                _ => None,
+            };
+            let (k, a, (cid, negated)) = match (neg_of(self, s[0]), neg_of(self, s[1])) {
+                (Some(a), None) => match const_of(self, s[1]) {
+                    Some(c) => (1, a, c),
+                    None => continue,
+                },
+                (None, Some(a)) => match const_of(self, s[0]) {
+                    Some(c) => (0, a, c),
+                    None => continue,
+                },
+                _ => continue,
+            };
+            /* the constant's own source: the literal itself, or the fneg's */
+            let b = if negated {
+                let IrOp::Alu(AluOp::Fneg, [c, ..]) = self.instrs[s[k].val.0 as usize] else { continue };
+                Src { val: c.val, swizzle: core::array::from_fn(|l| c.swizzle[s[k].swizzle[l] as usize & 3]) }
+            } else {
+                s[k]
+            };
+            /* a literal is negated in place: this compare must be its only reader */
+            let alone = negated || self.uses[cid] == Use::Alu(i as u32);
+            if !alone {
+                return Err(MaliError::ArithConstant);
+            }
+            /* `fneg(b)`: a literal flips its sign, a negated literal is its
+             * literal */
+            if !negated {
+                let IrOp::ConstF32(v) = self.instrs[cid] else { continue };
+                self.instrs[cid] = IrOp::ConstF32(v.map(|x| x ^ 0x8000_0000));
+            }
+            let srcs = match op {
+                AluOp::Feq => [a, b],
+                AluOp::Fne => [b, a],
+                /* `<` and `<=` turn round */
+                _ if k == 1 => [b, a],
+                _ => [a, b],
+            };
+            self.instrs[i] = IrOp::Alu(op, [srcs[0], srcs[1], srcs[1]]);
             any = true;
         }
         if any {

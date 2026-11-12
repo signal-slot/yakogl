@@ -6411,6 +6411,45 @@ fn a_mediump_discard_of_two_varying_lanes_is_refused() {
     check_linked(vs, fs, json);
 }
 
+/// A compare of a negated value with a constant (glsl.rs
+/// `Tree::neg_compares`, nir_opt_algebraic.py:765-770): `-x < c` is `-c <
+/// x`, `-x == c` is `x == -c`. Each pair through the link against its
+/// drm-shim reference (`--uniform-values`): mediump discards of a varying
+/// lane on either side, of a uniform lane and with `==` (refused on main,
+/// as `DiscardForm`), highp discards with `<` and `>=` and a highp select
+/// (other words on main), and `if (-u.x > 0.5)` around a kept branch
+/// (other words on main).
+const NEGCMP_POPULATION: [(&str, &str, &str, &str); 8] = [
+    pair!("negcmp_discard"),
+    pair!("negcmp_discard_first"),
+    pair!("negcmp_discard_uniform"),
+    pair!("negcmp_discard_eq"),
+    pair!("negcmp_highp_discard"),
+    pair!("negcmp_highp_discard_ge"),
+    pair!("negcmp_highp_select"),
+    pair!("negcmp_branch"),
+];
+
+#[test]
+fn a_compare_of_a_negated_value_with_a_constant_is_mesa_s() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in NEGCMP_POPULATION {
+        let r = std::panic::catch_unwind(|| {
+            check_linked(vs, fs, json);
+        });
+        if let Err(e) = r {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), NEGCMP_POPULATION.len(), failed.join("\n"));
+    /* the literal read by another value too (`vec4(0.5)`): it cannot be
+     * negated in place, and main's words were not Mesa's */
+    let (_, vs, _, json) = pair!("negcmp_vs_shared");
+    assert!(region(json, "vs.position").is_some());
+    assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::ArithConstant);
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,
