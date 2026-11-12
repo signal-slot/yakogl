@@ -2036,6 +2036,40 @@ fn a_load_or_conversion_with_no_reference_is_refused() {
     }
 }
 
+/// The colour's own lanes are converted at the colour's store, after
+/// everything before it (a discard included), in the colour's lane order
+/// across the loads, and each load stands before its first conversion
+/// (nir_fs.rs `select`, `conversion_order`): drm-shim references of the
+/// second review's shapes. fsconv_cpq converts q.y, c.z, p.x (two loads);
+/// fsconv_slot loads slot 1 first (d.y); fsconv_disc2, fsconv_discw,
+/// fsconv_disch, fsconv_discv and fsconv_discpc convert the colour after
+/// the DISCARD; fsconv_alpha2, fsconv_alpha3 and fsconv_alpha4 take a lane
+/// alone as the alpha (`ATEST ... r2.h0`).
+#[test]
+fn colour_lanes_are_converted_at_the_store_as_mesa_26_2_1() {
+    let cases = [
+        ("fsconv_cpq", td!("fsconv_cpq.vert"), td!("fsconv_cpq.frag"), td!("fsconv_cpq.expect.json")),
+        ("fsconv_slot", td!("fsconv_slot.vert"), td!("fsconv_slot.frag"), td!("fsconv_slot.expect.json")),
+        ("fsconv_disc2", td!("fsconv_disc2.vert"), td!("fsconv_disc2.frag"), td!("fsconv_disc2.expect.json")),
+        ("fsconv_discw", td!("fsconv_discw.vert"), td!("fsconv_discw.frag"), td!("fsconv_discw.expect.json")),
+        ("fsconv_disch", td!("fsconv_disch.vert"), td!("fsconv_disch.frag"), td!("fsconv_disch.expect.json")),
+        ("fsconv_discv", td!("fsconv_discv.vert"), td!("fsconv_discv.frag"), td!("fsconv_discv.expect.json")),
+        ("fsconv_discpc", td!("fsconv_discpc.vert"), td!("fsconv_discpc.frag"), td!("fsconv_discpc.expect.json")),
+        ("fsconv_alpha2", td!("fsconv_alpha2.vert"), td!("fsconv_alpha2.frag"), td!("fsconv_alpha2.expect.json")),
+        ("fsconv_alpha3", td!("fsconv_alpha3.vert"), td!("fsconv_alpha3.frag"), td!("fsconv_alpha3.expect.json")),
+        ("fsconv_alpha4", td!("fsconv_alpha4.vert"), td!("fsconv_alpha4.frag"), td!("fsconv_alpha4.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
 /// Two equal lanes of a varying the link keeps whole: Mesa's link merges
 /// them (`nir_opt_varyings`' deduplication; fsload_dup.expect.json loads
 /// `.v2` and stores two lanes), which the link here does not do, so the

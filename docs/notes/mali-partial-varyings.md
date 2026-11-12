@@ -95,55 +95,76 @@ not change.
 ## The lanes the link keeps, and how the fragment shader loads them
 
 Mesa 26.2.1's GL path, traced in the source (`$MESA_PAN_TREE`) and in the
-drm-shim's NIR of every pass (`NIR_DEBUG=print_fs,print_vs`), each step
-measured by a reference in `tools/mali/testdata` (nir_fs.rs `layout`,
-`kept_whole`, `conversion_order`; select.rs `generic_layout`):
+drm-shim's NIR of every pass (`NIR_DEBUG=print_fs,print_vs`). Each step
+names the code that does it and the reference in `tools/mali/testdata`
+that measures it.
 
-1. **Packing order.** The GLSL linker sorts the varyings: a vec4 first,
-   then a vec2, a float, a vec3, equal ones in the vertex shader's order
-   (gl_nir_link_varyings.c:2376-2390, the comparator :2494-2505). A matrix
-   sorts by its own components (`glsl_without_array(var->type)`,
-   :2694-2708): a mat2 as a vec4. fsload_v3z_v2x lays the vec2 before the
-   vec3; fsload_mat2_v2 the mat2 before the vec2.
-2. **Lanes kept.** `lower_precision` converts a varying in each tree it
-   lowers as a whole variable, `f2fmp` of the deref before the swizzle
-   (lower_precision.cpp:724-733). The link (`nir_opt_varyings_bulk`,
-   gl_nir_linker.c:1524) runs while that vector conversion reads every
-   lane, so every lane is kept; the lanes no one reads go only in the
-   fragment shader's own compile. A tree is lowered when every operand is
-   mediump: a mediump varying's lane, a constant, a mediump uniform, an
-   fp16 texel, gl_PointCoord, fp16 arithmetic (fsload_*, cmp_*, case 105).
-   A highp shader, a highp varying, an integer one and a tree with an
-   fp32 operand keep the lanes read (fsload_highp, fsload_hp_var2,
-   fsload_hp_mat2, intbool_89_flatlast). A matrix is kept per column, each
-   column its own deref (fsload_mat2: `.v2`; fsload_mat3: `.v3`). A colour
-   lane of another kind is refused (`FsVaryingLoad`).
-3. **Compaction.** `compact_varyings` (nir_opt_varyings.c:5491-5560) gives
-   every kept lane the next scalar slot in the order of step 1. A vertex
-   shader's constant lane is propagated, not kept. Two equal lanes are
-   merged (fsload_dup loads `.v2`); the link here refuses that vertex
-   shader (`VaryingDuplicate`).
+1. **Packing order** (select.rs `generic_layout`). The GLSL linker sorts
+   the varyings: a vec4 first, then a vec2, a float, a vec3, equal ones in
+   the vertex shader's order (gl_nir_link_varyings.c:2376-2390, the
+   comparator :2494-2505). A matrix sorts by its own components
+   (`glsl_without_array(var->type)`, :2694-2708): a mat2 as a vec4, a
+   mat3 as a float. fsload_v3z_v2x lays the vec2 before the vec3;
+   fsload_mat2_v2 the mat2 before the vec2.
+2. **Lanes kept** (nir_fs.rs `kept_whole`). `lower_precision` converts a
+   varying in each tree it lowers as a whole variable, `f2fmp` of the
+   deref before the swizzle (lower_precision.cpp:724-733). The link
+   (`nir_opt_varyings_bulk`, gl_nir_linker.c:1524) runs while that vector
+   conversion reads every lane, so every lane is kept; the lanes no one
+   reads go only in the fragment shader's own compile.
+   - Kept whole: a mediump float varying of a mediump shader that an fp16
+     operation reads (fsvec_*, discard_81_branchquad, intloop_*), or that
+     a lowered colour takes as it is. The colour is lowered when every
+     lane is a constant, a mediump varying's lane, a mediump uniform's
+     component, an fp16 texel, gl_PointCoord or fp16 arithmetic (cmp_*,
+     fsload_*, case 105).
+   - The lanes read alone: a highp shader, a highp varying and an integer
+     one (fsload_highp, fsload_hp_var2, intbool_89_flatlast); a colour
+     with an fp32 lane, a highp varying's, uniform's or texel's or an fp32
+     operation's (fsload_hp_var2, case 89); a varying only a cube
+     direction reads raw (varyconst_101_cubebias).
+   - A matrix is kept per column, each column its own deref (fsload_mat2:
+     `.v2`; fsload_mat3: `.v3`).
+   - Any other colour lane or reader is refused (`FsVaryingLoad`).
+3. **Compaction** (nir_fs.rs `layout`). `compact_varyings`
+   (nir_opt_varyings.c:5491-5560) gives every kept lane the next scalar
+   slot in the order of step 1. A vertex shader's constant lane is
+   propagated, not kept. Two equal lanes are merged (fsload_dup loads
+   `.v2`); the link here refuses that vertex shader (`VaryingDuplicate`).
 4. **Loads.** `nir_unlower_io_to_vars` (st_program.c:872) makes one
-   variable of each slot's lanes. The fragment shader loads a slot it reads
-   a lane of at that width (`component + num_components`,
+   variable of each slot's lanes. The fragment shader loads a slot it
+   reads a lane of at that width (`component + num_components`,
    pan_nir_lower_fs_inputs.c:52-69, in `bifrost_postprocess_nir` before
    `nir_opt_shrink_vectors`, bifrost_nir.c:286, which has no case for
    `load_var_buf_pan`). A slot no one reads is not loaded, though the
    vertex shader stores it (fsload_v3x_v3x: six stores, one `.v4` load).
-5. **Load order.** `nir_opt_move` puts each load right before its first
-   use (bifrost_nir.c:380-381): fsload_v3x_v3z loads slot 1 (`q.yz`, the
-   colour's first lane) before slot 0, whose `q.x` no one reads.
-6. **Conversions.** The lanes a lowered tree reads are converted where its
-   `f2fmp` stands, in lane order (`nir_lower_alu_width`). The colour's own
-   lanes lose their conversion at the link (`f2f32(f2fmp(a))` is `a`,
-   nir_opt_algebraic.py:1991) and are converted with the stored colour
-   (`nir_lower_mediump_io`, bifrost_nir.c:914), in the colour's order
-   (fsload_order: z then x; intloop_ifloop: the pair z,w, then x).
-   `nir_opt_vectorize` makes two lanes of one load that are an aligned
-   pair one `V2F32_TO_V2F16`, the first lane low
-   (nir_opt_vectorize.c:166-171, 559). A pair the selection here converts
-   apart (fsload_mk_pair, fsload_disc_col: the compare's y, then the
-   colour's x) or with the odd lane low is refused (`FsVaryingLoad`).
+5. **Conversions** (nir_fs.rs `conversion_order`, `select`).
+   - The lanes a lowered tree reads are converted where its `f2fmp` stands,
+     in lane order (`nir_lower_alu_width`), at their load: a compare's
+     before its discard, an operand's before its operation. So are lanes
+     an operation reads that the walk folds (`x * 1.0`: sel_v_color_uv).
+   - The colour's own lanes lose their conversion at the link
+     (`f2f32(f2fmp(a))` is `a`, nir_opt_algebraic.py:1991) and are
+     converted at the colour's store (`nir_lower_mediump_io`,
+     bifrost_nir.c:914, its `f2fmp` right before the store,
+     nir_lower_mediump.c:102-104): after everything before it, a discard
+     included (fsconv_disc2, fsconv_discw, fsconv_disch, fsconv_discv,
+     fsconv_discpc), in the colour's lane order across the loads
+     (fsconv_cpq: q.y, c.z, p.x; fsload_order; intloop_ifloop).
+   - `nir_opt_vectorize` makes two lanes of one load that are an aligned
+     pair one `V2F32_TO_V2F16` at the first one's place, that lane low
+     (nir_opt_vectorize.c:166-171, 559). A pair the selection converts
+     apart (fsload_mk_pair; fsload_disc_col: the compare's y, then the
+     colour's x) or with the odd lane low is refused (`FsVaryingLoad`).
+   - A lane alone as the alpha is read from its own conversion
+     (fsconv_alpha2, fsconv_alpha3, fsconv_alpha4: `ATEST ... r2.h0`).
+6. **Load order.** `nir_opt_move` puts each load right before its first
+   use (bifrost_nir.c:380-381). A load the trees read stands at the first
+   read of its varying; a load only the colour's own lanes read stands
+   before the first of their conversions, at the store (fsconv_slot:
+   d.y's slot 1 first, then slot 0; fsload_v3x_v3z). An indexed uniform
+   element only the colour's words read is sunk there too, after the
+   conversions (uniidx_j).
 
 ## Pins
 
