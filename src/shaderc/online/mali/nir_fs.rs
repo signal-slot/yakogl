@@ -6103,7 +6103,10 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         slots[nslots] = v;
         nslots += 1;
     }
-    let pc = FsVarying::new(POINT_COORD, 2, 0, f.pcoord_key);
+    /* gl_PointCoord is loaded as its two lanes, of which the colour may
+     * read one (pcv_c: `LD_VAR_SPECIAL.v2` for `gl_PointCoord.x`) */
+    let mut pc = FsVarying::new(POINT_COORD, 2, 0, f.pcoord_key);
+    pc.whole = true;
     let z = FsVarying::new(FRAG_Z, 1, 0, f.fz_key);
     for v in slots[..nslots].iter().copied().chain(pcoord.then_some(pc)).chain(fz.then_some(z)) {
         if f.nvar >= MAX_VARYINGS {
@@ -7357,13 +7360,18 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             used[k as usize] |= 1 << lane;
         }
     }
-    /* a load holds the lanes read, and those alone but where the link
-     * keeps lanes no one reads ([`FsVarying::whole`]: 78's v4 load, of
-     * which lanes 0 and 3 are read) */
+    /* a load holds the lanes read, and beside them only lanes the link
+     * keeps ([`FsVarying::whole`]: 78's v4 load, of which lanes 0 and 3
+     * are read). A lane past the load is this back end's defect; a lane
+     * read through a form these leaves do not name, a form no reference
+     * draws */
     for (k, v) in f.varyings[..f.nvar].iter().enumerate() {
         let full = (1u8 << v.comps) - 1;
-        if used[k] == 0 || used[k] & !full != 0 || (used[k] != full && !v.whole) {
+        if used[k] & !full != 0 {
             return Err(MaliError::Defect(Defect::IrIndex));
+        }
+        if used[k] == 0 || (used[k] != full && !v.whole) {
+            return Err(MaliError::FsVaryingLoad);
         }
     }
     let mut live = [false; MAX_PAIRS];
