@@ -1620,10 +1620,26 @@ impl Tree<'_, '_> {
                     && matches!(*op, IrOp::Alu(AluOp::Fmul, _))
                     && (lit(self, q, 0).is_some() || lit(self, q, 1).is_some())
             });
-            if !twin && self.readers(p).count() > 0 && self.readers(p).all(|(j, _)| self.fsat_of(j, p)) {
+            /* only where it is measured: a highp fragment shader's product of
+             * one or two lanes (a vertex position's clamp and a vec3's
+             * differ for other, older reasons; refused as before) */
+            let measured = self.highp_fragment && self.comps[p] <= 2;
+            if measured && !twin && self.readers(p).count() > 0 && self.readers(p).all(|(j, _)| self.fsat_of(j, p)) {
                 continue;
             }
-            let clamped = self.readers(p).any(|(_, op)| matches!(op, IrOp::Alu(AluOp::Fmin | AluOp::Fmax, _)));
+            /* a clamp's `fmin`/`fmax` reading the product, itself or
+             * through a local it is stored to (`vec2 t = a2 * -2.0;
+             * clamp(t, 0.0, 1.0)`: Mesa folds the clamp into the `FMA`) */
+            let clamp_op = |op: &IrOp| matches!(op, IrOp::Alu(AluOp::Fmin | AluOp::Fmax, _));
+            let direct = self.readers(p).any(|(_, op)| clamp_op(op));
+            let via_local = self.readers(p).any(|(_, op)| match *op {
+                IrOp::StoreLocal { local, .. } => self.instrs.iter().enumerate().any(|(l, o)| {
+                    matches!(*o, IrOp::LoadLocal { local: at, .. } if at == local)
+                        && self.readers(l).any(|(_, r)| clamp_op(r))
+                }),
+                _ => false,
+            });
+            let clamped = direct || (via_local && !one);
             let placed = self.uses[nid] == Use::Alu(p as u32) && (other.val.0 as usize) < nid;
             let chain = matches!(self.instrs.get(other.val.0 as usize), Some(IrOp::Alu(AluOp::Fmul, _)));
             if one && !clamped {
