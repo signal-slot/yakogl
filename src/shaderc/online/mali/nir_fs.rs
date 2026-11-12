@@ -7961,19 +7961,35 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                                 d
                             }
                         };
-                        let st = cube_rows(p, &mut rows, d)?;
-                        staging[..2].copy_from_slice(&st);
-                        /* the bias word after the descriptor
-                         * ([`TexLookup::bias`]): the uniform's half widened,
-                         * then `build_sfixed_8_8` as rows (`FMA.f32
-                         * .clamp_m1_1` by 1/16, `FMA.f32` by 4096,
-                         * `F32_TO_S32.rtz`, `U16_TO_U32 .h0`) */
+                        /* a bias's uniform widened before the descriptor:
+                         * the bias argument's `f2f32` is an instruction
+                         * before the look-up, while `va_lower_tex` builds
+                         * the descriptor and the 8.8 chain at the look-up
+                         * (pan_nir_lower_tex.c:805, :827, :936-937). Its
+                         * fp32 word, live across the cube ops, makes the
+                         * order's peak pressure 7 against the scheduler's 6,
+                         * so `bi_pressure_schedule` keeps its own order,
+                         * `CUBEFACE2_V9` first (fstex_cubebias_uni.expect
+                         * .json; the place is read from these bytes, not
+                         * from a Mesa IR dump). varyconst_101_cubebias's
+                         * order is the scheduler's either way */
                         let t = f.look_ups().get(x as usize).copied().ok_or(MaliError::Defect(Defect::IrIndex))?;
-                        if t.bias != Val::Undef {
+                        let bias = if t.bias != Val::Undef {
                             let d = f.uniform_dword(t.bias).ok_or(MaliError::Defect(Defect::IrIndex))?;
                             let (w, half, base) = ubo.half(d).ok_or(MaliError::FsUniform)?;
                             let swz = if half == 0 { Swz::H00 } else { Swz::H11 };
-                            let b = f2f32(p, &mut rows, Src::of(Idx::Ubo { base, comp: (w - base) as u8 }).swz(swz))?;
+                            Some(f2f32(p, &mut rows, Src::of(Idx::Ubo { base, comp: (w - base) as u8 }).swz(swz))?)
+                        } else {
+                            None
+                        };
+                        let st = cube_rows(p, &mut rows, d)?;
+                        staging[..2].copy_from_slice(&st);
+                        /* the bias word after the descriptor
+                         * ([`TexLookup::bias`]): the uniform's half widened
+                         * (above), then `build_sfixed_8_8` as rows (`FMA.f32
+                         * .clamp_m1_1` by 1/16, `FMA.f32` by 4096,
+                         * `F32_TO_S32.rtz`, `U16_TO_U32 .h0`) */
+                        if let Some(b) = bias {
                             let mut r = |op: Alu, bits: u8, s: &[Src]| -> Result<Src, MaliError> {
                                 Ok(Src::ssa(row(p, &mut rows, Row { op, bits, width: 1 }, s)?))
                             };
