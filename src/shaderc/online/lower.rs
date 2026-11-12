@@ -7591,8 +7591,15 @@ impl<'a> Lower<'_, 'a> {
         /* Its storage (A.5): a mediump or lowp float local or global,
          * `const` included, is stored at 16 bits; a struct's members and a
          * highp float at full width. */
+        /* A `const` whose initialiser folds is the exception: where
+         * `ast_to_hir` folds a read of it (a call's or a constructor's
+         * argument) the read is its 32-bit value, so the slot holds that,
+         * and a 16-bit reader narrows it to the same fp16 value Mesa's
+         * 16-bit storage gives (review probe v_constarg). */
+        let folded_const = storage == StorageQualifier::Const && init.is_some_and(|e| self.precs.folds(e));
         let medium = self.precs.decl(id) == Prec::Medium
-            && matches!(ty.base, BaseType::Float | BaseType::Vec(_) | BaseType::Mat(..));
+            && matches!(ty.base, BaseType::Float | BaseType::Vec(_) | BaseType::Mat(..))
+            && !folded_const;
         self.slot_prec = Some(if medium { Prec::Medium } else { Prec::High });
         let l = self.alloc_var(name, ty.base, len, line);
         self.slot_prec = None;

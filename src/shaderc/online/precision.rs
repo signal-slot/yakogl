@@ -1193,7 +1193,7 @@ mod tests {
         assert_eq!(alu(&g, AluOp::Fmul), [M]);
         assert!(g.ops.iter().all(|o| !matches!(o, Op::ConstF32(k) if f32::from_bits(k[0]) > 1.6)), "{:?}", g.ops);
         assert_eq!(of(&g, |o| matches!(o, Op::LoadLocal { .. })), [M, M], "the reads below the root");
-        assert_eq!(local(&g, "c"), M, "a const mediump float is stored at 16 bits");
+        assert_eq!(local(&g, "c"), H, "a const whose initialiser folds holds its 32-bit value");
         /* p1b: a local, the same */
         let g = vs("varying highp float v;\nvoid main(){ mediump float c = 1.3; v = c * c; gl_Position = p; }");
         assert_eq!(alu(&g, AluOp::Fmul), [M]);
@@ -1706,6 +1706,24 @@ mod tests {
         let a = Arena::new(&mut buf);
         let l = compile_to_ir(&a, Stage::Fragment, a.alloc_str(src).expect("arena")).expect("compiles");
         assert!(l.module.has_prec());
+    }
+
+    /// A `const` read where `ast_to_hir` folds (a call's or a
+    /// constructor's argument) is its 32-bit value, folded at 32 bits.
+    /// Mesa (review probe v_constarg, drm-shim GLSL IR): `vec4(c * c)` of
+    /// `const mediump float c = 1.3` is `constant f16vec4 (1.690430)`, the
+    /// fp16 rounding of 1.3 * 1.3; fp16(1.3)^2 is 1.6895, one ulp off. So
+    /// the slot holds the 32-bit value (High): a 16-bit reader narrows it,
+    /// which is the fp16 value Mesa's 16-bit storage gives, and the folded
+    /// product reads 1.3.
+    #[test]
+    fn a_const_whose_initialiser_folds_is_stored_at_full_width() {
+        let g = vs("attribute mediump vec4 q; varying highp vec4 v;\nconst mediump float c = 1.3;\n\
+                    void main(){ gl_Position = p; v = q * (c * c) + vec4(c * c); }");
+        assert_eq!(local(&g, "c"), H);
+        assert_eq!(alu(&g, AluOp::Fmul), [M, M, H], "q * (c * c) is 16-bit; vec4(c * c) is the 32-bit fold");
+        let g = vs("varying highp vec4 v;\nvoid main(){ gl_Position = p; mediump float m = p.x; v = vec4(m * m); }");
+        assert_eq!(local(&g, "m"), M, "a mediump local that is no const is stored at 16 bits");
     }
 
     #[test]
