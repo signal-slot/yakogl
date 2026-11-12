@@ -1954,10 +1954,11 @@ impl<'s> Fs<'s> {
                 };
             }
         }
-        /* the front end records no width here (`comps_of` answers 4) and
-         * pads a swizzle with its last lane: a lane whose operands are the
-         * lane before's is the same scalar operation, one node (`nir_opt_cse`
-         * after `nir_lower_alu_width`) */
+        /* the width is the front end's (a built-in records its call's,
+         * lower.rs `Sink`), and a swizzle of a narrower value pads it with
+         * its last lane: a lane whose operands are the lane before's is the
+         * same scalar operation, one node (`nir_opt_cse` after
+         * `nir_lower_alu_width`) */
         let same = |i: usize| (0..ir_arity(a)).all(|k| x[k][i] == x[k][i - 1]);
         let d = (1..w).find(|&i| same(i)).unwrap_or(w);
         if (d..w).any(|i| !same(i)) {
@@ -2776,9 +2777,10 @@ impl<'s> Fs<'s> {
             }
             return Ok(out);
         }
-        /* the front end records no width for a conversion or a compare
-         * (`comps_of` answers 4): the value has the lanes its sources
-         * have, so a lane past the sources' ends is not one of its */
+        /* the recorded width can pass the lanes the sources have (a
+         * module with no width table answers 4, and a source may be read
+         * through a narrower value's swizzle): a lane past the sources'
+         * ends is not one of the value's */
         let arity = ir_arity(a);
         for (i, o) in out.iter_mut().enumerate().take(w) {
             let s = [lane(0, i), lane(1, i), lane(2, i)];
