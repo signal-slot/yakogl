@@ -412,6 +412,31 @@ fn a_submit_and_completed_handle_a_pending_tiler_oom() {
     assert_eq!(r.osal.oom_chunks, 2);
 }
 
+/// An OOM the firmware raises at any moment around a submit, also between
+/// the OSAL's own look for one and the job's write (the review's probe:
+/// N reads of nothing between the two kicks), is serviced: the heap grows,
+/// no group restarts, both kicks complete.
+#[test]
+fn a_tiler_oom_raised_during_a_submit_is_serviced_not_a_restart() {
+    for n in 0..40 {
+        let mut r = rig_with(3, 1);
+        r.z.set_chunks(1);
+        queue_init(&mut r);
+        let a = oom_stream(&mut r, 2);
+        let b = stream(&mut r);
+        let fa = r.osal.submit(&*r.z, a.gpu, 32, &mut no_delay);
+        for _ in 0..n {
+            r.z.read32(B.gpu);
+        }
+        let fb = r.osal.submit(&*r.z, b.gpu, 24, &mut no_delay);
+        assert_eq!(fb, fa + 1, "N = {n}");
+        assert_eq!(r.osal.wait(&*r.z, fb, -1, &mut no_delay), 0, "N = {n}");
+        assert_eq!(r.osal.wait(&*r.z, fa, -1, &mut no_delay), 0, "N = {n}");
+        assert_eq!((r.osal.restarts, r.osal.last_error()), (0, None), "N = {n}");
+        assert_eq!((word(&a), word(&b), r.osal.oom_chunks), (1, 1, 1), "N = {n}");
+    }
+}
+
 /// With every slot the heap's, an OOM is answered with no chunk (panthor's
 /// `-ENOMEM`: the firmware waits): acknowledged with `heap_start` 0,
 /// counted, the job left waiting, the OSAL still up.
