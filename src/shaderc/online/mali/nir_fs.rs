@@ -5810,7 +5810,14 @@ fn reaches(f: &Fs<'_>, root: Val, e: Val) -> bool {
 /// lanes read. A highp ES 3.00 output is a lowered tree converted back
 /// (es3_hpout loads `.v4`). A colour lane of a form not measured either
 /// way is refused ([`MaliError::FsVaryingLoad`]).
-fn kept_whole(f: &Fs<'_>, m: &Module<'_>, loc: u8, node: u16, roots: &[Val]) -> Result<bool, MaliError> {
+fn kept_whole(
+    f: &Fs<'_>,
+    m: &Module<'_>,
+    loc: u8,
+    node: u16,
+    roots: &[Val],
+    all_read: bool,
+) -> Result<bool, MaliError> {
     let mediump = |l: u8| {
         !f.prec.highp
             && (l as usize) < MAX_VARYINGS
@@ -5858,27 +5865,6 @@ fn kept_whole(f: &Fs<'_>, m: &Module<'_>, loc: u8, node: u16, roots: &[Val]) -> 
      * when lower_precision lowers that tree, which it does when every lane
      * is mediump */
     let colour = f.colour.ok_or(MaliError::NoColour)?;
-    /* a colour lane is lowered with a tree only when its dereference is
-     * an operation's operand or is stored to a local lower_precision
-     * lowers (a constructor's temporary, a mediump local: `vec4(a.x, ..)`,
-     * fsload_v4_one; c05's `t.x = p.y`);
-     * an assignment to the colour itself, `gl_FragColor.xy = a.xy`, has no
-     * tree to lower and keeps the lanes read (fsload_bare1-3) */
-    let output_shadow = |l: ir::LocalId| {
-        m.locals.get(l.0 as usize).is_some_and(|d| {
-            d.name == "gl_FragColor" || m.outputs.iter().any(|o| o.kind == IoKind::Colour && o.name == d.name)
-        })
-    };
-    let lowered_deref = m.instrs.iter().enumerate().any(|(i, op)| {
-        matches!(*op, ir::Op::LoadInput { slot: IoSlot::Varying(v), .. } if v == loc)
-            && m.instrs.iter().any(|o| match *o {
-                ir::Op::StoreLocal { local, src, .. } => src.val.0 as usize == i && !output_shadow(local),
-                /* an operation of the tree, which the walk may have folded
-                 * (fsconv_fold2's `p.x + 0.0`) */
-                ir::Op::Alu(a, srcs) => srcs[..a.arity()].iter().any(|x| x.val.0 as usize == i),
-                _ => false,
-            })
-    });
     if !reads(&colour) {
         /* no fp16 operation and no colour lane reads it: a cube look-up's
          * direction, read raw at fp32 (varyconst_101_cubebias: the lanes
@@ -5890,7 +5876,9 @@ fn kept_whole(f: &Fs<'_>, m: &Module<'_>, loc: u8, node: u16, roots: &[Val]) -> 
         });
         return if other { Err(MaliError::FsVaryingLoad) } else { Ok(false) };
     }
-    if !lowered_deref {
+    /* the colour takes the lane through a value whose `f2fmp` the link
+     * keeps, or only through ones it undoes ([`colour_keeps_whole`]) */
+    if !colour_keeps_whole(m, loc, all_read)? {
         return Ok(false);
     }
     let (mut fp32, mut unknown) = (false, false);
@@ -5936,6 +5924,163 @@ fn kept_whole(f: &Fs<'_>, m: &Module<'_>, loc: u8, node: u16, roots: &[Val]) -> 
     match (unknown, fp32) {
         (true, _) => Err(MaliError::FsVaryingLoad),
         (false, fp32) => Ok(!fp32),
+    }
+}
+
+/// The colour keeps a varying's `f2fmp` through the link (true), or takes
+/// its lanes only through values whose conversion the link undoes
+/// (false). gl_nir_opts runs before `nir_opt_varyings_bulk`
+/// (gl_nir_linker.c:1441, :1524): `nir_lower_vars_to_ssa` makes a local
+/// a copy of what was stored, the whole-identity folds remove `* 1.0` and
+/// `+ 0.0` (nir_opt_algebraic.py:236-237, :292), `f2f32(f2fmp(a))` is `a`
+/// (:1991) and DCE drops a dead tree. So a colour store whose value is the
+/// varying's dereference, through locals stored once, swizzles and whole
+/// identities, converts nothing at the link: the lanes read
+/// (fsload_bare1-4, fsload_cancel1-9). A store of a constructor that holds
+/// the varying beside another value (a constant, another varying, an
+/// operation) keeps the conversion: `f2f32` reads the vector, not the
+/// `f2fmp` (fsload_v4_one, c20, c05, m28); a constructor of the varying's
+/// lanes alone is one vector of its `f2fmp` after copy propagation, which
+/// the cancel undoes (fsload_cancel10, fsload_cancel11). Any other value
+/// has no reference ([`MaliError::FsVaryingLoad`]) unless the colour reads
+/// every lane (`all_read`: kept or not, the layout is the same). Only the
+/// colour's stores are followed, so a dead tree reads nothing (k06).
+fn colour_keeps_whole(m: &Module<'_>, loc: u8, all_read: bool) -> Result<bool, MaliError> {
+    use ir::Op;
+    let shadow = |l: ir::LocalId| ir_colour_local(m, l);
+    let stores = |l: ir::LocalId| {
+        m.instrs.iter().filter_map(move |op| match *op {
+            Op::StoreLocal { local, index: None, src, .. } if local == l => Some(src),
+            _ => None,
+        })
+    };
+    let once = |l: ir::LocalId| ir_stored_once(m, l);
+    let bare = |v: ir::ValueId| ir_bare_varying(m, v, 0);
+    /* the varying locations a value reads, through every store of a local */
+    fn reach(m: &Module<'_>, v: ir::ValueId, seen: &mut u64, depth: u8) -> u32 {
+        if depth > 32 {
+            return 0;
+        }
+        match m.def(v) {
+            Some(&ir::Op::LoadInput { slot: IoSlot::Varying(l), .. }) => 1 << (l & 31),
+            Some(&ir::Op::LoadLocal { local, .. }) => {
+                if *seen >> (local.0 & 63) & 1 != 0 {
+                    return 0;
+                }
+                *seen |= 1 << (local.0 & 63);
+                let mut r = 0;
+                for op in m.instrs {
+                    if let ir::Op::StoreLocal { local: l, src, .. } = *op {
+                        if l == local {
+                            r |= reach(m, src.val, seen, depth + 1);
+                        }
+                    }
+                }
+                r
+            }
+            Some(&ir::Op::Alu(a, s)) => s[..a.arity()].iter().fold(0, |r, x| r | reach(m, x.val, seen, depth + 1)),
+            _ => 0,
+        }
+    }
+    let (mut whole, mut unsure) = (false, false);
+    for op in m.instrs {
+        let v = match *op {
+            Op::StoreOutput { slot: IoSlot::FragColor(_), src } => src.val,
+            Op::StoreLocal { local, index: None, src, .. } if shadow(local) => src.val,
+            _ => continue,
+        };
+        /* the colour's own local, stored by its parts above */
+        if matches!(m.def(v), Some(&Op::LoadLocal { local, .. }) if shadow(local)) {
+            continue;
+        }
+        if bare(v).is_some() || reach(m, v, &mut 0, 0) & 1 << (loc & 31) == 0 {
+            continue;
+        }
+        /* a constructor (a local stored by parts, past its copies) */
+        let mut c = v;
+        while let Some(&Op::LoadLocal { local, index: None, .. }) = m.def(c) {
+            match once(local) {
+                Some(s) => c = s.val,
+                None => break,
+            }
+        }
+        match m.def(c) {
+            Some(&Op::LoadLocal { local, index: None, .. }) => {
+                /* of the varying's lanes alone: one vector of its `f2fmp`
+                 * after `nir_opt_copy_prop`, which the cancel then undoes
+                 * (fsload_cancel10: `vec4(a.x, a.y, a.x, a.y)` loads `.v2`) */
+                let mut only = true;
+                for s in stores(local) {
+                    only &= bare(s.val) == Some(loc);
+                }
+                whole |= !only;
+            }
+            /* an operation's value: an fp16 tree of it */
+            Some(&Op::Alu(..)) => whole = true,
+            _ => unsure = true,
+        }
+    }
+    if whole {
+        Ok(true)
+    } else if unsure && !all_read {
+        Err(MaliError::FsVaryingLoad)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Local `l` is the colour's own (`gl_FragColor` written by parts, an ES
+/// 3.00 output): its stores are the colour's ([`colour_keeps_whole`]).
+fn ir_colour_local(m: &Module<'_>, l: ir::LocalId) -> bool {
+    m.locals.get(l.0 as usize).is_some_and(|d| {
+        d.name == "gl_FragColor" || m.outputs.iter().any(|o| o.kind == IoKind::Colour && o.name == d.name)
+    })
+}
+
+/// The one store of local `l`, if it has one only (a copy, which
+/// `nir_lower_vars_to_ssa` makes the stored value).
+fn ir_stored_once(m: &Module<'_>, l: ir::LocalId) -> Option<ir::Src> {
+    let mut it = m.instrs.iter().filter_map(|op| match *op {
+        ir::Op::StoreLocal { local, index: None, src, .. } if local == l => Some(src),
+        _ => None,
+    });
+    let first = it.next()?;
+    it.next().is_none().then_some(first)
+}
+
+/// The operand a whole identity leaves of `a` over `s` (`w` lanes): the
+/// other source of a `* 1.0`, or of a `+ 0.0` or `+ -0.0` with one sign of
+/// zero on every lane (nir_opt_algebraic.py:236-237, :292; nir_search.c
+/// :260-286, the sign of zero checked per lane, :282-285).
+fn ir_whole_identity(m: &Module<'_>, a: AluOp, s: &[ir::Src; 3], w: usize) -> Option<ir::Src> {
+    let bits: &[u32] = match a {
+        AluOp::Fmul => &[F32_ONE],
+        AluOp::Fadd => &[0, F32_NEG_ZERO],
+        _ => return None,
+    };
+    let konst = |v: ir::ValueId, swz: &[u8], b: u32| match m.def(v) {
+        Some(ir::Op::ConstF32(c)) => swz.iter().all(|&i| c.get(i as usize & 3) == Some(&b)),
+        _ => false,
+    };
+    (0..2).find_map(|k| {
+        let c = &s[k].swizzle[..w.clamp(1, 4)];
+        bits.iter().any(|&b| konst(s[k].val, c, b)).then_some(s[1 - k])
+    })
+}
+
+/// The varying location value `v` is, through locals stored once,
+/// swizzles and whole identities; None for anything else.
+fn ir_bare_varying(m: &Module<'_>, v: ir::ValueId, depth: u8) -> Option<u8> {
+    if depth > 32 {
+        return None;
+    }
+    match *m.def(v)? {
+        ir::Op::LoadInput { slot: IoSlot::Varying(l), .. } => Some(l),
+        ir::Op::LoadLocal { local, index: None, .. } if !ir_colour_local(m, local) => {
+            ir_bare_varying(m, ir_stored_once(m, local)?.val, depth + 1)
+        }
+        ir::Op::Alu(a, s) => ir_bare_varying(m, ir_whole_identity(m, a, &s, m.comps_of(v) as usize)?.val, depth + 1),
+        _ => None,
     }
 }
 
@@ -6041,7 +6186,9 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
             });
             /* and one GLSL's `lower_precision` converts whole before the
              * link ([`kept_whole`]) */
-            whole[loc as usize] |= kept_whole(f, m, loc, node, c)?;
+            let comps = m.inputs.iter().find(|d| d.kind == IoKind::Varying && d.location == loc).map(|d| d.components);
+            let all_read = comps.is_some_and(|n| read[loc as usize] == (1u8 << n.min(4)) - 1);
+            whole[loc as usize] |= kept_whole(f, m, loc, node, c, all_read)?;
         }
     }
     /* the texels the colour reads of each look-up; one it reads reads its

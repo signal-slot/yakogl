@@ -2156,6 +2156,48 @@ fn equal_lanes_of_two_qualifiers_are_not_merged() {
     }
 }
 
+/// A colour lane whose `f2fmp` the link undoes keeps the lanes read: a
+/// local read back bare, a whole identity, a dead tree; gl_nir_opts makes
+/// `f2f32(f2fmp(a))` `a` (nir_opt_algebraic.py:1991) after vars_to_ssa,
+/// the identity folds and DCE, before nir_opt_varyings (nir_fs.rs
+/// `kept_whole`). fsload_cancel1-9 are byte-equal on main; fsload_cancel10
+/// and 11 are a constructor of the varying's lanes alone (`.v2`).
+#[test]
+fn a_conversion_the_link_undoes_keeps_the_lanes_read_as_mesa_26_2_1() {
+    let cases = [
+        ("fsload_cancel1", td!("fsload_cancel1.vert"), td!("fsload_cancel1.frag"), td!("fsload_cancel1.expect.json")),
+        ("fsload_cancel2", td!("fsload_cancel2.vert"), td!("fsload_cancel2.frag"), td!("fsload_cancel2.expect.json")),
+        ("fsload_cancel3", td!("fsload_cancel3.vert"), td!("fsload_cancel3.frag"), td!("fsload_cancel3.expect.json")),
+        ("fsload_cancel4", td!("fsload_cancel4.vert"), td!("fsload_cancel4.frag"), td!("fsload_cancel4.expect.json")),
+        ("fsload_cancel5", td!("fsload_cancel5.vert"), td!("fsload_cancel5.frag"), td!("fsload_cancel5.expect.json")),
+        ("fsload_cancel6", td!("fsload_cancel6.vert"), td!("fsload_cancel6.frag"), td!("fsload_cancel6.expect.json")),
+        ("fsload_cancel7", td!("fsload_cancel7.vert"), td!("fsload_cancel7.frag"), td!("fsload_cancel7.expect.json")),
+        ("fsload_cancel8", td!("fsload_cancel8.vert"), td!("fsload_cancel8.frag"), td!("fsload_cancel8.expect.json")),
+        ("fsload_cancel9", td!("fsload_cancel9.vert"), td!("fsload_cancel9.frag"), td!("fsload_cancel9.expect.json")),
+        (
+            "fsload_cancel10",
+            td!("fsload_cancel10.vert"),
+            td!("fsload_cancel10.frag"),
+            td!("fsload_cancel10.expect.json"),
+        ),
+        (
+            "fsload_cancel11",
+            td!("fsload_cancel11.vert"),
+            td!("fsload_cancel11.frag"),
+            td!("fsload_cancel11.expect.json"),
+        ),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
 /// Two lanes of equal value: Mesa's link keeps the first in the layout's
 /// order and reads the other from it (`deduplicate_outputs`,
 /// nir_opt_varyings.c:3253-3420). fsload_dup's `a.z` is `a.x` (`.v2`, two
