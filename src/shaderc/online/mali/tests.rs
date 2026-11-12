@@ -1055,6 +1055,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::NoColour
         | E::ColourForm
         | E::ColourPair
+        | E::FsVaryingLoad
         | E::ColourZeroHalf
         | E::Fp16Inexact
         | E::TooManyLocals
@@ -1200,6 +1201,13 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.xzyw; }", MaliError::ColourForm),
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.yxzw; }", MaliError::FsOperandForm),
         (FS, "precision mediump float; varying vec2 v; void main(){ gl_FragColor = vec4(1.0, v, 1.0); }", MaliError::ColourPair),
+        /* both lanes of an aligned pair converted apart: Mesa converts the
+         * pair once (fsload_mk_pair.expect.json) */
+        (
+            FS,
+            "precision mediump float; varying vec4 a; void main(){ gl_FragColor = vec4(a.z, 0.5, a.w, 0.75); }",
+            MaliError::FsVaryingLoad,
+        ),
         (FS, "precision mediump float; varying float v; void main(){ gl_FragColor = vec4(v, 0.0, 0.0, 1.0); }", MaliError::ColourZeroHalf),
         /* the S4 rows no reference draws: `!=` on floats and on integers;
          * the clamp forms Mesa's late rules make; a negated float(bool) in
@@ -1747,27 +1755,6 @@ fn compile_vs_for(vs: &str, fs: &str) -> Stage {
     .expect("the vertex shader compiles for the program")
 }
 
-/// The program's vertex shader of each compaction case against pan_shc's:
-/// only the components read stored, at their compacted offsets (the
-/// varying program's words, `generic_size_B` through the record).
-#[test]
-fn the_compacted_vertex_programs_are_byte_equal_to_mesa_26_2_1() {
-    let cases = [
-        (td!("cmp_vs4.vert"), td!("cmp_b.frag"), td!("pan_shc-out/cmp_b.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_xy.frag"), td!("pan_shc-out/cmp_xy.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_xz.frag"), td!("pan_shc-out/cmp_xz.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_w.frag"), td!("pan_shc-out/cmp_w.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_zw.frag"), td!("pan_shc-out/cmp_zw.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_xyz.frag"), td!("pan_shc-out/cmp_xyz.json")),
-        (td!("cmp_vs2x4.vert"), td!("cmp_axby.frag"), td!("pan_shc-out/cmp_axby.json")),
-        (td!("cmp_vs2x4.vert"), td!("cmp_axybzw.frag"), td!("pan_shc-out/cmp_axybzw.json")),
-        (POINTS_VS, POINTCOORDVARY_FS, td!("pan_shc-out/pointcoordvary.json")),
-    ];
-    for (vs, fs, json) in cases {
-        check_vs_record_pan_shc(&compile_vs_for(vs, fs), json);
-    }
-}
-
 /// A vertex shader's multiply by a constant, as Mesa's algebraic rules
 /// leave it (pan_shc's references, tools/mali/testdata/cmul_*): the
 /// constant second, `* -1.0` an fneg folded into its user or stored as
@@ -1898,26 +1885,175 @@ fn the_point_coord_program_is_byte_equal_to_mesa_26_2_1() {
     check_fs_pan_shc(POINTCOORD_FS, td!("pan_shc-out/pointcoord.json"));
 }
 
-/// The fragment shaders that read part of their varyings, after Mesa's
-/// link keeps only the components read (`compact_varyings`): case 105's
-/// (`v_color.b` beside gl_PointCoord) and the compaction controls (one vec4
-/// read as .b, .xy, .xz, .w, .zw, .xyz; two vec4s read as `v_a.x, v_b.y`
-/// and `v_a.xy, v_b.zw`, which share one slot), each with its vertex
-/// shader (tools/mali/testdata/cmp_*).
+/// The fragment shaders that read part of a mediump varying, each linked
+/// with its vertex shader: Mesa loads the varying at its declared width
+/// and the vertex shader stores every lane (GLSL's `lower_precision`
+/// converts the variable whole before the link, nir_fs.rs `layout`). Case
+/// 105's (`v_color.b` beside gl_PointCoord), the compaction controls (one
+/// vec4 read as .b, .xy, .xz, .w, .zw, .xyz; two vec4s read as `v_a.x,
+/// v_b.y` and `v_a.xy, v_b.zw`, tools/mali/testdata/cmp_*) and the width
+/// controls (fsload_*: one lane of a vec2, a vec3 and a vec4, a lane read
+/// twice, two lanes, lowp, a discard's compare, lanes of two varyings),
+/// against Mesa 26.2.1's driver on the drm-shim (`drm_shim_ref.sh run ...
+/// --uniform-values`, case 105 with `--prim points`). Each fsload case has
+/// its own vertex shader, which writes only the varyings it reads.
 #[test]
-fn the_compacted_fragment_programs_are_byte_equal_to_mesa_26_2_1() {
-    check_fs_pan_shc(POINTCOORDVARY_FS, td!("pan_shc-out/pointcoordvary.json"));
-    for (fs, json) in [
-        (td!("cmp_b.frag"), td!("pan_shc-out/cmp_b.json")),
-        (td!("cmp_xy.frag"), td!("pan_shc-out/cmp_xy.json")),
-        (td!("cmp_xz.frag"), td!("pan_shc-out/cmp_xz.json")),
-        (td!("cmp_w.frag"), td!("pan_shc-out/cmp_w.json")),
-        (td!("cmp_zw.frag"), td!("pan_shc-out/cmp_zw.json")),
-        (td!("cmp_xyz.frag"), td!("pan_shc-out/cmp_xyz.json")),
-        (td!("cmp_axby.frag"), td!("pan_shc-out/cmp_axby.json")),
-        (td!("cmp_axybzw.frag"), td!("pan_shc-out/cmp_axybzw.json")),
-    ] {
-        check_fs_pan_shc(fs, json);
+fn a_mediump_varying_read_in_part_is_loaded_whole_as_mesa_26_2_1() {
+    let cmp = |m: &str| match m {
+        "axby" | "axybzw" => td!("cmp_vs2x4.vert"),
+        _ => td!("cmp_vs4.vert"),
+    };
+    let cases = [
+        ("cmp_b", cmp("b"), td!("cmp_b.frag"), td!("cmp_b.expect.json")),
+        ("cmp_xy", cmp("xy"), td!("cmp_xy.frag"), td!("cmp_xy.expect.json")),
+        ("cmp_xz", cmp("xz"), td!("cmp_xz.frag"), td!("cmp_xz.expect.json")),
+        ("cmp_w", cmp("w"), td!("cmp_w.frag"), td!("cmp_w.expect.json")),
+        ("cmp_zw", cmp("zw"), td!("cmp_zw.frag"), td!("cmp_zw.expect.json")),
+        ("cmp_xyz", cmp("xyz"), td!("cmp_xyz.frag"), td!("cmp_xyz.expect.json")),
+        ("cmp_axby", cmp("axby"), td!("cmp_axby.frag"), td!("cmp_axby.expect.json")),
+        ("cmp_axybzw", cmp("axybzw"), td!("cmp_axybzw.frag"), td!("cmp_axybzw.expect.json")),
+        ("fsload_v2_one", td!("fsload_v2_one.vert"), td!("fsload_v2_one.frag"), td!("fsload_v2_one.expect.json")),
+        (
+            "fsload_v2_twice",
+            td!("fsload_v2_twice.vert"),
+            td!("fsload_v2_twice.frag"),
+            td!("fsload_v2_twice.expect.json"),
+        ),
+        ("fsload_v3_one", td!("fsload_v3_one.vert"), td!("fsload_v3_one.frag"), td!("fsload_v3_one.expect.json")),
+        ("fsload_v4_one", td!("fsload_v4_one.vert"), td!("fsload_v4_one.frag"), td!("fsload_v4_one.expect.json")),
+        ("fsload_v4_two", td!("fsload_v4_two.vert"), td!("fsload_v4_two.frag"), td!("fsload_v4_two.expect.json")),
+        ("fsload_lowp", td!("fsload_lowp.vert"), td!("fsload_lowp.frag"), td!("fsload_lowp.expect.json")),
+        ("fsload_discard", td!("fsload_discard.vert"), td!("fsload_discard.frag"), td!("fsload_discard.expect.json")),
+        ("fsload_two", td!("fsload_two.vert"), td!("fsload_two.frag"), td!("fsload_two.expect.json")),
+        ("fsload_second", td!("fsload_second.vert"), td!("fsload_second.frag"), td!("fsload_second.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+    /* case 105: the fragment program and the varying program (the position
+     * program of a points draw is not this test's) */
+    let json = td!("pointcoordvary.expect.json");
+    let (v, f) = compile_linked(POINTS_VS, POINTCOORDVARY_FS);
+    check_fs_stage(&f, POINTS_VS, POINTCOORDVARY_FS, json, VIEWPORT_64X64);
+    assert_words(
+        "pointcoordvary vs.varying",
+        &vs_regions(&v).1,
+        &region(json, "vs.varying").expect("vs.varying").words,
+    );
+}
+
+/// A highp varying, and every varying of a highp shader, is loaded with
+/// the lanes read and stored by the vertex shader at its compacted offset
+/// (no `lower_precision` conversion: Mesa's link keeps the lanes read).
+#[test]
+fn a_highp_varying_read_in_part_is_compacted_as_mesa_26_2_1() {
+    let (vs, fs, json) = (td!("fsload_highp.vert"), td!("fsload_highp.frag"), td!("fsload_highp.expect.json"));
+    check_linked_for("fsload_highp", vs, fs, json);
+    let (vs, fs) = (td!("fsload_highp_varying.vert"), td!("fsload_highp_varying.frag"));
+    check_linked_for("fsload_highp_varying", vs, fs, td!("fsload_highp_varying.expect.json"));
+}
+
+/// Varyings that share a slot, and the layout and load rules of the link
+/// (nir_fs.rs `layout`, `kept_whole`, `conversion_order`), each linked
+/// with its vertex shader against Mesa 26.2.1's driver on the drm-shim
+/// (`drm_shim_ref.sh run ... --uniform-values`; fsload_pcv with `--prim
+/// points`): a slot is loaded when a lane of it is read, at the width the
+/// link left it, in the order of the slots' first reads (fsload_v3x_v3z,
+/// fsload_v3z_v3z: slot 1 first); a slot no one reads is stored and not
+/// loaded (fsload_v3x_v3x); a vec2 is laid before a vec3 (fsload_v3z_v2x)
+/// and a mat2 before a vec2 (fsload_mat2_v2); a matrix is kept per column
+/// (fsload_mat2, fsload_mat3) and, in a highp shader, per lane read
+/// (fsload_hp_mat2); a colour that holds a highp varying's lane keeps the
+/// lanes read (fsload_hp_var2).
+#[test]
+fn varyings_sharing_a_slot_are_loaded_per_slot_as_mesa_26_2_1() {
+    let pair = |n: &'static str| match n {
+        "fsload_v3x_v3z" | "fsload_v3z_v3z" | "fsload_v3x_v3x" => td!("fsload_v3x_v3z.vert"),
+        "fsload_v3z_v2x" => td!("fsload_v3z_v2x.vert"),
+        "fsload_mat2" | "fsload_hp_mat2" => td!("fsload_mat2.vert"),
+        "fsload_mat3" => td!("fsload_mat3.vert"),
+        "fsload_mat2_v2" => td!("fsload_mat2_v2.vert"),
+        _ => td!("fsload_hp_var2.vert"),
+    };
+    let cases = [
+        ("fsload_v3x_v3z", td!("fsload_v3x_v3z.frag"), td!("fsload_v3x_v3z.expect.json")),
+        ("fsload_v3z_v3z", td!("fsload_v3z_v3z.frag"), td!("fsload_v3z_v3z.expect.json")),
+        ("fsload_v3x_v3x", td!("fsload_v3x_v3x.frag"), td!("fsload_v3x_v3x.expect.json")),
+        ("fsload_v3z_v2x", td!("fsload_v3z_v2x.frag"), td!("fsload_v3z_v2x.expect.json")),
+        ("fsload_mat2", td!("fsload_mat2.frag"), td!("fsload_mat2.expect.json")),
+        ("fsload_hp_mat2", td!("fsload_hp_mat2.frag"), td!("fsload_hp_mat2.expect.json")),
+        ("fsload_mat3", td!("fsload_mat3.frag"), td!("fsload_mat3.expect.json")),
+        ("fsload_mat2_v2", td!("fsload_mat2_v2.frag"), td!("fsload_mat2_v2.expect.json")),
+        ("fsload_hp_var2", td!("fsload_hp_var2.frag"), td!("fsload_hp_var2.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, pair(name), fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
+/// Shapes whose load or conversions Mesa makes in a form the selection has
+/// no reference for, each refused by name; each reference holds the load:
+/// both lanes of an aligned pair beside constants (Mesa converts the pair
+/// once, `V2F32_TO_V2F16 r0, r2^, r3^`), a discard's compare of y and the
+/// colour's x (Mesa's pair with y low, `V2F32_TO_V2F16 r0, r1^, r0^`), and
+/// dFdy of a vec2's second lane (Mesa converts that lane alone, `FADD.f32
+/// r0.h0, r1^`).
+#[test]
+fn a_load_or_conversion_with_no_reference_is_refused() {
+    let cases = [
+        (td!("fsload_mk_pair.frag"), td!("fsload_mk_pair.expect.json"), MaliError::FsVaryingLoad, ".v4"),
+        (td!("fsload_disc_col.frag"), td!("fsload_disc_col.expect.json"), MaliError::FsVaryingLoad, ".v4"),
+        (td!("fsload_deriv2.frag"), td!("fsload_deriv2.expect.json"), MaliError::FsOperandForm, ".v2"),
+    ];
+    for (fs, json, want, width) in cases {
+        let r = region(json, "fs.fragment").expect("fs.fragment");
+        assert!(text(r.words[0]).starts_with(&format!("LD_VAR_BUF_IMM.f32.slot0{width}")), "{}", text(r.words[0]));
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), want, "{fs}");
+    }
+}
+
+/// Two equal lanes of a varying the link keeps whole: Mesa's link merges
+/// them (`nir_opt_varyings`' deduplication; fsload_dup.expect.json loads
+/// `.v2` and stores two lanes), which the link here does not do, so the
+/// program's vertex shader is refused by name (`VaryingDuplicate`), not
+/// built with the duplicated lane.
+#[test]
+fn a_duplicated_lane_of_a_varying_kept_whole_is_refused_at_the_link() {
+    let (vs, fs, json) = (td!("fsload_dup.vert"), td!("fsload_dup.frag"), td!("fsload_dup.expect.json"));
+    let r = region(json, "fs.fragment").expect("fs.fragment");
+    assert!(text(r.words[0]).starts_with("LD_VAR_BUF_IMM.f32.slot0.v2"), "{}", text(r.words[0]));
+    let _k = store::test_keep();
+    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
+        .expect("the scratch arena is free")
+        .expect("the vertex shader's constant lanes");
+    let f = store::with_scratch(|s| {
+        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
+    })
+    .expect("the scratch arena is free")
+    .expect("the fragment shader compiles for the vertex shader");
+    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    let r = store::with_scratch(|s| {
+        let pr = super::reads_at_vertex_locations(&pr, fs.as_bytes(), vs.as_bytes(), s)
+            .expect("both stages lower")
+            .expect("every read is a vertex output");
+        super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep()).map(|_| ())
+    })
+    .expect("the scratch arena is free");
+    match r {
+        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, MaliError::VaryingDuplicate),
+        other => panic!("the vertex shader is not refused by name: {other:?}"),
     }
 }
 
@@ -1989,7 +2125,7 @@ fn the_uniform_population_is_referenced() {
     for src in vs_reference_sources() {
         seen |= prods(src);
     }
-    /* the compaction cases, built for their programs (pan_shc's) */
+    /* the compaction controls, built for their programs (cmp_*.expect.json) */
     for (vs, fs) in [(td!("cmp_vs4.vert"), td!("cmp_b.frag")), (td!("cmp_vs2x4.vert"), td!("cmp_axby.frag"))] {
         let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
         let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");

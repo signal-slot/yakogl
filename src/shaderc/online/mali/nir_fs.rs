@@ -10,9 +10,10 @@
 //!   nodes (the mediump lowering), the algebraic rules applied to a 16-bit
 //!   lane pair (`bi_vectorize_filter` splits a mediump op into vec2s,
 //!   bifrost_nir.c:1088, before the algebraic passes) ([`walk`]);
-//! * the varyings: the components read, compacted from VAR0 in layout
-//!   order (`compact_varyings`), loaded where their first read stands
-//!   ([`layout`]);
+//! * the varyings: the lanes Mesa's link keeps (those read, or every
+//!   lane of one a lowered tree converts, [`kept_whole`]), compacted from
+//!   VAR0 in layout order (`compact_varyings`), each slot read loaded at
+//!   its width where its first read stands ([`layout`]);
 //! * the pairs: lanes `2p` and `2p + 1` of the colour as one two-lane node
 //!   per operation (`nir_opt_vectorize` at the 16-bit width of two), the
 //!   late fusion where the fadd stands, `fmul(a, 2.0)` as `fadd(a, a)`
@@ -740,8 +741,9 @@ pub struct FsVarying {
     /// Loaded flat (`.src_flat32`): the vertex shader computes its lanes
     /// from uniforms alone ([`super::link::VaryingConsts::flat`]).
     pub flat: bool,
-    /// Holds a varying the link keeps whole, of which the colour may read
-    /// some lanes only ([`layout`]'s packed matrix).
+    /// Holds lanes the program does not read: of a varying the link keeps
+    /// whole ([`kept_whole`], a dot product's), loaded at the slot's width
+    /// ([`layout`]).
     pub whole: bool,
 }
 
@@ -5753,11 +5755,136 @@ fn reaches(f: &Fs<'_>, root: Val, e: Val) -> bool {
     false
 }
 
+/// Mesa's link keeps every lane of varying `loc` (its input node `node`),
+/// not only the lanes the program reads (`roots`): true when GLSL's
+/// `lower_precision` converts it in a tree it lowers. The pass converts
+/// the whole variable at each dereference (`f2fmp` of the deref, before
+/// the swizzle: lower_precision.cpp:724-733), and the link
+/// (`nir_opt_varyings_bulk`, gl_nir_linker.c:1524) runs while that vector
+/// conversion still reads every lane of the loads; the lanes no one reads
+/// are dropped only when the fragment shader is compiled after it
+/// (`nir_lower_alu_width`, then `nir_opt_dce`). Measured with Mesa
+/// 26.2.1's driver on the drm-shim: a mediump float varying of a mediump
+/// shader that an fp16 operation reads (fsvec_*, the discards of
+/// discard_81_branchquad, the integers of intloop_*), or that a lowered
+/// colour takes as it is (cmp_*, fsload_*), is stored and loaded whole.
+/// A highp shader, a highp varying and an integer one (`caps->int16` is
+/// false, pan_screen.c:591) are not converted, and neither is a colour
+/// that holds an fp32 value (case 89's `float(v_idx) / 4.0`,
+/// intbool_89_flatlast; a highp varying's lane, hp_var2; a highp
+/// uniform's, hp_uni; a highp sampler's texel, hp_tex): those keep the
+/// lanes read. A highp ES 3.00 output is a lowered tree converted back
+/// (es3_hpout loads `.v4`). A colour lane of a form not measured either
+/// way is refused ([`MaliError::FsVaryingLoad`]).
+fn kept_whole(f: &Fs<'_>, m: &Module<'_>, loc: u8, node: u16, roots: &[Val]) -> Result<bool, MaliError> {
+    let mediump = |l: u8| {
+        !f.prec.highp
+            && (l as usize) < MAX_VARYINGS
+            && f.prec.other >> (l & 31) & 1 == 0
+            && m.inputs.iter().any(|d| d.kind == IoKind::Varying && d.location == l && is_float_varying(d.gl_type))
+    };
+    if !mediump(loc) {
+        return Ok(false);
+    }
+    let reads = |src: &[Val]| src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n == node));
+    let reached =
+        |id: u16, width: u8| (0..width.max(1)).any(|k| roots.iter().any(|&r| reaches(f, r, Val::Lane(id, k))));
+    let order = &f.nir.order[..f.nir.len];
+    /* an fp16 operation reads a lane: arithmetic, a phi or a compare of
+     * the lowered tree (fsvec_fract_mediump.expect.json loads `.v4` where
+     * `fract(v.x)` reads one lane; discard_81_branchquad's compares read
+     * y and w) */
+    let fp16_op = order.iter().any(|&id| {
+        let nd = f.nir.nodes[id as usize];
+        let arity = match nd.kind {
+            Kind::Alu(op) => op.arity(),
+            Kind::Phi => 2,
+            _ => 0,
+        };
+        nd.bits == 16 && reads(&nd.src[..arity]) && reached(id, nd.width)
+    });
+    /* an integer made of fp16 lanes (intloop_int_compare.expect.json and
+     * intloop_tri_int.expect.json load `.v4` where the colour reads two
+     * and three lanes) */
+    let int_of = order.iter().any(|&id| {
+        let nd = f.nir.nodes[id as usize];
+        let from_lane = |v: Val| match f.alu_of(v) {
+            Some((op, s)) if !op.is_int() => reads(&s[..op.arity()]),
+            _ => false,
+        };
+        nd.kind == Kind::Alu(Alu::F2i32) && from_lane(nd.src[0]) && reached(id, 1)
+    });
+    if fp16_op || int_of {
+        return Ok(true);
+    }
+    /* the colour takes a lane as it is: converted with the colour's tree
+     * when lower_precision lowers that tree, which it does when every lane
+     * is mediump */
+    let Some(colour) = f.colour else { return Ok(false) };
+    if !reads(&colour) {
+        return Ok(false);
+    }
+    let (mut fp32, mut unknown) = (false, false);
+    for v in colour {
+        let n = match v {
+            Val::Const(_) => continue,
+            Val::Lane(n, _) => n,
+            _ => {
+                unknown = true;
+                continue;
+            }
+        };
+        let nd = f.nir.nodes[n as usize];
+        match nd.kind {
+            /* gl_PointCoord, mediump in ES 1.00 (pointcoordvary.expect.json:
+             * `v_color.b` beside it loads `.v4`) */
+            Kind::Input { .. } if Some(n) == f.pcoord => {}
+            Kind::Input { .. } if Some(n) == f.fz => unknown = true,
+            Kind::Input { .. } => match f.inputs.iter().position(|&x| x == Some(n)) {
+                Some(l) if mediump(l as u8) => {}
+                /* hp_var2: `vec4(a.x, b.y, ..)`, b highp, keeps a.x alone */
+                Some(_) => fp32 = true,
+                None => unknown = true,
+            },
+            Kind::Alu(_) | Kind::Phi if nd.bits == 16 => {}
+            /* a mediump uniform's component, read at a constant or a
+             * run-time index (uni_m, uni_mf; uniidx_j's `fcols[fidx].ba`
+             * beside `v_color.rg`: `.v4`); a highp one is fp32 (hp_uni:
+             * `vec4(a.x, u.y, ..)` keeps a.x alone) */
+            Kind::Uniform { .. } | Kind::UniformIdx { .. } if nd.bits == 16 => {}
+            Kind::Uniform { .. } | Kind::UniformIdx { .. } if nd.bits == 32 => fp32 = true,
+            /* case 89 */
+            Kind::Alu(_) | Kind::Phi if nd.bits == 32 => fp32 = true,
+            /* a texel of an fp16 look-up (tex_col: `vec4(texture2D(s,
+             * a.xy).x, a.z, ..)` loads `.v4`) */
+            Kind::Tex if nd.bits == 16 => {}
+            /* a highp sampler's texel is fp32 (hp_tex: `vec4(a.x,
+             * texture2D(s, t).x, ..)` keeps a.x and t) */
+            Kind::Tex if nd.bits == 32 => fp32 = true,
+            _ => unknown = true,
+        }
+    }
+    match (unknown, fp32) {
+        (true, _) => Err(MaliError::FsVaryingLoad),
+        (false, fp32) => Ok(!fp32),
+    }
+}
+
+/// `gl_type` names a float varying: a scalar, a vector or a matrix's
+/// column (an integer one is not lowered, [`kept_whole`]).
+fn is_float_varying(gl_type: u16) -> bool {
+    use crate::gl::consts as gl;
+    let t = gl_type as u32;
+    matches!(t, gl::GL_FLOAT | gl::GL_FLOAT_VEC2 | gl::GL_FLOAT_VEC3 | gl::GL_FLOAT_VEC4) || is_matrix(gl_type)
+}
+
 /// The varyings the colour reads, laid out and compacted as Mesa's link
-/// does, in the order of their first reads. The layout takes them in
-/// declaration order, or in the program's vertex shader's order when the
-/// link compiled this shader for it (`order`, link.rs `VaryingOrder`:
-/// Mesa's fragment shader has the vertex shader's layout).
+/// does, the slots read loaded in the order of their first reads
+/// (docs/notes/mali-partial-varyings.md, "The lanes the link keeps"). The
+/// layout takes them in declaration order, or in the program's vertex
+/// shader's order when the link compiled this shader for it (`order`,
+/// link.rs `VaryingOrder`: Mesa's fragment shader has the vertex shader's
+/// layout).
 pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::VaryingOrder>) -> Result<(), MaliError> {
     /* colour outputs, one a render target; those past location 0 a
      * `vec4` as output 0 is ([`Fs::targets`]) */
@@ -5843,72 +5970,9 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
                     && nd.src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n == node))
                     && c.iter().any(|&root| reaches(f, root, Val::Lane(id, 0)))
             });
-            /* so is one a mediump shader makes an integer of, through its
-             * fp16 lanes (measured: intloop_int_compare.expect.json and
-             * intloop_tri_int.expect.json load `.v4` and their vertex
-             * programs store four lanes of `v_color`, of which the colour
-             * reads two and three; the cmp_* shaders, which read lanes as
-             * floats, are compacted) */
-            whole[loc as usize] |= !f.prec.highp
-                && order.iter().any(|&id| {
-                    let nd = f.nir.nodes[id as usize];
-                    let from_lane = |v: Val| match f.alu_of(v) {
-                        Some((op, s)) if !op.is_int() => {
-                            s[..op.arity()].iter().any(|x| matches!(*x, Val::Lane(n, _) if n == node))
-                        }
-                        _ => false,
-                    };
-                    nd.kind == Kind::Alu(Alu::F2i32)
-                        && from_lane(nd.src[0])
-                        && c.iter().any(|&root| reaches(f, root, Val::Lane(id, 0)))
-                });
-            /* and one a mediump shader's fp16 arithmetic reads a lane of:
-             * lower_precision converts the variable the expression reads
-             * (`f2fmp(v)`, then its swizzle), a vector operation the link
-             * sees whole (measured: fsvec_fract_mediump.expect.json loads
-             * `.v4` and its vertex program stores four lanes of `v`, of
-             * which `fract(v.x)` reads one; the cmp_* shaders, whose colour
-             * lanes are the varying's own with no arithmetic, are compacted) */
-            whole[loc as usize] |= !f.prec.highp
-                && order.iter().any(|&id| {
-                    let nd = f.nir.nodes[id as usize];
-                    matches!(nd.kind, Kind::Alu(_))
-                        && nd.bits == 16
-                        && nd.src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n == node))
-                        && c.iter().any(|&root| reaches(f, root, Val::Lane(id, 0)))
-                });
-            /* and one a mediump shader's discard compares a lane of
-             * (measured: discard_81_branchquad.expect.json loads `.v4` and
-             * its vertex program stores four lanes of `v_color`, of which
-             * the two discards read y and w) */
-            whole[loc as usize] |= !f.prec.highp
-                && f.nir.discards().any(|id| match f.nir.nodes[id as usize].src[0] {
-                    Val::Lane(cn, _) => {
-                        let cmp = f.nir.nodes[cn as usize];
-                        matches!(cmp.kind, Kind::Alu(Alu::Fcmp(_)))
-                            && cmp.src[..2].iter().any(|x| matches!(*x, Val::Lane(n, _) if n == node))
-                    }
-                    _ => false,
-                });
-        }
-    }
-    /* a matrix varying of columns narrower than a vec4 is read whole, every
-     * column, when any lane of it is read: the GLSL linker packs its
-     * columns into one slot (`packed:v_m[0],v_m[1]`), which the link then
-     * sees as read whole (measured: varyconst_78_matvary.expect.json, a
-     * mat2 of which the colour reads v_m[0].x and v_m[1].y, stores and
-     * loads all four lanes) */
-    fn root<'a>(d: &ir::IoDecl<'a>) -> &'a str {
-        d.name.split('[').next().unwrap_or(d.name)
-    }
-    let packed = |d: &&ir::IoDecl<'_>| d.kind == IoKind::Varying && is_matrix(d.gl_type) && d.components < 4;
-    for d in m.inputs.iter().filter(packed) {
-        let any =
-            m.inputs.iter().filter(packed).any(|e| root(e) == root(d) && read.get(e.location as usize) > Some(&0));
-        if any {
-            let loc = d.location as usize;
-            *read.get_mut(loc).ok_or(MaliError::VaryingLocation)? |= (1 << d.components) - 1;
-            whole[loc] = true;
+            /* and one GLSL's `lower_precision` converts whole before the
+             * link ([`kept_whole`]) */
+            whole[loc as usize] |= kept_whole(f, m, loc, node, c)?;
         }
     }
     /* the texels the colour reads of each look-up; one it reads reads its
@@ -5950,7 +6014,7 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         }
     }
     /* (rank, location, components): a stable insertion by the vertex rank */
-    let mut by = [(0u8, 0u8, 0u8); MAX_VARYINGS];
+    let mut by = [(0u8, 0u8, 0u8, 0u16); MAX_VARYINGS];
     let mut nd = 0;
     for d in decls {
         let rank = order.map_or(0, |o| o.rank(d.location));
@@ -5959,28 +6023,40 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         }
         let at = by[..nd].iter().position(|x| x.0 > rank).unwrap_or(nd);
         by.copy_within(at..nd, at + 1);
-        by[at] = (rank, d.location, d.components);
+        by[at] = (rank, d.location, d.components, d.gl_type);
         nd += 1;
     }
     let mut lay = [VaryingAt { location: 0, comps: 0, offset: 0 }; MAX_VARYINGS];
-    let n = generic_layout(by[..nd].iter().map(|&(_, l, c)| (l, c)), &mut lay)?;
-    let mut slots = [FsVarying::NONE; MAX_VARYINGS];
-    /* `compact_varyings`: every component read, in layout order, takes the
-     * next scalar slot from VAR0 */
+    let n = generic_layout(by[..nd].iter().map(|&(_, l, c, t)| (l, c, t)), &mut lay)?;
+    /* `compact_varyings` (nir_opt_varyings.c:5491-5560, `fs_assign_slots`
+     * in scalar slot order): every lane the link keeps, in layout order,
+     * takes the next scalar slot from VAR0; a vertex shader's constant
+     * lane is not one, the link propagates it into this shader */
     let mut s = 0u16;
-    /* (a flat lane read, an interpolated lane read): the link packs flat
+    /* each 16-byte slot's lanes, and those of them the program reads */
+    let (mut held, mut used) = ([0u8; MAX_VARYINGS], [0u8; MAX_VARYINGS]);
+    /* each slot's first read: the first read of a varying with a lane read
+     * there (`nir_opt_move` puts a load before its first use,
+     * bifrost_nir.c:381; v3x_v3z_p3 loads q.yz before p.xyz,q.x, whose
+     * q.x no one reads), the earlier slot first where they are equal (the
+     * conversions of a vector, in lane order, nir_lower_alu_width) */
+    let mut first_read = [u32::MAX; MAX_VARYINGS];
+    /* (a flat lane kept, an interpolated lane kept): the link packs flat
      * lanes in slots of their own, a layout no reference draws beside
      * interpolated ones (nir.rs refuses the pair's vertex shader too) */
     let (mut flat, mut smooth) = (false, false);
-    let mut kept = [false; MAX_VARYINGS];
     for at in &lay[..n] {
         let loc = at.location as usize & 15;
         let first = s;
-        if whole[loc] {
-            read[loc] = (1 << at.comps) - 1;
-        }
+        let full = (1u8 << at.comps) - 1;
+        let keep = if whole[loc] {
+            let konst = |c: u8| f.prec.consts.get(at.location, c).is_some();
+            (0..at.comps).filter(|&c| !konst(c)).fold(read[loc], |m, c| m | 1 << c)
+        } else {
+            read[loc]
+        };
         for comp in 0..at.comps {
-            if read[loc] & (1 << comp) == 0 {
+            if keep & (1 << comp) == 0 {
                 continue;
             }
             let declared = m
@@ -5993,26 +6069,39 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
                 smooth = true;
             }
             let (slot, lane) = ((s / 4) as usize, (s % 4) as u8);
-            let x = slots.get_mut(slot).ok_or(MaliError::VaryingLocation)?;
-            let key = if lane == 0 { f.var_key[loc] } else { x.key().min(f.var_key[loc]) };
-            *x = FsVarying::new(slot as u8, lane + 1, 16 * slot as u16, key);
-            f.lane_of[loc][comp as usize] = Some((slot as u8, lane));
-            kept[slot] |= whole[loc];
+            *held.get_mut(slot).ok_or(MaliError::VaryingLocation)? |= 1 << lane;
+            if read[loc] & (1 << comp) != 0 {
+                used[slot] |= 1 << lane;
+                first_read[slot] = first_read[slot].min(f.var_key[loc]);
+                f.lane_of[loc][comp as usize] = Some((slot as u8, lane));
+            }
             s += 1;
         }
-        f.compacted |= read[loc] != (1 << at.comps) - 1;
-        f.reads[f.nreads] = FsRead { location: at.location, mask: read[loc], offset: 4 * first };
+        f.compacted |= keep != full;
+        f.reads[f.nreads] = FsRead { location: at.location, mask: keep, offset: 4 * first };
         f.nreads += 1;
     }
     if flat && smooth {
         return Err(MaliError::VaryingNotFromAttribute);
     }
-    let nslots = s.div_ceil(4) as usize;
-    for x in &mut slots[..nslots] {
-        x.flat = flat;
-    }
-    for (x, k) in slots[..nslots].iter_mut().zip(kept) {
-        x.whole = k;
+    /* a slot is loaded when the program reads a lane of it, at the width
+     * the link left it (`nir_unlower_io_to_vars` makes one variable of the
+     * slot's lanes, loaded whole; `pan_nir_lower_fs_inputs` loads
+     * `component + num_components`, pan_nir_lower_fs_inputs.c:52-69, and no
+     * pass shrinks it before: v3x_v3z_p3's `.v4` of which p.x alone is
+     * read); a slot no one reads is not loaded (`nir_opt_dce`), though the
+     * vertex shader stores it (v3x_v3x_p1) */
+    let mut slots = [FsVarying::NONE; MAX_VARYINGS];
+    let mut nslots = 0;
+    for slot in 0..s.div_ceil(4) as usize {
+        if used[slot] == 0 {
+            continue;
+        }
+        let mut v = FsVarying::new(slot as u8, held[slot].count_ones() as u8, 16 * slot as u16, first_read[slot]);
+        v.flat = flat;
+        v.whole = used[slot] != held[slot];
+        slots[nslots] = v;
+        nslots += 1;
     }
     let pc = FsVarying::new(POINT_COORD, 2, 0, f.pcoord_key);
     let z = FsVarying::new(FRAG_Z, 1, 0, f.fz_key);
@@ -6408,6 +6497,115 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
         },
     };
     pr.push(p, place)
+}
+
+/// The lanes of each load are converted to fp16 in Mesa's order, which
+/// [`convert`] makes: each load's lanes in lane order, an aligned pair
+/// that [`Leaf::Half`] reads as one conversion (`V2F32_TO_V2F16`, the
+/// even lane low), every other lane alone (`FADD.f32 .h0`). Mesa converts
+/// the lanes its fp16 trees read where the varying's `f2fmp` stands, in
+/// lane order (`nir_lower_alu_width` splits the vector conversion), and
+/// the colour's own lanes after them, in the colour's order: the link's
+/// algebraic takes their conversion out of the tree (`f2f32(f2fmp(a))`
+/// is `a`, the colour being stored at fp32 then), and
+/// `nir_lower_mediump_io` converts the stored colour (bifrost_compile.c
+/// :914; disc_col's `V2F32_TO_V2F16 r0, r1^, r0^`: the compare's y, then
+/// the colour's x). `nir_opt_vectorize` makes the two lanes of an aligned
+/// pair of one load one conversion at the first one's place, that lane
+/// low (nir_opt_vectorize.c:166-171 and 559; intloop_ifloop.expect.json's
+/// `(v.z, v.w, v.x, 1.0)`: the pair z,w first, then x). A load whose two
+/// orders differ (a pair Mesa makes of lanes converted apart here,
+/// fsload_mk_pair and fsload_disc_col; lanes converted out of lane order),
+/// or whose fp16 trees read lanes of two varyings (each its own `f2fmp`,
+/// at its own place), has no reference here.
+fn conversion_order(
+    f: &Fs<'_>,
+    pr: &Pairs,
+    roots: [u8; 2],
+    conv_form: &[[Option<bool>; 4]; MAX_VARYINGS],
+) -> Result<(), MaliError> {
+    let lanes_of = |x: &P| -> [Option<(u8, u8)>; 2] {
+        match *x {
+            P::Leaf(Leaf::Half { k, h, swz: Swz::H10 }) => [Some((k, 2 * h + 1)), Some((k, 2 * h))],
+            P::Leaf(Leaf::Half { k, h, .. }) => [Some((k, 2 * h)), Some((k, 2 * h + 1))],
+            P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, .. }) => [Some((k, c)), None],
+            P::Leaf(Leaf::Lanes { k, c, e, d }) => [Some((k, c)), Some((e, d))],
+            _ => [None, None],
+        }
+    };
+    /* the lanes the fp16 trees convert (every leaf but the colour's own) */
+    let mut tree = [0u8; MAX_VARYINGS];
+    for (i, x) in pr.nodes[..pr.n].iter().enumerate() {
+        if roots.contains(&(i as u8)) {
+            continue;
+        }
+        for (k, c) in lanes_of(x).into_iter().flatten() {
+            tree[k as usize] |= 1 << c;
+        }
+    }
+    for k in 0..f.nvar {
+        let slot = f.varyings[k].location;
+        /* the varyings whose lanes the trees convert here */
+        let owners = (0..MAX_VARYINGS)
+            .filter(|&l| f.lane_of[l].iter().flatten().any(|&(s, lane)| s == slot && tree[k] & 1 << lane != 0));
+        if owners.count() > 1 {
+            return Err(MaliError::FsVaryingLoad);
+        }
+        /* Mesa's order of the conversions */
+        let mut order = [0u8; 4];
+        let mut n = 0;
+        let mut push = |c: u8, order: &mut [u8; 4]| {
+            if !order[..n].contains(&c) && n < 4 {
+                order[n] = c;
+                n += 1;
+            }
+        };
+        for c in (0..4).filter(|&c| tree[k] & 1 << c != 0) {
+            push(c, &mut order);
+        }
+        for r in roots {
+            for (j, c) in lanes_of(&pr.nodes[r as usize]).into_iter().flatten() {
+                if j as usize == k {
+                    push(c, &mut order);
+                }
+            }
+        }
+        /* its instructions: (first lane, second lane of a pair) */
+        let mut mesa = [(0u8, None::<u8>); 4];
+        let mut nm = 0;
+        for &c in &order[..n] {
+            match mesa[..nm].iter_mut().find(|g| g.0 == c ^ 1 && g.1.is_none()) {
+                Some(g) => g.1 = Some(c),
+                None => {
+                    mesa[nm] = (c, None);
+                    nm += 1;
+                }
+            }
+        }
+        /* [`convert`]'s */
+        let mut ours = [(0u8, None::<u8>); 4];
+        let mut no = 0;
+        let mut c = 0u8;
+        while c < 4 {
+            match conv_form[k][c as usize] {
+                Some(true) => {
+                    ours[no] = (c, Some(c + 1));
+                    no += 1;
+                    c += 2;
+                }
+                Some(false) => {
+                    ours[no] = (c, None);
+                    no += 1;
+                    c += 1;
+                }
+                None => c += 1,
+            }
+        }
+        if mesa[..nm] != ours[..no] {
+            return Err(MaliError::FsVaryingLoad);
+        }
+    }
+    Ok(())
 }
 
 /// `op` is `sin`, `cos` or `log2` ([`transc_rows`]).
@@ -7130,6 +7328,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             *cf = Some(pair);
         }
     }
+    conversion_order(f, &pr, roots, &conv_form)?;
     /* a coordinate is read as fp32, not converted (one load may be the
      * coordinate of several look-ups: texmore_2's `@r0:r1`) */
     if f.live_look_ups().any(|(_, t)| t.load.is_some_and(|k| used[k as usize] != 0)) {
@@ -7152,7 +7351,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         }
     }
     /* a load holds the lanes read, and those alone but where the link
-     * keeps a varying whole ([`layout`]'s packed matrix: 78's v4 load, of
+     * keeps lanes no one reads ([`FsVarying::whole`]: 78's v4 load, of
      * which lanes 0 and 3 are read) */
     for (k, v) in f.varyings[..f.nvar].iter().enumerate() {
         let full = (1u8 << v.comps) - 1;

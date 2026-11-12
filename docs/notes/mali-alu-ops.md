@@ -154,10 +154,14 @@ fp16: Mesa uses `.v2f16` forms there.
   r1^, 0x0.neg`, nir_fs.rs `cmp_leaf`), and the link keeps the mediump
   `v_color` whole (`.v4` load, four vertex stores) although only y and w are
   read, where every highp reference (fvgtest_discard2: `.y` alone, one
-  component) and pan_shc's mediump `cmp_*` compact. The rule is pinned only
-  for a varying a mediump discard's compare reads (nir_fs.rs `layout`,
-  `whole`); a mediump colour that reads a varying in part on the GL path
-  has no shim reference yet.
+  component) compacts. The link keeps every lane of a mediump varying a
+  lowered tree reads (GLSL's `lower_precision` converts the variable whole
+  before the link; nir_fs.rs `kept_whole`), and the fragment shader loads
+  each slot it reads at the width the link left it: the shim's `cmp_*`,
+  `fsload_*` and case 105 references, docs/notes/mali-partial-varyings.md
+  "The lanes the link keeps". pan_shc's mediump `cmp_*` compacted: its
+  SPIR-V front end has no `lower_precision` (README-pan_shc.md, the
+  `mediump` gap), so those outputs are not references and are gone.
 - The vertex `fmax`/`fmin` rules of 182 (fsat) were written and dropped: the
   programs then stop at `VaryingNotFromAttribute` (the uniform-only flat
   varying, docs/notes/mali-varying-constants.md rule 3), so no byte-equal
