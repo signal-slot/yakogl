@@ -5018,10 +5018,9 @@ fn walk_nodes(
              * texture cube cases, fstex_cube.expect.json): the look-up at
              * `COMPUTED_LOD` (pan_nir_lower_tex.c:944-945), two staging
              * words, `build_cube_desc`'s of the direction's lanes as case
-             * 41's arm takes them ([`select`]): a varying's raw fp32 lanes
-             * or constants, or fp16 values converted at the look-up
-             * (fstex_cubeface4's `vec3(-x, -y, -1)`). A highp shader's: no
-             * reference */
+             * 41's arm takes them ([`select`]), for the direction shapes
+             * measured against Mesa ([`cube_dir_measured`]). Any other
+             * direction, or a highp shader's look-up: no reference */
             ir::Op::Tex {
                 dim: ir::TexDim::Cube,
                 shadow: false,
@@ -5033,7 +5032,7 @@ fn walk_nodes(
                 offset: None,
             } if !prec.highp => {
                 let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
-                if dir.contains(&Val::Undef) || dir.iter().all(|v| matches!(v, Val::Const(_))) {
+                if !cube_dir_measured(f, dir) {
                     return Err(MaliError::TexCoord);
                 }
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: dir, bits: 16, width: 1 })?;
@@ -5250,6 +5249,57 @@ fn walk_nodes(
         vals[id.0 as usize] = out;
     }
     Ok(Flow::Next)
+}
+
+/// The direction of a mediump implicit-level `textureCube` is one of the
+/// shapes measured byte-equal to Mesa 26.2.1's drm-shim (fstex_cube*):
+///
+/// - raw: each lane a varying's lane or the constant +-1.0, one varying
+///   lane at least (fstex_cube, fstex_cubedir_twovary, _constneg). The
+///   cube ops read the load's fp32 words (`src_f32`) and +-1.0 as the
+///   table's `0x3F800000`.
+/// - pair: x and y fp16 trees of `+`, `*` and negation over varying
+///   lanes, constants and uniforms, vectorised as one pair; z the constant
+///   +-1.0 or a uniform (fstex_cubeface4, fstex_cubedir_face4uni,
+///   _uniscale, _fmak). Each lane is `F16_TO_F32`'d at the look-up.
+///
+/// Measured otherwise, and so refused:
+/// - another constant (`vec3(1.0, b, 0.5)`): Mesa promotes 0.5 to an FAU
+///   word; our constant pass takes it as `0x38000000.h1`, which the cube
+///   ops, having no swizzle (valhall.c CUBEFACE1), read as 2^-15;
+/// - raw lanes beside a uniform (`vec3(a2, u)`): Mesa keeps the varying
+///   fp32, the pair path narrows it;
+/// - gl_FragCoord or gl_PointCoord: Mesa keeps them fp32;
+/// - a product with 2.0 left alone (`a2 * 2.0`): Mesa's late rule makes it
+///   `FADD.v2f16 r0, r0^, r0^` (bifrost_nir_algebraic.py:31), which the
+///   pair here does not. Under an add it is the fused `FMA` (dEQP's
+///   `v.x*2.0 - 1.0`), measured equal.
+fn cube_dir_measured(f: &Fs<'_>, dir: [Val; 3]) -> bool {
+    const ONE: [u32; 2] = [F32_ONE, F32_ONE | 0x8000_0000];
+    /* a varying's lane; gl_PointCoord's ([`POINT_COORD`]) is none */
+    let varying = |v: Val| f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS);
+    let uniform = |v: Val| f.alu_of(v).is_none() && f.uniform_dword(v).is_some();
+    /* an fp16 tree; `fused`: an fadd takes it into its FMA (the fadd's
+     * one product; with two, which one fuses is not measured) */
+    fn tree(f: &Fs<'_>, v: Val, fused: bool, leaf: &dyn Fn(Val) -> bool) -> bool {
+        let Some((op, s)) = f.alu_of(v) else { return leaf(v) };
+        let fmul = |v: Val| matches!(f.alu_of(v), Some((Alu::Fmul, _)));
+        match op {
+            Alu::Fneg => tree(f, s[0], false, leaf),
+            Alu::Fadd => {
+                let one = fmul(s[0]) != fmul(s[1]);
+                tree(f, s[0], one, leaf) && tree(f, s[1], one, leaf)
+            }
+            Alu::Fmul if !fused && (s[0] == Val::Const(F32_TWO) || s[1] == Val::Const(F32_TWO)) => false,
+            Alu::Fmul => tree(f, s[0], false, leaf) && tree(f, s[1], false, leaf),
+            _ => false,
+        }
+    }
+    let raw = dir.iter().all(|&v| varying(v) || f.is_const(v, &ONE)) && dir.iter().any(|&v| varying(v));
+    let leaf = |v: Val| varying(v) || uniform(v) || matches!(v, Val::Const(_));
+    let pair = dir[..2].iter().all(|&v| f.alu_of(v).is_some() && tree(f, v, false, &leaf))
+        && (f.is_const(dir[2], &ONE) || uniform(dir[2]));
+    raw || pair
 }
 
 /// The sources `t` and `x` of atan's `fabs(t) * fsign(x)`, `t` the

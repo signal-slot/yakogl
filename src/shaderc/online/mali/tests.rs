@@ -3357,22 +3357,87 @@ fn a_mediump_texture_cube_at_the_implicit_level_is_byte_equal_to_mesa_26_2_1() {
 /// level: the pair `FMA.v2f16` then `FADD.v2f16 .neg`, each lane
 /// `F16_TO_F32`, the constant `0x3F800000.neg` an operand of the cube ops,
 /// `TEX_SINGLE.16.cube.computed`; both programs the shim's to the byte. The
-/// other five need a pair swapped (`.h10`), one half negated
-/// (`.neg.h00`) or the constant in x or y, which the cube direction's
-/// pair does not take yet: refused by name.
+/// other five are refused by name: faces 0-3 have the constant in x or y,
+/// no measured direction shape (TexCoord); face 5's pair has one half
+/// negated (`.neg.h11`), which the cube direction's pair does not take yet
+/// (ColourForm).
 #[test]
 fn deqp_cube_face_4_is_byte_equal_to_mesa_26_2_1() {
     let vs = td!("fstex_cubeface.vert");
     let (_, f) = check_program(vs, td!("fstex_cubeface4.frag"), td!("fstex_cubeface4.expect.json"));
     assert!(f.info.helper_threads, "a computed level needs the helper invocations");
-    for fs in [
-        td!("fstex_cubeface0.frag"),
-        td!("fstex_cubeface1.frag"),
-        td!("fstex_cubeface2.frag"),
-        td!("fstex_cubeface3.frag"),
-        td!("fstex_cubeface5.frag"),
+    for (fs, e) in [
+        (td!("fstex_cubeface0.frag"), MaliError::TexCoord),
+        (td!("fstex_cubeface1.frag"), MaliError::TexCoord),
+        (td!("fstex_cubeface2.frag"), MaliError::TexCoord),
+        (td!("fstex_cubeface3.frag"), MaliError::TexCoord),
+        (td!("fstex_cubeface5.frag"), MaliError::ColourForm),
     ] {
-        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::ColourForm, "{fs}");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), e, "{fs}");
+    }
+}
+
+/// The direction shapes the implicit-level cube arm takes
+/// (`nir_fs::cube_dir_measured`), each drawn on the Mesa 26.2.1 drm-shim
+/// with `--uniform-values` (one attribute per varying, so the link merges
+/// none; tools/mali/testdata/fstex_cubedir_*): two varyings' raw lanes,
+/// raw lanes with -1.0 between them, an fp16 pair beside a uniform z, a
+/// pair scaled by a uniform, a pair `a * 3.0 + 0.25`. Both programs the
+/// shim's to the byte.
+#[test]
+fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa_26_2_1() {
+    for (vs, fs, json) in [
+        (
+            td!("fstex_cubedir_twovary.vert"),
+            td!("fstex_cubedir_twovary.frag"),
+            td!("fstex_cubedir_twovary.expect.json"),
+        ),
+        (
+            td!("fstex_cubedir_constneg.vert"),
+            td!("fstex_cubedir_constneg.frag"),
+            td!("fstex_cubedir_constneg.expect.json"),
+        ),
+        (
+            td!("fstex_cubedir_face4uni.vert"),
+            td!("fstex_cubedir_face4uni.frag"),
+            td!("fstex_cubedir_face4uni.expect.json"),
+        ),
+        (
+            td!("fstex_cubedir_uniscale.vert"),
+            td!("fstex_cubedir_uniscale.frag"),
+            td!("fstex_cubedir_uniscale.expect.json"),
+        ),
+        (td!("fstex_cubedir_fmak.vert"), td!("fstex_cubedir_fmak.frag"), td!("fstex_cubedir_fmak.expect.json")),
+    ] {
+        check_program(vs, fs, json);
+    }
+}
+
+/// Directions Mesa 26.2.1 compiles to other words than the cube arm's
+/// (measured on its drm-shim): refused by name, not drawn with our words.
+/// - `vec3(a2, u)`: Mesa reads the varying fp32 (`src_f32`); a pair would
+///   narrow it to fp16 and back.
+/// - `vec3(a2 * 2.0, -1.0)`: Mesa's late rule makes the lone product
+///   `FADD.v2f16 r0, r0^, r0^`.
+/// - `vec3(a2 - 0.5, 0.5)` and `vec3(1.0, b1, 0.5)`: Mesa reads 0.5 from an
+///   FAU word; our constant pass would give the cube ops `0x38000000`,
+///   2^-15 as their fp32 operand.
+/// - `vec3(gl_FragCoord.xy, 1.0)`, `vec3(gl_PointCoord, 1.0)`: Mesa reads
+///   them fp32.
+#[test]
+fn mediump_texture_cube_directions_mesa_compiles_otherwise_are_refused_by_name() {
+    let fs = |decl: &str, dir: &str| {
+        format!("precision mediump float; uniform samplerCube s; {decl} void main() {{ gl_FragColor = textureCube(s, {dir}); }}")
+    };
+    for src in [
+        fs("uniform float u; varying vec2 a2;", "vec3(a2, u)"),
+        fs("varying vec2 a2;", "vec3(a2 * 2.0, -1.0)"),
+        fs("varying vec2 a2;", "vec3(a2 - 0.5, 0.5)"),
+        fs("varying float b1;", "vec3(1.0, b1, 0.5)"),
+        fs("", "vec3(gl_FragCoord.xy, 1.0)"),
+        fs("", "vec3(gl_PointCoord, 1.0)"),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::TexCoord, "{src}");
     }
 }
 
