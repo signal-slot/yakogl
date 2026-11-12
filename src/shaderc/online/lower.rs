@@ -4173,7 +4173,17 @@ impl<'a> Lower<'_, 'a> {
         }
         let ops = &ops[..n];
         let es3 = self.ast.es3;
-        let mut sink = Sink { l: self, out };
+        /* The width every instruction of the expansion records: the call's
+         * or the widest operand's, whichever is wider (`Sink::width`). */
+        let width = ops
+            .iter()
+            .filter_map(|o| match *o {
+                Operand::Value { comps, .. } => Some(comps),
+                Operand::Sampler { .. } => None,
+            })
+            .fold(want, u8::max)
+            .min(4);
+        let mut sink = Sink { l: self, out, width };
         let lowered = match builtin_call::lower_call(&mut sink, name, ops, want) {
             None if es3 => builtin_call::lower_es3(&mut sink, name, ops),
             r => r,
@@ -5071,8 +5081,8 @@ impl<'a> Lower<'_, 'a> {
         };
         let step = match (op, scalar) {
             (UnOp::PreInc | UnOp::PostInc, _) => one,
-            (_, ir::ScalarType::F32) => self.alu(ir::AluOp::Fneg, [one, one, one], out)?,
-            _ => self.alu(ir::AluOp::Ineg, [one, one, one], out)?,
+            (_, ir::ScalarType::F32) => self.alu_w(ir::AluOp::Fneg, [one, one, one], w, out)?,
+            _ => self.alu_w(ir::AluOp::Ineg, [one, one, one], w, out)?,
         };
         let new = self.alu_w(add, [old, step, step], w, out)?;
         self.store_lref(r, new, out)?;
@@ -5098,7 +5108,7 @@ impl<'a> Lower<'_, 'a> {
             let one = self.const_value([1.0; 4], out)?;
             let step = match op {
                 UnOp::PreInc | UnOp::PostInc => one,
-                _ => self.alu(ir::AluOp::Fneg, [one, one, one], out)?,
+                _ => self.alu_w(ir::AluOp::Fneg, [one, one, one], l.comps, out)?,
             };
             for j in 0..n {
                 let col = l.column(j);
@@ -5127,19 +5137,21 @@ impl<'a> Lower<'_, 'a> {
         let add = match (op, scalar) {
             (UnOp::PreInc | UnOp::PostInc, ir::ScalarType::F32) => ir::AluOp::Fadd,
             (UnOp::PreDec | UnOp::PostDec, ir::ScalarType::F32) => {
-                let neg = self.alu(ir::AluOp::Fneg, [one, one, one], out)?;
-                let v = self.alu(ir::AluOp::Fadd, [Src::id(old), neg, neg], out)?;
+                let neg = self.alu_w(ir::AluOp::Fneg, [one, one, one], l.comps, out)?;
+                let v = self.alu_w(ir::AluOp::Fadd, [Src::id(old), neg, neg], l.comps, out)?;
                 return self.store_local(l, v, out);
             }
             (UnOp::PreInc | UnOp::PostInc, ir::ScalarType::I32 | ir::ScalarType::U32) => ir::AluOp::Iadd,
             (UnOp::PreDec | UnOp::PostDec, ir::ScalarType::I32 | ir::ScalarType::U32) => {
-                let neg = self.alu(ir::AluOp::Ineg, [one, one, one], out)?;
-                let v = self.alu(ir::AluOp::Iadd, [Src::id(old), neg, neg], out)?;
+                let neg = self.alu_w(ir::AluOp::Ineg, [one, one, one], l.comps, out)?;
+                let v = self.alu_w(ir::AluOp::Iadd, [Src::id(old), neg, neg], l.comps, out)?;
                 return self.store_local(l, v, out);
             }
             _ => return Err(self.err(op.text(), "this expression statement is not lowered yet")),
         };
-        let v = self.alu(add, [Src::id(old), one, one], out)?;
+        /* The sum has the variable's width: `alu` records none, which
+         * `Module::comps_of` answered as 4 for `r--` of a `vec2`. */
+        let v = self.alu_w(add, [Src::id(old), one, one], l.comps, out)?;
         self.store_local(l, v, out)
     }
 
@@ -8564,11 +8576,23 @@ impl<'a> Lower<'_, 'a> {
 struct Sink<'s, 'x, 'a> {
     l: &'s mut Lower<'x, 'a>,
     out: &'s mut AVec<'a, Node>,
+    /// The width an `Alu` of the expansion records: the widest of the
+    /// call's result and its value operands. A component-wise step of an
+    /// expansion works on the operands' lanes or the result's (`smoothstep`
+    /// of a `vec2` with scalar edges: two; `distance` of two `vec3`s: the
+    /// difference three, the dot one by [`ir::AluOp::result_comps`]). A
+    /// step after a reduction (`length`'s square root) is recorded wider
+    /// than its one lane: an over-estimate, which `Module::comps_of` allows,
+    /// never a narrow answer.
+    width: u8,
 }
 
 impl<'a> builtin_call::Emit<'a> for Sink<'_, '_, 'a> {
     fn emit(&mut self, op: Op) -> R<'a, Src> {
-        let v = self.l.push_instr(op)?;
+        let v = match op {
+            Op::Alu(alu, _) => self.l.push_sized(op, alu.result_comps(self.width))?,
+            _ => self.l.push_instr(op)?,
+        };
         self.out.push(self.l.a, Node::Instr(ir::InstrId(v.0)))?;
         Ok(Src::id(v))
     }
@@ -12112,6 +12136,74 @@ mod value_width_tests {
              void main(){ gl_FragColor = a * 2.0; }",
         );
         assert_eq!(l.module.comps.len(), l.module.instrs.len());
+    }
+
+    /// The width of every `Alu` using `op`, in program order.
+    fn all_comps_of(m: &ir::Module, op: ir::AluOp) -> std::vec::Vec<u8> {
+        let ids = m.instrs.iter().enumerate().filter(|(_, o)| matches!(o, Op::Alu(x, _) if *x == op));
+        ids.map(|(i, _)| m.comps_of(ValueId(i as u32))).collect()
+    }
+
+    /// A built-in's result has the width of the call's type. The library
+    /// emits through `Sink::emit`, which recorded no width, so `abs(v)` of
+    /// a `vec2` read as four lanes, two of which no lane of `v` makes (the
+    /// Mali fragment walk refused them as a colour form).
+    #[test]
+    fn a_builtin_s_result_has_the_call_s_width() {
+        let mut buf = [0u8; 1 << 19];
+        let l = ir(
+            &mut buf,
+            "precision mediump float;\n\
+             varying vec2 v;\n\
+             void main(){ gl_FragColor = vec4(abs(v), 0.5, 1.0); }",
+        );
+        assert_eq!(comps_of(&l.module, ir::AluOp::Fabs), 2, "abs of a vec2 is two lanes");
+    }
+
+    /// Every instruction of an expansion is as wide as the widest of the
+    /// call's operands and result: `smoothstep` of a `vec2` is two lanes
+    /// throughout, its splatted scalar edges and four-lane constants
+    /// included; `distance` of two `vec3`s subtracts three lanes, then the
+    /// dot is one.
+    #[test]
+    fn every_instruction_of_an_expansion_has_the_call_s_width() {
+        let mut buf = [0u8; 1 << 19];
+        let l = ir(
+            &mut buf,
+            "precision mediump float;\n\
+             varying vec2 v;\n\
+             void main(){ gl_FragColor = vec4(smoothstep(0.2, 0.8, v), 0.5, 1.0); }",
+        );
+        for op in [ir::AluOp::Fneg, ir::AluOp::Fadd, ir::AluOp::Frcp, ir::AluOp::Fmul, ir::AluOp::Fmax] {
+            assert!(all_comps_of(&l.module, op).iter().all(|&c| c == 2), "{op:?} of smoothstep(vec2) is two lanes");
+        }
+        let mut b2 = [0u8; 1 << 19];
+        let l2 = ir(
+            &mut b2,
+            "precision mediump float;\n\
+             varying vec3 v;\n\
+             uniform vec3 u;\n\
+             void main(){ gl_FragColor = vec4(distance(v, u)); }",
+        );
+        assert_eq!(comps_of(&l2.module, ir::AluOp::Fadd), 3, "the difference is three lanes");
+        assert_eq!(comps_of(&l2.module, ir::AluOp::Fdot3), 1, "its dot is one");
+    }
+
+    /// `r--` and `r++` of a `vec2` write two lanes: the sum `step_by_one`
+    /// emits records the variable's width, not the 4 it answered.
+    #[test]
+    fn an_increment_s_sum_has_the_variable_s_width() {
+        for step in ["r--;", "r++;", "--r;", "++r;"] {
+            let src = format!(
+                "precision mediump float;\n\
+                 varying vec2 v;\n\
+                 void main(){{ vec2 r = v; {step} gl_FragColor = vec4(r, 0.5, 1.0); }}"
+            );
+            let mut buf = [0u8; 1 << 19];
+            let a = Arena::new(&mut buf);
+            let l = compile_to_ir(&a, Stage::Fragment, &src).expect("compiles");
+            assert_eq!(all_comps_of(&l.module, ir::AluOp::Fadd), [2], "{step} of a vec2 is two lanes");
+        }
     }
 }
 

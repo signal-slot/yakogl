@@ -1181,8 +1181,9 @@ impl<'m, 'a> Walk<'m, 'a> {
                 }
                 for (lane, o) in out.iter_mut().enumerate().take(n) {
                     /* The width table may over-estimate (ir.rs, comps_of:
-                     * "an over-estimate, never a wrong narrow answer"; the
-                     * front end leaves abs() of a vec2 unrecorded, so 4). A lane whose
+                     * "an over-estimate, never a wrong narrow answer"; a
+                     * built-in's step after a reduction, `length`'s square
+                     * root, records the operand's width). A lane whose
                      * source lanes do not exist is left uncomputed; a use of
                      * it later is still refused as Undefined. */
                     let mut s = [S(0); 3];
