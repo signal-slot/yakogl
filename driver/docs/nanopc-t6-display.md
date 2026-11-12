@@ -489,7 +489,7 @@ VP. Section 7 has the steps. It is developed through the **normal** kexec
 full sequence) with a `power-cycle` option that first puts every block into
 reset and its domain off, as the X2 HDMI design does
 (`x2-hdmi-cold.md`, `force-cold`, `power-cycle`); then signed off with U-Boot
-starting the image from the eMMC (`driver/tools/uboot-t6/t6-zephyr.cmd`),
+starting the image from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`),
 which is the same code with nothing left on.
 
 The chain's START refusals (`soc::rk3588_display_chain`, its module text has
@@ -859,7 +859,7 @@ answers polls, takes injected failures and records the order.
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |
 | D7 | `soc::rk3588_display_chain`: the staged cold bring-up (power, clocks and resets, GRF, PHY, DCLK_VOP0 to the PHY clock, controller, VOP2, video check) with `stop-after`, `power-cycle`, `force-cold`, and the golden test against the dump | a cold bring-up in block order over the combined model; every `stop-after`; each injected failure names its stage; golden: every dumped register equals the model's image outside the allow list | none alone | 500 lines + tests | no |
 | D8 | Cold run by normal kexec: the probe with `power-cycle`, bisected with `stop-after`, then the CPU pattern, then `gl_triangle` through D3 | as D7 | stage lines on the UART, the section 5 read-backs, the person confirms | runs | yes |
-| D9 | Sign-off: the same image started by U-Boot from the eMMC (`t6-zephyr.cmd`), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
+| D9 | Sign-off: the same image started by U-Boot from the eMMC (`prompt-go.sh`), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
 | D10 | EDID over the controller's I2C master; the preferred mode within the PHY plans; HDMI mode with an AVI InfoFrame for HDMI sinks | I2C transfers on the model (done, NACK, segment) | the EDID equals Linux's copy from D0 | 300 lines | yes |
 
 Order and parallel work: D0 first (the lead; nothing else needs the board

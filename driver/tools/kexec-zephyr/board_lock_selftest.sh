@@ -143,12 +143,15 @@
 # a board without a console=ttyS entry is refused; the host never writes a
 # byte into the tty; the dry run names the console and writes nothing.
 #
-# The T6's other runner on the lock, driver/tools/uboot-t6/prompt-reads.sh
-# (the reads at the U-Boot prompt), is held to the same rule: LOCK_WAIT 0
-# before it sources board_lock.sh. The tool it starts on the UART,
-# prompt-reads.py, has a self-test against a fake board on a pty (what it
-# types and when, and that it never types into Linux's root shell); the
-# check here runs it, so the gate does too.
+# The T6's other runners on the lock, driver/tools/uboot-t6/prompt-reads.sh
+# (the reads at the U-Boot prompt) and prompt-go.sh (an image started with
+# U-Boot's go), are held to the same rule: LOCK_WAIT 0 before they source
+# board_lock.sh. The tools they start on the UART, prompt-reads.py and
+# prompt-go.py, have self-tests against a fake board on a pty (what they
+# type and when, that they never type into Linux's root shell, and for
+# prompt-go.py nothing after go and every refusal before it); and
+# uboot-t6/selftest.sh runs stage.sh and prompt-go.sh's dry run against a
+# fake ssh. The checks here run all three, so the gate does too.
 #
 # Needs bash, flock(1), strings(1) and python3. tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
@@ -244,19 +247,15 @@ later=$(awk -v a="${def:-0}" -v b="${src:-0}" 'NR > a && NR < b && /LOCK_WAIT=/'
 check "nanopc-t6.sh: LOCK_WAIT defaults to 0 before it sources board_lock.sh (lines ${def:-none} < ${src:-none})" \
 	"$([ -n "$src" ] && [ -n "$def" ] && [ "$def" -lt "$src" ] && [ -z "$later" ]; echo $?)"
 
-# prompt-reads.sh, the same: LOCK_WAIT 0 before it sources board_lock.sh.
-ubr=$here/../uboot-t6/prompt-reads.sh
-src=$(grep -n '^\. "\$K/board_lock.sh"$' "$ubr" | cut -d: -f1)
-def=$(grep -n '^LOCK_WAIT=\${LOCK_WAIT:-0}$' "$ubr" | cut -d: -f1)
-later=$(awk -v a="${def:-0}" -v b="${src:-0}" 'NR > a && NR < b && /LOCK_WAIT=/' "$ubr")
-check "prompt-reads.sh: LOCK_WAIT defaults to 0 before it sources board_lock.sh (lines ${def:-none} < ${src:-none})" \
-	"$([ -n "$src" ] && [ -n "$def" ] && [ "$def" -lt "$src" ] && [ -z "$later" ]; echo $?)"
-
-# prompt-reads.py's own self-test (a fake board on a pty): its last line
-# names the checks run and planned, and how many failed.
-got=$(python3 -I "$here/../uboot-t6/prompt-reads.py" --self-test 2>&1 | tail -n 1)
-check "prompt-reads.py --self-test ('$got')" \
-	"$(grep -qE '^prompt-reads self-test: ([0-9]+) checks run \(planned \1\), 0 failed$' <<<"$got"; echo $?)"
+# prompt-reads.sh and prompt-go.sh, the same: LOCK_WAIT 0 before they
+# source board_lock.sh.
+for ubr in "$here/../uboot-t6/prompt-reads.sh" "$here/../uboot-t6/prompt-go.sh"; do
+	src=$(grep -n '^\. "\$K/board_lock.sh"$' "$ubr" | cut -d: -f1)
+	def=$(grep -n '^LOCK_WAIT=\${LOCK_WAIT:-0}$' "$ubr" | cut -d: -f1)
+	later=$(awk -v a="${def:-0}" -v b="${src:-0}" 'NR > a && NR < b && /LOCK_WAIT=/' "$ubr")
+	check "$(basename "$ubr"): LOCK_WAIT defaults to 0 before it sources board_lock.sh (lines ${def:-none} < ${src:-none})" \
+		"$([ -n "$src" ] && [ -n "$def" ] && [ "$def" -lt "$src" ] && [ -z "$later" ]; echo $?)"
+done
 
 # A holder whose output is piped returns when it ends, not after HOLD_MAX.
 cat > "$tmp/piped.sh" <<EOF
@@ -1161,23 +1160,25 @@ check "t6-crashkernel.sh: no output of status, set or undo shows the root UUID (
 
 # The window is decided by nanopc_t6.dts (zephyr,sram) and held again where an
 # image is loaded into it: nanopc-t6.sh checks /proc/iomem over WINDOW_BASE
-# ..+WINDOW_SIZE, the U-Boot script loads to t6z_load and refuses above
-# t6z_window, and tools/board.sh refuses an image whose image_size runs past
-# LOAD_END before it calls nanopc-t6.sh. A window grown in the dts alone
-# would leave the dry run checking less RAM than the image takes as its own,
-# and board.sh refusing an image that fits; one shrunk there would leave
+# ..+WINDOW_SIZE; prompt-go.sh refuses an image larger than its WINDOW_SIZE
+# or linked elsewhere than its WINDOW_BASE, and prompt-go.py has U-Boot load
+# to LOAD and `go` there; tools/board.sh refuses an image whose image_size
+# runs past LOAD_END before it calls nanopc-t6.sh. A window grown in the dts
+# alone would leave the dry run checking less RAM than the image takes as its
+# own, and board.sh refusing an image that fits; one shrunk there would leave
 # U-Boot loading past it. Each must equal the node's reg.
 dts=$here/../../boards/friendlyarm/nanopc_t6/nanopc_t6.dts
-ub=$here/../uboot-t6/t6-zephyr.cmd
+ugo=$here/../uboot-t6/prompt-go.sh
+upy=$here/../uboot-t6/prompt-go.py
 reg=$(awk '/^\tzephyr_ram: memory@/ { n = 1 } n && /reg = / { print; exit }' "$dts")
 win_base= win_size=
 if [[ "$reg" =~ reg\ =\ \<(0x[0-9a-fA-F]+)\ DT_SIZE_M\(([0-9]+)\)\>\; ]]; then
 	win_base=$((BASH_REMATCH[1])) win_size=$((BASH_REMATCH[2] << 20))
 fi
-# NAME=$((<number> [<< <number>])) in nanopc-t6.sh, evaluated only in that form.
-script_value() {
+# NAME=$((<number> [<< <number>])) in a runner, evaluated only in that form.
+script_value() { # <name> [file, default nanopc-t6.sh]
 	local e
-	e=$(sed -n "s/^$1=\\\$((\\(.*\\)))\$/\\1/p" "$t6")
+	e=$(sed -n "s/^$1=\\\$((\\(.*\\)))\$/\\1/p" "${2:-$t6}")
 	[[ "$e" =~ ^(0x[0-9a-fA-F]+|[0-9]+)(\ \<\<\ [0-9]+)?$ ]] && echo $((e))
 }
 got="$(script_value WINDOW_BASE) $(script_value WINDOW_SIZE)"
@@ -1191,14 +1192,25 @@ if [[ "$got" =~ ^YAKO_ADDR=(0x[0-9a-fA-F]+)\;\ LOAD_END=(0x[0-9a-fA-F]+)$ ]]; th
 fi
 check "tools/board.sh: nanopc-t6's YAKO_ADDR and LOAD_END - YAKO_ADDR ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_size)" \
 	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_size" ]; echo $?)"
-uboot_value() {
-	local v
-	v=$(sed -n "s/^setenv $1 \\(0x[0-9a-fA-F]*\\)\$/\\1/p" "$ub")
-	[ -n "$v" ] && echo $((v))
-}
-got="$(uboot_value t6z_load) $(uboot_value t6z_entry) $(uboot_value t6z_window)"
-check "t6-zephyr.cmd: t6z_load t6z_entry t6z_window ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_base $win_size)" \
-	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_base $win_size" ]; echo $?)"
+got="$(script_value WINDOW_BASE "$ugo") $(script_value WINDOW_SIZE "$ugo")"
+check "prompt-go.sh: WINDOW_BASE WINDOW_SIZE ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_size)" \
+	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_size" ]; echo $?)"
+got=$(sed -n 's/^LOAD = \(0x[0-9a-fA-F]*\)$/\1/p' "$upy")
+check "prompt-go.py: LOAD (${got:-none}), where U-Boot loads the image and goes, is nanopc_t6.dts's zephyr,sram base ($win_base)" \
+	"$([ -n "$got" ] && [ -n "$win_base" ] && [ $((got)) = "$win_base" ]; echo $?)"
+
+# prompt-reads.py's and prompt-go.py's own self-tests (a fake board on a
+# pty), before the process check below, so that it covers what they start.
+# The last line names the checks run and planned, and how many failed.
+for t in prompt-reads prompt-go; do
+	got=$(python3 -I "$here/../uboot-t6/$t.py" --self-test 2>&1 | tail -n 1)
+	check "$t.py --self-test ('$got')" \
+		"$(grep -qE "^$t self-test: ([0-9]+) checks run \(planned \1\), 0 failed\$" <<<"$got"; echo $?)"
+done
+# stage.sh and prompt-go.sh's dry run against a fake ssh.
+got=$(bash "$here/../uboot-t6/selftest.sh" 2>&1 | tail -n 1)
+check "uboot-t6/selftest.sh ('$got')" \
+	"$(grep -qE '^uboot-t6 selftest: ([0-9]+) checks run \(planned \1\), 0 failed$' <<<"$got"; echo $?)"
 
 # The stand-in UART's wire, by its pid.
 kill "$wire_pid" 2>/dev/null

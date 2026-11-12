@@ -5,13 +5,11 @@
 Status: design note. The clock, power and QoS decisions (sections 1, 2 and 7)
 are merged code with host tests. The U-Boot and eMMC facts (section 4) were
 measured read-only under Armbian and, on 2026-11-12, at the U-Boot prompt with
-the tool of section 3. The load route (section 5) has not run. Its load
-addresses, from source, are confirmed on the board twice: in the environment
-compiled into the booted binary (read under Armbian) and by `printenv` at the
-prompt. The script draft driver/tools/uboot-t6/t6-zephyr.cmd cannot run as
-written on this U-Boot build (it needs `setexpr`, `icache` and `dcache`, which
-the build lacks) and was never run; the route that replaces it is issue #4627.
-The entry audit (section 6) follows.
+the tool of section 3. The load route (section 5) is a tool
+(driver/tools/uboot-t6/stage.sh and prompt-go.sh, issue #4627) and has not
+run on the board. Its load addresses, from source, are confirmed on the board
+twice: in the environment compiled into the booted binary (read under
+Armbian) and by `printenv` at the prompt. The entry audit (section 6) follows.
 
 Why: every Z1 to Z4 image so far runs after Armbian by kexec, on the GPU clock
 and power state Linux left. Stage 5's product form is U-Boot booting Zephyr
@@ -202,6 +200,14 @@ issue #26.
    write; bit 14 set, the SPLL, a mux past 4 or a divider off the table means
    `gpu_clock_set` writes CPLL / 5; a CPLL at another rate means
    `ClockSetRefused`, nothing written, and the image needs another target.
+   Also `md.l` of `CLKGATE_CON(15)` (0xfd7c083c: WDT0's gates, bits 0 and
+   1), `GLB_RST_ST` (0xfd7c0c04) and `GLB_RST_CON` (0xfd7c0c10); and, only
+   when both WDT0 gates read open, WDT0's `WDT_CR` and `WDT_TORR`
+   (0xfeaf0000, 2 words) and `COMP_PARAM_1`, `COMP_VERSION`, `COMP_TYPE`
+   (0xfeaf00f4, 3 words); never `WDT_EOI` (+0x14), whose read clears the
+   interrupt. Added after the 2026-11-12 run, not yet read on the board.
+   Decides: whether WDT0 is clocked and stopped as the image finds it, and
+   whether a WDT0 timeout resets the SoC from U-Boot's state.
 4. **The watchdog and the eMMC.** `wdt list`, `mmc list`, `mmc dev 0` (selects,
    writes nothing), `mmc info`, `mmc part`, `ext4ls mmc 0:1 /`,
    `ext4ls mmc 0:1 /boot`. Never `mmc write`, `ext4write` or `saveenv`.
@@ -315,16 +321,12 @@ On this U-Boot build neither can be a U-Boot command: it has no `dcache`,
 the commands are entered by the runner on the UART, each answer checked on the
 host: `ext4size`, `ext4load` to 0x10000000, `md.l` of the `ARM\x64` magic at
 byte 56, `crc32` of the loaded bytes against the host's, `go 0x10000000`
-(driver/tools/uboot-t6/README.md, "The route"; issue #4627). None of this has
-run on the board.
-
-The script draft driver/tools/uboot-t6/t6-zephyr.cmd does the same checks as
-one U-Boot script. Of the commands it uses, the build has `test`, `itest`,
-`setenv`, `echo`, `exit`, `ext4size`, `ext4load` and `go`, and `source` to run
-it (`help`, section 4 (c)). It lacks `setexpr`, which the magic and header-size
-checks use (t6-zephyr.cmd:73, :82, :87-88), and `icache` and `dcache`, which
-the script runs before `go` unless `t6z_keepcache` is set (:103-104). So the
-draft cannot run as written on this build. It was never run.
+(driver/tools/uboot-t6/README.md, "The route"; issue #4627): `stage.sh` puts
+the image under /boot/yakogl, `prompt-go.sh` and `prompt-go.py` type and
+check the commands, `go`, record the image's output and judge it with
+`t6-verdict.sh` (`T6_ROUTE=uboot`). None of this has run on the board. (The
+script draft t6-zephyr.cmd, which needed `setexpr`, `icache` and `dcache`,
+was removed.)
 
 Load addresses, from source (U-Boot v2026.07, file:line), and confirmed on the
 board twice:
@@ -364,25 +366,23 @@ used; why the two differ is not checked. The route does not use
 The Z image's link address is 0x10000000, the 256 MiB window
 0x10000000-0x1fffffff: nanopc_t6.dts:55-58 (`memory@10000000`, the node
 `zephyr,sram` names at :52), the same window in nanopc-t6.sh:127-128
-(`WINDOW_BASE`) and `t6z_load`, `t6z_entry` and `t6z_window` in
-t6-zephyr.cmd:26-28. `CONFIG_SRAM_BASE_ADDRESS` is derived from that node, not
+(`WINDOW_BASE`), and `WINDOW_BASE` and `WINDOW_SIZE` in
+driver/tools/uboot-t6/prompt-go.sh and `LOAD` in prompt-go.py. `CONFIG_SRAM_BASE_ADDRESS` is derived from that node, not
 set in nanopc_t6_defconfig; `KERNEL_VM_BASE` is the same 0x10000000 and
 `KERNEL_VM_SIZE` 0x20000000 (nanopc_t6_defconfig:16-25).
 
 Overlap verdict, the window against those addresses:
 
 - `scriptaddr`, `pxefile_addr_r` and `kernel_addr_r` (0x00c00000 to 0x02000000)
-  are below 0x10000000: no overlap. The draft's `load mmc 0:1 ${scriptaddr}` and
-  `source ${scriptaddr}` do not touch the image.
+  are below 0x10000000: no overlap.
 - `fdt_addr_r`, `fdtoverlay_addr_r` and `ramdisk_addr_r` (0x12000000 and up) lie
   inside the window, and `kernel_comp_addr_r` plus its size ends at 0x12000000,
   the window's inside edge. The route loads the image to 0x10000000 and uses
   none of these; but a `booti` route with a tree at `fdt_addr_r` or a ramdisk
   would load them over the image's own pages. One more reason for `go`, and a
   rule for any later change: no tree or ramdisk at these defaults.
-- t6-zephyr.cmd loads to 0x10000000 (:26, :63) and runs `go` at 0x10000000
-  (:107), and the runner of issue #4627 does the same: the load address equals
-  the link address, as required.
+- prompt-go.py has U-Boot load to `LOAD`, 0x10000000, and runs `go` there:
+  the load address equals the link address, as required.
 
 U-Boot's own memory is outside the window: `bdinfo` at the prompt (section 4
 (c)) puts U-Boot's code, stack, heap and device tree at 0xecbcd000 and above
@@ -411,11 +411,17 @@ what they are, not by row number:
 
 - Cache and MMU at `go`: the image assumes MMU and caches off, and U-Boot has
   them on. This build has no `dcache` or `icache` command (section 4 (c)), so
-  the fix is in the image's entry: flush its own range, then turn the MMU and
-  caches off (issue #4627; not done).
+  the fix is in the image's entry: at Zephyr's earliest hook it turns the MMU
+  and both caches off, cleans and invalidates zephyr,sram by address, and
+  invalidates the instruction cache and the EL2 TLB
+  (driver/rust/src/board/nanopc_t6_go.rs, the U-Boot facts with file:line
+  there; host-tested, not run on the board). The kexec entry finds them off
+  and is not changed.
 - The watchdog: this build has no `wdt` command and no watchdog device, so the
-  image arms WDT0 itself, as after kexec. That WDT0's clock is open under
-  U-Boot is not measured.
+  image arms WDT0 itself, as after kexec; the arming opens WDT0's gates
+  itself and refuses a block that does not answer. Whether WDT0 is clocked
+  and whether its timeout resets the SoC under U-Boot is not measured: the
+  reads of section 3, step 3 (CLKGATE_CON(15), GLB_RST_CON, WDT0) decide it.
 - RK806 on SPI2: probing it from U-Boot writes `SYS_CFG3`. This build probes it
   by itself on every boot (`dm tree`, section 4 (c)), so the write is part of
   the state U-Boot hands over, not something a command at the prompt adds.

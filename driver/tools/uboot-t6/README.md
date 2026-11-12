@@ -10,11 +10,12 @@ Status:
 
 - The reads at the prompt are a tool (`prompt-reads.sh`) and ran on the board
   on 2026-11-12. What the prompt answered is in "What the prompt answered".
-- Starting an image from the prompt has not run. The script draft
-  `t6-zephyr.cmd` (never run) cannot run as written on this U-Boot build: it
-  uses `setexpr`, and `icache` and `dcache` unless `t6z_keepcache` is set,
-  and the build has none of them. The route that
-  replaces it is in "The route"; the work is issue #4627.
+  The list now also reads WDT0's gates, its words and the CRU's global reset
+  words ("The watchdog"); that part has not run.
+- Starting an image from the prompt is a tool (`stage.sh`, `prompt-go.sh`;
+  "The route") and has not run on the board (issue #4627). The script draft
+  `t6-zephyr.cmd` is gone: it needed `setexpr`, `icache` and `dcache`, which
+  this build lacks.
 
 ## Prompt reads
 
@@ -84,40 +85,102 @@ have them.
 ## The route
 
 1. The image goes on the eMMC's ext4 root as `/boot/yakogl/<image>.bin`
-   ("Staging under /boot and the undo"). Nothing of the stock `/boot` is
-   changed, and U-Boot's environment is never saved.
-2. The runner stops autoboot and enters the commands on the UART, one at a
-   time, checking each answer: `ext4size mmc 0:1 /boot/yakogl/<image>.bin`
-   (the size must equal the host's), `ext4load mmc 0:1 0x10000000 ...`,
-   `md.l 0x10000038 1` (the `ARM\x64` magic at byte 56), `crc32 0x10000000
-   <size>` (must equal the host's), then `go 0x10000000`.
-3. The image prints its record on the same UART and resets at its end.
-   `bootflow scan -lb` then boots Armbian: no one-shot variable is needed.
+   (`stage.sh`, "Staging under /boot and the undo"). Nothing of the stock
+   `/boot` is changed, and U-Boot's environment is never saved.
+2. `prompt-go.sh` reboots the board, stops autoboot and enters the commands
+   on the UART (`prompt-go.py`), one at a time, checking each answer before
+   the next: `ext4size mmc 0:1 /boot/yakogl/<image>.bin` (no answer), `printenv
+   filesize` (the host's size), `ext4load mmc 0:1 0x10000000 ...` (that many
+   bytes read), `md.l 0x10000038 1` (the `ARM\x64` magic at byte 56), `crc32
+   0x10000000 <size>` (the host's CRC-32), then `go 0x10000000`. After `go`
+   nothing is typed again. Any other answer: `reset`, no `go`.
+3. The image turns off the MMU and caches `go` leaves on (`T6:G`, "What the
+   image does itself"), arms WDT0, prints its record on the same UART and
+   resets at its end. `bootflow scan -lb` then boots Armbian: no one-shot
+   variable is needed. `prompt-go.py` judges the record with
+   `t6-verdict.sh <probe>` (`T6_ROUTE=uboot`) and waits for Linux's login.
 
 No script file, no `mkimage`, no `source`: the checks are the runner's, on
-the host, where they can be tested without a board.
+the host, where they are tested without a board (`prompt-go.py
+--self-test`, `selftest.sh`; both run in
+`../kexec-zephyr/board_lock_selftest.sh`, a gate row).
+
+```sh
+# once per image: stage it (the fingerprint file stays on this host)
+BOARD_HOST=root@<t6> driver/tools/uboot-t6/stage.sh stage <dir>/t6_hello.bin <dir>/t6-boot.fingerprint
+# dry run: the image's checks, the staged copy's sha256, the commands; changes nothing
+BOARD_HOST=root@<t6> driver/tools/uboot-t6/prompt-go.sh <dir>/t6_hello.bin t6_hello
+# the run
+BOARD_HOST=root@<t6> T6_HAND=<who> T6_RECORD_DIR=<dir> T6_UART=<tty> \
+  driver/tools/uboot-t6/prompt-go.sh <dir>/t6_hello.bin t6_hello --go
+# afterwards: take it away again
+BOARD_HOST=root@<t6> driver/tools/uboot-t6/stage.sh undo <dir>/t6-boot.fingerprint
+```
+
+`prompt-go.sh` refuses an image without the watchdog marker, linked
+elsewhere than 0x10000000, larger than the window, or without the `T6:G`
+line (an image built before its entry coped with `go`), and an image whose
+staged copy is not the same bytes. Its record is `record.txt`, `uart.log`,
+`typed.log`, `answers.txt`, `image.log` (the UART from `go` to Linux's
+login) and `verdict.txt` under `$T6_RECORD_DIR/<date>-t6-uboot-go`.
+
+Exit codes (`prompt-go.py`'s, passed on by `prompt-go.sh`): 0 the verdict
+PASS and Armbian back; 3 no autoboot line, nothing written; 4 the autoboot
+missed, Linux booted; 5 stopped at the U-Boot prompt (an echo that never
+matched, no answer, the prompt lost), the board stays there until its power
+is cut; 6 an answer differed, `reset` entered, no Linux login; 7 a command
+made U-Boot reset the board; 8 an answer differed: no `go`, `reset`
+entered, Armbian back; 9 `go` not answered (no "## Starting application");
+10 the image started, no Linux login: the board needs a hand; 11 the verdict
+FAIL, Armbian back. `prompt-go.sh` adds 1 the board did not come back into
+Armbian, 2 usage, 3 refused before anything changed.
+
+From `go` until the image arms WDT0 (`T6:A3`) nothing resets a board whose
+image stopped: U-Boot runs no watchdog and Linux's is gone (the kexec route
+has Linux's dw_wdt across the jump; this one has none). `T6_HAND` is
+required for that reason.
 
 Link address and window:
 `driver/boards/friendlyarm/nanopc_t6/nanopc_t6.dts`'s `zephyr,sram`, 256 MiB at
-0x10000000 (0x10000000-0x1fffffff); `driver/tools/kexec-zephyr/nanopc-t6.sh`'s
-WINDOW_BASE and WINDOW_SIZE and the draft's `t6z_load`, `t6z_entry` and
-`t6z_window` hold the same values, and
+0x10000000 (0x10000000-0x1fffffff). `driver/tools/kexec-zephyr/nanopc-t6.sh`'s
+`WINDOW_BASE` and `WINDOW_SIZE`, `prompt-go.sh`'s `WINDOW_BASE` and
+`WINDOW_SIZE` and `prompt-go.py`'s `LOAD` hold the same values, and
 `driver/tools/kexec-zephyr/board_lock_selftest.sh` fails when one differs.
 
-What the image must do itself, because this U-Boot cannot (issue #4627):
+## What the image does itself
 
 - **MMU and caches.** U-Boot runs with the MMU, the data cache and the
   instruction cache on (common/board_r.c:110-113; arch/arm/cpu/armv8/
   cache_v8.c:817, :880-894, :1172-1175), and `go` calls the entry as a plain
-  function, with no cleanup (cmd/boot.c:18-22, :41). The other boards' route
-  runs `dcache off; icache off` before `go` (`tools/uboot-netboot-lib.sh`);
-  this build has neither command. The image's `reset.S` clears only SCTLR.A
-  (Zephyr `arch/arm64/core/reset.S:63-65, 77-79`). So the T6 image's entry
-  has to flush its own range and turn the MMU and caches off before anything
-  else. Under kexec the entry already finds them off.
-- **The watchdog.** U-Boot runs none. The image arms WDT0 itself, as it does
-  after kexec; that the watchdog's clock is open under U-Boot is not
-  measured.
+  function, with no cleanup (cmd/boot.c:17-22, :41; the ARM override
+  arch/arm/lib/cmd_boot.c is built only for ARMv7-M, arch/arm/lib/
+  Makefile:35). Nothing from `ext4load` to the entry cleans the data cache
+  (cmd/ext4.c:48-51; fs/fs.c:625-627, :845-865; fs/ext4/ext4fs.c:71-200).
+  The file's sectors come by SDMA into DRAM (the T6 defconfig's
+  `CONFIG_MMC_SDHCI_SDMA`, :64; drivers/mmc/sdhci.c:104-105, :179-183), but
+  the CPU stores a sector read in part (fs/fs_internal.c:51, :69, :91), a
+  hole (fs/ext4/ext4fs.c:188) and a block cache hit
+  (drivers/block/blk-uclass.c:441-443) through its data cache, so those
+  bytes can still be dirty at `go`. The other boards' route runs `dcache
+  off; icache off` before `go` (`tools/uboot-netboot-lib.sh`); this build has
+  neither command. Zephyr's `reset.S` clears only SCTLR.A (Zephyr
+  `arch/arm64/core/reset.S:62-66`). So the image's first code, at Zephyr's
+  earliest hook (`z_arm64_el2_plat_prep_c`, before any stack), turns the
+  MMU and both caches off, then cleans and invalidates zephyr,sram to the
+  point of coherency by address, then invalidates the instruction cache and
+  the EL2 TLB, and prints `T6:G` (driver/rust/src/board/nanopc_t6_go.rs).
+  Under kexec the entry finds them off and does nothing (Z1 measured
+  `SCTLR_EL2` 0x30400800).
+- **The watchdog.** U-Boot runs none. The image arms WDT0 itself, as after
+  kexec: `yd_dw_wdt_arm` opens WDT0's two gates (CLKGATE_CON(15) bits 0
+  and 1) if they are closed, checks the block's identity and refuses (then
+  PSCI resets the SoC) when it does not answer. What the words are under
+  U-Boot is not measured: the read list now has CLKGATE_CON(15)
+  (0xfd7c083c), GLB_RST_ST (0xfd7c0c04) and GLB_RST_CON (0xfd7c0c10), and,
+  only when both gates read open, WDT0's CR and TORR and its
+  COMP_PARAM_1, COMP_VERSION and COMP_TYPE. GLB_RST_CON decides whether a
+  WDT0 timeout resets the SoC from this state; WDT0's soft reset line is not
+  read (no source on this host names its CRU bit).
 - **The GPU.** PD_GPU off and the GPU clock on the SPLL are both states
   `gpu_up` handles (docs/notes/nanopc-t6-uboot-handover.md, sections 1 and
   2); neither has run on the board from U-Boot's state.
@@ -151,112 +214,28 @@ U-Boot is GPL: the above are facts and file:line only.
 
 ## Staging under /boot and the undo
 
-From Armbian over ssh as root. Nothing below touches a stock file; the stock
-boot files are recorded first and compared after. The eMMC's loader area is
-never written.
+`stage.sh`, from this host over ssh as root. The fingerprint file stays on
+this host: the sha256 of every file under `/boot` but `/boot/yakogl`, sorted
+by name. `stage` writes it before anything changes on the board (or, when it
+exists, goes on only if `/boot` still matches it); every command compares
+`/boot` with it again after its own change.
 
 ```sh
-# 0. fingerprint of the stock /boot files (kept off the board's disk)
-find /boot -maxdepth 1 -type f -exec sha256sum {} + | sort -k2 > /tmp/boot-before.sha256
-# 1. stage: one new directory, one file
-install -d -m 0755 /boot/yakogl
-install -m 0644 <image>.bin /boot/yakogl/<image>.bin
-sync
-# 2. check the copy against the host's
-sha256sum /boot/yakogl/*
+BOARD_HOST=root@<t6> driver/tools/uboot-t6/stage.sh stage <image>.bin <fingerprint>
+BOARD_HOST=root@<t6> driver/tools/uboot-t6/stage.sh check <image>.bin <fingerprint>
+BOARD_HOST=root@<t6> driver/tools/uboot-t6/stage.sh undo <fingerprint>
 ```
 
-Undo:
-
-```sh
-rm -r /boot/yakogl && sync
-find /boot -maxdepth 1 -type f -exec sha256sum {} + | sort -k2 | diff - /tmp/boot-before.sha256 && echo "stock /boot restored"
-```
+What it writes on the board, and nothing else: the directory `/boot/yakogl`
+(0755), one file per image in it (0644, written to a `.part` file in the
+same directory and renamed), `sync`; `undo` is `rm -rf -- /boot/yakogl`. It
+never writes another file of `/boot`, a block device, the eMMC's loader area
+or U-Boot's environment, and loads no kernel module. Exit: 0 done and
+`/boot`'s other files match the fingerprint; 1 the copy or a stock file
+differs (named); 2 usage; 3 refused before anything was written.
 
 The image is only in RAM after `ext4load`: `reset` or the power switch
 returns to the stock `bootflow scan -lb`, which boots Armbian. A directory
-entry `/boot/yakogl` is the only change on the partition, and `rm -r`
-removes it; the rest of `/boot` is byte for byte as before (the `diff` above
-says so).
-
-## The script draft, t6-zephyr.cmd
-
-Never run. It sizes the file, loads it, checks size, magic and the header's
-`image_size`, turns the caches off and runs `go`, as one U-Boot script,
-loaded with `load mmc 0:1 ${scriptaddr} ...` and run with `source`. It cannot
-run as written on this build: the magic and header-size checks use
-`setexpr` (t6-zephyr.cmd:73, :82, :87-88), and it runs `icache off` and
-`dcache off` before `go` unless `t6z_keepcache` is set (:103-104); the build
-has none of the three ("What the prompt answered"). The other commands it
-uses the build has: `load`, `source`, `test`, `itest`, `setenv`, `echo`,
-`exit`, `ext4size`, `ext4load` and `go` (`help` at the prompt, 2026-11-12).
-The route above does the same checks from the host. The draft stays until the
-runner of issue #4627 replaces it, because `../kexec-zephyr/board_lock_selftest.sh`
-compares its window with the device tree's.
-
-The reads the draft's first run was to begin with (`mmc list`, the partition
-of `0:1`, `scriptaddr`, `bdinfo`) were made by `prompt-reads.sh` on
-2026-11-12: `mmc 0:1` is the eMMC's ext4 root, `scriptaddr` is 0x00c00000,
-and `relocaddr`, `sp start` and `fdt_blob` lie above 0xecbcd000, outside
-0x10000000-0x1fffffff. Still unproven on the board, for any route:
-
-- whether the image's early code survives `go`'s EL2 state (HCR_EL2, ICC) and
-  the registers x0..x3: host-tested separately;
-- the GPU's clock, PD_GPU and vdd_gpu_s0 from U-Boot's state: the Z1 power-on
-  was written for it (handover note).
-
-### Compiled with v2026.07 mkimage
-
-The script compiles clean. The host had no `mkimage` installed, so the tools
-came from the v2026.07 tag (commit `ece349ad`, the commit U-Boot
-2026.07_armbian names) built host-tools-only:
-
-```sh
-make O=<build-dir> tools-only_defconfig
-# then, for a host without gnutls dev headers: drop CONFIG_TOOLS_MKEFICAPSULE
-# (scripts/config --disable TOOLS_MKEFICAPSULE; make olddefconfig)
-make O=<build-dir> tools-only
-```
-
-The build is clean; `mkimage -V` says `mkimage version 2026.07`. The compile
-of the draft:
-
-```sh
-mkimage -A arm64 -O linux -T script -C none -n t6-zephyr -d t6-zephyr.cmd t6-zephyr.scr
-```
-
-```
-Image Name:   t6-zephyr
-Created:      Thu Nov 12 22:25:20 2026
-Image Type:   AArch64 Linux Script (uncompressed)
-Data Size:    5020 Bytes = 4.90 KiB = 0.00 MiB
-Load Address: 00000000
-Entry Point:  00000000
-Contents:
-   Image 0: 5012 Bytes = 4.89 KiB = 0.00 MiB
-```
-
-`dumpimage -l` on the `.scr` prints the same lines. The `.cmd` is 5012
-bytes; the `.scr` is 5084: the 64-byte legacy image header, then the script
-type's size table — the file's 4-byte big-endian size, then a 4-byte 0
-end-of-list — then the script byte for byte (its last 5012 bytes compare
-equal to the draft; tools/mkimage.c:688-724). Load address and entry point
-are 0 in the header — a script image's address is `source`'s argument
-(`${scriptaddr}`), and the image's own load address is the script's
-`t6z_load`.
-
-The commands and variables the script uses stand checked against the
-v2026.07 source: `exit` (cmd/exit.c:22), `itest` incl. `-lt`/`-gt` and
-`*addr` (cmd/itest.c:36-50, :59-84; the `.b/.w/.l/.q` name suffix parses in
-cmd_get_data_size, common/command.c:469), `setexpr` with the same suffix
-(cmd/setexpr.c:410), `ext4size`/`ext4load` (cmd/ext4.c:73, :86),
-`icache`/`dcache` (cmd/cache.c), `go` (cmd/boot.c:50), and
-`scriptaddr=0x00c00000` for the RK3588 (include/configs/rk3588_common.h:22).
-The `${filesize}` comparisons use `itest`, not `test`: `filesize` is hex
-without `0x` and `test` reads base 0 (cmd/test.c:152-173). Compiling with
-`mkimage -T script` does not read the script body — it stores it — so the
-compile and these citations together stand for the hush check.
-
-What the compile does not show: whether the board's build has these
-commands. It lacks `setexpr`, `icache` and `dcache` ("What the prompt
-answered").
+`/boot/yakogl` is the only change on the partition, and `undo` removes it
+and says "stock /boot restored" only when every other file matches the
+fingerprint.
