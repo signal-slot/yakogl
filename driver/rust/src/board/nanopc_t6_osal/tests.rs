@@ -601,6 +601,28 @@ fn an_unrecoverable_fatal_leaves_the_osal_dead_with_its_fences_complete() {
     assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
 }
 
+/// A kick that completed before an error, though no call had seen it yet,
+/// is not lost: the restart reads the sync object before it marks the
+/// kicks not complete as lost.
+#[test]
+fn a_kick_done_before_the_error_is_not_counted_lost() {
+    let mut r = rig();
+    queue_init(&mut r);
+    let s = stream(&mut r);
+    r.z.fail_at(3, Fail::Fault(1));
+    let f1 = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    // time passes with nobody looking: the kick runs and completes
+    for _ in 0..64 {
+        r.z.read32(B.gpu);
+    }
+    assert_eq!((word(&s), r.osal.fences()), (1, (2, 1)), "done, not yet seen");
+    let f2 = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f2, -1, &mut no_delay), -EIO);
+    assert_eq!(r.osal.restarts, 1);
+    assert_eq!(r.osal.wait(&*r.z, f1, -1, &mut no_delay), 0, "it completed before the error");
+    assert_eq!(r.osal.wait(&*r.z, f2, -1, &mut no_delay), -EIO);
+}
+
 /// A buffer freed while kicks are in flight, and a group whose end is not
 /// known: the free stays held and no page is handed out again, since the
 /// GPU may still run the group and write them.
