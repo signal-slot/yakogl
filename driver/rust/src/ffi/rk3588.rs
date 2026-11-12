@@ -417,10 +417,16 @@ pub struct YdT6GpuUp {
     /// `POWER_EN0` and `BUCK1_ON_VSEL` after the enable.
     pub supply_after: [u32; 2],
     pub supply_waited_us: u32,
+    /// Appended: the GPU QoS policy applied after the power-on
+    /// ([`rk3588::QosPolicy::id`]: 1 reset, 2 linux-zero; 0 when the run
+    /// stopped before it) and `MODE`, `BANDWIDTH`, `SATURATION` of
+    /// `qos_gpu_m0` read back.
+    pub qos_policy: u32,
+    pub qos_words: [u32; 3],
 }
 
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 125);
+const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 129);
 #[cfg(any(feature = "mali", test))]
 const _: () = assert!(offset_of!(YdT6GpuUp, rk806) == 4 * 18);
 #[cfg(any(feature = "mali", test))]
@@ -443,6 +449,10 @@ const _: () = assert!(offset_of!(YdT6GpuUp, supply_enabled) == 4 * 121);
 const _: () = assert!(offset_of!(YdT6GpuUp, supply_after) == 4 * 122);
 #[cfg(any(feature = "mali", test))]
 const _: () = assert!(offset_of!(YdT6GpuUp, supply_waited_us) == 4 * 124);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, qos_policy) == 4 * 125);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, qos_words) == 4 * 126);
 
 #[cfg(any(feature = "mali", test))]
 fn lo_hi(v: u64) -> [u32; 2] {
@@ -516,8 +526,29 @@ impl From<&crate::board::nanopc_t6_gpu::GpuUp> for YdT6GpuUp {
             supply_enabled: u32::from(o.supply_enabled),
             supply_after: o.supply_after.map(u32::from),
             supply_waited_us: o.supply_waited_us,
+            qos_policy: o.qos_policy,
+            qos_words: [o.qos[0][1], o.qos[0][2], o.qos[0][3]],
         }
     }
+}
+
+/// The GPU QoS policy [`yd_t6_gpu_up`] applies, as [`rk3588::QosPolicy::id`].
+#[cfg(feature = "mali")]
+static T6_GPU_QOS_POLICY: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(crate::board::nanopc_t6_gpu::GPU_QOS_POLICY.id());
+
+/// Choose the GPU QoS policy `yd_t6_gpu_up` applies after the power-on:
+/// `YD_T6_QOS_RESET` (1) or `YD_T6_QOS_LINUX_ZERO` (2, the default). Call it
+/// before `yd_t6_gpu_up`; the record names the policy that ran. `-EINVAL`
+/// (the choice unchanged) for any other id.
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub extern "C" fn yd_t6_gpu_qos_policy(id: u32) -> i32 {
+    if rk3588::QosPolicy::from_id(id).is_none() {
+        return -EINVAL;
+    }
+    T6_GPU_QOS_POLICY.store(id, core::sync::atomic::Ordering::Relaxed);
+    0
 }
 
 /// The NanoPC-T6's GPU power-on ([`crate::board::nanopc_t6_gpu::gpu_up`]):
@@ -549,7 +580,9 @@ pub unsafe extern "C" fn yd_t6_gpu_up(
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
     let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
-    let o = crate::board::nanopc_t6_gpu::gpu_up(&hw, b, &mut |us| delay_us(us), &mut |h| {
+    let qos = rk3588::QosPolicy::from_id(T6_GPU_QOS_POLICY.load(core::sync::atomic::Ordering::Relaxed))
+        .unwrap_or(crate::board::nanopc_t6_gpu::GPU_QOS_POLICY);
+    let o = crate::board::nanopc_t6_gpu::gpu_up_with(qos, &hw, b, &mut |us| delay_us(us), &mut |h| {
         let h = YdT6GpuUp::from(h);
         on_handover(&h);
     });
@@ -1635,5 +1668,33 @@ mod tests {
             assert_eq!(def(name), v, "{name}");
         }
         assert!(H.contains("_Static_assert(sizeof(struct yd_dw_wdt_arm) == 44,"));
+    }
+
+    #[test]
+    fn z1_record_appends_the_qos_policy_and_its_words() {
+        use crate::board::nanopc_t6_gpu::GpuUp;
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        assert_eq!(size_of::<YdT6GpuUp>(), 4 * 129);
+        assert_eq!(offset_of!(YdT6GpuUp, qos_policy), 4 * 125);
+        assert_eq!(offset_of!(YdT6GpuUp, qos_words), 4 * 126);
+        for what in ["YD_T6_QOS_RESET      1 ", "YD_T6_QOS_LINUX_ZERO 2 "] {
+            assert!(H.contains(&format!("#define {what}")), "{what}");
+        }
+        assert_eq!(rk3588::QosPolicy::Reset.id(), 1);
+        assert_eq!(rk3588::QosPolicy::LinuxZero.id(), 2);
+        assert_eq!(rk3588::QosPolicy::from_id(0), None);
+        assert_eq!(rk3588::QosPolicy::from_id(3), None);
+        // a run that stopped before the step carries no policy
+        let none = YdT6GpuUp::from(&GpuUp::default());
+        assert_eq!((none.qos_policy, none.qos_words), (0, [0; 3]));
+        for p in [rk3588::QosPolicy::Reset, rk3588::QosPolicy::LinuxZero] {
+            let mut g = GpuUp { qos_policy: p.id(), ..GpuUp::default() };
+            g.qos[0] = [0x8000_0000, p.values()[0], p.values()[1], p.values()[2], 0];
+            // the other blocks differ, so the record is shown to read m0
+            g.qos[1] = [9; 5];
+            let r = YdT6GpuUp::from(&g);
+            assert_eq!(r.qos_policy, p.id());
+            assert_eq!(r.qos_words, p.values());
+        }
     }
 }

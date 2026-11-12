@@ -547,6 +547,24 @@ pub enum QosPolicy {
 }
 
 impl QosPolicy {
+    /// The id the Z1 record and the C selector carry: 1 `Reset`, 2
+    /// `LinuxZero`; 0 is "none applied" in a record.
+    pub const fn id(self) -> u32 {
+        match self {
+            QosPolicy::Reset => 1,
+            QosPolicy::LinuxZero => 2,
+        }
+    }
+
+    /// The policy of an [`id`](Self::id); `None` for any other number.
+    pub const fn from_id(id: u32) -> Option<QosPolicy> {
+        match id {
+            1 => Some(QosPolicy::Reset),
+            2 => Some(QosPolicy::LinuxZero),
+            _ => None,
+        }
+    }
+
     /// The values for [`QOS_POLICY_WORDS`], in that order.
     pub const fn values(self) -> [u32; 3] {
         match self {

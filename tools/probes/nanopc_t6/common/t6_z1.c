@@ -14,13 +14,16 @@
 #include <stddef.h>
 
 /* driver/rust/src/ffi/rk3588.rs pins the same layout. */
-_Static_assert(sizeof(struct yd_t6_gpu_up) == 4 * 125, "struct yd_t6_gpu_up moved");
+_Static_assert(sizeof(struct yd_t6_gpu_up) == 4 * 129, "struct yd_t6_gpu_up moved");
 _Static_assert(offsetof(struct yd_t6_gpu_up, rk806) == 4 * 18, "struct yd_t6_gpu_up moved");
 _Static_assert(offsetof(struct yd_t6_gpu_up, ident) == 4 * 65, "struct yd_t6_gpu_up moved");
 _Static_assert(offsetof(struct yd_t6_gpu_up, stop) == 4 * 108, "struct yd_t6_gpu_up moved");
 _Static_assert(offsetof(struct yd_t6_gpu_up, clock_kept) == 4 * 112, "struct yd_t6_gpu_up moved");
 _Static_assert(offsetof(struct yd_t6_gpu_up, supply_waited_us) == 4 * 124,
 	       "struct yd_t6_gpu_up moved");
+
+_Static_assert(offsetof(struct yd_t6_gpu_up, qos_policy) == 4 * 125, "struct yd_t6_gpu_up moved");
+_Static_assert(offsetof(struct yd_t6_gpu_up, qos_words) == 4 * 126, "struct yd_t6_gpu_up moved");
 
 static const char *const stop_name[] = {
 	[YD_T6_GPU_STOP_NONE] = "none",
@@ -146,6 +149,9 @@ void t6_z1_print_record(const char *probe, const struct yd_t6_gpu_up *o, bool ha
 			       o->qos[b][0], o->qos[b][1], o->qos[b][2], o->qos[b][3],
 			       o->qos[b][4]);
 		}
+		printk("%s: qos policy %u (1 reset, 2 linux-zero): qos_gpu_m0 MODE 0x%08x BANDWIDTH "
+		       "0x%08x SATURATION 0x%08x\n",
+		       probe, o->qos_policy, o->qos_words[0], o->qos_words[1], o->qos_words[2]);
 		print_ident(probe, "after power-on", o->ident);
 	}
 	if (progress(o->stop) >= 8) {

@@ -205,6 +205,9 @@ pub struct GpuUp {
     pub pd_after: PdGpuRegs,
     /// `qos_gpu_m0..m3`, five words each, read after the power-on.
     pub qos: [[u32; 5]; 4],
+    /// [`QosPolicy::id`] of the policy applied after the power-on; 0 when
+    /// the run stopped before that step.
+    pub qos_policy: u32,
     pub ident: Ident,
     pub reset: Reset,
     /// After the reset.
@@ -238,6 +241,18 @@ impl GpuUp {
 /// power-on; `supply_enabled` is still false there), so the image prints it
 /// before a step that could fault.
 pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handover: &mut impl FnMut(&GpuUp)) -> GpuUp {
+    gpu_up_with(GPU_QOS_POLICY, m, b, delay_us, on_handover)
+}
+
+/// [`gpu_up`] applying `qos` after the power-on instead of [`GPU_QOS_POLICY`]
+/// (the C side picks it with `yd_t6_gpu_qos_policy`).
+pub fn gpu_up_with(
+    qos: QosPolicy,
+    m: &impl Mmio,
+    b: Bases,
+    delay_us: &mut impl FnMut(u32),
+    on_handover: &mut impl FnMut(&GpuUp),
+) -> GpuUp {
     let mut o = GpuUp { pd_before: PdGpuRegs::read(m, b.pmu), ..GpuUp::default() };
     o.clock = rk3588::gpu_clock(m, b.cru);
     o.spi_gate14 = m.read32(b.cru + rk3588::clkgate_con(14));
@@ -319,7 +334,8 @@ pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handov
         }
     }
     o.pd_after = PdGpuRegs::read(m, b.pmu);
-    rk3588::qos_apply(m, b.qos, GPU_QOS_POLICY);
+    rk3588::qos_apply(m, b.qos, qos);
+    o.qos_policy = qos.id();
     for (blk, words) in o.qos.iter_mut().enumerate() {
         for (w, off) in words.iter_mut().zip(rk3588::QOS_WORDS) {
             *w = m.read32(b.qos + 0x200 * blk + off);
@@ -709,6 +725,31 @@ mod tests {
         fn write8(&self, _: usize, _: u8) {
             unreachable!()
         }
+    }
+
+    #[test]
+    fn each_qos_policy_is_applied_and_named_in_the_record() {
+        for (policy, id, words) in [(QosPolicy::Reset, 1, [3, 0x12d, 0x40]), (QosPolicy::LinuxZero, 2, [0; 3])] {
+            let t6 = T6::handed_over();
+            let o = gpu_up_with(policy, &t6, B, &mut |_| {}, &mut |_| {});
+            assert_eq!(o.stop, Stop::None, "{policy:?}");
+            assert_eq!((o.qos_policy, policy.id()), (id, id));
+            for blk in 0..4 {
+                assert_eq!(o.qos[blk][1..4], words, "{policy:?} block {blk}");
+                assert_eq!(o.qos[blk][0], 0x8000_0000);
+            }
+        }
+        let o = gpu_up(&T6::handed_over(), B, &mut |_| {}, &mut |_| {});
+        assert_eq!(o.qos_policy, GPU_QOS_POLICY.id());
+    }
+
+    #[test]
+    fn a_run_stopped_before_the_qos_step_names_no_policy() {
+        let mut t6 = T6::handed_over_domain_on();
+        t6.rk806.get_mut().insert(rk806::POWER_EN0, 0x0e);
+        let o = gpu_up_with(QosPolicy::Reset, &t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!(o.stop, Stop::SupplyOff);
+        assert_eq!((o.qos_policy, o.qos), (0, [[0; 5]; 4]));
     }
 
     #[test]
