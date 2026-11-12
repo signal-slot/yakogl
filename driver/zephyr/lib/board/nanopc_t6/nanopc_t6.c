@@ -10,8 +10,11 @@
  *
  * Order (the T6:<tag> lines are the early banner, board::nanopc_t6_early;
  * a tag missing from the UART says where the image stopped):
- *   reset.S's plat_prep_c hook, the image's first code (MMU off, no stack
- *     yet): yd_t6_early_entry prints T6:A with the EL found, points VBAR_EL2
+ *   reset.S's plat_prep_c hook, the image's first code (no stack yet):
+ *     yd_t6_early_entry, at EL2 with the MMU or a cache on (U-Boot's `go`),
+ *     turns them off and cleans zephyr,sram to the point of coherency first
+ *     (T6:G; board::nanopc_t6_go; after kexec they are off and it does
+ *     nothing). Then, MMU off, it prints T6:A with the EL found, points VBAR_EL2
  *     at a reporter (T6:X for any later exception taken to EL2), and with
  *     CONFIG_YAKOGL_NANOPC_T6_VHE_EXIT writes HCR_EL2 = RW only before
  *     Zephyr's z_arm64_el2_init reads it (Linux's VHE kexec leaves E2H set;

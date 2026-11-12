@@ -5,7 +5,9 @@
 //! ([`record`]), the Raspberry Pi 4's framebuffer decisions ([`rpi4`]), and
 //! the i.MX8MP samples' hold before their reset ([`imx8mp`]), and when the
 //! NanoPC-T6 glue still feeds its watchdog ([`nanopc_t6`]) and what its
-//! image prints before Zephyr's console exists ([`nanopc_t6_early`]) and
+//! image prints before Zephyr's console exists ([`nanopc_t6_early`]), how
+//! its entry turns off the MMU and caches U-Boot's `go` leaves on
+//! ([`nanopc_t6_go`]), and
 //! its GPU power-on ([`nanopc_t6_gpu`]) and its AS0 and cache flush
 //! ([`nanopc_t6_mmu`]), extended to every firmware section with the board's
 //! `McuMemory` ([`nanopc_t6_sections`]), Z3, the firmware booted over
@@ -26,6 +28,8 @@ pub mod nanopc_t6_early;
 pub mod nanopc_t6_frame;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_fw;
+#[cfg(any(feature = "rk3588", test))]
+pub mod nanopc_t6_go;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_gpu;
 #[cfg(test)]
