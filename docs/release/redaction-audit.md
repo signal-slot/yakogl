@@ -219,7 +219,116 @@ The test runs in every `tools/check.sh` row that runs the root package's
 integration tests without a `--test` filter (the per-feature `test <features>`
 rows), so a new home path, address, login or e-mail in a tracked file fails
 the gate before it reaches this audit. No separate gate row runs the scan
-itself.
+itself yet; the unapplied patch for one is in "Proposed gate row (unapplied)"
+below.
+
+### Proposed gate row (unapplied)
+
+Nothing below is applied: `tools/check.sh`, `tools/check_scope_selftest.sh` and
+`tools/cts/**` are held by other plans. The diff is against `bd07ee2b` (main
+as plan #337 saw it) and was built and rehearsed in a scratch worktree, which
+is removed. Save the block to a file and `git apply` it.
+
+```diff
+diff --git a/tools/check.sh b/tools/check.sh
+index 9f61b56a..d38a34c3 100755
+--- a/tools/check.sh
++++ b/tools/check.sh
+@@ -2776,6 +2776,12 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
+   scope licence
+   step "tools   licence audit (SPDX header or allowlist row for every tracked file)" \
+     python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license
++  # The redaction scan (docs/release/checklist.md line 8): its self-test, then
++  # the public classes over HEAD. Exit 3 (private classes not run) and 0 pass;
++  # exit 1 (an H/M finding) and 2 (the scan could not run) fail the row.
++  # Every tracked file is read, so any changed path reaches it.
++  step "tools   redaction scan (self-test, then public classes over HEAD)" \
++    bash -c 'python3 -I tools/release/redaction-scan.py --self-test | grep -q "self-test passed" && { python3 -I tools/release/redaction-scan.py HEAD; rc=$?; [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]; }'
+   scope tools
+   # tools/hostharness/glmark2/compare.py on its fixture run directories: the
+   # before/after ms-per-frame table of two GM2_PROFILE runs. Host only.
+diff --git a/tools/check_scope_selftest.sh b/tools/check_scope_selftest.sh
+index b468c935..ba95fa4a 100755
+--- a/tools/check_scope_selftest.sh
++++ b/tools/check_scope_selftest.sh
+@@ -133,7 +133,7 @@ expect() {
+   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
+ }
+ out=$(plan docs/standalone-boot.md)
+-expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 226 skipped \(--changed HEAD, scopes: docs' "$out"
++expect "docs: only the shared rows" '^check.sh: 4 ok, 0 failed, 0 gap\(s\).*, 226 skipped \(--changed HEAD, scopes: docs' "$out"
+ out=$(plan src/v3d/job.rs)
+ expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
+ expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
+@@ -248,7 +248,7 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables
+ # the control: the full plan keeps its rows, the table row once, before the
+ # first CONFIGS row that reads the tables
+ out=$(plan src/gl/draw.rs)
+-# 230 rows: ok plus gaps, because a row whose tool this host lacks is a gap
++# 231 rows: ok plus gaps, because a row whose tool this host lacks is a gap
+ # here and a plan row on the gate host; the sum is the same on both. (Seven
+ # more for the direct boot: am62p-mkboot.py, the second-stage vectors, the
+ # yakogl-boot-stage2 clippy, test and softfloat rows, boot_stage2.h's layout
+@@ -266,7 +266,7 @@ out=$(plan src/gl/draw.rs)
+ checks=$((checks + 1))
+ line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
+ total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
+-[ "$total" = 230 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 230:$line"; fails=$((fails + 1)); }
++[ "$total" = 231 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 231:$line"; fails=$((fails + 1)); }
+ count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
+ order "full plan: the tables before their first reader" "$gen" \
+   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
+```
+
+**What the row checks.** After the licence audit, one row in the `licence`
+scope (the audit's own: any changed path reaches it, so the row runs for every
+change, a docs-only one included, and `--local` does not select it):
+
+1. `redaction-scan.py --self-test` must print `self-test passed`, so a scan
+   whose allow rules or classes broke fails the row before it judges the tree.
+2. `redaction-scan.py HEAD` scans the committed tree, public classes only (the
+   gate has no private values). Exit codes:
+
+| Exit | Meaning | Row |
+|---|---|---|
+| 0 | no H/M finding, private classes run (values were set) | pass |
+| 3 | no H/M finding, private classes not run | pass |
+| 1 | at least one H/M finding | **fail** (the report names `file:line class`, masked) |
+| 2 | the scan could not run (bad ref, unreadable private file) | **fail** |
+
+It scans `HEAD`, as `tests/redaction_scan.rs` does; a change that is only in
+the working tree is not seen until it is committed. The row is a second,
+cheaper route to what `redaction_scan_finds_nothing_in_this_tree` already
+checks inside the `test <features>` rows: it runs in a docs-only change, where
+those test rows are skipped.
+
+**Rehearsal** (scratch worktree of `bd07ee2b`, `tools/check.sh` itself not run):
+
+| Check | Result |
+|---|---|
+| `git apply --check` of the block above on `bd07ee2b` | clean |
+| `tools/check_scope_selftest.sh` with the diff applied | `137 checks run (planned 137), 0 failed` |
+| `--self-test` | `self-test passed` |
+| the row's command on `bd07ee2b` | `0 H/M finding(s)`, `NOT COMPLETE (private classes not run)`, exit 0 |
+| the row's command on a scratch commit adding a home path to `docs/notes/v3d-wait-poll.md` (built at run time as `/` + `home` + `/someone/x/build`) | `1 H/M finding(s)`, `FINDINGS`, exit 1 |
+
+**Applying it needs:**
+
+- The held files `tools/check.sh` and `tools/check_scope_selftest.sh`: the
+  pins change in three places there (the docs plan `3 ok` to `4 ok`, with
+  `226 skipped` unchanged because the row is shared by every scope, and the
+  full plan's row count 230 to 231, in the comment, the test and its message).
+  Another plan landing a row first moves these numbers: rebase them.
+- `CLAUDE.md` and `CONTRIBUTING.md` quote the row counts (`225` rows in the
+  full plan, `181` in `--quick`). One row more makes the full plan 226 as they
+  count it; `--quick` should become 182 (the row is not CONFIGS-bound), but
+  that was not measured here. Plan #331's successors own those files and must
+  recount and update the numbers in the same change.
+- Nothing from `tools/cts/**`. The alternative, a `cts-selftest.sh` check, is
+  the worse place: that script is the Mali/dEQP harness's self-test, a
+  redaction scan is not part of it, and it runs only in the `tools` scope, so
+  a change that touches no `tools` path would skip it. A gate row in the
+  `licence` scope reaches every change.
 
 ## Open items (not fixes of this round)
 
