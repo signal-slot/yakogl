@@ -11,10 +11,10 @@
 //! the short one: the block is `UniformBlock`, its member
 //! `UniformBlock.uniformMember`; the instance name reaches no query.
 //!
-//! The file also pins what the pool does not lift: a default-block uniform
-//! whose name fills the field is still refused at link, because the GL core
-//! reads that row's field for `glGetActiveUniform` and
-//! `glGetUniformLocation` (task #47's last step).
+//! The file also pins a default-block uniform whose name fills the field:
+//! it links, and `glGetActiveUniform` and `glGetUniformLocation` read its
+//! whole name through the pool (`shaderc::uniform_row_name`, task #47's
+//! last step; tests/es3_uniform_block_long_name.rs has the rest).
 //!
 //! The host cannot render: the verdicts here are the compile, the link, the
 //! reflection and the uniform dwords a draw hands the back end (the member's
@@ -450,26 +450,24 @@ fn two_members_of_a_long_named_block_are_two_active_uniforms() {
     unsafe { glDeleteProgram(p) };
 }
 
-/// Not lifted: a default-block uniform whose name fills the field. GL reads
-/// that row's field for its name, so the link refuses it as before, naming
-/// the field.
+/// A default-block uniform whose name fills the field links, and GL names
+/// and finds it whole: the GL core reads the row's name through the pool.
 #[test]
-fn a_default_block_uniform_of_63_characters_is_still_refused_at_link() {
+fn a_default_block_uniform_of_63_characters_links_and_reports_whole() {
     let _g = context();
     let u = "u".repeat(63);
     let fs = format!(
         "#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 o;\n\
          uniform vec4 {u};\nvoid main() {{ o = {u}; }}\n"
     );
-    let log = program(VS_PLAIN, &fs).map(|p| {
-        // SAFETY: a program of this context.
-        unsafe { glDeleteProgram(p) };
-    });
-    let log = log.expect_err("a 63-character default-block uniform does not link");
-    assert!(log.contains("64-byte name field"), "the log names the field: {log}");
-    assert!(log.contains("fragment uniform"), "and the stage and kind: {log}");
-    // a refused link is no GL error
+    let p = program(VS_PLAIN, &fs).unwrap_or_else(|log| panic!("link failed: {log}"));
+    assert_eq!(programiv(p, GL_ACTIVE_UNIFORMS), 1);
+    assert_eq!(active_uniform(p, 0).0, u);
+    assert_eq!(programiv(p, GL_ACTIVE_UNIFORM_MAX_LENGTH), 64);
+    assert!(uniform_location(p, &u) >= 0);
     assert_eq!(err(), GL_NO_ERROR);
+    // SAFETY: a program of this context.
+    unsafe { glDeleteProgram(p) };
 }
 
 /// And a name one under the field's limit links as it always did: the

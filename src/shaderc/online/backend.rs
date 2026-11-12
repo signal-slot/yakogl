@@ -3138,13 +3138,17 @@ void main (void)
         release(&sh);
     }
 
-    /// A default-block uniform whose name fills the field is still refused
-    /// at link, pool or no pool: `glGetActiveUniform` and
-    /// `glGetUniformLocation` read that row's field, and the GL core does
-    /// not read the pool yet. The pool holds its whole name all the same.
+    /// A default-block uniform whose name fills the field links: the pool
+    /// holds its whole name, and the GL core names and finds the row through
+    /// it (`shaderc::uniform_row_name`), not through the field
+    /// (docs/notes/reflection-long-names.md).
+    ///
+    /// Revert check: let the link accept only a block member's full-field
+    /// row again (`link::whole_uniform_row`) and it refuses the stage with
+    /// "64-byte name field".
     #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
     #[test]
-    fn a_cut_default_block_uniform_is_still_refused_at_link() {
+    fn a_cut_default_block_uniform_links_with_its_whole_name() {
         let _serial = test_lock();
         cache_clear();
         let name = "u".repeat(63);
@@ -3161,9 +3165,9 @@ void main (void)
         assert_eq!(pooled_uniform_name(&sh, k), Some(name.as_str()), "the pool says it is whole");
         assert!(crate::shaderc::uniform_blocks(&sh).members.is_empty(), "no block member fills it");
         let vs = "#version 300 es\nlayout(location = 0) in vec4 p;\nvoid main() { gl_Position = p; }";
+        assert_eq!(crate::shaderc::uniform_row_name(&sh, k), name.as_bytes());
         let (rc, text, fs) = link(vs, sh);
-        assert_eq!(rc, -EINVAL, "{text}");
-        assert!(text.contains("fragment uniform") && text.contains("64-byte name field"), "{text}");
+        assert_eq!(rc, 0, "{text}");
         release(&fs);
     }
 
