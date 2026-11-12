@@ -68,6 +68,9 @@ const PREC_MASK: u8 = 7;
 /// The scan reached the expression and recorded its class: an entry
 /// without it is [`Prec::Unknown`].
 const SEEN: u8 = 0x40;
+/// The expression is a constant expression (`constant_expression_value`
+/// folds it): [`Precs::folds`].
+const FOLDS_BIT: u8 = 0x80;
 
 /// What the lowering asks: the class of each expression, of each declared
 /// variable, and of each function's result.
@@ -102,6 +105,12 @@ impl<'a> Precs<'a> {
 
     /// `e`'s class (A.3): what a compiler temporary holding its value is
     /// (Mesa's `vec_ctor`, `conditional_tmp`, a call's return value).
+    /// `e` is a constant expression Mesa's `ast_to_hir` folds where it is
+    /// a call's or a constructor's argument (at 32 bits).
+    pub fn folds(&self, e: ExprId) -> bool {
+        self.exprs.get(e.0 as usize).is_some_and(|b| b & FOLDS_BIT != 0)
+    }
+
     pub fn class(&self, e: ExprId) -> Prec {
         match self.exprs.get(e.0 as usize).copied() {
             Some(b) if b & SEEN != 0 => prec_of((b >> CLASS_SHIFT) & PREC_MASK),
@@ -455,6 +464,11 @@ impl<'x, 'a> Scan<'x, 'a> {
     fn set_instr(&mut self, e: ExprId, p: Prec) {
         if let Some(x) = self.exprs.get_mut(e.0 as usize) {
             *x = (*x & !(PREC_MASK << INSTR_SHIFT)) | (bits_of(p) << INSTR_SHIFT) | SEEN;
+        }
+        if self.folds(e) {
+            if let Some(x) = self.exprs.get_mut(e.0 as usize) {
+                *x |= FOLDS_BIT;
+            }
         }
     }
 
@@ -1630,6 +1644,47 @@ mod tests {
         let g =
             vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4((sin(0.5) > 0.3 ? q.y : h.z) * q.x); }}"));
         assert_eq!(alu(&g, AluOp::Fmul), [Prec::Unknown], "a condition not evaluated here");
+    }
+
+    /// asin and acos are one NIR op each, which nir_builtin_builder.c
+    /// builds at 32 bits for a 16-bit operand (:232-233, :243-244:
+    /// `nir_f2f16(nir_asin(nir_f2f32(x)))`): the expansion records High,
+    /// as pow's does. atan stays at its operand's width (Medium). Mesa
+    /// (review probe v_asin; drm-shim `asin(e)`, e mediump: `FMA.f32`,
+    /// `FRSQ.f32`).
+    #[test]
+    fn asin_and_acos_are_full_width_and_atan_is_not() {
+        let head = "attribute mediump vec4 q; varying highp vec4 v;\n";
+        for f in ["asin", "acos"] {
+            let g = vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4({f}(q.x) * q.y); }}"));
+            let fmul = alu(&g, AluOp::Fmul);
+            assert_eq!(fmul.last(), Some(&M), "{f}: the reader's product");
+            for op in [AluOp::Ffma, AluOp::Fsqrt, AluOp::Fabs] {
+                assert!(alu(&g, op).iter().all(|&p| p == H), "{f}: {op:?} of the expansion");
+            }
+        }
+        let g = vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4(atan(q.x)); }}"));
+        assert!(alu(&g, AluOp::Fmul).iter().all(|&p| p == M), "atan is Medium");
+    }
+
+    /// A constant argument of a Medium built-in is passed to its mediump
+    /// parameter: its fp16 value. pow's expansion is High, so the constant
+    /// records Medium (every reader takes its fp16 value) and the High
+    /// expansion reads it widened. Mesa (review probe v_pow, drm-shim GLSL
+    /// IR): `pow (f2fmp a) (f2fmp (constant float (0.100000)))`; the
+    /// width branch's precrule_pow_const reads 0x3dccc000.
+    #[test]
+    fn a_constant_argument_of_a_full_width_builtin_is_its_fp16_value() {
+        let g = vs("attribute mediump vec4 q; varying highp vec4 v;\n\
+                    void main(){ gl_Position = p; v = vec4(pow(q.x, 0.1)); }");
+        let c = of(&g, |o| matches!(o, Op::ConstF32(k) if f32::from_bits(k[0]) == 0.1));
+        assert_eq!(c, [M]);
+        assert!(alu(&g, AluOp::Flog2).iter().all(|&p| p == H));
+        /* a folded argument that is no single constant: the fold is High
+         * and its fp16 rounding into the parameter has no form here */
+        let g = vs("attribute mediump vec4 q; varying highp vec4 v;\n\
+                    void main(){ gl_Position = p; v = vec4(pow(q.x, 0.05 * 3.0)); }");
+        assert_eq!(alu(&g, AluOp::Fmul).first(), Some(&Prec::Unknown), "{:?}", g.ops);
     }
 
     #[test]
