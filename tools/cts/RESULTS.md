@@ -383,45 +383,32 @@ is from the two-row set.
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 
 `panthor-gltest --sweep` on the board's own Linux (panthor, not Zephyr), the
-newest record: `tools/cts/log/2026-11-07-t6-step4a/` (board clock 2026-11-07,
-15:25 UTC; plan #309 fix-matattr-63, after the step-4 lowerings merged).
-Code: the integration tip `44f7b508` plus the record's predictions commit
-`e8199bf4`, built on the board itself (`yakogl-build=v0.1.0-479-ge8199bf`).
+newest record: `tools/cts/log/2026-11-t6-sweep-1a22bd38/` (2026-11-12).
+Code: main `1a22bd38e`, cross-built and run by
+`tools/mali/panthor/run-on-board.sh` from a detached checkout
+(`yakogl-build=v0.1.0-1005-g1a22bd38e`).
 
 | Runs | Cases | PASS | REFUSED | NO-CASE | SKIP | FAIL | FAULT | Kernel messages |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **147** | 15 | 83 | 9 | 2 | 0 | 0 |
+| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **165** | 6 | 73 | 9 | 3 | 0 | 0 |
 
-- The PASS set is the previous record's 132 (`2026-11-01-final3`) to the
-  string, plus 15, each `verdict case <n> <name>: PASS`: 46 es3size, 48
-  es3vol, 49 es3facing, 63 matattr, 68 armselect, 71 deadloop, 74 ifoutput,
-  76 boolany, 81 branchquad, 89 flatlast, 98 uniloop, 104 divloop, 141
-  es3instdiv, 142 unibranch, 148 texbranch (was REFUSED compile, or for 63,
-  98, 104 and 141 the FAIL/FAULT lines of final3). Every earlier PASS set
-  (frameboard, tip, mid, final, final3) is a subset of this one
-  (`tools/mali/sweep_passsets.py --delta tools/cts/log`: exit 0).
-- FAIL (#32): `verdict case 55 es3mrt: FAIL rc -1, first bad check -1 got
-  0x00000000 want 0x00000000` (GL error 0x500 from
-  `glFramebufferTexture2D(GL_COLOR_ATTACHMENT1)`, before any draw) and
-  `verdict case 206 es3levels: FAIL rc -1, first bad check 2 got 0x04602020
-  want 0x04602090` (3D levels 1 and 2 read level 0).
-- REFUSED, the 15 lines (#33 unless named): 19 (`REFUSED link: ... reads
-  part of a varying ... ('Tint')`), 44 and 91 (`REFUSED draw: mali: a
-  texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 ... is not built
-  yet`, #32: sampling an RGBA16F texture), 70 (a constant product), 77, 86,
-  138, 181, 182, 188, 199 (arithmetic), 80 (an indexed local), 101 (a vertex
-  look-up at a constant lane), 149 (a second vertex look-up), 218 (fp16
-  arithmetic on gl_FragCoord; a case added since final3).
-- Mesa 26.2.1 references of 63, 141, 55 and 91 on the board (record README
-  section 2): 141's Attributes and Buffers, 55's blend descriptors and FBD,
-  91's two RGBA16F blend descriptors, DCD0/DCD1 and render target are ours
-  byte for byte, the addresses and the render targets' `Surface stride`
-  aside; 63's programs are byte-equal to the in-tree references, its
-  records differ in where the column offset goes (Attribute `Offset` in
-  ours, the Buffer's address and size in Mesa's).
-- The 20 cases predicted to pass, with 80, 101 and 149, also ran twice on their own
-  (`cases-1.txt`, `cases-2.txt`, identical): `23 case(s) run: FAIL 2, PASS
-  15, REFUSED 6`.
+- The PASS set is the previous record's 161 (`2026-11-t6-sweep336`, main
+  `0decb5f7`) plus 4: 218 shadowcmp (was FAIL), 221 instmix (was REFUSED
+  compile), 224 and 225 (new cases). Every earlier PASS set is a subset of
+  this one (`tools/mali/sweep_passsets.py --delta tools/cts/log`: exit 0).
+- FAIL, 3 lines: `verdict case 206 es3levels: FAIL rc -1, first bad check 2
+  got 0x04602020 want 0x04602090` (3D levels 1 and 2 read level 0, #4350);
+  228 negapi_readpix_fmt (`first bad check -1`: integer textures and
+  multisample renderbuffers give GL error 0x502 on this back end, #4496);
+  229 tf_deleted_output (`first bad check -1`: the buffer re-created under a
+  deleted name is written by the capture, #4496 and #3889).
+- REFUSED, 6 lines: 77 transc (compile: fragment arithmetic, #33), 106 mrt3
+  (draw: several colour targets without a whole colour clear, #33), 149
+  vsunits (draw: a vertex shader that reads more than one texture, #32), 163
+  drawbuf0 (draw: first draw buffer GL_NONE, #33), 226 and 227 (compile: a
+  fragment shader that mixes highp and mediump float values, #4496).
+- Cases 223 to 229 are new in gl_test since the previous record: 223 SKIP,
+  224 and 225 PASS, 226 to 229 as above.
 
 ### Mali: NanoPC-T6 glmark2-es2 (stage 2 criterion)
 
