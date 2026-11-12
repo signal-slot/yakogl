@@ -32,6 +32,8 @@
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_shaderc_corpus
+//! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_shaderc_corpus
+//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_shaderc_corpus
 //! DEQP_GLES3_TEST_DIR=<VK-GL-CTS>/data/gles3/shaders \
 //!     cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online \
 //!     --test es3_shaderc_corpus -- --nocapture
