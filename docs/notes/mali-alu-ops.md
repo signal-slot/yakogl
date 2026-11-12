@@ -161,7 +161,7 @@ fp16: Mesa uses `.v2f16` forms there.
   `fsload_*` and case 105 references, docs/notes/mali-partial-varyings.md
   "The lanes the link keeps". pan_shc's mediump `cmp_*` compacted: its
   SPIR-V front end has no `lower_precision` (README-pan_shc.md, the
-  `mediump` gap), so those outputs are not references and are gone.
+  `mediump` gap), so those outputs are not references.
 - The vertex `fmax`/`fmin` rules of 182 (fsat) were written and dropped: the
   programs then stop at `VaryingNotFromAttribute` (the uniform-only flat
   varying, docs/notes/mali-varying-constants.md rule 3), so no byte-equal
