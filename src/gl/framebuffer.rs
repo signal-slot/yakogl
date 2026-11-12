@@ -456,6 +456,10 @@ fn integer_texture_surface(texfmt: u8) -> Option<u8> {
         GLES_TEXFMT_RGBA16UI => GLES_SURF_RGBA16UI,
         GLES_TEXFMT_RGBA32I => GLES_SURF_RGBA32I,
         GLES_TEXFMT_RGBA32UI => GLES_SURF_RGBA32UI,
+        GLES_TEXFMT_R32I => GLES_SURF_R32I,
+        GLES_TEXFMT_R32UI => GLES_SURF_R32UI,
+        GLES_TEXFMT_RG32I => GLES_SURF_RG32I,
+        GLES_TEXFMT_RG32UI => GLES_SURF_RG32UI,
         GLES_TEXFMT_RGB10A2UI => GLES_SURF_RGB10_A2UI,
         _ => return None,
     })
@@ -3858,7 +3862,20 @@ mod tests {
     use crate::testutil::{gpu_render, CacheOp, MemEvent, TestGl, HEAP_DATA};
     use std::vec::Vec;
 
-    /* ---- es3_texture_bits, the narrow classes 30-39 ---------------------------- */
+    #[test]
+    fn integer_texture_surface_has_the_32bit_r_and_rg_rows() {
+        use backend::*;
+        for (t, f) in [
+            (GLES_TEXFMT_R32I, GLES_SURF_R32I),
+            (GLES_TEXFMT_R32UI, GLES_SURF_R32UI),
+            (GLES_TEXFMT_RG32I, GLES_SURF_RG32I),
+            (GLES_TEXFMT_RG32UI, GLES_SURF_RG32UI),
+        ] {
+            assert_eq!(integer_texture_surface(t), Some(f));
+        }
+    }
+
+    /* ---- es3_texture_bits, the narrow classes 30-39---------------------------- */
 
     #[cfg(not(feature = "report-es2"))]
     fn narrow_bits(internalformat: GLenum, texfmt: u8) -> AttachmentBits {
