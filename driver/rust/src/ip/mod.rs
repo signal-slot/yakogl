@@ -13,6 +13,9 @@ pub mod cdns_dsi;
 /// D-PHY timing arithmetic, any SoC with a D-PHY transmitter.
 #[cfg(any(feature = "imx8mp", test))]
 pub mod dphy_timing;
+/// The DesignWare HDMI QP TX controller and its RK3588 GRF glue.
+#[cfg(any(feature = "rk3588", test))]
+pub mod dw_hdmi_qp;
 #[cfg(any(feature = "imx8mp", test))]
 pub mod dw_hdmi_tx;
 /// The DesignWare APB watchdog, armed by an image that no earlier stage
