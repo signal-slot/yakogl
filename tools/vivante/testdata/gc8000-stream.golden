@@ -1,0 +1,10 @@
+==== submit 0: 20 words ====
+LOAD_STATE 0x03800 GL_PIPE_SELECT                 count=1   0x00000000
+LOAD_STATE 0x01000 PS_END_PC                      count=1   0x00000007
+LOAD_STATE 0x140b8 BLT_ENABLE                     count=1   0x00000001
+DRAW_INSTANCED 0x60040001 type=4 instances=1 vertices=3 start=0
+WAIT_FENCE   0x78000002 0xffff1000
+LINK         0x40000002 0x00002000
+CALL         0x50000004 0x00003000 0x00000004 0x00004000
+END          0x10000000
+OP_0x00      0x00000000

@@ -17,6 +17,7 @@
 #   MESA_ETNA_TREE   Mesa 26.2.1 source tree (required)
 #   MESA_ETNA_BUILD  build directory for `golden` (default
 #                    $MESA_ETNA_TREE/build/mesa-etnaviv-host, then
+#                    $MESA_ETNA_TREE/build-host, then
 #                    $MESA_ETNA_TREE/build); the tree must carry
 #                    mesa-cs-golden.patch and be built as the README says
 #   CC               C compiler for cs_golden.c (default cc)
@@ -94,13 +95,13 @@ run_golden() {
 		build=$MESA_ETNA_BUILD
 		[ -d "$build" ] || gap golden "has a MESA_ETNA_BUILD that is not a directory ($build)"
 	else
-		for b in "$TREE/build/mesa-etnaviv-host" "$TREE/build"; do
+		for b in "$TREE/build/mesa-etnaviv-host" "$TREE/build-host" "$TREE/build"; do
 			if [ -d "$b" ]; then
 				build=$b
 				break
 			fi
 		done
-		[ -n "$build" ] || gap golden "has no build directory (build/mesa-etnaviv-host or build)"
+		[ -n "$build" ] || gap golden "has no build directory (build/mesa-etnaviv-host, build-host or build)"
 	fi
 
 	shim=$(find "$build" -name libetnaviv_noop_drm_shim.so -print -quit 2>/dev/null)
@@ -142,7 +143,11 @@ run_golden() {
 	[ -f "$TREE/src/etnaviv/hw/state.xml.h" ] && regs2args=(--regs2 "$TREE/src/etnaviv/hw/state.xml.h")
 	for mode in 1 8 15; do
 		for gpu in GC7000UL GCNANOULTRA31; do
+			# MESA_LOADER_DRIVER_OVERRIDE: on a host with a GPU of its own the EGL
+			# loader names that GPU's driver ("virtio_gpu: driver missing") and
+			# eglInitialize fails before the shim is asked anything.
 			env LD_PRELOAD="$shim" LD_LIBRARY_PATH="$libdirs" EGL_PLATFORM=surfaceless \
+				MESA_LOADER_DRIVER_OVERRIDE=etnaviv \
 				ETNA_SHIM_GPU="$gpu" \
 				ETNA_SHIM_CS_DUMP="$tmp/$mode.$gpu.cs" ETNA_SHIM_MEM_DUMP="$tmp/$mode.$gpu.mem" \
 				"$tmp/cs_golden" "$mode" >"$tmp/$mode.$gpu.out" 2>"$tmp/$mode.$gpu.err" || {
