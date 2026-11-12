@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 90] = [
+pub const ROWS: [(Row, &str); 92] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -196,6 +196,11 @@ pub const ROWS: [(Row, &str); 90] = [
      * `0xF0E0D0C.b22`; docs/notes/mali-derivatives.md 1) */
     (row(Alu::Fddx, 16, 1), "ddx_fine of one 16-bit lane: CLPER.i32.xor a, #1; FADD.v2f16 n, a.neg; LSHIFT_XOR.v2i16 lane_id.h00, #15, d"),
     (row(Alu::Fddy, 16, 1), "ddy_fine of one 16-bit lane: CLPER.i32.xor a, #2; FADD.v2f16 n, a.neg; LSHIFT_XOR.v2i16 (lane_id & 2).h00, #14, d"),
+    /* a mediump `normalize` and `length` (tools/mali/testdata/
+     * fsvec_normalize_mediump, fsvec_length_mediump: `FRSQ.f16 r2,
+     * r2^.h00`; `FRSQ.f16 r0, r0^.h00` then `FRCP.f16 r0, r0^.h00`) */
+    (row(Alu::Frsq, 16, 1), "nir_op_frsq of one 16-bit lane: FRSQ.f16 a.hN"),
+    (row(Alu::Frcp, 16, 1), "nir_op_frcp of one 16-bit lane: FRCP.f16 a.hN"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -266,6 +271,8 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         (Alu::Fcmp(cmpf), 16, 1 | 2) => ins(p, Op::FcmpOrV2f16 { cmpf, result: ResultType::M1 }, &[s[0], s[1], ZERO])?,
         (Alu::Fceil, 16, 1) => ins(p, Op::FroundV2f16 { round: Round::Rtp }, &[lone(s[0])])?,
         (Alu::Fmin, 16, 1) => ins(p, Op::FminV2f16, &[lone(s[0]), lone(s[1])])?,
+        (Alu::Frsq, 16, 1) => ins(p, Op::FrsqF16, &[lone(s[0])])?,
+        (Alu::Frcp, 16, 1) => ins(p, Op::FrcpF16, &[lone(s[0])])?,
         (Alu::Icmp(cmpf @ (Cmpf::Eq | Cmpf::Ne)), 32, 1) => {
             ins(p, Op::IcmpOrU32 { cmpf, result: ResultType::M1 }, &[s[0], s[1], ZERO])?
         }

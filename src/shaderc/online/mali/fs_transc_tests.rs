@@ -107,7 +107,8 @@ fn exp2_is_still_refused() {
     let e = "precision mediump float; uniform vec4 u_a; void main() \
              { gl_FragColor = vec4(sin(u_a.x), exp2(u_a.y), 0.5, 1.0); }";
     assert_eq!(verdict(e), Some(MaliError::Arithmetic));
-    /* vtransc: `inversesqrt` at fp16 (`FRSQ.f16`) has no op either */
+    /* vtransc: `inversesqrt` of a constant and of a uniform's lane (the
+     * mediump `FRSQ.f16` arm takes a computed lane only) */
     assert_eq!(verdict(VTRANSC_FS), Some(MaliError::Arithmetic));
 }
 

@@ -2073,6 +2073,7 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.extend(UNIARRAY_POPULATION.iter().map(|c| c.2));
     srcs.extend(ALU_POPULATION.iter().map(|c| c.2));
     srcs.extend(DERIV_POPULATION.iter().map(|c| c.2));
+    srcs.extend(FSVEC_POPULATION.iter().map(|c| c.2));
     /* locals at a run-time index, case 80 (the store tree's `inot`) */
     srcs.extend(INDEXLOCAL_POPULATION.iter().map(|c| c.2));
     /* gl_FragCoord by precision class, case 192's uniform twin and the
@@ -4648,6 +4649,54 @@ fn the_alu_population_is_byte_equal_to_mesa_26_2_1() {
     }
     let f = compile(SHC_STAGE_FRAGMENT, td!("alu_branchlane.frag")).expect("alu_branchlane.frag compiles");
     assert!(f.info.can_discard);
+}
+
+/* ---- fragment vector built-ins (docs/notes/mali-fs-vector-builtins.md) -- */
+
+/// The vector built-ins of a fragment shader, each drawn on the shim with
+/// `--uniform-values` (name, VS, FS, expect.json; the note's sha256 table
+/// pins the words): `length` and `normalize` at both precisions, the
+/// mediump ones a dot product of fp16 lanes, `FRSQ.f16` and `FRCP.f16`.
+const FSVEC_POPULATION: [(&str, &str, &str, &str); 4] = [
+    (
+        "fsvec_length_highp",
+        td!("fsvec_length_highp.vert"),
+        td!("fsvec_length_highp.frag"),
+        td!("fsvec_length_highp.expect.json"),
+    ),
+    (
+        "fsvec_length_mediump",
+        td!("fsvec_length_mediump.vert"),
+        td!("fsvec_length_mediump.frag"),
+        td!("fsvec_length_mediump.expect.json"),
+    ),
+    (
+        "fsvec_normalize_highp",
+        td!("fsvec_normalize_highp.vert"),
+        td!("fsvec_normalize_highp.frag"),
+        td!("fsvec_normalize_highp.expect.json"),
+    ),
+    (
+        "fsvec_normalize_mediump",
+        td!("fsvec_normalize_mediump.vert"),
+        td!("fsvec_normalize_mediump.frag"),
+        td!("fsvec_normalize_mediump.expect.json"),
+    ),
+];
+
+/// Every program of [`FSVEC_POPULATION`] is the shim's to the byte: both
+/// vertex programs, the fragment program, the FAU words (`u` is (16, 17,
+/// 18, 19)) and the register counts.
+#[test]
+fn the_fsvec_population_is_byte_equal_to_mesa_26_2_1() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in FSVEC_POPULATION {
+        if let Err(e) = std::panic::catch_unwind(|| check_program(vs, fs, json)) {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), FSVEC_POPULATION.len(), failed.join("\n"));
 }
 
 /* ---- derivatives (plan #336 fs-deriv, docs/notes/mali-derivatives.md) -- */

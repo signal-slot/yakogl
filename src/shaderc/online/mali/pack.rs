@@ -528,6 +528,20 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             fsrc(&mut f, i, 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
+        /* the fp16 forms read one lane of the source (`lane0`, no widen).
+         * Only the low half: Mesa packs a high half as the 2-bit swizzle
+         * h11 (fsarith_77_vtransc's `FRSQ.f16 r2, u2.w1.h11`, bits 28-29
+         * set), which the table's 1-bit `lane0` cannot write */
+        Op::FrcpF16 | Op::FrsqF16 => {
+            f = Fill::new(if i.op == Op::FrcpF16 { IsaOp::FrcpF16 } else { IsaOp::FrsqF16 });
+            let x = &i.src[0];
+            if x.swz != Swz::H00 {
+                return Err(MaliError::Defect(Defect::Operand));
+            }
+            f.put("src0", src_byte(x)?)?.put("lane0", 0)?;
+            f.put("neg0", x.neg as u32)?.put("abs0", x.abs as u32)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
         Op::FmaxF32 | Op::FminF32 => {
             f = Fill::new(if i.op == Op::FmaxF32 { IsaOp::FmaxF32 } else { IsaOp::FminF32 });
             for s in 0..2 {
