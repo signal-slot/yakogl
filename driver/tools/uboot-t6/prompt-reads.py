@@ -37,11 +37,13 @@ Reads only. allowed() is the whole list of what can be entered: `md.l`,
 no environment save, no storage write and no regulator command in it, and
 allowed() takes one command per line (no `;`, no `&&`).
 
-Two steps depend on what was read before them:
+Three steps depend on what was read before them:
 
   - The QoS words of the GPU sit behind PD_GPU, and reading an unpowered
     domain's block can fault the bus. They are read only when the PMU says
     the domain is on (PWR_GATE bit 0 clear and REPAIR_STATUS bit 1 set).
+  - WDT0's words are read only when CLKGATE_CON(15) says both its gates
+    are open: a read of a block whose clock is gated can hang the bus.
   - `pmic dump` is entered only when `dm tree` shows the RK806 probed
     already ("+"): U-Boot's probe of it writes SYS_CFG3, and this run must
     not be the one that causes a probe.
@@ -74,6 +76,13 @@ TRIES = 3
 PMU = 0xFD8D8000
 PWR_GATE, IDLE_REQ, IDLE_ACK, IDLE_ST, REPAIR_ST = 0x14C, 0x10C, 0x118, 0x120, 0x290
 QOS_BLOCKS = (0xFDF35000, 0xFDF35200, 0xFDF35400, 0xFDF35600)
+# WDT0, the watchdog the image arms itself (section 6): its two gates,
+# PCLK_WDT0 and TCLK_WDT0, are CLKGATE_CON(15) bits 0 and 1 (soc::rk3588);
+# the CRU's global reset status and configuration, GLB_RST_ST and
+# GLB_RST_CON (nanopc-t6.sh reads them under Linux before and after a run).
+CLKGATE_CON15 = 0xFD7C083C
+GLB_RST_ST, GLB_RST_CON = 0xFD7C0C04, 0xFD7C0C10
+WDT0 = 0xFEAF0000
 
 ALLOWED = re.compile(
     r"(?:version|help|printenv|bdinfo|dm tree|clk dump|wdt list"
@@ -117,6 +126,10 @@ def first_commands():
         md(0xFD7C0280),
         md(0xFD7C01A0, 7),
         md(0xFD7C01C0, 7),
+        # WDT0's gates and the global reset words.
+        md(CLKGATE_CON15),
+        md(GLB_RST_ST),
+        md(GLB_RST_CON),
         "clk dump",
         "wdt list",
         # The eMMC is mmc 0 (U-Boot's own "MMC:" line; `mmc list` shows it
@@ -154,9 +167,22 @@ def probed_pmic(dm_tree):
     return None
 
 
+def wdt0_clocked(answers):
+    """True only when CLKGATE_CON(15) was read with both WDT0 gates open."""
+    w = md_word(answers.get(md(CLKGATE_CON15), ""), CLKGATE_CON15)
+    return w is not None and w & 3 == 0
+
+
 def later_commands(answers):
     """The commands that depend on the answers so far, and why/why not."""
     cmds, notes = [], []
+    if wdt0_clocked(answers):
+        # WDT_CR and WDT_TORR, then COMP_PARAM_1, COMP_VERSION and COMP_TYPE.
+        # Never WDT_EOI (+0x14): a read of it clears the interrupt.
+        notes.append("WDT0's gates read open: WDT0's control and identity words are read")
+        cmds += [md(WDT0, 2), md(WDT0 + 0xF4, 3)]
+    else:
+        notes.append("WDT0's gates do not read open: WDT0 is not read")
     if pd_gpu_on(answers):
         notes.append("PD_GPU reads on: the GPU QoS words are read")
         for base in QOS_BLOCKS:
@@ -251,9 +277,14 @@ def clean(b):
     return s.replace("\r", "")
 
 
-def enter(con, cmd, timeout):
-    """Type cmd, compare the echo, enter it, return its output."""
-    if not allowed(cmd):
+def enter(con, cmd, timeout, ok=allowed, wait=True):
+    """Type cmd, compare the echo, enter it, return its output.
+
+    ok decides what may be typed (prompt-go.py passes its own list). With
+    wait False nothing is read after the Enter (`go`: from then on the
+    image owns the UART).
+    """
+    if not ok(cmd):
         raise Stop(5, "not in the allowed list, not typed: %r" % cmd)
     line = cmd.encode("ascii")
     for attempt in range(1, TRIES + 1):
@@ -276,7 +307,7 @@ def enter(con, cmd, timeout):
             raise Stop(5, "no prompt after ctrl-c on %r" % cmd)
     con.buf = b""
     con.write(b"\r")
-    if cmd == "reset":
+    if cmd == "reset" or not wait:
         return ""
     if not con.wait_prompt(timeout):
         if con.kernel:
@@ -401,6 +432,11 @@ class FakeBoard(threading.Thread):
         while time.monotonic() < end:
             self.shell += self.key(0.1)
 
+    def after_enter(self, cmd):
+        """A subclass plays what follows cmd itself and returns True (the
+        prompt loop ends); here every command is answered at the prompt."""
+        return False
+
     def answer(self, cmd):
         if cmd.startswith("md.l "):
             _, a, n = cmd.split()
@@ -444,6 +480,8 @@ class FakeBoard(threading.Thread):
                         self.out("\x1b[2KHit any key to stop autoboot:  1 ")
                         self.key(0.3)
                         self.linux()
+                        return
+                    if self.after_enter(cmd):
                         return
                     if self.mode == "hang" and cmd == "bdinfo":
                         continue
@@ -503,7 +541,8 @@ def self_test():
 
     # 1. The whole run, PD_GPU off, the pmic probed.
     rc, f, files = case()
-    want = first_commands() + ["pmic list", "pmic dev pmic@0", "pmic dump", "reset"]
+    wdt = [md(WDT0, 2), md(WDT0 + 0xF4, 3)]
+    want = first_commands() + wdt + ["pmic list", "pmic dev pmic@0", "pmic dump", "reset"]
     check(rc == 0, "ok: exit 0 (got %d)" % rc)
     check(f.entered == want, "ok: U-Boot was given exactly the plan, reset last (%r)" % f.entered[-4:])
     check(f.got.startswith(b" version\r"), "ok: the first byte written is the one space")
@@ -519,6 +558,15 @@ def self_test():
     rc, f, _ = case(words=PMU_ON)
     qos = [c for c in f.entered if c.startswith("md.l 0xfdf35")]
     check(rc == 0 and qos == [md(b + 8, 5) for b in QOS_BLOCKS], "PD_GPU on: the QoS words are read (%r)" % qos)
+
+    # 2b. WDT0's gates: read open (the fake's 0), the block is read after the
+    # gate word; either gate closed, it is not read at all.
+    rc, f, _ = case()
+    check(f.entered.index(md(WDT0, 2)) > f.entered.index(md(CLKGATE_CON15)), "WDT0 open: read after its gate word")
+    for gate in (1, 2, 3):
+        rc, f, _ = case(words={**PMU_OFF, CLKGATE_CON15: gate})
+        check(rc == 0 and not any(c.startswith("md.l 0xfeaf") for c in f.entered),
+              "WDT0 gate word %#x: WDT0 is not read" % gate)
 
     # 3. The pmic not probed: no pmic command at all.
     rc, f, _ = case(dm=DM_UNPROBED)
@@ -579,7 +627,7 @@ def self_test():
     check(probed_pmic(" pmic          0  [ + ]   rk8xx   `-- a;reset\n") is None,
           "probed_pmic: a name that would not be an allowed command is not used")
 
-    planned = 97
+    planned = 104
     print("prompt-reads self-test: %d checks run (planned %d), %d failed" % (count[0], planned, len(failed)))
     return 0 if not failed and count[0] == planned else 1
 
@@ -589,6 +637,7 @@ def main(argv):
         return self_test()
     if argv[1:] == ["plan"]:
         print("\n".join(first_commands()))
+        print("# then, if CLKGATE_CON(15) reads both WDT0 gates open: %s; %s" % (md(WDT0, 2), md(WDT0 + 0xF4, 3)))
         print("# then, if PD_GPU reads on: " + "; ".join(md(b + 8, 5) for b in QOS_BLOCKS))
         print("# then, if dm tree shows the pmic probed: pmic list; pmic dev <its name>; pmic dump")
         print("reset")
