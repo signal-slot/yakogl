@@ -29,7 +29,7 @@
 use super::power::{self, Config, Level, Status, Step};
 use super::rcc::GpuRcc;
 use crate::env::{Env, Level as LogLevel};
-use crate::errno::{EFAULT, EIO, ENODEV, ENOTSUP, ETIMEDOUT};
+use crate::errno::{EFAULT, EINVAL, EIO, ENODEV, ENOTSUP, ETIMEDOUT};
 use crate::firmware::optee::{self, Client, Event, Shm, Smc};
 use crate::gpu::vivante::hw;
 use crate::gpu::vivante::regs::VIVS_HI_INTR_ENBL;
@@ -417,6 +417,12 @@ pub fn power_on_with<S: Smc, R: Mmio, G: Mmio>(
     out: &mut YdMp2GpuUp,
 ) -> i32 {
     *out = YdMp2GpuUp::default();
+    if channel != power::SCMI_CHANNEL {
+        log.fmt(format_args!("optee channel {} refused: only {} carries the GPU", channel, power::SCMI_CHANNEL));
+        let a = optee::Error::Unsupported.code() as u32;
+        out.err = YdMp2GpuErr { kind: YD_MP2_GPU_ERR_OPTEE, step: YD_MP2_GPU_OPTEE_OPEN, a, b: channel };
+        return -EINVAL;
+    }
     let mut c = Client::new(LoggedSmc { smc, log }, shm, shm_pa);
     if let Err(e) = c.open(0, channel) {
         log.fmt(format_args!("optee open failed: {:?} (code {})", e, e.code()));
@@ -568,7 +574,6 @@ pub fn reset_idle_with<R: Mmio, G: Mmio>(
 #[cfg(target_arch = "aarch64")]
 mod abi {
     use super::*;
-    use crate::errno::EINVAL;
     use crate::firmware::optee::HwSmc;
     use crate::mmio::Hw;
 
@@ -1078,6 +1083,21 @@ mod tests {
         );
         assert_eq!(bus.events(), smc_evs(&["exchange_capabilities", "register_shm", "open_session", "unregister_shm"]));
         assert!(lines.iter().any(|l| l.starts_with("optee open failed: Tee")));
+    }
+
+    #[test]
+    fn power_on_refuses_another_channel_before_any_smc() {
+        // Channel 1 is the Cortex-M33's SMT mailbox (mod_optee_mbx.c:88-89).
+        let bus = Bus::new(0, &[]);
+        let mut lines = vec![];
+        let mut out = YdMp2GpuUp::default();
+        let smc = FakeSmc { script: VecDeque::new(), ev: bus.ev.clone(), rest: Rc::default() };
+        let mut shm = Box::new(Shm::new());
+        let rc = power_on_with(smc, &mut shm, PA, 1, &bus, RCC_BASE, &bus, GPU_BASE, 0, clog(&mut lines), &mut out);
+        assert_eq!(rc, -EINVAL);
+        assert_eq!(out.err, YdMp2GpuErr { kind: YD_MP2_GPU_ERR_OPTEE, step: YD_MP2_GPU_OPTEE_OPEN, a: 0x101, b: 1 });
+        assert!(bus.events().is_empty());
+        assert_eq!(lines, ["optee channel 1 refused: only 0 carries the GPU"]);
     }
 
     #[test]

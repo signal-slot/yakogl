@@ -33,8 +33,9 @@ const UP: [(&str, &str); 7] = [
     ("req_pd_state_get_on", "rep_pd_state_get_on"),
 ];
 /// The power-down's.
-const DOWN: [(&str, &str); 3] = [
+const DOWN: [(&str, &str); 4] = [
     ("req_pd_protocol_version", "rep_pd_protocol_version"),
+    ("req_pd_state_get_on", "rep_pd_state_get_on"),
     ("req_pd_state_set_off", "rep_pd_state_set_off"),
     ("req_pd_state_get_off", "rep_pd_state_get_off"),
 ];
@@ -181,7 +182,25 @@ fn power_down_messages_are_pinned_byte_for_byte() {
     down(&m, &mut Lines::default()).unwrap();
     let want: Vec<(Vec<u8>, Vec<u8>)> = DOWN.iter().map(|(q, p)| (vector(q), vector(p))).collect();
     assert_eq!(m.messages(), want);
-    assert_eq!(to_hex(&m.messages()[1].0), "04440400000000000000000000000040");
+    assert_eq!(to_hex(&m.messages()[1].0), "0544040000000000");
+    assert_eq!(to_hex(&m.messages()[2].0), "04440400000000000000000000000040");
+}
+
+#[test]
+fn power_down_of_a_domain_already_off_sends_no_set() {
+    // The domain reads off (here: never switched on): no POWER_STATE_SET,
+    // which ST's driver leaves unanswered after a failed ON
+    // (mod_stm32_pd.c:63-65).
+    let m = Mp2Model::new();
+    let mut log = Lines::default();
+    down(&m, &mut log).unwrap();
+    let want = vec![
+        (vector("req_pd_protocol_version"), vector("rep_pd_protocol_version")),
+        (vector("req_pd_state_get_off"), vector("rep_pd_state_get_off")),
+    ];
+    assert_eq!(m.messages(), want);
+    assert_eq!(log.0.last().unwrap(), "power domain 0 already off");
+    assert_eq!(m.faults(), vec![]);
 }
 
 #[test]
@@ -287,7 +306,7 @@ fn power_down_after_power_up_is_the_reverse() {
     let last_rcc = ev.iter().rposition(|e| matches!(e, Event::RccR(..) | Event::RccW(..))).unwrap();
     let first_scmi = ev.iter().position(|e| matches!(e, Event::Scmi { .. })).unwrap();
     assert!(last_rcc < first_scmi);
-    assert_eq!(m.messages().len(), 3);
+    assert_eq!(m.messages().len(), DOWN.len());
     assert!(ev.iter().all(|e| !matches!(e, Event::GpuR(..) | Event::GpuW(..))));
     // And a second power-up works from there.
     m.clear_log();
@@ -300,13 +319,14 @@ fn power_down_after_power_up_is_the_reverse() {
 #[test]
 fn power_down_failure_keeps_the_gate_off_and_the_domain_on() {
     // The RCC step comes first, so the clock is gated whatever SCMI answers;
-    // the domain is left as the failed step found it (the set of step 1 is
-    // refused, so it stays on; the read-back of step 2 follows a set that
-    // went through, so it is off).
+    // the domain is left as the failed step found it (the read of step 1 and
+    // the set of step 2 are refused, so it stays on; the read-back of step 3
+    // follows a set that went through, so it is off).
     let steps = [
         (0, Step::PowerVersion, (0x11, 0), true),
-        (1, Step::PowerOff, (0x11, 4), true),
-        (2, Step::PowerOffCheck, (0x11, 5), false),
+        (1, Step::PowerOffCheck, (0x11, 5), true),
+        (2, Step::PowerOff, (0x11, 4), true),
+        (3, Step::PowerOffCheck, (0x11, 5), false),
     ];
     for (at, step, id, on) in steps {
         let m = Mp2Model::new();
