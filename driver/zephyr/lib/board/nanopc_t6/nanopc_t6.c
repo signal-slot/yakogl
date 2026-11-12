@@ -16,34 +16,42 @@
  *     CONFIG_YAKOGL_NANOPC_T6_VHE_EXIT writes HCR_EL2 = RW only before
  *     Zephyr's z_arm64_el2_init reads it (Linux's VHE kexec leaves E2H set;
  *     driver/rust/src/aarch64.rs).
- *   z_arm64_el1_plat_init, the end of z_arm64_el1_init (MMU off): T6:A1.
- *   The pre-arm window, before WDT0 is armed by this image: reset.S (EL2
- *   to EL1), z_prep_c (BSS zero, data copy, z_arm64_mm_init: the MMU tables
- *   for the image and the board's regions, z_arm64_interrupt_init), z_cstart up to
- *   PRE_KERNEL_1 (the EARLY hook below, arch_kernel_init, the device
- *   states, the SoC and board early hooks), then t6_wdt_arm itself up to
- *   its arming write, including its two device_map() calls. t6_wdt_arm is
- *   the first PRE_KERNEL_1 hook (the gate row checks it in t6_hello's
- *   ELF). This is straight-line code with no wait on a device, and its
- *   length is not measured; but a fault in it halts the CPU for good: an
- *   exception, or the k_panic() in the arm64 MMU code when the
- *   CONFIG_MAX_XLAT_TABLES (8) tables run out, which device_map() can
- *   reach too. Nothing of the image's own covers that. Linux's dw_wdt
- *   does, opt-in: nanopc-t6.sh --go --linux-wdt opens /dev/watchdog0 in
- *   the jump's own ssh command, so WDT0 is running with Linux's period
- *   (44.7 s from the open) when the image starts, and t6_wdt_arm re-arms
- *   it ("was running").
+ *   z_arm64_el1_plat_init, the end of z_arm64_el1_init (EL1, MMU off): T6:A1,
+ *     T6:A2, WDT0 armed (yd_t6_early_arm on the physical addresses; T6:A3
+ *     with its result). A WDT0 that is already running is re-TOPped and
+ *     restarted, never stopped. reset.S calls z_arm64_el1_init (which calls
+ *     this hook last) before it returns into z_prep_c, z_prep_c calls
+ *     z_cstart, z_cstart runs EARLY to PRE_KERNEL_2 and starts the thread
+ *     that runs the rest (zephyr af17c0c8 arch/arm64/core/reset.S:248-257,
+ *     reset.c:315, prep_c.c:34-50, kernel/init.c:541-578 and 274-318): so
+ *     WDT0 is armed before every init hook of every level, by the code's
+ *     order and not by the linker's.
+ *     A SYS_INIT hook cannot promise that: priority 0 is the lowest there is
+ *     (include/zephyr/init.h:44), and hooks of one level and priority run in
+ *     link order (the linker script sorts the sections by name only,
+ *     include/zephyr/linker/linker-defs.h:70-73, and they share one name);
+ *     with CONFIG_POSIX_API four POSIX hooks at PRE_KERNEL_1 0 ran before
+ *     the arming when it was one. check_early_hooks.cmake, run after every
+ *     link, fails the build unless this hook is ours and calls the arming,
+ *     and unless the code it reaches calls no memset/memcpy (below).
+ *     The arming results go to s_arm and s_arm_rc, which are __noinit: the
+ *     BSS that z_prep_c zeroes afterwards does not hold them.
+ *   The pre-arm window, before WDT0 is armed by this image: reset.S up to
+ *   the hook above, z_arm64_el2_init and z_arm64_el1_init, and the T6:A
+ *   code: register writes and uart2, no wait on a device, no memory but the
+ *   stack. A fault in it halts the CPU for good (T6:X at EL2), and nothing
+ *   of the image's own covers that. Linux's dw_wdt does, opt-in:
+ *   nanopc-t6.sh --go --linux-wdt opens /dev/watchdog0 in the jump's own ssh
+ *   command, so WDT0 is running with Linux's period (44.7 s from the open)
+ *   when the image starts, and the arming re-arms it ("was running").
  *   EARLY: the GICv3 CPU interface back to EOImode 0 (Linux left it in split
  *     mode; with it, the system timer would tick once).
- *   PRE_KERNEL_1 0: map uart2 (T6:A2), WDT0 and the CRU, arm WDT0
- *     (yd_dw_wdt_arm; T6:A3 with its result). A WDT0 that is already running
- *     is re-TOPped and restarted, never stopped.
- *   PRE_KERNEL_1 99 (after the early console at 60): T6:B through the
- *     console, the marker and what the arming found, T6:C once WDT0 is
- *     armed; if it refused, say why and reset the SoC through
- *     PSCI at once: an image without its watchdog must not run. If PSCI
- *     returns, arm once more with TOP 15 and wait for it; if that refuses
- *     too, the board stays halted until its power is cut.
+ *   PRE_KERNEL_1 99 (after the early console at 60): map WDT0 and the CRU
+ *     for the feeder; T6:B through the console, the marker and what the
+ *     arming found, T6:C once WDT0 is armed; if it refused, say why and
+ *     reset the SoC through PSCI at once: an image without its watchdog must
+ *     not run. If PSCI returns, arm once more with TOP 15 and wait for it; if
+ *     that refuses too, the board stays halted until its power is cut.
  *   POST_KERNEL 0: a 1 s timer feeds WDT0 while yd_t6_feed_verdict() says
  *     so: before CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S of uptime, and while the
  *     sample's t6_watchdog_feed() calls come at most
@@ -62,6 +70,7 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/kernel/mm.h>
+#include <zephyr/linker/section_tags.h>
 
 #include <yakogl_drivers.h>
 
@@ -86,6 +95,8 @@ BUILD_ASSERT(DT_SAME_NODE(DT_CHOSEN(zephyr_console), UART2_NODE),
 	     "T6:B goes through the console, uart2 like the raw lines");
 BUILD_ASSERT(CONFIG_YAKOGL_NANOPC_T6_ALIVE_S < CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S,
 	     "the alive window is inside the lifetime");
+BUILD_ASSERT(CONFIG_MP_MAX_NUM_CPUS == 1,
+	     "z_arm64_el1_plat_init runs on every CPU that boots; WDT0 is armed there once");
 /* k_mem_map's (and so device_map's) free virtual range runs from the
  * image's end to KERNEL_VM_BASE + KERNEL_VM_SIZE; the image may fill
  * zephyr,sram, so the virtual space must reach past it, or the mappings land
@@ -142,19 +153,26 @@ __asm__(".pushsection .text.t6_plat_prep_c, \"ax\"\n"
 	".size z_arm64_el1_plat_prep_c, . - z_arm64_el1_plat_prep_c\n"
 	".popsection\n");
 
-/* Weak in Zephyr's arch/arm64/core/reset.c; called at the end of
- * z_arm64_el1_init, MMU off. */
+static mm_reg_t s_wdt;
+static mm_reg_t s_cru;
+/* Written by the arming below with the MMU off, before z_prep_c zeroes the
+ * BSS: so not in the BSS. */
+static __noinit struct yd_dw_wdt_arm s_arm;
+static __noinit int s_arm_rc;
+
+/*
+ * The arming (nanopc_t6.c, "Order"). Weak in Zephyr's arch/arm64/core/
+ * reset.c; called at the end of z_arm64_el1_init, MMU off: every access is
+ * to Device memory, where the dc zva of a memset or an unaligned access
+ * faults. yd_t6_early_arm writes its record one field at a time, and
+ * check_early_hooks.cmake fails the build if anything this function reaches
+ * calls memset, memcpy, memmove or an address in a register.
+ */
 void z_arm64_el1_plat_init(void);
 void z_arm64_el1_plat_init(void)
 {
-	yd_t6_early_el1();
+	s_arm_rc = yd_t6_early_arm(WDT0_PHYS, CRU_PHYS, CONFIG_YAKOGL_NANOPC_T6_WDT_TOP, &s_arm);
 }
-
-static mm_reg_t s_uart;
-static mm_reg_t s_wdt;
-static mm_reg_t s_cru;
-static struct yd_dw_wdt_arm s_arm;
-static int s_arm_rc = -1;
 static uint64_t s_icc_ctlr_found;
 static volatile int64_t s_alive_ms = -1;
 static volatile bool s_released;
@@ -222,20 +240,11 @@ static int t6_gic_eoi_reset(void)
 }
 SYS_INIT(t6_gic_eoi_reset, EARLY, 0);
 
-static int t6_wdt_arm(void)
-{
-	device_map(&s_uart, UART2_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	yd_t6_banner_a2(s_uart);
-	device_map(&s_wdt, WDT0_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&s_cru, CRU_PHYS, CRU_MAP, K_MEM_CACHE_NONE);
-	s_arm_rc = yd_dw_wdt_arm(s_wdt, s_cru, CONFIG_YAKOGL_NANOPC_T6_WDT_TOP, &s_arm);
-	yd_t6_banner_a3(s_uart, s_arm_rc, s_arm.cr_now, s_arm.period_ms);
-	return 0;
-}
-SYS_INIT(t6_wdt_arm, PRE_KERNEL_1, 0);
-
 static int t6_wdt_report(void)
 {
+	/* For the feeder and the second arming; WDT0 already runs. */
+	device_map(&s_wdt, WDT0_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&s_cru, CRU_PHYS, CRU_MAP, K_MEM_CACHE_NONE);
 	printk("T6:B console up (uart2 through the ns16550 driver)\n");
 	printk("%s\n", t6_marker);
 	if (s_icc_ctlr_found != 0) {
@@ -311,7 +320,8 @@ static K_TIMER_DEFINE(s_feeder, feed_tick, NULL);
 static int t6_wdt_feed_start(void)
 {
 #ifdef CONFIG_YAKOGL_NANOPC_T6_WDT_PROOF
-	/* Armed at uptime 0 (PRE_KERNEL_1, before the system timer runs). */
+	/* Armed before uptime 0 (before z_prep_c, so before the system timer
+	 * runs): the backstop fires after WDT0 would have. */
 	k_timer_start(&s_backstop, K_MSEC(s_arm.period_ms + PROOF_BACKSTOP_EXTRA_MS), K_NO_WAIT);
 #else
 	k_timer_start(&s_feeder, K_SECONDS(1), K_SECONDS(1));

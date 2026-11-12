@@ -58,58 +58,79 @@ const _: () = assert!(offset_of!(YdDwWdtArm, period_ms) == 40);
 /// Open WDT0's two CRU gates (the APB clock first: the block's registers
 /// need it), then [`dw_wdt::arm`] with `top` on xin24m. 0, `-EIO` when the
 /// arming refused (the reason in `out.refusal`).
+///
+/// `out` is written one field at a time, each a volatile 32-bit store, never
+/// as a whole: this also runs with the MMU off (`yd_t6_early_arm`), where
+/// every access is to Device memory, and a whole-struct store may become a
+/// `memset` or `memcpy` call, whose `dc zva` or unaligned accesses fault
+/// there.
 pub fn dw_wdt_arm_with(m: &impl Mmio, wdt_base: usize, cru_base: usize, top: u8, out: &mut YdDwWdtArm) -> i32 {
-    *out = YdDwWdtArm::default();
+    fn set(field: &mut u32, v: u32) {
+        // SAFETY: a valid, aligned u32.
+        unsafe { core::ptr::write_volatile(field, v) }
+    }
+    set(&mut out.comp_type, 0);
+    set(&mut out.param1, 0);
+    set(&mut out.version, 0);
+    set(&mut out.cr_found, 0);
+    set(&mut out.torr_found, 0);
+    set(&mut out.cr_now, 0);
+    set(&mut out.torr_now, 0);
+    set(&mut out.ccvr_now, 0);
+    set(&mut out.flags, 0);
+    set(&mut out.refusal, 0);
+    set(&mut out.period_ms, 0);
+    let mut flags = 0;
     for (gate, flag) in [(rk3588::PCLK_WDT0, YD_DW_WDT_PCLK_OPENED), (rk3588::TCLK_WDT0, YD_DW_WDT_TCLK_OPENED)] {
         match rk3588::gate_open(m, cru_base, gate) {
-            Ok(true) => out.flags |= flag,
+            Ok(true) => flags |= flag,
             Ok(false) => {}
             Err(now) => {
-                out.cr_now = now;
-                out.refusal = YD_DW_WDT_REFUSED_GATE;
+                set(&mut out.flags, flags);
+                set(&mut out.cr_now, now);
+                set(&mut out.refusal, YD_DW_WDT_REFUSED_GATE);
                 return -EIO;
             }
         }
     }
     match dw_wdt::arm(m, wdt_base, top, rk3588::TCLK_WDT0_HZ) {
         Ok(Armed { cr_found, torr_found, param1, version, cr_now, torr_now, ccvr_now, was_running, period_ms }) => {
-            out.comp_type = dw_wdt::COMP_TYPE_VALUE;
-            out.param1 = param1;
-            out.version = version;
-            out.cr_found = cr_found;
-            out.torr_found = torr_found;
-            out.cr_now = cr_now;
-            out.torr_now = torr_now;
-            out.ccvr_now = ccvr_now;
+            set(&mut out.comp_type, dw_wdt::COMP_TYPE_VALUE);
+            set(&mut out.param1, param1);
+            set(&mut out.version, version);
+            set(&mut out.cr_found, cr_found);
+            set(&mut out.torr_found, torr_found);
+            set(&mut out.cr_now, cr_now);
+            set(&mut out.torr_now, torr_now);
+            set(&mut out.ccvr_now, ccvr_now);
             if was_running {
-                out.flags |= YD_DW_WDT_WAS_RUNNING;
+                flags |= YD_DW_WDT_WAS_RUNNING;
             }
-            out.period_ms = period_ms;
+            set(&mut out.flags, flags);
+            set(&mut out.period_ms, period_ms);
             0
         }
         Err(Refused { why, comp_type, param1, cr_found, torr_found, read_back }) => {
-            out.comp_type = comp_type;
-            out.param1 = param1;
-            out.cr_found = cr_found;
-            out.torr_found = torr_found;
-            out.cr_now = read_back;
+            set(&mut out.comp_type, comp_type);
+            set(&mut out.param1, param1);
+            set(&mut out.cr_found, cr_found);
+            set(&mut out.torr_found, torr_found);
+            set(&mut out.cr_now, read_back);
             if cr_found & dw_wdt::cr::WDT_EN != 0 {
-                out.flags |= YD_DW_WDT_WAS_RUNNING;
+                flags |= YD_DW_WDT_WAS_RUNNING;
             }
-            out.refusal = why as u32;
+            set(&mut out.flags, flags);
+            set(&mut out.refusal, why as u32);
             -EIO
         }
     }
 }
 
-/// Arm WDT0 (`wdt_base`, the shim's `device_map()` of 0xfeaf0000) for the
-/// period of `top` (0..=15: 2^(16 + top) cycles of 24 MHz), through the CRU
-/// at `cru_base` (its mapping of 0xfd7c0000, at least 0x1000 bytes).
+/// [`dw_wdt_arm_with`] after the argument checks of [`yd_dw_wdt_arm`].
 ///
 /// # Safety
-/// Both bases are mapped device memory covering the blocks; `out` is valid.
-#[no_mangle]
-pub unsafe extern "C" fn yd_dw_wdt_arm(wdt_base: usize, cru_base: usize, top: u32, out: *mut YdDwWdtArm) -> i32 {
+/// Both bases address the blocks as device memory; `out` is null or valid.
+unsafe fn dw_wdt_arm_checked(wdt_base: usize, cru_base: usize, top: u32, out: *mut YdDwWdtArm) -> i32 {
     if out.is_null() || top > u32::from(dw_wdt::TOP_MAX) {
         return -EINVAL;
     }
@@ -117,6 +138,20 @@ pub unsafe extern "C" fn yd_dw_wdt_arm(wdt_base: usize, cru_base: usize, top: u3
     let hw = unsafe { Hw::new() };
     // SAFETY: the caller's contract.
     unsafe { dw_wdt_arm_with(&hw, wdt_base, cru_base, top as u8, &mut *out) }
+}
+
+/// Arm WDT0 (`wdt_base`, the shim's `device_map()` of 0xfeaf0000) for the
+/// period of `top` (0..=15: 2^(16 + top) cycles of 24 MHz), through the CRU
+/// at `cru_base` (its mapping of 0xfd7c0000, at least 0x1000 bytes). The
+/// image's own arming is `yd_t6_early_arm`; this is the glue's second try
+/// after a refusal.
+///
+/// # Safety
+/// Both bases are mapped device memory covering the blocks; `out` is valid.
+#[no_mangle]
+pub unsafe extern "C" fn yd_dw_wdt_arm(wdt_base: usize, cru_base: usize, top: u32, out: *mut YdDwWdtArm) -> i32 {
+    // SAFETY: the caller's contract.
+    unsafe { dw_wdt_arm_checked(wdt_base, cru_base, top, out) }
 }
 
 /// Restart WDT0's counter.
@@ -190,8 +225,12 @@ pub const YD_T6_EARLY_VHE_EXIT: u64 = 1 << 0;
 /// `yd_t6_el2_vectors` is the EL2 vector table [`yd_t6_early_c`] installs:
 /// every one of the 16 entries passes its offset to [`yd_t6_el2_trap`] on a
 /// stack of its own and never returns.
+///
+/// [`yd_t6_early_arm`] is the image's WDT0 arming, from Zephyr's
+/// `z_arm64_el1_plat_init`, MMU off: before `z_prep_c` and every init hook.
 #[cfg(target_arch = "aarch64")]
 mod early {
+    use super::YdDwWdtArm;
     use crate::aarch64;
     use crate::board::nanopc_t6_early::{self as banner, El2Entry, El2Trap, UART2_PHYS};
     use crate::ip::ns16550_tx::Tx;
@@ -323,38 +362,40 @@ mod early {
         }
     }
 
-    /// `T6:A1`, from Zephyr's `z_arm64_el1_plat_init` (the end of
-    /// `z_arm64_el1_init`).
+    /// `T6:A1`, `T6:A2`, [`super::yd_dw_wdt_arm`] on WDT0 and the CRU at
+    /// their physical bases `wdt_phys` and `cru_phys`, `T6:A3`:
+    /// from Zephyr's `z_arm64_el1_plat_init`, the end of `z_arm64_el1_init`,
+    /// which reset.S runs before `z_prep_c` and so before every init hook of
+    /// every level (nanopc_t6.c, "Order"). Returns what `yd_dw_wdt_arm`
+    /// would; `out` gets the record.
     ///
     /// # Safety
-    /// At EL1 with the MMU off (before `z_prep_c`).
+    /// At EL1 with the MMU off (before `z_prep_c`): every address is the
+    /// physical one, every access is to Device memory. The bases are WDT0's
+    /// and the CRU's; `out` is null or valid, outside `.bss` (which
+    /// `z_prep_c` zeroes after this).
     #[no_mangle]
-    pub unsafe extern "C" fn yd_t6_early_el1() {
+    pub unsafe extern "C" fn yd_t6_early_arm(wdt_phys: usize, cru_phys: usize, top: u32, out: *mut YdDwWdtArm) -> i32 {
         // SAFETY: the MMU is off: UART2_PHYS is uart2.
         let hw = unsafe { Hw::new() };
-        banner::banner_a1(&mut Tx::new(&hw, UART2_PHYS));
-    }
-
-    /// `T6:A2` through `uart`, the glue's `device_map()` of uart2.
-    ///
-    /// # Safety
-    /// `uart` maps uart2's registers as device memory.
-    #[no_mangle]
-    pub unsafe extern "C" fn yd_t6_banner_a2(uart: usize) {
+        let mut tx = Tx::new(&hw, UART2_PHYS);
+        banner::banner_a1(&mut tx);
+        banner::banner_a2(&mut tx);
         // SAFETY: the caller's contract.
-        let hw = unsafe { Hw::new() };
-        banner::banner_a2(&mut Tx::new(&hw, uart));
-    }
-
-    /// `T6:A3` through `uart`: the WDT0 arming's result.
-    ///
-    /// # Safety
-    /// As [`yd_t6_banner_a2`].
-    #[no_mangle]
-    pub unsafe extern "C" fn yd_t6_banner_a3(uart: usize, rc: i32, cr_now: u32, period_ms: u32) {
-        // SAFETY: the caller's contract.
-        let hw = unsafe { Hw::new() };
-        banner::banner_a3(&mut Tx::new(&hw, uart), rc, cr_now, period_ms);
+        let rc = unsafe { super::dw_wdt_arm_checked(wdt_phys, cru_phys, top, out) };
+        let (cr_now, period_ms) = if out.is_null() {
+            (0, 0)
+        } else {
+            // SAFETY: as above; volatile reads of what was just written.
+            unsafe {
+                (
+                    core::ptr::read_volatile(core::ptr::addr_of!((*out).cr_now)),
+                    core::ptr::read_volatile(core::ptr::addr_of!((*out).period_ms)),
+                )
+            }
+        };
+        banner::banner_a3(&mut tx, rc, cr_now, period_ms);
+        rc
     }
 }
 
@@ -2086,6 +2127,65 @@ mod tests {
         assert_eq!(dw_wdt_arm_with(&b, BASE, CRU, 13, &mut out), -EIO);
         assert_eq!((out.refusal, out.period_ms), (Refusal::NotDwWdt as u32, 0));
         assert!(b.wdt.writes().is_empty());
+    }
+
+    /// The record is written field by field (it may be Device memory) into
+    /// the glue's `__noinit` s_arm, which holds whatever RAM held at boot:
+    /// every field must be written on every path, none left as found.
+    #[test]
+    fn every_field_is_written_over_what_was_there() {
+        let stale = YdDwWdtArm {
+            comp_type: !0,
+            param1: !0,
+            version: !0,
+            cr_found: !0,
+            torr_found: !0,
+            cr_now: !0,
+            torr_now: !0,
+            ccvr_now: !0,
+            flags: !0,
+            refusal: !0,
+            period_ms: !0,
+        };
+        let mut fresh = YdDwWdtArm::default();
+        let mut out = stale;
+        assert_eq!(dw_wdt_arm_with(&board(0x2ff8), BASE, CRU, 13, &mut fresh), 0);
+        assert_eq!(dw_wdt_arm_with(&board(0x2ff8), BASE, CRU, 13, &mut out), 0);
+        assert_eq!(out, fresh);
+
+        let refused = |out: &mut YdDwWdtArm| {
+            let b = board(0x2ff8);
+            b.wdt.regs.borrow_mut()[COMP_TYPE / 4] = 0;
+            dw_wdt_arm_with(&b, BASE, CRU, 13, out)
+        };
+        let (mut fresh, mut out) = (YdDwWdtArm::default(), stale);
+        assert_eq!(refused(&mut fresh), -EIO);
+        assert_eq!(refused(&mut out), -EIO);
+        assert_eq!(out, fresh);
+
+        // a CRU gate that stays closed (the CRU ignores the write)
+        struct Stuck(Board);
+        impl Mmio for Stuck {
+            fn read32(&self, addr: usize) -> u32 {
+                self.0.read32(addr)
+            }
+            fn write32(&self, addr: usize, val: u32) {
+                if addr != CRU + 0x83c {
+                    self.0.write32(addr, val);
+                }
+            }
+            fn read8(&self, _: usize) -> u8 {
+                unreachable!()
+            }
+            fn write8(&self, _: usize, _: u8) {
+                unreachable!()
+            }
+        }
+        let (mut fresh, mut out) = (YdDwWdtArm::default(), stale);
+        assert_eq!(dw_wdt_arm_with(&Stuck(board(0x2ffb)), BASE, CRU, 13, &mut fresh), -EIO);
+        assert_eq!(fresh.refusal, YD_DW_WDT_REFUSED_GATE);
+        assert_eq!(dw_wdt_arm_with(&Stuck(board(0x2ffb)), BASE, CRU, 13, &mut out), -EIO);
+        assert_eq!(out, fresh);
     }
 
     #[test]

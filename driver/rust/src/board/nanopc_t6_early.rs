@@ -12,9 +12,10 @@
 //!   and `VBAR_EL2` found and set (the trap reporter below).
 //! - `T6:A1` the end of Zephyr's `z_arm64_el1_init` (`z_arm64_el1_plat_init`),
 //!   MMU off: EL1 runs and its timer register writes did not trap.
-//! - `T6:A2` the first PRE_KERNEL_1 hook, MMU on (through a `device_map()`
-//!   of uart2): `z_prep_c` (BSS, MMU tables) and the EARLY hooks passed.
-//! - `T6:A3` the same hook after the WDT0 arming, with its result.
+//! - `T6:A2` the same hook, right before the WDT0 arming (a hang in the
+//!   arming leaves it the last line).
+//! - `T6:A3` the same hook after the WDT0 arming, with its result. All of
+//!   this is before `z_prep_c` (BSS, MMU tables) and every init hook.
 //! - `T6:X` an exception taken to EL2 after `T6:A`: its syndrome, then the
 //!   CPU halts (WDT0, if it runs, resets the board).
 //!
@@ -88,7 +89,7 @@ pub fn banner_a1<M: Mmio>(tx: &mut Tx<'_, M>) {
 }
 
 pub fn banner_a2<M: Mmio>(tx: &mut Tx<'_, M>) {
-    tx.str(b"T6:A2 PRE_KERNEL_1, MMU on: arming WDT0\r\n");
+    tx.str(b"T6:A2 EL1, MMU off: arming WDT0\r\n");
 }
 
 pub fn banner_a3<M: Mmio>(tx: &mut Tx<'_, M>, rc: i32, cr_now: u32, period_ms: u32) {
@@ -174,7 +175,7 @@ mod tests {
     fn the_other_lines() {
         assert_eq!(sent(|tx| banner_a_other(tx, 1)).0, "T6:A EL1 (not EL2: HCR_EL2 and VBAR_EL2 untouched)\r\n");
         assert_eq!(sent(banner_a1).0, "T6:A1 EL1 init done, MMU off\r\n");
-        assert_eq!(sent(banner_a2).0, "T6:A2 PRE_KERNEL_1, MMU on: arming WDT0\r\n");
+        assert_eq!(sent(banner_a2).0, "T6:A2 EL1, MMU off: arming WDT0\r\n");
         assert_eq!(sent(|tx| banner_a3(tx, 0, 0x9, 22369)).0, "T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369\r\n");
         assert_eq!(sent(|tx| banner_a3(tx, -5, 0x8, 0)).0, "T6:A3 WDT0 arm rc -5 CR 0x00000008 period_ms 0\r\n");
         // Arbitrary values: this pins the format only, not a measured trap.

@@ -3,7 +3,7 @@
 [  431.118452] reboot: kexec_core: Starting new kernel
 T6:A EL2 HCR_EL2 0x000000048800003a -> 0x0000000080000002 SCTLR_EL2 0x0000000030400800 VBAR_EL2 0xffffcd30f6810800 -> 0x0000000010001000
 T6:A1 EL1 init done, MMU off
-T6:A2 PRE_KERNEL_1, MMU on: arming WDT0
+T6:A2 EL1, MMU off: arming WDT0
 T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369
 T6:B console up (uart2 through the ns16550 driver)
 yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000

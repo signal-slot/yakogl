@@ -1158,14 +1158,19 @@ well as the window.
 The glue (`driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c` over
 `ip::dw_wdt`, `soc::rk3588`, `aarch64`):
 
-- At EARLY it puts the GIC CPU interface back into EOImode 0. Armbian runs it
-  in split mode (dmesg: "GICv3: GIC: Using split EOI/Deactivate mode").
-- At PRE_KERNEL_1 it opens the two gates if they are closed and arms WDT0:
+- At the end of Zephyr's `z_arm64_el1_init` (its weak
+  `z_arm64_el1_plat_init`, MMU off), before `z_prep_c` and so before every
+  init hook of every level, it opens the two gates if they are closed and
+  arms WDT0 (an arming in a SYS_INIT hook ran after the hooks the linker put
+  before it at the same priority: with `CONFIG_POSIX_API`, four POSIX hooks
+  at PRE_KERNEL_1 0; `nanopc_t6.c`, "Order", has the Zephyr lines):
   `TORR` = top | top << 4, `CR` = RPL as found | `WDT_EN`, a restart, then
   `CR`, `TORR` and `CCVR` are read back. Seven refusals, one number each. A
   WDT0 that is already running (Linux's, under `--linux-wdt`) is only given
   the new `TOP` and restarted: every `CR` write keeps `WDT_EN` (host test
   `a_watchdog_linux_left_running_is_re_topped_and_restarted_never_stopped`).
+- At EARLY it puts the GIC CPU interface back into EOImode 0. Armbian runs it
+  in split mode (dmesg: "GICv3: GIC: Using split EOI/Deactivate mode").
 - After the early console it prints the marker and the arming. If the arming
   refused, it resets through PSCI at once. If PSCI returns, it arms WDT0 once
   more with `TOP` 15 (89.5 s) and waits for it.
@@ -1176,15 +1181,14 @@ The glue (`driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c` over
   the board resets at most 60 s + 22.4 s = 82.4 s after the arming,
   whatever the image does next.
 - **The pre-arm window.** Before the arming, nothing of the image's own can
-  reset the board: reset.S (EL2 to EL1), `z_prep_c` (BSS, data, the MMU
-  tables), `z_cstart` up to PRE_KERNEL_1 (the EARLY hook that resets the
-  GIC's EOI mode, `arch_kernel_init`, the SoC and board early hooks), and
-  `t6_wdt_arm`'s own `device_map()` calls. `t6_wdt_arm` is the first
-  PRE_KERNEL_1 hook (the gate row checks this in the ELF). This is
-  straight-line code with no wait on a device, and its length is not
-  measured. A fault in it halts the CPU for good: an exception, or the
-  `k_panic()` of the arm64 MMU code when its `CONFIG_MAX_XLAT_TABLES` (8)
-  tables run out, which `device_map()` can reach. With `--linux-wdt` the
+  reset the board: reset.S, the `T6:A` code, Zephyr's `z_arm64_el2_init`
+  and `z_arm64_el1_init`. This is straight-line register code with no wait
+  on a device and no memory but the stack; its length is not measured. A
+  fault in it halts the CPU for good (`T6:X` at EL2). The build fails
+  (`check_early_hooks.cmake`, after every link) unless the arming is called
+  from `z_arm64_el1_plat_init` and no code that runs with the MMU off calls
+  `memset`, `memcpy` or `memmove` (their `dc zva` and unaligned accesses
+  fault on the Device memory every access is then). With `--linux-wdt` the
   recipe covers it: `/dev/watchdog0` is opened in the jump's own ssh
   command, so WDT0 is already counting Linux's 44.7 s when the image
   starts, and nothing in Linux feeds or stops it across the kexec (linux
@@ -1342,7 +1346,7 @@ says where the image stopped:
 |---|---|---|
 | `T6:A` | the image's first code: reset.S's weak `z_arm64_el2_plat_prep_c` (and the EL1 one), MMU off, before any C code | `yd_t6_early_entry`: the EL; at EL2 `HCR_EL2` found and written, `SCTLR_EL2`, `VBAR_EL2` found and set |
 | `T6:A1` | the end of `z_arm64_el1_init` (`z_arm64_el1_plat_init`, weak), MMU off | the glue over the crate |
-| `T6:A2` | the first PRE_KERNEL_1 hook, MMU on, before the WDT0 arming | through a `device_map()` of uart2 |
+| `T6:A2` | the same hook, MMU off, right before the WDT0 arming | the glue over the crate (`yd_t6_early_arm`) |
 | `T6:A3` | right after the arming, with rc, `CR` and the period | the same |
 | `T6:B` | the first console line (ns16550 driver) | `printk` |
 | `T6:C` | WDT0 armed, before "board: watchdog armed" | `printk` |

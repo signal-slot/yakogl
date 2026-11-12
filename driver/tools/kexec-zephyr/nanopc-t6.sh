@@ -26,8 +26,8 @@
 # reboot notifier's dw_wdt_stop cannot stop it (no reset line) and only marks
 # it running (linux v6.18 watchdog_core.c:158-176, dw_wdt.c:285-297;
 # kernel_kexec runs the notifiers with SYS_RESTART = SYS_DOWN,
-# reboot.c:100-106). So it covers the image's pre-arm window (reset.S, the MMU
-# setup, the early init hooks: nanopc_t6.c, "Order"), which nothing of the
+# reboot.c:100-106). So it covers the image's pre-arm window (reset.S up to
+# the end of Zephyr's EL1 init: nanopc_t6.c, "Order"), which nothing of the
 # image's own covers; the image's arm then re-arms the running WDT0. It is
 # the default because the first jump (2026-10-19 00:26, without it) stopped
 # in that window and held the board until its power was cut. The command
@@ -283,7 +283,7 @@ plan (--go):
        the MMU off and its VHE HCR_EL2 (E2H set; the image's first code
        rewrites it); this ssh session ends there
   5. the image, on UART2 (1500000 baud, into uart.log): the raw early lines
-     T6:A (first code, EL2 state), T6:A1 (EL1 init), T6:A2 and T6:A3 (MMU on,
+     T6:A (first code, EL2 state), T6:A1 (EL1 init), T6:A2 and T6:A3 (MMU off,
      WDT0 armed), then through the console T6:B, the marker, "t6: WDT0 armed ...",
      T6:C, "board: watchdog armed", then the sample (T6:X: an exception taken
      to EL2, the image halted); it ends with PSCI SYSTEM_RESET, or WDT0 resets

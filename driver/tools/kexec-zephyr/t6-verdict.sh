@@ -97,7 +97,7 @@ table_boot() {
 	# 0x000000048800003a -> 0x0000000080000002; not a prediction for a probe)
 	e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{x16} VBAR_EL2 0x{x16} -> 0x{x16}' 'T6:A EL'
 	e 'T6:A1 EL1 init done, MMU off'
-	e 'T6:A2 PRE_KERNEL_1, MMU on: arming WDT0'
+	e 'T6:A2 EL1, MMU off: arming WDT0'
 	# banner_a3: rc 0, CR read back 0x9 (WDT_EN, RMOD), TOP 13's period
 	e 'T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369'
 	e 'T6:B console up (uart2 through the ns16550 driver)'

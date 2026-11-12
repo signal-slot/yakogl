@@ -3726,23 +3726,18 @@ zephyr_direct_images() {
   }
 }
 # The NanoPC-T6 image (Z1): it builds, and its watchdog glue is in it: the
-# SYS_INIT entry of t6_wdt_arm is the FIRST PRE_KERNEL_1 hook (what runs
-# before it is the pre-arm window, driver/docs/nanopc-t6-mali.md, "Z1"), the
-# EARLY hook resets the GIC's EOI mode, and the image carries the marker
-# driver/tools/kexec-zephyr/nanopc-t6.sh requires.
+# EARLY hook resets the GIC's EOI mode, the report, the feeder, and the image
+# carries the marker driver/tools/kexec-zephyr/nanopc-t6.sh requires. That
+# WDT0 is armed before every init hook (from z_arm64_el1_plat_init, MMU off)
+# is checked after every nanopc_t6 image's link, this one's included:
+# driver/zephyr/lib/board/nanopc_t6/check_early_hooks.cmake.
 zephyr_nanopc_t6_image() {
-  local dir=build/zephyr-werror/nanopc_t6 syms first marker
+  local dir=build/zephyr-werror/nanopc_t6 syms marker
   zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_hello nanopc_t6 || return 1
   syms=$(nm "$dir/zephyr/zephyr.elf") || return 1
-  for s in __init_t6_wdt_arm __init_t6_gic_eoi_reset __init_t6_wdt_report __init_t6_wdt_feed_start; do
+  for s in yd_t6_early_arm __init_t6_gic_eoi_reset __init_t6_wdt_report __init_t6_wdt_feed_start; do
     grep -qE " $s\$" <<<"$syms" || { echo "zephyr.elf has no $s: the nanopc_t6 watchdog glue is not in the image"; return 1; }
   done
-  first=$(awk '$3 == "__init_PRE_KERNEL_1_start" { print $1 }' <<<"$syms")
-  [ -n "$first" ] && [ "$(awk '$3 == "__init_t6_wdt_arm" { print $1 }' <<<"$syms")" = "$first" ] || {
-    echo "__init_t6_wdt_arm is not the first PRE_KERNEL_1 hook (PRE_KERNEL_1 starts at ${first:-?}):"
-    grep -E ' __init_' <<<"$syms" | sort | head -20
-    return 1
-  }
   marker=$(strings -n 20 "$dir/zephyr/zephyr.bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
   [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
 }

@@ -214,10 +214,10 @@ int yd_imx_wdog_arm(uintptr_t wdog_base, uintptr_t ccm_base, uint32_t timeout_ms
 		    uint32_t ext_reset, struct yd_imx_wdog_arm *out);
 
 /* ---- RK3588 board glue (ip::dw_wdt, soc::rk3588, aarch64; nanopc_t6.c) ----
- * yd_dw_wdt_arm: one call at PRE_KERNEL_1: WDT0's two CRU gates opened
- * (CLKGATE_CON(15) bits 0, 1), then the DW_apb_wdt armed for the period of
- * `top` (2^(16 + top) cycles of 24 MHz, top 0..15) to reset the system on its
- * first timeout, restarted and read back. 0, -EIO when it refused (refusal
+ * yd_dw_wdt_arm: WDT0's two CRU gates opened (CLKGATE_CON(15) bits 0, 1),
+ * then the DW_apb_wdt armed for the period of `top` (2^(16 + top) cycles of
+ * 24 MHz, top 0..15) to reset the system on its first timeout, restarted and
+ * read back. 0, -EIO when it refused (refusal
  * says why), -EINVAL for a bad argument. yd_dw_wdt_feed restarts it.
  * yd_gic_eoi_mode_reset: ICC_CTLR_EL1.EOImode back to 0 on this CPU; the
  * value found when it changed it, 0 when nothing was written.
@@ -300,13 +300,13 @@ int yd_mp2_psci_system_reset(void);
  * points VBAR_EL2 at a reporter that prints T6:X for any later exception
  * taken to EL2 and halts, and with YD_T6_EARLY_VHE_EXIT writes HCR_EL2 :=
  * RW only before Zephyr's z_arm64_el2_init reads it (aarch64.rs says why).
- * yd_t6_early_el1: T6:A1, from z_arm64_el1_plat_init (MMU off).
- * yd_t6_banner_a2 / _a3: T6:A2 / T6:A3 through a device_map() of uart2. */
+ * yd_t6_early_arm: from z_arm64_el1_plat_init (MMU off, before z_prep_c):
+ * T6:A1, T6:A2, yd_dw_wdt_arm with the physical bases of WDT0 and the CRU,
+ * T6:A3 with its result, which it returns. `out` must not be in .bss
+ * (z_prep_c zeroes it afterwards). */
 #define YD_T6_EARLY_VHE_EXIT 1 /* x0 of yd_t6_early_entry: HCR_EL2 := RW only */
 
-void yd_t6_early_el1(void);
-void yd_t6_banner_a2(uintptr_t uart);
-void yd_t6_banner_a3(uintptr_t uart, int32_t rc, uint32_t cr_now, uint32_t period_ms);
+int yd_t6_early_arm(uintptr_t wdt_phys, uintptr_t cru_phys, uint32_t top, struct yd_dw_wdt_arm *out);
 
 /* The GPU power-on, Z1's second half (board::nanopc_t6_gpu over
  * soc::rk3588, ip::rockchip_spi, ip::rk806, gpu::mali; feature mali):
