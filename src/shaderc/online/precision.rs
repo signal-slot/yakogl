@@ -1687,6 +1687,27 @@ mod tests {
         assert_eq!(alu(&g, AluOp::Fmul).first(), Some(&Prec::Unknown), "{:?}", g.ops);
     }
 
+    /// The width review's S-a: the result slot of a user function with
+    /// an early `return` had no `local_prec` entry, and every femtovg /
+    /// offarm shader was refused for its tables. The exact reproducer, and
+    /// the largest such corpus shader.
+    #[test]
+    fn a_function_with_an_early_return_gives_its_result_slot_a_class() {
+        let g = compile(
+            "precision mediump float; varying vec2 t;\n\
+             float f(vec2 x){ if (x.y > 0.0) { return x.x; } return x.y; }\n\
+             void main(){ gl_FragColor = vec4(f(t)); }",
+            Stage::Fragment,
+        );
+        assert_eq!(g.locals.len(), g.locals.iter().filter(|l| l.1 != Prec::Unknown).count());
+        assert!(g.locals.iter().any(|(n, p)| n.is_empty() && *p == M), "{:?}", g.locals);
+        let src = include_str!("../../../tools/mali/testdata/fvg_fill_color_glyph_nodiscard.frag");
+        let mut buf = std::vec![0u8; 1 << 22];
+        let a = Arena::new(&mut buf);
+        let l = compile_to_ir(&a, Stage::Fragment, a.alloc_str(src).expect("arena")).expect("compiles");
+        assert!(l.module.has_prec());
+    }
+
     #[test]
     fn f16_exact_knows_the_f16_values() {
         for x in [0.0f32, -0.0, 1.0, 1.5, 65504.0, -2.0, 6.103_515_6e-5, 5.960_464_5e-8, 0.000_122_070_31] {
