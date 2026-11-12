@@ -5117,7 +5117,7 @@ fn atan2_fneg(m: &Module<'_>, a: AluOp, id: usize) -> Option<(ir::ValueId, ir::S
 }
 
 /// The reads of IR value `v` (an `If`'s condition is a bool, never a sum's).
-fn ir_uses(m: &Module<'_>, v: ir::ValueId) -> usize {
+pub(super) fn ir_uses(m: &Module<'_>, v: ir::ValueId) -> usize {
     let mut n = 0;
     for op in m.instrs.iter() {
         op.for_each_src(|s| n += usize::from(s.val == v));

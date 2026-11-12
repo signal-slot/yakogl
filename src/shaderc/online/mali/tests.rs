@@ -1093,6 +1093,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
         /* reflect(i, 0): the dot and its scale fold, the fma stays */
         (VS, "attribute vec4 p; void main(){ gl_Position = reflect(p, vec4(0.0)); }", MaliError::FusedMultiplyAdd),
+        /* mod(x, y) of a value y: no reference draws it (a constant y is
+         * case 221's, case_221_instmix_is_byte_equal_to_mesa_26_2_1) */
+        (VS, "attribute vec4 p; void main(){ gl_Position = vec4(mod(p.x, p.y)); }", MaliError::FusedMultiplyAdd),
         (VS, "invariant gl_Position; attribute vec4 p; void main(){ gl_Position = p; }", MaliError::Invariant),
         (VS, "attribute vec2 p; void main(){ gl_Position.xy = p; }", MaliError::PositionLane),
         (FS, "precision mediump float; uniform vec4 u; void main(){ gl_FragColor = u.yxzw; }", MaliError::FsUniform),
@@ -2194,6 +2197,16 @@ fn vertex_reductions_and_bounds_no_reference_draws_are_refused() {
 fn a_vertex_abs_and_floor_are_byte_equal_to_mesa_26_2_1() {
     let (vs, fs) = (td!("vsarith_181_fmactrl.vert"), td!("vsarith_181_fmactrl.frag"));
     check_linked_for("181 fmactrl", vs, fs, td!("vsarith_181_fmactrl.expect.json"));
+}
+
+/// gl_test case 221 (instmix, driver/tools/pvrlab/gl_test_instmix.inc):
+/// `mod(id, 2.0) - 0.5` of `id = float(gl_InstanceID)` and `floor(id *
+/// 0.5) - 0.5`, scaled into `pos.xy * 0.5 + cell`
+/// (vsfma_221_instmix.expect.json, `--instances 4 --divisors 0,1,3`).
+#[test]
+fn case_221_instmix_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("vsfma_221_instmix.vert"), td!("vsfma_221_instmix.frag"));
+    check_linked_for("221 instmix", vs, fs, td!("vsfma_221_instmix.expect.json"));
 }
 
 /// gl_test case 188 (tools/shaders/gltest/predif_vs_uni.vert): the vertex

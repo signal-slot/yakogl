@@ -2203,6 +2203,80 @@ fn lane(w: &Walk<'_>, s: ir::Src, i: usize) -> Val {
     w.vals.get(s.val.0 as usize).map_or(Val::Undef, |v| v[s.swizzle[i] as usize & 3])
 }
 
+/// A front-end `ffma` is GLSL's `mod(x, y)` of a constant `y`: the front
+/// end writes it `ffma(y, fneg(ffloor(fmul(x, frcp(y)))), x)`
+/// (builtin_call.rs, "mod"), `srcs` `[y, fneg(..), x]`, the same `x` and
+/// `y` (value and swizzle) inside as outside.
+fn is_fmod_const(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
+    let alu = |src: ir::Src, op: AluOp| match m.def(src.val) {
+        Some(IrOp::Alu(o, s)) if *o == op => Some(*s),
+        _ => None,
+    };
+    let Some([q, ..]) = alu(srcs[1], AluOp::Fneg).and_then(|[f, ..]| alu(f, AluOp::Ffloor)) else {
+        return false;
+    };
+    let Some([x, r, _]) = alu(q, AluOp::Fmul) else { return false };
+    let Some([y, ..]) = alu(r, AluOp::Frcp) else { return false };
+    let constant = matches!(m.def(srcs[0].val), Some(IrOp::ConstF32(_)));
+    constant && x == srcs[2] && y == srcs[0]
+}
+
+/// GLSL's `mod(x, y)` as Mesa lowers `fmod` (`lower_fmod`,
+/// nir_opt_algebraic.py:2492): `fsub(x, fmul(y, ffloor(fdiv(x, y))))`, the
+/// `fsub` an `fadd` of the `fneg` (`lower_fsub`). `neg_floor` is the walked
+/// `fneg(ffloor(..))` of [`is_fmod_const`]'s shape, its `ffloor` the one
+/// kept; the late fusion makes the sum `ffma(-y, floor, x)` ([`fuse`]).
+/// Measured: case 221's `mod(id, 2.0) - 0.5` is `FMA.f32 r0,
+/// 0x40000000.neg, r1, r0^` over `FADD_IMM.f32 r0, r0^, #0xBF000000`
+/// (vsfma_221_instmix.expect.json, with [`vs_fadd`]'s reassociation).
+fn vs_fmod(vs: &mut Nir<'_>, x: Val, y: Val, neg_floor: Val) -> Result<Val, MaliError> {
+    let floor = match vs_alu_of(vs, neg_floor) {
+        Some((Alu::Fneg, [f, ..])) => f,
+        _ => return Err(MaliError::FusedMultiplyAdd),
+    };
+    let p = vs.alu(Alu::Fmul, y, floor, Val::Undef)?;
+    let n = vs.alu(Alu::Fneg, p, Val::Undef, Val::Undef)?;
+    vs.alu(Alu::Fadd, x, n, Val::Undef)
+}
+
+/// A vertex `fadd` of the lanes `x` and `y` of the front end's sources
+/// `srcs`: `fadd(fadd(a, b), #c)`, the inner sum used once and of no
+/// constant, is `fadd(fadd(a, c), b)`, a product kept for `b`
+/// (nir_opt_algebraic.py:2399-2400, "Prefer moving out a multiplication",
+/// as nir_fs.rs's `lane32`). Measured: case 221's `mod(id, 2.0) - 0.5`,
+/// `FADD_IMM.f32 r0, r0^, #0xBF000000` (`id - 0.5`) before the fused
+/// product (vsfma_221_instmix.expect.json).
+fn vs_fadd(vs: &mut Nir<'_>, m: &Module<'_>, srcs: &[ir::Src; 3], x: Val, y: Val) -> Result<Val, MaliError> {
+    let once = |k: usize| super::nir_fs::ir_uses(m, srcs[k].val) == 1;
+    let inner = match (x, y) {
+        (o, Val::Const(_)) if once(0) => Some((o, y)),
+        (Val::Const(_), o) if once(1) => Some((o, x)),
+        _ => None,
+    };
+    let sum = inner.and_then(|(o, c)| match vs_alu_of(vs, o) {
+        Some((Alu::Fadd, [p, q, _])) if !matches!(p, Val::Const(_)) && !matches!(q, Val::Const(_)) => Some((p, q, c)),
+        _ => None,
+    });
+    match sum {
+        Some((p, q, c)) => {
+            let (a, b) = if !vs_is_fmul(vs, q) && vs_is_fmul(vs, p) { (q, p) } else { (p, q) };
+            let s = vs.alu(Alu::Fadd, a, c, Val::Undef)?;
+            vs.alu(Alu::Fadd, s, b, Val::Undef)
+        }
+        None => vs.alu(Alu::Fadd, x, y, Val::Undef),
+    }
+}
+
+/// `is_fmul` (nir_search_helpers.h:402-416): a product, or the `fneg` of
+/// one.
+fn vs_is_fmul(vs: &Nir<'_>, v: Val) -> bool {
+    match vs_alu_of(vs, v) {
+        Some((Alu::Fmul, _)) => true,
+        Some((Alu::Fneg, [inner, ..])) => vs_is_fmul(vs, inner),
+        _ => false,
+    }
+}
+
 /// A front-end `ffma` is a matrix product's term (`mat_times_column` under
 /// `gpu-mali`): the column a uniform load of a mat4, the scale a splat lane.
 pub(super) fn is_mat_term(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
@@ -2677,7 +2751,7 @@ pub fn build<'s>(
                 for (l, o) in out.iter_mut().enumerate().take(width) {
                     let x = |k: usize| lane(w, s[k], l);
                     *o = match a {
-                        AluOp::Fadd => vs.alu(Alu::Fadd, x(0), x(1), Val::Undef)?,
+                        AluOp::Fadd => vs_fadd(&mut vs, m, &s, x(0), x(1))?,
                         AluOp::Fneg => vs.alu(Alu::Fneg, x(0), Val::Undef, Val::Undef)?,
                         /* `a / b` is `a * rcp(b)` from the front end */
                         AluOp::Frcp => vs.alu(Alu::Frcp, x(0), Val::Undef, Val::Undef)?,
@@ -2696,6 +2770,9 @@ pub fn build<'s>(
                             vs.note(Prod::MatProduct);
                             vs.alu(Alu::Ffma, x(0), x(1), x(2))?
                         }
+                        /* the front end's `mod(x, y)` of a constant `y`
+                         * (gl_test case 221) */
+                        AluOp::Ffma if is_fmod_const(m, &s) => vs_fmod(&mut vs, x(2), x(0), x(1))?,
                         AluOp::Ffma => return Err(MaliError::FusedMultiplyAdd),
                         AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 if l == 0 => {
                             vs.note(Prod::Dot);

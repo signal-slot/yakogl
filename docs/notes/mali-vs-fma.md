@@ -213,6 +213,14 @@ vertex walk accepts, and each is accepted only against a Mesa reference:
    unfused form depends on the operand constants (**inferred**: not
    measured here); the other four have different NIR from our hand-written
    forms. Keep the refusal text for them or split the error.
+   **`mod(x, y)` of a constant `y` is lowered** (gl_test case 221): the
+   walk rewrites the front end's `ffma(y, fneg(ffloor(fmul(x, frcp(y)))),
+   x)` as Mesa's `lower_fmod` result, `fadd(x, fneg(fmul(y, floor)))`
+   (nir_opt_algebraic.py:2492), and applies :2399-2400 to a following
+   `fadd` of a constant (`mod(id, 2.0) - 0.5` is `ffma(-2.0, floor, id -
+   0.5)`), byte-equal to `vsfma_221_instmix.expect.json` (`nir.rs`
+   `vs_fmod`, `vs_fadd`). A `mod` of a value `y` stays refused (no
+   reference).
 3. **Order and the shared-product rule**: the late fusion only fuses a product
    `only_used_by_fadd` (`nir.rs`, see `mali-vs-alu-ops.md`: a product with
    four uses is a single `FMA.f32 .., 0x0.neg` and its users are separate).
