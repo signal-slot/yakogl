@@ -466,6 +466,14 @@
  *               1 again 0.25 deeper with no glFinish; checks 3-7 are the
  *               note's, and a verdict line names its row. GC7000 with the
  *               knobs only, SKIP by name elsewhere. Opt-in, by number
+ * 223 msaarbo   a 4x RGBA8 + 4x DEPTH24_STENCIL8 renderbuffer FBO
+ *               (glRenderbufferStorageMultisample) drawn with an oblique
+ *               edge and resolved by glBlitFramebuffer into a texture FBO:
+ *               inside red, outside black, the edge pixel in between (more
+ *               than one sample); a scaled resolve and one into RGB565 are
+ *               GL_INVALID_OPERATION. SKIP by name where GL_MAX_SAMPLES < 4
+ *               (4x FBOs off, cargo feature msaa-fbo) or in an ES 2.0
+ *               library. All GPUs. Opt-in, by number
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8568,7 +8576,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -19538,6 +19546,194 @@ static int case_blitconv(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 223: a 4x renderbuffer FBO drawn and resolved by a blit (msaarbo)
+ *
+ * ES 3.0 multisample renderbuffers (docs/notes/es3-msaa-renderbuffers.md):
+ * a 64x64 FBO of a 4x RGBA8 colour renderbuffer and a 4x DEPTH24_STENCIL8
+ * one (glRenderbufferStorageMultisample, GL_RENDERBUFFER_SAMPLES >= 4 read
+ * back from both, the framebuffer complete), cleared black, depth 1, and
+ * drawn with case 207's red lower-right triangle at z 0 under the depth test
+ * LESS; then resolved by glBlitFramebuffer into a 64x64 RGBA8 texture FBO,
+ * which is read back:
+ *
+ *   inside   (40, 20 from the bottom) red;
+ *   outside  (20, 40 from the bottom) black;
+ *   edge     (32, 32): the diagonal runs through the pixel's centre, so its
+ *            samples fall on both sides: each colour channel strictly
+ *            between the inside's and the outside's (0x80 red with the
+ *            standard 4x pattern). A single-sampled target, or a resolve
+ *            that copies sample 0, gives red or black there.
+ *
+ * Then the ES 3.0 resolve errors (4.3.3), each GL_INVALID_OPERATION with
+ * nothing else pending: a scaled resolve (64x64 into 32x32), and a resolve
+ * into an RGB565 renderbuffer (formats differ). The resolved picture is read
+ * again afterwards: the refused blits wrote nothing.
+ *
+ * SKIP by name where GL_MAX_SAMPLES is below 4 (every back end until its
+ * 4x FBOs are on, the cargo feature `msaa-fbo`), or in an ES 2.0 library.
+ * All GPUs; not in the set, opt-in by number. */
+static bool msaarbo_between(uint32_t x, uint32_t y, uint32_t in, uint32_t out)
+{
+	uint32_t got = s_px[y * TW + x];
+	bool ok = true;
+
+	for (int i = 0; i < 32; i += 8) {
+		uint32_t g = (got >> i) & 0xff, a = (in >> i) & 0xff, b = (out >> i) & 0xff;
+		uint32_t lo = a < b ? a : b, hi = a < b ? b : a;
+
+		/* a channel the two sides share stays as it is; one they do not
+		 * lies strictly between them, a step away from either */
+		ok &= lo == hi ? g == lo : g > lo + 8 && g + 8 < hi;
+	}
+	pr_info("gl_test:   %-28s (%2u,%2u) = 0x%08x  want between 0x%08x and 0x%08x  %s  [check %d]\n",
+		"x4 resolve: edge in between", x, y, got, in, out, ok ? "ok" : "MISMATCH", gl_test_check_no + 1);
+	return gl_test_check(ok, got, 0xff000080u);
+}
+
+static bool msaarbo_expect_error(const char *what, GLenum want)
+{
+	GLenum e = glGetError(), more = glGetError();
+	bool ok = e == want && more == GL_NO_ERROR;
+
+	pr_info("gl_test:   %-28s error 0x%04x then 0x%04x  want 0x%04x then 0  %s  [check %d]\n", what,
+		(unsigned)e, (unsigned)more, (unsigned)want, ok ? "ok" : "MISMATCH", gl_test_check_no + 1);
+	return gl_test_check(ok, e, want);
+}
+
+static int case_msaarbo(void)
+{
+	/* the red lower-right triangle of case 207: its hypotenuse is the
+	 * diagonal, through the centres of the pixels (x, x) */
+	static const float c[3][2] = { { -1, -1 }, { 1, -1 }, { 1, 1 } };
+	const uint32_t red = 0xff0000ffu, black = 0xff000000u;
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	GLuint rb[3] = { 0, 0, 0 }, fbo[3] = { 0, 0, 0 }, tex = 0, prog;
+	GLint max_samples = 0, samples[2] = { 0, 0 };
+	struct cuv_vertex v[3];
+	bool ok = true;
+
+	if (!ver || strncmp(ver, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 223 msaarbo: SKIP (an ES 2.0 library has no glRenderbufferStorageMultisample)\n");
+		return -3;
+	}
+	free_all_objects();
+	glGetIntegerv(GL_MAX_SAMPLES, &max_samples);
+	if (!check_gl_error("msaarbo GL_MAX_SAMPLES"))
+		return -1;
+	if (max_samples < 4) {
+		pr_info("gl_test: case 223 msaarbo: SKIP (GL_MAX_SAMPLES %d < 4: 4x FBOs are off in this build, "
+			"cargo feature msaa-fbo)\n", (int)max_samples);
+		return -3;
+	}
+	pr_info("gl_test:   msaarbo: GL_MAX_SAMPLES %d\n", (int)max_samples);
+
+	/* rb 0 the 4x colour, rb 1 the 4x depth/stencil, rb 2 an RGB565 one for
+	 * the format error; fbo 0 the 4x one, 1 the texture's, 2 the RGB565 one */
+	glGenRenderbuffers(3, rb);
+	glGenFramebuffers(3, fbo);
+	glBindRenderbuffer(GL_RENDERBUFFER, rb[0]);
+	glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, TW, TH);
+	glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES, &samples[0]);
+	glBindRenderbuffer(GL_RENDERBUFFER, rb[1]);
+	glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, TW, TH);
+	glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES, &samples[1]);
+	glBindRenderbuffer(GL_RENDERBUFFER, rb[2]);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB565, TW, TH);
+	ok &= gl_test_check(check_gl_error("msaarbo storage"), 0, 0);
+	pr_info("gl_test:   msaarbo: GL_RENDERBUFFER_SAMPLES colour %d depth/stencil %d  want >= 4  %s  [check %d]\n",
+		(int)samples[0], (int)samples[1], samples[0] >= 4 && samples[1] >= 4 ? "ok" : "MISMATCH",
+		gl_test_check_no + 1);
+	ok &= gl_test_check(samples[0] >= 4 && samples[1] >= 4, (uint32_t)samples[0], 4);
+	if (!ok)
+		goto out;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[0]);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb[0]);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rb[1]);
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, TW, TH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[1]);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[2]);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb[2]);
+	for (int i = 0; i < 3; i++) {
+		GLenum st;
+
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo[i]);
+		st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		pr_info("gl_test:   msaarbo: framebuffer %d status 0x%04x  want 0x%04x  %s  [check %d]\n", i,
+			(unsigned)st, (unsigned)GL_FRAMEBUFFER_COMPLETE, st == GL_FRAMEBUFFER_COMPLETE ? "ok" : "MISMATCH",
+			gl_test_check_no + 1);
+		ok &= gl_test_check(st == GL_FRAMEBUFFER_COMPLETE, st, GL_FRAMEBUFFER_COMPLETE);
+	}
+	if (!ok)
+		goto out;
+
+	/* the 4x frame: a clear of all three, the triangle under the depth test */
+	prog = link_program(gl_test_vs_src, gl_test_fs_src);
+	if (!prog) {
+		ok = false;
+		goto out;
+	}
+	glUseProgram(prog);
+	for (int i = 0; i < 3; i++)
+		cuv_set(&v[i], c[i][0], c[i][1], 0.0f, 1, 0, 0);
+	upload_vbo(v, sizeof(v));
+	cuv_attribs();
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[0]);
+	glViewport(0, 0, TW, TH);
+	glDisable(GL_BLEND);
+	glDisable(GL_STENCIL_TEST);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearDepthf(1.0f);
+	glClearStencil(0);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glDisable(GL_DEPTH_TEST);
+	ok &= gl_test_check(check_gl_error("msaarbo draw"), 0, 0);
+
+	/* the resolve, 1:1 into the texture */
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0]);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[1]);
+	glBlitFramebuffer(0, 0, TW, TH, 0, 0, TW, TH, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	ok &= gl_test_check(check_gl_error("msaarbo resolve"), 0, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[1]);
+	read_topdown();
+	ok &= expect_px("x4 resolve: inside red", 40, TH - 1 - 20, red, 0);
+	ok &= expect_px("x4 resolve: outside black", 20, TH - 1 - 40, black, 0);
+	ok &= msaarbo_between(32, TH - 1 - 32, red, black);
+
+	/* the ES 3.0 resolve errors: scaled, then into another format */
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0]);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[1]);
+	glBlitFramebuffer(0, 0, TW, TH, 0, 0, TW / 2, TH / 2, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	ok &= msaarbo_expect_error("x4 resolve scaled", GL_INVALID_OPERATION);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[2]);
+	glBlitFramebuffer(0, 0, TW, TH, 0, 0, TW, TH, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	ok &= msaarbo_expect_error("x4 resolve RGBA8 to RGB565", GL_INVALID_OPERATION);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[1]);
+	read_topdown();
+	ok &= expect_px("after refusals: inside red", 40, TH - 1 - 20, red, 0);
+	ok &= expect_px("after refusals: outside black", 20, TH - 1 - 40, black, 0);
+	ok &= gl_test_check(check_gl_error("msaarbo read-back"), 0, 0);
+
+	glUseProgram(0);
+	glDeleteProgram(prog);
+out:
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(3, fbo);
+	glDeleteRenderbuffers(3, rb);
+	glDeleteTextures(1, &tex);
+	glViewport(0, 0, TW, TH);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	return ok ? 0 : -1;
+}
+
 /* ---- case 203: transform feedback capture, read back (tfcap) ---------------
  *
  * docs/es3/transform-feedback.md; open: #1226, #1227. The GL
@@ -23860,6 +24056,11 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		rc = case_dtpu();
 		if (rc == -3)
 			return -3; /* skipped by name: not the GC7000 with the test knobs, or no extension */
+		break;
+	case 223:
+		rc = case_msaarbo();
+		if (rc == -3)
+			return -3; /* skipped by name: GL_MAX_SAMPLES < 4, or an ES 2.0 library */
 		break;
 	case 216:
 		rc = case_mipchains();
