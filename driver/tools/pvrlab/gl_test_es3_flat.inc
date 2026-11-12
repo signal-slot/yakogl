@@ -242,7 +242,7 @@ static int es3flat_tris(const char *name, GLenum mode, const struct es3flat_vtx 
 		const struct es3flat_vtx *a = mode == GL_TRIANGLE_FAN ? &v[0] : &v[i];
 		const struct es3flat_vtx *b = &v[i + 1];
 		const struct es3flat_vtx *c = &v[i + 2];
-		char what[32];
+		char what[48];
 
 		snprintf(what, sizeof(what), "triangle %d = vertex %d", i, i + 2);
 		ok &= es3flat_expect(name, what, (int)((a->x + b->x + c->x) / 3.0f),
