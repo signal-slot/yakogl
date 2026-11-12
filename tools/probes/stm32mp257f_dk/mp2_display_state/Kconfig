@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+# The groups whose address or access rule is the least certain (README.md,
+# "Confidence") can be left out of a rerun when one of them faulted.
+config MP2_DISPLAY_STATE_RCC_RAW
+	bool "Dump every non-zero word of the RCC page"
+	default y
+	help
+	  The flexgen, PLL4/PLL8, cross-bar, I2C2 and GPIO gate registers
+	  are not named in this repository (only RCC_GPUCFGR, LTDCCFGR and
+	  DSICFGR are); the page is printed raw and mapped to ST's
+	  stm32mp25_rcc.h offline.
+
+config MP2_DISPLAY_STATE_GPIO
+	bool "Read GPIOB and GPIOF (the ADV7535 pins and the I2C2 pins)"
+	default y
+
+config MP2_DISPLAY_STATE_SYSCFG
+	bool "Read SYSCFG DISPLAYCLKCR (0x44235000)"
+	default y
+
+config MP2_DISPLAY_STATE_RISAF
+	bool "Read the DDR firewall's regions of the LTDC secure layers and the GPU (RISAF4)"
+	default y
+
+source "Kconfig.zephyr"
