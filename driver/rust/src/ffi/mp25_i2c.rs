@@ -10,7 +10,9 @@
 use crate::env::{Env, YdEnv};
 use crate::errno::{EINVAL, ENOTSUP};
 use crate::ip::stm32_i2c::{self as i2c, Config};
-use crate::mmio::{Hw, Mmio};
+#[cfg(not(test))]
+use crate::mmio::Hw;
+use crate::mmio::Mmio;
 use crate::ylog;
 use core::mem::{offset_of, size_of};
 
@@ -80,6 +82,49 @@ const _: () = assert!(size_of::<YdMp25I2cMsg>() == 16);
 const _: () = assert!(offset_of!(YdMp25I2cMsg, buf) == 0);
 const _: () = assert!(offset_of!(YdMp25I2cMsg, len) == 8);
 const _: () = assert!(offset_of!(YdMp25I2cMsg, flags) == 12);
+
+/// The registers the extern entry points reach: the hardware on the board.
+#[cfg(not(test))]
+fn port() -> Hw {
+    // SAFETY: `cfg->base` is the shim's `device_map()` range (the entry
+    // points' contract).
+    unsafe { Hw::new() }
+}
+
+/// In the host tests the same entry points reach a register model installed
+/// with `tests::with_bus`, as the sibling FFI modules' tests do.
+#[cfg(test)]
+struct Port;
+
+#[cfg(test)]
+thread_local! {
+    static BUS: core::cell::Cell<Option<*const dyn Mmio>> = const { core::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn port() -> Port {
+    Port
+}
+
+#[cfg(test)]
+impl Mmio for Port {
+    fn read32(&self, a: usize) -> u32 {
+        // SAFETY: `with_bus` keeps the model alive while it is installed.
+        BUS.with(|b| unsafe { &*b.get().expect("no bus installed") }.read32(a))
+    }
+    fn write32(&self, a: usize, v: u32) {
+        // SAFETY: as read32.
+        BUS.with(|b| unsafe { &*b.get().expect("no bus installed") }.write32(a, v))
+    }
+    fn read8(&self, a: usize) -> u8 {
+        // SAFETY: as read32.
+        BUS.with(|b| unsafe { &*b.get().expect("no bus installed") }.read8(a))
+    }
+    fn write8(&self, a: usize, v: u8) {
+        // SAFETY: as read32.
+        BUS.with(|b| unsafe { &*b.get().expect("no bus installed") }.write8(a, v))
+    }
+}
 
 fn ip_config(cfg: &YdMp25I2cConfig) -> Config {
     let mut c = Config::new(cfg.kernel_clock_hz, cfg.speed_hz);
@@ -191,8 +236,8 @@ pub unsafe extern "C" fn yd_mp25_i2c_init(
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    let (cfg, data, env, hw) = unsafe { (&*cfg, &mut *data, &*env, Hw::new()) };
-    init_with(&hw, env, cfg, data)
+    let (cfg, data, env) = unsafe { (&*cfg, &mut *data, &*env) };
+    init_with(&port(), env, cfg, data)
 }
 
 /// START, `len` (1..=255) bytes to the 7-bit `addr`, STOP. 0, `-ENODEV` for
@@ -207,7 +252,7 @@ pub unsafe extern "C" fn yd_mp25_i2c_write(cfg: *const YdMp25I2cConfig, addr: u1
     }
     let m = YdMp25I2cMsg { buf: buf as *mut u8, len: len.min(u32::MAX as usize) as u32, flags: YD_MP25_I2C_MSG_WRITE };
     // SAFETY: the caller's contract.
-    unsafe { transfer_with(&Hw::new(), (*cfg).base, addr, &[m]) }
+    unsafe { transfer_with(&port(), (*cfg).base, addr, &[m]) }
 }
 
 /// `wlen` bytes, a repeated START, `rlen` bytes, STOP; each 1..=255.
@@ -233,7 +278,7 @@ pub unsafe extern "C" fn yd_mp25_i2c_write_read(
         YdMp25I2cMsg { buf: rbuf, len: lim(rlen), flags: YD_MP25_I2C_MSG_READ },
     ];
     // SAFETY: the caller's contract.
-    unsafe { transfer_with(&Hw::new(), (*cfg).base, addr, &msgs) }
+    unsafe { transfer_with(&port(), (*cfg).base, addr, &msgs) }
 }
 
 /// Zephyr's `i2c_transfer` message list: one write, or a write then a read.
@@ -260,7 +305,7 @@ pub unsafe extern "C" fn yd_mp25_i2c_transfer(
         unsafe { core::slice::from_raw_parts(msgs, num_msgs as usize) }
     };
     // SAFETY: the caller's contract.
-    unsafe { transfer_with(&Hw::new(), (*cfg).base, addr, list) }
+    unsafe { transfer_with(&port(), (*cfg).base, addr, list) }
 }
 
 #[cfg(test)]
@@ -513,5 +558,234 @@ mod tests {
             assert_eq!(yd_mp25_i2c_transfer(&c, core::ptr::null_mut(), 1, 0x3d), -EINVAL);
             assert_eq!(yd_mp25_i2c_transfer(&c, core::ptr::null_mut(), 0, 0x3d), -EINVAL);
         }
+    }
+
+    use crate::errno::ENODEV;
+    use crate::model_mp25_i2c::{edid_block, Adv7535Config, Adv7535Handle, EdidMode, Mp25I2c};
+
+    /// Run `f` with `bus` behind the extern entry points.
+    fn with_bus<R>(bus: &Mp25I2c, f: impl FnOnce() -> R) -> R {
+        struct Clear;
+        impl Drop for Clear {
+            fn drop(&mut self) {
+                BUS.with(|b| b.set(None));
+            }
+        }
+        let p: *const (dyn Mmio + '_) = bus;
+        // SAFETY: only the lifetime is erased; `Clear` removes the pointer
+        // before this function returns, so `bus` outlives every use.
+        let p = unsafe { core::mem::transmute::<*const (dyn Mmio + '_), *const dyn Mmio>(p) };
+        BUS.with(|b| b.set(Some(p)));
+        let _clear = Clear;
+        f()
+    }
+
+    extern "C" fn nop_wait(_: *mut core::ffi::c_void, _: u32) {}
+    extern "C" fn nop_log(_: *mut core::ffi::c_void, _: u32, _: *const u8, _: usize) {}
+    extern "C" fn nop_i2c_w(_: *mut core::ffi::c_void, _: u32, _: *const u8, _: usize) -> i32 {
+        -1
+    }
+    extern "C" fn nop_i2c_wr(_: *mut core::ffi::c_void, _: u32, _: *const u8, _: usize, _: *mut u8, _: usize) -> i32 {
+        -1
+    }
+    extern "C" fn nop_gpio(_: *mut core::ffi::c_void, _: u32, _: u32) -> i32 {
+        -1
+    }
+
+    fn yd_env() -> YdEnv {
+        YdEnv {
+            ctx: core::ptr::null_mut(),
+            busy_wait_us: nop_wait,
+            sleep_ms: nop_wait,
+            log: nop_log,
+            i2c_write: nop_i2c_w,
+            i2c_write_read: nop_i2c_wr,
+            gpio_set: nop_gpio,
+        }
+    }
+
+    fn extern_init(bus: &Mp25I2c, c: &YdMp25I2cConfig) -> (i32, YdMp25I2cData) {
+        let (mut d, e) = (YdMp25I2cData::default(), yd_env());
+        // SAFETY: all three point at live locals; the bus is installed.
+        let rc = with_bus(bus, || unsafe { yd_mp25_i2c_init(c, &mut d, &e) });
+        (rc, d)
+    }
+
+    fn up_dk() -> (Mp25I2c, Adv7535Handle) {
+        let (bus, adv) = Mp25I2c::dk(Adv7535Config::default());
+        assert_eq!(extern_init(&bus, &cfg()).0, 0);
+        (bus, adv)
+    }
+
+    #[test]
+    fn extern_init_programs_timingr_cr1_and_data() {
+        let (bus, _adv) = Mp25I2c::dk(Adv7535Config::default());
+        let mut c = cfg();
+        c.flags = 0;
+        c.dnf_ns = 100;
+        let (rc, d) = extern_init(&bus, &c);
+        assert_eq!(rc, 0);
+        let mut want = Config::new(64_000_000, 400_000);
+        want.analog_filter = false;
+        want.dnf_ns = 100;
+        let t = compute_timing(&want).unwrap();
+        assert_eq!(bus.timingr(), t.timingr());
+        assert_eq!(d, YdMp25I2cData { timingr: t.timingr(), dnf: u32::from(t.dnf) });
+        assert_ne!(d.dnf, 0);
+        let cr1 = bus.cr1();
+        assert_ne!(cr1 & CR1_ANFOFF, 0);
+        assert_ne!(cr1 & CR1_PE, 0);
+        assert_eq!((cr1 & CR1_DNF) >> CR1_DNF.trailing_zeros(), d.dnf);
+    }
+
+    #[test]
+    fn extern_init_analog_filter_flag_keeps_the_filter_on() {
+        let (bus, _adv) = Mp25I2c::dk(Adv7535Config::default());
+        assert_eq!(extern_init(&bus, &cfg()).0, 0);
+        assert_eq!(bus.cr1() & CR1_ANFOFF, 0);
+        assert_ne!(bus.cr1() & CR1_PE, 0);
+    }
+
+    #[test]
+    fn extern_init_zero_rise_fall_take_linuxs_25_and_10() {
+        let (b0, _a0) = Mp25I2c::dk(Adv7535Config::default());
+        let (b1, _a1) = Mp25I2c::dk(Adv7535Config::default());
+        let mut c = cfg();
+        assert_eq!(extern_init(&b0, &c).0, 0);
+        (c.rise_ns, c.fall_ns) = (25, 10);
+        assert_eq!(extern_init(&b1, &c).0, 0);
+        assert_eq!(b0.timingr(), b1.timingr());
+        let mut want = Config::new(64_000_000, 400_000);
+        (want.rise_ns, want.fall_ns) = (25, 10);
+        assert_eq!(b0.timingr(), compute_timing(&want).unwrap().timingr());
+        // A different rise time reaches the timing.
+        let (b2, _a2) = Mp25I2c::dk(Adv7535Config::default());
+        (c.rise_ns, c.fall_ns) = (300, 10);
+        assert_eq!(extern_init(&b2, &c).0, 0);
+        assert_ne!(b0.timingr(), b2.timingr());
+    }
+
+    #[test]
+    fn extern_init_unreachable_speed_is_einval_and_leaves_data() {
+        let (bus, _adv) = Mp25I2c::dk(Adv7535Config::default());
+        let mut c = cfg();
+        c.speed_hz = 3_000_000;
+        let (rc, d) = extern_init(&bus, &c);
+        assert_eq!(rc, -EINVAL);
+        assert_eq!(d, YdMp25I2cData::default());
+        assert_eq!(bus.timingr(), 0);
+    }
+
+    #[test]
+    fn extern_write_reaches_the_adv7535() {
+        let (bus, adv) = up_dk();
+        let c = cfg();
+        // Main map 0x41 (POWER) := 0x10.
+        let b = [0x41u8, 0x10];
+        // SAFETY: live locals, bus installed.
+        let rc = with_bus(&bus, || unsafe { yd_mp25_i2c_write(&c, 0x3d, b.as_ptr(), b.len()) });
+        assert_eq!(rc, 0);
+        assert_eq!(adv.reg(0x41), 0x10);
+        assert!(adv.main_writes().contains(&(0x41, 0x10)));
+    }
+
+    #[test]
+    fn extern_write_read_reads_back_a_register() {
+        let (bus, adv) = up_dk();
+        let c = cfg();
+        let w = [0x41u8, 0x22];
+        let (p, mut r) = ([0x41u8], [0u8; 1]);
+        // SAFETY: live locals, bus installed.
+        let (rc1, rc2) = with_bus(&bus, || unsafe {
+            (
+                yd_mp25_i2c_write(&c, 0x3d, w.as_ptr(), w.len()),
+                yd_mp25_i2c_write_read(&c, 0x3d, p.as_ptr(), 1, r.as_mut_ptr(), 1),
+            )
+        });
+        assert_eq!((rc1, rc2), (0, 0));
+        assert_eq!(r[0], 0x22);
+        assert_eq!(r[0], adv.reg(0x41));
+        // The chip revision, as ST's U-Boot reads it.
+        let (z, mut rev) = ([0u8], [0u8]);
+        // SAFETY: as above.
+        let rc = with_bus(&bus, || unsafe { yd_mp25_i2c_write_read(&c, 0x3d, z.as_ptr(), 1, rev.as_mut_ptr(), 1) });
+        assert_eq!((rc, rev[0]), (0, 0x14));
+    }
+
+    #[test]
+    fn extern_write_read_returns_the_edid_at_0x3f() {
+        let (bus, _adv) = up_dk();
+        let c = cfg();
+        let (z, mut edid) = ([0u8], [0u8; 128]);
+        // SAFETY: live locals, bus installed.
+        let rc = with_bus(&bus, || unsafe {
+            yd_mp25_i2c_write_read(&c, 0x3f, z.as_ptr(), 1, edid.as_mut_ptr(), edid.len())
+        });
+        assert_eq!(rc, 0);
+        assert_eq!(edid.to_vec(), edid_block(EdidMode::P720));
+    }
+
+    #[test]
+    fn extern_transfer_takes_zephyrs_message_list() {
+        let (bus, adv) = up_dk();
+        let c = cfg();
+        let mut w = [0x41u8, 0x5a];
+        let mut one = [msg(&mut w, 0)];
+        // SAFETY: live locals, bus installed.
+        let rc = with_bus(&bus, || unsafe { yd_mp25_i2c_transfer(&c, one.as_mut_ptr(), 1, 0x3d) });
+        assert_eq!(rc, 0);
+        assert_eq!(adv.reg(0x41), 0x5a);
+        let (mut p, mut r) = ([0u8], [0u8; 4]);
+        let mut two = [msg(&mut p, 0), msg(&mut r, YD_MP25_I2C_MSG_READ | YD_MP25_I2C_MSG_STOP)];
+        // SAFETY: as above.
+        let rc = with_bus(&bus, || unsafe { yd_mp25_i2c_transfer(&c, two.as_mut_ptr(), 2, 0x3f) });
+        assert_eq!(rc, 0);
+        assert_eq!(r, edid_block(EdidMode::P720)[..4]);
+        // A read alone is -ENOTSUP.
+        let mut rd = [msg(&mut r, YD_MP25_I2C_MSG_READ)];
+        // SAFETY: as above.
+        let rc = with_bus(&bus, || unsafe { yd_mp25_i2c_transfer(&c, rd.as_mut_ptr(), 1, 0x3f) });
+        assert_eq!(rc, -ENOTSUP);
+    }
+
+    #[test]
+    fn extern_nack_on_an_absent_address_is_enodev_and_the_bus_recovers() {
+        let (bus, adv) = up_dk();
+        let c = cfg();
+        let (b, mut r) = ([1u8, 2], [0u8; 2]);
+        // SAFETY: live locals, bus installed.
+        let (w, wr) = with_bus(&bus, || unsafe {
+            (
+                yd_mp25_i2c_write(&c, 0x50, b.as_ptr(), 2),
+                yd_mp25_i2c_write_read(&c, 0x50, b.as_ptr(), 1, r.as_mut_ptr(), 2),
+            )
+        });
+        assert_eq!((w, wr), (-ENODEV, -ENODEV));
+        // The next transfer to the ADV7535 still works.
+        let ok = [0x41u8, 0x33];
+        // SAFETY: as above.
+        let rc = with_bus(&bus, || unsafe { yd_mp25_i2c_write(&c, 0x3d, ok.as_ptr(), 2) });
+        assert_eq!(rc, 0);
+        assert_eq!(adv.reg(0x41), 0x33);
+    }
+
+    #[test]
+    fn extern_length_and_address_errors_touch_no_register() {
+        let (bus, _adv) = up_dk();
+        bus.clear_log();
+        let c = cfg();
+        let mut big = [0u8; 256];
+        // SAFETY: live locals, bus installed.
+        with_bus(&bus, || unsafe {
+            assert_eq!(yd_mp25_i2c_write(&c, 0x3d, big.as_ptr(), 256), -EINVAL);
+            assert_eq!(yd_mp25_i2c_write(&c, 0x3d, big.as_ptr(), 0), -EINVAL);
+            assert_eq!(yd_mp25_i2c_write(&c, 0x3d, core::ptr::null(), 0), -EINVAL);
+            assert_eq!(yd_mp25_i2c_write(&c, 0x80, big.as_ptr(), 1), -EINVAL);
+            assert_eq!(yd_mp25_i2c_write_read(&c, 0x3d, big.as_ptr(), 1, big.as_mut_ptr(), 256), -EINVAL);
+            assert_eq!(yd_mp25_i2c_write_read(&c, 0x3d, big.as_ptr(), 1, big.as_mut_ptr(), 0), -EINVAL);
+            assert_eq!(yd_mp25_i2c_write_read(&c, 0x3d, big.as_ptr(), 256, big.as_mut_ptr(), 1), -EINVAL);
+            assert_eq!(yd_mp25_i2c_transfer(&c, core::ptr::null_mut(), 0, 0x3d), -EINVAL);
+        });
+        assert!(bus.accesses().is_empty());
     }
 }
