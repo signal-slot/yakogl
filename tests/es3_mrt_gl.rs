@@ -80,6 +80,16 @@ struct Seen {
     /// `targets[0].out_shift`: how many leading draw buffers the list
     /// dropped; target `k` takes fragment output `k + out_shift`.
     out_shift: u8,
+    /// The clear is a quad of the back end's (scissored or masked), not the
+    /// background object.
+    clear_quad: bool,
+    /// The scissor test and box (x, y, w, h) the draw carries.
+    scissor: bool,
+    scissor_rect: [i32; 4],
+    /// glColorMask at the clear (`clear_color_mask`), bit 0 R .. 3 A.
+    clear_color_mask: u8,
+    /// `clear_rgba`'s four words as bit patterns (integer targets: raw ints).
+    clear_bits: [u32; 4],
 }
 
 static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
@@ -93,6 +103,11 @@ unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
         draws: d.index_count != 0,
         targets: d.targets[..n].iter().map(|t| (t.gpu, t.w, t.h, t.format)).collect(),
         out_shift: d.targets[0].out_shift,
+        clear_quad: d.clear_quad,
+        scissor: d.scissor,
+        scissor_rect: d.scissor_rect,
+        clear_color_mask: d.clear_color_mask,
+        clear_bits: d.clear_rgba.map(f32::to_bits),
     });
     0
 }
@@ -238,14 +253,34 @@ fn read_buffer(src: GLenum) -> GLenum {
 }
 
 fn renderbuffer(w: GLsizei, h: GLsizei) -> GLuint {
+    renderbuffer_of(GL_RGBA8, w, h)
+}
+
+fn renderbuffer_of(format: GLenum, w: GLsizei, h: GLsizei) -> GLuint {
     let mut rb = 0;
     // SAFETY: room for one name.
     unsafe {
         glGenRenderbuffers(1, &mut rb);
         glBindRenderbuffer(GL_RENDERBUFFER, rb);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, w, h);
+        glRenderbufferStorage(GL_RENDERBUFFER, format, w, h);
     }
     rb
+}
+
+/// A bound framebuffer with a renderbuffer of `formats[i]` (8x8) on colour
+/// attachment i.
+fn mixed_framebuffer(formats: &[GLenum]) -> (GLuint, Vec<GLuint>) {
+    let rbs: Vec<GLuint> = formats.iter().map(|&f| renderbuffer_of(f, 8, 8)).collect();
+    let mut fb = 0;
+    // SAFETY: room for one name.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        for (i, rb) in rbs.iter().enumerate() {
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i as GLenum, GL_RENDERBUFFER, *rb);
+        }
+    }
+    (fb, rbs)
 }
 
 /// A bound framebuffer with an 8x8 RGBA8 renderbuffer on each of colour
@@ -324,6 +359,7 @@ fn es2_build_keeps_its_answers() {
 #[cfg(not(feature = "report-es2"))]
 mod es3 {
     use super::*;
+    use yakogl::backend::{GLES_SURF_R32I, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_RGBA8UI};
 
     /// The limits are the back end's: 4 with a four-target back end, the
     /// build's own count (3 on every GPU today) without one.
@@ -553,6 +589,202 @@ mod es3 {
         let c = seen().pop().expect("the clear reached the back end");
         assert_eq!(c.clear_target_mask, 1 << 7, "draw buffer 0 is not in the list");
         assert!(c.targets.iter().all(|t| t.0 != 0), "the list itself is unchanged");
+        release(fb, &rbs);
+    }
+
+    /* ---- the clear of several mixed attachments: what the back end gets --- */
+
+    const MIXED: [GLenum; 4] = [GL_RGBA8, GL_RGBA8UI, GL_R32I, GL_RGBA16F];
+
+    /// ES 3.0 has glColorMask and one scissor box, no per-buffer mask
+    /// (glColorMaski is ES 3.2): a clear of several draw buffers carries one
+    /// box and one mask, whatever the attachments' classes are.
+    fn reset_clear_state() {
+        // SAFETY: plain GL calls.
+        unsafe {
+            glDisable(GL_SCISSOR_TEST);
+            glScissor(0, 0, 8, 8);
+            glColorMask(1, 1, 1, 1);
+        }
+    }
+
+    fn last_clear() -> Seen {
+        seen().pop().expect("the clear reached the back end")
+    }
+
+    /// The four mixed attachments reach the back end as four targets of
+    /// their own formats: float, unsigned, signed and half-float classes.
+    #[test]
+    fn mixed_attachments_keep_their_formats() {
+        let _g = context();
+        let (fb, rbs) = mixed_framebuffer(&MIXED);
+        assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glClearColor(0.0, 0.0, 0.0, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        let c = last_clear();
+        let formats: Vec<u8> = c.targets.iter().map(|t| t.3).collect();
+        assert_eq!(formats, [GLES_SURF_RGBA8888, GLES_SURF_RGBA8UI, GLES_SURF_R32I, GLES_SURF_RGBA16F]);
+        assert!(c.do_clear && c.clear_target_mask == 0, "glClear: every target");
+        release(fb, &rbs);
+    }
+
+    /// glClear with the scissor test on: one quad clear, the box as set, over
+    /// all four mixed targets; a box holding the whole target is no scissor;
+    /// an empty box clears nothing; the colour is the float glClearColor.
+    #[test]
+    fn a_scissored_glclear_of_mixed_attachments() {
+        let _g = context();
+        let (fb, rbs) = mixed_framebuffer(&MIXED);
+        reset_clear_state();
+        // SAFETY: plain GL calls.
+        unsafe {
+            glClearColor(0.25, 0.5, 0.75, 1.0);
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(2, 1, 4, 3);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        let s = seen();
+        assert_eq!(s.len(), 1, "one clear for all four targets");
+        let c = &s[0];
+        assert!(c.do_clear && c.clear_quad, "a scissored clear is the back end's quad");
+        assert!(c.scissor);
+        assert_eq!(c.scissor_rect, [2, 1, 4, 3], "x, y, w, h");
+        assert_eq!(c.clear_target_mask, 0, "every target");
+        assert_eq!(c.targets.len(), 4);
+        assert_eq!(c.clear_color_mask, 0xf);
+        assert_eq!(c.clear_bits, [0.25f32, 0.5, 0.75, 1.0].map(f32::to_bits));
+
+        /* a box that holds the target is no scissor */
+        // SAFETY: plain GL calls.
+        unsafe {
+            glScissor(0, 0, 8, 8);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        let c = last_clear();
+        assert!(c.do_clear && !c.clear_quad && !c.scissor, "the cheap path");
+
+        /* an empty box clears nothing */
+        // SAFETY: plain GL calls.
+        unsafe {
+            glScissor(3, 3, 0, 4);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        assert!(seen().iter().all(|s| !s.do_clear), "an empty box reaches the back end as no clear");
+        reset_clear_state();
+        release(fb, &rbs);
+    }
+
+    /// glColorMask is one mask for every draw buffer: a partial mask is
+    /// handed once, in `clear_color_mask`; with a scissor the box and the
+    /// mask travel together; an all-off mask clears nothing.
+    #[test]
+    fn a_masked_glclear_of_mixed_attachments() {
+        let _g = context();
+        let (fb, rbs) = mixed_framebuffer(&MIXED);
+        reset_clear_state();
+        // SAFETY: plain GL calls.
+        unsafe {
+            glClearColor(1.0, 0.0, 0.0, 1.0);
+            glColorMask(1, 0, 1, 0);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        let c = last_clear();
+        assert!(c.do_clear);
+        assert_eq!(c.clear_color_mask, 0b0101, "R and B, bit 0 R .. 3 A");
+        assert_eq!(c.targets.len(), 4);
+        assert_eq!(c.clear_target_mask, 0);
+
+        // SAFETY: plain GL calls.
+        unsafe {
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(1, 1, 5, 6);
+            glColorMask(0, 1, 0, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        let c = last_clear();
+        assert!(c.do_clear && c.clear_quad && c.scissor);
+        assert_eq!((c.scissor_rect, c.clear_color_mask), ([1, 1, 5, 6], 0b1010));
+
+        // SAFETY: plain GL calls.
+        unsafe {
+            glColorMask(0, 0, 0, 0);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        assert!(seen().iter().all(|s| !s.do_clear), "no channel: no clear");
+        reset_clear_state();
+        release(fb, &rbs);
+    }
+
+    /// glClearBufferuiv / iv / fv on one draw buffer each, with a scissor
+    /// and a mask: the target named, its format, and the raw value words (an
+    /// integer target gets the integers' bit patterns, two's complement for
+    /// the signed one).
+    #[test]
+    fn single_buffer_clears_of_mixed_attachments_with_scissor_and_mask() {
+        let _g = context();
+        let (fb, rbs) = mixed_framebuffer(&MIXED);
+        let gpus = target_addresses(4);
+        reset_clear_state();
+        // SAFETY: plain GL calls.
+        unsafe {
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(2, 2, 3, 5);
+            glColorMask(1, 1, 0, 1);
+        }
+        let ui = [7u32, 0xffff_ffff, 300, 4];
+        let i = [-5i32, 9, -1, i32::MIN];
+        let f = [0.5f32, -2.0, 4.0, 0.125];
+
+        // SAFETY: four readable words each.
+        unsafe { glClearBufferuiv(GL_COLOR, 1, ui.as_ptr()) };
+        assert_eq!(err(), GL_NO_ERROR);
+        let c = last_clear();
+        assert_eq!(c.clear_target_mask, 1 << 1);
+        assert_eq!(c.targets[1].0, gpus[1]);
+        assert_eq!(c.targets[1].3, GLES_SURF_RGBA8UI);
+        assert_eq!(c.clear_bits, ui, "raw unsigned words");
+        assert!(c.do_clear && c.clear_quad && c.scissor);
+        assert_eq!(c.scissor_rect, [2, 2, 3, 5]);
+        assert_eq!(c.clear_color_mask, 0b1011);
+
+        // SAFETY: four readable words each.
+        unsafe { glClearBufferiv(GL_COLOR, 2, i.as_ptr()) };
+        assert_eq!(err(), GL_NO_ERROR);
+        let c = last_clear();
+        assert_eq!(c.clear_target_mask, 1 << 2);
+        assert_eq!((c.targets[2].0, c.targets[2].3), (gpus[2], GLES_SURF_R32I));
+        assert_eq!(c.clear_bits, i.map(|v| v as u32), "raw two's complement words");
+        assert_eq!((c.scissor_rect, c.clear_color_mask), ([2, 2, 3, 5], 0b1011));
+
+        // SAFETY: four readable words each.
+        unsafe { glClearBufferfv(GL_COLOR, 3, f.as_ptr()) };
+        assert_eq!(err(), GL_NO_ERROR);
+        let c = last_clear();
+        assert_eq!(c.clear_target_mask, 1 << 3);
+        assert_eq!((c.targets[3].0, c.targets[3].3), (gpus[3], GLES_SURF_RGBA16F));
+        assert_eq!(c.clear_bits, f.map(f32::to_bits));
+
+        // SAFETY: four readable words each.
+        unsafe { glClearBufferfv(GL_COLOR, 0, f.as_ptr()) };
+        let c = last_clear();
+        assert_eq!((c.clear_target_mask, c.targets[0].3), (1, GLES_SURF_RGBA8888));
+
+        /* the wrong class for the buffer is GL_INVALID_OPERATION and
+         * reaches no one (ES 3.0 4.2.3) */
+        // SAFETY: four readable words each.
+        unsafe { glClearBufferfv(GL_COLOR, 1, f.as_ptr()) };
+        assert_eq!(err(), GL_INVALID_OPERATION, "float clear of an unsigned buffer");
+        // SAFETY: four readable words each.
+        unsafe { glClearBufferuiv(GL_COLOR, 2, ui.as_ptr()) };
+        assert_eq!(err(), GL_INVALID_OPERATION, "unsigned clear of a signed buffer");
+        // SAFETY: four readable words each.
+        unsafe { glClearBufferiv(GL_COLOR, 0, i.as_ptr()) };
+        assert_eq!(err(), GL_INVALID_OPERATION, "signed clear of a float buffer");
+        assert!(seen().iter().all(|s| !s.do_clear), "none of the three reached the back end");
+        reset_clear_state();
         release(fb, &rbs);
     }
 
