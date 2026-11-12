@@ -71,7 +71,8 @@ pub enum Refusal {
     UnstallTimeout = 4,
 }
 
-/// A failure, with the set it is about and that set's last `STATUS`.
+/// A failure or a time-out, with the set it is about and that set's last
+/// `STATUS`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Refused {
     pub why: Refusal,
@@ -87,6 +88,11 @@ pub struct Off {
     pub status_found: [u32; MAX_SETS],
     /// `STATUS` of each set at the end.
     pub status_now: [u32; MAX_SETS],
+    /// The first stall or unstall poll that timed out
+    /// ([`Refusal::StallTimeout`], [`Refusal::UnstallTimeout`]), if any.
+    /// Paging is off on every set all the same (checked): the IOMMU is in
+    /// the state asked for, and the time-out is for the log.
+    pub timeout: Option<Refused>,
 }
 
 impl Off {
@@ -134,9 +140,10 @@ fn poll_all(
 /// idle or able to stall: while a set is stalled its master waits.
 ///
 /// Every step runs even when an earlier poll timed out, as Linux's does
-/// (:915: errors are ignored while disabling). The result: `PagingStuck`
-/// when a set still pages at the end; otherwise the first stall or unstall
-/// time-out (paging is then off on every set, checked); otherwise `Ok`.
+/// (:915: errors are ignored while disabling). The result is `Err` only
+/// when the IOMMU is not off: `PagingStuck` when a set still pages at the
+/// end (or `BadArgument`). Otherwise it is `Ok`, with the first stall or
+/// unstall time-out in [`Off::timeout`].
 pub fn paging_off(m: &impl Mmio, bases: &[usize], delay_us: &mut impl FnMut(u32)) -> Result<Off, Refused> {
     if bases.is_empty() || bases.len() > MAX_SETS {
         return Err(Refused { why: Refusal::BadArgument, set: 0, status: 0 });
@@ -197,10 +204,7 @@ pub fn paging_off(m: &impl Mmio, bases: &[usize], delay_us: &mut impl FnMut(u32)
             return Err(Refused { why: Refusal::PagingStuck, set: i, status: status_now[i] });
         }
     }
-    match first {
-        Some(r) => Err(r),
-        None => Ok(Off { status_found, status_now }),
-    }
+    Ok(Off { status_found, status_now, timeout: first })
 }
 
 #[cfg(test)]
@@ -369,13 +373,13 @@ mod tests {
     #[test]
     fn a_stall_that_never_comes_and_one_that_never_goes_are_named() {
         let m = Mmu { stall_never: true, ..Mmu::crash_kexec() };
-        let r = paging_off(&m, &SETS, &mut |us| m.delay(us)).unwrap_err();
+        let r = paging_off(&m, &SETS, &mut |us| m.delay(us)).unwrap().timeout.unwrap();
         assert_eq!((r.why, r.set, r.status), (Refusal::StallTimeout, 0, 1));
         // every step was still taken: paging is off on both sets
         assert!(m.sets.borrow().iter().all(|s| s.status & STATUS_PAGING_ENABLED == 0));
 
         let m = Mmu { stall_stuck: true, ..Mmu::crash_kexec() };
-        let r = paging_off(&m, &SETS, &mut |us| m.delay(us)).unwrap_err();
+        let r = paging_off(&m, &SETS, &mut |us| m.delay(us)).unwrap().timeout.unwrap();
         assert_eq!((r.why, r.set, r.status), (Refusal::UnstallTimeout, 0, 4));
     }
 
@@ -396,5 +400,18 @@ mod tests {
         for s in m.sets.borrow().iter() {
             assert_eq!((s.status & STATUS_PAGING_ENABLED, s.dte, s.int_mask), (0, 0, 0));
         }
+    }
+
+    /// Review R2-S2: a stall time-out with paging off at the end is "off",
+    /// with the time-out carried in the result.
+    #[test]
+    fn a_stall_time_out_with_paging_off_is_off_with_the_time_out_named() {
+        let m = Mmu { stall_never: true, ..Mmu::crash_kexec() };
+        let off = paging_off(&m, &SETS, &mut |us| m.delay(us)).unwrap();
+        assert_eq!(off.status_now, [0, 0]);
+        assert_eq!(off.timeout.map(|t| t.why), Some(Refusal::StallTimeout));
+        // and a clean run carries none
+        let m = Mmu::crash_kexec();
+        assert_eq!(paging_off(&m, &SETS, &mut |us| m.delay(us)).unwrap().timeout, None);
     }
 }
