@@ -925,6 +925,7 @@ fn lower_ordered<'a>(
         cur: Prec::High,
         cur_class: Prec::None,
         slot_prec: None,
+        pinned: AVec::new(),
         nodes: AVec::new(),
         inputs: AVec::new(),
         outputs: AVec::new(),
@@ -1015,6 +1016,9 @@ struct Lower<'x, 'a> {
     /// it ([`Lower::push_local`]); `None`: a temporary of the current
     /// expression.
     slot_prec: Option<Prec>,
+    /// Float constants a full-width built-in reads at their fp16 value
+    /// ([`Lower::full_width_args`]).
+    pinned: AVec<'a, u32>,
     nodes: AVec<'a, Node>,
     inputs: AVec<'a, IoDecl<'a>>,
     outputs: AVec<'a, IoDecl<'a>>,
@@ -4211,6 +4215,8 @@ impl<'a> Lower<'_, 'a> {
             ty: crate::shaderc::online::ast::SamplerType::new(SamplerDim::D2, SamplerRet::Float, false),
         }; MAX_BUILTIN_OPERANDS];
         let mut n = 0usize;
+        /* where this call's arguments begin: a constant before it is shared */
+        let start = self.instrs.len();
         for &e in ids {
             let ty = self.types.of(e);
             if let BaseType::Mat(cols, rows) = ty.base {
@@ -4249,7 +4255,11 @@ impl<'a> Lower<'_, 'a> {
          * 16-bit product; so it records High, and a Medium reader of the
          * result narrows it as Mesa's f2f16 of the fpow does. */
         let outer = self.cur;
-        if name == "pow" && self.cur == Prec::Medium {
+        /* pow, asin and acos are each one NIR op that Mesa builds at 32 bits
+         * from its 16-bit operands (bi_lower_bit_size for fpow;
+         * nir_builtin_builder.c:232-233, :243-244 for asin and acos). */
+        if matches!(name, "pow" | "asin" | "acos") && self.cur == Prec::Medium {
+            self.full_width_args(ids, &ops[..n], start)?;
             self.cur = Prec::High;
         }
         let mut sink = Sink { l: self, out, width };
@@ -4264,6 +4274,42 @@ impl<'a> Lower<'_, 'a> {
              * or a call in the IR. Neither exists yet. */
             None => Err(self.err(name, "this function call is not lowered yet")),
         }
+    }
+
+    /// The constant arguments of a Medium built-in whose expansion is
+    /// computed at full width (pow, asin, acos). Mesa passes each argument
+    /// to the built-in's mediump parameter, so a constant one is its fp16
+    /// value there (review probe v_pow: `pow (f2fmp a) (f2fmp (constant
+    /// float (0.100000)))`). A constant the call made records Medium (every
+    /// reader takes the fp16 value) and is pinned, so a later 32-bit reuse
+    /// makes it Unknown rather than High ([`Lower::const_value`]). A
+    /// shared constant already read at full width, or a folded argument
+    /// that is no single constant (its fold is High and its rounding into
+    /// the parameter has no form here), records Unknown.
+    fn full_width_args(&mut self, ids: &[ExprId], ops: &[Operand<'a>], start: usize) -> R<'a, ()> {
+        if ops.len() != ids.len() {
+            return Ok(());
+        }
+        for (&e, op) in ids.iter().zip(ops) {
+            let Operand::Value { src, .. } = *op else { continue };
+            if !self.precs.folds(e) {
+                continue;
+            }
+            let i = src.val.0 as usize;
+            let constant = matches!(self.instrs.as_slice().get(i), Some(Op::ConstF32(_)));
+            let had = self.prec.as_slice().get(i).copied();
+            let p = match (constant, i >= start, had) {
+                (true, true, _) | (true, false, Some(Prec::Medium)) => Prec::Medium,
+                _ => Prec::Unknown,
+            };
+            if let Some(x) = self.prec.as_mut_slice().get_mut(i) {
+                *x = p;
+            }
+            if p == Prec::Medium {
+                self.pinned.push(self.a, i as u32)?;
+            }
+        }
+        Ok(())
     }
 
     /// The definition a call names, resolved against the argument types.
@@ -5601,9 +5647,13 @@ impl<'a> Lower<'_, 'a> {
                     /* Shared by a 16-bit tree and a 32-bit one: a literal
                      * read at each user's width, High (Medium on a constant
                      * says every reader is 16-bit). */
+                    let pinned = self.pinned.as_slice().contains(&i);
                     if let Some(p) = self.prec.as_mut_slice().get_mut(i as usize) {
                         if *p == Prec::Medium && self.cur != Prec::Medium {
-                            *p = Prec::High;
+                            /* a constant pinned to its fp16 value
+                             * (`full_width_args`) cannot also be read
+                             * exactly */
+                            *p = if pinned { Prec::Unknown } else { Prec::High };
                         }
                     }
                     return Ok(Src::id(ValueId(i)));
