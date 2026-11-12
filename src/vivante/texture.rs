@@ -25,7 +25,7 @@ use crate::backend::{
     GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D, GLES_TEXTYPE_CUBE, GLES_WRAP_CLAMP_TO_EDGE, GLES_WRAP_MIRRORED_REPEAT,
 };
 use crate::shaderc::{ShcShader, SHC_UNIFORM_NO_BLOCK};
-use crate::util::{Global, ENOMEM};
+use crate::util::{Global, ENOMEM, ENOTSUP};
 
 use super::cmd::GcCmd;
 use super::regs::*;
@@ -236,6 +236,23 @@ pub const GC_HW_SAMPLER_SLOTS: u32 = 32;
 pub fn companion_slot(base: u32, count: u32, rank: u32) -> Option<u32> {
     let slot = base + count + rank;
     (slot < GC_HW_SAMPLER_SLOTS).then_some(slot)
+}
+
+/// Do a draw's own sampler slots fit the 32-entry array? The fragment stage
+/// owns slots `0..fs_count`, its `fs_wide` companions follow, and the vertex
+/// stage owns `vs_base..vs_base + vs_count` with `vs_base = fs_count +
+/// fs_wide` (`VS_SAMPLER_BASE`). `Err(slot)` is the highest slot a stage
+/// needs when it is past slot 31: the draw cannot be recorded, because a
+/// descriptor written there lands off the array. (The companions are refused
+/// one by one by `companion_slot`; they stay on the black texel.)
+pub fn stage_slots_fit(fs_count: u32, fs_wide: u32, vs_count: u32) -> Result<(), u32> {
+    let fs_last = fs_count.saturating_sub(1);
+    let last = if vs_count > 0 { (fs_count + fs_wide + vs_count - 1).max(fs_last) } else { fs_last };
+    if last < GC_HW_SAMPLER_SLOTS {
+        Ok(())
+    } else {
+        Err(last)
+    }
 }
 
 /// The unorm classes, the ones INT_FILTER may take.
@@ -781,6 +798,14 @@ fn emit_textures_inner(f: &mut GcFrame, d: &GcDraw) -> i32 {
     let fs_wide = d.textures.iter().take(GC_MAX_SAMPLERS).filter(|t| wide128_sampled(t)).count() as u32;
     let vs_base = fs_count + fs_wide;
     let vs_count = stage_count(d.vs_textures, d.vs);
+    if let Err(slot) = stage_slots_fit(fs_count, fs_wide, vs_count) {
+        crate::glog_once!(
+            "yakogl/vivante: a draw needs sampler slot {} but the hardware has {}: draw refused",
+            slot,
+            GC_HW_SAMPLER_SLOTS
+        );
+        return -ENOTSUP;
+    }
 
     /* the fragment stage owns slots 0.., the vertex stage the ones after */
     f.w.state(GC_VS_SAMPLER_BASE, vs_base);
@@ -836,6 +861,17 @@ fn declared_samplers(sh: &ShcShader) -> impl Iterator<Item = u8> + '_ {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stage_slots_fit_refuses_past_slot_31() {
+        assert_eq!(stage_slots_fit(0, 0, 0), Ok(()));
+        assert_eq!(stage_slots_fit(16, 0, 16), Ok(()));
+        assert_eq!(stage_slots_fit(16, 1, 15), Ok(()), "last slot 31");
+        assert_eq!(stage_slots_fit(16, 1, 16), Err(32));
+        assert_eq!(stage_slots_fit(32, 0, 0), Ok(()));
+        assert_eq!(stage_slots_fit(33, 0, 0), Err(32));
+        assert_eq!(stage_slots_fit(0, 0, 33), Err(32));
+    }
 
     #[test]
     fn log2_fixp88_is_mesas_truncated_log2() {
