@@ -3323,13 +3323,12 @@ step "tools   t6-verdict.sh: the predicted records pass, each altered record is 
   driver/tools/kexec-zephyr/t6-verdict-test.sh
 # The i.MX8MP board layer's host model (docs/notes/imx8mp-frame-floor.md,
 # "Waits per swap"): the latch thread and yakogl_zephyr_wait_vblank on cc and
-# pthreads, about 30 s. It reads the host/ directory and the three board
-# files it compiles; the host C compiler is the one tool. It times real
-# threads and fails a row 0.25 periods off, so it runs alone (w:tree): next to
-# cargo and compiler jobs of the pool it would flake. Headers it also reads
+# pthreads, about 2 s. It reads the host/ directory and the three board
+# files it compiles; the host C compiler is the one tool. Its threads run on
+# a simulated clock (host/sim_kernel.c), so the load of the host does not
+# change its numbers and it runs next to the other rows. Headers it also reads
 # (the rest of board/include, board/common, include/) are not in the key.
 scope drivers
-uses w:tree
 rowkey key_host_cc_row driver/zephyr/lib/board/imx8mp/host driver/zephyr/lib/board/imx8mp/board_imx8mp.c \
   driver/zephyr/lib/board/include/yakogl_board.h driver/zephyr/lib/board/common/board_internal.h
 step "host    imx8mp latch model: waits per swap" driver/zephyr/lib/board/imx8mp/host/run.sh
