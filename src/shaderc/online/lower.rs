@@ -8852,8 +8852,9 @@ struct Sink<'s, 'x, 'a> {
 impl Sink<'_, '_, '_> {
     /// The width an `Alu` of the expansion over `srcs` records. One lane
     /// when every source that is not a constant of the expansion's own is
-    /// a one-lane step of this expansion (the square root of `length`'s
-    /// dot): the operation reads lane 0 of each and makes one value.
+    /// a one-lane step of this expansion read lane for lane (the square
+    /// root of `length`'s dot): only lane 0 of such a read exists, so the
+    /// operation makes one value.
     /// Otherwise [`Sink::width`] by [`ir::AluOp::result_comps`]: an
     /// argument read through a splat (`smoothstep`'s scalar edge) still
     /// serves every lane, and so does a constant argument (`normalize` of
@@ -8865,7 +8866,15 @@ impl Sink<'_, '_, '_> {
             match instrs.get(s.val.0 as usize) {
                 /* a constant of the expansion's own (smoothstep's 3.0) */
                 Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) if s.val.0 >= self.start => continue,
-                _ if s.val.0 >= self.start && self.l.comps.as_slice().get(s.val.0 as usize) == Some(&1) => any = true,
+                /* lane i read from lane i of a one-lane value: only lane 0
+                 * is one (a splat read serves every lane, as refract's
+                 * `splat(dot)` chain does) */
+                _ if s.val.0 >= self.start
+                    && s.swizzle == ir::SWIZZLE_IDENTITY
+                    && self.l.comps.as_slice().get(s.val.0 as usize) == Some(&1) =>
+                {
+                    any = true
+                }
                 _ => return alu.result_comps(self.width),
             }
         }
@@ -12529,6 +12538,16 @@ mod value_width_tests {
         );
         assert_eq!(all_comps_of(&l.module, ir::AluOp::Frsq), [1]);
         assert_eq!(all_comps_of(&l.module, ir::AluOp::Fmul), [3], "the constant's three lanes");
+        /* a one-lane step read through a splat serves every lane: refract
+         * squares `splat(dot)` and adds its root to a two-lane product
+         * (the review's q1 refr2) */
+        let mut b5 = std::vec![0u8; 1 << 19];
+        let l = ir(
+            &mut b5,
+            "precision mediump float;\nvarying vec2 a;\nvarying vec2 n;\n\
+             void main(){ gl_FragColor = vec4(refract(a, n, 0.5), 0.0, 1.0); }",
+        );
+        assert!(all_comps_of(&l.module, ir::AluOp::Fsqrt).iter().all(|&c| c == 2), "refract's root of k");
         let mut b3 = [0u8; 1 << 19];
         let l = ir(
             &mut b3,
