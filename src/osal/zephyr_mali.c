@@ -240,10 +240,11 @@ void osal_mali_diag_print(void)
 	       c.live_pages_high, (unsigned int)(MALI_CARVE / PAGE), c.held, c.refused_frees,
 	       c.dead_refusal, c.dead_value);
 	printk("osal(mali): restarts %u (last by sched refusal %u, 0x%x); tiler OOMs %u grown, "
-	       "%u with no chunk; heap %u of %u chunk(s); group %s\n",
+	       "%u with no chunk; heap %u of %u chunk(s); group %s, memory %s; CS stops refused %u\n",
 	       c.restarts, c.last_refusal, c.last_value, c.oom_chunks, c.oom_no_chunk,
 	       c.heap_chunks, (unsigned int)MALI_CHUNKS,
-	       c.unended ? "may still run" : c.dead_refusal != 0 || c.down ? "ended" : "running");
+	       c.unended ? "may still run" : (c.dead_refusal != 0 || c.down) ? "ended" : "running",
+	       c.memory_kept ? "kept" : "not kept", c.stops_refused);
 }
 
 /* One line per group restart a call just caused, with the sched refusal
@@ -271,8 +272,9 @@ static void note_restart(void)
 		printk("osal(mali): stopped by sched refusal %u (0x%x) after kick %llu: %s; every "
 		       "later kick is -EIO\n",
 		       c.dead_refusal, c.dead_value, (unsigned long long)c.submitted,
-		       c.unended ? "the group may still run, memory kept (needs a GPU reset)" :
-				   "the group ended");
+		       c.unended     ? "the group may still run, memory kept (needs a GPU reset)" :
+		       c.memory_kept ? "the group ended, memory kept" :
+				       "the group ended");
 	}
 }
 
@@ -284,10 +286,10 @@ static void z_shutdown(void)
 
 	note_restart();
 	printk("osal(mali): shutdown: %s (%d)\n",
-	       rc == 0 ? "group stopped and terminated, GPU caches cleaned" :
-	       rc == -ETIMEDOUT ? "group stopped and terminated, GPU cache clean refused: memory kept" :
+	       rc == 0 ? "group terminated, GPU caches cleaned" :
+	       rc == -ETIMEDOUT ? "group terminated, GPU cache clean refused: memory kept" :
 	       rc == -EINVAL ? "no group to end" :
-	       "stop or terminate refused: the group may still run, memory kept", rc);
+	       "terminate refused: the group may still run, memory kept", rc);
 	osal_mali_diag_print();
 }
 
