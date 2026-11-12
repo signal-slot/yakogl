@@ -1319,6 +1319,24 @@ pub struct SampledTexture {
     /// GL_TEXTURE_WRAP_R, which st/mesa passes for every target (REPEAT,
     /// GL's default, unless set); a cube map's is clamped whatever it is.
     pub wrap_r: WrapMode,
+    /// GL_TEXTURE_COMPARE_FUNC under GL_COMPARE_REF_TO_TEXTURE, in GL's
+    /// order (GL's codes less GL_NEVER are the `Func` values); `None` when
+    /// the compare mode is GL_NONE. [`SampledTexture::sampler`] flips it.
+    pub compare: Option<Func>,
+}
+
+/// The sampler's compare function for GL's `f`: the Mali compares the
+/// texel with the reference, GL the reference with the texel, so the
+/// orders swap (`pan_flip_compare_func`, Mesa 26.2.1 pan_encoder.h:160-175,
+/// called by `panfrost_sampler_compare_func`, pan_cmdstream.c:140-149).
+pub fn flip_compare(f: Func) -> Func {
+    match f {
+        Func::LESS => Func::GREATER,
+        Func::GREATER => Func::LESS,
+        Func::LEQUAL => Func::GEQUAL,
+        Func::GEQUAL => Func::LEQUAL,
+        other => other,
+    }
 }
 
 /// GL's default GL_TEXTURE_MAX_LOD, 1000, as the sampler's 5.8 field holds
@@ -1394,8 +1412,9 @@ impl SampledTexture {
 
     /// The sampler (`panfrost_create_sampler_state`, Mesa 26.2.1
     /// pan_cmdstream.c:200-260, from st/mesa's state for a GLES 2 texture:
-    /// GL_TEXTURE_WRAP_R repeat, LOD bias 0, minimum LOD 0, no compare, a
-    /// zero border, seamless cube maps; nearest minification and
+    /// GL_TEXTURE_WRAP_R repeat, LOD bias 0, minimum LOD 0, a zero border,
+    /// seamless cube maps; the compare function NEVER under GL_NONE, else
+    /// GL's flipped ([`flip_compare`]); nearest minification and
     /// magnification clear round-to-nearest-even, :243-245). A cube map's
     /// three wrap modes are clamp-to-edge whatever GL's are: st/mesa
     /// normalises a seamless cube map's CSO so (st_atom_sampler.c:80-95;
@@ -1414,7 +1433,7 @@ impl SampledTexture {
             wrap_mode_t: if cube { WrapMode::CLAMP_TO_EDGE } else { self.wrap_t },
             wrap_mode_r: if cube { WrapMode::CLAMP_TO_EDGE } else { self.wrap_r },
             mipmap_mode: self.mipmap,
-            compare_function: Func::NEVER,
+            compare_function: self.compare.map_or(Func::NEVER, flip_compare),
             seamless_cube_map: true,
             round_to_nearest_even: !(self.mag_nearest && self.min_nearest),
             ..Default::default()

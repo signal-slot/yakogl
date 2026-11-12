@@ -107,6 +107,7 @@ fn texture_of(mode: &str) -> SampledTexture {
         wrap_s: wrap,
         wrap_t: wrap,
         wrap_r: WrapMode::REPEAT,
+        compare: None,
     }
 }
 
@@ -496,6 +497,7 @@ fn check_mip(mode: &'static str) {
         wrap_s: WrapMode::REPEAT,
         wrap_t: WrapMode::REPEAT,
         wrap_r: WrapMode::REPEAT,
+        compare: None,
     };
     let b = build(tex);
     let ours = |gpu: u64, len: usize| b.desc[(gpu - DESC) as usize..(gpu - DESC) as usize + len].to_vec();
@@ -613,6 +615,7 @@ fn check_format(mode: &'static str) {
         wrap_s: WrapMode::CLAMP_TO_EDGE,
         wrap_t: WrapMode::CLAMP_TO_EDGE,
         wrap_r: WrapMode::REPEAT,
+        compare: None,
     };
     let b = build(tex);
     let ours = |gpu: u64, len: usize| b.desc[(gpu - DESC) as usize..(gpu - DESC) as usize + len].to_vec();
@@ -728,6 +731,7 @@ fn a_vertex_shader_s_texture_is_the_board_s() {
         wrap_s: WrapMode::CLAMP_TO_EDGE,
         wrap_t: WrapMode::CLAMP_TO_EDGE,
         wrap_r: WrapMode::REPEAT,
+        compare: None,
     };
     let b = build_draw(None, Some(tex), false);
     let ours = |gpu: u64, len: usize| b.desc[(gpu - DESC) as usize..(gpu - DESC) as usize + len].to_vec();
@@ -864,6 +868,7 @@ fn a_cube_map_s_texture_is_the_board_s() {
         wrap_s: WrapMode::CLAMP_TO_EDGE,
         wrap_t: WrapMode::CLAMP_TO_EDGE,
         wrap_r: WrapMode::REPEAT,
+        compare: None,
     };
     let b = build_draw(None, Some(tex), false);
     let ours = |gpu: u64, len: usize| b.desc[(gpu - DESC) as usize..(gpu - DESC) as usize + len].to_vec();
@@ -1104,6 +1109,7 @@ fn depth_texture_of(source: &str, luminance: bool) -> SampledTexture {
         wrap_s: wrap,
         wrap_t: wrap,
         wrap_r: WrapMode::REPEAT,
+        compare: None,
     }
 }
 
@@ -1305,6 +1311,9 @@ const TEXMORE_48: &str = include_str!("../../tools/mali/testdata/texmore_48.trac
 /// 8x8x2, 4x4x1), nearest-mipmap-nearest (the same pair, `--uniform-values
 /// --levels 3`; gl_test case 206's volume).
 const TEXMORE_206_VOL: &str = include_str!("../../tools/mali/testdata/texmore_206_vol.trace");
+/// shadowcmp_218: gl_test case 218's two sampler2DShadow over one 4x4
+/// DEPTH_COMPONENT32F texture (fsarith_218_shadowcmp.vert and .frag).
+const SHADOWCMP_218: &str = include_str!("../../tools/mali/testdata/shadowcmp_218.trace");
 
 /// One decoded descriptor: pandecode's `Key: value` lines.
 type Fields = BTreeMap<String, String>;
@@ -1456,6 +1465,8 @@ fn shim_sampler(mut f: Fields) -> Sampler {
         minimum_lod: float(f, "Minimum LOD"),
         compare_function: match take(f, "Compare Function").as_str() {
             "Never" => Func::NEVER,
+            "Greater" => Func::GREATER,
+            "Lequal" => Func::LEQUAL,
             v => panic!("compare function {v}"),
         },
         maximum_lod: float(f, "Maximum LOD"),
@@ -1490,6 +1501,7 @@ fn shim_texture(mut f: Fields) -> Texture {
         normalize_coordinates: flag(f, "Normalize coordinates"),
         format: match take(f, "Format (v7)").as_str() {
             "RGBA8 UNORM RGBA" => Format::RGBA8_UNORM.0 << 12 | RgbComponentOrder::RGBA.0,
+            "Z32 RGBA" => Format::Z32.0 << 12 | RgbComponentOrder::RGBA.0,
             v => panic!("format {v}"),
         },
         width: num(f, "Width"),
@@ -1628,6 +1640,30 @@ fn check_shim_tables(name: &'static str, trace: &str, textures: &[SampledTexture
                         (pan_texture.c:1310-1311), the GL core's linear rows do not",
             });
         }
+        if m_tex.format == Format::Z32.0 << 12 | RgbComponentOrder::RGBA.0 {
+            /* after the texel interleave's difference: byte 9 holds both */
+            let word = u32::from_le_bytes(m_t[..4].try_into().unwrap());
+            let ours_fmt = word & 0x3ff | (Format::R32F.0 << 12 | RgbComponentOrder::RGB1.0) << 10;
+            diffs.push(Difference {
+                block: "Texture",
+                at: 0x00,
+                dump: m_t[..4].to_vec(),
+                ours: ours_fmt.to_le_bytes().to_vec(),
+                cause: "Format: Mesa views a DEPTH_COMPONENT32F texture as Z32 (pan_format.c:588, v7 and \
+                        later), the GL core keeps every depth texture as R32F texels, read as R32F RGB1 \
+                        (backend.rs `texel_format`); both are one 32-bit float a texel",
+            });
+            let half = u16::from_le_bytes(m_t[8..10].try_into().unwrap());
+            let ours_swz = half & !0xfff & !0x1000 | SWIZZLE_RGBA as u16;
+            diffs.push(Difference {
+                block: "Texture",
+                at: 0x08,
+                dump: m_t[8..10].to_vec(),
+                ours: ours_swz.to_le_bytes().to_vec(),
+                cause: "Swizzle: Mesa's R001 over Z32, ours the identity over R32F RGB1; both read \
+                        (d, 0, 0, 1), and a compare reads the red channel",
+            });
+        }
         /* the planes, layer-major: plane `layer * levels + level`; a 3D
          * texture's one a level */
         let count = tex.plane_count() as usize;
@@ -1737,6 +1773,61 @@ fn two_samplers_are_the_shim_s_tables() {
     /* per texture: the planes' address, texel interleave, clump ordering,
      * row stride and size */
     assert_eq!(check_shim_tables("texmore_2", TEXMORE_2, &textures), 2 * 5);
+}
+
+/// gl_test case 218 (shadowcmp): two sampler2DShadow over one 4x4
+/// DEPTH_COMPONENT32F texture, unit 0 GL_LESS and nearest, unit 1
+/// GL_GEQUAL and linear, both clamped to the edge, as the GL core hands them
+/// to the backend (`compare_op` GL's code less GL_NEVER, src/gl/draw.rs;
+/// R32F texels). Mesa 26.2.1 on drm-shim (shadowcmp_218.trace:
+/// `tools/mali/drm_shim_ref.sh run <shim> fsarith_218_shadowcmp.vert
+/// fsarith_218_shadowcmp.frag <out>`, tools/mali/gl_ref.py setting case
+/// 218's samplers) writes each sampler's compare function flipped,
+/// `Greater` and `Lequal` (pan_cmdstream.c:140-149): the Mali compares the
+/// texel with the reference. Every sampler byte is Mesa's; the board's
+/// sweep at 0decb5f7 read 0 for every lit texel when ours was `Never`.
+#[test]
+fn shadow_samplers_are_case_218_s() {
+    let shim = shim_fragment_tables(SHADOWCMP_218);
+    let pointer = |i: usize| hex(&shim.planes[i][0]["Pointer"]);
+    let (lt, ge) = (
+        (crate::gl::consts::GL_LESS - crate::gl::consts::GL_NEVER) as u8,
+        (crate::gl::consts::GL_GEQUAL - crate::gl::consts::GL_NEVER) as u8,
+    );
+    let texels = [0u8; 64 * 4];
+    let bind = |gpu: u64, compare_op: u8, linear: u8| crate::backend::GlesTextureBind {
+        format: crate::backend::GLES_TEXFMT_R32F,
+        type_: crate::backend::GLES_TEXTYPE_2D,
+        layers: 1,
+        base_gpu: gpu,
+        width: 4,
+        height: 4,
+        stride_texels: 16,
+        bytes: texels.len() as u32,
+        linear_filter: linear,
+        min_linear: linear,
+        wrap_s: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        wrap_t: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        compare_op,
+        cpu: texels.as_ptr().cast(),
+        ..crate::backend::GlesTextureBind::ZERO
+    };
+    let mut data_m = vec![0u8; 0x100];
+    let mut data = super::arena::Pool::new("data", 0x10_0000, &mut data_m).unwrap();
+    let textures = [
+        super::backend::texture_of(Some(&bind(pointer(0), lt, 0)), &mut data).unwrap(),
+        super::backend::texture_of(Some(&bind(pointer(1), ge, 1)), &mut data).unwrap(),
+    ];
+    assert_eq!(
+        (textures[0].sampler().compare_function, textures[1].sampler().compare_function),
+        (Func::GREATER, Func::LEQUAL)
+    );
+    /* GL_NONE (bit 4) is Mesa's NEVER whatever the function bits say */
+    let off = super::backend::texture_of(Some(&bind(pointer(0), lt | 16, 0)), &mut data).unwrap();
+    assert_eq!(off.sampler().compare_function, Func::NEVER);
+    /* per texture: the planes' address, texel interleave, format, swizzle,
+     * clump ordering, row stride and size */
+    assert_eq!(check_shim_tables("shadowcmp_218", SHADOWCMP_218, &textures), 2 * 7);
 }
 
 /// An 8x8 RGBA8 array of three layers (tex2darray_3layer, Mesa's words):

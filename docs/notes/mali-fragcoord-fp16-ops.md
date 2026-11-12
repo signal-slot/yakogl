@@ -65,8 +65,12 @@ stood the `sampler2DShadow` look-up, which no arm of the Mali back end took
 `tools/mali/drm_shim_ref.sh run <mesa-shim> fsarith_218_shadowcmp.vert
 fsarith_218_shadowcmp.frag <out>` then `tools/mali/pan_ref_diff.py extract
 <out>.trace --draw`. `tools/mali/gl_ref.py` learnt `sampler2DShadow` for it: the
-n-th sampler takes unit n with gl_test's 4x4 `DEPTH_COMPONENT32F` texture,
-`GL_COMPARE_REF_TO_TEXTURE` and `GL_LESS`, nearest. The texture's kind does
+n-th sampler takes unit n with gl_test's 4x4 `DEPTH_COMPONENT32F` texture
+under `GL_COMPARE_REF_TO_TEXTURE`, as case 218 sets it: the first `GL_LESS`
+and nearest, the second `GL_GEQUAL` and linear (the samplers' words are
+`shadowcmp_218.trace`'s, pinned by `src/mali/frame_tex_tests.rs`
+`shadow_samplers_are_case_218_s`: Mesa writes the compare function flipped,
+`Greater` and `Lequal`). The texture's kind does
 not reach the program (st/mesa lowers a shadow sampler bound to a non-depth
 texture only for ARB programs, `src/mesa/state_tracker/st_program.c:1239`,
 `st_atom_shader.c:170-180`); the **units** do: the two look-ups read the
