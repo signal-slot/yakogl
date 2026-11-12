@@ -83,6 +83,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 | Stage-interface link rules | interpolation and block mismatches refused | |
 | GLSL ES 3.00 in the compiler | 3,457 of 3,461 expected-build dEQP programs build on each GPU (`tests/es3_shaderc_corpus.rs`) | `docs/es3/shaderc-coverage.md`, RC13 |
 | PowerVR integer output from an ALU result | builds (`3efd7b30`): `precision.{int,uint}` fragment cases (24) no longer refused; the host read-back is black, so the value is checked through `usc_exec` (`tests/es3_int_out_alu_pvr.rs`), not a render | RC13 |
+| `gl_FragDepth` | builds on all three back ends: the PowerVR clamps it with a saturating `fadd`, emits `depthf` and runs the DEPTH_FEEDBACK pass (`7bfac242`, plan #325, `tests/es3_pvr_fragdepth.rs`); the GC7000UL writes clamped `r0.z` with `ps_depth_out_reg` 0 (`70a2050a`), and early Z is off for the writer through the early-depth rule (`5fa91ff6`, `tests/es3_fragdepth_gc.rs`; the back end's PE/RA words are item `gc-fragdepth-earlyz`); the V3D writes the per-pixel TLB Z with `writes_z`/`disable_ez` in the program data and the shader record (`8a5da05e`, `c8b31a3f`, `tests/es3_fragdepth_v3d.rs`). Host dEQP `shaders.fragdepth.` 17 of 17 begin, 0 refusals on `GPU=powervr`, `GPU=vivante` and `GPU=v3d` (before: 15 refused on the GC7000UL and the V3D); HOST-ONLY: no pixel verdict, the board verdicts are open (#316, #320; the GC `r0` depth-register convention is Mesa's) | `docs/notes/gl-fragdepth.md` |
 | Vertex array conversion | a buffer array the GPU cannot fetch as it lies (packed 2_10_10_10, `GL_HALF_FLOAT`, `GL_INT` / `GL_UNSIGNED_INT` through `glVertexAttribPointer`) is converted to float32 rows like a client array (`src/gl/draw.rs` `attrib_in_place_layout`); host only, `tests/es3_vertex_arrays.rs` | |
 | `layout(location)` on vertex inputs | `glBindAttribLocation` does not move a qualified input (`src/gl/program.rs` `ExplicitAttribs`), and an unqualified one takes the lowest free run clear of every `layout(location)` (`381b0f09`); host only, `tests/es3_attrib_location.rs`, host dEQP `attribute_location.mixed_max_attributes.*` 24 / 24 | Appendix A, T4 |
 | Typed current vertex value | `glVertexAttrib*` records float, int or uint beside the value, and the `GL_CURRENT_VERTEX_ATTRIB` getters convert as Mesa does (`bd114dcc`); host only, `tests/es3_current_attrib.rs`, host dEQP `state_query.shader` current and vertex-attrib queries 14 / 14 | Appendix A, T1 |
@@ -282,7 +283,8 @@ for in `docs/es3/shader-host-repro.md` (host run of all 20,616 cases at
 front end; 395 of the 645 are in its cause rows and 250 cannot be reproduced
 (main `396d667a` left no per-case list). The causes are back-end refusals
 (PowerVR texture look-ups 226, integer outputs from ALU results 24 (fixed, `3efd7b30`),
-`gl_FragDepth` 15, no owner on any GPU), the second and fourth draw buffer
+`gl_FragDepth` 15 (fixed on the host on all three back ends, `7bfac242`,
+`70a2050a`, `8a5da05e`; the board verdicts open)), the second and fourth draw buffer
 (RC14), multisample (RC8), the 64-byte reflection name (2) and values only a
 board can judge.
 
@@ -292,7 +294,10 @@ generator refusals outside that corpus: the PowerVR refuses `textureGrad`,
 from 2D-array, cube and 3D samplers. `texturesize` (38) reads a wrong size.
 `builtin_functions.common.round` / `roundeven` (16) are fixed on the host
 (`tests/es3_shaderc_fold.rs`), not yet run on a board. `precision.{int,uint}`
-(24) did not link (fixed on the host, `3efd7b30`), `fragdepth` (15) does not compile: not classified further.
+(24) did not link (fixed on the host, `3efd7b30`), `fragdepth` (15) did not
+compile (fixed on the host on all three back ends: `70a2050a` GC7000UL,
+`8a5da05e` V3D, `7bfac242` PowerVR; host dEQP 17 of 17 begin, 0 refusals,
+HOST-ONLY), not yet run on a board.
 
 ### RC14. MRT: three draw buffers
 
