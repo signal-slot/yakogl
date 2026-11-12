@@ -1801,6 +1801,12 @@ impl Tree<'_, '_> {
                 continue;
             };
             let w = usize::from(self.comps[i]).clamp(1, 4);
+            /* a compare of two constants folds to a constant boolean (no
+             * operand is encoded; -0.0 and 0.0 compare the same) */
+            let constant = |x: Src| self.fold(x, 0, 0)[..w].iter().all(|l| l.maybe_const());
+            if constant(s[0]) && constant(s[1]) {
+                continue;
+            }
             let mut zero = [false; 2];
             for k in 0..2 {
                 if let Some(z) = self.plus_zero(s[k], w)? {
@@ -1851,15 +1857,20 @@ impl Tree<'_, '_> {
             /* `fneg` of a value that is +0.0 in the lanes read: a zero
              * literal, or a local, a product of literals or a vector that
              * folds to it (`float z = 0.0; a < -z`); the compare reads that
-             * value itself, which is +0.0 */
+             * value itself, which is +0.0. A value that may fold to a zero
+             * the rule cannot name (`-abs(0.0)`, a local stored twice) is
+             * refused */
             Some(&IrOp::Alu(AluOp::Fneg, [c, ..])) => {
                 let swizzle = core::array::from_fn(|i| c.swizzle[s.swizzle[i] as usize & 3]);
                 let inner = Src { val: c.val, swizzle };
-                match self.const_lanes(inner, 0) {
-                    Some(v) if v[..w].iter().all(|&x| x == 0) => Ok(Some(inner)),
-                    Some(v) if v[..w].contains(&0) => Err(MaliError::NegZeroShared),
-                    _ => Ok(None),
+                let v = self.fold(inner, 0, 0);
+                if v[..w].iter().all(|l| *l == Lane::K(0)) {
+                    return Ok(Some(inner));
                 }
+                if v[..w].iter().any(|l| l.may_be_zero()) {
+                    return Err(MaliError::NegZeroShared);
+                }
+                Ok(None)
             }
             Some(&IrOp::ConstF32(v)) if lanes(&v, &s.swizzle, F32_NEG_ZERO) => {
                 match self.zero_for_compares(s.val.0 as usize) {
@@ -1867,68 +1878,130 @@ impl Tree<'_, '_> {
                     _ => Err(MaliError::NegZeroShared),
                 }
             }
-            Some(&IrOp::LoadLocal { local, index: None, .. }) => {
-                if s.swizzle[..w].iter().any(|&l| self.stored_neg_zero(local, l & 3)) {
+            /* any other value that folds, or may fold, to -0.0 in a lane
+             * read (`-1.0 * 0.0`, a vector built of -0.0 lanes, a local
+             * holding one): Mesa compares with +0.0 there, and the IR has
+             * none at the compare */
+            _ => {
+                let v = self.fold(s, 0, 0);
+                if v[..w].iter().any(|l| l.may_be_neg0()) {
                     return Err(MaliError::NegZeroShared);
                 }
                 Ok(None)
             }
-            /* any other value that folds to -0.0 in a lane read (`-1.0 *
-             * 0.0`, a vector built of -0.0 lanes): Mesa compares with
-             * +0.0 there, and the IR has none at the compare */
-            _ if self.const_lanes(s, 0).is_some_and(|v| v[..w].contains(&F32_NEG_ZERO)) => {
-                Err(MaliError::NegZeroShared)
-            }
-            _ => Ok(None),
         }
     }
 
-    /// The fp32 bits `s` reads in each lane, when it folds to constants:
-    /// a literal, an `fneg`, a product or a sum of constants (rounded as
-    /// fp32, as NIR's constant folding does), or a local whose every lane
-    /// read one store writes. `None`: not a constant (or too deep).
-    fn const_lanes(&self, s: Src, depth: usize) -> Option<[u32; 4]> {
-        if depth > 8 {
-            return None;
+    /// What NIR's constant folding can make of each lane `s` reads
+    /// ([`Lane`]): the bits of a literal, an `fneg`, a product or a sum of
+    /// constants (rounded as fp32, as NIR does), and of a local whose
+    /// stores all write that constant; otherwise whether the lane may still
+    /// be a constant NIR folds (`konst`) and a -0.0 among them (`neg0`). An
+    /// input, a uniform or a texel is none. An operation is one when all
+    /// its operands may be (`abs`, `min`, a conversion of constants: not
+    /// modelled), or when Mesa's rules can make it one from a zero (a
+    /// product, a fused product or a dot product with a zero lane, a select,
+    /// a sum of a value and its own negation). It may be a -0.0 when an
+    /// operand may be negative or -0.0 (a product also with a zero
+    /// constant; a select only through the operand it picks). A
+    /// local is the union of its stores; `visiting` holds the locals on the
+    /// path (a loop's local read through its own store adds nothing).
+    fn fold(&self, s: Src, depth: usize, visiting: u64) -> [Lane; 4] {
+        const UNKNOWN: [Lane; 4] = [Lane::Var { konst: true, neg0: true }; 4];
+        const NONE: [Lane; 4] = [Lane::Var { konst: false, neg0: false }; 4];
+        if depth > 12 {
+            return UNKNOWN;
         }
-        let at = |v: [u32; 4]| core::array::from_fn(|i| v[s.swizzle[i] as usize & 3]);
-        match *self.instrs.get(s.val.0 as usize)? {
-            IrOp::ConstF32(v) => Some(at(v)),
-            IrOp::Alu(AluOp::Fneg, [a, ..]) => Some(at(self.const_lanes(a, depth + 1)?.map(|x| x ^ F32_NEG_ZERO))),
-            IrOp::Alu(op @ (AluOp::Fmul | AluOp::Fadd), [a, b, _]) => {
-                let (x, y) = (self.const_lanes(a, depth + 1)?, self.const_lanes(b, depth + 1)?);
-                let f = |i: usize| {
-                    let (p, q) = (f32::from_bits(x[i]), f32::from_bits(y[i]));
-                    if op == AluOp::Fmul {
-                        (p * q).to_bits()
-                    } else {
-                        (p + q).to_bits()
+        let at = |v: [Lane; 4]| core::array::from_fn(|i| v[s.swizzle[i] as usize & 3]);
+        let Some(op) = self.instrs.get(s.val.0 as usize) else { return UNKNOWN };
+        match *op {
+            IrOp::ConstF32(v) => at(v.map(Lane::K)),
+            /* an int or a bool constant: a constant, never -0.0 (its
+             * conversion to float is +0.0 at most) */
+            IrOp::ConstI32(_) | IrOp::ConstBool(_) => [Lane::Var { konst: true, neg0: false }; 4],
+            IrOp::LoadInput { .. }
+            | IrOp::LoadUniform { .. }
+            | IrOp::LoadUniformIdx { .. }
+            | IrOp::Tex { .. }
+            | IrOp::TexSize { .. } => NONE,
+            /* a negated zero is -0.0 */
+            IrOp::Alu(AluOp::Fneg, [a, ..]) => at(self.fold(a, depth + 1, visiting).map(|l| match l {
+                Lane::K(x) => Lane::K(x ^ F32_NEG_ZERO),
+                Lane::Var { konst, .. } => Lane::Var { konst, neg0: konst },
+            })),
+            IrOp::Alu(op, srcs) => {
+                let n = op.arity();
+                let mut lanes = [UNKNOWN; 3];
+                for (k, l) in lanes.iter_mut().enumerate().take(n) {
+                    *l = self.fold(srcs[k], depth + 1, visiting);
+                }
+                /* `a + -a` (nir_opt_algebraic.py's `fadd(a, fneg(a))` is 0.0) */
+                let neg_of = |q: Src, of: Src| matches!(self.instrs.get(q.val.0 as usize), Some(&IrOp::Alu(AluOp::Fneg, [t, ..])) if t.val == of.val);
+                let cancel = op == AluOp::Fadd && (neg_of(srcs[0], srcs[1]) || neg_of(srcs[1], srcs[0]));
+                let product =
+                    matches!(op, AluOp::Fmul | AluOp::Ffma | AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 | AluOp::Bcsel);
+                at(core::array::from_fn(|i| {
+                    let l: [Lane; 3] = core::array::from_fn(|k| lanes[k][i]);
+                    let l = &l[..n];
+                    if let ([Lane::K(p), Lane::K(q)], AluOp::Fmul | AluOp::Fadd) = (l, op) {
+                        let (p, q) = (f32::from_bits(*p), f32::from_bits(*q));
+                        return Lane::K(if op == AluOp::Fmul { (p * q).to_bits() } else { (p + q).to_bits() });
                     }
-                };
-                Some(at(core::array::from_fn(f)))
+                    let maybe_const = |x: &Lane| matches!(x, Lane::K(_) | Lane::Var { konst: true, .. });
+                    let zero_k = |x: &Lane| matches!(x, Lane::K(k) if k & !F32_NEG_ZERO == 0);
+                    let konst = l.iter().all(maybe_const) || cancel || (product && l.iter().any(zero_k));
+                    let sign = |x: &Lane| match x {
+                        Lane::K(k) => k & F32_NEG_ZERO != 0,
+                        Lane::Var { neg0, .. } => *neg0,
+                    };
+                    /* a product is -0.0 with a zero and a negative factor:
+                     * a -0.0 operand, a negative constant or a zero constant
+                     * (by an unknown constant); a select is one of its
+                     * operands; a sum of a value and its negation is 0.0
+                     * (`+0.0`); anything else from a negative constant */
+                    let neg0 = konst
+                        && match op {
+                            AluOp::Bcsel => l.iter().skip(1).any(|x| x.may_be_neg0()),
+                            _ if cancel => false,
+                            _ if product => l.iter().any(|x| sign(x) || zero_k(x)),
+                            _ => l.iter().any(sign),
+                        };
+                    Lane::Var { konst, neg0 }
+                }))
             }
-            IrOp::LoadLocal { local, index: None, .. } => {
-                let mut v = [0u32; 4];
+            IrOp::LoadLocal { local, .. } => {
+                let bit = 1u64.checked_shl(local.0 as u32).unwrap_or(0);
+                if bit == 0 {
+                    return UNKNOWN;
+                }
+                if visiting & bit != 0 {
+                    return NONE;
+                }
+                let mut v = NONE;
                 for (l, out) in v.iter_mut().enumerate() {
-                    let mut found = None;
-                    for op in self.instrs.iter() {
-                        let IrOp::StoreLocal { local: to, index, src, write_mask } = *op else { continue };
+                    let mut seen: Option<Lane> = None;
+                    for st in self.instrs.iter() {
+                        let IrOp::StoreLocal { local: to, src, write_mask, .. } = *st else { continue };
                         if to != local || write_mask & (1 << l) == 0 {
                             continue;
                         }
-                        if index.is_some() || found.is_some() {
-                            return None;
-                        }
                         let lane = Src { val: src.val, swizzle: [src.swizzle[l]; 4] };
-                        found = Some(self.const_lanes(lane, depth + 1)?[0]);
+                        let x = self.fold(lane, depth + 1, visiting | bit)[0];
+                        seen = Some(match (seen, x) {
+                            (None, x) => x,
+                            (Some(Lane::K(a)), Lane::K(b)) if a == b => Lane::K(a),
+                            (Some(a), b) => Lane::Var {
+                                konst: a.maybe_const() || b.maybe_const(),
+                                neg0: a.may_be_neg0() || b.may_be_neg0(),
+                            },
+                        });
                     }
-                    /* a lane no store writes has no value: a NaN, which is
-                     * neither zero */
-                    *out = found.unwrap_or(0x7fc0_0001);
+                    /* a lane no store writes has no value */
+                    *out = seen.unwrap_or(Lane::Var { konst: false, neg0: false });
                 }
-                Some(at(v))
+                at(v)
             }
-            _ => None,
+            _ => UNKNOWN,
         }
     }
 
@@ -1962,30 +2035,43 @@ impl Tree<'_, '_> {
         }
         read.then_some(true)
     }
-
-    /// Some store of local `local` writes `-0.0` into its lane `l`: a
-    /// constant lane `-0.0`, or an `fneg` of a constant zero.
-    fn stored_neg_zero(&self, local: crate::shaderc::online::ir::LocalId, l: u8) -> bool {
-        self.instrs.iter().any(|op| {
-            let IrOp::StoreLocal { local: at, index: None, src, write_mask } = *op else { return false };
-            if at != local || write_mask & (1 << l) == 0 {
-                return false;
-            }
-            let lane = src.swizzle[l as usize] as usize & 3;
-            match self.instrs.get(src.val.0 as usize) {
-                Some(IrOp::ConstF32(v)) => v[lane] == F32_NEG_ZERO,
-                Some(&IrOp::Alu(AluOp::Fneg, [c, ..])) => matches!(
-                    self.instrs.get(c.val.0 as usize),
-                    Some(IrOp::ConstF32(v)) if v[c.swizzle[lane] as usize & 3] == 0
-                ),
-                _ => false,
-            }
-        })
-    }
 }
 
 /// The bits of `-0.0` in fp32.
 const F32_NEG_ZERO: u32 = 0x8000_0000;
+
+/// One lane of a compare operand as NIR's constant folding can make it
+/// ([`Tree::fold`]): a constant's bits, or a value of no known constant,
+/// with whether NIR may still fold it to a constant (`konst`) and to -0.0
+/// (`neg0`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Lane {
+    K(u32),
+    Var { konst: bool, neg0: bool },
+}
+
+impl Lane {
+    /// The lane is, or may fold to, a constant.
+    fn maybe_const(self) -> bool {
+        matches!(self, Lane::K(_) | Lane::Var { konst: true, .. })
+    }
+
+    /// The lane is, or may fold to, +0.0 or -0.0.
+    fn may_be_zero(self) -> bool {
+        match self {
+            Lane::K(x) => x & !F32_NEG_ZERO == 0,
+            Lane::Var { konst, .. } => konst,
+        }
+    }
+
+    /// The lane is, or may fold to, -0.0.
+    fn may_be_neg0(self) -> bool {
+        match self {
+            Lane::K(x) => x == F32_NEG_ZERO,
+            Lane::Var { neg0, .. } => neg0,
+        }
+    }
+}
 
 /// [`remap_srcs`] with a mutable closure.
 fn remap_srcs_mut(op: &mut IrOp, f: &mut impl FnMut(&mut Src)) {
