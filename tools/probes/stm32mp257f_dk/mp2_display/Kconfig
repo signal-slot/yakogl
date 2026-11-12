@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config MP2_DISPLAY_HOLD_S
+	int "Seconds the picture is held after the verdict line"
+	default 60
+	range 0 600
+	help
+	  After the PASS or FAIL line the probe keeps the scan-out running this
+	  long before main() returns, so the runner's MP2_HOLD_S and the KVM
+	  can see the picture. The board layer's lifetime
+	  (CONFIG_YAKOGL_STM32MP2_LIFETIME_S) must cover it.
+
+source "Kconfig.zephyr"

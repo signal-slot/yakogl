@@ -1,0 +1,74 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * mp2_display: the DK's display path as ST's tree has it, LTDC -> DSI ->
+ * ADV7535 -> HDMI, as yakogl devices. The probe's own overlay: the board
+ * and SoC files stay without it.
+ *
+ *   &i2c2    stm32mp251.dtsi:935-936 (0x40130000), the bus of the bridge
+ *            (stm32mp257f-dk.dts:395)
+ *   adv7535  stm32mp257f-dk.dts:428-433: reg 0x3d with the secondary maps
+ *            0x3f (edid), 0x3c (cec), 0x38 (packet), four DSI lanes
+ *   dsi      stm32mp255.dtsi:123-133 (0x48000000), its output to the bridge
+ *            (stm32mp257f-dk.dts:328-350)
+ *   ltdc     stm32mp251.dtsi:2150 (0x48010000), its output to the DSI
+ *            (stm32mp257f-dk.dts:536-547)
+ *
+ * Left out, on purpose:
+ *   - the bridge's INT (GPIO B4, falling) and reset (GPIO B6) lines
+ *     (stm32mp257f-dk.dts:436-438): no GPIO controller in this tree yet, the
+ *     bridge driver polls; the HPD is read from the chip, the DK has no pin.
+ *   - interrupts of the LTDC (the flips poll the shadow reload).
+ *   - clocks, resets and RIF: the display chain owner programs them.
+ *
+ * The values marked "placeholder" are to be set from the mp2_display_state
+ * probe's readings of what ST's chain leaves set.
+ */
+
+/ {
+	soc {
+		i2c2: i2c@40130000 {
+			compatible = "yakogl,stm32mp2-i2c";
+			reg = <0x40130000 0x400>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clock-frequency = <400000>;
+			/* placeholder: ck_ker_i2c2 at HSI (64 MHz) */
+			kernel-clock-frequency = <64000000>;
+			status = "okay";
+
+			adv7535: hdmi@3d {
+				compatible = "yakogl,adv7535";
+				reg = <0x3d>;
+				edid-reg = <0x3f>;
+				cec-reg = <0x3c>;
+				packet-reg = <0x38>;
+				adi,dsi-lanes = <4>;
+				status = "okay";
+			};
+		};
+
+		dsi: dsi@48000000 {
+			compatible = "yakogl,stm32-dsi";
+			reg = <0x48000000 0x800>;
+			data-lanes = <4>;
+			bridge = <&adv7535>;
+			/* placeholder: the DK's HSE, 40 MHz */
+			pll-ref-frequency = <40000000>;
+			/* 1280x720p60 CEA-861 VIC 4 */
+			pixel-clock-frequency = <74250000>;
+			status = "okay";
+		};
+
+		ltdc: display-controller@48010000 {
+			compatible = "yakogl,stm32-ltdc";
+			reg = <0x48010000 0x400>;
+			hactive = <1280>;
+			vactive = <720>;
+			pixel-format = "argb8888";
+			dsi-host = <&dsi>;
+			status = "okay";
+		};
+	};
+};
