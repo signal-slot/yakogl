@@ -92,11 +92,15 @@
 # Needs bash, flock(1) and strings(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-planned=27
 run=0
 failed=0
+# The lines of this file whose check has run. Every line that calls check
+# must be in it at the end: a check that a condition or an early return
+# skipped fails the test, and no count is kept by hand.
+declare -A ran=()
 check() { # <what> <0 = ok>
 	run=$((run + 1))
+	ran[${BASH_LINENO[0]}]=1
 	if [ "$2" = 0 ]; then
 		echo "$1 ok"
 	else
@@ -421,5 +425,9 @@ left=${left//$'\n'/ }
 check "no process of the test is left (the holder found by the search: $found; left: ${left:-none})" \
 	"$([ "$found" = 1 ] && [ -z "$left" ]; echo $?)"
 
-echo "board_lock_selftest: $run checks run (planned $planned), $failed failed"
-[ "$failed" = 0 ] && [ "$run" = "$planned" ]
+not_run=
+while IFS=: read -r line _; do
+	[ -n "${ran[$line]:-}" ] || not_run+=" $line"
+done < <(grep -nE '^([^#]*[[:space:];&|(])?check "' "$0")
+echo "board_lock_selftest: $run checks run, $failed failed${not_run:+, check lines not run:$not_run}"
+[ "$failed" = 0 ] && [ "$run" -gt 0 ] && [ -z "$not_run" ]
