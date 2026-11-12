@@ -6450,6 +6450,30 @@ fn a_compare_of_a_negated_value_with_a_constant_is_mesa_s() {
     assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::ArithConstant);
 }
 
+/// A product with a negated literal read by `clamp(x, 0.0, 1.0)` alone:
+/// Mesa's guard on the fneg rule is `is_used_by_non_fsat`
+/// (nir_search_helpers.h:477-492), and with the `fsat`'s `fmax` still in
+/// the program the rule fires, but nir_opt_algebraic.py:1105 turns
+/// `fsat(fneg(fmul(a, b)))` back into `fsat(fmul(fneg(a), b))`: the product
+/// as written (glsl.rs `Tree::fsat_of`). `clamp(a2 * -2.0, ..)`,
+/// `clamp(a2 * -1.0, ..)` and `min(max(a2 * -3.0, 0.0), 1.0)` (highp) are
+/// byte-equal
+/// (the first two were refused at 72d17d74f, equal on main). Refused
+/// ([`MaliError::ArithConstant`]): `max(min(.., 1.0), 0.0)`, whose words
+/// left alone are not Mesa's, and a second product of the same literal
+/// read by more than the clamp (one value in Mesa).
+#[test]
+fn a_negated_literal_product_read_by_fsat_alone_is_left_as_written() {
+    for (name, vs, fs, json) in [pair!("negsat_clamp"), pair!("negsat_clamp_one"), pair!("negsat_maxmin")] {
+        let r = std::panic::catch_unwind(|| check_linked(vs, fs, json));
+        assert!(r.is_ok(), "{name}");
+    }
+    for (name, _, fs, json) in [pair!("negsat_minmax"), pair!("negsat_twice")] {
+        assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::ArithConstant, "{name}");
+    }
+}
+
 /// A mediump fragment shader's matrix uniform is refused before its block
 /// is laid out (select.rs `UboLayout::fs16` takes floats, vectors, vec4
 /// arrays and ints), so the layout's `split` mark for a matrix, which it
