@@ -65,6 +65,9 @@ const INSTR_SHIFT: u8 = 0;
 const CLASS_SHIFT: u8 = 3;
 /// One [`Prec`] in a table byte.
 const PREC_MASK: u8 = 7;
+/// The scan reached the expression and recorded its class: an entry
+/// without it is [`Prec::Unknown`].
+const SEEN: u8 = 0x40;
 
 /// What the lowering asks: the class of each expression, of each declared
 /// variable, and of each function's result.
@@ -87,14 +90,23 @@ impl<'a> Precs<'a> {
     /// `e` is inside a tree Mesa computes at 16 bits (a lowered tree, or a
     /// lowered built-in's body), High for any other float or bool value,
     /// None for an int, a struct or no value.
+    ///
+    /// [`Prec::Unknown`] for an expression the scan did not reach: the
+    /// lowering records it, and a reader of precision refuses it.
     pub fn instr(&self, e: ExprId) -> Prec {
-        prec_of((self.exprs.get(e.0 as usize).copied().unwrap_or(0) >> INSTR_SHIFT) & PREC_MASK)
+        match self.exprs.get(e.0 as usize).copied() {
+            Some(b) if b & SEEN != 0 => prec_of((b >> INSTR_SHIFT) & PREC_MASK),
+            _ => Prec::Unknown,
+        }
     }
 
     /// `e`'s class (A.3): what a compiler temporary holding its value is
     /// (Mesa's `vec_ctor`, `conditional_tmp`, a call's return value).
     pub fn class(&self, e: ExprId) -> Prec {
-        prec_of((self.exprs.get(e.0 as usize).copied().unwrap_or(0) >> CLASS_SHIFT) & PREC_MASK)
+        match self.exprs.get(e.0 as usize).copied() {
+            Some(b) if b & SEEN != 0 => prec_of((b >> CLASS_SHIFT) & PREC_MASK),
+            _ => Prec::Unknown,
+        }
     }
 
     /// The class a variable `d` was declared with (`handle_precision` of
@@ -425,7 +437,7 @@ impl<'x, 'a> Scan<'x, 'a> {
 
     fn set_instr(&mut self, e: ExprId, p: Prec) {
         if let Some(x) = self.exprs.get_mut(e.0 as usize) {
-            *x = (*x & !(PREC_MASK << INSTR_SHIFT)) | (bits_of(p) << INSTR_SHIFT);
+            *x = (*x & !(PREC_MASK << INSTR_SHIFT)) | (bits_of(p) << INSTR_SHIFT) | SEEN;
         }
     }
 
@@ -898,7 +910,12 @@ impl<'x, 'a> Scan<'x, 'a> {
                  * class is */
                 Kind::Temp => class == Prec::Medium,
             };
-        let p = if !lowerable(ty) || ty.is_sampler() {
+        /* An int, a sampler and no value have no float width; a struct's
+         * value is its members, copied at full width (a struct is never
+         * lowered, `can_lower_type`). */
+        let p = if matches!(ty, BaseType::Struct(_)) {
+            Prec::High
+        } else if !lowerable(ty) || ty.is_sampler() {
             Prec::None
         } else if lowered {
             Prec::Medium
@@ -1382,6 +1399,122 @@ mod tests {
         let l = compile_to_ir(&a, Stage::Fragment, a.alloc_str(src).expect("arena")).expect("compiles");
         assert_eq!(l.module.prec.len(), l.module.instrs.len());
         assert_eq!(l.module.local_prec.len(), l.module.locals.len());
+    }
+
+    /// Every `.vert` and `.frag` under `dir`, recursively.
+    fn sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let mut entries: Vec<_> = rd.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        entries.sort();
+        for p in entries {
+            if p.is_dir() {
+                sources(&p, out);
+            } else if p.extension().is_some_and(|x| x == "vert" || x == "frag") {
+                out.push(p);
+            }
+        }
+    }
+
+    /// Not an int GL type (int, uint and their vectors).
+    fn float_gl_type(t: u16) -> bool {
+        !matches!(t, 0x1404 | 0x1405 | 0x8B53..=0x8B55 | 0x8DC6..=0x8DC8)
+    }
+
+    /// The value `v` is a float or a bool by what loads or selects it.
+    fn float_value(m: &Module, v: ValueId, depth: u32) -> bool {
+        use super::super::ir::{IoSlot, ScalarType};
+        let row = |dw: u16| m.uniforms.iter().find(|u| dw >= u.dword_off && dw < u.dword_off + u.dwords.max(1));
+        match m.instrs.get(v.0 as usize) {
+            Some(Op::LoadLocal { local, .. }) => m
+                .locals
+                .get(local.0 as usize)
+                .is_some_and(|d| d.ty.scalar != ScalarType::I32 && d.ty.scalar != ScalarType::U32),
+            Some(Op::LoadUniform { dword_off, .. }) => row(*dword_off).is_some_and(|u| float_gl_type(u.gl_type)),
+            Some(Op::LoadUniformIdx { base_dw, .. }) => row(*base_dw).is_some_and(|u| float_gl_type(u.gl_type)),
+            Some(Op::LoadInput { slot, .. }) => match slot {
+                IoSlot::Attrib(_) | IoSlot::Varying(_) => {
+                    m.inputs.iter().find(|d| d.slot() == *slot).is_some_and(|d| float_gl_type(d.gl_type))
+                }
+                IoSlot::VertexId | IoSlot::InstanceId => false,
+                _ => true,
+            },
+            Some(Op::Alu(AluOp::Bcsel, [_, x, _])) if depth < 64 => float_value(m, x.val, depth + 1),
+            _ => false,
+        }
+    }
+
+    /// Over the tree's shaders: the tables are in step, no instruction is
+    /// Unknown (an expression the scan did not reach), and no value that is
+    /// a float by its operation records None (the review's light_amount
+    /// struct copies recorded None for 144 selects and loads).
+    #[test]
+    fn every_float_value_of_the_corpus_has_a_class() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut files = Vec::new();
+        for d in ["tools/shaders", "tools/mali/testdata", "tests/fixtures", "tools/cts/testdata"] {
+            sources(&root.join(d), &mut files);
+        }
+        let mut buf = std::vec![0u8; 1 << 23];
+        let (mut compiled, mut bad) = (0usize, Vec::new());
+        for f in &files {
+            let Ok(src) = std::fs::read_to_string(f) else { continue };
+            let stage = if f.extension().is_some_and(|x| x == "vert") { Stage::Vertex } else { Stage::Fragment };
+            let a = Arena::new(&mut buf);
+            let Ok(text) = a.alloc_str(&src) else { continue };
+            let Ok(l) = compile_to_ir(&a, stage, text) else { continue };
+            let m = &l.module;
+            compiled += 1;
+            if !m.has_prec() {
+                bad.push(std::format!("{}: tables out of step", f.display()));
+                continue;
+            }
+            for (i, op) in m.instrs.iter().enumerate() {
+                let p = m.prec_of(ValueId(i as u32));
+                let float = match *op {
+                    Op::ConstF32(_) | Op::ConstBool(_) => true,
+                    Op::Alu(a, _) => matches!(
+                        a,
+                        AluOp::Fadd
+                            | AluOp::Fmul
+                            | AluOp::Ffma
+                            | AluOp::Fmin
+                            | AluOp::Fmax
+                            | AluOp::Fneg
+                            | AluOp::Fabs
+                            | AluOp::Fsign
+                            | AluOp::Frcp
+                            | AluOp::Frsq
+                            | AluOp::Fsqrt
+                            | AluOp::Fexp2
+                            | AluOp::Flog2
+                            | AluOp::Fsin
+                            | AluOp::Fcos
+                            | AluOp::Ffloor
+                            | AluOp::Fceil
+                            | AluOp::Ftrunc
+                            | AluOp::Ffract
+                            | AluOp::Fdot2
+                            | AluOp::Fdot3
+                            | AluOp::Fdot4
+                            | AluOp::Flt
+                            | AluOp::Fle
+                            | AluOp::Feq
+                            | AluOp::Fne
+                            | AluOp::B2f
+                            | AluOp::I2f
+                            | AluOp::U2f
+                    ),
+                    Op::Tex { ret: super::super::ir::ScalarType::F32, .. } => true,
+                    _ => float_value(m, ValueId(i as u32), 0),
+                };
+                if p == Prec::Unknown || (float && p == Prec::None) {
+                    bad.push(std::format!("{}: %{i} {p:?} {op:?}", f.display()));
+                }
+            }
+        }
+        std::println!("{compiled} of {} shaders compiled", files.len());
+        assert!(compiled > 900, "{compiled} shaders compiled");
+        assert!(bad.is_empty(), "{} values with no class:\n{}", bad.len(), bad[..bad.len().min(20)].join("\n"));
     }
 
     #[test]
