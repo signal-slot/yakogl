@@ -6118,7 +6118,7 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
      * (`deduplicate_outputs`, nir_opt_varyings.c:3253-3420, in scalar slot
      * order: the first kept, the others read from it; fsload_dup_swz's
      * q.x is p.y): (that lane, slot, lane) */
-    let mut placed = [((0u8, 0u8), 0u8, 0u8); 4 * MAX_VARYINGS];
+    let mut placed = [(((0u8, 0u8), 0u8), 0u8, 0u8); 4 * MAX_VARYINGS];
     let mut nplaced = 0;
     for at in &lay[..n] {
         let loc = at.location as usize & 15;
@@ -6134,7 +6134,12 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
             if keep & (1 << comp) == 0 {
                 continue;
             }
-            let class = f.prec.consts.class(at.location, comp);
+            /* within one interpolation qualifier (`get_input_qualifier`'s
+             * tables, nir_opt_varyings.c:3042-3136, 3298-3305: b12's flat q
+             * beside the smooth p, both a_a.xy, stays apart) */
+            let interp = m.inputs.iter().find(|d| d.kind == IoKind::Varying && d.location == at.location);
+            let interp = interp.map_or(ir::INTERP_SMOOTH, |d| d.interp);
+            let class = (f.prec.consts.class(at.location, comp), interp);
             if let Some(&(_, slot, lane)) = placed[..nplaced].iter().find(|x| x.0 == class) {
                 /* a lane equal to one laid out: read from it, not stored */
                 keep &= !(1 << comp);

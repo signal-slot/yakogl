@@ -2120,6 +2120,42 @@ fn a_lane_assigned_to_the_colour_keeps_the_lanes_read_as_mesa_26_2_1() {
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
 }
 
+/// Equal lanes are merged within one interpolation qualifier only
+/// (`get_input_qualifier`'s tables, nir_opt_varyings.c:3042-3136,
+/// 3298-3305): two flat varyings of one value are one flat load
+/// (fsload_qual4); a smooth and a flat one stay apart in Mesa's program
+/// (each reference holds a `.src_flat32` load), a layout refused here
+/// (flat beside smooth), never q read from p's smooth slot.
+#[test]
+fn equal_lanes_of_two_qualifiers_are_not_merged() {
+    check_linked_for(
+        "fsload_qual4",
+        td!("fsload_qual4.vert"),
+        td!("fsload_qual4.frag"),
+        td!("fsload_qual4.expect.json"),
+    );
+    for (vs, fs, json) in [
+        (td!("fsload_qual1.vert"), td!("fsload_qual1.frag"), td!("fsload_qual1.expect.json")),
+        (td!("fsload_qual2.vert"), td!("fsload_qual2.frag"), td!("fsload_qual2.expect.json")),
+        (td!("fsload_qual3.vert"), td!("fsload_qual3.frag"), td!("fsload_qual3.expect.json")),
+    ] {
+        let r = region(json, "fs.fragment").expect("fs.fragment");
+        assert!(r.words.iter().any(|w| text(*w).contains(".src_flat32")), "{fs}");
+        let _k = store::test_keep();
+        let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
+            .expect("the scratch arena is free")
+            .expect("the vertex shader's constant lanes");
+        let f = store::with_scratch(|s| super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|_| ()))
+            .expect("the scratch arena is free");
+        match f {
+            Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => {
+                assert_eq!(e, MaliError::VaryingNotFromAttribute, "{fs}")
+            }
+            other => panic!("{fs}: not refused by name: {other:?}"),
+        }
+    }
+}
+
 /// Two lanes of equal value: Mesa's link keeps the first in the layout's
 /// order and reads the other from it (`deduplicate_outputs`,
 /// nir_opt_varyings.c:3253-3420). fsload_dup's `a.z` is `a.x` (`.v2`, two
