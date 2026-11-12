@@ -72,6 +72,20 @@
 #define RCC_GPUCFGR  0x83C
 #define RCC_LTDCCFGR 0x840
 #define RCC_DSICFGR  0x844
+/* Named from ST Linux stm32mp25_rcc.h (v6.6-stm32mp-r3.1) */
+#define RCC_GPIOBCFGR   0x530
+#define RCC_GPIOFCFGR   0x540
+#define RCC_I2C2CFGR    0x7A8
+#define RCC_XBAR27CFGR  0x1084 /* LTDC kernel clock (FLEXGEN_27) */
+#define RCC_XBAR28CFGR  0x1088 /* DSI PHY reference (FLEXGEN_28) */
+#define RCC_PREDIV27CFGR 0x1184
+#define RCC_PREDIV28CFGR 0x1188
+#define RCC_FINDIV27CFGR 0x1290
+#define RCC_FINDIV28CFGR 0x1294
+#define RCC_PLL4CFGR1   0x1360
+#define RCC_PLL8CFGR1   0x1400 /* CFGR1..5 at +0, 4, 8, 0xC, 0x10; 6, 7 at 0x18, 0x1C */
+#define RCC_SPAN        0x2000
+#define RCC_RAW_END     0x1500
 #define RCC_PERCFGR_RST (1u << 0)
 #define RCC_PERCFGR_EN  (1u << 1)
 
@@ -103,7 +117,7 @@
  * (LTDC secure layers, 0xfe800000, 8 MiB), 14 (rotation, 0xff000000,
  * 16 MiB) and 10 (the GPU carveout, 0xfa800000) per the DK's RIF dtsi.
  */
-#define RISAF4_PHYS 0x42100000UL
+#define RISAF4_PHYS 0x420d0000UL /* stm32mp251.dtsi risaf4: DDR 0x80000000, 4 GiB */
 #define RISAF_REG(n) (0x40 + 0x40 * ((n) - 1u))
 
 static unsigned int nread;
@@ -133,6 +147,15 @@ static mm_reg_t map(uintptr_t pa)
 	mm_reg_t va;
 
 	device_map(&va, pa, 0x1000, K_MEM_CACHE_NONE);
+	return va;
+}
+
+/* The RCC is larger than a page: flexgen at 0x1000-0x12ff, PLLs to 0x14xx. */
+static mm_reg_t map_rcc(void)
+{
+	mm_reg_t va;
+
+	device_map(&va, RCC_PHYS, RCC_SPAN, K_MEM_CACHE_NONE);
 	return va;
 }
 
@@ -285,7 +308,7 @@ static void read_gpio(const char *blk, uintptr_t pa)
 
 int main(void)
 {
-	mm_reg_t rcc = map(RCC_PHYS);
+	mm_reg_t rcc = map_rcc();
 	mm_reg_t rifsc = map(RIFSC_PHYS);
 
 	printk("mp2_display_state: build %s\n", MP2_DISPLAY_STATE_BUILD);
@@ -309,6 +332,23 @@ int main(void)
 	(void)rd("rcc", "gpucfgr", rcc, RCC_PHYS, RCC_GPUCFGR);
 	(void)rd("rcc", "ltdccfgr", rcc, RCC_PHYS, RCC_LTDCCFGR);
 	(void)rd("rcc", "dsicfgr", rcc, RCC_PHYS, RCC_DSICFGR);
+	(void)rd("rcc", "i2c2cfgr", rcc, RCC_PHYS, RCC_I2C2CFGR);
+	(void)rd("rcc", "gpiobcfgr", rcc, RCC_PHYS, RCC_GPIOBCFGR);
+	(void)rd("rcc", "gpiofcfgr", rcc, RCC_PHYS, RCC_GPIOFCFGR);
+	(void)rd("rcc", "xbar27cfgr", rcc, RCC_PHYS, RCC_XBAR27CFGR);
+	(void)rd("rcc", "xbar28cfgr", rcc, RCC_PHYS, RCC_XBAR28CFGR);
+	(void)rd("rcc", "prediv27cfgr", rcc, RCC_PHYS, RCC_PREDIV27CFGR);
+	(void)rd("rcc", "prediv28cfgr", rcc, RCC_PHYS, RCC_PREDIV28CFGR);
+	(void)rd("rcc", "findiv27cfgr", rcc, RCC_PHYS, RCC_FINDIV27CFGR);
+	(void)rd("rcc", "findiv28cfgr", rcc, RCC_PHYS, RCC_FINDIV28CFGR);
+	for (uint32_t i = 0; i < 5; i++) {
+		char n4[16], n8[16];
+
+		snprintf(n4, sizeof(n4), "pll4cfgr%u", (unsigned int)(i + 1));
+		snprintf(n8, sizeof(n8), "pll8cfgr%u", (unsigned int)(i + 1));
+		(void)rd("rcc", n4, rcc, RCC_PHYS, RCC_PLL4CFGR1 + 4 * i);
+		(void)rd("rcc", n8, rcc, RCC_PHYS, RCC_PLL8CFGR1 + 4 * i);
+	}
 
 	read_ltdc(rcc, rifsc);
 	read_dsi(rcc, rifsc);
