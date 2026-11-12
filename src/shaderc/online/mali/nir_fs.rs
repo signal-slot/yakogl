@@ -6499,10 +6499,10 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
     pr.push(p, place)
 }
 
-/// The lanes of each load are converted to fp16 in Mesa's order, which
-/// [`convert`] makes: each load's lanes in lane order, an aligned pair
-/// that [`Leaf::Half`] reads as one conversion (`V2F32_TO_V2F16`, the
-/// even lane low), every other lane alone (`FADD.f32 .h0`). Mesa converts
+/// Each load's fp16 conversions in Mesa's order, for [`convert`]: the
+/// first lane of each, an aligned pair that [`Leaf::Half`] reads being one
+/// conversion (`V2F32_TO_V2F16`, the even lane low), every other lane
+/// alone (`FADD.f32 .h0`), padded with [`NO_LANE`]. Mesa converts
 /// the lanes its fp16 trees read where the varying's `f2fmp` stands, in
 /// lane order (`nir_lower_alu_width` splits the vector conversion), and
 /// the colour's own lanes after them, in the colour's order: the link's
@@ -6513,17 +6513,18 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
 /// the colour's x). `nir_opt_vectorize` makes the two lanes of an aligned
 /// pair of one load one conversion at the first one's place, that lane
 /// low (nir_opt_vectorize.c:166-171 and 559; intloop_ifloop.expect.json's
-/// `(v.z, v.w, v.x, 1.0)`: the pair z,w first, then x). A load whose two
-/// orders differ (a pair Mesa makes of lanes converted apart here,
-/// fsload_mk_pair and fsload_disc_col; lanes converted out of lane order),
-/// or whose fp16 trees read lanes of two varyings (each its own `f2fmp`,
-/// at its own place), has no reference here.
+/// `(v.z, v.w, v.x, 1.0)`: the pair z,w first, then x). A pair Mesa makes
+/// of lanes converted apart here (fsload_mk_pair, disc_col), or with its
+/// odd lane low (swap_yx's `V2F32_TO_V2F16 r0, r1^, r0^`), or a load whose
+/// fp16 trees read lanes of two varyings (each its own `f2fmp`, at its
+/// own place), has no reference here.
 fn conversion_order(
     f: &Fs<'_>,
     pr: &Pairs,
     roots: [u8; 2],
     conv_form: &[[Option<bool>; 4]; MAX_VARYINGS],
-) -> Result<(), MaliError> {
+) -> Result<[[u8; 4]; MAX_VARYINGS], MaliError> {
+    let mut out = [[NO_LANE; 4]; MAX_VARYINGS];
     let lanes_of = |x: &P| -> [Option<(u8, u8)>; 2] {
         match *x {
             P::Leaf(Leaf::Half { k, h, swz: Swz::H10 }) => [Some((k, 2 * h + 1)), Some((k, 2 * h))],
@@ -6601,11 +6602,17 @@ fn conversion_order(
                 None => c += 1,
             }
         }
-        if mesa[..nm] != ours[..no] {
+        /* the same conversions (a pair Mesa makes with its odd lane low has
+         * no reference here), made in Mesa's order */
+        let same = nm == no && mesa[..nm].iter().all(|g| ours[..no].contains(g));
+        if !same {
             return Err(MaliError::FsVaryingLoad);
         }
+        for (o, g) in out[k].iter_mut().zip(&mesa[..nm]) {
+            *o = g.0;
+        }
     }
-    Ok(())
+    Ok(out)
 }
 
 /// `op` is `sin`, `cos` or `log2` ([`transc_rows`]).
@@ -7328,7 +7335,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             *cf = Some(pair);
         }
     }
-    conversion_order(f, &pr, roots, &conv_form)?;
+    let conv_order = conversion_order(f, &pr, roots, &conv_form)?;
     /* a coordinate is read as fp32, not converted (one load may be the
      * coordinate of several look-ups: texmore_2's `@r0:r1`) */
     if f.live_look_ups().any(|(_, t)| t.load.is_some_and(|k| used[k as usize] != 0)) {
@@ -7468,7 +7475,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let mut texel = None;
     for &(_, _, what, x) in events.iter() {
         match what {
-            LOAD => convert(p, f, x as usize, &conv_form, &mut lv, &mut rows)?,
+            LOAD => convert(p, f, x as usize, &conv_form, Some(&conv_order[x as usize]), &mut lv, &mut rows)?,
             TEX => {
                 /* the coordinate's lane converted (`F16_TO_F32 r2, r2^.h0`),
                  * the one value both staging words */
@@ -8918,7 +8925,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
             p.cur = block;
         }
         match what {
-            LOAD | TAIL_LOAD => convert(p, f, x as usize, &none, &mut lv, &mut rows)?,
+            LOAD | TAIL_LOAD => convert(p, f, x as usize, &none, None, &mut lv, &mut rows)?,
             TEX => tex_highp(p, f, x as usize, &mut lv, val, &mut rows)?,
             /* a float array read's offset, held in its node's value until
              * its load ([`select::ubo_offset`], [`select::ubo_fetch`]) */
@@ -9107,7 +9114,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
             if let Some((false, k, _)) = load_lane(f, v)? {
                 if deferred[k as usize] {
                     deferred[k as usize] = false;
-                    convert(p, f, k as usize, &none, lv, rows)?;
+                    convert(p, f, k as usize, &none, None, lv, rows)?;
                 }
             }
             Ok(())
@@ -9185,7 +9192,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
         if let Some((false, k, _)) = load_lane(f, x)? {
             if deferred[k as usize] {
                 deferred[k as usize] = false;
-                convert(p, f, k as usize, &none, lv, rows)?;
+                convert(p, f, k as usize, &none, None, lv, rows)?;
             }
         }
         Ok(())
@@ -9686,6 +9693,7 @@ fn convert(
     f: &Fs<'_>,
     k: usize,
     form: &[[Option<bool>; 4]; MAX_VARYINGS],
+    order: Option<&[u8; 4]>,
     lv: &mut Leaves,
     rows: &mut u128,
 ) -> Result<(), MaliError> {
@@ -9704,23 +9712,40 @@ fn convert(
     for c in 0..v.comps as usize {
         lv.raw[k][c] = Some(lanes[c]);
     }
-    let mut c = 0;
-    while c < v.comps as usize {
-        match form[k][c] {
-            Some(true) => {
+    /* in `order` ([`conversion_order`]), else in lane order */
+    let mut starts = [NO_LANE; 4];
+    match order {
+        Some(o) => starts = *o,
+        None => {
+            let (mut c, mut n) = (0, 0);
+            while c < v.comps as usize {
+                if let Some(pair) = form[k][c] {
+                    starts[n] = c as u8;
+                    n += 1;
+                    c += if pair { 2 } else { 1 };
+                } else {
+                    c += 1;
+                }
+            }
+        }
+    }
+    for c in starts.iter().take_while(|&&c| c != NO_LANE).map(|&c| c as usize) {
+        match form[k].get(c).copied().flatten() {
+            Some(true) if c + 1 < v.comps as usize => {
                 let s = [Src::ssa(lanes[c]), Src::ssa(lanes[c + 1])];
                 lv.conv[k][c] = Some(row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 2 }, &s)?);
-                c += 2;
             }
             Some(false) => {
                 lv.conv[k][c] = Some(row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &[Src::ssa(lanes[c])])?);
-                c += 1;
             }
-            None => c += 1,
+            _ => return Err(MaliError::Defect(Defect::IrIndex)),
         }
     }
     Ok(())
 }
+
+/// No lane: the end of a load's conversion order ([`convert`]).
+const NO_LANE: u8 = u8::MAX;
 
 /// Look-up `j` (`bi_emit_tex_valhall`): the coordinate's two fp32 lanes
 /// collected as the staging words, the handle's two words (its descriptor

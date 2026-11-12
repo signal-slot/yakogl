@@ -50,7 +50,7 @@ tools/shaders/es100/hello.frag: ok
 tools/shaders/es100/hello.vert: ok
 tools/shaders/es100/idiv.frag: ok
 tools/shaders/es100/ifelse_loop.frag: ok
-tools/shaders/es100/ifloop.frag: Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet
+tools/shaders/es100/ifloop.frag: ok
 tools/shaders/es100/ifoutput.frag: ok
 tools/shaders/es100/ifoutput2.frag: ok
 tools/shaders/es100/immneg.frag: ok
