@@ -140,6 +140,117 @@ expect "verdict: nothing selected is said" '^no tests selected in missing$' "$ou
 : > "$nlog"
 verdict yakogl
 checks=$((checks + 1)); [ "$vrc" = 3 ] || { echo "FAIL verdict: an empty nextest.log is rc $vrc, expected 3"; fails=$((fails + 1)); }
+# tests_as_declared: a test row passes when the tests that ran are the tests
+# its sources declare, so no row pins a count that every change which adds a
+# test must edit. The sources below are made here; the logs are libtest's own
+# shape (`test <path> ... ok`, `test <path> - should panic ... ok`).
+td=$cache/declared
+mkdir -p "$td/src/sub" "$td/bad"
+cat > "$td/src/a.rs" <<'EOF2'
+//! A fixture: two tests in the usual `mod tests`.
+fn helper() {}
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn one() {}
+    // #[test]
+    // fn commented_out() {}
+    #[test]
+    #[should_panic]
+    fn two() {
+        panic!("as declared");
+    }
+}
+EOF2
+cat > "$td/src/sub/b.rs" <<'EOF2'
+#[test]
+fn one() {}
+#[cfg(feature = "inner")]
+mod inner {
+    #[test]
+    fn three() {}
+    mod deeper {
+        #[test]
+        fn four() {}
+    }
+}
+#[test]
+fn five() {}
+EOF2
+echo "fn no_test_here() {}" > "$td/bad/empty.rs"
+printf '#[test]\n#[allow(dead_code)]\n' > "$td/bad/cut.rs"
+dlog=$cache/declared.log
+# declared <result line> <test path>... -- <source>...: the hook's lines.
+declared() {
+  local result=$1
+  shift
+  : > "$dlog"
+  while [ "$1" != -- ]; do echo "test $1 ... ok" >> "$dlog"; shift; done
+  shift
+  echo "$result" | sed 's/^/test result: /' >> "$dlog"
+  out=$(tools/check.sh --tests-as-declared "$dlog" "$@" 2>&1)
+  drc=$?
+}
+drc_is() {
+  checks=$((checks + 1))
+  [ "$drc" = "$2" ] || { echo "FAIL declared: $1 is rc $drc, expected $2"; printf '%s\n' "$out" | sed 's/^/    /' | tail -5; fails=$((fails + 1)); }
+}
+all6=(tests::one "tests::two - should panic" sub::b::one sub::b::inner::three sub::b::inner::deeper::four sub::b::five)
+ok() { echo "ok. $1 passed; 0 failed; 0 ignored; 0 measured; 2616 filtered out; finished in 0.01s"; }
+declared "$(ok 6)" "${all6[@]}" -- "$td/src"
+drc_is "every declared test ran" 0
+expect "declared: the count is said" '^6 passed: every #\[test\] of ' "$out"
+# A test that is no longer compiled, or that the row's filter no longer selects.
+declared "$(ok 5)" "${all6[@]:0:5}" -- "$td/src"
+drc_is "a declared test that did not run" 1
+expect "declared: the test that did not run is named" '^declared, did not run .*: five$' "$out"
+# The same name in two modules is two tests.
+declared "$(ok 5)" "${all6[@]:1}" -- "$td/src"
+drc_is "one of two tests of the same name did not run" 1
+expect "declared: the name that ran once of twice" '^declared, did not run .*: one$' "$out"
+# A test the filter selects from a place the row does not list.
+declared "$(ok 7)" "${all6[@]}" other::place::six -- "$td/src"
+drc_is "a test no source declares" 1
+expect "declared: the unlisted test is named by its path" '^ran, no listed source declares it: other::place::six$' "$out"
+# One file; one inline module of a file (its nested modules too); one test.
+declared "$(ok 2)" tests::one "tests::two - should panic" -- "$td/src/a.rs"
+drc_is "a file" 0
+declared "$(ok 2)" sub::b::inner::three sub::b::inner::deeper::four -- "$td/src/sub/b.rs#inner"
+drc_is "a module of a file" 0
+expect "declared: the module's tests only" '^2 passed: ' "$out"
+declared "$(ok 1)" sub::b::five -- "$td/src/sub/b.rs#five"
+drc_is "one test of a file" 0
+declared "$(ok 3)" tests::one "tests::two - should panic" sub::b::five -- "$td/src/a.rs" "$td/src/sub/b.rs#five"
+drc_is "two sources" 0
+# A source that names nothing is a mistake in the list, never zero tests.
+declared "$(ok 1)" sub::b::five -- "$td/src/sub/b.rs#absent"
+drc_is "an item the file does not have" 1
+expect "declared: the absent item is named" 'b\.rs#absent: ' "$out"
+declared "$(ok 1)" sub::b::five -- "$td/src/sub#five"
+drc_is "an item of a directory" 1
+declared "$(ok 1)" sub::b::five -- "$td/bad/empty.rs" "$td/src/sub/b.rs#five"
+drc_is "a source with no test" 1
+expect "declared: the source with no test is named" 'empty\.rs: no #\[test\]' "$out"
+declared "$(ok 1)" sub::b::five -- "$td/src/gone.rs" "$td/src/sub/b.rs#five"
+drc_is "a source that does not exist" 1
+expect "declared: the missing source is named" 'gone\.rs: no such file or directory' "$out"
+declared "$(ok 1)" sub::b::five -- "$td/bad/cut.rs" "$td/src/sub/b.rs#five"
+drc_is "a #[test] with no function" 1
+expect "declared: the #[test] without a function is named" 'cut\.rs:1: ' "$out"
+declared "$(ok 1)" sub::b::five --
+drc_is "no source" 1
+# The result line: all passed, none failed, none ignored, and as many as the
+# log names.
+declared "FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s" "${all6[@]}" -- "$td/src"
+drc_is "a failed test" 1
+declared "ok. 5 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s" "${all6[@]:0:5}" -- "$td/src"
+drc_is "an ignored test" 1
+declared "$(ok 6)" "${all6[@]:0:5}" -- "$td/src"
+drc_is "a result line that counts more than the log names" 1
+: > "$dlog"
+out=$(tools/check.sh --tests-as-declared "$dlog" "$td/src" 2>&1)
+drc=$?
+drc_is "an empty log" 1
 # The nextest arm: a pass recorded by the other runner is not one for
 # nextest (the runner is in the key); nextest records, then skips.
 if nv=$(cargo nextest --version 2>/dev/null | head -1) && [ -n "$nv" ]; then

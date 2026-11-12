@@ -676,7 +676,7 @@ shader now makes): the fragment walk takes `u2f32` of a 32-bit integer
 vertex shader (docs/notes/mali-varying-constants.md, "Flat values"). The
 fragment shader is the flat `.v4` load of `v_flat.rgb` and the moved lane,
 `.src_flat32` (`layout` now takes a varying declared `flat`). Corpus:
-`es300/flatlast.frag` is `ok`; MALI_TESTS does not move.
+`es300/flatlast.frag` is `ok`.
 
 ### Proposed lowering items (one agent session each)
 

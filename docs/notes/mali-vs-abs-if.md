@@ -262,8 +262,8 @@ were present. All references below are to `src/shaderc/online/mali/nir.rs`.
   the other side, and the unwritten lane refuses it as `VaryingForm` ("a
   varying lane left unwritten") instead of `ControlFlow`. Mesa drops the
   write altogether (item 6 of `notes/mali-vs-alu-ops.md`).
-- **Tests:** the two byte-equal tests and the refusal test (`MALI_TESTS`
-  382 -> 385). Both vertex shaders are added to `vs_reference_sources()`,
+- **Tests:** the two byte-equal tests and the refusal test. Both vertex
+  shaders are added to `vs_reference_sources()`,
   and the gap list's vertex arithmetic example is now `fract` (it was
   `abs`). In `tools/mali/corpus-verdicts.txt`, `gltest/fma_vs_ctrl.vert` and
   `gltest/predif_vs_uni.vert` are `ok`, and so is every other source of

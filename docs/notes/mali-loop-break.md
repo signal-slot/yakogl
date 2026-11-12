@@ -242,8 +242,8 @@ the flattening once the walk can produce the nested `if`s Mesa's
    and `merge_flow` see no branch. (A discard in the same loop is another
    matter, and stays a refusal.)
 7. **Tests and gate.** A byte-equal case `case87_databreak` against
-   `tools/mali/testdata/case87_databreak.expect.json`, beside `s6_discloop`
-   (so `MALI_TESTS` in `tools/mali/gate.env` moves with it). Do not count the
+   `tools/mali/testdata/case87_databreak.expect.json`, beside `s6_discloop`.
+   Do not count the
    femtovg `filter_image*` programs in `tools/mali/corpus-verdicts.txt` until
    their own references are checked: they have the same loop shape with 24
    guarded copies and refuse today at the same place (`walk_loop`'s doc);
@@ -578,8 +578,8 @@ Three loop forms in one program:
 ## Plan for loops-rt, in order
 
 Each step ends with its references byte-equal and the corpus moved forward
-(`tools/mali/corpus-verdicts.sh --write` in the same commit, `MALI_TESTS` in
-`tools/mali/gate.env` counted again). The tests are byte-equal tests named
+(`tools/mali/corpus-verdicts.sh --write` in the same commit). The tests are
+byte-equal tests named
 as the existing ones (`<ref>_is_byte_equal_to_mesa_26_2_1` in `tests.rs`,
 `check_program` / `check_linked` against the `expect.json`, every region
 and the FAU words); the unit tests named are the ones each step needs

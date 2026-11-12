@@ -4561,8 +4561,9 @@ void main (void)
     /* ---- the Mali's link: the vertex shader's constant lanes ---------------- */
 
     /// The Mali's link tests, in a module named `mali` so that the gate's
-    /// Mali row (`tools/check.sh`, filter `mali::`, MALI_TESTS in
-    /// tools/mali/gate.env) runs them.
+    /// Mali row (`tools/check.sh`, filter `mali::`) runs them. The row
+    /// expects them as `backend.rs#mali` in MALI_TEST_SOURCES
+    /// (tools/mali/gate.env).
     #[cfg(feature = "gpu-mali")]
     mod mali {
         use super::*;

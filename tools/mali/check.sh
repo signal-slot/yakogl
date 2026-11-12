@@ -10,8 +10,8 @@
 #
 #   cargo fmt --check
 #   clippy and the --lib mali:: tests of host-test,gpu-mali,shaderc-online,
-#     no-shader-table (zero warnings; the exact test count is the pin in
-#     tools/mali/gate.env)
+#     no-shader-table (zero warnings; the tests that pass are the tests
+#     declared in the sources that tools/mali/gate.env lists)
 #   the two generated tables, regenerated and compared byte for byte
 #   the third_party upstream hashes, the pan_ref_diff self-test
 #   cargo check of osal-zephyr,gpu-mali,... for aarch64-unknown-none
