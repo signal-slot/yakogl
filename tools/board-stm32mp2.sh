@@ -158,6 +158,7 @@
 #   MP2_BACKUP_DIR   where install keeps the pristine environment image
 #   RUN_BOUND, RETURN_BOUND  seconds to the image's end and to Linux after it
 #   WDOG_BOUND       with --expect-watchdog: seconds from the reboot to Linux
+#                    back (default 120)
 #   MP2_HOLD_S       opt-in, unset = no hold (output unchanged): seconds to
 #                    hold after the image's "<prog>: PASS"/"FAIL" line, so an
 #                    observer (the KVM) can take a screenshot of a display
@@ -172,7 +173,6 @@
 #                    that is back into not_back; wait_bound in meta.txt
 #                    carries the extended value, hold_s the hold. The verdict
 #                    line is the same.
-#                    back (default 120)
 #   BOARD_END_RE     extended regex of the image's end line (the layer's)
 #   LOCK_WAIT, HOLD_MAX  see board_lock.sh
 set -uo pipefail
