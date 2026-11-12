@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  The STM32MP25 LTDC (LCD-TFT display controller, display-controller@48010000
+  in ST's stm32mp251.dtsi:2150, mainline stm32mp251.dtsi:1617) as a Zephyr
+  display device on the STM32MP257F-DK's A35. Register logic in Rust
+  (driver/rust/src/ip/stm32_ltdc.rs, from RM0457's LTDC chapter and Linux's
+  drivers/gpu/drm/stm/ltdc.c). One linear layer scans out a caller-provided
+  frame buffer; its output feeds the DSI host named in `dsi-host`
+  (stm32mp257f-dk.dts:536-547: the LTDC's output endpoint goes to the DSI).
+
+  The LTDC's clocks, reset and RIF (RIFSC) security settings are the chain
+  owner's (docs/notes/pre-study-stm32mp257f-dk.md :630, :645: the two LTDC
+  secure-layer areas at 0xfe800000 are carveouts); this device's init maps
+  the registers only.
+
+  Property names follow Linux's Documentation/devicetree/bindings/display/
+  st,stm32-ltdc.yaml where it has one (reg, interrupts).
+
+compatible: "yakogl,stm32-ltdc"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+    description: |
+      The LTDC registers, 0x48010000 on the DK (ST stm32mp251.dtsi:2150).
+
+  interrupts:
+    description: |
+      The LTDC interrupts (st,stm32-ltdc.yaml: line 0 the LTDC, line 1 the
+      error one). Without them flips wait for the shadow reload by polling.
+
+  hactive:
+    type: int
+    required: true
+    description: Width in pixels of the active area (the layer's width).
+
+  vactive:
+    type: int
+    required: true
+    description: Height in lines of the active area.
+
+  pixel-format:
+    type: string
+    default: "argb8888"
+    enum: ["argb8888", "rgb888", "rgb565"]
+    description: |
+      The layer's pixel format (LxPFCR PF, RM0457 LTDC; Linux ltdc.c's
+      format table). The shim maps it to Zephyr's PIXEL_FORMAT_*.
+
+  pitch-bytes:
+    type: int
+    description: |
+      Bytes per line of the frame buffer (LxCFBLR CFBP). Absent: hactive times
+      the format's bytes per pixel. The LTDC's alignment limits are in
+      docs/notes/stm32mp257f-dk-display-bringup.md (Q7).
+
+  fb-size:
+    type: int
+    description: |
+      Bytes of the frame buffer the shim may scan out (pitch-bytes x vactive
+      at least). Absent: that product.
+
+  hsync-active-low:
+    type: boolean
+    description: "GCR HSPOL (Linux ltdc.c: DRM_MODE_FLAG_NHSYNC)."
+
+  vsync-active-low:
+    type: boolean
+    description: "GCR VSPOL (Linux ltdc.c: DRM_MODE_FLAG_NVSYNC)."
+
+  de-active-low:
+    type: boolean
+    description: "GCR DEPOL (Linux ltdc.c: bus flag DE_LOW)."
+
+  pixclk-falling:
+    type: boolean
+    description: "GCR PCPOL (Linux ltdc.c: bus flag PIXDATA_NEGEDGE)."
+
+  dsi-host:
+    type: phandle
+    description: |
+      The yakogl,stm32-dsi this LTDC feeds (stm32mp257f-dk.dts:536-547).

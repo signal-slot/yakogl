@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  An STM32MP25 I2C controller (the STM32F7-style I2C IP of RM0457's I2C
+  chapter; Linux drivers/i2c/busses/i2c-stm32f7.c, binding
+  Documentation/devicetree/bindings/i2c/st,stm32-i2c.yaml) as a polled
+  Zephyr I2C master on the A35. Zephyr has no I2C driver for the MP2's A35
+  side. Register logic in Rust (driver/rust/src/ip/stm32_i2c.rs); the bus
+  carries the DK's ADV7535 (stm32mp257f-dk.dts:328-350).
+
+  The controller's clock gate, reset and RIF settings are the chain owner's;
+  this device's init maps the registers only. As the shim has no clock
+  driver, the kernel clock rate is a property. `clock-frequency` (the bus
+  speed) comes from i2c-controller.yaml; the timing is computed from it as
+  i2c-stm32f7.c's stm32f7_i2c_compute_timing does.
+
+compatible: "yakogl,stm32mp2-i2c"
+
+include: [i2c-controller.yaml]
+
+properties:
+  reg:
+    required: true
+
+  kernel-clock-frequency:
+    type: int
+    required: true
+    description: |
+      Hz of the I2C kernel clock (i2c-stm32f7.c's i2c_clk) the board leaves on
+      the controller, as read by the mp2_display_state probe; it fixes the
+      TIMINGR prescaler and SCL counts.
