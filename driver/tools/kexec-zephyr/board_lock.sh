@@ -161,11 +161,58 @@ board_lock_field() {
 	sed -n "s/^$1=//p" "$BOARD_LOCK" 2>/dev/null | head -1
 }
 
+# Whether pid $1 is still the process that started at $2 clock ticks. A
+# pid the kernel has given to another process since has other ticks; empty
+# ticks match nothing.
+board_lock_same_process() {
+	[ -n "$2" ] && [ "$(board_lock_start_ticks "$1")" = "$2" ]
+}
+
 # Whether the record's process is alive: its pid runs with the start time
 # the record holds.
 board_lock_record_alive() {
 	_rp=$(board_lock_field pid)
-	[ -n "$_rp" ] && [ "$(board_lock_start_ticks "$_rp")" = "$(board_lock_field ticks)" ]
+	[ -n "$_rp" ] && board_lock_same_process "$_rp" "$(board_lock_field ticks)"
+}
+
+# The watchdog: board_lock_watchdog <pid> <ticks> <seconds>. It looks at the
+# runner (pid AND start ticks) once a second and ends as soon as the runner
+# is gone, however it ended: a runner killed with SIGKILL runs no EXIT trap
+# to stop it. If the runner still holds the board after <seconds>, it is
+# sent TERM, and KILL 10 s later if it is still there.
+#
+# Until 2026-11-12 (issue #4499) this was one `sleep HOLD_MAX` and then
+# `kill -0 $$`. After a run that ended normally, the EXIT trap killed the
+# subshell and its `sleep HOLD_MAX` ran on to the end (55 sleeps of 1800
+# and 21600 s on one host; now it is a `sleep 1`). After a SIGKILLed run
+# the watchdog itself stayed for the rest of HOLD_MAX, and then killed
+# whatever process had the dead runner's pid by then (the pid counter
+# went round its whole range in about six minutes during gate runs). The
+# ticks check makes the kill go only to the runner; between the last
+# check and the kill there is no guard, a window of one fork rather than
+# of HOLD_MAX.
+board_lock_watchdog() {
+	_wd_end=$(( $(date +%s) + $3 ))
+	while board_lock_same_process "$1" "$2"; do
+		if [ "$(date +%s)" -ge "$_wd_end" ]; then
+			echo "board_lock: $(date '+%F %T') pid $1 held the board past ${3}s; killing the run" >&2
+			echo "board_lock: if that was a working run, HOLD_MAX is too low for what" >&2
+			echo "board_lock: this runner does while holding the lock -- set it higher" >&2
+			echo "board_lock: before sourcing, e.g. HOLD_MAX=\${HOLD_MAX:-1800}" >&2
+			kill -TERM "$1" 2>/dev/null
+			_wd_n=0
+			while [ "$_wd_n" -lt 10 ] && board_lock_same_process "$1" "$2"; do
+				sleep 1
+				_wd_n=$((_wd_n + 1))
+			done
+			if board_lock_same_process "$1" "$2"; then
+				kill -KILL "$1" 2>/dev/null
+			fi
+			return 0
+		fi
+		sleep 1
+	done
+	return 0
 }
 
 # Name the holder (for a refusal): the record's process when it lives;
@@ -217,7 +264,7 @@ if [ "${BOARD_LOCK_NO_ACQUIRE:-0}" != 1 ]; then
 
 	if [ "$HOLD_MAX" -gt 0 ]; then
 		# $$ stays the sourcing shell inside the subshell, which is
-		# what this has to kill: the runner, not the watchdog.
+		# what this has to watch and kill: the runner, not the watchdog.
 		#
 		# `exec 9>&-` FIRST, and it is not optional. The subshell
 		# inherits fd 9 from the `exec 9>` above, and so does the
@@ -233,11 +280,14 @@ if [ "${BOARD_LOCK_NO_ACQUIRE:-0}" != 1 ]; then
 		# still has its own fd -- so a run holds the board exactly as
 		# long as it did before. Only the orphan loses the ability to.
 		#
-		# Killing the `sleep` as well as the subshell in the trap
-		# would also work, but this holds even when the trap does not
-		# run at all: a SIGKILLed run, or one that dies before the
-		# trap is installed. Found by vivante-gltest2, 2026-09-22,
-		# with sixteen runs queued behind a lock no live run held.
+		# (Since 2026-11-12 the watchdog sleeps one second at a time and
+		# ends with its runner, which shortens such a hold to about a
+		# second; the fd is closed all the same.) Killing the `sleep` as
+		# well as the subshell in the trap would also work, but this
+		# holds even when the trap does not run at all: a SIGKILLed run,
+		# or one that dies before the trap is installed. Found by
+		# vivante-gltest2, 2026-09-22, with sixteen runs queued behind a
+		# lock no live run held.
 		#
 		# The caller's stdin, stdout and stderr go too, for the same
 		# reason. The subshell and its `sleep` inherit them, so a caller
@@ -250,19 +300,23 @@ if [ "${BOARD_LOCK_NO_ACQUIRE:-0}" != 1 ]; then
 		# lock's own hashed name, so no address in it), emptied when the
 		# lock is taken; the run's EXIT trap prints them to the run's own
 		# stderr, so a killed run still says why.
+		#
+		# The watchdog names the runner by its pid and start ticks
+		# (board_lock_watchdog above): it ends within a second or two of
+		# the runner, so after a SIGKILLed run nothing is left but a
+		# `sleep 1` about to end, and it never kills a process that got
+		# the runner's pid. Without the ticks (no /proc) it could tell
+		# neither, so the run is refused rather than left unbounded.
+		_wd_ticks=$(board_lock_start_ticks $$)
+		if [ -z "$_wd_ticks" ]; then
+			echo "board_lock: no start time for pid $$ in /proc: the watchdog could not tell its run; refusing" >&2
+			: > "$BOARD_LOCK"
+			exit 1
+		fi
 		_wd_log=$BOARD_LOCK.watchdog.log
 		: > "$_wd_log"
 		( exec 9>&- </dev/null >/dev/null 2>>"$_wd_log"
-		  sleep "$HOLD_MAX"
-		  if kill -0 $$ 2>/dev/null; then
-			echo "board_lock: $(date '+%F %T') pid $$ held the board past ${HOLD_MAX}s; killing the run" >&2
-			echo "board_lock: if that was a working run, HOLD_MAX is too low for what" >&2
-			echo "board_lock: this runner does while holding the lock -- set it higher" >&2
-			echo "board_lock: before sourcing, e.g. HOLD_MAX=\${HOLD_MAX:-1800}" >&2
-			kill -TERM $$ 2>/dev/null
-			sleep 10
-			kill -KILL $$ 2>/dev/null
-		  fi ) &
+		  board_lock_watchdog $$ "$_wd_ticks" "$HOLD_MAX" ) &
 		BOARD_LOCK_WATCHDOG=$!
 		# Keep whatever the caller already had on EXIT: a runner that
 		# cleans up after itself must not lose that by sourcing this.
