@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config MP2_HELLO_HANG
+	bool "Hang on purpose with interrupts locked (the watchdog trial)"
+	help
+	  Instead of counting five seconds and resetting through PSCI, print
+	  the hang line and spin with interrupts locked. Neither the layer's
+	  lifetime timer nor a PSCI reset can fire: only OP-TEE's SMC
+	  watchdog (BL2 arms the IWDG, about 32 s) brings the board back.
+	  Off by default; run it with tools/board-stm32mp2.sh run
+	  --expect-watchdog.
+
+source "Kconfig.zephyr"

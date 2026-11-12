@@ -47,6 +47,11 @@
 #    byte for byte what they were and the environment's variables the input's.
 #    The command log never names mmcblk0, a module, tailscale or sshd, and
 #    every dd writes the u-boot-env partition alone.
+# 7. The expected-watchdog run (run --expect-watchdog, the hang option of
+#    mp2_hello): the dry run waits WDOG_BOUND, replays of consoles with the
+#    hang line give watchdog_reset only when the banner and the hang line
+#    were seen, no PSCI line followed and the board came back; the fake board
+#    runs it live.
 # Prints "board_stm32mp2_selftest: N checks, F failed"; exit 0 only when F is
 # 0 and N is the pinned count. About 30 s (three live runs wait 5 s each).
 set -uo pipefail
@@ -54,7 +59,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=117
+WANT_CHECKS=128
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -190,6 +195,12 @@ check "run (blind, MP2_NO_CONSOLE=1): rc 0, no probe, no capture" \
 out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART MP2_NO_WATCHDOG=1 dry run "$S/img/nomarker.bin" "$S/logs" 2>&1)
 rc=$?
 check "run of an image without the marker, MP2_NO_WATCHDOG=1: rc 0 with the WARNING" eval '[ "$rc" = 0 ] && grep -q "WARNING: MP2_NO_WATCHDOG=1" <<<"$out"'
+out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART dry run --expect-watchdog "$S/img/mp2.bin" "$S/logs" 2>&1)
+rc=$?
+check "run --expect-watchdog: rc 0, the wait is WDOG_BOUND (default 120 s), not RUN_BOUND + RETURN_BOUND" \
+    eval '[ "$rc" = 0 ] && grep -q "<= 120 s" <<<"$out" && ! grep -q "<= 300 s" <<<"$out" && ! leaks "$out"'
+out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART WDOG_BOUND=90 RUN_BOUND=200 dry run --expect-watchdog "$S/img/mp2.bin" "$S/logs" wdog 2>&1)
+check "run --expect-watchdog: WDOG_BOUND sets the wait" eval 'grep -q "<= 90 s" <<<"$out"'
 check "dry runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
 
 echo "== 2. refusals that need no board"
@@ -461,6 +472,53 @@ out=$(BOARD_END_RE='^never matches' "$B" tally "$d" 2>&1)
 check "BOARD_END_RE overrides the end line" grep -q "verdict=no_end_line" <<<"$out"
 out=$("$B" tally "$d" 2>&1)
 check "the layer's lifetime reset is an end line too (any <why>)" grep -q "verdict=done .*boot_verdict=complete result=pass:mp2_identify" <<<"$out"
+HANG='12:00:03 mp2_hello: hanging on purpose with interrupts locked, the OP-TEE watchdog must reset'
+d="$S/runs/20261108-1212-wdog-0123abcd"
+mkrun "$d" name=wdog blind=0 back=1 t_reboot=1000 t_back=1070 expect_wdog=1
+printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" "$HANG" > "$d/console.txt"
+out=$("$B" tally "$d" 2>&1)
+rc=$?
+check "expected watchdog: banner, hang line, no PSCI line, back: rc 0, watchdog_reset, hung, back_after 70s" \
+    eval '[ "$rc" = 0 ] && [ "$out" = "board-stm32mp2.sh stm32mp257f-dk wdog rc=0 verdict=watchdog_reset boot=uboot-sd row boot_verdict=hung result=none back_after=70s" ]'
+d="$S/runs/20261108-1213-wdog-0123abcd"
+mkrun "$d" name=wdog blind=0 back=1 t_reboot=1000 t_back=1070 expect_wdog=1
+printf '%s\n%s\n%s\n12:00:20 mp2: lifetime over: PSCI SYSTEM_RESET at 20001 ms\n' "$UBOOT" "$LAYER" "$HANG" > "$d/console.txt"
+out=$("$B" tally "$d" 2>&1)
+rc=$?
+check "expected watchdog but a PSCI reset line followed: rc 4, psci_reset_before_wdog" \
+    eval '[ "$rc" = 4 ] && grep -q " rc=4 verdict=psci_reset_before_wdog boot=uboot-sd row boot_verdict=complete " <<<"$out"'
+d="$S/runs/20261108-1214-wdog-0123abcd"
+mkrun "$d" name=wdog blind=0 back=1 t_reboot=1000 t_back=1070 expect_wdog=1
+printf '%s\n%s\n%s\n12:00:20 mp2: PSCI SYSTEM_RESET returned -1: halted\n' "$UBOOT" "$LAYER" "$HANG" > "$d/console.txt"
+out=$("$B" tally "$d" 2>&1)
+rc=$?
+check "expected watchdog but PSCI returned: rc 4, psci_returned" eval '[ "$rc" = 4 ] && grep -q "verdict=psci_returned " <<<"$out"'
+d="$S/runs/20261108-1215-wdog-0123abcd"
+mkrun "$d" name=wdog blind=0 back=1 t_reboot=1000 t_back=1070 expect_wdog=1
+printf '%s\n%s\n' "$UBOOT" "$LAYER" > "$d/console.txt"
+out=$("$B" tally "$d" 2>&1)
+rc=$?
+check "expected watchdog, banner but no hang line: rc 4, no_hang, image_started" \
+    eval '[ "$rc" = 4 ] && grep -q " rc=4 verdict=no_hang boot=uboot-sd row boot_verdict=image_started " <<<"$out"'
+d="$S/runs/20261108-1216-wdog-0123abcd"
+mkrun "$d" name=wdog blind=0 back=1 t_reboot=1000 t_back=1070 expect_wdog=1
+printf '%s\n%s\n' "$UBOOT" "$HANG" > "$d/console.txt"
+out=$("$B" tally "$d" 2>&1)
+check "expected watchdog, a hang line without the banner: not a pass (no_end_line, uboot_go)" \
+    grep -q "rc=4 verdict=no_end_line boot=uboot-sd row boot_verdict=uboot_go" <<<"$out"
+d="$S/runs/20261108-1217-wdog-0123abcd"
+mkrun "$d" name=wdog blind=0 back=0 t_reboot=1000 t_back=1300 rc_cycle=5 expect_wdog=1
+printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" "$HANG" > "$d/console.txt"
+out=$("$B" tally "$d" 2>&1)
+rc=$?
+check "expected watchdog but Linux never came back: rc 5, not_back" \
+    eval '[ "$rc" = 5 ] && grep -q " rc=5 verdict=not_back boot=uboot-sd row boot_verdict=hung " <<<"$out"'
+d="$S/runs/20261108-1218-hang-0123abcd"
+mkrun "$d" name=hang blind=0 back=1 t_reboot=1000 t_back=1070
+printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" "$HANG" > "$d/console.txt"
+out=$("$B" tally "$d" 2>&1)
+check "a hang line in a run that did not expect the watchdog: still no_end_line, image_started" \
+    grep -q "rc=4 verdict=no_end_line boot=uboot-sd row boot_verdict=image_started " <<<"$out"
 out=$("$B" tally "$S/runs/nonexistent" 2>&1)
 check "tally of a directory without meta.txt: rc 2" [ $? = 2 ]
 
@@ -602,6 +660,20 @@ check "live run: one reboot, after the arm's write and its read-back (dd of=, sh
           [ "$(wc -w <<<"$o")" = 4 ] && [ "$(tr " " "\n" <<<"$o" | sort -n | paste -sd" " -)" = "$o" ]'
 check "live run: the wait is written in the record (wait_bound=2) and back_after is at least the 5 s poll" \
     eval 'grep -qx "wait_bound=2" "$rd/meta.txt" && [ "$(( $(sed -n "s/^t_back=//p" "$rd/meta.txt") - $(sed -n "s/^t_reboot=//p" "$rd/meta.txt") ))" -ge 5 ]'
+
+# a run that hangs on purpose: the console has the hang line and no PSCI line
+cp "$F/console.txt" "$F/console.pass"
+printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" "$HANG" | sed 's/^[0-9:]\{8\} //' > "$F/console.txt"
+: > "$F/ssh.log"
+out=$(WDOG_BOUND=2 live run --expect-watchdog "$S/img/mp2.bin" "$S/live-logs" wdog 2>&1)
+rc=$?
+rd=$(ls -d "$S"/live-logs/*-wdog-* 2>/dev/null | head -1)
+check "live run --expect-watchdog (comes back, hang line, no PSCI line): rc 0 and verdict=watchdog_reset, boot_verdict=hung" \
+    eval '[ "$rc" = 0 ] && grep -qE "^board-stm32mp2.sh stm32mp257f-dk wdog rc=0 verdict=watchdog_reset boot=uboot-sd row boot_verdict=hung result=none back_after=[0-9]+s$" <<<"$out"'
+check "live run --expect-watchdog: the record has expect_wdog=1 and wait_bound=2, the index shows the hang line, one reboot, the staged image removed" \
+    eval 'grep -qx "expect_wdog=1" "$rd/meta.txt" && grep -qx "wait_bound=2" "$rd/meta.txt" && grep -q "mp2_hello: hanging on purpose" "$rd/INDEX.txt" &&
+          [ "$(grep -c "systemctl reboot" "$F/ssh.log")" = 1 ] && [ -z "$(ls "$F"/boot/yakogl/once-*.bin 2>/dev/null)" ]'
+cp "$F/console.pass" "$F/console.txt"
 
 echo die > "$F/state/mode"
 : > "$F/ssh.log"

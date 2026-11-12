@@ -6,7 +6,8 @@
  * hand-over record (stm32mp2.c). This prints the build, counts
  * MP2_HELLO_SECONDS on the system timer (each second a k_sleep: the arch
  * timer's interrupt through the GIC-400) and resets the board back into
- * ST's Linux through PSCI.
+ * ST's Linux through PSCI. With CONFIG_MP2_HELLO_HANG it prints one line
+ * and spins with interrupts locked instead (the OP-TEE watchdog must reset).
  */
 #include <zephyr/kernel.h>
 #include <zephyr/devicetree.h>
@@ -29,6 +30,14 @@ int main(void)
 	       (unsigned long)CONFIG_SRAM_BASE_ADDRESS, (unsigned int)sys_clock_hw_cycles_per_sec());
 	printk("mp2_hello: PSCI version 0x%x, reset at %u ms of uptime at the latest\n",
 	       (unsigned int)mp2_psci_version(), mp2_lifetime_ms());
+#ifdef CONFIG_MP2_HELLO_HANG
+	printk("mp2_hello: hanging on purpose with interrupts locked, the OP-TEE watchdog must reset\n");
+	(void)irq_lock();
+	for (;;) {
+		/* no timer tick, no lifetime reset, no PSCI: the watchdog alone */
+		__asm__ volatile("" ::: "memory");
+	}
+#endif
 	for (int i = 1; i <= MP2_HELLO_SECONDS; i++) {
 		k_sleep(K_SECONDS(1));
 		printk("mp2_hello: %d s (uptime %lld ms)\n", i, (long long)k_uptime_get());
