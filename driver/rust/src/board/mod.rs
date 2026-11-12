@@ -23,6 +23,8 @@ pub mod nanopc_t6_frame;
 pub mod nanopc_t6_fw;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_gpu;
+#[cfg(test)]
+mod nanopc_t6_gpu_stops;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_mmu;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
