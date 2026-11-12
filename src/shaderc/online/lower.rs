@@ -5590,6 +5590,14 @@ impl<'a> Lower<'_, 'a> {
         for n in out.as_slice() {
             if let Node::Instr(ir::InstrId(i)) = *n {
                 if self.instrs.as_slice().get(i as usize) == Some(&Op::ConstF32(bits)) {
+                    /* Shared by a 16-bit tree and a 32-bit one: a literal
+                     * read at each user's width, High (Medium on a constant
+                     * says every reader is 16-bit). */
+                    if let Some(p) = self.prec.as_mut_slice().get_mut(i as usize) {
+                        if *p == Prec::Medium && self.cur != Prec::Medium {
+                            *p = Prec::High;
+                        }
+                    }
                     return Ok(Src::id(ValueId(i)));
                 }
             }
