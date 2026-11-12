@@ -334,6 +334,26 @@ impl Defaults {
         d
     }
 
+    /// The defaults after a scope that began at `outer`. Mesa's
+    /// `add_default_precision_qualifier` (glsl_symbol_table.cpp:194-207)
+    /// replaces a default that exists in any scope, so a `precision`
+    /// statement in a block or a function changes it for the rest of the
+    /// shader (review probes v_inner2, v_inner4, f_inner2). Only a type
+    /// that had no default when the scope began loses the scope's one.
+    fn leave(&mut self, outer: Defaults) {
+        if outer.float == Precision::Default {
+            self.float = Precision::Default;
+        }
+        if outer.int == Precision::Default {
+            self.int = Precision::Default;
+        }
+        for (s, o) in self.samplers.iter_mut().zip(outer.samplers) {
+            if o == Precision::Default {
+                *s = Precision::Default;
+            }
+        }
+    }
+
     /// `precision p base;`
     fn set(&mut self, p: Precision, base: BaseType<'_>) {
         match base {
@@ -526,7 +546,7 @@ impl<'x, 'a> Scan<'x, 'a> {
                     }
                     self.stmt(b)?;
                     self.cut(mark);
-                    self.defaults = saved;
+                    self.defaults.leave(saved);
                 }
             }
             Decl::Invariant { .. } => {}
@@ -550,7 +570,7 @@ impl<'x, 'a> Scan<'x, 'a> {
                     self.stmt(s)?;
                 }
                 self.cut(mark);
-                self.defaults = saved;
+                self.defaults.leave(saved);
             }
             Stmt::If { cond, then_s, else_s } => {
                 self.root(cond)?;
@@ -582,7 +602,7 @@ impl<'x, 'a> Scan<'x, 'a> {
                 }
                 self.scoped(body)?;
                 self.cut(mark);
-                self.defaults = saved;
+                self.defaults.leave(saved);
             }
             Stmt::Switch { sel, body } => {
                 self.root(sel)?;
@@ -596,7 +616,7 @@ impl<'x, 'a> Scan<'x, 'a> {
         let (mark, saved) = (self.vars.len(), self.defaults);
         self.stmt(id)?;
         self.cut(mark);
-        self.defaults = saved;
+        self.defaults.leave(saved);
         Ok(())
     }
 
@@ -1773,6 +1793,58 @@ mod tests {
         );
         assert!(i.contains(&(String::from("w"), M)) && i.contains(&(String::from("h"), H)), "{i:?}");
         assert_eq!(o, [(String::from("gl_FragColor"), M)]);
+    }
+
+    /// The class `classify` gives the variable `name` of `src`. The
+    /// lowering refuses a `precision` statement inside a body, so this asks
+    /// the scan alone.
+    fn decl_class(src: &str, stage: Stage, name: &str) -> Prec {
+        use super::super::ast::{Decl, DeclId};
+        use super::super::{parser, pp, sema};
+        let mut buf = std::vec![0u8; 1 << 21];
+        let a = Arena::new(&mut buf);
+        let text = a.alloc_str(src).expect("arena");
+        let pre = pp::preprocess(&a, text).expect("preprocesses");
+        let ast = parser::resolve_io(&a, parser::parse(&a, pre.tokens).expect("parses"), stage).expect("io");
+        let types = sema::check(&a, &ast, stage).expect("checks");
+        let p = super::classify(&a, &ast, &types, stage).expect("classifies");
+        let id = ast.decls.iter().position(|d| matches!(d, Decl::Var { name: n, .. } if *n == name)).expect("declared");
+        p.decl(DeclId(id as u32))
+    }
+
+    /// Mesa's `add_default_precision_qualifier` (glsl_symbol_table.cpp:
+    /// 194-207) REPLACES a default that exists in any scope: a `precision`
+    /// statement in a block or in another function changes every later
+    /// declaration, in Mesa. Only a type with no default yet gets one
+    /// scoped to the block. Review probes (drm-shim GLSL IR): v_inner2 and
+    /// v_inner4, a vertex `{ precision mediump float; }` or one in another
+    /// function, then `float u`: `(declare (mediump ) float16_t u)`;
+    /// f_inner2, a mediump fragment shader's `{ precision highp float; }`:
+    /// `(declare (highp ) float u)`.
+    #[test]
+    fn a_precision_statement_replaces_an_existing_default_beyond_its_block() {
+        let vs_head = "attribute highp vec4 p; attribute highp vec4 h; varying highp vec4 v;\n";
+        let u = |body: &str| decl_class(&std::format!("{vs_head}{body}"), Stage::Vertex, "u");
+        assert_eq!(u("void main(){ gl_Position = p; { precision mediump float; } float u = h.z; v = vec4(u); }"), M);
+        assert_eq!(
+            u("void f(){ precision mediump float; }\nvoid main(){ gl_Position = p; f(); float u = h.z; v = vec4(u); }"),
+            M
+        );
+        let f = decl_class(
+            "precision mediump float; varying highp vec4 v;\n\
+             void main(){ { precision highp float; } float u = v.z; gl_FragColor = vec4(u); }",
+            Stage::Fragment,
+            "u",
+        );
+        assert_eq!(f, H);
+        /* no default before it: the block's own, gone after it */
+        let f = decl_class(
+            "varying highp vec4 v;\n\
+             void main(){ { precision highp float; } mediump float u = v.z; gl_FragColor = vec4(u); }",
+            Stage::Fragment,
+            "u",
+        );
+        assert_eq!(f, M);
     }
 
     #[test]
