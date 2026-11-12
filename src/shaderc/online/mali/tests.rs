@@ -3441,6 +3441,19 @@ fn mediump_texture_cube_directions_mesa_compiles_otherwise_are_refused_by_name()
     }
 }
 
+/// A mediump `textureCube(s, v3, u)` with a uniform bias and a vec3
+/// varying (tools/mali/testdata/fstex_cubebias_uni, the review's probe
+/// c18b, drm-shim `--uniform-values`): Mesa widens the uniform before the
+/// cube descriptor, so the pressure scheduler's order is taken and
+/// `CUBEFACE2_V9` comes first. Both programs the shim's to the byte.
+#[test]
+fn a_mediump_texture_cube_with_a_uniform_bias_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("fstex_cubebias_uni.vert"), td!("fstex_cubebias_uni.frag"));
+    let (_, f) = check_program(vs, fs, td!("fstex_cubebias_uni.expect.json"));
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert!(texts[1].starts_with("CUBEFACE2_V9"), "{texts:?}");
+}
+
 /// gl_test case 114's fragment stage (`cubelod`, prog[1]: tools/shaders/
 /// es300/cubelodf.{vert,frag} as tools/mali/testdata/case114_f.*):
 /// `textureLod(u_s, v_dir, u_lod)` in a highp shader with a highp sampler,
