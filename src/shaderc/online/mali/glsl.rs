@@ -127,7 +127,7 @@ impl<'s> Shape<'s> {
         /* The passes rewrite instructions (and `ilt_trees` renumbers
          * them) without carrying the precision tables: the result has none
          * (ir.rs `Module::prec`), so a reader of precision refuses it. */
-        Module { instrs, comps: self.comps, nodes, body, prec: &[], local_prec: &[], ..*m }
+        Module { instrs, comps: self.comps, nodes, body, lanes: &[], prec: &[], local_prec: &[], ..*m }
     }
 }
 
@@ -148,6 +148,7 @@ pub(super) fn passes<'s>(
                 comps: t.comps,
                 nodes: t.nodes,
                 body: t.body,
+                lanes: &[],
                 prec: &[],
                 local_prec: &[],
                 ..*m

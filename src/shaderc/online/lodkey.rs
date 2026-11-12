@@ -123,10 +123,13 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
     let mut instrs: AVec<Op> = AVec::with_capacity(a, total)?;
     let sized = !m.comps.is_empty();
     let mut comps: AVec<u8> = AVec::with_capacity(a, if sized { total } else { 0 })?;
-    /* The precision table in step too; an inserted instruction records
-     * none (`Prec::None`). */
+    /* The precision and width tables in step too. The inserted level
+     * (a constant, a compare, a select) is float or bool math on the
+     * coordinate's level, at full width: High. */
     let precs = !m.prec.is_empty();
     let mut prec: AVec<Prec> = AVec::with_capacity(a, if precs { total } else { 0 })?;
+    let laned = !m.lanes.is_empty();
+    let mut lanes: AVec<u8> = AVec::with_capacity(a, if laned { total } else { 0 })?;
     for (i, op) in m.instrs.iter().enumerate() {
         let mut op = map_op(*op, &map);
         let r = plan(i);
@@ -139,7 +142,10 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
                     comps.push(a, 4)?;
                 }
                 if precs {
-                    prec.push(a, Prec::None)?;
+                    prec.push(a, Prec::High)?;
+                }
+                if laned {
+                    lanes.push(a, 4)?;
                 }
                 Src::splat(ValueId(base))
             } else {
@@ -154,7 +160,10 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
                     comps.extend_from_slice(a, &[4, 1, 1])?;
                 }
                 if precs {
-                    prec.extend_from_slice(a, &[Prec::None; 3])?;
+                    prec.extend_from_slice(a, &[Prec::High; 3])?;
+                }
+                if laned {
+                    lanes.extend_from_slice(a, &[4, 1, 1])?;
                 }
                 Src::splat(ValueId(base + 2))
             };
@@ -169,6 +178,9 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
         if precs {
             prec.push(a, m.prec_of(ValueId(i as u32)))?;
         }
+        if laned {
+            lanes.push(a, m.lanes.get(i).copied().unwrap_or(0))?;
+        }
     }
 
     /* the nodes: every block copied with the new ids, children first, so
@@ -180,6 +192,7 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
             instrs: instrs.into_slice(),
             comps: if sized { comps.into_slice() } else { m.comps },
             prec: if precs { prec.into_slice() } else { m.prec },
+            lanes: if laned { lanes.into_slice() } else { m.lanes },
             nodes: nodes.into_slice(),
             body,
             ..m
@@ -466,10 +479,15 @@ mod tests {
             let l = remap_mag_switch(a, l, 2).unwrap();
             assert_eq!(l.module.instrs.as_ptr(), before);
             let n = l.module.instrs.len();
+            let none = l.module.prec.iter().filter(|p| **p == Prec::None).count();
             let l = remap_mag_switch(a, l, 1).unwrap();
             assert_eq!(l.module.instrs.len(), n + 3, "a constant, a compare and a select");
             assert_eq!(l.module.comps.len(), l.module.instrs.len());
             assert_eq!(l.module.prec.len(), l.module.instrs.len(), "the precision table in step");
+            assert_eq!(l.module.lanes.len(), l.module.instrs.len(), "the width table in step");
+            /* the inserted level is float math at full width, never None
+             * (second review S-C) */
+            assert_eq!(l.module.prec.iter().filter(|p| **p == Prec::None).count(), none);
         })
         .unwrap();
     }

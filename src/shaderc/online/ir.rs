@@ -713,6 +713,15 @@ pub struct Module<'a> {
     /// estimate. An empty table means an older or hand-built module; the
     /// accessor answers 4 there, which is what a back end assumed anyway.
     pub comps: &'a [u8],
+    /// The exact width of each value, by the same `ValueId`: what `comps`
+    /// records, and also the widths the front end learned for the back end
+    /// that lowers precision (docs/notes/mali-precision.md, D.1): every
+    /// step of a built-in's expansion (one lane after a reduction), an
+    /// increment's sum, a conversion. `comps` keeps 0 (unrecorded, read as
+    /// 4) for those, the width every other back end was built against, so
+    /// their code does not move. Read it through [`Module::lanes_of`]; the
+    /// rule for passes that rebuild a module is [`Module::prec`]'s.
+    pub lanes: &'a [u8],
     /// Every node of every block, in one array; a [`Range`] indexes it.
     pub nodes: &'a [Node],
     /// `main`'s body.
@@ -758,6 +767,7 @@ impl<'a> Module<'a> {
             stage,
             instrs: &[],
             comps: &[],
+            lanes: &[],
             nodes: &[],
             body: Range::EMPTY,
             locals: &[],
@@ -770,6 +780,20 @@ impl<'a> Module<'a> {
             prec: &[],
             local_prec: &[],
         }
+    }
+
+    /// The exact width of the value `id` ([`Module::lanes`]): 1 to 4.
+    /// [`Module::comps_of`] where the table records none or is not in
+    /// step with the instructions.
+    pub fn lanes_of(&self, id: ValueId) -> u8 {
+        if self.lanes.len() == self.instrs.len() {
+            if let Some(&c) = self.lanes.get(id.0 as usize) {
+                if (1..=4).contains(&c) {
+                    return c;
+                }
+            }
+        }
+        self.comps_of(id)
     }
 
     /// The module carries precision tables in step with its instructions

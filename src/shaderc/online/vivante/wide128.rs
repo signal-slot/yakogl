@@ -439,6 +439,7 @@ pub fn split_planes<'a>(a: &Arena<'a>, l: Lowered<'a>, p: Planes) -> R<'a, Lower
             body,
             locals: locals.into_slice(),
             /* renumbered: no precision (ir.rs `Module::prec`) */
+            lanes: &[],
             prec: &[],
             local_prec: &[],
             ..m

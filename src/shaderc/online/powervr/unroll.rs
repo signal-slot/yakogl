@@ -290,6 +290,7 @@ pub fn unroll_with<'a>(
         locals: u.locals.into_slice(),
         body,
         /* rebuilt: no precision (ir.rs `Module::prec`) */
+        lanes: &[],
         prec: &[],
         local_prec: &[],
         ..*m
