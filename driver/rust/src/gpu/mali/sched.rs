@@ -1996,6 +1996,23 @@ mod tests {
         }
     }
 
+    /// The numbers the UART prints bare (zephyr_mali.c's restart and stop
+    /// lines, t6_submit's record): one meaning each, the Z4 record's 27
+    /// first, the Zephyr OSAL's after it.
+    #[test]
+    fn the_numbers_a_board_line_prints_keep_their_meaning() {
+        let pinned = [
+            (SchedRefusal::RingOverflow, 16),
+            (SchedRefusal::DrainTimeout, 27),
+            (SchedRefusal::TilerOomCounts, 28),
+            (SchedRefusal::HeapGrow, 29),
+            (SchedRefusal::HeapRemake, 30),
+        ];
+        for (r, n) in pinned {
+            assert_eq!(r as u32, n, "{r:?}");
+        }
+    }
+
     #[test]
     fn the_constants_are_panthors() {
         // panthor_sched.c:90, 92, 392, 1867, 997-998, 3335-3337
