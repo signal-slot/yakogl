@@ -137,7 +137,11 @@ that measures it.
    in, the first in that order is kept and the others are read from it
    (`deduplicate_outputs`, nir_opt_varyings.c:3253-3420; nir.rs records
    the equal lanes, link.rs `VaryingConsts::push_equal`): fsload_dup's
-   `a.z` is `a.x` (`.v2`), fsload_dup_swz's q.x is p.y.
+   `a.z` is `a.x` (`.v2`), fsload_dup_swz's q.x is p.y. Only lanes of one
+   interpolation qualifier are equal (`get_input_qualifier`'s tables,
+   nir_opt_varyings.c:3042-3136, 3298-3305): two flat ones merge
+   (fsload_qual4); a flat and a smooth one stay apart, a layout refused
+   here (fsload_qual1-3: `VaryingNotFromAttribute`).
 4. **Loads.** `nir_unlower_io_to_vars` (st_program.c:872) makes one
    variable of each slot's lanes. The fragment shader loads a slot it
    reads a lane of at that width (`component + num_components`,
