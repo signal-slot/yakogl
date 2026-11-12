@@ -5,44 +5,39 @@
 //! Zephyr has no I2C driver for the MP2's A35, so this is the driver. The bus,
 //! its base address, the clock, the reset and the pins are the caller's.
 //!
-//! Facts from Linux drivers/i2c/busses/i2c-stm32f7.c (v6.18, GPL-2.0: facts
-//! and function names only, nothing transcribed; the copy the author could
-//! fetch carried no line numbers, so the citations are by function):
+//! Facts from Linux v6.18 drivers/i2c/busses/i2c-stm32f7.c (GPL-2.0: facts
+//! and file:line only, nothing transcribed):
 //!
-//! 1. Registers: `CR1` 0x00, `CR2` 0x04, `TIMINGR` 0x10, `ISR` 0x18, `ICR`
-//!    0x1c, `RXDR` 0x24, `TXDR` 0x28. `CR1`: PE bit 0, ANFOFF bit 12, DNF
-//!    bits 11:8. `CR2`: SADD7 bits 7:1, RD_WRN bit 10, START bit 13, STOP bit
-//!    14, NBYTES bits 23:16, RELOAD bit 24, AUTOEND bit 25. `ISR`: TXIS 1,
-//!    RXNE 2, NACKF 4, STOPF 5, TC 6, BERR 8, ARLO 9, BUSY 15. `ICR` clears
-//!    NACKF 4, STOPF 5, BERR 8, ARLO 9 by writing 1. `TIMINGR`: SCLL 7:0,
-//!    SCLH 15:8, SDADEL 19:16, SCLDEL 23:20, PRESC 31:28.
-//! 2. `stm32f7_i2c_hw_config`: TIMINGR written first, then `CR1.ANFOFF`
-//!    (set when the analog filter is off), then `CR1.DNF` (cleared, then set),
-//!    `CR1.PE` last. [`init`] does that, with PE cleared before TIMINGR
+//! 1. Registers (:50-51 and the defines above them): `CR1` 0x00, `CR2` 0x04,
+//!    `TIMINGR` 0x10, `ISR` 0x18, `ICR` 0x1c, `RXDR` 0x24, `TXDR` 0x28
+//!    (accessed as bytes, :793, :804). `CR1`: PE bit 0, DNF bits 11:8, ANFOFF
+//!    bit 12. `CR2`: SADD7 bits 7:1, RD_WRN 10, START 13, STOP 14, NBYTES
+//!    23:16, RELOAD 24, AUTOEND 25. `ISR`: TXE 0, TXIS 1, RXNE 2, NACKF 4,
+//!    STOPF 5, TC 6, BERR 8, ARLO 9, BUSY 15. `TIMINGR`: SCLL 7:0, SCLH
+//!    15:8, SDADEL 19:16, SCLDEL 23:20, PRESC 31:28.
+//! 2. `stm32f7_i2c_hw_config` (:756-784): TIMINGR first, then `CR1.ANFOFF`
+//!    (set when the analog filter is off), then `CR1.DNF` (cleared, then
+//!    set), `CR1.PE` last. [`init`] does that, with PE cleared before TIMINGR
 //!    (TIMINGR may be written only with PE low, RM0457).
-//! 3. `stm32f7_i2c_compute_timing` and `stm32f7_i2c_setup_timing`: the
-//!    I2C-spec table (100 kHz: fall <= 300, rise <= 1000, vddat <= 3450,
-//!    sudat >= 250, low >= 4700, high >= 4000 ns; 400 kHz: 300, 300, 900,
-//!    100, 1300, 600; 1 MHz: 100, 120, 450, 50, 500, 260), analog filter
-//!    delay 50..260 ns when on, rise 25 ns and fall 10 ns when the DT is
-//!    silent, DNF = round(filter ns / kernel clock period) <= 15, one
-//!    PRESC/SCLDEL/SDADEL candidate per prescaler, then the SCLL/SCLH pair
-//!    with the least period error inside 80%..100% of the bus speed.
-//!    [`compute_timing`] follows the algorithm; the file the author could read
-//!    was a rendering without line numbers, and the `tscl_h >= tscl_l`
-//!    clause and the "strictly smaller error wins" rule are from memory of
-//!    the source, so the board is the judge (the ADV7535 answering).
-//! 4. `stm32f7_i2c_xfer_msg`: `CR2` gets SADD (7-bit address << 1), RD_WRN,
-//!    NBYTES (255 at most per segment, longer ones use RELOAD, not done
-//!    here), AUTOEND for the last message, START last. The write-read is
-//!    two messages: the write without AUTOEND (ends in TC), then a read
-//!    with START again (the restart) and AUTOEND.
-//! 5. `stm32f7_i2c_handle_isr_errs`: NACKF is cleared with `ICR.NACKCF`, the
-//!    TX data register is flushed by writing `ISR.TXE`, and the result is
-//!    -ENXIO; ARLO gives -EAGAIN, BERR -EIO, a bus busy before the start
-//!    -EBUSY, a timeout -ETIMEDOUT. The crate has no ENXIO: a NACK is
-//!    [`crate::errno::ENODEV`] here (no device answered the address or the
-//!    data).
+//! 3. `stm32f7_i2c_compute_timing` (:461-650): the spec table
+//!    (`stm32f7_get_specs`: 100 kHz, 400 kHz, 1 MHz rows as in [`SPECS`]),
+//!    analog filter 50..260 ns (:172-173) when on, DNF = round(DT filter
+//!    width / kernel clock period) <= 15 (:496), sdadel/scldel limits
+//!    (:517-527), the first (SCLDEL, SDADEL) per prescaler (:534-562), then
+//!    SCLL/SCLH inside `clk_min = 1e9/speed` .. `clk_max = 1e9/(0.8 speed)`
+//!    (:577-578, `RATE_MIN` :460), the least `|tscl - 1e9/speed|` strictly
+//!    below the first candidate bound `i2cbus` winning (:471, :615). Times
+//!    are integer ns with the clock period `DIV_ROUND_CLOSEST`ed (:465).
+//! 4. `stm32f7_i2c_xfer_msg` (:883): `CR2` gets SADD, RD_WRN, NBYTES (255 at
+//!    most per segment, longer ones use RELOAD, not done here), AUTOEND for
+//!    the last message, START last. The write-read is two messages: the
+//!    write without AUTOEND (ends in TC), then a read with START again (the
+//!    restart) and AUTOEND.
+//! 5. Errors: NACKF cleared with `ICR.NACKCF` and -ENXIO (:1627-1632), ARLO
+//!    -EAGAIN and BERR -EIO (`stm32f7_i2c_handle_isr_errs` :1519-1540); any
+//!    error flushes TXDR by writing `ISR.TXE` (:1745-1750). The crate has no
+//!    ENXIO: a NACK is [`crate::errno::ENODEV`] here. A busy bus gives
+//!    EBUSY, a poll timeout ETIMEDOUT.
 //!
 //! Kernel clock on the DK: ST's stm32mp251.dtsi gives each I2C node a kernel
 //! clock from the RCC flexgen; which rate ST's TF-A/U-Boot leave it at is
@@ -50,7 +45,7 @@
 //! 64 MHz (HSI) and say so. The caller passes the real rate.
 
 use crate::errno;
-use crate::mmio::{field, get, Mmio};
+use crate::mmio::{field, Mmio};
 
 pub const CR1: usize = 0x00;
 pub const CR2: usize = 0x04;
@@ -148,7 +143,6 @@ impl Timing {
 /// One row of Linux's `i2c_specs`: all times in ns.
 struct Spec {
     rate: u32,
-    rate_min: u32,
     fall_max: i64,
     rise_max: i64,
     hddat_min: i64,
@@ -161,7 +155,6 @@ struct Spec {
 const SPECS: [Spec; 3] = [
     Spec {
         rate: 100_000,
-        rate_min: 80_000,
         fall_max: 300,
         rise_max: 1000,
         hddat_min: 0,
@@ -172,7 +165,6 @@ const SPECS: [Spec; 3] = [
     },
     Spec {
         rate: 400_000,
-        rate_min: 320_000,
         fall_max: 300,
         rise_max: 300,
         hddat_min: 0,
@@ -183,7 +175,6 @@ const SPECS: [Spec; 3] = [
     },
     Spec {
         rate: 1_000_000,
-        rate_min: 800_000,
         fall_max: 100,
         rise_max: 120,
         hddat_min: 0,
@@ -247,8 +238,9 @@ pub fn compute_timing(cfg: &Config) -> Result<Timing, i32> {
 
     let tsync = af_min + dnf_delay + 2 * i2cclk;
     let clk_min = NS / i64::from(cfg.speed_hz);
-    let clk_max = NS / i64::from(spec.rate_min);
-    let mut best: Option<(Timing, i64)> = None;
+    let clk_max = NS / (i64::from(cfg.speed_hz) * 8 / 10);
+    let mut best: Option<Timing> = None;
+    let mut best_err = i2cbus;
     for (p, l, a) in cands.iter().flatten().copied() {
         let prescaler = (i64::from(p) + 1) * i2cclk;
         for scll in 0..256i64 {
@@ -262,20 +254,25 @@ pub fn compute_timing(cfg: &Config) -> Result<Timing, i32> {
                     continue;
                 }
                 let tscl = tscl_l + tscl_h + rise + fall;
-                if tscl < clk_min || tscl > clk_max || tscl_h < tscl_l {
+                if tscl < clk_min || tscl > clk_max {
                     continue;
                 }
                 let err = (tscl - i2cbus).abs();
-                if best.is_none_or(|(_, e)| err < e) {
-                    best = Some((
-                        Timing { presc: p, scldel: l, sdadel: a, sclh: sclh as u8, scll: scll as u8, dnf: dnf as u8 },
-                        err,
-                    ));
+                if err < best_err {
+                    best_err = err;
+                    best = Some(Timing {
+                        presc: p,
+                        scldel: l,
+                        sdadel: a,
+                        sclh: sclh as u8,
+                        scll: scll as u8,
+                        dnf: dnf as u8,
+                    });
                 }
             }
         }
     }
-    best.map(|(t, _)| t).ok_or(-errno::EINVAL)
+    best.ok_or(-errno::EINVAL)
 }
 
 /// Configure the controller (`stm32f7_i2c_hw_config`): PE low, `TIMINGR`,
@@ -298,9 +295,7 @@ fn wait<M: Mmio>(m: &M, base: usize, want: u32) -> Result<(), i32> {
         let isr = m.read32(base + ISR);
         if isr & ISR_NACKF != 0 {
             m.write32(base + ICR, ICR_NACKCF);
-            if isr & ISR_TXE == 0 {
-                m.write32(base + ISR, ISR_TXE); // flush TXDR, as the kernel
-            }
+            flush_txdr(m, base);
             // The controller sends the STOP itself after a NACK.
             for _ in 0..POLL_LIMIT {
                 if m.read32(base + ISR) & ISR_STOPF != 0 {
@@ -312,10 +307,12 @@ fn wait<M: Mmio>(m: &M, base: usize, want: u32) -> Result<(), i32> {
         }
         if isr & ISR_ARLO != 0 {
             m.write32(base + ICR, ICR_ARLOCF);
+            flush_txdr(m, base);
             return Err(-errno::EAGAIN);
         }
         if isr & ISR_BERR != 0 {
             m.write32(base + ICR, ICR_BERRCF);
+            flush_txdr(m, base);
             return Err(-errno::EIO);
         }
         if isr & want != 0 {
@@ -323,6 +320,12 @@ fn wait<M: Mmio>(m: &M, base: usize, want: u32) -> Result<(), i32> {
         }
     }
     Err(-errno::ETIMEDOUT)
+}
+
+/// Any error flushes TXDR so old data is not sent by the next transfer
+/// (i2c-stm32f7.c :1745-1750, writing `ISR.TXE`).
+fn flush_txdr<M: Mmio>(m: &M, base: usize) {
+    m.write32(base + ISR, ISR_TXE);
 }
 
 fn wait_idle<M: Mmio>(m: &M, base: usize) -> Result<(), i32> {
@@ -362,7 +365,7 @@ fn check(addr: u8, lens: &[usize]) -> Result<(), i32> {
 fn send<M: Mmio>(m: &M, base: usize, data: &[u8]) -> Result<(), i32> {
     for &b in data {
         wait(m, base, ISR_TXIS)?;
-        m.write32(base + TXDR, u32::from(b));
+        m.write8(base + TXDR, b);
     }
     Ok(())
 }
@@ -387,7 +390,7 @@ pub fn write_read<M: Mmio>(m: &M, base: usize, addr: u8, wr: &[u8], rd: &mut [u8
     start(m, base, addr, true, rd.len(), true);
     for b in rd.iter_mut() {
         wait(m, base, ISR_RXNE)?;
-        *b = get(0xff, m.read32(base + RXDR)) as u8;
+        *b = m.read8(base + RXDR);
     }
     finish(m, base)
 }
@@ -395,6 +398,7 @@ pub fn write_read<M: Mmio>(m: &M, base: usize, addr: u8, wr: &[u8], rd: &mut [u8
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mmio::get;
     use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
 
@@ -463,10 +467,6 @@ mod tests {
                     }
                     v | ISR_BUSY
                 }
-                RXDR => {
-                    *self.left.borrow_mut() -= 1;
-                    u32::from(self.rx.borrow_mut().pop_front().expect("RXDR read with nothing queued"))
-                }
                 o => *self.regs.borrow().get(&o).unwrap_or(&0),
             }
         }
@@ -489,11 +489,6 @@ mod tests {
                         *self.stop.borrow_mut() = true;
                     }
                 }
-                TXDR => {
-                    assert!(*self.left.borrow() > 0, "TXDR written with no byte due");
-                    *self.left.borrow_mut() -= 1;
-                    self.sent.borrow_mut().push(val as u8);
-                }
                 ICR => {
                     if val & ICR_NACKCF != 0 {
                         *self.nack.borrow_mut() = false;
@@ -508,11 +503,17 @@ mod tests {
                 }
             }
         }
-        fn read8(&self, _: usize) -> u8 {
-            unreachable!()
+        fn read8(&self, a: usize) -> u8 {
+            assert_eq!(a - BASE, RXDR);
+            *self.left.borrow_mut() -= 1;
+            self.rx.borrow_mut().pop_front().expect("RXDR read with nothing queued")
         }
-        fn write8(&self, _: usize, _: u8) {
-            unreachable!()
+        fn write8(&self, a: usize, val: u8) {
+            assert_eq!(a - BASE, TXDR);
+            self.writes.borrow_mut().push((TXDR, u32::from(val)));
+            assert!(*self.left.borrow() > 0, "TXDR written with no byte due");
+            *self.left.borrow_mut() -= 1;
+            self.sent.borrow_mut().push(val);
         }
     }
 
@@ -544,7 +545,7 @@ mod tests {
         assert!((0.0..=900.0 - 25.0 - 260.0 - 4.0 * clk).contains(&sda));
         assert_eq!(t.timingr() >> 28, u32::from(t.presc));
         // Pinned: what the algorithm gives for 64 MHz / 400 kHz.
-        assert_eq!(t.timingr(), 0x00704c4c);
+        assert_eq!(t.timingr(), 0x0070424c);
     }
 
     #[test]
@@ -624,7 +625,10 @@ mod tests {
     fn nack_is_an_errno_and_clears() {
         let m = up();
         assert_eq!(write(&m, BASE, 0x50, &[1, 2]), Err(-errno::ENODEV));
-        assert_eq!(*m.writes.borrow(), vec![(CR2, cr2(0x50, false, 2, true)), (ICR, ICR_NACKCF), (ICR, ICR_STOPCF)]);
+        assert_eq!(
+            *m.writes.borrow(),
+            vec![(CR2, cr2(0x50, false, 2, true)), (ICR, ICR_NACKCF), (ISR, ISR_TXE), (ICR, ICR_STOPCF)]
+        );
         // The bus is usable again.
         write(&m, BASE, 0x3d, &[1]).unwrap();
     }
