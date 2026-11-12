@@ -544,7 +544,9 @@ no wait to it.
 
 The host model that measured both tables:
 `driver/zephyr/lib/board/imx8mp/host/run.sh` compiles `board_imx8mp.c`
-unchanged against Zephyr's kernel calls on POSIX threads and a simulated
+unchanged against Zephyr's kernel calls on POSIX threads, on a simulated
+clock (time advances only by the draw and the panel period, never by the
+host's clock, so every run prints the same numbers), and a simulated
 LCDIF whose `imx8mp_display_set_fb` returns at the next multiple of a
 4 ms period, at buffers 1, 2 and 3 (and the Slint window with and without
 `CONFIG_YAKOGL_BOARD_SCANOUT_VIEW`). It plays each application's call
