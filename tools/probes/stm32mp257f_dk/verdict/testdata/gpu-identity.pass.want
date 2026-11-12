@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict gpu-identity model=PASS:0x8000 rev=PASS:0x6205 customer=0x0000aaaa
+1 checks, 0 failed

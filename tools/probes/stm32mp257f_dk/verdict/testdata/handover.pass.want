@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict handover fields=PASS el=2 m=0 c=0 i=1 x0=0x80000000 x1=0x0 pc=0xa0000000 cntfrq=24000000 mpidr=0x80000000 psci=0x10001
+1 checks, 0 failed

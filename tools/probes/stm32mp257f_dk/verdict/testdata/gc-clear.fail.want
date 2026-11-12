@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict gc-clear model=PASS readback=FAIL:4096 final=FAIL record=FAIL:kind=21
+1 checks, 1 failed
