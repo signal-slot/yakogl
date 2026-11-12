@@ -922,7 +922,7 @@ fn lower_ordered<'a>(
         precs,
         prec: AVec::new(),
         local_prec: AVec::new(),
-        cur: Prec::None,
+        cur: Prec::High,
         cur_class: Prec::None,
         slot_prec: None,
         nodes: AVec::new(),
@@ -1005,7 +1005,8 @@ struct Lower<'x, 'a> {
     /// [`Lower::locals`]. See [`ir::Module::local_prec`].
     local_prec: AVec<'a, Prec>,
     /// The [`Prec`] the instructions of the expression being lowered
-    /// record ([`Precs::instr`]); None outside any expression.
+    /// record ([`Precs::instr`]); High outside any expression (a copy the
+    /// lowering makes is read at full width).
     cur: Prec,
     /// That expression's class ([`Precs::class`]): what a temporary the
     /// lowering makes for it is stored at.
@@ -1754,11 +1755,13 @@ impl<'a> Lower<'_, 'a> {
         #[cfg(not(test))]
         let off = false;
         let saved = core::mem::take(&mut self.folded);
-        /* A statement is no expression: what it emits outside one (a
-         * flag, a store) records no expression's precision, also inside a
-         * body inlined into an expression. */
+        /* A statement is no expression: what it emits outside one is a
+         * copy the lowering makes (a held input, an output's shadow, a
+         * flag), at full width like any bare read (stores and ints record
+         * None by `instr_prec`), also inside a body inlined into an
+         * expression. */
         let outer = (self.cur, self.cur_class);
-        (self.cur, self.cur_class) = (Prec::None, Prec::None);
+        (self.cur, self.cur_class) = (Prec::High, Prec::None);
         let r = if off || self.fold_depth > 0 {
             self.statement_inner(id, out)
         } else {
