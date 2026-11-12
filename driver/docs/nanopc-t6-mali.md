@@ -2708,39 +2708,32 @@ Decided by the user on 2026-10-18:
 Measured under Armbian over ssh on 2026-10-26 and moved to their sections: the live
 `AS_MEMATTR` ("MMU (Z2)"), `TIMESTAMP_OFFSET` and the runtime CS/CSG values ("The
 firmware (Z3)"), Mesa 25.0.7 against 26.2.1 ("The command stream and descriptors
-(L1)"), the Linux QoS words ("The GPU power-on"). What is left needs U-Boot or a job
-from Zephyr; a UART / U-Boot session reads exactly this (issue #26 names them as
-Z-prerequisites), each with the board in U-Boot's prompt, before `bootm` / `booti`,
-and nothing written:
+(L1)"), the Linux QoS words ("The GPU power-on"). Read at the U-Boot prompt on
+2026-11-12, nothing written (`driver/tools/uboot-t6/prompt-reads.sh`; the values are
+in docs/notes/nanopc-t6-uboot-handover.md, section 4 (c)): the first two items below.
+What is left needs a run from U-Boot or a job from Zephyr:
 
 - **PD_GPU and vdd_gpu_s0 at the U-Boot hand-over** (the supply is boot-on but not
   always-on). After Linux's kexec: PD_GPU off, vdd_gpu_s0 on at 675 mV, the clock
-  300 MHz from CPLL (measured; "The GPU power-on"). Read in U-Boot, `md.l` each:
-  the PMU (0xfd8d8000) `PWR_GATE`,
-  `REPAIR_STATUS`, `BUS_IDLE_REQ`, `BUS_IDLE_ACK`, `BUS_IDLE_ST` (the registers
-  and the Linux values are in `0dce654a8:tools/mali/board-ref/2026-10-19-z1-gpu/README.md`:
-  off is 0xffff / 0xfad50001); and the RK806 (SPI2) `POWER_EN0`, `POWER_SLP_EN0`,
-  `BUCK1_CONFIG`, `BUCK1_ON_VSEL` (Linux and the image: 0x0f, 0xe0, 0xa4, 0x1c =
-  675 mV), through U-Boot's `regulator dev vdd_gpu_s0` / `regulator status` or
-  `pmic dump` when its driver has the supply, else the same SPI2 read the image does.
-  The image already handles the states U-Boot could plausibly leave (PD_GPU off with
-  vdd_gpu_s0 off or on, or PD_GPU powered with its idle request set; `board::nanopc_t6_gpu::gpu_up`,
-  "The GPU power-on" step 3 and 5), each host-tested with a stop for every refusal.
-  What decides: whether U-Boot's real state is one of those, whether it leaves PD_GPU
-  powered with the idle request set, and how fast DCDC1 ramps (the image polls up to
+  300 MHz from CPLL (measured; "The GPU power-on"). Measured at the U-Boot prompt:
+  PD_GPU is off with its idle request clear (`PWR_GATE` 0x0000fff9, `REPAIR_STATUS`
+  0xfff70001, `BUS_IDLE_REQ` 0, `BUS_IDLE_ACK` and `BUS_IDLE_ST` 0x00021fff). That
+  is a state the image handles (`board::nanopc_t6_gpu::gpu_up`, "The GPU power-on"
+  step 3 and 5; host-tested with a stop for every refusal). Not measured: whether
+  vdd_gpu_s0 is on there (the U-Boot build has no `pmic` command; the image reads
+  the RK806's `POWER_EN0` over SPI2 and reports it on its first run from U-Boot),
+  and how fast DCDC1 ramps (the image polls up to
   `rk806::DCDC1_RAMP_POLL_BUDGET_US`, a budget and not a fact). The design is in
   docs/notes/nanopc-t6-uboot-handover.md.
-- **The GPU clock without Linux**: SCMI clock 5 against the CRU. In U-Boot read the CRU
-  (0xfd7c0000) `CLKSEL_CON(158)` (0xfd7c0578; Linux leaves 0x1f24: `clk_gpu_src`
-  CPLL / 5 = 300 MHz, PVTPLL bit 14 clear), `CLKGATE_CON(66)`, the CPLL and GPLL
-  `PLL_CON` words, and `clk dump` (the rates U-Boot believes, SCMI clock 5
-  included), at the prompt with nothing run before. The image refuses the PVTPLL
-  and, when the CRU is not at a rate inside the OPP table, sets `CLKSEL_CON(158)`
-  (and (159)) itself: `soc::rk3588::gpu_clock_set`, CPLL / 5 = 300 MHz while the
-  CPLL reads 1500 MHz in normal mode, host-tested over the register model for
-  Armbian's 0x1f24 (kept), a PVTPLL state, an out-of-table divider and an unknown
-  mux ("The GPU power-on", step 2). What the prompt read decides is whether U-Boot's
-  CRU is in one of those states, and whether the CPLL reads 1500 MHz there.
+- **The GPU clock without Linux.** Measured at the U-Boot prompt: `CLKSEL_CON(158)`
+  (0xfd7c0578) reads 0x00001f80, the SPLL, where Linux leaves 0x1f24 (`clk_gpu_src`
+  CPLL / 5 = 300 MHz, PVTPLL bit 14 clear); the CPLL reads 1500 MHz in normal mode.
+  So `soc::rk3588::gpu_clock_set` moves the GPU to CPLL / 5 = 300 MHz ("The GPU
+  power-on", step 2; host-tested over the register model for Armbian's 0x1f24
+  (kept), a PVTPLL state, an out-of-table divider and an unknown mux). Not
+  measured: the rates U-Boot itself believes, SCMI clock 5 included (the build has
+  no `clk` command), and the move on the board (no image has run from U-Boot yet;
+  issue #4627).
 - **The QoS words' effect.** The choice is made in code: `soc::rk3588::QosPolicy`
   holds the two candidates — `Reset`, the hardware reset values (`MODE` 3,
   `BANDWIDTH` 0x12d, `SATURATION` 0x40), and `LinuxZero`, what Linux reads with the
