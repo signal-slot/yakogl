@@ -8120,6 +8120,28 @@ fn vectorize16(f: &mut Fs<'_>) -> Result<(), MaliError> {
     Ok(())
 }
 
+/// `fmul(a, 2.0)` -> `fadd(a, a)` (bifrost_nir_algebraic.py:31, the late
+/// rules, [`nir::late_rules`]) on the fp16 nodes [`vectorize16`] left, whose
+/// constants are fp16 halves by then: a pair whose constant is 2.0 in both
+/// halves (`ceil(u_k.x * 2.0)` beside `u_k.y * 2.0`: `FADD.v2f16 r0, u2.w0,
+/// u2.w0`, tools/mali/testdata/deadloop_mul2), or a lone product.
+fn late_rules16(f: &mut Fs<'_>) {
+    const F16_TWO: u32 = 0x4000;
+    for k in 0..f.nir.len {
+        let x = f.nir.order[k] as usize;
+        let nd = f.nir.nodes[x];
+        let two = match (nd.kind, nd.bits, nd.width) {
+            (Kind::Alu(Alu::Fmul), 16, 1) => Val::Const(F16_TWO),
+            (Kind::Alu(Alu::Fmul), 16, 2) => Val::Const(F16_TWO | F16_TWO << 16),
+            _ => continue,
+        };
+        if let Some(k) = nd.src[..2].iter().position(|v| *v == two) {
+            let a = nd.src[1 - k];
+            f.nir.nodes[x] = NirNode { kind: Kind::Alu(Alu::Fadd), src: [a, a, Val::Undef], ..nd };
+        }
+    }
+}
+
 /// The late `fadd(fmul(a, b), c)` -> `ffma(a, b, c)` (nir_opt_algebraic.py:
 /// 3816-3820) on the fp16 lanes of a shader with 2D array look-ups
 /// ([`array_look_ups`]), before they pair ([`vectorise_int_sources`]):
@@ -8389,8 +8411,24 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
     if pairs16 {
         vectorize16(f)?;
     }
+    /* an unrolled pass's fp16 product that found no other lane to pair
+     * with: where Mesa schedules the passes' sums against the compares
+     * then is not measured, and ours differs (`ceil(u_k.z * 3.0)` and
+     * `ceil(3.0 * u_k.x)` leave `u_k.y * 2.0` alone, case 70's loop with
+     * `acc * 3.0` leaves each pass's `k * 1.5`; tools/mali/testdata/
+     * deadloop_*): only pairs are, cflow_71_deadloop's */
+    if guarded16(f)
+        && f.nir.order[..f.nir.len].iter().any(|&id| {
+            matches!(f.nir.nodes[id as usize], NirNode { kind: Kind::Alu(Alu::Fmul), bits: 16, width: 1, .. })
+        })
+    {
+        return Err(MaliError::GuardMediump);
+    }
     nir::fuse(&mut f.nir);
     nir::late_rules(&mut f.nir);
+    if pairs16 {
+        late_rules16(f);
+    }
     nir::bcsel_fadd(&mut f.nir)?;
     if ladder {
         nir::bcsel_fadd16(&mut f.nir, scratch)?;
