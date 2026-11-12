@@ -587,17 +587,19 @@ fn check_planes(what: &str, class: &(&str, u8, u32, &str), (w, h): (u32, u32), m
     }
 }
 
-/// Did the GL core store the class as planes? RGBA32F is held as halves by
-/// `sized_format` (src/gl/texture.rs, `GL_RGBA32F => ... GLES_TEXFMT_RGBA16F`)
-/// whatever the mask says, so its descriptor is not a G32R32 one even with
-/// the class open. The test says so and checks nothing for it until it is.
-fn stored_as_planes(class: &(&str, u8, u32, &str), stream: &[(u32, u32)]) -> bool {
+/// The GL core stored the class as planes: with the class open it holds all
+/// three in their own class, GL_RGBA32F included (`sized_format` in
+/// src/gl/texture.rs, `rgba32f_class`), so slot 0's descriptor is the
+/// G32R32 one. Until that routing it held GL_RGBA32F as halves whatever the
+/// mask said, and this skipped RGBA32F; now that is a failure.
+fn assert_stored_as_planes(class: &(&str, u8, u32, &str), stream: &[(u32, u32)]) {
     let d = descriptor(stream, 0).unwrap_or_else(|| panic!("{}: no descriptor in slot 0", class.0));
-    let planes = d[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f == rnndb(class.3);
-    if !planes {
-        eprintln!("{}: the GL core does not store the class as planes (texture.rs sized_format); not checked", class.0);
-    }
-    planes
+    assert_eq!(
+        d[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f,
+        rnndb(class.3),
+        "{}: the GL core did not store the open class as planes (texture.rs sized_format)",
+        class.0
+    );
 }
 
 /// The sizes: non-square, not tile-aligned, with mips down to 1x1.
@@ -632,9 +634,7 @@ fn an_uploaded_128_bit_texture_is_two_tiled_planes() {
                 let m = model(class.1 == GLES_TEXFMT_RGBA32F, w, h, levels_of(w, h));
                 upload(class, w, h, &m);
                 let s = draw(program(sampler));
-                if !stored_as_planes(class, &s) {
-                    return;
-                }
+                assert_stored_as_planes(class, &s);
                 check_planes(&format!("{} {w}x{h}", class.0), class, (w, h), &m, &s);
             });
         }
@@ -662,9 +662,7 @@ fn a_sub_image_update_touches_only_its_texels_in_both_planes() {
             let p = program(sampler);
             let what = |s: &str| format!("{} {s}", class.0);
             let s = draw(p);
-            if !stored_as_planes(class, &s) {
-                return;
-            }
+            assert_stored_as_planes(class, &s);
             check_planes(&what("before"), class, (w, h), &m, &s);
 
             /* crosses the tile columns at 4 and 8 and the row at 4 */
