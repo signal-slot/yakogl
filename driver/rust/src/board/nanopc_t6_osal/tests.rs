@@ -601,6 +601,67 @@ fn an_unrecoverable_fatal_leaves_the_osal_dead_with_its_fences_complete() {
     assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
 }
 
+/// A buffer freed while kicks are in flight, and a group whose end is not
+/// known: the free stays held and no page is handed out again, since the
+/// GPU may still run the group and write them.
+fn freed_pages_stay_held(r: &mut Rig, f: &Alloc) {
+    assert_eq!(r.osal.held(), 1, "the free is still held");
+    assert_eq!(r.osal.alloc(4096), Err(-EIO), "no page handed out");
+    assert_eq!(r.osal.free(&*r.z, f.gpu, f.handle, &mut no_delay), -EINVAL, "freed once already");
+    assert_eq!(r.osal.held(), 1);
+}
+
+/// The unrecoverable fatal leaves the group unended (no terminate is
+/// sent): what was freed during the lost kick stays held.
+#[test]
+fn an_unrecoverable_fatal_keeps_the_frees_of_its_kicks_held() {
+    let mut r = rig();
+    queue_init(&mut r);
+    let s = stream(&mut r);
+    r.z.fail_at(2, Fail::Fatal(0x0000_0141));
+    // freed while the kick is recorded: held for its fence
+    let a = r.osal.alloc(4096).unwrap();
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
+    assert_eq!(r.osal.dead().map(|d| d.0), Some(SchedRefusal::CsFatal));
+    freed_pages_stay_held(&mut r, &a);
+}
+
+/// A hung kick whose stop and terminate the firmware never acknowledges:
+/// the OSAL is dead and the group may still run; the frees stay held.
+#[test]
+fn a_terminate_not_acknowledged_keeps_the_frees_held() {
+    let mut r = rig();
+    queue_init(&mut r);
+    let s = stream(&mut r);
+    r.z.fail_at(2, Fail::Hang);
+    let a = r.osal.alloc(4096).unwrap();
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    r.z.deaf.set(true);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
+    assert_eq!(r.osal.dead().map(|d| d.0), Some(SchedRefusal::CsgTerminateAckTimeout));
+    assert_eq!(r.osal.fences(), (2, 2), "the lost fence is complete");
+    freed_pages_stay_held(&mut r, &a);
+}
+
+/// A shutdown whose terminate is not acknowledged: a free after it is
+/// held, not given back at once as after an acknowledged end.
+#[test]
+fn a_shutdown_not_acknowledged_keeps_the_frees_held() {
+    let mut r = rig();
+    let s = stream(&mut r);
+    let a = r.osal.alloc(4096).unwrap();
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), 0);
+    r.z.deaf.set(true);
+    let e = r.osal.shutdown(&*r.z, &mut no_delay).unwrap();
+    assert!(e.terminate.is_err(), "{e:?}");
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
+    freed_pages_stay_held(&mut r, &a);
+}
+
 /// Twenty restarts, a good kick after each: every lost fence stays `-EIO`
 /// past the [`LOST_RANGES`] kept (an older lost range is held by the floor),
 /// every good one above the floor 0.
