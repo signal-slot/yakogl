@@ -7,9 +7,14 @@
 //! LTDC -> DSI -> ADV7535 -> HDMI path needs (docs/notes/pre-study-stm32mp257f-dk.md
 //! P8, Q7). Clocks and resets are the SoC glue's, not this file's.
 //!
-//! Citations are `ltdc.c: function` because the copy this was written from
-//! was read without line numbers; each is checkable with `grep -n` on the
-//! function name. What the code relies on:
+//! Citations are `ltdc.c: function`; in mainline master (2116 lines) they are
+//! `ltdc_crtc_atomic_enable` 776, `ltdc_crtc_atomic_disable` 799,
+//! `ltdc_crtc_mode_set_nofb` 898 (timings 964-971, GCR 973-989, SSCR..LIPCR
+//! 990-1007), `ltdc_plane_atomic_update` 1266 (window 1306-1313, PFCR 1330,
+//! CACR 1334, BFCR 1337-1353, CFBAR 1365, CFBLR 1368-1378, CFBLNR 1382,
+//! LXCR_LEN 1475-1487 and its reload), `ltdc_plane_atomic_disable` 1512,
+//! `ltdc_encoder_disable` 1713, `ltdc_encoder_enable` 1727. What the code
+//! relies on:
 //!
 //! - Version: `LTDC_IDR` (0x00) holds the hardware version; `ltdc_get_caps()`
 //!   picks the layer register table from it. HWVER 0x040100/0x040101 (the
