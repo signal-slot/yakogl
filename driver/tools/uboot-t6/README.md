@@ -125,15 +125,17 @@ staged copy is not the same bytes. Its record is `record.txt`, `uart.log`,
 login) and `verdict.txt` under `$T6_RECORD_DIR/<date>-t6-uboot-go`.
 
 Exit codes (`prompt-go.py`'s, passed on by `prompt-go.sh`): 0 the verdict
-PASS and Armbian back; 3 no autoboot line, nothing written; 4 the autoboot
-missed, Linux booted; 5 stopped at the U-Boot prompt (an echo that never
+PASS and Armbian back; 12 no autoboot line after the reboot, nothing
+written; 4 the autoboot missed, Linux booted; 5 stopped at the U-Boot prompt (an echo that never
 matched, no answer, the prompt lost), the board stays there until its power
 is cut; 6 an answer differed, `reset` entered, no Linux login; 7 a command
 made U-Boot reset the board; 8 an answer differed: no `go`, `reset`
 entered, Armbian back; 9 `go` not answered (no "## Starting application");
 10 the image started, no Linux login: the board needs a hand; 11 the verdict
 FAIL, Armbian back. `prompt-go.sh` adds 1 the board did not come back into
-Armbian, 2 usage, 3 refused before anything changed.
+Armbian, 2 usage, 3 refused before anything changed (only that: the board
+was not rebooted). The two runners share their ssh, board-fact, UART and
+reboot-and-wait code in `prompt-lib.sh`.
 
 From `go` until the image arms WDT0 (`T6:A3`) nothing resets a board whose
 image stopped: U-Boot runs no watchdog and Linux's is gone (the kexec route
@@ -168,7 +170,12 @@ Link address and window:
   earliest hook (`z_arm64_el2_plat_prep_c`, before any stack), turns the
   MMU and both caches off, then cleans and invalidates zephyr,sram to the
   point of coherency by address, then invalidates the instruction cache and
-  the EL2 TLB, and prints `T6:G` (driver/rust/src/board/nanopc_t6_go.rs).
+  the EL2 TLB, and prints `T6:G` with `SCTLR_EL2` as found and as read
+  back after the turn-off (driver/rust/src/board/nanopc_t6_go.rs).
+  `t6-verdict.sh` (`T6_ROUTE=uboot`) passes a record only when the value
+  read back has M, C and I clear and equals `T6:A`'s `SCTLR_EL2`. Entered
+  at EL1 (not this U-Boot's case) the entry turns nothing off and prints
+  `T6:G EL1` when the MMU or a cache is on there.
   Under kexec the entry finds them off and does nothing (Z1 measured
   `SCTLR_EL2` 0x30400800).
 - **The watchdog.** U-Boot runs none. The image arms WDT0 itself, as after
@@ -233,6 +240,14 @@ never writes another file of `/boot`, a block device, the eMMC's loader area
 or U-Boot's environment, and loads no kernel module. Exit: 0 done and
 `/boot`'s other files match the fingerprint; 1 the copy or a stock file
 differs (named); 2 usage; 3 refused before anything was written.
+
+The fingerprint holds the sha256 of every regular file and the target of
+every symbolic link under `/boot` (Armbian's `Image`, `uInitrd` and `dtb`
+are links). `stage` and `check` refuse a `/boot/yakogl` that is a symbolic
+link or holds one: a write through it would leave `/boot/yakogl`. `undo`
+removes `/boot/yakogl` even when a stock file changed since `stage` (a
+kernel update does that): it names the change and exits 1 after the
+removal; `rm -rf` removes a link, never what it points to.
 
 The image is only in RAM after `ext4load`: `reset` or the power switch
 returns to the stock `bootflow scan -lb`, which boots Armbian. A directory
