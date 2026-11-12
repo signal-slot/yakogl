@@ -64,8 +64,13 @@ use crate::backend::{gles_surf_bytes_per_pixel, GlesDraw};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
 
+use super::layout::{self, Layout};
+
 /// Bytes a pixel of a target the one-target path ([`wanted`]) takes.
 const BPP: u32 = 8;
+/// Bytes a 32-bit pixel takes: a shadow of it is written back by the RS in
+/// the stream that renders into it, never by [`retire`].
+const BPP32: u32 = 4;
 /// Where the shadow starts: a page.
 const BASE_ALIGN: usize = 4096;
 /// Shadows kept at once.
@@ -84,8 +89,23 @@ struct Key {
     bpp: u32,
 }
 
+/// Who holds the newest pixels of a target.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum State {
+    /// The shadow is rendered into and written back inside the stream being
+    /// recorded; no CPU tile-in or untile is due for it.
+    InStep,
+    /// The shadow is the newer copy: the last kick rendering into it.
+    ShadowNewer(u32),
+    /// The linear storage is the newer copy.
+    StorageNewer,
+}
+
 struct Entry {
     key: Key,
+    /// Bytes a pixel (`key.bpp`).
+    bpp: u32,
+    state: State,
     /// The linear storage's CPU view.
     cpu: *mut u8,
     mem: OsalGpuMem,
@@ -93,9 +113,6 @@ struct Entry {
     /// `mem`.
     gpu: u64,
     shadow: *mut u8,
-    /// The last kick rendering into the shadow while the shadow is the
-    /// newer copy; 0 while the linear storage is.
-    kick: u32,
     /// For the LRU.
     stamp: u32,
 }
@@ -123,14 +140,19 @@ const fn align_up(v: u32, a: u32) -> u32 {
 /// The shadow's size in pixels: Mesa's TILED render-target padding on a core
 /// without the BLT engine (`etna_layout_multiple`: paddingX 16, paddingY 4).
 pub const fn padded(w: u32, h: u32) -> (u32, u32) {
-    (align_up(w, 16), align_up(h, 4))
+    (layout::aligned_width(Layout::Tiled, w, true), layout::aligned_height(Layout::Tiled, h, true))
 }
 
 /// PE_COLOR_STRIDE for a shadow of a `w`-pixel-wide target: one row of
 /// pixels of the padded width (Mesa's `level->stride`; only the RS takes a
 /// tiled stride times 4).
 pub const fn stride(w: u32) -> u32 {
-    padded(w, 1).0 * BPP
+    stride_bpp(w, BPP)
+}
+
+/// [`stride`] for pixels of `bpp` bytes (`layout::stride`).
+pub const fn stride_bpp(w: u32, bpp: u32) -> u32 {
+    layout::stride(Layout::Tiled, w, bpp, true)
 }
 
 /// Byte offset of pixel (x, y) in a tiled surface `tw` pixels wide (a
@@ -283,7 +305,7 @@ const fn target_key(t: &Target) -> Key {
 /// (Mesa's 64-bit twin's `level->stride`).
 pub const fn target_stride(t: &Target) -> u32 {
     let bpp = if t.bpp as usize == WIDE_BPP { BPP } else { t.bpp };
-    padded(t.w, 1).0 * bpp
+    stride_bpp(t.w, bpp)
 }
 
 /// Does a draw into `targets` render into shadows, one a target? Every
@@ -345,7 +367,7 @@ pub fn bind_targets(targets: &[Target], kick: u32) -> Option<[Bound; MAX_TARGETS
     let mut out = [Bound::ZERO; MAX_TARGETS];
     for (i, t) in targets.iter().enumerate() {
         let e = s.entries[slots[i]].as_mut()?;
-        e.kick = kick;
+        e.state = State::ShadowNewer(kick);
         let (pw, ph) = padded(t.w, t.h);
         let plane1 = if t.bpp as usize == WIDE_BPP { e.gpu + plane_offset(pw, ph) as u64 } else { 0 };
         out[i] = Bound { gpu: e.gpu, plane1, stride: target_stride(t) };
@@ -371,11 +393,11 @@ fn prepare_key(key: Key, cpu: *mut u8, keep: &[Key], finish: &impl Fn() -> i32) 
     let clock = s.clock;
     if let Some(e) = s.entries.iter_mut().flatten().find(|e| e.key == key) {
         e.stamp = clock;
-        return if e.kick == 0 { tile_in(e) } else { 0 };
+        return if e.state == State::StorageNewer { tile_in(e) } else { 0 };
     }
     /* a shadow of the same storage at another size or pitch: the storage was
      * specified again; one that is still the newer copy goes back first */
-    if s.entries.iter().flatten().any(|e| e.key.gpu == key.gpu && e.kick != 0) && finish() != 0 {
+    if s.entries.iter().flatten().any(|e| e.key.gpu == key.gpu && e.kick() != 0) && finish() != 0 {
         return -1;
     }
     for e in s.entries.iter_mut() {
@@ -420,7 +442,8 @@ fn prepare_key(key: Key, cpu: *mut u8, keep: &[Key], finish: &impl Fn() -> i32) 
         // SAFETY: `skip` is below BASE_ALIGN, inside the allocation.
         shadow: unsafe { (mem.cpu as *mut u8).add(skip) },
         mem,
-        kick: 0,
+        bpp: key.bpp,
+        state: State::StorageNewer,
         stamp: clock,
     };
     // SAFETY: `bytes` from the page boundary on, inside the allocation.
@@ -440,7 +463,7 @@ fn free_slot(s: &Shadows, keep: &[Key]) -> Option<usize> {
         .iter()
         .enumerate()
         .filter_map(|(i, e)| e.as_ref().map(|e| (i, e)))
-        .filter(|(_, e)| e.kick == 0 && !keep.contains(&e.key))
+        .filter(|(_, e)| e.state == State::StorageNewer && !keep.contains(&e.key))
         .min_by_key(|(_, e)| e.stamp)
         .map(|(i, _)| i)
 }
@@ -485,8 +508,46 @@ fn tile_in(e: &mut Entry) -> i32 {
 pub fn bind(gl: &GlesDraw, kick: u32) -> Option<u64> {
     let key = key_of(gl);
     let e = shadows().entries.iter_mut().flatten().find(|e| e.key == key)?;
-    e.kick = kick;
+    e.state = State::ShadowNewer(kick);
     Some(e.gpu)
+}
+
+impl Entry {
+    /// The kick that last rendered into the shadow while it is the newer
+    /// copy; 0 otherwise.
+    fn kick(&self) -> u32 {
+        match self.state {
+            State::ShadowNewer(k) => k,
+            _ => 0,
+        }
+    }
+}
+
+/// The entry of the target at `gpu`, if it has a shadow.
+fn entry_at(gpu: u64) -> Option<&'static mut Entry> {
+    shadows().entries.iter_mut().flatten().find(|e| e.key.gpu == gpu)
+}
+
+/// The linear storage at `gpu` is the newer copy of its target (the GL core
+/// wrote it); the next [`prepare`] tiles it in. False when it has no shadow.
+pub fn mark_storage_newer(gpu: u64) -> bool {
+    entry_at(gpu).map(|e| e.state = State::StorageNewer).is_some()
+}
+
+/// The shadow at `gpu` is rendered into and written back inside the stream
+/// being recorded: [`retire`] leaves it alone. False when it has no shadow.
+pub fn mark_in_step(gpu: u64) -> bool {
+    entry_at(gpu).map(|e| e.state = State::InStep).is_some()
+}
+
+/// Does the target at `gpu` have a shadow that is in-step?
+pub fn in_step(gpu: u64) -> bool {
+    entry_at(gpu).is_some_and(|e| e.state == State::InStep)
+}
+
+/// The state of the shadow of the target at `gpu`, if it has one.
+pub fn state_of(gpu: u64) -> Option<State> {
+    entry_at(gpu).map(|e| e.state)
 }
 
 /// Every shadow whose last rendering kick has completed (`pending` says it
@@ -496,7 +557,13 @@ pub fn retire(pending: impl Fn(u32) -> bool) {
     let s = shadows();
     let mut untiled = 0u64;
     for e in s.entries.iter_mut().flatten() {
-        if e.kick == 0 || pending(e.kick) {
+        if e.kick() == 0 || pending(e.kick()) {
+            continue;
+        }
+        if e.bpp == BPP32 {
+            /* the RS wrote it back in its own stream (a later step): no
+             * untile here, the storage is the newer copy */
+            e.state = State::StorageNewer;
             continue;
         }
         let Key { w, h, pitch, bpp, .. } = e.key;
@@ -521,7 +588,7 @@ pub fn retire(pending: impl Fn(u32) -> bool) {
             osal::cache_flush(e.cpu as *mut core::ffi::c_void, rows);
         }
         untiled += u64::from(w * h * bpp);
-        e.kick = 0;
+        e.state = State::StorageNewer;
     }
     s.untiled += untiled;
 }
@@ -808,7 +875,7 @@ mod tests {
 
     /// (key, allocation bytes, shadow gpu, kick) of every shadow, by slot.
     fn entries() -> std::vec::Vec<(Key, usize, u64, u32)> {
-        shadows().entries.iter().flatten().map(|e| (e.key, e.mem.size, e.gpu, e.kick)).collect()
+        shadows().entries.iter().flatten().map(|e| (e.key, e.mem.size, e.gpu, e.kick())).collect()
     }
 
     /// `n` bytes of the shadow at `gpu` (an `h_alloc` address).
@@ -1116,5 +1183,87 @@ mod tests {
         assert!(b[..3].iter().all(|b| b.gpu != 0));
         assert_eq!(entries().len(), ENTRIES);
         assert_eq!(LIVE.load(Ordering::Relaxed), ENTRIES);
+    }
+
+    #[test]
+    fn padded_and_stride_follow_layout_for_4_and_8_bytes() {
+        for (w, h) in [(1u32, 1u32), (8, 8), (16, 4), (21, 10), (55, 63), (64, 64)] {
+            assert_eq!(
+                padded(w, h),
+                (layout::aligned_width(Layout::Tiled, w, true), layout::aligned_height(Layout::Tiled, h, true))
+            );
+            for bpp in [4u32, 8] {
+                assert_eq!(stride_bpp(w, bpp), layout::stride(Layout::Tiled, w, bpp, true));
+                assert_eq!(stride_bpp(w, bpp), padded(w, h).0 * bpp);
+            }
+            assert_eq!(stride(w), stride_bpp(w, 8));
+        }
+        assert_eq!(stride_bpp(21, 4), 128);
+        assert_eq!(stride_bpp(21, 8), 256);
+    }
+
+    #[test]
+    fn a_shadow_moves_between_the_three_states() {
+        let _rig = Rig::new();
+        let mut buf = std::vec![0u8; 16 * 4 * 8];
+        let t = target(&mut buf, 0x4200_0000, (16, 4), 128, 8);
+        assert_eq!(state_of(t.gpu), None);
+        assert!(!mark_storage_newer(t.gpu) && !mark_in_step(t.gpu) && !in_step(t.gpu));
+        assert_eq!(prepare_targets(&[t], || panic!("no finish")), 0);
+        assert_eq!(state_of(t.gpu), Some(State::StorageNewer));
+        bind_targets(&[t], 5).expect("bound");
+        assert_eq!(state_of(t.gpu), Some(State::ShadowNewer(5)));
+        assert!(!in_step(t.gpu));
+        assert!(mark_in_step(t.gpu));
+        assert!(in_step(t.gpu));
+        /* an in-step shadow is neither tiled in again nor written back */
+        let tiled = counts().0;
+        assert_eq!(prepare_targets(&[t], || panic!("no finish")), 0);
+        assert_eq!(counts().0, tiled);
+        retire(|_| false);
+        assert_eq!(state_of(t.gpu), Some(State::InStep));
+        assert!(mark_storage_newer(t.gpu));
+        assert_eq!(state_of(t.gpu), Some(State::StorageNewer));
+        /* the next prepare tiles the storage in */
+        assert_eq!(prepare_targets(&[t], || panic!("no finish")), 0);
+        assert_eq!(counts().0, tiled + 16 * 4 * 8);
+        /* a 64-bit shadow retires by untiling */
+        bind_targets(&[t], 6).expect("bound");
+        retire(|k| k == 6);
+        assert_eq!(state_of(t.gpu), Some(State::ShadowNewer(6)));
+        let untiled = counts().1;
+        retire(|_| false);
+        assert_eq!(state_of(t.gpu), Some(State::StorageNewer));
+        assert_eq!(counts().1, untiled + 16 * 4 * 8);
+    }
+
+    #[test]
+    fn retire_does_not_untile_a_4_byte_entry() {
+        let _rig = Rig::new();
+        let mut buf = std::vec![0x11u8; 16 * 4 * 4];
+        let t = target(&mut buf, 0x4300_0000, (16, 4), 64, 4);
+        assert_eq!(prepare_targets(&[t], || panic!("no finish")), 0);
+        let b = bind_targets(&[t], 8).expect("bound")[0];
+        assert_eq!(b.stride, 64);
+        // SAFETY: the shadow holds 16 * 4 * 4 bytes.
+        unsafe { core::ptr::write_bytes(b.gpu as *mut u8, 0xcc, 16 * 4 * 4) };
+        let untiled = counts().1;
+        retire(|_| false);
+        assert!(buf.iter().all(|&x| x == 0x11), "the storage is left as the RS stream wrote it");
+        assert_eq!(counts().1, untiled);
+        assert_eq!(state_of(t.gpu), Some(State::StorageNewer));
+    }
+
+    #[test]
+    fn a_4_byte_target_is_still_not_wanted_on_its_own() {
+        let mut buf = std::vec![0u8; 4 * 4 * 4];
+        let mut gl = GlesDraw::ZERO;
+        gl.target_gpu = 0x4400_0000;
+        gl.target_cpu = buf.as_mut_ptr() as *mut c_void;
+        gl.target_w = 4;
+        gl.target_h = 4;
+        gl.target_pitch = 4;
+        gl.target_format = GLES_SURF_RGBA8888;
+        assert!(!wanted(&gl, true, true));
     }
 }
