@@ -1152,6 +1152,11 @@ pub(crate) mod tests {
     /// firmware reports them (the first Z4 run, issue #4515): 25600 bytes
     /// each, 7 pages rounded up.
     pub(crate) const BOARD_SUSPEND_SIZE: u32 = 25600;
+    /// The model's reads from the sync object's write to the firmware's
+    /// publish of `extract` and its events: late enough that the wait's
+    /// last look sees the `seqno` alone, as the board's first Z4 run did
+    /// (`extract` 0, `sync_updates` 0 at 220 µs, issue #4515).
+    pub(crate) const PUBLISH_LAG: u32 = 20;
     /// The synthetic frame's group VM: the 2 MiB, then the queue's 8 KiB.
     const SYNTH_REGIONS: [Region; 2] = [
         Region { va: VA, size: VA_END - VA, mapping: Mapping::User },
@@ -1224,13 +1229,15 @@ pub(crate) mod tests {
     /// the GLB `doorbell_req` taken, CSG 0's request fields
     /// (`CSG_REQ_MASK`) and `doorbell_req` acknowledged, and the bits of CS
     /// 0's `req` the board's firmware acknowledges ([`CS_ACK_MASK`]) when the
-    /// doorbell names it. On doorbell 1, `job_lag` reads later, the blocks between the output page's `extract`
-    /// and the input page's `insert` run from the ring: `MOV32`/`MOV48` load
-    /// registers, `CALL` runs the stream it names the same way, `SYNC_ADD64`
-    /// adds to the 64-bit word it names (and writes `sync_status` when that
-    /// word is the queue's sync object), `HEAP_SET` keeps the register it
-    /// names (`heap_ctx`); then `extract` advances and `CSG_SYNC_UPDATE` is
-    /// raised. After a `CALL` it paints the target (`target_va`, 64 x 64) as
+    /// doorbell names it. On doorbell 1, `job_lag` reads later, the blocks
+    /// between the output page's `extract` and the input page's `insert` run
+    /// from the ring: `MOV32`/`MOV48` load registers, `CALL` runs the stream
+    /// it names the same way, `SYNC_ADD64` adds to the 64-bit word it names
+    /// (and writes `sync_status` when that word is the queue's sync object),
+    /// `HEAP_SET` keeps the register it names (`heap_ctx`); then, as the
+    /// board's firmware does, `publish_lag` reads later ([`PUBLISH_LAG`];
+    /// `None`: at once) `extract` advances and `CSG_SYNC_UPDATE` is raised,
+    /// with CS 0's `cs_irq_req` bit when late. After a `CALL` it paints the target (`target_va`, 64 x 64) as
     /// the frame would (red left half, blue right) when `paint` says so. The
     /// group VM is real memory (`rams`, one allocation per region at its
     /// VA): the heap writes it through pointers. Knobs: `never_complete`
@@ -1255,6 +1262,12 @@ pub(crate) mod tests {
         as_present: u32,
         calls: Cell<u32>,
         heap_ctx: Cell<Option<u64>>,
+        /// Reads from the sync object's write to the output page's
+        /// `extract`, `CSG_SYNC_UPDATE` and CS 0's `cs_irq_req` bit (`None`:
+        /// the same read, `extract` and the event only).
+        pub(crate) publish_lag: Option<u32>,
+        publish_due: Cell<Option<u32>>,
+        published: Cell<u64>,
     }
 
     impl Z4 {
@@ -1286,6 +1299,9 @@ pub(crate) mod tests {
                 as_present: 0xff,
                 calls: Cell::new(0),
                 heap_ctx: Cell::new(None),
+                publish_lag: Some(PUBLISH_LAG),
+                publish_due: Cell::new(None),
+                published: Cell::new(0),
             }
         }
         /// The group VM's backings, one per allocation, in their order; the
@@ -1408,9 +1424,25 @@ pub(crate) mod tests {
                 }
                 extract += job::JOB_BYTES;
             }
-            self.put64(out + offset_of!(RingbufOutput, extract), extract);
+            self.published.set(extract);
+            match self.publish_lag {
+                Some(n) => self.publish_due.set(Some(n)),
+                None => {
+                    self.put64(out + offset_of!(RingbufOutput, extract), extract);
+                    let ack = CSG_OUT + offset_of!(CsgOutput, ack);
+                    self.put(ack, self.w(ack) ^ CSG_SYNC_UPDATE);
+                }
+            }
+        }
+        /// The firmware's late side of a job (`publish_lag`): `extract`,
+        /// `CSG_SYNC_UPDATE` and CS 0's `cs_irq_req` bit.
+        fn publish(&self) {
+            let out = MEM + self.w64(CS_IN + offset_of!(CsInput, ringbuf_output)) as usize;
+            self.put64(out + offset_of!(RingbufOutput, extract), self.published.get());
             let ack = CSG_OUT + offset_of!(CsgOutput, ack);
             self.put(ack, self.w(ack) ^ CSG_SYNC_UPDATE);
+            let irq = CSG_OUT + offset_of!(CsgOutput, cs_irq_req);
+            self.put(irq, self.w(irq) ^ 1);
         }
         fn tick(&self, due: &Cell<Option<u32>>, answer: impl FnOnce()) {
             match due.get() {
@@ -1432,6 +1464,7 @@ pub(crate) mod tests {
         fn read32(&self, a: usize) -> u32 {
             self.tick(&self.csg_due, || self.answer_csg());
             self.tick(&self.job_due, || self.answer_job());
+            self.tick(&self.publish_due, || self.publish());
             match a {
                 _ if a == GPU + mali::GPU_ID && self.gpu_id.is_some() => self.gpu_id.unwrap(),
                 _ if a == GPU + mali::GPU_AS_PRESENT => self.as_present,
@@ -1532,13 +1565,14 @@ pub(crate) mod tests {
         // the start: START with ENDPOINT_CONFIG; SYNTH_CS 0's START request acked
         assert_eq!((o.csg_req, o.csg_ack, o.cs_req, o.cs_ack), (0x11, 0x11, 0x0511, 0x0011));
         assert_eq!((o.csg_ack_us, o.cs_ack_us), (1, 0));
-        // one 128-byte job consumed, the sync object at 1, its event seen
-        assert_eq!((o.insert, o.extract, o.seqno, o.sync_status), (128, 128, 1, 0));
-        assert_eq!((o.latest_flush, o.sync_updates, o.wait_us), (0, 1, 20));
+        // one 128-byte job written, the sync object at 1; the firmware has
+        // not yet published extract nor raised its event (PUBLISH_LAG)
+        assert_eq!((o.insert, o.extract, o.seqno, o.sync_status), (128, 0, 1, 0));
+        assert_eq!((o.latest_flush, o.sync_updates, o.wait_us), (0, 0, 20));
         assert_eq!((o.status_cmd_ptr, o.info), (0, 0));
-        // the end: both acknowledged at once, nothing left pending
+        // the end: both acknowledged at once; the late events cleared then
         assert_eq!((o.stop_refusal, o.terminate_refusal), (0, 0));
-        assert_eq!(o.cleared, [0, 0, 0]);
+        assert_eq!(o.cleared, [CSG_SYNC_UPDATE, 1, 0]);
         // the target as the model painted it
         assert_eq!((o.red, o.blue, o.fill, o.other, o.pixels), (2048, 2048, 0, 0, 4096));
         assert_eq!(o.digest, 0x0123_4567_89ab_cdef);
@@ -1658,9 +1692,12 @@ pub(crate) mod tests {
             cs_ack_us: 0,
             // model-only: the GPU's flush id, 0 on the model
             latest_flush: 0,
-            sync_updates: 1,
+            // the firmware publishes extract and raises CSG_SYNC_UPDATE
+            // after the stream wrote the seqno (PUBLISH_LAG), as the
+            // board's first run showed: the wait sees neither
+            sync_updates: 0,
             insert: 128,
-            extract: 128,
+            extract: 0,
             seqno: 1,
             sync_status: 0,
             // model-only: the model's job lag
@@ -1672,7 +1709,9 @@ pub(crate) mod tests {
             stop_refusal: 0,
             terminate_us: 1,
             terminate_refusal: 0,
-            cleared: [0, 0, 0],
+            // the late CSG_SYNC_UPDATE and CS 0's cs_irq bit, pending at the
+            // terminate (the board's first run: 268435456 1 0)
+            cleared: [CSG_SYNC_UPDATE, 1, 0],
             // the model paints the frame's halves; the board's GPU must too
             red: 2048,
             blue: 2048,
@@ -1708,11 +1747,27 @@ pub(crate) mod tests {
         assert_eq!((ram_u64(&z, gen::HEAP_FIRST_CHUNK_VA), ram_u64(&z, HEAP_CTX_VA)), (0, 0));
     }
 
+    /// The other setting of the model: the firmware publishes `extract` and
+    /// raises `CSG_SYNC_UPDATE` on the read that runs the job. The wait then
+    /// acknowledges the event and reads `extract` at the job's end; nothing
+    /// is left for the terminate.
+    #[test]
+    fn with_an_instant_publish_the_wait_sees_extract_and_the_event() {
+        let blob = synth::small();
+        let mut z = Z4::generated(blob.clone());
+        z.publish_lag = None;
+        let (o, _, _) = run_frame(&z, &blob, &GENERATED);
+        assert_eq!((o.step, o.seqno, o.extract, o.sync_updates), (STEP_NONE, 1, 128, 1));
+        assert_eq!(o.cleared, [0, 0, 0]);
+        assert_eq!((o.red, o.blue), (2048, 2048));
+    }
+
     /// The passing run's uart2 lines (the verdict table's fixture) carry the
     /// record this module pins: each field `t6-verdict.sh` pins, in the
     /// fixture's format (`%016llx`, `%08x`, decimal). The fields the table
-    /// leaves to a pattern (microseconds, `as0_tables_used`, `sync_updates`,
-    /// `latest_flush`, `cleared`, the pixel counts) are not compared.
+    /// leaves to a pattern (microseconds, `as0_tables_used`, `extract`,
+    /// `sync_updates`, `latest_flush`, `cleared`, the pixel counts) are not
+    /// compared.
     #[test]
     fn the_verdict_fixture_s_z4_lines_carry_the_pinned_record() {
         const UART: &str = include_str!("../../../tools/kexec-zephyr/testdata/t6_submit-pass.uart");
@@ -1743,7 +1798,6 @@ pub(crate) mod tests {
             ("Z4c", "chunk_size", d(o.heap_chunk_size)),
             ("Z4c", "stride", d(o.heap_stride)),
             ("Z4e", "insert", x64(o.insert)),
-            ("Z4e", "extract", x64(o.extract)),
             ("Z4e", "seqno", x64(o.seqno)),
             ("Z4e", "sync_status", x32(o.sync_status)),
             ("Z4f", "status_cmd_ptr", x64(o.status_cmd_ptr)),
@@ -1960,8 +2014,10 @@ pub(crate) mod tests {
 
     #[test]
     fn an_error_on_the_sync_object_stops_the_wait_and_the_group_is_still_ended() {
+        // the instant publish: the event comes with the seqno
         let mut z = Z4::new(synth::small());
         z.sync_status = 0x41;
+        z.publish_lag = None;
         let o = run(&z);
         assert_eq!((o.step, o.refusal, o.detail), (STEP_WAIT, SchedRefusal::SyncObjError as u32, 0x41));
         assert_eq!((o.seqno, o.sync_status, o.insert, o.extract), (1, 0x41, 128, 128));
