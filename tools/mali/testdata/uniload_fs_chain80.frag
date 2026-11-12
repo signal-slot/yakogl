@@ -1,0 +1,1 @@
+precision highp float; uniform vec4 u_k; void main() { mat2 m = mat2(u_k.x, u_k.y, u_k.z, u_k.w); mat2 s = m + m; mat2 d = 4.0 - m; mat2 q = 2.0 / m; mat2 n = -m; mat2 p = m++; float r = (s[1][1] + d[1][0] + q[0][1] + n[1][0] + 4.0 * p[1][0]) / 16.0; gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }

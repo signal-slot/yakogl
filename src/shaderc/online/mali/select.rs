@@ -257,9 +257,10 @@ pub struct UboLayout {
     /// the UBO descriptor (`cfg.size`, pan_cmdstream.c:1438-1452) are
     /// `4 * words`.
     words: u16,
-    /// Bit k % 32 of word k / 32: row k is a uniform array's
-    /// ([`UboLayout::vs`]).
-    arrays: [u32; MAX_LAYOUT_ROWS / 32],
+    /// Bit k % 32 of word k / 32: Mesa loads each word of row k alone
+    /// ([`UboLayout::load_of`]): the row is an array's (an element) or a
+    /// matrix (a column).
+    split: [u32; MAX_LAYOUT_ROWS / 32],
 }
 
 /// The rows one stage's layout holds: a mediump fragment shader's array
@@ -276,7 +277,7 @@ pub const MAX_UBO_ROWS: usize = 32;
 
 impl UboLayout {
     pub const NONE: UboLayout =
-        UboLayout { rows: [UboRow::NONE; MAX_LAYOUT_ROWS], n: 0, words: 0, arrays: [0; MAX_LAYOUT_ROWS / 32] };
+        UboLayout { rows: [UboRow::NONE; MAX_LAYOUT_ROWS], n: 0, words: 0, split: [0; MAX_LAYOUT_ROWS / 32] };
 
     /// The rows the layout holds, one per uniform or array element (its
     /// use of [`MAX_LAYOUT_ROWS`]).
@@ -314,6 +315,13 @@ impl UboLayout {
         Ok(())
     }
 
+    /// Mesa loads each word of the row [`UboLayout::push`] made last alone
+    /// ([`UboLayout::load_of`]).
+    fn split_last(&mut self) {
+        let k = self.n - 1;
+        self.split[k / 32] |= 1 << (k % 32);
+    }
+
     /// A vertex shader's: the uniforms its program reads.
     pub fn vs(m: &Module<'_>, vs: &nir::Nir<'_>) -> Result<UboLayout, MaliError> {
         let mut l = UboLayout::NONE;
@@ -341,18 +349,11 @@ impl UboLayout {
                     && dword >= u.dword_off && dword < u.dword_off + u.dwords.max(1))
             });
             l.push(u.dword_off, comps, halves)?;
-            if u.array_len > 1 {
-                l.arrays[(l.n - 1) / 32] |= 1 << ((l.n - 1) % 32);
+            if u.array_len > 1 || is_matrix(u.gl_type) {
+                l.split_last();
             }
         }
         Ok(l)
-    }
-
-    /// Front-end dword `dword` is an element's of a uniform array (a
-    /// vertex shader's layout, [`UboLayout::vs`]).
-    pub fn in_array(&self, dword: u16) -> bool {
-        let k = self.rows[..self.n].iter().position(|r| dword >= r.dword && dword < r.dword + r.comps);
-        k.is_some_and(|k| self.arrays[k / 32] & (1 << (k % 32)) != 0)
     }
 
     /// The program reads the block from memory (a [`nir::Kind::UniformIdx`]
@@ -380,6 +381,9 @@ impl UboLayout {
              * from word 4, `IADD_IMM.i32 #0x10`) */
             let (_, comps) = super::nir_fs::uniform_extent(m, u.dword_off)?;
             l.push(u.dword_off, comps, false)?;
+            if u.array_len > 1 || is_matrix(u.gl_type) {
+                l.split_last();
+            }
         }
         /* gl_FbWposYTransform, a vec4 state slot after the declared
          * uniforms (`_mesa_add_state_reference` appends it to the
@@ -435,6 +439,9 @@ impl UboLayout {
             }
             for e in 0..u16::from(u.array_len.max(1)) {
                 l.push(u.dword_off + e * comps, comps, halves)?;
+                if u.array_len > 1 {
+                    l.split_last();
+                }
             }
         }
         /* gl_FbWposYTransform, as [`UboLayout::fs32`] places it: a state
@@ -468,6 +475,59 @@ impl UboLayout {
         Some((r.word + k / 2, (k % 2) as u8, r.word))
     }
 
+    /// The words of the `load_ubo` that reads Mesa's word `w` once
+    /// `bifrost_postprocess_nir` has split the loads (bifrost_nir.c:1009-1017,
+    /// `nir_lower_mem_access_bit_sizes` with `mem_access_size_align_cb`,
+    /// :776-835): its first word and its word count, before
+    /// `nir_opt_shrink_vectors` (bifrost_nir.c:286) takes off its lanes
+    /// past the last one read (never its first ones: `shrink_start` is
+    /// false). `bi_opt_push_ubo` pushes each load from its first word
+    /// (bi_opt_push_ubo.c:61-95, :120-147; fau.rs [`super::fau::push_ubo`]).
+    ///
+    /// st lowers a uniform read to one `load_ubo` of the uniform, or of an
+    /// array element or a matrix column (st_glsl_to_nir.cpp:700-715,
+    /// `nir_lower_uniforms_to_ubo`). Its alignment is what the callback
+    /// splits by (nir_lower_uniforms_to_ubo.c:86-98):
+    ///
+    /// * a whole uniform's offset is a constant there, so the alignment is
+    ///   the offset's own: a load whose bytes round up to more than that is
+    ///   cut into pieces of the alignment's size, each piece's start
+    ///   aligned to its own (`required_align`, bifrost_nir.c:794-799);
+    ///   measured: a highp vec4 at byte 0 read at `.z` alone is one
+    ///   three-word load, at byte 4 (after a float) a load of bytes 8-15,
+    ///   at byte 8 (after a vec2) a load of bytes 16-23; a mediump vec4 at
+    ///   byte 0 one two-word load, at byte 4 a load a word, a mediump vec3
+    ///   at byte 4 a word and a half (tools/mali/testdata/uniload_*);
+    /// * an element's or a column's offset is not, so the alignment is 4
+    ///   and every word is its own load (femtovg's `frag[10].x` and
+    ///   `frag[10].z`, fvg_fill_image_nodiscard_noscissor; a mat4's
+    ///   `m[1].z` alone, uniload_vs_mat4z).
+    pub fn load_of(&self, w: u16) -> Option<(u16, u16)> {
+        let k = self.rows[..self.n].iter().position(|r| w >= r.word && w < r.word + r.words())?;
+        if self.split[k / 32] & (1 << (k % 32)) != 0 {
+            return Some((w, 1));
+        }
+        let r = self.rows[k];
+        let (start, bytes) = (4 * u32::from(r.word), u32::from(r.comps) * if r.halves { 2 } else { 4 });
+        let (mut at, mut left) = (start, bytes);
+        while left > 0 {
+            /* `nir_combined_align` of the piece's start; offset 0 is
+             * NIR_ALIGN_MUL_MAX's */
+            let align = if at == 0 { 1 << 30 } else { 1 << at.trailing_zeros() };
+            let mut size = left.min(16);
+            if align < size.next_power_of_two() {
+                size = align;
+            }
+            let (first, end) = (at / 4, (at + size).div_ceil(4));
+            if u32::from(w) < end {
+                return Some((first as u16, (end - first) as u16));
+            }
+            at += size;
+            left -= size;
+        }
+        None
+    }
+
     /// What Mesa's word `w` holds, as a push word.
     pub fn fau(&self, w: u16) -> Option<FauWord> {
         let r = self.rows[..self.n].iter().find(|r| w >= r.word && w < r.word + r.words())?;
@@ -480,6 +540,26 @@ impl UboLayout {
         }
         Some(FauWord::Uniform { dword: r.dword + (w - r.word) })
     }
+}
+
+/// A GL matrix type: st loads it a column at a time ([`UboLayout::load_of`]).
+fn is_matrix(gl_type: u16) -> bool {
+    use crate::gl::consts::{
+        GL_FLOAT_MAT2x3, GL_FLOAT_MAT2x4, GL_FLOAT_MAT3x2, GL_FLOAT_MAT3x4, GL_FLOAT_MAT4x2, GL_FLOAT_MAT4x3,
+        GL_FLOAT_MAT2, GL_FLOAT_MAT3, GL_FLOAT_MAT4,
+    };
+    matches!(
+        u32::from(gl_type),
+        GL_FLOAT_MAT2
+            | GL_FLOAT_MAT3
+            | GL_FLOAT_MAT4
+            | GL_FLOAT_MAT2x3
+            | GL_FLOAT_MAT2x4
+            | GL_FLOAT_MAT3x2
+            | GL_FLOAT_MAT3x4
+            | GL_FLOAT_MAT4x2
+            | GL_FLOAT_MAT4x3
+    )
 }
 
 /// One section's stores: `lea_buf`, then per word `addr + 4k` and a
@@ -602,19 +682,13 @@ pub fn vs_variant(
                 }
             }
             nir::Kind::Uniform { dword, comps } => {
+                /* the words Mesa pushes for them are the layout's rule
+                 * (`UboLayout::load_of`): an array element's lanes alone
+                 * (varyconst_150_a.expect.json pushes `u_p[58].y` without
+                 * `u_p[58].x`), a vec4 at byte 0 from its x (sel_u_yz) */
                 let base = ubo.word(dword).ok_or(MaliError::Defect(super::Defect::IrIndex))?;
-                /* an array element's lanes are pushed alone, each its own
-                 * load (measured: varyconst_150_a.expect.json pushes
-                 * `u_p[58].y` without `u_p[58].x`, 32 FAU words; a vec4
-                 * that is no array pushes from its x, sel_u_yz) */
-                let alone = ubo.in_array(dword);
                 for c in 0..comps {
-                    let at = if alone {
-                        Idx::Ubo { base: base + u16::from(c), comp: 0 }
-                    } else {
-                        Idx::Ubo { base, comp: c }
-                    };
-                    lanes[id][c as usize] = Src::of(at);
+                    lanes[id][c as usize] = Src::of(Idx::Ubo { base, comp: c });
                 }
             }
             nir::Kind::Sysval(sv) => {
@@ -763,10 +837,12 @@ pub(super) fn ubo_fetch(p: &mut Prog<'_>, off: u16) -> Result<u16, MaliError> {
 }
 
 /// The lanes of vec4 array read `id` of graph `g` its users take: (the
-/// lowest, the count up to the highest), what `nir_opt_shrink_vectors`
-/// leaves of the `load_ubo` (`shrink_start` moves its offset up past the
-/// lanes below the lowest one read; unitype_100.expect.json's fragment
-/// `.ba`, `IADD_IMM.i32 #0x8` then `LD_PKA.i64`).
+/// lowest, the count up to the highest), what Mesa leaves of the
+/// `load_ubo`: its alignment at a run-time offset is 4, so
+/// `nir_lower_mem_access_bit_sizes` splits it into a load a word
+/// (`UboLayout::load_of`), the lanes no one reads die and the vectoriser
+/// joins the rest (unitype_100.expect.json's fragment `.ba`,
+/// `IADD_IMM.i32 #0x8` then `LD_PKA.i64`).
 pub(super) fn lanes_read(g: &nir::Nir<'_>, id: u16) -> Result<(u8, u8), MaliError> {
     let mask = read_mask(g, id);
     if mask == 0 {

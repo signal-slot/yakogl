@@ -105,8 +105,8 @@ impl Layout {
 /// (`bi_pick_ubo`, :120-147): the sysval UBO, one range per sysval of as
 /// many words as its highest component read plus one (the `load_ubo`'s
 /// channel count after NIR shrinks it), then the uniform block (UBO 0), one
-/// range per load in the same way, its words named by `ubo`
-/// (select.rs `UboLayout`). Where a range no longer fits the FAU, Mesa
+/// range per load in the same way, the loads and their words named by
+/// `ubo` (select.rs `UboLayout::load_of`). Where a range no longer fits the FAU, Mesa
 /// stops pushing and loads the rest from the UBO (`bi_pick_ubo`'s return,
 /// then the `LOAD` it keeps): refused ([`MaliError::UboFallback`]).
 pub fn push_ubo(
@@ -150,36 +150,38 @@ pub fn push_ubo(
             }
         }
     }
-    /* the uniform block: per load base, its lanes up to the highest read;
-     * in a fragment shader, the lanes read alone: a lane between two read
-     * ones is no load's (measured: femtovg's `frag[10].x` and `frag[10].z`
-     * without `frag[10].y`, two words, u8.w0 and u8.w1, in
-     * fvg_fill_image_nodiscard_noscissor.expect.json) */
-    const BASES: usize = 512;
-    let mut ubo_read = [0u8; BASES];
+    /* the uniform block: Mesa's loads ([`super::select::UboLayout::load_of`]),
+     * each from its first word up to its last word read, in ascending
+     * word order (`range[word]`, then `bi_pick_ubo`); a source names its
+     * word as the base of its lanes and the lane (`base + comp`) */
+    const WORDS: usize = 512;
+    let mut read = [false; WORDS];
     for i in p.as_slice() {
         for s in i.srcs() {
             if let Idx::Ubo { base, comp } = s.idx {
-                let r = ubo_read.get_mut(base as usize).ok_or(MaliError::UboRowsFull)?;
-                *r |= 1u8.checked_shl(u32::from(comp)).ok_or(MaliError::UboFallback)?;
+                *read.get_mut(usize::from(base) + usize::from(comp)).ok_or(MaliError::UboRowsFull)? = true;
             }
         }
     }
-    /* the pushed word of each base's lane */
-    let mut ubo_at = [[u16::MAX; 8]; BASES];
-    for (base, &read) in ubo_read.iter().enumerate() {
-        if read == 0 {
+    let mut ubo_at = [u16::MAX; WORDS];
+    let mut w = 0;
+    while w < WORDS {
+        if !read[w] {
+            w += 1;
             continue;
         }
-        let range = 8 - read.leading_zeros() as u16;
-        let lanes = (0..range).filter(|&c| !fragment || read & (1 << c) != 0);
-        if fau.available() < lanes.clone().count() {
+        let (first, n) = ubo.load_of(w as u16).ok_or(MaliError::Defect(super::Defect::FauOverflow))?;
+        let (first, n) = (usize::from(first), usize::from(n));
+        let end = (first + n).min(WORDS);
+        let last = (w..end).rev().find(|&x| read[x]).unwrap_or(w);
+        if fau.available() < last + 1 - first {
             break;
         }
-        for c in lanes {
-            let w = ubo.fau(base as u16 + c).ok_or(MaliError::Defect(super::Defect::FauOverflow))?;
-            ubo_at[base][c as usize] = fau.emit(w)?;
+        for x in first..=last {
+            let word = ubo.fau(x as u16).ok_or(MaliError::Defect(super::Defect::FauOverflow))?;
+            ubo_at[x] = fau.emit(word)?;
         }
+        w = end.max(w + 1);
     }
     let end = fau.count;
     for i in 0..p.n {
@@ -187,7 +189,7 @@ pub fn push_ubo(
             let pushed = match p.ins[i].src[s].idx {
                 Idx::Sysval(sv, c) => first[sysval_index(sv)] + c as u16,
                 Idx::Ubo { base, comp } => {
-                    let at = ubo_at[base as usize][comp as usize & 7];
+                    let at = ubo_at.get(usize::from(base) + usize::from(comp)).copied().unwrap_or(u16::MAX);
                     if at == u16::MAX {
                         return Err(MaliError::UboFallback);
                     }
