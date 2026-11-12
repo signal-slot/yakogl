@@ -151,6 +151,12 @@ top=${BASH_REMATCH[1]} lifetime=${BASH_REMATCH[2]} alive=${BASH_REMATCH[3]} proo
 [ "$top" -ge 11 ] && [ "$top" -le 15 ] || refuse "WDT0 TOP $top outside 11..15"
 [ $((load)) -eq "$WINDOW_BASE" ] || refuse "the image is linked at $load, not at the window $(printf 0x%x "$WINDOW_BASE") (nanopc_t6.dts)"
 [ "$memsz" -le "$WINDOW_SIZE" ] || refuse "the image needs $memsz bytes, the window has $WINDOW_SIZE"
+# kexec_zephyr reads a file into a 64 MiB buffer (IMG_MAX) and refuses a
+# larger one; a __nocache static lies in the file's span (Zephyr places the
+# NOLOAD nocache section before the kernel objects' initialised sections,
+# k_timer_area and the others), so the file can be far larger than its code
+# and data.
+[ "$file_size" -le $((64 << 20)) ] || refuse "$IMG is $file_size bytes; kexec_zephyr reads at most 64 MiB (IMG_MAX)"
 period_ms=$(( (1 << (16 + top)) * 1000 / 24000000 ))
 if [ "$proof" = 1 ]; then
 	bound_s=$(( (period_ms + 10000 + 999) / 1000 ))
