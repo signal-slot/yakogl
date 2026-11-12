@@ -31,7 +31,7 @@
 //! compute and is not remapped here; a bias is not either.
 
 use super::arena::{AVec, Arena};
-use super::ir::{self, AluOp, InstrId, Module, Node, Op, Range, Src, TexLod, ValueId};
+use super::ir::{self, AluOp, InstrId, Module, Node, Op, Prec, Range, Src, TexLod, ValueId};
 use super::lower::Lowered;
 use super::R;
 
@@ -123,6 +123,10 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
     let mut instrs: AVec<Op> = AVec::with_capacity(a, total)?;
     let sized = !m.comps.is_empty();
     let mut comps: AVec<u8> = AVec::with_capacity(a, if sized { total } else { 0 })?;
+    /* The precision table in step too; an inserted instruction records
+     * none (`Prec::None`). */
+    let precs = !m.prec.is_empty();
+    let mut prec: AVec<Prec> = AVec::with_capacity(a, if precs { total } else { 0 })?;
     for (i, op) in m.instrs.iter().enumerate() {
         let mut op = map_op(*op, &map);
         let r = plan(i);
@@ -133,6 +137,9 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
                 instrs.push(a, Op::ConstF32([MAGNIFY_LOD.to_bits(); 4]))?;
                 if sized {
                     comps.push(a, 4)?;
+                }
+                if precs {
+                    prec.push(a, Prec::None)?;
                 }
                 Src::splat(ValueId(base))
             } else {
@@ -146,6 +153,9 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
                 if sized {
                     comps.extend_from_slice(a, &[4, 1, 1])?;
                 }
+                if precs {
+                    prec.extend_from_slice(a, &[Prec::None; 3])?;
+                }
                 Src::splat(ValueId(base + 2))
             };
             if let Op::Tex { lod: ref mut lv, .. } = op {
@@ -155,6 +165,9 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
         instrs.push(a, op)?;
         if sized {
             comps.push(a, m.comps.get(i).copied().unwrap_or(0))?;
+        }
+        if precs {
+            prec.push(a, m.prec_of(ValueId(i as u32)))?;
         }
     }
 
@@ -166,6 +179,7 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
         module: ir::Module {
             instrs: instrs.into_slice(),
             comps: if sized { comps.into_slice() } else { m.comps },
+            prec: if precs { prec.into_slice() } else { m.prec },
             nodes: nodes.into_slice(),
             body,
             ..m
@@ -455,6 +469,7 @@ mod tests {
             let l = remap_mag_switch(a, l, 1).unwrap();
             assert_eq!(l.module.instrs.len(), n + 3, "a constant, a compare and a select");
             assert_eq!(l.module.comps.len(), l.module.instrs.len());
+            assert_eq!(l.module.prec.len(), l.module.instrs.len(), "the precision table in step");
         })
         .unwrap();
     }

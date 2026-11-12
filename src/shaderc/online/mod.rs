@@ -24,6 +24,8 @@
 //! * [`sema`] -- the ES 1.00 type system over that tree.
 //! * [`lower`] -- the tree to [`ir::Module`], and `compile_to_ir`: the whole
 //!   front end behind one call.
+//! * [`precision`] -- Mesa's GLSL ES precision class of every expression,
+//!   which the lowering records per value for the Mali back end.
 //! * [`reflect`] -- the uniform, attribute and varying rows the GL core
 //!   reads, in the offline table's own field shapes.
 //! * [`ir`] -- the contract between the front end and the code generator.
@@ -122,6 +124,7 @@ pub mod loop_count;
 pub mod lower;
 pub mod parser;
 pub mod pp;
+pub mod precision;
 pub mod reflect;
 /// The two buffers the back end lends the compiler.
 /// Instruction selection: the IR to GC7000 instructions in virtual registers

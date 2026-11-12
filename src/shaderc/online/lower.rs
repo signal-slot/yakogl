@@ -33,7 +33,8 @@
 use super::arena::{AVec, Arena};
 use super::ast::*;
 use super::builtin_call::{self, Operand};
-use super::ir::{self, IoDecl, IoKind, Node, Op, Range as IrRange, Src, ValueId};
+use super::ir::{self, IoDecl, IoKind, Node, Op, Prec, Range as IrRange, Src, ValueId};
+use super::precision::{self, Precs};
 use super::sema::{ExprTypes, Stage};
 use super::{parser, pp, reflect, Error, R};
 use crate::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
@@ -657,6 +658,8 @@ pub fn relocate<'a>(a: &Arena<'a>, l: Lowered<'a>, text: &'a str, mark: usize) -
     }
     blk!(m.instrs);
     blk!(m.comps);
+    blk!(m.prec);
+    blk!(m.local_prec);
     blk!(m.nodes);
     blk!(m.locals);
     blk!(m.inputs);
@@ -789,6 +792,8 @@ pub fn relocate<'a>(a: &Arena<'a>, l: Lowered<'a>, text: &'a str, mark: usize) -
     let module = ir::Module {
         instrs: moved_slice(m.instrs, &map),
         comps: moved_slice(m.comps, &map),
+        prec: moved_slice(m.prec, &map),
+        local_prec: moved_slice(m.local_prec, &map),
         nodes: moved_slice(m.nodes, &map),
         locals,
         inputs,
@@ -904,6 +909,7 @@ fn lower_ordered<'a>(
     types: ExprTypes<'a>,
     mat_order: ir::MatOrder,
 ) -> R<'a, ir::Module<'a>> {
+    let precs = precision::classify(a, ast, &types, stage)?;
     let mut l = Lower {
         a,
         ast,
@@ -913,6 +919,12 @@ fn lower_ordered<'a>(
         mat_order,
         instrs: AVec::new(),
         comps: AVec::new(),
+        precs,
+        prec: AVec::new(),
+        local_prec: AVec::new(),
+        cur: Prec::None,
+        cur_class: Prec::None,
+        slot_prec: None,
         nodes: AVec::new(),
         inputs: AVec::new(),
         outputs: AVec::new(),
@@ -941,6 +953,8 @@ fn lower_ordered<'a>(
     let uniforms = l.uniform_decls()?;
     Ok(ir::Module {
         comps: a.alloc_copy(l.comps.as_slice())?,
+        prec: a.alloc_copy(l.prec.as_slice())?,
+        local_prec: a.alloc_copy(l.local_prec.as_slice())?,
         stage: match stage {
             Stage::Vertex => SHC_STAGE_VERTEX,
             Stage::Fragment => SHC_STAGE_FRAGMENT,
@@ -955,8 +969,6 @@ fn lower_ordered<'a>(
         uniform_dwords: reflection.uniform_dwords,
         uses_discard: l.uses_discard,
         uses_front_facing: l.uses_front_facing,
-        prec: &[],
-        local_prec: &[],
     })
 }
 
@@ -976,6 +988,25 @@ struct Lower<'x, 'a> {
     /// The component count of each instruction's value, in step with
     /// [`Lower::instrs`]. See [`ir::Module::comps`].
     comps: AVec<'a, u8>,
+    /// Mesa's precision class of every expression, from the tree
+    /// ([`precision::classify`]).
+    precs: Precs<'a>,
+    /// The [`Prec`] of each instruction, in step with [`Lower::instrs`].
+    /// See [`ir::Module::prec`].
+    prec: AVec<'a, Prec>,
+    /// The [`Prec`] of each local's storage, in step with
+    /// [`Lower::locals`]. See [`ir::Module::local_prec`].
+    local_prec: AVec<'a, Prec>,
+    /// The [`Prec`] the instructions of the expression being lowered
+    /// record ([`Precs::instr`]); None outside any expression.
+    cur: Prec,
+    /// That expression's class ([`Precs::class`]): what a temporary the
+    /// lowering makes for it is stored at.
+    cur_class: Prec,
+    /// The storage of the slots being allocated, when a declaration says
+    /// it ([`Lower::push_local`]); `None`: a temporary of the current
+    /// expression.
+    slot_prec: Option<Prec>,
     nodes: AVec<'a, Node>,
     inputs: AVec<'a, IoDecl<'a>>,
     outputs: AVec<'a, IoDecl<'a>>,
@@ -1614,10 +1645,11 @@ impl<'a> Lower<'_, 'a> {
             let id = ir::LocalId(self.locals.len() as u32);
             let run = Run::MatrixArray { len: v.count.max(1), cols };
             for _ in 0..run.slots() {
-                self.locals.push(
-                    self.a,
-                    ir::VarDecl { name: v.name, ty: ir::Type::new(ir::ScalarType::F32, v.components), array_len: 1 },
-                )?;
+                self.push_local(ir::VarDecl {
+                    name: v.name,
+                    ty: ir::Type::new(ir::ScalarType::F32, v.components),
+                    array_len: 1,
+                })?;
             }
             let mut l = Local::scalar(v.name, id, v.components);
             l.run = run;
@@ -1716,6 +1748,11 @@ impl<'a> Lower<'_, 'a> {
         #[cfg(not(test))]
         let off = false;
         let saved = core::mem::take(&mut self.folded);
+        /* A statement is no expression: what it emits outside one (a
+         * flag, a store) records no expression's precision, also inside a
+         * body inlined into an expression. */
+        let outer = (self.cur, self.cur_class);
+        (self.cur, self.cur_class) = (Prec::None, Prec::None);
         let r = if off || self.fold_depth > 0 {
             self.statement_inner(id, out)
         } else {
@@ -1727,6 +1764,7 @@ impl<'a> Lower<'_, 'a> {
                 _ => self.statement_inner(id, out),
             }
         };
+        (self.cur, self.cur_class) = outer;
         let done = core::mem::replace(&mut self.folded, saved);
         done.release(self.a);
         r
@@ -2272,7 +2310,7 @@ impl<'a> Lower<'_, 'a> {
     /// A fresh one-lane bool local, for a flag the lowering keeps.
     fn bool_local(&mut self) -> R<'a, Local<'a>> {
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::Bool, 1), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::Bool, 1), array_len: 1 })?;
         Ok(Local { name: "", id, comps: 1, run: Run::Single, value: None })
     }
 
@@ -2690,6 +2728,11 @@ impl<'a> Lower<'_, 'a> {
     /// The only expression statement in the subset: an assignment to an
     /// output.
     fn expr_statement(&mut self, e: ExprId, out: &mut AVec<'a, Node>) -> R<'a, ()> {
+        self.at(e, |s| s.expr_statement_at(e, out))
+    }
+
+    /// [`Lower::expr_statement`] under `e`'s [`Prec`].
+    fn expr_statement_at(&mut self, e: ExprId, out: &mut AVec<'a, Node>) -> R<'a, ()> {
         /* `++i;` and `i--;` as statements. As an expression they also have
          * a value, which no shader in either corpus uses and which would
          * need the old value kept; as a statement they are exactly
@@ -3161,6 +3204,11 @@ impl<'a> Lower<'_, 'a> {
     /// Lower `e`, appending the instructions that produce it, and give the
     /// operand that reads the result.
     fn value(&mut self, e: ExprId, want: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
+        self.at(e, |s| s.value_at(e, want, out))
+    }
+
+    /// [`Lower::value`] under `e`'s [`Prec`].
+    fn value_at(&mut self, e: ExprId, want: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
         /* Narrowed to the expression and not restored afterwards: an error
          * carries the line it was built at, and the next node sets it again,
          * so the innermost construct that failed is the one reported. */
@@ -4185,11 +4233,22 @@ impl<'a> Lower<'_, 'a> {
             })
             .fold(want, u8::max)
             .min(4);
+        /* `pow` is one NIR `fpow` in Mesa, which bi_lower_bit_size runs at
+         * 32 bits even in a 16-bit tree (precrule_e3_pow on branch
+         * mali-prec-width: one 32-bit fpow, no conversion). Its expansion
+         * here, `exp2(y * log2(x))`, would otherwise read as a user's own
+         * 16-bit product; so it records High, and a Medium reader of the
+         * result narrows it as Mesa's f2f16 of the fpow does. */
+        let outer = self.cur;
+        if name == "pow" && self.cur == Prec::Medium {
+            self.cur = Prec::High;
+        }
         let mut sink = Sink { l: self, out, width };
         let lowered = match builtin_call::lower_call(&mut sink, name, ops, want) {
             None if es3 => builtin_call::lower_es3(&mut sink, name, ops),
             r => r,
         };
+        self.cur = outer;
         match lowered {
             Some(r) => r,
             /* Not a built-in: a user-defined function, which needs inlining
@@ -4392,6 +4451,9 @@ impl<'a> Lower<'_, 'a> {
                  * an unused one behind, which is a register the back end
                  * still counts. */
                 let id = ir::LocalId(self.locals.len() as u32);
+                /* A parameter is stored at full width (Mesa's
+                 * `lower_variables` lowers no parameter, A.5). */
+                self.slot_prec = Some(Prec::High);
                 if run.elements().is_some() && self.ast.es3 {
                     /* The same layout a declaration gets. */
                     let n = u32::from(run.elements().unwrap_or(0));
@@ -4405,12 +4467,10 @@ impl<'a> Lower<'_, 'a> {
                     self.push_struct_slots(sname, pname, 0, 0)?;
                 } else {
                     for _ in 0..run.slots() {
-                        self.locals.push(
-                            self.a,
-                            ir::VarDecl { name: pname, ty: ir::Type::new(scalar, comps), array_len: 1 },
-                        )?;
+                        self.push_local(ir::VarDecl { name: pname, ty: ir::Type::new(scalar, comps), array_len: 1 })?;
                     }
                 }
+                self.slot_prec = None;
                 let param = Local { name: pname, id, comps, run, value: None };
                 if p.direction != ParamDirection::Out {
                     /* `out` does not read the argument -- the parameter
@@ -4821,10 +4881,11 @@ impl<'a> Lower<'_, 'a> {
                         Some(c) => c.flag,
                         None => {
                             let fid = ir::LocalId(self.locals.len() as u32);
-                            self.locals.push(
-                                self.a,
-                                ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::Bool, 1), array_len: 1 },
-                            )?;
+                            self.push_local(ir::VarDecl {
+                                name: "",
+                                ty: ir::Type::new(ir::ScalarType::Bool, 1),
+                                array_len: 1,
+                            })?;
                             let flag = Local { name: "", id: fid, comps: 1, run: Run::Single, value: None };
                             self.ret = Some(RetCtx { flag, slot, want, name, loops: 0 });
                             flag
@@ -5238,7 +5299,7 @@ impl<'a> Lower<'_, 'a> {
             return Err(self.err(name, "this constructor is not lowered yet"));
         };
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
 
         /* Consecutive arguments that came from the SAME value share one
          * store. `vec4(v_uv, 1.0, 1.0)` is the shape that pays: with the
@@ -5319,7 +5380,7 @@ impl<'a> Lower<'_, 'a> {
         };
         let to = self.scalar_of_type(base);
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
         let mut lane = 0u8;
         for &e in ids {
             if lane >= comps {
@@ -5481,7 +5542,21 @@ impl<'a> Lower<'_, 'a> {
             if lanes.iter().all(|x| x.is_finite()) {
                 let inv = [1.0 / lanes[0], 1.0 / lanes[1], 1.0 / lanes[2], 1.0 / lanes[3]];
                 if inv.iter().all(|x| x.is_finite()) {
-                    return self.const_value(inv, out);
+                    let r = self.const_value(inv, out)?;
+                    /* Mesa divides inside a 16-bit tree at 16 bits, by the
+                     * 16-bit `c`: the same value as this one narrowed only
+                     * when `c` is a 16-bit value (open question E.5 of
+                     * docs/notes/mali-precision.md). A constant shared with
+                     * another use is marked for both: a refusal, never a
+                     * wrong value. */
+                    if self.cur == Prec::Medium
+                        && !lanes[..usize::from(want.clamp(1, 4))].iter().all(|&x| precision::f16_exact(x))
+                    {
+                        if let Some(p) = self.prec.as_mut_slice().get_mut(r.val.0 as usize) {
+                            *p = Prec::Fold32;
+                        }
+                    }
+                    return Ok(r);
                 }
             }
         }
@@ -5963,7 +6038,7 @@ impl<'a> Lower<'_, 'a> {
     /// slot for a value that is decided on a branch.
     fn temp(&mut self, scalar: ir::ScalarType, comps: u8) -> R<'a, Local<'a>> {
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
         Ok(Local::scalar("", id, comps))
     }
 
@@ -6193,6 +6268,11 @@ impl<'a> Lower<'_, 'a> {
     ///
     /// Only the first `n` entries are meaningful.
     fn matrix_value(&mut self, m: ExprId, n: u8, out: &mut AVec<'a, Node>) -> R<'a, [Src; 4]> {
+        self.at(m, |s| s.matrix_value_at(m, n, out))
+    }
+
+    /// [`Lower::matrix_value`] under `m`'s [`Prec`].
+    fn matrix_value_at(&mut self, m: ExprId, n: u8, out: &mut AVec<'a, Node>) -> R<'a, [Src; 4]> {
         /* `n` is the column count; the rows are the expression's own type's
          * (ES 3.00's matCxR has C != R). */
         let r = self.rows_of(m);
@@ -6744,10 +6824,7 @@ impl<'a> Lower<'_, 'a> {
                         continue;
                     }
                     let id = ir::LocalId(self.locals.len() as u32);
-                    self.locals.push(
-                        self.a,
-                        ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, r), array_len: 1 },
-                    )?;
+                    self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, r), array_len: 1 })?;
                     let l = Local::scalar("", id, r);
                     self.store_local(l, zero, out)?;
                     let mut on_diagonal = j8 < r;
@@ -6879,7 +6956,7 @@ impl<'a> Lower<'_, 'a> {
     fn column_from_components(&mut self, comps_in: &[(Src, u8)], n: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
         let id = ir::LocalId(self.locals.len() as u32);
         let scalar = self.scalar_of_type(BaseType::Float);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(scalar, n), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(scalar, n), array_len: 1 })?;
         let mut pending: Option<(Src, u8, [u8; 4])> = None;
         for (lane, &(v, k)) in comps_in.iter().enumerate() {
             let mask = 1u8 << lane;
@@ -6926,7 +7003,7 @@ impl<'a> Lower<'_, 'a> {
         out: &mut AVec<'a, Node>,
     ) -> R<'a, Src> {
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, n), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, n), array_len: 1 })?;
         let l = Local::scalar("", id, n);
         self.store_local(l, zero, out)?;
         self.store_lanes(l, src, mask, lanes, out)?;
@@ -7445,7 +7522,15 @@ impl<'a> Lower<'_, 'a> {
             self.const_arrays.push(self.a, vals.into_slice())?;
             return self.bind(Local { name, id, comps, run: Run::Constants, value: None }, global);
         }
-        let l = self.alloc_var(name, ty.base, len, line)?;
+        /* Its storage (A.5): a mediump or lowp float local or global,
+         * `const` included, is stored at 16 bits; a struct's members and a
+         * highp float at full width. */
+        let medium = self.precs.decl(id) == Prec::Medium
+            && matches!(ty.base, BaseType::Float | BaseType::Vec(_) | BaseType::Mat(..));
+        self.slot_prec = Some(if medium { Prec::Medium } else { Prec::High });
+        let l = self.alloc_var(name, ty.base, len, line);
+        self.slot_prec = None;
+        let l = l?;
         let run = l.run;
         /* Declared before the initialiser is lowered would let `float x = x;`
          * read itself; ES 1.00 section 4.3 says the declared name is not in
@@ -7509,7 +7594,7 @@ impl<'a> Lower<'_, 'a> {
             (Run::Struct(_), BaseType::Struct(sname)) => self.push_struct_slots(sname, name, line, 0)?,
             _ => {
                 for _ in 0..run.slots() {
-                    self.locals.push(self.a, ir::VarDecl { name, ty: ir::Type::new(scalar, comps), array_len: 1 })?;
+                    self.push_local(ir::VarDecl { name, ty: ir::Type::new(scalar, comps), array_len: 1 })?;
                 }
             }
         }
@@ -7574,6 +7659,11 @@ impl<'a> Lower<'_, 'a> {
     /// An array has no single value, so it is always MOVED into a run --
     /// the move `struct_fill` makes for a struct, element by element here.
     fn array_fill(&mut self, e: ExprId, dst: Local<'a>, out: &mut AVec<'a, Node>) -> R<'a, ()> {
+        self.at(e, |s| s.array_fill_at(e, dst, out))
+    }
+
+    /// [`Lower::array_fill`] under `e`'s [`Prec`].
+    fn array_fill_at(&mut self, e: ExprId, dst: Local<'a>, out: &mut AVec<'a, Node>) -> R<'a, ()> {
         let Some(n) = dst.run.elements() else {
             return Err(self.err(dst.name, "an array value for something that is not an array"));
         };
@@ -7931,7 +8021,7 @@ impl<'a> Lower<'_, 'a> {
         let mut leaves: AVec<Leaf<'a>> = AVec::new();
         self.struct_leaf_list(sname, "", 0, &mut leaves)?;
         for lf in leaves.as_slice() {
-            self.locals.push(self.a, ir::VarDecl { name, ty: ir::Type::new(lf.scalar, lf.comps), array_len: 1 })?;
+            self.push_local(ir::VarDecl { name, ty: ir::Type::new(lf.scalar, lf.comps), array_len: 1 })?;
         }
         Ok(())
     }
@@ -7961,6 +8051,18 @@ impl<'a> Lower<'_, 'a> {
     /// leaf count instead would refuse `S(I(1.0, 2.0), 3.0)` and accept the
     /// flattened `S(1.0, 2.0, 3.0)`, which section 5.4.3 does not allow.
     fn struct_fill(
+        &mut self,
+        e: ExprId,
+        l: Local<'a>,
+        base: BaseType<'a>,
+        name: &'a str,
+        out: &mut AVec<'a, Node>,
+    ) -> R<'a, ()> {
+        self.at(e, |s| s.struct_fill_at(e, l, base, name, out))
+    }
+
+    /// [`Lower::struct_fill`] under `e`'s [`Prec`].
+    fn struct_fill_at(
         &mut self,
         e: ExprId,
         l: Local<'a>,
@@ -8564,9 +8666,86 @@ impl<'a> Lower<'_, 'a> {
             self.forget_known(local);
         }
         let id = ValueId(self.instrs.len() as u32);
+        let p = self.instr_prec(&op);
         self.instrs.push(self.a, op)?;
         self.comps.push(self.a, comps)?;
+        self.prec.push(self.a, p)?;
         Ok(id)
+    }
+
+    /// The [`Prec`] `op` records: the current expression's
+    /// ([`Lower::cur`]), except where the operation says otherwise. A
+    /// store has no value (a local's width is [`Lower::local_prec`]'s); an
+    /// output's store records the output's declared precision; an int
+    /// value has no float width; a compare of ints is a 32-bit bool
+    /// (Mesa lowers no int, `can_lower_type`) whatever tree it serves, as
+    /// the index compares of a run-time element select do.
+    fn instr_prec(&self, op: &Op) -> Prec {
+        use ir::AluOp::*;
+        match *op {
+            Op::StoreLocal { .. } | Op::Discard | Op::ConstI32(_) | Op::TexSize { .. } => Prec::None,
+            Op::StoreOutput { slot, .. } => self.output_prec(slot),
+            Op::LoadLocal { local, .. } if self.local_prec.as_slice().get(local.0 as usize) == Some(&Prec::None) => {
+                Prec::None
+            }
+            Op::Alu(
+                Iadd | Imul | Idiv | Imod | Ineg | Ishl | Ishr | Iand | Ior | Ixor | B2i | F2i | Udiv | Umod | Ushr
+                | Imin | Imax | Umin | Umax | Inot | F2u,
+                _,
+            ) => Prec::None,
+            Op::Alu(Ilt | Ile | Ieq | Ine | Ult | Ule | I2b, _) => Prec::High,
+            _ => self.cur,
+        }
+    }
+
+    /// The declared precision of the output `slot` stores (A.2 and A.7 of
+    /// docs/notes/mali-precision.md): `gl_Position` and `gl_FragDepth`
+    /// highp, `gl_PointSize` and ES 1.00's colour mediump, a declared
+    /// varying or ES 3.00 output its own.
+    fn output_prec(&self, slot: ir::IoSlot) -> Prec {
+        match slot {
+            ir::IoSlot::Position | ir::IoSlot::FragDepth => Prec::High,
+            ir::IoSlot::PointSize if self.ast.es3 => Prec::High,
+            ir::IoSlot::PointSize => Prec::Medium,
+            ir::IoSlot::FragColor(_) if !self.ast.es3 => Prec::Medium,
+            _ => {
+                let Some(d) = self.outputs.as_slice().iter().find(|d| d.slot() == slot) else {
+                    return Prec::None;
+                };
+                self.precs.global_path(self.ast, d.name)
+            }
+        }
+    }
+
+    /// Allocate the slot `d` (the one place a local is pushed), with its
+    /// storage (A.5): an int is None, a bool full width; a float what the
+    /// declaration being allocated says ([`Lower::slot_prec`]), else Medium
+    /// for a temporary of a Medium expression.
+    fn push_local(&mut self, d: ir::VarDecl<'a>) -> R<'a, ()> {
+        let p = match d.ty.scalar {
+            ir::ScalarType::I32 | ir::ScalarType::U32 => Prec::None,
+            ir::ScalarType::Bool => Prec::High,
+            ir::ScalarType::F32 => match self.slot_prec {
+                Some(p) => p,
+                None if self.cur_class == Prec::Medium => Prec::Medium,
+                None => Prec::High,
+            },
+        };
+        self.locals.push(self.a, d)?;
+        self.local_prec.push(self.a, p)?;
+        Ok(())
+    }
+
+    /// Run `f` as the lowering of the expression `e`: its instructions
+    /// record `e`'s [`Prec`], its temporaries `e`'s class.
+    #[inline]
+    fn at<T>(&mut self, e: ExprId, f: impl FnOnce(&mut Self) -> R<'a, T>) -> R<'a, T> {
+        let saved = (self.cur, self.cur_class);
+        self.cur = self.precs.instr(e);
+        self.cur_class = self.precs.class(e);
+        let r = f(self);
+        (self.cur, self.cur_class) = saved;
+        r
     }
 }
 
@@ -15040,7 +15219,12 @@ mod relocate_tests {
         let mark = a.used();
         let l = compile_to_ir(&a, super::super::sema::Stage::Fragment, text).expect("the stand-in compiles");
         let top = a.used();
+        let (prec, local_prec) = (l.module.prec.to_vec(), l.module.local_prec.to_vec());
         let l = relocate(&a, l, text, mark).expect("relocate");
+        /* the precision tables are moved with the rest, in step */
+        assert_eq!((l.module.prec, l.module.local_prec), (&prec[..], &local_prec[..]));
+        assert_eq!((prec.len(), local_prec.len()), (l.module.instrs.len(), l.module.locals.len()));
+        assert!(prec.contains(&ir::Prec::Medium), "the stand-in has mediump values");
         std::println!("front end top {top} bytes, {} after the release; peak {}", a.used(), a.peak());
         assert!(top > 1_000_000, "the stand-in still exercises the front end: {top}");
         assert!(a.used() < 500_000, "{} bytes left for the back end to start from", a.used());
