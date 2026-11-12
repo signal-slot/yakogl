@@ -1102,7 +1102,7 @@ pub(crate) mod tests {
     use crate::gpu::mali::csf::tests::{GPU, MEM};
     use crate::gpu::mali::csf::{
         CsInput, CsOutput, CsgInput, CsgOutput, GlbInput, GlbOutput, CSG_REQ_MASK, CSG_STATE_MASK, CSG_STATE_TERMINATE,
-        CSG_SYNC_UPDATE, CS_REQ_MASK, CS_STATE_MASK, CS_STATE_STOP, RK3588_TIMER_HZ,
+        CSG_SYNC_UPDATE, CS_EXTRACT_EVENT, CS_STATE_MASK, CS_STATE_STOP, RK3588_TIMER_HZ,
     };
     use crate::gpu::mali::fw::synth;
     use crate::gpu::mali::mmu::{mmu_as, AS_COMMAND, AS_COMMAND_UPDATE, AS_TRANSTAB};
@@ -1119,6 +1119,11 @@ pub(crate) mod tests {
     const CSG_OUT: usize = MEM + 0x0400_7000;
     const CS_IN: usize = MEM + 0x0400_3400;
     const CS_OUT: usize = MEM + 0x0400_7200;
+
+    /// The bits of CS 0's `req` the board's firmware copies into `ack`: the
+    /// state field and `CS_EXTRACT_EVENT`, not the start's idle bits. The
+    /// first Z4 run (issue #4515) read `req` 0x0511, `ack` 0x0011.
+    const CS_ACK_MASK: u32 = CS_STATE_MASK | CS_EXTRACT_EVENT;
 
     /// The synthetic frame's group VM: 2 MiB from the kernel range's start.
     const VA: u64 = 0x8000_0000_0000;
@@ -1211,9 +1216,9 @@ pub(crate) mod tests {
     /// booting from loaded code) with Z4's firmware behaviour over it, as
     /// sched.rs's model has it: on the global doorbell, `lag` reads later,
     /// the GLB `doorbell_req` taken, CSG 0's request fields
-    /// (`CSG_REQ_MASK`) and `doorbell_req` acknowledged, and CS 0's request
-    /// fields (`CS_REQ_MASK`) when the doorbell names it. On doorbell 1,
-    /// `job_lag` reads later, the blocks between the output page's `extract`
+    /// (`CSG_REQ_MASK`) and `doorbell_req` acknowledged, and the bits of CS
+    /// 0's `req` the board's firmware acknowledges ([`CS_ACK_MASK`]) when the
+    /// doorbell names it. On doorbell 1, `job_lag` reads later, the blocks between the output page's `extract`
     /// and the input page's `insert` run from the ring: `MOV32`/`MOV48` load
     /// registers, `CALL` runs the stream it names the same way, `SYNC_ADD64`
     /// adds to the 64-bit word it names (and writes `sync_status` when that
@@ -1343,7 +1348,7 @@ pub(crate) mod tests {
             let streams = self.w(sreq) ^ self.w(sack);
             self.ack_field(sreq, sack, streams);
             if streams & 1 != 0 {
-                self.ack_field(CS_IN + offset_of!(CsInput, req), CS_OUT + offset_of!(CsOutput, ack), CS_REQ_MASK);
+                self.ack_field(CS_IN + offset_of!(CsInput, req), CS_OUT + offset_of!(CsOutput, ack), CS_ACK_MASK);
             }
         }
         fn exec(&self, w: u64, regs: &mut [u64; 256]) {
@@ -1517,7 +1522,7 @@ pub(crate) mod tests {
             (SYNTH_HEAP_CTX_VA, CHUNK_VA, CHUNK_SIZE, 64)
         );
         // the start: START with ENDPOINT_CONFIG; SYNTH_CS 0's START request acked
-        assert_eq!((o.csg_req, o.csg_ack, o.cs_req, o.cs_ack), (0x11, 0x11, 0x0511, 0x0511));
+        assert_eq!((o.csg_req, o.csg_ack, o.cs_req, o.cs_ack), (0x11, 0x11, 0x0511, 0x0011));
         assert_eq!((o.csg_ack_us, o.cs_ack_us), (1, 0));
         // one 128-byte job consumed, the sync object at 1, its event seen
         assert_eq!((o.insert, o.extract, o.seqno, o.sync_status), (128, 128, 1, 0));
@@ -1626,7 +1631,7 @@ pub(crate) mod tests {
             csg_req: 0x11,
             csg_ack: 0x11,
             cs_req: 0x0511,
-            cs_ack: 0x0511,
+            cs_ack: 0x0011,
             // model-only: the model's acknowledge lag
             csg_ack_us: 1,
             cs_ack_us: 0,

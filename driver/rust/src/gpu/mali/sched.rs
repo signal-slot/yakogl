@@ -1625,7 +1625,7 @@ mod tests {
     // ---- the MCU's group and stream interface, modelled ----
 
     use crate::gpu::mali::fw::MCU_SHARED_REGION_START;
-    use csf::{GlbInput, GlbOutput, CSG_REQ_MASK, CS_REQ_MASK};
+    use csf::{GlbInput, GlbOutput, CSG_REQ_MASK};
     use std::cell::{Cell, RefCell};
     use std::collections::HashMap;
 
@@ -1670,6 +1670,12 @@ mod tests {
         Cs { input: at(CS_IN), output: at(CS_OUT), features: 0x085f, ..Cs::default() }
     }
 
+    /// The bits of CS 0's `req` the board's firmware copies into `ack`: the
+    /// state field and `CS_EXTRACT_EVENT`, not the idle bits
+    /// (`CS_IDLE_SYNC_WAIT`, `CS_IDLE_EMPTY`) the start also sets. The first
+    /// NanoPC-T6 Z4 run (issue #4515) read `req` 0x0511, `ack` 0x0011.
+    const CS_ACK_MASK: u32 = CS_STATE_MASK | CS_EXTRACT_EVENT;
+
     /// A stream event the model's firmware raises when CS 0 starts.
     #[derive(Clone, Copy)]
     struct Fault {
@@ -1684,7 +1690,7 @@ mod tests {
     /// differs from `doorbell_ack`; `lag` reads of the shared memory later
     /// it acknowledges CSG 0's request fields (`CSG_REQ_MASK`) and its
     /// `doorbell_req`; and when that doorbell names CS 0 and the group is
-    /// started, `cs_lag` reads later CS 0's request fields (`CS_REQ_MASK`),
+    /// started, `cs_lag` reads later CS 0's [`CS_ACK_MASK`] bits of `req`,
     /// raising `fault` with them. Every write, memory and register, is
     /// logged in order.
     ///
@@ -1795,7 +1801,7 @@ mod tests {
             let ack = o + offset_of!(CsOutput, ack);
             let req = i + offset_of!(CsInput, req);
             let stopping = self.word(req) & CS_STATE_MASK == csf::CS_STATE_STOP;
-            let mask = if self.no_stop_ack && stopping { CS_REQ_MASK & !CS_STATE_MASK } else { CS_REQ_MASK };
+            let mask = if self.no_stop_ack && stopping { CS_ACK_MASK & !CS_STATE_MASK } else { CS_ACK_MASK };
             self.ack_field(req, ack, mask);
             if let Some(f) = self.fault {
                 let (word, info) = if f.event == CS_FATAL {
@@ -2146,7 +2152,7 @@ mod tests {
                 doorbell_id: 1,
                 cs_config: 0x0101,
                 cs_req: 0x0511,
-                cs_ack: 0x0511,
+                cs_ack: 0x0011,
                 endpoint_req: 0xf001_0404,
                 csg_config: 1,
                 suspend_buf: SUSPEND_VA.into(),
@@ -2649,7 +2655,7 @@ mod tests {
         assert_eq!(e.refused.0, SchedRefusal::JobTimeout);
         let ended = e.ended.unwrap();
         // CS 0's ack still reads the start's state
-        assert_eq!(ended.stop, Err((SchedRefusal::CsStopAckTimeout, 0x0511)));
+        assert_eq!(ended.stop, Err((SchedRefusal::CsStopAckTimeout, 0x0011)));
         assert_eq!(ended.terminate, Ok(Terminated { us: 1, cleared: Cleared::default() }));
         assert_eq!(slept, u64::from(JOB_TIMEOUT_US) + u64::from(CS_ACK_WAIT_US) + 1 + 1);
     }
@@ -2672,7 +2678,7 @@ mod tests {
         assert_eq!(
             ended,
             Ended {
-                stop: Err((SchedRefusal::CsStopAckTimeout, 0x0511)),
+                stop: Err((SchedRefusal::CsStopAckTimeout, 0x0011)),
                 terminate: Err((SchedRefusal::CsgTerminateAckTimeout, 0)),
             }
         );

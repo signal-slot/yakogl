@@ -2453,7 +2453,7 @@ and a different board value is not a finding. The record is
 | `heap_chunk_size` | 2097152 (2 MiB) | pinned |
 | `heap_stride` | 64 | pinned (the G610's L2 line) |
 | `csg_req`, `csg_ack` | 0x11, 0x11 | pinned |
-| `cs_req`, `cs_ack` | 0x0511, 0x0511 | pinned |
+| `cs_req`, `cs_ack` | 0x0511, 0x0011 | pinned (measured: the firmware's `ack` copies the state field and `CS_EXTRACT_EVENT`, not the idle bits 0x0500 of the request; issue #4515) |
 | `csg_ack_us`, `cs_ack_us` | 1, 0 | board-dependent (the model's acknowledge lag) |
 | `latest_flush` | 0 | board-dependent (the GPU's flush id) |
 | `sync_updates` | 1 | pinned |
@@ -2510,7 +2510,7 @@ carry them:
 t6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000
 t6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used {d} vm_tables_used 10 suspend_size 0 protm_suspend_size 0
 t6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64
-t6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000511, acked in {d}/{d} us
+t6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000011, acked in {d}/{d} us
 t6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000080 seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us
 t6_submit: Z4f: latest_flush 0x{x8} sync_updates {d} status_cmd_ptr 0x0000000000000000 info 0x0000000000000000
 t6_submit: Z4g: stop {d} us refusal 0, terminate {d} us refusal 0, cleared {d} {d} {d}
@@ -2530,7 +2530,7 @@ number: the verdict adds the first four and compares the sum with `{@P}`.
 and `detail` 0 (Z4a: a stopped run differs here); `vm_tables_used` 10;
 `heap_ctx` 0x0000800000015000, the heap chunk 0x0000800000a00000,
 `chunk_size` 2097152, stride 64; the CSG 0 request and acknowledge words
-0x00000011 and CS 0's 0x00000511; `insert` and `extract` 0x80, `seqno`
+0x00000011, CS 0's request 0x00000511 and acknowledge 0x00000011; `insert` and `extract` 0x80, `seqno`
 1, `sync_status` 0; `status_cmd_ptr` and `info` 0; the stop's and the
 terminate's `refusal` 0; the frame digest 0xa4db81a9d39bfdcc. **Any value
 of its form**, checked for presence and form only: `as0_tables_used` (the
