@@ -247,7 +247,9 @@ void osal_mali_diag_print(void)
 
 /* One line per group restart a call just caused, with the sched refusal
  * that caused it (driver/rust/src/gpu/mali/sched.rs, SchedRefusal) and the
- * kicks it lost up to; one line when the OSAL stops (needs a GPU reset). */
+ * kicks it lost up to; one line when the OSAL stops (needs a GPU reset).
+ * The OSAL's own numbers: 28 TilerOomCounts, 29 HeapGrow, 30 HeapRemake
+ * (27 is the Z4 record's DrainTimeout, which the OSAL never meets). */
 static void note_restart(void)
 {
 	struct yd_t6_osal_counts c;
