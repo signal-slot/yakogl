@@ -343,6 +343,7 @@ endif()
 if(CONFIG_YAKOGL_DRV_I2C_STM32MP2 OR CONFIG_YAKOGL_DRV_DSI_STM32 OR CONFIG_YAKOGL_DRV_ADV7535 OR
    CONFIG_YAKOGL_DRV_DISPLAY_STM32_LTDC)
   zephyr_library_named(yakogl_stm32mp2_display)
+  zephyr_library_include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../rust/include")
   zephyr_library_sources_ifdef(CONFIG_YAKOGL_DRV_I2C_STM32MP2
     "${CMAKE_CURRENT_SOURCE_DIR}/../drivers/i2c/i2c_yakogl_stm32mp2.c")
   zephyr_library_sources_ifdef(CONFIG_YAKOGL_DRV_DSI_STM32
