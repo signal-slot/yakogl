@@ -672,9 +672,5 @@ fn the_formats_a_back_end_refuses_to_upload_are_listed() {
     };
     assert_eq!(refused(PVR_SAMPLED_TEXFMTS), Vec::<&str>::new(), "PowerVR");
     assert_eq!(refused(V3D_SAMPLED_TEXFMTS), Vec::<&str>::new(), "V3D 4.2");
-    assert_eq!(
-        refused(GC_SAMPLED_TEXFMTS),
-        ["GL_RGB32UI", "GL_RGB32I", "GL_RGBA32UI", "GL_RGBA32I"],
-        "GC7000UL"
-    );
+    assert_eq!(refused(GC_SAMPLED_TEXFMTS), ["GL_RGB32UI", "GL_RGB32I", "GL_RGBA32UI", "GL_RGBA32I"], "GC7000UL");
 }
