@@ -345,6 +345,8 @@ pub(crate) mod tests {
         /// (`None`: never).
         dcdc1_ramp: Option<u32>,
         ramp_left: RefCell<Option<Option<u32>>>,
+        /// `BUCK1_ON_VSEL` as it reads once DCDC1 has come on (`None`: unchanged).
+        vsel_after_enable: Option<u8>,
         /// The RK806 write frames the board sent, whole.
         rk806_writes: RefCell<Vec<Vec<u8>>>,
         frame: RefCell<Vec<u8>>,
@@ -389,6 +391,7 @@ pub(crate) mod tests {
                 rk806: RefCell::new([(0x00, 0x0f), (0x06, 0xe0), (0x10, 0xa4), (0x1a, 0x1c)].into_iter().collect()),
                 dcdc1_ramp: Some(3),
                 ramp_left: RefCell::new(None),
+                vsel_after_enable: None,
                 rk806_writes: RefCell::new(vec![]),
                 frame: RefCell::new(vec![]),
                 rxq: RefCell::new(VecDeque::new()),
@@ -430,6 +433,9 @@ pub(crate) mod tests {
                 match *left {
                     Some(Some(0)) => {
                         *self.rk806.borrow_mut().get_mut(&reg).unwrap() |= 1;
+                        if let Some(v) = self.vsel_after_enable {
+                            self.rk806.borrow_mut().insert(0x1a, v);
+                        }
                         *left = None;
                     }
                     Some(Some(n)) => *left = Some(Some(n - 1)),
@@ -934,6 +940,28 @@ pub(crate) mod tests {
         assert!(t6.rk806_writes.borrow().is_empty());
         assert_eq!(pmu_writes(&t6), 0);
         assert!(!t6.dcdc1_on());
+    }
+
+    #[test]
+    fn uboot_with_a_supply_that_drops_below_the_opp_after_the_enable_stops_untouched() {
+        let blob = synth::small();
+        // 0x1c at the start (675 mV, enough); 0x10 once DCDC1 reads on
+        let mut t6 = T6::uboot_supply_off(blob.clone(), 0x1c);
+        t6.vsel_after_enable = Some(0x10);
+        let o = run(&t6, &blob);
+        assert_gpu_stop(
+            &o,
+            nanopc_t6_gpu::Stop::SupplyBelowOpp,
+            nanopc_t6_gpu::SUPPLY_BELOW_AFTER_ENABLE,
+            0x10 << 32 | 300_000_000,
+        );
+        assert_eq!(o.stop, 11);
+        assert_eq!(o.refusal, 1);
+        // the enable went out once and took; nothing after it
+        assert_eq!(*t6.rk806_writes.borrow(), vec![vec![0x80, 0x00, 0x00, 0x11]]);
+        assert!(t6.dcdc1_on());
+        assert_eq!(pmu_writes(&t6), 0);
+        assert!(!t6.writes().iter().any(|w| T6::is_gpu(w.0) || T6::is_mcu(w.0)));
     }
 
     #[test]
