@@ -15,11 +15,13 @@
 //! differential, T, H and planar modes, the punch-through variant),
 //! `decompressEAC8Block` and `decompressEAC11Block` (with the 11-to-16-bit
 //! extension): the arithmetic of OpenGL ES 3.0 spec Annex C.2/C.3, which
-//! dEQP's reference implements. The VK-GL-CTS sources were not at hand when
-//! this was written, so the code is written from the spec and checked
-//! against Mesa 26.2.1's decoder, not transcribed from
-//! tcuCompressedTexture.cpp; a comparison with dEQP's own output is still to
-//! do (the host dEQP run of the plan's deqp-after item).
+//! dEQP's reference implements. The code is written from the spec and checked
+//! against Mesa 26.2.1's decoder (below); the points where dEQP could differ
+//! were read against tcuCompressedTexture.cpp at 93bca01: `extend11To16`
+//! is `(v << 5) | (v >> 6)`, `extend11To16WithSign` widens the magnitude,
+//! the signed base -128 counts as -127, the signed result clamps to
+//! -1023..=1023, a transparent punch-through texel is RGB 0 with alpha 0, and
+//! the non-opaque modifier is 0 for indices 0 and 2.
 //!
 //! Output: colour formats give RGBA8 texels; the 11-bit formats give 16-bit
 //! channels, unsigned (`u16`, 0..=65535 for 0..=1.0) or signed (`i16`,
