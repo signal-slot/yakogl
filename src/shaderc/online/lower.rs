@@ -658,6 +658,7 @@ pub fn relocate<'a>(a: &Arena<'a>, l: Lowered<'a>, text: &'a str, mark: usize) -
     }
     blk!(m.instrs);
     blk!(m.comps);
+    blk!(m.lanes);
     blk!(m.prec);
     blk!(m.local_prec);
     blk!(m.nodes);
@@ -792,6 +793,7 @@ pub fn relocate<'a>(a: &Arena<'a>, l: Lowered<'a>, text: &'a str, mark: usize) -
     let module = ir::Module {
         instrs: moved_slice(m.instrs, &map),
         comps: moved_slice(m.comps, &map),
+        lanes: moved_slice(m.lanes, &map),
         prec: moved_slice(m.prec, &map),
         local_prec: moved_slice(m.local_prec, &map),
         nodes: moved_slice(m.nodes, &map),
@@ -919,6 +921,7 @@ fn lower_ordered<'a>(
         mat_order,
         instrs: AVec::new(),
         comps: AVec::new(),
+        lanes: AVec::new(),
         precs,
         prec: AVec::new(),
         local_prec: AVec::new(),
@@ -956,11 +959,12 @@ fn lower_ordered<'a>(
      * (ir.rs `Module::prec`): a slot or an instruction pushed beside
      * `push_local` or `push_sized` would shift every entry after it onto
      * another value. Refused rather than handed on. */
-    if l.prec.len() != l.instrs.len() || l.local_prec.len() != l.locals.len() {
+    if l.prec.len() != l.instrs.len() || l.lanes.len() != l.instrs.len() || l.local_prec.len() != l.locals.len() {
         return Err(Error::new(l.line, "precision", "the precision tables are out of step with the IR"));
     }
     Ok(ir::Module {
         comps: a.alloc_copy(l.comps.as_slice())?,
+        lanes: a.alloc_copy(l.lanes.as_slice())?,
         prec: a.alloc_copy(l.prec.as_slice())?,
         local_prec: a.alloc_copy(l.local_prec.as_slice())?,
         stage: match stage {
@@ -996,6 +1000,9 @@ struct Lower<'x, 'a> {
     /// The component count of each instruction's value, in step with
     /// [`Lower::instrs`]. See [`ir::Module::comps`].
     comps: AVec<'a, u8>,
+    /// The exact width of each instruction's value, in step with
+    /// [`Lower::instrs`]. See [`ir::Module::lanes`].
+    lanes: AVec<'a, u8>,
     /// Mesa's precision class of every expression, from the tree
     /// ([`precision::classify`]).
     precs: Precs<'a>,
@@ -5208,8 +5215,8 @@ impl<'a> Lower<'_, 'a> {
         };
         let step = match (op, scalar) {
             (UnOp::PreInc | UnOp::PostInc, _) => one,
-            (_, ir::ScalarType::F32) => self.alu_w(ir::AluOp::Fneg, [one, one, one], w, out)?,
-            _ => self.alu_w(ir::AluOp::Ineg, [one, one, one], w, out)?,
+            (_, ir::ScalarType::F32) => self.alu_l(ir::AluOp::Fneg, [one, one, one], w, out)?,
+            _ => self.alu_l(ir::AluOp::Ineg, [one, one, one], w, out)?,
         };
         let new = self.alu_w(add, [old, step, step], w, out)?;
         self.store_lref(r, new, out)?;
@@ -5235,7 +5242,7 @@ impl<'a> Lower<'_, 'a> {
             let one = self.const_value([1.0; 4], out)?;
             let step = match op {
                 UnOp::PreInc | UnOp::PostInc => one,
-                _ => self.alu_w(ir::AluOp::Fneg, [one, one, one], l.comps, out)?,
+                _ => self.alu_l(ir::AluOp::Fneg, [one, one, one], l.comps, out)?,
             };
             for j in 0..n {
                 let col = l.column(j);
@@ -5264,21 +5271,21 @@ impl<'a> Lower<'_, 'a> {
         let add = match (op, scalar) {
             (UnOp::PreInc | UnOp::PostInc, ir::ScalarType::F32) => ir::AluOp::Fadd,
             (UnOp::PreDec | UnOp::PostDec, ir::ScalarType::F32) => {
-                let neg = self.alu_w(ir::AluOp::Fneg, [one, one, one], l.comps, out)?;
-                let v = self.alu_w(ir::AluOp::Fadd, [Src::id(old), neg, neg], l.comps, out)?;
+                let neg = self.alu_l(ir::AluOp::Fneg, [one, one, one], l.comps, out)?;
+                let v = self.alu_l(ir::AluOp::Fadd, [Src::id(old), neg, neg], l.comps, out)?;
                 return self.store_local(l, v, out);
             }
             (UnOp::PreInc | UnOp::PostInc, ir::ScalarType::I32 | ir::ScalarType::U32) => ir::AluOp::Iadd,
             (UnOp::PreDec | UnOp::PostDec, ir::ScalarType::I32 | ir::ScalarType::U32) => {
-                let neg = self.alu_w(ir::AluOp::Ineg, [one, one, one], l.comps, out)?;
-                let v = self.alu_w(ir::AluOp::Iadd, [Src::id(old), neg, neg], l.comps, out)?;
+                let neg = self.alu_l(ir::AluOp::Ineg, [one, one, one], l.comps, out)?;
+                let v = self.alu_l(ir::AluOp::Iadd, [Src::id(old), neg, neg], l.comps, out)?;
                 return self.store_local(l, v, out);
             }
             _ => return Err(self.err(op.text(), "this expression statement is not lowered yet")),
         };
         /* The sum has the variable's width: `alu` records none, which
          * `Module::comps_of` answered as 4 for `r--` of a `vec2`. */
-        let v = self.alu_w(add, [Src::id(old), one, one], l.comps, out)?;
+        let v = self.alu_l(add, [Src::id(old), one, one], l.comps, out)?;
         self.store_local(l, v, out)
     }
 
@@ -5544,22 +5551,22 @@ impl<'a> Lower<'_, 'a> {
             return Ok(v);
         }
         match (from, to) {
-            (ir::ScalarType::I32, ir::ScalarType::F32) => self.alu_w(ir::AluOp::I2f, [v, v, v], want, out),
-            (ir::ScalarType::F32, ir::ScalarType::I32) => self.alu_w(ir::AluOp::F2i, [v, v, v], want, out),
-            (ir::ScalarType::Bool, ir::ScalarType::F32) => self.alu_w(ir::AluOp::B2f, [v, v, v], want, out),
-            (ir::ScalarType::Bool, ir::ScalarType::I32) => self.alu_w(ir::AluOp::B2i, [v, v, v], want, out),
-            (ir::ScalarType::F32, ir::ScalarType::Bool) => self.alu_w(ir::AluOp::F2b, [v, v, v], want, out),
-            (ir::ScalarType::I32, ir::ScalarType::Bool) => self.alu_w(ir::AluOp::I2b, [v, v, v], want, out),
+            (ir::ScalarType::I32, ir::ScalarType::F32) => self.alu_l(ir::AluOp::I2f, [v, v, v], want, out),
+            (ir::ScalarType::F32, ir::ScalarType::I32) => self.alu_l(ir::AluOp::F2i, [v, v, v], want, out),
+            (ir::ScalarType::Bool, ir::ScalarType::F32) => self.alu_l(ir::AluOp::B2f, [v, v, v], want, out),
+            (ir::ScalarType::Bool, ir::ScalarType::I32) => self.alu_l(ir::AluOp::B2i, [v, v, v], want, out),
+            (ir::ScalarType::F32, ir::ScalarType::Bool) => self.alu_l(ir::AluOp::F2b, [v, v, v], want, out),
+            (ir::ScalarType::I32, ir::ScalarType::Bool) => self.alu_l(ir::AluOp::I2b, [v, v, v], want, out),
             /* ES 3.00 section 5.4.1: between `int` and `uint` "the bit
              * pattern ... is preserved" -- the same value, no instruction
              * (ir.md: the front end reuses the ValueId). */
             (ir::ScalarType::I32, ir::ScalarType::U32) | (ir::ScalarType::U32, ir::ScalarType::I32) => Ok(v),
-            (ir::ScalarType::U32, ir::ScalarType::F32) => self.alu_w(ir::AluOp::U2f, [v, v, v], want, out),
-            (ir::ScalarType::F32, ir::ScalarType::U32) => self.alu_w(ir::AluOp::F2u, [v, v, v], want, out),
+            (ir::ScalarType::U32, ir::ScalarType::F32) => self.alu_l(ir::AluOp::U2f, [v, v, v], want, out),
+            (ir::ScalarType::F32, ir::ScalarType::U32) => self.alu_l(ir::AluOp::F2u, [v, v, v], want, out),
             /* A bool is 0 or all ones; `B2i` gives 0 or 1 and `I2b` tests
              * against 0, which is the same question for either signedness. */
-            (ir::ScalarType::Bool, ir::ScalarType::U32) => self.alu_w(ir::AluOp::B2i, [v, v, v], want, out),
-            (ir::ScalarType::U32, ir::ScalarType::Bool) => self.alu_w(ir::AluOp::I2b, [v, v, v], want, out),
+            (ir::ScalarType::Bool, ir::ScalarType::U32) => self.alu_l(ir::AluOp::B2i, [v, v, v], want, out),
+            (ir::ScalarType::U32, ir::ScalarType::Bool) => self.alu_l(ir::AluOp::I2b, [v, v, v], want, out),
             /* The equal pairs returned above; the compiler cannot see that
              * through the guard, and a silent `Ok(v)` here would hide a
              * conversion that was forgotten. */
@@ -7426,6 +7433,15 @@ impl<'a> Lower<'_, 'a> {
         self.alu_sized(op, srcs, op.result_comps(comps), out)
     }
 
+    /// One ALU instruction whose exact width `w` goes to
+    /// [`ir::Module::lanes`] only: `comps` records nothing, as `alu` did
+    /// before the width was learned, so no back end reads a new width.
+    fn alu_l(&mut self, op: ir::AluOp, srcs: [Src; 3], w: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
+        let v = self.push_lanes(Op::Alu(op, srcs), 0, op.result_comps(w))?;
+        out.push(self.a, Node::Instr(ir::InstrId(v.0)))?;
+        Ok(Src::id(v))
+    }
+
     fn alu_sized(&mut self, op: ir::AluOp, srcs: [Src; 3], comps: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
         let v = self.push_sized(Op::Alu(op, srcs), comps)?;
         out.push(self.a, Node::Instr(ir::InstrId(v.0)))?;
@@ -8737,6 +8753,15 @@ impl<'a> Lower<'_, 'a> {
     /// That is why the width is recorded here rather than estimated in a
     /// back end.
     fn push_sized(&mut self, op: Op, comps: u8) -> R<'a, ValueId> {
+        self.push_lanes(op, comps, comps)
+    }
+
+    /// [`Lower::push_sized`] with the value's exact width, `lanes`,
+    /// recorded apart from `comps` ([`ir::Module::lanes`]): where this
+    /// branch learned a width the back ends were not built against (a
+    /// built-in's steps, an increment's sum, a conversion), `comps` keeps
+    /// what they read before, so their code cannot move.
+    fn push_lanes(&mut self, op: Op, comps: u8, lanes: u8) -> R<'a, ValueId> {
         if let Op::StoreLocal { local, .. } = op {
             self.forget_known(local);
         }
@@ -8744,6 +8769,7 @@ impl<'a> Lower<'_, 'a> {
         let p = self.instr_prec(&op);
         self.instrs.push(self.a, op)?;
         self.comps.push(self.a, comps)?;
+        self.lanes.push(self.a, lanes)?;
         self.prec.push(self.a, p)?;
         Ok(id)
     }
@@ -8871,7 +8897,7 @@ impl Sink<'_, '_, '_> {
                  * `splat(dot)` chain does) */
                 _ if s.val.0 >= self.start
                     && s.swizzle == ir::SWIZZLE_IDENTITY
-                    && self.l.comps.as_slice().get(s.val.0 as usize) == Some(&1) =>
+                    && self.l.lanes.as_slice().get(s.val.0 as usize) == Some(&1) =>
                 {
                     any = true
                 }
@@ -8893,9 +8919,12 @@ impl<'a> builtin_call::Emit<'a> for Sink<'_, '_, 'a> {
             self.l.cur = Prec::High;
         }
         let v = match op {
+            /* `comps` as before ([`Lower::push_lanes`]); the step's
+             * width in `lanes` */
             Op::Alu(alu, srcs) => {
                 let w = self.alu_width(alu, &srcs);
-                self.l.push_sized(op, w)
+                let comps = op.stated_comps().unwrap_or(0);
+                self.l.push_lanes(op, comps, w)
             }
             _ => self.l.push_instr(op),
         };
@@ -12452,10 +12481,18 @@ mod value_width_tests {
         assert_eq!(l.module.comps.len(), l.module.instrs.len());
     }
 
-    /// The width of every `Alu` using `op`, in program order.
+    /// The exact width ([`ir::Module::lanes_of`]) of every `Alu` using
+    /// `op`, in program order.
     fn all_comps_of(m: &ir::Module, op: ir::AluOp) -> std::vec::Vec<u8> {
         let ids = m.instrs.iter().enumerate().filter(|(_, o)| matches!(o, Op::Alu(x, _) if *x == op));
-        ids.map(|(i, _)| m.comps_of(ValueId(i as u32))).collect()
+        ids.map(|(i, _)| m.lanes_of(ValueId(i as u32))).collect()
+    }
+
+    /// What `comps` records for every `Alu` using `op`: the width the
+    /// other back ends read, which this branch leaves as it was.
+    fn all_recorded(m: &ir::Module, op: ir::AluOp) -> std::vec::Vec<u8> {
+        let ids = m.instrs.iter().enumerate().filter(|(_, o)| matches!(o, Op::Alu(x, _) if *x == op));
+        ids.map(|(i, _)| m.comps.get(i).copied().unwrap_or(0)).collect()
     }
 
     /// A built-in's result has the width of the call's type. The library
@@ -12471,7 +12508,8 @@ mod value_width_tests {
              varying vec2 v;\n\
              void main(){ gl_FragColor = vec4(abs(v), 0.5, 1.0); }",
         );
-        assert_eq!(comps_of(&l.module, ir::AluOp::Fabs), 2, "abs of a vec2 is two lanes");
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fabs), [2], "abs of a vec2 is two lanes");
+        assert_eq!(all_recorded(&l.module, ir::AluOp::Fabs), [0], "comps records nothing, as before");
     }
 
     /// Every instruction of an expansion is as wide as the widest of the
@@ -12499,8 +12537,8 @@ mod value_width_tests {
              uniform vec3 u;\n\
              void main(){ gl_FragColor = vec4(distance(v, u)); }",
         );
-        assert_eq!(comps_of(&l2.module, ir::AluOp::Fadd), 3, "the difference is three lanes");
-        assert_eq!(comps_of(&l2.module, ir::AluOp::Fdot3), 1, "its dot is one");
+        assert_eq!(all_comps_of(&l2.module, ir::AluOp::Fadd), [3], "the difference is three lanes");
+        assert_eq!(all_comps_of(&l2.module, ir::AluOp::Fdot3), [1], "its dot is one");
     }
 
     /// A step after a reduction is one lane: `length`'s and `distance`'s
@@ -15875,5 +15913,48 @@ mod report_es2_tests {
         let a = Arena::new(&mut buf);
         let es100 = "precision mediump float;\nvoid main() { gl_FragColor = vec4(1.0); }\n";
         assert!(compile_to_ir(&a, Stage::Fragment, es100).is_ok(), "an ES 1.00 shader compiles in the same build");
+    }
+}
+
+/// The PowerVR words of shapes this branch's precision work once moved,
+/// pinned to main's (d208eafa5): a back end that does not lower precision
+/// compiles what it compiled before. Second review B-B: `pow` of a `const`
+/// exponent moved when a built-in's steps recorded their width in `comps`
+/// (now in `lanes`), and a `mediump mat2` divided by 2.2 moved when the
+/// reciprocal was kept as an `Frcp`.
+#[cfg(all(test, feature = "gpu-powervr", not(feature = "report-es2")))]
+mod powervr_word_pins {
+    use crate::shaderc::online::{codegen, store};
+    use crate::shaderc::SHC_STAGE_VERTEX;
+
+    /// The program words, the temporaries, the varyings, the output size
+    /// and the uniform dwords, as hex.
+    fn words(src: &str) -> std::string::String {
+        let _k = store::test_keep();
+        store::with_scratch(|s| {
+            let sh = codegen::compile(SHC_STAGE_VERTEX, src.as_bytes(), 0, s, store::keep()).expect("compiles");
+            let mut v = std::vec::Vec::new();
+            for x in sh.usc_words() {
+                v.extend_from_slice(&x.to_le_bytes());
+            }
+            v.extend_from_slice(&sh.temps.to_le_bytes());
+            v.push(sh.num_varyings);
+            v.push(sh.vs_output_size);
+            v.extend_from_slice(&sh.uniform_dwords.to_le_bytes());
+            v.iter().map(|b| std::format!("{b:02x}")).collect()
+        })
+        .expect("the scratch arena is free")
+    }
+
+    #[test]
+    fn pow_of_a_const_exponent_compiles_to_main_s_words() {
+        let src = "attribute highp vec4 p; attribute mediump vec4 a; attribute highp vec4 h; varying highp vec4 v; \
+                   const mediump float E = 0.1; void main(){ gl_Position = p; v = vec4(pow(a.x, E)); }";
+        assert_eq!(
+            words(src),
+            "86924013cdcccc3d000040ff35820087840400000041348200824100004235820040c0a2000041ff3482008341000040\
+             55a0060800800400003055a0000804c00000003055a0000805c00000003055a0000806c00000003058a0000807c00000\
+             0030f3ffffffffff44a08005000000ff030001080000"
+        );
     }
 }
