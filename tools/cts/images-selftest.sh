@@ -462,6 +462,24 @@ for t in "x2 ms4" "imx8mp gles3" "pi4 gles3"; do
     [ "$rc" = 2 ] && ok "$t refused (rc 2)" || bad "$t: rc=$rc: $out"
 done
 
+# board-stage.sh stm32mp257f-dk: gl_test for the DK, build only. It needs the
+# three entries of every image (no IMX8MP_OUT, no GLMARK2_SRC), prints the
+# west command in a dry run, and refuses the other sets with exit 2.
+out=$(nd imx8mp common stm32mp257f-dk)
+check "dk common needs ZEPHYR_WS" "ZEPHYR_WS" "$out"
+absent "dk common does not need IMX8MP_OUT" "IMX8MP_OUT" "$out"
+absent "dk common does not need GLMARK2_SRC" "GLMARK2_SRC" "$out"
+out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 tools/cts/board-stage.sh stm32mp257f-dk common 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "dk common dry run: rc 0" || bad "dk common dry run: rc=$rc: $out"
+check "dk common dry run: the board" "-b stm32mp257f_dk/stm32mp257fxx/a35" "$out"
+check "dk common dry run: the sample" "driver/samples/zephyr/gl_test" "$out"
+check "dk common dry run: the output" "build/common/stm32mp257f-dk-" "$out"
+check "dk common dry run: the watchdog marker" "gc_wdog_arm: armed" "$out"
+for t in "stm32mp257f-dk deqp" "stm32mp257f-dk ms4" "stm32mp257f-dk gles3"; do
+    out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 tools/cts/board-stage.sh $t 2>&1); rc=$?
+    [ "$rc" = 2 ] && ok "$t refused (rc 2)" || bad "$t: rc=$rc: $out"
+done
+
 # needed_deps against the builders: a board stage runs the image builders, and
 # board-stage.sh stops only for what needed_deps lists. So every deps.toml
 # entry a builder reads (${NAME or $NAME, comment lines left out) must be in
