@@ -34,7 +34,7 @@ t6_submit: Z3: init req 0x0000040e acked 0x0000010e in 310 us, PING acked in 95 
 t6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000
 t6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used 8 vm_tables_used 10 suspend_size 0 protm_suspend_size 0
 t6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64
-t6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000511, acked in 1/0 us
+t6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000011, acked in 1/0 us
 t6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000080 seqno 0x0000000000000001 sync_status 0x00000000, wait 20 us
 t6_submit: Z4f: latest_flush 0x00000000 sync_updates 1 status_cmd_ptr 0x0000000000000000 info 0x0000000000000000
 t6_submit: Z4g: stop 1 us refusal 0, terminate 1 us refusal 0, cleared 0 0 0
