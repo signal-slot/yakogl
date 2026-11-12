@@ -5,6 +5,7 @@
 
 #[cfg(any(feature = "vivante", test))]
 pub mod gpu_ffi;
+pub mod display_regs;
 pub mod power;
 #[cfg(test)]
 mod power_model_tests;
