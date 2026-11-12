@@ -5603,24 +5603,16 @@ impl<'a> Lower<'_, 'a> {
     /// encoder.
     fn reciprocal(&mut self, v: Src, want: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
         if let Some(lanes) = self.const_lanes_of(v) {
-            if lanes.iter().all(|x| x.is_finite()) {
+            /* Mesa divides inside a 16-bit tree at 16 bits, by the 16-bit
+             * `c`: the same value as this fold narrowed only when `c` is a
+             * 16-bit value (open question E.5 of
+             * docs/notes/mali-precision.md). Otherwise the reciprocal is
+             * kept for the back end to compute. */
+            let exact = || lanes[..usize::from(want.clamp(1, 4))].iter().all(|&x| precision::f16_exact(x));
+            if lanes.iter().all(|x| x.is_finite()) && (self.cur != Prec::Medium || exact()) {
                 let inv = [1.0 / lanes[0], 1.0 / lanes[1], 1.0 / lanes[2], 1.0 / lanes[3]];
                 if inv.iter().all(|x| x.is_finite()) {
-                    let r = self.const_value(inv, out)?;
-                    /* Mesa divides inside a 16-bit tree at 16 bits, by the
-                     * 16-bit `c`: the same value as this one narrowed only
-                     * when `c` is a 16-bit value (open question E.5 of
-                     * docs/notes/mali-precision.md). A constant shared with
-                     * another use is marked for both: a refusal, never a
-                     * wrong value. */
-                    if self.cur == Prec::Medium
-                        && !lanes[..usize::from(want.clamp(1, 4))].iter().all(|&x| precision::f16_exact(x))
-                    {
-                        if let Some(p) = self.prec.as_mut_slice().get_mut(r.val.0 as usize) {
-                            *p = Prec::Fold32;
-                        }
-                    }
-                    return Ok(r);
+                    return self.const_value(inv, out);
                 }
             }
         }
