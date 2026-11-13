@@ -278,20 +278,83 @@ The discriminator is the boot you did not look at: **capture the console from
 BL2**, which the runner already does — the capture starts before the reboot
 (`tools/board-stm32mp2.sh:897-898`), so every record's `console.txt`/
 `console.raw` holds the new boot's TF-A BL2 lines. ST's TF-A v2.10-r3.1 BL2
-for stm32mp2 prints the SoC's reset reason at the start of every boot (a
-`Reset reason:` line; *derived* from plan #349's supply-sources study, which
-read ST's TF-A v2.10-r3.1, U-Boot 2023.10-r3.1 and Linux v6.6-stm32mp-r3.1 —
-that study's report is not yet in the tree, so take the line's exact text from
-it, not from this note). Only that line separates the causes:
+for stm32mp2 prints the SoC's reset reason at the start of every boot, as a
+`NOTICE` (always on) after the board model and board info
+(*confirmed by reading the source*; paths are relative to the tag
+`v2.10-stm32mp-r3.1` of github.com/STMicroelectronics/arm-trusted-firmware):
+
+```
+Reset reason: <text> (0x<RCC_C1BOOTRSTSCLRR>).<boot>
+```
+
+- format: `NOTICE("Reset reason: %s (0x%x).%s\n", reason_str, rstsr, boot_str)`,
+  `plat/st/stm32mp2/bl2_plat_setup.c:181-182`; called from BL2 at `:582`
+  (function `print_reset_reason`, `:129-183`).
+- `0x%x` is the raw `RCC_C1BOOTRSTSCLRR` (offset `0x420`,
+  `include/drivers/st/stm32mp25_rcc.h:260`) read at `:132`; the bits are
+  `:2289-2309`: `PORRSTF` 0, `BORRSTF` 1, `PADRSTF` 2, `HCSSRSTF` 3,
+  `VCORERSTF` 4, `VCPURSTF` 5, `SYSC1RSTF` 6, `SYSC2RSTF` 7,
+  `IWDG1SYSRSTF`..`IWDG5SYSRSTF` 8-12, `C1RSTF` 13, `STBYC1RSTF` 20,
+  `D1STBYRSTF` 22. `IWDGXSYSRSTF` is the OR of the five IWDG flags (`:2311-2315`).
+- `<boot>` is ` Cold boot.` when `RCC_BDCR.RTCCKEN` is 0, else ` Warm boot.`
+  (`bl2_plat_setup.c:142-147`): a cold boot means the backup domain lost its
+  RTC clock enable, which a real power loss does and a reset does not (an
+  inference from the code, not checked on the board).
+- the text is chosen in this order (`bl2_plat_setup.c:152-179`):
+
+| `PADRSTF` | first flag found, in this order | text after `Reset reason: ` | class |
+| --- | --- | --- | --- |
+| set | `PORRSTF` | `Power-on reset (por_rstn)` (`:166`) | power-on / supply |
+| set | `BORRSTF` | `Brownout reset (bor_rstn)` (`:168`) | brown-out / supply |
+| set | `SYSC2RSTF` or `SYSC1RSTF` | `System reset (SYSRST)` (`:171`) | system reset |
+| set | `HCSSRSTF` | `Clock failure on HSE` (`:173`) | clock |
+| set | any `IWDGnSYSRSTF` | `IWDG system reset (iwdgX_out_rst)` (`:175`) | watchdog |
+| set | none of those | `Pin reset from NRST` (`:177`) | pin reset |
+| clear | `STBYC1RSTF` | `System exits from Standby for CA35` (`:154`) | not a reset |
+| clear | `D1STBYRSTF` | `D1 domain exits from DStandby` (`:156`) | not a reset |
+| clear | `VCPURSTF` | `System reset from VCPU monitor` (`:158`) | VCPU monitor |
+| clear | `C1RSTF` | `CA35 reset by CM33 (C1RST)` (`:160`) | CM33 reset |
+| clear | none | `Unidentified` (`:162`) | - |
+
+  `VCORERSTF` is defined but has no text: with `PADRSTF` set and nothing
+  else a VCORE reset reads `Pin reset from NRST` (read from the code; the
+  board's value is unverified). The test order matters: with `POR` and `IWDG`
+  both set the line says power-on.
+- ST's U-Boot `v2023.10-stm32mp-r3.1` (github.com/STMicroelectronics/u-boot)
+  prints **no** reset reason on stm32mp2: a search of `arch/arm/mach-stm32mp`,
+  `board/st`, `cmd`, `drivers/watchdog` and `drivers/clk/stm32` for
+  `reset reason`/`reset cause`/`RSTSCLRR`/`BOOTRST` finds nothing there (only
+  other SoCs print `Reset cause:`, e.g. `arch/arm/mach-imx/cpu.c:245`); only
+  the register header `include/stm32mp25_rcc.h` mentions the flags. The BL2
+  line is the only source.
+- BL2 arms IWDG1 for 32 s (`fdts/stm32mp257f-dk.dts:164-167`
+  `timeout-sec = <32>`, `status = "okay"`; `stm32_iwdg_init`/`stm32_iwdg_refresh`
+  at `plat/st/stm32mp2/bl2_plat_setup.c:536-540`), and a watchdog reset shows
+  as the `IWDG system reset (iwdgX_out_rst)` text above. The `X` in the text
+  is literal; only the raw word says which instance fired (bits 8-12).
+  **Unverified**: whether OP-TEE's SMC watchdog timeout sets `IWDG1SYSRSTF` or
+  `IWDG2SYSRSTF` (OP-TEE's sources are not in these two trees; only the
+  `IWDG1`/`IWDG2` base-to-instance mapping is,
+  `plat/st/stm32mp2/stm32mp2_private.c:646-656`). Either bit gives the same text.
+- the PSCI reset our image issues: `SYSTEM_RESET` goes to `stm32_system_reset`
+  (`plat/st/stm32mp2/stm32mp2_pm.c:1230-1239`, `INFO("BL31: System cold
+  reset")`), which sends SCMI `SYSTEM_POWER_STATE_SET` with the cold-reset
+  type (`plat/st/stm32mp2/scmi/scmi_common.c:527-535`); the SCMI server then
+  resets the SoC. **Unverified**: which RCC flag that leaves (the server is
+  not in these sources), so the next BL2 text may be `System reset (SYSRST)`
+  or `Pin reset from NRST`; read it from the first return trial and record it
+  here. It is not a power-on text unless the supply fell.
+
+Only that line separates the causes:
 
 | what happened | console signature |
 | --- | --- |
-| PSCI reset by the image (normal end) | the end line `mp2: <why>: PSCI SYSTEM_RESET at <n> ms` immediately before the new boot (`stm32mp2.c:156-158`; the runner's `END_RE`, `board-stm32mp2.sh:205`) |
+| PSCI reset by the image (normal end) | BL2 `Reset reason: System reset (SYSRST) (0x...)` or `Pin reset from NRST` (**unverified** which; no power-on text); the end line `mp2: <why>: PSCI SYSTEM_RESET at <n> ms` immediately before the new boot (`stm32mp2.c:156-158`; the runner's `END_RE`, `board-stm32mp2.sh:205`) |
 | lifetime reset (too long, not too long for the watchdog) | end line with `why = lifetime over` (`stm32mp2.c:236-239`) |
 | fatal error | `mp2: fatal error <reason>`, then the end line (`stm32mp2.c:163-168`) |
-| watchdog reset (a hang, or our own 32 s arm firing un-fed) | no end line at all; the reset lands about 32 s after the stall — 32 s from BL2's IWDG, about 27 s after an OP-TEE panic (pre-study `:255-258`) |
+| watchdog reset (a hang, or our own 32 s arm firing un-fed) | BL2 `Reset reason: IWDG system reset (iwdgX_out_rst) (0x...)`; no end line at all; the reset lands about 32 s after the stall — 32 s from BL2's IWDG, about 27 s after an OP-TEE panic (pre-study `:255-258`) |
 | OP-TEE panic | the last logged request is the last line before the reset (every request is logged before it is sent, `power.rs:24-26`, pre-study `:872-881`); reset sooner, ~27 s |
-| supply loss / brown-out | the BL2 `Reset reason:` line names a power-on-class reset, or the console shows no BL2 lines at all (board silent: `boot_verdict=not_started/no_lines`, `board-stm32mp2.sh:129-133`) |
+| supply loss / brown-out | BL2 `Reset reason: Power-on reset (por_rstn) (0x...)` or `Reset reason: Brownout reset (bor_rstn) (0x...)`, usually with ` Cold boot.`; or the console shows no BL2 lines at all (board silent: `boot_verdict=not_started/no_lines`, `board-stm32mp2.sh:129-133`) |
 
 So: read `console.txt` from the boot boundary backwards, find the end line or
 its absence, then read BL2's line. A GPU step that fails twice, a board that
