@@ -72,6 +72,9 @@
  *      TS-cleared target to a linear one. TS_MEM_CONFIG, the TS clear
  *      values and the RS fill and resolve are what to read here
  *      (docs/notes/gc-tiled-targets.md step 0; testdata/ts-clear.golden)
+ *  30  a depth-tested draw into a texture-backed 64x64 RGBA8 target with a
+ *      D24S8 depth buffer, then glReadPixels (golden only): the W4/W5
+ *      configuration of docs/notes/gc-tiled-wire.md (testdata/tiled-ez.golden)
  *  16  case 20's ETC2 RGBA8 EAC texture. The branch is here, but ES 2.0 has
  *      no ETC2 and this context rejects the upload with GL_INVALID_ENUM, so
  *      there is no golden to be had: it stops with exit 3 and says why,
@@ -787,7 +790,7 @@ int main(int argc, char **argv)
 		 * drift from the code the way the old duplicate mode list did. If
 		 * you add a branch, add the number here. */
 		static const int have[] = { 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18,
-					    19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29 };
+					    19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 };
 		size_t k;
 		int known = 0;
 
@@ -836,12 +839,12 @@ int main(int argc, char **argv)
 	 * Everything else keeps RGBA4, so the readings taken against it stand. */
 	glRenderbufferStorage(GL_RENDERBUFFER,
 			      mode == 8 || mode == 12 || mode == 14 || mode == 15 || mode == 18 ||
-			      mode == 29 ? GL_RGBA8_OES
+			      mode == 29 || mode == 30 ? GL_RGBA8_OES
 								    : GL_RGBA4,
 			      64, 64);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
 	if (mode == 8 || mode == 12 || mode == 14 || mode == 15 || mode == 18 ||
-	    mode == 21 || mode == 22 || mode == 29) {
+	    mode == 21 || mode == 22 || mode == 29 || mode == 30) {
 		/* a depth attachment, so the driver has a depth surface to
 		 * describe: the only way to see what it tells the PE about it.
 		 * The stencil modes need the stencil half of the same buffer. */
@@ -862,6 +865,20 @@ int main(int argc, char **argv)
 			glDepthFunc(GL_LESS);
 		}
 	}
+	if (mode == 30) {
+		/* The colour target is a texture, not a renderbuffer: that is
+		 * the shape of a W4 shadow (a texture the scene renders into),
+		 * and the question is which layout Mesa gives it. */
+		GLuint ctex;
+
+		glGenTextures(1, &ctex);
+		glBindTexture(GL_TEXTURE_2D, ctex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 64, 64, 0, GL_RGBA,
+			     GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ctex, 0);
+	}
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 		fprintf(stderr, "fbo incomplete\n");
 		return 1;
@@ -874,7 +891,7 @@ int main(int argc, char **argv)
 	}
 	glViewport(0, 0, 64, 64);
 
-	if (mode >= 19 && mode != 28 && mode != 29) {
+	if (mode >= 19 && mode != 28 && mode != 29 && mode != 30) {
 		return frag_mode_g(mode);
 	}
 
@@ -1215,6 +1232,25 @@ draw:
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 		glFinish();
 		glClearDepthf(1.0f);
+		fprintf(stderr, "drew; gl error 0x%x\n", glGetError());
+		return 0;
+	}
+
+	if (mode == 30) {
+		/* A depth-tested draw into a texture-backed colour target with
+		 * a D24S8 depth buffer: the shape of docs/notes/gc-tiled-wire.md
+		 * W4/W5 (a TILED colour target, super-tiled depth, SINGLE_BUFFER,
+		 * early depth). No clear: the draw alone, then a read that
+		 * resolves the target. PE_COLOR_FORMAT's tiling bits,
+		 * PE_DEPTH_CONFIG, RA_EARLY_DEPTH, PE_LOGIC_OP's SINGLE_BUFFER and
+		 * the RS block are what to read (testdata/tiled-ez.golden). */
+		static unsigned char px[64 * 64 * 4];
+
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LESS);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+		glReadPixels(0, 0, 64, 64, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		glFinish();
 		fprintf(stderr, "drew; gl error 0x%x\n", glGetError());
 		return 0;
 	}

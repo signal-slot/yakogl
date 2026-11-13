@@ -825,6 +825,82 @@ side to diff. `cs_ours.c`'s mode list reserves the number as golden-only.
 The mode is the reference the tile-status steps of `gc-tiled-targets.md`
 are checked against once they exist.
 
+### A TILED target with super-tiled depth and early depth: mode 30 and `testdata/tiled-ez.golden`
+
+The words `docs/notes/gc-tiled-wire.md` W4 (a 32-bit tiled shadow target
+resolved by the RS in the same stream) and W5 (early depth into it) test
+against. Mode 30 renders into a 64x64 RGBA8 **texture** attached to an FBO
+(a shadow is a texture the scene renders into) with a 64x64
+`GL_DEPTH24_STENCIL8_OES` renderbuffer, enables `GL_LESS`, draws mode 1's
+triangle with no clear, and calls `glReadPixels`, whose resolve is the RS
+tiled-to-linear copy. Golden only: this backend has no `cs_ours` mode 30.
+The golden is `cs_decode.py`'s print of one submit of 462 words, nothing
+added; the raw dump's sha256 is `d4ec4a26...04c2e`, the memory dump's
+`a82c4707...d373f`. It reproduces like mode 29's, with `30` for `29`, `tiled-ez`
+for `ts-clear`, and the same build (cc line included):
+
+```sh
+cc -O1 -o cs_golden tools/vivante/cs_golden.c -I$MESA/include \
+    -L$BUILD/src/egl -L$BUILD/src/mesa/glapi/es2api -lEGL -lGLESv2
+rm -f tiled-ez.cs tiled-ez.mem
+LD_LIBRARY_PATH=$BUILD/src/egl:$BUILD/src/mesa/glapi/es2api:$BUILD/src/gallium/targets/dri \
+LD_PRELOAD=$BUILD/src/etnaviv/drm-shim/libetnaviv_noop_drm_shim.so \
+MESA_LOADER_DRIVER_OVERRIDE=etnaviv ETNA_SHIM_GPU=GC7000UL \
+ETNA_SHIM_CS_DUMP=tiled-ez.cs ETNA_SHIM_MEM_DUMP=tiled-ez.mem \
+    ./cs_golden 30
+python3 tools/vivante/cs_decode.py tiled-ez.cs \
+    --regs $MESA/src/etnaviv/hw/state_3d.xml.h \
+    --regs2 $MESA/src/etnaviv/hw/state.xml.h \
+    | diff tools/vivante/testdata/tiled-ez.golden -
+```
+
+Measured 2026-11-13 on the tree of mode 29 (1022 of 1022 steps; pycparser
+2.22 from its `release_v2.22` checkout on `PYTHONPATH`); mode 29 reproduced
+`ts-clear.golden` byte for byte with the same binary.
+
+**Mesa does not give an RGBA8 target TILED colour with super-tiled depth.**
+On the GC7000UL (`SUPER_TILED`, `SUPERTILED_TEXTURE`) it allocates the colour
+texture super-tiled as well, with a tile-status buffer; Mesa keeps a colour
+target TILED only for the 128-bit formats (no ES 2.0 render target), or when
+`ETNA_MESA_DEBUG=no_supertile` takes the super-tiled depth away too. The
+committed golden is the default run. The TILED colour words are the same mode
+run with `ETNA_MESA_DEBUG=no_supertile`, and differ from the golden in exactly
+these three lines, so the table gives both:
+
+| what | register (address) | default run (golden) | TILED colour (`no_supertile`) |
+| --- | --- | --- | --- |
+| colour tiling | `PE_COLOR_FORMAT` (0x0142c, the 7th word of the `PE_DEPTH_STRIDE` load at 0x01414) | 0x00112f06: format 6 (A8R8G8B8), components 0xf, `OVERWRITE` 0x10000, `SUPER_TILED` 0x100000, `SUPER_TILED_NEW` 0x2000 | 0x00010f06: the same without the two super-tiled bits |
+| depth | `PE_DEPTH_CONFIG` (0x01400) | 0x05051111: `DEPTH_MODE_Z`, `D24S8`, `EARLY_Z` 0x10000, `SUPER_TILED` 0x04000000 | 0x01051111: no `SUPER_TILED` |
+| RS source | `RS_SOURCE_STRIDE` (0x0160c) | 0xa8000400: `TILING`, `TS_MODE`, `SUPER_TILED_NEW`, stride 0x400 | 0x20000400: `TS_MODE`, stride 0x400, **no** `TILING` bit |
+
+Words that are the same in both runs, and are what W4 and W5 write:
+
+| what | register (address) | value |
+| --- | --- | --- |
+| early depth | `RA_EARLY_DEPTH` (0x00e08) | 0x05000031 |
+| depth | `PE_DEPTH_CONFIG` (0x01400, count 4), then `PE_DEPTH_STRIDE` 0x100 | `EARLY_Z` set (above); near/far 0x3f800000, 0x4b7fffff |
+| colour | `PE_COLOR_STRIDE` (0x01434) | 0x100 (the 64-pixel row of 4 bytes; the RS source stride is that times 4 in the TILED forms) |
+| single buffer | `PE_LOGIC_OP` (0x014a4, the 2nd word of the `PE_STENCIL_CONFIG_EXT` load at 0x014a0) | 0x000e426c: `SINGLE_BUFFER` field (0x300) = 2 |
+| PE memory | `PE_MEM_CONFIG` (0x014bc, the 8th word of that load) | 0x05000000 (`COLOR_TS_MODE`, `DEPTH_TS_MODE`) |
+| tile status | `TS_MEM_CONFIG` (0x01654, count 7) | 0x000043c0 and the TS bases (0xfffec000, 0xfffed000 colour; 0xffff1000, 0xffff2000 depth). Nothing is cleared, so the fast-clear bits are armed (mode 29: 0x43c3) but no clear value is written |
+| the resolve | `TS_MEM_CONFIG` | 0x00000000 (the resolve reads the surface, not the TS) |
+| the resolve | `RS_CONFIG` (0x01604) | 0x20000686 (`SOURCE_TILED`, `SWAP_RB`, A8R8G8B8 to A8R8G8B8, destination linear) |
+| the resolve | `RS_DEST_STRIDE` (0x01614) | 0x100 |
+| the resolve | `RS_PIPE_SOURCE_ADDR[0]` / `RS_PIPE_DEST_ADDR[0]` (0x016c0 / 0x016e0) | the colour surface (0xfffed000) / the linear staging buffer (0xffee5000) |
+| the resolve | `RS_WINDOW_SIZE` (0x01620) | 0x00400040 (64 x 64) |
+| the resolve | `RS_CLEAR_CONTROL` (0x0163c, count 5) | 0 |
+| the resolve | `RS_SINGLE_BUFFER` (0x016b8) | 1 before the kick, 0 after it |
+| the resolve | `RS_KICKER` (0x01600) | 0xbeebbeeb |
+
+The order in the stream is the point for W4: the draw, `GL_FLUSH_CACHE` 3,
+a semaphore and stall, `TS_MEM_CONFIG` 0, then the RS block above, ending in
+the kick and `RS_SINGLE_BUFFER` 0. The draw's state is `PE_DEPTH_CONFIG`
+through `TS_MEM_CONFIG` (lines 54-62 of the golden). Addresses are where the
+shim's allocator put the buffers; compare slots and contents, not the numbers.
+The `no_supertile` run is the evidence for the TILED forms; only the default
+run is committed. What the GC7000UL RS does with a TILED source is not
+something a host run can show.
+
 ### What the patch does, and why each piece is needed
 
 Four changes, all to the shim, none to the driver (`GC7000UL` is the first

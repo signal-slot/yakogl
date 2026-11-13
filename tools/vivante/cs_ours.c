@@ -84,6 +84,9 @@
  *   29    golden only: a tile-status fast clear of an RGBA8 + D24S8 target,
  *         one triangle, then a resolve to linear (glReadPixels). This
  *         backend has no tile status yet (testdata/ts-clear.golden)
+ *   30    golden only: a depth-tested draw into a texture-backed RGBA8
+ *         target with a D24S8 depth buffer, then a resolve to linear: the
+ *         gc_tiled_rt configuration (testdata/tiled-ez.golden)
  */
 struct pc_vertex {
 	float pos[4];
