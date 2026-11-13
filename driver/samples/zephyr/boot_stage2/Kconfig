@@ -27,6 +27,28 @@ config BOOT_STAGE2_SOURCE_EMMC
 
 endchoice
 
+config BOOT_STAGE2_BOOT0_ON_REQUEST
+	bool "A word on the console selects eMMC boot partition 1 (boot0) and resets"
+	depends on BOOT_STAGE2_SOURCE_EMMC && PM_CPU_OPS_PSCI && SERIAL
+	help
+	  The way back to the boot chain in boot0 without the recovery button:
+	  while the loader runs it looks at its console twice (when the eMMC is
+	  up, and before the jump), without waiting. BOOT_STAGE2_BOOT0_WORD
+	  received by then makes it write EXT_CSD PARTITION_CONFIG (byte 179) =
+	  0x48 with CMD6, read it back and reset the SoC through PSCI. Only
+	  that byte is ever written. Send the word repeatedly from the host
+	  across the reset.
+
+config BOOT_STAGE2_BOOT0_WORD
+	string "The word that asks for boot0"
+	depends on BOOT_STAGE2_BOOT0_ON_REQUEST
+	default "YK-BOOT0-9E3A71C5"
+	help
+	  At least 8 characters, and its first character must not occur in it
+	  again (the loader's matcher restarts on that character only). Short
+	  enough to arrive whole several times in the UART's receive FIFO (64
+	  bytes on the AM62P) while the loader brings the eMMC up.
+
 config BOOT_STAGE2_DISK
 	string "Disk name of the eMMC (the zephyr,mmc-disk node's disk-name)"
 	default "emmc"
