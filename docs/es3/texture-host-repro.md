@@ -70,6 +70,12 @@ The V3D library is the one GPU where the host shows real causes in
   GL core refuses a sized format none of whose storage classes the back end
   samples (`src/gl/es3_formats.rs` `storage_in`, the sized-formats design);
   the V3D samples RGBA8, SRGB8_ALPHA8, L8, A8, LA8 and R32F only.
+- (ETC2/EAC on the V3D since plan #354, `docs/notes/etc2-eac.md`: the four
+  block classes the GL core stores are in `V3D_SAMPLED_TEXFMTS`, the six other
+  formats are decoded at upload into R16F, RGBA16F, RGBA8 and SRGB8_A8, so a
+  compressed texture is no longer "a texel format the V3D does not sample";
+  `tests/es3_etc2_v3d.rs`. The picture verdicts of `texture.wrap` and
+  `texture.format.compressed` need a board: this host reads black.)
 - 24 `ResourceError` (`GL_OUT_OF_MEMORY` at the draw, which ends dEQP's
   process; the chunk went on in a second one): `rgba16f_*` (6 of `2d`, 6 of
   `cube`: "draw refused: a texture format other than RGBA8, SRGB8_ALPHA8,

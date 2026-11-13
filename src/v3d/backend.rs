@@ -981,8 +981,9 @@ struct Job {
     spills: [OsalGpuMem; JOB_SPILLS],
     nspills: usize,
     ntex: usize,
-    /// The job's packed sampler records by their state (`sampler_for`).
-    sampler_keys: [V3dSampler; SAMPLER_CACHE],
+    /// The job's packed sampler records by their state and depth compare
+    /// function (`sampler_for`).
+    sampler_keys: [(V3dSampler, u32); SAMPLER_CACHE],
     sampler_recs: [u32; SAMPLER_CACHE],
     nsamplers: usize,
 }
@@ -1046,19 +1047,22 @@ impl Job {
         spills: [OsalGpuMem::ZERO; JOB_SPILLS],
         nspills: 0,
         ntex: 0,
-        sampler_keys: [V3dSampler {
-            wrap_s: 0,
-            wrap_t: 0,
-            wrap_r: 0,
-            min_nearest: false,
-            mag_nearest: false,
-            mip_nearest: false,
-            mip_none: false,
-            min_lod: 0.0,
-            max_lod: 0.0,
-            lod_bias: 0.0,
-            border_color_mode: 0,
-        }; SAMPLER_CACHE],
+        sampler_keys: [(
+            V3dSampler {
+                wrap_s: 0,
+                wrap_t: 0,
+                wrap_r: 0,
+                min_nearest: false,
+                mag_nearest: false,
+                mip_nearest: false,
+                mip_none: false,
+                min_lod: 0.0,
+                max_lod: 0.0,
+                lod_bias: 0.0,
+                border_color_mode: 0,
+            },
+            0,
+        ); SAMPLER_CACHE],
         sampler_recs: [0; SAMPLER_CACHE],
         nsamplers: 0,
     };
@@ -5384,12 +5388,14 @@ pub extern "C" fn v3d_tiled_dump() -> u32 {
     n
 }
 
-/// A sampler state record for binding `b` in the texture arena.
-/// The job packs one record per sampler state and finds it again for the
-/// next draw that samples with the same state (the arena lives as long as the
-/// job, and a new job starts with an empty cache).
+/// A sampler state record for binding `b` in the texture arena, its depth
+/// compare included (`texture::pack_sampler`: a shadow look-up compares the
+/// texels with the reference in the TMU, docs/notes/v3d-shadow.md (a)).
+/// The job packs one record per (sampler state, compare function) and finds
+/// it again for the next draw that samples with the same pair (the arena
+/// lives as long as the job, and a new job starts with an empty cache).
 fn sampler_for(g: &mut V3dState, b: &GlesTextureBind) -> Result<u32, Attempt> {
-    let s = texture::sampler(b);
+    let s = (texture::sampler(b), texture::compare_function(b));
     let j = &g.j;
     if let Some(i) = j.sampler_keys[..j.nsamplers].iter().position(|k| *k == s) {
         g.samplers_reused = g.samplers_reused.wrapping_add(1);
@@ -5397,10 +5403,20 @@ fn sampler_for(g: &mut V3dState, b: &GlesTextureBind) -> Result<u32, Attempt> {
     }
     let (rec, cpu) = tex_alloc(g, V3D_SAMPLER_STATE_BYTES, V3D_TEX_RECORD_ALIGN as usize).ok_or(Attempt::Full)?;
     // SAFETY: V3D_SAMPLER_STATE_BYTES of the arena.
-    if !unsafe { v3d_tex_pack_sampler(cpu, &s) } {
+    if !unsafe { v3d_tex_pack_sampler(cpu, &s.0) } {
         return Err(Attempt::Refused(
             "the sampler state does not fit its record (v3d_tex_pack_sampler refused a field)",
         ));
+    }
+    /* The compare function is the only thing a shadow sampler adds to the
+     * compare-off record (`texture::sampler_compare_bits`, checked on Mesa's
+     * own packer by tools/v3d/tex_check.c). `texture::pack_sampler` does both
+     * in one call, but it needs `v3d_tex_pack_sampler_compare`, a C symbol
+     * every host test that links this back end would have to provide. */
+    let bits = texture::sampler_compare_bits(b);
+    if bits != 0 {
+        // SAFETY: the record's first word, in the arena, 32-byte aligned.
+        unsafe { (cpu as *mut u32).write(core::ptr::read(cpu as *const u32) | bits.to_le()) };
     }
     g.samplers_packed = g.samplers_packed.wrapping_add(1);
     let j = &mut g.j;
