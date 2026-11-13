@@ -128,6 +128,18 @@ config BOOT_STAGE2_SUMMARY_LINE
 	  (src/main.c, bs2_stamps_publish): the Verdin AM62P, quiet.conf. The
 	  i.MX8MP loader stays silent.
 
+config BOOT_STAGE2_STAMP_PAGE
+	bool "Leave the loader's stage stamps in a page of its RAM for the image"
+	default y if BOARD_VERDIN_IMX8MP
+	help
+	  The system counter at the loader's stages, written to physical
+	  0x41000000 just before the jump (src/main.c, bs2_stamps_publish): the
+	  middle of the i.MX8MP loader's 32 MiB, where the route-3 image reads
+	  them into its boot timeline (<cluster/boot_timeline.h>). Only where
+	  that address is the loader's own RAM (a BUILD_ASSERT): on the Verdin
+	  AM62P it is below the DDR (0x80000000), and the loader's times are the
+	  summary line.
+
 config BOOT_STAGE2_CHUNK_SECTORS
 	int "Sectors per disk read"
 	default 2048
