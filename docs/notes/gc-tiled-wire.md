@@ -870,6 +870,211 @@ origin/main`. Grep `tests/` and `src` for struct literals of anything that
 gains a field (`GcDraw`, `wide_target::Entry`, `ds_cache::Surface` are
 private; `YakoglBackend` is not touched by any item).
 
+## Session A: the run sheet
+
+The X2 session that W4 and W5 name ("Board check (session A ...)", above). It
+only measures: no code changes, and no default moves (W6 is a separate item,
+ordered after plan #351's i.MX8MP board run). Every fact below is read from the
+tree. No board address, host name, UART path or credential is written here,
+and none may go into a record.
+
+### Before any jump
+
+1. **One commit.** `git fetch origin`, `SHA=$(git rev-parse origin/main)`, the
+   same `SHA` for every image. It must carry W1-W5. Check, and stop with no
+   board touched if any of these finds nothing:
+   - `git grep -n 'TS_COLOR_STATUS_BASE' $SHA -- src/` (W1; today it finds
+     nothing, "What exists today" above);
+   - `git grep -n 'gc_debug_set_tiled_rt' $SHA -- src/ driver/samples/` (the
+     knob and both samples' calls, `driver/samples/zephyr/glmark2/src/main.cpp:1469-1472`,
+     `driver/samples/zephyr/gl_test/src/main_imx8mp.c:471-478`);
+   - `git grep -n 'early_z::' $SHA -- src/vivante/backend.rs` (W5's
+     `early_z::pe_bits` and `early_z::ra_word`, W5 "Touches" above);
+   - `git ls-tree --name-only $SHA tests/gc_tiled_rt.rs` (the host test of
+     W4 and W5, "Host tests" of each).
+
+   Write down `SHA` and `<sha8>` (its first eight characters).
+2. **Reachability from the leased worker, first.** This is the cause of the
+   2026-11-11 stop (`docs/notes/x2-glmark2-slow-scenes.md:11-24`): ping by the
+   board's name (`BOARD_HOST` from the environment) and ssh with the
+   persisted key, not a per-task forward. Then `tools/board.sh x2 status`
+   (reads the board, no jump). Any failure: no image is built for the board,
+   no jump is made, the report says the session did not start and why.
+3. **Two images from `SHA`, knob off and on, both from `origin/main` only.**
+   `tools/cts/x2-glmark2-scenes.sh` refuses a commit that is not an ancestor of
+   `origin/main`, tracked changes when it builds `HEAD`, and an image without
+   `gc_wdog_arm: armed` (`tools/cts/x2-glmark2-scenes.sh:29-32`, `:108-119`,
+   `:156-157`); `tools/board.sh` refuses such an image too (`tools/board.sh:56-58`).
+   Check each image with `grep -aF 'gc_wdog_arm: armed' <zephyr.bin>`.
+   `NETBOOT_NO_WATCHDOG=1` is never set; the script unsets it and
+   `BOARD_UART` for every board call (`:33-34`, `:171-172`).
+   - glmark2: `--commit "$SHA"` is the off image; the on image adds
+     `--conf CONFIG_GLMARK2_GC_TILED_RT=y`, the only key accepted
+     (`:18-23`, `:72`). On rows read `<sha8>+tiled_rt` in the commit column
+     and their directories get `-tiled_rt`, so both arms share one `<outdir>`.
+   - gl_test: `IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh <name> <first case> [-D...]`
+     builds `armadillo_x2/mimx8ml8/a53` into `$IMX8MP_OUT/x2/<name>` with
+     `CONFIG_GC_BOARD_WDOG_SELF_ARM=y` by default
+     (`tools/cts/imx8mp-gltest-build.sh:21-23`, `:56-59`;
+     `tools/cts/imx8mp-env.sh:18-22`). A sweep covers 48 case numbers from
+     the first case (`driver/samples/zephyr/gl_test/Kconfig:198-210`), so
+     cases 3 and 44 come from first case 0 and case 169 from first case 144
+     (selector = case - first, `imx8mp-gltest-build.sh:8-9`: 3, 44, 25). Four
+     images, each pair off and on, the on ones with
+     `-DCONFIG_GL_TEST_GC_TILED_RT=y` (`Kconfig:365-374`). Build from a
+     `git worktree add --detach` of `SHA`, never from a tree with changes.
+   - `--dry-run` (the script) and `DRYRUN=1` (the build script) touch no board;
+     run them first (`x2-glmark2-scenes.sh:40-41`,
+     `imx8mp-gltest-build.sh:25`).
+4. **Resources and the console.** `target:x2` and `target:x2-console`, and
+   optionally `target:x2-display`. The console only reads: no character is
+   sent to it, and `target:x2-display` (the NanoKVM) is observation only.
+   `BOARD_UART` comes from the environment only (`tools/board.sh:189-191`).
+   Never `target:imx8mp*`, `am62p*`, `rpi4*`, `rpi5*`, the NanoPC-T6 or the
+   STM32MP257F-DK. Nothing is installed or persisted, the eMMC boot
+   partitions, the U-Boot environment and swupdate are not touched, and the
+   board is left as found (`docs/notes/gc-ts-probe.md:97-99`, `:472-484`).
+
+### The order
+
+Terrain, shadow, refract, then gl_test cases 3, 44 and 169. Each is run off,
+then on, from the one `SHA`:
+
+| # | what | off, then on |
+|---|---|---|
+| 1 | terrain | one script call each: a run without a selector, then PERF pages `0x1000`, `0x1001`, `0x1003` (and `0x1004` when `gm_perf_page.h` has five pages), `x2-glmark2-scenes.sh:128-132` |
+| 2 | shadow | the same |
+| 3 | refract | the same |
+| 4 | gl_test case 3 (the case that hung when the two halves disagreed, W5 above) | one boot each |
+| 5 | gl_test case 44 (the 64-bit shadow) | one boot each |
+| 6 | gl_test case 169 (the depth canary) | one boot each |
+
+The glmark2 scenes go before gl_test so that a case 3 hang in the on arm
+still leaves their numbers.
+
+### The invocations
+
+From the checkout of `SHA` with `ZEPHYR_WS` and `GLMARK2_SRC` set
+(`x2-glmark2-scenes.sh:43-46`, `:105-106`), `BOARD_HOST` from the environment,
+and `<outdir>` outside the tree. One scene a call, so a stop is read between
+scenes:
+
+```sh
+tools/cts/x2-glmark2-scenes.sh --dry-run --commit "$SHA" <outdir> terrain shadow refract
+tools/cts/x2-glmark2-scenes.sh --dry-run --commit "$SHA" --conf CONFIG_GLMARK2_GC_TILED_RT=y <outdir> terrain shadow refract
+tools/cts/x2-glmark2-scenes.sh --commit "$SHA" <outdir> terrain
+tools/cts/x2-glmark2-scenes.sh --commit "$SHA" --conf CONFIG_GLMARK2_GC_TILED_RT=y <outdir> terrain
+# the same two lines for shadow, then for refract
+```
+
+Each call runs `tools/board.sh x2 run <image> <logdir> <name>` once a run
+(`x2-glmark2-scenes.sh:165-176`; usage `tools/board.sh:10`), with `SEL` set to
+the page selector. The gl_test boots, one case each, the image of its first
+case:
+
+```sh
+env -u NETBOOT_NO_WATCHDOG -u BOARD_UART SEL=3  tools/board.sh x2 run <gt0-off image>   <logdir> gt-case3-off
+env -u NETBOOT_NO_WATCHDOG -u BOARD_UART SEL=3  tools/board.sh x2 run <gt0-on image>    <logdir> gt-case3-on
+# SEL=44 on the gt0 images (gt-case44-off, -on); SEL=25 on the gt144 images (gt-case169-off, -on)
+```
+
+`tools/board.sh x2 stage <image> <logdir>` goes as far as the jump and never
+calls it (`tools/board.sh:45-49`): use it to check an image and the board
+again without a jump.
+
+### The words to quote
+
+- **The verdict line**, verbatim, one per run (`tools/board.sh:96-99`, `:895`):
+  `board.sh x2 <name> rc=<rc> verdict=<v> boot=kexec-dev DEV boot_verdict=<bv> result=<...> resets=<n> record=<w0,w1,w2> back_after=<s>s`.
+  A kexec-dev run says `DEV` and is never a row (`tools/board.sh:23-28`).
+  `verdict=done` is the only pass; `done_with_resets` is not clean
+  (`tools/board.sh:101-107`).
+- **The record words**: the `record=` field, three words on the X2, w3 is not
+  stored (`tools/board.sh:1128`). For a PERF page, quote the words and the
+  decoded `v0..v3` (`yakogl-tools record --words 3`,
+  `x2-glmark2-scenes.sh:185-193`): page 0's `v1` is the frame in us and gives
+  `ms/frame` (`:25`); pages 1, 3 and 4 give the swap and kicks, the GPU and
+  the CPU fallbacks (`driver/samples/zephyr/glmark2/src/gm_perf_page.h:17-34`).
+- **gl_test**: the CASE record of cases 3, 44 and 169 (status, first bad check,
+  got, want; `imx8mp-gltest-build.sh:8-9`).
+- **The arm is the console's**: the on images print `glmark2: gc_tiled_rt=1 ...`
+  (`main.cpp:1472`) or `gc_gl_test: gc_tiled_rt=1 ...` (`main_imx8mp.c:477`).
+  An "on" row without its line is not an on row; an off row has neither.
+- The `resets=` field is quoted as it is, never folded into a pass.
+
+### The records
+
+`<logdir>` is `records/x2/`. Each run writes
+`records/x2/<YYYYMMDD-HHMM>-<name>-<sha8>/` with `meta.txt`, `console.txt`,
+`INDEX.txt` and the backend's files (`tools/board.sh:118-124`), gitignored
+(`.gitignore:9-10`); the copies are redacted (IPv4 to 192.0.2.n, the board's
+host name to `<board-host>`, `tools/board.sh:124-125`). A note quotes
+the verdict line and the words only. The `*.out` and `table.tsv` of
+`x2-glmark2-scenes.sh` are read before anything of them is quoted: no address,
+UART path or credential.
+
+### Green, and a picture match
+
+- **Green**, per arm: every run ends `verdict=done` with `resets=0`; the marker
+  and (on) the knob line are in the console; the glmark2 table has an
+  `ms/frame` for each scene; gl_test cases 3, 44 and 169 each end with a CASE
+  record that passes; the on arm's page 4 fallbacks are no worse than off's.
+  Session A is green when both arms are. A cost row is not a verdict: the
+  criterion does not judge speed, and W6 is not decided here (it needs green
+  and a match, and is ordered after plan #351's board run).
+- **A picture match**: the on arm's picture equals the off arm's for terrain,
+  shadow and refract. The compared value is the scene's picture value
+  (five probes, crc16 of a 40x30 grid, the crc of the channels `>> 4`, the
+  mean colour, `black`; `main.cpp:231-246`), which a console prints as the
+  `glmark2-picture:` line (`tools/board.sh:167-168`, `main.cpp:87-89`).
+  Quote it for both arms from the X2 console record; `target:x2-display`
+  corroborates by eye and a picture seen without a value is written as such.
+  Equal crc16 is a match; a different one is a match only inside the picture
+  value's tolerance (`driver/docs/glmark2.md`, "The picture value"), the
+  quantised crc and the mean decide. `black`, or a difference above it, or a
+  case that passes in one arm only, is a mismatch: the knob stays off and the
+  row says so.
+
+### The stop rules
+
+- A run that does not come back (`board.sh` rc 5 or 6, `verdict=not_back`): the
+  whole session stops, no retry, the board is released and the report says it
+  needs a person (`x2-glmark2-scenes.sh:35-38`, `:218-221`; `tools/board.sh:112-114`).
+  The runner's limit is the limit (1500 s in all for x2 kexec-dev,
+  `tools/board.sh:206-209`): it is not raised and `NETBOOT_NO_WATCHDOG=1`
+  is not set.
+- A refused run (rc 3): stop, nothing retried (`x2-glmark2-scenes.sh:36-37`);
+  the cause is reported.
+- A hang or `failed`/`died_after` verdict of an on arm run: that is the
+  finding. No retry and no further on run in the session; the off rows taken
+  stay valid. A fence timeout is the hang's own sign (`gc-ts-probe.md:91-96`).
+- Any other verdict that is not `done` (rc 4) is a row, and the next run goes
+  on (`x2-glmark2-scenes.sh:37-38`).
+- The frame is `gc-ts-probe.md:78-99`: the supervisor feeds the self-armed
+  WDOG1 and resets the SoC, so a hang is a verdict, never something to wait out.
+- At every stop the board is left as found, `tools/board.sh x2 status` is run
+  once more and quoted, and nothing goes into `tools/cts/RESULTS.md`,
+  `STATUS.md` or `README.md`.
+
+### The rows to fill
+
+X2 numbers are development measurements (`x2-glmark2-scenes.sh:25-27`). With
+`SHA`, the verdict lines and the record words:
+
+- `docs/notes/x2-glmark2-slow-scenes.md`: a row per scene and arm (ms a frame,
+  the pages 1, 3 and 4 words, the picture line, the verdict line) and a row
+  per gl_test case and arm with its CASE record. The "What is left" section
+  there is replaced by them.
+- `docs/notes/gc-slow-terrain.md` and `docs/notes/gc-slow-shadow-refract.md`:
+  the off/on ms a frame for their scenes, beside the prediction, which is
+  compared and not edited. Terrain's row is W5's "0 to 14 ms".
+- This note: "What this note does not settle" loses the bullets session A
+  answers (the RS rate for 800x600, the RA's early depth with a TILED colour
+  under SINGLE_BUFFER(2), how many of terrain's fragments early depth
+  rejects), each with its row and commit.
+- The report gives the comment texts for #1204, #1106 and #15, and the title
+  and text of a new issue for each new defect. Agents never run `gh`.
+
 ## What this note does not settle
 
 - The RS rate for an 800x600 tiled→linear copy, and so W4's cost. Session A
