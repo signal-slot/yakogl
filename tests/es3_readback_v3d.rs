@@ -7,7 +7,11 @@
 //! GL_UNSIGNED_INT, or of GL_RGBA / GL_FLOAT.
 //!
 //! For every sized integer colour format and every float format the GL core
-//! makes renderbuffer storage of (R16F, RG16F, RGB16F, RGBA16F, R32F), a
+//! makes renderbuffer storage of (R16F, RG16F, RGB16F, RGBA16F, and R32F while
+//! the build makes it colour-renderable: ES 3.0 does not, only
+//! GL_EXT_color_buffer_float does, so the R32F rows run when a 1x1 R32F
+//! attachment of their kind is complete and otherwise check that the extension
+//! is not listed, and renderbuffer storage is GL_INVALID_ENUM, and are skipped), a
 //! renderbuffer is cleared with glClearBuffer{i,ui,f}v and read back with
 //! every (format, type) pair ES 3.0 4.3.1 lists for the class, the pair
 //! GL_IMPLEMENTATION_COLOR_READ_FORMAT / _TYPE names, and every other pair of
@@ -570,6 +574,59 @@ mod trampolines {
         with_platform(|p| p.log.clone())
     }
 
+    /// Is a 1x1 R32F attachment (a texture or a renderbuffer) complete? When
+    /// it is not, GL_EXT_color_buffer_float must not be listed, and
+    /// renderbuffer storage of it is GL_INVALID_ENUM. Needs the rig.
+    pub fn r32f_target_complete(texture: bool) -> bool {
+        use yakogl::gl::texture::*;
+        // SAFETY: plain GL calls with live out pointers; null pixels only allocate.
+        let (complete, storage) = unsafe {
+            while glGetError() != GL_NO_ERROR {}
+            let (mut name, mut fbo) = (0u32, 0u32);
+            let mut storage = GL_NO_ERROR;
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            if texture {
+                glGenTextures(1, &mut name);
+                glBindTexture(GL_TEXTURE_2D, name);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F as GLint, 1, 1, 0, GL_RED, GL_FLOAT, core::ptr::null());
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, name, 0);
+            } else {
+                glGenRenderbuffers(1, &mut name);
+                glBindRenderbuffer(GL_RENDERBUFFER, name);
+                glRenderbufferStorage(GL_RENDERBUFFER, GL_R32F, 1, 1);
+                storage = glGetError();
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, name);
+            }
+            let complete =
+                storage == GL_NO_ERROR && glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fbo);
+            if texture {
+                glDeleteTextures(1, &name);
+            } else {
+                glDeleteRenderbuffers(1, &name);
+            }
+            while glGetError() != GL_NO_ERROR {}
+            (complete, storage)
+        };
+        if !complete {
+            // SAFETY: GL_EXTENSIONS is a NUL-terminated string the core owns.
+            let ext = unsafe { core::ffi::CStr::from_ptr(glGetString(GL_EXTENSIONS) as *const core::ffi::c_char) }
+                .to_str()
+                .unwrap()
+                .to_owned();
+            assert!(!ext.split(' ').any(|e| e == "GL_EXT_color_buffer_float"), "{ext}");
+            if !texture {
+                assert_eq!(storage, GL_INVALID_ENUM, "R32F renderbuffer storage without GL_EXT_color_buffer_float");
+            }
+            eprintln!("skip: R32F {} is not colour-renderable here", if texture { "texture" } else { "renderbuffer" });
+        }
+        complete
+    }
+
     pub fn err() -> GLenum {
         // SAFETY: a plain GL call.
         unsafe { glGetError() }
@@ -631,7 +688,7 @@ mod trampolines {
 
     /// The float colour formats the GL core makes renderbuffer storage of
     /// (GL_EXT_color_buffer_half_float's four, and R32F; ES 3.0 itself has no
-    /// colour-renderable float format). RG16F and RGB16F are held in the
+    /// colour-renderable float format: `floats` drops R32F when it is not one). RG16F and RGB16F are held in the
     /// RGBA16F surface, four halves a pixel.
     pub const FLOATS: [Fmt; 5] = [
         f("R16F", GL_R16F, Class::Float, 1, 16),
@@ -944,6 +1001,13 @@ fn integer_formats_refuse_every_other_pair() {
     assert!(wrong.is_empty(), "{} pairs differ from the spec:\n{}", wrong.len(), wrong.join("\n"));
 }
 
+/// The float formats of `FLOATS` that are colour attachments of the kind
+/// here: R32F only when `gl_rig::r32f_target_complete` says so. Needs the rig.
+fn floats(texture: bool) -> Vec<Fmt> {
+    let r32f = gl_rig::r32f_target_complete(texture);
+    FLOATS.iter().filter(|f| f.gl != GL_R32F || r32f).copied().collect()
+}
+
 /* ---- the float class --------------------------------------------------------- */
 
 /// What a float format's clear reads back as RGBA / FLOAT today: the clear
@@ -964,7 +1028,7 @@ fn float_read_today(f: &Fmt) -> [f32; 4] {
 #[test]
 fn float_formats_read_their_clear_as_floats_and_bytes() {
     let _g = gl_rig::rig();
-    for f in FLOATS {
+    for f in floats(false) {
         let _fb = Fb::new(&[f]);
         f.clear(0);
         assert_eq!(gl_rig::err(), GL_NO_ERROR, "{}: the clear", f.name);
@@ -994,7 +1058,7 @@ fn float_formats_read_their_clear_as_floats_and_bytes() {
 fn float_formats_refuse_every_other_pair() {
     let _g = gl_rig::rig();
     let mut wrong = Vec::new();
-    for f in FLOATS {
+    for f in floats(false) {
         let _fb = Fb::new(&[f]);
         f.clear(0);
         wrong.extend(pairs_differing_from_the_spec(&f));
@@ -1032,8 +1096,8 @@ fn rg16f_reads_its_missing_blue_as_0() {
 #[test]
 fn the_implementation_pair_is_accepted() {
     let _g = gl_rig::rig();
-    for f in INTS.iter().chain(FLOATS.iter()) {
-        let _fb = Fb::new(&[*f]);
+    for f in INTS.iter().copied().chain(floats(false)) {
+        let _fb = Fb::new(&[f]);
         f.clear(0);
         let pair = implementation_pair();
         let want = match f.class {
@@ -1260,10 +1324,15 @@ fn release_texture_fb(tex: GLuint, fbo: GLuint) {
 #[test]
 fn texture_attachments_read_their_clear_the_same() {
     let _g = gl_rig::rig();
-    let complete: Vec<&Fmt> =
-        INTS.iter().filter(|f| f.channels == 4).chain(FLOATS.iter().filter(|f| f.channels != 3)).collect();
-    assert_eq!(complete.len(), 11);
-    for f in complete {
+    let float_tex = floats(true);
+    let complete: Vec<Fmt> = INTS
+        .iter()
+        .filter(|f| f.channels == 4)
+        .copied()
+        .chain(float_tex.iter().filter(|f| f.channels != 3).copied())
+        .collect();
+    assert_eq!(complete.len(), 7 + float_tex.iter().filter(|f| f.channels != 3).count());
+    for f in &complete {
         let (tex, fbo) = texture_fb(f);
         // SAFETY: a plain GL call.
         assert_eq!(unsafe { glCheckFramebufferStatus(GL_FRAMEBUFFER) }, GL_FRAMEBUFFER_COMPLETE, "{}", f.name);
