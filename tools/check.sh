@@ -1921,6 +1921,10 @@ step "test    $V3D_ES2_CONFIG (tests/es3_occlusion_gl.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_occlusion_gl
 step "test    $V3D_ES2_CONFIG (tests/es3_mrt_gl.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_mrt_gl
+# The ES 2.0 state next to each refusal b7c1484e moved to -ENOTSUP is
+# accepted (GL_NO_ERROR, no refused draw), through the report-es2 GL core.
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_refusals.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_refusals
 # The NanoPC-T6's Mali-G610 (`gpu-mali`): its backend builds each frame in
 # the OSAL's buffers and submits it through the Mali OSAL interface
 # (src/osal/mali.rs; on the host, a mock of it), and its shader back end
