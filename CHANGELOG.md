@@ -50,6 +50,13 @@ records at the tip.
 - dEQP-GLES3 on the Pi 4: rows 0-15, sixteen images, from main
   `b1b5b845`: 8,350 mustpass cases all with a result, 7,346 pass, 558
   fail, 446 not supported, 0 GPU recoveries (`d498d5ad`).
+- dEQP-GLES2 on the NanoPC-T6 (Mali-G610, panthor, the board's own
+  Armbian), the whole tree in two sessions, kept as slices under
+  `tools/cts/log/` (not yet a RESULTS.md row): S1 at main `a50d87b5`,
+  5,141 cases, 2,659 Pass, 2,445 Fail, 34 NotSupported, 3 QualityWarning
+  (`8fd2e909`); S2 at main `1bd2074f`, 4,872 cases, 1,245 Pass, 3,626
+  Fail, 1 ResourceError (`4ecefc7b`). Both ran with the same boot before
+  and after every chunk.
 - The full gate reads 222 ok, 0 failed, 0 gap(s) at `c66bea9f`
   (`4946e879`); green means that one commit and is re-run on the commit
   to publish.
@@ -189,6 +196,65 @@ records at the tip.
   64 MiB instead of loading it cut short, and its board self-test
   compares the loaders' window with the dts node (`2ded94b7`,
   `e1264cd1`).
+- GL core: the ETC2 and EAC blocks of the ten ES 3.0 compressed formats
+  decode on the CPU at upload (`4e539da8`, `src/gl/texture.rs`; the
+  design and dEQP's EAC tolerance in `docs/notes/etc2-eac.md`), and
+  `gl_test` case 20's compressed-format checks run through the GL core on
+  the host (`a8f0ea12`). R32I/UI and RG32I/UI have rows in
+  `integer_texture_surface` (`6c5b004f`) and the GC7000's sampled set
+  (`b5e04b14`).
+- GC7000: tiled 32-bit render targets with early depth behind
+  `gc_tiled_rt` (W1-W5, off by default; `9cdeff6d`,
+  `docs/notes/gc-tiled-wire.md`); `GLMARK2_GC_TILED_RT` and
+  `GL_TEST_GC_TILED_RT` switch it on from glmark2 and `gl_test`
+  (`98e847be`); the layout and depth-dump decode of the TS probe
+  are pure functions with a host test (`1cdf3d1b`, `b383d647`,
+  `docs/notes/gc-ts-probe.md`); and `gc_triangle`, a sample that draws
+  one triangle and checks its three apexes (`3bf0cebf`).
+- GL core: `src/msaa_hw/`, the module tree of the Valhall 4x FBO
+  descriptor and writeback resolve words, pure and unit-tested
+  (`fb51ce43`).
+- Mali (`gpu-mali`): the -0.0 rules of compares and negated-literal
+  products follow Mesa's algebraic rules or refuse by name
+  (`721b9df9`..`7b24cebe`), the uniform words pushed are Mesa's loads
+  (`125186a5`), and `driver/rust/src/board/nanopc_t6_osal.rs` is a
+  Zephyr OSAL over our own kernel side (K1, `4d9c670c`).
+- NanoPC-T6: the RK3588 display power domains (`6aefdd49`),
+  `ip::dw_hdmi_qp` (`e6f889c2`) and `ip::hdptx` (`6f022b17`) in
+  `driver/rust/src/ip/`, with the design in
+  `driver/docs/nanopc-t6-display.md`; the Z1, Z3 and Z4 records name the
+  GPU QoS policy (`cc5f1750`, `b619b3fa`).
+- STM32MP257F-DK: the display chain from LTDC to the ADV7535's HDMI, as
+  host-tested IP blocks (`ip::stm32_ltdc`, `ip::dw_mipi_dsi`,
+  `ip::stm32_dsi_phy`, `ip::stm32_i2c`, `ip::adv7535`,
+  `ip::stm32_gpio`), host models (`model_mp25_display.rs` and
+  `model_mp25_i2c.rs` in `driver/rust/src/`), the C ABI `ffi::mp25_display` and
+  `ffi::mp25_i2c`, and the Zephyr drivers over them; the
+  `mp2_display` probe, `tools/probes/stm32mp257f_dk/display_check/`
+  judging its colour bars from a KVM screenshot, and the gl_test,
+  glmark2 and dEQP builds for the DK (`cb69bd9b`, `fb94dafe`,
+  `b505bdff`). The board runs are still to do; the design is in
+  `docs/notes/stm32mp257f-dk-display-bringup.md` and
+  `docs/notes/stm32mp257f-dk-bringup.md`.
+- STM32MP257F-DK: `driver/tools/uboot-mp2/` runs the DK's typed U-Boot
+  one-shot scripts, with a QEMU test on U-Boot v2023.10
+  (`90d16804`, `de328573`); `tools/board-stm32mp2.sh` undoes its run on a
+  signal, never writes `bootcmd` (`7f285c49`) and keeps a hold after
+  the result line (`ac7e0988`).
+- Tools: `tools/cts/es2-tree-gate.py` reads a whole dEQP-GLES2 tree's
+  stage-1 fields against `es2-accepted.txt` (`99c8882c`);
+  `tools/cts/deqp-limits-tally.py` tallies the limit, state-query, UBO
+  and varying cases of host-deqp runs (`5554bb62`);
+  `tools/cts/x2-scene-table.py` prints the X2 slow-scene rows from
+  records (`edab7cf3`); `tools/cts/host-deqp-run.sh --compare` reads indented
+  result lines and refuses an empty side (`8816ebb4`, `615c5ba4`).
+- Tests: flat shading on V3D and GC7000UL, `tests/es3_flatshade_guard.rs`
+  (`bab1374f`); `tests/es3_float_target.rs` pins that a float colour
+  target is NotSupported or works, never an incomplete FBO
+  (`33e48bc1`, `docs/notes/es3-float-targets.md`); PowerVR int/uint
+  outputs from ALU results, conversions and MRT beside a float output;
+  and the V3D compiler's uniform block reads past dword 1536
+  (`b8c3f49b`).
 
 ### Changed
 
@@ -217,6 +283,11 @@ records at the tip.
   GLSL ES 3.00 program is `GL_INVALID_OPERATION` (`bc200f21`); and
   `glTexSubImage2D/3D` refuse `GL_FLOAT` into a texture with no float
   format (`bece11ec`).
+- Vivante: a program that writes `gl_FragDepth` turns early Z off through
+  the early-depth rule (`b3f42d14`); dedup's PE room holds the tiled
+  target's TS words (`be0c1527`).
+- V3D: `texture.rs` pins the sampler compare state of all eight GL
+  functions and the non-depth bypass (`753dedbf`).
 
 ### Fixed
 
