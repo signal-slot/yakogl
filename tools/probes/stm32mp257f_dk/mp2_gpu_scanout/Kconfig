@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config MP2_GPU_SCANOUT_HOLD_S
+	int "Seconds the picture is held after the verdict line"
+	default 60
+	range 0 600
+	help
+	  After the PASS or FAIL line the probe keeps the scan-out running this
+	  long before main() returns, so the runner's MP2_HOLD_S and the KVM
+	  can see the picture. The board layer's lifetime
+	  (CONFIG_YAKOGL_STM32MP2_LIFETIME_S) must cover it.
+
+config MP2_GPU_SCANOUT_WAIT_MS
+	int "Bound on the wait for each GPU fence, ms"
+	default 1000
+	range 1 10000
+	help
+	  gc_render_wait()'s bound, as gc_triangle's GC_TRIANGLE_WAIT_MS.
+	  Past it the render service dumps the GPU's state and the run fails.
+
+source "Kconfig.zephyr"
