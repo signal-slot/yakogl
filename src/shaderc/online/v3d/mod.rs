@@ -90,3 +90,5 @@ mod mesa_ref;
 mod roundtrip;
 #[cfg(test)]
 mod roundtrip71;
+#[cfg(test)]
+mod varyings_tests;
