@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict gl-case1 case1=PASS tally=PASS:0/1 final=PASS record=PASS:kind=1
+1 checks, 0 failed

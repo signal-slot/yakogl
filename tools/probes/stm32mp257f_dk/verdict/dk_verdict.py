@@ -17,11 +17,12 @@ import re
 import sys
 
 CHECKS = ["return-trial", "hang-trial", "handover", "identify-wdog", "gpu-identity",
-          "gpu-intr", "gpu-idle", "gc-irq", "gc-fence", "gc-clear", "gc-triangle"]
+          "gpu-intr", "gpu-idle", "gc-irq", "gc-fence", "gc-clear", "gc-triangle",
+          "gl-case1", "supply"]
 
 MODEL, REV = 0x8000, 0x6205
 INTR = 0xFFFFFFFF
-RECORD_MAGIC, KIND_APP = 0x594B0000, 2
+RECORD_MAGIC, KIND_APP, KIND_CASE = 0x594B0000, 2, 1
 STATUS_PASS = 1
 
 # board-stm32mp2.sh plain(): a leading "HH:MM:SS " or "<secs>.<frac> " stamp.
@@ -30,17 +31,20 @@ STAMP = re.compile(r"^([0-9:]{8}|[0-9]{9,}\.[0-9]+) ")
 ZLOG = re.compile(r"^\[[0-9:.,]+\] <[a-z]{3}> [A-Za-z0-9_]+: ")
 
 
-def clean(text):
+def clean(text, last_run=True):
     lines = []
     for raw in text.replace("\0", "").replace("\r", "").split("\n"):
         line = STAMP.sub("", raw)
         line = ZLOG.sub("", line)
         lines.append(line)
     # The last run: from the last "MP2:A EL<n>" (the image's first line).
+    # supply reads the whole capture instead: BL2's Reset reason line sits
+    # before the image's first line as well as after it.
     start = 0
-    for i, line in enumerate(lines):
-        if re.match(r"^MP2:A EL\d", line):
-            start = i
+    if last_run:
+        for i, line in enumerate(lines):
+            if re.match(r"^MP2:A EL\d", line):
+                start = i
     return lines[start:]
 
 
@@ -185,15 +189,15 @@ def check_gc_irq(log):
             ("igroupr", g.group(1) if g else "absent")]
 
 
-def record_field(log):
+def record_field(log, kind=KIND_APP):
     _, m = log.last(r"^yk-record: ([0-9a-f]{8}) ([0-9a-f]{8}) ([0-9a-f]{8}) ([0-9a-f]{8})$")
     if not m:
         return ("record", "FAIL:none")
     w = [int(g, 16) for g in m.groups()]
     if (w[0] & 0xFFFF0000) != RECORD_MAGIC:
         return ("record", "FAIL:magic")
-    kind = (w[0] >> 8) & 0xFF
-    return ("record", ps(kind == KIND_APP and (w[1] & 0xFF) == STATUS_PASS) + ":kind=%d" % kind)
+    found = (w[0] >> 8) & 0xFF
+    return ("record", ps(found == kind and (w[1] & 0xFF) == STATUS_PASS) + ":kind=%d" % found)
 
 
 def sample_model(log, name):
@@ -237,12 +241,63 @@ def check_gc_triangle(log):
     return out
 
 
+def check_gl_case1(log):
+    seen = [re.match(r"^gl_test: case 1 uniform: (PASS|FAIL|TIMEOUT)$", x) for x in log.lines]
+    seen = [m.group(1) for m in seen if m]
+    if not seen:
+        case1 = "FAIL:absent"
+    elif all(v == "PASS" for v in seen):
+        case1 = "PASS"
+    else:
+        v = next(v for v in seen if v != "PASS")
+        case1 = "FAIL" if v == "FAIL" else "FAIL:" + v
+    _, t = log.last(r"^gl_test: all: (\d+) of (\d+) cases failed\b")
+    tally = ps(bool(t) and t.group(1) == "0" and t.group(2) == "1") + \
+        (":%s/%s" % (t.group(1), t.group(2)) if t else ":absent")
+    return [("case1", case1), ("tally", tally),
+            sample_final(log, "gl_test", r"^gl_test: PASS$"), record_field(log, KIND_CASE)]
+
+
+# ST's TF-A BL2 prints "Reset reason: <text> (0x<raw RCC_C1BOOTRSTSCLRR>). Cold/Warm boot."
+# at the start of every boot (bl2_plat_setup.c:181-182), as a NOTICE line. The flag
+# names and bits are include/drivers/st/stm32mp25_rcc.h:2289-2309; the meaning of each
+# is docs/notes/stm32mp257f-dk-bringup.md, "When it looks like a hardware fault:
+# supply first": PORRSTF/BORRSTF are supply events, and a Cold boot (RTCCKEN lost)
+# is a power loss, never what a P6/P7 run asked for (a PSCI or watchdog reset stays
+# Warm). Any other boot - PSCI (SYSRST or pin), watchdog (IWDGn), the standby texts -
+# is not supply evidence and passes with its decoded reason.
+RESET_REASON = re.compile(r"Reset reason: (.+?) \(0x([0-9a-f]+)\)\. ?(Cold|Warm) boot\.")
+RCC_FLAGS = [(0, "PORRSTF"), (1, "BORRSTF"), (2, "PADRSTF"), (3, "HCSSRSTF"),
+             (4, "VCORERSTF"), (5, "VCPURSTF"), (6, "SYSC1RSTF"), (7, "SYSC2RSTF"),
+             (8, "IWDG1SYSRSTF"), (9, "IWDG2SYSRSTF"), (10, "IWDG3SYSRSTF"),
+             (11, "IWDG4SYSRSTF"), (12, "IWDG5SYSRSTF"), (13, "C1RSTF"),
+             (20, "STBYC1RSTF"), (22, "D1STBYRSTF")]
+
+
+def check_supply(log):
+    hits = [RESET_REASON.search(x) for x in log.lines]
+    hits = [m for m in hits if m]
+    if not hits:
+        return [("boot", "FAIL:none")]
+    out = []
+    for i, m in enumerate(hits, 1):
+        word, boot = int(m.group(2), 16), m.group(3)
+        # PORRSTF and BORRSTF name themselves; a cold boot with neither names
+        # ColdBoot. The rest of the decoded flags follow in bit order.
+        flags = (["ColdBoot"] if boot == "Cold" and not word & 0x3 else [])
+        flags += [name for bit, name in RCC_FLAGS if word >> bit & 1]
+        ok = not word & 0x3 and boot != "Cold"
+        out.append(("boot%d" % i, ps(ok) + ":" + boot + ":" + (",".join(flags) or "None")))
+    return out
+
+
 FUNCS = {
     "return-trial": check_return_trial, "hang-trial": check_hang_trial,
     "handover": check_handover, "identify-wdog": check_identify_wdog,
     "gpu-identity": check_gpu_identity, "gpu-intr": check_gpu_intr,
     "gpu-idle": check_gpu_idle, "gc-irq": check_gc_irq, "gc-fence": check_gc_fence,
     "gc-clear": check_gc_clear, "gc-triangle": check_gc_triangle,
+    "gl-case1": check_gl_case1, "supply": check_supply,
 }
 
 # What makes a check apply without --expect.
@@ -259,15 +314,19 @@ APPLIES = {
     "gc-fence": lambda l: l.has(r"^gc_fence: "),
     "gc-clear": lambda l: l.has(r"^gc_clear: "),
     "gc-triangle": lambda l: l.has(r"^gc_triangle: "),
+    "gl-case1": lambda l: l.has(r"^gl_test: "),
+    "supply": lambda l: l.has(r"Reset reason: "),
 }
 
 
 def run(text, expect, only):
     log = Log(clean(text))
+    whole = Log(clean(text, last_run=False))  # supply: also the BL2 lines
     results = []
     for c in CHECKS:
-        if (c in only) if only else (c in expect or APPLIES[c](log)):
-            fields = FUNCS[c](log)
+        subject = whole if c == "supply" else log
+        if (c in only) if only else (c in expect or APPLIES[c](subject)):
+            fields = FUNCS[c](subject)
             bad = any(v.startswith("FAIL") or (k, v) == ("igroupr", "mismatch") or
                       (k in ("intr", "idle") and v != "ok") for k, v in fields)
             line = "verdict %s %s" % (c, " ".join("%s=%s" % kvp for kvp in fields))

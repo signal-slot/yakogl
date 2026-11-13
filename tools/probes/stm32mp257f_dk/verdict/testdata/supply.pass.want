@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict supply boot1=PASS:Warm:IWDG2SYSRSTF boot2=PASS:Warm:PADRSTF,SYSC1RSTF
+1 checks, 0 failed

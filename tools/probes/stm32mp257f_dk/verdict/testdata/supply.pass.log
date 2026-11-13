@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=1 x0=0x80000000 x1=0x0 x2=0x0 x3=0x0 pc=0xa0000000 cntfrq=24000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 1234 ticks
+mp2: no watchdog armed by this image; PSCI SYSTEM_RESET at 20 s of uptime at the latest
+*** Booting Zephyr OS build v0.0.0 ***
+mp2_hello: build test
+mp2_hello: hanging on purpose with interrupts locked, 40 s
+NOTICE:  Reset reason: IWDG system reset (iwdgX_out_rst) (0x200). Warm boot.
+U-Boot 2023.10-stm32mp-r3.1
+STM32MP257F-DK/DHCOM
+Linux login:
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=1 x0=0x80000000 x1=0x0 x2=0x0 x3=0x0 pc=0xa0000000 cntfrq=24000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 1234 ticks
+*** Booting Zephyr OS build v0.0.0 ***
+gl_test: the first 1 case(s) of the regression set, from case 1
+gl_test: case 1 on the STM32MP257F-DK's GPU (lifetime 100000 ms)
+[00:00:02.100,000] <inf> gl_test: gl_test: start (case=1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+[00:00:06.800,000] <inf> gl_test: gl_test: case 1 uniform: PASS
+[00:00:06.820,000] <inf> gl_test: gl_test: all: 0 of 1 cases failed (1 passed; 0 timed out; first failure case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 0
+[00:00:06.830,000] <inf> gl_test: gl_test: done
+gl_test: the suite took 4730 ms
+yk-record: 594b0101 0001ff01 00000014 00000000
+gl_test: PASS
+mp2: board: run over: PSCI SYSTEM_RESET at 22000 ms
+NOTICE:  Reset reason: System reset (SYSRST) (0x44). Warm boot.
+U-Boot 2023.10-stm32mp-r3.1
+STM32MP257F-DK/DHCOM
+Linux login:
