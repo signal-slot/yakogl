@@ -300,13 +300,17 @@ type UvGradients = [[SelSrc; 2]; 2];
 /// the footprints gathered at the two levels (the same one twice unless a
 /// MIPMAP_LINEAR filter blends), those levels as integers, the blend
 /// weight of the second, whether the filter within the level is NEAREST,
-/// and the coordinate the footprints are at.
+/// and the coordinate the footprints are at. A cube's ([`Sel::pcf_cube_taps`])
+/// also says which tap of each footprint is past a corner of the face, and
+/// its face is square: the level's width both ways.
 struct Pcf {
-    taps: [VReg; 2],
+    taps: [[SelSrc; 4]; 2],
+    corners: Option<[[SelSrc; 4]; 2]>,
     levels: [SelSrc; 2],
     t: SelSrc,
     nearest: SelSrc,
     uv: [SelSrc; 2],
+    square: bool,
 }
 
 struct Sel<'a> {
@@ -1736,13 +1740,15 @@ impl<'a> Sel<'a> {
              * follows the coordinate: lane 2 for a 2D sampler, lane 3 for a
              * cube or a 2D array (ir::Op::Tex).
              *
-             * And, for a 2D sampler and a 2D array (native or stacked), the
-             * compare per texel (PCF) that ES 3.0 asks of a filter that
-             * blends: the four texels of the bilinear footprint gathered raw
-             * (pco's tg4, `gather`) at the level -- or the two levels of a
-             * MIPMAP_LINEAR filter -- the program chooses (`pcf_taps`), each
-             * compared, the four results weighted as the TPU would weight
-             * the depths (docs/es3/pvr-2darray.md section 7.2). Which of the
+             * And, for a 2D sampler, a 2D array (native or stacked) and a
+             * cube (native or stacked), the compare per texel (PCF) that ES
+             * 3.0 asks of a filter that blends: the four texels of the
+             * bilinear footprint gathered raw (pco's tg4, `gather`) at the
+             * level -- or the two levels of a MIPMAP_LINEAR filter -- the
+             * program chooses (`pcf_taps`; a cube's taps one by one across
+             * the face's edges, `pcf_cube_taps`), each compared, the four
+             * results weighted as the TPU would weight the depths
+             * (docs/es3/pvr-2darray.md section 7.2). Which of the
              * two the pixel takes, and the filter, are the sampler's to say
              * when the shader runs (sampler meta dword 13, the back end's
              * `shadow_filter_word`), so one program serves every filter. */
@@ -1793,6 +1799,9 @@ impl<'a> Sel<'a> {
                         let rl = self.fresh_typed(SelOp::Alu(frcp), op_type(frcp), [Some(layers), None, None])?;
                         Some(self.pcf_taps(sampler, lod, [u, v], raw, Some(rl), None, offset)?)
                     }
+                    /* a cube, native or stacked: each tap of the face's
+                     * footprint a texel of its own, seamless */
+                    ir::TexDim::Cube => Some(self.pcf_cube_taps(sampler, lod, coord)?),
                     _ => None,
                 };
                 self.shadow_compare(id, sampler, SelSrc::Virtual { v: depth, mods: Mods::default() }, reference, pcf)
@@ -3107,7 +3116,7 @@ impl<'a> Sel<'a> {
         r: SelSrc,
         pcf: Option<Pcf>,
     ) -> Result<(), SelectError> {
-        use ir::AluOp::{Bcsel, Fadd, Feq, Ffma, Fle, Flt, Fmax, Fmin, I2f, Iand, Ine, Ior};
+        use ir::AluOp::{Bcsel, Fadd, Feq, Ffma, Fle, Flt, Fmax, Fmin, Fmul, I2f, Iand, Ine, Ior};
         let imm = |x: u32| Some(SelSrc::Imm(x));
         let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
         let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
@@ -3138,7 +3147,7 @@ impl<'a> Sel<'a> {
             g(s, Bcsel, [Some(pass), f(1.0), f(0.0)])
         };
         let mut compared = compare(self, d)?;
-        if let Some(Pcf { taps, levels, t, nearest, uv: [u, v] }) = pcf {
+        if let Some(Pcf { taps, corners, levels, t, nearest, uv: [u, v], square }) = pcf {
             /* mix(a, b, t) = ffma(t, b - a, a), as the front end lowers it */
             let mix = |s: &mut Self, a: SelSrc, b: SelSrc, t: SelSrc| -> Result<SelSrc, SelectError> {
                 let na = s.modified(a, Mods { neg: true, abs: false, flr: false })?;
@@ -3149,14 +3158,30 @@ impl<'a> Sel<'a> {
             for (k, (taps, level)) in taps.into_iter().zip(levels).enumerate() {
                 /* the four compares: (i0, j0), (i1, j0), (i0, j1), (i1, j1) */
                 let mut c = [SelSrc::Imm(0); 4];
-                for (j, cj) in c.iter_mut().enumerate() {
-                    *cj = compare(self, SelSrc::Virtual { v: VReg(taps.0 + j as u32), mods: Mods::default() })?;
+                for (cj, tap) in c.iter_mut().zip(taps) {
+                    *cj = compare(self, tap)?;
+                }
+                /* a cube's tap past a corner of the face: the mean of the
+                 * other three compares (texref.rs, dEQP's
+                 * getCubeLinearSamples), (sum - c) / 3; one tap at most */
+                if let Some(corners) = corners {
+                    let s01 = g(self, Fadd, [Some(c[0]), Some(c[1]), None])?;
+                    let s23 = g(self, Fadd, [Some(c[2]), Some(c[3]), None])?;
+                    let sum = g(self, Fadd, [Some(s01), Some(s23), None])?;
+                    for (cj, corner) in c.iter_mut().zip(corners[k]) {
+                        let nc = self.modified(*cj, Mods { neg: true, abs: false, flr: false })?;
+                        let rest = g(self, Fadd, [Some(sum), Some(nc), None])?;
+                        let mean = g(self, Fmul, [Some(rest), f(1.0 / 3.0), None])?;
+                        *cj = g(self, Bcsel, [Some(corner), Some(mean), Some(*cj)])?;
+                    }
                 }
                 /* the weights: fract(coord * size - 0.5) per axis, size at
                  * the level (the layer's for a native array, the stacked
-                 * image's for a stacked one); fract(x) = x - floor(x), floor
-                 * a source modifier on this machine; 0 or 1 for NEAREST */
+                 * image's for a stacked one, the face's width both ways for
+                 * a cube); fract(x) = x - floor(x), floor a source modifier
+                 * on this machine; 0 or 1 for NEAREST */
                 let [w, h] = self.tex_size_2d(sampler, level)?;
+                let h = if square { w } else { h };
                 let mut fr = [SelSrc::Imm(0); 2];
                 for (axis, (coord, n)) in [(u, w), (v, h)].into_iter().enumerate() {
                     let nf = g(self, I2f, [Some(n), None, None])?;
@@ -3229,9 +3254,7 @@ impl<'a> Sel<'a> {
         layer: Option<(SelSrc, SelSrc)>,
         offset: Option<[i8; 3]>,
     ) -> Result<Pcf, SelectError> {
-        use ir::AluOp::{Bcsel, F2i, Fadd, Fddx, Fddy, Ffma, Flog2, Flt, Fmax, Fmin, Fmul, I2f, Iand, Ine};
-        let imm = |x: u32| Some(SelSrc::Imm(x));
-        let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
+        use ir::AluOp::{F2i, Fddx, Fddy, Fmul, I2f};
         let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
         let grads = match lod {
             ir::TexLod::Grad { ddx, ddy } => {
@@ -3254,15 +3277,69 @@ impl<'a> Sel<'a> {
             }
             _ => None,
         };
-        let lambda = match (lod, grads) {
+        let lambda = self.pcf_lambda(lod, grads, |s| {
+            let [w, h] = s.tex_size_2d(sampler, SelSrc::Imm(0))?;
+            let wf = g(s, I2f, [Some(w), None, None])?;
+            let mut hf = g(s, I2f, [Some(h), None, None])?;
+            if let Some(r) = v_scale {
+                hf = g(s, Fmul, [Some(hf), Some(r), None])?;
+            }
+            Ok([wf, hf])
+        })?;
+        let ([d1, d2], t, nearest) = self.pcf_levels(sampler, lambda)?;
+
+        let offset = offset.map(|[du, dv, _]| super::sel::lookup_word(du, dv));
+        let mut taps = [[SelSrc::Imm(0); 4]; 2];
+        for (tap, level) in taps.iter_mut().zip([d1, d2]) {
+            if let Some((lo, hi)) = layer {
+                self.emit(SelGroup {
+                    op: SelOp::SampleAddr,
+                    ty: OpType::U32,
+                    dst: None,
+                    srcs: [Some(lo), Some(hi), None],
+                })?;
+            }
+            let at = VReg(self.next_vreg);
+            self.next_vreg += LANES;
+            self.emit(SelGroup {
+                op: SelOp::Sample {
+                    binding: sampler,
+                    proj: false,
+                    lod: SmpLod::Replace,
+                    fetch: false,
+                    offset,
+                    cube: false,
+                    layer: layer.is_some(),
+                    gather: true,
+                },
+                ty: OpType::F32,
+                dst: Some(SelDst::Virtual(at)),
+                srcs: [Some(uv[0]), Some(uv[1]), Some(level)],
+            })?;
+            *tap = [0, 1, 2, 3].map(|j| SelSrc::Virtual { v: VReg(at.0 + j), mods: Mods::default() });
+        }
+        let levels = [g(self, F2i, [Some(d1), None, None])?, g(self, F2i, [Some(d2), None, None])?];
+        Ok(Pcf { taps, corners: None, levels, t, nearest, uv, square: false })
+    }
+
+    /// A shadow look-up's level of detail for [`Self::pcf_taps`] and
+    /// [`Self::pcf_cube_taps`]: `textureLod`'s level; else, with `grads`
+    /// (`[[du/dx, dv/dx], [du/dy, dv/dy]]` in normalised coordinates),
+    /// log2 of the longer gradient in texels of level 0 (`size`, floats,
+    /// computed only then) plus a bias; else 0 (a vertex shader).
+    fn pcf_lambda(
+        &mut self,
+        lod: ir::TexLod,
+        grads: Option<[[SelSrc; 2]; 2]>,
+        size: impl FnOnce(&mut Self) -> Result<[SelSrc; 2], SelectError>,
+    ) -> Result<SelSrc, SelectError> {
+        use ir::AluOp::{Ffma, Flog2, Fmax, Fmul};
+        let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
+        let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
+        Ok(match (lod, grads) {
             (ir::TexLod::Lod(l), _) => self.src(l, 0)?,
             (_, Some(d)) => {
-                let [w, h] = self.tex_size_2d(sampler, SelSrc::Imm(0))?;
-                let wf = g(self, I2f, [Some(w), None, None])?;
-                let mut hf = g(self, I2f, [Some(h), None, None])?;
-                if let Some(r) = v_scale {
-                    hf = g(self, Fmul, [Some(hf), Some(r), None])?;
-                }
+                let [wf, hf] = size(self)?;
                 let mut len2 = [SelSrc::Imm(0); 2];
                 for (k, [du, dv]) in d.into_iter().enumerate() {
                     let a = g(self, Fmul, [Some(du), Some(wf), None])?;
@@ -3282,7 +3359,18 @@ impl<'a> Sel<'a> {
             }
             /* a vertex shader's implicit level: 0 */
             _ => self.fresh_typed(SelOp::Copy, OpType::F32, [f(0.0), None, None])?,
-        };
+        })
+    }
+
+    /// The level(s) a shadow look-up's filter reads at level of detail
+    /// `lambda` ([`Self::pcf_taps`]' table, sampler meta dword 13): the two
+    /// levels as floats, the blend weight of the second, and whether the
+    /// filter within the level is NEAREST.
+    fn pcf_levels(&mut self, sampler: u8, lambda: SelSrc) -> Result<([SelSrc; 2], SelSrc, SelSrc), SelectError> {
+        use ir::AluOp::{Bcsel, Fadd, Ffma, Flt, Fmax, Fmin, I2f, Iand, Ine};
+        let imm = |x: u32| Some(SelSrc::Imm(x));
+        let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
+        let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
         let meta = self.fresh_group(SelOp::TexWord { binding: sampler, word: 13 }, [None; 3])?;
         let bit = |s: &mut Self, b: u32| -> Result<SelSrc, SelectError> {
             let x = g(s, Iand, [Some(meta), imm(b), None])?;
@@ -3315,38 +3403,264 @@ impl<'a> Sel<'a> {
         let d1 = g(self, Bcsel, [Some(minified), Some(pick), f(0.0)])?;
         let d2 = g(self, Bcsel, [Some(blend), Some(second), Some(d1)])?;
         let t = g(self, Bcsel, [Some(blend), Some(fraction), f(0.0)])?;
+        Ok(([d1, d2], t, nearest))
+    }
 
-        let offset = offset.map(|[du, dv, _]| super::sel::lookup_word(du, dv));
-        let mut taps = [VReg(0); 2];
-        for (tap, level) in taps.iter_mut().zip([d1, d2]) {
-            if let Some((lo, hi)) = layer {
-                self.emit(SelGroup {
-                    op: SelOp::SampleAddr,
-                    ty: OpType::U32,
-                    dst: None,
-                    srcs: [Some(lo), Some(hi), None],
-                })?;
-            }
-            *tap = VReg(self.next_vreg);
-            self.next_vreg += LANES;
-            self.emit(SelGroup {
-                op: SelOp::Sample {
-                    binding: sampler,
-                    proj: false,
-                    lod: SmpLod::Replace,
-                    fetch: false,
-                    offset,
-                    cube: false,
-                    layer: layer.is_some(),
-                    gather: true,
-                },
-                ty: OpType::F32,
-                dst: Some(SelDst::Virtual(*tap)),
-                srcs: [Some(uv[0]), Some(uv[1]), Some(level)],
-            })?;
+    /// The footprints a cube shadow look-up's compare per texel weighs
+    /// ([`Self::shadow_compare`]), seamless as ES 3.0 filters a cube and as
+    /// dEQP's reference compares one (texref.rs `sample_cube_compare`):
+    ///
+    /// - the face of the direction and (s, t) on it ([`Self::cube_face`]);
+    ///   the level of detail from the gradients of (s, t) in texels of level
+    ///   0's face (the quotient rule on the direction's gradients:
+    ///   `textureGrad`'s or the quad's), and the level(s) the filter reads
+    ///   ([`Self::pcf_levels`]), as [`Self::pcf_taps`] takes them;
+    /// - at each level, of face width n, the bilinear footprint i0 =
+    ///   floor(s n - 0.5), j0 likewise, and for each of its four taps the
+    ///   texel it reads: the tap's centre on the face's plane
+    ///   ([`Self::face_direction`]) selected and projected as any direction
+    ///   is -- the tap itself inside the face, past one edge the neighbouring
+    ///   face's edge texel along the same row or column (texref.rs
+    ///   `seamless_texel`); past a corner (outside in both axes) the tap is
+    ///   flagged, for the mean of the other three compares;
+    /// - each texel read by a gather a quarter texel past its centre,
+    ///   ((i + 0.75) / n, (j + 0.75) / n) on its face, whose first tap is
+    ///   that texel: on the stacked image at (u, (face + v) / 6), on the
+    ///   TPU's own cube (`native_cube`) at that point's direction.
+    ///
+    /// Eight gathers, four taps at each of the two levels.
+    fn pcf_cube_taps(&mut self, sampler: u8, lod: ir::TexLod, coord: ir::Src) -> Result<Pcf, SelectError> {
+        use ir::AluOp::{F2i, Fadd, Fddx, Fddy, Ffma, Fle, Flt, Fmax, Fmin, Fmul, Frcp, I2f, Iand, Ior};
+        let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
+        let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
+        let mut d = [SelSrc::Imm(0); 3];
+        for (k, dk) in d.iter_mut().enumerate() {
+            *dk = self.src(coord, k as u32)?;
         }
-        let levels = [g(self, F2i, [Some(d1), None, None])?, g(self, F2i, [Some(d2), None, None])?];
-        Ok(Pcf { taps, levels, t, nearest, uv })
+        let dd = match lod {
+            ir::TexLod::Grad { ddx, ddy } => {
+                let mut dd = [[SelSrc::Imm(0); 3]; 2];
+                for (j, v) in [ddx, ddy].into_iter().enumerate() {
+                    for (k, x) in dd[j].iter_mut().enumerate() {
+                        *x = self.src(ir::Src::id(v), k as u32)?;
+                    }
+                }
+                Some(dd)
+            }
+            ir::TexLod::Implicit | ir::TexLod::Bias(_) if self.m.stage == SHC_STAGE_FRAGMENT => {
+                let mut dd = [[SelSrc::Imm(0); 3]; 2];
+                for (j, op) in [Fddx, Fddy].into_iter().enumerate() {
+                    for (k, x) in dd[j].iter_mut().enumerate() {
+                        *x = g(self, op, [Some(d[k]), None, None])?;
+                    }
+                }
+                Some(dd)
+            }
+            _ => None,
+        };
+        let (face, st, grads) = self.cube_face(d, dd)?;
+        let lambda = self.pcf_lambda(lod, grads, |s| {
+            let [w, _] = s.tex_size_2d(sampler, SelSrc::Imm(0))?;
+            let wf = g(s, I2f, [Some(w), None, None])?;
+            Ok([wf, wf])
+        })?;
+        let ([d1, d2], t, nearest) = self.pcf_levels(sampler, lambda)?;
+        let native = crate::shaderc::native_cube_enabled();
+        let mut taps = [[SelSrc::Imm(0); 4]; 2];
+        let mut corners = [[SelSrc::Imm(0); 4]; 2];
+        let mut levels = [SelSrc::Imm(0); 2];
+        for (k, level) in [d1, d2].into_iter().enumerate() {
+            levels[k] = g(self, F2i, [Some(level), None, None])?;
+            let [w, _] = self.tex_size_2d(sampler, levels[k])?;
+            let n = g(self, I2f, [Some(w), None, None])?;
+            let rn = g(self, Frcp, [Some(n), None, None])?;
+            let last = g(self, Fadd, [Some(n), f(-1.0), None])?;
+            /* a texel's centre on the plane, (2 i + 1) / n - 1 */
+            let two_rn = g(self, Fadd, [Some(rn), Some(rn), None])?;
+            let centre0 = g(self, Fadd, [Some(rn), f(-1.0), None])?;
+            /* per axis: i0 = floor(s n - 0.5) and i0 + 1, whether each is
+             * outside the face, and its centre */
+            let mut out = [[SelSrc::Imm(0); 2]; 2];
+            let mut centre = [[SelSrc::Imm(0); 2]; 2];
+            for axis in 0..2 {
+                let x = g(self, Ffma, [Some(st[axis]), Some(n), f(-0.5)])?;
+                let i0 = self.modified(x, Mods { neg: false, abs: false, flr: true })?;
+                let i1 = g(self, Fadd, [Some(i0), f(1.0), None])?;
+                for (b, i) in [i0, i1].into_iter().enumerate() {
+                    let below = g(self, Flt, [Some(i), f(0.0), None])?;
+                    let above = g(self, Fle, [Some(n), Some(i), None])?;
+                    out[axis][b] = g(self, Ior, [Some(below), Some(above), None])?;
+                    centre[axis][b] = g(self, Ffma, [Some(i), Some(two_rn), Some(centre0)])?;
+                }
+            }
+            for (j, (a, b)) in [(0, 0), (1, 0), (0, 1), (1, 1)].into_iter().enumerate() {
+                corners[k][j] = g(self, Iand, [Some(out[0][a]), Some(out[1][b]), None])?;
+                let p = self.face_direction(face, centre[0][a], centre[1][b])?;
+                let (tap_face, tap_st, _) = self.cube_face(p, None)?;
+                /* the texel the centre falls in, a quarter texel past its
+                 * centre (clamped: a corner tap's point is anywhere) */
+                let mut at = [SelSrc::Imm(0); 2];
+                for (axis, x) in at.iter_mut().enumerate() {
+                    let sn = g(self, Fmul, [Some(tap_st[axis]), Some(n), None])?;
+                    let fl = self.modified(sn, Mods { neg: false, abs: false, flr: true })?;
+                    let lo = g(self, Fmax, [Some(fl), f(0.0), None])?;
+                    let i = g(self, Fmin, [Some(lo), Some(last), None])?;
+                    let q = g(self, Fadd, [Some(i), f(0.75), None])?;
+                    *x = g(self, Fmul, [Some(q), Some(rn), None])?;
+                }
+                let (u, v) = if native {
+                    let sc = g(self, Ffma, [Some(at[0]), f(2.0), f(-1.0)])?;
+                    let tc = g(self, Ffma, [Some(at[1]), f(2.0), f(-1.0)])?;
+                    let [x, y, z] = self.face_direction(tap_face, sc, tc)?;
+                    self.emit(SelGroup {
+                        op: SelOp::SampleZ { vol: false },
+                        ty: OpType::F32,
+                        dst: None,
+                        srcs: [Some(z), None, None],
+                    })?;
+                    (x, y)
+                } else {
+                    let vf = g(self, Fadd, [Some(at[1]), Some(tap_face), None])?;
+                    (at[0], g(self, Fmul, [Some(vf), f(1.0 / 6.0), None])?)
+                };
+                let tap = VReg(self.next_vreg);
+                self.next_vreg += LANES;
+                self.emit(SelGroup {
+                    op: SelOp::Sample {
+                        binding: sampler,
+                        proj: false,
+                        lod: SmpLod::Replace,
+                        fetch: false,
+                        offset: None,
+                        cube: native,
+                        layer: false,
+                        gather: true,
+                    },
+                    ty: OpType::F32,
+                    dst: Some(SelDst::Virtual(tap)),
+                    srcs: [Some(u), Some(v), Some(level)],
+                })?;
+                taps[k][j] = SelSrc::Virtual { v: tap, mods: Mods::default() };
+            }
+        }
+        Ok(Pcf { taps, corners: Some(corners), levels, t, nearest, uv: st, square: true })
+    }
+
+    /// A cube direction's face and its coordinates as [`Self::cube_uv`]
+    /// selects and projects them (its major axis, ties and signs), without
+    /// the stacked image's clamp: the face (0..5 as a float, GL's order),
+    /// (s, t) in [0, 1] on it, and with `dd` (d/dx and d/dy of the
+    /// direction) the gradients of (s, t), `[[ds/dx, dt/dx], [ds/dy,
+    /// dt/dy]]` -- the quotient rule, (dsc - (sc / ma) dma) * 0.5 / ma, the
+    /// major axis and signs chosen as for the direction.
+    fn cube_face(
+        &mut self,
+        d: [SelSrc; 3],
+        dd: Option<[[SelSrc; 3]; 2]>,
+    ) -> Result<(SelSrc, [SelSrc; 2], Option<UvGradients>), SelectError> {
+        use ir::AluOp::{Bcsel, Ffma, Fle, Flt, Fmul, Frcp, Iand};
+        let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
+        let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
+        let copy = |s: &mut Self, x: SelSrc| s.fresh_typed(SelOp::Copy, OpType::F32, [Some(x), None, None]);
+        let neg = Mods { neg: true, abs: false, flr: false };
+        /* each lane, its negation and its magnitude: a modifier is a source
+         * modifier on this machine, so each is a move carrying it */
+        let (mut v, mut n, mut a) = ([SelSrc::Imm(0); 3], [SelSrc::Imm(0); 3], [SelSrc::Imm(0); 3]);
+        for k in 0..3 {
+            v[k] = copy(self, d[k])?;
+            n[k] = self.modified(v[k], neg)?;
+            a[k] = self.modified(v[k], Mods { neg: false, abs: true, flr: false })?;
+        }
+        let y_le_x = g(self, Fle, [Some(a[1]), Some(a[0]), None])?;
+        let z_le_x = g(self, Fle, [Some(a[2]), Some(a[0]), None])?;
+        let x_major = g(self, Iand, [Some(y_le_x), Some(z_le_x), None])?;
+        let y_major = g(self, Fle, [Some(a[2]), Some(a[1]), None])?;
+        let mut pos = [SelSrc::Imm(0); 3];
+        for k in 0..3 {
+            pos[k] = g(self, Flt, [f(0.0), Some(v[k]), None])?;
+        }
+        let pick = |s: &mut Self, c: SelSrc, x: Option<SelSrc>, y: Option<SelSrc>| g(s, Bcsel, [Some(c), x, y]);
+        let choose = |s: &mut Self, x: SelSrc, y: SelSrc, z: SelSrc| -> Result<SelSrc, SelectError> {
+            let yz = pick(s, y_major, Some(y), Some(z))?;
+            pick(s, x_major, Some(x), Some(yz))
+        };
+        /* each major axis: (face, sc, tc) */
+        let fx = pick(self, pos[0], f(0.0), f(1.0))?;
+        let ux = pick(self, pos[0], Some(n[2]), Some(v[2]))?;
+        let fy = pick(self, pos[1], f(2.0), f(3.0))?;
+        let vy = pick(self, pos[1], Some(v[2]), Some(n[2]))?;
+        let fz = pick(self, pos[2], f(4.0), f(5.0))?;
+        let uz = pick(self, pos[2], Some(v[0]), Some(n[0]))?;
+        let ma = choose(self, a[0], a[1], a[2])?;
+        let face = choose(self, fx, fy, fz)?;
+        let sc = choose(self, ux, v[0], uz)?;
+        let tc = choose(self, n[1], vy, n[1])?;
+        let r = g(self, Frcp, [Some(ma), None, None])?;
+        let mut q = [SelSrc::Imm(0); 2];
+        let mut st = [SelSrc::Imm(0); 2];
+        for (axis, c) in [sc, tc].into_iter().enumerate() {
+            q[axis] = g(self, Fmul, [Some(c), Some(r), None])?;
+            st[axis] = g(self, Ffma, [Some(q[axis]), f(0.5), f(0.5)])?;
+        }
+        let Some(dd) = dd else { return Ok((face, st, None)) };
+        let half_r = g(self, Fmul, [Some(r), f(0.5), None])?;
+        let mut out = [[SelSrc::Imm(0); 2]; 2];
+        for (j, dj) in dd.into_iter().enumerate() {
+            let (mut dv, mut dn) = ([SelSrc::Imm(0); 3], [SelSrc::Imm(0); 3]);
+            for k in 0..3 {
+                dv[k] = copy(self, dj[k])?;
+                dn[k] = self.modified(dv[k], neg)?;
+            }
+            let dsc_x = pick(self, pos[0], Some(dn[2]), Some(dv[2]))?;
+            let dsc_z = pick(self, pos[2], Some(dv[0]), Some(dn[0]))?;
+            let dtc_y = pick(self, pos[1], Some(dv[2]), Some(dn[2]))?;
+            let mut dma = [SelSrc::Imm(0); 3];
+            for k in 0..3 {
+                dma[k] = pick(self, pos[k], Some(dv[k]), Some(dn[k]))?;
+            }
+            let dsc = choose(self, dsc_x, dv[0], dsc_z)?;
+            let dtc = choose(self, dn[1], dtc_y, dn[1])?;
+            let dm = choose(self, dma[0], dma[1], dma[2])?;
+            for (axis, ds) in [dsc, dtc].into_iter().enumerate() {
+                let nq = self.modified(q[axis], neg)?;
+                let t = g(self, Ffma, [Some(nq), Some(dm), Some(ds)])?;
+                out[j][axis] = g(self, Fmul, [Some(t), Some(half_r), None])?;
+            }
+        }
+        Ok((face, st, Some(out)))
+    }
+
+    /// The direction of the point (sc, tc) (each in [-1, 1] inside the
+    /// face, past it beyond) on the plane of cube face `face` (0..5 as a
+    /// float), the major axis at 1: the inverse of [`Self::cube_face`]'s
+    /// projection (texref.rs `face_direction`), a select per face.
+    fn face_direction(&mut self, face: SelSrc, sc: SelSrc, tc: SelSrc) -> Result<[SelSrc; 3], SelectError> {
+        use ir::AluOp::{Bcsel, Feq};
+        let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
+        let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
+        let neg = Mods { neg: true, abs: false, flr: false };
+        let (nsc, ntc) = (self.modified(sc, neg)?, self.modified(tc, neg)?);
+        let mut is = [SelSrc::Imm(0); 5];
+        for (k, x) in is.iter_mut().enumerate() {
+            *x = g(self, Feq, [Some(face), f(k as f32), None])?;
+        }
+        let one = SelSrc::Imm(1.0f32.to_bits());
+        let minus_one = SelSrc::Imm((-1.0f32).to_bits());
+        /* +X, -X, +Y, -Y, +Z, -Z */
+        let table = [
+            [one, minus_one, sc, sc, sc, nsc],
+            [ntc, ntc, one, minus_one, ntc, ntc],
+            [nsc, sc, tc, ntc, one, minus_one],
+        ];
+        let mut out = [SelSrc::Imm(0); 3];
+        for (o, row) in out.iter_mut().zip(table) {
+            let mut acc = row[5];
+            for k in (0..5).rev() {
+                acc = g(self, Bcsel, [Some(is[k]), Some(row[k]), Some(acc)])?;
+            }
+            *o = acc;
+        }
+        Ok(out)
     }
 
     fn fresh_group(&mut self, op: SelOp, srcs: [Option<SelSrc>; 3]) -> Result<SelSrc, SelectError> {
