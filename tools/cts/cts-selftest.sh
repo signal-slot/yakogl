@@ -584,23 +584,24 @@ echo
 # tools/license_audit.allow, or a .license sidecar) fails: missing-spdx must be
 # 0, and so must unknown-id (an identifier with no text in LICENSES/) and the
 # two mismatch classes, and unused-license (a text in LICENSES/ no file
-# names). `undecided` rows (provenance open, listed in
-# docs/release/license-audit.md) are printed as information. A new source file: add
-# the two SPDX lines; a new data file: add a row to the allowlist.
+# names), and undecided (a file whose provenance is open, listed in
+# docs/release/license-audit.md). A new source file: add the two SPDX lines; a
+# new data file: add a row to the allowlist.
 echo
 echo "== 25. license_audit.py --fail-on missing-spdx,... over the repository"
-larep=$(python3 -I "$LA" --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license 2>&1)
+larep=$(python3 -I "$LA" --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license,undecided 2>&1)
 larc=$?
 launk=$(printf '%s\n' "$larep" | sed -n 's/^unknown-id: \([0-9][0-9]*\)$/\1/p')
 lamiss=$(printf '%s\n' "$larep" | sed -n 's/^missing-spdx: \([0-9][0-9]*\)$/\1/p')
 laund=$(printf '%s\n' "$larep" | sed -n 's/^undecided: \([0-9][0-9]*\)$/\1/p')
+laund=${laund:-0}
 if [ -z "$launk" ] || [ -z "$lamiss" ]; then
     bad "license audit: no unknown-id / missing-spdx line in the report (exit $larc)"
     printf '%s\n' "$larep" | tail -5 | sed 's/^/        | /'
 elif [ "$larc" -ne 0 ]; then
-    bad "license audit: missing-spdx $lamiss, unknown-id $launk, or another --fail-on class (python3 -I tools/license_audit.py)"
+    bad "license audit: missing-spdx $lamiss, unknown-id $launk, undecided $laund, or another --fail-on class (python3 -I tools/license_audit.py)"
 else
-    ok "license audit: missing-spdx 0, unknown-id 0; undecided ${laund:-0} (information)"
+    ok "license audit: missing-spdx 0, unknown-id 0, undecided 0"
 fi
 
 # ---- 26: glmark2-fb.py decodes a synthetic frame dump ----------------------
