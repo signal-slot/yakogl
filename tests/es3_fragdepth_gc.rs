@@ -18,11 +18,12 @@
 //! lane-faithful interpreter of `tests/common`.
 //!
 //! Early Z is pinned through the rule: `writes_z` is derived from the compiled
-//! record (`ps_depth_out_reg != SHC_VIV_NO_REG`, as the back end will) and fed
+//! record (`ps_depth_out_reg != SHC_VIV_NO_REG`, as the back end does) and fed
 //! to `yakogl::vivante::early_z::early_z`, whose early test, early write,
 //! PE_DEPTH_CONFIG bits and RA_EARLY_DEPTH word are asserted. The back end
-//! does not call the rule yet: the PE/RA words it EMITS are pinned by item
-//! gc-fragdepth-earlyz.
+//! calls `early_z()` for a program that writes depth: `tiled_ez` runs the rule
+//! with the layout for a draw into a tiled shadow, and `draw_early_z` gives the
+//! linear "never" for every other draw.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_fragdepth_gc
@@ -413,10 +414,10 @@ fn early_z_words_for_every_layout_and_sample_count() {
     }
 }
 
-/// What the back end emits today is the Linear answer for every target:
-/// `draw_early_z` takes only `writes_z`, so no colour target, an MSAA target
-/// and a tiled target all get the words of a linear single-sample one. This
-/// pins that, and that the rule differs for a depth-only target (the control
+/// The back end's fallback, `draw_early_z` (every draw `tiled_ez` does not
+/// take), is the Linear answer for every target: it takes only `writes_z`, so
+/// no colour target, an MSAA target and a tiled target all get the words of a
+/// linear single-sample one. This pins that, and that the rule differs for a depth-only target (the control
 /// would be early): a finding, not a failure.
 #[test]
 fn the_back_end_words_do_not_follow_the_layout_or_the_samples() {
