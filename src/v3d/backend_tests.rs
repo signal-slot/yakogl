@@ -1806,6 +1806,136 @@ fn a_sampler_record_is_packed_once_per_job() {
     assert_eq!(v3d_finish(), 0);
 }
 
+/// A shadow binding's record carries its compare function, and the cache keys
+/// on it: the same sampler state with another function (or none) is another
+/// record, the same function is found again (the fake packer keeps the wrap
+/// in word 0's low bits, so the function's bits 4-6 are the real record's).
+/// Revert check: packing with the state alone gives LESS and LEQUAL one
+/// record with the field at 0.
+#[test]
+fn a_sampler_record_carries_the_depth_compare_and_is_keyed_on_it() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let t = narrow_texture(16, 16, 1, GLES_TEXFMT_R32F);
+    let with = |op: u8| {
+        let mut b = t;
+        b.compare_op = op;
+        b
+    };
+    /* GL_LESS - GL_NEVER = 1, GL_LEQUAL = 3; 16 is compare off */
+    for op in [1u8, 3, 16, 1, 3 | 8] {
+        let mut d = sampling(&rig, with(op));
+        d.fs = &p;
+        assert_eq!(draw(&d), 0, "op {op}: {:?}", rig.gl.logs());
+    }
+    let draws = rig.draws();
+    let rec: Vec<u32> = draws.iter().map(|d| d.tmu[0].sampler).collect();
+    assert_eq!(rec[0], rec[3], "LESS twice, one record");
+    assert_eq!(rec[1], rec[4], "LEQUAL with the fixed-point bit, the same record (bit 3 is not in it)");
+    assert!(rec[0] != rec[1] && rec[0] != rec[2] && rec[1] != rec[2], "three functions, three records");
+    for (i, want) in [1u32, 3, 0, 1, 3].into_iter().enumerate() {
+        assert_eq!((words(&rig, rec[i], 6)[0] >> 4) & 7, want, "draw {i}: the record's compare function");
+    }
+    assert_eq!(sampler_counters(), (3, 2));
+    /* a colour texture never compares */
+    let mut c = texture(0, 16, 16, 1);
+    c.compare_op = 1;
+    assert_eq!(draw(&sampling(&rig, c)), 0);
+    let r = rig.draws().last().unwrap().tmu[0].sampler;
+    assert_eq!((words(&rig, r, 6)[0] >> 4) & 7, 0);
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// The V3D's table asks the GL core for raster rows of blocks with no level or
+/// row alignment (`gl::texture::compressed_chain_layout`, which
+/// `texture::gl_level_blocks` mirrors), and layers sampled natively:
+/// tests/es3_etc2_v3d.rs checks the GL core's storage against that layout on
+/// a stand-in with these flags.
+#[test]
+fn the_v3d_table_reads_blocks_in_raster_rows() {
+    let t = &yakogl_backend_v3d;
+    assert!(t.compressed_blocks_in_rows);
+    assert_eq!((t.mip_level_align, t.linear_row_align), (0, 0));
+    assert!(t.native_layered_textures && t.etc1_decoded_at_upload);
+}
+
+/// An ETC2 texture of the GL core's raster rows of blocks is drawn (the TMU
+/// decodes it, `V3D_SAMPLED_TEXFMTS`): each of the five classes, its chain
+/// tiled from the grid of blocks `gl_level_blocks` names, the record carrying
+/// the image's size; a draw that sampled one was refused as "a texel format
+/// the V3D does not sample" until the mask listed them. A 3D texture of a
+/// compressed format is still refused, by name. Revert check: removing the
+/// classes from the mask gives rc < 0 and the refusal on every row.
+#[test]
+fn an_etc2_texture_is_drawn_and_its_blocks_are_tiled_as_texels() {
+    let rig = Rig::new();
+    rig.init();
+    for (format, bb) in [
+        (GLES_TEXFMT_ETC2_RGB, 8u32),
+        (GLES_TEXFMT_ETC2_SRGB_RGB, 8),
+        (GLES_TEXFMT_ETC2_RGB_PT, 8),
+        (GLES_TEXFMT_ETC2_RGBA, 16),
+        (GLES_TEXFMT_ETC2_SRGB_RGBA, 16),
+    ] {
+        let (w, h, levels) = (10u32, 6u32, 3u32);
+        let b = GlesTextureBind {
+            width: w,
+            height: h,
+            stride_texels: (w + 1) & !1,
+            layers: 1,
+            mip_levels: levels as u8,
+            mip_filter: 1,
+            format,
+            ..GlesTextureBind::ZERO
+        };
+        assert_eq!(texture::block_bytes(&b), Some(bb), "format {format}");
+        let bytes = texture::gl_bytes(&b) as usize;
+        let mut mem = OsalGpuMem::ZERO;
+        assert_eq!(crate::osal::gpu_alloc(V3D_HEAP_DATA, bytes, OSAL_MEM_DATA, &mut mem), 0);
+        for i in 0..bytes {
+            // SAFETY: inside the allocation (gl_bytes).
+            unsafe { *(mem.cpu as *mut u8).add(i) = (i as u8).wrapping_mul(7).wrapping_add(format) };
+        }
+        let b = GlesTextureBind { base_gpu: mem.gpu, ..b };
+        let mut d = sampling(&rig, b);
+        d.do_clear = true;
+        assert_eq!(draw(&d), 0, "format {format}: {:?}", rig.gl.logs());
+        assert_eq!(v3d_flush(), 0);
+        let u = rig.draws().last().unwrap().tmu[0];
+        let st = words(&rig, u.tex_state, 6);
+        assert_eq!((st[1], st[2]), (w, h), "format {format}: the image's size, not the grid's");
+        assert_eq!(st[3] & 0xffff, levels - 1, "format {format}: max level");
+        /* level 0's grid of 3 x 2 blocks, tiled as the fake lays it out
+         * (rows packed at the block size): block (2, 1) is the grid's last */
+        let (off, gw, gh) = texture::gl_level_blocks(w, h, 1, bb, 0);
+        assert_eq!((off, gw, gh), (0, 3, 2));
+        let layout = texture::layout(&b).expect("lays out");
+        assert_eq!((layout.width, layout.height, layout.cpp), (w, h, bb));
+        // SAFETY: the allocation is `bytes` long, the grid is its first level.
+        let src = unsafe { core::slice::from_raw_parts(mem.cpu as *const u8, (gw * gh * bb) as usize) };
+        let stride = layout.slices[0].stride;
+        let tiled = rig.gpu_bytes(st[0], ((gh - 1) * stride + gw * bb) as usize);
+        assert!(
+            (0..gh).all(|y| tiled[(y * stride) as usize..][..(gw * bb) as usize]
+                == src[(y * gw * bb) as usize..][..(gw * bb) as usize]),
+            "format {format}: level 0's blocks"
+        );
+    }
+    /* ES 3.0 has no compressed 3D texture */
+    let vol = GlesTextureBind {
+        width: 8,
+        height: 8,
+        layers: 4,
+        type_: GLES_TEXTYPE_3D,
+        mip_levels: 1,
+        format: GLES_TEXFMT_ETC2_RGB,
+        ..GlesTextureBind::ZERO
+    };
+    assert_eq!(texture::refusal(&vol), Some("a 3D texture of a compressed format"));
+    assert_eq!(v3d_finish(), 0);
+}
+
 /// A texture is tiled once per job: the next draw of the job finds its image
 /// and record again; a new job tiles it again (a CPU write in between would
 /// have flushed the job first, `kick_pending`).
