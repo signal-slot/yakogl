@@ -5,8 +5,9 @@
 # selftest.sh: host check of the DK one-shot scripts, no board, no network.
 #   - build.sh builds both scripts; tools/uboot_script.py check/extract read
 #     them back, byte for byte;
-#   - with mkimage present, its output equals uboot_script.py's (with
-#     SOURCE_DATE_EPOCH set);
+#   - with mkimage present (on PATH, or MKIMAGE=/path), its output equals
+#     uboot_script.py's (with SOURCE_DATE_EPOCH set); without it the check is
+#     counted as skipped in the summary, and MP2_REQUIRE_MKIMAGE=1 fails it;
 #   - lint: only allowed commands, no write of the environment or of a disk,
 #     setenv only of mp2z_* (and autoload), every echo starts with "mp2z: ",
 #     the undo is the first line, "mp2z: go" the last before go;
@@ -21,6 +22,8 @@ T=$(mktemp -d "${TMPDIR:-$PWD}/uboot-mp2-selftest.XXXXXX")
 trap 'rm -rf "$T"' EXIT
 pass=0
 fail=0
+skip=0
+skipped=()
 ok() { pass=$((pass + 1)); echo "ok   $1"; }
 bad() { fail=$((fail + 1)); echo "FAIL $1"; }
 expect_ok() { local what=$1; shift; if "$@" > "$T/out" 2>&1; then ok "$what"; else bad "$what"; sed 's/^/     /' "$T/out"; fi; }
@@ -172,12 +175,31 @@ for k in mmc net; do
 done
 
 # ---- 2. mkimage, when present
-if command -v mkimage > /dev/null; then
+# MKIMAGE=/path/to/mkimage names the tool (build.sh finds "mkimage" on PATH, so
+# a link to it goes first on PATH). MP2_REQUIRE_MKIMAGE=1 makes its absence a failure.
+have_mk=""
+if [ -n "${MKIMAGE:-}" ]; then
+	if [ -x "$MKIMAGE" ]; then
+		mkdir "$T/mkbin"
+		ln -s "$(readlink -f "$MKIMAGE")" "$T/mkbin/mkimage"
+		export PATH="$T/mkbin:$PATH"
+		have_mk=1
+	else
+		bad "MKIMAGE=$MKIMAGE is not an executable"
+	fi
+elif command -v mkimage > /dev/null; then
+	have_mk=1
+fi
+if [ -n "$have_mk" ]; then
 	bash "$here/build.sh" "$T/mk" > /dev/null
 	for k in mmc net; do
 		expect_ok "$k: mkimage and uboot_script.py give identical bytes" cmp "$T/mk/mp2-$k.scr" "$T/py/mp2-$k.scr"
 	done
+elif [ -n "${MP2_REQUIRE_MKIMAGE:-}" ]; then
+	bad "mkimage comparison: mkimage not on PATH and MP2_REQUIRE_MKIMAGE is set"
 else
+	skip=$((skip + 1))
+	skipped+=("mkimage not on PATH")
 	echo "skip mkimage comparison: mkimage not on PATH"
 fi
 
@@ -229,5 +251,9 @@ tail_of() { sed -n '/^# The Image header magic/,$p' "$1"; }
 expect_ok "both scripts carry the same image checks and jump" \
 	cmp <(tail_of "$here/mp2-mmc.cmd") <(tail_of "$here/mp2-net.cmd")
 
-echo "uboot-mp2 selftest: $pass ok, $fail failed"
+summary="uboot-mp2 selftest: $pass ok, $fail failed, $skip skipped"
+if [ "$skip" -gt 0 ]; then
+	summary="$summary ($(printf '%s; ' "${skipped[@]}" | sed 's/; $//'))"
+fi
+echo "$summary"
 [ "$fail" -eq 0 ]

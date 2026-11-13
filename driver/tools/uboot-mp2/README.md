@@ -23,8 +23,9 @@ A runner stops U-Boot's autoboot on the console and types **one line**. It
 loads a staged script, sources it, and falls back to the stock boot. Nothing is
 written to the environment: no `saveenv`, no `env save`, no `setenv` of a
 variable other than `mp2z_*` (the net script also sets `autoload` and puts it
-back before every exit and before `go`). `bootcmd` is never named by a
-command. A hang is reset by BL2's IWDG (about 32 s); the next autoboot reaches
+back before every exit and before `go`). The scripts never name `bootcmd`
+in a command (only in the undo echo). `bootcmd` is not set, changed or written
+by the scripts or by the typed line, which only runs it as the fallback. A hang is reset by BL2's IWDG (about 32 s); the next autoboot reaches
 ST's extlinux. The undo, printed first by each script:
 `mp2z: undo: nothing persistent; run bootcmd boots ST Linux`.
 
@@ -68,17 +69,19 @@ Contract (shared with the sibling items):
 
 ```sh
 driver/tools/uboot-mp2/build.sh /path/to/out       # mkimage if present, else tools/uboot_script.py
-driver/tools/uboot-mp2/selftest.sh                  # 52 checks, host only
+driver/tools/uboot-mp2/selftest.sh                  # 54 checks with mkimage (52 without), host only
 ```
 
 `mkimage -A arm64 -O linux -T script -C none -n <name> -d <cmd> <scr>`; without
 `mkimage`, `tools/uboot_script.py build` makes the same bytes (needs no
 u-boot-tools). With `SOURCE_DATE_EPOCH` set both produce identical bytes; the
-selftest compares them when `mkimage` is on `PATH` and says it skipped that
-otherwise. The selftest also builds both scripts, reads them back with
+selftest compares them when `mkimage` is on `PATH` (or named by
+`MKIMAGE=/path/to/mkimage`). Otherwise the summary counts the skip
+(`..., 1 skipped (mkimage not on PATH)`, exit 0), and `MP2_REQUIRE_MKIMAGE=1`
+turns the skip into a failure. The selftest also builds both scripts, reads them back with
 `uboot_script.py check`/`extract`, lints them (allowed commands only; no
 `saveenv`, `env save|write|erase`, `mmc write`, `ext4write`, `fatwrite`, `gpt`,
-`setenv` outside `mp2z_*`/`autoload`, no `bootcmd` in a command; the undo
+`setenv` outside `mp2z_*`/`autoload`, no `bootcmd` in a command except the undo echo; the undo
 first, `mp2z: go` last), compares `mp2z_load`/`mp2z_window` with
 `driver/boards/st/stm32mp257f_dk`'s `zephyr,sram` and `tools/board-stm32mp2.sh`'s
 `YAKO_ADDR`/`LOAD_END`, and shows that each of those checks fails on a mutated
