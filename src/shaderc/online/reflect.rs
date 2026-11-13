@@ -1071,6 +1071,105 @@ pub fn varying_budget(
     check_rows(Budget::Varyings, packed_varyings(vs, fs), rows)
 }
 
+/// The ES 3.00 shader-interface limits a pair is held to, as the GPU reports
+/// them (the four `GL_MAX_*` queries of ES 3.0 table 6.32), in the units the
+/// queries use. Passed in, as `rows` is for [`varying_budget`], so the check
+/// knows no GPU.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Es3VaryingLimits {
+    pub max_varying_vectors: usize,
+    pub max_varying_components: usize,
+    pub max_fragment_input_components: usize,
+    pub max_vertex_output_components: usize,
+}
+
+/// The ES 3.00 varying budget: what [`varying_budget`] leaves out for an
+/// ES 3.00 pair. Err(the log sentence, naming the limit) when
+///
+/// - the vertex shader's outputs exceed MAX_VERTEX_OUTPUT_COMPONENTS,
+/// - the fragment shader's inputs exceed MAX_FRAGMENT_INPUT_COMPONENTS,
+/// - the varyings used by both stages exceed MAX_VARYING_COMPONENTS, or do
+///   not fit MAX_VARYING_VECTORS rows ([`crate::shaderc::packing`]).
+///
+/// ```text
+/// OpenGL ES 3.0 section 2.12.8 (Shader Variables, Varying Variables):
+/// LinkProgram will fail if the number of components of the active output
+/// variables of the vertex shader exceeds MAX_VERTEX_OUTPUT_COMPONENTS, or
+/// the components of the active input variables of the fragment shader
+/// exceed MAX_FRAGMENT_INPUT_COMPONENTS [...]
+/// ```
+///
+/// Decisions (the spec text does not settle them; dEQP's varying cases and
+/// Mesa's counting agree):
+/// - gl_Position and gl_PointSize are not counted, nor are gl_FragCoord,
+///   gl_FrontFacing and gl_PointCoord: the limits are for user-declared
+///   varyings. (The ES 1.00 path counts the fragment built-ins, as Appendix
+///   A 7 says; it is unchanged.)
+/// - A varying counts when the stage statically uses it ([`Interface::uses`]);
+///   a vertex output counts whether or not the fragment shader reads it.
+/// - A component is a real component: vecN N, matN N*N (a non-square matrix
+///   as the square of the greater side, GLSL ES 3.00 section 11), an array
+///   times its length. `int`, `uint` and `bool` count one like `float`.
+/// - The component limits are totals, so packing does not enter them; the
+///   vector limit uses the Appendix A packing of the matched varyings, which
+///   is never stricter than whole rows.
+///
+/// An ES 1.00 pair passes: [`varying_budget`] is its rule.
+///
+/// Wiring: `online/backend.rs` calls [`varying_budget`] at the link; the call
+/// for this goes beside it, with the GPU's four constants.
+pub fn varying_budget_es3(vs: &Interface<'_>, fs: &Interface<'_>, limits: Es3VaryingLimits) -> Result<(), String> {
+    use crate::shaderc::packing::{check_rows, Budget, Kind, Var};
+    if !(vs.es3() && fs.es3()) {
+        return Ok(());
+    }
+    let kind = |r: &VaryingRow<'_>| Kind::of_gl_type(u32::from(r.gl_type)).unwrap_or(Kind::Vec4);
+    let comps = |r: &VaryingRow<'_>| -> usize {
+        let per = match kind(r) {
+            Kind::Mat4 => 16,
+            Kind::Mat3 => 9,
+            Kind::Mat2 => 4,
+            Kind::Vec4 => 4,
+            Kind::Vec3 => 3,
+            Kind::Vec2 => 2,
+            Kind::Float => 1,
+        };
+        per * usize::from(r.count).max(1)
+    };
+    let used = |i: &Interface<'_>| i.reflection.varyings.iter().filter(|r| i.uses(r.name)).map(comps).sum::<usize>();
+    let out = used(vs);
+    if out > limits.max_vertex_output_components {
+        return Err(format!(
+            "the vertex shader's outputs take {out} components, more than MAX_VERTEX_OUTPUT_COMPONENTS = {}",
+            limits.max_vertex_output_components
+        ));
+    }
+    let inp = used(fs);
+    if inp > limits.max_fragment_input_components {
+        return Err(format!(
+            "the fragment shader's inputs take {inp} components, more than MAX_FRAGMENT_INPUT_COMPONENTS = {}",
+            limits.max_fragment_input_components
+        ));
+    }
+    let matched = || {
+        fs.reflection
+            .varyings
+            .iter()
+            .filter(|f| fs.uses(f.name) && vs.reflection.varyings.iter().any(|v| v.name == f.name) && vs.uses(f.name))
+    };
+    let shared: usize = matched().map(comps).sum();
+    if shared > limits.max_varying_components {
+        return Err(format!(
+            "the varyings of both stages take {shared} components, more than MAX_VARYING_COMPONENTS = {}",
+            limits.max_varying_components
+        ));
+    }
+    let vars = matched().map(|f| Var::new(kind(f), u32::from(f.count).max(1)));
+    check_rows(Budget::Varyings, vars, limits.max_varying_vectors).map_err(|_| {
+        format!("the varyings of both stages do not fit MAX_VARYING_VECTORS = {}", limits.max_varying_vectors)
+    })
+}
+
 /// Run the front half over `src` -- preprocess, parse, check, reflect -- for
 /// the link, which has the two sources and needs what the compiled shaders do
 /// not carry: every varying the vertex shader DECLARES (written or not), and
