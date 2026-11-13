@@ -598,7 +598,7 @@ const HALF_MORE: [f32; 4] = [1.000_488_3, 3.0e-6, -0.0, f32::NEG_INFINITY];
 use yakogl::backend::{gles_surf_bytes_per_pixel, gles_surf_name, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGBA16F};
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::v3d::chain::{compile_program, Prim, Target};
-use yakogl::shaderc::online::v3d::select::{tlb_config_32b, tlb_config_f16};
+use yakogl::shaderc::online::v3d::select::tlb_config_f16;
 use yakogl::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, LANES};
 use yakogl::shaderc::online::{lower, sema};
 use yakogl::v3d::state;
