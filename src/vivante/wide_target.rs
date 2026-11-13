@@ -139,6 +139,35 @@ pub const fn padded(w: u32, h: u32) -> (u32, u32) {
     (layout::aligned_width(Layout::Tiled, w, true), layout::aligned_height(Layout::Tiled, h, true))
 }
 
+/// Bytes of the TS buffer of a `w` x `h` shadow of `bpp` bytes a pixel, W7:
+/// [`super::ts::ts_size`] of the TILED surface (the padded size through
+/// `etna_screen_resource_alloc_ts`'s `align(.., 0x100)`). The note's
+/// `ts::ts_bytes(w * h * 4)` does not exist; `ts_size` is the padded form
+/// Mesa uses, and the two agree for a padded-aligned size such as 256x256.
+pub const fn ts_buffer_bytes(w: u32, h: u32, bpp: u32) -> u32 {
+    super::ts::ts_size(w, h, bpp, false)
+}
+
+/// W7's colour TS words for a shadow at `base` with its TS buffer at
+/// `ts_base`, `(register, value)` in the order Mesa emits them
+/// (etnaviv_emit.c:586-597). The TS is programmed but never valid:
+/// `TS_MEM_CONFIG` carries no fast-clear bit (a 64-bit texel format adds
+/// `TS_MEM_64BPP_FORMAT`) and the clear value and its `_EXT` half are 0.
+pub fn ts_words(base: u64, ts_base: u64, bpp64: bool) -> [(u32, u32); 5] {
+    use super::regs::{
+        GC_TS_COLOR_CLEAR_VALUE, GC_TS_COLOR_CLEAR_VALUE_EXT, GC_TS_COLOR_STATUS_BASE, GC_TS_COLOR_SURFACE_BASE,
+        GC_TS_MEM_CONFIG,
+    };
+    let cfg = super::ts::ts_mem_config(super::ts::TsMemConfig { color_64bpp: bpp64, ..Default::default() });
+    [
+        (GC_TS_MEM_CONFIG, cfg),
+        (GC_TS_COLOR_STATUS_BASE, ts_base as u32),
+        (GC_TS_COLOR_SURFACE_BASE, base as u32),
+        (GC_TS_COLOR_CLEAR_VALUE, 0),
+        (GC_TS_COLOR_CLEAR_VALUE_EXT, 0),
+    ]
+}
+
 /// PE_COLOR_STRIDE for a shadow of a `w`-pixel-wide target: one row of
 /// pixels of the padded width (Mesa's `level->stride`; only the RS takes a
 /// tiled stride times 4).
@@ -622,6 +651,26 @@ pub fn release_all() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terrain_shadow_ts_buffer_is_1024_bytes() {
+        /* 256*256*4 = 0x40000 bytes, one TS byte per 256: 0x400, 0x100-aligned */
+        assert_eq!(ts_buffer_bytes(256, 256, 4), 0x400);
+        /* 8x8 pads to 16x8: 512 bytes of surface, 2 TS bytes, aligned to 0x100 */
+        assert_eq!(ts_buffer_bytes(8, 8, 4), 0x100);
+    }
+
+    #[test]
+    fn ts_words_program_the_bases_and_never_a_valid_ts() {
+        use crate::vivante::regs::*;
+        let w = ts_words(0x1000_0000, 0x1004_0000, false);
+        assert_eq!(w[0], (GC_TS_MEM_CONFIG, 0));
+        assert_eq!(w[1], (GC_TS_COLOR_STATUS_BASE, 0x1004_0000));
+        assert_eq!(w[2], (GC_TS_COLOR_SURFACE_BASE, 0x1000_0000));
+        assert_eq!(w[3], (GC_TS_COLOR_CLEAR_VALUE, 0));
+        assert_eq!(w[4], (GC_TS_COLOR_CLEAR_VALUE_EXT, 0));
+        assert_eq!(ts_words(0, 0x100, true)[0].1, 0x4000_0000);
+    }
 
     #[test]
     fn a_shadow_is_padded_as_mesa_pads_a_tiled_render_target() {
