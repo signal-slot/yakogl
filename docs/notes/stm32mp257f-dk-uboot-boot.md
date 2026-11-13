@@ -44,17 +44,24 @@ may differ: each place where that matters is marked):
   autoboot" counts the delay in a loop that polls `tstc()` with a 10 ms
   `udelay` and stops on any key (`ST/common/autoboot.c:371-406`); the window
   is about a second, so a runner sends a key from the first BL2 line on
-  (`tools/mp2_uboot_console.py`, `STOP_KEY`, `KEY_PERIOD`). No
-  `bootdelaykey` is set in the stock environment's source
-  (`autoboot.c:240` reads it; `TODO(board-env-read)`: the live `bootdelay`,
+  (`tools/mp2_uboot_console.py`, `STOP_KEY`, `KEY_PERIOD`). The defconfig sets
+  no `CONFIG_AUTOBOOT_*`, so `autoboot_keyed()` is false
+  (`ST/include/autoboot.h:36-40`, `ST/common/autoboot.c:418`) and the single-key
+  loop above is the one compiled in; the keyed path, which reads
+  `bootdelaykey` and `bootstopkey` (`autoboot.c:240-241`), is not used, and no
+  such variable is set in the stock environment's source
+  (`TODO(board-env-read)`: the live `bootdelay`,
   `bootdelaykey`, `stopkey` from `fw_printenv`).
 - **Console line length.** `CONFIG_SYS_CBSIZE` has no ST override
   (`grep` of `ST/configs/stm32mp25_defconfig` and `ST/include/configs/stm32mp25*.h`
-  finds none), so it is Kconfig's default **1024** (`ST/cmd/Kconfig:78-84`,
-  the `default 1024` line). The console buffer is `CONFIG_SYS_CBSIZE + 1`
+  finds none), so it is Kconfig's default **1024** (`ST/cmd/Kconfig:78-85`,
+  the `default 1024` line is :85). The console buffer is `CONFIG_SYS_CBSIZE + 1`
   (`ST/common/cli_readline.c:24`) and the reader stops taking characters at
-  `CBSIZE - 2` (`:534`). The typed lines of the one-shot are about 120 bytes
-  (`driver/tools/uboot-mp2/README.md`, "Typed lines"), an eighth of the limit.
+  `CBSIZE - 2` (`:534`). The typed lines of the one-shot are 116 (microSD) and 146 (TFTP)
+  characters with a one-digit device and partition, a ten-character token and
+  a fifteen-character server address (the lines of `driver/tools/uboot-mp2/README.md`,
+  "The route"), a seventh of the limit or less; the optional `setenv mp2z_*;`
+  prefixes the README names add a few tens of bytes.
 - **The environment** is on the medium U-Boot booted from, in the partition
   named `u-boot-env`: `CONFIG_ENV_IS_IN_MMC=y` (`defconfig:69`),
   `CONFIG_SYS_REDUNDAND_ENVIRONMENT=y` (`:72`), `CONFIG_SYS_MMC_ENV_DEV=-1`
@@ -63,7 +70,7 @@ may differ: each place where that matters is marked):
   partition (`u-boot,mmc-env-partition = "u-boot-env"`,
   `ST/arch/arm/dts/stm32mp257f-dk-u-boot.dtsi:11`). `env/mmc.c` puts the
   copy at the **top of the partition**: offset `start + size - (1 + copy) *
-  ENV_SIZE` (`ST/env/mmc.c:91-92`, `:117-130`), with `ENV_SIZE` 0x2000
+  ENV_SIZE` (`ST/env/mmc.c:91-92`, the partition lookup `:97-132`), with `ENV_SIZE` 0x2000
   (`ST/arch/arm/mach-stm32mp/Kconfig:33-34`). In the 512 KiB partition that is
   **0x7e000 for copy 0 and 0x7c000 for the redundant copy 1**, and 0x7e000 is
   where the board read found the CRC, a flag byte and the strings (pre-study,
@@ -81,8 +88,8 @@ may differ: each place where that matters is marked):
   `env_check` is `if env info -p -d -q; then env save; fi`
   (`stm32mp25_common.h:94`). `env info -p -d -q` succeeds only when the
   environment in use is the **default** one (`gd->flags & GD_FLG_ENV_DEFAULT`,
-  `ST/cmd/nvedit.c:1116`) **and** can be persisted (`:1128`; the results are
-  ANDed, `:1146`). So a valid stored environment is never rewritten by the
+  `ST/cmd/nvedit.c:1117`) **and** can be persisted (`:1127-1131`; the results are
+  ANDed, `:1145-1146`). So a valid stored environment is never rewritten by the
   stock boot; an invalid one (bad CRC on both copies) is replaced by the
   defaults and saved. This is the one way the stock path writes the
   environment, and it matters for the undo (section 8).
@@ -91,9 +98,9 @@ may differ: each place where that matters is marked):
   the boot instance (above). For each device and bootable partition,
   `scan_dev_for_boot` runs, for each prefix in `boot_prefixes` (`/ /boot/`,
   `ST/include/config_distro_bootcmd.h:494`), **first** `scan_dev_for_extlinux`
-  (`${prefix}extlinux/extlinux.conf`, `:499-510`), **then**
-  `scan_dev_for_scripts` (`boot.scr.uimg`, then `boot.scr`, `:495`, `:518-530`),
-  `:532-536`. A successful extlinux boot does not return, so a script is reached
+  (`${prefix}extlinux/extlinux.conf`, `:499`, `:504-511`), **then**
+  `scan_dev_for_scripts` (`boot.scr.uimg`, then `boot.scr`, `:495`, `:518-529`),
+  `:530-539` (the two `run` lines are `:534-535`). A successful extlinux boot does not return, so a script is reached
   only after extlinux has failed. The pre-study found `mmc0_extlinux/` and
   `mmc1_extlinux/` on the board's bootfs, not the source's `extlinux/`:
   `TODO(board-env-read)`: the live `boot_syslinux_conf`, `boot_prefixes`,
@@ -132,7 +139,7 @@ bit 0 into the address, is built only for `CONFIG_CPU_V7M`
   gave it, and `go` does not call `armv8_switch_to_el2` or any EL switch.
   U-Boot's own start code branches on the current level (`ST/arch/arm/cpu/armv8/start.S:120`,
   `:155`, `:360`; it sets `HCR_EL2.AMO` and its own `VBAR_EL2` at
-  `:127-130` when it is at EL2). The pre-study (section 1, Q8, Q13) records
+  `:127-131` when it is at EL2). The pre-study (section 1, Q8, Q13) records
   EL2 as read from the board. `TODO(board-run)`: the image's own record
   (`mp2-handover:` line, `driver/zephyr/lib/board/stm32mp2/stm32mp2.c:38-49`:
   `el`, `sctlr`, `m`, `c`, `i`, `x0..x3`) is the measurement; this note does
@@ -145,12 +152,14 @@ bit 0 into the address, is built only for `CONFIG_CPU_V7M`
   non-null"; by the source above `x0` should be 1: the board run settles it,
   and the image prints the values and asserts none.
 - **Caches and MMU:** U-Boot enables the MMU and data cache early
-  (`ST/arch/arm/mach-stm32mp/stm32mp2/cpu.c:36-55`, `arch_cpu_init`) and
+  (`ST/arch/arm/mach-stm32mp/stm32mp2/cpu.c:36-58`, `early_enable_caches` and
+  `arch_cpu_init`) and
   rebuilds its page tables after relocation (`:73-96`, `enable_caches`).
   `go` does nothing about them, and `cleanup_before_linux` is only on the
-  `booti`/`bootm` path (`ST/arch/arm/lib/bootm.c:82`, `:428`). So the script
+  `booti`/`bootm` path (`announce_and_cleanup`, `ST/arch/arm/lib/bootm.c:82`,
+  called at `:305` and `:366`; the other call, `:428`, is VxWorks's). So the script
   does it itself, as the sibling boards' one-shots do: `dcache flush; dcache
-  off; icache off; go` (`ST/cmd/cache.c:27-80`; `dcache_disable` clears
+  off; icache off; go` (`ST/cmd/cache.c:27-85`; `dcache_disable` clears
   `SCTLR.C` and `SCTLR.M` and flushes, `ST/arch/arm/cpu/armv8/cache_v8.c:579-603`;
   `icache_disable` clears `SCTLR.I`, `:812-815`). The image's `reset.S` expects
   MMU and caches off. The flush matters because the image was just written by
@@ -176,7 +185,7 @@ bit 0 into the address, is built only for `CONFIG_CPU_V7M`
 
 | what | address | why |
 | --- | --- | --- |
-| the image | **0xa0000000**, `go 0xa0000000` | the link address: `zephyr,sram` of `driver/boards/st/stm32mp257f_dk` (a 256 MiB `memory@a0000000`), `YAKO_ADDR` of `tools/board-stm32mp2.sh`, `mp2z_load` of the scripts. The image runs only there, so it is loaded in place, never `booti`'d (which moves it: `ST/cmd/booti.c:77-104`, `ST/arch/arm/lib/image.c:53-75`) |
+| the image | **0xa0000000**, `go 0xa0000000` | the link address: `zephyr,sram` of `driver/boards/st/stm32mp257f_dk` (a 256 MiB `memory@a0000000`), `YAKO_ADDR` of `tools/board-stm32mp2.sh`, `mp2z_load` of the scripts. The image runs only there, so it is loaded in place, never `booti`'d (which moves it: `ST/cmd/booti.c:77-86`, `ST/arch/arm/lib/image.c:70-75`) |
 | the script | **`${scriptaddr}`**, read from the live environment | the compiled-in value is 0x90100000 (`stm32mp25_common.h:105`, `:113`), but the stored environment is the board's; the typed line uses `${scriptaddr}` and nothing hard-codes it. `TODO(board-env-read)`: the live `scriptaddr` |
 | the window | 0xa0000000 .. 0xb0000000 | `mp2z_window` = 0x10000000; `LOAD_END` in the runner |
 | the size guard | the file and the header's `image_size` stay below **255 MiB** | see below |
@@ -189,7 +198,7 @@ bit 0 into the address, is built only for `CONFIG_CPU_V7M`
 - U-Boot relocates **to the top of RAM**, clamped below 4 GiB:
   `gd->ram_top = clamp_val(ram_base + ram_size, 0, SZ_4G - 1)`, then a block of
   `ALIGN(8 MiB + CONFIG_SYS_MALLOC_LEN + mon_len, 2 MiB)` is taken from the top
-  not covered by a reserved region (`ST/arch/arm/mach-stm32mp/dram_init.c:52-85`,
+  not covered by a reserved region (`ST/arch/arm/mach-stm32mp/dram_init.c:52-83`,
   `ST/common/board_f.c:378-380`; `SYS_MALLOC_LEN` is 0x2000000,
   `ST/arch/arm/mach-stm32mp/Kconfig:30-31`). The DK's reserved DDR regions
   (`ST/arch/arm/dts/stm32mp257f-dk-resmem.dtsi:112-181`) are 0x80000000 to
@@ -326,6 +335,12 @@ The i.MX8MP record's TFTP tuning (`tftptimeout`, `tftpblocksize`,
 `tftpwindowsize` in `YAKO_NET`) is not in the scripts: it was for a different
 MAC and U-Boot; `TODO(board-run)`: the transfer rate and any timeouts.
 
+ST's `stm32mp25_defconfig` does not set `CONFIG_TFTP_PORT` (the option is
+`ST/net/Kconfig:95`, off unless set), so `ST/net/tftp.c` compiles out the
+`tftpdstp` lookup (`#ifdef CONFIG_TFTP_PORT`, `tftp.c:938-944`) and always asks
+`WELL_KNOWN_PORT`, UDP port 69 (`tftp.c:26`, `:933`): the TFTP server must
+listen on port 69, and setting `tftpdstp` changes nothing.
+
 `TODO(board-env-read)`: that the DK's U-Boot has a link and a DHCP lease on
 the lab network (`dhcp` at the prompt, then `printenv serverip ipaddr`;
 read-only; never recorded with its addresses), and that the TFTP server is
@@ -361,10 +376,13 @@ The rule of `board-stm32mp2.sh`: **`bootcmd` is never written persistently**
 (by the runner; ST's variable, ST's boot). The one-shot goes further and writes
 no persistent environment at all.
 
-- **No `saveenv`, no `env save`, no `env set -f` or `erase`:** the scripts'
-  lint (`driver/tools/uboot-mp2/selftest.sh`) fails on `saveenv`, `env
-  save|write|erase`, `mmc write`, `ext4write`, `fatwrite`, `gpt`, and on any
-  `bootcmd` inside a command. (The binary has `CONFIG_CMD_EXT4_WRITE`,
+- **No `saveenv`, no `env save`, no `env write` or `erase`:** the scripts'
+  lint (`driver/tools/uboot-mp2/selftest.sh`) allows only `echo`, `setenv`,
+  `test`, `itest`, `setexpr`, `dcache`, `icache`, `go`, `exit` and the route's
+  own load commands, so `env` is not a command it accepts at all; it also
+  fails on the text `saveenv`, `mmc write`, `ext4write`, `fatwrite`, `gpt `,
+  `extlinux` and `boot.scr`, on a `setenv` of anything but `mp2z_*` or
+  `autoload`, and on `bootcmd` in any command but `echo`. (The binary has `CONFIG_CMD_EXT4_WRITE`,
   `CONFIG_CMD_ERASEENV`, `defconfig:38`, `:62`, and `saveenv` is default y,
   `ST/cmd/Kconfig:601-603`: the lint is what keeps them out.)
 - **Only the runner's own variables, each in RAM, each with its undo printed
@@ -469,7 +487,7 @@ sentence and is why the bound has two cases:
   pets the watchdog every `reset_period` (1 s by default, `wdt-uclass.c:55-67`,
   `:136-149`, `:270-297`; for the SMC driver `SMCWD_PET`,
   `arm_smc_wdt.c:57-59`). Cyclic functions run from `schedule()`
-  (`ST/common/cyclic.c:103-114`), and `schedule()` is called wherever U-Boot
+  (`ST/common/cyclic.c:102-114`), and `schedule()` is called wherever U-Boot
   waits for a character: the prompt's line reader (`ST/common/cli_readline.c:489`),
   `fgetc` (`ST/common/console.c:505`) and the serial driver's `getc` retry
   loop (`ST/drivers/serial/serial-uclass.c:257`). The autoboot countdown itself
