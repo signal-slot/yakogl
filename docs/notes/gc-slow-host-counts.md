@@ -606,3 +606,184 @@ the host does not show; a slowdown of 0.2 to 1 ms (800x600) or 1 to 4 ms
   and the knob's log lines, and open the issue for it.
 - The RS rate (2 to 8 GB/s) and the hidden-fragment share of terrain are the two
   inputs no board has measured; session A replaces them.
+
+## Predicted effect of W7 to W9, tile status and fast clear (host-derived, plan #355)
+
+Plan #355, item w5-early-z (issues #1204, #1106, #15). Docs only. **Every
+figure is arithmetic on counts the host harness reports and on bandwidths the
+GC7000UL notes already cite. None is a board measurement, and the RS rate is
+itself unmeasured.** This is what the case 243 probe's answer and a later X2
+run are read against.
+
+### What it replaces in `gc-tiled-wire.md`
+
+The order table of `gc-tiled-wire.md` gives W8 "terrain 1 to 5 ms, refract 2.5
+to 7.5 ms". Those are `gc-tiled-targets.md` change 4's figures, and they price
+each clear as a **quad** at 3.9 ns a pixel (terrain's "four FBO clear quads at
+800x600 and the four 256x256 ones", 4.8 ms; refract's one fused 1600x1200
+quad, 7.5 ms). That is no longer the stream: plan #328 landed the RS fill
+clears (`rs_clear.rs`), and the "RS jobs, fill" rows above (terrain 11.2,
+shadow 3, refract 4 a frame) are RS jobs, not draws. What W7 to W9 can still
+remove is the **bytes** a fill writes, not a job: a TS fill is also one RS job.
+So every RS job count below is unchanged; the fill shrinks to the tile status
+(`gc-tiled-targets.md`, "Fast clear": 30 KB for a 1600x1200 surface instead of
+7.68 MB). The quad-priced figures overstate the gain at this tip.
+
+### Inputs, and the commit read
+
+- Commit read: `b2673e3c` (the workspace's tip: W1 to W5 are in it, W7 to W9
+  are not).
+- Counts: `cargo test --no-default-features --features
+  host-test,gpu-vivante,shaderc-online,report-es2 --test gc_scene_kicks --
+  --nocapture` (3 pass; kicks 11, 2, 3 for terrain, shadow, refract, as above),
+  and the clear call sites of `tests/common/gc_scenes.rs` (`canvas_clear`,
+  `Renderer::render_texture`, `terrain()`, `shadow()`, `refract()`). Sizes:
+  `CANVAS_W` x `CANVAS_H` = 800x600; shadow and refract's targets are twice
+  that, 1600x1200.
+- Surface bytes: a colour target is A8R8G8B8, 4 bytes a pixel. A depth surface
+  is the backend's D24S8, 4 bytes a pixel in the padded allocation
+  (`src/vivante/ds_cache.rs:3`, `:334`; `gc-slow-stream-diff.md` finding 1:
+  "one fill for colour and one for depth over the padded D24S8 allocation"),
+  so terrain's 16-bit renderbuffer costs 4 bytes a pixel as well.
+- TS size: one 4-bit entry a 128-byte tile (`gc-tiled-targets.md`, 7.68 MB /
+  128 B = 60 000 tiles = 30 KB), aligned to `0x100` (`gc-tiled-wire.md` W7).
+  800x600x4 = 1.92 MB is 15 000 tiles, 7 500 bytes, 7 680 aligned;
+  1600x1200x4 is 30 000 bytes; 256x256x4 = 0.262 MB is 1 024 bytes.
+- Bandwidth: the RS fill rate of **2 to 8 GB/s, bytes counted once**, the
+  assumption of `gc-slow-stream-diff.md` finding 1 and `:225-226` ("at the low
+  end the RS is no faster per byte than the quad's 1.9 GB/s, at the high end it
+  is half the LPDDR4"), unmeasured until step 0 (iv) of `gc-tiled-targets.md`.
+  The only measured figure is the quad's 1.9 GB/s written, 1 981 us for 0.48
+  Mpx (`imx8mp-frame-floor.md`, "Step 3 result", as quoted there). A TS fill of
+  7.7 KB to 30 KB costs 0.001 to 0.015 ms at the same rates, below 1 % of the
+  bytes it replaces; it is not subtracted below.
+- What W7 to W9 reach: W8 and W9 apply to a **W4 shadow** (one 4-byte colour
+  target, `w % 16 == 0`, `h % 4 == 0`, depth test on with a depth
+  **renderbuffer**) and to a PE-private `ds_cache` depth surface
+  (`gc-tiled-wire.md` W8, W9). In the harness that is terrain's 800x600 pass
+  only (the tables above: shadow's and refract's 1600x1200 passes have a depth
+  **texture**). A depth texture needs W12 (a TS-aware CPU depth resolve), a
+  mipmapped or sampled colour texture needs W10 and W11.
+
+### The clears of one frame, from the harness
+
+| scene | clear (call site) | colour | depth | fill jobs | bytes |
+|---|---|---:|---:|---:|---:|
+| terrain | canvas clear (window, linear) | 800x600 | 800x600 | 2 | 3.84 MB |
+| terrain | height_map, normal_map (no depth) | 2 x 256x256 | none | 2 | 0.52 MB |
+| terrain | **terrain pass** (depth16 renderbuffer, fused) | 800x600 | 800x600 | 2 | **3.84 MB** |
+| terrain | bloom_h, bloom_v (no depth) | 2 x 256x256 | none | 2 | 0.52 MB |
+| terrain | tilt_h (no depth) | 800x600 | none | 1 | 1.92 MB |
+| terrain | tilt_v (window, `onscreen`, fused) | 800x600 | 800x600 | 2 | 3.84 MB |
+| terrain | total | | | 11 (11.2 measured) | 14.5 MB |
+| shadow | depth pass (depth texture, depth only) | none | 1600x1200 | 1 | 7.68 MB |
+| shadow | canvas clear | 800x600 | 800x600 | 2 | 3.84 MB |
+| shadow | total | | | 3 (3 measured) | 11.5 MB |
+| refract | distance target (textures, fused) | 1600x1200 | 1600x1200 | 2 | 15.36 MB |
+| refract | canvas clear | 800x600 | 800x600 | 2 | 3.84 MB |
+| refract | total | | | 4 (4 measured) | 19.2 MB |
+
+The job totals agree with the "RS jobs, fill" rows above (terrain's 0.2 is a
+mean over frames 3 to 6 that this note does not attribute). The byte totals
+agree with `gc-slow-stream-diff.md` finding 1 for shadow and refract (11.5 and
+19.2 MB); for terrain that note has 13.5 MB in the glmark2 harness against 14.5
+here (two different models; the 1 MB is not traced). The window's clears are
+linear and not a shadow: only `gc-tiled-wire.md` W13 would reach them.
+
+### Terrain
+
+W7 to W9 as wired reach the terrain pass only.
+
+- Removed: its colour fill (1.92 MB) and its depth fill (1.92 MB), 3.84 MB in 2
+  jobs. The jobs stay, each writing 7 680 bytes of TS.
+- 3.84 MB at 2 to 8 GB/s is **1.92 to 0.48 ms** (W8 half, W9 half: the two
+  surfaces have the same size).
+- The resolve that reads through TS (W8's TS-sourced copy of the same 1.92 MB)
+  does not fetch cleared tiles: **0 to 0.24-0.96 ms**, 0 if the pass draws
+  every tile, the whole 1.92 MB read (8 to 2 GB/s) if it draws none. The
+  pass's coverage is an open input (terrain-overdraw models it, not in this
+  tree), so this is an upper bound, not a middle.
+- **Prediction, W7 to W9 after W4/W5: terrain 0.5 to 2.9 ms a frame faster**
+  (0.48 + 0 to 1.92 + 0.96). Of a board frame of about 250 ms
+  (`gc-slow-terrain.md`, before plan #328's fixes) that is 0.2 to 1.2 %. Rank 1
+  of that note, the GPU shading of the 9 passes (140 to 205 ms), is untouched.
+- **If W10 and W11 then widen it to every offscreen colour target** (change 4
+  of `gc-tiled-targets.md`, not W8 as wired): tilt_h's 1.92 MB and the four
+  256x256 maps' 1.05 MB (0.26 each) join, 3.84 + 2.97 = 6.81 MB, **0.85 to 3.4
+  ms** removed. The chains (terrain, bloom_h, bloom_v, tilt_h) have several
+  levels, cannot use the sampler's TS, and a TILED source has no in-place
+  resolve, so each needs a copy of its surface: 1.92 + 1.92 + 2 x 0.262 = 4.37
+  MB, **0 to 0.55-2.2 ms** (0 where W4's copy-back already resolved them).
+  Net **-1.3 to +3.4 ms**. That is the replacement for the table's "1 to 5":
+  its top, 4.8 ms, is quads.
+- Not counted, no figure in the notes: the PE's depth reads of cleared tiles,
+  and tiled sampling's cache locality (`gc-tiled-targets.md` change 4).
+
+### Shadow
+
+- As wired W7 to W9 remove **nothing**: its only non-window clear is the depth
+  texture (7.68 MB, 1 job), neither a W4 shadow nor a PE-private surface.
+  Prediction **0 ms**, 0 jobs, 0 bytes.
+- With W12 (the depth texture gets a TS, the CPU resolve reads through it) W9's
+  fill reaches it: 7.68 MB becomes a 30 KB TS fill, **0.96 to 3.84 ms**
+  removed. That is the table's "fast clear of depth: shadow 7.5 ms" at the
+  quad's 3.9 ns a pixel. Against a shadow frame of 350 to 1000 ms of CPU depth
+  resolve (`gc-slow-shadow-refract.md`, cause 1) it is 0.1 to 1 %; the
+  TS-aware read of W12b (30 to 150 ms, "if the CPU resolve stays") is the gain
+  that matters, and is not W7 to W9's.
+
+### Refract
+
+- As wired **0 ms**: the fused 1600x1200 colour and depth clear (15.36 MB, 2
+  jobs) goes to textures, which W4 refuses and W9 does not reach.
+- With W10, W11 and W12 (a tiled colour texture, a depth texture with TS):
+  15.36 MB of fills, **1.9 to 7.7 ms** removed. The colour's level 0 is sampled
+  by the `glGenerateMipmap` chain and the refraction pass, so it needs a resolve
+  (TILED: a copy of all 7.68 MB), **0 to 0.96-3.8 ms**. Net **-1.9 to +7.7 ms**.
+  The table's "2.5 to 7.5 ms" is the same sum priced as a quad (7.5 ms for
+  1.92 Mpx of colour and depth); at RS rates the loss side is wider.
+- Of a refract frame of about 500 ms (`gc-tiled-targets.md`) the gain is at
+  most 1.5 %; its dominant cost is the CPU depth resolve of shadow's cause.
+
+### Across the three scenes
+
+| scene | bytes removed (jobs unchanged) | as wired, after W4/W5 | with W10 to W12 |
+|---|---:|---:|---:|
+| terrain | 3.84 MB (colour 1.92, depth 1.92) | **0.5 to 2.9 ms** | -1.3 to +3.4 ms |
+| shadow | 0 | **0 ms** | 0.96 to 3.84 ms (W12 only) |
+| refract | 0 | **0 ms** | -1.9 to +7.7 ms |
+
+- W7 to W9 remove **no RS job** in any scene. A PERF page that counts RS jobs
+  does not move; the bytes-written page (page 3 v3, KiB written,
+  `gc-slow-stream-diff.md`) falls by the bytes above (terrain as wired: 3.84
+  MB, 3 750 KiB a frame).
+- Every gain is a small share of a frame of 250 to 1 000 ms. W8 is a step that
+  W10 builds on, not a speed item by itself (as the order table says).
+- The RS rate and terrain's drawn-tile share are the inputs no board has
+  measured. A fill of one 1600x1200 surface timed by RS (step 0 (iv) of
+  `gc-tiled-targets.md`) narrows every range above by up to a factor of four.
+
+### What case 243 must answer before W7 is wired
+
+`gc-ts-probe.md`, "Part (iii): case 243 `tsprobe`" (K0 control resolve, K1 TS
+fill, K2 TS-sourced resolve, K3 pattern resolve). The terrain range above
+stands only if:
+
+1. **The TS fill lands with the MMU off** (not `FILL_MISS` or `NO_WRITE`): the
+   RS writes `T` at the address the back end gives every register.
+2. **The TS-sourced resolve honours the clear code** (arm 0 `YES`, not
+   `IGNORED`): a cleared tile reads as `TS_COLOR_CLEAR_VALUE`. Arm 0 is TILED,
+   128B mode, no compression, 64x64 A8R8G8B8: W7 and W8's configuration, so the
+   answer covers the terrain pass's 800x600 target.
+3. **Mode and compression** (arms 1 and 2: the `AUTO_DISABLE` words; the 256B
+   mode with Mesa's `0x382`): they change the TS size (256B granules halve it,
+   to 3.8 KB for a 1.92 MB surface) and not the bytes the fills save.
+4. **Not answered by 243**: the depth TS (W9's board check, "likely, not
+   proven" in `gc-ts-probe.md`), the sampler TS (W10's), and the TS-aware depth
+   read (W12, with case 244's layout answer). The terrain range assumes colour
+   and depth both work; with colour only, take **0.24 to 1.9 ms** (the colour
+   fill 1.92 MB, 0.24 to 0.96 ms, plus the resolve read, 0 to 0.96 ms).
+
+If arm 0 is `IGNORED`, `NO_WRITE`, `FILL_MISS` or hangs, W7 to W9 stay off and
+every range above is 0; a hang also stops the session and releases the board
+(`gc-ts-probe.md`).
