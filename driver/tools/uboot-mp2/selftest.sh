@@ -43,7 +43,7 @@ ALLOWED = {"echo", "setenv", "test", "itest", "itest.l", "setexpr", "setexpr.l",
            "dcache", "icache", "go", "exit"}
 ALLOWED |= {"ext4size", "ext4load"} if kind == "mmc" else {"dhcp", "tftpboot"}
 CONTROL = {"if", "then", "else", "fi"}
-SETENV_OK = re.compile(r"^(mp2z_[a-z0-9_]+|autoload)$")
+SETENV_OK = re.compile(r"^(mp2z_[a-z0-9_]+|autoload|tftptimeout|tftptimeoutcountmax)$")
 
 stmts = []          # (line number, tokens)
 for n, line in enumerate(src.splitlines(), 1):
@@ -77,7 +77,7 @@ for n, s in stmts:
             problems.append("line %d: echo does not start with 'mp2z: '" % n)
     elif cmd == "setenv":
         if len(s) < 2 or not SETENV_OK.match(s[1]):
-            problems.append("line %d: setenv of %r (only mp2z_* and autoload)" % (n, s[1:2]))
+            problems.append("line %d: setenv of %r (only mp2z_*, autoload, tftptimeout, tftptimeoutcountmax)" % (n, s[1:2]))
     elif cmd in ("dcache", "icache"):
         if s[1:] not in (["off"], ["flush"]):
             problems.append("line %d: %s %s" % (n, cmd, " ".join(s[1:])))
@@ -240,6 +240,67 @@ for k in mmc net; do
 	sed 's/^setenv mp2z_window 0x10000000$/setenv mp2z_window 0x20000000/' "$src" > "$T/neg.cmd"
 	expect_fail "$k: DTS check refuses a different mp2z_window" dtscheck "$T/neg.cmd"
 done
+
+# ---- 3b. the net script's TFTP port and dead-server bound
+cat > "$T/tftp.py" <<'PY'
+"""tftp.py SCRIPT: no tftpdstp, a dead server bounded under the IWDG, variables restored."""
+import re
+import sys
+
+lines = [l for l in open(sys.argv[1]).read().splitlines() if l.strip() and not l.lstrip().startswith("#")]
+bad = []
+if any("tftpdstp" in l or re.search(r"tftpboot .*:\d+:", l) for l in lines):
+    bad.append("the script relies on tftpdstp or a port in the server argument")
+
+
+def idx(pat):
+    return [i for i, l in enumerate(lines) if re.search(pat, l)]
+
+
+def val(var):
+    m = [re.match(r"^setenv %s (\d+)$" % var, l) for l in lines]
+    return [int(x.group(1)) for x in m if x]
+
+
+tmo, cnt = val("tftptimeout"), val("tftptimeoutcountmax")
+if len(tmo) != 1 or len(cnt) != 1:
+    bad.append("tftptimeout / tftptimeoutcountmax are not each set once to a number")
+else:
+    # net/tftp.c:701: the handler gives up at timeout number count_max + 1
+    bound = (cnt[0] + 1) * tmo[0]
+    if tmo[0] < 1000 or bound >= 16000:
+        bad.append("the dead-server bound is %d ms (want 1000 ms or more per try, under 16000 ms, half the IWDG)" % bound)
+boot = idx(r"^if tftpboot ")
+if len(boot) != 1:
+    bad.append("%d tftpboot lines, want 1" % len(boot))
+else:
+    for var, save in (("tftptimeout", "mp2z_tmo"), ("tftptimeoutcountmax", "mp2z_tmocnt")):
+        a = idx(r"^setenv %s \d+$" % var)
+        s = idx(r"^setenv %s \$\{%s\}$" % (save, var))
+        r = idx(r"^setenv %s \$\{%s\}$" % (var, save))
+        if not (a and s and r and s[0] < a[0] < boot[0] < r[0]):
+            bad.append("%s is not saved, set, then restored around tftpboot" % var)
+        elif any(l.startswith("exit") for l in lines[boot[0] + 1:r[0]]):
+            bad.append("an exit between tftpboot and the restore of %s" % var)
+print("\n".join(bad))
+sys.exit(1 if bad else 0)
+PY
+tftpcheck() { $PY3 "$T/tftp.py" "$1"; }
+expect_ok "net: no tftpdstp, dead server bounded under 16 s, variables restored" tftpcheck "$here/mp2-net.cmd"
+tmut() { # name, sed expression
+	sed "$2" "$here/mp2-net.cmd" > "$T/neg.cmd"
+	if cmp -s "$here/mp2-net.cmd" "$T/neg.cmd"; then bad "net: negative case '$1' changed nothing"; return; fi
+	expect_fail "net: tftp check refuses: $1" tftpcheck "$T/neg.cmd"
+}
+tmut "tftpdstp used" 's/^setenv mp2z_ok 0$/setenv tftpdstp 6969\nsetenv mp2z_ok 0/'
+tmut "a server with a port" 's/^if tftpboot \(.*\)${mp2z_server}:/if tftpboot \1${mp2z_server}:6969:/'
+tmut "the default 5 s timeout" 's/^setenv tftptimeout 2000$/setenv tftptimeout 5000/'
+tmut "the default retry count" 's/^setenv tftptimeoutcountmax 3$/setenv tftptimeoutcountmax 10/'
+tmut "the timeout not restored" '/^setenv tftptimeout ${mp2z_tmo}$/d'
+tmut "the count not restored" '/^setenv tftptimeoutcountmax ${mp2z_tmocnt}$/d'
+tmut "the timeout not saved" '/^setenv mp2z_tmo /d'
+expect_ok "README: the TFTP server must listen on UDP port 69" grep -q 'UDP port 69' "$here/README.md"
+expect_ok "README: tftpdstp is named as not used" grep -q 'tftpdstp' "$here/README.md"
 
 # the script images themselves: a corrupted .scr is refused by uboot_script.py check
 cp "$T/py/mp2-mmc.scr" "$T/neg.scr"
