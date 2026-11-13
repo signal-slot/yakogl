@@ -521,7 +521,7 @@ Every board check runs on the Armadillo-X2 (target:x2) only, under plan
     a new copy with no `finish` (counted), and the stream holds the RS copy
     after the render's draw.
   - A mock-stream unit test of the RS words against the tiling function.
-  - `tools/check.sh --changed origin/main`.
+  - The pull request's CI gate.
 - **Board check.**
   - terrain's ms a frame before and after;
   - PERF page 4: the `finish` count one a frame lower, and the

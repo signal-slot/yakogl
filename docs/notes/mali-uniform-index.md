@@ -456,7 +456,7 @@ fp32 array). `link-move` has landed. The item changes the Mali compiler in
    (section 3, points 1-5). *Acceptance:* a host test of the descriptors
    against the shim trace's resource table and UBO entry; every existing draw's
    descriptors unchanged (a shader with `ubo_mask == 0` gets the zero entry 0
-   Mesa gives it), `tools/check.sh --changed origin/main` green.
+   Mesa gives it), the pull request's CI gate green.
 6. **The board.** gl_test cases 108, 120, 121, 122 and 128 (and 100's fragment
    stage, with the vertex stage's own refusals aside) PASS on the NanoPC-T6 and
    their rows in `tools/cts/RESULTS.md`/`tools/mali/RESULTS.md` replace the

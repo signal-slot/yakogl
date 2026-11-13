@@ -222,7 +222,7 @@ The CPU readers of render targets, and what each one waits for:
 
 Every item:
 
-- ends with `tools/check.sh --changed origin/main` against the current tip;
+- ends with the pull request's CI gate on the current tip;
 - runs `src/vivante/backend_tests.rs`'s rig with `dedup::set_verify(true)`, the
   `host-test` default, so that a missing input in a key shows up as a test
   failure;
@@ -865,8 +865,8 @@ core's texture classes (`docs/notes/gl-texture-classes-es3.md`). The overlap:
   texture-class or `src/gl/texture.rs` change is needed. `storage_back` and
   `settle_texture` already call it (`src/gl/texture.rs:893-898`, `:926`).
 
-Rebase each W item on the current origin/main before `tools/check.sh --changed
-origin/main`. Grep `tests/` and `src` for struct literals of anything that
+Rebase each W item on the current origin/main before the pull request's CI gate
+runs. Grep `tests/` and `src` for struct literals of anything that
 gains a field (`GcDraw`, `wide_target::Entry`, `ds_cache::Surface` are
 private; `YakoglBackend` is not touched by any item).
 

@@ -231,7 +231,7 @@ The plan for the item:
 
 ## (e) Order of the commits
 
-Each commit leaves `tools/check.sh --changed origin/main` green on its own.
+Each commit leaves the CI gate (`tools/check.sh --changed`) green on its own.
 The bit is set last but one, so nothing is half on. The rows that reach these
 tests: `tests/es3_int_rt_v3d.rs`, `tests/es3_formats_v3d.rs` and
 `tests/mipmap_offer_guard.rs` each have a `$V3D_CONFIG` row

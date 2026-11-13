@@ -25,8 +25,9 @@ WebGL or an illustrative UI as a capture of YakoGL running on a board.
 The older `hero.js` and `home.js` effects are not loaded by the pages.
 
 Check with `tools/website-check.sh` (links, metadata and measurement
-provenance). Before a pull request, run `tools/check.sh --changed origin/main`
-as described in `CONTRIBUTING.md`. Preview with `python3 -m http.server -d website`.
+provenance); that is the whole local check for a website change. The pull
+request's CI gate is the check (`CONTRIBUTING.md`); do not run
+`tools/check.sh` locally. Preview with `python3 -m http.server -d website`.
 
 ## Publishing
 

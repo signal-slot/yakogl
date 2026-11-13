@@ -16,15 +16,11 @@ board sessions are the repository's GitHub issues.
 main moves only through pull requests: a topic branch, a pull request, the
 CI, a review, then the merge. Never push main by hand.
 
-1. Locally, run the rows of the gate your change reaches:
-   `tools/check.sh --changed origin/main`. It maps each changed path to the
-   parts it can break and skips the rest (a docs-only change runs three
-   rows, as `tools/check_scope_selftest.sh` pins it).
-   The scope comes from `git diff <base> HEAD` plus `git status --porcelain`,
-   so an untracked file counts: one outside the ignored paths (for example
-   `build/`) that maps to no narrower scope widens it to "all" and runs every
-   row. Keep the tree clean, and keep scratch files in `build/`; the first
-   lines the script prints name each path that forces "every row".
+1. Locally, run only the tests you added or changed (`cargo test --test
+   <name>` with the feature sets in that test's header) and `cargo fmt
+   --check` on the files you touched. Do not run `tools/check.sh` locally,
+   in any mode: the CI gate is the check. The one exception is a task whose
+   stated purpose is a gate walk (an acceptance run of the gate itself).
 2. Open the pull request. The CI is the gate: `.github/workflows/gate.yml`
    runs `tools/check.sh --changed <merge base>` on the pull request (the
    merge of the branch into main), and every row nightly on main's tip and
@@ -35,6 +31,10 @@ CI, a review, then the merge. Never push main by hand.
 4. Merge when the CI is green and the review approves.
 
 ## The gate: `tools/check.sh`
+
+This section describes what the CI runs, how to read its log, and what a
+host needs for a gate walk. It is not a list of commands to run before a
+pull request (step 1 above).
 
 - A red `cargo fmt --check` or a single warning is a defect.
 - The full run checks formatting, clippy (no warnings), the tests in every
@@ -90,8 +90,8 @@ CI, a review, then the merge. Never push main by hand.
   the artefact" fail (`dep_info_within` compares the physical dep-info paths
   with the logical `$PWD`; `cd -P` at `tools/check.sh:107` is the fix, not
   applied, `docs/notes/gate-symlinked-path.md`).
-- `tools/check.sh --quick` is for the edit loop. It runs most of the full
-  plan's rows. `YAKOGL_CHECK_PLAN=1 tools/check.sh --quick` and
+- `tools/check.sh --quick` runs most of the full plan's rows (the CI does
+  not use it). `YAKOGL_CHECK_PLAN=1 tools/check.sh --quick` and
   `YAKOGL_CHECK_PLAN=1 tools/check.sh` list the rows and run none; their
   summary lines give the counts, ok plus gaps (a row whose tool or file the
   host lacks is listed as a gap). No file keeps the count: a row added by
@@ -119,7 +119,7 @@ CI, a review, then the merge. Never push main by hand.
   your host to a Mesa tree without `build-v3d`, the three v3d rows (tex_check,
   cl_golden, job_check) become one `gap` naming `MESA_V3D_TREE`, and a gap
   keeps the run red: unset it (`env -u MESA_V3D_TREE tools/check.sh --quick`)
-  to use the vendored reference build, or point it at a built tree
+  for the vendored reference build, or point it at a built tree
   (`tools/v3d/README.md`). `tools/check.sh --local <base>` runs the local set
   (about twenty rows, `tools/check_scope_selftest.sh`) when a change reaches
   everything. Neither is the landing gate: the CI is.

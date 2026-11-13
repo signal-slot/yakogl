@@ -256,7 +256,7 @@ All on the host; no board.
    riding one `GOBIT` (the first address is no longer busy: it was
    dropped).
 6. **Gate**: `src/abi_layout*` and `src/gl` reach every row, so
-   `tools/check.sh --local <base>` for the implementing result.
+   the pull request's CI gate runs the local set for the implementing result.
 
 ## Implemented
 

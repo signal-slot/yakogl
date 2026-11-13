@@ -742,7 +742,7 @@ cover today's four RT classes; integer targets need:
 - fbload variants for integer targets (integer fetch + integer store).
 
 The regeneration path is unchanged: add the variants to the precompile
-source list, run `yakogl-precompile --internal`, and `tools/check.sh`
+source list, run `yakogl-precompile --internal`, and the CI gate (`tools/check.sh`)
 verifies the file. No hand-editing of `internal.rs`.
 
 ## 7. The ES 2.0 boundary

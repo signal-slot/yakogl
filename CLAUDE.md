@@ -6,25 +6,33 @@ Read `CONTRIBUTING.md` (how a change reaches main) first, and the open
 GitHub issues of signal-slot/yakogl: they hold all open work, the known
 defects and the next board sessions. This file is the short list.
 
-## The check to run, every time
+## What to run locally
 
-- `tools/check.sh --changed origin/main`: the rows your diff reaches. Run it
-  against the **current** main tip, right before the result is handed in,
-  not against the commit you started from (see the first failure below).
-- `tools/check.sh --quick`: most of the full plan's rows
-  (`YAKOGL_CHECK_PLAN=1 tools/check.sh --quick` lists them and runs none),
-  the edit loop. Not the gate.
-- `tools/check.sh --local <base>`: the local set when a diff reaches
-  everything (`src/gl`, `src/shaderc`, `tools/check.sh`, `Cargo.toml`, ...).
-- `tools/check.sh`: every row, what the CI (`.github/workflows/gate.yml`)
-  runs on each pull request's reach, on each push to main and nightly.
+Locally you run only what you added or changed (owner's decision of
+2026-11-12):
 
-Green is "N ok, 0 failed, 0 gap(s)". A `--quick` takes minutes on a warm tree
-and up to an hour from a cold one (59 min with 2 compiler slots); run it in the
-background and wait for the summary line instead of a tool timeout. Exit 2
-before any row: the gate could not start (cargo, rustfmt or clippy missing
-from the toolchain; the message says what to install). That is the host, not
-the code.
+- The tests you added or changed: `cargo test --test <name>` with the
+  feature sets named in that test's header.
+- `cargo fmt --check` on the files you touched; `cargo clippy` on the crates
+  you touched, if it is quick. A docs-only change needs none of this.
+- Do **not** run `tools/check.sh` (`--changed`, `--quick`, `--local` or full)
+  locally. A full or `--quick` run takes from tens of minutes to over an hour
+  and the pull request's CI runs the same rows. The only exception is a task
+  whose stated purpose is a gate walk (for example an acceptance run of the
+  gate itself).
+
+The check is the CI gate: `.github/workflows/gate.yml` runs `tools/check.sh`
+on every pull request (`--changed <merge base>`: the rows the diff reaches),
+on each push to main as its header says, and nightly (every row). How to read
+its log:
+
+- Green is "N ok, 0 failed, 0 gap(s)". A `gap` row (Zephyr images, hal_nxp,
+  pco_shc, aarch64) is a step that could not run; it is not a pass.
+- `--quick` is most of the full plan's rows; `--local <base>` is the local
+  set for a diff that reaches everything (`src/gl`, `src/shaderc`,
+  `tools/check.sh`, `Cargo.toml`, ...). The CI does not use them.
+- Exit 2 before any row: the gate could not start (cargo, rustfmt or clippy
+  missing from the toolchain). That is the runner, not the code.
 
 ## Common failures and how to avoid them
 
@@ -37,7 +45,8 @@ the code.
   `tests/` for every literal of it (`grep -rl 'YakoglBackend {' tests src`)
   and recheck against the latest main before merging.
 - Bare `cargo clippy --all-targets` fails with hundreds of errors: the crate
-  needs a feature set. Use `tools/check.sh`, which supplies them.
+  needs a feature set. The CI gate supplies them; locally use the feature
+  sets named in the test's header.
 - Clippy follows the host's nightly (no rust-toolchain file); a newer clippy
   flags old code. Fix the code; do not `allow` a lint blindly.
 - `gap` rows (Zephyr images, hal_nxp, pco_shc, aarch64) need `ZEPHYR_WS`,

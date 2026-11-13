@@ -272,8 +272,7 @@ level against dEQP's formula with the bias added.
    build` makes it). Expected: ours not more than Mesa's with the fold,
    equal or within a few without it (the scheduling of the SFU waits
    differs). Record the numbers in the item's commit message.
-6. The gate: `tools/check.sh --changed origin/main` against the current
-   main tip. The change reaches `src/shaderc/online/v3d/**`, so the rows of
+6. The gate: the pull request's CI runs `tools/check.sh`. The change reaches `src/shaderc/online/v3d/**`, so the rows of
    the round-trip corpus, `qpu_corpus_*.txt`, and the golden programs run;
    a golden that changes is regenerated in the same commit.
 

@@ -265,8 +265,8 @@ Use `mrt_draw` (3657) and `program_writing`, the `Rig`, `clear_only`,
    bits are in the first quad only (`QuadBuffers`), the later quads colour only.
 
 A pixel-level check (that an unnamed RT keeps its value) is a board item; the
-host tests above pin the recorded state. Gate with
-`tools/check.sh --changed origin/main`; the change touches `src/v3d/**` and
+host tests above pin the recorded state. The gate is the
+pull request's CI (`tools/check.sh`); the change touches `src/v3d/**` and
 this note.
 
 ## 5. Open points, answered
