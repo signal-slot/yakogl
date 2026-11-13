@@ -231,6 +231,11 @@ struct pvr_pds_render_stream {
     * number (IR1) instead of the vertex index (IR0). Honoured by
     * pvr_pds_render_vertex_program_ids(). */
    uint32_t per_instance;
+   /* GL divisor of a per_instance stream: element = instance / divisor.
+    * 0 or 1: no divide. A power of two is one right shift (SFTLP32), any
+    * other value Mesa's multiply and shift (pvr_pipeline_pds.c:846-864).
+    * Ignored without per_instance. */
+   uint32_t divisor;
 };
 
 #define PVR_PDS_VERTEX_MAX_STREAMS 16u
