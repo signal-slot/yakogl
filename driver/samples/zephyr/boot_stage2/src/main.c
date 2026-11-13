@@ -13,8 +13,9 @@
  *
  * This file is the Zephyr side only: the payload's source (the eMMC through
  * Zephyr's SD stack and the TI AM654 SDHCI driver, or the linked bytes), the
- * log, quiescing the controller and the cache maintenance. The header check,
- * the CRC-32s, the inflate and the jump are Rust (loader/, include/boot_stage2.h).
+ * log, clearing the segments' zero ranges, quiescing the controller and the
+ * cache maintenance. The header check, the CRC-32s, the inflate and the jump
+ * are Rust (loader/, include/boot_stage2.h).
  */
 
 #include <zephyr/kernel.h>
@@ -66,6 +67,18 @@ static uint8_t hdr[SECTOR_BYTES] __aligned(64);
 extern const uint8_t bs2_payload_start[];
 extern const uint8_t bs2_payload_end[];
 #endif
+
+/* What the loader says on a boot that goes well. The console is polled, so a
+ * character holds the boot for its time on the wire (87 us at 115200 Bd): the
+ * lines below were 0.09 s of the Verdin AM62P's 0.28 s in the loader
+ * (2026-11-12). BOOT_STAGE2_QUIET leaves one short line; a failure always
+ * says what failed. */
+#define bs2_say(...)                                                                               \
+	do {                                                                                       \
+		if (!IS_ENABLED(CONFIG_BOOT_STAGE2_QUIET)) {                                       \
+			printk(__VA_ARGS__);                                                       \
+		}                                                                                  \
+	} while (false)
 
 static FUNC_NORETURN void halt(void)
 {
@@ -120,12 +133,131 @@ static int read_in_place(uint8_t *dst, uint32_t first, uint64_t bytes)
 }
 #endif
 
+/*
+ * The segments' zero ranges (a version-2 header's zero bytes: the runs of
+ * zeros the payload does not store, and the image's .bss), cleared on a
+ * thread of their own. The loader runs with the MMU and the caches on, where
+ * a clear is fast, and main() sleeps while the eMMC's DMA runs: this thread
+ * has the lowest application priority, so it gets exactly that time, and
+ * main(), woken by the SDHC interrupt, always runs first. With the payload
+ * linked in there is no such wait; the thread then runs when main() waits
+ * for it.
+ *
+ * No lock: the header check (loader/src/lib.rs) guarantees that a zero range
+ * shares no byte with any segment's image bytes, with another zero range or
+ * with the staging buffer, so nothing main() reads, copies or inflates lands
+ * in a range this thread writes. The whole-cache flush before the jump comes
+ * after main() has taken zero_done.
+ */
+#define ZERO_PRIORITY K_LOWEST_APPLICATION_THREAD_PRIO
+BUILD_ASSERT(ZERO_PRIORITY > CONFIG_MAIN_THREAD_PRIORITY, "the clear runs under main()");
+
+static struct {
+	uint8_t *at;
+	size_t bytes;
+} zero_ranges[BS2_MAX_SEGMENTS];
+static uint32_t zero_count;
+/* From the thread's first instruction to its last, the times main()
+ * preempted it included. Read by main() after zero_done. */
+static int64_t zero_thread_ms;
+static K_SEM_DEFINE(zero_done, 0, 1);
+static K_THREAD_STACK_DEFINE(zero_stack, 4096);
+static struct k_thread zero_thread;
+
+/* The clear itself. The C library's memset is a byte loop in this image (a
+ * size-optimised picolibc): 57 MB of the AM62P showcase's zero ranges would
+ * take longer than the read they are meant to hide in. DC ZVA clears one
+ * block (DCZID_EL0: 64 bytes on the A53) without reading it from memory
+ * first; the bytes before the first whole block and after the last one, and
+ * everything on a core that forbids the instruction (DCZID_EL0.DZP), are
+ * stored as words and bytes. Needs the data cache on, as the loader has it. */
+static void zero_fill(uint8_t *p, size_t n)
+{
+	uint64_t dczid;
+
+	__asm__ volatile("mrs %0, dczid_el0" : "=r"(dczid));
+	if ((dczid & BIT(4)) == 0) {
+		const size_t block = (size_t)4 << (dczid & 0xf);
+		size_t head = (size_t)(-(uintptr_t)p & (block - 1));
+
+		if (n >= head + block) {
+			for (; head; head--, n--) {
+				*p++ = 0;
+			}
+			for (; n >= block; p += block, n -= block) {
+				__asm__ volatile("dc zva, %0" : : "r"(p) : "memory");
+			}
+		}
+	}
+	for (; n && ((uintptr_t)p & 7); n--) {
+		*p++ = 0;
+	}
+	for (; n >= 8; p += 8, n -= 8) {
+		*(uint64_t *)(void *)p = 0;
+	}
+	for (; n; n--) {
+		*p++ = 0;
+	}
+}
+
+static void zero_entry(void *p1, void *p2, void *p3)
+{
+	int64_t t = k_uptime_get();
+
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+	for (uint32_t i = 0; i < zero_count; i++) {
+		zero_fill(zero_ranges[i].at, zero_ranges[i].bytes);
+	}
+	zero_thread_ms = k_uptime_get() - t;
+	k_sem_give(&zero_done);
+}
+
+/* Start the clear of every segment's zero range, in table order. The number
+ * of bytes; 0: nothing to clear, no thread. */
+static uint64_t zero_start(const struct bs2_info *info)
+{
+	uint64_t total = 0;
+
+	for (uint32_t i = 0; i < info->count; i++) {
+		const struct bs2_segment *s = &info->segments[i];
+
+		if (s->zero_bytes) {
+			zero_ranges[zero_count].at = (uint8_t *)(uintptr_t)(s->load + s->image_bytes);
+			zero_ranges[zero_count].bytes = s->zero_bytes;
+			zero_count++;
+			total += s->zero_bytes;
+		}
+	}
+	if (zero_count) {
+		k_thread_create(&zero_thread, zero_stack, K_THREAD_STACK_SIZEOF(zero_stack), zero_entry,
+				NULL, NULL, NULL, ZERO_PRIORITY, 0, K_NO_WAIT);
+	}
+	return total;
+}
+
+/* Wait until the clear is done. The milliseconds main() waited. */
+static int64_t zero_wait(void)
+{
+	int64_t t = k_uptime_get();
+
+	if (zero_count) {
+		(void)k_sem_take(&zero_done, K_FOREVER);
+	}
+	return k_uptime_get() - t;
+}
+
 #ifdef CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST
 /*
  * The way back to the other boot chain without a button (the Verdin AM62P:
- * Toradex's chain in boot0, this one in boot1). A 'T' on the console while
- * the loader runs makes it point the eMMC's boot operation at boot partition
- * 1 again and reset the SoC, so the ROM's next read is the other chain.
+ * Toradex's chain in boot0, this one in boot1). BOOT_STAGE2_BOOT0_WORD on the
+ * console while the loader runs makes it point the eMMC's boot operation at
+ * boot partition 1 again and reset the SoC, so the ROM's next read is the
+ * other chain. The request was a single 'T' at first; a serial adapter
+ * plugged into a PC brought the board up in the other chain by itself on
+ * 2026-11-12 (a modem prober's "AT" is enough), hence a word nobody sends by
+ * accident.
  *
  * One byte of the EXT_CSD is written, PARTITION_CONFIG (179), with CMD6
  * SWITCH in its write-byte mode, and nothing else ever: no boot write
@@ -144,22 +276,34 @@ static int read_in_place(uint8_t *dst, uint32_t first, uint64_t bytes)
 
 static uint8_t ext_csd[512] __aligned(64);
 
-/* Whether a 'T' has arrived on the console. Never waits: it takes what the
- * UART's receiver holds now and returns. */
+/* Whether the word has arrived on the console. Never waits: it takes what
+ * the UART's receiver holds now and returns. The match carries over from one
+ * look to the next. The word's first character occurs in it once (checked at
+ * build time for the default), so a mismatch only has to be tried as a new
+ * start. */
 static bool boot0_requested(void)
 {
+	static const char word[] = CONFIG_BOOT_STAGE2_BOOT0_WORD;
+	static size_t matched;
+	static bool seen;
 	const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	unsigned char c;
-	bool seen = false;
 
 	if (!device_is_ready(uart)) {
 		return false;
 	}
 	for (int i = 0; i < 256 && uart_poll_in(uart, &c) == 0; i++) {
-		seen = seen || c == 'T';
+		if (c != (unsigned char)word[matched]) {
+			matched = 0;
+		}
+		if (c == (unsigned char)word[matched] && ++matched == sizeof(word) - 1) {
+			seen = true;
+			matched = 0;
+		}
 	}
 	return seen;
 }
+BUILD_ASSERT(sizeof(CONFIG_BOOT_STAGE2_BOOT0_WORD) - 1 >= 8, "a request word of at least 8 characters");
 
 static int ext_csd_read(const struct device *sdhc)
 {
@@ -249,7 +393,8 @@ static void boot0_on_request(void)
 	if (!boot0_requested()) {
 		return;
 	}
-	printk("boot_stage2: 'T' on the console: eMMC boot partition 1 (boot0) for the next start\n");
+	printk("boot_stage2: \"%s\" on the console: eMMC boot partition 1 (boot0) for the next start\n",
+	       CONFIG_BOOT_STAGE2_BOOT0_WORD);
 	if (boot0_select(DEVICE_DT_GET(SDHC_NODE)) != 0) {
 		printk("boot_stage2: boot0 request failed; booting this chain as usual\n");
 		return;
@@ -269,7 +414,11 @@ static inline void boot0_on_request(void)
 int main(void)
 {
 	struct bs2_info info;
+	/* The system counter at main(), in microseconds: the same clock the
+	 * stages before and after stamp, so the quiet line places the loader. */
+	const uint64_t entry_us = (k_cycle_get_64() * 1000000u) / sys_clock_hw_cycles_per_sec();
 	int64_t t0 = k_uptime_get();
+	int64_t t_ready = 0;
 	int ret;
 
 #ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
@@ -284,9 +433,9 @@ int main(void)
 	};
 	uint32_t disk_sectors = 0;
 
-	printk("boot_stage2: image header at eMMC user-area sector %d (payload up to sector %d), "
-	       "load 0x%lx, staging 0x%lx\n", HDR_SECTOR, END_SECTOR - 1, (unsigned long)LOAD,
-	       (unsigned long)STAGING);
+	bs2_say("boot_stage2: image header at eMMC user-area sector %d (payload up to sector %d), "
+		"load 0x%lx, staging 0x%lx\n", HDR_SECTOR, END_SECTOR - 1, (unsigned long)LOAD,
+		(unsigned long)STAGING);
 
 	ret = disk_access_init(CONFIG_BOOT_STAGE2_DISK);
 	if (ret) {
@@ -299,8 +448,8 @@ int main(void)
 		       ret, END_SECTOR);
 		halt();
 	}
-	printk("boot_stage2: eMMC user area %u sectors, ready after %lld ms\n", disk_sectors,
-	       k_uptime_get() - t0);
+	t_ready = k_uptime_get() - t0;
+	bs2_say("boot_stage2: eMMC user area %u sectors, ready after %lld ms\n", disk_sectors, t_ready);
 	boot0_on_request();
 
 	if (read_sectors(hdr, HDR_SECTOR, 1)) {
@@ -323,8 +472,8 @@ int main(void)
 		.staging_bytes = 0,
 	};
 
-	printk("boot_stage2: image carried in this loader (%zu bytes at %p), load 0x%lx\n", payload_bytes,
-	       (const void *)bs2_payload_start, (unsigned long)LOAD);
+	bs2_say("boot_stage2: image carried in this loader (%zu bytes at %p), load 0x%lx\n", payload_bytes,
+		(const void *)bs2_payload_start, (unsigned long)LOAD);
 	if (payload_bytes <= SECTOR_BYTES) {
 		printk("boot_stage2: no payload linked in (BOOT_STAGE2_PAYLOAD at build time)\n");
 		halt();
@@ -335,23 +484,24 @@ int main(void)
 		halt();
 	}
 #endif
-	printk("boot_stage2: \"%s\": header version %u, %u segment(s), %llu bytes stored, entry 0x%llx\n",
-	       info.name, info.version, info.count, info.stored_bytes, info.entry);
+	bs2_say("boot_stage2: \"%s\": header version %u, %u segment(s), %llu bytes stored, entry 0x%llx\n",
+		info.name, info.version, info.count, info.stored_bytes, info.entry);
 	for (uint32_t i = 0; i < info.count; i++) {
 		const struct bs2_segment *s = &info.segments[i];
 
-		printk("boot_stage2:   [%u] 0x%llx..0x%llx: %llu bytes image (%s, %llu stored at +0x%llx), "
-		       "footprint %llu\n", i, s->load, s->load + s->image_bytes, s->image_bytes,
-		       s->compression == BS2_COMPRESSION_DEFLATE ? "deflate" : "uncompressed",
-		       s->stored_bytes, s->stored_offset, s->footprint);
+		bs2_say("boot_stage2:   [%u] 0x%llx..0x%llx: %llu bytes image (%s, %llu stored at +0x%llx), "
+			"then %u zero bytes, footprint %llu\n", i, s->load, s->load + s->image_bytes,
+			s->image_bytes, s->compression == BS2_COMPRESSION_DEFLATE ? "deflate" : "uncompressed",
+			s->stored_bytes, s->stored_offset, s->zero_bytes, s->footprint);
 	}
 
 	/* What the read and the inflate run on: the MMU and both caches
 	 * (SCTLR_EL1 M, C, I), and the copy bandwidth into the payload region,
 	 * 1 MiB timed. Before the read: LOAD is free here in both modes (the
 	 * eMMC source reads an uncompressed segment 0 straight to LOAD, which
-	 * this probe would otherwise overwrite -- it did, on 2026-10-22). */
-	{
+	 * this probe would otherwise overwrite -- it did, on 2026-10-22). Not
+	 * in a quiet build: the copy alone is 5 ms on the AM62P. */
+	if (!IS_ENABLED(CONFIG_BOOT_STAGE2_QUIET)) {
 		uint64_t sctlr;
 		__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
 		uint32_t c0 = k_cycle_get_32();
@@ -363,6 +513,9 @@ int main(void)
 	}
 	int64_t t_read = 0, t_unpack = 0;
 	uint32_t nsec_total = 0;
+	/* After the probe above, which writes the first MiB at LOAD: a zero
+	 * range may begin there. */
+	const uint64_t zero_total = zero_start(&info);
 
 	for (uint32_t i = 0; i < info.count; i++) {
 		const struct bs2_segment *s = &info.segments[i];
@@ -403,16 +556,30 @@ int main(void)
 		t_read += t2 - t1;
 		t_unpack += k_uptime_get() - t2;
 	}
+	/* Every segment is in place; the zero ranges are once this returns. */
+	const int64_t t_zero_wait = zero_wait();
 	int64_t t3 = k_uptime_get();
 
 	/* once more, with everything read: the last moment the eMMC is up */
 	boot0_on_request();
-	printk("boot_stage2: \"%s\" ok (%u segment(s), segment 0 CRC-32 %08x): read %u sectors in %lld ms, "
-	       "unpacked in %lld ms; jumping to 0x%llx at %lld ms\n", info.name, info.count,
-	       info.segments[0].image_crc32, nsec_total, t_read, t_unpack, info.entry, t3 - t0);
-
-	/* Let the UART drain the last line: the image re-initialises it. */
-	k_busy_wait(5000);
+	bs2_say("boot_stage2: \"%s\" ok (%u segment(s), segment 0 CRC-32 %08x): read %u sectors in %lld ms, "
+		"unpacked in %lld ms, cleared %llu bytes in %lld ms on the zero thread (main waited %lld ms "
+		"for it); jumping to 0x%llx at %lld ms\n", info.name, info.count,
+		info.segments[0].image_crc32, nsec_total, t_read, t_unpack, zero_total, zero_thread_ms,
+		t_zero_wait, info.entry, t3 - t0);
+	if (IS_ENABLED(CONFIG_BOOT_STAGE2_QUIET)) {
+		/* The one line of a quiet boot: the milliseconds until the
+		 * source was ready, of the read and of the unpack, the zero
+		 * thread's from its start to its end / those main() then
+		 * waited for it, and the system counter at main(). The polled
+		 * console has waited for every character but the last, and
+		 * the image starts its UART milliseconds from here: no wait. */
+		printk("bs2: %lld %lld %lld %lld/%lld ms @%llu us\n", t_ready, t_read, t_unpack,
+		       zero_thread_ms, t_zero_wait, entry_us);
+	} else {
+		/* Let the UART drain the last line: the image re-initialises it. */
+		k_busy_wait(5000);
+	}
 
 	/* Quiesce what this image started: the SDHC (its interrupt and the
 	 * controller, reset), then interrupts off; the timers are stopped by

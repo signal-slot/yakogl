@@ -376,6 +376,75 @@ tools/am62p-mkboot.py stage2img --zephyr sup.bin --segment r5_ddr.bin@0x90000000
     --staging 0x91000000 --name showcase -o stage2-showcase.img
 ```
 
+**Zero bytes and image parts (2026-11-13).** Two fields of the version-2
+header that were reserved, 0, now keep zeros out of the payload. The
+showcase's image (20,270,326 bytes at 0x82000000) holds a 10.85 MB run of
+zeros in its file (a PROGBITS section that is zero but for a few hundred
+bytes) and is followed in RAM by a 46.4 MB `.bss`. Reading and CRC-ing the
+run cost about 80 ms in the loader, and the image cleared its `.bss` itself
+before its MMU and caches were on, which is slower still. The loader runs
+with the MMU and caches on, and its main thread sleeps while the eMMC's DMA
+runs, so the loader is the place to clear both.
+
+- **zero bytes** (segment entry, offset 36): the bytes of RAM right after the
+  segment's image bytes, from `load + image bytes`, that the loader clears.
+  Image bytes + zero bytes must fit the footprint. 0 is the old behaviour.
+- **image parts** P (header, offset 20; 0 reads as 1): the first P segments
+  together are the image. Segment 0 is its first extent (the arm64 header,
+  the entry) and segments 1..P-1 are the later extents, each at its own
+  address inside segment 0's footprint. A part starts at or above the end of
+  segment 0's image bytes + zero bytes, ends inside segment 0's footprint,
+  lies above the part before it, and its footprint is exactly its image bytes
+  + zero bytes. In the overlap check segment 0 counts against its own parts
+  with its image bytes + zero bytes only; every other pair, and the staging
+  buffer, are checked with the footprints as before, so a segment that is
+  not a part is still refused inside segment 0's footprint.
+
+A zero range therefore shares no byte with anything that is read or inflated
+or with another zero range, and the C side clears the ranges without a lock,
+on a thread of the lowest application priority that it starts once the
+header is parsed (`zero_start` in `src/main.c`; none when no segment has
+zero bytes). The main thread, woken by the SDHC interrupt, always runs
+first; the clear gets the time main would have slept. Main takes the
+thread's semaphore after the last segment is unpacked, before the cache
+flush and the jump. The quiet line is now `bs2: <ready> <read> <unpack>
+<zero thread>/<waited> ms @<entry> us`: the thread's milliseconds from its
+start to its end (the times main preempted it included), and those main then
+still waited for it. With the payload linked into the loader main never
+sleeps, so the thread runs during that wait.
+
+`stage2img --split-zeros MIN` cuts the zephyr.bin at every run of at least
+MIN zero bytes (the run shrunk inward to 4 KiB address boundaries, so each
+part starts on one; the longest runs when there are more than the table's 8
+entries hold) and `--clear-after BYTES` sets the zero bytes after the
+image's last byte, at `load + len(zephyr.bin)` exactly. For the showcase's
+image (`.bss` 0x83355000..0x85f9c231, file end 0x83354cf6):
+
+```sh
+tools/am62p-mkboot.py stage2img --zephyr sup/zephyr/zephyr.bin --sector 21073376 \
+    --end-sector 21204448 --staging 0x91000000 --name showcase-sbl --compress none \
+    --split-zeros 65536 --clear-after 0x2c47542 -o stage2-showcase-sbl.img
+```
+
+| segment | image bytes | zero bytes after it |
+|---|---|---|
+| 0, 0x82000000 | 7,311,360 | 61,440 (0x826f9000..0x82708000) |
+| 1, part at 0x82708000 | 2,035,712 | 10,846,208 (0x828f9000..0x83351000) |
+| 2, part at 0x83351000 | 15,606 | 46,429,506 (0x83354cf6..0x85f9c238) |
+
+9,363,456 bytes (18,288 sectors) are stored in place of 20,271,104, and
+`stage2check` puts the parts and their zero runs together again and compares
+the result with the zephyr.bin (host only on 2026-11-13; no board time yet).
+
+The image may then skip its own `.bss` clear (Zephyr's
+`CONFIG_SKIP_BSS_CLEAR`), but only under one condition: it is always started
+by this loader from a payload whose clear-after covers its whole `.bss`.
+Started any other way (kexec, U-Boot `go`, a payload written without
+`--clear-after`) the `.bss` holds whatever RAM held. A loader built before
+2026-11-13 refuses a payload with either field set. The tool cannot check the
+number against the ELF: it only sees zephyr.bin, so `--clear-after` is the
+caller's to compute from the image's `__bss_end`.
+
 Building:
 
 ```sh

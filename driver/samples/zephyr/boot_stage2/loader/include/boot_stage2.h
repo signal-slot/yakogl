@@ -32,7 +32,9 @@ struct bs2_segment {
 	uint32_t compression;
 	uint32_t stored_crc32;
 	uint32_t image_crc32;
-	uint32_t reserved;
+	uint32_t zero_bytes;    /* RAM after the image bytes (load + image_bytes ..) that the
+				 * loader clears; inside the footprint. The caller of
+				 * bs2_segment_unpack clears it, not the crate. */
 };
 
 struct bs2_info {
@@ -47,12 +49,17 @@ struct bs2_info {
 _Static_assert(sizeof(struct bs2_limits) == 40, "bs2_limits layout");
 _Static_assert(sizeof(struct bs2_segment) == 56, "bs2_segment layout");
 _Static_assert(offsetof(struct bs2_segment, compression) == 40, "bs2_segment layout");
+_Static_assert(offsetof(struct bs2_segment, zero_bytes) == 52, "bs2_segment layout");
 _Static_assert(offsetof(struct bs2_info, entry) == 448, "bs2_info layout");
 _Static_assert(offsetof(struct bs2_info, version) == 464, "bs2_info layout");
 _Static_assert(offsetof(struct bs2_info, name) == 472, "bs2_info layout");
 _Static_assert(sizeof(struct bs2_info) == 512, "bs2_info layout");
 
-/* 0, or a negative code bs2_strerror() names. */
+/* 0, or a negative code bs2_strerror() names. A version-2 header may cut the
+ * image into parts (segment 0 and the segments after it that lie inside its
+ * footprint, loader/src/lib.rs); the check guarantees that no segment's zero
+ * range overlaps another segment's image bytes or zero range, or the staging
+ * buffer, so the ranges can be cleared while the segments are read. */
 int bs2_header_parse(const uint8_t *sector, size_t len, const struct bs2_limits *limits,
 		     struct bs2_info *out);
 /* Segment `index` from its stored bytes at `stored` to its load address

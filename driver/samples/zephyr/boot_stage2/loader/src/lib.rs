@@ -39,7 +39,7 @@
 //! | 8 | 4 | header version, 2 |
 //! | 12 | 4 | header bytes, 512 |
 //! | 16 | 4 | segment count, 1..=8 |
-//! | 20 | 4 | reserved, 0 |
+//! | 20 | 4 | image parts P: the first P segments are the image (below); 0 reads as 1 |
 //! | 24 | 8 | entry address (inside segment 0) |
 //! | 32 | 8 | stored bytes: the payload after the header, a multiple of 512 |
 //! | 40 | 24 | zero |
@@ -60,13 +60,35 @@
 //! | 24 | 4 | compression: 0 none, 1 raw deflate |
 //! | 28 | 4 | CRC-32 of the stored bytes |
 //! | 32 | 4 | CRC-32 of the image |
-//! | 36 | 4 | reserved, 0 |
+//! | 36 | 4 | zero bytes: the bytes of RAM right after the image bytes (`load + image bytes ..`) that the loader clears; image bytes + zero bytes <= footprint |
 //!
 //! The stored ranges are in table order and do not overlap; the footprints
 //! lie in the loader's region, do not overlap each other and do not overlap
 //! the staging buffer a compressed eMMC payload is read to. Segment 0 is an
 //! arm64 Image and holds the entry. `tools/am62p-mkboot.py stage2img` writes
 //! both versions; the CRC-32 is zlib's.
+//!
+//! Zero bytes and image parts (2026-11-13) keep zeros out of the payload. The
+//! Verdin AM62P showcase image holds a 10.85 MB run of zeros in its file and
+//! is followed in RAM by a 46.4 MB .bss that it cleared itself with the MMU
+//! and caches off. The loader runs with both on and waits while the eMMC
+//! transfers, so it clears those ranges instead (the C side, on a thread
+//! under the reads): a run of zeros in the file is not stored, read or
+//! CRC-ed, and an image that is only ever started by this loader, with a
+//! payload whose zero bytes cover its .bss, may skip its own clear.
+//!
+//! With P > 1 the image is cut at its zero runs: segment 0 is its first
+//! extent (the arm64 header, the entry) and segments 1..P-1 are the later
+//! extents, each at its own address inside segment 0's footprint, each
+//! followed by its zero bytes. For those parts: they start at or above the
+//! end of segment 0's image bytes + zero bytes, end at or below the end of
+//! segment 0's footprint, are in ascending address order, and their
+//! footprint is exactly their image bytes + zero bytes. The overlap check
+//! takes segment 0 against one of its parts with segment 0's image bytes +
+//! zero bytes in place of its footprint; every other pair, and every segment
+//! against the staging buffer, is checked with the footprints. So nothing
+//! that is read or inflated lands in a zero range, and no two zero ranges
+//! share a byte.
 #![cfg_attr(not(test), no_std)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -123,7 +145,9 @@ pub struct Bs2Segment {
     pub compression: u32,
     pub stored_crc32: u32,
     pub image_crc32: u32,
-    pub reserved: u32,
+    /// The bytes after the image bytes that the loader clears (version 2;
+    /// inside the footprint).
+    pub zero_bytes: u32,
 }
 
 /// The header, checked (include/boot_stage2.h). A version-1 header is one
@@ -145,6 +169,7 @@ pub struct Bs2Info {
 const _: () = assert!(core::mem::size_of::<Bs2Limits>() == 40);
 const _: () = assert!(core::mem::size_of::<Bs2Segment>() == 56);
 const _: () = assert!(core::mem::offset_of!(Bs2Segment, compression) == 40);
+const _: () = assert!(core::mem::offset_of!(Bs2Segment, zero_bytes) == 52);
 const _: () = assert!(core::mem::offset_of!(Bs2Info, entry) == 448);
 const _: () = assert!(core::mem::offset_of!(Bs2Info, version) == 464);
 const _: () = assert!(core::mem::offset_of!(Bs2Info, name) == 472);
@@ -175,9 +200,11 @@ pub enum Bs2Error {
     SegmentOutside = -18,
     SegmentOverlap = -19,
     Footprint = -20,
+    ZeroRange = -21,
+    ImageParts = -22,
 }
 
-const ALL_ERRORS: [Bs2Error; 20] = {
+const ALL_ERRORS: [Bs2Error; 22] = {
     use Bs2Error::*;
     [
         BadArgument,
@@ -200,6 +227,8 @@ const ALL_ERRORS: [Bs2Error; 20] = {
         SegmentOutside,
         SegmentOverlap,
         Footprint,
+        ZeroRange,
+        ImageParts,
     ]
 };
 
@@ -231,6 +260,10 @@ impl Bs2Error {
             Bs2Error::SegmentOutside => "a segment lies outside the loader's RAM region\0",
             Bs2Error::SegmentOverlap => "segments overlap each other or the staging buffer\0",
             Bs2Error::Footprint => "the image's arm64 image_size is larger than its segment's footprint\0",
+            Bs2Error::ZeroRange => "a segment's image bytes and zero bytes together are over its footprint\0",
+            Bs2Error::ImageParts => {
+                "image parts: more than the segments, or a part outside segment 0's footprint, on its image, out of order or with a footprint of its own\0"
+            }
         }
     }
 }
@@ -314,19 +347,24 @@ fn parse_v1(h: &[u8], limits: &Bs2Limits, name: [u8; NAME_BYTES + 1]) -> Result<
         compression,
         stored_crc32: le32(h, 56),
         image_crc32: le32(h, 60),
-        reserved: 0,
+        zero_bytes: 0,
     };
     Ok(Bs2Info { segments, entry, stored_bytes, version: VERSION_SINGLE, count: 1, name })
 }
 
 fn parse_v2(h: &[u8], limits: &Bs2Limits, name: [u8; NAME_BYTES + 1]) -> Result<Bs2Info, Bs2Error> {
     let table_end = SEGMENT_TABLE + MAX_SEGMENTS * SEGMENT_ENTRY_BYTES;
-    if le32(h, 20) != 0 || h[40..64].iter().chain(&h[table_end..508]).any(|&b| b != 0) {
+    if h[40..64].iter().chain(&h[table_end..508]).any(|&b| b != 0) {
         return Err(Bs2Error::BadVersion);
     }
     let count = le32(h, 16) as usize;
     if count == 0 || count > MAX_SEGMENTS {
         return Err(Bs2Error::SegmentCount);
+    }
+    // The field was reserved, 0, before image parts: 0 is one part.
+    let parts = le32(h, 20).max(1) as usize;
+    if parts > count {
+        return Err(Bs2Error::ImageParts);
     }
     let entry = le64(h, 24);
     let stored_total = le64(h, 32);
@@ -355,11 +393,8 @@ fn parse_v2(h: &[u8], limits: &Bs2Limits, name: [u8; NAME_BYTES + 1]) -> Result<
             compression: le32(e, 24),
             stored_crc32: le32(e, 28),
             image_crc32: le32(e, 32),
-            reserved: le32(e, 36),
+            zero_bytes: le32(e, 36),
         };
-        if seg.reserved != 0 {
-            return Err(Bs2Error::BadVersion);
-        }
         if seg.compression != COMPRESSION_NONE && seg.compression != COMPRESSION_DEFLATE {
             return Err(Bs2Error::BadCompression);
         }
@@ -369,6 +404,9 @@ fn parse_v2(h: &[u8], limits: &Bs2Limits, name: [u8; NAME_BYTES + 1]) -> Result<
             || (seg.compression == COMPRESSION_NONE && seg.stored_bytes != seg.image_bytes)
         {
             return Err(Bs2Error::SizesDisagree);
+        }
+        if seg.image_bytes + seg.zero_bytes as u64 > seg.footprint {
+            return Err(Bs2Error::ZeroRange);
         }
         // In table order, sector aligned, inside the payload; whole sectors
         // of one segment never reach into the next.
@@ -387,17 +425,34 @@ fn parse_v2(h: &[u8], limits: &Bs2Limits, name: [u8; NAME_BYTES + 1]) -> Result<
         return Err(Bs2Error::WrongLoad);
     }
     let used = &segments[..count];
+    let s0 = &segments[0];
+    // What segment 0 itself writes: its image bytes and the zeros after them.
+    // Its parts lie above that, inside its footprint, one after the other
+    // (no sum here wraps: every segment's end was checked against the region).
+    let occupied = s0.image_bytes + s0.zero_bytes as u64;
+    for i in 1..parts {
+        let p = &used[i];
+        if p.load < s0.load + occupied
+            || p.load + p.footprint > s0.load + s0.footprint
+            || (i > 1 && p.load <= used[i - 1].load)
+            || p.footprint != p.image_bytes + p.zero_bytes as u64
+        {
+            return Err(Bs2Error::ImageParts);
+        }
+    }
     for (i, a) in used.iter().enumerate() {
         if limits.staging_bytes != 0 && overlaps(a.load, a.footprint, limits.staging, limits.staging_bytes) {
             return Err(Bs2Error::SegmentOverlap);
         }
-        for b in &used[i + 1..] {
-            if overlaps(a.load, a.footprint, b.load, b.footprint) {
+        for (j, b) in used.iter().enumerate().skip(i + 1) {
+            // Segment 0 against one of its parts: the part is inside the
+            // footprint by design, so only what segment 0 writes counts.
+            let an = if i == 0 && j < parts { occupied } else { a.footprint };
+            if overlaps(a.load, an, b.load, b.footprint) {
                 return Err(Bs2Error::SegmentOverlap);
             }
         }
     }
-    let s0 = &segments[0];
     if entry < s0.load || entry - s0.load >= s0.image_bytes {
         return Err(Bs2Error::EntryOutside);
     }
@@ -419,7 +474,8 @@ pub fn check_arm64_image(image: &[u8]) -> Result<(), Bs2Error> {
 /// address (`stored` is then the image). `image` must hold at least the
 /// segment's image bytes and must not overlap `stored`. Segment 0 must be an
 /// arm64 Image, and (version 2) its header's image_size must fit the
-/// footprint the overlap checks used. Returns the image's length.
+/// footprint the overlap checks used. The zero bytes are not touched here:
+/// clearing them is the caller's (`src/main.c`). Returns the image's length.
 pub fn unpack_segment(
     info: &Bs2Info,
     index: usize,

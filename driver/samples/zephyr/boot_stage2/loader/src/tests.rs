@@ -62,11 +62,18 @@ fn header_v1(info: &Bs2Info) -> [u8; 512] {
 
 /// A version-2 header from a Bs2Info, without any check.
 fn header_v2(info: &Bs2Info) -> [u8; 512] {
+    header_v2_parts(info, 0)
+}
+
+/// The same with the header's image parts field (0: the field as it was
+/// before image parts, one part).
+fn header_v2_parts(info: &Bs2Info, parts: u32) -> [u8; 512] {
     let mut h = [0u8; 512];
     h[..8].copy_from_slice(&MAGIC);
     h[8..12].copy_from_slice(&VERSION_SEGMENTS.to_le_bytes());
     h[12..16].copy_from_slice(&(HEADER_BYTES as u32).to_le_bytes());
     h[16..20].copy_from_slice(&info.count.to_le_bytes());
+    h[20..24].copy_from_slice(&parts.to_le_bytes());
     h[24..32].copy_from_slice(&info.entry.to_le_bytes());
     h[32..40].copy_from_slice(&info.stored_bytes.to_le_bytes());
     h[64..96].copy_from_slice(&info.name[..32]);
@@ -80,7 +87,7 @@ fn header_v2(info: &Bs2Info) -> [u8; 512] {
         e[24..28].copy_from_slice(&s.compression.to_le_bytes());
         e[28..32].copy_from_slice(&s.stored_crc32.to_le_bytes());
         e[32..36].copy_from_slice(&s.image_crc32.to_le_bytes());
-        e[36..40].copy_from_slice(&s.reserved.to_le_bytes());
+        e[36..40].copy_from_slice(&s.zero_bytes.to_le_bytes());
     }
     seal(&mut h);
     h
@@ -97,7 +104,7 @@ fn info_v1(image: &[u8]) -> Bs2Info {
         compression: COMPRESSION_NONE,
         stored_crc32: crc32::crc32(image),
         image_crc32: crc32::crc32(image),
-        reserved: 0,
+        zero_bytes: 0,
     };
     Bs2Info {
         segments,
@@ -146,7 +153,7 @@ fn payload(segs: &[(&[u8], u64, u32)]) -> Payload {
             compression: *comp,
             stored_crc32: crc32::crc32(&stored),
             image_crc32: crc32::crc32(data),
-            reserved: 0,
+            zero_bytes: 0,
         };
         stored_all.extend_from_slice(&stored);
         stored_all.resize(stored_all.len().div_ceil(512) * 512, 0);
@@ -316,7 +323,12 @@ fn v2_refusals() {
         &|i| i.segments[2].stored_offset = i.segments[1].stored_offset,
         Bs2Error::SegmentLayout,
     );
-    refuse("a reserved field", &|i| i.segments[1].reserved = 1, Bs2Error::BadVersion);
+    refuse("zero bytes over the footprint", &|i| i.segments[1].zero_bytes = 1, Bs2Error::ZeroRange);
+    refuse(
+        "zero bytes one over segment 0's .bss",
+        &|i| i.segments[0].zero_bytes = 0x40_0000 - 70_000 + 1,
+        Bs2Error::ZeroRange,
+    );
     refuse("an unknown compression", &|i| i.segments[2].compression = 7, Bs2Error::BadCompression);
     refuse("a zero-length segment", &|i| i.segments[2].image_bytes = 0, Bs2Error::SizesDisagree);
     refuse("uncompressed with stored != image", &|i| i.segments[2].image_bytes = 287, Bs2Error::SizesDisagree);
@@ -401,14 +413,214 @@ fn v2_unpack_refusals() {
     assert!(load_all(&q.file, &AM62P).is_ok());
 }
 
+/// An image of `len` bytes cut into parts at the given (offset, length)
+/// zero runs, the way `am62p-mkboot.py stage2img --split-zeros` cuts one:
+/// segment 0 and one continuation part after each run, the last part with
+/// `clear_after` zero bytes past the image's last byte. Then `extra`
+/// segments. Returns the payload and the image.
+fn split_payload(len: usize, runs: &[(usize, usize)], clear_after: u32, extra: &[(&[u8], u64)]) -> (Payload, Vec<u8>) {
+    let mut z = zimage(len);
+    z[16..24].copy_from_slice(&0x40_0000u64.to_le_bytes());
+    for &(at, n) in runs {
+        z[at..at + n].fill(0);
+    }
+    let mut segments = [Bs2Segment::default(); MAX_SEGMENTS];
+    let mut stored_all = Vec::new();
+    let mut images = Vec::new();
+    let mut start = 0;
+    let mut count = 0;
+    for k in 0..=runs.len() {
+        let (end, zero) = match runs.get(k) {
+            Some(&(at, n)) => (at, n as u32),
+            None => (len, clear_after),
+        };
+        let data = &z[start..end];
+        segments[count] = Bs2Segment {
+            load: LOAD + start as u64,
+            image_bytes: data.len() as u64,
+            footprint: if k == 0 { 0x40_0000 } else { data.len() as u64 + zero as u64 },
+            stored_offset: stored_all.len() as u64,
+            stored_bytes: data.len() as u64,
+            compression: COMPRESSION_NONE,
+            stored_crc32: crc32::crc32(data),
+            image_crc32: crc32::crc32(data),
+            zero_bytes: zero,
+        };
+        stored_all.extend_from_slice(data);
+        stored_all.resize(stored_all.len().div_ceil(512) * 512, 0);
+        images.push(data.to_vec());
+        start = end + zero as usize;
+        count += 1;
+    }
+    for (data, load) in extra {
+        segments[count] = Bs2Segment {
+            load: *load,
+            image_bytes: data.len() as u64,
+            footprint: data.len() as u64,
+            stored_offset: stored_all.len() as u64,
+            stored_bytes: data.len() as u64,
+            compression: COMPRESSION_NONE,
+            stored_crc32: crc32::crc32(data),
+            image_crc32: crc32::crc32(data),
+            zero_bytes: 0,
+        };
+        stored_all.extend_from_slice(data);
+        stored_all.resize(stored_all.len().div_ceil(512) * 512, 0);
+        images.push(data.to_vec());
+        count += 1;
+    }
+    let info = Bs2Info {
+        segments,
+        entry: LOAD,
+        stored_bytes: stored_all.len() as u64,
+        version: VERSION_SEGMENTS,
+        count: count as u32,
+        name: name("split"),
+    };
+    let mut file = header_v2_parts(&info, runs.len() as u32 + 1).to_vec();
+    file.extend_from_slice(&stored_all);
+    (Payload { info, file, images }, z)
+}
+
+/// What the loader leaves in RAM for the image: every part at its address
+/// over a region of 0xEE bytes, its zero bytes cleared.
+fn reassemble(file: &[u8], limits: &Bs2Limits, parts: usize, len: usize) -> Vec<u8> {
+    let info = parse_header(file, limits).expect("a valid payload");
+    let images = load_all(file, limits).expect("every segment loads");
+    let mut ram = vec![0xEEu8; len];
+    for (s, image) in info.segments.iter().zip(&images).take(parts) {
+        let at = (s.load - limits.load) as usize;
+        ram[at..at + image.len()].copy_from_slice(image);
+        ram[at + image.len()..at + image.len() + s.zero_bytes as usize].fill(0);
+    }
+    ram
+}
+
+#[test]
+fn v2_zero_bytes() {
+    // One part: the image, then its .bss cleared by the loader. Up to the
+    // footprint's last byte is accepted.
+    let (p, z) = split_payload(70_000, &[], 0x40_0000 - 70_000, &[]);
+    let info = parse_header(&p.file, &AM62P).expect("zero bytes up to the footprint");
+    assert_eq!((info.count, info.segments[0].zero_bytes), (1, 0x40_0000 - 70_000));
+    let ram = reassemble(&p.file, &AM62P, 1, 0x40_0000);
+    assert_eq!(&ram[..70_000], &z[..]);
+    assert!(ram[70_000..].iter().all(|&b| b == 0));
+    // image parts 1 and 0 are the same header rule
+    assert_eq!(parse_header(&header_v2_parts(&p.info, 1), &AM62P), Ok(info));
+    assert_eq!(parse_header(&header_v2_parts(&p.info, 0), &AM62P), Ok(info));
+    // a blob's zero bytes inside a footprint larger than its image
+    let blob = vec![0x5au8; 3000];
+    let (q, _) = split_payload(70_000, &[], 0, &[(&blob, 0x8e00_0000)]);
+    let mut i = q.info;
+    i.segments[1].footprint = 8192;
+    i.segments[1].zero_bytes = 8192 - 3000;
+    assert!(parse_header(&header_v2(&i), &AM62P).is_ok());
+    i.segments[1].zero_bytes += 1;
+    assert_eq!(parse_header(&header_v2(&i), &AM62P), Err(Bs2Error::ZeroRange));
+}
+
+#[test]
+fn v2_image_parts() {
+    // Three parts (two zero runs), a clear-after, and the showcase's two
+    // blobs above the image.
+    let ddr: Vec<u8> = (0..30_000u32).map(|i| (i * 7 + 3) as u8).collect();
+    let tcm: Vec<u8> = (0..288u32).map(|i| i as u8).collect();
+    let runs = [(8192, 16_384), (40_960, 12_288)];
+    let (p, z) = split_payload(70_000, &runs, 100_000, &[(&ddr, 0x8e00_0000), (&tcm, 0x8ec0_0000)]);
+    let info = parse_header(&p.file, &AM62P).expect("a valid split payload");
+    assert_eq!(info.count, 5);
+    assert_eq!(info.segments[0].footprint, 0x40_0000);
+    assert_eq!(
+        info.segments[..3].iter().map(|s| (s.load - LOAD, s.image_bytes, s.zero_bytes)).collect::<Vec<_>>(),
+        [(0, 8192, 16_384), (24_576, 16_384, 12_288), (53_248, 16_752, 100_000)]
+    );
+    assert_eq!(load_all(&p.file, &AM62P), Ok(p.images.clone()));
+    let ram = reassemble(&p.file, &AM62P, 3, 170_000);
+    assert_eq!(&ram[..70_000], &z[..], "the parts and their zero runs are the image");
+    assert!(ram[70_000..].iter().all(|&b| b == 0), "the clear-after range");
+    // the stored payload does not hold the zero runs
+    assert!(info.stored_bytes < 70_000 - 16_384 - 12_288 + 30_000 + 288 + 5 * 512);
+
+    let refuse = |what: &str, parts: u32, f: &dyn Fn(&mut Bs2Info), want: Bs2Error| {
+        let mut i = p.info;
+        f(&mut i);
+        assert_eq!(parse_header(&header_v2_parts(&i, parts), &AM62P), Err(want), "{what}");
+    };
+    let accept = |what: &str, parts: u32, f: &dyn Fn(&mut Bs2Info)| {
+        let mut i = p.info;
+        f(&mut i);
+        assert!(parse_header(&header_v2_parts(&i, parts), &AM62P).is_ok(), "{what}");
+    };
+    refuse("more parts than segments", 6, &|_| {}, Bs2Error::ImageParts);
+    accept("every segment a part needs them all inside segment 0", 3, &|i| i.count = 3);
+    refuse("a blob counted as a part", 4, &|_| {}, Bs2Error::ImageParts);
+    // Fewer parts than the table holds: the continuation is then an
+    // ordinary segment inside segment 0's footprint.
+    refuse("a part not counted", 2, &|_| {}, Bs2Error::SegmentOverlap);
+    refuse("parts read as one (the old field value)", 0, &|_| {}, Bs2Error::SegmentOverlap);
+    refuse("a part on segment 0's image", 3, &|i| i.segments[1].load = LOAD + 8191, Bs2Error::ImageParts);
+    refuse("a part on segment 0's zero bytes", 3, &|i| i.segments[1].load = LOAD + 24_575, Bs2Error::ImageParts);
+    refuse("a part on segment 0's longer zero bytes", 3, &|i| i.segments[0].zero_bytes += 1, Bs2Error::ImageParts);
+    refuse(
+        "a part ending past segment 0's footprint",
+        3,
+        &|i| i.segments[2].load = LOAD + 0x40_0000 - 116_751,
+        Bs2Error::ImageParts,
+    );
+    accept("a part ending on segment 0's last byte", 3, &|i| i.segments[2].load = LOAD + 0x40_0000 - 116_752);
+    refuse("a part above segment 0's footprint", 3, &|i| i.segments[2].load = 0x8d00_0000, Bs2Error::ImageParts);
+    refuse(
+        "parts in descending order",
+        3,
+        &|i| {
+            let (a, b) = (i.segments[1].load, i.segments[2].load);
+            i.segments[1].load = b + 0x10_0000;
+            i.segments[2].load = a + 0x10_0000;
+        },
+        Bs2Error::ImageParts,
+    );
+    refuse("two parts at one address", 3, &|i| i.segments[2].load = i.segments[1].load, Bs2Error::ImageParts);
+    refuse("a part with room after its zero bytes", 3, &|i| i.segments[1].footprint += 1, Bs2Error::ImageParts);
+    refuse("a part's zero bytes over its footprint", 3, &|i| i.segments[1].zero_bytes += 1, Bs2Error::ZeroRange);
+    refuse(
+        "a part whose zero bytes reach the next part",
+        3,
+        &|i| {
+            i.segments[1].zero_bytes += 1;
+            i.segments[1].footprint += 1;
+        },
+        Bs2Error::SegmentOverlap,
+    );
+    refuse("a part reaching into the next part", 3, &|i| i.segments[1].load += 4096, Bs2Error::SegmentOverlap);
+    // A segment that is not a part is still checked against segment 0's
+    // whole footprint, and against the parts.
+    refuse("a blob in segment 0's footprint", 3, &|i| i.segments[3].load = LOAD + 0x30_0000, Bs2Error::SegmentOverlap);
+    refuse("a blob on a part", 3, &|i| i.segments[4].load = LOAD + 24_576 + 100, Bs2Error::SegmentOverlap);
+    refuse("a blob on a part's zero bytes", 3, &|i| i.segments[4].load = LOAD + 45_000, Bs2Error::SegmentOverlap);
+    refuse("a blob on the clear-after range", 3, &|i| i.segments[4].load = LOAD + 150_000, Bs2Error::SegmentOverlap);
+    // segment 0 is checked against the staging buffer with its footprint
+    let low = Bs2Limits { staging: LOAD + 0x20_0000, ..AM62P };
+    assert_eq!(parse_header(&p.file, &low), Err(Bs2Error::SegmentOverlap), "staging in segment 0's .bss");
+    // the entry stays in segment 0's image bytes, not in a part
+    refuse("entry in a part", 3, &|i| i.entry = LOAD + 24_576, Bs2Error::EntryOutside);
+    refuse("entry in segment 0's zero bytes", 3, &|i| i.entry = LOAD + 8192, Bs2Error::EntryOutside);
+    // segment 0 is still the arm64 Image whose image_size fits the footprint
+    let mut i = p.info;
+    i.segments[0].footprint = 0x20_0000;
+    let mut f = p.file.clone();
+    f[..512].copy_from_slice(&header_v2_parts(&i, 3));
+    assert_eq!(load_all(&f, &AM62P), Err(Bs2Error::Footprint));
+}
+
 #[test]
 fn strerror_names_every_code() {
-    for code in -20..=-1 {
+    for code in -22..=-1 {
         let e = Bs2Error::from_code(code).expect("every code has a variant");
         assert!(e.text().ends_with('\0') && e.text().len() > 5);
     }
     assert!(Bs2Error::from_code(0).is_none());
-    assert!(Bs2Error::from_code(-21).is_none());
+    assert!(Bs2Error::from_code(-23).is_none());
 }
 
 /// The images `tools/am62p-mkboot.py stage2-vectors <dir>` writes (Python's
@@ -428,7 +640,7 @@ fn mkboot_vectors() {
         .filter(|p| p.extension().is_some_and(|x| x == "img"))
         .collect();
     names.sort();
-    let (mut ok, mut bad, mut multi) = (0, 0, 0);
+    let (mut ok, mut bad, mut multi, mut zeroed) = (0, 0, 0, 0);
     for p in &names {
         let file = std::fs::read(p).unwrap();
         let stem = p.file_name().unwrap().to_string_lossy().into_owned();
@@ -437,6 +649,10 @@ fn mkboot_vectors() {
             let images = result.unwrap_or_else(|e| panic!("{stem}: {e:?}"));
             if images.len() > 1 {
                 multi += 1;
+            }
+            let info = parse_header(&file, &AM62P).unwrap();
+            if info.segments.iter().any(|s| s.zero_bytes != 0) {
+                zeroed += 1;
             }
             ok += 1;
         } else {
@@ -451,6 +667,12 @@ fn mkboot_vectors() {
                 "bad-v2-no-segments.img" => Some(Bs2Error::SegmentCount),
                 "bad-v2-footprint.img" => Some(Bs2Error::Footprint),
                 "bad-v2-segment-crc.img" => Some(Bs2Error::StoredCrc),
+                "bad-v2-zero-over-footprint.img" => Some(Bs2Error::ZeroRange),
+                "bad-v2-parts-over-count.img"
+                | "bad-v2-part-outside.img"
+                | "bad-v2-part-on-occupied.img"
+                | "bad-v2-parts-descending.img" => Some(Bs2Error::ImageParts),
+                "bad-v2-blob-in-footprint.img" => Some(Bs2Error::SegmentOverlap),
                 s if s.starts_with("bad-v2-") => panic!("{s}: no expected refusal listed"),
                 _ => None,
             };
@@ -460,9 +682,66 @@ fn mkboot_vectors() {
             bad += 1;
         }
     }
-    assert!(ok >= 3 && bad >= 3 && multi >= 1, "too few vectors in {dir:?}: {ok} ok ({multi} multi), {bad} bad");
+    assert!(
+        ok >= 3 && bad >= 3 && multi >= 1 && zeroed >= 2,
+        "too few vectors in {dir:?}: {ok} ok ({multi} multi, {zeroed} with zero bytes), {bad} bad"
+    );
     println!(
-        "mkboot_vectors: {} images verified ({ok} loaded, {multi} of them multi-segment, {bad} refused)",
+        "mkboot_vectors: {} images verified ({ok} loaded, {multi} of them multi-segment, {zeroed} with zero bytes, {bad} refused)",
         ok + bad
+    );
+}
+
+/// A payload as it goes to a board, through the loader's own checks, under
+/// the limits that board's loader is built with: BS2_PAYLOAD=<stage2 .img>,
+/// BS2_PAYLOAD_ZEPHYR=<the zephyr.bin it was made from>, and
+/// BS2_PAYLOAD_LIMITS="<load>,<region end>,<max stored>,<staging>" (hex or
+/// decimal; the loader's BOOT_STAGE2_LOAD, _REGION_END, the sector range's
+/// bytes and _STAGING). The image is put together again from the segments
+/// and their zero bytes and must equal zephyr.bin; what follows the image's
+/// last byte in the last part's zero bytes is the .bss the loader clears.
+/// Without BS2_PAYLOAD the test says so and checks nothing.
+#[test]
+fn board_payload() {
+    let Some(path) = std::env::var_os("BS2_PAYLOAD") else {
+        println!("board_payload: BS2_PAYLOAD not set, nothing checked");
+        return;
+    };
+    let num = |s: &str| {
+        let s = s.trim();
+        match s.strip_prefix("0x") {
+            Some(h) => u64::from_str_radix(h, 16).unwrap(),
+            None => s.parse::<u64>().unwrap(),
+        }
+    };
+    let l: Vec<u64> = std::env::var("BS2_PAYLOAD_LIMITS").expect("BS2_PAYLOAD_LIMITS").split(',').map(num).collect();
+    let limits = Bs2Limits { load: l[0], region_end: l[1], max_stored: l[2], staging: l[3], staging_bytes: l[2] };
+    let file = std::fs::read(&path).unwrap();
+    let zephyr = std::fs::read(std::env::var_os("BS2_PAYLOAD_ZEPHYR").expect("BS2_PAYLOAD_ZEPHYR")).unwrap();
+    let info = parse_header(&file, &limits).unwrap_or_else(|e| panic!("header refused: {e:?}"));
+    let images = load_all(&file, &limits).unwrap_or_else(|e| panic!("payload refused: {e:?}"));
+    // The loader's memory from the load address: every byte 0xAA until a
+    // segment or a zero range writes it.
+    let mut ram = vec![0xAAu8; zephyr.len()];
+    let mut cleared_after = 0u64;
+    for (s, image) in info.segments[..info.count as usize].iter().zip(&images) {
+        let at = (s.load - limits.load) as usize;
+        if at >= ram.len() {
+            continue; // a segment of another core
+        }
+        ram[at..at + image.len()].copy_from_slice(image);
+        let zero_end = at + image.len() + s.zero_bytes as usize;
+        for b in &mut ram[(at + image.len()).min(zephyr.len())..zero_end.min(zephyr.len())] {
+            *b = 0;
+        }
+        cleared_after = cleared_after.max((zero_end as u64).saturating_sub(zephyr.len() as u64));
+    }
+    assert!(ram == zephyr, "the segments and zero ranges do not give zephyr.bin back");
+    println!(
+        "board_payload: {} segment(s), {} stored bytes give the {} bytes of zephyr.bin back; {} bytes cleared after it",
+        info.count,
+        info.stored_bytes,
+        zephyr.len(),
+        cleared_after
     );
 }
