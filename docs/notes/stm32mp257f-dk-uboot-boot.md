@@ -80,6 +80,32 @@ may differ: each place where that matters is marked):
   partition size, read with `dd` from Linux (read-only); the runner's
   `tools/board-stm32mp2.sh` already assumes these offsets and refuses when a
   CRC fails.
+  **The layout, in one table** (ST's tree, tag `v2023.10-stm32mp-r3.1`;
+  `uboot_env.py` numbers the copies 1 and 2, U-Boot's `env/mmc.c` 0 and 1):
+
+  | item | value | source |
+  | --- | --- | --- |
+  | size of one copy | `CONFIG_ENV_SIZE` 0x2000 (8 KiB) | `ST/arch/arm/mach-stm32mp/Kconfig:33-34`; the defconfig sets none |
+  | header | 4 bytes CRC32, then 1 flag byte, because the environment is redundant; the data is 0x2000 - 5 bytes | `ST/include/env_internal.h:59-64`, `:80-86` |
+  | redundant | `CONFIG_SYS_REDUNDAND_ENVIRONMENT=y` | `ST/configs/stm32mp25_defconfig:72` |
+  | copy 0 (`uboot_env.py` copy 1) | partition start + size - 0x2000: **0x7e000** in the 512 KiB partition | `ST/env/mmc.c:91-92` with `copy` = 0 (`:422`) |
+  | copy 1 (`uboot_env.py` copy 2) | partition start + size - 2 * 0x2000: **0x7c000**, *below* copy 0 | `ST/env/mmc.c:91-92` with `copy` = 1 (`:423`) |
+  | the partition is found by name | `u-boot-env`, no `CONFIG_ENV_MMC_PARTITION`, so the device tree's `u-boot,mmc-env-partition` | `ST/env/mmc.c:117-127`, `ST/arch/arm/dts/stm32mp257f-dk-u-boot.dtsi:11` |
+  | the device | `CONFIG_SYS_MMC_ENV_DEV=-1`, the boot instance | `ST/configs/stm32mp25_defconfig:77` |
+  | the active copy | both CRCs valid: the higher flag byte, except 0xff against 0x00 where the 0x00 one is newer; equal flags: copy 0 | `ST/env/common.c:365-374` |
+  | a write | the other copy, flag = previous + 1 | `ST/env/common.c:424`, `ST/env/mmc.c:270-299` |
+
+  Because copy 1 sits below copy 0, `uboot_env.py`'s default for the second
+  offset (`--offset + --size`) is wrong here and **`--offset2` must be given**.
+  The command that reads a `dd` image of the whole partition (read-only) is
+
+  ```
+  tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 check IMAGE
+  tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 print IMAGE
+  ```
+
+  (`env-layout-check` found this reads the DK's environment byte for byte as
+  ST's own tools do; `TODO(board-env-read)` still confirms it on the DK.)
 - **`bootcmd` and `env_check`.** The compiled-in `bootcmd_stm32mp` prints
   "Boot over ...", runs `env_check`, sets `boot_targets` to `mmc${boot_instance}`
   when it booted from mmc, and runs `distro_bootcmd`
@@ -407,7 +433,9 @@ no persistent environment at all.
   copies' CRCs must check before any write"; here before any run). The
   `imx8mp-netboot.md` run saw the same class of effect (a `saveenv` stores
   U-Boot's runtime variables): the before/after `fw_printenv` diff is what shows
-  it. `TODO(board-run)`: the diff is expected empty.
+  it. `TODO(board-run)`: the diff is expected empty. The environment itself is
+compared on the partition's `dd` image with `tools/uboot_env.py --size 0x2000
+--redundant --offset 0x7e000 --offset2 0x7c000 diff before.bin after.bin` (section 8).
 
 ## 8. The undo of a cut-off run (f)
 
@@ -436,6 +464,15 @@ RAM is gone at the next reset; only the card and the TFTP root persist.
   the run: they are **never written**, so they must match byte for byte, and
   the extra files must be only the `yakogl/` ones. `TODO(board-run)`: the
   before listing of `/boot` and its sha256 file, and the after comparison;
+- the exact dump and compare (the layout of section 1): `dd` the
+  `u-boot-env` partition to `before.bin` and `after.bin`, then
+  `tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 check before.bin`
+  (exit 0 only if both CRCs are valid) and the same options with
+  `diff before.bin after.bin` (exit 0 when they are identical). The active
+  copy is the one with the **higher flag byte** (`ST/env/common.c:365-374`;
+  0xff against 0x00 counts the 0x00 one as newer, equal flags take copy 0), so
+  the flag bytes of both copies must also match before and after, and `print`
+  shows the active one for the `fw_printenv` comparison;
 - compare `fw_printenv` with the before copy; `u-boot-env`'s two copies are
   not written by the one-shot, so the dump of the partition (`dd` of the
   512 KiB, read-only) can be compared too;
