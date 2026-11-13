@@ -35,6 +35,7 @@
 //! | [`wide_target`] | the tiled shadow a 64-bit colour target is rendered into |
 //! | [`tiled_rt`] | the tiled shadow of a 32-bit colour target, resolved back by the resolve engine in the same stream (`gc_tiled_rt`, off by default) |
 //! | [`layout`] | the address map of the 4x4-tiled and 64x64 super-tiled layouts: offsets, padding, stride, and whole-buffer linear-to-tiled conversion (the depth surface's and the shadow's layouts name it; the CPU conversion is not used) |
+//! | `rs_interp` | `host-test` only: the resolve engine's copies and fills run over a captured stream's writes and a memory model, through [`layout`] |
 //! | [`ts`] | tile-status buffer sizes, fast-clear words, and the PE_MEM_CONFIG and TS_MEM_CONFIG values Mesa writes (not yet used) |
 #![cfg(feature = "gpu-vivante")]
 
@@ -62,6 +63,9 @@ pub mod pe_zs;
 pub mod profile;
 pub mod regs;
 pub mod rs_clear;
+/// A model of the resolve engine over captured streams: host tests only.
+#[cfg(feature = "host-test")]
+pub mod rs_interp;
 pub mod shader;
 pub mod state;
 pub mod texture;
