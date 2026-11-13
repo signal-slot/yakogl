@@ -374,6 +374,135 @@ dEQP: `dEQP-GLES3.functional.texture.shadow.*` (`docs/es3-cts-failures.md:104`,
 Pi 4 image `T*` rows (`docs/es3/pi4-gles3-fails.tsv`) change; this item does
 not edit those files.
 
+## (f) What dEQP texture.shadow checks
+
+Source: VK-GL-CTS `93bca01`, `modules/gles3/functional/es3fTextureShadowTests.cpp`
+(cited below as `ES3:<line>`; re-check with `git show
+93bca01:modules/gles3/functional/es3fTextureShadowTests.cpp | sed -n
+'A,Bp'`). Only this file was read for this section. The verifier
+(`framework/common/tcuTexCompareVerifier.cpp`) and the renderer helpers
+(`glsTextureTestUtil.cpp`, `gluTextureTestUtil.cpp`) were not: what the
+`TexComparePrecision` numbers below mean there, and how the reference value
+is clamped when dEQP predicts the picture, is open (see "Open" at the end).
+
+Shape. Three groups of 6 filters x 8 compare functions x 3 formats = 144 cases
+each, 432 in all: `2d` (`ES3:1061-1087`), `cube` (`ES3:1092-1118`) and
+`2d_array` (`ES3:1123-1150`). Each case runs several draws (below).
+
+Sizes and wraps. 2D: 32 x 64 texels, `GL_REPEAT` both ways (`ES3:1077-1080`;
+the array has the same constants at `:1140-1143` and `numLayers = 8`
+at `:1144`); cube: size 32, wraps set to `GL_REPEAT` but the verifier is told
+`GL_CLAMP_TO_EDGE` with `seamlessCubeMap = true` (`ES3:1109-1111`, `:659-660`);
+mip levels `deLog2Floor32(size) + 1` for the cube (`ES3:503`), the full chain
+for the 2D case (`ES3:239-258`) and `deLog2Floor32(max(w, h)) + 1` for the
+array (`ES3:828`). The viewport is 64 x 64 (`ES3:54-57`). So the V3D sees a
+five- or six-level chain per texture: the draws need the mip chain of a depth
+texture to compare per level, which the R32F path stores like any other.
+
+Formats. Only three: `GL_DEPTH_COMPONENT16`, `GL_DEPTH_COMPONENT32F` and
+`GL_DEPTH24_STENCIL8` (`ES3:1035-1037`). `GL_DEPTH_COMPONENT24` and
+`GL_DEPTH32F_STENCIL8` are not in the group (the note's other sections and the
+audit that prompted this one named them; they are covered by the same code
+paths, not by this group). The D16 and D24S8 cases are the fixed-point ones
+that the clamp bit (d) is for; D32F is the one that must not be clamped.
+
+Texture contents. The 2D case fills texture 0 with a component gradient from
+(-0.5, -0.5, -0.5, 2.0) to (1.0, 1.0, 1.0, 0.0) on every level, without
+scaling (`ES3:245-246`), so for a depth format the written texel values lie
+outside [0,1] and rely on the upload clamping them (the texel of a fixed-point
+format is clamped by the GL; for D32F the stored value is the float as given,
+ES 3.0.6 3.8.3: I did not check whether `glu::Texture2D::upload` converts it
+first). Texture 1 is a 4-cell grid whose two colours are 24-bit RGB per level
+(`ES3:250-258`). The cube and the array scale the same fill by the format's
+`valueMin`/`valueMax` (`ES3:504-507`, `:826-827`, `:837-838`, `:854`), so
+their texels are in the format's own range. The gradient reaches both 0 and 1
+exactly at its corners, which is where a compare against a reference of 0.5,
+0 or 1 changes sign.
+
+Reference values. `refInRangeUpper` and `refInRangeLower` are 0.5 for every
+function except `GL_EQUAL` and `GL_NOTEQUAL`, where they are 1.0 and 0.0
+(`ES3:275-276`; cube `:563-564`; array `:870-871`). Outside [0,1]: the 2D
+and array cases add `refOutOfBoundsUpper = 1.1` and `refOutOfBoundsLower =
+-0.1` (`ES3:277-278`, rows at `:293-294`; array `:872-873`, rows `:888-889`),
+both on the grid texture (`texNdx 1`); the cube has the same pair (`ES3:565-
+566`, rows `:583-590`), both on the grid. The comment at `ES3:277` reads
+"lookup function should clamp values to [0, 1] range". These rows run for
+every function and every one of the three formats, D32F included. `ref` goes
+into the draw as `sampleParams.ref` and into the shader as the third (or
+fourth) coordinate lane (`ES3:664`, the 2D case sets the compare at `:346` for the
+sampler). There is no `clampValues` in this file; a name by that spelling is
+not in `ES3` at all (grep finds none).
+
+Compare precision. `texComparePrecision` is set at `ES3:373-381` (2D),
+`:690-698` (cube) and `:975-983` (array):
+
+| case | `coordBits` | `uvwBits` | `pcfBits` | `referenceBits` | `resultBits` | `derivateBits` / `lodBits` |
+|---|---|---|---|---|---|---|
+| 2D (`:373-381`) | (20, 20, 0) | (7, 7, 0) | 5 | 16 | `redBits - 1` | 18 / 6 |
+| cube (`:690-698`) | (10, 10, 10) | (6, 6, 0) | 5 | 16 | `redBits - 1` | 10 / 5 |
+| array (`:975-983`) | (20, 20, 20) | (7, 7, 7) | 5 | 16 | `redBits - 1` | 18 / 6 |
+
+Each case verifies twice at most: first with these "high quality PCF" bits,
+and, if that fails, with `uvwBits` cut to 4 (2D, array, `:394-395`, `:996-997`;
+the cube's `:711-712`), `pcfBits = 0` and `lodBits = 4`, logging "Verification
+assuming high-quality PCF filtering failed" (`ES3:388-399`). A pass on the
+second try is a `QualityWarning`, not a failure (the rows at
+`docs/es3-cts-failures.md:104`).
+
+Filters (`ES3:1044-1050`): `nearest` (NEAREST/NEAREST), `linear`
+(LINEAR/LINEAR), and the four mip filters with a LINEAR mag filter:
+`nearest_mipmap_nearest`, `linear_mipmap_nearest`, `nearest_mipmap_linear`,
+`linear_mipmap_linear`. Compare functions (`ES3:1055-1057`): `GL_LEQUAL`,
+`GL_GEQUAL`, `GL_LESS`, `GL_GREATER`, `GL_EQUAL`, `GL_NOTEQUAL`, `GL_ALWAYS`,
+`GL_NEVER`: all eight run. The draws per case: 6 for 2D (`ES3:289-294`), 6 for
+the cube (`ES3:570-591`, each drawn on six faces, `ES3:669`), 6 for the array
+(`ES3:882-889`), the array's layer coordinate running from -0.5 to 8
+(`ES3:895-909`).
+
+How the V3D design meets each:
+
+- Compare functions and filters. All eight go through the record's 3-bit
+  field (a) and the six filters are the ordinary TMU ones; nothing here is
+  special. NEVER and ALWAYS are in the group, so the packer must not treat
+  field 0 as "no compare" in the test (it is the compare-off word too, (a)):
+  the cases pass because the shader writes DREF, not because the record
+  differs.
+- Mip filters. The record's compare is applied per tap before the filter, so
+  `linear_mipmap_linear` is PCF per level and then a lerp of levels, which is
+  what GL specifies (c). The precision rows allow `pcfBits = 5` of weight
+  error with the first try, and the second try falls back to none, so the
+  V3D's fixed-point weights are inside the tolerance either way.
+- Reference in [0,1]. The ordinary rows (0.5, 0, 1) need no clamp and are
+  met as soon as the DREF write exists.
+- Reference outside [0,1]. The V3D design misses this until `fixed_depth` is
+  wired: Mesa writes the comparator as given (d), and the hardware is not
+  known to clamp. For D16 and D24S8 the clamp the audit settled (clamp to
+  [0,1] for DEPTH_COMPONENT16/24 and DEPTH24_STENCIL8) is what the rows
+  `refOutOfBounds*` need. For D32F the same two rows exist (`ES3:1035-1037`
+  against `:277-278`), so "never clamp D32F" has to be checked against what
+  the verifier predicts for a reference of 1.1 and -0.1 on a float depth
+  texture; see Open.
+- Texture range. 2D texels outside [0,1] (`ES3:245-246`) for the two fixed
+  formats are brought into range by the upload (the GL core stores a depth
+  texel as a unorm-valued R32F, (d)), so no extra compare work is needed; the
+  D32F texture keeps the out-of-range texels, which the compare treats as
+  they are.
+- 8 layers x 32 x 64: the array form and the cube form depend on the
+  `v3d-qpu-array-3d` and cube items (c); the cube through the no-seamless
+  layers is wrong at the edge by one tap, which `seamlessCubeMap = true`
+  (`ES3:660`) would catch with `pcfBits = 5` only if the second try also
+  fails. An ES 3.0 build keys cubes seamless, so the cube group is judged on
+  the seamless path.
+
+Open (needs the files not read here, `tcuTexCompareVerifier.cpp` and
+`glsTextureTestUtil.cpp`): (1) whether the verifier clamps `ref` to [0,1] for
+a float depth texture (`tcuTexCompareVerifier.cpp`, the name the plan gave is
+`clampValues`); (2) what `referenceBits = 16` and `pcfBits = 5` mean for a
+reference of exactly 0.5 against an unorm16 texel of 0x8000 (a one-ulp
+difference flips LESS/GREATER); (3) whether `resultBits = redBits - 1` is the
+tolerance of the 1-bit comparison results of NEAREST. These are for a follow-up
+that reads the two files at `93bca01`.
+
 ## What the item must not forget
 
 - Struct, C struct, asserts and the zero literal move together ((b)); a
