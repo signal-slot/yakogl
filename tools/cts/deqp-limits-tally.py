@@ -59,6 +59,21 @@ Exit 0: the tallies printed. 1: a run directory without c_*.qpa, a run with
 no result at all, a --compare side without a single result. 2: a bad
 command line.
 
+--require-pass limits is a mechanical acceptance check instead of the tally:
+for each RUN it selects exactly the plan's limit cases -- every case of
+gles3-mustpass.txt (next to this script; the names come from that file) in
+implementation_limits, state_query.integers, integers64, floats or booleans
+whose last name part is one of the seven limit words (the default --limit
+list), bare or with a _get<form> suffix (_getboolean, _getfloat,
+_getinteger, _getinteger64) -- and prints one line per case, 'status case'
+('Pass' or the run's status; 'Missing' for a case the run does not hold,
+'Incomplete' for one that began and was cut off), then 'N selected, P pass,
+F not-pass'; with several RUNs, one block per run headed '== RUN'. Exit 0
+when every selected case of every run is Pass; 3 when any is not (a missing
+case counts as not-pass; NotSupported is not Pass); 1 and 2 as above. The
+default output, without the option, is unchanged. --compare and
+--require-pass together are refused.
+
 --selftest writes tiny run directories inline -- the shapes real logs hold:
 unindented, space- and tab-indented <Result> lines, a multi-line message,
 &quot; and &amp; entities, a self-closed <Result ... />,
@@ -77,6 +92,10 @@ import sys
 import tempfile
 from xml.sax.saxutils import unescape
 
+REQUIRE_GROUPS = ("implementation_limits", "state_query.integers",
+                  "state_query.integers64", "state_query.floats",
+                  "state_query.booleans")
+MUSTPASS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gles3-mustpass.txt')
 GROUPS_DEFAULT = ("implementation_limits", "state_query.integers",
                   "state_query.integers64", "state_query.floats", "ubo",
                   "shaders.linkage.varying", "shaders.builtin_variable")
@@ -419,6 +438,41 @@ def compare_lines(old, new, groups, limits):
     return out
 
 
+def require_cases(mustpass=MUSTPASS):
+    """The selected case names, sorted, read from gles3-mustpass.txt."""
+    pat = re.compile(r'^dEQP-GLES3\.functional\.(?:%s)\.(?:%s)(?:_get(?:boolean|float|integer|integer64))?$'
+                     % ('|'.join(re.escape(g) for g in REQUIRE_GROUPS),
+                        '|'.join(LIMITS_DEFAULT)))
+    try:
+        with open(mustpass, encoding='utf-8', errors='replace') as f:
+            names = sorted({ln.strip() for ln in f if pat.match(ln.strip())})
+    except OSError as e:
+        raise TallyError('cannot read %s: %s' % (mustpass, e))
+    if not names:
+        raise TallyError('%s holds no limit case' % mustpass)
+    return names
+
+
+def require_lines(runs, paths):
+    """([lines], all_pass) of --require-pass limits."""
+    names = require_cases()
+    out, ok = [], True
+    for i, (run, path) in enumerate(zip(runs, paths)):
+        if len(runs) > 1:
+            if i:
+                out.append('')
+            out.append('== %s' % path)
+        npass = 0
+        for c in names:
+            st = case_status(run, c) or 'Missing'
+            npass += st == 'Pass'
+            out.append('%s %s' % (st, c))
+        out.append('%d selected, %d pass, %d not-pass'
+                   % (len(names), npass, len(names) - npass))
+        ok = ok and npass == len(names)
+    return out, ok
+
+
 def main():
     ap = argparse.ArgumentParser(
         prog='deqp-limits-tally.py',
@@ -430,6 +484,8 @@ def main():
                     help='tally this group too (repeatable)')
     ap.add_argument('--limit', action='append', default=[], metavar='WORD',
                     help='list limit rows named after this word too (repeatable)')
+    ap.add_argument('--require-pass', choices=('limits',), metavar='limits',
+                    help='acceptance check: the limit cases must all be Pass (exit 3 if not)')
     ap.add_argument('--selftest', action='store_true')
     a = ap.parse_args()
     if a.selftest:
@@ -437,6 +493,12 @@ def main():
     groups = GROUPS_DEFAULT + tuple(norm_group(g) for g in a.group)
     limits = LIMITS_DEFAULT + tuple(w for w in a.limit if w)
     try:
+        if a.require_pass:
+            if a.compare or not a.runs:
+                ap.error('--require-pass needs RUN... and no --compare')
+            lines, ok = require_lines([load_run(p) for p in a.runs], a.runs)
+            sys.stdout.write('\n'.join(lines) + '\n')
+            return 0 if ok else 3
         if a.compare:
             if len(a.runs) != 2:
                 ap.error('--compare needs exactly two run directories: OLD NEW')

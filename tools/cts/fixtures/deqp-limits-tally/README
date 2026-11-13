@@ -1,0 +1,8 @@
+Fixture run directories for tools/cts/deqp-limits-tally-selftest.sh: tiny
+host-deqp-run.sh-shaped runs (commit, all.txt, c_000.qpa) holding exactly the
+cases `deqp-limits-tally.py --require-pass limits` selects from
+tools/cts/gles3-mustpass.txt. Synthetic, not a dEQP result.
+
+  allpass  every selected case Pass
+  onefail  the first selected case Fail
+  missing  the last selected case absent from the run
