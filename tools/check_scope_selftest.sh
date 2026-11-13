@@ -93,6 +93,7 @@ want tests/es3_fragdepth_v3d.rs v3d
 want tests/es3_fragdepth_v3d_state.rs v3d
 want tests/es3_fragdepth_v3d_sim.rs v3d
 want tests/es3_fragdepth_gc.rs vivante
+want tests/es3_half_float_mrt_gc.rs vivante
 want tests/es3_fragdepth_cases.rs "vivante v3d"
 want src/mali/backend.rs mali
 want src/mali/genxml/v10.rs mali
