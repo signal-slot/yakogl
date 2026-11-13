@@ -319,18 +319,20 @@ not chosen: making room means shrinking Torizon's root filesystem offline.
 - `main()` (C): `disk_access_init("emmc")` (the SD stack starts from CMD0,
   which also leaves the boot partition the SPL read from: PARTITION_ACCESS
   is reset by CMD0), reads the header sector, reads the payload in 1 MiB
-  reads to the staging address 0x90000000 (deflate) or straight to
+  reads to the staging address 0x90000000 (compressed) or straight to
   0x82000000 (uncompressed), unpacks, then quiesces: the SDHC interrupt off
   and the controller reset, `irq_lock()`, `sys_cache_data_flush_and_invd_all()`,
   `sys_cache_instr_invd_all()`, `bs2_jump()`. Any refusal prints the reason
-  and stops (no reset loop).
+  and stops (no reset loop). A version-3 payload (below) is read and
+  unpacked segment by segment, each to its own load address.
 - The logic is Rust (`loader/`, crate `yakogl-boot-stage2`, no
   dependencies, `aarch64-unknown-none-softfloat`, built through
   `capi/yakogl_capi.cmake`): the header check (magic, header CRC-32,
   version, load address = the one the loader serves, entry inside the image,
   stored size within the user-area range, image size below the staging
   buffer), CRC-32 of the stored bytes, a raw-deflate decoder written from
-  RFC 1951 (flat output buffer, every malformed input an error), length and
+  RFC 1951 and an LZ4 frame decoder (flat output buffer, every malformed
+  input an error), length and
   CRC-32 of the image, the arm64 Image magic, and the jump: DAIF masked, both
   EL1 timers stopped, SCTLR_EL1 M/C/I off, `ic iallu`, `tlbi vmalle1`,
   `br` to the entry with x0..x3 = 0. The loader's code is identity mapped
@@ -341,14 +343,154 @@ not chosen: making room means shrinking Torizon's root filesystem offline.
   have done (HCR_EL2, CNTHCTL, ICC_SRE_EL2) the loader's identical reset path
   already did. This is the one difference from the one-stage route.
 
-The header (one 512-byte sector, little-endian; `loader/src/lib.rs`):
-magic `YKSTAGE2`, version 1, header size 512, compression (0 none, 1 raw
-deflate), load, entry, stored bytes, image bytes, CRC-32 of each, a 32-byte
-name, and at 508 the CRC-32 of bytes 0..508. `am62p-mkboot.py stage2img`
-writes it (and re-reads the result: header, both CRCs, zlib decode = the
-zephyr.bin), `stage2check` re-reads a file, `stage2-vectors` writes the test
-images that the crate's host test decodes (`tools/check.sh` row "am62p
-second stage": Python's zlib against the loader's Rust).
+The header (one 512-byte sector, little-endian; the layouts are tables in
+`loader/src/lib.rs`) has three versions, and the loader reads all of them.
+
+**Versions 1 and 2, one image.** Magic `YKSTAGE2`, the version, header size
+512, compression (0 none, 1 raw deflate, and in version 2 also 2, one LZ4
+frame), load, entry, stored bytes, image bytes, CRC-32 of each, a 32-byte
+name, in version 2 a range the loader zeroes after the unpack (offset from
+the load address and bytes: the `.bss` of an image built with
+`CONFIG_SKIP_BSS_CLEAR`, which `stage2img` takes from the zephyr.elf next to
+the zephyr.bin), and at 508 the CRC-32 of bytes 0..508. `am62p-mkboot.py
+stage2img` writes version 1 unless the payload needs version 2 (LZ4 or a
+zero range), so a loader already on a board reads what the tool writes for
+it; it re-reads the result (header, both CRCs, the decode = the zephyr.bin).
+`stage2check` re-reads a file, `stage2-vectors` writes the test images that
+the crate's host test decodes (`tools/check.sh` row "am62p second stage":
+Python's zlib and the lz4 command against the loader's Rust).
+
+**Version 3, a segment table.** A payload can carry up to eight segments,
+each with its own load address, the way `kexec_zephyr` takes `FILE@ADDR`
+segments: the mixed-criticality showcase needs three (the A53 Supervisor at
+0x82000000, the R5F's DDR image at 0x90000000 and its TCM blob at
+0x90c00000; the Supervisor copies the DDR image into the R5F carveout and
+starts the R5F). The fields that mean what they mean in versions 1 and 2
+are at the same offsets (load address 24, entry 32, stored bytes 40, name
+64, header CRC 508); at 16 is the segment count, at 20 the image parts, and
+at 96 the table, 40 bytes a segment: load address, image bytes, a footprint
+(the RAM the segment owns from its load address; segment 0: the arm64
+header's `image_size`, so its `.bss` counts), the stored offset (sector
+aligned, in table order), stored bytes, the compression (none, deflate,
+LZ4), both CRC-32s, and the zero bytes. The loader refuses a table whose
+stored ranges are unaligned, out of order or past the payload, a segment
+outside its region (0x82000000 up to the GPU carveout) or overlapping
+another one or the staging buffer, and, after placing segment 0, an
+`image_size` over its footprint. Then each segment is read and decoded (or
+read in place, uncompressed, the last partial sector through a bounce
+buffer) in turn and the jump goes to the entry in segment 0.
+
+Why 3: main's version 2 (the zero range and LZ4, 2026-10-29) and a work
+branch's segment table (2026-11-07) were both written as "version 2".
+Versions 1 and 2 stay byte for byte what they were, and the table is
+version 3 with its fields moved to the offsets above. A loader from before
+it refuses the number; this loader refuses a header of one layout under
+another's number (a table read as a single image has no image size, a
+single image read as a table has non-zero reserved bytes at 48..64), the
+work branch's "version 2" table among them.
+
+With the R5F segments at 0x90000000, the showcase's loader moves the staging
+buffer to 0x91000000 (`CONFIG_BOOT_STAGE2_STAGING`; `stage2img --staging`
+checks the same rule):
+
+```sh
+tools/am62p-mkboot.py stage2img --zephyr sup.bin --segment r5_ddr.bin@0x90000000 \
+    --segment r5_tcm.bin@0x90c00000 --sector 21073376 --end-sector 21204448 \
+    --staging 0x91000000 --name showcase -o stage2-showcase.img
+```
+
+**Zero bytes and image parts.** Two fields of version 3 keep zeros out of
+the payload. The showcase's image (20,270,326 bytes at 0x82000000) holds a
+10.85 MB run of zeros in its file (a PROGBITS section that is zero but for a
+few hundred bytes) and is followed in RAM by a 46.4 MB `.bss`. Reading and
+CRC-ing the run cost about 80 ms in the loader, and the image cleared its
+`.bss` itself before its MMU and caches were on, which is slower still. The
+loader runs with the MMU and caches on, and its main thread sleeps while the
+eMMC's DMA runs, so the loader is the place to clear both.
+
+- **zero bytes** (segment entry, offset 36): the bytes of RAM right after the
+  segment's image bytes, from `load + image bytes`, that the loader clears.
+  Image bytes + zero bytes must fit the footprint.
+- **image parts** P (header, offset 20; 1 up to the segment count): the
+  first P segments together are the image. Segment 0 is its first extent
+  (the arm64 header, the entry) and segments 1..P-1 are the later extents,
+  each at its own address inside segment 0's footprint. A part starts at or
+  above the end of segment 0's image bytes + zero bytes, ends inside segment
+  0's footprint, lies above the part before it, and its footprint is exactly
+  its image bytes + zero bytes. In the overlap check segment 0 counts
+  against its own parts with its image bytes + zero bytes only; every other
+  pair, and the staging buffer, are checked with the footprints, so a
+  segment that is not a part is still refused inside segment 0's footprint.
+
+A zero range therefore shares no byte with anything that is read or decoded
+or with another zero range, and the C side clears the ranges without a lock,
+on a thread of the lowest application priority that it starts once the
+header is parsed (`zero_start` in `src/main.c`; none when the header has no
+zero range). A version-2 header's one zero range goes the same way. The main
+thread, woken by the SDHC interrupt, always runs first; the clear gets the
+time main would have slept. Main takes the thread's semaphore after the last
+unpack, before the cache flush and the jump. With the payload linked into
+the loader main never sleeps, so the thread runs during that wait. The clear
+is the C library's `memset`, which in the loader's speed-optimised build
+zeroes a long range with `DC ZVA` (64 bytes an instruction on the A53, no
+read of the line first).
+
+`stage2img --split-zeros MIN` cuts the zephyr.bin at every run of at least
+MIN zero bytes (the run shrunk inward to 4 KiB address boundaries, so each
+part starts on one; the longest runs when there are more than the table's 8
+entries hold) and `--clear-after BYTES` sets the zero bytes after the
+image's last byte, at `load + len(zephyr.bin)` exactly. For the showcase's
+image (`.bss` 0x83355000..0x85f9c238, file end 0x83354cf6):
+
+```sh
+tools/am62p-mkboot.py stage2img --zephyr sup/zephyr/zephyr.bin --sector 21073376 \
+    --end-sector 21204448 --staging 0x91000000 --name showcase-sbl --compress none \
+    --split-zeros 65536 --clear-after 46429506 -o stage2-showcase-sbl.img
+```
+
+| segment | image bytes | zero bytes after it |
+|---|---|---|
+| 0, 0x82000000 | 7,311,360 | 61,440 (0x826f9000..0x82708000) |
+| 1, part at 0x82708000 | 2,035,712 | 10,846,208 (0x828f9000..0x83351000) |
+| 2, part at 0x83351000 | 15,606 | 46,429,506 (0x83354cf6..0x85f9c238) |
+
+9,363,456 bytes (18,288 sectors) are stored in place of 20,271,104, and
+`stage2check` puts the parts and their zero runs together again and compares
+the result with the zephyr.bin.
+
+The image may then skip its own `.bss` clear (Zephyr's
+`CONFIG_SKIP_BSS_CLEAR`), but only under one condition: it is always started
+by this loader from a payload whose clear-after covers its whole `.bss`.
+Started any other way (kexec, U-Boot `go`, a payload written without
+`--clear-after`) the `.bss` holds whatever RAM held. When the `.config` next
+to the zephyr.bin has the option, `stage2img` reads `__bss_end` from the
+zephyr.elf beside it: without `--clear-after` it sets the value, and it
+refuses one that ends short of the `.bss`. For an image built without the
+option the number is the caller's.
+
+**The console.** The console is polled, so every character holds the boot
+for its time on the wire (87 us at 115200 Bd). On 2026-11-12 the eMMC
+loader took 0.28 s on this board, 0.09 s of it the console: its progress
+lines, the Zephyr banner, the SD stack's four information lines, the copy
+probe and the drain wait. `quiet.conf` (after `emmc.conf` in
+`EXTRA_CONF_FILE`) turns all of that off (`BOOT_STAGE2_PROGRESS_LOG=n`,
+`BOOT_BANNER=n`, `LOG_DEFAULT_LEVEL=1`) and leaves one line before the jump
+(`BOOT_STAGE2_SUMMARY_LINE`):
+
+```
+bs2: <ready> <read> <unpack> <zero thread>/<waited> ms @<main> us
+```
+
+the milliseconds until the eMMC was ready, of the reads and of the unpack,
+the zero thread's from its start to its end (the times main preempted it
+included) and those main then still waited for it, and the system counter at
+`main()`. Failures are reported as before. On 2026-11-13 a loader of the
+work branch (the same mechanisms, its own `DC ZVA` loop, the table under its
+old number) ran the showcase payload above on the board: the 57 MB were
+cleared in 8 ms of the thread's time while the eMMC read ran, main waited
+0 ms, and the first A53 frame came 0.38 s after the first instruction of
+the showcase's own boot loader (its SBL).
+The loader as it is on main (version 3, `memset`) has not run on a board.
 
 Building:
 
@@ -361,6 +503,18 @@ tools/am62p-mkboot.py bootpart --tiboot3 tiboot3-am62px-hs-fs-verdin.bin --tispl
     --uboot u-boot-stage2.img --size 4194304 -o bootpart-stage2-4MiB.bin
 tools/am62p-mkboot.py stage2img --zephyr build/am62p/slint_direct/zephyr/zephyr.bin \
     --name slint -o stage2-slint.img       # for user-area sector 64 (dd seek=64)
+```
+
+The eMMC loader for the showcase's slot (step 6 under "At the board": the
+slot's sectors, the staging buffer above the R5F segments, one line on the
+console, the request word of "Recovery"):
+
+```sh
+west build -p always -b verdin_am62p/am62p54/a53 -d build/am62p/boot_stage2_emmc \
+    yakogl/driver/samples/zephyr/boot_stage2 -- "-DEXTRA_CONF_FILE=emmc.conf;quiet.conf" \
+    -DEXTRA_DTC_OVERLAY_FILE=boards/verdin_am62p_am62p54_a53_emmc.overlay \
+    -DCONFIG_BOOT_STAGE2_SECTOR=21073376 -DCONFIG_BOOT_STAGE2_END_SECTOR=21204448 \
+    -DCONFIG_BOOT_STAGE2_STAGING=0x91000000
 ```
 
 | file | bytes | where |
@@ -536,6 +690,24 @@ become:
 
 ## Recovery
 
+- **Back to boot0 without the button** (eMMC source, `emmc.conf`:
+  `BOOT_STAGE2_BOOT0_ON_REQUEST`; not run on a board yet): the word
+  `BOOT_STAGE2_BOOT0_WORD` (`YK-BOOT0-9E3A71C5` by default) on the loader's
+  console while it runs. The loader looks at its UART twice without waiting
+  (when the eMMC is up, before the header is read, and before the jump; a
+  normal boot loses no time), and on the word sends CMD6 SWITCH, write byte,
+  EXT_CSD[179] PARTITION_CONFIG = 0x48 (BOOT_ACK kept, boot partition 1,
+  user-area access), polls CMD13 until the card is back in tran, reads the
+  EXT_CSD back (CMD8), prints `boot0 request: PARTITION_CONFIG 0x50 -> 0x48
+  (wanted 0x48)` and resets the SoC with PSCI SYSTEM_RESET. A failed step is
+  named and the boot goes on. No other EXT_CSD byte is written. The word is
+  sent repeatedly from the host across a reset or power-on (it must arrive
+  while the loader runs; the UART's receive FIFO holds it), and the sender
+  must stop at the loader's request line: U-Boot is next on that console and
+  a key stops its autoboot. A word and not a single character: a first
+  version took `T`, and a serial adapter plugged into a PC switched the
+  board by itself on 2026-11-12 (a modem prober's `AT` is enough). Back
+  again from Linux: `mmc bootpart enable 2 1 /dev/mmcblk0`.
 - **Back to Torizon**: USB recovery mode, the recovery U-Boot, then
   `mmc partconf 0 <ack> 1 0` (boot0) through uuu
   (`build/am62p/uuu/back-to-boot0.lst`). Everything Torizon needs is still in
