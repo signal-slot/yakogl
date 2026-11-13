@@ -405,21 +405,30 @@ mod es3 {
     /// (RC1; these were GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT on the PowerVR),
     /// at colour attachment 0 and beyond it.
     ///
-    /// The R and RG classes are held widened to four channels (`es3_formats`),
-    /// a store that is not the layout of their surface: the PowerVR draws
-    /// them as the four-channel surface of the store
+    /// The 8- and 16-bit R and RG classes are held widened to four channels
+    /// (`es3_formats`), a store that is not the layout of their surface: the
+    /// PowerVR draws them as the four-channel surface of the store
     /// (tests/es3_pvr_fbo_int_rg.rs), the other back ends keep them
-    /// incomplete.
+    /// incomplete. R32I/UI and RG32I/UI have surfaces of their own
+    /// (`integer_texture_surface`, 6c5b004f): a back end that stores them in
+    /// their own class (the GC7000's, gc-r32-flip) makes them complete, one
+    /// that widens them keeps them incomplete like the narrower ones.
     #[test]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();
         let mut made = 0;
         backend::HOST_INTEGER_RT_FORMATS.store(ALL_SURFACES, Ordering::Relaxed);
-        for (f, name, channels, bits, _) in INT_FORMATS {
+        let own_32 = [
+            backend::GLES_TEXFMT_R32I,
+            backend::GLES_TEXFMT_R32UI,
+            backend::GLES_TEXFMT_RG32I,
+            backend::GLES_TEXFMT_RG32UI,
+        ];
+        for (f, name, channels, ..) in INT_FORMATS {
             let Some(tex) = int_texture(f) else { continue };
             made += 1;
-            // the GC samples and draws the 32-bit R and RG classes as their own surface (RC17)
-            let own = cfg!(feature = "gpu-vivante") && bits == 32;
+            let stored = yakogl::gl::es3_formats::find(f).and_then(|(_, e)| e.storage_here());
+            let own = stored.is_some_and(|s| own_32.contains(&s));
             let want = if channels == 4 || own || cfg!(feature = "gpu-powervr") {
                 GL_FRAMEBUFFER_COMPLETE
             } else {
