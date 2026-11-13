@@ -745,17 +745,11 @@ pub fn sample_cube_filtered(
     sample_cube_with(t, sp, x, y, z, lod, |v| v)
 }
 
-/// [`sample_cube_filtered`] with `tap` applied to every texel read before
-/// the blend (and before a corner tap's mean).
-fn sample_cube_with(
-    t: &Texture,
-    sp: &Sampler,
-    x: f32,
-    y: f32,
-    z: f32,
-    lod: Lod,
-    tap: impl Fn([f32; 4]) -> [f32; 4],
-) -> Result<([f32; 4], Face), Refusal> {
+/// The face a cube look-up at direction (x, y, z) selects and its (s, t) on
+/// that face, in [0, 1]: what [`sample_cube_filtered`] and
+/// [`sample_cube_compare`] project to before they filter. Refused as
+/// [`sample_cube`] refuses.
+pub fn cube_face_coords(x: f32, y: f32, z: f32) -> Result<(Face, f32, f32), Refusal> {
     if !(x.is_finite() && y.is_finite() && z.is_finite()) {
         return Err(Refusal::NotFinite);
     }
@@ -769,6 +763,21 @@ fn sample_cube_with(
     }
     let face = select_cube_face(x, y, z);
     let (s, tc) = project_to_face(face, x, y, z);
+    Ok((face, s, tc))
+}
+
+/// [`sample_cube_filtered`] with `tap` applied to every texel read before
+/// the blend (and before a corner tap's mean).
+fn sample_cube_with(
+    t: &Texture,
+    sp: &Sampler,
+    x: f32,
+    y: f32,
+    z: f32,
+    lod: Lod,
+    tap: impl Fn([f32; 4]) -> [f32; 4],
+) -> Result<([f32; 4], Face), Refusal> {
+    let (face, s, tc) = cube_face_coords(x, y, z)?;
     let v = over_levels(t, sp, lod, |l, filter| match filter {
         Filter::Nearest => {
             let (i, j) = (nearest_index(s, l.width)?, nearest_index(tc, l.height)?);
@@ -964,7 +973,8 @@ pub fn sample_2d_compare(t: &Texture, sp: &Sampler, cmp: &Compare, s: f32, tc: f
 
 /// [`sample_cube_filtered`] for a shadow look-up (`samplerCubeShadow`): the
 /// seamless taps are compared first, a corner tap being the mean of the
-/// other three compares. Returns the compare result and the face selected.
+/// other three compares. Returns the compare result and the face selected;
+/// [`cube_face_coords`] gives the face (s, t) the taps are taken around.
 pub fn sample_cube_compare(
     t: &Texture,
     sp: &Sampler,
@@ -1362,5 +1372,72 @@ mod tests {
         assert!((plain[0] - 0.75).abs() < 1e-6 && cmp(CompareFunc::Less, 0.5).texel(plain) == 1.0);
         assert_eq!(at(cmp(CompareFunc::Always, 0.0)).0, 1.0);
         assert_eq!(at(cmp(CompareFunc::Never, 0.0)).0, 0.0);
+    }
+
+    /// The compare of a cube look-up against a per-corner computation that
+    /// names each of the four taps by hand (4x4 faces, every texel its own
+    /// depth): face interior, across +X's s = 1 edge (-Z column 0, same
+    /// row), and at +X's (s, t) = (1, 1) corner, whose missing tap is the
+    /// mean of the other three compares (-Z (0, 3), -Y (3, 3), +X (3, 3)).
+    #[test]
+    fn a_cube_compare_matches_the_per_corner_computation() {
+        let depth = |f: usize, i: usize, j: usize| (f * 16 + j * 4 + i) as f32 / 96.0 + 0.003;
+        let faces: Vec<Vec<[f32; 4]>> =
+            (0..6).map(|f| (0..16).map(|k| [depth(f, k % 4, k / 4), 0.0, 0.0, 1.0]).collect()).collect();
+        let t = Texture { cube: true, min: MinFilter::Linear, levels: vec![Level { width: 4, height: 4, faces }] };
+        let sp = lin(Wrap::ClampToEdge);
+        let (px, nz, ny) = (Face::PosX.index(), Face::NegZ.index(), Face::NegY.index());
+        type Tap = Option<(usize, usize, usize)>;
+        let cases: [((f32, f32, f32), f32, f32, [Tap; 4], f32, f32); 3] = [
+            (
+                (1.0, -0.125, 0.125),
+                0.4375,
+                0.5625,
+                [Some((px, 1, 1)), Some((px, 2, 1)), Some((px, 1, 2)), Some((px, 2, 2))],
+                0.25,
+                0.75,
+            ),
+            (
+                (1.0, 0.0, -0.875),
+                0.9375,
+                0.5,
+                [Some((px, 3, 1)), Some((nz, 0, 1)), Some((px, 3, 2)), Some((nz, 0, 2))],
+                0.25,
+                0.5,
+            ),
+            (
+                (1.0, -0.875, -0.875),
+                0.9375,
+                0.9375,
+                [Some((px, 3, 3)), Some((nz, 0, 3)), Some((ny, 3, 3)), None],
+                0.25,
+                0.25,
+            ),
+        ];
+        let funcs: [(CompareFunc, fn(f32, f32) -> bool); 4] = [
+            (CompareFunc::Lequal, |r, d| r <= d),
+            (CompareFunc::Greater, |r, d| r > d),
+            (CompareFunc::Less, |r, d| r < d),
+            (CompareFunc::Gequal, |r, d| r >= d),
+        ];
+        for (dir, s, tc, taps, a, b) in cases {
+            let (face, s2, t2) = cube_face_coords(dir.0, dir.1, dir.2).unwrap();
+            assert_eq!(face, Face::PosX);
+            assert!((s2 - s).abs() < 1e-6 && (t2 - tc).abs() < 1e-6, "{dir:?}: ({s2}, {t2})");
+            for (func, pass) in funcs {
+                for dref in [0.15f32, 0.3, 0.45] {
+                    let one = |f: usize, i: usize, j: usize| if pass(dref, depth(f, i, j)) { 1.0f32 } else { 0.0 };
+                    let known: Vec<f32> = taps.iter().flatten().map(|&(f, i, j)| one(f, i, j)).collect();
+                    let mean = known.iter().sum::<f32>() / known.len() as f32;
+                    let w = [(1.0 - a) * (1.0 - b), a * (1.0 - b), (1.0 - a) * b, a * b];
+                    let want: f32 = (0..4).map(|k| w[k] * taps[k].map_or(mean, |(f, i, j)| one(f, i, j))).sum();
+                    let c = cmp(func, dref);
+                    let (got, gface) =
+                        sample_cube_compare(&t, &sp, &c, dir.0, dir.1, dir.2, Lod::Explicit(0.0)).unwrap();
+                    assert_eq!(gface, Face::PosX);
+                    assert!((got - want).abs() < 1e-6, "{dir:?} {func:?} {dref}: {got} vs {want}");
+                }
+            }
+        }
     }
 }
