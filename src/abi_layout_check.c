@@ -143,7 +143,7 @@ _Static_assert(offsetof(struct shc_uniform, inner) == 72, "struct shc_uniform.in
 _Static_assert(sizeof(struct shc_v3d_uniform) == 8, "struct shc_v3d_uniform");
 _Static_assert(offsetof(struct shc_v3d_uniform, contents) == 0, "struct shc_v3d_uniform.contents");
 _Static_assert(offsetof(struct shc_v3d_uniform, data) == 4, "struct shc_v3d_uniform.data");
-_Static_assert(sizeof(struct shc_v3d_fs) == 48, "struct shc_v3d_fs");
+_Static_assert(sizeof(struct shc_v3d_fs) == 64, "struct shc_v3d_fs");
 _Static_assert(offsetof(struct shc_v3d_fs, code_off) == 0, "struct shc_v3d_fs.code_off");
 _Static_assert(offsetof(struct shc_v3d_fs, code_bytes) == 4, "struct shc_v3d_fs.code_bytes");
 _Static_assert(offsetof(struct shc_v3d_fs, uniforms) == 8, "struct shc_v3d_fs.uniforms");
@@ -152,15 +152,18 @@ _Static_assert(offsetof(struct shc_v3d_fs, num_inputs) == 20, "struct shc_v3d_fs
 _Static_assert(offsetof(struct shc_v3d_fs, flat_shade_flags) == 24, "struct shc_v3d_fs.flat_shade_flags");
 _Static_assert(offsetof(struct shc_v3d_fs, noperspective_flags) == 28, "struct shc_v3d_fs.noperspective_flags");
 _Static_assert(offsetof(struct shc_v3d_fs, centroid_flags) == 32, "struct shc_v3d_fs.centroid_flags");
-_Static_assert(offsetof(struct shc_v3d_fs, threads) == 36, "struct shc_v3d_fs.threads");
-_Static_assert(offsetof(struct shc_v3d_fs, single_seg) == 37, "struct shc_v3d_fs.single_seg");
-_Static_assert(offsetof(struct shc_v3d_fs, writes_z) == 38, "struct shc_v3d_fs.writes_z");
-_Static_assert(offsetof(struct shc_v3d_fs, disable_ez) == 39, "struct shc_v3d_fs.disable_ez");
-_Static_assert(offsetof(struct shc_v3d_fs, uses_center_w) == 40, "struct shc_v3d_fs.uses_center_w");
-_Static_assert(offsetof(struct shc_v3d_fs, lock_scoreboard_on_first_thrsw) == 41, "struct shc_v3d_fs.lock_scoreboard_on_first_thrsw");
-_Static_assert(offsetof(struct shc_v3d_fs, uses_implicit_point_line_varyings) == 42, "struct shc_v3d_fs.uses_implicit_point_line_varyings");
-_Static_assert(offsetof(struct shc_v3d_fs, uses_pid) == 43, "struct shc_v3d_fs.uses_pid");
-_Static_assert(offsetof(struct shc_v3d_fs, rt_mask) == 44, "struct shc_v3d_fs.rt_mask");
+_Static_assert(offsetof(struct shc_v3d_fs, flat_shade_flags_hi) == 36, "struct shc_v3d_fs.flat_shade_flags_hi");
+_Static_assert(offsetof(struct shc_v3d_fs, noperspective_flags_hi) == 40, "struct shc_v3d_fs.noperspective_flags_hi");
+_Static_assert(offsetof(struct shc_v3d_fs, centroid_flags_hi) == 44, "struct shc_v3d_fs.centroid_flags_hi");
+_Static_assert(offsetof(struct shc_v3d_fs, threads) == 48, "struct shc_v3d_fs.threads");
+_Static_assert(offsetof(struct shc_v3d_fs, single_seg) == 49, "struct shc_v3d_fs.single_seg");
+_Static_assert(offsetof(struct shc_v3d_fs, writes_z) == 50, "struct shc_v3d_fs.writes_z");
+_Static_assert(offsetof(struct shc_v3d_fs, disable_ez) == 51, "struct shc_v3d_fs.disable_ez");
+_Static_assert(offsetof(struct shc_v3d_fs, uses_center_w) == 52, "struct shc_v3d_fs.uses_center_w");
+_Static_assert(offsetof(struct shc_v3d_fs, lock_scoreboard_on_first_thrsw) == 53, "struct shc_v3d_fs.lock_scoreboard_on_first_thrsw");
+_Static_assert(offsetof(struct shc_v3d_fs, uses_implicit_point_line_varyings) == 54, "struct shc_v3d_fs.uses_implicit_point_line_varyings");
+_Static_assert(offsetof(struct shc_v3d_fs, uses_pid) == 55, "struct shc_v3d_fs.uses_pid");
+_Static_assert(offsetof(struct shc_v3d_fs, rt_mask) == 56, "struct shc_v3d_fs.rt_mask");
 _Static_assert(sizeof(struct shc_v3d_vs) == 56, "struct shc_v3d_vs");
 _Static_assert(offsetof(struct shc_v3d_vs, code_off) == 0, "struct shc_v3d_vs.code_off");
 _Static_assert(offsetof(struct shc_v3d_vs, code_bytes) == 4, "struct shc_v3d_vs.code_bytes");
@@ -177,14 +180,14 @@ _Static_assert(offsetof(struct shc_v3d_vs, uses_iid) == 36, "struct shc_v3d_vs.u
 _Static_assert(offsetof(struct shc_v3d_vs, uses_biid) == 37, "struct shc_v3d_vs.uses_biid");
 _Static_assert(offsetof(struct shc_v3d_vs, writes_psiz) == 38, "struct shc_v3d_vs.writes_psiz");
 _Static_assert(offsetof(struct shc_v3d_vs, vattr_sizes) == 39, "struct shc_v3d_vs.vattr_sizes");
-_Static_assert(sizeof(struct shc_v3d) == 184, "struct shc_v3d");
+_Static_assert(sizeof(struct shc_v3d) == 200, "struct shc_v3d");
 _Static_assert(offsetof(struct shc_v3d, linked) == 0, "struct shc_v3d.linked");
 _Static_assert(offsetof(struct shc_v3d, prim) == 1, "struct shc_v3d.prim");
 _Static_assert(offsetof(struct shc_v3d, num_records) == 2, "struct shc_v3d.num_records");
 _Static_assert(offsetof(struct shc_v3d, record_of_location) == 3, "struct shc_v3d.record_of_location");
 _Static_assert(offsetof(struct shc_v3d, fs) == 24, "struct shc_v3d.fs");
-_Static_assert(offsetof(struct shc_v3d, vs) == 72, "struct shc_v3d.vs");
-_Static_assert(offsetof(struct shc_v3d, cs) == 128, "struct shc_v3d.cs");
+_Static_assert(offsetof(struct shc_v3d, vs) == 88, "struct shc_v3d.vs");
+_Static_assert(offsetof(struct shc_v3d, cs) == 144, "struct shc_v3d.cs");
 #if !defined(YAKOGL_GPU_VIVANTE) && !defined(YAKOGL_GPU_V3D) && !defined(YAKOGL_GPU_MALI)
 _Static_assert(sizeof(struct shc_shader) == 1272, "struct shc_shader");
 #endif
@@ -192,7 +195,7 @@ _Static_assert(sizeof(struct shc_shader) == 1272, "struct shc_shader");
 _Static_assert(sizeof(struct shc_shader) == 2480, "struct shc_shader");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(sizeof(struct shc_shader) == 1456, "struct shc_shader");
+_Static_assert(sizeof(struct shc_shader) == 1472, "struct shc_shader");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(sizeof(struct shc_shader) == 1272, "struct shc_shader");
@@ -244,7 +247,7 @@ _Static_assert(offsetof(struct shc_shader, priv) == 1264, "struct shc_shader.pri
 _Static_assert(offsetof(struct shc_shader, priv) == 2472, "struct shc_shader.priv");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct shc_shader, priv) == 1448, "struct shc_shader.priv");
+_Static_assert(offsetof(struct shc_shader, priv) == 1464, "struct shc_shader.priv");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct shc_shader, priv) == 1264, "struct shc_shader.priv");
@@ -511,7 +514,7 @@ _Static_assert(sizeof(struct gl_shader) == 1296, "struct gl_shader");
 _Static_assert(sizeof(struct gl_shader) == 2504, "struct gl_shader");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(sizeof(struct gl_shader) == 1480, "struct gl_shader");
+_Static_assert(sizeof(struct gl_shader) == 1496, "struct gl_shader");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(sizeof(struct gl_shader) == 1296, "struct gl_shader");
@@ -528,7 +531,7 @@ _Static_assert(offsetof(struct gl_shader, source) == 1288, "struct gl_shader.sou
 _Static_assert(offsetof(struct gl_shader, source) == 2496, "struct gl_shader.source");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_shader, source) == 1472, "struct gl_shader.source");
+_Static_assert(offsetof(struct gl_shader, source) == 1488, "struct gl_shader.source");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_shader, source) == 1288, "struct gl_shader.source");
@@ -540,7 +543,7 @@ _Static_assert(sizeof(struct gl_program) == 3688, "struct gl_program");
 _Static_assert(sizeof(struct gl_program) == 6104, "struct gl_program");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(sizeof(struct gl_program) == 4056, "struct gl_program");
+_Static_assert(sizeof(struct gl_program) == 4088, "struct gl_program");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(sizeof(struct gl_program) == 3688, "struct gl_program");
@@ -557,7 +560,7 @@ _Static_assert(offsetof(struct gl_program, rfs) == 1288, "struct gl_program.rfs"
 _Static_assert(offsetof(struct gl_program, rfs) == 2496, "struct gl_program.rfs");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, rfs) == 1472, "struct gl_program.rfs");
+_Static_assert(offsetof(struct gl_program, rfs) == 1488, "struct gl_program.rfs");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, rfs) == 1288, "struct gl_program.rfs");
@@ -569,7 +572,7 @@ _Static_assert(offsetof(struct gl_program, vs_uniforms) == 2560, "struct gl_prog
 _Static_assert(offsetof(struct gl_program, vs_uniforms) == 4976, "struct gl_program.vs_uniforms");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, vs_uniforms) == 2928, "struct gl_program.vs_uniforms");
+_Static_assert(offsetof(struct gl_program, vs_uniforms) == 2960, "struct gl_program.vs_uniforms");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, vs_uniforms) == 2560, "struct gl_program.vs_uniforms");
@@ -581,7 +584,7 @@ _Static_assert(offsetof(struct gl_program, fs_uniforms) == 2568, "struct gl_prog
 _Static_assert(offsetof(struct gl_program, fs_uniforms) == 4984, "struct gl_program.fs_uniforms");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, fs_uniforms) == 2936, "struct gl_program.fs_uniforms");
+_Static_assert(offsetof(struct gl_program, fs_uniforms) == 2968, "struct gl_program.fs_uniforms");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, fs_uniforms) == 2568, "struct gl_program.fs_uniforms");
@@ -593,7 +596,7 @@ _Static_assert(offsetof(struct gl_program, vs_uniform_cap) == 2576, "struct gl_p
 _Static_assert(offsetof(struct gl_program, vs_uniform_cap) == 4992, "struct gl_program.vs_uniform_cap");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, vs_uniform_cap) == 2944, "struct gl_program.vs_uniform_cap");
+_Static_assert(offsetof(struct gl_program, vs_uniform_cap) == 2976, "struct gl_program.vs_uniform_cap");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, vs_uniform_cap) == 2576, "struct gl_program.vs_uniform_cap");
@@ -605,7 +608,7 @@ _Static_assert(offsetof(struct gl_program, fs_uniform_cap) == 2578, "struct gl_p
 _Static_assert(offsetof(struct gl_program, fs_uniform_cap) == 4994, "struct gl_program.fs_uniform_cap");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, fs_uniform_cap) == 2946, "struct gl_program.fs_uniform_cap");
+_Static_assert(offsetof(struct gl_program, fs_uniform_cap) == 2978, "struct gl_program.fs_uniform_cap");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, fs_uniform_cap) == 2578, "struct gl_program.fs_uniform_cap");
@@ -617,7 +620,7 @@ _Static_assert(offsetof(struct gl_program, fs_uniform_alloc) == 2580, "struct gl
 _Static_assert(offsetof(struct gl_program, fs_uniform_alloc) == 4996, "struct gl_program.fs_uniform_alloc");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, fs_uniform_alloc) == 2948, "struct gl_program.fs_uniform_alloc");
+_Static_assert(offsetof(struct gl_program, fs_uniform_alloc) == 2980, "struct gl_program.fs_uniform_alloc");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, fs_uniform_alloc) == 2580, "struct gl_program.fs_uniform_alloc");
@@ -629,7 +632,7 @@ _Static_assert(offsetof(struct gl_program, fs_sampler_unit) == 2582, "struct gl_
 _Static_assert(offsetof(struct gl_program, fs_sampler_unit) == 4998, "struct gl_program.fs_sampler_unit");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, fs_sampler_unit) == 2950, "struct gl_program.fs_sampler_unit");
+_Static_assert(offsetof(struct gl_program, fs_sampler_unit) == 2982, "struct gl_program.fs_sampler_unit");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, fs_sampler_unit) == 2582, "struct gl_program.fs_sampler_unit");
@@ -641,7 +644,7 @@ _Static_assert(offsetof(struct gl_program, vs_sampler_unit) == 2598, "struct gl_
 _Static_assert(offsetof(struct gl_program, vs_sampler_unit) == 5014, "struct gl_program.vs_sampler_unit");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, vs_sampler_unit) == 2966, "struct gl_program.vs_sampler_unit");
+_Static_assert(offsetof(struct gl_program, vs_sampler_unit) == 2998, "struct gl_program.vs_sampler_unit");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, vs_sampler_unit) == 2598, "struct gl_program.vs_sampler_unit");
@@ -653,7 +656,7 @@ _Static_assert(offsetof(struct gl_program, attrib_app_index) == 2614, "struct gl
 _Static_assert(offsetof(struct gl_program, attrib_app_index) == 5030, "struct gl_program.attrib_app_index");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, attrib_app_index) == 2982, "struct gl_program.attrib_app_index");
+_Static_assert(offsetof(struct gl_program, attrib_app_index) == 3014, "struct gl_program.attrib_app_index");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, attrib_app_index) == 2614, "struct gl_program.attrib_app_index");
@@ -665,7 +668,7 @@ _Static_assert(offsetof(struct gl_program, attrib_binds) == 2630, "struct gl_pro
 _Static_assert(offsetof(struct gl_program, attrib_binds) == 5046, "struct gl_program.attrib_binds");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, attrib_binds) == 2998, "struct gl_program.attrib_binds");
+_Static_assert(offsetof(struct gl_program, attrib_binds) == 3030, "struct gl_program.attrib_binds");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, attrib_binds) == 2630, "struct gl_program.attrib_binds");
@@ -677,7 +680,7 @@ _Static_assert(offsetof(struct gl_program, num_attrib_binds) == 3686, "struct gl
 _Static_assert(offsetof(struct gl_program, num_attrib_binds) == 6102, "struct gl_program.num_attrib_binds");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_program, num_attrib_binds) == 4054, "struct gl_program.num_attrib_binds");
+_Static_assert(offsetof(struct gl_program, num_attrib_binds) == 4086, "struct gl_program.num_attrib_binds");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_program, num_attrib_binds) == 3686, "struct gl_program.num_attrib_binds");
@@ -732,7 +735,7 @@ _Static_assert(sizeof(struct gl_objects) == 2741760, "struct gl_objects");
 _Static_assert(sizeof(struct gl_objects) == 4597248, "struct gl_objects");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(sizeof(struct gl_objects) == 3024384, "struct gl_objects");
+_Static_assert(sizeof(struct gl_objects) == 3048960, "struct gl_objects");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(sizeof(struct gl_objects) == 2741760, "struct gl_objects");
@@ -747,7 +750,7 @@ _Static_assert(offsetof(struct gl_objects, programs) == 848896, "struct gl_objec
 _Static_assert(offsetof(struct gl_objects, programs) == 1467392, "struct gl_objects.programs");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_objects, programs) == 943104, "struct gl_objects.programs");
+_Static_assert(offsetof(struct gl_objects, programs) == 951296, "struct gl_objects.programs");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_objects, programs) == 848896, "struct gl_objects.programs");
@@ -759,7 +762,7 @@ _Static_assert(offsetof(struct gl_objects, renderbuffers) == 2737152, "struct gl
 _Static_assert(offsetof(struct gl_objects, renderbuffers) == 4592640, "struct gl_objects.renderbuffers");
 #endif
 #if defined(YAKOGL_GPU_V3D)
-_Static_assert(offsetof(struct gl_objects, renderbuffers) == 3019776, "struct gl_objects.renderbuffers");
+_Static_assert(offsetof(struct gl_objects, renderbuffers) == 3044352, "struct gl_objects.renderbuffers");
 #endif
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_objects, renderbuffers) == 2737152, "struct gl_objects.renderbuffers");
@@ -860,6 +863,7 @@ _Static_assert(offsetof(struct gl_context, default_surface_owned) == 39953, "str
 _Static_assert(offsetof(struct gl_context, index) == 39954, "struct gl_context.index");
 _Static_assert(offsetof(struct gl_context, default_y_up) == 39955, "struct gl_context.default_y_up");
 _Static_assert(offsetof(struct gl_context, error) == 39956, "struct gl_context.error");
+_Static_assert(offsetof(struct gl_context, current_attrib_type) == 39960, "struct gl_context.current_attrib_type");
 _Static_assert(sizeof(struct gc_kick) == 16, "struct gc_kick");
 _Static_assert(offsetof(struct gc_kick, magic) == 0, "struct gc_kick.magic");
 _Static_assert(offsetof(struct gc_kick, stream_bytes) == 4, "struct gc_kick.stream_bytes");

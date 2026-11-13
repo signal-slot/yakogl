@@ -172,8 +172,10 @@ struct v3d_fs_prog {
 	uint32_t threads;
 	bool single_seg;
 	uint32_t num_inputs;
-	/* word 0 of each flags array: M5 supports num_inputs <= 24 and all zero */
+	/* bit i: input i (i < 32); the _hi words: input 32 + i. The M5 frame
+	 * supports num_inputs <= 24 and all zero */
 	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
+	uint32_t flat_shade_flags_hi, noperspective_flags_hi, centroid_flags_hi;
 	bool writes_z, disable_ez, uses_center_w, lock_scoreboard_on_first_thrsw;
 	bool uses_implicit_point_line_varyings, uses_pid;
 	const struct v3d_uniform *uniforms;

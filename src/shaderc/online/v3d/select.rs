@@ -2210,8 +2210,8 @@ fn merge_exits<'a>(a: &Arena<'a>, ops: &mut AVec<'a, VOp>) -> Result<(), SelectE
 pub fn select_fragment<'a>(
     p: &Prepared<'_>,
     inputs: &[(u8, u8)],
-    flat: u32,
-    centroid: u32,
+    flat: u64,
+    centroid: u64,
     pressure: Pressure,
     a: &Arena<'a>,
 ) -> Result<Selected<'a>, SelectError> {
@@ -2283,10 +2283,10 @@ pub fn select_fragment<'a>(
     for (i, &(loc, comp)) in inputs.iter().enumerate() {
         let raw = s.v();
         s.push(a, VOp::Ldvary { dst: raw })?;
-        let value = if i < 32 && flat & (1 << i) != 0 {
+        let value = if flat & (1 << i) != 0 {
             s.mul(a, MulOp::Mov, Operand::R5, Operand::None)?
         } else {
-            let w = if i < 32 && centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
+            let w = if centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
             let scaled = s.mul(a, MulOp::Fmul, Operand::V(raw), w)?;
             s.add(a, AddOp::Fadd, scaled, Operand::R5)?
         };

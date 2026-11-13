@@ -3175,16 +3175,20 @@ mod tests {
     #[cfg(not(feature = "report-es2"))]
     fn the_es3_limits_are_what_this_gpu_carries_and_programs() {
         let _gl = TestGl::new(8, 8);
-        let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"));
+        let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr", feature = "gpu-v3d"));
         /* GC7000: 15 varyings reach the fragment stage (16 io rows, one the
          * position); PowerVR: 15, what its records, coefficient program and
-         * `ditrp` offsets carry (context.rs MAX_VARYING_VECTORS); V3D and
-         * Mali: 8, ES 2.0's minimum, until more are measured on the board */
+         * `ditrp` offsets carry (context.rs MAX_VARYING_VECTORS); V3D: 15
+         * (60 of the 64 fragment inputs the record carries) and 64 vertex
+         * output components; Mali: 8, ES 2.0's minimum, until more are
+         * measured on the board */
         let vectors = if fifteen { 15 } else { 8 };
         assert_eq!(geti1(GL_MAX_VARYING_VECTORS), vectors);
-        for q in [GL_MAX_VARYING_COMPONENTS, GL_MAX_VERTEX_OUTPUT_COMPONENTS, GL_MAX_FRAGMENT_INPUT_COMPONENTS] {
+        for q in [GL_MAX_VARYING_COMPONENTS, GL_MAX_FRAGMENT_INPUT_COMPONENTS] {
             assert_eq!(geti1(q), vectors * 4, "{q:#x}");
         }
+        let outputs = if cfg!(feature = "gpu-v3d") { 64 } else { vectors * 4 };
+        assert_eq!(geti1(GL_MAX_VERTEX_OUTPUT_COMPONENTS), outputs);
         /* every GPU: three (every colour attachment); the query itself is
          * ES 3.0's (see es2_has_no_draw_buffer_queries) */
         if !crate::REPORT_ES2 {

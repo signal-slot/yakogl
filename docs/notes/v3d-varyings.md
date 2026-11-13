@@ -149,8 +149,9 @@ asked. In either case the constants in `context.rs:193-194` stop being
 - The ES 3.00 link does not check varying component counts
   (`reflect.rs:1068-1070`); with 64 inputs a shader past the limit should
   fail at link, as dEQP expects.
-- `tools/shaders/known-uncompilable-v3d.txt:38-40` needs a separate entry
-  per build once the limits differ.
+- `tools/shaders/known-uncompilable-v3d.txt` no longer lists
+  `es100/varyings15` (the V3D links 15 varying vectors); a build whose limit
+  differs needs its own entry.
 - A Pi 4 board check, a step for #320: 16 vec4 varyings plus
   `gl_PointCoord` (does `num_inputs` of the shader record, two implicit
   point varyings included, stay within what the hardware takes?), and
