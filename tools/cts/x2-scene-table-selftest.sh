@@ -44,7 +44,7 @@ cat > "$D/console.txt" <<'EOF'
 10:00:07 glmark2: score lines follow after the scene's frames
 10:00:20 [terrain] <default>:
 10:00:30 glmark2: PERF page 0 asked (the frame-breakdown record of the last scene)
-10:00:31 link noise 10.137.22.9 read off the console
+10:00:31 link noise 203.0.113.9 read off the console
 10:00:40 glmark2-frame: [terrain] <default>: 61 frames; us per frame: gl 240000, swap 8000, show 1, other 2000, frame 250000
 10:00:41  FPS: 4 FrameTime: 250.000 ms
 10:00:42 glmark2: score 4: 1 scenes ran, 0 failed, 0 unsupported (1 list entry)
@@ -112,7 +112,7 @@ cat > "$D/console.txt" <<'EOF'
 13:00:20 [refract] <default>: FPS: 3 FrameTime: 333.333 ms
 EOF
 cat > "$D/INDEX.txt" <<'EOF'
-verdict: board.sh x2 refract-nosel rc=4 verdict=failed boot=kexec-dev DEV boot_verdict=complete result=none resets=0 record=absent back_after=60s host 10.137.22.9 on /dev/ttyAMA0
+verdict: board.sh x2 refract-nosel rc=4 verdict=failed boot=kexec-dev DEV boot_verdict=complete result=none resets=0 record=absent back_after=60s host 203.0.113.9 on /dev/ttyAMA0
 EOF
 
 # shadow, the knob built explicitly off (-tiled_rt_n): a whole result line without FrameTime:
