@@ -1600,18 +1600,20 @@ knobs_lib_tests() {
 scope vivante
 step "clippy  $KNOBS_CONFIG" cargo clippy --no-default-features --features "$KNOBS_CONFIG" --all-targets
 step "test    $KNOBS_CONFIG (--lib, ${#KNOBS_TESTS[@]} knob tests by name)" knobs_lib_tests "$KNOBS_CONFIG" "${KNOBS_TESTS[@]}"
-# The KICK_DIFF comparison (src/vivante/kick.rs `diff`) exists only with the
-# knobs, so its test binary runs here; every #[test] of the file must pass
-# (tests_as_declared), so a cfg that stops compiling them turns the row red,
-# not green.
-kick_diff_tests() {
+# The KICK_DIFF comparison (src/vivante/kick.rs `diff`) and the tiled render
+# targets behind gc_tiled_rt seen through the GL API (tests/gc_tiled_rt.rs)
+# exist only with the knobs, so their test binaries run here; every #[test]
+# of the file must pass (tests_as_declared), so a cfg that stops compiling
+# them turns the row red, not green.
+knobs_file_tests() {
   local out
-  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test gc_kick_diff 2>&1) ||
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test "$1" 2>&1) ||
     { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
   printf '%s\n' "$out" | grep -E '^test result'
-  printf '%s\n' "$out" | tests_as_declared tests/gc_kick_diff.rs
+  printf '%s\n' "$out" | tests_as_declared "tests/$1.rs"
 }
-step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" kick_diff_tests
+step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" knobs_file_tests gc_kick_diff
+step "test    $KNOBS_CONFIG (tests/gc_tiled_rt.rs, every declared test)" knobs_file_tests gc_tiled_rt
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
