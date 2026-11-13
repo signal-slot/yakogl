@@ -42,6 +42,7 @@
 pub mod backend;
 pub mod cmd;
 pub mod dedup;
+pub mod depth_dump;
 pub mod depth_format;
 pub mod depth_sample;
 pub mod ds_cache;
