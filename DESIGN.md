@@ -149,15 +149,20 @@ yakogl/
   src/gl/{context,buffer,texture,shader,program,state,vertex,vao,draw,framebuffer,egl}.rs
   src/gl/{types,consts,egl_consts}.rs           GL types; tokens generated from include/
                                 (yakogl-tools gl-consts)
-  src/gl/{es3,etc1,names,native_cube}.rs        the ES 3.0 entry points, ETC1, the name
-                                pools, the cube-map path
+  src/gl/{es3,etc1,etc2,names,native_cube}.rs   the ES 3.0 entry points, ETC1 and ETC2/EAC
+                                (CPU decode), the name pools, the cube-map path
+  src/gl/{msaa,msaa_resolve}.rs                 the multisample renderbuffer rules and the CPU
+                                resolve reference
   src/gl/{es3_formats,srgb,blit,tf,tf_capture}.rs  ES 3.0 sized formats, sRGB,
                                 glBlitFramebuffer, transform feedback and its CPU capture
   src/backend.rs                the backend contract (C view: src/backend.h)
+  src/{msaa_store,ds_retention,draw_steps}.rs   what the back ends share: the multisample sample
+                                slots, depth/stencil retention, per-draw step timing;
+                                src/msaa_hw/ each back end's 4x framebuffer words
   src/pvr/{backend,internal,csbgen,ffi}.rs  PowerVR backend (cargo feature gpu-powervr), its own programs (our
                                 compiler's, yakogl-precompile --internal), the FFI to the driver's command
                                 generators; ffi_layout_check.c pins it
-  src/vivante/{backend,shader,texture,cmd,regs,state,kick,internal,ds_cache,tiled_copy}.rs
+  src/vivante/{backend,shader,texture,cmd,regs,state,kick,internal,ds_cache,tiled_copy,tiled_rt,early_z}.rs
                                 the i.MX8MP's GC7000 backend (cargo feature gpu-vivante);
                                 src/vivante/VIVANTE_NOTES.md; src/vivante/gc_kick.h is the
                                 OSAL's view of the kick
@@ -167,8 +172,9 @@ yakogl/
                                 progress; driver/docs/nanopc-t6-mali.md); src/osal/mali.rs its
                                 part of the OSAL contract
   src/osal/mod.rs               g_osal + osal_set_ops; src/osal/render.rs the kick descriptor types
-  src/osal/{zephyr,zephyr_gc,zephyr_v3d,baremetal,linux}.c the OSALs (C; zephyr_gc is the
-                                GC7000's, zephyr_v3d the V3D's); zephyr_shaderc_scratch.c
+  src/osal/{zephyr,zephyr_gc,zephyr_v3d,zephyr_mali,baremetal,linux}.c the OSALs (C; zephyr_gc
+                                is the GC7000's, zephyr_v3d the V3D's, zephyr_mali the
+                                Mali-G610's); zephyr_shaderc_scratch.c
                                 (the compiler's regions) and zephyr_timing.c beside them
   src/shaderc/{mod,offline,link,sha256}.rs      offline shader back end + the shared link rule
   src/shaderc/{precompiled,record_key,packing,es100_twins}.rs  the precompiled back end,
@@ -246,7 +252,7 @@ are `extern "C"` / `#[repr(C)]`.
 
 What deliberately stays C:
 
-- the OSALs `src/osal/{zephyr,zephyr_gc,zephyr_v3d,zephyr_shaderc_scratch,zephyr_timing,baremetal,linux}.c`:
+- the OSALs `src/osal/{zephyr,zephyr_gc,zephyr_v3d,zephyr_mali,zephyr_shaderc_scratch,zephyr_timing,baremetal,linux}.c`:
   thin glue over C APIs (Zephyr macros and inlines, board hook pointers, a variadic log),
   none of which stable Rust can define (their move to Rust is open work,
   #19);
