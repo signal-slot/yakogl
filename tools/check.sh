@@ -1928,6 +1928,11 @@ step "test    $V3D_ES2_CONFIG (tests/es3_mrt_gl.rs)" \
 # accepted (GL_NO_ERROR, no refused draw), through the report-es2 GL core.
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_refusals.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_refusals
+# The ES 2.0 varying and uniform limits keep their answers (the ES 3.0 raises
+# of plan #359 do not show under report-es2); the PowerVR and GC7000
+# report-es2 rows run it with the rest of tests/.
+step "test    $V3D_ES2_CONFIG (tests/es2_report_limits.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es2_report_limits
 # The NanoPC-T6's Mali-G610 (`gpu-mali`): its backend builds each frame in
 # the OSAL's buffers and submits it through the Mali OSAL interface
 # (src/osal/mali.rs; on the host, a mock of it), and its shader back end
