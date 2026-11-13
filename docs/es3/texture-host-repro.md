@@ -248,6 +248,41 @@ The "before" tree was the working tree copied under `build/` with this
 branch's files put back from HEAD (`git show HEAD:<file>`), the dEQP binary
 shared; `host-deqp-run.sh` names such a run `70142d35-dirty`.
 
+## 8. ETC2/EAC and the V3D shadow compare (plan #354)
+
+What the host can show for these cases: the GL calls and their errors (every
+ETC2/EAC name uploads, as 2D, cube, 2D array, sub-image and PBO source),
+whether the draw is refused, and the texture record or sampler record the back
+end hands the job builder. What it cannot: a picture. The Linux OSAL keeps
+the command stream, every read-back is black, so `texture.wrap` and
+`texture.format` verdicts and `texture.shadow`'s comparisons are never judged
+here; whether the TMU samples the blocks, the decoded half floats and the
+compare as dEQP's tolerance wants is a board run (Pi 4, #320; AM62P, #313;
+i.MX8MP, #316).
+
+Host tests that stand in: `tests/es3_etc2_eac.rs` (decoded texels against the
+decoder, which `src/gl/etc2.rs` tests against Mesa's), `tests/es3_etc2_v3d.rs`
+(the V3D texture record per name), `tests/es3_shadow_v3d.rs`
+`the_draw_states_compare_op_is_the_look_ups_compare`, and
+`src/v3d/backend_tests.rs` `a_shadow_samplers_compare_function_is_in_its_record_and_its_cache_key`.
+
+To repeat the dEQP host runs (`tools/cts/README.md` section 2b; `CTS` a
+VK-GL-CTS at 93bca01 with the yakogl target):
+
+```sh
+for GPU in v3d powervr vivante; do
+  for F in wrap.etc2 wrap.eac format.compressed implementation_limits.num_compressed \
+           implementation_limits.compressed state_query.integers.compressed shadow; do
+    MODULE=gles3 GPU=$GPU OUT=$PWD/build/host-deqp/etc2-$GPU-$F \
+      tools/cts/host-deqp-run.sh "dEQP-GLES3.functional.${F}"
+  done
+done
+```
+
+(the filter is a substring of the case name; use the group path where the
+substring is ambiguous). Expect, before the change, GL_INVALID_ENUM at the
+upload of the six names and, on the V3D, a draw refusal for the other four.
+
 ## 7. The AM62P `texture.units`, `texture.swizzle` and `sglrGLContext.cpp:863` rows
 
 **The compile refusals of `units` and `specification` are one cause.** The

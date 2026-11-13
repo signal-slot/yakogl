@@ -10,9 +10,21 @@ and is not one of the ten). This note is about the other six and why they do
 not get a class of their own yet. Function names are the address; line
 numbers are of main at `6dc53970` and drift.
 
-Status when this was written: the decoder (`src/gl/etc2.rs`), the six names
-in the GL core, the V3D mask bits and the dEQP runs are other items of the
-plan and were not on main. Nothing here was measured on a board.
+Status: implemented by plan #354 (the decoder `src/gl/etc2.rs`; the six names
+in `src/gl/texture.rs` `decoded_format`; the four block classes in
+`V3D_SAMPLED_TEXFMTS`; the V3D shadow compare in `sampler_for`). Tests:
+`tests/es3_etc2_eac.rs` (the GL core), `tests/es3_etc2_negative.rs` (the
+argument errors of all eleven names), `tests/es3_etc2_v3d.rs` (the V3D draw).
+Nothing here was measured on a board.
+
+Implementation notes. The decode goes through the public
+glTexImage2D/3D and glTexSubImage2D/3D with the unpack state made plain
+(alignment 1, no skips, no buffer; the application's is given back), one 4x4
+block a call, so every storage rule of an ordinary texture of the decoded
+format holds. `GlTexture::decoded_from` is a `u16` in the struct's tail
+padding (the 256-byte pin held). `glGenerateMipmap`, `glCopyTexSubImage2D/3D`
+and a framebuffer attachment of such a texture are refused. ETC1 stays
+as before: the V3D decodes it at upload (`etc1_decoded_at_upload`) into RGB.
 
 ## 1. The decision
 
@@ -111,9 +123,8 @@ including the sRGB 6-bit one.
 what the build stores (`stored_compressed_formats`):
 
 - PowerVR and GC under ES 3.0: 11 (ETC1 plus the ten).
-- The V3D: 11 once `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the linear
-  and sRGB ETC2 classes; until then the sRGB pair is not stored and the list
-  is shorter. ES 3.0 requires all ten, so the V3D needs the mask first.
+- The V3D: 11, since `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the
+  linear and sRGB ETC2 classes (it listed 3 before).
 - `report-es2`: 3 on every build (ETC1, `RGB8_ETC2`, `RGBA8_ETC2_EAC`),
   unchanged.
 - Mali: the six are refused, so its count is what its mask allows.
@@ -128,9 +139,11 @@ All three GPUs decode all ten in hardware. Going native replaces the decode
 per back end and gives back the 4x/8x memory. These are follow-up issues:
 
 - V3D: `etc2_row` (`src/v3d/texture.rs`, over the rows of
-  `driver/src/v3d/v3d_tex.c`) already has all ten TMU rows, pinned by
-  `tools/v3d/tex_check.c`; Mesa `v3dx_format_table.c:159-168`. It needs five
-  class constants, `etc2_of` arms and mask bits.
+  `driver/src/v3d/v3d_tex.c`) has all ten TMU rows, pinned by
+  `tools/v3d/tex_check.c`; Mesa `v3dx_format_table.c:159-168`. The four block
+  classes are in the mask; the EAC and punch-through formats need five class
+  constants (`GLES_TEXFMT_*`), `etc2_of` arms and mask bits, which are
+  `src/backend.rs` changes.
 - PowerVR: Mesa `pvr_arch_formats.c:158-167`; `src/pvr/csbgen.rs` has the
   texstate constants 70-74 (`ROGUE_TEXSTATE_FORMAT_COMPRESSED_*`). The
   punch-through class needs only a mask bit.

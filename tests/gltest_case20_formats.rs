@@ -6,10 +6,11 @@
 //! GL_COMPRESSED_TEXTURE_FORMATS, not the old "3 formats, ETC1 first":
 //!
 //! - under `report-es2`: exactly 3 (ETC1, RGB8_ETC2, RGBA8_ETC2_EAC);
-//! - otherwise (ES 3.0): those three, in any order, plus either both sRGB
-//!   ETC2 formats or neither, as the back end samples them
-//!   (src/gl/texture.rs `stored_compressed_formats`; tests/es3_caps.rs
-//!   `known_gaps` keeps the five-format list as the intended ES 3.0 one);
+//! - otherwise (ES 3.0): those three, in any order, plus both sRGB ETC2
+//!   formats or neither, as the back end samples them, plus each of the six
+//!   formats the core decodes at upload (R11/RG11 EAC, the punch-through
+//!   pair) whose decoded class the back end samples; eleven on every GPU
+//!   build since plan #354 (src/gl/texture.rs `stored_compressed_formats`);
 //! - GL_ETC1_RGB8_OES appears somewhere in the list, the extension string
 //!   has GL_OES_compressed_ETC1_RGB8_texture, and no GL error is raised.
 //!
@@ -146,15 +147,33 @@ const GPU: &str = if cfg!(feature = "gpu-v3d") {
     "BXS-4-64 (AM62P)"
 };
 
-/// The count the core's rule gives this build: the sRGB pair is stored only
-/// in an ES 3.0 report and where the back end samples both.
-fn expected_count() -> usize {
+/// The six ES 3.0 formats the GL core decodes at upload (src/gl/texture.rs
+/// `decoded_format`) and the texel class each is stored in.
+const DECODED: [(GLenum, u8); 6] = [
+    (GL_COMPRESSED_R11_EAC, yakogl::backend::GLES_TEXFMT_R16F),
+    (GL_COMPRESSED_SIGNED_R11_EAC, yakogl::backend::GLES_TEXFMT_R16F),
+    (GL_COMPRESSED_RG11_EAC, yakogl::backend::GLES_TEXFMT_RGBA16F),
+    (GL_COMPRESSED_SIGNED_RG11_EAC, yakogl::backend::GLES_TEXFMT_RGBA16F),
+    (GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, yakogl::backend::GLES_TEXFMT_RGBA8),
+    (GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2, yakogl::backend::GLES_TEXFMT_SRGB8_A8),
+];
+
+/// The names the core's rule stores in this build: the sRGB pair only in an
+/// ES 3.0 report and where the back end samples both, each decoded name only
+/// in an ES 3.0 report and where the back end samples its class.
+fn expected_list() -> Vec<GLenum> {
     use yakogl::backend::*;
     let sampled = sampled_texfmts();
-    let srgb = !cfg!(feature = "report-es2")
+    let es3 = !cfg!(feature = "report-es2");
+    let srgb = es3
         && sampled & gles_texfmt_bit(GLES_TEXFMT_ETC2_SRGB_RGB) != 0
         && sampled & gles_texfmt_bit(GLES_TEXFMT_ETC2_SRGB_RGBA) != 0;
-    BASE.len() + if srgb { SRGB.len() } else { 0 }
+    let mut v = BASE.to_vec();
+    if srgb {
+        v.extend(SRGB);
+    }
+    v.extend(DECODED.iter().filter(|&&(_, class)| es3 && sampled & gles_texfmt_bit(class) != 0).map(|&(f, _)| f));
+    v
 }
 
 #[test]
@@ -183,14 +202,17 @@ fn case20_compressed_formats() {
         if cfg!(feature = "report-es2") {
             assert_eq!(count, 3, "ES 2.0 report");
         }
-        assert!(count == 3 || count == 5, "count {count}");
-        assert_eq!(count, expected_count(), "count the core's rule gives this build");
+        let want = expected_list();
+        assert_eq!(count, want.len(), "count the core's rule gives this build");
         for f in BASE {
             assert_eq!(list.iter().filter(|&&x| x == f).count(), 1, "0x{f:x} once in the list");
         }
         let srgb = SRGB.iter().filter(|f| list.contains(f)).count();
         assert!(srgb == 0 || srgb == 2, "sRGB ETC2 pair is both or neither");
-        assert_eq!(list.len(), BASE.len() + srgb, "nothing else in the list");
+        let mut got = list.clone();
+        let mut want = want;
+        (got.sort_unstable(), want.sort_unstable());
+        assert_eq!(got, want, "exactly the names the core's rule stores");
         assert!(list.contains(&GL_ETC1_RGB8_OES), "ETC1 in the list");
         assert!(ext.split_whitespace().any(|e| e == ETC1_EXT), "{ETC1_EXT} in GL_EXTENSIONS: {ext}");
     }
