@@ -23,6 +23,7 @@ const MASKS: [(&str, u64); 3] =
 fn all_classes() -> u64 {
     (GLES_TEXFMT_R11G11B10F..=GLES_TEXFMT_RGBA32F)
         .chain(GLES_TEXFMT_R32UI..=GLES_TEXFMT_RG16I)
+        .chain([GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA])
         .fold(PVR_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
 }
 

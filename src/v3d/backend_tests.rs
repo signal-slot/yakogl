@@ -1040,12 +1040,22 @@ unsafe extern "C" fn v3d_tex_pack_state(out: *mut u8, s: *const V3dTexState) -> 
 
 #[no_mangle]
 unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool {
+    // SAFETY: the arena and the backend's sampler, as the compare form's.
+    unsafe { v3d_tex_pack_sampler_compare(out, s, texture::COMPARE_OFF) }
+}
+
+/// The fake of v3d_tex_pack_sampler_compare: the filter flags in the third
+/// word as before, and the `compare_op` it was given whole in the fourth, so
+/// a test reads which compare a record was packed with.
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool {
     // SAFETY: V3D_SAMPLER_STATE_BYTES of the arena and the backend's sampler.
     unsafe {
         let s = &*s;
         let flags =
             s.mag_nearest as u32 | (s.min_nearest as u32) << 1 | (s.mip_nearest as u32) << 2 | (s.mip_none as u32) << 3;
-        let words = [s.wrap_s, s.wrap_t, flags, 0, 0, FAKE_SAMPLER_MARK];
+        let compare = if compare_op == texture::COMPARE_OFF { 0 } else { compare_op | 0x100 };
+        let words = [s.wrap_s, s.wrap_t, flags, compare, 0, FAKE_SAMPLER_MARK];
         core::ptr::copy_nonoverlapping(words.as_ptr() as *const u8, out, V3D_SAMPLER_STATE_BYTES);
     }
     true
@@ -1803,6 +1813,40 @@ fn a_sampler_record_is_packed_once_per_job() {
     assert_eq!(v3d_flush(), 0);
     assert_eq!(draw(&sampling(&rig, t)), 0);
     assert_eq!(sampler_counters(), (3, 1), "a new job packs its own");
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// A depth binding is R32F in the GL core, and a shadow look-up compares with
+/// the function its sampler record names (docs/notes/v3d-shadow.md (a)). The
+/// record is packed with `texture::pack_sampler` and kept per (sampler state,
+/// compare function): two depth bindings that differ only in the function get
+/// two records, a repeat finds its own again, and a binding of any other
+/// class, whatever its `compare_op`, is the compare-off record. Revert check:
+/// keying on the sampler state alone gives LESS's record to the LEQUAL
+/// binding (the same record for both), and packing with
+/// `v3d_tex_pack_sampler` writes no function at all (the fourth word 0).
+#[test]
+fn a_sampler_record_carries_its_depth_compare_function() {
+    let rig = Rig::new();
+    rig.init();
+    let t = texture(0, 16, 16, 1);
+    assert_eq!(draw(&sampling(&rig, t)), 0); /* a job with its arenas */
+    let depth = |compare_op: u8| GlesTextureBind { format: GLES_TEXFMT_R32F, compare_op, ..t };
+    let (off, less, lequal) = (depth(texture::COMPARE_OFF as u8), depth(1), depth(3));
+    let (rec_off, rec_less, rec_lequal) = {
+        let g = g();
+        (sampler_for(g, &off).ok().unwrap(), sampler_for(g, &less).ok().unwrap(), sampler_for(g, &lequal).ok().unwrap())
+    };
+    assert!(rec_off != rec_less && rec_less != rec_lequal && rec_off != rec_lequal, "one record per function");
+    assert_eq!(sampler_for(g(), &less).ok().unwrap(), rec_less, "a repeat finds its record");
+    assert_eq!(sampler_for(g(), &lequal).ok().unwrap(), rec_lequal);
+    let fourth = |rec: u32| words(&rig, rec, 6)[3];
+    assert_eq!((fourth(rec_off), fourth(rec_less), fourth(rec_lequal)), (0, 1 | 0x100, 3 | 0x100));
+    /* a binding that is not a depth texture is not compared, whatever the
+     * GL core's state says (ES 3.0.6 3.8.15): the compare-off record, which
+     * the depth binding with no compare already holds */
+    let plain = GlesTextureBind { compare_op: 1, ..t };
+    assert_eq!(sampler_for(g(), &plain).ok().unwrap(), rec_off);
     assert_eq!(v3d_finish(), 0);
 }
 

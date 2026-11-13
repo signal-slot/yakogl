@@ -10,9 +10,13 @@ and is not one of the ten). This note is about the other six and why they do
 not get a class of their own yet. Function names are the address; line
 numbers are of main at `6dc53970` and drift.
 
-Status when this was written: the decoder (`src/gl/etc2.rs`), the six names
-in the GL core, the V3D mask bits and the dEQP runs are other items of the
-plan and were not on main. Nothing here was measured on a board.
+Status: the decoder (`src/gl/etc2.rs`, with Mesa's outputs as vectors), the
+six names in the GL core (`decoded_format`, `decoded_image_2d`,
+`decoded_image_array`, `texture_write_decoded` in `src/gl/texture.rs`;
+`GlTexture::decoded_from`), the four ETC2 classes in `V3D_SAMPLED_TEXFMTS`
+and the host tests (`tests/es3_etc2_eac.rs`, `tests/es3_etc2_v3d.rs`,
+`tests/es3_decoded_class_v3d.rs`) are on main. Nothing here was measured on a
+board.
 
 ## 1. The decision
 
@@ -111,9 +115,10 @@ including the sRGB 6-bit one.
 what the build stores (`stored_compressed_formats`):
 
 - PowerVR and GC under ES 3.0: 11 (ETC1 plus the ten).
-- The V3D: 11 once `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the linear
-  and sRGB ETC2 classes; until then the sRGB pair is not stored and the list
-  is shorter. ES 3.0 requires all ten, so the V3D needs the mask first.
+- The V3D: 11, since `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the
+  linear and sRGB ETC2 classes (before it a linear ETC2 upload was stored and
+  its draw refused as "a texel format the V3D does not sample", and the sRGB
+  pair was not stored).
 - `report-es2`: 3 on every build (ETC1, `RGB8_ETC2`, `RGBA8_ETC2_EAC`),
   unchanged.
 - Mali: the six are refused, so its count is what its mask allows.
@@ -129,8 +134,14 @@ per back end and gives back the 4x/8x memory. These are follow-up issues:
 
 - V3D: `etc2_row` (`src/v3d/texture.rs`, over the rows of
   `driver/src/v3d/v3d_tex.c`) already has all ten TMU rows, pinned by
-  `tools/v3d/tex_check.c`; Mesa `v3dx_format_table.c:159-168`. It needs five
-  class constants, `etc2_of` arms and mask bits.
+  `tools/v3d/tex_check.c`; Mesa `v3dx_format_table.c:159-168`, so the rows
+  of 333a19f7 can take the EAC and punch-through classes as they are. The
+  four block classes the GL core has are in the mask and sampled natively.
+  The other six need `GLES_TEXFMT_*` constants for R11, signed R11, RG11,
+  signed RG11 and the sRGB punch-through (class 3, `ETC2_RGB_PT`, exists),
+  their `etc2_of` arms, mask bits, and `compressed_format_info` entries
+  (which would then leave `decoded_format`); the layout code
+  (`layout_compressed`) is format-blind.
 - PowerVR: Mesa `pvr_arch_formats.c:158-167`; `src/pvr/csbgen.rs` has the
   texstate constants 70-74 (`ROGUE_TEXSTATE_FORMAT_COMPRESSED_*`). The
   punch-through class needs only a mask bit.

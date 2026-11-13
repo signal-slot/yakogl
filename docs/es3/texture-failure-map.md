@@ -164,7 +164,11 @@ formats) and 331 n/s in image 18 (`shaders.texture_functions` and
 `texture.compressed`, not split) plus 12 each in the filtering images 19a, 19b,
 19d and 12 in 196 (3D). The remaining split is not recorded. These do not count
 toward 2,612 and are not given a plan item here; ETC2/EAC support is described
-in `docs/es3/pvr-formats.md` §2.4.
+in `docs/es3/pvr-formats.md` §2.4. The ten ES 3.0 ETC2/EAC formats are now all
+accepted by the GL core on the PowerVR, the GC7000UL and the V3D (plan #354:
+four as blocks, six decoded at upload, `docs/notes/etc2-eac.md`), which is what
+the 400 `texture.wrap` and `texture.format` ETC2/EAC cases need first; whether
+their pictures pass is the boards' to show (host only: the readback is black).
 
 ## 4. Coverage by plan item, and what no item covers
 
@@ -239,4 +243,4 @@ board has run these commits), so none of it is a conformance figure.
 | `shaders.texture_functions` look-ups on arrays and 3D | pvr-shadow, `d7356b65` | 226 PowerVR refusals in one message, `src/shaderc/online/powervr/select.rs`; front end clean (`docs/es3/shader-host-repro.md`) |
 
 Rows nothing has touched: `mipmap.3d.bias` (4), `size`, `vertex.2d/cube`,
-`filtering.3d` on the PowerVR (needs pvr-3d), ETC2 on the GC7000UL and V3D.
+`filtering.3d` on the PowerVR (needs pvr-3d); native (block) sampling of the six decoded ETC2/EAC formats on the three back ends. The V3D's four ETC2 block classes are in its mask, and its shadow draws pack the texture's compare function (`texture.shadow`, 432 cases, RC2), host only.
