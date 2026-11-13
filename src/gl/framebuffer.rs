@@ -488,6 +488,11 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
         if t.unsized_depth {
             return None;
         }
+        /* the texels of a compressed format decoded at upload (texture.rs
+         * `DECODED_ETC2`) are not a renderable format of the application's */
+        if t.etc2_decoded != 0 {
+            return None;
+        }
         if matches!(t.format, GL_DEPTH_COMPONENT | GL_DEPTH_STENCIL)
             && t.has_image()
             && t.width != 0

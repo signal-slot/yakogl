@@ -504,6 +504,7 @@ _Static_assert(offsetof(struct gl_texture, storage_deferred) == 245, "struct gl_
 _Static_assert(offsetof(struct gl_texture, rgba32f) == 246, "struct gl_texture.rgba32f");
 _Static_assert(offsetof(struct gl_texture, unsized_depth) == 247, "struct gl_texture.unsized_depth");
 _Static_assert(offsetof(struct gl_texture, depth_texels_newer) == 248, "struct gl_texture.depth_texels_newer");
+_Static_assert(offsetof(struct gl_texture, etc2_decoded) == 249, "struct gl_texture.etc2_decoded");
 #if !defined(YAKOGL_GPU_VIVANTE) && !defined(YAKOGL_GPU_V3D) && !defined(YAKOGL_GPU_MALI)
 _Static_assert(sizeof(struct gl_shader) == 1296, "struct gl_shader");
 #endif
