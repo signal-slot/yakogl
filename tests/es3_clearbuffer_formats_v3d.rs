@@ -654,7 +654,8 @@ fn srgb_and_rgb10_a2_clear_as_clamped_halves() {
 
 /// The float formats are not clamped (`v3d_tlb_clear`: "clamping is not
 /// performed on the clear color"): R16F, RG16F, RGB16F and RGBA16F as
-/// halves, R32F as the word. A format without alpha reads it as 1.
+/// halves (R32F is no colour target without GL_EXT_color_buffer_float). A
+/// format without alpha reads it as 1.
 #[test]
 fn float_formats_clear_unclamped() {
     let _g = rig();
@@ -663,10 +664,9 @@ fn float_formats_clear_unclamped() {
         (GL_RG16F, "RG16F", V3D_OUTPUT_IMAGE_FORMAT_RGBA16F, false),
         (GL_RGB16F, "RGB16F", V3D_OUTPUT_IMAGE_FORMAT_RGBA16F, false),
         (GL_RGBA16F, "RGBA16F", V3D_OUTPUT_IMAGE_FORMAT_RGBA16F, true),
-        (GL_R32F, "R32F", V3D_OUTPUT_IMAGE_FORMAT_R32F, false),
     ];
     for (f, name, out, has_alpha) in formats {
-        let tile = if f == GL_R32F { Tile::W32 } else { Tile::F16 };
+        let tile = Tile::F16;
         for mut v in [EDGE, MID, HALF_EDGE, HALF_MORE, [-1.5, 3.0e4, 0.1, -7.25]] {
             let s = clear(f, Call::Fv, bits(v)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
             assert_tlb(&s, name, true);
@@ -748,9 +748,7 @@ fn the_wrong_clear_call_is_invalid_operation() {
             assert_eq!(clear(f, call, [1; 4]).err(), Some(Refused::Clear(GL_INVALID_OPERATION)), "{name} {call:?}");
         }
     }
-    for (f, name) in
-        [(GL_RGBA8, "RGBA8"), (GL_SRGB8_ALPHA8, "SRGB8_ALPHA8"), (GL_RGBA16F, "RGBA16F"), (GL_R32F, "R32F")]
-    {
+    for (f, name) in [(GL_RGBA8, "RGBA8"), (GL_SRGB8_ALPHA8, "SRGB8_ALPHA8"), (GL_RGBA16F, "RGBA16F")] {
         for call in [Call::Iv, Call::Uiv] {
             assert_eq!(clear(f, call, [1; 4]).err(), Some(Refused::Clear(GL_INVALID_OPERATION)), "{name} {call:?}");
         }

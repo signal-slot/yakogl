@@ -516,6 +516,12 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
         }
         let int_format = integer_texture_internalformat(t);
         let rgb10a2 = rgb10a2_texture_surface(t.texfmt).is_some();
+        /* GL_RGB16F is an es3_formats name held in the RGBA16F class: the
+         * PBE writes four halves, the format names three. GL_EXT_color_
+         * buffer_half_float makes it renderable (RG16F, held the same way,
+         * is not an es3_formats name) */
+        let rgb16f = t.texfmt == GLES_TEXFMT_RGBA16F
+            && super::es3_formats::by_index(t.es3_fmt).is_some_and(|e| e.internalformat == GL_RGB16F);
 
         if t.mem.impl_.is_null()
             || t.width == 0
@@ -532,7 +538,10 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
             /* an ES 3.0 format of es3_formats is no render target, but
              * RGB10_A2 (ES 3.0 table 3.13): held as RGBA8, or in its own
              * class where the back end renders it */
-            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none() && !rgb10a2)
+            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none() && !rgb10a2 && !rgb16f)
+            /* single-precision colour is renderable with GL_EXT_color_buffer_float
+             * only (ES 3.0 table 3.13 leaves R32F out) */
+            || (!crate::REPORT_ES2 && t.texfmt == GLES_TEXFMT_R32F && !float32_color_renderable())
             || a.level < 0
             || a.level as u32 >= t.chain_levels as u32
             || a.level as usize >= CAP_MIP_LEVELS
@@ -552,6 +561,7 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
              * attachment by its sized format: GL_RGBA32F is not
              * colour-renderable without GL_EXT_color_buffer_float */
             GLES_TEXFMT_RGBA16F if t.rgba32f => GL_RGBA32F,
+            GLES_TEXFMT_RGBA16F if rgb16f => GL_RGB16F,
             GLES_TEXFMT_RGBA16F => GL_RGBA16F,
             GLES_TEXFMT_R16F => GL_R16F,
             GLES_TEXFMT_R32F => GL_R32F,
@@ -621,6 +631,14 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
         });
     }
     None
+}
+
+/// Are the single-precision float formats (R32F, RG32F, RGBA32F) colour-
+/// renderable? Only where GL_EXT_color_buffer_float is in this build's
+/// extension list (ES 3.0 4.4.4.1; it is not claimed today, and ES 2.0 has no
+/// such format at all).
+fn float32_color_renderable() -> bool {
+    crate::gl::state::extension_listed("GL_EXT_color_buffer_float")
 }
 
 fn is_color_format(f: GLenum) -> bool {
@@ -2606,7 +2624,9 @@ fn is_renderable_format(f: GLenum) -> bool {
 /// the refusal exactly then. ES 3.0 has the format in core.
 fn renderbuffer_format_advertised(f: GLenum) -> bool {
     if !crate::REPORT_ES2 {
-        return true;
+        /* ES 3.0 table 3.13: R32F is no renderbuffer format without
+         * GL_EXT_color_buffer_float (RGBA32F, RG32F and RGB32F never were) */
+        return f != GL_R32F || float32_color_renderable();
     }
     let listed = crate::gl::state::extension_listed;
     match f {
@@ -7040,7 +7060,6 @@ mod tests {
             (GL_RGB16F, GLES_SURF_RGBA16F, 8),
             (GL_RG16F, GLES_SURF_RGBA16F, 8),
             (GL_R16F, GLES_SURF_R16F, 2),
-            (GL_R32F, GLES_SURF_R32F, 4),
             (GL_RGBA8, GLES_SURF_RGBA8888, 4),
             (GL_RGB565, GLES_SURF_RGBA8888, 4),
         ] {
@@ -7144,7 +7163,9 @@ mod tests {
     #[test]
     fn float_target_formats_follow_the_colour_texture() {
         let gl = TestGl::new(8, 8);
-        for (internal, surf) in [(GL_R16F, GLES_SURF_R16F), (GL_R32F, GLES_SURF_R32F), (GL_RGBA8, GLES_SURF_RGBA8888)] {
+        /* (R32F is no colour target without GL_EXT_color_buffer_float:
+         * tests/es3_pvr_fbo_float.rs) */
+        for (internal, surf) in [(GL_R16F, GLES_SURF_R16F), (GL_RGBA8, GLES_SURF_RGBA8888)] {
             let tex = bind_new_texture(GL_TEXTURE_2D);
             // SAFETY: plain GL calls.
             unsafe { crate::gl::texture::glTexStorage2D(GL_TEXTURE_2D, 1, internal, 2, 2) };
@@ -7259,7 +7280,7 @@ mod tests {
     #[cfg(not(feature = "report-es2"))]
     fn read_pixels_of_r16f_and_r32f_targets_fill_rgba() {
         let _gl = TestGl::new(8, 8);
-        for internal in [GL_R16F, GL_R32F] {
+        for internal in [GL_R16F] {
             let tex = bind_new_texture(GL_TEXTURE_2D);
             let v = [0.75f32];
             // SAFETY: one RED float texel.
