@@ -14,19 +14,36 @@
  *            (stm32mp257f-dk.dts:328-350)
  *   ltdc     stm32mp251.dtsi:2150 (0x48010000), its output to the DSI
  *            (stm32mp257f-dk.dts:536-547)
+ *   ltdc_fb  the frame buffer, 0xb0000000, 32 MiB no-map: past the image's
+ *            load end, inside RISAF4 region 9 (non-secure, CID0/1 r/w),
+ *            below 4 GiB (docs/notes/stm32mp257f-dk-display-bringup.md,
+ *            "Where the image lives and the proposed framebuffer")
+ *
+ * The clocks are what the board layer's power-on sets and reads back
+ * (display_power_mp2.c over soc::stm32mp2::display): ck_ker_i2c2 is
+ * FLEXGEN_12 at 100 MHz, the DSI PHY reference FLEXGEN_28 at 27 MHz, the
+ * LTDC's pixel clock FLEXGEN_27 at the chosen mode's rate.
  *
  * Left out, on purpose:
- *   - the bridge's INT (GPIO B4, falling) and reset (GPIO B6) lines
- *     (stm32mp257f-dk.dts:436-438): no GPIO controller in this tree yet, the
- *     bridge driver polls; the HPD is read from the chip, the DK has no pin.
- *   - interrupts of the LTDC (the flips poll the shadow reload).
- *   - clocks, resets and RIF: the display chain owner programs them.
- *
- * The values marked "placeholder" are to be set from the mp2_display_state
- * probe's readings of what ST's chain leaves set.
+ *   - the bridge's INT (GPIO B4) and reset (GPIO B6) lines
+ *     (stm32mp257f-dk.dts:436-438): the board layer configures both pins and
+ *     pulses the reset; no GPIO controller in this tree, the HPD is read
+ *     from the chip.
+ *   - interrupts of the LTDC (frames and flips are polled).
  */
 
 / {
+	chosen {
+		yakogl,ltdc-fb = &ltdc_fb;
+	};
+
+	reserved-memory {
+		ltdc_fb: framebuffer@b0000000 {
+			reg = <0xb0000000 DT_SIZE_M(32)>;
+			no-map;
+		};
+	};
+
 	soc {
 		i2c2: i2c@40130000 {
 			compatible = "yakogl,stm32mp2-i2c";
@@ -34,8 +51,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			clock-frequency = <400000>;
-			/* placeholder: ck_ker_i2c2 at HSI (64 MHz) */
-			kernel-clock-frequency = <64000000>;
+			kernel-clock-frequency = <100000000>;
 			status = "okay";
 
 			adv7535: hdmi@3d {
@@ -54,19 +70,22 @@
 			reg = <0x48000000 0x800>;
 			data-lanes = <4>;
 			bridge = <&adv7535>;
-			/* placeholder: the DK's HSE, 40 MHz */
-			pll-ref-frequency = <40000000>;
-			/* 1280x720p60 CEA-861 VIC 4 */
-			pixel-clock-frequency = <74250000>;
+			pll-ref-frequency = <27000000>;
+			/* the LTDC driver sets the chosen mode's (stm32_dsi_set_mode) */
+			pixel-clock-frequency = <148500000>;
 			status = "okay";
 		};
 
+		/* hactive x vactive: the largest mode the driver may choose,
+		 * 1920x1080@60 when the EDID prefers it, else 1280x720@60; one
+		 * 1080p XRGB8888 frame (pitch 7680) fits fb-size. */
 		ltdc: display-controller@48010000 {
 			compatible = "yakogl,stm32-ltdc";
 			reg = <0x48010000 0x400>;
-			hactive = <1280>;
-			vactive = <720>;
+			hactive = <1920>;
+			vactive = <1080>;
 			pixel-format = "argb8888";
+			fb-size = <0x800000>;
 			dsi-host = <&dsi>;
 			status = "okay";
 		};
