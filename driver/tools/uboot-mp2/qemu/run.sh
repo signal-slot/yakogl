@@ -56,17 +56,21 @@ img() { # NAME IMGSZ
 }
 img ok 0x2000
 img bigimg 0x10000001
+img long 0xc000000
 cp "$run/img/ok.bin" "$run/img/big.bin"
 truncate -s $((0x10000001)) "$run/img/big.bin"   # sparse: 256 MiB + 1
 truncate -s 4096 "$run/img/nomagic.bin"
+truncate -s $((192 * 1024 * 1024)) "$run/img/long.bin"   # sparse: the power-cut cases load it
 
 cp "$run/scr/mp2-mmc.scr" "$stage/mp2-mmc.scr"
 cp "$run/img/ok.bin" "$stage/mp2z.bin"
 cp "$run/img/bigimg.bin" "$run/img/nomagic.bin" "$stage/"
 cp --sparse=always "$run/img/big.bin" "$stage/big.bin"
+cp --sparse=always "$run/img/long.bin" "$stage/long.bin"
 cp "$run/scr/mp2-net.scr" "$tftp/mp2-net.scr"
 cp "$run/img/ok.bin" "$tftp/mp2z.bin"
 cp "$run/img/bigimg.bin" "$tftp/bigimg.bin"
+cp --sparse=always "$run/img/long.bin" "$tftp/long.bin"
 if [ "${MP2_QEMU_BIG_TFTP:-1}" = 1 ]; then cp --sparse=always "$run/img/big.bin" "$tftp/big.bin"; fi
 
 # The SD card: GPT, partition 1 a placeholder, partition 2 the ext4 "bootfs"

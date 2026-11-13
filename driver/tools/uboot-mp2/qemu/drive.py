@@ -27,6 +27,7 @@ STOP = re.compile(rb"Hit any key to stop autoboot")
 LOAD = "0xa0000000"
 WINDOW = "0x10000000"
 UNDO = "mp2z: undo: nothing persistent; run bootcmd boots ST Linux"
+STOCK_BOOTCMD = "echo mp2q: stock bootcmd ran"   # build-uboot.sh's BOOTCOMMAND
 BACK = ["mp2z: back to bootcmd", "mp2q: stock bootcmd ran"]
 RAN = [
     "mp2z: go " + LOAD,
@@ -153,6 +154,14 @@ class Qemu:
         self.send(" ")
         self.expect(PROMPT, 20)
 
+    def cut(self):
+        """Power cut: SIGKILL, no poweroff, no flush. Keeps what was printed."""
+        self.p.kill()
+        self.p.wait()
+        rest = self.p.stdout.read()
+        self.buf += rest
+        self.log.write(rest)
+
     def close(self):
         if self.p.poll() is None:
             try:
@@ -162,6 +171,28 @@ class Qemu:
                 self.p.kill()
                 self.p.wait()
         self.log.close()
+
+
+def typed(q, line):
+    """Types LINE without waiting for the prompt."""
+    q.pos = max(q.pos, len(q.buf))
+    q.send(line + "\r")
+
+
+def cutoff_cases(big_tftp):
+    """Power cuts: (name, typed line, regex to cut on, seconds to wait after it)."""
+    mmc = "setenv mp2z_dev 0; setenv mp2z_part 2; "
+    net = "setenv mp2z_server 10.0.2.2; "
+    out = [
+        ("cut-mmc-after-undo", mmc + MMC, re.escape(UNDO), 0),
+        ("cut-net-after-undo", net + NET, re.escape(UNDO), 0),
+        # Kill while ext4load reads the 192 MiB image.
+        ("cut-mmc-during-load", mmc + "setenv mp2z_file /yakogl/long.bin; " + MMC,
+         r"mp2z: mmc 0:2 /yakogl/long\.bin", 0.1),
+        # Kill while tftpboot is receiving (its progress hashes).
+        ("cut-net-during-load", net + "setenv mp2z_file long.bin; " + NET, r"#####", 0.2),
+    ]
+    return out
 
 
 def printenv(q):
@@ -216,7 +247,10 @@ def main():
             q.close()
 
     # The stored environment: one saveenv, here and nowhere else.
-    session("setup", lambda q: q.cmd("saveenv"))
+    def setup(q):
+        q.cmd("saveenv")
+        return printenv(q)
+    setup_env = session("setup", setup) or {}
     env_sha, disk_sha = sha(a.env), sha(a.disk)
     first = {}
 
@@ -261,6 +295,40 @@ def main():
               final == first and bool(first),
               "differs in " + ", ".join(sorted(k for k in set(final) | set(first)
                                                if final.get(k) != first.get(k))))
+    # Power cuts: the stored environment must come out of each unchanged.
+    for name, line, pat, wait in cutoff_cases(a.big_tftp):
+        q = Qemu(argv, os.path.join(a.logs, name + ".log"))
+        try:
+            q.boot()
+            typed(q, line)
+            q.expect(re.compile(pat.encode()), 120)
+            time.sleep(wait)
+            q.cut()
+            raw = q.buf.decode(errors="replace")
+            check(name + ": undo line printed before the cut", UNDO in raw)
+            check(name + ": cut before go", "mp2z: go " not in raw and "## Starting" not in raw
+                  and "mp2z: loaded" not in raw)
+            check(name + ": stored environment unchanged after the cut", sha(a.env) == env_sha)
+            check(name + ": disk unchanged after the cut", sha(a.disk) == disk_sha)
+        except (TimeoutError, EOFError) as e:
+            check(name + ": console", False, "%s (log %s)" % (e, q.log.name))
+            q.close()
+            continue
+        q.log.close()
+        back = session(name + "-reboot", lambda q: (printenv(q), q.buf))
+        if back is None:
+            continue
+        env, rawb = back
+        check(name + ": reboot read the stored environment (no bad CRC)", b"bad CRC" not in rawb)
+        diff = sorted(k for k in set(env) | set(setup_env)
+                      if env.get(k) != setup_env.get(k)
+                      and not k.startswith("mp2z_") and k not in SIDE_EFFECT)
+        check(name + ": printenv after the reboot = setup printenv", not diff,
+              "differs in " + ", ".join(diff))
+        check(name + ": bootcmd is the stock value", env.get("bootcmd") == STOCK_BOOTCMD
+              and env.get("bootcmd") == setup_env.get("bootcmd"), repr(env.get("bootcmd")))
+        check(name + ": stored environment unchanged after the reboot", sha(a.env) == env_sha)
+
     print("run.sh: %d ok, %d failed" % (res["ok"], res["failed"]))
     return 0 if res["failed"] == 0 else 1
 
