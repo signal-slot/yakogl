@@ -369,7 +369,11 @@ agree with `layout.rs`. It does not show what the hardware does.
   - `w % 16 == 0` and `h % 4 == 0`, so the padded shadow is exactly the target
     and the RS writes nothing past the GL core's rows;
   - not MSAA, not drawn upward (`ms_via_scratch`, `negative_stride`);
-  - the depth test is on, with a `pe_private` depth surface (W3).
+  - the depth test is on, with a `pe_private` depth surface (W3). With the
+    test off, the draw still takes the shadow when that surface is already
+    `SUPER_TILED` and holds contents: drawn linear it would ask `ds_cache`
+    for a live surface in another layout, which refuses the draw
+    (`tests/gc_tiled_rt.rs`, case 6).
 
   Such a draw renders into a TILED shadow under SINGLE_BUFFER(2), with depth
   `SUPER_TILED`. At `frame_submit` the stream gets the RS tiled→linear copy of
