@@ -38,7 +38,7 @@
 use super::backend::RsBlit;
 use super::layout::{self, Layout};
 use super::regs::*;
-use crate::backend::GlesDraw;
+use crate::backend::{GlesDraw, GlesTextureBind, GLES_TEXFMT_RGBA8};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
 
@@ -237,9 +237,85 @@ pub fn held() -> usize {
     shadows().entries.iter().flatten().count()
 }
 
+/// The sampler descriptor words that read a shadow directly (gc-tiled-wire.md
+/// W10): CONFIG0, CONFIG1, LINEAR_STRIDE, SLICE and the level 0 address. The
+/// rest of the descriptor (size, log size, base LOD, 3D config) comes from the
+/// texture as for any 2D one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SamplerWords {
+    pub config0: u32,
+    pub config1: u32,
+    pub linear_stride: u32,
+    pub slice: u32,
+    pub lod0: u64,
+}
+
+/// The words for sampling `shadow`, a single-level TILED 32-bit RGBA8 copy of
+/// a `spec` target: Mesa's for a TILED resource the resolve engine may touch
+/// (16x4-padded, HALIGN SIXTEEN). Everything but `lod0` equals the words
+/// `texture.rs` writes for a tiled copy of the same size. `None` for a target
+/// [`spec_of`] would refuse (`w % 16 != 0` or `h % 4 != 0`).
+// Nothing calls it until W10 wires texture binding; the dead_code allow goes
+// with that wiring.
+#[allow(dead_code)]
+pub fn sampler_words(spec: &Spec, shadow: u64) -> Option<SamplerWords> {
+    if spec.w == 0 || spec.h == 0 || !spec.w.is_multiple_of(16) || !spec.h.is_multiple_of(4) {
+        return None;
+    }
+    let mut t = GlesTextureBind::ZERO;
+    t.format = GLES_TEXFMT_RGBA8;
+    t.width = spec.w;
+    t.height = spec.h;
+    let [config0, config1, _] = super::texture::format_words(&t, true);
+    let linear_stride = spec.w * BPP;
+    Some(SamplerWords {
+        config0,
+        config1: config1 | texdesc_halign(GC_TEXTURE_HALIGN_SIXTEEN),
+        linear_stride,
+        slice: linear_stride * spec.h,
+        lod0: shadow,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terrains_256_square_shadow_samples_with_the_notes_words() {
+        let spec = Spec { gpu: 0x1000, w: 256, h: 256, pitch: 1024 };
+        let s = sampler_words(&spec, 0x20000).expect("256x256 qualifies");
+        assert_eq!(s.config0 & texdesc_addressing_mode(!0), texdesc_addressing_mode(GC_TEX_ADDRESSING_TILED));
+        assert_eq!(s.config1, 0x04321000);
+        assert_eq!(s.linear_stride, 0x400);
+        assert_eq!(s.slice, 0x40000);
+        assert_eq!(s.lod0, 0x20000);
+    }
+
+    #[test]
+    fn the_words_are_the_tiled_copys_but_for_lod0() {
+        let spec = Spec { gpu: 0x1000, w: 64, h: 32, pitch: 256 };
+        let a = sampler_words(&spec, 0x20000).unwrap();
+        let b = sampler_words(&spec, 0x90000).unwrap();
+        assert_eq!((a.config0, a.config1, a.linear_stride, a.slice), (b.config0, b.config1, b.linear_stride, b.slice));
+        assert_ne!(a.lod0, b.lod0);
+        let mut t = GlesTextureBind::ZERO;
+        (t.width, t.height) = (64, 32);
+        let [c0, c1, _] = super::super::texture::format_words(&t, true);
+        assert_eq!(a.config0, c0);
+        assert_eq!(a.config1, c1 | texdesc_halign(GC_TEXTURE_HALIGN_SIXTEEN));
+        /* tiled_copy's descriptor: align4(w) * bpp, and align4(w) * align4(h) * bpp */
+        assert_eq!(a.linear_stride, 64 * 4);
+        assert_eq!(a.slice, 64 * 32 * 4);
+    }
+
+    #[test]
+    fn a_size_the_resolve_engine_would_not_take_has_no_words() {
+        for (w, h) in [(250, 256), (256, 250), (0, 0), (8, 4)] {
+            let spec = Spec { gpu: 0x1000, w, h, pitch: w * 4 };
+            assert_eq!(sampler_words(&spec, 0x20000), None, "{w}x{h}");
+        }
+    }
 
     #[test]
     fn the_strides_are_mesas_for_a_tiled_side() {
