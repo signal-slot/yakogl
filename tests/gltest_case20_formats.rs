@@ -146,15 +146,35 @@ const GPU: &str = if cfg!(feature = "gpu-v3d") {
     "BXS-4-64 (AM62P)"
 };
 
+/// The six formats the GL core decodes at upload and the class each lands
+/// in (docs/notes/etc2-eac.md): stored in an ES 3.0 report on a back end
+/// that samples the class.
+fn decoded() -> [(GLenum, u8); 6] {
+    use yakogl::backend::*;
+    [
+        (GL_COMPRESSED_R11_EAC, GLES_TEXFMT_R16F),
+        (GL_COMPRESSED_SIGNED_R11_EAC, GLES_TEXFMT_R16F),
+        (GL_COMPRESSED_RG11_EAC, GLES_TEXFMT_RGBA16F),
+        (GL_COMPRESSED_SIGNED_RG11_EAC, GLES_TEXFMT_RGBA16F),
+        (GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, GLES_TEXFMT_RGBA8),
+        (GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2, GLES_TEXFMT_SRGB8_A8),
+    ]
+}
+
 /// The count the core's rule gives this build: the sRGB pair is stored only
-/// in an ES 3.0 report and where the back end samples both.
+/// in an ES 3.0 report and where the back end samples both, and each decoded
+/// format where the back end samples its class.
 fn expected_count() -> usize {
     use yakogl::backend::*;
     let sampled = sampled_texfmts();
     let srgb = !cfg!(feature = "report-es2")
         && sampled & gles_texfmt_bit(GLES_TEXFMT_ETC2_SRGB_RGB) != 0
         && sampled & gles_texfmt_bit(GLES_TEXFMT_ETC2_SRGB_RGBA) != 0;
-    BASE.len() + if srgb { SRGB.len() } else { 0 }
+    let dec = decoded()
+        .iter()
+        .filter(|&&(_, class)| !cfg!(feature = "report-es2") && sampled & gles_texfmt_bit(class) != 0)
+        .count();
+    BASE.len() + if srgb { SRGB.len() } else { 0 } + dec
 }
 
 #[test]
@@ -183,14 +203,17 @@ fn case20_compressed_formats() {
         if cfg!(feature = "report-es2") {
             assert_eq!(count, 3, "ES 2.0 report");
         }
-        assert!(count == 3 || count == 5, "count {count}");
+        if !cfg!(feature = "report-es2") && !cfg!(feature = "gpu-mali") {
+            assert_eq!(count, 11, "ETC1 and the ten ES 3.0 ETC2/EAC formats ({GPU})");
+        }
         assert_eq!(count, expected_count(), "count the core's rule gives this build");
         for f in BASE {
             assert_eq!(list.iter().filter(|&&x| x == f).count(), 1, "0x{f:x} once in the list");
         }
         let srgb = SRGB.iter().filter(|f| list.contains(f)).count();
         assert!(srgb == 0 || srgb == 2, "sRGB ETC2 pair is both or neither");
-        assert_eq!(list.len(), BASE.len() + srgb, "nothing else in the list");
+        let dec = decoded().iter().filter(|(f, _)| list.contains(f)).count();
+        assert_eq!(list.len(), BASE.len() + srgb + dec, "nothing else in the list");
         assert!(list.contains(&GL_ETC1_RGB8_OES), "ETC1 in the list");
         assert!(ext.split_whitespace().any(|e| e == ETC1_EXT), "{ETC1_EXT} in GL_EXTENSIONS: {ext}");
     }

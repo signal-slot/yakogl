@@ -548,6 +548,14 @@ pub struct GlTexture {
     /// the whole depth plane (`texture.rs` `depth_seeded`). The padding
     /// ran out at `unsized_depth`: this grows the struct to 256 bytes.
     pub depth_texels_newer: bool,
+    /// The ES 3.0 ETC2/EAC name (`GL_COMPRESSED_R11_EAC` ... ) whose blocks
+    /// `texture.rs` decoded into this texture's texels at upload (0: none;
+    /// docs/notes/etc2-eac.md). The texels are an ordinary R16F, RGBA16F,
+    /// RGBA8 or SRGB8_ALPHA8 image; this says that glCompressedTexSubImage*
+    /// of the same name writes them and that no other command may treat
+    /// them as an image of that class. GL enums of the compressed names fit
+    /// 16 bits. Sits in what was padding.
+    pub decoded_from: u16,
 }
 
 impl GlTexture {

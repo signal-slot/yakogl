@@ -302,3 +302,23 @@ cases of section 2.
 GitHub issue under the ES 3.0 umbrellas #147 and #748 (duplicates checked
 first; RC2 and RC9 carry their facts meanwhile). This session had no GitHub
 access, so neither issue is cited by a number here.
+
+## 7. ETC2/EAC and V3D shadow compare (plan #354)
+
+What the host can show for these changes, and what it cannot. The Linux OSAL
+keeps the command stream, so every read-back is black: the `texture.wrap` and
+`texture.format.compressed` pictures and the 432 `texture.shadow` pictures
+are the boards' verdicts. On the host the evidence is the API outcome (an
+upload of each of the ten ETC2/EAC names is accepted, the format list has
+eleven entries), the GL core's texels against the decoder
+(`tests/es3_etc2_eac.rs`), the draw reaching the V3D job builder with the
+ETC2 or class record and no refusal (`tests/es3_etc2_v3d.rs`), the sampler
+record's compare function (`src/v3d/backend_tests.rs`,
+`tests/es3_etc2_v3d.rs`), and the look-up on the QPU interpreter within
+dEQP's thresholds (`tests/es3_decoded_class_v3d.rs`). The host dEQP
+before/after runs of `texture.wrap.*etc2*`, `texture.format.compressed.*`,
+`implementation_limits` and `state_query` compressed rows and
+`texture.shadow` (`tools/cts/host-deqp-run.sh`, `GPU=v3d|powervr|vivante`,
+`MODULE=gles3`) were not run for this change: the checkout of VK-GL-CTS at
+`93bca01` was being fetched into the dependency cache and the host was too
+loaded to build `deqp-gles3`. They are left as an issue.

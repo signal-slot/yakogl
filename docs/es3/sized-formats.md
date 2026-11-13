@@ -100,8 +100,37 @@ change; the tests state the expectation per mask.
 * A texture of these formats is no render target except `RGB10_A2` (its own
   surface on the V3D, `RGBA8` elsewhere) (`framebuffer.rs` attachment guard).
 
+## Compressed formats that land in these classes
+
+Six of ES 3.0's ten ETC2/EAC formats have no block class of their own; the GL
+core decodes them on the CPU at glCompressedTexImage2D/3D (design and
+dEQP's thresholds: `docs/notes/etc2-eac.md`; decoder: `src/gl/etc2.rs`) into
+an ordinary texture of a class in the table above:
+
+| format | stored as | texel |
+|---|---|---|
+| `R11_EAC`, `SIGNED_R11_EAC` | `R16F` | (r, 0, 0, 1) |
+| `RG11_EAC`, `SIGNED_RG11_EAC` | `RGBA16F` | (r, g, 0, 1) |
+| `RGB8_PUNCHTHROUGH_ALPHA1_ETC2` | `RGBA8` | alpha 0 or 255, rgb 0 where it is 0 |
+| `SRGB8_PUNCHTHROUGH_ALPHA1_ETC2` | `SRGB8_A8` | as above, the bytes sRGB-decoded when sampled |
+
+A format is stored only where the back end's mask holds its class (all of
+the PowerVR, GC7000UL and V3D masks do; the Mali's is empty, so it is refused
+there) and not under `report-es2`. `GlTexture::decoded_from` records the name:
+glCompressedTexSubImage* of the same name decodes into the texels (another
+name, or a texture that is not one of these, is GL_INVALID_OPERATION), and
+glTexSubImage*, glCopyTexSubImage*, glGenerateMipmap, a framebuffer
+attachment and an EGLImage refuse the texture; a new level 0 clears the
+record. The four block formats (`RGB8_ETC2`, `SRGB8_ETC2`, `RGBA8_ETC2_EAC`,
+`SRGB8_ALPHA8_ETC2_EAC`) stay native blocks; the V3D mask holds their four
+classes since this change (`tests/es3_etc2_v3d.rs`). Pinned by
+`tests/es3_etc2_eac.rs`. Memory cost against the compressed size: 4x for
+R11, 8x for the others.
+
 ## Not done (left to other items)
 
+* Native (block) sampling of the six decoded ETC2/EAC formats, which would
+  give back the 4x/8x memory (`docs/notes/etc2-eac.md` section 6).
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).
   The GC7000UL (`src/vivante/**`) takes the 8/16-bit and the R32/RG32 integer
   classes and `RGB10_A2UI` (`GC_SAMPLED_TEXFMTS`); its texture descriptor composes the
