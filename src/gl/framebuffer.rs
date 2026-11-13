@@ -36,6 +36,7 @@ use super::context::{
     self, gl_trace, tex_pitch, GlAttachment, GlContext, GlFramebuffer, GlRenderbuffer, CAP_COLOR_ATTACHMENTS,
     CAP_MIP_LEVELS, MAX_CONTEXTS, MAX_FRAMEBUFFERS, MAX_RENDERBUFFERS, MAX_TEXTURES, RGBA8_BPP,
 };
+use super::msaa;
 use super::names::{self, Kind};
 use super::types::*;
 use super::{draw, texture};
@@ -882,17 +883,22 @@ pub(super) fn check_status(c: &GlContext, fb: &GlFramebuffer) -> GLenum {
 
 /// The one sample count of `fb`'s attached images (a texture's is 0, a
 /// renderbuffer's its GL_RENDERBUFFER_SAMPLES), 0 with nothing attached;
-/// None when two differ (GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE).
+/// None when two differ (GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE,
+/// [`msaa::attachments_complete`]).
 pub(super) fn attached_samples(c: &GlContext, fb: &GlFramebuffer) -> Option<u8> {
-    let mut samples = None;
-    for a in attachment_points(fb).filter(|a| a.type_ != GL_NONE) {
-        let s = if a.type_ == GL_RENDERBUFFER { c.renderbuffer_ref(a.name).map_or(0, |rb| rb.samples) } else { 0 };
-        match samples {
-            Some(p) if p != s => return None,
-            _ => samples = Some(s),
-        }
+    let counts = || {
+        attachment_points(fb).filter(|a| a.type_ != GL_NONE).map(|a| {
+            if a.type_ == GL_RENDERBUFFER {
+                c.renderbuffer_ref(a.name).map_or(0, |rb| u32::from(rb.samples))
+            } else {
+                0
+            }
+        })
+    };
+    if !msaa::attachments_complete(counts()) {
+        return None;
     }
-    Some(samples.unwrap_or(0))
+    Some(counts().next().unwrap_or(0) as u8)
 }
 
 /// GL_SAMPLES of the bound (draw) framebuffer object: the sample count of
@@ -3465,7 +3471,9 @@ fn log_available() -> bool {
     osal::ops().is_some_and(|o| o.log.is_some())
 }
 
-/// Multisampled renderbuffers are single-sampled: GL_MAX_SAMPLES is 1, so a
+/// The stored count is [`msaa::stored_samples`] of the back end's maximum
+/// ([`msaa::backend_max_samples`], 0 on every back end today): with 0,
+/// multisampled renderbuffers are single-sampled, GL_MAX_SAMPLES is 1, so a
 /// conformant caller never asks for more (one that does gets
 /// GL_INVALID_OPERATION). One sample is kept as GL_RENDERBUFFER_SAMPLES 1
 /// in an ES 3.0 build: one sample a pixel, as plain storage, but a
@@ -3484,28 +3492,29 @@ pub unsafe extern "C" fn glRenderbufferStorageMultisample(
     /* ES 3.0 4.4.2, in dEQP's order (negative_api.buffer.
      * renderbuffer_storage_multisample): the target and the format are
      * GL_INVALID_ENUM, a negative sample count or a size past the limit
-     * GL_INVALID_VALUE, and a count past the format's GL_SAMPLES (1 here:
-     * no multisampled storage exists) GL_INVALID_OPERATION. Until
-     * 2026-09-24 the count was logged and single-sampled storage handed
+     * GL_INVALID_VALUE, and a count past GL_MAX_SAMPLES (1 while the back
+     * end keeps no samples), or any count above 0 for an integer format
+     * (ES 3.0 4.4.2: no multisampled integer storage), GL_INVALID_OPERATION.
+     * Until 2026-09-24 the count was logged and single-sampled storage handed
      * out, so an application that asked for 4 samples was told it had them. */
     if !renderbuffer_storage_args_ok(c, target, internalformat, width, height, FN) {
         return;
     }
-    if samples < 0 {
-        c.set_error(GL_INVALID_VALUE, FN);
+    let integer = is_integer_color_format(internalformat);
+    let stored = match msaa::stored_samples(samples, msaa::backend_max_samples(), integer) {
+        Ok(s) => s,
+        Err(e) => {
+            c.set_error(e, FN);
+            return;
+        }
+    };
+    /* the samples are four times the surface: past note (b)3's cap a
+     * multisampled renderbuffer is GL_OUT_OF_MEMORY (never with 1 sample) */
+    if msaa::oom(stored, width as u32, height as u32) {
+        c.set_error(GL_OUT_OF_MEMORY, FN);
         return;
     }
-    if samples > 1 {
-        c.set_error(GL_INVALID_OPERATION, FN);
-        return;
-    }
-    /* ES 3.0 4.4.2: an integer format has no multisampled storage, so any
-     * count above 0 is GL_INVALID_OPERATION for it */
-    if samples > 0 && is_integer_color_format(internalformat) {
-        c.set_error(GL_INVALID_OPERATION, FN);
-        return;
-    }
-    renderbuffer_storage(c, target, internalformat, width, height, samples as u8);
+    renderbuffer_storage(c, target, internalformat, width, height, stored as u8);
 }
 
 /// glInvalidateFramebuffer on the current context (glInvalidateSubFramebuffer
@@ -3785,7 +3794,9 @@ pub unsafe extern "C" fn glGetInternalformativ(
     const FN: &str = "glGetInternalformativ";
     /* ES 3.0 6.1.15: the target is GL_RENDERBUFFER, the format renderable,
      * the pname one of the two, and bufSize not negative (dEQP
-     * negative_api.state.get_internalformativ). One sample count, 1. */
+     * negative_api.state.get_internalformativ). The counts are
+     * msaa::internalformat_sample_counts: one, 1, while the back end keeps
+     * no samples. */
     /* ES 3.0 table 3.13's integer colour formats and RGB10_A2 are
      * renderable formats the query must know (dEQP-GLES3 state_query.
      * internal_format.*_samples, 20 cases); an ES 3.0 build makes
@@ -3830,13 +3841,18 @@ pub unsafe extern "C" fn glGetInternalformativ(
     if bufSize < 1 || params.is_null() {
         return;
     }
-    let counts = if integer { 0 } else { 1 };
-    if pname == GL_SAMPLES && counts == 0 {
-        return; /* no sample counts to list */
+    let counts = msaa::internalformat_sample_counts(internalformat, msaa::backend_max_samples(), integer);
+    if pname == GL_NUM_SAMPLE_COUNTS {
+        // SAFETY: `params` is non-null with room for bufSize >= 1 values (not
+        // necessarily aligned).
+        unsafe { params.write_unaligned(counts.len() as GLint) };
+        return;
     }
-    // SAFETY: `params` is non-null with room for bufSize >= 1 values (not
-    // necessarily aligned).
-    unsafe { params.write_unaligned(if pname == GL_NUM_SAMPLE_COUNTS { counts } else { 1 }) };
+    /* GL_SAMPLES: as many counts as bufSize holds, none when there are none */
+    for (i, &n) in counts.iter().take(bufSize as usize).enumerate() {
+        // SAFETY: i < bufSize, the room `params` has (not necessarily aligned).
+        unsafe { params.add(i).write_unaligned(n) };
+    }
 }
 
 /// Unit tests: re-arm the multisample / blit warnings (process-global;
