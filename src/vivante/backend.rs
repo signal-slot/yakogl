@@ -613,16 +613,19 @@ fn wide_target(gl: &GlesDraw) -> bool {
 /// shadow (`tiled_rt.rs`, W4): the knob is on, one 4-byte colour target the
 /// resolve engine addresses, drawn straight (not through the 4x scratch, not
 /// bottom-up), A8R8G8B8 or X8R8G8B8 in the pixel engine (what the RS copies
-/// as 32-bit pixels), with the depth test on against a depth surface only
-/// the pixel engine reads (`ds_cache::pe_private`, W3).
-fn tiled_rt_spec(gl: &GlesDraw) -> Option<Spec> {
+/// as 32-bit pixels), with a depth surface only the pixel engine reads
+/// (`ds_cache::pe_private`, W3) and the depth test on. With the test off the
+/// draw still takes the shadow when `depth_super`, its depth surface is
+/// already super-tiled and holds contents: drawn linear it would want that
+/// live surface linear, which `ds_cache::select_in` refuses.
+fn tiled_rt_spec(gl: &GlesDraw, depth_super: bool) -> Option<Spec> {
     if !tiled_rt_on()
         || wide_target(gl)
         || hw_targets(gl).1 != 1
         || ms_via_scratch(gl)
         || negative_stride(gl.flip_y)
         || gles_surf_is_integer(gl.target_format)
-        || !gl.depth_test
+        || !(gl.depth_test || depth_super)
         || !super::ds_cache::pe_private(gl, 1)
         || !matches!(pe_color_format(gl.target_format), (GC_PE_FORMAT_A8R8G8B8 | GC_PE_FORMAT_X8R8G8B8, false))
     {
@@ -3236,8 +3239,10 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     let key = super::ds_cache::key_of(gl, ms);
     /* a draw into a tiled shadow (tiled_rt.rs) wants its depth surface
      * super-tiled; with no memory for the shadow, or a live linear depth the
-     * CPU-side rules cannot remap, it is drawn as before */
-    let mut shadow_want = tiled_rt_spec(gl).and_then(|spec| {
+     * CPU-side rules cannot remap, it is drawn as before; a draw without the
+     * depth test keeps the shadow while its depth is live super-tiled */
+    let depth_super = tiled_rt_on() && !super::ds_cache::layout_free(key, Layout::Linear);
+    let mut shadow_want = tiled_rt_spec(gl, depth_super).and_then(|spec| {
         let shadow = tiled_rt::shadow_of(&spec, g().trt.shadow);
         (shadow != 0).then_some((spec, shadow))
     });
