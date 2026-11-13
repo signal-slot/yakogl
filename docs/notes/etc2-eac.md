@@ -54,7 +54,8 @@ codes as distinct values, so nothing is lost by the narrower class.
 ## 3. dEQP's tolerance for 11-bit EAC
 
 Sources are the CTS files named; they are not in this machine's deps cache,
-so the lines below are the design item's reading, not re-read for this note.
+so the lines below are the design item's reading, not re-read for this note
+(the sRGB `colorBits` line is from the later read-only audit of 93bca01).
 
 - The reference decoder widens an 11-bit value with
   `extend11To16(v) = (v << 5) | (v >> 6)` (`tcuCompressedTexture.cpp:804-816`;
@@ -62,10 +63,15 @@ so the lines below are the design item's reading, not re-read for this note.
   `UNORM_INT16` / `SNORM_INT16`. Our decode (`u16 / 65535`,
   `max(i16 / 32767, -1)` on the same 16-bit value) is the same number.
 - `texture.wrap` (`es3fTextureWrapTests.cpp:388-399`) uses
-  `computeColorBitsThreshold(8, colorBits) / colorScale`, `colorBits` 7 for
+  `computeColorBitsThreshold(8, colorBits) / colorScale`. `colorBits` is 6
+  for every sRGB format in every filter mode, nearest-only included
+  (`es3fTextureWrapTests.cpp:391-392`); for the other formats it is 7 for
   nearest-only and 6 otherwise. `tcuTexVerifierUtil.cpp:49-56` gives
-  `(2^(b-n) + 1/256) / (2^b - 1)`: nearest 0.0078585, linear 0.015702. The
-  signed formats (colour scale 0.5) double them: 0.015717 and 0.031403.
+  `(2^(b-n) + 1/256) / (2^b - 1)`: 7 bits 0.0078585, 6 bits 0.015702. The
+  signed formats (colour scale 0.5) double them: 0.015717 and 0.031403. So
+  the R11/RG11 formats get 0.0078585 (unsigned) or 0.015717 (signed) with
+  nearest-only filtering, and the sRGB formats get 0.015702 whatever the
+  filter.
 - `texture.format` (`es3fTextureFormatTests.cpp:192/413/590`) uses
   2/255 = 0.00784 and NEAREST.
 - Our error is the half-float rounding of a 16-bit value in [0, 1] or
@@ -76,7 +82,8 @@ so the lines below are the design item's reading, not re-read for this note.
 
 The punch-through pair has no such margin question: RGBA8 holds the decoded
 8-bit result exactly, and SRGB8_A8 is sampled through the same sRGB decode as
-the native pair.
+the native pair. Both are exact, so they are inside any threshold above,
+including the sRGB 6-bit one.
 
 ## 4. The GL core's rules for a decoded texture
 
