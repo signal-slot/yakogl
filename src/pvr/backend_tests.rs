@@ -47,6 +47,9 @@ struct GenLog {
     /// same order.
     frag_pds: Vec<(u32, u32)>,
     streams: Vec<Vec<PvrPdsVertexStream>>,
+    /// Each vertex program's instance id register and base instance, in the
+    /// same order as `streams`.
+    vbases: Vec<(u32, u32)>,
     /// topology, index address, count, instances
     index_lists: Vec<(u32, u64, u32, u32)>,
     /// Each index list's vertex streams: the index in `streams` of the
@@ -345,14 +348,15 @@ unsafe extern "C" fn pvr_pds_render_color_upload_program(
 }
 
 #[no_mangle]
-unsafe extern "C" fn pvr_pds_render_vertex_program_ids(
+unsafe extern "C" fn pvr_pds_render_vertex_program_ids_base(
     _vs_usc_exec_offset: u64,
     vs_temps: u32,
     streams: *const PvrPdsVertexStream,
     num_streams: u32,
     _has_slc_mcu_cache_controls: i32,
     _vertex_id_reg: u32,
-    _instance_id_reg: u32,
+    instance_id_reg: u32,
+    instance_id_base: u32,
     data_out: *mut u32,
     code_out: *mut u32,
     info: *mut PvrPdsRenderVertexInfo,
@@ -378,7 +382,10 @@ unsafe extern "C" fn pvr_pds_render_vertex_program_ids(
             ..Default::default()
         };
     }
-    with_gen(|g| g.streams.push(st));
+    with_gen(|g| {
+        g.streams.push(st);
+        g.vbases.push((instance_id_reg, instance_id_base));
+    });
     0
 }
 
@@ -817,6 +824,11 @@ impl Rig {
 
     fn streams(&self) -> Vec<Vec<PvrPdsVertexStream>> {
         with_gen(|g| g.streams.clone())
+    }
+
+    /// Each vertex program's (instance id register, base instance).
+    fn vbases(&self) -> Vec<(u32, u32)> {
+        with_gen(|g| g.vbases.clone())
     }
 
     fn ppp(&self) -> Vec<PvrPppState> {
@@ -2838,10 +2850,15 @@ fn an_instanced_draw_past_the_budget_is_split_by_instances() {
     pvr_backend_set_option(PVR_BACKEND_OPT_PRIM_BUDGET, 0);
 }
 
+/// A draw that reads gl_InstanceID past the budget is split by instances
+/// too: each chunk's first instance is the vertex fetch's base (Mesa's
+/// instance_id_modifier), so the ID does not restart at 0 in every chunk
+/// (upstream 575288b kept such a draw whole). The PDS adds the base before
+/// the per-instance DMAs as well, so the chunk's per-instance stream is not
+/// advanced again.
+#[cfg(feature = "test-knobs")]
 #[test]
-fn a_draw_that_reads_gl_instance_id_is_never_split_by_instances() {
-    /* upstream 575288b: the vertex fetch numbers instances per index list, so
-     * the ID would restart at 0 in every chunk. */
+fn a_draw_that_reads_gl_instance_id_is_split_with_each_chunk_as_the_base() {
     let rig = Rig::new();
     let mut fvs = *rig.fvs;
     fvs.vs_instance_id_reg1 = 3;
@@ -2849,34 +2866,59 @@ fn a_draw_that_reads_gl_instance_id_is_never_split_by_instances() {
     let mut d = rig.draw(3);
     d.vs = &fvs;
     d.instance_count = 4;
+    d.attribs[1] = GlesAttrib {
+        components: 4,
+        stride: 32,
+        offset: 64,
+        buffer_gpu: HEAP_GENERAL_BASE + 0x1000_0000,
+        per_instance: 1,
+        ..GlesAttrib::ZERO
+    };
+    d.num_attribs = 2;
 
     assert_eq!(draw(&d), 0);
     assert_eq!(pvr_backend_flush(), 0);
     let il = rig.index_lists();
-    assert_eq!(il.iter().map(|l| l.3).collect::<Vec<_>>(), [4], "one index list of four instances");
+    assert_eq!(il.iter().map(|l| l.3).filter(|&n| n != 0).collect::<Vec<_>>(), [2, 2], "instances per chunk");
+    let bases: Vec<(u32, u32)> = rig.vbases().into_iter().filter(|b| b.0 != PVR_PDS_NO_ID_REG).collect();
+    assert_eq!(bases, [(2, 0), (2, 2)], "instance id register 2, bases 0 and 2");
+    let per_inst: Vec<u64> =
+        rig.streams().iter().filter_map(|ss| ss.iter().find(|s| s.per_instance != 0).map(|s| s.address)).collect();
+    assert_eq!(
+        per_inst,
+        [HEAP_GENERAL_BASE + 0x1000_0040; 2],
+        "the base moves the per-instance fetch, not the address"
+    );
     pvr_backend_set_option(PVR_BACKEND_OPT_PRIM_BUDGET, 0);
 }
 
 /// One instance of an instanced draw the GL core draws instance by instance
-/// (GlesDraw::instance_id, a divisor past 1): the PDS starts the instance
-/// number at 0 for every draw, so a program that reads gl_InstanceID is
-/// refused, not drawn with 0. Instance 0, and a program that does not read
-/// it, are drawn. Revert check: without the refusal the first draw goes in.
+/// (GlesDraw::instance_id, a divisor past 1) whose program reads
+/// gl_InstanceID is drawn with the instance as the vertex fetch's base
+/// (docs/notes/instanceid-per-draw.md, fix P1). Revert check: with the old
+/// refusal instances 1..3 return -EINVAL.
 #[test]
-fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_refused() {
+fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_starts_at_its_instance() {
     let rig = Rig::new();
     let mut fvs = *rig.fvs;
     fvs.vs_instance_id_reg1 = 3;
-    let mut d = rig.draw(3);
-    d.vs = &fvs;
-    d.instance_id = 2;
-    assert_eq!(draw(&d), -EINVAL, "reads gl_InstanceID, instance 2");
-    d.instance_id = 0;
-    assert_eq!(draw(&d), 0, "instance 0");
+    for id in 0..4u32 {
+        let mut d = rig.draw(3);
+        d.vs = &fvs;
+        d.instance_id = id;
+        d.do_clear = id == 0;
+        assert_eq!(draw(&d), 0, "reads gl_InstanceID, instance {id}");
+    }
     let mut e = rig.draw(3);
+    e.do_clear = false;
     e.instance_id = 2;
     assert_eq!(draw(&e), 0, "does not read gl_InstanceID");
     assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(
+        rig.vbases(),
+        [(2, 0), (2, 1), (2, 2), (2, 3), (PVR_PDS_NO_ID_REG, 2)],
+        "the instance id register and each draw's base"
+    );
 }
 
 /// glDrawBuffers({GL_NONE, GL_COLOR_ATTACHMENT1}) (review R-09): the GL

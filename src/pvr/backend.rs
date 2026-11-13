@@ -2207,9 +2207,12 @@ pub fn clear_masked_program(class: u32, mask: u8) -> Option<&'static ShcShader> 
     clear_masked_index(class, mask).map(|i| internal(CLEAR_MASKED[i]))
 }
 
-/* + the id DOUTWs of pvr_pds_render_vertex_program_ids */
-const VDATA_DWORDS: usize = 8 * PVR_PDS_VERTEX_MAX_STREAMS as usize + 8;
-const VCODE_DWORDS: usize = PVR_PDS_VERTEX_MAX_STREAMS as usize + 4;
+/* + the id DOUTWs of pvr_pds_render_vertex_program_ids, + the base
+ * instance's constant (up to 2 data dwords with the bank's padding) and its
+ * ADD32 (1 code dword) of pvr_pds_render_vertex_program_ids_base: 16 streams
+ * with both ids and a base take 21 code dwords */
+const VDATA_DWORDS: usize = 8 * PVR_PDS_VERTEX_MAX_STREAMS as usize + 8 + 2;
+const VCODE_DWORDS: usize = PVR_PDS_VERTEX_MAX_STREAMS as usize + 4 + 1;
 /* iterators: W, the point coordinate, then the varyings */
 /* Iterators: the varyings plus Z, W and the point coordinate. */
 const CDATA_DWORDS: usize = 2 * (PVR_PDS_COEFF_MAX_VARYINGS as usize + 3) + 2;
@@ -5899,21 +5902,6 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
     } else {
         d
     };
-    /* One instance of an instanced draw the GL core draws instance by
-     * instance (a divisor past max_instance_divisor): the PDS starts the
-     * instance number at 0 for every draw, so a program that reads
-     * gl_InstanceID would read 0 for instance_id. Refused by name, not drawn
-     * wrong. */
-    if d.instance_id != 0 && !d.vs.is_null() && unsafe { (*d.vs).vs_instance_id_reg1 } != 0 {
-        static LOGGED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-        if !LOGGED.swap(true, core::sync::atomic::Ordering::Relaxed) {
-            glog!(
-                "yakogl/pvr: draw refused: an instance drawn on its own (a divisor past 1) whose program reads \
-                 gl_InstanceID"
-            );
-        }
-        return -EINVAL;
-    }
     /* A clear quad whose box misses the target clears nothing: it must not
      * open (or end) a frame either -- a frame it opened would begin with a
      * colour-load quad for nothing (see draw_box). The box is judged against
@@ -6521,14 +6509,14 @@ fn draw_sized(p: &mut Pvr, d: &GlesDraw) -> i32 {
         p.b.splits_total = p.b.splits_total.wrapping_add(1);
         frame_begin(p, &cont);
     }
-    /* gl_InstanceID counts from 0 in every chunk (the PDS writes the vertex
-     * fetch's instance number, which each index list restarts), so a shader
-     * that reads it would see the wrong instance. Such a draw goes through
-     * whole -- Qt Quick 3D's instanced materials read their transform from a
-     * per-instance attribute, which chunking does handle. */
+    /* A shader that reads gl_InstanceID gets each chunk's first instance as
+     * the vertex fetch's base (GlesDraw::instance_id, Mesa's
+     * instance_id_modifier): the PDS adds it to the instance number before
+     * the per-instance DMAs too, so its per-instance arrays are not advanced
+     * here as well. */
     // SAFETY: checked non-null by pvr_backend_draw; the core's linked program.
     let reads_instance_id = !d.vs.is_null() && unsafe { (*d.vs).vs_instance_id_reg1 } != 0;
-    if inst == 1 || per >= budget || reads_instance_id {
+    if inst == 1 || per >= budget {
         p.b.prims = p.b.prims.saturating_add(total); /* cannot be split any finer */
         return draw_dispatch(p, &cont);
     }
@@ -6539,7 +6527,11 @@ fn draw_sized(p: &mut Pvr, d: &GlesDraw) -> i32 {
         let n = chunk.min(inst - first);
 
         dd.instance_count = n;
-        attribs_advance_instances(&mut dd, first);
+        if reads_instance_id {
+            dd.instance_id = cont.instance_id.wrapping_add(first);
+        } else {
+            attribs_advance_instances(&mut dd, first);
+        }
         let rc = draw_dispatch(p, &dd);
         if rc != 0 {
             return rc;
@@ -7387,12 +7379,15 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         }
     }
     /* gl_VertexID / gl_InstanceID (ES 3.0): the vertex fetch writes IR0/IR1
-     * into the vtxin registers the compiler reads them from */
+     * into the vtxin registers the compiler reads them from. gl_InstanceID
+     * starts at the draw's base instance (GlesDraw::instance_id: the
+     * instance the GL core draws on its own, or the first of a chunk), which
+     * the PDS adds to IR1 (docs/notes/instanceid-per-draw.md, fix P1). */
     // SAFETY: vdata/vcode have the sizes the generator documents for up to
-    // PVR_PDS_VERTEX_MAX_STREAMS streams plus the id DOUTWs; nstreams <=
-    // num_attribs <= that.
+    // PVR_PDS_VERTEX_MAX_STREAMS streams plus the id DOUTWs and the base;
+    // nstreams <= num_attribs <= that.
     if unsafe {
-        pvr_pds_render_vertex_program_ids(
+        pvr_pds_render_vertex_program_ids_base(
             heap_off_of(d.vs_usc_gpu) as u64,
             vs.temps as u32,
             s.streams.as_ptr(),
@@ -7400,6 +7395,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             0,
             id_reg_of(vs.vs_vertex_id_reg1),
             id_reg_of(vs.vs_instance_id_reg1),
+            d.instance_id,
             s.vdata.as_mut_ptr(),
             s.vcode.as_mut_ptr(),
             &mut vinfo,
