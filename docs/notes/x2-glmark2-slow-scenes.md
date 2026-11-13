@@ -66,6 +66,16 @@ not touched. W1 to W5 are on main (`9cdeff6d`); the earlier closed pull
 request for this item only added case 243 probe helpers to `ts.rs` and failed
 CI, and was not reused.
 
+## Fifth attempt (plan #355, 2026-11-13): still no measurement
+
+Host `orion` again: `getent hosts armadillo` returned nothing and
+`tools/board.sh x2 status` stopped at `BOARD_HOST` unset (no `target:x2` or
+`target:x2-console` lease reached the task). No jump, no image, the board was
+not touched. W1 to W5 are on main (`9cdeff6d`). The earlier closed pull request
+for this item added a cs_golden mode 30 and `tiled-ez.golden`; it failed CI
+and its golden could not be reproduced here (no Mesa build on this worker), so
+it was not reused.
+
 ## What is left
 
 Rerun from one of the nodes that log in (see the checks above), with
