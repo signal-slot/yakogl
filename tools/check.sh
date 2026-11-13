@@ -34,6 +34,11 @@
 #                                    table proofs, the committed table's
 #                                    reproduction with Mesa's compiler, the
 #                                    Zephyr images and the glmark2 corpus.
+#   tools/check.sh --no-clippy ...   leave out every clippy row (a pull request's
+#                                    CI run; the nightly runs them). They are
+#                                    counted apart in the summary ("N clippy
+#                                    rows left to the nightly"), never a gap.
+#                                    YAKOGL_CHECK_NO_CLIPPY=1 does the same.
 #   tools/check.sh --jobs N ...      up to N rows at once (YAKOGL_CHECK_JOBS);
 #                                    the log stays in the script's order
 #
@@ -203,11 +208,24 @@ scope_of_path() {
   esac
 }
 # --jobs N, before the other arguments: up to N rows at once (the pool,
-# below; YAKOGL_CHECK_JOBS=N does the same).
-if [ "${1-}" = "--jobs" ]; then
-  YAKOGL_CHECK_JOBS=${2:?usage: tools/check.sh --jobs <N> [...]}
-  shift 2
-fi
+# below; YAKOGL_CHECK_JOBS=N does the same). --no-clippy, likewise before the
+# mode: leave out every clippy row (YAKOGL_CHECK_NO_CLIPPY=1 does the same).
+# The two may come in either order.
+NO_CLIPPY=0
+[ -n "${YAKOGL_CHECK_NO_CLIPPY-}" ] && [ "$YAKOGL_CHECK_NO_CLIPPY" != 0 ] && NO_CLIPPY=1
+while :; do
+  case "${1-}" in
+  --jobs)
+    YAKOGL_CHECK_JOBS=${2:?usage: tools/check.sh --jobs <N> [...]}
+    shift 2
+    ;;
+  --no-clippy)
+    NO_CLIPPY=1
+    shift
+    ;;
+  *) break ;;
+  esac
+done
 QUICK=0
 [ "${1-}" = "--quick" ] && { CONFIGS=("host-test,gpu-powervr"); QUICK=1; }
 # --scope-of <path>...: print each path's scope and exit (tools/check_scope_selftest.sh).
@@ -236,7 +254,7 @@ if [ -n "${YAKOGL_CHECK_CONFIGS-}" ]; then read -r -a CONFIGS <<< "$YAKOGL_CHECK
 missing=()
 command -v cargo >/dev/null 2>&1 || missing+=("cargo (install rustup)")
 cargo fmt --version >/dev/null 2>&1 || missing+=("rustfmt (rustup component add rustfmt)")
-cargo clippy --version >/dev/null 2>&1 || missing+=("clippy (rustup component add clippy)")
+[ "$NO_CLIPPY" -eq 1 ] || cargo clippy --version >/dev/null 2>&1 || missing+=("clippy (rustup component add clippy)")
 if [ "${#missing[@]}" -gt 0 ]; then
   printf '\033[31mtools/check.sh: cannot run, missing: %s\033[0m\n' "${missing[*]}" >&2
   printf 'The active toolchain is "%s"; set RUSTUP_TOOLCHAIN to one that has them.\n' \
@@ -282,6 +300,10 @@ oks=0
 fails=0
 gaps=0
 gap() {
+  if is_clippy_row "$*"; then
+    if wanted; then clippy_left "$*"; else skip "$*"; fi
+    return
+  fi
   if ! wanted; then skip "$*"; return; fi
   queue_line "$(printf '\033[33mgap   %s\033[0m' "$*")"
   gaps=$((gaps + 1))
@@ -361,6 +383,17 @@ wanted() {
 }
 skips=0
 rows_cached=0
+# --no-clippy: a clippy row (its label starts with "clippy") is left out by
+# choice, for the nightly gate to run. It is counted apart, never as a skip
+# of the scope map and never as a gap.
+clippy_left_n=0
+is_clippy_row() {
+  [ "$NO_CLIPPY" -eq 1 ] && [[ "$1" == "clippy "* ]]
+}
+clippy_left() {
+  queue_line "$(printf '\033[2mleft  %s (clippy: left to the nightly)\033[0m' "$*")"
+  clippy_left_n=$((clippy_left_n + 1))
+}
 skip() {
   queue_line "$(printf '\033[2mskip  %s\033[0m' "$*")"
   skips=$((skips + 1))
@@ -553,6 +586,7 @@ step() {
   ROW_NEEDS=
   ROW_NEEDS_HOW=
   if ! wanted; then skip "$label"; return 0; fi
+  if is_clippy_row "$label"; then clippy_left "$label"; return 0; fi
   if [ -n "${YAKOGL_CHECK_PLAN-}" ]; then queue_line "plan  $label"; oks=$((oks + 1)); return 0; fi
   # YAKOGL_CHECK_INPUT_KEYS=1: print each keyed row's key and run nothing
   # (tools/check_testcache_selftest.sh).
@@ -1356,7 +1390,7 @@ summary() {
     bins_run=$((bins_run + r))
     bins_cached=$((bins_cached + c))
   done < "$TEST_STATE/counts"
-  echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode), $rows_cached not run (passed on main) in $((SECONDS - gate_t0))s; test binaries: $bins_run run, $bins_cached skipped (passed on main); runner: $runner_name"
+  echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode), $clippy_left_n clippy rows left to the nightly, $rows_cached not run (passed on main) in $((SECONDS - gate_t0))s; test binaries: $bins_run run, $bins_cached skipped (passed on main); runner: $runner_name"
   if [ "$rc" -eq 0 ]; then
     green "check.sh: clean"
   else

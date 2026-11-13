@@ -22,11 +22,16 @@ CI, a review, then the merge. Never push main by hand.
    in any mode: the CI gate is the check. The one exception is a task whose
    stated purpose is a gate walk (an acceptance run of the gate itself).
 2. Open the pull request. The CI is the gate: `.github/workflows/gate.yml`
-   runs `tools/check.sh --changed <merge base>` on the pull request (the
-   merge of the branch into main), and every row nightly on main's tip and
+   runs `tools/check.sh --changed <merge base> --no-clippy` on the pull
+   request (the merge of the branch into main), and every row nightly on main's tip and
    when started by hand; main is not run on each merge. It runs on
    self-hosted runners that have the environment below. The file's header
    says which rows each event runs.
+   A pull request's run leaves out the clippy rows (owner, 2026-11-13: they
+   doubled the build of each feature set); the nightly run on main runs
+   them and is clippy's gate. Run clippy on the crates you touched when it
+   is quick, and fix a red nightly's clippy rows first (docs/ci.md, "The
+   nightly").
 3. The review reads the commit; it runs no check.
 4. Merge when the CI is green and the review approves.
 
@@ -37,7 +42,9 @@ host needs for a gate walk. It is not a list of commands to run before a
 pull request (step 1 above).
 
 - A red `cargo fmt --check` or a single warning is a defect.
-- The full run checks formatting, clippy (no warnings), the tests in every
+- The full run (nightly, by hand) checks formatting, clippy (no warnings;
+  a pull request's run leaves the clippy rows to the nightly,
+  `--no-clippy`), the tests in every
   feature configuration, the C check programs, the generated files, the
   product archives, the Python tools, and the Zephyr image builds. It takes
   35 to 80 minutes, depending on the host (measured: 36 minutes from a cold

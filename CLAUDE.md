@@ -34,6 +34,13 @@ its log:
 - Exit 2 before any row: the gate could not start (cargo, rustfmt or clippy
   missing from the toolchain). That is the runner, not the code.
 
+A pull request's CI gate runs `--changed <merge base> --no-clippy`: no
+clippy row (owner, 2026-11-13). The clippy rows run in the nightly gate on
+main, which is clippy's gate. Run clippy yourself on the crates you touched
+when it is quick (`cargo clippy -p <crate> --all-targets`, with the crate's
+feature set from `tools/check.sh`); `tools/check.sh --no-clippy ...` leaves
+the rows out locally too, counted as "clippy rows left to the nightly".
+
 ## Common failures and how to avoid them
 
 - **Two green pull requests, red main.** Each pull request's CI checks it
