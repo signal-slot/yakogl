@@ -1612,6 +1612,18 @@ kick_diff_tests() {
   printf '%s\n' "$out" | tests_as_declared tests/gc_kick_diff.rs
 }
 step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" kick_diff_tests
+# The gc_tiled_rt knob (docs/notes/gc-tiled-wire.md W4/W5) on glmark2's
+# terrain, shadow and refract frames: tests/gc_scene_kicks.rs's `tiled_rt`
+# module, which only the knobs compile and which needs the ES 2.0 report as
+# the file does; every #[test] of the module must pass.
+tiled_rt_scene_tests() {
+  local out
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG,report-es2" --test gc_scene_kicks tiled_rt:: 2>&1) ||
+    { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
+  printf '%s\n' "$out" | grep -E '^test result'
+  printf '%s\n' "$out" | tests_as_declared 'tests/gc_scene_kicks.rs#tiled_rt'
+}
+step "test    $KNOBS_CONFIG,report-es2 (tests/gc_scene_kicks.rs tiled_rt, every declared test)" tiled_rt_scene_tests
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \

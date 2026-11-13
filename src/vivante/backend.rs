@@ -2575,6 +2575,7 @@ fn frame_submit() -> i32 {
 fn tiled_rt_untile(w: &mut GcCmd, t: &Track) {
     w.cap += tiled_rt::RESERVE_WORDS;
     emit_rs(w, &tiled_rt::untile(&t.spec, t.shadow));
+    tiled_rt::count_resolve();
 }
 
 /// Bring the open stream's shadow to what `gl` needs, before anything of the
@@ -2601,15 +2602,18 @@ fn tiled_rt_enter(gl: &GlesDraw, want: Option<(Spec, u64)>) {
                 if cur.phase == Phase::InStep {
                     w.cap = w.cap.saturating_sub(tiled_rt::RESERVE_WORDS);
                     g.trt.phase = Phase::Active;
+                    tiled_rt::count_run(false);
                 }
                 return;
             }
             if cur.phase == Phase::Active {
                 tiled_rt_untile(w, &cur);
             }
-            if !clears_whole_colour(gl) {
+            let tile_in = !clears_whole_colour(gl);
+            if tile_in {
                 emit_rs(w, &tiled_rt::tile_in(&spec, shadow));
             }
+            tiled_rt::count_run(tile_in);
             w.cap = w.cap.saturating_sub(tiled_rt::RESERVE_WORDS);
             g.trt = Track { spec, shadow, phase: Phase::Active };
         }
