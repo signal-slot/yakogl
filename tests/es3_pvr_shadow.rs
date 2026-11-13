@@ -180,7 +180,8 @@ fn every_shadow_form_of_deqp_compiles() {
 /// MIPMAP_LINEAR filter blends (tests/es3_pvr_pcf.rs) -- `sbmode` rawdata,
 /// one channel, `lodm` replace with `pplod`, the same `soo`, no `tao` --
 /// reading its own data block; on a native 2D array all carry `tao`; a
-/// cube shadow look-up has the plain sample alone (no cube gather).
+/// cube shadow look-up gathers nothing (its taps are read one by one,
+/// tests/es3_pvr_pcf_cube.rs).
 #[test]
 fn a_shadow_look_up_is_the_plain_sample_and_a_one_channel_gather() {
     let rawdata = enum_value("sbmode", "rawdata");
@@ -220,8 +221,8 @@ fn a_shadow_look_up_is_the_plain_sample_and_a_one_channel_gather() {
     }
     let fs = fragment("samplerCubeShadow", "o = vec4(texture(s, c));");
     let fields = with_native_array(true, || compile_with(Stage::Fragment, &fs, |_, image| smps(image)).unwrap());
-    assert_eq!(fields.len(), 1, "a cube shadow look-up: the plain sample alone");
-    assert_eq!((fields[0]["sbmode"], fields[0]["dmn"]), (0, enum_value("dmn", "3d")));
+    assert!(fields.len() > 1, "a cube shadow look-up: the plain sample and its taps");
+    assert!(fields.iter().all(|f| (f["sbmode"], f["dmn"]) == (0, enum_value("dmn", "3d"))), "{fields:?}");
     /* the stacked array (switch off): the gathers of the stacked image,
      * without `tao` */
     let fs = fragment("sampler2DArrayShadow", "o = vec4(texture(s, c));")
