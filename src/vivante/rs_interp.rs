@@ -67,35 +67,6 @@ use super::regs::*;
 use std::collections::BTreeMap;
 use std::vec::Vec;
 
-// Registers and fields regs.rs does not have yet (item w1-regs adds them;
-// values from Mesa's hw/state_3d.xml.h, docs/notes/gc-tiled-wire.md W1).
-// TODO(w1-regs): switch to regs.rs `GC_RS_DEST_STRIDE_TILING`.
-const RS_DEST_STRIDE_TILING: u32 = 0x8000_0000;
-// TODO(w1-regs): switch to regs.rs `GC_RS_DEST_STRIDE_SUPER_TILED_NEW`.
-const RS_DEST_STRIDE_SUPER_TILED_NEW: u32 = 0x0800_0000;
-// TODO(w1-regs): switch to the regs.rs name of VIVS_RS_SOURCE_STRIDE_TS_MODE.
-const RS_STRIDE_TS_MODE: u32 = 0x2000_0000;
-// TODO(w1-regs): switch to the regs.rs name of VIVS_RS_*_STRIDE_MULTI.
-const RS_STRIDE_MULTI: u32 = 0x4000_0000;
-// TODO(w1-regs): switch to the regs.rs name of VIVS_RS_*_STRIDE_STRIDE__MASK.
-const RS_STRIDE_MASK: u32 = 0x0003_ffff;
-// TODO(w1-regs): switch to regs.rs `GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR`.
-const TS_MEM_CONFIG_DEPTH_FAST_CLEAR: u32 = 0x0000_0001;
-// TODO(w1-regs): switch to regs.rs `GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR`.
-const TS_MEM_CONFIG_COLOR_FAST_CLEAR: u32 = 0x0000_0002;
-// TODO(w1-regs): switch to regs.rs `GC_TS_COLOR_STATUS_BASE`.
-const TS_COLOR_STATUS_BASE: u32 = 0x0000_1658;
-// TODO(w1-regs): switch to regs.rs `GC_TS_COLOR_SURFACE_BASE`.
-const TS_COLOR_SURFACE_BASE: u32 = 0x0000_165c;
-// TODO(w1-regs): switch to regs.rs `GC_TS_COLOR_CLEAR_VALUE`.
-const TS_COLOR_CLEAR_VALUE: u32 = 0x0000_1660;
-// TODO(w1-regs): switch to regs.rs `GC_TS_DEPTH_STATUS_BASE`.
-const TS_DEPTH_STATUS_BASE: u32 = 0x0000_1664;
-// TODO(w1-regs): switch to regs.rs `GC_TS_DEPTH_SURFACE_BASE`.
-const TS_DEPTH_SURFACE_BASE: u32 = 0x0000_1668;
-// TODO(w1-regs): switch to regs.rs `GC_TS_DEPTH_CLEAR_VALUE`.
-const TS_DEPTH_CLEAR_VALUE: u32 = 0x0000_166c;
-
 /// The 4-bit TS entry of a cleared tile: the nibble of `ts::TS_CLEAR_VALUE`
 /// (0x11111111, etnaviv_screen.c:884-886).
 pub const TS_CLEAR_CODE: u8 = 0x1;
@@ -277,10 +248,20 @@ impl RsInterp {
     /// up for it.
     fn ts_of(&self, addr: u32, stride: u32) -> Option<TsSource> {
         let mem_config = self.reg_or(GC_TS_MEM_CONFIG, 0);
-        let tile_bytes = if stride & RS_STRIDE_TS_MODE != 0 { 256 } else { 128 };
+        let tile_bytes = if stride & GC_RS_SOURCE_STRIDE_TS_MODE != 0 { 256 } else { 128 };
         [
-            (TS_MEM_CONFIG_COLOR_FAST_CLEAR, TS_COLOR_SURFACE_BASE, TS_COLOR_STATUS_BASE, TS_COLOR_CLEAR_VALUE),
-            (TS_MEM_CONFIG_DEPTH_FAST_CLEAR, TS_DEPTH_SURFACE_BASE, TS_DEPTH_STATUS_BASE, TS_DEPTH_CLEAR_VALUE),
+            (
+                GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR,
+                GC_TS_COLOR_SURFACE_BASE,
+                GC_TS_COLOR_STATUS_BASE,
+                GC_TS_COLOR_CLEAR_VALUE,
+            ),
+            (
+                GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR,
+                GC_TS_DEPTH_SURFACE_BASE,
+                GC_TS_DEPTH_STATUS_BASE,
+                GC_TS_DEPTH_CLEAR_VALUE,
+            ),
         ]
         .into_iter()
         .find(|&(on, surface, _, _)| mem_config & on != 0 && self.regs.get(&surface) == Some(&addr))
@@ -294,10 +275,10 @@ impl RsInterp {
 
 /// Decode one side from its RS_CONFIG tiled bit and its stride register.
 fn side(addr: u32, tiled: bool, stride: u32, format: u32) -> Side {
-    assert_eq!(stride & RS_STRIDE_MULTI, 0, "rs_interp: multi-pipe strides not modelled");
+    assert_eq!(stride & GC_RS_STRIDE_MULTI, 0, "rs_interp: multi-pipe strides not modelled");
     // The source and destination strides share the bit positions.
-    let tiling = stride & RS_DEST_STRIDE_TILING != 0;
-    let new = stride & RS_DEST_STRIDE_SUPER_TILED_NEW != 0;
+    let tiling = stride & GC_RS_DEST_STRIDE_TILING != 0;
+    let new = stride & GC_RS_DEST_STRIDE_SUPER_TILED_NEW != 0;
     assert!(!new || tiling, "rs_interp: SUPER_TILED_NEW without TILING in stride {stride:#x}");
     let layout = match (tiled, tiling) {
         (false, false) => Layout::Linear,
@@ -305,7 +286,7 @@ fn side(addr: u32, tiled: bool, stride: u32, format: u32) -> Side {
         (true, true) => Layout::SuperTiled,
         (false, true) => panic!("rs_interp: stride {stride:#x} is tiled, RS_CONFIG says linear"),
     };
-    let value = stride & RS_STRIDE_MASK;
+    let value = stride & GC_RS_STRIDE_MASK;
     let stride = if layout == Layout::Linear {
         value
     } else {
@@ -421,7 +402,7 @@ mod tests {
         match l {
             Layout::Linear => stride,
             Layout::Tiled => stride << 2,
-            Layout::SuperTiled => (stride << 2) | RS_DEST_STRIDE_TILING | RS_DEST_STRIDE_SUPER_TILED_NEW,
+            Layout::SuperTiled => (stride << 2) | GC_RS_DEST_STRIDE_TILING | GC_RS_DEST_STRIDE_SUPER_TILED_NEW,
         }
     }
 
@@ -558,10 +539,10 @@ mod tests {
         mem.map(ts, vec![0x01, 0x10, 0x01, 0x00]);
         mem.map(d, vec![0; (w * h * 4) as usize]);
         let mut writes = vec![
-            (GC_TS_MEM_CONFIG, TS_MEM_CONFIG_COLOR_FAST_CLEAR),
-            (TS_COLOR_STATUS_BASE, ts),
-            (TS_COLOR_SURFACE_BASE, s),
-            (TS_COLOR_CLEAR_VALUE, 0xc0ff_ee00),
+            (GC_TS_MEM_CONFIG, GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR),
+            (GC_TS_COLOR_STATUS_BASE, ts),
+            (GC_TS_COLOR_SURFACE_BASE, s),
+            (GC_TS_COLOR_CLEAR_VALUE, 0xc0ff_ee00),
         ];
         writes.extend(job_writes(fmt() | GC_RS_SOURCE_TILED, s, stride << 2, d, w * 4, w, h, 0, 0));
 
@@ -596,6 +577,6 @@ mod tests {
         mem.map(0x1000, vec![0; 4096]);
         mem.map(0x10000, vec![0; 4096]);
         RsInterp::new()
-            .run(&job_writes(fmt(), 0x1000, (64 << 2) | RS_DEST_STRIDE_TILING, 0x10000, 64, 16, 4, 0, 0), &mut mem);
+            .run(&job_writes(fmt(), 0x1000, (64 << 2) | GC_RS_DEST_STRIDE_TILING, 0x10000, 64, 16, 4, 0, 0), &mut mem);
     }
 }
