@@ -164,7 +164,10 @@ formats) and 331 n/s in image 18 (`shaders.texture_functions` and
 `texture.compressed`, not split) plus 12 each in the filtering images 19a, 19b,
 19d and 12 in 196 (3D). The remaining split is not recorded. These do not count
 toward 2,612 and are not given a plan item here; ETC2/EAC support is described
-in `docs/es3/pvr-formats.md` §2.4.
+in `docs/es3/pvr-formats.md` §2.4. Since plan #354 the GL core accepts all ten
+ETC2/EAC formats (`docs/notes/etc2-eac.md`), so the compressed share of these
+NotSupported cases (`wrap.*etc2*`/`*eac*` 360, `format.compressed.*` 40) is a
+board re-run away from a verdict.
 
 ## 4. Coverage by plan item, and what no item covers
 
@@ -239,4 +242,6 @@ board has run these commits), so none of it is a conformance figure.
 | `shaders.texture_functions` look-ups on arrays and 3D | pvr-shadow, `d7356b65` | 226 PowerVR refusals in one message, `src/shaderc/online/powervr/select.rs`; front end clean (`docs/es3/shader-host-repro.md`) |
 
 Rows nothing has touched: `mipmap.3d.bias` (4), `size`, `vertex.2d/cube`,
-`filtering.3d` on the PowerVR (needs pvr-3d), ETC2 on the GC7000UL and V3D.
+`filtering.3d` on the PowerVR (needs pvr-3d). ETC2/EAC (`wrap.*etc2*`/`*eac*`, `format.compressed.*`): the
+GL core stores four formats as blocks and decodes the other six at upload, and the V3D samples the four
+block classes (plan #354, `docs/notes/etc2-eac.md`); host only, no board has run them.
