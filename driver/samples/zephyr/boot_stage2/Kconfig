@@ -86,7 +86,25 @@ config BOOT_STAGE2_PROGRESS_LOG
 	  console is polled, so every line costs its length at the UART's
 	  rate before the image runs (at 115200 baud, about 87 us a
 	  character: the four lines and the probe were 31 ms of the i.MX8MP
-	  loader's 300, 2026-10-29). Errors are always printed.
+	  loader's 300, 2026-10-29; with the Zephyr banner and the SD stack's
+	  information lines, 0.09 s of the AM62P eMMC loader's 0.28,
+	  2026-11-12). Errors are always printed. Off, the loader also does not
+	  wait for the UART to drain before the jump; quiet.conf turns the
+	  banner and the SD stack's information lines off with it.
+
+config BOOT_STAGE2_SUMMARY_LINE
+	bool "Without the progress log, one short line of times before the jump"
+	depends on !BOOT_STAGE2_PROGRESS_LOG
+	help
+	  "bs2: <ready> <read> <unpack> <zero thread>/<waited for it> ms
+	  @<system counter at main()> us": the milliseconds until the source
+	  was ready, of the reads and of the unpack, those the zero thread took
+	  from its start to its end and those main() then waited for it (0/0
+	  without a zero range), and where the loader began on the clock the
+	  stages before and after it use. About 30 characters, 3 ms at 115200
+	  baud. For a board whose image does not read the loader's stamps
+	  (src/main.c, bs2_stamps_publish): the Verdin AM62P, quiet.conf. The
+	  i.MX8MP loader stays silent.
 
 config BOOT_STAGE2_CHUNK_SECTORS
 	int "Sectors per disk read"

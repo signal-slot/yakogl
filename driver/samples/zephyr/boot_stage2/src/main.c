@@ -35,7 +35,8 @@
 
 /* The success-path log (BOOT_STAGE2_PROGRESS_LOG): the console is polled,
  * so each line holds the boot for its length at the UART's rate. Errors
- * always print (printk). Off, the arguments are still type-checked. */
+ * always print (printk). Off, the arguments are still type-checked, and a
+ * good boot prints nothing, or one short line (BOOT_STAGE2_SUMMARY_LINE). */
 #define progress(...)                                                                              \
 	do {                                                                                       \
 		if (IS_ENABLED(CONFIG_BOOT_STAGE2_PROGRESS_LOG)) {                                 \
@@ -401,6 +402,7 @@ int main(void)
 	bs2_stamp(1);
 	struct bs2_info info;
 	int64_t t0 = k_uptime_get();
+	int64_t t_ready = 0;
 	int ret;
 
 #ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
@@ -431,8 +433,8 @@ int main(void)
 		       ret, END_SECTOR);
 		halt();
 	}
-	progress("boot_stage2: eMMC user area %u sectors, ready after %lld ms\n", disk_sectors,
-	       k_uptime_get() - t0);
+	t_ready = k_uptime_get() - t0;
+	progress("boot_stage2: eMMC user area %u sectors, ready after %lld ms\n", disk_sectors, t_ready);
 
 	if (read_sectors(hdr, HDR_SECTOR, 1)) {
 		halt();
@@ -598,6 +600,20 @@ int main(void)
 		 "jumping to 0x%llx at %lld ms\n", info.name,
 		 segmented ? info.segments[0].image_crc32 : info.image_crc32, nsec, t_read, t_unpack,
 		 zero_total, zero_thread_ms, t_zero_wait, info.entry, k_uptime_get() - t0);
+
+	if (IS_ENABLED(CONFIG_BOOT_STAGE2_SUMMARY_LINE)) {
+		/* The one line of a boot without the progress log: the
+		 * milliseconds until the source was ready, of the reads and of
+		 * the unpack, the zero thread's from its start to its end /
+		 * those main() then waited for it, and the system counter at
+		 * main() in microseconds (the "main" stamp: the clock the
+		 * stages before and after the loader use). The polled console
+		 * has waited for every character but the last, and the image
+		 * starts its UART milliseconds from here: no drain wait. */
+		printk("bs2: %lld %lld %lld %lld/%lld ms @%llu us\n", t_ready, t_read, t_unpack,
+		       zero_thread_ms, t_zero_wait,
+		       (unsigned long long)((bs2_t[1] * 1000000u) / sys_clock_hw_cycles_per_sec()));
+	}
 
 	/* Let the UART drain the last line: the image re-initialises it. */
 	if (IS_ENABLED(CONFIG_BOOT_STAGE2_PROGRESS_LOG)) {
