@@ -12,36 +12,53 @@ west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d build/mp2_display \
 
 ## What it does
 
-`src/main.c` gets the LTDC device (`ltdc` in the overlay), writes the bars
-(`src/pattern.c`) with `display_write()`, calls `display_blanking_off()` and
-prints one line:
+Before the drivers initialise, the board layer powers the path
+(`driver/zephyr/lib/board/stm32mp2/display_power_mp2.c`, over the crate's
+`stm32mp2_display.h`): RIF check, OP-TEE's SCMI (HDMI 5 V on LDO5, the
+clocks, FLEXGEN_27 at 148.5 MHz), the RCC gates and resets, the pins, the
+ADV7535's reset pulse; every request on the console as `display_power: ...`.
 
-- `mp2_display: PASS: <w>x<h> <fmt>`
-- `mp2_display: FAIL: <step> <err>` (steps: `ltdc-ready`, `format`, `size`,
-  `pattern`, `write`, `blanking-off`)
+`src/main.c` then uses the LTDC device (`ltdc` in the overlay), the chain
+owner (`driver/drivers/display/display_yakogl_stm32_ltdc.c`):
+`display_get_capabilities()` makes it read HPD and the EDID through the
+ADV7535 and choose the mode (1920x1080@60 when the EDID prefers it, else
+1280x720@60); the probe writes the bars (`src/pattern.c`) line by line with
+`display_write()` into the driver's frame buffer, calls
+`display_blanking_off()` (LTDC, DSI host, ADV7535 up in that order), prints
+the chain's record (`mp2_display: chain ...`, `mode ...`, `ltdc ...`,
+`dsi ...`, `adv7535 ...`) and checks 60 frames with `stm32_ltdc_wait_frame()`
+(the LTDC's line interrupt, no transfer or underrun error). One line:
+
+- `mp2_display: PASS: <w>x<h> <fmt> <n> frames`
+- `mp2_display: FAIL: <step> <err>` (steps: `ltdc-ready`, the chain's
+  `board`, `fb`, `adv-init`, `mode`, `clock`, `ltdc-probe`,
+  `ltdc-configure`, `ltdc-enable`, `dsi-mode`, `dsi`, `adv-start`, `frame`,
+  `i2c`, and the probe's `format`, `size`, `pattern`, `write`, `chain`)
+
+It also compares its bar line with the crate's `yd_mp25_fill_color_bars`
+(`mp2_display: bars: ...`, a note only). The LTDC's frame CRC is not in the
+C ABI, so PASS rests on the frame flags, the picture on the KVM.
 
 It then keeps scanning out for `CONFIG_MP2_DISPLAY_HOLD_S` seconds (default
-60) before `main()` returns, so the runner's `MP2_HOLD_S`
+60), one frame checked a second (`mp2_display: hold: <n> frames ok, <m>
+failed` at the end), before `main()` returns, so the runner's `MP2_HOLD_S`
 (tools/board-stm32mp2.sh) and the KVM can see the picture. `prj.conf` raises
 the board layer's `CONFIG_YAKOGL_STM32MP2_LIFETIME_S` to 150 so the layer
 does not reset the board during the hold; a `BUILD_ASSERT` keeps the two
 consistent.
 
-**While the four drivers are compiling shells** (driver/drivers/display,
-driver/drivers/mipi_dsi, driver/drivers/i2c answer `-ENOSYS`), the probe
-prints `FAIL: write -38`. That is expected.
-
 ## The overlay
 
 `boards/stm32mp257f_dk_stm32mp257fxx_a35.overlay` adds, under `/soc`, the
 nodes of ST's tree as yakogl devices (bindings in driver/dts/bindings):
-`i2c2` (0x40130000) with the `adv7535` child (reg 0x3d, edid 0x3f, cec 0x3c,
-packet 0x38, four lanes), `dsi` (0x48000000, `bridge = <&adv7535>`) and
-`ltdc` (0x48010000, 1280x720 `argb8888`, `dsi-host = <&dsi>`). The board
-and SoC files are untouched. Left out: the bridge's INT and reset GPIOs (no
-GPIO controller in the tree yet), the LTDC interrupts, clocks/resets/RIF.
-Placeholders until the `mp2_display_state` probe reads them: the I2C kernel
-clock (64 MHz) and the DSI PLL reference (40 MHz).
+`i2c2` (0x40130000, kernel clock FLEXGEN_12 100 MHz) with the `adv7535`
+child (reg 0x3d, edid 0x3f, cec 0x3c, packet 0x38, four lanes), `dsi`
+(0x48000000, `bridge = <&adv7535>`, PHY reference FLEXGEN_28 27 MHz) and
+`ltdc` (0x48010000, at most 1920x1080 `argb8888`, scanned as XRGB8888,
+`dsi-host = <&dsi>`), and the frame buffer: `/chosen yakogl,ltdc-fb` names a
+32 MiB `no-map` reserved area at 0xb0000000 (RISAF4 region 9, past the
+image), of which `fb-size` 8 MiB is mapped normal non-cacheable. The board
+and SoC files are untouched.
 
 ## The pattern and its host test
 
