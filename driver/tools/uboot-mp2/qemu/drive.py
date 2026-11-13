@@ -24,6 +24,7 @@ import time
 
 PROMPT = re.compile(rb"\n=> ")
 STOP = re.compile(rb"Hit any key to stop autoboot")
+LONG_MIB = 255   # run.sh: long.bin, image_size 0xff00000, in the 256 MiB window
 LOAD = "0xa0000000"
 WINDOW = "0x10000000"
 UNDO = "mp2z: undo: nothing persistent; run bootcmd boots ST Linux"
@@ -179,18 +180,24 @@ def typed(q, line):
     q.send(line + "\r")
 
 
+# The load window must be at least this wide (seconds) for a cut to be
+# meaningful; the cut waits at most a quarter of the measured window.
+MIN_WINDOW = 3.0
+
+
 def cutoff_cases(big_tftp):
-    """Power cuts: (name, typed line, regex to cut on, seconds to wait after it)."""
+    """Power cuts: (name, typed line, regex to cut on, seconds to wait after it,
+    route of the long image whose measured load window bounds the wait, or None)."""
     mmc = "setenv mp2z_dev 0; setenv mp2z_part 2; "
     net = "setenv mp2z_server 10.0.2.2; "
     out = [
-        ("cut-mmc-after-undo", mmc + MMC, re.escape(UNDO), 0),
-        ("cut-net-after-undo", net + NET, re.escape(UNDO), 0),
+        ("cut-mmc-after-undo", mmc + MMC, re.escape(UNDO), 0, None),
+        ("cut-net-after-undo", net + NET, re.escape(UNDO), 0, None),
         # Kill while ext4load reads the 192 MiB image.
         ("cut-mmc-during-load", mmc + "setenv mp2z_file /yakogl/long.bin; " + MMC,
-         r"mp2z: mmc 0:2 /yakogl/long\.bin", 0.1),
+         r"mp2z: mmc 0:2 /yakogl/long\.bin", 0.1, "mmc"),
         # Kill while tftpboot is receiving (its progress hashes).
-        ("cut-net-during-load", net + "setenv mp2z_file long.bin; " + NET, r"#####", 0.2),
+        ("cut-net-during-load", net + "setenv mp2z_file long.bin; " + NET, r"#####", 0.2, "net"),
     ]
     return out
 
@@ -295,16 +302,47 @@ def main():
               final == first and bool(first),
               "differs in " + ", ".join(sorted(k for k in set(final) | set(first)
                                                if final.get(k) != first.get(k))))
+    # The load window: one uncut load of the long image per route, timed from
+    # the cut marker to "mp2z: loaded". The cuts wait at most a quarter of it.
+    windows = {}
+    for route, line, mark in (("mmc", "setenv mp2z_dev 0; setenv mp2z_part 2; setenv mp2z_file "
+                               "/yakogl/long.bin; " + MMC, r"mp2z: mmc 0:2 /yakogl/long\.bin"),
+                              ("net", "setenv mp2z_server 10.0.2.2; setenv mp2z_file long.bin; " + NET,
+                               r"#####")):
+        def calib(q, line=line, mark=mark):
+            typed(q, line)
+            q.expect(re.compile(mark.encode()), 120)
+            t0 = time.monotonic()
+            q.expect(re.compile(rb"mp2z: loaded "), 300)
+            return time.monotonic() - t0
+        w = session("window-" + route, calib)
+        if w is not None:
+            windows[route] = w
+            print("load window %s: %.1f s (%d MiB)" % (route, w, LONG_MIB), flush=True)
+            check("window-" + route + ": load window at least %.0f s" % MIN_WINDOW, w >= MIN_WINDOW,
+                  "%.2f s" % w)
     # Power cuts: the stored environment must come out of each unchanged.
-    for name, line, pat, wait in cutoff_cases(a.big_tftp):
+    for name, line, pat, wait, route in cutoff_cases(a.big_tftp):
+        if route:
+            if route not in windows:
+                check(name + ": load window measured", False)
+                continue
+            wait = min(wait, windows[route] / 4)
         q = Qemu(argv, os.path.join(a.logs, name + ".log"))
         try:
             q.boot()
             typed(q, line)
             q.expect(re.compile(pat.encode()), 120)
             time.sleep(wait)
+            done = b"mp2z: loaded " in q.buf   # the load finished before the cut
             q.cut()
             raw = q.buf.decode(errors="replace")
+            if route:
+                # The phase: the load had started (the marker matched) and had
+                # not finished; the kill left no "loaded" or "go" behind.
+                check(name + ": cut landed inside the load", not done
+                      and "mp2z: loaded" not in raw and "mp2z: go " not in raw,
+                      "the load finished before the cut (window %.1f s)" % windows[route])
             check(name + ": undo line printed before the cut", UNDO in raw)
             check(name + ": cut before go", "mp2z: go " not in raw and "## Starting" not in raw
                   and "mp2z: loaded" not in raw)

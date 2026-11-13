@@ -146,7 +146,7 @@ After the cases above, four more boots type the one-shot line and kill QEMU
 | case | cut |
 | --- | --- |
 | `cut-mmc-after-undo`, `cut-net-after-undo` | as soon as `mp2z: undo: ...` is printed, before the load and before `go` |
-| `cut-mmc-during-load` | 0.1 s after `mp2z: mmc 0:2 /yakogl/long.bin -> ...`, while `ext4load` reads a 192 MiB sparse image (`long.bin`: a valid header, `image_size` 0xc000000) |
+| `cut-mmc-during-load` | 0.1 s after `mp2z: mmc 0:2 /yakogl/long.bin -> ...`, while `ext4load` reads a 255 MiB sparse image (`long.bin`: a valid header, `image_size` 0xff00000) |
 | `cut-net-during-load` | 0.2 s after `tftpboot`'s first progress hashes, while the same image arrives over TFTP |
 
 Checks for each cut (one output line each):
@@ -161,9 +161,22 @@ Checks for each cut (one output line each):
    ran` (the fragment's `BOOTCOMMAND`), equal to the setup value.
 5. The env pflash file still has the setup sha256 after that reboot.
 
-The cuts trigger on console output, not on a fixed time. The during-load cuts
-land inside the load only best effort: if the load finishes first, check 2
-(no `mp2z: loaded`) fails.
+The cuts trigger on console output; the during-load cuts add a short wait.
+How the cut window is guaranteed, on any host speed:
+
+- `long.bin` is made by `run.sh` at run time (sparse, in the run directory
+  under the cache, never in the tree): 255 MiB, the most the DK's 256 MiB go
+  window takes. Loading it is the long phase, and its length is host work
+  (SD reads under `ext4load`, slirp under `tftpboot`).
+- Before the cuts, `drive.py` loads `long.bin` uncut once per route and
+  measures the load window, from the cut marker to `mp2z: loaded`; it prints
+  `load window mmc: N s (255 MiB)` and the same for net, and fails
+  `window-<route>` when a window is under 3 s (a host so fast the cut could
+  not be placed). The wait after the marker is capped at a quarter of the
+  measured window.
+- Each during-load cut checks `cut landed inside the load`: no
+  `mp2z: loaded` was seen before the kill or printed up to it, and no `go`.
+  A case that missed its window counts as failed, not ok. Check 2 stays.
 
 A copy of the scripts with `setenv bootdelay 5; saveenv` added after the undo
 line fails checks 4, 5 and the final readback (checked once by hand, not
