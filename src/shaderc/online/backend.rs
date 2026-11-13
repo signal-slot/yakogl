@@ -3138,13 +3138,16 @@ void main (void)
         release(&sh);
     }
 
-    /// A default-block uniform whose name fills the field is still refused
-    /// at link, pool or no pool: `glGetActiveUniform` and
-    /// `glGetUniformLocation` read that row's field, and the GL core does
-    /// not read the pool yet. The pool holds its whole name all the same.
+    /// A default-block uniform whose name fills the field links: the pool
+    /// holds its whole name, and the GL core reads `glGetActiveUniform`'s
+    /// and `glGetUniformLocation`'s names from the pool
+    /// (`program::row_name`), not from the field.
+    ///
+    /// Revert check: let the link accept a full field only for a block
+    /// member's row again and it refuses the stage with "64-byte name field".
     #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
     #[test]
-    fn a_cut_default_block_uniform_is_still_refused_at_link() {
+    fn a_cut_default_block_uniform_keeps_its_whole_name_and_links() {
         let _serial = test_lock();
         cache_clear();
         let name = "u".repeat(63);
@@ -3162,8 +3165,14 @@ void main (void)
         assert!(crate::shaderc::uniform_blocks(&sh).members.is_empty(), "no block member fills it");
         let vs = "#version 300 es\nlayout(location = 0) in vec4 p;\nvoid main() { gl_Position = p; }";
         let (rc, text, fs) = link(vs, sh);
-        assert_eq!(rc, -EINVAL, "{text}");
-        assert!(text.contains("fragment uniform") && text.contains("64-byte name field"), "{text}");
+        assert_eq!(rc, 0, "the link accepts the cut default-block row: {text}");
+        /* the linked stage (on the V3D, the program record) keeps the name */
+        let k = fs
+            .uniform_table()
+            .iter()
+            .position(|u| crate::util::name_bytes(&u.name) == name.as_bytes())
+            .expect("the linked row");
+        assert_eq!(uniform_name(&fs, k), name.as_bytes());
         release(&fs);
     }
 
