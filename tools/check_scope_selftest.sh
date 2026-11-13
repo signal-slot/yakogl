@@ -161,10 +161,12 @@ out=$(plan docs/standalone-boot.md)
 docs_plan=$out
 expect "docs: the summary" '^check.sh: [0-9]+ ok, 0 failed, 0 gap\(s\).*skipped \(--changed HEAD, scopes: docs' "$out"
 # A docs change reaches the rows every change reaches and no other: the
-# shared rows (scope all) and the licence audit (scope licence, any path).
+# shared rows (scope all), the licence audit and the redaction scan (scope
+# licence, any path).
 same "docs: only the shared rows" "cargo fmt --check
 sha256  third_party files are the upstream files (UPSTREAM)
-tools   licence audit (SPDX header or allowlist row for every tracked file)" "$(rows 'plan|gap' "$out")"
+tools   licence audit (SPDX header or allowlist row for every tracked file)
+tools   redaction scan (self-test, then public classes over HEAD)" "$(rows 'plan|gap' "$out")"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
