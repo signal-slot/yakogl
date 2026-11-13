@@ -9550,6 +9550,7 @@ fn add_stream(streams: &mut [PvrPdsVertexStream], n: usize, a: &GlesAttrib, base
         dma_size: a.components as u32 * 4,
         dst_reg: a.vi_reg as u32,
         per_instance: (a.per_instance != 0) as u32,
+        divisor: 0,
     };
     n + 1
 }

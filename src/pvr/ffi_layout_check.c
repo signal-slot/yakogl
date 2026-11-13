@@ -174,12 +174,13 @@ _Static_assert(offsetof(struct pvr_pds_render_color_upload_info, data_size_dw) =
 _Static_assert(offsetof(struct pvr_pds_render_color_upload_info, code_size_dw) == 4, "pvr_pds_render_color_upload_info.code_size_dw");
 _Static_assert(offsetof(struct pvr_pds_render_color_upload_info, temps_used) == 8, "pvr_pds_render_color_upload_info.temps_used");
 
-_Static_assert(sizeof(struct pvr_pds_render_stream) == 24, "struct pvr_pds_render_stream");
+_Static_assert(sizeof(struct pvr_pds_render_stream) == 32, "struct pvr_pds_render_stream");
 _Static_assert(offsetof(struct pvr_pds_render_stream, address) == 0, "pvr_pds_render_stream.address");
 _Static_assert(offsetof(struct pvr_pds_render_stream, stride) == 8, "pvr_pds_render_stream.stride");
 _Static_assert(offsetof(struct pvr_pds_render_stream, dma_size) == 12, "pvr_pds_render_stream.dma_size");
 _Static_assert(offsetof(struct pvr_pds_render_stream, dst_reg) == 16, "pvr_pds_render_stream.dst_reg");
 _Static_assert(offsetof(struct pvr_pds_render_stream, per_instance) == 20, "pvr_pds_render_stream.per_instance");
+_Static_assert(offsetof(struct pvr_pds_render_stream, divisor) == 24, "pvr_pds_render_stream.divisor");
 
 _Static_assert(sizeof(struct pvr_pds_coeff_varying) == 12, "struct pvr_pds_coeff_varying");
 _Static_assert(offsetof(struct pvr_pds_coeff_varying, components) == 0, "pvr_pds_coeff_varying.components");
