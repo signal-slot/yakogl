@@ -10,9 +10,12 @@ and is not one of the ten). This note is about the other six and why they do
 not get a class of their own yet. Function names are the address; line
 numbers are of main at `6dc53970` and drift.
 
-Status when this was written: the decoder (`src/gl/etc2.rs`), the six names
-in the GL core, the V3D mask bits and the dEQP runs are other items of the
-plan and were not on main. Nothing here was measured on a board.
+Status: the decoder (`src/gl/etc2.rs`), the six names in the GL core
+(`texture.rs` `decoded_image`, `write_decoded`), the V3D mask bits and the
+host tests (`tests/es3_etc2_eac.rs`, `tests/es3_etc2_v3d.rs`,
+`tests/eac_half_precision.rs`) are on main; the host dEQP before/after rows
+were not run on the machine that did the work (no VK-GL-CTS tree, see the
+commit message). Nothing here was measured on a board.
 
 ## 1. The decision
 
@@ -53,9 +56,8 @@ codes as distinct values, so nothing is lost by the narrower class.
 
 ## 3. dEQP's tolerance for 11-bit EAC
 
-Sources are the CTS files named; they are not in this machine's deps cache,
-so the lines below are the design item's reading, not re-read for this note
-(the sRGB `colorBits` line was read in 93bca01).
+Sources are the CTS files named, with every line number below read at
+VK-GL-CTS 93bca01 (fetched with curl from raw.githubusercontent.com).
 
 - The reference decoder widens an 11-bit value with
   `extend11To16(v) = (v << 5) | (v >> 6)` (`tcuCompressedTexture.cpp:804-816`;
@@ -63,17 +65,24 @@ so the lines below are the design item's reading, not re-read for this note
   `UNORM_INT16` / `SNORM_INT16`. Our decode (`u16 / 65535`,
   `max(i16 / 32767, -1)` on the same 16-bit value) is the same number.
 - `texture.wrap` (`es3fTextureWrapTests.cpp:388-399`) uses
-  `computeColorBitsThreshold(8, colorBits) / colorScale`. `colorBits` is 6
-  for every sRGB format in every filter mode, nearest-only included
-  (`es3fTextureWrapTests.cpp:391-392`); for the other formats it is 7 for
-  nearest-only and 6 otherwise. `tcuTexVerifierUtil.cpp:49-56` gives
-  `(2^(b-n) + 1/256) / (2^b - 1)`: 7 bits 0.0078585, 6 bits 0.015702. The
+  `computeColorBitsThreshold(bits, colorBits) / colorScale`, with `bits` the
+  render target's 8 and `colorBits = max(bits - (isNearestOnly && !isSRGB ? 1 : 2), 0)`.
+  So `colorBits` is 6 for every sRGB format in every filter mode,
+  nearest-only included (`es3fTextureWrapTests.cpp:391-392`); for the other
+  formats it is 7 for nearest-only and 6 otherwise. The per-channel scalar
+  is `computeColorBitsError(bits, numAccurateBits)` at
+  `tcuTexVerifierUtil.cpp:49-56`: `(2^(bits-numAccurateBits) + 1/256) / (2^bits - 1)`: 7 bits 0.0078585, 6 bits 0.015702. The
   signed formats (colour scale 0.5) double them: 0.015717 and 0.031403. So
   the R11/RG11 formats get 0.0078585 (unsigned) or 0.015717 (signed) with
   nearest-only filtering, and the sRGB formats get 0.015702 whatever the
   filter.
 - `texture.format` (`es3fTextureFormatTests.cpp:192/413/590`) uses
-  2/255 = 0.00784 and NEAREST.
+  `getPixelFormat().getColorThreshold() + RGBA(1,1,1,1)` and NEAREST
+  minification and magnification. Lines 192, 413 and 590 are the 2D, cube
+  and 2D-array cases; the 3D, compressed 2D and compressed cube cases
+  (758, 898, 1041) and the file cases (1167, 1287) use the same expression.
+  2/255 = 0.00784 assumes `getColorThreshold()` is 1/255 for an 8-bit
+  target (`tcuPixelFormat.hpp`, not read).
 - Our error is the half-float rounding of a 16-bit value in [0, 1] or
   [-1, 1]: 2.37e-4 unsigned, 2.29e-4 signed with round-to-nearest-even
   (`es3_formats::f32_to_half`), about 3% of the tightest tolerance (nearest,
@@ -111,9 +120,8 @@ including the sRGB 6-bit one.
 what the build stores (`stored_compressed_formats`):
 
 - PowerVR and GC under ES 3.0: 11 (ETC1 plus the ten).
-- The V3D: 11 once `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the linear
-  and sRGB ETC2 classes; until then the sRGB pair is not stored and the list
-  is shorter. ES 3.0 requires all ten, so the V3D needs the mask first.
+- The V3D: 11, since `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the
+  linear and sRGB ETC2 classes.
 - `report-es2`: 3 on every build (ETC1, `RGB8_ETC2`, `RGBA8_ETC2_EAC`),
   unchanged.
 - Mali: the six are refused, so its count is what its mask allows.

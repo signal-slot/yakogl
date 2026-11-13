@@ -171,8 +171,8 @@ impl Q {
     /// The value(s) glGetIntegerv answers for pname, cleared first.
     fn i(pname: GLenum) -> Vec<i64> {
         Self::error_clear();
-        let mut v = [i32::MIN; 8];
-        // SAFETY: room for the widest pname (the compressed-format list: five).
+        let mut v = [i32::MIN; 16];
+        // SAFETY: room for the widest pname (the compressed-format list: eleven).
         unsafe { glGetIntegerv(pname, v.as_mut_ptr()) };
         assert_ne!(v[0], i32::MIN, "glGetIntegerv(0x{pname:x}) wrote nothing");
         v.iter().take_while(|x| **x != i32::MIN).map(|&x| i64::from(x)).collect()
@@ -181,9 +181,9 @@ impl Q {
     /// keep the NaN sentinel, so the count is observable.
     fn f(pname: GLenum) -> Vec<f64> {
         Self::error_clear();
-        let mut f = [f32::NAN; 8];
-        // SAFETY: the widest pname writes five values (the format list);
-        // room for eight.
+        let mut f = [f32::NAN; 16];
+        // SAFETY: the widest pname writes eleven values (the format list);
+        // room for sixteen.
         unsafe { glGetFloatv(pname, f.as_mut_ptr()) };
         let out: Vec<f64> = f.iter().map(|&x| f64::from(x)).take_while(|x| !x.is_nan()).collect();
         assert!(!out.is_empty(), "glGetFloatv(0x{pname:x}) wrote nothing");
@@ -192,7 +192,7 @@ impl Q {
     /// The value(s) glGetInteger64v answers.
     fn i64(pname: GLenum) -> Vec<i64> {
         Self::error_clear();
-        let mut v = [i64::MIN; 8];
+        let mut v = [i64::MIN; 16];
         // SAFETY: as for glGetIntegerv.
         unsafe { glGetInteger64v(pname, v.as_mut_ptr()) };
         assert_ne!(v[0], i64::MIN, "glGetInteger64v(0x{pname:x}) wrote nothing");
@@ -536,14 +536,15 @@ fn the_aliased_ranges_are_float_pairs_the_v3d_draws() {
 
 /// `implementation_limits.compressed_texture_formats` and
 /// `num_compressed_texture_formats`, and the three
-/// `state_query.integers.compressed_texture_formats_*` value rows: today the
-/// V3D build stores and reports three formats — ETC1 and the two linear
-/// ETC2/EAC classes (`src/gl/texture.rs` `stored_compressed_formats`;
-/// `es3_caps.rs` lists this as the formats-* gap: "ES 3.0 needs the ten
-/// ETC2/EAC formats"). The list is pinned exactly: the expected test asks
-/// for the ES 3.0 ten.
+/// `state_query.integers.compressed_texture_formats_*` value rows: the V3D
+/// build stores and reports ETC1 and ES 3.0's ten ETC2/EAC formats, eleven
+/// names (`src/gl/texture.rs` `stored_compressed_formats`): the four the GL
+/// core stores as blocks, which `V3D_SAMPLED_TEXFMTS` lists since plan #354's
+/// V3D switch-on, and the six it decodes at upload into R16F, RGBA16F, RGBA8
+/// and SRGB8_A8 (docs/notes/etc2-eac.md). Before it the list held three names
+/// (ETC1 and the two linear classes). The list is pinned exactly, in order.
 #[test]
-fn the_compressed_format_list_is_the_three_stored_formats() {
+fn the_compressed_format_list_is_etc1_and_the_ten() {
     let _lib = context();
     let n = Q::one(GL_NUM_COMPRESSED_TEXTURE_FORMATS);
     let list = Q::i(GL_COMPRESSED_TEXTURE_FORMATS);
@@ -555,10 +556,25 @@ fn the_compressed_format_list_is_the_three_stored_formats() {
     assert_eq!(want.len(), list.len(), "a format listed twice");
     assert_eq!(
         list,
-        vec![i64::from(GL_ETC1_RGB8_OES), i64::from(GL_COMPRESSED_RGB8_ETC2), i64::from(GL_COMPRESSED_RGBA8_ETC2_EAC),],
+        [
+            GL_ETC1_RGB8_OES,
+            GL_COMPRESSED_RGB8_ETC2,
+            GL_COMPRESSED_RGBA8_ETC2_EAC,
+            GL_COMPRESSED_SRGB8_ETC2,
+            GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC,
+            GL_COMPRESSED_R11_EAC,
+            GL_COMPRESSED_SIGNED_R11_EAC,
+            GL_COMPRESSED_RG11_EAC,
+            GL_COMPRESSED_SIGNED_RG11_EAC,
+            GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+            GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+        ]
+        .map(i64::from),
         "the stored compressed list moved; re-pin (owner: src/gl/texture.rs)"
     );
-    assert!(!list.contains(&i64::from(GL_COMPRESSED_R11_EAC)), "the EAC set is not stored yet");
+    /* the three query forms agree on it (the state_query.integers rows) */
+    assert_eq!(Q::f(GL_COMPRESSED_TEXTURE_FORMATS), list.iter().map(|&f| f as f64).collect::<Vec<_>>());
+    assert_eq!(Q::i64(GL_COMPRESSED_TEXTURE_FORMATS), list);
 }
 
 /* ---- 6. the extension list and the 9 indexed rows ------------------------- */
@@ -736,7 +752,6 @@ fn the_uniform_block_family_meets_es3_0() {
 /// `es3_caps.rs`: "ES 3.0 needs the ten ETC2/EAC formats"); the V3D TMU
 /// decodes ETC2/EAC, so this is storage and listing, not silicon.
 #[test]
-#[ignore = "src/gl/texture.rs stores 3 compressed formats, ES 3.0 needs the ten ETC2/EAC"]
 fn the_etc2_eac_set_is_listed() {
     let _lib = context();
     let n = Q::one(GL_NUM_COMPRESSED_TEXTURE_FORMATS);

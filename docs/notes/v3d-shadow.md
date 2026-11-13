@@ -387,3 +387,19 @@ not edit those files.
   `grep -rn 'V3dSampler {' src tests` again against the current main.
 - Regenerate whatever a new `v3d_tex.h` row moves in the same commit
   (`tests/reference/*.rs`, `tests/fixtures/`).
+
+## Wired into the draw (plan #354)
+
+`src/v3d/backend.rs` `sampler_for` packs the record with `v3d_tex_pack_sampler`
+and ORs `texture::sampler_compare_bits` into its first word (the function is
+the only thing a shadow sampler changes, checked on Mesa's packer by
+`tools/v3d/tex_check.c`), and keys its job cache on (`texture::sampler`,
+`texture::compare_function`), so two draws that differ only in the function get
+two records. It does not call `texture::pack_sampler` (`v3d_tex_pack_sampler_compare`):
+more than twenty host test files link this back end and provide the C texture
+functions one trampoline at a time, and a symbol they lack is a link error.
+Tests: `src/v3d/backend_tests.rs` (`a_shadow_sampler_record_carries_the_compare_function_and_is_cached_with_it`,
+`a_colour_binding_packs_no_compare`) and, through the GL API with the real C
+packer, `tests/es3_etc2_v3d.rs` (`a_shadow_draw_carries_the_textures_compare_function_in_its_sampler_record`).
+Host only; the 432 Pi 4 `texture.shadow` cases are a board's to show.
+

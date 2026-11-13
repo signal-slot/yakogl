@@ -164,7 +164,8 @@ formats) and 331 n/s in image 18 (`shaders.texture_functions` and
 `texture.compressed`, not split) plus 12 each in the filtering images 19a, 19b,
 19d and 12 in 196 (3D). The remaining split is not recorded. These do not count
 toward 2,612 and are not given a plan item here; ETC2/EAC support is described
-in `docs/es3/pvr-formats.md` §2.4.
+in `docs/es3/pvr-formats.md` §2.4 and, for the six formats decoded at upload,
+`docs/notes/etc2-eac.md`.
 
 ## 4. Coverage by plan item, and what no item covers
 
@@ -233,10 +234,12 @@ board has run these commits), so none of it is a conformance figure.
 |---|---|---|
 | `format.sized`, `filtering.*.formats`, `units`, `specification` (GC7000UL) | formats-gc, `dc83be67` and `541975a2` | eight classes (R11G11B10F, RGB9E5, RGB10A2UI, RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I) sampled natively; integer look-ups select. Host upload refusals `texture.format` 200 -> 64, `texture.specification` 448 -> 141 (measured at `541975a2`, HOST-ONLY; `docs/es3/gc-formats.md` section 5); the rest are the 32-bit integer formats |
 | `format.sized`, `filtering.*.formats` (V3D) | formats-v3d, `cc1c6ede` | every class but RGB10A2 sampled, sRGB draws no longer refused; before it the host showed 72 upload refusals and 24 draw refusals in `texture.filtering` (`docs/es3/texture-host-repro.md` section 1, at `70142d35`). The compiler's `NotYet` refusals of `texelFetch`, offsets, 2D-array and 3D look-ups (the 227 compile refusals), `textureGrad` and shadow look-ups are gone since (items v3d-qpu-fetch-offset, v3d-qpu-array-3d, v3d-qpu-grad, pi4-results; host only, Mesa pins in `tests/fixtures/v3d_mesa_pins.txt`). Left: ETC2 (pi4-deqp-d) and the back end's sampler compare state at the draw (`sampler_for` still packs the compare-off record) |
+| `wrap.*etc2*`, `wrap.*eac*` (360), `format.compressed.{etc2,eac}` (40), `implementation_limits` and `state_query` compressed-format rows | etc2-eac, plan #354, `docs/notes/etc2-eac.md` | ES 3.0's ten ETC2/EAC formats and ETC1 are listed (11 names) and accepted on the PowerVR, the GC7000UL and the V3D: four as blocks, six decoded at upload (`src/gl/etc2.rs`); the V3D mask lists the four block classes. Host API and draw tests only (`tests/es3_etc2_eac.rs`, `tests/es3_etc2_v3d.rs`); the pictures are a board's |
+| `shadow.*` (V3D) | v3d-shadow-compare, plan #354 | the draw-time sampler compare reaches the V3D's sampler record (`src/v3d/backend.rs` `sampler_for`), where it compared NEVER before; host only (`src/v3d/backend_tests.rs`, `tests/es3_etc2_v3d.rs`) |
 | `filtering.2d_array`, `shadow.2d_array`, `vertex.2d_array` (PowerVR) | pvr-2darray, `e160bafb`, `d7b2cf8b`, `1ddb0cf3` | native array sampling behind `pvr_native_array` (default off), every shadow form compiles, PCF for LINEAR over one level. Open: mipmap and cube PCF, mirrored repeat, `textureGrad*` and offset forms on 2D arrays and 3D (no owner) |
 | `swizzle.*` (83), `filtering.3d.*` (153) | int-rt-pvr, `e4f58cbe` | the GL core delivers the swizzle and wrap R; no back end applies them yet (`docs/es3/texture-host-repro.md` section 3). Host dEQP before = after |
 | `specification` NPOT levels, depth PBO | tex3d-levels | see `docs/es3-cts-failures.md` |
 | `shaders.texture_functions` look-ups on arrays and 3D | pvr-shadow, `d7356b65` | 226 PowerVR refusals in one message, `src/shaderc/online/powervr/select.rs`; front end clean (`docs/es3/shader-host-repro.md`) |
 
 Rows nothing has touched: `mipmap.3d.bias` (4), `size`, `vertex.2d/cube`,
-`filtering.3d` on the PowerVR (needs pvr-3d), ETC2 on the GC7000UL and V3D.
+`filtering.3d` on the PowerVR (needs pvr-3d).

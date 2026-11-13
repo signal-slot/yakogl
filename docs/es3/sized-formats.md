@@ -142,3 +142,18 @@ change; the tests state the expectation per mask.
   class). `RGB5_A1` from `UNSIGNED_INT_2_10_10_10_REV` takes the 10-bit word
   since `e5c4a180`, and every level of a NPOT 3D/2D-array texture is valid
   since `c40414b9`.
+
+## The ETC2/EAC formats the GL core decodes
+
+Not table 3.2 formats, but they land in its classes: six of ES 3.0's ten
+compressed formats have no block class and are decoded at upload
+(`docs/notes/etc2-eac.md`, `src/gl/etc2.rs`, `src/gl/texture.rs`
+`decoded_image`): `R11_EAC` and `SIGNED_R11_EAC` into `R16F` (a half of the
+spec's 16-bit value, round to nearest even), `RG11_EAC` and `SIGNED_RG11_EAC`
+into `RGBA16F` (the first two halves; `RG16F` is stored there), the
+punch-through pair into `RGBA8` and `SRGB8_A8`. The classes are sampled by
+every back end but the Mali, so the six are stored where the build is an ES
+3.0 one and the back end samples the class (`texture.rs`
+`decoded_compressed_format`). The texture is then a compressed one to the
+API: `glTexSubImage*`, `glCopyTexSubImage*`, `glGenerateMipmap` and a
+framebuffer attachment refuse it (`GlTexture::decoded_from`).

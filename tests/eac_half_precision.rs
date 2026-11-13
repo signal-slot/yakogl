@@ -8,14 +8,15 @@
 //! The decoded value is the spec's: unsigned `u / 2047`, signed `s / 1023`
 //! (the signed decode clamps -1024 to -1023, so s is in -1023..=1023).
 //!
-//! Thresholds (docs/notes/etc2-eac.md section 3; the line numbers are that
-//! note's reading of VK-GL-CTS 93bca01, not re-read here: the CTS checkout was
-//! not in the deps cache of the machine this was written on):
-//! - `es3fTextureWrapTests.cpp:388-399`: `computeColorBitsThreshold(8, colorBits)
+//! Thresholds (docs/notes/etc2-eac.md section 3; every line number was
+//! read at VK-GL-CTS 93bca01):
+//! - `es3fTextureWrapTests.cpp:388-399`: `computeColorBitsThreshold(bits, colorBits)
 //!   / colorScale`, colorBits 7 (nearest only) or 6; with
-//!   `tcuTexVerifierUtil.cpp:49-56` `(2^(b-n) + 1/256) / (2^b - 1)` that is
+//!   `computeColorBitsError`, `tcuTexVerifierUtil.cpp:49-56`, `(2^(b-n) + 1/256) / (2^b - 1)` that is
 //!   0.0078585 (nearest) / 0.015702 (linear), doubled for the signed formats.
-//! - `es3fTextureFormatTests.cpp:192/413/590`: 2/255 = 0.00784, NEAREST.
+//! - `es3fTextureFormatTests.cpp:192/413/590`: `getColorThreshold() + 1` = 2/255 = 0.00784 (8-bit), NEAREST (those lines
+//!   are the uncompressed 2D, cube and 2D-array cases; the compressed ones use
+//!   the same expression).
 //!
 //! Both signs are held against the tightest, 2/255, and the wrap nearest bound.
 //!
