@@ -308,7 +308,17 @@ Items 1, 2, 3, 5 and 10 are done at main `445c5653`. Item 7 is done by value.
 - Speed: terrain, shadow and refract on the AM62P (94, 353 and 376 ms a
   frame, CPU GL-call time). Terrain on the Pi 4 (179 ms; #1209). Terrain,
   shadow and refract on the i.MX8MP (1 to 2 FPS; the GPU mipmap chain is not
-  reached from GL, #1106).
+  reached from GL, #1106). On the i.MX8MP (GC7000UL), plan #355 built W1 to W5
+  of `gc-tiled-wire.md` on the host (tiled 32-bit shadow targets resolved by
+  the RS in the same stream, and early depth into them) behind the test knob
+  `gc_tiled_rt`, default off (commit `9cdeff6d`). The host prediction
+  (`gc-slow-host-counts.md`, "Predicted effect of gc_tiled_rt") is that
+  terrain is the only scene the knob changes, by about -14 to +3 ms of about
+  250, and shadow and refract by 0 ms. Their cause is the CPU depth resolve of
+  the 1600x1200 depth texture, which W4 and W5 do not touch
+  (`gc-shadow-refract-cause.md`). No Armadillo-X2 measurement exists yet
+  (before `72972ba4`, the `origin/main` tip, and the knob on): it is pending in
+  `x2-glmark2-slow-scenes.md`, and every figure above is host-derived.
 - AM62P display: a camera look at the panel for torn frames in a light
   scene, the line-buffer read-ahead question, and whether to wire
   `am62p_dss_wait_vsync` as `wait_vblank` (`docs/notes/am62p-flip-latch.md`).
