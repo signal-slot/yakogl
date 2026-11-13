@@ -595,8 +595,8 @@ fn a_renderbuffer_of_each_is_a_complete_colour_attachment() {
 /// since gc-r32-flip; `es3_storage_or_refuse`, src/gl/texture.rs), so
 /// glTexImage2D and glTexStorage2D raise nothing and the attachment is made.
 /// The framebuffer is complete: `integer_texture_surface`
-/// (src/gl/framebuffer.rs) has a surface for the four (RC17, dEQP fbo.completeness
-/// `renderable.texture.*32*`).
+/// (src/gl/framebuffer.rs) has a surface for each of the four (RC17, dEQP
+/// fbo.completeness `renderable.texture.*32*`).
 #[test]
 fn a_texture_of_each_is_stored_and_a_complete_attachment() {
     for t in &INT32 {

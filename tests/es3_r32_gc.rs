@@ -500,8 +500,8 @@ fn an_uploaded_texture_is_described_and_laid_out() {
 /// two-plane path of docs/es3/gc-formats.md section 3). The mask holds the
 /// four classes, `storage_in` answers each format's own class, glTexImage2D
 /// and glTexStorage2D raise nothing, and a texture colour attachment is made
-/// without error; its status is INCOMPLETE_ATTACHMENT until the GL core's
-/// `integer_texture_surface` has rows for the classes (RC17).
+/// without error; its status is COMPLETE (the GL core's
+/// `integer_texture_surface` has rows for the classes, RC17).
 #[test]
 fn the_gl_core_stores_the_32_bit_integer_formats_here() {
     use yakogl::gl::es3_formats::find;

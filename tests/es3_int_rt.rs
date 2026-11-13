@@ -409,7 +409,8 @@ mod es3 {
     /// a store that is not the layout of their surface: the PowerVR draws
     /// them as the four-channel surface of the store
     /// (tests/es3_pvr_fbo_int_rg.rs), the other back ends keep them
-    /// incomplete.
+    /// incomplete, except the 32-bit classes a back end stores in their own
+    /// class (`integer_texture_surface` has their rows).
     #[test]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();
