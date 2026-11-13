@@ -135,7 +135,7 @@ no stage or construct more precise than that.
 |---|---|---:|---:|---:|---|---|
 | `gl_MaxDrawBuffers` is 1 | back-end limit | 2 | 2 | 2 | constant_expressions | `other.complex_{vertex,fragment}`: `'case' : two case labels have the same value` |
 | Backslash-newline inside a preprocessing token (done: pp-splice) | unsupported construct | 0 | 0 | 0 | preprocessor | was 4 each: `line_continuation.preprocessing_token_*` (`#def\` + newline + `ine`): `'def' : invalid preprocessor directive`; `line_continuation.token_*`: `'oo' : expected ';'` |
-| Uniform (instance) name of 63+ characters | back-end limit | 2 | 2 | 2 | uniform_block | `valid.long_instance_name_*`: link: the name is as long as the 64-byte reflection field (yakogl task #47) |
+| Uniform (instance) name of 63+ characters (done: refl-long-name) | back-end limit | 0 | 0 | 0 | uniform_block | was 2 each: `valid.long_instance_name_*`: link: the name is as long as the 64-byte reflection field (yakogl task #47); names stay whole since (`docs/notes/reflection-long-names.md`) |
 | Register pressure of a 128-element constant array index (done: gc-const-array) | back-end limit (GC7000UL) | 0 | 0 | 0 | large_constant_arrays | was 2 on the GC7000UL: `indexing.vec4_128_vertex`: `Abi(LoadBalancingTempsUnmeasured { temps: 34, temps_max: 21 })` |
 
 No expected-pass program was refused by the
@@ -242,7 +242,13 @@ the form in the log):
      (open, 2 programs per GPU).
   2. Preprocessor: backslash-newline splice inside a token (4). **Done**
      (pp-splice, 2026-10-14): all 4 programs build on the three GPUs.
-  3. Reflection names of 64 or more characters (open, 2 programs per GPU).
+  3. Reflection names of 63 or more characters (2 per GPU). **Done**: the
+     online record's name pool (`06840143`) and the GL core reading every
+     uniform name whole through it (`docs/notes/reflection-long-names.md`):
+     `uniform_block` 64 / 2 -> 66 / 0, the total 3,457 -> 3,459 (PowerVR
+     corpus at `06840143`; the GC7000UL and V3D link the two programs in
+     `tests/es3_uniform_long_name.rs`, their corpus run is not repeated). The
+     tables above are the earlier full run.
   4. GC7000UL: the 128-element constant array index (2). **Done**
      (gc-const-array, 2026-10-14): `large_constant_arrays` is 16 / 0 on the
      GC7000UL, as on the other two (3,457 / 4 / 2,135 / 0; 3,453 / 8 before
