@@ -5708,3 +5708,7 @@ fn the_dtpu_knob_samples_the_depth_surface_in_place() {
     assert!(!gc_depth_sampled(id, 64, 64));
     assert!(rig.faults().is_empty());
 }
+
+/// Tiled shadow targets and early depth (docs/notes/gc-tiled-wire.md W2-W5).
+#[path = "tiled_rt_tests.rs"]
+mod tiled_rt_tests;

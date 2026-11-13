@@ -632,10 +632,57 @@ pub const GC_STENCIL_OP_INCR_WRAP: u32 = 0x6;
 pub const GC_STENCIL_OP_DECR_WRAP: u32 = 0x7;
 
 // ---- tile status (not used: no fast clear, no compression) --------------
+//
+// The TS, RS and sampler-TS registers of docs/notes/gc-tiled-wire.md W1,
+// from state_3d.xml.h (and common_3d.xml.h for the HALIGN values); the
+// `mesa_header` test below checks each against its VIVS_ define. Only
+// `GC_TS_FLUSH_CACHE` and `GC_TS_MEM_CONFIG` (0) are written today.
 
 pub const GC_TS_FLUSH_CACHE: u32 = 0x00001650;
 pub const GC_TS_FLUSH: u32 = 0x00000001;
 pub const GC_TS_MEM_CONFIG: u32 = 0x00001654;
+pub const GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR: u32 = 0x00000001;
+pub const GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR: u32 = 0x00000002;
+pub const GC_TS_MEM_CONFIG_DEPTH_16BPP: u32 = 0x00000008;
+pub const GC_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE: u32 = 0x00000010;
+pub const GC_TS_MEM_CONFIG_COLOR_AUTO_DISABLE: u32 = 0x00000020;
+pub const GC_TS_COLOR_STATUS_BASE: u32 = 0x00001658;
+pub const GC_TS_COLOR_SURFACE_BASE: u32 = 0x0000165c;
+pub const GC_TS_COLOR_CLEAR_VALUE: u32 = 0x00001660;
+pub const GC_TS_DEPTH_STATUS_BASE: u32 = 0x00001664;
+pub const GC_TS_DEPTH_SURFACE_BASE: u32 = 0x00001668;
+pub const GC_TS_DEPTH_CLEAR_VALUE: u32 = 0x0000166c;
+pub const GC_TS_DEPTH_AUTO_DISABLE_COUNT: u32 = 0x00001670;
+pub const GC_TS_COLOR_AUTO_DISABLE_COUNT: u32 = 0x00001674;
+pub const GC_TS_COLOR_CLEAR_VALUE_EXT: u32 = 0x000016bc;
+/// The texture unit's TS state of sampler `i` (VIVS_TS_SAMPLER_CONFIG(i)).
+pub const fn ts_sampler_config(i: u32) -> u32 {
+    0x00001720 + 4 * i
+}
+pub const GC_TS_SAMPLER_CONFIG_ENABLE: u32 = 0x00000001;
+pub const fn ts_sampler_status_base(i: u32) -> u32 {
+    0x00001740 + 4 * i
+}
+pub const fn ts_sampler_clear_value(i: u32) -> u32 {
+    0x00001760 + 4 * i
+}
+/// PE_MEM_CONFIG's TS modes of the colour and depth surface (0: 128-byte
+/// tiles, 1: 256-byte).
+pub const fn pe_mem_config_color_ts_mode(x: u32) -> u32 {
+    (x << 24) & 0x0100_0000
+}
+pub const fn pe_mem_config_depth_ts_mode(x: u32) -> u32 {
+    (x << 26) & 0x0400_0000
+}
+/// The fields of the descriptor-based sampler's TX_CTRL
+/// ([`nte_descriptor_tx_ctrl`]).
+pub const fn tx_ctrl_ts_mode(x: u32) -> u32 {
+    x & 0x1
+}
+pub const GC_TX_CTRL_TS_ENABLE: u32 = 0x00000002;
+pub const fn tx_ctrl_ts_index(x: u32) -> u32 {
+    (x << 2) & 0x1c
+}
 
 // ---- global -------------------------------------------------------------
 
@@ -833,6 +880,7 @@ pub const fn texdesc_halign(x: u32) -> u32 {
 /// padded to 4 texels, or to 16 for the resolve engine.
 pub const GC_TEXTURE_HALIGN_FOUR: u32 = 0;
 pub const GC_TEXTURE_HALIGN_SIXTEEN: u32 = 1;
+pub const GC_TEXTURE_HALIGN_SUPER_TILED: u32 = 2;
 /// CONFIG1: the layers are an array, not the slices of a volume.
 pub const GC_TEXDESC_TEXTURE_ARRAY: u32 = 0x0100_0000;
 pub const GC_TEXDESC_CONFIG2: u32 = 0x6c;
@@ -1056,8 +1104,16 @@ pub const GC_RS_SOURCE_STRIDE: u32 = 0x0000160c;
 pub const GC_RS_SOURCE_STRIDE_TILING: u32 = 0x8000_0000;
 /// A supertiled source on a CACHE128B256BPERLINE core (VIVS_RS_SOURCE_STRIDE_SUPER_TILED_NEW).
 pub const GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW: u32 = 0x0800_0000;
+/// The source's TS mode (VIVS_RS_SOURCE_STRIDE_TS_MODE).
+pub const fn rs_source_stride_ts_mode(x: u32) -> u32 {
+    (x << 29) & 0x2000_0000
+}
 pub const GC_RS_DEST_ADDR: u32 = 0x00001610;
 pub const GC_RS_DEST_STRIDE: u32 = 0x00001614;
+/// A tiled destination (VIVS_RS_DEST_STRIDE_TILING): its stride is given
+/// times four, as a tiled source's.
+pub const GC_RS_DEST_STRIDE_TILING: u32 = 0x8000_0000;
+pub const GC_RS_DEST_STRIDE_SUPER_TILED_NEW: u32 = 0x0800_0000;
 pub const GC_RS_WINDOW_SIZE: u32 = 0x00001620;
 pub const fn rs_window_width(x: u32) -> u32 {
     x & 0xffff
@@ -1072,6 +1128,10 @@ pub const GC_RS_CLEAR_CONTROL: u32 = 0x0000163c;
 /* state_3d.xml.h VIVS_RS_CLEAR_CONTROL_BITS(0xffff), _MODE_ENABLED1 */
 pub const GC_RS_CLEAR_CONTROL_BITS_ALL: u32 = 0x0000_ffff;
 pub const GC_RS_CLEAR_CONTROL_MODE_ENABLED1: u32 = 0x0001_0000;
+/// RS_CLEAR_CONTROL's BITS field: the 16 bits of the fill word that change.
+pub const fn rs_clear_bits(x: u32) -> u32 {
+    x & 0xffff
+}
 pub const fn rs_fill_value(i: u32) -> u32 {
     0x00001640 + 4 * i
 }
@@ -1079,6 +1139,13 @@ pub const GC_RS_EXTRA_CONFIG: u32 = 0x000016a0;
 pub const fn rs_extra_aa(x: u32) -> u32 {
     x & 0x3
 }
+/// The source's TS mode for a TS-sourced resolve (VIVS_RS_EXTRA_CONFIG_TS_MODE).
+pub const fn rs_extra_ts_mode(x: u32) -> u32 {
+    (x << 24) & 0x0100_0000
+}
+/// An in-place resolve of a super-tiled surface's tile status: written with
+/// the tile count (VIVS_RS_KICKER_INPLACE).
+pub const GC_RS_KICKER_INPLACE: u32 = 0x000016b0;
 pub const GC_RS_SINGLE_BUFFER: u32 = 0x000016b8;
 pub const GC_RS_SINGLE_BUFFER_ENABLE: u32 = 0x00000001;
 pub const fn rs_pipe_source_addr(i: u32) -> u32 {
@@ -1145,5 +1212,95 @@ mod mesa_header {
             n += 1;
         }
         assert!(n >= 39, "only {n} GC_TEX_FORMAT_* consts found");
+    }
+
+    /// Every `#define NAME VALUE` of an in-tree rnndb header whose value is
+    /// a plain hex number, and of an array register `(0x... + 0x4*(i0))` its
+    /// base.
+    fn defines(file: &str) -> HashMap<String, u32> {
+        let path = format!("{}/driver/src/vivante/hw/{file}", env!("CARGO_MANIFEST_DIR"));
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+        let mut defs = HashMap::new();
+        for line in text.lines() {
+            let Some(rest) = line.strip_prefix("#define ") else { continue };
+            let mut it = rest.split_whitespace();
+            let (Some(name), Some(val)) = (it.next(), it.next()) else { continue };
+            let name = name.split('(').next().unwrap_or(name);
+            let hex = val.trim_start_matches('(');
+            if let Some(h) = hex.strip_prefix("0x") {
+                let digits: String = h.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+                if let Ok(v) = u32::from_str_radix(&digits, 16) {
+                    defs.insert(name.to_string(), v);
+                }
+            }
+        }
+        defs
+    }
+
+    /// The registers and fields of docs/notes/gc-tiled-wire.md W1, each
+    /// against its VIVS_ define in state_3d.xml.h (TEXTURE_HALIGN_* in
+    /// common_3d.xml.h): a mistyped value fails here.
+    #[test]
+    fn tiled_target_regs_match_mesa() {
+        use super::*;
+        let s3d = defines("state_3d.xml.h");
+        let c3d = defines("common_3d.xml.h");
+        let want = |defs: &HashMap<String, u32>, name: &str| {
+            *defs.get(name).unwrap_or_else(|| panic!("{name} is not in the header"))
+        };
+        let pairs: &[(&str, u32)] = &[
+            ("VIVS_PE_MEM_CONFIG", GC_PE_MEM_CONFIG),
+            ("VIVS_PE_MEM_CONFIG_COLOR_TS_MODE__MASK", pe_mem_config_color_ts_mode(1)),
+            ("VIVS_PE_MEM_CONFIG_DEPTH_TS_MODE__MASK", pe_mem_config_depth_ts_mode(1)),
+            ("VIVS_PE_DEPTH_CONFIG_SUPER_TILED", GC_PE_DEPTH_SUPER_TILED),
+            ("VIVS_PE_DEPTH_CONFIG_EARLY_Z", GC_PE_DEPTH_EARLY_Z),
+            ("VIVS_TS_FLUSH_CACHE", GC_TS_FLUSH_CACHE),
+            ("VIVS_TS_FLUSH_CACHE_FLUSH", GC_TS_FLUSH),
+            ("VIVS_TS_MEM_CONFIG", GC_TS_MEM_CONFIG),
+            ("VIVS_TS_MEM_CONFIG_DEPTH_FAST_CLEAR", GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR),
+            ("VIVS_TS_MEM_CONFIG_COLOR_FAST_CLEAR", GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR),
+            ("VIVS_TS_MEM_CONFIG_DEPTH_16BPP", GC_TS_MEM_CONFIG_DEPTH_16BPP),
+            ("VIVS_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE", GC_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE),
+            ("VIVS_TS_MEM_CONFIG_COLOR_AUTO_DISABLE", GC_TS_MEM_CONFIG_COLOR_AUTO_DISABLE),
+            ("VIVS_TS_COLOR_STATUS_BASE", GC_TS_COLOR_STATUS_BASE),
+            ("VIVS_TS_COLOR_SURFACE_BASE", GC_TS_COLOR_SURFACE_BASE),
+            ("VIVS_TS_COLOR_CLEAR_VALUE", GC_TS_COLOR_CLEAR_VALUE),
+            ("VIVS_TS_DEPTH_STATUS_BASE", GC_TS_DEPTH_STATUS_BASE),
+            ("VIVS_TS_DEPTH_SURFACE_BASE", GC_TS_DEPTH_SURFACE_BASE),
+            ("VIVS_TS_DEPTH_CLEAR_VALUE", GC_TS_DEPTH_CLEAR_VALUE),
+            ("VIVS_TS_DEPTH_AUTO_DISABLE_COUNT", GC_TS_DEPTH_AUTO_DISABLE_COUNT),
+            ("VIVS_TS_COLOR_AUTO_DISABLE_COUNT", GC_TS_COLOR_AUTO_DISABLE_COUNT),
+            ("VIVS_TS_COLOR_CLEAR_VALUE_EXT", GC_TS_COLOR_CLEAR_VALUE_EXT),
+            ("VIVS_TS_SAMPLER_CONFIG", ts_sampler_config(0)),
+            ("VIVS_TS_SAMPLER_CONFIG_ENABLE", GC_TS_SAMPLER_CONFIG_ENABLE),
+            ("VIVS_TS_SAMPLER_STATUS_BASE", ts_sampler_status_base(0)),
+            ("VIVS_TS_SAMPLER_CLEAR_VALUE", ts_sampler_clear_value(0)),
+            ("VIVS_RS_CONFIG_SOURCE_TILED", GC_RS_SOURCE_TILED),
+            ("VIVS_RS_CONFIG_DEST_TILED", GC_RS_DEST_TILED),
+            ("VIVS_RS_SOURCE_STRIDE_TILING", GC_RS_SOURCE_STRIDE_TILING),
+            ("VIVS_RS_SOURCE_STRIDE_SUPER_TILED_NEW", GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW),
+            ("VIVS_RS_SOURCE_STRIDE_TS_MODE__MASK", rs_source_stride_ts_mode(1)),
+            ("VIVS_RS_DEST_STRIDE_TILING", GC_RS_DEST_STRIDE_TILING),
+            ("VIVS_RS_DEST_STRIDE_SUPER_TILED_NEW", GC_RS_DEST_STRIDE_SUPER_TILED_NEW),
+            ("VIVS_RS_CLEAR_CONTROL", GC_RS_CLEAR_CONTROL),
+            ("VIVS_RS_CLEAR_CONTROL_BITS__MASK", rs_clear_bits(0xffff_ffff)),
+            ("VIVS_RS_CLEAR_CONTROL_MODE_ENABLED1", GC_RS_CLEAR_CONTROL_MODE_ENABLED1),
+            ("VIVS_RS_EXTRA_CONFIG", GC_RS_EXTRA_CONFIG),
+            ("VIVS_RS_EXTRA_CONFIG_TS_MODE__MASK", rs_extra_ts_mode(1)),
+            ("VIVS_RS_KICKER_INPLACE", GC_RS_KICKER_INPLACE),
+            ("VIVS_NTE_DESCRIPTOR_TX_CTRL", nte_descriptor_tx_ctrl(0)),
+            ("VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_MODE__MASK", tx_ctrl_ts_mode(1)),
+            ("VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_ENABLE", GC_TX_CTRL_TS_ENABLE),
+            ("VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_INDEX__MASK", tx_ctrl_ts_index(7)),
+        ];
+        for (name, ours) in pairs {
+            assert_eq!(*ours, want(&s3d, name), "{name}");
+        }
+        /* the array registers step by one word, as Mesa's do */
+        assert_eq!(ts_sampler_config(3), want(&s3d, "VIVS_TS_SAMPLER_CONFIG") + 12);
+        assert_eq!(ts_sampler_status_base(7), want(&s3d, "VIVS_TS_SAMPLER_STATUS_BASE") + 28);
+        assert_eq!(GC_TEXTURE_HALIGN_FOUR, want(&c3d, "TEXTURE_HALIGN_FOUR"));
+        assert_eq!(GC_TEXTURE_HALIGN_SIXTEEN, want(&c3d, "TEXTURE_HALIGN_SIXTEEN"));
+        assert_eq!(GC_TEXTURE_HALIGN_SUPER_TILED, want(&c3d, "TEXTURE_HALIGN_SUPER_TILED"));
     }
 }

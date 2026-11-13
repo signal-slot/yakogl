@@ -38,3 +38,16 @@ tools/cts/x2-glmark2-scenes.sh --commit origin/main <outdir> terrain shadow refr
 
 The per-scene expectations from the host profile stay in
 `imx8mp-glmark2-cpu.md` ("Slow scenes on the board").
+
+Session A (plan #355, docs/notes/gc-tiled-wire.md W5's board check) adds the
+knob-on arm once W1 to W5 are on origin/main, from the same image recipe:
+
+```sh
+tools/cts/x2-glmark2-scenes.sh --commit origin/main --conf CONFIG_GLMARK2_GC_TILED_RT=y <outdir> terrain shadow refract
+```
+
+The host harness's prediction for that arm (`tests/gc_scene_kicks.rs`
+`tiled_rt`): terrain keeps its kicks, waits and finishes, and adds three
+800x600 RS copies a frame: the overlay's tile-in, and the terrain pass's and
+the overlay's resolves. Shadow and refract are untouched by the
+knob: their depth is a texture, which is not PE-private.

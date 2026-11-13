@@ -30,6 +30,55 @@ Sources:
   TS-cleared target. It is in review and not on this tip, so this note calls
   it "the ts-golden mode".
 
+## Built: W1 to W5 on the host (plan #355)
+
+W1 to W5 are in, behind the test knob `gc_tiled_rt` (`gc_debug_set_tiled_rt`,
+`test-knobs` only, default off). No board has run them: session A is still
+open. How the code differs from the items below:
+
+- **W1**: `regs.rs`, checked against `state_3d.xml.h` and `common_3d.xml.h`
+  by `mesa_header::tiled_target_regs_match_mesa`.
+- **W2**: tiled-copy-rs had already folded the RS blocks into one emitter,
+  `backend.rs` `emit_rs(RsBlit)`. W2 adds only `RS_BLIT_WORDS`, its length,
+  which an open run keeps off the stream's capacity.
+- **W3**: `ds_cache.rs` `Surface::layout`, `pe_private` and `select_in`
+  (`select` is `select_in(.., Linear, ..)`, so `tests/gc_depth_resolve.rs`
+  is unchanged). A live plane keeps its surface's layout. `copy_plane`
+  refuses a copy across layouts. `seed_depth`, `resolve_depth` and
+  `depth_view` read `Linear` surfaces only.
+- **W4** is a module of its own, `tiled_rt.rs`, not a bpp field in
+  `wide_target.rs`, so the 64-bit path and its CPU retire are not touched. A
+  *run* is the draws of one target in one stream:
+  - its first draw tiles the storage in with an RS linear-to-TILED copy,
+    unless the draw opens with a whole, unmasked colour clear;
+  - the RS TILED-to-linear copy is recorded where the stream leaves the
+    target: another target, the linear path, or `frame_submit`. That is not
+    only at `frame_submit`, because terrain's bloom_h samples the terrain
+    target in the same stream (gc-kick-continue C1).
+  
+  The shadow is not kept in step across runs, so no `storage_current` hook
+  and no GL-core change were needed. The RS words are Mesa's for a TILED
+  side (`etna_compile_rs_state`, `etnaviv_rs.c:76-135`): stride times four,
+  no `TILING` bit (Mesa sets that bit for a super-tiled side only; "Touches"
+  above said `| TILING`), and `SOURCE_TILED` or `DEST_TILED`. A draw into a
+  shadow clears with the quad, not the RS fill, because `rs_clear.rs`
+  describes linear surfaces. The rule also takes draws with no depth test,
+  as long as they have a PE-private depth attachment, so every draw that
+  touches such a surface sees one layout.
+- **W5**: `backend.rs` `draw_ez` is one decision for both halves. It takes
+  `discard` from `uses_discard` or the TEXKILL scan. Mesa's rule keeps the
+  early *test* for a discarding program and moves only the write late (RA
+  `WRITE_DISABLE`, no `DISABLE_ZS`). It does not take back both words as
+  "Host tests" above says.
+- **Tests**:
+  - `src/vivante/tiled_rt_tests.rs`, five of them in tools/check.sh's
+    `KNOBS_TESTS`. The depth-tested draw's `PE_DEPTH_CONFIG` 0x05051111 and
+    `RA_EARLY_DEPTH` 0x05000031 are ts-clear.golden's (mode 8). The RS
+    interpreter runs over both copies.
+  - `tests/gc_scene_kicks.rs` `tiled_rt`: terrain with the knob on stays
+    within terrain's ceilings, at two runs, one tile-in and two resolves a
+    frame.
+
 ## Answer in short
 
 - **Early depth reaches terrain soonest, and with the least risk, through items

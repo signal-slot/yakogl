@@ -1578,6 +1578,11 @@ KNOBS_TESTS=(
   gl::egl::tests::the_gc7000_offers_the_multisampled_config_while_msaa_is_on
   gl::texture::tests::the_gc7000_narrow_la_knob_selects_the_rgba8_store
   gl::framebuffer::tests::kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache
+  vivante::backend::backend_tests::tiled_rt_tests::a_depth_tested_draw_into_a_tiled_shadow_resolves_into_its_storage_in_the_same_stream
+  vivante::backend::backend_tests::tiled_rt_tests::without_the_knob_or_outside_the_rule_a_draw_keeps_the_linear_stream
+  vivante::backend::backend_tests::tiled_rt_tests::a_run_opened_by_a_whole_colour_clear_tiles_nothing_in
+  vivante::backend::backend_tests::tiled_rt_tests::draws_into_one_shadow_are_one_run_and_another_target_ends_it
+  vivante::backend::backend_tests::tiled_rt_tests::a_discard_writes_depth_late_and_gl_fragdepth_and_clears_get_no_early_depth
 )
 # knobs_lib_tests <features> <test names...>
 knobs_lib_tests() {
@@ -1605,6 +1610,18 @@ kick_diff_tests() {
   printf '%s\n' "$out" | tests_as_declared tests/gc_kick_diff.rs
 }
 step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" kick_diff_tests
+# The gc_tiled_rt knob (docs/notes/gc-tiled-wire.md W4/W5) on glmark2
+# terrain's frame: tests/gc_scene_kicks.rs's `tiled_rt` module, which only
+# the knobs compile and which needs the ES 2.0 report as the file does; every
+# #[test] of the module must pass.
+tiled_rt_scene_tests() {
+  local out
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG,report-es2" --test gc_scene_kicks tiled_rt:: 2>&1) ||
+    { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
+  printf '%s\n' "$out" | grep -E '^test result'
+  printf '%s\n' "$out" | tests_as_declared 'tests/gc_scene_kicks.rs#tiled_rt'
+}
+step "test    $KNOBS_CONFIG,report-es2 (tests/gc_scene_kicks.rs tiled_rt, every declared test)" tiled_rt_scene_tests
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
@@ -3034,7 +3051,8 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 # them.
 KNOB_VIVANTE_SYMBOLS="gc_debug_depth_tpu gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_depth_tpu gc_debug_set_flip_experiment gc_debug_set_msaa
-gc_debug_set_narrow_la gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
+gc_debug_set_narrow_la gc_debug_set_tiled_rt gc_debug_tiled_rt gc_kick_diff_after_fence gc_kick_diff_arm_target
+gc_kick_diff_enable gc_kick_diff_stats"
 KNOB_POWERVR_SYMBOLS="pvr_debug_narrow_la pvr_debug_set_narrow_la pvr_debug_set_split_zs pvr_debug_split_zs"
 RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference
   driver/rust/src/errno_numbers.rs driver/compat driver/src/pvr/generated third_party/mesa-26.2.1

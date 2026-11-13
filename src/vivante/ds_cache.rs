@@ -31,6 +31,7 @@
 //! every surface holding one, the draw is refused (src/ds_retention.rs).
 
 use super::backend::{g, heap_data};
+use super::layout::Layout;
 use crate::backend::GlesDraw;
 use crate::ds_retention::{self, Parked, Plane, DEPTH, STENCIL};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
@@ -93,6 +94,13 @@ struct Surface {
     /// What each plane holds for its object: Live or a clear value when
     /// this surface has the object's latest contents, Undefined otherwise.
     planes: [Plane; 2],
+    /// How the pixel engine lays the words out: `Linear` (row-linear at
+    /// `stride`, PE_DEPTH_CONFIG without SUPER_TILED, measured by gl_test 169)
+    /// unless the surface is [`pe_private`] and its draws render into a
+    /// tiled shadow (`tiled_rt.rs`, docs/notes/gc-tiled-wire.md W3), which
+    /// makes it `SuperTiled`. Only the CPU readers below care, and they read
+    /// `Linear` surfaces only.
+    layout: Layout,
 }
 
 impl Surface {
@@ -236,6 +244,18 @@ const fn align64(v: u32) -> u32 {
     (v + 63) & !63
 }
 
+/// Is `key`'s surface one only the pixel engine ever touches? Neither plane
+/// comes from a texture (bit 30, the GL core's texture bit,
+/// `gl::context::ds_object_id`) nor is the window's (bit 31), and it is
+/// single-sampled. No CPU reader (`resolve_depth`, `seed_depth`,
+/// `depth_view`: texture ids only) and no window copy reaches such a surface,
+/// so its layout has to agree only between the PE and the rasteriser
+/// (docs/notes/gc-tiled-wire.md W3).
+pub fn pe_private(key: &DsKey) -> bool {
+    const NOT_PRIVATE: u32 = 0xc000_0000;
+    (key.depth_id | key.stencil_id) & NOT_PRIVATE == 0 && key.scale == 1
+}
+
 /// What [`select`] made current.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Selected {
@@ -245,6 +265,9 @@ pub struct Selected {
     /// bits, stencil as the value): the backend records a clear of just
     /// those planes before the draw.
     pub restore: [Option<u32>; 2],
+    /// The surface's layout ([`select_in`]): the one asked for, unless a live
+    /// plane keeps the one it has.
+    pub layout: Layout,
 }
 
 /// The surface for `key`, at least `w` x `h` pixels, made current: the
@@ -273,8 +296,31 @@ pub fn select(
     kick: u32,
     seed: Option<ds_retention::DepthTexels>,
     pending: impl Fn(u32) -> bool,
+    finish: impl FnMut() -> i32,
+) -> Result<Selected, i32> {
+    select_in(key, Layout::Linear, w, h, guard, kick, seed, pending, finish)
+}
+
+/// [`select`] with the layout the draw wants the surface in. Only a
+/// [`pe_private`] surface without seeded texels takes another layout than
+/// `Linear`; any other asks for `Linear` whatever `want` says. A surface
+/// whose layout changes keeps a plane holding a whole clear's value (the same
+/// words in any layout) and loses one that is Undefined anyway; a live plane
+/// keeps the surface in the layout it has, which [`Selected::layout`] then
+/// says (the PE reads it as it was written).
+#[allow(clippy::too_many_arguments)]
+pub fn select_in(
+    key: DsKey,
+    want: Layout,
+    w: u32,
+    h: u32,
+    guard: usize,
+    kick: u32,
+    seed: Option<ds_retention::DepthTexels>,
+    pending: impl Fn(u32) -> bool,
     mut finish: impl FnMut() -> i32,
 ) -> Result<Selected, i32> {
+    let want = if pe_private(&key) && seed.is_none() { want } else { Layout::Linear };
     let c = cache();
     c.clock = c.clock.wrapping_add(1);
     let clock = c.clock;
@@ -294,9 +340,12 @@ pub fn select(
                     c.counts.no_surface = c.counts.no_surface.wrapping_add(1);
                     return Err(-1);
                 }
-                (e.stride, e.rows, e.planes) = (s, r, [Plane::UNDEFINED; 2]);
+                (e.stride, e.rows, e.planes, e.layout) = (s, r, [Plane::UNDEFINED; 2], want);
                 note_peak(c);
                 fresh = true;
+            } else if e.layout != want && !e.holds_contents() {
+                /* nothing live: a cleared plane is its value in any layout */
+                e.layout = want;
             }
             i
         }
@@ -333,6 +382,7 @@ pub fn select(
                 written_by: 0,
                 stamp: 0,
                 planes: [Plane::UNDEFINED; 2],
+                layout: want,
             });
             note_peak(c);
             fresh = true;
@@ -365,6 +415,7 @@ pub fn select(
         let now = match holder {
             Some(j) => {
                 let from = c.entries[j].as_ref().map_or(Plane::UNDEFINED, |e| e.planes[p]);
+                /* a live plane in another layout: copy_plane refuses it */
                 if from.is_live() {
                     copy_plane(c, j, slot, p, guard, &mut finish)?;
                 } else {
@@ -401,7 +452,7 @@ pub fn select(
     g.depth_w = w;
     g.depth_h = e.rows;
     g.depth_surface_off = guard as u32;
-    Ok(Selected { fresh, restore })
+    Ok(Selected { fresh, restore, layout: e.layout })
 }
 
 /// What a recorded draw left in the planes of `key`'s surface: its whole
@@ -468,6 +519,17 @@ fn copy_plane(
     finish: &mut impl FnMut() -> i32,
 ) -> Result<(), i32> {
     let (Some(s), Some(d)) = (c.entries[from].as_ref(), c.entries[to].as_ref()) else { return Err(-1) };
+    if s.layout != d.layout {
+        crate::glog_once!(
+            "vivante: the {} of object 0x{:x} is in a surface of another layout ({:?} against {:?}): not copied, the \
+             draw is refused",
+            if p == DEPTH { "depth" } else { "stencil" },
+            if p == DEPTH { d.key.depth_id } else { d.key.stencil_id },
+            s.layout,
+            d.layout
+        );
+        return Err(-crate::util::ENOTSUP);
+    }
     if s.stride != d.stride {
         crate::glog_once!(
             "vivante: the {} of object 0x{:x} is in a surface of another row stride ({} against {} bytes): not \
@@ -542,11 +604,11 @@ fn seed_depth(
     let bytes = e.stride as usize * e.rows as usize;
     // SAFETY: a live allocation of this cache, guard + stride * rows + guard
     // bytes, which no kick uses (waited for above).
-    let all = if scale == 1 { unsafe { e.mem.bytes_mut() } } else { None };
+    let all = if scale == 1 && e.layout == Layout::Linear { unsafe { e.mem.bytes_mut() } } else { None };
     let Some(px) = all.and_then(|a| a.get_mut(guard..guard + bytes)) else {
         crate::glog_once!(
             "vivante: draw refused: the depth the CPU wrote into object 0x{:x} cannot go into its surface \
-             (scale {}, or no CPU view)",
+             (scale {}, a tiled surface, or no CPU view)",
             id,
             scale
         );
@@ -619,6 +681,9 @@ pub unsafe fn resolve_depth(
     };
     if let Some(v) = e.planes[DEPTH].cleared_value() {
         return fill(f32::from_bits(v));
+    }
+    if e.layout != Layout::Linear {
+        return 1; /* never a texture's (pe_private): read nothing rather than wrong */
     }
     /* the wait may submit the open frame: nothing in the cache moves */
     let rc = wait_kick(e.written_by);
@@ -702,7 +767,7 @@ pub fn depth_view(id: u32, guard: usize, kick: u32) -> Option<(u64, u32, u32)> {
         .entries
         .iter_mut()
         .flatten()
-        .find(|e| id != 0 && mine(e.key.plane(DEPTH)) && e.planes[DEPTH].is_live())?;
+        .find(|e| id != 0 && mine(e.key.plane(DEPTH)) && e.planes[DEPTH].is_live() && e.layout == Layout::Linear)?;
     if kick != 0 {
         e.used_by = kick;
     }
@@ -780,6 +845,12 @@ pub fn planes_of(key: DsKey) -> Option<[Plane; 2]> {
 #[cfg(test)]
 pub fn memory_of(key: DsKey) -> Option<(OsalGpuMem, usize)> {
     cache().entries.iter().flatten().find(|e| e.key == key).map(|e| (e.mem, (e.stride * e.rows) as usize))
+}
+
+/// `key`'s surface's layout (tests).
+#[cfg(test)]
+pub fn layout_of(key: DsKey) -> Option<Layout> {
+    cache().entries.iter().flatten().find(|e| e.key == key).map(|e| e.layout)
 }
 
 /// `key`'s surface's row stride in bytes (tests).

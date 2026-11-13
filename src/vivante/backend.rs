@@ -34,7 +34,7 @@ use crate::util::{Global, ENOMEM};
 
 use super::cmd::GcCmd;
 use super::dedup::{self, Group};
-use super::early_z::draw_early_z;
+use super::early_z::{draw_early_z, early_z, ColorLayout, EarlyZ, EarlyZInput, StencilFace};
 use super::internal::{GC_INTERNAL_CLEAR_PS, GC_INTERNAL_CLEAR_VS, GC_INTERNAL_TABLE};
 use super::kick::{GcKick, GC_KICK_MAGIC, GC_KICK_TAIL_BYTES};
 use super::pe_overwrite::{self, PeTarget};
@@ -161,6 +161,16 @@ pub(crate) struct GcState {
     ms_dest_bpp: u32,
     /// The multisampled target's surface format (picks the resolve's RS format).
     ms_dest_surf: u8,
+    /// The tiled-shadow run open in the stream being recorded (tiled_rt.rs):
+    /// its RS copy back into the target's storage is recorded where the
+    /// stream leaves the target, and room for it is kept off the stream's
+    /// capacity ([`RS_BLIT_WORDS`]) while it is open.
+    rt_run: Option<super::tiled_rt::Run>,
+    /// The shadow the draw being recorded renders into (0: its target), and
+    /// whether its depth surface is SUPER_TILED (ds_cache.rs `Surface::layout`):
+    /// set by `draw_one` for every draw, read by the PE and RA writers.
+    rt_bound: u32,
+    ds_super: bool,
     /// The destination's row pitch in bytes (`draw_pitch` x bpp: a window
     /// that is a view into a wider buffer keeps its own).
     ms_dest_stride: u32,
@@ -227,6 +237,9 @@ impl GcState {
         ms_dest_bpp: 0,
         ms_dest_surf: 0,
         ms_dest_stride: 0,
+        rt_run: None,
+        rt_bound: 0,
+        ds_super: false,
         clear_vs_code: OsalGpuMem::ZERO,
         clear_ps_code: OsalGpuMem::ZERO,
         mipgen_ps_code: OsalGpuMem::ZERO,
@@ -967,6 +980,10 @@ pub(super) struct RsBlit {
     pub h: u32,
 }
 
+/// What [`emit_rs`] writes, in words: 22 one-register LOAD_STATEs of two
+/// words each (the flush, the RA-PE stall's two, the RS block's nineteen).
+pub(super) const RS_BLIT_WORDS: u32 = 22 * 2;
+
 /// Record `b`: the colour and depth caches flushed and the PE drained first,
 /// so what the PE wrote before is in memory when the RS reads it
 /// (etnaviv_rs.c:845-850), then the RS block in Mesa's order
@@ -1054,6 +1071,37 @@ fn emit_resolve(c: &mut GcCmd) {
     let src_stride = (src_pitch << 2) | GC_RS_SOURCE_STRIDE_TILING | GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW;
     let (src, dst) = (g.msaa.gpu as u32, g.ms_dest_gpu as u32);
     emit_rs(c, &RsBlit { config, src, src_stride, dst, dst_stride, w: sw, h: sh });
+}
+
+/// End the open tiled-shadow run (tiled_rt.rs), if there is one: its RS copy
+/// back into the target's storage, into the room the run kept off the open
+/// stream's capacity.
+fn end_rt_run() {
+    let g = g();
+    let Some(r) = g.rt_run.take() else { return };
+    let w = &mut g.frames[g.cur].w;
+    w.cap += RS_BLIT_WORDS;
+    emit_rs(w, &super::tiled_rt::resolve_blit(&r));
+    super::tiled_rt::resolved();
+}
+
+/// Open the run `r` for the draw `gl` about to be recorded: room for its end
+/// kept off the capacity, and the storage tiled into the shadow first unless
+/// the draw clears every pixel of it. A run already open (this target's) is
+/// left as it is.
+fn open_rt_run(gl: &GlesDraw, r: super::tiled_rt::Run) {
+    let g = g();
+    if g.rt_run.is_some() {
+        return;
+    }
+    let w = &mut g.frames[g.cur].w;
+    let tile_in = !super::tiled_rt::opens_with_full_clear(gl);
+    if tile_in {
+        emit_rs(w, &super::tiled_rt::tile_in_blit(&r));
+    }
+    w.cap = w.cap.saturating_sub(RS_BLIT_WORDS);
+    g.rt_run = Some(r);
+    super::tiled_rt::opened(tile_in);
 }
 
 /// The depth canary: what the pixel engine actually writes, read back.
@@ -1465,6 +1513,69 @@ fn emit_raster_state(c: &mut GcCmd, d: &GcDraw) {
 
 /// Depth, stencil, blending and the colour surface: registers
 /// 0x01400..0x014bc.
+/// The early-depth decision of a draw (early_z.rs), one for both halves:
+/// PE_DEPTH_CONFIG's EARLY_Z and DISABLE_ZS bits and the RA_EARLY_DEPTH word
+/// come from it. A draw into its linear target, and every clear quad (Mesa
+/// clears with the RS, so it has no clear draw to copy), takes the linear
+/// answer: never early (`draw_early_z`). A draw into a tiled shadow
+/// (`tiled_rt.rs`, `GcState::rt_bound`) takes Mesa's rule with the draw's
+/// depth, stencil and fragment program (docs/notes/gc-tiled-wire.md W5).
+fn draw_ez(d: &GcDraw) -> EarlyZ {
+    let writes_z = d.fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG;
+    if d.is_clear || g().rt_bound == 0 {
+        return draw_early_z(writes_z);
+    }
+    let gl = d.gl;
+    let zs = pe_zs(zs_input(d));
+    let stencil_on = gl.stencil && gl.stencil_id != 0;
+    let face = |func: GlesCmp, sfail: GlesStencilOp, dpfail: GlesStencilOp, dppass: GlesStencilOp| StencilFace {
+        enabled: stencil_on,
+        func_always: func == GLES_CMP_ALWAYS,
+        ops_keep: [sfail, dpfail, dppass].iter().all(|&o| o == GLES_SOP_KEEP),
+    };
+    let front = face(gl.stencil_func, gl.stencil_sfail, gl.stencil_dpfail, gl.stencil_dppass);
+    let back = face(gl.stencil_back_func, gl.stencil_back_sfail, gl.stencil_back_dpfail, gl.stencil_back_dppass);
+    early_z(&EarlyZInput {
+        depth_enabled: gl.depth_test && gl.depth_id != 0,
+        depth_func_always: gl.depth_func == GLES_CMP_ALWAYS,
+        depth_write: zs.depth_write,
+        alpha_test: false,
+        stencil: [front, back],
+        writes_z,
+        uses_discard: d.fs.uses_discard != 0 || fs_discards(d.fs),
+        color: ColorLayout::Tiled,
+        msaa: false,
+        no_early_z: false,
+        ra_write_depth: true,
+    })
+}
+
+/// Does the fragment program hold a TEXKILL (shader.rs `discards`)? Read from
+/// its instruction words, so a program whose `uses_discard` the compiler left
+/// 0 is still seen.
+fn fs_discards(fs: &ShcShader) -> bool {
+    if fs.usc.is_null() || fs.usc_dw == 0 {
+        return false;
+    }
+    // SAFETY: a compiled shader's `usc` holds `usc_dw` words.
+    shader::discards(unsafe { core::slice::from_raw_parts(fs.usc, fs.usc_dw as usize) })
+}
+
+/// What pe_zs.rs reads of a draw.
+fn zs_input(d: &GcDraw) -> ZsInput {
+    let gl = d.gl;
+    ZsInput {
+        is_clear: d.is_clear,
+        clear_depth: d.clear_depth,
+        clear_stencil: d.clear_stencil,
+        depth_test: gl.depth_test,
+        depth_write: gl.depth_write,
+        stencil_test: gl.stencil,
+        has_depth_attachment: gl.depth_id != 0,
+        has_stencil_attachment: gl.stencil_id != 0,
+    }
+}
+
 fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) {
     let gl = d.gl;
     /* Depth and stencil as pe_zs.rs says: a clear tests ALWAYS and writes
@@ -1474,16 +1585,7 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
      * colour-only clear into a target with an attachment tests ALWAYS and
      * writes nothing: the route-3 cluster clears its window's colour every
      * frame (2026-11-04). */
-    let zs = pe_zs(ZsInput {
-        is_clear: d.is_clear,
-        clear_depth: d.clear_depth,
-        clear_stencil: d.clear_stencil,
-        depth_test: gl.depth_test,
-        depth_write: gl.depth_write,
-        stencil_test: gl.stencil,
-        has_depth_attachment: gl.depth_id != 0,
-        has_stencil_attachment: gl.stencil_id != 0,
-    });
+    let zs = pe_zs(zs_input(d));
     let depth_func = match zs.depth_func {
         ZsFunc::Always => GLES_CMP_ALWAYS,
         ZsFunc::Gl => gl.depth_func,
@@ -1556,7 +1658,18 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
     if zs.disable_zs {
         pe_depth |= GC_PE_DEPTH_DISABLE_ZS;
     }
-    pe_depth |= draw_early_z(d.fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG).pe_bits & GC_PE_DEPTH_EARLY_Z;
+    /* a draw into a tiled shadow takes both of the rule's bits, as Mesa's
+     * PE_DEPTH_CONFIG does (golden mode 8's depth-tested draw: EARLY_Z and
+     * DISABLE_ZS); any other draw only EARLY_Z, which the linear answer
+     * never sets */
+    let ez = draw_ez(d);
+    pe_depth |= if g().rt_bound != 0 && !d.is_clear { ez.pe_bits } else { ez.pe_bits & GC_PE_DEPTH_EARLY_Z };
+    /* a depth surface the PE writes super-tiled (ds_cache.rs `layout`):
+     * only a PE-private one beside a tiled shadow, Mesa's layout for every
+     * depth surface (etnaviv_resource.c:572-576) */
+    if g().ds_super {
+        pe_depth |= GC_PE_DEPTH_SUPER_TILED;
+    }
     c.state(GC_PE_DEPTH_CONFIG, pe_depth);
     c.state(GC_PE_DEPTH_NEAR, 0.0f32.to_bits());
     c.state(GC_PE_DEPTH_FAR, 1.0f32.to_bits());
@@ -1705,12 +1818,16 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         pe_color |= GC_PE_COLOR_FORMAT_SUPER_TILED | GC_PE_COLOR_FORMAT_SUPER_TILED_NEW;
     }
     c.state(GC_PE_COLOR_FORMAT, pe_color);
-    /* a 64-bit target: its tiled shadow, TILED (no SUPER_TILED bit) */
+    /* a 64-bit target: its tiled shadow, TILED (no SUPER_TILED bit); a
+     * 32-bit one's under the tiled_rt knob (tiled_rt.rs), the same layout */
     let shadow = if wide_target(gl) { super::wide_target::bind(gl, gc_kick_id()) } else { None };
+    let rt_shadow = g().rt_bound;
     let pitch = if ms {
         ms_pitch(gl.target_w, gles_surf_bytes_per_pixel(gl.target_format))
     } else if shadow.is_some() {
         super::wide_target::stride(gl.target_w)
+    } else if rt_shadow != 0 {
+        super::tiled_rt::stride(gl.target_w)
     } else {
         /* tex_pitch(w), or a view's wider pitch (draw_pitch) */
         crate::backend::draw_pitch(gl) * gles_surf_bytes_per_pixel(gl.target_format)
@@ -1769,6 +1886,8 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         g().msaa.gpu as u32
     } else if let Some(gpu) = shadow {
         gpu as u32
+    } else if rt_shadow != 0 {
+        rt_shadow
     } else if upward {
         (gl.target_gpu + u64::from(gl.target_h.saturating_sub(1)) * u64::from(pitch)) as u32
     } else {
@@ -1788,7 +1907,7 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         GC_PE_LOGIC_OP,
         GC_PE_LOGIC_OP_BASE
             | pe_logic_op_op(GC_LOGIC_OP_COPY)
-            | pe_logic_op_single_buffer(single_buffer(gl, shadow.is_some()))
+            | pe_logic_op_single_buffer(single_buffer(gl, shadow.is_some() || rt_shadow != 0))
             | unk24
             | pe_logic_op_srgb(gles_surf_is_srgb(gl.target_format)),
     );
@@ -1830,8 +1949,10 @@ fn emit_ra_state(c: &mut GcCmd, d: &GcDraw) {
      * it too (early_z.rs), and the rule says so for both.
      */
     ra |= GC_RA_EARLY_DEPTH_WRITE_DISABLE;
-    let ez = draw_early_z(d.fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG);
-    debug_assert_eq!(ez.ra_word, ra);
+    /* ...except into a tiled shadow (tiled_rt.rs), where the one decision
+     * of [`draw_ez`] gives both halves Mesa's words */
+    let ez = draw_ez(d);
+    debug_assert!(g().rt_bound != 0 || ez.ra_word == ra);
     c.state(GC_RA_EARLY_DEPTH, ez.ra_word);
 }
 
@@ -2066,8 +2187,15 @@ fn pe_key(k: &mut dedup::Key, d: &GcDraw, depth_stride: u32, depth_addr: u32) ->
     if wide_target(gl) {
         return false;
     }
-    /* the early-Z rule's writes_z input (emit_pe_state) */
+    /* the early-Z rule's writes_z input (emit_pe_state), and with a tiled
+     * shadow the whole decision (the fragment program is not in this key),
+     * the shadow and the depth layout */
     k.u32(u32::from(d.fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG));
+    k.u32(g().rt_bound);
+    k.u32(u32::from(g().ds_super));
+    if g().rt_bound != 0 {
+        k.u32(draw_ez(d).pe_bits);
+    }
     k.u32(
         u32::from(d.is_clear)
             | u32::from(d.clear_color) << 1
@@ -2125,7 +2253,7 @@ fn pe_key(k: &mut dedup::Key, d: &GcDraw, depth_stride: u32, depth_addr: u32) ->
     k.u32(g().msaa.gpu as u32);
     k.u32(depth_stride);
     k.u32(depth_addr);
-    k.u32(single_buffer(gl, false));
+    k.u32(single_buffer(gl, g().rt_bound != 0));
     true
 }
 
@@ -2386,6 +2514,9 @@ fn frame_submit() -> i32 {
         emit_resolve(&mut f.w);
         g.ms_dest_gpu = 0;
     }
+    /* ...and a tiled shadow back into its target's storage (tiled_rt.rs),
+     * into the room its run kept */
+    end_rt_run();
     if flip_mode() == FLIP_STUDY_RS_COPY {
         rs_flip_study(&mut g.frames[g.cur].w);
     }
@@ -2723,6 +2854,7 @@ pub extern "C" fn gc_shutdown() {
     }
     super::tiled_copy::release_all();
     super::wide_target::release_all();
+    super::tiled_rt::release_all();
     super::ds_cache::release_all();
     if !g.clear_vs_code.impl_.is_null() {
         osal::gpu_free(&mut g.clear_vs_code);
@@ -3019,12 +3151,27 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * chosen first: moving a plane into it may submit the open frame, which
      * resolves and forgets the multisampled target set up below */
     let key = super::ds_cache::key_of(gl, ms);
+    /* Under the tiled_rt knob (tiled_rt.rs, off by default) a 32-bit target
+     * whose depth is a PE-private renderbuffer renders into a TILED shadow,
+     * with its depth surface SUPER_TILED: the shadow first, then the surface
+     * asked for in that layout (docs/notes/gc-tiled-wire.md W4). */
+    let straight = !ms_via_scratch(gl) && !negative_stride(gl.flip_y);
+    let rt = if super::tiled_rt::target_fits(gl, n == 1, straight, pe_color_format(gl.target_format).1)
+        && key.depth_id != 0
+        && super::ds_cache::pe_private(&key)
+    {
+        super::tiled_rt::prepare(gl, g().rt_run)
+    } else {
+        None
+    };
+    let want_layout = if rt.is_some() { super::layout::Layout::SuperTiled } else { super::layout::Layout::Linear };
     /* sized for the larger of the storage GL gave and the target: ES 3.0 lets
      * them differ, and the pixel engine addresses it in target pixels */
     let (ds_w, ds_h) = (gl.ds_w.max(gl.target_w), gl.ds_h.max(gl.target_h));
     clock.lap(Step::GcRest);
-    let selected = match super::ds_cache::select(
+    let selected = match super::ds_cache::select_in(
         key,
+        want_layout,
         ds_w * ms,
         ds_h * ms,
         GC_DEPTH_GUARD_BYTES,
@@ -3039,6 +3186,14 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         Err(rc) => return rc,
     };
     clock.lap(Step::GcDs);
+    /* a live plane keeps its surface in the layout it has: the draw takes the
+     * shadow only with a SUPER_TILED depth, and a SUPER_TILED depth is told
+     * to the PE whatever the colour target is */
+    let ds_super = selected.layout == super::layout::Layout::SuperTiled;
+    let rt = rt.filter(|_| ds_super);
+    if ds_super && rt.is_none() {
+        glog_once!("yakogl/vivante: a draw into a linear target tests a depth surface laid out SUPER_TILED for a tiled shadow (tiled_rt.rs)");
+    }
     if gl.target_gpu == 0 && ensure_no_colour_surface() != 0 {
         return -ENOMEM;
     }
@@ -3073,6 +3228,11 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         }
     }
     clock.lap(Step::GcTiledCopy);
+    /* a tiled-shadow run this draw does not continue ends here, in the
+     * stream its draws are in, before anything after it reads the storage */
+    if g().recording && g().rt_run.is_some() && g().rt_run != rt {
+        end_rt_run();
+    }
 
     /* A stream with no room left, an arena that cannot take this draw's
      * copies, or a draw that leaves a multisampled target ends the frame.
@@ -3137,6 +3297,11 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         g.ms_dest_surf = gl.target_format;
         g.ms_dest_stride = crate::backend::draw_pitch(gl) * bpp;
     }
+    {
+        let g = g();
+        g.rt_bound = rt.map_or(0, |r| r.shadow);
+        g.ds_super = ds_super;
+    }
 
     /* The stream has no room check before a draw, and a draw's size is not
      * known until it is written (its state, uniforms and descriptors), so a
@@ -3168,6 +3333,10 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
          * in this one), before this draw samples them */
         let g = g();
         super::tiled_copy::emit_pending(gl, &mut g.frames[g.cur].w, gc_kick_id());
+        /* the run this draw renders into, opened in the stream it is in */
+        if let Some(r) = rt {
+            open_rt_run(gl, r);
+        }
         // SAFETY: the caller's contract, passed on; `restore` is a copy of
         // the draw with only its clear fields changed.
         let rc = restore.as_ref().map_or(0, |r| unsafe { record(r, clock) });
@@ -3279,6 +3448,8 @@ struct Mark {
     extra_used: u32,
     component_use_marked: bool,
     ms_dest: (u64, u32, u32, u32, u32, u8),
+    /// The open tiled-shadow run (its room is in `cap`).
+    rt_run: Option<super::tiled_rt::Run>,
     /// The occlusion counter's state and the stream's capacity (the armed
     /// counter keeps room for its suspend): a draw taken back leaves the
     /// counter as it found it.
@@ -3297,6 +3468,7 @@ impl Mark {
             extra_used: f.extra_used,
             component_use_marked: g.component_use_marked,
             ms_dest: (g.ms_dest_gpu, g.ms_dest_w, g.ms_dest_h, g.ms_dest_bpp, g.ms_dest_stride, g.ms_dest_surf),
+            rt_run: g.rt_run,
             oq: *oq(),
             cap: f.w.cap,
         }
@@ -3312,6 +3484,7 @@ impl Mark {
         f.extra_used = self.extra_used;
         f.w.cap = self.cap;
         g.component_use_marked = self.component_use_marked;
+        g.rt_run = self.rt_run;
         *oq() = self.oq;
         /* the groups the draw kept are no longer in the stream */
         dedup::invalidate();
@@ -3337,8 +3510,10 @@ unsafe fn record(gl: &GlesDraw, clock: &mut Timer) -> i32 {
     let ds = (depth.0, depth.1, g.depth_h);
     let cur = g.cur;
 
+    /* a draw into a tiled shadow clears with the quad: the RS fill describes
+     * the target and the depth surface as linear (rs_clear.rs) */
     if (gl.do_clear || gl.do_clear_depth || gl.do_clear_stencil)
-        && !(gc_rs_clear_on() && emit_rs_clear(&mut g.frames[cur], gl, ds))
+        && !(gc_rs_clear_on() && g.rt_bound == 0 && emit_rs_clear(&mut g.frames[cur], gl, ds))
         && emit_clear(&mut g.frames[cur], gl, code, depth) != 0
     {
         return -1;
@@ -3560,6 +3735,7 @@ fn retire_wide_targets() {
 /// a 64-bit target in it goes too (`wide_target.rs`).
 pub extern "C" fn gc_texture_released(base: u64, bytes: u64) {
     super::wide_target::released(base, bytes);
+    super::tiled_rt::released(base, bytes);
 }
 
 pub extern "C" fn gc_heap_base(heap: GlesHeap) -> u64 {

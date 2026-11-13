@@ -1050,3 +1050,63 @@ fn refract_a_frame_within_its_ceilings() {
     check("refract", Gpu::Lag, &run(Gpu::Lag, refract), &REFRACT_LAG);
     check("refract", Gpu::Done, &run(Gpu::Done, refract), &REFRACT_DONE);
 }
+
+/// terrain with the `gc_tiled_rt` test knob on (docs/notes/gc-tiled-wire.md
+/// W4 and W5; plan #355): the terrain pass and the overlay, the two passes
+/// into an FBO with a depth renderbuffer, render into a TILED shadow of the
+/// 800x600 target with early depth, resolved by the RS in the stream they
+/// are in. That adds no kick, wait, `finish()` or CPU copy: terrain's own
+/// ceilings hold. Each frame is two runs (the terrain pass, opened by its
+/// whole clear, so no tile-in; the overlay, tiled in from the storage the
+/// chains between left) and two resolves.
+///
+/// ```text
+/// cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2,test-knobs --test gc_scene_kicks -- tiled_rt
+/// ```
+#[cfg(feature = "test-knobs")]
+mod tiled_rt {
+    use super::*;
+    use yakogl::vivante::tiled_rt::{counts, gc_debug_set_tiled_rt, Counts as Runs};
+
+    /// The knob off again however the test ends.
+    struct Off;
+    impl Drop for Off {
+        fn drop(&mut self) {
+            gc_debug_set_tiled_rt(0);
+        }
+    }
+
+    /// Each counted frame's runs, tile-ins and resolves.
+    static FRAMES_SEEN: Mutex<Vec<Runs>> = Mutex::new(Vec::new());
+
+    /// terrain's frame, with what the shadows did in it kept.
+    fn counted_terrain() -> Box<dyn FnMut()> {
+        let mut frame = terrain();
+        Box::new(move || {
+            let before = counts();
+            frame();
+            let after = counts();
+            FRAMES_SEEN.lock().unwrap_or_else(|e| e.into_inner()).push(Runs {
+                runs: after.runs - before.runs,
+                tile_ins: after.tile_ins - before.tile_ins,
+                resolves: after.resolves - before.resolves,
+            });
+        })
+    }
+
+    #[test]
+    fn terrain_with_tiled_targets_within_its_ceilings() {
+        let _off = Off;
+        gc_debug_set_tiled_rt(1);
+        for (gpu, ceil) in [(Gpu::Lag, &TERRAIN_LAG), (Gpu::Done, &TERRAIN_DONE)] {
+            FRAMES_SEEN.lock().unwrap_or_else(|e| e.into_inner()).clear();
+            check("terrain (tiled_rt)", gpu, &run(gpu, counted_terrain), ceil);
+            let seen = FRAMES_SEEN.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            eprintln!("terrain (tiled_rt) {gpu:?}: shadow runs a frame {seen:?}");
+            assert_eq!(seen.len(), FRAMES);
+            for (n, f) in seen.iter().enumerate().skip(FIRST_COUNTED - 1) {
+                assert_eq!(*f, Runs { runs: 2, tile_ins: 1, resolves: 2 }, "{gpu:?}: frame {}", n + 1);
+            }
+        }
+    }
+}
