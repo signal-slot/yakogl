@@ -440,13 +440,22 @@ impl Ev<'_, '_> {
                 let [w, h] = super::tex_size_2d(super::tex_state(base), l[0]);
                 Some(([w, h, super::tex_depth(base) + 1, 0], [t[0]; 4]))
             }
+            /* textureSize of a native cube (`pvr_native_cube` on): one
+             * face's size at the level from the TEXTYPE_CUBE word, as a 2D
+             * image's. */
+            Op::TexSize { sampler, dim: ir::TexDim::Cube, lod } if yakogl::shaderc::native_cube_enabled() => {
+                let (l, t) = self.src_t(lod)?;
+                let [w, h] = super::tex_size_2d(super::tex_state((self.inp.marker)(sampler)), l[0]);
+                Some(([w, h, 0, 0], [t[0]; 4]))
+            }
             /* textureSize of a stacked texture: glsl2usc's pvr_arrSize
-             * (w, h / layers, layers) and pvr_cubeSize (w, h / 6). */
+             * (w, h / layers, layers) and pvr_cubeSize (w, h / 6), the
+             * quotient at least 1. */
             Op::TexSize { sampler, dim: dim @ (ir::TexDim::D2Array | ir::TexDim::Cube), lod } => {
                 let (l, t) = self.src_t(lod)?;
                 let [w, h] = super::tex_size_2d(super::tex_state((self.inp.marker)(sampler)), l[0]);
                 let count = if dim == ir::TexDim::Cube { 6 } else { f(self.layers_of(sampler)?) as i32 };
-                let per = (h as i32).checked_div(count).unwrap_or(0) as u32;
+                let per = (h as i32).checked_div(count).unwrap_or(0).max(1) as u32;
                 Some(([w, per, count as u32, 0], [t[0]; 4]))
             }
             /* A shadow look-up on a 2D sampler, or on a native 2D array
@@ -560,12 +569,14 @@ impl Ev<'_, '_> {
                 let marker = super::marker_at_level(base, (lv[0] as i32 as f32).to_bits());
                 Some(([0, 1, 2, 3].map(|k| super::sample_model(marker, u, v, k)), [t[0] || t[1] || t[2] || lt[0]; 4]))
             }
-            /* textureSize of a 3D texture: pvr_volSize (level 0). */
+            /* textureSize of a 3D texture in the grid: pvr_volSize's level-0
+             * slice size and count, each halved `lod` times and at least 1. */
             Op::TexSize { sampler, dim: ir::TexDim::D3, lod } => {
-                let (_, t) = self.src_t(lod)?;
+                let (l, t) = self.src_t(lod)?;
                 let (_, [sw, sh], n) =
                     super::vol_grid(super::tex_state((self.inp.marker)(sampler)), self.layers_of(sampler)?);
-                Some(([sw as u32, sh as u32, n as u32, 0], [t[0]; 4]))
+                let at = |x: i32| (x as u32).checked_shr(l[0]).unwrap_or(0).max(1);
+                Some(([at(sw), at(sh), at(n), 0], [t[0]; 4]))
             }
             /* texelFetch on a 3D texture: pvr_volFetch (level 0). */
             Op::Tex {
