@@ -1,0 +1,49 @@
+# ES 3.0 implementation limits per GPU build against the ES 3.0.6 minimum (Tables 6.32-6.34).
+# Builds: gpu-v3d, gpu-powervr, gpu-vivante, the default ES 3.0 report (not report-es2). Mali is left out (stage-5 plans).
+# Values are what `cargo test --test es3_caps -- --nocapture --test-threads=1` prints (the ok/GAP lines) at commit de328573bbce, one run per build:
+#   host-test,gpu-powervr | host-test,gpu-vivante | host-test,gpu-v3d,shaderc-online,no-shader-table
+# Regenerate: rerun those three, copy "name = value" from each line, update the commit above; the source column is file:line at that commit.
+# rule ">=": value must be at least the minimum; "<=": at most it. meets_*: yes/no. owner_*: plan or issue holding the gap, "-" when met.
+# Owners: #359 = this plan (varying and uniform-block limits), #339 = MAX_SAMPLES, #354 = compressed formats, RC14 = mrt4 (docs/es3-cts-failures.md).
+pname	es3_min	rule	v3d	powervr	vivante	meets_v3d	meets_powervr	meets_vivante	owner_v3d	owner_powervr	owner_vivante	source
+MAX_3D_TEXTURE_SIZE	256	>=	256	256	256	yes	yes	yes	-	-	-	src/gl/state.rs:1290
+MAX_ARRAY_TEXTURE_LAYERS	256	>=	256	256	256	yes	yes	yes	-	-	-	src/gl/state.rs:1289
+MAX_COLOR_ATTACHMENTS	4	>=	3	3	3	no	no	no	RC14	RC14	RC14	src/gl/state.rs:1286 (context.rs:185, backend.rs:832)
+MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS	50048	>=	1536	1536	1536	no	no	no	#359	#359	#359	src/gl/state.rs:1268
+MAX_COMBINED_TEXTURE_IMAGE_UNITS	32	>=	32	32	32	yes	yes	yes	-	-	-	src/gl/state.rs:1222
+MAX_COMBINED_UNIFORM_BLOCKS	24	>=	24	24	24	yes	yes	yes	-	-	-	src/gl/state.rs:1264
+MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS	50176	>=	1536	1536	1536	no	no	no	#359	#359	#359	src/gl/state.rs:1268
+MAX_CUBE_MAP_TEXTURE_SIZE	2048	>=	4096	4096	4096	yes	yes	yes	-	-	-	src/gl/state.rs:1227
+MAX_DRAW_BUFFERS	4	>=	3	3	3	no	no	no	RC14	RC14	RC14	src/gl/state.rs:1285 (context.rs:175, backend.rs:832)
+MAX_ELEMENT_INDEX	16777215	>=	16777215	16777215	16777215	yes	yes	yes	-	-	-	src/gl/state.rs:1291
+MAX_FRAGMENT_INPUT_COMPONENTS	60	>=	32	60	60	no	yes	yes	#359	-	-	src/gl/state.rs:1256 (context.rs:194; MAX_VARYING_VECTORS context.rs:124 vivante, :146 powervr, :154 v3d)
+MAX_FRAGMENT_UNIFORM_BLOCKS	12	>=	12	12	12	yes	yes	yes	-	-	-	src/gl/state.rs:1263
+MAX_FRAGMENT_UNIFORM_COMPONENTS	896	>=	1536	1536	1536	yes	yes	yes	-	-	-	src/gl/state.rs:1251 (context.rs:83)
+MAX_FRAGMENT_UNIFORM_VECTORS	224	>=	384	384	384	yes	yes	yes	-	-	-	src/gl/state.rs:1235 (context.rs:90)
+MAX_PROGRAM_TEXEL_OFFSET	7	>=	7	7	7	yes	yes	yes	-	-	-	src/gl/state.rs:1310 (context.rs:198)
+MIN_PROGRAM_TEXEL_OFFSET	-8	<=	-8	-8	-8	yes	yes	yes	-	-	-	src/gl/state.rs:1309
+MAX_RENDERBUFFER_SIZE	2048	>=	4096	4096	4096	yes	yes	yes	-	-	-	src/gl/state.rs:1228
+MAX_SAMPLES	4	>=	1	1	1	no	no	no	#339	#339	#339	src/gl/state.rs:1287 (msaa.rs:28)
+MAX_TEXTURE_IMAGE_UNITS	16	>=	16	16	16	yes	yes	yes	-	-	-	src/gl/state.rs:1221
+MAX_TEXTURE_SIZE	2048	>=	4096	4096	4096	yes	yes	yes	-	-	-	src/gl/state.rs:1226
+MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS	64	>=	64	64	64	yes	yes	yes	-	-	-	src/gl/state.rs:1295 (tf.rs:32)
+MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS	4	>=	4	4	4	yes	yes	yes	-	-	-	src/gl/state.rs:1298 (tf.rs:35)
+MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS	4	>=	64	64	64	yes	yes	yes	-	-	-	src/gl/state.rs:1301 (tf.rs:43)
+MAX_UNIFORM_BLOCK_SIZE	16384	>=	6144	6144	6144	no	no	no	#359	#359	#359	src/gl/state.rs:1266 (context.rs:83)
+MAX_UNIFORM_BUFFER_BINDINGS	24	>=	24	24	24	yes	yes	yes	-	-	-	src/gl/state.rs:1265 (context.rs:203)
+MAX_VARYING_COMPONENTS	60	>=	32	60	60	no	yes	yes	#359	-	-	src/gl/state.rs:1254 (context.rs:124 vivante, :146 powervr, :154 v3d)
+MAX_VARYING_VECTORS	15	>=	8	15	15	no	yes	yes	#359	-	-	src/gl/state.rs:1236 (context.rs:124 vivante, :146 powervr, :154 v3d)
+MAX_VERTEX_ATTRIBS	16	>=	16	16	16	yes	yes	yes	-	-	-	src/gl/state.rs:1220 (context.rs:78)
+MAX_VERTEX_OUTPUT_COMPONENTS	64	>=	32	60	60	no	no	no	#359	#359	#359	src/gl/state.rs:1255 (context.rs:193)
+MAX_VERTEX_TEXTURE_IMAGE_UNITS	16	>=	16	16	16	yes	yes	yes	-	-	-	src/gl/state.rs:1225 (backend.rs:711)
+MAX_VERTEX_UNIFORM_BLOCKS	12	>=	12	12	12	yes	yes	yes	-	-	-	src/gl/state.rs:1263
+MAX_VERTEX_UNIFORM_COMPONENTS	1024	>=	1536	1536	1536	yes	yes	yes	-	-	-	src/gl/state.rs:1250 (context.rs:83)
+MAX_VERTEX_UNIFORM_VECTORS	256	>=	384	384	384	yes	yes	yes	-	-	-	src/gl/state.rs:1234 (context.rs:89)
+UNIFORM_BUFFER_OFFSET_ALIGNMENT	256	<=	4	4	4	yes	yes	yes	-	-	-	src/gl/state.rs:1267
+NUM_COMPRESSED_TEXTURE_FORMATS	10	>=	3	5	5	no	no	no	#354	#354	#354	src/gl/state.rs:1212 (texture.rs:3421)
+MAX_TEXTURE_LOD_BIAS	2	>=	2	2	2	yes	yes	yes	-	-	-	src/gl/state.rs:1293
+MAX_SERVER_WAIT_TIMEOUT	0	>=	0	0	0	yes	yes	yes	-	-	-	src/gl/state.rs:1311
+ALIASED_LINE_WIDTH_RANGE[0]	1	<=	1	1	1	yes	yes	yes	-	-	-	src/gl/state.rs:995
+ALIASED_LINE_WIDTH_RANGE[1]	1	>=	16	16	16	yes	yes	yes	-	-	-	src/gl/state.rs:996
+ALIASED_POINT_SIZE_RANGE[0]	1	<=	1	1	1	yes	yes	yes	-	-	-	src/gl/state.rs:1000
+ALIASED_POINT_SIZE_RANGE[1]	1	>=	512	511	64	yes	yes	yes	-	-	-	src/gl/state.rs:1001 (POINT_SIZE_MAX state.rs:323)
