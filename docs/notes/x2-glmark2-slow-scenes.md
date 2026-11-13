@@ -64,6 +64,16 @@ not touched. W1 to W5 are on main (`9cdeff6d`); the earlier closed pull
 request for this item only added case 243 probe helpers to `ts.rs` and failed
 CI, and was not reused.
 
+## Fifth attempt (plan #355, 2026-11-13): still no measurement
+
+Host `orion` once more, same state: `getent hosts armadillo` returned nothing
+and `tools/board.sh x2 status` stopped at `BOARD_HOST` unset (no `target:x2`
+or `target:x2-console` lease reached the task). No jump, no image, the board
+was not touched. W1 to W5 are on main (`9cdeff6d`) and there is no host work
+left for this item; the earlier closed pull request (`depth_tiled.rs`, nothing
+calls it) is not reused. This needs a task placed on a node that logs in to
+the board.
+
 ## What is left
 
 Rerun from one of the nodes that log in (see the checks above), with
