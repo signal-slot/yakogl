@@ -24,7 +24,9 @@ import time
 
 PROMPT = re.compile(rb"\n=> ")
 STOP = re.compile(rb"Hit any key to stop autoboot")
-LONG_MIB = 255   # run.sh: long.bin, image_size 0xff00000, in the 256 MiB window
+# run.sh: long.bin has image_size 0xff00000 (255 MiB, in the 256 MiB window);
+# on the SD card it holds 32 MiB of data, over TFTP 255 MiB (sparse).
+LONG_MIB = {"mmc": 32, "net": 255}
 LOAD = "0xa0000000"
 WINDOW = "0x10000000"
 UNDO = "mp2z: undo: nothing persistent; run bootcmd boots ST Linux"
@@ -183,6 +185,7 @@ def typed(q, line):
 # The load window must be at least this wide (seconds) for a cut to be
 # meaningful; the cut waits at most a quarter of the measured window.
 MIN_WINDOW = 3.0
+THROTTLE = 4 << 20   # SD read bytes per second in the window and cut boots
 
 
 def cutoff_cases(big_tftp):
@@ -226,15 +229,24 @@ def main():
         ap.add_argument("--" + a, required=True)
     ap.add_argument("--big-tftp", action="store_true")
     a = ap.parse_args()
-    argv = [a.qemu, "-machine", "virt", "-cpu", "cortex-a57", "-m", a.mem,
+    def qemu_argv(throttle=0):
+        sd = "if=none,id=sd0,format=raw,file=" + a.disk
+        if throttle:
+            sd += ",throttling.bps-read=%d" % throttle
+        return [a.qemu, "-machine", "virt", "-cpu", "cortex-a57", "-m", a.mem,
             "-display", "none", "-serial", "stdio", "-monitor", "none", "-no-reboot",
             "-bios", a.uboot,
             "-drive", "if=pflash,unit=1,format=raw,file=" + a.env,
             "-device", "sdhci-pci",
-            "-drive", "if=none,id=sd0,format=raw,file=" + a.disk,
+            "-drive", sd,
             "-device", "sd-card,drive=sd0",
             "-netdev", "user,id=n0,tftp=" + a.tftp,
             "-device", "e1000,netdev=n0"]
+    argv = qemu_argv()
+    # The SD card read rate for the load-window and power-cut boots: long.bin
+    # is real data (not holes) in the image, so a 255 MiB load takes at least
+    # 255 MiB / THROTTLE seconds whatever the host: the window has a floor.
+    cut_argv = qemu_argv(THROTTLE)
     res = {"ok": 0, "failed": 0}
 
     def check(name, cond, detail=""):
@@ -242,7 +254,7 @@ def main():
         print("%s %s%s" % ("ok  " if cond else "FAIL", name,
                            "" if cond or not detail else ": " + detail), flush=True)
 
-    def session(name, body):
+    def session(name, body, argv=argv):
         q = Qemu(argv, os.path.join(a.logs, name + ".log"))
         try:
             q.boot()
@@ -315,10 +327,10 @@ def main():
             t0 = time.monotonic()
             q.expect(re.compile(rb"mp2z: loaded "), 300)
             return time.monotonic() - t0
-        w = session("window-" + route, calib)
+        w = session("window-" + route, calib, cut_argv)
         if w is not None:
             windows[route] = w
-            print("load window %s: %.1f s (%d MiB)" % (route, w, LONG_MIB), flush=True)
+            print("load window %s: %.1f s (%d MiB file)" % (route, w, LONG_MIB[route]), flush=True)
             check("window-" + route + ": load window at least %.0f s" % MIN_WINDOW, w >= MIN_WINDOW,
                   "%.2f s" % w)
     # Power cuts: the stored environment must come out of each unchanged.
@@ -328,7 +340,7 @@ def main():
                 check(name + ": load window measured", False)
                 continue
             wait = min(wait, windows[route] / 4)
-        q = Qemu(argv, os.path.join(a.logs, name + ".log"))
+        q = Qemu(cut_argv, os.path.join(a.logs, name + ".log"))
         try:
             q.boot()
             typed(q, line)
