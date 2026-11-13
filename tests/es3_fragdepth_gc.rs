@@ -18,11 +18,13 @@
 //! lane-faithful interpreter of `tests/common`.
 //!
 //! Early Z is pinned through the rule: `writes_z` is derived from the compiled
-//! record (`ps_depth_out_reg != SHC_VIV_NO_REG`, as the back end will) and fed
+//! record (`ps_depth_out_reg != SHC_VIV_NO_REG`, as the back end does) and fed
 //! to `yakogl::vivante::early_z::early_z`, whose early test, early write,
 //! PE_DEPTH_CONFIG bits and RA_EARLY_DEPTH word are asserted. The back end
-//! does not call the rule yet: the PE/RA words it EMITS are pinned by item
-//! gc-fragdepth-earlyz.
+//! calls `early_z()` for a program that writes depth: `tiled_ez` runs the rule
+//! with the layout for a draw into a tiled shadow, and `draw_early_z` the
+//! linear "never" for every other draw; the PE/RA words it EMITS are pinned
+//! below.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_fragdepth_gc
