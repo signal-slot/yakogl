@@ -80,6 +80,58 @@ class Single(Env):
         self.assertEqual(r.returncode, 1)
         self.assertIn(b"not defined", r.stderr)
 
+    def test_print_names_after_the_option(self):
+        # The usage line says `print IMAGE [-n] [NAME ...]`: -n and the names
+        # may follow the image. argparse (3.12.3) leaves the names that come
+        # after an option unparsed unless they are taken from the leftovers.
+        img = self.path("env", copy(VARS, 0x400))
+        r = self.ok("print", img, "-n", "boot_targets")
+        self.assertEqual(r.stdout, b"mmc0 mmc1\n")
+        r = self.ok("print", img, "boot_targets", "-n")
+        self.assertEqual(r.stdout, b"mmc0 mmc1\n")
+        # -n still takes exactly one name, wherever the names stand.
+        self.refused("print", img, "bootcmd", "-n", "boot_targets")
+        self.refused("print", img, "-n")
+        r = self.run_tool("print", img, "-n", "missing")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn(b"not defined", r.stderr)
+        r = self.run_tool("print", img, "--no-such-option")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn(b"unrecognized arguments: --no-such-option", r.stderr)
+        # An option after -n is not a name, and `--` is not taken as one.
+        for tail in (["-n", "-x"], ["-n", "--", "boot_targets"]):
+            r = self.run_tool("print", img, *tail)
+            self.assertEqual(r.returncode, 2, tail)
+            self.assertIn(b"unrecognized arguments", r.stderr)
+
+    def test_print_layout_options_are_not_names(self):
+        # The value of a layout option is its own, before or after the
+        # subcommand and around -n; it never joins the names.
+        img = self.path("env", copy(VARS, 0x400))
+        for args in (("print", img, "--size", "0x400", "-n", "boot_targets"),
+                     ("--size", "0x400", "print", img, "-n", "boot_targets"),
+                     ("print", "--size", "0x400", img, "-n", "boot_targets"),
+                     ("print", img, "-n", "boot_targets", "--size", "0x400")):
+            r = self.ok(*args)
+            self.assertEqual(r.stdout, b"mmc0 mmc1\n", args)
+        # Several names keep the order of the command line.
+        r = self.ok("print", img, "bootcmd", "--size", "0x400", "boot_targets")
+        self.assertEqual(r.stdout, b"bootcmd=run bootcmd_stm32mp\nboot_targets=mmc0 mmc1\n")
+
+    def test_only_print_takes_leftover_names(self):
+        # The leftovers become names for print alone; the other subcommands
+        # still refuse a stray argument (exit 2, argparse's message).
+        img = self.path("env", copy(VARS, 0x400))
+        out = self.path("out")
+        for args in (("check", img, "extra"),
+                     ("unset", img, out, "boot_targets", "--redundant", "bootcmd"),
+                     ("set", img, out, "a=b", "--redundant", "c=d"),
+                     ("diff", img, img, "extra")):
+            r = self.run_tool(*args)
+            self.assertEqual(r.returncode, 2, args)
+            self.assertIn(b"unrecognized arguments", r.stderr)
+            self.assertFalse(os.path.exists(out), "output written on a refusal")
+
     def test_check(self):
         img = self.path("env", copy(VARS, 0x400))
         r = self.ok("check", img)
