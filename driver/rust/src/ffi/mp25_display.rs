@@ -195,6 +195,58 @@ const _: () = assert!(offset_of!(YdMp25LtdcData, on) == 36);
 const _: () = assert!(offset_of!(YdMp25LtdcData, configured) == 38);
 const _: () = assert!(offset_of!(YdMp25LtdcData, fb) == 40);
 
+/// The registers the extern entry points reach: the hardware on the board.
+#[cfg(not(test))]
+fn port() -> Hw {
+    // SAFETY: `cfg->base` is the shim's `device_map()` range (the entry
+    // points' contract).
+    unsafe { Hw::new() }
+}
+
+/// In the host tests the entry points reach the register model installed
+/// with `tests::with_display`, or plain memory when none is installed (the
+/// pattern of `ffi::mp25_i2c`).
+#[cfg(test)]
+struct Port;
+
+#[cfg(test)]
+thread_local! {
+    static DISPLAY: core::cell::Cell<Option<*const dyn Mmio>> = const { core::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn port() -> Port {
+    Port
+}
+
+#[cfg(test)]
+impl Port {
+    fn with<R>(&self, f: impl FnOnce(&dyn Mmio) -> R) -> R {
+        match DISPLAY.with(|d| d.get()) {
+            // SAFETY: `with_display` keeps the model alive while installed.
+            Some(m) => f(unsafe { &*m }),
+            // SAFETY: the caller's addresses are plain memory it owns.
+            None => f(&unsafe { Hw::new() }),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Mmio for Port {
+    fn read32(&self, a: usize) -> u32 {
+        self.with(|m| m.read32(a))
+    }
+    fn write32(&self, a: usize, v: u32) {
+        self.with(|m| m.write32(a, v))
+    }
+    fn read8(&self, a: usize) -> u8 {
+        self.with(|m| m.read8(a))
+    }
+    fn write8(&self, a: usize, v: u8) {
+        self.with(|m| m.write8(a, v))
+    }
+}
+
 fn ltdc_format(f: u32) -> Result<ltdc::Format, i32> {
     match f {
         YD_MP25_LTDC_FMT_ARGB8888 => Ok(ltdc::Format::Argb8888),
@@ -312,7 +364,7 @@ pub unsafe extern "C" fn yd_mp25_ltdc_probe(
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    unsafe { ltdc_probe_with(&Hw::new(), &*env, &*cfg, &mut *data) }
+    unsafe { ltdc_probe_with(&port(), &*env, &*cfg, &mut *data) }
 }
 
 /// Program the timings, polarities, background and layer 1 (`fb_phys`,
@@ -337,7 +389,7 @@ pub unsafe extern "C" fn yd_mp25_ltdc_configure(
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    unsafe { ltdc_configure_with(&Hw::new(), &*cfg, &mut *data, &*mode, fb_phys, pitch, format) }
+    unsafe { ltdc_configure_with(&port(), &*cfg, &mut *data, &*mode, fb_phys, pitch, format) }
 }
 
 /// Error interrupts unmasked, layer on, a vertical-blanking reload, `FUT`,
@@ -357,7 +409,7 @@ pub unsafe extern "C" fn yd_mp25_ltdc_enable(
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    unsafe { ltdc_enable_with(&Hw::new(), &*env, &*cfg, &mut *data) }
+    unsafe { ltdc_enable_with(&port(), &*env, &*cfg, &mut *data) }
 }
 
 /// Layer off, errors masked, an immediate reload, `LTDCEN` cleared.
@@ -374,7 +426,7 @@ pub unsafe extern "C" fn yd_mp25_ltdc_disable(
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    unsafe { ltdc_disable_with(&Hw::new(), &*env, &*cfg, &mut *data) }
+    unsafe { ltdc_disable_with(&port(), &*env, &*cfg, &mut *data) }
 }
 
 /// Point the running layer at `fb_phys` (same pitch and format) and wait
@@ -393,7 +445,7 @@ pub unsafe extern "C" fn yd_mp25_ltdc_set_fb(
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    unsafe { ltdc_set_fb_with(&Hw::new(), &*env, &*cfg, &mut *data, fb_phys) }
+    unsafe { ltdc_set_fb_with(&port(), &*env, &*cfg, &mut *data, fb_phys) }
 }
 
 /// Wait for one line interrupt at the end of the active area (polled,
@@ -407,7 +459,7 @@ pub unsafe extern "C" fn yd_mp25_ltdc_wait_frame(cfg: *const YdMp25LtdcConfig, e
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    let (c, env, hw) = unsafe { (&*cfg, &*env, Hw::new()) };
+    let (c, env, hw) = unsafe { (&*cfg, &*env, port()) };
     rc(ltdc_of(&hw, c).and_then(|l| l.wait_frame(&hw, env)))
 }
 
@@ -423,7 +475,7 @@ pub unsafe extern "C" fn yd_mp25_ltdc_isr(cfg: *const YdMp25LtdcConfig, data: *m
         return 0;
     }
     // SAFETY: the caller's contract.
-    let (c, d, hw) = unsafe { (&*cfg, &mut *data, Hw::new()) };
+    let (c, d, hw) = unsafe { (&*cfg, &mut *data, port()) };
     let s = match ltdc_of(&hw, c) {
         Ok(l) => {
             let s = l.status(&hw);
@@ -730,7 +782,7 @@ pub unsafe extern "C" fn yd_mp25_dsi_probe(cfg: *const YdMp25DsiConfig, env: *co
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    unsafe { dsi_probe_with(&Hw::new(), &*env, &*cfg) }
+    unsafe { dsi_probe_with(&port(), &*env, &*cfg) }
 }
 
 /// The device on the link (Zephyr's `mipi_dsi_attach`): `lanes` (0 = the
@@ -775,7 +827,7 @@ pub unsafe extern "C" fn yd_mp25_dsi_enable(
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    unsafe { dsi_enable_with(&Hw::new(), &*env, &*cfg, &mut *data, &*mode) }
+    unsafe { dsi_enable_with(&port(), &*env, &*cfg, &mut *data, &*mode) }
 }
 
 /// Command mode, the PLL and `DSIEN` off, host and PHY held in reset
@@ -789,7 +841,7 @@ pub unsafe extern "C" fn yd_mp25_dsi_disable(cfg: *const YdMp25DsiConfig, data: 
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    unsafe { dsi_disable_with(&Hw::new(), &*cfg, &mut *data) }
+    unsafe { dsi_disable_with(&port(), &*cfg, &mut *data) }
 }
 
 // ---- ADV7535 ----------------------------------------------------------------------
@@ -1067,6 +1119,7 @@ mod tests {
     use crate::ip::dw_mipi_dsi::regs as dr;
     use crate::ip::stm32_dsi_phy::regs as pr;
     use crate::ip::stm32_i2c;
+    use crate::model_mp25_display::Mp25Display;
     use crate::model_mp25_i2c::{self as i2cm, Adv7535Config, Adv7535Handle, EdidMode, Mp25I2c};
     use core::ffi::c_void;
     use std::cell::RefCell;
@@ -1558,6 +1611,238 @@ mod tests {
         assert_eq!(r(ltdc::TWCR), (1649 << 16) | 749);
         assert_eq!(r(ltdc::GCR) & ltdc::GCR_LTDCEN, 0);
         assert!(c.lines.borrow().iter().any(|(_, s)| s.contains("reload not taken")));
+    }
+
+    /// Run `f` with `m` behind the LTDC and DSI extern entry points.
+    fn with_display<R>(m: &Mp25Display, f: impl FnOnce() -> R) -> R {
+        struct Clear;
+        impl Drop for Clear {
+            fn drop(&mut self) {
+                DISPLAY.with(|d| d.set(None));
+            }
+        }
+        let p: *const (dyn Mmio + '_) = m;
+        // SAFETY: only the lifetime is erased; `Clear` removes the pointer
+        // before this function returns, so `m` outlives every use.
+        let p = unsafe { core::mem::transmute::<*const (dyn Mmio + '_), *const dyn Mmio>(p) };
+        DISPLAY.with(|d| d.set(Some(p)));
+        let _clear = Clear;
+        f()
+    }
+
+    /// What the chain left behind, for the end-to-end tests.
+    struct Chain {
+        ld: YdMp25LtdcData,
+        dd: YdMp25DsiData,
+        ad: YdMp25Adv7535Data,
+        mode: YdMp25Mode,
+        sink: YdMp25HdmiSink,
+        choice: i32,
+    }
+
+    /// A Zephyr driver's order over the extern entry points only, on the
+    /// display model and the I2C model behind `e`: DSI probe and attach
+    /// (`lanes`, RGB888, the ADV7535's video-mode flags), the bridge's init /
+    /// HPD / EDID, the mode, then the LTDC (probe, configure an XRGB8888
+    /// layer with pitch ROUND_UP(W * 4, 64), enable; Linux's
+    /// `ltdc_crtc_atomic_enable` precedes the bridges' `pre_enable`), the DSI
+    /// host (`dw_mipi_dsi_bridge_atomic_enable`, `dw_mipi_dsi_stm_*`) and the
+    /// ADV7535's start (`adv7533_mode_set`, `adv7511_power_on`).
+    fn bring_up(m: &Mp25Display, e: &YdEnv, lanes: u32) -> Chain {
+        let mut ch = Chain {
+            ld: YdMp25LtdcData::default(),
+            dd: YdMp25DsiData::default(),
+            ad: YdMp25Adv7535Data::default(),
+            mode: YdMp25Mode::default(),
+            sink: YdMp25HdmiSink::default(),
+            choice: -1,
+        };
+        let cfg = YdMp25DsiConfig { lanes, ..DSI_CFG };
+        let acfg = YdMp25Adv7535Config { lanes: lanes as u8, ..ADV_CFG };
+        let mut edid = [0u8; 128];
+        // SAFETY: every pointer is a local of this function or of the caller.
+        with_display(m, || unsafe {
+            assert_eq!(yd_mp25_dsi_probe(&cfg, e), 0);
+            assert_eq!(
+                yd_mp25_dsi_attach(&cfg, &mut ch.dd, lanes, YD_MP25_DSI_FMT_RGB888, YD_MP25_DSI_MODE_ADV7535),
+                0
+            );
+            assert_eq!(yd_mp25_adv7535_init(&acfg, &mut ch.ad, e), 0);
+            assert_eq!(yd_mp25_adv7535_hpd(&mut ch.ad, e), 1);
+            assert_eq!(yd_mp25_adv7535_read_edid(&mut ch.ad, e, 0, edid.as_mut_ptr()), 0);
+            ch.choice = yd_mp25_choose_mode(&acfg, edid.as_ptr(), 128, &mut ch.mode, &mut ch.sink);
+            let pitch = (ch.mode.hactive * 4).next_multiple_of(64);
+            assert_eq!(yd_mp25_ltdc_probe(&LTDC_CFG, &mut ch.ld, e), 0);
+            assert_eq!(
+                yd_mp25_ltdc_configure(&LTDC_CFG, &mut ch.ld, &ch.mode, FB, pitch, YD_MP25_LTDC_FMT_XRGB8888),
+                0
+            );
+            assert_eq!(yd_mp25_ltdc_enable(&LTDC_CFG, &mut ch.ld, e), 0);
+            assert_eq!(yd_mp25_dsi_enable(&cfg, &mut ch.dd, e, &ch.mode), 0);
+            assert_eq!(yd_mp25_adv7535_start(&acfg, &mut ch.ad, e, &ch.mode, &ch.sink), 0);
+        });
+        ch
+    }
+
+    /// The final state both modes share: no ordering violation, the PLL and
+    /// the LTDC running, the lanes and the PHY as `dw_mipi_dsi_phy_init` /
+    /// `dw_mipi_dsi_stm_phy_init` set them, the layer taken over.
+    fn assert_running(m: &Mp25Display, ch: &Chain, lanes: u32) {
+        assert_eq!(m.violations(), Vec::<String>::new());
+        assert!(m.pll_active().is_some(), "the DSI PLL is committed");
+        assert_ne!(m.ltdc_reg(ltdc::GCR) & ltdc::GCR_LTDCEN, 0);
+        assert_eq!((ch.ld.on, ch.dd.on, ch.ad.started), (1, 1, 1));
+        assert_eq!(m.dsi_reg(dr::PHY_IF_CFG) & 3, lanes - 1); // N_LANES
+        assert_ne!(m.dsi_reg(dr::PWR_UP), 0);
+        assert_eq!(m.dsi_reg(dr::MODE_CFG), 0); // video mode
+        assert_ne!(m.dsi_reg(dr::PHY_RSTZ) & dr::PHY_ENFORCEPLL, 0);
+        let (w, h) = (ch.mode.hactive, ch.mode.vactive);
+        assert_eq!((ch.ld.pitch, ch.ld.width, ch.ld.height), ((w * 4).next_multiple_of(64), w, h));
+        assert_eq!(m.ltdc_active(0x134), FB as u32); // L1CFBAR taken over by the reload
+        assert_ne!(m.ltdc_active(0x10c) & ltdc::LXCR_LEN, 0); // L1CR.LEN
+    }
+
+    /// Linux sequence mirrored: ltdc.c `ltdc_crtc_mode_set_nofb` /
+    /// `ltdc_crtc_atomic_enable`, dw_mipi_dsi-stm.c `dw_mipi_dsi_phy_init`,
+    /// dw-mipi-dsi.c `dw_mipi_dsi_bridge_atomic_enable` and adv7533.c
+    /// `adv7533_mode_set`, at the DK's 1280x720@60 on four lanes with an EDID
+    /// that prefers it (VIC 4, 74.25 MHz, 445.5 Mbit/s a lane).
+    #[test]
+    fn e2e_720p60_on_four_lanes_through_the_c_entry_points() {
+        let soc = Soc::new();
+        let (c, adv) = rig(&soc, Adv7535Config::default());
+        let e = env(&c);
+        let m = Mp25Display::new();
+        let ch = bring_up(&m, &e, 4);
+        assert_eq!(ch.choice, YD_MP25_MODE_FROM_EDID);
+        assert_eq!(ch.mode, YdMp25Mode::from_video(&HD720_60));
+        assert_running(&m, &ch, 4);
+        // ltdc_crtc_mode_set_nofb: TWCR = (htotal - 1) << 16 | (vtotal - 1)
+        assert_eq!(m.ltdc_reg(ltdc::TWCR), (1649 << 16) | 749);
+        // dw_mipi_dsi_phy_init: 445.5 Mbit/s from 27 MHz (idf 4, ndiv 66, odf 2)
+        assert_eq!((ch.dd.lane_kbps, ch.dd.lane_mbps), (445_500, 445));
+        assert_eq!((ch.dd.pll_idf, ch.dd.pll_ndiv, ch.dd.pll_odf), (4, 66, 2));
+        assert_eq!(m.dsi_reg(dr::VID_PKT_SIZE) & dr::VID_PKT_SIZE_MASK, 1280);
+        assert_eq!(m.dsi_reg(dr::VID_VACTIVE_LINES), 720);
+        // adv7533_mode_set: four lanes in the CEC map, powered up, DVI
+        assert_eq!(adv.cec(0x1c), 4 << 4);
+        assert_eq!(adv.reg(adv::reg::POWER) & adv::reg::POWER_DOWN, 0);
+        assert_eq!(adv.cec(0x28), (1650 >> 4) as u8);
+    }
+
+    /// As the 720p test, at the mode the farm's KVM prefers: 1920x1080@60
+    /// (VIC 16, 148.5 MHz, under the LTDC's 150 MHz pad limit) on four lanes,
+    /// 891 Mbit/s a lane; ltdc.c's timing registers for 2200 x 1125.
+    #[test]
+    fn e2e_1080p60_on_four_lanes_through_the_c_entry_points() {
+        let soc = Soc::new();
+        let (c, adv) = rig(&soc, Adv7535Config { edid: i2cm::edid_block(EdidMode::P1080), ..Adv7535Config::default() });
+        let e = env(&c);
+        let m = Mp25Display::new();
+        let ch = bring_up(&m, &e, 4);
+        assert_eq!(ch.choice, YD_MP25_MODE_FROM_EDID);
+        assert_eq!(ch.mode, YdMp25Mode::from_video(&FHD1080_60));
+        assert_eq!((ch.sink.vic, ch.sink.refresh_hz), (16, 60));
+        assert_running(&m, &ch, 4);
+        assert_eq!(ch.ld.pitch, 7680);
+        assert_eq!(m.ltdc_reg(ltdc::TWCR), (2199 << 16) | 1124);
+        assert_eq!(ch.dd.lane_mbps, 891);
+        assert_eq!(m.dsi_reg(dr::VID_PKT_SIZE) & dr::VID_PKT_SIZE_MASK, 1920);
+        assert_eq!(m.dsi_reg(dr::VID_VACTIVE_LINES), 1080);
+        assert_eq!(adv.cec(0x28), (2200 >> 4) as u8);
+    }
+
+    /// The fallback of adv7511_drv.c `adv7511_get_modes` when the sink gives
+    /// no usable EDID (a block with a bad checksum): the chain comes up in
+    /// 1280x720@60 on the same four lanes, as the 720p test does.
+    #[test]
+    fn e2e_a_bad_edid_runs_the_720p_fallback() {
+        let soc = Soc::new();
+        let mut bad = i2cm::edid_block(EdidMode::P1080);
+        bad[127] ^= 1; // checksum
+        let (c, _adv) = rig(&soc, Adv7535Config { edid: bad, ..Adv7535Config::default() });
+        let e = env(&c);
+        let m = Mp25Display::new();
+        let ch = bring_up(&m, &e, 4);
+        assert_eq!(ch.choice, YD_MP25_MODE_FALLBACK_NO_EDID);
+        assert_eq!(ch.mode, YdMp25Mode::from_video(&HD720_60));
+        assert_running(&m, &ch, 4);
+        assert_eq!(m.ltdc_reg(ltdc::TWCR), (1649 << 16) | 749);
+        assert_eq!(ch.dd.lane_mbps, 445);
+    }
+
+    /// The orders a driver can get wrong, as the ABI and the model judge them:
+    /// ltdc.c has no ordering against the DSI (Linux enables the CRTC first,
+    /// as `bring_up` does), so the LTDC streaming into a DSI that is not yet
+    /// enabled is legal and leaves no violation; what the ABI refuses is a
+    /// step before its predecessor (`ltdc_crtc_atomic_enable` before
+    /// `mode_set_nofb`, `dw_mipi_dsi_bridge_atomic_enable` before attach), and
+    /// the model reports timing registers written under a running LTDC
+    /// (ltdc.c programs them with `LTDCEN` clear). The bridge keeps no state
+    /// the ABI checks: its start on a chip that answers needs no init first.
+    #[test]
+    fn e2e_wrong_order_is_refused_or_reported() {
+        let soc = Soc::new();
+        let (c, adv) = rig(&soc, Adv7535Config::default());
+        let e = env(&c);
+        let m = Mp25Display::new();
+        let mode = YdMp25Mode::from_video(&HD720_60);
+        let (mut ld, mut dd) = (YdMp25LtdcData::default(), YdMp25DsiData::default());
+        // SAFETY: locals.
+        with_display(&m, || unsafe {
+            // enable / flip before configure, DSI enable before attach:
+            // errors, nothing streaming
+            assert_eq!(yd_mp25_ltdc_probe(&LTDC_CFG, &mut ld, &e), 0);
+            assert_eq!(yd_mp25_ltdc_enable(&LTDC_CFG, &mut ld, &e), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_set_fb(&LTDC_CFG, &mut ld, &e, FB), -ENODEV);
+            assert_eq!(yd_mp25_dsi_enable(&DSI_CFG, &mut dd, &e, &mode), -EINVAL);
+            assert_eq!((dd.on, ld.on), (0, 0));
+            assert_eq!(m.ltdc_reg(ltdc::GCR) & ltdc::GCR_LTDCEN, 0);
+            assert_eq!(m.dsi_reg(dr::PWR_UP), 0);
+            // the LTDC streams before the DSI is attached: legal
+            let pitch = 5120;
+            assert_eq!(yd_mp25_ltdc_configure(&LTDC_CFG, &mut ld, &mode, FB, pitch, YD_MP25_LTDC_FMT_XRGB8888), 0);
+            assert_eq!(yd_mp25_ltdc_enable(&LTDC_CFG, &mut ld, &e), 0);
+            assert_eq!(m.violations(), Vec::<String>::new());
+            // a second configure under the running LTDC: reported by the model
+            assert_eq!(yd_mp25_ltdc_configure(&LTDC_CFG, &mut ld, &mode, FB, pitch, YD_MP25_LTDC_FMT_XRGB8888), 0);
+        });
+        let v = m.violations();
+        assert!(!v.is_empty() && v.iter().all(|s| s.contains("written with LTDCEN high")), "{v:?}");
+        assert_eq!(adv.reg(adv::reg::POWER) & adv::reg::POWER_DOWN, adv::reg::POWER_DOWN);
+    }
+
+    /// Teardown, as Linux's disable path orders it (adv7511 `power_off`, then
+    /// dw-mipi-dsi.c `dw_mipi_dsi_bridge_post_atomic_disable`, then ltdc.c
+    /// `ltdc_crtc_atomic_disable`): the models are idle, a second stop and
+    /// disable are harmless, and the chain comes up again.
+    #[test]
+    fn e2e_stop_and_disable_leave_the_models_idle() {
+        let soc = Soc::new();
+        let (c, adv) = rig(&soc, Adv7535Config::default());
+        let e = env(&c);
+        let m = Mp25Display::new();
+        let mut ch = bring_up(&m, &e, 4);
+        // SAFETY: locals.
+        with_display(&m, || unsafe {
+            assert_eq!(yd_mp25_adv7535_stop(&mut ch.ad, &e), 0);
+            assert_eq!(yd_mp25_dsi_disable(&DSI_CFG, &mut ch.dd), 0);
+            assert_eq!(yd_mp25_ltdc_disable(&LTDC_CFG, &mut ch.ld, &e), 0);
+            // again: nothing to undo
+            assert_eq!(yd_mp25_adv7535_stop(&mut ch.ad, &e), 0);
+            assert_eq!(yd_mp25_dsi_disable(&DSI_CFG, &mut ch.dd), 0);
+            assert_eq!(yd_mp25_ltdc_disable(&LTDC_CFG, &mut ch.ld, &e), 0);
+        });
+        assert_eq!(m.violations(), Vec::<String>::new());
+        assert_eq!((ch.ad.started, ch.dd.on, ch.ld.on), (0, 0, 0));
+        assert_eq!(adv.reg(adv::reg::POWER) & adv::reg::POWER_DOWN, adv::reg::POWER_DOWN);
+        assert_eq!(m.ltdc_reg(ltdc::GCR) & ltdc::GCR_LTDCEN, 0);
+        assert_eq!(m.dsi_reg(dr::PWR_UP), 0);
+        assert_eq!(m.dsi_reg(dr::PHY_RSTZ), 0);
+        assert_eq!(m.dsi_reg(pr::WCR) & pr::WCR_DSIEN, 0);
+        // up again on the same models: the same end state
+        let again = bring_up(&m, &e, 4);
+        assert_running(&m, &again, 4);
     }
 
     #[test]
