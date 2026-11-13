@@ -216,9 +216,9 @@ fn how_many_operands_of_one_group_an_instruction_holds() {
      * while the table was wrong by a factor of 34. */
     /* Measured 2026-10-24 (19,364 instructions, 16,330 / 2,541 / 493 while
      * the Qt shaders were in the table, until #1509). */
-    assert_eq!(instrs, 5540, "instructions in the table");
+    assert_eq!(instrs, 5545, "instructions in the table");
     let imm = hist.get(&7).expect("the immediate group has a row");
-    assert_eq!(imm.get(&0).copied().unwrap_or(0), 4209, "immediates: none");
+    assert_eq!(imm.get(&0).copied().unwrap_or(0), 4214, "immediates: none");
     assert_eq!(imm.get(&1).copied().unwrap_or(0), 1165, "immediates: one");
     assert_eq!(imm.get(&2).copied().unwrap_or(0), 166, "immediates: two");
     assert_eq!(imm.get(&3).copied().unwrap_or(0), 0, "immediates: three, which the reference never emits");

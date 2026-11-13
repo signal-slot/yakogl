@@ -395,7 +395,7 @@ fn no_allocated_register_is_overwritten_while_its_value_is_live() {
      * rolled); 536 / 352 programs and 39 / 29 loops while the Qt shaders
      * were in the GC7000 table, until #1509. */
     let es2 = cfg!(feature = "report-es2");
-    assert_eq!(checked, if es2 { 182 } else { 225 }, "the population moved: {checked} programs reached the check");
+    assert_eq!(checked, if es2 { 182 } else { 227 }, "the population moved: {checked} programs reached the check");
     assert_eq!(looped, if es2 { 26 } else { 32 }, "the loop population moved: {looped} programs with a back edge");
     assert!(bad.is_empty(), "{} programs overwrite a live register", bad.len());
 }

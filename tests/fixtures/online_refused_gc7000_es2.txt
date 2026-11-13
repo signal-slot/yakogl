@@ -35,6 +35,8 @@ es300/mrt2.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenG
 es300/mrt2.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 es300/mrt3.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 es300/mrt3.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/mrt4.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/mrt4.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 es300/texfetch.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 es300/texoffset.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 es300/texsize.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
