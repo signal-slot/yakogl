@@ -29,6 +29,9 @@ cat > "$S/board.sh" <<'EOF'
 # stub board.sh: logs its arguments and the variables that must not leak,
 # prints a verdict line shaped as the real one's
 echo "args=$* SEL=${SEL-unset} NNW=${NETBOOT_NO_WATCHDOG-unset} UART=${BOARD_UART-unset}" >> "$STUB_LOG"
+# the record directory as board.sh names it: <logdir>/<YYYYMMDD-HHMM>-<name>-<sha8 of the image>
+a=("$@"); [ "${a[0]}" = --dry-run ] && a=("${a[@]:1}")
+echo "rd=${a[3]}/$(date +%Y%m%d-%H%M)-${a[4]-x}-$(sha256sum "${a[2]}" | cut -c1-8)" >> "$STUB_LOG"
 [ "$1" = --dry-run ] && { echo "DRY host\$ would run"; exit 0; }
 name=${5:-x}
 rc=0 verdict=done rec=absent
@@ -196,6 +199,81 @@ n=$(grep -c 'x2 run' "$STUB_LOG")
 [ "$n" = 3 ] && ok "stopped at the failing run: 3 board calls (no retry, no further selector, no next scene)" || bad "board calls: $n"
 check "the failed row is in the table" "terrain	${MAIN2:0:8}	0x1001" "$out"
 absent "next scene never built" "refract" "$(grep '^west' "$STUB_LOG")"
+
+# ---- session A's run sheet (docs/notes/gc-tiled-wire.md, "The invocations") ---------------------
+# Every line of the sheet, SHA the main tip, <outdir> outside the tree. rc 0 is the script
+# accepting the arguments; the logged west line is the image's build options; the stub
+# board.sh's rd= line is the record directory name the real one derives (board.sh, RD=).
+SHA=$MAIN2
+SH8=${MAIN2:0:8}
+SA=$T/sa
+sheet() { # <label> <args...>: one line of the sheet is accepted
+    local label=$1
+    shift
+    run "$@"
+    rc_is "sheet: $label: accepted" 0 "$rc"
+}
+sheet 'dry-run, off, terrain shadow refract' --dry-run --commit "$SHA" "$SA/dry" terrain shadow refract
+w=$(grep '^west' "$STUB_LOG")
+[ "$(grep -c '^west' "$STUB_LOG")" = 3 ] && ok "sheet: dry off: three images" || bad "sheet: dry off: west calls"
+absent "sheet: dry off: no knob in any image" "GC_TILED_RT" "$w"
+check "sheet: dry off: commit column" "shadow	$SH8	0x1000" "$out"
+absent "sheet: dry off: no +tiled_rt" "+tiled_rt" "$out"
+sheet 'dry-run, on, terrain shadow refract' --dry-run --commit "$SHA" --conf CONFIG_GLMARK2_GC_TILED_RT=y "$SA/dry" terrain shadow refract
+[ "$(grep -c -- '-DCONFIG_GLMARK2_GC_TILED_RT=y' "$STUB_LOG")" = 3 ] && ok "sheet: dry on: knob in all three images" || bad "sheet: dry on: knob"
+for sc in terrain shadow refract; do
+    check "sheet: dry on: $sc commit column" "$sc	$SH8+tiled_rt	0x1000" "$out"
+    if [ -d "$SA/dry/$sc-tiled_rt" ] && [ -d "$SA/dry/$sc" ]; then ok "sheet: $sc off and on directories share the outdir"; else bad "sheet: $sc directories"; fi
+done
+for sc in terrain shadow refract; do
+    for arm in off on; do
+        if [ $arm = on ]; then sheet "$sc on" --commit "$SHA" --conf CONFIG_GLMARK2_GC_TILED_RT=y "$SA/run" "$sc"
+        else sheet "$sc off" --commit "$SHA" "$SA/run" "$sc"; fi
+        log=$(cat "$STUB_LOG")
+        d=$sc
+        [ $arm = on ] && d=$sc-tiled_rt
+        check "sheet: $sc $arm: scene argument of the image" "CONFIG_GLMARK2_ARGS=\"-b $sc\"" "$log"
+        check "sheet: $sc $arm: X2 board" "armadillo_x2/mimx8ml8/a53" "$log"
+        if [ $arm = on ]; then
+            check "sheet: $sc on: image built with the knob" "-DCONFIG_GLMARK2_GC_TILED_RT=y" "$(grep '^west' "$STUB_LOG")"
+            check "sheet: $sc on: commit column" "$SH8+tiled_rt" "$out"
+        else
+            absent "sheet: $sc off: image without the knob" "GC_TILED_RT" "$(grep '^west' "$STUB_LOG")"
+            absent "sheet: $sc off: commit column" "+tiled_rt" "$out"
+        fi
+        [ "$(grep -c '^rd=' "$STUB_LOG")" = 5 ] && ok "sheet: $sc $arm: five runs (none, 0x1000, 0x1001, 0x1003, 0x1004)" || bad "sheet: $sc $arm: runs"
+        if grep -Eq "^rd=$SA/run/$d/[0-9]{8}-[0-9]{4}-$sc-nosel-[0-9a-f]{8}\$" "$STUB_LOG"; then
+            ok "sheet: $sc $arm: record dir <logdir>/<YYYYMMDD-HHMM>-<name>-<sha8>"
+        else bad "sheet: $sc $arm: record dir: $(grep '^rd=' "$STUB_LOG" | head -1)"; fi
+        absent "sheet: $sc $arm: NETBOOT_NO_WATCHDOG never set" "NNW=1" "$log"
+    done
+done
+# the sheet reads <sha8> as the commit's; board.sh's is the image's sha256 (a mismatch of the note)
+absent "sheet: the record dir's sha8 is the image's, not the commit's" "-nosel-$SH8" "$(grep '^rd=' "$STUB_LOG")"
+# the gl_test boots, as the sheet writes them: the two unsets, SEL, the image, logdir and name
+echo "image gc_wdog_arm: armed" > "$T/gt.bin"
+for c in 3:gt-case3-off 3:gt-case3-on 44:gt-case44-off 44:gt-case44-on 25:gt-case169-off 25:gt-case169-on; do
+    : > "$STUB_LOG"
+    env -u NETBOOT_NO_WATCHDOG -u BOARD_UART SEL="${c%%:*}" "$S/board.sh" x2 run "$T/gt.bin" "$SA/gt" "${c#*:}" > /dev/null 2>&1
+    check "sheet: SEL=${c%%:*} ${c#*:}: selector, name, no leaks" "args=x2 run $T/gt.bin $SA/gt ${c#*:} SEL=${c%%:*} NNW=unset UART=unset" "$(cat "$STUB_LOG")"
+    if [[ ${c#*:} =~ ^[A-Za-z0-9_-]+$ ]]; then ok "sheet: name ${c#*:} passes board.sh's name rule"; else bad "name ${c#*:}"; fi
+done
+# the gl_test images, DRYRUN=1 (needs no variable): first case 0 for cases 3 and 44, 144 for 169
+GB=$HERE/imx8mp-gltest-build.sh
+for img in gt0:0 gt144:144; do
+    for arm in off on; do
+        args=()
+        [ $arm = on ] && args=(-DCONFIG_GL_TEST_GC_TILED_RT=y)
+        out=$(IMX8MP_BOARD=x2 DRYRUN=1 bash "$GB" "${img%%:*}-$arm" "${img#*:}" ${args[@]+"${args[@]}"} 2>&1)
+        rc=$?
+        rc_is "sheet: gl_test ${img%%:*} $arm: accepted" 0 "$rc"
+        check "sheet: gl_test ${img%%:*} $arm: X2 board" "armadillo_x2/mimx8ml8/a53" "$out"
+        check "sheet: gl_test ${img%%:*} $arm: first case" "CONFIG_GC_GL_TEST_SWEEP_FIRST=${img#*:}" "$out"
+        check "sheet: gl_test ${img%%:*} $arm: watchdog option" "CONFIG_GC_BOARD_WDOG_SELF_ARM=y" "$out"
+        if [ $arm = on ]; then check "sheet: gl_test ${img%%:*} on: knob" "CONFIG_GL_TEST_GC_TILED_RT=y" "$out"
+        else absent "sheet: gl_test ${img%%:*} off: no knob" "GC_TILED_RT" "$out"; fi
+    done
+done
 
 echo
 if [ "$fail" = 0 ]; then echo "x2-glmark2-scenes-selftest: all ok"; else echo "x2-glmark2-scenes-selftest: $fail failed"; exit 1; fi
