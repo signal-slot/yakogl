@@ -16,10 +16,11 @@
 //! set-up); the copy's bytes are compared with offsets computed here from
 //! Mesa's rules, independently of `native_array.rs`. No GPU runs.
 //!
-//! The GL core stores ETC2 RGB8, RGBA8 (ETC2_EAC) and their sRGB forms. It
-//! does not store the EAC R11/RG11 or the punch-through formats (an upload
-//! is GL_INVALID_ENUM, texture.rs `compressed_format_info`): there is no
-//! array of those to copy.
+//! The GL core stores ETC2 RGB8, RGBA8 (ETC2_EAC) and their sRGB forms as
+//! blocks. It does not store the EAC R11/RG11 or the punch-through formats
+//! as blocks (texture.rs `compressed_format_info`; since plan #354 an upload
+//! decodes them into R16F, RGBA16F, RGBA8 or SRGB8_ALPHA8 texels,
+//! `DECODED_ETC2`): there is no compressed array of those to copy.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_etc_array
