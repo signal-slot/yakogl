@@ -100,6 +100,21 @@ change; the tests state the expectation per mask.
 * A texture of these formats is no render target except `RGB10_A2` (its own
   surface on the V3D, `RGBA8` elsewhere) (`framebuffer.rs` attachment guard).
 
+## Compressed formats that land in these classes
+
+Six of ES 3.0's ten ETC2/EAC compressed formats have no storage class of their
+own: the GL core decodes them at `glCompressedTexImage2D/3D` and
+`glCompressedTexSubImage2D/3D` (`src/gl/texture.rs` `decoded_format`) and the
+texels are uploaded through the uncompressed path into a class of this table:
+`R11_EAC` and `SIGNED_R11_EAC` as `R16F`, `RG11_EAC` and `SIGNED_RG11_EAC` as
+`RG16F` (stored as `RGBA16F`, blue 0 and alpha 1), `RGB8_PUNCHTHROUGH_ALPHA1`
+as `RGBA8` and `SRGB8_PUNCHTHROUGH_ALPHA1` as `SRGB8_ALPHA8`. The halves are the
+decoder's 16-bit value over 65535 (unsigned) or 32767 (signed), rounded to
+nearest (`es3_formats::f32_to_half`), so every 11-bit code is a distinct half.
+The back end must sample the class (`backend::sampled_texfmts`), else the name is
+`GL_INVALID_ENUM`. Design and dEQP's tolerance for 11-bit EAC:
+`docs/notes/etc2-eac.md`.
+
 ## Not done (left to other items)
 
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).

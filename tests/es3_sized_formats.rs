@@ -23,7 +23,7 @@ const MASKS: [(&str, u64); 3] =
 fn all_classes() -> u64 {
     (GLES_TEXFMT_R11G11B10F..=GLES_TEXFMT_RGBA32F)
         .chain(GLES_TEXFMT_R32UI..=GLES_TEXFMT_RG16I)
-        .fold(PVR_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
+        .fold(PVR_SAMPLED_TEXFMTS | V3D_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
 }
 
 /// The integer classes: an integer format is stored in one of them or

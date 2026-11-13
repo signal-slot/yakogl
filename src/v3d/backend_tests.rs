@@ -1051,6 +1051,24 @@ unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) ->
     true
 }
 
+/// [`v3d_tex_pack_sampler`] with the depth compare: word 3 holds the
+/// function's three bits at SAMPLER_STATE's "Depth Compare Function" bit
+/// (`texture::SAMPLER_COMPARE_SHIFT`), 0 with the compare off (bit 4 of
+/// `compare_op`), as the C packer's first word does.
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool {
+    // SAFETY: the same contract as v3d_tex_pack_sampler.
+    unsafe {
+        if compare_op > 0x1f || !v3d_tex_pack_sampler(out, s) {
+            return false;
+        }
+        let f = if compare_op & texture::COMPARE_OFF != 0 { 0 } else { compare_op & 7 };
+        let w = (f << texture::SAMPLER_COMPARE_SHIFT).to_le_bytes();
+        core::ptr::copy_nonoverlapping(w.as_ptr(), out.add(12), 4);
+    }
+    true
+}
+
 #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 extern "C" {
     /// testutil's log trampoline: the lines land in the TestGl recorder.
@@ -1803,6 +1821,42 @@ fn a_sampler_record_is_packed_once_per_job() {
     assert_eq!(v3d_flush(), 0);
     assert_eq!(draw(&sampling(&rig, t)), 0);
     assert_eq!(sampler_counters(), (3, 1), "a new job packs its own");
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// A depth binding's sampler record carries its compare function, and the
+/// record cache is keyed by it as well as by the sampler state: two draws
+/// that differ only in the function get two records, a binding whose format
+/// is no depth class gets the compare-off record whatever its `compare_op`.
+/// Revert check: keying on the sampler alone (the code before 2026-11-13)
+/// returns the first record for every function and the word 3 asserts fail.
+#[test]
+fn a_shadow_samplers_record_carries_its_compare_function_and_is_keyed_by_it() {
+    let rig = Rig::new();
+    rig.init();
+    let depth = |op: u8| GlesTextureBind { format: GLES_TEXFMT_R32F, compare_op: op, ..texture(0, 16, 16, 1) };
+    let word3 = |rec: u32| words(&rig, rec, 6)[3];
+    let (off, less, greater) = {
+        let g = g();
+        (
+            sampler_for(g, &depth(16)).ok().expect("a record"),
+            sampler_for(g, &depth(1)).ok().expect("a record"),
+            sampler_for(g, &depth(4)).ok().expect("a record"),
+        )
+    };
+    assert_eq!(word3(off), 0, "compare off: NEVER, Mesa's word");
+    assert_eq!(word3(less), 1 << texture::SAMPLER_COMPARE_SHIFT, "GL_LESS");
+    assert_eq!(word3(greater), 4 << texture::SAMPLER_COMPARE_SHIFT, "GL_GREATER");
+    assert!(off != less && less != greater && off != greater, "one record per function");
+    assert_eq!(sampler_counters(), (3, 0));
+    /* the same function finds its record again */
+    assert_eq!(sampler_for(g(), &depth(1)).ok().expect("a record"), less);
+    assert_eq!(sampler_counters(), (3, 1));
+    /* not a depth class: the compare is bypassed (ES 3.0.6 3.8.15) and the record is the compare-off one */
+    let colour = GlesTextureBind { compare_op: 3, ..texture(0, 16, 16, 1) };
+    let c = sampler_for(g(), &colour).ok().expect("a record");
+    assert_eq!(word3(c), 0);
+    assert_eq!(sampler_for(g(), &GlesTextureBind { compare_op: 0, ..colour }).ok().expect("a record"), c);
     assert_eq!(v3d_finish(), 0);
 }
 

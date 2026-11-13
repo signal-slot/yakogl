@@ -3389,13 +3389,20 @@ fn compressed_format_info(internalformat: GLenum) -> Option<(u8, u8)> {
 }
 
 /// Every compressed internal format [`compressed_format_info`] has a class
-/// for, in the order GL_COMPRESSED_TEXTURE_FORMATS lists the stored ones.
-pub(crate) const COMPRESSED_FORMATS: [GLenum; 5] = [
+/// for or [`decoded_format`] decodes, in the order GL_COMPRESSED_TEXTURE_FORMATS lists the stored ones.
+pub(crate) const COMPRESSED_FORMATS: [GLenum; 11] = [
     GL_ETC1_RGB8_OES,
     GL_COMPRESSED_RGB8_ETC2,
     GL_COMPRESSED_RGBA8_ETC2_EAC,
     GL_COMPRESSED_SRGB8_ETC2,
     GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC,
+    /* the six [`decoded_format`] takes, listed in an ES 3.0 report only */
+    GL_COMPRESSED_R11_EAC,
+    GL_COMPRESSED_SIGNED_R11_EAC,
+    GL_COMPRESSED_RG11_EAC,
+    GL_COMPRESSED_SIGNED_RG11_EAC,
+    GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+    GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2,
 ];
 
 /// [`compressed_format_info`] of a format this build stores, None for one
@@ -3420,7 +3427,11 @@ pub(crate) fn stored_compressed_format(internalformat: GLenum) -> Option<(u8, u8
 /// (GL_COMPRESSED_TEXTURE_FORMATS), written into `out`; returns how many.
 pub(crate) fn stored_compressed_formats(out: &mut [GLint]) -> usize {
     let mut n = 0;
-    for f in COMPRESSED_FORMATS.iter().copied().filter(|&f| stored_compressed_format(f).is_some()) {
+    for f in COMPRESSED_FORMATS
+        .iter()
+        .copied()
+        .filter(|&f| stored_compressed_format(f).is_some() || decoded_format(f).is_some())
+    {
         if let Some(slot) = out.get_mut(n) {
             *slot = f as GLint;
         }
@@ -3898,6 +3909,340 @@ unsafe fn texture_write_etc1(t: &mut GlTexture, level: u32, lw: u32, y0: u32, w:
     ok
 }
 
+/* ---- the six ES 3.0 ETC2/EAC formats decoded at upload ----------------------
+ * RGB8_PUNCHTHROUGH_ALPHA1, SRGB8_PUNCHTHROUGH_ALPHA1, R11_EAC,
+ * SIGNED_R11_EAC, RG11_EAC and SIGNED_RG11_EAC have no GLES_TEXFMT class.
+ * They are decoded here (src/gl/etc2.rs) and the texels go through the
+ * uncompressed entry points into a class every back end samples, as Mesa's
+ * util_format fallback does (docs/notes/etc2-eac.md):
+ *   punch-through   RGBA8; the sRGB one SRGB8_ALPHA8
+ *   R11 / RG11      R16F / RG16F, the 16-bit extension of the 11-bit value
+ *                   divided by 65535 (unsigned) or 32767 (signed), as a half
+ *                   rounded to nearest (the core's float path truncates)
+ * The level then holds an uncompressed image: mip levels, cube faces, 2D
+ * array layers and glCompressedTexSubImage* are the uncompressed paths'. */
+
+/// A format that is decoded at upload.
+#[derive(Clone, Copy)]
+enum Decoded {
+    /// RGB8 / SRGB8 PUNCHTHROUGH_ALPHA1_ETC2.
+    Punch { srgb: bool },
+    /// R11_EAC / RG11_EAC and their signed forms.
+    Eac11 { signed: bool, channels: usize },
+}
+
+fn decoded_format(internalformat: GLenum) -> Option<Decoded> {
+    if crate::REPORT_ES2 {
+        return None;
+    }
+    let d = match internalformat {
+        GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 => Decoded::Punch { srgb: false },
+        GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2 => Decoded::Punch { srgb: true },
+        GL_COMPRESSED_R11_EAC => Decoded::Eac11 { signed: false, channels: 1 },
+        GL_COMPRESSED_SIGNED_R11_EAC => Decoded::Eac11 { signed: true, channels: 1 },
+        GL_COMPRESSED_RG11_EAC => Decoded::Eac11 { signed: false, channels: 2 },
+        GL_COMPRESSED_SIGNED_RG11_EAC => Decoded::Eac11 { signed: true, channels: 2 },
+        _ => return None,
+    };
+    /* only where the back end samples the class the texels go to */
+    let class = d.class();
+    (backend::sampled_texfmts() & backend::gles_texfmt_bit(class) != 0).then_some(d)
+}
+
+impl Decoded {
+    /// The storage class of the uncompressed level.
+    fn class(self) -> u8 {
+        match self {
+            Decoded::Punch { srgb: false } => GLES_TEXFMT_RGBA8,
+            Decoded::Punch { srgb: true } => GLES_TEXFMT_SRGB8_A8,
+            Decoded::Eac11 { channels: 1, .. } => GLES_TEXFMT_R16F,
+            Decoded::Eac11 { .. } => GLES_TEXFMT_RGBA16F, /* RG16F is held as RGBA16F */
+        }
+    }
+
+    /// (internalformat, format, type) of the glTexImage call that holds it.
+    fn upload(self) -> (GLenum, GLenum, GLenum) {
+        match self {
+            Decoded::Punch { srgb: false } => (GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE),
+            Decoded::Punch { srgb: true } => (GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE),
+            Decoded::Eac11 { channels: 1, .. } => (GL_R16F, GL_RED, GL_HALF_FLOAT),
+            Decoded::Eac11 { .. } => (GL_RG16F, GL_RG, GL_HALF_FLOAT),
+        }
+    }
+
+    /// Bytes of one compressed 4x4 block.
+    fn block_bytes(self) -> usize {
+        match self {
+            Decoded::Eac11 { channels: 2, .. } => 16,
+            _ => 8,
+        }
+    }
+
+    /// The block row at texel row `y0` of the `w` x `h` image `data`, from
+    /// texel column `x0` (a multiple of 4) on, at most [`STRIPE`] texels
+    /// wide, decoded to tightly packed texels (`cols` x `rows` of them).
+    /// The library has no heap: a stripe is a small stack buffer, and
+    /// [`upload_stripes`] hands one to the uncompressed path at a time.
+    fn stripe(self, (w, h): (usize, usize), data: &[u8], (x0, y0): (usize, usize)) -> (Stripe, usize, usize) {
+        let cols = (w - x0).min(STRIPE);
+        let rows = (h - y0).min(4);
+        let bw = w.div_ceil(4);
+        let bb = self.block_bytes();
+        let mut out = match self {
+            Decoded::Punch { .. } => Stripe::Bytes([0; STRIPE * 16]),
+            Decoded::Eac11 { .. } => Stripe::Halves([0; STRIPE * 8]),
+        };
+        for bx in x0 / 4..(x0 + cols).div_ceil(4) {
+            let at = ((y0 / 4) * bw + bx) * bb;
+            let blk = &data[at..at + bb];
+            match (self, &mut out) {
+                (Decoded::Punch { .. }, Stripe::Bytes(o)) => {
+                    let t = super::etc2::decode_rgb_block(blk[..8].try_into().unwrap(), true);
+                    for ty in 0..rows {
+                        for tx in 0..4 {
+                            let x = bx * 4 + tx;
+                            if x < w {
+                                let i = (ty * cols + (x - x0)) * 4;
+                                o[i..i + 4].copy_from_slice(&t[ty * 4 + tx]);
+                            }
+                        }
+                    }
+                }
+                (Decoded::Eac11 { signed, channels }, Stripe::Halves(o)) => {
+                    for c in 0..channels {
+                        let half: &[u8; 8] = blk[c * 8..c * 8 + 8].try_into().unwrap();
+                        let v: [u16; 16] = if signed {
+                            let t = super::etc2::decode_eac11_signed_block(half);
+                            core::array::from_fn(|i| es3_formats::f32_to_half((f32::from(t[i]) / 32767.0).max(-1.0)))
+                        } else {
+                            let t = super::etc2::decode_eac11_unsigned_block(half);
+                            core::array::from_fn(|i| es3_formats::f32_to_half(f32::from(t[i]) / 65535.0))
+                        };
+                        for ty in 0..rows {
+                            for tx in 0..4 {
+                                let x = bx * 4 + tx;
+                                if x < w {
+                                    o[(ty * cols + (x - x0)) * channels + c] = v[ty * 4 + tx];
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        (out, cols, rows)
+    }
+}
+
+/// Texels wide of one [`Decoded::stripe`].
+const STRIPE: usize = 64;
+
+/// Decoded texels of one stripe, in an array of their own type so the pointer
+/// handed to the uncompressed path is aligned for it.
+enum Stripe {
+    Bytes([u8; STRIPE * 16]),
+    Halves([u16; STRIPE * 8]),
+}
+
+impl Stripe {
+    fn ptr(&self) -> *const c_void {
+        match self {
+            Stripe::Bytes(v) => v.as_ptr() as *const c_void,
+            Stripe::Halves(v) => v.as_ptr() as *const c_void,
+        }
+    }
+}
+
+/// Run `f` (a call of an uncompressed entry point with texels decoded here)
+/// under the default unpack state and with no PIXEL_UNPACK_BUFFER: the
+/// decoded texels are tightly packed client memory whatever the application
+/// set for its own uploads (the compressed call's own `data` was resolved
+/// against the buffer by its caller). The application's state is restored.
+fn with_default_unpack(f: impl FnOnce()) {
+    type Saved = (GLint, GLint, GLint, GLint, GLint, GLint, GLuint);
+    let Some(c) = context::current() else { return };
+    let saved: Saved = (
+        c.unpack_alignment,
+        c.unpack_row_length,
+        c.unpack_image_height,
+        c.unpack_skip_rows,
+        c.unpack_skip_pixels,
+        c.unpack_skip_images,
+        c.bound_pixel_unpack_buffer,
+    );
+    (c.unpack_alignment, c.unpack_row_length, c.unpack_image_height) = (1, 0, 0);
+    (c.unpack_skip_rows, c.unpack_skip_pixels, c.unpack_skip_images) = (0, 0, 0);
+    c.bound_pixel_unpack_buffer = 0;
+    f();
+    if let Some(c) = context::current() {
+        (c.unpack_alignment, c.unpack_row_length, c.unpack_image_height) = (saved.0, saved.1, saved.2);
+        (c.unpack_skip_rows, c.unpack_skip_pixels, c.unpack_skip_images) = (saved.3, saved.4, saved.5);
+        c.bound_pixel_unpack_buffer = saved.6;
+    }
+}
+
+/// glCompressedTexImage2D / 3D (a 2D array) of a decoded format. The caller
+/// checked the target, the shape and imageSize. `depth` is 1 for a 2D image.
+///
+/// # Safety
+/// `data` is null or holds `depth` compressed images of the size.
+unsafe fn decoded_image(
+    target: GLenum,
+    level: GLint,
+    d: Decoded,
+    (width, height, depth): (GLsizei, GLsizei, GLsizei),
+    imageSize: GLsizei,
+    data: *const c_void,
+) {
+    let (ifmt, fmt, ty) = d.upload();
+    with_default_unpack(|| {
+        /* the level, without texels: its errors are glTexImage's */
+        if target == GL_TEXTURE_2D_ARRAY {
+            glTexImage3D(target, level, ifmt as GLint, width, height, depth, 0, fmt, ty, core::ptr::null());
+        } else {
+            glTexImage2D(target, level, ifmt as GLint, width, height, 0, fmt, ty, core::ptr::null());
+        }
+        if data.is_null() || width == 0 || height == 0 || depth == 0 {
+            return;
+        }
+        /* and the texels, only if the level was made */
+        let made = context::current().is_some_and(|c| {
+            active_texture(c, target).is_some_and(|ti| {
+                let t = &c.objs_ref().textures[ti];
+                let bit = 1u16 << level as u32;
+                (level as u32) < t.chain_levels as u32
+                    && t.level_defined & bit != 0
+                    && t.level_bad & bit == 0
+                    && level_size(t, level as u32) == (width as u32, height as u32)
+            })
+        });
+        if made {
+            // SAFETY: the caller sized `data` as imageSize bytes.
+            let src = core::slice::from_raw_parts(data as *const u8, imageSize as usize);
+            upload_stripes(target, level, d, (0, 0, 0), (width, height, depth), src);
+        }
+    });
+}
+
+/// Hand the `depth` compressed `w` x `h` images in `data` to the uncompressed
+/// path one [`Stripe`] at a time (glTexSubImage2D / 3D) at the offsets given;
+/// the caller has [`with_default_unpack`] in force.
+///
+/// # Safety
+/// `data` holds the `depth` images; the level holds the box.
+unsafe fn upload_stripes(
+    target: GLenum,
+    level: GLint,
+    d: Decoded,
+    (xo, yo, zo): (GLint, GLint, GLint),
+    (w, h, depth): (GLsizei, GLsizei, GLsizei),
+    data: &[u8],
+) {
+    let (_, fmt, ty) = d.upload();
+    let (w, h) = (w as usize, h as usize);
+    let one = w.div_ceil(4) * h.div_ceil(4) * d.block_bytes();
+    for z in 0..depth as usize {
+        let image = &data[z * one..(z + 1) * one];
+        for y0 in (0..h).step_by(4) {
+            for x0 in (0..w).step_by(STRIPE) {
+                let (s, cols, rows) = d.stripe((w, h), image, (x0, y0));
+                let (x, y) = (xo + x0 as GLint, yo + y0 as GLint);
+                if target == GL_TEXTURE_2D_ARRAY {
+                    glTexSubImage3D(
+                        target,
+                        level,
+                        x,
+                        y,
+                        zo + z as GLint,
+                        cols as GLsizei,
+                        rows as GLsizei,
+                        1,
+                        fmt,
+                        ty,
+                        s.ptr(),
+                    );
+                } else {
+                    glTexSubImage2D(target, level, x, y, cols as GLsizei, rows as GLsizei, fmt, ty, s.ptr());
+                }
+            }
+        }
+    }
+}
+
+/// glCompressedTexSubImage2D / 3D of a decoded format: the level must hold
+/// the image the format decodes to, the box must lie inside it and be whole
+/// blocks (or reach the level's edge), and imageSize must be the box's.
+/// Errors as [`compressed_tex_sub_image`]. The level is known to be of this
+/// format by its texel class only; a level an application
+/// made with glTexImage2D of the same uncompressed format is not told apart
+/// (docs/notes/etc2-eac.md).
+///
+/// # Safety
+/// `data` is null or holds the imageSize the caller passed.
+#[allow(clippy::too_many_arguments)]
+unsafe fn decoded_sub_image(
+    c: &mut GlContext,
+    target: GLenum,
+    level: GLint,
+    (xoffset, yoffset, zoffset): (GLint, GLint, GLint),
+    (width, height, depth): (GLsizei, GLsizei, GLsizei),
+    d: Decoded,
+    imageSize: GLsizei,
+    data: *const c_void,
+    func: &str,
+) {
+    let face = face_of(target);
+    let ti = active_texture(c, target).filter(|&ti| {
+        let t = &c.objs_ref().textures[ti];
+        let bit = 1u16 << level as u32;
+        t.texfmt == d.class()
+            && !t.mem.impl_.is_null()
+            && (level as u32) < t.chain_levels as u32
+            && t.level_defined & bit != 0
+            && t.level_bad & bit == 0
+            && (level != 0 || !is_face_target(target) || t.faces_set & (1u8 << face) != 0)
+    });
+    let Some(ti) = ti else {
+        c.set_error(GL_INVALID_OPERATION, func);
+        return;
+    };
+    let t = &c.objs_ref().textures[ti];
+    let (tw, th) = level_size(t, level as u32);
+    let td = if target == GL_TEXTURE_2D_ARRAY { t.layers as u32 } else { 1 };
+    let (xend, yend, zend) =
+        (xoffset.wrapping_add(width) as u32, yoffset.wrapping_add(height) as u32, zoffset.wrapping_add(depth) as u32);
+    if xoffset < 0
+        || yoffset < 0
+        || zoffset < 0
+        || width < 0
+        || height < 0
+        || depth < 0
+        || xend > tw
+        || yend > th
+        || zend > td
+    {
+        c.set_error(GL_INVALID_VALUE, func);
+        return;
+    }
+    if (xoffset & 3) != 0 || (yoffset & 3) != 0 || ((width & 3) != 0 && xend != tw) || ((height & 3) != 0 && yend != th)
+    {
+        c.set_error(GL_INVALID_OPERATION, func);
+        return;
+    }
+    if imageSize < 0 || compressed_image_bytes(width, height, depth, d.block_bytes() as u8) != Some(imageSize as usize)
+    {
+        c.set_error(GL_INVALID_VALUE, func);
+        return;
+    }
+    if data.is_null() || width == 0 || height == 0 || depth == 0 {
+        return;
+    }
+    // SAFETY: the caller sized `data` as imageSize bytes.
+    let src = core::slice::from_raw_parts(data as *const u8, imageSize as usize);
+    with_default_unpack(|| upload_stripes(target, level, d, (xoffset, yoffset, zoffset), (width, height, depth), src));
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn glCompressedTexImage2D(
     target: GLenum,
@@ -3935,6 +4280,10 @@ pub unsafe extern "C" fn glCompressedTexImage2D(
     }
     if imageSize < 0 || compressed_image_bytes(width, height, 1, bb) != Some(imageSize as usize) {
         c.set_error(GL_INVALID_VALUE, FUNC);
+        return;
+    }
+    if let Some(d) = decoded_format(internalformat) {
+        decoded_image(target, level, d, (width, height, 1), imageSize, data);
         return;
     }
     /* A backend whose texture unit has no ETC1 gets the image decoded here,
@@ -4090,6 +4439,10 @@ pub unsafe extern "C" fn glCompressedTexSubImage2D(
      * _neg_level, on a cube face too) */
     if level < 0 || level >= CAP_MIP_LEVELS as GLint {
         c.set_error(GL_INVALID_VALUE, FUNC);
+        return;
+    }
+    if let Some(d) = decoded_format(format) {
+        decoded_sub_image(c, target, level, (xoffset, yoffset, 0), (width, height, 1), d, imageSize, data, FUNC);
         return;
     }
     compressed_tex_sub_image(
@@ -5625,6 +5978,10 @@ pub unsafe extern "C" fn glCompressedTexImage3D(
     let Some(data) = super::buffer::pixel_buffer_resolve(c, false, data, imageSize as usize, FUNC) else {
         return;
     };
+    if let Some(d) = decoded_format(internalformat) {
+        decoded_image(target, level, d, (width, height, depth), imageSize, data);
+        return;
+    }
     let Some(ti) = active_texture(c, target) else {
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
@@ -5690,6 +6047,20 @@ pub unsafe extern "C" fn glCompressedTexSubImage3D(
     let Some(data) = super::buffer::pixel_buffer_resolve(c, false, data, imageSize as usize, FUNC) else {
         return;
     };
+    if let Some(d) = decoded_format(format) {
+        decoded_sub_image(
+            c,
+            target,
+            level,
+            (xoffset, yoffset, zoffset),
+            (width, height, depth),
+            d,
+            imageSize,
+            data,
+            FUNC,
+        );
+        return;
+    }
     compressed_tex_sub_image(
         c,
         target,
@@ -6732,8 +7103,18 @@ mod tests {
         /* the list of names is the table's, and every block size agrees with
          * the imageSize rule's */
         for f in COMPRESSED_FORMATS {
-            let (_, bb) = compressed_format_info(f).expect("a listed format has a class");
-            assert_eq!(compressed_block_bytes(f), Some(bb), "format {f:#x}");
+            match compressed_format_info(f) {
+                Some((_, bb)) => assert_eq!(compressed_block_bytes(f), Some(bb), "format {f:#x}"),
+                /* a decoded format: the decoder's block size */
+                None => match decoded_format(f) {
+                    Some(d) => assert_eq!(compressed_block_bytes(f), Some(d.block_bytes() as u8), "format {f:#x}"),
+                    /* an ES 2.0 report, or a back end that samples none of the classes (the Mali) */
+                    None => assert!(
+                        (crate::REPORT_ES2 || cfg!(feature = "gpu-mali")) && compressed_block_bytes(f).is_some(),
+                        "format {f:#x}"
+                    ),
+                },
+            }
         }
     }
 
@@ -9023,6 +9404,249 @@ mod tests {
         assert_decoded(&gl, name, 0, 0, 8, 8, &[ETC1_A; 4]);
     }
 
+    /* ---- the six formats decoded at upload (decoded_format) ---- */
+
+    use super::super::etc2;
+
+    /// Blocks with distinct texels: ETC1_A and B read as ETC2 individual /
+    /// differential blocks, and arbitrary bytes for the EAC halves.
+    const EAC_A: [u8; 8] = [0x80, 0x25, 0x13, 0x57, 0x9b, 0xdf, 0x02, 0x46];
+    const EAC_B: [u8; 8] = [0x7f, 0x3a, 0xec, 0xa8, 0x64, 0x20, 0x13, 0x57];
+
+    fn level_bytes(gl: &TestGl, name: GLuint, level: u32, face: u32, x: u32, y: u32, bpp: u32) -> Vec<u8> {
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        let (lw, lh) = level_size(t, level);
+        let o = t.level_off[level as usize] as usize + (((face * lh + y) * t.level_pitch(lw) + x) * bpp) as usize;
+        storage(gl, name)[o..o + bpp as usize].to_vec()
+    }
+
+    fn halves(b: &[u8]) -> Vec<u16> {
+        b.chunks(2).map(|c| u16::from_ne_bytes([c[0], c[1]])).collect()
+    }
+
+    fn half(v: f32) -> u16 {
+        es3_formats::f32_to_half(v)
+    }
+
+    #[test]
+    #[cfg(not(any(feature = "report-es2", feature = "gpu-mali")))]
+    fn punch_through_blocks_are_decoded_into_rgba8_and_srgb8_alpha8() {
+        for (format, texfmt) in [
+            (GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, GLES_TEXFMT_RGBA8),
+            (GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2, GLES_TEXFMT_SRGB8_A8),
+        ] {
+            let gl = TestGl::new(4, 4);
+            let name = new_tex();
+            let blocks = [ETC1_A, ETC1_B, ETC1_B, ETC1_A];
+            compressed_image(format, 8, 8, &blocks.concat());
+            assert_eq!(gl.error(), GL_NO_ERROR, "{format:#x}");
+            let t = &gl.ctx().objs_ref().textures[name as usize];
+            assert_eq!((t.width, t.height, t.texfmt, t.block_bytes), (8, 8, texfmt, 0), "{format:#x}");
+            for y in 0..8u32 {
+                for x in 0..8u32 {
+                    let want = etc2::decode_rgb_block(&blocks[((y / 4) * 2 + x / 4) as usize], true);
+                    assert_eq!(
+                        stored_texel(&gl, name, 0, 0, x, y),
+                        want[((y % 4) * 4 + x % 4) as usize],
+                        "{format:#x} texel ({x}, {y})"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(not(any(feature = "report-es2", feature = "gpu-mali")))]
+    fn an_npot_punch_through_image_cuts_its_edge_blocks_and_fills_its_chain() {
+        let gl = TestGl::new(4, 4);
+        let name = new_tex();
+        let f = GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+        let grid: Vec<u8> = (0..4).flat_map(|i| if i % 2 == 0 { ETC1_A } else { ETC1_B }).collect();
+        compressed_image(f, 6, 5, &grid);
+        // SAFETY: one block of 8 bytes is the 1x1 level.
+        unsafe { glCompressedTexImage2D(GL_TEXTURE_2D, 1, f, 3, 2, 0, 8, ptr(&ETC1_B)) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let want = etc2::decode_rgb_block(&ETC1_B, true);
+        assert_eq!(stored_texel(&gl, name, 0, 0, 5, 4), want[1], "the right-bottom block's first row");
+        assert_eq!(stored_texel(&gl, name, 1, 0, 2, 1), want[4 + 2], "level 1");
+    }
+
+    #[test]
+    #[cfg(not(any(feature = "report-es2", feature = "gpu-mali")))]
+    fn r11_and_rg11_are_decoded_into_half_float_classes() {
+        let gl = TestGl::new(4, 4);
+        let name = new_tex();
+        let blocks = [EAC_A, EAC_B];
+        compressed_image(GL_COMPRESSED_R11_EAC, 8, 4, &blocks.concat());
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        assert_eq!((t.texfmt, t.block_bytes, t.format), (GLES_TEXFMT_R16F, 0, GL_RED));
+        for (x, y) in [(0u32, 0u32), (3, 2), (5, 1), (7, 3)] {
+            let v = etc2::decode_eac11_unsigned_block(&blocks[(x / 4) as usize])[(y * 4 + x % 4) as usize];
+            let got = halves(&level_bytes(&gl, name, 0, 0, x, y, 2));
+            assert_eq!(got, [half(f32::from(v) / 65535.0)], "R11 texel ({x}, {y})");
+        }
+        /* the signed two-channel form: red then green, blue 0, alpha 1 */
+        let name = new_tex();
+        compressed_image(GL_COMPRESSED_SIGNED_RG11_EAC, 4, 4, &[EAC_A, EAC_B].concat());
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        assert_eq!(t.texfmt, GLES_TEXFMT_RGBA16F);
+        let r = etc2::decode_eac11_signed_block(&EAC_A);
+        let g = etc2::decode_eac11_signed_block(&EAC_B);
+        for (x, y) in [(0u32, 0u32), (2, 3), (3, 1)] {
+            let i = (y * 4 + x) as usize;
+            let got = halves(&level_bytes(&gl, name, 0, 0, x, y, 8));
+            let want = [r[i], g[i]].map(|v| half((f32::from(v) / 32767.0).max(-1.0)));
+            assert_eq!(got, [want[0], want[1], half(0.0), half(1.0)], "SIGNED_RG11 texel ({x}, {y})");
+        }
+    }
+
+    /// The 11-bit values survive the half-float class within half a step of
+    /// the 11-bit grid (docs/notes/etc2-eac.md, the threshold math):
+    /// every value the unsigned decoder can make, to its half and back.
+    /// An image wider than a stripe and not a whole number of blocks: every
+    /// texel of the stripes' seams and of the right and bottom edge blocks.
+    #[test]
+    #[cfg(not(any(feature = "report-es2", feature = "gpu-mali")))]
+    fn a_decoded_image_wider_than_a_stripe_has_every_texel_where_it_belongs() {
+        let gl = TestGl::new(4, 4);
+        let name = new_tex();
+        let (w, h) = (70usize, 6usize);
+        let (bw, bh) = (w.div_ceil(4), h.div_ceil(4));
+        let data: Vec<u8> = (0..bw * bh * 8).map(|i| (i * 29 + i / 8 * 13 + 5) as u8).collect();
+        compressed_image(GL_COMPRESSED_R11_EAC, w as GLsizei, h as GLsizei, &data);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        for y in 0..h {
+            for x in 0..w {
+                let b = (y / 4) * bw + x / 4;
+                let v =
+                    etc2::decode_eac11_unsigned_block(data[b * 8..b * 8 + 8].try_into().unwrap())[(y % 4) * 4 + x % 4];
+                let got = halves(&level_bytes(&gl, name, 0, 0, x as u32, y as u32, 2));
+                assert_eq!(got, [half(f32::from(v) / 65535.0)], "texel ({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(not(any(feature = "report-es2", feature = "gpu-mali")))]
+    fn eleven_bit_values_survive_the_half_float_class() {
+        for v11 in 0u32..2048 {
+            let v16 = (v11 << 5) | (v11 >> 6);
+            let h = es3_formats::half_to_f32(half(v16 as f32 / 65535.0));
+            let back = (h * 2047.0).round() as u32;
+            assert_eq!(back, v11, "unsigned {v11}");
+            assert!((h - v11 as f32 / 2047.0).abs() <= 1.0 / 2047.0 * 0.5 + 1e-6, "unsigned {v11}: {h}");
+        }
+        for m in 0u32..1024 {
+            let v16 = ((m << 5) | (m >> 5)) as f32;
+            let h = es3_formats::half_to_f32(half(v16 / 32767.0));
+            assert_eq!((h * 1023.0).round() as u32, m, "signed magnitude {m}");
+        }
+    }
+
+    #[test]
+    #[cfg(not(any(feature = "report-es2", feature = "gpu-mali")))]
+    fn a_decoded_sub_image_replaces_whole_blocks_and_checks_its_arguments() {
+        let gl = TestGl::new(4, 4);
+        let name = new_tex();
+        let f = GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+        compressed_image(f, 8, 8, &[ETC1_A; 4].concat());
+        // SAFETY: each call's data holds the imageSize it names.
+        unsafe {
+            glCompressedTexSubImage2D(GL_TEXTURE_2D, 0, 4, 4, 4, 4, f, 8, ptr(&ETC1_B));
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            assert_eq!(stored_texel(&gl, name, 0, 0, 5, 5), etc2::decode_rgb_block(&ETC1_B, true)[5]);
+            assert_eq!(stored_texel(&gl, name, 0, 0, 1, 1), etc2::decode_rgb_block(&ETC1_A, true)[5], "untouched");
+            glCompressedTexSubImage2D(GL_TEXTURE_2D, 0, 2, 0, 4, 4, f, 8, ptr(&ETC1_B));
+            assert_eq!(gl.error(), GL_INVALID_OPERATION, "not on a block");
+            glCompressedTexSubImage2D(GL_TEXTURE_2D, 0, 4, 4, 4, 4, f, 16, ptr(&[ETC1_B; 2].concat()));
+            assert_eq!(gl.error(), GL_INVALID_VALUE, "imageSize");
+            glCompressedTexSubImage2D(GL_TEXTURE_2D, 0, 8, 8, 4, 4, f, 8, ptr(&ETC1_B));
+            assert_eq!(gl.error(), GL_INVALID_VALUE, "outside the level");
+            glCompressedTexSubImage2D(GL_TEXTURE_2D, 3, 0, 0, 4, 4, f, 8, ptr(&ETC1_B));
+            assert_eq!(gl.error(), GL_INVALID_OPERATION, "a level that holds nothing");
+            glCompressedTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, 4, GL_COMPRESSED_R11_EAC, 8, ptr(&ETC1_B));
+            assert_eq!(gl.error(), GL_INVALID_OPERATION, "another format's class");
+        }
+    }
+
+    /// The decoded texels are read tightly whatever the application's unpack
+    /// state, which is left as it was.
+    #[test]
+    #[cfg(not(any(feature = "report-es2", feature = "gpu-mali")))]
+    fn a_decoded_upload_ignores_and_keeps_the_unpack_state() {
+        let gl = TestGl::new(4, 4);
+        let name = new_tex();
+        // SAFETY: plain GL calls; the data holds one block.
+        unsafe {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 8);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 77);
+            glPixelStorei(GL_UNPACK_SKIP_PIXELS, 3);
+            glPixelStorei(GL_UNPACK_SKIP_ROWS, 2);
+        }
+        compressed_image(GL_COMPRESSED_R11_EAC, 3, 3, &EAC_A);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let c = gl.ctx();
+        assert_eq!((c.unpack_alignment, c.unpack_row_length, c.unpack_skip_pixels, c.unpack_skip_rows), (8, 77, 3, 2));
+        let v = etc2::decode_eac11_unsigned_block(&EAC_A);
+        for (x, y) in [(0u32, 0u32), (2, 0), (1, 2), (2, 2)] {
+            let got = halves(&level_bytes(&gl, name, 0, 0, x, y, 2));
+            assert_eq!(got, [half(f32::from(v[(y * 4 + x) as usize]) / 65535.0)], "texel ({x}, {y})");
+        }
+    }
+
+    #[test]
+    #[cfg(not(any(feature = "report-es2", feature = "gpu-mali")))]
+    fn a_decoded_2d_array_takes_layers_and_sub_images() {
+        let gl = TestGl::new(4, 4);
+        let mut name: GLuint = 0;
+        let f = GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+        // SAFETY: plain GL calls; the data holds the imageSize it names.
+        unsafe {
+            glGenTextures(1, &mut name);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, name);
+            glCompressedTexImage3D(GL_TEXTURE_2D_ARRAY, 0, f, 4, 4, 3, 0, 24, ptr(&[ETC1_A, ETC1_B, ETC1_A].concat()));
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            glCompressedTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 2, 4, 4, 1, f, 8, ptr(&ETC1_B));
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            glCompressedTexImage3D(GL_TEXTURE_3D, 0, f, 4, 4, 1, 0, 8, ptr(&ETC1_B));
+            assert_eq!(gl.error(), GL_INVALID_OPERATION, "no 3D form");
+        }
+        for (layer, block) in [(0u32, ETC1_A), (1, ETC1_B), (2, ETC1_B)] {
+            assert_eq!(
+                stored_texel(&gl, name, 0, layer, 2, 3),
+                etc2::decode_rgb_block(&block, true)[(3 * 4 + 2) as usize],
+                "layer {layer}"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "report-es2")]
+    fn an_es2_report_lists_and_takes_none_of_the_six() {
+        let gl = TestGl::new(4, 4);
+        let _ = new_tex();
+        let mut list = [0 as GLint; 16];
+        assert_eq!(stored_compressed_formats(&mut list), 3);
+        for f in &COMPRESSED_FORMATS[5..] {
+            compressed_image(*f, 4, 4, &vec![0u8; compressed_block_bytes(*f).unwrap() as usize]);
+            assert_eq!(gl.error(), GL_INVALID_ENUM, "{f:#x}");
+        }
+    }
+
+    #[test]
+    #[cfg(not(any(feature = "report-es2", feature = "gpu-mali")))]
+    fn the_listing_has_the_ten_formats_and_the_names_are_taken() {
+        let _gl = TestGl::new(4, 4);
+        let mut list = [0 as GLint; 16];
+        let n = stored_compressed_formats(&mut list);
+        assert_eq!(n, 11, "ETC1 and the ten ES 3.0 formats");
+        for f in COMPRESSED_FORMATS {
+            assert!(list[..n].contains(&(f as GLint)), "{f:#x}");
+        }
+    }
+
     #[test]
     fn etc1_stays_compressed_on_a_backend_that_samples_it() {
         /* the PowerVR-shaped mock (etc1_decoded_at_upload false): the path
@@ -9075,14 +9699,15 @@ mod tests {
     }
 
     /// The compressed sRGB ETC2 formats are stored as blocks in their own
-    /// texel classes where the back end samples them (the PowerVR and the
-    /// GC7000UL, in an ES 3.0 report), and stay GL_INVALID_ENUM, with nothing
+    /// texel classes where the back end samples them (the PowerVR, the
+    /// GC7000UL and the V3D, in an ES 3.0 report), and stay GL_INVALID_ENUM, with nothing
     /// stored, everywhere else. The RGB one has no alpha, as
     /// GL_COMPRESSED_RGB8_ETC2.
     #[test]
     fn compressed_srgb_etc2_is_stored_as_blocks_in_the_srgb_class() {
         let gl = TestGl::new(4, 4);
-        let stored = (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante")) && !crate::REPORT_ES2;
+        let stored = (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante") || cfg!(feature = "gpu-v3d"))
+            && !crate::REPORT_ES2;
         for (format, bb, class, no_alpha) in [
             (GL_COMPRESSED_SRGB8_ETC2, 8usize, GLES_TEXFMT_ETC2_SRGB_RGB, true),
             (GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC, 16, GLES_TEXFMT_ETC2_SRGB_RGBA, false),
@@ -10826,7 +11451,9 @@ mod tests {
             glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_SIGNED_R11_EAC, 16, 16, 0, 256, core::ptr::null());
             assert_eq!(gl.error(), GL_INVALID_VALUE, "an EAC R11 16x16 image is 128 bytes");
             glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_SIGNED_R11_EAC, 16, 16, 0, 128, core::ptr::null());
-            assert_eq!(gl.error(), GL_INVALID_ENUM, "right size, a format not stored");
+            /* an ES 3.0 name since 2026-11-13 (decoded at upload); ES 2.0 has no EAC */
+            let want = if crate::REPORT_ES2 || cfg!(feature = "gpu-mali") { GL_INVALID_ENUM } else { GL_NO_ERROR };
+            assert_eq!(gl.error(), want, "right size, a format decoded at upload");
         }
     }
     /* ---- cube maps, 2D arrays and float texels (upstream 7e76640) ---------------------------------- */

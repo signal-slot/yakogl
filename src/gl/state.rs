@@ -952,7 +952,7 @@ pub unsafe extern "C" fn glPopGroupMarkerEXT() {
 
 /// The most values one glGet* pname writes: GL_COMPRESSED_TEXTURE_FORMATS
 /// lists every stored compressed format; no other pname writes more than four.
-const STATE_VALUES: usize = 8;
+const STATE_VALUES: usize = 12;
 const _: () = assert!(texture::COMPRESSED_FORMATS.len() <= STATE_VALUES);
 
 /// Float-valued state: fills `out` and returns the value count, 0 if pname is
@@ -3311,8 +3311,24 @@ mod tests {
             GL_COMPRESSED_RGB8_ETC2 as GLint,
             GL_COMPRESSED_RGBA8_ETC2_EAC as GLint
         ];
-        if (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante")) && !crate::REPORT_ES2 {
+        if (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante") || cfg!(feature = "gpu-v3d"))
+            && !crate::REPORT_ES2
+        {
             want.extend([GL_COMPRESSED_SRGB8_ETC2 as GLint, GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC as GLint]);
+        }
+        if !crate::REPORT_ES2 && !cfg!(feature = "gpu-mali") {
+            /* the six the GL core decodes at upload (the Mali samples none of their classes) */
+            want.extend(
+                [
+                    GL_COMPRESSED_R11_EAC,
+                    GL_COMPRESSED_SIGNED_R11_EAC,
+                    GL_COMPRESSED_RG11_EAC,
+                    GL_COMPRESSED_SIGNED_RG11_EAC,
+                    GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+                    GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+                ]
+                .map(|f| f as GLint),
+            );
         }
         assert_eq!(n as usize, want.len());
         assert_eq!(f[..want.len()], want[..]);

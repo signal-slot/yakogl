@@ -229,6 +229,31 @@ section 1 cannot move either way.
   both from the texture (it reads `GlTexture` directly) and is the
   reference a back end's result can be compared with on the host.
 
+### The compressed rows and the V3D shadow compare (plan #354)
+
+The V3D rows above that named ETC2 ("a texture format other than ... (RGB565,
+half float, ETC2) is not sampled yet") are gone for the four block formats:
+`V3D_SAMPLED_TEXFMTS` holds the ETC2/EAC classes and the draw reaches the TMU with
+the `etc2_row` record (`tests/es3_etc2_v3d.rs`). The other six ES 3.0 ETC2/EAC
+names are decoded at upload (`docs/notes/etc2-eac.md`), so on the host they are
+accepted instead of `GL_INVALID_ENUM`. A `texture.shadow` draw on the V3D packs
+the texture's compare function into its sampler record (`sampler_for`,
+`tests/es3_shadow_v3d_draw.rs`). The host cannot show the pictures of these
+rows (every read-back is black, section 0): the groups
+`texture.wrap.*etc2*`, `texture.wrap.*eac*`, `texture.format.compressed.*` and
+`texture.shadow` are reproduced for their upload and compile outcomes with
+`MODULE=gles3 GPU=<v3d|powervr|vivante> tools/cts/host-deqp-run.sh <substring>`;
+`implementation_limits` and `state_query` compressed rows are plain GL queries
+and do show their verdict on the host. Host dEQP before (`f2748a1f`) and after,
+HOST-ONLY, `MODULE=gles3`: the 240 cases of `etc2` and the 240 of `eac` went from
+160 / 200 NotSupported (v3d) or 80 / 160 (powervr, vivante) plus 76 upload errors on
+the V3D to all 240 reaching the picture check, `texture.format.compressed` from
+32 / 24 NotSupported of 44 to 44 at the picture check, the six
+`state_query...compressed_texture_formats` rows from 1 to 6 Pass, and
+`implementation_limits` from 38 / 41 to 40 / 43 Pass (v3d / powervr, vivante);
+`texture.shadow` fails the same way before and after (picture check, and on the
+GC7000UL a compile failure). The full table is `docs/notes/etc2-eac.md` section 7.
+
 ## 6. Reproducing it
 
 ```sh

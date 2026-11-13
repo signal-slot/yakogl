@@ -343,8 +343,9 @@ pub fn layout_compressed(
     Some(l)
 }
 
-/// [`refusal_for`]'s texel format with no TMU row here (ETC2, or the RGB10A2
-/// class the GL core keeps in RGBA8).
+/// [`refusal_for`]'s texel format with no TMU binding here (the punch-through
+/// ETC2 class the GL core does not store, or the RGB10A2 class it keeps in
+/// RGBA8).
 const NOT_SAMPLED: Refusal = "a texel format the V3D does not sample";
 
 /// [`refusal_for`]'s 16-bit format read by a 32-bit look-up.
@@ -1516,8 +1517,9 @@ mod tests {
     /// type and swizzle, the sRGB bit for the two sRGB ones only, a block
     /// for a texel ([`texel_bytes`]: never a TFU byte-copy type), the 16-bit
     /// TMU output (return size 16), and every rule but the sampled set
-    /// passes. Until src/backend.rs's V3D_SAMPLED_TEXFMTS lists them, the
-    /// set refuses them, with the one message every format outside it gets.
+    /// passes. V3D_SAMPLED_TEXFMTS lists the four the GL core stores; the
+    /// punch-through class it never stores is outside the set and gets the
+    /// one message every format outside it gets.
     #[test]
     fn the_gl_cores_etc2_classes_sample_as_their_rows() {
         let wider = V3D_SAMPLED_TEXFMTS | ETC2_CLASSES.iter().fold(0, |m, &(f, _)| m | gles_texfmt_bit(f));
@@ -1534,6 +1536,7 @@ mod tests {
                 Some("a look-up compiled for the 32-bit TMU output reads a texture of a 16-bit format")
             );
             let set = V3D_SAMPLED_TEXFMTS & gles_texfmt_bit(format) != 0;
+            assert_eq!(set, format != GLES_TEXFMT_ETC2_RGB_PT, "format {format}: the stored classes are sampled");
             assert_eq!(refusal(&b), (!set).then_some("a texel format the V3D does not sample"), "format {format}");
             let l = layout(&b).unwrap();
             assert_eq!(l, layout_compressed(36, 36, 6, 4, 4, bytes).unwrap(), "format {format}: the block layout");
