@@ -55,6 +55,15 @@ nothing and `tools/board.sh x2 status` stopped at `BOARD_HOST` unset (no
 board was not touched. W1 to W5 were already on main (`9cdeff6d`), so there
 was nothing left to build on the host for this item.
 
+## Fourth attempt (plan #355, 2026-11-13): still no measurement
+
+Host `orion` again: `getent hosts armadillo` returned nothing and
+`tools/board.sh x2 status` stopped at `BOARD_HOST` unset (no `target:x2` or
+`target:x2-console` lease reached the task). No jump, no image, the board was
+not touched. W1 to W5 are on main (`9cdeff6d`); the earlier closed pull
+request for this item only added case 243 probe helpers to `ts.rs` and failed
+CI, and was not reused.
+
 ## What is left
 
 Rerun from one of the nodes that log in (see the checks above), with
