@@ -599,7 +599,6 @@ class _FakeDK:
                 c.close()
                 return
             c.sendall(b"\b\b\b 0 \r\n")
-            self.prompt_at = len(self.rx)
             c.sendall(PROMPT)
             buf = b""
             while len(self.lines) < 2:
@@ -610,6 +609,11 @@ class _FakeDK:
                 if not d:
                     return
                 self.rx += d
+                if self.prompt_at is None and d.strip(b" "):
+                    # the helper keeps sending the stop key until it has seen the
+                    # prompt, so keys sent just before it arrive after the prompt
+                    # went out: the typed text starts at the first non-key byte
+                    self.prompt_at = len(self.rx) - len(d.lstrip(b" "))
                 for b in d:
                     if b == 13:
                         self.lines.append(buf.decode())
