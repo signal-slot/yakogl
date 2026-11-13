@@ -67,7 +67,9 @@ jobs:
       # uses every core, so more rows mostly overlap the one-core rows; more
       # than 4 was not measured. The farm's agents keep priority through CPU
       # weight (docs/ci.md 3.3, "Beside the farm"), not through this count.
-      YAKOGL_CHECK_JOBS: "4"
+      # "auto" is half the machine's cores (4 on 8), so the count follows the
+      # pool's machine (tools/env/yakogl-gate.yaml) and not a number here.
+      YAKOGL_CHECK_JOBS: auto
     steps:
       # Whether the run is needed. A nightly run on a commit that already passed
       # a nightly or a dispatched run proves nothing new; a red earlier run is

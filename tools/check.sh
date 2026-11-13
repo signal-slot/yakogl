@@ -172,7 +172,7 @@ scope_of_path() {
   esac
 }
 # --jobs N, before the other arguments: up to N rows at once (the pool,
-# below; YAKOGL_CHECK_JOBS=N does the same).
+# below; YAKOGL_CHECK_JOBS=N does the same; `auto` is half the cores).
 if [ "${1-}" = "--jobs" ]; then
   YAKOGL_CHECK_JOBS=${2:?usage: tools/check.sh --jobs <N> [...]}
   shift 2
@@ -339,7 +339,12 @@ gate_t0=$SECONDS
 #                   (the no-table and no-knob rows)
 #   rgx-target      build/pvr-check/rgx-target
 #   v3d-mesa        build/v3d-check/mesa and build/v3d-check/tmp
+# YAKOGL_CHECK_JOBS=auto: half the cores (the 4 on 8 cores measured in
+# docs/ci.md section 1), so the pool follows the machine it runs on; the
+# compiler slots below lower it when the memory holds fewer.
 JOBS=${YAKOGL_CHECK_JOBS:-1}
+JOBS_AUTO=0
+if [ "$JOBS" = auto ]; then JOBS=$(( $(nproc) / 2 )); [ "$JOBS" -ge 1 ] || JOBS=1; JOBS_AUTO=1; fi
 [[ $JOBS =~ ^[1-9][0-9]*$ ]] || { echo "check.sh: --jobs/YAKOGL_CHECK_JOBS '$JOBS' is not a count"; exit 2; }
 
 # The compiler slots. Every compiler a row starts (rustc, clippy-driver, and
@@ -396,6 +401,8 @@ case " ${CARGO_MAKEFLAGS-} ${MAKEFLAGS-} " in
   SLOTS=$((avail / per))
   [ "$SLOTS" -le "$(nproc)" ] || SLOTS=$(nproc)
   [ "$SLOTS" -ge 1 ] || SLOTS=1
+  # An auto pool never holds more rows than slots: each row holds a token.
+  [ "$JOBS_AUTO" -eq 0 ] || [ "$JOBS" -le "$SLOTS" ] || JOBS=$SLOTS
   # The FIFO is outside the checkout. Under build/ it went when the next job's
   # actions/checkout ran `git clean -ffdx` beside a gate that an earlier
   # cancel had orphaned (ps: tools/check.sh alive, its build/check/tests-<pid>

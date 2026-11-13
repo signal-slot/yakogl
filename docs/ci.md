@@ -288,7 +288,7 @@ an uplifted binary or archive rebuilt per feature set, a generated table
 another row reads, a scratch directory, and the checkout itself for the
 rows that edit it. The list is in `check.sh`; one entry was found by the
 strace survey (yakogl-precompile's tests write fixed paths under
-`build/test-tmp`). The CI runs 4 jobs (`gate.yml`): on 8 cores, 4 jobs
+`build/test-tmp`). The CI runs `auto` jobs, 4 on 8 cores (`gate.yml`): on 8 cores, 4 jobs
 took half the time of 1 (section 1); more was not measured.
 
 **Compiler slots.** Every compiler the rows start comes out of one GNU make
@@ -302,6 +302,18 @@ each cargo starts one compiler per core: on 2026-10-13 runner C (16 threads,
 rows, ran out of memory and hung for two hours. One clippy-driver on the
 yakogl crate peaks at 2.9 GB (2026-10-14). The run prints its slots on its
 first line.
+
+The CI machine's memory is chosen to fill the cores (decided 2026-11-13).
+Run 43372841985 on a 12 GB, 8-core machine printed "3 compiler slot(s)
+(11247 MB available, 3072 MB each, 8 cores)": 41,723 s of rows took 14,851 s
+wall (2.8 in parallel), five cores idle. Eight slots need 24,576 MB
+available, so `tools/env/yakogl-gate.yaml` gives a CI machine 28 GB (24 GB
+gives 7 slots, 20 GB 6). Fewer machines fit per host, each uses its 8 cores
+instead of 3. `gate.yml` sets `YAKOGL_CHECK_JOBS: auto` (half the cores, at
+most the slots) instead of a fixed 4, so the rows at once follow the
+machine. Not measured: 8 slots with 4 rows at once; the first run after
+the change shows the new wall time. Not checked against the hosts' memory
+(`orion nodes --json` was not reachable): check it before applying.
 
 The FIFO is not under the checkout. On 2026-10-18 (run 39062794102) seven
 V3D test rows were red with rustc's "failed to connect to jobserver" for a
