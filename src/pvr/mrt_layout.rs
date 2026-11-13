@@ -295,6 +295,46 @@ mod tests {
         assert_eq!(layout(&[1, 2]).unwrap().place[1].source_pos(), 2);
     }
 
+    /// Integer colour attachments beside float/unorm ones, as output-register
+    /// dwords (`surf_out_dwords`): 1 for RGBA8, R32F, R32I, RG16UI and R32UI,
+    /// 2 for RGBA16F and RGBA16UI, 4 for RGBA32UI. The placement, and with it
+    /// the PBE source positions a later wiring reads off this layout.
+    #[test]
+    fn integer_beside_float_unorm_mixes() {
+        /* RGBA8 + R32UI */
+        let l = layout(&[1, 1]).unwrap();
+        assert_eq!(places(&l), [reg(0), reg(1)]);
+        assert_eq!((l.output_regs, l.tile_buffers, l.program), (2, 0, EotProgram::Plain { targets: 2 }));
+        assert_eq!((l.place[0].source_pos(), l.place[1].source_pos()), (0, 1));
+
+        /* R32F + R32I: the same dwords, the same placement */
+        assert_eq!(places(&layout(&[1, 1]).unwrap()), [reg(0), reg(1)]);
+
+        /* R32I + RGBA16F: the 64-bit source skips register 1 */
+        let l = layout(&[1, 2]).unwrap();
+        assert_eq!(places(&l), [reg(0), reg(2)]);
+        assert_eq!((l.output_regs, l.tile_buffers, l.program), (4, 0, EotProgram::Plain { targets: 2 }));
+        assert_eq!((l.place[0].source_pos(), l.place[1].source_pos()), (0, 2));
+
+        /* RGBA8 + RG16UI + R32F */
+        let l = layout(&[1, 1, 1]).unwrap();
+        assert_eq!(places(&l), [reg(0), reg(1), reg(2)]);
+        assert_eq!((l.output_regs, l.program), (3, EotProgram::Plain { targets: 3 }));
+
+        /* RGBA8 + RGBA16UI + R32UI: the 2-dword target takes registers 2..4,
+         * the 1-dword one has none left, and register 1 is not back-filled:
+         * it spills to tile buffer 0 (eot3_tb), emitted from dword 0 */
+        let l = layout(&[1, 2, 1]).unwrap();
+        assert_eq!(places(&l), [reg(0), reg(2), tb(0)]);
+        assert_eq!((l.output_regs, l.tile_buffers, l.program), (4, 1, EotProgram::Eot3Tb));
+        assert_eq!(l.place[2].source_pos(), 0);
+
+        /* RGBA32UI + R32F: the 4-dword target fills the four registers, the
+         * second spills as the second of two targets, and no two-emit
+         * tile-buffer program was captured: refused */
+        assert_eq!(layout(&[4, 1]), Err(LayoutError::NoProgram { targets: 2, spilled: 1 }));
+    }
+
     #[test]
     fn spills_without_a_captured_program_are_refused() {
         /* two targets, the second spilled: eot_doutu_src0_tb_n[2] is
