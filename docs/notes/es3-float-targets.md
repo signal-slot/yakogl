@@ -315,3 +315,61 @@ Expected, to be confirmed by the runs: 0 / 15 on every GPU, because the
 cause is `glRenderbufferStorageMultisample` in the GL core (section 1), not
 the back end. Board lists agree: AM62P 0 float / 15 msaa, Pi 4 0 / 15.
 c4 holds on the host once `msaa-fbo` is on for the GPU.
+
+## 7. Plan #360 decision
+
+Plan #360, item `note-decision`. Supersedes section 5's option choice (A+B,
+"keep not claiming `GL_EXT_color_buffer_float`") **for the V3D**: option D
+of section 4 is now the end state, per GPU. Sections 1 to 4 and 6 stand.
+The rule and the per-GPU facts are in `docs/es3/sized-formats.md:103`
+("Float colour targets") and `docs/es3/backend-caps.md:261`
+(`GL_EXT_color_buffer_float`); this section stays consistent with both.
+
+| GPU | float formats drawn | claim | evidence |
+|---|---|---|---|
+| V3D 4.2 (Pi 4) | R16F, RG16F, RGBA16F, R32F, RG32F, RGBA32F, R11F_G11F_B10F: 128-bpp TLB, 32-bit TLB writes | `GL_EXT_color_buffer_float` behind the Cargo feature `color-buffer-float`, off by default (planned: items `core-claim`, `core-surf`, `v3d-arm`) | Mesa `v3dx_format_table.c:90-101,146` (`docs/es3/backend-caps.md:68-69`); `docs/es3/backend-caps.md:240-241` |
+| PowerVR BXS-4-64 | RGBA16F, R16F, R32F today (`src/pvr/backend.rs`) | **not claimed**: Mesa pco's R32F is not 32-bit precise | `docs/es3/pvr-formats.md:334,500` (R32F row, F32 `:248`); `docs/es3/backend-caps.md:264` |
+| GC7000UL (i.MX8MP) | RGBA16F, R32F | **not claimed**: RGBA32F needs two `G32R32` planes | `docs/notes/gc-128bit-render-targets.md:35,50`; `docs/es3/backend-caps.md:101,265` |
+
+Rules for every build:
+
+- `GL_EXT_color_buffer_half_float` stays claimed in every ES 3.0 build
+  (`src/gl/state.rs:112`, `:252`).
+- Without `GL_EXT_color_buffer_float`, R32F is incomplete like RG32F, RGBA32F
+  and R11F_G11F_B10F (today it is complete: `src/gl/framebuffer.rs:650`).
+  Status `FRAMEBUFFER_INCOMPLETE_ATTACHMENT`, renderbuffer storage
+  `GL_INVALID_ENUM` (section 3).
+- `report-es2` builds claim nothing new (`tests/es2_report_guard.rs`).
+- PowerVR and GC7000UL arms are issue drafts until their paths
+  (`src/pvr/**`, `src/vivante/**`) are free; this note does not decide them.
+- No board run here; the stage-4 board trees (#313, #316, #320) take the
+  board steps.
+
+## 8. Host dEQP before/after (HOST-ONLY)
+
+Host dEQP is HOST-ONLY (`tools/cts/README.md` 2b): API, completeness and
+compile verdicts count, pictures do not (the linux OSAL reads black). Each
+cell is `pass/fail/notsupported`. No run directory `build/host-deqp/` was
+present for this item, so no count is filled in: nothing is invented.
+Before cells are filled by items `before-<gpu>`, after cells by the docs
+item (items `after-<gpu>`; for v3d once with the feature off and once on).
+
+Group globs (all under `dEQP-GLES3.functional.`):
+
+- derivate: `shaders.derivate.*`
+- completeness: `fbo.completeness.*`
+- colour: `fbo.color.*`
+- float read-pixels: `pbo.renderbuffer.*` (the `rg16f`, `rgba16f`, `rg32f`,
+  `rgba32f` `_clears` and `_triangles` cases; `read_pixels.*` has no float
+  case in `tools/cts/gles3-mustpass.txt`)
+
+| GPU | `shaders.derivate.*` | `fbo.completeness.*` | `fbo.color.*` | `pbo.renderbuffer.*` (float) |
+|---|---|---|---|---|
+| v3d | before: pending (item `before-v3d`); after: pending | before: pending (item `before-v3d`); after: pending | before: pending (item `before-v3d`); after: pending | before: pending (item `before-v3d`); after: pending |
+| powervr | before: pending (item `before-pvr`); after: pending | before: pending (item `before-pvr`); after: pending | before: pending (item `before-pvr`); after: pending | before: pending (item `before-pvr`); after: pending |
+| vivante | before: pending (item `before-gc`); after: pending | before: pending (item `before-gc`); after: pending | before: pending (item `before-gc`); after: pending | before: pending (item `before-gc`); after: pending |
+
+Expected, not measured: the 15 derivate `texture.msaa4` rows do not move
+(multisample, section 1); `fbo.completeness.renderable.*.color0.r32f` moves
+from Fail to Pass on every GPU; the 32-bit rows stay NotSupported on
+PowerVR and vivante and become real tests on v3d with the feature on.
