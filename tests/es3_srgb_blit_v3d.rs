@@ -40,7 +40,14 @@
 //!   side's own render, which this stand-in does not store:
 //!   `other_side_formats_are_complete_colour_buffers` holds only that each is
 //!   a complete colour renderbuffer; the blit values of those pairs stay with
-//!   the shared `src/gl/blit.rs` tests.
+//!   the shared `src/gl/blit.rs` tests. R32F is the one of them whose
+//!   completeness follows the build rather than one answer: ES 3.0 makes it
+//!   colour-renderable only under GL_EXT_color_buffer_float, which no back
+//!   end claims (docs/notes/es3-float-targets.md), while today's core
+//!   completes it anyway. That test probes a 1x1 R32F colour renderbuffer
+//!   and holds the row as today while it is complete; once the core follows
+//!   the extension the row asserts the refusal instead (no extension listed,
+//!   storage GL_INVALID_ENUM) and skips (plan #360, r32f-gate-b).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_srgb_blit_v3d
@@ -716,6 +723,46 @@ fn an_out_of_bounds_blit_to_the_default_framebuffer_is_clipped() {
 
 /* ---- the other side of the conversion rows ------------------------------- */
 
+/// Is `token` in this context's GL_EXTENSIONS (what dEQP's completeness cases
+/// read to decide what a float colour format must be)?
+fn ext_claimed(token: &str) -> bool {
+    // SAFETY: GL_EXTENSIONS is a static NUL-terminated string the GL owns.
+    unsafe {
+        let s = core::ffi::CStr::from_ptr(glGetString(GL_EXTENSIONS) as *const _);
+        s.to_str().unwrap_or_default().split(' ').any(|t| t == token)
+    }
+}
+
+/// Is GL_R32F colour renderbuffer storage of this build: a 1x1 GL_R32F
+/// colour renderbuffer whose storage was accepted and that completes its
+/// framebuffer? ES 3.0 makes R32F colour-renderable under
+/// GL_EXT_color_buffer_float only, which this build does not claim; the core
+/// nevertheless completes it today, and plan #360's core-claim gates it on
+/// the extension (docs/notes/es3-float-targets.md). The probe answers for
+/// both states, so the r32f row below runs as today while the target is
+/// renderable and holds the extension's ES 3.0 refusal once it is not.
+fn r32f_colour_renderable() -> bool {
+    let (mut fb, mut rb) = (0, 0);
+    // SAFETY: plain GL calls; room for one name each; null pixels only
+    // allocate.
+    let (storage_ok, complete) = unsafe {
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_R32F, 1, 1);
+        let storage_ok = err() == GL_NO_ERROR;
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        let complete = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fb);
+        glDeleteRenderbuffers(1, &rb);
+        (storage_ok, complete)
+    };
+    while err() != GL_NO_ERROR {}
+    storage_ok || complete
+}
+
 /// The other formats of `fbo.blit.conversion.*_to_srgb8_alpha8` and
 /// `srgb8_alpha8_to_*`: each is a complete colour renderbuffer, except the
 /// three that ES 3.0 does not make colour-renderable (R11F_G11F_B10F, RG32F,
@@ -723,9 +770,18 @@ fn an_out_of_bounds_blit_to_the_default_framebuffer_is_clipped() {
 /// the Pi 4 list (docs/es3/pi4-gles3-fails.tsv; its r32f rows too, a case dEQP skips for other reasons), and stay
 /// incomplete here: they are not failures. Only completeness is held; the
 /// stand-in stores no pixels for these formats (see the file header).
+///
+/// The r32f row follows the build, not one answer. ES 3.0 names R32F
+/// colour-renderable only under GL_EXT_color_buffer_float, unclaimed here,
+/// but the core today completes a GL_R32F renderbuffer anyway; core-claim
+/// stops that. [`r32f_colour_renderable`] probes a 1x1 R32F colour
+/// renderbuffer: while it is complete the row runs as today, and once it is
+/// not the row asserts the ES 3.0 answer instead (no extension listed,
+/// storage GL_INVALID_ENUM) and skips.
 #[test]
 fn other_side_formats_are_complete_colour_buffers() {
     let _g = context();
+    let r32f = r32f_colour_renderable();
     let formats: [(GLenum, &str); 15] = [
         (GL_R8, "r8"),
         (GL_RG8, "rg8"),
@@ -745,6 +801,27 @@ fn other_side_formats_are_complete_colour_buffers() {
     ];
     let mut bad = Vec::new();
     for (f, name) in formats {
+        if f == GL_R32F && !r32f {
+            /* ES 3.0 4.4.2 with no GL_EXT_color_buffer_float in
+             * GL_EXTENSIONS: R32F is not colour-renderable and its
+             * renderbuffer storage is GL_INVALID_ENUM. Hold that much, then
+             * skip the row: it is neither a pass nor a failure then. */
+            assert!(
+                !ext_claimed("GL_EXT_color_buffer_float"),
+                "the r32f row skips only while GL_EXT_color_buffer_float is unclaimed"
+            );
+            let mut rb = 0;
+            // SAFETY: room for one name; plain GL calls.
+            unsafe {
+                glGenRenderbuffers(1, &mut rb);
+                glBindRenderbuffer(GL_RENDERBUFFER, rb);
+                glRenderbufferStorage(GL_RENDERBUFFER, GL_R32F, W, W);
+                glDeleteRenderbuffers(1, &rb);
+            }
+            assert_eq!(err(), GL_INVALID_ENUM, "r32f renderbuffer storage");
+            eprintln!("skipping r32f: GL_R32F is no colour renderbuffer of this build (GL_EXT_color_buffer_float not claimed)");
+            continue;
+        }
         let (mut fb, mut rb) = (0, 0);
         // SAFETY: plain GL calls; room for one name each.
         let status = unsafe {
