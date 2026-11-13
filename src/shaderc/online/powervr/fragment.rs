@@ -357,9 +357,10 @@ pub fn build_smp(image: Operand, data: u16, sampler: Operand, dest: u16, form: S
         return Err(BuildError::Unsupported("a layer address without a level word, or with a divisor"));
     }
     /* a gather replaces the level (pco_nir_tex.c:645-649) and is never
-     * projective or a fetch */
-    if gather && (proj || fetch || cube || lod != super::sel::SmpLod::Replace) {
-        return Err(BuildError::Unsupported("a gather other than 2D with a replaced level"));
+     * projective or a fetch; on a cube (`dmn` 3d) the direction's three
+     * words come first, as for any cube sample */
+    if gather && (proj || fetch || lod != super::sel::SmpLod::Replace) {
+        return Err(BuildError::Unsupported("a gather that is projective, a fetch or without a replaced level"));
     }
     let extra: &[(&str, u32)] = if proj || lod.in_block() || offset || layer || gather { &exta } else { &brief };
     let r = instr_region("smp", PH_BACKEND, &[Mods::default(); 3], extra).map_err(BuildError::Form)?;

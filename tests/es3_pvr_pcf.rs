@@ -423,10 +423,11 @@ fn a_shadow_look_up_gathers_at_two_levels() {
         let quad = names.iter().filter(|n| matches!(**n, "fdsx" | "fdsy")).count();
         assert_eq!(quad > 0, *derivatives, "{sampler} {e} (native {native}, vertex {vs}): {quad} derivatives");
     }
-    /* a cube: the plain sample alone (cube PCF is not this arm's) */
+    /* a cube: the plain sample and a gather per tap at each level, four
+     * and four (tests/es3_pvr_pcf_cube.rs) */
     let fs = fragment("samplerCubeShadow", "o = vec4(texture(s, c));");
     let (_, smps) = with_native_array(false, || compile_with(Stage::Fragment, &fs, ops).unwrap());
-    assert_eq!(smps.len(), 1, "a cube shadow look-up: no gather");
+    assert_eq!(smps.len(), 9, "a cube shadow look-up: the plain sample and eight gathers");
 }
 
 fn sampler_marker(name: &str) -> u32 {
