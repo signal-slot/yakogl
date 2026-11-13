@@ -47,6 +47,14 @@ The board was not touched. The work that did not need it is on the host:
 (`gc_debug_set_tiled_rt`, default off), see its "Status" section. The
 off/on pair of its "session A" is what the board still has to run.
 
+## Third attempt (plan #355, 2026-11-13): still no measurement
+
+Same worker (host `orion`), same state: `getent hosts armadillo` returned
+nothing and `tools/board.sh x2 status` stopped at `BOARD_HOST` unset (no
+`target:x2` lease reached the task). No jump was made, no image built, the
+board was not touched. W1 to W5 were already on main (`9cdeff6d`), so there
+was nothing left to build on the host for this item.
+
 ## What is left
 
 Rerun from one of the nodes that log in (see the checks above), with
