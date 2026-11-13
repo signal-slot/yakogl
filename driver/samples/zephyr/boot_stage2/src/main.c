@@ -30,6 +30,11 @@
 #include <zephyr/drivers/sdhc.h>
 #include <zephyr/storage/disk_access.h>
 #endif
+#ifdef CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST
+#include <zephyr/drivers/pm_cpu_ops.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/sd/sd_spec.h>
+#endif
 
 #include "boot_stage2.h"
 
@@ -390,6 +395,169 @@ static int64_t zero_wait(void)
 	return k_uptime_get() - t;
 }
 
+#ifdef CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST
+/*
+ * The way back to the other boot chain without a button (the Verdin AM62P:
+ * Toradex's chain in boot0, this one in boot1). BOOT_STAGE2_BOOT0_WORD on the
+ * console while the loader runs makes it point the eMMC's boot operation at
+ * boot partition 1 again and reset the SoC, so the ROM's next read is the
+ * other chain. The request was a single 'T' at first; a serial adapter
+ * plugged into a PC brought the board up in the other chain by itself on
+ * 2026-11-12 (a modem prober's "AT" is enough), hence a word nobody sends by
+ * accident.
+ *
+ * One byte of the EXT_CSD is written, PARTITION_CONFIG (179), with CMD6
+ * SWITCH in its write-byte mode, and nothing else ever: no boot write
+ * protection, no RST_n function, no other field. 0x48 is BOOT_ACK kept,
+ * BOOT_PARTITION_ENABLE = 1 (boot0), PARTITION_ACCESS = 0 (user area); the
+ * value this chain runs under is 0x50 (enable = 2, boot1). Coming back is
+ * `mmc bootpart enable 2 1 /dev/mmcblk0` in Linux.
+ */
+#define EXT_CSD_PARTITION_CONFIG 179u
+#define PARTITION_CONFIG_BOOT0   0x48u
+#define MMC_SWITCH_WRITE_BYTE    3u
+#define MMC_STATUS_SWITCH_ERROR  BIT(7)
+#define MMC_STATUS_READY         BIT(8)
+#define MMC_STATUS_STATE(s)      (((s) >> 9) & 0xfu)
+#define MMC_STATE_TRAN           4u
+
+static uint8_t ext_csd[512] __aligned(64);
+
+/* Whether the word has arrived on the console. Never waits: it takes what
+ * the UART's receiver holds now and returns. The match carries over from one
+ * look to the next. The word's first character occurs in it once (the rule
+ * in the option's help; the default keeps it), so a mismatch only has to be
+ * tried as a new start. */
+static bool boot0_requested(void)
+{
+	static const char word[] = CONFIG_BOOT_STAGE2_BOOT0_WORD;
+	static size_t matched;
+	static bool seen;
+	const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	unsigned char c;
+
+	if (!device_is_ready(uart)) {
+		return false;
+	}
+	for (int i = 0; i < 256 && uart_poll_in(uart, &c) == 0; i++) {
+		if (c != (unsigned char)word[matched]) {
+			matched = 0;
+		}
+		if (c == (unsigned char)word[matched] && ++matched == sizeof(word) - 1) {
+			seen = true;
+			matched = 0;
+		}
+	}
+	return seen;
+}
+BUILD_ASSERT(sizeof(CONFIG_BOOT_STAGE2_BOOT0_WORD) - 1 >= 8, "a request word of at least 8 characters");
+
+static int ext_csd_read(const struct device *sdhc)
+{
+	struct sdhc_command cmd = {
+		.opcode = MMC_SEND_EXT_CSD,
+		.response_type = SD_RSP_TYPE_R1,
+		.timeout_ms = CONFIG_SD_CMD_TIMEOUT,
+	};
+	struct sdhc_data data = {
+		.block_size = sizeof(ext_csd),
+		.blocks = 1,
+		.data = ext_csd,
+		.timeout_ms = CONFIG_SD_DATA_TIMEOUT,
+	};
+
+	return sdhc_request(sdhc, &cmd, &data);
+}
+
+/* PARTITION_CONFIG = boot0, checked by reading it back. 0 when the card
+ * holds the new value. */
+static int boot0_select(const struct device *sdhc)
+{
+	struct sdhc_command sw = {
+		.opcode = SD_SWITCH,
+		.arg = (MMC_SWITCH_WRITE_BYTE << 24) | (EXT_CSD_PARTITION_CONFIG << 16) |
+		       (PARTITION_CONFIG_BOOT0 << 8),
+		.response_type = SD_RSP_TYPE_R1b,
+		.timeout_ms = 1000,
+	};
+	struct sdhc_command st = {
+		.opcode = SD_SEND_STATUS,
+		.arg = (uint32_t)CONFIG_MMC_RCA << 16,
+		.response_type = SD_RSP_TYPE_R1,
+		.timeout_ms = CONFIG_SD_CMD_TIMEOUT,
+	};
+	uint8_t before;
+	int ret;
+
+	ret = ext_csd_read(sdhc);
+	if (ret) {
+		printk("boot_stage2: boot0 request: EXT_CSD read failed: %d\n", ret);
+		return ret;
+	}
+	before = ext_csd[EXT_CSD_PARTITION_CONFIG];
+	ret = sdhc_request(sdhc, &sw, NULL);
+	if (ret) {
+		printk("boot_stage2: boot0 request: CMD6 failed: %d\n", ret);
+		return ret;
+	}
+	/* The card holds DAT0 low while it programs the byte, then says in its
+	 * status whether it took it. */
+	for (int ms = 0;; ms++) {
+		if (ms == 2000) {
+			printk("boot_stage2: boot0 request: the card stayed busy after CMD6\n");
+			return -ETIMEDOUT;
+		}
+		if (sdhc_card_busy(sdhc) == 0) {
+			st.response[0] = 0;
+			ret = sdhc_request(sdhc, &st, NULL);
+			if (ret == 0 && (st.response[0] & MMC_STATUS_READY) &&
+			    MMC_STATUS_STATE(st.response[0]) == MMC_STATE_TRAN) {
+				break;
+			}
+		}
+		k_busy_wait(1000);
+	}
+	if (st.response[0] & MMC_STATUS_SWITCH_ERROR) {
+		printk("boot_stage2: boot0 request: the card refused the switch (status 0x%08x)\n",
+		       st.response[0]);
+		return -EIO;
+	}
+	memset(ext_csd, 0, sizeof(ext_csd));
+	ret = ext_csd_read(sdhc);
+	if (ret) {
+		printk("boot_stage2: boot0 request: EXT_CSD read-back failed: %d\n", ret);
+		return ret;
+	}
+	printk("boot_stage2: boot0 request: PARTITION_CONFIG 0x%02x -> 0x%02x (wanted 0x%02x)\n", before,
+	       ext_csd[EXT_CSD_PARTITION_CONFIG], PARTITION_CONFIG_BOOT0);
+	return ext_csd[EXT_CSD_PARTITION_CONFIG] == PARTITION_CONFIG_BOOT0 ? 0 : -EIO;
+}
+
+/* Called where the eMMC is up and no transfer is under way. Returns when the
+ * word has not come or the switch failed (the boot then goes on as usual). */
+static void boot0_on_request(void)
+{
+	if (!boot0_requested()) {
+		return;
+	}
+	printk("boot_stage2: \"%s\" on the console: eMMC boot partition 1 (boot0) for the next start\n",
+	       CONFIG_BOOT_STAGE2_BOOT0_WORD);
+	if (boot0_select(DEVICE_DT_GET(SDHC_NODE)) != 0) {
+		printk("boot_stage2: boot0 request failed; booting this chain as usual\n");
+		return;
+	}
+	printk("boot_stage2: resetting the SoC (PSCI SYSTEM_RESET)\n");
+	k_busy_wait(20000); /* the line, out of the UART */
+	(void)pm_system_reset(SYS_COLD_RESET);
+	printk("boot_stage2: the reset did not happen; power-cycle to start from boot0\n");
+	halt();
+}
+#else
+static inline void boot0_on_request(void)
+{
+}
+#endif
+
 static const char *compression_name(uint32_t compression)
 {
 	return compression == BS2_COMPRESSION_DEFLATE ? "deflate"
@@ -435,6 +603,7 @@ int main(void)
 	}
 	t_ready = k_uptime_get() - t0;
 	progress("boot_stage2: eMMC user area %u sectors, ready after %lld ms\n", disk_sectors, t_ready);
+	boot0_on_request();
 
 	if (read_sectors(hdr, HDR_SECTOR, 1)) {
 		halt();
@@ -594,6 +763,9 @@ int main(void)
 	/* Every image byte is in place; the zero ranges are once this returns. */
 	const int64_t t_zero_wait = zero_wait();
 	bs2_stamp(7);
+
+	/* Once more, with everything read: the last moment the eMMC is up. */
+	boot0_on_request();
 
 	progress("boot_stage2: \"%s\" ok (CRC-32 %08x): read %u sectors in %lld ms, unpacked in %lld ms, "
 		 "cleared %llu bytes in %lld ms on the zero thread (main waited %lld ms for it); "
