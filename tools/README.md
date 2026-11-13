@@ -696,7 +696,8 @@ verdict (a `tools/check.sh` row, scope tools).
 main moves through pull requests: a pull request, the full gate on it
 (`.github/workflows/gate.yml` runs every row of `tools/check.sh` on every pull
 request to main and nightly on main), a review, a merge. Locally
-a change runs only the rows its diff reaches (`tools/check.sh --changed <base>`).
+an agent runs only the tests it added or changed (`CONTRIBUTING.md`); the
+gate is the CI's job.
 
 `tools/land.sh <name> <tip> <message-file>` is the older direct path, and it
 pushes to main itself. It merges the tip `--no-ff` into a detached worktree of

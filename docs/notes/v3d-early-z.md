@@ -199,8 +199,8 @@ emits**, which is what the board then reads:
 * The ES 2.0 guard (`tests/es2_report_guard.rs`) is unaffected (no GL answer
   changes); it is part of the gate regardless.
 
-Gate: `tools/check.sh --changed origin/main` reaches the v3d rows; the
-driver change also needs `--local` (it reaches `driver/src/v3d`).
+Gate: the pull request's CI reaches the v3d rows; the driver change also
+reaches the local set (`driver/src/v3d`).
 
 ## (d) The gain per scene
 

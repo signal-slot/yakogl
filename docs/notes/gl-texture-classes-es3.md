@@ -724,8 +724,8 @@ Notes for the code (`src/vivante/texture.rs`):
     `u32` values before the change (pin them as literals). That proves the
     change moved no class.
   * Add the `< 64` const assertion (1.1).
-  * Run `tools/check.sh --changed origin/main`. It reaches every row, because
-    `src/backend.rs` is in scope `all`; use `--local` if needed (CLAUDE.md).
+  * The pull request's CI gate runs every row, because `src/backend.rs` is in
+    scope `all` (CLAUDE.md).
 * **Host dEQP:** `tools/cts/host-deqp-run.sh --gpu=vivante --module=gles3`
   (`texture.format`, `texture.specification`). The failure lists must be
   byte-identical to the baseline of gc-host-baseline2.

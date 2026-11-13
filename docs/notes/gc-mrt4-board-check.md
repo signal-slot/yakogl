@@ -386,7 +386,7 @@ the boot notes (`docs/notes/imx8mp-direct-boot.md`,
    NotSupported/low-limit to running; the host probe (gc-mrt4-deqp-probe)
    lists what to expect. `fragment_out` may still fail its RC1 parts.
 3. **The host gate, green against the current main tip**
-   (`tools/check.sh --changed origin/main`, and the local set — the const sits
+   (the pull request's CI gate, which for this change is the local set — the const sits
    behind a path that reaches everything): `tests/es3_mrt_gl.rs` already
    proves the GL core at four, `tests/es3_mrt4_gc.rs` (gc-mrt4-host) the
    vivante words through the GL API, `backend_tests.rs:3715` keeps its four

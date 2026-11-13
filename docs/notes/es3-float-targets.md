@@ -290,8 +290,8 @@ and R32F joins them (A). Reasons:
   `es3_formats_v3d.rs`, `es3_gl_core.rs`: those that render or clear into R32F
   need a host-only switch like `HOST_SRGB_RT` (`src/backend.rs:562`) for the
   extension, which belongs to the item but touches #330's test files).
-- Gate: `tools/check.sh --changed origin/main` against the current tip;
-  `src/gl` reach means `--local`. No generated file moves.
+- Gate: the pull request's CI (`src/gl` reach means the local set). No
+  generated file moves.
 - Rows: `fbo.completeness.renderable.renderbuffer.color0.r32f` and
   `texture.color0.r32f` Fail to Pass on the host and boards. The rerun item
   must also look for R32F users among non-float rows.

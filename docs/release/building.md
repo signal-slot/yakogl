@@ -429,11 +429,12 @@ the others). Running them on a board is `tools/board.sh <board> tree <table>
 
 ## Check the host side
 
-`tools/check.sh --quick` is the short form of the gate, for an edit loop (169 of
-209 rows, counted at `bfd75c57`, see `CONTRIBUTING.md`; minutes on a warm tree
-and up to an hour from a cold one, 59 minutes with 2 compiler slots), and
-`tools/check.sh --changed <base>` runs the rows a change reaches. Neither is the
-landing gate: the CI runs the full `tools/check.sh` on every pull request
+`tools/check.sh --quick` is the short form of the gate (169 of 209 rows,
+counted at `bfd75c57`, see `CONTRIBUTING.md`; minutes on a warm tree and up to
+an hour from a cold one, 59 minutes with 2 compiler slots), and
+`tools/check.sh --changed <base>` runs the rows a change reaches. A person
+setting up a host may run them; an agent does not (`CLAUDE.md`). Neither is
+the landing gate: the CI runs `tools/check.sh` on every pull request
 (`.github/workflows/gate.yml`). The full run needs the inputs of section 10, and
 the AM62P firmware header (input 6). Without them it reports gaps and is red.
 

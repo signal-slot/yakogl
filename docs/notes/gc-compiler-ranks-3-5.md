@@ -128,7 +128,7 @@ below puts its code in `select.rs`, either at selection time (`src`,
   `Lower::reciprocal`, the constructors) is not touched. So
   `src/pvr/internal.rs`, `tests/reference/*.rs` and the `pvr`/`v3d` lines
   of `tests/fixtures/precompile_counts.txt` cannot move. The check is
-  `tools/check.sh --changed origin/main`: it rebuilds those generated files
+  the CI gate (`tools/check.sh`): it rebuilds those generated files
   and compares the bytes.
 - **What moves on the GC side.** Every design shortens GC programs, so each
   item re-pins in its own commit:
@@ -531,7 +531,7 @@ texture unit's rate, which the model does not price, may cap the gain
 ## Ranked implementation items for the planner
 
 Each is one commit with its own re-pins (the shared list above),
-`tools/check.sh --changed origin/main` against the tip, and no file
+the CI gate on the pull request, and no file
 outside `select.rs` and the tests (and the regenerated
 `precompile_counts.txt` / `internal.rs` if they move). ms a frame at the
 model's 0.6 ns (x 1.33 for its 0.8 ns case), terrain only, counted on

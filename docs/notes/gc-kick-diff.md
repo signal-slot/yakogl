@@ -309,7 +309,7 @@ older recipe quotes. Do not bisect on 3 boots.
   values, row counting, zero pitch, unequal lengths, a write that never
   lands (stable), and the armed path with a fake delay routine that lands a
   write during the wait (verdict 2, then 1; counters; disarm).
-- `tools/check.sh --quick`: see the report of this item for the output and
+- The pull request's CI gate; see the report of this item for the output and
   the base comparison.
 - The gl_test wiring (2026-10-12): the host test
   `gl::framebuffer::tests::kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache`

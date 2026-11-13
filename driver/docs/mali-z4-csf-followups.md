@@ -413,7 +413,7 @@ there, only G15's pair.
   main: the follow-up moves each definition, deletes the local one from
   `sched.rs`, keeps every existing test green (the layout asserts at
   `csf.rs:893-901`, `sched.rs`'s `the_constants_are_panthors`), adds the
-  G13 guards with tests, and re-runs `tools/check.sh --changed origin/main`.
+  G13 guards with tests; the pull request's CI gate runs `tools/check.sh`.
   It may add the `CsfRefusal::AckMaskOutside` variant (G13) — a refusal is
   the `csf.rs` way, per `csf.rs:387-390`.
 - The paragraph this note exists to feed: the "**Submit (Z4)**" paragraph

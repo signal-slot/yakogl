@@ -240,7 +240,8 @@ After Z3 the kernel side must ping at least every 12 s (`PING_INTERVAL_MS`).
   pass: without a west workspace at `ZEPHYR_WS` (the one gap line for every
   Zephyr image), or with neither the file at `MALI_CSFFW` nor a header
   (`needs` names the file; `tools/cts/deps-env.sh --build MALI_CSFFW`
-  fetches it). Locally: `ZEPHYR_WS=<ws> MALI_CSFFW=<mali_csffw.bin>
+  fetches it). A gate walk (not a local
+  agent run, `CLAUDE.md`): `ZEPHYR_WS=<ws> MALI_CSFFW=<mali_csffw.bin>
   tools/check.sh --changed origin/main`.
 
 - **Z2's map, extended to every section** (8c8b8581):

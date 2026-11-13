@@ -339,10 +339,6 @@ noticed either way.
 module) and run on the host with
 
 ```sh
-tools/check.sh --changed origin/main   # <- before a pull request: the rows your change reaches
-tools/check.sh --quick                 #    the short gate (about 145 rows; 25 and 46 minutes in two runs on 2026-10-25)
-tools/check.sh                         #    every row: what the CI runs
-
 cargo test --no-default-features --features host-test,gpu-powervr   # the PowerVR build
 cargo test --no-default-features --features host-test,gpu-powervr,report-es2   # the ES 2.0 report
 cargo test --no-default-features --features host-test,gpu-vivante  # the GC7000 build
@@ -356,7 +352,8 @@ taste.** `tools/check.sh` is the gate: the formatter, clippy with
 `--all-targets`, and the suite in every configuration of its CONFIGS list,
 exiting non-zero on any of them. The CI runs it
 (`.github/workflows/gate.yml`, on every pull request and nightly on main);
-locally, `tools/check.sh --changed <base>` runs the rows a change reaches
+locally you run the tests you added or changed and `cargo fmt --check` on the
+files you touched; the pull request's CI gate is the check
 (`CONTRIBUTING.md`). A build that already prints one warning is a build where the next real warning is invisible -- which is how three
 `unused_unsafe` and a function with no callers survived here -- and `main`
 has arrived unformatted twice.

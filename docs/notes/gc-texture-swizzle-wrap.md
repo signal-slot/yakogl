@@ -523,7 +523,7 @@ Two small items; both edit `src/vivante/texture.rs`, so they follow
 * Words: CONFIG1 bits 8-10 / 12-14 / 16-18 / 20-22 (`regs.rs:817-828`), values
   `GC_SWIZZLE_R..1` = `X:117-122`; nothing else moves. No `GcTexfmt`,
   `YakoglBackend` or other table field is added; no generated file moves.
-* Host check: `tools/check.sh --changed origin/main` against the current main tip;
+* Host check: the pull request's CI gate;
   `cargo test --features host-test,gpu-vivante,shaderc-online --test
   es3_sampler_state_gc` and the in-crate `src/vivante/backend_tests.rs`
   (`a_texture_with_no_alpha_samples_alpha_one`, `a_luminance_depth_texture_...`,

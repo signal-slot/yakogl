@@ -335,8 +335,8 @@ In `tests/`:
 
   `gc-scene-kicks`'s ceilings drop to these numbers in the commit that lands
   C1.
-- `tools/check.sh --changed origin/main` on the result. C1 reaches
-  `src/vivante`, so expect the GC rows of the plan.
+- The pull request's CI gate on the result. C1 reaches `src/vivante`, so
+  expect the GC rows of the plan.
 
 ## Kicks a frame, scene by scene
 

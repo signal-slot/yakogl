@@ -299,8 +299,8 @@ connected keeps overlapping files apart, so a later item reads it again.
 
 ## Sequence of reviewable items
 
-Each is one commit with its host test and `tools/check.sh --changed
-origin/main` green; none changes behaviour until the last, because the empty
+Each is one commit with its host test and the CI
+gate green; none changes behaviour until the last, because the empty
 key and the unchanged `rt_format_drawable` keep every existing draw
 byte-identical (the gate compares generated shader bytes).
 
