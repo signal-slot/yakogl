@@ -28,7 +28,13 @@
 //!   - A half- or single-float renderbuffer answers its stored resolution
 //!     from glGetRenderbufferParameteriv (ES 3.0 6.1.15), not 8 bits a
 //!     channel: state_query.rbo.renderbuffer_component_size_color's float
-//!     rows.
+//!     rows. The R32F row follows the build's colour-renderability of R32F
+//!     instead of one answer: it runs while a 1x1 R32F colour renderbuffer
+//!     is complete (what the core does today on every GPU this file runs
+//!     on), and once the core gates R32F on the unclaimed
+//!     GL_EXT_color_buffer_float (plan #360, core-claim;
+//!     docs/notes/es3-float-targets.md) the row asserts that refusal (no
+//!     extension listed, storage GL_INVALID_ENUM) and skips.
 //!   - An attached float depth texture answers 32 float bits, not 24
 //!     unsigned-normalised ones: state_query.fbo.
 //!     framebuffer_attachment_x_size_texture and _component_type. Integer
@@ -925,17 +931,70 @@ mod es3 {
         }
     }
 
+    /// Is `token` in this build's GL_EXTENSIONS (what `glGetString` prints,
+    /// which the completeness cases of `fbo.completeness` follow)?
+    fn ext_claimed(token: &str) -> bool {
+        // SAFETY: GL_EXTENSIONS is a static NUL-terminated string the GL owns.
+        unsafe {
+            let s = core::ffi::CStr::from_ptr(glGetString(GL_EXTENSIONS) as *const _);
+            s.to_str().unwrap_or_default().split(' ').any(|t| t == token)
+        }
+    }
+
+    /// Is GL_R32F colour renderbuffer storage of this build: a 1x1 GL_R32F
+    /// colour renderbuffer whose storage was accepted and that completes its
+    /// framebuffer? ES 3.0 makes R32F colour-renderable under
+    /// GL_EXT_color_buffer_float only, which this build does not claim; the
+    /// core nevertheless completes it today on every GPU this file runs on,
+    /// and plan #360's core-claim gates it on the extension
+    /// (docs/notes/es3-float-targets.md). The probe answers for both states,
+    /// so the R32F row below reads sizes while the target is renderable and
+    /// holds the extension's ES 3.0 refusal once it is not.
+    fn r32f_colour_renderable() -> bool {
+        let rb = renderbuffer(GL_R32F, 1, 1, None);
+        let storage_ok = err() == GL_NO_ERROR;
+        let fb = framebuffer();
+        attach_rb(GL_COLOR_ATTACHMENT0, rb);
+        let complete = status() == GL_FRAMEBUFFER_COMPLETE;
+        release(fb, &[rb]);
+        while err() != GL_NO_ERROR {}
+        storage_ok || complete
+    }
+
     /// ES 3.0 6.1.15: GL_RENDERBUFFER_x_SIZE is the stored resolution. The
-    /// half- and single-float names are stored as such, and answered 8.
+    /// half- and single-float names are stored as such, and answered 8. The
+    /// R32F row follows the build: [`r32f_colour_renderable`] probes a 1x1
+    /// R32F colour renderbuffer, and while it is complete the row reads
+    /// sizes as today; once the core gates R32F on the unclaimed
+    /// GL_EXT_color_buffer_float the row asserts that refusal (no extension
+    /// listed, glRenderbufferStorage GL_INVALID_ENUM) and skips.
     #[test]
     fn float_renderbuffers_report_their_channel_sizes() {
         let _g = context();
+        let r32f = r32f_colour_renderable();
         for (f, want) in [
             (GL_RGBA16F, [16, 16, 16, 16]),
             (GL_RG16F, [16, 16, 0, 0]),
             (GL_R16F, [16, 0, 0, 0]),
             (GL_R32F, [32, 0, 0, 0]),
         ] {
+            if f == GL_R32F && !r32f {
+                /* ES 3.0 4.4.2 with no GL_EXT_color_buffer_float in
+                 * GL_EXTENSIONS: R32F is not colour-renderable and its
+                 * renderbuffer storage is GL_INVALID_ENUM. Hold that much,
+                 * then skip the row: it is neither a pass nor a failure
+                 * then. */
+                assert!(
+                    !ext_claimed("GL_EXT_color_buffer_float"),
+                    "the R32F row skips only while GL_EXT_color_buffer_float is unclaimed"
+                );
+                let rb = renderbuffer(GL_R32F, 4, 4, None);
+                assert_eq!(err(), GL_INVALID_ENUM, "{f:#x}: storage without the extension");
+                // SAFETY: a name this test made.
+                unsafe { glDeleteRenderbuffers(1, &rb) };
+                eprintln!("skipping {f:#x}: GL_R32F is no colour renderbuffer of this build (GL_EXT_color_buffer_float not claimed)");
+                continue;
+            }
             let rb = renderbuffer(f, 4, 4, None);
             assert_eq!(err(), GL_NO_ERROR, "{f:#x}");
             assert_eq!(rb_sizes(), want, "{f:#x}");
