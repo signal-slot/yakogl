@@ -29,14 +29,20 @@ CI, a review, then the merge. Never push main by hand.
    runs `tools/check.sh` on the pull request (the merge of the branch into
    main), again on main after the merge, and nightly, on self-hosted runners
    that have the environment below. The file's header says which rows each
-   event runs.
+   event runs. A pull request's run leaves out the clippy rows
+   (`--no-clippy`, owner 2026-11-13: they doubled the build of each feature
+   set); the nightly run on main runs them and is clippy's gate. Run clippy
+   on the crates you touched when it is quick, and fix a red nightly's
+   clippy rows first (docs/ci.md, "The nightly").
 3. The review reads the commit; it runs no check.
 4. Merge when the CI is green and the review approves.
 
 ## The gate: `tools/check.sh`
 
 - A red `cargo fmt --check` or a single warning is a defect.
-- The full run checks formatting, clippy (no warnings), the tests in every
+- The full run (nightly, by hand) checks formatting, clippy (no warnings;
+  a pull request's run leaves the clippy rows to the nightly,
+  `--no-clippy`), the tests in every
   feature configuration, the C check programs, the generated files, the
   product archives, the Python tools, and the Zephyr image builds. It takes
   35 to 50 minutes, depending on the host (measured: 36 minutes from a cold

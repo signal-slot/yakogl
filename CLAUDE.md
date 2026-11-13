@@ -18,6 +18,13 @@ defects and the next board sessions. This file is the short list.
 - `tools/check.sh`: every row, what the CI (`.github/workflows/gate.yml`)
   runs on each pull request's reach, on each push to main and nightly.
 
+A pull request's CI gate runs `--changed <merge base> --no-clippy`: no
+clippy row (owner, 2026-11-13). The clippy rows run in the nightly gate on
+main, which is clippy's gate. Run clippy yourself on the crates you touched
+when it is quick (`cargo clippy -p <crate> --all-targets`, with the crate's
+feature set from `tools/check.sh`); `tools/check.sh --no-clippy ...` leaves
+the rows out locally too, counted as "clippy rows left to the nightly".
+
 Green is "N ok, 0 failed, 0 gap(s)". A `--quick` takes minutes on a warm tree
 and up to an hour from a cold one (59 min with 2 compiler slots); run it in the
 background and wait for the summary line instead of a tool timeout. Exit 2

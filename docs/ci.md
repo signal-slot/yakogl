@@ -370,6 +370,46 @@ place; to be replaced by measured runs as each step lands.
 | a shared layer (`src/gl/*`, the online compiler) | 134 | 36 min | 10 to 15 min on one 8-core runner; 5 to 8 min sharded over two |
 | a test file | its binary | 36 min | 1 to 2 min |
 
+### 3.1a Clippy runs nightly, not on pull requests (2026-11-13)
+
+The owner decided: a pull request's gate passes `--no-clippy` and runs no
+clippy row. Measured on run 43372841985 (scope "all"): 242 rows, 14,851 s
+wall, rows summing to 41,723 s, of which the 38 clippy rows are 8,135 s
+(20%; `host-test,gpu-powervr,shaderc-online,precompiled-shaders` alone
+2,287 s), because clippy is a type-check build per feature set that the test
+build of the same set cannot reuse. `cargo fmt --check` (10 s) and every
+test row stay on pull requests.
+
+- `tools/check.sh --no-clippy` (or `YAKOGL_CHECK_NO_CLIPPY=1`) leaves out
+  every row whose label starts with `clippy`. The summary counts them apart
+  ("N clippy rows left to the nightly"); they are not skips of the scope map
+  and not gaps, so a pull request's green is still "0 failed, 0 gap(s)".
+  `--quick` and `--local` keep their rows unless the flag is given.
+- `gate.yml`: the `pull_request` run passes `--no-clippy`; the schedule
+  (02:00 JST) and `workflow_dispatch` runs do not and run every clippy row.
+- Agents still run clippy on the crates they touched when it is quick.
+
+#### The nightly: a red one is a fix task
+
+Today the repository has **no automatic path** from a red nightly to a task:
+`gate.yml` only uploads the log (artifact `gate-<sha>`), and no document,
+workflow or label in the tree turns a red run on main into an issue. Clippy
+now lands on main unchecked, so a red nightly is how a warning is found, and
+it must not wait for someone to look at the Actions page. What is needed
+(not built here, it needs a decision on the token and the label):
+
+1. A last step of the nightly job, `if: failure() && github.event_name ==
+   'schedule'`, with `issues: write` permission, that opens (or comments on
+   the one open) issue titled `nightly gate red on <short sha>`, labelled
+   `bug` and `nightly-red` (the farm reads open `bug` issues as fix tasks,
+   CONTRIBUTING.md), whose body names each failed row and its warnings,
+   taken from `build/gate-ci.log` (the `FAIL clippy  ...` rows and the
+   `warning:` lines under them), the run URL and the commit.
+2. The fix lands as a pull request that comments on and closes the issue;
+   the next nightly (a red run is run again, step `seen`) proves it.
+
+Until then, whoever reads the nightly's result opens that issue by hand.
+
 The nightly full run on main stays the proof of the whole; it is also the
 run that writes the caches, so the next day's pull requests start from it.
 

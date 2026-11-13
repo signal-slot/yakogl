@@ -8,10 +8,14 @@
 # runner the pull requests needed (the owner, 2026-10-25: main once a day).
 #
 # A pull request runs the rows its diff reaches: `check.sh --changed
-# <merge base>`, where the merge base is that of the base branch and the
-# commit checked out (the merge of the branch into the base branch,
-# refs/pull/N/merge).
-# The nightly run (on main's tip) and a run by hand run every row. They are
+# <merge base> --no-clippy`, where the merge base is that of the base branch
+# and the commit checked out (the merge of the branch into the base branch,
+# refs/pull/N/merge). A pull request's run leaves out every clippy row (the
+# owner, 2026-11-13: clippy is a second type-check build of each feature set,
+# 20% of the rows' time in run 43372841985); check.sh counts them as "left to
+# the nightly", never as gaps. cargo fmt --check and every test row stay.
+# The nightly run (on main's tip) and a run by hand run every row, clippy
+# included: the nightly is clippy's gate (docs/ci.md). They are
 # the proof of the whole, and they catch a wrong `skip` of the scope map
 # (docs/ci.md). A nightly run whose commit already passed a full run (main
 # did not move that day) runs nothing: step `seen`.
@@ -176,7 +180,7 @@ jobs:
           exit $rc
           EOS
           chmod +x "$RUNNER_TEMP/gate-run.sh"
-      - name: tools/check.sh --changed <merge base> (a pull request, the rows its diff reaches)
+      - name: tools/check.sh --changed <merge base> --no-clippy (a pull request, the rows its diff reaches, clippy left to the nightly)
         if: steps.seen.outputs.run == 'true' && github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -184,7 +188,7 @@ jobs:
           mkdir -p build
           base=$(git merge-base "origin/$BASE_REF" HEAD) || { echo "no merge base with origin/$BASE_REF"; exit 1; }
           echo "merge base with origin/$BASE_REF: $base"
-          "$RUNNER_TEMP/gate-run.sh" "$RUNNER_TEMP/gate.pgid" tools/check.sh --changed "$base" 2>&1 | tee build/gate-ci.log
+          "$RUNNER_TEMP/gate-run.sh" "$RUNNER_TEMP/gate.pgid" tools/check.sh --no-clippy --changed "$base" 2>&1 | tee build/gate-ci.log
           test "${PIPESTATUS[0]}" -eq 0
       # A test row uses cargo-nextest when the runner has it (~/.cargo/bin,
       # on PATH above) and runs the binaries itself otherwise.
