@@ -2959,6 +2959,13 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   scope licence
   step "tools   licence audit (SPDX header or allowlist row for every tracked file)" \
     python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license
+  # The redaction scan (docs/release/checklist.md line 8): its self-test, then
+  # the public classes over HEAD. Exit 3 (private classes not run) and 0 pass;
+  # exit 1 (an H/M finding) and 2 (the scan could not run) fail the row.
+  # Every tracked file is read, so any changed path reaches it: a tools/ or
+  # docs/ change never reaches the cargo test that runs the same scan (#4199).
+  step "tools   redaction scan (self-test, then public classes over HEAD)" \
+    bash -c 'python3 -I tools/release/redaction-scan.py --self-test | grep -q "self-test passed" && { python3 -I tools/release/redaction-scan.py HEAD; rc=$?; [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]; }'
   scope tools
   # tools/hostharness/glmark2/compare.py on its fixture run directories: the
   # before/after ms-per-frame table of two GM2_PROFILE runs. Host only.

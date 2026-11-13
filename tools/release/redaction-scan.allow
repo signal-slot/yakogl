@@ -81,4 +81,3 @@ drop | login-at-host | tools/cts/mali-slice-redact.py | root[@]192\.0\.2\.7\b | 
 drop | tailnet-dns | tools/cts/mali-slice-redact.py | \bboard-1\.example\.ts\.net\b | input of a redaction test under the reserved example name (RFC 2606)
 drop | email | tools/cts/mali-slice-redact.py | serial-getty[@]ttyS2\.service\b | systemd unit instance in the tool's help, not an address
 drop | private-ipv4 | driver/tools/uboot-mp2/qemu/* | \b10\.0\.2\.2\b | QEMU user networking's fixed host address (its built-in TFTP server), the same on every machine
-drop | private-ipv4 | tools/cts/x2-scene-table-selftest.sh | \b10\.137\.22\.9\b | private-range input of a redaction test: a fake console and verdict line the table must not carry
