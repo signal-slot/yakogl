@@ -56,11 +56,13 @@ img() { # NAME IMGSZ
 }
 img ok 0x2000
 img bigimg 0x10000001
-img long 0xc000000
+img long 0xff00000
 cp "$run/img/ok.bin" "$run/img/big.bin"
 truncate -s $((0x10000001)) "$run/img/big.bin"   # sparse: 256 MiB + 1
 truncate -s 4096 "$run/img/nomagic.bin"
-truncate -s $((192 * 1024 * 1024)) "$run/img/long.bin"   # sparse: the power-cut cases load it
+# sparse, made here at run time (never in the tree): 255 MiB, the most the
+# 256 MiB window takes; the power-cut cases load it
+truncate -s $((255 * 1024 * 1024)) "$run/img/long.bin"
 
 cp "$run/scr/mp2-mmc.scr" "$stage/mp2-mmc.scr"
 cp "$run/img/ok.bin" "$stage/mp2z.bin"
