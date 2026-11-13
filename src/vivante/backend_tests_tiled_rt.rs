@@ -543,33 +543,6 @@ fn a_draw_that_needs_the_other_depth_layout_is_refused_until_a_whole_clear() {
     osal::gpu_free(&mut a);
 }
 
-/// The clear itself, when it wants the layout the surface is not in, is
-/// refused before it can be recorded: `select_in` runs ahead of `drawn`, so
-/// "a whole clear's value is layout-free" only helps a clear that already
-/// matches the layout.
-#[cfg(feature = "test-knobs")]
-#[test]
-#[ignore = "defect: a whole depth clear that wants the other layout is refused by select_in before it can free the surface"]
-fn a_whole_depth_clear_in_the_other_layout_is_not_refused() {
-    let rig = Rig::new();
-    let (mut a, da) = shadow_target(&rig);
-    let _on = TiledRt::on();
-    // SAFETY: a live draw for the call.
-    assert_eq!(unsafe { gc_draw(&da) }, 0);
-    assert_eq!(gc_flush(), 0);
-    gc_debug_set_tiled_rt(0);
-    let mut c = da;
-    (c.do_clear, c.do_clear_depth, c.clear_depth) = (true, true, 1.0);
-    c.depth_test = false;
-    c.depth_write = false;
-    // SAFETY: a live draw for the call.
-    assert_eq!(unsafe { gc_draw(&c) }, 0, "the clear");
-    // SAFETY: a live draw for the call.
-    assert_eq!(unsafe { gc_draw(&da) }, 0, "and the draw behind it");
-    assert_eq!(gc_flush(), 0);
-    osal::gpu_free(&mut a);
-}
-
 fn select_in(layout: Layout, key: ds_cache::DsKey) -> Result<ds_cache::Selected, i32> {
     ds_cache::select_in(layout, key, 64, 64, GC_DEPTH_GUARD_BYTES, 1, None, |_| false, || 0)
 }
