@@ -5,7 +5,7 @@
 Status: design note. The clock, power and QoS decisions (sections 1, 2 and 7)
 are merged code with host tests. The U-Boot and eMMC facts (section 4) were
 measured read-only under Armbian; the load route (section 5) is a proposal
-whose load addresses are from source (board confirmation pending), with a script draft in
+whose load addresses, from source, are confirmed on the board, with a script draft in
 driver/tools/uboot-t6/t6-zephyr.cmd (never run). The entry audit (section 6)
 follows. The U-Boot prompt reads (section 3) are drafted and not run.
 
@@ -296,8 +296,19 @@ points: no one-shot variable, because nothing is saved and a reset returns to
 `bootflow scan -lb` (:34-36); and no watchdog is armed: the script prints that
 the watchdog marker is not checked (:37), so that step stays open.
 
-Load addresses, from source (U-Boot v2026.07, file:line); confirmation on the
-board is pending (the read-only uboot-addrs measurement). The board's defconfig
+Load addresses, from source (U-Boot v2026.07, file:line), confirmed on the
+board by the read-only uboot-addrs measurement (plan #346; no `records/`
+directory is named for it, as for t6-reads in section 4): the default
+environment compiled into the booted binary, read with `strings` from the
+package's `u-boot-rockchip.bin` (linux-u-boot-friendlyelec-rk3588-current
+26.8.10, U-Boot 2026.07_armbian), whose md5 `82927ed6…` equals the eMMC copy
+read at sectors 64 to 22799, so the strings in the package are what the board boots.
+All eight values below match. `bootcmd` is `bootflow scan -lb`
+(`CONFIG_BOOTCOMMAND`) and `boot_targets` is `mmc1 mmc0 nvme scsi usb pxe
+dhcp spi`. What the prompt `printenv` (section 3) still has to show is that
+no environment was ever saved over these compiled-in values: the config has
+`CONFIG_ENV_IS_NOWHERE=y` and `CONFIG_ENV_IS_IN_SPI_FLASH=y` together, and
+whether an environment was ever saved to SPI is unresolved. The board's defconfig
 selects the config name `rk3588_common` (arch/arm/mach-rockchip/rk3588/Kconfig:443-444),
 and its `ENV_MEM_LAYOUT_SETTINGS` (include/configs/rk3588_common.h:20-31) sets:
 
@@ -306,7 +317,8 @@ and its `ENV_MEM_LAYOUT_SETTINGS` (include/configs/rk3588_common.h:20-31) sets:
   `kernel_comp_size` 0x8000000 (:31), so the decompression area ends at 0x12000000;
 - `fdt_addr_r` 0x12000000 (:28), `fdtoverlay_addr_r` 0x12100000 (:29) and
   `ramdisk_addr_r` 0x12180000 (:30);
-- no `loadaddr` variable in that header; `CONFIG_SYS_LOAD_ADDR` is 0xc00800
+- the header sets no `loadaddr`, but the compiled-in environment carries
+  `loadaddr=0xc00800`, equal to `CONFIG_SYS_LOAD_ADDR`
   (configs/nanopc-t6-rk3588_defconfig:13). U-Boot's RAM starts at 0
   (rk3588_common.h:14).
 
