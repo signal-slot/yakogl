@@ -362,16 +362,30 @@ after `finish` (the carve-out is non-cacheable; `gc-depth-sample.md`).
 For each mode the case locates, by the decoding above, 12 reference pixels
 and records each one's **dword offset in the surface** (16 bits): the pixels
 (1,0), (2,0), (4,0), (8,0), (0,1), (0,4), (0,8), (16,0), (0,16), (32,0),
-(0,32), (63,63). 12 sixteen-bit values are 6 words; with the code word that
-is two pages a mode:
+(0,32), (63,63). 12 sixteen-bit values are 6 words. Pages A and B each
+spend one word on the code and on the CRC, so they have only 3 free words
+between them (A w2, A w3, B w2); 12-bit packing would not fit (4.5 words
+against 3). The dump is therefore **three pages a mode**, each page three
+words (w1 to w3). Offsets are dword offsets, 16 bits, `0xffff` when the
+reference was not found:
 
 | tag | w1 | w2 | w3 |
 |---|---|---|---|
-| mode `m`, page A | `code` \| `mode << 4` \| fence timeouts `<< 8` \| `matched << 16`, where `matched` is how many of the 4096 ids were found exactly once | offsets of (1,0) and (2,0) \| of (4,0) and (8,0) `<< 16` | offsets of (0,1) and (0,4) \| of (0,8) and (16,0) `<< 16` |
-| mode `m`, page B | CRC-32 of the 16 KiB surface | offsets of (0,16) and (32,0) \| of (0,32) and (63,63) `<< 16` | the surface's first dword that is not the clear value: index `<< 16`, its z byte |
+| page A, `0xc0 + m` | `code` \| `mode << 4` \| fence timeouts `<< 8` \| `matched << 16`, where `matched` is how many of the 4096 ids were found exactly once | (1,0) \| (2,0) `<< 16` | (4,0) \| (8,0) `<< 16` |
+| page B, `0xc4 + m` | CRC-32 of the 16 KiB surface | (0,1) \| (0,4) `<< 16` | the surface's first dword that is not the clear value: index `<< 16`, its z byte |
+| page C, `0xc8 + m` | (0,8) \| (16,0) `<< 16` | (0,16) \| (32,0) `<< 16` | (0,32) \| (63,63) `<< 16` |
 
-Page B of mode `m` has tag `0xc4 + m`. (Tags `0xc0..0xc7` are case 244's,
-`0xd0..0xd7` case 243's; the host item greps for a clash before taking them.)
+The 12 references live at: (1,0) and (2,0) in page A w2 (low, high);
+(4,0) and (8,0) in A w3; (0,1) and (0,4) in B w2; (0,8) and (16,0) in
+C w1; (0,16) and (32,0) in C w2; (0,32) and (63,63) in C w3.
+
+What the Rust twin must match (the later `src/vivante/layout.rs` dump
+decode): the same reference order, dword offsets, and `0xffff` for not
+found. Offset 2k is the low half and 2k+1 the high half of word k; words
+0 and 1 are A w2 and w3, word 2 is B w2, words 3 to 5 are C w1 to w3.
+
+Tags `0xc0..0xcb` are case 244's (page C is `0xc8..0xcb`), `0xd0..0xd7`
+are case 243's; the host item greps for a clash before taking them.
 The codes below are the low nibble of page A's w1.
 
 | code | name | reads as |
@@ -478,8 +492,9 @@ The codes below are the low nibble of page A's w1.
      `0x1000 | tag`. Order: `0xd0`; if its code is `YES`, `0xd4` (the K3 page);
      then `0xd2`, `0xd1`, `0xd3` as the table above allows; then case 244:
      `0xc3` (the control), `0xc0`, `0xc1`, `0xc2`, and the B page of every
-     mode (`0xc4..0xc7`). The whole session is at most 16 boots; a `HANG` or `GUARD` stops it. Never
-     `NETBOOT_NO_WATCHDOG=1`; no eMMC boot partition, no U-Boot environment,
+     mode (`0xc4..0xc7`) and its C page
+     (`0xc8..0xcb`). The whole session is at most 16 boots; a `HANG` or
+     `GUARD` stops it. Never `NETBOOT_NO_WATCHDOG=1`; no eMMC boot partition, no U-Boot environment,
      no swupdate; nothing installed or persisted.
    - The record goes under `records/x2/<YYYYMMDD-HHMM>-tsprobe-<sha8>/`
      (gitignored, redacted). The session adds a "Result" section to this note

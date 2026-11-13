@@ -94,9 +94,11 @@ PD_FN uint32_t pd_map_offset(enum pd_map map, uint32_t x, uint32_t y, uint32_t s
 #define PD_NREF 12u
 #define PD_NONE 0xffffu       /* a reference id or first dword that was not found */
 
-/* The tags of the pages: page A of mode m is 0xc0 + m, page B 0xc4 + m. */
+/* The tags of the pages: page A of mode m is 0xc0 + m, page B 0xc4 + m,
+ * page C 0xc8 + m. */
 #define PD_TAG_A 0xc0u
 #define PD_TAG_B 0xc4u
+#define PD_TAG_C 0xc8u
 
 /* The codes, the low nibble of page A's w1 (gc-ts-probe.md). */
 #define PD_HANG 0xfu
@@ -240,10 +242,10 @@ PD_FN uint32_t pd_pack16(uint32_t lo, uint32_t hi)
 }
 
 /* The 12 reference offsets as 6 words (offs[2k] low, offs[2k + 1] high), in
- * the page order. NOTE: gc-ts-probe.md's page table has room for 3 of these
- * words (page A w2 and w3, page B w2), not 6; pd_pack_a and pd_pack_b carry
- * the first 3 (the references (1,0) (2,0) (4,0) (8,0) (0,1) (0,4)) and the
- * case that wires them places the other three (see the report). */
+ * the page order. gc-ts-probe.md spreads them over three pages a mode, as o[0]
+ * = A w2, o[1] = A w3, o[2] = B w2, o[3..5] = C w1..w3 (page A and B spend
+ * one word on the code and on the CRC, so they have 3 free words between
+ * them; page C has 3). pd_pack_a, pd_pack_b and pd_pack_c carry them. */
 PD_FN void pd_pack_offsets(const struct pd_result *r, uint32_t w[6])
 {
 	uint32_t k;
@@ -268,7 +270,7 @@ PD_FN void pd_pack_a(const struct pd_result *r, uint32_t mode, uint32_t timeouts
 }
 
 /* Page B of mode `mode`, tag PD_TAG_B + mode: w1 = CRC-32 of the surface,
- * w2 = the third offset word, w3 = first non-clear dword index << 16 | its z
+ * w2 = the third offset word (o[2]: (0,1) and (0,4)), w3 = first non-clear dword index << 16 | its z
  * byte (index 0xffff and byte 0 when the surface is all clear). */
 PD_FN void pd_pack_b(const struct pd_result *r, uint32_t w[3])
 {
@@ -278,6 +280,18 @@ PD_FN void pd_pack_b(const struct pd_result *r, uint32_t w[3])
 	w[0] = r->crc;
 	w[1] = o[2];
 	w[2] = pd_pack16(r->first_z, r->first_idx);
+}
+
+/* Page C of mode `mode`, tag PD_TAG_C + mode: w1..w3 = o[3..5], the offsets
+ * of (0,8) (16,0) | (0,16) (32,0) | (0,32) (63,63). */
+PD_FN void pd_pack_c(const struct pd_result *r, uint32_t w[3])
+{
+	uint32_t o[6];
+
+	pd_pack_offsets(r, o);
+	w[0] = o[3];
+	w[1] = o[4];
+	w[2] = o[5];
 }
 
 /* ---- case 243: the outcome of a tile-status probe arm ----

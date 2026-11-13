@@ -60,7 +60,7 @@ static void test_case244(void)
 	static const uint32_t want[4] = { PD_ROW_LINEAR_CODE, PD_TILED4_CODE,
 					  PD_SUPER_DRM_CODE, PD_SUPER_INTERLEAVED_CODE };
 	struct pd_result r;
-	uint32_t m, w[3], b[3], i;
+	uint32_t m, w[3], b[3], c[3], i;
 
 	/* the helper values */
 	{
@@ -165,7 +165,18 @@ static void test_case244(void)
 		uint32_t o[6];
 
 		pd_pack_offsets(&r, o);
+		uint32_t k, h;
+
 		CHECK((o[5] >> 16) == pd_map_offset(PD_SUPER_DRM, 63, 63, PD_STRIDE));
+		CHECK(o[0] == w[1] && o[1] == w[2] && o[2] == b[1]);
+		pd_pack_c(&r, c);
+		CHECK(o[3] == c[0] && o[4] == c[1] && o[5] == c[2]);
+		for (k = 0; k < PD_NREF; k++) {
+			h = k & 1 ? o[k / 2] >> 16 : o[k / 2] & 0xffffu;
+			CHECK(h == pd_map_offset(PD_SUPER_DRM, pd_ref_xy[k][0],
+						 pd_ref_xy[k][1], PD_STRIDE));
+		}
+		CHECK(PD_TAG_C == PD_TAG_B + 4 && PD_TAG_B == PD_TAG_A + 4);
 	}
 	/* page B of an all-clear surface */
 	for (i = 0; i < PD_N; i++)
@@ -173,6 +184,8 @@ static void test_case244(void)
 	pd_decode(surf, CLEAR, &work, &r);
 	pd_pack_b(&r, b);
 	CHECK((b[2] >> 16) == 0xffff);
+	pd_pack_c(&r, c);
+	CHECK(c[0] == 0xffffffffu && c[1] == 0xffffffffu && c[2] == 0xffffffffu);
 }
 
 /* one synthetic readback per outcome code */
