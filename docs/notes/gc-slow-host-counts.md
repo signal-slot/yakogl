@@ -423,3 +423,186 @@ texture`), 0 refused**; previous 1 and 0. Tiled copies: none.
   refract stay the heaviest on CPU KiB (7.4 MiB read and 7.3 MiB flushed a
   frame, the depth resolve), which only depth-sample-gc removes. gc-cache-skip
   is not in these figures by construction.
+
+## Predicted effect of gc_tiled_rt (host-derived, plan #355)
+
+Plan #355, item session-a-predict (issues #1204, #1106, #15). **Every number
+in this section is host-derived: counts from the host harness and
+milliseconds computed from board figures cited here. None is a board
+measurement.** No X2 ms a frame exists yet (`x2-glmark2-slow-scenes.md`);
+session A (`gc-tiled-wire.md`, "Session A: the run sheet") measures them with
+the knob off and on, and this section is what its numbers are read against.
+No code or test is committed with it.
+
+### How the counts were taken
+
+- Tip `fac26ee1`, which holds `gc_tiled_rt` (W1 to W5 of `gc-tiled-wire.md`,
+  "Status"). The harness is the shared one of `tests/gc_scene_kicks.rs`
+  (`tests/common/gc_scenes.rs`), **not** the glmark2 host harness of the
+  sections above: it is a model (small meshes and short shaders, glmark2's
+  targets, clears, draws and `glGenerateMipmap` in glmark2's order), so its
+  counts differ from the glmark2 runs above. `gc_scene_kicks` reports 11 kicks
+  for terrain, 2 for shadow and 3 for refract at this tip (the ceilings in the
+  file are 14, 3 and 4; 8bd7cc04 counted 14, 3 and 4 in the glmark2 harness).
+  Compare off with on **inside this section**, not with the tables above.
+- Frames 3 to 6 (4 counted), a mean a frame; both GPU models (`Lag`, `Done`),
+  which agree except where a row says so.
+- Knob on: a local, uncommitted `gc_debug_set_tiled_rt(1)` after `gc_init`
+  (`test-knobs`). Stream words, draws, RS jobs and draws with
+  `PE_DEPTH_CONFIG` `EARLY_Z` set were read off each submitted kick's command
+  stream by a local, uncommitted decoder in the harness's `submit` stand-in
+  (LOAD_STATE writes tracked across kicks; an RS job is a write to
+  `RS_KICKER`, classified by `RS_CONFIG` `SOURCE_TILED` / `DEST_TILED`, the
+  stride `TILING` bits and `RS_CLEAR_CONTROL`). Command, from the repository
+  root:
+
+```sh
+cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2,test-knobs --test <local test> -- --nocapture
+```
+
+  The first scene run of a process counted fewer draws (terrain 51, not 71)
+  and was discarded; the figures are of a warm run, the same in `Lag` and
+  `Done`. "Draws" are every draw op of the stream, clear quads included
+  (`gc_scene_kicks` has no draw count).
+
+### What the counts say before any millisecond
+
+The knob adds work only where a draw qualifies for a tiled shadow
+(`gc-tiled-wire.md`, W4: one 4-byte colour target, `w % 16 == 0`, `h % 4 == 0`,
+depth test on with a depth **renderbuffer**). In this harness that is terrain's
+800x600 pass with the depth16 renderbuffer; shadow's and refract's 1600x1200
+passes have a depth **texture** and are not taken. Why each other draw is
+refused is item tiled-qualify-census's, not traced here.
+
+### Terrain
+
+| a frame (mean, frames 3 to 6) | knob off | knob on | change |
+|---|---:|---:|---:|
+| kicks (`Lag`, `Done`) | 11 | 11 | 0 |
+| waits outside the swap (`Lag`; `Done` 0) | 11 | 11 | 0 |
+| RS jobs, fill (colour and depth clears) | 11.2 | 11.2 | 0 |
+| RS jobs, linear to tiled (off: the tiled copies of the two vertex-stage maps; on: and the tile-in of a shadow) | 2 | 3 | **+1** |
+| RS jobs, tiled to linear (the copy back) | 0 | 2 | **+2** |
+| RS jobs, all | 13.2 | 16.2 | **+3** |
+| draws in the streams | 71 | 71 | 0 |
+| draws taking early depth | 0 | 2 | **+2** |
+| stream words | 16378 | 16510 | +132 (0.5 KB) |
+| CPU tiled copies, CPU depth resolves | 0, 0 | 0, 0 | 0 |
+
+The extra jobs are 800x600x4 = 1.92 MB each (the terrain target; the 256x256
+maps are 0.26 MB). The two early-depth draws are the harness's draws into the
+tiled shadow; the real number is glmark2's terrain draw count and cannot be
+read off this model.
+
+Predicted change, a frame, **host-derived**:
+
+- **Cost: +0.7 to +3 ms.** 3 RS jobs of 1.92 MB, each 0.24 to 0.96 ms at the RS
+  rate of 2 to 8 GB/s that `gc-slow-stream-diff.md` (finding 1, "Full-target
+  clears drawn as quads", its cost column) assumes, with the bytes counted
+  once; up to 1.9 ms each if the read and the write both count. That rate is
+  itself unmeasured (`gc-tiled-targets.md`, "0. Board probe: layouts and RS
+  rates"). For scale, the CPU copy of the same 1.92 MB took 12.3 to 12.9 ms on
+  the board (`gc-slow-terrain.md`, "Board cost" of the tiled copies, from
+  `imx8mp-frame-floor.md`, "Step 3 result"); the RS is expected well under it.
+  No kick is added, so the 0.03 to 0.08 ms of GPU overhead a kick
+  (`gc-slow-stream-diff.md`, finding 3) does not move; the +132 words are noise
+  against the 6 to 76 KB a frame the FE already fetches (the same note,
+  finding 6).
+- **Gain: 0 to -14 ms** (to -19 at 0.8 ns an instruction): early depth rejects
+  hidden fragments of the 148-instruction terrain pass, 42.6 ms at full cover
+  (`gc-tiled-targets.md`, "5. Early depth", Gain, and "The part"). The note puts
+  the range's width on `make_grid`'s draw order; the model of that order is
+  item terrain-overdraw's, in review and not in this tree, so the range is not
+  narrowed here.
+- **Net: from about -14 ms to about +3 ms**, the sign depending on the draw
+  order. Of a board frame of about 250 ms (`gc-slow-terrain.md`, before plan
+  #328's fixes) this is at most a twentieth: the knob cannot take terrain off
+  its GPU-shading bound (140 to 205 ms, the same note, rank 1).
+
+Reading rule for session A, terrain (D = ms a frame with the knob on minus off,
+same image otherwise; the knob switches W4 and W5 together, so D cannot
+separate them):
+
+- **Helps:** D <= -3 ms. The RS cost cannot exceed about 3 ms on the model, so
+  the rest is early depth.
+- **Hurts:** D >= +0.7 ms, up to +3 ms: "terrain got slower by about the cost of
+  three RS copies a frame: one tile-in, two copy-backs", with no early-depth
+  gain (the pass draws far to near, or the hidden share is small). D > +3 ms is
+  more than the model: an RS rate under 2 GB/s, or an RS job that stalls the
+  pipe (look first at whether the copy-back waits for the kick's draws).
+- **Does nothing:** -3 ms < D < +0.7 ms, inside the spread of repeated runs.
+  The two effects may cancel; the host cannot say, and the pair of runs does not
+  either. Say "no net effect", not "no early depth".
+- Kicks, waits and CPU tiled copies must not move (the first rows above); a
+  PERF counter showing one more means the knob did something the host does not.
+
+### Shadow
+
+| a frame (mean, frames 3 to 6) | knob off | knob on | change |
+|---|---:|---:|---:|
+| kicks (`Lag`, `Done`) | 2 | 2 | 0 |
+| waits outside the swap (`Lag`; `Done` 0) | 1 | 1 | 0 |
+| RS jobs, fill | 3 | 3 | 0 |
+| RS jobs, linear to tiled / tiled to linear | 0 / 0 | 0 / 0 | 0 |
+| draws in the streams | 3 | 3 | 0 |
+| draws taking early depth | 0 | 0 | 0 |
+| stream words | 834 | 834 | 0 |
+| CPU depth resolves (1600x1200) | 1 | 1 | 0 |
+
+The streams are the same size: no draw is taken (the depth pass renders to a
+depth texture). Predicted change, **host-derived**: **0 ms**. The part of the
+frame that dominates is not touched: the CPU depth resolve is 350 to 1000 ms on
+the board by its own estimate (`gc-slow-shadow-refract.md`, cause 1, from the
+AM62P's 349 ms for 1.92 M texels), which nothing in W4 or W5 removes
+(depth-sample-gc does, `gc-depth-sample.md`). Even if early depth took the depth
+pass, the cited range is 0 to 1 ms (`gc-tiled-targets.md`, "5. Early depth",
+shadow; `gc-slow-stream-diff.md`, finding 4).
+
+Reading rule for session A, shadow:
+
+- **Does nothing (the prediction):** |D| within the spread of repeated runs.
+  Shadow stays at its resolve-bound frame with the knob on.
+- **Helps:** D < 0 beyond the spread can only be early depth on the depth pass
+  or a draw the host harness does not show taking a shadow; at most 1 ms by the
+  cited range. A larger D is not this knob: look for another difference between
+  the two runs.
+- **Hurts:** "shadow got slower by about the cost of one more RS copy a stream:
+  the tile-in cost" means a stream with a tiled shadow that the host harness
+  does not have. The size says which target: 0.2 to 1 ms for an 800x600 one
+  (1.92 MB), 1 to 4 ms for the 1600x1200 one (7.68 MB at 2 to 8 GB/s), a job.
+  The record's `gc_tiled_rt` log lines and item tiled-qualify-census say which
+  draw.
+
+### Refract
+
+| a frame (mean, frames 3 to 6) | knob off | knob on | change |
+|---|---:|---:|---:|
+| kicks (`Lag`, `Done`) | 3 | 3 | 0 |
+| waits outside the swap (`Lag`; `Done` 0) | 1 | 1 | 0 |
+| RS jobs, fill | 4 | 4 | 0 |
+| RS jobs, linear to tiled / tiled to linear | 0 / 0 | 0 / 0 | 0 |
+| draws in the streams | 12 | 12 | 0 |
+| draws taking early depth | 0 | 0 | 0 |
+| stream words | 2924 | 2924 | 0 |
+| CPU depth resolves (1600x1200) | 1 | 1 | 0 |
+
+Predicted change, **host-derived**: **0 ms**, for shadow's reason: the
+1600x1200 colour and depth pass has a depth texture and is not taken. The frame
+is bound by the same CPU depth resolve (`gc-slow-shadow-refract.md`, cause 1).
+The early-depth range for refract is 0 to 2 ms (`gc-tiled-targets.md`, "5. Early
+depth", refract).
+
+Reading rule for session A, refract: as shadow's. A knob-on frame within the
+spread is the prediction; a gain of up to 2 ms would be early depth on a draw
+the host does not show; a slowdown of 0.2 to 1 ms (800x600) or 1 to 4 ms
+(1600x1200) a job is an RS tile-in or copy back the host harness does not have.
+
+### Across the three scenes
+
+- Only terrain's D can be large: from about -14 to +3 ms of about 250. Shadow's
+  and refract's frames are for depth-sample-gc, not this knob.
+- A D outside its stated bound is a finding about the model (a draw the host
+  does not take, an RS rate, a stall), not about the knob: record the numbers
+  and the knob's log lines, and open the issue for it.
+- The RS rate (2 to 8 GB/s) and the hidden-fragment share of terrain are the two
+  inputs no board has measured; session A replaces them.
