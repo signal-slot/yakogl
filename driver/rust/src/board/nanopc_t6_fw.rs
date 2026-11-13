@@ -17,7 +17,7 @@
 //! their probes (`t6_gpu`, `t6_mmu`): here they give their stop, refusal
 //! and value, and the few values Z3 depends on.
 
-use super::nanopc_t6_gpu::{self, gpu_up, Bases, GpuUp};
+use super::nanopc_t6_gpu::{self, gpu_up_with, Bases, GpuUp, GPU_QOS_POLICY};
 use super::nanopc_t6_mmu;
 use super::nanopc_t6_sections::{mmu_up_sections, Backing, McuMem, Placement};
 use crate::gpu::mali::csf::{self, GlbInput, GlbOutput, GlobalConfig, GLB_INIT_TOGGLES, GLB_PING};
@@ -25,6 +25,7 @@ use crate::gpu::mali::fw::{self, FwError};
 use crate::gpu::mali::pgtable::Table;
 use crate::gpu::mali::MCU_STATUS;
 use crate::mmio::Mmio;
+use crate::soc::rk3588::QosPolicy;
 use core::mem::offset_of;
 
 /// Which step stopped the run ([`FwUp::step`]), in the run's order.
@@ -213,6 +214,26 @@ pub fn fw_up(
     on_handover: &mut impl FnMut(&GpuUp),
     z1: &mut GpuUp,
 ) -> FwUp {
+    fw_up_with(GPU_QOS_POLICY, m, b, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1)
+}
+
+/// [`fw_up`] applying `qos` after Z1's power-on instead of
+/// [`GPU_QOS_POLICY`]; the record's GPU part (`z1.qos_policy`) names it.
+#[allow(clippy::too_many_arguments)]
+pub fn fw_up_with(
+    qos: QosPolicy,
+    m: &impl Mmio,
+    b: Bases,
+    blob: &[u8],
+    backings: &[Backing],
+    pool: &mut [Table],
+    tables_pa: u64,
+    timer_hz: u32,
+    clean: &impl Fn(usize, usize) -> i32,
+    delay_us: &mut impl FnMut(u32),
+    on_handover: &mut impl FnMut(&GpuUp),
+    z1: &mut GpuUp,
+) -> FwUp {
     let mut o = FwUp::default();
     let img = match fw::parse(blob) {
         Ok(img) => img,
@@ -233,7 +254,7 @@ pub fn fw_up(
         }
     };
 
-    let g = gpu_up(m, b, delay_us, on_handover);
+    let g = gpu_up_with(qos, m, b, delay_us, on_handover);
     *z1 = g;
     o.gpu_id = g.ident_after_reset.gpu_id;
     o.shader_present = lo_hi(g.ident_after_reset.shader_present);
@@ -793,6 +814,58 @@ pub(crate) mod tests {
         assert_eq!((o.step, o.refusal, o.detail), (STEP_PARSE, 2, [MAGIC ^ 1, 0]));
         assert_eq!(o.sections, 0);
         assert!(t6.log.borrow().is_empty());
+    }
+
+    #[test]
+    fn fw_up_applies_the_given_qos_policy_and_the_default_without_one() {
+        let blob = synth::small();
+        for (policy, words) in [(QosPolicy::Reset, [3, 0x12d, 0x40]), (QosPolicy::LinuxZero, [0; 3])] {
+            let t6 = T6::handed_over(blob.clone());
+            let mut z1 = GpuUp::default();
+            let mut pool = vec![[0u64; ENTRIES]; 16];
+            let clean = |a, n| t6.clean(a, n);
+            let o = fw_up_with(
+                policy,
+                &t6,
+                B,
+                &blob,
+                &backings(&blob),
+                &mut pool,
+                TABLES_PA,
+                RK3588_TIMER_HZ,
+                &clean,
+                &mut |_| {},
+                &mut |_| {},
+                &mut z1,
+            );
+            assert_eq!(o.step, STEP_NONE, "{policy:?}");
+            assert_eq!(z1.qos_policy, policy.id());
+            for blk in 0..4 {
+                assert_eq!(z1.qos[blk][1..4], words, "{policy:?} block {blk}");
+                for (w, off) in words.iter().zip(rk3588::QOS_POLICY_WORDS) {
+                    let at = QOS + 0x200 * blk + off;
+                    assert!(t6.writes().contains(&(at, *w)), "{policy:?}: no write of {w:#x} at {at:#x}");
+                }
+            }
+        }
+        let t6 = T6::handed_over(blob.clone());
+        let mut z1 = GpuUp::default();
+        let mut pool = vec![[0u64; ENTRIES]; 16];
+        let clean = |a, n| t6.clean(a, n);
+        let o = fw_up(
+            &t6,
+            B,
+            &blob,
+            &backings(&blob),
+            &mut pool,
+            TABLES_PA,
+            RK3588_TIMER_HZ,
+            &clean,
+            &mut |_| {},
+            &mut |_| {},
+            &mut z1,
+        );
+        assert_eq!((o.step, z1.qos_policy), (STEP_NONE, GPU_QOS_POLICY.id()));
     }
 
     #[test]

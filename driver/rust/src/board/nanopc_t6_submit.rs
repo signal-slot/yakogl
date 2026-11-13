@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: 2023 Collabora ltd.
 //! Z4 on the NanoPC-T6 (driver/docs/nanopc-t6-mali.md, "Submit (Z4)" and
 //! the milestones): one frame run on CSG 0 / CS 0 after Z3, in one run. The
-//! frame is checked first ([`check_frame`]); then Z3 ([`fw_up`]: Z1's
+//! frame is checked first ([`check_frame`]); then Z3 ([`nanopc_t6_fw::fw_up`]: Z1's
 //! power-on, Z2's AS0, the firmware's boot), the interface read again
 //! (reads only), the stream's user pages and the group's suspend buffers
 //! mapped in AS0 beside the firmware's sections, the group's VM built and
@@ -96,7 +96,8 @@
 //! [`SEQNO`], 1, the first of a fresh queue (panthor_sched.c:3165-3169).
 
 use super::nanopc_t6_frame as gen;
-use super::nanopc_t6_fw::{self, fw_up, FwUp};
+use super::nanopc_t6_fw::{self, fw_up_with, FwUp};
+use super::nanopc_t6_gpu::GPU_QOS_POLICY;
 use super::nanopc_t6_gpu::{Bases, GpuUp};
 use super::nanopc_t6_mmu::MEMATTR_LIVE;
 use super::nanopc_t6_sections::{Backing, McuMem, Placement};
@@ -112,6 +113,7 @@ use crate::gpu::mali::sched::{
 };
 use crate::gpu::mali::{self, Ident};
 use crate::mmio::Mmio;
+use crate::soc::rk3588::QosPolicy;
 use core::mem::offset_of;
 
 /// Which step stopped the run ([`SubmitUp::step`]), in the run's order.
@@ -905,7 +907,7 @@ pub struct GroupUp {
 }
 
 /// Z3, then everything up to a started CSG 0 / CS 0, recorded in `o` as
-/// [`submit_up`] records it: Z3 ([`fw_up`]), the interface read again, the
+/// [`submit_up`] records it: Z3 ([`nanopc_t6_fw::fw_up`]), the interface read again, the
 /// queue's user pages and suspend buffers mapped in AS0 and flushed, the
 /// group VM built from `regions` over `mem.vm` (one backing per region, in
 /// order) and enabled in address space 1, the tiler heap made at `heap`,
@@ -934,8 +936,50 @@ pub fn group_up(
     z1: &mut GpuUp,
     o: &mut SubmitUp,
 ) -> Option<GroupUp> {
+    group_up_with(
+        GPU_QOS_POLICY,
+        m,
+        b,
+        blob,
+        backings,
+        pool,
+        tables_pa,
+        timer_hz,
+        mem,
+        regions,
+        queue_va,
+        heap,
+        clean,
+        delay_us,
+        on_handover,
+        z1,
+        o,
+    )
+}
+
+/// [`group_up`] with Z3's power-on applying `qos` ([`fw_up_with`]).
+#[allow(clippy::too_many_arguments)]
+pub fn group_up_with(
+    qos: QosPolicy,
+    m: &impl Mmio,
+    b: Bases,
+    blob: &[u8],
+    backings: &[Backing],
+    pool: &mut [Table],
+    tables_pa: u64,
+    timer_hz: u32,
+    mem: Z4Mem<'_>,
+    regions: &[Region],
+    queue_va: u64,
+    heap: &HeapPlace,
+    clean: &impl Fn(usize, usize) -> i32,
+    delay_us: &mut impl FnMut(u32),
+    on_handover: &mut impl FnMut(&GpuUp),
+    z1: &mut GpuUp,
+    o: &mut SubmitUp,
+) -> Option<GroupUp> {
     // Z3
-    o.fw = fw_up(m, b, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1);
+    o.fw = fw_up_with(qos, m, b, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1);
     if o.fw.step != nanopc_t6_fw::STEP_NONE {
         o.stopped(STEP_FW, o.fw.step, 0);
         return None;
@@ -1113,13 +1157,49 @@ pub fn group_up(
 
 /// The run (see the module). `m`, `b`, `blob`, `backings`, `pool`,
 /// `tables_pa`, `timer_hz`, `clean`, `delay_us` and `on_handover` are
-/// [`fw_up`]'s, and Z4 goes on with them: `pool` must keep Z3's tables (its
+/// [`nanopc_t6_fw::fw_up`]'s, and Z4 goes on with them: `pool` must keep Z3's tables (its
 /// pages after Z3's `tables_used` hold the queue memory's tables; they were
 /// zeroed by Z3's build), `clean` cleans the table pages Z4 writes. `mem`
 /// is the memory Z4 adds ([`Z4Mem`]); `frame` the frame. `z1` is
-/// [`fw_up`]'s: Z1's whole record.
+/// [`nanopc_t6_fw::fw_up`]'s: Z1's whole record.
 #[allow(clippy::too_many_arguments)]
 pub fn submit_up(
+    m: &impl Mmio,
+    b: Bases,
+    blob: &[u8],
+    backings: &[Backing],
+    pool: &mut [Table],
+    tables_pa: u64,
+    timer_hz: u32,
+    mem: Z4Mem<'_>,
+    frame: &Frame<'_>,
+    clean: &impl Fn(usize, usize) -> i32,
+    delay_us: &mut impl FnMut(u32),
+    on_handover: &mut impl FnMut(&GpuUp),
+    z1: &mut GpuUp,
+) -> SubmitUp {
+    submit_up_with(
+        GPU_QOS_POLICY,
+        m,
+        b,
+        blob,
+        backings,
+        pool,
+        tables_pa,
+        timer_hz,
+        mem,
+        frame,
+        clean,
+        delay_us,
+        on_handover,
+        z1,
+    )
+}
+
+/// [`submit_up`] with Z3's power-on applying `qos`.
+#[allow(clippy::too_many_arguments)]
+pub fn submit_up_with(
+    qos: QosPolicy,
     m: &impl Mmio,
     b: Bases,
     blob: &[u8],
@@ -1154,7 +1234,8 @@ pub fn submit_up(
         chunk_size: frame.heap_chunk_size,
         chunks: 1,
     };
-    let Some(up) = group_up(
+    let Some(up) = group_up_with(
+        qos,
         m,
         b,
         blob,

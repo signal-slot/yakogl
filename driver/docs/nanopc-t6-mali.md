@@ -1498,7 +1498,7 @@ board's values). The order:
    the default; `tools/probes/nanopc_t6/t6_gpu/CMakeLists.txt:31`): the
    probe passes its id to `yd_t6_gpu_qos_policy` before `yd_t6_gpu_up`
    (`tools/probes/nanopc_t6/t6_gpu/src/main.c:65`,
-   `driver/rust/src/ffi/rk3588.rs:546`); without that call the default
+   `driver/rust/src/ffi/rk3588.rs:553`); without that call the default
    applies — `gpu_up` is `gpu_up_with(GPU_QOS_POLICY, ...)`,
    `driver/rust/src/board/nanopc_t6_gpu.rs:244`). The Z1 record names the
    policy that ran: `GpuUp::qos_policy` / `struct yd_t6_gpu_up.qos_policy`,
@@ -2781,16 +2781,20 @@ and nothing written:
   build-time choice, not an edit: `west build ... -- -DT6_GPU_QOS=reset` or
   `=linux-zero` (the default; `tools/probes/nanopc_t6/t6_gpu/CMakeLists.txt:31`)
   reaches `gpu_up_with` through `yd_t6_gpu_qos_policy()`
-  (`driver/rust/src/ffi/rk3588.rs:546`) before `yd_t6_gpu_up`, and the record's
+  (`driver/rust/src/ffi/rk3588.rs:553`) before `yd_t6_gpu_up`, and the record's
   `qos_policy` names the one that ran (`YD_T6_QOS_RESET` 1,
   `YD_T6_QOS_LINUX_ZERO` 2, 0 when the run stopped before the step;
   `driver/rust/include/yakogl_drivers.h:401`), so each run's own Z1 printout
   says which words it wrote (`tools/probes/nanopc_t6/common/t6_z1.c:152`). A
-  Z3 or Z4 run applies `LinuxZero` today: `yd_t6_fw_up` and `yd_t6_submit` run
-  Z1's power-on through `board::nanopc_t6_fw::fw_up`, whose `gpu_up` call
-  (`nanopc_t6_fw.rs:226`, and `nanopc_t6_submit.rs:909` into it) takes the
-  `GPU_QOS_POLICY` default and ignores the selector; picking `Reset` on those
-  paths means carrying the chosen policy into that call. The record names the
+  Z3 or Z4 run applies the same choice: `yd_t6_fw_up` and `yd_t6_submit` read the
+  one `T6_GPU_QOS_POLICY` (`rk3588.rs:542`) and pass it to
+  `board::nanopc_t6_fw::fw_up_with` (`nanopc_t6_fw.rs:223`; `fw_up` keeps the
+  `GPU_QOS_POLICY` default, and `submit_up_with`, `nanopc_t6_submit.rs:1201`,
+  carries the policy into Z3), so the probe's `-DT6_GPU_QOS` reaches Z3 and Z4,
+  host-tested by `fw_up_applies_the_given_qos_policy_and_the_default_without_one`
+  (`nanopc_t6_fw.rs:820`, each policy's words written, the record's GPU part
+  naming it) and `the_entry_applies_the_build_time_qos_policy_z1_reads`
+  (`ffi/rk3588.rs:1583`). The record names the
   applied policy either way, host-tested by
   `each_qos_policy_is_applied_and_named_in_the_record`
   (`driver/rust/src/board/nanopc_t6_gpu.rs:731`).
