@@ -6,8 +6,13 @@
 # console runner sends, never by the distro loop (its name is not boot.scr).
 #
 # It writes nothing: no saveenv, no mmc/ext4/fat write. Its variables are
-# mp2z_*, in RAM; the one other variable, autoload, is set in RAM and put
-# back before every exit and before go. selftest.sh holds the list of allowed
+# mp2z_*, in RAM; the other variables, autoload, tftptimeout and
+# tftptimeoutcountmax, are set in RAM and put back before every exit and
+# before go.
+#
+# The server must listen on UDP port 69. ST's stm32mp25_defconfig does not set
+# CONFIG_TFTP_PORT, so U-Boot ignores tftpdstp (net/tftp.c:938) and the script
+# does not use it; the server address is a bare host, never host:port. selftest.sh holds the list of allowed
 # commands.
 
 # The undo comes first; nothing is read or run before it.
@@ -40,9 +45,19 @@ if test ${mp2z_ok} -eq 0; then
 	setenv autoload ${mp2z_autoload}
 	exit
 fi
+# A dead server: U-Boot's defaults (5 s, 10 retries) wait about 56 s, longer
+# than BL2's IWDG (about 32 s). 2 s and 3 retries give up after 4 timeouts,
+# 8 s (net/tftp.c:701, the count resets with every block received). Both
+# variables are put back right after tftpboot (empty deletes them again).
+setenv mp2z_tmo ${tftptimeout}
+setenv mp2z_tmocnt ${tftptimeoutcountmax}
+setenv tftptimeout 2000
+setenv tftptimeoutcountmax 3
 setenv mp2z_ok 0
 if tftpboot ${mp2z_load} ${mp2z_server}:${mp2z_file}; then setenv mp2z_ok 1; fi
 setenv autoload ${mp2z_autoload}
+setenv tftptimeout ${mp2z_tmo}
+setenv tftptimeoutcountmax ${mp2z_tmocnt}
 if test ${mp2z_ok} -eq 0; then
 	echo "mp2z: refused: tftpboot failed"
 	exit

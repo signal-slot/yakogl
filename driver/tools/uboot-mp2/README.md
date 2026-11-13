@@ -22,8 +22,8 @@ console helper (`tools/mp2_uboot_console.py`), the board backends
 A runner stops U-Boot's autoboot on the console and types **one line**. It
 loads a staged script, sources it, and falls back to the stock boot. Nothing is
 written to the environment: no `saveenv`, no `env save`, no `setenv` of a
-variable other than `mp2z_*` (the net script also sets `autoload` and puts it
-back before every exit and before `go`). The scripts never name `bootcmd`
+variable other than `mp2z_*` (the net script also sets `autoload`, `tftptimeout` and
+`tftptimeoutcountmax` in RAM and puts them back before every exit and before `go`). The scripts never name `bootcmd`
 in a command (only in the undo echo). `bootcmd` is not set, changed or written
 by the scripts or by the typed line, which only runs it as the fallback. A hang is reset by BL2's IWDG (about 32 s); the next autoboot reaches
 ST's extlinux. The undo, printed first by each script:
@@ -65,11 +65,34 @@ Contract (shared with the sibling items):
   (`itest.l *addr != 0x644d5241`), the header's `image_size` (byte 16, 64 bit)
   below 4 GiB and not above the window.
 
+## The TFTP route: port 69 and a dead server
+
+- **The server listens on UDP port 69.** ST's `configs/stm32mp25_defconfig`
+  (tag `v2023.10-stm32mp-r3.1`) does not set `CONFIG_TFTP_PORT`, so U-Boot
+  compiles out the `tftpdstp` lookup (`net/tftp.c:938`) and always asks port
+  69. `mp2-net.cmd` does not use `tftpdstp` and names the server as a bare
+  host; a server on another port (6969, say) is not reached. The selftest
+  refuses a script that sets `tftpdstp`.
+- **A dead server is bounded under the IWDG where U-Boot allows it.** U-Boot's
+  defaults (5 s, 10 retries) wait about 56 s for the first reply, longer than
+  BL2's IWDG (about 32 s). The script sets `tftptimeout 2000` and
+  `tftptimeoutcountmax 3` in RAM around `tftpboot` (4 timeouts, 8 s, which the selftest holds under 16 s;
+  `net/tftp.c:701`), saves the old values in `mp2z_tmo` / `mp2z_tmocnt` and puts
+  them back right after, before any exit. No `saveenv`.
+- **What stays unbounded.** The ARP wait for a server host that is down
+  (`CONFIG_ARP_TIMEOUT` 5 s x `CONFIG_NET_RETRY_COUNT` 5, about 25 s) and
+  `dhcp` (about 28 s) are compile-time values with no variable; they run
+  before the fetch and the IWDG clock is not restarted by the script. With
+  the typed line sent some seconds after reset, a host that is down can
+  still end in a watchdog reset. A runner must treat a `watchdog_reset` during
+  the fetch as a refusal (the next autoboot reaches ST Linux), not as a
+  failure of the image. The QEMU test does not time this (it has no watchdog).
+
 ## Build and test
 
 ```sh
 driver/tools/uboot-mp2/build.sh /path/to/out       # mkimage if present, else tools/uboot_script.py
-driver/tools/uboot-mp2/selftest.sh                  # 54 checks with mkimage (52 without), host only
+driver/tools/uboot-mp2/selftest.sh                  # 63 checks with mkimage (62 without), host only
 ```
 
 `mkimage -A arm64 -O linux -T script -C none -n <name> -d <cmd> <scr>`; without
