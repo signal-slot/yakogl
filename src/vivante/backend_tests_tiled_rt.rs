@@ -440,6 +440,136 @@ fn the_copy_back_survives_a_stream_filled_with_shadow_draws() {
     osal::gpu_free(&mut mem);
 }
 
+/// (d) Behind a shadow draw, two draws that take none: the shadow is copied
+/// back once, before the first of them, and the second finds it written back.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn only_the_first_draw_that_takes_no_shadow_gets_a_copy_back_before_it() {
+    let rig = Rig::new();
+    let (mut a, da) = shadow_target(&rig);
+    let mut db = draw_into(&rig, TARGET_GPU + 0x40_0000);
+    db.depth_test = false;
+    let _on = TiledRt::on();
+    // SAFETY: live draws for the calls.
+    unsafe {
+        assert_eq!(gc_draw(&da), 0);
+        assert_eq!(gc_draw(&db), 0);
+        assert_eq!(gc_draw(&db), 0);
+    }
+    assert_eq!(gc_flush(), 0);
+    let s = rig.last_stream();
+    let jobs = rs_jobs(&s);
+    assert_eq!(jobs.len(), 2, "tile in, one copy back: {jobs:?}");
+    assert_eq!(jobs[1].config & GC_RS_SOURCE_TILED, GC_RS_SOURCE_TILED);
+    let at = rs_kicks_at(&s);
+    assert!(at[1] > s.upto_draw(0).0.len() && at[1] < s.upto_draw(1).0.len(), "before the first plain draw");
+    assert!(rig.faults().is_empty());
+    osal::gpu_free(&mut a);
+}
+
+/// (e) With the knob off none of these streams carries an RS job: a draw
+/// elsewhere between two draws, a whole colour clear, and a stream filled to
+/// overflow.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn with_the_knob_off_no_stream_carries_a_tile_in_or_a_copy_back() {
+    let rig = Rig::new();
+    let (mut a, da) = shadow_target(&rig);
+    let mut db = draw_into(&rig, TARGET_GPU + 0x40_0000);
+    db.depth_test = false;
+    // SAFETY: live draws for the calls.
+    unsafe {
+        assert_eq!(gc_draw(&da), 0);
+        assert_eq!(gc_draw(&db), 0);
+        assert_eq!(gc_draw(&da), 0);
+    }
+    assert_eq!(gc_flush(), 0);
+    assert!(rs_jobs(&rig.last_stream()).is_empty(), "A, B, A");
+
+    gc_attachment_gone(0x65);
+    let mut c = da;
+    (c.do_clear, c.clear_rgba) = (true, [1.0, 0.0, 0.0, 1.0]);
+    assert!(rs_jobs(&rig.submit(&c)).is_empty(), "a whole colour clear");
+
+    let k0 = rig.kicks();
+    for _ in 0..3 * GC_CMD_WORDS / 8 + 1 {
+        // SAFETY: a live draw for the call.
+        assert_eq!(unsafe { gc_draw(&da) }, 0);
+    }
+    assert_eq!(gc_flush(), 0);
+    let kicks = with_platform(|p| p.kicks[k0..].to_vec());
+    assert!(kicks.len() > 1, "the stream overflowed into more kicks");
+    for (i, words) in kicks.iter().enumerate() {
+        assert!(rs_jobs(&Stream(words.clone())).is_empty(), "kick {i}");
+    }
+    assert!(rig.faults().is_empty());
+    osal::gpu_free(&mut a);
+}
+
+/// (b) at the draw: a depth surface a shadow draw left super-tiled with live
+/// planes refuses a draw that wants it linear with -ENOTSUP. A whole depth
+/// clear that is itself a shadow draw (no live plane after it) lets that draw
+/// through.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn a_draw_that_needs_the_other_depth_layout_is_refused_until_a_whole_clear() {
+    let rig = Rig::new();
+    let (mut a, da) = shadow_target(&rig);
+    let _on = TiledRt::on();
+    // SAFETY: a live draw for the call.
+    assert_eq!(unsafe { gc_draw(&da) }, 0);
+    assert_eq!(gc_flush(), 0);
+    let key = ds_key((0x65, 1), (0x65, 1));
+    assert_eq!(ds_cache::layout_of(key), Layout::SuperTiled);
+
+    /* the same draw with the knob off wants a linear depth */
+    gc_debug_set_tiled_rt(0);
+    // SAFETY: a live draw for the call.
+    assert_eq!(unsafe { gc_draw(&da) }, -crate::util::ENOTSUP, "refused");
+    assert_eq!(ds_cache::layout_of(key), Layout::SuperTiled, "and unchanged");
+
+    /* a whole depth clear taken as a shadow draw: nothing live behind it */
+    gc_debug_set_tiled_rt(1);
+    let mut c = da;
+    (c.do_clear, c.do_clear_depth, c.clear_depth) = (true, true, 1.0);
+    c.depth_write = false;
+    // SAFETY: a live draw for the call.
+    assert_eq!(unsafe { gc_draw(&c) }, 0, "a whole depth clear");
+    gc_debug_set_tiled_rt(0);
+    // SAFETY: a live draw for the call.
+    assert_eq!(unsafe { gc_draw(&da) }, 0, "lets the draw through");
+    assert_eq!(ds_cache::layout_of(key), Layout::Linear);
+    assert_eq!(gc_flush(), 0);
+    osal::gpu_free(&mut a);
+}
+
+/// The clear itself, when it wants the layout the surface is not in, is
+/// refused before it can be recorded: `select_in` runs ahead of `drawn`, so
+/// "a whole clear's value is layout-free" only helps a clear that already
+/// matches the layout.
+#[cfg(feature = "test-knobs")]
+#[test]
+#[ignore = "defect: a whole depth clear that wants the other layout is refused by select_in before it can free the surface"]
+fn a_whole_depth_clear_in_the_other_layout_is_not_refused() {
+    let rig = Rig::new();
+    let (mut a, da) = shadow_target(&rig);
+    let _on = TiledRt::on();
+    // SAFETY: a live draw for the call.
+    assert_eq!(unsafe { gc_draw(&da) }, 0);
+    assert_eq!(gc_flush(), 0);
+    gc_debug_set_tiled_rt(0);
+    let mut c = da;
+    (c.do_clear, c.do_clear_depth, c.clear_depth) = (true, true, 1.0);
+    c.depth_test = false;
+    c.depth_write = false;
+    // SAFETY: a live draw for the call.
+    assert_eq!(unsafe { gc_draw(&c) }, 0, "the clear");
+    // SAFETY: a live draw for the call.
+    assert_eq!(unsafe { gc_draw(&da) }, 0, "and the draw behind it");
+    assert_eq!(gc_flush(), 0);
+    osal::gpu_free(&mut a);
+}
+
 fn select_in(layout: Layout, key: ds_cache::DsKey) -> Result<ds_cache::Selected, i32> {
     ds_cache::select_in(layout, key, 64, 64, GC_DEPTH_GUARD_BYTES, 1, None, |_| false, || 0)
 }
