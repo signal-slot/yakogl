@@ -5,6 +5,8 @@
 Date 2026-11-09, tip `bcab1c1d`. Plan item `refl-long-name-note`. Decision
 note only: no file under `src/` or `tests/` changed; the implementing item is
 `refl-long-name`, which may correct this note where it checked something wrong.
+It is implemented: see "Implemented" at the end, which also lists where the
+code differs from section 4.
 
 Closes the "decision needed" row of RC13 (`docs/es3-cts-failures.md:253`,
 section at `:237`): dEQP `shaders.uniform_block.valid.long_instance_name_vertex`
@@ -195,3 +197,58 @@ knowledge because `src/mesa/` is not vendored. One correction to the task
 text: the comment near `src/shaderc/online/abi.rs:192` about "more than 63"
 being refused by the allocator is about `temps` (the six-bit `NUM_TEMPS`
 field), not about names — the allocator puts no name limit at all.
+
+## Implemented (`refl-long-name`, 2026-11-13)
+
+The decision holds as written in section 4: no field widened, no offset in
+`src/abi_layout.rs` or `src/abi_layout_check.c` moved, `gles_shaderc.h`
+unchanged. It landed in two steps.
+
+1. The online record's name pool (`a1d618e3`, `0fc5da02`, `06840143`):
+   `online::backend::UniformNames`, row index -> whole name, in the record's
+   keep extent, empty for a shader whose names all fit. That made the two
+   `long_instance_name_*` programs link (their row is a block member's,
+   which the GL core never names by the field).
+2. The GL core reads every uniform row's name through the pool
+   (`shaderc::uniform_name`, `gl::program::location_name`), and the link
+   accepts any full-field row the pool names, a default-block uniform
+   included (`link::whole_uniform_row`).
+   - `glGetActiveUniform` and the queries that measure or match its names
+     (`GL_ACTIVE_UNIFORM_MAX_LENGTH`, `GL_UNIFORM_NAME_LENGTH`,
+     `glGetUniformIndices`) build the GL name as pieces, not in a buffer
+     (`ActiveName`: the whole name, an element index, "[0]"), so the
+     68- and 132-byte caps are gone, block members included; the only cut
+     is the caller's `bufSize` at the copy.
+   - `find_struct_member`'s 72-byte key and `glGetUniformBlockIndex`'s
+     132-byte `[0]` buffer became slice comparisons.
+   - `build_locations` merges the two stages' uniforms by the whole name:
+     two names alike in their first 63 characters are two uniforms.
+
+`tests/es3_shaderc_corpus.rs` on the pinned corpus with step 2: 3,459 built,
+2 refused (the `constant_expressions.other.complex_*` pair), 2,135 rightly
+refused, 0 wrongly accepted on the PowerVR, the GC7000UL and the V3D;
+`uniform_block` 66 / 0 (was 64 / 2), as section 5 predicted.
+
+Corrections to section 4, where the code proved it different:
+
+- The field is filled with the cut prefix only, no "truncated" marker: the
+  marker is the field being full (63 bytes and the NUL), the signature
+  `link::name_maxes_field` already reads, and the pool is built from that
+  signature (`backend::keep_names` matches the cut row against the
+  compile's reflection rows by prefix and layout).
+- `reject_truncated_names` keeps its uniform arm for a full-field row the
+  pool does not name: a table shader (no pool), or a cut row two
+  reflection rows of different names could be. Its unit test
+  `a_uniform_at_the_storable_limit_is_refused` (a table shader) stays.
+- The V3D program record (`codegen::link_sources`) handed the pool both
+  stages' reflection rows while its uniform table holds the fragment
+  stage's only (`v3d_abi::program_shader`). A fragment uniform whose name
+  differed from a vertex one only past 63 characters then matched both and
+  went unnamed, reported cut. It now hands the fragment rows only.
+- The new host test is `tests/es3_uniform_long_name.rs` (PowerVR, GC7000UL,
+  V3D), not `..._uniform_block_long_name.rs`; the block-name lengths of 63,
+  64, 200 and 1,024 are in `tests/es3_ubo_name_queries.rs`
+  (`one_block_each_long_length`), and `tests/es3_pvr_longname.rs` checks the
+  draw-time values of two long default-block uniforms on the PowerVR.
+- `src/gl/tf.rs`'s 64-byte transform-feedback name stays: the varyings it
+  matches are 32-byte io names, which this decision leaves guarded.

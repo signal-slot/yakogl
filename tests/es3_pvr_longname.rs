@@ -11,14 +11,16 @@
 //! the short one: the block is `UniformBlock`, its member
 //! `UniformBlock.uniformMember`; the instance name reaches no query.
 //!
-//! The file also pins what the pool does not lift: a default-block uniform
-//! whose name fills the field is still refused at link, because the GL core
-//! reads that row's field for `glGetActiveUniform` and
-//! `glGetUniformLocation` (task #47's last step).
+//! The file also pins the default block: a uniform whose name fills the
+//! field links, since the GL core reads every row's whole name from the pool
+//! for `glGetActiveUniform` and `glGetUniformLocation` (task #47's last
+//! step, docs/notes/reflection-long-names.md), and a draw hands the stage
+//! the value glUniform4f wrote.
 //!
 //! The host cannot render: the verdicts here are the compile, the link, the
 //! reflection and the uniform dwords a draw hands the back end (the member's
-//! row filled from the bound buffer), HOST-ONLY like
+//! row filled from the bound buffer, a default-block row from glUniform),
+//! HOST-ONLY like
 //! `tools/cts/host-deqp-run.sh`'s.
 //!
 //! ```text
@@ -450,26 +452,63 @@ fn two_members_of_a_long_named_block_are_two_active_uniforms() {
     unsafe { glDeleteProgram(p) };
 }
 
-/// Not lifted: a default-block uniform whose name fills the field. GL reads
-/// that row's field for its name, so the link refuses it as before, naming
-/// the field.
+/// A default-block uniform whose name fills the field links too: the GL
+/// core reads its whole name from the pool (`shaderc::uniform_name`). Two
+/// such names alike in the field's 63 characters are two uniforms, and a
+/// draw hands the fragment stage each one's glUniform4f value in its own
+/// row (tests/es3_uniform_long_name.rs pins the queries on every online
+/// back end).
 #[test]
-fn a_default_block_uniform_of_63_characters_is_still_refused_at_link() {
+fn default_block_uniforms_of_63_and_more_characters_link_and_draw_their_values() {
     let _g = context();
-    let u = "u".repeat(63);
+    let stem = "u".repeat(63);
+    let long = format!("{stem}_long");
     let fs = format!(
         "#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 o;\n\
-         uniform vec4 {u};\nvoid main() {{ o = {u}; }}\n"
+         uniform vec4 {stem};\nuniform vec4 {long};\nvoid main() {{ o = {stem} + {long}; }}\n"
     );
-    let log = program(VS_PLAIN, &fs).map(|p| {
-        // SAFETY: a program of this context.
-        unsafe { glDeleteProgram(p) };
-    });
-    let log = log.expect_err("a 63-character default-block uniform does not link");
-    assert!(log.contains("64-byte name field"), "the log names the field: {log}");
-    assert!(log.contains("fragment uniform"), "and the stage and kind: {log}");
-    // a refused link is no GL error
+    let p = program(VS_PLAIN, &fs).unwrap_or_else(|log| panic!("link failed: {log}"));
+    assert_eq!(programiv(p, GL_ACTIVE_UNIFORMS), 2);
+    let mut names = [active_uniform(p, 0).0, active_uniform(p, 1).0];
+    names.sort();
+    assert_eq!(names, [stem.clone(), long.clone()], "both reported whole");
+    let (ls, ll) = (uniform_location(p, &stem), uniform_location(p, &long));
+    assert!(ls >= 0 && ll >= 0 && ls != ll, "two locations: {ls} {ll}");
+    static POS: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 0.0, 1.0, -1.0, 1.0, 0.0, 1.0];
+    // SAFETY: plain GL calls on a linked program of this context; every
+    // pointer stays alive through the draw.
+    unsafe {
+        glUseProgram(p);
+        glUniform4f(ls, 1.0, 2.0, 3.0, 4.0);
+        glUniform4f(ll, 5.0, 6.0, 7.0, 8.0);
+        let loc = glGetAttribLocation(p, c"a_pos".as_ptr());
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        if loc >= 0 {
+            glVertexAttribPointer(loc as u32, 4, GL_FLOAT, 0, 0, POS.as_ptr() as *const c_void);
+            glEnableVertexAttribArray(loc as u32);
+        }
+        *DRAWN.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        assert_eq!(glGetError(), GL_NO_ERROR, "the draw");
+        if loc >= 0 {
+            glDisableVertexAttribArray(loc as u32);
+        }
+        glUseProgram(0);
+    }
+    let (_, stage) = DRAWN.lock().unwrap_or_else(|e| e.into_inner()).take().expect("the back end drew");
+    let mut got: Vec<Vec<f32>> = stage
+        .rows
+        .iter()
+        .filter(|&&(_, dwords)| dwords == 4)
+        .map(|&(off, _)| {
+            stage.dwords[usize::from(off)..usize::from(off) + 4].iter().map(|&d| f32::from_bits(d)).collect()
+        })
+        .collect();
+    got.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    assert_eq!(got, [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]], "each row holds its own value: {stage:?}");
     assert_eq!(err(), GL_NO_ERROR);
+    // SAFETY: a program of this context.
+    unsafe { glDeleteProgram(p) };
 }
 
 /// And a name one under the field's limit links as it always did: the

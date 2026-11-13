@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The names an ES 3.0 program with uniform blocks reports, through the GL
-//! API on the host, for names that fit today's 64-byte reflection field
-//! (1, 31 and 62 characters): the guard of `docs/notes/reflection-long-names.md`,
-//! whose fix makes names of 63 characters and more report whole. Its cases
-//! of 63+ characters belong next to these.
+//! API on the host: names that fit the 64-byte reflection field (1, 31 and
+//! 62 characters), and names of 63 characters and more up to the 1,024 of
+//! the longest identifier, which `docs/notes/reflection-long-names.md` has
+//! reported whole (`one_block_each_long_length`).
 //!
 //! What is pinned, per program:
 //! - `GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH` is the longest block name + 1
@@ -466,6 +466,24 @@ fn one_block_each_length() {
         for (len, member) in [(1, 1), (31, 30), (60, 1)] {
             let b = Block { name: ident('G', len), instance: Some(ident('s', 1)), member: ident('t', member) };
             assert!(b.api().len() <= 62);
+            check_names(&[b], stage);
+        }
+    }
+}
+
+/// The same past the field: block names, members and instance names of 63,
+/// 64, 200 and 1,024 characters, each reported whole by every query, its
+/// length counted whole -- the member of a 1,024-character block with an
+/// instance name is 2,049 characters (`Block.member`).
+#[test]
+fn one_block_each_long_length() {
+    for stage in [Stage::Vertex, Stage::Fragment] {
+        for len in [63, 64, 200, 1024] {
+            check_names(&[Block { name: ident('H', len), instance: None, member: ident('u', len) }], stage);
+            let b = Block { name: ident('G', len), instance: Some(ident('s', len)), member: ident('t', len) };
+            assert_eq!(b.api().len(), 2 * len + 1);
+            check_names(&[b], stage);
+            let b = Block { name: ident('K', 1), instance: Some(ident('i', len)), member: ident('m', 1) };
             check_names(&[b], stage);
         }
     }

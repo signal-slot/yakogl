@@ -1055,7 +1055,12 @@ pub fn link_sources<'s>(
     })?;
     let fs = lower_source(crate::shaderc::SHC_STAGE_FRAGMENT, fs_glsl, zero, scratch)?;
     let sh = compile_program(&vs, &fs, ProgramKey { vs_lod: vs_key, ..ProgramKey::LINK }, scratch, keep)?;
-    Ok((sh, (fs.reflection.blocks, fs.reflection.block_members, [vs.reflection.uniforms, fs.reflection.uniforms])))
+    /* and the fragment stage's uniform rows only: the program's uniform
+     * table is that stage's (`v3d_abi::program_shader`), and a row the
+     * 64-byte name field cut is named from the rows it was copied from
+     * (`backend::keep_names`) -- a vertex uniform whose name differs past
+     * the 63 characters the field keeps would make it ambiguous */
+    Ok((sh, (fs.reflection.blocks, fs.reflection.block_members, [&[], fs.reflection.uniforms])))
 }
 
 /// The PowerVR build: the USC chain (`powervr::chain`). A vertex shader goes
