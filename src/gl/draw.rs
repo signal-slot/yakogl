@@ -4431,6 +4431,23 @@ fn build_common(
                 (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = s;
             }
             (tb.linear_filter, tb.min_linear, tb.mip_filter, tb.mip_levels) = sampling_fields(t);
+            /* The Mali's 3D texture: its back end copies every level of the
+             * grid the GL core holds after level 0 (`volume_of`,
+             * `grid_level_at`; docs/notes/mali-3d-levels.md section 4), so it
+             * is given the levels a mipmap filter walks, which the GL core
+             * does not count for a grid (its `levels` stays 1). `bytes`
+             * stays level 0's. Here, after the sampler object's filters are
+             * in force. The PowerVR's grid keeps one level. */
+            #[cfg(feature = "gpu-mali")]
+            if tb.type_ == GLES_TEXTYPE_3D && t.grid_cols != 0 {
+                let levels = super::native_vol::sampled_levels(t);
+                tb.mip_levels = levels as u8;
+                tb.mip_filter = match t.min_filter {
+                    _ if levels < 2 => 0,
+                    GL_NEAREST_MIPMAP_LINEAR | GL_LINEAR_MIPMAP_LINEAR => 2,
+                    _ => 1,
+                };
+            }
             /* The PowerVR's native 3D texture (gl::native_vol,
              * pvr_native_3d; docs/notes/pvr-3d-native.md), by the same rules
              * as the 2D array's: the program alone decides (the record's bit
