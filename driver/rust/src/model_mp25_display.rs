@@ -351,6 +351,8 @@ impl Mmio for Mp25Display {
 }
 
 #[cfg(test)]
+mod golden;
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::ip::dw_mipi_dsi::{self as dsi, flags, Format};
