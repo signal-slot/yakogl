@@ -330,6 +330,14 @@ fn every_es3_limit_meets_the_spec_minimum_or_is_a_listed_gap() {
     for l in limits() {
         assert_eq!(geti64(l.pname), geti(l.pname) as i64, "{}: glGetInteger64v disagrees", l.name);
     }
+    /* ... and the float answer: the dEQP `*_getfloat` rows of the limits fail
+     * only where the integer query is below its minimum too (docs/notes/
+     * v3d-notpass-rest.md G3 suspected a second defect; get_floatv falls
+     * through to the integer state, there is none). Every value here is below
+     * 2^24, so the f32 is exact. */
+    for l in limits() {
+        assert_eq!(getf_n(l.pname)[0], geti(l.pname) as f32, "{}: glGetFloatv disagrees", l.name);
+    }
     /* ranges (Table 6.32: line width and point size ranges, both ends 1 at least) */
     let [w0, w1] = getf_n(GL_ALIASED_LINE_WIDTH_RANGE);
     check("ALIASED_LINE_WIDTH_RANGE[0]", w0 as f64, 1.0, Rule::AtMost);
