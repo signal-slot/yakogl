@@ -13,7 +13,9 @@ Sources:
 - **The back end** as of `723a75c8`. Every `file:line` below is at that
   commit. Items that are running now will move the lines: tiled-copy-rs
   (`backend.rs`, `tiled_copy.rs`, `texture.rs`), resolve-wide (`ds_cache.rs`),
-  mip-one-kick (`mipmap.rs`). The function names stay valid.
+  mip-one-kick (`mipmap.rs`). The function names stay valid. Two rule texts
+  were corrected against the built code and cite the tree as it stands, and
+  say so at their head: W5's early-depth rule and W10's sampler words.
 - **The three pure modules**: `src/vivante/layout.rs`, `ts.rs` and
   `early_z.rs` (items gc-layout, gc-ts-words, gc-early-z). They are **not on
   the integration tip** this note was written from. No `src/vivante/layout.rs`
@@ -77,7 +79,11 @@ Where the code differs from the design below:
   and a draw that cannot take a shadow, without clearing it, is refused.
 - **Discard keeps the test early.** Mesa's rule (`etna_update_zsa`) for a
   program that discards is an early test and a late write; the host test pins
-  that, not "no early depth at all".
+  that, not "no early depth at all" (`early_z.rs:141`, `:150`; W5).
+- **A stencil test never reaches the rule.** `tiled_ez` keeps today's "never"
+  for any draw whose stencil test is on, KEEP ops or not (`backend.rs:653`);
+  the rule itself is not that strict -- Mesa takes a non-KEEP stencil early,
+  and only a discard makes it both-late (W5, the rule's fourth bullet).
 - **The TEXKILL scan** is not cached by code address (the `DiscardCache` of
   `shader.rs` stays unused): a scan is one pass over the program words per
   shadow draw, and a stale answer after a program's memory is reused would
@@ -475,22 +481,60 @@ agree with `layout.rs`. It does not show what the hardware does.
 
 ### W5. Early depth for draws into a tiled shadow (about 1.5 h; same knob)
 
-- **What**: one `early_z::decide` for each draw, made in `record`
-  (`backend.rs:3091-3175`) and kept on `GcDraw`. Its inputs:
-  - `target_linear` = the draw takes no shadow;
-  - `depth_test`, `depth_write` as `emit_pe_state` computes them
-    (`:1448-1452`);
-  - `stencil_late` from `gl.stencil` and its ops;
-  - `shader_writes_depth` = `fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG`
+- **What** (built; these `file:line` are at the tree as it stands, not at
+  `723a75c8`): one decision per draw from Mesa's rule (`early_z::early_z`,
+  `early_z.rs:131-179`), taken wherever the draw's words are emitted, not
+  stored on `GcDraw`. `tiled_ez` (`backend.rs:651-664`) answers for a draw
+  only when it opens no clear quad, the stencil test is off, the depth test
+  is on, and the target takes a tiled shadow (`:653`,
+  `tiled_rt::Track::takes`, `tiled_rt.rs:100`); every other draw keeps
+  today's "never" through `draw_ez` (`:667-669`, `draw_early_z`,
+  `early_z.rs:186-188`). What the rule reads of a draw that passes that gate
+  (`EarlyZInput`, `early_z.rs:55-75`, built at `backend.rs:656-663`):
+  - colour layout `Tiled`, and `depth_func_always`, `depth_write`;
+  - `writes_z` = `fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG`
     (`src/shaderc/mod.rs:1057`, `:1082`);
-  - `shader_discards`: the fragment program holds a TEXKILL (the opcode in
-    `src/shaderc/online/vivante/isa_tables.rs:177-179`). This is a scan of
-    the program's instruction words, cached by code address, in
-    `src/vivante/shader.rs`. That needs no new `ShcViv` field, and
-    `src/abi_layout.rs` pins `ShcViv`'s layout.
+  - `uses_discard` = `fs_discards` (`backend.rs:673-682`): the compiler's
+    `uses_discard` flag, or a TEXKILL in the program words
+    (`shader::discards`, `src/vivante/shader.rs:421`, the opcode in
+    `src/shaderc/online/vivante/isa_tables.rs:177-179`). One pass over the
+    words per shadow draw, uncached (Status, "The TEXKILL scan"); no
+    `ShcViv` field.
 
-  A clear quad (`is_clear`) is always "no": Mesa has no clear quad to copy, and
-  both halves stay off as today.
+  And what the rule says of a shadow draw (`early_z.rs`; each case is a row
+  of `the_decision_table_follows_etna_update_zsa`, `:221-314`):
+
+  - a plain depth-testing, depth-writing draw with neither: the test and the
+    write are both early (`:139-155`; row "terrain tiled", `:229`) --
+    `PE_DEPTH_CONFIG` `EARLY_Z` and `DISABLE_ZS`, `RA_EARLY_DEPTH`
+    `TEST_ENABLE` without `WRITE_DISABLE`;
+  - a program that discards: an early test and a late write -- the Status
+    section's "Discard keeps the test early". `:141` withholds the early
+    write from `uses_discard`; the early test at `:150` does not look at it.
+    Words: `EARLY_Z` without `DISABLE_ZS`, `TEST_ENABLE` with `WRITE_DISABLE`
+    (row "discard tiled", `:246-247`). Not "no early depth at all";
+  - a program writing `gl_FragDepth`: no early depth, both halves late
+    (`:141`, `:150`; row "writes z tiled", `:249-250`);
+  - an enabled stencil test, whatever its ops: no early depth at all -- and
+    not from the rule but from the gate: `tiled_ez` refuses such a draw
+    before consulting Mesa's rule (`backend.rs:653`), so `draw_ez` answers
+    today's words. The design's `stencil_late` input does not exist. Mesa's
+    rule is not that strict: a stencil with non-KEEP ops is enabled and
+    modified (`stencil_flags`, `early_z.rs:115-128`), its write is early on
+    this part (`:140-142`), and the early test follows an early write
+    (`!stencil_modified || early_zs`, `:150`; row "stencil replace tiled",
+    `:271-279`). Only a discard pushes the modified stencil's write late and
+    takes the test with it -- a fragment the early test killed could not
+    carry out the stencil update the late pass owed it (row "stencil replace
+    + discard tiled", `:280-288`). The back end keeps the whole stencil
+    family out of the rule;
+  - a clear quad (`is_clear`) is always "no" (`backend.rs:653`): Mesa has no
+    clear quad to copy, and both halves stay off as today.
+
+  The two halves leave one decision and the stream says so: `emit_pe_state`
+  ORs `early_z.pe_bits` in (`backend.rs:1670-1677`), `emit_ra_state` writes
+  `early_z.ra_word` (`:1947-1966`, the fallback equal to today's word
+  asserted at `:1962-1964`), and `pe_key` keys both words (`:2199-2208`).
 - **Touches**: `backend.rs`:
   - `emit_pe_state` ORs in `early_z::pe_bits`, next to the existing
     `DISABLE_ZS` rule (`:1518-1520`);
@@ -506,16 +550,29 @@ agree with `layout.rs`. It does not show what the hardware does.
 - **CPU readers**: none. Early depth changes only which fragments the shader
   runs on, not what is stored. The PE-private rule of W3 keeps every reader
   away from these surfaces.
-- **Host tests**, `tests/gc_tiled_rt.rs` and a `backend_tests.rs` case:
+- **Host tests** (landed in `src/vivante/backend_tests_tiled_rt.rs`; the
+  `tests/gc_tiled_rt.rs` integration test over the public entry points is the
+  open item on top of it):
   - a depth-tested draw into a shadow writes `PE_DEPTH_CONFIG` and
-    `RA_EARLY_DEPTH` as golden mode 8 has them for its depth-tested draw (Mesa
-    renders that tiled, so its early-depth words are the reference). Both are
-    set in the same stream;
-  - for a discarding shader, a shader writing `gl_FragDepth`, a linear target
-    or a clear quad, both words are exactly today's (`WRITE_DISABLE`, no
-    `EARLY_Z`);
-  - a unit test that the TEXKILL scan finds the `discard` of a compiled
-    test shader and none in `mipgen.frag`'s or the clear quad's programs.
+    `RA_EARLY_DEPTH` as golden mode 8 has them for its depth-tested draw --
+    both halves, in the same stream, from one decision:
+    `a_draw_into_a_tiled_shadow_takes_early_depth_and_nothing_else_does`
+    (`backend_tests_tiled_rt.rs:239-291`), and the halves never disagree over
+    any input of the rule (`both_halves_follow_one_decision`,
+    `early_z.rs:332-352`). Mode 8 is a sound reference for the early-depth
+    fields even though Mesa renders super-tiled, not TILED: the rule asks
+    only whether the first colour target is linear (`early_z.rs:136`,
+    `ColorLayout`, `:32-41`);
+  - the same test (`:257-288`): a discarding program -- the compiler's flag,
+    and a TEXKILL in the words -- keeps the test early and the write late;
+    only a shader writing `gl_FragDepth`, a stencil test, the knob off (a
+    linear target) and the clear quad keep today's words (`WRITE_DISABLE`, no
+    `EARLY_Z`). The design's "for a discarding shader ... both words are
+    exactly today's" is what did not land: Mesa gives a discarding program an
+    early test and a late write (Status, "Discard keeps the test early");
+  - `tests/gc_texkill_scan.rs`: the TEXKILL scan finds the `discard` of a
+    compiled test shader, finds none in `mipgen.frag`'s or the clear quad's
+    programs, and agrees with the instruction decoder over a corpus.
 - **Board check (session A, item x2-gm-after or a session of its own, X2
   only)**: run one image built from origin/main with W4 and W5, with
   `gc_tiled_rt` off and then on. Check:
@@ -678,13 +735,50 @@ agree with `layout.rs`. It does not show what the hardware does.
 
 ### W10. Single-level shadow targets sampled directly (about 2 h; after tiled-copy-rs)
 
-- **What**: a 2D texture with one level whose storage has a shadow in step
-  (`InStep` or `ShadowNewer`) is sampled from the shadow:
-  - `format_words`: ADDRESSING `TILED` and `texdesc_halign(SIXTEEN)`
-    (`texture.rs:271-273`, `:298`);
-  - LINEAR_STRIDE = `padded_w * 4` (Mesa's `levels[0].stride` for a tiled
-    layout, as `texture.rs:377-381` already does for the copy);
-  - LOD 0 = the shadow.
+- **What**: a 2D texture with one level whose storage has a shadow in step is
+  sampled from the shadow. The words, at the tree as it stands -- recorded
+  for a single-level TILED 32-bit shadow, terrain's 256x256 RGBA8 height and
+  normal maps as the size:
+  - CONFIG0, ADDRESSING `TILED` is the field's value **0**
+    (`GC_TEX_ADDRESSING_TILED`, `regs.rs:829`, shift 20 `:826-828`;
+    `TEXTURE_ADDRESSING_MODE_TILED` 0x0, `common_3d.xml.h:131`;
+    `VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE`, `state_3d.xml.h:1605-1607`).
+    Mesa writes the field only for a linear resource
+    (`etnaviv_texture_desc.c:179-182`), and `format_words` writes the same
+    zero for a tiled side (`texture.rs:356-358`);
+  - CONFIG1 **0x04321000** = HALIGN SIXTEEN (`TEXTURE_HALIGN_SIXTEEN` 1,
+    `common_3d.xml.h:125`; field bits 28:26: `texdesc_halign`,
+    `regs.rs:858-860`, `VIVS_TE_SAMPLER_CONFIG1_HALIGN` mask 0x1c000000,
+    `state_3d.xml.h:1682-1684`) over the RGBA8 base `0x00321000` -- the base
+    of Mesa's own words without SWIZZLE_A = ONE (`texture.rs:361-363`).
+    Mesa takes HALIGN from the resource: a TILED resource the resolve engine
+    may touch is 16x4-padded and gets SIXTEEN (`etna_layout_multiple`,
+    `etnaviv_resource.c:357-362`, `:384-388` -- W4's qualification
+    `w % 16 == 0`, `h % 4 == 0` puts a shadow in exactly that shape), and the
+    sampler descriptor ORs it in (`etnaviv_texture_desc.c:183-186`);
+  - LINEAR_STRIDE **0x400** = 256 x 4: Mesa's `levels[0].stride`
+    (`etnaviv_texture_desc.c:190`, laid out by `setup_miptree`,
+    `etnaviv_resource.c:327-332`); the copy path computes the same number for
+    the same size (`texture.rs:463-472`);
+  - SLICE **0x40000** = the whole 256x256 layer: Mesa's
+    `levels[0].layer_stride` (`etnaviv_texture_desc.c:192`); the copy's is
+    `align4(w) * align4(h) * bpp` (`tiled_copy.rs:652`, used at
+    `texture.rs:482-484`);
+  - LOD 0 = the shadow -- and it is the only word that differs from the RS
+    tiled copy's descriptor of the same size and format: Mesa's LOD words are
+    `bo + levels[lod].offset` (`etnaviv_texture_desc.c:204-205`), and every
+    other word of that copy is in place today
+    (`texture.rs:449-455` with `tiled_copy::lookup`'s SIXTEEN,
+    `tiled_copy.rs:640-654`).
+
+  TX_CTRL stays **0** without W8: `write_sampler` writes 0, "no tile status"
+  (`texture.rs:702-703`). With W8 it is **`0x42 | slot << 2`**: TS_ENABLE 0x2
+  and TS_INDEX `slot << 2` (`state_3d.xml.h:1931-1938`, `regs.rs:1144-1150`)
+  plus 128B_TILE 0x40 (`state_3d.xml.h:1939`), which Mesa sets whenever the
+  TS mode field is 0 (`etnaviv_texture_desc.c:302-307`) -- and 0 is the
+  128-byte TS mode W7 programs. 0x42 is Mesa's own word from the board:
+  `TX_CTRL[0]` 0x42 with TS_ENABLE in terrain's stream, at slot 0 where
+  `slot << 2` vanishes (`gc-slow-terrain-stream-diff.md:165`, `:231`).
 
   This replaces `tiled_copy`'s vertex-stage copy for terrain's height and
   normal maps (`tiled_copy.rs:174-180`), and the RS copy tiled-copy-rs adds in
@@ -723,8 +817,28 @@ agree with `layout.rs`. It does not show what the hardware does.
 - **Host tests**:
   - `tests/gc_tiled_copy_reuse.rs` changes: a rendered height map is sampled
     by the vertex stage with no copy and no `finish` (counted), and the
-    descriptor's CONFIG0 and CONFIG1 match golden mode 26's words for a TILED
-    vertex texture, with HALIGN SIXTEEN instead of FOUR (`etnaviv_texture.c:230-232`);
+    descriptor's words equal the RS tiled copy's of the same size and format
+    with LOD 0 alone changed (the list above) -- *not* golden mode 26's.
+    Mode 26 cannot pin this case: its CONFIG1 is `0x08521000`
+    (`texture.rs:367-369`), whose HALIGN field is 2 = SUPER_TILED
+    (`regs.rs:858-865`, `state_3d.xml.h:1682-1684`), and HALIGN 2 comes only
+    from a super-tiled resource (`etnaviv_resource.c:389-393`): Mesa samples
+    that dEQP texture from a super-tiled one, and the word's base is the
+    GL_RGB one with SWIZZLE_A = ONE, not RGBA8's. No golden word in the tree
+    carries HALIGN SIXTEEN -- the recorded CONFIG1 words are 0x00321000,
+    0x00321002, 0x00521000 (HALIGN 0) and 0x08321000, 0x08500000, 0x08521000
+    (HALIGN 2), `tex_layout.rs:31-35`, `gc-slow-terrain-stream-diff.md:165`;
+  - so HALIGN SIXTEEN for a TILED target is pinned by the host test of the
+    identical words, not by a golden:
+    `a_render_into_the_texture_is_tiled_by_the_rs_with_no_finish`
+    (`tests/gc_tiled_copy_reuse.rs:500`) asserts SIXTEEN in the RS copy's
+    CONFIG1 (`:582-583`), and Mesa's derivation is the source lines above
+    (`etnaviv_resource.c:384-388`, the HALIGN-feature comment
+    `etnaviv_texture.c:230-232`, `etnaviv_texture_desc.c:183-186`). A golden
+    that pins it outright would be a new cs_golden mode sampling a
+    single-level TILED 16x4-aligned texture -- Mesa's `rs_align` case,
+    `etnaviv_resource.c:357-362 -- and none of the current modes samples
+    one;
   - glReadPixels and glTexSubImage2D after the render resolve first (an RS job
     and one `finish`);
   - glGenerateMipmap of such a texture records the resolve before the first
