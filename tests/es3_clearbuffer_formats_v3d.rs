@@ -24,6 +24,10 @@
 //!   each channel a half (`_mesa_float_to_half`, round to nearest even, NaN
 //!   the quiet pattern, overflow infinity), two a word.
 //!
+//! R32F is colour-renderable in ES 3.0 only with GL_EXT_color_buffer_float:
+//! its rows run while an R32F renderbuffer is complete and are skipped
+//! otherwise (extension unlisted, storage GL_INVALID_ENUM).
+//!
 //! The full, unscissored, unmasked clear is the TLB's: a clear word and no
 //! draw (`load_rt0` false). What the V3D refuses is pinned by name. The
 //! scissored and masked clears (a quad) are in tests/es3_int_rt_v3d.rs and
@@ -493,6 +497,34 @@ fn clear(format: GLenum, call: Call, values: [u32; 4]) -> Result<Seen, Refused> 
     r.map(|()| s)
 }
 
+/// Whether `name` is in glGetString(GL_EXTENSIONS).
+fn extension_listed(name: &str) -> bool {
+    // SAFETY: glGetString returns a NUL-terminated static string.
+    let s = unsafe { CStr::from_ptr(glGetString(GL_EXTENSIONS).cast::<c_char>()) }.to_string_lossy().into_owned();
+    s.split_whitespace().any(|e| e == name)
+}
+
+/// Whether R32F is a complete colour target (a renderbuffer, as `clear`
+/// makes it). ES 3.0 does not make it renderable; only
+/// GL_EXT_color_buffer_float does. When it is not, the extension must be
+/// unlisted and the storage call GL_INVALID_ENUM, and the R32F rows skip.
+fn r32f_renderable() -> bool {
+    match clear(GL_R32F, Call::Fv, [0; 4]) {
+        Ok(_) => true,
+        Err(r) => {
+            assert!(
+                matches!(r, Refused::Storage(GL_INVALID_ENUM) | Refused::Status(_)),
+                "R32F refused with {r:?}, want GL_INVALID_ENUM storage or an incomplete framebuffer"
+            );
+            assert!(
+                !extension_listed("GL_EXT_color_buffer_float"),
+                "R32F not renderable but GL_EXT_color_buffer_float is listed"
+            );
+            false
+        }
+    }
+}
+
 /* ---- Mesa's packing, written out ---- */
 
 /// `float_to_ubyte` (util/format_r11g11b10f.h's neighbour, u_math.h): what
@@ -665,7 +697,12 @@ fn float_formats_clear_unclamped() {
         (GL_RGBA16F, "RGBA16F", V3D_OUTPUT_IMAGE_FORMAT_RGBA16F, true),
         (GL_R32F, "R32F", V3D_OUTPUT_IMAGE_FORMAT_R32F, false),
     ];
+    let r32f = r32f_renderable();
     for (f, name, out, has_alpha) in formats {
+        if f == GL_R32F && !r32f {
+            eprintln!("skip {name}: not colour-renderable without GL_EXT_color_buffer_float");
+            continue;
+        }
         let tile = if f == GL_R32F { Tile::W32 } else { Tile::F16 };
         for mut v in [EDGE, MID, HALF_EDGE, HALF_MORE, [-1.5, 3.0e4, 0.1, -7.25]] {
             let s = clear(f, Call::Fv, bits(v)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
@@ -748,9 +785,14 @@ fn the_wrong_clear_call_is_invalid_operation() {
             assert_eq!(clear(f, call, [1; 4]).err(), Some(Refused::Clear(GL_INVALID_OPERATION)), "{name} {call:?}");
         }
     }
+    let r32f = r32f_renderable();
     for (f, name) in
         [(GL_RGBA8, "RGBA8"), (GL_SRGB8_ALPHA8, "SRGB8_ALPHA8"), (GL_RGBA16F, "RGBA16F"), (GL_R32F, "R32F")]
     {
+        if f == GL_R32F && !r32f {
+            eprintln!("skip {name}: not colour-renderable without GL_EXT_color_buffer_float");
+            continue;
+        }
         for call in [Call::Iv, Call::Uiv] {
             assert_eq!(clear(f, call, [1; 4]).err(), Some(Refused::Clear(GL_INVALID_OPERATION)), "{name} {call:?}");
         }
