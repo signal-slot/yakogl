@@ -79,6 +79,21 @@ The V3D library is the one GPU where the host shows real causes in
   the V3D back end says it samples but whose texture shader state its
   packer refuses; a V3D defect worth a look before the Pi 4 rerun).
 
+Since plan #354 the V3D's mask holds the four ETC2 block classes, and the
+GL core decodes the six other ETC2/EAC formats into classes every back end
+samples (`docs/notes/etc2-eac.md`), so the "ETC2 is not sampled yet" part of
+the draw refusal above no longer exists. No `texture.filtering` or
+`texture.swizzle` case names a compressed format, so the figures of this
+section do not move. The host checks of the ETC2/EAC formats are
+`tests/es3_etc2_eac.rs` (the GL core, on the three GPUs),
+`tests/es3_etc2_v3d.rs` and `src/v3d/backend_tests.rs`
+`all_ten_etc2_eac_formats_are_drawn_with_their_tmu_type` (the V3D's draw
+path). The host dEQP of `texture.wrap.*etc2*`, `*eac*` and
+`texture.format.compressed.*`, which is where those formats are drawn, was
+not run for this item: it needs the patched VK-GL-CTS checkout
+(`tools/cts/README.md` 2b), which is not in the deps cache, and its
+pictures would be black on the host anyway (section 0).
+
 Host figures per subgroup on the PowerVR and GC7000 libraries, either tree
 (`Fail` / `NotSupported`): filtering.2d 117 / 12, 2d_array 122 / 12, 3d
 141 / 12, cube 124 / 12 (combinations 23, 36, 56, 18; formats 66, 60, 59,

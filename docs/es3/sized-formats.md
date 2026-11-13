@@ -155,6 +155,22 @@ The plan #360 decision:
 * GC7000UL: does not claim it.
 * report-es2 builds claim neither extension (`tests/es2_report_guard.rs`).
 
+## ETC2 / EAC compressed formats
+
+Not part of the 35 colour formats above but the same decision: a format a
+back end may not sample natively is stored in a class it does.
+`glCompressedTexImage2D/3D` takes ES 3.0's ten ETC2/EAC names. The four
+block formats (`RGB8_ETC2`, `SRGB8_ETC2`, `RGBA8_ETC2_EAC`,
+`SRGB8_ALPHA8_ETC2_EAC`) are stored as blocks in the `ETC2_*` classes; the
+other six are decoded on the CPU at upload (`src/gl/etc2.rs`,
+`src/gl/etc2_store.rs`) into R16F (`R11_EAC`, `SIGNED_R11_EAC`), RGBA16F
+(`RG11_EAC`, `SIGNED_RG11_EAC`: (r, g, 0, 1)), RGBA8 and SRGB8_ALPHA8 (the
+punch-through pair), only where the back end's mask holds that class
+(`decoded_class_stored`; the Mali refuses the six). `GlTexture::decoded_from`
+names the compressed format of such a texture. Design, dEQP's 11-bit EAC
+tolerance and the memory cost: `docs/notes/etc2-eac.md`; host tests
+`tests/es3_etc2_eac.rs` and `tests/es3_etc2_v3d.rs`.
+
 ## Not done (left to other items)
 
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).

@@ -130,6 +130,7 @@ struct gl_texture {
 	bool     rgba32f;            /* the sized format is GL_RGBA32F, stored as halves (the ES 3.0 report only) */
 	bool     unsized_depth;      /* a GL_DEPTH_COMPONENT / GL_DEPTH_STENCIL texture, no attachment (the ES 3.0 report only) */
 	bool     depth_texels_newer; /* the CPU wrote a depth texture's texels since the backend's depth plane matched them (gles_draw.depth_texels) */
+	uint16_t decoded_from;       /* the compressed name whose ETC2/EAC blocks were decoded into this texture at upload (0: none) */
 };
 
 struct gl_shader {
