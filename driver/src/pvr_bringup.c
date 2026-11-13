@@ -234,8 +234,9 @@ static int pvr_init(const struct device *dev)
 	 * RGX_CRTIME_TICK_IN_CYCLES). TISCI refuses to tell this host the clock
 	 * rate, so measure it: 10 ms is 31,250 ticks at 800 MHz, a 0.003 %
 	 * resolution, and 90 ms less on the way to the first frame than the
-	 * 100 ms this took until 2026-10-21. */
-	{
+	 * 100 ms this took until 2026-10-21. The number is only logged: a
+	 * build whose log level drops the line does not wait for it. */
+	if (CONFIG_YAKOGL_DRV_GPU_PVR_LOG_LEVEL >= LOG_LEVEL_INF) {
 		uint64_t t0 = pvr_rd64(data->regs, 0x0160) & 0xFFFFFFFFFFFFULL, t1;
 
 		k_busy_wait(10000);
