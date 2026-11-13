@@ -168,7 +168,9 @@ endif()
 #                                    nightly + rust-src, builds it
 #                                    (YAKOGL_CARGO_BUILD_STD=AUTO).
 set(YAKOGL_DRIVERS_CRATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../rust")
-if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YAKOGL_BOARD_RECORD_RUST)
+# The DK's I2C, DSI and ADV7535 shims call ffi::mp25_* and the yd_env helpers.
+if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YAKOGL_BOARD_RECORD_RUST OR
+   CONFIG_YAKOGL_DRV_I2C_STM32MP2 OR CONFIG_YAKOGL_DRV_DSI_STM32 OR CONFIG_YAKOGL_DRV_ADV7535)
   if(NOT CONFIG_ARM64)
     message(FATAL_ERROR "yakogl-drivers: libyakogl_drivers.a is built for aarch64 only")
   endif()
@@ -229,6 +231,9 @@ if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YA
     # soc::stm32mp2's GPU power C ABI (gpu_ffi.rs over gpu::vivante's
     # identity table) behind lib/board/stm32mp2/include/stm32mp2_gpu.h
     list(APPEND _yd_features stm32mp2 vivante)
+  endif()
+  if(CONFIG_YAKOGL_DRV_I2C_STM32MP2 OR CONFIG_YAKOGL_DRV_DSI_STM32 OR CONFIG_YAKOGL_DRV_ADV7535)
+    list(APPEND _yd_features stm32mp2) # ffi::mp25_display, ffi::mp25_i2c
   endif()
   list(REMOVE_DUPLICATES _yd_features)
 
