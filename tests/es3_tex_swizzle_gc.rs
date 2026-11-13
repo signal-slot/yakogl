@@ -9,6 +9,10 @@
 //! - the descriptor's CONFIG1 swizzle fields (bits 8-10, 12-14, 16-18, 20-22)
 //!   for the identity, a permutation, ZERO/ONE and a GL_RGB texture whose
 //!   alpha is the format's ONE;
+//! - the same fields for each format of dEQP-GLES3 texture.swizzle
+//!   (alpha, luminance, luminance_alpha, red, rg, rgb, rgba) under each of
+//!   its swizzles, expected by GL ES 3.0 section 3.8.14 over the format's
+//!   channels in docs/es3/gc-formats.md;
 //! - SAMP_CTRL0's WWRAP (bits 6-8) for a 3D texture from GL_TEXTURE_WRAP_R, and
 //!   unchanged (= UWRAP) for a 2D one.
 //!
@@ -435,6 +439,99 @@ fn a_texture_with_no_alpha_composes_its_one() {
         swizzle_params(GL_TEXTURE_2D, [GL_ALPHA, GL_GREEN, GL_BLUE, GL_RED]);
         assert_eq!(render_quad(FS_2D).swizzle(), [SW_1, SW_G, SW_B, SW_R]);
     });
+}
+
+/* ---- dEQP-GLES3 texture.swizzle.multi_channel: its formats and swizzles ------------------ */
+
+/// The swizzles each format of texture.swizzle.multi_channel is drawn with
+/// (es3fTextureSwizzleTests.cpp): all_red .. all_one, bgra, abgr,
+/// one_one_red_green.
+const DEQP_SWIZZLES: [[GLenum; 4]; 9] = [
+    [GL_RED, GL_RED, GL_RED, GL_RED],
+    [GL_GREEN, GL_GREEN, GL_GREEN, GL_GREEN],
+    [GL_BLUE, GL_BLUE, GL_BLUE, GL_BLUE],
+    [GL_ALPHA, GL_ALPHA, GL_ALPHA, GL_ALPHA],
+    [GL_ZERO, GL_ZERO, GL_ZERO, GL_ZERO],
+    [GL_ONE, GL_ONE, GL_ONE, GL_ONE],
+    [GL_BLUE, GL_GREEN, GL_RED, GL_ALPHA],
+    [GL_ALPHA, GL_BLUE, GL_GREEN, GL_RED],
+    [GL_ONE, GL_ONE, GL_RED, GL_GREEN],
+];
+
+/// The format's own channels with alpha (docs/es3/gc-formats.md section 2:
+/// every sampled class but the 128-bit ones writes RGBA; the TE's L8, A8 and
+/// A8L8 fill the other channels themselves).
+const HAS_ALPHA: [u32; 4] = [SW_R, SW_G, SW_B, SW_A];
+/// The same for a base without alpha (GL_RGB, GL_LUMINANCE, GL_RED, GL_RG):
+/// the GL core's `no_alpha` turns the alpha into ONE (gc-formats.md section 2).
+const NO_ALPHA: [u32; 4] = [SW_R, SW_G, SW_B, SW_1];
+
+/// What GL ES 3.0 section 3.8.14 asks of TEXTURE_SWIZZLE_*: each output
+/// channel is the format's channel the parameter names, or the constant 0 / 1.
+fn expected(format: [u32; 4], gl: [GLenum; 4]) -> [u32; 4] {
+    gl.map(|s| match s {
+        GL_RED => format[0],
+        GL_GREEN => format[1],
+        GL_BLUE => format[2],
+        GL_ALPHA => format[3],
+        GL_ZERO => SW_0,
+        GL_ONE => SW_1,
+        _ => panic!("no swizzle 0x{s:x}"),
+    })
+}
+
+/// A 2x2 texture of `internal`/`format` drawn once per dEQP swizzle, each
+/// draw's CONFIG1 swizzle against [`expected`] over `channels`.
+fn deqp_swizzles(name: &str, internal: GLenum, format: GLenum, channels: [u32; 4]) {
+    on_gc7000(|| {
+        texture_2d(internal, format);
+        for gl in DEQP_SWIZZLES {
+            swizzle_params(GL_TEXTURE_2D, gl);
+            assert_eq!(render_quad(FS_2D).swizzle(), expected(channels, gl), "{name} {gl:x?}");
+        }
+    });
+}
+
+#[test]
+fn the_rule_composes_as_the_spec_reads() {
+    /* the helper itself, by hand: a no-alpha base reads its ONE through alpha */
+    assert_eq!(expected(NO_ALPHA, [GL_ALPHA, GL_ZERO, GL_RED, GL_ONE]), [SW_1, SW_0, SW_R, SW_1]);
+    assert_eq!(expected(HAS_ALPHA, [GL_ALPHA, GL_BLUE, GL_GREEN, GL_RED]), [SW_A, SW_B, SW_G, SW_R]);
+}
+
+#[test]
+fn deqp_alpha_a8() {
+    deqp_swizzles("alpha", GL_ALPHA, GL_ALPHA, HAS_ALPHA);
+}
+
+#[test]
+fn deqp_luminance_l8() {
+    deqp_swizzles("luminance", GL_LUMINANCE, GL_LUMINANCE, NO_ALPHA);
+}
+
+#[test]
+fn deqp_luminance_alpha_la8() {
+    deqp_swizzles("luminance_alpha", GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, HAS_ALPHA);
+}
+
+#[test]
+fn deqp_red_r8() {
+    deqp_swizzles("red", GL_R8, GL_RED, NO_ALPHA);
+}
+
+#[test]
+fn deqp_rg_rg8() {
+    deqp_swizzles("rg", GL_RG8, GL_RG, NO_ALPHA);
+}
+
+#[test]
+fn deqp_rgb_rgb8() {
+    deqp_swizzles("rgb", GL_RGB8, GL_RGB, NO_ALPHA);
+}
+
+#[test]
+fn deqp_rgba_rgba8() {
+    deqp_swizzles("rgba", GL_RGBA8, GL_RGBA, HAS_ALPHA);
 }
 
 #[test]
