@@ -13,11 +13,10 @@
 //! their own pitch. What this file pins, for each of the four, today:
 //!
 //! - the framebuffer is complete with the format as a renderbuffer colour
-//!   attachment. A **texture** of the format is stored (the GC
-//!   mask holds the four classes, gc-r32-flip), but as a colour attachment it
-//!   is GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT until the GL core's
-//!   `integer_texture_surface` has rows for them (item gl-r32-surface; RC17,
-//!   fbo.completeness `renderable.texture.*32*`);
+//!   attachment and with it as a **texture** colour attachment: the texture is
+//!   stored (the GC mask holds the four classes, gc-r32-flip) and
+//!   `integer_texture_surface` has rows for them since `6c5b004f` (item
+//!   gl-r32-surface; RC17, fbo.completeness `renderable.texture.*32*`);
 //! - a draw and a glClearBuffer{i,ui}v emit the whole PE_COLOR_FORMAT word
 //!   (FORMAT_EXT, FORMAT_MASK, FORMAT_EXT's own write mask clear; a draw
 //!   0x14000710 / 0x15000710, COMPONENTS without A and so no OVERWRITE; a
@@ -595,10 +594,11 @@ fn a_renderbuffer_of_each_is_a_complete_colour_attachment() {
 /// since gc-r32-flip; `es3_storage_or_refuse`, src/gl/texture.rs), so
 /// glTexImage2D and glTexStorage2D raise nothing and the attachment is made.
 /// The framebuffer is complete: `integer_texture_surface`
-/// (src/gl/framebuffer.rs) has a surface for each of the four (RC17, dEQP
+/// (src/gl/framebuffer.rs) has rows for the four since `6c5b004f` (item
+/// gl-r32-surface); the status assertion flipped with them (RC17, dEQP
 /// fbo.completeness `renderable.texture.*32*`).
 #[test]
-fn a_texture_of_each_is_stored_and_a_complete_attachment() {
+fn a_texture_of_each_is_a_complete_colour_attachment() {
     for t in &INT32 {
         on_gc7000(|| {
             let name = t.name();
@@ -624,7 +624,7 @@ fn a_texture_of_each_is_stored_and_a_complete_attachment() {
                 assert_eq!(
                     glCheckFramebufferStatus(GL_FRAMEBUFFER),
                     GL_FRAMEBUFFER_COMPLETE,
-                    "{name}: a texture has its own surface class (RC17)"
+                    "{name}: the surface rows of 6c5b004f make it complete"
                 );
             }
         });

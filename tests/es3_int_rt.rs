@@ -405,27 +405,30 @@ mod es3 {
     /// (RC1; these were GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT on the PowerVR),
     /// at colour attachment 0 and beyond it.
     ///
-    /// The R and RG classes are held widened to four channels (`es3_formats`),
-    /// a store that is not the layout of their surface: the PowerVR draws
-    /// them as the four-channel surface of the store
-    /// (tests/es3_pvr_fbo_int_rg.rs), the other back ends keep them
-    /// incomplete, except the 32-bit classes a back end stores in their own
-    /// class (`integer_texture_surface` has their rows).
+    /// The R and RG classes of eight and sixteen bits a channel are held
+    /// widened to four channels (`es3_formats`), a store that is not the
+    /// layout of their surface: the PowerVR draws them as the four-channel
+    /// surface of the store (tests/es3_pvr_fbo_int_rg.rs), the other back
+    /// ends keep them incomplete. The 32-bit R and RG classes are stored as
+    /// their own class by the GC7000 (b5e04b14 put them in its sampled set;
+    /// `integer_texture_surface` has their rows since `6c5b004f`, item
+    /// gl-r32-surface): complete there, widened to the four-channel store
+    /// and so incomplete on the V3D (`WIDE_INT_RT`), drawn complete on the
+    /// PowerVR.
     #[test]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();
         let mut made = 0;
         backend::HOST_INTEGER_RT_FORMATS.store(ALL_SURFACES, Ordering::Relaxed);
-        for (f, name, channels, bits, _) in INT_FORMATS {
+        for (f, name, channels, bits, ..) in INT_FORMATS {
             let Some(tex) = int_texture(f) else { continue };
             made += 1;
-            // the GC samples and draws the 32-bit R and RG classes as their own surface (RC17)
-            let own = cfg!(feature = "gpu-vivante") && bits == 32;
-            let want = if channels == 4 || own || cfg!(feature = "gpu-powervr") {
-                GL_FRAMEBUFFER_COMPLETE
-            } else {
-                GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT
-            };
+            let want =
+                if channels == 4 || cfg!(feature = "gpu-powervr") || (bits == 32 && cfg!(feature = "gpu-vivante")) {
+                    GL_FRAMEBUFFER_COMPLETE
+                } else {
+                    GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT
+                };
             let mut fb = 0;
             // SAFETY: room for one name; tex is a level the framebuffer takes.
             unsafe {
