@@ -206,13 +206,15 @@ linear twin's block format with `SAMP_CTRL1.SRGB` (section 2).
 
 Left:
 
-4. RGBA32F/I/UI as two planes (section 3): the back end and the compiler
-   join are in the tree, inert; the mask flip is pending (item
-   gc-wide128-flip). R32I/UI and RG32I/UI are their own classes in the mask
-   (`b5e04b14`): the TE samples them as `EXT_R32I` / `EXT_G32R32I`
-   (`F:286-291`). Their texture colour attachment has
-   `integer_texture_surface` rows (`6c5b004f`, `src/gl/framebuffer.rs`) and a
-   host test (`tests/es3_int32_rt_gc.rs`); the board has not run it
+4. RGBA32F/I/UI as two planes (section 3): the back end, the compiler join
+   and the GL core's own RGBA32F class (`src/gl/texture.rs`, used once the
+   mask offers it, halves otherwise) are in the tree, inert; the mask flip is
+   pending (item gc-wide128-flip). R32I/UI and RG32I/UI are their own classes
+   in the mask (`b5e04b14`): the TE samples them as `EXT_R32I` /
+   `EXT_G32R32I` (`F:286-291`). A texture colour attachment of them is
+   complete: the GL core's `integer_texture_surface` has their rows
+   (`6c5b004f`, `src/gl/framebuffer.rs`) and a host test
+   (`tests/es3_int32_rt_gc.rs`); the board has not run it
    (`docs/es3/int-rt-gc.md`).
 5. R8, RG8 and the R/RG snorm and integer formats in their own narrow
    classes (Mesa's EXT_R8 / G8R8 / R8I / G8R8I / R16I / G16R16I rows): memory

@@ -409,7 +409,10 @@ mod es3 {
     /// a store that is not the layout of their surface: the PowerVR draws
     /// them as the four-channel surface of the store
     /// (tests/es3_pvr_fbo_int_rg.rs), the other back ends keep them
-    /// incomplete.
+    /// incomplete. R32I/UI and RG32I/UI are held in a class of their own
+    /// where the back end samples it (the GC7000UL, GC_SAMPLED_TEXFMTS), a
+    /// store that is their surface's layout (`integer_texture_surface`), so
+    /// they are complete there.
     #[test]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();

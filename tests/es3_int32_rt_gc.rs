@@ -14,10 +14,10 @@
 //!
 //! - the framebuffer is complete with the format as a renderbuffer colour
 //!   attachment. A **texture** of the format is stored (the GC
-//!   mask holds the four classes, gc-r32-flip), but as a colour attachment it
-//!   is GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT until the GL core's
-//!   `integer_texture_surface` has rows for them (item gl-r32-surface; RC17,
-//!   fbo.completeness `renderable.texture.*32*`);
+//!   mask holds the four classes, gc-r32-flip) and, as a colour attachment,
+//!   complete: the GL core's `integer_texture_surface` has rows for them
+//!   (gl-r32-surface, `6c5b004f`; RC17, fbo.completeness
+//!   `renderable.texture.*32*`);
 //! - a draw and a glClearBuffer{i,ui}v emit the whole PE_COLOR_FORMAT word
 //!   (FORMAT_EXT, FORMAT_MASK, FORMAT_EXT's own write mask clear; a draw
 //!   0x14000710 / 0x15000710, COMPONENTS without A and so no OVERWRITE; a

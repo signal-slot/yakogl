@@ -27,7 +27,7 @@ use crate::backend::{
     self, gles_texfmt_bytes, GLES_SURF_RGB565, GLES_SURF_XRGB8888, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB,
     GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA, GLES_TEXFMT_L8, GLES_TEXFMT_LA8,
     GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGBA16F,
-    GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
+    GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::{self, Global};
@@ -217,7 +217,8 @@ fn depth_texel(src: &[u8], type_: GLenum) -> f32 {
     }
 }
 
-/// Expand one source row into a float texel format (RGBA16F / R16F / R32F).
+/// Expand one source row into a float texel format (RGBA16F / R16F / R32F,
+/// or RGBA32F where GL_RGBA32F has its own class, [`rgba32f_class`]).
 /// `src` holds `w` texels of `src_bpp(format, type)` bytes, `dst` room for
 /// `w` texels of the texel format.
 fn convert_row_float(dst: &mut [u8], src: &[u8], w: u32, format: GLenum, type_: GLenum, texfmt: u8) {
@@ -229,6 +230,10 @@ fn convert_row_float(dst: &mut [u8], src: &[u8], w: u32, format: GLenum, type_: 
         if texfmt == GLES_TEXFMT_RGBA16F {
             for (c, vc) in v.iter().enumerate() {
                 dst[x * 8 + c * 2..x * 8 + c * 2 + 2].copy_from_slice(&float_to_half(*vc).to_ne_bytes());
+            }
+        } else if texfmt == GLES_TEXFMT_RGBA32F {
+            for (c, vc) in v.iter().enumerate() {
+                dst[x * 16 + c * 4..x * 16 + c * 4 + 4].copy_from_slice(&vc.to_ne_bytes());
             }
         } else if texfmt == GLES_TEXFMT_R16F {
             dst[x * 2..x * 2 + 2].copy_from_slice(&float_to_half(v[0]).to_ne_bytes());
@@ -1096,7 +1101,8 @@ fn texels_writable(t: &GlTexture) -> bool {
         && (matches!(
             t.texfmt,
             GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F
-        ) || is_narrow_la(t.texfmt)
+        ) || is_float32_rgba(t)
+            || is_narrow_la(t.texfmt)
             || es3_formats::by_index(t.es3_fmt).is_some())
 }
 
@@ -2232,11 +2238,11 @@ unsafe fn texture_write_rect(
         }
         return ok;
     }
-    if matches!(t.texfmt, GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F) {
+    if matches!(t.texfmt, GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F) || is_float32_rgba(t) {
         /* float texels: converted a row at a time through the CPU view (or
-         * a stack row when there is none) */
+         * a stack row when there is none); 16 bytes a texel at most, RGBA32F */
         const FROW_MAX: u32 = 64;
-        let mut row = [0u8; FROW_MAX as usize * 8];
+        let mut row = [0u8; FROW_MAX as usize * 16];
         let gpu_write = osal::ops().and_then(|o| o.gpu_write);
 
         for j in 0..h as usize {
@@ -4274,6 +4280,12 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
             return;
         }
     }
+    /* nor is GL_RGBA32F (table 3.13: neither), refused where it is held in
+     * its own class; held as halves it is filtered as RGBA16F, as always */
+    if is_float32_rgba(t) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
     let filtered = !t.mem.cpu.is_null()
         && (matches!(
             t.texfmt,
@@ -5857,7 +5869,7 @@ fn sized_format(internalformat: GLenum) -> Option<(GLenum, GLenum, u8)> {
         GL_R8 => (GL_RED, u8_, rgba8),
         GL_RG8 => (GL_RG, u8_, rgba8),
         GL_RGBA16F => (GL_RGBA, GL_HALF_FLOAT, GLES_TEXFMT_RGBA16F),
-        GL_RGBA32F => (GL_RGBA, GL_FLOAT, GLES_TEXFMT_RGBA16F), /* stored as halves */
+        GL_RGBA32F => (GL_RGBA, GL_FLOAT, rgba32f_class()),
         GL_R16F => (GL_RED, GL_HALF_FLOAT, GLES_TEXFMT_R16F),
         GL_R32F => (GL_RED, GL_FLOAT, GLES_TEXFMT_R32F),
         GL_RG16F => (GL_RG, GL_HALF_FLOAT, GLES_TEXFMT_RGBA16F),
@@ -5964,8 +5976,38 @@ fn es3_storage_or_refuse(c: &mut GlContext, e: &es3_formats::Es3Format, func: &s
     st
 }
 
+/// The class GL_RGBA32F is stored in: its own, four 32-bit floats a texel,
+/// where the back end samples it (`backend::sampled_texfmts`; the GC7000UL
+/// reads it as two G32R32F planes, Mesa 26.2.1 etnaviv's EXT_G32R32F row,
+/// etnaviv_format.c:229-233, and its companion descriptor,
+/// etnaviv_texture_desc.c:374-415, docs/notes/gc-128bit-texture-sampling.md),
+/// else halves (RGBA16F), as the original
+/// tables always held it. Never under `report-es2`, which keeps its answers.
+///
+/// The GC7000 build alone for now: the PowerVR and V3D masks list the class
+/// already (RG32F and RGB32F are stored in it), but their GL_RGBA32F stays
+/// as halves, byte for byte, until a board run of theirs moves it.
+fn rgba32f_class() -> u8 {
+    if cfg!(feature = "gpu-vivante")
+        && !crate::REPORT_ES2
+        && backend::sampled_texfmts() & backend::gles_texfmt_bit(GLES_TEXFMT_RGBA32F) != 0
+    {
+        GLES_TEXFMT_RGBA32F
+    } else {
+        GLES_TEXFMT_RGBA16F
+    }
+}
+
+/// Is the texture GL_RGBA32F held in its own class ([`rgba32f_class`])? An
+/// es3_formats format stored as RGBA32F (RG32F, RGB32F) is not one: its
+/// texels go through es3_formats' own converter.
+fn is_float32_rgba(t: &GlTexture) -> bool {
+    t.texfmt == GLES_TEXFMT_RGBA32F && t.es3_fmt == 0
+}
+
 /// Is `internalformat` GL_RGBA32F, the one sized name the original tables
-/// store as another (`sized_format`: GL_RGBA32F is held as halves)? A
+/// may store as another (`sized_format`: GL_RGBA32F is held as halves where
+/// the back end does not sample its own class, [`rgba32f_class`])? A
 /// texture records it (`GlTexture::rgba32f`) so a framebuffer attachment can
 /// report the sized format it was made with, which is what ES 3.0 4.4.4.1
 /// judges. Never under `report-es2`, which keeps its answers.
@@ -6013,7 +6055,11 @@ fn es3_sub_image_check(c: &mut GlContext, ti: usize, format: GLenum, type_: GLen
                  * format; GL_OES_texture_float is not claimed, so an
                  * unsized or 8-bit colour texture refuses it (dEQP-GLES3
                  * negative_api.texture.texsubimage2d/3d) */
-                && (type_ != GL_FLOAT || matches!(texfmt, GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F))
+                && (type_ != GL_FLOAT
+                    || matches!(
+                        texfmt,
+                        GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F | GLES_TEXFMT_RGBA32F
+                    ))
         }
     };
     if !ok {
@@ -11408,6 +11454,154 @@ mod tests {
         }
         assert_eq!(gl.error(), GL_NO_ERROR);
         assert_eq!(storage(&gl, name)[..2], 0x3C00u16.to_ne_bytes());
+    }
+
+    /* ---- GL_RGBA32F: its own class where the back end samples it ----------- */
+
+    /// Holds the sampled-mask hooks for a test with RGBA32F added or taken
+    /// out, and puts them back. Made after the `TestGl`, so it is dropped
+    /// while the GL tests are still serialised.
+    #[cfg(not(feature = "report-es2"))]
+    struct Rgba32fSampled;
+    #[cfg(not(feature = "report-es2"))]
+    impl Rgba32fSampled {
+        fn set(open: bool) -> Rgba32fSampled {
+            use core::sync::atomic::Ordering::Relaxed;
+            let bit = backend::gles_texfmt_bit(GLES_TEXFMT_RGBA32F);
+            backend::TEST_EXTRA_SAMPLED.store(if open { bit } else { 0 }, Relaxed);
+            backend::TEST_HIDDEN_SAMPLED.store(if open { 0 } else { bit }, Relaxed);
+            Rgba32fSampled
+        }
+    }
+    #[cfg(not(feature = "report-es2"))]
+    impl Drop for Rgba32fSampled {
+        fn drop(&mut self) {
+            use core::sync::atomic::Ordering::Relaxed;
+            backend::TEST_EXTRA_SAMPLED.store(0, Relaxed);
+            backend::TEST_HIDDEN_SAMPLED.store(0, Relaxed);
+        }
+    }
+
+    /// Four floats a texel that halves cannot hold: 1 + 2^-20, a value past
+    /// the half range, a negative f32 denormal and a third to 24 bits.
+    const WIDE: [f32; 4] = [1.000_001, 1.0e6, -1.0e-40, 0.333_333_34];
+
+    /// convert_row_float writes four 32-bit floats a texel into RGBA32F, the
+    /// source as uploaded, and leaves the bytes past `w` texels alone.
+    #[test]
+    fn convert_row_float_keeps_rgba32f_texels() {
+        let src = f32_bytes(&[WIDE, [0.5, -0.5, 2.0, 1.0]].concat());
+        let mut dst = vec![0xAAu8; 3 * 16];
+        convert_row_float(&mut dst, &src, 2, GL_RGBA, GL_FLOAT, GLES_TEXFMT_RGBA32F);
+        assert_eq!(dst[..32], src[..]);
+        assert!(dst[32..].iter().all(|&b| b == 0xAA));
+        /* an RGB source: alpha is 1 (ES 3.0 3.8.3) */
+        let rgb = f32_bytes(&[1.5, 2.5, 3.5]);
+        convert_row_float(&mut dst, &rgb, 1, GL_RGB, GL_FLOAT, GLES_TEXFMT_RGBA32F);
+        assert_eq!(dst[..16], f32_bytes(&[1.5, 2.5, 3.5, 1.0])[..]);
+    }
+
+    /// While the back end does not sample the RGBA32F class, GL_RGBA32F is
+    /// held as halves, as it always was: texfmt, texel size, the name
+    /// recorded and the bytes. On the PowerVR and V3D builds that is so with
+    /// the class in their masks too (`rgba32f_class`).
+    #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn rgba32f_is_halves_where_its_class_is_not_offered() {
+        let gl = TestGl::new(4, 4);
+        for hide in [true, false] {
+            let _s = hide.then(|| Rgba32fSampled::set(false));
+            let open = backend::sampled_texfmts() & backend::gles_texfmt_bit(GLES_TEXFMT_RGBA32F) != 0;
+            if !hide && open && cfg!(feature = "gpu-vivante") {
+                continue; /* the routed path: the test below */
+            }
+            let name = new_tex();
+            let texel = [1.0f32, 0.5, -2.0, 0.25];
+            // SAFETY: one RGBA float texel.
+            unsafe { glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F as GLint, 1, 1, 0, GL_RGBA, GL_FLOAT, ptr(&texel)) };
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            let t = &gl.ctx().objs_ref().textures[name as usize];
+            assert_eq!((t.texfmt, t.bpp, t.rgba32f), (GLES_TEXFMT_RGBA16F, 8, true), "hidden {hide}");
+            assert_eq!(storage(&gl, name)[..8], u16_bytes(&[0x3C00, 0x3800, 0xC000, 0x3400])[..]);
+            /* glGenerateMipmap filters the halves, as before */
+            // SAFETY: plain GL call.
+            unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+            assert_eq!(gl.error(), GL_NO_ERROR);
+        }
+    }
+
+    /// With the class offered (the test hook; GC_SAMPLED_TEXFMTS does not
+    /// list it yet), every GL_RGBA32F image specification stores it as
+    /// GLES_TEXFMT_RGBA32F with the floats as uploaded: glTexImage2D of two
+    /// levels, glTexSubImage2D, glTexStorage2D and glTexImage3D; and
+    /// glGenerateMipmap refuses it (ES 3.0 3.8.11, table 3.13: RGBA32F is
+    /// neither colour-renderable nor filterable).
+    #[test]
+    #[cfg(all(feature = "gpu-vivante", not(feature = "report-es2")))]
+    fn rgba32f_has_its_own_class_where_the_back_end_samples_it() {
+        let gl = TestGl::new(4, 4);
+        let _s = Rgba32fSampled::set(true);
+        let at = |gl: &TestGl, name: GLuint, level: usize, texel: usize| -> Vec<u8> {
+            let t = &gl.ctx().objs_ref().textures[name as usize];
+            let off = t.level_off[level] as usize + texel * 16;
+            storage(gl, name)[off..off + 16].to_vec()
+        };
+        let other = [0.125f32, -7.0, 65_504.5, 3.0e-5];
+
+        let name = new_tex();
+        let level0: Vec<f32> = (0..4).flat_map(|i| if i % 2 == 0 { WIDE } else { other }).collect();
+        // SAFETY: a 2x2 and a 1x1 RGBA float image.
+        unsafe {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F as GLint, 2, 2, 0, GL_RGBA, GL_FLOAT, ptr(&level0));
+            glTexImage2D(GL_TEXTURE_2D, 1, GL_RGBA32F as GLint, 1, 1, 0, GL_RGBA, GL_FLOAT, ptr(&other));
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        assert_eq!((t.texfmt, t.bpp, t.rgba32f, t.es3_fmt), (GLES_TEXFMT_RGBA32F, 16, true, 0));
+        for i in 0..4 {
+            assert_eq!(at(&gl, name, 0, i), f32_bytes(if i % 2 == 0 { &WIDE } else { &other }), "texel {i}");
+        }
+        assert_eq!(at(&gl, name, 1, 0), f32_bytes(&other), "level 1");
+
+        /* a sub-image of texel (1, 1) only */
+        // SAFETY: one RGBA float texel.
+        unsafe { glTexSubImage2D(GL_TEXTURE_2D, 0, 1, 1, 1, 1, GL_RGBA, GL_FLOAT, ptr(&WIDE)) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(at(&gl, name, 0, 3), f32_bytes(&WIDE));
+        assert_eq!(at(&gl, name, 0, 1), f32_bytes(&other));
+
+        // SAFETY: plain GL call.
+        unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+        assert_eq!(gl.error(), GL_INVALID_OPERATION);
+
+        /* immutable storage, then its texels */
+        let name = new_tex();
+        // SAFETY: plain GL calls; one RGBA float texel.
+        unsafe {
+            glTexStorage2D(GL_TEXTURE_2D, 2, GL_RGBA32F, 2, 2);
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            glTexSubImage2D(GL_TEXTURE_2D, 1, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, ptr(&WIDE));
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        assert_eq!((t.texfmt, t.bpp, t.rgba32f), (GLES_TEXFMT_RGBA32F, 16, true));
+        assert_eq!(at(&gl, name, 1, 0), f32_bytes(&WIDE));
+
+        /* a 2D array of two layers */
+        let mut arr: GLuint = 0;
+        let layers: Vec<f32> = [WIDE, other].concat();
+        // SAFETY: room for one name; a 1x1x2 RGBA float image.
+        unsafe {
+            glGenTextures(1, &mut arr);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, arr);
+            glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F as GLint, 1, 1, 2, 0, GL_RGBA, GL_FLOAT, ptr(&layers));
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let t = &gl.ctx().objs_ref().textures[arr as usize];
+        assert_eq!((t.texfmt, t.bpp, t.rgba32f), (GLES_TEXFMT_RGBA32F, 16, true));
+        let pitch = level_row_pitch(t, 0, 1) as usize;
+        assert_eq!(at(&gl, arr, 0, 0), f32_bytes(&WIDE));
+        assert_eq!(at(&gl, arr, 0, pitch), f32_bytes(&other), "layer 1, a row below");
     }
 
     #[test]
