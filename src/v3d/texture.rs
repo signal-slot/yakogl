@@ -1821,6 +1821,50 @@ mod tests {
         assert_ne!(compare_function(&less), compare_function(&greater));
     }
 
+    /// The compare state of a binding, one row per GL compare function, the
+    /// expected values written out from docs/notes/v3d-shadow.md's table
+    /// (the SAMPLER_STATE "Depth Compare Function" field, bits 4-6 of word
+    /// 0, v3d_packet.xml:1728 and :3-12) and Mesa's v3dx_state.c:598-600
+    /// (compare off packs NEVER), not from the helpers' bodies. The
+    /// binding's `compare_op` is `func - GL_NEVER` (| 16 for no compare).
+    #[test]
+    fn the_compare_state_of_each_gl_function_and_the_bypasses() {
+        const GL_NEVER: u32 = 0x0200;
+        /* (GL function, the V3D field value, the first word's added bits) */
+        let table: [(u32, u32, u32); 8] = [
+            (0x0200, 0, 0x00), /* NEVER */
+            (0x0201, 1, 0x10), /* LESS */
+            (0x0202, 2, 0x20), /* EQUAL */
+            (0x0203, 3, 0x30), /* LEQUAL */
+            (0x0204, 4, 0x40), /* GREATER */
+            (0x0205, 5, 0x50), /* NOTEQUAL */
+            (0x0206, 6, 0x60), /* GEQUAL */
+            (0x0207, 7, 0x70), /* ALWAYS */
+        ];
+        let depth = GlesTextureBind { format: GLES_TEXFMT_R32F, ..bind(64, 64) };
+        for (func, field, bits) in table {
+            let op = (func - GL_NEVER) as u8;
+            /* COMPARE_REF_TO_TEXTURE on a depth binding */
+            let on = GlesTextureBind { compare_op: op, ..depth };
+            assert_eq!(compare_op(&on), field, "{func:#x}");
+            assert_eq!(compare_function(&on), field, "{func:#x}");
+            assert_eq!(sampler_compare_bits(&on), bits, "{func:#x}");
+            /* COMPARE_MODE NONE: the function is kept but not applied */
+            let off = GlesTextureBind { compare_op: op | 16, ..depth };
+            assert_eq!(compare_op(&off), field | 16, "{func:#x} off");
+            assert_eq!(compare_function(&off), 0, "{func:#x} off");
+            assert_eq!(sampler_compare_bits(&off), 0, "{func:#x} off");
+            /* a non-depth format bypasses the compare (ES 3.0.6 3.8.15) */
+            let rgba = GlesTextureBind { format: GLES_TEXFMT_RGBA8, compare_op: op, ..bind(64, 64) };
+            assert_eq!(compare_op(&rgba), 16, "{func:#x} rgba");
+            assert_eq!(compare_function(&rgba), 0, "{func:#x} rgba");
+            assert_eq!(sampler_compare_bits(&rgba), 0, "{func:#x} rgba");
+        }
+        /* the GL core's compare-off value */
+        let none = GlesTextureBind { compare_op: 16, ..depth };
+        assert_eq!((compare_op(&none), compare_function(&none), sampler_compare_bits(&none)), (16, 0, 0));
+    }
+
     /// The GL filters and wrap modes to the TMU's, as st/mesa and
     /// v3d_upload_sampler_state_variant take them.
     #[test]
