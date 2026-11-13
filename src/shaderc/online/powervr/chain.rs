@@ -371,6 +371,39 @@ pub fn build_fragment_for<'a>(
     buf: &mut [u8],
     blend_key: u32,
 ) -> Result<BuiltFragment<'a>, ChainError> {
+    build_fragment_with(m, limits, a, buf, blend_key, None)
+}
+
+/// [`build_fragment`] for colour attachments of different classes, the
+/// per-target list `targets` (up to [`MAX_PACK_TARGETS`], draw buffer `i`
+/// written from output location `i`): each output packed for its own
+/// target ([`pack_target_outputs`]) and written to the pixel output
+/// registers the end-of-tile emit reads that attachment from
+/// ([`target_out_regs`]); `output_regs` is the registers they span (the
+/// record's `num_outputs`). No blend applies and none is decoded here.
+///
+/// Refused by name, besides [`pack_target_outputs`]'s refusals: a written
+/// gl_FragDepth and alpha-to-one.
+pub fn build_fragment_targets<'a>(
+    m: &'a ir::Module<'a>,
+    limits: Limits,
+    a: &'a Arena<'a>,
+    buf: &mut [u8],
+    targets: &[TargetPack],
+) -> Result<BuiltFragment<'a>, ChainError> {
+    build_fragment_with(m, limits, a, buf, 0, Some(targets))
+}
+
+/// [`build_fragment_for`]'s body, and [`build_fragment_targets`]'s when
+/// `targets` is given (`blend_key` is then 0).
+fn build_fragment_with<'a>(
+    m: &'a ir::Module<'a>,
+    limits: Limits,
+    a: &'a Arena<'a>,
+    buf: &mut [u8],
+    blend_key: u32,
+    targets: Option<&[TargetPack]>,
+) -> Result<BuiltFragment<'a>, ChainError> {
     let m = super::abi::with_matrix_varyings_split(m, a).map_err(|_| ChainError::OutOfScratch)?;
     use super::fragment::{coefficient_offsets, IterMode, Iterated};
     use super::sel::{Bank, Mods, SelDst, SelSrc};
@@ -381,6 +414,25 @@ pub fn build_fragment_for<'a>(
         return Err(ChainError::WrongStage);
     }
     let sel = select(m, a).map_err(ChainError::Select)?;
+    /* Attachments of different classes: each integer target's output packed
+     * here, the float and normalised ones at the tail; no depth, as for an
+     * integer target. */
+    let sel = match targets {
+        Some(t) => {
+            if sel.outputs.iter().any(|(slot, _)| *slot == ir::IoSlot::FragDepth) {
+                return Err(ChainError::Build(BuildError::Unsupported(
+                    "gl_FragDepth with colour attachments of different classes",
+                )));
+            }
+            if sel.alpha_to_one.is_some() {
+                return Err(ChainError::Build(BuildError::Unsupported(
+                    "alpha-to-one with colour attachments of different classes",
+                )));
+            }
+            pack_target_outputs(sel, t, a)?
+        }
+        None => sel,
+    };
     /* An integer render target: the output packed for its layout here, and
      * no blend from the key, which carries the layout instead. */
     let int_rt = crate::shaderc::ShcIntRt::of_key(blend_key);
@@ -732,7 +784,32 @@ pub fn build_fragment_for<'a>(
         a2one_flag = Some(flag);
     }
     let mut output_regs = None;
-    let (len, temps) = if let Some(n) = int_dwords {
+    let (len, temps) = if let Some(t) = targets {
+        /* Attachments of different classes: output i at target i's
+         * registers, packed for it (`pack_target_outputs` packed the
+         * integer ones already). */
+        use super::assemble::TargetOut;
+        let regs = target_out_regs(t).ok_or(ChainError::FragmentOutputsNotBuilt)?;
+        let mut outs = [(0u16, TargetOut::Packed { dwords: [(Bank::Temp, 0); 4], n: 1 }); MAX_PACK_TARGETS];
+        let mut placed = 0;
+        for (i, (target, &(start, n))) in t.iter().zip(regs.iter()).enumerate() {
+            let Some((_, comps)) = sel.outputs.iter().find(|(slot, _)| *slot == ir::IoSlot::FragColor(i as u8)) else {
+                continue;
+            };
+            let out = match *target {
+                TargetPack::Int(_) => TargetOut::Packed { dwords: resolve(comps)?, n },
+                TargetPack::Class(class) => TargetOut::Colour { class, colour: resolve(comps)? },
+            };
+            outs[placed] = (u16::from(start), out);
+            placed += 1;
+        }
+        if placed == 0 {
+            return Err(ChainError::FragmentOutputsNotBuilt);
+        }
+        output_regs = regs.iter().map(|&(s, n)| s + n).max();
+        super::assemble::build_fragment_shader_targets(iterated, al.groups, &outs[..placed], discard, free, buf)
+            .map_err(ChainError::Build)?
+    } else if let Some(n) = int_dwords {
         /* the packed dwords, written as they are (`pack_int_output`) */
         let dwords = &colour[..usize::from(n)];
         super::assemble::build_fragment_shader_packed(iterated, al.groups, dwords, discard, free, buf)
@@ -900,7 +977,7 @@ fn pack_int_output<'a>(
 ) -> Result<(Selected<'a>, u8), ChainError> {
     use super::sel::{Bank, OpType, SelDst, SelOp, SelSrc};
     use crate::shaderc::online::arena::AVec;
-    use ir::AluOp::{Iand, Ior, Ishl};
+    use ir::AluOp::{Iand, Ior};
     let unsupported = |why| ChainError::Build(BuildError::Unsupported(why));
     let oom = |_| ChainError::OutOfScratch;
     let mask = mask & ((1u32 << rt.channels) - 1);
@@ -936,13 +1013,7 @@ fn pack_int_output<'a>(
         groups.push(a, SelGroup { op, ty, dst: Some(SelDst::Virtual(v)), srcs }).map_err(oom)?;
         Ok(SelSrc::Virtual { v, mods: super::sel::Mods::default() })
     };
-    /* channel c: (dword, bit offset, width) */
-    let field = |c: u32| match rt.bits {
-        32 => (c, 0, 32),
-        16 => (c / 2, 16 * (c % 2), 16),
-        8 => (0, 8 * c, 8),
-        _ => (0, 10 * c, if c == 3 { 2 } else { 10 }),
-    };
+    let field = |c: u32| int_field(rt, c);
     /* the bits of dword k (of one output) that its masked fields hold */
     let mut keep = [0u32; 4];
     for c in (0..u32::from(rt.channels)).filter(|c| mask & (1 << c) != 0) {
@@ -951,35 +1022,8 @@ fn pack_int_output<'a>(
     }
     let mut packed: [Option<SelSrc>; 4] = [None; 4];
     for (o, &i) in at[..count].iter().enumerate() {
-        let comps = &sel.outputs[i].1;
-        for c in 0..u32::from(rt.channels) {
-            let x = comps[c as usize].ok_or(ChainError::FragmentOutputsNotBuilt)?;
-            if mask & (1 << c) != 0 {
-                continue;
-            }
-            let (dword, offset, width) = field(c);
-            let v = if width == 32 {
-                /* its own register: the output's value moved there as it is */
-                emit(SelOp::Copy, OpType::U32, [Some(x), None, None])?
-            } else {
-                /* masked unless the shift drops the bits above the field */
-                let v = if offset + width < 32 {
-                    emit(SelOp::Alu(Iand), OpType::U32, [Some(x), Some(SelSrc::Imm((1 << width) - 1)), None])?
-                } else {
-                    x
-                };
-                if offset != 0 {
-                    emit(SelOp::Alu(Ishl), OpType::S32, [Some(v), Some(SelSrc::Imm(offset)), None])?
-                } else {
-                    v
-                }
-            };
-            let d = &mut packed[(o as u32 * per + dword) as usize];
-            *d = Some(match *d {
-                None => v,
-                Some(acc) => emit(SelOp::Alu(Ior), OpType::U32, [Some(acc), Some(v), None])?,
-            });
-        }
+        let at = (o as u32 * per) as usize;
+        insert_int_channels(&sel.outputs[i].1, rt, mask, &mut emit, &mut packed[at..at + per as usize])?;
         /* the masked fields: the pixel's dword, its kept bits beside the new */
         for (dword, &bits) in keep[..per as usize].iter().enumerate().filter(|(_, b)| **b != 0) {
             let k = o as u32 * per + dword as u32;
@@ -1007,6 +1051,192 @@ fn pack_int_output<'a>(
     let comps = core::array::from_fn(|k| if k < n { packed[k] } else { Some(first) });
     let outputs = a.alloc_copy(&[(ir::IoSlot::FragColor(0), comps)]).map_err(oom)?;
     Ok((Selected { groups: groups.into_slice(), vregs, outputs, alpha_to_one: None, ..sel }, n as u8))
+}
+
+/// Channel `c` of an integer target's packed value: (dword, bit offset,
+/// width), as [`pack_int_output`] lays the channels out.
+fn int_field(rt: crate::shaderc::ShcIntRt, c: u32) -> (u32, u32, u32) {
+    match rt.bits {
+        32 => (c, 0, 32),
+        16 => (c / 2, 16 * (c % 2), 16),
+        8 => (0, 8 * c, 8),
+        _ => (0, 10 * c, if c == 3 { 2 } else { 10 }),
+    }
+}
+
+/// One colour output's channels bit-inserted into an integer target's
+/// dwords `packed` (`None` until a channel lands in one), skipping those
+/// `mask` names (bit k: channel k): a 32-bit channel copied, a narrower one
+/// masked to its width, shifted to its place and or-ed in. The groups go
+/// through `emit`, in channel order ([`pack_int_output`],
+/// [`pack_target_outputs`]).
+fn insert_int_channels(
+    comps: &[Option<super::sel::SelSrc>; 4],
+    rt: crate::shaderc::ShcIntRt,
+    mask: u32,
+    emit: &mut impl FnMut(
+        super::sel::SelOp,
+        super::sel::OpType,
+        [Option<super::sel::SelSrc>; 3],
+    ) -> Result<super::sel::SelSrc, ChainError>,
+    packed: &mut [Option<super::sel::SelSrc>],
+) -> Result<(), ChainError> {
+    use super::sel::{OpType, SelOp, SelSrc};
+    use ir::AluOp::{Iand, Ior, Ishl};
+    for c in 0..u32::from(rt.channels) {
+        let x = comps[c as usize].ok_or(ChainError::FragmentOutputsNotBuilt)?;
+        if mask & (1 << c) != 0 {
+            continue;
+        }
+        let (dword, offset, width) = int_field(rt, c);
+        let v = if width == 32 {
+            /* its own register: the output's value moved there as it is */
+            emit(SelOp::Copy, OpType::U32, [Some(x), None, None])?
+        } else {
+            /* masked unless the shift drops the bits above the field */
+            let v = if offset + width < 32 {
+                emit(SelOp::Alu(Iand), OpType::U32, [Some(x), Some(SelSrc::Imm((1 << width) - 1)), None])?
+            } else {
+                x
+            };
+            if offset != 0 {
+                emit(SelOp::Alu(Ishl), OpType::S32, [Some(v), Some(SelSrc::Imm(offset)), None])?
+            } else {
+                v
+            }
+        };
+        let d = &mut packed[dword as usize];
+        *d = Some(match *d {
+            None => v,
+            Some(acc) => emit(SelOp::Alu(Ior), OpType::U32, [Some(acc), Some(v), None])?,
+        });
+    }
+    Ok(())
+}
+
+/// The most colour attachments a per-target list ([`TargetPack`]) names:
+/// one per draw buffer, the pixel's four output registers shared among them.
+pub const MAX_PACK_TARGETS: usize = 3;
+
+/// What one colour attachment of a draw into attachments of different
+/// classes takes from its fragment output: draw buffer `i` is written from
+/// output location `i`, packed for its own target, at the pixel output
+/// registers [`target_out_regs`] gives it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetPack {
+    /// A pure integer target: the output bit-inserted into its layout's
+    /// dwords with no conversion, as [`pack_int_output`] packs it.
+    Int(crate::shaderc::ShcIntRt),
+    /// A float or normalised target of class `SHC_RT_RGBA8`, `_F16X4`,
+    /// `_F16` or `_F32` (`gles_surf_rt_class`; sRGB is not one): packed as
+    /// the single-class program packs it with no blend.
+    Class(u32),
+}
+
+impl TargetPack {
+    /// The pixel output dwords the target's source takes: what
+    /// src/pvr/backend.rs `surf_out_dwords` counts for its format (an
+    /// integer layout's packed dwords, two for RGBA16F, one otherwise).
+    pub const fn dwords(&self) -> u32 {
+        match *self {
+            TargetPack::Int(rt) => rt.dwords(),
+            TargetPack::Class(crate::shaderc::SHC_RT_F16X4) => 2,
+            TargetPack::Class(_) => 1,
+        }
+    }
+}
+
+/// Where each target of `targets` takes its source in the pixel's four
+/// output registers, (first register, dwords) per target and (0, 0) past
+/// the list: the rule of the end-of-tile emit in src/pvr/backend.rs, which
+/// reads attachment `i` from there -- the targets in order, each straight
+/// after the one before, but a source of two dwords or more starting on an
+/// even register (pbe2_in_xe), so one register may be skipped. `None` for
+/// an empty list, one longer than [`MAX_PACK_TARGETS`], or one that runs
+/// past the fourth register (the emit stores no such attachment from the
+/// output registers).
+pub fn target_out_regs(targets: &[TargetPack]) -> Option<[(u8, u8); MAX_PACK_TARGETS]> {
+    if targets.is_empty() || targets.len() > MAX_PACK_TARGETS {
+        return None;
+    }
+    let mut regs = [(0u8, 0u8); MAX_PACK_TARGETS];
+    let mut out = 0u32;
+    for (r, t) in regs.iter_mut().zip(targets) {
+        let n = t.dwords();
+        let start = if n >= 2 && out & 1 != 0 { out + 1 } else { out };
+        if start + n > 4 {
+            return None;
+        }
+        *r = (start as u8, n as u8);
+        out = start + n;
+    }
+    Some(regs)
+}
+
+/// The colour outputs of a fragment shader drawn into the per-target list
+/// `targets`: output location `i` is target `i`'s, and each output for an
+/// integer target ([`TargetPack::Int`]) becomes its packed dwords (the
+/// components past them repeat the first), bit-inserted as
+/// [`pack_int_output`] does with no colour mask; an output for a float or
+/// normalised target stays the colour, which
+/// [`super::assemble::build_fragment_shader_targets`] packs. A target the
+/// shader writes no output for gets none.
+///
+/// Refused by name: a class outside RGBA8, F16X4, F16 and F32, a list that
+/// [`target_out_regs`] cannot lay out, and an output that is not a colour
+/// at a location the list has.
+fn pack_target_outputs<'a>(
+    sel: Selected<'a>,
+    targets: &[TargetPack],
+    a: &'a Arena<'a>,
+) -> Result<Selected<'a>, ChainError> {
+    use super::sel::SelDst;
+    use crate::shaderc::online::arena::AVec;
+    use crate::shaderc::{SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8};
+    let unsupported = |why| ChainError::Build(BuildError::Unsupported(why));
+    let oom = |_| ChainError::OutOfScratch;
+    if targets.iter().any(
+        |t| matches!(t, TargetPack::Class(c) if !matches!(*c, SHC_RT_RGBA8 | SHC_RT_F16X4 | SHC_RT_F16 | SHC_RT_F32)),
+    ) {
+        return Err(unsupported("a per-target class other than RGBA8, F16X4, F16 or F32"));
+    }
+    if target_out_regs(targets).is_none() {
+        return Err(unsupported("attachments of different classes past the pixel's four output registers"));
+    }
+    if sel
+        .outputs
+        .iter()
+        .any(|(slot, _)| !matches!(*slot, ir::IoSlot::FragColor(loc) if usize::from(loc) < targets.len()))
+    {
+        return Err(unsupported(
+            "a fragment output with no attachment in a draw into attachments of different classes",
+        ));
+    }
+    let mut groups: AVec<'a, SelGroup> = AVec::with_capacity(a, sel.groups.len() + 15 * targets.len()).map_err(oom)?;
+    for g in sel.groups {
+        groups.push(a, *g).map_err(oom)?;
+    }
+    let mut vregs = sel.vregs;
+    let mut emit = |op: super::sel::SelOp,
+                    ty: super::sel::OpType,
+                    srcs: [Option<super::sel::SelSrc>; 3]|
+     -> Result<super::sel::SelSrc, ChainError> {
+        let v = VReg(vregs);
+        vregs += 1;
+        groups.push(a, SelGroup { op, ty, dst: Some(SelDst::Virtual(v)), srcs }).map_err(oom)?;
+        Ok(super::sel::SelSrc::Virtual { v, mods: super::sel::Mods::default() })
+    };
+    let outputs = a.alloc_copy(sel.outputs).map_err(oom)?;
+    for (slot, comps) in outputs.iter_mut() {
+        let ir::IoSlot::FragColor(loc) = *slot else { continue };
+        let TargetPack::Int(rt) = targets[usize::from(loc)] else { continue };
+        let mut packed = [None; 4];
+        let n = rt.dwords() as usize;
+        insert_int_channels(comps, rt, 0, &mut emit, &mut packed[..n])?;
+        let first = packed[0].ok_or(ChainError::FragmentOutputsNotBuilt)?;
+        *comps = core::array::from_fn(|k| if k < n { packed[k] } else { Some(first) });
+    }
+    Ok(Selected { groups: groups.into_slice(), vregs, outputs, alpha_to_one: sel.alpha_to_one, ..sel })
 }
 
 /// Does the integer render target variant `key` read the pixel: a colour
@@ -1394,6 +1624,30 @@ pub fn compile_fragment_for<'a>(
     a: &'a Arena<'a>,
     blend_key: u32,
 ) -> Result<crate::shaderc::ShcShader, ChainError> {
+    compile_fragment_with(m, reflection, a, blend_key, None)
+}
+
+/// [`compile_fragment`] for colour attachments of different classes
+/// ([`build_fragment_targets`]): the record's `num_outputs` is the pixel
+/// output registers the targets span. Its `blend_key` stays 0: the caller
+/// that keys the variant records its key.
+pub fn compile_fragment_targets<'a>(
+    m: &'a ir::Module<'a>,
+    reflection: &crate::shaderc::online::reflect::Reflection<'a>,
+    a: &'a Arena<'a>,
+    targets: &[TargetPack],
+) -> Result<crate::shaderc::ShcShader, ChainError> {
+    compile_fragment_with(m, reflection, a, 0, Some(targets))
+}
+
+/// [`compile_fragment_for`]'s body, and [`compile_fragment_targets`]'s.
+fn compile_fragment_with<'a>(
+    m: &'a ir::Module<'a>,
+    reflection: &crate::shaderc::online::reflect::Reflection<'a>,
+    a: &'a Arena<'a>,
+    blend_key: u32,
+    targets: Option<&[TargetPack]>,
+) -> Result<crate::shaderc::ShcShader, ChainError> {
     let m = super::abi::with_matrix_varyings_split(m, a).map_err(|_| ChainError::OutOfScratch)?;
     let image = a.alloc_filled(MAX_IMAGE_BYTES, 0u8).map_err(|_| ChainError::OutOfScratch)?;
     let BuiltFragment {
@@ -1413,7 +1667,7 @@ pub fn compile_fragment_for<'a>(
         blend_consts,
         output_regs,
         int_dwords,
-    } = build_fragment_for(m, LIMITS, a, image, blend_key)?;
+    } = build_fragment_with(m, LIMITS, a, image, blend_key, targets)?;
     let words = a.alloc_filled(len / 4, 0u32).map_err(|_| ChainError::OutOfScratch)?;
     for (w, c) in words.iter_mut().zip(image[..len].as_chunks::<4>().0) {
         *w = u32::from_le_bytes(*c);
@@ -1782,6 +2036,211 @@ mod tests {
         })
         .unwrap();
         lines
+    }
+
+    /// An operation of a built program: its name, and its first
+    /// destination's (bank, index).
+    type Op = (&'static str, Option<(u32, u32)>);
+
+    /// `src` compiled for the per-target list `targets`: the record's
+    /// `num_outputs`, and the program's operations in order, each with its
+    /// first destination's (bank, index).
+    fn compile_targets(src: &str, targets: &[TargetPack]) -> Result<(u8, std::vec::Vec<Op>), std::string::String> {
+        use crate::shaderc::online::powervr::{decode::decode_group, isa::ops_for, operands::dsts};
+        use crate::shaderc::online::{lower, sema::Stage, store};
+        let _l = store::test_lock();
+        store::with_scratch(|a| {
+            let _keep = store::begin_keep().expect("keep");
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| format!("front end: {}", e.msg))?;
+            let rec = compile_fragment_targets(&l.module, &l.reflection, a, targets).map_err(|e| format!("{e:?}"))?;
+            // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let image: std::vec::Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let (mut off, mut ops) = (0usize, std::vec::Vec::new());
+            while off < image.len() {
+                let g = decode_group(&image, off).expect("decodes");
+                for (_, ph, r) in g.instrs() {
+                    let Some(op) = ops_for(r, ph).next() else { continue };
+                    let d0 = g.dst.as_ref().and_then(|d| dsts(d)[0]).map(|o| (o.bank, o.index));
+                    ops.push((op.name, d0));
+                }
+                off += g.total;
+            }
+            Ok((rec.num_outputs, ops))
+        })
+        .unwrap()
+    }
+
+    /// The pixel output registers (from 32, `PIXOUT0`) a program writes, in
+    /// order: the destinations in the bank its last operation writes.
+    fn pixel_writes(ops: &[Op]) -> std::vec::Vec<u32> {
+        let (_, Some((bank, _))) = *ops.last().expect("a program") else { panic!("ends without a destination") };
+        ops.iter().filter_map(|(_, d)| d.filter(|(b, _)| *b == bank).map(|(_, i)| i)).collect()
+    }
+
+    /// The `pck` operations among `ops`.
+    fn pcks(ops: &[Op]) -> usize {
+        ops.iter().filter(|(n, _)| *n == "pck").count()
+    }
+
+    const R32UI: crate::shaderc::ShcIntRt = crate::shaderc::ShcIntRt { channels: 1, bits: 32, signed: false };
+    const R32I: crate::shaderc::ShcIntRt = crate::shaderc::ShcIntRt { channels: 1, bits: 32, signed: true };
+    const RG16UI: crate::shaderc::ShcIntRt = crate::shaderc::ShcIntRt { channels: 2, bits: 16, signed: false };
+    const RG32UI: crate::shaderc::ShcIntRt = crate::shaderc::ShcIntRt { channels: 2, bits: 32, signed: false };
+    const RGBA32UI: crate::shaderc::ShcIntRt = crate::shaderc::ShcIntRt { channels: 4, bits: 32, signed: false };
+
+    /// The layout is the end-of-tile emit's (src/pvr/backend.rs): targets in
+    /// order, a source of two dwords or more on an even register, nothing
+    /// past the fourth register.
+    #[test]
+    fn target_out_regs_follow_the_end_of_tile_emit() {
+        use crate::shaderc::{SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8};
+        use TargetPack::{Class, Int};
+        assert_eq!(target_out_regs(&[Class(SHC_RT_RGBA8), Int(R32UI)]), Some([(0, 1), (1, 1), (0, 0)]));
+        assert_eq!(target_out_regs(&[Class(SHC_RT_F32), Int(R32I)]), Some([(0, 1), (1, 1), (0, 0)]));
+        assert_eq!(
+            target_out_regs(&[Class(SHC_RT_RGBA8), Int(RG16UI), Class(SHC_RT_F32)]),
+            Some([(0, 1), (1, 1), (2, 1)])
+        );
+        /* register 1 skipped: a two-dword source starts on an even one */
+        assert_eq!(target_out_regs(&[Class(SHC_RT_RGBA8), Class(SHC_RT_F16X4)]), Some([(0, 1), (2, 2), (0, 0)]));
+        assert_eq!(target_out_regs(&[Class(SHC_RT_F16), Int(RG32UI), Class(SHC_RT_RGBA8)]), None);
+        assert_eq!(
+            target_out_regs(&[Int(RG32UI), Class(SHC_RT_F16), Class(SHC_RT_RGBA8)]),
+            Some([(0, 2), (2, 1), (3, 1)])
+        );
+        assert_eq!(target_out_regs(&[Class(SHC_RT_RGBA8), Int(RGBA32UI)]), None);
+        assert_eq!(target_out_regs(&[Int(RGBA32UI)]), Some([(0, 4), (0, 0), (0, 0)]));
+        assert_eq!(target_out_regs(&[]), None);
+        assert_eq!(target_out_regs(&[Class(SHC_RT_F16); 4]), None);
+    }
+
+    /// An integer target's output packed by [`pack_target_outputs`]: RG16UI
+    /// is `(R & 0xffff) | (G & 0xffff) << 16` in one dword, R32UI the value
+    /// copied, and a float target's output stays its colour.
+    #[test]
+    fn pack_target_outputs_bit_inserts_only_the_integer_targets() {
+        use super::super::sel::{SelOp, SelSrc};
+        use crate::shaderc::{SHC_RT_F32, SHC_RT_RGBA8};
+        use ir::AluOp::{Iand, Ior, Ishl};
+        use TargetPack::{Class, Int};
+        let v = |r: u32| Some(SelSrc::Virtual { v: VReg(r), mods: super::super::sel::Mods::default() });
+        let outs = [
+            (ir::IoSlot::FragColor(0), [v(0), v(1), v(2), v(3)]),
+            (ir::IoSlot::FragColor(1), [v(4), v(5), v(4), v(4)]),
+            (ir::IoSlot::FragColor(2), [v(6), v(6), v(6), v(6)]),
+        ];
+        let mut buf = std::vec![0u8; 64 << 10];
+        let a = Arena::new(&mut buf);
+        let sel = Selected { groups: &[], vregs: 10, outputs: &outs, inputs: &[], discard: None, alpha_to_one: None };
+        let t = [Class(SHC_RT_RGBA8), Int(RG16UI), Class(SHC_RT_F32)];
+        let out = pack_target_outputs(sel, &t, &a).expect("packs");
+        assert_eq!(out.outputs[0], outs[0], "RGBA8 keeps its colour");
+        assert_eq!(out.outputs[2], outs[2], "F32 keeps its colour");
+        let ops: std::vec::Vec<(SelOp, std::option::Option<SelSrc>)> =
+            out.groups.iter().map(|g| (g.op, g.srcs[1])).collect();
+        assert_eq!(
+            ops,
+            [
+                (SelOp::Alu(Iand), Some(SelSrc::Imm(0xffff))),
+                /* the shift drops green's bits above 16: no mask */
+                (SelOp::Alu(Ishl), Some(SelSrc::Imm(16))),
+                (SelOp::Alu(Ior), v(11)),
+            ]
+        );
+        assert_eq!(out.groups[0].srcs[0], v(4), "red");
+        assert_eq!(out.groups[1].srcs[0], v(5), "green");
+        assert_eq!(out.groups[2].srcs[0], v(10), "red's field");
+        assert_eq!(out.outputs[1].1, [v(12); 4], "the one packed dword, repeated");
+        /* R32UI beside RGBA8: the value copied as it is */
+        let t = [Class(SHC_RT_RGBA8), Int(R32UI)];
+        let sel =
+            Selected { groups: &[], vregs: 10, outputs: &outs[..2], inputs: &[], discard: None, alpha_to_one: None };
+        let out = pack_target_outputs(sel, &t, &a).expect("packs");
+        assert_eq!(out.groups.len(), 1);
+        assert_eq!((out.groups[0].op, out.groups[0].srcs[0]), (SelOp::Copy, v(4)));
+        /* an output with no attachment, a class with no per-target pack */
+        let sel = Selected { groups: &[], vregs: 10, outputs: &outs, inputs: &[], discard: None, alpha_to_one: None };
+        assert!(pack_target_outputs(sel, &t, &a).is_err());
+        let sel =
+            Selected { groups: &[], vregs: 10, outputs: &outs[..1], inputs: &[], discard: None, alpha_to_one: None };
+        assert!(pack_target_outputs(sel, &[Class(crate::shaderc::SHC_RT_SRGB)], &a).is_err());
+    }
+
+    /// RGBA8 beside R32UI: the colour packed (one `pck`) into pixel output
+    /// 0, the integer written as it is to 1; the record spans two.
+    #[test]
+    fn rgba8_beside_r32ui_writes_each_at_its_register() {
+        let src = "#version 300 es\nflat in highp uint v;\nin mediump vec4 c;\n\
+                   layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out highp uint o1;\n\
+                   void main() { o0 = c; o1 = v * 3u; }\n";
+        let t = [TargetPack::Class(crate::shaderc::SHC_RT_RGBA8), TargetPack::Int(R32UI)];
+        let (num_outputs, ops) = compile_targets(src, &t).expect("compiles");
+        assert_eq!(num_outputs, 2);
+        assert_eq!(pixel_writes(&ops), [32, 33], "{ops:?}");
+        assert_eq!(pcks(&ops), 1, "{ops:?}");
+    }
+
+    /// dEQP's shader executor for `common.modf`: a highp float and an int
+    /// output, R32F beside R32I -- no pack in the tail for either (the
+    /// shader's own `int()` is a `pck`), pixel outputs 0 and 1.
+    #[test]
+    fn f32_beside_r32i_the_modf_case() {
+        let src = "#version 300 es\nin highp float x;\n\
+                   layout(location = 0) out highp float out0;\nlayout(location = 1) out highp int out1;\n\
+                   void main() { highp float i; out0 = modf(x, i); out1 = int(i); }\n";
+        let t = [TargetPack::Class(crate::shaderc::SHC_RT_F32), TargetPack::Int(R32I)];
+        let (num_outputs, ops) = compile_targets(src, &t).expect("compiles");
+        assert_eq!(num_outputs, 2);
+        assert_eq!(pixel_writes(&ops), [32, 33], "{ops:?}");
+        /* the same shader for one R32I target: the tail adds no pack */
+        let one = "#version 300 es\nin highp float x;\nlayout(location = 0) out highp int out1;\n\
+                   void main() { highp float i; highp float f = modf(x, i); out1 = int(i); }\n";
+        let (_, alone) = compile_targets(one, &[TargetPack::Int(R32I)]).expect("compiles");
+        assert_eq!(pcks(&ops), pcks(&alone), "{ops:?}");
+    }
+
+    /// Three targets: RGBA8, RG16UI and R32F at pixel outputs 0, 1 and 2;
+    /// and RGBA8 beside RGBA16F, whose two halves start on register 2.
+    #[test]
+    fn three_targets_and_an_aligned_wide_one() {
+        use crate::shaderc::{SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8};
+        let src = "#version 300 es\nflat in highp uvec2 v;\nin mediump vec4 c;\n\
+                   layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out highp uvec2 o1;\n\
+                   layout(location = 2) out highp float o2;\n\
+                   void main() { o0 = c; o1 = v + uvec2(1u); o2 = c.x * 2.0; }\n";
+        let t = [TargetPack::Class(SHC_RT_RGBA8), TargetPack::Int(RG16UI), TargetPack::Class(SHC_RT_F32)];
+        let (num_outputs, ops) = compile_targets(src, &t).expect("compiles");
+        assert_eq!(num_outputs, 3);
+        assert_eq!(pixel_writes(&ops), [32, 33, 34], "{ops:?}");
+        assert_eq!(pcks(&ops), 1, "{ops:?}");
+        let src = "#version 300 es\nin mediump vec4 c;\n\
+                   layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out mediump vec4 o1;\n\
+                   void main() { o0 = c; o1 = c * 2.0; }\n";
+        let (num_outputs, ops) =
+            compile_targets(src, &[TargetPack::Class(SHC_RT_RGBA8), TargetPack::Class(SHC_RT_F16X4)])
+                .expect("compiles");
+        assert_eq!(num_outputs, 4);
+        assert_eq!(pixel_writes(&ops), [32, 34, 35], "{ops:?}");
+        assert_eq!(pcks(&ops), 3, "{ops:?}");
+    }
+
+    /// Refused by name: a list the pixel's registers cannot hold, and a
+    /// written gl_FragDepth.
+    #[test]
+    fn target_lists_refused_by_name() {
+        use crate::shaderc::SHC_RT_RGBA8;
+        let src = "#version 300 es\nin mediump vec4 c;\nflat in highp uvec4 v;\n\
+                   layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out highp uvec4 o1;\n\
+                   void main() { o0 = c; o1 = v; }\n";
+        let e = compile_targets(src, &[TargetPack::Class(SHC_RT_RGBA8), TargetPack::Int(RGBA32UI)]).unwrap_err();
+        assert!(e.contains("past the pixel's four output registers"), "{e}");
+        let src = "#version 300 es\nin mediump vec4 c;\nflat in highp uint v;\n\
+                   layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out highp uint o1;\n\
+                   void main() { o0 = c; o1 = v; gl_FragDepth = c.x; }\n";
+        let e = compile_targets(src, &[TargetPack::Class(SHC_RT_RGBA8), TargetPack::Int(R32UI)]).unwrap_err();
+        assert!(e.contains("gl_FragDepth"), "{e}");
     }
 
     /// GLSL ES 1.00 section 4.6.1: an `invariant` output computed by the
