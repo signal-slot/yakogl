@@ -236,7 +236,7 @@ fn the_key_is_put_back_and_the_records_stay_apart() {
  * tests/es3_wide128_planes_gc.rs) and read the key the draw chose
  * (`gl::draw::wide128_draw_state`).
  *
- * RGBA32UI stays out of GC_SAMPLED_TEXFMTS until wide128-flip, and the mask
+ * RGBA32UI stays out of GC_SAMPLED_TEXFMTS until narrow-classes, and the mask
  * hook of the in-crate tests is `#[cfg(test)]`, so here the RGBA32UI case
  * finds the class closed, says so on stderr and checks the closed state:
  * the GL core stores no RGBA32UI texture, and the draw keeps the program's
@@ -520,7 +520,7 @@ mod draw {
     /// An RGBA32UI texture on the same usampler2D: two planes, the fragment
     /// stage keyed on binding 0 with its B,A plane on slot 1 (the stage's
     /// one slot, then its companion), the variant drawn. Closed (before
-    /// wide128-flip): the GL core stores no RGBA32UI texture, and the draw
+    /// narrow-classes): the GL core stores no RGBA32UI texture, and the draw
     /// keeps the program's shaders.
     #[test]
     fn an_rgba32ui_texture_selects_the_plane_joined_variant() {
@@ -528,7 +528,7 @@ mod draw {
             let p = usampler_program();
             if !open(GLES_TEXFMT_RGBA32UI) {
                 eprintln!(
-                    "RGBA32UI is not in GC_SAMPLED_TEXFMTS (wide128-flip): checking the closed state; the open \
+                    "RGBA32UI is not in GC_SAMPLED_TEXFMTS (narrow-classes): checking the closed state; the open \
                      case runs in gl::draw::tests::an_rgba32ui_texture_draws_the_plane_joined_variant"
                 );
                 assert_ne!(uint_texture(GL_RGBA32UI), GL_NO_ERROR, "no class stores RGBA32UI");
