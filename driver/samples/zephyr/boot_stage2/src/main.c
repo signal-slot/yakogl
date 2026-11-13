@@ -51,7 +51,8 @@
 
 /*
  * The loader's own timeline, for the image after it to report: the system
- * counter (CNTPCT_EL0, started by SPL) at the loader's stages, written into
+ * counter (CNTPCT_EL0, started by SPL) at the loader's stages, written
+ * (BOOT_STAGE2_STAMP_PAGE: the i.MX8MP) into
  * a page of this loader's RAM that nothing else uses -- the middle of its
  * 32 MiB, well past the loader and the devicetree SPL appends to it, and
  * below the top of the region, where Zephyr places device mappings. The
@@ -187,11 +188,24 @@ static int bs2_stamp_entry(void)
 }
 SYS_INIT(bs2_stamp_entry, PRE_KERNEL_1, 0);
 
+#ifdef CONFIG_BOOT_STAGE2_STAMP_PAGE
+BUILD_ASSERT(BS2_STAMP_ADDR >= CONFIG_SRAM_BASE_ADDRESS &&
+	     BS2_STAMP_ADDR + CONFIG_MMU_PAGE_SIZE <= CONFIG_SRAM_BASE_ADDRESS + CONFIG_SRAM_SIZE * 1024ull,
+	     "the stamp page lies in the loader's own RAM");
+#endif
+
 /* Map the page and write the record; the magic last. Called just before the
- * jump, after the last stamp. */
+ * jump, after the last stamp. Not without BOOT_STAGE2_STAMP_PAGE: the
+ * address is this loader's RAM on the i.MX8MP only (the AM62P's DDR begins
+ * at 0x80000000); elsewhere the stamps stay in .bss, where the summary line
+ * reads the one it prints. */
 static void bs2_stamps_publish(void)
 {
 	uint8_t *va = NULL;
+
+	if (!IS_ENABLED(CONFIG_BOOT_STAGE2_STAMP_PAGE)) {
+		return;
+	}
 
 	k_mem_map_phys_bare(&va, BS2_STAMP_ADDR, CONFIG_MMU_PAGE_SIZE,
 			    K_MEM_CACHE_WB | K_MEM_PERM_RW);
