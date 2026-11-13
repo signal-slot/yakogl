@@ -183,7 +183,7 @@ scope_of_path() {
   # *_71*) and by the shared V3D files 7.1 builds from; all of them are
   # under the three directories below, and the 4.2 rows are reached as before.
   src/shaderc/online/v3d/* | driver/src/v3d/* | tools/v3d/*) echo "v3d v3d71" ;;
-  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
+  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/es3_half_float_rt_v3d* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
   src/shaderc/online/mali/* | src/mali/* | tools/mali/*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
@@ -1783,6 +1783,11 @@ step "test    $V3D_CONFIG (tests/es3_int_rt.rs)" \
 # report-es2 (no row below).
 step "test    $V3D_CONFIG (tests/es3_int_rt_v3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt_v3d
+# The V3D's 16F and R32F colour render targets as they are today (test-v3d-half):
+# the render target words, the clear words and the compiler's TLB writes of a
+# float, vec2 and vec4 output. Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_half_float_rt_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_half_float_rt_v3d
 # The V3D samples the ES 3.0 storage classes (formats-v3d): each class's
 # texture shader state record (packed by the real driver/src/v3d/v3d_tex.c)
 # and C table row against Mesa's format table, the 32-bit return classes,
