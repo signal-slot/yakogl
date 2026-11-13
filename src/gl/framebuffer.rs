@@ -38,7 +38,7 @@ use super::context::{
 };
 use super::names::{self, Kind};
 use super::types::*;
-use super::{draw, texture};
+use super::{draw, msaa, texture};
 use crate::backend::{
     self, gles_surf_bytes_per_pixel, gles_surf_int_layout, gles_surf_is_integer, gles_texfmt_bytes, GLES_SURF_R16F,
     GLES_SURF_R32F, GLES_SURF_RGB10_A2, GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8,
@@ -659,7 +659,7 @@ fn is_color_format(f: GLenum) -> bool {
 
 /// The surface (`GLES_SURF_*`) of an ES 3.0 integer colour format, by its GL
 /// name, in any build (the ES 2.0 report refuses the formats elsewhere).
-fn integer_surf_format(f: GLenum) -> Option<u8> {
+pub(super) fn integer_surf_format(f: GLenum) -> Option<u8> {
     use backend::*;
     Some(match f {
         GL_R8I => GLES_SURF_R8I,
@@ -884,15 +884,16 @@ pub(super) fn check_status(c: &GlContext, fb: &GlFramebuffer) -> GLenum {
 /// renderbuffer's its GL_RENDERBUFFER_SAMPLES), 0 with nothing attached;
 /// None when two differ (GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE).
 pub(super) fn attached_samples(c: &GlContext, fb: &GlFramebuffer) -> Option<u8> {
-    let mut samples = None;
-    for a in attachment_points(fb).filter(|a| a.type_ != GL_NONE) {
-        let s = if a.type_ == GL_RENDERBUFFER { c.renderbuffer_ref(a.name).map_or(0, |rb| rb.samples) } else { 0 };
-        match samples {
-            Some(p) if p != s => return None,
-            _ => samples = Some(s),
+    let count = |a: &GlAttachment| {
+        if a.type_ == GL_RENDERBUFFER {
+            c.renderbuffer_ref(a.name).map_or(0, |rb| u32::from(rb.samples))
+        } else {
+            0
         }
-    }
-    Some(samples.unwrap_or(0))
+    };
+    let first = attachment_points(fb).find(|a| a.type_ != GL_NONE).map_or(0, count);
+    let all = attachment_points(fb).filter(|a| a.type_ != GL_NONE).map(count);
+    msaa::attachments_complete(all).then_some(first as u8)
 }
 
 /// GL_SAMPLES of the bound (draw) framebuffer object: the sample count of
@@ -3495,17 +3496,22 @@ pub unsafe extern "C" fn glRenderbufferStorageMultisample(
         c.set_error(GL_INVALID_VALUE, FN);
         return;
     }
-    if samples > 1 {
-        c.set_error(GL_INVALID_OPERATION, FN);
+    /* ES 3.0 4.4.2: a count past the back end's (`msaa::stored_samples`) or
+     * an integer format with samples is GL_INVALID_OPERATION; a multisampled
+     * surface past the cap is GL_OUT_OF_MEMORY */
+    let stored =
+        match msaa::stored_samples(samples, msaa::backend_max_samples(), is_integer_color_format(internalformat)) {
+            Ok(n) => n,
+            Err(e) => {
+                c.set_error(e, FN);
+                return;
+            }
+        };
+    if msaa::oom(stored, width as u32, height as u32) {
+        c.set_error(GL_OUT_OF_MEMORY, FN);
         return;
     }
-    /* ES 3.0 4.4.2: an integer format has no multisampled storage, so any
-     * count above 0 is GL_INVALID_OPERATION for it */
-    if samples > 0 && is_integer_color_format(internalformat) {
-        c.set_error(GL_INVALID_OPERATION, FN);
-        return;
-    }
-    renderbuffer_storage(c, target, internalformat, width, height, samples as u8);
+    renderbuffer_storage(c, target, internalformat, width, height, stored as u8);
 }
 
 /// glInvalidateFramebuffer on the current context (glInvalidateSubFramebuffer
@@ -3792,28 +3798,7 @@ pub unsafe extern "C" fn glGetInternalformativ(
      * renderbuffers of the integer ones (the ES 2.0 report refuses them in
      * glRenderbufferStorage). An integer format has no multisample counts
      * (6.1.15: NUM_SAMPLE_COUNTS may be 0 for one). */
-    let integer = matches!(
-        internalformat,
-        GL_R8I
-            | GL_R8UI
-            | GL_R16I
-            | GL_R16UI
-            | GL_R32I
-            | GL_R32UI
-            | GL_RG8I
-            | GL_RG8UI
-            | GL_RG16I
-            | GL_RG16UI
-            | GL_RG32I
-            | GL_RG32UI
-            | GL_RGBA8I
-            | GL_RGBA8UI
-            | GL_RGBA16I
-            | GL_RGBA16UI
-            | GL_RGBA32I
-            | GL_RGBA32UI
-            | GL_RGB10_A2UI
-    );
+    let integer = integer_surf_format(internalformat).is_some();
     if target != GL_RENDERBUFFER || !(is_renderable_format(internalformat) || integer || internalformat == GL_RGB10_A2)
     {
         context::set_error_no_ctx(GL_INVALID_ENUM, FN);
@@ -3830,13 +3815,17 @@ pub unsafe extern "C" fn glGetInternalformativ(
     if bufSize < 1 || params.is_null() {
         return;
     }
-    let counts = if integer { 0 } else { 1 };
-    if pname == GL_SAMPLES && counts == 0 {
-        return; /* no sample counts to list */
+    let counts = msaa::internalformat_sample_counts(internalformat, msaa::backend_max_samples());
+    if pname == GL_NUM_SAMPLE_COUNTS {
+        // SAFETY: `params` is non-null with room for bufSize >= 1 values (not
+        // necessarily aligned).
+        unsafe { params.write_unaligned(counts.len() as GLint) };
+        return;
     }
-    // SAFETY: `params` is non-null with room for bufSize >= 1 values (not
-    // necessarily aligned).
-    unsafe { params.write_unaligned(if pname == GL_NUM_SAMPLE_COUNTS { counts } else { 1 }) };
+    for (i, n) in counts.iter().take(bufSize as usize).enumerate() {
+        // SAFETY: as above, for the first `bufSize` values.
+        unsafe { params.add(i).write_unaligned(*n) };
+    }
 }
 
 /// Unit tests: re-arm the multisample / blit warnings (process-global;
