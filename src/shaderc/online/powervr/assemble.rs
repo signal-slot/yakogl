@@ -1756,6 +1756,173 @@ pub fn build_fragment_shader_packed(
     Ok((len, temps))
 }
 
+/// One colour attachment's output in [`build_fragment_shader_targets`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetOut {
+    /// A float colour packed for the target class `class` (`SHC_RT_RGBA8`,
+    /// `_F16X4`, `_F16` or `_F32`) the way [`build_fragment_shader_blended`]
+    /// packs it with no blend: RGBA8 saturated unorm bytes in one dword,
+    /// RGBA16F four halves in two, R16F one half, R32F the red float as it is.
+    Colour { class: u32, colour: [(super::sel::Bank, u16); 4] },
+    /// An integer target's `n` packed dwords (`chain::pack_int_output`),
+    /// written as they are.
+    Packed { dwords: [(super::sel::Bank, u16); 4], n: u8 },
+}
+
+/// A fragment shader writing several colour attachments of different
+/// classes, none blended: output (`reg`, out) is packed for its own target
+/// and written to pixel output registers `reg..`, where the end-of-tile
+/// program emits that attachment from (`chain::target_out_regs`). Each
+/// output works in its own six temporaries from `free + 6j`: the colour
+/// moved into the first four (only red for R16F and R32F) and packed into
+/// the fifth and sixth; an integer target's dwords not already in a
+/// temporary moved into the first ones. The packs come after every move,
+/// then the kill test and the feedback of a shader that discards, then the
+/// writes in register order, the last one ending the program. Returns the
+/// bytes written and the temporaries.
+pub fn build_fragment_shader_targets(
+    iterated: &[super::fragment::Iterated],
+    arithmetic: &[super::sel::SelGroup],
+    outs: &[(u16, TargetOut)],
+    discard: Option<u16>,
+    free: u16,
+    buf: &mut [u8],
+) -> Result<(usize, u16), BuildError> {
+    use super::sel::{Bank, OpType, SelDst, SelGroup, SelOp, SelSrc};
+    use crate::shaderc::{SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8};
+    #[derive(Clone, Copy)]
+    enum Step {
+        Move { ty: OpType, src: (Bank, u16), dst: u16 },
+        Pck { format: &'static str, scale: u32, rpt: u32, first: u16, dst: u16 },
+        Kill(u8),
+        Write { index: u16, src: u16 },
+    }
+    if outs.is_empty() || outs.len() > 3 {
+        return Err(BuildError::Unsupported("a target list of other than 1..=3 outputs"));
+    }
+    let temps = free
+        .checked_add(6 * outs.len() as u16)
+        .ok_or(BuildError::Unsupported("no temporaries left for the colours"))?;
+    /* at most 3 x (4 moves, 2 packs, 4 writes) and the 3 kill steps */
+    let mut steps = [Step::Kill(0); 33];
+    let mut n = 0usize;
+    let mut push = |s: Step| {
+        steps[n] = s;
+        n += 1;
+    };
+    let mut writes = [(0u16, 0u16); MAX_RGBA8_OUTPUTS];
+    let mut nw = 0usize;
+    for (j, &(reg, out)) in outs.iter().enumerate() {
+        let b = free + 6 * j as u16;
+        /* where each written dword is packed (an integer one: moved) */
+        let (srcs, ns): ([u16; 4], usize) = match out {
+            TargetOut::Colour { class, colour } => {
+                let moved = match class {
+                    SHC_RT_RGBA8 | SHC_RT_F16X4 => 4,
+                    SHC_RT_F16 | SHC_RT_F32 => 1,
+                    _ => return Err(BuildError::Unsupported("a target class other than RGBA8, F16X4, F16 or F32")),
+                };
+                for (k, &src) in colour[..moved].iter().enumerate() {
+                    push(Step::Move { ty: OpType::F32, src, dst: b + k as u16 });
+                }
+                match class {
+                    SHC_RT_F16X4 => ([b + 4, b + 5, 0, 0], 2),
+                    SHC_RT_F32 => ([b, 0, 0, 0], 1),
+                    _ => ([b + 4, 0, 0, 0], 1),
+                }
+            }
+            TargetOut::Packed { dwords, n } => {
+                if !(1..=4).contains(&n) {
+                    return Err(BuildError::Unsupported("an integer output of other than 1..=4 dwords"));
+                }
+                for (k, &(bank, r)) in dwords[..usize::from(n)].iter().enumerate() {
+                    if bank != Bank::Temp {
+                        push(Step::Move { ty: OpType::U32, src: (bank, r), dst: b + k as u16 });
+                    }
+                }
+                ([b, b + 1, b + 2, b + 3], usize::from(n))
+            }
+        };
+        for (k, &s) in srcs[..ns].iter().enumerate() {
+            let src = match out {
+                TargetOut::Packed { dwords, .. } if dwords[k].0 == Bank::Temp => dwords[k].1,
+                _ => s,
+            };
+            let index = reg + k as u16;
+            if nw == writes.len() || usize::from(index) >= MAX_RGBA8_OUTPUTS {
+                return Err(BuildError::Unsupported("a colour output past the pixel's four output registers"));
+            }
+            writes[nw] = (index, src);
+            nw += 1;
+        }
+    }
+    for (j, &(_, out)) in outs.iter().enumerate() {
+        let b = free + 6 * j as u16;
+        match out {
+            TargetOut::Colour { class: SHC_RT_RGBA8, .. } => {
+                push(Step::Pck { format: "u8888", scale: 1, rpt: 4, first: b, dst: b + 4 })
+            }
+            TargetOut::Colour { class: SHC_RT_F16X4, .. } => {
+                push(Step::Pck { format: "f16f16", scale: 0, rpt: 2, first: b, dst: b + 4 });
+                push(Step::Pck { format: "f16f16", scale: 0, rpt: 2, first: b + 2, dst: b + 5 });
+            }
+            TargetOut::Colour { class: SHC_RT_F16, .. } => {
+                push(Step::Pck { format: "f16f16", scale: 0, rpt: 1, first: b, dst: b + 4 })
+            }
+            _ => {}
+        }
+    }
+    if discard.is_some() {
+        for k in 0..3 {
+            push(Step::Kill(k));
+        }
+    }
+    for &(index, src) in &writes[..nw] {
+        push(Step::Write { index, src });
+    }
+    let last = n - 1;
+    let mut pro = Prologue::new(iterated, arithmetic);
+    let mut at = 0usize;
+    let len = encode_closed(
+        || {
+            if let Some(g) = pro.group()? {
+                return Ok(Some(g));
+            }
+            if at == n {
+                return Ok(None);
+            }
+            let k = at;
+            at += 1;
+            match steps[k] {
+                Step::Move { ty, src: (bank, reg), dst } => build_group(&SelGroup {
+                    op: SelOp::Copy,
+                    ty,
+                    dst: Some(SelDst::Fixed { bank: Bank::Temp, reg: dst }),
+                    srcs: [Some(SelSrc::Fixed { bank, reg, mods: Mods::default() }), None, None],
+                }),
+                Step::Pck { format, scale, rpt, first, dst } => build_pck(format, scale, rpt, first, dst),
+                Step::Kill(s) => {
+                    const TEMP: u32 = 1;
+                    let flag = discard.ok_or(BuildError::Unsupported("a kill test with no flag"))?;
+                    match s {
+                        0 => super::shapes::build_opt(
+                            &super::shapes::KILL_TEST,
+                            &[Some(Operand { bank: TEMP, index: flag as u32 }), None, None],
+                            None,
+                        ),
+                        1 => super::shapes::build_opt(&super::shapes::ALPHA_FEEDBACK, &[None; 3], None),
+                        _ => super::fragment::wait_data(),
+                    }
+                }
+                Step::Write { index, src } => build_pixout_write_to(index, src, k == last),
+            }
+            .map(Some)
+        },
+        buf,
+    )?;
+    Ok((len, temps))
+}
+
 /// The background object's clear program for `dwords` output dwords: shared
 /// register k moved to pixel output register k, the last move ending the
 /// program. Mesa's pvr_uscgen_clear_attach with `.dword_count = dwords,
