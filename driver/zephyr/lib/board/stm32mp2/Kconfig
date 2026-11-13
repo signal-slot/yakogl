@@ -63,3 +63,37 @@ config YAKOGL_BOARD_STM32MP2
 	  (board_stm32mp2.c): no window or screen yet; record: the
 	  yk-record line on USART2; reset: mp2_reset_to_linux() (PSCI
 	  SYSTEM_RESET), the watchdog OP-TEE's (YAKOGL_STM32MP2_WDOG).
+
+config YAKOGL_STM32MP2_DISPLAY
+	bool "STM32MP257F-DK A35: power the display path (LTDC, DSI, I2C2, ADV7535) before its drivers"
+	default y
+	depends on YAKOGL_STM32MP2
+	depends on YAKOGL_DRV_DISPLAY_STM32_LTDC && YAKOGL_DRV_DSI_STM32 && YAKOGL_DRV_ADV7535
+	depends on YAKOGL_DRV_I2C_STM32MP2
+	help
+	  display_power_mp2.c over the crate's soc::stm32mp2::display
+	  (include/stm32mp2_display.h; the crate has the feature stm32mp2
+	  with these drivers): at POST_KERNEL, before the I2C controller,
+	  the RIF check, the SCMI requests through OP-TEE (HDMI 5 V on LDO5,
+	  the clocks, FLEXGEN_27 at YAKOGL_STM32MP2_DISPLAY_PIXEL_HZ), the
+	  RCC gates and resets, the pins and the ADV7535's reset pulse, every
+	  message on the console ("display_power: ..."). It provides the
+	  LTDC driver's board hooks (yakogl_drv/stm32_ltdc.h). Needs
+	  YAKOGL_STM32MP2_WDOG.
+
+config YAKOGL_STM32MP2_DISPLAY_INIT_PRIORITY
+	int "POST_KERNEL priority of the display path's power-on"
+	default 45
+	depends on YAKOGL_STM32MP2_DISPLAY
+	help
+	  Below the I2C controller's (YAKOGL_DRV_I2C_STM32MP2_INIT_PRIORITY,
+	  50): its init programs the controller.
+
+config YAKOGL_STM32MP2_DISPLAY_PIXEL_HZ
+	int "LTDC kernel clock (FLEXGEN_27) set at power-on"
+	default 148500000
+	depends on YAKOGL_STM32MP2_DISPLAY
+	help
+	  148500000 for 1920x1080@60 (the farm KVM's preferred mode),
+	  74250000 for 1280x720@60. A mode the LTDC driver chooses with
+	  another clock powers the path again at that rate.

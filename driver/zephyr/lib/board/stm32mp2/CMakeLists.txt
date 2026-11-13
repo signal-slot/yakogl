@@ -16,10 +16,14 @@ if(CONFIG_YAKOGL_STM32MP2)
   if(CONFIG_YAKOGL_STM32MP2_GPU AND CONFIG_YAKOGL_DRV_GPU_VIVANTE)
     zephyr_library_sources(gc_power_mp2.c gc_irq_mp2.c)
   endif()
+  # The display path powered for its drivers (display_power_mp2.c over the
+  # crate's stm32mp2_display.h) and the LTDC driver's board hooks.
+  zephyr_library_sources_ifdef(CONFIG_YAKOGL_STM32MP2_DISPLAY display_power_mp2.c)
   zephyr_include_directories(.)
   # stm32mp2_gpu.h: the crate's GPU power C ABI (soc/stm32mp2/gpu_ffi.rs),
   # for the images that link the crate with it (CONFIG_YAKOGL_STM32MP2_GPU:
-  # mp2_gpu, gc_fence, gc_clear).
+  # mp2_gpu, gc_fence, gc_clear); stm32mp2_display.h the display path's
+  # (soc/stm32mp2/display_ffi.rs, CONFIG_YAKOGL_STM32MP2_DISPLAY).
   zephyr_include_directories(include)
   # tools/check.sh builds the probes with -DYAKOGL_WERROR=ON.
   if(YAKOGL_WERROR)
