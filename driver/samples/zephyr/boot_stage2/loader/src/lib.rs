@@ -5,11 +5,13 @@
 //! The A53 SPL loads the loader from the eMMC boot partition (the u-boot.img
 //! slot holds 1.49 MiB, too small for a GL image). The loader reads the real
 //! image from a raw sector range of the eMMC user area, checks it and jumps
-//! to it. This crate is that check and the jump; Zephyr's disk API, the log
-//! and the cache flush are the C side's (`src/main.c`).
+//! to it. This crate is that check, the placing and the jump; Zephyr's disk
+//! API, the log, the clear of the zero ranges and the cache flush are the C
+//! side's (`src/main.c`).
 //!
 //! The image in the user area: one 512-byte header sector, then the stored
-//! payload (sector aligned). The header, little-endian:
+//! payload (sector aligned). Three header versions, all read by this loader.
+//! Versions 1 and 2, one image, little-endian:
 //!
 //! | offset | size | field |
 //! |---|---|---|
@@ -39,6 +41,79 @@
 //! .bss) was 45 ms between the jump and the image's first C code
 //! (2026-10-29); the loader zeroes it with its caches on. Version 2 exists so
 //! that a loader without the zeroing refuses such an image.
+//!
+//! Version 3, up to [`MAX_SEGMENTS`] segments, each placed at its own load
+//! address (the AM62P showcase: the A53 Supervisor, the R5F's DDR image and
+//! its TCM blob, the three segments its kexec route loads). The fields that
+//! mean what they mean in versions 1 and 2 are at the same offsets (load,
+//! entry, stored bytes, name, the header CRC); the per-image ones (sizes,
+//! compression, CRC-32s, the zero range) are per segment, in the table:
+//!
+//! | offset | size | field |
+//! |---|---|---|
+//! | 0 | 8 | magic `"YKSTAGE2"` |
+//! | 8 | 4 | header version, 3 |
+//! | 12 | 4 | header bytes, 512 |
+//! | 16 | 4 | segment count, 1..=8 |
+//! | 20 | 4 | image parts P, 1..=count: the first P segments are the image (below) |
+//! | 24 | 8 | load address: segment 0's, the one the loader serves |
+//! | 32 | 8 | entry address (inside segment 0's image bytes) |
+//! | 40 | 8 | stored bytes: the whole payload after the header, a multiple of 512 |
+//! | 48 | 16 | zero |
+//! | 64 | 32 | name |
+//! | 96 | 8 x 40 | segment table (unused entries zero) |
+//! | 416 | 92 | zero |
+//! | 508 | 4 | CRC-32 of bytes 0..508 |
+//!
+//! A segment entry:
+//!
+//! | offset | size | field |
+//! |---|---|---|
+//! | 0 | 8 | load address |
+//! | 8 | 4 | image bytes |
+//! | 12 | 4 | footprint: the bytes of RAM the segment owns from its load address, at least the image bytes (segment 0: the arm64 header's image_size, so its .bss is not another segment's) |
+//! | 16 | 4 | stored offset from the first byte after the header, a multiple of 512 |
+//! | 20 | 4 | stored bytes |
+//! | 24 | 4 | compression: 0 none, 1 raw deflate, 2 one LZ4 frame |
+//! | 28 | 4 | CRC-32 of the stored bytes |
+//! | 32 | 4 | CRC-32 of the image |
+//! | 36 | 4 | zero bytes: the bytes of RAM right after the image bytes (`load + image bytes ..`) that the loader clears; image bytes + zero bytes <= footprint |
+//!
+//! A version 1 or 2 loader refuses version 3 by its number, and no version-3
+//! header passes for an older one or the reverse: the version is under the
+//! header CRC, and the bytes 16..24 and 48..64 hold different things. (A
+//! work branch of 2026-11 wrote this table under the number 2 with the entry
+//! at 24 and the stored bytes at 32. This loader reads such a header as a
+//! version-2 single image and refuses it: its segment count is read as the
+//! compression, which 3 or more is not, and its bytes 40..48, a single
+//! image's stored bytes, are zero.)
+//!
+//! The stored ranges are in table order and do not overlap; the footprints
+//! lie in the loader's region, do not overlap each other and do not overlap
+//! the staging buffer a compressed eMMC payload is read to. Segment 0 is an
+//! arm64 Image and holds the entry. `tools/am62p-mkboot.py stage2img` writes
+//! all three versions.
+//!
+//! Zero bytes and image parts keep zeros out of the payload. The Verdin
+//! AM62P showcase image holds a 10.85 MB run of zeros in its file and is
+//! followed in RAM by a 46.4 MB .bss that it cleared itself with the MMU and
+//! caches off. The loader runs with both on, so it clears those ranges (the
+//! C side): a run of zeros in the file is not stored, read or CRC-ed, and an
+//! image that is only ever started by this loader, with a payload whose zero
+//! bytes cover its .bss, may skip its own clear.
+//!
+//! With P > 1 the image is cut at its zero runs: segment 0 is its first
+//! extent (the arm64 header, the entry) and segments 1..P-1 are the later
+//! extents, each at its own address inside segment 0's footprint, each
+//! followed by its zero bytes. For those parts: they start at or above the
+//! end of segment 0's image bytes + zero bytes, end at or below the end of
+//! segment 0's footprint, are in ascending address order, and their
+//! footprint is exactly their image bytes + zero bytes. The overlap check
+//! takes segment 0 against one of its parts with segment 0's image bytes +
+//! zero bytes in place of its footprint; every other pair, and every segment
+//! against the staging buffer, is checked with the footprints. So nothing
+//! that is read or decoded lands in a zero range, and no two zero ranges
+//! share a byte.
 #![cfg_attr(not(test), no_std)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -49,14 +124,20 @@ pub mod lz4;
 use core::ffi::c_char;
 
 pub const MAGIC: [u8; 8] = *b"YKSTAGE2";
+/// The newest single-image header (1: no zero range, no LZ4).
 pub const VERSION: u32 = 2;
+/// The segment-table header.
+pub const VERSION_SEGMENTS: u32 = 3;
 pub const HEADER_BYTES: usize = 512;
+pub const SECTOR_BYTES: u64 = 512;
 pub const COMPRESSION_NONE: u32 = 0;
 pub const COMPRESSION_DEFLATE: u32 = 1;
 pub const COMPRESSION_LZ4: u32 = 2;
 
-/// The progress marks `unpack` reports through bs2_mark (the C side stamps
-/// the system counter; include/boot_stage2.h has the same numbers).
+/// The progress marks `unpack` and `unpack_segment` report through bs2_mark
+/// (the C side stamps the system counter; include/boot_stage2.h has the same
+/// numbers). With several segments each one marks, so the stamps that stay
+/// are the last segment's: every stored CRC checked, every segment decoded.
 pub const MARK_STORED_CHECKED: u32 = 5;
 pub const MARK_DECODED: u32 = 6;
 
@@ -75,21 +156,58 @@ fn mark(stage: u32) {
     let _ = stage;
 }
 pub const NAME_BYTES: usize = 32;
+pub const MAX_SEGMENTS: usize = 8;
+/// Where the version-3 segment table starts in the header, and its entries' size.
+pub const SEGMENT_TABLE: usize = 96;
+pub const SEGMENT_ENTRY_BYTES: usize = 40;
 
 /// What the loader accepts, from its Kconfig (include/boot_stage2.h).
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Bs2Limits {
-    /// The only load address this loader serves (the image's link address).
+    /// The only load address this loader serves: the image's link address
+    /// (versions 1 and 2), the load address of segment 0 (version 3), and
+    /// the start of the region.
     pub load: u64,
-    /// The most bytes the user-area range holds after the header sector.
+    /// The most bytes the source holds after the header sector.
     pub max_stored: u64,
-    /// The most bytes the image may have once decompressed (up to the
-    /// staging buffer, or the end of the mapped region for a stored image).
+    /// Versions 1 and 2: the most bytes the image may have once decompressed
+    /// (up to the staging buffer), and the room its zero range must end in.
     pub max_image: u64,
+    /// Version 3: the end (exclusive) of the identity-mapped region every
+    /// segment must lie in.
+    pub region_end: u64,
+    /// Version 3: the staging buffer, where a compressed eMMC segment is
+    /// read before it is decoded. No segment may overlap
+    /// `staging .. staging + staging_bytes`.
+    pub staging: u64,
+    /// 0 when nothing is staged (the payload linked into the loader).
+    pub staging_bytes: u64,
 }
 
-/// The header, checked (include/boot_stage2.h).
+/// One segment of a version-3 header, checked (include/boot_stage2.h).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Bs2Segment {
+    pub load: u64,
+    pub image_bytes: u64,
+    pub footprint: u64,
+    /// From the first byte after the header.
+    pub stored_offset: u64,
+    pub stored_bytes: u64,
+    pub compression: u32,
+    pub stored_crc32: u32,
+    pub image_crc32: u32,
+    /// The bytes after the image bytes that the loader clears (inside the
+    /// footprint).
+    pub zero_bytes: u32,
+}
+
+/// The header, checked (include/boot_stage2.h). Versions 1 and 2 fill the
+/// fields up to `zero_bytes` and leave `count` 0. Version 3 fills `load`
+/// (segment 0's), `entry`, `stored_bytes` (the whole payload), `name`, `count`
+/// and `segments`; its sizes, compression, CRC-32s and zero bytes are per
+/// segment, and the single-image fields for them are 0.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bs2Info {
@@ -106,14 +224,28 @@ pub struct Bs2Info {
     /// bytes from the load address. Past the image, inside the room.
     pub zero_offset: u64,
     pub zero_bytes: u64,
+    /// The header version, 1..=3.
+    pub version: u32,
+    /// The segments in `segments` (version 3; 0 for versions 1 and 2).
+    pub count: u32,
+    pub segments: [Bs2Segment; MAX_SEGMENTS],
 }
 
 // The layouts include/boot_stage2.h pins too.
-const _: () = assert!(core::mem::size_of::<Bs2Limits>() == 24);
+const _: () = assert!(core::mem::offset_of!(Bs2Limits, max_image) == 16);
+const _: () = assert!(core::mem::offset_of!(Bs2Limits, region_end) == 24);
+const _: () = assert!(core::mem::size_of::<Bs2Limits>() == 48);
+const _: () = assert!(core::mem::size_of::<Bs2Segment>() == 56);
+const _: () = assert!(core::mem::offset_of!(Bs2Segment, compression) == 40);
+const _: () = assert!(core::mem::offset_of!(Bs2Segment, zero_bytes) == 52);
 const _: () = assert!(core::mem::offset_of!(Bs2Info, compression) == 32);
 const _: () = assert!(core::mem::offset_of!(Bs2Info, name) == 44);
 const _: () = assert!(core::mem::offset_of!(Bs2Info, zero_offset) == 80);
-const _: () = assert!(core::mem::size_of::<Bs2Info>() == 96);
+const _: () = assert!(core::mem::offset_of!(Bs2Info, version) == 96);
+const _: () = assert!(core::mem::offset_of!(Bs2Info, count) == 100);
+const _: () = assert!(core::mem::offset_of!(Bs2Info, segments) == 104);
+const _: () = assert!(core::mem::size_of::<Bs2Info>() == 552);
+const _: () = assert!(SEGMENT_TABLE + MAX_SEGMENTS * SEGMENT_ENTRY_BYTES <= 508);
 
 /// The loader's error codes (negative; `bs2_strerror` names them).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,54 +268,78 @@ pub enum Bs2Error {
     NotArm64Image = -15,
     Lz4 = -16,
     ZeroRange = -17,
+    SegmentCount = -18,
+    SegmentLayout = -19,
+    SegmentOutside = -20,
+    SegmentOverlap = -21,
+    Footprint = -22,
+    ImageParts = -23,
 }
+
+const ALL_ERRORS: [Bs2Error; 23] = {
+    use Bs2Error::*;
+    [
+        BadArgument,
+        BadMagic,
+        BadHeaderCrc,
+        BadVersion,
+        BadCompression,
+        WrongLoad,
+        EntryOutside,
+        StoredTooBig,
+        ImageTooBig,
+        SizesDisagree,
+        StoredCrc,
+        ImageCrc,
+        Inflate,
+        LengthMismatch,
+        NotArm64Image,
+        Lz4,
+        ZeroRange,
+        SegmentCount,
+        SegmentLayout,
+        SegmentOutside,
+        SegmentOverlap,
+        Footprint,
+        ImageParts,
+    ]
+};
 
 impl Bs2Error {
     fn from_code(code: i32) -> Option<Self> {
-        use Bs2Error::*;
-        [
-            BadArgument,
-            BadMagic,
-            BadHeaderCrc,
-            BadVersion,
-            BadCompression,
-            WrongLoad,
-            EntryOutside,
-            StoredTooBig,
-            ImageTooBig,
-            SizesDisagree,
-            StoredCrc,
-            ImageCrc,
-            Inflate,
-            LengthMismatch,
-            NotArm64Image,
-            Lz4,
-            ZeroRange,
-        ]
-        .into_iter()
-        .find(|e| *e as i32 == code)
+        ALL_ERRORS.into_iter().find(|e| *e as i32 == code)
     }
 
     /// NUL-terminated, for the C side's log.
     pub fn text(self) -> &'static str {
         match self {
-            Bs2Error::BadArgument => "null pointer or short buffer\0",
+            Bs2Error::BadArgument => "null pointer, short buffer or bad segment index\0",
             Bs2Error::BadMagic => "no YKSTAGE2 header at the configured sector\0",
             Bs2Error::BadHeaderCrc => "header CRC-32 mismatch\0",
-            Bs2Error::BadVersion => "unknown header version or size\0",
+            Bs2Error::BadVersion => "unknown header version or size, or a reserved field is not zero\0",
             Bs2Error::BadCompression => "unknown compression\0",
-            Bs2Error::WrongLoad => "load address is not the one this loader serves\0",
-            Bs2Error::EntryOutside => "entry address outside the image\0",
-            Bs2Error::StoredTooBig => "stored payload larger than the user-area range\0",
+            Bs2Error::WrongLoad => "load address (of segment 0) is not the one this loader serves\0",
+            Bs2Error::EntryOutside => "entry address outside the image (segment 0)\0",
+            Bs2Error::StoredTooBig => "stored payload larger than the source holds\0",
             Bs2Error::ImageTooBig => "image larger than the room at the load address\0",
-            Bs2Error::SizesDisagree => "stored and image sizes disagree (or are zero)\0",
+            Bs2Error::SizesDisagree => "stored, image or footprint sizes disagree (or are zero)\0",
             Bs2Error::StoredCrc => "CRC-32 of the stored payload mismatch\0",
             Bs2Error::ImageCrc => "CRC-32 of the image mismatch\0",
             Bs2Error::Inflate => "deflate stream is malformed\0",
             Bs2Error::LengthMismatch => "decompressed length is not the header's\0",
             Bs2Error::NotArm64Image => "no arm64 Image header (ARM\\x64 at 0x38)\0",
             Bs2Error::Lz4 => "LZ4 frame is malformed\0",
-            Bs2Error::ZeroRange => "range to zero overlaps the image or leaves the room\0",
+            Bs2Error::ZeroRange => {
+                "range to zero overlaps the image or leaves the room (a segment: image and zero bytes over its footprint)\0"
+            }
+            Bs2Error::SegmentCount => "segment count is 0 or over 8\0",
+            Bs2Error::SegmentLayout => "segment stored ranges not sector aligned, out of order or past the payload\0",
+            Bs2Error::SegmentOutside => "a segment lies outside the loader's RAM region\0",
+            Bs2Error::SegmentOverlap => "segments overlap each other or the staging buffer\0",
+            Bs2Error::Footprint => "the image's arm64 image_size is larger than its segment's footprint\0",
+            Bs2Error::ImageParts => {
+                "image parts: none, more than the segments, or a part outside segment 0's footprint, on its image, out of order or with a footprint of its own\0"
+            }
         }
     }
 }
@@ -194,6 +350,15 @@ fn le32(b: &[u8], off: usize) -> u32 {
 
 fn le64(b: &[u8], off: usize) -> u64 {
     (le32(b, off) as u64) | ((le32(b, off + 4) as u64) << 32)
+}
+
+fn round_up_sector(n: u64) -> Option<u64> {
+    Some(n.checked_add(SECTOR_BYTES - 1)? & !(SECTOR_BYTES - 1))
+}
+
+/// `[a, a + an)` and `[b, b + bn)` share a byte (lengths > 0, no overflow).
+fn overlaps(a: u64, an: u64, b: u64, bn: u64) -> bool {
+    a < b + bn && b < a + an
 }
 
 /// Parse and check a header sector against the loader's limits.
@@ -209,8 +374,13 @@ pub fn parse_header(sector: &[u8], limits: &Bs2Limits) -> Result<Bs2Info, Bs2Err
         return Err(Bs2Error::BadHeaderCrc);
     }
     let version = le32(h, 8);
-    if !(1..=VERSION).contains(&version) || le32(h, 12) as usize != HEADER_BYTES {
+    if !(1..=VERSION_SEGMENTS).contains(&version) || le32(h, 12) as usize != HEADER_BYTES {
         return Err(Bs2Error::BadVersion);
+    }
+    let mut name = [0u8; NAME_BYTES + 1];
+    name[..NAME_BYTES].copy_from_slice(&h[64..64 + NAME_BYTES]);
+    if version == VERSION_SEGMENTS {
+        return parse_segments(h, limits, name);
     }
     let compression = le32(h, 16);
     if !(compression == COMPRESSION_NONE
@@ -220,8 +390,6 @@ pub fn parse_header(sector: &[u8], limits: &Bs2Limits) -> Result<Bs2Info, Bs2Err
         return Err(Bs2Error::BadCompression);
     }
     let (zero_offset, zero_bytes) = if version >= 2 { (le64(h, 96), le64(h, 104)) } else { (0, 0) };
-    let mut name = [0u8; NAME_BYTES + 1];
-    name[..NAME_BYTES].copy_from_slice(&h[64..64 + NAME_BYTES]);
     let info = Bs2Info {
         load: le64(h, 24),
         entry: le64(h, 32),
@@ -233,6 +401,9 @@ pub fn parse_header(sector: &[u8], limits: &Bs2Limits) -> Result<Bs2Info, Bs2Err
         name,
         zero_offset,
         zero_bytes,
+        version,
+        count: 0,
+        segments: [Bs2Segment::default(); MAX_SEGMENTS],
     };
     if info.load != limits.load {
         return Err(Bs2Error::WrongLoad);
@@ -261,6 +432,128 @@ pub fn parse_header(sector: &[u8], limits: &Bs2Limits) -> Result<Bs2Info, Bs2Err
     Ok(info)
 }
 
+/// Version 3: the table and its rules (the crate's header comment).
+fn parse_segments(h: &[u8], limits: &Bs2Limits, name: [u8; NAME_BYTES + 1]) -> Result<Bs2Info, Bs2Error> {
+    let table_end = SEGMENT_TABLE + MAX_SEGMENTS * SEGMENT_ENTRY_BYTES;
+    if h[48..64].iter().chain(&h[table_end..508]).any(|&b| b != 0) {
+        return Err(Bs2Error::BadVersion);
+    }
+    let count = le32(h, 16) as usize;
+    if count == 0 || count > MAX_SEGMENTS {
+        return Err(Bs2Error::SegmentCount);
+    }
+    let parts = le32(h, 20) as usize;
+    if parts == 0 || parts > count {
+        return Err(Bs2Error::ImageParts);
+    }
+    let load = le64(h, 24);
+    let entry = le64(h, 32);
+    let stored_total = le64(h, 40);
+    if !stored_total.is_multiple_of(SECTOR_BYTES) {
+        return Err(Bs2Error::SegmentLayout);
+    }
+    if stored_total > limits.max_stored {
+        return Err(Bs2Error::StoredTooBig);
+    }
+    let mut segments = [Bs2Segment::default(); MAX_SEGMENTS];
+    let mut stored_end = 0u64;
+    for (i, seg) in segments.iter_mut().enumerate() {
+        let e = &h[SEGMENT_TABLE + i * SEGMENT_ENTRY_BYTES..SEGMENT_TABLE + (i + 1) * SEGMENT_ENTRY_BYTES];
+        if i >= count {
+            if e.iter().any(|&b| b != 0) {
+                return Err(Bs2Error::BadVersion);
+            }
+            continue;
+        }
+        *seg = Bs2Segment {
+            load: le64(e, 0),
+            image_bytes: le32(e, 8) as u64,
+            footprint: le32(e, 12) as u64,
+            stored_offset: le32(e, 16) as u64,
+            stored_bytes: le32(e, 20) as u64,
+            compression: le32(e, 24),
+            stored_crc32: le32(e, 28),
+            image_crc32: le32(e, 32),
+            zero_bytes: le32(e, 36),
+        };
+        if !matches!(seg.compression, COMPRESSION_NONE | COMPRESSION_DEFLATE | COMPRESSION_LZ4) {
+            return Err(Bs2Error::BadCompression);
+        }
+        if seg.stored_bytes == 0
+            || seg.image_bytes == 0
+            || seg.footprint < seg.image_bytes
+            || (seg.compression == COMPRESSION_NONE && seg.stored_bytes != seg.image_bytes)
+        {
+            return Err(Bs2Error::SizesDisagree);
+        }
+        if seg.image_bytes + seg.zero_bytes as u64 > seg.footprint {
+            return Err(Bs2Error::ZeroRange);
+        }
+        // In table order, sector aligned, inside the payload; whole sectors
+        // of one segment never reach into the next.
+        let end = round_up_sector(seg.stored_offset + seg.stored_bytes).ok_or(Bs2Error::SegmentLayout)?;
+        if !seg.stored_offset.is_multiple_of(SECTOR_BYTES) || seg.stored_offset < stored_end || end > stored_total {
+            return Err(Bs2Error::SegmentLayout);
+        }
+        stored_end = end;
+        // Inside the region (the loader's identity map), no wrap.
+        let top = seg.load.checked_add(seg.footprint).ok_or(Bs2Error::SegmentOutside)?;
+        if seg.load < limits.load || top > limits.region_end {
+            return Err(Bs2Error::SegmentOutside);
+        }
+    }
+    if load != limits.load || segments[0].load != load {
+        return Err(Bs2Error::WrongLoad);
+    }
+    let used = &segments[..count];
+    let s0 = &segments[0];
+    // What segment 0 itself writes: its image bytes and the zeros after them.
+    // Its parts lie above that, inside its footprint, one after the other
+    // (no sum here wraps: every segment's end was checked against the region).
+    let occupied = s0.image_bytes + s0.zero_bytes as u64;
+    for i in 1..parts {
+        let p = &used[i];
+        if p.load < s0.load + occupied
+            || p.load + p.footprint > s0.load + s0.footprint
+            || (i > 1 && p.load <= used[i - 1].load)
+            || p.footprint != p.image_bytes + p.zero_bytes as u64
+        {
+            return Err(Bs2Error::ImageParts);
+        }
+    }
+    for (i, a) in used.iter().enumerate() {
+        if limits.staging_bytes != 0 && overlaps(a.load, a.footprint, limits.staging, limits.staging_bytes) {
+            return Err(Bs2Error::SegmentOverlap);
+        }
+        for (j, b) in used.iter().enumerate().skip(i + 1) {
+            // Segment 0 against one of its parts: the part is inside the
+            // footprint by design, so only what segment 0 writes counts.
+            let an = if i == 0 && j < parts { occupied } else { a.footprint };
+            if overlaps(a.load, an, b.load, b.footprint) {
+                return Err(Bs2Error::SegmentOverlap);
+            }
+        }
+    }
+    if entry < s0.load || entry - s0.load >= s0.image_bytes {
+        return Err(Bs2Error::EntryOutside);
+    }
+    Ok(Bs2Info {
+        load,
+        entry,
+        stored_bytes: stored_total,
+        image_bytes: 0,
+        compression: COMPRESSION_NONE,
+        stored_crc32: 0,
+        image_crc32: 0,
+        name,
+        zero_offset: 0,
+        zero_bytes: 0,
+        version: VERSION_SEGMENTS,
+        count: count as u32,
+        segments,
+    })
+}
+
 /// The image must be an arm64 Image (Zephyr's CONFIG_AARCH64_IMAGE_HEADER):
 /// "ARM\x64" at 0x38. Catches a header that describes the wrong file.
 pub fn check_arm64_image(image: &[u8]) -> Result<(), Bs2Error> {
@@ -270,11 +563,15 @@ pub fn check_arm64_image(image: &[u8]) -> Result<(), Bs2Error> {
     Ok(())
 }
 
-/// Decompress (or take) the stored payload into the image buffer and check
-/// both CRCs. `stored` and `image` must not overlap for a compressed
-/// payload; for COMPRESSION_NONE they are the same bytes and only the CRC is
-/// checked. The zero range is the caller's (it lies past `image_bytes`).
+/// Versions 1 and 2: decompress (or take) the stored payload into the image
+/// buffer and check both CRCs. `stored` and `image` must not overlap for a
+/// compressed payload; for COMPRESSION_NONE they are the same bytes and only
+/// the CRC is checked. The zero range is the caller's (it lies past
+/// `image_bytes`).
 pub fn unpack(info: &Bs2Info, stored: &[u8], image: &mut [u8]) -> Result<usize, Bs2Error> {
+    if info.version >= VERSION_SEGMENTS {
+        return Err(Bs2Error::BadArgument);
+    }
     /* The hardware CRC first; the table only if it disagrees, so a wrong
      * hardware path (never run before 2026-10-22) costs time, not the boot. */
     if crc32::crc32(stored) != info.stored_crc32 && crc32::crc32_update_table(0, stored) != info.stored_crc32 {
@@ -303,6 +600,78 @@ pub fn unpack(info: &Bs2Info, stored: &[u8], image: &mut [u8]) -> Result<usize, 
         return Err(Bs2Error::ImageCrc);
     }
     check_arm64_image(img)?;
+    Ok(n)
+}
+
+/// Version 3: produce segment `index` from its stored bytes and check it.
+/// Decode `stored` into `image`, or copy it there (uncompressed), or, with
+/// `image` None, check an uncompressed segment that was read straight to its
+/// load address (`stored` is then the image). `image` must hold at least the
+/// segment's image bytes and must not overlap `stored`. Segment 0 must be an
+/// arm64 Image whose header's image_size fits the footprint the overlap
+/// checks used. The zero bytes are not touched here: clearing them is the
+/// caller's (`src/main.c`). Returns the image's length.
+pub fn unpack_segment(
+    info: &Bs2Info,
+    index: usize,
+    stored: &[u8],
+    image: Option<&mut [u8]>,
+) -> Result<usize, Bs2Error> {
+    if info.version != VERSION_SEGMENTS || index >= info.count as usize || index >= MAX_SEGMENTS {
+        return Err(Bs2Error::BadArgument);
+    }
+    let seg = &info.segments[index];
+    let n = seg.image_bytes as usize;
+    if stored.len() as u64 != seg.stored_bytes || image.as_ref().is_some_and(|d| d.len() < n) {
+        return Err(Bs2Error::BadArgument);
+    }
+    /* The hardware CRC first; the table only if it disagrees (as `unpack`). */
+    if crc32::crc32(stored) != seg.stored_crc32 && crc32::crc32_update_table(0, stored) != seg.stored_crc32 {
+        return Err(Bs2Error::StoredCrc);
+    }
+    mark(MARK_STORED_CHECKED);
+    let img: &[u8] = match (seg.compression, image) {
+        (COMPRESSION_DEFLATE | COMPRESSION_LZ4, Some(dst)) => {
+            let dst = &mut dst[..n];
+            let got = if seg.compression == COMPRESSION_DEFLATE {
+                inflate::inflate(stored, dst).map_err(|_| Bs2Error::Inflate)?
+            } else {
+                lz4::decode_frame(stored, dst).map_err(|_| Bs2Error::Lz4)?
+            };
+            mark(MARK_DECODED);
+            if got != n {
+                return Err(Bs2Error::LengthMismatch);
+            }
+            if crc32::crc32(dst) != seg.image_crc32 {
+                return Err(Bs2Error::ImageCrc);
+            }
+            dst
+        }
+        // A decoder needs a destination of its own.
+        (COMPRESSION_DEFLATE | COMPRESSION_LZ4, None) => return Err(Bs2Error::BadArgument),
+        /* Uncompressed, the image is the stored bytes: the CRC over them was
+         * taken above (as `unpack`). The header's two values must still agree. */
+        (_, dst) => {
+            if seg.image_crc32 != seg.stored_crc32 {
+                return Err(Bs2Error::ImageCrc);
+            }
+            let img = match dst {
+                Some(d) => {
+                    d[..n].copy_from_slice(stored);
+                    &d[..n]
+                }
+                None => stored,
+            };
+            mark(MARK_DECODED);
+            img
+        }
+    };
+    if index == 0 {
+        check_arm64_image(img)?;
+        if le64(img, 16) > seg.footprint {
+            return Err(Bs2Error::Footprint);
+        }
+    }
     Ok(n)
 }
 
@@ -335,14 +704,16 @@ pub unsafe extern "C" fn bs2_header_parse(
     }
 }
 
-/// Check the stored payload and produce the image: decompress `stored` into
-/// `image` (capacity `image_cap`) or, uncompressed, check it where it is
-/// (`image` may then be `stored`). 0 or a negative Bs2Error code.
+/// Versions 1 and 2. Check the stored payload and produce the image:
+/// decompress `stored` into `image` (capacity `image_cap`) or, uncompressed,
+/// check it where it is when `image` is `stored` (the eMMC source reads it
+/// straight to the load address) and copy it to `image` otherwise (the
+/// payload linked into the loader). 0 or a negative Bs2Error code.
 ///
 /// # Safety
 /// `info` is what bs2_header_parse wrote; `stored` points at
 /// `info->stored_bytes` readable bytes; `image` at `image_cap` writable bytes,
-/// not overlapping `stored` unless the image is uncompressed.
+/// either `stored` itself (uncompressed only) or not overlapping it.
 #[no_mangle]
 pub unsafe extern "C" fn bs2_unpack(info: *const Bs2Info, stored: *const u8, image: *mut u8, image_cap: usize) -> i32 {
     if info.is_null() || stored.is_null() || image.is_null() {
@@ -350,13 +721,72 @@ pub unsafe extern "C" fn bs2_unpack(info: *const Bs2Info, stored: *const u8, ima
     }
     // SAFETY: as documented above.
     let info = unsafe { &*info };
-    let stored = unsafe { core::slice::from_raw_parts(stored, info.stored_bytes as usize) };
+    if info.version >= VERSION_SEGMENTS {
+        return Bs2Error::BadArgument as i32;
+    }
+    let n = info.stored_bytes as usize;
+    let (src, dst) = (stored, image);
+    // SAFETY: as documented above.
+    let stored = unsafe { core::slice::from_raw_parts(src, n) };
     let r = if info.compression != COMPRESSION_NONE {
         // SAFETY: as documented above (not overlapping `stored`).
-        let image = unsafe { core::slice::from_raw_parts_mut(image, image_cap) };
+        let image = unsafe { core::slice::from_raw_parts_mut(dst, image_cap) };
         unpack(info, stored, image)
-    } else {
+    } else if core::ptr::eq(src, dst) {
         unpack(info, stored, &mut [])
+    } else if n > image_cap || overlaps(src as u64, n as u64, dst as u64, n as u64) {
+        Err(Bs2Error::BadArgument)
+    } else {
+        /* The payload is elsewhere (linked into the loader): checked there,
+         * then copied to the load address. Until 2026-11 it was checked and
+         * never copied, so the loader jumped to whatever the load address
+         * held. */
+        unpack(info, stored, &mut []).inspect(|_| {
+            // SAFETY: `image` holds `image_cap` >= n bytes and does not
+            // overlap `stored` (both checked above).
+            unsafe { core::ptr::copy_nonoverlapping(src, dst, n) }
+        })
+    };
+    match r {
+        Ok(_) => 0,
+        Err(e) => e as i32,
+    }
+}
+
+/// Version 3. Place segment `index` at its load address from its stored
+/// bytes at `stored` (`info->segments[index].stored_bytes` of them): decode
+/// or copy them there, or, when `stored` is the load address itself (an
+/// uncompressed segment read in place), only check them. 0 or a negative
+/// Bs2Error code.
+///
+/// # Safety
+/// `info` is what bs2_header_parse wrote, with limits that describe memory
+/// this loader may write (the segment's load address and image bytes lie in
+/// its identity-mapped region); `stored` points at the segment's stored bytes.
+#[no_mangle]
+pub unsafe extern "C" fn bs2_segment_unpack(info: *const Bs2Info, index: u32, stored: *const u8) -> i32 {
+    if info.is_null() || stored.is_null() {
+        return Bs2Error::BadArgument as i32;
+    }
+    // SAFETY: as documented above.
+    let info = unsafe { &*info };
+    let index = index as usize;
+    if info.version != VERSION_SEGMENTS || index >= info.count as usize || index >= MAX_SEGMENTS {
+        return Bs2Error::BadArgument as i32;
+    }
+    let seg = &info.segments[index];
+    let (s, sn) = (stored as u64, seg.stored_bytes);
+    // SAFETY: the caller guarantees `stored` holds the segment's stored bytes.
+    let src = unsafe { core::slice::from_raw_parts(stored, sn as usize) };
+    let r = if s == seg.load {
+        unpack_segment(info, index, src, None)
+    } else if overlaps(s, sn, seg.load, seg.image_bytes) {
+        Err(Bs2Error::BadArgument)
+    } else {
+        // SAFETY: the header check put the segment inside the loader's
+        // identity-mapped region; it does not overlap `stored` (above).
+        let dst = unsafe { core::slice::from_raw_parts_mut(seg.load as usize as *mut u8, seg.image_bytes as usize) };
+        unpack_segment(info, index, src, Some(dst))
     };
     match r {
         Ok(_) => 0,
@@ -377,7 +807,8 @@ pub unsafe extern "C" fn bs2_crc32(data: *const u8, len: usize) -> u32 {
     crc32::crc32(unsafe { core::slice::from_raw_parts(data, len) })
 }
 
-/// The text of a code bs2_header_parse / bs2_unpack returned.
+/// The text of a code bs2_header_parse, bs2_unpack or bs2_segment_unpack
+/// returned.
 #[no_mangle]
 pub extern "C" fn bs2_strerror(code: i32) -> *const c_char {
     match Bs2Error::from_code(code) {
@@ -454,216 +885,4 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::vec::Vec;
-
-    const LIMITS: Bs2Limits = Bs2Limits { load: 0x8200_0000, max_stored: 1 << 20, max_image: 1 << 22 };
-
-    fn zimage(len: usize) -> Vec<u8> {
-        let mut z: Vec<u8> = (0..len).map(|i| (i * 13 / 7) as u8).collect();
-        z[0x38..0x3C].copy_from_slice(b"ARM\x64");
-        z
-    }
-
-    /// A header in mkboot's layout (the Python writer is checked against the
-    /// same layout by the BS2_VECTORS test below).
-    fn header(info: &Bs2Info) -> [u8; 512] {
-        let mut h = [0u8; 512];
-        h[..8].copy_from_slice(&MAGIC);
-        h[8..12].copy_from_slice(&VERSION.to_le_bytes());
-        h[12..16].copy_from_slice(&(HEADER_BYTES as u32).to_le_bytes());
-        h[16..20].copy_from_slice(&info.compression.to_le_bytes());
-        h[24..32].copy_from_slice(&info.load.to_le_bytes());
-        h[32..40].copy_from_slice(&info.entry.to_le_bytes());
-        h[40..48].copy_from_slice(&info.stored_bytes.to_le_bytes());
-        h[48..56].copy_from_slice(&info.image_bytes.to_le_bytes());
-        h[56..60].copy_from_slice(&info.stored_crc32.to_le_bytes());
-        h[60..64].copy_from_slice(&info.image_crc32.to_le_bytes());
-        h[64..96].copy_from_slice(&info.name[..32]);
-        h[96..104].copy_from_slice(&info.zero_offset.to_le_bytes());
-        h[104..112].copy_from_slice(&info.zero_bytes.to_le_bytes());
-        let c = crc32::crc32(&h[..508]);
-        h[508..].copy_from_slice(&c.to_le_bytes());
-        h
-    }
-
-    fn info_for(image: &[u8]) -> Bs2Info {
-        let mut name = [0u8; 33];
-        name[..4].copy_from_slice(b"test");
-        Bs2Info {
-            load: 0x8200_0000,
-            entry: 0x8200_0000,
-            stored_bytes: image.len() as u64,
-            image_bytes: image.len() as u64,
-            compression: COMPRESSION_NONE,
-            stored_crc32: crc32::crc32(image),
-            image_crc32: crc32::crc32(image),
-            name,
-            zero_offset: 0,
-            zero_bytes: 0,
-        }
-    }
-
-    #[test]
-    fn header_round_trip() {
-        let z = zimage(5000);
-        let info = info_for(&z);
-        let h = header(&info);
-        assert_eq!(parse_header(&h, &LIMITS), Ok(info));
-        assert_eq!(unpack(&info, &z, &mut []), Ok(5000));
-    }
-
-    #[test]
-    fn zero_range_and_version_1() {
-        let z = zimage(5000);
-        let mut info = info_for(&z);
-        info.zero_offset = 5000;
-        info.zero_bytes = (1 << 22) - 5000;
-        assert_eq!(parse_header(&header(&info), &LIMITS), Ok(info));
-        // Version 1: bytes 96..112 are not a zero range, and no LZ4.
-        let mut h = header(&info);
-        h[8] = 1;
-        let c = crc32::crc32(&h[..508]);
-        h[508..].copy_from_slice(&c.to_le_bytes());
-        let v1 = parse_header(&h, &LIMITS).unwrap();
-        assert_eq!((v1.zero_offset, v1.zero_bytes), (0, 0));
-        h[16] = COMPRESSION_LZ4 as u8;
-        let c = crc32::crc32(&h[..508]);
-        h[508..].copy_from_slice(&c.to_le_bytes());
-        assert_eq!(parse_header(&h, &LIMITS), Err(Bs2Error::BadCompression));
-    }
-
-    #[test]
-    fn header_refusals() {
-        let z = zimage(5000);
-        let info = info_for(&z);
-        let h = header(&info);
-        let mut bad = h;
-        bad[0] = b'X';
-        assert_eq!(parse_header(&bad, &LIMITS), Err(Bs2Error::BadMagic));
-        let mut bad = h;
-        bad[100] = 1;
-        assert_eq!(parse_header(&bad, &LIMITS), Err(Bs2Error::BadHeaderCrc));
-        assert_eq!(parse_header(&h[..511], &LIMITS), Err(Bs2Error::BadArgument));
-        let refuse = |f: &dyn Fn(&mut Bs2Info, &mut [u8; 512]), want: Bs2Error| {
-            let mut i = info;
-            let mut hh = [0u8; 512];
-            f(&mut i, &mut hh);
-            let mut out = header(&i);
-            if hh[8] != 0 {
-                out[8..16].copy_from_slice(&hh[8..16]);
-                let c = crc32::crc32(&out[..508]);
-                out[508..].copy_from_slice(&c.to_le_bytes());
-            }
-            assert_eq!(parse_header(&out, &LIMITS), Err(want));
-        };
-        refuse(&|_, hh| hh[8..16].copy_from_slice(&[3, 0, 0, 0, 0, 2, 0, 0]), Bs2Error::BadVersion);
-        refuse(&|i, _| i.compression = 3, Bs2Error::BadCompression);
-        refuse(
-            &|i, _| {
-                i.zero_offset = 4999;
-                i.zero_bytes = 100;
-            },
-            Bs2Error::ZeroRange,
-        );
-        refuse(
-            &|i, _| {
-                i.zero_offset = 5000;
-                i.zero_bytes = (1 << 22) - 4999;
-            },
-            Bs2Error::ZeroRange,
-        );
-        refuse(
-            &|i, _| {
-                i.zero_offset = u64::MAX;
-                i.zero_bytes = 2;
-            },
-            Bs2Error::ZeroRange,
-        );
-        refuse(&|i, _| i.load = 0x8080_0000, Bs2Error::WrongLoad);
-        refuse(&|i, _| i.entry = 0x8200_0000 + 5000, Bs2Error::EntryOutside);
-        refuse(&|i, _| i.entry = 0x81ff_fffc, Bs2Error::EntryOutside);
-        refuse(
-            &|i, _| {
-                i.stored_bytes = (1 << 20) + 1;
-                i.image_bytes = (1 << 20) + 1;
-            },
-            Bs2Error::StoredTooBig,
-        );
-        refuse(
-            &|i, _| {
-                i.compression = COMPRESSION_DEFLATE;
-                i.image_bytes = (1 << 22) + 1;
-            },
-            Bs2Error::ImageTooBig,
-        );
-        refuse(&|i, _| i.image_bytes = 4999, Bs2Error::SizesDisagree);
-        refuse(&|i, _| i.stored_bytes = 0, Bs2Error::SizesDisagree);
-    }
-
-    #[test]
-    fn unpack_refusals() {
-        let z = zimage(5000);
-        let info = info_for(&z);
-        let mut flipped = z.clone();
-        flipped[4000] ^= 0x10;
-        assert_eq!(unpack(&info, &flipped, &mut []), Err(Bs2Error::StoredCrc));
-        let mut i = info;
-        i.image_crc32 ^= 1;
-        assert_eq!(unpack(&i, &z, &mut []), Err(Bs2Error::ImageCrc));
-        let plain = vec![0u8; 5000];
-        let i = info_for(&plain);
-        assert_eq!(unpack(&i, &plain, &mut []), Err(Bs2Error::NotArm64Image));
-    }
-
-    #[test]
-    fn strerror_names_every_code() {
-        for code in -17..=-1 {
-            let e = Bs2Error::from_code(code).expect("every code has a variant");
-            assert!(e.text().ends_with('\0') && e.text().len() > 5);
-        }
-        assert!(Bs2Error::from_code(0).is_none());
-        assert!(Bs2Error::from_code(-18).is_none());
-    }
-
-    /// The images `tools/am62p-mkboot.py stage2-vectors <dir>` writes (Python's
-    /// zlib as the compressor, so this is the cross-check of the two sides):
-    /// `ok-*.img` must load, `bad-*.img` must be refused. Without BS2_VECTORS
-    /// the test says so and checks nothing; tools/check.sh sets it and requires
-    /// the "verified" line.
-    #[test]
-    fn mkboot_vectors() {
-        let Some(dir) = std::env::var_os("BS2_VECTORS") else {
-            println!("mkboot_vectors: BS2_VECTORS not set, nothing checked");
-            return;
-        };
-        let mut names: Vec<_> = std::fs::read_dir(&dir)
-            .expect("BS2_VECTORS is a directory")
-            .map(|e| e.unwrap().path())
-            .filter(|p| p.extension().is_some_and(|x| x == "img"))
-            .collect();
-        names.sort();
-        let limits =
-            Bs2Limits { load: 0x8200_0000, max_stored: 8128 * 512 - 512, max_image: 0x9000_0000 - 0x8200_0000 };
-        let (mut ok, mut bad) = (0, 0);
-        for p in &names {
-            let file = std::fs::read(p).unwrap();
-            let stem = p.file_name().unwrap().to_string_lossy().into_owned();
-            let result = parse_header(&file, &limits).and_then(|info| {
-                let stored = &file[HEADER_BYTES..HEADER_BYTES + info.stored_bytes as usize];
-                let mut image = vec![0u8; info.image_bytes as usize];
-                unpack(&info, stored, &mut image)
-            });
-            if stem.starts_with("ok-") {
-                assert!(result.is_ok(), "{stem}: {result:?}");
-                ok += 1;
-            } else {
-                assert!(result.is_err(), "{stem} was accepted");
-                bad += 1;
-            }
-        }
-        assert!(ok >= 3 && bad >= 3, "too few vectors in {dir:?}: {ok} ok, {bad} bad");
-        println!("mkboot_vectors: {} images verified ({ok} loaded, {bad} refused)", ok + bad);
-    }
-}
+mod tests;
