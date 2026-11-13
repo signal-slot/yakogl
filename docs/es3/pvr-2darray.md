@@ -156,6 +156,12 @@ by `lod` (`pco/usclib/tex.cl:63-94`, lines 76-91). Yakogl's `tex_size_2d`
 which `tex_size_2d` reads for a non-STRIDE image already. The hidden
 `pvr_layers_<sampler>` uniform is then not needed by a native-array program (the
 front end still declares it, and the table's stacked rows still read it).
+The word is the layer-major copy's: the stacked image's dword 2 is a STRIDE
+word without a depth field and its height is the whole stack's, so a program
+that only asks the size sets the record's bit 1 too (`SelOp::NativeSize`,
+`chain::native_flags`) and the draw binds the copy, as it does for a native
+volume's size (bit 2). Until 2026-11-13 the size alone set no bit and read the
+stacked word: dEQP's `texturesize.*sampler2darray*` cases with the switch on.
 
 ## 4. The `smp` instruction and its operands
 
