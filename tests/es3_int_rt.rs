@@ -408,19 +408,24 @@ mod es3 {
     /// The R and RG classes are held widened to four channels (`es3_formats`),
     /// a store that is not the layout of their surface: the PowerVR draws
     /// them as the four-channel surface of the store
-    /// (tests/es3_pvr_fbo_int_rg.rs), the other back ends keep them
-    /// incomplete.
+    /// (tests/es3_pvr_fbo_int_rg.rs); the other back ends keep the widened
+    /// ones incomplete. The GC7000's four 32-bit classes are not widened:
+    /// the GC mask holds them in their own right (gc-r32-flip, `b5e04b14`)
+    /// and `integer_texture_surface` has rows for them (gl-r32-surface,
+    /// `6c5b004f`), so R32I/UI and RG32I/UI texture attachments are
+    /// complete there (tests/es3_r32_gc.rs, tests/es3_int32_rt_gc.rs).
     #[test]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();
         let mut made = 0;
         backend::HOST_INTEGER_RT_FORMATS.store(ALL_SURFACES, Ordering::Relaxed);
-        for (f, name, channels, bits, _) in INT_FORMATS {
+        for (f, name, channels, bits, ..) in INT_FORMATS {
             let Some(tex) = int_texture(f) else { continue };
             made += 1;
-            // the GC samples and draws the 32-bit R and RG classes as their own surface (RC17)
-            let own = cfg!(feature = "gpu-vivante") && bits == 32;
-            let want = if channels == 4 || own || cfg!(feature = "gpu-powervr") {
+            /* the GC7000's 32-bit R/RG classes: own class in the mask, own
+             * surface row, drawn as R32F/G32R32F under UIF32 (tests/es3_int32_rt_gc.rs) */
+            let gc32 = bits == 32 && cfg!(feature = "gpu-vivante");
+            let want = if channels == 4 || cfg!(feature = "gpu-powervr") || gc32 {
                 GL_FRAMEBUFFER_COMPLETE
             } else {
                 GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT
