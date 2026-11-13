@@ -429,3 +429,275 @@ pub fn rs_clear(c: &Clear) -> Result<Words, NotRs> {
     w.stall(GC_SYNC_RA, GC_SYNC_PE);
     Ok(w)
 }
+
+// --- TS fast clear and in-place resolve (W8/W9 groundwork) -------------------
+//
+// Pure word builders for `docs/notes/gc-tiled-wire.md` W8 (colour fast clear),
+// W9 (depth fast clear, RS in-place resolve). Nothing calls them: with the
+// `gc_tiled_rt` knob off they are unreachable and no stream changes. Each
+// returns the words of one step in Mesa's order (`etnaviv_rs.c:337-387`
+// colour, `:467-480` depth, `:164-181` in place); the TS register run is what
+// the golden stream `tools/vivante/testdata/ts-clear.golden` carries for the
+// same clear (the golden's one `TS_MEM_CONFIG` run joins the colour and the
+// depth plane; here each plane writes its own part, with `keep` the bits of
+// the other plane).
+//
+// This file depends on `regs.rs` only (tests/gc_rs_clear.rs includes it by
+// `#[path]` with nothing else), so the field maths of `ts.rs` is not called
+// from here: the clear words come in as inputs (`ts::color_clear_words`,
+// `ts::depth_clear_word`, `ts::depth_clear_bits`) and the few formulas used
+// below are copied (`ts::ts_clear_job`, `ts::auto_disable_count`), with
+// tests/gc_ts_fast_clear.rs comparing the copies with `ts.rs`.
+
+/// `ts::TS_CLEAR_VALUE`: the RS fill word of a TS buffer, every tile "cleared".
+const TS_CLEAR_VALUE: u32 = 0x1111_1111;
+
+/// `ts::auto_disable_count`: `TS_*_AUTO_DISABLE_COUNT` after a fast clear
+/// (`etnaviv_rs.c:382-387`, `:469-475`).
+pub const fn auto_disable_count(padded_width: u32, padded_height: u32) -> u32 {
+    padded_width * padded_height / 16
+}
+
+/// `ts::ts_clear_job`'s window height: `align(ts_layer_stride / 0x40, 4)`.
+const fn ts_fill_height(ts_layer_stride: u32) -> u32 {
+    (ts_layer_stride / 0x40 + 3) & !3
+}
+
+/// `ts::ts_mem_config` for the bits a fast clear sets.
+const fn mem_config(fast_clear: u32, auto_disable: u32, auto: bool) -> u32 {
+    fast_clear | if auto { auto_disable } else { 0 }
+}
+
+/// A render target with a tile-status buffer: where the TS and the surface
+/// are, and the surface's padded size.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TsTarget {
+    /// GPU address of the TS buffer.
+    pub ts_addr: u32,
+    /// `ts::ts_layer_stride` of the surface (the TS buffer's bytes).
+    pub ts_layer_stride: u32,
+    /// GPU address of the (tiled) surface.
+    pub surface_addr: u32,
+    pub padded_width: u32,
+    pub padded_height: u32,
+}
+
+/// A colour fast clear of a 32-bit TS-backed target (`etna_blit_clear_color_rs`,
+/// `etnaviv_rs.c:337-387`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ColourFastClear {
+    pub target: TsTarget,
+    /// `(TS_COLOR_CLEAR_VALUE, TS_COLOR_CLEAR_VALUE_EXT)`, `ts::color_clear_words`.
+    pub clear: (u32, u32),
+    /// `TS_MEM_CONFIG` bits the clear leaves alone (the depth plane's).
+    pub keep: u32,
+    /// The core has AUTO_DISABLE (`TS_COLOR_AUTO_DISABLE_COUNT` and the
+    /// config bit). ts-clear.golden's shim core has none.
+    pub auto_disable: bool,
+}
+
+/// A depth fast clear (`etnaviv_rs.c:467-480`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DepthFastClear {
+    pub target: TsTarget,
+    /// The RS clear bits of the clear, `ts::depth_clear_bits`: the TS path
+    /// needs the whole word, 0xffff (`:467`; D24S8 depth 0xeeee | stencil
+    /// 0x1111).
+    pub bits: u32,
+    /// `TS_DEPTH_CLEAR_VALUE`, `ts::depth_clear_word`.
+    pub clear_word: u32,
+    /// The surface is Z16 (`TS_MEM_CONFIG` `DEPTH_16BPP`).
+    pub depth_16bpp: bool,
+    /// `TS_MEM_CONFIG` bits the clear leaves alone (the colour plane's).
+    pub keep: u32,
+    pub auto_disable: bool,
+}
+
+/// `RS_CONFIG` of the RS fill of a TS buffer: A8R8G8B8 to a TILED destination
+/// (`etna_rs_gen_ts_clear_cmd`, `etnaviv_rs.c:339-358`).
+pub const fn ts_fill_rs_config() -> u32 {
+    rs_config(GC_RS_FORMAT_A8R8G8B8) | GC_RS_DEST_TILED
+}
+
+/// The RS fill of a TS buffer with `TS_CLEAR_VALUE`: [`FILL_WORDS`] words. The destination is TILED, so its stride is the job's `0x40` times
+/// 4; the fill values are `{v, 0, 0, 0}` (not `rs_clear`'s `{v, 0, v, 0}`).
+pub fn ts_fill(w: &mut Words, ts_addr: u32, ts_layer_stride: u32) {
+    let mut c = Coalesce::new(w);
+
+    c.emit(GC_RS_CONFIG, ts_fill_rs_config());
+    c.emit(GC_RS_SOURCE_STRIDE, 0);
+    c.emit(GC_RS_DEST_STRIDE, 0x40 << 2);
+    c.emit(rs_pipe_dest_addr(0), ts_addr);
+    c.emit(rs_pipe_offset(0), 0);
+    c.emit(rs_pipe_offset(1), 0);
+    c.emit(GC_RS_WINDOW_SIZE, rs_window_width(16) | rs_window_height(ts_fill_height(ts_layer_stride)));
+    c.emit(rs_dither(0), 0xffff_ffff);
+    c.emit(rs_dither(1), 0xffff_ffff);
+    c.emit(GC_RS_CLEAR_CONTROL, RS_CLEAR_MODE_ENABLED1 | RS_CLEAR_BITS_ALL);
+    c.emit(rs_fill_value(0), TS_CLEAR_VALUE);
+    for i in 1..4 {
+        c.emit(rs_fill_value(i), 0);
+    }
+    c.emit(GC_RS_EXTRA_CONFIG, 0);
+    c.emit(GC_RS_SINGLE_BUFFER, GC_RS_SINGLE_BUFFER_ENABLE);
+    c.emit(GC_RS_KICKER, GC_RS_KICKER_VALUE);
+    c.emit(GC_RS_SINGLE_BUFFER, 0);
+    c.end();
+}
+
+/// Before a TS fill: the PE caches out, RA waits for PE, the TS cache is
+/// flushed (the golden's first three records).
+fn ts_fill_prologue(w: &mut Words) {
+    w.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
+    w.stall(GC_SYNC_RA, GC_SYNC_PE);
+    w.state(GC_TS_FLUSH_CACHE, GC_TS_FLUSH);
+}
+
+/// The colour fast clear: prologue, the TS fill, a stall RA->PE, then the
+/// registers that make the TS valid: `TS_MEM_CONFIG` (`COLOR_FAST_CLEAR`,
+/// `COLOR_AUTO_DISABLE`), `TS_COLOR_STATUS_BASE`, `_SURFACE_BASE`,
+/// `_CLEAR_VALUE` (one run), `_CLEAR_VALUE_EXT` (the same word for a texel of
+/// 32 bits or less, `etna_clear_blit_pack_rgba`) and, with AUTO_DISABLE,
+/// `TS_COLOR_AUTO_DISABLE_COUNT`.
+pub fn colour_fast_clear(c: &ColourFastClear) -> Words {
+    let t = &c.target;
+    let (lo, ext) = c.clear;
+    let cfg =
+        mem_config(GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR, GC_TS_MEM_CONFIG_COLOR_AUTO_DISABLE, c.auto_disable) | c.keep;
+    let mut w = Words::new();
+
+    ts_fill_prologue(&mut w);
+    ts_fill(&mut w, t.ts_addr, t.ts_layer_stride);
+    w.stall(GC_SYNC_RA, GC_SYNC_PE);
+    let mut r = Coalesce::new(&mut w);
+    r.emit(GC_TS_MEM_CONFIG, cfg);
+    r.emit(GC_TS_COLOR_STATUS_BASE, t.ts_addr);
+    r.emit(GC_TS_COLOR_SURFACE_BASE, t.surface_addr);
+    r.emit(GC_TS_COLOR_CLEAR_VALUE, lo);
+    r.emit(GC_TS_COLOR_CLEAR_VALUE_EXT, ext);
+    if c.auto_disable {
+        r.emit(GC_TS_COLOR_AUTO_DISABLE_COUNT, auto_disable_count(t.padded_width, t.padded_height));
+    }
+    r.end();
+    w
+}
+
+/// The depth fast clear, or `None` when the clear does not cover the whole
+/// word (a depth-only clear of D24S8, bits 0xeeee: a plain RS fill, `fill`).
+/// Prologue, the TS fill, a stall, then `TS_MEM_CONFIG` (`DEPTH_FAST_CLEAR`,
+/// `DEPTH_16BPP` for Z16, `DEPTH_AUTO_DISABLE`) and `TS_DEPTH_STATUS_BASE`,
+/// `_SURFACE_BASE`, `_CLEAR_VALUE` and, with AUTO_DISABLE,
+/// `TS_DEPTH_AUTO_DISABLE_COUNT` as one run.
+pub fn depth_fast_clear(c: &DepthFastClear) -> Option<Words> {
+    if c.bits != RS_CLEAR_BITS_ALL {
+        return None;
+    }
+    let t = &c.target;
+    let cfg = mem_config(GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR, GC_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE, c.auto_disable)
+        | if c.depth_16bpp { GC_TS_MEM_CONFIG_DEPTH_16BPP } else { 0 }
+        | c.keep;
+    let mut w = Words::new();
+
+    ts_fill_prologue(&mut w);
+    ts_fill(&mut w, t.ts_addr, t.ts_layer_stride);
+    w.stall(GC_SYNC_RA, GC_SYNC_PE);
+    let mut r = Coalesce::new(&mut w);
+    r.emit(GC_TS_MEM_CONFIG, cfg);
+    r.end();
+    r.emit(GC_TS_DEPTH_STATUS_BASE, t.ts_addr);
+    r.emit(GC_TS_DEPTH_SURFACE_BASE, t.surface_addr);
+    r.emit(GC_TS_DEPTH_CLEAR_VALUE, c.clear_word);
+    if c.auto_disable {
+        r.emit(GC_TS_DEPTH_AUTO_DISABLE_COUNT, auto_disable_count(t.padded_width, t.padded_height));
+    }
+    r.end();
+    Some(w)
+}
+
+/// The tile count of `RS_KICKER_INPLACE`. UNVERIFIED: Mesa's source is not in
+/// the tree; this is the TS tile count `auto_disable_count` uses, and a
+/// board or Mesa check must confirm it before the words are wired.
+pub const fn inplace_tile_count(padded_width: u32, padded_height: u32) -> u32 {
+    auto_disable_count(padded_width, padded_height)
+}
+
+/// The plane whose TS the in-place resolve reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InplacePlane {
+    /// `TS_COLOR_*`: status, surface and the 32-bit clear value.
+    Colour { clear_value: u32 },
+    /// `TS_DEPTH_*`: status, surface and the clear word; `depth_16bpp` sets
+    /// `TS_MEM_CONFIG` `DEPTH_16BPP`.
+    Depth { clear_value: u32, depth_16bpp: bool },
+}
+
+/// An RS in-place resolve of a super-tiled surface with a valid TS
+/// (`etnaviv_rs.c:164-181`): source = destination, same format and stride,
+/// and the RS writes only the tiles the TS marks cleared.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InplaceResolve {
+    pub target: TsTarget,
+    /// RS format of the surface (`rs_format`).
+    pub format: u32,
+    /// Bytes from one row to the next of the surface, untiled (the stride
+    /// register takes it times 4, as for a tiled side).
+    pub stride: u32,
+    /// `RS_KICKER_INPLACE` value, [`inplace_tile_count`].
+    pub tile_count: u32,
+    pub plane: InplacePlane,
+    /// `TS_MEM_CONFIG` bits of the other plane (kept).
+    pub keep: u32,
+}
+
+/// The in-place resolve: `TS_FLUSH_CACHE`, the TS source registers (the
+/// plane's `FAST_CLEAR` in `TS_MEM_CONFIG`, status, surface, clear value),
+/// the RS block with a super-tiled source and destination at one address, and
+/// the kick as `RS_KICKER_INPLACE` (no `RS_SINGLE_BUFFER`, no `RS_KICKER`).
+/// The source stride's bit 29, which the golden's TS-sourced resolve sets,
+/// is not named in `regs.rs` and is not written here.
+pub fn inplace_resolve(c: &InplaceResolve) -> Words {
+    let t = &c.target;
+    let mut w = Words::new();
+
+    w.state(GC_TS_FLUSH_CACHE, GC_TS_FLUSH);
+    let mut r = Coalesce::new(&mut w);
+    match c.plane {
+        InplacePlane::Colour { clear_value } => {
+            r.emit(GC_TS_MEM_CONFIG, GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR | c.keep);
+            r.emit(GC_TS_COLOR_STATUS_BASE, t.ts_addr);
+            r.emit(GC_TS_COLOR_SURFACE_BASE, t.surface_addr);
+            r.emit(GC_TS_COLOR_CLEAR_VALUE, clear_value);
+            r.emit(GC_TS_COLOR_CLEAR_VALUE_EXT, clear_value);
+        }
+        InplacePlane::Depth { clear_value, depth_16bpp } => {
+            let bpp = if depth_16bpp { GC_TS_MEM_CONFIG_DEPTH_16BPP } else { 0 };
+            r.emit(GC_TS_MEM_CONFIG, GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR | bpp | c.keep);
+            r.end();
+            r.emit(GC_TS_DEPTH_STATUS_BASE, t.ts_addr);
+            r.emit(GC_TS_DEPTH_SURFACE_BASE, t.surface_addr);
+            r.emit(GC_TS_DEPTH_CLEAR_VALUE, clear_value);
+        }
+    }
+    r.end();
+    let stride = (c.stride << 2) | GC_RS_SOURCE_STRIDE_TILING | GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW;
+    let dest_stride = (c.stride << 2) | GC_RS_DEST_STRIDE_TILING | GC_RS_DEST_STRIDE_SUPER_TILED_NEW;
+    let mut r = Coalesce::new(&mut w);
+    r.emit(GC_RS_CONFIG, rs_config(c.format) | GC_RS_SOURCE_TILED | GC_RS_DEST_TILED);
+    r.emit(GC_RS_SOURCE_STRIDE, stride);
+    r.emit(GC_RS_DEST_STRIDE, dest_stride);
+    r.emit(rs_pipe_source_addr(0), t.surface_addr);
+    r.emit(rs_pipe_dest_addr(0), t.surface_addr);
+    r.emit(rs_pipe_offset(0), 0);
+    r.emit(rs_pipe_offset(1), 0);
+    r.emit(GC_RS_WINDOW_SIZE, rs_window_width(t.padded_width) | rs_window_height(t.padded_height));
+    r.emit(rs_dither(0), 0xffff_ffff);
+    r.emit(rs_dither(1), 0xffff_ffff);
+    r.emit(GC_RS_CLEAR_CONTROL, 0);
+    for i in 0..4 {
+        r.emit(rs_fill_value(i), 0);
+    }
+    r.emit(GC_RS_EXTRA_CONFIG, 0);
+    r.emit(GC_RS_KICKER_INPLACE, c.tile_count);
+    r.end();
+    w
+}
