@@ -84,6 +84,46 @@ fn gc_trace(m: &Model) -> Vec<(u8, u32, u32)> {
         .collect()
 }
 
+/// The trace split into what the C did and the `gc diag:` read-backs
+/// (hw::DIAG_REGS) added since: the IDLE_STATE, CLOCK_CONTROL pair right
+/// before each attempt's own IDLE_STATE read, and the trailing AHB_CONTROL,
+/// PULSE_EATER pair of the after-reset and after-init lines.
+type Trace = Vec<(u8, u32, u32)>;
+fn split_diag(t: &[(u8, u32, u32)]) -> (Trace, Trace) {
+    let (mut c, mut diag) = (Vec::new(), Vec::new());
+    let mut i = 0;
+    while i < t.len() {
+        let is = |k: usize, off: u32| t.get(i + k).is_some_and(|a| a.0 == b'R' && a.1 == off);
+        let attempt_pair = is(0, 0x004) && is(1, 0x000) && is(2, 0x004);
+        let trailing_pair = i + 2 == t.len() && is(0, 0x3a8) && is(1, 0x10c);
+        if attempt_pair || trailing_pair {
+            diag.extend_from_slice(&t[i..i + 2]);
+            i += 2;
+        } else {
+            c.push(t[i]);
+            i += 1;
+        }
+    }
+    (c, diag)
+}
+
+/// The C's accesses alone; the diag read-backs are reads below 0x800 of
+/// hw::DIAG_REGS only, so the writes are the C's, in its order.
+fn without_diag(t: &[(u8, u32, u32)]) -> Trace {
+    let (c, diag) = split_diag(t);
+    for a in &diag {
+        assert_eq!(a.0, b'R', "a diag access is a read: {a:x?}");
+        assert!(a.1 < 0x800, "a diag read below 0x800: {a:x?}");
+        assert!(hw::DIAG_REGS.contains(&a.1), "{a:x?}");
+    }
+    c
+}
+
+/// The `gc diag:` lines, in order.
+fn diag_lines(e: &TestEnv) -> Vec<String> {
+    e.lines.borrow().iter().filter(|l| l.1.starts_with("gc diag: ")).map(|l| l.1.clone()).collect()
+}
+
 fn core_over(m: &Model, c: &mut Carveout, size: usize) -> GcCore {
     GcCore::new(m.base(GC), c.ptr(), CARVEOUT_PHYS, size)
 }
@@ -182,7 +222,7 @@ fn the_c_scenario_comes_out_identical() {
     let extra: Vec<u32> = t[10..15].iter().map(|a| a.1).collect();
     assert_eq!(extra, [0x74, 0x84, 0x88, 0x94, 0xa0], "then minor feature words 1..5");
     assert!(t[10..15].iter().all(|a| a.0 == b'R'));
-    assert_eq!(&t[15..], &golden::ATTACH[10..], "the reset: every access as the C");
+    assert_eq!(without_diag(&t[15..]), &golden::ATTACH[10..], "the reset: every access as the C");
     assert_eq!(id.secure_ahb, golden::ID_SECURE_AHB);
     assert_eq!(id.from_table, golden::ID_FROM_TABLE);
     let limits = [
@@ -206,14 +246,14 @@ fn the_c_scenario_comes_out_identical() {
     // the reset alone, as recovery runs it
     m.clear_log();
     hw::reset(&m, regs, &e, &id).unwrap();
-    assert_eq!(gc_trace(&m), golden::RESET);
+    assert_eq!(without_diag(&gc_trace(&m)), golden::RESET);
     assert_eq!(golden::RESET_RC, 0);
 
     // 2. init after reset
     m.clear_log();
     hw::init(&m, regs, &e);
     assert_eq!(golden::HW_INIT_RC, 0);
-    assert_eq!(gc_trace(&m), golden::HW_INIT);
+    assert_eq!(without_diag(&gc_trace(&m)), golden::HW_INIT);
 
     // 3. the MMU
     let mut co = Carveout::new(BIG);
@@ -538,6 +578,55 @@ fn the_database_facts_are_folded_into_the_feature_words() {
 }
 
 #[test]
+fn the_diag_read_backs_only_read_below_0x800_and_leave_the_writes_alone() {
+    let m = Model::new();
+    let e = TestEnv::default();
+    poke_identity(&m);
+    let regs = m.base(GC);
+    let id = hw::identify(&m, regs, &e).unwrap();
+    e.lines.borrow_mut().clear();
+    m.clear_log();
+    hw::reset(&m, regs, &e, &id).unwrap();
+    let t = gc_trace(&m);
+    let (c, diag) = split_diag(&t);
+    assert_eq!(c, golden::RESET);
+    let w = |t: &[(u8, u32, u32)]| t.iter().filter(|a| a.0 == b'W').copied().collect::<Vec<_>>();
+    assert_eq!(w(&t), w(golden::RESET), "the writes, values and order unchanged");
+    assert_eq!(
+        diag,
+        [
+            (b'R', 0x004, 0x7fff_ffff),
+            (b'R', 0x000, 0x0003_0100),
+            (b'R', 0x3a8, 0xdead_de42),
+            (b'R', 0x10c, 0x015b_0881)
+        ]
+    );
+    // the attempt's pair comes after the de-isolate write, before the check
+    let at = t.iter().position(|a| a.0 == b'R' && a.1 == 0x004).unwrap();
+    assert_eq!(t[at - 1], (b'W', 0x000, 0x0000_0100));
+    assert_eq!(&t[at..at + 3], &[(b'R', 0x004, 0x7fff_ffff), (b'R', 0x000, 0x0003_0100), (b'R', 0x004, 0x7fff_ffff)]);
+
+    m.clear_log();
+    hw::init(&m, regs, &e);
+    let t = gc_trace(&m);
+    let (c, diag) = split_diag(&t);
+    assert_eq!(c, golden::HW_INIT);
+    assert_eq!(w(&t), w(golden::HW_INIT));
+    assert_eq!(diag, [(b'R', 0x3a8, 0xdead_de42), (b'R', 0x10c, 0x015f_0881)]);
+
+    assert_eq!(
+        diag_lines(&e),
+        [
+            "gc diag: reset-attempt n=1 004=0x7fffffff 000=0x00030100",
+            "gc diag: after-reset 3a8=0xdeadde42 10c=0x015b0881",
+            "gc diag: after-init 3a8=0xdeadde42 10c=0x015f0881",
+        ]
+    );
+    assert!(e.lines.borrow().iter().filter(|l| l.1.starts_with("gc diag: ")).all(|l| l.0 == Level::Inf));
+    assert!(hw::DIAG_REGS.iter().all(|&r| r < 0x800));
+}
+
+#[test]
 fn a_gpu_that_never_idles_fails_the_reset_after_a_bounded_wait() {
     let m = Model::with_faults(Faults { gc_never_idle: true, ..Default::default() });
     let e = TestEnv::default();
@@ -547,6 +636,18 @@ fn a_gpu_that_never_idles_fails_the_reset_after_a_bounded_wait() {
     let per = u64::from(hw::RESET_HOLD_US + hw::RESET_RETRY_US);
     assert_eq!(*e.waited_us.borrow(), u64::from(hw::RESET_ATTEMPTS) * per);
     assert!(e.lines.borrow().iter().any(|l| l.0 == Level::Err && l.1.contains("FE not idle")));
+    // every attempt logs its IDLE_STATE and CLOCK_CONTROL, then the
+    // after-reset line on the way out
+    let d = diag_lines(&e);
+    assert_eq!(d.len(), hw::RESET_ATTEMPTS as usize + 1);
+    for (n, l) in d[..hw::RESET_ATTEMPTS as usize].iter().enumerate() {
+        assert!(l.starts_with(&format!("gc diag: reset-attempt n={} 004=0x", n + 1)), "{l}");
+    }
+    assert!(d[hw::RESET_ATTEMPTS as usize].starts_with("gc diag: after-reset 3a8=0x"));
+    let t = gc_trace(&m);
+    assert!(t.iter().all(|a| a.1 < 0x800), "no access at 0x800 or above");
+    let (_, diag) = split_diag(&t);
+    assert_eq!(diag.len(), 2 * hw::RESET_ATTEMPTS as usize + 2);
 }
 
 #[test]

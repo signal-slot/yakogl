@@ -182,6 +182,18 @@ route line (`gc_irq_mp2.c:98-104`):
   `dist-off`/`cpuif-off`/`disabled`/`other-cpu`/`masked` name the other ways
   (`gc_irq_mp2.c:76-90`).
 - the fence itself: `gc_fence: fence 1 irqs 1 elapsed <us> us irq-latency <us> us (completed 1, wait 0)` then `gc_fence: PASS` (`gc_fence/README.md:44-47`). That `irqs 1` is trustworthy because only the interrupt handler moves the counter — a retired fence with `irqs 0` is one retired with no interrupt counted (`gc_fence/README.md:50-58`). A "no interrupt from the GPU" (`route=ours`, `pend=0` after a fence) vs "not routed" (`route=raz`) is exactly what the two lines tell apart (`gc_irq_mp2.c:17-19`).
+- before the fence, reset and init print the `gc diag:` read-backs the
+  galcore-init-diff study asked for (`hw::DIAG_REGS` in
+  `driver/rust/src/gpu/vivante/hw.rs`; reads only, all below 0x800):
+  `gc diag: reset-attempt n=<k> 004=<IDLE_STATE> 000=<CLOCK_CONTROL>` on
+  every reset attempt, then `gc diag: after-reset 3a8=… 10c=…` and
+  `gc diag: after-init 3a8=… 10c=…`. A fence that does not retire is read
+  from them first: `3a8` bit 0 = 1 after reset or init is galcore's suspect 1
+  (`_ResetGPU` releases the secure-AHB soft reset by writing bit 0 back to 0,
+  and `gckHARDWARE_InitializeHardware` writes 0x3A8 = 0x2; our reset never
+  clears bit 0 and our init keeps it), an attempt count above 1 or an
+  `004` that is not idle shows a reset that settled late, and `10c` is the
+  pulse eater galcore programs in both places.
 - the idle loop's WAIT delay scales with the devicetree's assumed 800 MHz core clock, never read on this board (`app.overlay:8-13` comment; `driver/docs/vivante-kernel-rust.md:307-309`): latency only, not a fault.
 
 ## Step 6: gc_clear — the resolve engine

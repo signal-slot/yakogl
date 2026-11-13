@@ -280,6 +280,57 @@ pub const PULSE_EATER_RESET: u32 = 0x015b_0880;
 /// field is the same 64).
 pub const FSCALE_FULL: u32 = 64;
 
+/// The diagnostic read-backs of reset and init, for a fence that does not
+/// retire (the STM32MP257F's first gc_fence). They read and log; they write
+/// nothing and change no write's order or value. Every offset is below
+/// 0x800: the CPU never reads the 0x800+ state space
+/// (driver/docs/vivante-kernel-rust.md, "Hardware findings that still
+/// hold"). One line per stage, at Inf, prefix `gc diag: `:
+///
+/// ```text
+/// gc diag: reset-attempt n=<1..100> 004=0x<8 hex> 000=0x<8 hex>
+/// gc diag: after-reset 3a8=0x<8 hex> 10c=0x<8 hex>
+/// gc diag: after-init 3a8=0x<8 hex> 10c=0x<8 hex>
+/// ```
+///
+/// `reset-attempt` comes after the de-isolate write of every attempt,
+/// before its idle check; `after-reset` on the way out of [`reset`],
+/// whether it succeeded or not; `after-init` at the end of [`init`].
+///
+/// What galcore 6.4.21 (ST's gcnano-binaries, gcnano-driver-stm32mp/hal/
+/// kernel/arch/gc_hal_kernel_hardware.c) does with them:
+/// - 0x000 CLOCK_CONTROL ("reset register" in `_ResetGPU`): FSCALE, isolate
+///   (bit 19), soft reset (bit 12) when the part has no secure AHB.
+/// - 0x004 IDLE_STATE ("idle register"): read once per `_ResetGPU` pass.
+/// - 0x3A8 MMUv2_AHB_CONTROL: bit 0 the soft reset on a secure-AHB part in
+///   "secure in normal" mode, which `_ResetGPU` sets and then writes back to
+///   0 ("Release soft reset"); bit 1 the non-secure grant, which
+///   `gckHARDWARE_InitializeHardware` writes as 0x2 alone (no read first, so
+///   bit 0 is cleared there too); bit 3 / bit 4 the cancel-job request
+///   and its done flag (`gckHARDWARE_CancelJob`); bit 5 the VGPU reset done.
+///   [`reset`] does not write bit 0 back to 0 and [`init`] preserves it: a
+///   1 here is the state galcore clears that we do not.
+/// - 0x10C PM_PULSE_EATER (the "shader clock" of `_PmClockControl`):
+///   `_ResetGPU` writes it three times, `gckHARDWARE_InitializeHardware`
+///   writes it ("Disable internal DFS"); galcore reads no neighbouring
+///   register (0x108, 0x110) with it.
+pub const DIAG_REGS: [u32; 4] =
+    [VIVS_HI_CLOCK_CONTROL, VIVS_HI_IDLE_STATE, VIVS_MMUv2_AHB_CONTROL, VIVS_PM_PULSE_EATER];
+const _: () = {
+    let mut i = 0;
+    while i < DIAG_REGS.len() {
+        assert!(DIAG_REGS[i] < 0x800);
+        i += 1;
+    }
+};
+
+/// The `gc diag: after-reset` / `after-init` line (see [`DIAG_REGS`]).
+fn diag_readback(m: &impl Mmio, regs: usize, env: &impl Env, stage: &str) {
+    let ahb = rd(m, regs, VIVS_MMUv2_AHB_CONTROL);
+    let pe = rd(m, regs, VIVS_PM_PULSE_EATER);
+    ylog!(env, Inf, "gc diag: {} 3a8=0x{:08x} 10c=0x{:08x}", stage, ahb, pe);
+}
+
 /// Reset the GPU to idle. galcore `_ResetGPU`'s sequence:
 /// 1. clock gating off, the pulse eater programmed and its DISABLE pulsed;
 /// 2. FSCALE loaded (CMD_LOAD up then down);
@@ -302,7 +353,7 @@ pub const FSCALE_FULL: u32 = 64;
 pub fn reset(m: &impl Mmio, regs: usize, env: &impl Env, id: &GcIdentity) -> Result<(), i32> {
     let idle_mask = !VIVS_HI_IDLE_STATE_AXI_LP;
     let mmu_v2 = id.minor_features[1] & CHIP_MINOR_FEATURES1_MMU_VERSION != 0;
-    for _attempt in 0..RESET_ATTEMPTS {
+    for attempt in 0..RESET_ATTEMPTS {
         // 1. clock gating off, pulse eater
         wr(m, regs, VIVS_PM_POWER_CONTROLS, 0);
         let _ = rd(m, regs, VIVS_PM_POWER_CONTROLS);
@@ -331,6 +382,9 @@ pub fn reset(m: &impl Mmio, regs: usize, env: &impl Env, id: &GcIdentity) -> Res
         wr(m, regs, VIVS_HI_CLOCK_CONTROL, control);
         control &= !VIVS_HI_CLOCK_CONTROL_ISOLATE_GPU;
         wr(m, regs, VIVS_HI_CLOCK_CONTROL, control);
+        let diag_idle = rd(m, regs, VIVS_HI_IDLE_STATE);
+        let diag_clk = rd(m, regs, VIVS_HI_CLOCK_CONTROL);
+        ylog!(env, Inf, "gc diag: reset-attempt n={} 004=0x{:08x} 000=0x{:08x}", attempt + 1, diag_idle, diag_clk);
 
         // 4. idle?
         let idle = rd(m, regs, VIVS_HI_IDLE_STATE);
@@ -354,6 +408,7 @@ pub fn reset(m: &impl Mmio, regs: usize, env: &impl Env, id: &GcIdentity) -> Res
         control &= !VIVS_HI_CLOCK_CONTROL_DISABLE_DEBUG_REGISTERS;
         wr(m, regs, VIVS_HI_CLOCK_CONTROL, control);
         ylog!(env, Inf, "reset to idle: CLOCK_CONTROL=0x{:08x} IDLE_STATE=0x{:08x}", control, idle);
+        diag_readback(m, regs, env, "after-reset");
         return Ok(());
     }
     let idle = rd(m, regs, VIVS_HI_IDLE_STATE);
@@ -369,6 +424,7 @@ pub fn reset(m: &impl Mmio, regs: usize, env: &impl Env, id: &GcIdentity) -> Res
         idle,
         control
     );
+    diag_readback(m, regs, env, "after-reset");
     Err(-EBUSY)
 }
 
@@ -443,6 +499,7 @@ pub fn init(m: &impl Mmio, regs: usize, env: &impl Env) {
         if reg_absent(ahb) { " (absent: no slave at that address)" } else { "" },
         intr
     );
+    diag_readback(m, regs, env, "after-init");
 }
 
 /// The busy modules of an IDLE_STATE word (a set bit means idle), as

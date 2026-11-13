@@ -210,6 +210,17 @@ fn identify_gives_the_st_row_with_16_streams() {
 }
 
 #[test]
+fn reset_and_init_say_the_gc_diag_lines_on_the_st_identity() {
+    let b = bring_up(BASE_STM32MP257F);
+    let lines = b.e.lines.borrow();
+    let d: Vec<&str> = lines.iter().filter(|l| l.1.starts_with("gc diag: ")).map(|l| l.1.as_str()).collect();
+    assert_eq!(d.len(), 3, "{d:?}");
+    assert!(d[0].starts_with("gc diag: reset-attempt n=1 004=0x"), "{}", d[0]);
+    assert!(d[1].starts_with("gc diag: after-reset 3a8=0x"), "{}", d[1]);
+    assert!(d[2].starts_with("gc diag: after-init 3a8=0x"), "{}", d[2]);
+}
+
+#[test]
 fn a_fence_retires_with_its_interrupt() {
     for phys in [BASE_IMX8MP, BASE_STM32MP257F] {
         let mut b = bring_up(phys);
