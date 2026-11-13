@@ -13,9 +13,8 @@ numbers are of main at `6dc53970` and drift.
 Status: the decoder (`src/gl/etc2.rs`), the six names in the GL core
 (`texture.rs` `decoded_image`, `write_decoded`), the V3D mask bits and the
 host tests (`tests/es3_etc2_eac.rs`, `tests/es3_etc2_v3d.rs`,
-`tests/eac_half_precision.rs`) are on main; the host dEQP before/after rows
-were not run on the machine that did the work (no VK-GL-CTS tree, see the
-commit message). Nothing here was measured on a board.
+`tests/eac_half_precision.rs`) are on main, and section 7 is the host dEQP
+before/after run over the pinned CTS. Nothing here was measured on a board.
 
 ## 1. The decision
 
@@ -148,6 +147,91 @@ per back end and gives back the 4x/8x memory. These are follow-up issues:
 - `GLES_TEXFMT_ETC2_RGB_PT` (class 3) is mapped by all three back ends
   (`etc2_of`, `src/vivante/texture.rs`, `src/pvr/backend.rs`) but is in no
   mask and has never run on a board.
+
+## 7. The host dEQP, before and after (HOST-ONLY)
+
+`tools/cts/host-deqp-run.sh --gpu=<gpu> --module=gles3` over the pinned
+VK-GL-CTS `93bca01`, every filter run twice against one deqp build: **before** =
+main tip `4ecefc7b`, **after** = this branch, the second call's `--compare`
+against the first. Four filters: `etc2` and `eac` (each 216 `texture.wrap.*`
+rows and 24 `texture.format.compressed.*` rows), `compressed` (the 350 rows whose
+name carries `compressed` outside those: the 266 ASTC rows of
+`texture.compressed.astc.*`, 44 `texture.format.compressed.*`, 34
+`negative_api.texture`, 4 `state_query.integers.compressed_texture_formats_*`
+and 2 `implementation_limits.*compressed_texture_formats*`), and
+`texture.shadow` (432). `etc2`/`eac` overlap `compressed` in the
+`texture.format.compressed.*` rows. `--gpu=vivante` is the GC7000UL library; its
+two arms agree with PowerVR's case for case in every filter, so one row covers
+both.
+
+| GPU | filter | cases | before | after | moved |
+|---|---|---:|---|---|---|
+| V3D | `etc2` | 240 | Fail 80, NotSupported 160 | Fail 240 | 160 NotSupported→ran |
+| V3D | `eac` | 240 | Fail 40, NotSupported 200 | Fail 240 | 200 NotSupported→ran |
+| V3D | `compressed` | 350 | Pass 35, Fail 17, NotSupported 298 | Pass 40, Fail 44, NotSupported 266 | 32 NotSupported→ran, 5 Fail→Pass |
+| V3D | `texture.shadow` | 432 | Fail 432 | Fail 432 | none |
+| PowerVR, Vivante | `etc2` | 240 | Fail 160, NotSupported 80 | Fail 240 | 80 NotSupported→ran |
+| PowerVR, Vivante | `eac` | 240 | Fail 80, NotSupported 160 | Fail 240 | 160 NotSupported→ran |
+| PowerVR, Vivante | `compressed` | 350 | Pass 35, Fail 25, NotSupported 290 | Pass 40, Fail 44, NotSupported 266 | 24 NotSupported→ran, 5 Fail→Pass |
+| PowerVR, Vivante | `texture.shadow` | 432 | Fail 432 | Fail 432 | none |
+
+All 24 runs began every case the filter selected (`X of Y cases began` with
+`X = Y`), every run's `aborted.txt` is empty (no chunk stopped early), no group
+reported a crash or a case not executed, `cts-refusals.py` found no named
+refusal on either arm, and no case moved Pass→Fail anywhere. The numbers come
+from `summary.txt` and `failures.tsv` in the run directories under
+`build/host-deqp/` and the `4ecefc7b` checkout's own `build/` tree (scratch,
+never committed).
+
+What the host shows:
+
+- **A name that was in the list and a name that was not.** `glu::Texture2D`
+  consults the context's compressed-format list before it issues any GL command
+  (`framework/opengl/gluTexture.cpp:141`,
+  `ContextInfo::isCompressedTextureFormatSupported`): a name missing from
+  `GL_COMPRESSED_TEXTURE_FORMATS` makes the case dEQP `NotSupported` and it
+  never reaches the draw. Before, the ETC2/EAC names in that list were
+  `ETC2_RGB8` and `ETC2_RGBA8` on the V3D and those two plus `ETC2_SRGB8` and
+  `ETC2_SRGB8_ALPHA8` on PowerVR and GC — which is the whole difference between
+  the before arms' 80/40 and 160/80. After, all ten run on all three:
+  160+200 skipped-to-run on the V3D, 80+160 on PowerVR and GC, summed over the
+  two filters (they overlap, so read those as per-filter counts).
+- **The V3D's list and its upload no longer disagree.** On the old V3D build the
+  cases of exactly those two names failed with a pending `GL_INVALID_OPERATION`
+  surfaced at the wrap test's state check (`es3fTextureWrapTests.cpp:371`,
+  `GLU_EXPECT_NO_ERROR(gl.getError(), "Set texturing state")`) — 72 distinct
+  wrap cases, 36 per name — and 4 at `es3fTextureFormatTests.cpp:1070`, while the
+  same names' cases on PowerVR and GC failed only as picture verdicts. The list
+  promised ETC2 to the V3D and its upload path refused it; with
+  `V3D_SAMPLED_TEXFMTS` holding the four ETC2 classes neither signature appears
+  in any after arm of any GPU (`failures.tsv` there carries no `glGetError()`
+  line at all).
+- **The count and the queries it feeds.** In `compressed`, the two
+  `implementation_limits` rows and the four `state_query.integers` rows went from
+  5 Fail and 1 Pass to 6 Pass on all three libraries. The old failures were `Got
+  invalid integer value` ×2, `Got invalid float value` ×1 and `Requirement not
+  satisfied` ×2: the list, its count and the queries did not agree. Those rows
+  compare a query value rather than a picture, so on the host they are a real
+  pass. The 34 `negative_api.texture` rows were 34 Pass in every arm of every
+  GPU: the new names did not disturb the existing error paths.
+
+What the host cannot show:
+
+- **Whether a decoded texel is right.** Once a format is accepted, every failure
+  left is a picture verdict: `Image verification failed` (dEQP's own blank-target
+  check, 216 of the 240 in each after `etc2`/`eac` arm) or `Image comparison failed`
+  (the 44 that remain in `compressed`). A black `glReadPixels` fails that check
+  on the old build and the new one alike, so a `Fail` count going 40→240 says the
+  case ran, not that the decode is wrong, and the `Pass` count of `etc2`/`eac`
+  stays 0 on both arms. Nothing here separates a correct R16F decode from a wrong
+  one — that is `tests/es3_etc2_eac.rs` against Mesa's outputs, and the boards.
+- **The shadow compare.** `texture.shadow` is 432 cases, `Image verification
+  failed` in both arms of all three, 0 cases moved. Packing a compare function
+  into the V3D sampler record changes what the TMU does with a depth texture; on
+  the host no TMU runs, so this is the clearest change in the commit the host
+  cannot see at all. #320 (Pi 4) is its measurement.
+- The cost of the CPU decode (the 4x/8x memory, the upload time), and anything
+  about the PowerVR TPU or the GC TMU.
 
 ## What is not measured
 
