@@ -9,6 +9,12 @@
 //! - the descriptor's CONFIG1 swizzle fields (bits 8-10, 12-14, 16-18, 20-22)
 //!   for the identity, a permutation, ZERO/ONE and a GL_RGB texture whose
 //!   alpha is the format's ONE;
+//! - the same fields for each format of dEQP-GLES3 texture.swizzle the
+//!   GC7000UL samples (alpha, luminance, luminance_alpha, red, rg, rgb,
+//!   rgba; the case names in tools/cts/gles3-mustpass.txt) under each of the
+//!   group's swizzles, and its single_channel group's twenty on RGBA8, all
+//!   expected by GL ES 3.0 section 3.8.14 over the format's channels in
+//!   docs/es3/gc-formats.md section 2;
 //! - SAMP_CTRL0's WWRAP (bits 6-8) for a 3D texture from GL_TEXTURE_WRAP_R, and
 //!   unchanged (= UWRAP) for a 2D one.
 //!
@@ -434,6 +440,141 @@ fn a_texture_with_no_alpha_composes_its_one() {
         /* alpha read by red: the format's own ONE moves with the channel */
         swizzle_params(GL_TEXTURE_2D, [GL_ALPHA, GL_GREEN, GL_BLUE, GL_RED]);
         assert_eq!(render_quad(FS_2D).swizzle(), [SW_1, SW_G, SW_B, SW_R]);
+    });
+}
+
+/* ---- dEQP-GLES3 texture.swizzle: every format the GC7000UL samples ------------------ */
+
+/// The GL swizzles `texture.swizzle.multi_channel` draws each format with
+/// (`all_red` .. `all_one`, `bgra`, `abgr`, `one_one_red_green`: the group's
+/// 63 + 20 case names in `tools/cts/gles3-mustpass.txt`'s
+/// `functional.texture.swizzle`).
+const DEQP_SWIZZLES: [([GLenum; 4], &str); 9] = [
+    ([GL_RED, GL_RED, GL_RED, GL_RED], "all_red"),
+    ([GL_GREEN, GL_GREEN, GL_GREEN, GL_GREEN], "all_green"),
+    ([GL_BLUE, GL_BLUE, GL_BLUE, GL_BLUE], "all_blue"),
+    ([GL_ALPHA, GL_ALPHA, GL_ALPHA, GL_ALPHA], "all_alpha"),
+    ([GL_ZERO, GL_ZERO, GL_ZERO, GL_ZERO], "all_zero"),
+    ([GL_ONE, GL_ONE, GL_ONE, GL_ONE], "all_one"),
+    ([GL_BLUE, GL_GREEN, GL_RED, GL_ALPHA], "bgra"),
+    ([GL_ALPHA, GL_BLUE, GL_GREEN, GL_RED], "abgr"),
+    ([GL_ONE, GL_ONE, GL_RED, GL_GREEN], "one_one_red_green"),
+];
+
+/// The format's own channels, with alpha (docs/es3/gc-formats.md section 2:
+/// every sampled class but the 128-bit ones writes the four words R G B A.
+/// A narrow TE format presents what its texels hold: L8 spreads the
+/// luminance over the channels, A8 carries alpha only, A8L8 luminance and
+/// alpha — and the descriptor names those channels as the format supplies
+/// them).
+const HAS_ALPHA: [u32; 4] = [SW_R, SW_G, SW_B, SW_A];
+/// The same for a base without alpha (GL_RGB, GL_LUMINANCE, GL_RED, GL_RG):
+/// GL samples their alpha as 1, and the format's own ONE says so
+/// (`GlesTextureBind::no_alpha`).
+const NO_ALPHA: [u32; 4] = [SW_R, SW_G, SW_B, SW_1];
+
+/// What GL ES 3.0 section 3.8.14 asks of TEXTURE_SWIZZLE_* over a format
+/// whose channels are `texel`: each output component is the texel component
+/// the parameter names, or the constant 0 / 1. The format goes first and the
+/// GL swizzle composes on top — Mesa's util_format_compose_swizzles, and
+/// etnaviv's get_texture_swiz (docs/es3/gc-formats.md section 1).
+fn composed(texel: [u32; 4], gl: [GLenum; 4]) -> [u32; 4] {
+    gl.map(|s| match s {
+        GL_RED => texel[0],
+        GL_GREEN => texel[1],
+        GL_BLUE => texel[2],
+        GL_ALPHA => texel[3],
+        GL_ZERO => SW_0,
+        GL_ONE => SW_1,
+        _ => panic!("no swizzle 0x{s:x}"),
+    })
+}
+
+/// A 2x2 texture of `internal`/`format` bound to unit 0, drawn once under the
+/// identity (the format's own words) and once under each of the group's nine
+/// swizzles, plus a mix of the constants with channels, each draw's CONFIG1
+/// swizzle against [`composed`] over `texel`.
+fn deqp_swizzle_case(name: &str, internal: GLenum, format: GLenum, texel: [u32; 4]) {
+    on_gc7000(|| {
+        texture_2d(internal, format);
+        assert_eq!(render_quad(FS_2D).swizzle(), texel, "{name}: the identity is the format's own");
+        for (gl, swizzle) in DEQP_SWIZZLES {
+            swizzle_params(GL_TEXTURE_2D, gl);
+            assert_eq!(render_quad(FS_2D).swizzle(), composed(texel, gl), "{name}_{swizzle}");
+        }
+        let mixed = [GL_ZERO, GL_ALPHA, GL_ZERO, GL_ONE];
+        swizzle_params(GL_TEXTURE_2D, mixed);
+        assert_eq!(render_quad(FS_2D).swizzle(), composed(texel, mixed), "{name}_zero_alpha_zero_one");
+    });
+}
+
+#[test]
+fn the_rule_composes_as_the_spec_reads() {
+    /* the helper itself, by hand: a no-alpha base reads its ONE through alpha */
+    assert_eq!(composed(NO_ALPHA, [GL_ALPHA, GL_ZERO, GL_RED, GL_ONE]), [SW_1, SW_0, SW_R, SW_1]);
+    assert_eq!(composed(HAS_ALPHA, [GL_ALPHA, GL_BLUE, GL_GREEN, GL_RED]), [SW_A, SW_B, SW_G, SW_R]);
+}
+
+#[test]
+fn deqp_alpha_a8() {
+    deqp_swizzle_case("alpha", GL_ALPHA, GL_ALPHA, HAS_ALPHA);
+}
+
+#[test]
+fn deqp_luminance_l8() {
+    deqp_swizzle_case("luminance", GL_LUMINANCE, GL_LUMINANCE, NO_ALPHA);
+}
+
+#[test]
+fn deqp_luminance_alpha_la8() {
+    deqp_swizzle_case("luminance_alpha", GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, HAS_ALPHA);
+}
+
+#[test]
+fn deqp_red_r8() {
+    deqp_swizzle_case("red", GL_R8, GL_RED, NO_ALPHA);
+}
+
+#[test]
+fn deqp_rg_rg8() {
+    deqp_swizzle_case("rg", GL_RG8, GL_RG, NO_ALPHA);
+}
+
+#[test]
+fn deqp_rgb_rgb8() {
+    deqp_swizzle_case("rgb", GL_RGB8, GL_RGB, NO_ALPHA);
+}
+
+#[test]
+fn deqp_rgba_rgba8() {
+    deqp_swizzle_case("rgba", GL_RGBA8, GL_RGBA, HAS_ALPHA);
+}
+
+/// texture.swizzle.single_channel's twenty cases: one component named, the
+/// others at their default, on the RGBA8 the group uploads.
+#[test]
+fn deqp_single_channel_on_rgba8() {
+    on_gc7000(|| {
+        texture_2d(GL_RGBA8, GL_RGBA);
+        for (k, own) in [(0usize, "r"), (1, "g"), (2, "b"), (3, "a")] {
+            for (src, swizzle) in [
+                (GL_RED, "red"),
+                (GL_GREEN, "green"),
+                (GL_BLUE, "blue"),
+                (GL_ALPHA, "alpha"),
+                (GL_ZERO, "zero"),
+                (GL_ONE, "one"),
+            ] {
+                /* the group names a component other than the target's own */
+                if [GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA][k] == src {
+                    continue;
+                }
+                let mut gl = [GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA];
+                gl[k] = src;
+                swizzle_params(GL_TEXTURE_2D, gl);
+                assert_eq!(render_quad(FS_2D).swizzle(), composed(HAS_ALPHA, gl), "single_channel.{own}_{swizzle}");
+            }
+        }
     });
 }
 
