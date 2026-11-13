@@ -24,7 +24,7 @@
 //! | [`pe_overwrite`] | the PE colour COMPONENTS mask and OVERWRITE bit of a draw |
 //! | [`dedup`] | the state groups as the open stream last wrote them: a draw writes only the ones that differ |
 //! | [`depth_format`] | the depth surface format, size and clear word per GL depth attachment (not yet used) |
-//! | [`early_z`] | the early-depth rule: whether a draw may use it and the PE_DEPTH_CONFIG and RA_EARLY_DEPTH words for it (not yet used) |
+//! | [`early_z`] | the early-depth rule: whether a draw may use it and the PE_DEPTH_CONFIG and RA_EARLY_DEPTH words for it (taken by draws into a 32-bit tiled shadow, behind the `gc_tiled_rt` knob) |
 //! | [`shader`] | the register wiring of the two stages, the instruction cache, the uniforms |
 //! | [`texture`] | texture descriptors and sampler state |
 //! | [`kick`] | the descriptor the OSAL's `submit()` takes |
@@ -32,8 +32,8 @@
 //! | [`mipmap`] | glGenerateMipmap on the GPU: a 2D RGBA8 chain drawn level by level into the storage |
 //! | [`profile`] | the part: the ids, limits and feature bits of its hardware database row |
 //! | [`tiled_copy`] | the tiled copies the texture unit samples instead of some linear textures |
-//! | [`wide_target`] | the tiled shadow a 64-bit colour target is rendered into |
-//! | [`layout`] | the address map of the 4x4-tiled and 64x64 super-tiled layouts: offsets, padding, stride, and whole-buffer linear-to-tiled conversion (not yet used) |
+//! | [`wide_target`] | the tiled shadow a 64-bit colour target is rendered into, and a 32-bit one behind the `gc_tiled_rt` knob |
+//! | [`layout`] | the address map of the 4x4-tiled and 64x64 super-tiled layouts: offsets, padding, stride, and whole-buffer linear-to-tiled conversion (the layout and stride of the tiled shadows and depth surfaces) |
 //! | [`ts`] | tile-status buffer sizes, fast-clear words, and the PE_MEM_CONFIG and TS_MEM_CONFIG values Mesa writes (not yet used) |
 #![cfg(feature = "gpu-vivante")]
 

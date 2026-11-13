@@ -30,6 +30,58 @@ Sources:
   TS-cleared target. It is in review and not on this tip, so this note calls
   it "the ts-golden mode".
 
+## Where the items stand (plan #355)
+
+W1 to W5 are built on the host behind the test knob `gc_tiled_rt`
+(`gc_debug_set_tiled_rt`, `test-knobs` only, default off). With the knob off
+every stream is what it was. No board has run them: session A is still to
+come. Where the code differs from the items below:
+
+- **W1**: `regs.rs` names the registers, and `mesa_header::ts_rs_consts_match_mesa`
+  checks each one against `state_3d.xml.h` and `common_3d.xml.h`.
+- **W2** was on main already: `backend.rs` `emit_rs` and `RsBlit` serve the
+  4x resolve, the flip study and `tiled_copy`'s RS tile-in. W4's two jobs
+  are its fourth and fifth callers (`rt_resolve_blit`, `rt_tile_in_blit`).
+- **A TILED side's RS stride has no TILING bit.** W4's register list below
+  says `(pitch << 2) | TILING`. Mesa sets `RS_*_STRIDE_TILING` (and
+  `SUPER_TILED_NEW`) only for a super-tiled side. A 4x4-TILED side takes its
+  stride times four and nothing else (`etna_compile_rs_state`,
+  etnaviv_rs.c:76-110). `tiled_copy.rs` already writes it that way. The
+  resolve follows Mesa, and the host RS interpreter
+  (`backend_tests.rs` `run_rs_copy`) refuses the bit on a TILED side.
+- **W3**: `ds_cache::select_laid` takes the wanted layout, and `select`
+  stays the `Linear` form, so `tests/gc_depth_resolve.rs` is unchanged.
+  `ds_cache::pe_private` is the predicate. A `Linear` surface holding a live
+  plane keeps its layout, and its draws stay linear. A layout change restores
+  each cleared plane from its value and loses a live one, logged once. The
+  CPU readers (`copy_plane` across layouts, `seed_depth`, `resolve_depth`,
+  `depth_view`) refuse a surface that is not `Linear`.
+- **W4, which draws**: every draw into a framebuffer that qualifies, its
+  depth test on or off, so the pair's surface keeps one layout. The test
+  is a 4-byte non-integer colour target alone, 16x4-aligned, single-sampled,
+  not the window, with a PE-private depth/stencil pair. Its clears are the
+  quad, not the RS fill.
+- **W4, the kicks**: since `e299852c` a target change continues the stream
+  (`docs/notes/gc-kick-continue.md`), so "one frame has one target" no longer
+  holds. The open shadow is resolved where the stream leaves it: a draw into
+  another target, a linear draw into the same one, or the stream's end. A
+  stream that renders into a shadow keeps `RS_BLIT_WORDS` of room for that
+  resolve, as the occlusion counter keeps room for its suspend.
+- **W4, the storage**: there is no `storage_current` arm and no
+  `StorageNewer` state, so the GL core is not touched. The first draw of a
+  stream into a shadow tiles the storage in with the RS, unless it opens with
+  a whole, unmasked, unscissored colour clear (terrain's pass does). This
+  costs the overlay one RS tile-in a frame. In return, a write the GL core
+  makes without telling the backend can never leave a stale shadow.
+- **W5**: `backend.rs` `draw_ez` makes the decision, and `pe_key` keys its
+  words and the shadow. A clear quad keeps today's words. `uses_discard` is
+  `shader::discards` over the program's words, read at each draw into a
+  shadow, not cached by address: nothing tells the backend when a program's
+  memory is reused.
+
+The host tests are in `src/vivante/backend_tests.rs` (the seven knob tests
+are named in `tools/check.sh` `KNOBS_TESTS`) and `regs.rs`.
+
 ## Answer in short
 
 - **Early depth reaches terrain soonest, and with the least risk, through items

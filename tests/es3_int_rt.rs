@@ -419,7 +419,7 @@ mod es3 {
             let Some(tex) = int_texture(f) else { continue };
             made += 1;
             // the GC samples and draws the 32-bit R and RG classes as their own surface (RC17)
-            let own = cfg!(feature = "gpu-vivante") && bits == 32;
+            let own = cfg!(feature = "gpu-vivante") && bits == 32 && channels <= 2;
             let want = if channels == 4 || own || cfg!(feature = "gpu-powervr") {
                 GL_FRAMEBUFFER_COMPLETE
             } else {

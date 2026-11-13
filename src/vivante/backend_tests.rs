@@ -5708,3 +5708,451 @@ fn the_dtpu_knob_samples_the_depth_surface_in_place() {
     assert!(!gc_depth_sampled(id, 64, 64));
     assert!(rig.faults().is_empty());
 }
+
+/* ---- 32-bit tiled render targets (docs/notes/gc-tiled-wire.md W3-W5) ---- */
+
+/// `emit_rs` is as long as the room a stream keeps for a shadow's resolve
+/// ([`RS_BLIT_WORDS`]): a resolve never writes past the stream's end.
+#[test]
+fn rs_blit_words_is_the_length_of_one_resolve_engine_copy() {
+    let mut buf = vec![0u32; 256];
+    let mut c = GcCmd { words: buf.as_mut_ptr(), used: 0, cap: buf.len() as u32, overflow: false };
+    let o = RtOpen { shadow: 0x4000_1000, dest: 0x4000_8000, w: 64, h: 64, pitch: 256 };
+    emit_rs(&mut c, &rt_resolve_blit(&o));
+    assert!(!c.overflow);
+    assert_eq!(c.used, RS_BLIT_WORDS);
+}
+
+/// Only a pair of renderbuffers (no texture bit 30, no window bit 31),
+/// single-sampled, is PE-private: no CPU path reads its words, so its layout
+/// is the pixel engine's to choose.
+#[test]
+fn pe_private_is_a_single_sampled_renderbuffer_pair_only() {
+    use super::super::ds_cache::pe_private;
+    assert!(pe_private(&ds_key((0x65, 1), (0, 0))), "a depth renderbuffer");
+    assert!(pe_private(&ds_key((0x65, 1), (0x66, 1))), "a depth and a stencil renderbuffer");
+    assert!(!pe_private(&ds_key((0, 0), (0, 0))), "no attachment: the shared key 0");
+    assert!(!pe_private(&ds_key((0x4000_0065, 1), (0, 0))), "a depth texture");
+    assert!(!pe_private(&ds_key((0x65, 1), (0x4000_0066, 1))), "a stencil texture beside it");
+    assert!(!pe_private(&ds_key((0x8000_0012, 0), (0x8000_0012, 0))), "the window's");
+    let two = ds_cache::DsKey { scale: 2, ..ds_key((0x65, 1), (0, 0)) };
+    assert!(!pe_private(&two), "a 4x surface");
+}
+
+/// A super-tiled surface is never read or written row-linear on the CPU:
+/// `depth_view` has none to give, and the resolve answers 1 and writes
+/// nothing (W3: a guard, the plane of a texture never gets there). A
+/// texture's pair keeps `Linear` even when a draw asks otherwise.
+#[test]
+fn a_super_tiled_depth_surface_is_refused_by_the_cpu_readers() {
+    let _rig = Rig::new();
+    let id = 0x65;
+    let key = ds_key((id, 1), (0, 0));
+    let sel = ds_cache::select_laid(key, 64, 64, GC_DEPTH_GUARD_BYTES, 1, None, Layout::SuperTiled, |_| false, || 0)
+        .expect("a surface");
+    assert_eq!(sel.layout, Layout::SuperTiled);
+    ds_cache::drawn(key, 1, false, [true, false], [None, None]);
+    assert_eq!(ds_cache::depth_view(id, GC_DEPTH_GUARD_BYTES, 0), None);
+    let mut out = vec![-1.0f32; 64 * 64];
+    // SAFETY: 64 rows of 64 floats.
+    assert_eq!(unsafe { ds_cache::resolve_depth(id, out.as_mut_ptr(), 64, 64, 64, GC_DEPTH_GUARD_BYTES, |_| 0) }, 1);
+    assert!(out.iter().all(|&v| v == -1.0), "nothing written");
+
+    let tex = ds_key((0x4000_0067, 1), (0, 0));
+    let sel = ds_cache::select_laid(tex, 64, 64, GC_DEPTH_GUARD_BYTES, 1, None, Layout::SuperTiled, |_| false, || 0)
+        .expect("a surface");
+    assert_eq!(sel.layout, Layout::Linear, "a depth texture's surface stays row-linear");
+}
+
+/// A surface whose layout changes keeps a plane that holds a whole clear
+/// only, restored by the draw in the new layout, and loses a live one,
+/// logged once (W3).
+#[test]
+fn a_surface_that_changes_layout_restores_its_cleared_planes() {
+    let _rig = Rig::new();
+    let key = ds_key((0x65, 1), (0x66, 1));
+    let sel = |want| {
+        ds_cache::select_laid(key, 64, 64, GC_DEPTH_GUARD_BYTES, 1, None, want, |_| false, || 0).expect("a surface")
+    };
+    sel(Layout::Linear);
+    ds_cache::drawn(key, 1, false, [false, false], [Some(0.5f32.to_bits()), Some(3)]);
+    let s = sel(Layout::SuperTiled);
+    assert_eq!(s.layout, Layout::SuperTiled, "nothing live: the surface follows the draw");
+    assert_eq!(s.restore, [Some(0.5f32.to_bits()), Some(3)], "the cleared planes are cleared again");
+    ds_cache::drawn(key, 1, false, [true, false], [None, None]);
+    let s = sel(Layout::Linear);
+    assert_eq!(s.layout, Layout::Linear);
+    assert_eq!(s.restore, [None, Some(3)], "the live depth is lost, the stencil's clear restored");
+    assert_eq!(ds_cache::planes_of(key).map(|p| p[0]), Some(Plane::UNDEFINED));
+}
+
+/// Switches `gc_tiled_rt` back off however a test ends.
+#[cfg(feature = "test-knobs")]
+struct TiledRtOff;
+
+#[cfg(feature = "test-knobs")]
+impl Drop for TiledRtOff {
+    fn drop(&mut self) {
+        gc_debug_set_tiled_rt(0);
+    }
+}
+
+/// A 64x64 RGBA8 storage of the rig's, and a depth-tested draw into it as
+/// glmark2 terrain's pass makes one: a framebuffer object whose depth is a
+/// renderbuffer (serial 0x65), no stencil.
+#[cfg(feature = "test-knobs")]
+fn rt_draw(rig: &Rig) -> (OsalGpuMem, GlesDraw) {
+    let mut mem = OsalGpuMem::ZERO;
+    assert_eq!(osal::gpu_alloc(GC_HEAP_DATA, 64 * 64 * 4, OSAL_MEM_DATA, &mut mem), 0);
+    let mut d = rig.draw(3);
+    (d.target_gpu, d.target_cpu) = (mem.gpu, mem.cpu);
+    d.targets[0].gpu = mem.gpu;
+    (d.depth_id, d.depth_gen, d.stencil_id, d.stencil_gen) = (0x65, 1, 0, 0);
+    (d.depth_test, d.depth_write, d.depth_func) = (true, true, GLES_CMP_LESS);
+    (mem, d)
+}
+
+/// Every resolve-engine copy of a stream, in order: (RS_CONFIG, source,
+/// source stride, destination, destination stride, width, height) as the
+/// RS_KICKER found them.
+#[cfg(feature = "test-knobs")]
+fn rs_copies(s: &Stream) -> Vec<[u32; 7]> {
+    let (mut regs, mut out) = (BTreeMap::new(), Vec::new());
+    walk(&s.0, |r, v, _| {
+        regs.insert(r, v);
+        if r == GC_RS_KICKER {
+            let at = |r| *regs.get(&r).unwrap_or(&0);
+            let win = at(GC_RS_WINDOW_SIZE);
+            out.push([
+                at(GC_RS_CONFIG),
+                at(rs_pipe_source_addr(0)),
+                at(GC_RS_SOURCE_STRIDE),
+                at(rs_pipe_dest_addr(0)),
+                at(GC_RS_DEST_STRIDE),
+                win & 0xffff,
+                win >> 16,
+            ]);
+        }
+    });
+    out
+}
+
+/// Where in the stream each RS_KICKER is written.
+#[cfg(feature = "test-knobs")]
+fn rs_kicks(s: &Stream) -> Vec<usize> {
+    let mut v = Vec::new();
+    walk(&s.0, |r, _, i| {
+        if r == GC_RS_KICKER {
+            v.push(i);
+        }
+    });
+    v
+}
+
+/// One resolve-engine copy of 4-byte pixels on the rig's memory, with
+/// Mesa's semantics for the subset used (etnaviv_rs.c `etna_compile_rs_state`):
+/// a TILED side (RS_CONFIG SOURCE_TILED / DEST_TILED) is addressed through
+/// `layout::offset(Tiled, ..)` at its stride divided by four and carries no
+/// TILING bit; a linear side at its stride. It shows the stream's strides and
+/// bits agree with `layout.rs`, not what the hardware does.
+#[cfg(feature = "test-knobs")]
+fn run_rs_copy(c: &[u32; 7]) {
+    use super::super::layout::offset;
+    let [config, src, src_stride, dst, dst_stride, w, h] = *c;
+    assert_eq!(config & 0x1f, GC_RS_FORMAT_A8R8G8B8, "a 4-byte copy");
+    let side = |tiled: bool, stride: u32| {
+        if tiled {
+            assert_eq!(stride & 0xf800_0000, 0, "a TILED side has no TILING or SUPER_TILED_NEW bit");
+            (Layout::Tiled, stride >> 2)
+        } else {
+            (Layout::Linear, stride)
+        }
+    };
+    let (sl, ss) = side(config & GC_RS_SOURCE_TILED != 0, src_stride);
+    let (dl, ds) = side(config & GC_RS_DEST_TILED != 0, dst_stride);
+    let (sb, db) = (offset(sl, w - 1, h - 1, 4, ss) + 4, offset(dl, w - 1, h - 1, 4, ds) + 4);
+    let from = gpu_bytes(u64::from(src), sb);
+    let mut to = gpu_bytes(u64::from(dst), db);
+    for y in 0..h {
+        for x in 0..w {
+            let (a, b) = (offset(sl, x, y, 4, ss), offset(dl, x, y, 4, ds));
+            to[b..b + 4].copy_from_slice(&from[a..a + 4]);
+        }
+    }
+    gpu_write(u64::from(dst), &to);
+}
+
+/// Bytes into the allocation holding GPU address `gpu`, from there on.
+#[cfg(feature = "test-knobs")]
+fn gpu_write(gpu: u64, bytes: &[u8]) {
+    with_platform(|p| {
+        let (base, a) = p.allocs.range_mut(..=gpu).next_back().expect("an allocation");
+        let off = (gpu - base) as usize;
+        assert!(off + bytes.len() <= a.size, "0x{gpu:x} + {} runs off its allocation", bytes.len());
+        // SAFETY: inside that allocation (checked just above).
+        unsafe { core::slice::from_raw_parts_mut((a.mem.as_mut_ptr() as *mut u8).add(off), bytes.len()) }
+            .copy_from_slice(bytes);
+    })
+}
+
+/// W4 and W5, the knob on: terrain's pass renders into a page-aligned
+/// TILED shadow under SINGLE_BUFFER(2), its stride one row of the target
+/// (64 pixels, already a multiple of 16), its depth super-tiled, and early
+/// depth on in both halves as Mesa's rule has it for a depth-tested,
+/// depth-writing draw that neither discards nor writes gl_FragDepth: the
+/// test early in the rasteriser and in the PE (EARLY_Z), the write early
+/// (no WRITE_DISABLE), so nothing is left for the PE (DISABLE_ZS). The
+/// stream tiles the storage in before the draw (it does not clear) and
+/// resolves the shadow back into it before it ends: TILED to linear
+/// A8R8G8B8, the window the target, the source stride the shadow's row
+/// times four without the TILING bit (super-tiled only, etnaviv_rs.c:104),
+/// the destination the storage's pitch.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn a_tiled_rt_draw_renders_tiled_with_early_depth_and_resolves_in_its_stream() {
+    let rig = Rig::new();
+    let _off = TiledRtOff;
+    gc_debug_set_tiled_rt(1);
+    let (mut mem, d) = rt_draw(&rig);
+    let before = gc_tiled_rt_counts();
+    let s = rig.submit(&d);
+    let shadow = s.reg(pe_pipe_color_addr(0));
+    assert_eq!(shadow & 0xfff, 0, "the shadow starts on a page: 0x{shadow:08x}");
+    assert_ne!(u64::from(shadow), mem.gpu, "the PE never writes the storage");
+    assert_eq!(s.reg(pe_pipe_color_addr(1)), shadow);
+    assert_eq!(s.reg(GC_PE_COLOR_STRIDE), 64 * 4);
+    assert_eq!((s.reg(GC_PE_LOGIC_OP) >> 8) & 3, 2, "SINGLE_BUFFER(2): a tiled target");
+    let f = s.reg(GC_PE_COLOR_FORMAT);
+    assert_eq!(f & (GC_PE_COLOR_FORMAT_SUPER_TILED | GC_PE_COLOR_FORMAT_SUPER_TILED_NEW), 0, "TILED, not supertiled");
+    let pe = s.reg(GC_PE_DEPTH_CONFIG);
+    assert_ne!(pe & GC_PE_DEPTH_SUPER_TILED, 0, "the depth surface is super-tiled");
+    assert_ne!(pe & GC_PE_DEPTH_EARLY_Z, 0, "early depth in the PE");
+    assert_ne!(pe & GC_PE_DEPTH_DISABLE_ZS, 0, "nothing late: the PE does no depth work");
+    let ra = s.reg(GC_RA_EARLY_DEPTH);
+    assert_ne!(ra & GC_RA_EARLY_DEPTH_TEST_ENABLE, 0, "...and in the rasteriser");
+    assert_eq!(ra & GC_RA_EARLY_DEPTH_WRITE_DISABLE, 0, "the rasteriser writes depth");
+
+    let fmt = rs_source_format(GC_RS_FORMAT_A8R8G8B8) | rs_dest_format(GC_RS_FORMAT_A8R8G8B8);
+    let (target, pitch) = (mem.gpu as u32, 64 * 4);
+    assert_eq!(
+        rs_copies(&s),
+        [
+            [fmt | GC_RS_DEST_TILED, target, pitch, shadow, (64 * 4) << 2, 64, 64],
+            [fmt | GC_RS_SOURCE_TILED, shadow, (64 * 4) << 2, target, pitch, 64, 64],
+        ],
+        "the tile-in, then the resolve"
+    );
+    let (kicks, draw) = (rs_kicks(&s), s.upto_draw(0).0.len());
+    assert!(kicks[0] < draw && kicks[1] > draw, "the tile-in before the draw, the resolve after it");
+    let after = gc_tiled_rt_counts();
+    assert_eq!([after[0] - before[0], after[1] - before[1]], [1, 1]);
+    assert!(whole_commands(&s.0));
+    assert!(rig.faults().is_empty());
+    assert_eq!(gc_finish(), 0);
+    osal::gpu_free(&mut mem);
+}
+
+/// The RS interpreter over that stream: the storage's pixels go into the
+/// shadow at `layout::offset(Tiled, ..)` and come back to their own places,
+/// the storage wiped in between, so only the resolve can restore it.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn a_tiled_rt_resolve_puts_every_pixel_back_at_its_place() {
+    use super::super::layout::offset;
+    let rig = Rig::new();
+    let _off = TiledRtOff;
+    gc_debug_set_tiled_rt(1);
+    let (mut mem, d) = rt_draw(&rig);
+    let want: Vec<u8> = (0..64 * 64u32).flat_map(|i| (0x0100_0000 | i).to_le_bytes()).collect();
+    gpu_write(mem.gpu, &want);
+    let s = rig.submit(&d);
+    let copies = rs_copies(&s);
+    assert_eq!(copies.len(), 2);
+    run_rs_copy(&copies[0]);
+    let shadow = gpu_bytes(u64::from(copies[0][3]), 64 * 64 * 4);
+    for y in 0..64u32 {
+        for x in 0..64u32 {
+            let at = offset(Layout::Tiled, x, y, 4, 64 * 4);
+            let lin = ((y * 64 + x) * 4) as usize;
+            assert_eq!(shadow[at..at + 4], want[lin..lin + 4], "pixel ({x}, {y}) in the shadow");
+        }
+    }
+    gpu_write(mem.gpu, &vec![0u8; want.len()]);
+    run_rs_copy(&copies[1]);
+    assert_eq!(gpu_bytes(mem.gpu, want.len()), want, "the resolve gives the linear image back");
+    assert_eq!(gc_finish(), 0);
+    osal::gpu_free(&mut mem);
+}
+
+/// The stream of `rt_draw` changed by `change`, in a fresh rig with
+/// `gc_tiled_rt` at `knob`: every rig's allocations start at the same
+/// addresses, so two such streams compare word for word.
+#[cfg(feature = "test-knobs")]
+fn rt_stream(knob: i32, change: fn(&mut GlesDraw)) -> Vec<u32> {
+    let rig = Rig::new();
+    let _off = TiledRtOff;
+    gc_debug_set_tiled_rt(knob);
+    let (mut mem, mut d) = rt_draw(&rig);
+    change(&mut d);
+    let s = rig.submit(&d);
+    assert_eq!(gc_finish(), 0);
+    osal::gpu_free(&mut mem);
+    s.0
+}
+
+/// With the knob on, a draw the rule does not take records today's stream,
+/// word for word: a 250x250 target (the RS copies 16x4 multiples only), a
+/// depth texture in place of the renderbuffer (a CPU reader may read its
+/// surface), the window's depth, an integer target, no depth attachment.
+/// Terrain's pass itself is the control: the knob changes it.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn the_tiled_rt_knob_leaves_every_other_draw_as_it_was() {
+    type Change = fn(&mut GlesDraw);
+    let cases: [(&str, Change); 6] = [
+        ("terrain's pass", |_| {}),
+        ("250x250", |d| {
+            (d.target_w, d.target_h, d.targets[0].w, d.targets[0].h) = (250, 250, 250, 250);
+            d.viewport = [0, 0, 250, 250];
+        }),
+        ("a depth texture", |d| d.depth_id = 0x4000_0065),
+        ("the window's depth", |d| (d.depth_id, d.stencil_id) = (0x8000_0012, 0x8000_0012)),
+        ("an integer target", |d| {
+            d.target_format = GLES_SURF_RGBA8UI;
+            d.targets[0].format = GLES_SURF_RGBA8UI;
+        }),
+        ("no depth attachment", |d| (d.depth_id, d.depth_test) = (0, false)),
+    ];
+    for (i, (what, change)) in cases.into_iter().enumerate() {
+        let off = rt_stream(0, change);
+        if i == 0 {
+            assert_ne!(rt_stream(1, change), off, "{what}: the knob changes terrain's pass");
+        } else {
+            assert_eq!(rt_stream(1, change), off, "{what}: the knob changes nothing");
+        }
+    }
+}
+
+/// A program that discards keeps the depth write late (the rasteriser's
+/// WRITE_DISABLE) and tests early; one that writes gl_FragDepth tests and
+/// writes late, today's words; the clear quad in front of a draw keeps
+/// today's too (Mesa's clears never reach the rule), on the same
+/// super-tiled surface.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn early_depth_follows_mesa_for_discard_frag_depth_and_the_clear_quad() {
+    static KILL: [u32; 4] = [0x17, 0, 0, 0]; /* TEXKILL (shader.rs OPCODE_TEXKILL) */
+    let rig = Rig::new();
+    let _off = TiledRtOff;
+    gc_debug_set_tiled_rt(1);
+    let today = GC_RA_EARLY_DEPTH_BASE
+        | GC_RA_EARLY_DEPTH_FORWARD_Z
+        | GC_RA_EARLY_DEPTH_FORWARD_W
+        | GC_RA_EARLY_DEPTH_WRITE_DISABLE;
+    let zs = |s: &Stream| s.reg(GC_PE_DEPTH_CONFIG) & (GC_PE_DEPTH_EARLY_Z | GC_PE_DEPTH_DISABLE_ZS);
+
+    let (mut mem, mut d) = rt_draw(&rig);
+    let mut kill = *rig.fs;
+    (kill.usc, kill.usc_dw) = (KILL.as_ptr(), 4);
+    d.fs = &kill;
+    let s = rig.submit(&d);
+    assert_eq!(s.reg(GC_RA_EARLY_DEPTH), today | GC_RA_EARLY_DEPTH_TEST_ENABLE, "discard: tested early, written late");
+    assert_eq!(zs(&s), GC_PE_DEPTH_EARLY_Z);
+
+    let mut fragdepth = *rig.fs;
+    fragdepth.viv.ps_depth_out_reg = 0;
+    d.fs = &fragdepth;
+    let s = rig.submit(&d);
+    assert_eq!(s.reg(GC_RA_EARLY_DEPTH), today, "gl_FragDepth: everything late");
+    assert_eq!(zs(&s), 0);
+
+    d.fs = &*rig.fs;
+    (d.do_clear, d.do_clear_depth, d.clear_depth) = (true, true, 1.0);
+    let s = rig.submit(&d);
+    assert_eq!(s.draws().len(), 2, "the clear quad, then the draw");
+    let quad = s.upto_draw(0);
+    assert_eq!(quad.reg(GC_RA_EARLY_DEPTH), today, "the clear quad: today's words");
+    assert_eq!(quad.reg(GC_PE_DEPTH_CONFIG) & GC_PE_DEPTH_EARLY_Z, 0);
+    assert_ne!(quad.reg(GC_PE_DEPTH_CONFIG) & GC_PE_DEPTH_SUPER_TILED, 0, "the same surface, super-tiled");
+    assert_ne!(s.reg(GC_RA_EARLY_DEPTH) & GC_RA_EARLY_DEPTH_TEST_ENABLE, 0, "the draw behind it: early");
+    assert!(rig.faults().is_empty());
+    assert_eq!(gc_finish(), 0);
+    osal::gpu_free(&mut mem);
+}
+
+/// A draw that clears the whole target first needs no tile-in: the clear
+/// overwrites every pixel of the shadow. A masked clear, or a scissored one
+/// (the GL core's clear quad), does.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn a_whole_clear_needs_no_tile_in() {
+    let rig = Rig::new();
+    let _off = TiledRtOff;
+    gc_debug_set_tiled_rt(1);
+    let (mut mem, mut d) = rt_draw(&rig);
+    (d.do_clear, d.clear_rgba) = (true, [0.25, 0.5, 0.75, 1.0]);
+    let copies = rs_copies(&rig.submit(&d));
+    assert_eq!(copies.len(), 1, "the resolve only");
+    assert_ne!(copies[0][0] & GC_RS_SOURCE_TILED, 0);
+    d.clear_color_mask = 0x7;
+    assert_eq!(rs_copies(&rig.submit(&d)).len(), 2, "a masked clear keeps the alpha it does not write");
+    (d.clear_color_mask, d.clear_quad, d.scissor, d.scissor_rect) = (0, true, true, [0, 0, 8, 8]);
+    assert_eq!(rs_copies(&rig.submit(&d)).len(), 2, "a scissored clear keeps the pixels outside");
+    assert!(rig.faults().is_empty());
+    assert_eq!(gc_finish(), 0);
+    osal::gpu_free(&mut mem);
+}
+
+/// Two draws into the shadow in one stream share its tile-in and its
+/// resolve, and the second finds the pixel engine's group as the first left
+/// it (the host build verifies every group it skips). A linear draw into the
+/// same storage after them resolves the shadow first and writes the group
+/// again.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn draws_into_a_tiled_rt_share_one_tile_in_and_a_linear_draw_resolves_it_first() {
+    let rig = Rig::new();
+    let _off = TiledRtOff;
+    gc_debug_set_tiled_rt(1);
+    let (mut mem, d) = rt_draw(&rig);
+    let mut linear = d;
+    (linear.depth_id, linear.depth_test, linear.depth_write) = (0, false, false);
+    // SAFETY: live draws for the calls.
+    unsafe {
+        assert_eq!(gc_draw(&d), 0);
+        assert_eq!(gc_draw(&d), 0);
+        assert_eq!(gc_draw(&linear), 0);
+    }
+    assert_eq!(gc_flush(), 0);
+    let s = rig.last_stream();
+    assert_eq!(s.draws().len(), 3);
+    assert_eq!(rs_copies(&s).len(), 2, "one tile-in, one resolve");
+    assert_eq!(s.writes(GC_PE_COLOR_STRIDE).1, 2, "the second draw kept the group, the linear one rewrote it");
+    assert_eq!(s.writes(pe_pipe_color_addr(0)).0, Some(mem.gpu as u32), "the linear draw writes the storage");
+    let kicks = rs_kicks(&s);
+    let (second, third) = (s.upto_draw(1).0.len(), s.upto_draw(2).0.len());
+    assert!(kicks[1] > second && kicks[1] < third, "the resolve between the shadow's draws and the linear one");
+    assert!(whole_commands(&s.0));
+    assert!(rig.faults().is_empty());
+    assert_eq!(gc_finish(), 0);
+    osal::gpu_free(&mut mem);
+}
+
+/// A surface that holds depth written row-linear keeps its layout, and the
+/// framebuffer's draws stay linear while it holds it (W3): nothing here
+/// converts one layout into the other.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn a_surface_holding_linear_depth_keeps_its_draws_linear() {
+    let rig = Rig::new();
+    let _off = TiledRtOff;
+    let (mut mem, d) = rt_draw(&rig);
+    rig.submit(&d);
+    gc_debug_set_tiled_rt(1);
+    let s = rig.submit(&d);
+    assert_eq!(u64::from(s.reg(pe_pipe_color_addr(0))), mem.gpu, "linear: the depth is live and row-linear");
+    assert_eq!(s.reg(GC_PE_DEPTH_CONFIG) & GC_PE_DEPTH_SUPER_TILED, 0);
+    assert!(rs_copies(&s).is_empty());
+    assert_eq!(gc_finish(), 0);
+    osal::gpu_free(&mut mem);
+}

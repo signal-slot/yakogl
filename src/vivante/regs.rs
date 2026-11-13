@@ -632,10 +632,54 @@ pub const GC_STENCIL_OP_INCR_WRAP: u32 = 0x6;
 pub const GC_STENCIL_OP_DECR_WRAP: u32 = 0x7;
 
 // ---- tile status (not used: no fast clear, no compression) --------------
+//
+// The registers the tile-status and fast-clear items of
+// docs/notes/gc-tiled-wire.md (W7-W10) program, named now (W1) and checked
+// against state_3d.xml.h (`mesa_header::ts_rs_consts_match_mesa`). Nothing
+// writes the TS ones yet: `emit_pe_state` writes PE_MEM_CONFIG and
+// TS_MEM_CONFIG 0.
 
 pub const GC_TS_FLUSH_CACHE: u32 = 0x00001650;
 pub const GC_TS_FLUSH: u32 = 0x00000001;
 pub const GC_TS_MEM_CONFIG: u32 = 0x00001654;
+pub const GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR: u32 = 0x0000_0001;
+pub const GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR: u32 = 0x0000_0002;
+pub const GC_TS_MEM_CONFIG_DEPTH_16BPP: u32 = 0x0000_0008;
+pub const GC_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE: u32 = 0x0000_0010;
+pub const GC_TS_MEM_CONFIG_COLOR_AUTO_DISABLE: u32 = 0x0000_0020;
+pub const GC_TS_COLOR_STATUS_BASE: u32 = 0x0000_1658;
+pub const GC_TS_COLOR_SURFACE_BASE: u32 = 0x0000_165c;
+pub const GC_TS_COLOR_CLEAR_VALUE: u32 = 0x0000_1660;
+pub const GC_TS_DEPTH_STATUS_BASE: u32 = 0x0000_1664;
+pub const GC_TS_DEPTH_SURFACE_BASE: u32 = 0x0000_1668;
+pub const GC_TS_DEPTH_CLEAR_VALUE: u32 = 0x0000_166c;
+pub const GC_TS_DEPTH_AUTO_DISABLE_COUNT: u32 = 0x0000_1670;
+pub const GC_TS_COLOR_AUTO_DISABLE_COUNT: u32 = 0x0000_1674;
+pub const GC_TS_COLOR_CLEAR_VALUE_EXT: u32 = 0x0000_16bc;
+/// PE_MEM_CONFIG's TS modes of the colour (bit 24) and depth (bit 26)
+/// surfaces: 0 is 128-byte tiles, 1 256-byte.
+pub const fn pe_mem_config_color_ts_mode(x: u32) -> u32 {
+    (x << 24) & 0x0100_0000
+}
+pub const fn pe_mem_config_depth_ts_mode(x: u32) -> u32 {
+    (x << 26) & 0x0400_0000
+}
+/// The sampler's TS of texture unit `i` (`TS_SAMPLER_CONFIG`, `_STATUS_BASE`).
+pub const fn ts_sampler_config(i: u32) -> u32 {
+    0x0000_1720 + 4 * i
+}
+pub const fn ts_sampler_status_base(i: u32) -> u32 {
+    0x0000_1740 + 4 * i
+}
+/// `NTE_DESCRIPTOR_TX_CTRL`'s TS fields: the sampler reads through tile
+/// status `TS_INDEX(x)` in mode `TS_MODE(x)`.
+pub const GC_TX_CTRL_TS_ENABLE: u32 = 0x0000_0002;
+pub const fn tx_ctrl_ts_mode(x: u32) -> u32 {
+    x & 0x1
+}
+pub const fn tx_ctrl_ts_index(x: u32) -> u32 {
+    (x << 2) & 0x1c
+}
 
 // ---- global -------------------------------------------------------------
 
@@ -833,6 +877,8 @@ pub const fn texdesc_halign(x: u32) -> u32 {
 /// padded to 4 texels, or to 16 for the resolve engine.
 pub const GC_TEXTURE_HALIGN_FOUR: u32 = 0;
 pub const GC_TEXTURE_HALIGN_SIXTEEN: u32 = 1;
+/// A super-tiled texture's HALIGN (TEXTURE_HALIGN_SUPER_TILED).
+pub const GC_TEXTURE_HALIGN_SUPER_TILED: u32 = 2;
 /// CONFIG1: the layers are an array, not the slices of a volume.
 pub const GC_TEXDESC_TEXTURE_ARRAY: u32 = 0x0100_0000;
 pub const GC_TEXDESC_CONFIG2: u32 = 0x6c;
@@ -1058,6 +1104,12 @@ pub const GC_RS_SOURCE_STRIDE_TILING: u32 = 0x8000_0000;
 pub const GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW: u32 = 0x0800_0000;
 pub const GC_RS_DEST_ADDR: u32 = 0x00001610;
 pub const GC_RS_DEST_STRIDE: u32 = 0x00001614;
+/// A super-tiled destination, and the same on a CACHE128B256BPERLINE core
+/// (VIVS_RS_DEST_STRIDE_TILING, _SUPER_TILED_NEW). Like the source's, Mesa
+/// sets them for a super-tiled side only: a 4x4-TILED one takes its stride
+/// times four with neither (`etna_compile_rs_state`, etnaviv_rs.c:104-110).
+pub const GC_RS_DEST_STRIDE_TILING: u32 = 0x8000_0000;
+pub const GC_RS_DEST_STRIDE_SUPER_TILED_NEW: u32 = 0x0800_0000;
 pub const GC_RS_WINDOW_SIZE: u32 = 0x00001620;
 pub const fn rs_window_width(x: u32) -> u32 {
     x & 0xffff
@@ -1072,6 +1124,11 @@ pub const GC_RS_CLEAR_CONTROL: u32 = 0x0000163c;
 /* state_3d.xml.h VIVS_RS_CLEAR_CONTROL_BITS(0xffff), _MODE_ENABLED1 */
 pub const GC_RS_CLEAR_CONTROL_BITS_ALL: u32 = 0x0000_ffff;
 pub const GC_RS_CLEAR_CONTROL_MODE_ENABLED1: u32 = 0x0001_0000;
+/// RS_CLEAR_CONTROL's BITS field: which 16 bits of a 32-bit pixel pair a
+/// fill writes (0xffff all of them).
+pub const fn rs_clear_bits(x: u32) -> u32 {
+    x & 0xffff
+}
 pub const fn rs_fill_value(i: u32) -> u32 {
     0x00001640 + 4 * i
 }
@@ -1079,6 +1136,12 @@ pub const GC_RS_EXTRA_CONFIG: u32 = 0x000016a0;
 pub const fn rs_extra_aa(x: u32) -> u32 {
     x & 0x3
 }
+/// RS_EXTRA_CONFIG's TS mode of a TS-sourced copy (bit 24).
+pub const fn rs_extra_ts_mode(x: u32) -> u32 {
+    (x << 24) & 0x0100_0000
+}
+/// An in-place resolve of a super-tiled surface's tiles (VIVS_RS_KICKER_INPLACE).
+pub const GC_RS_KICKER_INPLACE: u32 = 0x000016b0;
 pub const GC_RS_SINGLE_BUFFER: u32 = 0x000016b8;
 pub const GC_RS_SINGLE_BUFFER_ENABLE: u32 = 0x00000001;
 pub const fn rs_pipe_source_addr(i: u32) -> u32 {
@@ -1145,5 +1208,121 @@ mod mesa_header {
             n += 1;
         }
         assert!(n >= 39, "only {n} GC_TEX_FORMAT_* consts found");
+    }
+
+    /// The `#define VIVS_<name> 0x...` lines of the in-tree state_3d.xml.h,
+    /// Mesa's rnndb header: plain values only (a macro's `__MASK` and
+    /// `__SHIFT` are plain values too).
+    fn state_3d() -> HashMap<String, u32> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/driver/src/vivante/hw/state_3d.xml.h");
+        let text = std::fs::read_to_string(path).expect("read state_3d.xml.h");
+        let mut defs = HashMap::new();
+        for line in text.lines() {
+            let mut it = line.split_whitespace();
+            if it.next() != Some("#define") {
+                continue;
+            }
+            let (Some(name), Some(val)) = (it.next(), it.next()) else {
+                continue;
+            };
+            if let (Some(n), Some(hex)) = (name.strip_prefix("VIVS_"), val.strip_prefix("0x")) {
+                defs.insert(n.to_string(), u32::from_str_radix(hex, 16).expect("hex"));
+            } else if let (Some(n), Ok(v)) = (name.strip_prefix("VIVS_"), val.parse::<u32>()) {
+                defs.insert(n.to_string(), v);
+            }
+        }
+        defs
+    }
+
+    /// The tile-status, resolve-engine and sampler-TS registers of
+    /// docs/notes/gc-tiled-wire.md W1, each against its VIVS_ define; a
+    /// field macro against its mask and shift (the value 1 placed in the
+    /// field, and the whole mask for the widest value).
+    #[test]
+    fn ts_rs_consts_match_mesa() {
+        use super::*;
+        let d = state_3d();
+        let get = |n: &str| *d.get(n).unwrap_or_else(|| panic!("VIVS_{n} is not in state_3d.xml.h"));
+        let plain = [
+            (GC_TS_FLUSH_CACHE, "TS_FLUSH_CACHE"),
+            (GC_TS_FLUSH, "TS_FLUSH_CACHE_FLUSH"),
+            (GC_TS_MEM_CONFIG, "TS_MEM_CONFIG"),
+            (GC_TS_MEM_CONFIG_DEPTH_FAST_CLEAR, "TS_MEM_CONFIG_DEPTH_FAST_CLEAR"),
+            (GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR, "TS_MEM_CONFIG_COLOR_FAST_CLEAR"),
+            (GC_TS_MEM_CONFIG_DEPTH_16BPP, "TS_MEM_CONFIG_DEPTH_16BPP"),
+            (GC_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE, "TS_MEM_CONFIG_DEPTH_AUTO_DISABLE"),
+            (GC_TS_MEM_CONFIG_COLOR_AUTO_DISABLE, "TS_MEM_CONFIG_COLOR_AUTO_DISABLE"),
+            (GC_TS_COLOR_STATUS_BASE, "TS_COLOR_STATUS_BASE"),
+            (GC_TS_COLOR_SURFACE_BASE, "TS_COLOR_SURFACE_BASE"),
+            (GC_TS_COLOR_CLEAR_VALUE, "TS_COLOR_CLEAR_VALUE"),
+            (GC_TS_DEPTH_STATUS_BASE, "TS_DEPTH_STATUS_BASE"),
+            (GC_TS_DEPTH_SURFACE_BASE, "TS_DEPTH_SURFACE_BASE"),
+            (GC_TS_DEPTH_CLEAR_VALUE, "TS_DEPTH_CLEAR_VALUE"),
+            (GC_TS_DEPTH_AUTO_DISABLE_COUNT, "TS_DEPTH_AUTO_DISABLE_COUNT"),
+            (GC_TS_COLOR_AUTO_DISABLE_COUNT, "TS_COLOR_AUTO_DISABLE_COUNT"),
+            (GC_TS_COLOR_CLEAR_VALUE_EXT, "TS_COLOR_CLEAR_VALUE_EXT"),
+            (GC_PE_MEM_CONFIG, "PE_MEM_CONFIG"),
+            (GC_RS_SOURCE_STRIDE_TILING, "RS_SOURCE_STRIDE_TILING"),
+            (GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW, "RS_SOURCE_STRIDE_SUPER_TILED_NEW"),
+            (GC_RS_DEST_STRIDE_TILING, "RS_DEST_STRIDE_TILING"),
+            (GC_RS_DEST_STRIDE_SUPER_TILED_NEW, "RS_DEST_STRIDE_SUPER_TILED_NEW"),
+            (GC_RS_CLEAR_CONTROL, "RS_CLEAR_CONTROL"),
+            (GC_RS_CLEAR_CONTROL_MODE_ENABLED1, "RS_CLEAR_CONTROL_MODE_ENABLED1"),
+            (GC_RS_CLEAR_CONTROL_BITS_ALL, "RS_CLEAR_CONTROL_BITS__MASK"),
+            (GC_RS_EXTRA_CONFIG, "RS_EXTRA_CONFIG"),
+            (GC_RS_KICKER_INPLACE, "RS_KICKER_INPLACE"),
+            (GC_RS_CONFIG, "RS_CONFIG"),
+            (GC_RS_SOURCE_TILED, "RS_CONFIG_SOURCE_TILED"),
+            (GC_RS_DEST_TILED, "RS_CONFIG_DEST_TILED"),
+            (GC_TX_CTRL_TS_ENABLE, "NTE_DESCRIPTOR_TX_CTRL_TS_ENABLE"),
+        ];
+        for (ours, name) in plain {
+            assert_eq!(ours, get(name), "VIVS_{name}");
+        }
+        /* field(x): 1 lands at the shift, and all ones fills the mask */
+        type Field = fn(u32) -> u32;
+        let fields: [(Field, &str); 7] = [
+            (pe_mem_config_color_ts_mode, "PE_MEM_CONFIG_COLOR_TS_MODE"),
+            (pe_mem_config_depth_ts_mode, "PE_MEM_CONFIG_DEPTH_TS_MODE"),
+            (rs_clear_bits, "RS_CLEAR_CONTROL_BITS"),
+            (rs_extra_ts_mode, "RS_EXTRA_CONFIG_TS_MODE"),
+            (tx_ctrl_ts_mode, "NTE_DESCRIPTOR_TX_CTRL_TS_MODE"),
+            (tx_ctrl_ts_index, "NTE_DESCRIPTOR_TX_CTRL_TS_INDEX"),
+            (rs_extra_aa, "RS_EXTRA_CONFIG_AA"),
+        ];
+        for (f, name) in fields {
+            let (mask, shift) = (get(&format!("{name}__MASK")), get(&format!("{name}__SHIFT")));
+            assert_eq!(f(1), (1 << shift) & mask, "VIVS_{name}(1)");
+            assert_eq!(f(u32::MAX >> shift), mask, "VIVS_{name}: the mask");
+        }
+        /* the arrays: element 0 and the step */
+        assert_eq!(ts_sampler_config(0), 0x1720, "VIVS_TS_SAMPLER_CONFIG(0)");
+        assert_eq!(ts_sampler_config(1) - ts_sampler_config(0), 4);
+        assert_eq!(ts_sampler_status_base(0), 0x1740, "VIVS_TS_SAMPLER_STATUS_BASE(0)");
+        assert_eq!(ts_sampler_status_base(7) - ts_sampler_status_base(0), 28);
+        /* the HALIGN values, from common_3d.xml.h */
+        let common = header_halign();
+        assert_eq!(GC_TEXTURE_HALIGN_FOUR, common["FOUR"]);
+        assert_eq!(GC_TEXTURE_HALIGN_SIXTEEN, common["SIXTEEN"]);
+        assert_eq!(GC_TEXTURE_HALIGN_SUPER_TILED, common["SUPER_TILED"]);
+    }
+
+    /// `TEXTURE_HALIGN_*` of common_3d.xml.h.
+    fn header_halign() -> HashMap<String, u32> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/driver/src/vivante/hw/common_3d.xml.h");
+        let text = std::fs::read_to_string(path).expect("read common_3d.xml.h");
+        let mut defs = HashMap::new();
+        for line in text.lines() {
+            let mut it = line.split_whitespace();
+            if it.next() != Some("#define") {
+                continue;
+            }
+            if let (Some(name), Some(val)) = (it.next(), it.next()) {
+                if let (Some(n), Some(hex)) = (name.strip_prefix("TEXTURE_HALIGN_"), val.strip_prefix("0x")) {
+                    defs.insert(n.to_string(), u32::from_str_radix(hex, 16).expect("hex"));
+                }
+            }
+        }
+        defs
     }
 }

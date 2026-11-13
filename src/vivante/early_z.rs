@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The early-depth rule as a pure function (docs/notes/gc-tiled-targets.md,
-//! "(c) Early depth"). `emit_pe_state` and `emit_ra_state` call
-//! it through `draw_early_z` (a linear target, plus the program's `writes_z`),
-//! and so still say "never".
+//! "(c) Early depth"). `emit_pe_state` and `emit_ra_state` call it through
+//! `backend.rs` `draw_ez`: [`early_z`] with the draw's state for a draw into
+//! a 32-bit tiled shadow (docs/notes/gc-tiled-wire.md W5, behind the
+//! `gc_tiled_rt` knob), and [`draw_early_z`] (a linear target, plus the
+//! program's `writes_z`), which says "never", for every other draw.
 //!
 //! The rule is Mesa 26.2.1's `etna_update_zsa`
 //! (`src/gallium/drivers/etnaviv/etnaviv_state.c:992-1080`), with the inputs

@@ -52,6 +52,16 @@
 //! depth buffer shared with draws into 32-bit targets (logged once when a
 //! draw reaches it). ES 2.0 has no 64-bit colour format to render into.
 //!
+//! A 32-bit target takes a shadow too, behind the `gc_tiled_rt` test knob
+//! (docs/notes/gc-tiled-wire.md W4; `backend.rs` `tiled_rt` says which
+//! draws): the same TILED shadow at [`RT_BPP`] bytes a pixel, for early depth
+//! (`early_z.rs`), which Mesa allows only for a target that is not linear.
+//! Its pixels never pass through the CPU: the stream itself tiles the storage
+//! in with the resolve engine before a draw that does not clear it, and
+//! resolves the shadow back into the storage before the stream leaves the
+//! target (`backend.rs`). [`prepare_rt`] and [`bind_rt`] are its entry
+//! points; [`retire`] only forgets the kick of such an entry.
+//!
 //! Prepared, not reached: a draw described target by target ([`Target`],
 //! [`wanted_targets`], [`prepare_targets`], [`bind_targets`]), every target
 //! of it on a shadow of its own pixel size, and a 128-bit target (RGBA32I/UI)
@@ -66,6 +76,9 @@ use crate::util::Global;
 
 /// Bytes a pixel of a target the one-target path ([`wanted`]) takes.
 const BPP: u32 = 8;
+/// Bytes a pixel of a 32-bit target's shadow ([`prepare_rt`]): one the
+/// resolve engine tiles in and out, never the CPU.
+pub const RT_BPP: u32 = 4;
 /// Where the shadow starts: a page.
 const BASE_ALIGN: usize = 4096;
 /// Shadows kept at once.
@@ -82,6 +95,9 @@ struct Key {
     pitch: u32,
     /// Bytes a pixel: 8 on the one-target path; 16 is a two-plane entry.
     bpp: u32,
+    /// A 32-bit target's shadow the stream tiles in and resolves with the
+    /// resolve engine ([`prepare_rt`]): the CPU never copies it.
+    rs: bool,
 }
 
 struct Entry {
@@ -227,7 +243,18 @@ pub fn wanted(gl: &GlesDraw, single: bool, straight: bool) -> bool {
 }
 
 fn key_of(gl: &GlesDraw) -> Key {
-    Key { gpu: gl.target_gpu, w: gl.target_w, h: gl.target_h, pitch: crate::backend::draw_pitch(gl) * BPP, bpp: BPP }
+    key_of_bpp(gl, BPP)
+}
+
+fn key_of_bpp(gl: &GlesDraw, bpp: u32) -> Key {
+    Key {
+        gpu: gl.target_gpu,
+        w: gl.target_w,
+        h: gl.target_h,
+        pitch: crate::backend::draw_pitch(gl) * bpp,
+        bpp,
+        rs: bpp == RT_BPP,
+    }
 }
 
 /// Bytes a shadow of `key` takes from its page boundary on: the padded
@@ -275,7 +302,7 @@ pub fn target_of(gl: &GlesDraw) -> Target {
 }
 
 const fn target_key(t: &Target) -> Key {
-    Key { gpu: t.gpu, w: t.w, h: t.h, pitch: t.pitch, bpp: t.bpp }
+    Key { gpu: t.gpu, w: t.w, h: t.h, pitch: t.pitch, bpp: t.bpp, rs: false }
 }
 
 /// PE_COLOR_STRIDE / PE_RT_CONFIG stride of a shadow of `t`: the padded
@@ -303,7 +330,7 @@ pub fn wanted_targets(targets: &[Target], straight: bool) -> bool {
 /// target); none of them pushes out another of the same draw. Non-zero
 /// when one has no shadow: the draw is then refused.
 pub fn prepare_targets(targets: &[Target], finish: impl Fn() -> i32) -> i32 {
-    let mut keys = [Key { gpu: 0, w: 0, h: 0, pitch: 0, bpp: 0 }; MAX_TARGETS];
+    let mut keys = [Key { gpu: 0, w: 0, h: 0, pitch: 0, bpp: 0, rs: false }; MAX_TARGETS];
     if targets.len() > MAX_TARGETS {
         return -1;
     }
@@ -371,7 +398,7 @@ fn prepare_key(key: Key, cpu: *mut u8, keep: &[Key], finish: &impl Fn() -> i32) 
     let clock = s.clock;
     if let Some(e) = s.entries.iter_mut().flatten().find(|e| e.key == key) {
         e.stamp = clock;
-        return if e.kick == 0 { tile_in(e) } else { 0 };
+        return if e.kick == 0 && !key.rs { tile_in(e) } else { 0 };
     }
     /* a shadow of the same storage at another size or pitch: the storage was
      * specified again; one that is still the newer copy goes back first */
@@ -427,6 +454,9 @@ fn prepare_key(key: Key, cpu: *mut u8, keep: &[Key], finish: &impl Fn() -> i32) 
     unsafe { core::ptr::write_bytes(e.shadow, 0, bytes) };
     s.entries[slot] = Some(e);
     let Some(e) = s.entries[slot].as_mut() else { return -1 };
+    if key.rs {
+        return 0; /* the stream tiles it in (`backend.rs`) */
+    }
     tile_in(e)
 }
 
@@ -483,10 +513,32 @@ fn tile_in(e: &mut Entry) -> i32 {
 /// The shadow `gl` renders into, marked as written by `kick` (the kick being
 /// recorded): its GPU address. `None` when [`prepare`] made none.
 pub fn bind(gl: &GlesDraw, kick: u32) -> Option<u64> {
-    let key = key_of(gl);
+    bind_key(key_of(gl), kick)
+}
+
+fn bind_key(key: Key, kick: u32) -> Option<u64> {
     let e = shadows().entries.iter_mut().flatten().find(|e| e.key == key)?;
     e.kick = kick;
     Some(e.gpu)
+}
+
+/// The 32-bit shadow of `gl`'s target ([`RT_BPP`]), allocated when there is
+/// none: its GPU address, or `None` when there is no memory for it (the draw
+/// then keeps the linear path). Nothing is copied: the caller records the
+/// resolve engine's tile-in. `finish` as for [`prepare`].
+pub fn prepare_rt(gl: &GlesDraw, finish: impl Fn() -> i32) -> Option<u64> {
+    let key = key_of_bpp(gl, RT_BPP);
+    if prepare_key(key, gl.target_cpu as *mut u8, &[], &finish) != 0 {
+        return None;
+    }
+    shadows().entries.iter().flatten().find(|e| e.key == key).map(|e| e.gpu)
+}
+
+/// [`bind`] of a 32-bit shadow: marked as used by `kick` (it renders into
+/// it, or the resolve engine reads it), so its memory is not handed out
+/// before that kick completes.
+pub fn bind_rt(gl: &GlesDraw, kick: u32) -> Option<u64> {
+    bind_key(key_of_bpp(gl, RT_BPP), kick)
 }
 
 /// Every shadow whose last rendering kick has completed (`pending` says it
@@ -497,6 +549,10 @@ pub fn retire(pending: impl Fn(u32) -> bool) {
     let mut untiled = 0u64;
     for e in s.entries.iter_mut().flatten() {
         if e.kick == 0 || pending(e.kick) {
+            continue;
+        }
+        if e.key.rs {
+            e.kick = 0; /* the stream wrote it back already */
             continue;
         }
         let Key { w, h, pitch, bpp, .. } = e.key;
@@ -855,7 +911,7 @@ mod tests {
         assert_eq!(prepare(&gl, || panic!("no finish with free slots")), 0);
         let e = entries();
         assert_eq!(e.len(), 1);
-        let key = Key { gpu: 0x4010_0000, w, h, pitch: pitch as u32, bpp: 8 };
+        let key = Key { gpu: 0x4010_0000, w, h, pitch: pitch as u32, bpp: 8, rs: false };
         assert_eq!(e[0].0, key);
         assert_eq!(e[0].1, 16 * 4 * 8 + BASE_ALIGN - 1, "padded 16 x 4, 8 bytes a pixel, plus the page");
         assert_eq!(e[0].3, 0);
@@ -994,7 +1050,7 @@ mod tests {
         assert_eq!(prepare_targets(&[t], || panic!("no finish")), 0);
         let e = entries();
         assert_eq!(e.len(), 1);
-        assert_eq!(e[0].0, Key { gpu: 0x4030_0000, w, h, pitch: pitch as u32, bpp: 16 });
+        assert_eq!(e[0].0, Key { gpu: 0x4030_0000, w, h, pitch: pitch as u32, bpp: 16, rs: false });
         assert_eq!(e[0].1, planes_bytes(16, 4) + BASE_ALIGN - 1);
         assert_eq!(counts(), (tiled0 + 5 * 3 * 16, untiled0));
 

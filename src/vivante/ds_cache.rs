@@ -29,8 +29,18 @@
 //!
 //! A surface that holds a live plane is never given to another pair: with
 //! every surface holding one, the draw is refused (src/ds_retention.rs).
+//!
+//! Each surface has a layout ([`Layout`], docs/notes/gc-tiled-wire.md W3):
+//! `Linear` (row-linear, what the pixel engine writes under SINGLE_BUFFER(1)
+//! with no SUPER_TILED bit, gl_test 169) unless a draw into a tiled shadow
+//! asked for `SuperTiled` ([`select_laid`]), which only a PE-private surface
+//! ([`pe_private`]) may become. The CPU paths here (`copy_plane`,
+//! `seed_depth`, [`resolve_depth`], [`depth_view`]) read and write the
+//! row-linear form only: they refuse any other layout rather than read a
+//! surface wrong.
 
 use super::backend::{g, heap_data};
+use super::layout::Layout;
 use crate::backend::GlesDraw;
 use crate::ds_retention::{self, Parked, Plane, DEPTH, STENCIL};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
@@ -93,6 +103,9 @@ struct Surface {
     /// What each plane holds for its object: Live or a clear value when
     /// this surface has the object's latest contents, Undefined otherwise.
     planes: [Plane; 2],
+    /// How the pixel engine lays the words out: `Linear` from allocation,
+    /// `SuperTiled` once a draw into a tiled shadow took it ([`select_laid`]).
+    layout: Layout,
 }
 
 impl Surface {
@@ -236,6 +249,20 @@ const fn align64(v: u32) -> u32 {
     (v + 63) & !63
 }
 
+/// Is `key` a pair only the pixel engine ever touches? Neither object is a
+/// texture (bit 30 of the id, `src/gl/context.rs` `ds_object_id`), nor the
+/// window's (bit 31), and the draw is single-sampled: no CPU path of this
+/// file ([`resolve_depth`], `seed_depth`) and no blit reaches its words, so
+/// their layout only has to agree between the PE and the rasteriser. At
+/// least one attachment: key 0 is every target without one.
+pub const fn pe_private(key: &DsKey) -> bool {
+    const NOT_PRIVATE: u32 = 0xc000_0000;
+    key.scale == 1
+        && (key.depth_id != 0 || key.stencil_id != 0)
+        && key.depth_id & NOT_PRIVATE == 0
+        && key.stencil_id & NOT_PRIVATE == 0
+}
+
 /// What [`select`] made current.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Selected {
@@ -245,6 +272,9 @@ pub struct Selected {
     /// bits, stencil as the value): the backend records a clear of just
     /// those planes before the draw.
     pub restore: [Option<u32>; 2],
+    /// The surface's layout now ([`select_laid`]): what the draw must
+    /// program (PE_DEPTH_CONFIG SUPER_TILED for `SuperTiled`).
+    pub layout: Layout,
 }
 
 /// The surface for `key`, at least `w` x `h` pixels, made current: the
@@ -273,8 +303,36 @@ pub fn select(
     kick: u32,
     seed: Option<ds_retention::DepthTexels>,
     pending: impl Fn(u32) -> bool,
+    finish: impl FnMut() -> i32,
+) -> Result<Selected, i32> {
+    select_laid(key, w, h, guard, kick, seed, Layout::Linear, pending, finish)
+}
+
+/// [`select`] for a draw that wants the surface in layout `want`
+/// (docs/notes/gc-tiled-wire.md W3): `SuperTiled` for a draw into a tiled
+/// shadow, `Linear` for every other one. Only a [`pe_private`] pair without
+/// seeded texels may leave `Linear`.
+///
+/// When the surface is in another layout: a `Linear` one holding a live
+/// plane stays `Linear` (the PE never wrote it otherwise, and nothing here
+/// converts), and [`Selected::layout`] says so: the draw keeps the linear
+/// path. Otherwise the surface takes `want`. Its planes' words are then
+/// another layout's: a plane holding a whole clear's value only is restored
+/// from it ([`Selected::restore`]), and a live one (a `SuperTiled` surface a
+/// linear draw now takes) is lost, logged once, its plane Undefined.
+#[allow(clippy::too_many_arguments)]
+pub fn select_laid(
+    key: DsKey,
+    w: u32,
+    h: u32,
+    guard: usize,
+    kick: u32,
+    seed: Option<ds_retention::DepthTexels>,
+    want: Layout,
+    pending: impl Fn(u32) -> bool,
     mut finish: impl FnMut() -> i32,
 ) -> Result<Selected, i32> {
+    let want = if pe_private(&key) && seed.is_none() { want } else { Layout::Linear };
     let c = cache();
     c.clock = c.clock.wrapping_add(1);
     let clock = c.clock;
@@ -333,6 +391,7 @@ pub fn select(
                 written_by: 0,
                 stamp: 0,
                 planes: [Plane::UNDEFINED; 2],
+                layout: Layout::Linear,
             });
             note_peak(c);
             fresh = true;
@@ -340,6 +399,25 @@ pub fn select(
         }
     };
     let mut restore = [None; 2];
+    if let Some(e) = c.entries[slot].as_mut().filter(|e| e.layout != want) {
+        if e.layout == Layout::Linear && e.holds_contents() {
+            /* keeps its layout: the draw takes the linear path */
+        } else {
+            for p in [DEPTH, STENCIL] {
+                if e.planes[p].is_live() {
+                    crate::glog_once!(
+                        "vivante: a {:?} depth/stencil surface is taken by a {:?} draw: its live {} is lost",
+                        e.layout,
+                        want,
+                        if p == DEPTH { "depth" } else { "stencil" }
+                    );
+                    e.planes[p] = Plane::UNDEFINED;
+                }
+                restore[p] = e.planes[p].cleared_value();
+            }
+            e.layout = want;
+        }
+    }
     for p in [DEPTH, STENCIL] {
         let Some(pk) = key.plane(p) else { continue };
         if p == DEPTH && seed.is_some() {
@@ -395,13 +473,14 @@ pub fn select(
     let Some(e) = c.entries[slot].as_mut() else { return Err(-1) };
     e.used_by = kick;
     e.stamp = clock;
+    let layout = e.layout;
     let g = g();
     g.depth = e.mem;
     g.depth_stride = e.stride;
     g.depth_w = w;
     g.depth_h = e.rows;
     g.depth_surface_off = guard as u32;
-    Ok(Selected { fresh, restore })
+    Ok(Selected { fresh, restore, layout })
 }
 
 /// What a recorded draw left in the planes of `key`'s surface: its whole
@@ -468,6 +547,17 @@ fn copy_plane(
     finish: &mut impl FnMut() -> i32,
 ) -> Result<(), i32> {
     let (Some(s), Some(d)) = (c.entries[from].as_ref(), c.entries[to].as_ref()) else { return Err(-1) };
+    if s.layout != d.layout {
+        crate::glog_once!(
+            "vivante: the {} of object 0x{:x} is in a {:?} surface, wanted in a {:?} one: not copied, the draw is \
+             refused",
+            if p == DEPTH { "depth" } else { "stencil" },
+            if p == DEPTH { d.key.depth_id } else { d.key.stencil_id },
+            s.layout,
+            d.layout
+        );
+        return Err(-crate::util::ENOTSUP);
+    }
     if s.stride != d.stride {
         crate::glog_once!(
             "vivante: the {} of object 0x{:x} is in a surface of another row stride ({} against {} bytes): not \
@@ -542,11 +632,11 @@ fn seed_depth(
     let bytes = e.stride as usize * e.rows as usize;
     // SAFETY: a live allocation of this cache, guard + stride * rows + guard
     // bytes, which no kick uses (waited for above).
-    let all = if scale == 1 { unsafe { e.mem.bytes_mut() } } else { None };
+    let all = if scale == 1 && e.layout == Layout::Linear { unsafe { e.mem.bytes_mut() } } else { None };
     let Some(px) = all.and_then(|a| a.get_mut(guard..guard + bytes)) else {
         crate::glog_once!(
             "vivante: draw refused: the depth the CPU wrote into object 0x{:x} cannot go into its surface \
-             (scale {}, or no CPU view)",
+             (scale {}, a surface that is not row-linear, or no CPU view)",
             id,
             scale
         );
@@ -619,6 +709,10 @@ pub unsafe fn resolve_depth(
     };
     if let Some(v) = e.planes[DEPTH].cleared_value() {
         return fill(f32::from_bits(v));
+    }
+    if e.layout != Layout::Linear {
+        /* never for a texture's plane (`pe_private`): a guard, not a path */
+        return 1;
     }
     /* the wait may submit the open frame: nothing in the cache moves */
     let rc = wait_kick(e.written_by);
@@ -702,7 +796,7 @@ pub fn depth_view(id: u32, guard: usize, kick: u32) -> Option<(u64, u32, u32)> {
         .entries
         .iter_mut()
         .flatten()
-        .find(|e| id != 0 && mine(e.key.plane(DEPTH)) && e.planes[DEPTH].is_live())?;
+        .find(|e| id != 0 && mine(e.key.plane(DEPTH)) && e.planes[DEPTH].is_live() && e.layout == Layout::Linear)?;
     if kick != 0 {
         e.used_by = kick;
     }
