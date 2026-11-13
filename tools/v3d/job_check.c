@@ -1709,6 +1709,69 @@ static void part_instanced(void)
 	      "1 instance: the plain VERTEX_ARRAY_PRIMS");
 }
 
+/* ---- 12b. the 64 inputs of V3D_MAX_FS_INPUTS ------------------------------
+ * The shader record's varying flags are 24 inputs to a word, three words
+ * (v3dx_emit.c emit_varying_flags). The 60 inputs of ES 3.0's 15 vec4
+ * varyings: one packet for each non-zero word, the first zeroing what it
+ * does not write (the words below it unless it is word 0, and the words
+ * above), the next ones changing nothing else; ZERO_ALL when every word is
+ * 0. Read back by Mesa's decoder. */
+static char *wide_job(struct lists *l, uint32_t flat1, uint32_t flat2, uint32_t centroid1)
+{
+	struct v3d_fs_prog fs = fs_prog();
+	fs.num_inputs = 60;
+	fs.flat_shade_flags = 0x5;
+	fs.flags_hi[0] = flat1;
+	fs.flags_hi[1] = flat2;
+	fs.flags_hi[4] = centroid1;
+	struct v3d_vs_prog vs = vs_prog(0x00201000u, vs_u, 5), cs = vs_prog(0x00202000u, cs_u, 3);
+	struct v3d_vertex_attr attrs[2] = { { 0x00300000u, 32, 4 }, { 0x00300010u, 32, 4 } };
+	struct v3d_uniform_storage vst = { vs_words, 4 }, fst = { fs_words, 2 };
+	struct v3d_job_state st = m5_state();
+	struct v3d_job_draw d = {
+		.st = &st, .fs = &fs, .vs = &vs, .cs = &cs, .vs_storage = vst, .fs_storage = fst,
+		.attrs = attrs, .num_attrs = 2, .prim = V3D_PRIM_TRIANGLES, .count = 3,
+	};
+	struct v3d_job_target t = { W, H, TARGET, W * 4, TILE_ALLOC, false };
+	struct v3d_job_clear c = { .load_rt0 = true, .z = 1.0f };
+	lists_init(l, RCL_OFF - BCL_OFF);
+	struct v3d_job j;
+	check(v3d_job_begin(&j, &t, &l->bcl, &l->rcl, &l->ind) && v3d_job_draw(&j, &d, NULL) == V3D_JOB_OK &&
+		      v3d_job_end(&j, &c, NULL, NULL),
+	      "a 60-input job builds");
+	return decode(l);
+}
+
+static void part_wide_varyings(void)
+{
+	static struct lists l;
+	const char *flat = "FLATSHADE_FLAGS";
+	char *text = wide_job(&l, 0xa, 0xf00, 0x30);
+	if (getenv("JOB_CHECK_DUMP"))
+		fputs(text, stdout);
+	check(!strstr(text, "Failed") && !strstr(text, "nknown"), "60 inputs: the decoder reported no error");
+	check(census(text, flat) == 3 && census(text, "ZERO_ALL_FLATSHADE_FLAGS") == 0,
+	      "60 inputs: one flat-shade packet for each of the three words");
+	check(field(text, flat, 0, "Flat Shade Flags for varyings V0*24") == 0x5 &&
+		      field(text, flat, 1, "Flat Shade Flags for varyings V0*24") == 0xa &&
+		      field(text, flat, 2, "Flat Shade Flags for varyings V0*24") == 0xf00,
+	      "60 inputs: the flat flags of words 0, 1 and 2 as given");
+	check(field(text, flat, 0, "Action for Flat Shade Flags of higher numbered varyings") ==
+		      V3D_VARYING_FLAGS_ACTION_ZEROED &&
+		      field(text, flat, 1, "Action for Flat Shade Flags of higher numbered varyings") ==
+			      V3D_VARYING_FLAGS_ACTION_UNCHANGED &&
+		      field(text, flat, 2, "Action for Flat Shade Flags of lower numbered varyings") ==
+			      V3D_VARYING_FLAGS_ACTION_UNCHANGED,
+	      "60 inputs: word 0 zeroes the words above it, the later words change nothing else");
+	check(census(text, "CENTROID_FLAGS") == 1 && census(text, "ZERO_ALL_CENTROID_FLAGS") == 0 &&
+		      field(text, "CENTROID_FLAGS", 0, "Centroid Flags for varyings V0*24") == 0x30 &&
+		      field(text, "CENTROID_FLAGS", 0, "Action for Centroid Flags of lower numbered varyings") ==
+			      V3D_VARYING_FLAGS_ACTION_ZEROED,
+	      "60 inputs: a centroid flag in word 1 alone is one packet that zeroes word 0");
+	check(census(text, "ZERO_ALL_NOPERSPECTIVE_FLAGS") == 1 && census(text, "NOPERSPECTIVE_FLAGS") == 0,
+	      "60 inputs: no non-perspective flags is ZERO_ALL");
+}
+
 /* The lists ms_job built last, hashed as part 15 hashes them, and what
  * b7c1484e (one RT at 4x, before the per-RT sample buffers) built for
  * part 14's first two jobs. */
@@ -2635,6 +2698,7 @@ int main(void)
 	 * part 11: 2 builds + 2 fields + 1 + 2 refusals;
 	 * part 12 (multiple render targets): 3 builds + 12;
 	 * part 13 (instanced draws): 3 builds + 8;
+	 * part 13b (60 inputs): 1 build + 6;
 	 * part 14 (4x multisampling): 13 + 2 pinned hashes + 13 two typed RTs;
 	 * part 15 (packet skip): 4 knob off + 9 knob on + 4 identical draws +
 	 * 3 depth range + 1 viewport x + 4 refusal + 2 one input + 1 new job;
@@ -2644,7 +2708,7 @@ int main(void)
 	 * part 19 (occlusion queries): 2 builds + 4;
 	 * part 20 (the render image): 1 build + 5 + 3 refusals */
 	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
-			    28 + 8 + 6 + 10 + 6 + 9;
+			    28 + 8 + 6 + 10 + 6 + 9 + 7;
 	part_identity();
 	part_rollback();
 	part_decode();
@@ -2661,6 +2725,7 @@ int main(void)
 	part_pntc();
 	part_mrt();
 	part_instanced();
+	part_wide_varyings();
 	part_msaa();
 	part_rt_image();
 	part_pack_skip();

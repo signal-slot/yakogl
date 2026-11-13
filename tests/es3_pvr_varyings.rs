@@ -10,7 +10,7 @@
 //! gl_FragCoord.z and gl_PointCoord read beside them -- the fullest
 //! coefficient layout, whose last iterator starts at coefficient 240 of the
 //! 252 the `ditrp` encodes -- and with a flat one last. The second half is
-//! the GL: the four limits read 15 / 60, a program of fifteen vec4 varyings
+//! the GL: the four limits read 15 / 60 / 60 / 64, a program of fifteen vec4 varyings
 //! links and draws (no error, no refused draw, the records the draw hands
 //! the back end carry the fifteen), and an ES 1.00 program of sixteen does
 //! not link, by the name of the limit. Under `report-es2` the answer stays 8
@@ -19,7 +19,7 @@
 //! The dEQP cases this answers on the host (API verdicts only, HOST-ONLY):
 //! implementation_limits.max_varying_vectors, max_varying_components,
 //! max_fragment_input_components and the state_query.integers forms of
-//! them; max_vertex_output_components still asks 64 of our 60.
+//! them, and max_vertex_output_components (64: the position and the fifteen).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_varyings
@@ -422,8 +422,8 @@ mod gl {
         assert_eq!(geti(GL_MAX_FRAGMENT_INPUT_COMPONENTS), 60, "GL_MAX_FRAGMENT_INPUT_COMPONENTS: ES 3.0 asks 60");
         assert_eq!(
             geti(GL_MAX_VERTEX_OUTPUT_COMPONENTS),
-            60,
-            "GL_MAX_VERTEX_OUTPUT_COMPONENTS: 15 * 4 (ES 3.0 asks 64)"
+            64,
+            "GL_MAX_VERTEX_OUTPUT_COMPONENTS: gl_Position and 15 * 4 (ES 3.0 asks 64)"
         );
         // SAFETY: plain GL call.
         assert_eq!(unsafe { glGetError() }, GL_NO_ERROR);

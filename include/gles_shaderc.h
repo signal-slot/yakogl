@@ -255,6 +255,9 @@ struct shc_v3d_fs {
 	uint8_t  threads, single_seg, writes_z, disable_ez, uses_center_w;
 	uint8_t  lock_scoreboard_on_first_thrsw, uses_implicit_point_line_varyings, uses_pid;
 	uint8_t  rt_mask;       /* bit n: the program writes colour to render target n (0..3) */
+	/* words 1 and 2 of the flag arrays (24 inputs to a word; the fields above are word 0):
+	 * flat 1, flat 2, noperspective 1, noperspective 2, centroid 1, centroid 2 */
+	uint32_t flags_hi[6];
 };
 
 /* The fields of the driver's struct v3d_vs_prog that are not addresses. */

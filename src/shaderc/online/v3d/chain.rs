@@ -138,6 +138,9 @@ pub struct FsProg<'a> {
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
+    /// Words 1 and 2 of the three flag arrays (`ShcV3dFs::flags_hi`): a word
+    /// holds 24 inputs, so input i is bit i % 24 of word i / 24.
+    pub flags_hi: [u32; 6],
     /// The shader writes Z to the TLB (prog_data `writes_z`): the pass-
     /// through Z (a discard, no colour write, a read of gl_FragCoord.z) or
     /// its own `gl_FragDepth` (select.rs `TLB_Z_PER_PIXEL`).
@@ -206,6 +209,9 @@ pub fn attribute_locations(gl_type: u16) -> u8 {
 /// `VARYING_SLOT_VAR0` (compiler/shader_enums.h): Mesa's slot number of the
 /// first generic varying.
 pub const VARYING_SLOT_VAR0: u8 = 32;
+/// Mesa V3D_MAX_FS_INPUTS (v3d_limits.h): scalar fragment shader inputs, the
+/// 15 vec4 varyings of ES 3.0 (60) and room for the implicit ones.
+pub const MAX_FS_INPUTS: usize = 64;
 
 /// `m` with its loops expanded where the unroller can (`None` from it: no
 /// loop, `m` as it is). Its refusals are named gaps, not verdicts on the
@@ -417,13 +423,17 @@ pub fn compile_program_keyed<'a>(
     let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
     let inputs = fragment_inputs(&fsp, a)?;
     /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
-     * flat_shade_flags at the input's index). The job builder reads word 0
-     * only and refuses more than 24 inputs. */
-    let mut flat = 0u32;
+     * flat_shade_flags at the input's index). A word holds 24 inputs, as the
+     * shader record's flag packets do (emit_varying_flags): input i is bit
+     * i % 24 of word i / 24, words 1 and 2 in `flags_hi`. */
+    let mut flat = [0u32; 3];
     /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
      * BITSET_SET of centroid_flags, the W it multiplies by the centroid
      * W). */
-    let mut centroid = 0u32;
+    let mut centroid = [0u32; 3];
+    if inputs.len() > MAX_FS_INPUTS {
+        return Err(V3dError::NotYet("more than 64 fragment shader inputs"));
+    }
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
             .inputs
@@ -431,16 +441,10 @@ pub fn compile_program_keyed<'a>(
             .find(|d| d.kind == IoKind::Varying && d.location == loc)
             .ok_or(V3dError::VaryingWithoutVertexOutput)?;
         if d.interp == crate::shaderc::online::ir::INTERP_FLAT {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a flat varying past input 31"));
-            }
-            flat |= 1 << i;
+            flat[i / 24] |= 1 << (i % 24);
         }
         if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a centroid varying past input 31"));
-            }
-            centroid |= 1 << i;
+            centroid[i / 24] |= 1 << (i % 24);
         }
     }
 
@@ -522,9 +526,10 @@ pub fn compile_program_keyed<'a>(
             single_seg: false,
             num_inputs: inputs.len() as u32,
             input_slots: slots,
-            flat_shade_flags: flat,
+            flat_shade_flags: flat[0],
             noperspective_flags: 0,
-            centroid_flags: centroid,
+            centroid_flags: centroid[0],
+            flags_hi: [flat[1], flat[2], 0, 0, centroid[1], centroid[2]],
             /* select.rs select_fragment: a discard, a read of Z, or a
              * gl_FragDepth write */
             writes_z: fsel.writes_z,
@@ -3452,7 +3457,7 @@ mod tests {
             use crate::shaderc::online::v3d::select::{select_fragment, Dst, Operand, Pressure, VOp};
             let fsp = prepare_fragment_with(&fr.module, &[], 0, a).expect("prepares");
             let inputs = fragment_inputs(&fsp, a).expect("inputs");
-            let sel = select_fragment(&fsp, inputs, 0, 0, Pressure::None, a).expect("selects");
+            let sel = select_fragment(&fsp, inputs, [0; 3], [0; 3], Pressure::None, a).expect("selects");
             let def = |v: Operand| {
                 sel.ops.iter().find(|o| match (o, v) {
                     (VOp::Add { dst: Dst::V(d), .. } | VOp::Mul { dst: Dst::V(d), .. }, Operand::V(x)) => *d == x,
@@ -3542,7 +3547,7 @@ mod tests {
             let (fm, trips) = unrolled(&fr.module, a).expect("the loop's trip count");
             let fsp = prepare_fragment_with(fm, trips, 0, a).expect("prepares");
             let inputs = fragment_inputs(&fsp, a).expect("inputs");
-            let sel = select_fragment(&fsp, inputs, 0, 0, Pressure::None, a).expect("selects");
+            let sel = select_fragment(&fsp, inputs, [0; 3], [0; 3], Pressure::None, a).expect("selects");
             let head = sel.ops.iter().position(|o| *o == VOp::LoopHead).expect("a loop");
             let edge = sel.ops.iter().position(|o| matches!(o, VOp::BackEdge { .. })).expect("a back edge");
             let user = |o: &VOp| matches!(o, VOp::Ldunif { u, .. } if u.contents == QUNIFORM_UNIFORM);

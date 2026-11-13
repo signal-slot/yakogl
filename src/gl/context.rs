@@ -146,11 +146,23 @@ pub const MAX_VARYING_VECTORS: usize = 15;
 pub const MAX_VARYING_VECTORS: usize = 15;
 #[cfg(all(feature = "gpu-powervr", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
-/// V3D: 8, the ES 2.0 minimum. Mesa's v3d allows 16 (V3D_MAX_FS_INPUTS, 64
-/// components), but nothing here has drawn with more than a few varyings on
-/// the board: the M6 first cut claims what it has a chance of having
-/// measured, and is raised with the board run that measures more.
-#[cfg(feature = "gpu-v3d")]
+/// V3D: 15, ES 3.0's minimum, which the compiler and the back end carry
+/// (tests/es3_v3d_varyings.rs compiles, links and draws with it):
+///
+/// * a fragment input is one scalar, 60 for 15 vec4s, below Mesa's
+///   V3D_MAX_FS_INPUTS (64, v3d_limits.h); the shader record's
+///   `number_of_varyings_in_fragment_shader` and the flat/centroid flag
+///   packets (24 inputs to a word, three words) carry them
+///   (shaderc/online/v3d/chain.rs `MAX_FS_INPUTS`, `ShcV3dFs::flags_hi`,
+///   driver/src/v3d/v3d_job.c EMIT_VARYING_FLAGS);
+/// * the vertex shader writes them to the VPM after the header and
+///   gl_Position: 64 rows, 8 sectors of the 128 the BCM2711's 64 KiB hold
+///   (chain.rs `vpm_fields`).
+///
+/// Under `report-es2` 8, the ES 2.0 answer as it was (tests/es2_report_guard.rs).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VARYING_VECTORS: usize = 15;
+#[cfg(all(feature = "gpu-v3d", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// Mali-G610: 8, the ES 2.0 minimum, as the V3D's first cut: nothing has
 /// been compiled for it yet. Mesa's panfrost takes 32 inputs a stage on
@@ -190,6 +202,20 @@ pub fn max_color_attachments() -> usize {
 /// The shader's gl_MaxVertexOutputVectors / gl_MaxFragmentInputVectors are
 /// these divided by four (ES 3.00 section 7.3), so raising one here moves
 /// the shader's value with it.
+///
+/// The vertex output of the V3D and the PowerVR is 64 (16 vec4s: gl_Position
+/// and the 15 varyings, ES 3.0's minimum, the fragment input one vector
+/// less because the position is not a fragment input): the V3D's VPM holds
+/// the position beside them, and the PowerVR's vertex output is the 4
+/// dwords of the position and the 60 of the varyings (and gl_PointSize
+/// after them), 65 dwords for the VDM's 8-bit size in units of 4
+/// (tests/es3_v3d_varyings.rs, tests/es3_pvr_varyings.rs build exactly
+/// that). The GC7000 stays at 15 * 4: whether its 16 io rows hold the
+/// position, 15 varyings and a gl_PointSize is open (docs/notes/
+/// es3-shader-interface-limits.md).
+#[cfg(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2")))]
+pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = (MAX_VARYING_VECTORS + 1) * 4;
+#[cfg(not(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2"))))]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 /// GL_MIN/MAX_PROGRAM_TEXEL_OFFSET, ES 3.0's minimum range: the values the

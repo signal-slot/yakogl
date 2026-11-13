@@ -243,8 +243,24 @@ samplers), RC6 and RC15; no single item.
 `state_query` 25 and `implementation_limits` 11: ES 3.0 limits read as float
 or 64-bit integers, uniform-block and varying component limits below the ES
 3.0 minimum, the compressed-format list, `max_draw_buffers` and
-`max_color_attachments` 3 (RC14). Item `es3-caps` (the ES 3.0 limits test was
-reverted for review and is to be redone).
+`max_color_attachments` 3 (RC14). `tests/es3_caps.rs` (`known_gaps()`) lists
+the limits below their minimum.
+
+The `*_getfloat` and `*_getinteger64` rows are not a second defect. The three
+integer entry points answer one number (`get_integerv` is the one source,
+`glGetFloatv` and `glGetInteger64v` convert it; `tests/es3_limits_v3d.rs`,
+`tests/es3_v3d_varyings.rs` pin it per pname), so a row fails on the form
+that asks the limit's value of a limit below its minimum and on no other
+cause. The board lists of 2026-10-31 were taken before the values moved.
+
+Closed on the host (HOST-ONLY, no board run yet): MAX_VARYING_VECTORS 15,
+MAX_VARYING_COMPONENTS 60 and MAX_FRAGMENT_INPUT_COMPONENTS 60 on the V3D
+(the PowerVR had them), MAX_VERTEX_OUTPUT_COMPONENTS 64 on the V3D and the
+PowerVR. Still open: MAX_VERTEX_OUTPUT_COMPONENTS 60 on the GC7000UL,
+MAX_UNIFORM_BLOCK_SIZE 6144 and MAX_COMBINED_VERTEX/FRAGMENT_UNIFORM_COMPONENTS
+1536 on every GPU, MAX_SAMPLES 1, the compressed-format count, and RC14. The
+design for each and its issue text are in
+`notes/es3-shader-interface-limits.md`.
 
 ### RC11. Occlusion queries
 

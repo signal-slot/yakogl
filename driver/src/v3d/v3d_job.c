@@ -493,25 +493,35 @@ static bool write_uniforms(struct v3d_cl *cl, const struct v3d_uniform *u, uint3
 	return true;
 }
 
-/* v3dx_emit.c emit_varying_flags for word 0 (the only word struct
- * v3d_fs_prog carries: 24 varyings, more than MAX_VARYING_VECTORS asks for):
- * one packet that zeroes the higher words, or ZERO_ALL_* when it is 0. The
+/* v3dx_emit.c emit_varying_flags: the flags are 24 inputs to a word, three
+ * words for the 64 inputs of V3D_MAX_FS_INPUTS. One packet per non-zero word,
+ * the first one zeroing what is not written (the words below it unless it
+ * is word 0, and the words above), or ZERO_ALL_* when every word is 0. The
  * three kinds are three packets of one layout (V3DX(emit_varying_flags)'s
- * flag_emit_callback in Mesa). */
-#define EMIT_VARYING_FLAGS(bcl, KIND, kind, w0)                                                    \
+ * flag_emit_callback in Mesa). Adds the packets beyond the one a kind
+ * counted to `extra`. */
+#define EMIT_VARYING_FLAGS(bcl, KIND, kind, w, extra)                                              \
 	do {                                                                                       \
-		if (!(w0)) {                                                                       \
-			v3d_cl_emit(bcl, ZERO_ALL_##KIND##_FLAGS, zero_all);                       \
-		} else {                                                                           \
+		bool emitted_any = false;                                                          \
+		for (uint32_t i = 0; i < 3; i++) {                                                 \
+			if (!(w)[i])                                                               \
+				continue;                                                          \
 			v3d_cl_emit(bcl, KIND##_FLAGS, flags) {                                    \
-				flags.varying_offset_v0 = 0;                                       \
+				flags.varying_offset_v0 = i;                                       \
 				flags.action_for_##kind##_flags_of_lower_numbered_varyings =       \
-					V3D_VARYING_FLAGS_ACTION_UNCHANGED;                        \
+					emitted_any || i == 0 ? V3D_VARYING_FLAGS_ACTION_UNCHANGED \
+							      : V3D_VARYING_FLAGS_ACTION_ZEROED;   \
 				flags.action_for_##kind##_flags_of_higher_numbered_varyings =      \
-					V3D_VARYING_FLAGS_ACTION_ZEROED;                           \
-				flags.kind##_flags_for_varyings_v024 = (w0);                       \
+					emitted_any ? V3D_VARYING_FLAGS_ACTION_UNCHANGED           \
+						    : V3D_VARYING_FLAGS_ACTION_ZEROED;             \
+				flags.kind##_flags_for_varyings_v024 = (w)[i];                     \
 			}                                                                          \
+			if (emitted_any)                                                           \
+				(extra)++;                                                         \
+			emitted_any = true;                                                        \
 		}                                                                                  \
+		if (!emitted_any)                                                                  \
+			v3d_cl_emit(bcl, ZERO_ALL_##KIND##_FLAGS, zero_all);                       \
 	} while (0)
 
 static void emit_stencil_face(struct v3d_cl *bcl, const struct v3d_job_stencil_face *f, bool front,
@@ -756,11 +766,16 @@ static bool emit_state(struct v3d_job *j, const struct v3d_job_draw *d, struct p
 
 	/* varying flags (v3dx_emit.c:621-643) */
 	const struct v3d_fs_prog *fs = d->fs;
-	if (PACK(V3D_PACK_VARYINGS, 3, fs->flat_shade_flags, fs->noperspective_flags,
-		 fs->centroid_flags)) {
-		EMIT_VARYING_FLAGS(bcl, FLAT_SHADE, flat_shade, fs->flat_shade_flags);
-		EMIT_VARYING_FLAGS(bcl, NON_PERSPECTIVE, non_perspective, fs->noperspective_flags);
-		EMIT_VARYING_FLAGS(bcl, CENTROID, centroid, fs->centroid_flags);
+	const uint32_t flat[3] = { fs->flat_shade_flags, fs->flags_hi[0], fs->flags_hi[1] };
+	const uint32_t nonpersp[3] = { fs->noperspective_flags, fs->flags_hi[2], fs->flags_hi[3] };
+	const uint32_t centroid[3] = { fs->centroid_flags, fs->flags_hi[4], fs->flags_hi[5] };
+	if (PACK(V3D_PACK_VARYINGS, 3, flat[0], flat[1], flat[2], nonpersp[0], nonpersp[1], nonpersp[2],
+		 centroid[0], centroid[1], centroid[2])) {
+		uint32_t extra = 0;
+		EMIT_VARYING_FLAGS(bcl, FLAT_SHADE, flat_shade, flat, extra);
+		EMIT_VARYING_FLAGS(bcl, NON_PERSPECTIVE, non_perspective, nonpersp, extra);
+		EMIT_VARYING_FLAGS(bcl, CENTROID, centroid, centroid, extra);
+		pd->n.emitted += extra;
 	}
 
 	/* no transform feedback targets (v3dx_emit.c:648-677); the occlusion
@@ -797,8 +812,8 @@ static bool draw_is_supported(const struct v3d_job_draw *d)
 	if (!threads_ok(d->fs->threads) || !threads_ok(d->vs->threads) ||
 	    !threads_ok(d->cs->threads))
 		return false;
-	/* word 0 of the varying flags only (24 varyings) */
-	if (d->fs->num_inputs > 24)
+	/* the three words of the varying flags (V3D_MAX_FS_INPUTS) */
+	if (d->fs->num_inputs > 64)
 		return false;
 	if (d->prim > V3D_PRIM_TRIANGLE_FAN || d->count == 0)
 		return false;

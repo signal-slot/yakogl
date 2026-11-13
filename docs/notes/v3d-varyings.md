@@ -156,3 +156,45 @@ asked. In either case the constants in `context.rs:193-194` stop being
   point varyings included, stay within what the hardware takes?), and
   flat and centroid bits in words 1 and 2. Nothing here has run on the
   board; the 16 is Mesa's number, not a measurement of ours.
+
+## Status: `v3d-varyings-compiler` and `v3d-varyings-raise` done on the host
+
+Reported: **15 / 60 / 60 / 64** (the decision's fallback, ES 3.0's own
+numbers), not Mesa's 16 / 64: nothing has drawn more than 15 on a board, and
+`gl_PointCoord`'s two implicit varyings ride beside the declared ones. The
+64 of the vertex output is the position and the 15
+(`context.rs` `MAX_VERTEX_OUTPUT_COMPONENTS`); `report-es2` keeps 8.
+
+What differs from the lists above:
+
+- The flag words are not three arrays in each struct: the existing
+  `flat_shade_flags`, `noperspective_flags` and `centroid_flags` stay word 0
+  (so every reader of them, the fixtures and the Mesa comparison included,
+  is unchanged) and `flags_hi: [u32; 6]` is appended to `ShcV3dFs`,
+  `V3dFsProg` and the C structs: `[flat 1, flat 2, noperspective 1,
+  noperspective 2, centroid 1, centroid 2]`. `ShcV3dFs` is 72 bytes (was
+  48), `V3dFsProg` 80 (was 56); `abi_layout.rs` and `abi_layout_check.c`
+  are regenerated (`yakogl-tools abi-layout driver/src`).
+- `chain.rs` sets input *i* as bit *i* % 24 of word *i* / 24 and refuses
+  more than `MAX_FS_INPUTS` (64) inputs by name; `select_fragment` takes the
+  two flag sets as `[u32; 3]`.
+- `select_vertex`'s row cap is `MAX_VPM_OUTPUT_ROWS` = 15 sectors x 8 = 120,
+  not 69: the shader record's "vertex shader output VPM segment size" is 4
+  bits of 8-row sectors (`v3d_packet.xml`). The 15 varyings with a point
+  size are 65 rows, 9 sectors; the 64 KiB VPM keeps 7 batches of them.
+- `EMIT_VARYING_FLAGS` (`v3d_job.c`) is the port of `emit_varying_flags`
+  above. `tools/v3d/job_check.c` part 13b reads its packets back with
+  Mesa's decoder: a 60-input job with flags in all three words, the first
+  packet zeroing the words above word 0, the later ones leaving them, a
+  centroid flag in word 1 alone zeroing word 0, ZERO_ALL for the kind with
+  no flag.
+- `tests/es3_v3d_varyings.rs` compiles, links and draws fifteen vec4
+  varyings (flat last, centroid in the middle: word 2 bits 8-11 and word 1
+  bits 4-7), runs the 60-input fragment program on `sim.rs` with each input
+  fetched from the slot the record gives it, and checks the four limits in
+  all three integer query forms. `es100/varyings15` left
+  `tools/shaders/known-uncompilable-v3d.txt`.
+
+Still open: the ES 3.00 link check of varying components, the Pi 4 board
+check of the last paragraph above (15 vec4 with `gl_PointCoord`, flat and
+centroid in words 1 and 2), and the 64-input ceiling's own board test.

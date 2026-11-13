@@ -1165,6 +1165,12 @@ pub struct ShcV3dFs {
     /// Bit n: the program writes colour to render target n (0..3); 0 for
     /// a program that writes no colour (a depth pre-pass).
     pub rt_mask: u8,
+    /// Words 1 and 2 of the three flag arrays, `[flat 1, flat 2,
+    /// noperspective 1, noperspective 2, centroid 1, centroid 2]`: the
+    /// shader record's flags are 24 inputs to a word (Mesa's
+    /// `flat_shade_flags[(V3D_MAX_FS_INPUTS - 1) / 24 + 1]`), the fields
+    /// above are word 0, so the 60 inputs of 15 vec4 varyings need three.
+    pub flags_hi: [u32; 6],
 }
 
 /// The vertex or coordinate shader of a linked program
@@ -1232,6 +1238,7 @@ impl ShcV3dFs {
         uses_implicit_point_line_varyings: 0,
         uses_pid: 0,
         rt_mask: 0,
+        flags_hi: [0; 6],
     };
 
     /// The uniform stream.

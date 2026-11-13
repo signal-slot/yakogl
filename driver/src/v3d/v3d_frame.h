@@ -172,12 +172,15 @@ struct v3d_fs_prog {
 	uint32_t threads;
 	bool single_seg;
 	uint32_t num_inputs;
-	/* word 0 of each flags array: M5 supports num_inputs <= 24 and all zero */
+	/* word 0 of each flags array (24 inputs to a word, v3dx_emit.c
+	 * emit_varying_flags); words 1 and 2 are in flags_hi */
 	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
 	bool writes_z, disable_ez, uses_center_w, lock_scoreboard_on_first_thrsw;
 	bool uses_implicit_point_line_varyings, uses_pid;
 	const struct v3d_uniform *uniforms;
 	uint32_t num_uniforms;
+	/* flat 1, flat 2, noperspective 1, noperspective 2, centroid 1, centroid 2 */
+	uint32_t flags_hi[6];
 };
 
 /* The vertex or coordinate shader's prog_data (v3d_vs_prog_data). */
