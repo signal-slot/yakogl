@@ -266,10 +266,11 @@ static int read_sectors(uint8_t *buf, uint32_t first, uint32_t count)
 	return 0;
 }
 
-/* An uncompressed segment straight to its load address: the whole sectors,
- * then the last partial one through the header buffer (the header is parsed
- * by now), so nothing past the segment's image bytes is written: what
- * follows them is its zero bytes or another segment. */
+/* An uncompressed image or segment straight to its load address: the whole
+ * sectors, then the last partial one through the header buffer (the header
+ * is parsed by now), so nothing past its image bytes is written: what
+ * follows them may be a zero range, which the zero thread is clearing, or
+ * another segment. */
 static int read_in_place(uint8_t *dst, uint32_t first, uint64_t bytes)
 {
 	uint32_t whole = (uint32_t)(bytes / SECTOR_BYTES);
@@ -287,6 +288,106 @@ static int read_in_place(uint8_t *dst, uint32_t first, uint64_t bytes)
 	return 0;
 }
 #endif
+
+/*
+ * The zero ranges, cleared on a thread of their own: a version-2 header's
+ * one range (the .bss of an image that skips its own clear) and each
+ * segment's zero bytes of a version-3 one (the zero runs the payload does not
+ * store, and the .bss). The loader runs with the MMU and the caches on,
+ * where a clear is fast (the image's reset path would clear its .bss with
+ * them off), and main() sleeps while the eMMC's DMA runs: this thread has
+ * the lowest application priority, so it gets exactly that time, and main(),
+ * woken by the SDHC interrupt, always runs first. With the payload linked in
+ * there is no such wait; the thread then runs when main() waits for it,
+ * after the unpack, which is where main() cleared the range itself before.
+ *
+ * The clear is the C library's memset: in this speed-optimised build that is
+ * the toolchain's aarch64 routine, which zeroes a long range with DC ZVA, one
+ * 64-byte block an instruction without reading it from memory first (it
+ * reads DCZID_EL0 and stores pairs when the core forbids the instruction).
+ * On the AM62P a loop of the same instruction cleared the showcase's 57 MB
+ * in 8 ms of this thread's time while the eMMC read ran, and main() waited
+ * 0 ms for it (2026-11-13, a loader built for size, whose memset stored
+ * bytes).
+ *
+ * No lock: the header check (loader/src/lib.rs) guarantees that a zero range
+ * shares no byte with the image bytes of the image or of any segment, with
+ * another zero range or with the staging buffer, and the reads below write
+ * nothing past the bytes they are for, so nothing main() reads, copies or
+ * decodes lands in a range this thread writes. The whole-cache flush before
+ * the jump comes after main() has taken zero_done.
+ */
+#define ZERO_PRIORITY K_LOWEST_APPLICATION_THREAD_PRIO
+BUILD_ASSERT(ZERO_PRIORITY > CONFIG_MAIN_THREAD_PRIORITY, "the clear runs under main()");
+
+static struct {
+	uint8_t *at;
+	size_t bytes;
+} zero_ranges[1 + BS2_MAX_SEGMENTS];
+static uint32_t zero_count;
+/* From the thread's first instruction to its last, the times main()
+ * preempted it included. Read by main() after zero_done. */
+static int64_t zero_thread_ms;
+/* In .bss, not K_SEM_DEFINE's initialised data: the range
+ * BOOT_STAGE2_RESTART copies stays what it was. */
+static struct k_sem zero_done;
+static K_THREAD_STACK_DEFINE(zero_stack, 4096);
+static struct k_thread zero_thread;
+
+static void zero_entry(void *p1, void *p2, void *p3)
+{
+	int64_t t = k_uptime_get();
+
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+	for (uint32_t i = 0; i < zero_count; i++) {
+		memset(zero_ranges[i].at, 0, zero_ranges[i].bytes);
+	}
+	zero_thread_ms = k_uptime_get() - t;
+	k_sem_give(&zero_done);
+}
+
+/* Start the clear of every zero range of the header, in table order. The
+ * number of bytes; 0: nothing to clear, no thread. */
+static uint64_t zero_start(const struct bs2_info *info)
+{
+	uint64_t total = 0;
+
+	if (info->zero_bytes != 0u) {
+		zero_ranges[zero_count].at = (uint8_t *)(LOAD + (uintptr_t)info->zero_offset);
+		zero_ranges[zero_count].bytes = (size_t)info->zero_bytes;
+		zero_count++;
+		total += info->zero_bytes;
+	}
+	for (uint32_t i = 0; i < info->count; i++) {
+		const struct bs2_segment *s = &info->segments[i];
+
+		if (s->zero_bytes != 0u) {
+			zero_ranges[zero_count].at = (uint8_t *)(uintptr_t)(s->load + s->image_bytes);
+			zero_ranges[zero_count].bytes = s->zero_bytes;
+			zero_count++;
+			total += s->zero_bytes;
+		}
+	}
+	if (zero_count) {
+		k_sem_init(&zero_done, 0, 1);
+		k_thread_create(&zero_thread, zero_stack, K_THREAD_STACK_SIZEOF(zero_stack), zero_entry,
+				NULL, NULL, NULL, ZERO_PRIORITY, 0, K_NO_WAIT);
+	}
+	return total;
+}
+
+/* Wait until the clear is done. The milliseconds main() waited. */
+static int64_t zero_wait(void)
+{
+	int64_t t = k_uptime_get();
+
+	if (zero_count) {
+		(void)k_sem_take(&zero_done, K_FOREVER);
+	}
+	return k_uptime_get() - t;
+}
 
 static const char *compression_name(uint32_t compression)
 {
@@ -403,6 +504,9 @@ int main(void)
 	}
 	int64_t t_read = 0, t_unpack = 0;
 	uint32_t nsec = 0;
+	/* After the probe above, which writes the first MiB at LOAD: a zero
+	 * range may begin there. */
+	const uint64_t zero_total = zero_start(&info);
 
 	if (segmented) {
 		for (uint32_t i = 0; i < info.count; i++) {
@@ -450,13 +554,21 @@ int main(void)
 	} else {
 		int64_t t1 = k_uptime_get();
 #ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
-		/* Uncompressed: straight to the load address. Compressed: to the
-		 * staging copy above the image, then decoded down to the load
-		 * address. */
-		uint8_t *stored = (uint8_t *)(info.compression != BS2_COMPRESSION_NONE ? STAGING : LOAD);
+		/* Uncompressed: straight to the load address (not a byte past
+		 * the image: a version-2 zero range may begin there, and it is
+		 * being cleared). Compressed: to the staging copy above the
+		 * image, then decoded down to the load address. */
+		uint8_t *stored;
 
 		nsec = (uint32_t)((info.stored_bytes + SECTOR_BYTES - 1) / SECTOR_BYTES);
-		if (read_sectors(stored, HDR_SECTOR + 1, nsec)) {
+		if (info.compression != BS2_COMPRESSION_NONE) {
+			stored = (uint8_t *)STAGING;
+			ret = read_sectors(stored, HDR_SECTOR + 1, nsec);
+		} else {
+			stored = (uint8_t *)LOAD;
+			ret = read_in_place(stored, HDR_SECTOR + 1, info.stored_bytes);
+		}
+		if (ret) {
 			halt();
 		}
 #else
@@ -477,28 +589,15 @@ int main(void)
 	}
 	bs2_stamp(3);
 
-	/* The zero ranges: a version-2 header's one range (the image's .bss, for
-	 * an image that skips its own clear; bs2_header_parse checked it is past
-	 * the image and inside the region) and each segment's zero bytes of a
-	 * version-3 one (the zero runs the payload does not store, and the
-	 * .bss). Here the caches are on; the image's reset path would clear its
-	 * .bss with them off. */
-	if (info.zero_bytes != 0u) {
-		memset((void *)(LOAD + (uintptr_t)info.zero_offset), 0, (size_t)info.zero_bytes);
-	}
-	for (uint32_t i = 0; i < info.count; i++) {
-		const struct bs2_segment *s = &info.segments[i];
-
-		if (s->zero_bytes != 0u) {
-			memset((void *)(uintptr_t)(s->load + s->image_bytes), 0, s->zero_bytes);
-		}
-	}
+	/* Every image byte is in place; the zero ranges are once this returns. */
+	const int64_t t_zero_wait = zero_wait();
 	bs2_stamp(7);
 
-	progress("boot_stage2: \"%s\" ok (CRC-32 %08x): read %u sectors in %lld ms, unpacked in %lld ms; "
+	progress("boot_stage2: \"%s\" ok (CRC-32 %08x): read %u sectors in %lld ms, unpacked in %lld ms, "
+		 "cleared %llu bytes in %lld ms on the zero thread (main waited %lld ms for it); "
 		 "jumping to 0x%llx at %lld ms\n", info.name,
 		 segmented ? info.segments[0].image_crc32 : info.image_crc32, nsec, t_read, t_unpack,
-		 info.entry, k_uptime_get() - t0);
+		 zero_total, zero_thread_ms, t_zero_wait, info.entry, k_uptime_get() - t0);
 
 	/* Let the UART drain the last line: the image re-initialises it. */
 	if (IS_ENABLED(CONFIG_BOOT_STAGE2_PROGRESS_LOG)) {
