@@ -24,10 +24,13 @@
 //! The upload tests need the three classes in the sampled mask. The mask
 //! hook of the in-crate tests (`backend::TEST_EXTRA_SAMPLED`) is
 //! `#[cfg(test)]`, so no integration test can add them: until
-//! GC_SAMPLED_TEXFMTS holds them (item wide128-flip) the upload tests find
+//! GC_SAMPLED_TEXFMTS holds them (item narrow-classes) the upload tests find
 //! the classes closed, say so on stderr and check the closed state instead
-//! (the GL core stores no 128-bit class for this back end). From the flip on
-//! they run for real. Before the flip they were run with the three classes
+//! (the GL core stores no 128-bit class for this back end). From the mask
+//! flip on they run for real, RGBA32F too: the GL core keeps GL_RGBA32F in
+//! its own class wherever the mask holds it (src/gl/texture.rs
+//! `rgba32f_native`, item wide128-flip), so an open class that is not two
+//! planes is a failure. Before the flip they were run with the three classes
 //! added to GC_SAMPLED_TEXFMTS locally.
 //!
 //! ```text
@@ -587,17 +590,18 @@ fn check_planes(what: &str, class: &(&str, u8, u32, &str), (w, h): (u32, u32), m
     }
 }
 
-/// Did the GL core store the class as planes? RGBA32F is held as halves by
-/// `sized_format` (src/gl/texture.rs, `GL_RGBA32F => ... GLES_TEXFMT_RGBA16F`)
-/// whatever the mask says, so its descriptor is not a G32R32 one even with
-/// the class open. The test says so and checks nothing for it until it is.
-fn stored_as_planes(class: &(&str, u8, u32, &str), stream: &[(u32, u32)]) -> bool {
+/// The GL core stored the open class as planes: slot 0's descriptor carries
+/// the class's G32R32 word. RGBA32F too, which the GL core keeps in its own
+/// class wherever the mask holds it (src/gl/texture.rs `rgba32f_native`); a
+/// GL_RGBA32F held as halves would show the RGBA16F word here.
+fn assert_stored_as_planes(class: &(&str, u8, u32, &str), stream: &[(u32, u32)]) {
     let d = descriptor(stream, 0).unwrap_or_else(|| panic!("{}: no descriptor in slot 0", class.0));
-    let planes = d[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f == rnndb(class.3);
-    if !planes {
-        eprintln!("{}: the GL core does not store the class as planes (texture.rs sized_format); not checked", class.0);
-    }
-    planes
+    assert_eq!(
+        d[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f,
+        rnndb(class.3),
+        "{}: an open class is stored as two G32R32 planes (texture.rs sized_format)",
+        class.0
+    );
 }
 
 /// The sizes: non-square, not tile-aligned, with mips down to 1x1.
@@ -615,7 +619,7 @@ fn levels_of(w: u32, h: u32) -> u32 {
 fn an_uploaded_128_bit_texture_is_two_tiled_planes() {
     for class in &WIDE {
         if !open(class.1) {
-            eprintln!("{}: not in GC_SAMPLED_TEXFMTS; the plane upload is not exercised (wide128-flip)", class.0);
+            eprintln!("{}: not in GC_SAMPLED_TEXFMTS; the plane upload is not exercised (narrow-classes)", class.0);
             assert!(!yakogl::vivante::texture::wide128_sampled(&GlesTextureBind {
                 format: class.1,
                 ..Default::default()
@@ -632,9 +636,7 @@ fn an_uploaded_128_bit_texture_is_two_tiled_planes() {
                 let m = model(class.1 == GLES_TEXFMT_RGBA32F, w, h, levels_of(w, h));
                 upload(class, w, h, &m);
                 let s = draw(program(sampler));
-                if !stored_as_planes(class, &s) {
-                    return;
-                }
+                assert_stored_as_planes(class, &s);
                 check_planes(&format!("{} {w}x{h}", class.0), class, (w, h), &m, &s);
             });
         }
@@ -647,7 +649,7 @@ fn an_uploaded_128_bit_texture_is_two_tiled_planes() {
 fn a_sub_image_update_touches_only_its_texels_in_both_planes() {
     for class in &WIDE {
         if !open(class.1) {
-            eprintln!("{}: not in GC_SAMPLED_TEXFMTS; the sub-image update is not exercised (wide128-flip)", class.0);
+            eprintln!("{}: not in GC_SAMPLED_TEXFMTS; the sub-image update is not exercised (narrow-classes)", class.0);
             continue;
         }
         let sampler = match class.1 {
@@ -662,9 +664,7 @@ fn a_sub_image_update_touches_only_its_texels_in_both_planes() {
             let p = program(sampler);
             let what = |s: &str| format!("{} {s}", class.0);
             let s = draw(p);
-            if !stored_as_planes(class, &s) {
-                return;
-            }
+            assert_stored_as_planes(class, &s);
             check_planes(&what("before"), class, (w, h), &m, &s);
 
             /* crosses the tile columns at 4 and 8 and the row at 4 */
