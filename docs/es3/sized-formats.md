@@ -100,6 +100,61 @@ change; the tests state the expectation per mask.
 * A texture of these formats is no render target except `RGB10_A2` (its own
   surface on the V3D, `RGBA8` elsewhere) (`framebuffer.rs` attachment guard).
 
+## Float colour targets
+
+`R16F`, `RG16F`, `RGBA16F`, `R32F`, `RG32F`, `RGBA32F` and `R11F_G11F_B10F`.
+Plan #360's decision and evidence: `docs/notes/es3-float-targets.md`.
+
+The rule:
+
+* ES 3.0.6 table 3.13 marks none of them colour-renderable (`RGB16F` is a
+  texture-only format there as well).
+* `GL_EXT_color_buffer_half_float` adds the 16F ones.
+* `GL_EXT_color_buffer_float` adds all seven.
+* Without the extension a renderbuffer or texture of such a format is
+  framebuffer-incomplete (ES 3.0.6 4.4.4, `FRAMEBUFFER_INCOMPLETE_ATTACHMENT`),
+  so `R32F` in particular must be incomplete when `GL_EXT_color_buffer_float`
+  is not claimed. The extension texts are cited by name only here.
+
+What yakogl does today (the extension string and the checks are the GL
+core's, the same for all three GPUs):
+
+* `GL_EXT_color_buffer_half_float` is listed in the ES 3.0 build
+  (`src/gl/state.rs:112`); `GL_EXT_color_buffer_float` is listed nowhere.
+* `is_color_format` accepts `R16F`, `RG16F`, `RGB16F`, `RGBA16F` and `R32F`
+  (`src/gl/framebuffer.rs:646-650`), so `R32F` is complete today without the
+  extension: this is the gap to the rule. `RG32F`, `RGBA32F` and
+  `R11F_G11F_B10F` are not in it and are incomplete (correct without the
+  extension; with it they would need a surface class first).
+* The renderbuffer arm maps `RGBA16F`, `RGB16F` and `RG16F` to the
+  `GLES_SURF_RGBA16F` class, `R16F` to `GLES_SURF_R16F` and `R32F` to
+  `GLES_SURF_R32F` (`src/gl/framebuffer.rs:743-747`); the texture arm does the
+  same by texture format (`src/gl/framebuffer.rs:965-967`), and the
+  attachment lookup by internal format (`src/gl/framebuffer.rs:1279-1281`).
+  Only these three float classes exist (`src/backend.rs:364-366`).
+* `rt_format_drawable` is true for every class that is not sRGB, `RGB10_A2`
+  or integer (`src/backend.rs:569-590`), so the three float classes pass it on
+  every GPU.
+
+The set each back end draws today, from its class mapping:
+
+| GPU | Drawn float classes | Read from |
+| --- | --- | --- |
+| V3D 4.2 | `RGBA16F` (16F, 64 bpp), `R16F` (16F, also 64 bpp), `R32F` (32F, 32 bpp) | `src/v3d/state.rs:468-470` |
+| PowerVR BXS-4-64 | `RGBA16F` (PBE `F16F16F16F16`), `R16F` (`F16`), `R32F` (`F32`) | `src/pvr/backend.rs:1024-1026` |
+| GC7000UL | `RGBA16F` (`A16B16G16R16F`), `R16F`, `R32F` (PE formats) | `src/vivante/backend.rs:337-339` |
+
+`RG16F` and `RGB16F` use the `RGBA16F` class everywhere. None of the three
+draws `RG32F`, `RGBA32F` or `R11F_G11F_B10F`.
+
+The plan #360 decision:
+
+* V3D: claims `GL_EXT_color_buffer_float` only under the **planned** Cargo
+  feature `color-buffer-float`, off by default; not landed yet.
+* PowerVR BXS-4-64: does not claim it.
+* GC7000UL: does not claim it.
+* report-es2 builds claim neither extension (`tests/es2_report_guard.rs`).
+
 ## Not done (left to other items)
 
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).
