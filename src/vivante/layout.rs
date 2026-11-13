@@ -257,3 +257,319 @@ fn for_each_pixel(
         }
     }
 }
+
+// Case 244 `dlayout` (docs/notes/gc-ts-probe.md, "Part (ii)"): the depth ramp
+// of the 64x64 draw and the decode of the surface the PE wrote.
+
+/// Pixels along one side of case 244's target.
+pub const DLAYOUT_SIDE: u32 = 64;
+/// Dwords of case 244's surface (16 KiB).
+pub const DLAYOUT_DWORDS: usize = (DLAYOUT_SIDE * DLAYOUT_SIDE) as usize;
+/// The reference pixels whose dword offsets the page carries, in page order.
+pub const DLAYOUT_REF_PIXELS: [(u32, u32); 12] =
+    [(1, 0), (2, 0), (4, 0), (8, 0), (0, 1), (0, 4), (0, 8), (16, 0), (0, 16), (32, 0), (0, 32), (63, 63)];
+/// An offset of [`DlayoutResult::offsets`] whose pixel was not found.
+pub const DLAYOUT_NOT_FOUND: u16 = 0xffff;
+/// A decoded z24 matches a pixel only when strictly closer than this.
+const DLAYOUT_TOLERANCE: u32 = 1024;
+/// Distance of two neighbouring ids in z24 units (2^-13 of the range).
+const DLAYOUT_STEP: u32 = 2048;
+
+/// `dlayout_decode`'s outcome (the low nibble of page A's w1; `F` is the
+/// case's own HANG).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum DlayoutCode {
+    /// The surface is the clear value everywhere.
+    NoWrite = 1,
+    /// Every id at `y * 64 + x` (stride `align(64, 64) * 4`).
+    RowLinear = 2,
+    /// Every id at `offset(Tiled, ..)`.
+    Tiled4 = 3,
+    /// Every id at `offset_in(SuperTiled, Drm, ..)`.
+    SuperDrm = 4,
+    /// Every id at `offset_in(SuperTiled, Interleaved, ..)`.
+    SuperInterleaved = 5,
+    /// Each id found once, at none of the four maps.
+    Other = 6,
+    /// Fewer than 4096 ids found exactly once.
+    Partial = 7,
+}
+
+/// What [`dlayout_decode`] read from a surface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DlayoutResult {
+    pub code: DlayoutCode,
+    /// How many of the 4096 ids were found exactly once.
+    pub matched: u32,
+    /// Dword offset of each of [`DLAYOUT_REF_PIXELS`] ([`DLAYOUT_NOT_FOUND`]
+    /// unless the id was found exactly once).
+    pub offsets: [u16; 12],
+    /// CRC-32 (IEEE) of the surface bytes, little-endian dwords.
+    pub crc: u32,
+    /// `(dword index, z byte)` of the first dword that is not the clear
+    /// value; the z byte is bits 15:8 of the dword (the low byte of z24).
+    pub first_non_clear: Option<(u32, u8)>,
+}
+
+/// The 24-bit depth of pixel `(x, y)` on the plane `z = (x + 64 y) / 8192`
+/// sampled at the pixel centre, rounded to 24 bits.
+pub fn dlayout_expect(x: u32, y: u32) -> u32 {
+    // ((x + .5) + 64 (y + .5)) / 8192 * 2^24 = (x + 64 y + 32.5) * 2048,
+    // an integer.
+    (x + DLAYOUT_SIDE * y) * DLAYOUT_STEP + 65 * DLAYOUT_STEP / 2
+}
+
+// The pixel id `x + 64 y` whose `dlayout_expect` is nearest to `z24`, if
+// within the tolerance.
+fn dlayout_id(z24: u32) -> Option<u32> {
+    let base = dlayout_expect(0, 0);
+    let id = (z24.saturating_sub(base) + DLAYOUT_STEP / 2) / DLAYOUT_STEP;
+    if id >= DLAYOUT_DWORDS as u32 {
+        return None;
+    }
+    let e = dlayout_expect(id % DLAYOUT_SIDE, id / DLAYOUT_SIDE);
+    (z24.abs_diff(e) < DLAYOUT_TOLERANCE).then_some(id)
+}
+
+// CRC-32 (IEEE 802.3, reflected, as zlib) of `data`.
+fn crc32(data: impl Iterator<Item = u8>) -> u32 {
+    let mut crc = !0u32;
+    for b in data {
+        crc ^= b as u32;
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xedb8_8320 & (crc & 1).wrapping_neg());
+        }
+    }
+    !crc
+}
+
+/// Decode a D24S8 surface the PE wrote for case 244's ramp (`surface` is
+/// the 64x64 surface's dwords, at least [`DLAYOUT_DWORDS`], `clear` the
+/// dword it was cleared to). Dwords past the first 4096 are ignored.
+pub fn dlayout_decode(surface: &[u32], clear: u32) -> DlayoutResult {
+    let s = &surface[..DLAYOUT_DWORDS.min(surface.len())];
+    // Per id: how often found, and the first dword index it was found at.
+    let mut count = [0u8; DLAYOUT_DWORDS];
+    let mut at = [0u16; DLAYOUT_DWORDS];
+    for (i, &d) in s.iter().enumerate() {
+        if let Some(id) = dlayout_id(d >> 8) {
+            let id = id as usize;
+            if count[id] == 0 {
+                at[id] = i as u16;
+            }
+            count[id] = count[id].saturating_add(1);
+        }
+    }
+    let matched = count.iter().filter(|&&c| c == 1).count() as u32;
+    let mut offsets = [DLAYOUT_NOT_FOUND; 12];
+    for (o, &(x, y)) in offsets.iter_mut().zip(DLAYOUT_REF_PIXELS.iter()) {
+        let id = (x + DLAYOUT_SIDE * y) as usize;
+        if count[id] == 1 {
+            *o = at[id];
+        }
+    }
+    let first_non_clear = s.iter().position(|&d| d != clear).map(|i| (i as u32, (s[i] >> 8) as u8));
+    let stride = align_up(DLAYOUT_SIDE, 64) * 4;
+    let fits = |map: &dyn Fn(u32, u32) -> usize| {
+        (0..DLAYOUT_DWORDS as u32).all(|id| {
+            let (x, y) = (id % DLAYOUT_SIDE, id / DLAYOUT_SIDE);
+            count[id as usize] == 1 && at[id as usize] as usize == map(x, y)
+        })
+    };
+    let code = if first_non_clear.is_none() {
+        DlayoutCode::NoWrite
+    } else if matched < DLAYOUT_DWORDS as u32 {
+        DlayoutCode::Partial
+    } else if fits(&|x, y| (y * stride / 4 + x) as usize) {
+        DlayoutCode::RowLinear
+    } else if fits(&|x, y| offset(Layout::Tiled, x, y, 4, stride) / 4) {
+        DlayoutCode::Tiled4
+    } else if fits(&|x, y| offset_in(Layout::SuperTiled, SuperOrder::Drm, x, y, 4, stride) / 4) {
+        DlayoutCode::SuperDrm
+    } else if fits(&|x, y| offset_in(Layout::SuperTiled, SuperOrder::Interleaved, x, y, 4, stride) / 4) {
+        DlayoutCode::SuperInterleaved
+    } else {
+        DlayoutCode::Other
+    };
+    let bytes = s.iter().flat_map(|d| d.to_le_bytes());
+    DlayoutResult { code, matched, offsets, crc: crc32(bytes), first_non_clear }
+}
+
+/// Tag of mode `mode`'s page A (page B is [`dlayout_tag_b`]).
+pub const fn dlayout_tag_a(mode: u32) -> u8 {
+    0xc0 + mode as u8
+}
+
+/// Tag of mode `mode`'s page B.
+pub const fn dlayout_tag_b(mode: u32) -> u8 {
+    0xc4 + mode as u8
+}
+
+// Two 16-bit offsets in one 32-bit half: the first in the low bits.
+fn pair(o: &[u16; 12], i: usize) -> u64 {
+    o[i] as u64 | (o[i + 1] as u64) << 16
+}
+
+/// The words `w1..w3` of mode `mode`'s page A.
+///
+/// The note's table puts four offsets (two pairs) in each of w2 and w3, so
+/// the record words are taken as 64 bits wide: a pair of 16-bit offsets is
+/// the low half (first offset low), the next pair `<< 32`. w1 is `code |
+/// mode << 4 | timeouts << 8 | matched << 16`; `timeouts` is 8 bits.
+pub fn dlayout_page_a(mode: u32, timeouts: u32, r: &DlayoutResult) -> [u64; 3] {
+    let w1 = r.code as u64 | (mode as u64 & 0xf) << 4 | (timeouts as u64 & 0xff) << 8 | (r.matched as u64) << 16;
+    [w1, pair(&r.offsets, 0) | pair(&r.offsets, 2) << 32, pair(&r.offsets, 4) | pair(&r.offsets, 6) << 32]
+}
+
+/// The words `w1..w3` of mode `mode`'s page B: the CRC, the offsets of
+/// (0,16), (32,0) and (0,32), (63,63) packed as in [`dlayout_page_a`], and
+/// the first non-clear dword (`index << 16 | z byte`; index `0xffff` if
+/// there is none).
+pub fn dlayout_page_b(r: &DlayoutResult) -> [u64; 3] {
+    let (i, z) = r.first_non_clear.unwrap_or((0xffff, 0));
+    [r.crc as u64, pair(&r.offsets, 8) | pair(&r.offsets, 10) << 32, (i as u64) << 16 | z as u64]
+}
+
+#[cfg(test)]
+mod dlayout_tests {
+    use super::*;
+
+    const CLEAR: u32 = 0xffff_ff00;
+
+    fn ramp(map: &dyn Fn(u32, u32) -> usize) -> Vec<u32> {
+        let mut s = vec![CLEAR; DLAYOUT_DWORDS];
+        for y in 0..64 {
+            for x in 0..64 {
+                s[map(x, y)] = dlayout_expect(x, y) << 8;
+            }
+        }
+        s
+    }
+
+    fn row(x: u32, y: u32) -> usize {
+        (y * 64 + x) as usize
+    }
+    fn tiled(x: u32, y: u32) -> usize {
+        offset(Layout::Tiled, x, y, 4, 256) / 4
+    }
+    fn drm(x: u32, y: u32) -> usize {
+        offset_in(Layout::SuperTiled, SuperOrder::Drm, x, y, 4, 256) / 4
+    }
+    fn inter(x: u32, y: u32) -> usize {
+        offset_in(Layout::SuperTiled, SuperOrder::Interleaved, x, y, 4, 256) / 4
+    }
+
+    #[test]
+    fn expect_values() {
+        assert_eq!(dlayout_expect(0, 0), 65 * 1024);
+        assert_eq!(dlayout_expect(1, 0) - dlayout_expect(0, 0), 2048);
+        assert_eq!(dlayout_expect(0, 1) - dlayout_expect(0, 0), 64 * 2048);
+        // z stays near [0, 0.5): the centre adds 32.5 / 8192
+        assert!(dlayout_expect(63, 63) < (1 << 23) + (1 << 17));
+    }
+
+    fn check_map(map: &dyn Fn(u32, u32) -> usize, code: DlayoutCode) {
+        let s = ramp(map);
+        let r = dlayout_decode(&s, CLEAR);
+        assert_eq!(r.code, code);
+        assert_eq!(r.matched, 4096);
+        for (o, &(x, y)) in r.offsets.iter().zip(DLAYOUT_REF_PIXELS.iter()) {
+            assert_eq!(*o as usize, map(x, y));
+        }
+        assert_eq!(r.first_non_clear.map(|(i, _)| i as usize), s.iter().position(|&d| d != CLEAR));
+    }
+
+    #[test]
+    fn code1_no_write() {
+        let s = vec![CLEAR; DLAYOUT_DWORDS];
+        let r = dlayout_decode(&s, CLEAR);
+        assert_eq!(r.code, DlayoutCode::NoWrite);
+        assert_eq!(r.matched, 0);
+        assert_eq!(r.first_non_clear, None);
+        assert_eq!(r.offsets, [DLAYOUT_NOT_FOUND; 12]);
+    }
+
+    #[test]
+    fn code2_row_linear() {
+        check_map(&row, DlayoutCode::RowLinear);
+    }
+
+    #[test]
+    fn code3_tiled4() {
+        check_map(&tiled, DlayoutCode::Tiled4);
+    }
+
+    #[test]
+    fn code4_super_drm() {
+        check_map(&drm, DlayoutCode::SuperDrm);
+    }
+
+    #[test]
+    fn code5_super_interleaved() {
+        check_map(&inter, DlayoutCode::SuperInterleaved);
+    }
+
+    #[test]
+    fn code6_other() {
+        // A permutation of the row-linear ramp that is none of the maps.
+        let other = |x: u32, y: u32| row((x + 1) % 64, y);
+        let s = ramp(&other);
+        let r = dlayout_decode(&s, CLEAR);
+        assert_eq!(r.code, DlayoutCode::Other);
+        assert_eq!(r.matched, 4096);
+        assert_eq!(r.offsets[0] as usize, other(1, 0));
+    }
+
+    #[test]
+    fn code7_partial() {
+        let mut s = ramp(&row);
+        s[row(5, 5)] = CLEAR; // one id missing
+        let r = dlayout_decode(&s, CLEAR);
+        assert_eq!(r.code, DlayoutCode::Partial);
+        assert_eq!(r.matched, 4095);
+        let mut s = ramp(&row);
+        s[row(5, 5)] = s[row(6, 5)]; // one id twice, one missing
+        let r = dlayout_decode(&s, CLEAR);
+        assert_eq!(r.code, DlayoutCode::Partial);
+        assert_eq!(r.matched, 4094);
+        assert_eq!(r.offsets[11] as usize, row(63, 63));
+    }
+
+    #[test]
+    fn decode_tolerance() {
+        let mut s = ramp(&row);
+        s[row(3, 3)] = (dlayout_expect(3, 3) + 1000) << 8 | 0xff;
+        assert_eq!(dlayout_decode(&s, CLEAR).code, DlayoutCode::RowLinear);
+        s[row(3, 3)] = (dlayout_expect(3, 3) + 1024) << 8;
+        assert_eq!(dlayout_decode(&s, CLEAR).code, DlayoutCode::Partial);
+    }
+
+    #[test]
+    fn crc_and_pages() {
+        // CRC-32 of the ASCII digits 1 to 9 is the standard check value.
+        assert_eq!(crc32(b"123456789".iter().copied()), 0xcbf4_3926);
+        let s = ramp(&row);
+        let r = dlayout_decode(&s, CLEAR);
+        let bytes: Vec<u8> = s.iter().flat_map(|d| d.to_le_bytes()).collect();
+        assert_eq!(r.crc, crc32(bytes.into_iter()));
+        let z0 = dlayout_expect(0, 0) as u8;
+        assert_eq!(r.first_non_clear, Some((0, z0)));
+
+        let a = dlayout_page_a(1, 3, &r);
+        assert_eq!(a[0], 2 | 1 << 4 | 3 << 8 | 4096 << 16);
+        // (1,0) (2,0) (4,0) (8,0)
+        assert_eq!(a[1], 1 | 2 << 16 | 4 << 32 | 8 << 48);
+        // (0,1) (0,4) (0,8) (16,0)
+        assert_eq!(a[2], 64 | 256 << 16 | 512 << 32 | 16 << 48);
+        let b = dlayout_page_b(&r);
+        assert_eq!(b[0], r.crc as u64);
+        // (0,16) (32,0) (0,32) (63,63)
+        assert_eq!(b[1], 1024 | 32 << 16 | 2048 << 32 | 4095 << 48);
+        assert_eq!(b[2], z0 as u64);
+        assert_eq!((dlayout_tag_a(2), dlayout_tag_b(2)), (0xc2, 0xc6));
+
+        let none = dlayout_decode(&vec![CLEAR; DLAYOUT_DWORDS], CLEAR);
+        assert_eq!(dlayout_page_b(&none)[2], 0xffff << 16);
+    }
+}
