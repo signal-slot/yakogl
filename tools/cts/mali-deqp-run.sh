@@ -576,7 +576,7 @@ mark_rest() { # <file of cases> <reason>
   awk -v r="$2" 'length($0) { print $0 "\t" r }' "$1" >> "$raw/lost.tsv"
 }
 
-while IFS=$'\t' read -r row lab n; do
+while IFS=$'\t' read -r -u 3 row lab n; do
   if [ -n "$stop" ]; then
     case $stop in board-lost) mark_rest "$raw/cases/$lab.txt" board-lost ;; *) mark_rest "$raw/cases/$lab.txt" not-run ;; esac
     printf '%s\t%s\t%s\tlost\t0\t-\t-\t%s\t-\t-\tnot-run\n' "$row" "$lab" "$n" \
@@ -706,7 +706,7 @@ while IFS=$'\t' read -r row lab n; do
     wrong-lib) stop=wrong-lib exit_rc=9 ;;
     wedged) stop=wedged exit_rc=10 ;;
   esac
-done < "$raw/plan.tsv"
+done 3< "$raw/plan.tsv"
 
 if [ "$board_ok" = 1 ]; then alive || true; else boot_now=unreachable; fi
 echo "boot_id_after=${boot_now:-unknown}" >> "$raw/meta.txt"
