@@ -53,7 +53,9 @@ Same worker (host `orion`), same state: `getent hosts armadillo` returned
 nothing and `tools/board.sh x2 status` stopped at `BOARD_HOST` unset (no
 `target:x2` lease reached the task). No jump was made, no image built, the
 board was not touched. W1 to W5 were already on main (`9cdeff6d`), so there
-was nothing left to build on the host for this item.
+was nothing left to build on the host for this item. A rerun of the item on
+the same worker later that day (main at `2aee4c92`) found the same three
+facts and did nothing else.
 
 ## What is left
 
