@@ -211,7 +211,8 @@ fn case20_compressed_formats() {
         assert!(srgb == 0 || srgb == 2, "sRGB ETC2 pair is both or neither");
         let mut got = list.clone();
         let mut want = want;
-        (got.sort_unstable(), want.sort_unstable());
+        got.sort_unstable();
+        want.sort_unstable();
         assert_eq!(got, want, "exactly the names the core's rule stores");
         assert!(list.contains(&GL_ETC1_RGB8_OES), "ETC1 in the list");
         assert!(ext.split_whitespace().any(|e| e == ETC1_EXT), "{ETC1_EXT} in GL_EXTENSIONS: {ext}");

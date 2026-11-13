@@ -131,10 +131,10 @@ fn context() -> std::sync::MutexGuard<'static, ()> {
     guard
 }
 
-/// glGetIntegerv's values, all it wrote (at most 8), and the error it raised.
+/// glGetIntegerv's values, all it wrote (at most 16), and the error it raised.
 fn geti(pname: GLenum) -> (Vec<GLint>, GLenum) {
-    let mut v = [i32::MIN; 8];
-    // SAFETY: room for the eight values the widest pname writes
+    let mut v = [i32::MIN; 16];
+    // SAFETY: room for the sixteen values the widest pname writes
     // (src/gl/state.rs STATE_VALUES).
     let err = unsafe {
         while glGetError() != GL_NO_ERROR {}
@@ -145,7 +145,7 @@ fn geti(pname: GLenum) -> (Vec<GLint>, GLenum) {
 }
 
 fn getf(pname: GLenum) -> (Vec<GLfloat>, GLenum) {
-    let mut v = [f32::NAN; 8];
+    let mut v = [f32::NAN; 16];
     // SAFETY: as above.
     let err = unsafe {
         while glGetError() != GL_NO_ERROR {}

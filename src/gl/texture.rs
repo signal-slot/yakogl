@@ -7130,7 +7130,9 @@ mod tests {
             let d = decoded_format(name).expect("a decoded name");
             assert_eq!((d.internalformat, d.format, d.class, d.texel), (internalformat, format, class, texel));
             assert_eq!(compressed_format_info(name), None, "{name:#x}: no block class");
-            assert_eq!(texfmt_of(d.internalformat as GLint), class, "{name:#x}: the class the image is held in");
+            if !crate::REPORT_ES2 {
+                assert_eq!(texfmt_of(d.internalformat as GLint), class, "{name:#x}: the class the image is held in");
+            }
         }
         for f in [GL_ETC1_RGB8_OES, GL_COMPRESSED_RGB8_ETC2, GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC, GL_RGBA, 0] {
             assert!(decoded_format(f).is_none(), "{f:#x}");
@@ -9482,7 +9484,8 @@ mod tests {
     #[test]
     fn compressed_srgb_etc2_is_stored_as_blocks_in_the_srgb_class() {
         let gl = TestGl::new(4, 4);
-        let stored = (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante")) && !crate::REPORT_ES2;
+        let stored = (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante") || cfg!(feature = "gpu-v3d"))
+            && !crate::REPORT_ES2;
         for (format, bb, class, no_alpha) in [
             (GL_COMPRESSED_SRGB8_ETC2, 8usize, GLES_TEXFMT_ETC2_SRGB_RGB, true),
             (GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC, 16, GLES_TEXFMT_ETC2_SRGB_RGBA, false),

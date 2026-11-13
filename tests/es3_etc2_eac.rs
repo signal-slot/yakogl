@@ -401,11 +401,11 @@ fn image2d_mip_levels_are_decoded_one_by_one() {
             image2d(GL_TEXTURE_2D, level as GLint, d, s, s, &data);
             datas.push(data);
         }
-        for level in 0..5usize {
+        for (level, data) in datas.iter().enumerate() {
             let s = 16 >> level;
             assert_eq!(
                 stored(name, level as u32, 0, s, s, d.bpp),
-                expected(d, s, s, &datas[level]),
+                expected(d, s, s, data),
                 "{}: level {level}",
                 d.name
             );
