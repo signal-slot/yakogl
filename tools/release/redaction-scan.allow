@@ -20,6 +20,11 @@ drop | private-ipv4 | tools/board_selftest.sh | \b(10\.11\.12\.(1|13)|172\.16\.0
 drop | private-ipv4 | tools/cts/pr-session-selftest.sh | secret-user@10\.9\.8\.7\b | fixture of the self-test's BOARD_HOST refusal
 # The preflight selftest's fake BOARD_UART canary (a look-alike, never a real value).
 drop | password | tools/cts/imx8mp-gles3-preflight-selftest.sh | SECRET\=ttyUSB | selftest fixture: the fake UART string the test asserts the preflight never prints
+# QEMU user-mode networking: the fixed host-side address of QEMU's own TFTP
+# and DHCP server, a constant of QEMU the qemu runner of the U-Boot one-shot
+# scripts must name.  Glob over that runner's directory; the near miss (any
+# other private-range address in the same directory) stays a finding.
+drop | private-ipv4 | driver/tools/uboot-mp2/qemu/* | \b10\.0\.2\.2\b | QEMU user-net host address, a constant of QEMU's slirp stack, not a lab address
 # Product defaults and keywords.
 drop | som-serial | * | verdin-(am62p|imx8mp)-00000000 | zeroed serial: the product's default host name
 drop | password | * | NOPASSWD: | sudoers keyword, not a password
@@ -80,3 +85,4 @@ drop | login-at-host | tools/cts/mali-slice-redact.py | root[@]board\b | input o
 drop | login-at-host | tools/cts/mali-slice-redact.py | root[@]192\.0\.2\.7\b | input of a redaction test (RFC 5737 address)
 drop | tailnet-dns | tools/cts/mali-slice-redact.py | \bboard-1\.example\.ts\.net\b | input of a redaction test under the reserved example name (RFC 2606)
 drop | email | tools/cts/mali-slice-redact.py | serial-getty[@]ttyS2\.service\b | systemd unit instance in the tool's help, not an address
+drop | private-ipv4 | tools/cts/x2-scene-table-selftest.sh | \b10\.137\.22\.9\b | private-range input of the self-test: the console noise line and the verdict-line address its redaction check must drop

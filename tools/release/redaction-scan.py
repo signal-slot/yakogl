@@ -836,6 +836,8 @@ def self_test():
              ["board-2", ".example.ts", ".net"]),
             ("email", redact, ["serial-getty", "@ttyS2.service"],
              ["serial-getty", "@ttyS3.service"]),
+            ("private-ipv4", "tools/cts/x2-scene-table-selftest.sh",
+             ["10.137", ".22.9"], ["10.137", ".22.90"]),
         ]
         for key, path, val, near in fixtures:
             line = "fixture %s end" % j(val)
@@ -879,6 +881,8 @@ def self_test():
             ("private-ipv4", pst, "drop", ["secret-user", "@10.9", ".8.7"],
              ["secret-user", "@10.9", ".8.70"]),
             ("password", pre, "drop", ["SEC", "RET=ttyUSB9"], ["SEC", "RET=ttyACM0"]),
+            ("private-ipv4", "driver/tools/uboot-mp2/qemu/x.py", "drop",
+             ["10.0", ".2.2"], ["10.0", ".2.3"]),
             ("som-serial", pad, "drop", ["verdin-am62p-", "00000000"],
              ["verdin-am62p-", "0000000a"]),
             ("password", pad, "drop", ["NOPASS", "WD: ALL"], ["PASS", "WD: ALL"]),
