@@ -537,7 +537,14 @@ impl From<&crate::board::nanopc_t6_gpu::GpuUp> for YdT6GpuUp {
 static T6_GPU_QOS_POLICY: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(crate::board::nanopc_t6_gpu::GPU_QOS_POLICY.id());
 
-/// Choose the GPU QoS policy `yd_t6_gpu_up` applies after the power-on:
+/// The policy [`T6_GPU_QOS_POLICY`] holds, for Z1, Z3 and Z4 alike.
+#[cfg(feature = "mali")]
+fn t6_gpu_qos_policy() -> rk3588::QosPolicy {
+    rk3588::QosPolicy::from_id(T6_GPU_QOS_POLICY.load(core::sync::atomic::Ordering::Relaxed))
+        .unwrap_or(crate::board::nanopc_t6_gpu::GPU_QOS_POLICY)
+}
+
+/// Choose the GPU QoS policy `yd_t6_gpu_up`, `yd_t6_fw_up` and `yd_t6_submit` apply after the power-on:
 /// `YD_T6_QOS_RESET` (1) or `YD_T6_QOS_LINUX_ZERO` (2, the default). Call it
 /// before `yd_t6_gpu_up`; the record names the policy that ran. `-EINVAL`
 /// (the choice unchanged) for any other id.
@@ -580,8 +587,7 @@ pub unsafe extern "C" fn yd_t6_gpu_up(
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
     let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
-    let qos = rk3588::QosPolicy::from_id(T6_GPU_QOS_POLICY.load(core::sync::atomic::Ordering::Relaxed))
-        .unwrap_or(crate::board::nanopc_t6_gpu::GPU_QOS_POLICY);
+    let qos = t6_gpu_qos_policy();
     let o = crate::board::nanopc_t6_gpu::gpu_up_with(qos, &hw, b, &mut |us| delay_us(us), &mut |h| {
         let h = YdT6GpuUp::from(h);
         on_handover(&h);
@@ -786,7 +792,8 @@ fn fw_up_run(
     on_handover: extern "C" fn(*const YdT6GpuUp),
     z1: &mut crate::board::nanopc_t6_gpu::GpuUp,
 ) -> crate::board::nanopc_t6_fw::FwUp {
-    crate::board::nanopc_t6_fw::fw_up(
+    crate::board::nanopc_t6_fw::fw_up_with(
+        t6_gpu_qos_policy(),
         m,
         b,
         blob,
@@ -957,7 +964,8 @@ fn submit_run(
     on_handover: extern "C" fn(*const YdT6GpuUp),
     z1: &mut crate::board::nanopc_t6_gpu::GpuUp,
 ) -> YdT6SubmitUp {
-    crate::board::nanopc_t6_submit::submit_up(
+    crate::board::nanopc_t6_submit::submit_up_with(
+        t6_gpu_qos_policy(),
         m,
         b,
         blob,
@@ -1569,6 +1577,37 @@ mod fw_tests {
             &mut Default::default(),
         );
         assert_eq!((o.step, o.detail), (fwb::STEP_PLACE, [3, 0]));
+    }
+
+    #[test]
+    fn the_entry_applies_the_build_time_qos_policy_z1_reads() {
+        let blob = synth::small();
+        let bk = backings(&blob);
+        let before = T6_GPU_QOS_POLICY.load(core::sync::atomic::Ordering::Relaxed);
+        for p in [rk3588::QosPolicy::Reset, rk3588::QosPolicy::LinuxZero] {
+            assert_eq!(yd_t6_gpu_qos_policy(p.id()), 0);
+            let t6 = T6::handed_over(blob.clone());
+            let mut pool = vec![[0u64; ENTRIES]; 16];
+            let mut z1 = crate::board::nanopc_t6_gpu::GpuUp::default();
+            MODEL.with(|m| m.set(&t6));
+            let o = fw_up_run(
+                &t6,
+                B,
+                &blob,
+                &bk,
+                &mut pool,
+                TABLES_PA,
+                RK3588_TIMER_HZ,
+                clean_model,
+                no_delay,
+                no_handover,
+                &mut z1,
+            );
+            assert_eq!(o.step, fwb::STEP_NONE, "{p:?}");
+            assert_eq!(z1.qos_policy, p.id());
+            assert_eq!(YdT6GpuUp::from(&z1).qos_policy, p.id());
+        }
+        yd_t6_gpu_qos_policy(before);
     }
 
     #[test]
