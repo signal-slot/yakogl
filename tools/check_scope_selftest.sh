@@ -183,6 +183,17 @@ expect "v3d: no PowerVR row" '^skip  clippy  host-test,gpu-powervr$' "$out"
 expect "v3d: no AM62P image" '^skip  zephyr  am62p gl_test image, -Werror' "$out"
 expect "v3d: no precompiled tables" '^skip  gen     precompiled table gpu-powervr:' "$out"
 expect "v3d: no Mali row" '^skip  clippy  host-test,gpu-mali,shaderc-online,no-shader-table$' "$out"
+# --no-clippy (a pull request's run): the same change plans no clippy row; each
+# is counted as left to the nightly, never as a gap or a skip. Without the
+# flag the clippy rows stay (the checks above).
+out=$(ZEPHYR_WS=$PWD/build/check/plan-ws GLMARK2_SRC=$PWD/build/check/plan-gm2 MESA_V3D_TREE= \
+  YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS=src/v3d/job.rs tools/check.sh --no-clippy --changed HEAD 2>&1 |
+  sed 's/\x1b\[[0-9;]*m//g')
+checks=$((checks + 1))
+! printf '%s\n' "$out" | grep -qE '^(plan|gap) +clippy' || { echo "FAIL --no-clippy: a clippy row is planned"; fails=$((fails + 1)); }
+expect "--no-clippy: the v3d clippy row is left out" '^left  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table ' "$out"
+expect "--no-clippy: its test row stays" '^plan  test +host-test,gpu-v3d' "$out"
+expect "--no-clippy: counted apart" ', [1-9][0-9]* clippy rows left to the nightly,' "$out"
 # A MESA_V3D_TREE that is not a Mesa tree (no build-v3d) is a missing input:
 # one gap naming it, not three failing rows.
 mkdir -p build/check/plan-notmesa
