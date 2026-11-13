@@ -22,7 +22,7 @@ Locally you run only what you added or changed (owner's decision of
   gate itself).
 
 The check is the CI gate: `.github/workflows/gate.yml` runs `tools/check.sh`
-on every pull request (`--changed <merge base>`: the rows the diff reaches),
+on every pull request (`--changed <merge base> --no-clippy`: the rows the diff reaches, no clippy),
 on each push to main as its header says, and nightly (every row). How to read
 its log:
 
