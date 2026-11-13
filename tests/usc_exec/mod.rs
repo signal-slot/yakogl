@@ -860,13 +860,15 @@ fn run_binary_decoded(
                 let cube = fname(r, "dmn") == Some("3d");
                 /* a gather (pco's tg4): `sbmode` rawdata, one channel, the
                  * four texels of the bilinear footprint as the four result
-                 * words (lower_smp: dest = chans * 4) */
+                 * words (lower_smp: dest = chans * 4); on a cube, the
+                 * footprint at the stacked coordinate `cube_uv` maps the
+                 * direction to, as a cube's sample is modelled */
                 let gather = fname(r, "sbmode") == Some("rawdata") && r.get("chan") == Some(1);
                 if !(cube || fname(r, "dmn") == Some("2d")) || !(r.get("chan") == Some(4) || gather) {
                     return Err("an smp other than 2d or 3d, four channels (or a one-channel gather)".into());
                 }
-                if gather && (cube || !replace) {
-                    return Err("a gather other than 2D with a replaced level".into());
+                if gather && !replace {
+                    return Err("a gather without a replaced level".into());
                 }
                 let lo = g.lower.as_ref().map(srcs).unwrap_or([None; 6]);
                 let up = g.upper.as_ref().map(srcs).unwrap_or([None; 6]);
