@@ -137,6 +137,34 @@ After the cases one more boot's `printenv` must equal the first case's
 `printenv` before its line: the environment after a reset is the one the
 cases started from.
 
+## The power-cut cases
+
+After the cases above, four more boots type the one-shot line and kill QEMU
+(SIGKILL: no `poweroff`, no flush) partway through, each from the same
+`env.img` the setup boot stored:
+
+| case | cut |
+| --- | --- |
+| `cut-mmc-after-undo`, `cut-net-after-undo` | as soon as `mp2z: undo: ...` is printed, before the load and before `go` |
+| `cut-mmc-during-load` | 0.1 s after `mp2z: mmc 0:2 /yakogl/long.bin -> ...`, while `ext4load` reads a 192 MiB sparse image (`long.bin`: a valid header, `image_size` 0xc000000) |
+| `cut-net-during-load` | 0.2 s after `tftpboot`'s first progress hashes, while the same image arrives over TFTP |
+
+Checks for each cut (one output line each):
+
+1. `mp2z: undo: ...` was printed before the cut.
+2. The cut came before `go`: no `mp2z: loaded`, `mp2z: go` or `## Starting`.
+3. The env pflash file and the SD card image have the sha256 they had right
+   after setup, straight after the cut.
+4. A new boot from the same `env.img` reads the environment (no `bad CRC`),
+   its `printenv` equals the setup boot's `printenv` apart from `mp2z_*` and
+   `filesize`/`fileaddr`, and `bootcmd` is the stock `echo mp2q: stock bootcmd
+   ran` (the fragment's `BOOTCOMMAND`), equal to the setup value.
+5. The env pflash file still has the setup sha256 after that reboot.
+
+The cuts trigger on console output, not on a fixed time. The during-load cuts
+land inside the load only best effort: if the load finishes first, check 2
+(no `mp2z: loaded`) fails.
+
 A copy of the scripts with `setenv bootdelay 5; saveenv` added after the undo
 line fails checks 4, 5 and the final readback (checked once by hand, not
 part of the run).
