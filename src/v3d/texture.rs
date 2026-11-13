@@ -343,8 +343,9 @@ pub fn layout_compressed(
     Some(l)
 }
 
-/// [`refusal_for`]'s texel format with no TMU row here (ETC2, or the RGB10A2
-/// class the GL core keeps in RGBA8).
+/// [`refusal_for`]'s texel format with no TMU row here (the punch-through
+/// ETC2 class no GL name uses, or the RGB10A2 class the GL core keeps in
+/// RGBA8).
 const NOT_SAMPLED: Refusal = "a texel format the V3D does not sample";
 
 /// [`refusal_for`]'s 16-bit format read by a 32-bit look-up.
@@ -378,7 +379,7 @@ pub fn refusal_for(b: &GlesTextureBind, ret32: bool) -> Option<Refusal> {
 /// [`refusal_for`] with the formats sampled (`sampled`, a mask of
 /// [`gles_texfmt_bit`]) given: [`V3D_SAMPLED_TEXFMTS`] for the backend, a
 /// wider set where a test asks what the rest of the rules say of a format
-/// the set does not hold yet (the ETC2 classes).
+/// the set does not hold (an ETC2 class no GL name uses).
 fn refusal_in(b: &GlesTextureBind, ret32: bool, sampled: u64) -> Option<Refusal> {
     match b.type_ {
         GLES_TEXTYPE_2D if b.layers <= 1 => {}
@@ -1516,8 +1517,9 @@ mod tests {
     /// type and swizzle, the sRGB bit for the two sRGB ones only, a block
     /// for a texel ([`texel_bytes`]: never a TFU byte-copy type), the 16-bit
     /// TMU output (return size 16), and every rule but the sampled set
-    /// passes. Until src/backend.rs's V3D_SAMPLED_TEXFMTS lists them, the
-    /// set refuses them, with the one message every format outside it gets.
+    /// passes. V3D_SAMPLED_TEXFMTS (src/backend.rs) lists the four the GL
+    /// core stores; the one no GL name uses (punch-through, class 3) is
+    /// outside it and gets the message every format outside it gets.
     #[test]
     fn the_gl_cores_etc2_classes_sample_as_their_rows() {
         let wider = V3D_SAMPLED_TEXFMTS | ETC2_CLASSES.iter().fold(0, |m, &(f, _)| m | gles_texfmt_bit(f));

@@ -2669,6 +2669,7 @@ fn image_of_texture(name: GLuint, face: Option<u32>) -> Option<EglImage> {
         || t.height == 0
         || t.target != want
         || t.block_bytes != 0
+        || t.decoded_from != 0
         || !matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGB565)
     {
         return None;
