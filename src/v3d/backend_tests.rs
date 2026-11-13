@@ -1806,6 +1806,65 @@ fn a_sampler_record_is_packed_once_per_job() {
     assert_eq!(v3d_finish(), 0);
 }
 
+/// A shadow look-up's compare is in its sampler record: a depth binding (R32F,
+/// `compare_op` = the function) packs it (`texture::pack_sampler`), and the
+/// job's cache keys on (sampler state, compare function): two draws that
+/// differ only in the function get two records, the same pair one. Compare
+/// off (GL_NONE, bit 4) and NEVER are the same record word, as Mesa's
+/// (v3dx_state.c:598-600). Revert check: leaving the compare bits out of the
+/// record leaves the function zero for every draw; a cache keyed on the state alone gives
+/// the LESS and LEQUAL draws one record.
+#[test]
+fn a_shadow_sampler_record_carries_the_compare_function_and_is_cached_with_it() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let depth = |op: u8| {
+        let mut t = narrow_texture(16, 16, 1, GLES_TEXFMT_R32F);
+        (t.unit, t.content_gen, t.compare_op) = (0, 7, op);
+        let mut d = sampling(&rig, t);
+        d.fs = &p;
+        d
+    };
+    let (p0, r0) = sampler_counters();
+    const LESS: u8 = 1;
+    const LEQUAL: u8 = 3;
+    for op in [LESS, LEQUAL, LESS, texture::COMPARE_OFF as u8, 0] {
+        assert_eq!(draw(&depth(op)), 0, "op {op}: {:?}", rig.gl.logs());
+    }
+    let (p1, r1) = sampler_counters();
+    assert_eq!((p1 - p0, r1 - r0), (3, 2), "LESS, LEQUAL and off/NEVER: three records, two found again");
+    let draws = rig.draws();
+    let rec = |i: usize| words(&rig, draws[i].tmu[0].sampler, 6);
+    let func = |i: usize| rec(i)[0] >> texture::SAMPLER_COMPARE_SHIFT & 7;
+    assert_eq!((func(0), func(1)), (u32::from(LESS), u32::from(LEQUAL)), "LESS and LEQUAL");
+    assert_eq!(draws[0].tmu[0].sampler, draws[2].tmu[0].sampler, "LESS twice: one record");
+    assert_ne!(draws[0].tmu[0].sampler, draws[1].tmu[0].sampler, "the function alone makes another record");
+    assert_eq!(func(3), 0, "compare off");
+    assert_eq!(draws[3].tmu[0].sampler, draws[4].tmu[0].sampler, "off and NEVER are one record word");
+    assert_eq!(rec(0)[5], FAKE_SAMPLER_MARK);
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// ES 3.0.6 3.8.15 bypasses the compare for a texture that is not a depth
+/// texture: a colour binding carrying a function (the GL core sets it from
+/// the texture's mode whatever the format) packs compare off, and shares the
+/// record of one without.
+#[test]
+fn a_colour_binding_packs_no_compare() {
+    let rig = Rig::new();
+    rig.init();
+    let t = texture(0, 16, 16, 1);
+    let mut with = t;
+    with.compare_op = 3;
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_eq!(draw(&sampling(&rig, with)), 0);
+    let draws = rig.draws();
+    assert_eq!(draws[0].tmu[0].sampler, draws[1].tmu[0].sampler, "one record");
+    assert_eq!(words(&rig, draws[1].tmu[0].sampler, 6)[0] >> texture::SAMPLER_COMPARE_SHIFT & 7, 0);
+    assert_eq!(v3d_finish(), 0);
+}
+
 /// A texture is tiled once per job: the next draw of the job finds its image
 /// and record again; a new job tiles it again (a CPU write in between would
 /// have flushed the job first, `kick_pending`).

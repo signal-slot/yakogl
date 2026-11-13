@@ -210,20 +210,23 @@ fn bind(format: u8, w: u32, h: u32) -> GlesTextureBind {
 }
 
 /// Every class of the mask is a row above, and the rows are the mask: what
-/// the GL core stores natively on the V3D, its TMU samples. The ETC2 formats
-/// are refused by name.
+/// the GL core stores natively on the V3D, its TMU samples; the four ETC2
+/// block classes the GL core stores are the mask's ETC2 bits (their rows are
+/// `v3d::texture`'s `the_gl_cores_etc2_classes_sample_as_their_rows`).
+/// The punch-through class is in no mask and is refused by name.
 #[test]
 fn the_sampled_mask_is_the_rows() {
     let rows = ROWS.iter().fold(0u64, |m, r| m | gles_texfmt_bit(r.0));
     let narrow = [GLES_TEXFMT_L8, GLES_TEXFMT_A8, GLES_TEXFMT_LA8, GLES_TEXFMT_SRGB8_A8]
         .iter()
         .fold(0u64, |m, &f| m | gles_texfmt_bit(f));
-    assert_eq!(V3D_SAMPLED_TEXFMTS, rows | narrow, "the mask is the rows and the ES 2.0 narrow classes");
-    for f in [GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_RGB_PT] {
-        let b = bind(f, 4, 4);
-        let r = texture::refusal_for(&b, false).expect("refused");
-        assert!(r.contains("does not sample"), "format {f}: {r}");
-    }
+    let etc2 = [GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA]
+        .iter()
+        .fold(0u64, |m, &f| m | gles_texfmt_bit(f));
+    assert_eq!(V3D_SAMPLED_TEXFMTS, rows | narrow | etc2, "the mask is the rows, the ES 2.0 narrow classes and ETC2");
+    let f = GLES_TEXFMT_ETC2_RGB_PT;
+    let r = texture::refusal_for(&bind(f, 4, 4), false).expect("refused");
+    assert!(r.contains("does not sample"), "format {f}: {r}");
 }
 
 /// Each class: the Rust row (`tmu_format`, `return_32`, `texel_bytes`) is
