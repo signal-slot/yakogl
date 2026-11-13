@@ -5,7 +5,7 @@
 Status: design note. The clock, power and QoS decisions (sections 1, 2 and 7)
 are merged code with host tests. The U-Boot and eMMC facts (section 4) were
 measured read-only under Armbian; the load route (section 5) is a proposal
-whose load addresses are not measured yet, with a script draft in
+whose load addresses are from source (board confirmation pending), with a script draft in
 driver/tools/uboot-t6/t6-zephyr.cmd (never run). The entry audit (section 6)
 follows. The U-Boot prompt reads (section 3) are drafted and not run.
 
@@ -296,12 +296,46 @@ points: no one-shot variable, because nothing is saved and a reset returns to
 `bootflow scan -lb` (:34-36); and no watchdog is armed: the script prints that
 the watchdog marker is not checked (:37), so that step stays open.
 
-Load addresses: not measured yet. They are U-Boot's compiled-in `kernel_addr_r`,
-`fdt_addr_r`, `scriptaddr` and `loadaddr`; the draft's `load mmc 0:1
-${scriptaddr}` line needs `scriptaddr` set. The image's link address,
-0x10000000, is from the repo. That the 256 MiB window, 0x10000000-0x1fffffff,
-is free of U-Boot's and the trusted firmware's own memory is a read for
-section 3, not a fact (`bdinfo` at the prompt shows U-Boot's).
+Load addresses, from source (U-Boot v2026.07, file:line); confirmation on the
+board is pending (the read-only uboot-addrs measurement). The board's defconfig
+selects the config name `rk3588_common` (arch/arm/mach-rockchip/rk3588/Kconfig:443-444),
+and its `ENV_MEM_LAYOUT_SETTINGS` (include/configs/rk3588_common.h:20-31) sets:
+
+- `scriptaddr` 0x00c00000 (:22) and `pxefile_addr_r` 0x00e00000 (:25);
+- `kernel_addr_r` 0x02000000 (:26) and `kernel_comp_addr_r` 0x0a000000 (:27), with
+  `kernel_comp_size` 0x8000000 (:31), so the decompression area ends at 0x12000000;
+- `fdt_addr_r` 0x12000000 (:28), `fdtoverlay_addr_r` 0x12100000 (:29) and
+  `ramdisk_addr_r` 0x12180000 (:30);
+- no `loadaddr` variable in that header; `CONFIG_SYS_LOAD_ADDR` is 0xc00800
+  (configs/nanopc-t6-rk3588_defconfig:13). U-Boot's RAM starts at 0
+  (rk3588_common.h:14).
+
+The Z image's link address is 0x10000000, the 256 MiB window
+0x10000000-0x1fffffff: nanopc_t6.dts:55-58 (`memory@10000000`, the node
+`zephyr,sram` names at :52), the same window in nanopc-t6.sh:104-106
+(`WINDOW_BASE`) and `t6z_load`, `t6z_entry` and `t6z_window` in
+t6-zephyr.cmd:26-28. `CONFIG_SRAM_BASE_ADDRESS` is derived from that node, not
+set in nanopc_t6_defconfig; `KERNEL_VM_BASE` is the same 0x10000000 and
+`KERNEL_VM_SIZE` 0x20000000 (nanopc_t6_defconfig:16-25).
+
+Overlap verdict, the window against those addresses:
+
+- `scriptaddr`, `pxefile_addr_r` and `kernel_addr_r` (0x00c00000 to 0x02000000)
+  are below 0x10000000: no overlap. The draft's `load mmc 0:1 ${scriptaddr}` and
+  `source ${scriptaddr}` do not touch the image.
+- `fdt_addr_r`, `fdtoverlay_addr_r` and `ramdisk_addr_r` (0x12000000 and up) lie
+  inside the window, and `kernel_comp_addr_r` plus its size ends at 0x12000000,
+  the window's inside edge. The script loads the image to 0x10000000 and uses
+  none of these, so the draft is not affected; but a `booti` route with a tree
+  at `fdt_addr_r` or a ramdisk would load them over the image's own pages. One
+  more reason for `go`, and a rule for any later change: no tree or ramdisk at
+  these defaults.
+- t6-zephyr.cmd loads to 0x10000000 (:26, :63) and runs `go` at 0x10000000
+  (:107): the load address equals the link address, as required.
+
+That the window is free of U-Boot's relocated copy and the trusted firmware's own
+memory stays a read for section 3 (`bdinfo` at the prompt shows U-Boot's); the
+verdict above covers only the environment's default addresses.
 
 Source citations, U-Boot v2026.07 (commit `ece349ad`) and Armbian's U-Boot
 build (commit `fc874938`), confirmed by the uboot-src-lines item:
