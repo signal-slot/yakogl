@@ -1,0 +1,290 @@
+diff --git a/driver/src/pvr_pds_render_gen.c b/driver/src/pvr_pds_render_gen.c
+index 79ea4989..b1446a5a 100644
+--- a/driver/src/pvr_pds_render_gen.c
++++ b/driver/src/pvr_pds_render_gen.c
+@@ -85,6 +85,22 @@ static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
+       if (st->dst_reg + dma_dw > vtxin_dw)
+          vtxin_dw = st->dst_reg + dma_dw;
+       program.streams[s].instance_data = st->per_instance != 0;
++      if (st->per_instance != 0 && st->divisor > 1) {
++         const uint32_t d = st->divisor;
++
++         if ((d & (d - 1)) == 0) {
++            program.streams[s].shift = (uint32_t)__builtin_ctz(d);
++         } else {
++            /* shift = the bit of the next highest power of two;
++             * multiplier = (2^(shift + 31) + d - 1) / d, as Mesa's
++             * pvr_pipeline_pds.c computes it. The generator adds the 31. */
++            const uint32_t shift = (31u - (uint32_t)__builtin_clz(d - 1u)) + 1u;
++
++            program.streams[s].shift = shift;
++            program.streams[s].multiplier =
++               (uint32_t)((((uint64_t)1 << (shift + 31u)) + (d - 1u)) / d);
++         }
++      }
+       program.streams[s].address = st->address;
+       program.streams[s].stride = st->stride;
+       program.streams[s].num_elements = 1;
+diff --git a/driver/src/pvr_pds_render_gen.h b/driver/src/pvr_pds_render_gen.h
+index c69dde7e..e01fea66 100644
+--- a/driver/src/pvr_pds_render_gen.h
++++ b/driver/src/pvr_pds_render_gen.h
+@@ -231,6 +231,11 @@ struct pvr_pds_render_stream {
+     * number (IR1) instead of the vertex index (IR0). Honoured by
+     * pvr_pds_render_vertex_program_ids(). */
+    uint32_t per_instance;
++   /* GL divisor of a per_instance stream: element = instance / divisor.
++    * 0 or 1: no divide. A power of two is one right shift (SFTLP32), any
++    * other value Mesa's multiply and shift (pvr_pipeline_pds.c:846-864).
++    * Ignored without per_instance. */
++   uint32_t divisor;
+ };
+ 
+ #define PVR_PDS_VERTEX_MAX_STREAMS 16u
+diff --git a/src/pvr/backend.rs b/src/pvr/backend.rs
+index 6d8ec65a..c64b2857 100644
+--- a/src/pvr/backend.rs
++++ b/src/pvr/backend.rs
+@@ -9550,6 +9550,7 @@ fn add_stream(streams: &mut [PvrPdsVertexStream], n: usize, a: &GlesAttrib, base
+         dma_size: a.components as u32 * 4,
+         dst_reg: a.vi_reg as u32,
+         per_instance: (a.per_instance != 0) as u32,
++        divisor: 0,
+     };
+     n + 1
+ }
+diff --git a/src/pvr/ffi.rs b/src/pvr/ffi.rs
+index 921c14da..82671211 100644
+--- a/src/pvr/ffi.rs
++++ b/src/pvr/ffi.rs
+@@ -401,11 +401,13 @@ pub struct PvrPdsVertexStream {
+     /// 1: one element per instance (GL divisor 1), indexed by the instance
+     /// number (IR1) instead of the vertex index (IR0).
+     pub per_instance: u32,
++    /// GL divisor of a per-instance stream (0 or 1: none).
++    pub divisor: u32,
+ }
+ 
+ impl PvrPdsVertexStream {
+     pub const ZERO: PvrPdsVertexStream =
+-        PvrPdsVertexStream { address: 0, stride: 0, dma_size: 0, dst_reg: 0, per_instance: 0 };
++        PvrPdsVertexStream { address: 0, stride: 0, dma_size: 0, dst_reg: 0, per_instance: 0, divisor: 0 };
+ }
+ 
+ /// `struct pvr_pds_coeff_varying`.
+@@ -701,12 +703,13 @@ const _: () = assert!(offset_of!(PvrPdsRenderColorUploadInfo, data_size_dw) == 0
+ const _: () = assert!(offset_of!(PvrPdsRenderColorUploadInfo, code_size_dw) == 4);
+ const _: () = assert!(offset_of!(PvrPdsRenderColorUploadInfo, temps_used) == 8);
+ 
+-const _: () = assert!(size_of::<PvrPdsVertexStream>() == 24);
++const _: () = assert!(size_of::<PvrPdsVertexStream>() == 32);
+ const _: () = assert!(offset_of!(PvrPdsVertexStream, address) == 0);
+ const _: () = assert!(offset_of!(PvrPdsVertexStream, stride) == 8);
+ const _: () = assert!(offset_of!(PvrPdsVertexStream, dma_size) == 12);
+ const _: () = assert!(offset_of!(PvrPdsVertexStream, dst_reg) == 16);
+ const _: () = assert!(offset_of!(PvrPdsVertexStream, per_instance) == 20);
++const _: () = assert!(offset_of!(PvrPdsVertexStream, divisor) == 24);
+ 
+ const _: () = assert!(size_of::<PvrPdsCoeffVarying>() == 12);
+ const _: () = assert!(offset_of!(PvrPdsCoeffVarying, components) == 0);
+diff --git a/src/pvr/ffi_layout_check.c b/src/pvr/ffi_layout_check.c
+index 5bb55726..c69482e0 100644
+--- a/src/pvr/ffi_layout_check.c
++++ b/src/pvr/ffi_layout_check.c
+@@ -174,12 +174,13 @@ _Static_assert(offsetof(struct pvr_pds_render_color_upload_info, data_size_dw) =
+ _Static_assert(offsetof(struct pvr_pds_render_color_upload_info, code_size_dw) == 4, "pvr_pds_render_color_upload_info.code_size_dw");
+ _Static_assert(offsetof(struct pvr_pds_render_color_upload_info, temps_used) == 8, "pvr_pds_render_color_upload_info.temps_used");
+ 
+-_Static_assert(sizeof(struct pvr_pds_render_stream) == 24, "struct pvr_pds_render_stream");
++_Static_assert(sizeof(struct pvr_pds_render_stream) == 32, "struct pvr_pds_render_stream");
+ _Static_assert(offsetof(struct pvr_pds_render_stream, address) == 0, "pvr_pds_render_stream.address");
+ _Static_assert(offsetof(struct pvr_pds_render_stream, stride) == 8, "pvr_pds_render_stream.stride");
+ _Static_assert(offsetof(struct pvr_pds_render_stream, dma_size) == 12, "pvr_pds_render_stream.dma_size");
+ _Static_assert(offsetof(struct pvr_pds_render_stream, dst_reg) == 16, "pvr_pds_render_stream.dst_reg");
+ _Static_assert(offsetof(struct pvr_pds_render_stream, per_instance) == 20, "pvr_pds_render_stream.per_instance");
++_Static_assert(offsetof(struct pvr_pds_render_stream, divisor) == 24, "pvr_pds_render_stream.divisor");
+ 
+ _Static_assert(sizeof(struct pvr_pds_coeff_varying) == 12, "struct pvr_pds_coeff_varying");
+ _Static_assert(offsetof(struct pvr_pds_coeff_varying, components) == 0, "pvr_pds_coeff_varying.components");
+diff --git a/tests/es3_pvr_divisor_pds.c b/tests/es3_pvr_divisor_pds.c
+new file mode 100644
+index 00000000..1357964f
+--- /dev/null
++++ b/tests/es3_pvr_divisor_pds.c
+@@ -0,0 +1,94 @@
++/* SPDX-License-Identifier: Apache-2.0
++ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
++ *
++ * The vertex PDS program with a per-stream instance divisor
++ * (struct pvr_pds_render_stream.divisor, Mesa's multiplier/shift,
++ * pvr_pipeline_pds.c:846-864); built and run by tests/es3_pvr_divisor_pds.rs.
++ * Prints one line per divisor:
++ *   d=<divisor> mult=<hex> dgrow=<n> cgrow=<n> same=<0|1> div_ok=<0|1>
++ * where mult is the multiplier data word of stream 1 (its block starts at
++ * dword 8, the multiplier is the constant after the stride), dgrow/cgrow the
++ * data and code growth over divisor 0, same whether the words equal divisor
++ * 0's, and div_ok whether (i * mult) >> (shift + 31) equals i / d for the
++ * instance numbers 0..99999 and a sample of the range up to 2^32 - 1.
++ */
++#include <stdio.h>
++#include <string.h>
++#include <stdint.h>
++
++#include "pvr_mesa.h"
++#include "pvr_pds_render_gen.h"
++
++#define N 64u
++
++struct prog {
++   uint32_t data[N], code[N];
++   struct pvr_pds_render_vertex_info info;
++};
++
++static int gen(struct prog *p, uint32_t divisor, uint32_t per_instance)
++{
++   const struct pvr_pds_render_stream st[2] = {
++      { .address = 0x100000, .stride = 16, .dma_size = 16, .dst_reg = 0 },
++      { .address = 0x200000, .stride = 8, .dma_size = 8, .dst_reg = 4,
++        .per_instance = per_instance, .divisor = divisor },
++   };
++
++   memset(p, 0, sizeof(*p));
++   return pvr_pds_render_vertex_program_ids(0x400, 2, st, 2, 0, PVR_PDS_NO_ID_REG, 6, p->data,
++                                            p->code, &p->info);
++}
++
++static int same(const struct prog *a, const struct prog *b)
++{
++   return a->info.data_size_dw == b->info.data_size_dw &&
++          a->info.code_size_dw == b->info.code_size_dw &&
++          !memcmp(a->data, b->data, a->info.data_size_dw * 4) &&
++          !memcmp(a->code, b->code, a->info.code_size_dw * 4);
++}
++
++static int model_ok(uint32_t d, uint32_t mult, uint32_t shift)
++{
++   for (uint64_t i = 0; i < 100000u + 70000u; i++) {
++      uint64_t n = i < 100000u ? i : 0xffffffffull - (i - 100000u) * 61000u;
++
++      if (((n * mult) >> (shift + 31u)) != n / d)
++         return 0;
++   }
++   return 1;
++}
++
++int main(void)
++{
++   static const uint32_t divs[] = { 0, 1, 2, 3, 4, 0xffff };
++   struct prog base, p, q;
++
++   if (gen(&base, 0, 1)) {
++      printf("generator failed\n");
++      return 1;
++   }
++   for (unsigned k = 0; k < sizeof(divs) / sizeof(divs[0]); k++) {
++      uint32_t d = divs[k], mult = 0, shift = 0;
++      int div_ok = 1;
++
++      if (gen(&p, d, 1)) {
++         printf("generator failed\n");
++         return 1;
++      }
++      if (d > 1 && (d & (d - 1))) {
++         shift = (31u - (uint32_t)__builtin_clz(d - 1u)) + 1u;
++         mult = p.data[8 + 3];
++         div_ok = model_ok(d, mult, shift);
++      }
++      printf("d=%u mult=0x%x dgrow=%d cgrow=%d same=%d div_ok=%d\n", d, mult,
++             (int)p.info.data_size_dw - (int)base.info.data_size_dw,
++             (int)p.info.code_size_dw - (int)base.info.code_size_dw, same(&base, &p), div_ok);
++   }
++   /* The divisor of a stream that is not per-instance is ignored. */
++   if (gen(&p, 0xffff, 0) || gen(&q, 0, 0)) {
++      printf("generator failed\n");
++      return 1;
++   }
++   printf("not_per_instance_ignored=%d\n", same(&p, &q));
++   return 0;
++}
+diff --git a/tests/es3_pvr_divisor_pds.rs b/tests/es3_pvr_divisor_pds.rs
+new file mode 100644
+index 00000000..648ec8fd
+--- /dev/null
++++ b/tests/es3_pvr_divisor_pds.rs
+@@ -0,0 +1,76 @@
++// SPDX-License-Identifier: Apache-2.0
++// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
++//! PowerVR: a per-instance stream can carry a GL divisor
++//! (docs/notes/instanceid-per-draw.md, fix P3): the REAL generator
++//! (driver/src/pvr_pds_render_gen.c) sets Mesa's stream `multiplier`/`shift`
++//! as pvr_pipeline_pds.c:846-864 computes them. tests/es3_pvr_divisor_pds.c
++//! checks that divisor 0 and 1 give the old words, a power of two is one
++//! shift, 3 and 0xffff get Mesa's multiplier word, and the multiply and shift
++//! equal integer division.
++//!
++//! ```text
++//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_divisor_pds
++//! ```
++
++#![cfg(all(
++    feature = "host-test",
++    feature = "gpu-powervr",
++    not(feature = "no-shader-table"),
++    target_os = "linux",
++    any(target_arch = "x86_64", target_arch = "aarch64")
++))]
++
++#[test]
++fn the_vertex_program_divides_the_instance_number_per_stream() {
++    let root = env!("CARGO_MANIFEST_DIR");
++    let drv = "driver";
++    let mesa = "third_party/mesa-26.2.1";
++    let imagination = format!("{mesa}/src/imagination");
++    let dirs = [
++        format!("{drv}/src"),
++        format!("{drv}/compat"),
++        format!("{drv}/src/pvr/generated"),
++        format!("{mesa}/include"),
++        format!("{mesa}/src"),
++        imagination.clone(),
++        format!("{imagination}/include"),
++        format!("{imagination}/common"),
++        format!("{imagination}/vulkan"),
++        format!("{imagination}/vulkan/pds"),
++        format!("{imagination}/vulkan/pds/pvr_pds_programs"),
++    ];
++    let dir = std::env::temp_dir().join(format!("yakogl-divisor-{}", std::process::id()));
++    std::fs::create_dir_all(&dir).unwrap();
++    let exe = dir.join("div_pds");
++    let cc = std::process::Command::new("cc")
++        .args(["-std=c11", "-O1"])
++        .args(dirs.iter().map(|d| format!("-I{root}/{d}")))
++        .arg(format!("{root}/tests/es3_pvr_divisor_pds.c"))
++        .arg(format!("{root}/{drv}/src/pvr_pds_render_gen.c"))
++        .arg(format!("{root}/{drv}/compat/pvr_mesa_pds.c"))
++        .arg("-o")
++        .arg(&exe)
++        .output()
++        .expect("cc");
++    assert!(cc.status.success(), "{}", String::from_utf8_lossy(&cc.stderr));
++    let out = std::process::Command::new(&exe).output().expect("div_pds");
++    let _ = std::fs::remove_dir_all(&dir);
++    let text = String::from_utf8_lossy(&out.stdout).to_string();
++    assert!(out.status.success(), "{text}");
++    // Mesa: shift = ceil(log2 d), multiplier = (2^(shift+31) + d - 1) / d.
++    // Divisor 0 and 1 are today's words; a power of two is one SFTLP32 (one
++    // code word, no multiplier); the others are two LIMM, a MAD and two
++    // SFTLP64 (five code words); the data size never changes (the multiplier
++    // takes the constant after the stride).
++    let want = [
++        "d=0 mult=0x0 dgrow=0 cgrow=0 same=1 div_ok=1",
++        "d=1 mult=0x0 dgrow=0 cgrow=0 same=1 div_ok=1",
++        "d=2 mult=0x0 dgrow=0 cgrow=1 same=0 div_ok=1",
++        "d=3 mult=0xaaaaaaab dgrow=0 cgrow=5 same=0 div_ok=1",
++        "d=4 mult=0x0 dgrow=0 cgrow=1 same=0 div_ok=1",
++        "d=65535 mult=0x80008001 dgrow=0 cgrow=5 same=0 div_ok=1",
++        "not_per_instance_ignored=1",
++    ];
++    let got: Vec<&str> = text.lines().collect();
++    assert_eq!(got, want, "{text}");
++}

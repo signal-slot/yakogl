@@ -85,6 +85,22 @@ static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
       if (st->dst_reg + dma_dw > vtxin_dw)
          vtxin_dw = st->dst_reg + dma_dw;
       program.streams[s].instance_data = st->per_instance != 0;
+      if (st->per_instance != 0 && st->divisor > 1) {
+         const uint32_t d = st->divisor;
+
+         if ((d & (d - 1)) == 0) {
+            program.streams[s].shift = (uint32_t)__builtin_ctz(d);
+         } else {
+            /* shift = the bit of the next highest power of two;
+             * multiplier = (2^(shift + 31) + d - 1) / d, as Mesa's
+             * pvr_pipeline_pds.c computes it. The generator adds the 31. */
+            const uint32_t shift = (31u - (uint32_t)__builtin_clz(d - 1u)) + 1u;
+
+            program.streams[s].shift = shift;
+            program.streams[s].multiplier =
+               (uint32_t)((((uint64_t)1 << (shift + 31u)) + (d - 1u)) / d);
+         }
+      }
       program.streams[s].address = st->address;
       program.streams[s].stride = st->stride;
       program.streams[s].num_elements = 1;
