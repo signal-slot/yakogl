@@ -379,11 +379,10 @@ not edit those files.
 Source: VK-GL-CTS `93bca01`, `modules/gles3/functional/es3fTextureShadowTests.cpp`
 (cited below as `ES3:<line>`; re-check with `git show
 93bca01:modules/gles3/functional/es3fTextureShadowTests.cpp | sed -n
-'A,Bp'`). Only this file was read for this section. The verifier
-(`framework/common/tcuTexCompareVerifier.cpp`) and the renderer helpers
-(`glsTextureTestUtil.cpp`, `gluTextureTestUtil.cpp`) were not: what the
-`TexComparePrecision` numbers below mean there, and how the reference value
-is clamped when dEQP predicts the picture, is open (see "Open" at the end).
+'A,Bp'`), the verifier `framework/common/tcuTexCompareVerifier.cpp`
+(`VER:<line>`) and the renderer helper `modules/glshared/glsTextureTestUtil.cpp`
+(`UTIL:<line>`). `gluTextureTestUtil.cpp` and the definition of
+`computeFixedPointError` were not read.
 
 Shape. Three groups of 6 filters x 8 compare functions x 3 formats = 144 cases
 each, 432 in all: `2d` (`ES3:1061-1087`), `cube` (`ES3:1092-1118`) and
@@ -479,9 +478,8 @@ How the V3D design meets each:
   known to clamp. For D16 and D24S8 the clamp the audit settled (clamp to
   [0,1] for DEPTH_COMPONENT16/24 and DEPTH24_STENCIL8) is what the rows
   `refOutOfBounds*` need. For D32F the same two rows exist (`ES3:1035-1037`
-  against `:277-278`), so "never clamp D32F" has to be checked against what
-  the verifier predicts for a reference of 1.1 and -0.1 on a float depth
-  texture; see Open.
+  against `:277-278`), and the verifier does not clamp for D32F (`VER:58-61`),
+  so "never clamp D32F" is what dEQP expects.
 - Texture range. 2D texels outside [0,1] (`ES3:245-246`) for the two fixed
   formats are brought into range by the upload (the GL core stores a depth
   texel as a unorm-valued R32F, (d)), so no extra compare work is needed; the
@@ -494,14 +492,26 @@ How the V3D design meets each:
   fails. An ES 3.0 build keys cubes seamless, so the cube group is judged on
   the seamless path.
 
-Open (needs the files not read here, `tcuTexCompareVerifier.cpp` and
-`glsTextureTestUtil.cpp`): (1) whether the verifier clamps `ref` to [0,1] for
-a float depth texture (`tcuTexCompareVerifier.cpp`, the name the plan gave is
-`clampValues`); (2) what `referenceBits = 16` and `pcfBits = 5` mean for a
-reference of exactly 0.5 against an unorm16 texel of 0x8000 (a one-ulp
-difference flips LESS/GREATER); (3) whether `resultBits = redBits - 1` is the
-tolerance of the 1-bit comparison results of NEAREST. These are for a follow-up
-that reads the two files at `93bca01`.
+The verifier's clamp. `execCompare` sets `clampValues = isFixedPoint` with the
+comment "if comparing against a floating point texture, ref (and value) is not
+clamped", and clamps both the texel and the reference to [0,1] only then
+(`VER:55-61`; `clampValues` is the plan's name for it). Every compare path
+passes `isFixedPointDepth` from `isFixedPointDepthTextureFormat`
+(`VER:162-195`): false for a float `D`/`R` format and for
+`FLOAT_UNSIGNED_INT_24_8_REV` (DEPTH32F_STENCIL8, `VER:176-177`), true for the
+other depth types, `UNSIGNED_INT_24_8` (DEPTH24_STENCIL8) included
+(`VER:180-181`). So for the 1.1 and -0.1 rows dEQP predicts a clamped
+reference on D16 and D24S8 and an unclamped one on D32F, which is the audit's
+conclusion: the design's `fixed_depth` bit matches it. The compare is widened
+by `computeFixedPointError(referenceBits)` (`VER:62`), and EQUAL/NOTEQUAL
+accept a result for any value inside `ref +- err` (`VER:87-95`). So EQUAL
+with ref 1.1 against a texel of 1.0 is judged true on D16 (both clamp to 1.0)
+and false on D32F; a V3D that does not clamp D16 fails the first. The
+reference reaches the shader as the `u_ref` uniform (`UTIL:673-675`).
+
+Open: the value `computeFixedPointError` returns for 16 and 5 bits (defined
+outside `tcuTexCompareVerifier.cpp`), and `gluTextureTestUtil.cpp`. Whether the
+V3D meets the clamp rows waits on a draw, not on more reading.
 
 ## What the item must not forget
 
