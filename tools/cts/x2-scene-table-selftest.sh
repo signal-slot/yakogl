@@ -44,7 +44,7 @@ cat > "$D/console.txt" <<'EOF'
 10:00:07 glmark2: score lines follow after the scene's frames
 10:00:20 [terrain] <default>:
 10:00:30 glmark2: PERF page 0 asked (the frame-breakdown record of the last scene)
-10:00:31 link noise 10.137.22.9 read off the console
+10:00:31 link noise 198.51.100.9 read off the console
 10:00:40 glmark2-frame: [terrain] <default>: 61 frames; us per frame: gl 240000, swap 8000, show 1, other 2000, frame 250000
 10:00:41  FPS: 4 FrameTime: 250.000 ms
 10:00:42 glmark2: score 4: 1 scenes ran, 0 failed, 0 unsupported (1 list entry)
@@ -112,7 +112,7 @@ cat > "$D/console.txt" <<'EOF'
 13:00:20 [refract] <default>: FPS: 3 FrameTime: 333.333 ms
 EOF
 cat > "$D/INDEX.txt" <<'EOF'
-verdict: board.sh x2 refract-nosel rc=4 verdict=failed boot=kexec-dev DEV boot_verdict=complete result=none resets=0 record=absent back_after=60s host 10.137.22.9 on /dev/ttyAMA0
+verdict: board.sh x2 refract-nosel rc=4 verdict=failed boot=kexec-dev DEV boot_verdict=complete result=none resets=0 record=absent back_after=60s host 198.51.100.9 on /dev/ttyAMA0
 EOF
 
 # shadow, the knob built explicitly off (-tiled_rt_n): a whole result line without FrameTime:
@@ -188,7 +188,7 @@ check "knob on from the -tiled_rt directory (no console knob line)" \
   "| abcd0000 | on | refract | 500.000 | 2 | stop: no verdict line in INDEX.txt |" "$out"
 check "the verdict line leaves redacted: IPv4 becomes 192.0.2.n, the UART path becomes <uart-path>" \
   "| ee00ee00 | absent | refract | 333.333 | 3 | board.sh x2 refract-nosel rc=4 verdict=failed boot=kexec-dev DEV boot_verdict=complete result=none resets=0 record=absent back_after=60s host 192.0.2.n on <uart-path> |" "$out"
-absent "no IPv4-like string printed" "10.137" "$out"
+absent "no IPv4-like string printed" "198.51.100" "$out"
 absent "no UART path printed" "ttyAMA0" "$out"
 check "knob off from the -tiled_rt_n directory, ms from 1000 / FPS (5 -> 200.000)" \
   "| 0f0f0f0f | off | shadow | 200.000 | 5 | board.sh x2 shadow-nosel rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=none resets=0 record=absent back_after=60s |" "$out"
