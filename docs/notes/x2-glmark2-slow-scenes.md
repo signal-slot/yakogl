@@ -74,6 +74,14 @@ stopped at `BOARD_HOST` unset. No jump, no image, the board was not touched.
 W1 to W5 are on main; the earlier closed pull request (`9698dd11`, a tiled
 chain layout in `tex_layout.rs` with no caller) failed CI and was not reused.
 
+## Sixth attempt (plan #355, 2026-11-13): still no measurement
+
+Host `orion` again, no `target:x2` or `target:x2-console` lease in the task:
+`getent hosts armadillo` returned nothing, `tools/board.sh x2 status` stopped
+at `BOARD_HOST` unset, and `ask_farm` for the board's login timed out. No
+jump, no image, the board was not touched. `gc_tiled_rt` (W1 to W5) is already
+on main, so no host change was made.
+
 ## What is left
 
 Rerun from one of the nodes that log in (see the checks above), with
