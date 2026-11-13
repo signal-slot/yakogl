@@ -32,15 +32,15 @@ issue #1196.
 
 | scene | verdict | what was looked at | origin/main commit | record |
 |---|---|---|---|---|
-| [build] use-vbo=false | pending | | | |
-| [build] use-vbo=true | pending | | | |
-| [texture] texture-filter=nearest | pending | | | |
-| [texture] texture-filter=linear | pending | | | |
-| [texture] texture-filter=mipmap | pending | | | |
-| [shading] shading=gouraud | pending | | | |
-| [shading] shading=blinn-phong-inf | pending | | | |
-| [shading] shading=phong | pending | | | |
-| [shading] shading=cel | pending | | | |
+| [build] use-vbo=false | right | The rearing horse, lit grey on black, in the same pose and shading as llvmpipe; no missing or stray triangles from the client-side arrays, no holes. Animated by a step at most, compared within the picture tolerance (0.0% of pixels more than 24 levels off, mean difference 0.1 level). | 86b4af69 | records/pi4/20261113-0847-gm01-build-409fcbdf |
+| [build] use-vbo=true | right | The same horse drawn from VBOs, identical to llvmpipe's and to the use-vbo=false picture (0.0% of pixels off, mean difference 0.03 level); no index or attribute mix-up. The first dump lost rows 68-107 on the UART and was rerun once (records/pi4/20261113-0851-gm02-build-ff0460dd). | 86b4af69 | records/pi4/20261113-0856-gm02-build-ff0460dd |
+| [texture] texture-filter=nearest | right | The wood crate (the plank front and the side panel) sampled by nearest texel: the same crate as llvmpipe, the only difference a sparse grid of single pixels at texel boundaries (0.1% of pixels, the texel-selection ties of nearest filtering); no blur, no swapped or missing face. | 86b4af69 | records/pi4/20261113-0901-gm03-texture-b8500398 |
+| [texture] texture-filter=linear | right | The same crate bilinearly filtered: smooth grain, no texel blocks, every probe within one level of llvmpipe's and no pixel more than 24 levels off. | 86b4af69 | records/pi4/20261113-0905-gm04-texture-633f6a6e |
+| [texture] texture-filter=mipmap | right | The crate through its mipmap chain: the grain a touch softer than the linear picture, as a level between 0 and 1 should be, and even over the whole crate; no shimmer or aliasing in the far planks, no band, seam or tile of a wrong level, no garbage tile, no black face. The difference against llvmpipe is a uniform sub-level haze (mean 0.3 level, 0.0% of pixels more than 24 off), so the level selection and the trilinear blend agree with llvmpipe's. | 86b4af69 | records/pi4/20261113-0910-gm05-texture-cc51aac0 |
+| [shading] shading=gouraud | right | The blue cat lit per vertex: the same soft, faintly faceted highlight along the back and the dark underside as llvmpipe, the eyes and ears where they belong. The difference is the silhouette and faint triangle edges (0.1% of pixels more than 24 levels off, mean difference under half a level). | 86b4af69 | records/pi4/20261113-0915-gm06-shading-49fcad29 |
+| [shading] shading=blinn-phong-inf | right | The glossy cat with the white specular spots on the ear, cheek, back and flank in the same places and sizes as llvmpipe; the difference is faint speckle at the highlight fringes where the specular power rounds (0.2% of pixels more than 24 off), the probes within four levels. | 86b4af69 | records/pi4/20261113-0919-gm07-shading-f2558063 |
+| [shading] shading=phong | right | The glossy cat lit per pixel: the bright specular spots on the flank, back, tail, ear and face in the same places and sizes as llvmpipe, the smooth falloff around them; the difference is speckle at the highlight fringes and the silhouette (0.4% of pixels more than 24 off), the probes within four levels. The first dump lost rows 96-156 on the UART and was rerun once (records/pi4/20261113-0924-gm08-shading-1d2e143b). | 86b4af69 | records/pi4/20261113-0933-gm08-shading-1d2e143b |
+| [shading] shading=cel | right | The green cat in three flat tones: the pale highlight bands on the ear, cheek, flank and tail, the dark shadow band under the body and behind the tail, and the mid-green body, with the same band edges as llvmpipe (0.0% of pixels more than 24 levels off, mean difference 0.02 level); no missing step, no gradient where a step should be. | 86b4af69 | records/pi4/20261113-0929-gm09-shading-ca9dabaf |
 | [bump] bump-render=high-poly | pending | | | |
 | [bump] bump-render=normals | pending | | | |
 | [bump] bump-render=height | pending | | | |
