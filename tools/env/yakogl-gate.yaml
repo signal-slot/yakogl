@@ -35,5 +35,19 @@ ci:
   labels: [self-hosted, Linux, X64, yakogl-gate]
   path: ["$HOME/.cargo/bin"]
   refresh: main
-  vcpus: 8                # a CI job's machine
-  memory-gb: 12
+  # A CI job's machine. tools/check.sh runs one compiler slot per 3072 MB of
+  # MemAvailable, never more than the cores (docs/ci.md, "Compiler slots"; one
+  # clippy-driver on the yakogl crate peaks at 2.9 GB). Gate run 43372841985 on
+  # 8 vcpus / 12 GB: "3 compiler slot(s) (11247 MB available, 3072 MB each,
+  # 8 cores)", 41,723 s of rows in 14,851 s wall (2.8 in parallel), 5 cores idle.
+  # 8 slots need 8 x 3072 = 24,576 MB available; the OS, cargo and the page
+  # cache took about 9 % (11247 of 12288 MB were available), so 28 GB gives
+  # about 25.5 GB available: all 8 slots. 24 GB would give 7 slots, 20 GB 6
+  # (fits more machines per host, leaves 1-2 cores idle). Fewer such machines
+  # fit per host: a CI machine goes from 12 to 28 GB of the host's memory
+  # (orion places by host memory, max_memory_utilization_ratio), and in
+  # exchange uses 8 cores, not 3. NOT checked against the hosts' memory
+  # (orion nodes --json was not reachable when this was chosen): the person
+  # who applies it checks it.
+  vcpus: 8
+  memory-gb: 28
