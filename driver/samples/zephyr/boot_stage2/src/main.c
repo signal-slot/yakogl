@@ -9,12 +9,14 @@
  * compressed payload is linked into this image at build time) or from a raw
  * sector range of the eMMC user area (BOOT_STAGE2_SOURCE_EMMC), checks it,
  * puts it at its load address and jumps to it with the MMU and caches off,
- * at EL1.
+ * at EL1. A header of version 1 or 2 describes one image; version 3 a table
+ * of segments, each at its own load address (loader/src/lib.rs).
  *
  * This file is the Zephyr side only: the payload's source (the eMMC through
  * Zephyr's SD stack and the TI AM654 SDHCI driver, or the linked bytes), the
- * log, quiescing the controller and the cache maintenance. The header check,
- * the CRC-32s, the inflate and the jump are Rust (loader/, include/boot_stage2.h).
+ * log, clearing the zero ranges, quiescing the controller and the cache
+ * maintenance. The header check, the CRC-32s, the decoders and the jump are
+ * Rust (loader/, include/boot_stage2.h).
  */
 
 #include <zephyr/kernel.h>
@@ -51,7 +53,9 @@
  * stamps and clears the magic. Layout, also in the image's board_route3.c:
  * magic, count, then u64 t[8]: entry, main, payload in memory, unpacked
  * (both CRCs checked), jump, stored CRC checked (BS2_MARK_STORED_CHECKED),
- * decoded (BS2_MARK_DECODED), zero range cleared.
+ * decoded (BS2_MARK_DECODED), zero range cleared. With a version-3 header
+ * each segment stamps "in memory", "stored CRC checked" and "decoded", so
+ * what stays is the last segment's: every segment in memory, checked, decoded.
  */
 #define BS2_STAMP_ADDR  0x41000000u
 #define BS2_STAMP_MAGIC 0x54325342u /* 'BS2T' */
@@ -261,7 +265,35 @@ static int read_sectors(uint8_t *buf, uint32_t first, uint32_t count)
 	}
 	return 0;
 }
+
+/* An uncompressed segment straight to its load address: the whole sectors,
+ * then the last partial one through the header buffer (the header is parsed
+ * by now), so nothing past the segment's image bytes is written: what
+ * follows them is its zero bytes or another segment. */
+static int read_in_place(uint8_t *dst, uint32_t first, uint64_t bytes)
+{
+	uint32_t whole = (uint32_t)(bytes / SECTOR_BYTES);
+	size_t tail = (size_t)(bytes % SECTOR_BYTES);
+
+	if (read_sectors(dst, first, whole)) {
+		return -1;
+	}
+	if (tail) {
+		if (read_sectors(hdr, first + whole, 1)) {
+			return -1;
+		}
+		memcpy(dst + (size_t)whole * SECTOR_BYTES, hdr, tail);
+	}
+	return 0;
+}
 #endif
+
+static const char *compression_name(uint32_t compression)
+{
+	return compression == BS2_COMPRESSION_DEFLATE ? "deflate"
+	       : compression == BS2_COMPRESSION_LZ4   ? "lz4"
+						      : "uncompressed";
+}
 
 int main(void)
 {
@@ -271,10 +303,16 @@ int main(void)
 	int ret;
 
 #ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
+	/* A compressed segment of a version-3 payload is read to STAGING + its
+	 * stored offset: the whole range is the staging buffer, and no segment
+	 * may overlap it. */
 	const struct bs2_limits limits = {
 		.load = LOAD,
 		.max_stored = MAX_STORED,
 		.max_image = STAGING - LOAD,
+		.region_end = REGION_END,
+		.staging = STAGING,
+		.staging_bytes = MAX_STORED,
 	};
 	uint32_t disk_sectors = 0;
 
@@ -305,10 +343,15 @@ int main(void)
 	}
 #else
 	const size_t payload_bytes = (size_t)(bs2_payload_end - bs2_payload_start);
+	/* Nothing is staged: the stored bytes are read from this image's
+	 * .rodata, so a version-3 payload's segments may use the staging range. */
 	const struct bs2_limits limits = {
 		.load = LOAD,
 		.max_stored = payload_bytes > SECTOR_BYTES ? payload_bytes - SECTOR_BYTES : 0,
 		.max_image = STAGING - LOAD,
+		.region_end = REGION_END,
+		.staging = STAGING,
+		.staging_bytes = 0,
 	};
 
 	progress("boot_stage2: image carried in this loader (%zu bytes at %p), load 0x%lx\n", payload_bytes,
@@ -323,13 +366,25 @@ int main(void)
 		halt();
 	}
 #endif
-	progress("boot_stage2: \"%s\": %llu bytes stored (%s), %llu bytes image, entry 0x%llx, "
-	       "%llu bytes zeroed at +0x%llx\n",
-	       info.name, info.stored_bytes,
-	       info.compression == BS2_COMPRESSION_DEFLATE ? "deflate"
-	       : info.compression == BS2_COMPRESSION_LZ4   ? "lz4"
-							   : "uncompressed",
-	       info.image_bytes, info.entry, info.zero_bytes, info.zero_offset);
+	const bool segmented = info.version >= BS2_VERSION_SEGMENTS;
+
+	if (segmented) {
+		progress("boot_stage2: \"%s\": header version %u, %u segment(s), %llu bytes stored, "
+			 "entry 0x%llx\n", info.name, info.version, info.count, info.stored_bytes, info.entry);
+		for (uint32_t i = 0; i < info.count; i++) {
+			const struct bs2_segment *s = &info.segments[i];
+
+			progress("boot_stage2:   [%u] 0x%llx..0x%llx: %llu bytes image (%s, %llu stored at "
+				 "+0x%llx), then %u zero bytes, footprint %llu\n", i, s->load,
+				 s->load + s->image_bytes, s->image_bytes, compression_name(s->compression),
+				 s->stored_bytes, s->stored_offset, s->zero_bytes, s->footprint);
+		}
+	} else {
+		progress("boot_stage2: \"%s\": %llu bytes stored (%s), %llu bytes image, entry 0x%llx, "
+			 "%llu bytes zeroed at +0x%llx\n",
+			 info.name, info.stored_bytes, compression_name(info.compression),
+			 info.image_bytes, info.entry, info.zero_bytes, info.zero_offset);
+	}
 
 	/* What the read and the inflate run on: the MMU and both caches
 	 * (SCTLR_EL1 M, C, I), and the copy bandwidth into the payload region,
@@ -346,45 +401,104 @@ int main(void)
 		       (unsigned)(sctlr & 1), (unsigned)((sctlr >> 2) & 1), (unsigned)((sctlr >> 12) & 1),
 		       (unsigned)(((uint64_t)(c1 - c0) * 1000000u) / sys_clock_hw_cycles_per_sec()));
 	}
-	int64_t t1 = k_uptime_get();
-#ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
-	/* Uncompressed: straight to the load address. Compressed: to the
-	 * staging copy above the image, then decoded down to the load address. */
-	uint8_t *stored = (uint8_t *)(info.compression != BS2_COMPRESSION_NONE ? STAGING : LOAD);
-	uint32_t nsec = (uint32_t)((info.stored_bytes + SECTOR_BYTES - 1) / SECTOR_BYTES);
-
-	if (read_sectors(stored, HDR_SECTOR + 1, nsec)) {
-		halt();
-	}
-#else
-	/* The stored bytes follow the header inside this image; bs2_unpack
-	 * copies or inflates them to the load address. */
-	const uint8_t *stored = bs2_payload_start + SECTOR_BYTES;
+	int64_t t_read = 0, t_unpack = 0;
 	uint32_t nsec = 0;
-#endif
-	int64_t t2 = k_uptime_get();
-	bs2_stamp(2);
 
-	ret = bs2_unpack(&info, (uint8_t *)stored, (uint8_t *)LOAD, STAGING - LOAD);
-	if (ret) {
-		printk("boot_stage2: \"%s\" refused: %s\n", info.name, bs2_strerror(ret));
-		halt();
+	if (segmented) {
+		for (uint32_t i = 0; i < info.count; i++) {
+			const struct bs2_segment *s = &info.segments[i];
+			int64_t t1 = k_uptime_get();
+#ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
+			/* Uncompressed: straight to the load address. Compressed:
+			 * to the staging buffer at the segment's stored offset (no
+			 * segment overlaps it: the header check), then decoded to
+			 * the load address. */
+			const uint32_t first = HDR_SECTOR + 1 + (uint32_t)(s->stored_offset / SECTOR_BYTES);
+			const uint32_t n = (uint32_t)((s->stored_bytes + SECTOR_BYTES - 1) / SECTOR_BYTES);
+			uint8_t *stored;
+
+			if (s->compression != BS2_COMPRESSION_NONE) {
+				stored = (uint8_t *)(STAGING + (uintptr_t)s->stored_offset);
+				if (read_sectors(stored, first, n)) {
+					halt();
+				}
+			} else {
+				stored = (uint8_t *)(uintptr_t)s->load;
+				if (read_in_place(stored, first, s->stored_bytes)) {
+					halt();
+				}
+			}
+			nsec += n;
+#else
+			/* The stored bytes follow the header inside this image;
+			 * bs2_segment_unpack copies or decodes them to the load
+			 * address. */
+			const uint8_t *stored = bs2_payload_start + SECTOR_BYTES + (size_t)s->stored_offset;
+#endif
+			int64_t t2 = k_uptime_get();
+			bs2_stamp(2);
+
+			ret = bs2_segment_unpack(&info, i, stored);
+			if (ret) {
+				printk("boot_stage2: \"%s\" segment %u refused: %s\n", info.name, i,
+				       bs2_strerror(ret));
+				halt();
+			}
+			t_read += t2 - t1;
+			t_unpack += k_uptime_get() - t2;
+		}
+	} else {
+		int64_t t1 = k_uptime_get();
+#ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
+		/* Uncompressed: straight to the load address. Compressed: to the
+		 * staging copy above the image, then decoded down to the load
+		 * address. */
+		uint8_t *stored = (uint8_t *)(info.compression != BS2_COMPRESSION_NONE ? STAGING : LOAD);
+
+		nsec = (uint32_t)((info.stored_bytes + SECTOR_BYTES - 1) / SECTOR_BYTES);
+		if (read_sectors(stored, HDR_SECTOR + 1, nsec)) {
+			halt();
+		}
+#else
+		/* The stored bytes follow the header inside this image; bs2_unpack
+		 * copies or decodes them to the load address. */
+		const uint8_t *stored = bs2_payload_start + SECTOR_BYTES;
+#endif
+		int64_t t2 = k_uptime_get();
+		bs2_stamp(2);
+
+		ret = bs2_unpack(&info, (uint8_t *)stored, (uint8_t *)LOAD, STAGING - LOAD);
+		if (ret) {
+			printk("boot_stage2: \"%s\" refused: %s\n", info.name, bs2_strerror(ret));
+			halt();
+		}
+		t_read = t2 - t1;
+		t_unpack = k_uptime_get() - t2;
 	}
-	int64_t t3 = k_uptime_get();
 	bs2_stamp(3);
 
-	/* The image's .bss, for an image that skips its own clear (header
-	 * version 2; bs2_header_parse checked the range is past the image and
-	 * inside the region). Here the caches are on; the image's reset path
-	 * would clear it with them off. */
+	/* The zero ranges: a version-2 header's one range (the image's .bss, for
+	 * an image that skips its own clear; bs2_header_parse checked it is past
+	 * the image and inside the region) and each segment's zero bytes of a
+	 * version-3 one (the zero runs the payload does not store, and the
+	 * .bss). Here the caches are on; the image's reset path would clear its
+	 * .bss with them off. */
 	if (info.zero_bytes != 0u) {
 		memset((void *)(LOAD + (uintptr_t)info.zero_offset), 0, (size_t)info.zero_bytes);
+	}
+	for (uint32_t i = 0; i < info.count; i++) {
+		const struct bs2_segment *s = &info.segments[i];
+
+		if (s->zero_bytes != 0u) {
+			memset((void *)(uintptr_t)(s->load + s->image_bytes), 0, s->zero_bytes);
+		}
 	}
 	bs2_stamp(7);
 
 	progress("boot_stage2: \"%s\" ok (CRC-32 %08x): read %u sectors in %lld ms, unpacked in %lld ms; "
-	       "jumping to 0x%llx at %lld ms\n", info.name, info.image_crc32, nsec, t2 - t1, t3 - t2,
-	       info.entry, k_uptime_get() - t0);
+		 "jumping to 0x%llx at %lld ms\n", info.name,
+		 segmented ? info.segments[0].image_crc32 : info.image_crc32, nsec, t_read, t_unpack,
+		 info.entry, k_uptime_get() - t0);
 
 	/* Let the UART drain the last line: the image re-initialises it. */
 	if (IS_ENABLED(CONFIG_BOOT_STAGE2_PROGRESS_LOG)) {

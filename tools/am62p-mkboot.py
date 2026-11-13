@@ -34,8 +34,11 @@ SPL would read the whole FIT into one buffer first.
   am62p-mkboot.py bootpart --tiboot3 tiboot3.bin --tispl tispl.bin
                         --uboot u-boot-zephyr.img --size BYTES -o OUT
   am62p-mkboot.py stage2img --zephyr zephyr.bin -o OUT [--load ADDR]
-                        [--compress deflate|none] [--name TEXT]
-  am62p-mkboot.py stage2check --zephyr zephyr.bin IMG
+                        [--compress deflate|lz4|none] [--name TEXT]
+                        [--segment FILE@ADDR ...] [--staging ADDR]
+                        [--split-zeros MIN] [--clear-after BYTES]
+                        [--sector N --end-sector N]
+  am62p-mkboot.py stage2check --zephyr zephyr.bin [--segment FILE@ADDR ...] IMG
   am62p-mkboot.py stage2-vectors DIR
 
 `bootpart` lays out a whole eMMC boot partition (tiboot3 at 0, tispl at
@@ -60,6 +63,40 @@ Rust reader are checked against each other.
 An image built with CONFIG_SKIP_BSS_CLEAR (its .config next to the
 zephyr.bin) gets a header version 2 with its .bss (from the zephyr.elf next
 to it) as the range the loader zeroes.
+
+With `--segment FILE@ADDR` (repeatable), `--split-zeros` or `--clear-after`,
+`stage2img` writes a version-3 header instead, a segment table: the
+zephyr.bin is segment 0 (at --load, holding the entry) and each FILE is
+placed at its ADDR, the way kexec_zephyr's FILE@ADDR segments are (the AM62P
+showcase: the Supervisor, r5_ddr.bin@0x90000000 and r5_tcm.bin@0x90c00000).
+Every segment must lie in the loader's region (0x82000000 .. the GPU
+carveout), clear of the others (segment 0 up to its arm64 image_size, .bss
+included) and clear of the loader's staging buffer (--staging,
+CONFIG_BOOT_STAGE2_STAGING, for as many bytes as the sector range holds).
+Without those three options the version 1 or 2 header is written, byte for
+byte as before version 3 existed, so loaders already on boards read what
+the tool writes for them; a loader from before version 3 refuses a
+version-3 payload.
+
+`--split-zeros MIN` and `--clear-after BYTES` keep zeros out of the payload.
+The loader clears a segment's `zero bytes`, the RAM right after its image
+bytes, with the MMU and caches on while the eMMC transfers run. With
+--split-zeros the zephyr.bin is cut at every run of at least MIN zero bytes:
+the run, shrunk inward to 4 KiB address boundaries, is not stored, and what
+follows it becomes another segment, a continuation part of the image inside
+segment 0's footprint (the header's `image parts` counts segment 0 and
+these). Each part's zero bytes are the run after it. When the runs give
+more parts than the 8 segments hold, the longest are cut and the tool says
+how many were left in. --clear-after is the zero bytes after the image's
+last byte, at `load + len(zephyr.bin)` exactly: give the distance from
+there to the end of the image's .bss, and the image may skip its own .bss
+clear (Zephyr's CONFIG_SKIP_BSS_CLEAR) as long as it is only ever started by
+this loader from such a payload. It must fit segment 0's footprint (the
+arm64 image_size). For an image whose .config next to the zephyr.bin has
+CONFIG_SKIP_BSS_CLEAR the tool reads the .bss from the zephyr.elf: it sets
+--clear-after when none is given and refuses one that ends short of the
+.bss. `stage2check` reads the parts from the header, puts the image together
+again (parts and zero runs) and compares it with --zephyr.
 
 Standard library only, plus the lz4 command for --compress lz4 ($LZ4 when
 set, else lz4 on PATH). No signing: the Zephyr payload has no TI x509
@@ -93,6 +130,11 @@ FDT_ROOM = 0x40000            # room left for that devicetree (fdt-0 with its ce
 STAGE2_MAGIC = b"YKSTAGE2"
 STAGE2_VERSION = 1            # what a header without the version 2 fields is written as
 STAGE2_VERSION_ZERO_LZ4 = 2   # the zero range at 96 and LZ4 (compression 2); older loaders refuse it
+STAGE2_VERSION_SEGMENTS = 3   # the segment table (loader/src/lib.rs); older loaders refuse it
+STAGE2_MAX_SEGMENTS = 8
+STAGE2_TABLE = 96             # the segment table's offset in the header, 40 bytes an entry
+STAGE2_ENTRY_BYTES = 40
+STAGE2_PART_ALIGN = 4096      # a continuation part of the image starts on such an address
 STAGE2_SECTOR = 64            # header sector: clear of the DOS table (0) and a GPT's sectors 1..33
 STAGE2_END_SECTOR = 8192      # Torizon's mmcblk0p1 starts here (sfdisk -d, 2026-10-02)
 STAGE2_STAGING = 0x90000000   # where the loader reads a compressed payload; bounds the image
@@ -529,8 +571,10 @@ def bss_zero_range(zephyr_bin, load):
     return (sym["__bss_start"] - load, sym["__bss_end"] - sym["__bss_start"])
 
 
-def stage2img(zephyr, load, compression, name, sector=STAGE2_SECTOR, end_sector=STAGE2_END_SECTOR, zero=(0, 0)):
-    """Header + payload, padded to whole sectors, for user-area sector `sector`."""
+def stage2img(zephyr, load, compression, name, sector=STAGE2_SECTOR, end_sector=STAGE2_END_SECTOR, zero=(0, 0),
+              staging=STAGE2_STAGING):
+    """Header (version 1 or 2) + payload, padded to whole sectors, for
+    user-area sector `sector`."""
     # The AM62P's DDR starts at 0x80000000; an image there must clear the A53
     # SPL's stack and the loader (SPL_STACK_TOP) and stay below the loader's
     # staging buffer. Another SoC's DDR (the i.MX8MP's at 0x40000000, loader
@@ -539,9 +583,9 @@ def stage2img(zephyr, load, compression, name, sector=STAGE2_SECTOR, end_sector=
     if 0x80000000 <= load < SPL_STACK_TOP:
         raise ValueError("the second stage loads the image at 0x%x or above (got 0x%x)" % (SPL_STACK_TOP, load))
     check_zephyr(zephyr, load)
-    if load >= 0x80000000 and len(zephyr) > STAGE2_STAGING - load:
+    if load >= 0x80000000 and len(zephyr) > staging - load:
         raise ValueError("a %d-byte image at 0x%x reaches the loader's staging buffer at 0x%x"
-                         % (len(zephyr), load, STAGE2_STAGING))
+                         % (len(zephyr), load, staging))
     if zero[1] and zero[0] < len(zephyr):
         raise ValueError("the range to zero starts at +0x%x, inside the %d-byte image" % (zero[0], len(zephyr)))
     stored = {COMP_DEFLATE: deflate_raw, COMP_LZ4: lz4_frame}.get(compression, bytes)(zephyr)
@@ -555,12 +599,244 @@ def stage2img(zephyr, load, compression, name, sector=STAGE2_SECTOR, end_sector=
     return out + bytes((-len(out)) % 512)
 
 
+def stage2_pack(compression, data):
+    """The stored bytes of `data` under a COMP_* value."""
+    return {COMP_DEFLATE: deflate_raw, COMP_LZ4: lz4_frame}.get(compression, bytes)(data)
+
+
+def stage2_v3_raw(segs, entry, name, total=None, parts=1, load=None, version=STAGE2_VERSION_SEGMENTS):
+    """A version-3 header + stored bytes, no checks (the vectors use it for
+    malformed payloads). segs: dicts with load, image (bytes), stored (bytes),
+    comp, and optionally footprint, offset, scrc, icrc overriding the
+    computed values, and zero (the zero bytes, 0 by default). parts is the
+    header's image parts field as written; load its load address (segment
+    0's by default)."""
+    body = bytearray()
+    table = []
+    for s in segs:
+        off = s.get("offset", len(body))
+        if off > len(body):
+            body.extend(bytes(off - len(body)))
+        stored = s["stored"]
+        end = off + len(stored)
+        if end > len(body):
+            body.extend(bytes(end - len(body)))
+        body[off:end] = stored
+        body.extend(bytes((-len(body)) % 512))
+        table.append((s["load"], len(s["image"]), s.get("footprint", len(s["image"])), off, len(stored), s["comp"],
+                      s.get("scrc", zlib.crc32(stored) & 0xFFFFFFFF), s.get("icrc", zlib.crc32(s["image"]) & 0xFFFFFFFF),
+                      s.get("zero", 0)))
+    if load is None:
+        load = segs[0]["load"] if segs else entry
+    h = bytearray(512)
+    struct.pack_into("<8sIIIIQQQ", h, 0, STAGE2_MAGIC, version, 512, len(segs), parts, load, entry,
+                     len(body) if total is None else total)
+    nm = name.encode()[:32]
+    h[64:64 + len(nm)] = nm
+    for i, t in enumerate(table[:STAGE2_MAX_SEGMENTS]):
+        struct.pack_into("<QIIIIIIII", h, STAGE2_TABLE + i * STAGE2_ENTRY_BYTES, *t)
+    struct.pack_into("<I", h, 508, zlib.crc32(bytes(h[:508])) & 0xFFFFFFFF)
+    return bytes(h) + bytes(body)
+
+
+def parse_segment_arg(text):
+    """FILE@ADDR, as kexec_zephyr takes it."""
+    path, sep, addr = text.rpartition("@")
+    if not sep or not path:
+        raise ValueError("--segment %r: give FILE@ADDR" % text)
+    return path, int(addr, 0)
+
+
+def stage2_split(zephyr, load, min_run, max_parts):
+    """Where --split-zeros cuts: ([(start, end)] the extents of the file that
+    are stored, in order; the number of runs left in for want of segments).
+    A run of at least min_run zero bytes is cut out after shrinking it inward
+    to 4 KiB address boundaries, so that the part after it starts on one (a
+    run up to the file's end keeps its end: no part follows it). The first
+    extent keeps the arm64 header."""
+    import re
+    if min_run < 1:
+        raise ValueError("--split-zeros %d: give a run length of at least 1 byte" % min_run)
+    cuts, tail = [], None
+    for m in re.finditer(b"\\x00{%d,}" % min_run, zephyr):
+        a = ((load + m.start() + STAGE2_PART_ALIGN - 1) & -STAGE2_PART_ALIGN) - load
+        if a < 64:
+            a += STAGE2_PART_ALIGN
+        if m.end() == len(zephyr):
+            if a < len(zephyr):
+                tail = a
+            continue
+        b = ((load + m.end()) & -STAGE2_PART_ALIGN) - load
+        if b > a:
+            cuts.append((a, b))
+    left_in = max(0, len(cuts) - (max_parts - 1))
+    if left_in:
+        cuts = sorted(sorted(cuts, key=lambda c: c[0] - c[1])[:max_parts - 1])
+    extents, start = [], 0
+    for a, b in cuts:
+        extents.append((start, a))
+        start = b
+    extents.append((start, len(zephyr) if tail is None else tail))
+    return extents, left_in
+
+
+def stage2_parts_check(segs, parts):
+    """The loader's rules for zero bytes and image parts, for segments as
+    dicts (load, image_bytes, zero_bytes, footprint): errors as strings."""
+    errors = []
+    for i, s in enumerate(segs):
+        if s["image_bytes"] + s["zero_bytes"] > s["footprint"]:
+            errors.append("segment %d: %d image bytes + %d zero bytes are over its footprint %d"
+                          % (i, s["image_bytes"], s["zero_bytes"], s["footprint"]))
+    if not 1 <= parts <= len(segs):
+        errors.append("%d image parts in a table of %d segments" % (parts, len(segs)))
+        return errors
+    s0 = segs[0]
+    occupied_end = s0["load"] + s0["image_bytes"] + s0["zero_bytes"]
+    for i in range(1, parts):
+        p = segs[i]
+        if p["load"] < occupied_end:
+            errors.append("part %d at 0x%x is on segment 0's image and zero bytes (up to 0x%x)"
+                          % (i, p["load"], occupied_end))
+        if p["load"] + p["footprint"] > s0["load"] + s0["footprint"]:
+            errors.append("part %d (0x%x..0x%x) is not inside segment 0's footprint (up to 0x%x)"
+                          % (i, p["load"], p["load"] + p["footprint"], s0["load"] + s0["footprint"]))
+        if i > 1 and p["load"] <= segs[i - 1]["load"]:
+            errors.append("part %d at 0x%x is not above part %d at 0x%x" % (i, p["load"], i - 1, segs[i - 1]["load"]))
+        if p["footprint"] != p["image_bytes"] + p["zero_bytes"]:
+            errors.append("part %d: footprint %d is not its %d image bytes + %d zero bytes"
+                          % (i, p["footprint"], p["image_bytes"], p["zero_bytes"]))
+    return errors
+
+
+def stage2_segments_check(segs, sector, end_sector, staging, parts=1, occupied=None):
+    """The loader's version-3 rules for segments [(load, footprint, label)]:
+    errors as strings. The AM62P map (load >= 0x80000000): every segment in
+    0x82000000 .. GPU_CARVEOUT, none on the staging buffer; any map: no two
+    overlap, at most 8, sizes below 4 GiB. The first `parts` segments are the
+    image's parts: segment 0 is taken against the others of them with
+    `occupied` (its image bytes + zero bytes) in place of its footprint
+    (stage2_parts_check has the rest of the parts' rules)."""
+    errors = []
+    if not 1 <= len(segs) <= STAGE2_MAX_SEGMENTS:
+        errors.append("%d segments: the loader takes 1..%d" % (len(segs), STAGE2_MAX_SEGMENTS))
+    cap = stage2_capacity(sector, end_sector)
+    am62p = segs and segs[0][0] >= 0x80000000
+    if am62p and staging + cap > GPU_CARVEOUT:
+        errors.append("the staging buffer 0x%x + %d bytes (the sector range) runs into the GPU carveout at 0x%x"
+                      % (staging, cap, GPU_CARVEOUT))
+    for i, (load, fp, label) in enumerate(segs):
+        if fp >= 1 << 32:
+            errors.append("%s: %d bytes, over the header's 32-bit sizes" % (label, fp))
+        if am62p and (load < SPL_STACK_TOP or load + fp > GPU_CARVEOUT):
+            errors.append("%s: 0x%x..0x%x is outside the loader's region 0x%x..0x%x"
+                          % (label, load, load + fp, SPL_STACK_TOP, GPU_CARVEOUT))
+        if am62p and load < staging + cap and staging < load + fp:
+            errors.append("%s: 0x%x..0x%x overlaps the loader's staging buffer 0x%x..0x%x (--staging, "
+                          "CONFIG_BOOT_STAGE2_STAGING)" % (label, load, load + fp, staging, staging + cap))
+        for j in range(i + 1, len(segs)):
+            load2, fp2, label2 = segs[j]
+            n = occupied if i == 0 and j < parts and occupied is not None else fp
+            if load < load2 + fp2 and load2 < load + n:
+                errors.append("%s (0x%x..0x%x) overlaps %s (0x%x..0x%x)"
+                              % (label, load, load + n, label2, load2, load2 + fp2))
+    return errors
+
+
+def stage2img_segments(zephyr, load, extra, compression, name, sector=STAGE2_SECTOR, end_sector=STAGE2_END_SECTOR,
+                       staging=STAGE2_STAGING, split_zeros=0, clear_after=0):
+    """A version-3 payload: zephyr.bin at `load` (segment 0, the entry), then
+    each (data, addr, label) of `extra`, every stored range sector aligned.
+    split_zeros (a run length, 0: off) cuts zephyr.bin at its zero runs into
+    segment 0 and continuation parts (stage2_split); clear_after is the zero
+    bytes after the image's last byte."""
+    if 0x80000000 <= load < SPL_STACK_TOP:
+        raise ValueError("the second stage loads the image at 0x%x or above (got 0x%x)" % (SPL_STACK_TOP, load))
+    image_size = check_zephyr(zephyr, load)
+    fp0 = max(image_size, len(zephyr))
+    if clear_after < 0 or len(zephyr) + clear_after > fp0:
+        raise ValueError("--clear-after %d: the %d image bytes and that run past segment 0's footprint 0x%x "
+                         "(the arm64 image_size)" % (clear_after, len(zephyr), fp0))
+    extents = [(0, len(zephyr))]
+    if split_zeros:
+        if len(extra) >= STAGE2_MAX_SEGMENTS:
+            raise ValueError("%d --segment: no table entry left for the image" % len(extra))
+        extents, left_in = stage2_split(zephyr, load, split_zeros, STAGE2_MAX_SEGMENTS - len(extra))
+        if left_in:
+            print("am62p-mkboot.py: --split-zeros %d: %d more zero run(s) of that length left in the stored bytes: "
+                  "%d parts and %d --segment fill the table's %d entries (the longest runs are cut)"
+                  % (split_zeros, left_in, len(extents), len(extra), STAGE2_MAX_SEGMENTS), file=sys.stderr)
+    # Each part's zero bytes: up to the next part, and after the last one up
+    # to the image's last byte and --clear-after past it.
+    ends = [st for st, _ in extents[1:]] + [len(zephyr) + clear_after]
+    table = [dict(load=load + st, image_bytes=en - st, zero_bytes=nxt - en, footprint=nxt - st)
+             for (st, en), nxt in zip(extents, ends)]
+    table[0]["footprint"] = fp0
+    segs = [(load, fp0, "segment 0 (zephyr.bin, .bss included)")]
+    segs += [(t["load"], t["footprint"], "part %d of zephyr.bin" % i) for i, t in enumerate(table) if i]
+    for data, addr, label in extra:
+        if not data:
+            raise ValueError("%s is empty" % label)
+        segs.append((addr, len(data), label))
+    errors = stage2_parts_check(table, len(table))
+    errors += stage2_segments_check(segs, sector, end_sector, staging, len(table),
+                                    table[0]["image_bytes"] + table[0]["zero_bytes"])
+    if errors:
+        raise ValueError("; ".join(errors))
+    raw = []
+    for (st, en), t in zip(extents, table):
+        raw.append(dict(load=t["load"], image=zephyr[st:en], stored=stage2_pack(compression, zephyr[st:en]),
+                        comp=compression, footprint=t["footprint"], zero=t["zero_bytes"]))
+    raw += [dict(load=addr, image=data, stored=stage2_pack(compression, data), comp=compression)
+            for data, addr, _ in extra]
+    out = stage2_v3_raw(raw, load, name, parts=len(table))
+    cap = stage2_capacity(sector, end_sector)
+    if len(out) - 512 > cap:
+        raise ValueError("the payload is %d bytes (%s), over the %d bytes of user-area sectors %d..%d after "
+                         "the header: %d bytes too many"
+                         % (len(out) - 512, COMP_NAMES[compression], cap,
+                            sector + 1, end_sector - 1, len(out) - 512 - cap))
+    return out
+
+
+def stage2_clear_after(given, bss, image_bytes):
+    """The zero bytes after the image's last byte for a version-3 payload:
+    `given` (--clear-after; None: not given), checked against `bss`, the
+    (offset, bytes) of bss_zero_range(): an image that skips its own .bss
+    clear needs the loader to clear up to the .bss's end, so that is the
+    value when none is given, and a shorter one is an error."""
+    need = bss[0] + bss[1] - image_bytes if bss[1] else 0
+    if given is None:
+        return max(need, 0)
+    if given < need:
+        raise ValueError("--clear-after %d ends short of the image's .bss, which it does not clear itself "
+                         "(CONFIG_SKIP_BSS_CLEAR): %d bytes from the image's last byte to __bss_end"
+                         % (given, need))
+    return given
+
+
 def stage2_parse(img):
-    """(fields dict, stored bytes) of a YKSTAGE2 image, or ValueError."""
+    """(fields dict, stored bytes) of a YKSTAGE2 image, or ValueError. A
+    version-3 header's fields carry "segments" (a list of dicts) and "parts",
+    and the stored bytes are the whole payload after the header."""
     if len(img) < 512 or img[:8] != STAGE2_MAGIC:
         raise ValueError("no YKSTAGE2 header")
     if struct.unpack_from("<I", img, 508)[0] != zlib.crc32(img[:508]) & 0xFFFFFFFF:
         raise ValueError("header CRC-32 mismatch")
+    if struct.unpack_from("<I", img, 8)[0] == STAGE2_VERSION_SEGMENTS:
+        _, ver, hb, count, parts, load, entry, total = struct.unpack_from("<8sIIIIQQQ", img, 0)
+        segs = []
+        for i in range(min(count, STAGE2_MAX_SEGMENTS)):
+            sload, nimage, fp, off, nstored, comp, scrc, icrc, nzero = struct.unpack_from(
+                "<QIIIIIIII", img, STAGE2_TABLE + i * STAGE2_ENTRY_BYTES)
+            segs.append(dict(load=sload, image_bytes=nimage, footprint=fp, stored_offset=off, stored_bytes=nstored,
+                             compression=comp, stored_crc32=scrc, image_crc32=icrc, zero_bytes=nzero))
+        f = dict(version=ver, header_bytes=hb, count=count, parts=parts, load=load, entry=entry,
+                 stored_bytes=total, segments=segs, name=img[64:96].rstrip(b"\0").decode(errors="replace"))
+        stored = bytes(img[512:512 + total])
+        if len(stored) != total:
+            raise ValueError("the file holds %d payload bytes, the header says %d" % (len(stored), total))
+        return f, stored
     _, ver, hb, comp, _ = struct.unpack_from("<8sIIII", img, 0)
     load, entry, nstored, nimage, scrc, icrc = struct.unpack_from("<QQQQII", img, 24)
     f = dict(version=ver, header_bytes=hb, compression=comp, load=load, entry=entry, stored_bytes=nstored,
@@ -574,13 +850,136 @@ def stage2_parse(img):
     return f, stored
 
 
-def stage2check(img, zephyr, load=ZEPHYR_LOAD, sector=STAGE2_SECTOR, end_sector=STAGE2_END_SECTOR):
-    """What the loader checks, plus: the payload is this zephyr.bin."""
+def stage2_unpack_one(comp, stored, nimage, icrc):
+    """(the image of one stored range, None), or (None, error)."""
+    if comp == COMP_DEFLATE:
+        try:
+            d = zlib.decompressobj(-15)
+            image = d.decompress(stored) + d.flush()
+        except zlib.error as e:
+            return None, "raw deflate: %s" % e
+    elif comp == COMP_LZ4:
+        import subprocess
+        try:
+            image = subprocess.run([lz4_command() or "lz4", "-d", "-c", "-q"], input=stored, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, check=True).stdout
+        except (OSError, subprocess.CalledProcessError) as e:
+            return None, "lz4 -d: %s" % e
+    elif comp == COMP_NONE:
+        image = stored
+    else:
+        return None, "compression %d" % comp
+    if len(image) != nimage or zlib.crc32(image) & 0xFFFFFFFF != icrc:
+        return None, "the image's length or CRC-32 is not the header's"
+    return image, None
+
+
+def stage2check_segments(img, f, stored, zephyr, load, extra, sector, end_sector, staging):
+    """A version-3 payload: what the loader checks, plus: the image parts
+    (segment 0 and its continuation parts) with their zero bytes are this
+    zephyr.bin, and the segments after them are the `extra` (data, addr,
+    label), in order. Sets f["clear_after"], the zero bytes past the image's
+    last byte."""
+    errors = []
+    segs = f["segments"]
+    parts = f["parts"]
+    if f["header_bytes"] != 512:
+        errors.append("header size %d" % f["header_bytes"])
+    if f["count"] != len(segs) or not 1 <= parts <= len(segs):
+        errors.append("%d segments and %d image parts in the header: the loader takes 1..%d segments and "
+                      "1..that many parts" % (f["count"], parts, STAGE2_MAX_SEGMENTS))
+        return errors, f
+    if len(segs) != parts + len(extra):
+        errors.append("%d segments in the header, %d of them the image: %d given with --segment"
+                      % (f["count"], parts, len(extra)))
+        return errors, f
+    tail = img[STAGE2_TABLE + len(segs) * STAGE2_ENTRY_BYTES:508]
+    if any(img[48:64]) or any(tail):
+        errors.append("a reserved header field or an unused table entry is not zero")
+    if f["entry"] != load or f["load"] != load or segs[0]["load"] != load:
+        errors.append("entry/load/segment 0 load 0x%x/0x%x/0x%x, not 0x%x"
+                      % (f["entry"], f["load"], segs[0]["load"], load))
+    if f["stored_bytes"] % 512 or f["stored_bytes"] > stage2_capacity(sector, end_sector):
+        errors.append("the payload (%d bytes) is not whole sectors or runs past user-area sector %d"
+                      % (f["stored_bytes"], end_sector - 1))
+    if len(img) != 512 + f["stored_bytes"]:
+        errors.append("the file is %d bytes, the header says 512 + %d" % (len(img), f["stored_bytes"]))
+    labels = ["segment 0 (zephyr.bin)"] + ["part %d of zephyr.bin" % i for i in range(1, parts)]
+    labels += [label for _, _, label in extra]
+    prev_end = 0
+    images = []
+    for s, label in zip(segs, labels):
+        off, n = s["stored_offset"], s["stored_bytes"]
+        images.append(None)
+        if off % 512 or off < prev_end or off + n > f["stored_bytes"]:
+            errors.append("%s: stored range +0x%x (%d bytes) not aligned, out of order or past the payload"
+                          % (label, off, n))
+            continue
+        prev_end = (off + n + 511) & ~511
+        part = stored[off:off + n]
+        if zlib.crc32(part) & 0xFFFFFFFF != s["stored_crc32"]:
+            errors.append("%s: CRC-32 of the stored bytes mismatch" % label)
+        if s["compression"] == COMP_NONE and s["stored_crc32"] != s["image_crc32"]:
+            errors.append("%s: uncompressed, but the two CRC-32s differ" % label)
+        images[-1], err = stage2_unpack_one(s["compression"], part, s["image_bytes"], s["image_crc32"])
+        if err:
+            errors.append("%s: %s" % (label, err))
+        if s["footprint"] < s["image_bytes"]:
+            errors.append("%s: footprint %d below the image's %d bytes" % (label, s["footprint"], s["image_bytes"]))
+    # The image as the loader leaves it: each part at its address, its zero
+    # bytes after it, nothing between those and the next part.
+    whole, at = bytearray(), 0
+    for s, image, label in zip(segs[:parts], images, labels):
+        if image is None:
+            break
+        if s["load"] - load != at:
+            errors.append("%s: at +0x%x, but the image bytes and zero bytes before it end at +0x%x"
+                          % (label, s["load"] - load, at))
+            break
+        if at + len(image) > len(zephyr):
+            errors.append("%s: its image bytes run past the given file's %d bytes" % (label, len(zephyr)))
+            break
+        whole += image
+        whole += bytes(min(s["zero_bytes"], len(zephyr) - len(whole)))
+        at += len(image) + s["zero_bytes"]
+    else:
+        if at < len(zephyr):
+            errors.append("the image and its zero bytes end at +0x%x, short of the given file's %d bytes"
+                          % (at, len(zephyr)))
+        elif bytes(whole) != zephyr:
+            errors.append("segment 0 (zephyr.bin): the image%s is not the given file"
+                          % (" (the parts and their zero runs put together)" if parts > 1 else ""))
+        f["clear_after"] = at - len(zephyr)
+    for s, image, (data, addr, label) in zip(segs[parts:], images[parts:], extra):
+        if image is not None and image != data:
+            errors.append("%s: the image is not the given file" % label)
+        if s["load"] != addr:
+            errors.append("%s: load 0x%x, not 0x%x" % (label, s["load"], addr))
+    if not errors:
+        image_size = check_zephyr(zephyr, load)
+        if image_size > segs[0]["footprint"]:
+            errors.append("segment 0's arm64 image_size 0x%x is over its footprint 0x%x"
+                          % (image_size, segs[0]["footprint"]))
+        errors += stage2_parts_check(segs, parts)
+        errors += stage2_segments_check([(s["load"], s["footprint"], label) for s, label in zip(segs, labels)],
+                                        sector, end_sector, staging, parts,
+                                        segs[0]["image_bytes"] + segs[0]["zero_bytes"])
+    return errors, f
+
+
+def stage2check(img, zephyr, load=ZEPHYR_LOAD, sector=STAGE2_SECTOR, end_sector=STAGE2_END_SECTOR, extra=(),
+                staging=STAGE2_STAGING):
+    """What the loader checks, plus: the payload is this zephyr.bin (and, in
+    a version-3 payload, the `extra` segments)."""
     errors = []
     try:
         f, stored = stage2_parse(img)
     except ValueError as e:
         return ["%s" % e], None
+    if f["version"] == STAGE2_VERSION_SEGMENTS:
+        return stage2check_segments(img, f, stored, zephyr, load, list(extra), sector, end_sector, staging)
+    if extra:
+        return ["a version %d (single image) payload, but --segment was given" % f["version"]], f
     if f["version"] not in (STAGE2_VERSION, STAGE2_VERSION_ZERO_LZ4) or f["header_bytes"] != 512:
         errors.append("header version %d / size %d" % (f["version"], f["header_bytes"]))
     if f["load"] != load or f["entry"] != load:
@@ -622,7 +1021,8 @@ def stage2check(img, zephyr, load=ZEPHYR_LOAD, sector=STAGE2_SECTOR, end_sector=
 
 def stage2_vectors(outdir):
     """The loader crate's host-test inputs: ok-*.img must load, bad-*.img must
-    be refused (loader/src/lib.rs, mkboot_vectors)."""
+    be refused, a bad-v3-*.img for the reason its name gives
+    (loader/src/tests.rs, mkboot_vectors)."""
     import os
     os.makedirs(outdir, exist_ok=True)
 
@@ -692,6 +1092,86 @@ def stage2_vectors(outdir):
         st = bytearray(s4)
         st[len(st) // 2] ^= 0x55
         files["bad-lz4.img"] = stage2_header(ZEPHYR_LOAD, ZEPHYR_LOAD, bytes(st), big, COMP_LZ4, "bad") + bytes(st)
+
+    # version 3: the showcase's shape (an image whose .bss runs past its
+    # file, a large blob and a small one above it), and its refusals
+    ddr = zimage(120000, 3)[0x40:]
+    tcm = bytes((i * 5) & 0xFF for i in range(288))
+    blob_at, tcm_at = 0x88000000, 0x88c00000
+    comps = [(COMP_DEFLATE, "deflate"), (COMP_NONE, "none")] + ([(COMP_LZ4, "lz4")] if lz4_command() else [])
+    for comp, tag in comps:
+        files["ok-v3-three-%s.img" % tag] = stage2img_segments(
+            big, ZEPHYR_LOAD, [(ddr, blob_at, "ddr"), (tcm, tcm_at, "tcm")], comp, "three-" + tag)
+    files["ok-v3-one.img"] = stage2img_segments(small, ZEPHYR_LOAD, [], COMP_DEFLATE, "one")
+    fp = len(big) + 0x10000                          # zimage's image_size
+
+    def v3(*segs, **kw):
+        return stage2_v3_raw([dict(load=a, image=d, stored=deflate_raw(d), comp=COMP_DEFLATE, **o)
+                              for d, a, o in segs], ZEPHYR_LOAD, "bad", **kw)
+    s0 = (big, ZEPHYR_LOAD, dict(footprint=fp))
+    files["bad-v3-overlap-bss.img"] = v3(s0, (ddr, ZEPHYR_LOAD + len(big), {}))
+    files["bad-v3-overlap-blobs.img"] = v3(s0, (ddr, blob_at, {}), (tcm, blob_at + len(ddr) - 1, {}))
+    files["bad-v3-on-staging.img"] = v3(s0, (tcm, STAGE2_STAGING, {}))
+    files["bad-v3-outside-ram.img"] = v3(s0, (tcm, GPU_CARVEOUT, {}))
+    files["bad-v3-below-ram.img"] = v3(s0, (tcm, 0x80000000, {}))
+    files["bad-v3-unaligned.img"] = v3(s0, (ddr, blob_at, dict(offset=len(deflate_raw(big)) + 4)))
+    files["bad-v3-no-segments.img"] = stage2_v3_raw([], ZEPHYR_LOAD, "bad")
+    files["bad-v3-footprint.img"] = v3((big, ZEPHYR_LOAD, dict(footprint=len(big))), (ddr, blob_at, {}))
+    files["bad-v3-past-payload.img"] = v3(s0, (ddr, blob_at, {}), total=512)
+    files["bad-v3-no-parts.img"] = v3(s0, (ddr, blob_at, {}), parts=0)
+    files["bad-v3-load-field.img"] = v3(s0, (ddr, blob_at, {}), load=ZEPHYR_LOAD + 0x1000)
+    # the table under the number of the single-image header with a zero
+    # range: read as that, it has no image bytes
+    files["bad-v3-as-version-2.img"] = v3(s0, version=STAGE2_VERSION_ZERO_LZ4)
+    good3 = bytearray(files["ok-v3-three-deflate.img"])
+    f3, _ = stage2_parse(bytes(good3))
+    good3[512 + f3["segments"][1]["stored_offset"] + 50] ^= 0x08
+    files["bad-v3-segment-crc.img"] = bytes(good3)
+    if lz4_command():
+        # a broken frame in the second segment, its stored CRC-32 matching
+        st = bytearray(lz4_frame(ddr))
+        st[0] ^= 1
+        files["bad-v3-lz4.img"] = stage2_v3_raw(
+            [dict(load=ZEPHYR_LOAD, image=big, stored=lz4_frame(big), comp=COMP_LZ4, footprint=fp),
+             dict(load=blob_at, image=ddr, stored=bytes(st), comp=COMP_LZ4)], ZEPHYR_LOAD, "bad")
+
+    # zero bytes and image parts: an image cut at two zero runs (three parts,
+    # the RAM after its last byte cleared too), the same with the two blobs
+    # and deflate, the zero bytes alone, and the refusals
+    split = bytearray(big[:300000])
+    split[40000:140000] = bytes(100000)
+    split[200000:260000] = bytes(60000)
+    split = bytes(split)
+    fp0 = struct.unpack_from("<Q", split, 16)[0]     # as zimage wrote it for 700000 bytes
+    files["ok-v3-split-none.img"] = stage2img_segments(split, ZEPHYR_LOAD, [], COMP_NONE, "split-none",
+                                                       split_zeros=50000, clear_after=0x8000)
+    files["ok-v3-split-deflate.img"] = stage2img_segments(
+        split, ZEPHYR_LOAD, [(ddr, blob_at, "ddr"), (tcm, tcm_at, "tcm")], COMP_DEFLATE, "split-deflate",
+        split_zeros=50000, clear_after=0x8000)
+    files["ok-v3-clear-after.img"] = stage2img_segments(small, ZEPHYR_LOAD, [], COMP_NONE, "clear-after",
+                                                        clear_after=0x10000)
+    fs, _ = stage2_parse(files["ok-v3-split-none.img"])
+    if (fs["parts"], fs["count"]) != (3, 3):
+        raise ValueError("the split vector has %d parts in %d segments, not 3 in 3" % (fs["parts"], fs["count"]))
+    ext = [(s["load"] - ZEPHYR_LOAD, s["image_bytes"], s["zero_bytes"]) for s in fs["segments"]]
+
+    def cut(nparts, *changes, more=()):
+        # the split vector's three parts with (index, key, value) changes, then more segments
+        segs = [dict(load=ZEPHYR_LOAD + o, image=split[o:o + n], stored=split[o:o + n], comp=COMP_NONE,
+                     footprint=n + z, zero=z) for o, n, z in ext]
+        segs[0]["footprint"] = fp0
+        for i, key, value in changes:
+            segs[i][key] = value
+        segs += [dict(load=a, image=d, stored=d, comp=COMP_NONE) for d, a in more]
+        return stage2_v3_raw(segs, ZEPHYR_LOAD, "bad", parts=nparts)
+    files["bad-v3-zero-over-footprint.img"] = cut(3, (2, "zero", ext[2][2] + 1))
+    files["bad-v3-parts-over-count.img"] = cut(4)
+    files["bad-v3-part-outside.img"] = cut(3, (2, "load", ZEPHYR_LOAD + fp0 - ext[2][1]))
+    files["bad-v3-part-on-occupied.img"] = cut(3, (1, "load", ZEPHYR_LOAD + ext[0][1] + ext[0][2] - 4096))
+    files["bad-v3-parts-descending.img"] = cut(3, (1, "load", ZEPHYR_LOAD + ext[2][0] + 0x40000),
+                                               (2, "load", ZEPHYR_LOAD + ext[1][0] + 0x40000))
+    # not a part, so segment 0's whole footprint counts
+    files["bad-v3-blob-in-footprint.img"] = cut(3, more=[(tcm, ZEPHYR_LOAD + fp0 - 4096)])
     for name, data in files.items():
         with open(os.path.join(outdir, name), "wb") as fh:
             fh.write(data)
@@ -817,6 +1297,142 @@ def self_test():
            len(fit) == (STAGE2_END_SECTOR - STAGE2_SECTOR) * 512)
     expect("refused: a user-area image for a load below 0x82000000",
            refused(lambda: stage2img(zz, UBOOT_PROPER_LOAD, COMP_DEFLATE, "low")))
+    # Versions 1 and 2 are what they were before version 3 existed: the
+    # sha256 of what the tool of main's be0c15278c4d wrote for these inputs
+    # (uncompressed images and headers over fixed stored bytes, so no
+    # compressor's output is pinned).
+    sha = lambda b: hashlib.sha256(b).hexdigest()
+    pin = lambda comp, zero=(0, 0): stage2_header(ZEPHYR_LOAD, ZEPHYR_LOAD, b"stored bytes", zz, comp, "pin", zero)
+    expect("version 1 and 2 payloads byte for byte as before version 3",
+           [sha(stage2img(zz, ZEPHYR_LOAD, COMP_NONE, "test")),
+            sha(stage2img(zz, ZEPHYR_LOAD, COMP_NONE, "test", zero=(0x50000, 0x1000))),
+            sha(pin(COMP_DEFLATE)), sha(pin(COMP_DEFLATE, (0x50000, 0x1000))), sha(pin(COMP_LZ4))]
+           == ["2699a1b90af50cc7a45bb01710e0d04069ed17086d2995820e208fbb8c6bd59d",
+               "7f81f92ec2e4b988d13551f3fc1748e596f927479fc3d392fea4a4e181eb504d",
+               "c33bb7e97b21df355519ebf1385391b29a5341a63c31df811c39d42bd98d63be",
+               "9f52c0f3067227a89788e9878ddf050a2fed77778b7cbfc1141d25d5fc4fbead",
+               "feb942dbffc4f7d585c46de198d6b97079f59f89229784439fc057e5052fa186"])
+    # version 3: several segments
+    blob, tcm = bytes(range(256)) * 400, bytes(288)
+    extra = [(blob, 0x90000000, "blob"), (tcm, 0x90c00000, "tcm")]
+    slot = dict(sector=21073376, end_sector=21204448, staging=0x91000000)    # a 64 MiB slot file
+    comps = [COMP_DEFLATE, COMP_NONE] + ([COMP_LZ4] if lz4_command() else [])
+    for comp in comps:
+        im = stage2img_segments(zz, ZEPHYR_LOAD, extra, comp, "multi", **slot)
+        errs, f = stage2check(im, zz, ZEPHYR_LOAD, slot["sector"], slot["end_sector"], extra, slot["staging"])
+        expect("stage2img --segment %s: stage2check clean, three segments, whole sectors" % COMP_NAMES[comp],
+               errs == [] and f["version"] == 3 and f["count"] == 3 and len(im) % 512 == 0
+               and all(s["stored_offset"] % 512 == 0 and s["compression"] == comp for s in f["segments"]))
+    im = stage2img_segments(zz, ZEPHYR_LOAD, extra, COMP_NONE, "multi", **slot)
+    f = stage2_parse(im)[0]
+    expect("stage2 v3: segment 0's footprint is the arm64 image_size, the others their length",
+           [s["footprint"] for s in f["segments"]] == [0x400000, len(blob), len(tcm)])
+    expect("stage2 v3 header: version 3, count and parts at 16/20, load, entry, stored bytes at 24/32/40, "
+           "48..64 zero",
+           struct.unpack_from("<IIIIQQQ", im, 8) == (3, 512, 3, 1, ZEPHYR_LOAD, ZEPHYR_LOAD, len(im) - 512)
+           and im[48:64] == bytes(16) and im[STAGE2_TABLE + 3 * STAGE2_ENTRY_BYTES:508] == bytes(508 - 216))
+    expect("stage2check: a segment file that differs is a FAIL",
+           stage2check(im, zz, ZEPHYR_LOAD, slot["sector"], slot["end_sector"],
+                       [(blob, 0x90000000, "blob"), (bytes(287) + b"\1", 0x90c00000, "tcm")], slot["staging"])[0] != [])
+    expect("stage2check: a missing --segment is a FAIL",
+           stage2check(im, zz, ZEPHYR_LOAD, slot["sector"], slot["end_sector"], extra[:1], slot["staging"])[0] != [])
+    expect("stage2check: --segment with a single-image payload is a FAIL",
+           stage2check(stage2img(zz, ZEPHYR_LOAD, COMP_NONE, "test"), zz, extra=extra[:1])[0] != [])
+    bad = bytearray(im)
+    bad[512 + f["segments"][2]["stored_offset"]] ^= 1
+    expect("stage2check: a flipped byte in the last segment is a FAIL",
+           stage2check(bytes(bad), zz, ZEPHYR_LOAD, slot["sector"], slot["end_sector"], extra, slot["staging"])[0] != [])
+    expect("refused: segments on the default staging buffer (0x90000000)",
+           refused(lambda: stage2img_segments(zz, ZEPHYR_LOAD, extra, COMP_DEFLATE, "s",
+                                              slot["sector"], slot["end_sector"])))
+    expect("refused: a segment inside segment 0's .bss",
+           refused(lambda: stage2img_segments(zz, ZEPHYR_LOAD, [(tcm, ZEPHYR_LOAD + 0x3ff000, "t")], COMP_NONE, "s")))
+    expect("refused: two segments that share a byte",
+           refused(lambda: stage2img_segments(zz, ZEPHYR_LOAD, [(blob, 0x88000000, "a"),
+                                                                (tcm, 0x88000000 + len(blob) - 1, "b")], COMP_NONE, "s")))
+    expect("refused: a segment in the GPU carveout",
+           refused(lambda: stage2img_segments(zz, ZEPHYR_LOAD, [(tcm, GPU_CARVEOUT - 100, "t")], COMP_NONE, "s")))
+    expect("refused: nine segments",
+           refused(lambda: stage2img_segments(zz, ZEPHYR_LOAD, [(tcm, 0x88000000 + i * 0x1000, "t%d" % i)
+                                                                for i in range(8)], COMP_NONE, "s")))
+    expect("refused: a staging buffer that runs into the GPU carveout",
+           refused(lambda: stage2img_segments(zz, ZEPHYR_LOAD, [], COMP_NONE, "s", slot["sector"],
+                                              slot["end_sector"], 0x95000000)))
+    expect("stage2 v3 without zero options: one image part, no zero bytes",
+           f["parts"] == 1 and not any(s["zero_bytes"] for s in f["segments"]))
+    # zero bytes and image parts
+    zs = bytearray(zz)
+    zs[50000:120000] = bytes(70000)
+    zs[180000:200000] = bytes(20000)
+    zs = bytes(zs)
+    s2check = lambda i, z, x=(): stage2check(i, z, ZEPHYR_LOAD, slot["sector"], slot["end_sector"], x, slot["staging"])
+    for comp in comps:
+        im = stage2img_segments(zs, ZEPHYR_LOAD, extra, comp, "split", split_zeros=16384, clear_after=0x100000, **slot)
+        errs, f = s2check(im, zs, extra)
+        expect("stage2img --split-zeros --clear-after %s: stage2check clean, 3 parts + 2 segments" % COMP_NAMES[comp],
+               errs == [] and f["parts"] == 3 and f["count"] == 5 and f["clear_after"] == 0x100000)
+    im = stage2img_segments(zs, ZEPHYR_LOAD, extra, COMP_NONE, "split", split_zeros=16384, clear_after=0x100000, **slot)
+    f = s2check(im, zs, extra)[1]
+    sg = f["segments"]
+    expect("split: parts on 4 KiB addresses, the runs shrunk inward, the last zero bytes from the file's end",
+           [(s["load"] - ZEPHYR_LOAD, s["image_bytes"], s["zero_bytes"]) for s in sg[:3]]
+           == [(0, 53248, 65536), (118784, 61440, 16384), (196608, 103392, 0x100000)])
+    expect("split: segment 0 keeps the arm64 footprint, a part's is its image and zero bytes",
+           [s["footprint"] for s in sg[:3]] == [0x400000, 61440 + 16384, 103392 + 0x100000])
+    expect("split: the zero runs are not stored", len(im) == 512 + 53248 + 61440 + 103424 + len(blob) + 512)
+    expect("stage2check: a split image against the file without the zero runs is a FAIL", s2check(im, zz, extra)[0] != [])
+
+    def resealed(image, changes):
+        b = bytearray(image)
+        for fmt, off, value in changes:
+            struct.pack_into(fmt, b, off, value)
+        struct.pack_into("<I", b, 508, zlib.crc32(bytes(b[:508])) & 0xFFFFFFFF)
+        return bytes(b)
+    ent = lambda i: STAGE2_TABLE + i * STAGE2_ENTRY_BYTES
+    expect("stage2check: zero bytes over a part's footprint is a FAIL",
+           s2check(resealed(im, [("<I", ent(1) + 36, 16385)]), zs, extra)[0] != [])
+    expect("stage2check: zero bytes short of the next part is a FAIL",
+           s2check(resealed(im, [("<I", ent(1) + 36, 16383), ("<I", ent(1) + 12, 61440 + 16383)]), zs, extra)[0] != [])
+    expect("stage2check: more image parts than the image has is a FAIL",
+           s2check(resealed(im, [("<I", 20, 4)]), zs, extra)[0] != [])
+    expect("stage2check: no image parts is a FAIL", s2check(resealed(im, [("<I", 20, 0)]), zs, extra)[0] != [])
+    expect("stage2check: a part counted as a segment is a FAIL",
+           s2check(resealed(im, [("<I", 20, 2)]), zs, [(zs[196608:], ZEPHYR_LOAD + 196608, "p")] + extra)[0] != [])
+    expect("stage2check: a part moved off its address is a FAIL",
+           s2check(resealed(im, [("<Q", ent(2), ZEPHYR_LOAD + 196608 + 4096)]), zs, extra)[0] != [])
+    expect("stage2check: a header load address that is not segment 0's is a FAIL",
+           s2check(resealed(im, [("<Q", 24, ZEPHYR_LOAD + 4096)]), zs, extra)[0] != [])
+    expect("stage2check: a non-zero reserved byte is a FAIL",
+           s2check(resealed(im, [("<B", 50, 1)]), zs, extra)[0] != [])
+    errs, f = s2check(resealed(im, [("<I", ent(2) + 36, 4096), ("<I", ent(2) + 12, 103392 + 4096)]), zs, extra)
+    expect("stage2check: a shorter clear-after is clean, and is reported", errs == [] and f["clear_after"] == 4096)
+    im = stage2img_segments(zz, ZEPHYR_LOAD, [], COMP_NONE, "bss", clear_after=0x400000 - len(zz))
+    errs, f = stage2check(im, zz)
+    expect("stage2img --clear-after alone: version 3, one segment, zero bytes up to the footprint's end",
+           errs == [] and f["version"] == 3 and (f["count"], f["parts"]) == (1, 1)
+           and f["segments"][0]["zero_bytes"] == 0x400000 - len(zz) and f["clear_after"] == 0x400000 - len(zz))
+    expect("refused: --clear-after one byte past segment 0's footprint",
+           refused(lambda: stage2img_segments(zz, ZEPHYR_LOAD, [], COMP_NONE, "s", clear_after=0x400001 - len(zz))))
+    expect("clear-after from the .bss: none given is the .bss's end, one short of it is refused",
+           stage2_clear_after(None, (len(zz) + 0x300, 0x5000), len(zz)) == 0x5300
+           and stage2_clear_after(0x6000, (len(zz) + 0x300, 0x5000), len(zz)) == 0x6000
+           and stage2_clear_after(None, (0, 0), len(zz)) == 0 and stage2_clear_after(7, (0, 0), len(zz)) == 7
+           and refused(lambda: stage2_clear_after(0x52ff, (len(zz) + 0x300, 0x5000), len(zz))))
+    ze = zs[:250000] + bytes(50000)
+    im = stage2img_segments(ze, ZEPHYR_LOAD, [], COMP_NONE, "tail", split_zeros=16384, clear_after=4096)
+    errs, f = stage2check(im, ze)
+    expect("split: a zero run up to the file's end joins the last part's zero bytes",
+           errs == [] and f["parts"] == 3 and f["segments"][2]["zero_bytes"] == 300000 - 253952 + 4096
+           and f["clear_after"] == 4096)
+    many = bytearray(zz)
+    for i, n in enumerate([8192, 16384] + [20480] * 5):    # seven runs, the first two the shortest
+        many[16384 + i * 28672:16384 + i * 28672 + n] = bytes(n)
+    many = bytes(many)
+    im = stage2img_segments(many, ZEPHYR_LOAD, extra, COMP_NONE, "many", split_zeros=8192, **slot)
+    errs, f = s2check(im, many, extra)
+    expect("split: more runs than segments: 6 parts beside 2 segments, the two shortest runs left in",
+           errs == [] and (f["parts"], f["count"]) == (6, 8)
+           and f["segments"][0]["image_bytes"] == 16384 + 2 * 28672)
     expect("refused: .bss into the GPU carveout",
            refused(lambda: build(base, zimage(4096, GPU_CARVEOUT - ZEPHYR_LOAD + 1), ZEPHYR_LOAD, "Z")))
     rp = build(base, None, None, None)
@@ -870,11 +1486,25 @@ def main():
                    help="user-area sector of the header (CONFIG_BOOT_STAGE2_SECTOR)")
     p.add_argument("--end-sector", type=lambda s: int(s, 0), default=STAGE2_END_SECTOR,
                    help="first sector the image must not reach (CONFIG_BOOT_STAGE2_END_SECTOR)")
+    p.add_argument("--split-zeros", type=lambda s: int(s, 0), default=0, metavar="MIN",
+                   help="cut zephyr.bin at every run of at least MIN zero bytes (e.g. 65536): the runs are not "
+                   "stored, the loader clears them (version-3 header, image parts)")
+    p.add_argument("--clear-after", type=lambda s: int(s, 0), default=None, metavar="BYTES",
+                   help="zero bytes the loader clears after the image's last byte, up to the end of its .bss "
+                   "(version-3 header)")
     p.add_argument("-o", "--output", required=True)
     p = sub.add_parser("stage2check", help="re-read a second-stage image the way the loader will")
     p.add_argument("--zephyr", required=True)
     p.add_argument("--load", type=lambda s: int(s, 0), default=ZEPHYR_LOAD)
+    p.add_argument("--sector", type=lambda s: int(s, 0), default=STAGE2_SECTOR)
+    p.add_argument("--end-sector", type=lambda s: int(s, 0), default=STAGE2_END_SECTOR)
     p.add_argument("image")
+    for q in (sub.choices["stage2img"], p):
+        q.add_argument("--segment", action="append", default=[], metavar="FILE@ADDR",
+                       help="another segment at ADDR (repeatable): a version-3 payload, zephyr.bin is segment 0")
+        q.add_argument("--staging", type=lambda s: int(s, 0), default=STAGE2_STAGING,
+                       help="the loader's CONFIG_BOOT_STAGE2_STAGING (default 0x%x): no segment may be on it"
+                       % STAGE2_STAGING)
     p = sub.add_parser("stage2-vectors", help="write the loader crate's host-test images (BS2_VECTORS)")
     p.add_argument("dir")
     p = sub.add_parser("bootpart", help="lay out a whole eMMC boot partition image")
@@ -905,29 +1535,61 @@ def main():
         print("wrote %d images to %s: %s" % (len(names), a.dir, " ".join(names)))
         return 0
     if a.cmd in ("stage2img", "stage2check"):
-        import os
         zephyr = open(a.zephyr, "rb").read()
+        extra = []
+        for spec in a.segment:
+            path, addr = parse_segment_arg(spec)
+            extra.append((open(path, "rb").read(), addr, "%s@0x%x" % (os.path.basename(path), addr)))
         if a.cmd == "stage2img":
             name = a.name or os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(a.zephyr))))
             comp = {"deflate": COMP_DEFLATE, "lz4": COMP_LZ4, "none": COMP_NONE}[a.compress]
-            img = stage2img(zephyr, a.load, comp, name, a.sector, a.end_sector, bss_zero_range(a.zephyr, a.load))
+            bss = bss_zero_range(a.zephyr, a.load)
+            if extra or a.split_zeros or a.clear_after is not None:
+                img = stage2img_segments(zephyr, a.load, extra, comp, name, a.sector, a.end_sector, a.staging,
+                                         a.split_zeros, stage2_clear_after(a.clear_after, bss, len(zephyr)))
+            else:
+                img = stage2img(zephyr, a.load, comp, name, a.sector, a.end_sector, bss, a.staging)
         else:
             img = open(a.image, "rb").read()
-        sector = getattr(a, "sector", STAGE2_SECTOR)
-        end_sector = getattr(a, "end_sector", STAGE2_END_SECTOR)
-        errors, f = stage2check(img, zephyr, a.load, sector, end_sector)
+        sector, end_sector = a.sector, a.end_sector
+        errors, f = stage2check(img, zephyr, a.load, sector, end_sector, extra, a.staging)
         if errors:
             for e in errors:
                 print("stage2check: FAIL: %s" % e, file=sys.stderr)
             return 1
         nsec = len(img) // 512
-        print("%s: %d bytes = %d sectors, user-area sectors %d..%d (of %d..%d); \"%s\", %s, stored %d bytes "
-              "(CRC-32 %08x), image %d bytes (CRC-32 %08x), load = entry = 0x%x, %d bytes zeroed at +0x%x; "
-              "sha256 %s" % (
-                  a.output if a.cmd == "stage2img" else a.image, len(img), nsec, sector,
-                  sector + nsec - 1, sector, end_sector - 1, f["name"],
-                  COMP_NAMES.get(f["compression"], "?"), f["stored_bytes"], f["stored_crc32"], f["image_bytes"],
-                  f["image_crc32"], f["load"], f["zero_bytes"], f["zero_offset"], hashlib.sha256(img).hexdigest()))
+        if f["version"] == STAGE2_VERSION_SEGMENTS:
+            print("%s: %d bytes = %d sectors, user-area sectors %d..%d (of %d..%d); \"%s\", header version 3, "
+                  "%d segments%s, stored %d bytes, load = entry = 0x%x, staging 0x%x; sha256 %s" % (
+                      a.output if a.cmd == "stage2img" else a.image, len(img), nsec, sector, sector + nsec - 1,
+                      sector, end_sector - 1, f["name"], f["count"],
+                      " (the first %d are the image's parts)" % f["parts"] if f["parts"] > 1 else "",
+                      f["stored_bytes"], f["entry"], a.staging, hashlib.sha256(img).hexdigest()))
+            labels = ["zephyr.bin"] + ["zephyr.bin part %d" % i for i in range(1, f["parts"])] + [w[2] for w in extra]
+            for i, (s, label) in enumerate(zip(f["segments"], labels)):
+                end = s["load"] + s["image_bytes"]
+                print("  [%d] %-24s 0x%08x..0x%08x image %9d bytes (CRC-32 %08x), footprint 0x%x, %s %d bytes "
+                      "at +0x%x%s" % (i, label, s["load"], end, s["image_bytes"], s["image_crc32"], s["footprint"],
+                                      COMP_NAMES.get(s["compression"], "?"), s["stored_bytes"], s["stored_offset"],
+                                      ", then %d zero bytes 0x%08x..0x%08x" % (s["zero_bytes"], end,
+                                                                               end + s["zero_bytes"])
+                                      if s["zero_bytes"] else ""))
+            nzero = sum(s["zero_bytes"] for s in f["segments"])
+            if nzero:
+                top = a.load + len(zephyr)
+                print("  cleared by the loader: %d bytes in %d range(s), %d of them after the image's last byte "
+                      "(0x%08x..0x%08x); of the image's %d bytes %d are stored"
+                      % (nzero, sum(1 for s in f["segments"] if s["zero_bytes"]), f["clear_after"], top,
+                         top + f["clear_after"], len(zephyr),
+                         sum(s["image_bytes"] for s in f["segments"][:f["parts"]])))
+        else:
+            print("%s: %d bytes = %d sectors, user-area sectors %d..%d (of %d..%d); \"%s\", %s, stored %d bytes "
+                  "(CRC-32 %08x), image %d bytes (CRC-32 %08x), load = entry = 0x%x, %d bytes zeroed at +0x%x; "
+                  "sha256 %s" % (
+                      a.output if a.cmd == "stage2img" else a.image, len(img), nsec, sector,
+                      sector + nsec - 1, sector, end_sector - 1, f["name"],
+                      COMP_NAMES.get(f["compression"], "?"), f["stored_bytes"], f["stored_crc32"], f["image_bytes"],
+                      f["image_crc32"], f["load"], f["zero_bytes"], f["zero_offset"], hashlib.sha256(img).hexdigest()))
         print("  write: dd if=IMG of=/dev/mmcblk0 bs=512 seek=%d conv=fsync   (%d sectors, %d left free)"
               % (sector, nsec, end_sector - sector - nsec))
         print("stage2check: ok")
