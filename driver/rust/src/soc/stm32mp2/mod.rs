@@ -3,6 +3,8 @@
 //! The STM32MP257F (STM32MP257F-DK): glue for the Cortex-A35 side. Plan #322,
 //! issues #7 and #1281.
 
+#[cfg(test)]
+mod display_chain_tests;
 pub mod display_regs;
 #[cfg(any(feature = "vivante", test))]
 pub mod gpu_ffi;
