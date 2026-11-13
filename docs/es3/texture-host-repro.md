@@ -280,8 +280,28 @@ done
 ```
 
 (the filter is a substring of the case name; use the group path where the
-substring is ambiguous). Expect, before the change, GL_INVALID_ENUM at the
-upload of the six names and, on the V3D, a draw refusal for the other four.
+substring is ambiguous).
+
+Measured, HOST-ONLY, VK-GL-CTS 93bca01, before = `b2673e3c`, after = the
+change of plan #354, the filters `etc2`, `eac` (240 cases each, overlapping
+`format.compressed`), `format.compressed` (44), `compressed_texture_formats`
+(6: `implementation_limits.{,num_}compressed_texture_formats` and the four
+`state_query.integers.compressed_texture_formats_*`) and `shadow` (522; 48
+negative compile cases pass either way). Identical on the three GPUs except
+where noted:
+
+| group | before | after | what changed |
+|---|---|---|---|
+| `etc2` (240) | v3d: 80 Fail (72 `GL_INVALID_OPERATION` at `es3fTextureWrapTests.cpp:371`, 4 at `es3fTextureFormatTests.cpp:1070`, 4 image) / 160 NotSupported; powervr, vivante: 160 Fail / 80 NotSupported | 240 Fail, 0 GL errors: 216 "Image verification failed", 24 "Image comparison failed" | the NotSupported cases (the punch-through names) now upload; on the V3D the draw is no longer refused |
+| `eac` (240) | v3d: 40 Fail / 200 NotSupported; powervr, vivante: 80 Fail / 160 NotSupported | 240 Fail, the same two image messages | the EAC names now upload |
+| `format.compressed` (44) | v3d 12 Fail / 32 NotSupported; powervr, vivante 20 / 24 | 44 Fail (images) | as above |
+| `compressed_texture_formats` (6) | 5 Fail, 1 Pass | 6 Pass | the list is eleven names |
+| `shadow` (522) | 474 Fail, 48 Pass | 474 Fail, 48 Pass | none: the host reads black, so the compare cannot show |
+
+Every case that stays Fail after is a picture verdict on a black read-back:
+the host shows that the uploads, the draws and the queries are clean, and
+nothing about whether a pixel is right. The 432 `texture.shadow` cases on the
+Pi 4 are the board's to judge (RC2).
 
 ## 7. The AM62P `texture.units`, `texture.swizzle` and `sglrGLContext.cpp:863` rows
 
