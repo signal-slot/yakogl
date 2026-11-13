@@ -35,9 +35,9 @@ built for the board:
 
 - `getent hosts armadillo` returned nothing (the name does not resolve here).
 - `tools/board.sh x2 status` stopped before touching the board:
-  `BOARD_HOST: set BOARD_HOST=user@host of the board` (the task carried no
+  `BOARD_HOST: set BOARD_HOST=` (the runner's own message: the variable was unset) (the task carried no
   board access).
-- `ask_farm` answered that the board is `root@armadillo` over Tailscale and
+- `ask_farm` answered that the board is reached as root over Tailscale and
   that login is accepted from the nodes Lepton, Lepton-local, hx90,
   n5max-local, nuc and system76 only; `orion` is not one of them. The
   console (CP2102N) is plugged into n5max and is read-only.

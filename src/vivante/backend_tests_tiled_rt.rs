@@ -6,8 +6,9 @@
 //! `test-knobs` feature (`tools/check.sh`'s knob row names them).
 
 use super::*;
-use crate::vivante::layout::{self, Layout};
-use crate::vivante::tiled_rt;
+use crate::vivante::layout::Layout;
+#[cfg(feature = "test-knobs")]
+use crate::vivante::{layout, tiled_rt};
 
 /// What the resolve engine was told at one RS_KICKER write.
 #[derive(Clone, Copy, Debug, Default)]
@@ -42,6 +43,7 @@ fn rs_jobs(s: &Stream) -> Vec<RsJob> {
     out
 }
 
+#[cfg(feature = "test-knobs")]
 /// Where in the stream each RS kick is (word index).
 fn rs_kicks_at(s: &Stream) -> Vec<usize> {
     let mut v = Vec::new();
@@ -53,6 +55,7 @@ fn rs_kicks_at(s: &Stream) -> Vec<usize> {
     v
 }
 
+#[cfg(feature = "test-knobs")]
 /// The RS interpreter: a 32-bit copy of a window, each side linear or
 /// 4x4-tiled as the job says (the stride times 4 for a tiled side, Mesa's
 /// `etna_compile_rs_state`), through `layout::offset`. A fill job writes its
@@ -90,6 +93,7 @@ fn rs_run(j: &RsJob) {
     });
 }
 
+#[cfg(feature = "test-knobs")]
 fn px(x: u32, y: u32) -> u32 {
     0x0100_0000 | (y << 12) | x
 }
