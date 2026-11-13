@@ -3027,6 +3027,7 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         key,
         ds_w * ms,
         ds_h * ms,
+        super::layout::Layout::Linear,
         GC_DEPTH_GUARD_BYTES,
         gc_kick_id(),
         /* depth texels the CPU wrote become the surface's depth first */

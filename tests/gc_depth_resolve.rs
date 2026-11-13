@@ -30,6 +30,7 @@ use yakogl::backend::GlesDraw;
 use yakogl::ds_retention::DepthTexels;
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
 use yakogl::vivante::ds_cache::{self, DsKey};
+use yakogl::vivante::layout::Layout;
 
 /// Host memory for every allocation; `select` makes exactly one per surface.
 static ALLOCS: Mutex<BTreeMap<u64, Box<[u64]>>> = Mutex::new(BTreeMap::new());
@@ -123,7 +124,7 @@ fn with_surface_at(guard: usize, w: u32, h: u32, case: impl FnOnce(&mut [u8], u3
         yakogl::backend::g_backend = &yakogl::vivante::backend::yakogl_backend_vivante;
         assert_eq!(yakogl::vivante::backend::gc_init(), 0, "gc_init");
     }
-    ds_cache::select(KEY, w, h, guard, 1, None, |_| false, || 0).expect("a surface");
+    ds_cache::select(KEY, w, h, Layout::Linear, guard, 1, None, |_| false, || 0).expect("a surface");
     ds_cache::drawn(KEY, 1, false, [true, false], [None, None]);
     /* the surface: 64-aligned width in words, 64-aligned rows (ds_cache.rs `select`) */
     let (stride, rows) = (w.div_ceil(64) * 64 * 4, h.div_ceil(64) * 64);
@@ -265,6 +266,7 @@ fn depth_texels_become_the_surface_depth() {
             KEY,
             w,
             h,
+            Layout::Linear,
             GUARD,
             2,
             seed,
@@ -317,9 +319,9 @@ fn depth_texels_need_no_copy_from_a_surface_of_another_stride() {
         assert_eq!(yakogl::vivante::backend::gc_init(), 0, "gc_init");
     }
     let first = DsKey { stencil_id: 0x65, ..KEY };
-    ds_cache::select(first, 90, 70, GUARD, 1, None, |_| false, || 0).expect("the first surface");
+    ds_cache::select(first, 90, 70, Layout::Linear, GUARD, 1, None, |_| false, || 0).expect("the first surface");
     ds_cache::drawn(first, 1, false, [true, false], [None, None]);
-    let plain = ds_cache::select(KEY, 200, 70, GUARD, 2, None, |_| false, || 0);
+    let plain = ds_cache::select(KEY, 200, 70, Layout::Linear, GUARD, 2, None, |_| false, || 0);
     assert_eq!(plain, Err(-95), "a plain draw would copy across strides: refused");
     let (w, h) = (200u32, 70u32);
     let texels: Vec<f32> = (0..w * h).map(|i| yakogl::ds_retention::unorm24_depth(i * 97)).collect();
@@ -333,7 +335,7 @@ fn depth_texels_need_no_copy_from_a_surface_of_another_stride() {
     };
     // SAFETY: `texels` holds `h` rows of `w` floats.
     let seed = unsafe { DepthTexels::of(&d) };
-    ds_cache::select(KEY, w, h, GUARD, 3, seed, |_| false, || 0).expect("the texels need no copy");
+    ds_cache::select(KEY, w, h, Layout::Linear, GUARD, 3, seed, |_| false, || 0).expect("the texels need no copy");
     let mut dst = vec![-1.0f32; (w * h) as usize];
     assert_eq!(resolve(&mut dst, w, h, w), 0);
     assert!(dst.iter().zip(&texels).all(|(a, b)| a.to_bits() == b.to_bits()), "the resolve answers the texels");

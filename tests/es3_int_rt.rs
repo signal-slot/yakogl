@@ -408,8 +408,8 @@ mod es3 {
     /// The R and RG classes are held widened to four channels (`es3_formats`),
     /// a store that is not the layout of their surface: the PowerVR draws
     /// them as the four-channel surface of the store
-    /// (tests/es3_pvr_fbo_int_rg.rs), the other back ends keep them
-    /// incomplete.
+    /// (tests/es3_pvr_fbo_int_rg.rs), the GC7000 holds the 32-bit ones in a
+    /// class of their own, the other back ends keep them incomplete.
     #[test]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();

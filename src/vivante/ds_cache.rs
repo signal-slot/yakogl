@@ -31,6 +31,7 @@
 //! every surface holding one, the draw is refused (src/ds_retention.rs).
 
 use super::backend::{g, heap_data};
+use super::layout::Layout;
 use crate::backend::GlesDraw;
 use crate::ds_retention::{self, Parked, Plane, DEPTH, STENCIL};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
@@ -90,6 +91,11 @@ struct Surface {
     /// ([`resolve_depth`]), and nothing after it.
     written_by: u32,
     stamp: u32,
+    /// How the pixel engine addresses it: Linear at allocation. Only a
+    /// PE-private surface ([`pe_private`]) is asked for another layout, by
+    /// the draws whose colour target is a tiled shadow; the CPU readers
+    /// ([`copy_plane`], [`seed_depth`], [`resolve_depth`]) refuse the others.
+    layout: Layout,
     /// What each plane holds for its object: Live or a clear value when
     /// this surface has the object's latest contents, Undefined otherwise.
     planes: [Plane; 2],
@@ -245,6 +251,18 @@ pub struct Selected {
     /// bits, stencil as the value): the backend records a clear of just
     /// those planes before the draw.
     pub restore: [Option<u32>; 2],
+    /// The surface's layout: the wanted one, or the existing one when a live
+    /// plane or a non-private key keeps it (the caller then stays on the
+    /// linear path).
+    pub layout: Layout,
+}
+
+/// No plane of `key` comes from a texture (bit 30 of the GL core's ids,
+/// `src/gl/context.rs`), none is the window's (bit 31), and the draw is not
+/// the 4x one: the pixel engine alone reads and writes the surface, so it
+/// may be given a layout other than Linear.
+pub fn pe_private(key: DsKey) -> bool {
+    key.scale == 1 && [key.depth_id, key.stencil_id].iter().all(|id| id & 0xc000_0000 == 0)
 }
 
 /// The surface for `key`, at least `w` x `h` pixels, made current: the
@@ -261,6 +279,11 @@ pub struct Selected {
 /// `finish` submits the open frame and waits for every kick: called before
 /// a plane is copied.
 ///
+/// `layout`: the layout the draw wants. A surface changing layout loses its
+/// planes (the pixel engine never read it in the other one) except the whole
+/// clear values; one with a live plane, or a key that is not
+/// [`pe_private`], keeps its layout, reported in [`Selected::layout`].
+///
 /// `seed`: depth texels the draw carries (`GlesDraw::depth_texels`): they
 /// become the surface's depth plane (`seed_depth`), and no depth is
 /// restored from a clear value.
@@ -269,6 +292,7 @@ pub fn select(
     key: DsKey,
     w: u32,
     h: u32,
+    layout: Layout,
     guard: usize,
     kick: u32,
     seed: Option<ds_retention::DepthTexels>,
@@ -285,6 +309,12 @@ pub fn select(
     let slot = match c.entries.iter().position(|e| e.as_ref().is_some_and(|e| e.key == key)) {
         Some(i) => {
             let e = c.entries[i].as_mut().expect("found above");
+            if e.layout != layout && pe_private(key) && !e.holds_contents() {
+                e.layout = layout;
+                for pl in e.planes.iter_mut().filter(|pl| pl.cleared_value().is_none()) {
+                    *pl = Plane::UNDEFINED;
+                }
+            }
             if stride > e.stride || rows > e.rows {
                 /* grown: the old contents cannot be kept at a new stride */
                 let (s, r) = (stride.max(e.stride), rows.max(e.rows));
@@ -332,6 +362,7 @@ pub fn select(
                 used_by: 0,
                 written_by: 0,
                 stamp: 0,
+                layout: if pe_private(key) { layout } else { Layout::Linear },
                 planes: [Plane::UNDEFINED; 2],
             });
             note_peak(c);
@@ -401,7 +432,7 @@ pub fn select(
     g.depth_w = w;
     g.depth_h = e.rows;
     g.depth_surface_off = guard as u32;
-    Ok(Selected { fresh, restore })
+    Ok(Selected { fresh, restore, layout: e.layout })
 }
 
 /// What a recorded draw left in the planes of `key`'s surface: its whole
@@ -468,6 +499,17 @@ fn copy_plane(
     finish: &mut impl FnMut() -> i32,
 ) -> Result<(), i32> {
     let (Some(s), Some(d)) = (c.entries[from].as_ref(), c.entries[to].as_ref()) else { return Err(-1) };
+    if s.layout != d.layout {
+        crate::glog_once!(
+            "vivante: the {} of object 0x{:x} is in a surface of another layout ({:?} against {:?}): not copied, \
+             the draw is refused",
+            if p == DEPTH { "depth" } else { "stencil" },
+            if p == DEPTH { d.key.depth_id } else { d.key.stencil_id },
+            s.layout,
+            d.layout
+        );
+        return Err(-crate::util::ENOTSUP);
+    }
     if s.stride != d.stride {
         crate::glog_once!(
             "vivante: the {} of object 0x{:x} is in a surface of another row stride ({} against {} bytes): not \
@@ -532,6 +574,14 @@ fn seed_depth(
     let Some(e) = c.entries[slot].as_ref() else { return Err(-1) };
     let busy = e.used_by != 0 && pending(e.used_by);
     let (scale, id) = (e.key.scale, e.key.depth_id);
+    if e.layout != Layout::Linear {
+        crate::glog_once!(
+            "vivante: draw refused: the depth the CPU wrote into object 0x{:x} cannot go into its {:?} surface",
+            id,
+            e.layout
+        );
+        return Err(-crate::util::ENOTSUP);
+    }
     if busy {
         let rc = finish();
         if rc != 0 {
@@ -617,6 +667,9 @@ pub unsafe fn resolve_depth(
         let parked = c.parked.iter().find(|p| mine(Some(p.key))).and_then(|p| p.planes[0].cleared_value());
         return parked.map_or(1, |v| fill(f32::from_bits(v)));
     };
+    if e.layout != Layout::Linear {
+        return 1; /* as for a multisampled surface: the words are not row-linear */
+    }
     if let Some(v) = e.planes[DEPTH].cleared_value() {
         return fill(f32::from_bits(v));
     }
@@ -792,4 +845,174 @@ pub fn stride_of(key: DsKey) -> Option<u32> {
 #[cfg(test)]
 pub fn parked_len() -> usize {
     cache().parked.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::TestGl;
+
+    const GUARD: usize = 256;
+    const ENOTSUP: i32 = crate::util::ENOTSUP;
+
+    fn key(depth: u32, stencil: u32) -> DsKey {
+        DsKey { depth_id: depth, depth_gen: 1, stencil_id: stencil, stencil_gen: 1, scale: 1 }
+    }
+
+    fn sel(k: DsKey, layout: Layout) -> Result<Selected, i32> {
+        select(k, 64, 64, layout, GUARD, 1, None, |_| false, || 0)
+    }
+
+    fn words(k: DsKey) -> &'static mut [u32] {
+        let (mem, bytes) = memory_of(k).expect("a surface");
+        // SAFETY: the surface's host mapping past the guard; no kick runs.
+        unsafe { core::slice::from_raw_parts_mut((mem.cpu as *mut u8).add(GUARD) as *mut u32, bytes / 4) }
+    }
+
+    /// Host memory for every allocation, leaked on free so that an address is
+    /// not reused.
+    unsafe extern "C" fn p_gpu_alloc(heap_base: u64, size: usize, _flags: u32, out: *mut OsalGpuMem) -> i32 {
+        static NEXT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        let cpu = Box::leak(vec![0u64; size.div_ceil(8)].into_boxed_slice()).as_mut_ptr() as *mut core::ffi::c_void;
+        let gpu = heap_base + 0x1000 + n * (1 << 24);
+        // SAFETY: the caller passes a writable descriptor.
+        unsafe { *out = OsalGpuMem { cpu, gpu, phys: gpu, size, impl_: cpu } };
+        0
+    }
+
+    unsafe extern "C" fn p_gpu_free(mem: *mut OsalGpuMem) -> i32 {
+        // SAFETY: the caller passes a live descriptor.
+        unsafe { *mem = OsalGpuMem::ZERO };
+        0
+    }
+
+    unsafe extern "C" fn p_cache(_cpu: *mut core::ffi::c_void, _n: usize) {}
+
+    static OSAL: crate::osal::OsalOps = crate::osal::OsalOps {
+        init: None,
+        shutdown: None,
+        gpu_alloc: Some(p_gpu_alloc),
+        gpu_free: Some(p_gpu_free),
+        mmu_map: None,
+        map_phys: None,
+        gpu_write: None,
+        gpu_read: None,
+        cache_flush: Some(p_cache),
+        cache_invd: Some(p_cache),
+        submit: None,
+        wait: None,
+        completed: None,
+        reg_read: None,
+        reg_write: None,
+        query: None,
+        log: None,
+        wait_vblank: None,
+        present: None,
+        lock: None,
+        unlock: None,
+        thread_id: None,
+        display_busy: None,
+    };
+
+    /// The test lock, with an empty cache and the host allocator above
+    /// installed until it drops.
+    struct Fresh {
+        prev: *const crate::osal::OsalOps,
+        _gl: TestGl,
+    }
+
+    impl Drop for Fresh {
+        fn drop(&mut self) {
+            release_all();
+            // SAFETY: tests are serialised by the TestGl guard, still held.
+            unsafe { crate::osal::osal_set_ops(self.prev) };
+        }
+    }
+
+    fn fresh_cache() -> Fresh {
+        let gl = TestGl::new(4, 4);
+        // SAFETY: tests are serialised by the TestGl guard.
+        let prev = unsafe {
+            let prev = crate::osal::g_osal;
+            crate::osal::osal_set_ops(&OSAL);
+            prev
+        };
+        release_all();
+        Fresh { prev, _gl: gl }
+    }
+
+    #[test]
+    fn pe_private_excludes_textures_the_window_and_scale_two() {
+        assert!(pe_private(key(5, 6)));
+        assert!(pe_private(key(5, 0)));
+        assert!(!pe_private(key(0x4000_0005, 6)), "a texture depth");
+        assert!(!pe_private(key(5, 0x4000_0006)), "a texture stencil");
+        assert!(!pe_private(key(0x8000_0001, 0x8000_0001)), "the window");
+        assert!(!pe_private(DsKey { scale: 2, ..key(5, 6) }));
+    }
+
+    #[test]
+    fn a_surface_is_linear_until_a_private_draw_wants_another_layout() {
+        let _gl = fresh_cache();
+        assert_eq!(sel(key(5, 6), Layout::Linear).map(|s| s.layout), Ok(Layout::Linear));
+        assert_eq!(sel(key(5, 6), Layout::SuperTiled).map(|s| s.layout), Ok(Layout::SuperTiled));
+        let tex = key(0x4000_0007, 0);
+        assert_eq!(sel(tex, Layout::SuperTiled).map(|s| s.layout), Ok(Layout::Linear), "not private");
+        assert_eq!(sel(tex, Layout::SuperTiled).map(|s| s.layout), Ok(Layout::Linear));
+        release_all();
+    }
+
+    #[test]
+    fn a_layout_change_drops_the_planes_but_keeps_a_whole_clear() {
+        let _gl = fresh_cache();
+        let (a, b) = (key(5, 6), key(8, 9));
+        sel(a, Layout::Linear).unwrap();
+        drawn(a, 1, false, [false, false], [Some(0x3f80_0000), None]);
+        sel(b, Layout::Linear).unwrap();
+        drawn(b, 1, false, [true, false], [None, None]);
+        assert!(planes_of(b).unwrap()[DEPTH].is_live());
+        assert_eq!(sel(a, Layout::SuperTiled).map(|s| s.layout), Ok(Layout::SuperTiled));
+        assert_eq!(planes_of(a).unwrap()[DEPTH].cleared_value(), Some(0x3f80_0000), "the clear value stays");
+        assert_eq!(sel(b, Layout::SuperTiled).map(|s| s.layout), Ok(Layout::Linear), "a live plane keeps it");
+        assert!(planes_of(b).unwrap()[DEPTH].is_live());
+        release_all();
+    }
+
+    #[test]
+    fn copy_plane_refuses_across_layouts_and_copies_within_one() {
+        let _gl = fresh_cache();
+        let (lin, st1, st2) = (key(9, 10), key(9, 11), key(9, 12));
+        sel(lin, Layout::Linear).unwrap();
+        drawn(lin, 1, false, [true, false], [None, None]);
+        words(lin).fill(0xaabb_cc11);
+        assert_eq!(sel(st1, Layout::SuperTiled).map(|_| ()), Err(-ENOTSUP), "the depth is live in a linear surface");
+        assert!(planes_of(lin).unwrap()[DEPTH].is_live(), "nothing moved");
+
+        release_all();
+        sel(st1, Layout::SuperTiled).unwrap();
+        drawn(st1, 1, false, [true, false], [None, None]);
+        words(st1).fill(0xaabb_cc11);
+        let s = sel(st2, Layout::SuperTiled).expect("the same layout copies");
+        assert_eq!(s.layout, Layout::SuperTiled);
+        assert!(words(st2).iter().all(|w| w >> 8 == 0xaa_bbcc), "the depth was copied");
+        assert!(words(st2).iter().all(|w| w & 0xff == 0), "the stencil bits were not");
+        release_all();
+    }
+
+    #[test]
+    fn the_cpu_readers_leave_a_non_linear_surface_alone() {
+        let _gl = fresh_cache();
+        let k = key(5, 5);
+        sel(k, Layout::SuperTiled).unwrap();
+        drawn(k, 1, false, [true, true], [None, None]);
+        words(k).fill(0x1234_5678);
+        let mut out = [7.0f32; 16];
+        // SAFETY: `out` holds 4 rows of 4 floats.
+        let rc = unsafe { resolve_depth(5, out.as_mut_ptr(), 4, 4, 4, GUARD, |_| 0) };
+        assert_eq!(rc, 1);
+        assert!(out.iter().all(|&v| v == 7.0), "nothing written");
+        assert!(words(k).iter().all(|&w| w == 0x1234_5678));
+        release_all();
+    }
 }
