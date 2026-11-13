@@ -11,10 +11,10 @@
 //! the short one: the block is `UniformBlock`, its member
 //! `UniformBlock.uniformMember`; the instance name reaches no query.
 //!
-//! The file also pins what the pool does not lift: a default-block uniform
-//! whose name fills the field is still refused at link, because the GL core
-//! reads that row's field for `glGetActiveUniform` and
-//! `glGetUniformLocation` (task #47's last step).
+//! The file also pins a default-block uniform whose name fills the field:
+//! it links, because the GL core takes the row's name from the pool too
+//! (`program::row_name`), so `glGetActiveUniform` reports it whole and
+//! `glGetUniformLocation` finds the row the draw then fills.
 //!
 //! The host cannot render: the verdicts here are the compile, the link, the
 //! reflection and the uniform dwords a draw hands the back end (the member's
@@ -450,26 +450,55 @@ fn two_members_of_a_long_named_block_are_two_active_uniforms() {
     unsafe { glDeleteProgram(p) };
 }
 
-/// Not lifted: a default-block uniform whose name fills the field. GL reads
-/// that row's field for its name, so the link refuses it as before, naming
-/// the field.
+/// A default-block uniform whose name fills the field links: GL takes the
+/// row's name from the record's pool, reports it whole and finds its
+/// location by it, and the value set there is in the row the draw hands
+/// over.
+///
+/// Revert check: let `program::row_name` read the field alone, or the link
+/// accept a full field only for a block member's row, and this fails.
 #[test]
-fn a_default_block_uniform_of_63_characters_is_still_refused_at_link() {
+fn a_default_block_uniform_of_63_characters_links_with_its_whole_name() {
     let _g = context();
     let u = "u".repeat(63);
     let fs = format!(
         "#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 o;\n\
          uniform vec4 {u};\nvoid main() {{ o = {u}; }}\n"
     );
-    let log = program(VS_PLAIN, &fs).map(|p| {
-        // SAFETY: a program of this context.
-        unsafe { glDeleteProgram(p) };
-    });
-    let log = log.expect_err("a 63-character default-block uniform does not link");
-    assert!(log.contains("64-byte name field"), "the log names the field: {log}");
-    assert!(log.contains("fragment uniform"), "and the stage and kind: {log}");
-    // a refused link is no GL error
+    let p = program(VS_PLAIN, &fs).unwrap_or_else(|log| panic!("a 63-character uniform links: {log}"));
+    assert_eq!(programiv(p, GL_ACTIVE_UNIFORMS), 1);
+    assert_eq!(active_uniform(p, 0), (u.clone(), 1, GL_FLOAT_VEC4), "reported whole");
+    assert_eq!(programiv(p, GL_ACTIVE_UNIFORM_MAX_LENGTH), 64, "63 characters and the NUL");
+    let loc = uniform_location(p, &u);
+    assert!(loc >= 0, "found by its whole name");
+    assert_eq!(uniform_location(p, &"u".repeat(62)), -1, "and by no shorter one");
+    static POS: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 0.0, 1.0, -1.0, 1.0, 0.0, 1.0];
+    // SAFETY: plain GL calls on a linked program of this context; every
+    // pointer stays alive through the draw.
+    unsafe {
+        glUseProgram(p);
+        glUniform4f(loc, 1.0, 2.0, 3.0, 4.0);
+        let a = glGetAttribLocation(p, c"a_pos".as_ptr());
+        assert!(a >= 0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glVertexAttribPointer(a as u32, 4, GL_FLOAT, 0, 0, POS.as_ptr() as *const c_void);
+        glEnableVertexAttribArray(a as u32);
+        *DRAWN.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        assert_eq!(glGetError(), GL_NO_ERROR, "the draw");
+        glDisableVertexAttribArray(a as u32);
+        glUseProgram(0);
+    }
+    let (_, stage) = DRAWN.lock().unwrap_or_else(|e| e.into_inner()).take().expect("the back end drew");
+    assert_eq!(stage.rows.len(), 1, "the fragment stage's one row: {stage:?}");
+    let (off, dwords) = stage.rows[0];
+    assert_eq!(dwords, 4, "a vec4: {stage:?}");
+    let got: Vec<f32> =
+        stage.dwords[usize::from(off)..usize::from(off) + 4].iter().map(|&d| f32::from_bits(d)).collect();
+    assert_eq!(got, [1.0, 2.0, 3.0, 4.0], "the row holds the value set at the whole name's location");
     assert_eq!(err(), GL_NO_ERROR);
+    // SAFETY: a program of this context.
+    unsafe { glDeleteProgram(p) };
 }
 
 /// And a name one under the field's limit links as it always did: the

@@ -29,7 +29,7 @@ use super::shader::{self, copy_out_text, log_text, INFO_LOG_SIZE};
 use super::types::*;
 use crate::shaderc::{
     self, packing, ShcAttrib, ShcAttribBinding, ShcAttribMap, ShcShader, ShcUniform, SHC_ATTRIB_NO_LOCATION,
-    SHC_MAX_DECLARED_ATTRIBS, SHC_UNIFORM_NAME_MAX, SHC_UNIFORM_NO_BLOCK,
+    SHC_MAX_DECLARED_ATTRIBS, SHC_UNIFORM_NO_BLOCK,
 };
 use crate::util::{self, Bytes, CStrWriter, Global};
 
@@ -158,13 +158,108 @@ pub(super) fn shader_is_attached(c: &GlContext, shader: GLuint) -> bool {
     shader != 0 && c.objs_ref().programs.iter().any(|p| p.used && (p.vs == shader || p.fs == shader))
 }
 
-/// The reflection entry a location refers to. A location table is built from
-/// the very tables it indexes (glLinkProgram), so the entry is there; an
-/// index that is not reads as an empty uniform rather than panicking.
-/// The widest name `active_uniform_name` can build: a reflection name plus the
-/// "[0]" an array's GL name carries. The index substitution cannot grow it --
-/// "[0]" is as short as a bracketed index gets.
-const ACTIVE_NAME_MAX: usize = SHC_UNIFORM_NAME_MAX + 4;
+/// An active uniform's GL name as the queries hand it out, kept as the
+/// pieces it is made of instead of copied into a buffer: `head`, then
+/// `index` in decimal (a struct array's element, [`active_uniform_name`]),
+/// then `tail`, then "[0]" when `zero`. The pieces borrow the whole name
+/// (the record's name pool, [`row_name`], or a block member's), which has no
+/// length a buffer could be sized by: an identifier is up to 1,024
+/// characters (GLSL ES 3.00 3.8) and a row name joins several. ES 3.0
+/// 2.12.6 cuts a name only at the caller's `bufSize` ([`GlName::copy_out`]).
+#[derive(Clone, Copy)]
+struct GlName<'a> {
+    head: &'a [u8],
+    index: Option<u32>,
+    tail: &'a [u8],
+    zero: bool,
+}
+
+impl<'a> GlName<'a> {
+    fn plain(name: &'a [u8], zero: bool) -> Self {
+        GlName { head: name, index: None, tail: &[], zero }
+    }
+
+    /// `index`'s decimal digits, most significant first, and how many.
+    fn digits(&self) -> ([u8; 10], usize) {
+        let mut d = [0u8; 10];
+        let Some(mut v) = self.index else { return (d, 0) };
+        let mut n = 0usize;
+        loop {
+            d[n] = b'0' + (v % 10) as u8;
+            n += 1;
+            v /= 10;
+            if v == 0 {
+                break;
+            }
+        }
+        d[..n].reverse();
+        (d, n)
+    }
+
+    fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
+        let (d, n) = self.digits();
+        let zero: &[u8] = if self.zero { b"[0]" } else { b"" };
+        self.head
+            .iter()
+            .copied()
+            .chain(d.into_iter().take(n))
+            .chain(self.tail.iter().copied())
+            .chain(zero.iter().copied())
+    }
+
+    fn len(&self) -> usize {
+        self.head.len() + self.digits().1 + self.tail.len() + if self.zero { 3 } else { 0 }
+    }
+
+    fn is(&self, s: &[u8]) -> bool {
+        self.len() == s.len() && self.bytes().eq(s.iter().copied())
+    }
+
+    /// The name, or the name without the "[0]" it ends in: "a[0]" is also
+    /// "a" (2.12.6).
+    fn is_or_array_of(&self, s: &[u8]) -> bool {
+        let n = self.len();
+        self.is(s)
+            || (n == s.len() + 3
+                && self.bytes().skip(s.len()).eq(b"[0]".iter().copied())
+                && self.bytes().take(s.len()).eq(s.iter().copied()))
+    }
+
+    /// `util::copy_out_str` of the name: at most `buf_size - 1` bytes and a
+    /// NUL, `length` the bytes written without it.
+    ///
+    /// # Safety
+    /// As `util::copy_out_str`'s.
+    unsafe fn copy_out(&self, buf_size: GLsizei, length: *mut GLsizei, buf: *mut GLchar) {
+        let mut n = 0usize;
+        if !buf.is_null() && buf_size > 0 {
+            for b in self.bytes().take(buf_size as usize - 1) {
+                *buf.add(n) = b as c_char;
+                n += 1;
+            }
+            *buf.add(n) = 0;
+        }
+        util::app_put(length, n as GLsizei);
+    }
+}
+
+/// Row `k` of a stage's uniform table as the source names it: the record's
+/// name pool keeps the whole name where the 64-byte `ShcUniform::name` field
+/// cut it (`shaderc::online::backend::uniform_name`), so a name of 63 or
+/// more characters is reported and matched whole. Without the online
+/// compiler no record has a pool, and the link refuses a name that fills the
+/// field (`shaderc::link::reject_truncated_names`): the field's bytes are the
+/// whole name of every row that links.
+fn row_name(stage: &ShcShader, k: usize) -> &[u8] {
+    #[cfg(feature = "shaderc-online")]
+    {
+        shaderc::online::backend::uniform_name(stage, k)
+    }
+    #[cfg(not(feature = "shaderc-online"))]
+    {
+        stage.uniform_table().get(k).map_or(&[], |u| util::name_bytes(&u.name))
+    }
+}
 
 /// How many active uniforms one location-table entry stands for.
 ///
@@ -261,15 +356,8 @@ fn block_members<'a>(
 /// ends in "[0]", an array of one element's too (`float f[1]` is `B.f[0]`,
 /// size 1; 30 cases of dEQP-GLES3 ubo.random). An array is the member with an
 /// array stride, which std140 never makes 0.
-fn block_member_name<'a>(m: &shaderc::ShcBlockMember, out: &'a mut [u8; ACTIVE_NAME_MAX + 64]) -> &'a [u8] {
-    let n = m.name.as_bytes();
-    let len = n.len().min(out.len() - 3);
-    out[..len].copy_from_slice(&n[..len]);
-    if m.array_size > 1 || m.array_stride != 0 {
-        out[len..len + 3].copy_from_slice(b"[0]");
-        return &out[..len + 3];
-    }
-    &out[..len]
+fn block_member_name(m: &shaderc::ShcBlockMember) -> GlName<'static> {
+    GlName::plain(m.name.as_bytes(), m.array_size > 1 || m.array_stride != 0)
 }
 
 /// Match the two stages' blocks by name: a block both declare must have the
@@ -348,22 +436,15 @@ fn active_total(p: &GlProgram, tab: &ProgLocTable, bl: &ProgBlocks) -> u32 {
 }
 
 /// The GL name, size and type of an active uniform.
-fn active_describe<'a>(
-    p: &GlProgram,
-    a: &Active<'_>,
-    out: &'a mut [u8; ACTIVE_NAME_MAX + 64],
-) -> (&'a [u8], GLint, GLenum) {
+fn active_describe<'a>(p: &'a GlProgram, a: &Active<'_>) -> (GlName<'a>, GLint, GLenum) {
     match *a {
         Active::Default(l, k) => {
-            let mut buf = [0u8; ACTIVE_NAME_MAX];
-            let (n, size) = active_uniform_name(p, l, k, &mut buf);
-            let len = n.len();
-            out[..len].copy_from_slice(n);
-            (&out[..len], size, location_ref(p, l).gl_type as GLenum)
+            let (n, size) = active_uniform_name(p, l, k);
+            (n, size, location_ref(p, l).gl_type as GLenum)
         }
         Active::Member(_, m) => {
             let size = GLint::from(m.array_size.max(1));
-            (block_member_name(&m, out), size, GLenum::from(m.gl_type))
+            (block_member_name(&m), size, GLenum::from(m.gl_type))
         }
     }
 }
@@ -421,11 +502,12 @@ pub unsafe extern "C" fn glGetUniformBlockIndex(program: GLuint, uniformBlockNam
             .position(|b| prog_block_desc(p, b).is_some_and(|(_, d)| d.name.as_bytes() == want))
     };
     /* an element of an array of blocks may be asked for without its "[0]" */
-    let mut with0 = [0u8; ACTIVE_NAME_MAX + 64];
-    let n = name.len().min(with0.len() - 3);
-    with0[..n].copy_from_slice(&name[..n]);
-    with0[n..n + 3].copy_from_slice(b"[0]");
-    named(name).or_else(|| named(&with0[..n + 3])).map_or(GL_INVALID_INDEX, |k| k as GLuint)
+    let with0 = |want: &[u8]| {
+        bl.b[..usize::from(bl.count)].iter().position(|b| {
+            prog_block_desc(p, b).is_some_and(|(_, d)| d.name.as_bytes().strip_suffix(b"[0]") == Some(want))
+        })
+    };
+    named(name).or_else(|| with0(name)).map_or(GL_INVALID_INDEX, |k| k as GLuint)
 }
 
 #[no_mangle]
@@ -462,14 +544,8 @@ pub unsafe extern "C" fn glGetUniformIndices(
         } else {
             // SAFETY: a NUL-terminated string (GL contract).
             let want = util::cstr_bytes(np);
-            (0..total).find(|&k| {
-                let mut buf = [0u8; ACTIVE_NAME_MAX + 64];
-                active_nth(p, tab, bl, k).is_some_and(|a| {
-                    let (n, _, _) = active_describe(p, &a, &mut buf);
-                    /* "a[0]" is also "a" (2.12.6) */
-                    n == want || n.strip_suffix(b"[0]") == Some(want)
-                })
-            })
+            (0..total)
+                .find(|&k| active_nth(p, tab, bl, k).is_some_and(|a| active_describe(p, &a).0.is_or_array_of(want)))
         };
         // SAFETY: the application passes room for `uniformCount` indices.
         util::app_set(uniformIndices, i, found.unwrap_or(GL_INVALID_INDEX));
@@ -531,8 +607,7 @@ pub unsafe extern "C" fn glGetActiveUniformsiv(
         // SAFETY: as above.
         let k = util::app_get(uniformIndices, i);
         let Some(a) = active_nth(p, tab, bl, k) else { continue };
-        let mut buf = [0u8; ACTIVE_NAME_MAX + 64];
-        let (name, size, ty) = active_describe(p, &a, &mut buf);
+        let (name, size, ty) = active_describe(p, &a);
         let v: GLint = match (pname, &a) {
             (GL_UNIFORM_TYPE, _) => ty as GLint,
             (GL_UNIFORM_SIZE, _) => size,
@@ -780,7 +855,7 @@ pub(crate) fn gl_type_shape(t: u16) -> (usize, usize) {
     }
 }
 
-/// The GL name and array size of one active uniform, written into `out`.
+/// The GL name and array size of one active uniform.
 ///
 /// Two rules, both from 2.10.4 and both about the same "[0]":
 ///
@@ -789,77 +864,38 @@ pub(crate) fn gl_type_shape(t: u16) -> (usize, usize) {
 ///   - a struct array's rows are named for element zero (`u_lights[0].atten`),
 ///     so element k is that name with the first bracketed index rewritten, and
 ///     its size is the member's OWN array (`inner`), not the flattened total.
-fn active_uniform_name<'a>(
-    p: &GlProgram,
-    l: &ProgLocation,
-    k: u32,
-    out: &'a mut [u8; ACTIVE_NAME_MAX],
-) -> (&'a [u8], GLint) {
+fn active_uniform_name<'a>(p: &'a GlProgram, l: &ProgLocation, k: u32) -> (GlName<'a>, GLint) {
     let u = location_ref(p, l);
-    let name = util::name_bytes(&u.name);
-    let mut n = 0usize;
-    let push = |out: &mut [u8; ACTIVE_NAME_MAX], n: &mut usize, b: u8| {
-        if *n < ACTIVE_NAME_MAX {
-            out[*n] = b;
-            *n += 1;
-        }
-    };
-
-    let size = if l.flattened {
+    let name = location_name(p, l);
+    let (n, size) = if l.flattened {
         /* "A.B[0].C" -> "A.B[k].C": the first bracketed index is the outer one */
         let open = name.iter().position(|&b| b == b'[');
         let close = name.iter().position(|&b| b == b']');
-        match (open, close) {
-            (Some(o), Some(c)) if c > o => {
-                for &b in &name[..=o] {
-                    push(out, &mut n, b);
-                }
-                let mut digits = [0u8; 10];
-                let mut d = 0usize;
-                let mut v = k;
-                loop {
-                    digits[d] = b'0' + (v % 10) as u8;
-                    d += 1;
-                    v /= 10;
-                    if v == 0 {
-                        break;
-                    }
-                }
-                while d > 0 {
-                    d -= 1;
-                    push(out, &mut n, digits[d]);
-                }
-                for &b in &name[c..] {
-                    push(out, &mut n, b);
-                }
-            }
+        let n = match (open, close) {
+            (Some(o), Some(c)) if c > o => GlName { head: &name[..=o], index: Some(k), tail: &name[c..], zero: false },
             /* no bracket to rewrite: the row is not shaped as advertised, so
              * report it as it stands rather than inventing a name */
-            _ => {
-                for &b in name {
-                    push(out, &mut n, b);
-                }
-            }
-        }
-        (u.inner as GLint).max(1)
+            _ => GlName::plain(name, false),
+        };
+        (n, (u.inner as GLint).max(1))
     } else {
-        for &b in name {
-            push(out, &mut n, b);
-        }
-        (u.array_len as GLint).max(1)
+        (GlName::plain(name, false), (u.array_len as GLint).max(1))
     };
 
     /* An array's name ends in "[0]" whatever its length: `float f[1]` is
      * `f[0]` of size 1. A flattened member's array is its `inner` one. */
-    let array = if l.flattened { size > 1 } else { declared_array(p, l) };
-    if array {
-        for &b in b"[0]" {
-            push(out, &mut n, b);
-        }
-    }
-    (&out[..n], size)
+    let zero = if l.flattened { size > 1 } else { declared_array(p, l) };
+    (GlName { zero, ..n }, size)
 }
 
+/// The whole name of the reflection entry a location refers to ([`row_name`]).
+fn location_name<'a>(p: &'a GlProgram, l: &ProgLocation) -> &'a [u8] {
+    row_name(if l.ref_stage == 0 { &p.rvs } else { &p.rfs }, usize::from(l.ref_index))
+}
+
+/// The reflection entry a location refers to. A location table is built from
+/// the very tables it indexes (glLinkProgram), so the entry is there; an
+/// index that is not reads as an empty uniform rather than panicking.
 fn location_ref<'a>(p: &'a GlProgram, l: &ProgLocation) -> &'a ShcUniform {
     static NO_UNIFORM: ShcUniform = ShcUniform::ZERO;
     let stage = if l.ref_stage == 0 { &p.rvs } else { &p.rfs };
@@ -1103,7 +1139,7 @@ fn uniform_vars(stage: &ShcShader) -> impl Iterator<Item = packing::Var> + Clone
         }
         let kind = packing::Kind::of_gl_type(u32::from(u.gl_type)).unwrap_or(packing::Kind::Vec4);
         let all = u32::from(u.array_len).max(1);
-        Some(if row_is_flattened(stage, util::name_bytes(&u.name)) {
+        Some(if row_is_flattened(stage, row_name(stage, i)) {
             let inner = u32::from(u.inner).max(1);
             packing::Var { kind, len: inner, count: (all / inner).max(1) }
         } else {
@@ -1154,11 +1190,9 @@ fn build_locations(p: &mut GlProgram, tab: &mut ProgLocTable, log: &mut [u8; INF
                 continue;
             }
             let off = if u.dword_off == SHC_UNIFORM_NO_BLOCK { -1 } else { u.dword_off as i32 };
-            let name = util::name_bytes(&u.name);
+            let name = row_name(stage, i);
 
-            let found = tab.u[..tab.count as usize]
-                .iter()
-                .position(|l| uniform_name_eq(util::name_bytes(&location_ref(p, l).name), name));
+            let found = tab.u[..tab.count as usize].iter().position(|l| uniform_name_eq(location_name(p, l), name));
             let k = match found {
                 Some(k) => {
                     let r = location_ref(p, &tab.u[k]);
@@ -2127,7 +2161,7 @@ fn split_subscript(name: &[u8]) -> Option<(&[u8], c_ulong)> {
 fn find_location(p: &GlProgram, locs: &[ProgLocation], name: &[u8]) -> Option<(usize, u32)> {
     /* the same uniform under either stage's struct instance name counts as a
      * match (see `uniform_name_eq`) */
-    let exact = |n: &[u8]| locs.iter().position(|l| uniform_name_eq(util::name_bytes(&location_ref(p, l).name), n));
+    let exact = |n: &[u8]| locs.iter().position(|l| uniform_name_eq(location_name(p, l), n));
     if let Some(i) = exact(name) {
         return Some((i, 0));
     }
@@ -2171,16 +2205,15 @@ fn find_struct_member(p: &GlProgram, locs: &[ProgLocation], name: &[u8]) -> Opti
         return None;
     }
     let tail = &after[rb + 1..];
-    let mut key = [0u8; SHC_UNIFORM_NAME_MAX + 8];
-    if head + 4 + tail.len() >= key.len() {
-        return None;
-    }
-    key[..head].copy_from_slice(&name[..head]);
-    key[head..head + 3].copy_from_slice(b"[0]");
-    key[head + 3..head + 3 + tail.len()].copy_from_slice(tail);
-    let key = &key[..head + 3 + tail.len()];
+    /* the row's name: `name` with its first index rewritten to "[0]" */
+    let is_key = |n: &[u8]| {
+        n.len() == head + 3 + tail.len()
+            && n[..head] == name[..head]
+            && &n[head..head + 3] == b"[0]"
+            && &n[head + 3..] == tail
+    };
 
-    let i = locs.iter().position(|l| util::name_bytes(&location_ref(p, l).name) == key)?;
+    let i = locs.iter().position(|l| is_key(location_name(p, l)))?;
     let u = location_ref(p, &locs[i]);
     /* checked: a saturated k must not wrap to a valid element */
     let elem = k.checked_mul((u.inner as c_ulong).max(1))?;
@@ -2245,7 +2278,7 @@ fn log_missing_uniform(p: &GlProgram, locs: &[ProgLocation], program: GLuint, na
     }
     let idx = (b'1'..=b'7').any(|d| name.windows(3).any(|w| w == [b'[', d, b']']));
 
-    if idx || locs.iter().any(|l| uniform_name_eq(util::name_bytes(&location_ref(p, l).name), name)) {
+    if idx || locs.iter().any(|l| uniform_name_eq(location_name(p, l), name)) {
         return;
     }
     st.miss_log_left -= 1;
@@ -2839,14 +2872,13 @@ pub unsafe extern "C" fn glGetActiveUniform(
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     };
-    let mut buf = [0u8; ACTIVE_NAME_MAX + 64];
-    let (gl_name, gl_size, gl_type) = active_describe(p, &a, &mut buf);
+    let (gl_name, gl_size, gl_type) = active_describe(p, &a);
 
     // SAFETY: size/type point at one value each, name at bufSize bytes, length
     // at one GLsizei, or they are null (GL contract); any alignment.
     util::app_put(size, gl_size);
     util::app_put(type_, gl_type);
-    util::copy_out_str(gl_name, bufSize, length, name);
+    gl_name.copy_out(bufSize, length, name);
 }
 
 /// The application's output array of a glGetUniform*v call (any alignment).
@@ -3050,10 +3082,9 @@ pub unsafe extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: 
              * reflection's: an array's carries "[0]" and a struct array's
              * carries its element index, and both are longer */
             let (tab, bl) = (&st.loc[ctx][h], &st.blocks[ctx][h]);
-            let mut buf = [0u8; ACTIVE_NAME_MAX + 64];
             let longest = (0..active_total(p, tab, bl))
                 .filter_map(|i| active_nth(p, tab, bl, i))
-                .map(|a| active_describe(p, &a, &mut buf).0.len())
+                .map(|a| active_describe(p, &a).0.len())
                 .max();
             longest.map_or(0, |n| n as GLint + 1)
         }

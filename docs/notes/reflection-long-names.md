@@ -124,24 +124,34 @@ travels Rust-side, keyed by an index — not a hash; a 64-bit hash would re-open
 exactly the "two names, one cut" collision `duplicate_name`
 (`src/shaderc/link.rs:42`) exists to catch, and an index cannot collide.
 
-Concretely, for `refl-long-name`:
+Concretely, as implemented (`06840143`, then `ubo-names-63`; this list was
+corrected against the code):
 
-- `uniform_rows` (`src/shaderc/online/reflect.rs:1146-1163`) keeps filling the
-  64-byte field as today for rows that fit; a row that does not fit gets the
-  field filled with its truncated prefix **plus a "truncated" marker**, and its
-  whole `&str` goes into a Rust-only side table on the keep record (row index
-  → whole name). The C header, `gles_shaderc.h`, is unchanged.
-- `reject_truncated_names` (`src/shaderc/link.rs:86`) loses its uniform arm:
-  once the whole name is reachable, "may have been truncated" is no longer
-  true of the uniform rows, and the exact-length refusal at `:74` (test
-  `:596-614`) goes with it — a 63- and a 64-character uniform name must both
-  link and report whole.
-- The GL core reads row names through the side table where one exists, which
-  retires the caps that existed only because the 64-byte field was the source:
-  `active_uniform_name`'s 68-byte buffer (`src/gl/program.rs:789-793`) grows to
-  the same whole-name path as the block side, and `find_struct_member`'s
-  72-byte key (`:2167-2169`) becomes a slice comparison. The `*_NAME_LENGTH`
-  queries need no change once the names they measure are whole.
+- `uniform_rows` keeps filling the 64-byte field as before, cut or not, with
+  no marker: a full field (63 bytes and the NUL) is the one signature of a
+  cut. The record keeps the whole name of every such row in its name pool
+  (`UniformNames` in `src/shaderc/online/backend.rs`, row index → whole name,
+  in the record's keep extent, empty when nothing was cut). The pool resolves
+  a full-field row to its reflection row by the name's 63-byte prefix and
+  the row's layout (`cut_row_is`), so names sharing the field's bytes stay
+  apart; a row two reflection rows could be is left out and refused. The C
+  header, `gles_shaderc.h`, is unchanged.
+- `reject_truncated_names` (`src/shaderc/link.rs`) keeps its uniform arm, but
+  accepts every full-field row the pool holds (`whole_uniform_row`): a 63-,
+  64- or 200-character uniform links. Without the online compiler there is
+  no pool, and the exact-length refusal (`link.rs` tests) is the rule.
+- The GL core takes every uniform row's name from the pool
+  (`program::row_name`, via `online::backend::uniform_name`): location
+  lookup, the stage merge in `build_locations`, `glGetActiveUniform`,
+  `glGetUniformIndices` and `GL_ACTIVE_UNIFORM_MAX_LENGTH`. A reported name is
+  no longer assembled in a fixed buffer: `GlName` keeps its pieces (the whole
+  name, a struct array's index, "[0]") and is cut only by the caller's
+  `bufSize`. `find_struct_member`'s 72-byte key and `glGetUniformBlockIndex`'s
+  132-byte "[0]" buffer became slice comparisons. Block names and members'
+  GL names were whole already (`ShcBlock::name`, `ShcBlockMember::name`).
+- Still read from the field: `gl/tf_capture.rs` (a transform-feedback vertex
+  stage's uniform rows, which refuses rather than guesses on a mismatch) and
+  `gl/draw.rs`'s `pvr_layers_<sampler>` lookup (both names cut alike).
 - The 32-byte io guards **stay** (GC `abi.rs:377-379`, PVR `abi.rs:523`/`:574`,
   V3D `v3d_abi.rs:68-70`, `codegen.rs:1120`, and the varying/attrib arm of
   `reject_truncated_names`): those names are paired across stages by
