@@ -101,7 +101,7 @@ pub const PVR_PDS_VERTEX_MAX_STREAMS: u32 = 16;
 /// The most USC temporaries a DOUTU word declares (six bits of four-temp
 /// blocks); every PDS program generator refuses more.
 pub const PVR_PDS_DOUTU_MAX_TEMPS: u32 = 252;
-/// `pvr_pds_render_vertex_program_ids`: no vertex / instance id register.
+/// `pvr_pds_render_vertex_program_ids_base`: no vertex / instance id register.
 pub const PVR_PDS_NO_ID_REG: u32 = 0xff;
 
 /* enum pvr_pds_coeff_interp */
@@ -543,9 +543,13 @@ extern "C" {
     /// Vertex-fetch program, one DMA per stream, also writing the vertex
     /// index (IR0) and/or the instance index (IR1) into the vtxin registers
     /// of a shader that reads gl_VertexID / gl_InstanceID
-    /// (`PVR_PDS_NO_ID_REG`: not written): `data_out` >= 8 * streams (+ 8
-    /// with an id) dwords, `code_out` >= streams + 2 (+ 2 with an id).
-    pub fn pvr_pds_render_vertex_program_ids(
+    /// (`PVR_PDS_NO_ID_REG`: not written), gl_InstanceID starting at
+    /// `instance_id_base` (Mesa's instance_id_modifier; ignored without an
+    /// instance id register, and base 0 gives the words of the generator
+    /// without a base): `data_out` >= 8 * streams (+ 8 with an id, + 2 with a
+    /// base) dwords, `code_out` >= streams + 2 (+ 2 with an id, + 1 with a
+    /// base).
+    pub fn pvr_pds_render_vertex_program_ids_base(
         vs_usc_exec_offset: u64,
         vs_temps: u32,
         streams: *const PvrPdsVertexStream,
@@ -553,6 +557,7 @@ extern "C" {
         has_slc_mcu_cache_controls: i32,
         vertex_id_reg: u32,
         instance_id_reg: u32,
+        instance_id_base: u32,
         data_out: *mut u32,
         code_out: *mut u32,
         info: *mut PvrPdsRenderVertexInfo,
