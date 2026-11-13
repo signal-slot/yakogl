@@ -96,9 +96,10 @@ cause as `draw_buffers_indexed`), `state_query.integers.*` 17 and
   its comment says only "no board has drawn four"), the uniform component and
   block-size limits, and the compressed-format list. The `*_getfloat` /
   `*_getinteger64` rows fail on limits whose integer query is right too (e.g.
-  `max_samples_getfloat`), so the float and 64-bit paths of
-  `get_floatv`/`get_integer64v` (`src/gl/state.rs:1040-1110`) are a separate
-  defect; not read to the line here.
+  `max_samples_getfloat`; MAX_SAMPLES is 1 for the integer query too). The
+  float and 64-bit paths only widen the integer answer and are not a
+  separate defect (`docs/notes/es3-shader-interface-limits.md`,
+  `tests/es3_caps.rs`).
 - **Cross-effect**: raising `DRAW_TARGETS` to 4 for the V3D also changes
   `fragment_out.*` and `draw_buffers_indexed.*` and the V3D MRT clear; coordinate
   with the notes for those.
