@@ -97,8 +97,21 @@ cause as `draw_buffers_indexed`), `state_query.integers.*` 17 and
   block-size limits, and the compressed-format list. The `*_getfloat` /
   `*_getinteger64` rows fail on limits whose integer query is right too (e.g.
   `max_samples_getfloat`), so the float and 64-bit paths of
-  `get_floatv`/`get_integer64v` (`src/gl/state.rs:1040-1110`) are a separate
-  defect; not read to the line here.
+  `glGetFloatv`/`glGetInteger64v` (`src/gl/state.rs:1379-1500`) were
+  suspected of a separate defect. Read: there is none. Both widen
+  `get_integerv`'s answer (the unsigned stencil masks aside), and
+  `tests/es3_query_forms.rs` pins that all three forms agree and write one
+  value for every limit; those rows fail with the value, and move with it.
+- **V3D varyings, what carries them**: `MAX_VARYING_VECTORS` 15 / 60 input
+  components needs more than the host side has today. `V3dFsProg` and
+  `ShcV3dFs` hold `flat_shade_flags`, `noperspective_flags` and
+  `centroid_flags` as ONE u32 each (`src/v3d/ffi.rs`, `src/shaderc/mod.rs`,
+  `src/abi_layout*.{rs,c}`), i.e. 32 scalar inputs; Mesa's are
+  arrays of words for 64 inputs (`V3D_MAX_FS_INPUTS`, `v3d_limits.h`; the array form is from memory of Mesa, v3d_compile.h is not vendored), and the
+  shader record carries one flag word per 32 inputs (`v3dx_emit.c`, likewise not vendored). The
+  limit is raised with the two-word flags in the ABI, the record emission,
+  the VPM output size for 64 vertex output components, and a board run of
+  es100/varyings15; not before.
 - **Cross-effect**: raising `DRAW_TARGETS` to 4 for the V3D also changes
   `fragment_out.*` and `draw_buffers_indexed.*` and the V3D MRT clear; coordinate
   with the notes for those.
