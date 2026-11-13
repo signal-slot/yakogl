@@ -399,8 +399,8 @@ pub enum SelectError {
     VaryingNotAnInput,
     /// An attribute the program reads is not in the record list it was given.
     AttributeWithoutRecord,
-    /// A VPM row past what this cut writes (16 attribute records, 64 output
-    /// rows).
+    /// A VPM row past what this cut writes (16 attribute records,
+    /// [`VPM_OUTPUT_ROWS`] output rows).
     VpmRowOutOfRange,
     /// A VPM output was written before every attribute was read: the input
     /// and output segments are shared, so the write could overwrite an input
@@ -2206,12 +2206,12 @@ fn merge_exits<'a>(a: &Arena<'a>, ops: &mut AVec<'a, VOp>) -> Result<(), SelectE
 /// Select a fragment shader. `inputs` is [`super::prepare::fragment_inputs`];
 /// bit i of `flat` says `inputs[i]` is flat (the program's
 /// `flat_shade_flags`), bit i of `centroid` that it is sampled at the
-/// centroid (`centroid_flags`).
+/// centroid (`centroid_flags`), for up to 64 inputs.
 pub fn select_fragment<'a>(
     p: &Prepared<'_>,
     inputs: &[(u8, u8)],
-    flat: u32,
-    centroid: u32,
+    flat: u64,
+    centroid: u64,
     pressure: Pressure,
     a: &Arena<'a>,
 ) -> Result<Selected<'a>, SelectError> {
@@ -2283,10 +2283,10 @@ pub fn select_fragment<'a>(
     for (i, &(loc, comp)) in inputs.iter().enumerate() {
         let raw = s.v();
         s.push(a, VOp::Ldvary { dst: raw })?;
-        let value = if i < 32 && flat & (1 << i) != 0 {
+        let value = if i < 64 && flat & (1 << i) != 0 {
             s.mul(a, MulOp::Mov, Operand::R5, Operand::None)?
         } else {
-            let w = if i < 32 && centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
+            let w = if i < 64 && centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
             let scaled = s.mul(a, MulOp::Fmul, Operand::V(raw), w)?;
             s.add(a, AddOp::Fadd, scaled, Operand::R5)?
         };
@@ -2428,6 +2428,14 @@ pub fn select_fragment<'a>(
     })
 }
 
+/// The output rows of a vertex shader's VPM segment: the shader record's
+/// segment size is 4 bits, in sectors of 8 rows (v3d_packet.xml GL Shader
+/// State Record, "Vertex Shader output VPM segment size"). ES 3.0's 15 vec4
+/// varyings take 60 rows after the four of the position and one of the point
+/// size: 65, nine sectors; Mesa's v3d takes 64 varying components too
+/// (`V3D_MAX_FS_INPUTS`, v3d_limits.h).
+pub const VPM_OUTPUT_ROWS: u32 = 15 * 8;
+
 /// The VPM rows each attribute record of `p` takes: the highest component
 /// read, plus one, per record (`records[r]` is the location of record `r`).
 pub fn vattr_sizes(p: &Prepared<'_>, records: &[u8]) -> Result<[u8; 16], SelectError> {
@@ -2557,7 +2565,7 @@ pub fn select_vertex<'a>(
     } else {
         (0, 4 + skip + p.varyings.len() as u32)
     };
-    if rows > 64 {
+    if rows > VPM_OUTPUT_ROWS {
         return Err(SelectError::VpmRowOutOfRange);
     }
     /* v3d_nir_emit_ff_vpm_outputs */

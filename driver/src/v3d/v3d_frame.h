@@ -172,12 +172,16 @@ struct v3d_fs_prog {
 	uint32_t threads;
 	bool single_seg;
 	uint32_t num_inputs;
-	/* word 0 of each flags array: M5 supports num_inputs <= 24 and all zero */
+	/* word 0 of each flags array (24 bits; the rest in flags_more); the M5
+	 * triangle builder takes num_inputs <= 24 and all-zero flags only */
 	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
 	bool writes_z, disable_ez, uses_center_w, lock_scoreboard_on_first_thrsw;
 	bool uses_implicit_point_line_varyings, uses_pid;
 	const struct v3d_uniform *uniforms;
 	uint32_t num_uniforms;
+	/* words 1 and 2 of the flags (inputs 24..63, 24 bits a word): flat 1, 2,
+	 * non-perspective 1, 2, centroid 1, 2 */
+	uint32_t flags_more[6];
 };
 
 /* The vertex or coordinate shader's prog_data (v3d_vs_prog_data). */

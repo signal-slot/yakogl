@@ -95,10 +95,12 @@ cause as `draw_buffers_indexed`), `state_query.integers.*` 17 and
   (`src/backend.rs:765-775`; ES 3.0 asks 4, the V3D TLB and compiler take 4,
   its comment says only "no board has drawn four"), the uniform component and
   block-size limits, and the compressed-format list. The `*_getfloat` /
-  `*_getinteger64` rows fail on limits whose integer query is right too (e.g.
-  `max_samples_getfloat`), so the float and 64-bit paths of
-  `get_floatv`/`get_integer64v` (`src/gl/state.rs:1040-1110`) are a separate
-  defect; not read to the line here.
+  `*_getinteger64` rows fail on the same values: dEQP registers the
+  minimum-value cases of `state_query.integers` only for the boolean, 64-bit and
+  float verifiers, and `glGetFloatv` / `glGetInteger64v` widen the
+  `glGetIntegerv` answer, so there is no separate defect in the float and
+  64-bit paths (`docs/notes/es3-shader-limits.md`, plan #359). The V3D's varying
+  and uniform-block limits are now at their minimums.
 - **Cross-effect**: raising `DRAW_TARGETS` to 4 for the V3D also changes
   `fragment_out.*` and `draw_buffers_indexed.*` and the V3D MRT clear; coordinate
   with the notes for those.

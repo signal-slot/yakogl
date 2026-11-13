@@ -1165,6 +1165,10 @@ pub struct ShcV3dFs {
     /// Bit n: the program writes colour to render target n (0..3); 0 for
     /// a program that writes no colour (a depth pre-pass).
     pub rt_mask: u8,
+    /// Words 1 and 2 of the flat, non-perspective and centroid flags (inputs
+    /// 24..47 and 48..63, 24 bits a word): flat 1, 2, non-perspective 1, 2,
+    /// centroid 1, 2. The three fields above are word 0.
+    pub flags_more: [u32; 6],
 }
 
 /// The vertex or coordinate shader of a linked program
@@ -1232,6 +1236,7 @@ impl ShcV3dFs {
         uses_implicit_point_line_varyings: 0,
         uses_pid: 0,
         rt_mask: 0,
+        flags_more: [0; 6],
     };
 
     /// The uniform stream.

@@ -283,6 +283,7 @@ pub fn program_shader(
         uses_implicit_point_line_varyings: u8::from(p.fs.uses_implicit_point_line_varyings),
         uses_pid: u8::from(p.fs.uses_pid),
         rt_mask: p.fs.rt_mask,
+        flags_more: p.fs.flags_more,
     };
 
     let mut record_of_location = [SHC_V3D_NO_RECORD; 16];

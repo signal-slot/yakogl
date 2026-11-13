@@ -596,6 +596,9 @@ static bool emit_state(const struct v3d_triangle_frame *f, struct v3d_cl *bcl)
 	if (f->fs->flat_shade_flags || f->fs->noperspective_flags || f->fs->centroid_flags ||
 	    f->fs->num_inputs > 24)
 		return false;
+	for (int i = 0; i < 6; i++)
+		if (f->fs->flags_more[i])
+			return false;
 	v3d_cl_emit(bcl, ZERO_ALL_FLAT_SHADE_FLAGS, zf);
 	v3d_cl_emit(bcl, ZERO_ALL_NON_PERSPECTIVE_FLAGS, zn);
 	v3d_cl_emit(bcl, ZERO_ALL_CENTROID_FLAGS, zc);

@@ -125,6 +125,23 @@ pub struct Code<'a> {
     pub window_cuts: u32,
 }
 
+/// Flags in one word of the varying-flags packets (`FLAT_SHADE_FLAGS` and
+/// the others): 24, the packet field.
+const FLAG_WORD_BITS: usize = 24;
+/// The most fragment shader inputs (`V3D_MAX_FS_INPUTS`, v3d_limits.h): three
+/// words of flags.
+const V3D_MAX_FS_INPUTS: usize = 64;
+
+/// A mask of up to 64 inputs as the packets' words of 24 flags.
+fn flag_words(mask: u64) -> [u32; 3] {
+    core::array::from_fn(|w| ((mask >> (FLAG_WORD_BITS * w)) & ((1 << FLAG_WORD_BITS) - 1)) as u32)
+}
+
+/// [`flag_words`] back to the mask.
+fn mask_of(words: [u32; 3]) -> u64 {
+    words.iter().enumerate().fold(0, |m, (w, &x)| m | u64::from(x) << (FLAG_WORD_BITS * w))
+}
+
 /// The fragment shader and the fields of `struct v3d_fs_prog`.
 #[derive(Clone, Copy, Debug)]
 pub struct FsProg<'a> {
@@ -135,9 +152,13 @@ pub struct FsProg<'a> {
     /// Per input, in `ldvary` order: (VARYING_SLOT_VAR0 + the FS location,
     /// component), as Mesa's `input_slots` prints.
     pub input_slots: &'a [(u8, u8)],
+    /// Word 0 of each kind of varying flags: inputs 0..23.
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
+    /// Words 1 and 2 (inputs 24..47 and 48..63) of the flat, the
+    /// non-perspective and the centroid flags, in that order.
+    pub flags_more: [u32; 6],
     /// The shader writes Z to the TLB (prog_data `writes_z`): the pass-
     /// through Z (a discard, no colour write, a read of gl_FragCoord.z) or
     /// its own `gl_FragDepth` (select.rs `TLB_Z_PER_PIXEL`).
@@ -336,7 +357,8 @@ fn vpm_fields(sel: &Selected<'_>, target: Target) -> Result<(u32, u32, u32), V3d
     /* 16 channels of 32 bits, 8 rows to a sector */
     let sectors = target.vpm_size / (16 * 4 * 8);
     let batches = (sectors / 2) / output;
-    if batches < 2 {
+    /* the record's segment size is 4 bits of sectors */
+    if batches < 2 || output > 15 {
         return Err(V3dError::VpmTooSmall);
     }
     Ok((0, output, (batches - 1).clamp(2, 4)))
@@ -417,32 +439,28 @@ pub fn compile_program_keyed<'a>(
     let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
     let inputs = fragment_inputs(&fsp, a)?;
     /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
-     * flat_shade_flags at the input's index). The job builder reads word 0
-     * only and refuses more than 24 inputs. */
-    let mut flat = 0u32;
-    /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
-     * BITSET_SET of centroid_flags, the W it multiplies by the centroid
-     * W). */
-    let mut centroid = 0u32;
+     * flat_shade_flags at the input's index). Bit i: input i is sampled at
+     * the centroid (BITSET_SET of centroid_flags, the W it multiplies by the
+     * centroid W). Up to V3D_MAX_FS_INPUTS = 64 inputs, 24 flags to the word
+     * the packets carry ([`flag_words`]). */
+    let (mut flat, mut centroid) = (0u64, 0u64);
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
             .inputs
             .iter()
             .find(|d| d.kind == IoKind::Varying && d.location == loc)
             .ok_or(V3dError::VaryingWithoutVertexOutput)?;
+        if i >= V3D_MAX_FS_INPUTS {
+            return Err(V3dError::NotYet("more than 64 fragment shader inputs"));
+        }
         if d.interp == crate::shaderc::online::ir::INTERP_FLAT {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a flat varying past input 31"));
-            }
             flat |= 1 << i;
         }
         if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a centroid varying past input 31"));
-            }
             centroid |= 1 << i;
         }
     }
+    let (flat, centroid) = (flag_words(flat), flag_words(centroid));
 
     /* Each input to the vertex shader's varying of the same name. */
     let wanted = a.alloc_filled(inputs.len(), (0u8, 0u8))?;
@@ -501,7 +519,7 @@ pub fn compile_program_keyed<'a>(
     /* LazyAttributes changes nothing in a fragment shader. */
     let (fsel, (fs_code, fs_threads)) = under_pressure(
         &[Pressure::None, Pressure::Remat, Pressure::Serial],
-        |pr| select_fragment(&fsp, inputs, flat, centroid, pr, a),
+        |pr| select_fragment(&fsp, inputs, mask_of(flat), mask_of(centroid), pr, a),
         false,
         a,
     )?;
@@ -522,9 +540,10 @@ pub fn compile_program_keyed<'a>(
             single_seg: false,
             num_inputs: inputs.len() as u32,
             input_slots: slots,
-            flat_shade_flags: flat,
+            flat_shade_flags: flat[0],
             noperspective_flags: 0,
-            centroid_flags: centroid,
+            centroid_flags: centroid[0],
+            flags_more: [flat[1], flat[2], 0, 0, centroid[1], centroid[2]],
             /* select.rs select_fragment: a discard, a read of Z, or a
              * gl_FragDepth write */
             writes_z: fsel.writes_z,
@@ -3346,6 +3365,113 @@ mod tests {
             let h = |x: f32| u32::from(sim::f32_to_half(x));
             for l in 0..LANES {
                 let want = [h(value(l, 0)) | h(value(l, 1)) << 16, h(value(l, 2)) | h(value(l, 3)) << 16];
+                let got = [o.tlb[0].value[l].unwrap(), o.tlb[1].value[l].unwrap()];
+                assert_eq!(got, want, "lane {l}");
+            }
+        })
+        .expect("scratch");
+    }
+
+    /// ES 3.0's fifteen vec4 varyings (sixty inputs), the last two flat and
+    /// centroid: the packets carry 24 flags a word, so those two vec4s (inputs
+    /// 52..59) are flags of word 2 (`flags_more`). In the interpreter each input
+    /// carries the value of its (location, component) from `input_slots`
+    /// (flat ones in C with noise in the ldvary result, as the hardware
+    /// gives them), and the colour is the sum of the fifteen vec4: a
+    /// reordered input read at the wrong index, or a flat one read from the
+    /// wrong register, shows in a component. The vertex stage writes the 60
+    /// varying rows after the position (4) and the point size (1): nine
+    /// sectors.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn fifteen_vec4_with_flat_and_centroid_last_flag_words_2_and_sum_right() {
+        use crate::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, Varying, LANES};
+        let (mut vs, mut fs) = (
+            std::string::String::from("#version 300 es\nlayout(location = 0) in vec4 p;\n"),
+            std::string::String::from("#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 o;\n"),
+        );
+        for i in 0..15 {
+            let q = match i {
+                13 => "flat ",
+                14 => "centroid ",
+                _ => "",
+            };
+            vs += &std::format!("{q}out vec4 v{i};\n");
+            fs += &std::format!("{q}in vec4 v{i};\n");
+        }
+        vs += "void main() { gl_PointSize = 1.0; gl_Position = p;\n";
+        fs += "void main() { vec4 s = vec4(0.0);\n";
+        for i in 0..15 {
+            vs += &std::format!("v{i} = p * {}.0;\n", i + 1);
+            fs += &std::format!("s += v{i};\n");
+        }
+        vs += "}\n";
+        fs += "o = s; }\n";
+        /* per lane, location and component: a multiple of 1/16, small enough
+         * that the sum of fifteen is exact in f16 */
+        let value = |l: usize, loc: u8, c: u8| ((l + 3 * loc as usize + c as usize) % 8) as f32 / 16.0;
+        let noise = 1000.0f32.to_bits();
+        store::with_scratch(|a| {
+            let vsrc = a.alloc_str(&vs).unwrap();
+            let fsrc = a.alloc_str(&fs).unwrap();
+            let v = lower::compile_to_ir(a, Stage::Vertex, vsrc).map_err(|e| e.msg).unwrap();
+            let fr = lower::compile_to_ir(a, Stage::Fragment, fsrc).map_err(|e| e.msg).unwrap();
+            let p = compile_program(&v.module, &fr.module, Prim::Triangles, TARGET, a).expect("compiles");
+            check_all(&p);
+            assert_eq!(p.fs.num_inputs, 60);
+            /* Mesa's input order: v13 is inputs 52..55 (word 2, bits 4..7), v14 inputs
+             * 56..59 (word 2, bits 8..11); words 0 and 1 are empty */
+            assert_eq!((p.fs.flat_shade_flags, p.fs.centroid_flags), (0, 0));
+            assert_eq!(p.fs.flags_more, [0, 0xf0, 0, 0, 0, 0xf00], "flat 1, 2; non-perspective 1, 2; centroid 1, 2");
+            assert_eq!(p.fs.input_slots[52].0, VARYING_SLOT_VAR0 + 13);
+            assert_eq!(p.fs.input_slots[59].0, VARYING_SLOT_VAR0 + 14);
+            let flat = |i: usize| match i / 24 {
+                0 => p.fs.flat_shade_flags,
+                w => p.fs.flags_more[w - 1],
+            } & (1 << (i % 24))
+                != 0;
+            assert!(p.vs.vpm_output_size >= 9, "65 rows are nine sectors: {}", p.vs.vpm_output_size);
+            let uniforms: std::vec::Vec<u32> =
+                p.fs.code
+                    .uniforms
+                    .iter()
+                    .map(|u| match u.contents {
+                        0 => u.data,
+                        c => panic!("uniform contents {c} not modelled here"),
+                    })
+                    .collect();
+            let varyings =
+                p.fs.input_slots
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &(slot, c))| {
+                        let loc = slot - VARYING_SLOT_VAR0;
+                        let v: [u32; LANES] = core::array::from_fn(|l| value(l, loc, c).to_bits());
+                        if flat(i) {
+                            Varying { vary: [noise; LANES], c: v }
+                        } else {
+                            /* W is 1: vary * W + C with C 0 */
+                            Varying { vary: v, c: [0; LANES] }
+                        }
+                    })
+                    .collect();
+            let inputs = FsInputs {
+                w: [1.0f32.to_bits(); LANES],
+                w_centroid: [1.0f32.to_bits(); LANES],
+                z: [0; LANES],
+                x: [0; LANES],
+                y: [0; LANES],
+                back_facing: [false; LANES],
+                varyings,
+            };
+            let env = Env { threads: p.fs.threads, ..Env::default() };
+            let o = sim::run(p.fs.code.words, &uniforms, &Inputs::Fragment(std::boxed::Box::new(inputs)), &env)
+                .expect("runs");
+            assert_eq!(o.tlb.len(), 2, "one f16 colour, two TLB words");
+            let h = |x: f32| u32::from(sim::f32_to_half(x));
+            for l in 0..LANES {
+                let sum = |c: u8| (0..15u8).map(|loc| value(l, loc, c)).sum::<f32>();
+                let want = [h(sum(0)) | h(sum(1)) << 16, h(sum(2)) | h(sum(3)) << 16];
                 let got = [o.tlb[0].value[l].unwrap(), o.tlb[1].value[l].unwrap()];
                 assert_eq!(got, want, "lane {l}");
             }

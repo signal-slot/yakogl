@@ -647,7 +647,8 @@ fn every_refusal_has_an_info_log() {
     }
     /* V3D (the Pi 4): `centroid` is refused at link, by name
      * (`NotYet("centroid varying")`, src/shaderc/online/v3d), and so are
-     * flat varyings past input 31 and more than its varyings. Ratchets. */
+     * programs whose fragment shader runs out of registers and more than its
+     * varyings. Ratchets. */
     #[cfg(feature = "gpu-v3d")]
     {
         assert!(refused_mustpass <= 55, "{refused_mustpass} mustpass programs refused, ceiling 55");
@@ -1203,8 +1204,12 @@ mod gl_api {
             ("Abi(LoadBalancingTempsUnmeasured {", false),
             #[cfg(feature = "gpu-v3d")]
             ("Abi(TooManyVaryings { got: ", true),
+            /* the 15 vec4 varyings the V3D now takes (60 inputs, the flags in three words)
+             * reach the code generator, and a fragment shader of that many inputs plus its
+             * own values can run out of the registers of 2 threads (select.rs, the
+             * pressure steps end at `Serial`) */
             #[cfg(feature = "gpu-v3d")]
-            ("varying past input 31", false),
+            ("more live values than 2 threads have registers", false),
         ];
         for (name, vectors, r) in &refused {
             let log = format!("{r:?}");

@@ -243,8 +243,32 @@ samplers), RC6 and RC15; no single item.
 `state_query` 25 and `implementation_limits` 11: ES 3.0 limits read as float
 or 64-bit integers, uniform-block and varying component limits below the ES
 3.0 minimum, the compressed-format list, `max_draw_buffers` and
-`max_color_attachments` 3 (RC14). Item `es3-caps` (the ES 3.0 limits test was
-reverted for review and is to be redone).
+`max_color_attachments` 3 (RC14). The design, per GPU, is
+`docs/notes/es3-shader-limits.md` (plan #359); the limits test is
+`tests/es3_caps.rs`.
+
+**The `*_getfloat` and `*_getinteger64` rows are not a separate defect.** dEQP
+registers the `state_query.integers` minimum-value cases only for the boolean,
+64-bit and float verifiers (the integer form is `implementation_limits`), and
+`glGetFloatv` and `glGetInteger64v` answer the number `glGetIntegerv` does
+(`state.rs`), so those rows failed on the value below the minimum and on nothing
+else. `tests/es3_limits_v3d.rs` and `tests/es3_v3d_varyings.rs` pin the three
+forms of each limit.
+
+| Limit | State |
+|---|---|
+| `MAX_VARYING_VECTORS` / `_COMPONENTS`, `MAX_FRAGMENT_INPUT_COMPONENTS` | met on all three (V3D 15 / 60 / 60: `tests/es3_v3d_varyings.rs`) |
+| `MAX_VERTEX_OUTPUT_COMPONENTS` | V3D 64 (met); PowerVR and GC7000UL 60: 64 is [U], issue drafts in the note |
+| `MAX_UNIFORM_BLOCK_SIZE`, `MAX_COMBINED_*_UNIFORM_COMPONENTS` | V3D 16384 / 50688 (met: `tests/es3_v3d_ubo_size.rs`); PowerVR and GC7000UL 6144 / 1536: the memory-load path, issue drafts in the note |
+| `MAX_DRAW_BUFFERS`, `MAX_COLOR_ATTACHMENTS` | 3: RC14 (board) |
+| `MAX_SAMPLES` | 1: RC8 |
+| `NUM_COMPRESSED_TEXTURE_FORMATS`, `COMPRESSED_TEXTURE_FORMATS` | plan #354 |
+
+Raising the V3D's varyings moved dEQP programs from a link refusal to the code
+generator: a fragment shader of 60 inputs plus its own values can need more
+registers than 2 threads have (`more live values than 2 threads have registers`,
+`random.interleaved.triangles.173`); that is a compiler gap, not a limit
+(`tests/es3_shaderc_infolog.rs`).
 
 ### RC11. Occlusion queries
 
