@@ -312,3 +312,227 @@ pub const fn ts_mem_config(c: TsMemConfig) -> u32 {
         | (if c.color_auto_disable { TS_MEM_COLOR_AUTO_DISABLE } else { 0 })
         | (if c.depth_auto_disable { TS_MEM_DEPTH_AUTO_DISABLE } else { 0 })
 }
+
+// ---------------------------------------------------------------------------
+// Board probe case 243 `tsprobe` (docs/notes/gc-ts-probe.md, "Part (iii)").
+// Pure: what the case reads back becomes an outcome code and a page word.
+// No stream is built here.
+// ---------------------------------------------------------------------------
+
+/// The page tag of arm `a`'s result page (`0xd0 + a`, a = 0..=3).
+pub const PROBE_TAG_ARM: u32 = 0xd0;
+/// The page tag of arm `a`'s K3 map page: `0xd4 + a`.
+pub const PROBE_TAG_K3: u32 = 0xd4;
+/// The page tag of arm `a`'s first-difference page: `0xd8 + a`.
+pub const PROBE_TAG_DIFF: u32 = 0xd8;
+/// K1's fill value, read back from `T`.
+pub const PROBE_FILL: u32 = TS_CLEAR_VALUE;
+/// Dwords of the 64x64 A8R8G8B8 surface.
+pub const PROBE_DWORDS: usize = 64 * 64;
+/// Dwords of `T` checked after K1.
+pub const PROBE_TS_DWORDS: usize = 64;
+/// The value `D` holds before a resolve.
+pub const PROBE_DEST_INIT: u32 = 0xdead_beef;
+/// `C`: Mesa's clear word for (0.25, 0.5, 0.75, 1.0) in A8R8G8B8.
+pub const PROBE_CLEAR: u32 = 0xff40_80bf;
+/// A guard dword's value.
+pub const PROBE_GUARD: u32 = 0xa5a5_a5a5;
+
+/// The outcome of one arm; the value is page word w1's low nibble.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum Outcome {
+    /// A fence timeout in any step.
+    Hang = 0xf,
+    /// A guard dword changed, or `S` changed in K1/K2.
+    Guard = 1,
+    /// K0's `D` is not `detile(B)`: the RS does not read this layout.
+    NoControl = 2,
+    /// After K1, `T[0..64]` is not `0x11111111`.
+    FillMiss = 3,
+    /// K2's `D` is `C` everywhere.
+    Yes = 4,
+    /// K2's `D` is `detile(B)`: the TS was ignored.
+    Ignored = 5,
+    /// K2's `D` is still `0xdeadbeef`.
+    NoWrite = 6,
+    /// Anything else.
+    Mixed = 7,
+}
+
+/// What one arm reads back. Slices may be empty for a step that did not run
+/// (only after a hang, which is classified first).
+#[derive(Clone, Copy, Debug)]
+pub struct ProbeReadback<'a> {
+    /// Fence timeouts over all steps of the arm.
+    pub fence_timeouts: u32,
+    /// Guard dwords that differ from [`PROBE_GUARD`], all objects.
+    pub guard_changed: u32,
+    /// `S` differs from `B` after K1 or K2.
+    pub surface_changed: bool,
+    /// `detile(B)`: the 4096 dwords K0 and an ignoring K2 must give.
+    pub expected_b: &'a [u32],
+    /// K0's `D`.
+    pub k0_d: &'a [u32],
+    /// `T[0..64]` after K1.
+    pub k1_t: &'a [u32],
+    /// K2's `D`.
+    pub k2_d: &'a [u32],
+    /// `C`, the clear word K2 should return.
+    pub clear: u32,
+}
+
+/// The outcome code: the first row of the note's table that holds.
+pub fn classify(r: &ProbeReadback) -> Outcome {
+    if r.fence_timeouts != 0 {
+        return Outcome::Hang;
+    }
+    if r.guard_changed != 0 || r.surface_changed {
+        return Outcome::Guard;
+    }
+    if r.k0_d.len() != PROBE_DWORDS || r.k0_d != r.expected_b {
+        return Outcome::NoControl;
+    }
+    if r.k1_t.len() < PROBE_TS_DWORDS || r.k1_t[..PROBE_TS_DWORDS].iter().any(|&w| w != PROBE_FILL) {
+        return Outcome::FillMiss;
+    }
+    let d = r.k2_d;
+    if d.len() == PROBE_DWORDS {
+        if d.iter().all(|&w| w == r.clear) {
+            return Outcome::Yes;
+        }
+        if d == r.expected_b {
+            return Outcome::Ignored;
+        }
+        if d.iter().all(|&w| w == PROBE_DEST_INIT) {
+            return Outcome::NoWrite;
+        }
+    }
+    Outcome::Mixed
+}
+
+/// `count(D == C) << 16 | count(D == detile(B))` (page w3 of the arm and
+/// K3 pages); each count is of 4096 and fits 16 bits.
+pub fn probe_counts(d: &[u32], clear: u32, expected_b: &[u32]) -> u32 {
+    let c = d.iter().filter(|&&w| w == clear).count() as u32;
+    let b = d.iter().zip(expected_b).filter(|(a, b)| a == b).count() as u32;
+    (c << 16) | (b & 0xffff)
+}
+
+/// The tag of arm `arm`'s result page (`0xd0 + arm`).
+pub const fn probe_tag(arm: u32) -> u32 {
+    PROBE_TAG_ARM + arm
+}
+
+/// Page w1 of an arm page: `code | arm << 4 | steps_done << 8 |
+/// fence_timeouts << 16`.
+pub const fn probe_w1(code: Outcome, arm: u32, steps_done: u32, fence_timeouts: u32) -> u32 {
+    (code as u32) | (arm << 4) | (steps_done << 8) | (fence_timeouts << 16)
+}
+
+/// `nibble_order` bit 0 of a K3 page: the low nibble covers the first granule.
+pub const K3_LOW_NIBBLE_FIRST: u32 = 1;
+/// `nibble_order` bit 1 of a K3 page: arm 3 matched `SuperOrder::Interleaved`.
+pub const K3_INTERLEAVED: u32 = 2;
+
+/// Page w1 of a K3 page (`0xd4 + arm`): the row-0 map | `nibble_order << 8`.
+pub const fn probe_k3_w1(row0_map: u32, nibble_order: u32) -> u32 {
+    (row0_map & 0xff) | (nibble_order << 8)
+}
+
+/// Page w1 of a first-difference page (`0xd8 + arm`): the index of the first
+/// dword of K2's `D` that is neither `C` nor `detile(B)`, `<< 16`, with the
+/// low half of the value read; `0xffff_ffff` when there is none.
+pub fn probe_diff_w1(d: &[u32], clear: u32, expected_b: &[u32]) -> u32 {
+    for (i, (&w, &b)) in d.iter().zip(expected_b).enumerate() {
+        if w != clear && w != b {
+            return ((i as u32) << 16) | (w & 0xffff);
+        }
+    }
+    0xffff_ffff
+}
+
+/// Page w3 of a first-difference page: the first index of `T` that is not
+/// `0x11111111` after K1 (`0xffff` when none) `<< 16 | ` the count of changed
+/// guard dwords (low 16 bits).
+pub fn probe_diff_w3(k1_t: &[u32], guard_changed: u32) -> u32 {
+    let first = k1_t.iter().take(PROBE_TS_DWORDS).position(|&w| w != PROBE_FILL).map_or(0xffff, |i| i as u32);
+    (first << 16) | (guard_changed & 0xffff)
+}
+
+/// A surface layout for K3: a copy of `layout.rs`'s `Layout::Tiled` and
+/// `Layout::SuperTiled` with `SuperOrder::Drm` / `Interleaved` (4x4 tiles,
+/// 64x64 super-tiles). The test compares [`k3_offset`] with
+/// `yakogl::vivante::layout::offset_in`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum K3Layout {
+    Tiled,
+    SuperTiledDrm,
+    SuperTiledInterleaved,
+}
+
+/// Byte offset of pixel `(x, y)` of a 32-bit surface with `stride` bytes per
+/// padded linear row (`layout.rs`: `offset_in`, `tile_index`, `super_index`).
+pub const fn k3_offset(layout: K3Layout, x: u32, y: u32, stride: u32) -> usize {
+    let (xs, ys, s) = (x as usize, y as usize, stride as usize);
+    let tile = ((y & 3) * 4 + (x & 3)) as usize;
+    match layout {
+        K3Layout::Tiled => (ys & !3) * s + 4 * ((xs & !3) << 2) + 4 * tile,
+        _ => {
+            let (px, py) = (x & 63, y & 63);
+            let hi = if matches!(layout, K3Layout::SuperTiledDrm) {
+                ((px & 0x04) << 2) | ((py & 0x0c) << 3) | ((px & 0x38) << 4) | ((py & 0x30) << 6)
+            } else {
+                ((px & 0x04) << 2)
+                    | ((py & 0x04) << 3)
+                    | ((px & 0x08) << 3)
+                    | ((py & 0x08) << 4)
+                    | ((px & 0x10) << 4)
+                    | ((py & 0x10) << 5)
+                    | ((px & 0x20) << 5)
+                    | ((py & 0x20) << 6)
+            };
+            (ys & !63) * s + 4 * ((xs & !63) << 6) + 4 * (tile + hi as usize)
+        }
+    }
+}
+
+/// K3's expected map: entry `y * width + x` is true when pixel `(x, y)` of
+/// the 32-bit `width` x `height` surface lies in a TS granule of `ts` whose
+/// nibble reads "cleared" (1), so the resolve returns `C` there and `B`
+/// elsewhere. One nibble covers `tile_size(mode)` bytes of surface in offset
+/// order; granule n's nibble is the low half of byte n/2 for even n when
+/// `low_nibble_first`, else the high half (and the other way for odd n).
+pub fn k3_expected_clear(
+    layout: K3Layout,
+    width: u32,
+    height: u32,
+    mode: u32,
+    ts: &[u8],
+    low_nibble_first: bool,
+) -> Vec<bool> {
+    let stride = width * 4;
+    let mut out = Vec::with_capacity((width * height) as usize);
+    for y in 0..height {
+        for x in 0..width {
+            let n = k3_offset(layout, x, y, stride) / tile_size(mode) as usize;
+            let byte = ts.get(n / 2).copied().unwrap_or(0);
+            let low = (n % 2 == 0) == low_nibble_first;
+            let nib = if low { byte & 0xf } else { byte >> 4 };
+            out.push(nib == 1);
+        }
+    }
+    out
+}
+
+/// Row 0's map for the page: bit k set when dword `8k` of row 0 (k = 0..8)
+/// is cleared in [`k3_expected_clear`]'s result for a surface `width` wide.
+pub fn k3_row0_map(clear: &[bool], width: u32) -> u32 {
+    let mut m = 0;
+    for k in 0..8u32 {
+        if 8 * k < width && clear[(8 * k) as usize] {
+            m |= 1 << k;
+        }
+    }
+    m
+}
