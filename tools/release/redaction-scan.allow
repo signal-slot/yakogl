@@ -18,6 +18,9 @@ drop | * | * | <(user|login)@(host|board)> | placeholder
 # The RFC 1918 fixtures that the console redaction self-test rewrites.
 drop | private-ipv4 | tools/board_selftest.sh | \b(10\.11\.12\.(1|13)|172\.16\.0\.9)\b | redact_dir fixture input (RFC 1918)
 drop | private-ipv4 | tools/cts/pr-session-selftest.sh | secret-user@10\.9\.8\.7\b | fixture of the self-test's BOARD_HOST refusal
+drop | private-ipv4 | tools/cts/x2-scene-table-selftest.sh | \b10\.11\.12\.13\b | fixture the table must never print (RFC 1918)
+# QEMU's user-mode network (-netdev user): its fixed gateway, TFTP and DHCP server.
+drop | private-ipv4 | driver/tools/uboot-mp2/qemu/* | \b10\.0\.2\.2\b | QEMU's documented slirp server address, not a lab value
 # The preflight selftest's fake BOARD_UART canary (a look-alike, never a real value).
 drop | password | tools/cts/imx8mp-gles3-preflight-selftest.sh | SECRET\=ttyUSB | selftest fixture: the fake UART string the test asserts the preflight never prints
 # Product defaults and keywords.
