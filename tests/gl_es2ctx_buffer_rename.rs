@@ -17,6 +17,8 @@
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,report-es2 --test gl_es2ctx_buffer_rename
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test gl_es2ctx_buffer_rename
+//! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_buffer_rename
+//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --test gl_es2ctx_buffer_rename
 //! ```
 //!
 //! The context is the smallest OSAL and back end that make one, as in
