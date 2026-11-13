@@ -61,6 +61,7 @@ info | email | tools/vivante/*.patch | @gmail\.com\b | upstream: etnaviv author 
 drop | email | tools/board_selftest.sh | tester[@]pi5-fake\.example\b | RFC 2606 .example fake BOARD_HOST of the pi5 dry-run self-test
 drop | private-ipv4 | tools/board_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a fake ssh error that must be redacted
 drop | private-ipv4 | tools/board_selftest.sh | \b10\.20\.30\.40\b | private-range input of a redaction test: console line that redact_run rewrites
+drop | private-ipv4 | tools/cts/x2-scene-table-selftest.sh | \b10\.137\.22\.9\b | private-range input of a redaction test: a console line and an INDEX line the table tool must not carry
 drop | login-at-host | tools/board_selftest.sh | root[@]t6fake-host\b | fake BOARD_HOST of the NanoPC-T6 run self-test (a look-alike, never a real host; stub ssh answers it): the test checks that no record carries it
 drop | private-ipv4 | tools/cts/mali-slice-readme-selftest.sh | \b10\.1\.2\.3\b | private-range input of a refusal test: the slice check must refuse it
 drop | login-at-host | tools/cts/mali-slice-readme-selftest.sh | root[@]board\b | input of a refusal test: the slice check must refuse it
