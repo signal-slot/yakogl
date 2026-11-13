@@ -952,7 +952,7 @@ pub unsafe extern "C" fn glPopGroupMarkerEXT() {
 
 /// The most values one glGet* pname writes: GL_COMPRESSED_TEXTURE_FORMATS
 /// lists every stored compressed format; no other pname writes more than four.
-const STATE_VALUES: usize = 8;
+const STATE_VALUES: usize = 16;
 const _: () = assert!(texture::COMPRESSED_FORMATS.len() <= STATE_VALUES);
 
 /// Float-valued state: fills `out` and returns the value count, 0 if pname is
@@ -3296,9 +3296,11 @@ mod tests {
     }
 
     /// The list has the advertised length and names the stored formats: the
-    /// three linear ones everywhere, and the sRGB ETC2 pair in an ES 3.0
-    /// report on the PowerVR and the GC7000UL, the back ends whose sampler
-    /// decodes them (`backend::PVR_SAMPLED_TEXFMTS`, `GC_SAMPLED_TEXFMTS`).
+    /// three linear ones everywhere, and in an ES 3.0 report the sRGB ETC2
+    /// pair (the back ends whose sampler decodes them: the PowerVR, the
+    /// GC7000UL and the V3D, `backend::*_SAMPLED_TEXFMTS`) and the six the GL
+    /// core decodes at upload: the ten formats ES 3.0 requires and the ETC1
+    /// name.
     #[test]
     fn compressed_format_list_has_the_advertised_length() {
         let gl = TestGl::new(8, 8);
@@ -3311,8 +3313,20 @@ mod tests {
             GL_COMPRESSED_RGB8_ETC2 as GLint,
             GL_COMPRESSED_RGBA8_ETC2_EAC as GLint
         ];
-        if (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante")) && !crate::REPORT_ES2 {
+        if (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante") || cfg!(feature = "gpu-v3d"))
+            && !crate::REPORT_ES2
+        {
             want.extend([GL_COMPRESSED_SRGB8_ETC2 as GLint, GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC as GLint]);
+        }
+        if !crate::REPORT_ES2 {
+            want.extend([
+                GL_COMPRESSED_R11_EAC as GLint,
+                GL_COMPRESSED_SIGNED_R11_EAC as GLint,
+                GL_COMPRESSED_RG11_EAC as GLint,
+                GL_COMPRESSED_SIGNED_RG11_EAC as GLint,
+                GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 as GLint,
+                GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2 as GLint,
+            ]);
         }
         assert_eq!(n as usize, want.len());
         assert_eq!(f[..want.len()], want[..]);

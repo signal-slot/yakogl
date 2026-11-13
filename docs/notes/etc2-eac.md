@@ -10,9 +10,12 @@ and is not one of the ten). This note is about the other six and why they do
 not get a class of their own yet. Function names are the address; line
 numbers are of main at `6dc53970` and drift.
 
-Status when this was written: the decoder (`src/gl/etc2.rs`), the six names
-in the GL core, the V3D mask bits and the dEQP runs are other items of the
-plan and were not on main. Nothing here was measured on a board.
+Status: the decoder (`src/gl/etc2.rs`, checked against Mesa 26.2.1's decoder
+by its own tests, 21000 random blocks agreeing), the six names in the GL core (`DECODED_ETC2` in
+`src/gl/texture.rs`) and the V3D mask bits are on main
+(`tests/es3_etc2_eac.rs`, `tests/es3_etc2_v3d.rs`). The record field is
+`GlTexture.etc2_decoded` (a code, 0 for none), not `decoded_from`. Nothing here
+was measured on a board; the host dEQP runs are in section 7.
 
 ## 1. The decision
 
@@ -35,7 +38,7 @@ texel against 8; RGBA8 32 bits against 4). This is what Mesa's `util_format`
 does when a driver has no hardware for a compressed format.
 
 A format is stored only if the build is not `report-es2` and the back end
-samples its decode class (`backend::sampled_texfmts()`, the same test
+samples its decode class (`DECODED_ETC2`'s `class`) (`backend::sampled_texfmts()`, the same test
 `stored_compressed_format` applies to the sRGB pair today). The four native
 formats stay native. The Mali samples none of the decode targets, so the six
 stay `GL_INVALID_ENUM` there.
@@ -87,14 +90,15 @@ including the sRGB 6-bit one.
 
 ## 4. The GL core's rules for a decoded texture
 
-- `GlTexture.decoded_from` (a new field; grep `tests/` and `src/` for struct
-  literals of `GlTexture` when it is added) records the compressed name.
+- `GlTexture.etc2_decoded` (a byte in what was padding, mirrored in
+  `src/gl_context.h`) records which decode filled the texture.
 - `glCompressedTexSubImage*` must use the same name; any other is
   `GL_INVALID_OPERATION`. A sub-image must be block aligned as for any
   compressed format; the blocks are decoded into the stored texels.
-- `glCopyTexSubImage*`, `glGenerateMipmap`, colour-renderability
-  (`src/gl/framebuffer.rs`) and EGLImage export (`src/gl/egl.rs`) are refused:
-  they would read or write texels that are not the compressed data.
+- `glTexSubImage*`, `glCopyTexSubImage*`, `glGenerateMipmap` and
+  colour-renderability (`src/gl/framebuffer.rs` `attachment_storage`) are
+  refused: they would read or write texels that are not the compressed data.
+  EGLImage export (`src/gl/egl.rs`) is not guarded (a gap).
 - A level-0 respecify with another format, or `glTexStorage*`, clears
   `decoded_from`. (`glTexStorage` with a compressed format is not supported
   by the GL core today; that is a separate gap.)
@@ -148,3 +152,23 @@ Mesa's outputs, the GL core's rules and the draw path on the interpreter or
 the back end's host tests; whether the PowerVR TPU, the V3D TMU and the GC
 sample R16F, RGBA16F and SRGB8_A8 at the tolerances above on silicon is the
 boards' to show (#313 AM62P, #320 Pi 4, #316 i.MX8MP).
+
+## 7. Host dEQP, and what the host can show
+
+The before-and-after host runs of plan #354 item 6 (`texture.wrap.*etc2*`,
+`*eac*`, `texture.format.compressed.*`, `implementation_limits` and
+`state_query` compressed rows, `texture.shadow`, `GPU=v3d|powervr|vivante`)
+were not made: the patched VK-GL-CTS checkout at `93bca01` is not in the
+dependency cache and could not be fetched and built in the session that
+landed this. What the host would show, when run (`tools/cts/README.md` 2b): the
+Linux OSAL keeps the command stream and runs none of it, so every read-back is
+black. It can show the upload and compile outcomes: that no compressed case is
+`NotSupported` or `GL_INVALID_ENUM` any more, and that the list rows read 11. It
+cannot show a picture verdict: the `texture.wrap` and `texture.format`
+compressed cases and the 432 `texture.shadow` cases compare rendered
+images, so they are a board run (#313 AM62P, #320 Pi 4, #316 i.MX8MP). The
+host evidence in the tree instead is the decoder against Mesa's
+(the tests in `src/gl/etc2.rs`), the storage contents (`tests/es3_etc2_eac.rs`),
+the V3D texture records and sampler records through the real back end
+(`tests/es3_etc2_v3d.rs`) and the unit tests of `sampler_for`
+(`src/v3d/backend_tests.rs`).
