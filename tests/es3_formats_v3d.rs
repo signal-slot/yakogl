@@ -33,8 +33,10 @@
 //! 32-bit floats either (Mesa's v3d_screen.c sets no texture_float_linear).
 //!
 //! `gl_rig` (below) drives the GL API over the real V3D back end, with the job
-//! builder faked: RGBA16F, R16F and R32F render targets are complete and read
-//! back a clear, and RGB565, RGBA16F and R16F textures reach the TMU.
+//! builder faked: RGBA16F and R16F render targets are complete and read back a
+//! clear (so is an R32F one while the build makes it colour-renderable; ES 3.0
+//! does not, only GL_EXT_color_buffer_float does, so the row checks that the
+//! extension is not listed and is skipped when the target is incomplete), and RGB565, RGBA16F and R16F textures reach the TMU.
 //!
 //! tools/check.sh runs this file in the V3D_CONFIG row. Compiles to nothing
 //! under report-es2 (no ES 3.0 storage class is used there).
@@ -1205,6 +1207,29 @@ mod trampolines {
 
     const SIDE: i32 = 8;
 
+    /// Is a 1x1 R32F texture attached as colour attachment 0 a complete
+    /// framebuffer?
+    fn r32f_texture_target_complete() -> bool {
+        let (mut tex, mut fbo) = (0u32, 0u32);
+        // SAFETY: plain GL calls with live out pointers; null pixels only allocate.
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F as GLint, 1, 1, 0, GL_RED, GL_FLOAT, core::ptr::null());
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            let complete = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fbo);
+            glDeleteTextures(1, &tex);
+            while glGetError() != GL_NO_ERROR {}
+            complete
+        }
+    }
+
     /// A texture of `internal` (`format`/`type_`, no texels) attached to a
     /// framebuffer: the status the GL core gives it, and what a clear to
     /// (0.5, 0.25, 0.75, 1) reads back as RGBA/FLOAT.
@@ -1539,6 +1564,13 @@ mod trampolines {
     #[test]
     fn r32f_target_is_complete_and_clears() {
         let _g = rig();
+        if !r32f_texture_target_complete() {
+            // SAFETY: GL_EXTENSIONS is a NUL-terminated string the core owns.
+            let ext = unsafe { CStr::from_ptr(glGetString(GL_EXTENSIONS) as *const c_char) }.to_str().unwrap();
+            assert!(!ext.split(' ').any(|e| e == "GL_EXT_color_buffer_float"), "{ext}");
+            eprintln!("skip: R32F is not colour-renderable here and GL_EXT_color_buffer_float is not listed");
+            return;
+        }
         let (status, px) = clear_and_read(GL_R32F, GL_RED, GL_FLOAT);
         assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
         assert!(px.chunks(4).all(|p| p == [0.5, 0.0, 0.0, 1.0]), "{:?}", &px[..8]);
