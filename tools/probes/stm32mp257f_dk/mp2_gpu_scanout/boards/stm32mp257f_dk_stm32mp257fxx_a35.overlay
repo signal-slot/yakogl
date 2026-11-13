@@ -1,0 +1,108 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * mp2_gpu_scanout: the GPU and the DK's display path. The display nodes are
+ * mp2_display's overlay unchanged (LTDC -> DSI -> ADV7535 -> HDMI as yakogl
+ * devices); &gpu is the board layer's app.overlay for gc_triangle
+ * (driver/zephyr/lib/board/stm32mp2/app.overlay). The probe's own overlay:
+ * the board and SoC files stay without it.
+ *
+ *   &gpu     the SoC's vivante,gc node (0x48280000, SPI 183) with the
+ *            board's 64 MiB no-map gpu-reserved carveout at 0xfa800000
+ *            (RISAF4 region 10, non-secure, CID0/1 r/w): the scanned-out
+ *            buffer is allocated there (gc_render_alloc), not in ltdc_fb
+ *   &i2c2   stm32mp251.dtsi:935-936 (0x40130000), the bus of the bridge
+ *            (stm32mp257f-dk.dts:395)
+ *   adv7535  stm32mp257f-dk.dts:428-433: reg 0x3d with the secondary maps
+ *            0x3f (edid), 0x3c (cec), 0x38 (packet), four DSI lanes
+ *   dsi      stm32mp255.dtsi:123-133 (0x48000000), its output to the bridge
+ *            (stm32mp257f-dk.dts:328-350)
+ *   ltdc     stm32mp251.dtsi:2150 (0x48010000), its output to the DSI
+ *            (stm32mp257f-dk.dts:536-547)
+ *   ltdc_fb  the frame buffer, 0xb0000000, 32 MiB no-map: past the image's
+ *            load end, inside RISAF4 region 9 (non-secure, CID0/1 r/w),
+ *            below 4 GiB (docs/notes/stm32mp257f-dk-display-bringup.md,
+ *            "Where the image lives and the proposed framebuffer"); the
+ *            driver's own buffer, scanned out until the probe flips to the
+ *            GPU's (stm32_ltdc_set_fb)
+ *
+ * The clocks are what the board layer's power-on sets and reads back
+ * (display_power_mp2.c over soc::stm32mp2::display): ck_ker_i2c2 is
+ * FLEXGEN_12 at 100 MHz, the DSI PHY reference FLEXGEN_28 at 27 MHz, the
+ * LTDC's pixel clock FLEXGEN_27 at the chosen mode's rate.
+ *
+ * Left out, on purpose:
+ *   - the bridge's INT (GPIO B4) and reset (GPIO B6) lines
+ *     (stm32mp257f-dk.dts:436-438): the board layer configures both pins and
+ *     pulses the reset; no GPIO controller in this tree, the HPD is read
+ *     from the chip.
+ *   - interrupts of the LTDC (frames and flips are polled).
+ */
+
+/ {
+	chosen {
+		yakogl,ltdc-fb = &ltdc_fb;
+	};
+
+	reserved-memory {
+		ltdc_fb: framebuffer@b0000000 {
+			reg = <0xb0000000 DT_SIZE_M(32)>;
+			no-map;
+		};
+	};
+
+	soc {
+		i2c2: i2c@40130000 {
+			compatible = "yakogl,stm32mp2-i2c";
+			reg = <0x40130000 0x400>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clock-frequency = <400000>;
+			kernel-clock-frequency = <100000000>;
+			status = "okay";
+
+			adv7535: hdmi@3d {
+				compatible = "yakogl,adv7535";
+				reg = <0x3d>;
+				edid-reg = <0x3f>;
+				cec-reg = <0x3c>;
+				packet-reg = <0x38>;
+				adi,dsi-lanes = <4>;
+				status = "okay";
+			};
+		};
+
+		dsi: dsi@48000000 {
+			compatible = "yakogl,stm32-dsi";
+			reg = <0x48000000 0x800>;
+			data-lanes = <4>;
+			bridge = <&adv7535>;
+			pll-ref-frequency = <27000000>;
+			/* the LTDC driver sets the chosen mode's (stm32_dsi_set_mode) */
+			pixel-clock-frequency = <148500000>;
+			status = "okay";
+		};
+
+		/* hactive x vactive: the largest mode the driver may choose,
+		 * 1920x1080@60 when the EDID prefers it, else 1280x720@60; one
+		 * 1080p XRGB8888 frame (pitch 7680) fits fb-size. */
+		ltdc: display-controller@48010000 {
+			compatible = "yakogl,stm32-ltdc";
+			reg = <0x48010000 0x400>;
+			hactive = <1920>;
+			vactive = <1080>;
+			pixel-format = "argb8888";
+			fb-size = <0x800000>;
+			dsi-host = <&dsi>;
+			status = "okay";
+		};
+	};
+};
+
+/* The GPU, as the board layer's app.overlay has it for gc_triangle: the core
+ * clock's rate only sizes the front end's idle-loop WAIT. */
+&gpu {
+	clock-frequency = <800000000>;
+	status = "okay";
+};
