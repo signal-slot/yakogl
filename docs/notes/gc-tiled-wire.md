@@ -47,6 +47,19 @@ off every stream is today's. No board has run them: see
 | W3 depth layouts | `ds_cache.rs` `Surface::layout`, `select_in`, `layout_free`, `pe_private` | `a_depth_surface_keeps_its_layout_while_it_holds_contents` and the three after it |
 | W4 shadows | `tiled_rt.rs`, `backend.rs` `tiled_rt_spec`, `tiled_rt_enter`, `frame_submit` | `a_depth_tested_draw_renders_into_a_tiled_shadow_the_rs_copies_back` and the five after it |
 | W5 early depth | `backend.rs` `tiled_ez`, `draw_ez`, `emit_pe_state`, `emit_ra_state`, `pe_key` | `a_draw_into_a_tiled_shadow_takes_early_depth_and_nothing_else_does` |
+| the slow scenes, knob on | `tiled_rt::counts` (runs, RS tile-ins, RS write-backs) | `tests/gc_scene_kicks.rs` `tiled_rt` (check.sh row `test-knobs,report-es2`) |
+
+What the knob reaches in glmark2's slow scenes (the host harness, both GPU
+models): **terrain only**, 2 runs, 1 tile-in and 2 write-backs a frame (the
+terrain pass opens with a whole clear; the overlay is tiled in), at no kick,
+wait, `finish()`, CPU copy or resolve more than with the knob off. **shadow and
+refract take no shadow**: shadow's 1600x1200 depth pass has no colour target
+for one, and their other depth-tested draws are into the window (the
+window's depth) and refract's 1600x1200 pass (a depth texture the next
+draws sample), both of which `ds_cache::pe_private`
+keeps linear, as W3 says. So session A's shadow and refract knob-on images
+record the knob-off streams; a gain there waits on W12 (depth textures tiled)
+and W13 (the window tiled).
 
 Where the code differs from the design below:
 

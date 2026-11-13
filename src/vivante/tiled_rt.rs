@@ -41,6 +41,7 @@ use super::regs::*;
 use crate::backend::GlesDraw;
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Bytes a pixel of a target this path takes.
 pub const BPP: u32 = 4;
@@ -229,6 +230,44 @@ pub fn release_all() {
         }
     }
     s.clock = 0;
+}
+
+/// What the shadows did in the streams recorded since the process began:
+/// runs opened (a draw that makes a shadow `Active` that was not), RS
+/// tile-ins (linear to tiled) and RS write-backs (tiled to linear). Read by
+/// the glmark2 scene harness (`tests/gc_scene_kicks.rs`, `tiled_rt`); the
+/// counts move no stream.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Counts {
+    pub runs: u32,
+    pub tile_ins: u32,
+    pub resolves: u32,
+}
+
+static RUNS: AtomicU32 = AtomicU32::new(0);
+static TILE_INS: AtomicU32 = AtomicU32::new(0);
+static RESOLVES: AtomicU32 = AtomicU32::new(0);
+
+/// The running [`Counts`].
+pub fn counts() -> Counts {
+    Counts {
+        runs: RUNS.load(Ordering::Relaxed),
+        tile_ins: TILE_INS.load(Ordering::Relaxed),
+        resolves: RESOLVES.load(Ordering::Relaxed),
+    }
+}
+
+/// A run opened; `tiled_in` when the RS tiled the storage in for it.
+pub(super) fn count_run(tiled_in: bool) {
+    RUNS.fetch_add(1, Ordering::Relaxed);
+    if tiled_in {
+        TILE_INS.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// An RS write-back of a shadow into its storage.
+pub(super) fn count_resolve() {
+    RESOLVES.fetch_add(1, Ordering::Relaxed);
 }
 
 /// Shadows held (a test reads it).

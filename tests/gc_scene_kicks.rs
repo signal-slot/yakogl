@@ -167,3 +167,109 @@ fn refract_a_frame_within_its_ceilings() {
     check("refract", Gpu::Lag, &run(Gpu::Lag, refract), &REFRACT_LAG);
     check("refract", Gpu::Done, &run(Gpu::Done, refract), &REFRACT_DONE);
 }
+
+/* ---- the gc_tiled_rt knob on ---------------------------------------------------------- */
+
+/// The three scenes with the `gc_tiled_rt` test knob on
+/// (docs/notes/gc-tiled-wire.md W4 and W5, plan #355): a depth-tested draw
+/// into a 32-bit target with a depth surface only the pixel engine reads
+/// renders into a TILED shadow with early depth, which the RS tiles in and
+/// writes back in the stream it is in. That adds no kick, wait, `finish()`,
+/// CPU copy or resolve: each scene's own ceilings hold. What the shadows did
+/// a frame (`tiled_rt::counts`) is held exactly, so a change that stops a
+/// scene's draws taking the shadow, or adds RS copies, fails here.
+///
+/// Only terrain is reached. Its terrain pass and its overlay, the two passes
+/// into an FBO with a depth renderbuffer, are a run each: the terrain pass
+/// opens with a whole clear (no tile-in), the overlay is tiled in, and each
+/// is written back where the stream leaves it. shadow and refract take no
+/// shadow: shadow's 1600x1200 depth pass has no colour target, and their
+/// other depth-tested draws are into the window, whose depth is the window's,
+/// and into refract's 1600x1200 target, whose depth is a texture the bunny
+/// samples; `ds_cache::pe_private` keeps both linear (W3).
+/// They need W12 (depth textures tiled) and W13 (the window tiled); until
+/// then the knob moves none of their streams.
+///
+/// ```text
+/// cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2,test-knobs --test gc_scene_kicks -- tiled_rt
+/// ```
+#[cfg(feature = "test-knobs")]
+mod tiled_rt {
+    use super::*;
+    use std::sync::Mutex;
+    use yakogl::vivante::backend::gc_debug_set_tiled_rt;
+    use yakogl::vivante::tiled_rt::{counts, Counts as Runs};
+
+    /// The knob off again when the scene's frame is dropped: inside the
+    /// harness's lock, so no other test's run sees it on.
+    struct Off;
+    impl Drop for Off {
+        fn drop(&mut self) {
+            gc_debug_set_tiled_rt(0);
+        }
+    }
+
+    /// `scene` with the knob on from `gc_init` to the end of its frames:
+    /// the counts as [`run`] returns them, and the shadows' runs, tile-ins
+    /// and write-backs of each counted frame (its canvas clear to its swap).
+    fn run_tiled(gpu: Gpu, scene: fn() -> Box<dyn FnMut()>) -> ((Vec<Counts>, Vec<String>), Vec<Runs>) {
+        let marks: Mutex<Vec<Runs>> = Mutex::new(Vec::new());
+        let r = run_with(
+            gpu,
+            || {
+                let mut frame = scene();
+                let off = Off;
+                Box::new(move || {
+                    let _ = &off;
+                    frame()
+                })
+            },
+            Hooks {
+                after_init: Some(Box::new(|| gc_debug_set_tiled_rt(1))),
+                each_frame: Some(Box::new(|_| marks.lock().unwrap_or_else(|e| e.into_inner()).push(counts()))),
+            },
+        );
+        let mut marks = marks.into_inner().unwrap_or_else(|e| e.into_inner());
+        marks.push(counts());
+        let frames = marks
+            .windows(2)
+            .map(|m| Runs {
+                runs: m[1].runs - m[0].runs,
+                tile_ins: m[1].tile_ins - m[0].tile_ins,
+                resolves: m[1].resolves - m[0].resolves,
+            })
+            .skip(FIRST_COUNTED - 1)
+            .collect();
+        (r, frames)
+    }
+
+    /// `scene` with the knob on, under both GPU models: within `ceil` (Lag,
+    /// Done), and `want` in every counted frame.
+    fn check_tiled(scene: &str, f: fn() -> Box<dyn FnMut()>, ceil: [&Counts; 2], want: Runs) {
+        for (gpu, ceil) in [Gpu::Lag, Gpu::Done].into_iter().zip(ceil) {
+            let (r, runs) = run_tiled(gpu, f);
+            let name = format!("{scene} (tiled_rt)");
+            check(&name, gpu, &r, ceil);
+            eprintln!("{name} {gpu:?}: shadow runs, tile-ins, write-backs a frame: {runs:?}");
+            assert_eq!(runs.len(), FRAMES + 1 - FIRST_COUNTED);
+            for (n, got) in runs.iter().enumerate() {
+                assert_eq!(*got, want, "{name} ({gpu:?}): frame {}", n + FIRST_COUNTED);
+            }
+        }
+    }
+
+    #[test]
+    fn terrain_with_tiled_targets_within_its_ceilings() {
+        check_tiled("terrain", terrain, [&TERRAIN_LAG, &TERRAIN_DONE], Runs { runs: 2, tile_ins: 1, resolves: 2 });
+    }
+
+    #[test]
+    fn shadow_takes_no_tiled_target() {
+        check_tiled("shadow", shadow, [&SHADOW_LAG, &SHADOW_DONE], Runs { runs: 0, tile_ins: 0, resolves: 0 });
+    }
+
+    #[test]
+    fn refract_takes_no_tiled_target() {
+        check_tiled("refract", refract, [&REFRACT_LAG, &REFRACT_DONE], Runs { runs: 0, tile_ins: 0, resolves: 0 });
+    }
+}
