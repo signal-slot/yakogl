@@ -381,8 +381,10 @@ Source: VK-GL-CTS `93bca01`, `modules/gles3/functional/es3fTextureShadowTests.cp
 93bca01:modules/gles3/functional/es3fTextureShadowTests.cpp | sed -n
 'A,Bp'`), the verifier `framework/common/tcuTexCompareVerifier.cpp`
 (`VER:<line>`) and the renderer helper `modules/glshared/glsTextureTestUtil.cpp`
-(`UTIL:<line>`). `gluTextureTestUtil.cpp` and the definition of
-`computeFixedPointError` were not read.
+(`UTIL:<line>`). `computeFixedPointError` is defined in
+`framework/common/tcuTexVerifierUtil.cpp` (`TVU:<line>`, read in the subsection
+below); `gluTextureTestUtil.cpp` is not used by this group (the group's
+renderer is `glsTextureTestUtil`).
 
 Shape. Three groups of 6 filters x 8 compare functions x 3 formats = 144 cases
 each, 432 in all: `2d` (`ES3:1061-1087`), `cube` (`ES3:1092-1118`) and
@@ -509,10 +511,79 @@ with ref 1.1 against a texel of 1.0 is judged true on D16 (both clamp to 1.0)
 and false on D32F; a V3D that does not clamp D16 fails the first. The
 reference reaches the shader as the `u_ref` uniform (`UTIL:673-675`).
 
-Open: the value `computeFixedPointError` returns for 16 and 5 bits (defined
-outside `tcuTexCompareVerifier.cpp`), and `gluTextureTestUtil.cpp`. Whether the
-V3D meets the clamp rows waits on a draw, not on more reading.
+Open: whether the V3D meets the clamp rows waits on a draw, not on more
+reading.
 
+### Tolerance: what `computeFixedPointError` returns
+
+Source: `93bca01`, every line below read with `git show 93bca01:<path> | grep -n`.
+
+The definition (`TVU:32-47`, i.e. `:32-42` and `:44-47`): `computeFixedPointError(n)` is
+`computeFloatingPointError(1.0f, n)` (`TVU:44-47`), which for value 1.0
+(exponent 0) is `((1 << (23 - n)) - 1) / 2^23` (`TVU:32-42`): the spacing of
+a float in [1,2) times the "garbage" mantissa bits. It is a hair below `2^-n`.
+
+Which bits. The `TexComparePrecision` rows above hold for all three depth
+formats alike: `referenceBits`, `pcfBits` and `resultBits` do not depend on the
+texture format (`ES3:373-381`; cube `:690-698`; array `:975-983`). Only the
+verifier's `isFixedPoint` differs (`VER:58-61`, `VER:162-195`). `resultBits` is
+`redBits - 1` of the render target (`ES3:381`, `:698`, `:983`); on an 8-bit target (the
+Pi 4's RGBA8888 configuration, an assumption: the pixel format is the
+surface's) it is 7.
+
+| bits | use | `computeFixedPointError` |
+|---|---|---|
+| `referenceBits` 16 | texel-vs-reference compare (`VER:62`) | 127 / 2^23 = 1.514e-5 |
+| `pcfBits` 5 | filter weights, first try (`VER:217`, `:241`) | 262143 / 2^23 = 0.03125 - 1.2e-7 = 0.031250 |
+| `resultBits` 7 | quantised output (`VER:113-120` err at `:115`; `VER:218`) | 65535 / 2^23 = 0.0078124 |
+| `pcfBits` 0 | second try, any-outcome verifier (`ES3:394-395`) | no PCF term: `VER:254-278` asserts `pcfBits == 0` and uses `resultBits` only (`:273`, `:278`) |
+
+Per depth format, the numbers dEQP applies:
+
+| format | clamp (`VER:58-61`, `VER:162-195`) | compare slack, `referenceBits` | filtered result (first try) | filtered result (second try) |
+|---|---|---|---|---|
+| `DEPTH_COMPONENT16` | texel and ref clamped to [0,1] | +-1.514e-5 (a D16 step is 1/65535 = 1.526e-5) | within the true range +-(0.03125 + 0.0078124) = +-0.03906 | within [min, max] of the possible outcomes +-0.0078124 |
+| `DEPTH24_STENCIL8` | clamped | +-1.514e-5 (about 254 D24 steps of 5.96e-8) | +-0.03906 | +-0.0078124 |
+| `DEPTH_COMPONENT32F` (`DEPTH32F_STENCIL8` is not in the group, `ES3:1035-1037`; `FLOAT_UNSIGNED_INT_24_8_REV` is also unclamped, `VER:176-177`) | not clamped | +-1.514e-5 | +-0.03906 | +-0.0078124 |
+
+How the slack is used (`VER:55-111`): LESS and GEQUAL-style functions accept
+both outcomes when `|ref - texel| < err`; EQUAL accepts true for a texel in
+`ref +- err` and false otherwise; NOTEQUAL the mirror image
+(`VER:87-95`). The filtered output is then accepted inside the range spanned
+by the outcomes of the taps the filter may have used, widened by
+`pcfErr + resErr` (`VER:217-218`, range check `:241`), or by `resErr` only on
+the second try (`VER:273`, `:278`). The first try is allowed to fail: the second is the verdict,
+and a first-try failure that passes the second is a `QualityWarning`.
+
+What it means for the V3D on the Pi 4.
+
+- Compare itself. A tap's compare outcome may differ from the exact one only
+  when the reference is within 1.5e-5 of the texel. The V3D compares in the
+  TMU on the 32-bit float of the R32F / DEPTH_COMP32F texel (section (d)) with
+  a 32-bit reference, so for D16 and D24S8 texels (exact in float) the compare
+  is exact and the slack is not needed. A TMU that compared at 16 bits would
+  stay inside it for D16 only if it rounded the reference to the nearest D16
+  step; the sources read here do not state the TMU's internal depth width
+  (section (d)), so that is left to the board run, not assumed.
+- Reference clamp. The [0,1] clamp planned in v3d-shadow-clamp-key is enough
+  for the compare rows of D16 and D24S8: dEQP clamps both sides there
+  (`VER:58-61`), and out-of-range references (1.1, -0.1, `ES3:277-278`) differ
+  from the clamped ones by 0.1, six thousand times the slack: a missing clamp
+  fails, an applied one passes with the exact comparison. It must not be
+  applied to D32F: there dEQP compares the raw 1.1 / -0.1. The TMU's internal
+  depth precision matters only if the TMU rounds the reference; then the
+  rounding error (at most half a step of its width) must stay under the
+  1.5e-5 above, which holds for a 16-bit or wider reference.
+- PCF. Bilinear PCF is judged against the exact outcome range widened by
+  0.039 on the first try and 0.0078 on the second. The V3D's PCF weights are
+  fixed point (width not read in the sources here); the first try needs
+  them to within 5 bits (0.031) plus the 7-bit output. If they are coarser
+  the second try still demands only that the result lies between the lowest
+  and highest tap outcome +-0.0078, which any convex combination does; it
+  passes, as a `QualityWarning` at worst.
+- `uvwBits` (7, or 4 on the second try) govern the texture coordinate
+  precision, which is a sampling-position tolerance, not the depth compare;
+  they are not affected by the clamp.
 ## What the item must not forget
 
 - Struct, C struct, asserts and the zero literal move together ((b)); a
