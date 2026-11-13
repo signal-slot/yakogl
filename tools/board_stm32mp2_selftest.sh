@@ -81,7 +81,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=171
+WANT_CHECKS=185
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -492,6 +492,35 @@ mkrun "$d" name=trial blind=0 back=1 t_reboot=1000 t_back=1090
 printf '%s\n' "$UBOOT" > "$d/console.txt"
 out=$("$B" tally "$d" 2>&1)
 check "U-Boot's go but nothing from the image: no_end_line, uboot_go" grep -q "verdict=no_end_line boot=uboot-sd row boot_verdict=uboot_go" <<<"$out"
+# the result lines of mp2_gpu, gc_fence, gc_clear, gc_triangle and gl_test
+# (sources: mp2_gpu/src/main.c, gc_*/src/main.c, gl_test's tally)
+SHAPE_END='12:00:07 mp2: shape done: PSCI SYSTEM_RESET at 4120 ms'
+n_shape=0
+shape() { # shape WANT-RESULT DESCRIPTION LINE...  (the verdict's result= field)
+    local want=$1 what=$2 dd
+    shift 2
+    n_shape=$((n_shape + 1))
+    dd="$S/runs/20261109-12${n_shape}0-shape-0123abcd"
+    mkrun "$dd" name=shape blind=0 back=1 t_reboot=1000 t_back=1070
+    printf '%s\n%s\n' "$UBOOT" "$LAYER" > "$dd/console.txt"
+    printf '12:00:06 %s\n' "$@" >> "$dd/console.txt"
+    printf '%s\n' "$SHAPE_END" >> "$dd/console.txt"
+    out=$("$B" tally "$dd" 2>&1)
+    check "result lines: $what" grep -q " result=$want back_after=" <<<"$out"
+}
+shape pass:mp2_gpu "mp2_gpu: verdict PASS is pass:mp2_gpu" 'mp2_gpu: verdict PASS model=0x8000 rev=0x6205 product=0x0 eco=0x0 customer=0x0 intr=ok idle=ok'
+shape fail:mp2_gpu "mp2_gpu: verdict FAIL is fail:mp2_gpu" 'mp2_gpu: verdict FAIL idle rc=-5 kind=1 step=2 a=0x0 b=0x0'
+shape pass:gc_fence "gc_fence: PASS is pass:gc_fence" 'gc_fence: fence 1 irqs 1 elapsed 120 us irq-latency 9 us (completed 1, wait 0)' 'gc_fence: PASS'
+shape fail:gc_fence "gc_fence: FAIL at step 5 is fail:gc_fence" 'gc_fence: FAIL at step 5: -116'
+shape pass:gc_clear "gc_clear: PASS is pass:gc_clear" 'gc_clear: PASS'
+shape fail:gc_clear "gc_clear: FAIL at step 4 is fail:gc_clear" 'gc_clear: FAIL at step 4: -5'
+shape pass:gc_triangle "gc_triangle: PASS (0 failing checks) is pass:gc_triangle" 'gc_triangle: red apex PASS (4,2) = ff0000ff' 'gc_triangle: linear: PASS 64x64 pitch 256 at GPU 0x1000 phys 0x2000 (0 failing checks)' 'gc_triangle: PASS (0 failing checks)'
+shape fail:gc_triangle "gc_triangle: FAIL (2 failing checks) is fail:gc_triangle" 'gc_triangle: red apex FAIL (4,2) = 000000ff' 'gc_triangle: FAIL (2 failing checks)'
+shape none "gc_triangle sub-lines alone (red apex, linear:, outside) are not a result" 'gc_triangle: red apex PASS (4,2) = ff0000ff' 'gc_triangle: linear: PASS 64x64 pitch 256 at GPU 0x1000 phys 0x2000 (0 failing checks)' 'gc_triangle: outside     FAIL (1,1) = 000000 (3 wrong pixels)'
+shape pass:gl_test "gl_test: all: 0 of 1 cases failed is pass:gl_test" 'gl_test: case 1 uniform: PASS' 'gl_test: all: 0 of 1 cases failed (1 passed; 0 timed out)'
+shape fail:gl_test "gl_test: all: 2 of 20 cases failed is fail:gl_test" 'gl_test: case 1 uniform: PASS' 'gl_test: case 2 blend: FAIL' 'gl_test: all: 2 of 20 cases failed (18 passed; 0 timed out)'
+shape none "gl_test per-case lines without the tally are not a result" 'gl_test: case 1 uniform: PASS' 'gl_test: case 2 blend: FAIL'
+shape pass:mp2_identify "the old <prog>: PASS: shape still counts" 'mp2_identify: PASS: watchdog armed (32 s), 3 PETs in 3012 ms'
 d="$S/runs/20261108-1204-trial-0123abcd"
 mkrun "$d" name=trial blind=0 back=1 t_reboot=1000 t_back=1040
 printf '12:00:00 yakogl-mp2: once=trial-1\n12:00:00 yakogl-mp2: cleared\n12:00:01 yakogl-mp2: mmc load failed, booting Linux\n' > "$d/console.txt"
@@ -807,6 +836,15 @@ check "live run --expect-watchdog without MP2_HOLD_S: no hold line" eval '! grep
 check "live run --expect-watchdog: the record has expect_wdog=1 and wait_bound=2, the index shows the hang line, one reboot, the staged image removed" \
     eval 'grep -qx "expect_wdog=1" "$rd/meta.txt" && grep -qx "wait_bound=2" "$rd/meta.txt" && grep -q "mp2_hello: hanging on purpose" "$rd/INDEX.txt" &&
           [ "$(grep -c "systemctl reboot" "$F/ssh.log")" = 1 ] && [ -z "$(ls "$F"/boot/yakogl/once-*.bin 2>/dev/null)" ]'
+# the hold on a sample's result line (gc_triangle: PASS (0 failing checks)): the hold line shows and the verdict is pass:gc_triangle
+TRI_END='12:00:06 gc_triangle: PASS (0 failing checks)
+12:00:06 mp2: gc_triangle done: PSCI SYSTEM_RESET at 4120 ms'
+printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" "$TRI_END" | sed 's/^[0-9:]\{8\} //' > "$F/console.txt"
+: > "$F/ssh.log"
+out=$(MP2_HOLD_S=3 live run "$S/img/mp2.bin" "$S/live-logs" holdtri 2>&1)
+rc=$?
+check "live run with MP2_HOLD_S=3 on a gc_triangle console: the hold line shows and the verdict has result=pass:gc_triangle" \
+    eval '[ "$rc" = 0 ] && [ "$(grep -c "^hold: result seen" <<<"$out")" = 1 ] && grep -qE " verdict=done boot=uboot-sd row boot_verdict=complete result=pass:gc_triangle back_after=[0-9]+s$" <<<"$out"'
 cp "$F/console.pass" "$F/console.txt"
 
 # G10: the reboot command did not reboot: the old boot goes on answering
