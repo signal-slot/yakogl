@@ -410,7 +410,8 @@ mod es3 {
     /// them as the four-channel surface of the store
     /// (tests/es3_pvr_fbo_int_rg.rs), the other back ends keep them
     /// incomplete, except the 32-bit classes a back end stores in their own
-    /// class (`integer_texture_surface` has their rows).
+    /// class (the GC7000UL's R32I/UI and RG32I/UI, gc-r32-flip):
+    /// `integer_texture_surface` has their rows (gl-r32-surface, `6c5b004f`).
     #[test]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();

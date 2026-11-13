@@ -70,7 +70,9 @@ every failing case of it is in a row of §3. Set against the three buckets:
 - Failures at `ad2b5ed` outside those three buckets: 395 =
   texture_functions 297 + builtin_functions.common 40 + precision 24 +
   fragdepth 15 + derivate (other) 8 + qualification_order 7 + uniform_block 2 +
-  metamorphic 2. Each is in a row of §3 with a cause.
+  metamorphic 2. Each is in a row of §3 with a cause; the uniform_block 2
+  (row 11) link on the host now (names of 63+ characters reported whole,
+  `docs/notes/reflection-long-names.md`).
 - The other 645 − 395 = **250** of `396d667a`'s unattributed failures are
   **not reproduced**: they do not fail at `ad2b5ed` and cannot be named. The
   sources that mention them say what they were: the "Failed to compile
@@ -105,7 +107,7 @@ runs the same programs there.
 | 8 | derivate.*.texture.msaa4 (15) | 15 Fail "checkFramebufferStatus == COMPLETE (es3fShaderDerivateTests.cpp:757)" | the same API verdict | **GL core / back end**: `glRenderbufferStorageMultisample(4, GL_RGBA8)` then the framebuffer is incomplete (`docs/es3-cts-failures.md` RC8) | `src/gl/framebuffer.rs`, the PowerVR MSAA renderbuffer | RC8 (multisample), not a shader cause |
 | 9 | derivate.{dfdx,dfdy,fwidth}.texture.basic 6 and dfdy.texture.float_{fastest,nicest} 2, all `float_highp` / `vec2_highp` | 8 Fail (no message: a wrong pixel) | compiled; black | **back-end miscompile / hardware**: the derivative of a texture-sampled value at highp; the mediump and lowp twins and the `linear`/`nicest`/`fastest` dfdx and fwidth twins passed | PowerVR `dFdx`/`dFdy` selection | PowerVR; a board log of the pixel difference first |
 | 10 | qualification_order.variables.valid.*storage* (7) | 7 Fail "Image comparison failed" | compiled; black | **back-end** (PowerVR `centroid in`): every one of the seven declares `smooth centroid` (the `.test` file); the board image predates item pvr-centroid (`936fcd76`, `ab6fd2ce`), which builds centroid inputs as smooth; host-verified by `tests/es3_pvr_centroid.rs`, board unverified | `src/shaderc/online/powervr/chain.rs` | done on the host; the next AM62P run checks it |
-| 11 | uniform_block.valid.long_instance_name_{vertex,fragment} (2) | 2 Fail "failed to link" | 2 link refusals: "the vertex uniform named 'aaa...' (63 a's) is as long as the reflection's 64-byte name field stores, so it may have been truncated" | **GL core / link decision**: a 1,024-character instance name; the reflection's name field is 64 bytes and the link refuses a name that fills it (yakogl task #47) rather than pair a truncated one | `src/shaderc/online/reflect.rs`, the link | decision (`docs/es3-cts-failures.md` "Reflection name of 63+ characters") |
+| 11 | uniform_block.valid.long_instance_name_{vertex,fragment} (2) | 2 Fail "failed to link" | 2 link refusals: "the vertex uniform named 'aaa...' (63 a's) is as long as the reflection's 64-byte name field stores, so it may have been truncated" | **fixed, links** (GL core / link): a 1,024-character instance name, whose row name `<1024 a's>.uniformMember` the 64-byte reflection field cut. Decided in `docs/notes/reflection-long-names.md`: the field and the ABI stay, the whole name travels in the online record's name pool (`shaderc::uniform_row_name`), the link accepts a full field the pool names, and `glGetActiveUniform`, `glGetActiveUniformBlockName`, `GL_ACTIVE_UNIFORM_MAX_LENGTH` and `GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH` report whole names (`tests/es3_uniform_block_long_name.rs`, both programs on PowerVR, GC7000UL and V3D); `tests/es3_shaderc_corpus.rs` 3,459 of 3,461 on each GPU | `src/shaderc/link.rs`, `src/shaderc/mod.rs`, `src/gl/program.rs` | done on the host; the next board run checks it |
 | 12 | metamorphic.bubblesort_flag (2) | 2 Fail "Nondeterministic rendering" | compiled; "Quick check fails on recipient" (black) | **hardware / back end**: two draws of the same program differ on the board | PowerVR | not reproducible on the host; a board log |
 | 13 | builtin_functions.precision (987) | 987 NoResult (image 7 stopped at `clamp.highp_fragment.vec3`, `ResourceError`, RC16) | all 987 ran: 819 QualityWarning, 114 Pass, 54 Fail "Failed to set up framebuffer object: GL_INVALID_ENUM (glsShaderExecUtil.cpp:670)" | the `NoResult` is RC16, fixed on the host by formats-pvr (the draw cut into pieces). The 54 are **GL core**: `matrixcompmult`, `outerproduct` and `transpose` with a four-column matrix output (`mat4`, `mat4x2`, `mat4x3`: 18 cases x 3) render one column per draw buffer and attach `GL_COLOR_ATTACHMENT3`, which the GL core refuses while the back end's `DRAW_TARGETS` is 3 (RC14). The other 933 are compile-clean; their values are for the board | `src/gl/framebuffer.rs` (attachment count), `src/backend.rs` `DRAW_TARGETS` | RC14 (four draw buffers on the PowerVR); the next AM62P run for the 933 |
 | | **total** | **1,397** (410 Fail + 987 NoResult) | | | | |
@@ -163,7 +165,9 @@ Row sums: 226 + 33 + 38 + 24 + 24 + 15 + 16 + 15 + 8 + 7 + 2 + 2 + 987 = 1,397.
    cases), and the per-size detail of row 3.
 7. Fixed on the host, unverified on the board: rows 7 and 10 (23 cases), and
    the 933 `builtin_functions.precision` values of row 13.
-8. A decision: the 64-byte reflection name (row 11, 2).
+8. The 64-byte reflection name (row 11, 2): decided
+   (`docs/notes/reflection-long-names.md`) and fixed on the host; names are
+   reported whole. Nothing left but the board run.
 
 The GC7000UL and V3D host runs of the group were not repeated here (item
 host-gles3-run holds them); their differences from the PowerVR on these

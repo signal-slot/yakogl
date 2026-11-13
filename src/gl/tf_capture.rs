@@ -403,7 +403,9 @@ fn uniform_block<'a>(c: &GlContext, a: &Arena<'a>, m: &Module<'_>, program: GLui
     let table = p.rvs.uniform_table();
     for u in m.uniforms.iter().filter(|u| u.dword_off != SHC_UNIFORM_NO_BLOCK) {
         let (off, n) = (usize::from(u.dword_off), usize::from(u.dwords));
-        let row = table.iter().find(|r| util::name_bytes(&r.name) == u.name.as_bytes());
+        let row = (0..table.len())
+            .find(|&j| crate::shaderc::uniform_row_name(&p.rvs, j) == u.name.as_bytes())
+            .map(|j| &table[j]);
         match row {
             Some(r) if r.dword_off != SHC_UNIFORM_NO_BLOCK && r.dwords == u.dwords => {
                 let from = usize::from(r.dword_off);
@@ -1289,11 +1291,13 @@ fn resolve_sampler(
     let k = usize::from(sampler - decl.binding);
     let unit = {
         let p = &c.objs_ref().programs[obj_index(program)];
-        let row = p
-            .rvs
-            .uniform_table()
-            .iter()
-            .find(|r| r.dword_off == SHC_UNIFORM_NO_BLOCK && util::name_bytes(&r.name) == decl.name.as_bytes());
+        let table = p.rvs.uniform_table();
+        let row = (0..table.len())
+            .find(|&j| {
+                table[j].dword_off == SHC_UNIFORM_NO_BLOCK
+                    && crate::shaderc::uniform_row_name(&p.rvs, j) == decl.name.as_bytes()
+            })
+            .map(|j| &table[j]);
         let Some(row) = row else {
             return Err(refuse!("sampler {} is not a sampler of the linked vertex stage", decl.name));
         };

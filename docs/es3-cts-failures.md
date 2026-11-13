@@ -81,7 +81,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 | NPOT levels of arrays and storage textures | valid at every level | |
 | Framebuffer completeness | host `fbo.completeness`: 17 cases Fail to Pass on the PowerVR and the GC7000UL (`src/gl/framebuffer.rs` `check_status` under `!REPORT_ES2`, `tests/es3_fbo_fragops.rs`) | RC17 |
 | Stage-interface link rules | interpolation and block mismatches refused | |
-| GLSL ES 3.00 in the compiler | 3,457 of 3,461 expected-build dEQP programs build on each GPU (`tests/es3_shaderc_corpus.rs`) | `docs/es3/shaderc-coverage.md`, RC13 |
+| GLSL ES 3.00 in the compiler | 3,459 of 3,461 expected-build dEQP programs build on each GPU (`tests/es3_shaderc_corpus.rs`) | `docs/es3/shaderc-coverage.md`, RC13 |
 | PowerVR integer output from an ALU result | builds (`3efd7b30`): `precision.{int,uint}` fragment cases (24) no longer refused; the host read-back is black, so the value is checked through `usc_exec` (`tests/es3_int_out_alu_pvr.rs`), not a render | RC13 |
 | `gl_FragDepth` | builds on all three back ends: the PowerVR clamps it with a saturating `fadd`, emits `depthf` and runs the DEPTH_FEEDBACK pass (`7bfac242`, plan #325, `tests/es3_pvr_fragdepth.rs`); the GC7000UL writes clamped `r0.z` with `ps_depth_out_reg` 0 (`70a2050a`), and early Z is off for the writer through the early-depth rule (`5fa91ff6`, `tests/es3_fragdepth_gc.rs`; `b3f42d14` wires the rule into `emit_pe_state` and `emit_ra_state`, and `the_back_end_words_say_early_z_off_for_both_programs` pins `RA_EARLY_DEPTH` 0x15000030 and no `PE_DEPTH_CONFIG` EARLY_Z); the V3D writes the per-pixel TLB Z with `writes_z`/`disable_ez` in the program data and the shader record (`8a5da05e`, `c8b31a3f`, `tests/es3_fragdepth_v3d.rs`). Host dEQP `shaders.fragdepth.` 17 of 17 begin, 0 refusals on `GPU=powervr`, `GPU=vivante` and `GPU=v3d` (before: 15 refused on the GC7000UL and the V3D); HOST-ONLY: no pixel verdict, the board verdicts are open (#316, #320; the GC `r0` depth-register convention is Mesa's) | `docs/notes/gl-fragdepth.md` |
 | Vertex array conversion | a buffer array the GPU cannot fetch as it lies (packed 2_10_10_10, `GL_HALF_FLOAT`, `GL_INT` / `GL_UNSIGNED_INT` through `glVertexAttribPointer`) is converted to float32 rows like a client array (`src/gl/draw.rs` `attrib_in_place_layout`); host only, `tests/es3_vertex_arrays.rs` | |
@@ -99,7 +99,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 |---|---:|---|---|
 | texture | 1,351 | specification 467 (3D and 2D-array uploads and the `*_pbo` cases, many "Compile failed" at `sglrGLContext`), filtering 244 (3d 129, 2d_array 115), format 158 (150 "Failed to compile shader program"), units 120, shadow 108 (all `2d_array`), vertex 89 (3d 56), mipmap 85 (3d 64), swizzle 80 | RC15 3D textures, RC6 2D arrays, RC2 integer samplers, RC9 |
 | fragment_out | 583 | basic and array `int` / `uint` 456, array `float` 36, array `fixed` 12, random 79 ("Image comparison failed") | RC1 (integer targets beside another, partial masks), RC14 |
-| shaders | 410 | texture_functions 297 (compile refusals: `textureGrad`, `textureProjGrad`, offsets, `texelFetchOffset`; 38 `texturesize` "Got unexpected texture size"), builtin_functions 40 (`common.round` / `roundeven` 16, `modf` 24), precision 24 (`int` / `uint`: the program linked-failed before `3efd7b30`, builds now; host read-back is black), derivate 23 (15 float framebuffer incomplete), fragdepth 15 (compile), qualification_order 7, uniform_block 2, metamorphic 2 | RC13, RC1, RC16 |
+| shaders | 410 | texture_functions 297 (compile refusals: `textureGrad`, `textureProjGrad`, offsets, `texelFetchOffset`; 38 `texturesize` "Got unexpected texture size"), builtin_functions 40 (`common.round` / `roundeven` 16, `modf` 24), precision 24 (`int` / `uint`: the program linked-failed before `3efd7b30`, builds now; host read-back is black), derivate 23 (15 float framebuffer incomplete), fragdepth 15 (compile), qualification_order 7, uniform_block 2 (link refusals; link on the host now, names of 63+ characters reported whole), metamorphic 2 | RC13, RC1, RC16 |
 | fbo | 367 | color 147, render 68, completeness 56, msaa 34, invalidate 33, blit 19 (16 `blit.depth_stencil`), depth 10. 146 are `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` | RC1, RC8, RC17 |
 | attribute_location | 48 | `mixed.*` and `mixed_time.*` 28, `mixed_max_attributes.*` 20 (all fixed on the host in `381b0f09`, 9 unit tests pass; host dEQP `mixed_max_attributes.*` 24 / 24 pass at `e320630d`, no board run) | Appendix A, task T4 |
 | vertex_arrays | 41 | packed `int2_10_10_10` in a buffer 20, `components{2,3}_{i,u}vec4` 21 | Appendix A, tasks T2 and T3 |
@@ -262,10 +262,8 @@ Closed: 0 failures. Appendix A has what remains of the vertex groups.
 
 Over dEQP's 5,596 `data/gles3/shaders/*.test` programs
 (`docs/es3/shaderc-coverage.md`, `tests/es3_shaderc_corpus.rs`), the PowerVR,
-GC7000UL and V3D each build 3,457 of the 3,461 that must build. Left on the
-PowerVR: 2 `constant_expressions.other.complex_*` (`gl_MaxDrawBuffers`, RC14)
-and 2 `uniform_block.valid.long_instance_name_*` (a reflection name of 63
-characters or more; needs a decision on the 64-byte field).
+GC7000UL and V3D each build 3,459 of the 3,461 that must build. Left on each:
+the 2 `constant_expressions.other.complex_*` (`gl_MaxDrawBuffers`, RC14).
 
 | Cause | Layer | PowerVR / GC7000UL / V3D programs | State |
 |---|---|---:|---|
@@ -275,7 +273,7 @@ characters or more; needs a decision on the 64-byte field).
 | Indexed element passed as an out/inout argument | shaderc | 0 / 0 / 0 | builds on all three (`docs/notes/shaderc-inout-indexed.md`) |
 | `gl_MaxDrawBuffers` (two `complex` programs) | GL core / limits | 2 / 2 / 2 | RC14 |
 | Integer / narrow colour output from an ALU result (`precision.{int,uint}` fragment, 24) | PowerVR select | 24 / 0 / 0 before, 0 / 0 / 0 now | fixed (`3efd7b30`: `StoreOutput` takes the declared width; host dEQP 24 refusals to 0; the value is checked through `usc_exec` in `tests/es3_int_out_alu_pvr.rs`, the host read-back is black) |
-| Reflection name of 63+ characters | shaderc / GL core | 2 / 2 / 2 | decision needed |
+| Reflection name of 63+ characters | shaderc / GL core | 2 / 2 / 2 before, 0 / 0 / 0 now | fixed (`docs/notes/reflection-long-names.md`: the whole name travels in the online record's name pool, the 64-byte ABI field stays; the GL queries report it whole, `tests/es3_uniform_block_long_name.rs`) |
 | 128-element constant array | GC7000UL | 0 / 0 / 0 | fixed (register pressure in `sink_definitions`) |
 
 The 645 `shaders` failures that no earlier file tied to a cause are accounted
@@ -286,8 +284,8 @@ front end; 395 of the 645 are in its cause rows and 250 cannot be reproduced
 (PowerVR texture look-ups 226, integer outputs from ALU results 24 (fixed, `3efd7b30`),
 `gl_FragDepth` 15 (fixed on the host on all three back ends, `7bfac242`,
 `70a2050a`, `8a5da05e`; the board verdicts open)), the second and fourth draw buffer
-(RC14), multisample (RC8), the 64-byte reflection name (2) and values only a
-board can judge.
+(RC14), multisample (RC8), the 64-byte reflection name (2, fixed: names are
+reported whole) and values only a board can judge.
 
 The board's `shaders.texture_functions` failures (297) are mostly code
 generator refusals outside that corpus: the PowerVR refuses `textureGrad`,
