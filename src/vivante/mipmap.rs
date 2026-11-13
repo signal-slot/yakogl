@@ -61,7 +61,9 @@ use crate::util::Global;
 
 use super::backend::{self, g};
 use super::internal::{GC_INTERNAL_MIPGEN_PS, GC_INTERNAL_TABLE};
+use super::layout::{self, Layout};
 use super::regs::GC_TEXDESC_LOD_ALIGN;
+use super::rs_clear::{RS_HEIGHT_ALIGN, RS_WIDTH_ALIGN};
 
 /// Bytes per RGBA8 texel.
 const RGBA8_BYTES: u32 = 4;
@@ -482,4 +484,97 @@ pub unsafe extern "C" fn yakogl_gc_fallback_stats(out: *mut YakoglGcFallbackStat
         carveout_cpu_bytes: f.carveout_cpu_bytes.load(Ordering::Relaxed),
     };
     0
+}
+
+/// Who untiles one level of a TILED RGBA8 chain, [`untile_plan`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UntileBy {
+    /// The resolve engine: both extents of the level meet the RS masks.
+    Rs,
+    /// The CPU, [`untile_level`]: an extent is off the RS masks.
+    Cpu,
+}
+
+/// For each of `levels` levels of a 2D RGBA8 TILED chain whose base is
+/// `width` x `height`, who untiles it: the RS when the level's width is a
+/// multiple of [`RS_WIDTH_ALIGN`] and its height of [`RS_HEIGHT_ALIGN`]
+/// (the masks Mesa's `etnaviv_transfer.c:357-361` tests before it takes the
+/// RS path), the CPU otherwise. Level `n` is `max(1, base >> n)` a side.
+/// Pure: nothing calls it yet (W11b).
+pub fn untile_plan(width: u32, height: u32, levels: u32) -> Vec<UntileBy> {
+    (0..levels)
+        .map(|n| {
+            let w = (width >> n.min(31)).max(1);
+            let h = (height >> n.min(31)).max(1);
+            if w.is_multiple_of(RS_WIDTH_ALIGN) && h.is_multiple_of(RS_HEIGHT_ALIGN) {
+                UntileBy::Rs
+            } else {
+                UntileBy::Cpu
+            }
+        })
+        .collect()
+}
+
+/// The CPU untile of one `width` x `height` RGBA8 level: `tiled` holds the
+/// level in [`Layout::Tiled`] at its RS-aligned stride ([`layout::stride`]),
+/// `linear` receives it, rows `linear_stride` bytes apart (at least
+/// `width * 4`; bytes past a row's pixels keep their value). Each pixel is
+/// read at [`layout::offset`]. Panics if a slice is too short or the stride
+/// is below one row.
+pub fn untile_level(tiled: &[u8], width: u32, height: u32, linear: &mut [u8], linear_stride: u32) {
+    const BPP: u32 = 4;
+    assert!(linear_stride >= width * BPP, "untile_level: linear stride below one row");
+    let stride = layout::stride(Layout::Tiled, width, BPP, true);
+    for y in 0..height {
+        for x in 0..width {
+            let s = layout::offset(Layout::Tiled, x, y, BPP, stride);
+            let d = y as usize * linear_stride as usize + (x * BPP) as usize;
+            linear[d..d + 4].copy_from_slice(&tiled[s..s + 4]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod untile_tests {
+    use super::UntileBy::{Cpu, Rs};
+    use super::*;
+
+    #[test]
+    fn plan_256_chain() {
+        // 256, 128, 64, 32, 16 meet the masks; 8x8 down to 1x1 do not.
+        assert_eq!(untile_plan(256, 256, 9), [Rs, Rs, Rs, Rs, Rs, Cpu, Cpu, Cpu, Cpu]);
+    }
+
+    #[test]
+    fn plan_non_power_of_two() {
+        // 100x60 -> 50x30 -> 25x15 ...: no width is a multiple of 16.
+        assert!(untile_plan(100, 60, 7).iter().all(|&u| u == Cpu));
+        // 48x20 meets both masks; 24x10 and 12x5 do not.
+        assert_eq!(untile_plan(48, 20, 3), [Rs, Cpu, Cpu]);
+        // Width fine, height not: 64x6, 32x3.
+        assert_eq!(untile_plan(64, 6, 2), [Cpu, Cpu]);
+        // A thin chain clamps at 1: 32x1, 16x1.
+        assert_eq!(untile_plan(32, 1, 2), [Cpu, Cpu]);
+        assert!(untile_plan(16, 16, 0).is_empty());
+    }
+
+    #[test]
+    fn untile_round_trip_is_bit_exact() {
+        for &(w, h) in &[(16u32, 4u32), (37, 21), (64, 64), (5, 3), (1, 1), (130, 9)] {
+            let stride = layout::stride(Layout::Tiled, w, 4, true);
+            let size = layout::size(Layout::Tiled, w, h, 4, true);
+            let src: Vec<u8> = (0..w * h * 4).map(|i| (i.wrapping_mul(2654435761) >> 11) as u8).collect();
+            let mut tiled = vec![0xA5u8; size];
+            for y in 0..h {
+                for x in 0..w {
+                    let o = layout::offset(Layout::Tiled, x, y, 4, stride);
+                    let i = ((y * w + x) * 4) as usize;
+                    tiled[o..o + 4].copy_from_slice(&src[i..i + 4]);
+                }
+            }
+            let mut out = vec![0u8; src.len()];
+            untile_level(&tiled, w, h, &mut out, w * 4);
+            assert_eq!(out, src, "{w}x{h}");
+        }
+    }
 }
