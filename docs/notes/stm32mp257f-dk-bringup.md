@@ -258,16 +258,16 @@ line-width case (`docs/notes/pre-study-stm32mp257f-dk.md:826`; the
 gl-regression-study's report is in the plan, not the tree).
 
 Reading the run: the runner's verdict line
-(`tools/board-stm32mp2.sh:122-133`) and `boot_verdict` (`:134-135`). One
-caveat for steps 4-8 (*confirmed by reading the runner*): its `result=` field
-only counts lines shaped `<prog>: PASS: ` / `<prog>: FAIL: `
-(`:126-127,539-541`), and `mp2_gpu`'s verdict line (`mp2_gpu/README.md:90`)
-and the three `gc_*` verdict lines (`gc_fence/README.md:46`,
-`gc_clear/README.md:49`, `gc_triangle/README.md:105`) lack the trailing colon,
-so those records read `result=none` and a sample's FAIL would not turn the
-verdict to `failed`. Judge those steps from the console lines in
-`INDEX.txt` and the `yk-record:` word fields, and treat the `result=` shape as
-a runner-fix candidate for `runner-fixes`.
+(`tools/board-stm32mp2.sh:122-133`) and `boot_verdict` (`:134-135`). The
+`result=` field and the `MP2_HOLD_S` hold read the image's final line through
+`result_of`, anchored at the line start: `<prog>: PASS: ` / `<prog>: FAIL: `
+(`mp2_identify`, `mp2_hello`), `<prog>: PASS` / `<prog>: FAIL (...)` /
+`<prog>: FAIL at step N: ...` (`gc_fence`, `gc_clear`, `gc_triangle`),
+`mp2_gpu: verdict PASS|FAIL`, and `gl_test: all: N of M cases failed` (0 is
+`pass:gl_test`, anything else `fail:gl_test`). Sub-lines (`gc_triangle:
+linear: PASS ...`, `gl_test: case 1 ...: PASS`) are not results, so a
+`gl_test` run that stops before its tally reads `result=none`. A FAIL turns
+the verdict to `failed`.
 
 ## When it looks like a hardware fault: supply first
 

@@ -156,8 +156,9 @@
 #   board-stm32mp2.sh stm32mp257f-dk <name> rc=<rc> verdict=<v> boot=uboot-sd <row|blind>
 #       boot_verdict=<bv> result=<pass:<prog>|fail:<prog>|none> back_after=<s>s
 # The image's end is the layer's "mp2: <why>: PSCI SYSTEM_RESET at <n> ms"
-# (stm32mp2.c); its result the probe's own "<prog>: PASS: ..." or
-# "<prog>: FAIL: ..." line (tools/probes/stm32mp257f_dk/mp2_identify).
+# (stm32mp2.c); its result the image's own final line, as result_of reads it:
+# "<prog>: PASS|FAIL: ...", "<prog>: PASS|FAIL (...)", "mp2_gpu: verdict PASS|FAIL",
+# "gl_test: all: N of M cases failed" (tools/probes/stm32mp257f_dk, gc_* samples).
 # verdict=done: the board came back and the console has the end line and no
 # FAIL; failed: a FAIL line; psci_returned: "PSCI SYSTEM_RESET returned"
 # (the watchdog brought the board back); no_end_line: the board came back
@@ -196,7 +197,7 @@
 #   WDOG_BOUND       with --expect-watchdog: seconds from the reboot to Linux
 #                    back (default 120)
 #   MP2_HOLD_S       opt-in, unset = no hold (output unchanged): seconds to
-#                    hold after the image's "<prog>: PASS"/"FAIL" line, so an
+#                    hold after the image's result line (result_of), so an
 #                    observer (the KVM) can take a screenshot of a display
 #                    probe. When the line shows on the console the runner
 #                    prints "hold: result seen at <UTC ISO time>, holding <s>s",
@@ -648,6 +649,23 @@ RD=
 # (no run directory outside run/probe: install, uninstall and disarm keep no record)
 meta() { [ "$DRY" = 1 ] || [ -z "$RD" ] || printf '%s=%s\n' "$1" "$2" >> "$RD/meta.txt"; }
 mget() { sed -n "s/^$1=//p" "${2:-$RD}/meta.txt" 2>/dev/null | tail -1; }
+# result_of: stdin is console text with the timestamps stripped; prints the
+# image's last result as pass:<prog> or fail:<prog>, or nothing. Every shape is
+# anchored at the line start, so a sub-line ("gc_triangle: linear: PASS ...",
+# "gl_test: case 1 uniform: PASS") is not an image's result:
+#   <prog>: PASS|FAIL: ...                      mp2_identify, mp2_hello
+#   <prog>: PASS|FAIL [(...) | at step N: ...]  gc_fence, gc_clear, gc_triangle
+#   mp2_gpu: verdict PASS|FAIL ...
+#   gl_test: all: N of M cases failed ...       (0 failed is a pass)
+result_of() {
+    tr -d '\r' | awk '
+    /^[A-Za-z0-9_]+: (PASS|FAIL): / || /^[A-Za-z0-9_]+: (PASS|FAIL)( \(.*\)| at step .*)?$/ {
+        n = $1; sub(/:$/, "", n); res = (($2 ~ /^PASS/) ? "pass" : "fail") ":" n
+    }
+    /^mp2_gpu: verdict (PASS|FAIL)/ { res = (($3 == "PASS") ? "pass" : "fail") ":mp2_gpu" }
+    /^gl_test: all: [0-9]+ of [0-9]+ cases failed/ { res = (($3 + 0 == 0) ? "pass" : "fail") ":gl_test" }
+    END { if (res != "") print res }'
+}
 plain() { sed -E 's/^([0-9:]{8}|[0-9]{9,}\.[0-9]+) //' "$1" | tr -d '\0\r'; }
 redact_words() { # redact_words DIR PLACEHOLDER STRING...
     local dir=$1 as=$2 f s esc files=()
@@ -714,10 +732,8 @@ verdict_line() {
         elif grep -qF 'yakogl-mp2: go ' <<<"$p"; then bv=uboot_go
         else bv=not_started; fi
         local l
-        l=$(grep -aoE '^[A-Za-z0-9_]+: (PASS|FAIL): ' <<<"$p" | tail -1)
-        if [ -n "$l" ]; then
-            case "$l" in *PASS*) res="pass:${l%%:*}" ;; *) res="fail:${l%%:*}" ;; esac
-        fi
+        l=$(result_of <<<"$p")
+        [ -n "$l" ] && res=$l
     fi
     if [ "$(mget rebooted "$dir")" = 0 ]; then v=not_rebooted; rc=4; after=absent
     elif [ "$back" != 1 ]; then v=not_back; rc=5
@@ -759,7 +775,7 @@ write_index() {
         echo "verdict: $V_LINE"
         echo "console lines of ours:"
         if [ -s "$dir/console.txt" ]; then
-            plain "$dir/console.txt" | grep -aE '^(yakogl-mp2: |MP2:|mp2: |mp2-handover: |[A-Za-z0-9_]+: (PASS|FAIL): |mp2_hello: hanging on purpose|\*\*\* Booting Zephyr)' | sed 's/^/  /'
+            plain "$dir/console.txt" | grep -aE '^(yakogl-mp2: |MP2:|mp2: |mp2-handover: |[A-Za-z0-9_]+: (PASS|FAIL)([: ]|$)|mp2_gpu: verdict |gl_test: all: |mp2_hello: hanging on purpose|\*\*\* Booting Zephyr)' | sed 's/^/  /'
         else
             echo "  none (no console: $(mget no_console_why "$dir"))"
         fi
@@ -871,13 +887,15 @@ console_check() {
     UART_REAL=$(readlink -f "$BOARD_UART")
     stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo 2> >(scrub >&2) || die "stty on BOARD_UART failed (no reboot)"
 }
-# hold_result_seen: the image's "<prog>: PASS|FAIL: " line is on the console
-# so far (console.txt for a device, console.ts for a bridge; either may carry
-# a timestamp before the line)
+# hold_result_seen: result_of finds the image's result line on the console so
+# far (console.txt for a device, console.ts for a bridge; either may carry a
+# timestamp before the line)
 hold_result_seen() {
-    local f
+    local f r
     for f in "$RD/console.txt" "$RD/console.ts"; do
-        [ -f "$f" ] && tr -d '\0\r' < "$f" | grep -aqE '(^|[0-9. ])[A-Za-z0-9_]+: (PASS|FAIL): ' && return 0
+        [ -f "$f" ] || continue
+        r=$(tr -d '\0\r' < "$f" | sed -E 's/^([0-9:]{8}|[0-9]{9,}\.[0-9]+) //' | result_of)
+        [ -n "$r" ] && return 0
     done
     return 1
 }
