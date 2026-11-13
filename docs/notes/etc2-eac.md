@@ -55,7 +55,7 @@ codes as distinct values, so nothing is lost by the narrower class.
 
 Sources are the CTS files named; they are not in this machine's deps cache,
 so the lines below are the design item's reading, not re-read for this note
-(the sRGB `colorBits` line is from the later read-only audit of 93bca01).
+(the sRGB `colorBits` line was read in 93bca01).
 
 - The reference decoder widens an 11-bit value with
   `extend11To16(v) = (v << 5) | (v >> 6)` (`tcuCompressedTexture.cpp:804-816`;
