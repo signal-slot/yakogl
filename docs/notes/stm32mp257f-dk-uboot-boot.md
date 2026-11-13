@@ -448,9 +448,12 @@ sentence and is why the bound has two cases:
 - The defconfig enables `CONFIG_WDT`, `CONFIG_WDT_STM32MP` and
   `CONFIG_WDT_ARM_SMC` (`defconfig:183-185`). `WDT_STM32MP` and `WDT_ARM_SMC`
   both `imply WATCHDOG` (`ST/drivers/watchdog/Kconfig:340-345`, `:388-393`), so
-  `CONFIG_WATCHDOG` is expected on; this reading is of Kconfig and not of a
-  built `.config` (none was built for this note: no cross compiler on the
-  host that wrote it).
+  `CONFIG_WATCHDOG` is on: `make stm32mp25_defconfig` of this tag (ST's
+  defconfig run through Kconfig, no U-Boot build) gives `CONFIG_WATCHDOG=y`,
+  `CONFIG_CYCLIC=y`, `CONFIG_WATCHDOG_TIMEOUT_MSECS=60000`,
+  `# CONFIG_WATCHDOG_AUTOSTART is not set`, `CONFIG_ENV_SIZE=0x2000` and
+  `CONFIG_SYS_CBSIZE=1024`. That is the source's configuration; the board's
+  binary may differ (`TODO(board-env-read)`, below).
 - At init `initr_watchdog` probes every watchdog and `init_watchdog_dev` starts
   those flagged to autostart (`ST/drivers/watchdog/wdt-uclass.c:70-95`,
   `:96-118`). `WATCHDOG_AUTOSTART` itself defaults to n for STM32MP
