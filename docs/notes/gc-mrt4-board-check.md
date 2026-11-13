@@ -138,19 +138,22 @@ index n-1 in the 8-banks, as Mesa programs a HALTI2+ core
   `backend.rs:2098-2104`), so a four-target draw never reuses a three-target
   group's partially written words.
 
-## 2. (b) The gl_test case: 222 `mrt4`
+## 2. (b) The gl_test case: 245 `mrt4`
 
 Modelled line-for-line on case 106 `mrt3`
 (`driver/tools/pvrlab/gl_test.c:13922-14048`), the GC's three-buffer case
-that runs on this board. Case numbers in use run to 221 (the name table at
-`gl_test.c:8563`); 222 is free.
+that runs on this board. This note first said 222; by the time the case was
+built 222-242 were in the name table and 243/244 were claimed by cases not yet
+joined (`gl_test_es3_divmix.inc`'s divmix, `gc-ts-probe.md`'s tsprobe and
+dlayout), so it is **245**, the first number nobody claims. The case as built
+is `case_mrt4` in `gl_test.c`; the sketch below is the design it follows.
 
 **What it draws.** Four 64x64 `GL_RGBA8` texture attachments
 (`TW`/`TH` are 64, `gl_test.c:992-993`) on one FBO — RGBA8 because it is
 unorm, blended-off and needs no output mode, so every failure reads as the
 wrong colour and not as an unsupported format. A new four-output program:
-the mrt3 vertex shader unchanged (`tools/shaders/es300/mrt3.vert`) and a new
-fragment `tools/shaders/es300/mrt4.frag`, the mrt3 text plus
+`tools/shaders/es300/mrt4.vert` (mrt3.vert's text under the case's own
+comment line) and `tools/shaders/es300/mrt4.frag`, the mrt3 text plus
 `layout(location = 3) out vec4 o3; ... o3 = vec4(1.0, 1.0, 0.0, 1.0);`
 (yellow). Distinct constant colours, no gradients: at 64x64 a centre pixel
 read is exact, and a gradient would blur "RT3 unwritten" with "RT3 wrote a
@@ -181,7 +184,7 @@ Expected pixels (`0xAABBGGRR`, `rgba_u32` `gl_test.c:6399-6402`):
 | 0 | 0xff808080 | 0xff0000ff | 0xff000000 | 0xff0000ff |
 | 1 | 0xff808080 | 0xff00ff00 | 0xff000000 | 0xff00ff00 |
 | 2 | 0xff808080 | 0xffff0000 | 0xffff0000 | 0xffff0000 |
-| 3 | 0xff808080 | 0x0000ffff | 0xff000000 | 0x0000ffff |
+| 3 | 0xff808080 | 0xff00ffff | 0xff000000 | 0xff00ffff |
 
 The one recorded check is a fail mask, as case 106's: bits 0-3 the clear,
 4-7 the draw, 8-11 the NONE-slot draw, 12-15 the NONE-slot clear, bit n of
@@ -195,7 +198,7 @@ exactly case 106's skip at `gl_test.c:13964-13968`.
 `main_imx8mp.c` only starts the backend and reports):
 
 ```c
-/* ---- case 222: four draw buffers (RC14, the GC7000UL's PE fourth RT) ----- */
+/* ---- case 245: four draw buffers (RC14, the GC7000UL's PE fourth RT) ----- */
 static int case_mrt4(void)
 {
 	static const GLenum all[4]  = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
@@ -211,7 +214,7 @@ static int case_mrt4(void)
 
 	glGetIntegerv(GL_MAX_DRAW_BUFFERS, &maxdb);
 	if (maxdb < 4) {
-		pr_info("gl_test: case 222 mrt4: SKIP (GL_MAX_DRAW_BUFFERS %d < 4)\n", (int)maxdb);
+		pr_info("gl_test: case 245 mrt4: SKIP (GL_MAX_DRAW_BUFFERS %d < 4)\n", (int)maxdb);
 		return -3;
 	}
 	free_all_objects();
@@ -242,12 +245,12 @@ static int case_mrt4(void)
 ```
 
 Joins in `gl_test.c`: the case's comment block by the set's contents list
-(the 106 line at `:193`), the name table (`[222] = "mrt4"`, `:8549-8563`),
-and the dispatch (`case 222: rc = case_mrt4(); break;`, the 106 line at
+(the 106 line at `:193`), the name table (`[245] = "mrt4"`, `:8549-8563`),
+and the dispatch (`case 245: rc = case_mrt4();`, the 106 line at
 `:23494`). It does **not** join the regression set `SET_ORDER`
 (`driver/tools/pvrlab/runner/src/lib.rs:53-56`) — case 106 is not in it
-either; the case runs alone (`CONFIG_GC_GL_TEST_CASE=222`) or inside a sweep
-whose 48-case window covers 222. The case body compiles unconditionally, like
+either; the case runs alone (`CONFIG_GC_GL_TEST_CASE=245`) or inside a sweep
+whose 48-case window covers 245. The case body compiles unconditionally, like
 every other case, and stays inert without the knob; the capability, not the
 case text, is what the opt-in builds.
 
@@ -323,7 +326,7 @@ the boot notes (`docs/notes/imx8mp-direct-boot.md`,
 1. Build, for the Verdin i.MX8MP (and, as the second data point, the
    Armadillo-X2 — same SoC family, `armadillo_x2/mimx8ml8/a53`):
    `west build -b verdin_imx8mp/mimx8ml8/a53 <gl_test> -- -DCONFIG_GC_GL_TEST_MRT4=y
-   -DCONFIG_GC_GL_TEST_CASE=222` with the ES 3.0 shader set (the default; not
+   -DCONFIG_GC_GL_TEST_CASE=245` with the ES 3.0 shader set (the default; not
    `-DGL_TEST_ES100=ON`). A scratch tree with `DRAW_TARGETS = 4` in
    `src/backend.rs` needs neither knob for the library and must *not* be the
    tree that gets merged: the product library stays at 3 and only the image
@@ -332,10 +335,10 @@ the boot notes (`docs/notes/imx8mp-direct-boot.md`,
    resets the SoC (`main_imx8mp.c:18-25`), so one boot answers one question.
 3. Read, in this order:
    * the console/panel lines, one per check, in case 106's shape:
-     `gl_test:   mrt4 clear attachment 3 = 0xff808080  want 0xff808080`,
-     `gl_test:   mrt4 draw attachment 3 = 0x0000ffff  want 0x0000ffff`, then
+     `gl_test:   mrt4 clear   attachment 3 = 0xff808080  want 0xff808080`,
+     `gl_test:   mrt4 draw    attachment 3 = 0xff00ffff  want 0xff00ffff`, then
      the two `hole clear` / `hole draw` lines;
-   * the runner's one line for the case: `222 mrt4 PASS`, `FAIL` or `SKIP`;
+   * the runner's one line for the case: `245 mrt4 PASS`, `FAIL` or `SKIP`;
    * the SNVS CASE record (gc_result.h): PASS, or the first bad check with
      `got = fail mask`, `want = 0` (`report_result`,
      `main_imx8mp.c:426-436`); a kick that never completed records the case
@@ -375,7 +378,7 @@ the boot notes (`docs/notes/imx8mp-direct-boot.md`,
 
 ## 5. (e) What must hold before DRAW_TARGETS goes to 4 on gpu-vivante
 
-1. **A board drew four.** Case 222 PASS on the i.MX8MP, recorded (the
+1. **A board drew four.** Case 245 PASS on the i.MX8MP, recorded (the
    RESULTS.md/STATUS.md rows and the issue comments above); the X2 run is a
    second data point of the same part, not a prerequisite. The flip is the
    `gpu-vivante` arm of `DRAW_TARGETS` alone (`src/backend.rs:794-797`); the
@@ -395,7 +398,7 @@ the boot notes (`docs/notes/imx8mp-direct-boot.md`,
 4. **The knob is decided**: keep `gc_debug_draw_targets` (its test then stays
    in `KNOBS_TESTS`, its names in `KNOB_VIVANTE_SYMBOLS`) or retire it in the
    flip's commit; either way the "no test knob in the artefact" row is green.
-   Case 222 keeps its own `maxdb < 4` skip, so it runs against a product
+   Case 245 keeps its own `maxdb < 4` skip, so it runs against a product
    library as a SKIP and against the flipped one for real.
 5. **Known MRT gaps are recorded as themselves, not silently inherited**:
    the per-RT blend-colour bank (§1.2's gap), a 64-bit integer target drawn
