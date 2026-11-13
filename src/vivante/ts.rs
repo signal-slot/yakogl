@@ -536,3 +536,282 @@ pub fn k3_row0_map(clear: &[bool], width: u32) -> u32 {
     }
     m
 }
+
+// ---------------------------------------------------------------------------
+// Case 243's streams: the (register, value) writes of K0 to K3, one arm at a
+// time (gc-ts-probe.md, "The steps of one arm" and "The golden diff"). Pure:
+// the caller encodes them (`LOAD_STATE` of one register each) and submits
+// one kick a step. The words follow `tools/vivante/testdata/ts-clear.golden`
+// (mode 29) apart from the diff the note lists.
+// ---------------------------------------------------------------------------
+
+/// `regs.rs` `GC_GL_FLUSH_CACHE`.
+pub const GL_FLUSH_CACHE: u32 = 0x0000_380c;
+/// `regs.rs` `GC_GL_SEMAPHORE_TOKEN`.
+pub const GL_SEMAPHORE_TOKEN: u32 = 0x0000_3808;
+/// `regs.rs` `GC_GL_STALL_TOKEN`.
+pub const GL_STALL_TOKEN: u32 = 0x0000_3c00;
+/// `regs.rs` `GC_TS_COLOR_STATUS_BASE`.
+pub const TS_COLOR_STATUS_BASE: u32 = 0x0000_1658;
+/// `regs.rs` `GC_TS_COLOR_SURFACE_BASE`.
+pub const TS_COLOR_SURFACE_BASE: u32 = 0x0000_165c;
+/// `regs.rs` `GC_TS_COLOR_CLEAR_VALUE`.
+pub const TS_COLOR_CLEAR_VALUE: u32 = 0x0000_1660;
+/// `regs.rs` `GC_TS_COLOR_AUTO_DISABLE_COUNT`.
+pub const TS_COLOR_AUTO_DISABLE_COUNT: u32 = 0x0000_1674;
+/// `regs.rs` `GC_TS_COLOR_CLEAR_VALUE_EXT`.
+pub const TS_COLOR_CLEAR_VALUE_EXT: u32 = 0x0000_16bc;
+/// `regs.rs` `GC_RS_KICKER`.
+pub const RS_KICKER: u32 = 0x0000_1600;
+/// `regs.rs` `GC_RS_CONFIG`.
+pub const RS_CONFIG: u32 = 0x0000_1604;
+/// `regs.rs` `GC_RS_SOURCE_STRIDE`.
+pub const RS_SOURCE_STRIDE: u32 = 0x0000_160c;
+/// `regs.rs` `GC_RS_DEST_STRIDE`.
+pub const RS_DEST_STRIDE: u32 = 0x0000_1614;
+/// `regs.rs` `GC_RS_WINDOW_SIZE`.
+pub const RS_WINDOW_SIZE: u32 = 0x0000_1620;
+/// `regs.rs` `rs_dither(0)`; `RS_DITHER[1]` follows at +4.
+pub const RS_DITHER0: u32 = 0x0000_1630;
+/// `regs.rs` `rs_fill_value(0)`; `RS_FILL_VALUE[1..4]` follow at +4.
+pub const RS_FILL_VALUE0: u32 = 0x0000_1640;
+/// `regs.rs` `GC_RS_EXTRA_CONFIG`.
+pub const RS_EXTRA_CONFIG: u32 = 0x0000_16a0;
+/// `regs.rs` `GC_RS_SINGLE_BUFFER`.
+pub const RS_SINGLE_BUFFER: u32 = 0x0000_16b8;
+/// `regs.rs` `rs_pipe_source_addr(0)`.
+pub const RS_PIPE_SOURCE_ADDR0: u32 = 0x0000_16c0;
+/// `regs.rs` `rs_pipe_dest_addr(0)`.
+pub const RS_PIPE_DEST_ADDR0: u32 = 0x0000_16e0;
+/// `regs.rs` `rs_pipe_offset(0)`; `RS_PIPE_OFFSET[1]` follows at +4.
+pub const RS_PIPE_OFFSET0: u32 = 0x0000_1700;
+
+/// `regs.rs` `GC_FLUSH_DEPTH | GC_FLUSH_COLOR`.
+pub const GL_FLUSH_COLOR_DEPTH: u32 = 0x0000_0003;
+/// `regs.rs` `stall_token(GC_SYNC_RA, GC_SYNC_PE)`: the golden's semaphore
+/// and stall word.
+pub const STALL_RA_PE: u32 = 0x0000_0705;
+/// `regs.rs` `GC_TS_FLUSH`.
+pub const TS_FLUSH: u32 = 0x0000_0001;
+/// `regs.rs` `GC_RS_KICKER_VALUE`.
+pub const RS_KICKER_VALUE: u32 = 0xbeeb_beeb;
+/// `regs.rs` `GC_RS_SINGLE_BUFFER_ENABLE`.
+pub const RS_SINGLE_BUFFER_ENABLE: u32 = 0x0000_0001;
+/// `regs.rs` `GC_RS_SOURCE_TILED`.
+pub const RS_CONFIG_SOURCE_TILED: u32 = 0x0000_0080;
+/// `regs.rs` `GC_RS_DEST_TILED`.
+pub const RS_CONFIG_DEST_TILED: u32 = 0x0000_4000;
+/// `regs.rs` `GC_RS_FORMAT_A8R8G8B8`.
+pub const RS_FORMAT_A8R8G8B8: u32 = 0x0000_0006;
+/// `regs.rs` `GC_RS_SOURCE_STRIDE_TILING`.
+pub const RS_STRIDE_TILING: u32 = 0x8000_0000;
+/// `regs.rs` `GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW`.
+pub const RS_STRIDE_SUPER_TILED_NEW: u32 = 0x0800_0000;
+/// `VIVS_RS_SOURCE_STRIDE_TS_MODE` (hw/state_3d.xml.h:1371-1373; not in
+/// `regs.rs`): the source's TS mode, 1 = 256B granules. The golden's resolve
+/// sets it (`0xa8000400`) and leaves `RS_EXTRA_CONFIG` at 0.
+pub const RS_SOURCE_STRIDE_TS_MODE: u32 = 0x2000_0000;
+/// `VIVS_TS_MEM_CONFIG_COLOR_COMPRESSION` (hw/state_3d.xml.h:1456-1470; not
+/// in `regs.rs`).
+pub const TS_MEM_COLOR_COMPRESSION: u32 = 0x0000_0080;
+/// `VIVS_TS_MEM_CONFIG_COLOR_COMPRESSION_FORMAT(3)` (hw/state_3d.xml.h:
+/// 1456-1470; not in `regs.rs`): the format field of the golden's `0x382`.
+pub const TS_MEM_COLOR_COMPRESSION_FORMAT_3: u32 = 0x0000_0300;
+
+/// The probe surface's side in pixels (64x64 A8R8G8B8, 16 KiB).
+pub const PROBE_SIDE: u32 = 64;
+/// Bytes of `S` and of `D`.
+pub const PROBE_SURFACE_BYTES: u32 = PROBE_SIDE * PROBE_SIDE * 4;
+/// Bytes of `T`: `ts_size(64, 64, 4, _)`, both layouts.
+pub const PROBE_TS_BYTES: u32 = 256;
+
+/// The GPU addresses of the case's objects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProbeAddrs {
+    /// `S`, the 64x64 colour surface.
+    pub s: u32,
+    /// `T`, its TS buffer.
+    pub t: u32,
+    /// `D`, the linear destination.
+    pub d: u32,
+}
+
+/// What one arm programs (gc-ts-probe.md, "Arms").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProbeArm {
+    /// `S` is SUPER_TILED (arm 3), else TILED.
+    pub super_tiled: bool,
+    /// [`TS_MODE_128B`] or [`TS_MODE_256B`] (`RS_SOURCE_STRIDE` bit 29).
+    pub ts_mode: u32,
+    /// `TS_MEM_CONFIG` of K2 and K3.
+    pub mem_config: u32,
+    /// `TS_COLOR_AUTO_DISABLE_COUNT`, written by arm 1 only.
+    pub auto_disable_count: Option<u32>,
+}
+
+/// Arms 0 to 3 (tags `0xd0..0xd3`); `None` past 3.
+pub const fn probe_arm(arm: u32) -> Option<ProbeArm> {
+    let (pw, ph) = padded_dims(PROBE_SIDE, PROBE_SIDE, false);
+    let fast = TS_MEM_COLOR_FAST_CLEAR;
+    Some(match arm {
+        0 => ProbeArm { super_tiled: false, ts_mode: TS_MODE_128B, mem_config: fast, auto_disable_count: None },
+        1 => ProbeArm {
+            super_tiled: false,
+            ts_mode: TS_MODE_128B,
+            mem_config: fast | TS_MEM_COLOR_AUTO_DISABLE,
+            auto_disable_count: Some(auto_disable_count(pw, ph)),
+        },
+        2 => ProbeArm {
+            super_tiled: false,
+            ts_mode: TS_MODE_256B,
+            mem_config: fast | TS_MEM_COLOR_COMPRESSION | TS_MEM_COLOR_COMPRESSION_FORMAT_3,
+            auto_disable_count: None,
+        },
+        3 => ProbeArm { super_tiled: true, ts_mode: TS_MODE_128B, mem_config: fast, auto_disable_count: None },
+        _ => return None,
+    })
+}
+
+/// `RS_SOURCE_STRIDE` of a resolve of `S`: the 64-pixel row times 4 (a tiled
+/// side, `source_stride_shift` 2), `TILING | SUPER_TILED_NEW` for a
+/// super-tiled `S` and `TS_MODE` for 256B granules, as Mesa's
+/// `etna_compile_rs_state` (etnaviv_rs.c:95-135) gives them: TILED `0x400`,
+/// TILED 256B `0x20000400`, SUPER_TILED `0x88000400`. K0 passes mode 128B.
+///
+/// gc-ts-probe.md writes TILED as `0x80000400`; that `TILING` bit is Mesa's
+/// super-tiled bit (`COND(src_super, VIVS_RS_SOURCE_STRIDE_TILING)`, and
+/// `rs_interp.rs` and `tiled_copy.rs` read it so), so the TILED arms leave
+/// it clear.
+pub const fn probe_source_stride(arm: &ProbeArm, ts_mode: u32) -> u32 {
+    let mut v = (PROBE_SIDE * 4) << 2;
+    if arm.super_tiled {
+        v |= RS_STRIDE_TILING | RS_STRIDE_SUPER_TILED_NEW;
+    }
+    if ts_mode == TS_MODE_256B {
+        v |= RS_SOURCE_STRIDE_TS_MODE;
+    }
+    v
+}
+
+/// The flush and RA-to-PE stall that opens every step, then `TS_FLUSH_CACHE`.
+fn probe_prologue(w: &mut Vec<(u32, u32)>) {
+    w.extend([
+        (GL_FLUSH_CACHE, GL_FLUSH_COLOR_DEPTH),
+        (GL_SEMAPHORE_TOKEN, STALL_RA_PE),
+        (GL_STALL_TOKEN, STALL_RA_PE),
+        (TS_FLUSH_CACHE, TS_FLUSH),
+    ]);
+}
+
+/// One side of an RS block: the address and the stride word.
+#[derive(Clone, Copy)]
+struct RsSide {
+    addr: u32,
+    stride: u32,
+}
+
+/// One RS block, from `RS_CONFIG` to the last `RS_SINGLE_BUFFER`, in the
+/// golden's order. A fill has no source address (the golden writes none) and
+/// a source stride of 0.
+fn probe_rs_block(
+    w: &mut Vec<(u32, u32)>,
+    config: u32,
+    src: Option<RsSide>,
+    dst: RsSide,
+    (width, height): (u32, u32),
+    (clear_control, fill0): (u32, u32),
+) {
+    let src_stride = src.map_or(0, |s| s.stride);
+    w.extend([(RS_CONFIG, config), (RS_SOURCE_STRIDE, src_stride), (RS_DEST_STRIDE, dst.stride)]);
+    if let Some(s) = src {
+        w.push((RS_PIPE_SOURCE_ADDR0, s.addr));
+    }
+    w.extend([
+        (RS_PIPE_DEST_ADDR0, dst.addr),
+        (RS_PIPE_OFFSET0, 0),
+        (RS_PIPE_OFFSET0 + 4, 0),
+        (RS_WINDOW_SIZE, height << 16 | width),
+        (RS_DITHER0, 0xffff_ffff),
+        (RS_DITHER0 + 4, 0xffff_ffff),
+        (RS_CLEAR_CONTROL, clear_control),
+        (RS_FILL_VALUE0, fill0),
+        (RS_FILL_VALUE0 + 4, 0),
+        (RS_FILL_VALUE0 + 8, 0),
+        (RS_FILL_VALUE0 + 12, 0),
+        (RS_EXTRA_CONFIG, 0),
+        (RS_SINGLE_BUFFER, RS_SINGLE_BUFFER_ENABLE),
+        (RS_KICKER, RS_KICKER_VALUE),
+        (RS_SINGLE_BUFFER, 0),
+    ]);
+}
+
+/// `RS_CONFIG` of the resolve: A8R8G8B8 both ways, the source tiled, no
+/// `SWAP_RB` (a bit copy: `D` gets `S`'s dwords as they are).
+pub const PROBE_RESOLVE_CONFIG: u32 = RS_FORMAT_A8R8G8B8 | RS_CONFIG_SOURCE_TILED | RS_FORMAT_A8R8G8B8 << 8;
+/// `RS_CONFIG` of the TS fill: A8R8G8B8 both ways, `DEST_TILED`.
+pub const PROBE_FILL_CONFIG: u32 = RS_FORMAT_A8R8G8B8 | RS_FORMAT_A8R8G8B8 << 8 | RS_CONFIG_DEST_TILED;
+
+fn probe_resolve(w: &mut Vec<(u32, u32)>, arm: &ProbeArm, a: &ProbeAddrs, ts_mode: u32) {
+    let src = RsSide { addr: a.s, stride: probe_source_stride(arm, ts_mode) };
+    let dst = RsSide { addr: a.d, stride: PROBE_SIDE * 4 };
+    probe_rs_block(w, PROBE_RESOLVE_CONFIG, Some(src), dst, (PROBE_SIDE, PROBE_SIDE), (0, 0));
+}
+
+/// K0, the control resolve: `S` to `D` with `TS_MEM_CONFIG` 0.
+pub fn probe_k0(arm: &ProbeArm, a: &ProbeAddrs) -> Vec<(u32, u32)> {
+    let mut w = Vec::new();
+    probe_prologue(&mut w);
+    w.push((TS_MEM_CONFIG, 0));
+    probe_resolve(&mut w, arm, a, TS_MODE_128B);
+    w
+}
+
+/// K1, the TS fill: [`ts_clear_job`] of `S`'s TS written to `T`
+/// (`etna_rs_gen_ts_clear_cmd`; the golden's first fill block). The same for
+/// every arm.
+pub fn probe_k1(a: &ProbeAddrs) -> Vec<(u32, u32)> {
+    let job = ts_clear_job(ts_layer_stride(PROBE_SURFACE_BYTES, TS_MODE_128B));
+    let mut w = Vec::new();
+    probe_prologue(&mut w);
+    let dst = RsSide { addr: a.t, stride: job.dest_stride << 2 };
+    probe_rs_block(&mut w, PROBE_FILL_CONFIG, None, dst, (job.width, job.height), (job.clear_control, job.fill));
+    w
+}
+
+/// K2, the TS-sourced resolve: K0 with the arm's TS words before the RS
+/// block.
+pub fn probe_k2(arm: &ProbeArm, a: &ProbeAddrs) -> Vec<(u32, u32)> {
+    let mut w = Vec::new();
+    probe_prologue(&mut w);
+    w.extend([
+        (TS_MEM_CONFIG, arm.mem_config),
+        (TS_COLOR_STATUS_BASE, a.t),
+        (TS_COLOR_SURFACE_BASE, a.s),
+        (TS_COLOR_CLEAR_VALUE, PROBE_CLEAR),
+        (TS_COLOR_CLEAR_VALUE_EXT, PROBE_CLEAR),
+    ]);
+    if let Some(n) = arm.auto_disable_count {
+        w.push((TS_COLOR_AUTO_DISABLE_COUNT, n));
+    }
+    probe_resolve(&mut w, arm, a, arm.ts_mode);
+    w
+}
+
+/// K3, the pattern resolve: K2's stream again, after the CPU wrote `T` as
+/// [`probe_k3_ts`] and reset `D`.
+pub fn probe_k3(arm: &ProbeArm, a: &ProbeAddrs) -> Vec<(u32, u32)> {
+    probe_k2(arm, a)
+}
+
+/// `T` as the CPU writes it before K3: 64 bytes of `0x01` (low nibble
+/// cleared, high nibble not), then 192 bytes of 0.
+pub fn probe_k3_ts() -> [u8; PROBE_TS_BYTES as usize] {
+    let mut t = [0u8; PROBE_TS_BYTES as usize];
+    t[..64].fill(0x01);
+    t
+}
+
+/// `B(i)`: dword `i` of `S` as the CPU writes it before K0.
+pub const fn probe_b(i: u32) -> u32 {
+    0xa500_0000 | i
+}
