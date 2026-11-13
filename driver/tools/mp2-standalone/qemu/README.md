@@ -47,6 +47,15 @@ after a failure or with `MP2S_QEMU_KEEP=1`.
    `bootlimit`, `altbootcmd`, `upgrade_available` equal the setup boot's. The
    case's own check then reads each boot's console lines and environment.
 
+The `loop_*` cases prove the distro-loop claims the product route rests on
+(`exit` continues to the next prefix, a `boot_prefixes` change mid-loop does
+not change the walked list, `saveenv` in a sourced script persists, a corrupt or
+missing script falls through). QEMU's bootstd walks prefixes differently, so
+they preset ST's legacy loop text (`scan_dev_for_scripts`, `boot_a_script`,
+`SCRIPT FAILED: continuing...`) and a `bootcmd` that runs it on the bootfs.
+Their test scripts are `cases/*.cmd`; a `Case` lists them as `files` (bootfs
+path to `.cmd`) and may `corrupt` one (data CRC broken).
+
 To add a case, add a `Case(name, script, presets, boots, check)` to `cases()` in
 `drive.py`; `MP2S_QEMU_ONLY=name` runs one.
 

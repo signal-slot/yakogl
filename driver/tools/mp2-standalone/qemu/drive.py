@@ -76,9 +76,12 @@ class Boot:
 
 
 class Case:
-    def __init__(self, name, script, presets, boots, check):
+    """files: {bootfs path: .cmd under cases/}, each built to a script image;
+    corrupt: the bootfs paths among them whose data CRC is then broken."""
+    def __init__(self, name, script, presets, boots, check, files=None, corrupt=()):
         self.name, self.script, self.presets = name, script, presets
         self.boots, self.check = boots, check
+        self.files, self.corrupt = files or {}, corrupt
 
 
 def demo_check(setup_env, boots):
@@ -99,9 +102,114 @@ def demo_check(setup_env, boots):
     return out
 
 
+# ST's 2023.10 boots the DK with the legacy distro loop (include/config_distro_bootcmd.h:
+# scan_dev_for_boot, scan_dev_for_scripts, boot_a_script, "SCRIPT FAILED:
+# continuing..."); QEMU's U-Boot uses bootstd, which walks prefixes differently
+# (it stops at the first script it finds). The loop cases preset that legacy
+# text (the extlinux step left out) and a bootcmd that runs it on the bootfs,
+# partition 2; the setup boot saves it, so it is the baseline of the checks.
+LEGACY_LOOP = [
+    "setenv boot_scripts boot.scr.uimg boot.scr",
+    "setenv boot_a_script 'load ${devtype} ${devnum}:${distro_bootpart} ${scriptaddr} ${prefix}${script}; "
+    "source ${scriptaddr}'",
+    "setenv scan_dev_for_scripts 'for script in ${boot_scripts}; do "
+    "if test -e ${devtype} ${devnum}:${distro_bootpart} ${prefix}${script}; then "
+    "echo Found U-Boot script ${prefix}${script}; run boot_a_script; "
+    "echo SCRIPT FAILED: continuing...; fi; done'",
+    "setenv scan_dev_for_boot 'echo Scanning ${devtype} ${devnum}:${distro_bootpart}...; "
+    "for prefix in ${boot_prefixes}; do run scan_dev_for_scripts; done'",
+    "setenv bootcmd 'setenv devtype mmc; setenv devnum 0; setenv distro_bootpart 2; "
+    "run scan_dev_for_boot; echo LOOP DONE'",
+]
+YAKOGL = "yakogl/standalone/boot.scr.uimg"      # the product's prefix /yakogl/standalone/
+STOCK = "mmc0_boot.scr.uimg"                    # the stand-in stock prefix /mmc0_
+
+
+def loop_presets(prefixes):
+    return [MMC_ONLY, "setenv boot_prefixes '%s'" % prefixes] + LEGACY_LOOP
+
+
+def seq(lines, pats):
+    """The index of each pattern's first line after the previous one, or None."""
+    at, out = 0, []
+    for p in pats:
+        i = next((j for j in range(at, len(lines)) if lines[j].startswith(p)), None)
+        out.append(i)
+        if i is None:
+            return out
+        at = i + 1
+    return out
+
+
+def ordered(name, b, pats):
+    got = seq(b.lines, pats)
+    return ("boot %d: %s, in this order: %s" % (b.n, name, " | ".join(pats)),
+            None not in got, "console lines at %r" % got)
+
+
+def absent(b, pat):
+    got = [ln for ln in b.lines if pat in ln]
+    return ("boot %d: no line with %r" % (b.n, pat), not got, "got %r" % got)
+
+
+def exit_check(setup_env, boots):
+    """(a) exit ends only the sourced script; the loop goes on to the next prefix."""
+    b = boots[0]
+    return [ordered("exit ends the script, the loop goes on", b, [
+                "Found U-Boot script /yakogl/standalone/boot.scr.uimg", "TEST first-prefix script runs",
+                "SCRIPT FAILED: continuing...", "Found U-Boot script /mmc0_boot.scr.uimg",
+                "TEST stock-prefix script runs", "LOOP DONE"]),
+            absent(b, "TEST after-exit")]
+
+
+def snapshot_check(setup_env, boots):
+    """(b) boot_prefixes changed by a script does not change the list the loop walks."""
+    b = boots[0]
+    return [ordered("the stock prefix is still reached", b, [
+                "TEST first-prefix script runs, boot_prefixes was /yakogl/standalone/ /mmc0_",
+                "TEST boot_prefixes now /new/", "SCRIPT FAILED: continuing...",
+                "Found U-Boot script /mmc0_boot.scr.uimg",
+                "TEST stock-prefix script runs, boot_prefixes is /new/", "LOOP DONE"]),
+            absent(b, "/new/boot.scr.uimg"), absent(b, "TEST new-prefix")]
+
+
+def saveenv_check(setup_env, boots):
+    """(c) saveenv inside a sourced script persists across a reset."""
+    b1, b2 = boots
+    return [ordered("saves the probe", b1, ["TEST probe unset", "TEST saveenv done", "SCRIPT FAILED"]),
+            ("setup: the probe was not in the environment before", "mp2s_probe" not in setup_env, ""),
+            ordered("reads the saved probe", b2, ["TEST probe is saved-by-script", "SCRIPT FAILED"]),
+            absent(b2, "TEST probe unset"),
+            ("boot 2: mp2s_probe in the environment", b2.env.get("mp2s_probe") == "saved-by-script",
+             "is %r" % b2.env.get("mp2s_probe"))]
+
+
+def corrupt_check(setup_env, boots):
+    """(d) a corrupt script and a missing one fall through to the next prefix."""
+    b = boots[0]
+    return [ordered("bad CRC, then the loop goes on", b, [
+                "Found U-Boot script /yakogl/standalone/boot.scr.uimg", "Bad data crc",
+                "SCRIPT FAILED: continuing...", "Found U-Boot script /mmc0_boot.scr.uimg",
+                "TEST stock-prefix script runs", "LOOP DONE"]),
+            absent(b, "TEST corrupt script ran"), absent(b, "/absent/")]
+
+
 def cases(here):
+    def c(f):
+        return os.path.join(here, "cases", f)
+    p = "/yakogl/standalone/ /mmc0_"
     return [Case("demo-counter", os.path.join(here, "demo-counter.cmd"),
-                 [MMC_ONLY, "setenv mp2s_test 3"], 3, demo_check)]
+                 [MMC_ONLY, "setenv mp2s_test 3"], 3, demo_check),
+            Case("loop_exit_continues", None, loop_presets(p), 1, exit_check,
+                 {YAKOGL: c("exit-first.cmd"), STOCK: c("stock-marker.cmd")}),
+            Case("loop_prefix_snapshot", None, loop_presets(p), 1, snapshot_check,
+                 {YAKOGL: c("prefix-change.cmd"), STOCK: c("prefix-stock.cmd"),
+                  "new/boot.scr.uimg": c("prefix-new.cmd")}),
+            Case("loop_saveenv_persists", None, loop_presets(p), 2, saveenv_check,
+                 {YAKOGL: c("saveenv-probe.cmd"), STOCK: c("stock-marker.cmd")}),
+            Case("loop_corrupt_script", None, loop_presets("/yakogl/standalone/ /absent/ /mmc0_"), 1,
+                 corrupt_check, {YAKOGL: c("corrupt-first.cmd"), STOCK: c("stock-marker.cmd")},
+                 corrupt=(YAKOGL,))]
 
 
 def printenv(q):
@@ -134,10 +242,17 @@ def main():
         w = os.path.join(a.work, c.name)
         stage = os.path.join(w, "bootfs")
         os.makedirs(os.path.join(stage, "yakogl"), exist_ok=True)
-        with open(c.script, "rb") as f:
-            scr = us.build(f.read(), name=c.name, arch="arm64", time=0)
-        with open(os.path.join(stage, "boot.scr.uimg"), "wb") as f:
-            f.write(scr)
+        files = dict(c.files)
+        if c.script:
+            files["boot.scr.uimg"] = c.script
+        for dest, src in files.items():
+            with open(src, "rb") as f:
+                scr = us.build(f.read(), name=c.name, arch="arm64", time=0)
+            if dest in c.corrupt:               # the last data byte: the data CRC no longer matches
+                scr = scr[:-1] + bytes([scr[-1] ^ 0xff])
+            os.makedirs(os.path.dirname(os.path.join(stage, dest)), exist_ok=True)
+            with open(os.path.join(stage, dest), "wb") as f:
+                f.write(scr)
         with open(a.image, "rb") as f, open(os.path.join(stage, "yakogl", "mp2z.bin"), "wb") as g:
             g.write(f.read())
         disk, flash = os.path.join(w, "sd.img"), os.path.join(w, "env.img")
