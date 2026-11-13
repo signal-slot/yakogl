@@ -280,3 +280,157 @@ pub const fn tex_words(i: &Input) -> Result<Words, Error> {
     w.size = at;
     Ok(w)
 }
+
+/// Bytes a texel of the tiled chain takes: RGBA8.
+pub const CHAIN_BPP: u32 = 4;
+
+/// One level of a tiled chain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChainLevel {
+    /// Bytes from the chain's base, on [`LOD_ALIGN`].
+    pub offset: u64,
+    /// Bytes of the level: its stride times its height padded to 4.
+    pub size: u64,
+    /// Row pitch in bytes: the width padded to 16, times 4.
+    pub stride: u32,
+}
+
+/// A 2D RGBA8 chain laid out TILED with 16x4 padding (`rs_align`, HALIGN
+/// SIXTEEN), each level on 64 bytes: `tiled_copy::tiled_layout`'s rule with
+/// the resolve engine's padding (docs/notes/gc-tiled-wire.md, W11a).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Chain {
+    pub level: [ChainLevel; MAX_LEVELS],
+    pub levels: u32,
+    /// Bytes from the base to the end of the last level.
+    pub size: u64,
+}
+
+/// The level offsets and sizes of a tiled RGBA8 chain of `levels` levels of
+/// `width` x `height`, each level `max(1, dim >> l)` and padded to 16x4.
+pub const fn tiled_chain(width: u32, height: u32, levels: u32) -> Result<Chain, Error> {
+    if width == 0 || height == 0 {
+        return Err(Error::Empty);
+    }
+    if levels == 0 || levels as usize > MAX_LEVELS {
+        return Err(Error::Levels);
+    }
+    let a = alignment(Layout::Tiled, true);
+    let mut c = Chain { level: [ChainLevel { offset: 0, size: 0, stride: 0 }; MAX_LEVELS], levels, size: 0 };
+    let mut at: u64 = 0;
+    let mut l = 0;
+    while l < levels {
+        at = (at + LOD_ALIGN - 1) & !(LOD_ALIGN - 1);
+        let stride = align_up(minify(width, l), a.width) * CHAIN_BPP;
+        let size = stride as u64 * align_up(minify(height, l), a.height) as u64;
+        c.level[l as usize] = ChainLevel { offset: at, size, stride };
+        at += size;
+        l += 1;
+    }
+    c.size = at;
+    Ok(c)
+}
+
+/// The descriptor words sampling [`tiled_chain`]'s chain at `base`: TILED,
+/// HALIGN SIXTEEN, level `l` at `base + level_offset[l]`. `tex_words`' own
+/// path, so the levels agree with [`tiled_chain`].
+pub const fn tiled_chain_words(width: u32, height: u32, levels: u32, base: u64) -> Result<Words, Error> {
+    tex_words(&Input {
+        width,
+        height,
+        levels,
+        bpp: CHAIN_BPP,
+        layout: Layout::Tiled,
+        ts: Ts::None,
+        rs_align: true,
+        stride_texels: 0,
+        base,
+    })
+}
+
+#[cfg(test)]
+#[path = "layout.rs"]
+mod layout_ref;
+
+#[cfg(test)]
+mod chain_tests {
+    use super::layout_ref as lr;
+    use super::*;
+
+    const SIZES: [(u32, u32); 6] = [(256, 256), (800, 600), (1, 1), (13, 7), (333, 101), (17, 1000)];
+
+    fn full(w: u32, h: u32) -> u32 {
+        w.max(h).ilog2() + 1
+    }
+
+    fn check(w: u32, h: u32, levels: u32) {
+        let c = tiled_chain(w, h, levels).unwrap();
+        let mut at = 0u64;
+        for l in 0..levels {
+            let (lw, lh) = ((w >> l).max(1), (h >> l).max(1));
+            let size = lr::size(lr::Layout::Tiled, lw, lh, 4, true) as u64;
+            let stride = lr::stride(lr::Layout::Tiled, lw, 4, true);
+            at = at.div_ceil(64) * 64;
+            let e = c.level[l as usize];
+            assert_eq!((e.offset, e.size, e.stride), (at, size, stride), "{w}x{h} level {l}");
+            // the last texel of the padded level ends the level
+            let pw = lr::aligned_width(lr::Layout::Tiled, lw, true);
+            let ph = lr::aligned_height(lr::Layout::Tiled, lh, true);
+            let end = lr::offset(lr::Layout::Tiled, pw - 1, ph - 1, 4, stride) as u64 + 4;
+            assert_eq!(end, size, "{w}x{h} level {l}: offset() ends at the size");
+            at += size;
+        }
+        assert_eq!(c.size, at);
+    }
+
+    #[test]
+    fn chain_matches_layout_rs() {
+        for (w, h) in SIZES {
+            for levels in [1, 3.min(full(w, h)), full(w, h)] {
+                check(w, h, levels);
+            }
+        }
+    }
+
+    #[test]
+    fn words_agree_with_chain() {
+        for (w, h) in SIZES {
+            let n = full(w, h);
+            let (c, t) = (tiled_chain(w, h, n).unwrap(), tiled_chain_words(w, h, n, 0x1000).unwrap());
+            for l in 0..n as usize {
+                assert_eq!(t.level_offset[l], c.level[l].offset);
+                assert_eq!(t.level_stride[l], c.level[l].stride);
+            }
+            assert_eq!(t.size, c.size);
+        }
+    }
+
+    #[test]
+    fn three_level_words() {
+        // 800x600, 400x300, 200x150 -> pitches 800, 400, 208 texels
+        let t = tiled_chain_words(800, 600, 3, 0x4000_0000).unwrap();
+        assert_eq!(t.config0_addressing, ADDRESSING_TILED << ADDRESSING_SHIFT);
+        assert_eq!(t.config1_halign, HALIGN_SIXTEEN << HALIGN_SHIFT);
+        assert_eq!(t.align, Alignment { width: 16, height: 4, base: 64 });
+        assert_eq!((t.linear_stride, t.slice), (3200, 3200 * 600));
+        assert_eq!(&t.level_stride[..3], &[3200, 1600, 832]);
+        assert_eq!(t.level_offset[0], 0);
+        assert_eq!(t.level_offset[1], 3200 * 600);
+        assert_eq!(t.level_offset[2], 3200 * 600 + 1600 * 300);
+        assert_eq!(t.size, 3200 * 600 + 1600 * 300 + 832 * 152);
+        assert!(!t.ts_enable);
+        assert!(t.level_offset[..3].iter().all(|o| o % LOD_ALIGN == 0));
+        assert_eq!(tiled_chain_words(64, 64, 1, 0x1001), Err(Error::Base));
+    }
+
+    #[test]
+    fn small_levels_pad_to_16x4() {
+        // 1x1 is still a 16x4 block: 256 bytes, and the next level starts there
+        let c = tiled_chain(2, 2, 2).unwrap();
+        assert_eq!((c.level[0].size, c.level[1].offset, c.level[1].size), (256, 256, 256));
+        assert_eq!(c.size, 512);
+        assert_eq!(tiled_chain(0, 4, 1), Err(Error::Empty));
+        assert_eq!(tiled_chain(4, 4, 0), Err(Error::Levels));
+        assert_eq!(tiled_chain(4, 4, 17), Err(Error::Levels));
+    }
+}
