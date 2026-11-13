@@ -1,0 +1,3 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+37	T6S2R13	361	done	7	0	0	yes	yes	yakogl-mali-exit: draws=63 refused=298 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) gpu_faults=0 job_timeouts=0
+38	T6S2R14	336	done	7	0	0	yes	yes	yakogl-mali-exit: draws=21 refused=315 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) gpu_faults=
