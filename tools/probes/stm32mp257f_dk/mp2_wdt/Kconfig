@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config MP2_WDT_TIMEOUT_S
+	int "Watchdog timeout sent with SET_TIMEOUT (seconds)"
+	default 32
+	range 6 131
+	help
+	  32 is the DK's timeout-sec, the one Linux uses. OP-TEE's early
+	  interrupt comes 5 s before it and needs 1 s more, hence 6 at the
+	  least; 131 is INIT's maximum with the LSI at 32 kHz.
+
+config MP2_WDT_PET_S
+	int "Seconds between two PETs"
+	default 5
+	range 1 60
+	help
+	  Must stay under the timeout less OP-TEE's 5 s (a build assert).
+
+config MP2_WDT_REFRESH_S
+	int "Seconds of petting, then no more"
+	default 60
+	range 1 600
+	help
+	  A whole number of PET periods. After it the image stops petting
+	  and the IWDG resets the board about MP2_WDT_TIMEOUT_S later. The
+	  layer's lifetime (CONFIG_YAKOGL_STM32MP2_LIFETIME_S, prj.conf) must
+	  exceed REFRESH_S + TIMEOUT_S + 30 (a build assert).
+
+source "Kconfig.zephyr"

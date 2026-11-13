@@ -16,3 +16,4 @@ pub mod power;
 mod power_model_tests;
 pub mod rcc;
 pub mod smc_wdt;
+pub mod smc_wdt_refresh;
