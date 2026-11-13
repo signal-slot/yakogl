@@ -1038,14 +1038,24 @@ unsafe extern "C" fn v3d_tex_pack_state(out: *mut u8, s: *const V3dTexState) -> 
     true
 }
 
+/// The fake sampler record: the wraps, the filter flags, word 3 the "Depth
+/// Compare Function" field as the C sets it from `compare_op` (bits 0-2 at
+/// bit 4, NEVER with bit 4 set, bit 3 ignored), word 4 the `compare_op` it
+/// was handed. It refuses what the C refuses past the sampler's own fields:
+/// a `compare_op` above 0x1f.
 #[no_mangle]
-unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool {
+unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool {
+    if compare_op > 0x1f {
+        return false;
+    }
+    let function = if compare_op & 16 != 0 { 0 } else { compare_op & 7 };
     // SAFETY: V3D_SAMPLER_STATE_BYTES of the arena and the backend's sampler.
     unsafe {
         let s = &*s;
         let flags =
             s.mag_nearest as u32 | (s.min_nearest as u32) << 1 | (s.mip_nearest as u32) << 2 | (s.mip_none as u32) << 3;
-        let words = [s.wrap_s, s.wrap_t, flags, 0, 0, FAKE_SAMPLER_MARK];
+        let words =
+            [s.wrap_s, s.wrap_t, flags, function << texture::SAMPLER_COMPARE_SHIFT, compare_op, FAKE_SAMPLER_MARK];
         core::ptr::copy_nonoverlapping(words.as_ptr() as *const u8, out, V3D_SAMPLER_STATE_BYTES);
     }
     true
@@ -1803,6 +1813,108 @@ fn a_sampler_record_is_packed_once_per_job() {
     assert_eq!(v3d_flush(), 0);
     assert_eq!(draw(&sampling(&rig, t)), 0);
     assert_eq!(sampler_counters(), (3, 1), "a new job packs its own");
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// A depth texture (R32F, ES 3.0.6 3.8.15) on unit 0 with GL's compare
+/// `compare_op` (`GlesTextureBind::compare_op`: bits 0-2 the function, bit 4
+/// compare off).
+fn shadow_texture(compare_op: u8) -> GlesTextureBind {
+    GlesTextureBind { format: GLES_TEXFMT_R32F, compare_op, ..texture(0, 16, 16, 1) }
+}
+
+/// A draw sampling `t` with `p`, whose look-up takes the TMU's 32-bit output
+/// as a depth binding's does (`ret32_program`).
+fn shadow_draw(rig: &Rig, p: &ShcShader, t: GlesTextureBind) -> GlesDraw {
+    let mut d = sampling(rig, t);
+    d.fs = p;
+    d
+}
+
+/// The sampler cache is keyed on the state AND the compare function: two
+/// depth bindings that differ only in GL_TEXTURE_COMPARE_FUNC (or in
+/// GL_TEXTURE_COMPARE_MODE) share a `V3dSampler` but need two records, and
+/// the same function is found again. Compare off is NEVER's record: V3D 4.2
+/// has no enable bit, and a look-up without TMUDREF does not compare
+/// (`texture::compare_function`). Revert check: keying on `texture::sampler`
+/// alone gives every draw after the first the first draw's record, NEVER
+/// where LESS or GREATER was asked, and (1, 7) counts.
+#[test]
+fn the_sampler_cache_is_not_shared_across_compare_functions() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let ops: Vec<u8> = (0..8).collect();
+    for &op in &ops {
+        assert_eq!(draw(&shadow_draw(&rig, &p, shadow_texture(op))), 0, "compare {op}: {:?}", rig.gl.logs());
+    }
+    assert_eq!(texture::sampler(&shadow_texture(1)), texture::sampler(&shadow_texture(4)), "one V3dSampler");
+    let recs: Vec<u32> = rig.draws().iter().map(|d| d.tmu[0].sampler).collect();
+    for (i, a) in recs.iter().enumerate() {
+        for (k, b) in recs.iter().enumerate().skip(i + 1) {
+            assert_ne!(a, b, "compare {} and {} share a record", ops[i], ops[k]);
+        }
+    }
+    assert_eq!(sampler_counters(), (8, 0));
+    /* the same function again: found, not packed; bit 3 (a fixed-point
+     * depth) is not in the record; compare off, with or without another
+     * function's bits, is NEVER's record */
+    for (op, of) in [(4u8, 4usize), (4 | 8, 4), (16, 0), (16 | 5, 0)] {
+        assert_eq!(draw(&shadow_draw(&rig, &p, shadow_texture(op))), 0);
+        assert_eq!(rig.draws().last().unwrap().tmu[0].sampler, recs[of], "compare {op}");
+    }
+    assert_eq!(sampler_counters(), (8, 4));
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// The packed record carries the compare function: the record's compare
+/// bits are `texture::sampler_compare_bits` of the binding, packed from its
+/// `texture::compare_op` (`texture::pack_sampler`; the fake's word 4 is the
+/// `compare_op` of the draw that packed the record), and the rest of the
+/// record is the binding's filters and wraps.
+#[test]
+fn a_shadow_samplers_record_carries_its_compare_bits() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let mut packed = Vec::new();
+    for op in [8 | 2, 16 | 3].into_iter().chain(0..8u8).chain([16]) {
+        let mut t = shadow_texture(op);
+        (t.linear_filter, t.wrap_s) = (1, GLES_WRAP_CLAMP_TO_EDGE);
+        assert_eq!(draw(&shadow_draw(&rig, &p, t)), 0, "compare {op}: {:?}", rig.gl.logs());
+        let rec = rig.draws().last().unwrap().tmu[0].sampler;
+        let sa = words(&rig, rec, 6);
+        assert_eq!(sa[5], FAKE_SAMPLER_MARK);
+        assert_eq!(sa[3], texture::sampler_compare_bits(&t), "compare {op}");
+        assert_eq!(sa[3], if op & 16 != 0 { 0 } else { u32::from(op & 7) << 4 }, "compare {op}");
+        let function = texture::compare_function(&t);
+        if !packed.contains(&function) {
+            packed.push(function);
+            assert_eq!(sa[4], texture::compare_op(&t), "compare {op}: the binding's compare_op is packed");
+        }
+        assert_eq!((sa[0], sa[1], sa[2]), (V3D_WRAP_MODE_CLAMP, V3D_WRAP_MODE_REPEAT, 0b1110), "compare {op}");
+    }
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// A texture that is not a depth texture packs as before the compare: no
+/// compare bits whatever its `compare_op` (ES 3.0.6 3.8.15 bypasses the
+/// compare for another base format), and one record for any `compare_op`.
+#[test]
+fn a_colour_texture_packs_without_a_compare() {
+    let rig = Rig::new();
+    rig.init();
+    for op in [0u8, 1, 4, 7, 16] {
+        let t = GlesTextureBind { compare_op: op, ..texture(0, 16, 16, 1) };
+        assert_eq!(draw(&sampling(&rig, t)), 0, "compare {op}: {:?}", rig.gl.logs());
+    }
+    let draws = rig.draws();
+    let rec = draws[0].tmu[0].sampler;
+    assert!(draws.iter().all(|d| d.tmu[0].sampler == rec), "one record");
+    let sa = words(&rig, rec, 6);
+    assert_eq!((sa[3], sa[4]), (0, texture::COMPARE_OFF), "packed with the compare off");
+    assert_eq!((sa[0], sa[1], sa[2]), (V3D_WRAP_MODE_REPEAT, V3D_WRAP_MODE_REPEAT, 0b1111));
+    assert_eq!(sampler_counters(), (1, 4));
     assert_eq!(v3d_finish(), 0);
 }
 
