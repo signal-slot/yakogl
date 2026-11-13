@@ -17,7 +17,8 @@ Sections 1 to 3 are the hardware and Mesa's tables; sections 4 to 6 are the
 plan as it was written against the tree before the work (their yakogl line
 numbers are that tree's); section 10 is what the PowerVR does now on the
 host -- sampling of the ES 3.0 storage classes, isampler2D/usampler2D, and
-the nineteen integer render targets -- and where it parts from the plan.
+the nineteen integer render targets -- and where it parts from the plan;
+section 11 is the plan #360 float colour-target verdict for this back end.
 None of it has run on the AM62P yet.
 
 ## Sources and citation shorthand
@@ -936,4 +937,68 @@ nineteen layouts run in the byte model); `tests/internal_programs.rs`
 `an_integer_sampler_reads_without_fcnorm`; `gl::draw`
 `an_integer_target_keys_its_layout_never_a_blend`. On the board: gl_test 200
 (intrt) and 201 (usamp).
+
+## 11. Float colour targets (plan #360)
+
+Plan #360 (`GL_EXT_color_buffer_float`) decides per GPU whether the ES 3.0
+build claims the extension, and claims it only where the back end really
+draws and reads the formats back. The decision and its evidence per GPU are
+in `docs/notes/es3-float-targets.md` section 7, the rule in
+`docs/es3/sized-formats.md` ("Float colour targets") and the status in
+`docs/es3/backend-caps.md` ("GL_EXT_color_buffer_float"). For the PowerVR
+BXS-4-64 the decision is: **`GL_EXT_color_buffer_float` is not claimed**.
+
+The extension string first (it is the GL core's, the same on every GPU).
+The ES 3.0 build lists `GL_EXT_color_buffer_half_float`
+(`src/gl/state.rs:112`, base list `:252`); `GL_EXT_color_buffer_float` is
+listed nowhere in any build -- only its constant exists
+(`src/gl/consts.rs:1175`). Neither answer is new to `report-es2`
+(`tests/es2_report_guard.rs`). The pair is honest in both directions:
+
+- the half-float extension adds the three 16F formats, and this back end
+  draws all three: `R16F` through `GLES_SURF_R16F` (PBE `F16`,
+  `src/pvr/backend.rs:1025`), `RGBA16F` through `GLES_SURF_RGBA16F`
+  (`F16F16F16F16`, `:1024`), and `RG16F`/`RGB16F` through the `RGBA16F`
+  class (`src/gl/framebuffer.rs:745`);
+- the float extension adds all seven of them, the three 32-bit formats
+  and `R11F_G11F_B10F` too (sized-formats' rule), and none of those four
+  has a path here -- the rows below. Listing the name would turn the
+  ~334 AM62P `NotSupported` rows of the note's section 2 into real tests
+  this back end fails, and section 7 records `R32F`, the only 32-bit row
+  that draws at all, as "Mesa pco's R32F is not 32-bit precise".
+
+The verdict per format (the citation shorthand is the one named at the
+head of this file; `§` is a section of this file):
+
+| format | colour-renderable in our build today | what the PBE/USC path would need | evidence |
+|---|---|---|---|
+| R16F | yes | nothing -- it draws: `F16` packmode, `F16_PER_CHANNEL` source, norm 0, `F16`-accum clear | `src/pvr/backend.rs:1025`, `:1037-1038`; §2.5; `arch-formats.c:232`, bind `VTRI` `:124`; note §7 |
+| RG16F | yes -- as the `RGBA16F` class | nothing for the claim: it draws `F16F16F16F16` (2 dw); the native `F16F16` row is Mesa's but the extension text asks no narrower store | `src/gl/framebuffer.rs:745`; `src/pvr/backend.rs:1024`; `arch-formats.c:237`, bind `:129` |
+| RGBA16F | yes | nothing -- it draws: `F16F16F16F16`, PCK, 2 PIXOUT dwords, `F16`-accum clear | `src/pvr/backend.rs:1024`; §2.5 (PCK `pvfio.c:211`, clear `formats.c:190`); `arch-formats.c:245`, bind `:137`; note §7 |
+| R32F | yes today -- the gap: without the claim it goes to **no** (rule below) | to claim it honestly: Mesa's raw read of the USC registers first -- a 32-bit component is `8_PER_CHANNEL` (`job-common.c:51-53`) over the `F32` accum (`arch-formats.c:248`), while this tree emits `F16_PER_CHANNEL` for every float class (`src/pvr/backend.rs:1037-1038`); then PBE blending of 32-bit components (plan item `blend-32f-map`) and an end-to-end draw/read-back check | note §7 (verdict), §3 ("first verify the R32F PBE source format"); §2.2 and §2.5 `R32F` rows; `src/gl/framebuffer.rs:650`, `:747` |
+| RG32F | no -- not a colour format name (`is_color_format`), no surface | a `GLES_SURF_RG32F` class (plan item `surf-abi`), `F32F32` packmode with `8_PER_CHANNEL`, raw 2-dword PIXOUT (`pvfio.c:180-182`), `F32`-accum clear (`formats.c:207`), a raw frame-load variant, the 32-bit texture storage and the claim itself | §2.5 `RG32F` row; `arch-formats.c:251`, bind `VTRI` `:143` |
+| RGBA32F | no -- same, and an `RGBA32F` *texture* is halves stored under the name, judged as `GL_RGBA32F`, so its attachment stays incomplete (`src/gl/framebuffer.rs:549-554`) | as `RG32F` with `F32F32F32F32` (`arch-formats.c:257`): raw 4-dword PIXOUT, 4-dword clear and frame-load, and real 32-bit storage before any claim | §2.5 `RGBA32F` row; `arch-formats.c:257`, bind `:149`; note §3 |
+| R11F_G11F_B10F | no -- not a colour format name, no surface | a class plus the `F10F11F11` packmode with `F16` source and accum (`arch-formats.c:258`), the USC widened to `R16G16B16_FLOAT` (`pvfio.c:106-107`) and PCK `f111110` packing it (`pco.c:414-416`), the `F16` clear -- under `GL_EXT_color_buffer_float`, which is what covers this format (the half-float one does not) | §2.5 `R11F_G11F_B10F` row; `arch-formats.c:258`, bind `_TRI` `:150` |
+
+Two things the table rests on:
+
+- the hardware renders all seven -- every row carries the `R` bind flag
+  (`VTRI`/`_TRI`, `arch-formats.c:124,129,137,140,143,149,150`, §1.1) --
+  the claim follows the *build*, not the hardware; the gap is ours, and
+  §2.2 already lists all seven PBE rows;
+- the GL core rule (sized-formats, note §7): without
+  `GL_EXT_color_buffer_float`, `R32F` is framebuffer-incomplete like
+  `RG32F`, `RGBA32F` and `R11F_G11F_B10F` --
+  `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` for a texture attachment,
+  `GL_INVALID_ENUM` for renderbuffer storage (plan item `core-claim`);
+  `GL_EXT_color_buffer_half_float` and the three 16F rows stay as they
+  are in every ES 3.0 build. Today's `R32F` completeness
+  (`src/gl/framebuffer.rs:650`) is the deviation that rule removes; on
+  this back end nothing in the draw path changes with it.
+
+What it would take to claim `GL_EXT_color_buffer_float` on this GPU --
+the `R32F` source-format fix, the four missing paths, the read-back and
+the board proof -- is an issue draft: note §7 keeps the PowerVR arm a
+draft until its paths (`src/pvr/**`) are free, and the AM62P board step
+of these rows belongs to #313.
 
