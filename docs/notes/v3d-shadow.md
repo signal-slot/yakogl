@@ -13,6 +13,19 @@ may be compared and the tests. The TMU words of the other ES 3.0 look-ups are in
 `docs/notes/v3d-tmu-es3.md` and the memory layouts in
 `docs/notes/v3d-tex-layout-es3.md`; neither is repeated here.
 
+Status (plan #354): the compiler side is done (`tests/es3_shadow_v3d.rs`) and
+the draw-time compare is wired. `sampler_for` (`src/v3d/backend.rs`) packs the
+record with `texture::pack_sampler` (`v3d_tex_pack_sampler_compare`) and keys
+its per-job cache on (`texture::sampler`, `texture::compare_function`); the
+C struct stayed as it was, which is the "key" option of (a). Host tests:
+`src/v3d/backend_tests.rs` `a_shadow_samplers_record_carries_the_compare_function`,
+`shadow_samplers_that_differ_only_in_the_compare_get_their_own_records` and
+`a_gl_shadow_draw_hands_the_tmu_the_textures_compare_function` (the last
+through the GL core, with the `sampler2DShadow` form of the compiler tests). A
+compare-off draw and a `NEVER` draw share one record, which is right: compare
+off packs NEVER. The picture is a board's: the host shows the state the TMU is
+handed, not the TMU's compare.
+
 Sources. `third_party/mesa-26.2.1` holds only the packet XML and the format
 table of Mesa's V3D (`UPSTREAM`, `src/broadcom/cle/v3d_packet.xml`,
 `src/gallium/drivers/v3d/v3dx_format_table.c`). The compiler (`v3d_tex.c`) and

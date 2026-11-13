@@ -275,11 +275,6 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
             "6144, not 16384: a block gets the default-block budget, MAX_UNIFORM_DWORDS * 4 (ubo-uniform)",
         ),
         ("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)"),
-        (
-            "NUM_COMPRESSED_TEXTURE_FORMATS",
-            "3: ETC1, RGB8_ETC2, RGBA8_ETC2_EAC, and 5 on the PowerVR and the GC7000UL with the sRGB ETC2 pair \
-             (gl/texture.rs stored_compressed_formats); ES 3.0 needs the ten ETC2/EAC formats (formats-*)",
-        ),
     ];
     let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"));
     if !fifteen {
@@ -289,6 +284,14 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
             ("MAX_VARYING_COMPONENTS", "32 = 8 vectors * 4"),
             ("MAX_FRAGMENT_INPUT_COMPONENTS", "32 = 8 vectors * 4, ES 3.0 needs 60 (gl/context.rs)"),
         ]);
+    }
+    if cfg!(feature = "gpu-mali") {
+        // the Mali's texture unit samples neither the sRGB ETC2 classes nor the R16F / RGBA16F / SRGB8_A8 the
+        // six decoded names are stored in (gl/texture.rs decoded_class_stored): ETC1 and the two linear classes
+        v.push((
+            "NUM_COMPRESSED_TEXTURE_FORMATS",
+            "3 on the Mali: the six decoded names are refused (docs/notes/etc2-eac.md)",
+        ));
     }
     // the GC7000 and the PowerVR report 15 varyings but 60 vertex output components
     v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));
