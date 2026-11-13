@@ -1582,6 +1582,9 @@ KNOBS_TESTS=(
   vivante::backend::backend_tests::tiled_rt_tests::a_draw_elsewhere_finds_the_shadow_written_back_and_a_return_needs_no_tile_in
   vivante::backend::backend_tests::tiled_rt_tests::released_storage_is_never_written_back_by_the_stream
   vivante::backend::backend_tests::tiled_rt_tests::the_copy_back_survives_a_stream_filled_with_shadow_draws
+  vivante::backend::backend_tests::tiled_rt_tests::only_the_first_draw_that_takes_no_shadow_gets_a_copy_back_before_it
+  vivante::backend::backend_tests::tiled_rt_tests::with_the_knob_off_no_stream_carries_a_tile_in_or_a_copy_back
+  vivante::backend::backend_tests::tiled_rt_tests::a_draw_that_needs_the_other_depth_layout_is_refused_until_a_whole_clear
   gl::egl::tests::the_gc7000_offers_the_multisampled_config_while_msaa_is_on
   gl::texture::tests::the_gc7000_narrow_la_knob_selects_the_rgba8_store
   gl::framebuffer::tests::kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache
