@@ -10,9 +10,15 @@ and is not one of the ten). This note is about the other six and why they do
 not get a class of their own yet. Function names are the address; line
 numbers are of main at `6dc53970` and drift.
 
-Status when this was written: the decoder (`src/gl/etc2.rs`), the six names
-in the GL core, the V3D mask bits and the dEQP runs are other items of the
-plan and were not on main. Nothing here was measured on a board.
+Status: the decoder (`src/gl/etc2.rs`), the six names in the GL core
+(`decoded_target`, `decoded_image_2d`, `decoded_image_3d` and the sub-image
+branch in `src/gl/texture.rs`; `GlTexture::decoded_from` records the name) and
+the V3D mask bits (the four stored ETC2 classes and `ETC2_RGB_PT`, with
+`compressed_blocks_in_rows` true) are on main, host-tested
+(`tests/es3_etc2_eac.rs`, `tests/es3_etc2_v3d.rs`). The dEQP runs are not made:
+the patched VK-GL-CTS was not in the deps cache, and the host build reads black
+for every render, so it could show only upload errors and the limit rows.
+Nothing here was measured on a board.
 
 ## 1. The decision
 
@@ -111,9 +117,8 @@ including the sRGB 6-bit one.
 what the build stores (`stored_compressed_formats`):
 
 - PowerVR and GC under ES 3.0: 11 (ETC1 plus the ten).
-- The V3D: 11 once `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the linear
-  and sRGB ETC2 classes; until then the sRGB pair is not stored and the list
-  is shorter. ES 3.0 requires all ten, so the V3D needs the mask first.
+- The V3D: 11, since `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the
+  linear and sRGB ETC2 classes.
 - `report-es2`: 3 on every build (ETC1, `RGB8_ETC2`, `RGBA8_ETC2_EAC`),
   unchanged.
 - Mali: the six are refused, so its count is what its mask allows.
