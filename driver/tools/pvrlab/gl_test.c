@@ -3940,33 +3940,39 @@ static int case_etc(void)
 	static uint8_t etc2a[4 * 16];
 	static const uint8_t alphas[4] = { 255, 128, 64, 0 };
 	GLuint prog, tex;
-	GLint n = 0, fmts[8] = { 0 };
+	GLint n = 0, fmts[16] = { 0 };
 	bool ok = true;
 	const char *ver = (const char *)glGetString(GL_VERSION);
 	int es2 = ver && strncmp(ver, "OpenGL ES 2.", 12) == 0;
-	int n_etc1 = 0, srgb = 0, other = 0;
+	int n_etc1 = 0, srgb = 0, decoded = 0, other = 0;
 
 	/* The core promises the list, not its order or length: ETC1, RGB8_ETC2
-	 * and RGBA8_ETC2_EAC always (3), and under an ES 3.0 report the sRGB
-	 * ETC2 pair when the back end samples both (5; tests/es3_caps.rs
-	 * known_gaps, tests/gltest_case20_formats.rs). The pair is both or
-	 * neither, so the count is 3 + 2 * pair, taken from the list. */
+	 * and RGBA8_ETC2_EAC always (3), under an ES 3.0 report the sRGB ETC2
+	 * pair when the back end samples both (+2) and the six formats it
+	 * decodes at upload (+6: R11 and RG11 EAC, signed and unsigned, the two
+	 * punch-through ETC2; tests/gltest_case20_formats.rs). The count is
+	 * taken from the list. */
 	glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, &n);
 	glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, fmts);
-	for (int i = 0; i < n && i < 8; i++) {
+	for (int i = 0; i < n && i < 16; i++) {
 		if (fmts[i] == GL_ETC1_RGB8_OES)
 			n_etc1++;
 		else if (fmts[i] == 0x9275 /* GL_COMPRESSED_SRGB8_ETC2 (gl3.h) */ ||
-			 fmts[i] == 0x9279 /* GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC (gl3.h) */)
+			 fmts[i] == 0x9279 /* GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC */)
 			srgb++;
+		else if ((fmts[i] >= 0x9270 && fmts[i] <= 0x9273) /* R11, SIGNED_R11, RG11, SIGNED_RG11 */ ||
+			 fmts[i] == 0x9276 /* RGB8_PUNCHTHROUGH_ALPHA1_ETC2 */ ||
+			 fmts[i] == 0x9277 /* SRGB8_PUNCHTHROUGH_ALPHA1_ETC2 */)
+			decoded++;
 		else if (fmts[i] != 0x9274 /* GL_COMPRESSED_RGB8_ETC2 */ &&
 			 fmts[i] != 0x9278 /* GL_COMPRESSED_RGBA8_ETC2_EAC */)
 			other++;
 	}
-	pr_info("gl_test: case 20 etc: %s, %d compressed formats, sRGB ETC2 x%d\n",
-		es2 ? "ES 2.0 report" : "ES 3.0 report", (int)n, srgb);
-	ok &= expect_int("compressed format count is 3, or 5 with the sRGB pair (3 under ES 2.0)",
-			 n == 3 + srgb && (srgb == 0 || (srgb == 2 && !es2)), 1);
+	pr_info("gl_test: case 20 etc: %s, %d compressed formats, sRGB ETC2 x%d, decoded x%d\n",
+		es2 ? "ES 2.0 report" : "ES 3.0 report", (int)n, srgb, decoded);
+	ok &= expect_int("compressed format count is 3, or 9 or 11 with the decoded six (3 under ES 2.0)",
+			 n == 3 + srgb + decoded && (srgb == 0 || (srgb == 2 && !es2)) &&
+			 (decoded == 0 || (decoded == 6 && !es2)), 1);
 	ok &= expect_int("ETC1 listed", n_etc1, 1);
 	ok &= expect_int("no other compressed format listed", other, 0);
 	ok &= expect_int("GL_OES_compressed_ETC1_RGB8_texture advertised",

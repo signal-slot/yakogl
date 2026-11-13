@@ -1051,6 +1051,24 @@ unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) ->
     true
 }
 
+/// The fake of v3d_tex_pack_sampler_compare: the fake record, with the
+/// depth compare function (0 with the compare off) in its fourth word.
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool {
+    if compare_op > 0x1f {
+        return false;
+    }
+    // SAFETY: as v3d_tex_pack_sampler's.
+    unsafe {
+        if !v3d_tex_pack_sampler(out, s) {
+            return false;
+        }
+        let function = if compare_op & texture::COMPARE_OFF != 0 { 0 } else { compare_op & 7 };
+        core::ptr::copy_nonoverlapping(function.to_le_bytes().as_ptr(), out.add(12), 4);
+    }
+    true
+}
+
 #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 extern "C" {
     /// testutil's log trampoline: the lines land in the TestGl recorder.
@@ -1803,6 +1821,54 @@ fn a_sampler_record_is_packed_once_per_job() {
     assert_eq!(v3d_flush(), 0);
     assert_eq!(draw(&sampling(&rig, t)), 0);
     assert_eq!(sampler_counters(), (3, 1), "a new job packs its own");
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// A shadow binding's sampler record carries its depth compare function, and
+/// the job's cache is keyed on (sampler state, function): the same state with
+/// another function packs another record; a binding that is not a depth class
+/// packs the compare off whatever `compare_op` says. Revert check: packing
+/// with `v3d_tex_pack_sampler` (or keying on the sampler alone) gives words[3]
+/// 0 everywhere and one record for the three LESS/GREATER/ALWAYS draws.
+#[test]
+fn a_shadow_samplers_record_carries_its_compare_function() {
+    let rig = Rig::new();
+    rig.init();
+    let mut depth = narrow_texture(16, 16, 1, GLES_TEXFMT_R32F);
+    depth.unit = 0;
+    let p32 = ret32_program();
+    /* GL's order: NEVER, LESS, EQUAL, LEQUAL, GREATER, NOTEQUAL, GEQUAL, ALWAYS */
+    let (less, greater, always) = (1u8, 4u8, 7u8);
+    let mut want = Vec::new();
+    for op in [less, greater, always, less] {
+        let b = GlesTextureBind { compare_op: op, ..depth };
+        let mut d = sampling(&rig, b);
+        d.fs = &p32;
+        assert_eq!(draw(&d), 0, "compare {op}: {:?}", rig.gl.logs());
+        want.push(u32::from(op));
+    }
+    let draws = rig.draws();
+    for (i, w) in want.iter().enumerate() {
+        let sa = words(&rig, draws[i].tmu[0].sampler, 6);
+        assert_eq!(sa[5], FAKE_SAMPLER_MARK);
+        assert_eq!(sa[3], *w, "draw {i}: the record's depth compare function");
+    }
+    assert_eq!(draws[0].tmu[0].sampler, draws[3].tmu[0].sampler, "one function, one record");
+    assert_ne!(draws[0].tmu[0].sampler, draws[1].tmu[0].sampler);
+    assert_ne!(draws[1].tmu[0].sampler, draws[2].tmu[0].sampler);
+    assert_eq!(sampler_counters(), (3, 1), "three functions packed, the fourth draw found its record");
+    /* the compare off (bit 4): NEVER's bits, a record of its own */
+    let off = GlesTextureBind { compare_op: always | texture::COMPARE_OFF as u8, ..depth };
+    let mut d = sampling(&rig, off);
+    d.fs = &p32;
+    assert_eq!(draw(&d), 0);
+    let draws = rig.draws();
+    assert_eq!(words(&rig, draws[4].tmu[0].sampler, 6)[3], 0);
+    /* an RGBA8 binding ignores the compare the GL core hands over */
+    let rgba = GlesTextureBind { compare_op: always, ..texture(0, 16, 16, 1) };
+    assert_eq!(draw(&sampling(&rig, rgba)), 0);
+    let draws = rig.draws();
+    assert_eq!(words(&rig, draws[5].tmu[0].sampler, 6)[3], 0, "not a depth class: compare off");
     assert_eq!(v3d_finish(), 0);
 }
 
