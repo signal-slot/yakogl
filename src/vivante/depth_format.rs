@@ -111,3 +111,143 @@ impl DepthSurface {
         }
     }
 }
+
+/// Bytes of D24S8 surface a TS tile covers (`ts::tile_size` in the 128B mode).
+const TS_TILE_BYTES: usize = super::ts::tile_size(super::ts::TS_MODE_128B) as usize;
+
+/// The TS code of a tile the RS fast clear left cleared: one nibble of
+/// [`super::ts::TS_CLEAR_VALUE`].
+const TS_CLEARED: u8 = (super::ts::TS_CLEAR_VALUE & 0xf) as u8;
+
+/// A `w` x `h` region (from pixel 0, 0) of a D24S8 surface as row-major
+/// depth floats in `out` (`w * h` long, panics if shorter), reading no
+/// surface word of a tile the tile status says is cleared.
+///
+/// `surface` is the D24S8 words (depth in bits 31..8) in `layout` with a
+/// padded row of `stride` bytes (`layout::stride`). `ts` is the tile status,
+/// four bits a tile as `ts::ts_size` sizes it, tile `n` in the low (even `n`)
+/// or high (odd `n`) nibble of byte `n / 2`; tile `n` covers surface bytes
+/// `n * 128 ..`, in memory order, so a pixel's tile is its
+/// `layout::offset` / 128. A tile whose nibble is the clear code takes the
+/// float of `clear_word` (the word the depth clear wrote, as
+/// `ts::depth_clear_word`); any other tile, and a tile past the end of `ts`,
+/// converts its words with `ds_retention::unorm24_depth`, the conversion of
+/// `ds_cache::resolve_depth`: the result equals a full read of a surface
+/// whose cleared tiles hold `clear_word`. Groundwork: nothing calls it until
+/// the X2 tile-status probe says the TS is usable with the MMU off.
+#[allow(clippy::too_many_arguments)]
+pub fn read_depth_ts(
+    surface: &[u32],
+    layout: super::layout::Layout,
+    stride: u32,
+    ts: &[u8],
+    clear_word: u32,
+    w: u32,
+    h: u32,
+    out: &mut [f32],
+) {
+    let clear = crate::ds_retention::unorm24_depth(clear_word >> 8);
+    for y in 0..h {
+        for x in 0..w {
+            let off = super::layout::offset(layout, x, y, 4, stride);
+            let tile = off / TS_TILE_BYTES;
+            let code = ts.get(tile / 2).map(|b| (b >> (4 * (tile & 1))) & 0xf);
+            out[(y * w + x) as usize] = if code == Some(TS_CLEARED) {
+                clear
+            } else {
+                crate::ds_retention::unorm24_depth(surface[off / 4] >> 8)
+            };
+        }
+    }
+}
+
+#[cfg(test)]
+mod ts_read_tests {
+    use super::super::layout::{self, Layout};
+    use super::super::ts;
+    use super::read_depth_ts;
+    use crate::ds_retention::unorm24_depth;
+
+    const CLEAR: u32 = 0xffff_ff00;
+    const POISON: u32 = 0x1234_5600;
+
+    /// A deterministic scatter of words (xorshift), never equal to `CLEAR`.
+    fn word(i: u32) -> u32 {
+        let mut s = i.wrapping_mul(0x9e37_79b9) | 1;
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        if s >> 8 == CLEAR >> 8 {
+            s ^ 0x100
+        } else {
+            s
+        }
+    }
+
+    /// Every third tile cleared, the rest written: `read_depth_ts` over a
+    /// surface whose cleared tiles are poisoned (never read) equals the full
+    /// read of the surface whose cleared tiles hold `CLEAR`.
+    fn run(layout: Layout, w: u32, h: u32) {
+        let super_tiled = layout == Layout::SuperTiled;
+        let stride = layout::stride(layout, w, 4, true);
+        let (_, ph) = ts::padded_dims(w, h, super_tiled);
+        let words = (layout::size(layout, w, h, 4, true) / 4).max((stride * ph / 4) as usize);
+        let n_tiles = words * 4 / 128 + 1;
+        let mut ts_buf = vec![0u8; ts::ts_size(w, h, 4, super_tiled) as usize];
+        let mut full: Vec<u32> = (0..words as u32).map(word).collect();
+        let mut seen = full.clone();
+        for t in (0..n_tiles).filter(|t| t % 3 == 1) {
+            for (f, s) in full.iter_mut().zip(seen.iter_mut()).skip(t * 32).take(32) {
+                *f = CLEAR;
+                *s = POISON;
+            }
+        }
+        for t in 0..n_tiles {
+            let code = if t % 3 == 1 { 1u8 } else { (t % 14) as u8 + 2 };
+            if let Some(b) = ts_buf.get_mut(t / 2) {
+                *b |= code << (4 * (t & 1));
+            }
+        }
+        let mut want = vec![0f32; (w * h) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                want[(y * w + x) as usize] = unorm24_depth(full[layout::offset(layout, x, y, 4, stride) / 4] >> 8);
+            }
+        }
+        let mut got = vec![0f32; (w * h) as usize];
+        read_depth_ts(&seen, layout, stride, &ts_buf, CLEAR, w, h, &mut got);
+        for (i, (a, b)) in got.iter().zip(&want).enumerate() {
+            assert_eq!(a.to_bits(), b.to_bits(), "{layout:?} {w}x{h} pixel {i}");
+        }
+    }
+
+    #[test]
+    fn linear_mix_is_bit_exact() {
+        run(Layout::Linear, 64, 32);
+    }
+
+    #[test]
+    fn linear_odd_size_and_pitch() {
+        run(Layout::Linear, 37, 19);
+        run(Layout::Linear, 5, 3);
+    }
+
+    #[test]
+    fn super_tiled_mix_is_bit_exact() {
+        run(Layout::SuperTiled, 128, 64);
+    }
+
+    #[test]
+    fn super_tiled_odd_size_and_pitch() {
+        run(Layout::SuperTiled, 100, 70);
+        run(Layout::SuperTiled, 67, 65);
+    }
+
+    #[test]
+    fn all_cleared_reads_no_surface() {
+        let ts_buf = vec![0x11u8; 64];
+        let mut out = vec![0f32; 9 * 7];
+        read_depth_ts(&[], Layout::Linear, 9 * 4, &ts_buf, 0x8000_0000, 9, 7, &mut out);
+        assert!(out.iter().all(|v| v.to_bits() == unorm24_depth(0x80_0000).to_bits()));
+    }
+}
