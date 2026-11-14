@@ -6,8 +6,10 @@ How much of GLSL ES 3.00 `src/shaderc/online/**` takes, measured over the
 dEQP `data/gles3/shaders/*.test` corpus (23 files). Measured on the host with
 `tests/es3_shaderc_corpus.rs`, first on 2026-10-10 on main 32778b57. The tables
 below were last re-measured on 2026-10-14 at commit `fa497e8` (it holds
-gc-const-array, pp-splice and shaders-fold), on all three GPU features; the
-commit messages of the gap work carry each step's before and after.
+gc-const-array, pp-splice and shaders-fold), on all three GPU features, and
+the `uniform_block` row and the totals again on 2026-11-14 with the
+63+-character reflection names (refl-long-name, plan #338); the commit
+messages of the gap work carry each step's before and after.
 
 * Corpus: VK-GL-CTS commit `93bca01861b0e3ef3c387027a9791e6d065f900c`
   (the pinned checkout in the deps cache, `VK-GL-CTS/data/gles3/shaders/`).
@@ -84,10 +86,10 @@ needs a link error, `pass` needs both to succeed.
 | switch | 0 | 0 | 52 | 0 |
 | swizzle_math_operations | 544 | 0 | 0 | 0 |
 | swizzles | 648 | 0 | 0 | 0 |
-| uniform_block | 64 | 2 | 72 | 0 |
-| **total** | **3457** | **4** | **2135** | **0** |
+| uniform_block | 66 | 0 | 72 | 0 |
+| **total** | **3459** | **2** | **2135** | **0** |
 
-So of the 3,461 programs that must build, 3,457 (99.9 %) do; of the 2,135 that
+So of the 3,461 programs that must build, 3,459 (99.9 %) do; of the 2,135 that
 must be refused, all are (but see the caveat). The front end is
 not what stands in front of the 8,835 AM62P GLES3 CTS failures: these are
 compile/link-time verdicts only. Feature gaps that need a *draw* (integer
@@ -122,8 +124,8 @@ code generator, which refuses at link).
 | switch | 0 / 0 / 52 / 0 | 0 / 0 / 52 / 0 |
 | swizzle_math_operations | 544 / 0 / 0 / 0 | 544 / 0 / 0 / 0 |
 | swizzles | 648 / 0 / 0 / 0 | 648 / 0 / 0 / 0 |
-| uniform_block | 64 / 2 / 72 / 0 | 64 / 2 / 72 / 0 |
-| **total** | **3457 / 4 / 2135 / 0** | **3457 / 4 / 2135 / 0** |
+| uniform_block | 66 / 0 / 72 / 0 | 66 / 0 / 72 / 0 |
+| **total** | **3459 / 2 / 2135 / 0** | **3459 / 2 / 2135 / 0** |
 
 ## Expected-pass programs refused, by root cause
 
@@ -135,12 +137,13 @@ no stage or construct more precise than that.
 |---|---|---:|---:|---:|---|---|
 | `gl_MaxDrawBuffers` is 1 | back-end limit | 2 | 2 | 2 | constant_expressions | `other.complex_{vertex,fragment}`: `'case' : two case labels have the same value` |
 | Backslash-newline inside a preprocessing token (done: pp-splice) | unsupported construct | 0 | 0 | 0 | preprocessor | was 4 each: `line_continuation.preprocessing_token_*` (`#def\` + newline + `ine`): `'def' : invalid preprocessor directive`; `line_continuation.token_*`: `'oo' : expected ';'` |
-| Uniform (instance) name of 63+ characters | back-end limit | 2 | 2 | 2 | uniform_block | `valid.long_instance_name_*`: link: the name is as long as the 64-byte reflection field (yakogl task #47) |
+| Uniform (instance) name of 63+ characters (done: refl-long-name, `docs/notes/reflection-long-names.md`) | back-end limit | 0 | 0 | 0 | uniform_block | was 2 each: `valid.long_instance_name_*`: link: the name is as long as the 64-byte reflection field (yakogl task #47); the record's name pool keeps the whole name and the GL core reads it through `shaderc::uniform_row_name` |
 | Register pressure of a 128-element constant array index (done: gc-const-array) | back-end limit (GC7000UL) | 0 | 0 | 0 | large_constant_arrays | was 2 on the GC7000UL: `indexing.vec4_128_vertex`: `Abi(LoadBalancingTempsUnmeasured { temps: 34, temps_max: 21 })` |
 
 No expected-pass program was refused by the
-type checker (sema) on any GPU: there is no "sema bug" among the 4/4/4
-refusals (8/10/8 before pp-splice and gc-const-array). The `\` splice
+type checker (sema) on any GPU: there is no "sema bug" among the 2/2/2
+refusals (4/4/4 before refl-long-name, 8/10/8 before pp-splice and
+gc-const-array). The `\` splice
 was in `pp.rs`/the lexer, the "unsupported construct" class; no
 `#version 300 es` *syntax* is refused.
 
@@ -233,7 +236,7 @@ the form in the log):
 ## What this says for ES 3.0
 
 * The ES 3.00 front end (preprocessor, lexer, parser, sema, constant folder) is
-  in good shape: 3,457 of 3,461 expected-build programs build on each of the three GPUs.
+  in good shape: 3,459 of 3,461 expected-build programs build on each of the three GPUs.
   Shader compilation is not where most of the AM62P's GLES3 failures come from;
   the handful below is what this corpus can show. Failures that need a draw or
   the API (integer targets, MRT, transform feedback varyings) are not in it.
@@ -242,7 +245,13 @@ the form in the log):
      (open, 2 programs per GPU).
   2. Preprocessor: backslash-newline splice inside a token (4). **Done**
      (pp-splice, 2026-10-14): all 4 programs build on the three GPUs.
-  3. Reflection names of 64 or more characters (open, 2 programs per GPU).
+  3. Reflection names of 63 or more characters (2 programs per GPU). **Done**
+     (refl-long-name, 2026-11-14, plan #338): `uniform_block` is 66 / 0 on
+     the three GPUs (3,459 / 2 / 2,135 / 0). The 64-byte reflection field
+     and the ABI stay; the online record keeps the whole name of a row the
+     field cut and the GL core reads every uniform row's name through
+     `shaderc::uniform_row_name` (`docs/notes/reflection-long-names.md`,
+     `tests/es3_uniform_block_long_name.rs`).
   4. GC7000UL: the 128-element constant array index (2). **Done**
      (gc-const-array, 2026-10-14): `large_constant_arrays` is 16 / 0 on the
      GC7000UL, as on the other two (3,457 / 4 / 2,135 / 0; 3,453 / 8 before
