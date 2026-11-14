@@ -239,4 +239,4 @@ board has run these commits), so none of it is a conformance figure.
 | `shaders.texture_functions` look-ups on arrays and 3D | pvr-shadow, `d7356b65` | 226 PowerVR refusals in one message, `src/shaderc/online/powervr/select.rs`; front end clean (`docs/es3/shader-host-repro.md`) |
 
 Rows nothing has touched: `mipmap.3d.bias` (4), `size`, `vertex.2d/cube`,
-`filtering.3d` on the PowerVR (needs pvr-3d), ETC2 on the GC7000UL and V3D.
+`filtering.3d` on the PowerVR (needs pvr-3d). ETC2/EAC: the GL core takes all ten formats (plan #354: four as blocks, six decoded at upload, `docs/notes/etc2-eac.md`) and the V3D samples the block ones, host-tested only; no dEQP run of `texture.wrap` / `texture.format.compressed` has been made since.

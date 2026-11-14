@@ -165,7 +165,7 @@ in `src/gl/context.rs`. "Per GPU" means a `cfg(feature = "gpu-…")` constant.
 | UNIFORM_BUFFER_OFFSET_ALIGNMENT | 4 | `state.rs:1231` |
 | MAX_COMBINED_VERTEX/FRAGMENT_UNIFORM_COMPONENTS | 1536 (no block share) | `state.rs:1232-1234` |
 | MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS / SEPARATE_ATTRIBS / SEPARATE_COMPONENTS | **64 / 4 / 64**. SEPARATE_COMPONENTS is set to the interleaved limit, not ES 3.0's 4, because the capture runs on the CPU (`gl/tf_capture.rs`) and has no hardware ceiling | `state.rs:1259-1267` ← `tf.rs:32,35,43` (the reason is the comment at `tf.rs:36-42`) |
-| NUM_COMPRESSED_TEXTURE_FORMATS | 3 (ETC1, RGB8_ETC2, RGBA8_ETC2_EAC); 5 on the PowerVR and the GC7000UL, with SRGB8_ETC2 and SRGB8_ALPHA8_ETC2_EAC (the formats an upload accepts, `texture.rs` `stored_compressed_formats`) | `state.rs` `get_integerv` |
+| NUM_COMPRESSED_TEXTURE_FORMATS | 11 on the PowerVR, the GC7000UL and the V3D: ETC1, RGB8_ETC2, RGBA8_ETC2_EAC, SRGB8_ETC2, SRGB8_ALPHA8_ETC2_EAC and the six the GL core decodes at upload (R11, SIGNED_R11, RG11, SIGNED_RG11 and the two punch-through ones, `docs/notes/etc2-eac.md`); 3 under report-es2 (the formats an upload accepts, `texture.rs` `stored_compressed_formats`) | `state.rs` `get_integerv` |
 | MAX_ELEMENT_INDEX | 0xFFFFFF | `state.rs:1255` |
 | MIN / MAX_PROGRAM_TEXEL_OFFSET, MAX_TEXTURE_LOD_BIAS, MAX_SERVER_WAIT_TIMEOUT | -8, 7, 2, 0 | `state.rs:1273-1274,1257,1275` ← `context.rs:162-163` |
 | ALIASED_LINE_WIDTH_RANGE | 1..16 | `state.rs:956-960` |
@@ -220,7 +220,7 @@ means the minimum is met.
 | MAX_VERTEX_OUTPUT_COMPONENTS ≥ 64 | **Reports 32**; Mesa Vulkan 64 | **Reports 60** (15 x 4); whether 64 is reachable with 16 output rows, one of them the position, is [U] | **Reports 32**; Hw 64 |
 | MAX_TEXTURE_SIZE, MAX_CUBE_MAP_TEXTURE_SIZE, MAX_RENDERBUFFER_SIZE ≥ 2048 | Hw state field 16384 (`texstate.xml:276`); Mesa Vulkan 4096 (`pvr_physical_device.c:620-623`). Reports 4096 = | Hw 8192 (`etnaviv_screen.c:970-973`, `H:18986,18992`). Reports 4096 = | Hw 4096 (`v3d_limits.h:62-63`). 4096 = |
 | MAX_TEXTURE_IMAGE_UNITS ≥ 16, VERTEX ≥ 16, COMBINED ≥ 32 | Mesa Vulkan 16 samplers a stage (`pvr_physical_device.c:634`). 16/16/32 = | Hw 16 + 16 (`etnaviv_screen.c:824-827`). 16/16/32 = | Hw 24 (`v3d_limits.h:39`). 16/16/32 = |
-| NUM_COMPRESSED_TEXTURE_FORMATS ≥ 10 | Hw has all ten (`texstate.xml:195-231`; `pvr_arch_formats.c:158-167`). **Reports 5** (the three linear, the two sRGB ETC2) | ETC2/EAC are hardware EXT formats from HALTI0 (`etnaviv_format.c:244-250`). **Reports 5** (the three linear, the two sRGB ETC2) | All ten (`v3dx_format_table.c:159-168`). **Reports 3** |
+| NUM_COMPRESSED_TEXTURE_FORMATS ≥ 10 | Hw has all ten (`texstate.xml:195-231`; `pvr_arch_formats.c:158-167`). **Reports 11** (ETC1, the four blocks, the six decoded) | ETC2/EAC are hardware EXT formats from HALTI0 (`etnaviv_format.c:244-250`). **Reports 11** (as the PowerVR) | All ten (`v3dx_format_table.c:159-168`). **Reports 11** (as the PowerVR: the four block formats are sampled by the TMU, the six decoded) |
 | MAX_ELEMENT_INDEX ≥ 2²⁴-1; MAX_TEXTURE_LOD_BIAS ≥ 2; texel offset -8..7; MAX_VERTEX_ATTRIBS ≥ 16 | = (exactly the minimum for the first three) | = | = |
 | Line width / point size ranges ≥ 1 | 16 / 511 = | 16 / 64 = | 16 / 512 = (hw 32 / 512, `v3d_limits.h:46-47`) |
 
@@ -256,7 +256,7 @@ es3_caps -- --nocapture` prints them per build):
 | RGB10_A2 | **not sampled** on purpose: the descriptor decodes it, but ES 3.0 makes GL_RGB10_A2 renderable and mipmappable, so it stays in RGBA8 (two bits lost) until the PowerVR renders the class ([C] `backend.rs:177-180`) | not sampled | **sampled** in its own class since `03f4bbd9` (`GLES_TEXFMT_RGB10A2` in `V3D_SAMPLED_TEXFMTS`, [C] `src/backend.rs:262-267`: `tmu_format` type 9; the same bit makes the 10/10/10/2 render surface drawable ([C] `src/backend.rs:571-572`, the surface `735e24e8` and `089cf587`); a field-wise CPU mipmap chain — the TFU path, step 4 of the note, is not built; `docs/notes/v3d-rgb10a2.md`; host-tested `tests/es3_formats_v3d.rs`, `tests/es3_int_rt_v3d.rs`, `6770479e`). Hw [M] `v3dx_format_table.c:71` |
 | RGBA8UI/I, RGBA16UI/I, RGBA32UI/I (integer samplers) | sampled (an `isampler2D` / `usampler2D`, and the cube, 3D and 2D-array integer samplers, a 3D look-up at its nearest slice; `docs/es3/pvr-formats.md` section 10.1) | not sampled. Hw: integer sampling with HALTI2, 128-bit integer with HALTI5, both met [M] `etnaviv_screen.c:419-429` | sampled ([C] `src/backend.rs:233-247`; `isampler2D` / `usampler2D` / cube only). Hw has all [M] `v3dx_format_table.c:122-123,129-130,136-137` |
 | RGBA32F | sampled | not sampled | sampled at the TMU's 32-bit output ([C] `src/backend.rs:233-247`). Hw has it [M] `v3dx_format_table.c:101` |
-| ETC2/EAC (`ETC2_RGB`, `ETC2_RGBA`, `ETC2_RGB_PT`) | outside this mask: compressed uploads are kept as blocks (`compressed_format_info`, [C] `src/gl/texture.rs`, ETC1 and RGB8_ETC2 as `ETC2_RGB`, RGBA8_ETC2_EAC as `ETC2_RGBA`); the sRGB pair is in it (`ETC2_SRGB_RGB`, `ETC2_SRGB_RGBA`: the same blocks with the TPU gamma, `docs/es3/srgb.md` 4.3); the other five ES 3.0 formats are not accepted | the linear three as on the PowerVR, and the sRGB pair in the mask (`ETC2_SRGB_RGB`, `ETC2_SRGB_RGBA`: the linear twin's ETC2 block format with `SAMP_CTRL1.SRGB`, [C] `vivante/texture.rs` `gc_texfmt` / `samp_ctrl1`; [M] `etnaviv_format.c:244,246,278`, `etnaviv_texture_desc.c:246-247`; host-tested `tests/es3_formats_gc.rs`, no board run) | `v3d/texture.rs:109-113` refuses ETC2 today ([C]: `V3D_SAMPLED_TEXFMTS` has no ETC2 bit). Hw has all ten [M] `v3dx_format_table.c:159-168` |
+| ETC2/EAC (`ETC2_RGB`, `ETC2_RGBA`, `ETC2_RGB_PT`) | outside this mask: compressed uploads are kept as blocks (`compressed_format_info`, [C] `src/gl/texture.rs`, ETC1 and RGB8_ETC2 as `ETC2_RGB`, RGBA8_ETC2_EAC as `ETC2_RGBA`); the sRGB pair is in it (`ETC2_SRGB_RGB`, `ETC2_SRGB_RGBA`: the same blocks with the TPU gamma, `docs/es3/srgb.md` 4.3); the other six ES 3.0 names are accepted and decoded on the CPU at upload into `R16F` (R11, signed or not), `RGBA16F` (RG11), `RGBA8` and `SRGB8_A8` (the punch-through pair), see `docs/notes/etc2-eac.md` and `src/gl/etc2.rs` | the linear three as on the PowerVR, and the sRGB pair in the mask (`ETC2_SRGB_RGB`, `ETC2_SRGB_RGBA`: the linear twin's ETC2 block format with `SAMP_CTRL1.SRGB`, [C] `vivante/texture.rs` `gc_texfmt` / `samp_ctrl1`; [M] `etnaviv_format.c:244,246,278`, `etnaviv_texture_desc.c:246-247`; host-tested `tests/es3_formats_gc.rs`, no board run) | in the mask: `ETC2_RGB`, `ETC2_RGBA`, `ETC2_SRGB_RGB`, `ETC2_SRGB_RGBA` and `ETC2_RGB_PT` (the TMU's own block rows, [C] `v3d/texture.rs` `etc2_row` / `layout_compressed`, tiled from the GL core's raster rows of blocks, `compressed_blocks_in_rows` true; host-tested `tests/es3_etc2_v3d.rs`, no board run). The six other formats are decoded as on the PowerVR; their TMU rows (`etc2_row`) wait for a class each. Hw has all ten [M] `v3dx_format_table.c:159-168` |
 
 **GL_EXT_color_buffer_float** (float colour targets in the ES 3.0 build; never
 in a `report-es2` build):
@@ -281,7 +281,7 @@ for an entry that now meets its minimum.
 | MAX_SAMPLES | 4 | 1 | 1 | 1 | none in the plan |
 | MAX_UNIFORM_BLOCK_SIZE | 16384 | 6144 | 6144 | 6144 | ubo-uniform |
 | MAX_COMBINED_*_UNIFORM_COMPONENTS | 50048 / 50176 | 1536 | 1536 | 1536 | ubo-uniform |
-| NUM_COMPRESSED_TEXTURE_FORMATS | 10 | 5 | 5 | 3 | formats-* |
+| NUM_COMPRESSED_TEXTURE_FORMATS | 10 | 11 | 11 | 11 | none (plan #354) |
 | MAX_VARYING_VECTORS / _COMPONENTS / FRAGMENT_INPUT | 15 / 60 / 60 | 8 / 32 / 32 | ok (15 / 60 / 60) | 8 / 32 / 32 | USC measurement; V3D board run |
 | MAX_VERTEX_OUTPUT_COMPONENTS | 64 | 32 | 60 | 32 | same (GC7000: 15 x 4) |
 
@@ -293,7 +293,7 @@ Features below ES 3.0 that no limit query shows: the 128-bit integer render targ
 on the GC7000 (formats-gc); the RG32F / RGBA32F / R11F_G11F_B10F colour-renderable names on every
 GPU, and a real 10-bit RGB10_A2 target on the PowerVR and the GC7000UL
 (the V3D draws and samples the class, `03f4bbd9`, §4); MSAA render
-targets; the seven other ETC2/EAC formats.
+targets; native sampling of the six ETC2/EAC formats the GL core decodes.
 
 **Real hardware limits, not just work to do.**
 - Transform feedback is hardware only on the V3D [M]. The PowerVR and the

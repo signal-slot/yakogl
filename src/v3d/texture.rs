@@ -187,9 +187,11 @@ pub const fn etc2_row(e: Etc2) -> (u32, [u8; 4], u32, bool) {
 }
 
 /// The [`Etc2`] row of a GL core texel format, `None` for an uncompressed
-/// one. The GL core has a class for five of the ten rows today
-/// (`GLES_TEXFMT_ETC2_*`, src/backend.rs; gl::texture::compressed_format_info);
-/// punch-through sRGB and the four EAC formats have none yet.
+/// one. The GL core has a class for five of the ten rows
+/// (`GLES_TEXFMT_ETC2_*`, src/backend.rs; gl::texture::compressed_format_info,
+/// of which it stores the four of ETC2 RGB8 and RGBA8 and their sRGB twins);
+/// the punch-through and EAC formats it decodes on the CPU at upload instead
+/// (docs/notes/etc2-eac.md), and the TMU rows wait for a class each.
 pub const fn etc2_of(format: u8) -> Option<Etc2> {
     match format {
         GLES_TEXFMT_ETC2_RGB => Some(Etc2::Rgb8),
@@ -656,8 +658,12 @@ pub fn sampler_compare_bits(b: &GlesTextureBind) -> u32 {
 }
 
 /// Pack `b`'s sampler record, its depth compare included ([`sampler`],
-/// [`compare_op`]), with `v3d_tex_pack_sampler_compare`; false, nothing
-/// written, for a field that does not fit. Its key, for a cache of packed
+/// [`compare_op`]); false, nothing written, for a field that does not fit. It
+/// is `v3d_tex_pack_sampler`'s record with [`sampler_compare_bits`] set in
+/// word 0, which is all `v3d_tex_pack_sampler_compare` adds (the record's
+/// other 20 bytes are the compare-off record's:
+/// tools/v3d/tex_check.c packs both and compares them with Mesa's); the
+/// backend links the one C packer either way. Its key, for a cache of packed
 /// records, is ([`sampler`], [`compare_function`]): two bindings that differ
 /// only in the compare need two records.
 ///
@@ -666,7 +672,18 @@ pub fn sampler_compare_bits(b: &GlesTextureBind) -> u32 {
 pub unsafe fn pack_sampler(b: &GlesTextureBind, out: *mut u8) -> bool {
     let s = sampler(b);
     // SAFETY: the caller's contract; `s` is a live sampler.
-    unsafe { v3d_tex_pack_sampler_compare(out, &s, compare_op(b)) }
+    if !unsafe { v3d_tex_pack_sampler(out, &s) } {
+        return false;
+    }
+    let bits = sampler_compare_bits(b);
+    if bits != 0 {
+        // SAFETY: the record's first word, just written (`out` is a byte pointer).
+        unsafe {
+            let w0 = (out as *const u32).read_unaligned() | bits.to_le();
+            (out as *mut u32).write_unaligned(w0);
+        }
+    }
+    true
 }
 
 /// The texture shader state of a binding whose image (`layout`) starts at
@@ -1516,8 +1533,7 @@ mod tests {
     /// type and swizzle, the sRGB bit for the two sRGB ones only, a block
     /// for a texel ([`texel_bytes`]: never a TFU byte-copy type), the 16-bit
     /// TMU output (return size 16), and every rule but the sampled set
-    /// passes. Until src/backend.rs's V3D_SAMPLED_TEXFMTS lists them, the
-    /// set refuses them, with the one message every format outside it gets.
+    /// passes, the sampled set (V3D_SAMPLED_TEXFMTS) included.
     #[test]
     fn the_gl_cores_etc2_classes_sample_as_their_rows() {
         let wider = V3D_SAMPLED_TEXFMTS | ETC2_CLASSES.iter().fold(0, |m, &(f, _)| m | gles_texfmt_bit(f));
@@ -1533,8 +1549,7 @@ mod tests {
                 refusal_in(&b, true, wider),
                 Some("a look-up compiled for the 32-bit TMU output reads a texture of a 16-bit format")
             );
-            let set = V3D_SAMPLED_TEXFMTS & gles_texfmt_bit(format) != 0;
-            assert_eq!(refusal(&b), (!set).then_some("a texel format the V3D does not sample"), "format {format}");
+            assert_eq!(refusal(&b), None, "format {format}: in V3D_SAMPLED_TEXFMTS");
             let l = layout(&b).unwrap();
             assert_eq!(l, layout_compressed(36, 36, 6, 4, 4, bytes).unwrap(), "format {format}: the block layout");
             let s = state(&b, &l, 0x10_0000);

@@ -983,6 +983,9 @@ struct Job {
     ntex: usize,
     /// The job's packed sampler records by their state (`sampler_for`).
     sampler_keys: [V3dSampler; SAMPLER_CACHE],
+    /// The compare function of each key ([`texture::compare_function`]): two
+    /// bindings that differ only in it need two records.
+    sampler_cmps: [u32; SAMPLER_CACHE],
     sampler_recs: [u32; SAMPLER_CACHE],
     nsamplers: usize,
 }
@@ -1059,6 +1062,7 @@ impl Job {
             lod_bias: 0.0,
             border_color_mode: 0,
         }; SAMPLER_CACHE],
+        sampler_cmps: [0; SAMPLER_CACHE],
         sampler_recs: [0; SAMPLER_CACHE],
         nsamplers: 0,
     };
@@ -5390,14 +5394,15 @@ pub extern "C" fn v3d_tiled_dump() -> u32 {
 /// job, and a new job starts with an empty cache).
 fn sampler_for(g: &mut V3dState, b: &GlesTextureBind) -> Result<u32, Attempt> {
     let s = texture::sampler(b);
+    let cmp = texture::compare_function(b);
     let j = &g.j;
-    if let Some(i) = j.sampler_keys[..j.nsamplers].iter().position(|k| *k == s) {
+    if let Some(i) = (0..j.nsamplers).find(|&i| j.sampler_keys[i] == s && j.sampler_cmps[i] == cmp) {
         g.samplers_reused = g.samplers_reused.wrapping_add(1);
         return Ok(g.j.sampler_recs[i]);
     }
     let (rec, cpu) = tex_alloc(g, V3D_SAMPLER_STATE_BYTES, V3D_TEX_RECORD_ALIGN as usize).ok_or(Attempt::Full)?;
     // SAFETY: V3D_SAMPLER_STATE_BYTES of the arena.
-    if !unsafe { v3d_tex_pack_sampler(cpu, &s) } {
+    if !unsafe { texture::pack_sampler(b, cpu) } {
         return Err(Attempt::Refused(
             "the sampler state does not fit its record (v3d_tex_pack_sampler refused a field)",
         ));
@@ -5405,7 +5410,7 @@ fn sampler_for(g: &mut V3dState, b: &GlesTextureBind) -> Result<u32, Attempt> {
     g.samplers_packed = g.samplers_packed.wrapping_add(1);
     let j = &mut g.j;
     if j.nsamplers < SAMPLER_CACHE {
-        (j.sampler_keys[j.nsamplers], j.sampler_recs[j.nsamplers]) = (s, rec);
+        (j.sampler_keys[j.nsamplers], j.sampler_cmps[j.nsamplers], j.sampler_recs[j.nsamplers]) = (s, cmp, rec);
         j.nsamplers += 1;
     }
     Ok(rec)
@@ -6692,7 +6697,9 @@ pub static yakogl_backend_v3d: YakoglBackend = YakoglBackend {
      * read every byte of the clear back on the board */
     rt_rgba8888_is_bgra: false,
     mip_level_align: 0,
-    compressed_blocks_in_rows: false,
+    /* the ETC2/EAC blocks lie in raster rows of blocks (texture::
+     * gl_level_blocks), which the tiling reads (texture::layout_compressed) */
+    compressed_blocks_in_rows: true,
     /* the TMU samples a cube itself (depth 6, array stride): the GL core
      * gives one face's size and the layer count, and stacks the faces */
     native_layered_textures: true,

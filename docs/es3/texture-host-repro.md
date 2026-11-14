@@ -73,7 +73,7 @@ The V3D library is the one GPU where the host shows real causes in
 - 24 `ResourceError` (`GL_OUT_OF_MEMORY` at the draw, which ends dEQP's
   process; the chunk went on in a second one): `rgba16f_*` (6 of `2d`, 6 of
   `cube`: "draw refused: a texture format other than RGBA8, SRGB8_ALPHA8,
-  L8, A8, LA8 and R32F (RGB565, half float, ETC2) is not sampled yet") and
+  L8, A8, LA8 and R32F (RGB565, half float, ETC2) is not sampled yet" -- message of the build at `70142d35`; ETC2 has been in the V3D's sampled set since plan #354) and
   `srgb8_alpha8_*` (6 + 6: "draw refused: the texture state does not fit
   its record (v3d_tex_pack_state refused a field)" -- a 64x64 sRGB chain
   the V3D back end says it samples but whose texture shader state its

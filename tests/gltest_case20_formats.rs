@@ -146,15 +146,26 @@ const GPU: &str = if cfg!(feature = "gpu-v3d") {
     "BXS-4-64 (AM62P)"
 };
 
+const EAC: [GLenum; 6] = [
+    GL_COMPRESSED_R11_EAC,
+    GL_COMPRESSED_SIGNED_R11_EAC,
+    GL_COMPRESSED_RG11_EAC,
+    GL_COMPRESSED_SIGNED_RG11_EAC,
+    GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+    GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+];
+
 /// The count the core's rule gives this build: the sRGB pair is stored only
-/// in an ES 3.0 report and where the back end samples both.
+/// in an ES 3.0 report and where the back end samples both, the other six of
+/// ES 3.0's ten (EAC, punch-through) where it samples the classes they decode to.
 fn expected_count() -> usize {
     use yakogl::backend::*;
     let sampled = sampled_texfmts();
-    let srgb = !cfg!(feature = "report-es2")
-        && sampled & gles_texfmt_bit(GLES_TEXFMT_ETC2_SRGB_RGB) != 0
-        && sampled & gles_texfmt_bit(GLES_TEXFMT_ETC2_SRGB_RGBA) != 0;
-    BASE.len() + if srgb { SRGB.len() } else { 0 }
+    let has = |f: u8| !cfg!(feature = "report-es2") && sampled & gles_texfmt_bit(f) != 0;
+    let srgb = has(GLES_TEXFMT_ETC2_SRGB_RGB) && has(GLES_TEXFMT_ETC2_SRGB_RGBA);
+    /* the six decode into R16F, RGBA16F, RGBA8 and SRGB8_A8 (docs/notes/etc2-eac.md) */
+    let eac = [GLES_TEXFMT_R16F, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8].into_iter().all(has);
+    BASE.len() + if srgb { SRGB.len() } else { 0 } + if eac { EAC.len() } else { 0 }
 }
 
 #[test]
@@ -183,14 +194,16 @@ fn case20_compressed_formats() {
         if cfg!(feature = "report-es2") {
             assert_eq!(count, 3, "ES 2.0 report");
         }
-        assert!(count == 3 || count == 5, "count {count}");
+        assert!(count == 3 || count == 5 || count == 11, "count {count}");
         assert_eq!(count, expected_count(), "count the core's rule gives this build");
         for f in BASE {
             assert_eq!(list.iter().filter(|&&x| x == f).count(), 1, "0x{f:x} once in the list");
         }
         let srgb = SRGB.iter().filter(|f| list.contains(f)).count();
         assert!(srgb == 0 || srgb == 2, "sRGB ETC2 pair is both or neither");
-        assert_eq!(list.len(), BASE.len() + srgb, "nothing else in the list");
+        let eac = EAC.iter().filter(|f| list.contains(f)).count();
+        assert!(eac == 0 || eac == 6, "the six EAC and punch-through formats are all or none");
+        assert_eq!(list.len(), BASE.len() + srgb + eac, "nothing else in the list");
         assert!(list.contains(&GL_ETC1_RGB8_OES), "ETC1 in the list");
         assert!(ext.split_whitespace().any(|e| e == ETC1_EXT), "{ETC1_EXT} in GL_EXTENSIONS: {ext}");
     }

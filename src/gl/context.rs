@@ -548,6 +548,11 @@ pub struct GlTexture {
     /// the whole depth plane (`texture.rs` `depth_seeded`). The padding
     /// ran out at `unsized_depth`: this grows the struct to 256 bytes.
     pub depth_texels_newer: bool,
+    /// Which of the six ETC2/EAC formats the GL core decodes at upload
+    /// (`texture.rs` `DECODED_FORMATS`, index + 1) the level 0 storage holds
+    /// the decoded texels of; 0 for every other texture. Respecifying
+    /// level 0 any other way clears it. Sits in the padding.
+    pub decoded_from: u8,
 }
 
 impl GlTexture {

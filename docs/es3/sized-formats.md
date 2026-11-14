@@ -155,6 +155,29 @@ The plan #360 decision:
 * GC7000UL: does not claim it.
 * report-es2 builds claim neither extension (`tests/es2_report_guard.rs`).
 
+## ETC2/EAC compressed formats
+
+ES 3.0's ten block formats are not sized formats of this table; the GL core
+takes them in two ways (`docs/notes/etc2-eac.md`). `RGB8_ETC2`, `RGBA8_ETC2_EAC`
+and their sRGB twins stay blocks (`GLES_TEXFMT_ETC2_*`), sampled by the PowerVR
+TPU, the GC7000UL and, since plan #354, the V3D TMU (`V3D_SAMPLED_TEXFMTS`; its
+blocks lie in raster rows, `compressed_blocks_in_rows`). The other six are
+decoded on the CPU at upload (`src/gl/etc2.rs`) into classes of this table:
+
+| GL name | stored as |
+| --- | --- |
+| `R11_EAC`, `SIGNED_R11_EAC` | `R16F` (r, 0, 0, 1) |
+| `RG11_EAC`, `SIGNED_RG11_EAC` | `RGBA16F` (r, g, 0, 1) |
+| `RGB8_PUNCHTHROUGH_ALPHA1_ETC2` | `RGBA8` |
+| `SRGB8_PUNCHTHROUGH_ALPHA1_ETC2` | `SRGB8_A8` |
+
+A decoded name is accepted only where the back end samples its class
+(`backend::sampled_texfmts()`), never under report-es2, and its texture
+refuses `glGenerateMipmap` and a colour attachment (`GlTexture::decoded_from`).
+`glCompressedTexSubImage*` of the same name decodes into the stored texels, a
+PBO source is read as for the block formats, 2D arrays decode each layer and 3D
+is `GL_INVALID_OPERATION`. Host tests: `tests/es3_etc2_eac.rs`.
+
 ## Not done (left to other items)
 
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).
