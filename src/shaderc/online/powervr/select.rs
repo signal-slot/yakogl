@@ -1420,15 +1420,12 @@ impl<'a> Sel<'a> {
              * and at least 1 (pco usclib_tex_state_size for three
              * components). */
             ir::Op::TexSize { sampler, dim: ir::TexDim::D3, lod } if crate::shaderc::native_3d_enabled() => {
-                use ir::AluOp::{Bcsel, Iadd};
                 let lod = self.src(lod, 0)?;
-                self.emit(SelGroup { op: SelOp::VolSize, ty: OpType::U32, dst: None, srcs: [None; 3] })?;
+                self.emit(SelGroup { op: SelOp::NativeSize(ir::TexDim::D3), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
                 let [w, h] = self.tex_size_2d(sampler, lod)?;
                 let depth = self.array_depth(sampler)?;
-                let size = self.fresh_group(SelOp::Alu(Iadd), [Some(depth), Some(SelSrc::Imm(1)), None])?;
-                let at = self.fresh_group(SelOp::Machine(MachineOp::Ushr), [Some(size), Some(lod), None])?;
-                let some = self.fresh_group(SelOp::Machine(MachineOp::Uge), [Some(at), Some(SelSrc::Imm(1)), None])?;
-                let d = self.fresh_group(SelOp::Alu(Bcsel), [Some(some), Some(at), Some(SelSrc::Imm(1))])?;
+                let size = self.fresh_group(SelOp::Alu(ir::AluOp::Iadd), [Some(depth), Some(SelSrc::Imm(1)), None])?;
+                let d = self.minify(size, lod)?;
                 for (lane, r) in [w, h, d].into_iter().enumerate() {
                     self.emit(SelGroup {
                         op: SelOp::Copy,
@@ -1837,6 +1834,9 @@ impl<'a> Sel<'a> {
              * docs/es3/pvr-2darray.md section 3.5). */
             ir::Op::TexSize { sampler, dim: ir::TexDim::D2Array, lod } if crate::shaderc::native_array_enabled() => {
                 let lod = self.src(lod, 0)?;
+                /* the word read is the layer-major copy's: the draw must bind
+                 * it (record bit 1), as it binds the volume for a 3D size */
+                self.emit(SelGroup { op: SelOp::NativeSize(ir::TexDim::D2Array), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
                 let [w, h] = self.tex_size_2d(sampler, lod)?;
                 let depth = self.array_depth(sampler)?;
                 let count = self.fresh_group(SelOp::Alu(ir::AluOp::Iadd), [Some(depth), Some(SelSrc::Imm(1)), None])?;
@@ -1850,10 +1850,34 @@ impl<'a> Sel<'a> {
                 }
                 Ok(())
             }
+            /* textureSize of a native cube (`pvr_native_cube`): one face's
+             * size at the level, as a 2D image's, from the TEXTYPE_CUBE
+             * word (width and height a face's, pco usclib_tex_state_size
+             * for two components); the draw binds that copy (record bit
+             * 0), which a program that also samples the cube gets anyway --
+             * the stacked image's word, six faces high, would be divided by
+             * six below. */
+            ir::Op::TexSize { sampler, dim: ir::TexDim::Cube, lod } if crate::shaderc::native_cube_enabled() => {
+                let lod = self.src(lod, 0)?;
+                self.emit(SelGroup { op: SelOp::NativeSize(ir::TexDim::Cube), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
+                let size = self.tex_size_2d(sampler, lod)?;
+                for (lane, r) in size.into_iter().enumerate() {
+                    self.emit(SelGroup {
+                        op: SelOp::Copy,
+                        ty: OpType::U32,
+                        dst: Some(SelDst::Virtual(Self::reg(ir::ValueId(id.0), lane as u32))),
+                        srcs: [Some(r), None, None],
+                    })?;
+                }
+                Ok(())
+            }
             /* textureSize of a stacked texture, as glsl2usc's pvr_arrSize and
              * pvr_cubeSize read the stacked 2D image: a 2D array is (w,
              * h / layers, layers), a cube (w, h / 6), integer divisions
-             * (`idiv_into`, nir_lower_idiv's). */
+             * (`idiv_into`, nir_lower_idiv's). The quotient is at least 1
+             * (GLSL ES 3.00 8.8: a level's size never reaches 0): the
+             * stack's height at the level is `(count * h) >> lod`, whose
+             * quotient by `count` is `h >> lod` until that is 0. */
             ir::Op::TexSize { sampler, dim: dim @ (ir::TexDim::D2Array | ir::TexDim::Cube), lod } => {
                 let lod = self.src(lod, 0)?;
                 let [w, h] = self.tex_size_2d(sampler, lod)?;
@@ -1864,10 +1888,12 @@ impl<'a> Sel<'a> {
                         SelSrc::Fixed { bank: Bank::Shared, reg: self.layers_dword(sampler)?, mods: Mods::default() };
                     self.fresh_typed(SelOp::Alu(ir::AluOp::F2i), op_type(ir::AluOp::F2i), [Some(layers), None, None])?
                 };
-                let per = SelDst::Virtual(Self::reg(ir::ValueId(id.0), 1));
-                self.idiv_into(h, count, false, per)?;
+                let q = VReg(self.next_vreg);
+                self.next_vreg += 1;
+                self.idiv_into(h, count, false, SelDst::Virtual(q))?;
+                let per = self.at_least_one(SelSrc::Virtual { v: q, mods: Mods::default() })?;
                 /* lane 2, the layer count, for an array only (no_std: no Vec) */
-                let lanes = [Some((0u32, w)), (dim == ir::TexDim::D2Array).then_some((2, count))];
+                let lanes = [Some((0u32, w)), Some((1, per)), (dim == ir::TexDim::D2Array).then_some((2, count))];
                 for (lane, r) in lanes.into_iter().flatten() {
                     self.emit(SelGroup {
                         op: SelOp::Copy,
@@ -1878,13 +1904,22 @@ impl<'a> Sel<'a> {
                 }
                 Ok(())
             }
-            /* textureSize of a 3D texture: glsl2usc's pvr_volSize, one
-             * slice's size and the slice count (level 0 whatever `lod`, as
-             * the helper does). */
-            ir::Op::TexSize { sampler, dim: ir::TexDim::D3, .. } => {
+            /* textureSize of a 3D texture in the grid of slices: glsl2usc's
+             * pvr_volSize, one slice's size and the slice count at level 0,
+             * each halved `lod` times and at least 1 (GLSL ES 3.00 8.8: the
+             * level's size, whether or not the grid holds that level; the
+             * helper answered level 0 whatever `lod`, so dEQP's
+             * texturesize.sampler3d cases at a level above 0 got level 0's
+             * size). */
+            ir::Op::TexSize { sampler, dim: ir::TexDim::D3, lod } => {
+                let lod = self.src(lod, 0)?;
                 let layers = SelSrc::Fixed { bank: Bank::Shared, reg: self.layers_dword(sampler)?, mods: Mods::default() };
                 let (_, [sw, sh], n) = self.vol_grid(sampler, layers)?;
-                for (lane, r) in [sw, sh, n].into_iter().enumerate() {
+                let mut at = [SelSrc::Imm(0); 3];
+                for (k, x) in [sw, sh, n].into_iter().enumerate() {
+                    at[k] = self.minify(x, lod)?;
+                }
+                for (lane, r) in at.into_iter().enumerate() {
                     self.emit(SelGroup {
                         op: SelOp::Copy,
                         ty: OpType::U32,
@@ -3730,6 +3765,20 @@ impl<'a> Sel<'a> {
             out[lane] = self.fresh_group(SelOp::Alu(Bcsel), [Some(some), Some(at), imm(1)])?;
         }
         Ok(out)
+    }
+
+    /// `max(x >> lod, 1)` for an unsigned size `x`: the size at level `lod`
+    /// of a dimension that is `x` at level 0 (GLSL ES 3.00 8.8), as
+    /// [`Self::tex_size_2d`] shifts the image word's fields.
+    fn minify(&mut self, x: SelSrc, lod: SelSrc) -> Result<SelSrc, SelectError> {
+        let at = self.fresh_group(SelOp::Machine(MachineOp::Ushr), [Some(x), Some(lod), None])?;
+        self.at_least_one(at)
+    }
+
+    /// `max(x, 1)` for an unsigned `x`.
+    fn at_least_one(&mut self, x: SelSrc) -> Result<SelSrc, SelectError> {
+        let some = self.fresh_group(SelOp::Machine(MachineOp::Uge), [Some(x), Some(SelSrc::Imm(1)), None])?;
+        self.fresh_group(SelOp::Alu(ir::AluOp::Bcsel), [Some(some), Some(x), Some(SelSrc::Imm(1))])
     }
 
     /// Where a cube look-up samples the stacked 2D image YakoGL keeps a cube

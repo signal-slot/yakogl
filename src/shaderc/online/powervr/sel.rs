@@ -78,7 +78,7 @@
 //! say what they encode.
 
 use super::builtins::{shape, Shape};
-use crate::shaderc::online::ir::AluOp;
+use crate::shaderc::online::ir::{AluOp, TexDim};
 
 /// A virtual register, before allocation. Numbered by selection.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -367,13 +367,16 @@ pub enum SelOp {
     /// TEXTYPE_3D descriptor): the same `smp` `dmn` 3d as the cube's, which
     /// the record tells apart (`native_cube` bit 2).
     SampleZ { vol: bool },
-    /// A marker, no operands: the program asks a native 3D texture's size
-    /// (`textureSize` on a sampler3D, which reads the TEXTYPE_3D image
-    /// word's size and depth), so the draw must bind the twiddled copy
-    /// even when nothing samples the volume. Read by `chain::native_flags`
-    /// (`native_cube` bit 2) and dropped by `chain::expand_samples`; it never
-    /// reaches the builder.
-    VolSize,
+    /// A marker, no operands: the program asks a native texture's size
+    /// (`textureSize` on a sampler3D, sampler2DArray or samplerCube compiled
+    /// with the TPU's own kind, which reads the TEXTYPE_3D, the layered 2D or
+    /// the TEXTYPE_CUBE image word's size and depth), so the draw must bind
+    /// the twiddled copy that word describes even when nothing samples it:
+    /// the stacked image's word holds the whole stack's height and no depth.
+    /// Read by `chain::native_flags` (`native_cube` bit 0 for `Cube`, 1 for
+    /// `D2Array`, 2 for `D3`) and dropped by `chain::expand_samples`; it
+    /// never reaches the builder.
+    NativeSize(TexDim),
     /// The layer address of the `layer` [`SelOp::Sample`] that follows:
     /// the low dword in `srcs[0]`, the high dword in `srcs[1]` (`smp`'s
     /// `tao` words). Consumed by the chain like [`SelOp::SampleZ`].
@@ -555,7 +558,7 @@ impl SelOp {
             | SelOp::LoopEnd
             | SelOp::TexWord { .. }
             | SelOp::Pred(_)
-            | SelOp::VolSize => 0,
+            | SelOp::NativeSize(_) => 0,
             SelOp::SampleZ { .. } | SelOp::PlaneCoeff { .. } => 1,
             SelOp::SampleGrad | SelOp::SampleAddr => 2,
             SelOp::Alu(op) => SelGroup::arity(op),
@@ -592,7 +595,7 @@ impl SelOp {
             SelOp::Alu(op) => SelGroup::is_buildable(op),
             SelOp::TexWord { .. }
             | SelOp::SampleZ { .. }
-            | SelOp::VolSize
+            | SelOp::NativeSize(_)
             | SelOp::SampleGrad
             | SelOp::SampleAddr
             | SelOp::PlaneCoeff { .. } => false,
