@@ -259,6 +259,11 @@ pub struct Faults {
     /// The ports' `REG_CFG_DONE` bits read 1 after the update is taken (the
     /// other answer to the design note's U8).
     pub cfg_done_sticky: bool,
+    /// These ports (bit n = VPn) time no frame although every clock input
+    /// the CRU and the PHY show reads as running.
+    pub no_frames: u32,
+    /// SRST_A_VOP (52/9) ignores a release: the VOP stays in reset.
+    pub vop_reset_stuck: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -802,7 +807,7 @@ impl Rk3588Display {
             if Self::active(&s, p) && !self.vp_clocked(p) {
                 s.unclocked_seen[p] = true;
             }
-            if !self.vp_running(&s, p) {
+            if !self.vp_running(&s, p) || self.faults.no_frames & 1 << p != 0 {
                 continue;
             }
             if s.next_frame_us[p] == 0 {
@@ -975,6 +980,9 @@ impl Rk3588Display {
                     return;
                 }
                 if addr == sel_addr(0, 112) && self.faults.dclk_mux_stuck {
+                    return;
+                }
+                if addr == rst_addr(0, 52) && self.faults.vop_reset_stuck && (val >> 16) & !val & (1 << 9) != 0 {
                     return;
                 }
                 let resets_before: Vec<bool> = if b.name == B_CRU { self.reset_states() } else { Vec::new() };
