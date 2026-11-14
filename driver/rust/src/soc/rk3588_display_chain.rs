@@ -312,7 +312,12 @@ pub fn frame_us(mode: &VideoMode) -> u32 {
 
 /// Read what runs (START, before any write).
 fn find(m: &impl Mmio, b: &Bases) -> Found {
-    let mut f = Found { phy_status: m.read32(b.phy.grf + hdptx::grf::STATUS), ..Found::default() };
+    let mut f = Found::default();
+    // the PHY's GRF names no clock in Linux's tree; it is read only when the
+    // PHY itself is reachable, as `power_down` does (design note U5)
+    if ready(m, b.cru, b.pmu, &super::rk3588_display::HDPTX0).is_ok() {
+        f.phy_status = m.read32(b.phy.grf + hdptx::grf::STATUS);
+    }
     match ready(m, b.cru, b.pmu, &VOP) {
         Ok(()) => f.vop_reachable = true,
         Err(NotReady::DomainOff(_)) => {}

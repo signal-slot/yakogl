@@ -396,3 +396,19 @@ fn an_unclocked_vp0_is_refused_without_power_cycle() {
     no_refusal(&m);
     assert_eq!(r.frame.bus_error, [false, false]);
 }
+
+#[test]
+fn a_locked_phy_whose_apb_clock_is_gated_is_not_touched_by_the_power_cycle() {
+    // the PHY's PLL runs (its GRF says locked) while PCLK_HDPTX0 (72/5) reads
+    // gated: its register file cannot be reached (D4's HDPTX0 block), so the
+    // power-off, which writes it, is not run; its resets still are
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.poke(gate_addr(0, 72), m.peek(gate_addr(0, 72)) | 1 << 5);
+    assert_eq!(m.peek(PHY_GRF + 0x80) & 0x8, 0x8);
+    m.clear_log();
+    let r = up(&m, &Config { force_cold: true, power_cycle: true, ..cfg() }).unwrap();
+    no_refusal(&m);
+    assert!(!r.found.phy_powered_off);
+    assert_eq!(r.found.phy_status, 0, "STATUS is not read while the PHY is not reachable");
+}
