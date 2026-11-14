@@ -2623,6 +2623,124 @@ static void part_occlusion(void)
 	free(text);
 }
 
+/* ---- part 21: the three-word varying flags (v3dx_emit.c emit_varying_flags) --- */
+
+void v3d_job_emit_varying_flags(struct v3d_cl *bcl, const uint32_t flat[3],
+				const uint32_t noperspective[3], const uint32_t centroid[3]);
+
+/* One expected packet of a kind: word index, its 24-bit flags and the two
+ * actions, written here by hand from Mesa's rule (not by the builder's loop). */
+struct vf_pkt {
+	uint32_t off, flags, lower, higher;
+};
+
+#define VF_KEEP V3D_VARYING_FLAGS_ACTION_UNCHANGED
+#define VF_ZERO V3D_VARYING_FLAGS_ACTION_ZEROED
+
+static void vf_expect(struct v3d_cl *cl, int kind, const struct vf_pkt *p, int n)
+{
+	if (n == 0) {
+		if (kind == 0) {
+			v3d_cl_emit(cl, ZERO_ALL_FLAT_SHADE_FLAGS, z);
+		} else if (kind == 1) {
+			v3d_cl_emit(cl, ZERO_ALL_NON_PERSPECTIVE_FLAGS, z);
+		} else {
+			v3d_cl_emit(cl, ZERO_ALL_CENTROID_FLAGS, z);
+		}
+		return;
+	}
+	for (int i = 0; i < n; i++) {
+		if (kind == 0) {
+			v3d_cl_emit(cl, FLAT_SHADE_FLAGS, f) {
+				f.varying_offset_v0 = p[i].off;
+				f.action_for_flat_shade_flags_of_lower_numbered_varyings = p[i].lower;
+				f.action_for_flat_shade_flags_of_higher_numbered_varyings = p[i].higher;
+				f.flat_shade_flags_for_varyings_v024 = p[i].flags;
+			}
+		} else if (kind == 1) {
+			v3d_cl_emit(cl, NON_PERSPECTIVE_FLAGS, f) {
+				f.varying_offset_v0 = p[i].off;
+				f.action_for_non_perspective_flags_of_lower_numbered_varyings = p[i].lower;
+				f.action_for_non_perspective_flags_of_higher_numbered_varyings = p[i].higher;
+				f.non_perspective_flags_for_varyings_v024 = p[i].flags;
+			}
+		} else {
+			v3d_cl_emit(cl, CENTROID_FLAGS, f) {
+				f.varying_offset_v0 = p[i].off;
+				f.action_for_centroid_flags_of_lower_numbered_varyings = p[i].lower;
+				f.action_for_centroid_flags_of_higher_numbered_varyings = p[i].higher;
+				f.centroid_flags_for_varyings_v024 = p[i].flags;
+			}
+		}
+	}
+}
+
+static void part_varying_flags(void)
+{
+	/* word 0 only: today's bytes (UNCHANGED lower, ZEROED higher; ZERO_ALL
+	 * when 0): flat input 3, noperspective input 0, centroid input 23 */
+	static const struct vf_pkt w0_flat[] = { { 0, 1u << 3, VF_KEEP, VF_ZERO } };
+	static const struct vf_pkt w0_np[] = { { 0, 1u << 0, VF_KEEP, VF_ZERO } };
+	static const struct vf_pkt w0_ce[] = { { 0, 1u << 23, VF_KEEP, VF_ZERO } };
+	/* input 30 flat: word 1 bit 6, the first emitted word and not word 0:
+	 * both directions zeroed; input 50 centroid: word 2 bit 2 */
+	static const struct vf_pkt w1_flat[] = { { 1, 1u << 6, VF_ZERO, VF_ZERO } };
+	static const struct vf_pkt w2_ce[] = { { 2, 1u << 2, VF_ZERO, VF_ZERO } };
+	/* all three words: word 0 keeps lower and zeroes higher, the later
+	 * ones keep both */
+	static const struct vf_pkt all_flat[] = {
+		{ 0, 0x800001u, VF_KEEP, VF_ZERO },
+		{ 1, 0x000010u, VF_KEEP, VF_KEEP },
+		{ 2, 0xffffffu, VF_KEEP, VF_KEEP },
+	};
+	/* words 0 and 2: word 1 is skipped, word 2 keeps both */
+	static const struct vf_pkt w02_np[] = {
+		{ 0, 0x000002u, VF_KEEP, VF_ZERO },
+		{ 2, 0x400000u, VF_KEEP, VF_KEEP },
+	};
+	/* words 1 and 2: the first emitted is word 1 (zero both), then keep */
+	static const struct vf_pkt w12_ce[] = {
+		{ 1, 0x000100u, VF_ZERO, VF_ZERO },
+		{ 2, 0x000200u, VF_KEEP, VF_KEEP },
+	};
+	/* only word 2 of every kind */
+	static const struct vf_pkt o2_flat[] = { { 2, 0x1u, VF_ZERO, VF_ZERO } };
+	static const struct vf_pkt o2_np[] = { { 2, 0x800000u, VF_ZERO, VF_ZERO } };
+	static const struct vf_pkt o2_ce[] = { { 2, 0xabcdefu, VF_ZERO, VF_ZERO } };
+	static const struct {
+		const char *name;
+		uint32_t w[3][3];
+		const struct vf_pkt *e[3];
+		int n[3];
+	} cases[] = {
+		{ "all zero", { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } }, { NULL, NULL, NULL }, { 0, 0, 0 } },
+		{ "word 0 only", { { 1u << 3, 0, 0 }, { 1u << 0, 0, 0 }, { 1u << 23, 0, 0 } },
+		  { w0_flat, w0_np, w0_ce }, { 1, 1, 1 } },
+		{ "flat input 30, centroid input 50", { { 0, 1u << 6, 0 }, { 0, 0, 0 }, { 0, 0, 1u << 2 } },
+		  { w1_flat, NULL, w2_ce }, { 1, 0, 1 } },
+		{ "all three words, words 0 and 2, words 1 and 2",
+		  { { 0x800001u, 0x10, 0xffffffu }, { 2, 0, 0x400000u }, { 0, 0x100, 0x200 } },
+		  { all_flat, w02_np, w12_ce }, { 3, 2, 2 } },
+		{ "only word 2", { { 0, 0, 0x1u }, { 0, 0, 0x800000u }, { 0, 0, 0xabcdefu } },
+		  { o2_flat, o2_np, o2_ce }, { 1, 1, 1 } },
+	};
+	static uint8_t got[512], want[512];
+
+	for (unsigned c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+		struct v3d_cl g, e;
+		v3d_cl_init(&g, got, BO_GPU, sizeof(got));
+		v3d_cl_init(&e, want, BO_GPU, sizeof(want));
+		v3d_job_emit_varying_flags(&g, cases[c].w[0], cases[c].w[1], cases[c].w[2]);
+		for (int k = 0; k < 3; k++)
+			vf_expect(&e, k, cases[c].e[k], cases[c].n[k]);
+		char what[128];
+		snprintf(what, sizeof(what), "varying flags, %s: Mesa's packets, byte for byte", cases[c].name);
+		check(v3d_cl_ok(&g) && v3d_cl_ok(&e) && g.used == e.used && e.used > 0 &&
+			      memcmp(got, want, e.used) == 0,
+		      what);
+	}
+}
+
 int main(void)
 {
 	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields;
@@ -2642,9 +2760,10 @@ int main(void)
 	 * part 17 (a view's stride): 2 builds + 1 decode + 3 strides;
 	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal;
 	 * part 19 (occlusion queries): 2 builds + 4;
-	 * part 20 (the render image): 1 build + 5 + 3 refusals */
+	 * part 20 (the render image): 1 build + 5 + 3 refusals;
+	 * part 21 (three-word varying flags): 5 byte comparisons */
 	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
-			    28 + 8 + 6 + 10 + 6 + 9;
+			    28 + 8 + 6 + 10 + 6 + 9 + 5;
 	part_identity();
 	part_rollback();
 	part_decode();
@@ -2665,6 +2784,7 @@ int main(void)
 	part_rt_image();
 	part_pack_skip();
 	part_occlusion();
+	part_varying_flags();
 	printf("job_check: %d checks run (planned %d), %d failed\n", checks, planned, failures);
 	return (failures == 0 && checks == planned) ? 0 : 1;
 }
