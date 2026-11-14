@@ -67,6 +67,11 @@ use crate::shaderc::online::ir::AluOp;
 /// `enum quniform_contents` (v3d_compiler.h:180-206): the values this
 /// compiler emits.
 pub const QUNIFORM_CONSTANT: u32 = 0;
+/// The most VPM output rows a vertex shader writes: the four fixed-function
+/// rows, the point size and the fragment shader's inputs at Mesa's
+/// V3D_MAX_FS_INPUTS (64), rounded up to the sectors of 8 rows the record's
+/// output size counts: nine. ES 3.0's 15 vec4 and a point size are 65 rows.
+pub const VPM_OUTPUT_ROWS_MAX: u32 = 72;
 /// A dword of the stage's uniform block. Mesa's `data` is a dword offset
 /// into Gallium's constant buffer (try_emit_uniform, nir_to_vir.c:2789-2819);
 /// ours is the dword offset into the stage's uniform block as the IR states
@@ -399,8 +404,8 @@ pub enum SelectError {
     VaryingNotAnInput,
     /// An attribute the program reads is not in the record list it was given.
     AttributeWithoutRecord,
-    /// A VPM row past what this cut writes (16 attribute records, 64 output
-    /// rows).
+    /// A VPM row past what this cut writes (16 attribute records,
+    /// `VPM_OUTPUT_ROWS_MAX` output rows).
     VpmRowOutOfRange,
     /// A VPM output was written before every attribute was read: the input
     /// and output segments are shared, so the write could overwrite an input
@@ -2204,14 +2209,14 @@ fn merge_exits<'a>(a: &Arena<'a>, ops: &mut AVec<'a, VOp>) -> Result<(), SelectE
 }
 
 /// Select a fragment shader. `inputs` is [`super::prepare::fragment_inputs`];
-/// bit i of `flat` says `inputs[i]` is flat (the program's
-/// `flat_shade_flags`), bit i of `centroid` that it is sampled at the
+/// bit i % 24 of word i / 24 of `flat` says `inputs[i]` is flat (the program's
+/// `flat_shade_flags`), likewise of `centroid` that it is sampled at the
 /// centroid (`centroid_flags`).
 pub fn select_fragment<'a>(
     p: &Prepared<'_>,
     inputs: &[(u8, u8)],
-    flat: u32,
-    centroid: u32,
+    flat: [u32; 3],
+    centroid: [u32; 3],
     pressure: Pressure,
     a: &Arena<'a>,
 ) -> Result<Selected<'a>, SelectError> {
@@ -2283,10 +2288,10 @@ pub fn select_fragment<'a>(
     for (i, &(loc, comp)) in inputs.iter().enumerate() {
         let raw = s.v();
         s.push(a, VOp::Ldvary { dst: raw })?;
-        let value = if i < 32 && flat & (1 << i) != 0 {
+        let value = if flat[i / 24] >> (i % 24) & 1 != 0 {
             s.mul(a, MulOp::Mov, Operand::R5, Operand::None)?
         } else {
-            let w = if i < 32 && centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
+            let w = if centroid[i / 24] >> (i % 24) & 1 != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
             let scaled = s.mul(a, MulOp::Fmul, Operand::V(raw), w)?;
             s.add(a, AddOp::Fadd, scaled, Operand::R5)?
         };
@@ -2557,7 +2562,7 @@ pub fn select_vertex<'a>(
     } else {
         (0, 4 + skip + p.varyings.len() as u32)
     };
-    if rows > 64 {
+    if rows > VPM_OUTPUT_ROWS_MAX {
         return Err(SelectError::VpmRowOutOfRange);
     }
     /* v3d_nir_emit_ff_vpm_outputs */

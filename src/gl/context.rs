@@ -146,11 +146,24 @@ pub const MAX_VARYING_VECTORS: usize = 15;
 pub const MAX_VARYING_VECTORS: usize = 15;
 #[cfg(all(feature = "gpu-powervr", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
-/// V3D: 8, the ES 2.0 minimum. Mesa's v3d allows 16 (V3D_MAX_FS_INPUTS, 64
-/// components), but nothing here has drawn with more than a few varyings on
-/// the board: the M6 first cut claims what it has a chance of having
-/// measured, and is raised with the board run that measures more.
-#[cfg(feature = "gpu-v3d")]
+/// V3D: 15, ES 3.0's minimum (Mesa's v3d allows 16, V3D_MAX_FS_INPUTS, 64
+/// components). Each component is one fragment input (`ldvary`), 60 of them:
+///
+/// * the compiler lays out and flags 64 inputs (online/v3d/chain.rs
+///   `FLAG_WORDS`: the packets' flag words hold 24 inputs each) and the job
+///   builder emits all three words (driver/src/v3d/v3d_job.c
+///   EMIT_VARYING_FLAGS);
+/// * the VPM takes the four fixed-function rows, a point size and the 60
+///   varyings: 65 rows, nine sectors (online/v3d/select.rs
+///   `VPM_OUTPUT_ROWS_MAX`);
+/// * es100/varyings15 compiles and the interpreter carries all fifteen
+///   (online/v3d/varyings_tests.rs); tests/es3_v3d_varyings.rs draws them.
+///
+/// No Pi 4 run has drawn with them yet (a board item). Under `report-es2` 8,
+/// the ES 2.0 answer as it was (tests/es2_report_guard.rs).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VARYING_VECTORS: usize = 15;
+#[cfg(all(feature = "gpu-v3d", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// Mali-G610: 8, the ES 2.0 minimum, as the V3D's first cut: nothing has
 /// been compiled for it yet. Mesa's panfrost takes 32 inputs a stage on
@@ -190,6 +203,14 @@ pub fn max_color_attachments() -> usize {
 /// The shader's gl_MaxVertexOutputVectors / gl_MaxFragmentInputVectors are
 /// these divided by four (ES 3.00 section 7.3), so raising one here moves
 /// the shader's value with it.
+///
+/// V3D: 64 (ES 3.0's minimum), one vec4 over the fragment side's 60:
+/// a vertex shader may write a 16th vec4 the fragment shader does not read,
+/// which takes no VPM row (the chain writes the outputs the fragment shader
+/// reads).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = 64;
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 /// GL_MIN/MAX_PROGRAM_TEXEL_OFFSET, ES 3.0's minimum range: the values the

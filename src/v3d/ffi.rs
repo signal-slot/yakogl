@@ -92,6 +92,10 @@ pub struct V3dFsProg {
     pub uses_pid: bool,
     pub uniforms: *const V3dUniform,
     pub num_uniforms: u32,
+    /// Words 1 and 2 of the three flags arrays (24 inputs a word).
+    pub flat_shade_flags_hi: [u32; 2],
+    pub noperspective_flags_hi: [u32; 2],
+    pub centroid_flags_hi: [u32; 2],
 }
 
 /// `struct v3d_vs_prog` (the vertex and the coordinate shader).
@@ -828,7 +832,7 @@ const _: () = assert!(size_of::<V3dUniformStorage>() == 16);
 const _: () = assert!(size_of::<V3dVertexAttr>() == 16);
 const _: () = assert!(offset_of!(V3dVertexAttr, divisor) == 12);
 const _: () = assert!(size_of::<V3dTiling>() == 32);
-const _: () = assert!(size_of::<V3dFsProg>() == 56);
+const _: () = assert!(size_of::<V3dFsProg>() == 80);
 const _: () = assert!(offset_of!(V3dFsProg, threads) == 4);
 const _: () = assert!(offset_of!(V3dFsProg, single_seg) == 8);
 const _: () = assert!(offset_of!(V3dFsProg, num_inputs) == 12);
@@ -838,6 +842,8 @@ const _: () = assert!(offset_of!(V3dFsProg, writes_z) == 28);
 const _: () = assert!(offset_of!(V3dFsProg, uses_pid) == 33);
 const _: () = assert!(offset_of!(V3dFsProg, uniforms) == 40);
 const _: () = assert!(offset_of!(V3dFsProg, num_uniforms) == 48);
+const _: () = assert!(offset_of!(V3dFsProg, flat_shade_flags_hi) == 52);
+const _: () = assert!(offset_of!(V3dFsProg, centroid_flags_hi) == 68);
 const _: () = assert!(size_of::<V3dVsProg>() == 64);
 const _: () = assert!(offset_of!(V3dVsProg, single_seg) == 8);
 const _: () = assert!(offset_of!(V3dVsProg, vpm_input_size) == 12);

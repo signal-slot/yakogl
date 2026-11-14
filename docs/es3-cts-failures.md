@@ -243,8 +243,17 @@ samplers), RC6 and RC15; no single item.
 `state_query` 25 and `implementation_limits` 11: ES 3.0 limits read as float
 or 64-bit integers, uniform-block and varying component limits below the ES
 3.0 minimum, the compressed-format list, `max_draw_buffers` and
-`max_color_attachments` 3 (RC14). Item `es3-caps` (the ES 3.0 limits test was
-reverted for review and is to be redone).
+`max_color_attachments` 3 (RC14). `tests/es3_caps.rs` lists the limits still
+below their minimum (`known_gaps()`).
+
+The V3D's varying family is at the minimum (15 / 60 / 60 / 64): the flag words
+of the shader record carry 64 inputs, the VPM 65 rows; the host draws
+(`tests/es3_v3d_varyings.rs`) pass, the Pi 4 run of them is left. The float
+and 64-bit query forms have no path of their own that differs from the integer
+one (`docs/notes/es3-limits-design.md` section 1). Left: the uniform-block
+size and combined components (6144 / 1536: block storage is not separate from
+the default block, design and issue drafts in the same note), and
+`max_vertex_output_components` 60 on the PowerVR and GC7000UL.
 
 ### RC11. Occlusion queries
 
