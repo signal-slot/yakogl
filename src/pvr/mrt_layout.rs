@@ -295,6 +295,56 @@ mod tests {
         assert_eq!(layout(&[1, 2]).unwrap().place[1].source_pos(), 2);
     }
 
+    /// Integer colour attachments beside float/unorm ones, as output-register
+    /// dwords (`surf_out_dwords`): RGBA8, R32F, R32I, R32UI and RG16UI take 1,
+    /// RGBA16F and RGBA16UI 2, RGBA32UI 4. The placement, and with it the PBE
+    /// source positions a later wiring reads off this layout, is the emit
+    /// loop's walk (`backend.rs`, the end-of-tile emit) for these mixes:
+    /// RGBA8 + R32UI and R32F + R32I at registers 0, 1; R32I + RGBA16F at 0, 2
+    /// (the 64-bit source skips register 1); RGBA8 + RG16UI + R32F at 0, 1, 2;
+    /// RGBA8 + RGBA16UI + R32UI spills the third target; RGBA32UI + R32F is
+    /// refused (docs/notes/pvr-int-mixed-targets.md section 3).
+    #[test]
+    fn integer_beside_float_unorm_mixes() {
+        /* RGBA8 + R32UI: two 1-dword targets, the second's source at 1 */
+        let l = layout(&[1, 1]).unwrap();
+        assert_eq!(places(&l), [reg(0), reg(1)]);
+        assert_eq!((l.output_regs, l.tile_buffers, l.program), (2, 0, EotProgram::Plain { targets: 2 }));
+        assert_eq!((l.place[0].source_pos(), l.place[1].source_pos()), (0, 1));
+
+        /* R32F + R32I: the same dwords, the same placement -- the rule is
+         * per-target dwords, not per-target class */
+        let l = layout(&[1, 1]).unwrap();
+        assert_eq!(places(&l), [reg(0), reg(1)]);
+        assert_eq!((l.place[0].source_pos(), l.place[1].source_pos()), (0, 1));
+
+        /* R32I + RGBA16F: the 2-dword source starts even, skipping
+         * register 1; the span is the four registers, with no spill */
+        let l = layout(&[1, 2]).unwrap();
+        assert_eq!(places(&l), [reg(0), reg(2)]);
+        assert_eq!((l.output_regs, l.tile_buffers, l.program), (4, 0, EotProgram::Plain { targets: 2 }));
+        assert_eq!((l.place[0].source_pos(), l.place[1].source_pos()), (0, 2));
+
+        /* RGBA8 + RG16UI + R32F: three 1-dword targets fill 0, 1, 2 */
+        let l = layout(&[1, 1, 1]).unwrap();
+        assert_eq!(places(&l), [reg(0), reg(1), reg(2)]);
+        assert_eq!((l.output_regs, l.tile_buffers, l.program), (3, 0, EotProgram::Plain { targets: 3 }));
+
+        /* RGBA8 + RGBA16UI + R32UI: the 2-dword target takes registers 2..4,
+         * the 1-dword one finds none left, and register 1 is not back-filled:
+         * it spills to tile buffer 0 (eot3_tb), emitted from dword 0 */
+        let l = layout(&[1, 2, 1]).unwrap();
+        assert_eq!(places(&l), [reg(0), reg(2), tb(0)]);
+        assert_eq!((l.output_regs, l.tile_buffers, l.program), (4, 1, EotProgram::Eot3Tb));
+        assert_eq!(l.place[2].source_pos(), 0);
+
+        /* RGBA32UI + R32F: the 4-dword target fills the four registers, the
+         * second spills as target 1 of two, and eot_doutu_src0_tb_n[2] is
+         * eot2_tb, a three-emit program: refused (the family:
+         * `spills_without_a_captured_program_are_refused`) */
+        assert_eq!(layout(&[4, 1]), Err(LayoutError::NoProgram { targets: 2, spilled: 1 }));
+    }
+
     #[test]
     fn spills_without_a_captured_program_are_refused() {
         /* two targets, the second spilled: eot_doutu_src0_tb_n[2] is
