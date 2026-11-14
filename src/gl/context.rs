@@ -146,11 +146,18 @@ pub const MAX_VARYING_VECTORS: usize = 15;
 pub const MAX_VARYING_VECTORS: usize = 15;
 #[cfg(all(feature = "gpu-powervr", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
-/// V3D: 8, the ES 2.0 minimum. Mesa's v3d allows 16 (V3D_MAX_FS_INPUTS, 64
-/// components), but nothing here has drawn with more than a few varyings on
-/// the board: the M6 first cut claims what it has a chance of having
-/// measured, and is raised with the board run that measures more.
-#[cfg(feature = "gpu-v3d")]
+/// V3D: 15, ES 3.0's minimum. The hardware takes 64 scalar fragment inputs
+/// (Mesa v3d_limits.h V3D_MAX_FS_INPUTS), which is 16 vec4; 15 are what a
+/// vertex shader's gl_Position leaves in the 16 the GL names. The compiler
+/// packs one `ldvary` per component (es100/varyings15 builds the 60-component
+/// fragment shader), the shader record carries the count, and the job builder
+/// writes the flat/centroid flag words in groups of 24 inputs as Mesa's
+/// `v3dx_emit_varying_flags` does (tests/es3_v3d_varyings.rs).
+///
+/// Under `report-es2` 8, the ES 2.0 answer as it was (tests/es2_report_guard.rs).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VARYING_VECTORS: usize = 15;
+#[cfg(all(feature = "gpu-v3d", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// Mali-G610: 8, the ES 2.0 minimum, as the V3D's first cut: nothing has
 /// been compiled for it yet. Mesa's panfrost takes 32 inputs a stage on
@@ -190,6 +197,14 @@ pub fn max_color_attachments() -> usize {
 /// The shader's gl_MaxVertexOutputVectors / gl_MaxFragmentInputVectors are
 /// these divided by four (ES 3.00 section 7.3), so raising one here moves
 /// the shader's value with it.
+///
+/// V3D: 64, one vec4 more than the varyings: the VPM output record is sized by
+/// what the fragment shader reads (the coordinate/vertex shader writes only
+/// the components the linked fragment shader asks for), so a vertex shader
+/// may declare 16 vec4 outputs as long as 15 are read.
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = 64;
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 /// GL_MIN/MAX_PROGRAM_TEXEL_OFFSET, ES 3.0's minimum range: the values the

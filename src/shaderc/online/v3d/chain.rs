@@ -138,6 +138,10 @@ pub struct FsProg<'a> {
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
+    /// Inputs 32..63 of the three: bit i is input 32 + i.
+    pub flat_shade_flags_hi: u32,
+    pub noperspective_flags_hi: u32,
+    pub centroid_flags_hi: u32,
     /// The shader writes Z to the TLB (prog_data `writes_z`): the pass-
     /// through Z (a discard, no colour write, a read of gl_FragCoord.z) or
     /// its own `gl_FragDepth` (select.rs `TLB_Z_PER_PIXEL`).
@@ -417,13 +421,18 @@ pub fn compile_program_keyed<'a>(
     let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
     let inputs = fragment_inputs(&fsp, a)?;
     /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
-     * flat_shade_flags at the input's index). The job builder reads word 0
-     * only and refuses more than 24 inputs. */
-    let mut flat = 0u32;
+     * flat_shade_flags at the input's index). Inputs 0..31 are in
+     * `flat_shade_flags`, 32..63 in `flat_shade_flags_hi`; the job builder
+     * writes them in the groups of 24 the packet carries. */
+    let mut flat = 0u64;
     /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
      * BITSET_SET of centroid_flags, the W it multiplies by the centroid
      * W). */
-    let mut centroid = 0u32;
+    let mut centroid = 0u64;
+    /* V3D_MAX_FS_INPUTS: the shader record's count and the flag words stop here */
+    if inputs.len() > 64 {
+        return Err(V3dError::NotYet("more than 64 fragment shader inputs"));
+    }
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
             .inputs
@@ -431,15 +440,9 @@ pub fn compile_program_keyed<'a>(
             .find(|d| d.kind == IoKind::Varying && d.location == loc)
             .ok_or(V3dError::VaryingWithoutVertexOutput)?;
         if d.interp == crate::shaderc::online::ir::INTERP_FLAT {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a flat varying past input 31"));
-            }
             flat |= 1 << i;
         }
         if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a centroid varying past input 31"));
-            }
             centroid |= 1 << i;
         }
     }
@@ -522,9 +525,12 @@ pub fn compile_program_keyed<'a>(
             single_seg: false,
             num_inputs: inputs.len() as u32,
             input_slots: slots,
-            flat_shade_flags: flat,
+            flat_shade_flags: flat as u32,
             noperspective_flags: 0,
-            centroid_flags: centroid,
+            centroid_flags: centroid as u32,
+            flat_shade_flags_hi: (flat >> 32) as u32,
+            noperspective_flags_hi: 0,
+            centroid_flags_hi: (centroid >> 32) as u32,
             /* select.rs select_fragment: a discard, a read of Z, or a
              * gl_FragDepth write */
             writes_z: fsel.writes_z,

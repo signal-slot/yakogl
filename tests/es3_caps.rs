@@ -283,17 +283,22 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
              decoded formats are not stored (gl/texture.rs stored_compressed_formats)",
         ));
     }
-    let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"));
+    let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr", feature = "gpu-v3d"));
     if !fifteen {
-        // V3D and Mali carry 8 varying vectors (gl/context.rs MAX_VARYING_VECTORS), the ES 2.0 minimum
+        // Mali carries 8 varying vectors (gl/context.rs MAX_VARYING_VECTORS), the ES 2.0 minimum
         v.extend_from_slice(&[
             ("MAX_VARYING_VECTORS", "8, not 15: the ES 2.0 minimum is what this back end programs (gl/context.rs)"),
             ("MAX_VARYING_COMPONENTS", "32 = 8 vectors * 4"),
             ("MAX_FRAGMENT_INPUT_COMPONENTS", "32 = 8 vectors * 4, ES 3.0 needs 60 (gl/context.rs)"),
         ]);
     }
-    // the GC7000 and the PowerVR report 15 varyings but 60 vertex output components
-    v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));
+    // the V3D reports 64 vertex output components (gl/context.rs); the GC7000 and the PowerVR report
+    // 15 varyings but 60, and Mali 32
+    if cfg!(feature = "gpu-v3d") {
+        // none: 64
+    } else {
+        v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));
+    }
     v
 }
 

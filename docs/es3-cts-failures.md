@@ -250,9 +250,15 @@ formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,
 `tests/gltest_case20_formats.rs`, `tests/vivante_imx8mp_limits.rs`); the board
 rows (the Pi 4's `implementation_limits.*compressed*` and
-`state_query.integers.compressed_texture_formats_*`) are to be re-run. Item
-`es3-caps` (the ES 3.0 limits test was reverted for review and is to be
-redone).
+`state_query.integers.compressed_texture_formats_*`) are to be re-run. The float and 64-bit forms are not a
+second defect: `glGetFloatv` and `glGetInteger64v` answer what `glGetIntegerv`
+answers (`tests/es3_limits_v3d.rs`, `tests/es3_v3d_varyings.rs`), so a
+`*_getfloat` / `*_getinteger64` row fails exactly when the limit is below its
+minimum. The V3D's varying family is closed on the host (v3d-varyings-raise:
+`MAX_VARYING_VECTORS` 15, the components 60 / 60 / 64; `tests/es3_v3d_varyings.rs`;
+board rows to re-run). Left: the uniform-block size and the combined
+uniform components (every GPU), `MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the
+PowerVR and GC7000UL, RC14.
 
 ### RC11. Occlusion queries
 
