@@ -243,6 +243,15 @@ pub struct Faults {
     pub underflow: bool,
     /// A fetching window's AXI read fails every frame (SYS0 bus error).
     pub bus_error: bool,
+    /// STANDBY never raises DSP_HOLD_VALID (the port stops all the same).
+    pub no_dsp_hold: bool,
+    /// Esmart0's `REGION0_YRGB_MST` ignores writes.
+    pub mst_stuck: bool,
+    /// The controller's clock monitor never reads locked.
+    pub cmu_unlocked: bool,
+    /// The PHY's lanes report not ready (`PHY_RDY` 0) once VP0 runs; the
+    /// PLL stays locked.
+    pub phy_rdy_lost: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -262,6 +271,9 @@ struct VopState {
     raw: [u32; 4],
     sys_raw: [u32; 2],
     stopping: [bool; 4],
+    /// The port was seen active (STANDBY clear or stopping) without its
+    /// pixel clock: the frame it was in is not over.
+    unclocked_seen: [bool; 4],
     next_frame_us: [u64; 4],
     /// The windows fetching ([`win_en`] numbering) and their addresses.
     fetching: u32,
@@ -538,7 +550,13 @@ impl Rk3588Display {
         if on && init && cmn && refclk && !self.faults.phy_no_clk {
             st |= 1 << 2;
             if lane && !self.faults.phy_no_lock {
-                st |= (1 << 3) | (1 << 1);
+                st |= 1 << 3;
+                // (no borrow: called from inside the VOP's own update, where
+                // only the clock bit is read)
+                let vp0 = self.vop.try_borrow().map(|v| Self::active(&v, 0)).unwrap_or(false);
+                if !(self.faults.phy_rdy_lost && vp0 && self.gate_open(0, 52, 13)) {
+                    st |= 1 << 1;
+                }
             }
         }
         st
@@ -547,10 +565,6 @@ impl Rk3588Display {
     fn phy_clock(&self) -> bool {
         self.phy_status() & (1 << 2) != 0
     }
-    fn phy_locked(&self) -> bool {
-        self.phy_status() & 0xa == 0xa
-    }
-
     fn phy_check(&self, addr: usize) -> bool {
         let off = addr - PHY;
         let n = off / 4;
@@ -567,7 +581,8 @@ impl Rk3588Display {
         match off {
             0x0 => self.core_id,
             0xb0 => {
-                if self.phy_locked() && self.vp_running(&self.vop.borrow(), 0) {
+                let pll_locked = self.phy_status() & (1 << 3) != 0;
+                if pll_locked && self.vp_running(&self.vop.borrow(), 0) && !self.faults.cmu_unlocked {
                     0x15
                 } else {
                     0
@@ -632,8 +647,42 @@ impl Rk3588Display {
         }
     }
 
+    /// STANDBY clear, or set but the frame not ended yet.
+    fn active(s: &VopState, p: usize) -> bool {
+        s.stopping[p] || Self::vop_reg(s, dsp_ctrl(p)) & 1 << 31 == 0
+    }
+
     fn vp_running(&self, s: &VopState, p: usize) -> bool {
-        (s.stopping[p] || Self::vop_reg(s, dsp_ctrl(p)) & 1 << 31 == 0) && self.vp_clocked(p)
+        Self::active(s, p) && self.vp_clocked(p)
+    }
+
+    /// The address a window fetches is wrong for the IOMMU's state: with
+    /// paging off an IOVA of the system before us is read as a physical
+    /// address; with paging on through the tables of the system before us,
+    /// our physical buffer is read as an IOVA (not mapped there; an
+    /// assumption of this model). Either is a bus error.
+    fn bad_fetch(&self, s: &VopState, w: usize) -> bool {
+        let iova = self.iova_windows.borrow().contains(&s.fetch_addr[w]);
+        let paging = s.mmu[0].status & 1 != 0;
+        if paging {
+            !iova && w >= 4 && !self.iova_windows.borrow().is_empty()
+        } else {
+            iova
+        }
+    }
+
+    /// Paging just went off: a window still fetching on a running port
+    /// (its disable pending, or none written) reads its IOVA as a physical
+    /// address for the rest of its frame.
+    fn paging_went_off(&self) {
+        let mut s = self.vop.borrow_mut();
+        let sel = Self::vop_reg(&s, PORT_SEL);
+        for w in 0..8 {
+            let p = win_port(sel, w);
+            if s.fetching & 1 << w != 0 && self.vp_running(&s, p) && self.bad_fetch(&s, w) {
+                s.sys_raw[0] |= 1 << 1;
+            }
+        }
     }
 
     fn vop_read(&self, addr: usize) -> u32 {
@@ -645,10 +694,13 @@ impl Rk3588Display {
                 0x00 => set.dte,
                 0x04 => set.status,
                 0x1c => set.int_mask,
-                _ => 0,
+                // COMMAND: write-only commands; the D0 dump reads it as 0
+                0x08 => 0,
+                o => panic!("read of vop_mmu offset {o:#x} (rockchip-iommu.c:33-42 names 0x00, 0x04, 0x08, 0x1c)"),
             };
         }
         let off = addr - VOP;
+        assert!(off < 0x2000, "VOP access at {off:#x}: the HDR and LUT registers from 0x2000 are never touched");
         let raw = (0..4).find(|p| int_raw(*p) == off);
         match off {
             VERSION => self.faults.vop_version.unwrap_or(VERSION_RK3588),
@@ -666,6 +718,7 @@ impl Rk3588Display {
     fn vop_write(&self, addr: usize, val: u32) {
         let mut s = self.vop.borrow_mut();
         if addr >= MMU[0] {
+            let paging = s.mmu.iter().any(|x| x.status & 1 != 0);
             let i = usize::from(addr >= MMU[1]);
             let set = &mut s.mmu[i];
             match (addr & 0xff, val) {
@@ -675,15 +728,17 @@ impl Rk3588Display {
                 (0x08, 2) if set.status & 1 != 0 => set.status |= 4,
                 (0x08, 3) => set.status &= !4,
                 (0x08, 2) => {}
-                (o, v) => self.refused.borrow_mut().push(format!("vop_mmu write {v:#x} to {o:#x}")),
+                (o, v) => panic!("write {v:#x} to vop_mmu offset {o:#x}"),
+            }
+            if paging && s.mmu.iter().all(|x| x.status & 1 == 0) {
+                drop(s);
+                self.paging_went_off();
             }
             return;
         }
         let off = addr - VOP;
-        if off == VERSION {
-            self.refused.borrow_mut().push("VERSION_INFO written".into());
-            return;
-        }
+        assert!(off < 0x2000, "VOP access at {off:#x}: the HDR and LUT registers from 0x2000 are never touched");
+        assert_ne!(off, VERSION, "VERSION_INFO is read only");
         let clr = (0..4).find(|p| int_clr(*p) == off);
         let ctrl = (0..4).find(|p| dsp_ctrl(*p) == off);
         if off == CFG_DONE {
@@ -703,15 +758,20 @@ impl Rk3588Display {
             let mask = val >> 16;
             let old = Self::vop_reg(&s, off);
             s.regs.insert(off, (old & !mask) | (val & mask & 0xffff));
+        } else if off == 0x1814 && self.faults.mst_stuck {
         } else if off == PORT_SEL {
             s.port_sel_written = Some(val);
         } else if let Some(p) = ctrl {
+            // STANDBY takes effect at the end of the frame (vop2 fact 16),
+            // whether or not the pixel clock runs now: a port without it
+            // ends its frame when the clock comes back (D1's model)
+            let was_active = Self::active(&s, p);
             let was = self.vp_running(&s, p);
             s.regs.insert(off, val);
             if !was && self.vp_running(&s, p) {
                 s.next_frame_us[p] = *self.now_us.borrow() + self.frame_us;
             }
-            if was && val & 1 << 31 != 0 {
+            if was_active && val & 1 << 31 != 0 {
                 s.stopping[p] = true;
             }
         } else {
@@ -724,6 +784,9 @@ impl Rk3588Display {
         let end = *self.now_us.borrow() + us;
         let mut s = self.vop.borrow_mut();
         for p in 0..4 {
+            if Self::active(&s, p) && !self.vp_clocked(p) {
+                s.unclocked_seen[p] = true;
+            }
             if !self.vp_running(&s, p) {
                 continue;
             }
@@ -732,9 +795,26 @@ impl Rk3588Display {
             }
             while self.vp_running(&s, p) && s.next_frame_us[p] <= end {
                 s.next_frame_us[p] += self.frame_us;
+                if s.unclocked_seen[p] {
+                    // the frame its clock was taken from ends now, with the
+                    // windows of that frame
+                    s.unclocked_seen[p] = false;
+                    let sel = Self::vop_reg(&s, PORT_SEL);
+                    let iova = self.iova_windows.borrow();
+                    for w in (0..8).filter(|w| s.fetching & 1 << w != 0 && win_port(sel, *w) == p) {
+                        if iova.contains(&s.fetch_addr[w]) {
+                            self.refused.borrow_mut().push(format!(
+                                "VP{p} got its pixel clock back with window {w} fetching {:#x}, an IOVA of the system before us",
+                                s.fetch_addr[w]
+                            ));
+                        }
+                    }
+                }
                 if s.stopping[p] {
                     s.stopping[p] = false;
-                    s.raw[p] |= 1 << 6;
+                    if !self.faults.no_dsp_hold {
+                        s.raw[p] |= 1 << 6;
+                    }
                     break;
                 }
                 s.raw[p] |= 1;
@@ -763,10 +843,9 @@ impl Rk3588Display {
                     }
                 }
                 let sel = Self::vop_reg(&s, PORT_SEL);
-                let paging = s.mmu[0].status & 1 != 0;
                 let fetching = s.fetching;
                 for w in (0..8).filter(|w| fetching & 1 << w != 0 && win_port(sel, *w) == p) {
-                    if self.faults.bus_error || !paging && self.iova_windows.borrow().contains(&s.fetch_addr[w]) {
+                    if self.faults.bus_error || self.bad_fetch(&s, w) {
                         s.sys_raw[0] |= 1 << 1;
                     }
                     if self.faults.underflow {
@@ -884,6 +963,14 @@ impl Mmio for Rk3588Display {
             B_CRU | B_PMU | B_SYS_GRF | B_VOP_GRF | B_VO1_GRF | B_PHY_GRF => {
                 if b.name == B_PMU {
                     self.check_switch(addr, val);
+                    // the VOP's bus clocks must not stop before a port's
+                    // STANDBY has taken effect (DSP_HOLD_VALID; design note
+                    // section 1, rockchip_drm_vop2.c:950-969)
+                    let vop_off = addr == PWR + 4 && val & (val >> 16) & (1 << 1) != 0;
+                    let s = self.vop.borrow();
+                    if vop_off && (0..4).any(|p| self.vp_running(&s, p)) {
+                        self.refused.borrow_mut().push("PD_VOP switched off under a running port".into());
+                    }
                 }
                 let mask = val >> 16;
                 if matches!(b.name, B_SYS_GRF | B_VOP_GRF | B_VO1_GRF | B_PHY_GRF) && val & 0xffff & !mask != 0 {
