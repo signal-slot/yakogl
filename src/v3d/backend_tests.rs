@@ -9969,3 +9969,80 @@ fn a_depth_quad_a_stencil_quad_then_a_full_clear_are_quad_quad_then_the_tlb_clea
     assert_eq!((c.z, c.stencil), (0.75, 0x44), "and the depth and stencil of the full clear");
     assert_eq!(rig.kicks().len(), 2);
 }
+
+/* ---- ES 3.0 uniform blocks of GL_MAX_UNIFORM_BLOCK_SIZE (plan #359) ------- */
+
+/// A uniform block of the 16384 bytes GL_MAX_UNIFORM_BLOCK_SIZE reports
+/// (gl/context.rs MAX_UNIFORM_BLOCK_SIZE), through the GL core onto the job
+/// builder: 16 members of `vec4[64]`, read by constant index at the first
+/// and the last dword and by a uniform index in the last member, filled
+/// from a bound buffer whose dword k holds k + 0.5. Every
+/// QUNIFORM_UNIFORM word of the stream names a dword of the stage's
+/// storage (the job builder refuses one past it, v3d_job.c
+/// `write_uniforms`) and reads the buffer's dword: the last one, 4095, is
+/// past the 1536-dword default block the GL core capped a stage at before.
+#[test]
+#[cfg(not(feature = "report-es2"))]
+fn a_uniform_block_of_16384_bytes_reaches_the_stream_whole() {
+    use crate::gl::buffer::*;
+    use crate::gl::consts::*;
+    use crate::gl::es3::glBindBufferBase;
+    use crate::gl::framebuffer::*;
+    use crate::gl::program::*;
+    use std::ffi::CString;
+    const VS: &str = "#version 300 es\nin highp vec4 a_position;\nvoid main() { gl_Position = a_position; }\n";
+    let members: String = (0..16).map(|m| format!("highp vec4 m{m}[64]; ")).collect();
+    let fs = format!(
+        "#version 300 es\nuniform Big {{ {members}}};\nuniform highp int u_i;\n\
+         layout(location = 0) out highp vec4 o;\n\
+         void main() {{ o = vec4(m0[0].x, m15[63].w, m15[u_i].y, 1.0); }}\n"
+    );
+    let rig = gl_rig();
+    let rb = gl_renderbuffer(GL_RGBA8, 4, 4);
+    let data: Vec<f32> = (0..4096).map(|k| k as f32 + 0.5).collect();
+    let mut buf = 0;
+    // SAFETY: plain GL calls on live names; `data` is 16384 bytes.
+    unsafe {
+        glBindFramebuffer(GL_FRAMEBUFFER, 1);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        crate::gl::state::glViewport(0, 0, 4, 4);
+        glGenBuffers(1, &mut buf);
+        glBindBuffer(GL_UNIFORM_BUFFER, buf);
+        glBufferData(GL_UNIFORM_BUFFER, 16384, data.as_ptr() as *const c_void, GL_STATIC_DRAW);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, buf);
+    }
+    let (p, _) = gl_program_of(VS, &fs, true);
+    // SAFETY: a live program and names; plain GL calls.
+    unsafe {
+        let big = CString::new("Big").unwrap();
+        let b = glGetUniformBlockIndex(p, big.as_ptr());
+        assert_ne!(b, GL_INVALID_INDEX);
+        glUniformBlockBinding(p, b, 0);
+        let u_i = CString::new("u_i").unwrap();
+        glUniform1i(glGetUniformLocation(p, u_i.as_ptr()), 63);
+    }
+    let before = rig.draws().len();
+    gl_quad([-1.0, -1.0, 0.0], [1.0, 1.0, 0.0]);
+    // SAFETY: plain GL calls.
+    unsafe {
+        crate::gl::state::glFinish();
+        assert_eq!(crate::gl::state::glGetError(), GL_NO_ERROR, "{:?}", rig.gl.logs());
+    }
+    let draws = rig.draws();
+    assert_eq!(draws.len(), before + 1, "the quad is drawn, not refused: {:?}", rig.gl.logs());
+    let d = draws.last().expect("the quad");
+    assert!(d.fs_storage.len() > 4096, "the stage's storage holds the block whole: {}", d.fs_storage.len());
+    let read: Vec<u32> = d
+        .fs_uniforms
+        .iter()
+        .filter(|u| u.contents == V3D_QUNIFORM_UNIFORM)
+        .map(|u| d.fs_storage[u.data as usize])
+        .collect();
+    for (k, why) in [(0, "m0[0].x"), (4095, "m15[63].w, the block's last dword"), (64 * 4 * 15 + 1, "m15[0].y")] {
+        assert!(read.contains(&data[k].to_bits()), "{why}: dword {k} is not in the stream");
+    }
+    // SAFETY: a live name.
+    unsafe { glDeleteBuffers(1, &buf) };
+    gl_release(p, &[1], &[rb]);
+}
