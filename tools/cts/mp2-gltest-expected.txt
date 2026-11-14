@@ -1,0 +1,12 @@
+# Expected differences of a STM32MP257F-DK gl_test run from the i.MX8MP
+# baseline (tools/cts/mp2-gltest-diff.py --expected). One case number per
+# line, then a '#' reason. A listed case that fails on the DK is reported as
+# expected, not new; one that passes is reported too (the entry is stale).
+# Only what the code shows: the DK core has WIDELINE_TRIANGLE_EMU.
+10   # pending Q11: 3 px wide line check ("loop: 3 px wide"), gl_test.c case_prims
+230  # pending Q11: flat_lines (wide-line emulation, flatshading)
+231  # pending Q11: flat_lines_wide
+232  # pending Q11: flat_line_strip
+233  # pending Q11: flat_line_strip_wide
+234  # pending Q11: flat_line_loop
+235  # pending Q11: flat_line_loop_wide
