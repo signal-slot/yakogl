@@ -6,7 +6,8 @@
 // Derived from Mesa 26.2.1 src/panfrost/compiler/bifrost/bifrost_compile.c
 // (bi_emit_alu, bi_alu_src_index, bi_make_vec_to, bi_emit_ld_tile,
 // bi_emit_intrinsic; Collabora 2020, 2026, Alyssa Rosenzweig 2022, Arm
-// 2025), bi_lower_swizzle.c (Collabora 2020) and
+// 2025), bi_lower_swizzle.c (Collabora 2020), bi_lower_mkvec_swz.c (Collabora
+// 2026) and
 // src/gallium/drivers/panfrost/pan_blend_cso.c (Alyssa Rosenzweig 2018,
 // Collabora 2019-2025) (MIT).
 // The upstream part stays under its licence (LICENSES/MIT.txt); our changes

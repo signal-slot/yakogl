@@ -7,16 +7,18 @@
 // SPDX-FileCopyrightText: 2019 Valve Corporation
 // SPDX-FileCopyrightText: 2018-2022 Alyssa Rosenzweig
 // SPDX-FileCopyrightText: 2019-2021, 2026 Collabora, Ltd.
-// SPDX-FileCopyrightText: 2020, 2025 Google LLC
+// SPDX-FileCopyrightText: 2020, 2021, 2025 Google LLC
 // SPDX-FileCopyrightText: 2025 Arm Ltd.
 // Derived from Mesa 26.2.1 src/compiler/nir/ (nir_search.c, nir_opt_vectorize.c,
 // nir_opt_copy_propagate.c, nir_opt_dce.c, nir_opt_cse.c, nir_instr_set.c,
 // nir_lower_alu_width.c, nir_opt_constant_folding.c, nir_opt_move.c,
 // nir_opt_shrink_vectors.c, nir_lower_load_const_to_scalar.c,
-// nir_range_analysis.c, nir_search_helpers.h, nir.c, nir_lower_blend.c),
-// src/panfrost/lib/pan_blend.c and src/panfrost/compiler/bifrost/
-// bifrost_nir.c (MIT; each holder above from those files' headers). The upstream part stays
-// under its licence (LICENSES/MIT.txt); our changes are Apache-2.0. See NOTICE.
+// nir_range_analysis.c, nir_range_analysis.h, nir_search_helpers.h, nir.c,
+// nir_builder.c, nir_algebraic.py's automaton, nir_lower_blend.c),
+// src/panfrost/lib/pan_blend.c, src/panfrost/compiler/pan_nir.h and
+// src/panfrost/compiler/bifrost/bifrost_nir.c (MIT; each holder above from
+// those files' headers). The upstream part stays under its licence
+// (LICENSES/MIT.txt); our changes are Apache-2.0. See NOTICE.
 //! The NIR of a blend shader, through Mesa's passes.
 //!
 //! Mesa builds a blend shader as NIR (`GENX(pan_blend_create_shader)`,
