@@ -3948,6 +3948,9 @@ if [ "$QUICK" -eq 0 ]; then
     # Z2's probe (AS0's page tables, the cache flush round trip) likewise.
     step "zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush), -Werror on our C files" \
       zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_mmu nanopc_t6_mmu
+    # D2's probe (the display adopt after a crash kexec) likewise.
+    step "zephyr  nanopc_t6 t6_display image (D2, the display adopt), -Werror on our C files" \
+      zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_display nanopc_t6_display
     # Z3's probe (the firmware boot): without the board's mali_csffw.bin and
     # without a header made from it the row is a gap naming the file.
     needs_mali_csffw() {
