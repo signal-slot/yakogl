@@ -2179,6 +2179,39 @@ mod tests {
         }
     }
 
+    /// The copy back of an `out` or `inout` parameter into the caller's
+    /// variable reads the parameter's slot, a 32-bit copy: High, never
+    /// None. It ran under the statement `f(m);`, a void call, whose
+    /// instructions record None (the width author's out-parameter
+    /// reference, round 8). Mesa stores the parameter at 32 bits (A.5) and
+    /// narrows it into a mediump `m` at the copy.
+    #[test]
+    fn an_out_parameter_s_copy_back_has_a_class() {
+        let srcs = [
+            "void f(out mediump float r) { r = a * 2.0; }\n\
+             void main() { mediump float m; f(m); v = m * 1.5; gl_Position = p; }",
+            "void f(inout mediump float r) { r = r * 2.0; }\n\
+             void main() { mediump float m = a; f(m); v = m * 1.5; gl_Position = p; }",
+            "void f(out mediump vec2 r) { r = vec2(a, b); }\n\
+             void main() { mediump vec2 m; f(m); v = m.x * m.y; gl_Position = p; }",
+            "struct S { mediump float x; highp float y; };\n\
+             void f(out S r) { r = S(a, b); }\n\
+             void main() { S m; f(m); v = m.x * m.y; gl_Position = p; }",
+        ];
+        for src in srcs {
+            let g = vs(&std::format!("varying highp float v;\n{src}"));
+            let loads: Vec<(usize, Prec)> = g
+                .ops
+                .iter()
+                .zip(&g.prec)
+                .enumerate()
+                .filter(|(_, (o, _))| matches!(o, Op::LoadLocal { .. }))
+                .map(|(i, (_, p))| (i, *p))
+                .collect();
+            assert!(loads.iter().all(|&(_, p)| p != Prec::None), "{src}\n{loads:?}");
+        }
+    }
+
     #[test]
     fn f16_exact_knows_the_f16_values() {
         for x in [0.0f32, -0.0, 1.0, 1.5, 65504.0, -2.0, 6.103_515_6e-5, 5.960_464_5e-8, 0.000_122_070_31] {
