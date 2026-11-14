@@ -312,9 +312,19 @@ range, and the source does not say whether such a window still fetches;
 step 3 before step 2 would let it read its IOVA as a physical address.
 
 What it needs: a `crashkernel=` reservation that holds the image window
-0x10000000-0x1fffffff on Armbian's command line (today the T6 has none: the
-window is free System RAM and `nanopc-t6.sh` uses the normal route), and
-`nanopc-t6.sh --crash`. What it proves: the VOP2 window programming, the
+0x10000000-0x1fffffff on Armbian's command line, and `nanopc-t6.sh --crash`.
+`driver/tools/kexec-zephyr/t6-crashkernel.sh set` adds
+`crashkernel=256M@0x10000000` to the `extraargs=` line of
+`/boot/armbianEnv.txt` (`undo` restores the file byte for byte; neither
+reboots, `status` reads the result after the reboot). The fixed base has no
+fallback: if anything already lies there at boot, Linux reserves nothing and
+logs "memory is in use" (`kernel/crash_reserve.c:401-421`). CMA
+(`cma=256M`) is placed before it but top-down below 4 GiB, far above the
+window (`arch/arm64/mm/init.c:327-333`, `mm/cma.c:394`, `:423`); the
+tool's header has the details. `nanopc-t6.sh --crash` refuses unless
+`/proc/iomem`'s "Crash kernel" range holds the window and the image plus the
+kernel's 4 KiB control page; without `--crash` it keeps the normal route.
+Not yet run on the board (2026-11-15). What it proves: the VOP2 window programming, the
 frame buffer format and stride, the hand-over from a buffer to the screen.
 What it does not prove: power, clocks, the PHY, the controller, the mode.
 A risk of its own: the crash route also leaves panthor's GPU and its firmware
