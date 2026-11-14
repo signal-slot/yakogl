@@ -32,6 +32,7 @@ tools/shaders/uniform_color.frag | Apache-2.0 | shader written for this project 
 tools/shaders/uv.vert | Apache-2.0 | shader written for this project (the offline table hashes the source: no header edit)
 tools/shaders/zorder.vert | Apache-2.0 | shader written for this project (the offline table hashes the source: no header edit)
 tests/fixtures/*.txt | Apache-2.0 | text fixtures: output of our own tools
+driver/tools/mp2-standalone/st-env/stm32mp25-dk-initial-env.txt | Apache-2.0 | default environment strings written by make u-boot-initial-env (regen.sh), a table of values, no code
 tools/cts/*-tree.txt | Apache-2.0 | test lists, results of our board runs
 tools/cts/*-mustpass.txt | Apache-2.0 | case-name lists derived from the VK-GL-CTS mustpass lists (Apache-2.0)
 tools/cts/*.results.tsv | Apache-2.0 | our board run results
