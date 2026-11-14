@@ -26,8 +26,8 @@
 //!    first opens VOP2's gates and releases its resets and reads again. A
 //!    running port without `force_cold` stops the bring-up
 //!    ([`Error::FoundRunning`]): taking a running picture over is route (a),
-//!    step D2, not this. With `force_cold`, a running port this chain
-//!    clocks again later (VP0) that runs no frame is refused
+//!    step D2, not this. With `force_cold`, a running VP0 (the port whose
+//!    clock the DCLK stage sets) that runs no frame is refused
 //!    ([`Error::Unclocked`]) unless `power_cycle`: it is in the middle of a
 //!    frame, and a window disable or STANDBY written to it would land only
 //!    when the DCLK stage gives its clock back, with paging still on. Then
@@ -62,9 +62,9 @@
 //!    for a frame: the pixel clock must run) and shown on the caller's
 //!    buffer ([`vop2::window_show`]).
 //! 8. VIDEO: the section 5 read-backs: over two frames VP0 starts frames,
-//!    does not underflow and raises no bus error; Esmart0's update is taken
-//!    (`REG_CFG_DONE` bit 0 back to 0, `REGION0_YRGB_MST` = the buffer); the
-//!    PHY reads locked, clock ready and ready; the controller's clock
+//!    does not underflow and raises no bus error; Esmart0's
+//!    `REGION0_YRGB_MST` reads the buffer's address; the PHY reads locked,
+//!    clock ready and ready; the controller's clock
 //!    monitor reads locked. The hot-plug level is logged, not required: 0
 //!    means no cable or no powered sink, worth a warning; the T6's panel
 //!    gives it (`dw_hdmi_qp` fact 9). REG_CFG_DONE's port bit after the
@@ -370,7 +370,10 @@ fn find_opened(m: &impl Mmio, b: &Bases, stage: u32) -> Result<Found, Failed> {
     Ok(find(m, b))
 }
 
-/// The ports this chain gives a pixel clock (DCLK stage): VP0.
+/// The port whose pixel clock the DCLK stage sets: VP0. Another port whose
+/// DCLK mux is on `clk_hdmiphy_pixel0` would get its clock back with the
+/// PHY too; on the T6, Linux runs VP1 from `dclk_vop1_src` (the D0 dump's
+/// CLKSEL_CON(112) bits 10:9 read 0), so it is not counted here.
 const CLOCKED_HERE: u32 = 1 << 0;
 
 /// Stop every running port (START with `force_cold`): every window off,
@@ -462,7 +465,7 @@ pub fn bring_up(
         if !cfg.force_cold {
             return Err(Failed { stage: START, error: Error::FoundRunning(found.running) });
         }
-        // A port this chain clocks again (DCLK stage) that runs no frame is
+        // VP0, whose clock the DCLK stage sets, that runs no frame is
         // in the middle of one: a window disable or STANDBY written now
         // would stay pending and land only when its clock is back, with
         // paging still on. Only the power cycle (PD_VOP off) drops such a
