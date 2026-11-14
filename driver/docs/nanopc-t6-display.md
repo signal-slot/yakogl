@@ -323,7 +323,11 @@ logs "memory is in use" (`kernel/crash_reserve.c:401-421`). CMA
 window (`arch/arm64/mm/init.c:327-333`, `mm/cma.c:394`, `:423`); the
 tool's header has the details. `nanopc-t6.sh --crash` refuses unless
 `/proc/iomem`'s "Crash kernel" range holds the window and the image plus the
-kernel's 4 KiB control page; without `--crash` it keeps the normal route.
+kernel's 4 KiB control page, and while a crash image is already loaded.
+Without `--crash` it takes the normal route, also while the reservation is
+set (the kernel limits only crash segments to the reservation,
+`kernel/kexec_core.c:200-210`), unless a crash image is loaded in it; with
+`--go` both routes read `kexec_crash_loaded` again under the board lock.
 Not yet run on the board (2026-11-15). What it proves: the VOP2 window programming, the
 frame buffer format and stride, the hand-over from a buffer to the screen.
 What it does not prove: power, clocks, the PHY, the controller, the mode.
