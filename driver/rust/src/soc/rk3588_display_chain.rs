@@ -510,5 +510,7 @@ pub fn shut_down(m: &impl Mmio, b: &Bases, env: &impl Env) -> Result<(), Failed>
     Ok(())
 }
 
+pub mod t6;
+
 #[cfg(test)]
 mod tests;

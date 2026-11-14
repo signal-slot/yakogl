@@ -33,7 +33,8 @@
 //!   cmn released and the reference clock (PMU1 CRU 4/7) open;
 //!   `PHY_RDY` and `PLL_LOCK_DONE` once lane is released too.
 //! - Controller (D6's model): request words never read, the I2C master
-//!   never touched; `CORE_ID` reads [`Rk3588Display::core_id`];
+//!   never touched; 0x10, 0x804 and 0x80c never touched (their reads end
+//!   in a bus error on the T6: the D0 dump's record, 2026-11-12); `CORE_ID` reads [`Rk3588Display::core_id`];
 //!   `CMU_STATUS` reads the locked value 0x15 while the PHY is locked
 //!   (link clock) and VP0 runs (video clock), 0 otherwise.
 //! - VOP2 (D1's model): ports run frames while STANDBY is clear and their
@@ -583,6 +584,8 @@ impl Rk3588Display {
             Some("I2C master (D10)")
         } else if read && [0x40, 0x974, 0xab0].contains(&off) {
             Some("a request word read")
+        } else if [0x10, 0x804, 0x80c].contains(&off) {
+            Some("a word this controller does not answer (a bus error on the T6, D0 record)")
         } else {
             None
         };
@@ -695,6 +698,11 @@ impl Rk3588Display {
         } else if off == SYS0_INT_CLR || off == SYS0_INT_CLR + 0x10 {
             let i = usize::from(off != SYS0_INT_CLR);
             s.sys_raw[i] &= !(val & (val >> 16) & 0xffff);
+        } else if off == SYS0_INT_EN || off == SYS0_INT_EN + 0x10 || (0..4).any(|p| off == 0x0a0 + 0x10 * p) {
+            // interrupt enables take their write mask in 31:16 (vop2.c:746-747)
+            let mask = val >> 16;
+            let old = Self::vop_reg(&s, off);
+            s.regs.insert(off, (old & !mask) | (val & mask & 0xffff));
         } else if off == PORT_SEL {
             s.port_sel_written = Some(val);
         } else if let Some(p) = ctrl {
