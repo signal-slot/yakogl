@@ -400,6 +400,14 @@ tools/am62p-mkboot.py stage2img --zephyr sup.bin --segment r5_ddr.bin@0x90000000
     --staging 0x91000000 --name showcase -o stage2-showcase.img
 ```
 
+The compression is the table's, per segment, and the tool writes it that
+way: `--compress` is the image's and the default of every `--segment`, and
+`--segment FILE@ADDR:lz4` (`:deflate`, `:none`) is that segment's own. A
+payload that shares a small slot with its loader can then be LZ4 where the
+unpack time is (the large image) and deflate where the bytes are needed
+(`stage2check` with the suffix also checks the segment is stored that way;
+the vectors `ok-v3-mixed-*.img` are read by the loader's Rust).
+
 **Zero bytes and image parts.** Two fields of version 3 keep zeros out of
 the payload. The showcase's image (20,270,326 bytes at 0x82000000) holds a
 10.85 MB run of zeros in its file (a PROGBITS section that is zero but for a
