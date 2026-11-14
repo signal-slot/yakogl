@@ -950,7 +950,9 @@ static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// proves it.
 /// `pub(crate)` so that a test elsewhere in the crate that compiles through
 /// the in-process compiler can take it too: the V3D backend's rig builds and
-/// releases its clear program (src/v3d/backend_tests.rs).
+/// releases its clear program (src/v3d/backend_tests.rs), and the PowerVR
+/// backend's rig resets the `if` lowering switch a compile reads
+/// (src/pvr/backend_tests.rs).
 #[cfg(test)]
 pub(crate) fn test_lock() -> Serial {
     let outermost = SERIAL_DEPTH.with(|d| {
