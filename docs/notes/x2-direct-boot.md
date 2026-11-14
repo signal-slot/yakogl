@@ -236,16 +236,16 @@ poweroff                                     # then remove and restore power
 The write ends at 3.4 MB, so U-Boot's environment at 0x3FA000 and 0x3FE000 is
 untouched, and partition A still holds the untouched at30 image.
 
-### 3. What to look for on `/dev/ttyUSB0` (UART2, 115200 8N1)
+### 3. What to look for on the console (UART2, 115200 8N1, device in $BOARD_UART)
 
-The following prints each line with the seconds since the first byte, which is
+`BOARD_UART` holds the local character device of the USB serial adapter. The following prints each line with the seconds since the first byte, which is
 SPL's banner, so it does not include the Boot ROM's time:
 
 ```sh
-stty -F /dev/ttyUSB0 115200 raw -echo
+stty -F "$BOARD_UART" 115200 raw -echo
 python3 -u -c '
 import os, time
-fd = os.open("/dev/ttyUSB0", os.O_RDONLY); t0 = None; buf = b""
+fd = os.open(os.environ["BOARD_UART"], os.O_RDONLY); t0 = None; buf = b""
 while True:
     b = os.read(fd, 4096); now = time.monotonic(); t0 = t0 or now; buf += b
     *lines, buf = buf.split(b"\n")
