@@ -36,6 +36,7 @@ pub mod isa_tables;
 pub mod listing;
 pub(crate) mod peephole;
 pub mod wide128;
+pub mod wide128_rt;
 /* The round trip and the default audit both read the offline table. */
 #[cfg(all(test, not(feature = "no-shader-table")))]
 mod program_end;
