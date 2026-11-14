@@ -58,6 +58,9 @@ struct Faults {
     no_frames: bool,
     /// A `vop_mmu` set ignores "disable paging".
     paging_stuck: bool,
+    /// `OVL_PORT_SEL` reads this from the frame start that takes Esmart0's
+    /// enable on: the port select in force is not the one written.
+    port_sel_drift: Option<u32>,
 }
 
 /// The window enable words (Cluster n `WIN_CTRL0`, `CLUSTER_CTRL`; Esmart n
@@ -157,9 +160,13 @@ impl Soc {
                     if let Some(sel) = s.port_sel_written.take() {
                         s.regs.insert(VOP + PORT_SEL, sel);
                     }
+                    let e0_was_on = s.in_force[&0x1810] & 1 != 0;
                     for w in window_words() {
                         let v = s.regs.get(&(VOP + w)).copied().unwrap_or(0);
                         s.in_force.insert(w, v);
+                    }
+                    if let (false, true, Some(sel)) = (e0_was_on, s.in_force[&0x1810] & 1 != 0, self.f.port_sel_drift) {
+                        s.regs.insert(VOP + PORT_SEL, sel);
                     }
                 }
                 // with paging off, a Linux window fetches its IOVA as a
@@ -457,6 +464,17 @@ fn an_esmart0_already_enabled_is_refused_before_any_write() {
     let a = run(&soc, FB);
     assert_eq!((a.stop, a.refusal, a.detail), (Stop::TakeOver as u32, vop2::Refusal::KeepEnabled as u32, 1));
     assert_eq!(soc.writes(), vec![]);
+}
+
+/// The port select in force after the window's frame is not the one
+/// written (Esmart0 would not be in VP0's layer range): Stop::Shown, index
+/// 2, with the value read (review S4).
+#[test]
+fn a_port_select_that_does_not_read_back_stops_as_shown() {
+    let soc = Soc::with(Faults { port_sel_drift: Some(0xa054_7873), ..Faults::default() }, &[]);
+    let a = run(&soc, FB);
+    assert_eq!((a.stop, a.index, a.detail), (Stop::Shown as u32, 2, 0xa054_7873));
+    assert_eq!(a.shown, [FB as u32, 1, 0xa054_7873, 0x7651_3042]);
 }
 
 /// A buffer at or above 4 GiB cannot be shown with the IOMMU off.
