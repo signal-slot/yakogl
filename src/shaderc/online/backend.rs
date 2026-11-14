@@ -2334,9 +2334,10 @@ pub fn wide128_variant(
     let facts = Facts { lod_key: lod, ..Facts::of(&base) };
     /* the plane key, chained into the record key as `record_key` chains
      * its facts: only the units in the mask and their companions */
-    let mut key = [0u8; 4 + wide128::UNITS];
+    let mut key = [0u8; 8 + wide128::UNITS];
     key[..4].copy_from_slice(&planes.mask.to_le_bytes());
-    for (u, k) in key[4..].iter_mut().enumerate() {
+    key[4..8].copy_from_slice(&(planes.mask & planes.no_alpha).to_le_bytes());
+    for (u, k) in key[8..].iter_mut().enumerate() {
         *k = planes.companion_of(u as u8).unwrap_or(0);
     }
     let mut sha = record_key(base.source, &ZeroList::EMPTY, base.attrib_map, facts);
