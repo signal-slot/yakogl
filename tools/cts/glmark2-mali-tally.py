@@ -9,6 +9,7 @@
   python3 -I tools/cts/glmark2-mali-tally.py --status-row [--column COL] [--table FILE] <rundir>
   python3 -I tools/cts/glmark2-mali-tally.py --causes <rundir>
   python3 -I tools/cts/glmark2-mali-tally.py [--allow-verdict-mismatch] ... <runner-dir>
+  python3 -I tools/cts/glmark2-mali-tally.py --baseline <rundir> [--forward-only] ... <rundir>
 
 It plays for glmark2 the part tools/cts/mali-deqp-tally.py plays for dEQP-GLES2.
 The run is one glmark2-es2 process per scene (tools/cts/mali-glmark2-build.sh's
@@ -125,11 +126,24 @@ Outputs:
                    title and text (a refusal is marked as plan #309's); the
                    scenes not run are listed, with no issue
 
+--baseline <rundir> (a record directory or a runner directory, read as above, with the same
+--column and --table) adds the per-scene move from the baseline to the run: each scene is
+clean (ok), refused (a verdict that ran and is not ok, other than the next), crash (crash, hang,
+gpu-fault) or missing (not-run); the order is missing < crash < refused < clean, a move up is
+forward, a move down is back. After the default table the lines are
+"delta <scene>: <was> -> <now>[; ms A -> B]" for every scene that moved or whose frame time
+changed (ms where both runs have one), then
+"delta: N clean (was M), K moved forward, J moved back". With another output mode the delta goes
+to stderr, so that mode's output is unchanged. --forward-only (needs --baseline) makes the exit
+status 4 when some scene moved back. Without --baseline nothing changes. No raw log of the
+a57d8104 record is in the tree; pass its record directory when it is restored.
+
 Nothing printed carries a board address: IPv4 addresses, user@host logins and
 UART device paths read from the run are replaced by <addr>, <login>, <uart>.
 
 Exit status: 0 the tally was produced, 1 malformed input, 2 usage, 3 a runner
-directory whose verdicts disagree with the tally's (without the flag).
+directory whose verdicts disagree with the tally's (without the flag), 4 --forward-only and
+a scene moved back.
 """
 
 import importlib.util
@@ -823,8 +837,40 @@ def render_causes(t):
     return out
 
 
+DELTA_STATE = {"ok": "clean", "not-run": "missing", "crash": "crash", "hang": "crash",
+               "gpu-fault": "crash"}
+DELTA_RANK = {"missing": 0, "crash": 1, "refused": 2, "clean": 3}
+
+
+def delta_state(r):
+    return DELTA_STATE.get(r["verdict"], "refused")
+
+
+def render_delta(t, base):
+    """(lines, back): the move of every scene from base to t, and how many moved back"""
+    out, fwd, back = [], 0, 0
+    for r, b in zip(t["rows"], base["rows"]):
+        was, now = delta_state(b), delta_state(r)
+        move = DELTA_RANK[now] - DELTA_RANK[was]
+        fwd += move > 0
+        back += move < 0
+        ms = ""
+        if b["ms"] is not None and r["ms"] is not None and b["ms"] != r["ms"]:
+            ms = "; ms %.2f -> %.2f" % (b["ms"], r["ms"])
+        if move or ms:
+            out.append("delta %s: %s -> %s%s" % (r["info"], was, now, ms))
+
+    def nclean(x):
+        return sum(1 for r in x["rows"] if delta_state(r) == "clean")
+
+    out.append("delta: %d clean (was %d), %d moved forward, %d moved back"
+               % (nclean(t), nclean(base), fwd, back))
+    return out, back
+
+
 def main(argv):
     mode, column, table, args, allow = None, "mali", PICTURES, [], False
+    baseline, forward_only = None, False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -832,13 +878,17 @@ def main(argv):
             mode = a
         elif a == "--allow-verdict-mismatch":
             allow = True
-        elif a in ("--column", "--table"):
+        elif a == "--forward-only":
+            forward_only = True
+        elif a in ("--column", "--table", "--baseline"):
             i += 1
             if i >= len(argv):
                 print("glmark2-mali-tally: %s needs a value" % a, file=sys.stderr)
                 return 2
             if a == "--column":
                 column = argv[i]
+            elif a == "--baseline":
+                baseline = argv[i]
             else:
                 table = argv[i]
         elif a.startswith("--"):
@@ -847,11 +897,12 @@ def main(argv):
         else:
             args.append(a)
         i += 1
-    if len(args) != 1:
+    if len(args) != 1 or (forward_only and baseline is None):
         print(__doc__, file=sys.stderr)
         return 2
     try:
         t = tally(args[0], column, table)
+        base = tally(baseline, column, table) if baseline is not None else None
     except (Malformed, SystemExit) as e:
         # SystemExit: common-tally's read_picture_table on a malformed table
         print("glmark2-mali-tally: malformed: %s" % e, file=sys.stderr)
@@ -868,13 +919,20 @@ def main(argv):
         out = render_causes(t)
     else:
         out = render_table(t)
+    delta, back = render_delta(t, base) if base else ([], 0)
+    if delta and mode is None:
+        out = out + delta
     print("\n".join(out))
     sys.stdout.flush()
+    if delta and mode is not None:
+        print("\n".join(delta), file=sys.stderr)
     for r, rv in t["mismatch"]:
         print("glmark2-mali-tally: %sscene %s: runner verdict %s, tally verdict %s (%s)"
               % ("allowed: " if allow else "", r["info"], rv, r["verdict"], r["cause"] or "-"),
               file=sys.stderr)
-    return 3 if t["mismatch"] and not allow else 0
+    if t["mismatch"] and not allow:
+        return 3
+    return 4 if forward_only and back else 0
 
 
 if __name__ == "__main__":
