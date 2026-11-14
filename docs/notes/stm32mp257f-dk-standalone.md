@@ -542,7 +542,7 @@ boot_prefixes and boots Linux. Nothing was rebooted.`
 Every verb takes the board lock and runs `dev_guard` before each write, and
 it records what it is about to leave behind in a state file beside the lock
 (`board-stm32mp2.sh:82-93`). The one-shot runners (`board-stm32mp2.sh run`,
-`board-stm32mp2-uboot.sh`) must refuse while `mp2s_left` is set: the boot
+`driver/tools/uboot-mp2/oneshot.sh`) must refuse while `mp2s_left` is set: the boot
 after their image would not be Linux. Those files belong to plan #357 and
 #349, so that is new work, reported, not done here.
 

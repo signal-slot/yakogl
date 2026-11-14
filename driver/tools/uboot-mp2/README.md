@@ -16,6 +16,36 @@ console helper (`tools/mp2_uboot_console.py`), the board backends
 | `mp2-net.cmd` | `setenv autoload no; dhcp`, then `tftpboot` of `${mp2z_file}` from `${mp2z_server}` |
 | `build.sh [OUTDIR]` | builds `mp2-mmc.scr` and `mp2-net.scr` |
 | `selftest.sh` | host check, no board, no network |
+| `oneshot.sh` | the runner: stages a script and an image, types the line, waits for ST's Linux, removes the files, diffs the environment and `/boot` |
+| `oneshot_selftest.sh` | the runner without a board: dry runs, refusals, a fake board and console (68 checks) |
+
+## The runner: oneshot.sh
+
+```sh
+driver/tools/uboot-mp2/oneshot.sh [--dry-run] status
+driver/tools/uboot-mp2/oneshot.sh [--dry-run] stage <image>
+driver/tools/uboot-mp2/oneshot.sh [--dry-run] run <image> <logdir> [name]
+driver/tools/uboot-mp2/oneshot.sh [--dry-run] disarm
+```
+
+`BOARD_BOOT=uboot-mmc` (default) stages `mp2z-<token>.scr` and `.bin` under
+`/boot/yakogl/` on the microSD's bootfs over ssh; `BOARD_BOOT=uboot-tftp`
+stages them under `$NETBOOT_TFTP_ROOT/yakogl/` for `tools/tftp_oneshot.py`
+(proven first with `tools/uboot-netboot-lib.sh`'s `nb_tftp_canary`). `run`
+refuses an image of 255 MiB or more on the host before anything is staged,
+an image without the `gc_wdog_arm: armed` marker (unless
+`MP2_NO_WATCHDOG=1`), a bad CRC in `fw_printenv`, a `scriptaddr` unset or in
+the go window, `/boot` on the eMMC and files of an earlier run. It records
+`fw_printenv` and the sha256 of every stock `/boot` file before and after,
+prints the UNDO before each change, and ends in one verdict line
+(`uboot-mp2-oneshot stm32mp257f-dk <name> rc=<rc> verdict=<v> boot=<b> row
+...`). A board that does not come back is `verdict=not_back`, rc 7, NEEDS A
+PERSON, and is never retried; what a cut-off run leaves is recorded beside
+the board lock and `disarm` removes it. It never writes the environment or
+`bootcmd`. `BOARD_HOST`, `BOARD_UART`, `NETBOOT_SERVER` and
+`NETBOOT_TFTP_ROOT` come from the environment only; the header of
+`oneshot.sh` lists the rest. It lives here and not under `tools/` so that a
+change to it reaches the `drivers` rows of `tools/check.sh` and not every row.
 
 ## The route: typed, nothing persistent
 
