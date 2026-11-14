@@ -3141,7 +3141,7 @@ void main (void)
     /// A default-block uniform whose name fills the field links: the pool
     /// holds its whole name, and the GL core reads `glGetActiveUniform`'s
     /// and `glGetUniformLocation`'s names from the pool
-    /// (`program::row_name`), not from the field.
+    /// (`shaderc::uniform_row_name`), not from the field.
     ///
     /// Revert check: let the link accept a full field only for a block
     /// member's row again and it refuses the stage with "64-byte name field".
