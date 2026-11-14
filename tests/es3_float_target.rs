@@ -24,12 +24,11 @@
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_float_target
 //! ```
 //!
-//! R32F is the one format where today's code and the note differ: it is
-//! complete without the extension (section 3, "Mismatch"). The test that
-//! pins the note's answer for it is `#[ignore]`d, naming section 5, and a
-//! passing test pins today's answer, so the fix-float code change has to
-//! turn both. No GPU claims the extension, so there is no render and
-//! readback test of a 32-bit float target here (section 4, C and D).
+//! R32F is refused without the extension like RG32F and RGBA32F (section 3),
+//! and an RGB16F texture is a complete colour target like its renderbuffer
+//! (section 5, Tests (3)). No GPU claims the extension, so there is no
+//! render and readback test of a 32-bit float target here (section 4, C
+//! and D).
 //!
 //! No GPU runs: the stand-in back end draws nothing.
 //!
@@ -318,10 +317,9 @@ fn float32_renderbuffer_storage_invalid_enum() {
 }
 
 /// The note's answer for R32F (section 5, contract of fix-float: R32F
-/// leaves `is_color_format` and joins RG32F and RGBA32F). Fails today, see
-/// [`r32f_target_complete_today`].
+/// leaves `is_color_format` and joins RG32F and RGBA32F; dEQP
+/// `fbo.completeness.renderable.{renderbuffer,texture}.color0.r32f`).
 #[test]
-#[ignore = "docs/notes/es3-float-targets.md section 5 (fix-float code change): R32F is a complete colour target without GL_EXT_color_buffer_float, src/gl/framebuffer.rs is_color_format"]
 fn r32f_target_refused_without_extension() {
     let _g = context();
     assert_eq!(texture_target_status(R32F), GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{GPU}: R32F texture");
@@ -332,51 +330,27 @@ fn r32f_target_refused_without_extension() {
     );
 }
 
-/// Today's answer for R32F, the mismatch of section 3: complete as a texture
-/// and as a renderbuffer, though the extension is not claimed (dEQP
-/// `fbo.completeness.renderable.{renderbuffer,texture}.color0.r32f` fail on
-/// it). The fix-float code change turns this test and the ignored one above.
-#[test]
-fn r32f_target_complete_today() {
-    let _g = context();
-    assert_eq!(texture_target_status(R32F), GL_FRAMEBUFFER_COMPLETE, "{GPU}: R32F texture");
-    assert_eq!(renderbuffer_target(GL_R32F), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE), "{GPU}: R32F renderbuffer");
-}
-
 /* ---- the half-float targets the claimed extension promises -------------- */
 
 /// Option B: `GL_EXT_color_buffer_half_float` is claimed, so each 16F format
-/// is a complete colour target: all four as a renderbuffer, and RGBA16F,
-/// RG16F and R16F as a texture (RGB16F's texture: the two tests below).
+/// is a complete colour target, as a texture and as a renderbuffer (RGB16F's
+/// texture is also pinned alone below).
 #[test]
 fn float16_targets_complete() {
     let _g = context();
     for f in FLOAT16 {
-        if f.0 != GL_RGB16F {
-            assert_eq!(texture_target_status(f), GL_FRAMEBUFFER_COMPLETE, "{GPU}: {} texture", f.3);
-        }
+        assert_eq!(texture_target_status(f), GL_FRAMEBUFFER_COMPLETE, "{GPU}: {} texture", f.3);
         assert_eq!(renderbuffer_target(f.0), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE), "{GPU}: {} renderbuffer", f.3);
     }
 }
 
 /// The note's list of what stays complete names RGB16F for both kinds
 /// (section 5, "Tests" (3)), and so does Mesa with the half-float extension
-/// (src/mesa/main/fbobject.c `is_format_color_renderable`, GL_RGB16F). Fails
-/// today, see [`rgb16f_texture_incomplete_today`].
+/// (src/mesa/main/fbobject.c `is_format_color_renderable`, GL_RGB16F).
 #[test]
-#[ignore = "docs/notes/es3-float-targets.md section 5, Tests (3): an RGB16F texture is GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT today (src/gl/framebuffer.rs attachment_storage); no dEQP row is measured failing on it"]
 fn rgb16f_texture_complete() {
     let _g = context();
     assert_eq!(texture_target_status(FLOAT16[1]), GL_FRAMEBUFFER_COMPLETE, "{GPU}: RGB16F texture");
-}
-
-/// Today's answer for an RGB16F texture attachment: incomplete, while the
-/// RGB16F renderbuffer is complete. No board list has
-/// `fbo.completeness.renderable.texture.color0.rgb16f` failing.
-#[test]
-fn rgb16f_texture_incomplete_today() {
-    let _g = context();
-    assert_eq!(texture_target_status(FLOAT16[1]), GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{GPU}: RGB16F texture");
 }
 
 /* ---- (c) the shaders.derivate targets stay complete --------------------- */
