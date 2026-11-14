@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config MP2_PRODUCT_LIFETIME_S
+	int "Seconds of uptime after which the image resets through PSCI (0: never)"
+	default 120
+	range 0 3599
+	help
+	  The image's own end: a PSCI SYSTEM_RESET at this uptime, so that a
+	  counted standalone default (`default <image> N`) of it comes back
+	  to Linux after N boots. 0 is a real product: no reset of its own,
+	  it runs while the heartbeat holds. Only `forever` with
+	  BOARD_PERSON_PRESENT=1 may carry such an image (README.md). It is
+	  not the board layer's CONFIG_YAKOGL_STM32MP2_LIFETIME_S, which has
+	  no off switch; a non-zero value must stay below that one (a build
+	  assert).
+
+config MP2_PRODUCT_PET_S
+	int "Seconds between two PETs"
+	default 5
+	range 1 26
+	help
+	  Must stay under the timeout less OP-TEE's 5 s (a build assert).
+
+config MP2_PRODUCT_HEARTBEAT_MS
+	int "Period of the heartbeat timer (ms)"
+	default 1000
+	range 10 5000
+	help
+	  A k_timer advances the heartbeat counter at this period. The main
+	  loop pets only when the counter moved since the previous PET, so
+	  the period must be below MP2_PRODUCT_PET_S (a build assert).
+
+source "Kconfig.zephyr"
