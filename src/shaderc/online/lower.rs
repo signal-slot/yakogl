@@ -4827,7 +4827,18 @@ impl<'a> Lower<'_, 'a> {
         let r = r?;
 
         /* The copy back happens after the caller's scope is restored, which
-         * is when its variables exist again. */
+         * is when its variables exist again. It reads the parameter's slot,
+         * stored at 32 bits (A.5): a full-width copy, High, whatever the
+         * call's own class (`f(m);` is a void call, which records None). */
+        let outer = (self.cur, self.cur_class);
+        (self.cur, self.cur_class) = (Prec::High, Prec::None);
+        let r = self.copy_back(bound, out).map(|()| r);
+        (self.cur, self.cur_class) = outer;
+        r
+    }
+
+    /// The copy back of [`Lower::inline`]'s `out` and `inout` parameters.
+    fn copy_back(&mut self, bound: &[Bound<'a>], out: &mut AVec<'a, Node>) -> R<'a, ()> {
         for &b in bound.iter() {
             if let Some(r) = b.lref {
                 let p = b.param;
@@ -4855,7 +4866,7 @@ impl<'a> Lower<'_, 'a> {
                 self.store_local(t.column(j), Src::id(v), out)?;
             }
         }
-        Ok(r)
+        Ok(())
     }
 
     /// The body of an inlined function: statements, then the return.
