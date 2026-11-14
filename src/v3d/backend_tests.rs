@@ -1039,13 +1039,16 @@ unsafe extern "C" fn v3d_tex_pack_state(out: *mut u8, s: *const V3dTexState) -> 
 }
 
 #[no_mangle]
-unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool {
+unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool {
     // SAFETY: V3D_SAMPLER_STATE_BYTES of the arena and the backend's sampler.
     unsafe {
         let s = &*s;
         let flags =
             s.mag_nearest as u32 | (s.min_nearest as u32) << 1 | (s.mip_nearest as u32) << 2 | (s.mip_none as u32) << 3;
-        let words = [s.wrap_s, s.wrap_t, flags, 0, 0, FAKE_SAMPLER_MARK];
+        /* word 3 is the depth compare function, as the real record's field
+         * (COMPARE_OFF packs NEVER, 0) */
+        let compare = if compare_op & texture::COMPARE_OFF != 0 { 0 } else { compare_op & 7 };
+        let words = [s.wrap_s, s.wrap_t, flags, compare, 0, FAKE_SAMPLER_MARK];
         core::ptr::copy_nonoverlapping(words.as_ptr() as *const u8, out, V3D_SAMPLER_STATE_BYTES);
     }
     true
@@ -1803,6 +1806,55 @@ fn a_sampler_record_is_packed_once_per_job() {
     assert_eq!(v3d_flush(), 0);
     assert_eq!(draw(&sampling(&rig, t)), 0);
     assert_eq!(sampler_counters(), (3, 1), "a new job packs its own");
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// A shadow sampler's depth compare is in its sampler record, and in the
+/// key the job finds a record again by: two draws of one sampler state and one
+/// compare share a record, a draw of another compare gets its own, and a
+/// binding that is no depth texture carries no compare whatever its
+/// `compare_op` says (the GL core sets it from the texture's mode alone).
+/// Revert check: `sampler_for` keying on the sampler state alone gives the
+/// LEQUAL and the GREATER draws one record (word 3 of both is 3), and packing
+/// without the compare leaves word 3 at 0.
+#[test]
+fn a_shadow_samplers_compare_function_is_in_its_record_and_its_cache_key() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let depth = |op: u8| {
+        let mut t = narrow_texture(8, 8, 1, GLES_TEXFMT_R32F);
+        (t.unit, t.content_gen, t.compare_op) = (0, 7, op);
+        let mut d = sampling(&rig, t);
+        d.fs = &p;
+        d
+    };
+    const LEQUAL: u8 = 3;
+    const GREATER: u8 = 4;
+    for op in [LEQUAL, LEQUAL, texture::COMPARE_OFF as u8, GREATER] {
+        assert_eq!(draw(&depth(op)), 0, "{:?}", rig.gl.logs());
+    }
+    let draws = rig.draws();
+    let rec = |i: usize| draws[i].tmu[0].sampler;
+    assert_eq!(rec(0), rec(1), "one state, one compare, one record");
+    assert_ne!(rec(0), rec(2), "the compare off is another record");
+    assert_ne!(rec(0), rec(3), "another function is another record");
+    assert_ne!(rec(2), rec(3));
+    let compare = |i: usize| words(&rig, rec(i), 6)[3];
+    assert_eq!([compare(0), compare(2), compare(3)], [3, 0, 4], "LEQUAL, off (NEVER), GREATER");
+    assert_eq!(sampler_counters(), (3, 1));
+    /* a colour texture with a compare_op set: no compare, the record of the
+     * same state without one */
+    let mut colour = texture(0, 8, 8, 1);
+    colour.compare_op = LEQUAL;
+    let mut plain = colour;
+    plain.compare_op = 0;
+    assert_eq!(draw(&sampling(&rig, colour)), 0);
+    assert_eq!(draw(&sampling(&rig, plain)), 0);
+    let draws = rig.draws();
+    let n = draws.len();
+    assert_eq!(draws[n - 2].tmu[0].sampler, draws[n - 1].tmu[0].sampler);
+    assert_eq!(words(&rig, draws[n - 1].tmu[0].sampler, 6)[3], 0);
     assert_eq!(v3d_finish(), 0);
 }
 

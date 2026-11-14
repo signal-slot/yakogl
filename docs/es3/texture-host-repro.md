@@ -248,6 +248,61 @@ The "before" tree was the working tree copied under `build/` with this
 branch's files put back from HEAD (`git show HEAD:<file>`), the dEQP binary
 shared; `host-deqp-run.sh` names such a run `70142d35-dirty`.
 
+## 8. ETC2/EAC and the V3D shadow compare (plan #354)
+
+What the host can show for these cases: the GL calls and their errors (every
+ETC2/EAC name uploads, as 2D, cube, 2D array, sub-image and PBO source),
+whether the draw is refused, and the texture record or sampler record the back
+end hands the job builder. What it cannot: a picture. The Linux OSAL keeps
+the command stream, every read-back is black, so `texture.wrap` and
+`texture.format` verdicts and `texture.shadow`'s comparisons are never judged
+here; whether the TMU samples the blocks, the decoded half floats and the
+compare as dEQP's tolerance wants is a board run (Pi 4, #320; AM62P, #313;
+i.MX8MP, #316).
+
+Host tests that stand in: `tests/es3_etc2_eac.rs` (decoded texels against the
+decoder, which `src/gl/etc2.rs` tests against Mesa's), `tests/es3_etc2_v3d.rs`
+(the V3D texture record per name), `tests/es3_shadow_v3d.rs`
+`the_draw_states_compare_op_is_the_look_ups_compare`, and
+`src/v3d/backend_tests.rs` `a_shadow_samplers_compare_function_is_in_its_record_and_its_cache_key`.
+
+To repeat the dEQP host runs (`tools/cts/README.md` section 2b; `CTS` a
+VK-GL-CTS at 93bca01 with the yakogl target):
+
+```sh
+for GPU in v3d powervr vivante; do
+  for F in wrap.etc2 wrap.eac format.compressed implementation_limits.num_compressed \
+           implementation_limits.compressed state_query.integers.compressed shadow; do
+    MODULE=gles3 GPU=$GPU OUT=$PWD/build/host-deqp/etc2-$GPU-$F \
+      tools/cts/host-deqp-run.sh "dEQP-GLES3.functional.${F}"
+  done
+done
+```
+
+(the filter is a substring of the case name; use the group path where the
+substring is ambiguous).
+
+Measured, HOST-ONLY, VK-GL-CTS 93bca01, before = `b2673e3c`, after = the
+change of plan #354, the filters `etc2`, `eac` (240 cases each, overlapping
+`format.compressed`), `format.compressed` (44), `compressed_texture_formats`
+(6: `implementation_limits.{,num_}compressed_texture_formats` and the four
+`state_query.integers.compressed_texture_formats_*`) and `shadow` (522; 48
+negative compile cases pass either way). Identical on the three GPUs except
+where noted:
+
+| group | before | after | what changed |
+|---|---|---|---|
+| `etc2` (240) | v3d: 80 Fail (72 `GL_INVALID_OPERATION` at `es3fTextureWrapTests.cpp:371`, 4 at `es3fTextureFormatTests.cpp:1070`, 4 image) / 160 NotSupported; powervr, vivante: 160 Fail / 80 NotSupported | 240 Fail, 0 GL errors: 216 "Image verification failed", 24 "Image comparison failed" | the NotSupported cases (the punch-through names) now upload; on the V3D the draw is no longer refused |
+| `eac` (240) | v3d: 40 Fail / 200 NotSupported; powervr, vivante: 80 Fail / 160 NotSupported | 240 Fail, the same two image messages | the EAC names now upload |
+| `format.compressed` (44) | v3d 12 Fail / 32 NotSupported; powervr, vivante 20 / 24 | 44 Fail (images) | as above |
+| `compressed_texture_formats` (6) | 5 Fail, 1 Pass | 6 Pass | the list is eleven names |
+| `shadow` (522) | 474 Fail, 48 Pass | 474 Fail, 48 Pass | none: the host reads black, so the compare cannot show |
+
+Every case that stays Fail after is a picture verdict on a black read-back:
+the host shows that the uploads, the draws and the queries are clean, and
+nothing about whether a pixel is right. The 432 `texture.shadow` cases on the
+Pi 4 are the board's to judge (RC2).
+
 ## 7. The AM62P `texture.units`, `texture.swizzle` and `sglrGLContext.cpp:863` rows
 
 **The compile refusals of `units` and `specification` are one cause.** The

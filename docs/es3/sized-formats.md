@@ -155,6 +155,16 @@ The plan #360 decision:
 * GC7000UL: does not claim it.
 * report-es2 builds claim neither extension (`tests/es2_report_guard.rs`).
 
+## Compressed formats decoded at upload
+
+The six ES 3.0 ETC2/EAC formats with no block class are held as ordinary
+textures of a class the back end samples (plan #354,
+`docs/notes/etc2-eac.md`): R11_EAC and SIGNED_R11_EAC as R16F, RG11_EAC and
+SIGNED_RG11_EAC as RG16F (RGBA16F class), RGB8_PUNCHTHROUGH_ALPHA1_ETC2 as
+RGBA8 and SRGB8_PUNCHTHROUGH_ALPHA1_ETC2 as SRGB8_ALPHA8; `GlTexture::decoded_from`
+names the origin. An ES 3.0 sized format of the same class is a different
+texture to them (the sub-image rule).
+
 ## Not done (left to other items)
 
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).

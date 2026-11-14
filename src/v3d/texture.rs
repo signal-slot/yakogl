@@ -187,9 +187,12 @@ pub const fn etc2_row(e: Etc2) -> (u32, [u8; 4], u32, bool) {
 }
 
 /// The [`Etc2`] row of a GL core texel format, `None` for an uncompressed
-/// one. The GL core has a class for five of the ten rows today
-/// (`GLES_TEXFMT_ETC2_*`, src/backend.rs; gl::texture::compressed_format_info);
-/// punch-through sRGB and the four EAC formats have none yet.
+/// one. The GL core has a class for five of the ten rows
+/// (`GLES_TEXFMT_ETC2_*`, src/backend.rs; gl::texture::compressed_format_info),
+/// four of them in [`V3D_SAMPLED_TEXFMTS`]; the punch-through and EAC names
+/// are decoded by the GL core at upload (docs/notes/etc2-eac.md) and the
+/// other rows of the table are not asked for. Native classes for them are a
+/// later item: the rows are here, pinned by tools/v3d/tex_check.c.
 pub const fn etc2_of(format: u8) -> Option<Etc2> {
     match format {
         GLES_TEXFMT_ETC2_RGB => Some(Etc2::Rgb8),
@@ -343,8 +346,9 @@ pub fn layout_compressed(
     Some(l)
 }
 
-/// [`refusal_for`]'s texel format with no TMU row here (ETC2, or the RGB10A2
-/// class the GL core keeps in RGBA8).
+/// [`refusal_for`]'s texel format with no TMU binding here (a class outside
+/// [`V3D_SAMPLED_TEXFMTS`]: `GLES_TEXFMT_ETC2_RGB_PT`, or the RGB10A2 class the
+/// GL core keeps in RGBA8).
 const NOT_SAMPLED: Refusal = "a texel format the V3D does not sample";
 
 /// [`refusal_for`]'s 16-bit format read by a 32-bit look-up.
@@ -1516,8 +1520,9 @@ mod tests {
     /// type and swizzle, the sRGB bit for the two sRGB ones only, a block
     /// for a texel ([`texel_bytes`]: never a TFU byte-copy type), the 16-bit
     /// TMU output (return size 16), and every rule but the sampled set
-    /// passes. Until src/backend.rs's V3D_SAMPLED_TEXFMTS lists them, the
-    /// set refuses them, with the one message every format outside it gets.
+    /// passes. The sampled set (src/backend.rs's V3D_SAMPLED_TEXFMTS) holds
+    /// the four the GL core has names for; the punch-through class has none
+    /// and gets the one message every format outside the set gets.
     #[test]
     fn the_gl_cores_etc2_classes_sample_as_their_rows() {
         let wider = V3D_SAMPLED_TEXFMTS | ETC2_CLASSES.iter().fold(0, |m, &(f, _)| m | gles_texfmt_bit(f));

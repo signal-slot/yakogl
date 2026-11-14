@@ -131,10 +131,10 @@ fn context() -> std::sync::MutexGuard<'static, ()> {
     guard
 }
 
-/// glGetIntegerv's values, all it wrote (at most 8), and the error it raised.
+/// glGetIntegerv's values, all it wrote (at most 16), and the error it raised.
 fn geti(pname: GLenum) -> (Vec<GLint>, GLenum) {
-    let mut v = [i32::MIN; 8];
-    // SAFETY: room for the eight values the widest pname writes
+    let mut v = [i32::MIN; 16];
+    // SAFETY: room for the sixteen values the widest pname writes
     // (src/gl/state.rs STATE_VALUES).
     let err = unsafe {
         while glGetError() != GL_NO_ERROR {}
@@ -145,7 +145,7 @@ fn geti(pname: GLenum) -> (Vec<GLint>, GLenum) {
 }
 
 fn getf(pname: GLenum) -> (Vec<GLfloat>, GLenum) {
-    let mut v = [f32::NAN; 8];
+    let mut v = [f32::NAN; 16];
     // SAFETY: as above.
     let err = unsafe {
         while glGetError() != GL_NO_ERROR {}
@@ -217,8 +217,9 @@ const PINS: &[Pin] = &[
     pin("MAX_COLOR_ATTACHMENTS", GL_MAX_COLOR_ATTACHMENTS, &[3]),
     // state.rs:1211, texture.rs stored_compressed_formats: ETC1, RGB8_ETC2,
     // RGBA8_ETC2_EAC, and in an ES 3.0 report the sRGB pair, which
-    // GC_SAMPLED_TEXFMTS holds (backend.rs)
-    pin2("NUM_COMPRESSED_TEXTURE_FORMATS", GL_NUM_COMPRESSED_TEXTURE_FORMATS, &[5], &[3]),
+    // GC_SAMPLED_TEXFMTS holds (backend.rs), and the six ES 3.0 formats the
+    // GL core decodes at upload (texture.rs decoded_format)
+    pin2("NUM_COMPRESSED_TEXTURE_FORMATS", GL_NUM_COMPRESSED_TEXTURE_FORMATS, &[11], &[3]),
     pin2(
         "COMPRESSED_TEXTURE_FORMATS",
         GL_COMPRESSED_TEXTURE_FORMATS,
@@ -228,6 +229,12 @@ const PINS: &[Pin] = &[
             GL_COMPRESSED_RGBA8_ETC2_EAC as GLint,
             GL_COMPRESSED_SRGB8_ETC2 as GLint,
             GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC as GLint,
+            GL_COMPRESSED_R11_EAC as GLint,
+            GL_COMPRESSED_SIGNED_R11_EAC as GLint,
+            GL_COMPRESSED_RG11_EAC as GLint,
+            GL_COMPRESSED_SIGNED_RG11_EAC as GLint,
+            GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 as GLint,
+            GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2 as GLint,
         ],
         &[GL_ETC1_RGB8_OES as GLint, GL_COMPRESSED_RGB8_ETC2 as GLint, GL_COMPRESSED_RGBA8_ETC2_EAC as GLint],
     ),

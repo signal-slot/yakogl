@@ -236,7 +236,9 @@ board has run these commits), so none of it is a conformance figure.
 | `filtering.2d_array`, `shadow.2d_array`, `vertex.2d_array` (PowerVR) | pvr-2darray, `e160bafb`, `d7b2cf8b`, `1ddb0cf3` | native array sampling behind `pvr_native_array` (default off), every shadow form compiles, PCF for LINEAR over one level. Open: mipmap and cube PCF, mirrored repeat, `textureGrad*` and offset forms on 2D arrays and 3D (no owner) |
 | `swizzle.*` (83), `filtering.3d.*` (153) | int-rt-pvr, `e4f58cbe` | the GL core delivers the swizzle and wrap R; no back end applies them yet (`docs/es3/texture-host-repro.md` section 3). Host dEQP before = after |
 | `specification` NPOT levels, depth PBO | tex3d-levels | see `docs/es3-cts-failures.md` |
+| `wrap.*etc2*`/`*eac*` (360), `format.compressed.*` (40), `implementation_limits` and `state_query` compressed rows | etc2-eac, plan #354, `docs/notes/etc2-eac.md` | all ten ETC2/EAC names are accepted on the three GPUs (four as blocks, six decoded at upload), `GL_NUM_COMPRESSED_TEXTURE_FORMATS` 11, the V3D samples the block classes. Host only; the pictures of these cases are a board's to judge (`docs/es3/texture-host-repro.md` section 8) |
+| `shadow.*` (432, V3D) | plan #354 | `sampler_for` packs the draw's depth compare (`texture::pack_sampler`); before it every shadow draw compared NEVER (RC2) |
 | `shaders.texture_functions` look-ups on arrays and 3D | pvr-shadow, `d7356b65` | 226 PowerVR refusals in one message, `src/shaderc/online/powervr/select.rs`; front end clean (`docs/es3/shader-host-repro.md`) |
 
 Rows nothing has touched: `mipmap.3d.bias` (4), `size`, `vertex.2d/cube`,
-`filtering.3d` on the PowerVR (needs pvr-3d), ETC2 on the GC7000UL and V3D.
+`filtering.3d` on the PowerVR (needs pvr-3d).

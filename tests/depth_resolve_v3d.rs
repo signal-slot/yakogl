@@ -164,6 +164,7 @@ mod trampolines {
                                  dst: *mut u8, stride: u32) -> bool);
     trampoline!(v3d_tex_state_from_layout(s: *mut V3dTexState, l: *const V3dTexLayout));
     trampoline!(v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool);
+    trampoline!(v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool);
 }
 
 /// Every texture state packed, by the record's CPU address.
