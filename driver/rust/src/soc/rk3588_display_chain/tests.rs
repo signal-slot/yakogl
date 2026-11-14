@@ -628,3 +628,227 @@ fn a_vop_reset_found_asserted_is_released_by_the_power_cycle() {
     assert_eq!(r.found.vop_unreadable, Some(NotReady::InReset(reset::A_VOP)));
     assert!(r.found.vop_reachable, "read again once the reset was released");
 }
+
+/// One input set of the pixel clock rule (`pixel_clocks`) for a port, and
+/// whether the port must count as clocked.
+struct ClockRow {
+    port: usize,
+    gate_open: bool,
+    /// SRST_D_VOP0 released (VP0 only).
+    reset_released: bool,
+    mux: u32,
+    /// The port's own source gate (52/10 + port) open.
+    src_open: bool,
+    /// The next port's source gate open: VP1's row must not read it.
+    other_src_open: bool,
+    phy_ready: bool,
+    clocked: bool,
+}
+
+#[test]
+fn the_pixel_clock_rule_reads_each_of_its_inputs() {
+    let row = |port, gate_open, mux, src_open, phy_ready, clocked| ClockRow {
+        port,
+        gate_open,
+        reset_released: true,
+        mux,
+        src_open,
+        other_src_open: false,
+        phy_ready,
+        clocked,
+    };
+    let rows = [
+        // VP0: gate 52/13, reset 52/13, mux 112[8:7], source gate 52/10
+        row(0, true, 0, true, false, true),
+        row(0, true, 0, false, true, false),
+        row(0, false, 0, true, true, false),
+        ClockRow { reset_released: false, ..row(0, true, 0, true, true, false) },
+        row(0, true, 1, false, true, true),
+        row(0, true, 1, true, false, false),
+        row(0, true, 2, true, true, false),
+        // VP1: gate 53/0, mux 112[10:9], source gate 52/11
+        row(1, true, 0, true, false, true),
+        ClockRow { other_src_open: true, ..row(1, true, 0, false, true, false) },
+        row(1, false, 0, true, true, false),
+        row(1, true, 1, false, true, true),
+        row(1, true, 1, true, false, false),
+        row(1, true, 2, true, true, false),
+    ];
+    for r in &rows {
+        // cold: every gate closed, every reset asserted, every mux 0
+        let m = Rk3588Display::cold();
+        let set = |addr: usize, bit: u32, on: bool| {
+            let v = m.peek(addr);
+            m.poke(addr, if on { v | 1 << bit } else { v & !(1 << bit) });
+        };
+        let (gate_con, gate_bit) = [(52, 13), (53, 0)][r.port];
+        set(gate_addr(0, gate_con), gate_bit, !r.gate_open);
+        set(rst_addr(0, 52), 13, !r.reset_released);
+        set(gate_addr(0, 52), 10 + r.port as u32, !r.src_open);
+        set(gate_addr(0, 52), 11 + r.port as u32, !r.other_src_open);
+        let shift = 7 + 2 * r.port;
+        m.poke(sel_addr(0, 112), r.mux << shift);
+        let phy_status = if r.phy_ready { hdptx::grf::PHY_CLK_RDY } else { 0 };
+        let (here, now) = pixel_clocks(&m, &B, phy_status);
+        let bit = 1 << r.port;
+        assert_eq!(
+            now & bit != 0,
+            r.clocked,
+            "VP{} gate {} reset {} mux {} src {} other {} phy {}",
+            r.port,
+            r.gate_open,
+            r.reset_released,
+            r.mux,
+            r.src_open,
+            r.other_src_open,
+            r.phy_ready
+        );
+        // VP0 is always the chain's; another port only when its mux is on the PHY0
+        assert_eq!(here & bit != 0, r.port == 0 || r.mux == 1, "VP{} mux {}", r.port, r.mux);
+    }
+}
+
+#[test]
+fn a_port_on_the_phys_clock_that_shows_no_frame_is_refused_under_force_cold() {
+    // VP1 on the PHY0's pixel clock, every clock input reading as running,
+    // but its timing shows no frame: it may be in the middle of one
+    let mut m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(true);
+    let sel = sel_addr(0, 112);
+    m.poke(sel, (m.peek(sel) & !(3 << 9)) | 1 << 9);
+    m.faults.no_frames = 1 << 1;
+    m.clear_log();
+    let r = up(&m, &Config { force_cold: true, ..cfg() });
+    assert_eq!(r.err().map(|f| (f.stage, f.error)), Some((stage::START, Error::Unclocked(1 << 1))));
+    // only the event clears of the frame waits were written
+    assert!(m.writes().iter().all(|(a, _)| [VOP_BASE + 0xa4, VOP_BASE + 0xb4].contains(a)), "{:x?}", m.writes());
+    no_refusal(&m);
+}
+
+#[test]
+fn a_vop_that_stays_in_reset_after_its_release_is_refused() {
+    // SRST_A_VOP found asserted and stuck: after the power cycle's release
+    // VOP2 still cannot be read, which is not "nothing runs"
+    let mut m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.write32(rst_addr(0, 52), (1 << 9) << 16 | 1 << 9);
+    m.faults.vop_reset_stuck = true;
+    m.clear_log();
+    let r = up(&m, &Config { force_cold: true, power_cycle: true, ..cfg() });
+    assert_eq!(
+        r.err().map(|f| (f.stage, f.error)),
+        Some((stage::START, Error::VopUnreadable(NotReady::InReset(reset::A_VOP))))
+    );
+}
+
+/// Start states a system before us can leave, each built from Linux's
+/// picture left running (VP0, Cluster0 at an IOVA, paging on).
+#[derive(Clone, Copy, Debug)]
+enum Start {
+    /// PD_VOP off.
+    Cold,
+    /// VP0 runs, clocked (a crash kexec).
+    Running,
+    /// PD_VOP powered, its idle request set, VP0 still timed.
+    IdleRequested,
+    /// VP0's STANDBY taken, then DCLK_VOP0 gated (a clean shutdown).
+    StoppedGated,
+    /// VP0 runs, SRST_D_VOP0 asserted under it.
+    ResetUnderRunning,
+    /// VP0 runs on the PHY0's clock, the PHY's PLL turned off.
+    PhyOff,
+    /// VP0's STANDBY written, DCLK_VOP0 gated before the frame ended.
+    StoppingGated,
+    /// The last one, with PD_VOP's idle request set too.
+    StoppingGatedIdle,
+    /// VP0 stopped and on dclk_vop0_src, its gates open.
+    StoppedOnSrc,
+}
+
+fn start_state(s: Start) -> Rk3588Display {
+    let m = Rk3588Display::cold();
+    if let Start::Cold = s {
+        return m;
+    }
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(false);
+    let gate52 = |bit: u32, closed: bool| {
+        let v = m.peek(gate_addr(0, 52));
+        m.poke(gate_addr(0, 52), if closed { v | 1 << bit } else { v & !(1 << bit) });
+    };
+    let standby = |wait: bool| {
+        m.write32(VOP_BASE + 0xc00, 1 << 31);
+        if wait {
+            m.busy_wait_us(40_000);
+        }
+    };
+    match s {
+        Start::Cold | Start::Running => {}
+        Start::IdleRequested => request_vop_idle(&m),
+        Start::StoppedGated => {
+            standby(true);
+            gate52(13, true);
+        }
+        Start::ResetUnderRunning => m.poke(rst_addr(0, 52), m.peek(rst_addr(0, 52)) | 1 << 13),
+        Start::PhyOff => m.poke(PHY_GRF, 0xffff_0000),
+        Start::StoppingGated => {
+            standby(false);
+            gate52(13, true);
+        }
+        Start::StoppingGatedIdle => {
+            standby(false);
+            gate52(13, true);
+            request_vop_idle(&m);
+        }
+        Start::StoppedOnSrc => {
+            standby(true);
+            gate52(10, false);
+            m.poke(sel_addr(0, 112), m.peek(sel_addr(0, 112)) & !(3 << 7));
+        }
+    }
+    m.busy_wait_us(1);
+    m.clear_log();
+    m
+}
+
+#[test]
+fn each_start_state_is_refused_or_brought_up_as_its_flags_allow() {
+    // Expected START outcome per start state for (no flag, force_cold,
+    // power_cycle, both): None = Ok. Without power_cycle a refusal writes
+    // nothing; with it every run ends Ok or FoundRunning. No run may see a
+    // model refusal or a bus error.
+    use Error::*;
+    let unread = VopUnreadable(NotReady::DomainOff("vop"));
+    let cases: &[(Start, [Option<Error>; 4])] = &[
+        (Start::Cold, [None, None, None, None]),
+        (Start::Running, [Some(FoundRunning(1)), None, Some(FoundRunning(1)), None]),
+        (Start::IdleRequested, [Some(unread), Some(unread), Some(FoundRunning(1)), None]),
+        (Start::StoppedGated, [Some(Unclocked(1)), Some(Unclocked(1)), None, None]),
+        (Start::ResetUnderRunning, [Some(Unclocked(1)), Some(Unclocked(1)), Some(FoundRunning(1)), None]),
+        (Start::PhyOff, [Some(Unclocked(1)), Some(Unclocked(1)), Some(FoundRunning(1)), None]),
+        (Start::StoppingGated, [Some(Unclocked(1)), Some(Unclocked(1)), None, None]),
+        (Start::StoppingGatedIdle, [Some(unread), Some(unread), None, None]),
+        (Start::StoppedOnSrc, [None, None, None, None]),
+    ];
+    for &(s, want) in cases {
+        for (i, (force_cold, power_cycle)) in
+            [(false, false), (true, false), (false, true), (true, true)].into_iter().enumerate()
+        {
+            let m = start_state(s);
+            let r = up(&m, &Config { force_cold, power_cycle, ..cfg() });
+            let what = format!("{s:?} force_cold {force_cold} power_cycle {power_cycle}");
+            match (&r, want[i]) {
+                (Ok(rep), None) => assert_eq!(rep.frame.bus_error, [false, false], "{what}"),
+                (Err(f), Some(e)) => {
+                    assert_eq!((f.stage, f.error), (stage::START, e), "{what}");
+                    if !power_cycle {
+                        assert!(m.writes().is_empty(), "{what}: written before the refusal");
+                    }
+                }
+                _ => panic!("{what}: {r:?}, expected {:?}", want[i]),
+            }
+            assert_eq!(m.refused(), Vec::<String>::new(), "{what}");
+        }
+    }
+}
