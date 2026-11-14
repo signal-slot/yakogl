@@ -1053,25 +1053,6 @@ pub const fn wide128_lane_sources(swizzle: [GlesSwizzle; 4], no_alpha: bool) -> 
     out
 }
 
-#[cfg(test)]
-mod wide128_lane_tests {
-    use super::*;
-
-    #[test]
-    fn wide128_lane_sources_cases() {
-        let same = [GLES_SWIZZLE_SAME; 4];
-        assert_eq!(wide128_lane_sources(same, false), [0, 1, 2, 3]);
-        let rgba = [GLES_SWIZZLE_RED, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_BLUE, GLES_SWIZZLE_ALPHA];
-        assert_eq!(wide128_lane_sources(rgba, false), [0, 1, 2, 3]);
-        let bgra = [GLES_SWIZZLE_BLUE, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_RED, GLES_SWIZZLE_ALPHA];
-        assert_eq!(wide128_lane_sources(bgra, false), [2, 1, 0, 3]);
-        let zozo = [GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE, GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE];
-        assert_eq!(wide128_lane_sources(zozo, false), [4, 5, 4, 5]);
-        assert_eq!(wide128_lane_sources(same, true), [0, 1, 2, 5]);
-        assert_eq!(wide128_lane_sources([GLES_SWIZZLE_ALPHA; 4], true), [5, 5, 5, 5]);
-    }
-}
-
 impl GlesTextureBind {
     pub const ZERO: GlesTextureBind = GlesTextureBind {
         unit: 0,
@@ -2313,5 +2294,24 @@ pub fn return_mipmap_chain(b: &GlesTextureBind, levels: u32) {
     if let Some(f) = table().and_then(|t| t.return_mipmap_chain) {
         // SAFETY: a static table's entry; `b` is live for the call.
         unsafe { f(b, levels) }
+    }
+}
+
+#[cfg(test)]
+mod wide128_lane_tests {
+    use super::*;
+
+    #[test]
+    fn wide128_lane_sources_cases() {
+        let same = [GLES_SWIZZLE_SAME; 4];
+        assert_eq!(wide128_lane_sources(same, false), [0, 1, 2, 3]);
+        let rgba = [GLES_SWIZZLE_RED, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_BLUE, GLES_SWIZZLE_ALPHA];
+        assert_eq!(wide128_lane_sources(rgba, false), [0, 1, 2, 3]);
+        let bgra = [GLES_SWIZZLE_BLUE, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_RED, GLES_SWIZZLE_ALPHA];
+        assert_eq!(wide128_lane_sources(bgra, false), [2, 1, 0, 3]);
+        let zozo = [GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE, GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE];
+        assert_eq!(wide128_lane_sources(zozo, false), [4, 5, 4, 5]);
+        assert_eq!(wide128_lane_sources(same, true), [0, 1, 2, 5]);
+        assert_eq!(wide128_lane_sources([GLES_SWIZZLE_ALPHA; 4], true), [5, 5, 5, 5]);
     }
 }
