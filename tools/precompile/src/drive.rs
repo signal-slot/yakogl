@@ -64,6 +64,24 @@ pub fn sensitivity(sh: &ShcShader) -> u64 {
     }
 }
 
+/// `wide128_sensitivity(sh)`: the GC7000's other question at a program's
+/// first draw, of each stage that declares a sampler: which bindings'
+/// look-ups a 128-bit plane key would change. Like the sampler-state
+/// sensitivity it runs the front end over the source, so an image that asks
+/// it of a row would run its compiler once per stage of every program it
+/// draws with a texture (Slint's first two frames on the i.MX8MP: four
+/// runs, the only ones of a start the table otherwise answers whole). 0 on
+/// the PowerVR, which has no such key and whose table has no such column.
+pub fn wide128(sh: &ShcShader) -> u32 {
+    #[cfg(feature = "gpu-vivante")]
+    return yakogl::shaderc::wide128_sensitivity(sh);
+    #[cfg(not(feature = "gpu-vivante"))]
+    {
+        let _ = sh;
+        0
+    }
+}
+
 /// The bytes of the keep region lent for one run: far more than an image
 /// lends (the product sizes its own, CONFIG_YAKOGL_SHADERC_KEEP_BYTES), so
 /// that no job here is refused for room. The keep size changes no code the
