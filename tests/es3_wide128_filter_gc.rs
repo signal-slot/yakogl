@@ -45,8 +45,8 @@ use yakogl::gl::state::*;
 use yakogl::gl::texture::*;
 use yakogl::gl::types::*;
 use yakogl::gl::vertex::*;
-use yakogl::osal::{OsalGpuMem, OsalOps, osal_set_ops};
-use yakogl::vivante::kick::{GC_KICK_MAGIC, GcKick};
+use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
+use yakogl::vivante::kick::{GcKick, GC_KICK_MAGIC};
 use yakogl::vivante::regs::*;
 
 const COMMON_3D: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/driver/src/vivante/hw/common_3d.xml.h"));
