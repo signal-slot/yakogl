@@ -356,9 +356,13 @@ fails (the rule of `tools/board-stm32mp2.sh:65-66`).
   N image boots that never reach Linux would spend ST's trial. The runner
   reads the metadata partition read-only and refuses unless the booted bank
   is accepted (0xFC). `TODO(board-env-read)`: the metadata's `bank_state` on
-  the board. The trial counter is an EFI variable in `ubootefi.var` on the
-  EFI system partition (`ST/lib/efi_loader/efi_var_file.c:140-144`,
-  `ST/lib/efi_loader/efi_disk.c:531-535`); whether that is bootfs is
+  the board. The trial counter is the u16 EFI variable `TrialStateCtr`
+  (GUID 8be4df61-93ca-11d2-aa0d-00e098032b8c, the EFI global variable GUID;
+  `ST/lib/fwu_updates/fwu.c:42-45`), present only while a trial runs. It lives in
+  `ubootefi.var` on the EFI system partition (`ST/lib/efi_loader/efi_var_file.c:140-144`,
+  `ST/lib/efi_loader/efi_disk.c:531-535`). `tools/efi_varfile.py --fwu FILE`
+  reads a copy of that file read-only and prints `fwu-trial: counter <n>` or
+  `fwu-trial: absent` (selftest: `tools/efi_varfile_selftest.sh`). Whether that is bootfs is
   `TODO(board-env-read)`, and the `/boot` sha256 comparison would show it.
 
 ## 4. `forever`: only with a person
