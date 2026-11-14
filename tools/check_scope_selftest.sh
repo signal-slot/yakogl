@@ -117,6 +117,8 @@ want tools/cts/deqp-uart-tally.py tools
 want tools/board.sh tools
 want tools/board-stm32mp2.sh tools
 want tools/board_stm32mp2_selftest.sh tools
+want tools/board-stm32mp2-standalone.sh tools
+want tools/board_stm32mp2_standalone_selftest.sh tools
 want tools/uboot_env.py tools
 want tools/env/build-gate-image.sh tools
 want tools/hostharness/glmark2/run.sh tools
