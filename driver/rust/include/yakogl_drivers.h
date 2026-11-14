@@ -183,6 +183,23 @@ int yd_rpi4_window_is_view(const struct yd_rpi4_fb *fb, uint32_t w, uint32_t h);
 int yd_rpi4_pan_row(const struct yd_rpi4_fb *fb, uint64_t win_phys, uint32_t w, uint32_t h,
 		    uint32_t stride, uint32_t *row);
 
+/* The same decisions with the board as a parameter (src/board/rpi_fb.rs):
+ * board 4 or 5. The Pi 5 (BCM2712) shares struct yd_rpi4_fb. */
+#define YD_RPI_SCANOUT_FMT_RGBX 0 /* R, G, B, X in memory */
+#define YD_RPI_SCANOUT_FMT_BGRX 1 /* B, G, R, X in memory */
+/* The ARM physical address of the mailbox's framebuffer address (the Pi 4
+ * clears 0xc0000000, the Pi 5 keeps it); 0: no framebuffer. */
+uint64_t yd_rpi_fb_phys(uint32_t board, uint32_t bus);
+/* 1: a FRAMEBUFFER_ALLOCATE answer holds rows rows of width 32 bpp pixels. */
+int yd_rpi_allocate_ok(uint32_t width, uint32_t rows, uint32_t pitch, uint32_t size);
+/* 1 and *fb: the answer is a usable framebuffer (all checks above). */
+int yd_rpi_fb_from_answer(uint32_t board, uint32_t bus, uint32_t width, uint32_t height,
+			  uint32_t rows, uint32_t pitch, uint32_t size, struct yd_rpi4_fb *fb);
+/* 1, *fb and the window format (GLES_NATIVE_FORMAT_*): the firmware's running
+ * scanout plane can be adopted; fmt is YD_RPI_SCANOUT_FMT_*. */
+int yd_rpi_adopt_scanout(uint64_t phys, uint32_t pitch, uint32_t width, uint32_t height,
+			 uint32_t fmt, struct yd_rpi4_fb *fb, uint32_t *format);
+
 /* ---- i.MX WDOG self-arm (ip::imx_wdog; gc_board gc_wdog_arm.c) ----------
  * One call at PRE_KERNEL_1: the WDOG clock root and gate on, then WDOG1 armed
  * for timeout_ms (whole 0.5 s steps, 0.5 s .. 128 s) from whatever state it

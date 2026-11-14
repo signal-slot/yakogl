@@ -36,6 +36,7 @@ pub mod nanopc_t6_sections;
 pub mod nanopc_t6_submit;
 pub mod record;
 pub mod rpi4;
+pub mod rpi_fb;
 
 #[cfg(test)]
 mod tests {
