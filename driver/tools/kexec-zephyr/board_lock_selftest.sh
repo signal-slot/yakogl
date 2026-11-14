@@ -89,6 +89,12 @@
 # T6's /proc/iomem, an entry and a GIC table in the window's last part, and
 # --go with and without the tables named.
 #
+# The T6 display dump (t6-display-dump.sh) takes this lock too and reads
+# registers of the running Linux. Its own self-test, on a made-up board, runs
+# from here as one check: the read list stays inside its windows, a display
+# that is off or a held lock refuses before any read, and a read that fails
+# stops the run.
+#
 # Needs bash, flock(1) and strings(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
@@ -383,6 +389,13 @@ out=$(t6_board_run "$kernel" "$gic_out" --go)
 rc=$?
 check "nanopc-t6.sh: --go with the tables named gets past the board checks to its own T6_HAND refusal (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --go needs T6_HAND' <<<"$out"; echo $?)"
+
+# t6-display-dump.sh: its self-test, with its own made-up board and its own
+# count of check lines.
+out=$(bash "$here/t6-display-dump-selftest.sh" 2>&1)
+rc=$?
+[ "$rc" = 0 ] || grep ' FAIL$' <<<"$out"
+check "t6-display-dump.sh: its self-test passes (rc $rc: $(tail -n 1 <<<"$out"))" "$rc"
 
 # The window is decided by nanopc_t6.dts (zephyr,sram) and held again where an
 # image is loaded into it: nanopc-t6.sh checks /proc/iomem over WINDOW_BASE
