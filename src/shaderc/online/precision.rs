@@ -1641,6 +1641,8 @@ mod tests {
     /// - every value's class agrees with its kind ([`Module::value_kind`],
     ///   the function the lowering decides by): a float or a bool never
     ///   records None, an int always does;
+    /// - no `Iand`, `Ior` or `Ixor` mixes a bool with a non-bool, which
+    ///   [`AluOp::result_kind`]'s arm for them rests on;
     /// - no float or bool value was lowered under a context with no class
     ///   ([`super::super::lower::NO_CONTEXT`] stays 0);
     /// - the lowering lowers no expression the scan did not reach
@@ -1702,6 +1704,16 @@ mod tests {
             }
             for i in unclassed(m) {
                 bad.push(std::format!("{}: %{i} {:?} {:?}", f.display(), m.prec[i], m.instrs[i]));
+            }
+            /* what `AluOp::result_kind`'s `Iand | Ior | Ixor` arm rests on:
+             * no side is a bool unless both are */
+            let k = kinds(m);
+            for (i, op) in m.instrs.iter().enumerate() {
+                if let Op::Alu(AluOp::Iand | AluOp::Ior | AluOp::Ixor, [x, y, _]) = op {
+                    if (k[x.val.0 as usize] == ValueKind::Bool) != (k[y.val.0 as usize] == ValueKind::Bool) {
+                        bad.push(std::format!("{}: %{i} mixes a bool with a non-bool: {op:?}", f.display()));
+                    }
+                }
             }
         }
         std::println!("{compiled} of {} shaders compiled", files.len());
@@ -2506,6 +2518,201 @@ void main(){ glob = glob * uh; mediump float t = a.x; t++; --t; v = vec4(glob, c
             assert!(bad.is_empty(), "{src}\nvalues whose class is not their kind's: {bad:?}");
             assert_eq!(super::super::lower::UNSEEN.with(|n| n.get()), 0, "{src}");
             assert_eq!(super::super::lower::NO_CONTEXT.with(|n| n.get()), 0, "{src}");
+        }
+    }
+
+    /// Every arm of [`Op::value_kind`] and [`AluOp::result_kind`] on a
+    /// real lowered shader: each row is a GLSL form, the instructions it
+    /// lowers to that the row picks, and the kind the form has in GLSL.
+    /// The width pass reads these kinds, so a changed arm fails a row here
+    /// (tenth review, should-fix 1: `gl_FrontFacing` as a float and an
+    /// `Iand` of one bool and one int as a bool survived every test). The
+    /// `Iand` of a bool and a non-bool is never made; the corpus test
+    /// asserts that, as the arm's comment says.
+    #[test]
+    fn every_value_kind_arm_is_the_kind_of_its_glsl_form() {
+        use super::super::ir::IoSlot;
+        type Pick = fn(&Module, &Op) -> bool;
+        fn uni(m: &Module, name: &str) -> u16 {
+            m.uniforms.iter().find(|u| u.name == name).unwrap_or_else(|| panic!("no uniform {name}")).dword_off
+        }
+        fn slot(m: &Module, l: super::super::ir::LocalId, name: &str) -> bool {
+            m.locals.get(l.0 as usize).is_some_and(|d| d.name == name)
+        }
+        fn is(o: &Op, a: AluOp) -> bool {
+            matches!(o, Op::Alu(x, _) if *x == a)
+        }
+        let fs1 = "precision mediump float; varying vec4 v; uniform vec4 uf; uniform int ui; uniform bool ub;\n\
+                   uniform vec4 ua[3]; uniform int ia[3]; uniform sampler2D s;\n\
+                   void main(){ float x = v.x + uf.y; int i = ui * 2 + ia[ui]; bool b = ub && (v.y < 0.5);\n\
+                   if (gl_FrontFacing) discard;\n\
+                   for (int k = 0; k < 2; k++) { x = x * 0.5; b = !b; }\n\
+                   bvec2 bb = bvec2(b, v.z > 0.0);\n\
+                   gl_FragColor = texture2D(s, v.xy) * x + ua[i] + gl_FragCoord\n\
+                       + vec4(gl_PointCoord, float(i), float(any(bb))) + vec4(float(b || bb.y), float(-i), float(int(x)), float(bool(x))); }";
+        let int_sel = "precision mediump float; varying vec4 v; uniform int ui;\n\
+                       void main(){ int t = v.x > 0.5 ? ui : 3; gl_FragColor = vec4(float(t)); }";
+        let float_sel = "precision mediump float; varying vec4 v; uniform float uf;\n\
+                         void main(){ float t = v.x > 0.5 ? uf : v.y; gl_FragColor = vec4(t); }";
+        let vs1 = "attribute highp vec4 p; attribute mediump vec4 a; varying mediump vec4 v; uniform bvec2 ubv; uniform int ui;\n\
+                   void main(){ v = vec4(float(all(ubv)), float(ui == 2), float(true), 0.0) + vec4(float(ubv.x ^^ ubv.y)); gl_Position = p; }";
+        let fs3 = "#version 300 es\nprecision mediump float; in vec4 v; flat in int fi; uniform highp usampler2D us; uniform highp uint uu;\n\
+                   out vec4 o;\n\
+                   void main(){ uvec4 t = texture(us, v.xy); ivec2 z = textureSize(us, 0); uint w = (uu / 3u) >> 1u;\n\
+                   int j = (fi & 3) << 1; o = vec4(t) + vec4(float(w), float(~j), float(z.x), float(uu < 2u)) + vec4(float(uint(v.x))); }";
+        let vs3 = "#version 300 es\nin highp vec4 p; in mediump vec4 a; out highp vec4 v;\n\
+                   void main(){ v = vec4(float(gl_VertexID), float(gl_InstanceID), 0.0, 0.0); gl_Position = p; }";
+        let pack = "#version 300 es\nin highp vec4 p; in mediump vec4 a; out highp vec4 v;\n\
+                    void main(){ v = vec4(float(packHalf2x16(a.xy))); gl_Position = p; }";
+        let unpack = "#version 300 es\nin highp vec4 p; uniform highp uint uu; out highp vec4 v;\n\
+                      void main(){ v = vec4(unpackHalf2x16(uu), 0.0, 0.0); gl_Position = p; }";
+        use ValueKind::{Bool as B, Float as F, Int as I, Void as V};
+        let rows: &[(&str, Stage, &str, Pick, ValueKind)] = &[
+            ("a float literal", Stage::Fragment, fs1, |_, o| matches!(o, Op::ConstF32(_)), F),
+            ("an int literal", Stage::Fragment, fs1, |_, o| matches!(o, Op::ConstI32(_)), I),
+            ("a bool literal", Stage::Vertex, vs1, |_, o| matches!(o, Op::ConstBool(_)), B),
+            (
+                "a float uniform",
+                Stage::Fragment,
+                fs1,
+                |m, o| matches!(o, Op::LoadUniform { dword_off, .. } if *dword_off == uni(m, "uf")),
+                F,
+            ),
+            (
+                "an int uniform",
+                Stage::Fragment,
+                fs1,
+                |m, o| matches!(o, Op::LoadUniform { dword_off, .. } if *dword_off == uni(m, "ui")),
+                I,
+            ),
+            (
+                "a bool uniform's 0 or 1",
+                Stage::Fragment,
+                fs1,
+                |m, o| matches!(o, Op::LoadUniform { dword_off, .. } if *dword_off == uni(m, "ub")),
+                I,
+            ),
+            (
+                "a float array uniform element",
+                Stage::Fragment,
+                fs1,
+                |m, o| matches!(o, Op::LoadUniformIdx { base_dw, .. } if *base_dw == uni(m, "ua")),
+                F,
+            ),
+            (
+                "an int array uniform element",
+                Stage::Fragment,
+                fs1,
+                |m, o| matches!(o, Op::LoadUniformIdx { base_dw, .. } if *base_dw == uni(m, "ia")),
+                I,
+            ),
+            ("a varying", Stage::Fragment, fs1, |_, o| matches!(o, Op::LoadInput { slot: IoSlot::Varying(_), .. }), F),
+            ("an attribute", Stage::Vertex, vs1, |_, o| matches!(o, Op::LoadInput { slot: IoSlot::Attrib(_), .. }), F),
+            (
+                "gl_FrontFacing",
+                Stage::Fragment,
+                fs1,
+                |_, o| matches!(o, Op::LoadInput { slot: IoSlot::FrontFacing, .. }),
+                B,
+            ),
+            (
+                "gl_FragCoord",
+                Stage::Fragment,
+                fs1,
+                |_, o| matches!(o, Op::LoadInput { slot: IoSlot::FragCoord, .. }),
+                F,
+            ),
+            (
+                "gl_PointCoord",
+                Stage::Fragment,
+                fs1,
+                |_, o| matches!(o, Op::LoadInput { slot: IoSlot::PointCoord, .. }),
+                F,
+            ),
+            (
+                "a float local",
+                Stage::Fragment,
+                fs1,
+                |m, o| matches!(o, Op::LoadLocal { local, .. } if slot(m, *local, "x")),
+                F,
+            ),
+            (
+                "an int local",
+                Stage::Fragment,
+                fs1,
+                |m, o| matches!(o, Op::LoadLocal { local, .. } if slot(m, *local, "k")),
+                I,
+            ),
+            (
+                "a bool local",
+                Stage::Fragment,
+                fs1,
+                |m, o| matches!(o, Op::LoadLocal { local, .. } if slot(m, *local, "b")),
+                B,
+            ),
+            ("a look-up", Stage::Fragment, fs1, |_, o| matches!(o, Op::Tex { .. }), F),
+            ("a store", Stage::Fragment, fs1, |_, o| matches!(o, Op::StoreLocal { .. } | Op::StoreOutput { .. }), V),
+            ("discard", Stage::Fragment, fs1, |_, o| matches!(o, Op::Discard), V),
+            ("+ of floats", Stage::Fragment, fs1, |_, o| is(o, AluOp::Fadd), F),
+            ("* of floats", Stage::Fragment, fs1, |_, o| is(o, AluOp::Fmul), F),
+            ("float(int)", Stage::Fragment, fs1, |_, o| is(o, AluOp::I2f), F),
+            ("float(bool)", Stage::Fragment, fs1, |_, o| is(o, AluOp::B2f), F),
+            ("< of floats", Stage::Fragment, fs1, |_, o| is(o, AluOp::Flt), B),
+            ("< of ints", Stage::Fragment, fs1, |_, o| is(o, AluOp::Ilt), B),
+            ("bool(float)", Stage::Fragment, fs1, |_, o| is(o, AluOp::F2b), B),
+            ("a bool uniform made a bool", Stage::Fragment, fs1, |_, o| is(o, AluOp::I2b), B),
+            ("!", Stage::Fragment, fs1, |_, o| is(o, AluOp::Bnot), B),
+            ("any", Stage::Fragment, fs1, |_, o| is(o, AluOp::Bany), B),
+            ("all", Stage::Vertex, vs1, |_, o| is(o, AluOp::Ball), B),
+            ("== of ints", Stage::Vertex, vs1, |_, o| is(o, AluOp::Ieq), B),
+            ("* and + of ints", Stage::Fragment, fs1, |_, o| is(o, AluOp::Imul) || is(o, AluOp::Iadd), I),
+            ("- of an int", Stage::Fragment, fs1, |_, o| is(o, AluOp::Ineg), I),
+            ("int(float)", Stage::Fragment, fs1, |_, o| is(o, AluOp::F2i), I),
+            ("&& of bools", Stage::Fragment, fs1, |_, o| is(o, AluOp::Iand), B),
+            ("|| of bools", Stage::Fragment, fs1, |_, o| is(o, AluOp::Ior), B),
+            ("^^ of bools", Stage::Vertex, vs1, |_, o| is(o, AluOp::Ixor), B),
+            ("?: of ints", Stage::Fragment, int_sel, |_, o| is(o, AluOp::Bcsel), I),
+            ("?: of floats", Stage::Fragment, float_sel, |_, o| is(o, AluOp::Bcsel), F),
+            /* ES 3.00 */
+            ("gl_VertexID", Stage::Vertex, vs3, |_, o| matches!(o, Op::LoadInput { slot: IoSlot::VertexId, .. }), I),
+            (
+                "gl_InstanceID",
+                Stage::Vertex,
+                vs3,
+                |_, o| matches!(o, Op::LoadInput { slot: IoSlot::InstanceId, .. }),
+                I,
+            ),
+            (
+                "a flat int input",
+                Stage::Fragment,
+                fs3,
+                |m, o| matches!(o, Op::LoadInput { slot, .. } if m.inputs.iter().any(|d| d.slot() == *slot && d.name == "fi")),
+                I,
+            ),
+            ("a uint look-up", Stage::Fragment, fs3, |_, o| matches!(o, Op::Tex { .. }), I),
+            ("textureSize", Stage::Fragment, fs3, |_, o| matches!(o, Op::TexSize { .. }), I),
+            ("/ and >> of uints", Stage::Fragment, fs3, |_, o| is(o, AluOp::Udiv) || is(o, AluOp::Ushr), I),
+            ("& and << of ints", Stage::Fragment, fs3, |_, o| is(o, AluOp::Iand) || is(o, AluOp::Ishl), I),
+            ("~ of an int", Stage::Fragment, fs3, |_, o| is(o, AluOp::Inot), I),
+            ("float(uint)", Stage::Fragment, fs3, |_, o| is(o, AluOp::U2f), F),
+            ("uint(float)", Stage::Fragment, fs3, |_, o| is(o, AluOp::F2u), I),
+            ("< of uints", Stage::Fragment, fs3, |_, o| is(o, AluOp::Ult), B),
+            ("packHalf2x16's integer work on the float's bits", Stage::Vertex, pack, |_, o| is(o, AluOp::Iand), I),
+            ("unpackHalf2x16's selects of a float or bits", Stage::Vertex, unpack, |_, o| is(o, AluOp::Bcsel), I),
+        ];
+        let mut buf = std::vec![0u8; 1 << 22];
+        for &(what, stage, src, pick, want) in rows {
+            if crate::REPORT_ES2 && src.starts_with("#version 300 es") {
+                continue;
+            }
+            let a = Arena::new(&mut buf);
+            let l = compile_to_ir(&a, stage, a.alloc_str(src).expect("arena"))
+                .unwrap_or_else(|e| panic!("{what}: line {}: {}", e.line, e.msg));
+            let m = &l.module;
+            let k = kinds(m);
+            let got: Vec<ValueKind> = (0..m.instrs.len()).filter(|&i| pick(m, &m.instrs[i])).map(|i| k[i]).collect();
+            assert!(!got.is_empty(), "{what}: the shader has no such instruction");
+            assert!(got.iter().all(|&x| x == want), "{what}: {got:?}, want {want:?}");
         }
     }
 

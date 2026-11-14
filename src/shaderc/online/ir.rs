@@ -428,7 +428,11 @@ impl AluOp {
             Iadd | Imul | Idiv | Imod | Ineg | Ishl | Ishr | Udiv | Umod | Ushr | Imin | Imax | Umin | Umax | Inot
             | B2i | F2i | F2u => ValueKind::Int,
             /* `&&`, `||`, `^^` when both sides are bools; otherwise int
-             * bits (an int's, or a float's in the pack built-ins) */
+             * bits (an int's, or a float's in the pack built-ins). The
+             * lowering never mixes a bool with a non-bool here (sema gives
+             * `&&` two bools, `&` two integers), so "both" and "either"
+             * agree on every module it makes; the corpus test asserts that
+             * (precision.rs `every_value_of_the_corpus_has_its_kind_s_class`) */
             Iand | Ior | Ixor => {
                 if src[0] == ValueKind::Bool && src[1] == ValueKind::Bool {
                     ValueKind::Bool
