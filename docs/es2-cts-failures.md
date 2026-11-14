@@ -6,7 +6,9 @@ dEQP-GLES2, the mustpass list `tools/cts/gles2-mustpass.txt` (17,165 cases),
 on the AM62P (PowerVR BXS-4-64), the i.MX8MP (Vivante GC7000UL) and the
 Raspberry Pi 4 (V3D 4.2). This file says what is not Pass now and why that is
 accepted. The numbers and the commit are in `tools/cts/RESULTS.md`. Earlier
-rounds, their failures and their fixes are in git history.
+rounds, their failures and their fixes are in git history. The fourth back
+end, the Mali-G610 of the NanoPC-T6 (stage 5), is section M: its first whole
+tree, not yet at 0 Fail.
 
 ## Summary
 
@@ -165,3 +167,128 @@ checks the GC7000 descriptor on the host for that half.
 - The `NPOT_RESTRICTED` branches of the tests in `src/gl/draw.rs` and
   `src/gl/texture.rs` never take the restricted side in any build. They are
   revert checks, not stale text.
+
+## M. Mali-G610 (NanoPC-T6): the first whole tree
+
+The `gpu-mali` back end on the NanoPC-T6 (RK3588, Valhall v10), on the
+board's own Armbian (kernel 6.18.55-current-rockchip64) through panthor, with
+the `tools/mali/panthor-gles` pair, `tools/cts/mali-deqp-run.sh` over the 76
+rows of `tools/cts/mali-gles2-tree.txt` (issue #20, ROADMAP stage 5, issue
+#7). Seven slices, `tools/cts/log/<slice>/`, from four origin/main commits:
+`a50d87b5` (S1, S1b, 2026-11-12), `1bd2074f` (S2, S2b), `4ecefc7b` (S3,
+S3b), `9b5daae8` (S4, all 2026-11-13). `src/mali`, `src/shaderc/online/mali`
+and `src/gl` are the same in `1bd2074f`, `4ecefc7b` and `9b5daae8`, and the
+first two are also unchanged at origin/main `d1e77916`. S1 and S1b ran
+`a50d87b5`'s, 26 commits to the Mali compiler and back end older. No slice
+reruns another and
+no case is Lost: every mustpass case has exactly one result
+(`mali-deqp-tally.py --check-cover` exits 0 against origin/main
+`d1e77916`).
+
+The board: all 76 chunks ended `done`, with 0 panthor kernel lines, 0 resets,
+ssh answering after every chunk and the same boot id before and after each
+slice. No exit line reports a GPU fault or a job timeout. No case crashed,
+hung or faulted the GPU.
+
+The block below is `mali-deqp-tally.py --tally --markdown` of the seven
+slices, and `--check-doc` keeps it equal to them. Its cause column reads
+`refused:this` for every case of a chunk whose exit line names a refusal:
+the tally takes the word after "refused" in `first_refused=compile: online
+shaderc: the code generator refused this ... shader`. The table after the
+block names the causes.
+
+<!-- mali-deqp-tally begin -->
+
+Slices: `2026-11-12-t6-gles2-S1-a50d87b5`, `2026-11-12-t6-gles2-S1b-a50d87b5`, `2026-11-13-t6-gles2-S2-1bd2074f`, `2026-11-13-t6-gles2-S2b-1bd2074f`, `2026-11-13-t6-gles2-S3-4ecefc7b`, `2026-11-13-t6-gles2-S3b-4ecefc7b`, `2026-11-13-t6-gles2-S4-9b5daae8`
+(commits `1bd2074f`, `4ecefc7b`, `9b5daae8`, `a50d87b5`).
+
+| Status | Cases |
+| --- | ---: |
+| Pass | 5260 |
+| Fail | 10898 |
+| NotSupported | 971 |
+| QualityWarning | 3 |
+| ResourceError | 33 |
+| **Total** | **17165** |
+
+| Status | Cause | Cases |
+| --- | --- | ---: |
+| Fail | refused:this | 10017 |
+| NotSupported | refused:this | 970 |
+| Fail | Image compare failed | 828 |
+| ResourceError | refused:this | 33 |
+| Fail | Image comparison failed | 32 |
+| Fail | Got unexpected error | 21 |
+| QualityWarning | refused:this | 3 |
+| NotSupported | EXT_multisampled_render_to_texture is not supported at es#fMultisampledRenderToTextureTests.cpp:# | 1 |
+
+<!-- mali-deqp-tally end -->
+
+### M.1 The non-Pass cases by cause
+
+11,905 cases are not Pass. A case's cause is what dEQP reports for it,
+together with its chunk's `yakogl-mali-exit` line (`draws=`, `refused=`,
+`first_refused=`). The library logs only the first refusal of a chunk by
+name, so a case's own `MaliError` variant is not recorded. Owners: plan #309
+holds every refusal of `src/mali` and `src/shaderc/online/mali` (#33 for the
+compiler); "new" means no open issue holds the cause yet.
+
+| # | Cause | Status | Cases | Where (largest groups) | Owner |
+|---|---|---|---:|---|---|
+| 1 | The online compiler refused a shader. dEQP: `Failed to compile shader (program)`, `Compile failed`, `could not build program`, `expected shaders to compile and link properly, but failed to compile.`, `Failed to retrieve uniform location`, ...; the chunk's exit line names a `MaliError` (M.2) | Fail | 9,851 | `shaders.operator` 2,576, `shaders.random` 1,765, `uniform_api` 1,267, `shaders.swizzles` 648, `vertex_arrays` 571, `shaders.matrix` 527, `shaders.conversions` 470, `shaders.constant_expressions` 411, `shaders.preprocessor` 260, `shaders.indexing` 186, `shaders.functions` 171, `texture.filtering` 112, `texture.specification` 106, `draw` 101, `fragment_ops.interaction` 97 | plan #309, #33 |
+| 2 | The same refusal, which dEQP reports NotSupported because GLSL ES 1.00 Appendix A makes the feature optional (`Loop type is not supported`, `Shader is not supported`, `Dynamic loops not supported`, `Dynamic indexing not supported`, `Full GLSL ES 100 is not supported`) | NotSupported | 937 | `shaders.loops` 527, `shaders.indexing` 367, `shaders.struct` 24 | plan #309, #33 |
+| 3 | A blend shader refused at the draw (`mali frame: a blend shader other than a constant colour's ... is not built yet`, `NOT_BUILT_BLEND_SHADER`); dEQP: `Image compare failed` (the draw is missing) | Fail | 828 | `fragment_ops.blend` (232 pass) | plan #309 |
+| 4 | A GL error, a query value or missing pixels in a chunk whose exit line counts refusals: `GL_INVALID_OPERATION` at a draw (a refused draw is `-ENOTSUP`, `src/gl/draw.rs` `submit_draw`, or the program did not link), `GL error`, `Got invalid error`, `got invalid value`, `expected GL_TRUE`, `Image comparison failed` | Fail | 164 | `fragment_ops.random` 100, `light_amount` 18, `negative_api` 14, `default_vertex_attrib` 8 (`mat2`, `mat3`), `shaders.random` 8, `state_query` 7, `shaders.operator` 6, `fragment_ops.interaction` 2, `shaders.texture_functions` 1 | plan #309 by the chunk's refusals; each case unproven |
+| 5 | A depth or stencil object refused at the draw (`mali: a depth or stencil object drawn in another framebuffer's depth/stencil pair is not built yet`); dEQP: `Got unexpected error` 21, `Image comparison failed` 14 | Fail | 35 | `fbo.render.{recreate_depthbuffer,recreate_stencilbuffer,shared_depthbuffer}.*_depth_component16_stencil_index8` | plan #309 |
+| 6 | A draw failed with `GL_OUT_OF_MEMORY`: `backend::draw` returned an error other than `-ENOTSUP` (`-ENOMEM`, `-EINVAL` or `-EIO`, `src/mali/backend.rs`); not a refusal | ResourceError | 33 | `shaders.matrix` 24 (`*_vertex`), `shaders.random` 6, `shaders.conditionals` 2, `fragment_ops.interaction` 1 | new |
+| 7 | Wrong pixels from a vertex-shader cube look-up, with no refusal in the chunk (row `T6S1R17`: `draws=1260 refused=0`); dEQP: `Image comparison failed` | Fail | 16 | `texture.vertex.cube.filtering.*` 10 (mip filters), `texture.vertex.cube.wrap.{clamp,mirror}_*` 6 | new |
+| 8 | Wrong pixels that no refusal of the chunk explains: `fbo.render.stencil_clear.rbo_rgb565_{stencil_index8,depth_component16_stencil_index8}` 2 (`Image comparison failed`), `texture.mipmap.cube.bias.linear_{linear,nearest}` 2 (`Image verification failed`) | Fail | 4 | `fbo.render`, `texture.mipmap` | new |
+| 9 | A feature the context does not offer: `EXT_clip_control` 8, no multisample buffers 16, `EXT_multisampled_render_to_texture` 1, no compressed format with sub-image updates 9: the 34 of section C | NotSupported | 34 | `clip_control`, `multisample`, `negative_api.texture` | accepted (section C) |
+| 10 | `rasterization.interpolation.basic.lines`, `.projected.lines`, `.projected.lines_wide`: the Pi 4's three of section C | QualityWarning | 3 | `rasterization` | accepted (section C) |
+| | **Total** | | **11,905** | Fail 10,898 (1, 3, 4, 5, 7, 8), NotSupported 971 (2, 9), ResourceError 33, QualityWarning 3 | |
+
+### M.2 The refusals by the chunk's first refusal
+
+Causes 1 and 2 (10,788 cases) by the `MaliError` that the exit line of
+their chunk names first (`src/shaderc/online/mali/mod.rs`). Every one is a
+variant of the compiler, so they are plan #309's. A chunk holds one to 400
+cases, and its later refusals may be other variants, so the counts say where
+each variant stops a chunk first, not how many shaders it refuses.
+
+| `MaliError` | Fail | NotSupported | Cases |
+|---|---:|---:|---:|
+| `IntValue` (an integer or boolean value) | 4,860 | 321 | 5,181 |
+| `Arithmetic` | 1,646 | 24 | 1,670 |
+| `ColourForm` (a gl_FragColor lane other than the varying's own or a constant) | 616 | 120 | 736 |
+| `ConstantFold` (a constant operation on a value that is not a finite normal float) | 708 | 0 | 708 |
+| `VaryingDuplicate` (two varying lanes of equal value) | 594 | 8 | 602 |
+| `VaryingNotFromAttribute` (a varying lane computed from no attribute) | 304 | 0 | 304 |
+| `AlgebraicForm` | 239 | 0 | 239 |
+| `PositionLane` (a gl_Position lane left unwritten) | 0 | 208 | 208 |
+| `NegZeroShared` | 196 | 0 | 196 |
+| `TexKind` | 193 | 0 | 193 |
+| `UniformPrecision` (a vertex shader uniform that is not highp) | 175 | 0 | 175 |
+| `TooManyLocals` (more than 32 local variables) | 37 | 112 | 149 |
+| `LoopMediump` | 37 | 87 | 124 |
+| `ArithConstant` | 92 | 0 | 92 |
+| `LoopVertex` | 16 | 48 | 64 |
+| `LoopForm` | 50 | 9 | 59 |
+| `Invariant` | 36 | 0 | 36 |
+| `MixedPrecision` (#4496) | 28 | 0 | 28 |
+| `ColourZeroHalf` (a colour pair of a varying lane and 0.0) | 24 | 0 | 24 |
+| **Total** | **9,851** | **937** | **10,788** |
+
+The 208 fragment loops with a run-time bound that
+`docs/notes/mali-gles2-forecast.md` section 3 counts as hang-risks are row
+`T6S3R08`. All 208 are NotSupported, refused at link (`PositionLane` first,
+`refused=210`, `draws=0`). None reached the GPU, so the hang risk is still
+untested.
+
+### M.3 Still open
+
+- Causes 6, 7 and 8 are new. Cause 4 needs the refusal of each case before
+  its cases can be held by plan #309 or opened as defects of the GL core.
+- The library names only the first refusal of a chunk. A per-case refusal
+  line would let the tally split causes 1, 2 and 4 by variant.
+- 0 Fail is the stage 5 criterion. The tree is rerun once plan #309's
+  refusals move, from one origin/main commit, and replaces this section.

@@ -380,6 +380,41 @@ is from the two-row set.
   42, 33 ran, 0 failed, **0 GL errors**, in both runs; GT 48 of 49 (case 44, #6) then 49 of 49. The glmark2 cell above is
   now a run from main (`bebce725`, GL errors raised 0 in all three arms).
 
+## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), dEQP-GLES2 (stage 5)
+
+The first whole tree, 2026-11-12/13: `tools/cts/mali-deqp-run.sh` over the 76
+rows of `tools/cts/mali-gles2-tree.txt`, on the board's own Armbian (kernel
+6.18.55-current-rockchip64, panthor) with the `tools/mali/panthor-gles` pair
+(issue #20). Each slice is built from one origin/main commit. S2 to S4 share
+`src/mali` and `src/shaderc/online/mali` with origin/main `d1e77916`; S1 and
+S1b ran `a50d87b5`'s, 26 Mali commits older. Causes:
+`docs/es2-cts-failures.md` section M.
+
+| Slice (`tools/cts/log/`) | Main | Rows | Cases | Pass | Fail | NotSupported | ResourceError | QualityWarning | Lost | Kernel lines / resets |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `2026-11-12-t6-gles2-S1-a50d87b5` | `a50d87b5` | 1-16 | 3,192 | 2,564 | 591 | 34 | 0 | 3 | 0 | 0 / 0 |
+| `2026-11-12-t6-gles2-S1b-a50d87b5` | `a50d87b5` | 17-24 | 1,949 | 95 | 1,854 | 0 | 0 | 0 | 0 | 0 / 0 |
+| `2026-11-13-t6-gles2-S2-1bd2074f` | `1bd2074f` | 25-36 | 4,175 | 1,161 | 3,013 | 0 | 1 | 0 | 0 | 0 / 0 |
+| `2026-11-13-t6-gles2-S2b-1bd2074f` | `1bd2074f` | 37-38 | 697 | 84 | 613 | 0 | 0 | 0 | 0 | 0 / 0 |
+| `2026-11-13-t6-gles2-S3-4ecefc7b` | `4ecefc7b` | 39-57 | 3,121 | 333 | 2,059 | 700 | 29 | 0 | 0 | 0 / 0 |
+| `2026-11-13-t6-gles2-S3b-4ecefc7b` | `4ecefc7b` | 58-68 | 1,356 | 36 | 1,125 | 194 | 1 | 0 | 0 | 0 / 0 |
+| `2026-11-13-t6-gles2-S4-9b5daae8` | `9b5daae8` | 69-76 | 2,675 | 987 | 1,643 | 43 | 2 | 0 | 0 | 0 / 0 |
+| **whole list** | | 1-76 | **17,165** | **5,260** | **10,898** | **971** | **33** | **3** | **0** | **0 / 0** |
+
+- All 76 chunks ended `done`: no crash, hang or GPU fault, ssh answered after
+  every chunk, and each slice has the same boot id before and after.
+  `mali-deqp-tally.py --check-cover` exits 0 against origin/main `d1e77916`.
+- Not Pass, by cause: compile or link refused by the online compiler 9,851
+  Fail and 937 NotSupported (plan #309, #33); blend shader refused at the
+  draw 828; GL errors or missing pixels in chunks with refusals 164; a depth
+  or stencil object refused at the draw 35; draws that fail with
+  `GL_OUT_OF_MEMORY` 33 (ResourceError, new); wrong pixels of
+  `texture.vertex.cube` with no refusal 16 (new); wrong pixels no refusal
+  explains 4 (new); the accepted 34 NotSupported and 3 QualityWarning of
+  `docs/es2-cts-failures.md` section C.
+- The 208 hang-risk fragment loops (`docs/notes/mali-gles2-forecast.md`
+  section 3, row `T6S3R08`) were all refused at link, so none ran on the GPU.
+
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 
 `panthor-gltest --sweep` on the board's own Linux (panthor, not Zephyr), the
