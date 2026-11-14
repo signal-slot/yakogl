@@ -277,22 +277,39 @@ What Linux 6.18 leaves depends on the kexec route:
 So adoption needs the crash route. The smallest thing Zephyr must write to
 show its own buffer, in this order:
 
-1. Read VP0 `DSP_CTRL` (STANDBY clear), Esmart0 or the window Linux used
-   (the dump says which), and the mode from the VP timing registers; refuse
-   if they differ from the build's mode.
-2. Stop the IOMMU translating: for both `vop_mmu` register sets, `COMMAND` =
-   disable paging (or force reset) and check `STATUS` bit 0 clear. Until this
-   is done the VOP reads through tables Zephyr may overwrite.
-3. Point the window at Zephyr's buffer: `REGION0_YRGB_MST` (physical, below
-   4 GiB), `REGION0_VIR` (stride / 4), format ARGB8888 code 0 with R/B swap 0
-   for XRGB8888 memory order, AFBC off if Linux used a Cluster window with
-   AFBC (then switch to Esmart0: `OVL_LAYER_SEL`/`OVL_PORT_SEL` as well).
-4. `REG_CFG_DONE` = bit 15 | bit 0 | bit 16; the change lands at the next
+1. Read VP0 `DSP_CTRL` (STANDBY clear), the windows Linux enabled and the
+   mode from the VP timing registers; refuse if the mode differs from the
+   build's. Linux shows its picture on Cluster0 of VP0, and of VP1 for the
+   second HDMI output (board reading, 2026-11-12).
+2. Turn off Linux's windows (`ip::vop2::take_over`). It finds the running
+   ports itself (`DSP_CTRL` STANDBY clear), since whether Linux drives VP1
+   as well is not something the caller should have to know. It disables
+   every window except the one to keep, whatever its port, a Cluster window
+   with both its enable bits (`WIN0_EN` in `CLUSTER_WIN_CTRL0`,
+   `CLUSTER_ENABLE` in `CLUSTER_CTRL`; `rockchip_vop2_reg.c:283`, `:314`;
+   Linux does the same, `rockchip_drm_vop2.c:149-155`). It refuses a window
+   to keep that is already enabled (its address is Linux's). Then
+   `REG_CFG_DONE` for every running port and one frame start waited for on
+   each, so no window of Linux fetches any more.
+3. Stop the IOMMU translating (`ip::rk_iommu::paging_off`): for both
+   `vop_mmu` register sets Linux's order, stall, disable paging,
+   `INT_MASK` = 0 and `DTE_ADDR` = 0, stall off (`rockchip-iommu.c:911-925`),
+   then check `STATUS` bit 0 clear. Done after step 2, nothing reads a
+   Linux IOVA as a physical address; until it is done the VOP would read
+   through tables Zephyr may overwrite.
+4. Make Esmart0 the only layer of VP0 (`ip::vop2::overlay_single`:
+   `OVL_PORT_SEL` with its `REG_CFG_DONE` and the wait until it is in force,
+   then `OVL_LAYER_SEL`) and point it at Zephyr's buffer
+   (`ip::vop2::window_show`): `REGION0_YRGB_MST` (physical, below 4 GiB),
+   `REGION0_VIR` (stride / 4), format ARGB8888 code 0 with R/B swap 0 for
+   XRGB8888 memory order, enable last.
+5. `REG_CFG_DONE` = bit 15 | bit 0 | bit 16; the change lands at the next
    frame.
 
-Steps 2-4 are a handful of 32-bit writes. Doing step 3 before step 2 shows
-garbage for at most one frame, never a fault, because both take effect at
-the frame boundary only after `REG_CFG_DONE`; the design does 2 first anyway.
+The display is dark from step 2 to step 5, for a few frames. Step 4 before
+step 2 would leave Linux's Cluster0 enabled outside every port's layer
+range, and the source does not say whether such a window still fetches;
+step 3 before step 2 would let it read its IOVA as a physical address.
 
 What it needs: a `crashkernel=` reservation that holds the image window
 0x10000000-0x1fffffff on Armbian's command line (today the T6 has none: the
