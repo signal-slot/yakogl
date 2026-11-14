@@ -343,6 +343,8 @@ python3 -I $T/blend_deqp_ref.py random | pan_shc --blend > rnd.json
 python3 -I $T/blend_deqp_ref.py digest rnd.json > $T/testdata/blend_random.sha   # 2700 keys
 python3 -I $T/blend_deqp_ref.py u32 | pan_shc --blend > u32.json
 python3 -I $T/blend_deqp_ref.py u32words u32.json > $T/testdata/blend_u32.words   # 100 keys
+python3 -I $T/blend_deqp_ref.py min_f32 | pan_shc --blend > min.json
+python3 -I $T/blend_deqp_ref.py lines min.json > $T/testdata/blend_min_f32.words   # 1 key, a word a line
 ```
 
 A key may end in `f32`: the fragment colour is fp32 (a highp ES 3.00
@@ -362,7 +364,9 @@ with a blend shader, the blend colour 0.2, 0.4, 0.6, 0.8); `blend_random.sha`
 are identical. The tests are `every_deqp_gles2_blend_shader_is_mesa_s` and
 `random_blend_shaders_are_mesa_s` (src/shaderc/online/mali/tests.rs); the
 gate's pan_shc row (MESA_PAN_TREE; a gap without it) makes them,
-`blend_u32.words` and `blend_nir_rules.rs` again and compares the bytes.
+`blend_u32.words`, `blend_min_f32.words` (the backend test
+`a_highp_colour_s_blend_shader_reads_it_as_fp32` reads it) and
+`blend_nir_rules.rs` again and compares the bytes.
 
 `src/shaderc/online/mali/blend_nir_rules.rs` is generated from the same tree's
 `nir_opt_algebraic.py` and `bifrost_nir_algebraic.py`:

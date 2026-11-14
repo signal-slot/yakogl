@@ -2708,9 +2708,10 @@ if command -v cc >/dev/null 2>&1; then
     [ "$total" -eq 5 ] || { echo "pan_shc: $total regions compared, 5 planned"; return 1; }
     echo "pan_shc: 5 regions compared (planned 5), 0 differ"
     # The blend shader references (README-pan_shc.md "Blend shaders"):
-    # pan_shc --blend on every key of blend_deqp.words, blend_random.sha and
-    # blend_u32.words gives their bytes again, and blend_nir_rules.rs is what
-    # gen_blend_nir_rules.py makes from this tree's NIR algebraic rules.
+    # pan_shc --blend on every key of blend_deqp.words, blend_random.sha,
+    # blend_u32.words and blend_min_f32.words gives their bytes again, and
+    # blend_nir_rules.rs is what gen_blend_nir_rules.py makes from this
+    # tree's NIR algebraic rules.
     local shc=$MESA_PAN_TREE/build-pan/src/panfrost/pan_shc/pan_shc
     python3 -I tools/mali/blend_deqp_ref.py list | "$shc" --blend >"$dir/blend_deqp.json" 2>/dev/null &&
       python3 -I tools/mali/blend_deqp_ref.py words "$dir/blend_deqp.json" | cmp - tools/mali/testdata/blend_deqp.words ||
@@ -2721,7 +2722,10 @@ if command -v cc >/dev/null 2>&1; then
     python3 -I tools/mali/blend_deqp_ref.py u32 | "$shc" --blend >"$dir/blend_u32.json" 2>/dev/null &&
       python3 -I tools/mali/blend_deqp_ref.py u32words "$dir/blend_u32.json" | cmp - tools/mali/testdata/blend_u32.words ||
       { echo "pan_shc --blend: not blend_u32.words"; return 1; }
-    echo "pan_shc --blend: blend_deqp.words, blend_random.sha and blend_u32.words made again, byte-equal"
+    python3 -I tools/mali/blend_deqp_ref.py min_f32 | "$shc" --blend >"$dir/blend_min_f32.json" 2>/dev/null &&
+      python3 -I tools/mali/blend_deqp_ref.py lines "$dir/blend_min_f32.json" | cmp - tools/mali/testdata/blend_min_f32.words ||
+      { echo "pan_shc --blend: not blend_min_f32.words"; return 1; }
+    echo "pan_shc --blend: blend_deqp.words, blend_random.sha, blend_u32.words and blend_min_f32.words made again, byte-equal"
     exec 8>&-
     PYTHONDONTWRITEBYTECODE=1 python3 -I tools/mali/gen_blend_nir_rules.py "$MESA_PAN_TREE" |
       cmp - src/shaderc/online/mali/blend_nir_rules.rs ||

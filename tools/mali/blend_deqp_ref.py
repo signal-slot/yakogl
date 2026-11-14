@@ -33,6 +33,9 @@ once each, in the order the tests first draw them.
   blend_deqp_ref.py u32words <pan_shc out>
                                          their reference (tools/mali/
                                          testdata/blend_u32.words)
+  blend_deqp_ref.py min_f32              the key of blend_min_f32.words
+  blend_deqp_ref.py lines <pan_shc out>  its words, one a line (tools/mali/
+                                         testdata/blend_min_f32.words)
 
 The reference file has one line an equation: the equation as pan_shc reads
 it, ':', then the shader's words (hex, little-endian u64, the padding
@@ -158,6 +161,10 @@ def u32_keys():
     return [k[:-len("f32")] + "u32" for k in f32[:100]]
 
 
+# the key of blend_min_f32.words
+MIN_F32 = "min one one min one one 15 1 f32"
+
+
 # the factor order the random draw was made with
 FACTORS_RANDOM = [
     "zero", "one", "src_color", "inv_src_color", "dst_color", "inv_dst_color",
@@ -198,6 +205,16 @@ def main():
         return 0
     if sys.argv[1:] == ["u32"]:
         print("\n".join(u32_keys()))
+        return 0
+    if sys.argv[1:] == ["min_f32"]:
+        print(MIN_F32)
+        return 0
+    if len(sys.argv) == 3 and sys.argv[1] == "lines":
+        got = read_words(sys.argv[2])
+        if list(got) != [MIN_F32]:
+            print(f"blend_deqp_ref: not the one key '{MIN_F32}'", file=sys.stderr)
+            return 1
+        print("\n".join(got[MIN_F32]))
         return 0
     if sys.argv[1:] == ["list"]:
         print("\n".join(equations()))
