@@ -60,9 +60,11 @@ reports `max_varyings = V3D_MAX_FS_INPUTS / 4` = 16
   sizes must both be re-run through `vpm_fields` in the compiler item.
 - **Draw side** (`driver/src/v3d/v3d_job.c:501-513`, `759-764`, `800-802`;
   `v3d_frame.c:595-598`, `694-697`; `v3d_frame.h:174-176`): `struct
-  v3d_fs_prog` holds word 0 only (24 varyings), the job builder refuses
-  `num_inputs > 24`, and `EMIT_VARYING_FLAGS` emits one packet per kind
-  with the higher words zeroed (`ZERO_ALL_*` when word 0 is 0).
+  v3d_fs_prog` holds the flat, centroid and non-perspective flags as two
+  32-bit words each (`*_flags`, `*_flags_hi`), the job builder takes up to 64
+  inputs, and `EMIT_VARYING_FLAGS` writes the 24-bit words that hold a flag,
+  input i in word i / 24 (the first written word zeroes the ones below it, the
+  later ones leave the rest; `ZERO_ALL_*` when no flag is set).
   `number_of_varyings_in_fragment_shader` is `fs->num_inputs`
   (`v3d_frame.c:697`). The Rust mirror is `V3dFsProg`
   (`src/v3d/ffi.rs:76-95`, pin at `ffi.rs:835`, C side
@@ -149,8 +151,9 @@ asked. In either case the constants in `context.rs:193-194` stop being
 - The ES 3.00 link does not check varying component counts
   (`reflect.rs:1068-1070`); with 64 inputs a shader past the limit should
   fail at link, as dEQP expects.
-- `tools/shaders/known-uncompilable-v3d.txt:38-40` needs a separate entry
-  per build once the limits differ.
+- `tools/shaders/known-uncompilable-v3d.txt` no longer lists
+  `es100/varyings15` (the V3D links 15 varying vectors); a build whose limit
+  differs needs its own entry.
 - A Pi 4 board check, a step for #320: 16 vec4 varyings plus
   `gl_PointCoord` (does `num_inputs` of the shader record, two implicit
   point varyings included, stay within what the hardware takes?), and

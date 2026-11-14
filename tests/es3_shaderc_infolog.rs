@@ -647,11 +647,11 @@ fn every_refusal_has_an_info_log() {
     }
     /* V3D (the Pi 4): `centroid` is refused at link, by name
      * (`NotYet("centroid varying")`, src/shaderc/online/v3d), and so are
-     * flat varyings past input 31 and more than its varyings. Ratchets. */
+     * more than its 15 varyings. Ratchets. */
     #[cfg(feature = "gpu-v3d")]
     {
-        assert!(refused_mustpass <= 55, "{refused_mustpass} mustpass programs refused, ceiling 55");
-        assert!(refused.len() <= 202, "{} programs refused, ceiling 202", refused.len());
+        assert!(refused_mustpass <= 0, "{refused_mustpass} mustpass programs refused, ceiling 0");
+        assert!(refused.len() <= 108, "{} programs refused, ceiling 108", refused.len());
     }
 
     /* The GL API's side of the same claim (glTransformFeedbackVaryings, then
@@ -1203,8 +1203,10 @@ mod gl_api {
             ("Abi(LoadBalancingTempsUnmeasured {", false),
             #[cfg(feature = "gpu-v3d")]
             ("Abi(TooManyVaryings { got: ", true),
+            /* the 60-input fragment shaders the V3D accepts since 15 varying vectors: a random
+             * case's live values can still exceed the two-thread register file */
             #[cfg(feature = "gpu-v3d")]
-            ("varying past input 31", false),
+            ("more live values than 2 threads have registers", false),
         ];
         for (name, vectors, r) in &refused {
             let log = format!("{r:?}");
