@@ -72,9 +72,9 @@ use super::framebuffer::{
 };
 use super::types::*;
 use crate::backend::{
-    self, gles_surf_bytes_per_pixel, gles_surf_int_layout, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGB565,
-    GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F,
-    GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
+    self, gles_surf_bytes_per_pixel, gles_surf_int_layout, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGB10_A2,
+    GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888, GLES_TEXFMT_R16F,
+    GLES_TEXFMT_R32F, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
@@ -566,6 +566,11 @@ fn decode_float(img: &Image, raw: &[u8; 16]) -> [f32; 4] {
         GLES_SURF_RGBA16F => [half(0), half(2), half(4), half(6)],
         GLES_SURF_R16F => [half(0), 0.0, 0.0, 1.0],
         GLES_SURF_R32F => [f32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]), 0.0, 0.0, 1.0],
+        GLES_SURF_RGB10_A2 => {
+            let w = u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
+            let c = |s: u32, max: f32| ((w >> s) & if max > 3.0 { 0x3ff } else { 3 }) as f32 / max;
+            [c(0, 1023.0), c(10, 1023.0), c(20, 1023.0), c(30, 3.0)]
+        }
         _ => {
             let (r, b) = if img.bgra { (raw[2], raw[0]) } else { (raw[0], raw[2]) };
             let a = if img.opaque { 255 } else { raw[3] };
@@ -623,6 +628,12 @@ fn encode_float(img: &Image, mut v: [f32; 4], raw: &mut [u8; 16]) {
         }
         GLES_SURF_R16F => half(raw, 0, v[0]),
         GLES_SURF_R32F => raw[..4].copy_from_slice(&v[0].to_le_bytes()),
+        GLES_SURF_RGB10_A2 => {
+            /* round(clamp(v) * (2^b - 1)); NaN clamps through and casts to 0 */
+            let q = |x: f32, max: f32| (x.clamp(0.0, 1.0) * max + 0.5) as u32;
+            let w = q(v[0], 1023.0) | q(v[1], 1023.0) << 10 | q(v[2], 1023.0) << 20 | q(v[3], 3.0) << 30;
+            raw[..4].copy_from_slice(&w.to_le_bytes());
+        }
         _ => {
             let b: [u8; 4] = core::array::from_fn(|ch| {
                 if img.surf == GLES_SURF_SRGB8_A8 && ch < 3 {
@@ -1478,6 +1489,91 @@ mod tests {
         blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
         let want: Vec<u8> = [1.0f32, 0.0, 128.0 / 255.0, 64.0 / 255.0].iter().flat_map(|&v| half(v)).collect();
         assert_eq!(stored(&gl, rb_gpu(&gl, f_rb), 2, 8, 1, 0), want);
+    }
+
+    /// The little-endian bytes of a 10/10/10/2 word.
+    fn a2(r: u32, g: u32, b: u32, a: u32) -> Vec<u8> {
+        (r | g << 10 | b << 20 | a << 30).to_le_bytes().to_vec()
+    }
+
+    /// Is GL_RGB10_A2 its own renderbuffer class in this build (the 10/10/10/2
+    /// word)? Elsewhere it is RGBA8888 and these cases do not apply.
+    fn rgb10a2_class() -> bool {
+        renderbuffer_surf_format(GL_RGB10_A2) == GLES_SURF_RGB10_A2
+    }
+
+    /// A blit out of and into an RGB10_A2 renderbuffer converts through the
+    /// 10/10/10/2 word, not RGBA8 bytes: out is `w / 1023` (alpha `a / 3`)
+    /// rounded to the byte, in is `round(v * 1023)` (alpha `round(v * 3)`),
+    /// and RGB10_A2 to RGB10_A2 is exact.
+    #[test]
+    fn rgb10a2_renderbuffer_converts_as_ten_ten_ten_two() {
+        let gl = TestGl::new(8, 8);
+        if !rgb10a2_class() {
+            return;
+        }
+        let (s_fb, s_rb) = rbo_fbo(GL_RGB10_A2, 2, 1);
+        let (u_fb, u_rb) = rbo_fbo(GL_RGBA8, 2, 1);
+        let (d_fb, d_rb) = rbo_fbo(GL_RGB10_A2, 2, 1);
+        let px = [(1023, 512, 0, 3), (341, 1, 1022, 1)];
+        render(&gl, rb_gpu(&gl, s_rb), 2, 1, 4, |x, _| {
+            let (r, g, b, a) = px[x as usize];
+            a2(r, g, b, a)
+        });
+        /* out: RGBA8 holds round(v * 255) of the 10-bit (2-bit) fraction */
+        bind(s_fb, u_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        for (x, &(r, g, b, a)) in px.iter().enumerate() {
+            let want: Vec<u8> = [r as f64 / 1023.0, g as f64 / 1023.0, b as f64 / 1023.0, a as f64 / 3.0]
+                .iter()
+                .map(|&f| unorm_ref(f, 8))
+                .collect();
+            assert_eq!(stored(&gl, rb_gpu(&gl, u_rb), 2, 4, x as u32, 0), want, "to RGBA8, pixel {x}");
+        }
+        assert_eq!(stored(&gl, rb_gpu(&gl, u_rb), 2, 4, 0, 0), vec![255, 128, 0, 255]);
+        /* in: byte v is v / 255 of full scale, kept to 10 (2) bits */
+        render(
+            &gl,
+            rb_gpu(&gl, u_rb),
+            2,
+            1,
+            4,
+            |x, _| if x == 0 { vec![255, 128, 0, 255] } else { vec![85, 1, 254, 85] },
+        );
+        bind(u_fb, d_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let q = |v: u32, max: f64| (v as f64 / 255.0 * max + 0.5).floor() as u32;
+        let want = |p: [u32; 4]| a2(q(p[0], 1023.0), q(p[1], 1023.0), q(p[2], 1023.0), q(p[3], 3.0));
+        assert_eq!(stored(&gl, rb_gpu(&gl, d_rb), 2, 4, 0, 0), want([255, 128, 0, 255]));
+        assert_eq!(stored(&gl, rb_gpu(&gl, d_rb), 2, 4, 1, 0), want([85, 1, 254, 85]));
+        assert_eq!(stored(&gl, rb_gpu(&gl, d_rb), 2, 4, 0, 0), a2(1023, 514, 0, 3));
+        /* RGB10_A2 to RGB10_A2: every word survives */
+        let (e_fb, e_rb) = rbo_fbo(GL_RGB10_A2, 2, 1);
+        bind(s_fb, e_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        for (x, &(r, g, b, a)) in px.iter().enumerate() {
+            assert_eq!(stored(&gl, rb_gpu(&gl, e_rb), 2, 4, x as u32, 0), a2(r, g, b, a), "round trip, pixel {x}");
+        }
+    }
+
+    /// LINEAR out of an RGB10_A2 renderbuffer filters the decoded floats:
+    /// a 0 / 1023 pair is 0.5 (RGBA8 128), alpha 0 / 3 likewise.
+    #[test]
+    fn rgb10a2_renderbuffer_filters_linear_after_decode() {
+        let gl = TestGl::new(8, 8);
+        if !rgb10a2_class() {
+            return;
+        }
+        let (s_fb, s_rb) = rbo_fbo(GL_RGB10_A2, 2, 1);
+        let (o_fb, o_rb) = rbo_fbo(GL_RGBA8, 1, 1);
+        render(&gl, rb_gpu(&gl, s_rb), 2, 1, 4, |x, _| if x == 0 { a2(0, 0, 1023, 0) } else { a2(1023, 0, 1023, 3) });
+        bind(s_fb, o_fb);
+        blit([0, 0, 2, 1], [0, 0, 1, 1], GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(stored(&gl, rb_gpu(&gl, o_rb), 1, 4, 0, 0), vec![128, 0, 255, 128]);
     }
 
     /// sRGB on either side of a blit (ES 3.0.6 4.3.3; dEQP's
