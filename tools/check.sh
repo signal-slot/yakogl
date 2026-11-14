@@ -1896,6 +1896,11 @@ step "test    host-test,gpu-vivante,shaderc-online (tests/es3_flatshade_guard.rs
 # the GL core and the real job builder. Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_v3d_varyings.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_varyings
+# The V3D compiler at the hardware's limits: 64 fragment inputs and their
+# flag words, 69 VPM output rows, 65 inputs refused by name, on SHC_ONLINE and
+# the QPU interpreter. Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/v3d_varyings_compile.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_varyings_compile
 # The `msaa-fbo` feature (no effect yet) builds with each GPU's host
 # configuration, so a later item that reads it starts from a tree that
 # compiles.

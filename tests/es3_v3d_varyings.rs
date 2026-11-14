@@ -683,15 +683,17 @@ mod v3d {
         assert_eq!(d.flat_zeroed, 1);
     }
 
-    /// One vector past the limit is a link error, not a draw (the V3D's
-    /// refusal is the code generator's, `VpmRowOutOfRange`).
+    /// One vector past the limit is a link error, not a draw. The V3D's
+    /// refusal is the code generator's: select takes the 69 VPM rows
+    /// (`MAX_VPM_OUTPUT_ROWS`), but 64 computed components do not fit the
+    /// registers (`NotYet`, no spilling yet). The GL link does not count
+    /// varying components itself (docs/notes/v3d-varyings.md, "Open").
     #[test]
     fn sixteen_varying_vectors_do_not_link() {
         let _g = rig();
         let (vs, fs) = sources(16, 16, &|_| "");
         let log = link(&vs, &fs).expect_err("16 vec4 varyings exceed GL_MAX_VARYING_VECTORS");
-        /* the code generator's refusal (the VPM row it would write is past
-         * the record), not a draw; the log says so */
+        /* the code generator's refusal, not a draw; the log says so */
         assert!(!log.is_empty(), "the link fails with a log");
     }
 

@@ -399,8 +399,8 @@ pub enum SelectError {
     VaryingNotAnInput,
     /// An attribute the program reads is not in the record list it was given.
     AttributeWithoutRecord,
-    /// A VPM row past what this cut writes (16 attribute records, 64 output
-    /// rows).
+    /// A VPM row past what this cut writes (16 attribute records,
+    /// [`MAX_VPM_OUTPUT_ROWS`] output rows).
     VpmRowOutOfRange,
     /// A VPM output was written before every attribute was read: the input
     /// and output segments are shared, so the write could overwrite an input
@@ -425,6 +425,12 @@ impl From<ArenaError> for SelectError {
         SelectError::OutOfScratch
     }
 }
+
+/// The most VPM rows a vertex shader writes: the four fixed-function rows
+/// (v3d_nir_emit_ff_vpm_outputs), the point size, and one row for each of
+/// the 64 fragment inputs the hardware takes (Mesa `V3D_MAX_FS_INPUTS`,
+/// v3d_limits.h). docs/notes/v3d-varyings.md.
+pub const MAX_VPM_OUTPUT_ROWS: u32 = 4 + 1 + 64;
 
 /// The selected program and the facts about it the shader record needs.
 #[derive(Clone, Copy, Debug)]
@@ -2557,7 +2563,7 @@ pub fn select_vertex<'a>(
     } else {
         (0, 4 + skip + p.varyings.len() as u32)
     };
-    if rows > 64 {
+    if rows > MAX_VPM_OUTPUT_ROWS {
         return Err(SelectError::VpmRowOutOfRange);
     }
     /* v3d_nir_emit_ff_vpm_outputs */
