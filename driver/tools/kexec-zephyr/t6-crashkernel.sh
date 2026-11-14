@@ -146,13 +146,23 @@ set)
 	for c in CONFIG_CRASH_RESERVE CONFIG_CRASH_DUMP CONFIG_KEXEC; do
 		grep -qx "$c=y" "$R/boot/config-$rel" 2>/dev/null || no "the kernel $rel lacks $c=y: it would ignore the reservation"
 	done
+	# set changes $F only by its rename, after new.sha256 is written: a set
+	# cut before that left $F as it was, and is started again.
 	if [ -d "$S" ]; then
 		if [ -f "$S/new.sha256" ] && [ "$(sha "$F")" = "$(cat "$S/new.sha256")" ]; then
 			say "already set by this tool ($F sha256 $(sha "$F")); nothing to do"
 			exit 0
 		fi
-		no "$S exists but $F is not the file set wrote: run status, then undo or ask who changed it"
+		if [ ! -f "$S/new.sha256" ] ||
+			{ [ -f "$S/orig.sha256" ] && [ "$(sha "$F")" = "$(cat "$S/orig.sha256")" ]; }; then
+			say "an earlier set stopped before it changed $F: its state is removed and set starts again"
+			rm -f "$F.yakogl-new"
+			rm -rf "$S"
+		else
+			no "$S exists but $F is neither the file set found nor the one it wrote: run status, then ask who changed it"
+		fi
 	fi
+	rm -f "$F.yakogl-new"
 	if grep -q "$(printf "\r")" "$F"; then no "$F has CR line ends"; fi
 	[ -z "$(tail -c 1 "$F")" ] || no "$F does not end with a newline"
 	n=$(grep -c "$E" "$F" || true)
@@ -168,9 +178,11 @@ set)
 		new="extraargs=$TOKEN"
 	fi
 	mkdir "$S" || no "cannot make $S"
-	cp -p "$F" "$S/armbianEnv.txt.orig" || no "cannot copy $F"
-	sha "$F" >"$S/orig.sha256"
-	[ "$(sha "$S/armbianEnv.txt.orig")" = "$(cat "$S/orig.sha256")" ] || no "the copy differs from $F"
+	# From here until the rename a refusal also removes what set made.
+	bail() { rm -f "$F.yakogl-new"; rm -rf "$S"; no "$@"; }
+	cp -p "$F" "$S/armbianEnv.txt.orig" || bail "cannot copy $F"
+	sha "$F" >"$S/orig.sha256" || bail "cannot write $S/orig.sha256"
+	[ "$(sha "$S/armbianEnv.txt.orig")" = "$(cat "$S/orig.sha256")" ] || bail "the copy differs from $F"
 	if [ "$n" = 1 ]; then
 		awk -v new="$new" "/^[ \t]*extraargs=/ { print new; next } { print }" "$F" >"$F.yakogl-new"
 	else
@@ -180,22 +192,30 @@ set)
 	if ! { [ "$(grep -v "$E" "$F")" = "$(grep -v "$E" "$F.yakogl-new")" ] &&
 		[ "$(grep "$E" "$F.yakogl-new")" = "$new" ] &&
 		[ "$(wc -l <"$F.yakogl-new")" -eq $(( $(wc -l <"$F") + 1 - n )) ]; }; then
-		rm -f "$F.yakogl-new"; rm -rf "$S"
-		no "the new file would change more than the extraargs= line"
+		bail "the new file would change more than the extraargs= line"
 	fi
 	chmod --reference="$F" "$F.yakogl-new" 2>/dev/null || true
+	sha "$F.yakogl-new" >"$S/new.sha256" || bail "cannot write $S/new.sha256"
 	sync
-	mv "$F.yakogl-new" "$F" || no "cannot rename the new file over $F"
-	sync
-	sha "$F" >"$S/new.sha256"
+	mv "$F.yakogl-new" "$F" || bail "cannot rename the new file over $F"
 	sync
 	say "extraargs before (crashkernel=, cma= words): $(printf "%s\n" "$old" | toks)"
 	say "extraargs after  (crashkernel=, cma= words): $(printf "%s\n" "$new" | toks)"
 	say "$F sha256 $(cat "$S/orig.sha256") -> $(cat "$S/new.sha256"); the copy for undo is $S/armbianEnv.txt.orig"
 	;;
 undo)
-	[ -f "$S/armbianEnv.txt.orig" ] && [ -f "$S/orig.sha256" ] && [ -f "$S/new.sha256" ] ||
-		no "no copy from set in $S: nothing to undo"
+	[ -d "$S" ] || no "no copy from set in $S: nothing to undo"
+	if [ ! -f "$S/new.sha256" ]; then
+		# set writes new.sha256 before its rename: this set never changed $F.
+		rm -f "$F.yakogl-new"
+		rm -rf "$S"
+		sync
+		say "the set in $S stopped before it changed $F (sha256 $(sha "$F")): its state is removed"
+		exit 0
+	fi
+	[ -f "$S/armbianEnv.txt.orig" ] && [ -f "$S/orig.sha256" ] ||
+		no "$S has new.sha256 but no copy: not restoring; ask who changed $S"
+	rm -f "$F.yakogl-new"
 	orig=$(cat "$S/orig.sha256")
 	[ "$(sha "$S/armbianEnv.txt.orig")" = "$orig" ] || no "the copy $S/armbianEnv.txt.orig is not the file set found (sha256 differs)"
 	now=$(sha "$F")

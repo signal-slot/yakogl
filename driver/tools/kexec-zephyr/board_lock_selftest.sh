@@ -474,7 +474,21 @@ fb=$tmp/ckboard
 mkdir -p "$tmp/fakessh" "$fb/boot" "$fb/proc/device-tree" "$fb/proc/sys/kernel" "$fb/sys/kernel" "$fb/root"
 printf '#!/bin/sh\nfor a; do last=$a; done\nexec sh -c "$last"\n' > "$tmp/fakessh/ssh"
 printf '#!/bin/sh\ncat "%s/dmesg"\n' "$fb" > "$tmp/fakessh/dmesg"
-chmod +x "$tmp/fakessh/ssh" "$tmp/fakessh/dmesg"
+# sync: counts its calls, logs whether set's new file is still beside the
+# file and the file's sha256, and at call $CK_KILL_AT kills the board
+# script that called it (a set or undo cut there).
+cat > "$tmp/fakessh/sync" <<'EOS'
+#!/bin/sh
+n=$(( $(cat "$CK_SYNC_N" 2>/dev/null || echo 0) + 1 ))
+echo "$n" > "$CK_SYNC_N"
+t=no
+[ -e "$CK_FILE.yakogl-new" ] && t=yes
+echo "sync $n: new-file $t, file $(sha256sum < "$CK_FILE" | cut -d' ' -f1)" >> "$CK_SYNC_LOG"
+[ "$n" = "${CK_KILL_AT:-0}" ] && kill -9 "$PPID"
+exit 0
+EOS
+chmod +x "$tmp/fakessh/ssh" "$tmp/fakessh/dmesg" "$tmp/fakessh/sync"
+export CK_SYNC_N=$tmp/ck-sync.n CK_SYNC_LOG=$tmp/ck-sync.log CK_FILE=$fb/boot/armbianEnv.txt
 printf 'friendlyarm,nanopc-t6\0rockchip,rk3588\0' > "$fb/proc/device-tree/compatible"
 echo 6.18.55 > "$fb/proc/sys/kernel/osrelease"
 printf 'CONFIG_KEXEC=y\nCONFIG_CRASH_RESERVE=y\nCONFIG_CRASH_DUMP=y\n' > "$fb/boot/config-6.18.55"
@@ -581,6 +595,56 @@ out=$(ckrun undo)
 rc=$?
 check "t6-crashkernel.sh: undo without a set refuses (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF 'nothing to undo' <<<"$out"; echo $?)"
+# A set cut short (S2). set writes new.sha256 before it renames the new
+# file over the old one, and changes nothing else after that, so each cut
+# leaves a state the next set or undo finishes from. Sync 1 is between the
+# new file and the rename, sync 2 after the rename.
+ck_sync() { rm -f "$CK_SYNC_N" "$CK_SYNC_LOG"; }
+printf '%s' "$env_with" > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+ck_sync
+out=$(CK_KILL_AT=1 ckrun set)
+check "t6-crashkernel.sh: a set killed before the rename leaves the file as it was (rc $?)" \
+	"$(grep -qF 'set did not complete' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ -d "$fb/root/yakogl-crashkernel" ]; echo $?)"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: the next set finishes it (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qx 'extraargs=cma=256M crashkernel=256M@0x10000000' "$fb/boot/armbianEnv.txt" && [ ! -e "$fb/boot/armbianEnv.txt.yakogl-new" ]; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: ... and undo after it is byte for byte the old file (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ ! -e "$fb/root/yakogl-crashkernel" ]; echo $?)"
+ck_sync
+out=$(CK_KILL_AT=1 ckrun set)
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo after a set killed before the rename clears its state, file untouched (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ ! -e "$fb/root/yakogl-crashkernel" ] && [ ! -e "$fb/boot/armbianEnv.txt.yakogl-new" ]; echo $?)"
+ck_sync
+killed=$(CK_KILL_AT=2 ckrun set)
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: after a set killed past the rename, set says it is set (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'set did not complete' <<<"$killed" && grep -qF 'already set by this tool' <<<"$out"; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: ... and undo restores it byte for byte (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
+mkdir "$fb/root/yakogl-crashkernel"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set finishes from an empty state directory (killed after its mkdir) (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qx 'extraargs=cma=256M crashkernel=256M@0x10000000' "$fb/boot/armbianEnv.txt"; echo $?)"
+ckrun undo >/dev/null
+# The order on disk: a sync while the new file is still beside the old one
+# (it is on disk before the rename), then one after the rename.
+ck_sync
+ckrun set >/dev/null
+new_sha=$(sha256sum < "$fb/boot/armbianEnv.txt" | cut -d' ' -f1)
+old_sha=${before%% *}
+check "t6-crashkernel.sh: set syncs the new file before the rename and the rename after it ($(tr '\n' ';' < "$CK_SYNC_LOG"))" \
+	"$(grep -qx "sync 1: new-file yes, file $old_sha" "$CK_SYNC_LOG" && grep -qx "sync 2: new-file no, file $new_sha" "$CK_SYNC_LOG"; echo $?)"
+ckrun undo >/dev/null
 printf '%s' "$env_with" > "$fb/boot/armbianEnv.txt"
 ckrun set >/dev/null
 echo 'fdtfile=other.dtb' >> "$fb/boot/armbianEnv.txt"
