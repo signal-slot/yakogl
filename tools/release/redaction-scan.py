@@ -803,6 +803,7 @@ def self_test():
         c_txt = ("tools/cts/testdata/mali-fail-triage/slices/"
                  "2026-11-09-t6-gles2-S1-11111111/kmsg/c.txt")
         redact = "tools/cts/mali-slice-redact.py"
+        mp2 = "tools/mp2_uboot_record_check.py"
         fixtures = [
             ("email", board, ["tester", "@pi5-fake.example"],
              ["tester", "@pi5-other.example"]),
@@ -836,6 +837,12 @@ def self_test():
              ["board-2", ".example.ts", ".net"]),
             ("email", redact, ["serial-getty", "@ttyS2.service"],
              ["serial-getty", "@ttyS3.service"]),
+            ("private-ipv4", mp2, ["10.1", ".2.3"], ["10.1", ".2.30"]),
+            ("private-ipv4", mp2, ["10.9", ".8.7"], ["10.9", ".8.70"]),
+            ("ipv6-local", mp2, ["fe80:", ":1ff:fe23:4567:890a"],
+             ["fe80:", ":1ff:fe23:4567:890b"]),
+            ("tailnet-dns", mp2, ["dk1", ".tail1234.ts", ".net"],
+             ["dk2", ".tail1234.ts", ".net"]),
         ]
         for key, path, val, near in fixtures:
             line = "fixture %s end" % j(val)
