@@ -37,12 +37,16 @@
 //!   32-bit pixel. Formats: A8R8G8B8 and X8R8G8B8 (4 bytes), A4R4G4B4 and
 //!   R5G6B5 (2 bytes; no `SWAP_RB`).
 //! - **Fill.** `RS_CLEAR_CONTROL` mode != 0: the window of the destination is
-//!   written with the 16-byte pattern of `RS_FILL_VALUE[0..4]` (little
-//!   endian), byte `p` of the pattern only where clear bit `p` is set. Byte
-//!   `k` of the pixel in window column `x` is pattern byte
-//!   `(x * bpp + k) % 16` (an assumption; Mesa writes one value into all four
-//!   fill words for a 32-bit format, so for its masks the position does not
-//!   matter). The source is not read.
+//!   written with `RS_FILL_VALUE[0]` (little endian) repeated, byte `p` of
+//!   the 16-byte run only where clear bit `p` is set. Byte `k` of the pixel
+//!   in window column `x` is byte `(x * bpp + k) % 4` of the fill word under
+//!   clear bit `(x * bpp + k) % 16` (an assumption for the bit position;
+//!   Mesa's masks repeat every 4 bytes, so for them it does not matter).
+//!   The modelled formats are 32 bits or less, and those fill from word 0
+//!   alone: Mesa's TS fill (`etna_rs_gen_ts_clear_cmd`, the ts-golden's fill
+//!   blocks) writes `0x11111111` into word 0 and 0 into words 1 to 3 and
+//!   relies on every status dword reading `0x11111111`. Words 1 to 3 are
+//!   tracked, not used. The source is not read.
 //! - **Window.** `RS_WINDOW_SIZE` w x h, starting at the side's base address
 //!   (`RS_PIPE_SOURCE_ADDR[0]` / `RS_PIPE_DEST_ADDR[0]`, else the legacy
 //!   `RS_SOURCE_ADDR` / `RS_DEST_ADDR`); pixel `(x, y)` of the window is at
@@ -54,9 +58,13 @@
 //!   `DEPTH_FAST_CLEAR`), reads each pixel through its tile's 4-bit entry:
 //!   entry `n` covers bytes `[n * T, (n + 1) * T)` of the source in memory
 //!   order (T = 128, or 256 with the stride's `TS_MODE` bit), entry `n` is
-//!   nibble `n % 2` (low first) of status byte `n / 2`. The clear code
-//!   ([`TS_CLEAR_CODE`]) reads the clear value, 0 reads memory, any other
-//!   code (compression) panics.
+//!   nibble `n % 2` (low first) of status byte `n / 2`. Mesa's meaning of
+//!   the entry (the TS fill writes [`TS_CLEAR_CODE`] to mark a tile cleared,
+//!   etnaviv_screen.c:884-886): the clear code reads the clear value
+//!   (`TS_*_CLEAR_VALUE`, through `SWAP_RB` like a pixel from memory), any
+//!   other entry reads memory. With the TS's compression bit set in
+//!   `TS_MEM_CONFIG` an entry other than 0 and the clear code is a
+//!   compressed tile, which is not modelled: the job panics.
 //!
 //! Not modelled (a job using them panics): `DOWNSAMPLE_X/Y`, `FLIP`, a
 //! non-zero `RS_PIPE_OFFSET`, `RS_EXTRA_CONFIG` other than 0, the
@@ -95,6 +103,10 @@ const TS_DEPTH_STATUS_BASE: u32 = 0x0000_1664;
 const TS_DEPTH_SURFACE_BASE: u32 = 0x0000_1668;
 // TODO(w1-regs): switch to regs.rs `GC_TS_DEPTH_CLEAR_VALUE`.
 const TS_DEPTH_CLEAR_VALUE: u32 = 0x0000_166c;
+// VIVS_TS_MEM_CONFIG_DEPTH_COMPRESSION and _COLOR_COMPRESSION
+// (hw/state_3d.xml.h:1456-1470); regs.rs has neither.
+const TS_MEM_CONFIG_DEPTH_COMPRESSION: u32 = 0x0000_0040;
+const TS_MEM_CONFIG_COLOR_COMPRESSION: u32 = 0x0000_0080;
 
 /// The 4-bit TS entry of a cleared tile: the nibble of `ts::TS_CLEAR_VALUE`
 /// (0x11111111, etnaviv_screen.c:884-886).
@@ -182,6 +194,9 @@ pub struct TsSource {
     pub clear_value: u32,
     /// Bytes of source per 4-bit entry: 128, or 256 with `TS_MODE`.
     pub tile_bytes: u32,
+    /// `TS_MEM_CONFIG` has the compression bit of this TS: an entry other
+    /// than 0 and [`TS_CLEAR_CODE`] is a compressed tile.
+    pub compressed: bool,
 }
 
 /// One RS job as the registers describe it at the kick.
@@ -279,15 +294,28 @@ impl RsInterp {
         let mem_config = self.reg_or(GC_TS_MEM_CONFIG, 0);
         let tile_bytes = if stride & RS_STRIDE_TS_MODE != 0 { 256 } else { 128 };
         [
-            (TS_MEM_CONFIG_COLOR_FAST_CLEAR, TS_COLOR_SURFACE_BASE, TS_COLOR_STATUS_BASE, TS_COLOR_CLEAR_VALUE),
-            (TS_MEM_CONFIG_DEPTH_FAST_CLEAR, TS_DEPTH_SURFACE_BASE, TS_DEPTH_STATUS_BASE, TS_DEPTH_CLEAR_VALUE),
+            (
+                TS_MEM_CONFIG_COLOR_FAST_CLEAR,
+                TS_COLOR_SURFACE_BASE,
+                TS_COLOR_STATUS_BASE,
+                TS_COLOR_CLEAR_VALUE,
+                TS_MEM_CONFIG_COLOR_COMPRESSION,
+            ),
+            (
+                TS_MEM_CONFIG_DEPTH_FAST_CLEAR,
+                TS_DEPTH_SURFACE_BASE,
+                TS_DEPTH_STATUS_BASE,
+                TS_DEPTH_CLEAR_VALUE,
+                TS_MEM_CONFIG_DEPTH_COMPRESSION,
+            ),
         ]
         .into_iter()
-        .find(|&(on, surface, _, _)| mem_config & on != 0 && self.regs.get(&surface) == Some(&addr))
-        .map(|(_, _, status, clear)| TsSource {
+        .find(|&(on, surface, ..)| mem_config & on != 0 && self.regs.get(&surface) == Some(&addr))
+        .map(|(_, _, status, clear, compression)| TsSource {
             status_base: self.reg(status),
             clear_value: self.reg_or(clear, 0),
             tile_bytes,
+            compressed: mem_config & compression != 0,
         })
     }
 }
@@ -321,10 +349,9 @@ pub fn execute(job: &RsJob, mem: &mut Memory) {
     let n = bpp as usize;
     let at = |s: &Side, x: u32, y: u32| s.addr as u64 + layout::offset(s.layout, x, y, bpp, s.stride) as u64;
     if let Some(f) = job.fill {
-        let mut pattern = [0u8; 16];
-        for (i, v) in f.value.iter().enumerate() {
-            pattern[4 * i..4 * i + 4].copy_from_slice(&v.to_le_bytes());
-        }
+        // Every modelled format is 32 bits or less: word 0 alone, repeated.
+        let word = f.value[0].to_le_bytes();
+        let pattern: [u8; 16] = core::array::from_fn(|p| word[p % 4]);
         for y in 0..job.h {
             for x in 0..job.w {
                 let a = at(&job.dst, x, y);
@@ -347,8 +374,10 @@ pub fn execute(job: &RsJob, mem: &mut Memory) {
             let a = at(&job.src, x, y);
             let mut px = match job.ts.as_ref().map(|t| (t, ts_entry(t, mem, a - job.src.addr as u64))) {
                 Some((t, TS_CLEAR_CODE)) => t.clear_value.to_le_bytes()[..n].to_vec(),
-                Some((_, 0)) | None => mem.read(a, n).to_vec(),
-                Some((_, e)) => panic!("rs_interp: TS entry {e:#x} (compressed) not modelled"),
+                Some((t, e)) if e != 0 && t.compressed => {
+                    panic!("rs_interp: TS entry {e:#x} of a compressed TS not modelled")
+                }
+                Some(_) | None => mem.read(a, n).to_vec(),
             };
             if job.swap_rb {
                 px.swap(0, 2);
@@ -573,7 +602,10 @@ mod tests {
         let mut rs = RsInterp::new();
         rs.ts_source = true;
         rs.run(&writes, &mut mem);
-        assert_eq!(rs.jobs[0].ts, Some(TsSource { status_base: ts, clear_value: 0xc0ff_ee00, tile_bytes: 128 }));
+        assert_eq!(
+            rs.jobs[0].ts,
+            Some(TsSource { status_base: ts, clear_value: 0xc0ff_ee00, tile_bytes: 128, compressed: false })
+        );
         let got = mem.region(d);
         for y in 0..h {
             for x in 0..w {
@@ -587,6 +619,74 @@ mod tests {
                 assert_eq!(got[o..o + 4], want, "({x}, {y}) in tile {tile}");
             }
         }
+    }
+
+    /// The writes of a TS-sourced copy of a 64x4 TILED surface at `s` (TS at
+    /// `ts`, `TS_MEM_CONFIG` = `mem_config`) to a linear `d`.
+    fn ts_copy_writes(s: u32, ts: u32, d: u32, mem_config: u32) -> Vec<(u32, u32)> {
+        let stride = layout::stride(Layout::Tiled, 64, 4, true);
+        let mut w = vec![
+            (GC_TS_MEM_CONFIG, mem_config),
+            (TS_COLOR_STATUS_BASE, ts),
+            (TS_COLOR_SURFACE_BASE, s),
+            (TS_COLOR_CLEAR_VALUE, 0xc0ff_ee00),
+        ];
+        w.extend(job_writes(fmt() | GC_RS_SOURCE_TILED, s, stride << 2, d, 64 * 4, 64, 4, 0, 0));
+        w
+    }
+
+    #[test]
+    fn a_ts_entry_other_than_the_clear_code_reads_memory() {
+        let (s, ts, d) = (0x0010_0000u32, 0x0011_0000u32, 0x0020_0000u32);
+        let stride = layout::stride(Layout::Tiled, 64, 4, true);
+        let src = pattern(1024);
+        let mut mem = Memory::new();
+        mem.map(s, src.clone());
+        // Tile 0 cleared; tiles 1 to 7 carry codes 2..f (no compression).
+        mem.map(ts, vec![0x21, 0x43, 0x65, 0xf7]);
+        mem.map(d, vec![0; 1024]);
+        let mut rs = RsInterp::new();
+        rs.ts_source = true;
+        rs.run(&ts_copy_writes(s, ts, d, TS_MEM_CONFIG_COLOR_FAST_CLEAR), &mut mem);
+        assert!(!rs.jobs[0].ts.unwrap().compressed);
+        let got = mem.region(d);
+        for y in 0..4 {
+            for x in 0..64 {
+                let o = layout::offset(Layout::Tiled, x, y, 4, stride);
+                let i = ((y * 64 + x) * 4) as usize;
+                let want = if o / 128 == 0 { 0xc0ff_ee00u32.to_le_bytes() } else { src[o..o + 4].try_into().unwrap() };
+                assert_eq!(got[i..i + 4], want, "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "compressed TS not modelled")]
+    fn a_compressed_entry_is_refused() {
+        let (s, ts, d) = (0x0010_0000u32, 0x0011_0000u32, 0x0020_0000u32);
+        let mut mem = Memory::new();
+        mem.map(s, vec![0; 1024]);
+        mem.map(ts, vec![0x21, 0, 0, 0]);
+        mem.map(d, vec![0; 1024]);
+        let mut rs = RsInterp::new();
+        rs.ts_source = true;
+        rs.run(&ts_copy_writes(s, ts, d, TS_MEM_CONFIG_COLOR_FAST_CLEAR | TS_MEM_CONFIG_COLOR_COMPRESSION), &mut mem);
+    }
+
+    #[test]
+    fn a_fill_takes_fill_word_0_alone() {
+        // Mesa's TS fill: 0x11111111 in RS_FILL_VALUE[0], 0 in [1..4]
+        // (ts-golden's fill blocks); every dword of the window reads the fill.
+        let d = 0x0040_0000u32;
+        let mut mem = Memory::new();
+        mem.map(d, vec![0xaa; 256]);
+        let clear = GC_RS_CLEAR_CONTROL_MODE_ENABLED1 | GC_RS_CLEAR_CONTROL_BITS_ALL;
+        let writes: Vec<_> = job_writes(fmt() | GC_RS_DEST_TILED, 0, 0, d, 0x40 << 2, 16, 4, clear, 0x1111_1111)
+            .into_iter()
+            .map(|(r, v)| if (rs_fill_value(1)..=rs_fill_value(3)).contains(&r) { (r, 0) } else { (r, v) })
+            .collect();
+        RsInterp::new().run(&writes, &mut mem);
+        assert!(mem.region(d).iter().all(|&b| b == 0x11));
     }
 
     #[test]
