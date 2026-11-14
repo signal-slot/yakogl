@@ -14,9 +14,9 @@
 //!
 //! 1. Read what was left, writing nothing: PD_VOP powered and out of idle
 //!    (`soc::rk3588::PdRegs`; a VOP register read with its domain off may
-//!    hang the bus, U5), the VOP's CRU gates open, `VERSION_INFO`, VP0
-//!    running (STANDBY clear) with `DSP_CTRL` exactly what the build would
-//!    write for HDMI RGB, VP0's four timing words those of [`MODE`], HDMI0
+//!    hang the bus, U5), the VOP's CRU gates open (PD_VOP's clocks and
+//!    HCLK_VOP), `VERSION_INFO`, VP0 running (STANDBY clear) with
+//!    `DSP_CTRL` exactly what the build would write for HDMI RGB, VP0's four timing words those of [`MODE`], HDMI0
 //!    enabled and fed by VP0 (`DSP_IF_EN`), the Esmart windows' internal
 //!    power on (`SYS_PD_CTRL` bit 7). Anything else is a state this code
 //!    does not know, and it refuses by name.
@@ -48,6 +48,7 @@ use crate::ip::rk_iommu;
 use crate::ip::vop2::{self, cluster, esmart, ovl, sys, vp, Esmart, Format, HdmiPort, Vp, Window};
 use crate::mmio::Mmio;
 use crate::soc::rk3588::{clkgate_con, PdRegs, PD_VO1, PD_VOP};
+use crate::soc::rk3588_display::clk as display_clk;
 use crate::video::VideoMode;
 
 /// The mode the build adopts: 1024x768 at 60 Hz, 65 MHz, H 1024 1048 1184
@@ -154,8 +155,8 @@ pub enum Stop {
     /// PD_VOP is not powered or not out of idle (`detail`: the PMU repair
     /// status). The VOP was not read.
     VopDomain = 1,
-    /// A clock of PD_VOP is gated (`index`: its bit in CLKGATE_CON(52),
-    /// `detail`: the word). The VOP was not read.
+    /// A clock of PD_VOP, or HCLK_VOP, is gated (`index`: its bit in
+    /// CLKGATE_CON(52), `detail`: the word). The VOP was not read.
     VopClock = 2,
     /// `VERSION_INFO` is not the RK3588's (`detail`).
     Version = 3,
@@ -274,9 +275,11 @@ pub fn adopt(m: &impl Mmio, b: &Bases, fb_pa: u64, delay_us: &mut impl FnMut(u32
     if !pd.usable_of(&PD_VOP) {
         return a.stopped(Stop::VopDomain, 0, 0, pd.repair);
     }
-    // every PD_VOP clock is in CLKGATE_CON(52) (soc::rk3588::PD_VOP)
+    // PD_VOP's clocks (soc::rk3588::PD_VOP) and the VOP's own register
+    // clock HCLK_VOP (52/8, which also clocks the vop_mmu: rk3588-base.dtsi
+    // :1428-1437), all in CLKGATE_CON(52); checked before any VOP or vop_mmu read
     a.cru_gate52 = m.read32(b.cru + clkgate_con(52));
-    for g in PD_VOP.clocks {
+    for g in PD_VOP.clocks.iter().chain([&display_clk::HCLK_VOP.gate]) {
         let word = if g.con == 52 { a.cru_gate52 } else { m.read32(b.cru + clkgate_con(g.con)) };
         if word & 1 << g.bit != 0 {
             return a.stopped(Stop::VopClock, 0, g.bit, word);

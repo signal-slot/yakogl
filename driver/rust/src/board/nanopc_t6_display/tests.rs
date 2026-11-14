@@ -387,10 +387,11 @@ fn each_state_it_does_not_know_is_refused_by_name_before_any_write() {
     let gate52 = CRU + 0x8d0;
     // name, the dump word changed, the stop, its index and detail
     type Case = (&'static str, (usize, u32), Stop, u32, u32);
-    let cases: [Case; 11] = [
+    let cases: [Case; 12] = [
         ("PD_VOP off", (pmu_repair, 0xfad4_0001), Stop::VopDomain, 0, 0xfad4_0001),
         ("PD_VOP idle requested", (PMU + 0x10c, 0x0000_a3cf), Stop::VopDomain, 0, 0xfad5_0001),
         ("ACLK_VOP gated", (gate52, 0x0600), Stop::VopClock, 9, 0x0600),
+        ("HCLK_VOP gated", (gate52, 0x0500), Stop::VopClock, 8, 0x0500),
         ("not the RK3588's VOP", (VOP + 0x004, 0x4015_8f45), Stop::Version, 0, 0x4015_8f45),
         ("VP0 in standby", (VOP + VP0_DSP_CTRL, 0x8000_000f), Stop::Standby, 0, 0x8000_000f),
         ("VP0 in P888", (VOP + VP0_DSP_CTRL, 0x0000_0000), Stop::VpState, 0, 0),

@@ -830,7 +830,7 @@ int yd_t6_osal_counts(struct yd_t6_osal_counts *out);
  * and the HDMI QP TX0 (0xfde80000), a page each. */
 #define YD_T6_DISPLAY_STOP_NONE         0 /* Esmart0 shows the buffer */
 #define YD_T6_DISPLAY_STOP_VOP_DOMAIN   1 /* PD_VOP not powered or idle (detail: PMU REPAIR) */
-#define YD_T6_DISPLAY_STOP_VOP_CLOCK    2 /* a PD_VOP clock gated (index: bit, detail: CLKGATE_CON(52)) */
+#define YD_T6_DISPLAY_STOP_VOP_CLOCK    2 /* a PD_VOP clock or HCLK_VOP gated (index: bit, detail: CLKGATE_CON(52)) */
 #define YD_T6_DISPLAY_STOP_VERSION      3 /* VERSION_INFO is not 0x40176786 (detail) */
 #define YD_T6_DISPLAY_STOP_STANDBY      4 /* VP0 in STANDBY (detail: DSP_CTRL) */
 #define YD_T6_DISPLAY_STOP_VP_STATE     5 /* VP0 DSP_CTRL not 0xf (detail) */
