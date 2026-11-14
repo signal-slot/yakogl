@@ -96,7 +96,11 @@
 #   id          kind.formA.formB
 #   kind        ind, raw, raw0, war, waw
 #   a, b        A and B in Mesa's disassembly (v3d_qpu_disasm at ver 71 of
-#               the packed word; its column padding printed as one space)
+#               the packed word; its column padding printed as one space).
+#               fadd.si_a and fadd.si_b disassemble alike: the 7.1 packer
+#               orders fadd's operands to encode fadd against faddnf and
+#               swaps small_imm_a/b with them (qpu_pack.c:1935-1965); the
+#               scheduler is given the unpacked form, immediate in operand a
 #   dep         the DAG edge A->B: order (a read-after-write, write-after-
 #               write or other ordering edge), war (only a write-after-read
 #               edge, removed when A is scheduled, :1915, so B may share
