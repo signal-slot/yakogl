@@ -159,3 +159,11 @@ Mesa's outputs, the GL core's rules and the draw path on the interpreter or
 the back end's host tests; whether the PowerVR TPU, the V3D TMU and the GC
 sample R16F, RGBA16F and SRGB8_A8 at the tolerances above on silicon is the
 boards' to show (#313 AM62P, #320 Pi 4, #316 i.MX8MP).
+
+The host dEQP before/after runs (2026-11-14, `docs/es3/texture-host-repro.md`
+7.1, HOST-ONLY) show the API side on the three GPUs: the 216 `texture.wrap`
+and 24 `texture.format.compressed` cases of the six decoded formats (288 and
+32 on the V3D, whose sRGB block pair was not stored before) move from
+NotSupported to the black read-back's Fail, the V3D's 72 refused ETC2 draws
+are gone, and the five `implementation_limits` and `state_query`
+compressed-format cases pass. No picture verdict is in them.

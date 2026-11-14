@@ -315,10 +315,52 @@ eleven entries), the GL core's texels against the decoder
 ETC2 or class record and no refusal (`tests/es3_etc2_v3d.rs`), the sampler
 record's compare function (`src/v3d/backend_tests.rs`,
 `tests/es3_etc2_v3d.rs`), and the look-up on the QPU interpreter within
-dEQP's thresholds (`tests/es3_decoded_class_v3d.rs`). The host dEQP
-before/after runs of `texture.wrap.*etc2*`, `texture.format.compressed.*`,
-`implementation_limits` and `state_query` compressed rows and
-`texture.shadow` (`tools/cts/host-deqp-run.sh`, `GPU=v3d|powervr|vivante`,
-`MODULE=gles3`) were not run for this change: the checkout of VK-GL-CTS at
-`93bca01` was being fetched into the dependency cache and the host was too
-loaded to build `deqp-gles3`. They are left as an issue.
+dEQP's thresholds (`tests/es3_decoded_class_v3d.rs`), and the shadow draw's
+own check through the real packer (`tests/es3_shadow_v3d_draw.rs`: every 2D
+form under each of the eight functions, the record's function run on the
+interpreter, a sampler object, a fixed-point depth).
+
+### 7.1 Host dEQP before and after (2026-11-14, HOST-ONLY)
+
+`tools/cts/host-deqp-run.sh` with `MODULE=gles3` and `GPU=v3d`, `powervr`,
+`vivante`, VK-GL-CTS `93bca01` with the yakogl target, `deqp-gles3` built on
+the host; the library of the main tip with `455c3bb5` ("after", the tree of
+this change) against the library of `fa3ecfc8`, its parent ("before"), each
+filter its own `OUT=`, the pairs compared with `--compare-only`. Every case
+began in every run (396, 44, 432, 49 and 6 cases per filter), no chunk lost
+a case, no crash. **HOST-ONLY: every read-back is black, so Fail with "Image
+verification failed" or "Image comparison failed" is the host's normal
+outcome of a case that reached its draw; only the status moves and the
+messages are evidence.**
+
+| filter | GPU | before | after |
+|---|---|---|---|
+| `texture.wrap.e*` (11 formats x 36: ETC1 and the ten) | v3d | 108 Fail (etc1 "Image verification failed" 36; etc2_rgb8 and etc2_eac_rgba8 "Set texturing state: GL_INVALID_OPERATION at es3fTextureWrapTests.cpp:371" 72, the refused draw), 288 NotSupported (the sRGB pair, the EAC four, the punch-through pair) | 396 Fail, all "Image verification failed" |
+| | powervr, vivante | 180 Fail (etc1 and the four block formats, "Image verification failed"), 216 NotSupported (the EAC four and the punch-through pair) | 396 Fail, all "Image verification failed" |
+| `texture.format.compressed.*` (11 formats x 4) | v3d | 12 Fail, 32 NotSupported | 44 Fail, all "Image comparison failed" |
+| | powervr, vivante | 20 Fail, 24 NotSupported | 44 Fail, all "Image comparison failed" |
+| `implementation_limits.{compressed,num_compressed}_texture_formats` | all three | Fail | **Pass** |
+| `state_query.integers.compressed_texture_formats_{getinteger,getinteger64,getfloat}` | all three | Fail | **Pass** |
+| `texture.shadow.*` (432) | v3d, powervr | 432 Fail "Image verification failed" | the same, 0 changed |
+| | vivante | 432 Fail "Failed to compile shader program at glsTextureTestUtil.cpp:411" | the same, 0 changed |
+
+What the moves show: every ETC2/EAC name is accepted by `glCompressedTexImage2D`
+(no case ends NotSupported on the format any more), the V3D no longer refuses
+the ETC2 draw (the 72 GL_INVALID_OPERATION rows are gone), and the two
+compressed-format limits and the three state queries pass on the three GPUs
+(the five limit and state cases of RC10). The remaining `implementation_limits`
+failures are other limits (`max_color_attachments`, `max_draw_buffers`,
+`max_combined_*_uniform_components`, `max_uniform_block_size`,
+`max_vertex_output_components`; on the V3D also `max_fragment_input_components`,
+`max_varying_components`, `max_varying_vectors`), RC10 and RC14, not this
+plan's.
+
+What they cannot show: the pictures. `texture.wrap` and `texture.format`
+compare pixels, so their 440 Fail on every GPU are the black read-back, before
+and after, and the `texture.shadow` cases on the V3D and PowerVR fail the same
+way in both arms: the compare function in the sampler record is in the host
+tests above, and whether the TMU compares is the Pi 4's to show (RC2). The
+GC7000UL's 432 `texture.shadow` cases never reach a draw: its online compiler
+refuses the shadow look-up ("an ES 3.00 texture look-up (a shadow sampler,
+...) is not selected yet"), the known item of `docs/notes/gc-shadow-compare.md`,
+unchanged by this plan.
