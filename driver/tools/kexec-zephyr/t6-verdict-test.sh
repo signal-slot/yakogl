@@ -220,6 +220,32 @@ check t6_submit-pixels 1 "VERDICT t6_submit FAIL (1 of $SUB)" "$((SUB - 1)) 0 1"
 sed '/Z3: rc 0/a t6_submit: Z3: stop 5 refusal 5 detail 0x0000000000000000 acked 0x00000000' "$D/t6_submit-pass.uart" >"$WORK/stop.log"
 check t6_submit-stop-line 1 "VERDICT t6_submit FAIL (1 of $SUB)" "$SUB 0 1" t6_submit "$WORK/stop.log"
 
+# t6_display (step D2): the line count is the table's, read from the pass
+# run (every line ok), not kept by hand here
+DISP=$(bash "$V" t6_display "$D/t6_display-pass.uart" | grep -c '^ok ' || true)
+check t6_display-pass 0 'VERDICT t6_display PASS' "$DISP 0 0" t6_display "$D/t6_display-pass.uart"
+# the hooks: a pixel clock off by 7.7 %, a PHY PLL not locked, a controller
+# clock monitor not locked each differ on that line only
+sed 's/pixel clock 65002 kHz/pixel clock 60000 kHz/' "$D/t6_display-pass.uart" >"$WORK/pclk.log"
+check t6_display-pclk 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/pclk.log"
+sed 's/PHY0 GRF STATUS 0x0000000e/PHY0 GRF STATUS 0x00000006/' "$D/t6_display-pass.uart" >"$WORK/phy.log"
+check t6_display-phy 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/phy.log"
+sed 's/CMU_STATUS 0x00000255/CMU_STATUS 0x00000254/' "$D/t6_display-pass.uart" >"$WORK/cmu.log"
+check t6_display-cmu 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/cmu.log"
+# Esmart0 reading another address after the hold differs
+sed '/^t6_display: VOP OVL_PORT_SEL/s/YRGB_MST 0x10012000/YRGB_MST 0x0ad17000/' "$D/t6_display-pass.uart" >"$WORK/mst.log"
+check t6_display-mst 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/mst.log"
+# an underflow in the frame check differs
+sed 's/frame start 1, underflow 0,/frame start 1, underflow 1,/' "$D/t6_display-pass.uart" >"$WORK/under.log"
+check t6_display-underflow 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/under.log"
+# the adopt refused (VP0 in STANDBY): the five step lines, the hold, the
+# three held lines and the seven status lines are missing; the adopt line
+# and the FAIL line in place of PASS differ
+sed -e '/^t6_display: take-over/,/^t6_display: HDMI0 VIDEO_MONITOR/d' \
+	-e 's/^t6_display: PASS: .*/t6_display: FAIL: adopt stop 4/' "$D/t6_display-pass.uart" |
+	sed '/^t6_display: FAIL: adopt/i t6_display: adopt rc -5 stop 4 (VP0 is in STANDBY: no picture to adopt), refusal 0, index 0, detail 0x8000000f' >"$WORK/standby.log"
+check t6_display-standby 1 "VERDICT t6_display FAIL (18 of $DISP)" "$((DISP - 18)) 16 2" t6_display "$WORK/standby.log"
+
 # Z1's record in the stop fixtures is what t6_z1.c prints (host cc, the
 # probes' printk as printf): a fixture cannot drift from the code
 P=$(cd "$HERE/../../.." && pwd)/tools/probes/nanopc_t6/common

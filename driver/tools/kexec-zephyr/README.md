@@ -93,6 +93,15 @@ procedure" and "Z4 board procedure"; they are not repeated here. Both runs
 need the owner's go-ahead and someone at the power switch, and neither has
 been run on the board.
 
+The display probe `t6_display` (step D2, `driver/docs/nanopc-t6-display.md`,
+section 2 route (a)) adopts the picture Linux leaves running, so it needs the
+crash route (`kexec --crash` into a `crashkernel=` reservation that holds the
+image window), not the normal kexec this script does today; that route is
+not in this script yet. Its record is judged with `t6-verdict.sh t6_display`
+(fixture `testdata/t6_display-pass.uart`). The verdict judges the UART lines
+only: whether the display shows the four quadrants and the white border in
+the right places is the person's answer.
+
 `tools/board.sh nanopc-t6 run <zephyr.bin> <logdir>` runs an image through
 this script the way the other boards run (backend `kexec-dev`, so the verdict
 line says DEV). It calls `nanopc-t6.sh <zephyr.bin> --go` with
