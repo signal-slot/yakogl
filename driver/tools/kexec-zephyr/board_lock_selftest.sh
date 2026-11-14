@@ -559,6 +559,24 @@ out=$(ckrun set)
 rc=$?
 check "t6-crashkernel.sh: set refuses two extraargs= lines (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF 'has 2 extraargs= lines' <<<"$out"; echo $?)"
+# U-Boot's env import skips blanks before a name (lib/hashtable.c:902-904,
+# v2026.07), so " extraargs=" is the live line: set edits it, keeping its
+# blanks, and adds no second line (a later one would replace it).
+printf 'verbosity=1\n \textraargs=cma=256M\nrootdev=UUID=%s\n' "$uuid" > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set edits a live extraargs= line with leading blanks and adds none (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(grep -c 'extraargs=' "$fb/boot/armbianEnv.txt")" = 1 ] && grep -qx ' 	extraargs=cma=256M crashkernel=256M@0x10000000' "$fb/boot/armbianEnv.txt"; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo after it is byte for byte the old file (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
+printf ' extraargs=a\nextraargs=b\n' > "$fb/boot/armbianEnv.txt"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set counts a blank-led extraargs= line with the others (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'has 2 extraargs= lines' <<<"$out"; echo $?)"
 out=$(ckrun undo)
 rc=$?
 check "t6-crashkernel.sh: undo without a set refuses (rc $rc)" \
