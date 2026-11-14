@@ -370,6 +370,12 @@ the display the lead plugs in, read from the dump, so every PHY value is
 measured on that very rate. The expected case is **1920x1080 at 60 Hz, 148.5
 MHz** (CEA-861 VIC 16), which Linux's PHY table has (`hdptx.c:427`).
 
+Measured (board, 2026-11-12): the T6's display gives no EDID, and Linux runs
+it at **1024x768 at 60 Hz, 65 MHz** (h 1024 1048 1184 1344, v 768 771 777
+806, both syncs negative), DVI. That is the build's fixed mode
+(`soc::rk3588_display_chain::MODE_1024X768_60`); the PHY runs Linux's table
+row for 65 MHz (`hdptx.c:445-446`), read back from the dump.
+
 What the PHY PLL needs (`hdptx.c:900-970`): the PLL output is 5x the TMDS
 character rate divided out of a VCO of 2.0-4.0 GHz, `VCO = 24 MHz x M`
 (P = refdiv = 1), `S` even or 1, M 20-255. For 148.5 MHz: 742.5 MHz x 4 =
