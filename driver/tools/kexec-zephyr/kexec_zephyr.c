@@ -343,12 +343,17 @@ static int write_file(const char *path, const char *text)
  *  - The image starts on the CPU that panics. The normal route moves to the
  *    reboot CPU by itself; here only the offlining puts us on CPU 0, so the
  *    trigger is refused unless /sys/devices/system/cpu/online reads "0"
- *    afterwards (a write that failed, a CPU that would not go). The crash
- *    image is then unloaded again, so the next run does not find it.
+ *    afterwards (a write that failed, a CPU that would not go).
  *  - No device_shutdown runs, so every network interface Linux has up keeps
  *    its DMA and its interrupts (on the NanoPC-T6 the RTL8125 PCIe NICs,
  *    named enP..., which the three fixed names of quiesce_bus_masters miss).
- *    Every interface in /sys/class/net except lo is taken down instead.
+ *    Every interface in /sys/class/net except lo is taken down instead. The
+ *    netlink ACK is not read, so the line printed says "requested".
+ * The trigger is opened first: once the links are down the board may be
+ * unreachable, so whatever can be refused is refused before that. A refusal
+ * brings CPUs 1-7 back online and unloads the crash image again (the next
+ * run then does not find one loaded): exit 1, or exit 3 naming the failed
+ * unload.
  */
 static void crash_links_down(void)
 {
@@ -371,36 +376,64 @@ static void crash_links_down(void)
 				continue;
 			}
 			put(name);
-			put(link_down(name) == 0 ? ": link down\n" : ": link down FAILED\n");
+			put(link_down(name) == 0 ? ": link down requested\n" : ": link down request FAILED\n");
 		}
 	}
 	sys(SYS_close, fd, 0, 0, 0, 0, 0);
 }
 
+static const char *const crash_cpus[] = {
+	"/sys/devices/system/cpu/cpu1/online", "/sys/devices/system/cpu/cpu2/online",
+	"/sys/devices/system/cpu/cpu3/online", "/sys/devices/system/cpu/cpu4/online",
+	"/sys/devices/system/cpu/cpu5/online", "/sys/devices/system/cpu/cpu6/online",
+	"/sys/devices/system/cpu/cpu7/online",
+};
+
+/* Not triggering: CPUs 1-7 back online, the crash image unloaded. */
+static void crash_refuse(const char *why)
+{
+	long n;
+
+	put("crash: ");
+	put(why);
+	put(": not triggering\n");
+	for (unsigned long i = 0; i < sizeof(crash_cpus) / sizeof(crash_cpus[0]); i++) {
+		if (write_file(crash_cpus[i], "1") != 0) {
+			put("crash: ");
+			put(crash_cpus[i]);
+			put(": could not be brought back online\n");
+		}
+	}
+	n = sys(SYS_kexec_load, 0, 0, 0, KEXEC_ARCH_AARCH64 | KEXEC_ON_CRASH, 0, 0);
+	if (n < 0) {
+		put("crash: unloading the crash image FAILED: error ");
+		put_hex(-n);
+		put(" (it stays loaded; /sys/kernel/kexec_crash_loaded)\n");
+		sys(SYS_exit, 3, 0, 0, 0, 0, 0);
+	}
+	put("crash: crash image unloaded\n");
+	sys(SYS_exit, 1, 0, 0, 0, 0, 0);
+}
+
 static void crash_jump(void)
 {
-	static const char *const cpus[] = {
-		"/sys/devices/system/cpu/cpu1/online", "/sys/devices/system/cpu/cpu2/online",
-		"/sys/devices/system/cpu/cpu3/online", "/sys/devices/system/cpu/cpu4/online",
-		"/sys/devices/system/cpu/cpu5/online", "/sys/devices/system/cpu/cpu6/online",
-		"/sys/devices/system/cpu/cpu7/online",
-	};
-
 	char online[32] = "";
 	struct {
 		long sec, nsec;
 	} ts = { 0, 300 * 1000 * 1000 };
+	long trigger = sys(SYS_openat, AT_FDCWD, (long)"/proc/sysrq-trigger", O_WRONLY, 0, 0, 0);
 
-	for (unsigned long i = 0; i < sizeof(cpus) / sizeof(cpus[0]); i++) {
-		(void)write_file(cpus[i], "0");
+	if (trigger < 0) {
+		crash_refuse("/proc/sysrq-trigger cannot be opened for writing");
+	}
+	for (unsigned long i = 0; i < sizeof(crash_cpus) / sizeof(crash_cpus[0]); i++) {
+		(void)write_file(crash_cpus[i], "0");
 	}
 	if (read_small("/sys/devices/system/cpu/online", online, sizeof(online)) <= 0 ||
 	    online[0] != '0' || (online[1] != '\n' && online[1] != 0)) {
-		put("crash: CPUs other than 0 are still online (/sys/devices/system/cpu/online: ");
-		put(online[0] ? online : "unread\n");
-		put("): the image would start on one of them; not triggering, crash image unloaded\n");
-		sys(SYS_kexec_load, 0, 0, 0, KEXEC_ARCH_AARCH64 | KEXEC_ON_CRASH, 0, 0);
-		sys(SYS_exit, 1, 0, 0, 0, 0, 0);
+		put("crash: /sys/devices/system/cpu/online reads ");
+		put(online[0] ? online : "nothing\n");
+		crash_refuse("CPUs other than 0 are still online, and the image would start on the one that panics");
 	}
 	(void)write_file("/proc/sys/kernel/sysrq", "1");
 	sys(SYS_sync, 0, 0, 0, 0, 0, 0);
@@ -409,7 +442,8 @@ static void crash_jump(void)
 	ignore_signal(15);   /* SIGTERM */
 	crash_links_down();
 	sys(SYS_nanosleep, (long)&ts, 0, 0, 0, 0, 0);   /* let the stop paths finish */
-	(void)write_file("/proc/sysrq-trigger", "c");
+	(void)sys(SYS_write, trigger, (long)"c", 1, 0, 0, 0);
+	sys(SYS_close, trigger, 0, 0, 0, 0, 0);
 }
 
 static void quiesce_bus_masters(void)
