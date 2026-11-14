@@ -144,6 +144,20 @@ asked. In either case the constants in `context.rs:193-194` stop being
    `tests/es2_report_guard.rs`, listed in the design's section 6.
 6. Rebase onto #354 and #356 for `ffi.rs` and `backend.rs`.
 
+## Status (what landed on the host)
+
+Done: `MAX_VARYING_VECTORS` 15 on the V3D under ES 3.0 (8 under `report-es2`),
+components 60 / 60 / 60 (`context.rs`), the compiler's flag sets as one
+64-input set cut into Mesa's three 24-bit words (`chain.rs` `flag_word`;
+`FsProg`, `ShcV3dFs`, `V3dFsProg` carry word 0 under the old names and words 1
+and 2 in `*_hi`), the draw builder's cap 64 and Mesa's `emit_varying_flags`
+(`v3d_job.c`), `tests/es3_v3d_varyings.rs`. Not done: the vertex output 64
+(`select.rs` cap 64 rows, 16 vec4 = 4 + 64 + point size; the ignored
+`a_vs_writes_16_vec4_outputs`), so `MAX_VERTEX_OUTPUT_COMPONENTS` stays 60;
+the tiny `v3d_frame.c` frame builder keeps its 24-input, all-zero-flags
+limit (only `tools/v3d/frame_check` uses it). 15 vec4 with `gl_PointSize` is
+65 rows and refused by name.
+
 ## Open, no owner yet
 
 - The ES 3.00 link does not check varying component counts

@@ -250,7 +250,18 @@ formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,
 `tests/gltest_case20_formats.rs`, `tests/vivante_imx8mp_limits.rs`); the board
 rows (the Pi 4's `implementation_limits.*compressed*` and
-`state_query.integers.compressed_texture_formats_*`) are to be re-run. Item
+`state_query.integers.compressed_texture_formats_*`) are to be re-run. The V3D's
+varying family is closed on the host except the vertex output: `GL_MAX_VARYING_VECTORS`
+15, `GL_MAX_VARYING_COMPONENTS` 60, `GL_MAX_FRAGMENT_INPUT_COMPONENTS` 60 under ES 3.0
+(`tests/es3_v3d_varyings.rs`; 8 / 32 / 32 under `report-es2`), carried by the flag
+words 0..2 of `v3d_fs_prog` and a draw cap of 64 inputs; `GL_MAX_VERTEX_OUTPUT_COMPONENTS` is
+60 (the 16th output row, `docs/es3/backend-caps.md`). The `*_getfloat` and
+`*_getinteger64` rows of the same limits had no defect of their own: both forms
+convert the integer answer (`src/gl/state.rs` `glGetFloatv`, `glGetInteger64v`;
+`tests/es3_limits_v3d.rs` pins the three forms equal), so they fail with the
+value and pass with it. The uniform-block limits (`GL_MAX_UNIFORM_BLOCK_SIZE`
+6144, the combined components 1536) stay: they need uniform blocks read from
+memory or a larger stream, see the issue drafts of plan 359. Item
 `es3-caps` (the ES 3.0 limits test was reverted for review and is to be
 redone).
 

@@ -146,11 +146,22 @@ pub const MAX_VARYING_VECTORS: usize = 15;
 pub const MAX_VARYING_VECTORS: usize = 15;
 #[cfg(all(feature = "gpu-powervr", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
-/// V3D: 8, the ES 2.0 minimum. Mesa's v3d allows 16 (V3D_MAX_FS_INPUTS, 64
-/// components), but nothing here has drawn with more than a few varyings on
-/// the board: the M6 first cut claims what it has a chance of having
-/// measured, and is raised with the board run that measures more.
-#[cfg(feature = "gpu-v3d")]
+/// V3D: 15, ES 3.0's minimum, under ES 3.0. Mesa's v3d allows 16
+/// (V3D_MAX_FS_INPUTS, 64 components); what carries the fifteen:
+///
+/// * the compiler builds es100/varyings15's 60-component fragment shader
+///   (shaderc/online/v3d/chain.rs) and the records hold 16 varyings;
+/// * the shader record's "number of varyings in fragment shader" is 8 bits
+///   and the draw builder takes up to 64 inputs (driver/src/v3d/v3d_job.c);
+/// * the flat and centroid flag words are word 0 of Mesa's three (24
+///   inputs): a flat or centroid varying that lands on input 24 or later is
+///   refused by name (chain.rs), not drawn wrong. tests/es3_v3d_varyings.rs.
+///
+/// Not measured on a board yet. Under `report-es2` 8, the ES 2.0 answer as
+/// it was (tests/es2_report_guard.rs).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VARYING_VECTORS: usize = 15;
+#[cfg(all(feature = "gpu-v3d", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// Mali-G610: 8, the ES 2.0 minimum, as the V3D's first cut: nothing has
 /// been compiled for it yet. Mesa's panfrost takes 32 inputs a stage on

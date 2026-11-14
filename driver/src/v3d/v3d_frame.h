@@ -172,12 +172,15 @@ struct v3d_fs_prog {
 	uint32_t threads;
 	bool single_seg;
 	uint32_t num_inputs;
-	/* word 0 of each flags array: M5 supports num_inputs <= 24 and all zero */
+	/* word 0 of each flags set (inputs 0..23); words 1 and 2 are *_hi below */
 	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
 	bool writes_z, disable_ez, uses_center_w, lock_scoreboard_on_first_thrsw;
 	bool uses_implicit_point_line_varyings, uses_pid;
 	const struct v3d_uniform *uniforms;
 	uint32_t num_uniforms;
+	/* words 1 and 2 of the flag sets (inputs 24..47 and 48..71, bit i % 24):
+	 * Mesa's v3d_fs_prog_data keeps three 24-bit words of each */
+	uint32_t flat_shade_flags_hi[2], noperspective_flags_hi[2], centroid_flags_hi[2];
 };
 
 /* The vertex or coordinate shader's prog_data (v3d_vs_prog_data). */

@@ -1205,6 +1205,11 @@ mod gl_api {
             ("Abi(TooManyVaryings { got: ", true),
             #[cfg(feature = "gpu-v3d")]
             ("varying past input 31", false),
+            /* 15 varying vectors reach the fragment shader now (8 before):
+             * a program that reads that many and keeps them live needs more
+             * than the registers of two threads, and there is no spilling */
+            #[cfg(feature = "gpu-v3d")]
+            ("more live values than 2 threads have registers", false),
         ];
         for (name, vectors, r) in &refused {
             let log = format!("{r:?}");

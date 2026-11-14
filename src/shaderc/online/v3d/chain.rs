@@ -135,9 +135,16 @@ pub struct FsProg<'a> {
     /// Per input, in `ldvary` order: (VARYING_SLOT_VAR0 + the FS location,
     /// component), as Mesa's `input_slots` prints.
     pub input_slots: &'a [(u8, u8)],
+    /// Word 0 of Mesa's flag sets (`v3d_fs_prog_data::flat_shade_flags[0]`,
+    /// inputs 0..23, bit i for input i), and in `*_hi` words 1 and 2
+    /// (inputs 24..47 and 48..71, bit i % 24): `v3d_set_fs_prog_data_inputs`,
+    /// vir.c:985-1003.
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
+    pub flat_shade_flags_hi: [u32; 2],
+    pub noperspective_flags_hi: [u32; 2],
+    pub centroid_flags_hi: [u32; 2],
     /// The shader writes Z to the TLB (prog_data `writes_z`): the pass-
     /// through Z (a discard, no colour write, a read of gl_FragCoord.z) or
     /// its own `gl_FragDepth` (select.rs `TLB_Z_PER_PIXEL`).
@@ -221,6 +228,15 @@ fn unrolled<'a>(m: &'a ir::Module<'a>, a: &'a Arena<'a>) -> Result<(&'a ir::Modu
 }
 
 /// The refusal of a program whose values do not fit 2 threads' registers.
+/// V3D_MAX_FS_INPUTS (v3d_limits.h:32): the inputs of a fragment shader.
+const V3D_MAX_FS_INPUTS: usize = 64;
+
+/// Word `w` of a 64-bit flag set as Mesa's `v3d_fs_prog_data` holds it:
+/// 24 inputs a word, bit i % 24 of word i / 24 (vir.c:992-1003).
+fn flag_word(set: u64, w: usize) -> u32 {
+    ((set >> (24 * w)) & 0x00ff_ffff) as u32
+}
+
 const DOES_NOT_FIT: &str = "more live values than 2 threads have registers (no spilling yet)";
 
 /// The selection levels the chain tries, in order, while a program does not
@@ -416,14 +432,17 @@ pub fn compile_program_keyed<'a>(
     /* The fragment shader, and the order of its inputs. */
     let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
     let inputs = fragment_inputs(&fsp, a)?;
+    if inputs.len() > V3D_MAX_FS_INPUTS {
+        return Err(V3dError::NotYet("more than 64 fragment inputs"));
+    }
     /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
-     * flat_shade_flags at the input's index). The job builder reads word 0
-     * only and refuses more than 24 inputs. */
-    let mut flat = 0u32;
+     * flat_shade_flags at the input's index), kept as one 64-bit set and
+     * cut into Mesa's three 24-bit words below. */
+    let mut flat = 0u64;
     /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
      * BITSET_SET of centroid_flags, the W it multiplies by the centroid
      * W). */
-    let mut centroid = 0u32;
+    let mut centroid = 0u64;
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
             .inputs
@@ -431,15 +450,9 @@ pub fn compile_program_keyed<'a>(
             .find(|d| d.kind == IoKind::Varying && d.location == loc)
             .ok_or(V3dError::VaryingWithoutVertexOutput)?;
         if d.interp == crate::shaderc::online::ir::INTERP_FLAT {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a flat varying past input 31"));
-            }
             flat |= 1 << i;
         }
         if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a centroid varying past input 31"));
-            }
             centroid |= 1 << i;
         }
     }
@@ -522,9 +535,12 @@ pub fn compile_program_keyed<'a>(
             single_seg: false,
             num_inputs: inputs.len() as u32,
             input_slots: slots,
-            flat_shade_flags: flat,
+            flat_shade_flags: flag_word(flat, 0),
             noperspective_flags: 0,
-            centroid_flags: centroid,
+            centroid_flags: flag_word(centroid, 0),
+            flat_shade_flags_hi: [flag_word(flat, 1), flag_word(flat, 2)],
+            noperspective_flags_hi: [0; 2],
+            centroid_flags_hi: [flag_word(centroid, 1), flag_word(centroid, 2)],
             /* select.rs select_fragment: a discard, a read of Z, or a
              * gl_FragDepth write */
             writes_z: fsel.writes_z,
