@@ -6,7 +6,7 @@
 // SPDX-FileCopyrightText: 2016 Red Hat
 // SPDX-FileCopyrightText: 2019 Valve Corporation
 // SPDX-FileCopyrightText: 2018-2022 Alyssa Rosenzweig
-// SPDX-FileCopyrightText: 2019-2021, 2026 Collabora, Ltd.
+// SPDX-FileCopyrightText: 2019-2021, 2025, 2026 Collabora, Ltd.
 // SPDX-FileCopyrightText: 2020, 2021, 2025 Google LLC
 // SPDX-FileCopyrightText: 2025 Arm Ltd.
 // Derived from Mesa 26.2.1 src/compiler/nir/ (nir_search.c, nir_opt_vectorize.c,
