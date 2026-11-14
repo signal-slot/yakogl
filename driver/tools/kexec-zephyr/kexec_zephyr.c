@@ -55,6 +55,7 @@
 #define SYS_reboot     142
 #define SYS_kexec_load 104
 #define SYS_mmap       222
+#define SYS_getdents64 61
 
 #define AT_FDCWD          (-100)
 #define O_RDONLY          0
@@ -337,7 +338,45 @@ static int write_file(const char *path, const char *text)
  * KEXEC_ON_CRASH inside the crashkernel= reservation. The secondary CPUs are
  * offlined first so they go through PSCI CPU_OFF and the image can CPU_ON
  * them, rather than being left spinning in the old kernel's park loop.
+ *
+ * Two things differ from the normal route, and are checked or done here:
+ *  - The image starts on the CPU that panics. The normal route moves to the
+ *    reboot CPU by itself; here only the offlining puts us on CPU 0, so the
+ *    trigger is refused unless /sys/devices/system/cpu/online reads "0"
+ *    afterwards (a write that failed, a CPU that would not go). The crash
+ *    image is then unloaded again, so the next run does not find it.
+ *  - No device_shutdown runs, so every network interface Linux has up keeps
+ *    its DMA and its interrupts (on the NanoPC-T6 the RTL8125 PCIe NICs,
+ *    named enP..., which the three fixed names of quiesce_bus_masters miss).
+ *    Every interface in /sys/class/net except lo is taken down instead.
  */
+static void crash_links_down(void)
+{
+	static char buf[4096];
+	long fd = sys(SYS_openat, AT_FDCWD, (long)"/sys/class/net", O_RDONLY, 0, 0, 0);
+	long n;
+
+	if (fd < 0) {
+		put("crash: /sys/class/net cannot be read: no interface taken down\n");
+		return;
+	}
+	while ((n = sys(SYS_getdents64, fd, (long)buf, sizeof(buf), 0, 0, 0)) > 0) {
+		for (long off = 0; off < n;) {
+			/* struct linux_dirent64: d_ino, d_off, d_reclen, d_type, d_name */
+			unsigned short reclen = *(unsigned short *)(buf + off + 16);
+			const char *name = buf + off + 19;
+
+			off += reclen;
+			if (name[0] == '.' || (name[0] == 'l' && name[1] == 'o' && name[2] == 0)) {
+				continue;
+			}
+			put(name);
+			put(link_down(name) == 0 ? ": link down\n" : ": link down FAILED\n");
+		}
+	}
+	sys(SYS_close, fd, 0, 0, 0, 0, 0);
+}
+
 static void crash_jump(void)
 {
 	static const char *const cpus[] = {
@@ -347,12 +386,29 @@ static void crash_jump(void)
 		"/sys/devices/system/cpu/cpu7/online",
 	};
 
+	char online[32] = "";
+	struct {
+		long sec, nsec;
+	} ts = { 0, 300 * 1000 * 1000 };
+
 	for (unsigned long i = 0; i < sizeof(cpus) / sizeof(cpus[0]); i++) {
 		(void)write_file(cpus[i], "0");
 	}
+	if (read_small("/sys/devices/system/cpu/online", online, sizeof(online)) <= 0 ||
+	    online[0] != '0' || (online[1] != '\n' && online[1] != 0)) {
+		put("crash: CPUs other than 0 are still online (/sys/devices/system/cpu/online: ");
+		put(online[0] ? online : "unread\n");
+		put("): the image would start on one of them; not triggering, crash image unloaded\n");
+		sys(SYS_kexec_load, 0, 0, 0, KEXEC_ARCH_AARCH64 | KEXEC_ON_CRASH, 0, 0);
+		sys(SYS_exit, 1, 0, 0, 0, 0, 0);
+	}
 	(void)write_file("/proc/sys/kernel/sysrq", "1");
 	sys(SYS_sync, 0, 0, 0, 0, 0, 0);
-	quiesce_bus_masters();
+	ignore_signal(1);    /* SIGHUP */
+	ignore_signal(13);   /* SIGPIPE */
+	ignore_signal(15);   /* SIGTERM */
+	crash_links_down();
+	sys(SYS_nanosleep, (long)&ts, 0, 0, 0, 0, 0);   /* let the stop paths finish */
 	(void)write_file("/proc/sysrq-trigger", "c");
 }
 
