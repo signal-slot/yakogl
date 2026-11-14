@@ -240,11 +240,18 @@ samplers), RC6 and RC15; no single item.
 
 ### RC10. Limits and state queries
 
-`state_query` 25 and `implementation_limits` 11: ES 3.0 limits read as float
-or 64-bit integers, uniform-block and varying component limits below the ES
-3.0 minimum, the compressed-format list, `max_draw_buffers` and
-`max_color_attachments` 3 (RC14). Item `es3-caps` (the ES 3.0 limits test was
-reverted for review and is to be redone).
+`state_query` 25 and `implementation_limits` 11: limits below the ES 3.0
+minimum, each failing in every query form dEQP makes for it (the float and
+64-bit rows are the same values, not a separate query defect:
+`docs/notes/v3d-varyings.md`, "The query forms"). The varying family meets
+ES 3.0 on every GPU but the Mali since plan #359 (the V3D 15 / 60 / 60 / 64,
+`docs/notes/v3d-varyings.md`; the PowerVR and the GC7000 15 / 60 / 60 and
+MAX_VERTEX_OUTPUT_COMPONENTS 60, below 64). Still open: the uniform-block
+size and combined components (6144 / 1536 on every GPU, the design and what
+it waits for in `docs/notes/es3-uniform-block-limits.md`), the
+compressed-format list, `max_samples` (RC8) and `max_draw_buffers` /
+`max_color_attachments` 3 (RC14). `tests/es3_caps.rs` `known_gaps()` lists
+them per build.
 
 ### RC11. Occlusion queries
 

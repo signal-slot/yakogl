@@ -171,8 +171,10 @@ struct v3d_fs_prog {
 	uint32_t code;       /* GPU address of the QPU code, 8-byte aligned */
 	uint32_t threads;
 	bool single_seg;
-	uint32_t num_inputs;
-	/* word 0 of each flags array: M5 supports num_inputs <= 24 and all zero */
+	uint32_t num_inputs; /* at most V3D_MAX_FS_INPUTS */
+	/* word 0 of each flags array, inputs 0-23 (the packets' 24-bit field):
+	 * the compiler puts every flat and centroid input there, and a bit
+	 * past 23 is refused, never dropped (docs/notes/v3d-varyings.md) */
 	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
 	bool writes_z, disable_ez, uses_center_w, lock_scoreboard_on_first_thrsw;
 	bool uses_implicit_point_line_varyings, uses_pid;
@@ -208,6 +210,11 @@ struct v3d_vertex_attr {
 };
 
 #define V3D_MAX_ATTRS 16
+/* Mesa's V3D_MAX_FS_INPUTS (broadcom/common/v3d_limits.h): the fragment
+ * shader's input components */
+#define V3D_MAX_FS_INPUTS 64
+/* the inputs one word of the varying flags covers */
+#define V3D_FLAGS_WORD_INPUTS 24
 
 /*
  * A stage's GL uniform storage: what gallium's constbuf 0 user buffer is in

@@ -494,10 +494,11 @@ static bool write_uniforms(struct v3d_cl *cl, const struct v3d_uniform *u, uint3
 }
 
 /* v3dx_emit.c emit_varying_flags for word 0 (the only word struct
- * v3d_fs_prog carries: 24 varyings, more than MAX_VARYING_VECTORS asks for):
- * one packet that zeroes the higher words, or ZERO_ALL_* when it is 0. The
- * three kinds are three packets of one layout (V3DX(emit_varying_flags)'s
- * flag_emit_callback in Mesa). */
+ * v3d_fs_prog carries: inputs 0-23, where the compiler puts every flat and
+ * centroid input of up to V3D_MAX_FS_INPUTS; draw_is_supported refuses a
+ * bit past 23): one packet that zeroes the higher words, or ZERO_ALL_* when
+ * it is 0. The three kinds are three packets of one layout
+ * (V3DX(emit_varying_flags)'s flag_emit_callback in Mesa). */
 #define EMIT_VARYING_FLAGS(bcl, KIND, kind, w0)                                                    \
 	do {                                                                                       \
 		if (!(w0)) {                                                                       \
@@ -797,8 +798,13 @@ static bool draw_is_supported(const struct v3d_job_draw *d)
 	if (!threads_ok(d->fs->threads) || !threads_ok(d->vs->threads) ||
 	    !threads_ok(d->cs->threads))
 		return false;
-	/* word 0 of the varying flags only (24 varyings) */
-	if (d->fs->num_inputs > 24)
+	/* the inputs the shader record names (Mesa's V3D_MAX_FS_INPUTS), and
+	 * the varying flags in word 0 only: a bit past input 23 has no word
+	 * here, so it is refused rather than dropped */
+	if (d->fs->num_inputs > V3D_MAX_FS_INPUTS)
+		return false;
+	if ((d->fs->flat_shade_flags | d->fs->noperspective_flags | d->fs->centroid_flags) >>
+	    V3D_FLAGS_WORD_INPUTS)
 		return false;
 	if (d->prim > V3D_PRIM_TRIANGLE_FAN || d->count == 0)
 		return false;

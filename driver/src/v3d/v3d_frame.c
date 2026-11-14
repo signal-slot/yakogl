@@ -594,7 +594,7 @@ static bool emit_state(const struct v3d_triangle_frame *f, struct v3d_cl *bcl)
 
 	/* varying flags (v3dx_emit.c:621-643): M5 writes the all-zero case only */
 	if (f->fs->flat_shade_flags || f->fs->noperspective_flags || f->fs->centroid_flags ||
-	    f->fs->num_inputs > 24)
+	    f->fs->num_inputs > V3D_MAX_FS_INPUTS)
 		return false;
 	v3d_cl_emit(bcl, ZERO_ALL_FLAT_SHADE_FLAGS, zf);
 	v3d_cl_emit(bcl, ZERO_ALL_NON_PERSPECTIVE_FLAGS, zn);

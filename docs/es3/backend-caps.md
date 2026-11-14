@@ -157,8 +157,8 @@ in `src/gl/context.rs`. "Per GPU" means a `cfg(feature = "gpu-…")` constant.
 | MAX_VERTEX_ATTRIBS | 16 | `state.rs:1184` ← `context.rs:78` |
 | MAX_TEXTURE_IMAGE_UNITS, MAX_COMBINED_TEXTURE_IMAGE_UNITS, MAX_VERTEX_TEXTURE_IMAGE_UNITS | 16, 32, 16 | `state.rs:1185-1189` ← `context.rs:95,107`, `backend.rs:571,582,602` |
 | MAX_VERTEX/FRAGMENT_UNIFORM_VECTORS, MAX_VERTEX/FRAGMENT_UNIFORM_COMPONENTS | 384 / 1536 | `state.rs:1198-1199,1214-1215` ← `context.rs:83,89-90` |
-| MAX_VARYING_VECTORS / MAX_VARYING_COMPONENTS | GC7000 15 / 60; PowerVR 8 / 32; V3D 8 / 32 | `state.rs:1200,1218` ← `context.rs:124,127,133` |
-| MAX_VERTEX_OUTPUT_COMPONENTS, MAX_FRAGMENT_INPUT_COMPONENTS | GC7000 60, 60; PowerVR 32, 32; V3D 32, 32 | `state.rs:1219-1220` ← `context.rs:158-159` |
+| MAX_VARYING_VECTORS / MAX_VARYING_COMPONENTS | GC7000 15 / 60; PowerVR 15 / 60; V3D 15 / 60 | `state.rs` `get_integerv` ← `context.rs` `MAX_VARYING_VECTORS` |
+| MAX_VERTEX_OUTPUT_COMPONENTS, MAX_FRAGMENT_INPUT_COMPONENTS | GC7000 60, 60; PowerVR 60, 60; V3D 64, 60 (`gl_Position` takes VPM rows of its own, `docs/notes/v3d-varyings.md`) | `state.rs` ← `context.rs` `MAX_VERTEX_OUTPUT_COMPONENTS`, `MAX_FRAGMENT_INPUT_COMPONENTS` |
 | MAX_VERTEX/FRAGMENT_UNIFORM_BLOCKS, MAX_COMBINED_UNIFORM_BLOCKS | 12, 12, 24 | `state.rs:1227-1228` ← `program.rs:69` |
 | MAX_UNIFORM_BUFFER_BINDINGS | 24 | `state.rs:1229` ← `context.rs:168` |
 | MAX_UNIFORM_BLOCK_SIZE | 6144 (= 1536 x 4) | `state.rs:1230` |
@@ -213,11 +213,11 @@ means the minimum is met.
 | MAX_SAMPLES ≥ 4 | Hw 4 (`bxs-4-64.h:92`); Vulkan sample counts 1, 4 (`pvr_physical_device.c:735,740`). **Reports 1** | Hw 4x only (`etnaviv_screen.c:451-468`, `H:19129`); multisample textures debug-only in Mesa (`:296`). **Reports 1** | Hw 4 (`v3d_limits.h:41`; `v3d_screen.c:423-424`). **Reports 1** |
 | MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS ≥ 64, SEPARATE_ATTRIBS ≥ 4, SEPARATE_COMPONENTS ≥ 4 | Hw none (§1.3). **Reports 64 / 4 / 64 =** (the capture runs on the CPU, `gl/tf_capture.rs`) | Hw none (`HWTFB` = 0, `H:19202`); Mesa 26.2.1 offers 0 buffers here (`etnaviv_screen.c:267`). **Reports 64 / 4 / 64 =** (CPU capture) | Hw yes, 4 buffers (packets; `v3d_screen.c:321`). **Reports 64 / 4 / 64 =** (CPU capture) |
 | MAX_VERTEX_UNIFORM_BLOCKS ≥ 12, FRAGMENT ≥ 12, COMBINED ≥ 24, BINDINGS ≥ 24 | no UBO hardware relied on: blocks are flattened into the default block ([C] the comment at `state.rs:1221-1226`). Reports 12/12/24/24 = | same lowering (etnaviv lowers UBOs to uniforms too, `etnaviv_screen.c:195-199`); = | same lowering; = |
-| MAX_UNIFORM_BLOCK_SIZE ≥ 16384 | **Reports 6144** (yakogl's budget, not a hardware cap) | same | same |
-| MAX_COMBINED_VERTEX / FRAGMENT_UNIFORM_COMPONENTS ≥ 50176 / 50048 | **Reports 1536** | same | same |
+| MAX_UNIFORM_BLOCK_SIZE ≥ 16384 | **Reports 6144** (yakogl's budget, not a hardware cap: blocks are copied into the default block; a 16 KiB block needs reads from memory, `docs/notes/es3-uniform-block-limits.md`) | same | same |
+| MAX_COMBINED_VERTEX / FRAGMENT_UNIFORM_COMPONENTS ≥ 50176 / 50048 | **Reports 1536** (the blocks share the default block; same note) | same | same |
 | MAX_VERTEX / FRAGMENT_UNIFORM_COMPONENTS ≥ 1024 / 896 | 1536 = | 1536 = | 1536 = |
-| MAX_VARYING_VECTORS ≥ 15, MAX_VARYING_COMPONENTS ≥ 60, MAX_FRAGMENT_INPUT_COMPONENTS ≥ 60 | Mesa Vulkan: 64 out / 64 in components (`pvr_physical_device.c:655,677`). **Reports 8 / 32 / 32** ("until the USC's limit is measured", `context.rs:125`) | Hw 16 varyings, one slot is the position (`etnaviv_screen.c:965-968`, `H:18876`). Reports 15 / 60 / 60 = | Hw 64 input components (`v3d_limits.h:32-34`; `v3d_screen.c:323`). **Reports 8 / 32 / 32** ("raised with the board run", `context.rs:128-131`) |
-| MAX_VERTEX_OUTPUT_COMPONENTS ≥ 64 | **Reports 32**; Mesa Vulkan 64 | **Reports 60** (15 x 4); whether 64 is reachable with 16 output rows, one of them the position, is [U] | **Reports 32**; Hw 64 |
+| MAX_VARYING_VECTORS ≥ 15, MAX_VARYING_COMPONENTS ≥ 60, MAX_FRAGMENT_INPUT_COMPONENTS ≥ 60 | Mesa Vulkan: 64 out / 64 in components (`pvr_physical_device.c:655,677`). Reports 15 / 60 / 60 = (the records, the PDS coefficient program and the `ditrp` offsets carry 15, `context.rs`) | Hw 16 varyings, one slot is the position (`etnaviv_screen.c:965-968`, `H:18876`). Reports 15 / 60 / 60 = | Hw 64 input components (`v3d_limits.h:32-34`; `v3d_screen.c:323`). Reports 15 / 60 / 60 = (64 inputs compile and draw, at most 24 of them flat or centroid; 64 read at once do not allocate, `docs/notes/v3d-varyings.md`) |
+| MAX_VERTEX_OUTPUT_COMPONENTS ≥ 64 | **Reports 60**; Mesa Vulkan 64; whether 64 is reachable is [U] (issue draft of plan #359) | **Reports 60** (15 x 4); whether 64 is reachable with 16 output rows, one of them the position, is [U] | Reports 64 = (x, y, z, 1/w, the point size and 64 varyings fit the VPM output, `select.rs` `VPM_MAX_OUTPUT_ROWS`) |
 | MAX_TEXTURE_SIZE, MAX_CUBE_MAP_TEXTURE_SIZE, MAX_RENDERBUFFER_SIZE ≥ 2048 | Hw state field 16384 (`texstate.xml:276`); Mesa Vulkan 4096 (`pvr_physical_device.c:620-623`). Reports 4096 = | Hw 8192 (`etnaviv_screen.c:970-973`, `H:18986,18992`). Reports 4096 = | Hw 4096 (`v3d_limits.h:62-63`). 4096 = |
 | MAX_TEXTURE_IMAGE_UNITS ≥ 16, VERTEX ≥ 16, COMBINED ≥ 32 | Mesa Vulkan 16 samplers a stage (`pvr_physical_device.c:634`). 16/16/32 = | Hw 16 + 16 (`etnaviv_screen.c:824-827`). 16/16/32 = | Hw 24 (`v3d_limits.h:39`). 16/16/32 = |
 | NUM_COMPRESSED_TEXTURE_FORMATS ≥ 10 | Hw has all ten (`texstate.xml:195-231`; `pvr_arch_formats.c:158-167`). **Reports 5** (the three linear, the two sRGB ETC2) | ETC2/EAC are hardware EXT formats from HALTI0 (`etnaviv_format.c:244-250`). **Reports 5** (the three linear, the two sRGB ETC2) | All ten (`v3dx_format_table.c:159-168`). **Reports 3** |
@@ -282,8 +282,7 @@ for an entry that now meets its minimum.
 | MAX_UNIFORM_BLOCK_SIZE | 16384 | 6144 | 6144 | 6144 | ubo-uniform |
 | MAX_COMBINED_*_UNIFORM_COMPONENTS | 50048 / 50176 | 1536 | 1536 | 1536 | ubo-uniform |
 | NUM_COMPRESSED_TEXTURE_FORMATS | 10 | 5 | 5 | 3 | formats-* |
-| MAX_VARYING_VECTORS / _COMPONENTS / FRAGMENT_INPUT | 15 / 60 / 60 | 8 / 32 / 32 | ok (15 / 60 / 60) | 8 / 32 / 32 | USC measurement; V3D board run |
-| MAX_VERTEX_OUTPUT_COMPONENTS | 64 | 32 | 60 | 32 | same (GC7000: 15 x 4) |
+| MAX_VERTEX_OUTPUT_COMPONENTS | 64 | 60 | 60 | ok (64) | issue drafts of plan #359 (PowerVR, GC7000: 15 x 4) |
 
 The three transform feedback limits are **not** gaps: 64 / 4 / 64 meet ES
 3.0's 64 / 4 / 4 on every GPU (§2).

@@ -3,8 +3,10 @@
 # V3D varyings: 15 vectors and 64 vertex output components
 
 Plan #359, item `v3d-varyings-note`, from the read-only design
-`design-v3d-varyings`. Line numbers are at the integration tip `2aee4c92`
-(the `src/` and `driver/` files may have moved by a few lines since);
+`design-v3d-varyings`; the raise itself is the section "What the raise
+carries" (it replaces the two change lists the design had). Line numbers of
+the first sections are at the integration tip `2aee4c92` (the `src/` and
+`driver/` files may have moved by a few lines since);
 Mesa lines are Mesa 26.2.1 (`$MESA_FULL_SRC_26_2_1`: the vendored
 `third_party/mesa-26.2.1` has no v3d driver or compiler sources). Code
 that relies on this design cites this note.
@@ -94,65 +96,148 @@ reports `max_varyings = V3D_MAX_FS_INPUTS / 4` = 16
 
 ## Decision
 
-Report 16 vectors and 64 for `MAX_VARYING_COMPONENTS`,
-`MAX_FRAGMENT_INPUT_COMPONENTS` and `MAX_VERTEX_OUTPUT_COMPONENTS`, Mesa's
-answer, on the V3D only (above ES 3.0's 15/60/60/64, so conformant). The
-fallback if a board rejects 16 vec4s (see the open board check below) is
-15/60/60/64, with the three component constants split from
-`MAX_VARYING_VECTORS * 4` into 64/60/60 per GPU build, as the triage note
-asked. In either case the constants in `context.rs:193-194` stop being
-`MAX_VARYING_VECTORS * 4` on the V3D, and `state.rs:1254` follows. Under
-`report-es2` the V3D stays 8 (`tests/es2_report_guard.rs`).
+The V3D build answers `MAX_VARYING_VECTORS` 15, `MAX_VARYING_COMPONENTS`
+and `MAX_FRAGMENT_INPUT_COMPONENTS` 60 and `MAX_VERTEX_OUTPUT_COMPONENTS`
+64: ES 3.0's minimums, not Mesa's 16 vectors. Three reasons, each measured
+on the host or read in the code:
 
-## Changes of `v3d-varyings-compiler`
+- A fragment shader that reads 64 input components does not compile here:
+  `select_fragment` emits every `ldvary` before the body ("The varyings
+  first, in input order"), so 64 values are live at once, and the
+  allocator refuses with "more live values than 2 threads have registers
+  (no spilling yet)" (`varyings_tests.rs`
+  `a_vs_with_16_vec4_outputs_feeds_15`). 60 fit.
+- A program reading `gl_PointCoord` takes two implicit varyings ahead of
+  the declared ones; 60 + 2 stays within the 64 inputs the hardware
+  iterates, and whether 64 + 2 does is a board question (below).
+- No board has drawn more than a few varyings; 15 is what the conformance
+  run needs.
 
-1. Flag sets become three 24-bit words as Mesa does (`vir.c:992-1003`):
-   `chain.rs:138-140` and `419-445` (drop the "input past 31" refusals),
-   `FsProg`, `ShcV3dFs`/`shc_v3d_fs`, the `abi_layout` pins and
-   `v3d_abi.rs`; the comparison JSON (`chain.rs:1322-1327`) prints all
-   words.
-2. `select_fragment` (`select.rs:2210`) takes the flags as 64-bit tests
-   (a `u64` pair or `[u32; 3]`).
-3. `select_vertex` raises its row cap (`select.rs:2560`) from 64 to
-   4 + 1 + 64 = 69, and `VpmRowOutOfRange`'s doc (`select.rs:402`) moves
-   with it.
-4. `chain.rs` refuses more than 64 fragment inputs by name rather than by
-   `NotYet`, and `vpm_fields` stays correct at 69 rows for both targets.
-5. `sim.rs` needs no change: it interprets the code, not the flag words
-   or the VPM layout. The host tests (`tests/es3_v3d_varyings.rs`, from
-   `v3d-varyings-probe`) pin the 60- and 64-component shaders.
+`MAX_VERTEX_OUTPUT_COMPONENTS` is 64 rather than 60 because `gl_Position`
+is not one of the V3D's varyings: its four fixed-function rows come before
+them in the VPM (above), so a vertex shader with 16 vec4 outputs links with
+a fragment shader reading 15 of them. `src/gl/context.rs` splits the
+constant for `gpu-v3d` without `report-es2`; the PowerVR, GC7000 and Mali
+keep `MAX_VARYING_VECTORS * 4`. Under `report-es2` the V3D stays at 8,
+which `tests/es2_report_guard.rs` pins (16 passed on the V3D's ES 2.0
+build).
 
-## Changes of `v3d-varyings-raise`
+## What the raise carries
 
-1. `V3dFsProg` and C `struct v3d_fs_prog` (`v3d_frame.h:174-176`) hold
-   three flag words each; the pins in `ffi.rs:835` and
-   `ffi_layout_check.c:29` move (the struct becomes 80 bytes), and
-   `backend.rs:3680-3682` copies all three. The comparison fixtures keep
-   only word 0; the new tests and `job_check.c` check words 1 and 2.
-2. `EMIT_VARYING_FLAGS` (`v3d_job.c:501-513`) becomes a port of Mesa's
-   `emit_varying_flags` (`v3dx_emit.c:177-208`) with the packet layout
-   above (`varying_offset_v0` = the word index, the actions as in the
-   rule above); `v3d_frame.c:595-598` (the all-zero case) widens the same
-   way.
-3. The draw cap rises from 24 to 64 inputs (`v3d_job.c:800-802`,
-   `v3d_frame.c:597`, `v3d_frame.h:175`).
-4. `context.rs:149-159` and `188-194` get the `cfg` split: the V3D answers
-   16 and 64/64/64; PowerVR, GC and Mali are unchanged (Mali stays as it
-   is for the stage-5 plans). `state.rs:1254-1256` reads the new
-   constants.
-5. Tests: `tests/es3_caps.rs` `known_gaps`, `tests/es3_limits_v3d.rs` and
-   `tests/es2_report_guard.rs`, listed in the design's section 6.
-6. Rebase onto #354 and #356 for `ffi.rs` and `backend.rs`.
+The design above planned three flag words per kind through every struct
+the fragment program crosses. That moves `struct shc_v3d_fs`
+(`include/gles_shaderc.h`), hence `struct shc_v3d` and `struct shc_shader`
+on a V3D build and every struct that embeds them (the generated
+`src/abi_layout.rs` and `src/abi_layout_check.c`), `struct v3d_fs_prog`
+(`driver/src/v3d/v3d_frame.h`, `src/v3d/ffi.rs` and its pins), and the
+tools and tests that mirror them (`tools/v3d/pack_seq.h`,
+`v3d_prog_header.py`, `sim_fixture.py`, `tests/v3d_sim_mesa.rs`,
+`tests/es3_flatshade_guard.rs`). The raise does not need it: of ES 3.0's
+60 inputs only the flat and centroid ones need a flags bit, and only a
+program with more than 24 of them needs a second word (what that costs is
+below). So every ABI byte stays as it is, and the raise is:
+
+1. **One flags word, the qualified inputs first.** `chain.rs`
+   `compile_program`: the flags are word 0 of Mesa's arrays, inputs 0-23
+   (`FLAGS_WORD_INPUTS`). When a flat or centroid input would land past
+   23, the input list is reordered with the flat and centroid inputs first,
+   each group in its own order; `ldvary` takes the inputs in the list's
+   order and the vertex shader writes them in the same order (`wanted`),
+   so both stages follow. A program whose qualified inputs all lie below 24
+   keeps Mesa's order, which is every program the comparison fixtures hold.
+   More than 24 flat and centroid components are refused by name ("more
+   than 24 flat and centroid varying components"), never drawn smooth.
+2. **64 fragment inputs.** `chain.rs` refuses more than `FS_MAX_INPUTS` (64,
+   Mesa's `V3D_MAX_FS_INPUTS`) by name, before selection.
+3. **69 VPM output rows.** `select.rs` `VPM_MAX_OUTPUT_ROWS`: x, y, z, 1/w,
+   the point size and 64 varyings, Mesa's largest layout (the cap was 64,
+   which refused 15 vec4 with `gl_PointSize`). `vpm_fields` holds it on the
+   64 KiB VPM (9 sectors a batch, seven batches).
+4. **The job builder.** `v3d_job.c` `draw_is_supported` takes up to
+   `V3D_MAX_FS_INPUTS` (`v3d_frame.h`; it took 24) and refuses a flag bit
+   past 23 instead of dropping it (the packet field is 24 bits);
+   `EMIT_VARYING_FLAGS` is unchanged, since word 0 with the higher words
+   zeroed is Mesa's emission for this case (`v3dx_emit.c:177-208`).
+   `v3d_frame.c` (the M5 frame) takes the same input count.
+5. **The GL core.** `context.rs` `MAX_VARYING_VECTORS` and
+   `MAX_VERTEX_OUTPUT_COMPONENTS` (above); `state.rs` and the shader's
+   `gl_Max*` constants read them. The ES 1.00 link's Appendix A packing
+   packs against 15.
+
+Tests: `src/shaderc/online/v3d/varyings_tests.rs` (the compiler and the
+interpreter: 15 vectors, 16 vec4 outputs feeding 15, the point size row,
+the reorder with the flat values reaching the colour, the two refusals),
+`tests/es3_v3d_varyings.rs` (the GL core, the real back end and the real
+job builder: 60-input draws of GLSL ES 3.00 and 1.00, the decoded
+`FLAT_SHADE_FLAGS` of a late flat varying, the link refusals),
+`tools/v3d/job_check.c` part 2 (the job builder's refusals and a 60-input
+draw), and the pins in `tests/es3_caps.rs`, `tests/es3_limits_v3d.rs` and
+`src/gl/state.rs`.
+
+What the one word costs, measured on the host (`tests/es3_shaderc_infolog.rs`
+on `gpu-v3d`, VK-GL-CTS 93bca01's transform-feedback programs): 85 of them
+have more than 24 flat or centroid components and are refused at link by
+name (the `array.*` and `array_element.*` `ivec4`/`uvec4` cases, 54; 30
+`random*`; `extra.mixed.centroid_mat_flat_int`). 26 of them were refused
+before too ("a flat varying past input 31"); the other 59 linked, and the
+job builder refused every draw of them (more than 24 inputs): on the Pi 4
+that was a ResourceError, which ended the TF1 image's run at
+`array.interleaved.lines.highp_ivec4`. A link refusal is a Fail and the run
+goes on (the test's totals: 1190 linked and 134 refused before, 1131 and
+193 now). The test's V3D floor of the 600 random programs that link
+through the GL API moves from 504 to 459: 45 with a flat or centroid input
+past 23, refused by the flags word or, once their flat inputs move first,
+by the allocator (no spilling yet).
+
+Host dEQP-GLES3 `transform_feedback.*` on `GPU=v3d` (HOST-ONLY, 882
+cases, main `40539acd` against this change): Pass 740 -> 849, Fail
+130 -> 2, NotSupported 12 -> 31. 106 Fail -> Pass and 3 NotSupported ->
+Pass are programs of 9 to 15 vectors that the old 8-vector limit and the
+24-input job builder refused; 22 Fail -> NotSupported are array captures
+the flags word now refuses at link, which dEQP reports as "Capturing
+arrays is not supported" (es3fTransformFeedbackTests.cpp:1033-1036). The
+capture runs on the CPU (`gl/tf_capture.rs`), so these are the host's own
+verdicts on the captured buffers, not a board result.
+
+The three-word design stays the follow-up for a program with more than 24
+flat or centroid components (an issue draft of plan #359): the flags
+become `[u32; 3]` in `FsProg`, `shc_v3d_fs` and `v3d_fs_prog`, the pins are
+regenerated (`yakogl-tools abi-layout`), and `EMIT_VARYING_FLAGS` becomes
+the port of `emit_varying_flags` described above.
+
+## The query forms
+
+Section G3 of `docs/notes/v3d-notpass-rest.md` suspected a separate defect
+in the float and 64-bit query paths, because the board's
+`state_query.integers.*_getfloat` / `*_getinteger64` rows failed while no
+`*_getinteger` row did. There is no such defect. For an implementation
+limit dEQP makes only the boolean, int64 and float forms in
+`state_query.integers` and the boolean, integer and float forms in
+`state_query.integers64` (es3fIntegerStateQueryTests.cpp, "implementation
+defined limits have their own tests so just check the conversions", at
+VK-GL-CTS 93bca01): the integer form is the `implementation_limits` row.
+Each form checks the value against the minimum, so all of them fail with a
+value below it and pass with one that meets it. `glGetFloatv` and
+`glGetInteger64v` answer the `glGetIntegerv` value converted
+(`src/gl/state.rs`); `tests/es3_limits_v3d.rs`
+`every_g3_pname_answers_the_same_in_all_three_integer_forms` and
+`tests/es3_caps.rs` pin that. The AM62P's `max_varying_vectors_getfloat`
+Fail is the same: that run (ad2b5ed, 2026-10-13) predates the PowerVR's
+15 (b9a5a673, 2026-11-09).
 
 ## Open, no owner yet
 
 - The ES 3.00 link does not check varying component counts
-  (`reflect.rs:1068-1070`); with 64 inputs a shader past the limit should
-  fail at link, as dEQP expects.
-- `tools/shaders/known-uncompilable-v3d.txt:38-40` needs a separate entry
-  per build once the limits differ.
-- A Pi 4 board check, a step for #320: 16 vec4 varyings plus
-  `gl_PointCoord` (does `num_inputs` of the shader record, two implicit
-  point varyings included, stay within what the hardware takes?), and
-  flat and centroid bits in words 1 and 2. Nothing here has run on the
-  board; the 16 is Mesa's number, not a measurement of ours.
+  (`reflect.rs:1068-1070`): a GLSL ES 3.00 pair past 60 is refused by the
+  code generator (above 64 inputs, or by the register allocator), not by
+  the link's own rule. dEQP's negative varying cases would see a link
+  failure either way.
+- `tools/shaders/known-uncompilable-v3d.txt` lost its `varyings15` entry:
+  the pair links under ES 3.0. `tests/v3d_online_corpus.rs` is not run in a
+  `report-es2` build (it refuses every GLSL ES 3.00 source there), so the
+  ES 2.0 build's refusal of 15 vectors has no entry.
+- A Pi 4 board check, a step for #320: gl_test case 97 (`varyings15`)
+  now runs on the V3D instead of skipping, and dEQP-GLES3
+  `shaders.linkage.varying.*` with 15 vec4, with `gl_PointCoord` beside
+  them, and with flat inputs past input 23. Nothing here has run on the
+  board.
