@@ -1979,10 +1979,18 @@ impl<'a> Sel<'a> {
         let base = reg * 4;
         /* A scratch copy, so a register that turns out not to fit is left
          * exactly as it was: a half-written register would hold values no
-         * instruction reads and shift every literal after it. */
+         * instruction reads and shift every literal after it.
+         *
+         * An UNUSED lane is room: it is the padding the commit below (or a
+         * driver-filled register) wrote, which nothing reads. Until
+         * 2026-11-13 it counted as taken, so every register was full once
+         * written: a scalar literal took a register of its own. The folding
+         * of rank 4a turned dEQP uniform_api.random.3's vec4 comparisons into
+         * a scalar literal a lane, and its vertex constant file went from 275
+         * registers to 461, past the GC7000's 320 (the link refused it). */
         let mut slots = [None; 4];
         for (i, slot) in slots.iter_mut().enumerate() {
-            if base + i < self.consts.len() {
+            if base + i < self.consts.len() && self.consts[base + i] != ConstSlot::UNUSED {
                 *slot = Some(self.consts[base + i]);
             }
         }
