@@ -5,6 +5,10 @@
 Date 2026-11-09, tip `bcab1c1d`. Plan item `refl-long-name-note`. Decision
 note only: no file under `src/` or `tests/` changed; the implementing item is
 `refl-long-name`, which may correct this note where it checked something wrong.
+Implemented (plan #338): the GL queries and the link by `83644bb2`, the last
+two field readers (`gl/draw.rs`, `gl/tf_capture.rs`) and the crate-level
+`shaderc::uniform_row_name` by `refl-long-name`; section 4's "Concretely"
+list and section 5 read as the code does, the rest is the decision as taken.
 
 Closes the "decision needed" row of RC13 (`docs/es3-cts-failures.md:253`,
 section at `:237`): dEQP `shaders.uniform_block.valid.long_instance_name_vertex`
@@ -124,8 +128,10 @@ travels Rust-side, keyed by an index — not a hash; a 64-bit hash would re-open
 exactly the "two names, one cut" collision `duplicate_name`
 (`src/shaderc/link.rs:42`) exists to catch, and an index cannot collide.
 
-Concretely, as implemented (`06840143`, then `ubo-names-63`; this list was
-corrected against the code):
+Concretely, as implemented (the name pool by `06840143`, plan #325; the GL
+queries and the link by `83644bb2`; the last field readers by
+`refl-long-name`; this list was corrected against the code, which is the
+reference):
 
 - `uniform_rows` keeps filling the 64-byte field as before, cut or not, with
   no marker: a full field (63 bytes and the NUL) is the one signature of a
@@ -140,18 +146,28 @@ corrected against the code):
   accepts every full-field row the pool holds (`whole_uniform_row`): a 63-,
   64- or 200-character uniform links. Without the online compiler there is
   no pool, and the exact-length refusal (`link.rs` tests) is the rule.
-- The GL core takes every uniform row's name from the pool
-  (`program::row_name`, via `online::backend::uniform_name`): location
+- The GL core reads every uniform row's name through
+  `shaderc::uniform_row_name` (`src/shaderc/mod.rs`: the pool's name via
+  `online::backend::uniform_name`, else the field's bytes; without the online
+  compiler always the field's), never through the field alone: location
   lookup, the stage merge in `build_locations`, `glGetActiveUniform`,
-  `glGetUniformIndices` and `GL_ACTIVE_UNIFORM_MAX_LENGTH`. A reported name is
-  no longer assembled in a fixed buffer: `GlName` keeps its pieces (the whole
-  name, a struct array's index, "[0]") and is cut only by the caller's
+  `glGetUniformIndices`, `GL_UNIFORM_NAME_LENGTH` and
+  `GL_ACTIVE_UNIFORM_MAX_LENGTH`; the PowerVR `pvr_layers_<sampler>` row the
+  draw fills with the bound array's layer count (`gl/draw.rs`,
+  `fill_stage_layer_uniforms`, which built the row's name in a fixed
+  `SHC_UNIFORM_NAME_MAX + 16` buffer from the field before); and the
+  transform-feedback capture's match of the IR's uniforms and samplers to the
+  linked vertex stage's rows (`gl/tf_capture.rs` `uniform_block`,
+  `resolve_sampler`), which refused a 63-character uniform as "not laid out
+  in the linked vertex stage" before. A reported name is no longer assembled
+  in a fixed buffer: `GlName` (`src/gl/program.rs`) keeps its pieces (the
+  whole name, a struct array's index, "[0]") and is cut only by the caller's
   `bufSize`. `find_struct_member`'s 72-byte key and `glGetUniformBlockIndex`'s
   132-byte "[0]" buffer became slice comparisons. Block names and members'
   GL names were whole already (`ShcBlock::name`, `ShcBlockMember::name`).
-- Still read from the field: `gl/tf_capture.rs` (a transform-feedback vertex
-  stage's uniform rows, which refuses rather than guesses on a mismatch) and
-  `gl/draw.rs`'s `pvr_layers_<sampler>` lookup (both names cut alike).
+  The `*_NAME_LENGTH` queries needed no change once the names they measure
+  were whole. Still read from their 32-byte fields: attribute and varying
+  names (`gl/tf_capture.rs` `inputs`, `gl/tf.rs`), the io half below.
 - The 32-byte io guards **stay** (GC `abi.rs:377-379`, PVR `abi.rs:523`/`:574`,
   V3D `v3d_abi.rs:68-70`, `codegen.rs:1120`, and the varying/attrib arm of
   `reject_truncated_names`): those names are paired across stages by
@@ -183,10 +199,23 @@ corrected against the code):
     and both stay `GL_INVALID_ENUM` under `REPORT_ES2`
     (`src/gl/program.rs:2988-2995`, the `es2_report_guard` rule);
   - edges that must not regress: a 63- and a 64-character uniform name link
-    and report whole (replacing `link.rs:596-614`'s exact-length expectation),
-    a 1,025-character identifier is still refused (`lexer.rs:543`);
+    and report whole (the `link.rs` exact-length test stays as the rule of a
+    build without the online compiler), a 1,025-character identifier is still
+    refused (`lexer.rs:543`);
   - any fixture or reference table it adds is regenerated in the same commit
-    (CLAUDE.md, the gate compares the bytes).
+    (CLAUDE.md, the gate compares the bytes); none was needed.
+  As implemented the file pins both dEQP programs; default-block uniforms of
+  62, 63, 64 and 200 characters, names sharing a 62-character prefix and a
+  100-character array, each at every `bufSize` and at a location whose value
+  reads back; block names of 70 and 200 characters with and without an
+  instance, and two blocks of 70 and 200 behind instances of 200 and 70
+  (`GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH` 201); a 200-character uniform
+  declared in both stages as one uniform; a transform-feedback capture
+  reading a 63- and a 200-character uniform and a 70-character sampler by
+  name; and the 1,025-character refusal. `tests/es3_pvr_longname.rs` adds the
+  PowerVR `pvr_layers_` row filled for a sampler of 60, 63 and 200
+  characters, and `tests/es3_ubo_name_queries.rs` block, member and
+  default-block names of 63, 64 and 200 characters next to its 1, 31 and 62.
 - `tests/es3_shaderc_corpus.rs`: the build count moves **3,457 → 3,459** of
   3,461 on each GPU — the only other two refusals are
   `constant_expressions.other.complex_{vertex,fragment}`, the
@@ -194,7 +223,8 @@ corrected against the code):
   and the `uniform_block` row `:87`/`:125` moves 64 / 2 → 66 / 0.
 - Board: the two dEQP cases replace their `tools/cts/RESULTS.md` rows and the
   `docs/es3-cts-failures.md:253` row flips from "decision needed"; the
-  `docs/es3/` rows are the es3-docs item's to move.
+  `docs/es3/` rows are the es3-docs item's to move
+  (`docs/es3/shaderc-coverage.md`'s counts moved with `refl-long-name`).
 
 ## What this note did not do
 

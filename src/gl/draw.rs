@@ -3247,7 +3247,7 @@ fn fill_stage_layer_uniforms(
 ) {
     let table = sh.uniform_table();
 
-    for su in table {
+    for (i, su) in table.iter().enumerate() {
         if su.dword_off != SHC_UNIFORM_NO_BLOCK || su.binding as usize >= CAP_SAMPLERS {
             continue;
         }
@@ -3258,16 +3258,15 @@ fn fill_stage_layer_uniforms(
         };
         let h = bound[units[su.binding as usize] as usize];
         let t = (h != 0 && (h as usize) < MAX_TEXTURES && textures[h as usize].used).then(|| &textures[h as usize]);
-        /* snprintf(lname, SHC_UNIFORM_NAME_MAX + 16, "pvr_layers_%s", name):
-         * the bytes as they are, truncated to the buffer */
+        /* the row "pvr_layers_<sampler>", both names whole however long
+         * (`shaderc::uniform_row_name`): the 64-byte field cuts a sampler
+         * name at 63 characters, and the hidden row's 11 characters sooner */
         const PREFIX: &[u8] = b"pvr_layers_";
-        let mut lname = [0u8; SHC_UNIFORM_NAME_MAX + 16];
-        let name = util::name_bytes(&su.name);
-        let len = (PREFIX.len() + name.len()).min(lname.len() - 1);
-        lname[..PREFIX.len()].copy_from_slice(PREFIX);
-        lname[PREFIX.len()..len].copy_from_slice(&name[..len - PREFIX.len()]);
-        for k in table {
-            if k.dword_off != SHC_UNIFORM_NO_BLOCK && util::name_bytes(&k.name) == &lname[..len] {
+        let name = shaderc::uniform_row_name(sh, i);
+        for (j, k) in table.iter().enumerate() {
+            if k.dword_off != SHC_UNIFORM_NO_BLOCK
+                && shaderc::uniform_row_name(sh, j).strip_prefix(PREFIX) == Some(name)
+            {
                 let layers = match t {
                     Some(t) if t.layers != 0 => t.layers as u32,
                     _ => 1,
