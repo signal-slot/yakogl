@@ -251,10 +251,13 @@ struct shc_v3d_fs {
 	const struct shc_v3d_uniform *uniforms;
 	uint32_t num_uniforms;
 	uint32_t num_inputs;
-	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
+	uint32_t flat_shade_flags, noperspective_flags, centroid_flags; /* word 0: inputs 0..23 */
 	uint8_t  threads, single_seg, writes_z, disable_ez, uses_center_w;
 	uint8_t  lock_scoreboard_on_first_thrsw, uses_implicit_point_line_varyings, uses_pid;
 	uint8_t  rt_mask;       /* bit n: the program writes colour to render target n (0..3) */
+	/* words 1 and 2 of each flag set, inputs 24..63: input i is bit i % 24 of
+	 * word i / 24 (Mesa vir.c v3d_set_fs_prog_data_inputs) */
+	uint32_t flat_shade_flags_hi[2], noperspective_flags_hi[2], centroid_flags_hi[2];
 };
 
 /* The fields of the driver's struct v3d_vs_prog that are not addresses. */

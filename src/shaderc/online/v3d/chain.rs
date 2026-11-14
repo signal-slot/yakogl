@@ -69,6 +69,9 @@ pub enum V3dError {
     /// The VPM cannot hold two batches of the vertex outputs
     /// (v3d_vs_set_prog_data asserts `vpm_output_batches >= 2`, vir.c:936).
     VpmTooSmall,
+    /// The fragment shader reads more than [`MAX_FS_INPUTS`] scalar inputs,
+    /// the most the hardware interpolates.
+    TooManyFragmentInputs,
     OutOfScratch,
 }
 
@@ -135,9 +138,16 @@ pub struct FsProg<'a> {
     /// Per input, in `ldvary` order: (VARYING_SLOT_VAR0 + the FS location,
     /// component), as Mesa's `input_slots` prints.
     pub input_slots: &'a [(u8, u8)],
+    /// Word 0 of each flag set: bit i for input i < 24.
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
+    /// Words 1 and 2 of each flag set: bit i % 24 of word i / 24 for input
+    /// i of 24..64, as Mesa packs them (`v3d_set_fs_prog_data_inputs`,
+    /// vir.c:992-1003, 24 bits a word as the flag packets carry them).
+    pub flat_shade_flags_hi: [u32; 2],
+    pub noperspective_flags_hi: [u32; 2],
+    pub centroid_flags_hi: [u32; 2],
     /// The shader writes Z to the TLB (prog_data `writes_z`): the pass-
     /// through Z (a discard, no colour write, a read of gl_FragCoord.z) or
     /// its own `gl_FragDepth` (select.rs `TLB_Z_PER_PIXEL`).
@@ -206,6 +216,17 @@ pub fn attribute_locations(gl_type: u16) -> u8 {
 /// `VARYING_SLOT_VAR0` (compiler/shader_enums.h): Mesa's slot number of the
 /// first generic varying.
 pub const VARYING_SLOT_VAR0: u8 = 32;
+/// The scalar fragment shader inputs the hardware takes (Mesa
+/// `V3D_MAX_FS_INPUTS`, v3d_limits.h): 16 vec4 varyings.
+pub const MAX_FS_INPUTS: usize = 64;
+
+/// A 64-input flag set as the three 24-bit words of the shader record's
+/// flag packets: input i is bit i % 24 of word i / 24 (Mesa
+/// `v3d_set_fs_prog_data_inputs`, vir.c:992-1003).
+pub fn flag_words(set: u64) -> [u32; 3] {
+    const W: u64 = (1 << 24) - 1;
+    [(set & W) as u32, ((set >> 24) & W) as u32, ((set >> 48) & W) as u32]
+}
 
 /// `m` with its loops expanded where the unroller can (`None` from it: no
 /// loop, `m` as it is). Its refusals are named gaps, not verdicts on the
@@ -336,7 +357,9 @@ fn vpm_fields(sel: &Selected<'_>, target: Target) -> Result<(u32, u32, u32), V3d
     /* 16 channels of 32 bits, 8 rows to a sector */
     let sectors = target.vpm_size / (16 * 4 * 8);
     let batches = (sectors / 2) / output;
-    if batches < 2 {
+    /* the record's VPM segment sizes are 4 bits of sectors; the row cap
+     * (MAX_VPM_OUTPUT_ROWS) keeps the output side inside that */
+    if batches < 2 || output > 15 {
         return Err(V3dError::VpmTooSmall);
     }
     Ok((0, output, (batches - 1).clamp(2, 4)))
@@ -416,14 +439,19 @@ pub fn compile_program_keyed<'a>(
     /* The fragment shader, and the order of its inputs. */
     let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
     let inputs = fragment_inputs(&fsp, a)?;
+    /* The hardware interpolates 64 scalar inputs (V3D_MAX_FS_INPUTS); a
+     * program past them does not link on this GPU. */
+    if inputs.len() > MAX_FS_INPUTS {
+        return Err(V3dError::TooManyFragmentInputs);
+    }
     /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
-     * flat_shade_flags at the input's index). The job builder reads word 0
-     * only and refuses more than 24 inputs. */
-    let mut flat = 0u32;
+     * flat_shade_flags at the input's index), packed to 24-bit words for
+     * the program data by flag_words. */
+    let mut flat = 0u64;
     /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
      * BITSET_SET of centroid_flags, the W it multiplies by the centroid
      * W). */
-    let mut centroid = 0u32;
+    let mut centroid = 0u64;
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
             .inputs
@@ -431,15 +459,9 @@ pub fn compile_program_keyed<'a>(
             .find(|d| d.kind == IoKind::Varying && d.location == loc)
             .ok_or(V3dError::VaryingWithoutVertexOutput)?;
         if d.interp == crate::shaderc::online::ir::INTERP_FLAT {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a flat varying past input 31"));
-            }
             flat |= 1 << i;
         }
         if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a centroid varying past input 31"));
-            }
             centroid |= 1 << i;
         }
     }
@@ -522,9 +544,12 @@ pub fn compile_program_keyed<'a>(
             single_seg: false,
             num_inputs: inputs.len() as u32,
             input_slots: slots,
-            flat_shade_flags: flat,
+            flat_shade_flags: flag_words(flat)[0],
             noperspective_flags: 0,
-            centroid_flags: centroid,
+            centroid_flags: flag_words(centroid)[0],
+            flat_shade_flags_hi: [flag_words(flat)[1], flag_words(flat)[2]],
+            noperspective_flags_hi: [0; 2],
+            centroid_flags_hi: [flag_words(centroid)[1], flag_words(centroid)[2]],
             /* select.rs select_fragment: a discard, a read of Z, or a
              * gl_FragDepth write */
             writes_z: fsel.writes_z,
@@ -1335,6 +1360,19 @@ mod tests {
             b(f.force_per_sample_msaa)
         )
         .unwrap();
+        /* Words 1 and 2 (inputs 24..64), which v3d_shc does not print: only
+         * when one is set, so a program of 24 inputs or fewer reads key for
+         * key as v3d_shc's and the fixtures stay as they are. */
+        let hi = [
+            ("flat_shade_flags", f.flat_shade_flags_hi),
+            ("noperspective_flags", f.noperspective_flags_hi),
+            ("centroid_flags", f.centroid_flags_hi),
+        ];
+        if hi.iter().any(|(_, w)| w.iter().any(|&x| x != 0)) {
+            for (name, w) in hi {
+                write!(o, " \"{name}_hi\": [\"0x{:08x}\", \"0x{:08x}\"],", w[0], w[1]).unwrap();
+            }
+        }
         tail(&mut o, &f.code);
         o.push_str(",\n");
         for (name, v, last) in [("vs", &p.vs, false), ("cs", &p.cs, true)] {
