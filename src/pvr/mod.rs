@@ -41,3 +41,6 @@ pub mod pr_zs;
 /// The partial render's SPM scratch size and PBE store words (Mesa's
 /// pvr_arch_spm.c, transcribed).
 pub mod spm;
+/// The per-target key list of a draw's colour targets and its mixed key
+/// (docs/notes/pvr-int-mixed-targets.md, sections 2.1, 3 and 5).
+pub mod target_keys;
