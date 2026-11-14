@@ -2039,9 +2039,46 @@ mod tests {
             let g = vs(&std::format!("{head}void main(){{ gl_Position = p; {body} }}"));
             assert!(g.prec.contains(&Prec::Unknown), "{body}");
         }
-        for body in ["v = vec4(f(uh));", "v = vec4(f(p.y * 2.0));", "v = vec4(pow(q.z, uh + p.x));"] {
+        for body in ["v = vec4(f(uh));", "v = vec4(f(p.y));", "v = vec4(pow(q.z, uh + p.x));"] {
             let g = vs(&std::format!("{head}void main(){{ gl_Position = p; {body} }}"));
             assert!(!g.prec.contains(&Prec::Unknown), "{body}");
+        }
+    }
+
+    /// Fifth review B-F, B-G: "known to vary" was still a guess about what
+    /// NIR folds. Probes p5/g01 (`r(h.x)` with `e = 0.1;` in `r`), g02
+    /// (`f(uh * 0.0 + 0.1)`), g04 (`f(h.x - h.x + 0.1)`), g05
+    /// (`f(h.x * 0.0 + 0.1)`): Mesa's final NIR is `fpow` of `0x3dccc000`,
+    /// the fp16 value; we recorded High. Only a bare read of an input, a
+    /// uniform or a built-in input (a swizzle, a member or an index of one)
+    /// is known to vary, or a parameter every call gives one and the callee
+    /// never writes. g08 (`f(us.m)`, `f(ua[1])`) and g06 (`g(h.x)`, `g`
+    /// calling `f`) stay High, as in Mesa; g10's `x * 1.0`, g11's
+    /// `max(h.x, 0.1)` and g09's `float(gl_VertexID)`, which Mesa keeps at
+    /// 32 bits, are refused: a refusal, never a wrong record.
+    #[test]
+    fn only_a_bare_read_is_known_to_vary() {
+        let head = "attribute mediump vec4 q; attribute highp vec4 h; varying highp vec4 v; uniform highp float uh;\n\
+                    struct S { mediump float m; }; uniform S us; uniform mediump float ua[2];\n\
+                    mediump float f(mediump float e){ return pow(q.z, e); }\n\
+                    mediump float r(mediump float e){ e = 0.1; return pow(q.z, e); }\n\
+                    mediump float g(mediump float x){ return f(x); }\n\
+                    mediump float k(mediump float x){ return f(x * 1.0); }\n";
+        for arg in [
+            "r(h.x)",
+            "f(uh * 0.0 + 0.1)",
+            "f(h.x - h.x + 0.1)",
+            "f(h.x * 0.0 + 0.1)",
+            "k(h.x)",
+            "f(max(h.x, 0.1))",
+            "f(h.y > 0.5 ? h.x : 0.1)",
+        ] {
+            let g = vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4({arg}); }}"));
+            assert!(g.prec.contains(&Prec::Unknown), "{arg}");
+        }
+        for arg in ["f(us.m)", "f(ua[1])", "f(h.zw.x)", "g(h.x)", "f(uh)"] {
+            let g = vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4({arg}); }}"));
+            assert!(!g.prec.contains(&Prec::Unknown), "{arg}");
         }
     }
 

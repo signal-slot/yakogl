@@ -4359,11 +4359,19 @@ impl<'a> Lower<'_, 'a> {
         Ok(())
     }
 
-    /// `e` is known to vary from one invocation to the next: it reads an
-    /// input, a uniform or a built-in input, or a parameter of the
-    /// innermost inlined body given such a value ([`Lower::var_params`]),
-    /// through any operation. A whitelist: a local, a `const`, a literal
-    /// and anything else may be a constant to NIR.
+    /// `e` is known to vary from one invocation to the next, so NIR cannot
+    /// fold it to a constant: a BARE read of an input, a uniform or a
+    /// built-in input -- swizzled, a struct member, an array element -- or
+    /// of a parameter of the innermost inlined body that every call gives
+    /// such a read and the body never writes ([`Lower::var_params`]).
+    /// A whitelist: any operation, conversion, call or `?:` is not known
+    /// to vary, even over such reads, because NIR's algebra may fold it
+    /// (fifth review B-G: `uh * 0.0 + 0.1`, `h.x - h.x + 0.1` and
+    /// `h.x * 0.0 + 0.1` are the fp16 constant 0x3dccc000 in Mesa's final
+    /// NIR, probes p5/g02, g04, g05). Forms Mesa keeps at 32 bits are
+    /// refused too (g09 `float(gl_VertexID)`, g10 `x * 1.0`, g11
+    /// `max(h.x, 0.1)`, g03 `?:` with an input side): a refusal, never a
+    /// wrong record.
     fn varies(&self, e: ExprId, depth: u32) -> bool {
         if depth > 64 {
             return false;
@@ -4386,17 +4394,46 @@ impl<'a> Lower<'_, 'a> {
                     )
                     || self.reflection.uniforms.iter().any(|u| row(u.name))
             }
-            /* a select varies only through its sides */
-            Expr::Select(_, t, f) => self.varies(t, depth + 1) || self.varies(f, depth + 1),
-            Expr::Call { args, .. } | Expr::ArrayCtor { args, .. } => {
-                args.indices().any(|i| self.varies(self.ast.expr_ids[i], depth + 1))
-            }
-            _ => {
-                let mut c = [ExprId(0); 3];
-                let n = self.expr_children(e, &mut c);
-                c[..n].iter().any(|&x| self.varies(x, depth + 1))
-            }
+            /* a swizzle or a member of a bare read; an element at any index
+             * (p5/g08: `us.m`, `ua[1]` stay 32-bit in Mesa) */
+            Expr::Field(b, _) | Expr::Index(b, _) => self.varies(b, depth + 1),
+            _ => false,
         }
+    }
+
+    /// `body` writes the parameter `name`: assigns it, steps it, or passes
+    /// it as an `out` or `inout` argument (a built-in with an `out`
+    /// parameter counts whatever position). Fifth review B-F, probe p5/g01:
+    /// `e = 0.1;` in the callee makes the parameter a constant to NIR.
+    fn writes_param(&self, body: StmtId, name: &'a str) -> bool {
+        /* `assigns_to` counts every call that takes the name; its `ro`
+         * callback clears an argument a call reads only. */
+        let ro = |a: ExprId| !self.passed_out(a);
+        assigns_to(self.ast, body, name, &ro)
+    }
+
+    /// The argument `a` is passed where the callee may write it: an `out`
+    /// or `inout` parameter of a user function, any argument of a built-in
+    /// with an `out` parameter (`modf`, `frexp`), or a call this cannot
+    /// resolve.
+    fn passed_out(&self, a: ExprId) -> bool {
+        for e in self.ast.exprs.iter() {
+            let Expr::Call { name, args } = *e else { continue };
+            let ids: &[ExprId] = &self.ast.expr_ids[args.indices()];
+            let Some(k) = ids.iter().position(|&x| x == a) else { continue };
+            if super::sema::constructor_type(name, self.ast.es3).is_some() {
+                return false;
+            }
+            if matches!(name, "modf" | "frexp") {
+                return true;
+            }
+            let Some((params, _)) = self.user_function(name, args) else {
+                /* a built-in without an `out` parameter */
+                return false;
+            };
+            return self.ast.params.get(params.start as usize + k).is_none_or(|p| p.direction != ParamDirection::In);
+        }
+        true
     }
 
     /// The definition a call names, resolved against the argument types.
@@ -4733,12 +4770,12 @@ impl<'a> Lower<'_, 'a> {
         /* The callee's returns are its own: a `return` in a loop of the
          * callee must leave the callee, not the caller's loop around the
          * call. */
-        /* which parameters take a value known to vary: decided in the
-         * caller's frame */
+        /* which parameters take a value known to vary and are never written
+         * by the body: decided in the caller's frame */
         let marks = self.var_params.len();
         for (p, &arg) in param_ids.iter().zip(arg_ids) {
             if let Some(pname) = p.name {
-                if self.varies(arg, 0) {
+                if p.direction == ParamDirection::In && self.varies(arg, 0) && !self.writes_param(body, pname) {
                     self.var_params.push(self.a, (self.inline_depth + 1, pname))?;
                 }
             }
