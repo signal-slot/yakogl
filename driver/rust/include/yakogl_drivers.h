@@ -859,6 +859,114 @@ int yd_t6_osal_gpu(struct osal_mali_gpu *out);
 int yd_t6_osal_heap(struct osal_mali_heap *out);
 int yd_t6_osal_counts(struct yd_t6_osal_counts *out);
 
+/* D2, the display a crash kexec left running, adopted (board::nanopc_t6_display
+ * over ip::vop2 and ip::rk_iommu; feature rk3588): read what Linux left
+ * (PD_VOP usable, its CRU gates open, VERSION_INFO, VP0 running in
+ * 1024x768@60 with DSP_CTRL 0xf, HDMI0 fed by VP0, the Esmart power on),
+ * then turn every window but Esmart0 off and wait a frame, turn both vop_mmu
+ * sets' paging off, make Esmart0 VP0's only layer, show the buffer at
+ * physical fb_pa (1024x768 XRGB8888, stride 4096, below 4 GiB) and wait a
+ * frame. 0 when Esmart0 shows it, -EIO when a step stopped (stop names
+ * it; the steps up to _ESMART_POWER write nothing), -EINVAL for a null
+ * argument. The bases are mappings: the VOP (0xfdd90000, 0x2000 bytes),
+ * the two vop_mmu sets (0xfdd97e00, 0xfdd97f00), the PMU (0xfd8d8000), the
+ * CRU (0xfd7c0000), sys_grf (0xfd58c000), the HDPTX PHY0 GRF (0xfd5e0000)
+ * and the HDMI QP TX0 (0xfde80000), a page each. */
+#define YD_T6_DISPLAY_STOP_NONE         0 /* Esmart0 shows the buffer */
+#define YD_T6_DISPLAY_STOP_VOP_DOMAIN   1 /* PD_VOP not powered or idle (detail: PMU REPAIR) */
+#define YD_T6_DISPLAY_STOP_VOP_CLOCK    2 /* a PD_VOP clock gated (index: bit, detail: CLKGATE_CON(52)) */
+#define YD_T6_DISPLAY_STOP_VERSION      3 /* VERSION_INFO is not 0x40176786 (detail) */
+#define YD_T6_DISPLAY_STOP_STANDBY      4 /* VP0 in STANDBY (detail: DSP_CTRL) */
+#define YD_T6_DISPLAY_STOP_VP_STATE     5 /* VP0 DSP_CTRL not 0xf (detail) */
+#define YD_T6_DISPLAY_STOP_MODE         6 /* VP0 timing word index differs (detail: read) */
+#define YD_T6_DISPLAY_STOP_ROUTE        7 /* HDMI0 not enabled on VP0 (detail: DSP_IF_EN) */
+#define YD_T6_DISPLAY_STOP_ESMART_POWER 8 /* SYS_PD_CTRL bit 7 set (detail) */
+#define YD_T6_DISPLAY_STOP_TAKE_OVER    9 /* vop2 take_over (refusal: vop2 Refusal, detail) */
+#define YD_T6_DISPLAY_STOP_IOMMU        10 /* a vop_mmu set keeps paging (refusal, index: set, detail: STATUS) */
+#define YD_T6_DISPLAY_STOP_OVERLAY      11 /* vop2 overlay_single (refusal, detail) */
+#define YD_T6_DISPLAY_STOP_WINDOW       12 /* vop2 window_show refused the buffer (refusal) */
+#define YD_T6_DISPLAY_STOP_FRAME        13 /* no frame start after the window (refusal, detail) */
+#define YD_T6_DISPLAY_STOP_SHOWN        14 /* read-back index 0 YRGB_MST, 1 enable, 2 PORT_SEL, 3 LAYER_SEL (detail) */
+
+struct yd_t6_display_bases {
+	uintptr_t vop;
+	uintptr_t vop_mmu[2];
+	uintptr_t pmu;
+	uintptr_t cru;
+	uintptr_t sys_grf;
+	uintptr_t phy_grf;
+	uintptr_t hdmi;
+};
+
+struct yd_t6_display_adopt {
+	uint32_t stop;          /* YD_T6_DISPLAY_STOP_* */
+	uint32_t refusal;
+	uint32_t index;
+	uint32_t detail;
+	/* as found */
+	uint32_t pd_vop[6];     /* PD_VOP's PWR, STATUS, IDLE_REQ, IDLE_ACK, IDLE_ST, REPAIR */
+	uint32_t cru_gate52;    /* CLKGATE_CON(52) */
+	uint32_t version;
+	uint32_t dsp_ctrl[4];   /* VP0..VP3 */
+	uint32_t timing[4];     /* VP0 HTOTAL_HS_END, HACT_ST_END, VTOTAL_VS_END, VACT_ST_END */
+	uint32_t dsp_if_en;
+	uint32_t pd_ctrl;       /* SYS_PD_CTRL */
+	uint32_t layer_sel;     /* OVL_LAYER_SEL */
+	uint32_t port_sel;      /* OVL_PORT_SEL */
+	uint32_t cluster0[2];   /* Cluster0 WIN_CTRL0, CLUSTER_CTRL */
+	uint32_t esmart0_ctrl;  /* Esmart0 REGION0_CTRL */
+	uint32_t mmu_status[2]; /* vop_mmu STATUS, DTE_ADDR of each set */
+	uint32_t mmu_dte[2];
+	/* what it did */
+	uint32_t running;       /* ports found running, bit n = VPn */
+	uint32_t off;           /* windows turned off: bit n Cluster n, bit 4 + n Esmart n */
+	uint32_t mmu_status_now[2];
+	uint32_t mmu_timeout;   /* a stall time-out with paging off all the same, 0 none */
+	uint32_t ovl_layer_sel; /* written */
+	uint32_t ovl_port_sel;
+	uint32_t ovl_waited_us;
+	uint32_t fb;            /* the buffer's physical address */
+	uint32_t stride;
+	uint32_t cfg_done_written; /* REG_CFG_DONE right after the window's write */
+	uint32_t cfg_done_after;   /* and after the next frame start */
+	uint32_t frame_waited_us;
+	uint32_t shown[4];      /* after it: YRGB_MST, REGION0_CTRL, OVL_PORT_SEL, OVL_LAYER_SEL */
+};
+
+/* Section 5's read-backs of driver/docs/nanopc-t6-display.md. */
+struct yd_t6_display_status {
+	uint32_t refusal;       /* a frame wait's or the check's vop2 Refusal, 0 none */
+	uint32_t detail;
+	uint32_t frame_start;   /* over the check's wait: 1 = seen */
+	uint32_t underflow;     /* POST_BUF_EMPTY */
+	uint32_t bus_error[2];  /* SYS0, SYS1 */
+	uint32_t raw;           /* VP0 INT_RAW_STATUS */
+	uint32_t frames;        /* frame starts timed */
+	uint32_t frames_us;     /* between the first and the last */
+	uint32_t vop[15];       /* VERSION, SYS_PD_CTRL, REG_CFG_DONE, DSP_IF_EN, DSP_CTRL,
+				 * HTOTAL_HS_END, VTOTAL_VS_END, OVL_PORT_SEL, OVL_LAYER_SEL,
+				 * REGION0_CTRL, YRGB_MST, REGION0_VIR, INT_RAW_STATUS,
+				 * SYS0_INT_STATUS, SYS1_INT_STATUS */
+	uint32_t soc_status1;   /* sys_grf SOC_STATUS1: HDMI0 HPD in bit 16 */
+	uint32_t phy_status;    /* HDPTX PHY0 GRF STATUS: PLL_LOCK_DONE 3, PHY_CLK_RDY 2, PHY_RDY 1 */
+	uint32_t vo1_usable;    /* the words below are read only when 1 */
+	uint32_t cmu[3];        /* CMU_STATUS, CMU_VIDQPCLK_FREQ, CMU_LINKQPCLK_FREQ */
+	uint32_t monitor[7];    /* VIDEO_MONITOR_STATUS0..6 */
+};
+
+/* The pattern of section 5 into fb (height rows of stride_bytes, width pixels):
+ * red, green / blue, yellow quadrants, a white 1-pixel border. 0 or -EINVAL. */
+int yd_t6_display_pattern(uint32_t *fb, uint32_t width, uint32_t height, uint32_t stride_bytes);
+
+int yd_t6_display_adopt(const struct yd_t6_display_bases *b, uint64_t fb_pa,
+			void (*delay_us)(uint32_t us), struct yd_t6_display_adopt *out);
+
+/* After a successful adopt: the frame check over wait_us, frames frame starts timed
+ * with now_us() (microseconds), then the reads. 0, -EIO (out->refusal), -EINVAL. */
+int yd_t6_display_status(const struct yd_t6_display_bases *b, uint32_t wait_us, uint32_t frames,
+			 uint64_t (*now_us)(void), void (*delay_us)(uint32_t us),
+			 struct yd_t6_display_status *out);
+
 /* ---- TI SN65DSI83/84 (ip::sn65dsi8x; yakogl,sn65dsi8x) ------------------
  * I2C bus 0 of the env is the bridge; GPIO line 0 its EN pin, line 1 the
  * display adapter's reset (logical, 1 = asserted). */
@@ -1971,6 +2079,24 @@ _Static_assert(offsetof(struct yd_t6_osal_counts, unended) == 64, "yd_t6_osal_co
 _Static_assert(offsetof(struct yd_t6_osal_counts, down) == 68, "yd_t6_osal_counts.down");
 _Static_assert(offsetof(struct yd_t6_osal_counts, memory_kept) == 72, "yd_t6_osal_counts.memory_kept");
 _Static_assert(offsetof(struct yd_t6_osal_counts, stops_refused) == 76, "yd_t6_osal_counts.stops_refused");
+_Static_assert(sizeof(struct yd_t6_display_bases) == 64, "struct yd_t6_display_bases");
+_Static_assert(offsetof(struct yd_t6_display_bases, vop_mmu) == 8, "yd_t6_display_bases.vop_mmu");
+_Static_assert(offsetof(struct yd_t6_display_bases, hdmi) == 56, "yd_t6_display_bases.hdmi");
+_Static_assert(sizeof(struct yd_t6_display_adopt) == 192, "struct yd_t6_display_adopt");
+_Static_assert(offsetof(struct yd_t6_display_adopt, pd_vop) == 16, "yd_t6_display_adopt.pd_vop");
+_Static_assert(offsetof(struct yd_t6_display_adopt, version) == 44, "yd_t6_display_adopt.version");
+_Static_assert(offsetof(struct yd_t6_display_adopt, timing) == 64, "yd_t6_display_adopt.timing");
+_Static_assert(offsetof(struct yd_t6_display_adopt, mmu_status) == 108, "yd_t6_display_adopt.mmu_status");
+_Static_assert(offsetof(struct yd_t6_display_adopt, running) == 124, "yd_t6_display_adopt.running");
+_Static_assert(offsetof(struct yd_t6_display_adopt, ovl_layer_sel) == 144, "yd_t6_display_adopt.ovl_layer_sel");
+_Static_assert(offsetof(struct yd_t6_display_adopt, fb) == 156, "yd_t6_display_adopt.fb");
+_Static_assert(offsetof(struct yd_t6_display_adopt, shown) == 176, "yd_t6_display_adopt.shown");
+_Static_assert(sizeof(struct yd_t6_display_status) == 148, "struct yd_t6_display_status");
+_Static_assert(offsetof(struct yd_t6_display_status, frames) == 28, "yd_t6_display_status.frames");
+_Static_assert(offsetof(struct yd_t6_display_status, vop) == 36, "yd_t6_display_status.vop");
+_Static_assert(offsetof(struct yd_t6_display_status, soc_status1) == 96, "yd_t6_display_status.soc_status1");
+_Static_assert(offsetof(struct yd_t6_display_status, vo1_usable) == 104, "yd_t6_display_status.vo1_usable");
+_Static_assert(offsetof(struct yd_t6_display_status, monitor) == 120, "yd_t6_display_status.monitor");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");
