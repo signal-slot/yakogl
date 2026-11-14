@@ -89,16 +89,19 @@ cause as `draw_buffers_indexed`), `state_query.integers.*` 17 and
 `integers64.*` 6 (Fail), `rbo.renderbuffer_component_size_color` 1,
 `shader.program_active_uniform_types` 1, `shader.program_binary` 1.
 
-- **Cause**: GL core. The limit rows are ES 3.0 minimums the core does not
-  reach: `GL_MAX_VARYING_VECTORS` is 8 on the V3D (`src/gl/context.rs:131-133`;
-  ES 3.0 asks 15, Mesa's v3d has 16), `DRAW_TARGETS` is 3
+- **Cause**: GL core. The limit rows are ES 3.0 minimums the core did not
+  reach: `GL_MAX_VARYING_VECTORS` was 8 on the V3D (ES 3.0 asks 15; it is 15
+  now, `src/gl/context.rs:208-210`, with 60 fragment inputs and 64 vertex
+  output components, `docs/notes/v3d-varyings.md`), the uniform block size and
+  combined-component limits were 6144 and 1536 (they are 16384 and 50688 now,
+  `context.rs:111-130`), `DRAW_TARGETS` is 3
   (`src/backend.rs:765-775`; ES 3.0 asks 4, the V3D TLB and compiler take 4,
-  its comment says only "no board has drawn four"), the uniform component and
-  block-size limits, and the compressed-format list. The `*_getfloat` /
-  `*_getinteger64` rows fail on limits whose integer query is right too (e.g.
-  `max_samples_getfloat`), so the float and 64-bit paths of
-  `get_floatv`/`get_integer64v` (`src/gl/state.rs:1040-1110`) are a separate
-  defect; not read to the line here.
+  its comment says only "no board has drawn four"), and the compressed-format
+  list is 3. The `*_getfloat` / `*_getinteger64` rows fail on the same values:
+  dEQP registers the minimum-value cases of `state_query.integers` only for the
+  boolean, 64-bit and float verifiers, and `glGetFloatv` / `glGetInteger64v`
+  widen the `glGetIntegerv` answer, so there is no separate defect in the float
+  and 64-bit paths (`docs/notes/es3-shader-limits.md` §1, plan #359).
 - **Cross-effect**: raising `DRAW_TARGETS` to 4 for the V3D also changes
   `fragment_out.*` and `draw_buffers_indexed.*` and the V3D MRT clear; coordinate
   with the notes for those.

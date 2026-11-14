@@ -592,7 +592,8 @@ constant its `glGetIntegerv` query answers with (`gl/context.rs`):
 `GL_MAX_VERTEX_UNIFORM_VECTORS` and `GL_MAX_FRAGMENT_UNIFORM_VECTORS` (384
 each, `MAX_UNIFORM_DWORDS / 4`) by the GLSL ES 1.00 Appendix A packing of
 each stage's uniforms (`program.rs` `check_uniform_packing`),
-`GL_MAX_VARYING_VECTORS` (8; 15 on the GC7000) by the same packing of the
+`GL_MAX_VARYING_VECTORS` (15 on the V3D, the PowerVR and the GC7000UL; 8 on the
+Mali and in a `report-es2` build) by the same packing of the
 varyings, in the shader back end's link, and `GL_MAX_VERTEX_ATTRIBS` (16) in
 whole locations by the attribute layout. The algorithm is `shaderc/packing.rs`;
 `src/shaderc/SHADERC_NOTES.md` ("The resource budget") says which back end
