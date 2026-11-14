@@ -37,6 +37,7 @@ pub mod program;
 pub mod shader;
 pub mod srgb;
 pub mod state;
+pub mod target_keys;
 pub mod texture;
 pub mod tf;
 /// The transform-feedback capture: the vertex shader evaluated on the CPU
