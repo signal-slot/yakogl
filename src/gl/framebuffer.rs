@@ -517,6 +517,10 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
         }
         let int_format = integer_texture_internalformat(t);
         let rgb10a2 = rgb10a2_texture_surface(t.texfmt).is_some();
+        /* GL_RGB16F is held as four halves; GL_EXT_color_buffer_half_float
+         * makes it colour-renderable */
+        let rgb16f = t.texfmt == GLES_TEXFMT_RGBA16F
+            && super::es3_formats::by_index(t.es3_fmt).is_some_and(|e| e.internalformat == GL_RGB16F);
 
         if t.mem.impl_.is_null()
             || t.width == 0
@@ -534,7 +538,7 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
             /* an ES 3.0 format of es3_formats is no render target, but
              * RGB10_A2 (ES 3.0 table 3.13): held as RGBA8, or in its own
              * class where the back end renders it */
-            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none() && !rgb10a2)
+            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none() && !rgb10a2 && !rgb16f)
             || a.level < 0
             || a.level as u32 >= t.chain_levels as u32
             || a.level as usize >= CAP_MIP_LEVELS
@@ -554,6 +558,7 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
              * attachment by its sized format: GL_RGBA32F is not
              * colour-renderable without GL_EXT_color_buffer_float */
             GLES_TEXFMT_RGBA16F if t.rgba32f => GL_RGBA32F,
+            GLES_TEXFMT_RGBA16F if rgb16f => GL_RGB16F,
             GLES_TEXFMT_RGBA16F => GL_RGBA16F,
             GLES_TEXFMT_R16F => GL_R16F,
             GLES_TEXFMT_R32F => GL_R32F,
@@ -649,7 +654,6 @@ fn is_color_format(f: GLenum) -> bool {
             | GL_RGB16F
             | GL_RG16F
             | GL_R16F
-            | GL_R32F
     ) || is_integer_color_format(f)
         /* ES 3.0 table 3.13: colour-renderable, so renderbuffer storage. In
          * its own 10/10/10/2 surface where the back end renders the class
@@ -1054,8 +1058,8 @@ pub fn fb_target_alpha_bits_n(c: &GlContext, n: u8) -> u8 {
             _ => 8,
         },
         GL_RENDERBUFFER => match c.renderbuffer_ref(a.name).map(|rb| rb.internalformat) {
-            Some(GL_RGB565) | Some(GL_RGB8) | Some(GL_RGB16F) | Some(GL_RG16F) | Some(GL_R16F) | Some(GL_R32F)
-            | Some(GL_R8) | Some(GL_RG8) => 0,
+            Some(GL_RGB565) | Some(GL_RGB8) | Some(GL_RGB16F) | Some(GL_RG16F) | Some(GL_R16F) | Some(GL_R8)
+            | Some(GL_RG8) => 0,
             Some(GL_RGB5_A1) => 1,
             Some(GL_RGBA4) => 4,
             /* R and RG integer formats have no alpha (it reads 1) */
@@ -1283,9 +1287,8 @@ pub fn fb_target_n(c: &GlContext, n: u8) -> Option<(u64, u32, u32, u8)> {
     }
     stamp_target_use(c, loc);
     let format = match st.internalformat {
-        GL_RGBA16F => GLES_SURF_RGBA16F,
+        GL_RGBA16F | GL_RGB16F | GL_RG16F => GLES_SURF_RGBA16F,
         GL_R16F => GLES_SURF_R16F,
-        GL_R32F => GLES_SURF_R32F,
         f if is_integer_color_format(f) || f == GL_SRGB8_ALPHA8 || f == GL_RGB10_A2 => renderbuffer_surf_format(f),
         _ => GLES_SURF_RGBA8888,
     };
@@ -7057,7 +7060,6 @@ mod tests {
             (GL_RGB16F, GLES_SURF_RGBA16F, 8),
             (GL_RG16F, GLES_SURF_RGBA16F, 8),
             (GL_R16F, GLES_SURF_R16F, 2),
-            (GL_R32F, GLES_SURF_R32F, 4),
             (GL_RGBA8, GLES_SURF_RGBA8888, 4),
             (GL_RGB565, GLES_SURF_RGBA8888, 4),
         ] {
@@ -7161,7 +7163,9 @@ mod tests {
     #[test]
     fn float_target_formats_follow_the_colour_texture() {
         let gl = TestGl::new(8, 8);
-        for (internal, surf) in [(GL_R16F, GLES_SURF_R16F), (GL_R32F, GLES_SURF_R32F), (GL_RGBA8, GLES_SURF_RGBA8888)] {
+        for (internal, surf) in
+            [(GL_R16F, GLES_SURF_R16F), (GL_RGBA16F, GLES_SURF_RGBA16F), (GL_RGBA8, GLES_SURF_RGBA8888)]
+        {
             let tex = bind_new_texture(GL_TEXTURE_2D);
             // SAFETY: plain GL calls.
             unsafe { crate::gl::texture::glTexStorage2D(GL_TEXTURE_2D, 1, internal, 2, 2) };
@@ -7276,7 +7280,7 @@ mod tests {
     #[cfg(not(feature = "report-es2"))]
     fn read_pixels_of_r16f_and_r32f_targets_fill_rgba() {
         let _gl = TestGl::new(8, 8);
-        for internal in [GL_R16F, GL_R32F] {
+        for internal in [GL_R16F] {
             let tex = bind_new_texture(GL_TEXTURE_2D);
             let v = [0.75f32];
             // SAFETY: one RED float texel.

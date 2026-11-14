@@ -8,25 +8,13 @@
 //! job builder faked (tests/es3_invalidate_v3d.rs's rig), so the tests see
 //! the target, render-target row and load words of every job.
 //!
-//! A GL_RGB16F texture is held in the RGBA16F class, but
-//! `framebuffer::attachment_storage` lets only RGBA8, SRGB8_A8, RGBA16F,
-//! R16F, R32F, the integer classes and RGB10_A2 through (its
-//! `t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && ...` term refuses it),
-//! so the framebuffer is incomplete. The renderbuffer of the same format is
-//! complete and draws as RGBA16F with `target_alpha_bits == 0`
-//! (`color.blend.rgb16f_src_over` passes on the Pi 4): the control here.
-//!
-//! The plain tests pin today: the texture is incomplete on 2D, cube, 2D-array
-//! and 3D targets and in the shared-colorbuffer shapes, and the renderbuffer
-//! is complete and its draw and clears reach the back end as one typed
-//! RGBA16F RT with the alpha forced to 1 at the load. The `#[ignore]`d tests
-//! give the expected results (ES 3.0 table 3.13: RGB16F is colour-renderable
-//! with GL_EXT_color_buffer_half_float): complete, the same jobs as the
-//! renderbuffer, a read-back whose alpha is 1. They fail until the one
-//! condition in `src/gl/framebuffer.rs` `attachment_storage` (plan #186's
-//! file) lets a RGBA16F texture of format GL_RGB16F through, with
-//! `fb_target_alpha_bits_n` answering 0 for it as it does for the
-//! renderbuffer.
+//! A GL_RGB16F texture is held in the RGBA16F class and is a colour
+//! attachment as the renderbuffer of the same format is (ES 3.0 table 3.13:
+//! RGB16F is colour-renderable with GL_EXT_color_buffer_half_float): complete
+//! on 2D, cube, 2D-array and 3D targets, drawing and clearing as the same
+//! typed RGBA16F RT with the alpha forced to 1 at the load, a read-back whose
+//! alpha is 1 (`framebuffer::attachment_storage` lets the format through and
+//! `fb_target_alpha_bits_n` answers 0 for it).
 //!
 //! The fake GPU draws nothing, so a read-back sees the texels the test put in
 //! the texture, not a rendered image; a rendered image is a board result.
@@ -1087,76 +1075,11 @@ fn renderbuffer_blit_into_the_same_format() {
     assert_eq!(blit_case(Att::Rb), (GL_FRAMEBUFFER_COMPLETE, GL_FRAMEBUFFER_COMPLETE, GL_NO_ERROR));
 }
 
-/* ---- today: the texture is no attachment -------------------------------------- */
+/* ---- the texture draws as the renderbuffer does ------------------------------- */
 
-/// The condition in `attachment_storage` refuses the texture on every target:
-/// the framebuffer is incomplete.
-#[test]
-fn texture_is_incomplete_today_on_every_target() {
-    for att in TEXTURES {
-        assert_eq!(completeness(att), GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{att:?}");
-    }
-}
-
-/// An incomplete framebuffer takes no draw and no clear and the back end sees
-/// nothing. The draw and glClearBufferfv raise GL_INVALID_FRAMEBUFFER_OPERATION
-/// (ES 3.0 4.4.4); glClear raises nothing today (a deviation, pinned as it is).
-#[test]
-fn texture_draw_and_clear_reach_no_job_today() {
-    let inv = GL_INVALID_FRAMEBUFFER_OPERATION;
-    for att in TEXTURES {
-        assert_eq!(draw_case(att), (inv, vec![]), "{att:?} draw");
-        assert_eq!(clear_case(att), (GL_NO_ERROR, inv, vec![]), "{att:?} clear");
-    }
-}
+const WHY: &str = "a RGBA16F texture of format GL_RGB16F is a colour attachment (GL_EXT_color_buffer_half_float)";
 
 #[test]
-fn texture_readback_is_refused_today() {
-    for att in TEXTURES {
-        assert_eq!(readback_case(att), (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, [-1.0; 4]), "{att:?}");
-    }
-}
-
-/// The shared-colorbuffer shapes (`shared_colorbuffer`, `_clear`): both
-/// framebuffers over the texture are incomplete, so both operations fail.
-#[test]
-fn texture_shared_colorbuffer_is_incomplete_today() {
-    let (u, f) = (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, GL_INVALID_FRAMEBUFFER_OPERATION);
-    for att in TEXTURES {
-        for clear_first in [false, true] {
-            /* glClear on an incomplete framebuffer raises nothing today (the
-             * spec says GL_INVALID_FRAMEBUFFER_OPERATION; glClearBuffer* does) */
-            let ea = if clear_first { GL_NO_ERROR } else { f };
-            assert_eq!(shared_case(att, clear_first), (u, u, ea, f, vec![]), "{att:?} clear_first {clear_first}");
-        }
-    }
-}
-
-#[test]
-fn texture_resize_recreate_blit_and_sample_are_incomplete_today() {
-    let (u, f) = (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, GL_INVALID_FRAMEBUFFER_OPERATION);
-    for att in TEXTURES {
-        assert_eq!(resize_case(att), (u, f, vec![]), "{att:?} resize");
-        assert_eq!(recreate_case(att), (u, f, vec![]), "{att:?} recreate");
-        assert_eq!(blit_case(att), (u, u, f), "{att:?} blit");
-    }
-}
-
-/// `sample`: the draw into the texture is refused, the sampling draw runs.
-#[test]
-fn texture_sample_after_render_runs_one_job_today() {
-    let (e, made) = sample_case();
-    assert_eq!(e, GL_NO_ERROR);
-    assert_eq!(made.len(), 1, "{made:?}");
-}
-
-/* ---- expected: the texture draws as the renderbuffer does --------------------- */
-
-const WHY: &str = "src/gl/framebuffer.rs attachment_storage refuses a RGBA16F texture of format GL_RGB16F: \
-                   `t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none() && !rgb10a2`";
-
-#[test]
-#[ignore = "src/gl/framebuffer.rs attachment_storage: a RGBA16F texture of format GL_RGB16F is no attachment (plan #186)"]
 fn texture_is_complete_on_every_target() {
     for att in TEXTURES {
         assert_eq!(completeness(att), GL_FRAMEBUFFER_COMPLETE, "{att:?}: {WHY}");
@@ -1164,7 +1087,6 @@ fn texture_is_complete_on_every_target() {
 }
 
 #[test]
-#[ignore = "src/gl/framebuffer.rs attachment_storage: a RGBA16F texture of format GL_RGB16F is no attachment (plan #186)"]
 fn texture_draws_and_clears_as_the_renderbuffer_does() {
     for att in TEXTURES {
         assert_eq!(draw_case(att), (GL_NO_ERROR, vec![rgb16f_job(SIZE)]), "{att:?} draw: {WHY}");
@@ -1177,7 +1099,6 @@ fn texture_draws_and_clears_as_the_renderbuffer_does() {
 /// The alpha reads as 1 although the texture holds none (ES 3.0 4.3.2: a
 /// missing alpha reads 1), and the colour is what was uploaded.
 #[test]
-#[ignore = "src/gl/framebuffer.rs attachment_storage: a RGBA16F texture of format GL_RGB16F is no attachment (plan #186)"]
 fn texture_readback_has_alpha_one() {
     for att in TEXTURES {
         assert_eq!(readback_case(att), (GL_FRAMEBUFFER_COMPLETE, [0.25, 0.5, 0.75, 1.0]), "{att:?}: {WHY}");
@@ -1185,7 +1106,6 @@ fn texture_readback_has_alpha_one() {
 }
 
 #[test]
-#[ignore = "src/gl/framebuffer.rs attachment_storage: a RGBA16F texture of format GL_RGB16F is no attachment (plan #186)"]
 fn texture_shared_colorbuffer_as_the_renderbuffer() {
     let ok = GL_FRAMEBUFFER_COMPLETE;
     for att in TEXTURES {
@@ -1198,7 +1118,6 @@ fn texture_shared_colorbuffer_as_the_renderbuffer() {
 }
 
 #[test]
-#[ignore = "src/gl/framebuffer.rs attachment_storage: a RGBA16F texture of format GL_RGB16F is no attachment (plan #186)"]
 fn texture_resize_recreate_blit_as_the_renderbuffer() {
     let ok = GL_FRAMEBUFFER_COMPLETE;
     for att in TEXTURES {
@@ -1209,9 +1128,8 @@ fn texture_resize_recreate_blit_as_the_renderbuffer() {
 }
 
 /// `sample`: the draw into the texture, then its sampling; both reach the
-/// back end (2 jobs; today the first is refused and only the sampling runs).
+/// back end (2 jobs).
 #[test]
-#[ignore = "src/gl/framebuffer.rs attachment_storage: a RGBA16F texture of format GL_RGB16F is no attachment (plan #186)"]
 fn texture_sample_after_render() {
     let (e, made) = sample_case();
     assert_eq!(e, GL_NO_ERROR);

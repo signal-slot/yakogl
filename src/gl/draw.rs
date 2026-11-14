@@ -12945,7 +12945,7 @@ mod tests {
         let prog = es3_prog(&gl, "cube.frag");
         let plain = draw_strip(&gl).draw;
         assert!(core::ptr::eq(plain.fs, &gl.ctx().objs_ref().programs[obj_index(prog)].rfs));
-        for (internal, cls) in [(GL_RGBA16F, 1u32), (GL_R16F, 2), (GL_R32F, 3)] {
+        for (internal, cls) in [(GL_RGBA16F, 1u32), (GL_R16F, 2)] {
             let tex = bind_new_tex(GL_TEXTURE_2D);
             let mut fbo: GLuint = 0;
             // SAFETY: plain GL calls.
@@ -12960,7 +12960,7 @@ mod tests {
             // SAFETY: the variant lives in the draw path's static cache.
             let fs = unsafe { &*d.fs };
             assert_eq!(fs.blend_key >> SHC_BLEND_KEY_RT_SHIFT, cls, "0x{internal:x}");
-            assert_eq!(d.target_format, [0, GLES_SURF_RGBA16F, GLES_SURF_R16F, GLES_SURF_R32F][cls as usize]);
+            assert_eq!(d.target_format, [0, GLES_SURF_RGBA16F, GLES_SURF_R16F][cls as usize]);
             assert_eq!(d.target_gpu, gl.ctx().objs().textures[tex as usize].mem.gpu);
         }
         /* back on the RGBA8 window: the base shader again */

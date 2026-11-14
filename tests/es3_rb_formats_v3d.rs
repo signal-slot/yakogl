@@ -625,7 +625,7 @@ mod trampolines {
     /// The float colour formats the GL core's extension list adds (not ES 3.0
     /// core renderable: reported, not asserted).
     pub const EXT_FORMATS: &[(&str, GLenum, Kind)] =
-        &[("RGBA16F", GL_RGBA16F, Kind::Float), ("R16F", GL_R16F, Kind::Float), ("R32F", GL_R32F, Kind::Float)];
+        &[("RGBA16F", GL_RGBA16F, Kind::Float), ("R16F", GL_R16F, Kind::Float)];
 
     fn bytes_per_pixel(f: GLenum, k: Kind) -> u64 {
         match k {
