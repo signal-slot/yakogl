@@ -82,3 +82,7 @@ drop | tailnet-dns | tools/cts/mali-slice-redact.py | \bboard-1\.example\.ts\.ne
 drop | email | tools/cts/mali-slice-redact.py | serial-getty[@]ttyS2\.service\b | systemd unit instance in the tool's help, not an address
 drop | private-ipv4 | driver/tools/uboot-mp2/qemu/* | \b10\.0\.2\.2\b | QEMU user networking's fixed host address (its built-in TFTP server), the same on every machine
 drop | private-ipv4 | tools/cts/x2-scene-table-selftest.sh | \b10\.137\.22\.9\b | private-range input of a redaction test: a fake console and verdict line the table must not carry
+drop | private-ipv4 | tools/mp2_uboot_record_check.py | \b10\.1\.2\.3\b | private-range input of the record check's redaction self-test: a dirty console line the check must not echo
+drop | private-ipv4 | tools/mp2_uboot_record_check.py | \b10\.9\.8\.7\b | private-range input of the record check's redaction self-test: an address in console.raw behind a NUL
+drop | ipv6-local | tools/mp2_uboot_record_check.py | \bfe80::1ff:fe23:4567:890a\b | link-local input of the record check's redaction self-test (RFC 4291's example interface identifier)
+drop | tailnet-dns | tools/mp2_uboot_record_check.py | \bdk1\.tail1234\.ts\.net\b | fake tailnet host name input of the record check's redaction self-test
