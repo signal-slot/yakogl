@@ -178,11 +178,12 @@ fn a_fs_reads_15_vec4_varyings() {
     }
 }
 
-/// Fails today with `Select(VpmRowOutOfRange)`: the vertex shader's output
-/// rows stop below 64 components (gl_Position, the viewport rows and 16
-/// vec4 do not fit).
+/// Fails today with `NotYet("more live values than 2 threads have
+/// registers")`: the 69 VPM rows are accepted (select.rs
+/// `MAX_VPM_OUTPUT_ROWS`), but 64 computed components are all live at the
+/// end of the body (no spilling, the varyings are stored after it).
 #[test]
-#[ignore = "MAX_VERTEX_OUTPUT_COMPONENTS 64: select refuses VpmRowOutOfRange for a 16th vec4 output"]
+#[ignore = "MAX_VERTEX_OUTPUT_COMPONENTS 64: 16 computed vec4 outputs run out of registers (no spilling yet)"]
 fn a_vs_writes_16_vec4_outputs() {
     check_vs_rows(16, false).expect("a 16-vector (64-component) pair compiles");
 }

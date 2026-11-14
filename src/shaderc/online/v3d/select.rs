@@ -399,8 +399,8 @@ pub enum SelectError {
     VaryingNotAnInput,
     /// An attribute the program reads is not in the record list it was given.
     AttributeWithoutRecord,
-    /// A VPM row past what this cut writes (16 attribute records, 64 output
-    /// rows).
+    /// A VPM row past what this cut writes (16 attribute records,
+    /// [`MAX_VPM_OUTPUT_ROWS`] output rows).
     VpmRowOutOfRange,
     /// A VPM output was written before every attribute was read: the input
     /// and output segments are shared, so the write could overwrite an input
@@ -425,6 +425,12 @@ impl From<ArenaError> for SelectError {
         SelectError::OutOfScratch
     }
 }
+
+/// The most VPM rows a vertex shader writes: the four fixed-function rows
+/// (v3d_nir_emit_ff_vpm_outputs), the point size, and one row for each of
+/// the 64 fragment inputs the hardware takes (Mesa `V3D_MAX_FS_INPUTS`,
+/// v3d_limits.h). docs/notes/v3d-varyings.md.
+pub const MAX_VPM_OUTPUT_ROWS: u32 = 4 + 1 + 64;
 
 /// The selected program and the facts about it the shader record needs.
 #[derive(Clone, Copy, Debug)]
@@ -2206,12 +2212,13 @@ fn merge_exits<'a>(a: &Arena<'a>, ops: &mut AVec<'a, VOp>) -> Result<(), SelectE
 /// Select a fragment shader. `inputs` is [`super::prepare::fragment_inputs`];
 /// bit i of `flat` says `inputs[i]` is flat (the program's
 /// `flat_shade_flags`), bit i of `centroid` that it is sampled at the
-/// centroid (`centroid_flags`).
+/// centroid (`centroid_flags`); 64 bits, one per input the hardware takes
+/// (Mesa's `BITSET_DECLARE(.., V3D_MAX_FS_INPUTS)`).
 pub fn select_fragment<'a>(
     p: &Prepared<'_>,
     inputs: &[(u8, u8)],
-    flat: u32,
-    centroid: u32,
+    flat: u64,
+    centroid: u64,
     pressure: Pressure,
     a: &Arena<'a>,
 ) -> Result<Selected<'a>, SelectError> {
@@ -2283,10 +2290,10 @@ pub fn select_fragment<'a>(
     for (i, &(loc, comp)) in inputs.iter().enumerate() {
         let raw = s.v();
         s.push(a, VOp::Ldvary { dst: raw })?;
-        let value = if i < 32 && flat & (1 << i) != 0 {
+        let value = if i < 64 && flat & (1 << i) != 0 {
             s.mul(a, MulOp::Mov, Operand::R5, Operand::None)?
         } else {
-            let w = if i < 32 && centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
+            let w = if i < 64 && centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
             let scaled = s.mul(a, MulOp::Fmul, Operand::V(raw), w)?;
             s.add(a, AddOp::Fadd, scaled, Operand::R5)?
         };
@@ -2557,7 +2564,7 @@ pub fn select_vertex<'a>(
     } else {
         (0, 4 + skip + p.varyings.len() as u32)
     };
-    if rows > 64 {
+    if rows > MAX_VPM_OUTPUT_ROWS {
         return Err(SelectError::VpmRowOutOfRange);
     }
     /* v3d_nir_emit_ff_vpm_outputs */

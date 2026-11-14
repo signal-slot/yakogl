@@ -146,6 +146,14 @@ asked. In either case the constants in `context.rs:193-194` stop being
 
 ## Open, no owner yet
 
+- A vertex shader of 16 computed vec4 varyings selects (69 rows) but
+  fails allocation, `NotYet("more live values than 2 threads have
+  registers (no spilling yet)")`: the 64 components are all live at the
+  end of the body, because the varyings are stored after it. 16 vec4s read
+  from uniforms, or 15 computed ones, compile. It needs spilling or VPM
+  writes as each output is produced (Mesa stores outputs where the shader
+  writes them). Pinned, ignored, by `varyings_tests::a_vs_writes_16_vec4_outputs`
+  and `tests/v3d_varyings_compile.rs` `sixteen_computed_vec4_varyings_compile`.
 - The ES 3.00 link does not check varying component counts
   (`reflect.rs:1068-1070`); with 64 inputs a shader past the limit should
   fail at link, as dEQP expects.

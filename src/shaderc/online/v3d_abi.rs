@@ -283,6 +283,9 @@ pub fn program_shader(
         uses_implicit_point_line_varyings: u8::from(p.fs.uses_implicit_point_line_varyings),
         uses_pid: u8::from(p.fs.uses_pid),
         rt_mask: p.fs.rt_mask,
+        flat_shade_flags_hi: p.fs.flat_shade_flags_hi,
+        noperspective_flags_hi: p.fs.noperspective_flags_hi,
+        centroid_flags_hi: p.fs.centroid_flags_hi,
     };
 
     let mut record_of_location = [SHC_V3D_NO_RECORD; 16];
