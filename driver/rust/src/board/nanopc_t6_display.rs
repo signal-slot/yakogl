@@ -1,0 +1,517 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+//! Step D2 on the NanoPC-T6 (driver/docs/nanopc-t6-display.md, section 2
+//! route (a) and section 7 row D2): adopt the display a crash kexec left
+//! running. Linux 6.18 scans its frame buffer on VP0 through the VOP's
+//! IOMMU, in Cluster0 (linear XRGB8888; board dump of 2026-11-12: Cluster0
+//! `WIN_CTRL0` and `CLUSTER_CTRL` = 1, Esmart0 off, VP1-VP3 in STANDBY).
+//! The adopt keeps Linux's power, clocks, PHY, HDMI controller and VP0
+//! timing, and changes only the VOP's windows and its IOMMU: Cluster0 off,
+//! paging off, Esmart0 VP0's only layer, showing a buffer of this image.
+//!
+//! [`adopt`] runs, in this order, and stops at the first step that refuses
+//! ([`Stop`] names it):
+//!
+//! 1. Read what was left, writing nothing: PD_VOP powered and out of idle
+//!    (`soc::rk3588::PdRegs`; a VOP register read with its domain off may
+//!    hang the bus, U5), the VOP's CRU gates open, `VERSION_INFO`, VP0
+//!    running (STANDBY clear) with `DSP_CTRL` exactly what the build would
+//!    write for HDMI RGB, VP0's four timing words those of [`MODE`], HDMI0
+//!    enabled and fed by VP0 (`DSP_IF_EN`), the Esmart windows' internal
+//!    power on (`SYS_PD_CTRL` bit 7). Anything else is a state this code
+//!    does not know, and it refuses by name.
+//! 2. `vop2::take_over` keeping Esmart0: every window off, `REG_CFG_DONE`
+//!    on the running ports, one frame start on each.
+//! 3. `rk_iommu::paging_off` on both `vop_mmu` sets; a set that keeps paging
+//!    is [`Stop::Iommu`].
+//! 4. `vop2::overlay_single`: Esmart0 the only, bottom layer of VP0.
+//! 5. `vop2::window_show`: Esmart0 on the caller's buffer at physical
+//!    `fb_pa`, [`MODE`]'s size, stride [`FB_STRIDE`]; `REG_CFG_DONE` for VP0
+//!    (bit 15 | bit 16 | bit 0).
+//! 6. One frame start, then the read-back of section 5's "our buffer is the
+//!    one shown": `YRGB_MST`, `REGION0_CTRL` enable, the two overlay selects.
+//!
+//! The caller draws [`draw_pattern`] into the buffer and cleans it to the
+//! point of coherency before [`adopt`] (the VOP does not snoop the CPU's
+//! caches). [`status`] is section 5's other read-backs, all reads: the frame
+//! start, underflow and bus error bits over a wait, the frame interval
+//! against the caller's clock, the VOP's registers, the HPD level, the PHY
+//! GRF status and, only when PD_VO1 is usable, the HDMI controller's clock
+//! monitor and video monitor words.
+//!
+//! Nothing here touches the GPU, the interrupt controller, the PHY or the
+//! HDMI controller's registers beyond those reads.
+
+use crate::ip::dw_hdmi_qp;
+use crate::ip::hdptx;
+use crate::ip::rk_iommu;
+use crate::ip::vop2::{self, cluster, esmart, ovl, sys, vp, Esmart, Format, HdmiPort, Vp, Window};
+use crate::mmio::Mmio;
+use crate::soc::rk3588::{clkgate_con, PdRegs, PD_VO1, PD_VOP};
+use crate::video::VideoMode;
+
+/// The mode the build adopts: 1024x768 at 60 Hz, 65 MHz, H 1024 1048 1184
+/// 1344, V 768 771 777 806, both syncs negative (VESA DMT; what Linux ran on
+/// the board's display in the dump of 2026-11-12).
+pub const MODE: VideoMode = VideoMode {
+    pixel_clock_hz: 65_000_000,
+    hactive: 1024,
+    hfront: 24,
+    hsync: 136,
+    hback: 160,
+    vactive: 768,
+    vfront: 3,
+    vsync: 6,
+    vback: 29,
+    hsync_high: false,
+    vsync_high: false,
+    de_high: true,
+};
+
+/// The port, the window and the HDMI output the adopt uses.
+pub const PORT: Vp = Vp::Vp0;
+pub const WINDOW: Esmart = Esmart::E0;
+pub const HDMI: HdmiPort = HdmiPort::Hdmi0;
+
+/// The frame buffer's row stride: [`MODE`]'s width in XRGB8888, a multiple
+/// of 64 bytes.
+pub const FB_STRIDE: u32 = 1024 * 4;
+/// The frame buffer's size in bytes.
+pub const FB_BYTES: usize = FB_STRIDE as usize * 768;
+
+/// Physical bases of the blocks (rk3588-base.dtsi; driver/docs/
+/// nanopc-t6-display.md section 1). The VOP's registers below 0x2000 are
+/// the only ones used; the two `vop_mmu` sets share one 4 KiB page.
+pub const VOP_PHYS: usize = 0xfdd9_0000;
+pub const VOP_MAP: usize = 0x2000;
+pub const VOP_MMU_PAGE_PHYS: usize = 0xfdd9_7000;
+pub const VOP_MMU_SETS: [usize; 2] = [0xe00, 0xf00];
+pub const PMU_PHYS: usize = 0xfd8d_8000;
+pub const CRU_PHYS: usize = crate::soc::rk3588::CRU_BASE;
+pub const SYS_GRF_PHYS: usize = dw_hdmi_qp::SYS_GRF_BASE;
+pub const PHY_GRF_PHYS: usize = hdptx::GRF0_BASE;
+pub const HDMI_PHYS: usize = dw_hdmi_qp::TX0_BASE;
+
+/// The colours of the pattern (XRGB8888: 0x00RRGGBB, bytes B, G, R, X in
+/// memory). With R and B swapped the quadrants read blue, green, red, cyan:
+/// a person tells the byte order from the picture.
+pub const RED: u32 = 0x00ff_0000;
+pub const GREEN: u32 = 0x0000_ff00;
+pub const BLUE: u32 = 0x0000_00ff;
+pub const YELLOW: u32 = 0x00ff_ff00;
+pub const WHITE: u32 = 0x00ff_ffff;
+
+/// The pattern of driver/docs/nanopc-t6-display.md section 5: four
+/// quadrants, red top left, green top right, blue bottom left, yellow
+/// bottom right, and a white border one pixel wide. `fb` holds `height`
+/// rows of `stride_px` pixels; nothing past a row's `width` is written.
+/// Returns false (nothing written) when `fb` is too short or `width` is
+/// wider than the stride.
+pub fn draw_pattern(fb: &mut [u32], width: usize, height: usize, stride_px: usize) -> bool {
+    if width > stride_px || height == 0 || fb.len() < stride_px * (height - 1) + width {
+        return false;
+    }
+    for y in 0..height {
+        let row = &mut fb[y * stride_px..y * stride_px + width];
+        for (x, px) in row.iter_mut().enumerate() {
+            let edge = x == 0 || y == 0 || x == width - 1 || y == height - 1;
+            *px = match (edge, x < width / 2, y < height / 2) {
+                (true, _, _) => WHITE,
+                (false, true, true) => RED,
+                (false, false, true) => GREEN,
+                (false, true, false) => BLUE,
+                (false, false, false) => YELLOW,
+            };
+        }
+    }
+    true
+}
+
+/// The mapped (virtual) bases [`adopt`] and [`status`] use: the C side's
+/// `struct yd_t6_display_bases`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Bases {
+    pub vop: usize,
+    /// The two `vop_mmu` register sets.
+    pub vop_mmu: [usize; 2],
+    pub pmu: usize,
+    pub cru: usize,
+    pub sys_grf: usize,
+    pub phy_grf: usize,
+    pub hdmi: usize,
+}
+
+/// Which step stopped [`adopt`]. The value crosses to C
+/// (`YD_T6_DISPLAY_STOP_*`). Steps up to [`Stop::EsmartPower`] write
+/// nothing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u32)]
+pub enum Stop {
+    /// Every step ran; Esmart0 shows the buffer.
+    #[default]
+    None = 0,
+    /// PD_VOP is not powered or not out of idle (`detail`: the PMU repair
+    /// status). The VOP was not read.
+    VopDomain = 1,
+    /// A clock of PD_VOP is gated (`index`: its bit in CLKGATE_CON(52),
+    /// `detail`: the word). The VOP was not read.
+    VopClock = 2,
+    /// `VERSION_INFO` is not the RK3588's (`detail`).
+    Version = 3,
+    /// VP0 is in STANDBY: nothing scans out to adopt (`detail`: `DSP_CTRL`).
+    Standby = 4,
+    /// VP0's `DSP_CTRL` is not what the build writes for HDMI RGB
+    /// (`detail`).
+    VpState = 5,
+    /// VP0's timing is not [`MODE`]'s (`index`: 0 `DSP_HTOTAL_HS_END`, 1
+    /// `DSP_HACT_ST_END`, 2 `DSP_VTOTAL_VS_END`, 3 `DSP_VACT_ST_END`;
+    /// `detail`: the word read).
+    Mode = 6,
+    /// HDMI0 is not enabled or not fed by VP0 (`detail`: `DSP_IF_EN`).
+    Route = 7,
+    /// The Esmart windows' VOP-internal power is off (`detail`:
+    /// `SYS_PD_CTRL`).
+    EsmartPower = 8,
+    /// `vop2::take_over` refused or timed out (`refusal`: the
+    /// `vop2::Refusal`, `detail`: its read-back).
+    TakeOver = 9,
+    /// A `vop_mmu` set keeps paging (`refusal`: the `rk_iommu::Refusal`,
+    /// `index`: the set, `detail`: its `STATUS`).
+    Iommu = 10,
+    /// `vop2::overlay_single` refused (`refusal`, `detail`).
+    Overlay = 11,
+    /// `vop2::window_show` refused the buffer (`refusal`).
+    Window = 12,
+    /// No frame start after the window's `REG_CFG_DONE` (`refusal`,
+    /// `detail`).
+    Frame = 13,
+    /// A register reads other than written after that frame (`index`: 0
+    /// `YRGB_MST`, 1 `REGION0_CTRL` enable, 2 `OVL_PORT_SEL`, 3
+    /// `OVL_LAYER_SEL`; `detail`: the value read).
+    Shown = 14,
+}
+
+/// What [`adopt`] read and did, in 32-bit words only: the C side's `struct
+/// yd_t6_display_adopt`. Fields after the step that stopped stay 0.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Adopt {
+    /// [`Stop`], the refusal number of that step, which word or set, and the
+    /// value it is about.
+    pub stop: u32,
+    pub refusal: u32,
+    pub index: u32,
+    pub detail: u32,
+
+    /// As found. PD_VOP's PMU words (PWR, STATUS, IDLE_REQ, IDLE_ACK,
+    /// IDLE_ST, REPAIR) and CLKGATE_CON(52).
+    pub pd_vop: [u32; 6],
+    pub cru_gate52: u32,
+    pub version: u32,
+    /// `DSP_CTRL` of VP0-VP3.
+    pub dsp_ctrl: [u32; 4],
+    /// VP0's `DSP_HTOTAL_HS_END`, `DSP_HACT_ST_END`, `DSP_VTOTAL_VS_END`,
+    /// `DSP_VACT_ST_END`.
+    pub timing: [u32; 4],
+    pub dsp_if_en: u32,
+    pub pd_ctrl: u32,
+    pub layer_sel: u32,
+    pub port_sel: u32,
+    /// Cluster0's `WIN_CTRL0` and `CLUSTER_CTRL`; Esmart0's `REGION0_CTRL`.
+    pub cluster0: [u32; 2],
+    pub esmart0_ctrl: u32,
+    /// Each `vop_mmu` set's `STATUS` and `DTE_ADDR`.
+    pub mmu_status: [u32; 2],
+    pub mmu_dte: [u32; 2],
+
+    /// The take-over: the ports found running (bit n = VPn) and the windows
+    /// turned off (`vop2::WindowMask`).
+    pub running: u32,
+    pub off: u32,
+    /// The IOMMU: each set's `STATUS` at the end, and the `rk_iommu::Refusal`
+    /// of a stall time-out that did not keep paging on (0 none).
+    pub mmu_status_now: [u32; 2],
+    pub mmu_timeout: u32,
+    /// The overlay: `OVL_LAYER_SEL` and `OVL_PORT_SEL` written, µs until the
+    /// port select was in force.
+    pub ovl_layer_sel: u32,
+    pub ovl_port_sel: u32,
+    pub ovl_waited_us: u32,
+    /// The window: the buffer's physical address and stride.
+    pub fb: u32,
+    pub stride: u32,
+    /// `REG_CFG_DONE` read right after the window's write and after the next
+    /// frame start (U8: whether VP0's bit clears when taken), and the µs
+    /// waited for that frame start.
+    pub cfg_done_written: u32,
+    pub cfg_done_after: u32,
+    pub frame_waited_us: u32,
+    /// After that frame: Esmart0's `YRGB_MST` and `REGION0_CTRL`,
+    /// `OVL_PORT_SEL`, `OVL_LAYER_SEL`.
+    pub shown: [u32; 4],
+}
+
+impl Adopt {
+    fn stopped(mut self, stop: Stop, refusal: u32, index: u32, detail: u32) -> Adopt {
+        self.stop = stop as u32;
+        self.refusal = refusal;
+        self.index = index;
+        self.detail = detail;
+        self
+    }
+}
+
+/// The adopt (see the module). `fb_pa` is the physical address of a buffer
+/// of [`FB_BYTES`] at stride [`FB_STRIDE`], drawn and cleaned by the caller.
+pub fn adopt(m: &impl Mmio, b: &Bases, fb_pa: u64, delay_us: &mut impl FnMut(u32)) -> Adopt {
+    let mut a = Adopt::default();
+    let v = b.vop;
+
+    // 1. what was left, read only
+    let pd = PdRegs::of(m, b.pmu, &PD_VOP);
+    a.pd_vop = [pd.pwr_gate, pd.status, pd.idle_req, pd.idle_ack, pd.idle_st, pd.repair];
+    if !pd.usable_of(&PD_VOP) {
+        return a.stopped(Stop::VopDomain, 0, 0, pd.repair);
+    }
+    // every PD_VOP clock is in CLKGATE_CON(52) (soc::rk3588::PD_VOP)
+    a.cru_gate52 = m.read32(b.cru + clkgate_con(52));
+    for g in PD_VOP.clocks {
+        let word = if g.con == 52 { a.cru_gate52 } else { m.read32(b.cru + clkgate_con(g.con)) };
+        if word & 1 << g.bit != 0 {
+            return a.stopped(Stop::VopClock, 0, g.bit, word);
+        }
+    }
+    a.version = vop2::version(m, v);
+    if a.version != vop2::VERSION_RK3588 {
+        return a.stopped(Stop::Version, 0, 0, a.version);
+    }
+    for (p, w) in a.dsp_ctrl.iter_mut().enumerate() {
+        *w = m.read32(v + vp::base(p) + vp::DSP_CTRL);
+    }
+    let vb = v + vp::base(PORT.id());
+    a.timing = [vp::DSP_HTOTAL_HS_END, vp::DSP_HACT_ST_END, vp::DSP_VTOTAL_VS_END, vp::DSP_VACT_ST_END]
+        .map(|off| m.read32(vb + off));
+    a.dsp_if_en = m.read32(v + sys::DSP_IF_EN);
+    a.pd_ctrl = m.read32(v + sys::PD_CTRL);
+    a.layer_sel = m.read32(v + ovl::LAYER_SEL);
+    a.port_sel = m.read32(v + ovl::PORT_SEL);
+    let c0 = v + vop2::Cluster::C0.base();
+    a.cluster0 = [m.read32(c0 + cluster::WIN_CTRL0), m.read32(c0 + cluster::CTRL)];
+    a.esmart0_ctrl = m.read32(v + WINDOW.base() + esmart::REGION0_CTRL);
+    for i in 0..2 {
+        a.mmu_status[i] = m.read32(b.vop_mmu[i] + rk_iommu::STATUS);
+        a.mmu_dte[i] = m.read32(b.vop_mmu[i] + rk_iommu::DTE_ADDR);
+    }
+
+    let dsp = a.dsp_ctrl[PORT.id()];
+    if dsp & vp::DSP_CTRL_STANDBY != 0 {
+        return a.stopped(Stop::Standby, 0, 0, dsp);
+    }
+    // MODE is a constant the tests pin: its words always exist
+    let Ok(t) = vop2::vp_timing(&MODE, PORT) else {
+        return a.stopped(Stop::Mode, 0, 0, 0);
+    };
+    if dsp != t.dsp_ctrl {
+        return a.stopped(Stop::VpState, 0, 0, dsp);
+    }
+    let want = [t.htotal_hs_end, t.hact_st_end, t.vtotal_vs_end, t.vact_st_end];
+    if let Some(i) = (0..4).find(|&i| a.timing[i] != want[i]) {
+        return a.stopped(Stop::Mode, 0, i as u32, a.timing[i]);
+    }
+    let route = vop2::hdmi_if(PORT, HDMI);
+    if a.dsp_if_en & route.if_en_mask != route.if_en {
+        return a.stopped(Stop::Route, 0, 0, a.dsp_if_en);
+    }
+    if a.pd_ctrl & sys::PD_ESMART != 0 {
+        return a.stopped(Stop::EsmartPower, 0, 0, a.pd_ctrl);
+    }
+
+    // 2. Linux's windows off, taken at a frame boundary
+    match vop2::take_over(m, v, Some(WINDOW), delay_us) {
+        Ok(o) => {
+            a.running = o.running;
+            a.off = o.off;
+        }
+        Err(f) => {
+            a.running = f.running;
+            a.off = f.off;
+            return a.stopped(Stop::TakeOver, f.refused.why as u32, 0, f.refused.read_back);
+        }
+    }
+
+    // 3. nothing fetches through Linux's page tables any more
+    match rk_iommu::paging_off(m, &b.vop_mmu, delay_us) {
+        Ok(o) => {
+            a.mmu_status_now = o.status_now;
+            a.mmu_timeout = o.timeout.map_or(0, |r| r.why as u32);
+        }
+        Err(r) => {
+            for i in 0..2 {
+                a.mmu_status_now[i] = m.read32(b.vop_mmu[i] + rk_iommu::STATUS);
+            }
+            return a.stopped(Stop::Iommu, r.why as u32, r.set as u32, r.status);
+        }
+    }
+
+    // 4. Esmart0 the only layer of VP0
+    match vop2::overlay_single(m, v, PORT, WINDOW, delay_us) {
+        Ok(o) => {
+            a.ovl_layer_sel = o.layer_sel;
+            a.ovl_port_sel = o.port_sel;
+            a.ovl_waited_us = o.waited_us;
+        }
+        Err(r) => return a.stopped(Stop::Overlay, r.why as u32, 0, r.read_back),
+    }
+
+    // 5. our buffer
+    let w = Window {
+        addr: fb_pa,
+        width: MODE.hactive,
+        height: MODE.vactive,
+        stride_bytes: FB_STRIDE,
+        x: 0,
+        y: 0,
+        format: Format::Xrgb8888,
+    };
+    if let Err(r) = vop2::window_show(m, v, PORT, WINDOW, &w, (MODE.hactive, MODE.vactive)) {
+        return a.stopped(Stop::Window, r.why as u32, 0, r.read_back);
+    }
+    // window_show refuses an address at or above 4 GiB
+    a.fb = fb_pa as u32;
+    a.stride = FB_STRIDE;
+    a.cfg_done_written = m.read32(v + sys::REG_CFG_DONE);
+
+    // 6. one frame later the update is in force
+    match vop2::wait_frame(m, v, PORT, delay_us) {
+        Ok(us) => a.frame_waited_us = us,
+        Err(r) => return a.stopped(Stop::Frame, r.why as u32, 0, r.read_back),
+    }
+    a.cfg_done_after = m.read32(v + sys::REG_CFG_DONE);
+    let e0 = v + WINDOW.base();
+    a.shown = [
+        m.read32(e0 + esmart::REGION0_YRGB_MST),
+        m.read32(e0 + esmart::REGION0_CTRL),
+        m.read32(v + ovl::PORT_SEL),
+        m.read32(v + ovl::LAYER_SEL),
+    ];
+    let ok = [
+        a.shown[0] == a.fb,
+        a.shown[1] & esmart::R0_ENABLE != 0,
+        a.shown[2] == a.ovl_port_sel,
+        a.shown[3] == a.ovl_layer_sel,
+    ];
+    if let Some(i) = ok.iter().position(|o| !o) {
+        return a.stopped(Stop::Shown, 0, i as u32, a.shown[i]);
+    }
+    a
+}
+
+/// What [`status`] read: section 5 of driver/docs/nanopc-t6-display.md, in
+/// 32-bit words only (the C side's `struct yd_t6_display_status`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Status {
+    /// The `vop2::Refusal` of the frame check or of a frame wait, 0 none;
+    /// and its read-back.
+    pub refusal: u32,
+    pub detail: u32,
+    /// Over the check's wait: a frame start (1), an underflow (1), a bus
+    /// error on `SYS0` and `SYS1` (1), and `VP_INT_RAW_STATUS` at its end.
+    pub frame_start: u32,
+    pub underflow: u32,
+    pub bus_error: [u32; 2],
+    pub raw: u32,
+    /// The frame starts timed and the µs between the first and the last on
+    /// the caller's clock.
+    pub frames: u32,
+    pub frames_us: u32,
+    /// `vop2::ReadBack` of VP0 and Esmart0, in its field order: version,
+    /// `SYS_PD_CTRL`, `REG_CFG_DONE`, `DSP_IF_EN`, `DSP_CTRL`,
+    /// `DSP_HTOTAL_HS_END`, `DSP_VTOTAL_VS_END`, `OVL_PORT_SEL`,
+    /// `OVL_LAYER_SEL`, `REGION0_CTRL`, `YRGB_MST`, `REGION0_VIR`,
+    /// `VP_INT_RAW_STATUS`, `SYS0_INT_STATUS`, `SYS1_INT_STATUS`.
+    pub vop: [u32; 15],
+    /// sys_grf `SOC_STATUS1` (HPD level of HDMI0 in bit 16) and the HDPTX
+    /// PHY0 GRF `STATUS` (`PLL_LOCK_DONE` 3, `PHY_CLK_RDY` 2, `PHY_RDY` 1).
+    pub soc_status1: u32,
+    pub phy_status: u32,
+    /// PD_VO1 usable (1), then, only when it is, the controller's
+    /// `CMU_STATUS`, `CMU_VIDQPCLK_FREQ`, `CMU_LINKQPCLK_FREQ` and
+    /// `VIDEO_MONITOR_STATUS0-6`.
+    pub vo1_usable: u32,
+    pub cmu: [u32; 3],
+    pub monitor: [u32; dw_hdmi_qp::VIDEO_MONITOR_WORDS],
+}
+
+/// Section 5's read-backs (see the module), all reads except the event
+/// clears of VP0: `vop2::frame_check` over `wait_us`, then `frames` frame
+/// starts timed with `now_us`, then the registers.
+pub fn status(
+    m: &impl Mmio,
+    b: &Bases,
+    wait_us: u32,
+    frames: u32,
+    now_us: &mut impl FnMut() -> u64,
+    delay_us: &mut impl FnMut(u32),
+) -> Status {
+    let mut s = Status::default();
+    let v = b.vop;
+    match vop2::frame_check(m, v, PORT, wait_us, delay_us) {
+        Ok(f) => {
+            s.frame_start = f.frame_start.into();
+            s.underflow = f.underflow.into();
+            s.bus_error = f.bus_error.map(u32::from);
+            s.raw = f.raw;
+        }
+        Err(r) => (s.refusal, s.detail) = (r.why as u32, r.read_back),
+    }
+    if s.refusal == 0 && frames > 0 {
+        let mut t0 = 0;
+        for n in 0..=frames {
+            if let Err(r) = vop2::wait_frame(m, v, PORT, delay_us) {
+                (s.refusal, s.detail) = (r.why as u32, r.read_back);
+                break;
+            }
+            let t = now_us();
+            if n == 0 {
+                t0 = t;
+            } else {
+                s.frames = n;
+                s.frames_us = u32::try_from(t - t0).unwrap_or(u32::MAX);
+            }
+        }
+    }
+    let r = vop2::read_back(m, v, PORT, WINDOW);
+    s.vop = [
+        r.version,
+        r.pd_ctrl,
+        r.cfg_done,
+        r.dsp_if_en,
+        r.dsp_ctrl,
+        r.htotal_hs_end,
+        r.vtotal_vs_end,
+        r.port_sel,
+        r.layer_sel,
+        r.region0_ctrl,
+        r.yrgb_mst,
+        r.vir,
+        r.raw_status,
+        r.sys0_int_status,
+        r.sys1_int_status,
+    ];
+    s.soc_status1 = m.read32(b.sys_grf + dw_hdmi_qp::grf::SOC_STATUS1);
+    s.phy_status = m.read32(b.phy_grf + hdptx::grf::STATUS);
+    if PdRegs::of(m, b.pmu, &PD_VO1).usable_of(&PD_VO1) {
+        s.vo1_usable = 1;
+        s.cmu = [dw_hdmi_qp::reg::CMU_STATUS, dw_hdmi_qp::reg::CMU_VIDQPCLK_FREQ, dw_hdmi_qp::reg::CMU_LINKQPCLK_FREQ]
+            .map(|off| m.read32(b.hdmi + off));
+        for (i, w) in s.monitor.iter_mut().enumerate() {
+            *w = m.read32(b.hdmi + dw_hdmi_qp::reg::VIDEO_MONITOR_STATUS0 + 4 * i);
+        }
+    }
+    s
+}
+
+#[cfg(test)]
+mod tests;

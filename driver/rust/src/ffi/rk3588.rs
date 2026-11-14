@@ -2072,6 +2072,207 @@ mod fw_tests {
     }
 }
 
+/// The display adopt of step D2 ([`crate::board::nanopc_t6_display`]):
+/// `struct yd_t6_display_bases`, `struct yd_t6_display_adopt` and `struct
+/// yd_t6_display_status` are the board module's own `#[repr(C)]` records.
+pub use crate::board::nanopc_t6_display::{
+    Adopt as YdT6DisplayAdopt, Bases as YdT6DisplayBases, Status as YdT6DisplayStatus,
+};
+
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(size_of::<YdT6DisplayBases>() == 64);
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(offset_of!(YdT6DisplayBases, vop_mmu) == 8);
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(offset_of!(YdT6DisplayBases, hdmi) == 56);
+const _: () = assert!(size_of::<YdT6DisplayAdopt>() == 4 * 48);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, pd_vop) == 4 * 4);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, version) == 4 * 11);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, timing) == 4 * 16);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, mmu_status) == 4 * 27);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, running) == 4 * 31);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, ovl_layer_sel) == 4 * 36);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, fb) == 4 * 39);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, shown) == 4 * 44);
+const _: () = assert!(size_of::<YdT6DisplayStatus>() == 4 * 37);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, frames) == 4 * 7);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, vop) == 4 * 9);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, soc_status1) == 4 * 24);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, vo1_usable) == 4 * 26);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, monitor) == 4 * 30);
+
+/// Draw the adopt's pattern ([`crate::board::nanopc_t6_display::draw_pattern`])
+/// into `fb`: `height` rows of `stride_bytes`, `width` pixels each. 0, or
+/// `-EINVAL` (nothing written) for a null or misaligned `fb`, a stride that
+/// is not whole pixels or shorter than a line, or a zero size.
+///
+/// # Safety
+/// `fb` is valid for writes of `stride_bytes * height` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_display_pattern(fb: *mut u32, width: u32, height: u32, stride_bytes: u32) -> i32 {
+    if fb.is_null() || !(fb as usize).is_multiple_of(4) || !stride_bytes.is_multiple_of(4) || width == 0 || height == 0
+    {
+        return -EINVAL;
+    }
+    let stride_px = stride_bytes as usize / 4;
+    // SAFETY: the caller's contract.
+    let px = unsafe { core::slice::from_raw_parts_mut(fb, stride_px * height as usize) };
+    if crate::board::nanopc_t6_display::draw_pattern(px, width as usize, height as usize, stride_px) {
+        0
+    } else {
+        -EINVAL
+    }
+}
+
+/// The adopt ([`crate::board::nanopc_t6_display::adopt`]) on the blocks of
+/// `b`, showing the buffer at physical `fb_pa` (drawn and cleaned by the
+/// caller). 0 when Esmart0 shows it, `-EIO` when a step stopped
+/// (`out.stop` says which), `-EINVAL` for a null argument.
+///
+/// # Safety
+/// Every base of `*b` is mapped device memory covering what the module
+/// reads and writes (`VOP_MAP` bytes of the VOP, 0x100 of each `vop_mmu`
+/// set, a page of each other block); `b` and `out` are valid.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_display_adopt(
+    b: *const YdT6DisplayBases,
+    fb_pa: u64,
+    delay_us: Option<extern "C" fn(u32)>,
+    out: *mut YdT6DisplayAdopt,
+) -> i32 {
+    let Some(delay_us) = delay_us else { return -EINVAL };
+    if b.is_null() || out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (hw, b) = unsafe { (Hw::new(), &*b) };
+    let a = crate::board::nanopc_t6_display::adopt(&hw, b, fb_pa, &mut |us| delay_us(us));
+    // SAFETY: the caller's contract.
+    unsafe { *out = a };
+    if a.stop == crate::board::nanopc_t6_display::Stop::None as u32 {
+        0
+    } else {
+        -EIO
+    }
+}
+
+/// Section 5's read-backs ([`crate::board::nanopc_t6_display::status`]):
+/// the frame check over `wait_us`, `frames` frame starts timed with
+/// `now_us` (µs), the registers. 0, `-EIO` when a frame wait or the check
+/// refused (`out.refusal`), `-EINVAL` for a null argument.
+///
+/// # Safety
+/// As [`yd_t6_display_adopt`].
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_display_status(
+    b: *const YdT6DisplayBases,
+    wait_us: u32,
+    frames: u32,
+    now_us: Option<extern "C" fn() -> u64>,
+    delay_us: Option<extern "C" fn(u32)>,
+    out: *mut YdT6DisplayStatus,
+) -> i32 {
+    let (Some(now_us), Some(delay_us)) = (now_us, delay_us) else { return -EINVAL };
+    if b.is_null() || out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (hw, b) = unsafe { (Hw::new(), &*b) };
+    let s = crate::board::nanopc_t6_display::status(&hw, b, wait_us, frames, &mut || now_us(), &mut |us| delay_us(us));
+    // SAFETY: the caller's contract.
+    unsafe { *out = s };
+    if s.refusal == 0 {
+        0
+    } else {
+        -EIO
+    }
+}
+
+#[cfg(test)]
+mod display_tests {
+    use super::*;
+    use crate::board::nanopc_t6_display::Stop;
+
+    #[test]
+    fn the_c_header_has_the_d2_numbers_and_layout() {
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let def = |name: &str| -> u32 {
+            let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
+            l.split_whitespace().nth(2).expect(name).parse().unwrap_or_else(|_| panic!("{name}"))
+        };
+        for (name, v) in [
+            ("YD_T6_DISPLAY_STOP_NONE", Stop::None),
+            ("YD_T6_DISPLAY_STOP_VOP_DOMAIN", Stop::VopDomain),
+            ("YD_T6_DISPLAY_STOP_VOP_CLOCK", Stop::VopClock),
+            ("YD_T6_DISPLAY_STOP_VERSION", Stop::Version),
+            ("YD_T6_DISPLAY_STOP_STANDBY", Stop::Standby),
+            ("YD_T6_DISPLAY_STOP_VP_STATE", Stop::VpState),
+            ("YD_T6_DISPLAY_STOP_MODE", Stop::Mode),
+            ("YD_T6_DISPLAY_STOP_ROUTE", Stop::Route),
+            ("YD_T6_DISPLAY_STOP_ESMART_POWER", Stop::EsmartPower),
+            ("YD_T6_DISPLAY_STOP_TAKE_OVER", Stop::TakeOver),
+            ("YD_T6_DISPLAY_STOP_IOMMU", Stop::Iommu),
+            ("YD_T6_DISPLAY_STOP_OVERLAY", Stop::Overlay),
+            ("YD_T6_DISPLAY_STOP_WINDOW", Stop::Window),
+            ("YD_T6_DISPLAY_STOP_FRAME", Stop::Frame),
+            ("YD_T6_DISPLAY_STOP_SHOWN", Stop::Shown),
+        ] {
+            assert_eq!(def(name), v as u32, "{name}");
+        }
+        let pins = [
+            ("sizeof(struct yd_t6_display_bases)", size_of::<YdT6DisplayBases>()),
+            ("offsetof(struct yd_t6_display_bases, vop_mmu)", offset_of!(YdT6DisplayBases, vop_mmu)),
+            ("offsetof(struct yd_t6_display_bases, hdmi)", offset_of!(YdT6DisplayBases, hdmi)),
+            ("sizeof(struct yd_t6_display_adopt)", size_of::<YdT6DisplayAdopt>()),
+            ("offsetof(struct yd_t6_display_adopt, pd_vop)", offset_of!(YdT6DisplayAdopt, pd_vop)),
+            ("offsetof(struct yd_t6_display_adopt, version)", offset_of!(YdT6DisplayAdopt, version)),
+            ("offsetof(struct yd_t6_display_adopt, timing)", offset_of!(YdT6DisplayAdopt, timing)),
+            ("offsetof(struct yd_t6_display_adopt, mmu_status)", offset_of!(YdT6DisplayAdopt, mmu_status)),
+            ("offsetof(struct yd_t6_display_adopt, running)", offset_of!(YdT6DisplayAdopt, running)),
+            ("offsetof(struct yd_t6_display_adopt, ovl_layer_sel)", offset_of!(YdT6DisplayAdopt, ovl_layer_sel)),
+            ("offsetof(struct yd_t6_display_adopt, fb)", offset_of!(YdT6DisplayAdopt, fb)),
+            ("offsetof(struct yd_t6_display_adopt, shown)", offset_of!(YdT6DisplayAdopt, shown)),
+            ("sizeof(struct yd_t6_display_status)", size_of::<YdT6DisplayStatus>()),
+            ("offsetof(struct yd_t6_display_status, frames)", offset_of!(YdT6DisplayStatus, frames)),
+            ("offsetof(struct yd_t6_display_status, vop)", offset_of!(YdT6DisplayStatus, vop)),
+            ("offsetof(struct yd_t6_display_status, soc_status1)", offset_of!(YdT6DisplayStatus, soc_status1)),
+            ("offsetof(struct yd_t6_display_status, vo1_usable)", offset_of!(YdT6DisplayStatus, vo1_usable)),
+            ("offsetof(struct yd_t6_display_status, monitor)", offset_of!(YdT6DisplayStatus, monitor)),
+        ];
+        for (what, v) in pins {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
+    }
+
+    #[test]
+    fn null_or_misshapen_arguments_are_refused_before_anything_is_touched() {
+        extern "C" fn no_delay(_: u32) {}
+        extern "C" fn no_clock() -> u64 {
+            0
+        }
+        let mut a = YdT6DisplayAdopt::default();
+        let mut s = YdT6DisplayStatus::default();
+        let b = core::ptr::null::<YdT6DisplayBases>();
+        // SAFETY: each call is refused before it dereferences anything.
+        unsafe {
+            assert_eq!(yd_t6_display_adopt(b, 0, Some(no_delay), &mut a), -EINVAL);
+            assert_eq!(yd_t6_display_status(b, 0, 0, Some(no_clock), Some(no_delay), &mut s), -EINVAL);
+            assert_eq!(yd_t6_display_pattern(core::ptr::null_mut(), 4, 4, 16), -EINVAL);
+        }
+        let mut fb = [7u32; 16];
+        // SAFETY: fb holds 4 rows of 16 bytes.
+        unsafe {
+            assert_eq!(yd_t6_display_pattern(fb.as_mut_ptr(), 4, 4, 15), -EINVAL);
+            assert_eq!(yd_t6_display_pattern(fb.as_mut_ptr(), 5, 4, 16), -EINVAL);
+            assert!(fb.iter().all(|p| *p == 7));
+            assert_eq!(yd_t6_display_pattern(fb.as_mut_ptr(), 4, 4, 16), 0);
+        }
+        assert_eq!(fb[0], crate::board::nanopc_t6_display::WHITE);
+        assert_eq!(fb[5], crate::board::nanopc_t6_display::RED);
+    }
+}
+
 #[cfg(test)]
 mod mmu_tests {
     use super::*;
