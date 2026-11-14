@@ -22,7 +22,7 @@ use core::fmt::Write as _;
 use super::consts::*;
 use super::context::{
     self, gl_trace, obj_index, obj_name, GlContext, GlProgram, CAP_COMBINED_TEXTURE_UNITS, CAP_SAMPLERS,
-    CAP_TEXTURE_UNITS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_UNIFORM_DWORDS, MAX_VERTEX_ATTRIBS, OBJ_PROGRAM,
+    CAP_TEXTURE_UNITS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_STAGE_UNIFORM_DWORDS, MAX_VERTEX_ATTRIBS, OBJ_PROGRAM,
 };
 use super::draw;
 use super::shader::{self, copy_out_text, log_text, INFO_LOG_SIZE};
@@ -1866,7 +1866,7 @@ fn block_dwords(sh: &shaderc::ShcShader) -> usize {
         .map(|u| u.dword_off as usize + u.dwords as usize)
         .max()
         .unwrap_or(0);
-    (sh.uniform_dwords as usize).max(layout_end).min(MAX_UNIFORM_DWORDS)
+    (sh.uniform_dwords as usize).max(layout_end).min(MAX_STAGE_UNIFORM_DWORDS)
 }
 
 #[no_mangle]
@@ -3362,6 +3362,7 @@ pub(crate) fn reset_for_tests() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gl::context::MAX_UNIFORM_DWORDS;
     use crate::gl::shader::{glCompileShader, glCreateShader, glShaderSource};
     use crate::testutil::{MemEvent, TestGl};
     use core::ffi::c_void;
@@ -6942,7 +6943,7 @@ mod tests {
         set_table(&mut p.rvs, std::vec![sampler("s", 0)]);
         assert_eq!(block_dwords(&p.rvs), 0, "samplers take no block storage");
         set_table(&mut p.rvs, std::vec![uni("far", 0xfff0, 8, GL_FLOAT_VEC4, 2)]);
-        assert_eq!(block_dwords(&p.rvs), MAX_UNIFORM_DWORDS, "capped");
+        assert_eq!(block_dwords(&p.rvs), MAX_STAGE_UNIFORM_DWORDS, "capped");
     }
 
     #[test]

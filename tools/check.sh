@@ -1894,6 +1894,13 @@ step "test    host-test,gpu-vivante,shaderc-online (tests/es3_flatshade_guard.rs
 # Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_v3d_varyings.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_varyings
+# The V3D's uniform blocks (docs/notes/es3-shader-limits.md): 16384 bytes, and
+# the combined components ES 3.0's formula gives, asked in all three integer
+# forms and drawn as a block of that size, which the GL core hands the back end
+# word by word (src/gl/context.rs MAX_UNIFORM_BLOCK_SIZE). Compiles to nothing
+# under report-es2, where there are no uniform blocks.
+step "test    $V3D_CONFIG (tests/es3_v3d_ubo_size.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_ubo_size
 # The `msaa-fbo` feature (no effect yet) builds with each GPU's host
 # configuration, so a later item that reads it starts from a tree that
 # compiles.

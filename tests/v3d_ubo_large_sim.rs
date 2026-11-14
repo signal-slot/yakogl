@@ -1,17 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Does the V3D compiler read a uniform block past dword 1536 (6144 bytes,
-//! the GL core's `MAX_UNIFORM_DWORDS`), up to the 16384 bytes ES 3.0 asks
-//! `MAX_UNIFORM_BLOCK_SIZE` for? A fragment shader reads `vec4 v[1024]` (4096
-//! dwords) of a std140 block, by constant index (entries 0, 383, 384, 1023;
-//! dwords 1532..1535 are entry 383, 1536.. is entry 384) and by an index
-//! held in a uniform, and the QPU interpreter runs it with a uniform stream
-//! built from a block whose dword k holds a distinct value (k + 0.5, exact in
-//! f32). The value read reaches the TLB as `gl_FragDepth` (unclamped, f32).
+//! The V3D compiler reading a uniform block past dword 1536 (6144 bytes, what
+//! `MAX_UNIFORM_BLOCK_SIZE` used to be) up to ES 3.0's 16384. A fragment
+//! shader reads `vec4 v[1024]` (4096 dwords) of a std140 block, by constant
+//! index (entries 0, 383, 384, 1023; dwords 1532..1535 are entry 383, 1536..
+//! is entry 384) and by an index held in a uniform, and the QPU interpreter
+//! runs it with a uniform stream built from a block whose dword k holds a
+//! distinct value (k + 0.5, exact in f32). The value read reaches the TLB as
+//! `gl_FragDepth` (unclamped, f32).
 //!
-//! Probe, not a feature: a case that fails today is `#[ignore]`d with the
-//! limiting code. Only the `contents == 1` (QUNIFORM_UNIFORM) stream words
-//! are modelled; a program that needs UNIFA/QUNIFORM_UBO_ADDR is reported.
+//! This is the compiler-side half of the raise `src/gl/context.rs`
+//! MAX_UNIFORM_BLOCK_SIZE makes for the GPU: a block member of any dword index
+//! is a `QUNIFORM_UNIFORM` word of the stage's storage that the draw fills, so
+//! a block of 16384 bytes links, draws and reads (the GL-side half is
+//! `tests/es3_v3d_ubo_size.rs`). What the raise does not buy is the array
+//! indexing the `#[ignore]`d cases name: `Op::LoadUniformIdx` selects among at
+//! most 256 components (no `ldunifa` yet) and `UniformRow::array_len` is a u8.
+//!
+//! Only the `contents == 1` (QUNIFORM_UNIFORM) stream words are modelled; a
+//! program that needs UNIFA/QUNIFORM_UBO_ADDR is reported.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d_ubo_large_sim
