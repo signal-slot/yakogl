@@ -262,18 +262,6 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
     let mut v: Vec<(&'static str, &'static str)> = vec![
         ("MAX_COLOR_ATTACHMENTS", "3, not 4: gl/context.rs CAP_COLOR_ATTACHMENTS; the mrt4 item"),
         ("MAX_DRAW_BUFFERS", "3, not 4: gl/context.rs MAX_DRAW_BUFFERS = CAP_COLOR_ATTACHMENTS; the mrt4 item"),
-        (
-            "MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",
-            "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/state.rs); MAX_UNIFORM_BLOCK_SIZE is the root",
-        ),
-        (
-            "MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",
-            "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/state.rs)",
-        ),
-        (
-            "MAX_UNIFORM_BLOCK_SIZE",
-            "6144, not 16384: a block gets the default-block budget, MAX_UNIFORM_DWORDS * 4 (ubo-uniform)",
-        ),
         ("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)"),
     ];
     if cfg!(feature = "gpu-mali") {
@@ -282,6 +270,29 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
             "3: ETC1, RGB8_ETC2, RGBA8_ETC2_EAC; the Mali samples no texel class, so the sRGB pair and the six \
              decoded formats are not stored (gl/texture.rs stored_compressed_formats)",
         ));
+    }
+    /* the V3D reads a uniform block word by word from the host array, so its blocks
+     * are as large as its uniform storage (gl/context.rs MAX_UNIFORM_BLOCK_SIZE,
+     * tests/es3_v3d_ubo_size.rs): 16384 bytes and the formula's combined components.
+     * Every other back end keeps the gap until its own raise (docs/notes/es3-shader-limits.md). */
+    if !cfg!(all(feature = "gpu-v3d", not(feature = "report-es2"))) {
+        v.extend_from_slice(&[
+            (
+                "MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",
+                "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/context.rs \
+                 MAX_COMBINED_UNIFORM_COMPONENTS); MAX_UNIFORM_BLOCK_SIZE is the root",
+            ),
+            (
+                "MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",
+                "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/context.rs MAX_COMBINED_UNIFORM_COMPONENTS)",
+            ),
+            (
+                "MAX_UNIFORM_BLOCK_SIZE",
+                "6144, not 16384: a block gets the default-block budget, MAX_UNIFORM_DWORDS * 4 (ubo-uniform; the \
+                 PowerVR and the GC7000UL read the block storage from the shader's own constant file, \
+                 docs/notes/es3-shader-limits.md)",
+            ),
+        ]);
     }
     // the GC7000UL and the PowerVR report ES 3.0's 15 varying vectors; the V3D does too
     // outside a report-es2 build (gl/context.rs MAX_VARYING_VECTORS)
@@ -299,7 +310,15 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
     // the V3D reports 64 vertex output components (gl/context.rs: 15 vectors plus gl_Position's
     // vector); the GC7000 and the PowerVR report 15 varyings but 60, and Mali 32
     if !cfg!(all(feature = "gpu-v3d", not(feature = "report-es2"))) {
-        v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));
+        v.push((
+            "MAX_VERTEX_OUTPUT_COMPONENTS",
+            if fifteen {
+                "60 = 15 * 4, ES 3.0 needs 64 (the vector beside the varyings is what the V3D programs: \
+                 gl/context.rs VERTEX_OUTPUT_EXTRA, docs/notes/es3-shader-limits.md)"
+            } else {
+                "32 = 8 * 4"
+            },
+        ));
     }
     v
 }

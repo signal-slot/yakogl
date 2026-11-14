@@ -1254,19 +1254,19 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; STATE_VALUES
         GL_MAX_VARYING_COMPONENTS => (MAX_VARYING_VECTORS * 4) as GLint,
         GL_MAX_VERTEX_OUTPUT_COMPONENTS => context::MAX_VERTEX_OUTPUT_COMPONENTS as GLint,
         GL_MAX_FRAGMENT_INPUT_COMPONENTS => context::MAX_FRAGMENT_INPUT_COMPONENTS as GLint,
-        /* Uniform blocks are flattened into each stage's default block and
-         * filled from the bound range at draw time (program.rs), the same on
-         * both GPUs: a stage takes ES 3.0's twelve, a program
-         * PROG_MAX_BLOCKS, and one block at most the stage's whole default
-         * block, MAX_UNIFORM_DWORDS -- below ES 3.0's 16384 bytes (RESULTS.md
-         * gap list). */
-        GL_MAX_VERTEX_UNIFORM_BLOCKS | GL_MAX_FRAGMENT_UNIFORM_BLOCKS => 12,
+        /* Uniform blocks are flattened into each stage's uniform storage and
+         * filled from the bound range at draw time (program.rs): a stage takes
+         * ES 3.0's twelve, a program PROG_MAX_BLOCKS, and one block at most
+         * context::MAX_UNIFORM_BLOCK_SIZE (the V3D's 16384, which its draw
+         * reads word by word; the others the stage's whole default block,
+         * MAX_UNIFORM_DWORDS * 4, below ES 3.0's 16384 — RESULTS.md gap list) */
+        GL_MAX_VERTEX_UNIFORM_BLOCKS | GL_MAX_FRAGMENT_UNIFORM_BLOCKS => context::MAX_STAGE_UNIFORM_BLOCKS as GLint,
         GL_MAX_COMBINED_UNIFORM_BLOCKS => super::program::PROG_MAX_BLOCKS as GLint,
         GL_MAX_UNIFORM_BUFFER_BINDINGS => context::MAX_UNIFORM_BUFFER_BINDINGS as GLint,
-        GL_MAX_UNIFORM_BLOCK_SIZE => (MAX_UNIFORM_DWORDS * 4) as GLint,
+        GL_MAX_UNIFORM_BLOCK_SIZE => context::MAX_UNIFORM_BLOCK_SIZE as GLint,
         GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT => 4,
         GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS | GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS => {
-            MAX_UNIFORM_DWORDS as GLint
+            context::MAX_COMBINED_UNIFORM_COMPONENTS as GLint
         }
         /* colour attachments one render writes: the end-of-tile programs and
          * the kick's PBE registers carry this many (a G-buffer pass asks for
@@ -3195,18 +3195,22 @@ mod tests {
             assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), 3);
         }
         assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), 3);
-        /* Uniform blocks, the same on both GPUs (flattened into the default
-         * block): twelve a stage, 24 a program, 24 binding points, and one
-         * block no larger than a stage's default block (6144 bytes, below
-         * ES 3.0's 16384). The combined components stay the default block's
-         * 1536, which the blocks share -- below ES 3.0's formula minimum. */
+        /* Uniform blocks (flattened into the stage's uniform storage): twelve
+         * a stage, 24 a program, 24 binding points. The V3D reads a block word
+         * by word from the host array (tests/es3_v3d_ubo_size.rs): ES 3.0's
+         * 16384 bytes, and the combined components by its formula,
+         * 12 * 16384 / 4 + 1536. The others keep one block no larger than a
+         * stage's default block (6144 bytes) and the combined components at
+         * the default block's 1536, which the blocks share: both below ES
+         * 3.0 (docs/notes/es3-shader-limits.md). */
         assert_eq!(geti1(GL_MAX_VERTEX_UNIFORM_BLOCKS), 12);
         assert_eq!(geti1(GL_MAX_FRAGMENT_UNIFORM_BLOCKS), 12);
         assert_eq!(geti1(GL_MAX_COMBINED_UNIFORM_BLOCKS), 24);
         assert_eq!(geti1(GL_MAX_UNIFORM_BUFFER_BINDINGS), 24);
-        assert_eq!(geti1(GL_MAX_UNIFORM_BLOCK_SIZE), 6144);
-        assert_eq!(geti1(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS), 1536);
-        assert_eq!(geti1(GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS), 1536);
+        let (block, combined) = if cfg!(feature = "gpu-v3d") { (16384, 50688) } else { (6144, 1536) };
+        assert_eq!(geti1(GL_MAX_UNIFORM_BLOCK_SIZE), block);
+        assert_eq!(geti1(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS), combined);
+        assert_eq!(geti1(GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS), combined);
         assert_eq!(geti1(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT), 4);
     }
 
