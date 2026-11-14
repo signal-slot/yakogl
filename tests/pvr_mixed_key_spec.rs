@@ -5,8 +5,9 @@
 //! `src/shaderc`: an encoder from a per-target class list to the mixed key
 //! of section 2.2, and the register rule of section 3. It is checked
 //! against the note's worked keys, against `pvr::mrt_layout::layout` (the
-//! merged placement) for the worked mixes and every 1-3 target list over the
-//! note's classes, and against the existing key shapes of section 2.3 for
+//! merged placement) for the worked mixes and every 1-4 target list over the
+//! note's classes (the fourth from RC14's fourth draw buffer; the key itself
+//! stays two or three slots), and against the existing key shapes of section 2.3 for
 //! collisions. Where the note and `mrt_layout` disagree the test asserts
 //! mrt_layout's placement. Host only, no GPU.
 //!
@@ -15,7 +16,7 @@
 //! ```
 #![cfg(all(feature = "gpu-powervr", not(feature = "report-es2")))]
 
-use yakogl::pvr::mrt_layout::{layout, LayoutError, Place};
+use yakogl::pvr::mrt_layout::{layout, register_layout, LayoutError, Place};
 
 /// A per-target class of section 2.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -186,19 +187,22 @@ fn lists(max: usize) -> Vec<Vec<Class>> {
     out
 }
 
-/// The model's register table against `mrt_layout::layout`, for every 1-3
-/// target list over the note's classes. A list the model fits in four
-/// registers must lay out with no tile buffer at the same starts and span;
-/// one it refuses must spill (or have no program).
+/// The model's register table against `mrt_layout::layout` and
+/// `register_layout`, for every 1-4 target list over the note's classes. A
+/// list the model fits in four registers must lay out with no tile buffer
+/// at the same starts and span; one it refuses must spill (or have no
+/// program), and `register_layout` must refuse it by name.
 #[test]
 fn registers_match_mrt_layout_for_every_list() {
     let mut n = 0;
-    for t in lists(3) {
+    for t in lists(4) {
         let d: Vec<u8> = t.iter().map(|&c| dwords(c)).collect();
         let l = layout(&d);
+        let r = register_layout(&d);
         match model_layout(&t) {
             Some((start, span)) => {
                 let l = l.unwrap_or_else(|e| panic!("{t:?}: model fits, layout says {e:?}"));
+                assert_eq!(r, Ok(l), "{t:?}");
                 assert_eq!(l.tile_buffers, 0, "{t:?}");
                 assert_eq!(l.output_regs, span, "{t:?}");
                 let got: Vec<u8> = l.place[..t.len()]
@@ -210,15 +214,18 @@ fn registers_match_mrt_layout_for_every_list() {
                     .collect();
                 assert_eq!(got, start, "{t:?}");
             }
-            None => match l {
-                Ok(l) => assert!(l.tile_buffers > 0, "{t:?}: model refuses, layout has no spill"),
-                Err(LayoutError::NoProgram { .. }) => {}
-                Err(e) => panic!("{t:?}: {e:?}"),
-            },
+            None => {
+                assert!(matches!(r, Err(LayoutError::OutputRegs { .. })), "{t:?}: {r:?}");
+                match l {
+                    Ok(l) => assert!(l.tile_buffers > 0, "{t:?}: model refuses, layout has no spill"),
+                    Err(LayoutError::NoProgram { .. }) => {}
+                    Err(e) => panic!("{t:?}: {e:?}"),
+                }
+            }
         }
         n += 1;
     }
-    assert_eq!(n, 23 + 23 * 23 + 23 * 23 * 23);
+    assert_eq!(n, 23 + 23 * 23 + 23 * 23 * 23 + 23 * 23 * 23 * 23);
 }
 
 /// The existing key shapes of section 2.3 never have a mixed key's bits.

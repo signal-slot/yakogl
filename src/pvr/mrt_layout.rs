@@ -46,7 +46,18 @@
 //! The tile-buffer programs were captured with one sample per pixel
 //! (`msaa_samples 1`, `num_output_regs 4`, tools/pco_shc/README.md); a
 //! multisampled render's spill is not covered here.
+//!
+//! [`register_layout`] is the same walk with no tile buffer (RC14's fourth
+//! draw buffer, a render the end-of-tile emit takes from the output
+//! registers only): four 1-dword (RGBA8-class) targets take registers 0..3,
+//! a 2-dword target (RGBA16F, RG32F/I/UI, RGBA16I/UI) an even pair, as
+//! Mesa 26.2.1's `pvr_mrt_alloc_from_buffer` does on a `pbe2_in_xe` core
+//! (`src/imagination/vulkan/pvr_arch_mrt.c`, docs/notes/pvr-int-mixed-targets.md
+//! section 1), and the first target that does not fit is refused by name
+//! ([`LayoutError::OutputRegs`]) where [`layout`] would spill it. Where both
+//! succeed they give the same layout.
 
+use crate::backend::GLES_MAX_TARGETS;
 use crate::osal::render::{PvrRenderStatic, PVR_RENDER_EOT_MAX_RT, PVR_RENDER_TILE_BUFFERS};
 
 /// Output registers per pixel (`backend.rs` `PVR_BACKEND_MAX_OUT_REGS`; the
@@ -55,6 +66,7 @@ pub const OUTPUT_REGS: u8 = 4;
 
 /// Colour targets a layout holds: the end-of-tile programs' capacity.
 pub const MAX_TARGETS: usize = PVR_RENDER_EOT_MAX_RT;
+const _: () = assert!(MAX_TARGETS == GLES_MAX_TARGETS);
 
 /// Where one target's dwords are.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,6 +165,10 @@ pub enum LayoutError {
     /// `targets` targets whose last `spilled` spill: no end-of-tile program
     /// was captured for that.
     NoProgram { targets: u8, spilled: u8 },
+    /// [`register_layout`] only: target `target` would take output registers
+    /// `first..first + dwords`, past the [`OUTPUT_REGS`]-th: it does not fit
+    /// beside the targets before it (registers are never back-filled).
+    OutputRegs { target: u8, first: u8, dwords: u8 },
 }
 
 /// The layout of a render's colour targets.
@@ -186,21 +202,35 @@ const fn program_for(targets: u8, spilled: u8) -> Option<EotProgram> {
 /// Lays out targets of `dwords[i]` output-register dwords each, in emit
 /// order, by the rule in the module docs.
 pub fn layout(dwords: &[u8]) -> Result<MrtLayout, LayoutError> {
+    walk(dwords, true)
+}
+
+/// Lays out targets of `dwords[i]` output-register dwords each, in emit
+/// order, in the output registers only: [`layout`]'s placement when it
+/// spills nothing, and [`LayoutError::OutputRegs`] for the first target it
+/// would spill.
+pub fn register_layout(dwords: &[u8]) -> Result<MrtLayout, LayoutError> {
+    walk(dwords, false)
+}
+
+fn walk(dwords: &[u8], spill: bool) -> Result<MrtLayout, LayoutError> {
     if dwords.is_empty() || dwords.len() > MAX_TARGETS {
         return Err(LayoutError::TargetCount(dwords.len()));
+    }
+    if let Some(i) = dwords.iter().position(|&d| d == 0 || d > OUTPUT_REGS) {
+        return Err(LayoutError::Dwords { target: i as u8, dwords: dwords[i] });
     }
     let targets = dwords.len() as u8;
     let mut place = [Place::Register { first: 0 }; MAX_TARGETS];
     let mut next = 0u8;
     let mut spilled = 0u8;
     for (i, &d) in dwords.iter().enumerate() {
-        if d == 0 || d > OUTPUT_REGS {
-            return Err(LayoutError::Dwords { target: i as u8, dwords: d });
-        }
         let first = if d >= 2 { (next + 1) & !1 } else { next };
         if spilled == 0 && first + d <= OUTPUT_REGS {
             place[i] = Place::Register { first };
             next = first + d;
+        } else if !spill {
+            return Err(LayoutError::OutputRegs { target: i as u8, first, dwords: d });
         } else {
             place[i] = Place::TileBuffer { index: spilled };
             spilled += 1;
