@@ -362,7 +362,7 @@ fails (the rule of `tools/board-stm32mp2.sh:65-66`).
   `ubootefi.var` on the EFI system partition (`ST/lib/efi_loader/efi_var_file.c:140-144`,
   `ST/lib/efi_loader/efi_disk.c:531-535`). `tools/efi_varfile.py --fwu FILE`
   reads a copy of that file read-only and prints `fwu-trial: counter <n>` or
-  `fwu-trial: absent` (selftest: `tools/efi_varfile_selftest.sh`). Whether that is bootfs is
+  `fwu-trial: absent` (selftest: `tools/testdata/efi_varfile_selftest.sh`). Whether that is bootfs is
   `TODO(board-env-read)`, and the `/boot` sha256 comparison would show it.
 
 ## 4. `forever`: only with a person

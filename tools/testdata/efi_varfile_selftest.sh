@@ -7,7 +7,7 @@
 # TrialStateCtr, EFI global GUID).
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-tool="$here/efi_varfile.py"
+tool="$here/../efi_varfile.py"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/efivar.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT
 fail=0
