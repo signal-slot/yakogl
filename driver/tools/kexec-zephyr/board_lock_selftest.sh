@@ -525,6 +525,14 @@ $ck
 rc=$?
 check "nanopc-t6.sh: --crash still refuses another entry in the window (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: the window overlaps: 1ff00000-1fffffff : reserved' <<<"$out"; echo $?)"
+# --crash without Linux's watchdog: if the crash kexec does not happen,
+# panic() waits in its timeout loop (kernel/panic.c:508-509, :557), and
+# with panic_timeout 0 nothing ever resets the board.
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash --no-linux-wdt)
+rc=$?
+check "nanopc-t6.sh: --crash with --no-linux-wdt is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --crash needs the Linux watchdog' <<<"$out"; echo $?)"
 # An image whose RAM footprint (header bytes 16..23) is the whole window
 # leaves no page of the reservation for the control page.
 cp "$tmp/top13.bin" "$tmp/full.bin"
