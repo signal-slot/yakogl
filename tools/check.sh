@@ -1612,6 +1612,21 @@ kick_diff_tests() {
   printf '%s\n' "$out" | tests_as_declared tests/gc_kick_diff.rs
 }
 step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" kick_diff_tests
+# glmark2's terrain, shadow and refract with `gc_tiled_rt` off and on
+# (tests/gc_scene_kicks_tiled_rt.rs, plan #355): the scene harness needs
+# report-es2, so no other row compiles the file. Linted and run here; every
+# #[test] of it must pass (tests_as_declared).
+KNOBS_ES2_CONFIG="$KNOBS_CONFIG,report-es2"
+scene_kicks_tiled_rt_tests() {
+  local out
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_ES2_CONFIG" --test gc_scene_kicks_tiled_rt 2>&1) ||
+    { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
+  printf '%s\n' "$out" | grep -E '^test result'
+  printf '%s\n' "$out" | tests_as_declared tests/gc_scene_kicks_tiled_rt.rs
+}
+step "clippy  $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs)" \
+  cargo clippy --no-default-features --features "$KNOBS_ES2_CONFIG" --test gc_scene_kicks_tiled_rt
+step "test    $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs, every declared test)" scene_kicks_tiled_rt_tests
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \

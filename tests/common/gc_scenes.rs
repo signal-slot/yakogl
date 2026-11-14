@@ -10,8 +10,10 @@
 //! "host-test", feature = "gpu-vivante", feature = "shaderc-online", feature
 //! = "report-es2"))]`. [`run_with`] takes [`Hooks`]: `after_init` runs once
 //! after `gc_init` and the context are made (before the scene's setup),
-//! `each_frame(n)` before each frame's canvas clear (n from 1), for a test
-//! that sets a back-end knob.
+//! `each_frame(n)` before each frame's canvas clear (n from 1) and
+//! `after_frame(n)` after its swap, for a test that sets a back-end knob.
+//! [`stream_tally`] counts the RS jobs and early-depth draws of the streams
+//! submitted (`gc_scene_kicks_tiled_rt.rs`).
 
 #![allow(dead_code)]
 
@@ -123,6 +125,84 @@ pub struct Platform {
     step: &'static str,
     events: Vec<String>,
     faults: Vec<String>,
+    /// What the submitted streams asked of the resolve engine and the pixel
+    /// engine ([`stream_tally`]), and the two registers it follows across
+    /// kicks (the GPU keeps its state from one kick to the next).
+    tally: StreamTally,
+    rs_config: u32,
+    pe_depth_config: u32,
+}
+
+/// The resolve-engine jobs and the draws of the submitted streams, read off
+/// their words at `submit` (`LOAD_STATE`, `DRAW_INSTANCED`): what a test of
+/// the tiled shadows (`gc_tiled_rt`) counts besides [`Counts`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StreamTally {
+    /// `RS_KICKER` writes.
+    pub rs_kicks: u32,
+    /// RS jobs whose source is TILED (`RS_CONFIG` `SOURCE_TILED`): a shadow's
+    /// copy back.
+    pub rs_from_tiled: u32,
+    /// RS jobs whose destination is TILED (`DEST_TILED`): a shadow's tile-in,
+    /// or a texture's RS tiled copy (`tiled_copy.rs`).
+    pub rs_to_tiled: u32,
+    /// Draws, and those with `PE_DEPTH_CONFIG` `EARLY_Z` set.
+    pub draws: u32,
+    pub early_z_draws: u32,
+}
+
+impl StreamTally {
+    /// `self - before`, count by count.
+    pub fn since(&self, before: &StreamTally) -> StreamTally {
+        StreamTally {
+            rs_kicks: self.rs_kicks - before.rs_kicks,
+            rs_from_tiled: self.rs_from_tiled - before.rs_from_tiled,
+            rs_to_tiled: self.rs_to_tiled - before.rs_to_tiled,
+            draws: self.draws - before.draws,
+            early_z_draws: self.early_z_draws - before.early_z_draws,
+        }
+    }
+}
+
+/// The tally of every stream submitted since the run began.
+pub fn stream_tally() -> StreamTally {
+    with_platform(|p| p.tally)
+}
+
+/// Walk one submitted stream into the tally (the register walk of
+/// `backend_tests.rs` `walk`).
+fn tally_stream(p: &mut Platform, words: &[u32]) {
+    use yakogl::vivante::regs::*;
+    let mut i = 0usize;
+    while i < words.len() {
+        let w = words[i];
+        match w & 0xf800_0000 {
+            GC_OP_LOAD_STATE => {
+                let count = ((w >> 16) & 0x3ff) as usize;
+                let base = (w & 0xffff) * 4;
+                for (k, &v) in words.iter().skip(i + 1).take(count).enumerate() {
+                    match base + 4 * k as u32 {
+                        GC_RS_CONFIG => p.rs_config = v,
+                        GC_PE_DEPTH_CONFIG => p.pe_depth_config = v,
+                        GC_RS_KICKER => {
+                            p.tally.rs_kicks += 1;
+                            p.tally.rs_from_tiled += u32::from(p.rs_config & GC_RS_SOURCE_TILED != 0);
+                            p.tally.rs_to_tiled += u32::from(p.rs_config & GC_RS_DEST_TILED != 0);
+                        }
+                        _ => {}
+                    }
+                }
+                i += 1 + count;
+            }
+            GC_OP_DRAW_INSTANCED => {
+                p.tally.draws += 1;
+                p.tally.early_z_draws += u32::from(p.pe_depth_config & GC_PE_DEPTH_EARLY_Z != 0);
+                i += 4;
+            }
+            GC_OP_STALL => i += 2,
+            _ => i += 1, /* NOP and the pad words */
+        }
+    }
 }
 
 pub static PLATFORM: Mutex<Option<Platform>> = Mutex::new(None);
@@ -191,6 +271,18 @@ unsafe extern "C" fn p_submit(kick: *const c_void, len: usize) -> i64 {
         if k.magic != GC_KICK_MAGIC {
             p.faults.push(format!("submit with magic 0x{:x}", k.magic));
             return -22;
+        }
+        let stream = p.allocs.range(..=k.stream_gpu).next_back().and_then(|(&base, a)| {
+            let (at, n) = ((k.stream_gpu - base) as usize, k.stream_bytes as usize);
+            // SAFETY: the stand-in's own allocation, read as u32 words inside
+            // its size (the back end's stream lies in one allocation).
+            (at + n <= a.len() * 8).then(|| unsafe {
+                core::slice::from_raw_parts((a.as_ptr() as *const u8).add(at) as *const u32, n / 4).to_vec()
+            })
+        });
+        match stream {
+            Some(words) => tally_stream(p, &words),
+            None => p.faults.push(format!("submit of a stream at 0x{:x} outside every allocation", k.stream_gpu)),
         }
         p.kicks += 1;
         p.fence += 1;
@@ -302,11 +394,12 @@ pub fn run(gpu: Gpu, scene: impl FnOnce() -> Box<dyn FnMut()>) -> (Vec<Counts>, 
 
 /// What a test may do around the frames: `after_init` once after `gc_init`
 /// and the context exist (before the scene's setup), `each_frame(n)` before
-/// frame `n`'s canvas clear (n from 1).
+/// frame `n`'s canvas clear (n from 1), `after_frame(n)` after its swap.
 #[derive(Default)]
 pub struct Hooks<'a> {
     pub after_init: Option<Box<dyn FnOnce() + 'a>>,
     pub each_frame: Option<Box<dyn FnMut(usize) + 'a>>,
+    pub after_frame: Option<Box<dyn FnMut(usize) + 'a>>,
 }
 
 /// [`run`] with [`Hooks`].
@@ -352,6 +445,9 @@ pub fn run_with(
             frame();
             swap();
             no_error(&format!("frame {n}"));
+            if let Some(f) = hooks.after_frame.as_mut() {
+                f(n);
+            }
             let after = snapshot();
             if n >= FIRST_COUNTED {
                 counted.push(Counts {
