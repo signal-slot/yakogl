@@ -243,8 +243,9 @@ pub struct Faults {
     pub underflow: bool,
     /// A fetching window's AXI read fails every frame (SYS0 bus error).
     pub bus_error: bool,
-    /// STANDBY never raises DSP_HOLD_VALID (the port stops all the same).
-    pub no_dsp_hold: bool,
+    /// A running port ignores STANDBY: it goes on running frames and raises
+    /// no DSP_HOLD_VALID.
+    pub standby_ignored: bool,
     /// Esmart0's `REGION0_YRGB_MST` ignores writes.
     pub mst_stuck: bool,
     /// The controller's clock monitor never reads locked.
@@ -770,6 +771,9 @@ impl Rk3588Display {
             // ends its frame when the clock comes back (D1's model)
             let was_active = Self::active(&s, p);
             let was = self.vp_running(&s, p);
+            if was && val & 1 << 31 != 0 && self.faults.standby_ignored {
+                return;
+            }
             s.regs.insert(off, val);
             if !was && self.vp_running(&s, p) {
                 s.next_frame_us[p] = *self.now_us.borrow() + self.frame_us;
@@ -815,9 +819,7 @@ impl Rk3588Display {
                 }
                 if s.stopping[p] {
                     s.stopping[p] = false;
-                    if !self.faults.no_dsp_hold {
-                        s.raw[p] |= 1 << 6;
-                    }
+                    s.raw[p] |= 1 << 6;
                     break;
                 }
                 s.raw[p] |= 1;
@@ -918,30 +920,8 @@ impl Rk3588Display {
     }
 }
 
-impl Mmio for Rk3588Display {
-    fn read32(&self, addr: usize) -> u32 {
-        *self.reads_since.borrow_mut() += 1;
-        if *self.reads_since.borrow() > self.lag {
-            self.settle();
-        }
-        let Some(b) = Self::blk(addr) else {
-            panic!("read of an unmodelled address {addr:#x}");
-        };
-        if let Some(why) = self.refusal(b) {
-            self.refused.borrow_mut().push(format!("read {addr:#x}: {why}"));
-            return 0;
-        }
-        match b.name {
-            B_PHY if !self.phy_check(addr) => 0,
-            B_HDMI if !self.hdmi_check(addr - HDMI, true) => 0,
-            B_CRU | B_PMU => {
-                *self.regs.borrow().get(&addr).unwrap_or_else(|| panic!("read of an unmodelled register {addr:#x}"))
-            }
-            _ => self.peek(addr),
-        }
-    }
-
-    fn write32(&self, addr: usize, val: u32) {
+impl Rk3588Display {
+    fn write32_inner(&self, addr: usize, val: u32) {
         self.writes.borrow_mut().push((addr, val));
         *self.reads_since.borrow_mut() = 0;
         let Some(b) = Self::blk(addr) else {
@@ -1000,6 +980,43 @@ impl Mmio for Rk3588Display {
                 }
             }
             _ => unreachable!(),
+        }
+    }
+}
+
+impl Mmio for Rk3588Display {
+    fn read32(&self, addr: usize) -> u32 {
+        *self.reads_since.borrow_mut() += 1;
+        if *self.reads_since.borrow() > self.lag {
+            self.settle();
+        }
+        let Some(b) = Self::blk(addr) else {
+            panic!("read of an unmodelled address {addr:#x}");
+        };
+        if let Some(why) = self.refusal(b) {
+            self.refused.borrow_mut().push(format!("read {addr:#x}: {why}"));
+            return 0;
+        }
+        match b.name {
+            B_PHY if !self.phy_check(addr) => 0,
+            B_HDMI if !self.hdmi_check(addr - HDMI, true) => 0,
+            B_CRU | B_PMU => {
+                *self.regs.borrow().get(&addr).unwrap_or_else(|| panic!("read of an unmodelled register {addr:#x}"))
+            }
+            _ => self.peek(addr),
+        }
+    }
+
+    fn write32(&self, addr: usize, val: u32) {
+        let vp0_running = self.vp_running(&self.vop.borrow(), 0);
+        self.write32_inner(addr, val);
+        // VP0's pixel clock (the PHY's PLL, the DCLK_VOP0 gate, mux or
+        // reset) taken away while VP0 runs and its STANDBY has not taken
+        // effect: its frame stops in the middle. Linux stops a port first; the PLL goes
+        // off only when its last user, the VOP's dclk, lets it go
+        // (hdptx.c:1134-1164, rockchip_drm_vop2.c:950-969).
+        if vp0_running && !self.vp_clocked(0) && Self::active(&self.vop.borrow(), 0) {
+            self.refused.borrow_mut().push(format!("write {addr:#x} = {val:#x}: VP0's pixel clock stopped under it"));
         }
     }
 

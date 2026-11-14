@@ -94,6 +94,9 @@ fn a_cold_bring_up_runs_the_blocks_in_order_and_shows_the_buffer() {
     // the IOMMU off before VP0 is started, VP0 started before the window
     let mmu = m.first_write(B_MMU).unwrap();
     let start = first_to(&m, VOP_BASE + 0xc00).unwrap();
+    // Linux's order (vop2 fact 9): the interface route (VP0's CLK_CTRL) and
+    // the timing before DSP_CTRL starts the port
+    assert!(first_to(&m, VOP_BASE + 0xc0c).unwrap() < start && first_to(&m, VOP_BASE + 0xc48).unwrap() < start);
     let win = m.writes().iter().rposition(|(a, v)| *a == VOP_BASE + 0x1810 && v & 1 != 0).unwrap();
     assert!(vop < mmu && mmu < start && start < win);
     // DCLK_VOP0 on the PHY (CLKSEL_CON(112)[8:7] = 1), its gate and reset open
@@ -452,4 +455,70 @@ fn a_cfg_done_bit_that_stays_set_is_logged_not_failed() {
     let r = up(&m, &cfg()).unwrap();
     assert_eq!(r.read_back.cfg_done & 1, 1);
     assert!(m.lines().iter().any(|(_, l)| l.contains("(U8)")));
+}
+
+#[test]
+fn a_running_port_whose_standby_does_not_take_stops_the_chain() {
+    // the port keeps running frames after STANDBY: nothing of it may be
+    // turned off under it
+    let m = Rk3588Display::with_faults(Faults { standby_ignored: true, ..Faults::default() });
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(false);
+    m.clear_log();
+    let r = up(&m, &Config { force_cold: true, ..cfg() });
+    assert!(
+        matches!(r, Err(Failed { stage: stage::START, error: Error::Standby(e) }) if e.why == VopRefusal::StandbyTimeout),
+        "{r:?}"
+    );
+    assert!(!m.wrote_to(B_PMU) && !m.wrote_to(B_MMU));
+}
+
+#[test]
+fn power_cycle_does_not_take_a_running_port_without_force_cold() {
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.clear_log();
+    let r = up(&m, &Config { power_cycle: true, ..cfg() });
+    assert_eq!(r.err(), Some(Failed { stage: stage::START, error: Error::FoundRunning(1) }));
+    assert!(m.writes().is_empty());
+}
+
+#[test]
+fn a_window_left_enabled_on_a_stopped_port_is_switched_off_before_the_port_starts() {
+    // a system before us stopped VP0 but left its Cluster0 window enabled,
+    // at an IOVA, with paging on: nothing runs, so START writes nothing;
+    // stage 7 turns paging off and must switch the window off before VP0
+    // starts, or it fetches its IOVA as a physical address
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(false);
+    m.poke(VOP_BASE + 0xc00, 1 << 31 | 0xf);
+    assert!(!m.port_runs(0));
+    m.clear_log();
+    let r = up(&m, &cfg()).unwrap();
+    assert_eq!(r.found.running, 0);
+    assert_eq!(r.frame.bus_error, [false, false]);
+    assert_eq!(m.fetching(), WIN_ESMART0);
+    no_refusal(&m);
+}
+
+#[test]
+fn the_chain_writes_only_its_own_fields_of_shared_words() {
+    // CRU and GRF words take their write mask in 31:16: the chain's words
+    // leave the fields of other blocks as found
+    let m = Rk3588Display::cold();
+    let others = [
+        (sel_addr(0, 112), 0x0000_007f), // CLKSEL_CON(112) 6:0, not DCLK_VOP0's mux
+        (VOP_GRF + 0x08, 1 << 4),        // GRF_VOP_CON2: HDMI1's select
+        (VO1_GRF, 0x3 << 7),             // GRF_VO1_CON0: HDMI1's sync field
+        (VO1_GRF + 0x24, 1 << 12),       // GRF_VO1_CON9: HDMI1's GRANT_SEL
+        (SYS_GRF + 0x308, 1 << 15),      // SOC_CON2: HDMI1's HPD mask
+    ];
+    for (a, v) in others {
+        m.poke(a, v);
+    }
+    up(&m, &cfg()).unwrap();
+    for (a, v) in others {
+        assert_eq!(m.peek(a) & v, v, "{a:#x}: another block's field changed");
+    }
 }
