@@ -7,6 +7,10 @@
 //! 1x1, 64x64, 127x33 and the largest size the host takes, with samples 0
 //! and 4 (v3d-early-stop-repro, rb-formats-v3d).
 //!
+//! R32F is not colour-renderable in ES 3.0 (only GL_EXT_color_buffer_float
+//! makes it so): its rows run while a 1x1 R32F renderbuffer is complete and
+//! are skipped otherwise (extension unlisted, storage GL_INVALID_ENUM).
+//!
 //! A legal state that a back end refuses must not surface as
 //! GL_OUT_OF_MEMORY: dEQP aborts the session on it (src/gl/draw.rs).
 //! Asserted: no OOM for any legal state at these sizes; samples 4 is
@@ -789,8 +793,70 @@ mod trampolines {
         }
     }
 
+    /// Whether `name` is in glGetString(GL_EXTENSIONS) (ES 2.0 style list;
+    /// the GL core lists the extensions in it).
+    fn extension_listed(name: &str) -> bool {
+        // SAFETY: glGetString returns a NUL-terminated static string.
+        let s = unsafe { CStr::from_ptr(glGetString(GL_EXTENSIONS).cast::<c_char>()) }.to_string_lossy().into_owned();
+        s.split_whitespace().any(|e| e == name)
+    }
+
+    /// Whether a 1x1 R32F renderbuffer is a complete colour attachment. ES 3.0
+    /// does not make R32F colour-renderable: only GL_EXT_color_buffer_float
+    /// does. When it is not, the extension must not be listed and the
+    /// storage call must be GL_INVALID_ENUM.
+    fn r32f_renderable() -> bool {
+        let (mut rb, mut fbo) = (0u32, 0u32);
+        // SAFETY: plain GL calls on names made here.
+        let (storage, status) = unsafe {
+            first_error();
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_R32F, 1, 1);
+            let storage = first_error();
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+            let status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fbo);
+            glBindRenderbuffer(GL_RENDERBUFFER, 0);
+            glDeleteRenderbuffers(1, &rb);
+            first_error();
+            (storage, status)
+        };
+        let ok = storage == GL_NO_ERROR && status == GL_FRAMEBUFFER_COMPLETE;
+        if !ok {
+            assert!(
+                !extension_listed("GL_EXT_color_buffer_float"),
+                "R32F not renderable but GL_EXT_color_buffer_float listed"
+            );
+            assert!(
+                storage == GL_INVALID_ENUM || storage == GL_NO_ERROR,
+                "R32F storage without the extension: 0x{storage:x}, want GL_INVALID_ENUM"
+            );
+        }
+        ok
+    }
+
+    /// The extension formats this build draws: R32F only while it is a
+    /// complete colour target; otherwise its row is skipped.
+    fn ext_formats() -> Vec<&'static (&'static str, GLenum, Kind)> {
+        let r32f = r32f_renderable();
+        EXT_FORMATS
+            .iter()
+            .filter(|&&(name, f, _)| {
+                let skip = f == GL_R32F && !r32f;
+                if skip {
+                    eprintln!("skip {name}: not colour-renderable without GL_EXT_color_buffer_float");
+                }
+                !skip
+            })
+            .collect()
+    }
+
     fn all_formats() -> impl Iterator<Item = &'static (&'static str, GLenum, Kind)> {
-        FORMATS.iter().chain(EXT_FORMATS)
+        FORMATS.iter().chain(ext_formats())
     }
 
     /// Storage, a complete framebuffer, a clear and a draw: no error, for every
@@ -946,7 +1012,7 @@ mod trampolines {
     fn format_table() {
         let _g = rig();
         let mut out = String::new();
-        for &(name, f, k) in FORMATS.iter().chain(EXT_FORMATS) {
+        for &(name, f, k) in all_formats() {
             let sz = sizes(f, k);
             let mut row = format!("{name:20}");
             for samples in [0, 4] {
