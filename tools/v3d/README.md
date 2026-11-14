@@ -586,3 +586,9 @@ described here.
   interrupts, clocks, power domains, MMU, each with a file-and-line citation)
   and `docs/notes/pre-study-rpi5.md` (the plan: what can be done before the
   board, what needs it, the open questions U1 to U12).
+- **`es100_ref71.sh`** (`V3D_SHC` set): Mesa's 7.1 result for every
+  `tools/shaders/es100` source, one row per source (path, stage, compiled and
+  Mesa's reason, instructions, threads, uniforms), into `es100_counts_71.tsv`;
+  the other stage of each program is a stub the script makes.
+  `tests/v3d71_mesa_corpus.rs` pins the program set and, with `V3D_SHC`, reruns
+  the script and compares the bytes (`gap: V3D_SHC` without it).
