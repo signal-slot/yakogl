@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Bits of the NanoPC-T6's display registers that may differ between the
+# Zephyr cold path (the model's image after the display chain's bring-up) and
+# the Linux dump (nanopc-t6-display-dump-linux.txt), each with its reason.
+# Format: ADDRESS MASK REASON (hex, hex, text). See
+# driver/docs/nanopc-t6-display.md, section 6.
+#
+# The entries below follow from what the registers are, or from two dumps of
+# the same picture taken nine minutes apart (2026-11-12). Entries found by
+# the first comparison with the image are added below them, each with its
+# reason, or the driver changes instead.
+#
+# Linux shows its picture in Cluster0 of VP0 (linear XRGB8888, through the
+# IOMMU; vop2/summary of the dump's record). The design shows ours in Esmart0
+# with the IOMMU off. So the Cluster0 and Esmart0 window registers and the
+# overlay's layer and port selects differ by design; the first comparison
+# adds their rows.
+
+# PMU: status words; only the bits of other power domains are allowed
+0xfd8d81f0 0xf5ffffff chain status: the video codec domains go on and off under Linux (bits 1, 2 and 7 moved between the two dumps); the VOP's bit 25 and VO1's bit 27 are compared
+0xfd8d81f8 0xf5ffffff memory status: likewise
+0xfd8d8294 0xffffffff the word after the repair status: Linux's driver does not use it; bits 5 and 7 moved between the two dumps
+
+# VOP2
+0xfdd90060 0xffffffff SYS_STATUS0: status, sampled at an arbitrary time (moved between the two dumps)
+0xfdd90088 0xffffffff SYS0_INT_STATUS: event flags, sampled at an arbitrary time
+0xfdd90098 0xffffffff SYS1_INT_STATUS: likewise
+0xfdd900a8 0xffffffff VP0_INT_STATUS: likewise
+0xfdd900ac 0xffffffff VP0_INT_RAW_STATUS: likewise
+0xfdd91814 0xffffffff Esmart0 REGION0_YRGB_MST: our buffer; Linux leaves Esmart0 unused
+
+# vop_mmu
+0xfdd97e00 0xffffffff DTE_ADDR: Linux uses the IOMMU, Zephyr does not
+0xfdd97e04 0x00000001 STATUS paging enabled: likewise
+0xfdd97f00 0xffffffff DTE_ADDR (second set): likewise
+0xfdd97f04 0x00000001 STATUS paging enabled (second set): likewise
+
+# HDMI QP TX0
+0xfde800b8 0xffffffff CMU_VIDQPCLK_FREQ: a measurement, varies by a count
+0xfde800bc 0xffffffff CMU_LINKQPCLK_FREQ: likewise
+0xfde83010 0xffffffff MAINUNIT_0_INT_STATUS: event flags
+0xfde83020 0xffffffff MAINUNIT_1_INT_STATUS: event flags
+
+# HDPTX PHY0: registers that read back another value than Linux's tables
+# write. The image holds the value written; the dump holds the read-back.
+0xfed600c0 0xffffffff CMN_REG(0030): reads back unlike the value written
+0xfed60118 0xffffffff CMN_REG(0046): likewise
+0xfed60120 0xffffffff CMN_REG(0048): likewise
+0xfed60c78 0xffffffff LANE_REG(031E): likewise
+0xfed61078 0xffffffff LANE_REG(041E): likewise
+0xfed61478 0xffffffff LANE_REG(051E): likewise
+0xfed61878 0xffffffff LANE_REG(061E): likewise
