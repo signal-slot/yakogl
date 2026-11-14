@@ -211,6 +211,11 @@ function(yakogl_add_capi_archive)
   if(YAKOGL_MSAA_FBO)
     list(APPEND _features "msaa-fbo")
   endif()
+  # ES 3.0 float colour targets (the crate's `color-buffer-float`), a global
+  # too: off unless a build tree asks for GL_EXT_color_buffer_float.
+  if(YAKOGL_COLOR_BUFFER_FLOAT)
+    list(APPEND _features "color-buffer-float")
+  endif()
   # Any other crate feature, comma or semicolon separated (a global, empty by
   # default): tools/cts/host-deqp-run.sh's EXTRA_FEATURES for an opt-in feature
   # that has no option of its own yet.
