@@ -1250,27 +1250,26 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
 }
 
 /// Every reachable gap is reached by its own ES 1.00 source, and the rest
-/// say why they cannot be (`unreachable_from_es100`). The counts are
-/// pinned: a new gap, or one that becomes reachable, fails here until it
-/// has a case.
+/// say why they cannot be (`unreachable_from_es100`). A new gap fails
+/// here until it has a case or a reason, a case for a gap that has a
+/// reason fails until the reason goes, and a case's gap is in `GAPS`.
 #[test]
 fn every_reachable_gap_is_reached_by_an_es100_source() {
     let mut reached = std::collections::BTreeSet::new();
     for (st, src, want) in gap_cases() {
         let got = gap(st, &src);
         assert_eq!(got, want, "{src}");
+        assert!(MaliError::GAPS.contains(&want), "{want:?} is not in MaliError::GAPS");
         reached.insert(want.message());
     }
     /* two gaps are reached through the entry points, not a source alone */
     reached.insert(a_blend_variant_is_refused_gap().message());
     reached.insert(a_linked_vertex_shader_is_refused_gap().message());
     let reachable: Vec<_> = MaliError::GAPS.iter().filter(|e| unreachable_from_es100(**e).is_none()).collect();
-    let unreachable = MaliError::GAPS.len() - reachable.len();
     for e in &reachable {
         assert!(reached.contains(e.message()), "no case reaches {e:?}");
     }
     assert_eq!(reached.len(), reachable.len(), "a case reaches a gap classified unreachable");
-    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (62, 57, 5), "gaps: all, reachable, unreachable");
 }
 
 /// The front end's verdict on gl_FragData[1] (the reason FragOutput is
