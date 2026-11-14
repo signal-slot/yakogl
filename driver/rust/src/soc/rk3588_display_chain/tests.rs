@@ -561,3 +561,45 @@ fn a_powered_vop_with_its_idle_request_set_is_not_taken_as_off() {
     no_refusal(&m);
     assert_eq!((r.found.running, r.found.stopped), (1, 1));
 }
+
+#[test]
+fn a_vp0_stopping_without_its_clock_is_refused_without_power_cycle() {
+    // review R6: the system before us wrote STANDBY to VP0, then gated
+    // DCLK_VOP0 before that frame ended; DSP_CTRL reads STANDBY
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(false);
+    m.write32(VOP_BASE + 0xc00, 1 << 31);
+    m.poke(gate_addr(0, 52), m.peek(gate_addr(0, 52)) | 1 << 13);
+    m.busy_wait_us(1);
+    m.clear_log();
+    let r = up(&m, &Config { force_cold: true, ..cfg() });
+    assert_eq!(r.err().map(|f| (f.stage, f.error)), Some((stage::START, Error::Unclocked(1))));
+    assert!(m.writes().is_empty());
+    no_refusal(&m);
+    let r = up(&m, &Config { force_cold: true, power_cycle: true, ..cfg() }).unwrap();
+    no_refusal(&m);
+    assert_eq!(r.frame.bus_error, [false, false]);
+}
+
+#[test]
+fn a_port_on_the_phys_pixel_clock_counts_as_clocked_here() {
+    // DCLK_VOP1 can take clk_hdmiphy_pixel0 too (clk-rk3588.c:504, 2104):
+    // VP1 on the PHY's clock, which is off, runs Linux's Cluster1 window
+    // mid-frame; VP0 runs from dclk_vop0_src. Bringing the PHY up would
+    // give VP1 its clock back with the window and paging as they are.
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(true);
+    let sel = sel_addr(0, 112);
+    m.poke(sel, (m.peek(sel) & !(3 << 7 | 3 << 9)) | 1 << 9);
+    m.poke(gate_addr(0, 52), m.peek(gate_addr(0, 52)) & !(1 << 10));
+    m.poke(rst_addr(0x3_0000, 3), m.peek(rst_addr(0x3_0000, 3)) | 1 << 12);
+    m.busy_wait_us(1);
+    assert!(m.port_runs(0) && !m.port_runs(1));
+    m.clear_log();
+    let r = up(&m, &Config { force_cold: true, ..cfg() });
+    assert_eq!(r.err().map(|f| (f.stage, f.error)), Some((stage::START, Error::Unclocked(1 << 1))));
+    assert!(m.writes().is_empty());
+    no_refusal(&m);
+}

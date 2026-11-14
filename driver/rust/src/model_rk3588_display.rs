@@ -38,10 +38,13 @@
 //!   `CMU_STATUS` reads the locked value 0x15 while the PHY is locked
 //!   (link clock) and VP0 runs (video clock), 0 otherwise.
 //! - VOP2 (D1's model): ports run frames while STANDBY is clear and their
-//!   pixel clock runs. VP0's runs when `DCLK_VOP0` (52/13) is open, its
-//!   reset `SRST_D_VOP0` (52/13) released, its mux (CLKSEL_CON 112 bits 8:7)
-//!   on the PHY (1) and the PHY's clock ready; the other ports' pixel clocks
-//!   are [`Rk3588Display::vp_clock`]. At a port's frame start its pending
+//!   pixel clock runs. VP0-VP2's come from the CRU (clk-rk3588.c:2091-2111):
+//!   `DCLK_VOPn` gate 52/13, 53/0, 53/1 open (and for VP0 `SRST_D_VOP0`
+//!   52/13 released), its mux (CLKSEL_CON(112) bits 8:7, 10:9, 12:11) on
+//!   either `dclk_vopn_src` (0; its gate 52/10, 52/11, 52/12 open, its PLL
+//!   taken as running) or the PHY0's pixel clock (1; the PHY's clock
+//!   ready); a mux on PHY1 (2) gives no clock here. VP3's pixel clock is
+//!   [`Rk3588Display::set_vp_clock`]. At a port's frame start its pending
 //!   `REG_CFG_DONE` is taken: the written port select comes into force and
 //!   the window enables written become the ones that fetch (review R3-S2:
 //!   the model shadows the enables; the other window registers read as
@@ -302,7 +305,7 @@ pub struct Rk3588Display {
     pub core_id: u32,
     /// The HPD level in sys_grf `SOC_STATUS1` bit 16.
     pub hpd: bool,
-    /// VP1-VP3 have a pixel clock (VP0's is the modelled chain).
+    /// VP3 has a pixel clock (VP0-VP2's follow the CRU).
     vp_clock: Cell<[bool; 4]>,
     /// Addresses that are IOVAs of the system before us.
     iova_windows: RefCell<Vec<u32>>,
@@ -626,13 +629,18 @@ impl Rk3588Display {
 
     /// The pixel clock of port `p` runs (module text).
     fn vp_clocked(&self, p: usize) -> bool {
-        if p > 0 {
+        if p == 3 {
             return self.vp_clock.get()[p];
         }
-        self.gate_open(0, 52, 13)
-            && self.rst_released(0, 52, 13)
-            && (self.get(sel_addr(0, 112)) >> 7) & 3 == 1
-            && self.phy_clock()
+        let (gate, src_gate) = [((52, 13), 10), ((53, 0), 11), ((53, 1), 12)][p];
+        let mux = (self.get(sel_addr(0, 112)) >> (7 + 2 * p)) & 3;
+        self.gate_open(0, gate.0, gate.1)
+            && (p != 0 || self.rst_released(0, 52, 13))
+            && match mux {
+                0 => self.gate_open(0, 52, src_gate),
+                1 => self.phy_clock(),
+                _ => false,
+            }
     }
 
     fn vop_reg(s: &VopState, off: usize) -> u32 {
@@ -903,11 +911,15 @@ impl Rk3588Display {
         }
         drop(s);
         if vp1 {
-            self.set_vp_clock(1, true);
+            // VP1 from dclk_vop1_src, as the D0 dump reads it: DCLK_VOP1's
+            // mux 0, its gate 53/0 and the source's gate 52/11 open
+            self.poke(sel_addr(0, 112), self.get(sel_addr(0, 112)) & !(3 << 9));
+            self.poke(gate_addr(0, 53), self.get(gate_addr(0, 53)) & !1);
+            self.poke(gate_addr(0, 52), self.get(gate_addr(0, 52)) & !(1 << 11));
         }
     }
 
-    /// Give port `p` (1-3) a pixel clock or take it away.
+    /// Give VP3 a pixel clock or take it away (`p` = 3).
     pub fn set_vp_clock(&self, p: usize, on: bool) {
         let mut c = self.vp_clock.get();
         c[p] = on;
