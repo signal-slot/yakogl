@@ -27,6 +27,28 @@ config BOOT_STAGE2_SOURCE_EMMC
 
 endchoice
 
+config BOOT_STAGE2_BOOT0_ON_REQUEST
+	bool "A word on the console selects eMMC boot partition 1 (boot0) and resets"
+	depends on BOOT_STAGE2_SOURCE_EMMC && PM_CPU_OPS_PSCI && SERIAL
+	help
+	  The way back to the boot chain in boot0 without the recovery button:
+	  while the loader runs it looks at its console twice (when the eMMC is
+	  up, and before the jump), without waiting. BOOT_STAGE2_BOOT0_WORD
+	  received by then makes it write EXT_CSD PARTITION_CONFIG (byte 179) =
+	  0x48 with CMD6, read it back and reset the SoC through PSCI. Only
+	  that byte is ever written. Send the word repeatedly from the host
+	  across the reset.
+
+config BOOT_STAGE2_BOOT0_WORD
+	string "The word that asks for boot0"
+	depends on BOOT_STAGE2_BOOT0_ON_REQUEST
+	default "YK-BOOT0-9E3A71C5"
+	help
+	  At least 8 characters, and its first character must not occur in it
+	  again (the loader's matcher restarts on that character only). Short
+	  enough to arrive whole several times in the UART's receive FIFO (64
+	  bytes on the AM62P) while the loader brings the eMMC up.
+
 config BOOT_STAGE2_DISK
 	string "Disk name of the eMMC (the zephyr,mmc-disk node's disk-name)"
 	default "emmc"
@@ -62,9 +84,14 @@ config BOOT_STAGE2_STAGING
 	default 0x90000000
 	help
 	  Inside the mapped region (the overlay's stage2_payload node), above
-	  the largest image (it bounds the image: STAGING - LOAD bytes) and
-	  below the region's end with room for the largest payload the
-	  user-area range holds.
+	  the largest image (it bounds a version 1 or 2 image: STAGING - LOAD
+	  bytes) and below the region's end with room for the largest payload
+	  the user-area range holds. A version-3 (segment table) payload's
+	  segments may lie anywhere in the region except STAGING .. STAGING +
+	  the range's bytes (eMMC source). With the default 0x90000000 the
+	  AM62P showcase's R5F segments at 0x90000000 would collide, so its
+	  loader moves the staging buffer above them (am62p-mkboot.py stage2img
+	  --staging checks the same rule).
 
 config BOOT_STAGE2_REGION_END
 	hex "End of the mapped region (exclusive)"
@@ -81,7 +108,37 @@ config BOOT_STAGE2_PROGRESS_LOG
 	  console is polled, so every line costs its length at the UART's
 	  rate before the image runs (at 115200 baud, about 87 us a
 	  character: the four lines and the probe were 31 ms of the i.MX8MP
-	  loader's 300, 2026-10-29). Errors are always printed.
+	  loader's 300, 2026-10-29; with the Zephyr banner and the SD stack's
+	  information lines, 0.09 s of the AM62P eMMC loader's 0.28,
+	  2026-11-12). Errors are always printed. Off, the loader also does not
+	  wait for the UART to drain before the jump; quiet.conf turns the
+	  banner and the SD stack's information lines off with it.
+
+config BOOT_STAGE2_SUMMARY_LINE
+	bool "Without the progress log, one short line of times before the jump"
+	depends on !BOOT_STAGE2_PROGRESS_LOG
+	help
+	  "bs2: <ready> <read> <unpack> <zero thread>/<waited for it> ms
+	  @<system counter at main()> us": the milliseconds until the source
+	  was ready, of the reads and of the unpack, those the zero thread took
+	  from its start to its end and those main() then waited for it (0/0
+	  without a zero range), and where the loader began on the clock the
+	  stages before and after it use. About 30 characters, 3 ms at 115200
+	  baud. For a board whose image does not read the loader's stamps
+	  (src/main.c, bs2_stamps_publish): the Verdin AM62P, quiet.conf. The
+	  i.MX8MP loader stays silent.
+
+config BOOT_STAGE2_STAMP_PAGE
+	bool "Leave the loader's stage stamps in a page of its RAM for the image"
+	default y if BOARD_VERDIN_IMX8MP
+	help
+	  The system counter at the loader's stages, written to physical
+	  0x41000000 just before the jump (src/main.c, bs2_stamps_publish): the
+	  middle of the i.MX8MP loader's 32 MiB, where the route-3 image reads
+	  them into its boot timeline (<cluster/boot_timeline.h>). Only where
+	  that address is the loader's own RAM (a BUILD_ASSERT): on the Verdin
+	  AM62P it is below the DDR (0x80000000), and the loader's times are the
+	  summary line.
 
 config BOOT_STAGE2_CHUNK_SECTORS
 	int "Sectors per disk read"

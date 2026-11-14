@@ -105,7 +105,11 @@ Two images, two board qualifiers:
   GPU off. It identity-maps 0x48000000 .. 0x58000000 write-back and inflates
   the payload to 0x48000000 (`BOOT_STAGE2_LOAD`, the Kconfig defaults for
   this board), then jumps with DAIF masked, the EL1 timers stopped, the MMU
-  and caches off (`loader/src/lib.rs`, `bs2_jump`).
+  and caches off (`loader/src/lib.rs`, `bs2_jump`). The payload's header is
+  version 1 or 2 here (one image; 2 with LZ4 or a zero range). Version 3, a
+  table of segments each at its own load address, is the AM62P showcase's
+  and changes nothing on this route: `am62p-direct-boot.md`, "The second
+  stage".
 - **The direct image**, `verdin_imx8mp/mimx8ml8/a53/direct`
   (`driver/boards/toradex/verdin_imx8mp/verdin_imx8mp_mimx8ml8_a53_direct.*`):
   the a53 (kexec) variant linked at 0x48000000 with 256 MiB of RAM up to the
