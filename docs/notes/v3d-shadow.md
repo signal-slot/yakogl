@@ -2,6 +2,16 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # V3D 4.2: shadow look-ups (sampler compare and compiler)
 
+Status (plan #354). The record half was built as `v3d::texture::pack_sampler`
+over `v3d_tex_pack_sampler_compare` (`333a19f7`; the function is an argument of
+the packer, not a field of `V3dSampler`, so (b)'s struct growth was not needed),
+the compiler half in `06bd7bc5`, and `src/v3d/backend.rs` `sampler_for` packs
+with `pack_sampler` and keys its cache on (sampler state, compare function)
+since `455c3bb5` (`src/v3d/backend_tests.rs`
+`a_sampler_record_carries_its_depth_compare_function`, `tests/es3_shadow_v3d.rs`
+`the_records_compare_function_is_the_one_the_look_up_runs`). Host only: no
+board has run a shadow draw since.
+
 Design, for item `v3d-qpu-shadow`. Today the V3D online compiler refuses every
 shadow look-up by name (`src/shaderc/online/v3d/prepare.rs:1335-1337`,
 `NotYet("a shadow look-up")`), although the GL core already hands the compare
