@@ -255,6 +255,9 @@ struct shc_v3d_fs {
 	uint8_t  threads, single_seg, writes_z, disable_ez, uses_center_w;
 	uint8_t  lock_scoreboard_on_first_thrsw, uses_implicit_point_line_varyings, uses_pid;
 	uint8_t  rt_mask;       /* bit n: the program writes colour to render target n (0..3) */
+	/* words 1 and 2 of each flags array (24 inputs a word, Mesa's
+	 * flat_shade_flags[((V3D_MAX_FS_INPUTS - 1) / 24) + 1]); the word 0 above */
+	uint32_t flat_shade_flags_hi[2], noperspective_flags_hi[2], centroid_flags_hi[2];
 };
 
 /* The fields of the driver's struct v3d_vs_prog that are not addresses. */

@@ -4,9 +4,8 @@
 //! what a vertex/fragment pair with 15 vec4 varyings (60 components), a 16th
 //! vec4 vertex output (64 components), and flat, centroid and smooth varyings
 //! compiles to and, in the interpreter, carries through. They record the
-//! state before the ES 3.0 raise (MAX_VARYING_VECTORS 15,
-//! MAX_VERTEX_OUTPUT_COMPONENTS 64); a test that fails today is `#[ignore]`d
-//! with the limit it needs, and runs with `--ignored`.
+//! limits the ES 3.0 raise rests on (MAX_VARYING_VECTORS 15,
+//! MAX_VERTEX_OUTPUT_COMPONENTS 64).
 
 use super::chain::{compile_program, Code, Prim, Target, V3dProgram, VARYING_SLOT_VAR0};
 use super::sim::{self, Env, FsInputs, Inputs, Varying, VsInputs, LANES};
@@ -178,13 +177,29 @@ fn a_fs_reads_15_vec4_varyings() {
     }
 }
 
-/// Fails today with `Select(VpmRowOutOfRange)`: the vertex shader's output
-/// rows stop below 64 components (gl_Position, the viewport rows and 16
-/// vec4 do not fit).
+/// A vertex shader writing 16 vec4 (ES 3.0's 64 vertex output components)
+/// beside a fragment shader reading 15 compiles: the 16th is not a fragment
+/// input, so it takes no VPM row (the chain writes the outputs the fragment
+/// shader reads), and the fifteen are all there.
 #[test]
-#[ignore = "MAX_VERTEX_OUTPUT_COMPONENTS 64: select refuses VpmRowOutOfRange for a 16th vec4 output"]
-fn a_vs_writes_16_vec4_outputs() {
-    check_vs_rows(16, false).expect("a 16-vector (64-component) pair compiles");
+fn a_vs_writing_16_vec4_outputs_beside_a_15_vec4_fs_compiles() {
+    let rows = with_program(&vs_source(16, false), &fs_source(15, 3, false), |p| {
+        assert_eq!(p.fs.num_inputs, 60);
+        run_vs(p)
+    })
+    .expect("compiles");
+    for i in 0..15 {
+        assert!(has_row(&rows, (16 * i) as f32), "v{i}.0");
+    }
+}
+
+/// Fifteen vec4 and gl_PointSize: the four fixed-function rows, the point
+/// size and 60 varyings are 65 VPM rows, nine sectors (select.rs
+/// `VPM_OUTPUT_ROWS_MAX`).
+#[test]
+fn fifteen_vec4_and_a_point_size_fit_the_vpm() {
+    let vs = vs_source(15, false).replace("gl_Position =", "gl_PointSize = 1.0;\ngl_Position =");
+    with_program(&vs, &fs_source(15, 0, false), |p| assert_eq!(p.vs.vpm_output_size, 9)).expect("compiles");
 }
 
 /// The same 15 vectors from a GLSL ES 3.00 pair.
@@ -210,6 +225,44 @@ fn flat_centroid_and_smooth_varyings_set_their_flags() {
         assert_eq!(p.fs.flat_shade_flags.count_ones(), 2, "f.x and f.y");
         assert_eq!(p.fs.centroid_flags.count_ones(), 2, "c.x and c.y");
         assert_eq!(p.fs.flat_shade_flags & p.fs.centroid_flags, 0);
+    })
+    .expect("compiles");
+}
+
+/// Fifteen vec4 varyings, one in three flat and one in three centroid: the
+/// flags land in the three 24-input words of the program (input 24 is the
+/// first of word 1, input 48 of word 2), each at its input's own bit.
+#[cfg(not(feature = "report-es2"))]
+#[test]
+fn flat_and_centroid_flags_span_three_words() {
+    let qual = |i: usize| ["", "flat ", "centroid "][i % 3];
+    let mut vs = vs_source(15, true);
+    let mut fs = fs_source(15, 0, true);
+    for i in 0..15 {
+        vs = vs.replace(&std::format!("out vec4 v{i};"), &std::format!("{}out vec4 v{i};", qual(i)));
+        fs = fs.replace(&std::format!("in vec4 v{i};"), &std::format!("{}in vec4 v{i};", qual(i)));
+    }
+    with_program(&vs, &fs, |p| {
+        assert_eq!(p.fs.num_inputs, 60);
+        let word = |w: usize, lo: u32, hi: [u32; 2]| if w == 0 { lo } else { hi[w - 1] };
+        let (mut flats, mut centroids) = (0, 0);
+        for (k, &(slot, _)) in p.fs.input_slots.iter().enumerate() {
+            let q = qual(usize::from(slot - VARYING_SLOT_VAR0));
+            let (w, bit) = (k / 24, k % 24);
+            let flat = word(w, p.fs.flat_shade_flags, p.fs.flat_shade_flags_hi) >> bit & 1;
+            let cen = word(w, p.fs.centroid_flags, p.fs.centroid_flags_hi) >> bit & 1;
+            assert_eq!((flat, cen), (u32::from(q == "flat "), u32::from(q == "centroid ")), "input {k}");
+            flats += flat;
+            centroids += cen;
+        }
+        assert_eq!((flats, centroids), (20, 20), "five flat and five centroid vec4");
+        for w in 0..3 {
+            let (f, c) = (
+                word(w, p.fs.flat_shade_flags, p.fs.flat_shade_flags_hi),
+                word(w, p.fs.centroid_flags, p.fs.centroid_flags_hi),
+            );
+            assert_eq!((f >> 24, c >> 24), (0, 0), "word {w} holds 24 inputs");
+        }
     })
     .expect("compiles");
 }

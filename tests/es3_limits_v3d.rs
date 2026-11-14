@@ -252,6 +252,13 @@ fn meets_es3_0() -> Vec<Spec> {
         s("MAX_COMBINED_UNIFORM_BLOCKS", GL_MAX_COMBINED_UNIFORM_BLOCKS, 24),
         s("MAX_UNIFORM_BUFFER_BINDINGS", GL_MAX_UNIFORM_BUFFER_BINDINGS, 24),
         s("MAX_PROGRAM_TEXEL_OFFSET", GL_MAX_PROGRAM_TEXEL_OFFSET, 7),
+        // the varying family (context.rs MAX_VARYING_VECTORS 15 on gpu-v3d,
+        // tests/es3_v3d_varyings.rs draws it; the vertex side carries a 16th
+        // vec4 no fragment input reads)
+        s("MAX_VARYING_VECTORS", GL_MAX_VARYING_VECTORS, 15),
+        s("MAX_VARYING_COMPONENTS", GL_MAX_VARYING_COMPONENTS, 60),
+        s("MAX_FRAGMENT_INPUT_COMPONENTS", GL_MAX_FRAGMENT_INPUT_COMPONENTS, 60),
+        s("MAX_VERTEX_OUTPUT_COMPONENTS", GL_MAX_VERTEX_OUTPUT_COMPONENTS, 64),
     ]
 }
 
@@ -308,43 +315,6 @@ fn below_es3_0() -> Vec<Gap> {
             1,
             "state_query.integers.max_samples_getfloat + max_samples_getinteger64 (values; forms below)",
             "src/gl/state.rs + src/gl/framebuffer.rs (GL core caps); 4x design docs/notes/v3d-msaa-es3.md",
-        ),
-        // The varying family: `src/gl/context.rs` MAX_VARYING_VECTORS is 8
-        // on gpu-v3d (the ES 2.0 minimum; Mesa's v3d programs 16 /
-        // V3D_MAX_FS_INPUTS 64). The three component rows are 4x the root
-        // (`src/gl/state.rs` and `src/gl/context.rs` derive them), so one
-        // change moves all four.
-        g(
-            "MAX_VARYING_VECTORS",
-            GL_MAX_VARYING_VECTORS,
-            15,
-            8,
-            "implementation_limits.max_varying_vectors + state_query.integers.max_varying_vectors_*",
-            "src/gl/context.rs (MAX_VARYING_VECTORS, gpu-v3d)",
-        ),
-        g(
-            "MAX_VARYING_COMPONENTS",
-            GL_MAX_VARYING_COMPONENTS,
-            60,
-            32,
-            "implementation_limits.max_varying_components + state_query.integers.max_varying_components_*",
-            "src/gl/context.rs (MAX_VARYING_VECTORS * 4)",
-        ),
-        g(
-            "MAX_VERTEX_OUTPUT_COMPONENTS",
-            GL_MAX_VERTEX_OUTPUT_COMPONENTS,
-            64,
-            32,
-            "implementation_limits.max_vertex_output_components + state_query.integers.max_vertex_output_components_*",
-            "src/gl/context.rs (MAX_VARYING_VECTORS * 4)",
-        ),
-        g(
-            "MAX_FRAGMENT_INPUT_COMPONENTS",
-            GL_MAX_FRAGMENT_INPUT_COMPONENTS,
-            60,
-            32,
-            "implementation_limits.max_fragment_input_components + state_query.integers.max_fragment_input_components_*",
-            "src/gl/context.rs (MAX_VARYING_VECTORS * 4)",
         ),
         // The uniform-block family: `src/gl/context.rs` MAX_UNIFORM_DWORDS
         // is 1536 and `src/gl/state.rs` derives the block size
@@ -438,20 +408,21 @@ fn g3_limits_below_the_es3_0_minimum_are_pinned_as_they_are() {
     assert_eq!(Q::error(), GL_NO_ERROR);
 }
 
-/// The component rows are exactly four per varying vector, so the family's
-/// fix is the one root value (and `tests/es3_caps.rs`'s gl_Max* shader
-/// values move with it).
+/// The component rows are four per varying vector on the fragment side, and
+/// the vertex side is one vec4 more (the V3D's vertex shader may write a 16th
+/// that no fragment input reads): the family's root is one value
+/// (`tests/es3_caps.rs`'s gl_Max* shader values move with it).
 #[test]
 fn the_varying_component_rows_are_four_times_their_root() {
     let _lib = context();
     let vectors = Q::one(GL_MAX_VARYING_VECTORS);
     for (name, pname) in [
         ("MAX_VARYING_COMPONENTS", GL_MAX_VARYING_COMPONENTS),
-        ("MAX_VERTEX_OUTPUT_COMPONENTS", GL_MAX_VERTEX_OUTPUT_COMPONENTS),
         ("MAX_FRAGMENT_INPUT_COMPONENTS", GL_MAX_FRAGMENT_INPUT_COMPONENTS),
     ] {
         assert_eq!(Q::one(pname), vectors * 4, "{name} is 4 components per varying vector");
     }
+    assert_eq!(Q::one(GL_MAX_VERTEX_OUTPUT_COMPONENTS), vectors * 4 + 4, "one vec4 more written than read");
     assert_eq!(Q::error(), GL_NO_ERROR);
 }
 
@@ -703,25 +674,6 @@ fn four_draw_buffers_and_colour_attachments() {
 fn four_samples() {
     let _lib = context();
     assert!(Q::one(GL_MAX_SAMPLES) >= 4);
-    assert_eq!(Q::error(), GL_NO_ERROR);
-}
-
-/// The varying family at ES 3.0's minimums: implementation_limits.max_varying_vectors,
-/// .max_varying_components, .max_vertex_output_components,
-/// .max_fragment_input_components and their state_query.integers.* rows.
-/// Owner: `src/gl/context.rs` MAX_VARYING_VECTORS, 8 on gpu-v3d ("Mesa's
-/// v3d allows 16 (V3D_MAX_FS_INPUTS, 64 components), but nothing here has
-/// drawn with more than a few varyings on the board"); the component rows
-/// and the shader's gl_Max*Vectors derive from it, and `docs/es3-
-/// cts-failures.md`/the board run that measures more varyings carries it.
-#[test]
-#[ignore = "src/gl/context.rs MAX_VARYING_VECTORS is 8 on gpu-v3d, ES 3.0 needs 15"]
-fn the_varying_family_meets_es3_0() {
-    let _lib = context();
-    assert!(Q::one(GL_MAX_VARYING_VECTORS) >= 15);
-    assert!(Q::one(GL_MAX_VARYING_COMPONENTS) >= 60);
-    assert!(Q::one(GL_MAX_VERTEX_OUTPUT_COMPONENTS) >= 64);
-    assert!(Q::one(GL_MAX_FRAGMENT_INPUT_COMPONENTS) >= 60);
     assert_eq!(Q::error(), GL_NO_ERROR);
 }
 
