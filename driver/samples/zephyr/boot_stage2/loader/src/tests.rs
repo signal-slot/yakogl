@@ -798,6 +798,16 @@ fn mkboot_vectors() {
             if images.len() > 1 {
                 multi += 1;
             }
+            // A compression per segment: the vectors named "mixed" carry
+            // more than one in their table, and each segment was unpacked
+            // by its own.
+            let comps = &info.segments[..images.len().min(info.segments.len())];
+            let mixed = comps.iter().any(|s| s.compression != comps[0].compression);
+            assert_eq!(mixed, stem.starts_with("ok-v3-mixed-"), "{stem}: the segments' compressions");
+            if stem == "ok-v3-mixed-lz4-deflate.img" {
+                let got: Vec<u32> = comps.iter().map(|s| s.compression).collect();
+                assert_eq!(got, [COMPRESSION_LZ4, COMPRESSION_DEFLATE, COMPRESSION_NONE], "{stem}");
+            }
             if info.zero_bytes != 0 || info.segments.iter().any(|s| s.zero_bytes != 0) {
                 zeroed += 1;
             }
