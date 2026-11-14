@@ -1792,6 +1792,11 @@ step "test    $V3D_CONFIG (tests/es3_int_rt_v3d.rs)" \
 # to nothing under report-es2 (no row below).
 step "test    $V3D_CONFIG (tests/es3_formats_v3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_formats_v3d
+# The V3D's float colour targets (v3d-cbf-test-draft): what the 16F targets
+# clear, draw and read back today; the claimed GL_EXT_color_buffer_float path
+# is #[ignore = "v3d-arm"] until the V3D arm lands.
+step "test    $V3D_CONFIG (tests/es3_color_buffer_float_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_color_buffer_float_v3d
 # The V3D shader back end's GLSL ES 3.00 gaps the dEQP corpus found
 # (matrix vertex attributes, integer shifts, trunc), built and run on the
 # interpreter. Compiles to nothing under report-es2.
