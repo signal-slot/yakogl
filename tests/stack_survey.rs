@@ -229,11 +229,11 @@ macro_rules! parts {
     };
 }
 parts! {
-    the_compilers_stack_by_phase_table_vertex: "table vertex", if cfg!(feature = "gpu-vivante") { 69 } else { 24 };
-    the_compilers_stack_by_phase_table_fragment: "table fragment", if cfg!(feature = "gpu-vivante") { 165 } else { 89 };
+    the_compilers_stack_by_phase_table_vertex: "table vertex", if cfg!(feature = "gpu-vivante") { 70 } else { 24 };
+    the_compilers_stack_by_phase_table_fragment: "table fragment", if cfg!(feature = "gpu-vivante") { 166 } else { 89 };
     the_compilers_stack_by_phase_shaders_top: "tools/shaders", 20;
     the_compilers_stack_by_phase_shaders_es100: "tools/shaders/es100", 126;
-    the_compilers_stack_by_phase_shaders_es300: "tools/shaders/es300", 43;
+    the_compilers_stack_by_phase_shaders_es300: "tools/shaders/es300", 45;
     the_compilers_stack_by_phase_shaders_femtovg: "tools/shaders/femtovg", 36;
     the_compilers_stack_by_phase_shaders_gl_test_es100: "tools/shaders/gl_test_es100", 14;
     the_compilers_stack_by_phase_shaders_gltest: "tools/shaders/gltest", 63;
@@ -243,7 +243,7 @@ parts! {
 }
 /* Measured 2026-10-24, the sum of the parts (1359 / 1363 while the Qt
  * shaders were in the corpus and the tables, until #1509). */
-const TOTAL: usize = if cfg!(feature = "gpu-vivante") { 568 } else { 447 };
+const TOTAL: usize = if cfg!(feature = "gpu-vivante") { 572 } else { 449 };
 
 /// The parts together are the whole corpus: every source is in exactly one
 /// part (`corpus` refuses a directory no part names), each part holds the

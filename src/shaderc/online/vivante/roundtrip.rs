@@ -449,7 +449,7 @@ mod builder_default_audit {
          * would turn this into a clean invariant and hide the fact that the
          * builder has to special-case them -- which is how the rebuild test
          * caught this the moment the default moved. */
-        ("PMODE", 1, Expect::MajorityWith(1, "`nop`, whose whole encoding is zero", 30)),
+        ("PMODE", 1, Expect::MajorityWith(1, "`nop`, whose whole encoding is zero", 31)),
         ("SKPHP", 0, Expect::Invariant(0)),
         ("UNK", 0, Expect::Invariant(0)),
         ("DST_FULL", 0, Expect::Invariant(0)),
@@ -487,7 +487,7 @@ mod builder_default_audit {
     #[test]
     fn every_builder_default_matches_the_corpus() {
         let (dist, nops) = distributions();
-        assert_eq!(nops, 30, "the corpus's nop count is what PMODE's exception count must match");
+        assert_eq!(nops, 31, "the corpus's nop count is what PMODE's exception count must match");
         let mut wrong: Vec<String> = Vec::new();
 
         for (name, default, expect) in DEFAULTS {

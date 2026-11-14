@@ -425,7 +425,7 @@ fn the_back_end_computes_what_the_ir_says() {
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         agreed + differed,
-        if es2 { 158 } else { 183 },
+        if es2 { 158 } else { 185 },
         "the compared population moved ({agreed} agree, {differed} differ)"
     );
     /* The skipped population, by reason: textures and derivatives (the

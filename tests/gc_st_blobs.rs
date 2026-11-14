@@ -30,7 +30,7 @@ use yakogl::shaderc::ShcBlob;
 
 /// The rows of the i.MX8MP table (`SHC_BLOB_TABLE` of vivante_blobs.rs), which
 /// the ST table repeats one for one.
-const ROWS: usize = 234;
+const ROWS: usize = 236;
 
 /// The rows whose instruction words differ between the two tables, and the
 /// words that differ (positions over the common length plus the words one
@@ -40,7 +40,7 @@ const ROWS: usize = 234;
 const DIFFERING_ROWS: usize = 91;
 const DIFFERING_WORDS: usize = 5853;
 const SHORTER_ON_ST: usize = 28;
-const INSTRUCTIONS: (usize, usize) = (5540, 5415);
+const INSTRUCTIONS: (usize, usize) = (5545, 5420);
 
 /// The differing rows by name, in table order.
 const DIFFERING: &[&str] = &[

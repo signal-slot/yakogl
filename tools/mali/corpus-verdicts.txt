@@ -165,6 +165,8 @@ tools/shaders/es300/mrt2.frag: ok
 tools/shaders/es300/mrt2.vert: ok
 tools/shaders/es300/mrt3.frag: ok
 tools/shaders/es300/mrt3.vert: ok
+tools/shaders/es300/mrt4.frag: ok
+tools/shaders/es300/mrt4.vert: ok
 tools/shaders/es300/texfetch.frag: Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet
 tools/shaders/es300/texoffset.frag: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet
 tools/shaders/es300/texsize.frag: ok
