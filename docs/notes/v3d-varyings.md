@@ -109,6 +109,14 @@ asked. In either case the constants in `context.rs:193-194` stop being
 
 ## Changes of `v3d-varyings-compiler`
 
+Status: done. Items 1 and 2 landed with `v3d-varyings-raise` (6581f22b)
+in another form: the program data carries each set as two 32-bit halves
+(`*_flags` inputs 0..31, `*_flags_hi` 32..63) and `v3d_job.c` regroups
+them into the packet's 24-bit words. Item 3 landed with d17f4362
+(`select.rs` `VPM_MAX_OUTPUT_ROWS`), item 4 after it
+(`V3dError::TooManyFragmentInputs` in `chain.rs` and `chain71.rs`); both
+are pinned by `tests/v3d_varyings_compile.rs`.
+
 1. Flag sets become three 24-bit words as Mesa does (`vir.c:992-1003`):
    `chain.rs:138-140` and `419-445` (drop the "input past 31" refusals),
    `FsProg`, `ShcV3dFs`/`shc_v3d_fs`, the `abi_layout` pins and
@@ -149,6 +157,19 @@ asked. In either case the constants in `context.rs:193-194` stop being
 
 ## Open, no owner yet
 
+- A vertex shader of 16 computed vec4 varyings selects (69 rows) but
+  fails allocation, `NotYet("more live values than 2 threads have
+  registers (no spilling yet)")`: the 64 components are all live at the
+  end of the body, because the varyings are stored after it. 16 vec4s read
+  from uniforms, or 15 computed ones, compile. It needs spilling or VPM
+  writes as each output is produced (Mesa stores outputs where the shader
+  writes them). Pinned, ignored, by `tests/v3d_varyings_compile.rs`
+  `sixteen_computed_vec4_varyings_compile` (`varyings_tests.rs`
+  `a_vs_with_16_vec4_outputs_feeds_15` compiles: its fragment shader reads
+  15, so one output is dead).
+  Until the link check below exists, this gap is also what makes
+  `tests/es3_v3d_varyings.rs` `sixteen_varying_vectors_do_not_link` fail
+  to link; the link check has to come before the gap closes.
 - The ES 3.00 link does not check varying component counts
   (`reflect.rs:1068-1070`); with 64 inputs a shader past the limit should
   fail at link, as dEQP expects.

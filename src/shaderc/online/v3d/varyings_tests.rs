@@ -244,7 +244,7 @@ fn a_vs_writes_15_vec4_varyings_and_the_point_size() {
 #[test]
 fn more_than_64_fragment_inputs_are_refused() {
     let e = with_program(&vs_source(17, false), &fs_source(17, 0, false), |_| ()).unwrap_err();
-    assert_eq!(e, "NotYet(\"more than 64 fragment shader inputs\")");
+    assert_eq!(e, "TooManyFragmentInputs");
 }
 
 /// Flat vec4s in each of the three 24-input groups the packet carries (v0:
