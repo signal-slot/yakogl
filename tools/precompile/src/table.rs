@@ -19,6 +19,7 @@
 //! | `SHC_PRECOMPILED_IF_LOWERING: [u32; N]` | how an `if` with arithmetic arms was lowered (`IfLowering::as_u32`; the key covers it when not the default) |
 //! | `SHC_PRECOMPILED_SENSITIVITY: [u64; N]` | the sampler-state sensitivity a program's first draw asks of it (`lod_sensitivity`, `LodKey::bits`) |
 //! | `SHC_PRECOMPILED_ATTRIB_MAP: [Option<&ShcAttribMap>; N]` | the link's attribute locations a vertex shader was compiled with |
+//! | `SHC_PRECOMPILED_WIDE128: [u32; N]` | a GC7000 table only: the bindings whose look-ups a 128-bit plane key would change, that GPU's other first-draw question (`wide128_sensitivity`). The PowerVR never asks, and its table has no such column |
 //!
 //! A compile's reflection is stored once, in a `ShcPrecompiledReflection`
 //! static (`S_<sha256>_<VS|FS>`, with `_DEFERRED` when the compile left its
@@ -98,6 +99,10 @@ pub struct Row {
     /// `lod_sensitivity` of the record (set by the caller, which asks it of
     /// the live record).
     pub sensitivity: u64,
+    /// `wide128_sensitivity` of the record (set by the caller, as
+    /// `sensitivity` is; 0 and not printed for a GPU that has no such
+    /// question).
+    pub wide128: u32,
     pub map: Option<Box<ShcAttribMap>>,
     /// The shader, its pointers at the vectors below.
     pub shader: ShcShader,
@@ -162,6 +167,7 @@ impl Row {
             lod_key: r.lod_key.bits(),
             if_lowering: r.if_lowering.as_u32(),
             sensitivity: 0,
+            wide128: 0,
             map: r.attrib_map.map(|m| Box::new(*m)),
             shader: sh,
             blocks,
@@ -776,21 +782,28 @@ fn blocks_text(r: &Row) -> String {
 /// Each column's entry for row `r`, in [`COLUMNS`] order.
 fn column_entries(r: &Row) -> [String; COLUMNS.len()] {
     let id = r.ident();
-    [
+    let all = [
         format!("[{}]", r.key.iter().map(|b| format!("0x{b:02x}")).collect::<Vec<_>>().join(", ")),
         r.w_constant.to_string(),
         format!("0x{:016x}", r.lod_key),
         r.if_lowering.to_string(),
         format!("0x{:016x}", r.sensitivity),
         if r.map.is_some() { format!("Some(&{id}_ATTRIB_MAP)") } else { "None".into() },
-    ]
+        format!("0x{:08x}", r.wide128),
+    ];
+    core::array::from_fn(|i| all[i].clone())
 }
+
+/// How many of [`ALL_COLUMNS`] this build's table has: the last one is the
+/// GC7000's. A PowerVR library never reads it, and a static nothing reads
+/// is a warning in the library's build.
+const N_COLUMNS: usize = if cfg!(feature = "gpu-vivante") { ALL_COLUMNS.len() } else { ALL_COLUMNS.len() - 1 };
 
 /// The column statics: name, element type, what one entry is. Every one of
 /// them is a fact of the variant -- an input of the record key, or the answer
 /// a program's first draw asks -- which is why they stay per row while the
 /// source's reflection does not.
-const COLUMNS: [(&str, &str, &str); 6] = [
+const ALL_COLUMNS: [(&str, &str, &str); 7] = [
     (
         "SHC_PRECOMPILED_KEYS",
         "[u8; 32]",
@@ -817,7 +830,23 @@ const COLUMNS: [(&str, &str, &str); 6] = [
         "Option<&ShcAttribMap>",
         "The link's attribute locations a vertex shader was compiled with.",
     ),
+    (
+        "SHC_PRECOMPILED_WIDE128",
+        "u32",
+        "The bindings whose look-ups a 128-bit plane key would change (`wide128_sensitivity`),\n/// the GC7000's other question at a program's first draw.",
+    ),
 ];
+
+/// This build's columns.
+const COLUMNS: [(&str, &str, &str); N_COLUMNS] = {
+    let mut c = [("", "", ""); N_COLUMNS];
+    let mut i = 0;
+    while i < N_COLUMNS {
+        c[i] = ALL_COLUMNS[i];
+        i += 1;
+    }
+    c
+};
 
 /// One row as text, all of it: its statics, its source's reflection (statics
 /// and entry), its own statics, its table entry and its column entries. Two
@@ -1073,6 +1102,7 @@ mod tests {
             lod_key: 0,
             if_lowering: 0,
             sensitivity: 0,
+            wide128: 0,
             map: None,
             shader: ShcShader { layout_at_link, ..ShcShader::ZERO },
             blocks: Vec::new(),
