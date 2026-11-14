@@ -610,6 +610,25 @@ mod tests {
         assert!(e.contains("second plane is on a unit the shader samples"), "{e}");
     }
 
+    /// The front end declares no `textureGather`, so no gather reaches
+    /// `split_planes` (the `Op` has no such form): a gather on a keyed
+    /// sampler2D or usampler2D is refused by name, never half a texel, and
+    /// an unkeyed one is refused the same way. When the front end learns the
+    /// gather, this pin moves to the pass's own refusal (the 16-bit halves
+    /// split is Mesa's etnaviv_nir_lower_128bit.c:115-151).
+    #[test]
+    fn a_gather_on_a_keyed_unit_is_refused_by_name() {
+        let _k = store::test_keep();
+        let p = Planes::NONE.with(0, 1);
+        for (decl, out) in [("uniform highp sampler2D s;", "vec4"), ("uniform highp usampler2D s;", "uvec4")] {
+            let src = fs(decl, out, "textureGather(s, v_uv)");
+            for key in [p, Planes::NONE] {
+                let e = compile_fs(&src, key).expect_err("refused");
+                assert!(e.contains("textureGather") && e.contains("no function of this name is declared"), "{e}");
+            }
+        }
+    }
+
     /* ---- lane sources (docs/notes/gc-128bit-swizzle.md sections 4, 5.2, 5.3) ---- */
 
     /// The module of one shader after the pass under `p`, as its
