@@ -65,8 +65,14 @@
 //! value a packer refused `-EINVAL`, a submit or a wait that failed `-EIO`
 //! (or the wait's own error), and a backend with no Mali OSAL `-ENODEV`.
 //!
+//! A framebuffer with no colour attachment (depth and/or stencil only,
+//! glmark2's shadow pass) is drawn as Mesa's panfrost draws one: a frame
+//! with one dummy render target that stores nothing, its depth/stencil
+//! written back as any frame's ([`DRAWS_WITHOUT_COLOUR`],
+//! [`frame::begin_frame_depth_only`], docs/notes/mali-depth-only.md).
+//!
 //! The capability answers say what this backend does today: it samples no
-//! texel format and renders no integer or depth-only target. A draw writes
+//! texel format and renders no integer target. A draw writes
 //! up to [`DRAW_TARGETS`] colour targets, in a frame that starts from a
 //! whole colour clear of all of them ([`colour_targets`]). Where the GL core
 //! needs a limit that is the hardware's, the value is Mesa's for this GPU,
@@ -88,9 +94,16 @@ use crate::util::{Global, EBUSY, EINVAL, EIO, ENODEV, ENOMEM, ENOTSUP};
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
-/// A framebuffer with no colour attachment: not drawn (nothing is), so the
-/// GL core reports it GL_FRAMEBUFFER_UNSUPPORTED (`backend::DEPTH_ONLY_TARGETS`).
-pub const DRAWS_WITHOUT_COLOUR: bool = false;
+/// A framebuffer with no colour attachment is drawn
+/// (`backend::DEPTH_ONLY_TARGETS`): the GL core reports it complete and
+/// hands its draws over with `target_gpu` 0 at the depth/stencil size. Each
+/// is recorded into a frame with no colour surface, Mesa 26.2.1 panfrost's
+/// frame of `nr_cbufs` 0 (`frame::begin_frame_depth_only`: one dummy
+/// render target, Write Enable off; the draws' blend off and render target
+/// mask 0), whose depth/stencil is written back to its pair's buffer as any
+/// frame's, so a later pass samples the depth texture through
+/// [`mali_depth_resolve`] (docs/notes/mali-depth-only.md).
+pub const DRAWS_WITHOUT_COLOUR: bool = true;
 
 /// The texel formats this backend samples (`backend::sampled_texfmts`):
 /// none, until the texture descriptor (`genxml::v10::Texture`, `Plane`) is
@@ -155,9 +168,12 @@ pub const SLOT_STILL_IN_FLIGHT: &str =
 /// An open frame whose end the builder refused or whose submit failed: its
 /// draws were taken and will never run. Counted as lost work.
 pub const FRAME_LOST: &str = "mali: an open frame could not be ended or submitted; its draws are lost";
-/// The draw names no colour surface. The contract of `backend::draw` makes
-/// that `-EINVAL` (a core bug), not a gap.
-pub const INVALID_NO_TARGET: &str = "mali: the draw has no colour target (target_gpu is 0)";
+/// The draw names no colour surface and no depth or stencil object either:
+/// nothing to draw into. The contract of `backend::draw` makes that
+/// `-EINVAL` (a core bug), not a gap. With a depth or stencil object it is
+/// a depth-only draw ([`depth_only`]).
+pub const INVALID_NO_TARGET: &str =
+    "mali: the draw has no colour target (target_gpu is 0) and no depth or stencil object";
 /// `num_targets` past [`DRAW_TARGETS`], what the GL core was told: its defect.
 pub const INVALID_TARGET_COUNT: &str = "mali: the draw has more colour targets than the backend reports";
 /* A draw of several colour targets (`GlesDraw::num_targets`), refused by
@@ -730,7 +746,7 @@ fn draw_blend_shader(
     target: &frame::Target,
 ) -> Result<Option<DrawBlendShader>, FrameError> {
     let mask = if d.color_write { d.color_mask & 0xf } else { 0 };
-    if !d.blend || mask == 0 {
+    if !d.blend || mask == 0 || depth_only(d) {
         return Ok(None);
     }
     let b = blending(d)?;
@@ -1387,15 +1403,18 @@ fn colour_clear_mask(d: &GlesDraw) -> u8 {
 /// with the flipped viewport ([`frame::DrawCall::flip_y`]).
 fn check(d: &GlesDraw) -> Result<(), FrameError> {
     let not_built = |why| Err(FrameError::NotBuilt(why));
-    if d.target_gpu == 0 {
+    if d.target_gpu == 0 && !depth_only(d) {
         return Err(FrameError::Invalid(INVALID_NO_TARGET));
     }
-    if d.targets[0].out_shift != 0 {
-        return not_built(NOT_BUILT_OUTPUT_SHIFT);
-    }
-    target_format(d)?;
-    if d.num_targets > 1 {
-        check_targets(d)?;
+    /* a depth-only draw has no colour target to check */
+    if !depth_only(d) {
+        if d.targets[0].out_shift != 0 {
+            return not_built(NOT_BUILT_OUTPUT_SHIFT);
+        }
+        target_format(d)?;
+        if d.num_targets > 1 {
+            check_targets(d)?;
+        }
     }
     let touches_zs = d.index_count != 0 || d.do_clear_depth || d.do_clear_stencil;
     if touches_zs && (d.depth_id != 0 || d.stencil_id != 0) && (d.ds_w < d.target_w || d.ds_h < d.target_h) {
@@ -1410,6 +1429,14 @@ fn check(d: &GlesDraw) -> Result<(), FrameError> {
     }
     cull(d.cull)?;
     Ok(())
+}
+
+/// A draw into a framebuffer with no colour attachment
+/// ([`DRAWS_WITHOUT_COLOUR`]): no colour surface (`target_gpu` 0), and a
+/// depth or stencil object, whose size is the draw's (`target_w`,
+/// `target_h`).
+fn depth_only(d: &GlesDraw) -> bool {
+    d.target_gpu == 0 && (d.depth_id != 0 || d.stencil_id != 0)
 }
 
 /// What a draw of several colour targets must be ([`check`]): targets 1..
@@ -1751,7 +1778,9 @@ fn add_gl_draw(
         vs_uniforms: uniform_words(d.vs_uniform_cpu, d.vs_uniform_dwords),
         fs_uniforms: uniform_words(d.fs_uniform_cpu, d.fs_uniform_dwords),
         zs: depth_stencil_state(d),
-        colour_mask: if d.color_write { d.color_mask & 0xf } else { 0 },
+        /* a frame with no colour surface writes no colour, whatever the
+         * mask (the GL core already sends 0) */
+        colour_mask: if d.color_write && !open.no_colour { d.color_mask & 0xf } else { 0 },
         front_cw: d.front_cw,
         cull: cull(d.cull)?,
         textures: fs_tex.as_ref().map_or(&[], |(t, n)| &t[..*n]),
@@ -2700,7 +2729,13 @@ fn upload_preload(code: &mut Arena, p: &PreloadProgram) -> Result<u64, FrameErro
 /// it can ([`sample_store`]); it then starts from the samples the store
 /// holds, each drawn back by the per-sample preload, when the store holds
 /// its target's, and otherwise from the target's image in every sample.
+///
+/// A frame with no colour surface (`key.gpu` 0, a depth-only draw) has no
+/// image to start from or keep: it is opened as Mesa's frame of no colour
+/// buffer ([`frame::begin_frame_depth_only`]), whatever `clear` says.
 fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: Option<[f32; 4]>) -> Result<(), Fail> {
+    let depth_only = key.gpu == 0;
+    let clear = if depth_only { Some([0.0; 4]) } else { clear };
     let (more, n) = colour_targets(&key);
     if clear.is_none() && n > 0 {
         return Err(FrameError::NotBuilt(NOT_BUILT_TARGETS_PRELOAD).into());
@@ -2719,8 +2754,12 @@ fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: O
     }
     // SAFETY: the slot is free of the GPU since the wait above.
     let (mut a, mut cs) = unsafe { slot_arenas(&g.slots[i], g.user_regs, Tops::ZERO, 0) }?;
-    let mut f = frame::begin_frame_targets(&mut a.desc, &mut cs, &more[..n])?;
-    let store = if target.samples == 4 { sample_store(g, &target) } else { None };
+    let mut f = if depth_only {
+        frame::begin_frame_depth_only(&mut a.desc, &mut cs)?
+    } else {
+        frame::begin_frame_targets(&mut a.desc, &mut cs, &more[..n])?
+    };
+    let store = if target.samples == 4 && !depth_only { sample_store(g, &target) } else { None };
     let mut kept = None;
     if let Some((gpu, surface_stride)) = store {
         let bin = upload_preload(&mut a.code, &g.sample_preload)?;
@@ -3046,9 +3085,16 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
         glog_once!("{}", NO_MALI_OSAL);
         return Err(Fail::Errno(-ENODEV));
     };
-    let format = target_format(d)?;
-    let row_stride =
-        backend::draw_pitch(d).checked_mul(format.bytes()).ok_or(FrameError::Invalid(INVALID_ROW_STRIDE))?;
+    /* a depth-only draw's frame has no colour surface: its target is the
+     * depth/stencil size at no address, no row stride, and RGBA8, the
+     * format of Mesa's dummy render target (`frame::begin_frame_depth_only`) */
+    let no_colour = depth_only(d);
+    let format = if no_colour { frame::TargetFormat::Rgba8888 } else { target_format(d)? };
+    let row_stride = if no_colour {
+        0
+    } else {
+        backend::draw_pitch(d).checked_mul(format.bytes()).ok_or(FrameError::Invalid(INVALID_ROW_STRIDE))?
+    };
     let key = TargetKey::of(d, row_stride, format);
     if g.open.is_some_and(|o| o.key != key) {
         let rc = end_open(g);
@@ -3068,12 +3114,15 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
     }
     /* the clear's parts: a whole one is a start value while nothing of the
      * frame has used its buffer; any other is drawn */
-    let colour_whole = d.do_clear && !d.clear_quad && colour_clear_mask(d) == 0xf;
+    /* with no colour surface there is no colour to clear (the GL core sends
+     * none, `do_clear` off) */
+    let do_clear = d.do_clear && !no_colour;
+    let colour_whole = do_clear && !d.clear_quad && colour_clear_mask(d) == 0xf;
     let ds_whole = [d.do_clear_depth && !d.clear_quad, d.do_clear_stencil && !d.clear_quad];
     let values = [d.clear_depth.to_bits(), u32::from(d.clear_stencil)];
     let mut quad = QuadBuffers { colour: false, depth: false, stencil: false };
     if let Some(o) = g.open.as_mut() {
-        if d.do_clear {
+        if do_clear {
             if colour_whole && o.frame.draws == 0 {
                 /* the frame's start: nothing of the old image is kept, so
                  * nothing is preloaded (`pan_preload_needed`,
@@ -3096,7 +3145,7 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
             samples: u32::from(d.samples.max(1)),
         };
         open_frame(g, key, target, Some(d.clear_rgba))?;
-    } else if d.index_count == 0 && !d.do_clear && !d.clear_quad {
+    } else if d.index_count == 0 && !do_clear && !d.clear_quad {
         /* a whole depth/stencil clear and no frame: the plane's value */
         for (aspect, whole) in ds_whole.iter().enumerate() {
             let (id, gen) = key.objects[aspect];
@@ -3117,7 +3166,7 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
             samples: u32::from(d.samples.max(1)),
         };
         open_frame(g, key, target, None)?;
-        quad.colour = d.do_clear || d.clear_quad;
+        quad.colour = !no_colour && (d.do_clear || d.clear_quad);
     }
     /* the clear quad's program writes output 0, target 0 only */
     if quad.colour && key.more[0].is_some() {
@@ -3495,4 +3544,4 @@ pub static yakogl_backend_mali: YakoglBackend = YakoglBackend {
 
 #[cfg(test)]
 #[path = "backend_tests.rs"]
-mod tests;
+pub(super) mod tests;

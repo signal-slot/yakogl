@@ -31,6 +31,8 @@ mod frame_blend_tests;
 #[cfg(test)]
 mod frame_cull_tests;
 #[cfg(test)]
+mod frame_depthonly_tests;
+#[cfg(test)]
 mod frame_discard_tests;
 #[cfg(test)]
 mod frame_flip_tests;

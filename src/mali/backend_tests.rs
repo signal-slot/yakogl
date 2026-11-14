@@ -18,8 +18,8 @@ use crate::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use crate::testutil::OwnOsal;
 use std::sync::Mutex;
 
-const TRI_VS: &str = include_str!("../../tools/mali/testdata/tri.vert");
-const TRI_FS: &str = include_str!("../../tools/mali/testdata/tri.frag");
+pub(crate) const TRI_VS: &str = include_str!("../../tools/mali/testdata/tri.vert");
+pub(crate) const TRI_FS: &str = include_str!("../../tools/mali/testdata/tri.frag");
 const TV_VS: &str = include_str!("../../tools/mali/testdata/tri_varying.vert");
 const TV_FS: &str = include_str!("../../tools/mali/testdata/tri_varying.frag");
 
@@ -32,7 +32,7 @@ const GPU: OsalMaliGpu =
 const HEAP: OsalMaliHeap =
     OsalMaliHeap { ctx_gpu: 0x8000_0001_5000, first_chunk_gpu: 0x8000_00a0_0000, chunk_size: 2 << 20, reserved: 0 };
 
-struct Buf {
+pub(crate) struct Buf {
     id: usize,
     gpu: u64,
     size: usize,
@@ -51,11 +51,11 @@ enum Event {
 }
 
 #[derive(Default)]
-struct Mock {
+pub(crate) struct Mock {
     bufs: Vec<Buf>,
     allocs: usize,
     /// Each submit's stream VA and words, read from the buffer at that VA.
-    submits: Vec<(u64, Vec<u64>)>,
+    pub(crate) submits: Vec<(u64, Vec<u64>)>,
     events: Vec<Event>,
     fences: i64,
     /// The fences that completed: only the one a wait asked for, or one a
@@ -75,15 +75,15 @@ struct Mock {
 
 static MOCK: Mutex<Option<Mock>> = Mutex::new(None);
 
-fn with<R>(f: impl FnOnce(&mut Mock) -> R) -> R {
+pub(crate) fn with<R>(f: impl FnOnce(&mut Mock) -> R) -> R {
     f(MOCK.lock().unwrap_or_else(|e| e.into_inner()).as_mut().expect("the mock is installed"))
 }
 
 impl Mock {
-    fn find(&self, gpu: u64, len: usize) -> Option<&Buf> {
+    pub(crate) fn find(&self, gpu: u64, len: usize) -> Option<&Buf> {
         self.bufs.iter().find(|b| gpu >= b.gpu && gpu + len as u64 <= b.gpu + b.size as u64)
     }
-    fn read(&self, gpu: u64, len: usize) -> Vec<u8> {
+    pub(crate) fn read(&self, gpu: u64, len: usize) -> Vec<u8> {
         let b = self.find(gpu, len).unwrap_or_else(|| panic!("{len} bytes at {gpu:#x}: no buffer holds them"));
         // SAFETY: inside the buffer's words.
         let bytes = unsafe { core::slice::from_raw_parts(b.mem.as_ptr().cast::<u8>(), b.size) };
@@ -91,7 +91,7 @@ impl Mock {
         bytes[at..at + len].to_vec()
     }
     /// What a GPU writes: `bytes` at `gpu`.
-    fn write(&mut self, gpu: u64, bytes: &[u8]) {
+    pub(crate) fn write(&mut self, gpu: u64, bytes: &[u8]) {
         let len = bytes.len();
         let b = self.bufs.iter_mut().find(|b| gpu >= b.gpu && gpu + len as u64 <= b.gpu + b.size as u64);
         let b = b.unwrap_or_else(|| panic!("{len} bytes at {gpu:#x}: no buffer holds them"));
@@ -246,12 +246,12 @@ unsafe extern "C" fn m_init(_arg: *mut c_void) -> i32 {
 }
 
 /// The mock installed, the backend down, for the guard's life.
-struct Rig {
+pub(crate) struct Rig {
     _osal: OwnOsal,
 }
 
 impl Rig {
-    fn new(mali: bool) -> Rig {
+    pub(crate) fn new(mali: bool) -> Rig {
         let osal = OwnOsal::new(&OPS, &yakogl_backend_mali);
         *MOCK.lock().unwrap_or_else(|e| e.into_inner()) = Some(Mock { mali, ..Mock::default() });
         Rig { _osal: osal }
@@ -273,7 +273,7 @@ impl Drop for Rig {
 }
 
 /// A target buffer the GL core would own: 64x64 RGBA8.
-fn target() -> u64 {
+pub(crate) fn target() -> u64 {
     let mut t = OsalGpuMem::ZERO;
     // SAFETY: a valid out-parameter.
     assert_eq!(unsafe { m_alloc(0, 64 * 64 * 4, OSAL_MEM_DATA, &mut t) }, 0);
@@ -282,7 +282,7 @@ fn target() -> u64 {
 
 /// The board's triangle as the GL core resolves it: a 64x64 RGBA8 FBO
 /// cleared to blue, six vertices of one vec2 attribute at location 0.
-fn triangle(target_gpu: u64, vertices: &[f32; 12]) -> GlesDraw {
+pub(crate) fn triangle(target_gpu: u64, vertices: &[f32; 12]) -> GlesDraw {
     let mut d = GlesDraw::ZERO;
     d.target_gpu = target_gpu;
     d.target_w = 64;
@@ -311,10 +311,10 @@ fn triangle(target_gpu: u64, vertices: &[f32; 12]) -> GlesDraw {
     d
 }
 
-const VERTICES: [f32; 12] = [-1.0, -1.0, 0.0, -1.0, -1.0, 1.0, 0.0, -1.0, 0.0, 1.0, -1.0, 1.0];
+pub(crate) const VERTICES: [f32; 12] = [-1.0, -1.0, 0.0, -1.0, -1.0, 1.0, 0.0, -1.0, 0.0, 1.0, -1.0, 1.0];
 
 /// One draw or clear, then the flush that submits its frame.
-fn draw_flush(d: &GlesDraw) -> i32 {
+pub(crate) fn draw_flush(d: &GlesDraw) -> i32 {
     // SAFETY: a valid draw whose records the caller keeps.
     let rc = unsafe { mali_draw(d) };
     if rc != 0 {
@@ -325,7 +325,7 @@ fn draw_flush(d: &GlesDraw) -> i32 {
 
 /// Compile a vertex and a fragment shader with the Valhall back end into
 /// keep, and run `f` on the two records while keep holds them.
-fn with_programs<R>(vs: &str, fs: &str, f: impl FnOnce(&ShcShader, &ShcShader) -> R) -> R {
+pub(crate) fn with_programs<R>(vs: &str, fs: &str, f: impl FnOnce(&ShcShader, &ShcShader) -> R) -> R {
     let _k = store::test_keep();
     let one = |stage, src: &str| {
         store::with_scratch(|s| {
@@ -348,7 +348,7 @@ fn move48(w: u64) -> Option<(u32, u64)> {
 /// The 64-bit register pair `reg` as the moves before `RUN_IDVS` left it
 /// (a `MOVE48`, or the two `MOVE32`s `cs_move64_to` emits for a wider
 /// value); None when no move wrote it.
-fn reg_at_idvs(words: &[u64], reg: u32) -> Option<u64> {
+pub(crate) fn reg_at_idvs(words: &[u64], reg: u32) -> Option<u64> {
     let run = words.iter().position(|&w| matches!(Instr::decode(w), Ok(Instr::RunIdvs(_))))?;
     let mut r = [None::<u32>; 128];
     for &w in &words[..run] {
@@ -1370,7 +1370,7 @@ fn mesa_s_blend_shader_words_are_uploaded_where_the_descriptor_points() {
 }
 
 /// The registers each RUN_IDVS of a stream reads.
-fn regs_at_each_idvs(words: &[u64]) -> Vec<std::collections::BTreeMap<u32, u32>> {
+pub(crate) fn regs_at_each_idvs(words: &[u64]) -> Vec<std::collections::BTreeMap<u32, u32>> {
     let mut r = std::collections::BTreeMap::new();
     let mut out = Vec::new();
     for &w in words {
@@ -2405,7 +2405,7 @@ fn case_55s_draw_into_two_targets_is_mesa_s_frame() {
 
 /// The framebuffer descriptor RUN_FRAGMENT reads (d40's last value before
 /// it, its tag bits off).
-fn fbd_at_fragment(words: &[u64]) -> Option<u64> {
+pub(crate) fn fbd_at_fragment(words: &[u64]) -> Option<u64> {
     let run = words.iter().position(|&w| matches!(Instr::decode(w), Ok(Instr::RunFragment(_))))?;
     words[..run].iter().rev().filter_map(|&w| move48(w)).find(|(d, _)| *d == 40).map(|(_, v)| v & !63)
 }
