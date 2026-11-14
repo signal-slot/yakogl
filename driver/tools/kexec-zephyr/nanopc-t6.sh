@@ -30,7 +30,8 @@
 #           So --crash refuses unless /proc/iomem's "Crash kernel" range holds
 #           the whole window and the image's segment plus that page; the
 #           reservation is made with t6-crashkernel.sh, beside this. The GPU
-#           and its firmware also stay running (section 2(a)).
+#           and its firmware also stay running (section 2(a)). --crash with
+#           --no-linux-wdt is refused (below).
 # With --go it takes the board lock (board_lock.sh; it refuses, never waits,
 # while anyone holds it: see LOCK_WAIT), reads the board's state
 # again under the lock, starts the record (below), copies the loader, mmio_rd
@@ -146,6 +147,14 @@ for a in "$@"; do
 done
 [ -n "$IMG" ] || die "usage: BOARD_HOST=root@<t6> $0 <zephyr.bin> [--go [--no-linux-wdt]] [--crash]"
 [ -f "$IMG" ] || die "$IMG: no such file"
+# The crash route needs Linux's watchdog: if the panic does not take the
+# crash kexec, panic() ends in its timeout loop (linux v6.18 kernel/panic.c:
+# 508-509, :557), which never resets the board when panic_timeout is 0;
+# only WDT0, open and no longer fed, does.
+if [ "$CRASH" = 1 ] && [ "$LINUX_WDT" = 0 ]; then
+	echo "nanopc-t6.sh: REFUSED: --crash needs the Linux watchdog (drop --no-linux-wdt): if the crash kexec does not happen, only WDT0 brings the board back" >&2
+	exit 3
+fi
 : "${BOARD_HOST:?set BOARD_HOST=root@<the NanoPC-T6>}"
 # shellcheck disable=SC2206  # options are words
 SSH_OPTS=(${BOARD_SSH_OPTS:-})
