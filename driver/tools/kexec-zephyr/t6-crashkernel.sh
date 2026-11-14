@@ -107,8 +107,9 @@ no() { echo "board: REFUSED: $*"; echo "board: nothing was changed."; exit 3; }
 sha() { sha256sum "$1" | cut -d" " -f1; }
 # The command line and armbianEnv.txt carry the root UUID (root=, rootdev=),
 # which must not reach a log or an issue: of a line only the crashkernel= and
-# cma= words are printed.
-toks() { tr " \t" "\n\n" | grep -E "^(crashkernel|cma)=" | tr "\n" " "; }
+# cma= words are printed. The name of an extraargs= line is cut first, or
+# its first word (extraargs=cma=...) would be dropped with it.
+toks() { sed "s/^[[:blank:]]*extraargs=//" | tr " \t" "\n\n" | grep -E "^(crashkernel|cma)=" | tr "\n" " "; }
 lines_toks() { # <grep pattern> <file>: "N: <tokens>" for each matching line
 	grep -n "$1" "$2" | while IFS= read -r l; do
 		printf "%s: %s\n" "${l%%:*}" "$(printf "%s\n" "${l#*:}" | toks)"
