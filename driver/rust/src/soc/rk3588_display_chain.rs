@@ -27,11 +27,13 @@
 //!    VOP2's gates, releases its resets and reads again. A
 //!    running port without `force_cold` stops the bring-up
 //!    ([`Error::FoundRunning`]): taking a running picture over is route (a),
-//!    step D2, not this. With `force_cold`, a running VP0 (the port whose
-//!    clock the DCLK stage sets) that runs no frame is refused
-//!    ([`Error::Unclocked`]) unless `power_cycle`: it is in the middle of a
-//!    frame, and a window disable or STANDBY written to it would land only
-//!    when the DCLK stage gives its clock back, with paging still on. Then
+//!    step D2, not this. Without `power_cycle`, a port the chain gives a
+//!    pixel clock (VP0, whose mux the DCLK stage sets, and any port whose
+//!    `DCLK_VOPn` mux reads `clk_hdmiphy_pixel0`, which the PHY stage
+//!    starts) is refused ([`Error::Unclocked`]) when PD_VOP is on and the
+//!    port has no clock now, or (with `force_cold`) runs and shows no
+//!    frame: it may be in the middle of a frame, and what is pending in it
+//!    would land when the clock comes back, with paging still on. Then
 //!    every window is disabled, `REG_CFG_DONE` written for each running
 //!    port and the port put in STANDBY ([`vop2::standby`]); a port whose
 //!    STANDBY never comes and that runs no frame has no pixel clock and
@@ -80,9 +82,10 @@
 //! and a stage that ends with the PHY locked is the one a bisection needs.
 //! The controller's bind needs nothing of the PHY.
 
-use super::rk3588::{gate_open, pd_on, PdRegs, PD_VOP};
+use super::rk3588::{clkgate_con, clksel_con, gate_open, pd_on, Gate, PdRegs, PD_VOP};
 use super::rk3588_display::{
-    clk, display_off, display_on, ready, reset, reset_assert, reset_release, DisplayError, DisplayOn, NotReady, VOP,
+    clk, display_off, display_on, ready, reset, reset_assert, reset_release, DisplayError, DisplayOn, Field, NotReady,
+    Part, VOP,
 };
 use crate::env::Env;
 use crate::ip::dw_hdmi_qp::{self as dw, BindParams, Ident, Port, Sink};
@@ -272,8 +275,8 @@ pub enum Error {
     /// PD_VOP is on but VOP2 cannot be read (a gate closed or a reset
     /// asserted): whether a port runs is not known.
     VopUnreadable(NotReady),
-    /// A port this chain clocks (VP0) was found with STANDBY clear and no
-    /// pixel clock (bit n = VPn).
+    /// A port the chain gives a pixel clock (VP0, and a port whose mux is
+    /// on the PHY0) has none now, or runs no frame (bit n = VPn).
     Unclocked(u32),
 }
 
@@ -389,11 +392,44 @@ fn find_opened(m: &impl Mmio, b: &Bases, env: &impl Env, stage: u32) -> Result<F
     Ok(f)
 }
 
-/// The port whose pixel clock the DCLK stage sets: VP0. Another port whose
-/// DCLK mux is on `clk_hdmiphy_pixel0` would get its clock back with the
-/// PHY too; on the T6, Linux runs VP1 from `dclk_vop1_src` (the D0 dump's
-/// CLKSEL_CON(112) bits 10:9 read 0), so it is not counted here.
-const CLOCKED_HERE: u32 = 1 << 0;
+/// The pixel clocks of VP0-VP2 (clk-rk3588.c:2091-2111, as DCLK_VOP0 is in
+/// D4): the `DCLK_VOPn` gate, its mux in CLKSEL_CON(112) (0 `dclk_vopn_src`,
+/// 1 `clk_hdmiphy_pixel0`, 2 `clk_hdmiphy_pixel1`; clk-rk3588.c:503-505) and
+/// the source's gate. VP3 has no PHY in its mux.
+const DCLK: [(Gate, Field, Gate); 3] = [
+    (Gate { con: 52, bit: 13 }, clk::DCLK_VOP0_MUX, Gate { con: 52, bit: 10 }),
+    (Gate { con: 53, bit: 0 }, Field { part: Part::Cru, con: 112, shift: 9, width: 2 }, Gate { con: 52, bit: 11 }),
+    (Gate { con: 53, bit: 1 }, Field { part: Part::Cru, con: 112, shift: 11, width: 2 }, Gate { con: 52, bit: 12 }),
+];
+
+/// Read the ports' pixel clocks (CRU words only; the PHY's clock from
+/// `phy_status`, 0 when the PHY could not be read). Returns (the ports the
+/// chain gives a clock: VP0, whose mux the DCLK stage sets, and every port
+/// whose mux is on the PHY0, which the PHY stage starts; the ports whose
+/// clock runs now). A port on `clk_hdmiphy_pixel1` or with its gate or
+/// (VP0) its reset closed counts as not clocked.
+fn pixel_clocks(m: &impl Mmio, b: &Bases, phy_status: u32) -> (u32, u32) {
+    let sel = m.read32(b.cru + clksel_con(112));
+    let phy_clock = phy_status & hdptx::grf::PHY_CLK_RDY != 0;
+    let open = |g: Gate| m.read32(b.cru + clkgate_con(g.con)) & (1 << g.bit) == 0;
+    let (mut here, mut now) = (1 << 0, 0);
+    for (p, (gate, mux, src)) in DCLK.iter().enumerate() {
+        let on = mux.get(sel);
+        if on == clk::DCLK_VOP0_FROM_HDMIPHY0 {
+            here |= 1 << p;
+        }
+        let reset_ok = p != 0 || m.read32(b.cru + reset::D_VOP0.offset()) & (1 << reset::D_VOP0.bit) == 0;
+        let source = match on {
+            0 => open(*src),
+            1 => phy_clock,
+            _ => false,
+        };
+        if open(*gate) && reset_ok && source {
+            now |= 1 << p;
+        }
+    }
+    (here, now)
+}
 
 /// Stop every running port (START with `force_cold`): every window off,
 /// `REG_CFG_DONE` for each running port, then each one into STANDBY. A
@@ -480,18 +516,30 @@ pub fn bring_up(
         }
         found = Found { vop_unreadable: Some(n), ..find_opened(m, b, env, START)? };
     }
+    // A port the chain gives a clock that is not clocked now may be in the
+    // middle of a frame (STANDBY clear, or written and not yet taken: the
+    // two read the same). Its pending window state would land when the
+    // PHY or DCLK stage gives the clock back, with paging still on. Only
+    // the power cycle (PD_VOP off) drops it (review R6).
+    if found.vop_reachable && !cfg.power_cycle {
+        let (here, now) = pixel_clocks(m, b, found.phy_status);
+        if here & !now != 0 {
+            return Err(Failed { stage: START, error: Error::Unclocked(here & !now) });
+        }
+    }
     if found.running != 0 {
         if !cfg.force_cold {
             return Err(Failed { stage: START, error: Error::FoundRunning(found.running) });
         }
-        // VP0, whose clock the DCLK stage sets, that runs no frame is
-        // in the middle of one: a window disable or STANDBY written now
+        // A port the chain gives a clock that reads clocked but runs no
+        // frame is in the middle of one: a window disable or STANDBY written now
         // would stay pending and land only when its clock is back, with
         // paging still on. Only the power cycle (PD_VOP off) drops such a
         // state, so without it the port is refused before anything of it
         // is written (the event clear of the frame wait aside).
         if !cfg.power_cycle {
-            for p in PORTS.iter().filter(|p| found.running & CLOCKED_HERE & 1 << p.id() != 0) {
+            let (here, _) = pixel_clocks(m, b, found.phy_status);
+            for p in PORTS.iter().filter(|p| found.running & here & 1 << p.id() != 0) {
                 match vop2::wait_frame(m, b.vop, *p, &mut delay) {
                     Ok(_) => {}
                     Err(e) if e.why == vop2::Refusal::FrameTimeout => {
