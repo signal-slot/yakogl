@@ -18,7 +18,8 @@ DOT=.
 FHOST=dkfake${DOT}box${DOT}invalid
 FA4=192${DOT}168${DOT}7${DOT}9
 FB4=10${DOT}9${DOT}8${DOT}7
-FA6=fd7a:115c:a1e0::1
+C=:
+FA6=fd7a${C}115c${C}a1e0${C}${C}1
 export PATH="$T/bin:$PATH" BOARD_HOST=tester@$FHOST FAKE_OUT="$T/canned"
 fail=0
 mk() { # boot_id type sshd [kernel suffix]
@@ -49,7 +50,7 @@ chk() { # name want_rc want_pattern [args...]
         echo "FAIL $n (rc $got): $out"
         fail=1
     fi
-    if printf '%s' "$out" | grep -Fq -e dkfake -e "$FA4" -e "$FB4" -e fd7a:; then
+    if printf '%s' "$out" | grep -Fq -e dkfake -e "$FA4" -e "$FB4" -e "fd7a$C"; then
         echo "FAIL $n: address or host name in output"
         fail=1
     fi
