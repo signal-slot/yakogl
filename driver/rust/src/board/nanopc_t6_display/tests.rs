@@ -216,6 +216,7 @@ impl Mmio for Soc {
                 [MMU0, MMU1].iter().any(|b| (*b..b + 0x100).contains(&addr))
                     || (PMU..PMU + 0x1000).contains(&addr)
                     || addr == CRU + 0x8d0
+                    || addr == CRU + 0x8f0
                     || addr == SYS_GRF + 0x384
                     || addr == PHY_GRF + 0x80
                     || HDMI_READS.contains(&addr.wrapping_sub(HDMI)),
@@ -504,6 +505,22 @@ fn the_hdmi_controller_is_not_read_with_pd_vo1_off() {
     let s = status(&soc, &B, 100_000, 1, &mut || soc.now(), &mut |us| soc.advance(us));
     assert_eq!((s.vo1_usable, s.cmu, s.monitor), (0, [0; 3], [0; 7]));
     assert!(!soc.ops().iter().any(|o| matches!(o, Op::R(a, _) if (HDMI..HDMI + 0x1000).contains(a))));
+}
+
+/// PCLK_HDMITX0 (CLKGATE_CON(60) bit 11) gated: the controller's register
+/// clock is off, so it is not read (review S2); the gate word is recorded.
+#[test]
+fn the_hdmi_controller_is_not_read_with_its_pclk_gated() {
+    let soc = Soc::with(Faults::default(), &[(CRU + 0x8f0, 0x0eff)]);
+    assert_eq!(run(&soc, FB).stop, 0);
+    let s = status(&soc, &B, 100_000, 1, &mut || soc.now(), &mut |us| soc.advance(us));
+    assert_eq!((s.vo1_usable, s.cru_gate60, s.cmu, s.monitor), (0, 0x0eff, [0; 3], [0; 7]));
+    assert!(!soc.ops().iter().any(|o| matches!(o, Op::R(a, _) if (HDMI..HDMI + 0x1000).contains(a))));
+    // the dump's word (open) reads the controller
+    let soc = Soc::dump();
+    assert_eq!(run(&soc, FB).stop, 0);
+    let s = status(&soc, &B, 100_000, 1, &mut || soc.now(), &mut |us| soc.advance(us));
+    assert_eq!((s.vo1_usable, s.cru_gate60, s.cmu[0]), (1, 0x06ff, 0x255));
 }
 
 #[test]

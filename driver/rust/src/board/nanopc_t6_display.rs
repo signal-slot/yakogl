@@ -36,8 +36,8 @@
 //! caches). [`status`] is section 5's other read-backs, all reads: the frame
 //! start, underflow and bus error bits over a wait, the frame interval
 //! against the caller's clock, the VOP's registers, the HPD level, the PHY
-//! GRF status and, only when PD_VO1 is usable, the HDMI controller's clock
-//! monitor and video monitor words.
+//! GRF status and, only when PD_VO1 is usable and PCLK_HDMITX0 is open, the
+//! HDMI controller's clock monitor and video monitor words.
 //!
 //! Nothing here touches the GPU, the interrupt controller, the PHY or the
 //! HDMI controller's registers beyond those reads.
@@ -439,12 +439,14 @@ pub struct Status {
     /// PHY0 GRF `STATUS` (`PLL_LOCK_DONE` 3, `PHY_CLK_RDY` 2, `PHY_RDY` 1).
     pub soc_status1: u32,
     pub phy_status: u32,
-    /// PD_VO1 usable (1), then, only when it is, the controller's
-    /// `CMU_STATUS`, `CMU_VIDQPCLK_FREQ`, `CMU_LINKQPCLK_FREQ` and
-    /// `VIDEO_MONITOR_STATUS0-6`.
+    /// PD_VO1 usable and PCLK_HDMITX0 open (1), then, only when they are,
+    /// the controller's `CMU_STATUS`, `CMU_VIDQPCLK_FREQ`,
+    /// `CMU_LINKQPCLK_FREQ` and `VIDEO_MONITOR_STATUS0-6`.
     pub vo1_usable: u32,
     pub cmu: [u32; 3],
     pub monitor: [u32; dw_hdmi_qp::VIDEO_MONITOR_WORDS],
+    /// CLKGATE_CON(60), read when PD_VO1 is usable: PCLK_HDMITX0 in bit 11.
+    pub cru_gate60: u32,
 }
 
 /// Section 5's read-backs (see the module), all reads except the event
@@ -505,7 +507,15 @@ pub fn status(
     ];
     s.soc_status1 = m.read32(b.sys_grf + dw_hdmi_qp::grf::SOC_STATUS1);
     s.phy_status = m.read32(b.phy_grf + hdptx::grf::STATUS);
-    if PdRegs::of(m, b.pmu, &PD_VO1).usable_of(&PD_VO1) {
+    // the controller's register clock PCLK_HDMITX0 (60/11, Linux v6.18
+    // clk-rk3588.c:1962-1963) must be open too: a read with it gated may
+    // stall or fault the bus (review S2)
+    let pclk = display_clk::PCLK_HDMITX0.gate;
+    let vo1 = PdRegs::of(m, b.pmu, &PD_VO1).usable_of(&PD_VO1);
+    if vo1 {
+        s.cru_gate60 = m.read32(b.cru + clkgate_con(pclk.con));
+    }
+    if vo1 && s.cru_gate60 & 1 << pclk.bit == 0 {
         s.vo1_usable = 1;
         s.cmu = [dw_hdmi_qp::reg::CMU_STATUS, dw_hdmi_qp::reg::CMU_VIDQPCLK_FREQ, dw_hdmi_qp::reg::CMU_LINKQPCLK_FREQ]
             .map(|off| m.read32(b.hdmi + off));

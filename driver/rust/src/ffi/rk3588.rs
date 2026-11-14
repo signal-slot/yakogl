@@ -2223,12 +2223,13 @@ const _: () = assert!(offset_of!(YdT6DisplayAdopt, running) == 4 * 31);
 const _: () = assert!(offset_of!(YdT6DisplayAdopt, ovl_layer_sel) == 4 * 36);
 const _: () = assert!(offset_of!(YdT6DisplayAdopt, fb) == 4 * 39);
 const _: () = assert!(offset_of!(YdT6DisplayAdopt, shown) == 4 * 44);
-const _: () = assert!(size_of::<YdT6DisplayStatus>() == 4 * 37);
+const _: () = assert!(size_of::<YdT6DisplayStatus>() == 4 * 38);
 const _: () = assert!(offset_of!(YdT6DisplayStatus, frames) == 4 * 7);
 const _: () = assert!(offset_of!(YdT6DisplayStatus, vop) == 4 * 9);
 const _: () = assert!(offset_of!(YdT6DisplayStatus, soc_status1) == 4 * 24);
 const _: () = assert!(offset_of!(YdT6DisplayStatus, vo1_usable) == 4 * 26);
 const _: () = assert!(offset_of!(YdT6DisplayStatus, monitor) == 4 * 30);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, cru_gate60) == 4 * 37);
 
 /// Draw the adopt's pattern ([`crate::board::nanopc_t6_display::draw_pattern`])
 /// into `fb`: `height` rows of `stride_bytes`, `width` pixels each. 0, or
@@ -2367,6 +2368,7 @@ mod display_tests {
             ("offsetof(struct yd_t6_display_status, soc_status1)", offset_of!(YdT6DisplayStatus, soc_status1)),
             ("offsetof(struct yd_t6_display_status, vo1_usable)", offset_of!(YdT6DisplayStatus, vo1_usable)),
             ("offsetof(struct yd_t6_display_status, monitor)", offset_of!(YdT6DisplayStatus, monitor)),
+            ("offsetof(struct yd_t6_display_status, cru_gate60)", offset_of!(YdT6DisplayStatus, cru_gate60)),
         ];
         for (what, v) in pins {
             let pin = format!("_Static_assert({what} == {v},");
