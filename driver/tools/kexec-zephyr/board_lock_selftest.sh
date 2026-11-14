@@ -478,20 +478,27 @@ chmod +x "$tmp/fakessh/ssh" "$tmp/fakessh/dmesg"
 printf 'friendlyarm,nanopc-t6\0rockchip,rk3588\0' > "$fb/proc/device-tree/compatible"
 echo 6.18.55 > "$fb/proc/sys/kernel/osrelease"
 printf 'CONFIG_KEXEC=y\nCONFIG_CRASH_RESERVE=y\nCONFIG_CRASH_DUMP=y\n' > "$fb/boot/config-6.18.55"
-printf 'root=UUID=0 rootwait cma=256M\n' > "$fb/proc/cmdline"
+# The root UUID is on the board's command line, in dmesg's "Kernel command
+# line" and in armbianEnv.txt: no output may show it (the end checks).
+uuid=deadbeef-0000-4000-8000-0123456789ab
+printf 'root=UUID=%s rootwait cma=256M\n' "$uuid" > "$fb/proc/cmdline"
 echo 0 > "$fb/sys/kernel/kexec_crash_size"
 echo 0 > "$fb/sys/kernel/kexec_crash_loaded"
 printf '00200000-e143ffff : System RAM\n  02000000-0432ffff : Kernel code\n' > "$fb/proc/iomem"
-echo 'cma: Reserved 256 MiB at 0x00000000d1400000' > "$fb/dmesg"
-ckrun() { # <command>
-	PATH=$tmp/fakessh:$PATH T6CK_ROOT=$fb BOARD_LOCK=$tmp/ck.lock BOARD_HOST=root@board.invalid bash "$ckt" "$1" 2>&1
+printf '%s\n' "Kernel command line: root=UUID=$uuid rootwait cma=256M" \
+	'cma: Reserved 256 MiB at 0x00000000d1400000' > "$fb/dmesg"
+ckrun() { # <command>; every output is kept for the UUID check at the end
+	PATH=$tmp/fakessh:$PATH T6CK_ROOT=$fb BOARD_LOCK=$tmp/ck.lock BOARD_HOST=root@board.invalid bash "$ckt" "$1" 2>&1 |
+		tee -a "$tmp/ck-all.out"
+	return "${PIPESTATUS[0]}"
 }
-env_with='verbosity=1
+env_with="verbosity=1
+rootdev=UUID=$uuid
 bootlogo=false
 overlay_prefix=rockchip-rk3588
 extraargs=cma=256M
 usbstoragequirks=0x2537:0x1066:u
-'
+"
 printf '%s' "$env_with" > "$fb/boot/armbianEnv.txt"
 before=$(sha256sum < "$fb/boot/armbianEnv.txt")
 out=$(ckrun status)
@@ -510,7 +517,8 @@ out=$(ckrun status)
 rc=$?
 check "t6-crashkernel.sh: status after set, before the reboot, says reboot (rc $rc)" \
 	"$([ "$rc" = 1 ] && grep -qF 'the file has crashkernel= but the running kernel was not given it: reboot' <<<"$out"; echo $?)"
-printf 'root=UUID=0 rootwait cma=256M crashkernel=256M@0x10000000\n' > "$fb/proc/cmdline"
+printf 'root=UUID=%s rootwait cma=256M crashkernel=256M@0x10000000\n' "$uuid" > "$fb/proc/cmdline"
+echo "Kernel command line: root=UUID=$uuid rootwait cma=256M crashkernel=256M@0x10000000" >> "$fb/dmesg"
 printf '00200000-e143ffff : System RAM\n  02000000-0432ffff : Kernel code\n  10000000-1fffffff : Crash kernel\n' > "$fb/proc/iomem"
 out=$(ckrun status)
 rc=$?
@@ -540,7 +548,7 @@ rc=$?
 check "t6-crashkernel.sh: undo on it is byte for byte the old file (rc $rc)" \
 	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
 # Refusals leave the file as it was.
-printf 'extraargs=cma=256M crashkernel=512M\n' > "$fb/boot/armbianEnv.txt"
+printf 'extraargs=root=UUID=%s cma=256M crashkernel=512M\n' "$uuid" > "$fb/boot/armbianEnv.txt"
 before=$(sha256sum < "$fb/boot/armbianEnv.txt")
 out=$(ckrun set)
 rc=$?
@@ -568,6 +576,11 @@ out=$(ckrun status)
 rc=$?
 check "t6-crashkernel.sh: another board is refused (rc $rc)" \
 	"$([ "$rc" != 0 ] && grep -qF 'not a NanoPC-T6' <<<"$out"; echo $?)"
+# The board's command line holds the root UUID (in /proc/cmdline, dmesg's
+# "Kernel command line" and armbianEnv.txt's rootdev=): status, set and undo
+# print only the crashkernel= and cma= tokens and the reservation lines.
+check "t6-crashkernel.sh: no output of status, set or undo shows the root UUID ($(grep -c "$uuid" "$tmp/ck-all.out") lines do)" \
+	"$([ -s "$tmp/ck-all.out" ] && ! grep -qF "$uuid" "$tmp/ck-all.out"; echo $?)"
 
 # The window is decided by nanopc_t6.dts (zephyr,sram) and held again where an
 # image is loaded into it: nanopc-t6.sh checks /proc/iomem over WINDOW_BASE
