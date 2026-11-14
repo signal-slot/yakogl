@@ -204,9 +204,9 @@ const PINS: &[Pin] = &[
     pin("MAX_VERTEX_UNIFORM_VECTORS", GL_MAX_VERTEX_UNIFORM_VECTORS, &[384]),
     // state.rs:1234, context.rs:90
     pin("MAX_FRAGMENT_UNIFORM_VECTORS", GL_MAX_FRAGMENT_UNIFORM_VECTORS, &[384]),
-    // state.rs:1235, context.rs:123-124, the gpu-vivante MAX_VARYING_VECTORS
+    // state.rs:1236, context.rs:163-164, the gpu-vivante MAX_VARYING_VECTORS
     pin("MAX_VARYING_VECTORS", GL_MAX_VARYING_VECTORS, &[15]),
-    // state.rs:1220, context.rs:95 CAP_TEXTURE_UNITS
+    // state.rs:1221, context.rs:135 CAP_TEXTURE_UNITS
     pin("MAX_TEXTURE_IMAGE_UNITS", GL_MAX_TEXTURE_IMAGE_UNITS, &[16]),
     // state.rs:1224, backend.rs:688-689, the gpu-vivante GLES_VS_TEX_UNITS
     pin("MAX_VERTEX_TEXTURE_IMAGE_UNITS", GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &[16]),
@@ -252,26 +252,38 @@ const PINS: &[Pin] = &[
     // state.rs:1291
     pin3("MAX_ELEMENTS_VERTICES", GL_MAX_ELEMENTS_VERTICES, &[0xFF_FFFF]),
     pin3("MAX_ELEMENTS_INDICES", GL_MAX_ELEMENTS_INDICES, &[0xFF_FFFF]),
-    // state.rs:1265, MAX_UNIFORM_DWORDS * 4
+    // state.rs:1266 => context.rs:110-113 MAX_UNIFORM_BLOCK_SIZE, which is
+    // MAX_UNIFORM_DWORDS * 4 on this GPU. The V3D answers ES 3.0's 16384
+    // because its draw reads a block word by word out of the stage's storage
+    // (tests/es3_v3d_ubo_size.rs); this GPU reads the block out of the shader's
+    // constant file, so 16384 there is the load path and the gap stays.
     pin3("MAX_UNIFORM_BLOCK_SIZE", GL_MAX_UNIFORM_BLOCK_SIZE, &[6144]),
-    // state.rs:1262
+    // state.rs:1263 => context.rs:93 MAX_STAGE_UNIFORM_BLOCKS, ES 3.0's twelve
     pin3("MAX_VERTEX_UNIFORM_BLOCKS", GL_MAX_VERTEX_UNIFORM_BLOCKS, &[12]),
     pin3("MAX_FRAGMENT_UNIFORM_BLOCKS", GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &[12]),
-    // state.rs:1263, program.rs:69 PROG_MAX_BLOCKS
+    // state.rs:1264, program.rs:69 PROG_MAX_BLOCKS
     pin3("MAX_COMBINED_UNIFORM_BLOCKS", GL_MAX_COMBINED_UNIFORM_BLOCKS, &[24]),
-    // state.rs:1264, context.rs:182
+    // state.rs:1265, context.rs:271 MAX_UNIFORM_BUFFER_BINDINGS
     pin3("MAX_UNIFORM_BUFFER_BINDINGS", GL_MAX_UNIFORM_BUFFER_BINDINGS, &[24]),
-    // state.rs:1266
+    // state.rs:1267, a literal
     pin3("UNIFORM_BUFFER_OFFSET_ALIGNMENT", GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &[4]),
-    // state.rs:1249-1250, MAX_UNIFORM_DWORDS
+    // state.rs:1250-1251, context.rs:83 MAX_UNIFORM_DWORDS
     pin3("MAX_VERTEX_UNIFORM_COMPONENTS", GL_MAX_VERTEX_UNIFORM_COMPONENTS, &[1536]),
     pin3("MAX_FRAGMENT_UNIFORM_COMPONENTS", GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, &[1536]),
-    // state.rs:1267-1269
+    // state.rs:1268-1270 => context.rs:125-130 MAX_COMBINED_UNIFORM_COMPONENTS,
+    // ES 3.0's formula (section 6.2): the stage's blocks times the block size
+    // in components, plus its default-block components. Here a block is the
+    // default block itself, so no share is added and the answer stays the 1536
+    // the blocks share; the V3D answers 50688, above the 50176 / 50048 minimums.
     pin3("MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS", GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS, &[1536]),
     pin3("MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS", GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS, &[1536]),
-    // state.rs:1253, MAX_VARYING_VECTORS * 4
+    // state.rs:1254, MAX_VARYING_VECTORS * 4
     pin3("MAX_VARYING_COMPONENTS", GL_MAX_VARYING_COMPONENTS, &[60]),
-    // state.rs:1254-1255, context.rs:172-173
+    // state.rs:1255-1256 => context.rs:251-261 MAX_VERTEX_OUTPUT_COMPONENTS
+    // (MAX_VARYING_VECTORS * 4 + VERTEX_OUTPUT_EXTRA). The extra vector is the
+    // V3D's gl_Position (4, for 64); this GPU programs the varyings alone, so
+    // its answer is 60 where ES 3.0 wants 64 -- an issue draft in
+    // docs/notes/es3-shader-limits.md, behind the USC measurement.
     pin3("MAX_VERTEX_OUTPUT_COMPONENTS", GL_MAX_VERTEX_OUTPUT_COMPONENTS, &[60]),
     pin3("MAX_FRAGMENT_INPUT_COMPONENTS", GL_MAX_FRAGMENT_INPUT_COMPONENTS, &[60]),
     // state.rs:1308-1309, context.rs:176-177

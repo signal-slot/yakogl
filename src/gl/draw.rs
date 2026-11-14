@@ -28,8 +28,8 @@ use super::buffer;
 use super::consts::*;
 use super::context::{
     self, gl_trace, obj_index, tex_pitch, GlBuffer, GlContext, GlProgram, GlTexture, GlVertexAttrib,
-    CAP_COLOR_ATTACHMENTS, CAP_SAMPLERS, MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_TEXTURES, MAX_UNIFORM_DWORDS,
-    MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
+    CAP_COLOR_ATTACHMENTS, CAP_SAMPLERS, MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_STAGE_UNIFORM_DWORDS,
+    MAX_TEXTURES, MAX_UNIFORM_DWORDS, MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
 };
 use super::framebuffer;
 use super::tf;
@@ -942,6 +942,17 @@ fn put(mem: &mut OsalGpuMem, off: usize, src: &[u8]) -> i32 {
         Some(f) => unsafe { f(mem, off, src.as_ptr() as *const c_void, src.len()) },
         None => -1,
     }
+}
+
+/// [`put`] into a program's uniform staging, which holds two default blocks
+/// (`MAX_UNIFORM_DWORDS`): a block of a GPU whose storage is larger
+/// (`MAX_STAGE_UNIFORM_DWORDS`, the V3D, which reads the host arrays and
+/// never stages) that does not fit is an error, not a write past the end.
+fn put_uniforms(mem: &mut OsalGpuMem, off: usize, src: &[u8]) -> i32 {
+    if off + src.len() > mem.size {
+        return -1;
+    }
+    put(mem, off, src)
 }
 
 /// Grow-only scratch: (re)allocate when too small; the bump allocator cannot
@@ -3905,11 +3916,11 @@ fn build_common(
         let mut fs_app_dw = p.rfs.uniform_dwords;
         let fs_off = (vs_dw as usize * 4 + 15) & !15usize;
 
-        if vs_dw as usize > MAX_UNIFORM_DWORDS {
-            vs_dw = MAX_UNIFORM_DWORDS as u16;
+        if vs_dw as usize > MAX_STAGE_UNIFORM_DWORDS {
+            vs_dw = MAX_STAGE_UNIFORM_DWORDS as u16;
         }
-        if fs_dw as usize > MAX_UNIFORM_DWORDS {
-            fs_dw = MAX_UNIFORM_DWORDS as u16;
+        if fs_dw as usize > MAX_STAGE_UNIFORM_DWORDS {
+            fs_dw = MAX_STAGE_UNIFORM_DWORDS as u16;
         }
         if fs_app_dw > fs_dw {
             fs_app_dw = fs_dw;
@@ -3929,10 +3940,10 @@ fn build_common(
         /* a failing upload leaves the previous draw's values: the draw is refused */
         let mut rc = 0;
         if vs_dw != 0 {
-            /* the block holds min(uniform_dwords, MAX_UNIFORM_DWORDS) = vs_dw dwords */
+            /* the block holds min(uniform_dwords, MAX_STAGE_UNIFORM_DWORDS) = vs_dw dwords */
             let blk = p.vs_block();
             if !host_only {
-                rc |= put(&mut pg.uniforms, 0, dword_bytes(&blk[..(vs_dw as usize).min(blk.len())]));
+                rc |= put_uniforms(&mut pg.uniforms, 0, dword_bytes(&blk[..(vs_dw as usize).min(blk.len())]));
             }
             d.vs_uniform_gpu = pg.uniforms.gpu;
             d.vs_uniform_dwords = vs_dw;
@@ -3952,13 +3963,17 @@ fn build_common(
             let host_only = host_only && fs_dw <= p.fs_uniform_alloc;
             if fs_app_dw != 0 && !host_only {
                 let blk = p.fs_block();
-                rc |= put(&mut pg.uniforms, fs_off, dword_bytes(&blk[..(fs_app_dw as usize).min(blk.len())]));
+                rc |= put_uniforms(&mut pg.uniforms, fs_off, dword_bytes(&blk[..(fs_app_dw as usize).min(blk.len())]));
             }
             if !host_only
                 && fs_blend_consts_off != SHC_NO_BLEND_CONSTS
                 && fs_blend_consts_off as u32 + 4 <= fs_dw as u32
             {
-                rc |= put(&mut pg.uniforms, fs_off + fs_blend_consts_off as usize * 4, dword_bytes(&c.blend_color));
+                rc |= put_uniforms(
+                    &mut pg.uniforms,
+                    fs_off + fs_blend_consts_off as usize * 4,
+                    dword_bytes(&c.blend_color),
+                );
             }
             d.fs_uniform_gpu = pg.uniforms.gpu + fs_off as u64;
             d.fs_uniform_dwords = fs_dw;
