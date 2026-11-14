@@ -1818,6 +1818,9 @@ step "test    $V3D_CONFIG (tests/es3_mrt_gl.rs)" \
 # The float colour target decision of docs/notes/es3-float-targets.md on the V3D build (the PowerVR and GC7000 rows run it with the rest of tests/). Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_float_target.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_float_target
+# The clear-colour words of the float render targets (plan #360 v3d-clear-words), pure and by hand from Mesa 26.2.1.
+step "test    $V3D_CONFIG (tests/es3_v3d_clear_float_words.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_clear_float_words
 # RG32F, RGBA32F and R11F_G11F_B10F are not colour-renderable without GL_EXT_color_buffer_float, on the V3D build (the PowerVR and GC7000 rows run it with the rest of tests/). Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_float32_rt_off.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_float32_rt_off
