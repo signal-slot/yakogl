@@ -522,3 +522,12 @@ fn the_chain_writes_only_its_own_fields_of_shared_words() {
         assert_eq!(m.peek(a) & v, v, "{a:#x}: another block's field changed");
     }
 }
+
+#[test]
+fn a_shut_down_failure_names_the_shut_down() {
+    let m = Rk3588Display::with_faults(Faults { standby_ignored: true, ..Faults::default() });
+    up(&m, &cfg()).unwrap();
+    let r = shut_down(&m, &B, &m);
+    assert!(matches!(r, Err(Failed { stage: stage::SHUT_DOWN, error: Error::Standby(_) })), "{r:?}");
+    assert!(m.usable("vop"), "the domain stays on under the running port");
+}

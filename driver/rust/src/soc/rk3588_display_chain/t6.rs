@@ -5,7 +5,7 @@
 //! identity. Every value here is the D0 dump's
 //! (driver/docs/nanopc-t6-display-dump-linux.txt, Linux 6.18 showing the
 //! mode on HDMI0, 2026-11-12), and the golden test
-//! () holds this file to it.
+//! (`soc::rk3588_display_golden`) holds this file to it.
 //!
 //! The PHY image (owner decision U1): the registers are the 189 that Linux's
 //! TMDS init tables for 340 MHz and below write (hdptx.c:459-690: the two
@@ -212,12 +212,12 @@ const LANES: [(u16, u32); 68] = [
 pub const PHY_IMAGE: Image = Image { cmn: &CMN, sb: &SB, lane_top: &LANE_TOP, lanes: &LANES };
 
 /// The ROPLL dividers the dump reads back for 65 MHz: Linux's table row
-/// (hdptx.c:445-446), not []'s: M 162, S 12, SDM
-/// +16/54, SDC N 7 and 1/1 ( of the dump's words).
+/// (hdptx.c:445-446), not [`crate::ip::hdptx::plan`]'s: M 162, S 12, SDM
+/// +16/54, SDC N 7 and 1/1 (`PllWords::plan` of the dump's words).
 pub const PLAN: Plan =
     Plan { rate_hz: 65_000_000, m: 162, s: 12, sdm: Some(Sdm { minus: false, k: 16, lc: 54, n: 7, a: 1, b: 1 }) };
 
-/// The controller's  as the dump reads it ("HQTX" in ASCII), and
+/// The controller's `CORE_ID` as the dump reads it ("HQTX" in ASCII), and
 /// the timer base Linux writes (the dump reads it back).
 pub const BIND: BindParams = BindParams { core_id: 0x4851_5458, timer_base_hz: LINUX_TIMER_BASE_HZ };
 
