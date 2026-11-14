@@ -198,7 +198,9 @@ keep their keys, their programs and their back-end paths. A draw with a
 constructor takes a dense list) and keeps its old key; the back end
 refuses it by name (section 5).
 
-### 2.5 The API in `src/shaderc/mod.rs` (item `design-key`)
+### 2.5 The API in `src/target_key.rs` (item `design-key`)
+
+The API is a module of its own, so that the key does not wait on `src/shaderc/mod.rs`.
 
 ```rust
 /// The most draw buffers a mixed key carries (the PowerVR's
@@ -455,7 +457,7 @@ layout and the emit's cannot drift apart.
 Run each with the feature set in its header; for all of these it is
 `--no-default-features --features host-test,gpu-powervr,shaderc-online`.
 
-- **`src/shaderc/mod.rs` `key_tests`** (`design-key`): the four worked keys
+- **`src/target_key.rs` `tests`** (`design-key`): the four worked keys
   of section 2.2; the round trip; `None` for one target, for no integer
   target, for one layout everywhere, for a gap, for an invalid per-target
   key (a masked integer key, a blend key, the sRGB class), for a list past
