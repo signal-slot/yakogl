@@ -1044,6 +1044,12 @@ unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) ->
     unsafe { v3d_tex_pack_sampler_compare(out, s, texture::COMPARE_OFF) }
 }
 
+thread_local! {
+    /// On: the fake of v3d_tex_pack_sampler_compare writes Mesa's record
+    /// words instead of its debugging layout (a test sets and clears it).
+    static MESA_SAMPLER_WORDS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
 /// The fake of v3d_tex_pack_sampler_compare: the filter flags in the third
 /// word as before, and the `compare_op` it was given whole in the fourth, so
 /// a test reads which compare a record was packed with.
@@ -1055,7 +1061,19 @@ unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSam
         let flags =
             s.mag_nearest as u32 | (s.min_nearest as u32) << 1 | (s.mip_nearest as u32) << 2 | (s.mip_none as u32) << 3;
         let compare = if compare_op == texture::COMPARE_OFF { 0 } else { compare_op | 0x100 };
-        let words = [s.wrap_s, s.wrap_t, flags, compare, 0, FAKE_SAMPLER_MARK];
+        let mut words = [s.wrap_s, s.wrap_t, flags, compare, 0, FAKE_SAMPLER_MARK];
+        if MESA_SAMPLER_WORDS.with(|m| m.get()) {
+            /* Mesa's rule (docs/notes/v3d-shadow.md, compare-words), for a
+             * one-level sampler with every wrap CLAMP_TO_EDGE: tools/v3d/
+             * tex_check.c holds the real C packer to the same bytes */
+            assert!(
+                s.wrap_s == V3D_WRAP_MODE_CLAMP && s.wrap_t == V3D_WRAP_MODE_CLAMP && s.wrap_r == V3D_WRAP_MODE_CLAMP
+            );
+            assert!(s.mip_none, "the table is for an unmipmapped sampler");
+            let func = if compare_op & texture::COMPARE_OFF != 0 { 0 } else { compare_op & 7 };
+            let base = if s.min_nearest && s.mag_nearest { 0x0010_0007 } else { 0x0010_0004 };
+            words = [base | func << 4, 0x0049_0000, 0, 0, 0, 0];
+        }
         core::ptr::copy_nonoverlapping(words.as_ptr() as *const u8, out, V3D_SAMPLER_STATE_BYTES);
     }
     true
@@ -1847,6 +1865,93 @@ fn a_sampler_record_carries_its_depth_compare_function() {
      * the depth binding with no compare already holds */
     let plain = GlesTextureBind { compare_op: 1, ..t };
     assert_eq!(sampler_for(g(), &plain).ok().unwrap(), rec_off);
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// A one-level, wrap-clamped binding of `format` with the filter and compare
+/// given.
+fn shadow_binding(t: GlesTextureBind, format: u8, linear: u8, compare_op: u8) -> GlesTextureBind {
+    GlesTextureBind {
+        format,
+        linear_filter: linear,
+        min_linear: linear,
+        compare_op,
+        wrap_s: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        wrap_t: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        wrap_r: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        ..t
+    }
+}
+
+/// The sampler record of `b` as Mesa's v3dx_state.c packs it (the fake in
+/// Mesa-words mode), its six words.
+fn mesa_record(rig: &Rig, b: &GlesTextureBind) -> Vec<u32> {
+    MESA_SAMPLER_WORDS.with(|m| m.set(true));
+    let rec = sampler_for(g(), b).ok().unwrap();
+    words(rig, rec, 6)
+}
+
+/// The draw-time compare words, pinned as literals (docs/notes/v3d-shadow.md,
+/// compare-words): word 0 is 0x00100007 | fn << 4 for a NEAREST sampler and
+/// 0x00100004 | fn << 4 for a LINEAR one, word 1 0x00490000, words 2-5 zero,
+/// for a one-level texture with CLAMP_TO_EDGE on every axis; compare off and
+/// a non-depth format give fn 0. Revert check: packing with the compare-off
+/// packer gives 0x00100007/0x00100004 for every function.
+#[test]
+fn a_depth_sampler_record_holds_mesa_s_compare_words() {
+    let rig = Rig::new();
+    rig.init();
+    let t = texture(0, 16, 16, 1);
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    let off = texture::COMPARE_OFF as u8;
+    let expect = |nearest: bool, cmp: u8, w0: u32| {
+        let b = shadow_binding(t, GLES_TEXFMT_R32F, !nearest as u8, cmp);
+        assert_eq!(mesa_record(&rig, &b), [w0, 0x0049_0000, 0, 0, 0, 0], "nearest {nearest} compare_op {cmp}");
+    };
+    /* (a) compare off */
+    expect(true, off, 0x0010_0007);
+    expect(false, off, 0x0010_0004);
+    /* (b) the eight GL functions: NEVER LESS EQUAL LEQUAL GREATER NOTEQUAL
+     * GEQUAL ALWAYS */
+    let nearest =
+        [0x0010_0007, 0x0010_0017, 0x0010_0027, 0x0010_0037, 0x0010_0047, 0x0010_0057, 0x0010_0067, 0x0010_0077];
+    let linear =
+        [0x0010_0004, 0x0010_0014, 0x0010_0024, 0x0010_0034, 0x0010_0044, 0x0010_0054, 0x0010_0064, 0x0010_0074];
+    for f in 0..8u8 {
+        expect(true, f, nearest[f as usize]);
+        expect(false, f, linear[f as usize]);
+    }
+    /* (c) a non-depth format with the compare on bypasses to the compare-off
+     * record */
+    for f in [1u8, 3, 7] {
+        let b = shadow_binding(t, GLES_TEXFMT_RGBA8, 0, f);
+        assert_eq!(mesa_record(&rig, &b), [0x0010_0007, 0x0049_0000, 0, 0, 0, 0]);
+        let b = shadow_binding(t, GLES_TEXFMT_RGBA8, 1, f);
+        assert_eq!(mesa_record(&rig, &b), [0x0010_0004, 0x0049_0000, 0, 0, 0, 0]);
+    }
+    MESA_SAMPLER_WORDS.with(|m| m.set(false));
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// The per-job sampler cache is keyed by the sampler state and the compare
+/// function: compare off and LESS with the same filter and wraps are two
+/// records, two equal LESS bindings share one.
+#[test]
+fn equal_compare_bindings_share_a_sampler_record() {
+    let rig = Rig::new();
+    rig.init();
+    let t = texture(0, 16, 16, 1);
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    let bind = |cmp: u8| shadow_binding(t, GLES_TEXFMT_R32F, 0, cmp);
+    let off = texture::COMPARE_OFF as u8;
+    let rec = |cmp: u8| sampler_for(g(), &bind(cmp)).ok().unwrap();
+    let (r_off, r_less, r_less2, r_never) = (rec(off), rec(1), rec(1), rec(0));
+    assert_ne!(r_off, r_less, "compare off and LESS are two records");
+    assert_eq!(r_less, r_less2, "two equal LESS bindings share a record");
+    /* compare off and NEVER have one key (compare_function is 0 for both)
+     * and Mesa packs the same words for them (compare off is the NEVER
+     * function), so sharing the record is correct */
+    assert_eq!(r_off, r_never);
     assert_eq!(v3d_finish(), 0);
 }
 
