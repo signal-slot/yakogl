@@ -392,6 +392,10 @@ impl VOp {
     }
 }
 
+/// The vertex shader's VPM output rows at most: x, y, z, 1/w, the point
+/// size and 64 varyings (Mesa's V3D_MAX_FS_INPUTS).
+pub const VPM_MAX_OUTPUT_ROWS: u32 = 4 + 1 + 64;
+
 /// Why selection stopped.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SelectError {
@@ -399,8 +403,8 @@ pub enum SelectError {
     VaryingNotAnInput,
     /// An attribute the program reads is not in the record list it was given.
     AttributeWithoutRecord,
-    /// A VPM row past what this cut writes (16 attribute records, 64 output
-    /// rows).
+    /// A VPM row past what this cut writes (16 attribute records,
+    /// [`VPM_MAX_OUTPUT_ROWS`] output rows).
     VpmRowOutOfRange,
     /// A VPM output was written before every attribute was read: the input
     /// and output segments are shared, so the write could overwrite an input
@@ -2557,7 +2561,10 @@ pub fn select_vertex<'a>(
     } else {
         (0, 4 + skip + p.varyings.len() as u32)
     };
-    if rows > 64 {
+    /* Mesa's largest vertex output: the four fixed-function rows, the point
+     * size and V3D_MAX_FS_INPUTS (64) varyings (v3d_nir_lower_io.c:410-431,
+     * v3d_limits.h); vpm_fields (chain.rs) sizes the segment from it */
+    if rows > VPM_MAX_OUTPUT_ROWS {
         return Err(SelectError::VpmRowOutOfRange);
     }
     /* v3d_nir_emit_ff_vpm_outputs */
