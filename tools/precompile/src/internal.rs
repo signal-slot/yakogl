@@ -79,6 +79,7 @@ fn row_of(sh: &yakogl::shaderc::ShcShader, source: usize, origin: (Origin, Step)
     });
     let mut row = row.ok_or("a shader the compiler handed out has no record in its cache")?;
     row.sensitivity = drive::sensitivity(sh);
+    row.wide128 = drive::wide128(sh);
     Ok(row)
 }
 
