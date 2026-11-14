@@ -364,7 +364,14 @@ def main(argv=None):
     s["diff"].add_argument("image")
     s["diff"].add_argument("image_b")
     s["diff"].add_argument("--second-b")
-    a = ap.parse_args(argv)
+    # argparse (3.12.3) takes the NAME list of `print IMAGE [-n] [NAME ...]`
+    # at the first run of positionals only, so names after -n come back as
+    # leftovers; they are names when none looks like an option.
+    a, rest = ap.parse_known_args(argv)
+    if rest:
+        if a.cmd != "print" or any(x.startswith("-") for x in rest):
+            ap.error("unrecognized arguments: " + " ".join(rest))
+        a.names += rest
     if a.cmd is None:
         ap.print_usage(sys.stderr)
         return 2
