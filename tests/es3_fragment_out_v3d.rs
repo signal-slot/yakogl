@@ -457,24 +457,10 @@ fn three_rgba16f_attachments_are_taken() {
 
 /* ---- G4: RG16F at an attachment past the first ----------------------------- */
 
-/// Note G4 (`array.float.rg16f_*`): attachment 0 maps RG16F to RGBA16F, the
-/// `fb_target_n` of attachments 1.. does not and hands RGBA8888. Pinned as it
-/// is; the expected class is the next test.
+/// Note G4 (`array.float.rg16f_*`): RG16F is RGBA16F storage at attachments 1
+/// and 2 as it is at attachment 0 (`fb_target_n` maps GL_RG16F and GL_RGB16F
+/// to RGBA16F).
 #[test]
-fn rg16f_past_the_first_attachment_is_handed_as_rgba8_today() {
-    let _g = context(0);
-    let s = drawn(&[GL_RG16F; 3], &["vec2", "vec2", "vec2"]);
-    assert_eq!(s.refused, None);
-    let f = surfs(&s);
-    assert_eq!(f[0], GLES_SURF_RGBA16F, "attachment 0 goes through renderbuffer_surf_format");
-    assert_eq!(f[1..], [GLES_SURF_RGBA8888; 2], "G4: the fall-through arm of fb_target_n (src/gl/framebuffer.rs)");
-}
-
-/// Expected: RGBA16F storage at attachments 1 and 2 as well. Owner: src/gl
-/// (note "Groups", G4 and the order table step 1: one match arm in
-/// `fb_target_n`).
-#[test]
-#[ignore = "note G4, step 1: src/gl, fb_target_n maps GL_RG16F/GL_RGB16F to RGBA16F"]
 fn rg16f_past_the_first_attachment_is_rgba16f() {
     let _g = context(0);
     let s = drawn(&[GL_RG16F; 3], &["vec2", "vec2", "vec2"]);
@@ -493,7 +479,7 @@ fn rg16f_past_the_first_attachment_is_rgba16f() {
 #[test]
 fn rg32f_rgba32f_r11f_renderbuffers_are_refused_by_the_gl_core() {
     let _g = context(0);
-    for f in [GL_RG32F, GL_RGBA32F, GL_R11F_G11F_B10F] {
+    for f in [GL_R32F, GL_RG32F, GL_RGBA32F, GL_R11F_G11F_B10F] {
         let e = try_framebuffer(&[f]).err().unwrap_or_else(|| panic!("{f:#x} unexpectedly set up"));
         assert_eq!(e.0, 0, "{f:#x}");
         assert_eq!(e.1, GL_INVALID_ENUM, "{f:#x}");

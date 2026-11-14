@@ -718,9 +718,9 @@ fn an_out_of_bounds_blit_to_the_default_framebuffer_is_clipped() {
 
 /// The other formats of `fbo.blit.conversion.*_to_srgb8_alpha8` and
 /// `srgb8_alpha8_to_*`: each is a complete colour renderbuffer, except the
-/// three that ES 3.0 does not make colour-renderable (R11F_G11F_B10F, RG32F,
+/// four that ES 3.0 does not make colour-renderable (R11F_G11F_B10F, R32F, RG32F,
 /// RGBA32F: no EXT_color_buffer_float). Those are the `NotSupported` rows of
-/// the Pi 4 list (docs/es3/pi4-gles3-fails.tsv; its r32f rows too, a case dEQP skips for other reasons), and stay
+/// the Pi 4 list (docs/es3/pi4-gles3-fails.tsv), and stay
 /// incomplete here: they are not failures. Only completeness is held; the
 /// stand-in stores no pixels for these formats (see the file header).
 #[test]
@@ -761,7 +761,7 @@ fn other_side_formats_are_complete_colour_buffers() {
             s
         };
         let _ = err();
-        let not_renderable = matches!(f, GL_R11F_G11F_B10F | GL_RG32F | GL_RGBA32F);
+        let not_renderable = matches!(f, GL_R11F_G11F_B10F | GL_R32F | GL_RG32F | GL_RGBA32F);
         if (status == GL_FRAMEBUFFER_COMPLETE) == not_renderable {
             bad.push(format!("{name}: status {status:#x}"));
         }

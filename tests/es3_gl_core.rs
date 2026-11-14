@@ -926,16 +926,11 @@ mod es3 {
     }
 
     /// ES 3.0 6.1.15: GL_RENDERBUFFER_x_SIZE is the stored resolution. The
-    /// half- and single-float names are stored as such, and answered 8.
+    /// half-float names are stored as such, and answered 8.
     #[test]
     fn float_renderbuffers_report_their_channel_sizes() {
         let _g = context();
-        for (f, want) in [
-            (GL_RGBA16F, [16, 16, 16, 16]),
-            (GL_RG16F, [16, 16, 0, 0]),
-            (GL_R16F, [16, 0, 0, 0]),
-            (GL_R32F, [32, 0, 0, 0]),
-        ] {
+        for (f, want) in [(GL_RGBA16F, [16, 16, 16, 16]), (GL_RG16F, [16, 16, 0, 0]), (GL_R16F, [16, 0, 0, 0])] {
             let rb = renderbuffer(f, 4, 4, None);
             assert_eq!(err(), GL_NO_ERROR, "{f:#x}");
             assert_eq!(rb_sizes(), want, "{f:#x}");

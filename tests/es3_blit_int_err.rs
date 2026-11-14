@@ -6,7 +6,7 @@
 //! draw buffer does not (or the reverse), when signed and unsigned integers
 //! meet, and when the filter is GL_LINEAR with an integer read buffer.
 //!
-//! The images are RGBA32I, RGBA32UI, R32F and RGBA8 textures, the integer
+//! The images are RGBA32I, RGBA32UI, R16F and RGBA8 textures, the integer
 //! ones as in the dEQP case: the GL core copies no integer texture
 //! (gl/blit.rs `attachment_image`), which until 2026-11-07 dropped the
 //! colour bit before these checks, so each such blit answered GL_NO_ERROR. A valid integer blit still answers
@@ -155,7 +155,7 @@ fn blit(filter: GLenum) {
 
 const RGBA32I: (GLenum, GLenum, GLenum) = (GL_RGBA32I, GL_RGBA_INTEGER, GL_INT);
 const RGBA32UI: (GLenum, GLenum, GLenum) = (GL_RGBA32UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT);
-const R32F: (GLenum, GLenum, GLenum) = (GL_R32F, GL_RED, GL_FLOAT);
+const R16F: (GLenum, GLenum, GLenum) = (GL_R16F, GL_RED, GL_HALF_FLOAT);
 const RGBA8: (GLenum, GLenum, GLenum) = (GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
 
 /// The eight-bit integer format of the same signedness, for a back end that
@@ -218,7 +218,7 @@ fn blit_error(read: (GLenum, GLenum, GLenum), draw: (GLenum, GLenum, GLenum), fi
 #[test]
 fn an_integer_read_buffer_into_a_float_draw_buffer_is_invalid_operation() {
     let _g = context();
-    assert_eq!(blit_error(RGBA32I, R32F, GL_NEAREST), GL_INVALID_OPERATION);
+    assert_eq!(blit_error(RGBA32I, R16F, GL_NEAREST), GL_INVALID_OPERATION);
     assert_eq!(blit_error(RGBA32I, RGBA8, GL_NEAREST), GL_INVALID_OPERATION);
 }
 
@@ -232,7 +232,7 @@ fn unsigned_into_signed_integers_is_invalid_operation() {
 #[test]
 fn a_float_read_buffer_into_an_integer_draw_buffer_is_invalid_operation() {
     let _g = context();
-    assert_eq!(blit_error(R32F, RGBA32I, GL_NEAREST), GL_INVALID_OPERATION);
+    assert_eq!(blit_error(R16F, RGBA32I, GL_NEAREST), GL_INVALID_OPERATION);
     assert_eq!(blit_error(RGBA8, RGBA32UI, GL_NEAREST), GL_INVALID_OPERATION);
 }
 
