@@ -428,7 +428,11 @@ References each step needs (shader text, Mesa 26.2.1 drm-shim):
 - D.3: the ten probes of A.9; plus a `?:` whose first branch is highp
   (`? b : m`), a mediump `out` parameter, a lowered built-in with a
   sequence (`normalize(m)`, `length(m)`), and the A.6 contraction form
-  (`mediump float m = x + y;` read by `m * 2.0`), for E.1-E.4.
+  (`mediump float m = x + y;` read by `m * 2.0`), for E.1-E.4. A bool's
+  width is not its class: `(v.z > 0.5) != (hu < 0.3)` of a mediump and a
+  highp compare records High (no lowered tree, as in Mesa's GLSL IR), but
+  Mesa 26.2.1 computes the `ine` at 16 bits (`16 ine_pan`, review probe
+  t06), so D.3 models `pan_nir_lower_bool_to_bitsize` for a mixed pair.
 - D.4: the `vsmp_*` set of `mali-vs-int` (if_else, return_in_else, vec3,
   in_float, missing_returns, vec3_highpu, if_else_highp); `vsstruct_*` and
   `vsneg_*` of `mali-uniforms`; dEQP
