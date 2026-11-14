@@ -153,3 +153,198 @@ fn register_values() {
     let w = TsMemConfig { color_64bpp: true, color_valid: true, ..base };
     assert_eq!(ts_mem_config(w), 0x4000_0002);
 }
+
+// ---- case 243 tsprobe (docs/notes/gc-ts-probe.md, Part (iii)) ----
+
+mod probe {
+    use super::*;
+    use yakogl::vivante::layout::{self, Layout, SuperOrder};
+
+    fn b() -> Vec<u32> {
+        (0..PROBE_DWORDS as u32).map(|i| 0xa500_0000 | i).collect()
+    }
+
+    /// A readback that is `YES`; each test spoils one thing.
+    struct Case {
+        b: Vec<u32>,
+        k1: Vec<u32>,
+        k2: Vec<u32>,
+    }
+
+    fn yes() -> Case {
+        Case { b: b(), k1: vec![PROBE_FILL; 64], k2: vec![PROBE_CLEAR; PROBE_DWORDS] }
+    }
+
+    fn run(c: &Case, k0: &[u32], timeouts: u32, guard: u32, changed: bool) -> Outcome {
+        classify(&ProbeReadback {
+            fence_timeouts: timeouts,
+            guard_changed: guard,
+            surface_changed: changed,
+            expected_b: &c.b,
+            k0_d: k0,
+            k1_t: &c.k1,
+            k2_d: &c.k2,
+            clear: PROBE_CLEAR,
+        })
+    }
+
+    #[test]
+    fn one_readback_per_outcome_code() {
+        let c = yes();
+        assert_eq!(run(&c, &c.b, 0, 0, false), Outcome::Yes);
+
+        assert_eq!(run(&c, &c.b, 1, 0, false), Outcome::Hang);
+        // A hang wins over everything else.
+        assert_eq!(run(&c, &[], 2, 5, true), Outcome::Hang);
+
+        assert_eq!(run(&c, &c.b, 0, 1, false), Outcome::Guard);
+        assert_eq!(run(&c, &c.b, 0, 0, true), Outcome::Guard);
+
+        let mut bad = c.b.clone();
+        bad[100] ^= 1;
+        assert_eq!(run(&c, &bad, 0, 0, false), Outcome::NoControl);
+        assert_eq!(run(&c, &[PROBE_DEST_INIT; PROBE_DWORDS], 0, 0, false), Outcome::NoControl);
+
+        let mut fm = yes();
+        fm.k1[63] = 0;
+        assert_eq!(run(&fm, &fm.b, 0, 0, false), Outcome::FillMiss);
+        // Dwords of T past the fill are not looked at.
+        let mut ok = yes();
+        ok.k1.extend([0, 0]);
+        assert_eq!(run(&ok, &ok.b, 0, 0, false), Outcome::Yes);
+
+        let mut ig = yes();
+        ig.k2 = ig.b.clone();
+        assert_eq!(run(&ig, &ig.b, 0, 0, false), Outcome::Ignored);
+
+        let mut nw = yes();
+        nw.k2 = vec![PROBE_DEST_INIT; PROBE_DWORDS];
+        assert_eq!(run(&nw, &nw.b, 0, 0, false), Outcome::NoWrite);
+
+        let mut mx = yes();
+        mx.k2[7] = mx.b[7];
+        assert_eq!(run(&mx, &mx.b, 0, 0, false), Outcome::Mixed);
+        let mut mx2 = yes();
+        mx2.k2[0] = PROBE_DEST_INIT;
+        assert_eq!(run(&mx2, &mx2.b, 0, 0, false), Outcome::Mixed);
+    }
+
+    #[test]
+    fn outcome_values_and_tags() {
+        let v = [
+            (Outcome::Hang, 0xf),
+            (Outcome::Guard, 1),
+            (Outcome::NoControl, 2),
+            (Outcome::FillMiss, 3),
+            (Outcome::Yes, 4),
+            (Outcome::Ignored, 5),
+            (Outcome::NoWrite, 6),
+            (Outcome::Mixed, 7),
+        ];
+        for (o, n) in v {
+            assert_eq!(o as u32, n);
+        }
+        assert_eq!(probe_tag(0), 0xd0);
+        assert_eq!(probe_tag(3), 0xd3);
+        assert_eq!(PROBE_TAG_K3 + 3, 0xd7);
+        assert_eq!(PROBE_TAG_DIFF + 3, 0xdb);
+        assert_eq!(PROBE_CLEAR, color_clear_words(ColorFormat::Argb8888, [0.25, 0.5, 0.75, 1.0]).0);
+    }
+
+    #[test]
+    fn page_words() {
+        assert_eq!(probe_w1(Outcome::Yes, 2, 5, 0), 0x0000_0524);
+        assert_eq!(probe_w1(Outcome::Hang, 1, 2, 3), 0x0003_021f);
+        assert_eq!(probe_k3_w1(0x55, K3_LOW_NIBBLE_FIRST), 0x155);
+        assert_eq!(probe_k3_w1(0xaa, 0), 0xaa);
+        assert_eq!(probe_k3_w1(0x33, K3_LOW_NIBBLE_FIRST | K3_INTERLEAVED), 0x333);
+        let d = b();
+        let mut k2 = vec![PROBE_CLEAR; PROBE_DWORDS];
+        assert_eq!(probe_counts(&k2, PROBE_CLEAR, &d), 4096 << 16);
+        assert_eq!(probe_counts(&d, PROBE_CLEAR, &d), 4096);
+        k2[..10].copy_from_slice(&d[..10]);
+        assert_eq!(probe_counts(&k2, PROBE_CLEAR, &d), (4086 << 16) | 10);
+        assert_eq!(probe_diff_w1(&k2, PROBE_CLEAR, &d), 0xffff_ffff);
+        k2[20] = 0x1234_5678;
+        assert_eq!(probe_diff_w1(&k2, PROBE_CLEAR, &d), (20 << 16) | 0x5678);
+        let mut t = vec![PROBE_FILL; 64];
+        assert_eq!(probe_diff_w3(&t, 0), 0xffff_0000);
+        t[9] = 0;
+        assert_eq!(probe_diff_w3(&t, 3), (9 << 16) | 3);
+    }
+
+    fn k3_ts() -> Vec<u8> {
+        let mut t = vec![0u8; 256];
+        t[..64].fill(0x01);
+        t
+    }
+
+    #[test]
+    fn k3_offset_matches_layout_rs() {
+        for (kl, l, o) in [
+            (K3Layout::Tiled, Layout::Tiled, SuperOrder::Drm),
+            (K3Layout::SuperTiledDrm, Layout::SuperTiled, SuperOrder::Drm),
+            (K3Layout::SuperTiledInterleaved, Layout::SuperTiled, SuperOrder::Interleaved),
+        ] {
+            for y in 0..64 {
+                for x in 0..64 {
+                    assert_eq!(k3_offset(kl, x, y, 256), layout::offset_in(l, o, x, y, 4, 256), "{kl:?} {x},{y}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn k3_expected_map_tiled_128b() {
+        // The note: low nibble first, row 0 has C in x [0,8), [16,24), ...
+        let m = k3_expected_clear(K3Layout::Tiled, 64, 64, TS_MODE_128B, &k3_ts(), true);
+        assert_eq!(k3_row0_map(&m, 64), 0x55);
+        for x in 0..64u32 {
+            assert_eq!(m[x as usize], (x / 8) % 2 == 0, "x {x}");
+        }
+        // High nibble first: the 0x01 bytes have a zero high nibble, so the
+        // odd granules are the cleared ones.
+        let h = k3_expected_clear(K3Layout::Tiled, 64, 64, TS_MODE_128B, &k3_ts(), false);
+        assert_eq!(k3_row0_map(&h, 64), 0xaa);
+        // Every pixel of a granule is in the same state, checked per offset.
+        for y in 0..64 {
+            for x in 0..64 {
+                let g = layout::offset(Layout::Tiled, x, y, 4, 256) / 128;
+                assert_eq!(m[(y * 64 + x) as usize], g.is_multiple_of(2));
+            }
+        }
+        // 16384 / 128 = 128 granules, the even ones cleared: half the pixels.
+        assert_eq!(m.iter().filter(|&&c| c).count(), 2048);
+    }
+
+    #[test]
+    fn k3_expected_map_tiled_256b() {
+        let m = k3_expected_clear(K3Layout::Tiled, 64, 64, TS_MODE_256B, &k3_ts(), true);
+        // Runs 16 wide: map bits over 8-pixel steps are 0x33.
+        assert_eq!(k3_row0_map(&m, 64), 0x33);
+        let h = k3_expected_clear(K3Layout::Tiled, 64, 64, TS_MODE_256B, &k3_ts(), false);
+        assert_eq!(k3_row0_map(&h, 64), 0xcc);
+    }
+
+    #[test]
+    fn k3_expected_map_super_tiled_both_orders() {
+        for (kl, o) in
+            [(K3Layout::SuperTiledDrm, SuperOrder::Drm), (K3Layout::SuperTiledInterleaved, SuperOrder::Interleaved)]
+        {
+            let m = k3_expected_clear(kl, 64, 64, TS_MODE_128B, &k3_ts(), true);
+            for y in 0..64 {
+                for x in 0..64 {
+                    let g = layout::offset_in(Layout::SuperTiled, o, x, y, 4, 256) / 128;
+                    assert_eq!(m[(y * 64 + x) as usize], g.is_multiple_of(2), "{kl:?} {x},{y}");
+                }
+            }
+        }
+        // Finding: with 128B granules and the 0x01 pattern the parity of the
+        // granule is pixel-index bit 5 (y2) in both orders, so the two maps
+        // are equal and cannot tell the orders apart; 256B granules (bit 6:
+        // y3 against x3) can.
+        let map = |kl, mode| k3_expected_clear(kl, 64, 64, mode, &k3_ts(), true);
+        assert_eq!(map(K3Layout::SuperTiledDrm, TS_MODE_128B), map(K3Layout::SuperTiledInterleaved, TS_MODE_128B));
+        assert_ne!(map(K3Layout::SuperTiledDrm, TS_MODE_256B), map(K3Layout::SuperTiledInterleaved, TS_MODE_256B));
+    }
+}
