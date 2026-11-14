@@ -18,17 +18,8 @@
 //!   hands over `GLES_SURF_RGBA16F`): PACKMODE F16F16F16F16 (10),
 //!   SOURCE_FORMAT F16_PER_CHANNEL (0), norm clear, 8 bytes a pixel;
 //! - R16F: PACKMODE F16 (51), SOURCE_FORMAT F16_PER_CHANNEL, 2 bytes a pixel;
-//! - R32F: PACKMODE F32 (54), 4 bytes a pixel and SOURCE_FORMAT
-//!   F16_PER_CHANNEL (0) as well (src/pvr/backend.rs:1038, `pbe_emit_words`:
-//!   one source format for every float surface). The hardware field has two
-//!   values only, F16_PER_CHANNEL and 8_PER_CHANNEL (pbestate.xml:155-158,
-//!   `ROGUE_PBESTATE_SOURCE_FORMAT_*` in src/pvr/csbgen.rs:561-562), so
-//!   there is no "F32" to give it: the F32 of Mesa's R32_SFLOAT row
-//!   (vulkan/pvr_arch_formats.c:248, docs/notes/es3-float-targets.md
-//!   section 3) is the row's accumulator / pack column, which the F32 pack
-//!   mode here matches. Whether the PBE stores R32F right from an
-//!   F16-per-channel source is a silicon question (#313); this file holds
-//!   today's words.
+//! - R32F is not colour-renderable without GL_EXT_color_buffer_float (which
+//!   no build claims), so it is no row here (tests/es3_pvr_fbo_float.rs).
 //!
 //! Also held: the surface the GL core hands over and its bytes a pixel
 //! (renderbuffer and texture), for the formats that render today; and that
@@ -54,7 +45,7 @@ use core::ffi::{c_char, c_void, CStr};
 use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard, Once};
 
-use yakogl::backend::{self, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGBA16F};
+use yakogl::backend::{self, GLES_SURF_R16F, GLES_SURF_RGBA16F};
 use yakogl::gl::consts::*;
 use yakogl::gl::context::{self, GlContext};
 use yakogl::gl::draw::glDrawArrays;
@@ -683,18 +674,16 @@ fn drawn() -> Words {
 /* PBE packmodes and source formats (csbgen/rogue/pbestate.xml) */
 const PACKMODE_F16F16F16F16: u32 = 10;
 const PACKMODE_F16: u32 = 51;
-const PACKMODE_F32: u32 = 54;
 const SOURCE_F16_PER_CHANNEL: u32 = csb::ROGUE_PBESTATE_SOURCE_FORMAT_F16_PER_CHANNEL;
 const SOURCE_8_PER_CHANNEL: u32 = csb::ROGUE_PBESTATE_SOURCE_FORMAT_8_PER_CHANNEL;
 
 /// One row: (GL name, label, the surface the GL core hands over, bytes a
 /// pixel, PACKMODE).
-const ROWS: [(GLenum, &str, u8, u32, u32); 5] = [
+const ROWS: [(GLenum, &str, u8, u32, u32); 4] = [
     (GL_RGBA16F, "RGBA16F", GLES_SURF_RGBA16F, 8, PACKMODE_F16F16F16F16),
     (GL_RGB16F, "RGB16F", GLES_SURF_RGBA16F, 8, PACKMODE_F16F16F16F16),
     (GL_RG16F, "RG16F", GLES_SURF_RGBA16F, 8, PACKMODE_F16F16F16F16),
     (GL_R16F, "R16F", GLES_SURF_R16F, 2, PACKMODE_F16),
-    (GL_R32F, "R32F", GLES_SURF_R32F, 4, PACKMODE_F32),
 ];
 
 /// The surface the bound framebuffer's attachment 0 is drawn as.
@@ -717,26 +706,19 @@ fn renderbuffer_words() {
         let w = drawn();
         assert_eq!(w.packmode, packmode, "{name}: PACKMODE");
         assert_eq!(w.norm, 0, "{name}: norm clear (a float is not fully normalised)");
-        /* today: F16 per channel for every float surface, R32F included */
+        /* today: F16 per channel for every float surface */
         assert_eq!(w.source_format, SOURCE_F16_PER_CHANNEL, "{name}: SOURCE_FORMAT");
         release(Kind::Renderbuffer, fb, rb);
     }
 }
 
-/// The same for a texture attachment (all but GL_RGB16F, which is incomplete).
+/// The same for a texture attachment (GL_RGB16F too: GL_EXT_color_buffer_half_float).
 #[test]
 fn texture_words() {
     let _g = rig();
     for (internal, name, surf, bpp, packmode) in ROWS {
         let (fb, tex, status) = target(Kind::Texture, internal);
         assert_eq!(err(), GL_NO_ERROR, "{name}: glTexStorage2D");
-        /* a GL_RGB16F texture is not a colour attachment today (the
-         * renderbuffer is); the other four are */
-        if internal == GL_RGB16F {
-            assert_eq!(status, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{name}: texture status");
-            release(Kind::Texture, fb, tex);
-            continue;
-        }
         assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "{name}: texture status");
         assert_eq!(surface(), surf, "{name}: surface");
         assert_eq!(backend::gles_surf_bytes_per_pixel(surf), bpp, "{name}: bytes a pixel");
