@@ -181,4 +181,12 @@ backend on the OSAL `src/osal/zephyr_v3d.c` (`docs/online-shaderc/v3d-backend.md
 repeated at the end, and the last lines of the run are frozen into one record
 on the screen (`V3D_GL_TEST_RECORD*`) before the bounded-lifetime watchdog
 (`V3D_GL_TEST_HOLD_S`) resets the board. Kconfig: `V3D_GL_TEST_CASES` (the
-list), `V3D_GL_TEST_CASE` (one case alone), `V3D_GL_TEST_MSAA`.
+list), `V3D_GL_TEST_CASE` (one case alone), `V3D_GL_TEST_MSAA`, `V3D_GL_TEST_MRT4`.
+
+Four-target knobs (measurements, off by default, gated by
+`YAKOGL_TEST_KNOBS`): `V3D_GL_TEST_MRT4` (Pi 4) and `PVR_GL_TEST_MRT4` (AM62P)
+make the image call `v3d_debug_set_draw_targets(4)` /
+`pvr_debug_set_draw_targets(4)` at startup, before the first context, so
+`GL_MAX_DRAW_BUFFERS` and `GL_MAX_COLOR_ATTACHMENTS` answer 4 instead of 3.
+Products leave them off. The C wiring in `main_rpi4.c` and `main_am62p.c`
+follows in a later item (`docs/notes/mrt4-v3d-pvr.md`, "The image knobs").
