@@ -611,6 +611,14 @@ struct Moved {
     dst: usize,
 }
 
+#[cfg(test)]
+std::thread_local! {
+    /// How many expressions this thread's lowerings lowered that the
+    /// precision scan never reached ([`precision::Precs::seen`]): an
+    /// Unknown no rule decided. The corpus test asserts it stays 0.
+    pub(crate) static UNSEEN: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
 /// Turns [`relocate`] off, for the test that compares a compile with and
 /// without it (under `store::test_lock`, so no other compile sees it).
 #[cfg(test)]
@@ -8996,6 +9004,10 @@ impl<'a> Lower<'_, 'a> {
     /// record `e`'s [`Prec`], its temporaries `e`'s class.
     #[inline]
     fn at<T>(&mut self, e: ExprId, f: impl FnOnce(&mut Self) -> R<'a, T>) -> R<'a, T> {
+        #[cfg(test)]
+        if !self.precs.seen(e) {
+            UNSEEN.with(|n| n.set(n.get() + 1));
+        }
         let saved = (self.cur, self.cur_class);
         self.cur = self.precs.instr(e);
         self.cur_class = self.precs.class(e);
