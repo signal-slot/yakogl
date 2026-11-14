@@ -16,6 +16,9 @@
 #   normal (the default): kexec_load, then reboot(LINUX_REBOOT_CMD_KEXEC).
 #           Linux runs device_shutdown() first, so the display is off when the
 #           image starts (driver/docs/nanopc-t6-display.md, section 2(a)).
+#           The window may lie in the crashkernel= reservation (the kernel
+#           limits only crash segments to it, kernel/kexec_core.c:200-210)
+#           while no crash image is loaded; that is read again under the lock.
 #   --crash: kexec_load with KEXEC_ON_CRASH, then a panic (sysrq c) takes the
 #           crash route: __crash_kexec runs no device_shutdown
 #           (linux v6.18 kernel/crash_core.c:120-138, kernel/panic.c:504-509),
@@ -226,9 +229,11 @@ case "$(fact compatible)" in *friendlyarm,nanopc-t6*) ;; *) refuse "$BOARD_HOST 
 [ "$(fact kexec_loaded)" = 0 ] || refuse "a kexec image is already loaded (/sys/kernel/kexec_loaded 1): someone else is about to jump"
 
 # The window: inside one top-level "System RAM" range, overlapping no entry
-# under it (the kernel image, reserved memory). On the crash route the one
-# entry it may overlap is the crashkernel= reservation ("Crash kernel"),
-# which must then hold all of it (below).
+# under it (the kernel image, reserved memory). The one entry it may overlap
+# is the crashkernel= reservation ("Crash kernel"): the crash route needs it
+# to hold the whole window (below), and the normal route may load into it,
+# since the kernel limits only crash segments to it (kernel/kexec_core.c:
+# 200-210), as long as no crash image is loaded there (below).
 iomem=$(printf '%s\n' "$facts" | sed -n '/^iomem<<$/,/^>>$/p' | sed '1d;$d')
 grep -qE '^ *[0-9a-f]*[1-9a-f][0-9a-f]*-' <<<"$iomem" || refuse "/proc/iomem shows no addresses (not root?)"
 wb=$WINDOW_BASE we=$((WINDOW_BASE + WINDOW_SIZE - 1))
@@ -242,16 +247,13 @@ while IFS= read -r line; do
 		if [ "$name" != "System RAM" ] && [ "$s" -le "$we" ] && [ "$e" -ge "$wb" ]; then clash="$clash; $line"; fi
 	elif [ "$parent_s" -le "$wb" ] && [ "$parent_e" -ge "$we" ] && [ "$s" -le "$we" ] && [ "$e" -ge "$wb" ]; then
 		if [ "$name" = "Crash kernel" ]; then
-			ck_s=$s ck_e=$e
-			[ "$CRASH" = 0 ] || continue
+			ck_s=$s ck_e=$e ck_line=${line#"${line%%[! ]*}"}
+			continue
 		fi
 		clash="$clash; ${line#"${line%%[! ]*}"}"
 	fi
 done <<<"$iomem"
 [ "$inside" = 1 ] || refuse "the window $(printf '0x%x-0x%x' "$wb" "$we") is not inside one System RAM range of /proc/iomem"
-if [ -n "$clash" ] && [ "$ck_s" -ge 0 ] && [ "$CRASH" = 0 ]; then
-	refuse "the window overlaps:${clash#;} -- the crashkernel= reservation lies in it: take --crash, or remove the reservation (t6-crashkernel.sh undo, then reboot) for the normal route"
-fi
 [ -z "$clash" ] || refuse "the window overlaps:${clash#;}"
 # The crash route: the reservation holds the whole window, and in it the
 # image's segment (load .. load + memsz) plus the one 4 KiB control page the
@@ -268,6 +270,10 @@ if [ "$CRASH" = 1 ]; then
 		refuse "--crash: the image's segment ($memsz bytes at $load) and the kernel's 4 KiB control page do not fit in the reservation $(printf '0x%x-0x%x' "$ck_s" "$ck_e")"
 	[ "$(fact kexec_crash_loaded)" = 0 ] ||
 		refuse "--crash: a crash image is already loaded (/sys/kernel/kexec_crash_loaded '$(fact kexec_crash_loaded)': a kdump service, or another run); loading this one would replace it"
+elif [ "$ck_s" -ge 0 ] && [ "$(fact kexec_crash_loaded)" != 0 ]; then
+	# The normal route writes the window at the reboot, over the loaded
+	# crash image's segment: a panic before that would enter a damaged image.
+	refuse "a crash image is loaded in the crashkernel= reservation the window lies in (/sys/kernel/kexec_crash_loaded '$(fact kexec_crash_loaded)'); the normal route would write over it"
 fi
 
 # The GIC's ITS and LPI tables: the redistributors and ITSs Linux enabled keep
@@ -290,7 +296,11 @@ if [ "$CRASH" = 1 ]; then
 	echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM and inside the crashkernel= reservation $(printf '0x%08x-0x%08x' "$ck_s" "$ck_e") (kexec_crash_size $(fact kexec_crash_size)), and overlaps no other /proc/iomem entry; no crash image is loaded"
 	echo "route: crash (--crash): kexec_load(KEXEC_ON_CRASH), then a panic; no device_shutdown, so the display and the GPU stay as Linux left them"
 else
-	echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM and overlaps no /proc/iomem entry"
+	if [ "$ck_s" -ge 0 ]; then
+		echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM; the window lies in the crashkernel= reservation $ck_line, and no crash image is loaded; it overlaps no other /proc/iomem entry"
+	else
+		echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM and overlaps no /proc/iomem entry"
+	fi
 	echo "route: normal: kexec_load, then reboot(LINUX_REBOOT_CMD_KEXEC); device_shutdown runs, so the display is off when the image starts (--crash keeps it; crashkernel= reservation: ${ck_lines:-none})"
 fi
 echo "board: the $gic_n GIC ITS/LPI tables Linux's log names are outside the window ($(printf '%s' "$gic" | tr ' ' ',' | sed 's/,$//'))"
@@ -335,6 +345,7 @@ else
        the MMU off and its VHE HCR_EL2 (E2H set; the image's first code
        rewrites it); this ssh session ends there"
 	reread="kexec_loaded"
+	[ "$ck_s" -lt 0 ] || reread="kexec_loaded, kexec_crash_loaded"
 fi
 cat <<EOF
 plan (--go):
@@ -409,7 +420,7 @@ printf "who_remote=%s\n" "$(who_remote)"') ||
 	refuse "cannot read the board's state again under the lock"
 fresh_fact() { printf '%s\n' "$fresh" | sed -n "s/^$1=//p" | head -1; }
 [ "$(fresh_fact kexec_loaded)" = 0 ] || refuse "under the lock: a kexec image is already loaded (/sys/kernel/kexec_loaded '$(fresh_fact kexec_loaded)')"
-if [ "$CRASH" = 1 ] && [ "$(fresh_fact kexec_crash_loaded)" != 0 ]; then
+if { [ "$CRASH" = 1 ] || [ "$ck_s" -ge 0 ]; } && [ "$(fresh_fact kexec_crash_loaded)" != 0 ]; then
 	refuse "under the lock: a crash image is already loaded (/sys/kernel/kexec_crash_loaded '$(fresh_fact kexec_crash_loaded)')"
 fi
 [ -z "$(fresh_fact gpu_users)" ] || refuse "under the lock: processes hold the GPU device: $(fresh_fact gpu_users)"

@@ -359,14 +359,33 @@ check "nanopc-t6.sh: an image without the line is refused for it (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF "lacks the 'board: watchdog armed' line" <<<"$err"; echo $?)"
 
 # nanopc-t6.sh's checks of the board's facts, on made-up facts: an `ssh`
-# first in PATH prints $tmp/facts whatever it is asked, so no board is
-# contacted. The facts are the T6's under Armbian: one System RAM bank
+# first in PATH answers from $tmp/facts (below), so no board is contacted. The facts are the T6's under Armbian: one System RAM bank
 # 0x00200000-0xe143ffff, below 0x20000000 only the kernel's entries under
 # it, the GIC's ITS/LPI tables above 4 GiB. An image TOP 13 passes the image
 # checks. t6_board_run <iomem lines under the bank> <gic_tables> [--go]
+# The board's `ssh`: it logs each command and answers by what it asks. The
+# facts and the read under the lock come from $tmp/facts and $tmp/fresh;
+# the jump (the command that runs kexec_zephyr) drops the connection and
+# the board then comes back with another boot_id; anything else prints
+# nothing. stty, fuser and scp stand in for --go's UART checks and copies.
 mkdir "$tmp/fakebin"
-printf '#!/bin/sh\ncat "%s/facts"\n' "$tmp" > "$tmp/fakebin/ssh"
-chmod +x "$tmp/fakebin/ssh"
+cat > "$tmp/fakebin/ssh" <<EOS
+#!/bin/bash
+for a; do last=\$a; done
+printf '%s\n----\n' "\$last" >> "$tmp/ssh.log"
+case "\$last" in
+*'printf "compatible='*) cat "$tmp/facts" ;;
+*'printf "kexec_loaded='*) cat "$tmp/fresh" ;;
+*sha256sum*) printf '%s' "\$T6_FAKE_SHAS" ;;
+*'/kexec_zephyr '*) touch "$tmp/jumped"; exit 255 ;;
+'cat /proc/sys/kernel/random/boot_id') if [ -e "$tmp/jumped" ]; then echo boot-after; else echo boot-before; fi ;;
+esac
+exit 0
+EOS
+printf '#!/bin/sh\ncase " $* " in *" -a "*) echo "speed 1500000 baud; line = 0; -parenb cs8 -cstopb clocal -icrnl -ixon -opost -icanon -echo" ;; esac\n' > "$tmp/fakebin/stty"
+printf '#!/bin/sh\nexit 1\n' > "$tmp/fakebin/fuser"
+printf '#!/bin/sh\nexit 0\n' > "$tmp/fakebin/scp"
+chmod +x "$tmp/fakebin/ssh" "$tmp/fakebin/stty" "$tmp/fakebin/fuser" "$tmp/fakebin/scp"
 t6_image "$tmp/top13.bin" 'board: watchdog armed'
 sed -i 's/; top 9; /; top 13; /' "$tmp/top13.bin"
 t6_board_run() {
@@ -383,6 +402,22 @@ t6_board_run() {
 }
 kernel='  02000000-0432ffff : Kernel code'
 gic_out='100220000 100230000 1002f0000 '
+# t6_go_run <iomem lines> [--crash]: --go to the end on the fake board, with
+# T6_HAND, a record directory, /dev/null as the UART (the fake stty and
+# fuser pass it) and stand-ins for the two tools. The read under the lock
+# gives kexec_crash_loaded $t6_fresh_crash (default 0). The jump command
+# reaches the fake ssh's log.
+t6_go_run() {
+	rm -rf "$tmp/rec" "$tmp/jumped" "$tmp/ssh.log"
+	mkdir "$tmp/rec"
+	printf 'kexec_loaded=0\nkexec_crash_loaded=%s\nboot_id=boot-before\ngpu_users=\nwdt_users=\nwho_remote=\n' \
+		"${t6_fresh_crash:-0}" > "$tmp/fresh"
+	: > "$tmp/kz"
+	: > "$tmp/mr"
+	T6_FAKE_SHAS=$(sha256sum "$tmp/top13.bin" "$tmp/kz" | cut -d' ' -f1 | tr '\n' ' ') \
+		T6_HAND=selftest T6_RECORD_DIR=$tmp/rec T6_UART=/dev/null KEXEC_ZEPHYR=$tmp/kz MMIO_RD=$tmp/mr \
+		BOARD_LOCK=$tmp/t6go.lock t6_board_run "$1" "$gic_out" --go ${2:+"$2"}
+}
 out=$(t6_board_run "$kernel" "$gic_out")
 rc=$?
 check "nanopc-t6.sh: the dry run on the T6's facts finds the window 0x10000000-0x1fffffff free (rc $rc)" \
@@ -446,11 +481,44 @@ $ck" "$gic_out" --crash)
 rc=$?
 check "nanopc-t6.sh: --crash with a crash image already loaded is refused (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --crash: a crash image is already loaded' <<<"$out"; echo $?)"
+# The normal route while the reservation holds the window: the kernel
+# limits only crash segments to the reservation (kernel/kexec_core.c:
+# 200-210), so it is allowed while no crash image is loaded there.
 out=$(t6_crash_size=268435456 t6_board_run "$kernel
 $ck" "$gic_out")
 rc=$?
-check "nanopc-t6.sh: the normal route on a window inside the reservation is refused, naming --crash (rc $rc)" \
-	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: the window overlaps: 10000000-1fffffff : Crash kernel -- the crashkernel= reservation lies in it: take --crash' <<<"$out"; echo $?)"
+check "nanopc-t6.sh: the normal route is allowed with the reservation in the window and no crash image (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'route: normal:' <<<"$out" && grep -qF 'the window lies in the crashkernel= reservation 10000000-1fffffff : Crash kernel, and no crash image is loaded' <<<"$out"; echo $?)"
+out=$(t6_crash_loaded=1 t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: the normal route is refused when a crash image is loaded in that reservation (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: a crash image is loaded in the crashkernel= reservation the window lies in' <<<"$out"; echo $?)"
+# --go to the end on the fake board: the jump command each route sends.
+out=$(t6_crash_size=268435456 t6_go_run "$kernel
+$ck" --crash)
+rc=$?
+jump=$(grep -m1 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log")
+check "nanopc-t6.sh: --crash --go sends the jump with --crash and records the route (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000 --crash; rc=' <<<"$jump" && grep -qF 'route crash (reservation 0x10000000-0x1fffffff)' "$tmp"/rec/*/record.txt; echo $?)"
+out=$(t6_go_run "$kernel")
+rc=$?
+jump=$(grep -m1 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log")
+check "nanopc-t6.sh: --go without --crash sends the jump without it (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000; rc=' <<<"$jump" && grep -qF 'route normal' "$tmp"/rec/*/record.txt; echo $?)"
+# The read under the lock: a crash image loaded between the dry checks and
+# the lock stops the jump, on the crash route and on the normal route in
+# the reservation.
+out=$(t6_fresh_crash=1 t6_crash_size=268435456 t6_go_run "$kernel
+$ck" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash --go refuses a crash image loaded before the lock was taken (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: under the lock: a crash image is already loaded' <<<"$out" && ! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log"; echo $?)"
+out=$(t6_fresh_crash=1 t6_crash_size=268435456 t6_go_run "$kernel
+$ck")
+rc=$?
+check "nanopc-t6.sh: --go on the normal route in the reservation refuses the same under the lock (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: under the lock: a crash image is already loaded' <<<"$out" && ! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log"; echo $?)"
 out=$(t6_crash_size=268435456 t6_board_run "$kernel
 $ck
   1ff00000-1fffffff : reserved" "$gic_out" --crash)
