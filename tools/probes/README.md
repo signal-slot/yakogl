@@ -46,6 +46,11 @@ Gate rows (`tools/check.sh`, reached by a change under `tools/probes/` or
 - `zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot), -Werror on our C
   files`: builds `nanopc_t6/t6_fw`. It is a gap without `ZEPHYR_WS` or the
   CSF firmware header (made from the board's file first when one is given).
+- `zephyr  stm32mp257f_dk <image> image`: `mp2_hello` (also checked for the
+  board layer's `gc_wdog_arm: armed OP-TEE arm,smc-wdt` marker), `mp2_identify`
+  and `mp2_gpu` of `stm32mp257f_dk/`, and the `gc_fence` and `gc_clear` samples,
+  built for `stm32mp257f_dk/stm32mp257fxx/a35` with `-DYAKOGL_WERROR=ON`.
+  Without `ZEPHYR_WS` they are the one gap naming it.
 - `test    rpi_5 fdt_walk host test`: `rpi_5/common/fdt/test/run.sh` (host cc,
   ASan/UBSan, no Zephyr). Ok only with `dtc` on PATH and `fdt_walk: N checks,
   0 failed` without a SKIPPED line; without `dtc` it is a gap naming it. If it

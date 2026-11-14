@@ -3817,6 +3817,24 @@ zephyr_nanopc_t6_image() {
   marker=$(strings -n 20 "$dir/zephyr/zephyr.bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
   [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
 }
+# The STM32MP257F-DK's return-trial image (mp2_hello): it builds, and it
+# carries the board layer's watchdog marker, the line driver/zephyr/lib/board/
+# stm32mp2/stm32mp2_wdog.c prints once the OP-TEE SMC watchdog is armed
+# (docs/notes/pre-study-stm32mp257f-dk.md; issues #7, #1281).
+zephyr_stm32mp257f_dk_hello_image() {
+  local dir=build/zephyr-werror/stm32mp257f_dk_hello marker
+  zephyr_werror_image stm32mp257f_dk/stm32mp257fxx/a35 tools/probes/stm32mp257f_dk/mp2_hello stm32mp257f_dk_hello || return 1
+  marker=$(strings -n 20 "$dir/zephyr/zephyr.bin" | grep -c '^gc_wdog_arm: armed OP-TEE arm,smc-wdt ') || true
+  [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker 'gc_wdog_arm: armed OP-TEE arm,smc-wdt' ${marker:-0} times, not once"; return 1; }
+}
+# tools/vivante/gate_st.sh <hwdb|golden>: exit 0 pass, 1 mismatch, 2 gap (one
+# `gap:` line on stderr, the check not run). A gap is the row's own outcome.
+gate_st_row() {
+  local rc=0
+  tools/vivante/gate_st.sh "$1" || rc=$?
+  if [ "$rc" -eq 2 ]; then : > "$ROWS/$ROW_SEQ.gap"; fi
+  return "$rc"
+}
 # Z3's probe (t6_fw) embeds the CSF firmware, driver/src/fw/mali_csffw_blob.h
 # (gitignored, never committed). With the board's file at <fw> the header is
 # made from it first (driver/tools/mkmalifw.sh), and replaced only when its
@@ -3908,9 +3926,34 @@ if [ "$QUICK" -eq 0 ]; then
       zephyr_nanopc_t6_fw_image "$mali_csffw"
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
+    # The STM32MP257F-DK's A35 (issues #7, #1281): the probes and the two
+    # GPU samples, -Werror on our C files; mp2_hello also carries the marker.
+    step "zephyr  stm32mp257f_dk mp2_hello image (return trial, the watchdog marker), -Werror on our C files" \
+      zephyr_stm32mp257f_dk_hello_image
+    step "zephyr  stm32mp257f_dk mp2_identify image (hand-over record), -Werror on our C files" \
+      zephyr_werror_image stm32mp257f_dk/stm32mp257fxx/a35 tools/probes/stm32mp257f_dk/mp2_identify stm32mp257f_dk_identify
+    step "zephyr  stm32mp257f_dk mp2_gpu image (GPU power and identity), -Werror on our C files" \
+      zephyr_werror_image stm32mp257f_dk/stm32mp257fxx/a35 tools/probes/stm32mp257f_dk/mp2_gpu stm32mp257f_dk_gpu
+    step "zephyr  stm32mp257f_dk gc_fence image, -Werror on our C files" \
+      zephyr_werror_image stm32mp257f_dk/stm32mp257fxx/a35 gc_fence stm32mp257f_dk_gc_fence
+    step "zephyr  stm32mp257f_dk gc_clear image, -Werror on our C files" \
+      zephyr_werror_image stm32mp257f_dk/stm32mp257fxx/a35 gc_clear stm32mp257f_dk_gc_clear
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
   fi
+fi
+
+# The STM32MP257F's GPU row (model 0x8000, revision 0x6205; issues #7, #1281)
+# against Mesa 26.2.1: the hwdb comparison and the golden command stream
+# (tools/vivante/gate_st.sh, host only). Without MESA_ETNA_TREE they are one
+# gap naming it, never a pass. The script's self-test needs no Mesa tree.
+scope vivante
+step "tools   gate_st.sh self-test (no Mesa tree)" tools/vivante/gate_st_selftest.sh
+if [ -n "${MESA_ETNA_TREE-}" ]; then
+  step "run     gate_st.sh hwdb: ST 0x8000/0x6205 row against the pinned comparison (MESA_ETNA_TREE)" gate_st_row hwdb
+  step "run     gate_st.sh golden: ST row's command stream against the GC7000UL's (MESA_ETNA_TREE)" gate_st_row golden
+else
+  gap "vivante gate_st.sh hwdb and golden: no MESA_ETNA_TREE (a Mesa 26.2.1 tree built as tools/vivante/README.md says): the ST row was NOT compared with Mesa"
 fi
 
 # The FDT walker of the rpi_5 probes (host cc with ASan/UBSan, no Zephyr); its
