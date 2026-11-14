@@ -245,13 +245,19 @@ fn meets_es3_0() -> Vec<Spec> {
         s("MAX_VARYING_COMPONENTS", GL_MAX_VARYING_COMPONENTS, 60),
         s("MAX_VERTEX_OUTPUT_COMPONENTS", GL_MAX_VERTEX_OUTPUT_COMPONENTS, 64),
         s("MAX_FRAGMENT_INPUT_COMPONENTS", GL_MAX_FRAGMENT_INPUT_COMPONENTS, 60),
+        // the uniform-block family, raised on the V3D by v3d-uniform-blocks:
+        // 16384 bytes a block and ES 3.0's formula for the combined components
+        // (docs/notes/ubo-limits.md); the minimums are 16384, 50176 and 50048
+        s("MAX_UNIFORM_BLOCK_SIZE", GL_MAX_UNIFORM_BLOCK_SIZE, 16_384),
+        s("MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS", GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS, 50_176),
+        s("MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS", GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS, 50_048),
         // units and vertex attributes
         s("MAX_VERTEX_ATTRIBS", GL_MAX_VERTEX_ATTRIBS, 16),
         s("MAX_TEXTURE_IMAGE_UNITS", GL_MAX_TEXTURE_IMAGE_UNITS, 16),
         s("MAX_VERTEX_TEXTURE_IMAGE_UNITS", GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, 16),
         s("MAX_COMBINED_TEXTURE_IMAGE_UNITS", GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, 32),
         // the uniform vectors and block counts (the *components and block
-        // size live in below_es3_0(); the vectors and counts reach it)
+        // size are in the family below; the vectors and counts reach ES 3.0 too)
         s("MAX_VERTEX_UNIFORM_VECTORS", GL_MAX_VERTEX_UNIFORM_VECTORS, 256),
         s("MAX_FRAGMENT_UNIFORM_VECTORS", GL_MAX_FRAGMENT_UNIFORM_VECTORS, 224),
         s("MAX_VERTEX_UNIFORM_BLOCKS", GL_MAX_VERTEX_UNIFORM_BLOCKS, 12),
@@ -316,34 +322,6 @@ fn below_es3_0() -> Vec<Gap> {
             "state_query.integers.max_samples_getfloat + max_samples_getinteger64 (values; forms below)",
             "src/gl/state.rs + src/gl/framebuffer.rs (GL core caps); 4x design docs/notes/v3d-msaa-es3.md",
         ),
-        // The uniform-block family: `src/gl/context.rs` MAX_UNIFORM_DWORDS
-        // is 1536 and `src/gl/state.rs` derives the block size
-        // (dwords * 4 bytes) and both combined-component limits (the bare
-        // dwords — no block share added on top) from it.
-        g(
-            "MAX_UNIFORM_BLOCK_SIZE",
-            GL_MAX_UNIFORM_BLOCK_SIZE,
-            16_384,
-            6_144,
-            "implementation_limits.max_uniform_block_size + state_query.integers64.max_uniform_block_size_*",
-            "src/gl/context.rs (MAX_UNIFORM_DWORDS); src/gl/state.rs derives the size",
-        ),
-        g(
-            "MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",
-            GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS,
-            50_176, // 12 blocks * 16384 / 4 + 1024 (Table 6.32 note)
-            1_536,
-            "implementation_limits.max_combined_vertex_uniform_components + state_query.integers64.*_get{float,integer}",
-            "src/gl/context.rs (MAX_UNIFORM_DWORDS); src/gl/state.rs: no block share",
-        ),
-        g(
-            "MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",
-            GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS,
-            50_048, // 12 * 16384 / 4 + 896
-            1_536,
-            "implementation_limits.max_combined_fragment_uniform_components + state_query.integers64.*_get{float,integer}",
-            "src/gl/context.rs (MAX_UNIFORM_DWORDS); src/gl/state.rs: no block share",
-        ),
     ]
 }
 
@@ -376,7 +354,7 @@ fn limits_that_meet_the_es3_0_minimum_stay_meeting_it() {
 
 /* ---- 2. the limits that are below ES 3.0, pinned as they are -------------- */
 
-/// The 10 value gaps G3 names, each pinned to today's answer with its owner;
+/// The 7 value gaps G3 names, each pinned to today's answer with its owner;
 /// the ES 3.0 expectation is the `#[ignore]`d test at the end of this file
 /// (one per family). A pinned value that reaches its minimum prints CLOSED
 /// without failing, so the fix does not have to touch this file (the rule
@@ -678,18 +656,34 @@ fn four_samples() {
     assert_eq!(Q::error(), GL_NO_ERROR);
 }
 
-/// The uniform-block family at ES 3.0's minimums:
-/// implementation_limits.max_uniform_block_size,
-/// .max_combined_{vertex,fragment}_uniform_components and their
-/// state_query.integers64.* rows. Owner: `src/gl/context.rs`
-/// MAX_UNIFORM_DWORDS (1536) and the `src/gl/state.rs` arms that derive the
-/// block size from it and report the bare dwords for the combined limits
-/// (no uniform-block share added on top of the default-block budget).
+/// The uniform-block family: ES 3.0's formula, MAX_*_UNIFORM_COMPONENTS +
+/// MAX_*_UNIFORM_BLOCKS * MAX_UNIFORM_BLOCK_SIZE / 4. The V3D reports 1536
+/// per-stage components, so the combined limit is 1536 + 12 * 4096 = 50688
+/// (above the spec's own minimums, 50176 and 50048), and one block is 16384
+/// bytes. Owner: `src/gl/context.rs` MAX_STAGE_UNIFORM_DWORDS.
 #[test]
-#[ignore = "src/gl MAX_UNIFORM_DWORDS gives 6144/1536, ES 3.0 needs 16384/50176/50048"]
-fn the_uniform_block_family_meets_es3_0() {
+fn the_uniform_block_family_follows_the_es3_0_formula() {
     let _lib = context();
-    assert!(Q::one(GL_MAX_UNIFORM_BLOCK_SIZE) >= 16_384);
+    let block = Q::one(GL_MAX_UNIFORM_BLOCK_SIZE);
+    assert_eq!(block, 16_384);
+    for (name, stage, blocks, combined) in [
+        (
+            "vertex",
+            GL_MAX_VERTEX_UNIFORM_COMPONENTS,
+            GL_MAX_VERTEX_UNIFORM_BLOCKS,
+            GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS,
+        ),
+        (
+            "fragment",
+            GL_MAX_FRAGMENT_UNIFORM_COMPONENTS,
+            GL_MAX_FRAGMENT_UNIFORM_BLOCKS,
+            GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS,
+        ),
+    ] {
+        let (components, blocks) = (Q::one(stage), Q::one(blocks));
+        assert_eq!(Q::one(combined), components + blocks * block / 4, "{name}");
+        assert_eq!(Q::one(combined), 50_688, "{name}");
+    }
     assert!(Q::one(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS) >= 50_176);
     assert!(Q::one(GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS) >= 50_048);
     assert_eq!(Q::error(), GL_NO_ERROR);

@@ -88,6 +88,33 @@ pub const MAX_UNIFORM_DWORDS: usize = 1536;
 /// read them, so the three cannot disagree.
 pub const MAX_VERTEX_UNIFORM_VECTORS: usize = MAX_UNIFORM_DWORDS / 4;
 pub const MAX_FRAGMENT_UNIFORM_VECTORS: usize = MAX_UNIFORM_DWORDS / 4;
+/// Uniform blocks one stage may use (GL_MAX_VERTEX_UNIFORM_BLOCKS and
+/// GL_MAX_FRAGMENT_UNIFORM_BLOCKS, ES 3.0's twelve).
+pub const MAX_STAGE_UNIFORM_BLOCKS: usize = 12;
+/// V3D, not under `report-es2`: ES 3.0's own formula, a stage's
+/// MAX_*_UNIFORM_COMPONENTS (1536, the per-stage value reported) plus twelve
+/// blocks of 16384 bytes (4096 dwords) = 50688 dwords. The V3D reads the
+/// program's host arrays, so a flattened block may be this long
+/// (docs/notes/ubo-limits.md). ES 3.0's own minimums are 50176 and 50048.
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_UNIFORM_BLOCK_DWORDS: usize = 4096;
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_STAGE_UNIFORM_DWORDS: usize = MAX_UNIFORM_DWORDS + MAX_STAGE_UNIFORM_BLOCKS * MAX_UNIFORM_BLOCK_DWORDS;
+/// One stage's flattened uniform block, in dwords: the longest a program's
+/// array (and a draw's `vs_uniform_dwords`) may be. Every other build keeps
+/// `MAX_UNIFORM_DWORDS`.
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+pub const MAX_UNIFORM_BLOCK_DWORDS: usize = MAX_UNIFORM_DWORDS;
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+pub const MAX_STAGE_UNIFORM_DWORDS: usize = MAX_UNIFORM_DWORDS;
+/// GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS and the fragment one.
+pub const MAX_COMBINED_UNIFORM_COMPONENTS: usize = MAX_STAGE_UNIFORM_DWORDS;
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+const _: () = assert!(
+    MAX_COMBINED_UNIFORM_COMPONENTS == MAX_UNIFORM_DWORDS + MAX_STAGE_UNIFORM_BLOCKS * MAX_UNIFORM_BLOCK_DWORDS
+);
+/* GlProgram's caps and a draw's dword counts are u16, the blend constants included */
+const _: () = assert!(MAX_STAGE_UNIFORM_DWORDS + BLEND_CONSTS_DWORDS <= u16::MAX as usize);
 /// GL_MAX_TEXTURE_IMAGE_UNITS and gl_MaxTextureImageUnits: the samplers a
 /// fragment shader may use. Every backend's per-draw fragment table holds
 /// GLES_MAX_TEX_BINDS (16) bindings, and the link enforces this limit

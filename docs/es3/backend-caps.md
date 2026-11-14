@@ -161,9 +161,9 @@ in `src/gl/context.rs`. "Per GPU" means a `cfg(feature = "gpu-…")` constant.
 | MAX_VERTEX_OUTPUT_COMPONENTS, MAX_FRAGMENT_INPUT_COMPONENTS | GC7000 60, 60; PowerVR 60, 60; V3D **64**, 60 | `state.rs:1219-1220` ← `context.rs` `MAX_VERTEX_OUTPUT_COMPONENTS` |
 | MAX_VERTEX/FRAGMENT_UNIFORM_BLOCKS, MAX_COMBINED_UNIFORM_BLOCKS | 12, 12, 24 | `state.rs:1227-1228` ← `program.rs:69` |
 | MAX_UNIFORM_BUFFER_BINDINGS | 24 | `state.rs:1229` ← `context.rs:168` |
-| MAX_UNIFORM_BLOCK_SIZE | 6144 (= 1536 x 4) | `state.rs:1230` |
+| MAX_UNIFORM_BLOCK_SIZE | V3D 16384 (`MAX_UNIFORM_BLOCK_DWORDS` 4096 x 4); 6144 (= 1536 x 4) on the others and under `report-es2` | `state.rs` ← `context.rs` `MAX_UNIFORM_BLOCK_DWORDS` |
 | UNIFORM_BUFFER_OFFSET_ALIGNMENT | 4 | `state.rs:1231` |
-| MAX_COMBINED_VERTEX/FRAGMENT_UNIFORM_COMPONENTS | 1536 (no block share) | `state.rs:1232-1234` |
+| MAX_COMBINED_VERTEX/FRAGMENT_UNIFORM_COMPONENTS | V3D 50688 (1536 + 12 x 4096); 1536 (no block share) on the others and under `report-es2` | `state.rs` ← `context.rs` `MAX_COMBINED_UNIFORM_COMPONENTS` |
 | MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS / SEPARATE_ATTRIBS / SEPARATE_COMPONENTS | **64 / 4 / 64**. SEPARATE_COMPONENTS is set to the interleaved limit, not ES 3.0's 4, because the capture runs on the CPU (`gl/tf_capture.rs`) and has no hardware ceiling | `state.rs:1259-1267` ← `tf.rs:32,35,43` (the reason is the comment at `tf.rs:36-42`) |
 | NUM_COMPRESSED_TEXTURE_FORMATS | 11 on the PowerVR, the GC7000UL and the V3D under ES 3.0: ETC1 and the ten ES 3.0 ETC2/EAC formats (the formats an upload accepts, `texture.rs` `stored_compressed_formats`: four as blocks, six decoded at upload into R16F, RGBA16F, RGBA8 and SRGB8_ALPHA8, `docs/notes/etc2-eac.md`); 3 under `report-es2` (ETC1, RGB8_ETC2, RGBA8_ETC2_EAC) and on the Mali (no sampled class) | `state.rs` `get_integerv` |
 | MAX_ELEMENT_INDEX | 0xFFFFFF | `state.rs:1255` |
@@ -213,8 +213,8 @@ means the minimum is met.
 | MAX_SAMPLES ≥ 4 | Hw 4 (`bxs-4-64.h:92`); Vulkan sample counts 1, 4 (`pvr_physical_device.c:735,740`). **Reports 1** | Hw 4x only (`etnaviv_screen.c:451-468`, `H:19129`); multisample textures debug-only in Mesa (`:296`). **Reports 1** | Hw 4 (`v3d_limits.h:41`; `v3d_screen.c:423-424`). **Reports 1** |
 | MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS ≥ 64, SEPARATE_ATTRIBS ≥ 4, SEPARATE_COMPONENTS ≥ 4 | Hw none (§1.3). **Reports 64 / 4 / 64 =** (the capture runs on the CPU, `gl/tf_capture.rs`) | Hw none (`HWTFB` = 0, `H:19202`); Mesa 26.2.1 offers 0 buffers here (`etnaviv_screen.c:267`). **Reports 64 / 4 / 64 =** (CPU capture) | Hw yes, 4 buffers (packets; `v3d_screen.c:321`). **Reports 64 / 4 / 64 =** (CPU capture) |
 | MAX_VERTEX_UNIFORM_BLOCKS ≥ 12, FRAGMENT ≥ 12, COMBINED ≥ 24, BINDINGS ≥ 24 | no UBO hardware relied on: blocks are flattened into the default block ([C] the comment at `state.rs:1221-1226`). Reports 12/12/24/24 = | same lowering (etnaviv lowers UBOs to uniforms too, `etnaviv_screen.c:195-199`); = | same lowering; = |
-| MAX_UNIFORM_BLOCK_SIZE ≥ 16384 | **Reports 6144** (yakogl's budget, not a hardware cap) | same | same |
-| MAX_COMBINED_VERTEX / FRAGMENT_UNIFORM_COMPONENTS ≥ 50176 / 50048 | **Reports 1536** | same | same |
+| MAX_UNIFORM_BLOCK_SIZE ≥ 16384 | **Reports 6144** (yakogl's budget, not a hardware cap) | same | Reports 16384 = (`docs/notes/ubo-limits.md` §9) |
+| MAX_COMBINED_VERTEX / FRAGMENT_UNIFORM_COMPONENTS ≥ 50176 / 50048 | **Reports 1536** | same | Reports 50688 = (1536 + 12 x 4096) |
 | MAX_VERTEX / FRAGMENT_UNIFORM_COMPONENTS ≥ 1024 / 896 | 1536 = | 1536 = | 1536 = |
 | MAX_VARYING_VECTORS ≥ 15, MAX_VARYING_COMPONENTS ≥ 60, MAX_FRAGMENT_INPUT_COMPONENTS ≥ 60 | Mesa Vulkan: 64 out / 64 in components (`pvr_physical_device.c:655,677`). Reports 15 / 60 / 60 = (`tests/es3_pvr_varyings.rs`) | Hw 16 varyings, one slot is the position (`etnaviv_screen.c:965-968`, `H:18876`). Reports 15 / 60 / 60 = | Hw 64 input components (`v3d_limits.h:32-34`; `v3d_screen.c:323`). Reports 15 / 60 / 60 = (the compiler builds 60 `ldvary` inputs, the shader record counts up to 64 and the flag words of inputs 24..63 go in the second and third word of the packet: `tests/es3_v3d_varyings.rs`; the silicon's interpolation of 60 inputs is the board's) |
 | MAX_VERTEX_OUTPUT_COMPONENTS ≥ 64 | **Reports 60** (15 x 4); Mesa Vulkan 64 | **Reports 60** (15 x 4); whether 64 is reachable with 16 output rows, one of them the position, is [U] | Reports 64 = (a vertex shader may declare 16 vec4 outputs, the fragment shader reads 15; `tests/es3_v3d_varyings.rs`) |
@@ -279,8 +279,8 @@ for an entry that now meets its minimum.
 |---|---|---|---|---|---|
 | MAX_COLOR_ATTACHMENTS, MAX_DRAW_BUFFERS | 4 | 3 | 3 | 3 | mrt4 |
 | MAX_SAMPLES | 4 | 1 | 1 | 1 | none in the plan |
-| MAX_UNIFORM_BLOCK_SIZE | 16384 | 6144 | 6144 | 6144 | ubo-uniform |
-| MAX_COMBINED_*_UNIFORM_COMPONENTS | 50048 / 50176 | 1536 | 1536 | 1536 | ubo-uniform |
+| MAX_UNIFORM_BLOCK_SIZE | 16384 | 6144 | 6144 | ok (16384) | PowerVR, GC7000UL: ubo-uniform |
+| MAX_COMBINED_*_UNIFORM_COMPONENTS | 50048 / 50176 | 1536 | 1536 | ok (50688) | PowerVR, GC7000UL: ubo-uniform |
 | MAX_VARYING_VECTORS / _COMPONENTS / FRAGMENT_INPUT | 15 / 60 / 60 | ok (15 / 60 / 60) | ok (15 / 60 / 60) | 15 / 60 / 60 (Mali 8 / 32 / 32) | V3D done (v3d-varyings-raise); V3D board run |
 | MAX_VERTEX_OUTPUT_COMPONENTS | 64 | 60 | 60 | 64 (Mali 32) | PowerVR and GC7000: [U] whether 64 is reachable (GC7000: 15 x 4; one of 16 output rows is the position) |
 

@@ -28,8 +28,8 @@ use super::buffer;
 use super::consts::*;
 use super::context::{
     self, gl_trace, obj_index, tex_pitch, GlBuffer, GlContext, GlProgram, GlTexture, GlVertexAttrib,
-    CAP_COLOR_ATTACHMENTS, CAP_SAMPLERS, MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_TEXTURES, MAX_UNIFORM_DWORDS,
-    MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
+    CAP_COLOR_ATTACHMENTS, CAP_SAMPLERS, MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_STAGE_UNIFORM_DWORDS,
+    MAX_TEXTURES, MAX_UNIFORM_DWORDS, MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
 };
 use super::framebuffer;
 use super::tf;
@@ -3903,13 +3903,12 @@ fn build_common(
         let mut vs_dw = p.rvs.uniform_dwords;
         let mut fs_dw = fs_uniform_dwords;
         let mut fs_app_dw = p.rfs.uniform_dwords;
-        let fs_off = (vs_dw as usize * 4 + 15) & !15usize;
 
-        if vs_dw as usize > MAX_UNIFORM_DWORDS {
-            vs_dw = MAX_UNIFORM_DWORDS as u16;
+        if vs_dw as usize > MAX_STAGE_UNIFORM_DWORDS {
+            vs_dw = MAX_STAGE_UNIFORM_DWORDS as u16;
         }
-        if fs_dw as usize > MAX_UNIFORM_DWORDS {
-            fs_dw = MAX_UNIFORM_DWORDS as u16;
+        if fs_dw as usize > MAX_STAGE_UNIFORM_DWORDS {
+            fs_dw = MAX_STAGE_UNIFORM_DWORDS as u16;
         }
         if fs_app_dw > fs_dw {
             fs_app_dw = fs_dw;
@@ -3917,7 +3916,26 @@ fn build_common(
         /* a back end that reads the host arrays only (the V3D) never reads the
          * staging copy: no reserve, no put (the fields below are set as ever) */
         let host_only = backend::uniforms_host_only();
-        if !host_only && (vs_dw != 0 || fs_dw != 0) && pg.uniforms.cpu.is_null() {
+        /* The staging copy holds 2 * MAX_UNIFORM_DWORDS dwords + 16 bytes (the
+         * shared limit of every back end that reads it): a block longer than
+         * one stage's share is refused before anything is written. */
+        if !host_only && (vs_dw as usize > MAX_UNIFORM_DWORDS || fs_dw as usize > MAX_UNIFORM_DWORDS) {
+            return Err((GL_OUT_OF_MEMORY, FUNC));
+        }
+        /* the VS block is staged only when !host_only, and then it is no longer
+         * than MAX_UNIFORM_DWORDS; else the FS block starts at the head of the
+         * allocation's second half at the latest */
+        let fs_off = (vs_dw.min(MAX_UNIFORM_DWORDS as u16) as usize * 4 + 15) & !15usize;
+        /* the FS block is read from the staging copy when the back end reads it
+         * or the variant outgrew the program's array (below): it, with its
+         * offset, has to fit the allocation */
+        if fs_dw != 0
+            && (!host_only || fs_dw > p.fs_uniform_alloc)
+            && fs_off + fs_dw as usize * 4 > MAX_UNIFORM_DWORDS * 4 * 2 + 16
+        {
+            return Err((GL_OUT_OF_MEMORY, FUNC));
+        }
+        if (!host_only || fs_dw > p.fs_uniform_alloc) && (vs_dw != 0 || fs_dw != 0) && pg.uniforms.cpu.is_null() {
             /* no CPU view: the kick reads the block itself, so a block a
              * pending kick reads is not rewritten (staging_reserve) */
             let bytes = pg.uniforms.size;
@@ -8577,6 +8595,58 @@ mod tests {
     }
 
     /* ---- uniforms -------------------------------------------------------------------- */
+
+    /// A program whose stage blocks the V3D lets reach 50688 dwords, drawn on
+    /// a back end that stages the blocks (the testutil tables: not
+    /// uniforms_host_only): the staging copy holds 2 * MAX_UNIFORM_DWORDS
+    /// dwords + 16 bytes, so a block longer than 1536 dwords is refused with
+    /// GL_OUT_OF_MEMORY before a byte is copied.
+    #[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+    fn long_block_refused(vs_dw: u16, fs_dw: u16) {
+        let gl = Gl::new(16, 16);
+        let prog = basic(&gl);
+        assert!(!crate::backend::uniforms_host_only(), "the test table stages the blocks");
+        draw_tri(&gl); /* the program's GPU copies exist: only the uniform upload is left */
+        let long = context::MAX_UNIFORM_DWORDS as u16 + 1;
+        assert!(vs_dw.max(fs_dw) >= long && vs_dw.max(fs_dw) as usize <= MAX_STAGE_UNIFORM_DWORDS);
+        {
+            let c = gl.ctx();
+            let p = &mut context::objects(c.group).programs[obj_index(prog)];
+            p.free_uniforms();
+            let (v, f) = (vs_dw.max(fs_dw) as usize, vs_dw.max(fs_dw) as usize);
+            // SAFETY: C heap blocks the program owns from here (freed with it).
+            unsafe {
+                p.vs_uniforms = util::calloc(v, 4) as *mut f32;
+                p.fs_uniforms = util::calloc(f + context::BLEND_CONSTS_DWORDS, 4) as *mut f32;
+            }
+            assert!(!p.vs_uniforms.is_null() && !p.fs_uniforms.is_null());
+            (p.vs_uniform_cap, p.fs_uniform_cap) = (v as u16, f as u16);
+            p.fs_uniform_alloc = (f + context::BLEND_CONSTS_DWORDS) as u16;
+            p.rvs.uniform_dwords = vs_dw;
+            p.rfs.uniform_dwords = fs_dw;
+        }
+        gl.cache_ops();
+        // SAFETY: plain GL call; the arrays are statics.
+        unsafe { glDrawArrays(GL_TRIANGLES, 0, 3) };
+        assert_eq!(gl.error(), GL_OUT_OF_MEMORY);
+        assert!(gl.draws().is_empty());
+        /* nothing reached the staging buffer: put() flushes what it copies */
+        assert!(gl.cache_ops().is_empty(), "no uniform byte was copied");
+    }
+
+    #[test]
+    #[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+    fn a_vertex_block_past_the_staging_copy_is_refused_before_any_write() {
+        long_block_refused(context::MAX_UNIFORM_DWORDS as u16 + 1, 0);
+        long_block_refused(MAX_STAGE_UNIFORM_DWORDS as u16, 0);
+    }
+
+    #[test]
+    #[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+    fn a_fragment_block_past_the_staging_copy_is_refused_before_any_write() {
+        long_block_refused(0, context::MAX_UNIFORM_DWORDS as u16 + 1);
+        long_block_refused(4, MAX_STAGE_UNIFORM_DWORDS as u16);
+    }
 
     #[test]
     fn fs_uniforms_reach_the_draw_and_gpu_memory() {

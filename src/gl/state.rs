@@ -1258,15 +1258,15 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; STATE_VALUES
          * filled from the bound range at draw time (program.rs), the same on
          * both GPUs: a stage takes ES 3.0's twelve, a program
          * PROG_MAX_BLOCKS, and one block at most the stage's whole default
-         * block, MAX_UNIFORM_DWORDS -- below ES 3.0's 16384 bytes (RESULTS.md
-         * gap list). */
+         * block, MAX_UNIFORM_BLOCK_DWORDS: ES 3.0's 16384 bytes on the V3D, the
+         * stage's whole default block elsewhere (docs/notes/ubo-limits.md). */
         GL_MAX_VERTEX_UNIFORM_BLOCKS | GL_MAX_FRAGMENT_UNIFORM_BLOCKS => 12,
         GL_MAX_COMBINED_UNIFORM_BLOCKS => super::program::PROG_MAX_BLOCKS as GLint,
         GL_MAX_UNIFORM_BUFFER_BINDINGS => context::MAX_UNIFORM_BUFFER_BINDINGS as GLint,
-        GL_MAX_UNIFORM_BLOCK_SIZE => (MAX_UNIFORM_DWORDS * 4) as GLint,
+        GL_MAX_UNIFORM_BLOCK_SIZE => (context::MAX_UNIFORM_BLOCK_DWORDS * 4) as GLint,
         GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT => 4,
         GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS | GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS => {
-            MAX_UNIFORM_DWORDS as GLint
+            context::MAX_COMBINED_UNIFORM_COMPONENTS as GLint
         }
         /* colour attachments one render writes: the end-of-tile programs and
          * the kick's PBE registers carry this many (a G-buffer pass asks for
@@ -3195,18 +3195,20 @@ mod tests {
             assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), 3);
         }
         assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), 3);
-        /* Uniform blocks, the same on both GPUs (flattened into the default
-         * block): twelve a stage, 24 a program, 24 binding points, and one
-         * block no larger than a stage's default block (6144 bytes, below
-         * ES 3.0's 16384). The combined components stay the default block's
-         * 1536, which the blocks share -- below ES 3.0's formula minimum. */
+        /* Uniform blocks (flattened into the default block): twelve a stage,
+         * 24 a program, 24 binding points. On the V3D one block is ES 3.0's
+         * 16384 bytes and the combined components its formula, 1536 + 12 *
+         * 4096; elsewhere one block is a stage's default block (6144 bytes)
+         * and the combined components its 1536 (docs/notes/ubo-limits.md). */
+        let (block_size, combined) =
+            if cfg!(all(feature = "gpu-v3d", not(feature = "report-es2"))) { (16384, 50688) } else { (6144, 1536) };
         assert_eq!(geti1(GL_MAX_VERTEX_UNIFORM_BLOCKS), 12);
         assert_eq!(geti1(GL_MAX_FRAGMENT_UNIFORM_BLOCKS), 12);
         assert_eq!(geti1(GL_MAX_COMBINED_UNIFORM_BLOCKS), 24);
         assert_eq!(geti1(GL_MAX_UNIFORM_BUFFER_BINDINGS), 24);
-        assert_eq!(geti1(GL_MAX_UNIFORM_BLOCK_SIZE), 6144);
-        assert_eq!(geti1(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS), 1536);
-        assert_eq!(geti1(GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS), 1536);
+        assert_eq!(geti1(GL_MAX_UNIFORM_BLOCK_SIZE), block_size);
+        assert_eq!(geti1(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS), combined);
+        assert_eq!(geti1(GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS), combined);
         assert_eq!(geti1(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT), 4);
     }
 

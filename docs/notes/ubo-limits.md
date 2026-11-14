@@ -253,3 +253,51 @@ Order matters: each step keeps the tree green.
 7. A Pi 4 board step (#320): a draw with a 16384-byte block read at the first
    and last dword, and `functional.ubo` and `implementation_limits` of the
    dEQP tree.
+
+## 9. V3D raise (done, host): 16384 bytes a block, 50688 combined components
+
+On the V3D build under ES 3.0 (`not(feature = "report-es2")`) the GL core
+reports `GL_MAX_UNIFORM_BLOCK_SIZE` 16384 and
+`GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS` and
+`GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS` 50688. PowerVR, GC7000UL and
+Mali keep 6144 and 1536; under `report-es2` nothing moves on any GPU
+(`tests/es2_report_guard.rs`).
+
+- **The number.** 50688 is ES 3.0's own formula applied to what the V3D
+  reports per stage: `MAX_*_UNIFORM_COMPONENTS` 1536 + 12 blocks x 4096
+  dwords (16384 bytes). ES 3.0's own minimums are lower (50176 vertex, 50048
+  fragment, which are built from 1024 / 896 default components), so the
+  reported value meets them and stays consistent with the 1536 the same driver
+  answers for the stage.
+- **Constants** (`src/gl/context.rs`, per build, no `YakoglBackend` field):
+  `MAX_STAGE_UNIFORM_BLOCKS` 12; `MAX_UNIFORM_BLOCK_DWORDS` 4096,
+  `MAX_STAGE_UNIFORM_DWORDS` 50688 and `MAX_COMBINED_UNIFORM_COMPONENTS` 50688
+  on gpu-v3d without report-es2, `MAX_UNIFORM_DWORDS` (1536) for all three
+  otherwise. Const asserts pin the formula and that
+  `MAX_STAGE_UNIFORM_DWORDS + BLEND_CONSTS_DWORDS` fits the `u16` of the
+  program caps and `vs_uniform_dwords`.
+- **Where they are used.** `program.rs` `block_dwords` caps a stage's
+  flattened block at `MAX_STAGE_UNIFORM_DWORDS`; `draw.rs` `build_common`
+  clamps the stage's dword count to it; `state.rs` answers the three queries.
+  The default-uniform budget (`MAX_UNIFORM_DWORDS`, the vectors, the packing,
+  `gl_Max*Vectors`, `GL_MAX_*_UNIFORM_COMPONENTS`) is unchanged.
+- **The staging copy stays 1536 dwords a stage.** `pg.uniforms` is
+  `2 * MAX_UNIFORM_DWORDS * 4 + 16` bytes and `put` copies without a bounds
+  check. The V3D reads the program's host arrays and never the copy
+  (`uniforms_host_only`), but a back-end table that stages (the testutil
+  tables) with a longer block would have written past it. `build_common`
+  therefore refuses (`GL_OUT_OF_MEMORY`) any draw with `!host_only` and a
+  stage over `MAX_UNIFORM_DWORDS`, before `staging_reserve` and any `put`; a
+  fragment variant larger than the program's array (read from the staging
+  copy even when host-only) is refused unless its offset and length fit the
+  allocation. The FS offset is computed from the vertex block clamped to
+  `MAX_UNIFORM_DWORDS`. Lib tests: `gl::draw::tests::a_vertex_block_past_the_staging_copy_is_refused_before_any_write`
+  and the fragment twin.
+- **Arrays.** One uniform array holds at most 255 elements (the reflection's
+  `u8`), so a 16384-byte block is written as several arrays
+  (`tests/v3d_uniform_host.rs`, two blocks of eight 128-vec4 arrays, read at
+  the first and last vec4).
+- **Not done.** The Pi 4 board run (§8 step 7) and dEQP `functional.ubo` are
+  the board's. PowerVR and GC7000UL keep 6144 / 1536 (their
+  `src/pvr` and `src/vivante` back ends read the staged copy or a fixed
+  constant buffer).

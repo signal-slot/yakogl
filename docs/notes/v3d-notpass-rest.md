@@ -94,7 +94,10 @@ cause as `draw_buffers_indexed`), `state_query.integers.*` 17 and
   ES 3.0 asks 15, Mesa's v3d has 16), `DRAW_TARGETS` is 3
   (`src/backend.rs:765-775`; ES 3.0 asks 4, the V3D TLB and compiler take 4,
   its comment says only "no board has drawn four"), the uniform component and
-  block-size limits, and the compressed-format list. The `*_getfloat` /
+  block-size limits, and the compressed-format list. The V3D's uniform-block size (16384) and combined
+  uniform components (50688; ES 3.0's own minimums are 50176 and 50048) are
+  raised on the host (`docs/notes/ubo-limits.md` §9); their board rows are
+  to re-run. The `*_getfloat` /
   `*_getinteger64` rows fail on limits whose integer query is right too (e.g.
   `max_samples_getfloat`), so the float and 64-bit paths of
   `glGetFloatv`/`glGetInteger64v` (`src/gl/state.rs:1379-1500`) were

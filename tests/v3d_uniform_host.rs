@@ -57,9 +57,11 @@ mod v3d {
     use std::process::Command;
     use std::sync::{Mutex, MutexGuard, OnceLock};
 
+    use yakogl::gl::buffer::*;
     use yakogl::gl::consts::*;
     use yakogl::gl::context::{self, GlContext};
     use yakogl::gl::draw::glDrawArrays;
+    use yakogl::gl::es3::glBindBufferRange;
     use yakogl::gl::program::*;
     use yakogl::gl::shader::*;
     use yakogl::gl::state::*;
@@ -952,6 +954,58 @@ mod trampolines {
         for (d, what) in [(&d1, "draw 0"), (&d2, "draw 1"), (&d3, "draw 2")] {
             assert_staging(d, what);
         }
+    }
+
+    /// (f) two uniform blocks of 16384 bytes (1024 vec4 each, ES 3.0's
+    /// MAX_UNIFORM_BLOCK_SIZE, which the V3D reports): the vertex stage's
+    /// flattened block is 8192 dwords, far past the 1536 of the default
+    /// block, and the job builder is handed all of it; the first and the last
+    /// vec4 of each block are where the shader reads them.
+    #[test]
+    fn two_blocks_of_16384_bytes_reach_the_job_builder_whole() {
+        let _r = rig();
+        /* a uniform array holds at most 255 elements (the reflection's u8):
+         * each block is eight arrays of 128 vec4 */
+        let members = |c: &str| (0..8).map(|k| format!("vec4 {c}{k}[128];")).collect::<Vec<_>>().join(" ");
+        let vs = format!(
+            "#version 300 es\nlayout(location = 0) in vec4 a_position;\n\
+            uniform BlockA {{ {} }};\nuniform BlockB {{ {} }};\n\
+            void main() {{ gl_Position = a_position + a0[0] + a7[127] + b0[0] + b7[127]; }}\n",
+            members("a"),
+            members("b")
+        );
+        let vs = vs.as_str();
+        let fs = "#version 300 es\nprecision mediump float;\nout vec4 o;\nvoid main() { o = vec4(1.0); }\n";
+        let p = program(vs, fs);
+        use_program(p);
+        let (a, b) = (floats(70, 4096), floats(71, 4096));
+        let mut bufs: [GLuint; 2] = [0; 2];
+        // SAFETY: plain GL calls; each buffer holds the 16384 bytes of its block.
+        unsafe {
+            glGenBuffers(2, bufs.as_mut_ptr());
+            for (k, (buf, data)) in bufs.iter().zip([&a, &b]).enumerate() {
+                let name = CString::new(if k == 0 { "BlockA" } else { "BlockB" }).unwrap();
+                glBindBuffer(GL_UNIFORM_BUFFER, *buf);
+                glBufferData(GL_UNIFORM_BUFFER, 16384, data.as_ptr() as *const c_void, GL_STATIC_DRAW);
+                let idx = glGetUniformBlockIndex(p, name.as_ptr());
+                assert_ne!(idx, GL_INVALID_INDEX, "{:?}", logs());
+                glUniformBlockBinding(p, idx, k as GLuint);
+                glBindBufferRange(GL_UNIFORM_BUFFER, k as GLuint, *buf, 0, 16384);
+            }
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        }
+        let d = draw();
+        end_frame();
+
+        assert_eq!(d.vs.len(), 8192, "both blocks, whole: {:?}", logs());
+        for (name, data) in [("BlockA", &a), ("BlockB", &b)] {
+            let (first, last) = (bits(&data[..4]), bits(&data[4092..]));
+            assert!(has_run(&d.vs, &first), "{name}'s first vec4");
+            assert!(has_run(&d.vs, &last), "{name}'s last vec4");
+        }
+        assert_eq!(&d.vs[..4096], &bits(&a)[..], "the first block, in order");
+        assert_eq!(&d.vs[4096..], &bits(&b)[..], "the second block, in order");
+        assert!(d.fs.is_empty(), "no FS block");
     }
 
     /// (e) glUniform after a draw in the same frame does not reach the draw
