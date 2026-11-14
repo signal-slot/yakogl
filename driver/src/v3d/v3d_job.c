@@ -525,6 +525,17 @@ static bool write_uniforms(struct v3d_cl *cl, const struct v3d_uniform *u, uint3
 			v3d_cl_emit(bcl, ZERO_ALL_##KIND##_FLAGS, zero_all);                       \
 	} while (0)
 
+/* The packets EMIT_VARYING_FLAGS writes for one kind: one per 24-bit word
+ * with a flag, or the one ZERO_ALL_* when there is none. */
+static uint32_t varying_flag_packets(uint32_t lo, uint32_t hi)
+{
+	const uint64_t all = ((uint64_t)hi << 32) | lo;
+	uint32_t n = 0;
+	for (uint32_t k = 0; k < 3; k++)
+		n += ((uint32_t)(all >> (24 * k)) & 0xffffffu) != 0;
+	return n ? n : 1;
+}
+
 static void emit_stencil_face(struct v3d_cl *bcl, const struct v3d_job_stencil_face *f, bool front,
 			      bool back)
 {
@@ -767,7 +778,11 @@ static bool emit_state(struct v3d_job *j, const struct v3d_job_draw *d, struct p
 
 	/* varying flags (v3dx_emit.c:621-643) */
 	const struct v3d_fs_prog *fs = d->fs;
-	if (PACK(V3D_PACK_VARYINGS, 3, fs->flat_shade_flags, fs->noperspective_flags,
+	if (PACK(V3D_PACK_VARYINGS,
+		 varying_flag_packets(fs->flat_shade_flags, fs->flat_shade_flags_hi) +
+			 varying_flag_packets(fs->noperspective_flags, fs->noperspective_flags_hi) +
+			 varying_flag_packets(fs->centroid_flags, fs->centroid_flags_hi),
+		 fs->flat_shade_flags, fs->noperspective_flags,
 		 fs->centroid_flags, fs->flat_shade_flags_hi, fs->noperspective_flags_hi,
 		 fs->centroid_flags_hi)) {
 		EMIT_VARYING_FLAGS(bcl, FLAT_SHADE, flat_shade, fs->flat_shade_flags,
