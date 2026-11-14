@@ -14,14 +14,20 @@ pub const PVR_RENDER_HEAP_USC: usize = 2;
 /// PDS-heap offset of the static EOT (pixel-event) PDS code the firmware runs.
 pub const PVR_RENDER_EOT_PDS_CODE_OFF: u32 = 0x80;
 
-/// Colour attachments one render may write. The hardware allows eight; three
-/// is what a Quick 3D G-buffer pass asks for. The draws and the driver's
-/// static end-of-tile PDS program stay at this count.
-pub const PVR_RENDER_MAX_RT: usize = 3;
+/// Colour attachments one render may write. The hardware allows eight; four
+/// is ES 3.0's `GL_MAX_DRAW_BUFFERS`. The driver's static end-of-tile PDS
+/// program moves a fourth PBE state only when the driver was brought up for
+/// it (`pvr_render_eot_four_rt`, driver/src/pvr_render.h); otherwise it moves
+/// [`PVR_RENDER_EOT_PDS_PAIRS`].
+pub const PVR_RENDER_MAX_RT: usize = 4;
 
 /// Colour attachments the end-of-tile USC programs and the kick's PBE words
-/// cover: one more than a draw writes yet.
+/// cover: as many as a render may write.
 pub const PVR_RENDER_EOT_MAX_RT: usize = 4;
+
+/// PBE states the driver's static end-of-tile PDS program moves by default
+/// (three); `pvr_render_eot_four_rt` makes it [`PVR_RENDER_MAX_RT`].
+pub const PVR_RENDER_EOT_PDS_PAIRS: usize = 3;
 
 /// Tile buffers: one per colour attachment that does not fit the pixel's four
 /// output registers. Three RGBA16F attachments (a Quick 3D G-buffer) spill

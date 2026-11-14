@@ -51,14 +51,18 @@ enum pvr_render_heap {
 	PVR_RENDER_HEAP_USC,         /* USC shader code */
 };
 
-/* Colour attachments one render may write (the hardware allows eight; three
- * is what a Quick 3D G-buffer pass asks for). The static end-of-tile PDS
- * program and the draws stay at this count. */
-#define PVR_RENDER_MAX_RT 3
+/* Colour attachments one render may write (the hardware allows eight; four
+ * is ES 3.0's GL_MAX_DRAW_BUFFERS). The kick carries a PBE state per
+ * attachment and there is an end-of-tile program per count, but the static
+ * end-of-tile PDS program moves a fourth state only when the service was
+ * brought up for it (pvr_render_eot_four_rt below). */
+#define PVR_RENDER_MAX_RT 4
 /* Colour attachments the end-of-tile USC programs and the kick's PBE words
- * cover: one more than a draw writes yet, the capacity a four-target render
- * (ES 3.0 GL_MAX_DRAW_BUFFERS) grows into. */
+ * cover: as many as a render may write. */
 #define PVR_RENDER_EOT_MAX_RT 4
+/* PBE states (emit-word pairs) the static end-of-tile PDS program moves by
+ * default: three, the program every render ran before four targets. */
+#define PVR_RENDER_EOT_PDS_PAIRS 3
 
 /* Tile buffers: one per colour attachment that does not fit the pixel's four
  * output registers. Three RGBA16F attachments (a Quick 3D G-buffer) spill
@@ -301,6 +305,24 @@ extern bool pvr_render_fl_ready_pages;
  * docs/notes/pvr-render-pool.md, "Design: the firmware's partial render").
  * Off until gl_test case 175 (refusehang) and glmark2 have run with it. */
 extern bool pvr_render_partial_render;
+/* Build the static end-of-tile PDS program for four PBE states
+ * (PVR_RENDER_MAX_RT pairs) rather than PVR_RENDER_EOT_PDS_PAIRS (three).
+ * The firmware runs that one program, at PVR_RENDER_EOT_PDS_CODE_OFF, for
+ * every render, so the choice is the service's, read once by
+ * pvr_render_init: on, every render's event_pixel_pds_info_n word is the
+ * four-pair one (pvr_cr_event_pixel_pds_info(4): const_size 4) and its PDS
+ * DATA segment must be generated for four pairs, the unused ones zero; off
+ * (the default), every word is the three-pair one it was. Off until the
+ * four-target board run (RC14, docs/es3-cts-failures.md). */
+extern bool pvr_render_eot_four_rt;
+
+/* The emit-word pairs the static end-of-tile PDS program moves for the
+ * switch's value: the count pvr_render_init generates that program and the
+ * event_pixel_pds_info_n words for (tests/pvr_render_rt4.rs). */
+static inline uint32_t pvr_render_eot_pds_pairs(bool four_rt)
+{
+	return four_rt ? PVR_RENDER_MAX_RT : PVR_RENDER_EOT_PDS_PAIRS;
+}
 /* GPU recoveries (the firmware's HWR counter) since the render service
  * started: the board layer's recovery count on the PowerVR. */
 uint32_t pvr_render_hwr_recoveries(void);
