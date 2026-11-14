@@ -51,11 +51,18 @@ pub struct Planes {
     /// `companion[u]`: the unit of `u`'s B,A plane. Read only for the units
     /// in `mask`.
     pub companion: [u8; UNITS],
+    /// Bit `u` set (only ever for a unit in `mask`): the binding's texture
+    /// has no alpha (an RGB32 texture stored as RGBA32, `GcTexfmt::no_alpha`).
+    /// The descriptors' swizzle A = ONE reaches the R,G plane's channels
+    /// only, and the join reads the B,A plane's second channel, so the
+    /// joined `.w` is the constant 1 (1.0, or 1 for an integer sampler)
+    /// instead.
+    pub no_alpha: u32,
 }
 
 impl Planes {
     /// No 128-bit sampler: the pass does nothing.
-    pub const NONE: Planes = Planes { mask: 0, companion: [0; UNITS] };
+    pub const NONE: Planes = Planes { mask: 0, companion: [0; UNITS], no_alpha: 0 };
 
     pub const fn is_empty(&self) -> bool {
         self.mask == 0
@@ -69,6 +76,20 @@ impl Planes {
             self.companion[unit as usize] = companion;
         }
         self
+    }
+
+    /// `self` with the 128-bit sampler on `unit` marked as having no alpha
+    /// (see [`Planes::no_alpha`]). A unit that is not keyed is left alone.
+    pub const fn without_alpha(mut self, unit: u8) -> Planes {
+        if (unit as usize) < UNITS && self.mask & (1 << unit) != 0 {
+            self.no_alpha |= 1 << unit;
+        }
+        self
+    }
+
+    /// Whether the 128-bit sampler on `unit` has no alpha.
+    pub const fn lacks_alpha(&self, unit: u8) -> bool {
+        (unit as usize) < UNITS && self.mask & self.no_alpha & (1 << unit) != 0
     }
 
     /// The companion unit of `unit`, when `unit` is a 128-bit sampler.
@@ -90,6 +111,7 @@ impl Default for Planes {
 mod key {
     use core::sync::atomic::{AtomicU32, AtomicU8};
     pub static MASK: AtomicU32 = AtomicU32::new(0);
+    pub static NO_ALPHA: AtomicU32 = AtomicU32::new(0);
     pub static COMPANION: [AtomicU8; super::UNITS] = [const { AtomicU8::new(0) }; super::UNITS];
 }
 
@@ -99,7 +121,11 @@ mod key {
 /// (`shaderc::set_compile_lod_key`).
 pub fn set_compile_planes(p: Planes) -> Planes {
     use core::sync::atomic::Ordering::Relaxed;
-    let mut old = Planes { mask: key::MASK.swap(p.mask, Relaxed), companion: [0; UNITS] };
+    let mut old = Planes {
+        mask: key::MASK.swap(p.mask, Relaxed),
+        companion: [0; UNITS],
+        no_alpha: key::NO_ALPHA.swap(p.no_alpha, Relaxed),
+    };
     for (u, c) in key::COMPANION.iter().enumerate() {
         old.companion[u] = c.swap(p.companion[u], Relaxed);
     }
@@ -109,8 +135,9 @@ pub fn set_compile_planes(p: Planes) -> Planes {
 /// The compile's [`Planes`]: [`Planes::NONE`] unless a caller set one.
 pub fn compile_planes() -> Planes {
     use core::sync::atomic::Ordering::Relaxed;
-    let mut p = Planes { mask: key::MASK.load(Relaxed), companion: [0; UNITS] };
+    let mut p = Planes { mask: key::MASK.load(Relaxed), companion: [0; UNITS], no_alpha: 0 };
     if p.mask != 0 {
+        p.no_alpha = key::NO_ALPHA.load(Relaxed);
         for (u, c) in key::COMPANION.iter().enumerate() {
             p.companion[u] = c.load(Relaxed);
         }
@@ -123,8 +150,10 @@ const fn refuse<'a>(msg: &'static str) -> Error<'a> {
 }
 
 /// The instructions a split look-up adds before its own id (which becomes
-/// the joining load): two look-ups and two stores.
+/// the joining load): two look-ups and two stores; a no-alpha binding's
+/// join stores z and w apart and adds the constant w.
 const EXTRA: u32 = 4;
+const EXTRA_NO_ALPHA: u32 = 6;
 
 /// `l` with every look-up on a unit of `p.mask` split into its two plane
 /// look-ups and joined (module doc). Instructions keep program order in
@@ -138,6 +167,11 @@ pub fn split_planes<'a>(a: &Arena<'a>, l: Lowered<'a>, p: Planes) -> R<'a, Lower
         return Ok(l);
     }
     let split = |op: &Op| matches!(*op, Op::Tex { sampler, .. } if p.companion_of(sampler).is_some());
+    let extra = |op: &Op| match *op {
+        Op::Tex { sampler, .. } if p.lacks_alpha(sampler) => EXTRA_NO_ALPHA,
+        Op::Tex { sampler, .. } if p.companion_of(sampler).is_some() => EXTRA,
+        _ => 0,
+    };
     if !m.instrs.iter().any(split) {
         return Ok(l);
     }
@@ -173,9 +207,7 @@ pub fn split_planes<'a>(a: &Arena<'a>, l: Lowered<'a>, p: Planes) -> R<'a, Lower
     let mut new_id: AVec<u32> = AVec::with_capacity(a, n)?;
     let mut acc = 0u32;
     for op in m.instrs.iter() {
-        if split(op) {
-            acc += EXTRA;
-        }
+        acc += extra(op);
         new_id.push(a, new_id.len() as u32 + acc)?;
     }
     let new_id = new_id.into_slice();
@@ -218,15 +250,33 @@ pub fn split_planes<'a>(a: &Arena<'a>, l: Lowered<'a>, p: Planes) -> R<'a, Lower
         instrs.push(a, hi_op)?;
         /* lanes z and w read the plane's x and y */
         let hi = Src { val: ValueId(base + 2), swizzle: [0, 1, 0, 1] };
-        instrs.push(a, Op::StoreLocal { local: t, index: None, src: hi, write_mask: 0b1100 })?;
-        instrs.push(a, Op::LoadLocal { local: t, index: None, comps: 4 })?;
-        if sized {
-            comps.extend_from_slice(a, &[4, 0, 4, 0, m.comps.get(i).copied().unwrap_or(4)])?;
+        let own = m.comps.get(i).copied().unwrap_or(4);
+        if p.lacks_alpha(sampler) {
+            /* the stored alpha word is not the texture's: w is the constant 1 */
+            instrs.push(a, Op::StoreLocal { local: t, index: None, src: hi, write_mask: 0b0100 })?;
+            instrs.push(
+                a,
+                if ret == ir::ScalarType::F32 { Op::ConstF32([1f32.to_bits(); 4]) } else { Op::ConstI32([1; 4]) },
+            )?;
+            instrs.push(
+                a,
+                Op::StoreLocal { local: t, index: None, src: Src::id(ValueId(base + 4)), write_mask: 0b1000 },
+            )?;
+            instrs.push(a, Op::LoadLocal { local: t, index: None, comps: 4 })?;
+            if sized {
+                comps.extend_from_slice(a, &[4, 0, 4, 0, 4, 0, own])?;
+            }
+        } else {
+            instrs.push(a, Op::StoreLocal { local: t, index: None, src: hi, write_mask: 0b1100 })?;
+            instrs.push(a, Op::LoadLocal { local: t, index: None, comps: 4 })?;
+            if sized {
+                comps.extend_from_slice(a, &[4, 0, 4, 0, own])?;
+            }
         }
     }
 
     let mut nodes: AVec<Node> = AVec::with_capacity(a, m.nodes.len() + acc as usize)?;
-    let body = copy_block(a, &m, m.body, &map, &split, new_id, &mut nodes)?;
+    let body = copy_block(a, &m, m.body, &map, &extra, new_id, &mut nodes)?;
     Ok(Lowered {
         module: ir::Module {
             instrs: instrs.into_slice(),
@@ -247,7 +297,7 @@ fn copy_block<'a>(
     m: &Module<'_>,
     r: Range,
     map: &dyn Fn(ValueId) -> ValueId,
-    split: &dyn Fn(&Op) -> bool,
+    extra: &dyn Fn(&Op) -> u32,
     new_id: &[u32],
     out: &mut AVec<'a, Node>,
 ) -> R<'a, Range> {
@@ -256,19 +306,20 @@ fn copy_block<'a>(
         let copied = match node {
             Node::Instr(InstrId(i)) => {
                 let id = new_id.get(i as usize).copied().unwrap_or(i);
-                if m.instrs.get(i as usize).is_some_and(split) {
-                    for j in (1..=EXTRA).rev() {
+                let n = m.instrs.get(i as usize).map_or(0, extra);
+                if n != 0 {
+                    for j in (1..=n).rev() {
                         level.push(a, Node::Instr(InstrId(id - j)))?;
                     }
                 }
                 Node::Instr(InstrId(id))
             }
             Node::If { cond, then_, else_ } => {
-                let then_ = copy_block(a, m, then_, map, split, new_id, out)?;
-                let else_ = copy_block(a, m, else_, map, split, new_id, out)?;
+                let then_ = copy_block(a, m, then_, map, extra, new_id, out)?;
+                let else_ = copy_block(a, m, else_, map, extra, new_id, out)?;
                 Node::If { cond: Src { val: map(cond.val), ..cond }, then_, else_ }
             }
-            Node::Loop { body } => Node::Loop { body: copy_block(a, m, body, map, split, new_id, out)? },
+            Node::Loop { body } => Node::Loop { body: copy_block(a, m, body, map, extra, new_id, out)? },
             other => other,
         };
         level.push(a, copied)?;

@@ -227,6 +227,67 @@ fn the_key_is_put_back_and_the_records_stay_apart() {
     }
 }
 
+/// The instruction listing of `sh`, one line per instruction.
+fn listing(sh: &ShcShader) -> Vec<String> {
+    sh.usc_words()
+        .chunks(4)
+        .map(|c| {
+            let mut s = String::new();
+            yakogl::shaderc::online::vivante::listing::body_text(
+                &mut s,
+                &decode_instr(&c.try_into().unwrap()).expect("decodes"),
+            )
+            .expect("text");
+            s
+        })
+        .collect()
+}
+
+/// A keyed binding whose texture has no alpha (RGB32 stored as RGBA32): the
+/// joined `.w` is the constant 1, not the B,A plane's second channel, which
+/// the descriptors' swizzle A = ONE does not reach. A binding with alpha
+/// joins as before.
+#[test]
+fn a_no_alpha_binding_joins_a_constant_one_for_w() {
+    let _g = serial();
+    for (sampler, out) in [("sampler2D", "vec4"), ("usampler2D", "uvec4")] {
+        let sh = compile(SHC_STAGE_FRAGMENT, &fs(&format!("uniform highp {sampler} s;"), out, "o = texture(s, uv);"));
+        let alpha = Wide128Planes::NONE.with(0, 5);
+        let with = variant(&sh, alpha).unwrap_or_else(|e| panic!("{sampler}: {e}"));
+        let without = variant(&sh, alpha.without_alpha(0)).unwrap_or_else(|e| panic!("{sampler}: {e}"));
+        assert_ne!(with.priv_, without.priv_, "{sampler}: the alpha bit is part of the record key");
+        assert_eq!(units(&without), [("texld", 0), ("texld", 5)], "{sampler}");
+        let (a, n) = (listing(&with), listing(&without));
+        let one = if sampler == "sampler2D" { "1.0:f20" } else { "1:s20" };
+        /* with alpha: the second plane's x,y become z,w, as before */
+        assert!(
+            a.iter().any(|t| t.starts_with("mov") && t.contains("t2.__zw, void, void, t1.xyxy")),
+            "{sampler}: {a:#?}"
+        );
+        assert!(a.iter().all(|t| !t.contains(one)), "{sampler}: no constant: {a:#?}");
+        /* without: only z comes from the plane, w is the constant */
+        assert!(
+            n.iter().any(|t| t.starts_with("mov") && t.contains("t2.__z_, void, void, t1.xyxy")),
+            "{sampler}: {n:#?}"
+        );
+        assert!(
+            n.iter().any(|t| t.starts_with("mov") && t.contains("t2.___w, void, void,") && t.contains(one)),
+            "{sampler}: {n:#?}"
+        );
+        assert!(n.iter().all(|t| !t.contains(".__zw")), "{sampler}: w is not read from the plane: {n:#?}");
+        assert_ne!(with.usc_words(), without.usc_words(), "{sampler}");
+        /* the same key again finds its record; the key is put back */
+        let again = variant(&sh, alpha.without_alpha(0)).expect("compiles");
+        assert_eq!(again.priv_, without.priv_, "{sampler}");
+        assert!(compile_planes().is_empty() && compile_planes().no_alpha == 0, "{sampler}: the key is put back");
+        /* an alpha bit on a unit that is not keyed is no key */
+        assert_eq!(alpha.without_alpha(3), alpha, "{sampler}");
+        for s in [with, without, again, sh] {
+            release_shader(&s);
+        }
+    }
+}
+
 /* ---- the GL core's draw (item wide128-shader) ----------------------------
  *
  * The draw picks the key from the texture bound NOW (src/gl/draw.rs,
