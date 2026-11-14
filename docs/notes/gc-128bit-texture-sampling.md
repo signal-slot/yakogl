@@ -154,7 +154,7 @@ gathers of one plane, joined with `(hi << 16) | lo` (`:115-151`).
      the draw, not the program.
    - Host test `tests/es3_wide128_gc.rs`.
    Left of the join: a gather (it needs Mesa's 16-bit halves; no
-   `textureGather` split exists) and the no-alpha 1 (item 3).
+   `textureGather` split exists) and the no-alpha 1 on the draw side (item 3).
 2. **The flip** (gc-wide128-flip, still left): the three classes into
    `GC_SAMPLED_TEXFMTS`, the gc-formats.md rows (`none` becomes the plane
    format) and the host dEQP measurement.
@@ -162,7 +162,12 @@ gathers of one plane, joined with `(hi << 16) | lo` (`:115-151`).
    - A binding with `no_alpha` (an RGB32F texture stored as RGBA32F) gets
      swizzle A = ONE in both descriptors. The join reads channel 1 of
      plane 1, which that swizzle does not reach, so the shader side must
-     supply the 1 itself. Mesa has the same shape.
+     supply the 1 itself. Mesa has the same shape. Compiler side done:
+     `Planes::no_alpha` (`without_alpha(unit)`, part of the variant's record
+     key) makes `split_planes` store a constant 1 (1.0, or 1 for an integer
+     sampler) into the joined `.w`. Left: `wide128_select` (`src/gl/draw.rs`)
+     must call `.without_alpha(unit)` on each keyed unit whose binding has
+     `GcTexfmt::no_alpha`.
    - With sixteen fragment units in use, the companions plus the vertex
      stage can run past slot 31. Vertex slots past it are not bounded
      today, as before.
