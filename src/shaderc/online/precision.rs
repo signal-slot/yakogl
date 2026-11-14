@@ -1204,7 +1204,7 @@ mod tests {
     //! lowering records it per instruction: the A.9 probes (whose Mesa NIR
     //! the note quotes) and the `vsmp_*` forms of dEQP's vertex shaders.
     use super::super::arena::Arena;
-    use super::super::ir::{AluOp, Module, Op, Prec, ValueId};
+    use super::super::ir::{AluOp, Module, Op, Prec, ValueId, ValueKind};
     use super::super::lower::compile_to_ir;
     use super::super::sema::Stage;
     use std::string::String;
@@ -1606,100 +1606,75 @@ mod tests {
         }
     }
 
-    /// Not an int GL type (int, uint and their vectors).
-    fn float_gl_type(t: u16) -> bool {
-        !matches!(t, 0x1404 | 0x1405 | 0x8B53..=0x8B55 | 0x8DC6..=0x8DC8)
+    /// The kind of every value of `m`, by [`Module::value_kind`]: the
+    /// function the lowering records each [`Prec`] by, so the check has
+    /// no copy of its own.
+    fn kinds(m: &Module) -> Vec<ValueKind> {
+        let mut k = Vec::with_capacity(m.instrs.len());
+        for i in 0..m.instrs.len() {
+            let x = m.value_kind(ValueId(i as u32), &k);
+            k.push(x);
+        }
+        k
     }
 
-    /// The value `v` is a float or a bool by what loads or selects it.
-    fn float_value(m: &Module, v: ValueId, depth: u32) -> bool {
-        use super::super::ir::{IoSlot, ScalarType};
-        let row = |dw: u16| m.uniforms.iter().find(|u| dw >= u.dword_off && dw < u.dword_off + u.dwords.max(1));
-        match m.instrs.get(v.0 as usize) {
-            Some(Op::LoadLocal { local, .. }) => m
-                .locals
-                .get(local.0 as usize)
-                .is_some_and(|d| d.ty.scalar != ScalarType::I32 && d.ty.scalar != ScalarType::U32),
-            Some(Op::LoadUniform { dword_off, .. }) => row(*dword_off).is_some_and(|u| float_gl_type(u.gl_type)),
-            Some(Op::LoadUniformIdx { base_dw, .. }) => row(*base_dw).is_some_and(|u| float_gl_type(u.gl_type)),
-            Some(Op::LoadInput { slot, .. }) => match slot {
-                IoSlot::Attrib(_) | IoSlot::Varying(_) => {
-                    m.inputs.iter().find(|d| d.slot() == *slot).is_some_and(|d| float_gl_type(d.gl_type))
+    /// The values whose class contradicts their kind: a float or a bool
+    /// that records None, or an int that records a class.
+    fn unclassed(m: &Module) -> Vec<usize> {
+        let k = kinds(m);
+        (0..m.instrs.len())
+            .filter(|&i| {
+                let p = m.prec_of(ValueId(i as u32));
+                match k[i] {
+                    ValueKind::Float | ValueKind::Bool => p == Prec::None,
+                    ValueKind::Int => p != Prec::None,
+                    ValueKind::Void => false,
                 }
-                IoSlot::VertexId | IoSlot::InstanceId => false,
-                _ => true,
-            },
-            Some(Op::Alu(AluOp::Bcsel, [_, x, _])) if depth < 64 => float_value(m, x.val, depth + 1),
-            _ => false,
-        }
+            })
+            .collect()
     }
 
-    /// Instruction `i` makes a float or bool value (the operation, its
-    /// local's or input's or uniform's type, a select's first side).
-    fn float_op(m: &Module, i: usize) -> bool {
-        match m.instrs[i] {
-            Op::ConstF32(_) | Op::ConstBool(_) => true,
-            /* a select is its sides' kind: before the generic ALU
-             * arm, which would not list it (eighth review,
-             * should-fix 1) */
-            Op::Alu(AluOp::Bcsel, _) => float_value(m, ValueId(i as u32), 0),
-            Op::Alu(a, _) => matches!(
-                a,
-                AluOp::Fadd
-                    | AluOp::Fmul
-                    | AluOp::Ffma
-                    | AluOp::Fmin
-                    | AluOp::Fmax
-                    | AluOp::Fneg
-                    | AluOp::Fabs
-                    | AluOp::Fsign
-                    | AluOp::Frcp
-                    | AluOp::Frsq
-                    | AluOp::Fsqrt
-                    | AluOp::Fexp2
-                    | AluOp::Flog2
-                    | AluOp::Fsin
-                    | AluOp::Fcos
-                    | AluOp::Ffloor
-                    | AluOp::Fceil
-                    | AluOp::Ftrunc
-                    | AluOp::Ffract
-                    | AluOp::Fdot2
-                    | AluOp::Fdot3
-                    | AluOp::Fdot4
-                    | AluOp::Flt
-                    | AluOp::Fle
-                    | AluOp::Feq
-                    | AluOp::Fne
-                    | AluOp::B2f
-                    | AluOp::I2f
-                    | AluOp::U2f
-            ),
-            Op::Tex { ret: super::super::ir::ScalarType::F32, .. } => true,
-            _ => float_value(m, ValueId(i as u32), 0),
-        }
-    }
-
-    /// Over the tree's shaders, three invariants that hold for every
-    /// correct shader, whatever another change adds to the corpus:
+    /// Over the tree's shaders, invariants that hold for every correct
+    /// shader, whatever another change adds to the corpus:
     ///
     /// - the tables are in step with the instructions and locals;
-    /// - no value that is a float by its operation records None (the
-    ///   review's light_amount struct copies recorded None for 144 selects
-    ///   and loads);
+    /// - every value's class agrees with its kind ([`Module::value_kind`],
+    ///   the function the lowering decides by): a float or a bool never
+    ///   records None, an int always does;
+    /// - no float or bool value was lowered under a context with no class
+    ///   ([`super::super::lower::NO_CONTEXT`] stays 0);
     /// - the lowering lowers no expression the scan did not reach
-    ///   ([`super::super::lower::UNSEEN`] stays 0): every Unknown is a
-    ///   rule's (a pow/asin/acos argument not known to vary, a run-time
-    ///   index into a folded `const`, an unevaluated `?:` condition, an
-    ///   inexact reciprocal), never a gap of the scan.
+    ///   ([`super::super::lower::UNSEEN`] stays 0).
     ///
-    /// Which shaders a rule refuses is not listed here: a new shader that
-    /// calls pow on a computed value is refused by design (glmark2's
-    /// `pow(max(dot(N, H), 0.0), 100.0)`), and the rule's forms are pinned
-    /// by the unit tests on their own sources. One positive pin keeps the
-    /// Unknown path live over the corpus.
+    /// What this test notices is a value WITHOUT a class. It does not
+    /// notice a rule that refuses more than it should: a change that made
+    /// every pow argument Unknown, or every `?:` on a constant condition,
+    /// keeps every
+    /// value classed and passes here (ninth review, mutations A5 and A6).
+    /// Each rule is guarded by its own unit tests on its own sources:
+    ///
+    /// - pow / asin / acos arguments not known to vary (A5 is killed by
+    ///   these six): `an_argument_not_known_to_vary_into_pow_is_unknown`,
+    ///   `only_a_bare_read_is_known_to_vary`,
+    ///   `a_computed_pow_argument_is_refused_and_a_bare_read_is_not`,
+    ///   `a_local_named_like_an_input_is_the_local`,
+    ///   `a_constant_through_a_parameter_into_pow_is_unknown`,
+    ///   `an_exact_fp16_constant_argument_is_not_pinned`;
+    /// - a `?:` whose condition is not evaluated (A6 is killed by these
+    ///   three): `a_select_on_a_constant_condition_is_the_chosen_side`,
+    ///   `mesa_s_rules_decide_more_constants`,
+    ///   `a_condition_outside_the_measured_forms_is_unknown`;
+    /// - a run-time index into a folded `const`:
+    ///   `a_run_time_index_into_a_folded_const_is_unknown`;
+    /// - an inexact reciprocal fold:
+    ///   `a_reciprocal_folded_in_a_lowered_tree_is_unknown_where_it_differs`.
+    ///
+    /// Which corpus shaders a rule refuses is not listed here: a new
+    /// shader that calls pow on a computed value is refused by design
+    /// (glmark2's `pow(max(dot(N, H), 0.0), 100.0)`). One positive pin
+    /// keeps the Unknown path live over the corpus.
     #[test]
-    fn every_float_value_of_the_corpus_has_a_class() {
+    fn every_value_of_the_corpus_has_its_kind_s_class() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut files = Vec::new();
         for d in ["tools/shaders", "tools/mali/testdata", "tests/fixtures", "tools/cts/testdata"] {
@@ -1721,17 +1696,12 @@ mod tests {
                 bad.push(std::format!("{}: tables out of step", f.display()));
                 continue;
             }
-            for (i, op) in m.instrs.iter().enumerate() {
-                let p = m.prec_of(ValueId(i as u32));
-                let float = float_op(m, i);
-                if p == Prec::Unknown {
-                    let rel = f.strip_prefix(root).unwrap_or(f).display().to_string();
-                    if !unknown.contains(&rel) {
-                        unknown.push(rel);
-                    }
-                } else if float && p == Prec::None {
-                    bad.push(std::format!("{}: %{i} {p:?} {op:?}", f.display()));
-                }
+            if m.prec.contains(&Prec::Unknown) {
+                let rel = f.strip_prefix(root).unwrap_or(f).display().to_string();
+                unknown.push(rel);
+            }
+            for i in unclassed(m) {
+                bad.push(std::format!("{}: %{i} {:?} {:?}", f.display(), m.prec[i], m.instrs[i]));
             }
         }
         std::println!("{compiled} of {} shaders compiled", files.len());
@@ -1739,7 +1709,7 @@ mod tests {
         let unseen = super::super::lower::UNSEEN.with(|n| n.get());
         assert_eq!(unseen, 0, "expressions lowered that the precision scan never reached");
         let no_context = super::super::lower::NO_CONTEXT.with(|n| n.get());
-        assert_eq!(no_context, 0, "float values lowered under no class, left to the Unknown rule");
+        assert_eq!(no_context, 0, "float or bool values lowered under no class, left to the Unknown rule");
         /* the Unknown path is live: the dead-cube shader's `asin(float(k))`
          * of a global `k` NIR may prove constant (fourth review) */
         assert!(
@@ -1747,7 +1717,12 @@ mod tests {
             "{unknown:?}"
         );
         std::println!("{} shaders carry an Unknown: {unknown:?}", unknown.len());
-        assert!(bad.is_empty(), "{} values with no class:\n{}", bad.len(), bad[..bad.len().min(20)].join("\n"));
+        assert!(
+            bad.is_empty(),
+            "{} values whose class is not their kind's:\n{}",
+            bad.len(),
+            bad[..bad.len().min(20)].join("\n")
+        );
     }
 
     /// A `?:` whose condition `ast_to_hir` evaluates is the chosen side
@@ -2279,32 +2254,148 @@ mod tests {
         }
     }
 
-    /// The rule that makes "a float value with class None" impossible
-    /// (lower.rs `Lower::instr_prec`): a float or bool value lowered under
-    /// a context with no class records Unknown, never None, unless its
-    /// site sets the class Mesa was measured at. Shown by taking the copy
-    /// in's measured class away (`UNMEASURED`), as a new site that sets
-    /// none would be: its loads record Unknown and are counted.
+    /// The rule that makes "a float or bool value with class None"
+    /// impossible (lower.rs `Lower::instr_prec`): such a value lowered
+    /// under a context with no class records Unknown, never None, unless
+    /// its site sets the class Mesa was measured at. Shown by taking the
+    /// copy in's measured class away (`UNMEASURED`), as a new site that
+    /// sets none would be: its loads, and the select ladder of a run-time
+    /// index (a float `Bcsel`, whose kind comes from its sides; ninth
+    /// review should-fix 1), record Unknown and are counted.
     #[test]
     fn a_float_value_under_no_context_is_unknown_never_none() {
-        let src = "varying mediump vec4 v; attribute mediump vec4 q;\n\
-                   void sp(inout mediump vec4 io){ io = io * 0.5; }\n\
-                   void main(){ mediump vec4 arr[2]; arr[0] = q; arr[1] = q; sp(arr[1]); v = arr[0] + arr[1]; gl_Position = p; }";
-        super::super::lower::UNMEASURED.with(|u| u.set(true));
-        super::super::lower::NO_CONTEXT.with(|n| n.set(0));
-        let g = vs(src);
-        super::super::lower::UNMEASURED.with(|u| u.set(false));
-        let counted = super::super::lower::NO_CONTEXT.with(|n| n.get());
-        assert!(counted > 0, "the copy in fell to the rule");
-        let floats_none = g
-            .ops
-            .iter()
-            .zip(&g.prec)
-            .filter(|(o, p)| matches!(o, Op::LoadLocal { .. } | Op::Alu(..)) && **p == Prec::None)
-            .filter(|(o, _)| !matches!(o, Op::Alu(AluOp::Ieq | AluOp::Iadd, _)))
-            .count();
-        assert_eq!(floats_none, 0, "{:?}", g.prec);
-        assert!(g.prec.contains(&Prec::Unknown));
+        for (index, ladder) in [("1", false), ("ui", true)] {
+            let src = std::format!(
+                "varying mediump vec4 v; attribute mediump vec4 q; uniform int ui;\n\
+                 void sp(inout mediump vec4 io){{ io = io * 0.5; }}\n\
+                 void main(){{ mediump vec4 arr[2]; arr[0] = q; arr[1] = q; sp(arr[{index}]); v = arr[0] + arr[1]; gl_Position = p; }}"
+            );
+            super::super::lower::UNMEASURED.with(|u| u.set(true));
+            super::super::lower::NO_CONTEXT.with(|n| n.set(0));
+            let mut buf = std::vec![0u8; 1 << 22];
+            let a = Arena::new(&mut buf);
+            let l = compile_to_ir(
+                &a,
+                Stage::Vertex,
+                a.alloc_str(&std::format!("attribute highp vec4 p;\n{src}")).expect("arena"),
+            );
+            super::super::lower::UNMEASURED.with(|u| u.set(false));
+            let l = l.expect("compiles");
+            let m = &l.module;
+            assert!(super::super::lower::NO_CONTEXT.with(|n| n.get()) > 0, "{src}: the copy in fell to the rule");
+            assert!(unclassed(m).is_empty(), "{src}: {:?}", unclassed(m));
+            assert!(m.prec.contains(&Prec::Unknown), "{src}");
+            if ladder {
+                let k = kinds(m);
+                let selects: Vec<Prec> = (0..m.instrs.len())
+                    .filter(|&i| matches!(m.instrs[i], Op::Alu(AluOp::Bcsel, _)) && k[i] == ValueKind::Float)
+                    .map(|i| m.prec[i])
+                    .collect();
+                assert!(selects.contains(&Prec::Unknown), "{src}: the ladder's selects {selects:?}");
+            }
+        }
+    }
+
+    /// `&&`, `||`, `^^` on bools lower to `Iand`, `Ior`, `Ixor`, which
+    /// also serve int `&`, `|`, `^`: the value's kind, not the opcode,
+    /// decides its class (ninth review B-K; they recorded None). A bool
+    /// records the class of the tree it is in, as every float does:
+    /// Medium in a lowered (mediump) tree, High in a full-width tree or in
+    /// none. Mesa's GLSL IR has the same: `(var_ref b) || (var_ref c)` of
+    /// two bool variables, which have no precision, is in no lowered tree
+    /// (probe q1). The bit width of a bool is not this class: it is the
+    /// width of the compares that made it (`pan_nir_lower_bool_to_bitsize`,
+    /// docs/notes/mali-precision.md A.6), which the width pass works out
+    /// from the compares; what it needs here is that a bool is never None,
+    /// which it reads as an int (32 bits, no conversion). Mesa 26.2.1
+    /// final NIR for the forms:
+    ///
+    /// - b1: `16 iand flt, flt`, `16 ixor`, `16 ior`, `16 inot`: the
+    ///   compares are 16-bit, so are the bools made from them;
+    /// - b2: `32 iand %7, %8` of a bool uniform and a widened 16-bit
+    ///   compare: the uniform is 32-bit;
+    /// - q2: `32 iand (ilt_pan ...), (i2i32 flt_pan)`: an int compare is
+    ///   32-bit, and makes the `&&` 32-bit;
+    /// - q1: `16 ieq_pan %8, %6` of two 16-bit bools: an `==` of bools is
+    ///   a bool operation like `&&` (an `==` of ints is a 32-bit compare).
+    #[test]
+    fn a_bool_operation_records_its_tree_s_class_never_none() {
+        let fs = |src: &str| compile(src, Stage::Fragment);
+        /* b1 */
+        let g = fs("precision mediump float; varying vec4 v;\n\
+                    void main(){ bool b = v.x > 0.5 && v.y < 0.3; bool c = b ^^ (v.z > 0.1); bool d = !(b || c);\n\
+                    gl_FragColor = (d || c) ? v : vec4(0.0); }");
+        assert_eq!(alu(&g, AluOp::Iand), [M], "b && c of two mediump compares");
+        assert_eq!(alu(&g, AluOp::Ixor), [M], "a bool local ^^ a mediump compare");
+        assert_eq!(alu(&g, AluOp::Ior), [H, H], "|| of two bool locals: no lowered tree");
+        assert_eq!(alu(&g, AluOp::Bnot), [H]);
+        /* b2 */
+        let g = vs("varying mediump vec4 v; uniform bool ub; uniform bvec2 ubv;\n\
+                    void main(){ bvec2 q = bvec2(a > 0.0, ub); bool e = all(q) && any(ubv); v = e ? vec4(a) : vec4(float(ubv.y)); gl_Position = p; }");
+        assert_eq!(alu(&g, AluOp::Iand), [H], "all(q) && any(ubv)");
+        /* q1 */
+        let g = fs("precision mediump float; varying vec4 v;\n\
+                    void main(){ bool b = v.x > 0.5; bool c = v.y < 0.3; bool e = b == c; bool f = b != (v.z > 0.1);\n\
+                    gl_FragColor = (e || f) ? v : vec4(0.0); }");
+        assert_eq!(alu(&g, AluOp::Ieq), [H], "== of two bool locals");
+        assert_eq!(alu(&g, AluOp::Ine), [M], "a bool local != a mediump compare");
+        if !crate::REPORT_ES2 {
+            /* q2: an int compare is a 32-bit bool, whatever tree it is in */
+            let g = fs("#version 300 es\nprecision mediump float; in vec4 v; flat in mediump int kk; out vec4 o;\n\
+                        void main(){ bool b = (kk < 3) && (v.x > 0.5); bool c = (kk == 2) == (v.y < 0.3);\n\
+                        o = (b || c) ? v : vec4(0.0); }");
+            assert_eq!(alu(&g, AluOp::Ilt), [H]);
+            assert_eq!(alu(&g, AluOp::Iand), [H], "an int compare && a mediump compare");
+            assert_eq!(alu(&g, AluOp::Ieq), [H, H], "== of ints, then == of that and a compare");
+        }
+    }
+
+    /// An int value records None whatever opcode makes it, and a select
+    /// is the kind of its two sides, not of its condition: an int `?:`
+    /// and an int run-time index ladder are Int. The pack built-ins work
+    /// a float's bits with integer operations: `Iand` of a float and an
+    /// int mask, and unpackHalf2x16's select of a float or of bits made
+    /// by integer operations, are bits, Int.
+    #[test]
+    fn an_int_select_and_float_bits_record_none() {
+        let g = vs("varying mediump vec4 v; uniform bool ub; uniform int ui; uniform int ia[4];\n\
+                    void main(){ int t = ub ? ui : 7; int s = ia[ui]; v = vec4(a * float(t + s)); gl_Position = p; }");
+        let selects = alu(&g, AluOp::Bcsel);
+        assert!(!selects.is_empty() && selects.iter().all(|&c| c == Prec::None), "{selects:?}");
+        /* a bool uniform's load is the 0 or 1 the GL core stores, an int;
+         * `I2b` makes the bool (lower.rs `bool_from_block`) */
+        let loads = of(&g, |o| matches!(o, Op::LoadUniform { .. } | Op::LoadUniformIdx { .. }));
+        assert!(!loads.is_empty() && loads.iter().all(|&c| c == Prec::None), "{loads:?}");
+        assert_eq!(alu(&g, AluOp::I2b), [H], "the bool `ub`");
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let src = "#version 300 es\nin highp vec4 p; in mediump vec4 q; uniform highp uint uu; out highp vec4 v;\n\
+                   void main(){ v = vec4(float(packHalf2x16(q.xy)), unpackHalf2x16(uu), 0.0); gl_Position = p; }";
+        let mut buf = std::vec![0u8; 1 << 22];
+        let a = Arena::new(&mut buf);
+        let l = compile_to_ir(&a, Stage::Vertex, a.alloc_str(src).expect("arena")).expect("compiles");
+        let m = &l.module;
+        let k = kinds(m);
+        let src_k = |s: super::super::ir::Src| k[s.val.0 as usize];
+        let class_of = |f: &dyn Fn(&Op) -> bool| -> Vec<Prec> {
+            (0..m.instrs.len()).filter(|&i| f(&m.instrs[i])).map(|i| m.prec[i]).collect()
+        };
+        let bits_and = class_of(&|o| matches!(o, Op::Alu(AluOp::Iand, [x, ..]) if src_k(*x) == ValueKind::Float));
+        assert_eq!(bits_and, [Prec::None], "packHalf2x16's `Iand` of the float's bits");
+        let mixed = class_of(&|o| matches!(o, Op::Alu(AluOp::Bcsel, [_, x, y]) if src_k(*x) != src_k(*y)));
+        assert_eq!(mixed, [Prec::None], "unpackHalf2x16's select of a float or bits");
+        /* isnan and isinf of a mediump value: the int compare of the
+         * float's bits is a 32-bit bool in the mediump tree it serves */
+        let g = compile(
+            "#version 300 es\nin highp vec4 p; in mediump vec4 q; out mediump vec4 v;\n\
+             void main(){ v = (isnan(q.x * 0.5) || isinf(q.y * 0.5)) ? q : vec4(0.0); gl_Position = p; }",
+            Stage::Vertex,
+        );
+        assert_eq!(alu(&g, AluOp::Fmul), [M, M], "the trees are mediump");
+        assert_eq!(alu(&g, AluOp::Ult), [H], "isnan's compare of the bits");
+        assert_eq!(alu(&g, AluOp::Ieq), [H], "isinf's compare of the bits");
+        assert_eq!(alu(&g, AluOp::Iand), [Prec::None, Prec::None], "the bits");
     }
 
     /// The pack built-ins (ES 3.00) take a highp argument: Mesa widens it
@@ -2356,10 +2447,10 @@ mod tests {
     /// flow, look-ups, `inverse`/`transpose`/`outerProduct`, the pack
     /// built-ins, `out`/`inout` through array elements, swizzles and
     /// structs, a discard loop, `gl_PointCoord`, globals, `++`/`--`):
-    /// every float value has a class, no expression escapes the scan, and
+    /// every value has its kind's class, no expression escapes the scan, and
     /// no value is left to the no-context rule.
     #[test]
-    fn the_eighth_review_s_shaders_give_every_float_value_a_class() {
+    fn the_eighth_review_s_shaders_give_every_value_its_kind_s_class() {
         let shaders = [
             (
                 Stage::Fragment,
@@ -2411,9 +2502,8 @@ void main(){ glob = glob * uh; mediump float t = a.x; t++; --t; v = vec4(glob, c
             let l = compile_to_ir(&a, stage, a.alloc_str(src).expect("arena")).expect("compiles");
             let m = &l.module;
             assert!(m.has_prec(), "{src}");
-            let none: Vec<usize> =
-                (0..m.instrs.len()).filter(|&i| float_op(m, i) && m.prec_of(ValueId(i as u32)) == Prec::None).collect();
-            assert!(none.is_empty(), "{src}\nfloat values with no class: {none:?}");
+            let bad = unclassed(m);
+            assert!(bad.is_empty(), "{src}\nvalues whose class is not their kind's: {bad:?}");
             assert_eq!(super::super::lower::UNSEEN.with(|n| n.get()), 0, "{src}");
             assert_eq!(super::super::lower::NO_CONTEXT.with(|n| n.get()), 0, "{src}");
         }

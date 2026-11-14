@@ -941,6 +941,7 @@ fn lower_ordered<'a>(
         lanes: AVec::new(),
         precs,
         prec: AVec::new(),
+        kinds: AVec::new(),
         local_prec: AVec::new(),
         cur: Prec::High,
         cur_class: Prec::None,
@@ -1027,6 +1028,10 @@ struct Lower<'x, 'a> {
     /// The [`Prec`] of each instruction, in step with [`Lower::instrs`].
     /// See [`ir::Module::prec`].
     prec: AVec<'a, Prec>,
+    /// The [`ir::ValueKind`] of each instruction, in step with
+    /// [`Lower::instrs`]: what [`Lower::instr_prec`] decides by, and
+    /// what a later instruction's kind is made from.
+    kinds: AVec<'a, ir::ValueKind>,
     /// The [`Prec`] of each local's storage, in step with
     /// [`Lower::locals`]. See [`ir::Module::local_prec`].
     local_prec: AVec<'a, Prec>,
@@ -8970,119 +8975,78 @@ impl<'a> Lower<'_, 'a> {
             self.forget_known(local);
         }
         let id = ValueId(self.instrs.len() as u32);
-        let p = self.instr_prec(&op);
+        let kind = self.value_kind(&op);
+        let p = self.instr_prec(&op, kind);
         self.instrs.push(self.a, op)?;
         self.comps.push(self.a, comps)?;
         self.lanes.push(self.a, lanes)?;
         self.prec.push(self.a, p)?;
+        self.kinds.push(self.a, kind)?;
         Ok(id)
     }
 
-    /// The [`Prec`] `op` records: the current expression's
-    /// ([`Lower::cur`]), except where the operation says otherwise. A
-    /// store has no value (a local's width is [`Lower::local_prec`]'s); an
-    /// output's store records the output's declared precision; an int
-    /// value has no float width; a compare of ints is a 32-bit bool
-    /// (Mesa lowers no int, `can_lower_type`) whatever tree it serves, as
-    /// the index compares of a run-time element select do.
-    fn instr_prec(&self, op: &Op) -> Prec {
+    /// The [`ir::ValueKind`] of `op` ([`ir::Op::value_kind`]), over the
+    /// instructions, slots, inputs and uniform rows lowered so far.
+    fn value_kind(&self, op: &Op) -> ir::ValueKind {
+        op.value_kind(
+            |v| self.kinds.as_slice().get(v.0 as usize).copied().unwrap_or(ir::ValueKind::Void),
+            |l| {
+                self.locals
+                    .as_slice()
+                    .get(l.0 as usize)
+                    .map_or(ir::ValueKind::Void, |d| ir::ValueKind::of_scalar(d.ty.scalar))
+            },
+            |slot| ir::ValueKind::of_input(slot, self.inputs.as_slice().iter().find(|d| d.slot() == slot)),
+            |dw| {
+                self.reflection
+                    .uniforms
+                    .iter()
+                    .find(|u| {
+                        (u32::from(u.dword_off)..u32::from(u.dword_off) + u32::from(u.dwords.max(1)))
+                            .contains(&u32::from(dw))
+                    })
+                    .map_or(ir::ValueKind::Float, |u| ir::ValueKind::of_block_gl_type(u.gl_type))
+            },
+        )
+    }
+
+    /// The [`Prec`] `op` records, `kind` its value's kind. The rule is
+    /// stated by the kind (docs/notes/mali-precision.md):
+    ///
+    /// - no value (a store, a discard): None, except an output's store,
+    ///   which records the output's declared precision;
+    /// - an int value: None, it has no float width;
+    /// - a bool made from ints (an int compare, `I2b`): High, a 32-bit
+    ///   bool whatever tree it serves (Mesa lowers no int,
+    ///   `can_lower_type`; the index compares of a run-time element
+    ///   select are these);
+    /// - any other float or bool value: the current expression's class
+    ///   ([`Lower::cur`]). Mesa's bool operations take their sources'
+    ///   width (`nir_lower_bool_to_bitsize`), which is that class: 16 bits
+    ///   for `&&` of two mediump compares, 32 when a side is an int
+    ///   compare. Where the context has no class (an int, uint, void or
+    ///   sampler expression) the value records Unknown, never None; a
+    ///   site Mesa was measured at sets its class itself (the copy in and
+    ///   back of a parameter, the pack built-ins: High).
+    fn instr_prec(&self, op: &Op, kind: ir::ValueKind) -> Prec {
         use ir::AluOp::*;
-        match *op {
-            Op::StoreLocal { .. } | Op::Discard | Op::ConstI32(_) | Op::TexSize { .. } => Prec::None,
-            Op::StoreOutput { slot, .. } => self.output_prec(slot),
-            Op::LoadLocal { local, .. } if self.local_prec.as_slice().get(local.0 as usize) == Some(&Prec::None) => {
-                Prec::None
+        let src_kind = |s: ir::Src| self.kinds.as_slice().get(s.val.0 as usize).copied();
+        match kind {
+            ir::ValueKind::Void => match *op {
+                Op::StoreOutput { slot, .. } => self.output_prec(slot),
+                _ => Prec::None,
+            },
+            ir::ValueKind::Int => Prec::None,
+            ir::ValueKind::Bool if matches!(op, Op::Alu(Ilt | Ile | Ult | Ule | I2b, _)) => Prec::High,
+            ir::ValueKind::Bool if matches!(op, Op::Alu(Ieq | Ine, [a, ..]) if src_kind(*a) != Some(ir::ValueKind::Bool)) => {
+                Prec::High
             }
-            Op::Alu(
-                Iadd | Imul | Idiv | Imod | Ineg | Ishl | Ishr | Iand | Ior | Ixor | B2i | F2i | Udiv | Umod | Ushr
-                | Imin | Imax | Umin | Umax | Inot | F2u,
-                _,
-            ) => Prec::None,
-            Op::Alu(Ilt | Ile | Ieq | Ine | Ult | Ule | I2b, _) => Prec::High,
-            /* THE rule for a float or bool value whose context has no
-             * class (a void call, an int, uint or bool expression): it is
-             * never recorded None. A site Mesa was measured at sets its
-             * class itself (the copy in and back of a parameter, the pack
-             * built-ins: High); any other such value is Unknown, which the
-             * width pass refuses. */
-            _ if self.cur == Prec::None && self.float_valued(op, 0) => {
+            ir::ValueKind::Float | ir::ValueKind::Bool if self.cur == Prec::None => {
                 #[cfg(test)]
                 NO_CONTEXT.with(|n| n.set(n.get() + 1));
                 Prec::Unknown
             }
-            _ => self.cur,
-        }
-    }
-
-    /// `op` makes a float or bool value: one with a width that precision
-    /// lowering decides. By the operation, a local's type, an input's or
-    /// a uniform's GL type, or a select's first side.
-    fn float_valued(&self, op: &Op, depth: u32) -> bool {
-        use ir::AluOp::*;
-        let float_gl = |t: u16| !matches!(t, 0x1404 | 0x1405 | 0x8B53..=0x8B55 | 0x8DC6..=0x8DC8);
-        match *op {
-            Op::ConstF32(_) | Op::ConstBool(_) => true,
-            Op::Alu(Bcsel, [_, x, _]) => {
-                depth < 64
-                    && self.instrs.as_slice().get(x.val.0 as usize).is_some_and(|o| self.float_valued(o, depth + 1))
-            }
-            Op::Alu(a, _) => matches!(
-                a,
-                Fadd | Fmul
-                    | Ffma
-                    | Fmin
-                    | Fmax
-                    | Fneg
-                    | Fabs
-                    | Fsign
-                    | Frcp
-                    | Frsq
-                    | Fsqrt
-                    | Fexp2
-                    | Flog2
-                    | Fsin
-                    | Fcos
-                    | Ffloor
-                    | Fceil
-                    | Ftrunc
-                    | Ffract
-                    | Fddx
-                    | Fddy
-                    | Fdot2
-                    | Fdot3
-                    | Fdot4
-                    | Flt
-                    | Fle
-                    | Feq
-                    | Fne
-                    | B2f
-                    | I2f
-                    | U2f
-                    | F2b
-                    | Bnot
-                    | Bany
-                    | Ball
-            ),
-            Op::Tex { ret, .. } => ret == ir::ScalarType::F32,
-            Op::LoadLocal { local, .. } => self
-                .locals
-                .as_slice()
-                .get(local.0 as usize)
-                .is_some_and(|d| matches!(d.ty.scalar, ir::ScalarType::F32 | ir::ScalarType::Bool)),
-            Op::LoadUniform { dword_off, .. } | Op::LoadUniformIdx { base_dw: dword_off, .. } => self
-                .reflection
-                .uniforms
-                .iter()
-                .find(|u| dword_off >= u.dword_off && dword_off < u.dword_off + u.dwords.max(1))
-                .is_some_and(|u| float_gl(u.gl_type)),
-            Op::LoadInput { slot, .. } => match slot {
-                ir::IoSlot::Attrib(_) | ir::IoSlot::Varying(_) => {
-                    self.inputs.as_slice().iter().find(|d| d.slot() == slot).is_none_or(|d| float_gl(d.gl_type))
-                }
-                ir::IoSlot::VertexId | ir::IoSlot::InstanceId => false,
-                _ => true,
-            },
-            _ => false,
+            ir::ValueKind::Float | ir::ValueKind::Bool => self.cur,
         }
     }
 
