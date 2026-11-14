@@ -131,6 +131,22 @@ pub const MODE_1024X768_60: VideoMode = VideoMode {
     de_high: true,
 };
 
+/// The checks of the VIDEO stage ([`Error::Video`]).
+pub mod video_check {
+    /// No frame start on VP0 within two frames.
+    pub const NO_FRAME: u32 = 1 << 0;
+    /// VP0 raised POST_BUF_EMPTY: the fetch fell behind.
+    pub const UNDERFLOW: u32 = 1 << 1;
+    /// SYS0 or SYS1 bus error: an AXI fetch failed.
+    pub const BUS_ERROR: u32 = 1 << 2;
+    /// Esmart0's `REGION0_YRGB_MST` does not read the buffer's address.
+    pub const ADDRESS: u32 = 1 << 3;
+    /// The PHY is not locked, clock ready and ready.
+    pub const PHY: u32 = 1 << 4;
+    /// The controller's clock monitor does not read locked.
+    pub const CMU: u32 = 1 << 5;
+}
+
 /// The blocks' addresses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bases {
@@ -175,7 +191,9 @@ pub struct Config<'a> {
     pub force_cold: bool,
     /// Power the blocks off first (PHY off and in reset, domains off).
     pub power_cycle: bool,
-    /// 0 = run to the end.
+    /// 0 = run to the end; N stops after stage N, [`stage::VIDEO`]
+    /// included (the bring-up then returns [`Error::Stopped`], not a
+    /// [`Report`]).
     pub stop_after: u32,
 }
 
@@ -243,8 +261,9 @@ pub enum Error {
     DclkMux(u32),
     Hdmi(dw::Refused),
     Iommu(rk_iommu::Refused),
-    /// The section 5 read-backs after the bring-up (what failed is logged).
-    Video,
+    /// The section 5 read-backs after the bring-up: the [`video_check`]
+    /// bits that failed (the values are logged).
+    Video(u32),
     /// PD_VOP is on but VOP2 cannot be read (a gate closed or a reset
     /// asserted): whether a port runs is not known.
     VopUnreadable(NotReady),
@@ -409,6 +428,10 @@ pub fn bring_up(
         let found = cfg.plan.rate_hz.min(u64::from(u32::MAX)) as u32;
         return Err(Failed { stage: START, error: Error::Phy(hdptx::Refused { why: hdptx::Refusal::Rate, found }) });
     }
+    if Port::of_base(b.hdmi) != Some(Port::Hdmi0) {
+        let refused = dw::Refused { why: dw::Refusal::PortMismatch, found: b.hdmi as u32 };
+        return Err(Failed { stage: START, error: Error::Hdmi(refused) });
+    }
     let win = window(&cfg.mode, fb, stride_bytes);
     let active = (cfg.mode.hactive, cfg.mode.vactive);
     vop2::window_check(&win, active.0, active.1).map_err(at(START, Error::Vop))?;
@@ -529,14 +552,20 @@ pub fn bring_up(
     let read_back = vop2::read_back(m, b.vop, Vp::Vp0, Esmart::E0);
     let phy_status = hdptx::status(m, &b.phy);
     let hdmi_status = dw::status(m, b.hdmi, b.sys_grf, Port::Hdmi0);
-    let shown = read_back.yrgb_mst == fb as u32 && read_back.cfg_done & 1 == 0;
-    let ok = frame.frame_start
-        && !frame.underflow
-        && !frame.bus_error.contains(&true)
-        && shown
-        && phy_status.up()
-        && hdmi_status.clocks_locked();
-    if !ok {
+    let mut failed = 0;
+    for (bad, bit) in [
+        (!frame.frame_start, video_check::NO_FRAME),
+        (frame.underflow, video_check::UNDERFLOW),
+        (frame.bus_error.contains(&true), video_check::BUS_ERROR),
+        (read_back.yrgb_mst != fb as u32, video_check::ADDRESS),
+        (!phy_status.up(), video_check::PHY),
+        (!hdmi_status.clocks_locked(), video_check::CMU),
+    ] {
+        if bad {
+            failed |= bit;
+        }
+    }
+    if failed != 0 {
         ylog!(
             env,
             Err,
@@ -548,11 +577,22 @@ pub fn bring_up(
             phy_status.status,
             hdmi_status.cmu_status
         );
-        return Err(Failed { stage: VIDEO, error: Error::Video });
+        return Err(Failed { stage: VIDEO, error: Error::Video(failed) });
+    }
+    // Whether CFG_DONE's port bit clears once the update is taken is the
+    // design note's open question U8: an observation, not a verdict.
+    if read_back.cfg_done & 1 << Vp::Vp0.id() != 0 {
+        ylog!(
+            env,
+            Wrn,
+            "t6 display: REG_CFG_DONE {:#x}: VP0's bit still set after two frames (U8)",
+            read_back.cfg_done
+        );
     }
     if !hdmi_status.hpd {
-        ylog!(env, Wrn, "t6 display: no hot-plug level (the T6's panel gives none)");
+        ylog!(env, Wrn, "t6 display: no hot-plug level: no cable or no powered sink");
     }
+    done(cfg, VIDEO)?;
     ylog!(
         env,
         Inf,

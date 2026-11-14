@@ -133,6 +133,11 @@ fn every_stop_after_stops_there_and_leaves_the_next_stage_untouched() {
         assert!(!touched(&m), "stage {stage}: the next stage was started");
         no_refusal(&m);
     }
+    // stop_after VIDEO stops after the check, the picture up
+    let m = Rk3588Display::cold();
+    let r = up(&m, &Config { stop_after: stage::VIDEO, ..cfg() });
+    assert_eq!(r.err(), Some(Failed { stage: stage::VIDEO, error: Error::Stopped }));
+    assert!(m.port_runs(0) && m.fetching() == WIN_ESMART0);
     // and the stage before each one did its work: after PHY the PLL is locked
     let m = Rk3588Display::cold();
     let _ = up(&m, &Config { stop_after: stage::PHY, ..cfg() });
@@ -411,4 +416,40 @@ fn a_locked_phy_whose_apb_clock_is_gated_is_not_touched_by_the_power_cycle() {
     no_refusal(&m);
     assert!(!r.found.phy_powered_off);
     assert_eq!(r.found.phy_status, 0, "STATUS is not read while the PHY is not reachable");
+}
+
+#[test]
+fn the_controller_base_is_checked_before_any_write() {
+    // review R4: TX1's base with port 0 was refused only at stage 6
+    let m = Rk3588Display::cold();
+    let b = Bases { hdmi: 0xfdea_0000, ..B };
+    let r = bring_up(&m, &b, &m, &cfg(), FB, STRIDE);
+    let refused = dw::Refused { why: dw::Refusal::PortMismatch, found: 0xfdea_0000 };
+    assert_eq!(r.err(), Some(Failed { stage: stage::START, error: Error::Hdmi(refused) }));
+    assert!(m.writes().is_empty());
+}
+
+#[test]
+fn each_video_check_fails_on_its_own() {
+    use video_check::*;
+    for (f, bit) in [
+        (Faults { underflow: true, ..Faults::default() }, UNDERFLOW),
+        (Faults { bus_error: true, ..Faults::default() }, BUS_ERROR),
+        (Faults { mst_stuck: true, ..Faults::default() }, ADDRESS),
+        (Faults { phy_rdy_lost: true, ..Faults::default() }, PHY),
+        (Faults { cmu_unlocked: true, ..Faults::default() }, CMU),
+    ] {
+        let m = Rk3588Display::with_faults(f);
+        assert_eq!(up(&m, &cfg()).err(), Some(Failed { stage: stage::VIDEO, error: Error::Video(bit) }), "{f:?}");
+    }
+}
+
+#[test]
+fn a_cfg_done_bit_that_stays_set_is_logged_not_failed() {
+    // design note U8: whether the port's REG_CFG_DONE bit clears once the
+    // update is taken is not known; the picture does not depend on it
+    let m = Rk3588Display::with_faults(Faults { cfg_done_sticky: true, ..Faults::default() });
+    let r = up(&m, &cfg()).unwrap();
+    assert_eq!(r.read_back.cfg_done & 1, 1);
+    assert!(m.lines().iter().any(|(_, l)| l.contains("(U8)")));
 }
