@@ -570,6 +570,29 @@ pub(super) unsafe fn set_varyings(
     p.pending_n = count as u32;
 }
 
+/// A transform feedback request for a link: glTransformFeedbackVaryings's
+/// names (NUL-separated), how many there are, and the buffer mode.
+#[derive(Clone, Copy)]
+pub(super) struct TfRequest<'a> {
+    pub(super) names: &'a [u8],
+    pub(super) count: u32,
+    pub(super) mode: GLenum,
+}
+
+/// The request glTransformFeedbackVaryings stored for `program`'s next link.
+/// The names stay valid until the next glTransformFeedbackVaryings or the
+/// program's reset.
+pub(super) fn pending(group: u8, program: GLuint) -> TfRequest<'static> {
+    let p = prog(group, program);
+    let names: &'static [u8] = if p.pending.is_null() {
+        &[]
+    } else {
+        // SAFETY: `pending` is the block `set_varyings` filled with `pending_bytes` bytes.
+        unsafe { core::slice::from_raw_parts(p.pending, p.pending_bytes as usize) }
+    };
+    TfRequest { names, count: p.pending_n, mode: p.pending_mode }
+}
+
 /// Is `program` the program of an active transform feedback object (any
 /// object, bound or not, paused or not)? glLinkProgram then fails.
 pub(super) fn program_in_use(c: &GlContext, program: GLuint) -> bool {
@@ -621,23 +644,26 @@ fn split_element(name: &[u8]) -> Option<(&[u8], u32)> {
 /// Why a link of requested varyings failed, as the info log says it.
 type Say<'a> = &'a mut dyn FnMut(core::fmt::Arguments);
 
-/// Resolve the requested names against the vertex shader's declared outputs
-/// (ES 3.0 2.11.8) and keep the rows. `vs_src` is the vertex shader's
+/// Resolve the requested names (`req`) against the vertex shader's declared
+/// outputs (ES 3.0 2.11.8) and keep the rows. `vs_src` is the vertex shader's
 /// NUL-terminated source. Err: the log has been written.
-pub(super) fn link_resolve(group: u8, program: GLuint, vs_src: *const c_char, say: Say) -> Result<(), ()> {
+pub(super) fn link_resolve(
+    group: u8,
+    program: GLuint,
+    vs_src: *const c_char,
+    req: &TfRequest,
+    say: Say,
+) -> Result<(), ()> {
     let p = prog(group, program);
-    p.mode = p.pending_mode;
-    if p.pending_n == 0 {
+    p.mode = req.mode;
+    if req.count == 0 {
         return Ok(());
     }
-    let n = p.pending_n as usize;
-    if p.pending.is_null() {
+    if req.names.is_empty() {
         say(format_args!("link error: out of memory for the transform feedback varyings"));
         return Err(());
     }
-    // SAFETY: `pending` is the block `set_varyings` filled with `pending_bytes` bytes.
-    let names = unsafe { core::slice::from_raw_parts(p.pending, p.pending_bytes as usize) };
-    resolve_rows(p, n, names, vs_src, say)
+    resolve_rows(p, req.count as usize, req.names, vs_src, say)
 }
 
 #[cfg(not(feature = "shaderc-online"))]

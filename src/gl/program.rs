@@ -1897,52 +1897,99 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
         context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC);
         return;
     };
-    let ctx = c.group as usize;
-    let group = c.group;
-    if program_or_error(c, program, FUNC).is_none() {
+    let Some((vs, fs)) = program_or_error(c, program, FUNC).map(|p| (p.vs, p.fs)) else {
         return;
-    }
+    };
     /* ES 3.0 2.11.7: a program an active transform feedback object uses
      * cannot be linked */
     if super::tf::program_in_use(c, program) {
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
-    let Some(p) = program_or_error(c, program, FUNC) else {
-        return;
-    };
-    // SAFETY: single-threaded by contract; taken once in this entry point.
-    let st = STATE.get();
-    st.validated[ctx][obj_index(program)] = false; /* GL: a link resets it */
-    if !crate::REPORT_ES2 {
-        super::tf::link_begin(group, program);
+    match link_inputs(c, program, vs, fs) {
+        Ok(inputs) => {
+            link_with(c, program, &inputs);
+        }
+        Err(why) => {
+            /* the old link is gone all the same */
+            link_reset(c, program);
+            // SAFETY: single-threaded by contract; link_reset holds no reference.
+            write_log(&mut STATE.get().log[c.group as usize][obj_index(program)], format_args!("{why}"));
+        }
     }
-    let tab = &mut st.loc[ctx][obj_index(program)];
-    let log = &mut st.log[ctx][obj_index(program)];
-    let blocks = &mut st.blocks[ctx][obj_index(program)];
+}
 
-    p.linked = false;
-    log[0] = 0;
-    tab.count = 0;
-    blocks.count = 0;
-    p.free_uniforms();
-    let (vs, fs) = (p.vs, p.fs);
-    draw::invalidate_program(c, program);
+/// What a program is linked from: the two stages' sources and compiles and
+/// the transform feedback request. glLinkProgram takes them from the
+/// attached shader objects.
+pub(super) struct LinkInputs<'a> {
+    /// The vertex shader's NUL-terminated source, or null.
+    pub(super) vs_src: *const c_char,
+    /// The fragment shader's NUL-terminated source, or null.
+    #[allow(dead_code)] /* read by the program binary's capture (G7) */
+    pub(super) fs_src: *const c_char,
+    pub(super) rvs: ShcShader,
+    pub(super) rfs: ShcShader,
+    pub(super) tf: super::tf::TfRequest<'a>,
+}
 
+/// glLinkProgram's inputs from the shader objects `vs` and `fs`. Err: the
+/// link error for the info log.
+fn link_inputs(c: &GlContext, program: GLuint, vs: GLuint, fs: GLuint) -> Result<LinkInputs<'static>, &'static str> {
     /* A stage the offline table lacks reports COMPILE_STATUS true so the
      * application compiles the other stage too (its text is logged once),
      * but no program can be made of it (upstream 18692b4). */
     let missing = |h: GLuint| c.shader_ref(h).is_some_and(|s| s.missing);
     if c.shader_ref(vs).is_some() && c.shader_ref(fs).is_some() && (missing(vs) || missing(fs)) {
-        let stage = if missing(vs) { "vertex" } else { "fragment" };
-        write_log(log, format_args!("link error: the {stage} shader is not in the offline table"));
-        return;
+        return Err(if missing(vs) {
+            "link error: the vertex shader is not in the offline table"
+        } else {
+            "link error: the fragment shader is not in the offline table"
+        });
     }
     let compiled = |h: GLuint| c.shader_ref(h).filter(|s| s.compiled).map(|s| s.compiled_shader);
     let (Some(rvs), Some(rfs)) = (compiled(vs), compiled(fs)) else {
-        write_log(log, format_args!("link error: vertex and fragment shaders must be attached and compiled"));
-        return;
+        return Err("link error: vertex and fragment shaders must be attached and compiled");
     };
+    let source = |h: GLuint| c.shader_ref(h).map_or(core::ptr::null(), |s| s.source);
+    Ok(LinkInputs { vs_src: source(vs), fs_src: source(fs), rvs, rfs, tf: super::tf::pending(c.group, program) })
+}
+
+/// A link starts: the previous result is gone, whatever happens next.
+unsafe fn link_reset(c: &mut GlContext, program: GLuint) {
+    let ctx = c.group as usize;
+    // SAFETY: single-threaded by contract; the callers hold no other reference to STATE.
+    let st = STATE.get();
+    st.validated[ctx][obj_index(program)] = false; /* GL: a link resets it */
+    if !crate::REPORT_ES2 {
+        super::tf::link_begin(c.group, program);
+    }
+    if let Some(p) = c.program(program) {
+        p.linked = false;
+        p.free_uniforms();
+    }
+    st.log[ctx][obj_index(program)][0] = 0;
+    st.loc[ctx][obj_index(program)].count = 0;
+    st.blocks[ctx][obj_index(program)].count = 0;
+    draw::invalidate_program(c, program);
+}
+
+/// Link `program` from `inputs`: the link of ES 3.0 2.12.3 after the entry
+/// point's checks. Returns whether the program is linked; on a failure the
+/// info log says why.
+///
+/// # Safety
+/// `inputs.vs_src` is null or a NUL-terminated string.
+pub(super) unsafe fn link_with(c: &mut GlContext, program: GLuint, inputs: &LinkInputs) -> bool {
+    const FUNC: &str = "glLinkProgram";
+    let ctx = c.group as usize;
+    link_reset(c, program);
+    // SAFETY: single-threaded by contract; taken once here.
+    let st = STATE.get();
+    let tab = &mut st.loc[ctx][obj_index(program)];
+    let log = &mut st.log[ctx][obj_index(program)];
+    let blocks = &mut st.blocks[ctx][obj_index(program)];
+    let (rvs, rfs) = (inputs.rvs, inputs.rfs);
     /* ES 2.0 report: a link fails when the varyings to capture exceed
      * MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS, which is 0 there --
      * transform feedback is not implemented. */
@@ -1950,9 +1997,8 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
     if !crate::REPORT_ES2 {
         /* ES 3.0 2.11.8: the requested varyings are resolved against the
          * vertex shader's outputs; the link errors are the spec's (tf.rs) */
-        let vs_src = c.shader_ref(vs).map_or(core::ptr::null(), |s| s.source);
-        if super::tf::link_resolve(c.group, program, vs_src, &mut |a| write_log(log, a)).is_err() {
-            return;
+        if super::tf::link_resolve(c.group, program, inputs.vs_src, &inputs.tf, &mut |a| write_log(log, a)).is_err() {
+            return false;
         }
     } else if tf > 0 {
         write_log(
@@ -1961,14 +2007,14 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
                 "link error: {tf} transform feedback varying(s) requested; MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS is 0 (transform feedback is not implemented)"
             ),
         );
-        return;
+        return false;
     }
 
     if check_sampler_counts(&rvs, &rfs, log).is_err() {
-        return;
+        return false;
     }
     if check_uniform_packing(&rvs, &rfs, log).is_err() {
-        return;
+        return false;
     }
 
     let p = &mut c.objs().programs[obj_index(program)];
@@ -1988,19 +2034,19 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
      * "Attribute registers decided at link"): a vertex shader whose compile
      * left its inputs to the link, or whose bindings alias, is compiled
      * again with it. */
-    let vs_src = c.shader_ref(vs).map_or(core::ptr::null(), |s| s.source);
+    let vs_src = inputs.vs_src;
     let p = &mut c.objs().programs[obj_index(program)];
     let explicit = ExplicitAttribs::scan(vs_src);
     // SAFETY: a shader object's NUL-terminated copy of its source, or null.
     st.es300[ctx][obj_index(program)] =
         !crate::REPORT_ES2 && !vs_src.is_null() && is_glsl_es300(unsafe { util::cstr_bytes(vs_src) });
     match link_attrib_layout(p, vs_src, &explicit, log) {
-        Err(()) => return,
+        Err(()) => return false,
         /* the vertex shader for the fragment shader (with a map, the
          * attribute relink's call carried the fragment shader already) */
         Ok(None) => {
             if link_vs_for_fs(p, vs_src, log).is_err() {
-                return;
+                return false;
             }
         }
         Ok(Some(map)) => {
@@ -2032,7 +2078,7 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
         p.free_uniforms();
         write_log(log, format_args!("link error: out of memory for the uniform blocks"));
         c.set_error(GL_OUT_OF_MEMORY, FUNC);
-        return;
+        return false;
     }
     p.vs_uniform_cap = vdw as u16;
     p.fs_uniform_cap = fdw as u16;
@@ -2044,19 +2090,20 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
         let rc = link(&p.rvs, &mut p.rfs, log.as_mut_ptr() as *mut c_char, INFO_LOG_SIZE);
         if rc != 0 {
             glog!("yakogl: {}", Bytes(log_text(log)));
-            return;
+            return false;
         }
     }
     if build_locations(p, tab, log) != 0 {
-        return;
+        return false;
     }
     if build_blocks(p, blocks, log) != 0 {
-        return;
+        return false;
     }
     if build_attrib_indices(p, &explicit, log) != 0 {
-        return;
+        return false;
     }
     p.linked = true;
+    true
 }
 
 /// Destroy a program object: its GPU state, location table and blocks.
