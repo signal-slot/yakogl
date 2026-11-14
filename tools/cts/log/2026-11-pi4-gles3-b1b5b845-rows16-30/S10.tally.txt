@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image S10: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt S10.console.txt
+S10.console.txt: deqp: done: 800 passed, 232 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 1032 cases begun, 1032 with a result, 0 without
+mustpass cases with a result: 690 (of 1032 seen)
+group                                       pass   fail    n/s  other
+shaders                                      605     85      0      0
+TOTAL                                        605     85      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  S10: deqp: summary 1032 cases begun, 1032 with a result; deqp: done 800 passed, 232 failed, 0 not supported, 0 warnings; b1b5b845 DONE: 1032 cases, P 800 F 232 R 0 N 0 other 0; 1032 result lines seen
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.basic.float_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.basic.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.basic.vec2_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.basic.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.basic.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_fastest.float_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_fastest.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_fastest.vec2_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_fastest.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_fastest.vec4_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_fastest.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_nicest.float_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_nicest.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_nicest.vec2_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_nicest.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_nicest.vec4_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.float_nicest.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.msaa4.float_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.msaa4.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.msaa4.vec2_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.msaa4.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdx.texture.msaa4.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.basic.float_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.basic.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.basic.vec2_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.basic.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.basic.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_fastest.float_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_fastest.float_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_fastest.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_fastest.vec2_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_fastest.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_fastest.vec3_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_fastest.vec4_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_fastest.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_nicest.float_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_nicest.float_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_nicest.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_nicest.vec2_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_nicest.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_nicest.vec3_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_nicest.vec4_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.float_nicest.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.msaa4.float_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.msaa4.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.msaa4.vec2_highp
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.msaa4.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.dfdy.texture.msaa4.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.basic.float_highp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.basic.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.basic.vec2_highp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.basic.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.basic.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_fastest.float_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_fastest.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_fastest.vec2_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_fastest.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_fastest.vec4_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_fastest.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_nicest.float_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_nicest.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_nicest.vec2_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_nicest.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_nicest.vec4_lowp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.float_nicest.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.msaa4.float_highp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.msaa4.float_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.msaa4.vec2_highp
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.msaa4.vec2_mediump
+Fail dEQP-GLES3.functional.shaders.derivate.fwidth.texture.msaa4.vec4_mediump
+Fail dEQP-GLES3.functional.shaders.fragdepth.compare.const
+Fail dEQP-GLES3.functional.shaders.fragdepth.compare.dynamic
+Fail dEQP-GLES3.functional.shaders.fragdepth.compare.dynamic_conditional_write
+Fail dEQP-GLES3.functional.shaders.fragdepth.compare.fragcoord_z
+Fail dEQP-GLES3.functional.shaders.fragdepth.compare.uniform
+Fail dEQP-GLES3.functional.shaders.fragdepth.compare.uniform_conditional_write
+Fail dEQP-GLES3.functional.shaders.fragdepth.compare.uniform_loop_write
+Fail dEQP-GLES3.functional.shaders.fragdepth.compare.write_in_function
+Fail dEQP-GLES3.functional.shaders.fragdepth.write.const
+Fail dEQP-GLES3.functional.shaders.fragdepth.write.dynamic
+Fail dEQP-GLES3.functional.shaders.fragdepth.write.dynamic_conditional_write
+Fail dEQP-GLES3.functional.shaders.fragdepth.write.uniform
+Fail dEQP-GLES3.functional.shaders.fragdepth.write.uniform_conditional_write
+Fail dEQP-GLES3.functional.shaders.fragdepth.write.uniform_loop_write
+Fail dEQP-GLES3.functional.shaders.fragdepth.write.write_in_function
