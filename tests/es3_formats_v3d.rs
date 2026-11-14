@@ -34,7 +34,8 @@
 //!
 //! `gl_rig` (below) drives the GL API over the real V3D back end, with the job
 //! builder faked: RGBA16F and R16F render targets are complete and read
-//! back a clear, an R32F one is incomplete without GL_EXT_color_buffer_float, and RGB565, RGBA16F and R16F textures reach the TMU.
+//! back a clear, an R32F one is incomplete without GL_EXT_color_buffer_float,
+//! and RGB565, RGBA16F and R16F textures reach the TMU.
 //!
 //! tools/check.sh runs this file in the V3D_CONFIG row. Compiles to nothing
 //! under report-es2 (no ES 3.0 storage class is used there).
