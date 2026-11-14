@@ -64,9 +64,11 @@
 //!    CEC, HDCP 1.4, and the main interrupt (Linux requests it, qp.c:1071;
 //!    here its masks stay 0 and nothing takes it: every status is polled).
 //! 9. Nothing here waits on hot-plug: [`hpd`] is a single read for the
-//!    status line. The T6's panel gives no hot-plug level and no EDID
-//!    (board, Linux 6.18, 2026-11-12), so the board uses one fixed mode and
-//!    [`Sink::Dvi`]; Linux too picks DVI when there is no EDID.
+//!    status line. The T6's panel gives a hot-plug level but no EDID
+//!    (board, Linux 6.18, 2026-11-12: sys_grf `SOC_STATUS1` bit 16 reads 1,
+//!    the connector is connected, its EDID is 0 bytes), so the board uses
+//!    one fixed mode and [`Sink::Dvi`]; Linux too picks DVI when there is
+//!    no EDID.
 //!
 //! The RK3588 glue (glue, and dtsi:1606-1630: the controller's
 //! `rockchip,grf` is sys_grf 0xfd58c000, its `rockchip,vo-grf` is vo1_grf

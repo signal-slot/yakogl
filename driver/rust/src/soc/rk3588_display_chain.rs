@@ -65,8 +65,10 @@
 //!    does not underflow and raises no bus error; Esmart0's update is taken
 //!    (`REG_CFG_DONE` bit 0 back to 0, `REGION0_YRGB_MST` = the buffer); the
 //!    PHY reads locked, clock ready and ready; the controller's clock
-//!    monitor reads locked. The hot-plug level is logged, not required: the
-//!    T6's panel gives none (board, 2026-11-12; `dw_hdmi_qp` fact 9).
+//!    monitor reads locked. The hot-plug level is logged, not required: 0
+//!    means no cable or no powered sink, worth a warning; the T6's panel
+//!    gives it (`dw_hdmi_qp` fact 9). REG_CFG_DONE's port bit after the
+//!    update is logged too: whether it clears is the design note's U8.
 //!
 //! Where this differs from Linux's order: Linux binds the controller at
 //! probe, long before a mode is set, and runs the PHY's PLL (stages 1-3)
@@ -109,13 +111,14 @@ pub mod stage {
     pub const VOP: u32 = 7;
     /// The read-backs of the running picture.
     pub const VIDEO: u32 = 8;
+    /// Not a bring-up stage: a failure of [`super::shut_down`].
+    pub const SHUT_DOWN: u32 = 9;
 }
 
 /// The build's fixed mode: what Linux runs the T6's display at, since the
 /// display gives no EDID (board, Linux 6.18, 2026-11-12, the DRM state's
 /// mode line): 1024x768 at 60 Hz, pixel clock 65000 kHz, h 1024 1048 1184
-/// 1344, v 768 771 777 806, both syncs negative. The design note's section
-/// 3 expected 1080p; the board says otherwise.
+/// 1344, v 768 771 777 806, both syncs negative.
 pub const MODE_1024X768_60: VideoMode = VideoMode {
     pixel_clock_hz: 65_000_000,
     hactive: 1024,
@@ -357,9 +360,9 @@ const PORTS: [Vp; 4] = [Vp::Vp0, Vp::Vp1, Vp::Vp2, Vp::Vp3];
 
 /// Make a powered VOP2 readable (its gates open, its resets released, as
 /// D4's [`VOP`] lists them; CRU writes only), then read what runs again.
-fn find_opened(m: &impl Mmio, b: &Bases) -> Result<Found, Failed> {
+fn find_opened(m: &impl Mmio, b: &Bases, stage: u32) -> Result<Found, Failed> {
     for c in VOP.clocks {
-        gate_open(m, b.cru + c.part.offset(), c.gate).map_err(at(stage::START, Error::Gate))?;
+        gate_open(m, b.cru + c.part.offset(), c.gate).map_err(at(stage, Error::Gate))?;
     }
     for r in VOP.resets {
         reset_release(m, b.cru, *r);
@@ -374,7 +377,7 @@ const CLOCKED_HERE: u32 = 1 << 0;
 /// `REG_CFG_DONE` for each running port, then each one into STANDBY. A
 /// port whose STANDBY does not come is checked for frames: none means no
 /// pixel clock, so nothing of it fetches (R3-S1), and it is left.
-fn stop_running(m: &impl Mmio, b: &Bases, env: &impl Env, f: &mut Found) -> Result<(), Failed> {
+fn stop_running(m: &impl Mmio, b: &Bases, env: &impl Env, f: &mut Found, stage: u32) -> Result<(), Failed> {
     let mut delay = |us| env.busy_wait_us(us);
     vop2::windows_off(m, b.vop, 0xf, None);
     for p in PORTS.iter().filter(|p| f.running & 1 << p.id() != 0) {
@@ -385,11 +388,11 @@ fn stop_running(m: &impl Mmio, b: &Bases, env: &impl Env, f: &mut Found) -> Resu
             Ok(_) => f.stopped |= 1 << p.id(),
             Err(e) if e.why == vop2::Refusal::StandbyTimeout => {
                 if vop2::wait_frame(m, b.vop, *p, &mut delay).is_ok() {
-                    return Err(Failed { stage: stage::START, error: Error::Standby(e) });
+                    return Err(Failed { stage, error: Error::Standby(e) });
                 }
                 f.unclocked |= 1 << p.id();
             }
-            Err(e) => return Err(Failed { stage: stage::START, error: Error::Standby(e) }),
+            Err(e) => return Err(Failed { stage, error: Error::Standby(e) }),
         }
     }
     Ok(())
@@ -453,7 +456,7 @@ pub fn bring_up(
         if !cfg.power_cycle {
             return Err(Failed { stage: START, error: Error::VopUnreadable(n) });
         }
-        found = Found { vop_unreadable: Some(n), ..find_opened(m, b)? };
+        found = Found { vop_unreadable: Some(n), ..find_opened(m, b, START)? };
     }
     if found.running != 0 {
         if !cfg.force_cold {
@@ -476,7 +479,7 @@ pub fn bring_up(
                 }
             }
         }
-        stop_running(m, b, env, &mut found)?;
+        stop_running(m, b, env, &mut found, START)?;
         ylog!(env, Inf, "t6 display: stopped ports {:#x}, no pixel clock on {:#x}", found.stopped, found.unclocked);
     }
     if cfg.power_cycle {
@@ -606,17 +609,19 @@ pub fn bring_up(
     Ok(Report { found, power, phy, ident, vop, iommu, overlay, frame, read_back, phy_status, hdmi_status })
 }
 
-/// Stop the picture and power the chain down: VP0's window off and VP0 in
-/// STANDBY when it runs, then [`power_down`].
+/// Stop the picture and power the chain down, from any state: VOP2 made
+/// readable when its domain is on, every window off and every running port
+/// in STANDBY (as START with `force_cold`), then [`power_down`]. A failure
+/// is reported at [`stage::SHUT_DOWN`].
 pub fn shut_down(m: &impl Mmio, b: &Bases, env: &impl Env) -> Result<(), Failed> {
     let mut found = find(m, b);
     if found.vop_unreadable.is_some() {
-        found = find_opened(m, b)?;
+        found = find_opened(m, b, stage::SHUT_DOWN)?;
     }
     if found.running != 0 {
-        stop_running(m, b, env, &mut found)?;
+        stop_running(m, b, env, &mut found, stage::SHUT_DOWN)?;
     }
-    power_down(m, b, env).map_err(at(stage::START, Error::Display))?;
+    power_down(m, b, env).map_err(at(stage::SHUT_DOWN, Error::Display))?;
     Ok(())
 }
 

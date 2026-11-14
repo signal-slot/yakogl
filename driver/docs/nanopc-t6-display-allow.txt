@@ -70,7 +70,7 @@
 0xfd7c08d0 0xffffdcf2 CLKGATE_CON(52): the chain's VOP gates (bits 0, 2, 3, 8, 9, 13) are compared and open in both; the others are not the chain's
 0xfd7c08d4 0xffffffff CLKGATE_CON(53): no gate of the chain
 0xfd7c08dc 0xffffffff CLKGATE_CON(55): PD_VO0's gates, not used by HDMI
-0xfd7c08ec 0xfffffdc8 CLKGATE_CON(59): the chain's bits compared, except bits 3, 6, 12 (HCLK_VO1_S_ROOT, aclk_hdcp1_pre, PCLK_VO1GRF): Linux gates them between uses (genpd switches PD_VO1 with them, the vo1_grf regmap opens its clock per access); the chain leaves them open
+0xfd7c08ec 0xfffffdc8 CLKGATE_CON(59): the chain's bits compared, except bits 3, 6, 12 (HCLK_VO1_S_ROOT, aclk_hdcp1_pre, PCLK_VO1GRF): Linux gates them between uses (59/3, 59/6: genpd switches PD_VO1 with them; 59/12: vo1_grf names PCLK_VO1GRF as its clock, rk3588-base.dtsi:608-612 (clocks at :611), so its regmap opens it per access); the chain leaves them open
 0xfd7c08f0 0xffff77ff CLKGATE_CON(60): the chain's bits compared, except bits 5, 6 (ACLK_HDCP1, HCLK_HDCP1): PD_VO1's switching clocks, gated by Linux after the switch, left open by the chain
 0xfd7c08f4 0xfffffffe CLKGATE_CON(61): only CLK_HDMITX0_REF (bit 0, open in both) is the chain's
 0xfd7c0920 0xffffffdf CLKGATE_CON(72): only PCLK_HDPTX0 (bit 5) is the chain's; the model starts every other gate closed
