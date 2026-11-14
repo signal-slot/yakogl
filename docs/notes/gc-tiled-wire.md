@@ -47,6 +47,22 @@ off every stream is today's. No board has run them: see
 | W3 depth layouts | `ds_cache.rs` `Surface::layout`, `select_in`, `layout_free`, `pe_private` | `a_depth_surface_keeps_its_layout_while_it_holds_contents` and the three after it |
 | W4 shadows | `tiled_rt.rs`, `backend.rs` `tiled_rt_spec`, `tiled_rt_enter`, `frame_submit` | `a_depth_tested_draw_renders_into_a_tiled_shadow_the_rs_copies_back` and the five after it |
 | W5 early depth | `backend.rs` `tiled_ez`, `draw_ez`, `emit_pe_state`, `emit_ra_state`, `pe_key` | `a_draw_into_a_tiled_shadow_takes_early_depth_and_nothing_else_does` |
+| the three scenes | glmark2's terrain, shadow and refract on the `gc_scene_kicks` harness, off and on | `tests/gc_scene_kicks_tiled_rt.rs` |
+
+What the scene harness counts with the knob on (2026-11-14, `dfce5988`; a
+host count, not a board measurement):
+
+- **terrain**: two draws a frame take the shadow and early depth, the terrain
+  pass (it opens with a whole colour clear: no tile-in) and the overlay
+  blended into the same target (one tile-in). Each pass ends with its copy
+  back: 3 RS jobs a frame more, and the same kicks, waits, `finish()` calls,
+  CPU copies and depth resolves as off.
+- **shadow and refract**: nothing changes. Their offscreen depth is a depth
+  texture the next pass samples, so it is not private to the pixel engine
+  (`ds_cache::pe_private`) and no draw qualifies; the window's draws do not
+  either. W4 and W5 cannot speed these two scenes up; session A measures
+  terrain's gain only, and theirs has to come from depth-sample-gc
+  (`gc-depth-sample.md`).
 
 Where the code differs from the design below:
 

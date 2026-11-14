@@ -95,4 +95,7 @@ tools/cts/x2-glmark2-scenes.sh --commit origin/main --conf CONFIG_GLMARK2_GC_TIL
 ```
 
 The per-scene expectations from the host profile stay in
-`imx8mp-glmark2-cpu.md` ("Slow scenes on the board").
+`imx8mp-glmark2-cpu.md` ("Slow scenes on the board"). On the host the knob
+changes only terrain's streams (`tests/gc_scene_kicks_tiled_rt.rs`;
+`gc-tiled-wire.md`, "Status"): shadow and refract render the same streams
+off and on, so session A's on run of those two is a control, not a gain.
