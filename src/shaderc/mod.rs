@@ -1151,6 +1151,7 @@ pub struct ShcV3dFs {
     pub uniforms: *const ShcV3dUniform,
     pub num_uniforms: u32,
     pub num_inputs: u32,
+    /// Word 0 of each flag set: bit i for input i < 24.
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
@@ -1165,6 +1166,12 @@ pub struct ShcV3dFs {
     /// Bit n: the program writes colour to render target n (0..3); 0 for
     /// a program that writes no colour (a depth pre-pass).
     pub rt_mask: u8,
+    /// Words 1 and 2 of each flag set, inputs 24..64: input i is bit i % 24
+    /// of word i / 24, as the shader record's flag packets take them (Mesa
+    /// `flat_shade_flags[(V3D_MAX_FS_INPUTS - 1) / 24 + 1]`, vir.c:992-1003).
+    pub flat_shade_flags_hi: [u32; 2],
+    pub noperspective_flags_hi: [u32; 2],
+    pub centroid_flags_hi: [u32; 2],
 }
 
 /// The vertex or coordinate shader of a linked program
@@ -1232,6 +1239,9 @@ impl ShcV3dFs {
         uses_implicit_point_line_varyings: 0,
         uses_pid: 0,
         rt_mask: 0,
+        flat_shade_flags_hi: [0; 2],
+        noperspective_flags_hi: [0; 2],
+        centroid_flags_hi: [0; 2],
     };
 
     /// The uniform stream.
