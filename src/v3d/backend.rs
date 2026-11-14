@@ -3688,6 +3688,9 @@ fn programs(d: &GlesDraw, fs: &ShcShader) -> Result<(V3dFsProg, V3dVsProg, V3dVs
         uses_pid: f.uses_pid != 0,
         uniforms: f.uniforms as *const V3dUniform,
         num_uniforms: f.num_uniforms,
+        flat_shade_flags_hi: f.flat_shade_flags_hi,
+        noperspective_flags_hi: f.noperspective_flags_hi,
+        centroid_flags_hi: f.centroid_flags_hi,
     };
     /* a program reading gl_PointCoord takes two implicit varyings before
      * its declared ones; only points have them (agreed with v3d-m5 and the

@@ -1887,6 +1887,13 @@ step "test    $V3D_CONFIG (tests/es3_flatshade_guard.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_flatshade_guard
 step "test    host-test,gpu-vivante,shaderc-online (tests/es3_flatshade_guard.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_flatshade_guard
+# The V3D's ES 3.0 shader interface (docs/notes/v3d-varyings.md): 15 varying
+# vectors, 60 fragment inputs and 64 vertex output components, drawn through
+# the GL core, the in-process compiler and the real job builder, whose packets
+# carry the flat and centroid flags of inputs 24..63 (driver/src/v3d/v3d_job.c).
+# Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_v3d_varyings.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_varyings
 # The `msaa-fbo` feature (no effect yet) builds with each GPU's host
 # configuration, so a later item that reads it starts from a tree that
 # compiles.

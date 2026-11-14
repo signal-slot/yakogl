@@ -3,10 +3,11 @@
 //! Probe of the compiler's varying limits (plan #359, `v3d-varyings-probe`):
 //! what a vertex/fragment pair with 15 vec4 varyings (60 components), a 16th
 //! vec4 vertex output (64 components), and flat, centroid and smooth varyings
-//! compiles to and, in the interpreter, carries through. They record the
-//! state before the ES 3.0 raise (MAX_VARYING_VECTORS 15,
-//! MAX_VERTEX_OUTPUT_COMPONENTS 64); a test that fails today is `#[ignore]`d
-//! with the limit it needs, and runs with `--ignored`.
+//! compiles to and, in the interpreter, carries through. They record the ES 3.0
+//! raise (MAX_VARYING_VECTORS 15 and MAX_VERTEX_OUTPUT_COMPONENTS 64 in
+//! `crate::gl::context`, `MAX_FS_INPUTS` and `MAX_VPM_OUTPUT_ROWS` here); the
+//! one `#[ignore]`d test is the limit's own refusal, kept as a record and
+//! running with `--ignored`.
 
 use super::chain::{compile_program, Code, Prim, Target, V3dProgram, VARYING_SLOT_VAR0};
 use super::sim::{self, Env, FsInputs, Inputs, Varying, VsInputs, LANES};
@@ -178,11 +179,11 @@ fn a_fs_reads_15_vec4_varyings() {
     }
 }
 
-/// Fails today with `Select(VpmRowOutOfRange)`: the vertex shader's output
-/// rows stop below 64 components (gl_Position, the viewport rows and 16
-/// vec4 do not fit).
+/// The limit's own refusal, kept as a record: 16 vec4 (64 components) beside
+/// gl_Position need 68 VPM output rows, past `MAX_VPM_OUTPUT_ROWS`, which is
+/// what makes reporting 15 varying vectors honest to a program.
 #[test]
-#[ignore = "MAX_VERTEX_OUTPUT_COMPONENTS 64: select refuses VpmRowOutOfRange for a 16th vec4 output"]
+#[ignore = "MAX_VARYING_VECTORS 15: select refuses VpmRowOutOfRange for a 16th vec4 output"]
 fn a_vs_writes_16_vec4_outputs() {
     check_vs_rows(16, false).expect("a 16-vector (64-component) pair compiles");
 }
@@ -210,6 +211,42 @@ fn flat_centroid_and_smooth_varyings_set_their_flags() {
         assert_eq!(p.fs.flat_shade_flags.count_ones(), 2, "f.x and f.y");
         assert_eq!(p.fs.centroid_flags.count_ones(), 2, "c.x and c.y");
         assert_eq!(p.fs.flat_shade_flags & p.fs.centroid_flags, 0);
+    })
+    .expect("compiles");
+}
+
+/// The same qualifiers past input 24: twelve smooth vec2 fill word 0, so the
+/// flat vec2 is inputs 24, 25 and the centroid vec2 26, 27 — word 1 of each
+/// flags set, which is what the job builder sends as a second packet
+/// (driver/src/v3d/v3d_job.c, tests/es3_v3d_varyings.rs). The selection needs
+/// no new instruction: `ldvary` takes the varyings in order and the flat plane
+/// is the hardware's choice, not the code's (`sim.rs` reads the flag words
+/// nowhere).
+#[cfg(not(feature = "report-es2"))]
+#[test]
+fn flat_and_centroid_inputs_past_24_set_the_high_words() {
+    let mut vs = String::from("#version 300 es\nin vec4 a;\n");
+    let mut fs = String::from("#version 300 es\nprecision highp float;\n");
+    let mut body_v = String::from(" gl_Position = vec4(0.0, 0.0, 0.0, 1.0);\n");
+    let mut body_f = String::from(" float acc = 0.0;\n");
+    for i in 0..12 {
+        vs += &std::format!("out vec2 t{i};\n");
+        fs += &std::format!("in vec2 t{i};\n");
+        body_v += &std::format!(" t{i} = a.xx + vec2({}.0, {}.0);\n", 100 + i, 200 + i);
+        body_f += &std::format!(" acc += t{i}.x + t{i}.y;\n");
+    }
+    vs += "flat out vec2 f;\ncentroid out vec2 c;\n";
+    fs += "flat in vec2 f;\ncentroid in vec2 c;\n";
+    body_v += " f = a.xy + vec2(300.0, 400.0);\n c = a.xy + vec2(500.0, 600.0);\n";
+    body_f += " acc += f.x + f.y + c.x + c.y;\n";
+    vs += &std::format!("void main() {{\n{body_v}}}\n");
+    fs += &std::format!("layout(location = 0) out vec4 o;\nvoid main() {{\n{body_f} o = vec4(acc / 65536.0);\n}}\n");
+    with_program(&vs, &fs, |p| {
+        assert_eq!(p.fs.num_inputs, 28, "twelve vec2, the flat vec2, the centroid vec2");
+        assert_eq!(p.fs.flat_shade_flags, 0, "word 0 of the flat flags is empty");
+        assert_eq!(p.fs.flat_shade_flags_hi[0], 0x3, "inputs 24 and 25: word 1");
+        assert_eq!(p.fs.centroid_flags, 0);
+        assert_eq!(p.fs.centroid_flags_hi[0], 0xc, "inputs 26 and 27: word 1");
     })
     .expect("compiles");
 }

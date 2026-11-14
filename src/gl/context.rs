@@ -146,11 +146,27 @@ pub const MAX_VARYING_VECTORS: usize = 15;
 pub const MAX_VARYING_VECTORS: usize = 15;
 #[cfg(all(feature = "gpu-powervr", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
-/// V3D: 8, the ES 2.0 minimum. Mesa's v3d allows 16 (V3D_MAX_FS_INPUTS, 64
-/// components), but nothing here has drawn with more than a few varyings on
-/// the board: the M6 first cut claims what it has a chance of having
-/// measured, and is raised with the board run that measures more.
-#[cfg(feature = "gpu-v3d")]
+/// V3D: 15, ES 3.0's minimum (8 under `report-es2`, the ES 2.0 answer as it
+/// was, tests/es2_report_guard.rs). Mesa's v3d allows 64 fragment input
+/// components (V3D_MAX_FS_INPUTS, v3d_limits.h) and reports 16 vectors; 15
+/// are what a vertex shader's gl_Position leaves in the 64 components the
+/// GL names, ES 3.0's minimum. What carries fifteen vec4s here
+/// (tests/es3_v3d_varyings.rs builds and draws with them):
+///
+/// * the compiler lays each used component out as one `ldvary` input
+///   (online/v3d/chain.rs `fragment_inputs`, at most `MAX_FS_INPUTS` of
+///   them) and the vertex shader writes them into the VPM after the header
+///   (online/v3d/select.rs `MAX_VPM_OUTPUT_ROWS`: the four fixed-function
+///   rows, the point size, and these 60 components — nine 8-row sectors);
+/// * the shader record's `number_of_varyings_in_fragment_shader` is 8 bits,
+///   and the job builder takes up to 64 inputs (driver/src/v3d/v3d_job.c);
+/// * the flat, non-perspective and centroid flags go to the hardware 24
+///   inputs to a packet: word 0 is the record's `flat_shade_flags` and
+///   words 1 and 2 its `flat_shade_flags_hi`, one packet per nonzero word
+///   (`v3d_job.c` `EMIT_VARYING_FLAGS`, Mesa's `emit_varying_flags`).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VARYING_VECTORS: usize = 15;
+#[cfg(all(feature = "gpu-v3d", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// Mali-G610: 8, the ES 2.0 minimum, as the V3D's first cut: nothing has
 /// been compiled for it yet. Mesa's panfrost takes 32 inputs a stage on
@@ -185,12 +201,24 @@ pub fn max_draw_buffers() -> usize {
 pub fn max_color_attachments() -> usize {
     max_draw_buffers()
 }
+/// The vertex output components beyond the varyings' own: the V3D's vertex
+/// shader writes gl_Position into the VPM beside the 15 varyings (ES 3.0's
+/// 64 = 15 vectors plus the position vector, docs/notes/v3d-varyings.md),
+/// and a program of 15 vec4 varyings plus gl_Position and gl_PointSize
+/// builds and draws (tests/es3_v3d_varyings.rs). The PowerVR and the
+/// GC7000UL keep 0 (their vertex output stays 60) until their owners
+/// measure the 64th component (docs/notes/es3-shader-limits.md).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+const VERTEX_OUTPUT_EXTRA: usize = 4;
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+const VERTEX_OUTPUT_EXTRA: usize = 0;
 /// GL_MAX_VERTEX_OUTPUT_COMPONENTS and GL_MAX_FRAGMENT_INPUT_COMPONENTS:
-/// four components per varying vector, per GPU with MAX_VARYING_VECTORS.
+/// four components per varying vector, per GPU with MAX_VARYING_VECTORS
+/// (the vertex stage's also `VERTEX_OUTPUT_EXTRA`).
 /// The shader's gl_MaxVertexOutputVectors / gl_MaxFragmentInputVectors are
 /// these divided by four (ES 3.00 section 7.3), so raising one here moves
 /// the shader's value with it.
-pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4 + VERTEX_OUTPUT_EXTRA;
 pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 /// GL_MIN/MAX_PROGRAM_TEXEL_OFFSET, ES 3.0's minimum range: the values the
 /// GL core reports, and the shader's gl_Min/MaxProgramTexelOffset.

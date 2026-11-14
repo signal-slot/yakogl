@@ -28,10 +28,9 @@
 //!
 //! What is held, for each case: no GL_OUT_OF_MEMORY is ever raised, the
 //! captured words are the vertices' (the capture is the GL core's and does
-//! not depend on the back end), and the draw is either recorded or refused
-//! by name with GL_INVALID_OPERATION (`-ENOTSUP`, `backend::draw`; the
-//! job builder's refusal answers it since v3d-refuse-enotsup). Where the
-//! V3D cannot draw a case yet, an `#[ignore]`d twin holds the draw recorded.
+//! not depend on the back end), and the draw is recorded: the job builder
+//! takes up to 60 fragment input scalars (the flag words past word 0 are
+//! written since the V3D reports 15 varying vectors).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_tf_v3d
@@ -815,17 +814,9 @@ fn run_builtin(prim: GLenum, mode: GLenum, point_size: bool) -> (Vec<GLenum>, bo
 const PRIMS: [GLenum; 3] = [GL_POINTS, GL_LINES, GL_TRIANGLES];
 const MODES: [GLenum; 2] = [GL_INTERLEAVED_ATTRIBS, GL_SEPARATE_ATTRIBS];
 
-/// The scalar inputs the V3D job builder takes from a fragment shader:
-/// `draw_is_supported` refuses a program whose `num_inputs` is above 24
-/// ("word 0 of the varying flags only", driver/src/v3d/v3d_job.c).
+/// The scalar inputs one word of the varying flags covers (driver/src/v3d/
+/// v3d_job.c writes the flag words of inputs past it as Mesa does).
 const FS_INPUT_CAP: usize = 24;
-
-/// dEQP's run order inside an image: the tree sorted by name (the board's
-/// logs list `interleaved` before `separate`, `lines` before `points`).
-fn in_run_order(mut v: Vec<Case>) -> Vec<Case> {
-    v.sort_by_key(|c| c.name());
-    v
-}
 
 /// Every case of the two groups whose varyings the fragment shader reads in
 /// at most 24 scalars is drawn with no error at all, GL_OUT_OF_MEMORY
@@ -877,80 +868,32 @@ fn position_and_point_size_cases_draw_and_capture() {
     }
 }
 
-/// The cases over the cap: 39 of the 252, every one of them in both
-/// buffer modes and all three primitives, not only dEQP's `lines`. The job
-/// builder refuses the draw, the back end answers -ENOTSUP (legal GL state
-/// it cannot draw yet), and the GL core raises GL_INVALID_OPERATION
-/// (`submit_draw`): dEQP fails the case and goes on to the next, so TF1 and
-/// TF2 run to their end. Before v3d-refuse-enotsup the answer was -EINVAL
-/// and GL_OUT_OF_MEMORY, which dEQP reads as a fatal resource error. The
-/// capture, which is the GL core's, is right. `refused_cases_draw` holds
-/// what a V3D that can draw them gives.
+/// The cases over 24 fragment input scalars: 39 of the 252, every one of
+/// them in both buffer modes and all three primitives (at most 60, ES 3.0's
+/// GL_MAX_FRAGMENT_INPUT_COMPONENTS). The job builder writes the flat-shade
+/// and noperspective flags past word 0 of the varying flags, so they draw
+/// with no error, and the capture, which is the GL core's, is right.
 #[test]
-fn cases_over_the_input_cap_are_refused_as_invalid_operation() {
+fn cases_over_24_inputs_draw_and_capture() {
     let _g = rig();
     let mut n = 0;
     for c in cases().into_iter().filter(|c| c.fragment_inputs() > FS_INPUT_CAP) {
         let o = run(&c);
-        assert_eq!(o.errors, [GL_INVALID_OPERATION], "{} ({} inputs)", c.name(), c.fragment_inputs());
-        assert_eq!(o.captured, o.expected, "{}: the capture is the GL core's, right either way", c.name());
+        assert_eq!(o.errors, [], "{} ({} inputs): {:?}", c.name(), c.fragment_inputs(), o.log);
+        assert_eq!(o.captured, o.expected, "{}: the capture", c.name());
         n += 1;
     }
     assert_eq!(n, 39);
-    /* the back end logs a refusal once a process: this test's first case, or an earlier test's */
-    let all = ALL_LOG.lock().unwrap_or_else(|e| e.into_inner());
-    assert!(
-        all.iter().any(|l| l.contains(
-            "yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)"
-        )),
-        "{all:?}"
-    );
 }
 
-/// The fragment inputs are the whole of it: a program one scalar over the
-/// cap is refused and one at the cap is not (mat3x4 twice is 24; vec4 as
-/// arrays of 3 and 4 is 28).
+/// A program at 24 scalars draws, and so does one of 28 (vec4 as arrays of 3 and 4).
 #[test]
-fn the_cap_is_24_fragment_input_scalars() {
+fn the_cap_is_60_fragment_input_scalars() {
     let _g = rig();
     let at = Case::basic("mat3x4", GL_LINES, GL_INTERLEAVED_ATTRIBS);
     assert_eq!(at.fragment_inputs(), 24);
     assert_eq!(run(&at).errors, []);
     let over = Case::array_of("vec4", GL_LINES, GL_INTERLEAVED_ATTRIBS);
     assert_eq!(over.fragment_inputs(), 28);
-    assert_eq!(run(&over).errors, [GL_INVALID_OPERATION]);
-}
-
-/// Each image's stop case, in dEQP's run order: the first case of the
-/// image's groups that the V3D refuses. TF1 (`array.*`, `interpolation.*`,
-/// `point_size.*`, `position.*`) stopped at #4, `array.interleaved.lines.
-/// highp_ivec4`, after four that passed; TF2 (`basic_types.*`,
-/// `random_full_array_capture.*`) at #11, `basic_types.interleaved.lines.
-/// highp_mat4`, after eleven (tools/cts/log/2026-11-pi4-gles3-c/).
-#[test]
-fn the_first_refused_case_of_each_image_is_the_one_it_stopped_at() {
-    let _g = rig();
-    let first_refused = |group: &str| {
-        let all = in_run_order(cases().into_iter().filter(|c| c.name().starts_with(group)).collect());
-        let at = all.iter().position(|c| !run(c).errors.is_empty()).expect("a refused case");
-        (at, all[at].name())
-    };
-    assert_eq!(first_refused("array."), (4, "array.interleaved.lines.highp_ivec4".to_string()));
-    assert_eq!(first_refused("basic_types."), (11, "basic_types.interleaved.lines.highp_mat4".to_string()));
-}
-
-/// What a V3D that draws them gives: no error for a program that reads more
-/// than 24 fragment input scalars (ES 3.0 guarantees 60, GL_MAX_FRAGMENT_
-/// INPUT_COMPONENTS), which needs the job builder to write the flat-shade
-/// and noperspective flags past word 0 of the varying flags. Waits on that
-/// (the v3d job builder, driver/src/v3d/v3d_job.c).
-#[test]
-#[ignore = "v3d-fs-inputs-over-24"]
-fn refused_cases_draw() {
-    let _g = rig();
-    for c in cases().into_iter().filter(|c| c.fragment_inputs() > FS_INPUT_CAP) {
-        let o = run(&c);
-        assert_eq!(o.errors, [], "{}: {:?}", c.name(), o.log);
-        assert_eq!(o.captured, o.expected, "{}: the capture", c.name());
-    }
+    assert_eq!(run(&over).errors, []);
 }

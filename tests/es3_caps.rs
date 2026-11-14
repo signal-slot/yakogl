@@ -281,17 +281,24 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
              (gl/texture.rs stored_compressed_formats); ES 3.0 needs the ten ETC2/EAC formats (formats-*)",
         ),
     ];
-    let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"));
+    // the GC7000UL and the PowerVR report ES 3.0's 15 varying vectors; the V3D does too
+    // outside a report-es2 build (gl/context.rs MAX_VARYING_VECTORS)
+    let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"))
+        || cfg!(all(feature = "gpu-v3d", not(feature = "report-es2")));
     if !fifteen {
-        // V3D and Mali carry 8 varying vectors (gl/context.rs MAX_VARYING_VECTORS), the ES 2.0 minimum
+        // Mali, and the V3D of a report-es2 build, carry 8 varying vectors
+        // (gl/context.rs MAX_VARYING_VECTORS), the ES 2.0 minimum
         v.extend_from_slice(&[
             ("MAX_VARYING_VECTORS", "8, not 15: the ES 2.0 minimum is what this back end programs (gl/context.rs)"),
             ("MAX_VARYING_COMPONENTS", "32 = 8 vectors * 4"),
             ("MAX_FRAGMENT_INPUT_COMPONENTS", "32 = 8 vectors * 4, ES 3.0 needs 60 (gl/context.rs)"),
         ]);
     }
-    // the GC7000 and the PowerVR report 15 varyings but 60 vertex output components
-    v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));
+    // the V3D reports 64 vertex output components (gl/context.rs: 15 vectors plus gl_Position's
+    // vector); the GC7000 and the PowerVR report 15 varyings but 60, and Mali 32
+    if !cfg!(all(feature = "gpu-v3d", not(feature = "report-es2"))) {
+        v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));
+    }
     v
 }
 
