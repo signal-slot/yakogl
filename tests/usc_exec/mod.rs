@@ -1066,6 +1066,7 @@ fn run_binary_decoded(
                          * the fragment shader's result, keyed from 0. */
                         Some("special") if d.index >= 32 && d.index < 36 => {
                             out.insert(d.index - 32, val);
+                            PIXOUT_WRITES.with(|c| c.borrow_mut().push(d.index - 32));
                         }
                         Some("vtxin") => {
                             *vtx.get_mut(d.index as usize).ok_or("vtxin write out of range")? = val;
@@ -1097,7 +1098,16 @@ std::thread_local! {
     static LAST_GRADIENTS: std::cell::RefCell<Vec<Vec<u32>>> = const { std::cell::RefCell::new(Vec::new()) };
     static LAST_SKIPS: std::cell::RefCell<Vec<(usize, bool)>> = const { std::cell::RefCell::new(Vec::new()) };
     static LAST_LEVELS: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
+    static PIXOUT_WRITES: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
     static LAST_LAYERS: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The pixel output register (0..3) of every write this thread has run
+/// since the last call, in program order, one entry per write (`run_binary`
+/// keeps only the last value of a register); taking them clears the list.
+#[allow(dead_code)]
+pub fn take_pixout_writes() -> Vec<u32> {
+    PIXOUT_WRITES.with(|c| std::mem::take(&mut *c.borrow_mut()))
 }
 
 /// The level words of every `smp` with a replaced level (`lodm` replace)
