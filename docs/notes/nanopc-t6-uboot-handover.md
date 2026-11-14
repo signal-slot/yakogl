@@ -263,7 +263,7 @@ CPU the way the Verdin route does (docs/standalone-boot.md):
 2. Then `go <addr>` or `booti <addr> - <fdt>`.
 
 Which applies: the Z images are flat binaries linked at one fixed physical
-address, with `CONFIG_AARCH64_IMAGE_HEADER` (kexec_zephyr.c:503-507 refuses an image
+address, with `CONFIG_AARCH64_IMAGE_HEADER` (kexec_zephyr.c:537-541 refuses an image
 without the arm64 Image header; nanopc_t6.dts:10: `zephyr,sram` is 256 MiB at
 0x10000000; nanopc-t6.sh:125-128 the same window). So:
 
