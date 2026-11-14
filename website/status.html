@@ -6,7 +6,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YakoGL status: board support and measured results</title>
-<meta name="description" content="Measured OpenGL ES results on Zephyr for Verdin AM62P, Verdin iMX8M Plus and Raspberry Pi 4, with public records, test conditions and development status.">
+<meta name="description" content="Measured OpenGL ES results on Zephyr for Toradex Verdin AM62P, Toradex Verdin iMX8M Plus and Raspberry Pi 4, with public records, test conditions and development status.">
 <meta name="color-scheme" content="light dark">
 <link rel="canonical" href="https://yako.gl/status.html">
 <meta property="og:type" content="website">
@@ -62,19 +62,19 @@ and warnings; the <a href="#records">records</a> list them.</p>
 <div class="scroll"><table class="summary-table">
 <thead><tr><th scope="col">Board</th><th scope="col">GPU</th><th scope="col">Where it is</th></tr></thead>
 <tbody>
-<tr id="mali"><th scope="row">FriendlyElec NanoPC-T6</th><td>Arm Mali-G610</td>
+<tr id="mali"><th scope="row"><a href="https://wiki.friendlyelec.com/wiki/index.php/NanoPC-T6">FriendlyElec NanoPC-T6</a></th><td>Arm Mali-G610</td>
 <td>On the board's Linux, 147 of 256 <code>gl_test</code> cases pass (2026-11-07).
 On Zephyr, the GPU powers on and reports its ID; drawing does not run yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Details</a></td></tr>
-<tr id="x2"><th scope="row">Atmark Techno Armadillo-X2</th><td>Vivante GC7000UL</td>
+<tr id="x2"><th scope="row"><a href="https://armadillo.atmark-techno.com/armadillo-x2">Atmark Techno Armadillo-X2</a></th><td>Vivante GC7000UL</td>
 <td>The same SoC and GPU as the Verdin iMX8M Plus. Zephyr starts from the board's
 Linux for development. Booting from the board's own loader has not run yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/x2-direct-boot.md">Details</a></td></tr>
-<tr id="stm32mp2"><th scope="row">STM32MP257F-DK</th><td>Vivante GCNANOULTRA31</td>
+<tr id="stm32mp2"><th scope="row"><a href="https://www.st.com/en/evaluation-tools/stm32mp257f-dk.html">STM32MP257F-DK</a></th><td>Vivante GCNANOULTRA31</td>
 <td>Board files and a GPU identity probe are in the tree.
 No image has run on the board yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-stm32mp257f-dk.md">Details</a></td></tr>
-<tr id="pi5"><th scope="row">Raspberry Pi 5</th><td>Broadcom V3D 7.1</td>
+<tr id="pi5"><th scope="row"><a href="https://www.raspberrypi.com/products/raspberry-pi-5/">Raspberry Pi 5</a></th><td>Broadcom V3D 7.1</td>
 <td>The frame path runs against a simulator on the host.
 No image has run on the board yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-rpi5.md">Details</a></td></tr>
@@ -101,19 +101,19 @@ failures in two regression cases. The latest run passes; the record does not sho
 <p>Every figure, with its build, its date and a link to the public record.</p>
 <p class="prov js-only">Records checked at <span data-meta="checked"></span>.</p>
 
-<h3 id="am62p">Toradex Verdin AM62P <span class="muted">· PowerVR BXS-4-64</span></h3>
+<h3 id="am62p"><a href="https://www.toradex.com/computer-on-modules/verdin-arm-family/ti-am62p">Toradex Verdin AM62P</a> <span class="muted">· PowerVR BXS-4-64</span></h3>
 <div class="scroll"><table class="status-table">
 <thead><tr><th scope="col">Measurement</th><th scope="col">Result</th><th scope="col">Build, date and public record</th></tr></thead>
 <tbody data-status="am62p"></tbody>
 </table></div>
 
-<h3 id="imx8mp">Toradex Verdin iMX8M Plus <span class="muted">· Vivante GC7000UL</span></h3>
+<h3 id="imx8mp"><a href="https://www.toradex.com/computer-on-modules/verdin-arm-family/nxp-imx-8m-plus">Toradex Verdin iMX8M Plus</a> <span class="muted">· Vivante GC7000UL</span></h3>
 <div class="scroll"><table class="status-table">
 <thead><tr><th scope="col">Measurement</th><th scope="col">Result</th><th scope="col">Build, date and public record</th></tr></thead>
 <tbody data-status="imx8mp"></tbody>
 </table></div>
 
-<h3 id="pi4">Raspberry Pi 4 <span class="muted">· Broadcom V3D 4.2</span></h3>
+<h3 id="pi4"><a href="https://www.raspberrypi.com/products/raspberry-pi-4-model-b/">Raspberry Pi 4</a> <span class="muted">· Broadcom V3D 4.2</span></h3>
 <div class="scroll"><table class="status-table">
 <thead><tr><th scope="col">Measurement</th><th scope="col">Result</th><th scope="col">Build, date and public record</th></tr></thead>
 <tbody data-status="pi4"></tbody>

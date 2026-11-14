@@ -289,6 +289,8 @@ figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
 .board-row { display: grid; grid-template-columns: 34px minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 24px; align-items: center; padding: 28px 0; border-bottom: 1px solid var(--line); }
 .board-index { font: 500 0.78rem ui-monospace, monospace; color: var(--muted); }
 .board-row h3 { font-size: 1.16rem; margin: 2px 0 5px; }
+.board-row h3 a, .summary-table th a, h3[id] > a { color: inherit; text-decoration-color: var(--muted); text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
+.board-row h3 a:hover, .summary-table th a:hover, h3[id] > a:hover { color: var(--accent); }
 .board-row p { margin: 0; }
 .board-row .tag { font-size: 0.61rem; margin: 0 0 3px; }
 .board-gpu, .board-detail { font-size: 0.82rem; }
