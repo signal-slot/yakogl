@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image M1: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt M1.console.txt
+M1.console.txt: deqp: done: 454 passed, 12 failed, 58 not supported, 0 warnings, complete=1 | deqp: summary: 524 cases begun, 524 with a result, 0 without
+mustpass cases with a result: 507 (of 524 seen)
+group                                       pass   fail    n/s  other
+multisample                                   12      4     48      0
+negative_api                                 301      7      4      0
+occlusion_query                               62      0      0      0
+pbo                                           43      0      6      0
+polygon_offset                                20      0      0      0
+TOTAL                                        438     11     58      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  M1: deqp: summary 524 cases begun, 524 with a result; deqp: done 454 passed, 12 failed, 58 not supported, 0 warnings; b1b5b845 DONE: 524 cases, P 454 F 12 R 0 N 58 other 0; 524 result lines seen
+Fail dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_alpha_to_coverage
+Fail dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_sample_coverage
+Fail dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_sample_coverage_inverted
+Fail dEQP-GLES3.functional.multisample.fbo_max_samples.sample_coverage_invert
+Fail dEQP-GLES3.functional.negative_api.buffer.blit_framebuffer
+Fail dEQP-GLES3.functional.negative_api.buffer.blit_framebuffer_multisample
+Fail dEQP-GLES3.functional.negative_api.buffer.read_pixels_fbo_format_mismatch
+Fail dEQP-GLES3.functional.negative_api.shader.uniformui_incompatible_type
+Fail dEQP-GLES3.functional.negative_api.shader.uniformuiv_incompatible_type
+Fail dEQP-GLES3.functional.negative_api.texture.texsubimage2d
+Fail dEQP-GLES3.functional.negative_api.texture.texsubimage3d
