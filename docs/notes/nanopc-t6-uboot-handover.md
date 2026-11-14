@@ -263,9 +263,9 @@ CPU the way the Verdin route does (docs/standalone-boot.md):
 2. Then `go <addr>` or `booti <addr> - <fdt>`.
 
 Which applies: the Z images are flat binaries linked at one fixed physical
-address, with `CONFIG_AARCH64_IMAGE_HEADER` (kexec_zephyr.c:436 refuses an image
+address, with `CONFIG_AARCH64_IMAGE_HEADER` (kexec_zephyr.c:503-507 refuses an image
 without the arm64 Image header; nanopc_t6.dts:10: `zephyr,sram` is 256 MiB at
-0x10000000; nanopc-t6.sh:104-107 the same window). So:
+0x10000000; nanopc-t6.sh:125-128 the same window). So:
 
 - `go 0x10000000` is the route: it jumps to the first byte, the header's branch,
   with no device tree and no relocation. The load address must be the link
@@ -324,7 +324,7 @@ and its `ENV_MEM_LAYOUT_SETTINGS` (include/configs/rk3588_common.h:20-31) sets:
 
 The Z image's link address is 0x10000000, the 256 MiB window
 0x10000000-0x1fffffff: nanopc_t6.dts:55-58 (`memory@10000000`, the node
-`zephyr,sram` names at :52), the same window in nanopc-t6.sh:104-106
+`zephyr,sram` names at :52), the same window in nanopc-t6.sh:127-128
 (`WINDOW_BASE`) and `t6z_load`, `t6z_entry` and `t6z_window` in
 t6-zephyr.cmd:26-28. `CONFIG_SRAM_BASE_ADDRESS` is derived from that node, not
 set in nanopc_t6_defconfig; `KERNEL_VM_BASE` is the same 0x10000000 and
