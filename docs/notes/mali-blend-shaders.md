@@ -312,8 +312,10 @@ fp32 key, and that is Mesa's shader for it too: `pan_blend_create_shader`
 loads 32 bits for a `nir_type_uint32` `src0_type` and converts them from
 float, the target's base type, not from the source type (pan_blend.c:837-862,
 "We assume the destination type here"), and `bi_emit_load_blend_input`
-reads only the type's size (bifrost_compile.c:924-946). Read from the
-source, not measured: `pan_shc --blend` takes fp16 and fp32 keys only.
+reads only the type's size (bifrost_compile.c:924-946). In the gate:
+`blend_u32.words`, 100 uint32 keys made by `pan_shc --blend` with `u32`,
+equal our words of the same keys at fp32
+(`a_uint32_colour_s_blend_shaders_are_mesa_s`).
 Every other integer colour output (an `ivec4`, an `int`, `uint` or narrower
 vector, a `mediump` one, a `uvec4` highp only through `precision highp int`)
 has no reference and is refused at the fragment compile

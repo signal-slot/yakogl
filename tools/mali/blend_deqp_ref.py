@@ -26,6 +26,13 @@ once each, in the order the tests first draw them.
                                          colour (1x and 4x)
   blend_deqp_ref.py digest <pan_shc out> their reference
                                          (tools/mali/testdata/blend_random.sha)
+  blend_deqp_ref.py u32                  100 keys with a uint32 colour (a
+                                         highp `out uvec4`): the first 100
+                                         fp32 keys of `random`, `u32` for
+                                         `f32`
+  blend_deqp_ref.py u32words <pan_shc out>
+                                         their reference (tools/mali/
+                                         testdata/blend_u32.words)
 
 The reference file has one line an equation: the equation as pan_shc reads
 it, ':', then the shader's words (hex, little-endian u64, the padding
@@ -143,6 +150,14 @@ def random_keys():
     return out
 
 
+def u32_keys():
+    """The keys of blend_u32.words: Mesa keys a uint32 colour apart
+    (src0_type nir_type_uint32), but converts it from float as the target's
+    base type (pan_blend.c:837-862), so its words are the fp32 key's."""
+    f32 = [k for k in random_keys() if k.endswith(" f32")]
+    return [k[:-len("f32")] + "u32" for k in f32[:100]]
+
+
 # the factor order the random draw was made with
 FACTORS_RANDOM = [
     "zero", "one", "src_color", "inv_src_color", "dst_color", "inv_dst_color",
@@ -181,11 +196,14 @@ def main():
             data = b"".join(struct.pack("<Q", int(w, 16)) for w in got[e])
             print(e + " : " + hashlib.sha256(data).hexdigest()[:16])
         return 0
+    if sys.argv[1:] == ["u32"]:
+        print("\n".join(u32_keys()))
+        return 0
     if sys.argv[1:] == ["list"]:
         print("\n".join(equations()))
         return 0
-    if len(sys.argv) == 3 and sys.argv[1] == "words":
-        want = equations()
+    if len(sys.argv) == 3 and sys.argv[1] in ("words", "u32words"):
+        want = equations() if sys.argv[1] == "words" else u32_keys()
         got = read_words(sys.argv[2])
         missing = [e for e in want if e not in got]
         if missing:

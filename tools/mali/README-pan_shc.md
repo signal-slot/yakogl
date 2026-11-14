@@ -340,11 +340,19 @@ T=tools/mali
 python3 -I $T/blend_deqp_ref.py list | pan_shc --blend > out.json
 python3 -I $T/blend_deqp_ref.py words out.json > $T/testdata/blend_deqp.words   # 1403 keys
 python3 -I $T/blend_deqp_ref.py random | pan_shc --blend > rnd.json
-python3 -I $T/blend_deqp_ref.py digest rnd.json > $T/testdata/blend_random.sha   # 2100 keys
+python3 -I $T/blend_deqp_ref.py digest rnd.json > $T/testdata/blend_random.sha   # 2700 keys
+python3 -I $T/blend_deqp_ref.py u32 | pan_shc --blend > u32.json
+python3 -I $T/blend_deqp_ref.py u32words u32.json > $T/testdata/blend_u32.words   # 100 keys
 ```
 
 A key may end in `f32`: the fragment colour is fp32 (a highp ES 3.00
-`out vec4`, `src0_type` `nir_type_float32`).
+`out vec4`, `src0_type` `nir_type_float32`); or in `u32`: uint32 (a highp
+`out uvec4`, `nir_type_uint32`). Mesa converts a uint32 colour from float,
+the target's base type (pan_blend.c:837-862), so its words are the fp32
+key's: `blend_u32.words` holds the first 100 fp32 keys of `random` with
+`u32`, and the backend takes the fp32 key for such a colour
+(`a_uint32_colour_s_blend_shaders_are_mesa_s`; measured 2026-11-15, the
+100 equal the same keys' fp32 words).
 
 `blend_deqp.words` is every blend shader of dEQP-GLES2
 `functional.fragment_ops.blend` (es2fBlendTests.cpp's states that Mesa draws
@@ -353,8 +361,8 @@ with a blend shader, the blend colour 0.2, 0.4, 0.6, 0.8); `blend_random.sha`
 4x with an fp16 colour, 600 with an fp32 one. Both runs were made twice and
 are identical. The tests are `every_deqp_gles2_blend_shader_is_mesa_s` and
 `random_blend_shaders_are_mesa_s` (src/shaderc/online/mali/tests.rs); the
-gate's pan_shc row (MESA_PAN_TREE; a gap without it) makes both files and
-`blend_nir_rules.rs` again and compares the bytes.
+gate's pan_shc row (MESA_PAN_TREE; a gap without it) makes them,
+`blend_u32.words` and `blend_nir_rules.rs` again and compares the bytes.
 
 `src/shaderc/online/mali/blend_nir_rules.rs` is generated from the same tree's
 `nir_opt_algebraic.py` and `bifrost_nir_algebraic.py`:
