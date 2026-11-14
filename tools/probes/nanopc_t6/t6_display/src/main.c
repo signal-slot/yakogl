@@ -59,7 +59,7 @@ static uint32_t t6_display_fb[FB_W * FB_H] __aligned(4096);
 static const char *const stop_name[] = {
 	[YD_T6_DISPLAY_STOP_NONE] = "none",
 	[YD_T6_DISPLAY_STOP_VOP_DOMAIN] = "PD_VOP is not powered or not out of idle",
-	[YD_T6_DISPLAY_STOP_VOP_CLOCK] = "a clock of PD_VOP is gated",
+	[YD_T6_DISPLAY_STOP_VOP_CLOCK] = "a clock of PD_VOP or HCLK_VOP is gated",
 	[YD_T6_DISPLAY_STOP_VERSION] = "VERSION_INFO is not the RK3588's",
 	[YD_T6_DISPLAY_STOP_STANDBY] = "VP0 is in STANDBY: no picture to adopt",
 	[YD_T6_DISPLAY_STOP_VP_STATE] = "VP0's DSP_CTRL is not HDMI RGB",
