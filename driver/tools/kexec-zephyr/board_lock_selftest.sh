@@ -95,6 +95,21 @@
 # that is off or a held lock refuses before any read, and a read that fails
 # stops the run.
 #
+# A tenth, for the crash route (nanopc-t6.sh --crash, D2 of
+# driver/docs/nanopc-t6-display.md): on made-up facts, --crash refuses
+# without a crashkernel= reservation that holds the window, with one that
+# holds only part of it, with a crash image already loaded, with another
+# entry in the window, and with an image whose segment leaves no room for the
+# kernel's control page; with the reservation it passes the dry run and
+# reaches its T6_HAND refusal; the normal route says "route: normal", jumps
+# without --crash, and is refused, naming --crash, when the reservation lies
+# in the window. t6-crashkernel.sh, the tool that makes the reservation, runs
+# against a fake board (a directory, T6CK_ROOT, and an `ssh` that runs the
+# command here): status before and after, the set/undo round trip byte for
+# byte on a file with an extraargs= line and on one without, and its
+# refusals (a crashkernel= already there, two extraargs= lines, undo without
+# set, a file changed after set, another board).
+#
 # Needs bash, flock(1) and strings(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
@@ -359,10 +374,12 @@ t6_board_run() {
 		printf '%s\n' 'compatible=friendlyarm,nanopc-t6 rockchip,rk3588 ' kernel=6.18.55 \
 			kexec_load_disabled=0 kexec_loaded=0 config_kexec=CONFIG_KEXEC=y uid=0 \
 			wdt_identity=dw_wdt wdt_state=inactive wdt_timeout=44 wdt_nowayout=0 wdt_users= \
+			config_crash_dump=CONFIG_CRASH_DUMP=y "kexec_crash_loaded=${t6_crash_loaded:-0}" \
+			"kexec_crash_size=${t6_crash_size:-0}" \
 			"gic_tables=$2" 'iomem<<' '00200000-e143ffff : System RAM'
 		printf '%s\n' "$1" '>>'
 	} > "$tmp/facts"
-	PATH=$tmp/fakebin:$PATH BOARD_HOST=root@board.invalid bash "$t6" "$tmp/top13.bin" ${3:+"$3"} 2>&1
+	PATH=$tmp/fakebin:$PATH BOARD_HOST=root@board.invalid bash "$t6" "${t6_img:-$tmp/top13.bin}" ${3:+"$3"} ${4:+"$4"} 2>&1
 }
 kernel='  02000000-0432ffff : Kernel code'
 gic_out='100220000 100230000 1002f0000 '
@@ -396,6 +413,161 @@ out=$(bash "$here/t6-display-dump-selftest.sh" 2>&1)
 rc=$?
 [ "$rc" = 0 ] || grep ' FAIL$' <<<"$out"
 check "t6-display-dump.sh: its self-test passes (rc $rc: $(tail -n 1 <<<"$out"))" "$rc"
+
+# The crash route. The reservation t6-crashkernel.sh makes is
+# 0x10000000-0x1fffffff, under the bank after the kernel.
+ck='  10000000-1fffffff : Crash kernel'
+out=$(t6_board_run "$kernel" "$gic_out")
+check "nanopc-t6.sh: without --crash the dry run names the normal route and no reservation" \
+	"$(grep -qF 'route: normal: kexec_load, then reboot(LINUX_REBOOT_CMD_KEXEC)' <<<"$out" && grep -qF 'crashkernel= reservation: none)' <<<"$out"; echo $?)"
+check "nanopc-t6.sh: the normal route's plan jumps without --crash" \
+	"$(grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000$' <<<"$out"; echo $?)"
+out=$(t6_board_run "$kernel" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash without a reservation is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF "REFUSED: --crash needs a crashkernel= reservation that holds the window 0x10000000-0x1fffffff; the board has: Crash kernel 'none'" <<<"$out"; echo $?)"
+out=$(t6_crash_size=134217728 t6_board_run "$kernel
+  08000000-17ffffff : Crash kernel" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash with a reservation holding half the window is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF "the board has: Crash kernel '08000000-17ffffff : Crash kernel'" <<<"$out"; echo $?)"
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash with the reservation passes the dry run and names the crash route (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'route: crash (--crash)' <<<"$out" && grep -qF 'inside the crashkernel= reservation 0x10000000-0x1fffffff' <<<"$out" && grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000 --crash$' <<<"$out"; echo $?)"
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash --go)
+rc=$?
+check "nanopc-t6.sh: --crash --go with the reservation reaches its T6_HAND refusal (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --go needs T6_HAND' <<<"$out"; echo $?)"
+out=$(t6_crash_loaded=1 t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash with a crash image already loaded is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --crash: a crash image is already loaded' <<<"$out"; echo $?)"
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: the normal route on a window inside the reservation is refused, naming --crash (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: the window overlaps: 10000000-1fffffff : Crash kernel -- the crashkernel= reservation lies in it: take --crash' <<<"$out"; echo $?)"
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck
+  1ff00000-1fffffff : reserved" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash still refuses another entry in the window (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: the window overlaps: 1ff00000-1fffffff : reserved' <<<"$out"; echo $?)"
+# An image whose RAM footprint (header bytes 16..23) is the whole window
+# leaves no page of the reservation for the control page.
+cp "$tmp/top13.bin" "$tmp/full.bin"
+printf '\x00\x00\x00\x10\x00\x00\x00\x00' | dd of="$tmp/full.bin" bs=1 seek=16 conv=notrunc status=none
+out=$(t6_img=$tmp/full.bin t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash refuses a segment that leaves no room for the control page (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF "REFUSED: --crash: the image's segment (268435456 bytes at 0x10000000)" <<<"$out"; echo $?)"
+
+# t6-crashkernel.sh on a fake board: a directory with the board's files, and
+# an `ssh` (and a `dmesg`) that run here.
+ckt=$here/t6-crashkernel.sh
+fb=$tmp/ckboard
+mkdir -p "$tmp/fakessh" "$fb/boot" "$fb/proc/device-tree" "$fb/proc/sys/kernel" "$fb/sys/kernel" "$fb/root"
+printf '#!/bin/sh\nfor a; do last=$a; done\nexec sh -c "$last"\n' > "$tmp/fakessh/ssh"
+printf '#!/bin/sh\ncat "%s/dmesg"\n' "$fb" > "$tmp/fakessh/dmesg"
+chmod +x "$tmp/fakessh/ssh" "$tmp/fakessh/dmesg"
+printf 'friendlyarm,nanopc-t6\0rockchip,rk3588\0' > "$fb/proc/device-tree/compatible"
+echo 6.18.55 > "$fb/proc/sys/kernel/osrelease"
+printf 'CONFIG_KEXEC=y\nCONFIG_CRASH_RESERVE=y\nCONFIG_CRASH_DUMP=y\n' > "$fb/boot/config-6.18.55"
+printf 'root=UUID=0 rootwait cma=256M\n' > "$fb/proc/cmdline"
+echo 0 > "$fb/sys/kernel/kexec_crash_size"
+echo 0 > "$fb/sys/kernel/kexec_crash_loaded"
+printf '00200000-e143ffff : System RAM\n  02000000-0432ffff : Kernel code\n' > "$fb/proc/iomem"
+echo 'cma: Reserved 256 MiB at 0x00000000d1400000' > "$fb/dmesg"
+ckrun() { # <command>
+	PATH=$tmp/fakessh:$PATH T6CK_ROOT=$fb BOARD_LOCK=$tmp/ck.lock BOARD_HOST=root@board.invalid bash "$ckt" "$1" 2>&1
+}
+env_with='verbosity=1
+bootlogo=false
+overlay_prefix=rockchip-rk3588
+extraargs=cma=256M
+usbstoragequirks=0x2537:0x1066:u
+'
+printf '%s' "$env_with" > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: status without a reservation exits 1 and says so (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'is NOT reserved (no crashkernel=)' <<<"$out" && grep -qF 'cma: Reserved 256 MiB' <<<"$out"; echo $?)"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set appends the token to the extraargs= line only (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(grep -v '^extraargs=' "$fb/boot/armbianEnv.txt")" = "$(grep -v '^extraargs=' <<<"$env_with")" ] && grep -qx 'extraargs=cma=256M crashkernel=256M@0x10000000' "$fb/boot/armbianEnv.txt" && grep -qF 'next: reboot the board' <<<"$out"; echo $?)"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: a second set changes nothing (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'already set by this tool' <<<"$out" && [ "$(grep -c crashkernel= "$fb/boot/armbianEnv.txt")" = 1 ]; echo $?)"
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: status after set, before the reboot, says reboot (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'the file has crashkernel= but the running kernel was not given it: reboot' <<<"$out"; echo $?)"
+printf 'root=UUID=0 rootwait cma=256M crashkernel=256M@0x10000000\n' > "$fb/proc/cmdline"
+printf '00200000-e143ffff : System RAM\n  02000000-0432ffff : Kernel code\n  10000000-1fffffff : Crash kernel\n' > "$fb/proc/iomem"
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: status after the reboot finds the window in the reservation (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'is inside the reservation: nanopc-t6.sh --crash can run' <<<"$out"; echo $?)"
+printf '00200000-e143ffff : System RAM\n' > "$fb/proc/iomem"
+echo 'crashkernel reservation failed - memory is in use.' >> "$fb/dmesg"
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: status names a reservation the kernel could not make (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'NOT reserved although the kernel was given' <<<"$out" && grep -qF 'memory is in use' <<<"$out"; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo restores the file byte for byte and removes its copy (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ ! -e "$fb/root/yakogl-crashkernel" ] && grep -qF 'byte for byte' <<<"$out"; echo $?)"
+# No extraargs= line: set adds one at the end; undo takes it away again.
+printf 'verbosity=1\nrootdev=UUID=0\n' > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set on a file without extraargs= adds the line at the end (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(cat "$fb/boot/armbianEnv.txt")" = "verbosity=1
+rootdev=UUID=0
+extraargs=crashkernel=256M@0x10000000" ]; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo on it is byte for byte the old file (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
+# Refusals leave the file as it was.
+printf 'extraargs=cma=256M crashkernel=512M\n' > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set refuses a file that already has a crashkernel= (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'already has a crashkernel=' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ ! -e "$fb/root/yakogl-crashkernel" ]; echo $?)"
+printf 'extraargs=a\nextraargs=b\n' > "$fb/boot/armbianEnv.txt"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set refuses two extraargs= lines (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'has 2 extraargs= lines' <<<"$out"; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo without a set refuses (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'nothing to undo' <<<"$out"; echo $?)"
+printf '%s' "$env_with" > "$fb/boot/armbianEnv.txt"
+ckrun set >/dev/null
+echo 'fdtfile=other.dtb' >> "$fb/boot/armbianEnv.txt"
+changed=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo refuses a file changed after set and leaves it (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'changed after set' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$changed" ] && [ -e "$fb/root/yakogl-crashkernel/armbianEnv.txt.orig" ]; echo $?)"
+printf 'friendlyarm,other\0' > "$fb/proc/device-tree/compatible"
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: another board is refused (rc $rc)" \
+	"$([ "$rc" != 0 ] && grep -qF 'not a NanoPC-T6' <<<"$out"; echo $?)"
 
 # The window is decided by nanopc_t6.dts (zephyr,sram) and held again where an
 # image is loaded into it: nanopc-t6.sh checks /proc/iomem over WINDOW_BASE
