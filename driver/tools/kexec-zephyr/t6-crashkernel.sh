@@ -102,6 +102,15 @@ S=$R/root/yakogl-crashkernel
 say() { echo "board: $*"; }
 no() { echo "board: REFUSED: $*"; echo "board: nothing was changed."; exit 3; }
 sha() { sha256sum "$1" | cut -d" " -f1; }
+# The command line and armbianEnv.txt carry the root UUID (root=, rootdev=),
+# which must not reach a log or an issue: of a line only the crashkernel= and
+# cma= words are printed.
+toks() { tr " \t" "\n\n" | grep -E "^(crashkernel|cma)=" | tr "\n" " "; }
+lines_toks() { # <grep pattern> <file>: "N: <tokens>" for each matching line
+	grep -n "$1" "$2" | while IFS= read -r l; do
+		printf "%s: %s\n" "${l%%:*}" "$(printf "%s\n" "${l#*:}" | toks)"
+	done
+}
 case "$(tr "\0" " " <"$R/proc/device-tree/compatible" 2>/dev/null)" in
 *friendlyarm,nanopc-t6*) ;;
 *) no "not a NanoPC-T6 (compatible $(tr "\0" " " <"$R/proc/device-tree/compatible" 2>/dev/null || echo unread))" ;;
@@ -116,14 +125,18 @@ facts)
 		echo "config=$(grep -h "^$c=" "$R/boot/config-$rel" 2>/dev/null || echo "$c absent")"
 	done
 	echo "file_sha=$(sha "$F")"
-	grep -n "^extraargs=" "$F" | sed "s/^/file_extraargs=/"
-	grep -n "crashkernel=" "$F" | sed "s/^/file_crashkernel=/"
+	lines_toks "^extraargs=" "$F" | sed "s/^/file_extraargs=line /"
+	lines_toks "crashkernel=" "$F" | sed "s/^/file_crashkernel=line /"
 	if [ -d "$S" ]; then echo "state=$(cat "$S/orig.sha256" 2>/dev/null) $(cat "$S/new.sha256" 2>/dev/null)"; fi
-	echo "cmdline=$(tr " " "\n" <"$R/proc/cmdline" | grep "^crashkernel=" | tr "\n" " ")"
+	echo "cmdline=$(toks <"$R/proc/cmdline")"
 	echo "kexec_crash_size=$(cat "$R/sys/kernel/kexec_crash_size" 2>/dev/null || echo absent)"
 	echo "kexec_crash_loaded=$(cat "$R/sys/kernel/kexec_crash_loaded" 2>/dev/null || echo absent)"
 	grep -E "^ *[0-9a-f]+-[0-9a-f]+ : Crash kernel$" "$R/proc/iomem" | sed "s/^ */iomem=/"
-	dmesg 2>/dev/null | grep -E "crashkernel|cma: Reserved" | sed "s/^/dmesg=/"
+	# The lines of the reservation (kernel/crash_reserve.c:418-421, :445-446,
+	# :456) and of CMA; never "Kernel command line:", which holds root=.
+	dmesg 2>/dev/null | grep -v "command line" |
+		grep -E "crashkernel reserved|crashkernel reservation failed|cannot allocate crashkernel|crashkernel: |cma: Reserved" |
+		sed "s/^/dmesg=/"
 	;;
 set)
 	rel=$(cat "$R/proc/sys/kernel/osrelease")
@@ -142,7 +155,7 @@ set)
 	n=$(grep -c "^extraargs=" "$F" || true)
 	[ "$n" -le 1 ] || no "$F has $n extraargs= lines"
 	if grep -q "crashkernel=" "$F"; then
-		no "$F already has a crashkernel=: $(grep -n "crashkernel=" "$F" | tr "\n" " ")(the last one on the command line wins; this tool adds only its own)"
+		no "$F already has a crashkernel= (line: tokens) $(lines_toks "crashkernel=" "$F" | tr "\n" " ")(the last one on the command line wins; this tool adds only its own)"
 	fi
 	if [ "$n" = 1 ]; then
 		old=$(grep "^extraargs=" "$F")
@@ -173,8 +186,8 @@ set)
 	sync
 	sha "$F" >"$S/new.sha256"
 	sync
-	say "extraargs before: $old"
-	say "extraargs after:  $new"
+	say "extraargs before (crashkernel=, cma= words): $(printf "%s\n" "$old" | toks)"
+	say "extraargs after  (crashkernel=, cma= words): $(printf "%s\n" "$new" | toks)"
 	say "$F sha256 $(cat "$S/orig.sha256") -> $(cat "$S/new.sha256"); the copy for undo is $S/armbianEnv.txt.orig"
 	;;
 undo)
@@ -235,7 +248,7 @@ if [ -n "$(fact state)" ]; then
 else
 	echo "file: no copy from set on the board"
 fi
-echo "running kernel: command line '$(fact cmdline)', kexec_crash_size $(fact kexec_crash_size), kexec_crash_loaded $(fact kexec_crash_loaded)"
+echo "running kernel: command line (crashkernel=, cma= words) '$(fact cmdline)', kexec_crash_size $(fact kexec_crash_size), kexec_crash_loaded $(fact kexec_crash_loaded)"
 echo "running kernel: /proc/iomem Crash kernel: $(fact iomem | tr '\n' ';')"
 fact dmesg | sed 's/^/running kernel: dmesg: /'
 held=0
@@ -244,15 +257,17 @@ while IFS= read -r l; do
 	s=$((16#${BASH_REMATCH[1]})) e=$((16#${BASH_REMATCH[2]}))
 	if [ "$s" -le "$WINDOW_BASE" ] && [ "$e" -ge $((WINDOW_BASE + WINDOW_SIZE - 1)) ]; then held=1; fi
 done <<<"$(fact iomem)"
+# The crashkernel= words the running kernel was given (cmdline also has cma=).
+ck_cmd=$(fact cmdline | tr ' ' '\n' | grep '^crashkernel=' | tr '\n' ' ' || true)
 win=$(printf '0x%08x-0x%08x' "$WINDOW_BASE" $((WINDOW_BASE + WINDOW_SIZE - 1)))
 if [ "$held" = 1 ]; then
 	echo "status: the window $win is inside the reservation: nanopc-t6.sh --crash can run"
 	exit 0
 fi
-if [ -n "$(fact file_crashkernel)" ] && [ -z "$(fact cmdline)" ]; then
+if [ -n "$(fact file_crashkernel)" ] && [ -z "$ck_cmd" ]; then
 	echo "status: the window $win is NOT reserved; the file has crashkernel= but the running kernel was not given it: reboot"
-elif [ -n "$(fact cmdline)" ]; then
-	echo "status: the window $win is NOT reserved although the kernel was given '$(fact cmdline)': see the dmesg lines above (\"memory is in use\" = something was placed there first)"
+elif [ -n "$ck_cmd" ]; then
+	echo "status: the window $win is NOT reserved although the kernel was given '$ck_cmd': see the dmesg lines above (\"memory is in use\" = something was placed there first)"
 else
 	echo "status: the window $win is NOT reserved (no crashkernel=): $0 set, then reboot"
 fi
