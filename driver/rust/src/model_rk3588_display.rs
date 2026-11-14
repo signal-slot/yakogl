@@ -252,6 +252,9 @@ pub struct Faults {
     /// The PHY's lanes report not ready (`PHY_RDY` 0) once VP0 runs; the
     /// PLL stays locked.
     pub phy_rdy_lost: bool,
+    /// The ports' `REG_CFG_DONE` bits read 1 after the update is taken (the
+    /// other answer to the design note's U8).
+    pub cfg_done_sticky: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -705,7 +708,7 @@ impl Rk3588Display {
         match off {
             VERSION => self.faults.vop_version.unwrap_or(VERSION_RK3588),
             CFG_DONE => {
-                let pend = (0..4).fold(0, |a, p| a | u32::from(s.pending[p]) << p);
+                let pend = (0..4).fold(0, |a, p| a | u32::from(s.pending[p] || self.faults.cfg_done_sticky) << p);
                 Self::vop_reg(&s, CFG_DONE) & 1 << 15 | pend
             }
             SYS0_INT_STATUS => s.sys_raw[0] & Self::vop_reg(&s, SYS0_INT_EN),
