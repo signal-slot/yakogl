@@ -51,7 +51,10 @@
 #
 # --changed maps each changed path to the parts it can break (scope_of_path
 # below: a GPU back end, gl_test, the tools, the precompiled tables, the
-# drivers crate, the samples, or everything) and skips the rows of the other
+# drivers crate, the samples, `tests` -- a change confined to tests/, which
+# runs the test rows of the integration targets it reaches
+# (tools/check_tests_reach.py) and what every change reaches -- or
+# everything) and skips the rows of the other
 # parts, printing `skip` for each so the log says what was not run. A path
 # the map does not know, and every shared layer (src/gl, src/shaderc, the
 # OSALs, capi, Cargo.toml, this script), selects every row -- and --local then
@@ -176,7 +179,9 @@ BUILD_ONLY_CONFIGS=(
 scope_of_path() {
   case "$1" in
   docs/* | */*.md | *.md | website/* | NOTICE | LICENSE* | .github/* | records/* | .gitignore | .ccfarm/*) echo docs ;;
-  tools/precompile/* | tools/shaders/* | tests/fixtures/precompile*) echo precompile ;;
+  tools/precompile/* | tools/shaders/*) echo precompile ;;
+  # a precompile fixture is read by the tables' rows and by the tests that name it
+  tests/fixtures/precompile*) echo "precompile tests" ;;
   # V3D 7.1 (Raspberry Pi 5): the v3d71 row (tools/v3d/check71.sh) is reached by
   # its own files (src/shaderc/online/v3d/*71*.rs, driver/src/v3d/generated/
   # v3d_packet_v71_pack.h, tools/v3d/check71.sh, check71.d/*, shim71/*, pi5/*,
@@ -194,10 +199,15 @@ scope_of_path() {
   src/shaderc/online/powervr/* | src/pvr/* | driver/src/pvr/* | driver/src/pvr_* | driver/src/fw/* | driver/compat/* | tools/pvr/* | tools/pco_shc/* | tools/pco-isa/* | tools/isa-extract/* | tools/glsl2usc.sh | driver/tools/offsetof/* | tests/reference/* | driver/rust/src/soc/am62p/* | tools/ti-zephyr/* | tools/ti-trm/*) echo pvr ;;
   driver/tools/pvrlab/*) echo gltest ;;
   tools/yakogl-tools/*) echo toolscrate ;;
+  tools/release/redaction-scan.allow) echo tests ;;
   tools/mali/*) echo mali ;;
   tools/osal/*) echo osal ;;
   driver/samples/* | examples/* | tools/slint/* | tools/probes/* | tools/host-replay/*) echo samples ;;
   driver/rust/* | driver/*) echo drivers ;;
+  # a path confined to tests/ (the GPU-named files above keep their GPU's
+  # scope): the `tests` scope, the test rows of the targets it reaches
+  # (tools/check_tests_reach.py)
+  tests/*) echo tests ;;
   tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
@@ -326,6 +336,8 @@ config_scopes() {
   echo "$out"
 }
 SCOPES=all
+TEST_TARGETS=
+TESTS_NARROW=0
 if [ -n "$CHANGED_BASE" ]; then
   # YAKOGL_CHECK_PATHS="<path> ..." stands in for the diff (the self-test).
   if [ -n "${YAKOGL_CHECK_PATHS-}" ]; then
@@ -336,13 +348,47 @@ if [ -n "$CHANGED_BASE" ]; then
   fi
   SCOPES=$(for cp in $changed_paths; do scope_of_path "$cp"; done | sort -u | tr '\n' ' ')
   case " $SCOPES " in *" all "*) SCOPES=all ;; esac
+  # `tests`: which integration test targets the paths confined to tests/ reach.
+  # ALL: cannot tell, every target of the test rows; WIDEN: a reader outside
+  # tests/ (a tool, a table proof) reads a changed file, so every row; else
+  # the targets, plus redaction_scan (it scans the whole tree, new test file
+  # included) and the library's test_rules (it reads tests/*.rs).
+  case " $SCOPES " in *" tests "*)
+    tests_paths=$(for cp in $changed_paths; do case " $(scope_of_path "$cp") " in *" tests "*) echo "$cp" ;; esac; done)
+    TEST_TARGETS=$(python3 -I tools/check_tests_reach.py $tests_paths 2>/dev/null) || TEST_TARGETS=ALL
+    case "$TEST_TARGETS" in
+    WIDEN) SCOPES=all; TEST_TARGETS= ;;
+    ALL | "") TEST_TARGETS=ALL ;;
+    *) TEST_TARGETS=$(printf '%s\n' $TEST_TARGETS redaction_scan | sort -u | tr '\n' ' '); TESTS_NARROW=1 ;;
+    esac ;;
+  esac
   echo "check.sh: --changed $CHANGED_BASE: $(printf '%s\n' "$changed_paths" | grep -c .) path(s), scopes: ${SCOPES:-none}"
   if [ "$SCOPES" = all ]; then
-    for cp in $changed_paths; do [ "$(scope_of_path "$cp")" = all ] && echo "      every row: $cp"; done
+    for cp in $changed_paths; do
+      case " $(scope_of_path "$cp") " in *" all "*) echo "      every row: $cp" ;; *" tests "*) echo "      every row: $cp (read outside tests/)" ;; esac
+    done
   fi
+  [ -n "$TEST_TARGETS" ] && echo "check.sh: tests scope: targets ${TEST_TARGETS% }"
 fi
 ROW_SCOPES=all
+ROW_TESTS=
 scope() { ROW_SCOPES="$*"; }
+# tests_row <target>...: the next row runs those root integration test
+# targets (tests/<target>.rs) from a function, so `step` cannot see a
+# `--test` in its arguments. A step also reads its own `--test <name>`.
+tests_row() { ROW_TESTS="$*"; }
+# 0 when the row under the current `scope` line is wanted only for the
+# `tests` scope with a narrowed target list: it runs just those targets.
+tests_narrow_row() {
+  local s
+  [ "$TESTS_NARROW" -eq 1 ] || return 1
+  for s in $ROW_SCOPES; do
+    [ "$s" = tests ] && continue
+    case "$s" in all | licence | local) return 1 ;; esac
+    case " $SCOPES " in *" $s "*) return 1 ;; esac
+  done
+  return 0
+}
 # 0 when the rows under the current `scope` line are selected.
 wanted() {
   local s
@@ -350,6 +396,11 @@ wanted() {
     [ "$LOCAL" -eq 0 ] && return 0
     for s in $ROW_SCOPES; do [ "$s" = local ] && return 0; done
     return 1
+  fi
+  # a row that runs target <t> of tests/ is wanted when the change reaches <t>
+  if [ -n "$ROW_TESTS" ] && [ -n "$TEST_TARGETS" ]; then
+    [ "$TEST_TARGETS" = ALL ] && return 0
+    for s in $ROW_TESTS; do case " $TEST_TARGETS " in *" $s "*) return 0 ;; esac; done
   fi
   for s in $ROW_SCOPES; do
     [ "$s" = all ] && return 0
@@ -552,7 +603,13 @@ step() {
   ROW_KEY=
   ROW_NEEDS=
   ROW_NEEDS_HOW=
-  if ! wanted; then skip "$label"; return 0; fi
+  local ta pt=
+  for ta in "$@"; do
+    [ "$pt" = --test ] && ROW_TESTS="$ROW_TESTS $ta"
+    pt=$ta
+  done
+  if ! wanted; then ROW_TESTS=; skip "$label"; return 0; fi
+  ROW_TESTS=
   if [ -n "${YAKOGL_CHECK_PLAN-}" ]; then queue_line "plan  $label"; oks=$((oks + 1)); return 0; fi
   # YAKOGL_CHECK_INPUT_KEYS=1: print each keyed row's key and run nothing
   # (tools/check_testcache_selftest.sh).
@@ -1499,23 +1556,38 @@ if ! ls "${DEQP_GLES3_TEST_DIR:-/nonexistent}"/*.test >/dev/null 2>&1; then
   fi
   unset DEQP_GLES3_TEST_DIR
 fi
+tests_lib_done=0
 for f in "${CONFIGS[@]}"; do
   tier=()
-  scope "$(config_scopes "$f")"
+  scope "$(config_scopes "$f") tests"
   case "$f" in host-test,gpu-powervr,shaderc-online | host-test,gpu-vivante,shaderc-online) scope "$ROW_SCOPES local" ;; esac
   case "$f" in
   *precompiled-shaders*gpu-vivante* | *gpu-vivante*precompiled-shaders*)
     tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-gc7000.rs") ;;
   *precompiled-shaders*) tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-powervr.rs") ;;
   esac
+  # A change confined to tests/ builds and runs the targets it reaches only
+  # (TEST_TARGETS, tools/check_tests_reach.py), and the library's test_rules
+  # once: they read tests/*.rs, which no other library test does.
+  pick=() clip=(--all-targets)
+  if tests_narrow_row; then
+    for t in $TEST_TARGETS; do pick+=(--test "$t"); done
+    clip=("${pick[@]}")
+  fi
   [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
-  step "clippy  $f" "${tier[@]}" cargo clippy --no-default-features --features "$f" --all-targets
+  step "clippy  $f" "${tier[@]}" cargo clippy --no-default-features --features "$f" "${clip[@]}"
   # --no-fail-fast: cargo otherwise stops at the first test BINARY that fails,
   # and every binary after it goes unrun. A red row then names one failure
   # and hides the rest: on 2026-09-23 a gate red on deqp_repro_shaders never
   # ran encoding_vocabulary, whose own failure surfaced a push later.
   [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
-  step "test    $f" cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f"
+  step "test    $f" cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f" ${pick[@]+"${pick[@]}"}
+  if [ "${#pick[@]}" -gt 0 ] && [ "$tests_lib_done" -eq 0 ]; then
+    tests_lib_done=1
+    [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
+    step "test    $f (--lib test_rules::, reads tests/*.rs)" \
+      cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f" --lib test_rules::
+  fi
 done
 
 # An image without the compiler: the precompiled shaders the whole back end
@@ -1612,7 +1684,9 @@ knobs_file_tests() {
   printf '%s\n' "$out" | grep -E '^test result'
   printf '%s\n' "$out" | tests_as_declared "tests/$1.rs"
 }
+tests_row gc_kick_diff
 step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" knobs_file_tests gc_kick_diff
+tests_row gc_tiled_rt
 step "test    $KNOBS_CONFIG (tests/gc_tiled_rt.rs, every declared test)" knobs_file_tests gc_tiled_rt
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
@@ -4126,6 +4200,7 @@ if [ "$QUICK" -eq 0 ]; then
     # It regenerates build/glmark2-host/shaders, which tests/glmark2_corpus.rs
     # in every test row reads, so it runs alone (w:tree).
     uses w:tree
+    tests_row glmark2_corpus
     step "test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs)" glmark2_corpus_tests
   else
     gap "glmark2 corpus: no glmark2 tree at GLMARK2_SRC='${GLMARK2_SRC-}' (set GLMARK2_SRC): the glmark2 shaders were NOT compiled"

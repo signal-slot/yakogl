@@ -217,6 +217,25 @@ that already passed one: the owner, 2026-10-25). A document or a one-GPU
 change is already small this way. A shared-layer change is not, and the
 next two mechanisms carry it.
 
+**A change confined to `tests/`** (the scope `tests`; any `tests/` path the
+GPU-named scopes above do not claim, and `tools/release/redaction-scan.allow`)
+runs the cargo test rows and the rows every change reaches (fmt, the licence
+audit), and no image, driver, sample, aarch64, table or tool row. In those
+rows it builds, lints and runs only the integration test targets it reaches
+(`tools/check_tests_reach.py`): a changed `tests/<name>.rs` is the target
+`<name>`; a changed module or file under a `tests/` subdirectory reaches
+every target that pulls it in (`mod`, `#[path]`, `include!`) or names it,
+a fixture the targets that name it. `redaction_scan` (it scans the whole
+tree) always runs, and so do the library's `test_rules::` tests (they read
+`tests/*.rs`). The explicit per-target rows (V3D, fragdepth, knobs, the
+glmark2 corpus) are selected by their target, whatever their GPU scope; a
+function that runs a root target says so with `tests_row <target>`. When the
+script cannot tell what a file reaches it runs every target of the test
+rows (still not every row); a fixture that something outside `tests/` also
+reads, and a mix with `src/` or any other `all` path, select every row. The
+log says `check.sh: tests scope: targets ...`. The nightly run on main is
+the backstop.
+
 ### 3.2 Never redo work whose inputs did not change (new)
 
 **Test binaries.** cargo already rebuilds only what changed. The gate

@@ -52,7 +52,6 @@ want capi/assemble.cmake all
 want Cargo.toml all
 want tools/check.sh all
 want tools/land.sh all
-want tests/es3_tf_api.rs all
 want third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml all
 want some/new/place.rs all
 # one GPU
@@ -104,7 +103,7 @@ want tools/mali/isa-ref/board-2026-10-18.txt mali
 want driver/tools/pvrlab/gl_test.c gltest
 want tools/precompile/prove.sh precompile
 want tools/shaders/precompiled.list precompile
-want tests/fixtures/precompile_counts.txt precompile
+want tests/fixtures/precompile_counts.txt "precompile tests"
 want tools/yakogl-tools/src/main.rs toolscrate
 want tools/mali/panthor/src/dev.rs mali
 want tools/osal/linux_heap_check.c osal
@@ -318,6 +317,41 @@ expect "fragdepth: the GC7000UL test reaches its row" '^plan  test    host-test,
 expect "fragdepth: a GC7000UL change skips the V3D writer row" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_fragdepth_v3d.rs\)$' "$out"
 out=$(plan tests/es3_fragdepth_cases.rs)
 count "fragdepth: the cases file reaches its two rows" '^plan  test    .*es3_fragdepth_cases.rs\)$' 2 "$out"
+# A change confined to tests/ (scope tests): the test rows of the targets it
+# reaches, and what every change reaches; no image, driver, sample, aarch64,
+# table or tool row (tools/check_tests_reach.py names the targets).
+want tests/es3_tf_api.rs tests
+want tests/common/mod.rs tests
+want tests/usc_exec/mod.rs tests
+want tests/fixtures/v3d_texref.txt tests
+want tests/redaction_scan.rs tests
+want tools/release/redaction-scan.allow tests
+tests_plan=$(plan tests/es3_tf_api.rs)
+expect "tests: the summary" 'scopes: tests' "$tests_plan"
+expect "tests: the targets" '^check.sh: tests scope: targets .*es3_tf_api.*redaction_scan' "$tests_plan"
+expect "tests: a PowerVR suite row" '^plan  test    host-test,gpu-powervr$' "$tests_plan"
+expect "tests: a GC7000 suite row" '^plan  test    host-test,gpu-vivante$' "$tests_plan"
+expect "tests: the library's test_rules" '^plan  test    .*test_rules::' "$tests_plan"
+expect "tests: the target's own row (V3D)" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_tf_api.rs\)$' "$tests_plan"
+expect "tests: no other target's row" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_srgb.rs\)$' "$tests_plan"
+expect "tests: no image" '^skip  zephyr  am62p gl_test image, -Werror' "$tests_plan"
+expect "tests: no table proof" '^skip  gen     precompiled table gpu-powervr:' "$tests_plan"
+expect "tests: fmt and the licence audit run" '^plan  cargo fmt --check$' "$tests_plan"
+expect "tests: the licence audit" '^plan  tools   licence audit' "$tests_plan"
+if printf '%s\n' "$tests_plan" | grep -qE '^plan  (zephyr|cc  |run  |check  |tools  (check|board)|clippy  yakogl-)'; then
+  echo "FAIL tests: an image, driver, sample, cc, run or tool row is planned"; fails=$((fails + 1))
+fi
+checks=$((checks + 1))
+# the tree-wide redaction scan runs whatever test file changed
+expect "tests: redaction_scan is a target of every narrowed run" 'targets .*redaction_scan' "$(plan tests/es3_srgb.rs)"
+# a shared module reaches the targets that use it, and a mix with src/ is every row
+expect "tests: a shared module reaches its users" 'targets .*es3_gc_const_array' "$(plan tests/common/mod.rs)"
+expect "tests: a tests/ and src/ mix is every row" 'scopes: all' "$(plan "tests/es3_tf_api.rs src/gl/draw.rs")"
+# a fixture a tool outside tests/ reads is every row
+expect "tests: a fixture a tool reads is every row" 'scopes: all' "$(plan tests/fixtures/v3d_texref.txt)"
+# the glmark2 corpus test runs from a wrapper row, the knob tests from theirs
+expect "tests: glmark2_corpus selects its corpus row" '^plan  test    glmark2 corpus' "$(plan tests/glmark2_corpus.rs)"
+expect "tests: gc_kick_diff selects its knob row" '^plan  test    .*tests/gc_kick_diff.rs' "$(plan tests/gc_kick_diff.rs)"
 # --local: a shared-layer change runs the local set only
 local_plan() {
   ZEPHYR_WS=$PWD/build/check/plan-ws YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS="$1" tools/check.sh --local HEAD 2>&1 |
