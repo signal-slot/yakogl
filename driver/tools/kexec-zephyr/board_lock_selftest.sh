@@ -622,8 +622,13 @@ out=$(ckrun status)
 rc=$?
 check "t6-crashkernel.sh: status without a reservation exits 1 and says so (rc $rc)" \
 	"$([ "$rc" = 1 ] && grep -qF 'is NOT reserved (no crashkernel=)' <<<"$out" && grep -qF 'cma: Reserved 256 MiB' <<<"$out"; echo $?)"
+# The words of the extraargs= line include its first one (extraargs=cma=...).
+check "t6-crashkernel.sh: status prints the first word of the extraargs= line ($(grep -F 'extraargs line' <<<"$out"))" \
+	"$(grep -qF 'extraargs line: line 5: cma=256M' <<<"$out"; echo $?)"
 out=$(ckrun set)
 rc=$?
+check "t6-crashkernel.sh: set prints the words of the line before and after, the first one included" \
+	"$(grep -qx 'board: extraargs before (crashkernel=, cma= words): cma=256M ' <<<"$out" && grep -qx 'board: extraargs after  (crashkernel=, cma= words): cma=256M crashkernel=256M@0x10000000 ' <<<"$out"; echo $?)"
 check "t6-crashkernel.sh: set appends the token to the extraargs= line only (rc $rc)" \
 	"$([ "$rc" = 0 ] && [ "$(grep -v '^extraargs=' "$fb/boot/armbianEnv.txt")" = "$(grep -v '^extraargs=' <<<"$env_with")" ] && grep -qx 'extraargs=cma=256M crashkernel=256M@0x10000000' "$fb/boot/armbianEnv.txt" && grep -qF 'next: reboot the board' <<<"$out"; echo $?)"
 out=$(ckrun set)
@@ -665,6 +670,8 @@ check "t6-crashkernel.sh: set on a file without extraargs= adds the line at the 
 	"$([ "$rc" = 0 ] && [ "$(cat "$fb/boot/armbianEnv.txt")" = "verbosity=1
 rootdev=UUID=0
 extraargs=crashkernel=256M@0x10000000" ]; echo $?)"
+check "t6-crashkernel.sh: ... and status names the crashkernel= of the line set added (the line's first word)" \
+	"$(ckrun status | grep -qF 'crashkernel= in it: line 3: crashkernel=256M@0x10000000'; echo $?)"
 out=$(ckrun undo)
 rc=$?
 check "t6-crashkernel.sh: undo on it is byte for byte the old file (rc $rc)" \
@@ -773,6 +780,24 @@ out=$(ckrun undo)
 rc=$?
 check "t6-crashkernel.sh: undo refuses a file changed after set and leaves it (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF 'changed after set' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$changed" ] && [ -e "$fb/root/yakogl-crashkernel/armbianEnv.txt.orig" ]; echo $?)"
+# set on the same state (the file is neither the one set found nor the one it
+# wrote) refuses too, and keeps the copy undo needs.
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set refuses a file changed after set and keeps the copy (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'neither the file set found nor the one it wrote' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$changed" ] && [ -e "$fb/root/yakogl-crashkernel/armbianEnv.txt.orig" ] && [ -e "$fb/root/yakogl-crashkernel/new.sha256" ]; echo $?)"
+rm -rf "$fb/root/yakogl-crashkernel"
+# A root UUID inside extraargs= itself: set's before and after lines show
+# only the words (the UUID check at the end reads them).
+printf 'verbosity=1\nextraargs=root=UUID=%s cma=256M\n' "$uuid" > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set on an extraargs= that holds a root UUID prints only its words (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qx 'board: extraargs after  (crashkernel=, cma= words): cma=256M crashkernel=256M@0x10000000 ' <<<"$out"; echo $?)"
+ckrun undo >/dev/null
+check "t6-crashkernel.sh: ... and undo is byte for byte" \
+	"$([ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
 printf 'friendlyarm,other\0' > "$fb/proc/device-tree/compatible"
 out=$(ckrun status)
 rc=$?
