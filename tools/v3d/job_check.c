@@ -339,9 +339,32 @@ static void part_rollback(void)
 	r.num_attrs = 1;
 	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
 	      "an attribute read with no record: REFUSED, nothing left");
+	/* the fragment inputs: V3D_MAX_FS_INPUTS at most, and the varying flags
+	 * in word 0 (inputs 0-23) only, a bit past it refused, never dropped */
+	struct v3d_fs_prog fs_in = fs;
+	fs_in.num_inputs = V3D_MAX_FS_INPUTS + 1;
+	r = d;
+	r.fs = &fs_in;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "65 fragment inputs: REFUSED, nothing left");
+	fs_in.num_inputs = 60;
+	fs_in.flat_shade_flags = 1u << 24;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "a flat flag past input 23: REFUSED, nothing left");
+	fs_in.flat_shade_flags = 0;
+	fs_in.centroid_flags = 1u << 31;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "a centroid flag past input 23: REFUSED, nothing left");
 	check(j.draws == 1, "the job holds its one draw");
 	check(v3d_job_end(&j, &c, NULL, NULL), "the job still ends after FULL and REFUSED");
 	check(rl.bcl.used == one_draw, "the ended job used the BCL exactly");
+
+	/* 60 inputs (ES 3.0's 15 varying vectors) with word 0 all flat go in */
+	lists_init(&rl, RCL_OFF - BCL_OFF);
+	v3d_job_begin(&j, &t, &rl.bcl, &rl.rcl, &rl.ind);
+	fs_in.centroid_flags = 0;
+	fs_in.flat_shade_flags = (1u << 24) - 1;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_OK, "60 fragment inputs, 24 of them flat, go in");
 }
 
 /* ---- 3. Mesa's decoder on a three-draw job ------------------------------- */
@@ -2625,7 +2648,7 @@ static void part_occlusion(void)
 
 int main(void)
 {
-	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields;
+	/* part 1: 14 checks; part 2: 11 + 3 input refusals + 1 60-input draw; part 3: 6 + 51 census + 2 + 47 fields;
 	 * part 4: 3 + 3 + 19 fields; part 5: 2 + 5 words + 2 refusals + 3 per
 	 * stage + 1 + 1 + 4 size words + 2 size refusals; part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
 	 * refusals + 4 refusals + 1 + 3 (the M5 frame);
@@ -2643,7 +2666,7 @@ int main(void)
 	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal;
 	 * part 19 (occlusion queries): 2 builds + 4;
 	 * part 20 (the render image): 1 build + 5 + 3 refusals */
-	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
+	const int planned = 14 + 15 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
 			    28 + 8 + 6 + 10 + 6 + 9;
 	part_identity();
 	part_rollback();

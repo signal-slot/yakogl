@@ -647,7 +647,8 @@ fn every_refusal_has_an_info_log() {
     }
     /* V3D (the Pi 4): `centroid` is refused at link, by name
      * (`NotYet("centroid varying")`, src/shaderc/online/v3d), and so are
-     * flat varyings past input 31 and more than its varyings. Ratchets. */
+     * more than 24 flat and centroid components (the one flags word) and
+     * more than its varyings. Ratchets. */
     #[cfg(feature = "gpu-v3d")]
     {
         assert!(refused_mustpass <= 55, "{refused_mustpass} mustpass programs refused, ceiling 55");
@@ -1203,8 +1204,15 @@ mod gl_api {
             ("Abi(LoadBalancingTempsUnmeasured {", false),
             #[cfg(feature = "gpu-v3d")]
             ("Abi(TooManyVaryings { got: ", true),
+            /* the one word of flat/centroid flags (docs/notes/v3d-varyings.md) */
             #[cfg(feature = "gpu-v3d")]
-            ("varying past input 31", false),
+            ("more than 24 flat and centroid varying components", false),
+            #[cfg(feature = "gpu-v3d")]
+            ("more than 64 fragment shader input components", true),
+            /* a program that got past the flags word with its flat inputs
+             * moved first, and then does not allocate (no spilling yet) */
+            #[cfg(feature = "gpu-v3d")]
+            ("more live values than 2 threads have registers", false),
         ];
         for (name, vectors, r) in &refused {
             let log = format!("{r:?}");
@@ -1241,14 +1249,23 @@ mod gl_api {
         let interp = linked.iter().filter(|n| n.starts_with("interpolation.")).count();
         assert_eq!(interp, 54, "every interpolation.* program links");
         let random = linked.iter().filter(|n| n.starts_with("random")).count();
-        /* Ratchets: raise, never lower. The GC7000's 62 and the V3D's 96 below
-         * 600 are the back-end gaps of the list above. */
+        /* Ratchets: raise, never lower. The GC7000's 62 and the V3D's 141
+         * below 600 are the back-end gaps of the list above. The V3D's was
+         * 504 until plan #359: 45 random programs with a flat or centroid
+         * input past input 23 (integer varyings are flat) linked then, and
+         * the job builder refused every draw of them (more than 24 inputs;
+         * on the Pi 4 a ResourceError, which ends dEQP's run, as TF1's at
+         * array.interleaved.lines.highp_ivec4). They are refused at link by
+         * name now: more than 24 flat and centroid components for the one
+         * flags word, or, with the flat inputs moved first, the allocator
+         * (docs/notes/v3d-varyings.md). The three-word flags follow-up is
+         * what raises this again. */
         let floor = if cfg!(feature = "gpu-powervr") {
             597
         } else if cfg!(feature = "gpu-vivante") {
             538
         } else {
-            504
+            459
         };
         assert!(random >= floor, "{random} of 600 random programs link, floor {floor}");
     }

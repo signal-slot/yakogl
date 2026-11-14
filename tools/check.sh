@@ -1889,6 +1889,11 @@ step "test    $V3D_CONFIG (tests/es3_flatshade_guard.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_flatshade_guard
 step "test    host-test,gpu-vivante,shaderc-online (tests/es3_flatshade_guard.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_flatshade_guard
+# The V3D's ES 3.0 varying limits (15 / 60 / 60 / 64) through the GL core, the
+# back end and the real job builder (docs/notes/v3d-varyings.md). Compiles to
+# nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_v3d_varyings.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_varyings
 # The `msaa-fbo` feature (no effect yet) builds with each GPU's host
 # configuration, so a later item that reads it starts from a tree that
 # compiles.

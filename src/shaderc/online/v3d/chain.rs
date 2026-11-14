@@ -207,6 +207,16 @@ pub fn attribute_locations(gl_type: u16) -> u8 {
 /// first generic varying.
 pub const VARYING_SLOT_VAR0: u8 = 32;
 
+/// `V3D_MAX_FS_INPUTS` (broadcom/common/v3d_limits.h): the input components
+/// a fragment shader reads, which the job builder takes too (v3d_job.c).
+pub const FS_MAX_INPUTS: usize = 64;
+
+/// The inputs one word of the flat/centroid/non-perspective flags covers
+/// (the 24-bit field of the `*_FLAGS` packets, v3d_packet.xml), and the only
+/// word `struct v3d_fs_prog` carries: a flat or centroid input is one of the
+/// first this many.
+pub const FLAGS_WORD_INPUTS: usize = 24;
+
 /// `m` with its loops expanded where the unroller can (`None` from it: no
 /// loop, `m` as it is). Its refusals are named gaps, not verdicts on the
 /// shader.
@@ -416,32 +426,61 @@ pub fn compile_program_keyed<'a>(
     /* The fragment shader, and the order of its inputs. */
     let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
     let inputs = fragment_inputs(&fsp, a)?;
-    /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
-     * flat_shade_flags at the input's index). The job builder reads word 0
-     * only and refuses more than 24 inputs. */
-    let mut flat = 0u32;
-    /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
-     * BITSET_SET of centroid_flags, the W it multiplies by the centroid
-     * W). */
-    let mut centroid = 0u32;
-    for (i, &(loc, _)) in inputs.iter().enumerate() {
-        let d = fs
-            .inputs
+    if inputs.len() > FS_MAX_INPUTS {
+        return Err(V3dError::NotYet("more than 64 fragment shader input components"));
+    }
+    let interp = |loc: u8| {
+        fs.inputs
             .iter()
             .find(|d| d.kind == IoKind::Varying && d.location == loc)
-            .ok_or(V3dError::VaryingWithoutVertexOutput)?;
-        if d.interp == crate::shaderc::online::ir::INTERP_FLAT {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a flat varying past input 31"));
+            .map(|d| d.interp)
+            .ok_or(V3dError::VaryingWithoutVertexOutput)
+    };
+    let qualified = |loc: u8| interp(loc).map(|i| i == ir::INTERP_FLAT || i == ir::INTERP_CENTROID);
+    /* The flags travel as one 24-bit word per kind (word 0 of Mesa's
+     * flat_shade_flags/centroid_flags arrays: struct v3d_fs_prog, the job
+     * builder's FLAT_SHADE_FLAGS/CENTROID_FLAGS with the higher words
+     * zeroed), so a flat or centroid input is one of the first 24. ldvary
+     * takes the inputs in this list's order and the vertex shader writes
+     * them in the same order, so when one would land past 23 the flat and
+     * centroid inputs go first, each group in its own order; a program
+     * whose qualified inputs are all below 24 keeps Mesa's order
+     * (docs/notes/v3d-varyings.md, "What the raise carries"). */
+    let mut late = false;
+    for (i, &(loc, _)) in inputs.iter().enumerate() {
+        late |= i >= FLAGS_WORD_INPUTS && qualified(loc)?;
+    }
+    let inputs: &[(u8, u8)] = if late {
+        let v = a.alloc_filled(inputs.len(), (0u8, 0u8))?;
+        let mut n = 0;
+        for first in [true, false] {
+            for &x in inputs {
+                if qualified(x.0)? == first {
+                    v[n] = x;
+                    n += 1;
+                }
             }
-            flat |= 1 << i;
         }
-        if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a centroid varying past input 31"));
-            }
-            centroid |= 1 << i;
+        v
+    } else {
+        inputs
+    };
+    /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
+     * flat_shade_flags at the input's index), or sampled at the centroid
+     * (BITSET_SET of centroid_flags, the W it multiplies by the centroid
+     * W). A bit past the word is refused by name, never drawn smooth. */
+    let mut flat = 0u32;
+    let mut centroid = 0u32;
+    for (i, &(loc, _)) in inputs.iter().enumerate() {
+        let bits = match interp(loc)? {
+            ir::INTERP_FLAT => &mut flat,
+            ir::INTERP_CENTROID => &mut centroid,
+            _ => continue,
+        };
+        if i >= FLAGS_WORD_INPUTS {
+            return Err(V3dError::NotYet("more than 24 flat and centroid varying components"));
         }
+        *bits |= 1 << i;
     }
 
     /* Each input to the vertex shader's varying of the same name. */

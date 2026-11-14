@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Probe of the compiler's varying limits (plan #359, `v3d-varyings-probe`):
-//! what a vertex/fragment pair with 15 vec4 varyings (60 components), a 16th
-//! vec4 vertex output (64 components), and flat, centroid and smooth varyings
-//! compiles to and, in the interpreter, carries through. They record the
-//! state before the ES 3.0 raise (MAX_VARYING_VECTORS 15,
-//! MAX_VERTEX_OUTPUT_COMPONENTS 64); a test that fails today is `#[ignore]`d
-//! with the limit it needs, and runs with `--ignored`.
+//! The compiler's varying limits (plan #359, docs/notes/v3d-varyings.md):
+//! what a vertex/fragment pair with 15 vec4 varyings (60 components, ES 3.0's
+//! MAX_VARYING_VECTORS), 16 vec4 vertex outputs (64 components,
+//! MAX_VERTEX_OUTPUT_COMPONENTS) feeding 15, the point size beside them, and flat,
+//! centroid and smooth varyings compiles to and, in the interpreter, carries
+//! through; and the one word of flat/centroid flags the shader record
+//! carries (chain.rs `FLAGS_WORD_INPUTS`): the qualified inputs go first
+//! when one would land past input 23, and more than 24 are refused by name.
 
 use super::chain::{compile_program, Code, Prim, Target, V3dProgram, VARYING_SLOT_VAR0};
 use super::sim::{self, Env, FsInputs, Inputs, Varying, VsInputs, LANES};
@@ -20,6 +21,12 @@ const TARGET: Target = Target { vpm_size: 65536 };
 /// `n` vec4 varyings `v0..`: component c of `v{i}` is `a.x + 16 i + c`, so
 /// only a lost, swapped or misplaced varying changes what is read.
 fn vs_source(n: usize, es3: bool) -> String {
+    vs_source_with(n, es3, &[], false)
+}
+
+/// [`vs_source`] with `v{i}` flat for each i in `flat` (GLSL ES 3.00 only),
+/// and a gl_PointSize write when `psiz`.
+fn vs_source_with(n: usize, es3: bool, flat: &[usize], psiz: bool) -> String {
     let (attr, out) = if es3 { ("in", "out") } else { ("attribute", "varying") };
     let mut s = String::new();
     if es3 {
@@ -27,9 +34,13 @@ fn vs_source(n: usize, es3: bool) -> String {
     }
     s.push_str(&std::format!("{attr} vec4 a;\n"));
     for i in 0..n {
-        s.push_str(&std::format!("{out} vec4 v{i};\n"));
+        let q = if flat.contains(&i) { "flat " } else { "" };
+        s.push_str(&std::format!("{q}{out} vec4 v{i};\n"));
     }
     s.push_str("void main() {\n");
+    if psiz {
+        s.push_str("gl_PointSize = 2.0;\n");
+    }
     for i in 0..n {
         s.push_str(&std::format!(
             "v{i} = vec4(a.x) + vec4({:.1}, {:.1}, {:.1}, {:.1});\n",
@@ -47,6 +58,11 @@ fn vs_source(n: usize, es3: bool) -> String {
 /// others are read (and so inputs) through a multiply by zero the compiler
 /// may not remove (floats are not folded across `v * 0.0`).
 fn fs_source(n: usize, pick: usize, es3: bool) -> String {
+    fs_source_with(n, pick, es3, &[])
+}
+
+/// [`fs_source`] with `v{i}` flat for each i in `flat`.
+fn fs_source_with(n: usize, pick: usize, es3: bool, flat: &[usize]) -> String {
     let inn = if es3 { "in" } else { "varying" };
     let mut s = String::new();
     if es3 {
@@ -54,7 +70,8 @@ fn fs_source(n: usize, pick: usize, es3: bool) -> String {
     }
     s.push_str("precision highp float;\n");
     for i in 0..n {
-        s.push_str(&std::format!("{inn} vec4 v{i};\n"));
+        let q = if flat.contains(&i) { "flat " } else { "" };
+        s.push_str(&std::format!("{q}{inn} vec4 v{i};\n"));
     }
     if es3 {
         s.push_str("layout(location = 0) out vec4 o;\n");
@@ -129,16 +146,28 @@ fn check_vs_rows(n: usize, es3: bool) -> Result<(), String> {
 /// (by `input_slots`, so the test does not assume the link's order) and
 /// compare `acc / 1024`: the picked varying's four components.
 fn check_fs(n: usize, pick: usize, es3: bool) -> Result<(), String> {
-    with_program(&vs_source(n, es3), &fs_source(n, pick, es3), |p| {
+    check_fs_with(n, pick, es3, &[])
+}
+
+/// [`check_fs`] with `v{i}` flat for each i in `flat`: a flat input's value
+/// is in C and noise in the ldvary result (the provoking vertex's value,
+/// Mesa emit_flat_varying), a smooth one's the reverse, so an input whose
+/// flag is not where its ldvary is shows in the colour.
+fn check_fs_with(n: usize, pick: usize, es3: bool, flat: &[usize]) -> Result<(), String> {
+    with_program(&vs_source_with(n, es3, flat, false), &fs_source_with(n, pick, es3, flat), |p| {
         assert_eq!(p.fs.num_inputs as usize, 4 * n, "FS inputs: one per component read");
+        let noise = [1000.0f32.to_bits(); LANES];
         let varyings =
             p.fs.input_slots
                 .iter()
-                .map(|&(slot, comp)| {
+                .enumerate()
+                .map(|(i, &(slot, comp))| {
                     let loc = usize::from(slot - VARYING_SLOT_VAR0);
-                    Varying {
-                        vary: core::array::from_fn(|l| (l as f32 + (16 * loc + usize::from(comp)) as f32).to_bits()),
-                        c: [0; LANES],
+                    let v = core::array::from_fn(|l| (l as f32 + (16 * loc + usize::from(comp)) as f32).to_bits());
+                    if i < 32 && p.fs.flat_shade_flags & (1 << i) != 0 {
+                        Varying { vary: noise, c: v }
+                    } else {
+                        Varying { vary: v, c: [0; LANES] }
                     }
                 })
                 .collect();
@@ -178,13 +207,104 @@ fn a_fs_reads_15_vec4_varyings() {
     }
 }
 
-/// Fails today with `Select(VpmRowOutOfRange)`: the vertex shader's output
-/// rows stop below 64 components (gl_Position, the viewport rows and 16
-/// vec4 do not fit).
+/// MAX_VERTEX_OUTPUT_COMPONENTS 64: a vertex shader with 16 vec4 outputs
+/// links with a fragment shader reading 15 of them (MAX_VARYING_VECTORS),
+/// and writes what that one reads after the four fixed-function rows. A
+/// fragment shader reading all 64 components does not compile (its 64
+/// ldvary results are live at once: "more live values than 2 threads have
+/// registers"), which is why the V3D answers 15 vectors, not Mesa's 16.
 #[test]
-#[ignore = "MAX_VERTEX_OUTPUT_COMPONENTS 64: select refuses VpmRowOutOfRange for a 16th vec4 output"]
-fn a_vs_writes_16_vec4_outputs() {
-    check_vs_rows(16, false).expect("a 16-vector (64-component) pair compiles");
+fn a_vs_with_16_vec4_outputs_feeds_15() {
+    with_program(&vs_source(16, false), &fs_source(15, 14, false), |p| {
+        let rows = run_vs(p);
+        assert_eq!(rows.len(), 4 + 60, "x, y, z, 1/w and the 60 components read");
+        for i in 0..15 {
+            for c in 0..4 {
+                assert!(has_row(&rows, (16 * i + c) as f32), "v{i}.{c}");
+            }
+        }
+    })
+    .expect("a 16-output vertex shader links with a 15-input fragment shader");
+    let e = with_program(&vs_source(16, false), &fs_source(16, 0, false), |_| ()).unwrap_err();
+    assert_eq!(e, "NotYet(\"more live values than 2 threads have registers (no spilling yet)\")");
+}
+
+/// The point size takes its own row before the varyings (Mesa's
+/// per_vertex_point_size layout): 4 + 1 + 60 rows, past the 64 the VPM
+/// output stopped at before select.rs `VPM_MAX_OUTPUT_ROWS`, and every
+/// varying still lands.
+#[test]
+fn a_vs_writes_15_vec4_varyings_and_the_point_size() {
+    with_program(&vs_source_with(16, false, &[], true), &fs_source(15, 0, false), |p| {
+        let rows = run_vs(p);
+        assert_eq!(rows.len(), 4 + 1 + 60, "x, y, z, 1/w, the point size and 60 varyings");
+        assert!(has_row(&rows, 0.0) && has_row(&rows, 16.0 * 14.0 + 3.0), "the first and last varying component");
+    })
+    .expect("a 15-vector pair with gl_PointSize compiles");
+}
+
+/// 64 fragment inputs is the most the shader record names (chain.rs
+/// `FS_MAX_INPUTS`); 17 vec4 is refused by name, not emitted wrong.
+#[test]
+fn more_than_64_fragment_inputs_are_refused_by_name() {
+    let e = with_program(&vs_source(17, false), &fs_source(17, 0, false), |_| ()).unwrap_err();
+    assert_eq!(e, "NotYet(\"more than 64 fragment shader input components\")");
+}
+
+/// A flat vec4 that would be inputs 56-59 of 15 vectors lies past the one
+/// flags word, so the flat inputs go first (flags 0xf); the fragment
+/// shader's ldvary order and the vertex shader's rows follow, and each
+/// picked value still arrives, flat or smooth.
+#[cfg(not(feature = "report-es2"))]
+#[test]
+fn a_flat_varying_past_input_23_moves_into_the_flags_word() {
+    with_program(&vs_source_with(15, true, &[14], false), &fs_source_with(15, 14, true, &[14]), |p| {
+        assert_eq!(p.fs.flat_shade_flags, 0xf, "v14's four components are inputs 0-3");
+        assert_eq!(p.fs.centroid_flags, 0);
+        for (i, &(slot, comp)) in p.fs.input_slots.iter().take(4).enumerate() {
+            assert_eq!((slot, usize::from(comp)), (VARYING_SLOT_VAR0 + 14, i), "input {i}");
+        }
+        /* rows 4-7 (after x, y, z, 1/w) are v14's, in the same order */
+        let rows = run_vs(p);
+        for c in 0..4 {
+            let want = |l: usize| (l as f32 + (16 * 14 + c) as f32).to_bits();
+            assert!((0..LANES).all(|l| rows[4 + c][l] == want(l)), "row {} is v14.{c}", 4 + c);
+        }
+    })
+    .expect("compiles");
+    for pick in [0, 13, 14] {
+        check_fs_with(15, pick, true, &[14]).expect("compiles");
+    }
+}
+
+/// A program whose flat inputs all lie below 24 keeps the link's order.
+#[cfg(not(feature = "report-es2"))]
+#[test]
+fn flat_varyings_within_the_flags_word_keep_their_order() {
+    with_program(&vs_source_with(15, true, &[1], false), &fs_source_with(15, 0, true, &[1]), |p| {
+        assert_eq!(p.fs.flat_shade_flags, 0xf0, "v1 is inputs 4-7");
+        for (i, &(slot, _)) in p.fs.input_slots.iter().enumerate() {
+            assert_eq!(usize::from(slot - VARYING_SLOT_VAR0), i / 4, "input {i}");
+        }
+    })
+    .expect("compiles");
+}
+
+/// 24 flat components fill the word (15 vectors, six of them flat); a 25th
+/// has no bit and is refused by name, never drawn smooth.
+#[cfg(not(feature = "report-es2"))]
+#[test]
+fn more_than_24_flat_components_are_refused_by_name() {
+    let six = [9, 10, 11, 12, 13, 14];
+    with_program(&vs_source_with(15, true, &six, false), &fs_source_with(15, 0, true, &six), |p| {
+        assert_eq!(p.fs.flat_shade_flags, 0x00ff_ffff);
+    })
+    .expect("24 flat components compile");
+    check_fs_with(15, 12, true, &six).expect("compiles");
+    let seven = [8, 9, 10, 11, 12, 13, 14];
+    let e = with_program(&vs_source_with(15, true, &seven, false), &fs_source_with(15, 0, true, &seven), |_| ())
+        .unwrap_err();
+    assert_eq!(e, "NotYet(\"more than 24 flat and centroid varying components\")");
 }
 
 /// The same 15 vectors from a GLSL ES 3.00 pair.
