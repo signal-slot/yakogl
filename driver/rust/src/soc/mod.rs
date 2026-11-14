@@ -19,6 +19,9 @@ pub mod rk3588_display;
 pub mod rk3588_display_chain;
 
 #[cfg(test)]
+mod rk3588_display_golden;
+
+#[cfg(test)]
 mod rk3588_clock_exhaustive;
 
 #[cfg(any(feature = "stm32mp2", test))]
