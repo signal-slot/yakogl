@@ -88,3 +88,7 @@ drop | private-ipv4 | tools/mp2_uboot_record_check.py | \b10\.1\.2\.3\b | privat
 drop | private-ipv4 | tools/mp2_uboot_record_check.py | \b10\.9\.8\.7\b | private-range input of the record check's redaction self-test: an address in console.raw behind a NUL
 drop | ipv6-local | tools/mp2_uboot_record_check.py | \bfe80::1ff:fe23:4567:890a\b | link-local input of the record check's redaction self-test (RFC 4291's example interface identifier)
 drop | tailnet-dns | tools/mp2_uboot_record_check.py | \bdk1\.tail1234\.ts\.net\b | fake tailnet host name input of the record check's redaction self-test
+# The Pi 5 display verdict self-test: inputs its redaction check must never print.
+drop | private-ipv4 | tools/probes/rpi5_display/verdicts_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a console line the verdict tool must not print
+drop | ipv6-local | tools/probes/rpi5_display/verdicts_selftest.sh | \bfe80::1\b | link-local input of the same redaction test
+drop | email | tools/probes/rpi5_display/verdicts_selftest.sh | \bserial-getty@ttyS2\.service\b | systemd unit name in the same console line
