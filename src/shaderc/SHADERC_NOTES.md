@@ -440,7 +440,9 @@ row; this does not. Each class is fed from where its types are known:
 
 Each refusal is one line in the info log and in glog: "link error: the vertex
 shader's uniforms do not fit MAX_VERTEX_UNIFORM_VECTORS = 384 (Appendix A
-packing)", "... the program's varyings do not fit MAX_VARYING_VECTORS = 8 ...",
+packing)", "... the program's varyings do not fit MAX_VARYING_VECTORS = 15 ..."
+(the number in that line is the build's `MAX_VARYING_VECTORS`: 15 on the V3D, the
+PowerVR and the GC7000UL, 8 on the Mali and in a `report-es2` build),
 "... the vertex shader's attributes do not fit MAX_VERTEX_ATTRIBS = 16
 (OpenGL ES 2.0.25 section 2.10.4): ...".
 

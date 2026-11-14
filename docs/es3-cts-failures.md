@@ -250,9 +250,38 @@ formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,
 `tests/gltest_case20_formats.rs`, `tests/vivante_imx8mp_limits.rs`); the board
 rows (the Pi 4's `implementation_limits.*compressed*` and
-`state_query.integers.compressed_texture_formats_*`) are to be re-run. Item
-`es3-caps` (the ES 3.0 limits test was reverted for review and is to be
-redone).
+`state_query.integers.compressed_texture_formats_*`) are to be re-run.
+The shader-limit design, per GPU, is `docs/notes/es3-shader-limits.md` (plan #359); the limits test is
+`tests/es3_caps.rs`.
+
+**The `*_getfloat` and `*_getinteger64` rows are not a separate defect.** dEQP
+registers the `state_query.integers` minimum-value cases only for the boolean,
+64-bit and float verifiers (the integer form is `implementation_limits`), and
+`glGetFloatv` and `glGetInteger64v` answer the number `glGetIntegerv` does
+(`src/gl/state.rs`), so those rows failed on the value below the minimum and on
+nothing else. `tests/es3_v3d_varyings.rs` and `tests/es3_v3d_ubo_size.rs` pin
+the three forms of each raised limit. The HOST-ONLY dEQP run of plan #359
+(`docs/notes/es3-shader-limits.md` §5) says the same on the host: on the V3D build
+21 of these rows go Fail to Pass and none the other way (11 to 4 in
+`implementation_limits.`, 17 to 9 in `state_query.integers.`, 6 to 0 in
+`state_query.integers64.`), and the same case list against the PowerVR and the
+GC7000UL builds changes 0 cases at either commit.
+
+| Limit | State |
+|---|---|
+| `MAX_VARYING_VECTORS` / `_COMPONENTS`, `MAX_FRAGMENT_INPUT_COMPONENTS` | met on all three (V3D 15 / 60 / 60: `tests/es3_v3d_varyings.rs`) |
+| `MAX_VERTEX_OUTPUT_COMPONENTS` | V3D 64 (met); PowerVR and GC7000UL 60: 64 is [U], issue drafts 3-4 in the note |
+| `MAX_UNIFORM_BLOCK_SIZE`, `MAX_COMBINED_*_UNIFORM_COMPONENTS` | V3D 16384 / 50688 (met: `tests/es3_v3d_ubo_size.rs`); PowerVR and GC7000UL 6144 / 1536: the memory-load path, issue drafts 1-2 in the note |
+| `MAX_DRAW_BUFFERS`, `MAX_COLOR_ATTACHMENTS` | 3: RC14 (board) |
+| `MAX_SAMPLES` | 1: RC8 |
+| `NUM_COMPRESSED_TEXTURE_FORMATS`, `COMPRESSED_TEXTURE_FORMATS` | closed on the host, see above |
+
+Raising the V3D's varyings moves a program past the link refusal into the code
+generator, where a 60-input fragment shader can need more live values than the
+2 threads have registers (`more live values than 2 threads have registers (no
+spilling yet)`, `src/shaderc/online/v3d/chain.rs:245`, pinned by
+`tests/es3_shaderc_infolog.rs`); that is a compiler gap, not a limit, and the
+board question of issue draft 5.
 
 ### RC11. Occlusion queries
 
