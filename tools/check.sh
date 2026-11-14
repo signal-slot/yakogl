@@ -187,7 +187,7 @@ scope_of_path() {
   src/shaderc/online/mali/* | src/mali/* | tools/mali/*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
-  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc*) echo vivante ;;
+  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc* | tests/es3_half_float_mrt_gc*) echo vivante ;;
   # gl_FragDepth's shape test (tests/es3_fragdepth_cases.rs) pins its verdicts
   # on both GPUs: a change there reaches both fragdepth rows, and nothing else
   tests/es3_fragdepth_cases*) echo "vivante v3d" ;;
@@ -1630,6 +1630,11 @@ step "test    host-test,gpu-vivante,shaderc-online (tests/es3_fragdepth_gc.rs)" 
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_fragdepth_gc
 step "test    host-test,gpu-vivante,shaderc-online (tests/es3_fragdepth_cases.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_fragdepth_cases
+# RGBA16F beside another draw buffer on the GC7000UL (plan #360): the tiled
+# shadow of a lone 16F target and the linear path of a 16F MRT, pinned; the
+# ignored test is the expected result. Compiles to nothing under report-es2.
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_half_float_mrt_gc.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_half_float_mrt_gc
 
 # The Raspberry Pi 4's V3D (`gpu-v3d`). Its only shader back end is the
 # in-process compiler and it has no offline table, so its one host
