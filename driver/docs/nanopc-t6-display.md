@@ -349,6 +349,22 @@ reset and its domain off, as the X2 HDMI design does
 starting the image from the eMMC (`driver/tools/uboot-t6/t6-zephyr.cmd`),
 which is the same code with nothing left on.
 
+The chain's START refusals (`soc::rk3588_display_chain`, its module text has
+the full rules) and two notes on them:
+
+- Without `power-cycle` a VOP2 that is powered but cannot be read, a port it
+  clocks that has no clock now, and (without `force-cold`) a running port are
+  refused before any write; D8 and D9 therefore run with `power-cycle`.
+- With `power-cycle` but without `force-cold`, a running port is refused
+  with `FoundRunning` only after VOP2 was made readable: when PD_VOP was
+  idle-requested, `pd_on` has by then written the PMU and released the bus
+  of the picture before us.
+- For D9: `SRST_D_VOP1` (53/0), `SRST_D_VOP2` (53/1),
+  `SRST_D_VOP2HDMI_BRIDGE0` (52/14) and `SRST_P_VOPGRF` (53/3)
+  (`rst-rk3588.c:540`, `:541`, `:536`, `:543`) are neither checked nor
+  released by the chain; Linux drives none of them and the D0 dump reads
+  them released.
+
 ### Which first, which signs off, what is shared
 
 - First picture: **(a) by crash kexec** (two small steps), because it needs
