@@ -167,7 +167,9 @@ static void print_status(const struct yd_t6_display_status *s)
 		       s->monitor[0], s->monitor[1], s->monitor[2], s->monitor[3], s->monitor[4],
 		       s->monitor[5], s->monitor[6]);
 	} else {
-		printk("t6_display: PD_VO1 not usable: the HDMI controller was not read\n");
+		printk("t6_display: HDMI0 not read: PD_VO1 not usable or PCLK_HDMITX0 gated "
+		       "(CLKGATE_CON(60) 0x%08x)\n",
+		       s->cru_gate60);
 	}
 }
 

@@ -6,7 +6,8 @@
 # Linux 6.18 scanning 1024x768 at 60 Hz, 65 MHz, both syncs negative, on
 # the first HDMI output) that the adopt probe's model reads
 # (board::nanopc_t6_display, its tests): every nonzero VOP2 word below
-# 0x2000, both vop_mmu sets, the PMU's domain words, CLKGATE_CON(52), the
+# 0x2000, both vop_mmu sets, the PMU's domain words, CLKGATE_CON(52) and
+# CLKGATE_CON(60), the
 # sys_grf HPD status, the HDPTX PHY0 GRF status, and the HDMI QP TX0's CMU
 # and video monitor words. Lines copied unchanged; a word not listed reads 0.
 #
@@ -31,6 +32,7 @@
 0xfd8d8290 32 0xfad50001
 0xfd8d8294 32 0x00039fc1
 0xfd7c08d0 32 0x00000400
+0xfd7c08f0 32 0x000006ff
 0xfd58c384 32 0x001da240
 0xfd5e0080 32 0x0000000e
 0xfdd90000 32 0x00008000

@@ -826,8 +826,9 @@ int yd_t6_osal_counts(struct yd_t6_osal_counts *out);
  * it; the steps up to _ESMART_POWER write nothing), -EINVAL for a null
  * argument. The bases are mappings: the VOP (0xfdd90000, 0x2000 bytes),
  * the two vop_mmu sets (0xfdd97e00, 0xfdd97f00), the PMU (0xfd8d8000), the
- * CRU (0xfd7c0000), sys_grf (0xfd58c000), the HDPTX PHY0 GRF (0xfd5e0000)
- * and the HDMI QP TX0 (0xfde80000), a page each. */
+ * CRU (0xfd7c0000; CLKGATE_CON(52) and (60) are read), sys_grf
+ * (0xfd58c000), the HDPTX PHY0 GRF (0xfd5e0000) and the HDMI QP TX0
+ * (0xfde80000), a page each. */
 #define YD_T6_DISPLAY_STOP_NONE         0 /* Esmart0 shows the buffer */
 #define YD_T6_DISPLAY_STOP_VOP_DOMAIN   1 /* PD_VOP not powered or idle (detail: PMU REPAIR) */
 #define YD_T6_DISPLAY_STOP_VOP_CLOCK    2 /* a PD_VOP clock or HCLK_VOP gated (index: bit, detail: CLKGATE_CON(52)) */
@@ -905,9 +906,11 @@ struct yd_t6_display_status {
 				 * SYS0_INT_STATUS, SYS1_INT_STATUS */
 	uint32_t soc_status1;   /* sys_grf SOC_STATUS1: HDMI0 HPD in bit 16 */
 	uint32_t phy_status;    /* HDPTX PHY0 GRF STATUS: PLL_LOCK_DONE 3, PHY_CLK_RDY 2, PHY_RDY 1 */
-	uint32_t vo1_usable;    /* the words below are read only when 1 */
+	uint32_t vo1_usable;    /* PD_VO1 usable and PCLK_HDMITX0 open: the words below are read
+				 * only when 1 */
 	uint32_t cmu[3];        /* CMU_STATUS, CMU_VIDQPCLK_FREQ, CMU_LINKQPCLK_FREQ */
 	uint32_t monitor[7];    /* VIDEO_MONITOR_STATUS0..6 */
+	uint32_t cru_gate60;    /* CLKGATE_CON(60), read when PD_VO1 is usable (PCLK_HDMITX0 bit 11) */
 };
 
 /* The pattern of section 5 into fb (height rows of stride_bytes, width pixels):
@@ -2047,12 +2050,13 @@ _Static_assert(offsetof(struct yd_t6_display_adopt, running) == 124, "yd_t6_disp
 _Static_assert(offsetof(struct yd_t6_display_adopt, ovl_layer_sel) == 144, "yd_t6_display_adopt.ovl_layer_sel");
 _Static_assert(offsetof(struct yd_t6_display_adopt, fb) == 156, "yd_t6_display_adopt.fb");
 _Static_assert(offsetof(struct yd_t6_display_adopt, shown) == 176, "yd_t6_display_adopt.shown");
-_Static_assert(sizeof(struct yd_t6_display_status) == 148, "struct yd_t6_display_status");
+_Static_assert(sizeof(struct yd_t6_display_status) == 152, "struct yd_t6_display_status");
 _Static_assert(offsetof(struct yd_t6_display_status, frames) == 28, "yd_t6_display_status.frames");
 _Static_assert(offsetof(struct yd_t6_display_status, vop) == 36, "yd_t6_display_status.vop");
 _Static_assert(offsetof(struct yd_t6_display_status, soc_status1) == 96, "yd_t6_display_status.soc_status1");
 _Static_assert(offsetof(struct yd_t6_display_status, vo1_usable) == 104, "yd_t6_display_status.vo1_usable");
 _Static_assert(offsetof(struct yd_t6_display_status, monitor) == 120, "yd_t6_display_status.monitor");
+_Static_assert(offsetof(struct yd_t6_display_status, cru_gate60) == 148, "yd_t6_display_status.cru_gate60");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");
