@@ -65,3 +65,24 @@ issue #1196.
 | [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | right | The grid of ring-and-moire cells, the vertices displaced by the vertex loop into the same wave as llvmpipe's; no black, flat or NaN cell, no torn cell from a wrong loop count. Same pose this run; the difference is the aliasing of the fine rings (3.1% of pixels more than 24 levels off): the Pi 4's probes (tr 2c, bl 63, br 86) are the AM62P's and, at its colour depth, the i.MX8MP's; llvmpipe's (42, 5e, 9e) are the ones apart, on the near-Nyquist rings. | 7e6f0766 | records/pi4/20261114-1104-gm31-loop-2234b109 |
 | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | right | The same ring-and-moire cells and waved grid with the loop bound a constant; no black, flat or NaN cell, no missing step. Animated: the mesh's wave stands in another pose than llvmpipe's, so compared by content (15.3% of pixels more than 24 levels off, all on the mesh). Its probes are the AM62P's (checked by eye) exactly. | 7e6f0766 | records/pi4/20261114-1108-gm32-loop-94835b9e |
 | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | right | The same cells and waved grid with the loop bound a uniform: its picture value (crc16 7fb7, crc16q 7143) is that of the constant-bound picture, so the uniform bound is read; no black, flat or NaN cell. Close to llvmpipe's pose (4.3% of pixels more than 24 levels off, the ring aliasing): the Pi 4's probes (tr 2c, bl 63, br 86) are the AM62P's and, at its colour depth, the i.MX8MP's; llvmpipe's (42, 5e, 9e) are the ones apart, on the near-Nyquist rings. | 7e6f0766 | records/pi4/20261114-1113-gm33-loop-3adb075d |
+
+## Summary
+
+- 33 of 33 pictures judged: 33 right, 0 wrong. Terrain, refract, shadow and
+  texture-filter=mipmap, the four the check paid closest attention to, are right
+  (rows above say what was looked at).
+- Images were built from four origin/main commits: 86b4af69 (build, texture,
+  shading: 9 scenes), be13a5b9 (bump, effect2d, pulsar, desktop: 8), 7fa0abf8
+  (buffer, ideas, jellyfish, terrain, shadow, refract: 8) and 7e6f0766
+  (conditionals, function, loop: 8).
+- Method: each dump decoded with `tools/cts/glmark2-fb.py` (row crc16s, frame
+  crc32 and the scene's `glmark2-picture` line checked; a damaged dump was
+  rerun, pixels never patched); compared with `tools/cts/glmark2-picdiff.py`
+  against the Mesa llvmpipe references of `tools/cts/glmark2-host-ref.sh`;
+  animated scenes (buffer, jellyfish, terrain, refract, pulsar, desktop and
+  the mesh scenes of function and loop) by content only.
+- The records are on the session machines and gitignored; later sessions
+  reported that no record survived their task's end, so the record paths name
+  where each dump was kept, not files in the tree. One rerun of the 33 dumps
+  at one origin/main commit, copied somewhere that lasts, would give lasting
+  records.
