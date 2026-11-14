@@ -521,6 +521,9 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
             || t.width == 0
             || t.height == 0
             || t.block_bytes != 0
+            /* a compressed format decoded at upload is no render target
+             * either, whatever class holds its texels */
+            || t.decoded_from != 0
             || !(matches!(
                 t.texfmt,
                 GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F

@@ -484,3 +484,43 @@ fn the_shadow_programs_are_the_designed_sequences() {
         assert_eq!(p.fs.threads, 2, "five TMU writes: the input FIFO's 16 slots over 4 threads do not hold them");
     });
 }
+
+/// The draw's half: the compare function a shadow look-up runs is the one
+/// the binding's sampler record carries (`v3d::texture::compare_function`,
+/// which `sampler_for` keys its cache on and `texture::pack_sampler` packs
+/// with `v3d_tex_pack_sampler_compare`, src/v3d/backend.rs), for each
+/// binding type the forms above sample (2D, cube, 2D array) and each of the
+/// eight GL functions as the GL core encodes them (`gl::draw::compare_op`:
+/// the function less GL_NEVER, bit 3 for a fixed-point depth): the record's
+/// field is the interpreter's [`FUNCS`] entry of the same function, and the
+/// 2D look-up at each texel centre with that field gives
+/// `reference OP depth` (ES 3.0.6 3.8.15.1). With GL_NONE (bit 4) the field
+/// is NEVER, Mesa's compare-off word.
+#[test]
+fn the_records_compare_function_is_the_one_the_look_up_runs() {
+    use yakogl::backend::{
+        GlesTextureBind, GLES_TEXFMT_R32F, GLES_TEXTYPE_2D, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_CUBE,
+    };
+    use yakogl::v3d::texture::{compare_function, COMPARE_OFF};
+    let tex = depth_2x2(1);
+    let fs = fs_of("sampler2DShadow", "texture(t, vec3(v.xy, u_ref))");
+    let depths = [0.25, 0.5, 0.5, 0.75];
+    let centres = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)];
+    let base = GlesTextureBind { format: GLES_TEXFMT_R32F, width: 2, height: 2, ..GlesTextureBind::ZERO };
+    for (gl_op, func) in FUNCS.into_iter().enumerate() {
+        for (type_, layers) in [(GLES_TEXTYPE_2D, 1), (GLES_TEXTYPE_CUBE, 6), (GLES_TEXTYPE_2D_ARRAY, 3)] {
+            for fixed in [0u8, 8] {
+                let b = GlesTextureBind { type_, layers, compare_op: gl_op as u8 | fixed, ..base };
+                let field = compare_function(&b) as usize;
+                assert_eq!(FUNCS[field], func, "type {type_}, fixed-point {fixed}: the record's function");
+            }
+        }
+        let field = compare_function(&GlesTextureBind { compare_op: gl_op as u8, ..base }) as usize;
+        for (k, (s, t)) in centres.into_iter().enumerate() {
+            let got = run_fs(&fs, [s, t, 0.0, 1.0], &tex, Sampler::NEAREST_CLAMP, FUNCS[field], &[0.5]);
+            assert_eq!(got, compare(func, 0.5, depths[k]), "{func:?} through the record at texel {k}");
+        }
+    }
+    let off = GlesTextureBind { compare_op: COMPARE_OFF as u8, ..base };
+    assert_eq!(FUNCS[compare_function(&off) as usize], CompareFunc::Never, "compare off: Mesa's NEVER word");
+}

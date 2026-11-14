@@ -155,6 +155,30 @@ The plan #360 decision:
 * GC7000UL: does not claim it.
 * report-es2 builds claim neither extension (`tests/es2_report_guard.rs`).
 
+## The ten ETC2/EAC formats
+
+Compressed formats are not classes of `es3_formats`; `src/gl/texture.rs`
+takes them (design: `docs/notes/etc2-eac.md`):
+
+| Formats | Stored as | Where |
+| --- | --- | --- |
+| `RGB8_ETC2` (and `ETC1_RGB8_OES`), `RGBA8_ETC2_EAC` | blocks, `GLES_TEXFMT_ETC2_RGB` / `_RGBA` | every GPU (the V3D's mask holds them since plan #354) |
+| `SRGB8_ETC2`, `SRGB8_ALPHA8_ETC2_EAC` | blocks, `GLES_TEXFMT_ETC2_SRGB_RGB` / `_RGBA` | an ES 3.0 report where the mask holds them: PowerVR, GC7000UL, V3D |
+| `R11_EAC`, `SIGNED_R11_EAC` | decoded at upload into `R16F` (r, 0, 0, 1) | an ES 3.0 report where the back end samples the class: PowerVR, GC7000UL, V3D |
+| `RG11_EAC`, `SIGNED_RG11_EAC` | decoded into `RGBA16F` (r, g, 0, 1) | as above |
+| `RGB8_PUNCHTHROUGH_ALPHA1_ETC2`, `SRGB8_PUNCHTHROUGH_ALPHA1_ETC2` | decoded into `RGBA8` / `SRGB8_A8` | as above |
+
+A decoded texture remembers its format (`GlTexture::decoded_from`): only
+glCompressedTexSubImage* of that format writes it, and glTexSubImage*,
+glCopyTexSubImage*, glGenerateMipmap, a framebuffer attachment and an EGLImage
+refuse it as they refuse a block format. Mip levels, cube faces, 2D-array
+layers (glCompressedTexImage3D) and a PIXEL_UNPACK_BUFFER source are decoded
+per call; TEXTURE_3D has no ETC2/EAC form (GL_INVALID_OPERATION). An 11-bit
+EAC value is held to 2.4e-4 in the half, against dEQP's tightest tolerance of
+0.0078585 (`tests/eac_half_precision.rs`). The Mali samples none of the
+classes, so it takes none of the six; `report-es2` takes ETC1 and the two
+linear ETC2 formats only.
+
 ## Not done (left to other items)
 
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).

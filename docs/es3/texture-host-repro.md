@@ -302,3 +302,32 @@ cases of section 2.
 GitHub issue under the ES 3.0 umbrellas #147 and #748 (duplicates checked
 first; RC2 and RC9 carry their facts meanwhile). This session had no GitHub
 access, so neither issue is cited by a number here.
+
+## 8. ETC2/EAC and the V3D shadow compare: host dEQP-GLES3 before and after (plan #354)
+
+`MODULE=gles3 GPU=<v3d|powervr|vivante> tools/cts/host-deqp-run.sh <filter>`,
+VK-GL-CTS `93bca01` with the yakogl target, the gles3 mustpass, run on
+2026-11-14. "Before" is a clean worktree of main at `e14c47d2`; "after" is
+the same tree with plan #354's ETC2/EAC and shadow-compare change. HOST-ONLY:
+the linux OSAL reads back black, so every **picture** verdict below
+(`Image comparison failed`, `Image verification failed`) says nothing about
+the GPU and must not be quoted as a pass or a fail. What the host does show
+is whether a case gets as far as its picture: a format refused at upload
+(`NotSupported`, "Compressed texture format not supported", `gluTexture.cpp`)
+or a draw refused with a GL error, against a case that uploads, draws and
+reaches the compare. The query rows are real verdicts.
+
+| filter | GPU | before | after |
+|---|---|---|---|
+| `compressed_texture_formats` (implementation_limits.{num_,}compressed_texture_formats, state_query.integers.compressed_texture_formats_*: 6) | V3D, PowerVR, GC7000UL | 1 Pass, 5 Fail ("Requirement not satisfied", "Got invalid integer/float value") | **6 Pass** on each |
+| `etc2` (240) | V3D | 160 NotSupported; 76 Fail on `GL_INVALID_OPERATION` at "Set texturing state" (the V3D's draw refused the ETC2 classes); 4 picture | 240 reach the picture (24 comparison, 216 verification), no GL error |
+| `etc2` | PowerVR, GC7000UL | 80 NotSupported, 160 picture | 240 picture, no GL error |
+| `eac` (240; `etc2_eac_*` is in both filters, the union is the 400 ETC2/EAC cases of the mustpass) | V3D | 200 NotSupported; 38 Fail on `GL_INVALID_OPERATION`; 2 picture | 240 picture, no GL error |
+| `eac` | PowerVR, GC7000UL | 160 NotSupported, 80 picture | 240 picture, no GL error |
+| `texture.shadow.` (432) | V3D, PowerVR | 432 picture | 432 picture: the compare in the V3D's sampler record changes the pixels only, which the host cannot see |
+| `texture.shadow.` | GC7000UL | 432 "Failed to compile shader program" | the same (the GC compiler's shadow forms; not this change) |
+
+So on the host every one of the 400 ETC2/EAC cases now uploads and draws on
+all three GPUs and the six list rows pass; whether their pictures pass, and
+whether the V3D's 432 shadow cases now compare (RC2's "compares NEVER"), is
+a board run's to say (#320 Pi 4, #313 AM62P, #316 i.MX8MP).

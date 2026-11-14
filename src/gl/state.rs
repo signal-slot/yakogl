@@ -951,8 +951,9 @@ pub unsafe extern "C" fn glPopGroupMarkerEXT() {
 }
 
 /// The most values one glGet* pname writes: GL_COMPRESSED_TEXTURE_FORMATS
-/// lists every stored compressed format; no other pname writes more than four.
-const STATE_VALUES: usize = 8;
+/// lists every stored compressed format (ETC1 and the ten ETC2/EAC formats of
+/// ES 3.0); no other pname writes more than four.
+const STATE_VALUES: usize = 12;
 const _: () = assert!(texture::COMPRESSED_FORMATS.len() <= STATE_VALUES);
 
 /// Float-valued state: fills `out` and returns the value count, 0 if pname is
@@ -3296,9 +3297,12 @@ mod tests {
     }
 
     /// The list has the advertised length and names the stored formats: the
-    /// three linear ones everywhere, and the sRGB ETC2 pair in an ES 3.0
-    /// report on the PowerVR and the GC7000UL, the back ends whose sampler
-    /// decodes them (`backend::PVR_SAMPLED_TEXFMTS`, `GC_SAMPLED_TEXFMTS`).
+    /// three linear ones everywhere, and in an ES 3.0 report on the PowerVR,
+    /// the GC7000UL and the V3D the sRGB ETC2 pair, which their samplers
+    /// decode (`backend::PVR_SAMPLED_TEXFMTS`, `GC_SAMPLED_TEXFMTS`,
+    /// `V3D_SAMPLED_TEXFMTS`), and the six formats the GL core decodes at
+    /// upload into classes they sample (`texture::DECODED_FORMATS`): ETC1
+    /// and ES 3.0's ten.
     #[test]
     fn compressed_format_list_has_the_advertised_length() {
         let gl = TestGl::new(8, 8);
@@ -3311,8 +3315,10 @@ mod tests {
             GL_COMPRESSED_RGB8_ETC2 as GLint,
             GL_COMPRESSED_RGBA8_ETC2_EAC as GLint
         ];
-        if (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante")) && !crate::REPORT_ES2 {
+        if !cfg!(feature = "gpu-mali") && !crate::REPORT_ES2 {
             want.extend([GL_COMPRESSED_SRGB8_ETC2 as GLint, GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC as GLint]);
+            want.extend(texture::DECODED_FORMATS.iter().map(|d| d.name as GLint));
+            assert_eq!(want.len(), 11, "ETC1 and the ten ETC2/EAC formats");
         }
         assert_eq!(n as usize, want.len());
         assert_eq!(f[..want.len()], want[..]);

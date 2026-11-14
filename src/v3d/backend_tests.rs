@@ -1051,6 +1051,21 @@ unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) ->
     true
 }
 
+/// [`v3d_tex_pack_sampler`]'s fake with the `compare_op` the backend passed
+/// in word 3 (the real packer's bytes are tools/v3d/tex_check.c's to check).
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool {
+    // SAFETY: the caller's record and sampler, passed on; word 3 lies inside
+    // the V3D_SAMPLER_STATE_BYTES just written.
+    unsafe {
+        if !v3d_tex_pack_sampler(out, s) {
+            return false;
+        }
+        core::ptr::copy_nonoverlapping(compare_op.to_le_bytes().as_ptr(), out.add(12), 4);
+    }
+    true
+}
+
 #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 extern "C" {
     /// testutil's log trampoline: the lines land in the TestGl recorder.
@@ -1806,6 +1821,59 @@ fn a_sampler_record_is_packed_once_per_job() {
     assert_eq!(v3d_finish(), 0);
 }
 
+/// A shadow look-up's sampler record carries GL's compare function
+/// (`texture::pack_sampler` over `v3d_tex_pack_sampler_compare`,
+/// docs/notes/v3d-shadow.md (a)): a depth binding (R32F, read at the 32-bit
+/// TMU output) hands its `compare_op` to the packer, a colour binding the
+/// compare-off op whatever its own. The job's cache keys on (sampler state,
+/// compare function): two depth bindings that differ only in the function
+/// get a record each, the same pair finds its record again, and colour
+/// bindings with and without a compare share theirs.
+///
+/// Revert checks: packing with `v3d_tex_pack_sampler` leaves word 3 of the
+/// fake's record 0 for every binding; keying on the sampler state alone gives
+/// GREATER the LESS record (one record, three reuses).
+#[test]
+fn a_shadow_samplers_record_carries_its_compare_function() {
+    use super::texture::COMPARE_OFF;
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let mut base = narrow_texture(16, 16, 1, GLES_TEXFMT_R32F);
+    base.unit = 0;
+    /* GL's order (gl::draw::compare_op): LESS 1, GREATER 4; bit 4 is off */
+    let depth = |op: u8| {
+        let mut d = sampling(&rig, GlesTextureBind { compare_op: op, ..base });
+        d.fs = &p;
+        d
+    };
+    for op in [1u8, 4, 1, COMPARE_OFF as u8] {
+        assert_eq!(draw(&depth(op)), 0, "compare_op {op}: {:?}", rig.gl.logs());
+    }
+    /* a sampler state of its own: not the depth bindings' records */
+    let colour = GlesTextureBind { wrap_s: GLES_WRAP_CLAMP_TO_EDGE, ..texture(0, 16, 16, 1) };
+    assert_ne!(texture::sampler(&colour), texture::sampler(&base));
+    for op in [1u8, COMPARE_OFF as u8] {
+        assert_eq!(draw(&sampling(&rig, GlesTextureBind { compare_op: op, ..colour })), 0, "{:?}", rig.gl.logs());
+    }
+    let recs: Vec<u32> = rig.draws().iter().map(|d| d.tmu[0].sampler).collect();
+    let compare = |rec: u32| words(&rig, rec, 6)[3];
+    assert_eq!(recs.len(), 6);
+    assert_eq!(
+        (compare(recs[0]), compare(recs[1]), compare(recs[3])),
+        (1, 4, COMPARE_OFF),
+        "LESS, GREATER and compare off reach the packer"
+    );
+    assert_ne!(recs[0], recs[1], "LESS and GREATER: a record each");
+    assert_eq!(recs[0], recs[2], "LESS again: its record found");
+    assert!(recs[3] != recs[0] && recs[3] != recs[1], "compare off: its own record");
+    assert_eq!(recs[4], recs[5], "a colour binding's compare_op does not reach the record");
+    assert_eq!(compare(recs[4]), COMPARE_OFF, "a colour binding is packed compare-off");
+    /* depth: LESS, GREATER, off; colour: one record, found once */
+    assert_eq!(sampler_counters(), (4, 2));
+    assert_eq!(v3d_finish(), 0);
+}
+
 /// A texture is tiled once per job: the next draw of the job finds its image
 /// and record again; a new job tiles it again (a CPU write in between would
 /// have flushed the job first, `kick_pending`).
@@ -1945,6 +2013,78 @@ fn femtovgs_luminance_is_kept_narrow_and_rgb_widened_to_rgba8() {
         // SAFETY: a live name, freed while the rig's OSAL is installed.
         unsafe { glDeleteTextures(1, &name) };
     }
+}
+
+/// The ETC2 block classes the GL core stores are in `V3D_SAMPLED_TEXFMTS`:
+/// a GL_COMPRESSED_RGB8_ETC2, RGBA8_ETC2_EAC, SRGB8_ETC2 and
+/// SRGB8_ALPHA8_ETC2_EAC texture made through the GL API under this
+/// backend's table is drawn with no refusal, its texture state carries the
+/// TMU's ETC2 type for the class (`texture::etc2_row`, Mesa's
+/// v3dx_format_table.c rows) at the image's size. A GL_COMPRESSED_R11_EAC
+/// texture, which the GL core decodes at upload into R16F
+/// (`gl::texture::DECODED_FORMATS`), is drawn as an R16F texture.
+///
+/// Revert check: the four classes out of the mask refuse each draw with
+/// "a texel format the V3D does not sample" (-ENOTSUP).
+#[test]
+#[cfg(not(feature = "report-es2"))] /* the sRGB pair and R11_EAC are ES 3.0's */
+fn a_gl_etc2_texture_is_drawn_with_its_tmu_row() {
+    use crate::gl::consts::*;
+    use crate::gl::texture::{glBindTexture, glCompressedTexImage2D, glDeleteTextures, glGenTextures, glTexParameteri};
+    let rig = Rig::new();
+    rig.init();
+    // SAFETY: serialised by the rig's TestGl, whose drop resets the table.
+    unsafe { crate::backend::g_backend = &yakogl_backend_v3d };
+    let cases = [
+        (GL_COMPRESSED_RGB8_ETC2, 8usize, GLES_TEXFMT_ETC2_RGB),
+        (GL_COMPRESSED_RGBA8_ETC2_EAC, 16, GLES_TEXFMT_ETC2_RGBA),
+        (GL_COMPRESSED_SRGB8_ETC2, 8, GLES_TEXFMT_ETC2_SRGB_RGB),
+        (GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC, 16, GLES_TEXFMT_ETC2_SRGB_RGBA),
+        (GL_COMPRESSED_R11_EAC, 8, GLES_TEXFMT_R16F),
+    ];
+    for (format, bb, texfmt) in cases {
+        /* 8x8: 2x2 blocks */
+        let data: Vec<u8> = (0..4 * bb).map(|i| (i * 37 + 11) as u8).collect();
+        let mut name = 0;
+        // SAFETY: plain GL calls on the rig's context; `data` holds imageSize bytes.
+        unsafe {
+            glGenTextures(1, &mut name);
+            glBindTexture(GL_TEXTURE_2D, name);
+            glCompressedTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                format,
+                8,
+                8,
+                0,
+                data.len() as i32,
+                data.as_ptr() as *const c_void,
+            );
+            /* one level: complete without a mipmap filter */
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR as i32);
+        }
+        assert_eq!(rig.gl.error(), GL_NO_ERROR, "0x{format:x}");
+        let t = &rig.gl.ctx().objs().textures[name as usize];
+        assert_eq!(t.texfmt, texfmt, "0x{format:x}: the stored class");
+        let b = crate::gl::draw::texture_bind_2d(t);
+        assert_eq!((b.format, b.incomplete), (texfmt, 0), "0x{format:x}: the binding");
+        assert_eq!(texture::refusal(&b), None, "0x{format:x}");
+        let mut d = rig.draw();
+        d.textures[0] = b;
+        d.num_textures = 1;
+        assert_eq!(draw(&d), 0, "0x{format:x}: {:?}", rig.gl.logs());
+        let u = *rig.draws().last().unwrap().tmu.first().expect("the draw binds its texture");
+        let st = words(&rig, u.tex_state, 6);
+        let type_ = match texture::etc2_of(texfmt) {
+            Some(e) => texture::etc2_row(e).0,
+            None => V3D_TEXTURE_DATA_FORMAT_R16F,
+        };
+        assert_eq!((st[1], st[2], st[3] >> FAKE_TYPE_SHIFT), (8, 8, type_), "0x{format:x}: size and TMU type");
+        // SAFETY: a live name, freed while the rig's OSAL is installed.
+        unsafe { glDeleteTextures(1, &name) };
+    }
+    assert_eq!(rig.logs_with("does not sample"), 0);
+    assert_eq!(v3d_finish(), 0);
 }
 
 /// `texture::gl_level` is where the GL core keeps each level on this build

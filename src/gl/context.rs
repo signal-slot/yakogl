@@ -548,6 +548,17 @@ pub struct GlTexture {
     /// the whole depth plane (`texture.rs` `depth_seeded`). The padding
     /// ran out at `unsized_depth`: this grows the struct to 256 bytes.
     pub depth_texels_newer: bool,
+    /// The ES 3.0 compressed format the texels were decoded from at upload
+    /// (`texture.rs` `DECODED_FORMATS` index + 1: R11/RG11 EAC and the
+    /// punch-through ETC2 pair, docs/notes/etc2-eac.md), 0 for any other
+    /// texture. The storage is the class the format decodes into (R16F,
+    /// RGBA16F, RGBA8, SRGB8_A8), but the texture is a compressed one:
+    /// glCompressedTexSubImage* of the same format decodes into it, and the
+    /// calls that would read or write its texels as that class
+    /// (glTexSubImage*, glCopyTexSubImage*, glGenerateMipmap, a framebuffer
+    /// attachment, an EGLImage) are refused as for a block format. Sits in
+    /// the padding after `depth_texels_newer`.
+    pub decoded_from: u8,
 }
 
 impl GlTexture {

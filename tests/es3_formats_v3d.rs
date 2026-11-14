@@ -210,20 +210,28 @@ fn bind(format: u8, w: u32, h: u32) -> GlesTextureBind {
 }
 
 /// Every class of the mask is a row above, and the rows are the mask: what
-/// the GL core stores natively on the V3D, its TMU samples. The ETC2 formats
-/// are refused by name.
+/// the GL core stores natively on the V3D, its TMU samples. The four ETC2
+/// block classes the GL core stores are in the mask (their TMU rows are
+/// `texture::etc2_row`'s, pinned in src/v3d/texture.rs); the punch-through
+/// class, which the GL core decodes at upload instead, is refused by name.
 #[test]
 fn the_sampled_mask_is_the_rows() {
     let rows = ROWS.iter().fold(0u64, |m, r| m | gles_texfmt_bit(r.0));
     let narrow = [GLES_TEXFMT_L8, GLES_TEXFMT_A8, GLES_TEXFMT_LA8, GLES_TEXFMT_SRGB8_A8]
         .iter()
         .fold(0u64, |m, &f| m | gles_texfmt_bit(f));
-    assert_eq!(V3D_SAMPLED_TEXFMTS, rows | narrow, "the mask is the rows and the ES 2.0 narrow classes");
-    for f in [GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_RGB_PT] {
-        let b = bind(f, 4, 4);
-        let r = texture::refusal_for(&b, false).expect("refused");
-        assert!(r.contains("does not sample"), "format {f}: {r}");
+    let etc2 = [GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA];
+    let etc2_mask = etc2.iter().fold(0u64, |m, &f| m | gles_texfmt_bit(f));
+    assert_eq!(
+        V3D_SAMPLED_TEXFMTS,
+        rows | narrow | etc2_mask,
+        "the mask is the rows, the ES 2.0 narrow classes and the stored ETC2 classes"
+    );
+    for f in etc2 {
+        assert_eq!(texture::refusal_for(&bind(f, 4, 4), false), None, "format {f}");
     }
+    let r = texture::refusal_for(&bind(GLES_TEXFMT_ETC2_RGB_PT, 4, 4), false).expect("refused");
+    assert!(r.contains("does not sample"), "punch-through: {r}");
 }
 
 /// Each class: the Rust row (`tmu_format`, `return_32`, `texel_bytes`) is
@@ -779,6 +787,7 @@ mod trampolines {
                                  dst: *mut u8, stride: u32) -> bool);
     trampoline!(v3d_tex_state_from_layout(s: *mut V3dTexState, l: *const V3dTexLayout));
     trampoline!(v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool);
+    trampoline!(v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool);
 }
 
     #[no_mangle]

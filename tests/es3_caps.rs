@@ -275,12 +275,15 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
             "6144, not 16384: a block gets the default-block budget, MAX_UNIFORM_DWORDS * 4 (ubo-uniform)",
         ),
         ("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)"),
-        (
-            "NUM_COMPRESSED_TEXTURE_FORMATS",
-            "3: ETC1, RGB8_ETC2, RGBA8_ETC2_EAC, and 5 on the PowerVR and the GC7000UL with the sRGB ETC2 pair \
-             (gl/texture.rs stored_compressed_formats); ES 3.0 needs the ten ETC2/EAC formats (formats-*)",
-        ),
     ];
+    if cfg!(feature = "gpu-mali") {
+        // the PowerVR, the GC7000UL and the V3D store ETC1 and the ten (11)
+        v.push((
+            "NUM_COMPRESSED_TEXTURE_FORMATS",
+            "3: ETC1, RGB8_ETC2, RGBA8_ETC2_EAC; the Mali samples none of the classes the sRGB pair, the EAC and \
+             the punch-through formats are stored in (gl/texture.rs stored_compressed_formats, DECODED_FORMATS)",
+        ));
+    }
     let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"));
     if !fifteen {
         // V3D and Mali carry 8 varying vectors (gl/context.rs MAX_VARYING_VECTORS), the ES 2.0 minimum

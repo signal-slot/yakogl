@@ -641,7 +641,12 @@ fn every_format_converts_into_every_class_it_may_be_stored_in() {
         return;
     }
     let all = all_classes();
-    assert_eq!(sampled_texfmts() & !all, 0);
+    /* besides the ETC2 block classes, which compressed uploads store (the
+     * V3D samples the linear ones too) and no conversion here writes */
+    let blocks = [GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA]
+        .iter()
+        .fold(0u64, |m, &f| m | gles_texfmt_bit(f));
+    assert_eq!(sampled_texfmts() & !(all | blocks), 0);
     for e in FORMATS.iter() {
         let tf = e.storage_in(all).expect(e.name);
         assert_eq!(Some(tf), Some(e.storage[0]), "{}: the first class is the native one", e.name);

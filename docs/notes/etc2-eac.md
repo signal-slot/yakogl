@@ -10,9 +10,13 @@ and is not one of the ten). This note is about the other six and why they do
 not get a class of their own yet. Function names are the address; line
 numbers are of main at `6dc53970` and drift.
 
-Status when this was written: the decoder (`src/gl/etc2.rs`), the six names
-in the GL core, the V3D mask bits and the dEQP runs are other items of the
-plan and were not on main. Nothing here was measured on a board.
+Status. The decoder is `src/gl/etc2.rs` (`4e539da8`). The GL core takes the
+six names as section 4 says (`src/gl/texture.rs` `DECODED_FORMATS`,
+`GlTexture::decoded_from`; host tests in `src/gl/texture.rs` and
+`tests/es3_etc2_eac.rs`), and `V3D_SAMPLED_TEXFMTS` holds the four ETC2 block
+classes, so the V3D lists all ten too (section 5). Nothing here was measured on
+a board, and the host dEQP run cannot judge a picture (`docs/es3/texture-host-repro.md`
+section 8).
 
 ## 1. The decision
 
@@ -110,17 +114,22 @@ including the sRGB 6-bit one.
 `GL_NUM_COMPRESSED_TEXTURE_FORMATS` and `GL_COMPRESSED_TEXTURE_FORMATS` list
 what the build stores (`stored_compressed_formats`):
 
-- PowerVR and GC under ES 3.0: 11 (ETC1 plus the ten).
-- The V3D: 11 once `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the linear
-  and sRGB ETC2 classes; until then the sRGB pair is not stored and the list
-  is shorter. ES 3.0 requires all ten, so the V3D needs the mask first.
+- PowerVR, GC and V3D under ES 3.0: 11 (ETC1 plus the ten). The V3D's mask
+  (`V3D_SAMPLED_TEXFMTS`, `src/backend.rs`) holds the linear and sRGB ETC2
+  block classes, so the sRGB pair is stored there too.
 - `report-es2`: 3 on every build (ETC1, `RGB8_ETC2`, `RGBA8_ETC2_EAC`),
   unchanged.
-- Mali: the six are refused, so its count is what its mask allows.
+- Mali: its mask is empty, so the sRGB pair and the six are refused and its
+  count stays 3.
 
-The pins that move are in `src/gl/state.rs`, `tests/es3_caps.rs`,
-`tests/gltest_case20_formats.rs`, `tests/vivante_imx8mp_limits.rs` and
-`tests/es3_limits_v3d.rs`; they change in the commit that adds the names.
+The list is eleven values, more than the eight `src/gl/state.rs`
+`STATE_VALUES` held: it is 12 now, and a caller that reads
+GL_COMPRESSED_TEXTURE_FORMATS into a fixed buffer must size it from
+GL_NUM_COMPRESSED_TEXTURE_FORMATS (the host tests' 8-entry buffers grew to 16;
+`driver/tools/pvrlab/gl_test.c` case 20 still reads into `fmts[8]`, an issue
+of its own). The pins that moved are in `src/gl/state.rs`,
+`tests/es3_caps.rs`, `tests/gltest_case20_formats.rs`,
+`tests/vivante_imx8mp_limits.rs` and `tests/es3_limits_v3d.rs`.
 
 ## 6. Native later (not done)
 

@@ -29,7 +29,7 @@
 //! | record: a non-float32 attribute | yes: BYTE, UNSIGNED_BYTE, SHORT, UNSIGNED_SHORT, FIXED, normalized or not | `every_attribute_type_draws` |
 //! | record: a vertex array / index buffer outside the 32-bit space | no: a guard (needs memory above 4 GiB) | `index_types_draw` for the indices |
 //! | record: the job builder's refusal (the TF1/TF2 stop) | no: transform feedback is ES 3.0 (the stand-in builder never refuses) | - |
-//! | texture::GAPS: a texel format not sampled (ETC2, RGB10A2) | ETC1 (GL_OES_compressed_ETC1_RGB8_texture) yes, the rest ES 3.0 | `etc1_texture_samples` |
+//! | texture::GAPS: a texel format not sampled (the ETC2 punch-through class, RGB10A2) | ETC1 (GL_OES_compressed_ETC1_RGB8_texture) yes, the rest ES 3.0 | `etc1_texture_samples` |
 //! | texture::GAPS: a 16-bit format read by a 32-bit look-up and the converse | the depth texture (GL_OES_depth_texture) is ES 2.0's one 32-bit class | `depth_texture_samples` |
 //! | tex_state_for: tiled-copy gaps (unstamped EGLImage, over budget, fill refused, address) | over budget: yes, by texture.size.2d.2048x2048_* (22,376,448 bytes tiled with the chain): accepted with the 24 MiB of image T5 (texture-2048.conf, the rig answers that budget), refused -ENOTSUP with the 16 MiB of the other images, which is why the tree splits it into T5; an EGLImage and the address are not dEQP-GLES2 state | `a_large_texture_samples` |
 //! | black_typed_state: an incomplete 32-bit-class texture | yes: an incomplete depth texture | `incomplete_depth_texture_reads_black` |
@@ -246,6 +246,7 @@ mod trampolines {
                                  dst: *mut u8, stride: u32) -> bool);
     trampoline!(v3d_tex_state_from_layout(s: *mut V3dTexState, l: *const V3dTexLayout));
     trampoline!(v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool);
+    trampoline!(v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool);
 }
 
 #[no_mangle]

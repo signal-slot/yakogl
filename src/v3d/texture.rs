@@ -343,8 +343,9 @@ pub fn layout_compressed(
     Some(l)
 }
 
-/// [`refusal_for`]'s texel format with no TMU row here (ETC2, or the RGB10A2
-/// class the GL core keeps in RGBA8).
+/// [`refusal_for`]'s texel format outside `V3D_SAMPLED_TEXFMTS` (the ETC2
+/// punch-through class the GL core never stores, or the RGB10A2 class the GL
+/// core keeps in RGBA8).
 const NOT_SAMPLED: Refusal = "a texel format the V3D does not sample";
 
 /// [`refusal_for`]'s 16-bit format read by a 32-bit look-up.
@@ -1516,8 +1517,10 @@ mod tests {
     /// type and swizzle, the sRGB bit for the two sRGB ones only, a block
     /// for a texel ([`texel_bytes`]: never a TFU byte-copy type), the 16-bit
     /// TMU output (return size 16), and every rule but the sampled set
-    /// passes. Until src/backend.rs's V3D_SAMPLED_TEXFMTS lists them, the
-    /// set refuses them, with the one message every format outside it gets.
+    /// passes. src/backend.rs's V3D_SAMPLED_TEXFMTS lists the four the GL
+    /// core stores; the punch-through class, which the GL core decodes at
+    /// upload, stays outside it and gets the message every format outside
+    /// the set gets.
     #[test]
     fn the_gl_cores_etc2_classes_sample_as_their_rows() {
         let wider = V3D_SAMPLED_TEXFMTS | ETC2_CLASSES.iter().fold(0, |m, &(f, _)| m | gles_texfmt_bit(f));
