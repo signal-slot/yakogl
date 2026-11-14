@@ -69,6 +69,9 @@ pub enum V3dError {
     /// The VPM cannot hold two batches of the vertex outputs
     /// (v3d_vs_set_prog_data asserts `vpm_output_batches >= 2`, vir.c:936).
     VpmTooSmall,
+    /// The fragment shader reads more than [`MAX_FS_INPUTS`] scalar inputs,
+    /// the most the hardware interpolates.
+    TooManyFragmentInputs,
     OutOfScratch,
 }
 
@@ -210,6 +213,9 @@ pub fn attribute_locations(gl_type: u16) -> u8 {
 /// `VARYING_SLOT_VAR0` (compiler/shader_enums.h): Mesa's slot number of the
 /// first generic varying.
 pub const VARYING_SLOT_VAR0: u8 = 32;
+/// The scalar fragment shader inputs the hardware takes (Mesa
+/// `V3D_MAX_FS_INPUTS`, v3d_limits.h): 16 vec4 varyings.
+pub const MAX_FS_INPUTS: usize = 64;
 
 /// `m` with its loops expanded where the unroller can (`None` from it: no
 /// loop, `m` as it is). Its refusals are named gaps, not verdicts on the
@@ -429,9 +435,10 @@ pub fn compile_program_keyed<'a>(
      * BITSET_SET of centroid_flags, the W it multiplies by the centroid
      * W). */
     let mut centroid = 0u64;
-    /* V3D_MAX_FS_INPUTS: the shader record's count and the flag words stop here */
-    if inputs.len() > 64 {
-        return Err(V3dError::NotYet("more than 64 fragment shader inputs"));
+    /* V3D_MAX_FS_INPUTS: the shader record's count and the flag words stop
+     * here; a program past them does not link on this GPU. */
+    if inputs.len() > MAX_FS_INPUTS {
+        return Err(V3dError::TooManyFragmentInputs);
     }
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs

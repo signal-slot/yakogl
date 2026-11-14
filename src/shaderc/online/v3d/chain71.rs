@@ -366,8 +366,8 @@ pub fn compile_program71_keyed<'a>(
     let inputs = fragment_inputs(&fsp, a).map_err(V3dError::from)?;
     let mut flat = 0u64;
     let mut centroid = 0u64;
-    if inputs.len() > 64 {
-        return Err(V3dError::NotYet("more than 64 fragment shader inputs").into());
+    if inputs.len() > chain::MAX_FS_INPUTS {
+        return Err(V3dError::TooManyFragmentInputs.into());
     }
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
