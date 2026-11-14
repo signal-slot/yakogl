@@ -20,10 +20,11 @@
 //!    against the window ([`vop2::window_check`]). Then what runs is read,
 //!    nothing written: the PMU and CRU say whether VOP2 can be read; if so,
 //!    `DSP_CTRL` of VP0-VP3 says which ports run (review R3-S1 of D1: read
-//!    before anything else touches the VOP). PD_VOP on but VOP2 not
-//!    readable (a gate closed, a reset asserted) means a port may run
-//!    unseen: refused ([`Error::VopUnreadable`]) unless `power_cycle`, which
-//!    first opens VOP2's gates and releases its resets and reads again. A
+//!    before anything else touches the VOP). PD_VOP powered but VOP2 not
+//!    readable (its idle request set, a gate closed, a reset asserted)
+//!    means a port may run unseen: refused ([`Error::VopUnreadable`])
+//!    unless `power_cycle`, which first takes PD_VOP out of idle, opens
+//!    VOP2's gates, releases its resets and reads again. A
 //!    running port without `force_cold` stops the bring-up
 //!    ([`Error::FoundRunning`]): taking a running picture over is route (a),
 //!    step D2, not this. With `force_cold`, a running VP0 (the port whose
@@ -79,7 +80,7 @@
 //! and a stage that ends with the PHY locked is the one a bisection needs.
 //! The controller's bind needs nothing of the PHY.
 
-use super::rk3588::gate_open;
+use super::rk3588::{gate_open, pd_on, PdRegs, PD_VOP};
 use super::rk3588_display::{
     clk, display_off, display_on, ready, reset, reset_assert, reset_release, DisplayError, DisplayOn, NotReady, VOP,
 };
@@ -205,8 +206,9 @@ pub struct Config<'a> {
 pub struct Found {
     /// VOP2 could be read (PD_VOP usable, its clocks open, resets released).
     pub vop_reachable: bool,
-    /// PD_VOP is usable but VOP2 could not be read: the gate or reset that
-    /// stopped it. Whether a port runs is then not known.
+    /// PD_VOP is powered but VOP2 could not be read: the domain's idle
+    /// request, or the gate or reset that stopped it. Whether a port runs
+    /// is then not known.
     pub vop_unreadable: Option<NotReady>,
     /// `DSP_CTRL` of VP0-VP3 (0 when the VOP could not be read).
     pub dsp_ctrl: [u32; 4],
@@ -342,7 +344,13 @@ fn find(m: &impl Mmio, b: &Bases) -> Found {
     }
     match ready(m, b.cru, b.pmu, &VOP) {
         Ok(()) => f.vop_reachable = true,
-        Err(NotReady::DomainOff(_)) => {}
+        // not usable is not off: a powered PD_VOP with its idle request
+        // set still times its ports (review R5)
+        Err(n @ NotReady::DomainOff(_)) => {
+            if PdRegs::of(m, b.pmu, &PD_VOP).powered(&PD_VOP) {
+                f.vop_unreadable = Some(n);
+            }
+        }
         Err(n) => f.vop_unreadable = Some(n),
     }
     if f.vop_reachable {
@@ -358,16 +366,27 @@ fn find(m: &impl Mmio, b: &Bases) -> Found {
 
 const PORTS: [Vp; 4] = [Vp::Vp0, Vp::Vp1, Vp::Vp2, Vp::Vp3];
 
-/// Make a powered VOP2 readable (its gates open, its resets released, as
-/// D4's [`VOP`] lists them; CRU writes only), then read what runs again.
-fn find_opened(m: &impl Mmio, b: &Bases, stage: u32) -> Result<Found, Failed> {
+/// Make a powered VOP2 readable, then read what runs again: PD_VOP taken
+/// out of idle when it is powered but not usable ([`pd_on`]), its gates
+/// opened and its resets released as D4's [`VOP`] lists them. A VOP2 still
+/// not readable after that is refused.
+fn find_opened(m: &impl Mmio, b: &Bases, env: &impl Env, stage: u32) -> Result<Found, Failed> {
+    if !PdRegs::of(m, b.pmu, &PD_VOP).usable_of(&PD_VOP) {
+        pd_on(m, b.cru, b.pmu, &PD_VOP, &mut |us| env.busy_wait_us(us))
+            .map_err(|e| Failed { stage, error: Error::Display(DisplayError::Domain(e)) })?;
+    }
     for c in VOP.clocks {
         gate_open(m, b.cru + c.part.offset(), c.gate).map_err(at(stage, Error::Gate))?;
     }
     for r in VOP.resets {
         reset_release(m, b.cru, *r);
     }
-    Ok(find(m, b))
+    let f = find(m, b);
+    if !f.vop_reachable {
+        let n = ready(m, b.cru, b.pmu, &VOP).err().unwrap_or(NotReady::DomainOff(PD_VOP.name));
+        return Err(Failed { stage, error: Error::VopUnreadable(n) });
+    }
+    Ok(f)
 }
 
 /// The port whose pixel clock the DCLK stage sets: VP0. Another port whose
@@ -459,7 +478,7 @@ pub fn bring_up(
         if !cfg.power_cycle {
             return Err(Failed { stage: START, error: Error::VopUnreadable(n) });
         }
-        found = Found { vop_unreadable: Some(n), ..find_opened(m, b, START)? };
+        found = Found { vop_unreadable: Some(n), ..find_opened(m, b, env, START)? };
     }
     if found.running != 0 {
         if !cfg.force_cold {
@@ -619,7 +638,7 @@ pub fn bring_up(
 pub fn shut_down(m: &impl Mmio, b: &Bases, env: &impl Env) -> Result<(), Failed> {
     let mut found = find(m, b);
     if found.vop_unreadable.is_some() {
-        found = find_opened(m, b, stage::SHUT_DOWN)?;
+        found = find_opened(m, b, env, stage::SHUT_DOWN)?;
     }
     if found.running != 0 {
         stop_running(m, b, env, &mut found, stage::SHUT_DOWN)?;

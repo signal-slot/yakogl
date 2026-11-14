@@ -531,3 +531,33 @@ fn a_shut_down_failure_names_the_shut_down() {
     assert!(matches!(r, Err(Failed { stage: stage::SHUT_DOWN, error: Error::Standby(_) })), "{r:?}");
     assert!(m.usable("vop"), "the domain stays on under the running port");
 }
+
+/// PD_VOP's idle request set by the system before us (PMU 0x10c bits 13,
+/// 14, with the write mask), the status words settled.
+fn request_vop_idle(m: &Rk3588Display) {
+    m.write32(PMU + 0x10c, (3 << 13) << 16 | 3 << 13);
+    for _ in 0..4 {
+        let _ = m.read32(PMU + 0x290);
+    }
+    assert!(!m.usable("vop"));
+}
+
+#[test]
+fn a_powered_vop_with_its_idle_request_set_is_not_taken_as_off() {
+    // review R5: PD_VOP powered, its bus idle-requested, VP0 still timed
+    // with Linux's window: "not usable" is not "off"
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(false);
+    request_vop_idle(&m);
+    m.clear_log();
+    let r = up(&m, &cfg());
+    assert!(matches!(r, Err(Failed { stage: stage::START, error: Error::VopUnreadable(_) })), "{r:?}");
+    assert!(m.writes().is_empty());
+    no_refusal(&m);
+    // with the power cycle the domain is taken out of idle, VP0 seen and
+    // stopped before anything turns its clock off
+    let r = up(&m, &Config { force_cold: true, power_cycle: true, ..cfg() }).unwrap();
+    no_refusal(&m);
+    assert_eq!((r.found.running, r.found.stopped), (1, 1));
+}
