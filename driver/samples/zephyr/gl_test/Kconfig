@@ -152,6 +152,17 @@ config GL_TEST_PVR_FS_TEMPS_MIN
 	  and the offline table: never a default. A product option until the
 	  shader-compiler rename.
 
+config PVR_GL_TEST_MRT4
+	bool "Answer 4 draw buffers and colour attachments (a measurement, off in products)"
+	depends on YAKOGL_TEST_KNOBS
+	default n
+	help
+	  The image calls pvr_debug_set_draw_targets(4) at startup, before
+	  the first context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS
+	  answer 4 instead of 3. A measurement: products leave it off. The C
+	  wiring in main_am62p.c follows in a later item
+	  (docs/notes/mrt4-v3d-pvr.md, "The image knobs").
+
 endmenu
 
 menu "gl_test on the STM32MP257F-DK (Vivante GCNanoUltra31)"
@@ -452,6 +463,17 @@ config V3D_GL_TEST_MSAA
 	  case 145 (sample coverage) has one to draw on. Off by default until
 	  the board has measured it (docs/online-shaderc/v3d-backend.md,
 	  "Multisampling").
+
+config V3D_GL_TEST_MRT4
+	bool "Answer 4 draw buffers and colour attachments (a measurement, off in products)"
+	depends on YAKOGL_TEST_KNOBS
+	default n
+	help
+	  The image calls v3d_debug_set_draw_targets(4) at startup, before
+	  the first context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS
+	  answer 4 instead of 3. A measurement: products leave it off. The C
+	  wiring in main_rpi4.c follows in a later item
+	  (docs/notes/mrt4-v3d-pvr.md, "The image knobs").
 
 config V3D_GL_TEST_VTL_PASSES
 	int "Case 129 (vstexlod): run only its first N passes (0: all)"
