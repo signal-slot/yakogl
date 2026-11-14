@@ -185,13 +185,45 @@ pub fn max_draw_buffers() -> usize {
 pub fn max_color_attachments() -> usize {
     max_draw_buffers()
 }
-/// GL_MAX_VERTEX_OUTPUT_COMPONENTS and GL_MAX_FRAGMENT_INPUT_COMPONENTS:
-/// four components per varying vector, per GPU with MAX_VARYING_VECTORS.
-/// The shader's gl_MaxVertexOutputVectors / gl_MaxFragmentInputVectors are
-/// these divided by four (ES 3.00 section 7.3), so raising one here moves
-/// the shader's value with it.
+/// GL_MAX_VARYING_COMPONENTS, GL_MAX_VERTEX_OUTPUT_COMPONENTS and
+/// GL_MAX_FRAGMENT_INPUT_COMPONENTS: three limits ES 3.0 keeps apart (a GPU
+/// may carry more output components than the fragment stage takes in), one
+/// definition per GPU build next to [`MAX_VARYING_VECTORS`]. Today every GPU
+/// reports four components per varying vector, so each is
+/// `MAX_VARYING_VECTORS * 4`; they are separate constants so one can move
+/// without the others. The shader's gl_MaxVertexOutputVectors /
+/// gl_MaxFragmentInputVectors are the output and input ones divided by four
+/// (ES 3.00 section 7.3), so raising one here moves the shader's value with
+/// it. gl_MaxVaryingVectors stays [`MAX_VARYING_VECTORS`].
+#[cfg(feature = "gpu-vivante")]
+pub const MAX_VARYING_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-vivante")]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-vivante")]
 pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-powervr")]
+pub const MAX_VARYING_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-powervr")]
+pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-powervr")]
+pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-v3d")]
+pub const MAX_VARYING_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-v3d")]
+pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-v3d")]
+pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-mali")]
+pub const MAX_VARYING_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-mali")]
+pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(feature = "gpu-mali")]
+pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+/* what holds on every build: a varying is both an output and an input, and
+ * the vertex stage carries at least what the fragment stage takes in */
+const _: () = assert!(MAX_VARYING_COMPONENTS <= MAX_VERTEX_OUTPUT_COMPONENTS);
+const _: () = assert!(MAX_VARYING_COMPONENTS <= MAX_FRAGMENT_INPUT_COMPONENTS);
+const _: () = assert!(MAX_FRAGMENT_INPUT_COMPONENTS <= MAX_VERTEX_OUTPUT_COMPONENTS);
 /// GL_MIN/MAX_PROGRAM_TEXEL_OFFSET, ES 3.0's minimum range: the values the
 /// GL core reports, and the shader's gl_Min/MaxProgramTexelOffset.
 pub const MIN_PROGRAM_TEXEL_OFFSET: i32 = -8;
