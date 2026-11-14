@@ -339,3 +339,60 @@ fn the_real_bases_are_the_design_notes() {
     // the model sits at the same addresses (the golden test needs it)
     assert_eq!(B, RK3588);
 }
+
+#[test]
+fn a_powered_vop_that_cannot_be_read_is_refused_without_power_cycle() {
+    // review B1: Linux's picture runs, one VOP bus gate (PCLK_VOP_ROOT 52/3)
+    // reads closed, so DSP_CTRL cannot be read
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(false);
+    m.poke(gate_addr(0, 52), m.peek(gate_addr(0, 52)) | 1 << 3);
+    assert!(m.port_runs(0));
+    m.clear_log();
+    let r = up(&m, &Config { force_cold: true, ..cfg() });
+    assert!(
+        matches!(r, Err(Failed { stage: stage::START, error: Error::VopUnreadable(_) })),
+        "a VOP that runs but cannot be read is not 'nothing runs': {r:?}"
+    );
+    assert!(m.writes().is_empty());
+    no_refusal(&m);
+    // with the power cycle the gate is opened, the port stopped, the
+    // domain switched off: then the bring-up goes on
+    let r = up(&m, &Config { force_cold: true, power_cycle: true, ..cfg() }).unwrap();
+    no_refusal(&m);
+    assert_eq!((r.found.vop_unreadable.is_some(), r.found.running, r.found.stopped), (true, 1, 1));
+    assert_eq!(r.frame.bus_error, [false, false]);
+    // and without force_cold the port it then finds running is refused
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(false);
+    m.poke(gate_addr(0, 52), m.peek(gate_addr(0, 52)) | 1 << 3);
+    let r = up(&m, &Config { power_cycle: true, ..cfg() });
+    assert_eq!(r.err().map(|f| f.error), Some(Error::FoundRunning(1)));
+}
+
+#[test]
+fn an_unclocked_vp0_is_refused_without_power_cycle() {
+    // review B2: VP0 has STANDBY clear and Linux's window on it, its pixel
+    // clock gated (52/13); the chain would give the clock back while the
+    // window's disable is pending and paging still on
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(false);
+    m.poke(gate_addr(0, 52), m.peek(gate_addr(0, 52)) | 1 << 13);
+    assert!(!m.port_runs(0));
+    m.clear_log();
+    let r = up(&m, &Config { force_cold: true, ..cfg() });
+    assert_eq!(r.err().map(|f| (f.stage, f.error)), Some((stage::START, Error::Unclocked(1))));
+    no_refusal(&m);
+    // nothing of VP0 was written but the event clear of the frame wait, so
+    // a second try finds the same state and is refused the same way
+    assert!(m.writes().iter().all(|(a, _)| *a == VOP_BASE + 0xa4), "{:x?}", m.writes());
+    let r = up(&m, &Config { force_cold: true, ..cfg() });
+    assert_eq!(r.err().map(|f| f.error), Some(Error::Unclocked(1)));
+    // the power cycle drops the pending state with PD_VOP
+    let r = up(&m, &Config { force_cold: true, power_cycle: true, ..cfg() }).unwrap();
+    no_refusal(&m);
+    assert_eq!(r.frame.bus_error, [false, false]);
+}
