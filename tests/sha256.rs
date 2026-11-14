@@ -14,7 +14,7 @@ use std::ffi::{c_char, CStr};
 
 use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::offline::{gles_offline_shader_source, shc_offline_register, SHC_OFFLINE};
-use yakogl::shaderc::sha256::{sha256, Sha256};
+use yakogl::shaderc::sha256::{sha256, sha256_portable, Sha256};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 fn hex(d: &[u8]) -> String {
@@ -51,6 +51,30 @@ fn incremental_matches_one_shot() {
             c.update(core::slice::from_ref(b));
         }
         assert_eq!(c.finalize(), sha256(&data[..len]), "len {len}");
+    }
+}
+
+/// update() hands whole blocks to the compression function where they lie
+/// and keeps only the bytes short of one: every way of cutting the input
+/// (pieces below, at and above a block, with a part-filled context before
+/// them) gives the one-shot digest, and the portable function's.
+#[test]
+fn pieces_of_any_size_give_the_one_shot_digest() {
+    let data: Vec<u8> = (0..5000u32).map(|i| (i * 131 + 17) as u8).collect();
+    let whole = sha256(&data);
+    assert_eq!(whole, sha256_portable(&data));
+    for piece in [1, 3, 55, 63, 64, 65, 127, 128, 129, 191, 192, 200, 1024, 4999, 5000] {
+        for lead in [0, 1, 63, 64] {
+            let mut c = Sha256::new();
+            c.update(&data[..lead]);
+            for p in data[lead..].chunks(piece) {
+                c.update(p);
+            }
+            assert_eq!(c.finalize(), whole, "pieces of {piece} after {lead}");
+        }
+    }
+    for len in 0..300 {
+        assert_eq!(sha256(&data[..len]), sha256_portable(&data[..len]), "len {len}");
     }
 }
 
