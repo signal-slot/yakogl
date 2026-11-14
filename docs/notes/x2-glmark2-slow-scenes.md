@@ -82,6 +82,14 @@ at `BOARD_HOST` unset, and `ask_farm` for the board's login timed out. No
 jump, no image, the board was not touched. `gc_tiled_rt` (W1 to W5) is already
 on main, so no host change was made.
 
+## Seventh attempt (plan #355, 2026-11-14): still no measurement
+
+Host `orion` again, no `target:x2` or `target:x2-console` lease in the task:
+`getent hosts armadillo` returned nothing and `tools/board.sh x2 status`
+stopped at `BOARD_HOST` unset. No jump, no image, the board was not touched.
+`gc_tiled_rt` (W1 to W5, `tests/gc_scene_kicks_tiled_rt.rs`) is already on
+main, so no host change was made.
+
 ## What is left
 
 Rerun from one of the nodes that log in (see the checks above), with
