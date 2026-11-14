@@ -7278,32 +7278,20 @@ mod tests {
      * surface refuses them at glTexImage2D, so this asks about a
      * capability that build does not offer. */
     #[cfg(not(feature = "report-es2"))]
-    fn read_pixels_of_r16f_and_r32f_targets_fill_rgba() {
+    fn read_pixels_of_an_r16f_target_fills_rgba() {
         let _gl = TestGl::new(8, 8);
-        for internal in [GL_R16F] {
-            let tex = bind_new_texture(GL_TEXTURE_2D);
-            let v = [0.75f32];
-            // SAFETY: one RED float texel.
-            unsafe {
-                glTexImage2D(
-                    GL_TEXTURE_2D,
-                    0,
-                    internal as GLint,
-                    1,
-                    1,
-                    0,
-                    GL_RED,
-                    GL_FLOAT,
-                    v.as_ptr() as *const c_void,
-                )
-            };
-            bound_fb();
-            attach_tex(GL_COLOR_ATTACHMENT0, tex);
-            let mut f = [9f32; 4];
-            // SAFETY: room for one RGBA float pixel.
-            unsafe { glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, f.as_mut_ptr() as *mut c_void) };
-            assert_eq!(f, [0.75, 0.0, 0.0, 1.0], "0x{internal:x}");
-        }
+        let tex = bind_new_texture(GL_TEXTURE_2D);
+        let v = [0.75f32];
+        // SAFETY: one RED float texel.
+        unsafe {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F as GLint, 1, 1, 0, GL_RED, GL_FLOAT, v.as_ptr() as *const c_void)
+        };
+        bound_fb();
+        attach_tex(GL_COLOR_ATTACHMENT0, tex);
+        let mut f = [9f32; 4];
+        // SAFETY: room for one RGBA float pixel.
+        unsafe { glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, f.as_mut_ptr() as *mut c_void) };
+        assert_eq!(f, [0.75, 0.0, 0.0, 1.0]);
     }
 
     #[test]
