@@ -73,13 +73,19 @@ pub mod sim71;
 // (`alloc`), scheduling (`sched`), the structural verifier (`verify`), and the
 // chain that runs them for a GL program (`chain`).
 pub mod alloc;
+pub mod alloc71;
 pub mod chain;
+pub mod chain71;
 pub mod order;
 pub mod prepare;
 pub mod sched;
+pub mod sched71;
+pub mod sched71_cf;
 pub mod select;
+pub mod select71;
 pub mod verify;
 pub mod verify71;
+pub mod vop71;
 
 #[cfg(test)]
 pub(crate) mod fields;
