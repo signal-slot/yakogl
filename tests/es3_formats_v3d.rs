@@ -34,7 +34,13 @@
 //!
 //! `gl_rig` (below) drives the GL API over the real V3D back end, with the job
 //! builder faked: RGBA16F, R16F and R32F render targets are complete and read
-//! back a clear, and RGB565, RGBA16F and R16F textures reach the TMU.
+//! back a clear. R32F is the one of them whose colour-renderability follows
+//! the build: ES 3.0 makes it a colour target only under
+//! GL_EXT_color_buffer_float (4.4.4), which no back end claims
+//! (docs/notes/es3-float-targets.md); the r32f row reads the clear while a
+//! 1x1 R32F colour attachment is complete and holds the extension's refusal
+//! once the core gates it on the unclaimed extension (plan #360). RGB565,
+//! RGBA16F and R16F textures reach the TMU either way.
 //!
 //! tools/check.sh runs this file in the V3D_CONFIG row. Compiles to nothing
 //! under report-es2 (no ES 3.0 storage class is used there).
@@ -1205,6 +1211,47 @@ mod trampolines {
 
     const SIDE: i32 = 8;
 
+    /// Is `token` in this build's GL_EXTENSIONS (what dEQP's completeness
+    /// cases read to decide what a float colour format must be)?
+    fn ext_claimed(token: &str) -> bool {
+        // SAFETY: GL_EXTENSIONS is a static NUL-terminated string the GL owns.
+        unsafe {
+            let s = CStr::from_ptr(glGetString(GL_EXTENSIONS) as *const c_char);
+            s.to_str().unwrap_or_default().split(' ').any(|t| t == token)
+        }
+    }
+
+    /// Is GL_R32F a colour target of this build: does a 1x1 GL_R32F texture
+    /// attached as colour attachment 0 complete its framebuffer? ES 3.0 makes
+    /// R32F colour-renderable under GL_EXT_color_buffer_float only, which this
+    /// build does not claim; the core nevertheless completes it today, and
+    /// plan #360's core-claim gates it on the extension
+    /// (docs/notes/es3-float-targets.md). The probe answers for both states,
+    /// so the r32f target row below reads its clear while the target is
+    /// renderable and holds the extension's ES 3.0 refusal once it is not.
+    /// Needs the rig.
+    fn r32f_colour_renderable() -> bool {
+        let (mut tex, mut fbo) = (0u32, 0u32);
+        // SAFETY: plain GL calls with live out pointers; null pixels only
+        // allocate.
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F as GLint, 1, 1, 0, GL_RED, GL_FLOAT, core::ptr::null());
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            let status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fbo);
+            glDeleteTextures(1, &tex);
+            while glGetError() != GL_NO_ERROR {}
+            status == GL_FRAMEBUFFER_COMPLETE
+        }
+    }
+
     /// A texture of `internal` (`format`/`type_`, no texels) attached to a
     /// framebuffer: the status the GL core gives it, and what a clear to
     /// (0.5, 0.25, 0.75, 1) reads back as RGBA/FLOAT.
@@ -1536,9 +1583,28 @@ mod trampolines {
         assert!(px.chunks(4).all(|p| p == [0.5, 0.0, 0.0, 1.0]), "{:?}", &px[..8]);
     }
 
+    /// An R32F colour attachment is complete and a clear reads back. The
+    /// target follows the build: [`r32f_colour_renderable`] probes a 1x1 R32F
+    /// colour texture, and while it completes the row reads the clear as
+    /// today; once the core gates R32F on the unclaimed
+    /// GL_EXT_color_buffer_float the row asserts that refusal (no extension
+    /// listed) and skips — neither a pass of a wrong answer nor a failure of
+    /// the gate.
     #[test]
     fn r32f_target_is_complete_and_clears() {
         let _g = rig();
+        if !r32f_colour_renderable() {
+            /* ES 3.0 4.4.4 with no GL_EXT_color_buffer_float in GL_EXTENSIONS:
+             * R32F is not colour-renderable and its attachment is incomplete.
+             * Hold that much, then skip the row: it is neither a pass nor a
+             * failure then. */
+            assert!(
+                !ext_claimed("GL_EXT_color_buffer_float"),
+                "the r32f row skips only while GL_EXT_color_buffer_float is unclaimed"
+            );
+            eprintln!("skipping r32f: a GL_R32F texture is no colour target of this build (GL_EXT_color_buffer_float not claimed)");
+            return;
+        }
         let (status, px) = clear_and_read(GL_R32F, GL_RED, GL_FLOAT);
         assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
         assert!(px.chunks(4).all(|p| p == [0.5, 0.0, 0.0, 1.0]), "{:?}", &px[..8]);
