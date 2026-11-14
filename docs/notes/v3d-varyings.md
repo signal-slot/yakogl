@@ -50,9 +50,12 @@ reports `max_varyings = V3D_MAX_FS_INPUTS / 4` = 16
   (`select.rs:2210-2216`). `FsProg` carries them at `chain.rs:138-140`
   (`flat_shade_flags`, `centroid_flags`; `noperspective_flags` beside
   them). The comparison JSON prints one word (`chain.rs:1322-1327`).
-- **VS output rows** (`select.rs:2560-2562`): `rows > 64` is
-  `VpmRowOutOfRange`. With 4 fixed rows, the point size and 64 varyings
-  that is 69. `vpm_fields` (`chain.rs:320-337`, Mesa
+- **VS output rows** (`select.rs:2560-2562`): `rows > 64` was
+  `VpmRowOutOfRange`, which refused 15 vec4 with `gl_PointSize` (65 rows).
+  With 4 fixed rows, the point size and 64 varyings that is 69, now
+  `select.rs` `VPM_MAX_OUTPUT_ROWS` (step 3 below, done; pinned by
+  `varyings_tests.rs` and `tests/es3_v3d_varyings.rs`
+  `fifteen_vec4_with_the_point_size_draw`). `vpm_fields` (`chain.rs:320-337`, Mesa
   `v3d_vs_set_prog_data`, `vir.c:896-937`) sizes the VPM output from
   `vpm_output_rows` in 8-row units and refuses a VPM that cannot hold two
   batches (`chain.rs:69-70`, `vir.c:936`); with 69 rows a batch is

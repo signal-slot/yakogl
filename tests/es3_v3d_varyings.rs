@@ -164,6 +164,8 @@ mod v3d {
         flat_shade_flags: u32,
         flat_shade_flags_hi: u32,
         centroid_flags_hi: u32,
+        /// The vertex shader's VPM output segment, in sectors of 8 rows.
+        vs_vpm_output_size: u32,
     }
 
     #[no_mangle]
@@ -176,6 +178,7 @@ mod v3d {
                 flat_shade_flags: (*d.fs).flat_shade_flags,
                 flat_shade_flags_hi: (*d.fs).flat_shade_flags_hi,
                 centroid_flags_hi: (*d.fs).centroid_flags_hi,
+                vs_vpm_output_size: (*d.vs).vpm_output_size,
             }
         };
         PLATFORM.lock().unwrap_or_else(|e| e.into_inner()).as_mut().expect("the platform").draws.push(rec);
@@ -683,16 +686,28 @@ mod v3d {
         assert_eq!(d.flat_zeroed, 1);
     }
 
-    /// One vector past the limit is a link error, not a draw (the V3D's
-    /// refusal is the code generator's, `VpmRowOutOfRange`).
+    /// One vector past the limit is a link error, not a draw.
     #[test]
     fn sixteen_varying_vectors_do_not_link() {
         let _g = rig();
         let (vs, fs) = sources(16, 16, &|_| "");
         let log = link(&vs, &fs).expect_err("16 vec4 varyings exceed GL_MAX_VARYING_VECTORS");
-        /* the code generator's refusal (the VPM row it would write is past
-         * the record), not a draw; the log says so */
         assert!(!log.is_empty(), "the link fails with a log");
+    }
+
+    /// gl_PointSize beside fifteen vec4: the vertex shader writes x, y, z,
+    /// 1/w, the point size and the 60 varyings, 65 VPM rows (the code
+    /// generator stopped at 64 before select.rs `VPM_MAX_OUTPUT_ROWS`), and
+    /// the record's output segment is 9 sectors of 8 rows.
+    #[test]
+    fn fifteen_vec4_with_the_point_size_draw() {
+        let _g = rig();
+        let (vs, fs) = sources(15, 15, &|_| "");
+        let vs = vs.replace(" gl_Position = p;\n", " gl_Position = p;\n gl_PointSize = 1.0;\n");
+        let d = draw(&vs, &fs);
+        assert_eq!(d.seen.len(), 1);
+        assert_eq!(d.seen[0].num_inputs, 60);
+        assert_eq!(d.seen[0].vs_vpm_output_size, 65u32.div_ceil(8), "the vertex shader's output segment");
     }
 
     /// The vertex shader may declare 16 outputs (64 components, the limit)
