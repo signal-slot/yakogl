@@ -34,7 +34,3 @@ zorder.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compile
 # shader does not declare `v_coords`). Not a V3D refusal; the pairing is the test's.
 es100/loop_nested.vert+es100/loop_nested.frag: rc -22: online shaderc: fragment varying 'v_coords' is not declared in the vertex shader; GLSL ES 1.00 section 4.3.5: a varying the fragment shader uses must be declared by the vertex shader, with the same type
 es100/ret_nested.vert+es100/ret_nested.frag: rc -22: online shaderc: fragment varying 'v_coords' is not declared in the vertex shader; GLSL ES 1.00 section 4.3.5: a varying the fragment shader uses must be declared by the vertex shader, with the same type
-
-# gl_test varyings15: 15 varying vectors, more than MAX_VARYING_VECTORS = 8 on
-# the V3D; the case checks the limit. gl_test only; no benchmark uses it.
-es100/varyings15.vert+es100/varyings15.frag: rc -22: online shaderc: link error: the program's varyings do not fit MAX_VARYING_VECTORS = 8 (Appendix A packing)

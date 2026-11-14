@@ -172,12 +172,18 @@ struct v3d_fs_prog {
 	uint32_t threads;
 	bool single_seg;
 	uint32_t num_inputs;
-	/* word 0 of each flags array: M5 supports num_inputs <= 24 and all zero */
+	/* word 0 of each flags array (24 bits; words 1 and 2 in the arrays
+	 * below); the M5 triangle builder takes num_inputs <= 24 and
+	 * all-zero flags only */
 	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
 	bool writes_z, disable_ez, uses_center_w, lock_scoreboard_on_first_thrsw;
 	bool uses_implicit_point_line_varyings, uses_pid;
 	const struct v3d_uniform *uniforms;
 	uint32_t num_uniforms;
+	/* words 1 and 2 of each flags array: bit i % 24 of word i / 24 for
+	 * input i of 24..63, as Mesa packs them (v3d_set_fs_prog_data_inputs,
+	 * vir.c:992-1003) */
+	uint32_t flat_shade_flags_hi[2], noperspective_flags_hi[2], centroid_flags_hi[2];
 };
 
 /* The vertex or coordinate shader's prog_data (v3d_vs_prog_data). */

@@ -539,6 +539,7 @@ static void part_decode(void)
 	/* draw 3: a program with no attribute and a flat varying, a line loop */
 	struct v3d_fs_prog fs3 = fs;
 	fs3.flat_shade_flags = 0x5;
+	fs3.num_inputs = 60; /* ES 3.0's 15 vec4 varyings: V3D_MAX_FS_INPUTS is 64 */
 	struct v3d_vs_prog vs3 = vs, cs3 = cs;
 	memset(vs3.vattr_sizes, 0, sizeof(vs3.vattr_sizes));
 	memset(cs3.vattr_sizes, 0, sizeof(cs3.vattr_sizes));
@@ -548,6 +549,17 @@ static void part_decode(void)
 		.num_attrs = 0, .prim = V3D_PRIM_LINE_LOOP, .count = 3,
 	};
 	check(v3d_job_draw(&j, &d3, NULL) == V3D_JOB_OK, "draw 3 (no attribute, flat, line loop)");
+
+	/* what the builder refuses before it writes anything: past 64 inputs,
+	 * and a flag past the packet's 24 bits (the stream is unchanged) */
+	struct v3d_fs_prog fs3x = fs3;
+	struct v3d_job_draw d3x = d3;
+	d3x.fs = &fs3x;
+	fs3x.num_inputs = 65;
+	check(v3d_job_draw(&j, &d3x, NULL) != V3D_JOB_OK, "draw 3x (65 inputs) is refused");
+	fs3x.num_inputs = 60;
+	fs3x.centroid_flags = 1u << 24;
+	check(v3d_job_draw(&j, &d3x, NULL) != V3D_JOB_OK, "draw 3x (a flag past bit 23) is refused");
 
 	struct v3d_job_clear c = { .load_rt0 = true, .z = 1.0f, .stencil = 0 };
 	check(v3d_job_end(&j, &c, NULL, NULL), "the decode job ends");
@@ -1646,6 +1658,63 @@ static void part_pntc(void)
 	}
 }
 
+/* ---- 11b. the varying flags past word 0 ---------------------------------
+ * 60 inputs (ES 3.0's 15 vec4 varyings): flat flags in words 0 and 1 (inputs
+ * 0, 2, 24 and 47), centroid flags in word 2 (inputs 48, 49), none non-
+ * perspective. Mesa's emit_varying_flags writes one packet per nonzero word,
+ * at the word's offset: the first (word 0) zeroes the higher words it does
+ * not send, the next changes nothing; the centroid's only word 2 zeroes the
+ * lower ones too; ZERO_ALL_* is for a kind with no flag at all. */
+static void part_varying_words(void)
+{
+	static struct lists l;
+	struct v3d_fs_prog fs = fs_prog();
+	fs.num_inputs = 60;
+	fs.flat_shade_flags = 0x5;
+	fs.flat_shade_flags_hi[0] = 1u << 23 | 1u; /* flat word 1: inputs 24 and 47 */
+	fs.centroid_flags = 0;
+	fs.centroid_flags_hi[1] = 0x3; /* centroid word 2: inputs 48 and 49 */
+	struct v3d_vs_prog vs = vs_prog(0x00201000u, vs_u, 5), cs = vs_prog(0x00202000u, cs_u, 3);
+	struct v3d_vertex_attr attrs[2] = { { 0x00300000u, 32, 4 }, { 0x00300010u, 32, 4 } };
+	struct v3d_uniform_storage vst = { vs_words, 4 }, fst = { fs_words, 2 };
+	struct v3d_job_state st = m5_state();
+	struct v3d_job_draw d = {
+		.st = &st, .fs = &fs, .vs = &vs, .cs = &cs, .vs_storage = vst, .fs_storage = fst,
+		.attrs = attrs, .num_attrs = 2, .prim = V3D_PRIM_TRIANGLES, .count = 3,
+	};
+	struct v3d_job_target t = { W, H, TARGET, W * 4, TILE_ALLOC };
+	struct v3d_job_clear c = { .load_rt0 = true, .z = 1.0f };
+	lists_init(&l, RCL_OFF - BCL_OFF);
+	struct v3d_job j;
+	check(v3d_job_begin(&j, &t, &l.bcl, &l.rcl, &l.ind) && v3d_job_draw(&j, &d, NULL) == V3D_JOB_OK &&
+		      v3d_job_end(&j, &c, NULL, NULL),
+	      "a job of 60 inputs with flags in three words builds");
+	char *text = decode(&l);
+	const char *flat = "Flat Shade Flags for varyings V0*24";
+	check(field(text, "FLATSHADE_FLAGS", 0, flat) == 0x5 &&
+		      field(text, "FLATSHADE_FLAGS", 0, "Varying offset V0") == 0 &&
+		      field(text, "FLATSHADE_FLAGS", 0, "Action for Flat Shade Flags of higher numbered varyings") ==
+			      V3D_VARYING_FLAGS_ACTION_ZEROED &&
+		      field(text, "FLATSHADE_FLAGS", 0, "Action for Flat Shade Flags of lower numbered varyings") ==
+			      V3D_VARYING_FLAGS_ACTION_UNCHANGED,
+	      "flat word 0: offset 0, lower unchanged, higher zeroed");
+	check(field(text, "FLATSHADE_FLAGS", 1, flat) == (1 << 23 | 1) &&
+		      field(text, "FLATSHADE_FLAGS", 1, "Varying offset V0") == 1 &&
+		      field(text, "FLATSHADE_FLAGS", 1, "Action for Flat Shade Flags of higher numbered varyings") ==
+			      V3D_VARYING_FLAGS_ACTION_UNCHANGED &&
+		      field(text, "FLATSHADE_FLAGS", 1, "Action for Flat Shade Flags of lower numbered varyings") ==
+			      V3D_VARYING_FLAGS_ACTION_UNCHANGED,
+	      "flat word 1: offset 1, nothing else changed");
+	check(field(text, "FLATSHADE_FLAGS", 2, flat) == -1, "no packet for the empty flat word 2");
+	check(field(text, "CENTROID_FLAGS", 0, "Centroid Flags for varyings V0*24") == 0x3 &&
+		      field(text, "CENTROID_FLAGS", 0, "Varying offset V0") == 2 &&
+		      field(text, "CENTROID_FLAGS", 0, "Action for Centroid Flags of higher numbered varyings") ==
+			      V3D_VARYING_FLAGS_ACTION_ZEROED &&
+		      field(text, "CENTROID_FLAGS", 0, "Action for Centroid Flags of lower numbered varyings") ==
+			      V3D_VARYING_FLAGS_ACTION_ZEROED,
+	      "centroid word 2 alone: offset 2, the others zeroed");
+}
+
 /* ---- 12. instanced draws ---------------------------------------------------
  * A draw of more than one instance is the instanced packet of its kind
  * (VERTEX_ARRAY_INSTANCED_PRIMS / INDEXED_INSTANCED_PRIM_LIST, Mesa
@@ -2625,7 +2694,8 @@ static void part_occlusion(void)
 
 int main(void)
 {
-	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields;
+	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields + 2
+	 * refusals;
 	 * part 4: 3 + 3 + 19 fields; part 5: 2 + 5 words + 2 refusals + 3 per
 	 * stage + 1 + 1 + 4 size words + 2 size refusals; part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
 	 * refusals + 4 refusals + 1 + 3 (the M5 frame);
@@ -2633,6 +2703,7 @@ int main(void)
 	 * 3 builds + 8 apart;
 	 * part 8: 4 builds + 9; part 9: 3 builds + 7; part 10: 3 builds + 5;
 	 * part 11: 2 builds + 2 fields + 1 + 2 refusals;
+	 * part 11b (the varying flags past word 0): 1 build + 4 packet fields;
 	 * part 12 (multiple render targets): 3 builds + 12;
 	 * part 13 (instanced draws): 3 builds + 8;
 	 * part 14 (4x multisampling): 13 + 2 pinned hashes + 13 two typed RTs;
@@ -2643,7 +2714,7 @@ int main(void)
 	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal;
 	 * part 19 (occlusion queries): 2 builds + 4;
 	 * part 20 (the render image): 1 build + 5 + 3 refusals */
-	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
+	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 2 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 5 + 15 + 11 + 28 +
 			    28 + 8 + 6 + 10 + 6 + 9;
 	part_identity();
 	part_rollback();
@@ -2659,6 +2730,7 @@ int main(void)
 	part_psiz();
 	part_discard();
 	part_pntc();
+	part_varying_words();
 	part_mrt();
 	part_instanced();
 	part_msaa();
