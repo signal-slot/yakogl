@@ -1009,6 +1009,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
             "no test or corpus shader gives U32_TO_F32 or S32_TO_F32 a constant source (the only way a narrowed \
              source reaches them: the constant lowering's table byte or half)",
         ),
+        E::IntColour => Some("ES 1.00 has no fragment output but gl_FragColor and gl_FragData, both vec4"),
         E::FauFull => Some(
             "the sysvals are at most 6 words (VS) and 4 (FS) of 128, pushed first; uniforms that do not fit are \
              UboFallback",
@@ -6905,6 +6906,37 @@ fn intuni_ishr_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn intuni_intrt_is_byte_equal_to_mesa_26_2_1() {
     check_intbool("intrt");
+}
+
+/// An integer colour output other than one declared `highp uvec4` has no
+/// Mesa reference: it is refused by name (`IntColour`), never compiled as
+/// a float colour. Before, each of these compiled with `colour_f16` true:
+/// its integer words were converted to fp16 and stored `BLEND.v4.f16`,
+/// and a blended draw took the fp16 colour's blend shader, where Mesa
+/// stores `BLEND.v4.i32`/`.u32` and keys the blend shader on int32/uint32.
+/// The declared `highp uvec4` stays (intuni_intrt above, fbload_int).
+#[test]
+fn an_integer_colour_without_a_reference_is_refused_by_name() {
+    let fs = |decls: &str, value: &str| {
+        format!("#version 300 es\nprecision highp float;\n{decls}\nvoid main() {{ o = {value}; }}\n")
+    };
+    let u = "uvec4(1u, 2u, 3u, 4u)";
+    let i = "ivec4(1, 2, 3, 4)";
+    for src in [
+        fs("precision highp int;\nout uvec4 o;", u),
+        fs("out uvec4 o;", u),
+        fs("out mediump uvec4 o;", u),
+        fs("out highp ivec4 o;", i),
+        fs("out ivec4 o;", i),
+        fs("precision highp int;\nout ivec4 o;", i),
+        fs("out highp uint o;", "7u"),
+        fs("out highp int o;", "7"),
+        fs("out highp uvec2 o;", "uvec2(1u, 2u)"),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::IntColour, "{src}");
+    }
+    let f = compile(SHC_STAGE_FRAGMENT, &fs("out highp uvec4 o;", u)).expect("a declared highp uvec4 compiles");
+    assert!(!f.info.colour_f16, "its blend shader takes the 32-bit key");
 }
 
 #[test]

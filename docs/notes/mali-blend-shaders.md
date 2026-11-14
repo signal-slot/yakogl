@@ -314,6 +314,12 @@ float, the target's base type, not from the source type (pan_blend.c:837-862,
 "We assume the destination type here"), and `bi_emit_load_blend_input`
 reads only the type's size (bifrost_compile.c:924-946). Read from the
 source, not measured: `pan_shc --blend` takes fp16 and fp32 keys only.
+Every other integer colour output (an `ivec4`, an `int`, `uint` or narrower
+vector, a `mediump` one, a `uvec4` highp only through `precision highp int`)
+has no reference and is refused at the fragment compile
+(`MaliError::IntColour`, `FsPrecision::of`), so it never reaches a blend
+shader. The record's `colour_f16`, which `shader_key` reads, comes from one
+rule, `FsPrecision::colour_f16`.
 
 The frame side: `src/mali/blend.rs` `shader_key` maps a draw's equation,
 colour mask, sample count and colour type (the fragment record's

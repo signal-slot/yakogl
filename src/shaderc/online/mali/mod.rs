@@ -256,6 +256,9 @@ pub enum MaliError {
     /// (nir_fs.rs `ADMITTED`).
     FsOperandForm,
     FragOutput,
+    /// An integer colour output other than a `uvec4` declared `highp`, the
+    /// one a Mesa reference draws (`FsPrecision::of`).
+    IntColour,
     /// A fragment shader that writes no colour.
     NoColour,
     Interpolation,
@@ -364,6 +367,7 @@ impl MaliError {
         MaliError::FragmentTooLarge,
         MaliError::FsOperandForm,
         MaliError::FragOutput,
+        MaliError::IntColour,
         MaliError::NoColour,
         MaliError::Interpolation,
         MaliError::ColourForm,
@@ -500,6 +504,9 @@ impl MaliError {
                 "Valhall: a fragment colour of more than 255 vectorised operations and operands is not lowered yet"
             }
             MaliError::FragOutput => "Valhall: a fragment output other than gl_FragColor is not lowered yet",
+            MaliError::IntColour => {
+                "Valhall: an integer colour output other than one declared `highp uvec4` (an ivec4, int or uint, fewer lanes, or a uvec4 mediump or highp only by `precision highp int`) is not lowered yet"
+            }
             MaliError::NoColour => "Valhall: a fragment shader that leaves gl_FragColor unwritten is not lowered yet",
             MaliError::Interpolation => "Valhall: a flat, centroid or noperspective varying is not lowered yet",
             MaliError::ColourForm => {
@@ -1021,6 +1028,14 @@ pub struct FsPrecision {
 }
 
 impl FsPrecision {
+    /// Colour output 0 is stored as fp16 (`MaliShader::colour_f16`, Mesa's
+    /// `blend[0].type` = `nir_type_float16`): neither a highp float nor an
+    /// integer output. The one rule the record, and through it the blend
+    /// shader's key (src/mali/blend.rs `shader_key`), takes the type from.
+    pub fn colour_f16(&self) -> bool {
+        !self.colour_f32 && !self.colour_u32
+    }
+
     /// The precision of fragment shader `src`, whose IR is `m`.
     pub fn of<'s>(m: &ir_mod::Module<'_>, src: &'s str, scratch: &Arena<'s>) -> Result<FsPrecision, MaliError> {
         use super::ast::{BaseType, Decl, DeclId, Precision, StorageQualifier};
@@ -1029,6 +1044,8 @@ impl FsPrecision {
         let ast = super::parser::parse(scratch, pre.tokens).map_err(defect)?;
         let ast = super::parser::resolve_io(scratch, ast, super::sema::Stage::Fragment).map_err(defect)?;
         let float = |b: &BaseType<'_>| matches!(b, BaseType::Float | BaseType::Vec(_) | BaseType::Mat(..));
+        let integer =
+            |b: &BaseType<'_>| matches!(b, BaseType::Int | BaseType::IVec(_) | BaseType::Uint | BaseType::UVec(_));
         /* the default in force at each function's definition; main's picks */
         let mut dflt = Precision::Default;
         let mut at_main = None;
@@ -1055,12 +1072,20 @@ impl FsPrecision {
                     let p = if ty.precision == Precision::Default { dflt } else { ty.precision };
                     f.colour_f32 |= p == Precision::High;
                 }
-                /* an unsigned integer output (fbload_int.frag's `highp uvec4
-                 * o_color`): Mesa stores its words as computed,
-                 * `BLEND.v4.u32` (fbload_fbload_int.expect.json) */
-                Decl::Var { storage: StorageQualifier::FragOut, ty, .. }
-                    if matches!(ty.base, BaseType::UVec(4)) && ty.precision == Precision::High =>
-                {
+                /* an integer output. The one a Mesa reference draws is a
+                 * `uvec4` declared `highp` (fbload_int.frag's `o_color`,
+                 * intuni_intrt.frag's `o_v`): Mesa stores its words as
+                 * computed, `BLEND.v4.u32` (fbload_fbload_int.expect.json).
+                 * Any other has no reference and is refused by name, never
+                 * taken for a float colour: an `ivec4` (`BLEND.v4.i32`), an
+                 * `int`, `uint` or narrower vector, a `mediump` or `lowp`
+                 * one, and a `uvec4` that is highp only through `precision
+                 * highp int` (the same type, but no reference shows Mesa's
+                 * words for it) */
+                Decl::Var { storage: StorageQualifier::FragOut, ty, .. } if integer(&ty.base) => {
+                    if ty.base != BaseType::UVec(4) || ty.precision != Precision::High {
+                        return Err(MaliError::IntColour);
+                    }
                     f.colour_u32 = true;
                 }
                 Decl::Var { storage: StorageQualifier::Varying, ty, name, .. } if float(&ty.base) => {
@@ -1367,7 +1392,7 @@ fn compile_stage<'s>(
                 let c = finish(&mut p, &mut layout, true, &g.ubo, scratch, out, marks)?;
                 sc.info.preload = c.preload;
                 sc.info.work_reg_count = c.work_reg_count;
-                sc.info.colour_f16 = true;
+                sc.info.colour_f16 = fs.colour_f16();
                 sc.info.colour_outputs = 1;
                 sc.rows = rows;
                 sc.code = &out[..c.words];
@@ -1450,7 +1475,7 @@ fn compile_stage<'s>(
         let c = finish(&mut p, &mut layout, true, &ubo, scratch, out, marks)?;
         sc.info.preload = c.preload;
         sc.info.work_reg_count = c.work_reg_count;
-        sc.info.colour_f16 = !fs.colour_f32 && !fs.colour_u32;
+        sc.info.colour_f16 = fs.colour_f16();
         sc.info.colour_outputs = f.colour_outputs();
         sc.info.compacted = f.compacted;
         /* the bindings by descriptor index ([`nir_fs::layout`] numbers them:
