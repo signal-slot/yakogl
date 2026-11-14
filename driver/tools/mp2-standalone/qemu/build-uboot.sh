@@ -2,9 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# build-uboot.sh: build mainline U-Boot v2023.10, qemu_arm64_defconfig plus
-# mp2-standalone.config, for run.sh (README.md in this directory). Prints the
-# path of u-boot.bin on its last line.
+# build-uboot.sh [redund]: build mainline U-Boot v2023.10, qemu_arm64_defconfig
+# plus mp2-standalone.config, for run.sh (README.md in this directory). Prints
+# the path of u-boot.bin on its last line. "redund" layers
+# mp2-standalone-redund.config on top (the environment in two copies on the
+# microSD, as on the DK, with redund-default.env as the default environment),
+# in its own build directory.
 #
 # It is ../../uboot-mp2/qemu/build-uboot.sh's approach with its own fragment
 # and its own cache directory: that script's fragment overrides bootcmd, this
@@ -73,8 +76,23 @@ v=$(sed -n 's/^VERSION = //p; s/^PATCHLEVEL = //p; s/^EXTRAVERSION = //p' "$src/
 if [ "$v" != "${UBOOT_TAG#v}" ]; then say "$src is U-Boot '$v', not ${UBOOT_TAG#v}"; exit 1; fi
 
 frag=$here/mp2-standalone.config
-key=$(printf '%s\n%s\n%s\n' "$(cat "$frag")" "$(cd "$src" && pwd -P)" "$cross" | sha256sum | cut -c1-16)
-out=$cache/build-qemu_arm64-$key
+# redund: the environment loads from the microSD in initr_env, which on QEMU is
+# an sdhci-pci card, bound only when pci_init has scanned the bus; that runs
+# after initr_env unless the board defines CONFIG_SYS_EARLY_PCI_INIT
+# (common/board_r.c:672, :719; a board-header define, not a Kconfig option).
+# The DK's SDMMC is on the SoC, present at that point.
+case "${1:-}" in
+"") name=qemu_arm64 extra=() kcflags= ;;
+redund)
+	name=qemu_arm64-redund kcflags=-DCONFIG_SYS_EARLY_PCI_INIT
+	extra=("$here/mp2-standalone-redund.config" "$here/redund-default.env")
+	;;
+*) say "usage: build-uboot.sh [redund]"; exit 2 ;;
+esac
+key=$(printf '%s\n%s\n%s\n%s' "$(cat "$frag" ${extra[@]+"${extra[@]}"})" "$(cd "$src" && pwd -P)" "$cross" \
+	"${kcflags:+$kcflags
+}" | sha256sum | cut -c1-16)
+out=$cache/build-$name-$key
 if [ -f "$out/u-boot.bin" ]; then
 	say "up to date: $out"
 	echo "$out/u-boot.bin"
@@ -84,8 +102,13 @@ fi
 mkdir -p "$out"
 say "building U-Boot $UBOOT_TAG qemu_arm64 in $out (CROSS_COMPILE=$cross)"
 # merge_config.sh wants "# CONFIG_X is not set" for an off option.
-grep -v '^#' "$frag" | grep -v '^$' |
-	sed 's/^\(CONFIG_[A-Z0-9_]*\)=n$/# \1 is not set/' > "$out/mp2-standalone.config"
+# The redund fragment names its default environment file by @HERE@, and its
+# lines replace the base fragment's for the same option (the last one holds).
+cat "$frag" ${extra[@]+"${extra[0]}"} | grep -v '^#' | grep -v '^$' |
+	sed "s/^\(CONFIG_[A-Z0-9_]*\)=n\$/# \1 is not set/; s|@HERE@|$here|" |
+	awk '{ s = $0; sub(/=.*/, "", s); sub(/^# /, "", s); sub(/ is not set$/, "", s)
+	       if (!(s in v)) o[n++] = s; v[s] = $0 }
+	     END { for (i = 0; i < n; i++) print v[o[i]] }' > "$out/mp2-standalone.config"
 mk() { make -s -C "$src" O="$out" CROSS_COMPILE="$cross" "$@"; }
 mk qemu_arm64_defconfig > /dev/null
 "$src/scripts/kconfig/merge_config.sh" -m -O "$out" "$out/.config" "$out/mp2-standalone.config" > /dev/null
@@ -97,7 +120,7 @@ while IFS= read -r line; do
 		exit 1
 	fi
 done < "$out/mp2-standalone.config"
-if ! mk -j"$(nproc)" u-boot.bin > "$out/build.log" 2>&1; then
+if ! mk -j"$(nproc)" KCFLAGS="$kcflags" u-boot.bin > "$out/build.log" 2>&1; then
 	tail -n 30 "$out/build.log" >&2
 	say "build failed; full log $out/build.log"
 	exit 1

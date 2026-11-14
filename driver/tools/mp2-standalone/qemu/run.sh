@@ -41,6 +41,17 @@ uboot=$(bash "$here/build-uboot.sh") || rc=$?
 [ "$rc" -eq 0 ] || { echo "run.sh: build-uboot.sh failed ($rc)"; exit 1; }
 uboot=$(echo "$uboot" | tail -n 1)
 echo "run.sh: U-Boot $uboot"
+# The env_* cases run the redund U-Boot (the DK's two environment copies on
+# the microSD); built only when one of them runs.
+redund=()
+case "${MP2S_QEMU_ONLY:-env_}" in
+env_*)
+	r=$(bash "$here/build-uboot.sh" redund) || rc=$?
+	[ "$rc" -eq 0 ] || { echo "run.sh: build-uboot.sh redund failed ($rc)"; exit 1; }
+	redund=(--uboot-redund "$(echo "$r" | tail -n 1)")
+	echo "run.sh: U-Boot (redund) ${redund[1]}"
+	;;
+esac
 echo "run.sh: QEMU $("$qemu" --version | head -n 1)"
 
 run=$(mktemp -d "$cache/run.XXXXXX")
@@ -57,6 +68,6 @@ only=()
 if [ -n "${MP2S_QEMU_ONLY:-}" ]; then only=(--only "$MP2S_QEMU_ONLY"); fi
 python3 -I "$here/drive.py" --qemu "$qemu" --uboot "$uboot" --image "$run/standin.bin" \
 	--work "$run/work" --uboot-script "$here/../../../../tools/uboot_script.py" \
-	--logs "$run/logs" ${only[@]+"${only[@]}"} || rc=$?
+	--logs "$run/logs" ${only[@]+"${only[@]}"} ${redund[@]+"${redund[@]}"} || rc=$?
 if [ "$rc" -ne 0 ]; then echo "run.sh: run directory and console logs kept in $run"; fi
 exit "$rc"
