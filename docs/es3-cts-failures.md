@@ -244,7 +244,15 @@ samplers), RC6 and RC15; no single item.
 `state_query` 25 and `implementation_limits` 11: ES 3.0 limits read as float
 or 64-bit integers, uniform-block and varying component limits below the ES
 3.0 minimum, the compressed-format list, `max_draw_buffers` and
-`max_color_attachments` 3 (RC14). The compressed-format list is closed on the
+`max_color_attachments` 3 (RC14). The float and 64-bit forms are not a
+second defect: `glGetFloatv` and `glGetInteger64v` answer what `glGetIntegerv`
+answers (`tests/es3_limits_v3d.rs`, `tests/es3_v3d_varyings.rs`), so a
+`*_getfloat` / `*_getinteger64` row fails exactly when the limit is below its
+minimum. The V3D's varying family is closed on the host (v3d-varyings-raise:
+`MAX_VARYING_VECTORS` 15, the components 60 / 60 / 64; `tests/es3_v3d_varyings.rs`;
+board rows to re-run). Left: the uniform-block size and the combined
+uniform components (every GPU), `MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the
+PowerVR and GC7000UL, and RC14. The compressed-format list is closed on the
 host: `GL_NUM_COMPRESSED_TEXTURE_FORMATS` is 11 (ETC1 and the ten ETC2/EAC
 formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,
