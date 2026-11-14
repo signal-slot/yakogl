@@ -13,8 +13,12 @@
 //!
 //! The file also pins a default-block uniform whose name fills the field:
 //! it links, because the GL core takes the row's name from the pool too
-//! (`program::row_name`), so `glGetActiveUniform` reports it whole and
-//! `glGetUniformLocation` finds the row the draw then fills.
+//! (`shaderc::uniform_row_name`), so `glGetActiveUniform` reports it whole
+//! and `glGetUniformLocation` finds the row the draw then fills; and the
+//! PowerVR's hidden `float pvr_layers_<sampler>` row, which the draw fills
+//! with the bound 2D array's layer count by name (`gl/draw.rs`), found for
+//! a sampler of 60, 63 and 200 characters (the hidden row's name is 11
+//! longer, so the field cuts it first).
 //!
 //! The host cannot render: the verdicts here are the compile, the link, the
 //! reflection and the uniform dwords a draw hands the back end (the member's
@@ -36,6 +40,7 @@ use yakogl::gl::es3::*;
 use yakogl::gl::program::*;
 use yakogl::gl::shader::*;
 use yakogl::gl::state::*;
+use yakogl::gl::texture::*;
 use yakogl::gl::types::*;
 use yakogl::gl::vertex::*;
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
@@ -62,12 +67,23 @@ unsafe extern "C" fn b_ok() -> i32 {
     0
 }
 /// One stage as the last draw handed it over: each uniform row's dword
-/// offset and dwords, and the stage's uniform dwords as the GL core filled
-/// them from the bound buffers.
+/// offset and dwords, each row's whole name (`shaderc::uniform_row_name`),
+/// and the stage's uniform dwords as the GL core filled them from the bound
+/// buffers.
 #[derive(Clone, Default, Debug)]
 struct Stage {
     rows: Vec<(u16, u16)>,
+    names: Vec<String>,
     dwords: Vec<u32>,
+}
+
+impl Stage {
+    /// The dwords of the row named `name`, as f32s.
+    fn row_f32(&self, name: &str) -> Option<Vec<f32>> {
+        let k = self.names.iter().position(|n| n == name)?;
+        let (off, n) = (usize::from(self.rows[k].0), usize::from(self.rows[k].1));
+        Some(self.dwords.get(off..off + n)?.iter().map(|&d| f32::from_bits(d)).collect())
+    }
 }
 
 static DRAWN: Mutex<Option<(Stage, Stage)>> = Mutex::new(None);
@@ -75,12 +91,15 @@ static DRAWN: Mutex<Option<(Stage, Stage)>> = Mutex::new(None);
 unsafe fn stage_of(sh: *const yakogl::shaderc::ShcShader, cpu: *const c_void, dwords: u16) -> Stage {
     let Some(sh) = sh.as_ref() else { return Stage::default() };
     let rows = sh.uniform_table().iter().map(|u| (u.dword_off, u.dwords)).collect();
+    let names = (0..sh.uniform_table().len())
+        .map(|k| String::from_utf8_lossy(yakogl::shaderc::uniform_row_name(sh, k)).into_owned())
+        .collect();
     let dwords = if cpu.is_null() {
         Vec::new()
     } else {
         core::slice::from_raw_parts(cpu as *const u32, usize::from(dwords)).to_vec()
     };
-    Stage { rows, dwords }
+    Stage { rows, names, dwords }
 }
 
 unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
@@ -455,8 +474,9 @@ fn two_members_of_a_long_named_block_are_two_active_uniforms() {
 /// location by it, and the value set there is in the row the draw hands
 /// over.
 ///
-/// Revert check: let `program::row_name` read the field alone, or the link
-/// accept a full field only for a block member's row, and this fails.
+/// Revert check: let `shaderc::uniform_row_name` read the field alone, or
+/// the link accept a full field only for a block member's row, and this
+/// fails.
 #[test]
 fn a_default_block_uniform_of_63_characters_links_with_its_whole_name() {
     let _g = context();
@@ -518,4 +538,79 @@ fn a_default_block_uniform_of_62_characters_links_as_before() {
     assert_eq!(err(), GL_NO_ERROR);
     // SAFETY: a program of this context.
     unsafe { glDeleteProgram(p) };
+}
+
+/* ---- the hidden layer-count row behind a long sampler name ---------------- */
+
+/// The PowerVR samples a 2D array by offsetting the image address in the
+/// shader, and reads the layer count from a hidden block member the
+/// reflection adds, `float pvr_layers_<sampler>`, which the draw fills by
+/// name from the bound texture (`gl/draw.rs`, `fill_stage_layer_uniforms`).
+/// The row is found through the sampler's whole name: a sampler of 60
+/// characters (its own field whole, the hidden row's 71 characters cut at
+/// 63), of 63 and of 200 (both cut) each get the bound array's 5 layers.
+///
+/// Revert check: build the hidden row's name from the 64-byte field again,
+/// as the C `snprintf(lname, SHC_UNIFORM_NAME_MAX + 16, ...)` did, and the
+/// row of all three stays 0.
+#[test]
+fn the_layer_count_row_of_a_long_named_sampler_2d_array_is_filled() {
+    let _g = context();
+    const LAYERS: GLsizei = 5;
+    let mut tex: GLuint = 0;
+    // SAFETY: plain GL calls; one texture name.
+    unsafe {
+        glGenTextures(1, &mut tex);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, tex);
+        glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA8, 4, 4, LAYERS);
+        assert_eq!(glGetError(), GL_NO_ERROR, "glTexStorage3D");
+    }
+    static POS: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 0.0, 1.0, -1.0, 1.0, 0.0, 1.0];
+    for len in [60usize, 63, 200] {
+        let s = format!("s{}", "a".repeat(len - 1));
+        let fs = format!(
+            "#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 o;\n\
+             uniform highp sampler2DArray {s};\nvoid main() {{ o = texture({s}, vec3(0.5, 0.5, 1.0)); }}\n"
+        );
+        let p = program(VS_PLAIN, &fs).unwrap_or_else(|log| panic!("a {len}-character sampler: link failed: {log}"));
+        /* the sampler is an active uniform under its whole name (the hidden
+         * row is another, as the table has always listed it) */
+        let k = uniform_index(p, &s);
+        assert_ne!(k, GL_INVALID_INDEX, "{len}: the sampler by its whole name");
+        assert_eq!(active_uniform(p, k), (s.clone(), 1, GL_SAMPLER_2D_ARRAY), "{len}: the sampler, whole");
+        let loc = uniform_location(p, &s);
+        assert!(loc >= 0, "{len}: the sampler by its whole name");
+        // SAFETY: plain GL calls on a linked program of this context; every
+        // pointer stays alive through the draw.
+        unsafe {
+            glUseProgram(p);
+            glUniform1i(loc, 0);
+            let a = glGetAttribLocation(p, c"a_pos".as_ptr());
+            assert!(a >= 0);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glVertexAttribPointer(a as u32, 4, GL_FLOAT, 0, 0, POS.as_ptr() as *const c_void);
+            glEnableVertexAttribArray(a as u32);
+            *DRAWN.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            assert_eq!(glGetError(), GL_NO_ERROR, "{len}: the draw");
+            glDisableVertexAttribArray(a as u32);
+            glUseProgram(0);
+        }
+        let (_, stage) = DRAWN.lock().unwrap_or_else(|e| e.into_inner()).take().expect("the back end drew");
+        let hidden = format!("pvr_layers_{s}");
+        let heads: Vec<String> =
+            stage.names.iter().map(|n| format!("{}..({})", &n[..n.len().min(16)], n.len())).collect();
+        assert!(stage.names.contains(&hidden), "{len}: the hidden row is in the table under its whole name: {heads:?}");
+        assert_eq!(stage.row_f32(&hidden), Some(vec![LAYERS as f32]), "{len}: the row holds the bound array's layers");
+        assert_eq!(err(), GL_NO_ERROR, "{len}");
+        // SAFETY: a program of this context.
+        unsafe { glDeleteProgram(p) };
+    }
+    // SAFETY: plain GL calls; the texture this test made.
+    unsafe {
+        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+        glDeleteTextures(1, &tex);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
 }

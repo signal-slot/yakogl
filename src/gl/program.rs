@@ -162,7 +162,8 @@ pub(super) fn shader_is_attached(c: &GlContext, shader: GLuint) -> bool {
 /// pieces it is made of instead of copied into a buffer: `head`, then
 /// `index` in decimal (a struct array's element, [`active_uniform_name`]),
 /// then `tail`, then "[0]" when `zero`. The pieces borrow the whole name
-/// (the record's name pool, [`row_name`], or a block member's), which has no
+/// (the record's name pool, [`shaderc::uniform_row_name`], or a block
+/// member's), which has no
 /// length a buffer could be sized by: an identifier is up to 1,024
 /// characters (GLSL ES 3.00 3.8) and a row name joins several. ES 3.0
 /// 2.12.6 cuts a name only at the caller's `bufSize` ([`GlName::copy_out`]).
@@ -240,24 +241,6 @@ impl<'a> GlName<'a> {
             *buf.add(n) = 0;
         }
         util::app_put(length, n as GLsizei);
-    }
-}
-
-/// Row `k` of a stage's uniform table as the source names it: the record's
-/// name pool keeps the whole name where the 64-byte `ShcUniform::name` field
-/// cut it (`shaderc::online::backend::uniform_name`), so a name of 63 or
-/// more characters is reported and matched whole. Without the online
-/// compiler no record has a pool, and the link refuses a name that fills the
-/// field (`shaderc::link::reject_truncated_names`): the field's bytes are the
-/// whole name of every row that links.
-fn row_name(stage: &ShcShader, k: usize) -> &[u8] {
-    #[cfg(feature = "shaderc-online")]
-    {
-        shaderc::online::backend::uniform_name(stage, k)
-    }
-    #[cfg(not(feature = "shaderc-online"))]
-    {
-        stage.uniform_table().get(k).map_or(&[], |u| util::name_bytes(&u.name))
     }
 }
 
@@ -888,9 +871,10 @@ fn active_uniform_name<'a>(p: &'a GlProgram, l: &ProgLocation, k: u32) -> (GlNam
     (GlName { zero, ..n }, size)
 }
 
-/// The whole name of the reflection entry a location refers to ([`row_name`]).
+/// The whole name of the reflection entry a location refers to
+/// ([`shaderc::uniform_row_name`]).
 fn location_name<'a>(p: &'a GlProgram, l: &ProgLocation) -> &'a [u8] {
-    row_name(if l.ref_stage == 0 { &p.rvs } else { &p.rfs }, usize::from(l.ref_index))
+    shaderc::uniform_row_name(if l.ref_stage == 0 { &p.rvs } else { &p.rfs }, usize::from(l.ref_index))
 }
 
 /// The reflection entry a location refers to. A location table is built from
@@ -1139,7 +1123,7 @@ fn uniform_vars(stage: &ShcShader) -> impl Iterator<Item = packing::Var> + Clone
         }
         let kind = packing::Kind::of_gl_type(u32::from(u.gl_type)).unwrap_or(packing::Kind::Vec4);
         let all = u32::from(u.array_len).max(1);
-        Some(if row_is_flattened(stage, row_name(stage, i)) {
+        Some(if row_is_flattened(stage, shaderc::uniform_row_name(stage, i)) {
             let inner = u32::from(u.inner).max(1);
             packing::Var { kind, len: inner, count: (all / inner).max(1) }
         } else {
@@ -1190,7 +1174,7 @@ fn build_locations(p: &mut GlProgram, tab: &mut ProgLocTable, log: &mut [u8; INF
                 continue;
             }
             let off = if u.dword_off == SHC_UNIFORM_NO_BLOCK { -1 } else { u.dword_off as i32 };
-            let name = row_name(stage, i);
+            let name = shaderc::uniform_row_name(stage, i);
 
             let found = tab.u[..tab.count as usize].iter().position(|l| uniform_name_eq(location_name(p, l), name));
             let k = match found {

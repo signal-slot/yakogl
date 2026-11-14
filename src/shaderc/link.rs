@@ -86,16 +86,22 @@ fn name_maxes_field(field: &[c_char]) -> bool {
 /// Row `k` of `sh`'s uniform table, its name field full, accepted anyway:
 /// the online back end's record keeps the row's whole name (its name pool,
 /// `online::backend::pooled_uniform_name`), so nothing was lost. The GL
-/// core takes every uniform row's name from the pool (`program::row_name`):
-/// a default-block uniform is reported (`glGetActiveUniform`,
-/// `GL_ACTIVE_UNIFORM_MAX_LENGTH`) and matched (`glGetUniformLocation`)
-/// whole, and a uniform-block member is named as GL names it (`Block.m`,
-/// `ShcBlockMember::name`) and filled by the member's index
-/// (`program::fill_uniform_blocks`). A member's row name is the qualified
-/// `<instance>.<member>`, which a 1,024-character instance name
-/// (dEQP-GLES3 `uniform_block.long_instance_name_*`) puts past any field.
-/// Without the online compiler no record has a pool, and the rule is the
-/// field's as before.
+/// core names, matches and reports every uniform row through
+/// `shaderc::uniform_row_name`, which reads the pool, never through the
+/// field alone: a default-block uniform is reported (`glGetActiveUniform`,
+/// `GL_ACTIVE_UNIFORM_MAX_LENGTH`) and matched (`glGetUniformLocation`, the
+/// PowerVR `pvr_layers_` row of `gl/draw.rs`, the transform-feedback
+/// capture's rows of `gl/tf_capture.rs`) whole, and a uniform-block member
+/// is named as GL names it (`Block.m`, `ShcBlockMember::name`) and filled by
+/// the member's index (`program::fill_uniform_blocks`). A member's row name
+/// is the qualified `<instance>.<member>`, which a 1,024-character instance
+/// name (dEQP-GLES3 `uniform_block.long_instance_name_*`) puts past any
+/// field. docs/notes/reflection-long-names.md has the decision.
+///
+/// A full field the pool could not name (two reflection rows of one 63-byte
+/// prefix and one layout) is still refused, and so is every full field of a
+/// table shader and of a build without the online compiler: no record has a
+/// pool there, and the rule is the field's as before.
 fn whole_uniform_row(sh: &ShcShader, k: usize) -> bool {
     #[cfg(feature = "shaderc-online")]
     {
