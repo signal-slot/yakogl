@@ -4808,7 +4808,7 @@ fn the_one_plane_zs_preloads_are_mesa_s() {
 fn blend_key(text: &str) -> super::blend::Key {
     use super::blend::{Base, Channel, Factor, Func, Key};
     let w: Vec<&str> = text.split_whitespace().collect();
-    assert!(w.len() == 8 || (w.len() == 9 && w[8] == "f32"), "{text}");
+    assert!(w.len() == 8 || (w.len() == 9 && matches!(w[8], "f32" | "u32")), "{text}");
     let func = |s: &str| match s {
         "add" => Func::Add,
         "subtract" => Func::Subtract,
@@ -4844,6 +4844,8 @@ fn blend_key(text: &str) -> super::blend::Key {
         alpha: ch(w[3], w[4], w[5]),
         mask: w[6].parse().expect("a mask"),
         samples: w[7].parse().expect("a sample count"),
+        /* a uint32 colour (a highp `out uvec4`) takes the fp32 key: the
+         * record's colour_f16 is false for both (FsPrecision::colour_f16) */
         colour_f32: w.len() == 9,
     }
 }
@@ -4920,16 +4922,14 @@ fn the_shim_driver_s_blend_shaders_are_ours() {
     }
 }
 
-/// Every blend shader of dEQP-GLES2 functional.fragment_ops.blend (the
-/// blend states of es2fBlendTests.cpp that Mesa draws with a blend shader,
-/// 1403 keys, tools/mali/blend_deqp_ref.py) is Mesa 26.2.1's, word for word
-/// (tools/mali/testdata/blend_deqp.words, `pan_shc --blend`), and so is its
-/// work register count (32 for every key; `pan_shc --blend` prints it).
-#[test]
-fn every_deqp_gles2_blend_shader_is_mesa_s() {
+/// The keys of a `blend_deqp_ref.py words`-made reference (`<key> :
+/// <words>` a line) whose blend shader is not Mesa 26.2.1's, word for word
+/// and with its work register count (32 for every key; `pan_shc --blend`
+/// prints it), and how many keys the file has.
+fn blend_words_differ(text: &str) -> (Vec<String>, usize) {
     let mut differ = Vec::new();
     let mut n = 0;
-    for line in td!("blend_deqp.words").lines() {
+    for line in text.lines() {
         let (key, words) = line.split_once(" : ").expect("a key and its words");
         let mesa: Vec<u64> =
             words.split_whitespace().map(|w| u64::from_str_radix(w, 16).expect("a hex word")).collect();
@@ -4940,7 +4940,32 @@ fn every_deqp_gles2_blend_shader_is_mesa_s() {
             Err(e) => differ.push(format!("{key}: {e:?}")),
         }
     }
+    (differ, n)
+}
+
+/// Every blend shader of dEQP-GLES2 functional.fragment_ops.blend (the
+/// blend states of es2fBlendTests.cpp that Mesa draws with a blend shader,
+/// 1403 keys, tools/mali/blend_deqp_ref.py) is Mesa 26.2.1's, word for word
+/// (tools/mali/testdata/blend_deqp.words, `pan_shc --blend`), and so is its
+/// work register count.
+#[test]
+fn every_deqp_gles2_blend_shader_is_mesa_s() {
+    let (differ, n) = blend_words_differ(td!("blend_deqp.words"));
     assert_eq!(n, 1403, "the reference's keys");
+    assert!(differ.is_empty(), "{} of {n} differ:\n{}", differ.len(), differ.join("\n"));
+}
+
+/// A uint32 colour (a highp ES 3.00 `out uvec4`) is its own key in Mesa
+/// (`src0_type` nir_type_uint32, pan_context.c:210-216), but Mesa converts
+/// it from float, the target's base type (pan_blend.c:837-862), so its
+/// blend shader is the fp32 key's: the backend takes that key for it
+/// (`colour_f16` false), and our fp32 words equal Mesa's uint32 words for
+/// the 100 keys of tools/mali/testdata/blend_u32.words (`pan_shc --blend`
+/// with `u32`; the first 100 fp32 keys of `blend_deqp_ref.py random`).
+#[test]
+fn a_uint32_colour_s_blend_shaders_are_mesa_s() {
+    let (differ, n) = blend_words_differ(td!("blend_u32.words"));
+    assert_eq!(n, 100, "the reference's keys");
     assert!(differ.is_empty(), "{} of {n} differ:\n{}", differ.len(), differ.join("\n"));
 }
 

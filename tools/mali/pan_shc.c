@@ -1010,15 +1010,16 @@ static void print_earlyzs(const struct pan_earlyzs_lut *lut)
  * pan_shc --blend: Mesa's blend shader for each equation read from stdin,
  * one a line:
  *
- *   <rgb func> <rgb src> <rgb dst> <alpha func> <alpha src> <alpha dst> <mask> <samples> [f32]
+ *   <rgb func> <rgb src> <rgb dst> <alpha func> <alpha src> <alpha dst> <mask> <samples> [f32|u32]
  *
  * funcs add, subtract, reverse_subtract, min, max; factors zero, one,
  * src_color, src_alpha, dst_alpha, dst_color, src_alpha_saturate,
  * const_color, const_alpha, each with an inv_ form (zero is inv_one); mask
  * the colour mask (0-15); samples 1 or 4. The target is R8G8B8A8_UNORM and
  * the fragment shader's colour fp16 (a mediump gl_FragColor, what a GLES 2
- * draw hands the driver), or fp32 with `f32` (a highp ES 3.00 `out vec4`,
- * blend[0].type nir_type_float32).
+ * draw hands the driver), fp32 with `f32` (a highp ES 3.00 `out vec4`,
+ * blend[0].type nir_type_float32), or uint32 with `u32` (a highp ES 3.00
+ * `out uvec4`, nir_type_uint32).
  *
  * Each equation is compiled as GENX(pan_blend_get_shader_locked) does
  * (src/gallium/drivers/panfrost/pan_blend_cso.c:59-132): the key's state
@@ -1105,7 +1106,12 @@ static int blend_main(uint64_t gpu_id, uint32_t gpu_variant)
 		enum pipe_blendfactor f[4];
 		int fields = sscanf(line, "%31s %31s %31s %31s %31s %31s %u %u %31s", rf, rs, rd, af, as,
 				    ad, &mask, &samples, ty);
-		if ((fields != 8 && !(fields == 9 && strcmp(ty, "f32") == 0)) ||
+		nir_alu_type src0_type = nir_type_float16;
+		if (fields == 9 && strcmp(ty, "f32") == 0)
+			src0_type = nir_type_float32;
+		else if (fields == 9 && strcmp(ty, "u32") == 0)
+			src0_type = nir_type_uint32;
+		if ((fields != 8 && !(fields == 9 && src0_type != nir_type_float16)) ||
 		    !blend_func(rf, &rgb_func) || !blend_func(af, &alpha_func) ||
 		    !blend_factor(rs, &f[0]) || !blend_factor(rd, &f[1]) ||
 		    !blend_factor(as, &f[2]) || !blend_factor(ad, &f[3]) || mask == 0 || mask > 15 ||
@@ -1127,7 +1133,7 @@ static int blend_main(uint64_t gpu_id, uint32_t gpu_variant)
 
 		/* pan_blend_cso.c:94-125 */
 		nir_shader *nir = pan_blend_create_shader_v10(
-			&state, fields == 9 ? nir_type_float32 : nir_type_float16, 0, 0);
+			&state, src0_type, 0, 0);
 		nir->info.num_ubos = PAN_UBO_SYSVALS + 1;
 		nir_shader_intrinsics_pass(nir, lower_blend_constants, nir_metadata_control_flow,
 					   NULL);
