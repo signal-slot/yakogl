@@ -99,6 +99,9 @@ set -u
 R=${T6CK_ROOT:-}
 F=$R/boot/armbianEnv.txt
 S=$R/root/yakogl-crashkernel
+# The live extraargs= line: U-Boot env import skips blanks before a name
+# (lib/hashtable.c:902-904, v2026.07), so a line with leading blanks counts.
+E="^[[:blank:]]*extraargs="
 say() { echo "board: $*"; }
 no() { echo "board: REFUSED: $*"; echo "board: nothing was changed."; exit 3; }
 sha() { sha256sum "$1" | cut -d" " -f1; }
@@ -125,7 +128,7 @@ facts)
 		echo "config=$(grep -h "^$c=" "$R/boot/config-$rel" 2>/dev/null || echo "$c absent")"
 	done
 	echo "file_sha=$(sha "$F")"
-	lines_toks "^extraargs=" "$F" | sed "s/^/file_extraargs=line /"
+	lines_toks "$E" "$F" | sed "s/^/file_extraargs=line /"
 	lines_toks "crashkernel=" "$F" | sed "s/^/file_crashkernel=line /"
 	if [ -d "$S" ]; then echo "state=$(cat "$S/orig.sha256" 2>/dev/null) $(cat "$S/new.sha256" 2>/dev/null)"; fi
 	echo "cmdline=$(toks <"$R/proc/cmdline")"
@@ -152,14 +155,14 @@ set)
 	fi
 	if grep -q "$(printf "\r")" "$F"; then no "$F has CR line ends"; fi
 	[ -z "$(tail -c 1 "$F")" ] || no "$F does not end with a newline"
-	n=$(grep -c "^extraargs=" "$F" || true)
+	n=$(grep -c "$E" "$F" || true)
 	[ "$n" -le 1 ] || no "$F has $n extraargs= lines"
 	if grep -q "crashkernel=" "$F"; then
 		no "$F already has a crashkernel= (line: tokens) $(lines_toks "crashkernel=" "$F" | tr "\n" " ")(the last one on the command line wins; this tool adds only its own)"
 	fi
 	if [ "$n" = 1 ]; then
-		old=$(grep "^extraargs=" "$F")
-		if [ "$old" = "extraargs=" ]; then new="extraargs=$TOKEN"; else new="$old $TOKEN"; fi
+		old=$(grep "$E" "$F")
+		case "$old" in *=) new="$old$TOKEN" ;; *) new="$old $TOKEN" ;; esac
 	else
 		old="(none)"
 		new="extraargs=$TOKEN"
@@ -169,13 +172,13 @@ set)
 	sha "$F" >"$S/orig.sha256"
 	[ "$(sha "$S/armbianEnv.txt.orig")" = "$(cat "$S/orig.sha256")" ] || no "the copy differs from $F"
 	if [ "$n" = 1 ]; then
-		awk -v new="$new" "/^extraargs=/ { print new; next } { print }" "$F" >"$F.yakogl-new"
+		awk -v new="$new" "/^[ \t]*extraargs=/ { print new; next } { print }" "$F" >"$F.yakogl-new"
 	else
 		{ cat "$F"; printf "%s\n" "$new"; } >"$F.yakogl-new"
 	fi
 	# Every line but extraargs= is the old file, and the line is the new one.
-	if ! { [ "$(grep -v "^extraargs=" "$F")" = "$(grep -v "^extraargs=" "$F.yakogl-new")" ] &&
-		[ "$(grep "^extraargs=" "$F.yakogl-new")" = "$new" ] &&
+	if ! { [ "$(grep -v "$E" "$F")" = "$(grep -v "$E" "$F.yakogl-new")" ] &&
+		[ "$(grep "$E" "$F.yakogl-new")" = "$new" ] &&
 		[ "$(wc -l <"$F.yakogl-new")" -eq $(( $(wc -l <"$F") + 1 - n )) ]; }; then
 		rm -f "$F.yakogl-new"; rm -rf "$S"
 		no "the new file would change more than the extraargs= line"
