@@ -653,7 +653,10 @@ mod tests {
     fn a_stage_is_refused_by_name() {
         let mut buf = std::vec![0u8; 4096];
         let a = Arena::new(&mut buf);
-        let sel = super::super::vop71::empty_selected(false);
+        /* A fragment shader: an empty vertex shader has no viewport x/y
+         * pair, which select71 refuses as a defect (ViewportXyMissing),
+         * not as an unfinished stage. */
+        let sel = super::super::vop71::empty_selected(true);
         match compile_stage71(&sel, &a) {
             Ok(s) => check71("empty", &s.code, s.threads, s.single_seg),
             Err(e) => assert!(is_stage_refusal(&e), "{e:?}"),
