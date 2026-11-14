@@ -367,8 +367,9 @@ A fixed mode first, in DVI mode (no InfoFrames), RGB 8 bit: then the TMDS
 character rate equals the pixel clock and the controller needs only
 `LINK_CONFIG0` and `HDCP2LOGIC_CONFIG0`. The mode is the one Linux shows on
 the display the lead plugs in, read from the dump, so every PHY value is
-measured on that very rate. The expected case is **1920x1080 at 60 Hz, 148.5
-MHz** (CEA-861 VIC 16), which Linux's PHY table has (`hdptx.c:427`).
+measured on that very rate. A sink with an EDID usually prefers
+**1920x1080 at 60 Hz, 148.5 MHz** (CEA-861 VIC 16), which Linux's PHY table
+has (`hdptx.c:427`); the T6's display has none (below).
 
 Measured (board, 2026-11-12): the T6's display gives no EDID, and Linux runs
 it at **1024x768 at 60 Hz, 65 MHz** (h 1024 1048 1184 1344, v 768 771 777
@@ -457,7 +458,7 @@ compared against the dump):
 | VP0 runs frames | VP0 `INT_RAW_STATUS` 0xAC bit 0 (FS, frame start); clear with `INT_CLR` 0xA4 = bit \| bit<<16, read again after more than one frame | the VP's timing generator runs on a pixel clock |
 | No underflow | the same register bit 4 (POST_BUF_EMPTY) stays 0 over many frames | the window's fetch keeps up: our buffer address is readable memory |
 | No bus error | `SYS0_INT_STATUS` 0x88 / `SYS1_INT_STATUS` 0x98 bit 1 | the AXI fetch completed |
-| Our buffer is the one shown | Esmart0 `REGION0_YRGB_MST` reads our address after `REG_CFG_DONE`, `REG_CFG_DONE` VP bit back to 0 | the shadow registers took the update |
+| Our buffer is the one shown | Esmart0 `REGION0_YRGB_MST` reads our address after `REG_CFG_DONE` | the window register holds our address. Whether the `REG_CFG_DONE` VP bit goes back to 0 once the update is taken is open (U8): it is logged, not used as a proof |
 | VOP clock rate | the frame-start interval measured against the arch timer (24 MHz) | pixel clock = htotal x vtotal x rate |
 | PHY PLL | hdptxphy0_grf STATUS 0xfd5e0080: PLL_LOCK_DONE bit 3, PHY_CLK_RDY bit 2, PHY_RDY bit 1 | the PLL locked and the lanes are ready |
 | Controller clocks | `CMU_STATUS` 0xb0 & 0x3f = 0x15 (`DISPLAY_CLK_LOCKED`), `CMU_VIDQPCLK_FREQ` 0xb8, `CMU_LINKQPCLK_FREQ` 0xbc (`dw-hdmi-qp.h:38-55`) | the controller sees its video and link clocks; the FREQ registers measure them (units unknown: compared with the dump) |
