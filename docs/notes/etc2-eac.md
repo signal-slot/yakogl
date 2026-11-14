@@ -165,8 +165,8 @@ name carries `compressed` outside those: the 266 ASTC rows of
 and 2 `implementation_limits.*compressed_texture_formats*`), and
 `texture.shadow` (432). `etc2`/`eac` overlap `compressed` in the
 `texture.format.compressed.*` rows. `--gpu=vivante` is the GC7000UL library; its
-two arms agree with PowerVR's case for case in every filter, so one row covers
-both.
+two arms agree with PowerVR's status for status in every filter, so one row
+covers both (the `texture.shadow` messages differ, below).
 
 | GPU | filter | cases | before | after | moved |
 |---|---|---:|---|---|---|
@@ -229,8 +229,12 @@ What the host cannot show:
   case ran, not that the decode is wrong, and the `Pass` count of `etc2`/`eac`
   stays 0 on both arms. Nothing here separates a correct R16F decode from a wrong
   one — that is `tests/es3_etc2_eac.rs` against Mesa's outputs, and the boards.
-- **The shadow compare.** `texture.shadow` is 432 cases, `Image verification
-  failed` in both arms of all three, 0 cases moved. Packing a compare function
+- **The shadow compare.** `texture.shadow` is 432 cases, Fail in both arms of
+  all three, 0 cases moved (`Image verification failed` on the V3D and
+  PowerVR; on the GC7000UL library the cases never reach a draw, `Failed to
+  compile shader program`: its selector refuses the shadow look-up,
+  `src/shaderc/online/select.rs` "an ES 3.00 texture look-up (a shadow
+  sampler, ...) is not selected yet", `docs/notes/gc-shadow-compare.md`). Packing a compare function
   into the V3D sampler record changes what the TMU does with a depth texture; on
   the host no TMU runs, so this is the clearest change in the commit the host
   cannot see at all. #320 (Pi 4) is its measurement.
