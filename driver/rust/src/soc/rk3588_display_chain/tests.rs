@@ -603,3 +603,28 @@ fn a_port_on_the_phys_pixel_clock_counts_as_clocked_here() {
     assert!(m.writes().is_empty());
     no_refusal(&m);
 }
+
+#[test]
+fn shut_down_opens_an_unreadable_vop_and_stops_it_first() {
+    // review N8: Linux's picture runs, PCLK_VOP_ROOT (52/3) reads gated
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.leave_linux_running(false);
+    m.poke(gate_addr(0, 52), m.peek(gate_addr(0, 52)) | 1 << 3);
+    shut_down(&m, &B, &m).unwrap();
+    no_refusal(&m);
+    assert!(!m.usable("vop") && !m.port_runs(0));
+}
+
+#[test]
+fn a_vop_reset_found_asserted_is_released_by_the_power_cycle() {
+    // review N9: SRST_A_VOP (52/9) asserted by the system before us
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    m.write32(rst_addr(0, 52), (1 << 9) << 16 | 1 << 9);
+    m.clear_log();
+    let r = up(&m, &Config { force_cold: true, power_cycle: true, ..cfg() }).unwrap();
+    no_refusal(&m);
+    assert_eq!(r.found.vop_unreadable, Some(NotReady::InReset(reset::A_VOP)));
+    assert!(r.found.vop_reachable, "read again once the reset was released");
+}
