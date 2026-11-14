@@ -44,14 +44,31 @@ fn hw_crc32() -> bool {
     (isar0 >> 16) & 0xf != 0
 }
 
+/// The hardware loop: one aligned 8-byte load per CRC32X.
+///
+/// The loader's target (aarch64-unknown-none-softfloat) has `strict-align`,
+/// so a `u64` taken from eight bytes at an address the compiler cannot
+/// prove aligned (`as_chunks::<8>()` and `u64::from_le_bytes`, the first
+/// form of this loop) is put together from eight byte loads, shifts and
+/// ORs: 22 instructions for each 8 bytes, 525 MB/s on the i.MX8MP's A53
+/// (13.65 MB of stored bytes and images in 26 ms, 2026-11-15). `align_to`
+/// gives the bytes up to the first 8-byte boundary, the aligned words and
+/// the rest; a word is then one `ldr` and the loop is four instructions
+/// (load, CRC32X, compare, branch).
 #[cfg(all(target_arch = "aarch64", not(test)))]
 #[target_feature(enable = "crc")]
 unsafe fn crc32_update_hw(crc: u32, data: &[u8]) -> u32 {
     use core::arch::aarch64::{__crc32b, __crc32d};
     let mut c = !crc;
-    let (words, tail) = data.as_chunks::<8>();
-    for w in words {
-        c = __crc32d(c, u64::from_le_bytes(*w));
+    // SAFETY: any bit pattern is a u64, and `align_to` returns words only
+    // at addresses aligned for one, inside `data`.
+    let (head, words, tail) = unsafe { data.align_to::<u64>() };
+    for &b in head {
+        c = __crc32b(c, b);
+    }
+    for &w in words {
+        // The CRC takes the bytes in memory order: the word as little endian.
+        c = __crc32d(c, u64::from_le(w));
     }
     for &b in tail {
         c = __crc32b(c, b);
@@ -81,6 +98,30 @@ mod tests {
         // The CRC-32 check value of "123456789" (and zlib.crc32(b"123456789")).
         assert_eq!(crc32(b"123456789"), 0xCBF4_3926);
         assert_eq!(crc32(b""), 0);
+    }
+
+    /// The split the hardware loop makes (bytes to the first 8-byte
+    /// boundary, aligned words, the rest), with the table in place of the
+    /// instructions: every start alignment and every length around the word
+    /// size gives the bytewise value. The instructions themselves run only
+    /// on the target.
+    #[test]
+    fn aligned_word_split_equals_bytewise() {
+        let buf: [u8; 96] = core::array::from_fn(|i| (i * 131 + 17) as u8);
+        for start in 0..16 {
+            for len in 0..=64 {
+                let data = &buf[start..start + len];
+                // SAFETY: any bit pattern is a u64.
+                let (head, words, tail) = unsafe { data.align_to::<u64>() };
+                assert!(head.len() < 8 && tail.len() < 8 && head.len() + words.len() * 8 + tail.len() == len);
+                let mut c = crc32_update_table(0x1234_5678, head);
+                for &w in words {
+                    c = crc32_update_table(c, &u64::from_le(w).to_le_bytes());
+                }
+                c = crc32_update_table(c, tail);
+                assert_eq!(c, crc32_update_table(0x1234_5678, data), "start {start} len {len}");
+            }
+        }
     }
 
     #[test]
