@@ -44,7 +44,8 @@
 //! Here rf0 goes to an [`Op71::Ldunif`] destination only, under the rule
 //! alloc.rs keeps for r5 (the note's choice): a fragment shader, the value
 //! read within [`R0_SPAN`] operations, no implicit rf0 write, `ldvary` C
-//! read, thread switch or control flow inside its life, no `ldvary` or C read
+//! read, thread switch, control flow or [`Op71::CondMov`]/[`Op71::Copy`]
+//! into it inside its life, no `ldvary` or C read
 //! in the [`R0_AFTER`] operations before the load (Mesa's
 //! `ip > last_ldvary_ip + 4`, :1330-1332), and no `ldvary` C live across it.
 //! One value holds rf0 at a time. Nothing else is ever given rf0, so no
@@ -234,6 +235,9 @@ pub fn allocate71<'a>(sel: &Selected71<'_>, threads: u32, a: &Arena<'a>) -> Resu
      * no rf0 value crosses one so it never matters), control flow. */
     let ends_rf0 = |o: &Op71| o.writes_rf0_implicitly() || reads_vary_c(o) || *o == Op71::Thrsw || o.is_control_flow();
     let near_ldvary = |o: &Op71| matches!(o, Op71::Ldvary { .. }) || reads_vary_c(o);
+    /* A CondMov or Copy into the value would be an ALU write of rf0. */
+    let rewrites =
+        |o: &Op71, v: usize| matches!(*o, Op71::CondMov { dst, .. } | Op71::Copy { dst, .. } if dst.0 as usize == v);
     for (i, op) in ops.iter().enumerate() {
         let Some(v) = op.def() else { continue };
         let v = v.0 as usize;
@@ -252,7 +256,7 @@ pub fn allocate71<'a>(sel: &Selected71<'_>, threads: u32, a: &Arena<'a>) -> Resu
             && sel.fragment
             && free(rf0_busy)
             && (last[v] as usize) <= i + R0_SPAN
-            && !ops[i + 1..=(last[v] as usize).max(i)].iter().any(ends_rf0)
+            && !ops[i + 1..=(last[v] as usize).max(i)].iter().any(|o| ends_rf0(o) || rewrites(o, v))
             && !ops[i.saturating_sub(R0_AFTER)..i].iter().any(near_ldvary)
             && !vary_c_live_after(ops, i)
         {
@@ -553,6 +557,12 @@ mod tests {
         let reg = run(&ops, true, 4, 4).unwrap().0;
         assert_ne!(reg[2], reg[0], "{reg:?}");
         assert_ne!(reg[2], reg[1], "{reg:?}");
+        /* a uniform rewritten by a CondMov or Copy within two operations is
+         * not given rf0: that would be an ALU write of rf0 */
+        let ops = [ldunif(0), Op71::CondMov { dst: V(0), src: Src71::Payload(3), cond: Cond::IfA }, tlb(0)];
+        assert_eq!(run(&ops, true, 1, 4).unwrap().0[0], Rf(4));
+        let ops = [ldunif(0), Op71::Copy { dst: V(0), src: Src71::Payload(3) }, tlb(0)];
+        assert_eq!(run(&ops, true, 1, 4).unwrap().0[0], Rf(4));
         /* a CondMov or Copy into a register never defined */
         let ops = [ldunif(0), Op71::CondMov { dst: V(1), src: v(0), cond: Cond::IfA }];
         assert_eq!(run(&ops, true, 2, 4), Err(Alloc71Error::UseBeforeDef));
