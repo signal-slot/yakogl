@@ -305,8 +305,15 @@ Python model of the passes for all 3503 fp16 keys, state by state);
 
 The colour's type is in the key (`colour_f32`, Mesa's `src0_type`): a highp
 ES 3.00 `out vec4` is fp32 in r0-r3 and converted in the blend shader
-(`V2F32_TO_V2F16`, the clamp fused). An integer colour into an RGBA8 UNORM
-target is a GL error (no defined result); it takes the fp32 key.
+(`V2F32_TO_V2F16`, the clamp fused). A `highp uvec4` colour into an RGBA8
+UNORM target is not a GL error, but the result is undefined (ES 3.0,
+shader outputs: values that do not match the buffer's format). It takes the
+fp32 key, and that is Mesa's shader for it too: `pan_blend_create_shader`
+loads 32 bits for a `nir_type_uint32` `src0_type` and converts them from
+float, the target's base type, not from the source type (pan_blend.c:837-862,
+"We assume the destination type here"), and `bi_emit_load_blend_input`
+reads only the type's size (bifrost_compile.c:924-946). Read from the
+source, not measured: `pan_shc --blend` takes fp16 and fp32 keys only.
 
 The frame side: `src/mali/blend.rs` `shader_key` maps a draw's equation,
 colour mask, sample count and colour type (the fragment record's
