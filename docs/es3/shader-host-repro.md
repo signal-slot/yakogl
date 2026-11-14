@@ -71,6 +71,13 @@ every failing case of it is in a row of §3. Set against the three buckets:
   texture_functions 297 + builtin_functions.common 40 + precision 24 +
   fragdepth 15 + derivate (other) 8 + qualification_order 7 + uniform_block 2 +
   metamorphic 2. Each is in a row of §3 with a cause.
+- Two of those 395 are fixed since. The 24 `precision` cases were compile
+  refusals on PowerVR (an int or uint output from an ALU result); `3efd7b30`
+  (`89c06d85` on the integration branch) builds them, so they now fail only on
+  the black host read-back (row 5, `docs/notes/pvr-int-output-alu.md`). The 2
+  `uniform_block` cases (`long_instance_name_*`) link on all three GPUs since
+  `83644bb2` and `06840143`, which report 63+ character names whole (row 13,
+  `docs/notes/reflection-long-names.md`).
 - The other 645 − 395 = **250** of `396d667a`'s unattributed failures are
   **not reproduced**: they do not fail at `ad2b5ed` and cannot be named. The
   sources that mention them say what they were: the "Failed to compile
