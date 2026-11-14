@@ -7,9 +7,10 @@
 //!
 //! - under `report-es2`: exactly 3 (ETC1, RGB8_ETC2, RGBA8_ETC2_EAC);
 //! - otherwise (ES 3.0): those three, in any order, plus either both sRGB
-//!   ETC2 formats or neither, as the back end samples them
-//!   (src/gl/texture.rs `stored_compressed_formats`; tests/es3_caps.rs
-//!   `known_gaps` keeps the five-format list as the intended ES 3.0 one);
+//!   ETC2 formats or neither, and either the six formats the core decodes at
+//!   upload (R11, RG11, punch-through) or none, as the back end samples
+//!   them (src/gl/texture.rs `stored_compressed_formats`); the PowerVR, the
+//!   GC7000UL and the V3D list all eleven, ES 3.0's ten and ETC1;
 //! - GL_ETC1_RGB8_OES appears somewhere in the list, the extension string
 //!   has GL_OES_compressed_ETC1_RGB8_texture, and no GL error is raised.
 //!
@@ -137,6 +138,15 @@ fn context() -> std::sync::MutexGuard<'static, ()> {
 const ETC1_EXT: &str = "GL_OES_compressed_ETC1_RGB8_texture";
 const BASE: [GLenum; 3] = [GL_ETC1_RGB8_OES, GL_COMPRESSED_RGB8_ETC2, GL_COMPRESSED_RGBA8_ETC2_EAC];
 const SRGB: [GLenum; 2] = [GL_COMPRESSED_SRGB8_ETC2, GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC];
+/// The six ES 3.0 formats the core decodes at upload (src/gl/etc2_store.rs).
+const DECODED: [GLenum; 6] = [
+    GL_COMPRESSED_R11_EAC,
+    GL_COMPRESSED_SIGNED_R11_EAC,
+    GL_COMPRESSED_RG11_EAC,
+    GL_COMPRESSED_SIGNED_RG11_EAC,
+    GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+    GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+];
 
 const GPU: &str = if cfg!(feature = "gpu-v3d") {
     "V3D 4.2 (Pi 4)"
@@ -147,14 +157,17 @@ const GPU: &str = if cfg!(feature = "gpu-v3d") {
 };
 
 /// The count the core's rule gives this build: the sRGB pair is stored only
-/// in an ES 3.0 report and where the back end samples both.
+/// in an ES 3.0 report and where the back end samples both; the six decoded
+/// names only in an ES 3.0 report and where it samples R16F, RGBA16F and
+/// SRGB8_ALPHA8 (the classes they are stored in).
 fn expected_count() -> usize {
     use yakogl::backend::*;
     let sampled = sampled_texfmts();
-    let srgb = !cfg!(feature = "report-es2")
-        && sampled & gles_texfmt_bit(GLES_TEXFMT_ETC2_SRGB_RGB) != 0
-        && sampled & gles_texfmt_bit(GLES_TEXFMT_ETC2_SRGB_RGBA) != 0;
-    BASE.len() + if srgb { SRGB.len() } else { 0 }
+    let has = |f: u8| sampled & gles_texfmt_bit(f) != 0;
+    let es3 = !cfg!(feature = "report-es2");
+    let srgb = es3 && has(GLES_TEXFMT_ETC2_SRGB_RGB) && has(GLES_TEXFMT_ETC2_SRGB_RGBA);
+    let decoded = es3 && has(GLES_TEXFMT_R16F) && has(GLES_TEXFMT_RGBA16F) && has(GLES_TEXFMT_SRGB8_A8);
+    BASE.len() + if srgb { SRGB.len() } else { 0 } + if decoded { DECODED.len() } else { 0 }
 }
 
 #[test]
@@ -183,14 +196,16 @@ fn case20_compressed_formats() {
         if cfg!(feature = "report-es2") {
             assert_eq!(count, 3, "ES 2.0 report");
         }
-        assert!(count == 3 || count == 5, "count {count}");
+        assert!(matches!(count, 3 | 5 | 11), "count {count}");
         assert_eq!(count, expected_count(), "count the core's rule gives this build");
         for f in BASE {
             assert_eq!(list.iter().filter(|&&x| x == f).count(), 1, "0x{f:x} once in the list");
         }
         let srgb = SRGB.iter().filter(|f| list.contains(f)).count();
         assert!(srgb == 0 || srgb == 2, "sRGB ETC2 pair is both or neither");
-        assert_eq!(list.len(), BASE.len() + srgb, "nothing else in the list");
+        let decoded = DECODED.iter().filter(|f| list.contains(f)).count();
+        assert!(decoded == 0 || decoded == 6, "the six decoded names are all listed or none");
+        assert_eq!(list.len(), BASE.len() + srgb + decoded, "nothing else in the list");
         assert!(list.contains(&GL_ETC1_RGB8_OES), "ETC1 in the list");
         assert!(ext.split_whitespace().any(|e| e == ETC1_EXT), "{ETC1_EXT} in GL_EXTENSIONS: {ext}");
     }

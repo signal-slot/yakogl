@@ -262,11 +262,18 @@ pub const GC_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
 /// `usampler2D` / `isamplerCube` / `usamplerCube`; the classes of 32-bit
 /// channels (R32F, RGBA32F, RGBA32UI, RGBA32I) at the TMU's 32-bit output,
 /// which the program is keyed for (`shaderc::LodKey::ret32`, set by the GL
-/// core from [`gles_texfmt_return_32`]). Not the ETC2 formats, and not
+/// core from [`gles_texfmt_return_32`]). The four ETC2/EAC block classes the
+/// GL core stores (`etc2_row`: RGB8, RGBA8, and the two sRGB twins), and not
 /// `GLES_TEXFMT_RGB10A2`, which the TMU decodes too (`tmu_format`'s row) but
-/// which stays in RGBA8 for the reason the PowerVR's does (above).
+/// which stays in RGBA8 for the reason the PowerVR's does (above). R11, RG11
+/// and the punch-through pair are decoded by the GL core at upload
+/// (docs/notes/etc2-eac.md) into classes in this set.
 pub const V3D_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
+        GLES_TEXFMT_ETC2_RGB,
+        GLES_TEXFMT_ETC2_RGBA,
+        GLES_TEXFMT_ETC2_SRGB_RGB,
+        GLES_TEXFMT_ETC2_SRGB_RGBA,
         GLES_TEXFMT_SRGB8_A8,
         GLES_TEXFMT_R11G11B10F,
         GLES_TEXFMT_RGB9E5,

@@ -1041,11 +1041,19 @@ unsafe extern "C" fn v3d_tex_pack_state(out: *mut u8, s: *const V3dTexState) -> 
 #[no_mangle]
 unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool {
     // SAFETY: V3D_SAMPLER_STATE_BYTES of the arena and the backend's sampler.
+    unsafe { v3d_tex_pack_sampler_compare(out, s, 0) }
+}
+
+/// The fake sampler record of a depth compare: word 3 holds the
+/// `compare_op` the backend passed (`texture::compare_op`, bit 4 = off).
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool {
+    // SAFETY: V3D_SAMPLER_STATE_BYTES of the arena and the backend's sampler.
     unsafe {
         let s = &*s;
         let flags =
             s.mag_nearest as u32 | (s.min_nearest as u32) << 1 | (s.mip_nearest as u32) << 2 | (s.mip_none as u32) << 3;
-        let words = [s.wrap_s, s.wrap_t, flags, 0, 0, FAKE_SAMPLER_MARK];
+        let words = [s.wrap_s, s.wrap_t, flags, compare_op, 0, FAKE_SAMPLER_MARK];
         core::ptr::copy_nonoverlapping(words.as_ptr() as *const u8, out, V3D_SAMPLER_STATE_BYTES);
     }
     true
@@ -1804,6 +1812,217 @@ fn a_sampler_record_is_packed_once_per_job() {
     assert_eq!(draw(&sampling(&rig, t)), 0);
     assert_eq!(sampler_counters(), (3, 1), "a new job packs its own");
     assert_eq!(v3d_finish(), 0);
+}
+
+/// A shadow draw: a 4x4 binding on unit 0 with GL's compare function `op`
+/// (`GlesTextureBind::compare_op`: GL's order from NEVER, bit 3 a fixed-point
+/// depth, bit 4 for GL_NONE), sampled by the program `p`.
+fn shadow_draw(rig: &Rig, p: &ShcShader, op: u8, format: u8) -> GlesDraw {
+    let mut t = if format == GLES_TEXFMT_R32F { narrow_texture(4, 4, 1, format) } else { texture(0, 4, 4, 1) };
+    (t.unit, t.content_gen, t.compare_op) = (0, 7, op);
+    let mut d = sampling(rig, t);
+    d.fs = p;
+    d
+}
+
+/// The draw-time sampler state carries the binding's depth compare function
+/// (docs/notes/v3d-shadow.md (a)): the record is packed with
+/// `v3d_tex_pack_sampler_compare` and the binding's `compare_op` (the fake
+/// records hold the op in word 3; tools/v3d/tex_check.c pins Mesa's bytes for
+/// each). A depth binding with the compare off, and a texture of any other
+/// format with a compare set (ES 3.0.6 3.8.15), get the compare-off op.
+/// Revert check: `sampler_for` packing with `v3d_tex_pack_sampler` gives
+/// word 3 = 0 for every function.
+#[test]
+fn a_shadow_samplers_record_carries_the_compare_function() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    for op in 0..8u8 {
+        for (fixed, what) in [(0u8, "float depth"), (8, "fixed-point depth")] {
+            let d = shadow_draw(&rig, &p, op | fixed, GLES_TEXFMT_R32F);
+            assert_eq!(draw(&d), 0, "{what} {op}: {:?}", rig.gl.logs());
+            assert_eq!(v3d_flush(), 0);
+            let u = rig.draws().last().unwrap().tmu[0];
+            let sa = words(&rig, u.sampler, 6);
+            assert_eq!(sa[5], FAKE_SAMPLER_MARK);
+            assert_eq!(sa[3], u32::from(op | fixed), "{what} {op}: the binding's compare_op reaches the record");
+        }
+    }
+    let off = shadow_draw(&rig, &p, 16 | 3, GLES_TEXFMT_R32F);
+    assert_eq!(draw(&off), 0);
+    assert_eq!(v3d_flush(), 0);
+    let sa = words(&rig, rig.draws().last().unwrap().tmu[0].sampler, 6);
+    assert_eq!(sa[3], texture::COMPARE_OFF | 3, "GL_NONE: the compare-off op");
+    /* another base format: the compare is bypassed whatever the mode says */
+    let mut q = program();
+    with_code(&mut q);
+    let rgba = shadow_draw(&rig, &q, 1, GLES_TEXFMT_RGBA8);
+    assert_eq!(draw(&rgba), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let sa = words(&rig, rig.draws().last().unwrap().tmu[0].sampler, 6);
+    assert_eq!(sa[3], texture::COMPARE_OFF, "an RGBA8 texture with a compare function set");
+}
+
+/// The sampler cache is keyed by the sampler state AND the compare function:
+/// two bindings that differ only in the function (`V3dSampler` has no
+/// compare) get two records, equal ones share one. Revert check: a cache
+/// keyed by `texture::sampler(b)` alone answers the second draw with the
+/// first's record and counts (2, 1).
+#[test]
+fn shadow_samplers_that_differ_only_in_the_compare_get_their_own_records() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let less = shadow_draw(&rig, &p, 1, GLES_TEXFMT_R32F);
+    let greater = shadow_draw(&rig, &p, 4, GLES_TEXFMT_R32F);
+    assert_eq!(texture::sampler(&less.textures[0]), texture::sampler(&greater.textures[0]), "the same V3dSampler");
+    assert_eq!(draw(&less), 0);
+    assert_eq!(draw(&greater), 0);
+    assert_eq!(draw(&shadow_draw(&rig, &p, 1, GLES_TEXFMT_R32F)), 0);
+    let draws = rig.draws();
+    assert_ne!(draws[0].tmu[0].sampler, draws[1].tmu[0].sampler, "LESS and GREATER: two records");
+    assert_eq!(draws[0].tmu[0].sampler, draws[2].tmu[0].sampler, "LESS again: the first's record");
+    assert_eq!(sampler_counters(), (2, 1));
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// The draw level of the shadow item: a `sampler2DShadow` look-up (the form
+/// of tests/es3_shadow_v3d.rs `a_2d_shadow_look_up_compares_each_texel_then_
+/// filters`, built by the GL core's own link) over a depth texture whose
+/// GL_TEXTURE_COMPARE_MODE / _FUNC the application set, drawn through the GL
+/// core: each draw's sampler record holds that function (`compare_op` =
+/// func - GL_NEVER, bit 3 for the fixed-point DEPTH_COMPONENT24) and two functions get two records. With the compare mode
+/// GL_NONE the record is the compare-off one, which is Mesa's NEVER one. The picture
+/// itself is the board's (docs/notes/v3d-shadow.md): the host shows the
+/// state the TMU is handed, not the TMU's compare.
+#[test]
+fn a_gl_shadow_draw_hands_the_tmu_the_textures_compare_function() {
+    use crate::gl::consts::*;
+    use crate::gl::state::*;
+    use crate::gl::texture::*;
+    const VS: &str = "#version 300 es\nin vec4 a_position;\nout vec2 v_coord;\n\
+        void main() { v_coord = a_position.xy * 0.5 + 0.5; gl_Position = a_position; }\n";
+    const FS: &str = "#version 300 es\nprecision mediump float;\nprecision mediump sampler2DShadow;\n\
+        uniform sampler2DShadow u_shadow;\nin vec2 v_coord;\nout vec4 o;\n\
+        void main() { o = vec4(texture(u_shadow, vec3(v_coord, 0.5))); }\n";
+    let rig = gl_rig();
+    let (prog, _) = gl_program_of(VS, FS, true);
+    let depth = vec![0u8; 8 * 8 * 4];
+    let (mut tex, mut fbo) = (0, 0);
+    let funcs = [GL_LESS, GL_GREATER, GL_NOTEQUAL, GL_ALWAYS, GL_NEVER];
+    let rb = gl_renderbuffer(GL_RGBA8, 8, 8);
+    // SAFETY: plain GL calls on the rig's context with live buffers.
+    unsafe {
+        /* the rig's window surface is host memory: draw into a renderbuffer */
+        crate::gl::framebuffer::glGenFramebuffers(1, &mut fbo);
+        crate::gl::framebuffer::glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        crate::gl::framebuffer::glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        glViewport(0, 0, 8, 8);
+        glGenTextures(1, &mut tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_DEPTH_COMPONENT24 as i32,
+            8,
+            8,
+            0,
+            GL_DEPTH_COMPONENT,
+            GL_UNSIGNED_INT,
+            depth.as_ptr() as *const c_void,
+        );
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as i32);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as i32);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE as i32);
+        for f in funcs {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, f as i32);
+            gl_quad([-1.0, -1.0, 0.0], [1.0, 1.0, 0.0]);
+        }
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE as i32);
+        gl_quad([-1.0, -1.0, 0.0], [1.0, 1.0, 0.0]);
+        assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", rig.gl.logs());
+        glFinish();
+    }
+    let draws = rig.draws();
+    assert_eq!(draws.len(), funcs.len() + 1, "{:?}", rig.gl.logs());
+    for (d, f) in draws.iter().zip(funcs) {
+        let sa = words(&rig, d.tmu[0].sampler, 6);
+        assert_eq!(sa[3], (f - GL_NEVER) | 8, "GL function 0x{f:x} of a fixed-point depth");
+    }
+    /* mode GL_NONE: compare off packs NEVER (Mesa), which is the key of
+     * GL_NEVER too: the last two draws share one record */
+    assert_eq!(draws[funcs.len()].tmu[0].sampler, draws[funcs.len() - 1].tmu[0].sampler, "NONE and NEVER");
+    let mut records: Vec<u32> = draws.iter().map(|d| d.tmu[0].sampler).collect();
+    records.sort_unstable();
+    records.dedup();
+    assert_eq!(records.len(), funcs.len(), "one record per function");
+    // SAFETY: a live name.
+    unsafe { glDeleteTextures(1, &tex) };
+    gl_release(prog, &[fbo], &[rb]);
+}
+
+/// All ten ES 3.0 ETC2/EAC formats reach the TMU on the V3D (plan #354):
+/// glCompressedTexImage2D of each through the GL core, then a textured draw
+/// through the real back end. Four are blocks the TMU decodes (the GL core's
+/// ETC2 classes, in `V3D_SAMPLED_TEXFMTS` since this item: before it every
+/// one of these draws was refused as "a texel format the V3D does not
+/// sample"), six are decoded at upload into R16F, RGBA16F and RGBA8 texels.
+/// The texture record's type is Mesa's row for the memory the TMU reads
+/// (v3dx_format_table.c:159-168 for the blocks). The pictures are the
+/// board's (tools/cts/RESULTS.md); the host shows the draw is made and what
+/// record the TMU is given.
+#[test]
+fn all_ten_etc2_eac_formats_are_drawn_with_their_tmu_type() {
+    use crate::gl::consts::*;
+    use crate::gl::framebuffer::*;
+    use crate::gl::state::*;
+    use crate::gl::texture::*;
+    let rig = gl_rig();
+    let prog = gl_tex_program();
+    let table: [(u32, usize, u32); 10] = [
+        (GL_COMPRESSED_RGB8_ETC2, 8, V3D_TEXTURE_DATA_FORMAT_RGB8_ETC2),
+        (GL_COMPRESSED_SRGB8_ETC2, 8, V3D_TEXTURE_DATA_FORMAT_RGB8_ETC2),
+        (GL_COMPRESSED_RGBA8_ETC2_EAC, 16, V3D_TEXTURE_DATA_FORMAT_RGBA8_ETC2_EAC),
+        (GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC, 16, V3D_TEXTURE_DATA_FORMAT_RGBA8_ETC2_EAC),
+        (GL_COMPRESSED_R11_EAC, 8, V3D_TEXTURE_DATA_FORMAT_R16F),
+        (GL_COMPRESSED_SIGNED_R11_EAC, 8, V3D_TEXTURE_DATA_FORMAT_R16F),
+        (GL_COMPRESSED_RG11_EAC, 16, V3D_TEXTURE_DATA_FORMAT_RGBA16F),
+        (GL_COMPRESSED_SIGNED_RG11_EAC, 16, V3D_TEXTURE_DATA_FORMAT_RGBA16F),
+        (GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, 8, V3D_TEXTURE_DATA_FORMAT_RGBA8),
+        (GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2, 8, V3D_TEXTURE_DATA_FORMAT_RGBA8),
+    ];
+    let (mut fbo, mut tex) = (0, [0u32; 10]);
+    let rb = gl_renderbuffer(GL_RGBA8, 8, 8);
+    // SAFETY: plain GL calls on the rig's context with live buffers.
+    unsafe {
+        /* the rig's window surface is host memory: draw into a renderbuffer */
+        glGenFramebuffers(1, &mut fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        glViewport(0, 0, 8, 8);
+        glGenTextures(10, tex.as_mut_ptr());
+        for (i, (name, bb, type_)) in table.iter().enumerate() {
+            let data: Vec<u8> = (0..4 * bb).map(|b| (b * 37 + i * 11) as u8).collect();
+            glBindTexture(GL_TEXTURE_2D, tex[i]);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as i32);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as i32);
+            glCompressedTexImage2D(GL_TEXTURE_2D, 0, *name, 8, 8, 0, data.len() as i32, data.as_ptr() as *const c_void);
+            assert_eq!(glGetError(), GL_NO_ERROR, "upload 0x{name:x}: {:?}", rig.gl.logs());
+            gl_quad([-1.0, -1.0, 0.0], [1.0, 1.0, 0.0]);
+            assert_eq!(glGetError(), GL_NO_ERROR, "draw 0x{name:x}: {:?}", rig.gl.logs());
+            glFinish();
+            /* the record is read now: the next job packs its own over the arena */
+            let draws = rig.draws();
+            assert_eq!(draws.len(), i + 1, "0x{name:x}: one draw each, none refused: {:?}", rig.gl.logs());
+            let st = words(&rig, draws[i].tmu[0].tex_state, 6);
+            assert_eq!(st[3] >> FAKE_TYPE_SHIFT, *type_, "0x{name:x}: the record's TMU type");
+            assert_eq!((st[1], st[2]), (8, 8), "0x{name:x}: size");
+        }
+    }
+    // SAFETY: live names; plain GL calls.
+    unsafe { glDeleteTextures(10, tex.as_ptr()) };
+    gl_release(prog, &[fbo], &[rb]);
 }
 
 /// A texture is tiled once per job: the next draw of the job finds its image

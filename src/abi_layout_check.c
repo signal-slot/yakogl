@@ -504,6 +504,7 @@ _Static_assert(offsetof(struct gl_texture, storage_deferred) == 245, "struct gl_
 _Static_assert(offsetof(struct gl_texture, rgba32f) == 246, "struct gl_texture.rgba32f");
 _Static_assert(offsetof(struct gl_texture, unsized_depth) == 247, "struct gl_texture.unsized_depth");
 _Static_assert(offsetof(struct gl_texture, depth_texels_newer) == 248, "struct gl_texture.depth_texels_newer");
+_Static_assert(offsetof(struct gl_texture, decoded_from) == 250, "struct gl_texture.decoded_from");
 #if !defined(YAKOGL_GPU_VIVANTE) && !defined(YAKOGL_GPU_V3D) && !defined(YAKOGL_GPU_MALI)
 _Static_assert(sizeof(struct gl_shader) == 1296, "struct gl_shader");
 #endif
@@ -860,6 +861,7 @@ _Static_assert(offsetof(struct gl_context, default_surface_owned) == 39953, "str
 _Static_assert(offsetof(struct gl_context, index) == 39954, "struct gl_context.index");
 _Static_assert(offsetof(struct gl_context, default_y_up) == 39955, "struct gl_context.default_y_up");
 _Static_assert(offsetof(struct gl_context, error) == 39956, "struct gl_context.error");
+_Static_assert(offsetof(struct gl_context, current_attrib_type) == 39960, "struct gl_context.current_attrib_type");
 _Static_assert(sizeof(struct gc_kick) == 16, "struct gc_kick");
 _Static_assert(offsetof(struct gc_kick, magic) == 0, "struct gc_kick.magic");
 _Static_assert(offsetof(struct gc_kick, stream_bytes) == 4, "struct gc_kick.stream_bytes");

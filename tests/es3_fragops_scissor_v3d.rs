@@ -146,6 +146,7 @@ mod trampolines {
     trampoline!(v3d_tex_state_from_layout(s: *mut V3dTexState, l: *const V3dTexLayout));
     trampoline!(v3d_tex_pack_state(out: *mut u8, s: *const V3dTexState) -> bool);
     trampoline!(v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool);
+    trampoline!(v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool);
 }
 
 /* ---- the job builder, stood in for (driver/src/v3d/v3d_job.c) -------------- */

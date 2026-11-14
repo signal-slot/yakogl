@@ -475,6 +475,7 @@ const _: () = assert!(offset_of!(crate::gl::context::GlTexture, storage_deferred
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, rgba32f) == 246);
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, unsized_depth) == 247);
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, depth_texels_newer) == 248);
+const _: () = assert!(offset_of!(crate::gl::context::GlTexture, decoded_from) == 250);
 #[cfg(feature = "gpu-powervr")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 1296);
 #[cfg(feature = "gpu-vivante")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 2504);
 #[cfg(feature = "gpu-v3d")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 1480);
@@ -695,6 +696,7 @@ const _: () = assert!(offset_of!(crate::gl::context::GlContext, default_surface_
 const _: () = assert!(offset_of!(crate::gl::context::GlContext, index) == 39954);
 const _: () = assert!(offset_of!(crate::gl::context::GlContext, default_y_up) == 39955);
 const _: () = assert!(offset_of!(crate::gl::context::GlContext, error) == 39956);
+const _: () = assert!(offset_of!(crate::gl::context::GlContext, current_attrib_type) == 39960);
 #[cfg(feature = "gpu-vivante")] const _: () = assert!(size_of::<crate::vivante::kick::GcKick>() == 16);
 #[cfg(feature = "gpu-vivante")] const _: () = assert!(offset_of!(crate::vivante::kick::GcKick, magic) == 0);
 #[cfg(feature = "gpu-vivante")] const _: () = assert!(offset_of!(crate::vivante::kick::GcKick, stream_bytes) == 4);

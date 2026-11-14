@@ -19,10 +19,13 @@ use yakogl::gl::es3_formats::*;
 const MASKS: [(&str, u64); 3] =
     [("PowerVR", PVR_SAMPLED_TEXFMTS), ("GC7000UL", GC_SAMPLED_TEXFMTS), ("V3D 4.2", V3D_SAMPLED_TEXFMTS)];
 
-/// Every class this module can write, as a back end that samples them all.
+/// Every class this module can write, as a back end that samples them all
+/// (the V3D's mask also holds the ETC2 block classes of the GL core, which
+/// this module does not write: tests/es3_etc2_eac.rs and es3_etc2_v3d.rs).
 fn all_classes() -> u64 {
     (GLES_TEXFMT_R11G11B10F..=GLES_TEXFMT_RGBA32F)
         .chain(GLES_TEXFMT_R32UI..=GLES_TEXFMT_RG16I)
+        .chain([GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA])
         .fold(PVR_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
 }
 

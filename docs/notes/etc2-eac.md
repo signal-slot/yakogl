@@ -10,9 +10,14 @@ and is not one of the ten). This note is about the other six and why they do
 not get a class of their own yet. Function names are the address; line
 numbers are of main at `6dc53970` and drift.
 
-Status when this was written: the decoder (`src/gl/etc2.rs`), the six names
-in the GL core, the V3D mask bits and the dEQP runs are other items of the
-plan and were not on main. Nothing here was measured on a board.
+Status: items of plan #354 landed. The decoder (`src/gl/etc2.rs`), the stored
+texels (`src/gl/etc2_store.rs`), the six names in the GL core
+(`decoded_class_stored`, `decoded_image`, `decoded_sub_image` in
+`src/gl/texture.rs`) and the V3D mask bits are on main; host tests are
+`tests/es3_etc2_eac.rs` (the three GPUs), `tests/es3_etc2_v3d.rs` and
+`src/v3d/backend_tests.rs`. Nothing here was measured on a board, and the host
+dEQP before/after runs of the item were not made (no CTS checkout in the deps
+cache; its pictures would be black anyway).
 
 ## 1. The decision
 
@@ -111,16 +116,19 @@ including the sRGB 6-bit one.
 what the build stores (`stored_compressed_formats`):
 
 - PowerVR and GC under ES 3.0: 11 (ETC1 plus the ten).
-- The V3D: 11 once `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`) holds the linear
-  and sRGB ETC2 classes; until then the sRGB pair is not stored and the list
-  is shorter. ES 3.0 requires all ten, so the V3D needs the mask first.
+- The V3D: 11 (`V3D_SAMPLED_TEXFMTS` holds the four ETC2 classes since this
+  item; before it the sRGB pair was not stored and the list had three).
 - `report-es2`: 3 on every build (ETC1, `RGB8_ETC2`, `RGBA8_ETC2_EAC`),
   unchanged.
 - Mali: the six are refused, so its count is what its mask allows.
 
-The pins that move are in `src/gl/state.rs`, `tests/es3_caps.rs`,
+The pins that moved are in `src/gl/state.rs`, `tests/es3_caps.rs`,
 `tests/gltest_case20_formats.rs`, `tests/vivante_imx8mp_limits.rs` and
-`tests/es3_limits_v3d.rs`; they change in the commit that adds the names.
+`tests/es3_limits_v3d.rs`; `STATE_VALUES` (`src/gl/state.rs`) is 16 so the list
+fits one `glGetIntegerv`. A caller that sizes its buffer by
+`GL_NUM_COMPRESSED_TEXTURE_FORMATS` (as the spec says) is safe; one that
+assumes at most eight values, such as `driver/tools/pvrlab/gl_test.c`
+`case_etc` (`fmts[8]`), overflows it: see the issue list of plan #354.
 
 ## 6. Native later (not done)
 
