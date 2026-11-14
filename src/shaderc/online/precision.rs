@@ -2082,6 +2082,50 @@ mod tests {
         }
     }
 
+    /// Sixth review B-H: a local of `main` named like an attribute or a
+    /// uniform is that local, not the input. The arguments' "known to vary"
+    /// was decided in the callee's scope, where `main`'s locals are not
+    /// visible, so the name fell through to the input. Probes p6/h13
+    /// (`highp float h = 0.1; f(h)`, attribute `h`), h14 (a local `uh`,
+    /// uniform `uh`), h15 (`highp vec4 h = vec4(0.1); f(h.x)`): Mesa's
+    /// final NIR is `fpow` of 0x3dccc000, the fp16 constant. And p6/h01:
+    /// a local in the callee named like its parameter is that local.
+    #[test]
+    fn a_local_named_like_an_input_is_the_local() {
+        let head = "attribute mediump vec4 q; attribute highp vec4 h; varying highp vec4 v; uniform highp float uh;\n\
+                    mediump float f(mediump float e){ return pow(q.z, e); }\n\
+                    mediump float k(mediump float e){ { mediump float e = 0.1; return pow(q.z, e); } }\n";
+        let wrong = [
+            "highp float h = 0.1; v = vec4(f(h));",
+            "highp float uh = 0.1; v = vec4(f(uh));",
+            "highp vec4 h = vec4(0.1); v = vec4(f(h.x));",
+            "v = vec4(k(h.x));",
+        ]
+        .into_iter()
+        .filter(|body| {
+            !vs(&std::format!("{head}void main(){{ gl_Position = p; {body} }}")).prec.contains(&Prec::Unknown)
+        })
+        .collect::<Vec<_>>();
+        assert!(wrong.is_empty(), "recorded with no Unknown: {wrong:?}");
+        let g = vs(&std::format!("{head}void main(){{ gl_Position = p; v = vec4(f(h.x), f(uh), 0.0, 0.0); }}"));
+        assert!(!g.prec.contains(&Prec::Unknown), "the inputs themselves");
+    }
+
+    /// Sixth review (c): p3/x1 shares the constant 0.5 between pow's
+    /// argument (pinned to its fp16 value) and asin's full-width expansion,
+    /// which made it Unknown. 0.5 is an fp16 value: either width reads the
+    /// same, so it is not pinned.
+    #[test]
+    fn an_exact_fp16_constant_argument_is_not_pinned() {
+        let g = compile(
+            "attribute highp vec4 p; attribute mediump float a; uniform mediump float mu; varying highp vec4 v;\n\
+             mediump float f(mediump float e){ return pow(a, e); }\n\
+             void main(){ gl_Position = p; v = vec4(pow(a, 0.5), pow(mu, 0.5), asin(a), f(p.y)); }",
+            Stage::Vertex,
+        );
+        assert!(!g.prec.contains(&Prec::Unknown), "{:?}", g.prec);
+    }
+
     #[test]
     fn f16_exact_knows_the_f16_values() {
         for x in [0.0f32, -0.0, 1.0, 1.5, 65504.0, -2.0, 6.103_515_6e-5, 5.960_464_5e-8, 0.000_122_070_31] {
