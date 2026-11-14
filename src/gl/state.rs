@@ -2564,6 +2564,8 @@ mod tests {
             512.0
         } else if cfg!(feature = "gpu-vivante") {
             64.0
+        } else if cfg!(feature = "gpu-mali") {
+            4095.9375
         } else {
             511.0
         };
@@ -3189,12 +3191,14 @@ mod tests {
         }
         let outputs = if cfg!(feature = "gpu-v3d") { 64 } else { vectors * 4 };
         assert_eq!(geti1(GL_MAX_VERTEX_OUTPUT_COMPONENTS), outputs);
-        /* every GPU: three (every colour attachment); the query itself is
-         * ES 3.0's (see es2_has_no_draw_buffer_queries) */
+        /* every colour attachment: three, and four on the Mali, whose draw
+         * writes four targets (`mali::backend::DRAW_TARGETS`); the query
+         * itself is ES 3.0's (see es2_has_no_draw_buffer_queries) */
+        let targets = if cfg!(feature = "gpu-mali") { 4 } else { 3 };
         if !crate::REPORT_ES2 {
-            assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), 3);
+            assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), targets);
         }
-        assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), 3);
+        assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), targets);
         /* Uniform blocks, the same on both GPUs (flattened into the default
          * block): twelve a stage, 24 a program, 24 binding points, and one
          * block no larger than a stage's default block (6144 bytes, below
