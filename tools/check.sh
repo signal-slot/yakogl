@@ -1821,6 +1821,9 @@ step "test    $V3D_CONFIG (tests/es3_float_target.rs)" \
 # RG32F, RGBA32F and R11F_G11F_B10F are not colour-renderable without GL_EXT_color_buffer_float, on the V3D build (the PowerVR and GC7000 rows run it with the rest of tests/). Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_float32_rt_off.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_float32_rt_off
+# glReadPixels of the 16F colour targets (the PowerVR and GC7000 rows run it with the rest of tests/). Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_readpixels_half_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_readpixels_half_float
 # The EGL attribute lists of glmark2 and Slint on the Pi 4's
 # windows (the PowerVR and GC7000 rows above run it with the rest of tests/).
 step "test    $V3D_CONFIG (tests/egl_bench_configs.rs)" \
