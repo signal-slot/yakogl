@@ -108,6 +108,9 @@ option(YAKOGL_TEST_KNOBS "compile in the test knobs (gc_debug_set_msaa and the l
 # ES 3.0 multisample renderbuffers (the crate's `msaa-fbo` feature): 4x
 # framebuffers on the back ends that can draw and resolve them. OFF by default.
 option(YAKOGL_MSAA_FBO "report GL_MAX_SAMPLES 4 and draw into 4x framebuffers (the crate's msaa-fbo feature)" OFF)
+# ES 3.0 float colour targets (the crate's `color-buffer-float` feature): claim
+# GL_EXT_color_buffer_float where the back end draws them. OFF by default.
+option(YAKOGL_COLOR_BUFFER_FLOAT "claim GL_EXT_color_buffer_float where the back end draws float colour targets (the crate's color-buffer-float feature)" OFF)
 # The gl_test runner (the crate's `gl-test-runner` feature): the walker of
 # driver/tools/pvrlab/gl_test.c, which a build that links that file needs
 # (gl_test_run calls it). OFF in a product build.
