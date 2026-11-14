@@ -1850,6 +1850,51 @@ fn a_sampler_record_carries_its_depth_compare_function() {
     assert_eq!(v3d_finish(), 0);
 }
 
+/// A depth texture (R32F, ES 3.0.6 3.8.15) on unit 0 with GL's compare
+/// `compare_op` (`GlesTextureBind::compare_op`: bits 0-2 the function, bit 4
+/// compare off).
+fn shadow_texture(compare_op: u8) -> GlesTextureBind {
+    GlesTextureBind { format: GLES_TEXFMT_R32F, compare_op, ..texture(0, 16, 16, 1) }
+}
+
+/// The draws' side of the cache key: eight depth draws of one job, one per
+/// GL_TEXTURE_COMPARE_FUNC, share a `V3dSampler` but hold eight records, and
+/// the same function is found again. Bit 3 of `compare_op` (a fixed-point
+/// depth) is not in the record, and compare off, with or without another
+/// function's bits, is NEVER's record: V3D 4.2 has no enable bit, and a
+/// look-up without TMUDREF does not compare (`texture::compare_function`).
+/// Revert check: keying on `texture::sampler` alone gives every draw after
+/// the first the first draw's record, NEVER where LESS or GREATER was asked,
+/// and (1, 7) counts.
+#[test]
+fn the_sampler_cache_is_not_shared_across_compare_functions() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let shadow_draw = |t: GlesTextureBind| {
+        let mut d = sampling(&rig, t);
+        d.fs = &p;
+        d
+    };
+    for op in 0..8u8 {
+        assert_eq!(draw(&shadow_draw(shadow_texture(op))), 0, "compare {op}: {:?}", rig.gl.logs());
+    }
+    assert_eq!(texture::sampler(&shadow_texture(1)), texture::sampler(&shadow_texture(4)), "one V3dSampler");
+    let recs: Vec<u32> = rig.draws().iter().map(|d| d.tmu[0].sampler).collect();
+    for (i, a) in recs.iter().enumerate() {
+        for (k, b) in recs.iter().enumerate().skip(i + 1) {
+            assert_ne!(a, b, "compare {i} and {k} share a record");
+        }
+    }
+    assert_eq!(sampler_counters(), (8, 0));
+    for (op, of) in [(4u8, 4usize), (4 | 8, 4), (16, 0), (16 | 5, 0)] {
+        assert_eq!(draw(&shadow_draw(shadow_texture(op))), 0);
+        assert_eq!(rig.draws().last().unwrap().tmu[0].sampler, recs[of], "compare {op}");
+    }
+    assert_eq!(sampler_counters(), (8, 4));
+    assert_eq!(v3d_finish(), 0);
+}
+
 /// A texture is tiled once per job: the next draw of the job finds its image
 /// and record again; a new job tiles it again (a CPU write in between would
 /// have flushed the job first, `kick_pending`).
