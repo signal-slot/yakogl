@@ -105,6 +105,13 @@ impl<'a> Precs<'a> {
 
     /// `e`'s class (A.3): what a compiler temporary holding its value is
     /// (Mesa's `vec_ctor`, `conditional_tmp`, a call's return value).
+    /// The scan reached `e` and recorded its class. An expression the
+    /// lowering lowers but the scan did not reach is a defect of the scan:
+    /// its values record [`Prec::Unknown`] for no rule's reason.
+    pub fn seen(&self, e: ExprId) -> bool {
+        self.exprs.get(e.0 as usize).is_some_and(|b| b & SEEN != 0)
+    }
+
     /// `e` is a constant expression Mesa's `ast_to_hir` folds where it is
     /// a call's or a constructor's argument (at 32 bits).
     pub fn folds(&self, e: ExprId) -> bool {
@@ -1627,10 +1634,24 @@ mod tests {
         }
     }
 
-    /// Over the tree's shaders: the tables are in step, no instruction is
-    /// Unknown (an expression the scan did not reach), and no value that is
-    /// a float by its operation records None (the review's light_amount
-    /// struct copies recorded None for 144 selects and loads).
+    /// Over the tree's shaders, three invariants that hold for every
+    /// correct shader, whatever another change adds to the corpus:
+    ///
+    /// - the tables are in step with the instructions and locals;
+    /// - no value that is a float by its operation records None (the
+    ///   review's light_amount struct copies recorded None for 144 selects
+    ///   and loads);
+    /// - the lowering lowers no expression the scan did not reach
+    ///   ([`super::super::lower::UNSEEN`] stays 0): every Unknown is a
+    ///   rule's (a pow/asin/acos argument not known to vary, a run-time
+    ///   index into a folded `const`, an unevaluated `?:` condition, an
+    ///   inexact reciprocal), never a gap of the scan.
+    ///
+    /// Which shaders a rule refuses is not listed here: a new shader that
+    /// calls pow on a computed value is refused by design (glmark2's
+    /// `pow(max(dot(N, H), 0.0), 100.0)`), and the rule's forms are pinned
+    /// by the unit tests on their own sources. One positive pin keeps the
+    /// Unknown path live over the corpus.
     #[test]
     fn every_float_value_of_the_corpus_has_a_class() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -1640,6 +1661,7 @@ mod tests {
         }
         let mut buf = std::vec![0u8; 1 << 23];
         let (mut compiled, mut bad, mut unknown) = (0usize, Vec::new(), Vec::<String>::new());
+        super::super::lower::UNSEEN.with(|n| n.set(0));
         for f in &files {
             let Ok(src) = std::fs::read_to_string(f) else { continue };
             let stage = if f.extension().is_some_and(|x| x == "vert") { Stage::Vertex } else { Stage::Fragment };
@@ -1703,11 +1725,15 @@ mod tests {
         }
         std::println!("{compiled} of {} shaders compiled", files.len());
         assert!(compiled > 900, "{compiled} shaders compiled");
-        /* The shaders with a refusal for the width pass, by name: one
-         * value is Unknown in the dead-cube shader below, `asin(float(k))`
-         * of a global `k` NIR may prove constant (fourth review). None
-         * under tools/mali/testdata. */
-        assert_eq!(unknown, ["tests/fixtures/deqp_random_dead_cube/all_features.fragment.96.frag"], "Unknown values");
+        let unseen = super::super::lower::UNSEEN.with(|n| n.get());
+        assert_eq!(unseen, 0, "expressions lowered that the precision scan never reached");
+        /* the Unknown path is live: the dead-cube shader's `asin(float(k))`
+         * of a global `k` NIR may prove constant (fourth review) */
+        assert!(
+            unknown.iter().any(|u| u == "tests/fixtures/deqp_random_dead_cube/all_features.fragment.96.frag"),
+            "{unknown:?}"
+        );
+        std::println!("{} shaders carry an Unknown: {unknown:?}", unknown.len());
         assert!(bad.is_empty(), "{} values with no class:\n{}", bad.len(), bad[..bad.len().min(20)].join("\n"));
     }
 
@@ -2124,6 +2150,33 @@ mod tests {
             Stage::Vertex,
         );
         assert!(!g.prec.contains(&Prec::Unknown), "{:?}", g.prec);
+    }
+
+    /// The forms a pow argument is refused in, pinned on their own
+    /// sources rather than by which corpus shaders hold them (round 8): a
+    /// computed argument (glmark2's lit shaders, `pow(max(dot(N, H), 0.0),
+    /// 100.0)`; a dot; a product; a local holding one) is Unknown; a bare
+    /// read of a varying or a uniform is not.
+    #[test]
+    fn a_computed_pow_argument_is_refused_and_a_bare_read_is_not() {
+        let head = "precision mediump float; varying vec3 n; uniform vec3 hv; uniform float uf;\n";
+        let unknowns = |body: &str| {
+            let g = compile(&std::format!("{head}void main(){{ {body} }}"), Stage::Fragment);
+            g.prec.iter().filter(|&&p| p == Prec::Unknown).count()
+        };
+        for body in [
+            "gl_FragColor = vec4(pow(max(dot(n, hv), 0.0), 100.0));",
+            "gl_FragColor = vec4(pow(dot(n, hv), 100.0));",
+            "gl_FragColor = vec4(pow(max(n.x, 0.0), 100.0));",
+            "gl_FragColor = vec4(pow(max(n.x, 0.0), uf));",
+            "gl_FragColor = vec4(pow(n.x * hv.x, 100.0));",
+            "float m = max(dot(n, hv), 0.0); gl_FragColor = vec4(pow(m, 100.0));",
+        ] {
+            assert_eq!(unknowns(body), 1, "{body}");
+        }
+        for body in ["gl_FragColor = vec4(pow(n.x, 100.0));", "gl_FragColor = vec4(pow(n.x, uf));"] {
+            assert_eq!(unknowns(body), 0, "{body}");
+        }
     }
 
     #[test]
