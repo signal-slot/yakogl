@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES2 image TF: deqp-uart-tally.py --label TF --mustpass tools/cts/gles2-mustpass.txt TF.console.txt
+TF.console.txt: deqp: done: 20 passed, 0 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 20 cases begun, 20 with a result, 0 without
+mustpass cases with a result: 17 (of 20 seen)
+group                                       pass   fail    n/s  other
+shaders                                       17      0      0      0
+TOTAL                                         17      0      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  TF: deqp: summary 20 cases begun, 20 with a result; deqp: done 20 passed, 0 failed, 0 not supported, 0 warnings; b1b5b845 DONE, all passed: 20 cases, P 20 F 0 R 0 N 0 other 0; 20 result lines seen
