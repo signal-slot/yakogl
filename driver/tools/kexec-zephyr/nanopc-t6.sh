@@ -218,6 +218,7 @@ printf "config_kexec=%s\n" "$(grep -h "^CONFIG_KEXEC=" /boot/config-"$(uname -r)
 printf "config_crash_dump=%s\n" "$(grep -h "^CONFIG_CRASH_DUMP=" /boot/config-"$(uname -r)" 2>/dev/null || echo absent)"
 printf "kexec_crash_loaded=%s\n" "$(cat /sys/kernel/kexec_crash_loaded 2>/dev/null || echo absent)"
 printf "kexec_crash_size=%s\n" "$(cat /sys/kernel/kexec_crash_size 2>/dev/null || echo absent)"
+printf "sysrq_trigger=%s\n" "$(if [ -w /proc/sysrq-trigger ]; then echo writable; else echo absent; fi)"
 printf "uid=%s\n" "$(id -u)"
 printf "uptime=%s\n" "$(cut -d" " -f1 /proc/uptime)"
 printf "system=%s\n" "$(systemctl is-system-running 2>/dev/null || true)"
@@ -277,6 +278,9 @@ if [ "$CRASH" = 1 ]; then
 	fi
 	[ $((wb + memsz + 4096 - 1)) -le "$ck_e" ] ||
 		refuse "--crash: the image's segment ($memsz bytes at $load) and the kernel's 4 KiB control page do not fit in the reservation $(printf '0x%x-0x%x' "$ck_s" "$ck_e")"
+	# kexec_zephyr takes every link down before it writes the trigger.
+	[ "$(fact sysrq_trigger)" = writable ] ||
+		refuse "--crash: /proc/sysrq-trigger is $(fact sysrq_trigger) (not writable): the panic that takes the crash route could not be started"
 	[ "$(fact kexec_crash_loaded)" = 0 ] ||
 		refuse "--crash: a crash image is already loaded (/sys/kernel/kexec_crash_loaded '$(fact kexec_crash_loaded)': a kdump service, or another run); loading this one would replace it"
 elif [ "$ck_s" -ge 0 ] && [ "$(fact kexec_crash_loaded)" != 0 ]; then
@@ -509,6 +513,22 @@ regs=$(read_regs) || { rec "cannot read the registers with mmio_rd; not jumping"
 rec "registers before (GLB_RST_ST, GLB_RST_CON, WDT0 CR, TORR): $regs"
 rec "gpu power before: $(read_gpu_power || echo unread)"
 
+# What the jump command does when kexec_zephyr returns. On the normal route
+# the board is as it was: the magic close stops WDT0 from resetting it
+# (Linux feeds it again). On the crash route kexec_zephyr may have taken
+# every link down before it returned, so the board may be unreachable: no
+# magic close, and a process outside the ssh session (setsid) keeps WDT0
+# open and unfed, so WDT0 resets the board. The open is held rather than
+# left to the close: after a close without 'V' WDT0 stays active, and
+# whether Linux then feeds it depends on the driver's maximum hardware
+# heartbeat (linux v6.18 drivers/watchdog/watchdog_dev.c:95-96, :960-972).
+if [ "$CRASH" = 1 ]; then
+	return_wdt="setsid sleep 600 </dev/null >/dev/null 2>&1 &
+echo \"linux-wdt: kexec_zephyr returned \$rc on the crash route: no magic close; WDT0 stays open, unfed, by pid \$! and resets the board\""
+else
+	return_wdt="printf V >&3; exec 3>&-
+echo \"linux-wdt: kexec_zephyr returned \$rc: magic close written, Linux feeds WDT0 from now on\""
+fi
 if [ "$LINUX_WDT" = 1 ]; then
 	# WDT_CR (0xfeaf0000) and WDT_TORR (+4) after the open, as mmio_rd
 	# prints them ("0xfeaf0000: 0x00000009"); WDT_EN is bit 0. The sleep
@@ -525,8 +545,7 @@ fi
 echo \"linux-wdt: WDT0 CR \$cr TORR \$torr after the open: WDT_EN 1, jumping\"
 sleep 1
 $STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg; rc=\$?
-printf V >&3; exec 3>&-
-echo \"linux-wdt: kexec_zephyr returned \$rc: magic close written, Linux feeds WDT0 from now on\"
+$return_wdt
 exit \$rc"
 else
 	jump="sync; $STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg"

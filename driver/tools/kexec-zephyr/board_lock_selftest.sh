@@ -359,7 +359,8 @@ check "nanopc-t6.sh: an image without the line is refused for it (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF "lacks the 'board: watchdog armed' line" <<<"$err"; echo $?)"
 
 # nanopc-t6.sh's checks of the board's facts, on made-up facts: an `ssh`
-# first in PATH answers from $tmp/facts (below), so no board is contacted. The facts are the T6's under Armbian: one System RAM bank
+# first in PATH answers from $tmp/facts (below), so no board is contacted.
+# The facts are the T6's under Armbian: one System RAM bank
 # 0x00200000-0xe143ffff, below 0x20000000 only the kernel's entries under
 # it, the GIC's ITS/LPI tables above 4 GiB. An image TOP 13 passes the image
 # checks. t6_board_run <iomem lines under the bank> <gic_tables> [--go]
@@ -394,7 +395,7 @@ t6_board_run() {
 			kexec_load_disabled=0 kexec_loaded=0 config_kexec=CONFIG_KEXEC=y uid=0 \
 			wdt_identity=dw_wdt wdt_state=inactive wdt_timeout=44 wdt_nowayout=0 wdt_users= \
 			"config_crash_dump=${t6_crash_dump:-CONFIG_CRASH_DUMP=y}" "kexec_crash_loaded=${t6_crash_loaded:-0}" \
-			"kexec_crash_size=${t6_crash_size:-0}" \
+			"kexec_crash_size=${t6_crash_size:-0}" "sysrq_trigger=${t6_sysrq:-writable}" \
 			"gic_tables=$2" 'iomem<<' '00200000-e143ffff : System RAM'
 		printf '%s\n' "$1" '>>'
 	} > "$tmp/facts"
@@ -499,11 +500,19 @@ out=$(t6_crash_size=268435456 t6_go_run "$kernel
 $ck" --crash)
 rc=$?
 jump=$(grep -m1 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log")
+# After the links are down a returned kexec_zephyr must end in a WDT0
+# reset: no magic close, and WDT0 kept open (unfed) past the ssh session.
+after=$(sed -n '/kexec_zephyr \/tmp\/yakogl-kexec\/zephyr.bin/,/^----$/p' "$tmp/ssh.log")
+check "nanopc-t6.sh: on the crash route a returned kexec_zephyr writes no magic close and keeps WDT0 open" \
+	"$(! grep -qF 'printf V' <<<"$after" && grep -qF 'setsid sleep' <<<"$after"; echo $?)"
 check "nanopc-t6.sh: --crash --go sends the jump with --crash and records the route (rc $rc)" \
 	"$([ "$rc" = 0 ] && grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000 --crash; rc=' <<<"$jump" && grep -qF 'route crash (reservation 0x10000000-0x1fffffff)' "$tmp"/rec/*/record.txt; echo $?)"
 out=$(t6_go_run "$kernel")
 rc=$?
 jump=$(grep -m1 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log")
+after=$(sed -n '/kexec_zephyr \/tmp\/yakogl-kexec\/zephyr.bin/,/^----$/p' "$tmp/ssh.log")
+check "nanopc-t6.sh: on the normal route a returned kexec_zephyr is followed by the magic close" \
+	"$(grep -qF 'printf V >&3' <<<"$after"; echo $?)"
 check "nanopc-t6.sh: --go without --crash sends the jump without it (rc $rc)" \
 	"$([ "$rc" = 0 ] && grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000; rc=' <<<"$jump" && grep -qF 'route normal' "$tmp"/rec/*/record.txt; echo $?)"
 # The read under the lock: a crash image loaded between the dry checks and
@@ -535,6 +544,14 @@ out=$(t6_crash_size=266338304 t6_board_run "$kernel
 rc=$?
 check "nanopc-t6.sh: --crash with a reservation that starts 2 MiB into the window is refused (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF "the board has: Crash kernel '10200000-1fffffff : Crash kernel'" <<<"$out"; echo $?)"
+# The trigger is checked before the jump: kexec_zephyr takes every link down
+# before it writes it, so a trigger that is missing would leave the board
+# without network.
+out=$(t6_sysrq=absent t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash without a writable /proc/sysrq-trigger is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --crash: /proc/sysrq-trigger is absent' <<<"$out"; echo $?)"
 # --crash without Linux's watchdog: if the crash kexec does not happen,
 # panic() waits in its timeout loop (kernel/panic.c:508-509, :557), and
 # with panic_timeout 0 nothing ever resets the board.
