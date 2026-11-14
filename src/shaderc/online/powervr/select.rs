@@ -5410,6 +5410,21 @@ mod tests {
     use super::*;
     use crate::shaderc::online::store;
 
+    /// `text`'s fragment shader lowered as the PowerVR's front end lowers it:
+    /// with its matrix-product order ([`super::super::MAT_TIMES_VEC_ORDER`]),
+    /// not the build's GPU's. A Mali build sums `m * v` in Mesa's order
+    /// (`ir::MatOrder::MesaGlsl`), which gives this selector other groups
+    /// than the PowerVR gets.
+    fn pvr_ir<'a>(
+        a: &crate::shaderc::online::arena::Arena<'a>,
+        text: &'a str,
+    ) -> crate::shaderc::online::lower::Lowered<'a> {
+        use crate::shaderc::online::{lower, sema::Stage};
+        lower::compile_to_ir_ordered(a, Stage::Fragment, text, super::super::MAT_TIMES_VEC_ORDER)
+            .map_err(|e| e.msg)
+            .unwrap()
+    }
+
     /// A loop that leaves on data that may differ between instances (a
     /// varying) is one body between a `LoopBegin` and a back edge driven by
     /// its counter alone, and `verify_loops` refuses every way the back edge
@@ -5571,7 +5586,6 @@ void main() {{ colour = vec4(0.0); {body} }}
     /// [`selected_fs`] with an `if` lowering asked for (put back after,
     /// under the lock every compile here takes).
     fn selected_fs_with(src: &str, lowering: crate::shaderc::IfLowering) -> std::vec::Vec<SelGroup> {
-        use crate::shaderc::online::{lower, sema::Stage};
         let _l = store::test_lock();
         struct Put(crate::shaderc::IfLowering);
         impl Drop for Put {
@@ -5583,7 +5597,7 @@ void main() {{ colour = vec4(0.0); {body} }}
         let mut out = std::vec::Vec::new();
         store::with_scratch(|a| {
             let text = a.alloc_str(src).unwrap();
-            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let l = pvr_ir(a, text);
             out = select(&l.module, a).expect("selects").groups.to_vec();
         })
         .unwrap();
@@ -5625,14 +5639,13 @@ void main() {{ colour = vec4(0.0); {body} }}
     /// them against pco) until `eliminate_dead` counted the pair.
     #[test]
     fn the_values_the_builder_reads_keep_their_definitions() {
-        use crate::shaderc::online::{lower, sema::Stage};
         /* through a local, as stencil.frag's `result`: the local's copy */
         let src = "precision mediump float; uniform float u; void main() { \
                    vec4 r; if (u < 0.5) discard; r = vec4(1.0); gl_FragColor = r; }";
         let _l = store::test_lock();
         store::with_scratch(|a| {
             let text = a.alloc_str(src).unwrap();
-            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let l = pvr_ir(a, text);
             let s = select(&l.module, a).expect("selects");
             let defined = |x: SelSrc| match x {
                 SelSrc::Virtual { v, .. } => s.groups.iter().any(|g| g.dst == Some(SelDst::Virtual(v))),
@@ -5802,7 +5815,6 @@ void main() {{ colour = vec4(0.0); {body} }}
     /// past the crossover (15 vec4 steps each: 60 groups an arm).
     #[test]
     fn the_default_lowering_is_chosen_on_the_arms_final_groups() {
-        use crate::shaderc::online::{lower, sema::Stage};
         use crate::shaderc::IfLowering;
         let image = |src: &str, l: IfLowering| -> std::vec::Vec<u32> {
             let _l = store::test_lock();
@@ -5816,7 +5828,7 @@ void main() {{ colour = vec4(0.0); {body} }}
             store::with_scratch(|a| {
                 let _keep = store::begin_keep().expect("keep");
                 let text = a.alloc_str(src).unwrap();
-                let lw = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+                let lw = pvr_ir(a, text);
                 let rec = super::super::chain::compile_fragment(&lw.module, &lw.reflection, a).expect("compiles");
                 // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
                 unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) }.to_vec()
@@ -5875,7 +5887,6 @@ void main() {{ colour = vec4(0.0); {body} }}
 
     #[test]
     fn the_back_edge_is_driven_by_the_loop_counter_and_nothing_else() {
-        use crate::shaderc::online::{lower, sema::Stage};
         let _l = store::test_lock();
         store::with_scratch(|a| {
             let text = a
@@ -5885,7 +5896,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                      gl_FragColor = vec4(s); }",
                 )
                 .unwrap();
-            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let l = pvr_ir(a, text);
             let s = select(&l.module, a).expect("selects");
             let g: std::vec::Vec<SelGroup> = s.groups.to_vec();
             let count = |op: SelOp| g.iter().filter(|x| x.op == op).count();
@@ -5933,7 +5944,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                      gl_FragColor = vec4(s); }",
                 )
                 .unwrap();
-            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let l = pvr_ir(a, text);
             let s = select(&l.module, a).expect("selects");
             let g: std::vec::Vec<SelGroup> = s.groups.to_vec();
             let end = g.iter().position(|x| x.op == SelOp::LoopEnd).unwrap();
@@ -5955,7 +5966,6 @@ void main() {{ colour = vec4(0.0); {body} }}
     #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
     #[test]
     fn a_shadow_look_up_compares_the_reference_with_the_depth_by_the_samplers_function() {
-        use crate::shaderc::online::{lower, sema::Stage};
         use std::collections::BTreeMap;
         let _l = store::test_lock();
         /* (dword 12, depth) -> the output's lane 0, for the look-up `call`;
@@ -5969,7 +5979,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                      void main(){{ o = vec4({call}, 0.0, 0.0, 1.0); }}"
                 );
                 let text = a.alloc_str(&src).unwrap();
-                let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+                let l = pvr_ir(a, text);
                 let sel = select(&l.module, a).expect("selects");
                 let out = sel.outputs.iter().find_map(|(_, c)| c[0]).expect("an output");
                 cases
@@ -6113,7 +6123,6 @@ void main() {{ colour = vec4(0.0); {body} }}
     #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
     #[test]
     fn cube_and_array_shadow_look_ups_select() {
-        use crate::shaderc::online::{lower, sema::Stage};
         let _l = store::test_lock();
         for (decl, call) in [
             ("samplerCubeShadow", "texture(s, vec4(0.1, 0.2, 0.9, 0.5))"),
@@ -6139,7 +6148,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                      in vec3 v3; in vec4 v4; layout(location = 0) out vec4 o; void main(){{ o = vec4({call}); }}"
                 );
                 let text = a.alloc_str(&src).unwrap();
-                let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+                let l = pvr_ir(a, text);
                 let sel = select(&l.module, a).unwrap_or_else(|e| panic!("{decl}: {e:?}"));
                 let words: std::vec::Vec<u8> = sel
                     .groups
@@ -6166,7 +6175,6 @@ void main() {{ colour = vec4(0.0); {body} }}
     #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
     #[test]
     fn integer_cube_3d_and_array_lookups_select_as_integer_smp() {
-        use crate::shaderc::online::{lower, sema::Stage};
         let _l = store::test_lock();
         /* the hidden pvr_layers_ uniform of a 3D texture and a 2D array is
          * declared on a PowerVR build only (reflect.rs) */
@@ -6195,7 +6203,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                      void main(){{ o = vec4({call}); }}"
                 );
                 let text = a.alloc_str(&src).unwrap();
-                let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+                let l = pvr_ir(a, text);
                 let sel = select(&l.module, a).unwrap_or_else(|e| panic!("{decl} {call}: {e:?}"));
                 let smps: std::vec::Vec<OpType> =
                     sel.groups.iter().filter(|g| matches!(g.op, SelOp::Sample { .. })).map(|g| g.ty).collect();
@@ -6211,7 +6219,6 @@ void main() {{ colour = vec4(0.0); {body} }}
     /// whose other arm is a select of the same value, and the ors exist.
     #[test]
     fn a_value_kept_past_a_break_is_one_select_on_the_or_of_its_guards() {
-        use crate::shaderc::online::{lower, sema::Stage};
         let _l = store::test_lock();
         store::with_scratch(|a| {
             let text = a
@@ -6221,7 +6228,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                      gl_FragColor = vec4(s); }",
                 )
                 .unwrap();
-            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let l = pvr_ir(a, text);
             let s = select(&l.module, a).expect("selects");
             let bcsel = SelOp::Alu(ir::AluOp::Bcsel);
             let def = |v: VReg| s.groups.iter().find(|g| g.dst == Some(SelDst::Virtual(v)));
