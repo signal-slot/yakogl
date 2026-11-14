@@ -1034,6 +1034,44 @@ pub const fn swizzle_source(k: usize, s: GlesSwizzle) -> usize {
     }
 }
 
+/// The source of each lane of a two-plane RGBA32 binding's look-up under the
+/// GL texture swizzle `swizzle`: a lane of the joined (R, G, B, A) value
+/// 0 ..= 3, 4 the constant zero, 5 the constant one. `no_alpha` is a texture
+/// with no alpha channel (GL_RGB32F/I/UI): its alpha lane reads one.
+/// docs/notes/gc-128bit-swizzle.md section 4.
+pub const fn wide128_lane_sources(swizzle: [GlesSwizzle; 4], no_alpha: bool) -> [u8; 4] {
+    let base: [u8; 4] = [0, 1, 2, if no_alpha { 5 } else { 3 }];
+    let mut out = [0u8; 4];
+    let mut k = 0;
+    while k < 4 {
+        out[k] = match swizzle_source(k, swizzle[k]) {
+            c @ 0..=3 => base[c],
+            c => c as u8,
+        };
+        k += 1;
+    }
+    out
+}
+
+#[cfg(test)]
+mod wide128_lane_tests {
+    use super::*;
+
+    #[test]
+    fn wide128_lane_sources_cases() {
+        let same = [GLES_SWIZZLE_SAME; 4];
+        assert_eq!(wide128_lane_sources(same, false), [0, 1, 2, 3]);
+        let rgba = [GLES_SWIZZLE_RED, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_BLUE, GLES_SWIZZLE_ALPHA];
+        assert_eq!(wide128_lane_sources(rgba, false), [0, 1, 2, 3]);
+        let bgra = [GLES_SWIZZLE_BLUE, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_RED, GLES_SWIZZLE_ALPHA];
+        assert_eq!(wide128_lane_sources(bgra, false), [2, 1, 0, 3]);
+        let zozo = [GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE, GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE];
+        assert_eq!(wide128_lane_sources(zozo, false), [4, 5, 4, 5]);
+        assert_eq!(wide128_lane_sources(same, true), [0, 1, 2, 5]);
+        assert_eq!(wide128_lane_sources([GLES_SWIZZLE_ALPHA; 4], true), [5, 5, 5, 5]);
+    }
+}
+
 impl GlesTextureBind {
     pub const ZERO: GlesTextureBind = GlesTextureBind {
         unit: 0,
