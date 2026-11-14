@@ -71,6 +71,15 @@ with one board case, so nobody has to take it on trust.
 
 ## (b) Does `V3dSampler` grow?
 
+Landed another way. `333a19f7` kept `V3dSampler` at 32 bytes and gave the C a
+second entry point, `v3d_tex_pack_sampler_compare(out, s, compare_op)`
+(`src/v3d/texture.rs`: `pack_sampler`, `compare_op`, `compare_function`), and
+the draw-time wiring keys the job's sampler cache on the pair
+(`texture::sampler`, `texture::compare_function`) in `sampler_for`
+(`src/v3d/backend.rs`): two bindings that differ only in the compare get two
+records, and compare off shares NEVER's. The design below is the one
+considered first, kept for the record.
+
 Yes. `V3dSampler` (`src/v3d/ffi.rs:562-574`) is three `u32` wraps, four
 `bool`s, three `f32` and a `u32`: 12 + 4 + 12 + 4 = 32 bytes with no padding,
 and `ffi.rs:888-892` asserts the size 32 and the offsets of `min_nearest` (12),
