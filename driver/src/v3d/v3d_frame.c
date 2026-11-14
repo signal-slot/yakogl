@@ -593,8 +593,11 @@ static bool emit_state(const struct v3d_triangle_frame *f, struct v3d_cl *bcl)
 	/* no stencil (v3dx_emit.c:600-619) */
 
 	/* varying flags (v3dx_emit.c:621-643): M5 writes the all-zero case only */
-	if (f->fs->flat_shade_flags || f->fs->noperspective_flags || f->fs->centroid_flags ||
-	    f->fs->num_inputs > 24)
+	for (uint32_t i = 0; i < V3D_VARYING_FLAG_WORDS; i++)
+		if (f->fs->flat_shade_flags[i] || f->fs->noperspective_flags[i] ||
+		    f->fs->centroid_flags[i])
+			return false;
+	if (f->fs->num_inputs > V3D_MAX_FS_INPUTS)
 		return false;
 	v3d_cl_emit(bcl, ZERO_ALL_FLAT_SHADE_FLAGS, zf);
 	v3d_cl_emit(bcl, ZERO_ALL_NON_PERSPECTIVE_FLAGS, zn);

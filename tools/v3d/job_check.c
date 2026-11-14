@@ -538,7 +538,7 @@ static void part_decode(void)
 
 	/* draw 3: a program with no attribute and a flat varying, a line loop */
 	struct v3d_fs_prog fs3 = fs;
-	fs3.flat_shade_flags = 0x5;
+	fs3.flat_shade_flags[0] = 0x5;
 	struct v3d_vs_prog vs3 = vs, cs3 = cs;
 	memset(vs3.vattr_sizes, 0, sizeof(vs3.vattr_sizes));
 	memset(cs3.vattr_sizes, 0, sizeof(cs3.vattr_sizes));
@@ -2263,9 +2263,9 @@ static bool one_input(int k, bool change, struct v3d_job_state *st, struct v3d_f
 	case 26: *name = "colour mask"; if (c) st->colormask = 0x7; return true;
 	case 27: case 28: case 29: case 30:
 		*name = "blend colour"; if (c) st->blend_color_f16[k - 27] = 0x3c00; return true;
-	case 31: *name = "flat shade flags"; if (c) fs->flat_shade_flags = 1; return true;
-	case 32: *name = "non-perspective flags"; if (c) fs->noperspective_flags = 1; return true;
-	case 33: *name = "centroid flags"; if (c) fs->centroid_flags = 1; return true;
+	case 31: *name = "flat shade flags"; if (c) fs->flat_shade_flags[0] = 1; return true;
+	case 32: *name = "non-perspective flags"; if (c) fs->noperspective_flags[0] = 1; return true;
+	case 33: *name = "centroid flags"; if (c) fs->centroid_flags[0] = 1; return true;
 	case 34 + 7 + 7 + 6:
 		/* SAMPLE_STATE's mask: a 4x job writes the draw's */
 		*name = "sample mask (a 4x job)";

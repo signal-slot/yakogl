@@ -81,9 +81,10 @@ pub struct V3dFsProg {
     pub threads: u32,
     pub single_seg: bool,
     pub num_inputs: u32,
-    pub flat_shade_flags: u32,
-    pub noperspective_flags: u32,
-    pub centroid_flags: u32,
+    /// 24-bit words, input i at bit i % 24 of word i / 24 (Mesa's prog_data).
+    pub flat_shade_flags: [u32; 3],
+    pub noperspective_flags: [u32; 3],
+    pub centroid_flags: [u32; 3],
     pub writes_z: bool,
     pub disable_ez: bool,
     pub uses_center_w: bool,
@@ -828,16 +829,17 @@ const _: () = assert!(size_of::<V3dUniformStorage>() == 16);
 const _: () = assert!(size_of::<V3dVertexAttr>() == 16);
 const _: () = assert!(offset_of!(V3dVertexAttr, divisor) == 12);
 const _: () = assert!(size_of::<V3dTiling>() == 32);
-const _: () = assert!(size_of::<V3dFsProg>() == 56);
+const _: () = assert!(size_of::<V3dFsProg>() == 80);
 const _: () = assert!(offset_of!(V3dFsProg, threads) == 4);
 const _: () = assert!(offset_of!(V3dFsProg, single_seg) == 8);
 const _: () = assert!(offset_of!(V3dFsProg, num_inputs) == 12);
 const _: () = assert!(offset_of!(V3dFsProg, flat_shade_flags) == 16);
-const _: () = assert!(offset_of!(V3dFsProg, centroid_flags) == 24);
-const _: () = assert!(offset_of!(V3dFsProg, writes_z) == 28);
-const _: () = assert!(offset_of!(V3dFsProg, uses_pid) == 33);
-const _: () = assert!(offset_of!(V3dFsProg, uniforms) == 40);
-const _: () = assert!(offset_of!(V3dFsProg, num_uniforms) == 48);
+const _: () = assert!(offset_of!(V3dFsProg, noperspective_flags) == 28);
+const _: () = assert!(offset_of!(V3dFsProg, centroid_flags) == 40);
+const _: () = assert!(offset_of!(V3dFsProg, writes_z) == 52);
+const _: () = assert!(offset_of!(V3dFsProg, uses_pid) == 57);
+const _: () = assert!(offset_of!(V3dFsProg, uniforms) == 64);
+const _: () = assert!(offset_of!(V3dFsProg, num_uniforms) == 72);
 const _: () = assert!(size_of::<V3dVsProg>() == 64);
 const _: () = assert!(offset_of!(V3dVsProg, single_seg) == 8);
 const _: () = assert!(offset_of!(V3dVsProg, vpm_input_size) == 12);

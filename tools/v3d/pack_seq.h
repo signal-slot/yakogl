@@ -113,7 +113,7 @@ static bool pack_seq_build(struct v3d_job *j, const struct v3d_job_target *t, st
 		pack_seq_state(i, t->width, t->height, &st, &prim, &indexed, &flat);
 		struct v3d_fs_prog fs = {
 			.code = 0x00200000u, .threads = 4, .num_inputs = 4, .uniforms = pack_seq_fs_u,
-			.num_uniforms = 1, .flat_shade_flags = flat,
+			.num_uniforms = 1, .flat_shade_flags = { flat },
 		};
 		struct v3d_job_draw d = {
 			.st = &st, .fs = &fs, .vs = &vs, .cs = &cs,

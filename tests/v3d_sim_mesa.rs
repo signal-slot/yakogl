@@ -1568,7 +1568,8 @@ fn run_pair_inner(p: &Pair, seed: u64, positive: bool, zeros: bool) -> Result<Op
     }
 
     // ---------------- FS ----------------
-    let flag = |k: &str| u32::from_str_radix(p.fs.meta.get(k).map_or("0", |s| s.trim_start_matches("0x")), 16).unwrap();
+    // Bit i: input i (Mesa's fixture prints word 0, 24 inputs; ours the whole set).
+    let flag = |k: &str| u64::from_str_radix(p.fs.meta.get(k).map_or("0", |s| s.trim_start_matches("0x")), 16).unwrap();
     let (flat, noper, centroid) = (flag("flat_shade_flags"), flag("noperspective_flags"), flag("centroid_flags"));
     let mut w = [0u32; LANES];
     let mut wc = [0u32; LANES];
@@ -2972,7 +2973,7 @@ fn ours_pair_keyed(vs_path: &str, fs_path: &str, vs_key: LodKey, fs_key: LodKey)
             vsm.inputs.iter().map(|d| (d.name, d.kind, d.location, d.gl_type)).collect::<Vec<_>>()
         );
     }
-    let hex = |x: u32| format!("0x{x:08x}");
+    let hex = |x: u64| format!("0x{x:08x}");
     let tf = |b: bool| if b { "True" } else { "False" }.to_string();
     let code = |c: &yakogl::shaderc::online::v3d::chain::Code| -> (Vec<u64>, Vec<(u32, u32)>) {
         (c.words.to_vec(), c.uniforms.iter().map(|u| (u.contents, u.data)).collect())

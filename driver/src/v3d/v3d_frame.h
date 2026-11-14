@@ -166,14 +166,21 @@ void v3d_wpos_gl(bool y0_top, uint32_t fb_height, struct v3d_wpos *w);
 bool v3d_wpos_uniform(const struct v3d_wpos *w, uint32_t fb_height, uint32_t contents,
 		      uint32_t data, uint32_t *out);
 
+/* The varying components a fragment shader reads, at most (Mesa
+ * broadcom/common/v3d_limits.h), and the 24-bit words of each of its flag
+ * sets (Mesa v3d_set_fs_prog_data_inputs: ((64 - 1) / 24) + 1). */
+#define V3D_MAX_FS_INPUTS      64
+#define V3D_VARYING_FLAG_WORDS 3
+
 /* The fragment shader's prog_data, as tools/v3d/v3d_shc prints it. */
 struct v3d_fs_prog {
 	uint32_t code;       /* GPU address of the QPU code, 8-byte aligned */
 	uint32_t threads;
 	bool single_seg;
 	uint32_t num_inputs;
-	/* word 0 of each flags array: M5 supports num_inputs <= 24 and all zero */
-	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
+	/* Mesa's flag arrays: input i at bit i % 24 of word i / 24, up to
+	 * V3D_MAX_FS_INPUTS (64) inputs (v3d_set_fs_prog_data_inputs) */
+	uint32_t flat_shade_flags[3], noperspective_flags[3], centroid_flags[3];
 	bool writes_z, disable_ez, uses_center_w, lock_scoreboard_on_first_thrsw;
 	bool uses_implicit_point_line_varyings, uses_pid;
 	const struct v3d_uniform *uniforms;

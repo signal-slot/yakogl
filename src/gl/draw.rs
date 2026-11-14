@@ -28,8 +28,8 @@ use super::buffer;
 use super::consts::*;
 use super::context::{
     self, gl_trace, obj_index, tex_pitch, GlBuffer, GlContext, GlProgram, GlTexture, GlVertexAttrib,
-    CAP_COLOR_ATTACHMENTS, CAP_SAMPLERS, MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_TEXTURES, MAX_UNIFORM_DWORDS,
-    MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
+    CAP_COLOR_ATTACHMENTS, CAP_SAMPLERS, MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_STAGE_UNIFORM_DWORDS,
+    MAX_TEXTURES, MAX_UNIFORM_DWORDS, MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
 };
 use super::framebuffer;
 use super::tf;
@@ -3905,11 +3905,11 @@ fn build_common(
         let mut fs_app_dw = p.rfs.uniform_dwords;
         let fs_off = (vs_dw as usize * 4 + 15) & !15usize;
 
-        if vs_dw as usize > MAX_UNIFORM_DWORDS {
-            vs_dw = MAX_UNIFORM_DWORDS as u16;
+        if vs_dw as usize > MAX_STAGE_UNIFORM_DWORDS {
+            vs_dw = MAX_STAGE_UNIFORM_DWORDS as u16;
         }
-        if fs_dw as usize > MAX_UNIFORM_DWORDS {
-            fs_dw = MAX_UNIFORM_DWORDS as u16;
+        if fs_dw as usize > MAX_STAGE_UNIFORM_DWORDS {
+            fs_dw = MAX_STAGE_UNIFORM_DWORDS as u16;
         }
         if fs_app_dw > fs_dw {
             fs_app_dw = fs_dw;
@@ -3929,7 +3929,7 @@ fn build_common(
         /* a failing upload leaves the previous draw's values: the draw is refused */
         let mut rc = 0;
         if vs_dw != 0 {
-            /* the block holds min(uniform_dwords, MAX_UNIFORM_DWORDS) = vs_dw dwords */
+            /* the block holds min(uniform_dwords, MAX_STAGE_UNIFORM_DWORDS) = vs_dw dwords */
             let blk = p.vs_block();
             if !host_only {
                 rc |= put(&mut pg.uniforms, 0, dword_bytes(&blk[..(vs_dw as usize).min(blk.len())]));
@@ -3950,6 +3950,12 @@ fn build_common(
              * read from the GPU buffer (below), so that one is filled even
              * on a host-only backend */
             let host_only = host_only && fs_dw <= p.fs_uniform_alloc;
+            /* the staging copy holds two MAX_UNIFORM_DWORDS blocks; a
+             * stage storage past that (MAX_STAGE_UNIFORM_DWORDS, the V3D's
+             * uniform blocks) is only ever read from the host arrays */
+            if !host_only && (vs_dw as usize > MAX_UNIFORM_DWORDS || fs_dw as usize > MAX_UNIFORM_DWORDS) {
+                return Err((GL_OUT_OF_MEMORY, FUNC));
+            }
             if fs_app_dw != 0 && !host_only {
                 let blk = p.fs_block();
                 rc |= put(&mut pg.uniforms, fs_off, dword_bytes(&blk[..(fs_app_dw as usize).min(blk.len())]));

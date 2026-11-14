@@ -69,6 +69,10 @@ pub enum V3dError {
     /// The VPM cannot hold two batches of the vertex outputs
     /// (v3d_vs_set_prog_data asserts `vpm_output_batches >= 2`, vir.c:936).
     VpmTooSmall,
+    /// The fragment shader reads more than [`V3D_MAX_FS_INPUTS`] varying
+    /// components. The GL link refuses this first
+    /// (GL_MAX_FRAGMENT_INPUT_COMPONENTS).
+    TooManyFragmentInputs,
     OutOfScratch,
 }
 
@@ -135,9 +139,12 @@ pub struct FsProg<'a> {
     /// Per input, in `ldvary` order: (VARYING_SLOT_VAR0 + the FS location,
     /// component), as Mesa's `input_slots` prints.
     pub input_slots: &'a [(u8, u8)],
-    pub flat_shade_flags: u32,
-    pub noperspective_flags: u32,
-    pub centroid_flags: u32,
+    /// Bit i: input i is flat, noperspective, sampled at the centroid
+    /// (Mesa's `BITSET_WORD` arrays of `V3D_MAX_FS_INPUTS` = 64 bits, which
+    /// the driver packs into 24-bit words, [`flag_words`]).
+    pub flat_shade_flags: u64,
+    pub noperspective_flags: u64,
+    pub centroid_flags: u64,
     /// The shader writes Z to the TLB (prog_data `writes_z`): the pass-
     /// through Z (a discard, no colour write, a read of gl_FragCoord.z) or
     /// its own `gl_FragDepth` (select.rs `TLB_Z_PER_PIXEL`).
@@ -206,6 +213,28 @@ pub fn attribute_locations(gl_type: u16) -> u8 {
 /// `VARYING_SLOT_VAR0` (compiler/shader_enums.h): Mesa's slot number of the
 /// first generic varying.
 pub const VARYING_SLOT_VAR0: u8 = 32;
+
+/// `V3D_MAX_FS_INPUTS` (Mesa broadcom/common/v3d_limits.h): the varying
+/// components a fragment shader may read (`num_inputs`; gl_PointCoord's two
+/// implicit varyings are not inputs, Mesa emit_fragment_varying with no
+/// variable).
+pub const V3D_MAX_FS_INPUTS: usize = 64;
+
+/// Words of a varying flag set as the driver emits them: 24 inputs a word,
+/// input i at bit i % 24 of word i / 24 (Mesa v3d_set_fs_prog_data_inputs,
+/// vir.c:985-1003; the packet's flag field is 24 bits, v3d_packet.xml).
+pub const V3D_VARYING_FLAG_WORDS: usize = V3D_MAX_FS_INPUTS.div_ceil(24);
+
+/// `flags` (bit i: input i) as [`V3D_VARYING_FLAG_WORDS`] 24-bit words.
+pub const fn flag_words(flags: u64) -> [u32; V3D_VARYING_FLAG_WORDS] {
+    let mut w = [0u32; V3D_VARYING_FLAG_WORDS];
+    let mut i = 0;
+    while i < V3D_VARYING_FLAG_WORDS {
+        w[i] = ((flags >> (24 * i)) & 0xff_ffff) as u32;
+        i += 1;
+    }
+    w
+}
 
 /// `m` with its loops expanded where the unroller can (`None` from it: no
 /// loop, `m` as it is). Its refusals are named gaps, not verdicts on the
@@ -416,14 +445,20 @@ pub fn compile_program_keyed<'a>(
     /* The fragment shader, and the order of its inputs. */
     let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
     let inputs = fragment_inputs(&fsp, a)?;
+    /* The hardware interpolates at most V3D_MAX_FS_INPUTS (64) inputs
+     * (Mesa v3d_limits.h), GL_MAX_FRAGMENT_INPUT_COMPONENTS is at most that
+     * (src/gl/context.rs), and the flag words below have a bit for each. */
+    if inputs.len() > V3D_MAX_FS_INPUTS {
+        return Err(V3dError::TooManyFragmentInputs);
+    }
     /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
-     * flat_shade_flags at the input's index). The job builder reads word 0
-     * only and refuses more than 24 inputs. */
-    let mut flat = 0u32;
+     * flat_shade_flags at the input's index). The job builder writes them
+     * as Mesa's 24-bit words (flag_words, v3dx_emit.c emit_varying_flags). */
+    let mut flat = 0u64;
     /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
      * BITSET_SET of centroid_flags, the W it multiplies by the centroid
      * W). */
-    let mut centroid = 0u32;
+    let mut centroid = 0u64;
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
             .inputs
@@ -431,15 +466,9 @@ pub fn compile_program_keyed<'a>(
             .find(|d| d.kind == IoKind::Varying && d.location == loc)
             .ok_or(V3dError::VaryingWithoutVertexOutput)?;
         if d.interp == crate::shaderc::online::ir::INTERP_FLAT {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a flat varying past input 31"));
-            }
             flat |= 1 << i;
         }
         if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a centroid varying past input 31"));
-            }
             centroid |= 1 << i;
         }
     }
@@ -1322,9 +1351,9 @@ mod tests {
             "], \"flat_shade_flags\": \"0x{:08x}\", \"noperspective_flags\": \"0x{:08x}\", \"centroid_flags\": \"0x{:08x}\", \
              \"writes_z\": {}, \"disable_ez\": {}, \"uses_center_w\": {}, \"lock_scoreboard_on_first_thrsw\": {}, \
              \"uses_discard\": {}, \"uses_implicit_point_line_varyings\": {}, \"uses_pid\": {}, \"force_per_sample_msaa\": {},",
-            f.flat_shade_flags,
-            f.noperspective_flags,
-            f.centroid_flags,
+            flag_words(f.flat_shade_flags)[0],
+            flag_words(f.noperspective_flags)[0],
+            flag_words(f.centroid_flags)[0],
             b(f.writes_z),
             b(f.disable_ez),
             b(f.uses_center_w),

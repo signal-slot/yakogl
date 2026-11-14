@@ -244,7 +244,22 @@ samplers), RC6 and RC15; no single item.
 `state_query` 25 and `implementation_limits` 11: ES 3.0 limits read as float
 or 64-bit integers, uniform-block and varying component limits below the ES
 3.0 minimum, the compressed-format list, `max_draw_buffers` and
-`max_color_attachments` 3 (RC14). The compressed-format list is closed on the
+`max_color_attachments` 3 (RC14). The float and 64-bit query forms have no
+defect of their own: they widen `glGetIntegerv`'s answer and fail with the
+value (`tests/es3_query_forms.rs`). The varying and uniform-block limits are
+closed on the V3D by plan #359: 15 varying vectors, 60 varying and fragment
+input components, 64 vertex output components, `MAX_UNIFORM_BLOCK_SIZE`
+16384 and 50688 combined components (`docs/notes/v3d-varyings.md`,
+`docs/notes/ubo-limits.md` §9). Host dEQP-GLES3 (HOST-ONLY, API verdicts;
+`tools/cts/host-deqp-run.sh`, VK-GL-CTS 93bca01) on the V3D:
+`implementation_limits` 9 → 2 Fail and `state_query.integers*` 20 → 6 Fail,
+what is left being `max_draw_buffers`, `max_color_attachments` (RC14) and the
+`max_samples` forms; `shaders.linkage`, `shaders.indexing.varying_array`,
+`shaders.builtin_variable` and `ubo` compile and link the same before and
+after. The PowerVR and the GC7000UL keep 6 and 14 Fail: their block size,
+combined components and vertex output components stay 6144, 1536 and 60
+(`docs/es3/backend-caps.md` §5). The board rows are to be re-run. The
+compressed-format list is closed on the
 host: `GL_NUM_COMPRESSED_TEXTURE_FORMATS` is 11 (ETC1 and the ten ETC2/EAC
 formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,

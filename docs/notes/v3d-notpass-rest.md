@@ -90,11 +90,12 @@ cause as `draw_buffers_indexed`), `state_query.integers.*` 17 and
 `shader.program_active_uniform_types` 1, `shader.program_binary` 1.
 
 - **Cause**: GL core. The limit rows are ES 3.0 minimums the core does not
-  reach: `GL_MAX_VARYING_VECTORS` is 8 on the V3D (`src/gl/context.rs:131-133`;
-  ES 3.0 asks 15, Mesa's v3d has 16), `DRAW_TARGETS` is 3
+  reach: `GL_MAX_VARYING_VECTORS` was 8 on the V3D (ES 3.0 asks 15, Mesa's
+  v3d has 16; 15 since plan #359, see below), `DRAW_TARGETS` is 3
   (`src/backend.rs:765-775`; ES 3.0 asks 4, the V3D TLB and compiler take 4,
   its comment says only "no board has drawn four"), the uniform component and
-  block-size limits, and the compressed-format list. The `*_getfloat` /
+  block-size limits (16384 and 50688 on the V3D since plan #359,
+  `docs/notes/ubo-limits.md` §9), and the compressed-format list. The `*_getfloat` /
   `*_getinteger64` rows fail on limits whose integer query is right too (e.g.
   `max_samples_getfloat`), so the float and 64-bit paths of
   `glGetFloatv`/`glGetInteger64v` (`src/gl/state.rs:1379-1500`) were
@@ -102,16 +103,12 @@ cause as `draw_buffers_indexed`), `state_query.integers.*` 17 and
   `get_integerv`'s answer (the unsigned stencil masks aside), and
   `tests/es3_query_forms.rs` pins that all three forms agree and write one
   value for every limit; those rows fail with the value, and move with it.
-- **V3D varyings, what carries them**: `MAX_VARYING_VECTORS` 15 / 60 input
-  components needs more than the host side has today. `V3dFsProg` and
-  `ShcV3dFs` hold `flat_shade_flags`, `noperspective_flags` and
-  `centroid_flags` as ONE u32 each (`src/v3d/ffi.rs`, `src/shaderc/mod.rs`,
-  `src/abi_layout*.{rs,c}`), i.e. 32 scalar inputs; Mesa's are
-  arrays of words for 64 inputs (`V3D_MAX_FS_INPUTS`, `v3d_limits.h`; the array form is from memory of Mesa, v3d_compile.h is not vendored), and the
-  shader record carries one flag word per 32 inputs (`v3dx_emit.c`, likewise not vendored). The
-  limit is raised with the two-word flags in the ABI, the record emission,
-  the VPM output size for 64 vertex output components, and a board run of
-  es100/varyings15; not before.
+- **V3D varyings, what carries them**: done on the host by plan #359
+  (`docs/notes/v3d-varyings.md`, "What was built"): `V3dFsProg` and
+  `ShcV3dFs` hold Mesa's three 24-bit flag words per kind, the job builder
+  emits one packet per non-zero word, the VPM output holds 64 varying
+  components, and the V3D reports 15 / 60 / 60 / 64. The board run of
+  es100/varyings15 and of words 1 and 2 is #320's.
 - **Cross-effect**: raising `DRAW_TARGETS` to 4 for the V3D also changes
   `fragment_out.*` and `draw_buffers_indexed.*` and the V3D MRT clear; coordinate
   with the notes for those.

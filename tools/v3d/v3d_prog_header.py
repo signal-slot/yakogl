@@ -303,7 +303,7 @@ def main():
     w("\t\t.single_seg = %s," % cbool(fs["single_seg"], "fs.single_seg"))
     w("\t\t.num_inputs = %d," % cuint(fs["num_inputs"], "fs.num_inputs"))
     for k in ("flat_shade_flags", "noperspective_flags", "centroid_flags"):
-        w("\t\t.%s = 0x%08xu," % (k, cuint(fs[k], "fs." + k)))
+        w("\t\t.%s = { 0x%08xu }," % (k, cuint(fs[k], "fs." + k)))
     for k in ("writes_z", "disable_ez", "uses_center_w", "lock_scoreboard_on_first_thrsw",
               "uses_implicit_point_line_varyings", "uses_pid"):
         w("\t\t.%s = %s," % (k, cbool(fs[k], "fs." + k)))

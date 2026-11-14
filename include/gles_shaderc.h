@@ -251,7 +251,8 @@ struct shc_v3d_fs {
 	const struct shc_v3d_uniform *uniforms;
 	uint32_t num_uniforms;
 	uint32_t num_inputs;
-	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
+	/* Mesa's 24-bit flag words: input i at bit i % 24 of word i / 24 */
+	uint32_t flat_shade_flags[3], noperspective_flags[3], centroid_flags[3];
 	uint8_t  threads, single_seg, writes_z, disable_ez, uses_center_w;
 	uint8_t  lock_scoreboard_on_first_thrsw, uses_implicit_point_line_varyings, uses_pid;
 	uint8_t  rt_mask;       /* bit n: the program writes colour to render target n (0..3) */

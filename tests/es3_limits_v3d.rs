@@ -27,7 +27,9 @@
 //!   its owner in the comment, and the ES 3.0 result is the `#[ignore]`d
 //!   test of it (`cargo test ... -- --ignored` runs the expectations);
 //! - `GL_MAX_VARYING_COMPONENTS`-style derived rows pin their derivation
-//!   (4 components per varying vector) so raising the root moves them.
+//!   (4 components per varying vector) so raising the root moves them, and
+//!   the uniform-block rows pin ES 3.0's formula for the combined
+//!   components.
 //!
 //! The 9 `state_query.indexed` rows and the compressed-format list rows are
 //! pinned in their own tests; the three remaining G3 state rows
@@ -243,14 +245,24 @@ fn meets_es3_0() -> Vec<Spec> {
         s("MAX_TEXTURE_IMAGE_UNITS", GL_MAX_TEXTURE_IMAGE_UNITS, 16),
         s("MAX_VERTEX_TEXTURE_IMAGE_UNITS", GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, 16),
         s("MAX_COMBINED_TEXTURE_IMAGE_UNITS", GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, 32),
-        // the uniform vectors and block counts (the *components and block
-        // size live in below_es3_0(); the vectors and counts reach it)
+        // the uniform vectors, block counts, block size and combined
+        // components (src/gl/context.rs MAX_STAGE_UNIFORM_DWORDS: twelve
+        // 16384-byte blocks a stage behind the default block)
         s("MAX_VERTEX_UNIFORM_VECTORS", GL_MAX_VERTEX_UNIFORM_VECTORS, 256),
         s("MAX_FRAGMENT_UNIFORM_VECTORS", GL_MAX_FRAGMENT_UNIFORM_VECTORS, 224),
         s("MAX_VERTEX_UNIFORM_BLOCKS", GL_MAX_VERTEX_UNIFORM_BLOCKS, 12),
         s("MAX_FRAGMENT_UNIFORM_BLOCKS", GL_MAX_FRAGMENT_UNIFORM_BLOCKS, 12),
         s("MAX_COMBINED_UNIFORM_BLOCKS", GL_MAX_COMBINED_UNIFORM_BLOCKS, 24),
         s("MAX_UNIFORM_BUFFER_BINDINGS", GL_MAX_UNIFORM_BUFFER_BINDINGS, 24),
+        s("MAX_UNIFORM_BLOCK_SIZE", GL_MAX_UNIFORM_BLOCK_SIZE, 16_384),
+        s("MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS", GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS, 50_176),
+        s("MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS", GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS, 50_048),
+        // the varying family (src/gl/context.rs MAX_VARYING_VECTORS 15 and
+        // MAX_VERTEX_OUTPUT_COMPONENTS 64 on gpu-v3d)
+        s("MAX_VARYING_VECTORS", GL_MAX_VARYING_VECTORS, 15),
+        s("MAX_VARYING_COMPONENTS", GL_MAX_VARYING_COMPONENTS, 60),
+        s("MAX_VERTEX_OUTPUT_COMPONENTS", GL_MAX_VERTEX_OUTPUT_COMPONENTS, 64),
+        s("MAX_FRAGMENT_INPUT_COMPONENTS", GL_MAX_FRAGMENT_INPUT_COMPONENTS, 60),
         s("MAX_PROGRAM_TEXEL_OFFSET", GL_MAX_PROGRAM_TEXEL_OFFSET, 7),
     ]
 }
@@ -309,71 +321,6 @@ fn below_es3_0() -> Vec<Gap> {
             "state_query.integers.max_samples_getfloat + max_samples_getinteger64 (values; forms below)",
             "src/gl/state.rs + src/gl/framebuffer.rs (GL core caps); 4x design docs/notes/v3d-msaa-es3.md",
         ),
-        // The varying family: `src/gl/context.rs` MAX_VARYING_VECTORS is 8
-        // on gpu-v3d (the ES 2.0 minimum; Mesa's v3d programs 16 /
-        // V3D_MAX_FS_INPUTS 64). The three component rows are 4x the root
-        // (`src/gl/state.rs` and `src/gl/context.rs` derive them), so one
-        // change moves all four.
-        g(
-            "MAX_VARYING_VECTORS",
-            GL_MAX_VARYING_VECTORS,
-            15,
-            8,
-            "implementation_limits.max_varying_vectors + state_query.integers.max_varying_vectors_*",
-            "src/gl/context.rs (MAX_VARYING_VECTORS, gpu-v3d)",
-        ),
-        g(
-            "MAX_VARYING_COMPONENTS",
-            GL_MAX_VARYING_COMPONENTS,
-            60,
-            32,
-            "implementation_limits.max_varying_components + state_query.integers.max_varying_components_*",
-            "src/gl/context.rs (MAX_VARYING_VECTORS * 4)",
-        ),
-        g(
-            "MAX_VERTEX_OUTPUT_COMPONENTS",
-            GL_MAX_VERTEX_OUTPUT_COMPONENTS,
-            64,
-            32,
-            "implementation_limits.max_vertex_output_components + state_query.integers.max_vertex_output_components_*",
-            "src/gl/context.rs (MAX_VARYING_VECTORS * 4)",
-        ),
-        g(
-            "MAX_FRAGMENT_INPUT_COMPONENTS",
-            GL_MAX_FRAGMENT_INPUT_COMPONENTS,
-            60,
-            32,
-            "implementation_limits.max_fragment_input_components + state_query.integers.max_fragment_input_components_*",
-            "src/gl/context.rs (MAX_VARYING_VECTORS * 4)",
-        ),
-        // The uniform-block family: `src/gl/context.rs` MAX_UNIFORM_DWORDS
-        // is 1536 and `src/gl/state.rs` derives the block size
-        // (dwords * 4 bytes) and both combined-component limits (the bare
-        // dwords — no block share added on top) from it.
-        g(
-            "MAX_UNIFORM_BLOCK_SIZE",
-            GL_MAX_UNIFORM_BLOCK_SIZE,
-            16_384,
-            6_144,
-            "implementation_limits.max_uniform_block_size + state_query.integers64.max_uniform_block_size_*",
-            "src/gl/context.rs (MAX_UNIFORM_DWORDS); src/gl/state.rs derives the size",
-        ),
-        g(
-            "MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",
-            GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS,
-            50_176, // 12 blocks * 16384 / 4 + 1024 (Table 6.32 note)
-            1_536,
-            "implementation_limits.max_combined_vertex_uniform_components + state_query.integers64.*_get{float,integer}",
-            "src/gl/context.rs (MAX_UNIFORM_DWORDS); src/gl/state.rs: no block share",
-        ),
-        g(
-            "MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",
-            GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS,
-            50_048, // 12 * 16384 / 4 + 896
-            1_536,
-            "implementation_limits.max_combined_fragment_uniform_components + state_query.integers64.*_get{float,integer}",
-            "src/gl/context.rs (MAX_UNIFORM_DWORDS); src/gl/state.rs: no block share",
-        ),
     ]
 }
 
@@ -406,7 +353,9 @@ fn limits_that_meet_the_es3_0_minimum_stay_meeting_it() {
 
 /* ---- 2. the limits that are below ES 3.0, pinned as they are -------------- */
 
-/// The 10 value gaps G3 names, each pinned to today's answer with its owner;
+/// The value gaps G3 named that are still open, each pinned to today's
+/// answer with its owner (the varying and uniform-block families met ES 3.0
+/// with plan #359 and are in [`meets_es3_0`]);
 /// the ES 3.0 expectation is the `#[ignore]`d test at the end of this file
 /// (one per family). A pinned value that reaches its minimum prints CLOSED
 /// without failing, so the fix does not have to touch this file (the rule
@@ -438,19 +387,52 @@ fn g3_limits_below_the_es3_0_minimum_are_pinned_as_they_are() {
     assert_eq!(Q::error(), GL_NO_ERROR);
 }
 
-/// The component rows are exactly four per varying vector, so the family's
-/// fix is the one root value (and `tests/es3_caps.rs`'s gl_Max* shader
-/// values move with it).
+/// The varying and fragment-input rows are exactly four per varying vector,
+/// so one root value moves them (and the shader's gl_Max* values with it).
+/// The vertex output is the VPM's 64 components (16 vectors), one vector
+/// above the fragment side: the V3D's VPM output rows hold 64 varying
+/// components beside the fixed-function rows (online/v3d/select.rs
+/// MAX_VPM_OUTPUT_ROWS).
 #[test]
 fn the_varying_component_rows_are_four_times_their_root() {
     let _lib = context();
     let vectors = Q::one(GL_MAX_VARYING_VECTORS);
     for (name, pname) in [
         ("MAX_VARYING_COMPONENTS", GL_MAX_VARYING_COMPONENTS),
-        ("MAX_VERTEX_OUTPUT_COMPONENTS", GL_MAX_VERTEX_OUTPUT_COMPONENTS),
         ("MAX_FRAGMENT_INPUT_COMPONENTS", GL_MAX_FRAGMENT_INPUT_COMPONENTS),
     ] {
         assert_eq!(Q::one(pname), vectors * 4, "{name} is 4 components per varying vector");
+    }
+    assert_eq!(Q::one(GL_MAX_VERTEX_OUTPUT_COMPONENTS), 64);
+    assert_eq!(Q::error(), GL_NO_ERROR);
+}
+
+/// The combined uniform components are ES 3.0's formula (Table 6.20:
+/// MAX_*_UNIFORM_COMPONENTS + MAX_*_UNIFORM_BLOCKS * MAX_UNIFORM_BLOCK_SIZE
+/// / 4), what a stage's storage holds (src/gl/context.rs
+/// MAX_STAGE_UNIFORM_DWORDS): 1536 + 12 * 4096 = 50688 for both stages.
+#[test]
+fn the_combined_uniform_components_are_the_block_formula() {
+    let _lib = context();
+    let size = Q::one(GL_MAX_UNIFORM_BLOCK_SIZE);
+    assert_eq!(size, 16_384);
+    for (name, combined, blocks, comps) in [
+        (
+            "VERTEX",
+            GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS,
+            GL_MAX_VERTEX_UNIFORM_BLOCKS,
+            GL_MAX_VERTEX_UNIFORM_COMPONENTS,
+        ),
+        (
+            "FRAGMENT",
+            GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS,
+            GL_MAX_FRAGMENT_UNIFORM_BLOCKS,
+            GL_MAX_FRAGMENT_UNIFORM_COMPONENTS,
+        ),
+    ] {
+        let want = Q::one(blocks) * size / 4 + Q::one(comps);
+        assert_eq!(Q::one(combined), want, "MAX_COMBINED_{name}_UNIFORM_COMPONENTS");
+        assert_eq!(want, 50_688, "{name}");
     }
     assert_eq!(Q::error(), GL_NO_ERROR);
 }
@@ -709,13 +691,11 @@ fn four_samples() {
 /// The varying family at ES 3.0's minimums: implementation_limits.max_varying_vectors,
 /// .max_varying_components, .max_vertex_output_components,
 /// .max_fragment_input_components and their state_query.integers.* rows.
-/// Owner: `src/gl/context.rs` MAX_VARYING_VECTORS, 8 on gpu-v3d ("Mesa's
-/// v3d allows 16 (V3D_MAX_FS_INPUTS, 64 components), but nothing here has
-/// drawn with more than a few varyings on the board"); the component rows
-/// and the shader's gl_Max*Vectors derive from it, and `docs/es3-
-/// cts-failures.md`/the board run that measures more varyings carries it.
+/// `src/gl/context.rs` MAX_VARYING_VECTORS (15 on gpu-v3d) and
+/// MAX_VERTEX_OUTPUT_COMPONENTS (64); what the compiler and the job builder
+/// carry for it is src/shaderc/online/v3d/varyings_tests.rs and
+/// tests/es3_flatshade_guard.rs (docs/notes/v3d-varyings.md).
 #[test]
-#[ignore = "src/gl/context.rs MAX_VARYING_VECTORS is 8 on gpu-v3d, ES 3.0 needs 15"]
 fn the_varying_family_meets_es3_0() {
     let _lib = context();
     assert!(Q::one(GL_MAX_VARYING_VECTORS) >= 15);
@@ -728,12 +708,11 @@ fn the_varying_family_meets_es3_0() {
 /// The uniform-block family at ES 3.0's minimums:
 /// implementation_limits.max_uniform_block_size,
 /// .max_combined_{vertex,fragment}_uniform_components and their
-/// state_query.integers64.* rows. Owner: `src/gl/context.rs`
-/// MAX_UNIFORM_DWORDS (1536) and the `src/gl/state.rs` arms that derive the
-/// block size from it and report the bare dwords for the combined limits
-/// (no uniform-block share added on top of the default-block budget).
+/// state_query.integers64.* rows. `src/gl/context.rs`
+/// MAX_UNIFORM_BLOCK_DWORDS (4096 on gpu-v3d) and MAX_STAGE_UNIFORM_DWORDS
+/// (the default block and twelve such blocks); a draw reading a 16384-byte
+/// block is tests/v3d_uniform_host.rs (f) (docs/notes/ubo-limits.md).
 #[test]
-#[ignore = "src/gl MAX_UNIFORM_DWORDS gives 6144/1536, ES 3.0 needs 16384/50176/50048"]
 fn the_uniform_block_family_meets_es3_0() {
     let _lib = context();
     assert!(Q::one(GL_MAX_UNIFORM_BLOCK_SIZE) >= 16_384);

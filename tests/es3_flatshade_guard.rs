@@ -19,7 +19,11 @@
 //!   program has `ZERO_ALL_FLAT_SHADE_FLAGS`), `VERTEX_ARRAY_PRIMS` names the
 //!   native primitive (the loop and the fan are not rewritten), and
 //!   `LINE_WIDTH` is the width asked for. The job builder's input, the
-//!   draw's `V3dJobDraw`, is checked alongside.
+//!   draw's `V3dJobDraw`, is checked alongside. A program with 15 vec4
+//!   varyings (ES 3.0's MAX_VARYING_VECTORS, plan #359) is drawn too: its
+//!   flat and centroid inputs past 24 and 48 are Mesa's flag words 1 and 2,
+//!   one `FLAT_SHADE_FLAGS` / `CENTROID_FLAGS` packet per non-zero word with
+//!   its varying offset and the actions of v3dx_emit.c emit_varying_flags.
 //! - GC7000UL: through the GL core and the REAL Vivante back end on a
 //!   stand-in OSAL that keeps every stream (as tests/es3_int_rt_gc.rs), the
 //!   state words and the draw command: `PA_SYSTEM_MODE` with
@@ -81,12 +85,42 @@ const VS_MIXED: &str = "#version 300 es\nin vec4 p;\nin vec4 c;\nflat out vec4 v
 const FS_MIXED: &str = "#version 300 es\nprecision mediump float;\nflat in vec4 vf;\nin vec4 vs;\nout vec4 o;\n\
     void main() { o = vf + vs; }\n";
 
+/// 15 vec4 varyings (ES 3.0's MAX_VARYING_VECTORS, 60 fragment inputs):
+/// `v0`, `v6` and `v12` flat (inputs 0-3, 24-27 and 48-51, one in each of
+/// the V3D's 24-bit flag words), `v13` centroid (inputs 52-55), the rest
+/// smooth.
+#[cfg(feature = "gpu-v3d")]
+fn wide_sources() -> &'static (String, String) {
+    static S: std::sync::OnceLock<(String, String)> = std::sync::OnceLock::new();
+    S.get_or_init(|| {
+        let qual = |i: usize| match i {
+            0 | 6 | 12 => "flat ",
+            13 => "centroid ",
+            _ => "",
+        };
+        let mut vs = String::from("#version 300 es\nin vec4 p;\nin vec4 c;\n");
+        let mut fs = String::from("#version 300 es\nprecision mediump float;\n");
+        let (mut wv, mut rf) = (String::new(), String::from("vec4 a = vec4(0.0);\n"));
+        for i in 0..15 {
+            vs.push_str(&format!("{}out vec4 v{i};\n", qual(i)));
+            fs.push_str(&format!("{}in vec4 v{i};\n", qual(i)));
+            wv.push_str(&format!("v{i} = c + vec4({i}.0);\n"));
+            rf.push_str(&format!("a += v{i};\n"));
+        }
+        vs.push_str(&format!("void main() {{\n{wv}gl_Position = p; gl_PointSize = 1.0;\n}}\n"));
+        fs.push_str(&format!("out vec4 o;\nvoid main() {{\n{rf}o = a / 16.0;\n}}\n"));
+        (vs, fs)
+    })
+}
+
 /// Which programs a test draws.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
     Flat,
     Smooth,
     Mixed,
+    #[cfg(feature = "gpu-v3d")]
+    Wide,
 }
 
 fn sources(k: Kind) -> (&'static str, &'static str) {
@@ -94,6 +128,8 @@ fn sources(k: Kind) -> (&'static str, &'static str) {
         Kind::Flat => (VS_FLAT, FS_FLAT),
         Kind::Smooth => (VS_SMOOTH, FS_SMOOTH),
         Kind::Mixed => (VS_MIXED, FS_MIXED),
+        #[cfg(feature = "gpu-v3d")]
+        Kind::Wide => (wide_sources().0.as_str(), wide_sources().1.as_str()),
     }
 }
 
@@ -620,6 +656,10 @@ mod v3d {
         line_width: f32,
         flat_shade_flags: u32,
         count: u32,
+        num_inputs: u32,
+        /// The three 24-bit words of each flag set (V3dFsProg).
+        flat_words: [u32; 3],
+        centroid_words: [u32; 3],
     }
 
     #[no_mangle]
@@ -630,8 +670,11 @@ mod v3d {
             SeenDraw {
                 prim: d.prim,
                 line_width: (*d.st).line_width,
-                flat_shade_flags: (*d.fs).flat_shade_flags,
+                flat_shade_flags: (*d.fs).flat_shade_flags[0],
                 count: d.count,
+                num_inputs: (*d.fs).num_inputs,
+                flat_words: (*d.fs).flat_shade_flags,
+                centroid_words: (*d.fs).centroid_flags,
             }
         };
         PLATFORM.lock().unwrap_or_else(|e| e.into_inner()).as_mut().expect("the platform").draws.push(rec);
@@ -889,6 +932,13 @@ mod v3d {
         /// ZERO_ALL_FLAT_SHADE_FLAGS.
         flat_flags: Vec<u32>,
         flat_zeroed: usize,
+        /// Every FLAT_SHADE_FLAGS and CENTROID_FLAGS as (varying offset,
+        /// lower action, higher action, flag word) (byte 1: bits 0-3, 4-5,
+        /// 6-7; v3d_packet_v42_pack.h), and how many ZERO_ALL_* of each.
+        flat_packets: Vec<(u8, u8, u8, u32)>,
+        centroid_packets: Vec<(u8, u8, u8, u32)>,
+        centroid_zeroed: usize,
+        noperspective_zeroed: usize,
         /// The `mode` of every VERTEX_ARRAY_PRIMS.
         modes: Vec<u32>,
         /// The float of every LINE_WIDTH.
@@ -905,12 +955,32 @@ mod v3d {
             opcode("VERTEX_ARRAY_PRIMS"),
             opcode("LINE_WIDTH"),
         );
-        let mut d = Draw { provoking: vec![], flat_flags: vec![], flat_zeroed: 0, modes: vec![], widths: vec![], seen };
+        let (centroid, centroid_zero, noper_zero) =
+            (opcode("CENTROID_FLAGS"), opcode("ZERO_ALL_CENTROID_FLAGS"), opcode("ZERO_ALL_NON_PERSPECTIVE_FLAGS"));
+        let mut d = Draw {
+            provoking: vec![],
+            flat_flags: vec![],
+            flat_zeroed: 0,
+            flat_packets: vec![],
+            centroid_packets: vec![],
+            centroid_zeroed: 0,
+            noperspective_zeroed: 0,
+            modes: vec![],
+            widths: vec![],
+            seen,
+        };
+        let flags = |b: &[u8]| (b[1] & 0xf, (b[1] >> 4) & 3, b[1] >> 6, u32::from_le_bytes([b[2], b[3], b[4], 0]));
         for (op, b) in packets(bcl) {
             match op {
                 o if o == cfg => d.provoking.push(b[3] & 0x20 != 0),
-                o if o == flat => d.flat_flags.push(u32::from_le_bytes([b[2], b[3], b[4], 0])),
+                o if o == flat => {
+                    d.flat_flags.push(u32::from_le_bytes([b[2], b[3], b[4], 0]));
+                    d.flat_packets.push(flags(b));
+                }
                 o if o == zero => d.flat_zeroed += 1,
+                o if o == centroid => d.centroid_packets.push(flags(b)),
+                o if o == centroid_zero => d.centroid_zeroed += 1,
+                o if o == noper_zero => d.noperspective_zeroed += 1,
                 o if o == prims => d.modes.push(b[1] as u32),
                 o if o == width => d.widths.push(f32::from_le_bytes([b[1], b[2], b[3], b[4]])),
                 _ => {}
@@ -1099,5 +1169,33 @@ mod v3d {
                 assert_eq!(d.modes, vec![native(mode)], "{name} at {width}");
             }
         }
+    }
+
+    /// 15 vec4 varyings, the ES 3.0 MAX_VARYING_VECTORS the V3D reports: the
+    /// job builder takes the 60 inputs (it refused more than 24 before plan
+    /// #359) and writes Mesa's packets for flag words 1 and 2
+    /// (v3dx_emit.c:177-208): the first non-zero word of a kind zeroes the
+    /// higher words, and the lower ones too unless it is word 0; a later word
+    /// leaves both; the offset is the word's index.
+    #[test]
+    fn fifteen_varyings_put_flags_past_24_and_48_in_words_1_and_2() {
+        const UNCHANGED: u8 = 0;
+        const ZEROED: u8 = 1;
+        let _g = rig();
+        let d = draw(Kind::Wide, GL_TRIANGLES, 6, 1.0);
+        assert_eq!(d.seen.len(), 1, "one draw");
+        assert_eq!(d.seen[0].num_inputs, 60, "15 vec4 varyings");
+        assert_eq!(d.seen[0].flat_words, [0xf, 0xf, 0xf], "v0, v6 and v12: inputs 0-3, 24-27, 48-51");
+        assert_eq!(d.seen[0].centroid_words, [0, 0, 0xf0], "v13: inputs 52-55");
+        assert_eq!(
+            d.flat_packets,
+            vec![(0, UNCHANGED, ZEROED, 0xf), (1, UNCHANGED, UNCHANGED, 0xf), (2, UNCHANGED, UNCHANGED, 0xf)],
+            "FLAT_SHADE_FLAGS, one per word"
+        );
+        assert_eq!(d.flat_zeroed, 0);
+        assert_eq!(d.centroid_packets, vec![(2, ZEROED, ZEROED, 0xf0)], "CENTROID_FLAGS, word 2 alone");
+        assert_eq!(d.centroid_zeroed, 0);
+        assert_eq!(d.noperspective_zeroed, 1, "ZERO_ALL_NON_PERSPECTIVE_FLAGS");
+        assert_eq!(d.modes, vec![native(GL_TRIANGLES)]);
     }
 }

@@ -24,7 +24,7 @@
 use super::arena::{Arena, ArenaError};
 use super::ir::{self, IoKind};
 use super::reflect;
-use super::v3d::chain::{V3dProgram, VsProg};
+use super::v3d::chain::{flag_words, V3dProgram, VsProg};
 use crate::shaderc::{
     ShcShader, ShcUniform, ShcV3d, ShcV3dFs, ShcV3dUniform, ShcV3dVs, ShcVarying, SHC_NO_BLEND_CONSTS, SHC_NO_META,
     SHC_NO_PSIZE, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX, SHC_V3D_NO_RECORD, SHC_V3D_PRIM_TRIANGLES,
@@ -271,9 +271,9 @@ pub fn program_shader(
         uniforms: fs_uniforms,
         num_uniforms: fs_num_uniforms,
         num_inputs: p.fs.num_inputs,
-        flat_shade_flags: p.fs.flat_shade_flags,
-        noperspective_flags: p.fs.noperspective_flags,
-        centroid_flags: p.fs.centroid_flags,
+        flat_shade_flags: flag_words(p.fs.flat_shade_flags),
+        noperspective_flags: flag_words(p.fs.noperspective_flags),
+        centroid_flags: flag_words(p.fs.centroid_flags),
         threads: u8::try_from(p.fs.threads).map_err(|_| V3dAbiError::TooLarge)?,
         single_seg: u8::from(p.fs.single_seg),
         writes_z: u8::from(p.fs.writes_z),

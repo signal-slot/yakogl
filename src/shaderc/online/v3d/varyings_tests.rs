@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Probe of the compiler's varying limits (plan #359, `v3d-varyings-probe`):
+//! The compiler's varying limits (plan #359; docs/notes/v3d-varyings.md):
 //! what a vertex/fragment pair with 15 vec4 varyings (60 components), a 16th
 //! vec4 vertex output (64 components), and flat, centroid and smooth varyings
-//! compiles to and, in the interpreter, carries through. They record the
-//! state before the ES 3.0 raise (MAX_VARYING_VECTORS 15,
-//! MAX_VERTEX_OUTPUT_COMPONENTS 64); a test that fails today is `#[ignore]`d
-//! with the limit it needs, and runs with `--ignored`.
+//! compiles to and, in the interpreter, carries through: the ES 3.0 values
+//! the V3D reports (MAX_VARYING_VECTORS 15, MAX_VERTEX_OUTPUT_COMPONENTS 64,
+//! src/gl/context.rs). The flags of inputs 24 and later go to the job
+//! builder's flag words 1 and 2 (`flag_words`); the packets it makes of them
+//! are tests/es3_flatshade_guard.rs's.
 
-use super::chain::{compile_program, Code, Prim, Target, V3dProgram, VARYING_SLOT_VAR0};
+use super::chain::{compile_program, flag_words, Code, Prim, Target, V3dError, V3dProgram, VARYING_SLOT_VAR0};
 use super::sim::{self, Env, FsInputs, Inputs, Varying, VsInputs, LANES};
 use crate::shaderc::online::sema::Stage;
 use crate::shaderc::online::{lower, store};
@@ -178,13 +179,23 @@ fn a_fs_reads_15_vec4_varyings() {
     }
 }
 
-/// Fails today with `Select(VpmRowOutOfRange)`: the vertex shader's output
-/// rows stop below 64 components (gl_Position, the viewport rows and 16
-/// vec4 do not fit).
+/// MAX_VERTEX_OUTPUT_COMPONENTS 64 beside MAX_FRAGMENT_INPUT_COMPONENTS 60:
+/// a vertex shader writing 16 vec4 links with a fragment shader reading 15
+/// of them, and the 15 read reach the VPM. (The VPM output rows hold 16 vec4
+/// and the fixed-function rows, select.rs MAX_VPM_OUTPUT_ROWS; a fragment
+/// shader reading all 64 is past what the GL link lets through.)
 #[test]
-#[ignore = "MAX_VERTEX_OUTPUT_COMPONENTS 64: select refuses VpmRowOutOfRange for a 16th vec4 output"]
-fn a_vs_writes_16_vec4_outputs() {
-    check_vs_rows(16, false).expect("a 16-vector (64-component) pair compiles");
+fn a_vs_writing_16_vec4_outputs_links_with_15_read() {
+    with_program(&vs_source(16, false), &fs_source(15, 14, false), |p| {
+        assert_eq!(p.fs.num_inputs, 60);
+        let rows = run_vs(p);
+        for i in 0..15 {
+            for c in 0..4 {
+                assert!(has_row(&rows, (16 * i + c) as f32), "v{i}.{c} is not among the {} rows written", rows.len());
+            }
+        }
+    })
+    .expect("a 16-vector vertex shader links with a 15-vector fragment shader");
 }
 
 /// The same 15 vectors from a GLSL ES 3.00 pair.
@@ -248,4 +259,98 @@ fn scalars_and_vec2s_pack_into_60_components() {
     })
     .expect("compiles");
     assert_eq!(n, 60, "every component of the 30 varyings is an FS input");
+}
+
+/// The flag words of `flags` as the job builder emits them: 24 inputs a
+/// word, input i at bit i % 24 of word i / 24 (Mesa vir.c:985-1003).
+#[test]
+fn flag_words_are_mesas_24_bit_words() {
+    assert_eq!(flag_words(0), [0, 0, 0]);
+    assert_eq!(flag_words(0xf), [0xf, 0, 0]);
+    assert_eq!(flag_words(1 << 23), [1 << 23, 0, 0]);
+    assert_eq!(flag_words(1 << 24), [0, 1, 0]);
+    assert_eq!(flag_words(1 << 47), [0, 1 << 23, 0]);
+    assert_eq!(flag_words(1 << 48), [0, 0, 1]);
+    assert_eq!(flag_words(1 << 63), [0, 0, 1 << 15]);
+    assert_eq!(flag_words(u64::MAX), [0xff_ffff, 0xff_ffff, 0xffff]);
+}
+
+/// 15 vec4 varyings with `v0`, `v6` and `v12` flat and `v13` centroid: the
+/// flat inputs are 0-3, 24-27 and 48-51, one in each flag word, the centroid
+/// ones 52-55 (the inputs are in location order, `input_slots`), and the
+/// interpreter reads a flat input as its C coefficient alone.
+#[cfg(not(feature = "report-es2"))]
+#[test]
+fn flat_and_centroid_inputs_past_24_and_48_set_flag_words_1_and_2() {
+    let qual = |i: usize| match i {
+        0 | 6 | 12 => "flat ",
+        13 => "centroid ",
+        _ => "",
+    };
+    let mut vs = String::from("#version 300 es\nin vec4 a;\n");
+    let mut fs = String::from("#version 300 es\nprecision highp float;\n");
+    let mut body_v = String::new();
+    let mut body_f = String::from("vec4 acc = vec4(0.0);\n");
+    for i in 0..15 {
+        vs.push_str(&std::format!("{}out vec4 v{i};\n", qual(i)));
+        fs.push_str(&std::format!("{}in vec4 v{i};\n", qual(i)));
+        body_v.push_str(&std::format!("v{i} = a + vec4({}.0);\n", 16 * i));
+        body_f.push_str(&std::format!("acc += v{i} * {};\n", if i == 12 { "1.0" } else { "0.0" }));
+    }
+    vs.push_str(&std::format!("void main() {{\n{body_v}gl_Position = vec4(0.0, 0.0, 0.0, 1.0);\n}}\n"));
+    fs.push_str(&std::format!("layout(location = 0) out vec4 o;\nvoid main() {{\n{body_f}o = acc / 1024.0;\n}}\n"));
+    with_program(&vs, &fs, |p| {
+        assert_eq!(p.fs.num_inputs, 60);
+        let loc = |i: usize| usize::from(p.fs.input_slots[i].0 - VARYING_SLOT_VAR0);
+        let mask = |locs: &[usize]| (0..60).filter(|&i| locs.contains(&loc(i))).fold(0u64, |m, i| m | 1 << i);
+        assert_eq!(p.fs.flat_shade_flags, mask(&[0, 6, 12]));
+        assert_eq!(p.fs.centroid_flags, mask(&[13]));
+        assert_eq!(p.fs.noperspective_flags, 0);
+        assert_eq!(flag_words(p.fs.flat_shade_flags), [0xf, 0xf, 0xf], "inputs 0-3, 24-27, 48-51");
+        assert_eq!(flag_words(p.fs.centroid_flags), [0, 0, 0xf0], "inputs 52-55");
+        /* a flat input reads C alone: its `vary` is garbage the shader must
+         * not use; a smooth one vary * W + C with W 1 and C 0 */
+        let varyings = (0..60)
+            .map(|i| {
+                let value: [u32; LANES] = core::array::from_fn(|l| (l as f32 + (16 * loc(i)) as f32).to_bits());
+                if p.fs.flat_shade_flags & (1 << i) != 0 {
+                    Varying { vary: [1e9f32.to_bits(); LANES], c: value }
+                } else {
+                    Varying { vary: value, c: [0; LANES] }
+                }
+            })
+            .collect();
+        let inputs = FsInputs {
+            w: [1.0f32.to_bits(); LANES],
+            w_centroid: [1.0f32.to_bits(); LANES],
+            z: [0; LANES],
+            x: [0; LANES],
+            y: [0; LANES],
+            back_facing: [false; LANES],
+            varyings,
+        };
+        let env = Env { threads: p.fs.threads, ..Env::default() };
+        let o =
+            sim::run(p.fs.code.words, &uniforms_of(&p.fs.code), &Inputs::Fragment(std::boxed::Box::new(inputs)), &env)
+                .expect("the fragment shader runs");
+        let h = |x: f32| u32::from(sim::f32_to_half(x));
+        for l in 0..LANES {
+            let w = h((l as f32 + (16 * 12) as f32) / 1024.0);
+            assert_eq!(
+                [o.tlb[0].value[l].unwrap(), o.tlb[1].value[l].unwrap()],
+                [w | w << 16, w | w << 16],
+                "lane {l}"
+            );
+        }
+    })
+    .expect("a 15-vector pair with flat and centroid varyings compiles");
+}
+
+/// More fragment inputs than the hardware interpolates (V3D_MAX_FS_INPUTS,
+/// 64) are refused by name; the GL link refuses them first
+/// (GL_MAX_FRAGMENT_INPUT_COMPONENTS 60).
+#[test]
+fn more_than_64_fragment_inputs_are_refused() {
+    let err = with_program(&vs_source(17, false), &fs_source(17, 0, false), |_| ()).expect_err("68 inputs");
+    assert_eq!(err, std::format!("{:?}", V3dError::TooManyFragmentInputs));
 }

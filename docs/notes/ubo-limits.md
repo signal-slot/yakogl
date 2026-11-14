@@ -253,3 +253,32 @@ Order matters: each step keeps the tree green.
 7. A Pi 4 board step (#320): a draw with a 16384-byte block read at the first
    and last dword, and `functional.ubo` and `implementation_limits` of the
    dEQP tree.
+
+## 9. What was built on the V3D (plan #359, `ubo-v3d`)
+
+Steps 1-5 of §8, with one change to §7.2: the capability is a per-GPU-build
+constant in `src/gl/context.rs`, as `MAX_VARYING_VECTORS` is, not a field
+of `YakoglBackend`. The value is per build anyway, and a field would have
+to be added to every `YakoglBackend {` literal in `tests/` and `src/` (the
+2026-10-14 main breakage, CLAUDE.md).
+
+- `MAX_UNIFORM_BLOCK_DWORDS` (V3D 4096, elsewhere `MAX_UNIFORM_DWORDS`),
+  `MAX_STAGE_UNIFORM_BLOCKS` (12) and `MAX_STAGE_UNIFORM_DWORDS` (V3D
+  1536 + 12 * 4096 = 50688, elsewhere 1536), all under `!report-es2`;
+  `MAX_COMBINED_UNIFORM_COMPONENTS` is the stage storage, asserted equal to
+  §1's formula on the V3D. Every dword count stays a `u16`.
+- `program.rs` `block_dwords` and `draw.rs`'s clamp use
+  `MAX_STAGE_UNIFORM_DWORDS`; the staging copy stays two
+  `MAX_UNIFORM_DWORDS` blocks, and a back end that reads it (not the V3D)
+  never gets more (`draw.rs` refuses with GL_OUT_OF_MEMORY rather than
+  write past it).
+- `state.rs` answers `GL_MAX_UNIFORM_BLOCK_SIZE` 16384 and the combined
+  components 50688 on the V3D, 6144 and 1536 elsewhere.
+- §2's open question: block-member rows do not count against the Appendix
+  A budget. A program with two 16384-byte blocks and a default uniform in
+  one stage links, and the draw hands the back end both blocks whole with
+  every uniform-stream word inside the storage
+  (`tests/v3d_uniform_host.rs` (f)).
+- Not built: §8 step 6 (`ldunifa` for a run-time index over more than 256
+  values, `tests/v3d_ubo_large_sim.rs` keeps its two `#[ignore]`d cases) and
+  step 7 (the Pi 4 board run).

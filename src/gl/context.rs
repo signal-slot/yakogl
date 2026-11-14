@@ -88,6 +88,55 @@ pub const MAX_UNIFORM_DWORDS: usize = 1536;
 /// read them, so the three cannot disagree.
 pub const MAX_VERTEX_UNIFORM_VECTORS: usize = MAX_UNIFORM_DWORDS / 4;
 pub const MAX_FRAGMENT_UNIFORM_VECTORS: usize = MAX_UNIFORM_DWORDS / 4;
+/// GL_MAX_VERTEX_UNIFORM_BLOCKS and GL_MAX_FRAGMENT_UNIFORM_BLOCKS, ES 3.0's
+/// twelve on every GPU.
+pub const MAX_STAGE_UNIFORM_BLOCKS: usize = 12;
+/// One stage's uniform storage in dwords: the program's per-stage array
+/// (`GlProgram::vs_uniforms` / `fs_uniforms`, program.rs `block_dwords`) and
+/// what a draw hands the back end (draw.rs). Uniform blocks are not
+/// hardware UBOs here: each is flattened into this array behind the default
+/// uniforms and filled from its bound range at draw time (program.rs
+/// `fill_uniform_blocks`; docs/notes/ubo-limits.md).
+///
+/// V3D: the default block and twelve blocks of [`MAX_UNIFORM_BLOCK_DWORDS`],
+/// 1536 + 12 * 4096 = 50688 dwords. The back end reads the host array only
+/// (`uniforms_host_only`) and the compiler makes each block dword one
+/// uniform-stream word (`QUNIFORM_UNIFORM`, online/v3d/select.rs), so
+/// nothing past the GL core bounds it; the draw's dword count is a u16
+/// (`V3dUniformStorage`, `GlesDraw::*_uniform_dwords`).
+///
+/// PowerVR, GC7000UL and Mali: [`MAX_UNIFORM_DWORDS`], the blocks share the
+/// default block's storage. The PowerVR loads it into shared registers (2048
+/// of them), the GC7000UL's memory-load path is unproven on the board, and
+/// the Mali's is not built (docs/notes/ubo-limits.md sections 4-6).
+///
+/// Under `report-es2` [`MAX_UNIFORM_DWORDS`] on every GPU: GLSL ES 1.00 has
+/// no uniform blocks.
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_STAGE_UNIFORM_DWORDS: usize = MAX_UNIFORM_DWORDS + MAX_STAGE_UNIFORM_BLOCKS * MAX_UNIFORM_BLOCK_DWORDS;
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+pub const MAX_STAGE_UNIFORM_DWORDS: usize = MAX_UNIFORM_DWORDS;
+/// GL_MAX_UNIFORM_BLOCK_SIZE in dwords: the largest block a stage stores.
+/// V3D 4096 (16384 bytes, ES 3.0's minimum); elsewhere the default block's
+/// storage, which every block of the stage shares ([`MAX_STAGE_UNIFORM_DWORDS`]).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_UNIFORM_BLOCK_DWORDS: usize = 4096;
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+pub const MAX_UNIFORM_BLOCK_DWORDS: usize = MAX_UNIFORM_DWORDS;
+/// GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS and
+/// GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS: what a stage's storage
+/// holds of default uniforms and block members together. On the V3D that is
+/// ES 3.0's formula (Table 6.20: MAX_*_UNIFORM_COMPONENTS +
+/// MAX_*_UNIFORM_BLOCKS * MAX_UNIFORM_BLOCK_SIZE / 4), asserted below.
+pub const MAX_COMBINED_UNIFORM_COMPONENTS: usize = MAX_STAGE_UNIFORM_DWORDS;
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+const _: () = assert!(
+    MAX_COMBINED_UNIFORM_COMPONENTS == MAX_UNIFORM_DWORDS + MAX_STAGE_UNIFORM_BLOCKS * MAX_UNIFORM_BLOCK_DWORDS
+);
+/* the dword counts the program keeps and the draw hands the back end are
+ * u16 (`GlProgram::fs_uniform_alloc` holds the blend constants too) */
+const _: () = assert!(MAX_STAGE_UNIFORM_DWORDS + BLEND_CONSTS_DWORDS <= u16::MAX as usize);
+const _: () = assert!(MAX_UNIFORM_BLOCK_DWORDS <= MAX_STAGE_UNIFORM_DWORDS);
 /// GL_MAX_TEXTURE_IMAGE_UNITS and gl_MaxTextureImageUnits: the samplers a
 /// fragment shader may use. Every backend's per-draw fragment table holds
 /// GLES_MAX_TEX_BINDS (16) bindings, and the link enforces this limit
@@ -146,11 +195,19 @@ pub const MAX_VARYING_VECTORS: usize = 15;
 pub const MAX_VARYING_VECTORS: usize = 15;
 #[cfg(all(feature = "gpu-powervr", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
-/// V3D: 8, the ES 2.0 minimum. Mesa's v3d allows 16 (V3D_MAX_FS_INPUTS, 64
-/// components), but nothing here has drawn with more than a few varyings on
-/// the board: the M6 first cut claims what it has a chance of having
-/// measured, and is raised with the board run that measures more.
-#[cfg(feature = "gpu-v3d")]
+/// V3D: 15, ES 3.0's minimum (docs/notes/v3d-varyings.md). The hardware
+/// interpolates 64 fragment inputs (Mesa's V3D_MAX_FS_INPUTS, which Mesa
+/// reports as 16 vectors); the compiler packs each input's flags into
+/// Mesa's three 24-bit words (online/v3d/chain.rs `flag_words`) and the job
+/// builder emits them (driver/src/v3d/v3d_job.c EMIT_VARYING_FLAGS), and
+/// the vertex shader's VPM output holds 4 + 1 + 64 rows (online/v3d/select.rs
+/// MAX_VPM_OUTPUT_ROWS). 15 and not Mesa's 16 until a board run has drawn
+/// with words 1 and 2 (tests/es3_flatshade_guard.rs is the host's half).
+///
+/// Under `report-es2` 8, the ES 2.0 answer as it was (tests/es2_report_guard.rs).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VARYING_VECTORS: usize = 15;
+#[cfg(all(feature = "gpu-v3d", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// Mali-G610: 8, the ES 2.0 minimum, as the V3D's first cut: nothing has
 /// been compiled for it yet. Mesa's panfrost takes 32 inputs a stage on
@@ -190,7 +247,15 @@ pub fn max_color_attachments() -> usize {
 /// The shader's gl_MaxVertexOutputVectors / gl_MaxFragmentInputVectors are
 /// these divided by four (ES 3.00 section 7.3), so raising one here moves
 /// the shader's value with it.
+///
+/// The V3D's vertex output is 64, ES 3.0's minimum: the VPM output rows
+/// hold 64 varying components beside the fixed-function rows
+/// (online/v3d/select.rs MAX_VPM_OUTPUT_ROWS), so the vertex stage is not
+/// bound by the fragment stage's 15 vectors.
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = 64;
 pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 /// GL_MIN/MAX_PROGRAM_TEXEL_OFFSET, ES 3.0's minimum range: the values the
 /// GL core reports, and the shader's gl_Min/MaxProgramTexelOffset.

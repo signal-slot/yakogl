@@ -1203,8 +1203,11 @@ mod gl_api {
             ("Abi(LoadBalancingTempsUnmeasured {", false),
             #[cfg(feature = "gpu-v3d")]
             ("Abi(TooManyVaryings { got: ", true),
+            /* a program whose flat or centroid inputs reach past input 31
+             * links since the V3D's flag words are Mesa's three (plan #359);
+             * some of those need more registers than two threads have */
             #[cfg(feature = "gpu-v3d")]
-            ("varying past input 31", false),
+            ("more live values than 2 threads have registers", false),
         ];
         for (name, vectors, r) in &refused {
             let log = format!("{r:?}");

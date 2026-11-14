@@ -23,6 +23,11 @@
 //! * (d) a block of 240 dwords (60 vec4s).
 //! * (e) glUniform after a draw, in the same frame, does not reach the
 //!   earlier draw.
+//! * (f) two uniform blocks of 16384 bytes (ES 3.0's MAX_UNIFORM_BLOCK_SIZE,
+//!   plan #359) in the FS, read at their first and last vec4: both whole
+//!   blocks are in the stage's storage, and every uniform-stream word the
+//!   fragment program reads (QUNIFORM_UNIFORM, the dword index into that
+//!   storage) is inside it.
 //!
 //! The stand-in builder draws nothing, so no pixel is checked: the words the
 //! real builder would copy are. The GL core no longer fills the staging copy
@@ -186,6 +191,12 @@ mod trampolines {
     pub struct SeenDraw {
         pub vs: Vec<u32>,
         pub fs: Vec<u32>,
+        /// The word of `fs` each QUNIFORM_UNIFORM entry of the fragment
+        /// program's uniform stream reads, `None` for one past the block (the
+        /// real builder refuses that draw, v3d_job.c write_uniforms). Read
+        /// by the uniform-block case, which an ES 2.0 build does not have.
+        #[cfg_attr(feature = "report-es2", allow(dead_code))]
+        pub fs_reads: Vec<Option<u32>>,
         /// Some program's staging buffer holds `vs` at offset 0 (true when
         /// the VS has no block).
         pub staged_vs: bool,
@@ -254,7 +265,21 @@ mod trampolines {
         unsafe { (*j.bcl).used += 120 };
         let (vs, fs) = (block(&d.vs_storage), block(&d.fs_storage));
         let fs_off = (vs.len() * 4 + 15) & !15;
-        let seen = SeenDraw { staged_vs: staged_at(&vs, 0), staged_fs: staged_at(&fs, fs_off), vs, fs };
+        // SAFETY: the draw's fragment program and its uniform stream live for the call.
+        let stream = unsafe {
+            let p = &*d.fs;
+            if p.uniforms.is_null() {
+                &[][..]
+            } else {
+                std::slice::from_raw_parts(p.uniforms, p.num_uniforms as usize)
+            }
+        };
+        let fs_reads = stream
+            .iter()
+            .filter(|u| u.contents == V3D_QUNIFORM_UNIFORM)
+            .map(|u| fs.get(u.data as usize).copied())
+            .collect();
+        let seen = SeenDraw { staged_vs: staged_at(&vs, 0), staged_fs: staged_at(&fs, fs_off), fs_reads, vs, fs };
         draws().push(seen);
         V3D_JOB_OK
     }
@@ -987,5 +1012,83 @@ mod trampolines {
         assert_not_a(&d3, &v2, "next frame");
         assert_staging(&d2, "second");
         assert_staging(&d3, "next frame");
+    }
+
+    /// Two blocks of 1024 vec4 (16384 bytes each, ES 3.0's
+    /// MAX_UNIFORM_BLOCK_SIZE; members of at most 255 elements, a
+    /// `UniformRow::array_len` is a u8) and a default uniform.
+    #[cfg(not(feature = "report-es2"))]
+    const FS_UBO_16K: &str = "#version 300 es\nprecision highp float;\n\
+        layout(std140) uniform Big0 { vec4 a0[255]; vec4 a1[255]; vec4 a2[255]; vec4 a3[255]; vec4 a4[4]; };\n\
+        layout(std140) uniform Big1 { vec4 b0[255]; vec4 b1[255]; vec4 b2[255]; vec4 b3[255]; vec4 b4[4]; };\n\
+        uniform vec4 u_tint;\nout vec4 o;\n\
+        void main() { o = a0[0] + a4[3] + b0[0] + b4[3] + u_tint; }\n";
+    #[cfg(not(feature = "report-es2"))]
+    const VS_300: &str = "#version 300 es\nin vec4 a_position;\nvoid main() { gl_Position = a_position; }\n";
+
+    /// (f) Two 16384-byte blocks in one stage, filled from two buffers: the
+    /// stage's storage holds both whole (src/gl/context.rs
+    /// MAX_STAGE_UNIFORM_DWORDS, 1536 + 12 * 4096 dwords on the V3D; it was
+    /// cut at 1536 before plan #359), and the fragment program reads the first
+    /// and the last vec4 of each, and the default uniform, from inside it.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn two_16384_byte_uniform_blocks_are_stored_whole_and_read_at_their_ends() {
+        use yakogl::gl::buffer::{glBindBuffer, glBufferData, glGenBuffers};
+        use yakogl::gl::es3::glBindBufferBase;
+        const DW: usize = 4096;
+        let _r = rig();
+        let mut size: GLint = 0;
+        // SAFETY: one GLint out.
+        unsafe { glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &mut size) };
+        assert_eq!(size as usize, DW * 4, "GL_MAX_UNIFORM_BLOCK_SIZE");
+        let p = program(VS_300, FS_UBO_16K);
+        use_program(p);
+        /* dword k of block 0 is k + 0.5, of block 1 100000 + k + 0.5: exact,
+         * distinct, and none a default value */
+        let blocks: [Vec<f32>; 2] =
+            [(0..DW).map(|k| k as f32 + 0.5).collect(), (0..DW).map(|k| 100_000.0 + k as f32 + 0.5).collect()];
+        let tint = floats(70, 4);
+        let mut bufs = [0u32; 2];
+        // SAFETY: plain GL calls; the arrays hold the sizes passed.
+        unsafe {
+            glGenBuffers(2, bufs.as_mut_ptr());
+            for (i, name) in [c"Big0", c"Big1"].into_iter().enumerate() {
+                let idx = glGetUniformBlockIndex(p, name.as_ptr());
+                assert_ne!(idx, GL_INVALID_INDEX, "{name:?} is an active block");
+                glUniformBlockBinding(p, idx, i as GLuint);
+                glBindBuffer(GL_UNIFORM_BUFFER, bufs[i]);
+                glBufferData(
+                    GL_UNIFORM_BUFFER,
+                    (DW * 4) as GLsizeiptr,
+                    blocks[i].as_ptr() as *const c_void,
+                    GL_STATIC_DRAW,
+                );
+                glBindBufferBase(GL_UNIFORM_BUFFER, i as GLuint, bufs[i]);
+            }
+            glUniform4fv(loc(p, "u_tint"), 1, tint.as_ptr());
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        }
+        let d = draw();
+        end_frame();
+        assert!(d.fs.len() >= 2 * DW + 4, "the FS storage holds both blocks: {} dwords", d.fs.len());
+        for (i, b) in blocks.iter().enumerate() {
+            assert!(has_run(&d.fs, &bits(b)), "block {i}: all {DW} dwords, in order");
+        }
+        assert!(has_run(&d.fs, &bits(&tint)), "the default uniform");
+        assert!(d.fs_reads.iter().all(Option::is_some), "a stream word past the storage: {:?}", d.fs_reads);
+        let read: Vec<u32> = d.fs_reads.iter().flatten().copied().collect();
+        for (i, b) in blocks.iter().enumerate() {
+            for (what, k) in [("first", 0), ("last", DW - 4)] {
+                for w in bits(&b[k..k + 4]) {
+                    assert!(has_word(&read, w), "block {i}: the {what} vec4 is read (0x{w:x})");
+                }
+            }
+        }
+        for w in bits(&tint) {
+            assert!(has_word(&read, w), "u_tint is read");
+        }
+        // SAFETY: names made above.
+        unsafe { glDeleteProgram(p) };
     }
 }
