@@ -146,8 +146,9 @@ step 6 of the precompiled tier turns on.
 
 Beside the rows the table carries every link the generator made, by record key
 (`SHC_PRECOMPILED_LINKS`: the verdict a link takes without the front end), every
-row's sampler-state sensitivity (what a program's first draw asks), and the
-toolchain mark as constants (`SHC_PRECOMPILED_GPU`, `_ES2`, `_TOOLCHAIN`).
+row's sampler-state sensitivity and, in a GC7000 table, its 128-bit plane
+sensitivity (what a program's first draw asks: `SHC_PRECOMPILED_SENSITIVITY`,
+`SHC_PRECOMPILED_WIDE128`), and the toolchain mark as constants (`SHC_PRECOMPILED_GPU`, `_ES2`, `_TOOLCHAIN`).
 
 ## The precompiled tier
 
@@ -159,7 +160,7 @@ of the compiler's entry points (compile, a blend variant, a link's substitution,
 the vertex shader laid out at link, a sampler-state variant): the keep cache,
 then the table, by the same record key and stage and blend key, then the
 compiler. A hit runs no compile; a link the table recorded takes its verdict
-from it and a row's sensitivity is read, not computed, so a program made only of
+from it and a row's sensitivities are read, not computed, so a program made only of
 rows runs the compiler not once (`shc_precompiled_hits()` against
 `shc_online_compiler_runs()`; on the host the gl_test_es100 app's 100 PowerVR
 programs replay with 0 runs, against 3240 without the table). The table is

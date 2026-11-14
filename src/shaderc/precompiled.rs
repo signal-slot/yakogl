@@ -28,8 +28,9 @@
 //! reads a keep record's), so a variant of a row or the link of a row is
 //! asked for the same way. Two answers the table carries besides the rows spare the front
 //! end at a link and at a program's first draw: the verdict of every link the
-//! generator made ([`linked`]) and every row's sampler-state sensitivity
-//! ([`sensitivity`]).
+//! generator made ([`linked`]), every row's sampler-state sensitivity
+//! ([`sensitivity`]) and, on the GC7000, its 128-bit plane sensitivity
+//! ([`wide128`]).
 //!
 //! The rows were compiled with the compiler's switches at their boot values;
 //! with any of them changed ([`applies`]) the table is not consulted, so a
@@ -380,6 +381,27 @@ pub fn sensitivity(sh: &ShcShader) -> Option<u64> {
     }
     #[cfg(feature = "precompiled-shaders")]
     let bits = Some(table::SHC_PRECOMPILED_SENSITIVITY[i]);
+    #[cfg(not(feature = "precompiled-shaders"))]
+    let bits = {
+        let _ = i;
+        None
+    };
+    bits
+}
+
+/// The 128-bit plane sensitivity the table recorded for the row behind `sh`:
+/// what `wide128_sensitivity` answers without the front end. The GL core
+/// asks it at a program's first draw, of each stage that declares a sampler;
+/// before the table carried it, every such stage of a table-made program
+/// cost one compiler run there (the source through the front end again).
+#[cfg(feature = "gpu-vivante")]
+pub fn wide128(sh: &ShcShader) -> Option<u32> {
+    let i = row_of(sh)?;
+    if !applies() {
+        return None;
+    }
+    #[cfg(feature = "precompiled-shaders")]
+    let bits = Some(table::SHC_PRECOMPILED_WIDE128[i]);
     #[cfg(not(feature = "precompiled-shaders"))]
     let bits = {
         let _ = i;
@@ -859,7 +881,10 @@ mod tests {
     /// both, and each of its fragment shader's recorded variants asked and
     /// linked -- runs no compiler at all with the table, and the compiler
     /// every step without it; and each step hands out the same shader (the
-    /// same sensitivity) either way. Prints both counts.
+    /// same sensitivity) either way. On the GC7000 the first draw's second
+    /// question, the 128-bit plane sensitivity, is asked of both shaders as
+    /// well: the same answer either way, and no compiler run with the table.
+    /// Prints both counts.
     #[test]
     #[cfg(all(feature = "precompiled-shaders", feature = "shaderc-online"))]
     fn the_tables_programs_run_no_compiler() {
@@ -896,6 +921,10 @@ mod tests {
                     // SAFETY: a shader this back end made.
                     let bits = unsafe { (b.lod_sensitivity.unwrap())(sh) };
                     made.push(std::format!("{} sensitivity {bits:#x}", sig(sh)));
+                }
+                #[cfg(feature = "gpu-vivante")]
+                for sh in [&vs, &rfs] {
+                    made.push(std::format!("{} wide128 {:#x}", sig(sh), crate::shaderc::wide128_sensitivity(sh)));
                 }
                 /* the variants the generator asked of this program: its links
                  * of a variant of the same fragment source to the same vertex shader */
