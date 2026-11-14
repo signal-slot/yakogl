@@ -7,7 +7,7 @@
 //! one of these, and stores `out` in its sink when the call returns 1.
 
 use crate::board::record::{self, Display, Glmark2Outcome, GmScene, Writer};
-use crate::board::{imx8mp, rpi4};
+use crate::board::{imx8mp, rpi4, rpi_fb};
 use core::mem::{offset_of, size_of};
 
 const _: () = assert!(size_of::<Writer>() == 8);
@@ -242,6 +242,79 @@ pub unsafe extern "C" fn yd_rpi4_pan_row(
         Some(r) => {
             // SAFETY: the caller's contract.
             unsafe { *row = r };
+            1
+        }
+        None => 0,
+    }
+}
+
+/// The ARM physical address for the mailbox's framebuffer `bus` address on
+/// `board` (4 or 5; board::rpi_fb::fb_phys): 0 for no framebuffer (a zero
+/// address, an unknown board).
+#[no_mangle]
+pub extern "C" fn yd_rpi_fb_phys(board: u32, bus: u32) -> u64 {
+    rpi_fb::Board::from_u32(board).and_then(|b| rpi_fb::fb_phys(b, bus)).unwrap_or(0)
+}
+
+/// 1 when a FRAMEBUFFER_ALLOCATE answer (`pitch`, `size`) holds `rows` rows of
+/// `width` 32 bpp pixels (board::rpi_fb::allocate_ok), else 0.
+#[no_mangle]
+pub extern "C" fn yd_rpi_allocate_ok(width: u32, rows: u32, pitch: u32, size: u32) -> i32 {
+    rpi_fb::allocate_ok(width, rows, pitch, size) as i32
+}
+
+/// 1 and `*fb` when the mailbox answer is a usable framebuffer on `board`
+/// (board::rpi_fb::fb_from_answer), 0 otherwise.
+///
+/// # Safety
+/// `fb` is writable.
+#[no_mangle]
+pub unsafe extern "C" fn yd_rpi_fb_from_answer(
+    board: u32,
+    bus: u32,
+    width: u32,
+    height: u32,
+    rows: u32,
+    pitch: u32,
+    size: u32,
+    fb: *mut rpi4::Fb,
+) -> i32 {
+    let Some(b) = rpi_fb::Board::from_u32(board) else {
+        return 0;
+    };
+    match rpi_fb::fb_from_answer(b, bus, width, height, rows, pitch, size) {
+        Some(f) => {
+            // SAFETY: the caller's contract.
+            unsafe { *fb = f };
+            1
+        }
+        None => 0,
+    }
+}
+
+/// 1, `*fb` and the window format in `*format` when the plane the firmware
+/// scans out can be adopted (board::rpi_fb::adopt_scanout; `fmt` is
+/// YD_RPI_SCANOUT_FMT_*), 0 otherwise.
+///
+/// # Safety
+/// `fb` and `format` are writable.
+#[no_mangle]
+pub unsafe extern "C" fn yd_rpi_adopt_scanout(
+    phys: u64,
+    pitch: u32,
+    width: u32,
+    height: u32,
+    fmt: u32,
+    fb: *mut rpi4::Fb,
+    format: *mut u32,
+) -> i32 {
+    match rpi_fb::adopt_scanout(phys, pitch, width, height, fmt) {
+        Some((f, w)) => {
+            // SAFETY: the caller's contract.
+            unsafe {
+                *fb = f;
+                *format = w;
+            }
             1
         }
         None => 0,
