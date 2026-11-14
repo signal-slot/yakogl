@@ -26,6 +26,7 @@ pub mod es3_formats;
 pub mod etc1;
 pub mod etc2;
 pub mod framebuffer;
+pub mod limits;
 pub(crate) mod msaa;
 pub(crate) mod msaa_resolve;
 pub mod names;
