@@ -1030,7 +1030,7 @@ struct Lower<'x, 'a> {
     /// The parameters of the bodies being inlined whose argument is known
     /// to vary ([`Lower::varies`]), by inline depth. Any other parameter
     /// may be a constant once NIR has inlined and propagated it.
-    var_params: AVec<'a, (u32, &'a str)>,
+    var_params: AVec<'a, (u32, ir::LocalId, Option<Src>)>,
     nodes: AVec<'a, Node>,
     inputs: AVec<'a, IoDecl<'a>>,
     outputs: AVec<'a, IoDecl<'a>>,
@@ -4338,6 +4338,13 @@ impl<'a> Lower<'_, 'a> {
             }
             let i = src.val.0 as usize;
             let constant = matches!(self.instrs.as_slice().get(i), Some(Op::ConstF32(_)));
+            /* a constant with an exact fp16 value in every lane it gives is
+             * the same read at either width: nothing to record, and no pin
+             * that a 32-bit reuse would turn Unknown (sixth review (c),
+             * p3/x1's 0.5) */
+            if constant && self.const_lanes_of(src).is_some_and(|l| l.iter().all(|&x| precision::f16_exact(x))) {
+                continue;
+            }
             /* a `const` variable: ast_to_hir folds its read to its value,
              * so the parameter gets that value's fp16 rounding; the slot
              * holds the 32-bit value (`declare_var`), and this read of it,
@@ -4377,11 +4384,18 @@ impl<'a> Lower<'_, 'a> {
             return false;
         }
         match *self.ast.expr(e) {
+            /* What the name resolves to, in the lowering's own order
+             * (`value_at`): a held output, a local or parameter in scope,
+             * then an input, a built-in input, a uniform. */
             Expr::Ident(n) => {
-                if self.var_params.as_slice().iter().any(|&(d, p)| d == self.inline_depth && p == n) {
-                    return true;
+                if let Some(l) = self.scope_entry(n) {
+                    return self
+                        .var_params
+                        .as_slice()
+                        .iter()
+                        .any(|&(d, id, v)| d == self.inline_depth && id == l.id && v == l.value);
                 }
-                if self.scope_entry(n).is_some() || self.shadow_of(n).is_some() {
+                if self.shadow_of(n).is_some() {
                     return false;
                 }
                 let row = |r: &str| {
@@ -4760,6 +4774,17 @@ impl<'a> Lower<'_, 'a> {
         /* A function body sees the globals and its own parameters, never the
          * caller's locals: its entries start above the caller's, and lookup
          * starts there (`scope_base`). */
+        /* Which arguments are known to vary: decided HERE, in the caller's
+         * scope, before the callee's frame hides the caller's locals (a
+         * `main` local named like an attribute is that local, sixth review
+         * B-H). */
+        let mut vary = [false; MAX_PARAMS];
+        for ((v, p), &arg) in vary.iter_mut().zip(param_ids).zip(arg_ids) {
+            *v = p.direction == ParamDirection::In
+                && self.varies(arg, 0)
+                && p.name.is_some_and(|n| !self.writes_param(body, n));
+        }
+
         let caller_base = self.scope_base;
         let caller_top = self.scope.len();
         self.scope_base = caller_top;
@@ -4767,19 +4792,18 @@ impl<'a> Lower<'_, 'a> {
             self.scope.push(self.a, b.param)?;
         }
 
+        /* The parameters known to vary, by the binding itself (its slot or
+         * the value it aliases), not by name: a local of the body that
+         * shadows one is not it. */
+        let marks = self.var_params.len();
+        for (b, &v) in bound.iter().zip(&vary) {
+            if v {
+                self.var_params.push(self.a, (self.inline_depth + 1, b.param.id, b.param.value))?;
+            }
+        }
         /* The callee's returns are its own: a `return` in a loop of the
          * callee must leave the callee, not the caller's loop around the
          * call. */
-        /* which parameters take a value known to vary and are never written
-         * by the body: decided in the caller's frame */
-        let marks = self.var_params.len();
-        for (p, &arg) in param_ids.iter().zip(arg_ids) {
-            if let Some(pname) = p.name {
-                if p.direction == ParamDirection::In && self.varies(arg, 0) && !self.writes_param(body, pname) {
-                    self.var_params.push(self.a, (self.inline_depth + 1, pname))?;
-                }
-            }
-        }
         let caller_ret = self.ret.take();
         self.inline_depth += 1;
         let r = self.inline_body(name, body, want, out);
