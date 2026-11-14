@@ -20,13 +20,22 @@
 //!    against the window ([`vop2::window_check`]). Then what runs is read,
 //!    nothing written: the PMU and CRU say whether VOP2 can be read; if so,
 //!    `DSP_CTRL` of VP0-VP3 says which ports run (review R3-S1 of D1: read
-//!    before anything else touches the VOP). A running port without
-//!    `force_cold` stops the bring-up ([`Error::FoundRunning`]): taking a
-//!    running picture over is route (a), step D2, not this. With
-//!    `force_cold` every window is disabled, `REG_CFG_DONE` written for each
-//!    running port and the port put in STANDBY ([`vop2::standby`]); a port
-//!    whose STANDBY never comes and that runs no frame has no pixel clock
-//!    and fetches nothing (R3-S1), so it is left. With `power_cycle` the
+//!    before anything else touches the VOP). PD_VOP on but VOP2 not
+//!    readable (a gate closed, a reset asserted) means a port may run
+//!    unseen: refused ([`Error::VopUnreadable`]) unless `power_cycle`, which
+//!    first opens VOP2's gates and releases its resets and reads again. A
+//!    running port without `force_cold` stops the bring-up
+//!    ([`Error::FoundRunning`]): taking a running picture over is route (a),
+//!    step D2, not this. With `force_cold`, a running port this chain
+//!    clocks again later (VP0) that runs no frame is refused
+//!    ([`Error::Unclocked`]) unless `power_cycle`: it is in the middle of a
+//!    frame, and a window disable or STANDBY written to it would land only
+//!    when the DCLK stage gives its clock back, with paging still on. Then
+//!    every window is disabled, `REG_CFG_DONE` written for each running
+//!    port and the port put in STANDBY ([`vop2::standby`]); a port whose
+//!    STANDBY never comes and that runs no frame has no pixel clock and
+//!    fetches nothing (R3-S1), so it is left (a port this chain never
+//!    clocks, or one whose state the power cycle drops). With `power_cycle` the
 //!    PHY is powered off ([`hdptx::power_off`]), its APB reset asserted and
 //!    the display domains switched off ([`display_off`]): every block
 //!    starts from its reset state.
@@ -70,7 +79,7 @@
 
 use super::rk3588::gate_open;
 use super::rk3588_display::{
-    clk, display_off, display_on, ready, reset, reset_assert, reset_release, DisplayError, DisplayOn, VOP,
+    clk, display_off, display_on, ready, reset, reset_assert, reset_release, DisplayError, DisplayOn, NotReady, VOP,
 };
 use crate::env::Env;
 use crate::ip::dw_hdmi_qp::{self as dw, BindParams, Ident, Port, Sink};
@@ -175,6 +184,9 @@ pub struct Config<'a> {
 pub struct Found {
     /// VOP2 could be read (PD_VOP usable, its clocks open, resets released).
     pub vop_reachable: bool,
+    /// PD_VOP is usable but VOP2 could not be read: the gate or reset that
+    /// stopped it. Whether a port runs is then not known.
+    pub vop_unreadable: Option<NotReady>,
     /// `DSP_CTRL` of VP0-VP3 (0 when the VOP could not be read).
     pub dsp_ctrl: [u32; 4],
     /// The ports with STANDBY clear (bit n = VPn).
@@ -233,6 +245,12 @@ pub enum Error {
     Iommu(rk_iommu::Refused),
     /// The section 5 read-backs after the bring-up (what failed is logged).
     Video,
+    /// PD_VOP is on but VOP2 cannot be read (a gate closed or a reset
+    /// asserted): whether a port runs is not known.
+    VopUnreadable(NotReady),
+    /// A port this chain clocks (VP0) was found with STANDBY clear and no
+    /// pixel clock (bit n = VPn).
+    Unclocked(u32),
 }
 
 /// A failure, with the stage it happened in.
@@ -295,8 +313,12 @@ pub fn frame_us(mode: &VideoMode) -> u32 {
 /// Read what runs (START, before any write).
 fn find(m: &impl Mmio, b: &Bases) -> Found {
     let mut f = Found { phy_status: m.read32(b.phy.grf + hdptx::grf::STATUS), ..Found::default() };
-    if ready(m, b.cru, b.pmu, &VOP).is_ok() {
-        f.vop_reachable = true;
+    match ready(m, b.cru, b.pmu, &VOP) {
+        Ok(()) => f.vop_reachable = true,
+        Err(NotReady::DomainOff(_)) => {}
+        Err(n) => f.vop_unreadable = Some(n),
+    }
+    if f.vop_reachable {
         for p in 0..4 {
             f.dsp_ctrl[p] = m.read32(b.vop + vop2::vp::base(p) + vop2::vp::DSP_CTRL);
             if f.dsp_ctrl[p] & vop2::vp::DSP_CTRL_STANDBY == 0 {
@@ -308,6 +330,21 @@ fn find(m: &impl Mmio, b: &Bases) -> Found {
 }
 
 const PORTS: [Vp; 4] = [Vp::Vp0, Vp::Vp1, Vp::Vp2, Vp::Vp3];
+
+/// Make a powered VOP2 readable (its gates open, its resets released, as
+/// D4's [`VOP`] lists them; CRU writes only), then read what runs again.
+fn find_opened(m: &impl Mmio, b: &Bases) -> Result<Found, Failed> {
+    for c in VOP.clocks {
+        gate_open(m, b.cru + c.part.offset(), c.gate).map_err(at(stage::START, Error::Gate))?;
+    }
+    for r in VOP.resets {
+        reset_release(m, b.cru, *r);
+    }
+    Ok(find(m, b))
+}
+
+/// The ports this chain gives a pixel clock (DCLK stage): VP0.
+const CLOCKED_HERE: u32 = 1 << 0;
 
 /// Stop every running port (START with `force_cold`): every window off,
 /// `REG_CFG_DONE` for each running port, then each one into STANDBY. A
@@ -382,9 +419,34 @@ pub fn bring_up(
         found.dsp_ctrl[3],
         found.phy_status
     );
+    // PD_VOP on but VOP2 not readable: a port may run. Only a power cycle
+    // may go on, and it first makes VOP2 readable to stop what runs.
+    if let Some(n) = found.vop_unreadable {
+        if !cfg.power_cycle {
+            return Err(Failed { stage: START, error: Error::VopUnreadable(n) });
+        }
+        found = Found { vop_unreadable: Some(n), ..find_opened(m, b)? };
+    }
     if found.running != 0 {
         if !cfg.force_cold {
             return Err(Failed { stage: START, error: Error::FoundRunning(found.running) });
+        }
+        // A port this chain clocks again (DCLK stage) that runs no frame is
+        // in the middle of one: a window disable or STANDBY written now
+        // would stay pending and land only when its clock is back, with
+        // paging still on. Only the power cycle (PD_VOP off) drops such a
+        // state, so without it the port is refused before anything of it
+        // is written (the event clear of the frame wait aside).
+        if !cfg.power_cycle {
+            for p in PORTS.iter().filter(|p| found.running & CLOCKED_HERE & 1 << p.id() != 0) {
+                match vop2::wait_frame(m, b.vop, *p, &mut delay) {
+                    Ok(_) => {}
+                    Err(e) if e.why == vop2::Refusal::FrameTimeout => {
+                        return Err(Failed { stage: START, error: Error::Unclocked(1 << p.id()) });
+                    }
+                    Err(e) => return Err(Failed { stage: START, error: Error::Vop(e) }),
+                }
+            }
         }
         stop_running(m, b, env, &mut found)?;
         ylog!(env, Inf, "t6 display: stopped ports {:#x}, no pixel clock on {:#x}", found.stopped, found.unclocked);
@@ -503,6 +565,9 @@ pub fn bring_up(
 /// STANDBY when it runs, then [`power_down`].
 pub fn shut_down(m: &impl Mmio, b: &Bases, env: &impl Env) -> Result<(), Failed> {
     let mut found = find(m, b);
+    if found.vop_unreadable.is_some() {
+        found = find_opened(m, b)?;
+    }
     if found.running != 0 {
         stop_running(m, b, env, &mut found)?;
     }
