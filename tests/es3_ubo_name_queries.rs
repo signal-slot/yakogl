@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The names an ES 3.0 program with uniform blocks reports, through the GL
-//! API on the host, for names that fit today's 64-byte reflection field
-//! (1, 31 and 62 characters): the guard of `docs/notes/reflection-long-names.md`,
-//! whose fix makes names of 63 characters and more report whole. Its cases
-//! of 63+ characters belong next to these.
+//! API on the host, for names that fit the 64-byte reflection field (1, 31
+//! and 62 characters) and for names it cannot hold whole (63, 64 and 200
+//! characters), which the online compiler's name pool keeps and the GL core
+//! reports whole (`docs/notes/reflection-long-names.md`). Default-block
+//! uniforms of those lengths are checked beside the blocks.
 //!
 //! What is pinned, per program:
 //! - `GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH` is the longest block name + 1
@@ -27,6 +28,7 @@
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_ubo_name_queries
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_ubo_name_queries
+//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_ubo_name_queries
 //! ```
 
 // Uniform blocks need the compiler and an ES 3.0 report; the other
@@ -229,9 +231,12 @@ fn shader(ty: GLenum, text: &str) -> GLuint {
 }
 
 /// A linked program whose `stage` declares and reads `blocks`.
-fn program(blocks: &[Block], stage: Stage) -> GLuint {
-    let decls: String = blocks.iter().map(Block::decl).collect();
-    let sum: String = blocks.iter().map(|b| format!(" + {}", b.read())).collect();
+/// `defaults`: `vec4` default-block uniforms it declares and reads too.
+fn program(blocks: &[Block], defaults: &[String], stage: Stage) -> GLuint {
+    let decls: String =
+        blocks.iter().map(Block::decl).chain(defaults.iter().map(|d| format!("uniform vec4 {d};\n"))).collect();
+    let sum: String =
+        blocks.iter().map(|b| format!(" + {}", b.read())).chain(defaults.iter().map(|d| format!(" + {d}"))).collect();
     let (vs_src, fs_src) = match stage {
         Stage::Vertex => (
             format!("#version 300 es\nin vec4 a_pos;\n{decls}void main() {{ gl_Position = a_pos{sum}; }}\n"),
@@ -323,7 +328,7 @@ fn program_iv(p: GLuint, pname: GLenum) -> GLint {
 /// in `stage`.
 fn check_names(blocks: &[Block], stage: Stage) {
     let _g = context();
-    let p = program(blocks, stage);
+    let p = program(blocks, &[], stage);
     let ctx = format!("{stage:?} shader");
 
     /* the blocks */
@@ -455,8 +460,8 @@ fn named_instances_in_the_fragment_shader() {
 
 /// One block per name length, alone in its program: the maximum is that
 /// block's own length + 1, not the longest of a set. A 62-character block
-/// with an instance name would report its member as 64 characters, the
-/// cases of 63 and more that `refl-long-name` adds.
+/// with an instance name would report its member as 64 characters, one of
+/// the cases of 63 and more below.
 #[test]
 fn one_block_each_length() {
     for stage in [Stage::Vertex, Stage::Fragment] {
@@ -468,5 +473,98 @@ fn one_block_each_length() {
             assert!(b.api().len() <= 62);
             check_names(&[b], stage);
         }
+    }
+}
+
+/* ---- names of 63 characters and more --------------------------------------- */
+
+/// Names the 64-byte reflection field cannot hold whole (63 fills it):
+/// block names, bare members and `Block.member` names of 63, 64 and 200
+/// characters, each alone in its program and three together. The record's
+/// name pool keeps the rows' whole names, and every query hands them out
+/// whole (`docs/notes/reflection-long-names.md`).
+#[test]
+fn block_and_member_names_of_63_64_and_200_characters() {
+    for stage in [Stage::Vertex, Stage::Fragment] {
+        for len in [63, 64, 200] {
+            check_names(&[Block { name: ident('H', len), instance: None, member: ident('u', len) }], stage);
+            let b = Block { name: ident('G', len), instance: Some(ident('s', len)), member: ident('t', len) };
+            check_names(&[b], stage);
+        }
+        let anonymous = [
+            Block { name: ident('A', 63), instance: None, member: ident('m', 63) },
+            Block { name: ident('B', 64), instance: None, member: ident('n', 64) },
+            Block { name: ident('C', 200), instance: None, member: ident('o', 200) },
+        ];
+        check_names(&anonymous, stage);
+        let named = [
+            Block { name: ident('D', 1), instance: Some(ident('i', 1)), member: ident('p', 61) },
+            Block { name: ident('E', 31), instance: Some(ident('j', 200)), member: ident('q', 32) },
+            Block { name: ident('F', 62), instance: Some(ident('k', 62)), member: ident('r', 137) },
+        ];
+        for (b, api) in named.iter().zip([63, 64, 200]) {
+            assert_eq!(b.api().len(), api);
+        }
+        check_names(&named, stage);
+    }
+}
+
+/// Every name query of a default-block `vec4` per name of `names`, declared
+/// in `stage`: `GL_ACTIVE_UNIFORM_MAX_LENGTH`, `glGetUniformIndices`,
+/// `GL_UNIFORM_NAME_LENGTH`, no block, `glGetActiveUniform` at the buffer
+/// sizes of [`check_copy_out`], and a location of its own.
+fn check_default_names(names: &[String], stage: Stage) {
+    let _g = context();
+    let p = program(&[], names, stage);
+    let ctx = format!("{stage:?} shader");
+    assert_eq!(program_iv(p, GL_ACTIVE_UNIFORMS), names.len() as GLint, "{ctx}: active uniforms");
+    let longest = names.iter().map(String::len).max().unwrap();
+    assert_eq!(
+        program_iv(p, GL_ACTIVE_UNIFORM_MAX_LENGTH),
+        longest as GLint + 1,
+        "{ctx}: GL_ACTIVE_UNIFORM_MAX_LENGTH"
+    );
+    let mut locations = Vec::new();
+    for name in names {
+        let c = CString::new(name.as_str()).unwrap();
+        let ptrs = [c.as_ptr()];
+        let mut i: GLuint = GL_INVALID_INDEX;
+        // SAFETY: plain GL call; one NUL-terminated name and one index.
+        unsafe { glGetUniformIndices(p, 1, ptrs.as_ptr(), &mut i) };
+        assert_ne!(i, GL_INVALID_INDEX, "{ctx}: glGetUniformIndices('{name}')");
+        let iv = |pname| {
+            let mut v: GLint = -2;
+            // SAFETY: plain GL call; one index and one value.
+            unsafe { glGetActiveUniformsiv(p, 1, &i, pname, &mut v) };
+            v
+        };
+        assert_eq!(iv(GL_UNIFORM_NAME_LENGTH), name.len() as GLint + 1, "{ctx}: GL_UNIFORM_NAME_LENGTH");
+        assert_eq!(iv(GL_UNIFORM_BLOCK_INDEX), -1, "{ctx}: a default-block uniform is in no block");
+        check_copy_out("glGetActiveUniform", name, |size, length, buf| {
+            let (mut sz, mut ty): (GLint, GLenum) = (0, 0);
+            // SAFETY: `buf` has room for `size` bytes; one value each else.
+            unsafe { glGetActiveUniform(p, i, size, length, &mut sz, &mut ty, buf) };
+            assert_eq!((sz, ty), (1, GL_FLOAT_VEC4), "{ctx}: size and type of '{name}'");
+        });
+        // SAFETY: plain GL call; a NUL-terminated name.
+        let loc = unsafe { glGetUniformLocation(p, c.as_ptr()) };
+        assert!(loc >= 0, "{ctx}: glGetUniformLocation('{name}')");
+        assert!(!locations.contains(&loc), "{ctx}: '{name}' has a location of its own");
+        locations.push(loc);
+    }
+    // SAFETY: plain GL call on the program this test made.
+    unsafe { glDeleteProgram(p) };
+    assert_eq!(err(), GL_NO_ERROR, "{ctx}");
+}
+
+/// Default-block uniforms of 62 (one under the field's limit), 63, 64 and
+/// 200 characters, each alone and all in one program.
+#[test]
+fn default_block_uniforms_of_63_64_and_200_characters() {
+    for stage in [Stage::Vertex, Stage::Fragment] {
+        for len in [62, 63, 64, 200] {
+            check_default_names(&[ident('d', len)], stage);
+        }
+        check_default_names(&[ident('e', 62), ident('f', 63), ident('g', 64), ident('h', 200)], stage);
     }
 }

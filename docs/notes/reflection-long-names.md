@@ -5,6 +5,9 @@
 Date 2026-11-09, tip `bcab1c1d`. Plan item `refl-long-name-note`. Decision
 note only: no file under `src/` or `tests/` changed; the implementing item is
 `refl-long-name`, which may correct this note where it checked something wrong.
+Implemented 2026-11-14 (`refl-long-name`, plan #338): section 4's "Concretely"
+list and section 5 now read as the code does; the rest is the decision as
+taken.
 
 Closes the "decision needed" row of RC13 (`docs/es3-cts-failures.md:253`,
 section at `:237`): dEQP `shaders.uniform_block.valid.long_instance_name_vertex`
@@ -124,24 +127,40 @@ travels Rust-side, keyed by an index — not a hash; a 64-bit hash would re-open
 exactly the "two names, one cut" collision `duplicate_name`
 (`src/shaderc/link.rs:42`) exists to catch, and an index cannot collide.
 
-Concretely, for `refl-long-name`:
+Concretely, as implemented (the name pool by `06840143`, plan #325; the GL
+core and the link by `refl-long-name`; this list was corrected against the
+code, which is the reference):
 
-- `uniform_rows` (`src/shaderc/online/reflect.rs:1146-1163`) keeps filling the
-  64-byte field as today for rows that fit; a row that does not fit gets the
-  field filled with its truncated prefix **plus a "truncated" marker**, and its
-  whole `&str` goes into a Rust-only side table on the keep record (row index
-  → whole name). The C header, `gles_shaderc.h`, is unchanged.
-- `reject_truncated_names` (`src/shaderc/link.rs:86`) loses its uniform arm:
-  once the whole name is reachable, "may have been truncated" is no longer
-  true of the uniform rows, and the exact-length refusal at `:74` (test
-  `:596-614`) goes with it — a 63- and a 64-character uniform name must both
-  link and report whole.
-- The GL core reads row names through the side table where one exists, which
-  retires the caps that existed only because the 64-byte field was the source:
-  `active_uniform_name`'s 68-byte buffer (`src/gl/program.rs:789-793`) grows to
-  the same whole-name path as the block side, and `find_struct_member`'s
-  72-byte key (`:2167-2169`) becomes a slice comparison. The `*_NAME_LENGTH`
-  queries need no change once the names they measure are whole.
+- `uniform_rows` keeps filling the 64-byte field as before, cut or not, with
+  **no marker**: a full field (63 bytes and the NUL) is the one signature of a
+  cut, and the record keeps the whole name of every such row in its name pool
+  (`UniformNames` in `src/shaderc/online/backend.rs`, `keep_names`: row index
+  → whole `&str` in the keep arena, empty when nothing was cut). The pool
+  resolves a full-field row to its reflection row by the name's 63-byte
+  prefix and the row's layout (`cut_row_is`), so two names that share the
+  field's bytes stay apart; a row two reflection rows of different names
+  could be is left out of the pool and refused at link. The C header,
+  `gles_shaderc.h`, is unchanged.
+- `reject_truncated_names` (`src/shaderc/link.rs`) keeps its uniform arm,
+  narrowed: a full field is accepted when the pool names its row
+  (`whole_uniform_row`), default-block uniforms included, and still refused
+  when the pool cannot name it, for a table shader and in a build without the
+  online compiler (the exact-length refusal of the `link.rs` tests is the rule
+  there). So a 63-, a 64- and a 200-character uniform name link and report
+  whole on every online back end.
+- The GL core reads every uniform row's name through
+  `shaderc::uniform_row_name` (the pool's name, else the field's bytes):
+  `glGetActiveUniform`, `GL_UNIFORM_NAME_LENGTH`, `glGetUniformIndices`,
+  `GL_ACTIVE_UNIFORM_MAX_LENGTH`, `glGetUniformLocation`, the location table
+  and its stage merge, the struct-member key, the PowerVR `pvr_layers_` row
+  match (`src/gl/draw.rs`) and the transform-feedback capture's row match
+  (`src/gl/tf_capture.rs`). A reported name is no longer assembled in a fixed
+  buffer: `ActiveName` (`src/gl/program.rs`) keeps its pieces (the whole name,
+  a struct array's element index, "[0]") and is cut only by the caller's
+  `bufSize`, at the copy; `find_struct_member`'s 72-byte key and
+  `glGetUniformBlockIndex`'s "[0]" buffer became slice comparisons. The
+  `*_NAME_LENGTH` queries needed no change once the names they measure were
+  whole.
 - The 32-byte io guards **stay** (GC `abi.rs:377-379`, PVR `abi.rs:523`/`:574`,
   V3D `v3d_abi.rs:68-70`, `codegen.rs:1120`, and the varying/attrib arm of
   `reject_truncated_names`): those names are paired across stages by
@@ -173,10 +192,20 @@ Concretely, for `refl-long-name`:
     and both stay `GL_INVALID_ENUM` under `REPORT_ES2`
     (`src/gl/program.rs:2988-2995`, the `es2_report_guard` rule);
   - edges that must not regress: a 63- and a 64-character uniform name link
-    and report whole (replacing `link.rs:596-614`'s exact-length expectation),
-    a 1,025-character identifier is still refused (`lexer.rs:543`);
+    and report whole (the `link.rs` exact-length test stays as the rule of a
+    build without the online compiler), a 1,025-character identifier is still
+    refused (`lexer.rs:543`);
   - any fixture or reference table it adds is regenerated in the same commit
-    (CLAUDE.md, the gate compares the bytes).
+    (CLAUDE.md, the gate compares the bytes); none was needed.
+  As implemented the file pins both dEQP programs, block and instance names
+  of 70 and 200 characters, default-block uniforms of 63, 64 and 200
+  characters (the first two on one 62-character prefix) each whole and at a
+  location of its own, a 200-character uniform shared by both stages, a
+  64-character array reported `name[0]`, and the copy-out edges at `bufSize`
+  65, 64, 63, 2, 1 and 0 as well. `tests/es3_ubo_name_queries.rs` adds block,
+  member and default-block names of 63, 64 and 200 characters next to its 1,
+  31 and 62, and `tests/es3_pvr_longname.rs`'s default-block case flips from
+  "refused at link" to "links and reports whole".
 - `tests/es3_shaderc_corpus.rs`: the build count moves **3,457 → 3,459** of
   3,461 on each GPU — the only other two refusals are
   `constant_expressions.other.complex_{vertex,fragment}`, the

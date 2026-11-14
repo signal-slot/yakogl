@@ -896,6 +896,26 @@ pub fn uniform_blocks(sh: &ShcShader) -> ShcBlocks {
     }
 }
 
+/// Row `k` of `sh`'s uniform table as the source names it, whatever its
+/// length: the 64-byte [`ShcUniform::name`] field holds 63 characters, and
+/// the online compiler's record keeps the whole name of a row the field cut
+/// (its name pool, `online::backend::uniform_name`). Every other row -- and
+/// every row of a table shader, or of a build without the online compiler
+/// -- is the field's bytes. Empty for a `k` the table has no row at.
+///
+/// The GL core names, matches and reports uniform rows through this, never
+/// through the field (docs/notes/reflection-long-names.md).
+pub fn uniform_row_name(sh: &ShcShader, k: usize) -> &[u8] {
+    #[cfg(feature = "shaderc-online")]
+    {
+        online::backend::uniform_name(sh, k)
+    }
+    #[cfg(not(feature = "shaderc-online"))]
+    {
+        sh.uniform_table().get(k).map_or(&[], |u| crate::util::name_bytes(&u.name))
+    }
+}
+
 /// Whether the in-process (online) compiler made `sh`. Its uniform rows are
 /// one per array, element by element (`s[1].b[0].b`, the member's own
 /// array), never the offline table's per-member flattening of an array of
