@@ -342,7 +342,9 @@ if [ "$CRASH" = 1 ]; then
 	crash_arg=" --crash"
 	how="= kexec_load(entry $load, 1 segment: $file_size bytes at $load, memsz $memsz,
        KEXEC_ON_CRASH: copied into the crashkernel= reservation at once), then
-       CPUs 1-7 offline (PSCI CPU_OFF), sysrq enabled, sync, and a panic by
+       CPUs 1-7 offline (PSCI CPU_OFF; no trigger, and the crash image
+       unloaded, unless only CPU 0 is online), sysrq enabled, sync, every
+       network link but lo down, and a panic by
        /proc/sysrq-trigger 'c': __crash_kexec stops nothing but the CPU, runs
        no device_shutdown (VOP2, HDMI and the GPU keep running) and enters
        the image at EL2 with the MMU off; this ssh session ends there"

@@ -336,6 +336,25 @@ running, which the Z1-Z4 power-on has never met (they all ran after a normal
 kexec). The adopt probe therefore draws with the CPU first; a Mali frame on
 the adopted display is a separate step.
 
+What an image must do first after a crash kexec (facts for D3 and the
+K steps; no image does this yet). The GPU is still powered, and its CSF
+firmware runs from Linux's memory through the GPU's MMU, so before the
+GPU's interrupt lines are enabled at the GIC and before the Z1 power-on
+(which has only met a powered-down GPU): mask and clear `GPU_IRQ_MASK`,
+`JOB_IRQ_MASK` and `MMU_IRQ_MASK`; halt the MCU (`MCU_CONTROL` disable,
+wait for `MCU_STATUS` disabled); `GPU_COMMAND` SOFT_RESET and wait for
+RESET_COMPLETED in `GPU_IRQ_RAWSTAT` (HARD_RESET when that times out),
+after which the address spaces are off and the GPU no longer walks
+Linux's page tables; only then the power-on, which must accept a domain
+that is already on and must not cut PD_GPU without the PMU idle request
+first. Interrupts the image did not ask for still arrive: the ITS stays
+on and a redistributor's EnableLPIs cannot be cleared, so LPIs (INTID
+8192 and up) from devices Linux left running can be signalled; the
+image's GIC code must acknowledge and end every INTID it does not know,
+or the running priority stays raised and the timer stops (the WDT then
+resets the board, and the run is lost). `kexec_zephyr --crash` takes
+every network link down before the panic to cut the largest source.
+
 ### (b) Adopt from U-Boot
 
 Mainline U-Boot does not light RK3588 HDMI. At v2026.07, v2026.10,
