@@ -1038,6 +1038,24 @@ unsafe extern "C" fn v3d_tex_pack_state(out: *mut u8, s: *const V3dTexState) -> 
     true
 }
 
+/// The fake record of [`v3d_tex_pack_sampler`] with the depth compare
+/// function (`compare_op & 7`, 0 for the off bit 4) in its fourth word.
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool {
+    if compare_op > 0x1f {
+        return false;
+    }
+    // SAFETY: the caller's contract.
+    unsafe {
+        if !v3d_tex_pack_sampler(out, s) {
+            return false;
+        }
+        let f = if compare_op & 16 != 0 { 0 } else { compare_op & 7 };
+        core::ptr::copy_nonoverlapping(f.to_le_bytes().as_ptr(), out.add(12), 4);
+    }
+    true
+}
+
 #[no_mangle]
 unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool {
     // SAFETY: V3D_SAMPLER_STATE_BYTES of the arena and the backend's sampler.
@@ -1609,6 +1627,41 @@ fn a_textured_draw_binds_its_unit_to_the_tiled_image_and_its_records() {
     /* Mesa: mip_filter_nearest = the min mip filter is not LINEAR, so it is
      * set with no mip filter at all */
     assert_eq!(sa[2], 0b1110, "mag linear, min nearest, mip nearest, no mips");
+}
+
+/// A shadow sampler's depth compare is part of its record and of the cache
+/// key: two bindings equal in every other sampler field but the compare
+/// function get two records, a third with the first's compare finds the
+/// first's again.
+///
+/// Revert check: keying on `texture::sampler` alone gives the second binding
+/// the first's record (one packed, one reused, both compare words LESS).
+#[test]
+fn a_depth_compare_is_in_the_sampler_record_and_its_cache_key() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let (mut p0, mut r0) = (0, 0);
+    // SAFETY: both pointers are live.
+    unsafe { v3d_sampler_counters(&mut p0, &mut r0) };
+    for op in [1u8, texture::COMPARE_OFF as u8, 1] {
+        let mut t = narrow_texture(8, 8, 1, GLES_TEXFMT_R32F);
+        (t.unit, t.compare_op) = (0, op);
+        let mut d = sampling(&rig, t);
+        d.fs = &p;
+        assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    }
+    let (mut p1, mut r1) = (0, 0);
+    // SAFETY: both pointers are live.
+    unsafe { v3d_sampler_counters(&mut p1, &mut r1) };
+    assert_eq!((p1 - p0, r1 - r0), (2, 1), "LESS, off, LESS again");
+    assert_eq!(v3d_flush(), 0);
+    let t: Vec<_> = rig.draws().iter().map(|d| d.tmu[0]).collect();
+    assert_eq!(t.len(), 3);
+    let cmp = |i: usize| words(&rig, t[i].sampler, 6)[3];
+    assert_eq!((cmp(0), cmp(1), cmp(2)), (1, 0, 1));
+    assert_eq!(t[0].sampler, t[2].sampler);
+    assert_ne!(t[0].sampler, t[1].sampler);
 }
 
 /// The fragment and the vertex stage number their sampler bindings apart:
