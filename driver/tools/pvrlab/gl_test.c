@@ -502,7 +502,16 @@
  *               gl_test_es3_divmix.inc). Needs a back end that takes the
  *               divisors; the PowerVR before P3 fails all 24 checks (every
  *               instance lands in cell 0). All GPUs. Opt-in, by number
- *               All GPUs. Opt-in, by number
+ * 244 w128tex   the GC7000UL's two-plane RGBA32 texture class (i.MX8MP):
+ *               a 4x4 RGBA32F, RGBA32UI and RGBA32I texture sampled NEAREST
+ *               through sampler2D/usampler2D/isampler2D with values a 16-bit
+ *               path loses, a GL_RGB32F texture whose sampled alpha must be
+ *               1.0, and an RGBA32UI texture with TEXTURE_SWIZZLE_R/B swapped
+ *               whose draw must be refused (no pixel changes, GL_NO_ERROR)
+ *               while the swizzle guard stands (docs/notes/gc-128bit-
+ *               swizzle.md section 6; gl_test_es3_w128tex.inc). One verdict
+ *               line per sub-check, 5 in all. SKIP off the GC7000 and in an
+ *               ES 2.0 library. Opt-in, by number
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8627,7 +8636,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint", [243] = "divmix",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint", [243] = "divmix", [244] = "w128tex",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -20794,6 +20803,7 @@ out:
 #include "gl_test_es3_drawrandom.inc"
 #include "gl_test_es3_precision.inc"
 #include "gl_test_es3_divmix.inc"
+#include "gl_test_es3_w128tex.inc"
 
 /* ---- case 222: the texture unit samples the D24S8 depth surface (dtpu) -----
  *
@@ -24109,6 +24119,11 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 	case 220: rc = case_lodtime(); break;
 	case 221: rc = case_instmix(); break;
 	case 243: rc = case_divmix(); break;
+	case 244:
+		rc = case_w128tex();
+		if (rc == -3)
+			return -3; /* skipped by name: not the GC7000UL, or an ES 2.0 library */
+		break;
 	case 222:
 		rc = case_dtpu();
 		if (rc == -3)
