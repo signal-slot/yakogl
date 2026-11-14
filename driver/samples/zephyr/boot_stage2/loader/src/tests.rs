@@ -856,9 +856,13 @@ fn mkboot_vectors() {
 /// A payload as it goes to a board, through the loader's own checks, under
 /// the limits that board's loader is built with: BS2_PAYLOAD=<stage2 .img>,
 /// BS2_PAYLOAD_ZEPHYR=<the zephyr.bin it was made from>, and
-/// BS2_PAYLOAD_LIMITS="<load>,<region end>,<max stored>,<staging>" (hex or
-/// decimal; the loader's BOOT_STAGE2_LOAD, _REGION_END, the sector range's
-/// bytes and _STAGING). The image is put together again from the segments
+/// BS2_PAYLOAD_LIMITS="<load>,<region end>,<max stored>,<staging>[,<staging
+/// bytes>]" (hex or decimal; the loader's BOOT_STAGE2_LOAD, _REGION_END, the
+/// sector range's bytes and _STAGING). The fifth value is the bytes of the
+/// staging buffer no segment may be on: left out, the sector range's bytes,
+/// as the eMMC source has it; 0 for a payload linked into the loader, which
+/// stages nothing (src/main.c), with <max stored> the payload's bytes after
+/// its header. The image is put together again from the segments
 /// and their zero bytes (or, versions 1 and 2, taken as it is) and must
 /// equal zephyr.bin; what is cleared past the image's last byte is the .bss
 /// the loader clears. Without BS2_PAYLOAD the test says so and checks
@@ -877,14 +881,15 @@ fn board_payload() {
         }
     };
     let l: Vec<u64> = std::env::var("BS2_PAYLOAD_LIMITS").expect("BS2_PAYLOAD_LIMITS").split(',').map(num).collect();
-    // As src/main.c fills them for the eMMC source.
+    // As src/main.c fills them: for the eMMC source, or with a fifth value
+    // of 0 for the payload it carries.
     let limits = Bs2Limits {
         load: l[0],
         max_stored: l[2],
         max_image: l[3] - l[0],
         region_end: l[1],
         staging: l[3],
-        staging_bytes: l[2],
+        staging_bytes: l.get(4).copied().unwrap_or(l[2]),
     };
     let file = std::fs::read(&path).unwrap();
     let zephyr = std::fs::read(std::env::var_os("BS2_PAYLOAD_ZEPHYR").expect("BS2_PAYLOAD_ZEPHYR")).unwrap();
