@@ -1895,6 +1895,17 @@ msaa_fbo_builds() {
   done
 }
 step "check   msaa-fbo on the four GPUs' host configurations" msaa_fbo_builds
+# The `color-buffer-float` feature (no effect yet) builds with each GPU's host
+# configuration, and the claimed-path half of tests/es3_color_buffer_float.rs
+# compiles and runs with it on the three GPUs that have host tests.
+color_buffer_float_builds() {
+  local c
+  for c in "$V3D_CONFIG" host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
+    host-test,gpu-mali,shaderc-online,no-shader-table; do
+    cargo check --no-default-features --features "$c,color-buffer-float" --lib || return 1
+  done
+}
+step "check   color-buffer-float on the four GPUs' host configurations" color_buffer_float_builds
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
