@@ -33,8 +33,8 @@
 //! 32-bit floats either (Mesa's v3d_screen.c sets no texture_float_linear).
 //!
 //! `gl_rig` (below) drives the GL API over the real V3D back end, with the job
-//! builder faked: RGBA16F, R16F and R32F render targets are complete and read
-//! back a clear, and RGB565, RGBA16F and R16F textures reach the TMU.
+//! builder faked: RGBA16F and R16F render targets are complete and read
+//! back a clear, an R32F one is incomplete without GL_EXT_color_buffer_float, and RGB565, RGBA16F and R16F textures reach the TMU.
 //!
 //! tools/check.sh runs this file in the V3D_CONFIG row. Compiles to nothing
 //! under report-es2 (no ES 3.0 storage class is used there).
@@ -1536,12 +1536,13 @@ mod trampolines {
         assert!(px.chunks(4).all(|p| p == [0.5, 0.0, 0.0, 1.0]), "{:?}", &px[..8]);
     }
 
+    /// R32F is colour-renderable only with GL_EXT_color_buffer_float, which no
+    /// build claims: the texture is an incomplete attachment (ES 3.0 4.4.4.1).
     #[test]
-    fn r32f_target_is_complete_and_clears() {
+    fn r32f_target_is_incomplete_without_the_extension() {
         let _g = rig();
-        let (status, px) = clear_and_read(GL_R32F, GL_RED, GL_FLOAT);
-        assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
-        assert!(px.chunks(4).all(|p| p == [0.5, 0.0, 0.0, 1.0]), "{:?}", &px[..8]);
+        let (status, _) = clear_and_read(GL_R32F, GL_RED, GL_FLOAT);
+        assert_eq!(status, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{:?}", logs());
     }
 
     const VS: &str =

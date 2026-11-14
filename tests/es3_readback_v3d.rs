@@ -7,17 +7,18 @@
 //! GL_UNSIGNED_INT, or of GL_RGBA / GL_FLOAT.
 //!
 //! For every sized integer colour format and every float format the GL core
-//! makes renderbuffer storage of (R16F, RG16F, RGB16F, RGBA16F, R32F), a
+//! makes renderbuffer storage of (R16F, RG16F, RGB16F, RGBA16F), a
 //! renderbuffer is cleared with glClearBuffer{i,ui,f}v and read back with
 //! every (format, type) pair ES 3.0 4.3.1 lists for the class, the pair
 //! GL_IMPLEMENTATION_COLOR_READ_FORMAT / _TYPE names, and every other pair of
 //! the pixel format and type enums (GL_INVALID_OPERATION for a known pair the
 //! buffer does not take, GL_INVALID_ENUM for a name that is none). The same
 //! formats as texture attachments: the ones the GL core takes (the
-//! four-channel integer classes, R16F, RG16F, RGBA16F, R32F) read the same;
-//! the narrow integer textures and RGB16F are incomplete attachments today
-//! (pinned with their expected results in tests/es3_narrow_int_rt_v3d.rs and
-//! tests/es3_rgb16f_attach_v3d.rs), so no readback of them begins.
+//! four-channel integer classes, R16F, RG16F, RGB16F, RGBA16F) read the same;
+//! the narrow integer textures are incomplete attachments today
+//! (pinned with their expected results in tests/es3_narrow_int_rt_v3d.rs),
+//! so no readback of them begins; R32F is no attachment at all (not renderable
+//! without GL_EXT_color_buffer_float).
 //!
 //! The rig is tests/es3_pbo_rb_clears_v3d.rs' `gl_rig`: the job builder and
 //! the GPU stood in for. The stand-in GPU applies a job's whole-target clear
@@ -630,15 +631,14 @@ mod trampolines {
     ];
 
     /// The float colour formats the GL core makes renderbuffer storage of
-    /// (GL_EXT_color_buffer_half_float's four, and R32F; ES 3.0 itself has no
-    /// colour-renderable float format). RG16F and RGB16F are held in the
-    /// RGBA16F surface, four halves a pixel.
-    pub const FLOATS: [Fmt; 5] = [
+    /// (GL_EXT_color_buffer_half_float's four; R32F needs
+    /// GL_EXT_color_buffer_float, which is not claimed). RG16F and RGB16F are
+    /// held in the RGBA16F surface, four halves a pixel.
+    pub const FLOATS: [Fmt; 4] = [
         f("R16F", GL_R16F, Class::Float, 1, 16),
         f("RG16F", GL_RG16F, Class::Float, 2, 16),
         f("RGB16F", GL_RGB16F, Class::Float, 3, 16),
         f("RGBA16F", GL_RGBA16F, Class::Float, 4, 16),
-        f("R32F", GL_R32F, Class::Float, 1, 32),
     ];
 
     /// The clear colour of a format: four values inside the class's range, a
@@ -948,7 +948,7 @@ fn integer_formats_refuse_every_other_pair() {
 
 /// What a float format's clear reads back as RGBA / FLOAT today: the clear
 /// in the channels the format has; a lacking blue is 0 and a lacking alpha 1
-/// for R16F, R32F and RGB16F; RG16F's lacking blue is the clear's blue
+/// for R16F and RGB16F; RG16F's lacking blue is the clear's blue
 /// (`rg16f_reads_its_missing_blue_as_0` below). RGBA / UNSIGNED_BYTE is the
 /// same, clamped to [0, 1] and rounded to a byte.
 fn float_read_today(f: &Fmt) -> [f32; 4] {
@@ -1008,8 +1008,8 @@ fn float_formats_refuse_every_other_pair() {
 /// the read hands the four halves out).
 /// Cause: src/gl/framebuffer.rs `read_float_row` applies no channel mask to
 /// a float target (`read_int_row`'s caller does for the integer class). RGB16F
-/// and R16F/R32F come out right because the clear's alpha is forced to 1 for a
-/// format without alpha (`fb_target_alpha_bits`) and R16F/R32F store one
+/// and R16F come out right because the clear's alpha is forced to 1 for a
+/// format without alpha (`fb_target_alpha_bits`) and R16F stores one
 /// channel.
 #[test]
 #[ignore = "GL core: RGBA/FLOAT of an RG16F buffer reads the storage's blue, not 0 (read_float_row, plan #186)"]
@@ -1188,13 +1188,13 @@ fn the_other_float_formats_are_no_renderbuffer_storage() {
 /* ---- the tables ---------------------------------------------------------------- */
 
 /// The integer table is the 19 sized integer colour formats of ES 3.0 and
-/// the float one the five of `is_renderbuffer_color_format`, each named once.
+/// the float one the four of `is_renderbuffer_color_format`, each named once.
 #[test]
 fn the_tables_hold_every_format_once() {
     let mut names: Vec<_> = INTS.iter().chain(FLOATS.iter()).map(|f| f.name).collect();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), 24);
+    assert_eq!(names.len(), 23);
     assert_eq!(INTS.iter().filter(|f| f.class == Class::Int).count(), 9);
     assert_eq!(INTS.iter().filter(|f| f.class == Class::Uint).count(), 10);
 }
@@ -1255,13 +1255,12 @@ fn release_texture_fb(tex: GLuint, fbo: GLuint) {
 
 /// A texture attachment reads its clear as the renderbuffer does: the
 /// four-channel integer formats, RGB10_A2UI, R16F, RG16F (its blue the
-/// clear's, as above), RGBA16F and R32F, through the class's pair and the
+/// clear's, as above), RGB16F and RGBA16F, through the class's pair and the
 /// implementation's.
 #[test]
 fn texture_attachments_read_their_clear_the_same() {
     let _g = gl_rig::rig();
-    let complete: Vec<&Fmt> =
-        INTS.iter().filter(|f| f.channels == 4).chain(FLOATS.iter().filter(|f| f.channels != 3)).collect();
+    let complete: Vec<&Fmt> = INTS.iter().filter(|f| f.channels == 4).chain(FLOATS.iter()).collect();
     assert_eq!(complete.len(), 11);
     for f in complete {
         let (tex, fbo) = texture_fb(f);
@@ -1283,19 +1282,17 @@ fn texture_attachments_read_their_clear_the_same() {
     }
 }
 
-/// The one- and two-channel integer textures and the RGB16F texture are
+/// The one- and two-channel integer textures are
 /// GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT today (the GL core admits only the
-/// four-channel integer classes and not GL_RGB16F as a texture attachment:
-/// pinned, with the expected results, in tests/es3_narrow_int_rt_v3d.rs and
-/// tests/es3_rgb16f_attach_v3d.rs), so no readback of them begins: the read
-/// is refused (the pair check or completeness, see
+/// four-channel integer classes as a texture attachment: pinned, with the
+/// expected results, in tests/es3_narrow_int_rt_v3d.rs), so no readback of
+/// them begins: the read is refused (the pair check or completeness, see
 /// `an_incomplete_framebuffer_is_refused`) and writes nothing.
 #[test]
-fn narrow_integer_and_rgb16f_textures_are_incomplete_today() {
+fn narrow_integer_textures_are_incomplete_today() {
     let _g = gl_rig::rig();
-    let incomplete: Vec<&Fmt> =
-        INTS.iter().filter(|f| f.channels < 4).chain(FLOATS.iter().filter(|f| f.channels == 3)).collect();
-    assert_eq!(incomplete.len(), 13);
+    let incomplete: Vec<&Fmt> = INTS.iter().filter(|f| f.channels < 4).collect();
+    assert_eq!(incomplete.len(), 12);
     for f in incomplete {
         let (tex, fbo) = texture_fb(f);
         // SAFETY: a plain GL call.
