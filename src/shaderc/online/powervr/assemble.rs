@@ -356,7 +356,7 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
         /* the chain resolved every one into a copy (`expand_samples`) */
         SelOp::TexWord { .. } => return Err(BuildError::Unsupported("a texture state word that was not resolved")),
         SelOp::SampleZ { .. } => return Err(BuildError::Unsupported("a cube coordinate the chain did not consume")),
-        SelOp::VolSize => return Err(BuildError::Unsupported("a volume-size marker the chain did not consume")),
+        SelOp::NativeSize(_) => return Err(BuildError::Unsupported("a native-size marker the chain did not consume")),
         SelOp::SampleGrad => return Err(BuildError::Unsupported("gradients the chain did not consume")),
         SelOp::SampleAddr => return Err(BuildError::Unsupported("a layer address the chain did not consume")),
         SelOp::PlaneCoeff { .. } => return Err(BuildError::Unsupported("a plane coefficient that was not resolved")),

@@ -251,7 +251,7 @@ fn single_op(g: &SelGroup) -> Option<&'static str> {
         | SelOp::WaitData
         | SelOp::TexWord { .. }
         | SelOp::SampleZ { .. }
-        | SelOp::VolSize
+        | SelOp::NativeSize(_)
         | SelOp::SampleGrad
         | SelOp::SampleAddr
         | SelOp::PlaneCoeff { .. }
@@ -1479,7 +1479,7 @@ mod tests {
                 | SelOp::WaitData
                 | SelOp::TexWord { .. }
                 | SelOp::SampleZ { .. }
-                | SelOp::VolSize
+                | SelOp::NativeSize(_)
                 | SelOp::SampleGrad
                 | SelOp::SampleAddr
                 | SelOp::PlaneCoeff { .. }

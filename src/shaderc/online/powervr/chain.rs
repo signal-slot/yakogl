@@ -209,25 +209,31 @@ pub fn compile_vertex_with<'a>(
 /// `gl::native_array`); bit 2, it samples a sampler3D as the TPU's own 3D
 /// texture (`smp` 3d over a volume, the draw binds the twiddled copy of
 /// `gl::native_vol`). All are decided after dead-code removal: a dead
-/// look-up takes its sample with it and sets nothing.
+/// look-up takes its sample with it and sets nothing. A `textureSize`
+/// compiled for the TPU's own kind ([`SelOp::NativeSize`]) sets its kind's
+/// bit too: it reads the copy's image word (one face's or one layer's size,
+/// the depth field), which the stacked image's word does not hold.
 pub fn native_flags(groups: &[SelGroup]) -> u8 {
     use super::sel::SelOp;
-    let (mut cube, mut vol) = (false, false);
+    use crate::shaderc::online::ir::TexDim;
+    let (mut cube, mut array, mut vol) = (false, false, false);
     for (i, g) in groups.iter().enumerate() {
-        if matches!(g.op, SelOp::Sample { cube: true, .. }) {
-            /* a native 3D sample is a `dmn` 3d sample whose third coordinate
-             * is the volume's */
-            if i > 0 && matches!(groups[i - 1].op, SelOp::SampleZ { vol: true }) {
-                vol = true;
-            } else {
-                cube = true;
+        match g.op {
+            SelOp::Sample { cube: true, .. } => {
+                /* a native 3D sample is a `dmn` 3d sample whose third
+                 * coordinate is the volume's */
+                if i > 0 && matches!(groups[i - 1].op, SelOp::SampleZ { vol: true }) {
+                    vol = true;
+                } else {
+                    cube = true;
+                }
             }
+            SelOp::Sample { layer: true, .. } | SelOp::NativeSize(TexDim::D2Array) => array = true,
+            SelOp::NativeSize(TexDim::D3) => vol = true,
+            SelOp::NativeSize(TexDim::Cube) => cube = true,
+            _ => {}
         }
     }
-    /* a textureSize on a sampler3D compiled natively reads the TEXTYPE_3D
-     * image word: the draw must bind the copy that word describes */
-    vol |= groups.iter().any(|g| g.op == SelOp::VolSize);
-    let array = groups.iter().any(|g| matches!(g.op, SelOp::Sample { layer: true, .. }));
     u8::from(cube) | (u8::from(array) << 1) | (u8::from(vol) << 2)
 }
 
@@ -1110,7 +1116,19 @@ fn expand_samples<'a>(
             }
             /* a sampler only textureSize reads has its descriptor too */
             SelOp::TexWord { binding, .. } => binding,
-            _ => continue,
+            /* so has one whose stacked layer count alone is read
+             * (`textureSize(s, l).z` of a stacked sampler2DArray or
+             * sampler3D reads only the hidden `pvr_layers_s` uniform):
+             * without its row the draw cannot bind the unit and never
+             * fills the count */
+            _ => {
+                let layers = g.srcs.iter().flatten().find_map(|s| match s {
+                    SelSrc::Fixed { bank: Bank::Shared, reg, .. } => layers_binding(decls, *reg),
+                    _ => None,
+                });
+                let Some(binding) = layers else { continue };
+                binding
+            }
         };
         if !bindings.as_slice().contains(&binding) {
             bindings.push(a, binding).map_err(oom)?;
@@ -1171,7 +1189,7 @@ fn expand_samples<'a>(
             cube_z = g.srcs[0];
             continue;
         }
-        if g.op == SelOp::VolSize {
+        if matches!(g.op, SelOp::NativeSize(_)) {
             continue;
         }
         if g.op == SelOp::SampleAddr {
@@ -1501,6 +1519,19 @@ pub fn compile_fragment_for<'a>(
 fn row_sampled(binding: u8, array_len: u8, sampled: &[u8]) -> bool {
     let end = u16::from(binding) + u16::from(array_len.max(1));
     sampled.iter().any(|&b| (u16::from(binding)..end).contains(&u16::from(b)))
+}
+
+/// The sampler whose stacked layer count block dword `dword` holds: the
+/// hidden uniform `pvr_layers_<sampler>` at that offset (the contract
+/// select.rs `layers_dword` reads by and draw.rs fill_stage_layer_uniforms
+/// fills), and the sampler row of that name; none for any other dword.
+fn layers_binding(decls: &[ir::UniformDecl<'_>], dword: u16) -> Option<u8> {
+    let no_block = crate::shaderc::SHC_UNIFORM_NO_BLOCK;
+    let name = decls
+        .iter()
+        .find(|d| d.dword_off != no_block && d.dword_off == dword)
+        .and_then(|d| d.name.strip_prefix("pvr_layers_"))?;
+    decls.iter().find(|d| d.dword_off == no_block && d.name == name).map(|d| d.binding)
 }
 
 /// The descriptor slots of a program that samples `sampled`, in order: every

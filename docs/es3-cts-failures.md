@@ -300,7 +300,13 @@ board can judge.
 The board's `shaders.texture_functions` failures (297) are mostly code
 generator refusals outside that corpus: the PowerVR refuses `textureGrad`,
 `textureProjGrad`, their offset forms, `texelFetchOffset` and integer results
-from 2D-array, cube and 3D samplers. `texturesize` (38) reads a wrong size.
+from 2D-array, cube and 3D samplers. `texturesize` (38) read a wrong size:
+the compiler's stacked-array, cube, grid and native-copy sizes are fixed on the
+host (`tests/es3_pvr_texsize.rs`, the byte model over the draw's descriptor
+words), not yet run on a board; the three "with lod base" iterations of each
+case still need the bind to apply `GL_TEXTURE_BASE_LEVEL`, which no PowerVR
+bind does (`src/gl/draw.rs` `mip_levels_needed`), so the cases stay Fail on the
+board until that lands (`docs/es3/shader-host-repro.md` row 3).
 `builtin_functions.common.round` / `roundeven` (16) are fixed on the host
 (`tests/es3_shaderc_fold.rs`), not yet run on a board. `precision.{int,uint}`
 (24) did not link (fixed on the host, `3efd7b30`), `fragdepth` (15) did not

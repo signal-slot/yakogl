@@ -1848,6 +1848,12 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs)" \
 # slices with the switch off. Compiles to nothing under report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_3d
+# PowerVR textureSize (the 38 dEQP shaders.texture_functions.texturesize
+# cases): every sampler kind in both stages, with the TPU's own cube, array
+# and volume on and off, run in the byte model over the descriptor words the
+# draw's bind gets. Compiles to nothing under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_texsize.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_texsize
 # PowerVR gl_FragDepth (the dEQP fbo.depth clamp cases): the written depth
 # clamped by a saturating fadd, fed to the ISP by depthf, and the record's
 # writes_depth kept apart from its sampler flavours (native_cube). Compiles
