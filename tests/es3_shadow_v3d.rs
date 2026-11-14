@@ -484,3 +484,42 @@ fn the_shadow_programs_are_the_designed_sequences() {
         assert_eq!(p.fs.threads, 2, "five TMU writes: the input FIFO's 16 slots over 4 threads do not hold them");
     });
 }
+
+/// The draw-time half: a depth binding's `compare_op` (the GL core's
+/// TEXTURE_COMPARE_FUNC, GL's order) is the compare function of its sampler
+/// record (`v3d::texture::compare_function`, what `sampler_for` packs and
+/// keys its cache on), and that function, which the QPU interpreter's TMUDREF
+/// takes in the same order as the hardware field, makes the look-up compare as
+/// GL says. Before plan #354 `sampler_for` packed with the compare-less
+/// `v3d_tex_pack_sampler`, the record held NEVER whatever the texture said,
+/// and a shadow draw compared never (dEQP texture.shadow, RC2).
+///
+/// Per function: the texels 0.25, 0.5 and 0.75 against the reference 0.5. A
+/// compare that is off (no TEXTURE_COMPARE_MODE, `COMPARE_OFF`) packs NEVER,
+/// as Mesa's compare-off word does, and a colour binding carries none.
+#[test]
+fn the_draw_states_compare_op_is_the_look_ups_compare() {
+    use yakogl::backend::{GlesTextureBind, GLES_TEXFMT_R32F, GLES_TEXFMT_RGBA8};
+    use yakogl::v3d::texture::{compare_function, sampler_compare_bits, COMPARE_OFF, SAMPLER_COMPARE_SHIFT};
+
+    let tex = depth_2x2(1);
+    let fs = fs_of("sampler2DShadow", "texture(t, vec3(v.xy, u_ref))");
+    let depths = [0.25, 0.5, 0.75];
+    let centres = [(0.25, 0.25), (0.75, 0.25), (0.75, 0.75)];
+    let binding = |format: u8, compare_op: u8| GlesTextureBind { format, compare_op, ..GlesTextureBind::ZERO };
+    for (op, func) in FUNCS.into_iter().enumerate() {
+        let b = binding(GLES_TEXFMT_R32F, op as u8);
+        let f = compare_function(&b);
+        assert_eq!(f, op as u32, "{func:?}: the record's field is GL's order");
+        assert_eq!(sampler_compare_bits(&b), f << SAMPLER_COMPARE_SHIFT);
+        for (k, (s, t)) in centres.into_iter().enumerate() {
+            let got = run_fs(&fs, [s, t, 0.0, 1.0], &tex, Sampler::NEAREST_CLAMP, FUNCS[f as usize], &[0.5]);
+            assert_eq!(got, compare(func, 0.5, depths[k]), "{func:?} against {}", depths[k]);
+        }
+    }
+    /* off: NEVER in the record, so a look-up that does not compare reads 0 */
+    let off = binding(GLES_TEXFMT_R32F, COMPARE_OFF as u8);
+    assert_eq!((compare_function(&off), sampler_compare_bits(&off)), (0, 0));
+    let colour = binding(GLES_TEXFMT_RGBA8, 3);
+    assert_eq!((compare_function(&colour), sampler_compare_bits(&colour)), (0, 0), "no compare on a colour texture");
+}
