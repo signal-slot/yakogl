@@ -112,7 +112,7 @@
 0xfdd900bc 0xffffffff VP1_INT_RAW_STATUS: event flags of a port the design does not use
 0xfdd900cc 0xffffffff VP2_INT_RAW_STATUS: event flags of a port the design does not use
 0xfdd900dc 0xffffffff VP3_INT_RAW_STATUS: event flags of a port the design does not use
-0xfdd90604 0xffffffff OVL_LAYER_SEL: by design, Esmart0 (id 2) is VP0's layer 0; Linux puts Cluster0 there and lays out VP1's layers too
+0xfdd90604 0x000f0fff OVL_LAYER_SEL layers 0-2 and 4: by design, Esmart0 (id 2) is VP0's layer 0; Linux puts Cluster0 there and lays out VP1's layers too, which moves the windows found on those layers
 0xfdd90608 0x205400f3 OVL_PORT_SEL: by design, Esmart0 alone on VP0; Linux has Cluster0 on VP0, Cluster1 on VP1 and splits the layers over two ports
 0xfdd90610 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
 0xfdd90614 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
@@ -127,7 +127,7 @@
 0xfdd906ec 0xffffffff VP_BG_MIX_CTRL(3): a port the design does not use
 0xfdd906f0 0xffffffff CLUSTER_DLY_NUM: Linux's delays for its Cluster windows; the design writes 0 (one Esmart layer)
 0xfdd906f4 0xffffffff CLUSTER_DLY_NUM1: likewise
-0xfdd906f8 0xffffffff SMART_DLY_NUM: the design writes Esmart0's delay 23 alone; Linux writes 23 for Esmart2 and 3
+0xfdd906f8 0xffff00ff SMART_DLY_NUM: Esmart0's field (7:0): the design writes 23 there, Linux leaves Esmart0 unused; Esmart2 and 3 (31:16): Linux writes 23, the design 0. Esmart1's field is compared
 0xfdd90c0c 0x0000000c VP0_CLK_CTRL DCLK_OUT_DIV (3:2): Linux writes an uninitialised variable for HDMI (rockchip_vop2_reg.c:1673, :1683; never assigned for HDMI in :1548-1636), read 3 here; the design writes 0 (ip::vop2 module text). DCLK_OUT is not on the HDMI path (:1564-1580). Decided: the chain writes 0; 3 is the D8 fallback only if there is no picture with every other read-back good
 0xfdd90c10 0xffffffff VP0_3D_LUT_CTRL: Linux v6.18 does not write it; reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
 0xfdd90ca0 0xffffffff VP0 +0xa0-0xb4: not named by Linux v6.18 (vop2.h); reset values, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
