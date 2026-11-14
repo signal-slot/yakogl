@@ -23,6 +23,11 @@ const CRU: usize = 0xfd7c_0000;
 const SYS_GRF: usize = 0xfd58_c000;
 const PHY_GRF: usize = 0xfd5e_0000;
 const HDMI: usize = 0xfde8_0000;
+/// The HDMI QP TX0 offsets the board dump read without harm (CMU_STATUS,
+/// CMU_VIDQPCLK_FREQ, CMU_LINKQPCLK_FREQ, VIDEO_MONITOR_STATUS0-6). The D0
+/// dump measured a bus error on other offsets (0x10, 0x804, 0x80c): the
+/// model refuses every read outside this list.
+const HDMI_READS: [usize; 10] = [0xb0, 0xb8, 0xbc, 0x884, 0x888, 0x88c, 0x890, 0x894, 0x898, 0x89c];
 
 const B: Bases =
     Bases { vop: VOP, vop_mmu: [MMU0, MMU1], pmu: PMU, cru: CRU, sys_grf: SYS_GRF, phy_grf: PHY_GRF, hdmi: HDMI };
@@ -184,8 +189,11 @@ impl Soc {
     fn reg(&self, a: usize) -> u32 {
         self.s.borrow().regs.get(&a).copied().unwrap_or(0)
     }
+    /// A read or write of PD_VOP's blocks: the VOP or either vop_mmu set.
     fn vop_accessed(&self) -> bool {
-        self.ops().iter().any(|o| matches!(o, Op::R(a, _) | Op::W(a, _) if (VOP..VOP + 0x2000).contains(a)))
+        let in_pd_vop =
+            |a: &usize| (VOP..VOP + 0x2000).contains(a) || [MMU0, MMU1].iter().any(|b| (*b..b + 0x100).contains(a));
+        self.ops().iter().any(|o| matches!(o, Op::R(a, _) | Op::W(a, _) if in_pd_vop(a)))
     }
 }
 
@@ -210,7 +218,7 @@ impl Mmio for Soc {
                     || addr == CRU + 0x8d0
                     || addr == SYS_GRF + 0x384
                     || addr == PHY_GRF + 0x80
-                    || (HDMI..HDMI + 0x1000).contains(&addr),
+                    || HDMI_READS.contains(&addr.wrapping_sub(HDMI)),
                 "read of {addr:#x}: not a block of the adopt"
             );
             s.regs.get(&addr).copied().unwrap_or(0)
