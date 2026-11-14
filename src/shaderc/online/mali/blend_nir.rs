@@ -1587,6 +1587,12 @@ mod fc {
 
 /// No class yet (a class is 12 bits).
 const NO_CLASS: u16 = u16::MAX;
+/// The deepest [`Nir::fp_class`] recursion before the key is refused
+/// (`BlendVariantNotLowered`). Measured 2026-11-15 over the 4203 keys of
+/// blend_deqp.words, blend_random.sha and blend_u32.words: depth 3 at
+/// most (a query and three values below it); 16 leaves room for other
+/// keys and bounds the stack at 17 frames, not the block's [`MAX`].
+const FP_CLASS_DEPTH: u32 = 16;
 
 /// `analyze_fp_constant` (nir_range_analysis.c:117-172).
 fn const_class(bits: u8, vals: &[u64]) -> u16 {
@@ -1947,31 +1953,36 @@ impl Nir<'_> {
 
     /// `nir_analyze_fp_class` (nir_range_analysis.c:760-1377) of a value.
     /// Each value is analysed once a query (`memo`, as Mesa's `range_ht`
-    /// caches it); the recursion follows the value's sources, at most the
-    /// block's [`MAX`] values deep, with no cut-off.
-    fn fp_class(&self, d: u16, memo: &[core::cell::Cell<u16>; MAX]) -> u16 {
+    /// caches it); the recursion follows the value's sources, `depth`
+    /// values below the query's. Mesa has no cut-off; this refuses the key
+    /// past [`FP_CLASS_DEPTH`] (a frame a value, on a Zephyr thread's
+    /// stack), never answering UNKNOWN where Mesa would answer a class.
+    fn fp_class(&self, d: u16, memo: &[core::cell::Cell<u16>; MAX], depth: u32) -> R<u16> {
         let m = memo[d as usize].get();
         if m != NO_CLASS {
-            return m;
+            return Ok(m);
         }
-        let r = self.fp_class_of(d, memo);
+        if depth > FP_CLASS_DEPTH {
+            return Err(MaliError::BlendVariantNotLowered);
+        }
+        let r = self.fp_class_of(d, memo, depth)?;
         memo[d as usize].set(r);
-        r
+        Ok(r)
     }
 
-    fn fp_class_of(&self, d: u16, memo: &[core::cell::Cell<u16>; MAX]) -> u16 {
+    fn fp_class_of(&self, d: u16, memo: &[core::cell::Cell<u16>; MAX], depth: u32) -> R<u16> {
         use fc::*;
         let ins = &self.ins[d as usize];
         let op = match ins.kind {
-            Kind::Const => return const_class(ins.bits, &ins.k[..ins.comps as usize]),
+            Kind::Const => return Ok(const_class(ins.bits, &ins.k[..ins.comps as usize])),
             Kind::Alu(op) => op,
-            _ => return UNKNOWN,
+            _ => return Ok(UNKNOWN),
         };
-        let s = |k: usize| self.fp_class(ins.srcs[k].def, memo);
+        let s = |k: usize| self.fp_class(ins.srcs[k].def, memo, depth + 1);
         let r = match op {
-            Op::Vec2 => s(0) | s(1),
+            Op::Vec2 => s(0)? | s(1)?,
             Op::F2f16 => {
-                let mut r = handle_sz(s(0));
+                let mut r = handle_sz(s(0)?);
                 if self.ins[ins.srcs[0].def as usize].bits > ins.bits {
                     if r & LT_NEG_ONE != 0 {
                         r |= NEG_INF | NEG_ONE;
@@ -1988,18 +1999,18 @@ impl Nir<'_> {
                 }
                 r
             }
-            Op::Fneg => fneg_class(s(0)),
-            Op::Fadd => fadd_class(s(0), s(1)),
-            Op::Fsub => fadd_class(s(0), fneg_class(s(1))),
-            Op::Fmax => fneg_class(fmin_class(fneg_class(s(0)), fneg_class(s(1)))),
-            Op::Fmin => fmin_class(s(0), s(1)),
+            Op::Fneg => fneg_class(s(0)?),
+            Op::Fadd => fadd_class(s(0)?, s(1)?),
+            Op::Fsub => fadd_class(s(0)?, fneg_class(s(1)?)),
+            Op::Fmax => fneg_class(fmin_class(fneg_class(s(0)?), fneg_class(s(1)?))),
+            Op::Fmin => fmin_class(s(0)?, s(1)?),
             Op::Fmul => {
                 let eq = self.alu_srcs_equal(d, d, 0, 1);
                 let neq = !self.is_const(ins.srcs[0].def) && self.srcs_negative_equal(d, 0, 1);
-                fmul_class(s(0), s(1), eq, neq)
+                fmul_class(s(0)?, s(1)?, eq, neq)
             }
             Op::Ffma => {
-                let (a, b, c) = (s(0), s(1), s(2));
+                let (a, b, c) = (s(0)?, s(1)?, s(2)?);
                 let eq = self.alu_srcs_equal(d, d, 0, 1);
                 let neq = !self.is_const(ins.srcs[0].def) && self.srcs_negative_equal(d, 0, 1);
                 let mut r = fadd_class(fmul_class(a, b, eq, neq), c);
@@ -2010,9 +2021,9 @@ impl Nir<'_> {
                 }
                 r
             }
-            Op::Mov => s(0),
+            Op::Mov => s(0)?,
             Op::Fsat => {
-                let mut r = s(0);
+                let mut r = s(0)?;
                 if r & (ANY_NEG | NEG_ZERO | NAN) != 0 {
                     r &= !(ANY_NEG | NEG_ZERO | NAN);
                     r |= POS_ZERO;
@@ -2028,11 +2039,7 @@ impl Nir<'_> {
             }
             _ => UNKNOWN,
         };
-        if op.is_float() {
-            handle_sz(r)
-        } else {
-            r
-        }
+        Ok(if op.is_float() { handle_sz(r) } else { r })
     }
 }
 
@@ -2277,7 +2284,7 @@ impl Nir<'_> {
                     }
                 }
                 let memo: [core::cell::Cell<u16>; MAX] = core::array::from_fn(|_| core::cell::Cell::new(NO_CLASS));
-                self.fp_class(d, &memo) & ex == 0
+                self.fp_class(d, &memo, 0)? & ex == 0
             }
             VarCond::Unknown => return Err(MaliError::BlendVariantNotLowered),
         })
@@ -2863,5 +2870,31 @@ mod tests {
         })
         .expect("the scratch arena is free");
         assert_eq!(ours, mesa);
+    }
+
+    /// `fp_class` refuses a value whose sources run deeper than
+    /// [`FP_CLASS_DEPTH`] (a key refused, never UNKNOWN for a class Mesa
+    /// would find), and answers one at the bound: a chain of `fneg` on a
+    /// constant 1.0.
+    #[test]
+    fn fp_class_refuses_past_its_depth() {
+        crate::shaderc::online::store::with_scratch(|sc| {
+            let mut n = Nir::new(sc).expect("the scratch arena");
+            let mut v = n.konst(16, &[ONE16]).expect("a constant");
+            let mut chain = vec![v];
+            for _ in 0..FP_CLASS_DEPTH + 1 {
+                v = n.alu(Op::Fneg, 1, 16, &[(v, sw(0))]).expect("an fneg");
+                chain.push(v);
+            }
+            let memo = || -> [core::cell::Cell<u16>; MAX] { core::array::from_fn(|_| core::cell::Cell::new(NO_CLASS)) };
+            /* FP_CLASS_DEPTH fnegs over the constant: the constant at the
+             * bound, a class (-1.0 after an odd count, 1.0 after an even) */
+            let at = chain[FP_CLASS_DEPTH as usize];
+            assert!(n.fp_class(at, &memo(), 0).is_ok(), "at the bound");
+            /* one more: the constant past it */
+            let past = chain[FP_CLASS_DEPTH as usize + 1];
+            assert_eq!(n.fp_class(past, &memo(), 0), Err(MaliError::BlendVariantNotLowered));
+        })
+        .expect("the scratch arena is free");
     }
 }
