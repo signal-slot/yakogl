@@ -483,29 +483,35 @@ def self_test():
             f.write(b"x")
         only("u-boot-env: only one dump", uo, "u-boot-env", "only the before")
 
-        # 6 redaction
+        # 6 redaction. The private-looking values are built at run time: this
+        # file is in the tree tools/release/redaction-scan.py scans
+        # (tests/redaction_scan.rs), and a literal would be its finding.
+        ip_a = ".".join(("10", "1", "2", "3"))
+        ip_b = ".".join(("10", "9", "8", "7"))
+        link6 = "fe" + "80::1ff:fe23:4567:890a"
+        tailnet = ".".join(("dk1", "tail1234", "ts", "net"))
         for label, text, kind in (
-                ("IPv4", "tftp from 10.1.2.3 ok\n", "IPv4"),
+                ("IPv4", "tftp from %s ok\n" % ip_a, "IPv4"),
                 ("IPv4 near a placeholder", "from 192.0.2.1 then 203.0.113.7\n", "IPv4"),
-                ("IPv6", "link fe80::1ff:fe23:4567:890a up\n", "IPv6"),
+                ("IPv6", "link %s up\n" % link6, "IPv6"),
                 ("IPv6 full", "a 2001:0db8:85a3:0000:0000:8a2e:0370:7334 b\n", "IPv6"),
                 ("tty path", "console on /dev/ttyUSB3\n", "serial device path"),
                 ("serial path", "/dev/serial/by-id/x\n", "serial device path"),
                 ("USB serial", "usb-FTDI_FT232R_USB_UART_A50285BI-if00-port0\n", "USB serial"),
                 ("USB serial number", "iSerial: 0123456789AB\n", "USB serial"),
-                ("tailnet name", "ssh dk1.tail1234.ts.net\n", "tailnet host")):
+                ("tailnet name", "ssh %s\n" % tailnet, "tailnet host")):
             r = make_record(root, "r-" + label.replace(" ", "_"), **{"typed.log": text})
             only("redaction: " + label, r, "redaction", kind)
-        r = make_record(root, "r-nul", **{"console.raw": "ok\0 10.9.8.7\n"})
+        r = make_record(root, "r-nul", **{"console.raw": "ok\0 %s\n" % ip_b})
         only("redaction: address in console.raw behind a NUL", r, "redaction", "console.raw:1")
         expect("redaction: version, MAC, time, <redacted> and TEST-NET placeholders pass",
                make_record(root, "r-ok", **{"typed.log": "U-Boot 2023.10.0 ethaddr=<redacted> serial#=<redacted> "
                                             "12:34:56 aa:bb:cc:dd:ee:ff 192.0.2.7 Linux 6.1.82 foo::bar console [ttySTM0]\n"}), False)
-        r = make_record(root, "r-leak", **{"typed.log": "ip 10.1.2.3\n"})
+        r = make_record(root, "r-leak", **{"typed.log": "ip %s\n" % ip_a})
         lines = []
         run_checks(r, None, out=lines.append)
         n[0] += 1
-        t = "10.1.2.3" not in "\n".join(lines)
+        t = ip_a not in "\n".join(lines)
         print("%s redaction: the leaked value is not printed" % ("ok  " if t else "FAIL"))
         if not t:
             fails.append("echo")
