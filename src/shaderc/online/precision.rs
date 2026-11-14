@@ -1634,6 +1634,52 @@ mod tests {
         }
     }
 
+    /// Instruction `i` makes a float or bool value (the operation, its
+    /// local's or input's or uniform's type, a select's first side).
+    fn float_op(m: &Module, i: usize) -> bool {
+        match m.instrs[i] {
+            Op::ConstF32(_) | Op::ConstBool(_) => true,
+            /* a select is its sides' kind: before the generic ALU
+             * arm, which would not list it (eighth review,
+             * should-fix 1) */
+            Op::Alu(AluOp::Bcsel, _) => float_value(m, ValueId(i as u32), 0),
+            Op::Alu(a, _) => matches!(
+                a,
+                AluOp::Fadd
+                    | AluOp::Fmul
+                    | AluOp::Ffma
+                    | AluOp::Fmin
+                    | AluOp::Fmax
+                    | AluOp::Fneg
+                    | AluOp::Fabs
+                    | AluOp::Fsign
+                    | AluOp::Frcp
+                    | AluOp::Frsq
+                    | AluOp::Fsqrt
+                    | AluOp::Fexp2
+                    | AluOp::Flog2
+                    | AluOp::Fsin
+                    | AluOp::Fcos
+                    | AluOp::Ffloor
+                    | AluOp::Fceil
+                    | AluOp::Ftrunc
+                    | AluOp::Ffract
+                    | AluOp::Fdot2
+                    | AluOp::Fdot3
+                    | AluOp::Fdot4
+                    | AluOp::Flt
+                    | AluOp::Fle
+                    | AluOp::Feq
+                    | AluOp::Fne
+                    | AluOp::B2f
+                    | AluOp::I2f
+                    | AluOp::U2f
+            ),
+            Op::Tex { ret: super::super::ir::ScalarType::F32, .. } => true,
+            _ => float_value(m, ValueId(i as u32), 0),
+        }
+    }
+
     /// Over the tree's shaders, three invariants that hold for every
     /// correct shader, whatever another change adds to the corpus:
     ///
@@ -1662,6 +1708,7 @@ mod tests {
         let mut buf = std::vec![0u8; 1 << 23];
         let (mut compiled, mut bad, mut unknown) = (0usize, Vec::new(), Vec::<String>::new());
         super::super::lower::UNSEEN.with(|n| n.set(0));
+        super::super::lower::NO_CONTEXT.with(|n| n.set(0));
         for f in &files {
             let Ok(src) = std::fs::read_to_string(f) else { continue };
             let stage = if f.extension().is_some_and(|x| x == "vert") { Stage::Vertex } else { Stage::Fragment };
@@ -1676,43 +1723,7 @@ mod tests {
             }
             for (i, op) in m.instrs.iter().enumerate() {
                 let p = m.prec_of(ValueId(i as u32));
-                let float = match *op {
-                    Op::ConstF32(_) | Op::ConstBool(_) => true,
-                    Op::Alu(a, _) => matches!(
-                        a,
-                        AluOp::Fadd
-                            | AluOp::Fmul
-                            | AluOp::Ffma
-                            | AluOp::Fmin
-                            | AluOp::Fmax
-                            | AluOp::Fneg
-                            | AluOp::Fabs
-                            | AluOp::Fsign
-                            | AluOp::Frcp
-                            | AluOp::Frsq
-                            | AluOp::Fsqrt
-                            | AluOp::Fexp2
-                            | AluOp::Flog2
-                            | AluOp::Fsin
-                            | AluOp::Fcos
-                            | AluOp::Ffloor
-                            | AluOp::Fceil
-                            | AluOp::Ftrunc
-                            | AluOp::Ffract
-                            | AluOp::Fdot2
-                            | AluOp::Fdot3
-                            | AluOp::Fdot4
-                            | AluOp::Flt
-                            | AluOp::Fle
-                            | AluOp::Feq
-                            | AluOp::Fne
-                            | AluOp::B2f
-                            | AluOp::I2f
-                            | AluOp::U2f
-                    ),
-                    Op::Tex { ret: super::super::ir::ScalarType::F32, .. } => true,
-                    _ => float_value(m, ValueId(i as u32), 0),
-                };
+                let float = float_op(m, i);
                 if p == Prec::Unknown {
                     let rel = f.strip_prefix(root).unwrap_or(f).display().to_string();
                     if !unknown.contains(&rel) {
@@ -1727,6 +1738,8 @@ mod tests {
         assert!(compiled > 900, "{compiled} shaders compiled");
         let unseen = super::super::lower::UNSEEN.with(|n| n.get());
         assert_eq!(unseen, 0, "expressions lowered that the precision scan never reached");
+        let no_context = super::super::lower::NO_CONTEXT.with(|n| n.get());
+        assert_eq!(no_context, 0, "float values lowered under no class, left to the Unknown rule");
         /* the Unknown path is live: the dead-cube shader's `asin(float(k))`
          * of a global `k` NIR may prove constant (fourth review) */
         assert!(
@@ -2209,6 +2222,200 @@ mod tests {
                 .map(|(i, (_, p))| (i, *p))
                 .collect();
             assert!(loads.iter().all(|&(_, p)| p != Prec::None), "{src}\n{loads:?}");
+        }
+        /* the copy back reads the parameter's 32-bit slot: High (Mesa,
+         * review probe p8/n7: `f2fmp (var_ref lowerp)` into the mediump
+         * variable), not Medium */
+        let g = vs("varying highp float v;\n\
+                    void f(out mediump float r) { r = a * 2.0; }\n\
+                    void main() { mediump float m; f(m); v = m * 1.5; gl_Position = p; }");
+        let r = g.locals.iter().position(|(n, _)| n == "r").expect("the parameter's slot");
+        let copy =
+            g.ops.iter().zip(&g.prec).find(|(o, _)| matches!(o, Op::LoadLocal { local, .. } if local.0 as usize == r));
+        assert_eq!(copy.map(|c| *c.1), Some(H), "the copy back");
+    }
+
+    /// The copy IN of an `inout` argument that is an array element (at a
+    /// constant or a run-time index), a swizzle or a struct is a full-width
+    /// read into the 32-bit parameter (eighth review B-I; Mesa, probes
+    /// p8/n2, n3: `inout_tmp`, then `lowerp = f162f(inout_tmp)`): High.
+    /// It ran under the void call's context and recorded None.
+    #[test]
+    fn an_inout_argument_s_copy_in_is_full_width() {
+        let head = "varying mediump vec4 v; uniform int ui; attribute mediump vec4 q;\n";
+        for (src, var) in [
+            (
+                "void sp(inout mediump vec4 io){ io = io * 0.5; }\n\
+                 void main(){ mediump vec4 arr[2]; arr[0] = q; arr[1] = q; sp(arr[1]); v = arr[0] + arr[1]; gl_Position = p; }",
+                "arr",
+            ),
+            (
+                "void sp(inout mediump vec4 io){ io = io * 0.5; }\n\
+                 void main(){ mediump vec4 arr[2]; arr[0] = q; arr[1] = q; sp(arr[ui]); v = arr[0] + arr[1]; gl_Position = p; }",
+                "arr",
+            ),
+            (
+                "void sp(inout mediump vec2 io){ io = io * 0.5; }\n\
+                 void main(){ mediump vec4 w = q; sp(w.zx); v = w; gl_Position = p; }",
+                "w",
+            ),
+            (
+                "struct S { mediump vec2 m; highp float k; }; void ss(inout S t){ t.m *= 2.0; t.k += 1.0; }\n\
+                 void main(){ S s; s.m = q.xy; s.k = p.x; ss(s); v = vec4(s.m, s.k, 1.0); gl_Position = p; }",
+                "s",
+            ),
+        ] {
+            let g = vs(&std::format!("{head}{src}"));
+            let first_op = g.ops.iter().position(|o| matches!(o, Op::Alu(AluOp::Fmul | AluOp::Fadd, _)));
+            let ids: Vec<usize> = g.locals.iter().enumerate().filter(|(_, l)| l.0 == var).map(|(i, _)| i).collect();
+            let copy: Vec<Prec> = g.ops[..first_op.unwrap_or(g.ops.len())]
+                .iter()
+                .zip(&g.prec)
+                .filter(|(o, _)| matches!(o, Op::LoadLocal { local, .. } if ids.contains(&(local.0 as usize))))
+                .map(|(_, p)| *p)
+                .collect();
+            assert!(!copy.is_empty() && copy.iter().all(|&p| p == H), "{src}\n{copy:?}");
+            assert!(!alu(&g, AluOp::Bcsel).contains(&Prec::None), "{src}: the index ladder");
+        }
+    }
+
+    /// The rule that makes "a float value with class None" impossible
+    /// (lower.rs `Lower::instr_prec`): a float or bool value lowered under
+    /// a context with no class records Unknown, never None, unless its
+    /// site sets the class Mesa was measured at. Shown by taking the copy
+    /// in's measured class away (`UNMEASURED`), as a new site that sets
+    /// none would be: its loads record Unknown and are counted.
+    #[test]
+    fn a_float_value_under_no_context_is_unknown_never_none() {
+        let src = "varying mediump vec4 v; attribute mediump vec4 q;\n\
+                   void sp(inout mediump vec4 io){ io = io * 0.5; }\n\
+                   void main(){ mediump vec4 arr[2]; arr[0] = q; arr[1] = q; sp(arr[1]); v = arr[0] + arr[1]; gl_Position = p; }";
+        super::super::lower::UNMEASURED.with(|u| u.set(true));
+        super::super::lower::NO_CONTEXT.with(|n| n.set(0));
+        let g = vs(src);
+        super::super::lower::UNMEASURED.with(|u| u.set(false));
+        let counted = super::super::lower::NO_CONTEXT.with(|n| n.get());
+        assert!(counted > 0, "the copy in fell to the rule");
+        let floats_none = g
+            .ops
+            .iter()
+            .zip(&g.prec)
+            .filter(|(o, p)| matches!(o, Op::LoadLocal { .. } | Op::Alu(..)) && **p == Prec::None)
+            .filter(|(o, _)| !matches!(o, Op::Alu(AluOp::Ieq | AluOp::Iadd, _)))
+            .count();
+        assert_eq!(floats_none, 0, "{:?}", g.prec);
+        assert!(g.prec.contains(&Prec::Unknown));
+    }
+
+    /// The pack built-ins (ES 3.00) take a highp argument: Mesa widens it
+    /// and computes the clamp, scale and rounding at 32 bits (probes p8/m1,
+    /// m3, drm-shim GLSL IR: `vec2 f162f`, `vec2 sat`, `vec2 *`, `vec2
+    /// round_even`). Their float steps record High; they ran under the
+    /// uint call's context and recorded None (eighth review B-J).
+    #[test]
+    fn a_pack_builtin_s_float_steps_are_full_width() {
+        if crate::REPORT_ES2 {
+            return;
+        }
+        for call in ["packHalf2x16(q.xy)", "packUnorm2x16(q.xy)", "packSnorm2x16(q.zw)"] {
+            let g = compile(
+                &std::format!(
+                    "#version 300 es\nin highp vec4 p; in mediump vec4 q; out mediump vec4 v;\n\
+                     void main(){{ v = vec4(float({call})); gl_Position = p; }}"
+                ),
+                Stage::Vertex,
+            );
+            let float_steps: Vec<Prec> = g
+                .ops
+                .iter()
+                .zip(&g.prec)
+                .filter(|(o, _)| {
+                    matches!(
+                        o,
+                        Op::Alu(
+                            AluOp::Fabs
+                                | AluOp::Ffma
+                                | AluOp::Ffloor
+                                | AluOp::Fmax
+                                | AluOp::Fmin
+                                | AluOp::Fmul
+                                | AluOp::Ftrunc
+                                | AluOp::Fsign
+                                | AluOp::Fadd,
+                            _
+                        )
+                    )
+                })
+                .map(|(_, p)| *p)
+                .collect();
+            assert!(!float_steps.is_empty() && float_steps.iter().all(|&p| p == H), "{call}: {float_steps:?}");
+        }
+    }
+
+    /// The eighth review's six corpus-style shaders (ES 3.00 control
+    /// flow, look-ups, `inverse`/`transpose`/`outerProduct`, the pack
+    /// built-ins, `out`/`inout` through array elements, swizzles and
+    /// structs, a discard loop, `gl_PointCoord`, globals, `++`/`--`):
+    /// every float value has a class, no expression escapes the scan, and
+    /// no value is left to the no-context rule.
+    #[test]
+    fn the_eighth_review_s_shaders_give_every_float_value_a_class() {
+        let shaders = [
+            (
+                Stage::Fragment,
+                r#"#version 300 es
+precision mediump float; in mediump vec4 vc; in highp vec2 uvh; flat in mediump int fi; uniform mediump sampler2D s; uniform highp usampler2D us; uniform mediump int ui; uniform mediump vec4 uv; layout(location = 0) out mediump vec4 o0; layout(location = 1) out highp vec4 o1;
+void main(){ vec4 r = vec4(0.0); switch (ui) { case 0: r = vc; break; case 1: r = vc * 2.0; break; default: r = uv; } int k = 0; do { r += vec4(0.1); k++; } while (k < 3); o0 = r; o1 = vec4(dFdx(vc.x), fwidth(vc.y), float(fi & 3), float(ui << 1)); }"#,
+            ),
+            (
+                Stage::Fragment,
+                r#"#version 300 es
+precision mediump float; in mediump vec4 vc; in highp vec2 uvh; flat in mediump int fi; uniform mediump sampler2D s; uniform highp usampler2D us; uniform mediump int ui; uniform mediump vec4 uv; out mediump vec4 o;
+void main(){ mediump vec4 t = textureGrad(s, uvh, vec2(0.1), vec2(0.2)) + texelFetch(s, ivec2(uvh), 0); uvec4 q = texelFetch(us, ivec2(1, 1), 0); o = t + vec4(q) * 0.5; gl_FragDepth = vc.x; }"#,
+            ),
+            (
+                Stage::Vertex,
+                r#"#version 300 es
+in highp vec4 p; in mediump vec4 a; out mediump vec4 v; uniform mediump mat3 m3; uniform highp mat4 m4;
+void main(){ mat3 im = inverse(m3); mat4 t = transpose(m4); mat2 op = outerProduct(a.xy, a.zw); uint ph = packHalf2x16(a.xy); v = vec4(im * a.xyz, 1.0) + t * p + vec4(op[0], unpackHalf2x16(ph)) + vec4(float(floatBitsToInt(a.x) >> 16)); gl_Position = p; }"#,
+            ),
+            (
+                Stage::Vertex,
+                r#"attribute highp vec4 p; attribute mediump vec4 a; varying mediump vec4 v; uniform mediump vec4 ua[4]; uniform int ui;
+struct L { mediump vec3 c; highp float k; }; uniform L ls[2];
+void sp(out mediump vec2 o2, inout mediump vec4 io, out L lo){ o2 = a.xy * 2.0; io = io * 0.5 + a; lo.c = a.xyz; lo.k = p.x; }
+void main(){ mediump vec4 w = a; mediump vec2 q; L l; mediump vec4 arr[2]; arr[0] = a; arr[1] = a.wzyx; sp(q, w, l); sp(arr[1].xy, arr[ui], l); mediump vec3 sw = vec3(0.0); sp(sw.yz, w, l); v = w + vec4(q, l.c.x, l.k) + arr[0] + arr[1] + vec4(sw, 1.0) + ua[ui] + vec4(ls[1].c, ls[0].k); gl_Position = p; }"#,
+            ),
+            (
+                Stage::Fragment,
+                r#"precision mediump float; varying mediump vec4 v; uniform sampler2D s; uniform mediump float uf;
+mediump float g(mediump float x){ return x > 0.5 ? x : -x; }
+void cp(out mediump float r){ r = v.x * 2.0; } void pass(out mediump float r2){ cp(r2); }
+void main(){ mediump float m; pass(m); vec4 c = texture2D(s, gl_PointCoord) * vec4(m); for (int i = 0; i < 4; i++) { if (c.x > uf) { discard; } c += vec4(g(c.y)); } gl_FragColor = c + (gl_FrontFacing ? vec4(1.0) : vec4(0.0)) + vec4(gl_FragCoord.xy, mix(c.zw, v.xy, bvec2(true, false))); }"#,
+            ),
+            (
+                Stage::Vertex,
+                r#"attribute highp vec4 p; attribute mediump vec4 a; varying highp vec4 v; uniform highp float uh;
+highp float glob = 0.25; const mediump vec3 cv = vec3(0.1, 0.2, 0.3);
+void main(){ glob = glob * uh; mediump float t = a.x; t++; --t; v = vec4(glob, cv) + vec4(t) + vec4(pow(a.y, 2.0), asin(clamp(a.z, -1.0, 1.0)), length(a.xy), atan(a.x, a.y)); gl_Position = p; }"#,
+            ),
+        ];
+        for (stage, src) in shaders {
+            if crate::REPORT_ES2 && src.starts_with("#version 300 es") {
+                continue;
+            }
+            super::super::lower::UNSEEN.with(|n| n.set(0));
+            super::super::lower::NO_CONTEXT.with(|n| n.set(0));
+            let mut buf = std::vec![0u8; 1 << 22];
+            let a = Arena::new(&mut buf);
+            let l = compile_to_ir(&a, stage, a.alloc_str(src).expect("arena")).expect("compiles");
+            let m = &l.module;
+            assert!(m.has_prec(), "{src}");
+            let none: Vec<usize> =
+                (0..m.instrs.len()).filter(|&i| float_op(m, i) && m.prec_of(ValueId(i as u32)) == Prec::None).collect();
+            assert!(none.is_empty(), "{src}\nfloat values with no class: {none:?}");
+            assert_eq!(super::super::lower::UNSEEN.with(|n| n.get()), 0, "{src}");
+            assert_eq!(super::super::lower::NO_CONTEXT.with(|n| n.get()), 0, "{src}");
         }
     }
 

@@ -617,6 +617,15 @@ std::thread_local! {
     /// precision scan never reached ([`precision::Precs::seen`]): an
     /// Unknown no rule decided. The corpus test asserts it stays 0.
     pub(crate) static UNSEEN: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+    /// How many float or bool values were lowered under a context with no
+    /// class and got [`Prec::Unknown`] from the rule in
+    /// `Lower::instr_prec`, not from a site's measured class. The corpus
+    /// test asserts it stays 0: every such site the corpus reaches has its
+    /// class from Mesa.
+    pub(crate) static NO_CONTEXT: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+    /// Set by the test of the no-context rule: the copy in of a parameter
+    /// keeps the call's context, as a site that sets no class would.
+    pub(crate) static UNMEASURED: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
 }
 
 /// Turns [`relocate`] off, for the test that compares a compile with and
@@ -4287,6 +4296,13 @@ impl<'a> Lower<'_, 'a> {
             self.full_width_args(ids, &ops[..n], start)?;
             self.cur = Prec::High;
         }
+        /* The pack built-ins take a highp argument: Mesa widens it and
+         * clamps, scales and rounds at 32 bits (eighth review B-J, probes
+         * p8/m1, m3: `vec2 f162f`, `vec2 sat`, `vec2 *`, `vec2 round_even`).
+         * The call's own value is a uint, which records None. */
+        if matches!(name, "packHalf2x16" | "packUnorm2x16" | "packSnorm2x16") {
+            self.cur = Prec::High;
+        }
         /* A look-up's own arithmetic (a projective divide) works on its
          * coordinate, a 32-bit root (A.3); only the `Tex` is the
          * sampler's class. */
@@ -4533,6 +4549,19 @@ impl<'a> Lower<'_, 'a> {
         } else {
             self.a.alloc_filled(param_ids.len(), Bound::EMPTY)?
         };
+        /* The copy IN of the arguments is a full-width read into the 32-bit
+         * parameters (Mesa: `lowerp = f162f(inout_tmp)`, eighth review B-I,
+         * probes p8/n2, n3): High, whatever the call's own class (`sp(a);`
+         * is a void call). An argument that is an expression lowers under
+         * its own class (`Lower::at`). */
+        let call_ctx = (self.cur, self.cur_class);
+        (self.cur, self.cur_class) = (Prec::High, Prec::None);
+        /* the test of the no-context rule takes this measured class away,
+         * to stand for a site that sets none */
+        #[cfg(test)]
+        if UNMEASURED.with(|u| u.get()) {
+            self.cur = call_ctx.0;
+        }
         for (slot, (p, &arg)) in bound.iter_mut().zip(param_ids.iter().zip(arg_ids)) {
             let Some(pname) = p.name else {
                 return Err(self.err(name, "this call's parameter has no name"));
@@ -4778,6 +4807,7 @@ impl<'a> Lower<'_, 'a> {
             let elem = p.ty.array_len.map(|_| p.ty.base);
             *slot = Bound { param, target, struct_name, elem, lref };
         }
+        (self.cur, self.cur_class) = call_ctx;
 
         /* A function body sees the globals and its own parameters, never the
          * caller's locals: its entries start above the caller's, and lookup
@@ -8969,7 +8999,90 @@ impl<'a> Lower<'_, 'a> {
                 _,
             ) => Prec::None,
             Op::Alu(Ilt | Ile | Ieq | Ine | Ult | Ule | I2b, _) => Prec::High,
+            /* THE rule for a float or bool value whose context has no
+             * class (a void call, an int, uint or bool expression): it is
+             * never recorded None. A site Mesa was measured at sets its
+             * class itself (the copy in and back of a parameter, the pack
+             * built-ins: High); any other such value is Unknown, which the
+             * width pass refuses. */
+            _ if self.cur == Prec::None && self.float_valued(op, 0) => {
+                #[cfg(test)]
+                NO_CONTEXT.with(|n| n.set(n.get() + 1));
+                Prec::Unknown
+            }
             _ => self.cur,
+        }
+    }
+
+    /// `op` makes a float or bool value: one with a width that precision
+    /// lowering decides. By the operation, a local's type, an input's or
+    /// a uniform's GL type, or a select's first side.
+    fn float_valued(&self, op: &Op, depth: u32) -> bool {
+        use ir::AluOp::*;
+        let float_gl = |t: u16| !matches!(t, 0x1404 | 0x1405 | 0x8B53..=0x8B55 | 0x8DC6..=0x8DC8);
+        match *op {
+            Op::ConstF32(_) | Op::ConstBool(_) => true,
+            Op::Alu(Bcsel, [_, x, _]) => {
+                depth < 64
+                    && self.instrs.as_slice().get(x.val.0 as usize).is_some_and(|o| self.float_valued(o, depth + 1))
+            }
+            Op::Alu(a, _) => matches!(
+                a,
+                Fadd | Fmul
+                    | Ffma
+                    | Fmin
+                    | Fmax
+                    | Fneg
+                    | Fabs
+                    | Fsign
+                    | Frcp
+                    | Frsq
+                    | Fsqrt
+                    | Fexp2
+                    | Flog2
+                    | Fsin
+                    | Fcos
+                    | Ffloor
+                    | Fceil
+                    | Ftrunc
+                    | Ffract
+                    | Fddx
+                    | Fddy
+                    | Fdot2
+                    | Fdot3
+                    | Fdot4
+                    | Flt
+                    | Fle
+                    | Feq
+                    | Fne
+                    | B2f
+                    | I2f
+                    | U2f
+                    | F2b
+                    | Bnot
+                    | Bany
+                    | Ball
+            ),
+            Op::Tex { ret, .. } => ret == ir::ScalarType::F32,
+            Op::LoadLocal { local, .. } => self
+                .locals
+                .as_slice()
+                .get(local.0 as usize)
+                .is_some_and(|d| matches!(d.ty.scalar, ir::ScalarType::F32 | ir::ScalarType::Bool)),
+            Op::LoadUniform { dword_off, .. } | Op::LoadUniformIdx { base_dw: dword_off, .. } => self
+                .reflection
+                .uniforms
+                .iter()
+                .find(|u| dword_off >= u.dword_off && dword_off < u.dword_off + u.dwords.max(1))
+                .is_some_and(|u| float_gl(u.gl_type)),
+            Op::LoadInput { slot, .. } => match slot {
+                ir::IoSlot::Attrib(_) | ir::IoSlot::Varying(_) => {
+                    self.inputs.as_slice().iter().find(|d| d.slot() == slot).is_none_or(|d| float_gl(d.gl_type))
+                }
+                ir::IoSlot::VertexId | ir::IoSlot::InstanceId => false,
+                _ => true,
+            },
+            _ => false,
         }
     }
 
