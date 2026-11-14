@@ -165,6 +165,13 @@ check t6_display-cmu 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1
 # Esmart0 reading another address after the hold differs
 sed '/^t6_display: VOP OVL_PORT_SEL/s/YRGB_MST 0x10012000/YRGB_MST 0x0ad17000/' "$D/t6_display-pass.uart" >"$WORK/mst.log"
 check t6_display-mst 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/mst.log"
+# the overlay selects written must read back: a port select that moved
+# during the hold differs on the status line, a layer select on the shown
+# line differs there
+sed '/^t6_display: VOP OVL_PORT_SEL/s/OVL_PORT_SEL 0xa0547880/OVL_PORT_SEL 0xa0547873/' "$D/t6_display-pass.uart" >"$WORK/ops.log"
+check t6_display-port-sel 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/ops.log"
+sed '/^t6_display: shown:/s/OVL_LAYER_SEL 0x76513042/OVL_LAYER_SEL 0x76513240/' "$D/t6_display-pass.uart" >"$WORK/ols.log"
+check t6_display-layer-sel 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/ols.log"
 # an underflow in the frame check differs
 sed 's/frame start 1, underflow 0,/frame start 1, underflow 1,/' "$D/t6_display-pass.uart" >"$WORK/under.log"
 check t6_display-underflow 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/under.log"
