@@ -296,7 +296,7 @@ unsafe extern "C" fn p_submit(kick: *const c_void, len: usize) -> i64 {
             let bytes = unsafe { core::slice::from_raw_parts(a.as_ptr() as *const u8, a.len() * 8) };
             let end = (off + k.stream_bytes as usize).min(bytes.len());
             let words: Vec<u32> =
-                bytes[off.min(end)..end].chunks_exact(4).map(|b| u32::from_ne_bytes(b.try_into().unwrap())).collect();
+                bytes[off.min(end)..end].as_chunks::<4>().0.iter().map(|b| u32::from_ne_bytes(*b)).collect();
             let mut s = p.stream;
             count_stream(&words, &mut s);
             p.stream = s;
