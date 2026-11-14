@@ -253,3 +253,43 @@ Order matters: each step keeps the tree green.
 7. A Pi 4 board step (#320): a draw with a 16384-byte block read at the first
    and last dword, and `functional.ubo` and `implementation_limits` of the
    dEQP tree.
+
+## 9. As built (V3D, 2026-11-14)
+
+The V3D reports `MAX_UNIFORM_BLOCK_SIZE` 16384 and
+`MAX_COMBINED_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` 50688 outside a
+`report-es2` build; PowerVR, GC7000UL and Mali still report 6144 / 1536
+(`tests/es3_caps.rs` `known_gaps`). §7 item 1 became `MAX_STAGE_UNIFORM_DWORDS`
+(`gl/context.rs`), `src/gl/limits.rs` holds the combined-components formula,
+and `tests/es3_v3d_ubo_size.rs` pins the three query forms and a full
+16384-byte block reaching the back end.
+
+**The host pointers the back end snapshots.** A stage's block can now be
+larger than the 2 * `MAX_UNIFORM_DWORDS` * 4 + 16 byte staging buffer
+(`draw.rs` `build_common`). The fragment pointer is formed by
+`fs_uniform_cpu_view`: the program's own array when the block fits it, else the
+staging buffer's CPU view at `fs_off`, and only when
+`fs_off + fs_dw * 4 <= uniforms.size`; otherwise the draw is refused
+(`GL_OUT_OF_MEMORY`). The vertex pointer is the program's array and is handed
+over only when `vs_dw <= vs_uniform_cap`. Pinned by the unit test
+`the_fragment_snapshot_view_is_refused_past_the_uniform_buffer`.
+
+**Host dEQP, before / after** (VK-GL-CTS 93bca01, deqp-gles3): V3D
+`implementation_limits` Fail 5 -> 2, `state_query.integers` Fail 12 -> 6;
+PowerVR and Vivante unchanged. Not re-run for this note.
+
+## 10. Issues left (drafts)
+
+1. **PowerVR and GC7000UL: raise `MAX_UNIFORM_BLOCK_SIZE` to 16384.** Both read
+   block storage from the shader's own constant file (§4, §5), so the raise
+   needs the constant-file capacity or a different read path, then the
+   combined-components formula and the gap entries in `tests/es3_caps.rs` and
+   `tests/vivante_imx8mp_limits.rs`. Board step for each.
+2. **GL core: enforce the per-GPU block capacity.** Linking and
+   `glUniformBlockBinding`/draw should refuse a block above the back end's
+   capability instead of relying on each back end's own clamp
+   (`block_dwords`, `put_uniforms`).
+3. **V3D: `ldunifa` for run-time indices over more than 256 values**
+   (`prepare.rs`; `UniformRow::array_len` is a `u8`); the ignored cases of
+   `tests/v3d_ubo_large_sim.rs` are its acceptance. Pi 4 board step for a
+   16384-byte block read at the first and last dword.
