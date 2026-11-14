@@ -795,6 +795,81 @@ mod trampolines {
         unsafe { glDeleteProgram(prog) };
     }
 
+    /// The blocks of level `level` of the texture the last draw sampled, read
+    /// back out of the tiled copy the TMU reads: its texture record's base
+    /// pointer is level 0's slice (v3d_tex_state_from_layout), and
+    /// v3d_tex_load_box over `layout_compressed`'s layout (pinned against
+    /// Mesa by tools/v3d/tex_check.c) gives `gw` x `gh` blocks in raster rows.
+    fn tiled_blocks(l: &V3dTexLayout, level: u32, gw: u32, gh: u32, bb: usize) -> Vec<u8> {
+        let rec = last_tmu_record().expect("the draw carries a texture record");
+        let base = u64::from(u32::from_le_bytes(rec[..4].try_into().unwrap()) & !63);
+        let mut out = vec![0u8; gw as usize * gh as usize * bb];
+        with_platform(|p| {
+            let img = platform_cpu(p, base, 1);
+            // SAFETY: the image starts `slices[0].offset` before the record's base, inside its allocation.
+            let img = unsafe { img.sub(l.slices[0].offset as usize) } as *const u8;
+            // SAFETY: a live layout inside the allocation; `out` is gw * gh blocks.
+            let ok = unsafe { v3d_tex_load_box(img, l, level, 0, 0, gw, gh, out.as_mut_ptr(), gw * bb as u32) };
+            assert!(ok, "level {level} loads");
+        });
+        out
+    }
+
+    /// Multi-row ETC2 levels reach the TMU in raster order of blocks: the
+    /// texture's tiled image holds, at every level of a 13x9 and a 33x17
+    /// texture (a width that is not a multiple of 4, wider than one block
+    /// row), the block grid the application uploaded, block (x, y) at grid
+    /// position (x, y). With `compressed_blocks_in_rows` false the GL core
+    /// stores twiddled power-of-two grids (a 4x3 grid in a 4x4 Morton walk),
+    /// which `gl_level_blocks` and `tile` do not read.
+    #[test]
+    fn multi_row_levels_keep_their_blocks_in_raster_order() {
+        let _g = rig();
+        let prog = program(VS, FS);
+        for (w, h, f, bb) in [
+            (13, 9, GL_COMPRESSED_RGB8_ETC2, 8usize),
+            (33, 17, GL_COMPRESSED_RGB8_ETC2, 8),
+            (33, 17, GL_COMPRESSED_RGBA8_ETC2_EAC, 16),
+        ] {
+            let tex = bind_2d();
+            let levels = 32 - (w.max(h) as u32).leading_zeros();
+            // SAFETY: plain GL calls on the texture made above.
+            unsafe { glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST as GLint) };
+            let mut grids = Vec::new();
+            for lv in 0..levels {
+                let (lw, lh) = ((w >> lv).max(1), (h >> lv).max(1));
+                let (gw, gh) = ((lw as u32).div_ceil(4), (lh as u32).div_ceil(4));
+                let blocks = bytes(1000 * w as u32 + lv, gw as usize * gh as usize * bb);
+                // SAFETY: `blocks` is the level's imageSize bytes.
+                unsafe {
+                    glCompressedTexImage2D(
+                        GL_TEXTURE_2D,
+                        lv as GLint,
+                        f,
+                        lw,
+                        lh,
+                        0,
+                        blocks.len() as GLsizei,
+                        blocks.as_ptr() as *const c_void,
+                    );
+                    assert_eq!(glGetError(), GL_NO_ERROR, "{w}x{h} level {lv}: {:?}", logs());
+                }
+                grids.push((gw, gh, blocks));
+            }
+            draw_sampling(prog);
+            let layout = yakogl::v3d::texture::layout_compressed(w as u32, h as u32, levels, 4, 4, bb as u32)
+                .expect("the layout");
+            for (lv, (gw, gh, blocks)) in grids.iter().enumerate() {
+                let got = tiled_blocks(&layout, lv as u32, *gw, *gh, bb);
+                assert_eq!(&got, blocks, "{w}x{h} 0x{f:x} level {lv}: the {gw}x{gh} blocks in raster order");
+            }
+            // SAFETY: a name made above.
+            unsafe { glDeleteTextures(1, &tex) };
+        }
+        // SAFETY: a name made above.
+        unsafe { glDeleteProgram(prog) };
+    }
+
     /// A depth texture compared by `func` (GL_TEXTURE_COMPARE_MODE
     /// GL_COMPARE_REF_TO_TEXTURE) is sampled by a `sampler2DShadow` look-up:
     /// the sampler record of the draw names the function (Depth Compare
