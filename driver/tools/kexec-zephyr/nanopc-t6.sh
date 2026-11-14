@@ -7,10 +7,27 @@
 #
 #   BOARD_HOST=root@<t6> driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin>          # dry run
 #   BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=<tty> \
-#     driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin> --go [--no-linux-wdt]     # the jump
+#     driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin> --go [--no-linux-wdt] [--crash]  # the jump
 #
 # Without --go it checks the image on this host, makes read-only checks on the
 # board, prints exactly what --go would do, and changes nothing anywhere.
+#
+# Two routes (the dry run prints which one it would take):
+#   normal (the default): kexec_load, then reboot(LINUX_REBOOT_CMD_KEXEC).
+#           Linux runs device_shutdown() first, so the display is off when the
+#           image starts (driver/docs/nanopc-t6-display.md, section 2(a)).
+#   --crash: kexec_load with KEXEC_ON_CRASH, then a panic (sysrq c) takes the
+#           crash route: __crash_kexec runs no device_shutdown
+#           (linux v6.18 kernel/crash_core.c:120-138, kernel/panic.c:504-509),
+#           so the display Linux drives stays on for the image to adopt. The
+#           segment must lie in the crashkernel= reservation
+#           (kernel/kexec_core.c:200-210; kernel/kexec.c:31-37 for the entry),
+#           and the kernel puts one 4 KiB control page in the reservation
+#           outside the segment (kernel/kexec.c:65-71, kexec_core.c:395-450).
+#           So --crash refuses unless /proc/iomem's "Crash kernel" range holds
+#           the whole window and the image's segment plus that page; the
+#           reservation is made with t6-crashkernel.sh, beside this. The GPU
+#           and its firmware also stay running (section 2(a)).
 # With --go it takes the board lock (board_lock.sh; it refuses, never waits,
 # while anyone holds it: see LOCK_WAIT), reads the board's state
 # again under the lock, starts the record (below), copies the loader, mmio_rd
@@ -113,16 +130,18 @@ refuse() { echo "nanopc-t6.sh: REFUSED: $*" >&2; echo "nanopc-t6.sh: nothing was
 IMG=
 GO=0
 LINUX_WDT=1
+CRASH=0
 for a in "$@"; do
 	case "$a" in
 	--go) GO=1 ;;
+	--crash) CRASH=1 ;;
 	--linux-wdt) LINUX_WDT=1 ;;
 	--no-linux-wdt) LINUX_WDT=0 ;;
 	-*) die "unknown option $a" ;;
 	*) [ -z "$IMG" ] || die "one image only"; IMG=$a ;;
 	esac
 done
-[ -n "$IMG" ] || die "usage: BOARD_HOST=root@<t6> $0 <zephyr.bin> [--go [--no-linux-wdt]]"
+[ -n "$IMG" ] || die "usage: BOARD_HOST=root@<t6> $0 <zephyr.bin> [--go [--no-linux-wdt]] [--crash]"
 [ -f "$IMG" ] || die "$IMG: no such file"
 : "${BOARD_HOST:?set BOARD_HOST=root@<the NanoPC-T6>}"
 # shellcheck disable=SC2206  # options are words
@@ -184,6 +203,9 @@ printf "kernel=%s\n" "$(uname -r)"
 printf "kexec_load_disabled=%s\n" "$(cat /proc/sys/kernel/kexec_load_disabled)"
 printf "kexec_loaded=%s\n" "$(cat /sys/kernel/kexec_loaded)"
 printf "config_kexec=%s\n" "$(grep -h "^CONFIG_KEXEC=" /boot/config-"$(uname -r)" 2>/dev/null || echo absent)"
+printf "config_crash_dump=%s\n" "$(grep -h "^CONFIG_CRASH_DUMP=" /boot/config-"$(uname -r)" 2>/dev/null || echo absent)"
+printf "kexec_crash_loaded=%s\n" "$(cat /sys/kernel/kexec_crash_loaded 2>/dev/null || echo absent)"
+printf "kexec_crash_size=%s\n" "$(cat /sys/kernel/kexec_crash_size 2>/dev/null || echo absent)"
 printf "uid=%s\n" "$(id -u)"
 printf "uptime=%s\n" "$(cut -d" " -f1 /proc/uptime)"
 printf "system=%s\n" "$(systemctl is-system-running 2>/dev/null || true)"
@@ -204,11 +226,13 @@ case "$(fact compatible)" in *friendlyarm,nanopc-t6*) ;; *) refuse "$BOARD_HOST 
 [ "$(fact kexec_loaded)" = 0 ] || refuse "a kexec image is already loaded (/sys/kernel/kexec_loaded 1): someone else is about to jump"
 
 # The window: inside one top-level "System RAM" range, overlapping no entry
-# under it (the kernel image, reserved memory).
+# under it (the kernel image, reserved memory). On the crash route the one
+# entry it may overlap is the crashkernel= reservation ("Crash kernel"),
+# which must then hold all of it (below).
 iomem=$(printf '%s\n' "$facts" | sed -n '/^iomem<<$/,/^>>$/p' | sed '1d;$d')
 grep -qE '^ *[0-9a-f]*[1-9a-f][0-9a-f]*-' <<<"$iomem" || refuse "/proc/iomem shows no addresses (not root?)"
 wb=$WINDOW_BASE we=$((WINDOW_BASE + WINDOW_SIZE - 1))
-inside=0 parent_s=-1 parent_e=-1 clash=
+inside=0 parent_s=-1 parent_e=-1 clash= ck_s=-1 ck_e=-1
 while IFS= read -r line; do
 	[[ "$line" =~ ^(\ *)([0-9a-f]+)-([0-9a-f]+)\ :\ (.*)$ ]] || continue
 	ind=${#BASH_REMATCH[1]} s=$((16#${BASH_REMATCH[2]})) e=$((16#${BASH_REMATCH[3]})) name=${BASH_REMATCH[4]}
@@ -217,11 +241,34 @@ while IFS= read -r line; do
 		if [ "$name" = "System RAM" ] && [ "$s" -le "$wb" ] && [ "$e" -ge "$we" ]; then inside=1; fi
 		if [ "$name" != "System RAM" ] && [ "$s" -le "$we" ] && [ "$e" -ge "$wb" ]; then clash="$clash; $line"; fi
 	elif [ "$parent_s" -le "$wb" ] && [ "$parent_e" -ge "$we" ] && [ "$s" -le "$we" ] && [ "$e" -ge "$wb" ]; then
+		if [ "$name" = "Crash kernel" ]; then
+			ck_s=$s ck_e=$e
+			[ "$CRASH" = 0 ] || continue
+		fi
 		clash="$clash; ${line#"${line%%[! ]*}"}"
 	fi
 done <<<"$iomem"
 [ "$inside" = 1 ] || refuse "the window $(printf '0x%x-0x%x' "$wb" "$we") is not inside one System RAM range of /proc/iomem"
+if [ -n "$clash" ] && [ "$ck_s" -ge 0 ] && [ "$CRASH" = 0 ]; then
+	refuse "the window overlaps:${clash#;} -- the crashkernel= reservation lies in it: take --crash, or remove the reservation (t6-crashkernel.sh undo, then reboot) for the normal route"
+fi
 [ -z "$clash" ] || refuse "the window overlaps:${clash#;}"
+# The crash route: the reservation holds the whole window, and in it the
+# image's segment (load .. load + memsz) plus the one 4 KiB control page the
+# kernel places after it (kexec_core.c:395-450 takes the first free page of
+# the reservation above the segment).
+ck_lines=$(grep -E '^ *[0-9a-f]+-[0-9a-f]+ : Crash kernel$' <<<"$iomem" | sed 's/^ *//' | tr '\n' ';' | sed 's/;$//' || true)
+if [ "$CRASH" = 1 ]; then
+	[ "$(fact config_crash_dump)" = CONFIG_CRASH_DUMP=y ] ||
+		refuse "--crash: the kernel $(fact kernel) has $(fact config_crash_dump), so it has no crash route"
+	if [ "$ck_s" -lt 0 ] || [ "$ck_s" -gt "$wb" ] || [ "$ck_e" -lt "$we" ]; then
+		refuse "--crash needs a crashkernel= reservation that holds the window $(printf '0x%08x-0x%08x' "$wb" "$we"); the board has: Crash kernel '${ck_lines:-none}' in /proc/iomem, kexec_crash_size $(fact kexec_crash_size). Make it with t6-crashkernel.sh set and reboot, or run without --crash"
+	fi
+	[ $((wb + memsz + 4096 - 1)) -le "$ck_e" ] ||
+		refuse "--crash: the image's segment ($memsz bytes at $load) and the kernel's 4 KiB control page do not fit in the reservation $(printf '0x%x-0x%x' "$ck_s" "$ck_e")"
+	[ "$(fact kexec_crash_loaded)" = 0 ] ||
+		refuse "--crash: a crash image is already loaded (/sys/kernel/kexec_crash_loaded '$(fact kexec_crash_loaded)': a kdump service, or another run); loading this one would replace it"
+fi
 
 # The GIC's ITS and LPI tables: the redistributors and ITSs Linux enabled keep
 # them (EnableLPIs cannot be cleared again) and write the pending tables when an
@@ -239,7 +286,13 @@ done
 [ "$gic_n" -gt 0 ] || refuse "Linux's log names no GIC ITS/LPI table (its ring wrapped?): whether one lies in the window is unknown; reboot the board into Armbian so that dmesg names them again"
 echo "board: $BOARD_HOST: $(fact compatible), Linux $(fact kernel), $(fact config_kexec), kexec_load_disabled 0, nothing loaded"
 echo "board: up $(fact uptime) s, systemd '$(fact system)', boot_id $(fact boot_id)"
-echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM and overlaps no /proc/iomem entry"
+if [ "$CRASH" = 1 ]; then
+	echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM and inside the crashkernel= reservation $(printf '0x%08x-0x%08x' "$ck_s" "$ck_e") (kexec_crash_size $(fact kexec_crash_size)), and overlaps no other /proc/iomem entry; no crash image is loaded"
+	echo "route: crash (--crash): kexec_load(KEXEC_ON_CRASH), then a panic; no device_shutdown, so the display and the GPU stay as Linux left them"
+else
+	echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM and overlaps no /proc/iomem entry"
+	echo "route: normal: kexec_load, then reboot(LINUX_REBOOT_CMD_KEXEC); device_shutdown runs, so the display is off when the image starts (--crash keeps it; crashkernel= reservation: ${ck_lines:-none})"
+fi
 echo "board: the $gic_n GIC ITS/LPI tables Linux's log names are outside the window ($(printf '%s' "$gic" | tr ' ' ',' | sed 's/,$//'))"
 echo "board: WDT0 under Linux: $(fact wdt_identity), state $(fact wdt_state), timeout $(fact wdt_timeout) s, nowayout $(fact wdt_nowayout), open by '$(fact wdt_users)' (the image arms it itself either way)"
 if [ "$LINUX_WDT" = 1 ]; then
@@ -265,10 +318,28 @@ open_wdt=
 if [ "$LINUX_WDT" = 1 ]; then
 	open_wdt="exec 3>/dev/watchdog0 (Linux's dw_wdt starts WDT0 for $(fact wdt_timeout) s), read WDT_CR/WDT_TORR (no jump unless WDT_EN is 1), then "
 fi
+crash_arg=
+if [ "$CRASH" = 1 ]; then
+	crash_arg=" --crash"
+	how="= kexec_load(entry $load, 1 segment: $file_size bytes at $load, memsz $memsz,
+       KEXEC_ON_CRASH: copied into the crashkernel= reservation at once), then
+       CPUs 1-7 offline (PSCI CPU_OFF), sysrq enabled, sync, and a panic by
+       /proc/sysrq-trigger 'c': __crash_kexec stops nothing but the CPU, runs
+       no device_shutdown (VOP2, HDMI and the GPU keep running) and enters
+       the image at EL2 with the MMU off; this ssh session ends there"
+	reread="kexec_loaded, kexec_crash_loaded"
+else
+	how="= kexec_load(entry $load, 1 segment: $file_size bytes at $load, memsz $memsz)
+       then reboot(LINUX_REBOOT_CMD_KEXEC): Linux shuts its devices down (PCI bus
+       mastering cleared), stops the other CPUs and enters the image at EL2 with
+       the MMU off and its VHE HCR_EL2 (E2H set; the image's first code
+       rewrites it); this ssh session ends there"
+	reread="kexec_loaded"
+fi
 cat <<EOF
 plan (--go):
   1. take the board lock (driver/tools/kexec-zephyr/board_lock.sh, per BOARD_HOST);
-     read kexec_loaded, the GPU users, the remote sessions and boot_id again under
+     read $reread, the GPU users, the remote sessions and boot_id again under
      it and decide on those values; refuse without T6_HAND, T6_RECORD_DIR and
      T6_UART
   2. the record: \$T6_RECORD_DIR/<date>-t6/, with the hand at the power switch;
@@ -276,12 +347,8 @@ plan (--go):
      \`dmesg -w\` of the board until the jump
   3. copy kexec_zephyr, mmio_rd and $(basename "$IMG") to $BOARD_HOST:$STAGE/, then
      sync; read GLB_RST_ST, GLB_RST_CON, WDT0 CR and TORR into the record
-  4. on the board: ${open_wdt}$STAGE/kexec_zephyr $STAGE/zephyr.bin $load
-     = kexec_load(entry $load, 1 segment: $file_size bytes at $load, memsz $memsz)
-       then reboot(LINUX_REBOOT_CMD_KEXEC): Linux shuts its devices down (PCI bus
-       mastering cleared), stops the other CPUs and enters the image at EL2 with
-       the MMU off and its VHE HCR_EL2 (E2H set; the image's first code
-       rewrites it); this ssh session ends there
+  4. on the board: ${open_wdt}$STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg
+     $how
   5. the image, on UART2 (1500000 baud, into uart.log): the raw early lines
      T6:A (first code, EL2 state), T6:A1 (EL1 init), T6:A2 and T6:A3 (MMU off,
      WDT0 armed), then through the console T6:B, the marker, "t6: WDT0 armed ...",
@@ -334,6 +401,7 @@ LOCK_WAIT=${LOCK_WAIT:-0}
 # when the caller set one.
 fresh=$(board "$WHO_REMOTE"'
 printf "kexec_loaded=%s\n" "$(cat /sys/kernel/kexec_loaded)"
+printf "kexec_crash_loaded=%s\n" "$(cat /sys/kernel/kexec_crash_loaded 2>/dev/null || echo absent)"
 printf "boot_id=%s\n" "$(cat /proc/sys/kernel/random/boot_id)"
 printf "gpu_users=%s\n" "$(fuser /dev/dri/* 2>/dev/null | tr -s " " || true)"
 printf "wdt_users=%s\n" "$(fuser /dev/watchdog /dev/watchdog0 2>/dev/null | tr -s " " || true)"
@@ -341,6 +409,9 @@ printf "who_remote=%s\n" "$(who_remote)"') ||
 	refuse "cannot read the board's state again under the lock"
 fresh_fact() { printf '%s\n' "$fresh" | sed -n "s/^$1=//p" | head -1; }
 [ "$(fresh_fact kexec_loaded)" = 0 ] || refuse "under the lock: a kexec image is already loaded (/sys/kernel/kexec_loaded '$(fresh_fact kexec_loaded)')"
+if [ "$CRASH" = 1 ] && [ "$(fresh_fact kexec_crash_loaded)" != 0 ]; then
+	refuse "under the lock: a crash image is already loaded (/sys/kernel/kexec_crash_loaded '$(fresh_fact kexec_crash_loaded)')"
+fi
 [ -z "$(fresh_fact gpu_users)" ] || refuse "under the lock: processes hold the GPU device: $(fresh_fact gpu_users)"
 if [ -n "$(fresh_fact who_remote)" ] && [ "${T6_ALLOW_SESSIONS:-0}" != 1 ]; then
 	refuse "under the lock: remote sessions on the board: $(fresh_fact who_remote)-- the jump ends them; ask whoever holds them, then T6_ALLOW_SESSIONS=1"
@@ -356,7 +427,7 @@ mkdir "$REC" || die "cannot make the record directory $REC"
 rec() { printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$REC/record.txt"; }
 echo "nanopc-t6.sh: record $REC"
 rec "build $(git -C "$HERE" describe --always --dirty 2>/dev/null || echo unknown)"
-rec "board $BOARD_HOST, boot_id $old_boot; hand at the power switch: $T6_HAND; linux_wdt $LINUX_WDT"
+rec "board $BOARD_HOST, boot_id $old_boot; hand at the power switch: $T6_HAND; linux_wdt $LINUX_WDT; route $([ "$CRASH" = 1 ] && echo "crash (reservation $(printf '0x%x-0x%x' "$ck_s" "$ck_e"))" || echo normal)"
 rec "image $IMG, sha256 $(sha256sum "$IMG" | cut -d' ' -f1): $markers"
 rec "bound: back in reset by $bound_s s after the jump at the latest"
 
@@ -431,15 +502,15 @@ if [ -z \"\$cr\" ] || [ \$(( cr & 1 )) -ne 1 ]; then
 fi
 echo \"linux-wdt: WDT0 CR \$cr TORR \$torr after the open: WDT_EN 1, jumping\"
 sleep 1
-$STAGE/kexec_zephyr $STAGE/zephyr.bin $load; rc=\$?
+$STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg; rc=\$?
 printf V >&3; exec 3>&-
 echo \"linux-wdt: kexec_zephyr returned \$rc: magic close written, Linux feeds WDT0 from now on\"
 exit \$rc"
 else
-	jump="sync; $STAGE/kexec_zephyr $STAGE/zephyr.bin $load"
+	jump="sync; $STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg"
 fi
 t0=$(date +%s)
-rec "jumping (linux_wdt $LINUX_WDT)"
+rec "jumping (linux_wdt $LINUX_WDT, route $([ "$CRASH" = 1 ] && echo crash || echo normal))"
 jump_rc=0
 timeout 30 ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=3 \
 	-o ServerAliveCountMax=2 "$BOARD_HOST" "$jump" </dev/null >"$tmp/jump.out" 2>&1 || jump_rc=$?
