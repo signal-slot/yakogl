@@ -17,17 +17,18 @@ it). Paths are relative to `src/`; `F` = `gallium/drivers/etnaviv/etnaviv_format
 `D` = `gallium/drivers/etnaviv/etnaviv_texture_desc.c`, `S` =
 `gallium/drivers/etnaviv/etnaviv_screen.c`.
 
-Caveat on the citations: this item could not re-read `F` (the sparse clone of
-the tag into `$CONNECTED_DEPS_DIR/mesa-etnaviv-26.2.1` could not be checked out
-here, and gitlab's raw URL refuses the fetch tool). The line numbers below are
-those already in the tree, which `docs/es3/gc-formats.md` section 1 took from
-that release and `tests/es3_formats_gc.rs` pins by value against the rnndb
-header; they were not re-verified against the source in this item.
+Read and verified in this item from a sparse clone of the tag
+(`$CONNECTED_DEPS_DIR`, `mesa-etnaviv-26.2.1`): `translate_texture_format`
+(`F:275-294`) takes the table's `.tex`, then on `halti >= 5` replaces it
+(`F:286-291`). The table's own rows are the *float* extended formats
+(`VT(R32_SINT, FLOAT, EXT_R32F | EXT_FORMAT, R32F)`, `F:136-137`;
+`R32G32_*`: `EXT_G32R32F`, `F:209-210`), so without the override an integer
+texture would be read as float.
 
 | class | Mesa table row | HALTI5 override | hardware format (value) | sign |
 |---|---|---|---|---|
-| R32UI / R32I | `PIPE_FORMAT_R32_UINT` / `_SINT`, `F:136-137` | `translate_texture_format` replaces the format by `TEXTURE_FORMAT_EXT_R32I`, `F:286-291` | `EXT_R32I` = 0x23 | one word for both signs: no CONFIG2 sign bit for 32-bit channels, `D:187-189` |
-| RG32UI / RG32I | `PIPE_FORMAT_R32G32_UINT` / `_SINT`, `F:209-210` (the table's `EXT_G32R32F` is replaced) | `F:286-291` | `EXT_G32R32I` = 0x24 | as above |
+| R32UI / R32I | `PIPE_FORMAT_R32_UINT` / `_SINT` (`EXT_R32F`), `F:136-137` | `translate_texture_format` replaces the format by `TEXTURE_FORMAT_EXT_R32I`, `F:286-291` | `EXT_R32I` = 0x23 | one word for both signs: CONFIG2 `0x00030000` plus a sign bit only for 8- and 16-bit channels, `D:187-189` |
+| RG32UI / RG32I | `PIPE_FORMAT_R32G32_UINT` / `_SINT`, `F:209-210` (`EXT_G32R32F`) | `F:289-290` | `EXT_G32R32I` = 0x24 | as above |
 
 - Support gate: `gpu_supports_texture_format`, the 32-bit integer formats need
   HALTI5 (`S:423-429`); the i.MX8MP GC7000UL has HALTI0-5.
@@ -35,7 +36,7 @@ header; they were not re-verified against the source in this item.
   only allows NEAREST on integer textures anyway (`Es3Format::filterable`,
   `src/gl/es3_formats.rs:214`).
 - Swizzle: Mesa composes the format's own swizzle with the sampler view's
-  (`etnaviv_texture_desc.c`, `get_texture_swiz`-style composition). In the tree
+  (`swiz` is ORed into CONFIG1 at `D:186`). In the tree
   the format's own word is the identity for these classes
   (`tests/es3_r32_gc.rs:96-120`) and the GL texture swizzle is composed on top
   (`840ea7ec`, `docs/notes/gc-texture-swizzle-wrap.md`). Whether the TE returns
@@ -168,6 +169,5 @@ Ordered as they can be done; none needs code in this plan.
 
 ## 7. Assumptions
 
-- "Mesa citations" are the ones the tree already carries (section 1 caveat).
 - The task's premise (no class, no mask bit) was found false; the note
   documents the tree rather than a design for something not yet built.
