@@ -570,16 +570,131 @@ pub fn mrt_targets(gl: &GlesDraw) -> usize {
 /// take their own shader output through PS_OUTPUT_REG, as Mesa's etnaviv
 /// compacts null colour buffers (etnaviv_state.c, etna_set_framebuffer_state:
 /// `ps_output_remap[rt] = rt_output[i]`, RT_COUNT from the real targets only).
-pub fn hw_targets(gl: &GlesDraw) -> ([u8; 4], usize) {
-    let mut slots = [0u8; 4];
-    let mut n = 1;
+///
+/// A 128-bit attachment ([`GC_INT_RT_128BPP`]) is two hardware targets, as
+/// Mesa draws one (etnaviv_state.c:140-163, `etna_fb_expand_128bit`): its
+/// R,G plane in the attachment's own place, its B,A plane (`plane` 1)
+/// appended after every ordinary target, in the order the 128-bit
+/// attachments appear, so up to eight (docs/notes/gc-128bit-rt-shader.md
+/// sections 3 and 4). Inert: `draw_one` and the GL core refuse that format by
+/// name, and every draw that arrives has no plane and at most four targets.
+pub fn hw_target_list(gl: &GlesDraw) -> HwTargets {
+    let mut l = HwTargets { t: [HwTarget::ZERO; GC_MAX_HW_TARGETS], n: 1 };
     for (slot, t) in gl.targets.iter().enumerate().take(mrt_targets(gl)).skip(1) {
         if t.gpu != 0 {
-            slots[n] = slot as u8;
-            n += 1;
+            l.t[l.n].slot = slot as u8;
+            l.n += 1;
         }
     }
-    (slots, n)
+    let plain = l.n;
+    for i in 0..plain {
+        let slot = l.t[i].slot;
+        /* slot 0 is listed even with no colour surface (`target_gpu` 0) */
+        if (slot != 0 || gl.target_gpu != 0) && is_128bpp_target(attachment_format(gl, slot)) {
+            l.t[l.n] = HwTarget { slot, plane: 1 };
+            l.n += 1;
+        }
+    }
+    l
+}
+
+/// The hardware targets the 8-RT bank and PE_COLOR_* can drive: RT0 and
+/// RT1..7 (Mesa's `num_rts` 8 on HALTI2+, etnaviv_screen.c:774-777).
+pub const GC_MAX_HW_TARGETS: usize = 8;
+
+/// One hardware render target: the GL draw-buffer slot it draws (index into
+/// `GlesDraw::targets`, 0 the colour surface), and which plane of it. `plane`
+/// is 0 for an ordinary target and for a 128-bit attachment's R,G half, 1
+/// for its B,A half.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HwTarget {
+    pub slot: u8,
+    pub plane: u8,
+}
+
+impl HwTarget {
+    pub const ZERO: HwTarget = HwTarget { slot: 0, plane: 0 };
+}
+
+/// A draw's hardware render targets in order ([`hw_target_list`]): `t[..n]`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HwTargets {
+    pub t: [HwTarget; GC_MAX_HW_TARGETS],
+    pub n: usize,
+}
+
+impl HwTargets {
+    /// The targets, in hardware order.
+    pub fn list(&self) -> &[HwTarget] {
+        &self.t[..self.n]
+    }
+
+    /// The fragment output hardware target `rt` stores: an ordinary target
+    /// or R,G plane its slot plus the draw buffers the GL core dropped in
+    /// front (`shift`, `GlesDrawTarget::out_shift`); a B,A plane output
+    /// `4 + k`, `k` its attachment's rank among the 128-bit ones, which
+    /// `shift` does not move (Mesa's `rt_companion`, `next_output` from
+    /// `max_render_targets`, etnaviv_state.c:141-163).
+    pub fn output(&self, rt: usize, shift: usize) -> usize {
+        let t = self.t[rt];
+        if t.plane == 0 {
+            shift + t.slot as usize
+        } else {
+            4 + self.t[..rt].iter().filter(|p| p.plane == 1).count()
+        }
+    }
+}
+
+/// The surface format GL slot `slot` of the draw holds: the colour surface's
+/// for slot 0, as every other reader of the list takes it.
+pub fn attachment_format(gl: &GlesDraw, slot: u8) -> u8 {
+    if slot == 0 {
+        gl.target_format
+    } else {
+        gl.targets[slot as usize].format
+    }
+}
+
+/// Is `format` a 128-bit colour surface, drawn as two 64-bit planes?
+pub fn is_128bpp_target(format: u8) -> bool {
+    gles_surf_is_integer(format) && GC_INT_RT_128BPP & int_rt_bit(format) != 0
+}
+
+/// The colour write mask of hardware target `t` from the draw's 4-bit RGBA
+/// mask (bit 0 R .. bit 3 A): unchanged for an ordinary target, the low two
+/// bits for a 128-bit attachment's R,G plane and `(mask >> 2) & 3` for its
+/// B,A plane (etnaviv_blend.c:153-163; `wide_target::plane_masks`).
+pub fn hw_target_mask(gl: &GlesDraw, t: HwTarget, mask: u32) -> u32 {
+    if !is_128bpp_target(attachment_format(gl, t.slot)) {
+        return mask;
+    }
+    let (rg, ba) = super::wide_target::plane_masks((mask & 0xf) as u8);
+    u32::from(if t.plane == 0 { rg } else { ba })
+}
+
+/// Hardware target `t`'s bank words: its address, PE_RT_CONFIG stride and
+/// PE format. An ordinary target is its attachment's linear storage, as
+/// before. A 128-bit attachment's plane is a 64-bit `G32R32F` target (its
+/// integers stored as the register's bits under UIF32,
+/// `shader::ps_color_output_mode`) in the two-plane image of
+/// `wide_target.rs`: the B,A plane at `plane_offset` of the padded size,
+/// the stride of an 8-byte tiled row. The base is the attachment's address
+/// until the draw binds the image's shadow (docs/notes/gc-128bit-render-targets.md,
+/// "Implementation sequence" step 1, `bind_targets`); no draw reaches a plane
+/// while `GC_INT_RT_128BPP` is refused.
+pub fn hw_target_surface(gl: &GlesDraw, t: HwTarget) -> (u64, u32, u32) {
+    let (gpu, w, h, format) = if t.slot == 0 {
+        (gl.target_gpu, gl.target_w, gl.target_h, gl.target_format)
+    } else {
+        let a = gl.targets[t.slot as usize];
+        (a.gpu, a.w, a.h, a.format)
+    };
+    if !is_128bpp_target(format) {
+        return (gpu, target_pitch(w, gles_surf_bytes_per_pixel(format)), pe_color_format(format).0);
+    }
+    let (pw, ph) = super::wide_target::padded(w, h);
+    let base = if t.plane == 1 { gpu + super::wide_target::plane_offset(pw, ph) as u64 } else { gpu };
+    (base, super::wide_target::stride(w), GC_PE_FORMAT_G32R32F)
 }
 
 /// Does this draw select the flat shade model? When a fragment input the
@@ -606,7 +721,7 @@ pub fn msaa_extras(gl: &GlesDraw) -> bool {
 /// (`wide_target.rs`)? One hardware target with 64-bit pixels, drawn
 /// straight (not through the 4x scratch, not bottom-up).
 fn wide_target(gl: &GlesDraw) -> bool {
-    super::wide_target::wanted(gl, hw_targets(gl).1 == 1, !ms_via_scratch(gl) && !negative_stride(gl.flip_y))
+    super::wide_target::wanted(gl, hw_target_list(gl).n == 1, !ms_via_scratch(gl) && !negative_stride(gl.flip_y))
 }
 
 /// The shadow spec of this draw's colour target when it renders into a TILED
@@ -621,7 +736,7 @@ fn wide_target(gl: &GlesDraw) -> bool {
 fn tiled_rt_spec(gl: &GlesDraw, depth_super: bool) -> Option<Spec> {
     if !tiled_rt_on()
         || wide_target(gl)
-        || hw_targets(gl).1 != 1
+        || hw_target_list(gl).n != 1
         || ms_via_scratch(gl)
         || negative_stride(gl.flip_y)
         || gles_surf_is_integer(gl.target_format)
@@ -1819,7 +1934,8 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
      * answer would never differ. */
     let ms = ms_via_scratch(gl);
     let alpha_bits = if d.is_clear { 8 } else { u32::from(gl.target_alpha_bits) };
-    let rt0 = pe_overwrite::pe_color(rt_mask(0), blend, alpha_bits, PeTarget::Fbo, ms);
+    let rt0 =
+        pe_overwrite::pe_color(hw_target_mask(gl, HwTarget::ZERO, rt_mask(0)), blend, alpha_bits, PeTarget::Fbo, ms);
     let mut pe_color = if ext_format {
         pe_color_format_format_ext(format) | GC_PE_COLOR_FORMAT_FORMAT_MASK
     } else {
@@ -1856,31 +1972,32 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
     };
     c.state(GC_PE_COLOR_STRIDE, stride);
 
-    /* Render targets 1..3: the 8-RT bank, index rt - 1, as
+    /* Render targets 1..7: the 8-RT bank, index rt - 1, as
      * etnaviv programs it for a HALTI2+ core (etnaviv_state.c:250-420,
      * etnaviv_emit.c, etnaviv_blend.c:150-200). ES 3.0 has one colour mask
      * and one blend state for every draw buffer, so each target takes RT0's.
      * Linear, like RT0 here (no SUPER_TILED: RT_CONFIG has no linear bit).
      * RT_COUNT (PS_CONTROL, shader.rs) is what enables them; nothing is
      * written for a single-target draw. A slot with no target (`gpu` 0) is
-     * skipped and the slots after it move down ([`hw_targets`]); the colour
-     * mask is still the GL slot's, since glClearBuffer names draw buffers. */
-    let (slots, n) = hw_targets(gl);
-    for (rt, &slot) in slots[..n].iter().enumerate().skip(1) {
-        let slot = slot as usize;
-        let t = gl.targets[slot];
-        let (fmt, _) = pe_color_format(t.format);
-        let rt_pitch = target_pitch(t.w, gles_surf_bytes_per_pixel(t.format));
+     * skipped and the slots after it move down ([`hw_target_list`]); the
+     * colour mask is still the GL slot's, since glClearBuffer names draw
+     * buffers, and a 128-bit attachment's plane takes its half of it
+     * ([`hw_target_mask`]; no draw has a plane yet). */
+    let hw = hw_target_list(gl);
+    for (rt, &ht) in hw.list().iter().enumerate().skip(1) {
+        let slot = ht.slot as usize;
+        let format = attachment_format(gl, ht.slot);
+        let (gpu, rt_pitch, fmt) = hw_target_surface(gl, ht);
         /* an integer draw buffer is never blended (ES 3.0 4.1.8), whatever
          * the float or unorm ones beside it are */
-        let rt_blend = blend && !gles_surf_is_integer(t.format);
-        c.state(pe_rt_addr_8_pipe(rt as u32, 0), t.gpu as u32);
-        let srgb = if gles_surf_is_srgb(t.format) { GC_RT_CONFIG_SRGB } else { 0 };
+        let rt_blend = blend && !gles_surf_is_integer(format);
+        c.state(pe_rt_addr_8_pipe(rt as u32, 0), gpu as u32);
+        let srgb = if gles_surf_is_srgb(format) { GC_RT_CONFIG_SRGB } else { 0 };
         c.state(pe_rt_config_8(rt as u32), rt_config_stride(rt_pitch) | rt_config_format(fmt) | srgb);
         /* these targets keep 8 alpha bits (GlesDraw::target_alpha_bits) and
          * are drawn in place, never through the multisample scratch, which
          * stands in for RT0 alone: msaa false, as before */
-        let rt_color = pe_overwrite::pe_color(rt_mask(slot), rt_blend, 8, PeTarget::Fbo, false);
+        let rt_color = pe_overwrite::pe_color(hw_target_mask(gl, ht, rt_mask(slot)), rt_blend, 8, PeTarget::Fbo, false);
         c.state(
             pe_halti5_rt_colormask(rt as u32),
             pe_halti5_rt_colormask_components(rt_color.components)
@@ -2283,16 +2400,23 @@ fn shader_key(k: &mut dedup::Key, d: &GcDraw) -> bool {
         }
         k.u32(u32::from_le_bytes(b));
     }
-    let (slots, t) = hw_targets(d.gl);
-    k.u32(u32::from_le_bytes(slots));
-    k.u32(t as u32);
+    /* each hardware target's slot, its plane in bit 7 */
+    let hw = hw_target_list(d.gl);
+    for half in hw.t.chunks(4) {
+        let mut b = [0u8; 4];
+        for (dst, t) in b.iter_mut().zip(half) {
+            *dst = t.slot | t.plane << 7;
+        }
+        k.u32(u32::from_le_bytes(b));
+    }
+    k.u32(hw.n as u32);
     /* GC_PS_OUTPUT_REG names each target's fragment output, and the list's
      * shift moves them: two draws of one stream that differ only in
      * out_shift (dense from slot 0, dense from slot 1) write it apart. */
     k.u32(u32::from(d.gl.targets[0].out_shift));
     k.u32(u32::from(d.gl.target_format));
-    for &s in &slots[1..t] {
-        k.u32(u32::from(d.gl.targets[s as usize].format));
+    for t in &hw.list()[1..] {
+        k.u32(u32::from(attachment_format(d.gl, t.slot)));
     }
     k.u32(u32::from(msaa_extras(d.gl)));
     k.u32(u32::from(g().component_use_marked));
@@ -3191,7 +3315,8 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * name (review R-02); a target at least as large as RT 0 is written
      * inside it. (Clipping to the intersection through that one rectangle is
      * possible; it is not done here.) */
-    let (slots, n) = hw_targets(gl);
+    let hw = hw_target_list(gl);
+    let n = hw.n;
     /* An integer surface this back end does not draw: RGBA32I/UI, which the
      * pixel engine has no format for (it would be drawn as RGBA8,
      * [`GC_INTEGER_RT_FORMATS`]). The GL core refuses them by name before
@@ -3200,7 +3325,7 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * alone: beside another draw buffer it would keep the linear path, where
      * the PE misplaces 64-bit pixels (gl_test case 44, `wide_target.rs` "Not
      * covered"), so such a draw is refused instead of storing garbage. */
-    if slots[..n].iter().any(|&s| {
+    if hw.list().iter().any(|&HwTarget { slot: s, .. }| {
         let (gpu, f) = if s == 0 {
             (gl.target_gpu, gl.target_format)
         } else {
@@ -3214,7 +3339,7 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     }) {
         return -crate::util::ENOTSUP;
     }
-    if slots[1..n].iter().any(|&s| {
+    if hw.list()[1..].iter().any(|&HwTarget { slot: s, .. }| {
         let t = gl.targets[s as usize];
         t.w < gl.target_w || t.h < gl.target_h
     }) {

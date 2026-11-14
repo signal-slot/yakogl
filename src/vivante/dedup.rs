@@ -470,10 +470,11 @@ mod tests {
 
     /// Today's largest PE-group emit, in words: `emit_pe_state`'s
     /// one-register LOAD_STATEs (2 words apiece: `state_words(1)`), the
-    /// sites inside its render-target loop written once per draw buffer
-    /// past the first (`mrt_targets` clamps the draw buffers to four, the
-    /// loop skips RT0). Today that is 26 single sites and four in the
-    /// loop: 26 + 3 x 4 = 38 LOAD_STATEs, 76 words.
+    /// sites inside its render-target loop written once per hardware target
+    /// past the first (`hw_target_list`: up to eight, a 128-bit attachment
+    /// taking two; the loop skips RT0). Today that is 26 single sites and
+    /// four in the loop: 26 + 7 x 4 = 54 LOAD_STATEs, 108 words (no draw
+    /// past four targets arrives while RGBA32I/UI targets are refused).
     fn pe_words_today(body: &str) -> usize {
         let single = code_sites(body, "c.state(");
         let batched = code_sites(body, "c.state_multi(") + code_sites(body, "c.state_fixp(");
@@ -489,21 +490,21 @@ mod tests {
         );
         assert_eq!(other, 0, "emit_pe_state writes a stall, a pad or a plain word: the PE room must count it too");
         let l0 =
-            body.find("for (rt, &slot)").expect("emit_pe_state's render-target loop renamed: follow this test to it");
+            body.find("for (rt, &ht)").expect("emit_pe_state's render-target loop renamed: follow this test to it");
         let l1 = l0
             + body[l0..]
                 .find("\n    }")
                 .expect("the render-target loop no longer ends at four spaces of indentation: follow it here");
         let in_loop = code_sites(&body[l0..l1], "c.state(");
-        const DRAW_BUFFERS: usize = 4; /* `mrt_targets` (backend.rs): `num_targets` clamped to 1..=4 */
-        2 * (single - in_loop + (DRAW_BUFFERS - 1) * in_loop)
+        const TARGETS: usize = super::super::backend::GC_MAX_HW_TARGETS; /* `hw_target_list` (backend.rs) */
+        2 * (single - in_loop + (TARGETS - 1) * in_loop)
     }
 
     /// The headroom W7 asks to check: today's largest PE emit plus the
     /// tile-status words W7/W9 have not wired yet. Wiring them moves a
     /// register from "to add" into today's emit and the sum stands; PE
     /// words beyond them raise it and trip this test, which is its point.
-    /// Today: 76 + 9 x 2 = 94 against a room of 128 — ROOM stands.
+    /// Today: 108 + 9 x 2 = 126 against a room of 128 — ROOM stands.
     #[test]
     fn the_pe_room_holds_the_tiled_target_ts_words() {
         let body = pe_state_body();
