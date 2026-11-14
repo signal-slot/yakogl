@@ -4137,3 +4137,303 @@ const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
 /// other program moves (chain.rs compiled_corpus_words_are_pinned).
 const OURS_TOTALS: (usize, [usize; 3]) = (198, [11079, 5631, 4635]);
 const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9823, 4840, 4039]);
+
+// ---------------------------------------------------------------------------
+// Four colour targets (RC14).
+// ---------------------------------------------------------------------------
+
+/// Four draw buffers through our compiler and the interpreter: a 16x16 FBO
+/// of four colour attachments (4x RGBA8, then 3x RGBA8 + RGBA16F), each
+/// cleared to its own colour (glClearBufferfv), and one triangle whose
+/// fragment shader writes a different colour to each of `o0`..`o3`, with
+/// `backend::HOST_DRAW_TARGETS` = 4 (what DRAW_TARGETS = 4 would report).
+/// Every pixel of every attachment is then read back: inside the triangle
+/// the output's colour in the attachment's format, outside the clear
+/// colour.
+///
+/// What is real and what is a model. This harness runs QPU programs, not
+/// control lists: there is no binner, rasteriser, tile buffer or RCL here
+/// (sim.rs models one QPU), so the clear, the coverage and the tile store
+/// are the test's model, and no control list is exercised. Real are: our
+/// VS and FS (`chain::compile_program`), run on the interpreter; the
+/// triangle's edges come from the VS's VPM rows (the scaled x and y, in
+/// 1/256 pixel, as the clipper takes them); the colour of each covered
+/// pixel of each attachment comes from the FS's TLB writes, routed by the
+/// render target number in each write's TLB config (Mesa
+/// vir_emit_tlb_color_write, nir_to_vir.c:1953-1984: "7 - rt" in bits
+/// 3..5; a config holds until the next TLBU), and narrowed as the tile
+/// buffer's internal type would: an RGBA8 target to unorm8 (clamped), an
+/// RGBA16F one kept as the f16 written. The expected pixels are computed
+/// from the GL colours and the triangle's NDC vertices alone, never from
+/// the interpreter.
+#[cfg(all(feature = "host-test", not(feature = "report-es2")))] // GLSL ES 3.00 sources
+mod four_targets {
+    use super::*;
+    use std::sync::atomic::Ordering;
+    use yakogl::backend;
+    use yakogl::shaderc::online::v3d::select::Uniform;
+
+    const VS: &str = "#version 300 es
+in vec4 a_pos;
+void main() { gl_Position = a_pos; }
+";
+    /// One program for both cases: the V3D program is not keyed by the
+    /// target's float class (select.rs `tlb_config_32b`), so RT 3 writes the
+    /// same f16 pair to an RGBA8 and to an RGBA16F target; the out-of-range
+    /// channels of `o3` show the one clamped and the other not.
+    const FS: &str = "#version 300 es
+precision highp float;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+layout(location = 2) out vec4 o2;
+layout(location = 3) out vec4 o3;
+void main() {
+    o0 = vec4(1.0, 0.0, 0.0, 1.0);
+    o1 = vec4(0.0, 1.0, 0.0, 1.0);
+    o2 = vec4(0.0, 0.0, 0.25, 0.75);
+    o3 = vec4(3.25, -0.5, 0.375, 1.0);
+}
+";
+    const OUT: [[f32; 4]; 4] =
+        [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0, 0.25, 0.75], [3.25, -0.5, 0.375, 1.0]];
+    const CLEARS: [[f32; 4]; 4] =
+        [[0.0, 0.0, 1.0, 1.0], [1.0, 0.0, 1.0, 0.0], [0.25, 0.75, 0.0, 1.0], [0.75, 0.25, 0.25, 0.75]];
+
+    /// The FBO: 16x16, four 4x4 lane blocks a row.
+    const W: usize = 16;
+    const H: usize = 16;
+    /// The viewport transform Mesa's v3d writes for a W x H viewport
+    /// (QUNIFORM_VIEWPORT_X/Y_SCALE: half the size times 256, 1/256 pixel
+    /// on V3D 4.2); the clipper adds the viewport's centre.
+    const VP_X_SCALE: f32 = (W as f32 / 2.0) * 256.0;
+    const VP_Y_SCALE: f32 = (H as f32 / 2.0) * 256.0;
+    const VP_Z_SCALE: f32 = 0.5;
+    const VP_Z_OFFSET: f32 = 0.5;
+    /// The triangle, in NDC (w = 1). No pixel centre lies on an edge: in
+    /// window coordinates the edges are x = 0.8, y = 0.8 and 8x + 9y =
+    /// 128.8, and the centres give 8i + 9j + 8.5, never 128.8; the nearest
+    /// is 0.025 pixel away, the VS's 1/256-pixel floor 0.004.
+    const TRI: [[f32; 2]; 3] = [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.7]];
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    enum Format {
+        Rgba8,
+        Rgba16f,
+    }
+
+    /// One pixel of an attachment as glReadPixels returns it for the
+    /// format: four unorm8 bytes, or four f16 words.
+    fn store(f: Format, c: [f32; 4]) -> [u16; 4] {
+        match f {
+            Format::Rgba8 => c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u16),
+            Format::Rgba16f => c.map(sim::f32_to_half),
+        }
+    }
+
+    /// The same from the TLB's f16 words: the tile buffer narrows them to
+    /// the target's internal type.
+    fn store_f16(f: Format, h: [u16; 4]) -> [u16; 4] {
+        match f {
+            Format::Rgba8 => h.map(|x| (sim::half_to_f32(x).clamp(0.0, 1.0) * 255.0).round() as u16),
+            Format::Rgba16f => h,
+        }
+    }
+
+    fn edge_test(v: [(f64, f64); 3], p: (f64, f64)) -> bool {
+        let e = |a: (f64, f64), b: (f64, f64)| (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0);
+        let (e0, e1, e2) = (e(v[0], v[1]), e(v[1], v[2]), e(v[2], v[0]));
+        (e0 > 0.0 && e1 > 0.0 && e2 > 0.0) || (e0 < 0.0 && e1 < 0.0 && e2 < 0.0)
+    }
+
+    /// Whether the centre of pixel (i, j) is inside [`TRI`], from the NDC
+    /// vertices alone (the expected side).
+    fn inside_ndc(i: usize, j: usize) -> bool {
+        let v = TRI.map(|[x, y]| ((x as f64 + 1.0) * W as f64 / 2.0, (y as f64 + 1.0) * H as f64 / 2.0));
+        edge_test(v, (i as f64 + 0.5, j as f64 + 0.5))
+    }
+
+    /// Our uniform stream resolved: constants and the viewport words, and
+    /// nothing else (this program reads no other).
+    fn resolve(stage: &str, us: &[Uniform]) -> Vec<u32> {
+        us.iter()
+            .map(|u| match u.contents {
+                0 => u.data,
+                2 => VP_X_SCALE.to_bits(),
+                3 => VP_Y_SCALE.to_bits(),
+                4 => VP_Z_OFFSET.to_bits(),
+                5 => VP_Z_SCALE.to_bits(),
+                c => panic!("{stage}: uniform contents {c} (data {:#x}) is not modelled here", u.data),
+            })
+            .collect()
+    }
+
+    fn run_env(threads: u32) -> sim::Env {
+        sim::Env { thread: threads.max(1) - 1, threads, ..Default::default() }
+    }
+
+    /// The pixels of the four attachments after the clear and the draw.
+    type Frame = [[[u16; 4]; W * H]; 4];
+
+    /// The TLB colour words of one FS run per render target, as the config
+    /// of each write routes them; and the config of every write (`None`
+    /// for a write without TLBU).
+    type ByRt = [Vec<[u32; LANES]>; 4];
+    fn tlb_by_rt(o: &sim::Outcome) -> (ByRt, Vec<Option<u32>>) {
+        let mut by_rt: ByRt = Default::default();
+        let mut spec = 0xffu32;
+        for t in &o.tlb {
+            if let Some(c) = t.config {
+                spec = c & 0xff;
+            }
+            // f16 colour (type 3 << 6), per pixel, half swap, vec4
+            assert_eq!(spec & 0b1100_0111, 0b1100_0111, "TLB specifier {spec:#x}: not an f16 vec4 colour write");
+            let rt = 7 - ((spec >> 3) & 7) as usize;
+            assert!(rt < backend::draw_targets(), "RT {rt} past the draw's {} targets", backend::draw_targets());
+            by_rt[rt].push(t.value.map(|v| v.expect("a defined colour word")));
+        }
+        (by_rt, o.tlb.iter().map(|t| t.config).collect())
+    }
+
+    /// Compiles the program, clears the four attachments, draws the
+    /// triangle; returns the frame, the TLB configs of one FS run and the
+    /// pixels the triangle covered.
+    fn draw(formats: [Format; 4], clears: [[f32; 4]; 4]) -> (Frame, Vec<Option<u32>>, usize) {
+        let mut mem = vec![0u8; 16 << 20];
+        let a = Arena::new(&mut mem);
+        let fs_src = a.alloc_str(FS).unwrap();
+        let vs_src = a.alloc_str(VS).unwrap();
+        let fsl = lower::compile_to_ir(&a, sema::Stage::Fragment, fs_src).unwrap_or_else(|e| panic!("FS: {}", e.msg));
+        let vsl = lower::compile_to_ir(&a, sema::Stage::Vertex, vs_src).unwrap_or_else(|e| panic!("VS: {}", e.msg));
+        let prog = compile_program(&vsl.module, &fsl.module, Prim::Triangles, TARGET, &a)
+            .unwrap_or_else(|e| panic!("our compiler refused the four-output program: {e:?}"));
+        assert_eq!(prog.fs.rt_mask, 0b1111, "the FS writes RT 0..3");
+        assert!(prog.fs.input_slots.is_empty(), "the FS reads no varying");
+
+        // The VS: a_pos, one record of four rows; vertex k in lane k.
+        assert!(!prog.vs.uses_vid && !prog.vs.uses_iid, "the VS reads no vertex or instance id");
+        assert_eq!(prog.attributes, &[(0, Some(0))], "a_pos at location 0, record 0");
+        assert_eq!(prog.vs.vattr_sizes[0], 4, "a_pos is fetched whole");
+        assert!(prog.vs.vattr_sizes[1..].iter().all(|&s| s == 0), "one attribute record");
+        let pos = |l: usize| {
+            let [x, y] = TRI[l.min(2)];
+            [x, y, 0.0, 1.0]
+        };
+        let rows: Vec<[u32; LANES]> = (0..4).map(|c| core::array::from_fn(|l| pos(l)[c].to_bits())).collect();
+        let vs_stream = resolve("VS", prog.vs.code.uniforms);
+        let vs_inputs = Inputs::Vertex(VsInputs { vpm: rows });
+        let vo = sim::run(prog.vs.code.words, &vs_stream, &vs_inputs, &run_env(prog.vs.threads))
+            .unwrap_or_else(|e| panic!("VS: {e}"));
+        let row =
+            |r: usize| vo.vpm_out.get(r).copied().flatten().unwrap_or_else(|| panic!("VS: VPM row {r} unwritten"));
+        let (sx, sy) = (row(0), row(1));
+        // The clipper's window coordinates: the scaled value in 1/256
+        // pixel plus the viewport's centre (VIEWPORT_OFFSET).
+        let v: [(f64, f64); 3] = core::array::from_fn(|k| {
+            (sx[k] as i32 as f64 / 256.0 + W as f64 / 2.0, sy[k] as i32 as f64 / 256.0 + H as f64 / 2.0)
+        });
+
+        // The clear: each attachment its own colour.
+        let mut frame: Frame = core::array::from_fn(|rt| [store(formats[rt], clears[rt]); W * H]);
+
+        // The draw: one FS run per 4x4 block, lane l at pixel (l % 4, l / 4)
+        // of the block (the model's lane order); a covered lane writes each
+        // RT its TLB writes are routed to.
+        let fs_stream = resolve("FS", prog.fs.code.uniforms);
+        let mut configs = None;
+        let mut covered = 0;
+        for by in 0..H / 4 {
+            for bx in 0..W / 4 {
+                let px = |l: usize| (bx * 4 + l % 4, by * 4 + l / 4);
+                let cov: [bool; LANES] = core::array::from_fn(|l| {
+                    let (i, j) = px(l);
+                    edge_test(v, (i as f64 + 0.5, j as f64 + 0.5))
+                });
+                if !cov.contains(&true) {
+                    continue;
+                }
+                let inputs = FsInputs {
+                    w: [1f32.to_bits(); LANES],
+                    w_centroid: [1f32.to_bits(); LANES],
+                    z: [0.5f32.to_bits(); LANES],
+                    x: core::array::from_fn(|l| (px(l).0 as f32).to_bits()),
+                    y: core::array::from_fn(|l| (px(l).1 as f32).to_bits()),
+                    back_facing: [false; LANES],
+                    varyings: Vec::new(),
+                };
+                let fs_inputs = Inputs::Fragment(Box::new(inputs));
+                let fo = sim::run(prog.fs.code.words, &fs_stream, &fs_inputs, &run_env(prog.fs.threads))
+                    .unwrap_or_else(|e| panic!("FS: {e}"));
+                assert!(fo.msf.iter().all(|&m| m != 0), "the FS discards nothing");
+                let (by_rt, conf) = tlb_by_rt(&fo);
+                configs.get_or_insert(conf);
+                for (rt, words) in by_rt.iter().enumerate() {
+                    assert_eq!(words.len(), 2, "RT {rt}: two f16 pair words");
+                    for l in (0..LANES).filter(|&l| cov[l]) {
+                        // r g in word 0, b a in word 1, low half first
+                        // (VFPACK), as the harness reads RT 0 above
+                        let h = |k: usize| (words[k / 2][l] >> (16 * (k % 2))) as u16;
+                        let (i, j) = px(l);
+                        frame[rt][j * W + i] = store_f16(formats[rt], core::array::from_fn(h));
+                    }
+                }
+                covered += cov.iter().filter(|&&c| c).count();
+            }
+        }
+        (frame, configs.expect("the triangle covers a block"), covered)
+    }
+
+    /// Every pixel of every attachment: the output's colour inside the
+    /// triangle, the clear colour outside.
+    fn check(name: &str, formats: [Format; 4], clears: [[f32; 4]; 4]) {
+        // The two tests set and reset the one static: one at a time.
+        static KNOB: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _knob = KNOB.lock().unwrap_or_else(|e| e.into_inner());
+        backend::HOST_DRAW_TARGETS.store(4, Ordering::Relaxed);
+        assert_eq!(backend::draw_targets(), 4, "HOST_DRAW_TARGETS stands in for DRAW_TARGETS = 4");
+        let (frame, configs, covered) = draw(formats, clears);
+        backend::HOST_DRAW_TARGETS.store(0, Ordering::Relaxed);
+        // The TLB writes: RT 0 under the default config (no TLBU), RT 1..3
+        // each through TLBU with "7 - rt" in bits 3..5, f16 vec4, per pixel,
+        // half swap (0xf7, 0xef, 0xe7), in RT order, two words each.
+        assert_eq!(
+            configs,
+            [None, None, Some(0xffff_fff7), None, Some(0xffff_ffef), None, Some(0xffff_ffe7), None],
+            "{name}: the FS's TLB writes"
+        );
+        let inside = (0..W * H).filter(|&p| inside_ndc(p % W, p / W)).count();
+        assert_eq!(covered, inside, "{name}: covered pixels");
+        assert!(inside > 0 && inside < W * H, "{name}: both sides of the triangle are checked");
+        for rt in 0..4 {
+            let (ins, outs) = (store(formats[rt], OUT[rt]), store(formats[rt], clears[rt]));
+            assert_ne!(ins, outs, "{name}: RT {rt}'s output and clear must differ to tell them apart");
+            for j in 0..H {
+                for i in 0..W {
+                    let inside = inside_ndc(i, j);
+                    assert_eq!(
+                        frame[rt][j * W + i],
+                        if inside { ins } else { outs },
+                        "{name}: attachment {rt} ({:?}) pixel ({i}, {j}), {}",
+                        formats[rt],
+                        if inside { "inside" } else { "outside" }
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn four_rgba8_targets_are_cleared_and_drawn() {
+        check("4x RGBA8", [Format::Rgba8; 4], CLEARS);
+        // RT 3's out-of-range channels clamp in an RGBA8 target.
+        assert_eq!(store(Format::Rgba8, OUT[3]), [255, 0, 96, 255]);
+    }
+
+    #[test]
+    fn three_rgba8_targets_and_an_rgba16f_one_are_cleared_and_drawn() {
+        let mut clears = CLEARS;
+        clears[3] = [2.5, -1.0, 0.125, 1.0];
+        check("3x RGBA8 + RGBA16F", [Format::Rgba8, Format::Rgba8, Format::Rgba8, Format::Rgba16f], clears);
+        // RT 3 keeps the f16 the FS wrote, unclamped.
+        assert_eq!(store(Format::Rgba16f, OUT[3]).map(sim::half_to_f32), OUT[3]);
+    }
+}
