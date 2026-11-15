@@ -8,8 +8,9 @@ Apps compile against the standard Khronos `<GLES2/gl2.h>` and link this archive.
 It started on the PowerVR BXS-4-64 (Rogue, BVNC 36.53.104.796; TI AM62P / Toradex
 Verdin) and now also drives the Vivante GC7000UL (i.MX 8M Plus) and the Broadcom V3D 4.2
 (Raspberry Pi 4). A fourth back end, for the Arm Mali-G610 (RK3588, FriendlyElec
-NanoPC-T6), is in progress: so far it runs on the board's own Linux, not on Zephyr
-(`src/mali/`, `driver/docs/nanopc-t6-mali.md`; README.md, "Status"). Some
+NanoPC-T6), is in progress: on Zephyr it passes the regression set of `gl_test`
+off-screen as a development result, and dEQP-GLES2 has run only on the board's own
+Linux (`src/mali/`, `driver/docs/nanopc-t6-mali.md`; README.md, "Status"). Some
 sections below describe the PowerVR first, as it was built.
 
 ## Goals / non-goals
