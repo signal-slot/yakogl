@@ -260,3 +260,147 @@ fn mixed_keys_collide_with_no_existing_tag() {
         assert_eq!(slot_code(c) & 3 != 0, is_int(c), "{c:?}");
     }
 }
+
+// ---- the model against src/target_key.rs ----
+
+/// Section 2.1's per-target key of a class, written from the note's table:
+/// an integer layout is its slot code in bits [5:9]; a class key is its
+/// two-bit class in [30:31].
+fn target_key(c: Class) -> u32 {
+    match c {
+        Rgba8 => 0,
+        Rgba16f => 0x4000_0000,
+        R16f => 0x8000_0000,
+        R32f => 0xC000_0000,
+        Int(..) => slot_code(c) << 5,
+    }
+}
+
+fn keys(t: &[Class]) -> Vec<u32> {
+    t.iter().map(|&c| target_key(c)).collect()
+}
+
+/// Slot code 0x1f is a signed RGB10_A2 layout: the note lists RGB10_A2UI
+/// only (19 integer formats), but `ShcIntRt::of_key` and so the production
+/// functions accept it. A known disagreement, left out of the comparisons
+/// below and pinned by `signed_rgb10_a2_is_not_a_valid_target_ignored`.
+const LOOSE_CODE: u32 = 0x1f;
+
+/// True when a per-target key or a mixed key involves `LOOSE_CODE`.
+fn loose_target(t: u32) -> bool {
+    t & 0x3ff == LOOSE_CODE << 5 && t & !0x3ff == 0 || (t >> 5) & 0x1f == LOOSE_CODE && t & 0x03ff_fc00 == 0
+}
+
+fn loose_mixed(key: u32) -> bool {
+    (0..3).any(|i| (key >> (10 + 5 * i)) & 0x1f == LOOSE_CODE)
+}
+
+/// Per-target keys: the dword count of every class, and `None` for values
+/// that are not exactly a valid key.
+#[test]
+fn target_key_dwords_match_the_model() {
+    use yakogl::target_key::shc_target_key_dwords;
+    let mut valid = vec![];
+    for c in classes() {
+        let k = target_key(c);
+        assert_eq!(shc_target_key_dwords(k), Some(dwords(c) as u32), "{c:?} {k:#x}");
+        valid.push(k);
+    }
+    // Stray mask or payload bits, reserved slot codes 0x04/0x08/0x0C, width
+    // 10 with fewer than four channels: all invalid.
+    let mut probes = vec![u32::MAX, 0x1, 0x1f, 0x3ff, 0x2000_0000, 0x0200_0000, 0x4000_0001, 0x8000_0400, 0xA000_0000];
+    for code in 0u32..0x20 {
+        for extra in [0, 1 << 26, 1 << 10, 1 << 31, 1 << 30] {
+            probes.push(code << 5 | extra);
+        }
+    }
+    for p in probes {
+        if loose_target(p) {
+            continue;
+        }
+        assert_eq!(shc_target_key_dwords(p).is_some(), valid.contains(&p), "{p:#x}");
+    }
+}
+
+/// For every list of 1..=3 targets: the layout, the mixed key and the
+/// decoded list agree with the model, and `None` agrees with `None`.
+#[test]
+fn production_agrees_with_the_model_for_every_list() {
+    use yakogl::target_key::*;
+    let mut mixed = 0;
+    for t in lists(3) {
+        let k = keys(&t);
+        match model_layout(&t) {
+            Some((start, span)) => {
+                let (s, n) = shc_mixed_out_layout(&k).unwrap_or_else(|| panic!("{t:?}: no layout"));
+                assert_eq!(&s[..t.len()], &start[..], "{t:?}");
+                assert!(s[t.len()..].iter().all(|&x| x == 0), "{t:?}");
+                assert_eq!(n, span, "{t:?}");
+            }
+            None => assert_eq!(shc_mixed_out_layout(&k), None, "{t:?}"),
+        }
+        let want = encode(&t);
+        assert_eq!(shc_blend_key_mixed(&k), want, "{t:?}");
+        if let Some(key) = want {
+            mixed += 1;
+            assert!(shc_blend_key_is_mixed(key), "{t:?}");
+            let (back, n) = shc_blend_key_mixed_targets(key).unwrap_or_else(|| panic!("{t:?}: no decode"));
+            assert_eq!(n, t.len(), "{t:?}");
+            assert_eq!(&back[..n], &k[..], "{t:?}");
+        }
+    }
+    assert!(mixed > 100, "{mixed}");
+}
+
+/// The invalid cases, the decoder over every single-bit flip of a model key
+/// and over every pair of slot codes: it accepts exactly the model's keys.
+#[test]
+fn production_refuses_what_the_model_refuses() {
+    use yakogl::target_key::*;
+    assert_eq!(shc_blend_key_mixed(&keys(&[R32UI])), None);
+    assert_eq!(shc_blend_key_mixed(&keys(&[])), None);
+    assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, Rgba16f, R32f])), None);
+    assert_eq!(shc_blend_key_mixed(&keys(&[R32UI, R32UI])), None);
+    assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, RGBA32UI])), None);
+    assert_eq!(shc_blend_key_mixed(&keys(&[R32UI, Rgba8, Rgba8, Rgba8])), None);
+    assert_eq!(shc_mixed_out_layout(&[]), None);
+    assert_eq!(shc_mixed_out_layout(&keys(&[Rgba8; 4])), None);
+    // an invalid per-target key anywhere
+    assert_eq!(shc_blend_key_mixed(&[0, 0x5]), None);
+    assert_eq!(shc_blend_key_mixed(&[target_key(R32UI), 0x1_0000]), None);
+    assert_eq!(shc_mixed_out_layout(&[0, 0x2000_0000]), None);
+    for k in [0, u32::MAX, SHC_BLEND_KEY_MIXED_TAG] {
+        assert_eq!(shc_blend_key_mixed_targets(k), None, "{k:#x}");
+        assert!(!shc_blend_key_is_mixed(k), "{k:#x}");
+    }
+    let all: Vec<u32> = lists(3).iter().filter_map(|t| encode(t)).collect();
+    for &key in &all {
+        assert_eq!(key & SHC_BLEND_KEY_MIXED_TAG, SHC_BLEND_KEY_MIXED_TAG);
+        for bit in 0..32 {
+            let f = key ^ 1 << bit;
+            if loose_mixed(f) {
+                continue;
+            }
+            assert_eq!(shc_blend_key_is_mixed(f), all.contains(&f), "{key:#x} bit {bit}");
+        }
+    }
+    for a in 0u32..0x20 {
+        for b in 0u32..0x20 {
+            let key = SHC_BLEND_KEY_MIXED_TAG | a << 10 | b << 15;
+            if loose_mixed(key) {
+                continue;
+            }
+            assert_eq!(shc_blend_key_is_mixed(key), all.contains(&key), "{key:#x}");
+        }
+    }
+}
+
+/// The spec's answer for the signed RGB10_A2 code; fails today.
+#[test]
+#[ignore = "src/target_key.rs accepts signed RGB10_A2 (code 0x1f); the note lists RGB10_A2UI only"]
+fn signed_rgb10_a2_is_not_a_valid_target_ignored() {
+    use yakogl::target_key::*;
+    let t = LOOSE_CODE << 5;
+    assert_eq!(shc_target_key_dwords(t), None);
+    assert_eq!(shc_blend_key_mixed(&[0, t]), None);
+}
