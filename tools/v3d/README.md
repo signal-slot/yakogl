@@ -563,6 +563,18 @@ described here.
   `clear.stdout` and `triangle.stdout` hold `gl_ref.py`'s two lines (renderer
   string, `glGetError`). They are what Mesa submits, not a board capture;
   the shim's `SUBMIT_CL` does nothing.
+- **`sched71_oracle.sh`, `sched71_oracle.c`, `sched71_oracle.tsv`**: Mesa
+  26.2.1's QPU scheduler (`qpu_schedule.c`, `devinfo->ver = 71`) run on 2548
+  instruction pairs: per pair the DAG edge, `instruction_latency`,
+  `qpu_merge_inst`, whether Mesa put the two in one word and the word distance.
+  It is the reference for the 7.1 packer (`docs/notes/v3d71-backend.md`).
+  `tools/v3d/sched71_oracle.sh --check <mesa-26.2.1 source tree>` regenerates
+  the table and compares it byte for byte (only sources are used, no
+  `build-v3d`); without a tree it is `gap: MESA_V3D_TREE` (exit 77). It is
+  not a `check71.d` script and no gate row runs it: the gate has no full
+  Mesa source tree (`third_party/mesa-26.2.1` has no `compiler/` or
+  `util/dag.c`), and a gap would turn the v3d71 row red. The script's
+  header documents the pairs, the columns and the Mesa citations.
 - **`src/shaderc/online/v3d/`** (the 4.2 modules next to them are unchanged):
   - `isa71.rs`: the 7.1 QPU instruction model (no accumulators or mux, a
     register-file address per operand, the SFU as add operations).
