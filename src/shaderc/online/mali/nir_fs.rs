@@ -4986,8 +4986,9 @@ fn walk_nodes(
              * widened (pan_nir_lower_tex.c:144-149, :938-940: `F16_TO_F32
              * r2, u2.w0.h0` then the 8.8 chain, [`select`]); the direction's
              * lanes as a cube's at level 0, raw varying lanes and the
-             * link's constant among them. A bias that is no uniform lane, or
-             * a highp shader's: no reference */
+             * link's constant among them, of the shapes the implicit arm
+             * takes ([`cube_dir_measured`]; fstex_cubebias_uni). A bias
+             * that is no uniform lane, or a highp shader's: no reference */
             ir::Op::Tex {
                 dim: ir::TexDim::Cube,
                 shadow: false,
@@ -5000,7 +5001,7 @@ fn walk_nodes(
             } if !prec.highp => {
                 let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
                 let bias = lane(vals, bias, 0);
-                if dir.contains(&Val::Undef) || dir.iter().all(|v| matches!(v, Val::Const(_))) {
+                if !cube_dir_measured(f, dir) {
                     return Err(MaliError::TexCoord);
                 }
                 if f.uniform_dword(bias).is_none() {
@@ -5253,8 +5254,9 @@ fn walk_nodes(
     Ok(Flow::Next)
 }
 
-/// The direction of a mediump implicit-level `textureCube` is one of the
-/// shapes measured byte-equal to Mesa 26.2.1's drm-shim (fstex_cube*):
+/// The direction of a mediump `textureCube` at the implicit level or with
+/// a bias is one of the shapes measured byte-equal to Mesa 26.2.1's
+/// drm-shim (fstex_cube*):
 ///
 /// - raw: each lane a varying's lane or a constant fp16 holds exactly,
 ///   one varying lane at least (fstex_cube, fstex_cubedir_twovary,
