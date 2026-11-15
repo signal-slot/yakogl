@@ -531,6 +531,59 @@ Rules that hold for every step:
 `tools/cts/cts-selftest.sh` runs the selftests of the merge, pipeline, gen, wrap and triage tools; the preflight
 and report selftests (`imx8mp-gles3-preflight-selftest.sh`, `imx8mp-gles3-report-selftest.sh`) are not part of it.
 
+## RGBA32 two-plane sampling run (one session)
+
+Once the flip (RGBA32F/UI/I in `GC_SAMPLED_TEXFMTS`, items gc-w128-flip and gc-w128-guard) is on `origin/main`, the
+GC7000UL samples these formats as two G32R32 planes. Nothing of this has run on the board. The run needs one
+session, one commit and one GL client at a time, under the rules of "Running a GLES3 slice session". Results go in
+the board session, not in the commit that adds this section.
+
+1. **Build from a commit with the flip.** `git fetch origin`, then `COMMIT=$(git rev-parse origin/main)` and
+   `HEAD8=${COMMIT:0:8}`, only when `git log origin/main` shows the flip and the guard. Check that
+   `git rev-parse HEAD` equals `$COMMIT`. Both images below come from this one commit. Before the flip the first
+   four sub-checks of step 2 fail by design.
+
+2. **The `w128tex` case** (gl_test case 244; code, values and check numbering in
+   `driver/tools/pvrlab/gl_test_es3_w128tex.inc`, described in `driver/tools/pvrlab/README.md`):
+   ```sh
+   tools/cts/imx8mp-gltest-build.sh w128tex-$HEAD8 244
+   SEL=0 BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run $IMX8MP_IMG_OUT/w128tex-$HEAD8/zephyr/zephyr.bin <logdir> w128tex
+   ```
+   `BOARD_HOST`, `BOARD_UART` and the output directories come from the environment. Expected verdict lines:
+   ```
+   gl_test: w128tex: rgba32f sampler2D: PASS (16 of 16 texels)
+   gl_test: w128tex: rgba32ui usampler2D: PASS (16 of 16 texels)
+   gl_test: w128tex: rgba32i isampler2D: PASS (16 of 16 texels)
+   gl_test: w128tex: rgb32f sampler2D, alpha 1.0: PASS (16 of 16 texels)
+   gl_test: w128tex: swizzle refused: PASS (0 of 4096 pixels changed, GL_NO_ERROR 0x0)
+   gl_test: w128tex: 5 of 5 sub-checks pass
+   ```
+   With no console, the CASE record carries the first bad check: 1-16 rgba32f, 17-32 rgba32ui, 33-48 rgba32i,
+   49-64 rgb32f, 65 the swizzle draw's GL error, 66 the pixels it changed. Settle a failure here before step 3: the
+   failing sub-check names the format whose planes are wrong. If the swizzle key has landed, sub-check 5 is a drawn
+   check (R and B swapped) and the case's README section says what it prints.
+
+3. **The dEQP case list.** The flip reaches 178 dEQP-GLES3 cases (56 sized, 122 specification); 51 RG32I/UI
+   cases sit beside them and are not expected to move. They are table entries 70-80 and 94-103 of
+   `tools/cts/imx8mp-gles3-tree.txt` (entries count from 0, as `TREE_ROWS` does). Check the numbers against the
+   table of the commit you build, with `python3 -I tools/cts/imx8mp-gles3-sessions.py` (each entry's first pattern
+   names its format). Build the table image (slice session step 4), then run the rows as in step 10:
+   ```sh
+   TREE_ROWS=70-80 TREE_IMAGE=$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin \
+     tools/cts/imx8mp-gles3-board.sh tree records/imx8mp/es3-$HEAD8-rows70-80 2>&1 | tee records/imx8mp/es3-$HEAD8-rows70-80.log
+   TREE_ROWS=94-103 TREE_IMAGE=$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin \
+     tools/cts/imx8mp-gles3-board.sh tree records/imx8mp/es3-$HEAD8-rows94-103 2>&1 | tee records/imx8mp/es3-$HEAD8-rows94-103.log
+   ```
+   Then the console scan, the verdict reading and the commit of steps 10-12. Expect the sized and specification
+   RGBA32 cases to move to pass, with zero recoveries. Still red whatever this run shows (RGBA32 render targets,
+   not sampling): `fbo.color.*32*` (60 cases), `fbo.blit.conversion` (128) and `pbo.renderbuffer` (12). An entry
+   that overruns the window is split as in step 16.
+
+4. **Where the results go** (in the board session). The `w128tex` verdict lines and the tallies of the two row
+   ranges replace their rows in `tools/cts/RESULTS.md` (current results only, no run log) and the summary in
+   `tools/cts/STATUS.md`. A comment on GitHub issue #24 carries the commit and the result; the RC2 clause of
+   `docs/es3-cts-failures.md` then moves from "host-done, i.MX8MP board run pending" to the measured result.
+
 ## ES 2.0 regression rows
 
 These are separate and unchanged. Build with the gles2 stage 1 and no `DEQP_MODULE`, then run
