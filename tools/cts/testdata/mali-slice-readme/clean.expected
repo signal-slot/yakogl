@@ -30,6 +30,8 @@ dEQP status counts (`results.tsv`):
 | Fail | 1 |
 | NotSupported | 1 |
 
+Cases with the library's own refusal of a shader or a program (`refusals.tsv`): 2, of which 1 are not Pass.
+
 Lost cases by reason (`results.tsv` detail):
 
 | reason | cases |

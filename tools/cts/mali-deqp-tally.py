@@ -22,6 +22,9 @@ A slice is tools/cts/log/<YYYY-MM-DD>-t6-gles2-<session>-<sha8>/ with
                row with '-' or an empty field is rejected.
   results.tsv  case status detail   (a dEQP status, or Lost with a reason:
                chunk-crash, chunk-hang, board-lost, not-run)
+  refusals.tsv case refusal   (optional; the runner writes it since
+               2026-11-15: for each case whose log holds one, the first info
+               log in which the library refuses a shader or a program)
   kmsg/<label>.txt   the redacted kernel lines of the chunk
 
 A session the runner ends on board-lost or a wedged process marks the rest
@@ -40,9 +43,13 @@ other duplicate is RULE cover-duplicate; a reruns naming a slice not given,
 the slice itself, or forming a cycle is RULE rerun-target, for every name in
 the list.
 
-results.tsv lists the cases in mustpass order, chunk after chunk, so the
-chunks' `cases` counts split it; a chunk whose exit line names a refusal
-gives that refusal as the cause of its non-Pass cases.
+The cause of a non-Pass case, in a slice with refusals.tsv: its own refusal
+when the file names the case ("refused, <vertex|fragment> shader: <why>"),
+else dEQP's Result text with names and numbers folded. In a slice without
+the file the tally can only guess: results.tsv lists the cases in mustpass
+order, chunk after chunk, so the chunks' `cases` counts split it, and a chunk
+whose exit line names a refusal gives that refusal as the cause of all its
+non-Pass cases.
 
 Every rule failure prints "RULE <name>: ..." and the mode exits 1; a slice
 that cannot be read exits 2. --no-git skips the ancestor rule (fixtures);
@@ -60,6 +67,7 @@ STATUSES = ("Pass", "Fail", "NotSupported", "QualityWarning",
 CHUNK_STATUS = ("done", "crash", "hang", "fault", "lost")
 CHUNK_COLS = ("row", "label", "cases", "status", "seconds", "kmsg",
               "resets", "ssh_after", "boot_same", "exit_line")
+REFUSAL_COLS = ("case", "refusal")
 META_KEYS = ("commit", "session", "rows", "tree", "boot_id_before",
              "boot_id_after", "kernel", "lib", "started", "ended")
 LOST_REASONS = ("chunk-crash", "chunk-hang", "board-lost", "not-run")
@@ -68,6 +76,9 @@ END = "<!-- mali-deqp-tally end -->"
 # A back end refusal in a detail or an exit line: "refused <name>",
 # "refused: <name>" or "refusal=<name>".
 REFUSED = re.compile(r"\brefus(?:ed|al)\b[\s:=]+([A-Za-z_][A-Za-z0-9_.:-]*)")
+# A refusals.tsv text: "... refused this <stage> shader: <why>", where <why>
+# is the compiler's error, "Mali(<text>)" for this back end.
+SHADER_REFUSAL = re.compile(r"\brefused this (\w+) shader: (.*)$")
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURES = os.path.join(HERE, "testdata", "mali-deqp")
 
@@ -109,8 +120,11 @@ def load_slice(path):
     chunks = read_tsv(os.path.join(path, "chunks.tsv"), CHUNK_COLS)
     results = read_tsv(os.path.join(path, "results.tsv"),
                        ("case", "status", "detail"))
+    refusals = None
+    if os.path.exists(os.path.join(path, "refusals.tsv")):
+        refusals = read_tsv(os.path.join(path, "refusals.tsv"), REFUSAL_COLS)
     return {"path": path, "name": os.path.basename(path), "meta": meta,
-            "chunks": chunks, "results": results}
+            "chunks": chunks, "results": results, "refusals": refusals}
 
 
 def load_mustpass(path):
@@ -252,6 +266,23 @@ def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
                             % (where, case, dups[(n, ri)]))
             else:
                 seen[case] = where
+        status = {f[0]: f[1] for _, f, _w in s["results"]}
+        named = set()
+        for ln, f, whole in s["refusals"] or ():
+            where = "%s refusals.tsv:%d" % (n, ln)
+            if not whole or not f[0] or not f[1].strip():
+                errs.append("RULE refusal-case: %s: a row needs a case and "
+                            "its refusal" % where)
+            elif f[0] not in status:
+                errs.append("RULE refusal-case: %s: %s is not in the slice's "
+                            "results.tsv" % (where, f[0]))
+            elif status[f[0]] == "Lost":
+                errs.append("RULE refusal-case: %s: %s is Lost (it has no "
+                            "log)" % (where, f[0]))
+            elif f[0] in named:
+                errs.append("RULE refusal-case: %s: %s is named twice"
+                            % (where, f[0]))
+            named.add(f[0])
     miss = [c for c in mustpass if c not in seen]
     for c in miss[:20]:
         errs.append("RULE cover-missing: %s is in no slice" % c)
@@ -291,19 +322,47 @@ def cause(status, detail, exit_line):
     return normalize(detail)
 
 
+def refusal_cause(text):
+    """The cause a refusals.tsv text gives: the shader stage and the
+    compiler's own words, without the "Mali(...)" around them."""
+    m = SHADER_REFUSAL.search(text)
+    if not m:
+        return "refused: " + text
+    why = m.group(2)
+    if why.startswith("Mali("):
+        why = why[len("Mali("):]
+        if why.endswith(")"):
+            why = why[:-1]
+    return "refused, %s shader: %s" % (m.group(1), why)
+
+
+def refusal_map(s):
+    """case -> refusal text of a slice with refusals.tsv, else None."""
+    if s["refusals"] is None:
+        return None
+    return {f[0]: f[1] for _, f, _w in s["refusals"]}
+
+
 def tally(slices):
     by_status = {}
     by_cause = {}
     ordered, superseded, _d, _e = resolve(slices)
     for s in ordered:
         ex = chunk_exit_lines(s)
+        own = refusal_map(s)
         for i, (_, f, _w) in enumerate(s["results"]):
             if i in superseded[s["name"]]:
                 continue
             st = f[1]
             by_status[st] = by_status.get(st, 0) + 1
             if st != "Pass":
-                k = (st, cause(st, f[2], ex[i]))
+                if own is None:
+                    c = cause(st, f[2], ex[i])
+                elif f[0] in own:
+                    c = refusal_cause(own[f[0]])
+                else:
+                    c = cause(st, f[2], "")
+                k = (st, c)
                 by_cause[k] = by_cause.get(k, 0) + 1
     return by_status, by_cause
 
@@ -413,6 +472,24 @@ def self_test():
     chk("tally: numbers stripped from Fail cause",
         "Image comparison failed: max difference = (#, #, #)" in o)
     chk("tally: Lost reason is its cause", "chunk-crash" in o)
+    own = os.path.join(FIXTURES, "refusals", "2026-11-09-t6-gles2-S1-00000000")
+    chk("refusals.tsv: the slices still cover the mustpass list",
+        run("--check-cover", "--no-git", mp, own, good[1])[0] == 0)
+    rc, o, _e = run("--tally", "--no-git", own, good[1])
+    chk("refusals.tsv: a named case takes its own refusal as the cause",
+        rc == 0 and re.search(r"^cause Fail +1  refused, fragment shader: "
+                              r"Valhall: an integer or boolean value is not "
+                              r"lowered yet$", o, re.M) is not None)
+    chk("refusals.tsv: a link error's refusal reads the same way",
+        re.search(r"^cause NotSupported +1  refused, vertex shader: Valhall: "
+                  r"a loop in a vertex shader is not lowered yet$", o, re.M)
+        is not None)
+    chk("refusals.tsv: a case it does not name keeps dEQP's text, not the "
+        "chunk's first refusal",
+        re.search(r"^cause Fail +1  Image comparison failed$", o, re.M)
+        is not None and "refused:this" not in o)
+    must("refusals.tsv naming a case of no result", "refusal-case",
+         "--check-cover", "--no-git", mp, b("refusalunknown"), good[1])
     rc, o, _e = run("--tally", "--markdown", *good)
     chk("markdown: marked block", o.startswith(BEGIN) and o.endswith(END + "\n"))
     chk("markdown: matches the pinned fixture",

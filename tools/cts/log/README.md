@@ -119,8 +119,14 @@ commit message and the RESULTS.md row. Its files:
 - `results.tsv`: a header line, then `case status detail` per case of the rows:
   dEQP's status and its Result text, or `Lost` with `chunk-crash`,
   `chunk-hang`, `board-lost`, `not-run` or `wrong-lib` as the detail.
+- `refusals.tsv` (slices since 2026-11-15): a header line, then `case refusal`
+  for each case whose log holds one: the first shader or program info log in
+  which the library refuses, whitespace folded. The tally takes a case's
+  cause from it.
 - `kmsg/<label>.txt`: the kernel lines between that chunk's markers, to be
   classified with `tools/cts/mali-kmsg.py` (`docs/notes/mali-panthor-kmsg.md`).
+- `<file>.license` beside each of them (the runner writes it since
+  2026-11-15): the licence of our results.
 
 The raw `.qpa`, stdout and stderr and the whole `dmesg` capture stay in the
 runner's `RAW_DIR` and are never committed. A slice is checked for the

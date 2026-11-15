@@ -73,7 +73,14 @@
 #   results.tsv  case status detail: dEQP's status and its Result text, or
 #                Lost with the reason chunk-crash|chunk-hang|board-lost|
 #                not-run|wrong-lib as the detail
+#   refusals.tsv case refusal: for each case whose log holds one, the first
+#                shader or program info log in which the library refuses
+#                ("... refused this vertex shader: ..."), whitespace folded.
+#                The exit line of chunks.tsv names only the chunk's first
+#                refusal; this file names each case's own.
 #   kmsg/<label>.txt  the kernel lines between the chunk's markers
+#   <file>.license    beside each of them: the licence of our results (the
+#                slice is committed as written, plus its README.md)
 # The raw logs (every process's .qpa, stdout, stderr and the whole dmesg
 # capture) go to RAW_DIR (default build/mali-deqp-run/<slice name>/, ignored by
 # git); they are not redacted and are never committed.
@@ -213,9 +220,20 @@ def plan(tree, mustpass, a, b, casedir):
         print('%d\t%s\t%d' % (i, lab, len(cases)))
 
 
+def qpa_refusal(body):
+    """The first <InfoLog> of a case's log in which the library refuses a
+    shader or a program, or ''."""
+    for m in re.finditer(r'<InfoLog>(.*?)</InfoLog>', body, re.S):
+        text = html.unescape(m.group(1))
+        if re.search(r'\brefused\b', text):
+            return text
+    return ''
+
+
 def qpa_cases(path):
-    """[(case, status, detail)] of one .qpa; status None for a case begun and
-    never closed (the process stopped inside it)."""
+    """[(case, status, detail, refusal)] of one .qpa; status None for a case
+    begun and never closed (the process stopped inside it); refusal is
+    qpa_refusal of the case's log."""
     out, cur, buf = [], None, []
     try:
         lines = open(path, encoding='utf-8', errors='replace').read().splitlines()
@@ -224,28 +242,30 @@ def qpa_cases(path):
     for l in lines:
         if l.startswith('#beginTestCaseResult'):
             if cur is not None:
-                out.append((cur, None, ''))
+                out.append((cur, None, '', ''))
             parts = l.split()
             cur, buf = (parts[1] if len(parts) > 1 else '?'), []
         elif l.startswith('#endTestCaseResult') and cur is not None:
-            m = re.search(r'<Result StatusCode="([^"]*)"[^>]*>(.*?)</Result>', '\n'.join(buf), re.S)
-            out.append((cur, m.group(1), html.unescape(m.group(2))) if m else (cur, 'Unknown', 'no Result element'))
+            body = '\n'.join(buf)
+            m = re.search(r'<Result StatusCode="([^"]*)"[^>]*>(.*?)</Result>', body, re.S)
+            out.append((cur, m.group(1), html.unescape(m.group(2)), qpa_refusal(body)) if m
+                       else (cur, 'Unknown', 'no Result element', ''))
             cur = None
         elif l.startswith('#terminateTestCaseResult') and cur is not None:
             st = (l.split() + ['Terminated'])[1]
-            out.append((cur, st, 'terminated: ' + st))
+            out.append((cur, st, 'terminated: ' + st, ''))
             cur = None
         elif cur is not None:
             buf.append(l)
     if cur is not None:
-        out.append((cur, None, ''))
+        out.append((cur, None, '', ''))
     return out
 
 
 def rest(caselist, *qpas):
     begun = set()
     for q in qpas:
-        begun |= {c for c, _, _ in qpa_cases(q)}
+        begun |= {c for c, _, _, _ in qpa_cases(q)}
     for l in open(caselist):
         c = l.strip()
         if c and c not in begun:
@@ -315,6 +335,11 @@ def field(s, n=240):
     return (s[:n] if s else '-')
 
 
+LICENSE = ('SPDX-License-Identifier: Apache-2.0\n'
+           'SPDX-FileCopyrightText: 2026 Signal Slot, Inc.\n'
+           'Results of our NanoPC-T6 dEQP-GLES2 run, written by tools/cts/mali-deqp-run.sh.\n')
+
+
 def finalize(raw, out):
     red = redactor()
     plan_rows = [l.rstrip('\n').split('\t') for l in open(os.path.join(raw, 'plan.tsv'))]
@@ -337,7 +362,7 @@ def finalize(raw, out):
     meta = [l.rstrip('\n') for l in open(os.path.join(raw, 'meta.txt'))]
     with open(os.path.join(out, 'meta.txt'), 'w') as f:
         f.writelines(red(l) + '\n' for l in meta)
-    res, chk = [], []
+    res, chk, ref = [], [], []
     for row, lab, n in plan_rows:
         c = chunks.get(lab)
         if c is None:
@@ -352,28 +377,39 @@ def finalize(raw, out):
         for q in sorted(glob.glob(os.path.join(raw, 'qpa', lab + '.r*.qpa')),
                         key=lambda p: int(re.search(r'\.r(\d+)\.qpa$', p).group(1))):
             k = re.search(r'\.r(\d+)\.qpa$', q).group(1)
-            for case, st, det in qpa_cases(q):
+            for case, st, det, why in qpa_cases(q):
                 if st is None:
-                    got.setdefault(case, ('Lost', attempts.get((lab, k), 'chunk-crash')))
+                    got.setdefault(case, ('Lost', attempts.get((lab, k), 'chunk-crash'), ''))
                 else:
-                    got[case] = (st, det)
+                    got[case] = (st, det, why)
         for l in open(os.path.join(raw, 'cases', lab + '.txt')):
             case = l.strip()
             if not case:
                 continue
             if wrong:
-                st, det = 'Lost', 'wrong-lib'
+                st, det, why = 'Lost', 'wrong-lib', ''
             elif case in lost:
-                st, det = 'Lost', lost[case]
+                st, det, why = 'Lost', lost[case], ''
             else:
-                st, det = got.get(case, ('Lost', 'not-run'))
+                st, det, why = got.get(case, ('Lost', 'not-run', ''))
             res.append('%s\t%s\t%s' % (case, st, field(red(det))))
+            if why:
+                ref.append('%s\t%s' % (case, field(red(why), 600)))
     with open(os.path.join(out, 'chunks.tsv'), 'w') as f:
         f.write('row\tlabel\tcases\tstatus\tseconds\tkmsg\tresets\tssh_after\tboot_same\texit_line\n')
         f.writelines(l + '\n' for l in chk)
     with open(os.path.join(out, 'results.tsv'), 'w') as f:
         f.write('case\tstatus\tdetail\n')
         f.writelines(l + '\n' for l in res)
+    with open(os.path.join(out, 'refusals.tsv'), 'w') as f:
+        f.write('case\trefusal\n')
+        f.writelines(l + '\n' for l in ref)
+    # A .license sidecar beside each file, so the slice is committed as written.
+    names = ['meta.txt', 'chunks.tsv', 'results.tsv', 'refusals.tsv']
+    names += [os.path.join('kmsg', r[1] + '.txt') for r in plan_rows]
+    for name in names:
+        with open(os.path.join(out, name + '.license'), 'w') as f:
+            f.write(LICENSE)
     tally = {}
     for l in res:
         st = l.split('\t')[1]

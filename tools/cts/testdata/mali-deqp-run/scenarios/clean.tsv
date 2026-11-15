@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# A clean run: one dEQP Fail (its Result text must come out redacted).
+# A clean run: one dEQP Fail (its Result text must come out redacted) and one
+# case the library refuses a shader of (its refusal goes to refusals.tsv).
 dEQP-GLES2.functional.flush_finish.wait	fail
+dEQP-GLES2.functional.flush_finish.flush	refuse
