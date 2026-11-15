@@ -3333,7 +3333,7 @@ fn a_fragment_cube_look_up_is_byte_equal_to_mesa_26_2_1() {
 /// texcube pair, whose colour is the texel whole (fstex_cube_whole).
 #[test]
 fn a_mediump_texture_cube_at_the_implicit_level_is_byte_equal_to_mesa_26_2_1() {
-    let (_, f) = check_program(td!("fstex_cube.vert"), td!("fstex_cube.frag"), td!("fstex_cube.expect.json"));
+    let (_, f) = check_linked(td!("fstex_cube.vert"), td!("fstex_cube.frag"), td!("fstex_cube.expect.json"));
     assert_eq!(f.info.sampler, Some(0));
     assert!(f.info.helper_threads, "a computed level needs the helper invocations");
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
@@ -3346,7 +3346,7 @@ fn a_mediump_texture_cube_at_the_implicit_level_is_byte_equal_to_mesa_26_2_1() {
     let (vs, fs) = (td!("fstex_cube_whole.vert"), td!("fstex_cube_whole.frag"));
     assert_eq!(include_str!("../../../../tools/shaders/gltest/texcube_vs.vert"), vs);
     assert_eq!(include_str!("../../../../tools/shaders/gltest/texcube_fs.frag"), fs);
-    let (_, f) = check_program(vs, fs, td!("fstex_cube_whole.expect.json"));
+    let (_, f) = check_linked(vs, fs, td!("fstex_cube_whole.expect.json"));
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
     assert!(!texts.iter().any(|t| t.starts_with("MOV.i32") && t.contains(", r")), "{texts:?}");
     /* the gap beside it: a highp shader's implicit level has no reference */
@@ -3368,7 +3368,7 @@ fn a_mediump_texture_cube_at_the_implicit_level_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn deqp_cube_face_4_is_byte_equal_to_mesa_26_2_1() {
     let vs = td!("fstex_cubeface.vert");
-    let (_, f) = check_program(vs, td!("fstex_cubeface4.frag"), td!("fstex_cubeface4.expect.json"));
+    let (_, f) = check_linked(vs, td!("fstex_cubeface4.frag"), td!("fstex_cubeface4.expect.json"));
     assert!(f.info.helper_threads, "a computed level needs the helper invocations");
     for (fs, e) in [
         (td!("fstex_cubeface0.frag"), MaliError::TexCoord),
@@ -3388,67 +3388,70 @@ fn deqp_cube_face_4_is_byte_equal_to_mesa_26_2_1() {
 /// 26.2.1 drm-shim's to the byte.
 #[test]
 fn a_negated_swapped_varying_pair_is_byte_equal_to_mesa_26_2_1() {
-    check_program(td!("fsneg_swapped.vert"), td!("fsneg_swapped.frag"), td!("fsneg_swapped.expect.json"));
+    check_linked(td!("fsneg_swapped.vert"), td!("fsneg_swapped.frag"), td!("fsneg_swapped.expect.json"));
     let (vs, fs) = (td!("fstex_cubedir_negyx.vert"), td!("fstex_cubedir_negyx.frag"));
-    check_program(vs, fs, td!("fstex_cubedir_negyx.expect.json"));
+    check_linked(vs, fs, td!("fstex_cubedir_negyx.expect.json"));
 }
 
-/// The direction shapes the implicit-level cube arm takes
-/// (`nir_fs::cube_dir_measured`), each drawn on the Mesa 26.2.1 drm-shim
-/// with `--uniform-values` (one attribute per varying, so the link merges
-/// none; tools/mali/testdata/fstex_cubedir_*): two varyings' raw lanes,
-/// raw lanes with -1.0 between them, an fp16 pair beside a uniform z, a
-/// pair scaled by a uniform, a pair `a * 3.0 + 0.25`, a pair times a
-/// negative constant `a * -0.5` (Mesa's `FMA` by 0.5 then `FADD .neg`,
-/// which ours makes too since main's fp16 lowering), constant lanes fp16
-/// holds other than +-1.0, raw (`vec3(1.0, b1, 0.5)`) and beside a pair
-/// (`vec3(a2 - 0.5, 0.5)`), which the cube ops read from an FAU word, and
-/// a uniform lane in the second word of a vec4 (`a2 + u4.zw`, z `u4.w`:
-/// Mesa pushes the uniform from its first word, `u2.w1`, as main does).
-/// Both programs the shim's to the byte.
+/// The cube look-up references of tools/mali/testdata named `<prefix>*`
+/// (the directory read, so a reference added there is checked with no
+/// list to edit): each name with its sources and expect.json, sorted.
+fn cube_references(prefix: &str) -> Vec<(String, String, String, String)> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
+    let mut names: Vec<String> = std::fs::read_dir(&root)
+        .expect("a readable directory")
+        .flatten()
+        .filter_map(|e| e.file_name().to_str().and_then(|n| n.strip_suffix(".frag")).map(String::from))
+        .filter(|n| n.starts_with(prefix))
+        .collect();
+    names.sort();
+    let read = |n: &str, ext: &str| std::fs::read_to_string(root.join(format!("{n}.{ext}"))).expect("the reference");
+    names
+        .into_iter()
+        .map(|n| (read(&n, "vert"), read(&n, "frag"), read(&n, "expect.json"), n))
+        .map(|(v, f, j, n)| (n, v, f, j))
+        .collect()
+}
+
+/// The direction shapes the cube arms take (`nir_fs::cube_dir_measured`),
+/// each drawn on the Mesa 26.2.1 drm-shim with `--uniform-values` (one
+/// attribute per varying; tools/mali/testdata/fstex_cubedir_*): raw lanes
+/// of whole varyings and constants fp16 holds, an fp16 pair beside a
+/// constant or uniform z, scaled, fused, negated, a uniform lane in the
+/// second word of a vec4 (Mesa pushes the uniform from its first word, as
+/// main does). Both programs the shim's to the byte along the draw's
+/// linked path.
 #[test]
 fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa_26_2_1() {
-    for (vs, fs, json) in [
-        (
-            td!("fstex_cubedir_twovary.vert"),
-            td!("fstex_cubedir_twovary.frag"),
-            td!("fstex_cubedir_twovary.expect.json"),
-        ),
-        (
-            td!("fstex_cubedir_constneg.vert"),
-            td!("fstex_cubedir_constneg.frag"),
-            td!("fstex_cubedir_constneg.expect.json"),
-        ),
-        (
-            td!("fstex_cubedir_face4uni.vert"),
-            td!("fstex_cubedir_face4uni.frag"),
-            td!("fstex_cubedir_face4uni.expect.json"),
-        ),
-        (
-            td!("fstex_cubedir_uniscale.vert"),
-            td!("fstex_cubedir_uniscale.frag"),
-            td!("fstex_cubedir_uniscale.expect.json"),
-        ),
-        (td!("fstex_cubedir_fmak.vert"), td!("fstex_cubedir_fmak.frag"), td!("fstex_cubedir_fmak.expect.json")),
-        (
-            td!("fstex_cubedir_mulnegk.vert"),
-            td!("fstex_cubedir_mulnegk.frag"),
-            td!("fstex_cubedir_mulnegk.expect.json"),
-        ),
-        (
-            td!("fstex_cubedir_rawhalf.vert"),
-            td!("fstex_cubedir_rawhalf.frag"),
-            td!("fstex_cubedir_rawhalf.expect.json"),
-        ),
-        (
-            td!("fstex_cubedir_pairhalf.vert"),
-            td!("fstex_cubedir_pairhalf.frag"),
-            td!("fstex_cubedir_pairhalf.expect.json"),
-        ),
-        (td!("fstex_cubedir_vec4zw.vert"), td!("fstex_cubedir_vec4zw.frag"), td!("fstex_cubedir_vec4zw.expect.json")),
-        (td!("fstex_cubedir_vec4w.vert"), td!("fstex_cubedir_vec4w.frag"), td!("fstex_cubedir_vec4w.expect.json")),
-    ] {
-        check_program(vs, fs, json);
+    let refs = cube_references("fstex_cubedir_");
+    assert!(!refs.is_empty());
+    for (name, vs, fs, json) in &refs {
+        let r = std::panic::catch_unwind(|| check_linked(vs, fs, json));
+        assert!(r.is_ok(), "{name}: not the shim's words");
+    }
+}
+
+/// The cube look-ups Mesa 26.2.1 compiles to other words than ours
+/// (tools/mali/testdata/fstex_cubeno_<refusal>_*, each with the drm-shim
+/// reference of Mesa's words): refused by the name the file names, alone
+/// and along the draw's linked path. Among them:
+/// - an all-constant direction, a varying z beside the pair, a sum of two
+///   products one of which is `* 2.0` (which one Mesa fuses is not
+///   measured);
+#[test]
+fn cube_look_ups_mesa_compiles_otherwise_are_refused_by_the_name_of_their_reference() {
+    use MaliError as E;
+    let refs = cube_references("fstex_cubeno_");
+    assert!(!refs.is_empty());
+    for (name, vs, fs, _) in &refs {
+        let want = match name.strip_prefix("fstex_cubeno_").and_then(|r| r.split('_').next()) {
+            Some("texcoord") => E::TexCoord,
+            Some("operandform") => E::FsOperandForm,
+            r => panic!("{name}: no refusal named {r:?}"),
+        };
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), want, "{name}");
+        let linked = std::panic::catch_unwind(|| compile_linked(vs, fs));
+        assert!(linked.is_err(), "{name}: the linked program compiled");
     }
 }
 
@@ -3458,10 +3461,6 @@ fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa
 ///   narrow it to fp16 and back.
 /// - `vec3(a2 * 2.0, -1.0)`: Mesa's late rule makes the lone product
 ///   `FADD.v2f16 r0, r0^, r0^`.
-/// - `vec3(a2, 0.1)` (tools/mali/testdata/fstex_cubedir_rawtenth): a raw
-///   constant lane fp16 does not hold. Mesa rounds it to fp16 and reads
-///   the widened value from an FAU word (`u2.w0`); ours reads the fp32
-///   constant from the table (`0x3DCCCCCD`).
 /// - `vec3(gl_FragCoord.xy, 1.0)`, `vec3(gl_PointCoord, 1.0)`: Mesa reads
 ///   them fp32.
 #[test]
@@ -3472,7 +3471,6 @@ fn mediump_texture_cube_directions_mesa_compiles_otherwise_are_refused_by_name()
     for src in [
         fs("uniform float u; varying vec2 a2;", "vec3(a2, u)"),
         fs("varying vec2 a2;", "vec3(a2 * 2.0, -1.0)"),
-        td!("fstex_cubedir_rawtenth.frag").to_string(),
         fs("", "vec3(gl_FragCoord.xy, 1.0)"),
         fs("", "vec3(gl_PointCoord, 1.0)"),
     ] {
@@ -3485,11 +3483,11 @@ fn mediump_texture_cube_directions_mesa_compiles_otherwise_are_refused_by_name()
 /// refused as it is in the colour. `a2 * -3.0 + 0.25` is the fused
 /// `FMA.v2f16` with the constant first; Mesa 26.2.1 reads it as `u2.w0`
 /// (-3.0 in the FAU word), ours as `u2.w0.neg` (the review's probes s01,
-/// s11; tools/mali/testdata/fstex_cubedir_fmanegk.expect.json). The same
+/// s11; tools/mali/testdata/fstex_cubeno_operandform_fmanegk.expect.json). The same
 /// sum as a colour is refused on main by this rule (FsOperandForm).
 #[test]
 fn a_cube_direction_pair_with_a_form_the_colour_refuses_is_refused_by_name() {
-    let fs = td!("fstex_cubedir_fmanegk.frag");
+    let fs = td!("fstex_cubeno_operandform_fmanegk.frag");
     assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::FsOperandForm, "{fs}");
     let colour = "precision mediump float; varying mediump vec2 a2; \
                   void main() { gl_FragColor = vec4(a2 * -3.0 + 0.25, 0.0, 1.0); }";
@@ -3507,7 +3505,7 @@ fn a_cube_direction_pair_with_a_form_the_colour_refuses_is_refused_by_name() {
 #[test]
 fn a_mediump_texture_cube_with_a_uniform_bias_is_byte_equal_to_mesa_26_2_1() {
     let (vs, fs) = (td!("fstex_cubebias_uni.vert"), td!("fstex_cubebias_uni.frag"));
-    let (_, f) = check_program(vs, fs, td!("fstex_cubebias_uni.expect.json"));
+    let (_, f) = check_linked(vs, fs, td!("fstex_cubebias_uni.expect.json"));
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
     assert!(texts[1].starts_with("CUBEFACE2_V9"), "{texts:?}");
 }
@@ -3515,7 +3513,7 @@ fn a_mediump_texture_cube_with_a_uniform_bias_is_byte_equal_to_mesa_26_2_1() {
 /// The bias arm takes the implicit arm's directions
 /// (`nir_fs::cube_dir_measured`): a direction Mesa 26.2.1 compiles to
 /// other words is refused by name with a bias too. `vec3(a2, w)` (raw
-/// lanes beside a uniform; tools/mali/testdata/fstex_cubebias_unilane,
+/// lanes beside a uniform; tools/mali/testdata/fstex_cubeno_texcoord_biasunilane,
 /// the second review's b06), gl_FragCoord's lanes (b07) and a lone
 /// product with 2.0 (b11) each differ from the drm-shim's words.
 #[test]
@@ -3527,7 +3525,7 @@ fn a_cube_bias_direction_mesa_compiles_otherwise_is_refused_by_name() {
         )
     };
     for src in [
-        td!("fstex_cubebias_unilane.frag").to_string(),
+        td!("fstex_cubeno_texcoord_biasunilane.frag").to_string(),
         fs("", "vec3(gl_FragCoord.xy, 1.0)"),
         fs("varying vec2 a2;", "vec3(a2 * 2.0, -1.0)"),
     ] {
