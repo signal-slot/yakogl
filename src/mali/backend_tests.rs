@@ -4271,6 +4271,37 @@ fn staged_indices_are_the_draw_s_own_and_an_element_buffer_is_read_in_place() {
     assert_eq!(at[2], 0x61_0000, "an element buffer, in place");
 }
 
+/// A refused draw writes one `yakogl-mali-refusal:` line with its reason; a
+/// second draw refused for the same reason with none recorded between writes
+/// none, and the next refusal after a recorded draw writes one again.
+#[test]
+fn a_refused_draw_logs_its_reason_once() {
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    REFUSAL_LINES.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    let lines = || REFUSAL_LINES.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let t = target();
+    let mut blend = triangle(t, &VERTICES);
+    blend.blend = true;
+    // SAFETY: a valid draw.
+    assert_eq!(unsafe { mali_draw(&blend) }, -ENOTSUP);
+    let first = lines();
+    assert_eq!(first.len(), 1, "{first:?}");
+    assert!(first[0].starts_with("yakogl-mali-refusal: -95 "), "{}", first[0]);
+    assert!(first[0].len() > "yakogl-mali-refusal: -95 ".len(), "the reason follows");
+    // SAFETY: as above.
+    assert_eq!(unsafe { mali_draw(&blend) }, -ENOTSUP);
+    assert_eq!(lines().len(), 1, "the same reason again: no new line");
+    let mut ok = triangle(t, &VERTICES);
+    ok.index_count = 0;
+    // SAFETY: as above.
+    assert_eq!(unsafe { mali_draw(&ok) }, 0);
+    // SAFETY: as above.
+    assert_eq!(unsafe { mali_draw(&blend) }, -ENOTSUP);
+    assert_eq!(lines().len(), 2, "after a recorded draw the refusal is logged again");
+    assert_eq!(lines()[1], first[0]);
+}
+
 /// The first reason is kept whole and a later one does not replace it: the
 /// verdict row of panthor-gltest names the reason the case met first, with
 /// no cut at the log line limit (the string here is longer than it).
