@@ -806,6 +806,12 @@ fn compile_vivante<'s>(
             p if p.is_empty() => Ok(l),
             p => super::vivante::wide128::split_planes(scratch, l, p),
         })
+        /* 128-bit colour outputs as two plane stores (the per-draw key;
+         * empty, and the module untouched, unless asked) */
+        .and_then(|l| match super::vivante::wide128_rt::compile_rt_planes() {
+            p if p.is_empty() => Ok(l),
+            p => super::vivante::wide128_rt::split_outputs(scratch, l, p),
+        })
         /* integer samplers read as the float look-up (docs/es3/gc-formats.md §3) */
         .and_then(|l| super::vivante::int_tex::float_typed_lookups(scratch, l))
         .and_then(|l| lower::relocate(scratch, l, src, mark))
