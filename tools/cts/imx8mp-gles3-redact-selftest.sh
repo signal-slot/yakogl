@@ -19,7 +19,7 @@ tty="/dev/""ttyUSB0"
 acm="/dev/""ttyACM1"
 addr="10.1.2"".3"
 addrp="192.168.0"".7:2222"
-login="ab""c@host.exa""mple"
+login="abc""@""host.example"
 
 mkdir -p "$tmp/clean/sub" "$tmp/dirty"
 printf 'Pass 12\nFail 0\nversion 1.2 and /dev/null\n' > "$tmp/clean/a.txt"
