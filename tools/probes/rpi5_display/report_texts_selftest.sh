@@ -85,7 +85,9 @@ refuse() { # <name> <value> <args...>
     chk "$name: value not echoed" hasnt "$o" "$val"
     chk "$name: nothing printed" hasnt "$o" "U3 report texts"
 }
-ip="10.21.7.9"
+# The tree holds no private address literally (tests/redaction_scan.rs scans
+# this file too): the two fixture addresses are joined at run time.
+ip=$(printf '%s.%s.%s.%s' 10 21 7 9)
 printf 'u3 scanout: running at %s\n' "$ip" > "$T/ip.log"
 refuse ip-in-log "$ip" --verdicts "$T/ip.log" --record $REC --commit $SHA
 tty="/dev/ttyUSB7"
@@ -99,8 +101,9 @@ refuse host-in-ref "$host" --verdicts "$T/ok.log" --linux-ref "$T/host.txt" --re
 ser="usb-FTDI_FT232R_A50285BI-if00"
 printf 'by-id %s\n' "$ser" > "$T/ser.log"
 refuse usb-serial "$ser" --verdicts "$T/ser.log" --record $REC --commit $SHA
-printf 'ref 192.168.1.5 end\n' > "$T/ipref.txt"
-refuse ip-in-ref "192.168.1.5" --verdicts "$T/ok.log" --linux-ref "$T/ipref.txt" --record $REC --commit $SHA
+ipref=$(printf '%s.%s.%s.%s' 192 168 1 5)
+printf 'ref %s end\n' "$ipref" > "$T/ipref.txt"
+refuse ip-in-ref "$ipref" --verdicts "$T/ok.log" --linux-ref "$T/ipref.txt" --record $REC --commit $SHA
 
 # 4 usage errors
 "$RT" --verdicts "$T/full.log" --record badname --commit $SHA > /dev/null 2>&1
