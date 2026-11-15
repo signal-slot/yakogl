@@ -10,7 +10,11 @@
 //! `known_gaps`), not because the float or 64-bit path differs: glGetFloatv and
 //! glGetInteger64v widen `get_integerv`'s answer (gl/state.rs). This test pins
 //! that, so a limit that moves moves in all three forms and the `_getfloat` /
-//! `_getinteger64` rows are not a second defect to chase.
+//! `_getinteger64` rows are not a second defect to chase, and that
+//! glGetBooleanv agrees with them. The mustpass (tools/cts/gles3-mustpass.txt)
+//! has no `_getinteger` form in `state_query.integers` (that form is
+//! `implementation_limits`) and no `_getinteger64` in `integers64`, which is
+//! why the board lists show those limits failing only in the other forms.
 //!
 //! Not run under `report-es2` (the ES 3.0-only queries are INVALID_ENUM).
 //!
@@ -159,7 +163,10 @@ const LIMITS: &[(&str, GLenum)] = &[
     ("MAX_TEXTURE_IMAGE_UNITS", GL_MAX_TEXTURE_IMAGE_UNITS),
     ("MAX_VERTEX_TEXTURE_IMAGE_UNITS", GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS),
     ("MAX_COMBINED_TEXTURE_IMAGE_UNITS", GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS),
+    ("MIN_PROGRAM_TEXEL_OFFSET", GL_MIN_PROGRAM_TEXEL_OFFSET),
     ("MAX_PROGRAM_TEXEL_OFFSET", GL_MAX_PROGRAM_TEXEL_OFFSET),
+    ("MAX_TEXTURE_LOD_BIAS", GL_MAX_TEXTURE_LOD_BIAS),
+    ("MAX_SERVER_WAIT_TIMEOUT", GL_MAX_SERVER_WAIT_TIMEOUT),
     ("MAX_ELEMENTS_VERTICES", GL_MAX_ELEMENTS_VERTICES),
     ("MAX_ELEMENTS_INDICES", GL_MAX_ELEMENTS_INDICES),
     ("MAX_ELEMENT_INDEX", GL_MAX_ELEMENT_INDEX),
@@ -189,6 +196,38 @@ fn float_and_int64_forms_answer_what_the_integer_form_does() {
         assert_eq!(i[1], i32::MIN, "{name}: glGetIntegerv wrote more than one value");
         assert_eq!(l[1], i64::MIN, "{name}: glGetInteger64v wrote more than one value");
         assert!(f[1].is_nan(), "{name}: glGetFloatv wrote more than one value");
+    }
+}
+
+/// glGetBooleanv converts the same state (ES 3.0.6 section 6.1.2: a nonzero
+/// value reads GL_TRUE, zero GL_FALSE), one value per limit, and none of the
+/// four forms records an error for a limit of an ES 3.0 build. dEQP's
+/// `*_getboolean` rows of these limits pass on the boards for that reason:
+/// any nonzero value is GL_TRUE, whatever its size.
+#[test]
+fn boolean_form_agrees_with_the_integer_form_and_no_form_errs() {
+    let _g = context();
+    // SAFETY: the context is current; glGetError takes no pointer.
+    while unsafe { glGetError() } != GL_NO_ERROR {}
+    for &(name, pname) in LIMITS {
+        let mut i = [i32::MIN; 8];
+        let mut l = [i64::MIN; 8];
+        let mut f = [f32::NAN; 8];
+        let mut b = [0xAAu8; 8];
+        // SAFETY: room for the eight values the widest pname returns.
+        unsafe {
+            glGetIntegerv(pname, i.as_mut_ptr());
+            glGetInteger64v(pname, l.as_mut_ptr());
+            glGetFloatv(pname, f.as_mut_ptr());
+            glGetBooleanv(pname, b.as_mut_ptr());
+        }
+        // SAFETY: as above.
+        assert_eq!(unsafe { glGetError() }, GL_NO_ERROR, "{name}: a query form recorded an error");
+        let truth = if i[0] != 0 { GL_TRUE as u8 } else { GL_FALSE as u8 };
+        assert_eq!(b[0], truth, "{name}: glGetBooleanv says {} for the integer {}", b[0], i[0]);
+        assert_eq!(b[0] != 0, l[0] != 0, "{name}: glGetBooleanv and glGetInteger64v disagree");
+        assert_eq!(b[0] != 0, f[0] != 0.0, "{name}: glGetBooleanv and glGetFloatv disagree");
+        assert_eq!(b[1], 0xAA, "{name}: glGetBooleanv wrote more than one value");
     }
 }
 
