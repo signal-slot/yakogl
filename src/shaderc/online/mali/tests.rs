@@ -3508,6 +3508,29 @@ fn a_mediump_texture_cube_with_a_uniform_bias_is_byte_equal_to_mesa_26_2_1() {
     assert!(texts[1].starts_with("CUBEFACE2_V9"), "{texts:?}");
 }
 
+/// The bias arm takes the implicit arm's directions
+/// (`nir_fs::cube_dir_measured`): a direction Mesa 26.2.1 compiles to
+/// other words is refused by name with a bias too. `vec3(a2, w)` (raw
+/// lanes beside a uniform; tools/mali/testdata/fstex_cubebias_unilane,
+/// the second review's b06), gl_FragCoord's lanes (b07) and a lone
+/// product with 2.0 (b11) each differ from the drm-shim's words.
+#[test]
+fn a_cube_bias_direction_mesa_compiles_otherwise_is_refused_by_name() {
+    let fs = |decl: &str, dir: &str| {
+        format!(
+            "precision mediump float; uniform samplerCube s; uniform float u; {decl} \
+             void main() {{ gl_FragColor = textureCube(s, {dir}, u); }}"
+        )
+    };
+    for src in [
+        td!("fstex_cubebias_unilane.frag").to_string(),
+        fs("", "vec3(gl_FragCoord.xy, 1.0)"),
+        fs("varying vec2 a2;", "vec3(a2 * 2.0, -1.0)"),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::TexCoord, "{src}");
+    }
+}
+
 /// gl_test case 114's fragment stage (`cubelod`, prog[1]: tools/shaders/
 /// es300/cubelodf.{vert,frag} as tools/mali/testdata/case114_f.*):
 /// `textureLod(u_s, v_dir, u_lod)` in a highp shader with a highp sampler,
