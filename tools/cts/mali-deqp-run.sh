@@ -14,7 +14,7 @@
 # real run needs both, exit 1 without). Without --build the plan says "build:
 # not given" and the commit-on-main, library and size checks are "skipped (no
 # build)"; without --out it names the slice directory it would use,
-# build/mali-deqp-run/<session>-rows<A>-<B> (gitignored), and creates nothing.
+# build/mali-deqp-slice/<session>-rows<A>-<B> (gitignored), and creates nothing.
 # The default tree is tools/cts/mali-gles2-tree.txt, or $MALI_DEQP_TREE; a
 # tree that does not exist is said so and exits 1, dry run or not.
 #
@@ -397,9 +397,16 @@ PYEOF
 export MALI_DEQP_HERE=$HERE
 py() { python3 -I -c "$PY" "$@"; }
 
-[ -n "$out" ] || out=$REPO/build/mali-deqp-run/$session-rows$row_a-$row_b
+[ -n "$out" ] || out=$REPO/build/mali-deqp-slice/$session-rows$row_a-$row_b
 name=$(basename "$out")
 raw=${RAW_DIR:-$REPO/build/mali-deqp-run/$name}
+# The slice is redacted and may be committed; the raw logs are neither. In one
+# directory they would mix, and the plan written below would make the slice
+# "not empty".
+if [ "$(realpath -m -- "$out")" = "$(realpath -m -- "$raw")" ]; then
+  echo "$me: --out $out is also the raw log directory (RAW_DIR, default build/mali-deqp-run/<slice name>): give another --out or set RAW_DIR" >&2
+  exit 1
+fi
 work=$raw
 [ "$dry" = 0 ] || work=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-dry-XXXXXX")
 rm -rf "$work/cases"
