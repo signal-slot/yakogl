@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Cause map for imx8mp-gles3-compare.py: <cause id> TAB <glob over the dEQP-GLES3 case name> TAB <short title>
+# The first matching line wins, so a narrow line goes before a wide one. A case no line matches is
+# 'unclassified'. A cause may have several lines. '*' also matches '.' (fnmatch).
+# Seeded from RC1-RC18 of docs/es3-cts-failures.md: the causes that apply to the GC7000UL (Vivante)
+# and the generic ones; the PowerVR-only (RC6, RC15, RC16) and closed (RC4, RC12) causes are left
+# out. Conservative: a group the RC section does not name stays unclassified.
+rc14-mrt-draw-buffers	dEQP-GLES3.functional.state_query.integers.max_draw_buffers*	RC14 four draw buffers
+rc14-mrt-draw-buffers	dEQP-GLES3.functional.state_query.integers.max_color_attachments*	RC14 four draw buffers
+rc14-mrt-draw-buffers	dEQP-GLES3.functional.implementation_limits.max_draw_buffers*	RC14 four draw buffers
+rc14-mrt-draw-buffers	dEQP-GLES3.functional.implementation_limits.max_color_attachments*	RC14 four draw buffers
+rc14-mrt-draw-buffers	dEQP-GLES3.functional.draw_buffers_indexed.*	RC14 four draw buffers
+rc14-mrt-draw-buffers	dEQP-GLES3.functional.shaders.constant_expressions.other.complex_*	RC14 four draw buffers
+rc10-limits-state	dEQP-GLES3.functional.state_query.*	RC10 limits and state queries
+rc10-limits-state	dEQP-GLES3.functional.implementation_limits.*	RC10 limits and state queries
+rc8-blit-msaa	dEQP-GLES3.functional.fbo.blit.*	RC8 glBlitFramebuffer and multisample
+rc8-blit-msaa	dEQP-GLES3.functional.fbo.msaa.*	RC8 glBlitFramebuffer and multisample
+rc8-blit-msaa	dEQP-GLES3.functional.multisample.*	RC8 glBlitFramebuffer and multisample
+rc8-blit-msaa	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max*	RC8 glBlitFramebuffer and multisample
+rc8-blit-msaa	dEQP-GLES3.functional.texture.multisample.*	RC8 glBlitFramebuffer and multisample
+rc17-fbo-completeness	dEQP-GLES3.functional.fbo.completeness.*	RC17 framebuffer completeness
+rc1-int-color-rt	dEQP-GLES3.functional.fragment_out.*int*	RC1 integer colour render targets
+rc1-int-color-rt	dEQP-GLES3.functional.fbo.color.*int*	RC1 integer colour render targets
+rc7-srgb	dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.*	RC7 sRGB
+rc5-shadow	dEQP-GLES3.functional.texture.shadow.*	RC5 shadow samplers
+rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.swizzle.*	RC18 texture swizzle and wrap R
+rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.filtering.3d.*	RC18 texture swizzle and wrap R
+rc2-sized-formats	dEQP-GLES3.functional.texture.format.*	RC2 sized texture formats
+rc3-transform-feedback	dEQP-GLES3.functional.transform_feedback.*	RC3 transform feedback
+rc11-occlusion-query	dEQP-GLES3.functional.occlusion_query.*	RC11 occlusion queries
+rc13-shader-compiler	dEQP-GLES3.functional.shaders.texture_functions.*	RC13 shader compiler refusals
+rc13-shader-compiler	dEQP-GLES3.functional.shaders.fragdepth.*	RC13 shader compiler refusals
+rc13-shader-compiler	dEQP-GLES3.functional.shaders.builtin_functions.precision.*	RC13 shader compiler refusals
+rc13-shader-compiler	dEQP-GLES3.functional.shaders.builtin_functions.common.round*	RC13 shader compiler refusals
