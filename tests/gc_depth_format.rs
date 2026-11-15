@@ -5,6 +5,10 @@
 
 #[path = "../src/vivante/depth_format.rs"]
 mod depth_format;
+// only the offset functions are used here
+#[allow(dead_code)]
+#[path = "../src/vivante/layout.rs"]
+mod layout;
 
 use depth_format::*;
 
