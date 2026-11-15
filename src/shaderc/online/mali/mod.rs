@@ -314,6 +314,13 @@ pub enum MaliError {
     /// More expressions than the record holds, or one larger, moved by
     /// Mesa's link into the vertex shader (motion.rs).
     MovedTooLarge,
+    /// A vertex shader whose attribute numbering the walk cannot model:
+    /// a lane's fold that Mesa's back end makes after it numbers the
+    /// attribute locations (nir.rs `build`, docs/notes/mali-builtin-inputs.md
+    /// "Attribute records"), where the walk without that fold refuses, or
+    /// where the fold makes a varying lane a constant that Mesa's link
+    /// keeps computed.
+    AttributeNumbering,
     /// The scratch arena ran out (reported as capacity, not as a gap).
     OutOfScratch,
     Defect(Defect),
@@ -389,6 +396,7 @@ impl MaliError {
         MaliError::AlgebraicForm,
         MaliError::ConvertWiden,
         MaliError::MovedTooLarge,
+        MaliError::AttributeNumbering,
     ];
 
     /// The log text of each gap.
@@ -557,6 +565,9 @@ impl MaliError {
             }
             MaliError::MovedTooLarge => {
                 "Valhall: more than 4 fragment expressions, or one of more than 8 operations, that Mesa's link moves into the vertex shader is not lowered yet"
+            }
+            MaliError::AttributeNumbering => {
+                "Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not lowered yet"
             }
             MaliError::OutOfScratch => "Valhall: the scratch arena ran out",
             MaliError::Defect(_) => "Valhall back end defect: an invariant of the pipeline did not hold",
@@ -1335,19 +1346,20 @@ fn compile_stage<'s>(
                 work_reg_count: var.work_reg_count,
             });
         }
-        /* the attribute records: one per location read, record = location
-         * (pan_shc's `attributes`); a matrix takes one location per column,
-         * each its own record (other_63_matattr: mat4 `a_xf` at 1 is
-         * records 1..4) */
+        /* the attribute records: one per location Mesa numbers, in
+         * location order (`nir::Nir::counted`: the locations read, and one
+         * whose load only the back end's late fold removes, vsattr_latefold's
+         * `d`, which keeps its record and its descriptor with no load;
+         * `nir::Nir::attribute_record`); a matrix takes one location per
+         * column, each its own record (other_63_matattr: mat4 `a_xf` at 1
+         * is records 1..4; vsattr_matcol: a mat2's unread column 0 takes
+         * none) */
         for d in m.inputs.iter() {
             let ir_mod::IoSlot::Attrib(base) = d.slot() else { continue };
             for loc in (0..glsl::columns(d.gl_type)).filter_map(|c| base.checked_add(c)) {
-                let read = vs.order[..vs.len]
-                    .iter()
-                    .any(|&id| matches!(vs.nodes[id as usize].kind, nir::Kind::Input { loc: l, .. } if l == loc));
-                if read {
+                if vs.counted & 1u64.checked_shl(u32::from(loc)).unwrap_or(0) != 0 {
                     let slot = sc.attributes.get_mut(sc.nattr).ok_or(MaliError::Defect(Defect::IrIndex))?;
-                    *slot = (loc, loc);
+                    *slot = (loc, vs.attribute_record(loc)?);
                     sc.nattr += 1;
                 }
             }

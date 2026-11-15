@@ -747,6 +747,15 @@ pub struct Nir<'s> {
     /// one `load_ubo` in NIR, however many lane nodes the walk makes of
     /// them (nir_fs.rs; [`Nir::load_read_above`]).
     pub(super) uniform_load: &'s mut [u16],
+    /// The vertex walk models Mesa's IR where it numbers the attribute
+    /// locations ([`build`]): a lane's fold that only the back end's
+    /// scalarisation lets NIR make ([`vs_fmul`]) is not made.
+    numbering_walk: bool,
+    /// The walk made such a fold ([`vs_fmul`]).
+    late_fold: bool,
+    /// The attribute locations Mesa numbers, one bit each
+    /// ([`Nir::attribute_record`]); set by [`build`].
+    pub counted: u64,
 }
 
 const F32_ZERO: u32 = 0;
@@ -1109,6 +1118,9 @@ impl<'s> Nir<'s> {
             nonuniform_const: false,
             nonuniform: scratch.alloc_filled(MAX_NODES, false).map_err(oom)?,
             uniform_load: scratch.alloc_filled(MAX_NODES, u16::MAX).map_err(oom)?,
+            numbering_walk: false,
+            late_fold: false,
+            counted: 0,
         })
     }
 
@@ -1781,6 +1793,26 @@ impl<'s> Nir<'s> {
         })
     }
 
+    /// The attribute record of location `loc`, which is its `LD_ATTR`
+    /// index: how many of the locations Mesa numbers ([`Nir::counted`])
+    /// are below `loc` (docs/notes/mali-builtin-inputs.md, "Attribute
+    /// records").
+    pub fn attribute_record(&self, loc: u8) -> Result<u8, MaliError> {
+        let below = 1u64.checked_shl(u32::from(loc)).ok_or(MaliError::Defect(Defect::IrIndex))? - 1;
+        Ok((self.counted & below).count_ones() as u8)
+    }
+
+    /// The attribute locations a load in the order reads, one bit each.
+    pub(super) fn inputs_read(&self) -> Result<u64, MaliError> {
+        let mut read = 0u64;
+        for &id in &self.order[..self.len] {
+            if let Kind::Input { loc, .. } = self.nodes[id as usize].kind {
+                read |= 1u64.checked_shl(u32::from(loc)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            }
+        }
+        Ok(read)
+    }
+
     fn push(&mut self, kind: Kind, src: [Val; 3]) -> Result<u16, MaliError> {
         self.push_sized(kind, src, 32)
     }
@@ -2300,6 +2332,39 @@ fn vs_fadd(vs: &mut Nir<'_>, m: &Module<'_>, srcs: &[ir::Src; 3], x: Val, y: Val
     }
 }
 
+/// Each source of an IR operation of `width` lanes that NIR's rules on one
+/// value cannot match while the operation is a vector: a source with a
+/// constant lane that is not the same constant in every lane read
+/// (nir_search.c `match_value` needs a `load_const` and compares each
+/// lane, the sign of a zero too). `d * vec4(0.0, -0.0, 0.0, 0.0)` is
+/// neither `fmul(a, 0.0)` nor `fmul(a, -0.0)` until the back end
+/// scalarises it.
+fn split_const(w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> [bool; 2] {
+    [0, 1].map(|k| {
+        let first = lane(w, s[k], 0);
+        let lanes = || (0..width).map(|i| lane(w, s[k], i));
+        lanes().any(|v| matches!(v, Val::Const(_))) && !lanes().all(|v| v == first && matches!(v, Val::Const(_)))
+    })
+}
+
+/// One lane of an IR `fmul`. A zero of a `split` source ([`split_const`])
+/// folds the lane only in the back end (`bi_optimize_loop`'s
+/// `nir_lower_alu_width`, then `nir_opt_algebraic`'s `fmul(a, 0.0)` and
+/// `fmul(a, -0.0)`), after Mesa numbers the attribute locations: the walk
+/// folds it as the back end does, and notes it ([`build`]); the numbering
+/// walk keeps the other factor read, in a node nothing folds.
+fn vs_fmul(vs: &mut Nir<'_>, split: [bool; 2], a: Val, b: Val) -> Result<Val, MaliError> {
+    let ab = [a, b];
+    let late = (0..2).find(|&k| split[k] && is_zero(ab[k]) && !matches!(ab[1 - k], Val::Const(_)));
+    if let Some(k) = late {
+        if vs.numbering_walk {
+            return Ok(Val::Lane(vs.push(Kind::Alu(Alu::Mov), [ab[1 - k], Val::Undef, Val::Undef])?, 0));
+        }
+        vs.late_fold = true;
+    }
+    vs.alu(Alu::Fmul, a, b, Val::Undef)
+}
+
 /// `is_fmul` (nir_search_helpers.h:402-416): a product, or the `fneg` of
 /// one.
 fn vs_is_fmul(vs: &Nir<'_>, v: Val) -> bool {
@@ -2659,6 +2724,49 @@ pub fn build<'s>(
     moved: &[super::motion::Moved],
     fp16: &dyn Fn(&str) -> bool,
 ) -> Result<Nir<'s>, MaliError> {
+    let mut vs = walk(m, scratch, reads, moved, fp16, false)?;
+    vs.counted = vs.inputs_read()?;
+    /* Mesa numbers the attribute locations a load still reads where its
+     * IR is vectors (`nir_recompute_io_bases` at the end of
+     * `nir_lower_io_passes` and of `nir_opt_varyings_bulk`); the back end
+     * scalarises later (`bi_optimize_loop`'s `nir_lower_alu_width`) and
+     * its `nir_opt_algebraic` may then remove a load, whose location stays
+     * counted. The walk is per lane, so when it made such a fold
+     * ([`vs_fmul`]) the locations are those of a second walk without it,
+     * whose loads are a superset of the first's (it keeps a node where the
+     * first folds one). A second walk that refuses is a form not
+     * modelled. So is a varying lane such a fold makes a constant: Mesa's
+     * link (`nir_opt_varyings`, on the vectors) keeps it a computed lane,
+     * which our link would propagate into the fragment shader
+     * ([`Nir::consts`]; dEQP 1405_0's `vec4(.., d, ..) * vec4(.., -0.0, b,
+     * a)`) */
+    if vs.late_fold {
+        let numbered = walk(m, scratch, reads, moved, fp16, true).map_err(|e| match e {
+            MaliError::OutOfScratch => e,
+            _ => MaliError::AttributeNumbering,
+        })?;
+        let counted = numbered.inputs_read()?;
+        if vs.counted & !counted != 0 {
+            return Err(MaliError::Defect(Defect::IrIndex));
+        }
+        if numbered.consts != vs.consts {
+            return Err(MaliError::AttributeNumbering);
+        }
+        vs.counted = counted;
+    }
+    Ok(vs)
+}
+
+/// The vertex walk of [`build`]; `numbering` models Mesa's IR where it
+/// numbers the attribute locations ([`Nir::numbering_walk`]).
+fn walk<'s>(
+    m: &Module<'_>,
+    scratch: &Arena<'s>,
+    reads: Option<&[(u8, u8)]>,
+    moved: &[super::motion::Moved],
+    fp16: &dyn Fn(&str) -> bool,
+    numbering: bool,
+) -> Result<Nir<'s>, MaliError> {
     if m.instrs.len() > MAX_VALUES {
         return Err(MaliError::TooManyValues);
     }
@@ -2666,6 +2774,7 @@ pub fn build<'s>(
         return Err(MaliError::TooManyLocals);
     }
     let mut vs = Nir::new(scratch)?;
+    vs.numbering_walk = numbering;
     let vals = scratch.alloc_filled(MAX_VALUES, [Val::Undef; 4]).map_err(|_| MaliError::OutOfScratch)?;
     let w = &mut Walk { vals, locals: [[Val::Undef; 4]; MAX_LOCALS] };
     let mut position: Option<[Val; 4]> = None;
@@ -2815,6 +2924,7 @@ pub fn build<'s>(
             IrOp::Alu(a, s) => {
                 /* lanes an arm makes for every lane at once, at lane 0 */
                 let mut held = [Val::Undef; 4];
+                let split = if a == AluOp::Fmul { split_const(w, &s, width) } else { [false; 2] };
                 for (l, o) in out.iter_mut().enumerate().take(width) {
                     let x = |k: usize| lane(w, s[k], l);
                     *o = match a {
@@ -2826,7 +2936,7 @@ pub fn build<'s>(
                          * `normalize`'s product of a vec3 and its `rsq` four
                          * lanes (builtin_call.rs), the last undefined */
                         AluOp::Fmul if x(0) == Val::Undef || x(1) == Val::Undef => Val::Undef,
-                        AluOp::Fmul => vs.alu(Alu::Fmul, x(0), x(1), Val::Undef)?,
+                        AluOp::Fmul => vs_fmul(&mut vs, split, x(0), x(1))?,
                         /* a matrix product's last term by a `w` of 1.0
                          * (`M * vec4(p, 1.0)`): `fmul(c3, 1.0)` is `c3`
                          * (nir_opt_algebraic.py:292) and the term `fadd(acc,
