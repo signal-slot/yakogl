@@ -473,28 +473,32 @@ fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
 /// (`compile_vs_for_reads`), as Mesa's link leaves the pair
 /// (nir_opt_varyings).
 fn compile_linked(vs: &str, fs: &str) -> (Stage, Stage) {
+    match try_compile_linked(vs, fs) {
+        Ok(p) => p,
+        Err(e) => panic!("the pair does not compile along the link: {e:?}"),
+    }
+}
+
+/// [`compile_linked`], a refusal of either stage returned, not a panic.
+fn try_compile_linked(vs: &str, fs: &str) -> Result<(Stage, Stage), CompileError> {
     let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
-        .expect("the scratch arena is free")
-        .expect("the vertex shader's constant lanes");
+    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s)).expect("the scratch arena is free")?;
     let f = store::with_scratch(|s| {
         super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
     })
-    .expect("the scratch arena is free")
-    .expect("the fragment shader compiles for the vertex shader");
-    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    .expect("the scratch arena is free")?;
+    let pr =
+        super::fragment_reads(&f.info.shader()).map_err(|e| CompileError::BackEnd(codegen::BackEndError::Mali(e)))?;
     /* at the vertex shader's own locations, paired by name (case 19's tex) */
     let pr = store::with_scratch(|s| super::reads_at_vertex_locations(&pr, fs.as_bytes(), vs.as_bytes(), s))
-        .expect("the scratch arena is free")
-        .expect("both stages lower")
+        .expect("the scratch arena is free")?
         .expect("every read is a vertex output");
     let v = store::with_scratch(|s| {
         super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep())
             .map(|(sh, _)| stage_of(&sh))
     })
-    .expect("the scratch arena is free")
-    .expect("the vertex shader compiles for the program");
-    (v, f)
+    .expect("the scratch arena is free")?;
+    Ok((v, f))
 }
 
 /// [`compile_linked`] checked against an expect.json, every region, and
@@ -3463,8 +3467,11 @@ fn cube_look_ups_mesa_compiles_otherwise_are_refused_by_the_name_of_their_refere
             r => panic!("{name}: no refusal named {r:?}"),
         };
         assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), want, "{name}");
-        let linked = std::panic::catch_unwind(|| compile_linked(vs, fs));
-        assert!(linked.is_err(), "{name}: the linked program compiled");
+        match try_compile_linked(vs, fs) {
+            Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, want, "{name}: linked"),
+            Err(e) => panic!("{name}: linked: not a Mali refusal: {e:?}"),
+            Ok(_) => panic!("{name}: the linked program compiled"),
+        }
     }
 }
 
