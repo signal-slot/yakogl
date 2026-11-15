@@ -251,9 +251,16 @@ answers (`tests/es3_limits_v3d.rs`, `tests/es3_v3d_varyings.rs`), so a
 `*_getfloat` / `*_getinteger64` row fails exactly when the limit is below its
 minimum. The V3D's varying family is closed on the host (v3d-varyings-raise:
 `MAX_VARYING_VECTORS` 15, the components 60 / 60 / 64; `tests/es3_v3d_varyings.rs`;
-board rows to re-run). Left: the uniform-block size and the combined
-uniform components (every GPU), `MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the
-PowerVR and GC7000UL, and RC14. The compressed-format list is closed on the
+board rows to re-run). The V3D's uniform-block family is closed on the
+host too: `MAX_UNIFORM_BLOCK_SIZE` 16384 and the combined uniform components
+50688 (ES 3.0's formula over the default block and twelve blocks), a stage's
+blocks read through the uniform stream behind its default block
+(`gl/context.rs` `MAX_UNIFORM_BLOCK_SIZE`, `MAX_STAGE_UNIFORM_DWORDS`;
+`tests/es3_limits_v3d.rs`, `v3d/backend_tests.rs`
+`a_uniform_block_of_16384_bytes_reaches_the_stream_whole`; board rows to
+re-run, host dEQP not yet run). Left: the uniform-block size and the
+combined uniform components on the PowerVR and GC7000UL (6144 / 1536),
+`MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the same two, and RC14. The compressed-format list is closed on the
 host: `GL_NUM_COMPRESSED_TEXTURE_FORMATS` is 11 (ETC1 and the ten ETC2/EAC
 formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,

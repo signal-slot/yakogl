@@ -262,20 +262,28 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
     let mut v: Vec<(&'static str, &'static str)> = vec![
         ("MAX_COLOR_ATTACHMENTS", "3, not 4: gl/context.rs CAP_COLOR_ATTACHMENTS; the mrt4 item"),
         ("MAX_DRAW_BUFFERS", "3, not 4: gl/context.rs MAX_DRAW_BUFFERS = CAP_COLOR_ATTACHMENTS; the mrt4 item"),
-        (
-            "MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",
-            "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/state.rs); MAX_UNIFORM_BLOCK_SIZE is the root",
-        ),
-        (
-            "MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",
-            "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/state.rs)",
-        ),
-        (
-            "MAX_UNIFORM_BLOCK_SIZE",
-            "6144, not 16384: a block gets the default-block budget, MAX_UNIFORM_DWORDS * 4 (ubo-uniform)",
-        ),
         ("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)"),
     ];
+    if !cfg!(feature = "gpu-v3d") {
+        // the V3D reads a stage's uniform blocks past its default block (gl/context.rs
+        // MAX_UNIFORM_BLOCK_SIZE, MAX_STAGE_UNIFORM_DWORDS); the other back ends upload the
+        // default block only
+        v.extend_from_slice(&[
+            (
+                "MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",
+                "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/context.rs MAX_STAGE_UNIFORM_DWORDS); \
+                 MAX_UNIFORM_BLOCK_SIZE is the root",
+            ),
+            (
+                "MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",
+                "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/context.rs MAX_STAGE_UNIFORM_DWORDS)",
+            ),
+            (
+                "MAX_UNIFORM_BLOCK_SIZE",
+                "6144, not 16384: a block gets the default-block budget, MAX_UNIFORM_DWORDS * 4 (ubo-uniform)",
+            ),
+        ]);
+    }
     if cfg!(feature = "gpu-mali") {
         v.push((
             "NUM_COMPRESSED_TEXTURE_FORMATS",

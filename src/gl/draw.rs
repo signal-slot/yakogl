@@ -2311,13 +2311,26 @@ fn upload_prog_gpu(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader) -> i32 {
     }
     /* Uniform blocks: the VS block then the FS block, 16-byte aligned
      * (reused every draw). */
-    let bytes = MAX_UNIFORM_DWORDS * 4 * 2 + 16;
+    let bytes = staging_stage_dwords(rvs, rfs) * 4 * 2 + 16;
     if osal::gpu_alloc(backend::heap_base(GLES_HEAP_DATA), bytes, OSAL_MEM_DATA, &mut pg.uniforms) != 0 {
         return -1;
     }
 
     pg.valid = true;
     0
+}
+
+/// Dwords each stage's half of a program's uniform staging buffer holds
+/// (`ProgGpu::uniforms`, `2 * this * 4 + 16` bytes): a stage's default
+/// block, or more where the program's stages lay out more and the GPU reads
+/// a stage's uniform blocks past its default block (the V3D,
+/// [`context::MAX_STAGE_UNIFORM_DWORDS`]). A blend variant's FS block is the
+/// shader's plus the blend constants. The draw uploads at most this a stage.
+fn staging_stage_dwords(rvs: &ShcShader, rfs: &ShcShader) -> usize {
+    MAX_UNIFORM_DWORDS
+        .max(rvs.uniform_dwords as usize)
+        .max(rfs.uniform_dwords as usize + context::BLEND_CONSTS_DWORDS)
+        .min(context::MAX_STAGE_UNIFORM_DWORDS)
 }
 
 /* --------------------------------------------------------------------------- */
@@ -3899,20 +3912,14 @@ fn build_common(
     }
     let p = &c.objs_ref().programs[obj_index(program)];
     {
-        let mut vs_dw = p.rvs.uniform_dwords;
-        let mut fs_dw = fs_uniform_dwords;
-        let mut fs_app_dw = p.rfs.uniform_dwords;
+        /* each stage at most its half of the staging buffer (default block
+         * and, on the V3D, uniform blocks: staging_stage_dwords); the FS
+         * half starts behind the VS block as uploaded */
+        let room = staging_stage_dwords(&p.rvs, &p.rfs) as u16;
+        let vs_dw = p.rvs.uniform_dwords.min(room);
+        let fs_dw = fs_uniform_dwords.min(room);
+        let fs_app_dw = p.rfs.uniform_dwords.min(fs_dw);
         let fs_off = (vs_dw as usize * 4 + 15) & !15usize;
-
-        if vs_dw as usize > MAX_UNIFORM_DWORDS {
-            vs_dw = MAX_UNIFORM_DWORDS as u16;
-        }
-        if fs_dw as usize > MAX_UNIFORM_DWORDS {
-            fs_dw = MAX_UNIFORM_DWORDS as u16;
-        }
-        if fs_app_dw > fs_dw {
-            fs_app_dw = fs_dw;
-        }
         /* a back end that reads the host arrays only (the V3D) never reads the
          * staging copy: no reserve, no put (the fields below are set as ever) */
         let host_only = backend::uniforms_host_only();
@@ -3928,7 +3935,7 @@ fn build_common(
         /* a failing upload leaves the previous draw's values: the draw is refused */
         let mut rc = 0;
         if vs_dw != 0 {
-            /* the block holds min(uniform_dwords, MAX_UNIFORM_DWORDS) = vs_dw dwords */
+            /* the block holds min(uniform_dwords, room) = vs_dw dwords */
             let blk = p.vs_block();
             if !host_only {
                 rc |= put(&mut pg.uniforms, 0, dword_bytes(&blk[..(vs_dw as usize).min(blk.len())]));
@@ -3972,7 +3979,7 @@ fn build_common(
                 core::ptr::null()
             } else {
                 // SAFETY: fs_off is inside the uniforms allocation
-                // (2 * MAX_UNIFORM_DWORDS * 4 + 16 bytes).
+                // (2 * room * 4 + 16 bytes, vs_dw and fs_dw at most room).
                 unsafe { (pg.uniforms.cpu as *const u8).add(fs_off) as *const c_void }
             };
         }

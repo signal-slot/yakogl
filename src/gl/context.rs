@@ -88,6 +88,51 @@ pub const MAX_UNIFORM_DWORDS: usize = 1536;
 /// read them, so the three cannot disagree.
 pub const MAX_VERTEX_UNIFORM_VECTORS: usize = MAX_UNIFORM_DWORDS / 4;
 pub const MAX_FRAGMENT_UNIFORM_VECTORS: usize = MAX_UNIFORM_DWORDS / 4;
+/// GL_MAX_VERTEX_UNIFORM_BLOCKS and GL_MAX_FRAGMENT_UNIFORM_BLOCKS, ES 3.0's
+/// twelve on every GPU.
+pub const MAX_STAGE_UNIFORM_BLOCKS: usize = 12;
+/// GL_MAX_UNIFORM_BLOCK_SIZE, in bytes. Uniform blocks are flattened into
+/// each stage's default block behind the default-block uniforms and filled
+/// from the bound range at draw time (program.rs `fill_uniform_blocks`).
+///
+/// V3D: 16384, ES 3.0's minimum. The QPU reads every dword of the stage's
+/// array through the uniform stream (a QUNIFORM_UNIFORM word's `data` is a
+/// dword offset, 32 bits; driver/src/v3d/v3d_job.c `write_uniforms`), so the
+/// array is not bounded by the default block; tests/v3d_ubo_large_sim.rs
+/// reads dword 4095 of a 16384-byte block by constant and by uniform index.
+///
+/// The other GPUs, and the V3D under `report-es2`: one block at most the
+/// stage's default block, MAX_UNIFORM_DWORDS * 4 = 6144 bytes: the GL core
+/// stages at most MAX_UNIFORM_DWORDS dwords a stage for their back ends
+/// (draw.rs), and the GC7000 holds the blocks in its constant file
+/// (docs/notes/gc-ubo-const-limit.md).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_UNIFORM_BLOCK_SIZE: usize = crate::gl::limits::ES3_MIN_MAX_UNIFORM_BLOCK_SIZE;
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+pub const MAX_UNIFORM_BLOCK_SIZE: usize = MAX_UNIFORM_DWORDS * 4;
+/// GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS and
+/// GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS, and the dwords one stage's
+/// array may hold (default block and uniform blocks together;
+/// program.rs `block_dwords`, draw.rs's upload).
+///
+/// V3D: ES 3.0's formula (section 2.11.4, gl/limits.rs), the default block
+/// plus twelve blocks of MAX_UNIFORM_BLOCK_SIZE: 1536 + 12 * 4096 = 50688,
+/// above both minimums (50176 and 50048). A program's array is sized by what
+/// its stages lay out, not by this.
+///
+/// The other GPUs: MAX_UNIFORM_DWORDS, the blocks share the default block.
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_STAGE_UNIFORM_DWORDS: usize = crate::gl::limits::combined_uniform_components(
+    MAX_UNIFORM_DWORDS,
+    MAX_STAGE_UNIFORM_BLOCKS,
+    MAX_UNIFORM_BLOCK_SIZE,
+);
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+pub const MAX_STAGE_UNIFORM_DWORDS: usize = MAX_UNIFORM_DWORDS;
+/* the draw carries a stage's dwords in a u16 (GlesDraw::*_uniform_dwords,
+ * GlProgram::*_uniform_cap) */
+const _: () = assert!(MAX_STAGE_UNIFORM_DWORDS + BLEND_CONSTS_DWORDS <= u16::MAX as usize);
+const _: () = assert!(MAX_STAGE_UNIFORM_DWORDS >= MAX_UNIFORM_DWORDS);
 /// GL_MAX_TEXTURE_IMAGE_UNITS and gl_MaxTextureImageUnits: the samplers a
 /// fragment shader may use. Every backend's per-draw fragment table holds
 /// GLES_MAX_TEX_BINDS (16) bindings, and the link enforces this limit
