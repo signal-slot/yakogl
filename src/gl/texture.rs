@@ -1192,6 +1192,35 @@ fn npot_mip_chains(layers: u32) -> bool {
     backend::native_layered_textures() || (backend::mip_level_align() == 0 && layers <= 1)
 }
 
+/// A non-power-of-two 2D array of a decoded ETC2/EAC name on a back end that
+/// does not walk layers itself ([`npot_mip_chains`] false). Its GL levels all
+/// have texels (a decoded name's uploads must land somewhere): the chain is
+/// laid out packed, level i of `layers` images of max(w >> i, 1) x max(h >> i,
+/// 1), and the array copy (`native_array::copy`) puts it layer-major for the
+/// TPU. Uncompressed arrays keep one level there ([`npot_mip_chains`]).
+fn stacked_decoded_array(t: &GlTexture) -> bool {
+    t.target == GL_TEXTURE_2D_ARRAY
+        && t.decoded_from != 0
+        && t.layers > 1
+        && !backend::native_layered_textures()
+        && backend::mip_level_align() == 0
+}
+
+/// Whether a layout asks for the whole chain of a non-power-of-two size
+/// (`chain`, [`chain_layout_npot`]), and whether it is a stacked decoded array
+/// that gets it though its back end does not walk layers ([`stacked_decoded_array`]).
+#[derive(Clone, Copy)]
+struct NpotChain {
+    chain: bool,
+    stacked: bool,
+}
+
+impl NpotChain {
+    fn from(chain: bool, stacked: bool) -> Self {
+        Self { chain, stacked }
+    }
+}
+
 /// Level-0 storage. A power-of-two texture gets room for its whole chain
 /// (levels consecutive, each tightly packed at its own size), so later
 /// glTexImage2D(level > 0) / glGenerateMipmap uploads need no reallocation.
@@ -1213,7 +1242,8 @@ fn texture_alloc_storage(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfmt:
 fn grow_npot_chain(t: &mut GlTexture, oom: &mut bool) -> bool {
     *oom = false;
     let (w, h) = (t.width, t.height);
-    if !npot_mip_chains(t.layers as u32)
+    let stacked = stacked_decoded_array(t);
+    if !(npot_mip_chains(t.layers as u32) || stacked)
         || !matches!(t.target, GL_TEXTURE_2D | GL_TEXTURE_CUBE_MAP | GL_TEXTURE_2D_ARRAY)
         || t.chain_levels != 1
         || (is_pot(w) && is_pot(h))
@@ -1230,7 +1260,7 @@ fn grow_npot_chain(t: &mut GlTexture, oom: &mut bool) -> bool {
     // SAFETY: the whole CPU mapping of the allocation; the kicks writing it
     // completed (the caller settled it).
     unsafe { osal::cache_invd(t.mem.cpu, t.mem.size) };
-    if !relayout_keeping_levels(t, w, h, t.layers as u32, t.texfmt, true) {
+    if !relayout_keeping_levels(t, w, h, t.layers as u32, t.texfmt, NpotChain::from(true, stacked)) {
         *oom = true;
         return false;
     }
@@ -1254,7 +1284,7 @@ fn grow_npot_chain(t: &mut GlTexture, oom: &mut bool) -> bool {
 /// storage and layout and no level. `npot_chain` as in
 /// [`texture_alloc_storage_ex`] ([`grow_npot_chain`] lays a level 0 that
 /// is specified out again this way).
-fn relayout_keeping_levels(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfmt: u8, npot_chain: bool) -> bool {
+fn relayout_keeping_levels(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfmt: u8, npot_chain: NpotChain) -> bool {
     /* the new storage before the texture changes at all: with the old one
      * released first, a refused glGenerateMipmap left the texture without
      * level 0 and every later frame reported
@@ -1808,7 +1838,7 @@ fn texture_alloc_storage_ex(
     one_level: bool,
     npot_chain: bool,
 ) -> i32 {
-    let Some(layout) = storage_layout(w, h, layers, texfmt, one_level, npot_chain) else {
+    let Some(layout) = storage_layout(w, h, layers, texfmt, one_level, NpotChain::from(npot_chain, false)) else {
         return -1;
     };
     texture_alloc_laid_out(t, w, h, layers, texfmt, layout)
@@ -1822,12 +1852,14 @@ fn storage_layout(
     layers: u32,
     texfmt: u8,
     one_level: bool,
-    npot_chain: bool,
+    npot_chain: NpotChain,
 ) -> Option<([u32; CAP_MIP_LEVELS], u8, u32, u32)> {
     let bpp = gles_texfmt_bytes(texfmt);
-    let pot_stack = !backend::native_layered_textures();
     let lvl_align = backend::mip_level_align();
-    let npot_chain = npot_chain && npot_mip_chains(layers);
+    /* a stacked decoded array is laid out packed: the stack's rounding
+     * belongs to the TPU walk the array copy replaces */
+    let pot_stack = !backend::native_layered_textures() && !npot_chain.stacked;
+    let npot_chain = npot_chain.chain && (npot_mip_chains(layers) || npot_chain.stacked);
     let layout = chain_layout_npot(w, h, layers, bpp, one_level, lvl_align, pot_stack, npot_chain);
     if layout.is_none() {
         glog!("texture {}x{} x{} fmt {}: too large", w, h, layers, texfmt);
@@ -1931,7 +1963,7 @@ fn texture_alloc_laid_out_ex(
     t.chain_pitch = chain_pitch;
     /* the PowerVR's NPOT chain, laid out as its power-of-two extent's
      * (pot_chain_layout) */
-    t.pot_chain = pot_stack && lvl_align == 0 && levels > 1 && !(is_pot(w) && is_pot(h));
+    t.pot_chain = pot_stack && lvl_align == 0 && levels > 1 && layers == 1 && !(is_pot(w) && is_pot(h));
     if matches!(storage, NewStorage::Given(_)) || storage_made_anew(t, bytes, texfmt) {
         context::release_storage(&mut t.mem, &mut t.external); /* an image's texture gets its own storage again */
         t.bgra = false;
@@ -2778,7 +2810,7 @@ unsafe fn tex_image_2d(
             /* levels uploaded before any level 0 survive a level 0 that
              * shows the chain is another shape (relayout_keeping_levels) */
             let ok = if t.level_defined & 1 == 0 && !t.mem.impl_.is_null() && t.format == format {
-                relayout_keeping_levels(t, width as u32, height as u32, layers, texfmt, false)
+                relayout_keeping_levels(t, width as u32, height as u32, layers, texfmt, NpotChain::from(false, false))
             } else if defers_storage(target, format, texfmt, width as u32, height as u32, pixels) {
                 /* a shadow map: laid out, its storage left to ensure_storage */
                 texture_alloc_storage_deferred(t, width as u32, height as u32, texfmt) == 0
@@ -2869,7 +2901,7 @@ unsafe fn tex_image_2d(
             && w0 <= MAX_TEXTURE_SIZE as u32
             && h0 <= MAX_TEXTURE_SIZE as u32
         {
-            if !relayout_keeping_levels(t, w0, h0, layers, texfmt_of(internalformat), false) {
+            if !relayout_keeping_levels(t, w0, h0, layers, texfmt_of(internalformat), NpotChain::from(false, false)) {
                 c.set_error(GL_OUT_OF_MEMORY, FUNC);
                 return false;
             }
@@ -5734,7 +5766,7 @@ unsafe fn tex_image_3d(
             && (level as u32) < u32::from(context::gl_mip_levels(t.width, t.height))
             && (width as u32, height as u32, depth as u32) == (lw, lh, t.layers as u32)
             && t.format == format;
-        if npot_level && npot_mip_chains(t.layers as u32) {
+        if npot_level && (npot_mip_chains(t.layers as u32) || stacked_decoded_array(t)) {
             if !settle_texture(c, ti) {
                 c.set_error(GL_OUT_OF_MEMORY, FUNC);
                 return false;

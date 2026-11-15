@@ -573,7 +573,6 @@ fn a_2d_array_with_a_smaller_level() {
 /// 2D texture (`image_2d_at_level_0_and_a_smaller_level_off_the_block_grid`)
 /// does store level 1.
 #[test]
-#[ignore = "GL core: a decoded ETC2/EAC name in a non-power-of-two 2D array stores no level 1 (chain_levels 1)"]
 fn a_2d_array_off_the_block_grid_with_a_smaller_level() {
     each(|n, id, f| array_with_a_smaller_level(n, id, f, (5, 3)));
 }
