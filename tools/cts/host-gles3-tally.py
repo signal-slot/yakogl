@@ -7,7 +7,9 @@
         [--tip FILE] [--notpass FILE]
   python3 -I tools/cts/host-gles3-tally.py --part FILE RUN
   python3 -I tools/cts/host-gles3-tally.py --merge PART PART PART
-        [--tip FILE] [--notpass FILE]
+        [--owners RULES]... [--tip FILE] [--notpass FILE]
+  python3 -I tools/cts/host-gles3-tally.py --apply-owners NOTPASS RULES...
+        --out FILE
   python3 -I tools/cts/host-gles3-tally.py --selftest
 
 Each RUN is a run directory tools/cts/host-deqp-run.sh wrote (README 2b):
@@ -54,10 +56,34 @@ exactly what the three-run mode writes for the same runs, byte for byte
 (--tip and --notpass as above). It refuses (exit 1) parts of different commits
 or modules, a missing or repeated GPU, and a malformed file.
 
-Exit 0 ok, 1 a refused input, 2 a bad command line.
+--owners RULES (repeatable; with --merge or the three-run mode) fills the rc
+and owner columns of the not-pass list from owner rules files, such as
+docs/es3/host-gles3-owners.tsv. Line 1 of a rules file is the header
+'# host-gles3-owners: gpu<TAB>case_re<TAB>message_re<TAB>rc<TAB>owner<TAB>note';
+other lines starting with '#' are comments, blank lines are skipped, and each
+rule is those six tab separated columns. gpu is powervr, v3d, vivante or '*'
+(any). case_re and message_re are Python re.search patterns over the case and
+the message (an empty one matches anything). rc is RC1..RC18 (an RC of
+docs/es3-cts-failures.md), G7, 'new' (a cause with no RC) or 'allowed' (a
+NotSupported row the ES 3.0 mustpass permits); owner is a plan (#338, #339,
+#343, #350/#325, #335/#355, #354, #359, #360, #361, #364), 'unowned', or
+'none', which goes with 'allowed' and only with it. The rules
+of the files in the order given are tried top to bottom and the first match
+wins (put the specific rules first). A row no rule matches is listed on stderr
+and the run exits 1 without writing anything.
+
+--apply-owners NOTPASS RULES... --out FILE does the same for one file that is
+already written: a not-pass list as --notpass writes it (its '#' and column
+header lines are kept), or a part file, whose not-pass section is taken and
+written under a not-pass header of the part's commit. rc and owner are
+replaced on every row, so the file may already hold an earlier triage.
+
+Exit 0 ok, 1 a refused input (an unmatched row too), 2 a bad command line.
 """
 import argparse
+import contextlib
 import glob
+import io
 import os
 import re
 import shutil
@@ -397,6 +423,102 @@ def merge_parts(paths):
     return tip, notpass
 
 
+RULES_HEAD = '# host-gles3-owners: gpu\tcase_re\tmessage_re\trc\towner\tnote'
+RC_RE = re.compile(r'^(?:RC(?:[1-9]|1[0-8])|G7|new|allowed)$')
+OWNERS = ('#338', '#339', '#343', '#350/#325', '#335/#355', '#354', '#359', '#360', '#361', '#364',
+          'unowned', 'none')
+
+
+def load_rules(path):
+    """One owner rules file into a list of {gpu, case, msg, rc, owner, at};
+    a header, column count, gpu, pattern, rc or owner that is not what the
+    module docstring says is refused."""
+    try:
+        with open(path, encoding='utf-8') as f:
+            lines = f.read().split('\n')
+    except (OSError, UnicodeDecodeError) as e:
+        raise TallyError('%s: cannot read the rules file: %s' % (path, e))
+    if lines[0] != RULES_HEAD:
+        raise TallyError('%s: line 1 is not the rules header %r' % (path, RULES_HEAD))
+    rules = []
+    for n, ln in enumerate(lines[1:], 2):
+        if not ln.strip() or ln.startswith('#'):
+            continue
+        at = '%s:%d' % (path, n)
+        f = ln.split('\t')
+        if len(f) != 6:
+            raise TallyError('%s: %d columns, 6 expected (gpu case_re message_re rc owner note)'
+                             % (at, len(f)))
+        gpu, case_re, msg_re, rc, owner = f[:5]
+        if gpu != '*' and gpu not in GPUS:
+            raise TallyError('%s: gpu %r is not one of %s or *' % (at, gpu, ' '.join(GPUS)))
+        if not RC_RE.match(rc):
+            raise TallyError('%s: rc %r is not RC1..RC18, G7, new or allowed' % (at, rc))
+        if owner not in OWNERS:
+            raise TallyError('%s: owner %r is not one of %s' % (at, owner, ' '.join(OWNERS)))
+        if (rc == 'allowed') != (owner == 'none'):
+            raise TallyError('%s: rc allowed goes with owner none, and only with it' % at)
+        try:
+            rx = [re.compile(case_re), re.compile(msg_re)]
+        except re.error as e:
+            raise TallyError('%s: bad pattern: %s' % (at, e))
+        rules.append({'gpu': gpu, 'case': rx[0], 'msg': rx[1], 'rc': rc, 'owner': owner, 'at': at})
+    return rules
+
+
+def apply_owners(lines, rules):
+    """(lines with rc and owner filled, unmatched rows) for not-pass lines:
+    '#' and column header lines pass through, each row takes the rc and owner
+    of the first rule that matches its gpu, case and message."""
+    out, unmatched = [], []
+    for ln in lines:
+        if ln.startswith('#') or ln.startswith('gpu\tcase\t'):
+            out.append(ln)
+            continue
+        f = ln.split('\t')
+        if len(f) != 7:
+            raise TallyError('malformed not-pass row: %r' % ln)
+        for r in rules:
+            if r['gpu'] in ('*', f[0]) and r['case'].search(f[1]) and r['msg'].search(f[4]):
+                f[5], f[6] = r['rc'], r['owner']
+                break
+        else:
+            f[5] = f[6] = ''
+            unmatched.append(ln)
+        out.append('\t'.join(f))
+    return out, unmatched
+
+
+def owned(lines, rule_paths):
+    """apply_owners over every rules file in order; an unmatched row is
+    refused, each one named on stderr."""
+    rules = []
+    for p in rule_paths:
+        rules += load_rules(p)
+    out, unmatched = apply_owners(lines, rules)
+    if unmatched:
+        for ln in unmatched:
+            print('host-gles3-tally: no owner rule matches: %s' % ln, file=sys.stderr)
+        raise TallyError('%d not-pass row(s) match no rule of %s'
+                         % (len(unmatched), ' '.join(rule_paths)))
+    return out
+
+
+def notpass_input(path):
+    """The not-pass lines of a not-pass list or of a part file."""
+    try:
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+    except (OSError, UnicodeDecodeError) as e:
+        raise TallyError('%s: cannot read the not-pass file: %s' % (path, e))
+    if text.startswith(PART_MAGIC):
+        part = load_part(path)
+        return notpass_head(part['commit'][:12]) + part['notpass']
+    if not text.endswith('\n'):
+        raise TallyError('%s: malformed not-pass file (empty or no final newline)' % path)
+    return text[:-1].split('\n')
+
+
 def selftest():
     tmp = tempfile.mkdtemp(prefix='hostgles3tally.')
 
@@ -500,6 +622,72 @@ def selftest():
                          ('num', lambda t: t.replace('\tfunctional.buffer\t', '\tfunctional.buffer\tz', 1)),
                          ('gpu', lambda t: t.replace('gpu=v3d', 'gpu=foo', 1))):
             refused([pf[0], variant(name, fn), pf[2]], 'a malformed part (%s)' % name)
+        # owner rules: the first match wins, a gpu rule beside a '*' one,
+        # an unmatched row exits 1 and writes nothing
+        def rules_file(name, rules, head=RULES_HEAD):
+            p = os.path.join(tmp, name)
+            with open(p, 'w') as f:
+                f.write(head + '\n# a comment\n\n' + ''.join('\t'.join(r) + '\n' for r in rules))
+            return p
+
+        rl = rules_file('owners', [
+            ('v3d', r'\.negative_api\.', '', 'new', '#364', 'the gpu rule, before the * one'),
+            ('*', r'\.negative_api\.', 'invalid error', 'RC10', '#359', ''),
+            ('*', r'\.shader_api\.program_binary\.', '', 'G7', '#364', ''),
+            ('*', '', 'online shaderc', 'RC13', 'unowned', 'first of the two rules fbo.q matches'),
+            ('*', r'\.fbo\.', '', 'RC17', '#354', ''),
+        ])
+        rest = rules_file('rest', [('*', r'\.texture\.', '', 'allowed', 'none', '')])
+        want = {'negative_api.y': ('RC10', '#359'), 'shader_api.program_binary.x': ('G7', '#364'),
+                'fbo.q': ('RC13', 'unowned'), 'fbo.z': ('RC17', '#354'), 'fbo.multi': ('RC17', '#354'),
+                'texture.t': ('allowed', 'none')}
+        got = owned(mn, [rl, rest])
+        assert got[:2] == mn[:2], got[:2]
+        for r in (ln.split('\t') for ln in got[2:]):
+            w = ('new', '#364') if r[0] == 'v3d' and 'negative_api' in r[1] else want[r[1][len(P):]]
+            assert tuple(r[5:]) == w, r
+        out = os.path.join(tmp, 'owned')
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = main(['--merge'] + pf + ['--owners', rl, '--notpass', out, '--tip', out + '.tip'])
+        assert rc == 1, rc
+        assert not os.path.exists(out) and not os.path.exists(out + '.tip'), 'an unmatched run wrote'
+        assert err.getvalue().count('no owner rule matches: ') == 3, err.getvalue()
+        assert all(P + 'texture.t\t' in ln for ln in err.getvalue().splitlines()[:3]), err.getvalue()
+        assert main(['--merge'] + pf + ['--owners', rl, '--owners', rest, '--notpass', out,
+                     '--tip', out + '.tip']) == 0
+        with open(out) as f:
+            assert f.read() == '\n'.join(got) + '\n', 'merge --owners differs from owned()'
+        np = os.path.join(tmp, 'notpass')
+        with open(np, 'w') as f:
+            f.write('\n'.join(mn) + '\n')
+        assert main(['--apply-owners', np, rl, rest, '--out', out]) == 0
+        with open(out) as f:
+            assert f.read() == '\n'.join(got) + '\n', '--apply-owners differs from owned()'
+        assert main(['--apply-owners', out, rl, rest, '--out', out + '.2']) == 0
+        with open(out + '.2') as f:
+            assert f.read() == '\n'.join(got) + '\n', 'a second triage is not the same'
+        assert main(['--apply-owners', pf[1], rl, rest, '--out', out]) == 0
+        with open(out) as f:
+            assert f.read().split('\n')[2:-1] == [ln for ln in got if ln.startswith('v3d\t')]
+        os.remove(out)
+        with contextlib.redirect_stderr(io.StringIO()):
+            assert main(['--apply-owners', np, rl, '--out', out]) == 1
+        assert not os.path.exists(out), 'an unmatched --apply-owners wrote'
+        for name, rules, head in (
+                ('head', [], '# host-gles3-owners'),
+                ('rc', [('*', '', '', 'RC19', 'unowned', '')], RULES_HEAD),
+                ('owner', [('*', '', '', 'new', '#999', '')], RULES_HEAD),
+                ('none', [('*', '', '', 'new', 'none', '')], RULES_HEAD),
+                ('allowed', [('*', '', '', 'allowed', 'unowned', '')], RULES_HEAD),
+                ('gpu', [('mali', '', '', 'new', 'unowned', '')], RULES_HEAD),
+                ('cols', [('*', '', '', 'new', 'unowned')], RULES_HEAD),
+                ('re', [('*', '(', '', 'new', 'unowned', '')], RULES_HEAD)):
+            try:
+                load_rules(rules_file('bad.' + name, rules, head))
+                raise AssertionError('a bad rules file accepted (%s)' % name)
+            except TallyError:
+                pass
         bad = [paths[0], paths[2], odir]
         try:
             load_three(bad)
@@ -516,7 +704,7 @@ def selftest():
     print('selftest ok')
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('runs', nargs='*', help='the three run directories (powervr, vivante, v3d)')
     ap.add_argument('--tip', help='write the tip table here (default stdout)')
@@ -524,13 +712,33 @@ def main():
     ap.add_argument('--part', nargs=2, metavar=('FILE', 'RUN'),
                     help='write the part file of ONE run directory')
     ap.add_argument('--merge', nargs=3, metavar='PART', help='merge the three part files')
+    ap.add_argument('--owners', action='append', default=[], metavar='RULES',
+                    help='fill rc and owner of the not-pass list from this rules file (repeatable)')
+    ap.add_argument('--apply-owners', nargs='+', metavar='FILE',
+                    help='NOTPASS RULES...: fill rc and owner of a written not-pass list or part file')
+    ap.add_argument('--out', help='where --apply-owners writes')
     ap.add_argument('--selftest', action='store_true')
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     if a.selftest:
         selftest()
         return 0
+    if a.apply_owners:
+        if a.runs or a.part or a.merge or a.tip or a.notpass or a.owners:
+            ap.error('--apply-owners takes NOTPASS RULES... --out FILE only')
+        if len(a.apply_owners) < 2 or not a.out:
+            ap.error('--apply-owners needs NOTPASS, at least one RULES file and --out FILE')
+        try:
+            out = owned(notpass_input(a.apply_owners[0]), a.apply_owners[1:])
+        except TallyError as e:
+            print('host-gles3-tally: %s' % e, file=sys.stderr)
+            return 1
+        with open(a.out, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(out) + '\n')
+        return 0
+    if a.out:
+        ap.error('--out goes with --apply-owners')
     if a.part:
-        if a.runs or a.merge or a.tip or a.notpass:
+        if a.runs or a.merge or a.tip or a.notpass or a.owners:
             ap.error('--part takes FILE RUN only')
         try:
             run = load_run(a.part[1])
@@ -553,6 +761,8 @@ def main():
                 ap.error('give exactly three run directories')
             runs = load_three(a.runs)
             tipl, npl = tip_lines(runs), notpass_lines(runs)
+        if a.owners:
+            npl = owned(npl, a.owners)
     except TallyError as e:
         print('host-gles3-tally: %s' % e, file=sys.stderr)
         return 1

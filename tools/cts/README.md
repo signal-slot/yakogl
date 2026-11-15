@@ -598,6 +598,33 @@ directory, and `lib-cmake-args=` in `$OUT/commit`). Unset, the run is unchanged.
 Check the feature on cargo's line in `build/host-deqp/lib-*-build.log`. For
 example `GPU=powervr EXTRA_FEATURES=pvr-instance-divisor`.
 
+### The HOST-ONLY tip table and not-pass list: `host-gles3-tally.py`
+
+```sh
+python3 -I tools/cts/host-gles3-tally.py --part docs/es3/host-gles3-part-v3d.tsv <run dir>   # one GPU's run, as a text file
+python3 -I tools/cts/host-gles3-tally.py --merge <part> <part> <part> \
+    --owners docs/es3/host-gles3-owners.tsv \
+    --tip docs/es3/host-gles3-tip.tsv --notpass docs/es3/host-gles3-notpass.tsv
+python3 -I tools/cts/host-gles3-tally.py --apply-owners <not-pass list or part> docs/es3/host-gles3-owners.tsv --out <file>
+python3 -I tools/cts/host-gles3-tally.py --selftest
+```
+
+The script's docstring has the formats. The not-pass list holds the counting
+verdicts only (refusals, wrong GL errors, crashes, compile failures), and its
+last two columns, `rc` and `owner`, come from owner rules: `--owners RULES`
+(repeatable) fills them while merging, and `--apply-owners NOTPASS RULES...
+--out FILE` fills them in a list or part file already written (rc and owner
+are replaced, so a second triage needs no clean copy). The rules file
+`docs/es3/host-gles3-owners.tsv` begins with the header
+`# host-gles3-owners: gpu<TAB>case_re<TAB>message_re<TAB>rc<TAB>owner<TAB>note`;
+each rule is a gpu (`powervr`, `v3d`, `vivante` or `*`), two Python
+`re.search` patterns over the case and the message (empty: anything), the rc
+(`RC1`..`RC18` of `docs/es3-cts-failures.md`, `G7`, `new`, or `allowed` for a
+NotSupported row the ES 3.0 mustpass permits), the owning plan (`unowned`, or
+`none` with `allowed`) and a note. Lines starting with `#` are comments. The
+first matching rule wins, so the specific ones go first. A row that no rule
+matches is printed on stderr, and the run exits 1 without writing anything.
+
 ### The multisample groups, per `GPU=`, without and with `msaa-fbo`
 
 The three groups the multisample renderbuffer work moves
