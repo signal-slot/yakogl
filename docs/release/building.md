@@ -250,13 +250,14 @@ repository at the commit that added this file.
   i.MX8MP stage 1; not checked since.
 - **One stage 1 per board family:** `BOARD` selects the compile flags, so use
   `BOARD=verdin_am62p/am62p54/a53` (the script's default) for the AM62P,
-  `BOARD=rpi_4b` for the Pi 4 (`tools/cts/pi4-deqp-images.sh:26-27`), and the
+  `BOARD=rpi_4b` for the Pi 4 and `BOARD=nanopc_t6` for the NanoPC-T6
+  (`tools/cts/deqp-tree-images.sh:39-41`), and the
   i.MX8MP wrapper `tools/cts/imx8mp-deqp-stage1.sh` (`BOARD` defaults to
   `verdin_imx8mp/mimx8ml8/a53`, `tools/cts/imx8mp-env.sh:30`). Give each its
   own `WORK`.
-- **Variables:** `DEQP_WORK` for the AM62P and the Pi 4 (the stage 1 `WORK`;
+- **Variables:** `DEQP_WORK` for the AM62P, the Pi 4 and the NanoPC-T6 (the stage 1 `WORK`;
   it holds `cts/` and `build/`, checked at `tools/cts/am62p-deqp-images.sh:115-118`
-  and `tools/cts/pi4-deqp-images.sh:96-98`). `DEQP_STAGE1` for the i.MX8MP (the
+  and `tools/cts/deqp-tree-images.sh:117-119`). `DEQP_STAGE1` for the i.MX8MP (the
   same directory layout, `tools/cts/imx8mp-deqp-stage1.sh:9-10`).
   `IMX8MP_OUT`: any empty directory; the i.MX8MP scripts write images and logs
   there (`tools/cts/imx8mp-env.sh:12,40`).
@@ -392,7 +393,8 @@ Make the output directory first (`mkdir -p`).
 `img<N> rc=<rc> bin=<sha256 prefix>` per image.
 
 **Pi 4** (one `deqp` image per block of `tools/cts/pi4-full-tree.txt`;
-`tools/cts/pi4-deqp-images.sh:1-30`):
+`tools/cts/deqp-tree-images.sh:1-56`, which `pi4-deqp-images.sh` calls with
+`rpi_4b`):
 
 ```sh
 export DEQP_WORK=$WORK/deqp-pi4          # stage 1 built with BOARD=rpi_4b
@@ -402,6 +404,15 @@ tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/deqp/pi4-$(git re
 It runs `cmake -GNinja -DBOARD=rpi_4b ...` and `ninja` itself, then
 `tools/cts/check-deqp-images.py` on the resolved `.config` (an image that
 is not a conformance image gets `rc=not-conformance`).
+
+**NanoPC-T6** (the same builder with `nanopc_t6`: one image per block of
+`tools/cts/mali-gles2-tree.txt`, with `-DYAKOGL_WERROR=ON`; it needs
+`driver/src/fw/mali_csffw_blob.h`, made by `driver/tools/mkmalifw.sh`):
+
+```sh
+export DEQP_WORK=$WORK/deqp-t6           # stage 1 built with BOARD=nanopc_t6
+tools/cts/t6-deqp-images.sh tools/cts/mali-gles2-tree.txt build/deqp/t6-$(git rev-parse --short=8 HEAD)
+```
 
 **i.MX8MP** (one image carrying a 29-row table, selected at run time;
 `tools/cts/imx8mp-deqp-build.sh:1-30`):
