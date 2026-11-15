@@ -36,6 +36,7 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
 - `stm32mp257f_dk/mp2_identify`: the STM32MP257F-DK's return-trial image, the
   hand-over record and OP-TEE's watchdog armed at boot, then PSCI reset.
 - `rpi_5/*`: the Raspberry Pi 5 probes (`tools/probes/rpi_5/README.md`).
+- `rpi5_display`: U3 on the Raspberry Pi 5, the display (`driver/docs/rpi5-display.md`): the mailbox framebuffer, display register words, a split screen; with a read-only Linux dump and host tests. Moves under `rpi_5/` when that tree is free.
 
 Gate rows (`tools/check.sh`, reached by a change under `tools/probes/` or
 `driver/`):
