@@ -19,6 +19,10 @@
 # 2: usage, or a tool is missing.
 set -eu
 
+# readelf and objdump print their headings in the host's language ("Type:",
+# "Machine:"); the patterns below are the C locale's.
+export LC_ALL=C
+
 GLIBC_MAX=2.41
 GLIBCXX_MAX=3.4.33
 CXXABI_MAX=1.3.15
