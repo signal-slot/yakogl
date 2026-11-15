@@ -5293,14 +5293,15 @@ fn walk_nodes(
 fn cube_dir_measured(f: &Fs<'_>, m: &Module<'_>, coord: ir::Src, dir: [Val; 3]) -> bool {
     /* a varying's lane; gl_PointCoord's ([`POINT_COORD`]) is none */
     let varying = |v: Val| f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS);
-    /* a direction built of parts (`vec3(a2.x, 1.0, 1.0)`) is a mediump
-     * temporary GLSL's lower_precision converts: each varying read whole at
-     * its dereference, before the swizzle (`handle_rvalue`,
-     * lower_precision.cpp:731-733), so the link keeps every lane and the
-     * load is the varying's width (fstex_cubeno_texcoord_partialx: `a2.x`
-     * loads `.v2`). Ours loads the lanes read, so the raw lanes must read
-     * every component of each float vector varying. A varying that is the coordinate itself (`a4.xyz`)
-     * is a texture argument, which the pass leaves as it is
+    /* ours loads the lanes read. Mesa's load of a direction built of
+     * parts is the varying's whole width in the forms measured so
+     * (fstex_cubeno_texcoord_partialx: `a2.x` loads `.v2`), and the lanes
+     * read in others (a vec4's `.x, .y, .z` loads `.v3`); no rule found
+     * gives the width for every form (docs/notes/mali-cube-textures.md
+     * (h), "The raw load's width"). So the raw lanes must read every
+     * component of each float vector varying, where both loads are its
+     * width. A varying that is the coordinate itself (`a4.xyz`) is a
+     * texture argument, which lower_precision leaves as it is
      * (`visit_enter(ir_texture *)`, lower_precision.cpp:785-790): the
      * lanes read (fstex_cubedir_v4part) */
     let direct = matches!(m.def(coord.val), Some(ir::Op::LoadInput { .. }));

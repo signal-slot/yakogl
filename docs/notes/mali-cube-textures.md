@@ -781,23 +781,40 @@ checks them against `ADMITTED`, as it does for the colour's pairs. A form
 the colour refuses is refused in the direction too (`FsOperandForm`).
 
 **The raw load's width.** The cube ops are fp32 only, so Mesa keeps a raw
-lane's varying fp32 (`src_f32`). How many lanes it loads depends on GLSL's
-`lower_precision`:
+lane's varying fp32 (`src_f32`). Our raw load holds the lanes the direction
+reads. Mesa's load is not always that, and no single rule found so far
+gives its width for every form. What the drm-shim measured:
 
-- A direction built of parts, `vec3(a2.x, 1.0, 1.0)`, is a mediump
-  temporary the pass lowers. Each varying is converted whole at its
-  dereference, before the swizzle (`handle_rvalue`,
-  `src/compiler/glsl/lower_precision.cpp:731-733`). The link then keeps every
-  lane, and the load is the varying's width (`a2.x` loads `.v2`; two
-  varyings read in part share one `.v4` slot).
-- A varying that is the coordinate itself, `textureCube(s, a4.xyz)`, is a
-  texture argument, which the pass does not convert
-  (`lower_precision_visitor::visit_enter(ir_texture *)`, `:785-790`). The
-  load holds the lanes read (`.v3`).
+- Wider than the lanes read, the varying's whole width, in a mediump
+  direction built of parts: `vec3(a2.x, 1.0, 1.0)` loads `.v2`
+  (`_texcoord_partialx`), `vec3(a3.xy, 1.0)` `.v3` (`_partialxy`),
+  `vec3(a2, b2.x)` `.v4` (`_partialb`), and `vec3(a4.xy, 1.0)` `.v4`
+  (measured, no reference committed). One explanation fits these: GLSL's
+  `lower_precision` converts each dereference of the varying whole,
+  before the swizzle (`handle_rvalue`,
+  `src/compiler/glsl/lower_precision.cpp:731-733`).
+- The lanes read, the same as ours, in mediump forms where that
+  explanation predicts the whole width: `vec3(a4.x, a4.y, a4.z)` loads
+  `.v3`, not `.v4`; `vec3(a3.x, a3.y, a3.z)` where the vertex shader makes
+  `a3.z` a constant loads `.v2`; `vec3(a2, 1.0)` where it makes `a2.y` a
+  constant loads one lane. A highp `vec3(a2.x, 1.0, 1.0)` loads one lane
+  too (the pass does not convert a highp value). Measured, no reference
+  committed.
+- The lanes read when the varying is the coordinate itself,
+  `textureCube(s, a4.xyz)` (`.v3`, `_v4part`, `_v4yzw`, `_biasv4yzw`). The
+  pass does not convert a texture argument
+  (`lower_precision_visitor::visit_enter(ir_texture *)`, `:785-790`).
 
-Our raw load holds the lanes read. So a built direction is taken only when
-it reads each of its varyings whole (`a3.zyx` order is free). A varying the
-coordinate is directly is taken as read.
+So the raw arm takes a direction built of parts only when both loads are
+the varying's whole width: it reads every lane of each float vector varying
+(any order: `a3.zyx` is taken). A lane the vertex shader makes constant is
+a constant in the fragment shader, not a read, so its varying is not read
+whole. A varying the coordinate is directly is taken as read. The rest is
+refused (`TexCoord`), including forms measured equal above, because they
+have no committed reference and no rule says which width Mesa takes: a vec4
+read in three parts, a highp varying read in part, a varying with a lane
+the vertex shader makes constant. A matrix varying's column read in parts
+is refused as well: the raw arm admits vector varyings only.
 
 The references in `tools/mali/testdata`:
 

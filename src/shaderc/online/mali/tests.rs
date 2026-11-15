@@ -3441,9 +3441,9 @@ fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa
 /// and along the draw's linked path. Among them:
 /// - a raw lane of a varying read in part (`vec3(a2.x, 1.0, 1.0)`,
 ///   `vec3(a3.xy, 1.0)`, `vec3(a2, b2.x)`, `vec3(a2.x, b2.y, 1.0)`, and
-///   with a bias): Mesa's mediump tree converts the whole varying at each
-///   read, so the link keeps every lane and the load is the varying's
-///   width (`.v2` for `a2.x`), ours the lanes read;
+///   with a bias): in these Mesa loads the varying's whole width (`.v2`
+///   for `a2.x`), ours the lanes read (docs/notes/mali-cube-textures.md
+///   (h), "The raw load's width");
 /// - an all-constant direction, a varying z beside the pair, a sum of two
 ///   products one of which is `* 2.0` (which one Mesa fuses is not
 ///   measured);
