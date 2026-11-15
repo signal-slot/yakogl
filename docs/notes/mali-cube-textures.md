@@ -852,5 +852,10 @@ Measured otherwise, and so refused:
   - Our `layout` counts the samplers read, which gives index 0: `sa[0]`'s
     texture.
   - The same defect is on main for `texture2D(ta[1], ..)`.
+  - Not an element, and taken: a plain sampler declared after a sampler
+    array (`fstex_cubedir_arrthenplain`), and a sampler whose binding falls
+    in the range of a uniform array that is not a sampler
+    (`fstex_cubedir_besideuniformarray`: a non-sampler uniform has binding
+    0 and its own `array_len`).
 
 A highp shader's implicit level has no reference (`TexKind`).
