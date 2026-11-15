@@ -198,6 +198,7 @@ def check_repo():
         'Pi 4':dict(base, **parse_conf(os.path.join(DEQP, 'boards/rpi_4b.conf'))),
         'Pi 4 T5': {**base, **parse_conf(os.path.join(DEQP, 'boards/rpi_4b.conf')),
                     **parse_conf(os.path.join(DEQP, 'texture-2048.conf'))},
+        'T6': dict(base, **parse_conf(os.path.join(DEQP, 'boards/nanopc_t6.conf'))),
     }
     dq = read(os.path.join(DEQP, 'Kconfig'))
     for name, c in boards.items():
@@ -206,6 +207,8 @@ def check_repo():
             bad.append('deqp/Kconfig lost DEQP_REPORT_ES2')
     if boards['Pi 4'].get('YAKOGL_GPU_V3D') != 'y':
         bad.append('Pi 4: deqp/boards/rpi_4b.conf does not set CONFIG_YAKOGL_GPU_V3D=y')
+    if boards['T6'].get('YAKOGL_GPU_MALI') != 'y':
+        bad.append('T6: deqp/boards/nanopc_t6.conf does not set CONFIG_YAKOGL_GPU_MALI=y')
 
     # 3. the library's and the sample's own defaults
     def has(sym, text):

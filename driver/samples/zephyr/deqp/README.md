@@ -94,3 +94,37 @@ runner's 0xa0000000..0xb0000000.
 `tools/board-stm32mp2.sh` stages `zephyr.bin` on bootfs (`/boot/yakogl`) and
 waits `RUN_BOUND` (120 s by default) for the end line: give a dEQP run
 `RUN_BOUND=600` or more.
+
+## NanoPC-T6 (Mali-G610)
+
+The image runs through YakoGL's GL core, its in-process compiler and its Mali
+backend on the OSAL `src/osal/zephyr_mali.c`, over our own kernel side. It is
+kexec'd out of Armbian (`driver/tools/kexec-zephyr/nanopc-t6.sh`, one image
+per jump, a development result only); the record is uart2.
+`boards/nanopc_t6.conf` sets the Mali and WDT0's bounds (fed until 600 s, and
+only while a case begins or ends at least every 60 s); `src/mali_board.c`
+prints the build first and ends the run with the OSAL's close line,
+`deqp: OK|FAILED (rc=N)` and the PSCI reset back into Armbian. The CSF
+firmware is the board glue's (`driver/zephyr/lib/board/nanopc_t6/
+nanopc_t6_mali.c`): make `driver/src/fw/mali_csffw_blob.h` with
+`driver/tools/mkmalifw.sh <mali_csffw.bin>` first.
+
+```sh
+# stage 1 for this board (its own compile flags: Cortex-A55)
+BOARD=nanopc_t6 WORK=$PWD/build/deqp-zephyr-t6 ZEPHYR_BASE=... \
+    ZEPHYR_MODULES="$(tools/cts/zephyr-modules.sh <workspace>)" tools/cts/cts-build-zephyr.sh
+# stage 2: one image per case filter
+west build -p always -b nanopc_t6 -d build/t6-deqp driver/samples/zephyr/deqp -- \
+    -DZEPHYR_MODULES="$ZEPHYR_MODULES" -DYAKOGL_WERROR=ON \
+    -DDEQP_SRC=$PWD/build/deqp-zephyr-t6/cts -DDEQP_BUILD=$PWD/build/deqp-zephyr-t6/build \
+    -DCONFIG_DEQP_CASE='"dEQP-GLES2.functional.prerequisite.*"'
+```
+
+Memory: about 148 MiB of the board's 256 MiB window (`nanopc_t6.dts`): the
+gl_test image's GL core and OSAL memory (32 MiB carve-out), dEQP's code and
+the 64 MiB C heap. `zephyr.bin` is about 56 MiB of the 64 MiB `kexec_zephyr`
+reads, because the OSAL's `__nocache` statics lie inside the file's span: a
+carve-out about 8 MiB larger does not fit that limit. Every case
+filter gives the same sizes (the whole package is linked; only the filter
+string differs). `driver/tools/kexec-zephyr/nanopc-t6.sh` refuses an image
+over either limit before it copies anything to the board.
