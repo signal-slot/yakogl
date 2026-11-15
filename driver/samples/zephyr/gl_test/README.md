@@ -6,7 +6,7 @@ Runs `driver/tools/pvrlab/gl_test.c`, YakoGL's on-silicon test suite, on the
 GPUs: the Verdin AM62P's PowerVR, the i.MX8M Plus's Vivante GC7000UL, the
 STM32MP257F-DK's Vivante GCNanoUltra31, the Pi 4's V3D and the NanoPC-T6's
 Mali-G610. It is one sample for every board: the Zephyr board (`-b`) picks the
-GPU, `src/main_am62p.c`, `main_imx8mp.c`, `main_stm32mp2.c`, `main_rpi4.c` or
+GPU, `main_am62p.c`, `main_imx8mp.c`, `main_stm32mp2.c`, `main_rpi4.c` or
 `main_nanopc_t6.c` (the lines that start the back end and the board's way to
 give a verdict) and the files in `boards/` (`imx8mp.conf` and
 `armadillo_x2.conf` are added by `CMakeLists.txt` for the i.MX8M Plus boards,
@@ -127,7 +127,7 @@ the thing under test, check that it has not moved it onto different code.
 ## STM32MP257F-DK, Cortex-A35 (Vivante GCNanoUltra31)
 
 The DK's GPU (model 0x8000, revision 0x6205; #1281) runs the same suite
-through `src/main_stm32mp2.c` and the board layer (`yakogl_board.h`,
+through `driver/samples/zephyr/gl_test/src/main_stm32mp2.c` and the board layer (`yakogl_board.h`,
 `driver/zephyr/lib/board/stm32mp2`), as `gc_fence` and `gc_clear` do, not the
 i.MX8MP's `yakogl_gc_board`. Before `main()` the layer powers the GPU for the
 driver (`gc_power_mp2.c`: SCMI over OP-TEE, the RCC gate and reset; anything

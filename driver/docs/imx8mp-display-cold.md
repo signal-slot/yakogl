@@ -4,9 +4,9 @@
 
 Status (2026-10-02): designed, written and host-tested; not yet run on a
 board. Group E steps 3 and 5 of docs/source-form.md: the last two display
-files written after GPL Linux drivers, `src/display/imx8mp_lcdif.c` (+
+files written after GPL Linux drivers, `driver/src/display/imx8mp_lcdif.c` (+
 `imx8mp_lcdif_adopt.c` and the LCDIF lines of `gc_panel_console.c`) and
-`src/display/imx8mp_dsim.c`, rewritten in the `yakogl-drivers` crate from
+`driver/src/display/imx8mp_dsim.c`, rewritten in the `yakogl-drivers` crate from
 documentation. The C files stay the default until the board has run the new
 code: `CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_LCDIF_RUST` and `CONFIG_YAKOGL_DRV_DSIM_RUST`
 (both default n) switch to it.
@@ -29,7 +29,7 @@ code: `CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_LCDIF_RUST` and `CONFIG_YAKOGL_DRV_DSIM_
   (the specification text was not at hand).
 - TI SN65DSI84 SLLSEC2H (the bridge, already `ip::sn65dsi8x`): Table 7-2,
   the order the DSI host must keep.
-- Test data: `src/display/golden-linux-2026-09-21.txt`, the board's Linux
+- Test data: `driver/src/display/golden-linux-2026-09-21.txt`, the board's Linux
   with the panel on (its LCDIF dump stops at 0x32e8002c with a bus error, so
   CTRLDESCL0_x and PANIC0_THRES were never captured).
 

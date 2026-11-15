@@ -12,10 +12,10 @@ evidence is the DSS counters, the bridge's IRQ_STAT, the GPU read-backs and
 dEQP, not the picture.
 
 This is docs/source-form.md group E, steps 6 and 7. It replaces the
-GPL-derived `driver/drivers/display/display_am62p_dss.c` (after Linux tidss),
-`driver/drivers/mipi_dsi/dsi_cdns_j721e.c` (after Linux cdns-dsi and
+GPL-derived `display_am62p_dss.c` (after Linux tidss),
+`dsi_cdns_j721e.c` (after Linux cdns-dsi and
 cdns-dphy) and the `dss_vp_regs_from_mode` / `cdns_dsi_calc` /
-`cdns_dphy_pll_calc` parts of `driver/lib/display_calc/display_calc.c`. The
+`cdns_dphy_pll_calc` parts of `display_calc.c`. The
 Linux drivers were not read for this work; the replaced C files were read for
 their API, devicetree and board parameters and for the original parts kept
 below. The SN65DSI83 bridge behind the DSI host is already Rust
@@ -240,7 +240,7 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b/  TI's driver, unmodified
   `cdns_dsi::init` + `attach` and `dss_init` + `output_enable`, read through
   the model, against the Linux dump, outside the allow-list.
 
-The `driver/tests/display_calc` ztest that tested the C arithmetic went with
+The `display_calc` ztest that tested the C arithmetic went with
 the C drivers.
 
 ## Board plan (a): the golden dump's read list

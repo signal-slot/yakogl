@@ -15,7 +15,7 @@ evidence that looks decisive and is not.
 
 ## Measured on silicon
 
-`driver/tools/pvrlab/user/z_probe.c` (`b607b58`, pvrgpu-platform) draws one
+pvrgpu-platform's `z_probe.c` (`b607b58`) draws one
 full-screen quad at three NDC z values with depth testing off, so only clipping
 can remove it. **This first sweep ran at `CR_PPP_CTRL = 0x202`**, the value we
 had then -- which is what the last column is reading:

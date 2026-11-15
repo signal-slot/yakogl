@@ -59,7 +59,7 @@ pattern the rest should follow.
 
 ### 1.3 What differs (the board part)
 
-| Concern | AM62P (`common/`) | i.MX8MP (`driver/zephyr/lib/gc_board/`) | Pi 4 (`v3d_clear/src/`) |
+| Concern | AM62P (`common/`) | i.MX8MP (`gc_board/`) | Pi 4 (`v3d_clear/src/`) |
 |---|---|---|---|
 | Window memory | static `__noinit` buffer in the image (`gl_triangle/src/main.c:29`; `gl_slint` 3 buffers, `main.c:38`) | GPU carve-out, `gc_render_alloc()` (`gc_gl_triangle/src/main.c:298`) | firmware framebuffer from the mailbox (`v3d_gl_triangle/src/main.c:358`, bottom half `:391`). Slint: own static buffer + guard rows, copied to the fb (`v3d_gl_slint/src/main.c:81-92,119`) |
 | Display | DSS app plane, `pvr_sample_show_window()` (`common/sample_glue.c:101-159`), vflip | `imx8mp_display_on(phys, pitch)` (`gc_gl_triangle/src/main.c:342`), panel-sized only | HDMI fb from the firmware (`rpi_mbox.c`), `fbcon` console on part of it |
@@ -365,7 +365,7 @@ records, and each file with its sha256 and line count (`records/README.md`).
 | the Python record decoder | deleted in Step 1; decoder and name mapping are `yakogl-tools record` |
 | `tools/uboot-netboot-lib.sh`, `tools/tftp_oneshot.py`, `tools/am62p_netboot_uart.py` | stay (board basics: U-Boot hook, TFTP, AM62P bridge) |
 | `driver/tools/kexec-zephyr/*` (`kexec_run.sh`, `board_lock.sh`, `snvs_lpgpr.c`) | stay (kexec-dev backend, the lock, the SNVS reader) |
-| `tools/cts/am62p-recover.sh` | deleted with pvrgpu.ko (2026-10-04): `board.sh` waits for Linux itself (a new boot_id), `kexec_run.sh` checks the RTI itself, and there is no module to load |
+| `am62p-recover.sh` | deleted with pvrgpu.ko (2026-10-04): `board.sh` waits for Linux itself (a new boot_id), `kexec_run.sh` checks the RTI itself, and there is no module to load |
 | `tools/cts/deqp-uart-tally.py` | stays as `tally`'s dEQP reader (already shared by AM62P and Pi 4); port to Rust later |
 | `imx8mp-gltest-build.sh`, `imx8mp-deqp-build.sh`, `am62p-deqp-images.sh` | absorbed by a build step of `tree` |
 | `cts-run.sh`, `cts-board-run.sh`, `cts-module-probe.sh` | deleted with pvrgpu.ko (2026-10-04; `tools/cts/README.md` says what replaced each) |

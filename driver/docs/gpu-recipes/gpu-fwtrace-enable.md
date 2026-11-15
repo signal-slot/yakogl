@@ -101,7 +101,8 @@ string for an id is found by looking it up in `RGXFW_LOG_SFIDLIST`;
 
 ## 4. Decoding on the target: `pvr_fw_trace_decode`
 
-`driver/src/pvr_fw_trace_decode.[ch]` decodes the ring in the driver. It
+`driver/src/pvr_fw_trace_decode.c` and `driver/src/pvr_fw_trace_decode.h`
+decode the ring in the driver. It
 includes the vendored `rgx_fwif_sf.h` and builds its format table and group
 names from the DDK's own X-macros (`RGXFW_LOG_SFIDLIST`, `RGXFW_LOG_SFGROUPLIST`),
 so it cannot drift from the firmware's table.
@@ -128,7 +129,7 @@ ring over the early lines) and dumps through `LOG_INF("FWT| ...")`. The decoder
 is `driver/src/pvr_fw_trace_decode.c`, built into every image with the PowerVR
 driver (`driver/zephyr/CMakeLists.txt` compiles `driver/src/*.c`).
 
-## 5. Decoding offline: `tools/sfdecode`
+## 5. Decoding offline: `driver/tools/sfdecode`
 
 The render and boot paths also log the raw ring tail as lines of six hex dwords
 (`pvr_render.c` after a render, and `pvr_fw_boot.c` on a boot timeout and early

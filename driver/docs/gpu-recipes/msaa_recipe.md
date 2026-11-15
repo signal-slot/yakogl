@@ -11,7 +11,7 @@ This GPU's ISP has 4 samples per pixel natively (`isp_samples_per_pixel = 4`), s
 keeps the 16x16-pixel tile; only the per-sample storage grows. Everything below mirrors
 Mesa (`pvr_arch_job_render.c`, `pvr_arch_srv_job_render.c`, `pvr_arch_job_common.c`).
 
-## HWRT dataset (`src/pvr_render.c` `hwrt_get(w, h, samples)`)
+## HWRT dataset (`driver/src/pvr_render.c` `hwrt_get(w, h, samples)`)
 - Samples spread 2x2 (`pvr_get_samples_in_xy`): the tail-pointer and region-header
   buffers are sized from `tiles_x * 2`, `tiles_y * 2`; `rgn_header_size` (SIPF v2, per 2x2
   group) is 4x the single-sampled count (1024x600: 640 -> 2560).

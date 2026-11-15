@@ -22,14 +22,14 @@ Paths are in the upstream tree (`src/`) at the pinned commit.
 | Need | Where upstream asks | In the image |
 |---|---|---|
 | C++17, exceptions, RTTI, iostreams, `std::map`/`std::string`, `std::filesystem::path` | `meson.build:4` (`cpp_std=c++17`), `-DUSE_EXCEPTIONS` (`src/meson.build`), `libmatrix/util.h:21` | full libstdc++ of the Zephyr SDK 1.0.1 (GCC 14.3), as dEQP has (`prj.conf`). `std::filesystem::path` is in its `libstdc++.a`. |
-| A window system ("flavour"): a `NativeState` | `native-state.h:28-70`; `main.cpp` picks one per flavour | **ours**: `NativeStateBoard` in `src/main.cpp`. The window is a `struct gles_native_window` on `board_window(W, H)`; `flip()` is `board_show()`. |
-| EGL + GLES through dlopen/dlsym and glad | `gl-state-egl.cpp:38-49` (`load_proc`), `:326-331` (`dlopen` libEGL), `:665` (libGLESv2) | **ours**: `include/dlfcn.h` + `src/platform.c`. `dlsym` is YakoGL's `eglGetProcAddress`, which answers for every EGL and GL entry point (`src/gl/egl.rs:3272`). |
+| A window system ("flavour"): a `NativeState` | `native-state.h:28-70`; `main.cpp` picks one per flavour | **ours**: `NativeStateBoard` in `driver/samples/zephyr/glmark2/src/main.cpp`. The window is a `struct gles_native_window` on `board_window(W, H)`; `flip()` is `board_show()`. |
+| EGL + GLES through dlopen/dlsym and glad | `gl-state-egl.cpp:38-49` (`load_proc`), `:326-331` (`dlopen` libEGL), `:665` (libGLESv2) | **ours**: `include/dlfcn.h` + `driver/samples/zephyr/glmark2/src/platform.c`. `dlsym` is YakoGL's `eglGetProcAddress`, which answers for every EGL and GL entry point (`src/gl/egl.rs:3272`). |
 | `EGLNativeWindowType` | glad's `EGL/eglplatform.h` has no Zephyr arm | YakoGL's `include/` comes first, so glad uses YakoGL's `eglplatform.h` (`struct gles_native_window *`). |
 | The canvas | `canvas-generic.cpp` (CanvasGeneric over a NativeState and a GLState) | upstream, **unchanged**, with upstream's `GLStateEGL`. |
 | Data files: `get_resource` (`std::ifstream`), `list_files` (`std::filesystem::directory_iterator`) | `libmatrix/util.cc:233-256` | **patched** (`patches/libmatrix-util-zephyr.patch`): an istream over the linked-in bytes (in place, seekable) and the linked-in paths, on the model of upstream's own ANDROID arm (`util.cc:257-324`). |
 | CPU count, process times, idle time | `util.cc:326-381` (`sysconf`, `getrusage`, `/proc/uptime`) | patched: `arch_num_cpus()`; process times are NaN (not measured), so a `--results cpu` line prints `nan`, never a made-up zero; idle time 0.0, as upstream returns when `/proc/uptime` is missing. |
 | `getopt_long`, `optarg` | `options.cpp:26,282` | Zephyr's `CONFIG_POSIX_C_LIB_EXT` + `CONFIG_GETOPT_LONG`. `include/getopt.h` adds `<unistd.h>` for `optarg`, as glibc's getopt.h does. |
-| `isatty(fileno(stdout))` (colour or not) | `libmatrix/log.cc:126,149,169,189` | Zephyr has no `isatty` with picolibc. `src/platform.c` answers "not a terminal", so the UART log has no colour codes. |
+| `isatty(fileno(stdout))` (colour or not) | `libmatrix/log.cc:126,149,169,189` | Zephyr has no `isatty` with picolibc. `driver/samples/zephyr/glmark2/src/platform.c` answers "not a terminal", so the UART log has no colour codes. |
 | `M_PI` | `scene-build.cpp:175`, `model.cpp:282`, ... | `_GNU_SOURCE`, as g++ predefines on Linux. Zephyr's `_POSIX_C_SOURCE=200809L` alone hides picolibc's XSI names. |
 | PNG/JPEG decoding | `image-reader.cpp` (libpng, libjpeg-turbo) | upstream's bundled `src/libpng`, `src/zlib`, `src/libjpeg-turbo` (the file lists of their `meson.build`). zlib gets `Z_HAVE_UNISTD_H`, as its configure sets on POSIX. |
 
@@ -480,7 +480,7 @@ known words, then each page decoded by `yakogl-tools record`).
   total cycles / frame-to-frame us.
 - **Page 4** (selector 0x1004, w0 = 0x594b0c04) is the means over the
   scene's frames of the differences of `yakogl_gc_fallback_stats`
-  (`src/gm_gc_fallback.h`: cumulative 64-bit `gpu_mip_chains`,
+  (`driver/samples/zephyr/glmark2/src/gm_gc_fallback.h`: cumulative 64-bit `gpu_mip_chains`,
   `cpu_mip_calls`, `gpu_waits`, `carveout_cpu_bytes`), read where page 1's
   counters are. It uses w1 and w2 only (v4 = v5 = 0, w3 = 0) because the
   Armadillo-X2 stores w0..w2. The sample's `__weak` definition returns
