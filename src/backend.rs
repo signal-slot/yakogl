@@ -235,8 +235,10 @@ pub const PVR_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
 /// etnaviv_format.c:244, 246, 278) and the eight ES 3.0 classes the
 /// descriptor decodes (packed float, snorm, RGB10A2UI, 8/16-bit integer) and
 /// the four 32-bit integer classes of one or two channels (R32UI, R32I as
-/// EXT_R32I, RG32UI, RG32I as EXT_G32R32I; `gc-r32-flip`). Not RGB10A2 or
-/// RGBA32* (the two-plane path, docs/es3/gc-formats.md section 3).
+/// EXT_R32I, RG32UI, RG32I as EXT_G32R32I; `gc-r32-flip`), and the three
+/// 128-bit classes (RGBA32F, RGBA32UI, RGBA32I), sampled as two G32R32
+/// planes the program joins (docs/es3/gc-formats.md section 3,
+/// `gc-wide128-flip`). Not RGB10A2.
 pub const GC_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
         GLES_TEXFMT_SRGB8_A8,
@@ -254,6 +256,9 @@ pub const GC_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
         GLES_TEXFMT_R32I,
         GLES_TEXFMT_RG32UI,
         GLES_TEXFMT_RG32I,
+        GLES_TEXFMT_RGBA32F,
+        GLES_TEXFMT_RGBA32UI,
+        GLES_TEXFMT_RGBA32I,
     ]);
 /// The V3D TMU binding's (`v3d/texture.rs` `tmu_format`, each class Mesa's
 /// V3D 4.2 row of the same memory layout, v3dx_format_table.c): the base set,

@@ -496,9 +496,10 @@ fn an_uploaded_texture_is_described_and_laid_out() {
 
 /// RC17 (dEQP fbo.completeness `renderable.texture.*32*`): the GL core no
 /// longer refuses the 32-bit integer formats of one and two channels as
-/// textures, and still refuses the three- and four-channel ones (the
-/// two-plane path of docs/es3/gc-formats.md section 3). The mask holds the
-/// four classes, `storage_in` answers each format's own class, glTexImage2D
+/// textures, nor (since gc-wide128-flip) the three- and four-channel ones,
+/// stored in RGBA32UI/I and sampled as two planes (docs/es3/gc-formats.md
+/// section 3), which stay refused as a colour attachment (`GC_INT_RT_128BPP`).
+/// The mask holds the four classes, `storage_in` answers each format's own class, glTexImage2D
 /// and glTexStorage2D raise nothing, and a texture colour attachment is made
 /// without error; its status is COMPLETE (the GL core's
 /// `integer_texture_surface` has rows for the classes, RC17).
@@ -512,10 +513,10 @@ fn the_gl_core_stores_the_32_bit_integer_formats_here() {
         (GL_RG32I, GL_RG_INTEGER, GL_INT, GLES_TEXFMT_RG32I),
     ];
     let wide = [
-        (GL_RGB32UI, GL_RGB_INTEGER, GL_UNSIGNED_INT),
-        (GL_RGB32I, GL_RGB_INTEGER, GL_INT),
-        (GL_RGBA32UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT),
-        (GL_RGBA32I, GL_RGBA_INTEGER, GL_INT),
+        (GL_RGB32UI, GL_RGB_INTEGER, GL_UNSIGNED_INT, GLES_TEXFMT_RGBA32UI),
+        (GL_RGB32I, GL_RGB_INTEGER, GL_INT, GLES_TEXFMT_RGBA32I),
+        (GL_RGBA32UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT, GLES_TEXFMT_RGBA32UI),
+        (GL_RGBA32I, GL_RGBA_INTEGER, GL_INT, GLES_TEXFMT_RGBA32I),
     ];
     for (internal, format, ty, class) in own {
         assert!(open(class), "class {class}: in the mask");
@@ -544,8 +545,8 @@ fn the_gl_core_stores_the_32_bit_integer_formats_here() {
             }
         });
     }
-    for (internal, format, ty) in wide {
-        assert_eq!(find(internal).expect("an ES 3.0 format").1.storage_in(GC_SAMPLED_TEXFMTS), None);
+    for (internal, format, ty, class) in wide {
+        assert_eq!(find(internal).expect("an ES 3.0 format").1.storage_in(GC_SAMPLED_TEXFMTS), Some(class));
         on_gc7000(|| {
             // SAFETY: a plain GL call; no pixels.
             unsafe {
@@ -553,7 +554,7 @@ fn the_gl_core_stores_the_32_bit_integer_formats_here() {
                 glGenTextures(1, &mut t);
                 glBindTexture(GL_TEXTURE_2D, t);
                 glTexImage2D(GL_TEXTURE_2D, 0, internal as GLint, 16, 16, 0, format, ty, core::ptr::null());
-                assert_eq!(glGetError(), GL_INVALID_OPERATION, "0x{internal:x}: still refused");
+                assert_eq!(glGetError(), GL_NO_ERROR, "0x{internal:x}: stored as two planes");
             }
         });
     }
