@@ -429,6 +429,10 @@ directory keeps them, and the plan's parser turns them into verdicts. A
 frame from the capture device, when someone with access to that node takes
 one during Z4, or a person at a monitor, is a confirmation, never the proof.
 
+The pixel valve and HDMI0 registers of the checks above decode through
+`driver/zephyr/lib/board/rpi5_scanout/pv_hdmi.h` (pure functions over values
+the caller read; host test `tools/v3d/check71.d/pv_hdmi.sh`).
+
 ## 8. Open
 
 - **U3 on the board:** does a Zephyr `kernel=` image find a running firmware
