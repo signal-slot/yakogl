@@ -36,10 +36,10 @@
  *    over the first word of the list, the word the channel's list-active
  *    field names.
  *
- * "unverified" marks an offset or bit that is the Pi 4 layout, or whose
- * line came from a summary of the file and not from a checkout (the
- * sandbox could not fetch the tree); the board's register dump must
- * confirm it for BCM2712 before route 3 relies on it.
+ * "unverified" marks a fact not confirmed for BCM2712: an offset or bit that
+ * is the Pi 4 layout, or one not read (the HD VID_CTL offset). The
+ * vc4_regs.h lines were checked against the file at rpi-6.12.y 5bd564aa;
+ * the board's register dump must confirm the rest before route 3 relies on it.
  *
  * Idempotent: the plan for a snapshot taken after the plan was applied is
  * empty, and each write touches only a bit that is set in the snapshot.
@@ -62,10 +62,10 @@ enum fw_stop_block {
 /* ENABLE, bit 31: rpi:vc4_regs.h:1007 (facts section 10). */
 #define FW_STOP_HD_VID_CTL_ENABLE (1u << 31)
 
-/* PV_CONTROL offset 0, EN bit 0: unverified (Pi 4 layout, line from a summary). */
+/* PV_CONTROL offset 0 (rpi:vc4_regs.h:145), EN bit 0 (:169): the Pi 4 PV layout; that BCM2712 uses it is unverified. */
 #define FW_STOP_PV_CONTROL 0x00u
 #define FW_STOP_PV_CONTROL_EN (1u << 0)
-/* PV_V_CONTROL offset 4, VIDEN bit 0: unverified (as above). */
+/* PV_V_CONTROL offset 4 (rpi:vc4_regs.h:171), VIDEN bit 0 (:180): same caveat. */
 #define FW_STOP_PV_V_CONTROL 0x04u
 #define FW_STOP_PV_VCONTROL_VIDEN (1u << 0)
 
@@ -150,8 +150,8 @@ static inline int fw_stop_hvs_ctrl0_off(enum fw_stop_hvs_gen g, uint32_t ch, uin
  * order; return n (0 when nothing runs) or a negative enum fw_stop_err.
  * Each write is made only when its bit is set in the snapshot:
  *   1 HDMI hd VID_CTL: clear ENABLE           (facts s10; rpi:vc4_hdmi.c:3391-3399)
- *   2 PV V_CONTROL: clear VIDEN               (unverified)
- *   3 PV CONTROL: clear EN                    (unverified)
+ *   2 PV V_CONTROL: clear VIDEN               (rpi:vc4_regs.h:171,180; BCM2712 use unverified)
+ *   3 PV CONTROL: clear EN                    (rpi:vc4_regs.h:145,169; BCM2712 use unverified)
  *   4 HVS CTRL0 of the channel: clear ENB     (rpi:vc4_regs.h:568, rpi:vc4_hvs.c:739)
  *   5 HVS list memory at the list-active word: the END word
  *                                             (rpi:vc4_regs.h:1359, rpi:vc4_hvs.c:1579-1583)
@@ -181,11 +181,11 @@ static inline int fw_stop_plan(const struct fw_stop_snap *s, struct fw_stop_writ
 						  "facts s10; rpi:vc4_hdmi.c:3391-3399; offset unverified"};
 	if (s->pv_vcontrol & FW_STOP_PV_VCONTROL_VIDEN)
 		out[n++] = (struct fw_stop_write){FW_STOP_PV, FW_STOP_PV_V_CONTROL, 0,
-						  FW_STOP_PV_VCONTROL_VIDEN, 0, "unverified"};
+						  FW_STOP_PV_VCONTROL_VIDEN, 0, "rpi:vc4_regs.h:171,180; BCM2712 use unverified"};
 	if (s->pv_control & FW_STOP_PV_CONTROL_EN)
 		out[n++] = (struct fw_stop_write){FW_STOP_PV, FW_STOP_PV_CONTROL, 0,
 						  FW_STOP_PV_CONTROL_EN, FW_STOP_WAIT_FRAME_US,
-						  "unverified"};
+						  "rpi:vc4_regs.h:145,169; BCM2712 use unverified"};
 	if (fw_stop_hvs_running(s)) {
 		out[n++] = (struct fw_stop_write){FW_STOP_HVS, ctrl0_off, 0, FW_STOP_HVS_CTRL0_ENB,
 						  FW_STOP_WAIT_FRAME_US,
