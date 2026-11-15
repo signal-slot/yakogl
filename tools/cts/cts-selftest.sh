@@ -45,11 +45,12 @@ echo
 # tool went silently EMPTY rather than failing, because dEQP escapes the
 # token's quotes as `&apos;` and the pattern stopped at `&`. A sweep run on
 # that would have cost 40 minutes of board time and produced one nameless row.
-# This uses the fixture in testdata/ rather than the `check` helper above,
-# which compares a decide() verdict and takes different arguments.
+# This uses the fixtures in testdata/refusals/ (its own directory: a .qpa of
+# another tool's fixtures must not move these counts) rather than the `check`
+# helper above, which compares a decide() verdict and takes different arguments.
 echo
-echo "== 16. cts-refusals.py on the tokened format (testdata fixture)"
-rout=$(python3 "$HERE/cts-refusals.py" --cases 1 "$HERE/testdata" 2>&1)
+echo "== 16. cts-refusals.py on the tokened format (testdata/refusals)"
+rout=$(python3 "$HERE/cts-refusals.py" --cases 1 "$HERE/testdata/refusals" 2>&1)
 for want in "assignment to this is not lowered yet" \
             "the code generator refused this fragment shader: Select(OutOfScratch)" \
             "on cases dEQP FAILED (real gaps)        : 4" \

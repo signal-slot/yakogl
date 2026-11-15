@@ -382,38 +382,42 @@ is from the two-row set.
 
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), dEQP-GLES2 (stage 5)
 
-The first whole tree, 2026-11-12/13: `tools/cts/mali-deqp-run.sh` over the 76
-rows of `tools/cts/mali-gles2-tree.txt`, on the board's own Armbian (kernel
+The whole tree at origin/main `37305608`, 2026-11-15, in one boot:
+`tools/cts/mali-deqp-run.sh` over the 76 rows of
+`tools/cts/mali-gles2-tree.txt`, on the board's own Armbian (kernel
 6.18.55-current-rockchip64, panthor) with the `tools/mali/panthor-gles` pair
-(issue #20). Each slice is built from one origin/main commit. S2 to S4 share
-`src/mali` and `src/shaderc/online/mali` with origin/main `d1e77916`; S1 and
-S1b ran `a50d87b5`'s, 26 Mali commits older. Causes:
+(issue #20). The same build ran the tree three times that day with the same
+status for every case; the slices are the third run. Causes:
 `docs/es2-cts-failures.md` section M.
 
 | Slice (`tools/cts/log/`) | Main | Rows | Cases | Pass | Fail | NotSupported | ResourceError | QualityWarning | Lost | Kernel lines / resets |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `2026-11-12-t6-gles2-S1-a50d87b5` | `a50d87b5` | 1-16 | 3,192 | 2,564 | 591 | 34 | 0 | 3 | 0 | 0 / 0 |
-| `2026-11-12-t6-gles2-S1b-a50d87b5` | `a50d87b5` | 17-24 | 1,949 | 95 | 1,854 | 0 | 0 | 0 | 0 | 0 / 0 |
-| `2026-11-13-t6-gles2-S2-1bd2074f` | `1bd2074f` | 25-36 | 4,175 | 1,161 | 3,013 | 0 | 1 | 0 | 0 | 0 / 0 |
-| `2026-11-13-t6-gles2-S2b-1bd2074f` | `1bd2074f` | 37-38 | 697 | 84 | 613 | 0 | 0 | 0 | 0 | 0 / 0 |
-| `2026-11-13-t6-gles2-S3-4ecefc7b` | `4ecefc7b` | 39-57 | 3,121 | 333 | 2,059 | 700 | 29 | 0 | 0 | 0 / 0 |
-| `2026-11-13-t6-gles2-S3b-4ecefc7b` | `4ecefc7b` | 58-68 | 1,356 | 36 | 1,125 | 194 | 1 | 0 | 0 | 0 / 0 |
-| `2026-11-13-t6-gles2-S4-9b5daae8` | `9b5daae8` | 69-76 | 2,675 | 987 | 1,643 | 43 | 2 | 0 | 0 | 0 / 0 |
-| **whole list** | | 1-76 | **17,165** | **5,260** | **10,898** | **971** | **33** | **3** | **0** | **0 / 0** |
+| `2026-11-15-t6-gles2-S1-37305608` | `37305608` | 1-24 | 5,141 | 2,856 | 2,248 | 34 | 0 | 3 | 0 | 0 / 0 |
+| `2026-11-15-t6-gles2-S2-37305608` | `37305608` | 25-38 | 4,872 | 1,243 | 3,628 | 0 | 1 | 0 | 0 | 0 / 0 |
+| `2026-11-15-t6-gles2-S3-37305608` | `37305608` | 39-68 | 4,477 | 370 | 3,181 | 896 | 30 | 0 | 0 | 0 / 0 |
+| `2026-11-15-t6-gles2-S4-37305608` | `37305608` | 69-76 | 2,675 | 987 | 1,643 | 43 | 2 | 0 | 0 | 0 / 0 |
+| **whole list** | | 1-76 | **17,165** | **5,456** | **10,700** | **973** | **33** | **3** | **0** | **0 / 0** |
 
 - All 76 chunks ended `done`: no crash, hang or GPU fault, ssh answered after
-  every chunk, and each slice has the same boot id before and after.
-  `mali-deqp-tally.py --check-cover` exits 0 against origin/main `d1e77916`.
-- Not Pass, by cause: compile or link refused by the online compiler 9,851
-  Fail and 937 NotSupported (plan #309, #33); blend shader refused at the
-  draw 828; GL errors or missing pixels in chunks with refusals 164; a depth
-  or stencil object refused at the draw 35; draws that fail with
-  `GL_OUT_OF_MEMORY` 33 (ResourceError, new); wrong pixels of
-  `texture.vertex.cube` with no refusal 16 (new); wrong pixels no refusal
-  explains 4 (new); the accepted 34 NotSupported and 3 QualityWarning of
+  every chunk, and the boot id is the same before and after every slice.
+  `mali-deqp-tally.py --check-cover` exits 0.
+- Not Pass, 11,709: 10,583 cases have a compile or link refusal of the online
+  compiler in their own log (Fail 9,644, NotSupported 939; plan #309), listed
+  by refusal text in section M's block. Of the 1,126 without one: blend
+  shader refused at the draw 828; `fragment_ops.random` in chunks with
+  refused draws 100; a depth or stencil object refused at the draw 35; draws
+  that fail with `GL_OUT_OF_MEMORY` 33 (ResourceError); wrong pixels of
+  `texture.vertex.cube` with no refusal 16; an incomplete cube map refused at
+  the draw 16; `GL_INVALID_OPERATION` at a draw 23; `negative_api` 20;
+  `state_query` 7; wrong pixels of `texture.mipmap.cube` 6; 5 others; the
+  accepted 34 NotSupported and 3 QualityWarning of
   `docs/es2-cts-failures.md` section C.
-- The 208 hang-risk fragment loops (`docs/notes/mali-gles2-forecast.md`
-  section 3, row `T6S3R08`) were all refused at link, so none ran on the GPU.
+- Against the first tree (2026-11-12/13, seven slices from four commits,
+  5,260 Pass): 224 cases now pass and 28 that passed are refused now
+  (section M.2).
+- The hang-risk loops (`docs/notes/mali-gles2-forecast.md` section 3, row
+  `T6S3R08`) were all refused at compile or link (`draws=0`), so none ran on
+  the GPU.
 
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 

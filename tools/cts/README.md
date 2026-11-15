@@ -1093,7 +1093,8 @@ work; `driver/docs/nanopc-t6-mali.md` is the board note. The scripts:
 - `mali-deqp-tally.py --check-cover|--tally [--markdown]|--check-doc`: the
   slices -> the cover check, the tally by status and cause, and the
   `docs/es2-cts-failures.md` block (`docs/es2/board-recipe-mali.md` section
-  7). `mali-deqp-tally-selftest.sh` runs its `--self-test` on
+  7; `--check-doc DOC --log LOGDIR` reads the slices from the block's own
+  `Slices:` line). `mali-deqp-tally-selftest.sh` runs its `--self-test` on
   `testdata/mali-deqp/` (`cts-selftest.sh` check 40).
 - `mali-slice-readme.py [--write|--check] SLICEDIR`: the `README.md` of a
   committed `t6-gles2` slice, from its `meta.txt`, `chunks.tsv`, `results.tsv`
@@ -1137,9 +1138,12 @@ tools/cts/mali-rerun-tree-selftest.sh
 tools/cts/mali-deqp-e2e-selftest.sh
 ```
 
-Of these self-tests the gate runs one: `cts-selftest.sh` check 40
-(`mali-deqp-tally-selftest.sh`). `tools/check.sh` has no row for the others;
-run them by hand.
+The gate runs all of them: `tools/check.sh` has its own row for
+`mali-deqp-selftest.sh` and for `mali-kmsg-selftest.sh`, and
+`cts-selftest.sh` runs the others. One more `tools/check.sh` row checks the
+real document: `mali-deqp-tally.py --check-doc docs/es2-cts-failures.md
+--log tools/cts/log` (the block of section M equals the tally of the slices
+its `Slices:` line names).
 
 `--dry-run` makes no ssh call and writes nothing: it lists the rows and cases it
 would run, says whether the build's commit is on `origin/main`, and goes on

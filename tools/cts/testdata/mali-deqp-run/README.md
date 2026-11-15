@@ -19,11 +19,13 @@ dEQP-GLES2 runner `tools/cts/mali-deqp-run.sh` without a board.
   makes (`deqp-gles2`, `data/gles2/`, `build.txt` with `commit=`, `lib/` with
   `libGLESv2.so.2` and `libEGL.so.1`; not named `build/`, which `.gitignore`
   leaves out). Its `deqp-gles2` is a script that writes a `.qpa` from
-  `qpa/pass.qpa`, `qpa/fail.qpa` and `qpa/refuse.qpa` and prints
+  `qpa/pass.qpa`, `qpa/fail.qpa`, `qpa/refuse.qpa` and
+  `qpa/refuse-section.qpa` and prints
   `yakogl-mali: loaded` and a
   `yakogl-mali-exit:` line when the staged `libGLESv2.so.2` is the fixture's.
 - `scenarios/*.tsv`: what the fake `deqp-gles2` does to a case (`fail`,
-  `refuse` with the library's refusal in a shader info log, `crash`, `hang`, `jobtimeout` with `kmsg/job-timeout.txt` written to the
+  `refuse` with the library's refusal in a shader info log, `refuse-section`
+  with it in the `<Text>` of an "Info Log" section, `crash`, `hang`, `jobtimeout` with `kmsg/job-timeout.txt` written to the
   board's kernel log, `lose-ssh`; `-<TAB>nolib` leaves out the loaded line).
 - `tree.txt`: three rows (6, 6 and 5 cases) of the real
   `tools/cts/gles2-mustpass.txt`, in the table form of `mali-gles2-tree.txt`.

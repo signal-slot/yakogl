@@ -6,6 +6,7 @@
   python3 -I tools/cts/mali-deqp-tally.py --check-cover MUSTPASS SLICE...
   python3 -I tools/cts/mali-deqp-tally.py --tally [--markdown] SLICE...
   python3 -I tools/cts/mali-deqp-tally.py --check-doc DOC SLICE...
+  python3 -I tools/cts/mali-deqp-tally.py --check-doc DOC --log LOGDIR
   python3 -I tools/cts/mali-deqp-tally.py --self-test
 
 A slice is tools/cts/log/<YYYY-MM-DD>-t6-gles2-<session>-<sha8>/ with
@@ -50,6 +51,10 @@ the file the tally can only guess: results.tsv lists the cases in mustpass
 order, chunk after chunk, so the chunks' `cases` counts split it, and a chunk
 whose exit line names a refusal gives that refusal as the cause of all its
 non-Pass cases.
+
+--check-doc DOC --log LOGDIR checks the doc's block against the slices the
+block itself names (its "Slices:" line), read from LOGDIR: the form the gate
+runs on docs/es2-cts-failures.md and tools/cts/log/.
 
 Every rule failure prints "RULE <name>: ..." and the mode exits 1; a slice
 that cannot be read exits 2. --no-git skips the ancestor rule (fixtures);
@@ -409,7 +414,19 @@ def doc_block(text):
     return text[a:b + len(END)] + "\n"
 
 
-def check_doc(doc, slices):
+def block_slices(blk):
+    """The slice names of a block's "Slices:" line, or None without one."""
+    m = re.search(r"^Slices: (.+)$", blk, re.M)
+    if not m:
+        return None
+    names = re.findall(r"`([^`]*)`", m.group(1))
+    if not names or any(not re.fullmatch(r"[A-Za-z0-9._-]+", n) or
+                        n in (".", "..") for n in names):
+        return None
+    return names
+
+
+def check_doc(doc, slices, log=None):
     try:
         with open(doc, encoding="utf-8") as f:
             text = f.read()
@@ -418,6 +435,12 @@ def check_doc(doc, slices):
     blk = doc_block(text)
     if blk is None:
         return ["RULE doc-block: %s has no %s ... %s block" % (doc, BEGIN, END)]
+    if log is not None:
+        names = block_slices(blk)
+        if names is None:
+            return ["RULE doc-slices: %s: the block's \"Slices:\" line names "
+                    "no slice directory" % doc]
+        slices = [load_slice(os.path.join(log, n)) for n in names]
     if blk != render_markdown(slices):
         return ["RULE doc-stale: %s: the mali-deqp-tally block differs from "
                 "--markdown of the slices" % doc]
@@ -521,6 +544,17 @@ def self_test():
          os.path.join(FIXTURES, "doc-stale.md"), *good)
     must("doc without block", "doc-block", "--check-doc",
          os.path.join(FIXTURES, "doc-noblock.md"), *good)
+    chk("check-doc --log: the block's own slices, read from the directory",
+        run("--check-doc", os.path.join(FIXTURES, "doc-current.md"),
+            "--log", g)[0] == 0)
+    must("check-doc --log: stale doc block", "doc-stale", "--check-doc",
+         os.path.join(FIXTURES, "doc-stale.md"), "--log", g)
+    must("check-doc --log: a block without a Slices line", "doc-slices",
+         "--check-doc", os.path.join(FIXTURES, "doc-noslices.md"), "--log", g)
+    rc, _o, e = run("--check-doc", os.path.join(FIXTURES, "doc-current.md"),
+                    "--log", bad)
+    chk("check-doc --log: a named slice the directory lacks exits 2",
+        rc == 2 and "meta.txt" in e)
     # reruns: a later slice replaces the Lost rows of the one it names
     rr = os.path.join(FIXTURES, "rerun", "2026-11-08-t6-gles2-S5-00000000")
     lostd = os.path.join(FIXTURES, "lost")
@@ -615,6 +649,7 @@ def main(argv):
     git = True
     markdown = False
     main_ref = "origin/main"
+    log = None
     args = []
     mode = None
     i = 0
@@ -630,6 +665,12 @@ def main(argv):
                 print("--main-ref needs a ref", file=sys.stderr)
                 return 2
             main_ref = argv[i]
+        elif a == "--log":
+            i += 1
+            if i >= len(argv):
+                print("--log needs a directory", file=sys.stderr)
+                return 2
+            log = argv[i]
         elif a in ("--check-cover", "--tally", "--check-doc", "--self-test"):
             mode = a
         elif a.startswith("--"):
@@ -649,7 +690,9 @@ def main(argv):
             s = [load_slice(p) for p in args]
             sys.stdout.write(render_markdown(s) if markdown else render_text(s))
             return 0
-        if mode == "--check-doc" and len(args) >= 2:
+        if mode == "--check-doc" and log is not None and len(args) == 1:
+            return report(check_doc(args[0], [], log))
+        if mode == "--check-doc" and log is None and len(args) >= 2:
             return report(check_doc(args[0], [load_slice(p) for p in args[1:]]))
     except Fatal as e:
         print("mali-deqp-tally: %s" % e, file=sys.stderr)

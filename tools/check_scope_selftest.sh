@@ -126,6 +126,7 @@ want docs/standalone-boot.md docs
 want website/index.html docs
 want README.md docs
 want docs/notes/x.md docs
+want docs/es2-cts-failures.md "docs ctsdoc"
 # the plan for a given change (YAKOGL_CHECK_PATHS stands in for the diff)
 # A stand-in west workspace, so the image rows are planned rather than gaps
 # (plan mode runs nothing, so the directory only has to exist).
@@ -166,6 +167,14 @@ expect "docs: the summary" '^check.sh: [0-9]+ ok, 0 failed, 0 gap\(s\).*skipped 
 same "docs: only the shared rows" "cargo fmt --check
 sha256  third_party files are the upstream files (UPSTREAM)
 tools   licence audit (SPDX header or allowlist row for every tracked file)" "$(rows 'plan|gap' "$out")"
+# docs/es2-cts-failures.md holds a block generated from the slices under
+# tools/cts/log/: its own edit reaches the row that compares the two, and no
+# other row beyond the shared ones.
+out=$(plan docs/es2-cts-failures.md)
+same "es2-cts-failures.md: the shared rows and its block check" "$(rows 'plan|gap' "$docs_plan")
+tools   es2-cts-failures.md's Mali block equals the tally of its slices" "$(rows 'plan|gap' "$out")"
+out=$(plan tools/cts/log/2026-11-15-t6-gles2-S1-37305608/results.tsv)
+expect "a slice file: the block check" "^plan  tools   es2-cts-failures.md's Mali block equals the tally of its slices\$" "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"

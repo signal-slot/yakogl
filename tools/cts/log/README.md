@@ -89,9 +89,8 @@ out.
 
 ## t6-gles2 slices: the NanoPC-T6 dEQP-GLES2 runs
 
-`<YYYY-MM-DD>-t6-gles2-<session>` (`<session>` is `smoke`, `S1` … `S4`, as the
-runner's `--session`; the NanoPC-T6 is not a `tools/board.sh` board, so the name
-carries no `sha8`: the commit is in `meta.txt`) is what
+`<YYYY-MM-DD>-t6-gles2-<session>-<sha8>` (`<session>` is `smoke`, `S1` … `S4`,
+as the runner's `--session`; `<sha8>` is the `commit` of `meta.txt`) is what
 `tools/cts/mali-deqp-run.sh --out` writes, redacted, from a run of
 `tools/cts/mali-gles2-tree.txt` rows over the board's Armbian
 (`tools/cts/README.md` section 6). It holds no README of its own kind of
@@ -121,8 +120,9 @@ commit message and the RESULTS.md row. Its files:
   `chunk-hang`, `board-lost`, `not-run` or `wrong-lib` as the detail.
 - `refusals.tsv` (slices since 2026-11-15): a header line, then `case refusal`
   for each case whose log holds one: the first shader or program info log in
-  which the library refuses, whitespace folded. The tally takes a case's
-  cause from it.
+  which the library refuses, whitespace folded (dEQP logs an info log in two
+  forms, `<InfoLog>` and a `Section` named `Info Log`; both are read). The
+  tally takes a case's cause from it.
 - `kmsg/<label>.txt`: the kernel lines between that chunk's markers, to be
   classified with `tools/cts/mali-kmsg.py` (`docs/notes/mali-panthor-kmsg.md`).
 - `<file>.license` beside each of them (the runner writes it since

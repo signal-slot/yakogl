@@ -178,6 +178,10 @@ BUILD_ONLY_CONFIGS=(
 # what the full run in CI exists to catch.
 scope_of_path() {
   case "$1" in
+  # Its section M holds the block tools/cts/mali-deqp-tally.py generates from
+  # the slices under tools/cts/log/; the row that compares the two (ctsdoc) is
+  # reached by an edit of the document alone, and no other tools row is.
+  docs/es2-cts-failures.md) echo "docs ctsdoc" ;;
   docs/* | */*.md | *.md | website/* | NOTICE | LICENSE* | .github/* | records/* | .gitignore | .ccfarm/*) echo docs ;;
   tools/precompile/* | tools/shaders/*) echo precompile ;;
   # a precompile fixture is read by the tables' rows and by the tests that name it
@@ -3076,6 +3080,15 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # tools/cts/mali-kmsg.py, the panthor kernel message classifier the runner
   # logs per chunk (resets, job timeouts, MMU and CS faults), on its fixtures.
   step "tools   mali-kmsg-selftest.sh (panthor kernel message classifier)" bash tools/cts/mali-kmsg-selftest.sh
+  # The block of docs/es2-cts-failures.md that tools/cts/mali-deqp-tally.py
+  # generates (section M) against the slices its own "Slices:" line names
+  # under tools/cts/log/: a block edited by hand, a slice changed after it, or
+  # a tally whose output moved fails here. The document alone reaches this row
+  # (scope ctsdoc, scope_of_path), so a docs-only edit of it is checked too.
+  scope tools ctsdoc
+  step "tools   es2-cts-failures.md's Mali block equals the tally of its slices" \
+    python3 -I tools/cts/mali-deqp-tally.py --check-doc docs/es2-cts-failures.md --log tools/cts/log
+  scope tools
   # The Mali glmark2 build recipe (--dry-run on stubs), the tally of a run
   # directory and the symbol check of glmark2-es2 against the panthor-gles
   # pair, each on its own fixtures. Host only; a part that needs GLMARK2_SRC or

@@ -16,11 +16,17 @@ move with them; the counts are only as old as that commit.
 
 **Measured baseline: the first whole tree on the board** (2026-11-12/13, the
 seven `tools/cts/log/*-t6-gles2-*` slices from main `a50d87b5`, `1bd2074f`,
-`4ecefc7b` and `9b5daae8`; `docs/es2-cts-failures.md` section M): 5,260
-Pass, 10,898 Fail, 971 NotSupported, 33 ResourceError, 3 QualityWarning,
-0 Lost. Forecast: 5,970 pass. No chunk hung, crashed or faulted. Section 2's
-"measured" column and section 6 set the measurement against the forecast;
-sections 1 to 5 are the forecast as it was made.
+`4ecefc7b` and `9b5daae8`; `mali-deqp-tally.py --tally` over those seven
+slices gives the tables this note cites): 5,260 Pass, 10,898 Fail, 971
+NotSupported, 33 ResourceError, 3 QualityWarning, 0 Lost. Forecast: 5,970
+pass. No chunk hung, crashed or faulted. Section 2's "measured" column and
+section 6 set that measurement against the forecast; sections 1 to 5 are the
+forecast as it was made.
+
+The current result is the whole tree at main `37305608` (2026-11-15, 5,456
+Pass), with each case's own refusal: `docs/es2-cts-failures.md` section M.
+This note is not redone for it; the per-case list there replaces the
+forecast as the work order.
 
 ## What this is for
 
@@ -212,8 +218,9 @@ cases of `attribute_location` and `default_vertex_attrib` whose names carry
 The "measured" column is the board's first whole tree (see the baseline at
 the top): the non-Pass cases of the chunks whose `yakogl-mali-exit` line
 names that cause as its `first_refused`, Fail and NotSupported together
-(`docs/es2-cts-failures.md` sections M.1 and M.2). The library names only
-the first refusal of a chunk, so a column count is where the cause stops a
+(the tally of the seven slices, by the chunk's first refusal). The library
+names only the first refusal of a chunk, so a column count is where the cause
+stops a
 chunk first, not how many shaders it refuses; a cause with 0 may still
 refuse shaders behind another. The rows from `COLOUR_FORM` down were added
 from the measurement (forecast 0). The measured column sums to 11651:
@@ -425,8 +432,8 @@ Section 3's 208 hang-risk loops (row `T6S3R08`) were all refused at link,
 `PositionLane` first, and reported NotSupported by dEQP, so no kept loop with
 a run-time bound reached the GPU. No chunk hung, crashed or faulted.
 
-Section 4's new causes, from the measurement (`docs/es2-cts-failures.md`
-section M.1): draws that fail with `GL_OUT_OF_MEMORY` (33 ResourceError),
+Section 4's new causes, from the measurement (they are still in
+`docs/es2-cts-failures.md` section M.1 for the tree at `37305608`): draws that fail with `GL_OUT_OF_MEMORY` (33 ResourceError),
 wrong pixels of `texture.vertex.cube` with no refusal (16), and 4 wrong
 pixels no refusal explains. The 164 GL errors and missing pixels in chunks
 with refusals (cause 4 there) wait for a per-case refusal record.
