@@ -328,7 +328,40 @@ Without `--crash` it takes the normal route, also while the reservation is
 set (the kernel limits only crash segments to the reservation,
 `kernel/kexec_core.c:200-210`), unless a crash image is loaded in it; with
 `--go` both routes read `kexec_crash_loaded` again under the board lock.
-Not yet run on the board (2026-11-15). What it proves: the VOP2 window programming, the
+
+The crash route has one more condition: no interrupt may be left on a
+chip whose bus lock sleeps. Before the jump, `machine_crash_shutdown`
+masks and shuts down every started interrupt, one after the other
+(`arch/arm64/kernel/machine_kexec.c:213-225`, `kernel/irq/kexec.c`), and
+for each it takes the chip's bus lock (`kernel/irq/manage.c:2689-2711`).
+The PMIC (RK806, on SPI) is a regmap-irq chip: its bus lock is a mutex,
+and its unlock writes the PMIC's mask and ack registers over SPI
+(`drivers/base/regmap/regmap-irq.c:76-80`, `:83-207`;
+`drivers/mfd/rk8xx-core.c:546-556`). An SPI transfer waits for the SPI
+controller's interrupt (`drivers/spi/spi-rockchip.c:382-404`), which the
+same loop shut down earlier, and only one CPU is left, with interrupts
+off. So the panic sleeps for ever, "Starting crashdump kernel..." is never
+printed, and Linux's watchdog resets the board. The PMIC's rows in
+`/proc/interrupts` (chip `rk806`) were the two of its power key (driver
+`rk805-pwrkey`). Measured on 2026-11-15 with `t6_hello`:
+with the driver bound the jump hung and WDT0 reset the board; with its one
+device unbound the `rk806` rows were gone, and the image ran and passed,
+twice. `kexec_zephyr --crash` therefore unbinds every device of
+`rk805-pwrkey` before CPUs 1-7 go offline (found by listing
+`/sys/bus/platform/drivers/rk805-pwrkey/`, since the device's number
+changes per boot), and, as its last step that can refuse, after the CPU
+check and before the links go down, reads `/proc/interrupts` and refuses while
+a row with a handler is on a chip other than the ones the crash route was
+measured with (GICv3, GICv3-23, ITS-PCI-MSI-\*, ITS-PCI-MSIX-\*,
+rockchip_gpio_irq). A program cannot ask a chip whether its bus lock
+sleeps, so an unknown chip is refused, not let through. A refusal binds
+the power key again, with the CPUs and the crash image put back as before
+(`crash_irq.h` beside the tool; `crash_irq_selftest.sh` tests it on the
+host). The PMIC's own interrupt line on a GPIO bank
+(`rockchip_gpio_irq ... rk806`) stays after the unbind and did no harm.
+
+The crash route itself ran on the board on 2026-11-15 with `t6_hello` only
+(above); the adoption has not run yet. What it proves: the VOP2 window programming, the
 frame buffer format and stride, the hand-over from a buffer to the screen.
 What it does not prove: power, clocks, the PHY, the controller, the mode.
 A risk of its own: the crash route also leaves panthor's GPU and its firmware
