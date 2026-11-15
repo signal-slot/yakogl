@@ -5256,19 +5256,24 @@ fn walk_nodes(
 /// The direction of a mediump implicit-level `textureCube` is one of the
 /// shapes measured byte-equal to Mesa 26.2.1's drm-shim (fstex_cube*):
 ///
-/// - raw: each lane a varying's lane or the constant +-1.0, one varying
-///   lane at least (fstex_cube, fstex_cubedir_twovary, _constneg). The
-///   cube ops read the load's fp32 words (`src_f32`) and +-1.0 as the
-///   table's `0x3F800000`.
+/// - raw: each lane a varying's lane or a constant fp16 holds exactly,
+///   one varying lane at least (fstex_cube, fstex_cubedir_twovary,
+///   _constneg, _rawhalf). The cube ops read the load's fp32 words
+///   (`src_f32`) and the constant as an operand: +-1.0 the table's
+///   `0x3F800000`, 0.5 an FAU word (their sources have no swizzle,
+///   valhall.c CUBEFACE1).
 /// - pair: x and y fp16 trees of `+`, `*` and negation over varying
-///   lanes, constants and uniforms, vectorised as one pair; z the constant
-///   +-1.0 or a uniform (fstex_cubeface4, fstex_cubedir_face4uni,
-///   _uniscale, _fmak). Each lane is `F16_TO_F32`'d at the look-up.
+///   lanes, constants and uniforms, vectorised as one pair (the colour's
+///   forms, [`ADMITTED`], checked in [`select`]); z a constant or a
+///   uniform (fstex_cubeface4, fstex_cubedir_face4uni, _uniscale, _fmak,
+///   _pairhalf). Each lane is `F16_TO_F32`'d at the look-up, a constant z
+///   rounded to fp16 first ([`cube_lane`]).
 ///
 /// Measured otherwise, and so refused:
-/// - another constant (`vec3(1.0, b, 0.5)`): Mesa promotes 0.5 to an FAU
-///   word; our constant pass takes it as `0x38000000.h1`, which the cube
-///   ops, having no swizzle (valhall.c CUBEFACE1), read as 2^-15;
+/// - a raw constant fp16 does not hold (`vec3(a2, 0.1)`,
+///   fstex_cubedir_rawtenth): Mesa rounds it to fp16 and reads the
+///   widened value from an FAU word; the raw lanes here keep the fp32
+///   constant;
 /// - raw lanes beside a uniform (`vec3(a2, u)`): Mesa keeps the varying
 ///   fp32, the pair path narrows it;
 /// - gl_FragCoord or gl_PointCoord: Mesa keeps them fp32;
@@ -5277,7 +5282,6 @@ fn walk_nodes(
 ///   pair here does not. Under an add it is the fused `FMA` (dEQP's
 ///   `v.x*2.0 - 1.0`), measured equal.
 fn cube_dir_measured(f: &Fs<'_>, dir: [Val; 3]) -> bool {
-    const ONE: [u32; 2] = [F32_ONE, F32_ONE | 0x8000_0000];
     /* a varying's lane; gl_PointCoord's ([`POINT_COORD`]) is none */
     let varying = |v: Val| f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS);
     let uniform = |v: Val| f.alu_of(v).is_none() && f.uniform_dword(v).is_some();
@@ -5297,10 +5301,11 @@ fn cube_dir_measured(f: &Fs<'_>, dir: [Val; 3]) -> bool {
             _ => false,
         }
     }
-    let raw = dir.iter().all(|&v| varying(v) || f.is_const(v, &ONE)) && dir.iter().any(|&v| varying(v));
+    let exact = |v: Val| matches!(v, Val::Const(c) if f16_exact(c).is_some());
+    let raw = dir.iter().all(|&v| varying(v) || exact(v)) && dir.iter().any(|&v| varying(v));
     let leaf = |v: Val| varying(v) || uniform(v) || matches!(v, Val::Const(_));
     let pair = dir[..2].iter().all(|&v| f.alu_of(v).is_some() && tree(f, v, false, &leaf))
-        && (f.is_const(dir[2], &ONE) || uniform(dir[2]));
+        && (matches!(dir[2], Val::Const(_)) || uniform(dir[2]));
     raw || pair
 }
 

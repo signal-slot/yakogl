@@ -3400,8 +3400,10 @@ fn a_negated_swapped_varying_pair_is_byte_equal_to_mesa_26_2_1() {
 /// raw lanes with -1.0 between them, an fp16 pair beside a uniform z, a
 /// pair scaled by a uniform, a pair `a * 3.0 + 0.25`, a pair times a
 /// negative constant `a * -0.5` (Mesa's `FMA` by 0.5 then `FADD .neg`,
-/// which ours makes too since main's fp16 lowering). Both programs the
-/// shim's to the byte.
+/// which ours makes too since main's fp16 lowering), constant lanes fp16
+/// holds other than +-1.0, raw (`vec3(1.0, b1, 0.5)`) and beside a pair
+/// (`vec3(a2 - 0.5, 0.5)`), which the cube ops read from an FAU word.
+/// Both programs the shim's to the byte.
 #[test]
 fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa_26_2_1() {
     for (vs, fs, json) in [
@@ -3431,6 +3433,16 @@ fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa
             td!("fstex_cubedir_mulnegk.frag"),
             td!("fstex_cubedir_mulnegk.expect.json"),
         ),
+        (
+            td!("fstex_cubedir_rawhalf.vert"),
+            td!("fstex_cubedir_rawhalf.frag"),
+            td!("fstex_cubedir_rawhalf.expect.json"),
+        ),
+        (
+            td!("fstex_cubedir_pairhalf.vert"),
+            td!("fstex_cubedir_pairhalf.frag"),
+            td!("fstex_cubedir_pairhalf.expect.json"),
+        ),
     ] {
         check_program(vs, fs, json);
     }
@@ -3442,9 +3454,10 @@ fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa
 ///   narrow it to fp16 and back.
 /// - `vec3(a2 * 2.0, -1.0)`: Mesa's late rule makes the lone product
 ///   `FADD.v2f16 r0, r0^, r0^`.
-/// - `vec3(a2 - 0.5, 0.5)` and `vec3(1.0, b1, 0.5)`: Mesa reads 0.5 from an
-///   FAU word; our constant pass would give the cube ops `0x38000000`,
-///   2^-15 as their fp32 operand.
+/// - `vec3(a2, 0.1)` (tools/mali/testdata/fstex_cubedir_rawtenth): a raw
+///   constant lane fp16 does not hold. Mesa rounds it to fp16 and reads
+///   the widened value from an FAU word (`u2.w0`); ours reads the fp32
+///   constant from the table (`0x3DCCCCCD`).
 /// - `vec3(gl_FragCoord.xy, 1.0)`, `vec3(gl_PointCoord, 1.0)`: Mesa reads
 ///   them fp32.
 #[test]
@@ -3455,8 +3468,7 @@ fn mediump_texture_cube_directions_mesa_compiles_otherwise_are_refused_by_name()
     for src in [
         fs("uniform float u; varying vec2 a2;", "vec3(a2, u)"),
         fs("varying vec2 a2;", "vec3(a2 * 2.0, -1.0)"),
-        fs("varying vec2 a2;", "vec3(a2 - 0.5, 0.5)"),
-        fs("varying float b1;", "vec3(1.0, b1, 0.5)"),
+        td!("fstex_cubedir_rawtenth.frag").to_string(),
         fs("", "vec3(gl_FragCoord.xy, 1.0)"),
         fs("", "vec3(gl_PointCoord, 1.0)"),
     ] {
