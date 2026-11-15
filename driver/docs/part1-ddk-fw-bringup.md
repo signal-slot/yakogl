@@ -35,9 +35,9 @@ geom（ジオメトリ処理）がプリミティブを 1 つもタイリング�
 以降の手順はこのパスを指す。
 
 - `src/`：ドライバ本体（Zephyr 用のハンドライト、Linux KO としてもビルドする）
-- `tools/pvrlab/`：Linux カーネルモジュールとしてビルドして実機に載せるデバッグハーネス
-- `tools/offsetof/`：DDK ヘッダを実 config でコンパイルして構造体レイアウトを吐くダンパ
-- `tools/sfdecode/`：FW トレースを人間可読にするデコーダ
+- `driver/tools/pvrlab/`：Linux カーネルモジュールとしてビルドして実機に載せるデバッグハーネス
+- `driver/tools/offsetof/`：DDK ヘッダを実 config でコンパイルして構造体レイアウトを吐くダンパ
+- `driver/tools/sfdecode/`：FW トレースを人間可読にするデコーダ
 - `docs/`：この記事を含むドキュメント
 
 ## なぜ DDK ファームウェアのパスなのか
@@ -198,7 +198,7 @@ grep 'pvrgpu:  t\[' ours_dmesg.txt | python3 tools/sfdecode/sfdecode.py
 ## ビルドとデプロイと採取のループ
 
 自作ドライバは Zephyr 用だが、切り分けは Linux カーネルモジュールとしてビルドし、Torizon 上で `insmod` して行う。
-ドライバのコア `.c` をそのまま Linux KO に組み込む薄いハーネスが `tools/pvrlab/` である。
+ドライバのコア `.c` をそのまま Linux KO に組み込む薄いハーネスが `driver/tools/pvrlab/` である。
 
 `Kbuild` はドライバの `.o` を並べ、Zephyr との差分を shim で吸収し、DDK パスを2つのフラグで選ぶだけになっている。
 
@@ -248,7 +248,7 @@ FPS: 59.0
 ```
 
 このとき FW が吐くトレースを回収すると、geom が成功している 1 フレームの中身がそのまま読める。
-自作側で同じ手順（`tools/sfdecode/`）でデコードしておけば、行単位で比較できる。
+自作側で同じ手順（`driver/tools/sfdecode/`）でデコードしておけば、行単位で比較できる。
 
 DDK の geom（TA）サイクルは次の順で進む。
 各行の値の意味を押さえておくと、自作側のどこが違うかが分かる。

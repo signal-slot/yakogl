@@ -53,7 +53,7 @@ board configurations, not samples of their own).
 | Sample | Purpose |
 |---|---|
 | `examples/triangle` | the triangle (outside this directory) |
-| `gl_test` | the on-silicon GL test suite (`tools/pvrlab/gl_test.c`) |
+| `gl_test` | the on-silicon GL test suite (`driver/tools/pvrlab/gl_test.c`) |
 | `examples/slint` | the Slint demo (outside this directory) |
 | `deqp` | the dEQP conformance run |
 | `glmark2` | the performance measure |

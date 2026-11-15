@@ -252,7 +252,7 @@ order and refuses a window that does not fit, as the Pi 4 does.
 | A `SET_PIXEL_ORDER` answer the Pi 4 never saw | `pixel_order()` returns `None`, no window | a refusal by name |
 
 Size: medium-small. `rpi_mbox.c` is unchanged. New: the board-parameterised
-decisions and their host tests, a `driver/zephyr/lib/board/rpi5/` layer of
+decisions and their host tests, a Pi 5 board layer of
 about the Pi 4's size, a Kconfig entry, a mock run beside
 `rpi_mbox_mock.c`. The plan's items `fb-by-board` and `rpi5-screen` are
 exactly this.

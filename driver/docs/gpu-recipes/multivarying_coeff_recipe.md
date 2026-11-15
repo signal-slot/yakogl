@@ -24,7 +24,7 @@ driver so the FS reads two **perspective-correct (smooth)** varyings and interpo
 - Output-select emit: `pvr_arch_cmd_buffer.c:6562-6639` (`pvr_setup_output_select`), SIZEINFO1 emit
   `:7359-7411`.
 - Driver current single-varying path: `powervr-bxs-am62p-geom/src/pvr_fw_boot.c:2748-2761`
-  (`coeff_prog[5]`), `src/pvr_vdm_ppp_gen.c:291-318` (OUTPUT_SEL / VARYING0), `:219-233` (SIZEINFO1),
+  (`coeff_prog[5]`), `driver/src/pvr_vdm_ppp_gen.c:291-318` (OUTPUT_SEL / VARYING0), `:219-233` (SIZEINFO1),
   vertex fetch `pvr_pds_render_gen.c:266`.
 
 ## Shader layout being wired (from meta)

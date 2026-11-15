@@ -21,19 +21,19 @@ west build -b verdin_am62p/am62p54/a53 driver/samples/zephyr/deqp -- \
 
 What is here, and why:
 
-- `src/main.cpp`: the `tcu::App` loop of dEQP's own `tcuMain.cpp`, with the
+- `driver/samples/zephyr/deqp/src/main.cpp`: the `tcu::App` loop of dEQP's own `tcuMain.cpp`, with the
   arguments built in (`CONFIG_DEQP_CASE`, a `CONFIG_DEQP_SURFACE_SIZE` pbuffer,
   images and shader sources not logged).
-- `src/deqp_archive.cpp`: a `tcu::Archive` over the test data, which
-  `tools/embed_data.py` turns into C arrays at build time (77 files, 1.1 MB for
+- `driver/samples/zephyr/deqp/src/deqp_archive.cpp`: a `tcu::Archive` over the test data, which
+  `driver/samples/zephyr/deqp/tools/embed_data.py` turns into C arrays at build time (77 files, 1.1 MB for
   GLES2). There is no file system.
-- `src/deqp_log.c`: `--wrap=fopen` hands dEQP a picolibc stream (`fdevopen`)
+- `driver/samples/zephyr/deqp/src/deqp_log.c`: `--wrap=fopen` hands dEQP a picolibc stream (`fdevopen`)
   for its QPA log. The stream is parsed line by line and never stored. Each case
   becomes one console line, `deqp: <StatusCode> <case>`, and the summary counts
   the cases that began but never reached a result: absence is its own outcome.
   How the console leaves the board (UART, or the panel for a camera) is the
   board's business, not the sample's.
-- `src/deqp_stubs.c`: what the framework references and Zephyr lacks (child
+- `driver/samples/zephyr/deqp/src/deqp_stubs.c`: what the framework references and Zephyr lacks (child
   processes for the subprocess modes, `getcwd`/`lstat`/`readlink`). Each one
   fails the way the real call fails when the thing does not exist.
 - The package entry (`modules/gles2/tes2TestPackageEntry.cpp`) is compiled into

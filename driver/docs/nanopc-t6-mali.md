@@ -610,7 +610,7 @@ registration forces it, as for the GC7000's kernel side.
 | Descriptor and CS packers | generated from `v10.xml`, vendored under `third_party/mesa-26.2.1/` | the V3D packets |
 | Shader back end | `src/shaderc/online/mali/` | `src/shaderc/online/v3d/` |
 | Kernel side (power, MMU, firmware, CSF) | `driver/rust/src/gpu/mali/`, feature `mali`, SoC feature `rk3588` | `driver/rust/src/gpu/vivante/` |
-| Zephyr registration | `driver/drivers/gpu/gpu_mali_rust.c` (thin) | `gpu_vivante_gc_rust.c` |
+| Zephyr registration | `gpu_mali_rust.c` (thin) | `gpu_vivante_gc_rust.c` |
 | Development OSAL on Linux | a std crate that implements `OsalOps` over panthor's uAPI (`include/uapi/drm/panthor_drm.h`, MIT); never in an image | `tools/mali/panthor/` (crate `yakogl-mali-panthor`); the `OsalOps` table is filled at L2, when the `gpu-mali` back end exists |
 | Board glue | `driver/zephyr/lib/board/nanopc_t6/` (Zephyr side); `driver/rust/src/ip/dw_wdt.rs`, `soc/rk3588.rs`, `aarch64.rs` (feature `rk3588`) | `.../rpi4/`, `ip/imx_wdog.rs` |
 | Zephyr board | `driver/boards/friendlyarm/nanopc_t6/` (target `nanopc_t6`) | `driver/boards/toradex/` |

@@ -10,13 +10,13 @@ fragment_ops.blend 1060/0, shaders.texture_functions 20/0 and fbo 711/0
 (tools/cts/RESULTS.md, "GC7000 kernel side in Rust"). The staged smaller
 steps (gc_identify, gc_fence, gc_clear, gc_triangle) and the X2 adopt run
 were not run with the Rust before the switch. Source-form group C
-(docs/source-form.md): `driver/src/vivante/gc_bringup.c`, `gc_hw.c`,
+(docs/source-form.md): `gc_bringup.c`, `gc_hw.c`,
 `gc_mmu.c` and `gc_cmdbuf.c` followed the Linux etnaviv kernel driver (GPL).
 They are rewritten as original Rust, `gpu::vivante` in the drivers crate
 (`driver/rust/src/gpu/vivante/`, feature `vivante`), from permissive sources
 only, and `CONFIG_YAKOGL_DRV_GPU_VIVANTE` builds it; the four C files, the switch
-`CONFIG_YAKOGL_DRV_GC_KERNEL_RUST` and `driver/tools/gclab/kerneltest` are gone.
-The Linux module `driver/tools/gclab` (`gcgpu.ko`) was built from the C and
+`CONFIG_YAKOGL_DRV_GC_KERNEL_RUST` and `gclab/kerneltest` are gone.
+The Linux module `gclab` (`gcgpu.ko`) was built from the C and
 is retired with it (its README).
 
 Linux etnaviv (`drivers/gpu/drm/etnaviv`) was not read for this work. Every
@@ -62,7 +62,7 @@ driver/rust/include/yakogl_drivers.h     their C declarations
 driver/drivers/gpu/gpu_vivante_gc_rust.c the Zephyr side
 ```
 
-`c_golden.rs` was written by `driver/tools/gclab/kerneltest`, which compiled
+`c_golden.rs` was written by `gclab/kerneltest`, which compiled
 the C on the host; both were deleted with the C (4c25beb0). The record stays
 as the replay test's data.
 
@@ -172,7 +172,7 @@ identified from its registers alone, with a warning (the C did the same).
 
 ## Host identity with the C
 
-`driver/tools/gclab/kerneltest` (deleted with the C) compiled the shipped C
+`gclab/kerneltest` (deleted with the C) compiled the shipped C
 files on the host, against a recording register file and a 64 MiB carveout at
 the board's 0x58000000. It ran one scenario and wrote `c_golden.rs`, and the
 gate row `cc GC7000 kernel C == c_golden.rs (kerneltest)` kept that record
@@ -242,7 +242,7 @@ Measured on the Verdin iMX8M Plus in September 2026, with the C kernel side
 and the Linux harness that are now gone. They are facts about the part, so
 they hold for the Rust. The full accounts are in
 `docs/notes/imx8mp-gc-driver-notes.md` (the old
-`driver/src/vivante/NOTES.md`) and
+`NOTES.md`) and
 `docs/notes/imx8mp-gc-bringup.md`.
 
 Registers:
@@ -374,7 +374,7 @@ gate row, the switch and NOTICE's etnaviv mention were removed (2026-10-03).
 Left:
 
 - The Armadillo-X2 `gc_gl_triangle` adopt run with the Rust kernel side.
-- `driver/tools/gclab` and `gcgpu.ko` are removed (`git ls-files
+- `gclab` and `gcgpu.ko` are removed (`git ls-files
   driver/tools/gclab` is empty). The RESULTS Work list row that asks for
   this follow-up may now be closed.
 - The galcore variants in the table above can be tried one at a time,
