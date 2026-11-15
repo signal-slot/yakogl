@@ -6,10 +6,15 @@
 //! GL_COMPRESSED_TEXTURE_FORMATS, not the old "3 formats, ETC1 first":
 //!
 //! - under `report-es2`: exactly 3 (ETC1, RGB8_ETC2, RGBA8_ETC2_EAC);
-//! - otherwise (ES 3.0): those three, in any order, plus either both sRGB
-//!   ETC2 formats or neither, as the back end samples them
-//!   (src/gl/texture.rs `stored_compressed_formats`; tests/es3_caps.rs
-//!   `known_gaps` keeps the five-format list as the intended ES 3.0 one);
+//! - otherwise (ES 3.0): those three, each once in the list, plus the sRGB
+//!   ETC2 pair where the back end samples both sRGB ETC2 classes, plus each
+//!   of the six formats the core decodes at upload (the four R11/RG11 EAC
+//!   and the two PUNCHTHROUGH_ALPHA1 ETC2) where it samples the class the
+//!   decode lands in (src/gl/texture.rs `stored_compressed_formats` and
+//!   `stored_decoded_format`; docs/notes/etc2-eac.md). The PowerVR, the
+//!   GC7000UL and the V3D sample every one of those classes, so their ES
+//!   3.0 list is 11 (455c3bb5); the Mali samples no texel class and keeps
+//!   3, recorded as a gap in tests/es3_caps.rs `known_gaps`;
 //! - GL_ETC1_RGB8_OES appears somewhere in the list, the extension string
 //!   has GL_OES_compressed_ETC1_RGB8_texture, and no GL error is raised.
 //!
