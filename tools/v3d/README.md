@@ -508,6 +508,12 @@ every program for fs, vs and cs, so the 7.1 count sits beside the 4.2 one.
 The devices differ per program: `color_uv` is fs 12, vs 31, cs 22 at 4.2
 and fs 12, vs 26, cs 15 at 7.1.
 
+`qpu_corpus_71_sources.tsv` maps each of those programs to its GLSL: three
+rows (fs, vs, cs) per program, the source a path under `tools/shaders`
+(the cs row names the vertex shader's source). `qpu_corpus_71_sources.py`
+writes it from `qpu_counts_71.tsv` (`--check` compares); the test
+`tests/v3d_corpus71_sources.rs` pins it.
+
 **H3, Mesa's GL driver on the drm-shim.** Same method as
 `tools/mali/drm_shim_ref.sh`: Mesa 26.2.1 with `-Dgallium-drivers=v3d` and
 `-Dtools=drm-shim`, the shim reporting the GPU named by `V3D_GPU_ID`.
