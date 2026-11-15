@@ -18,7 +18,7 @@ sections below describe the PowerVR first, as it was built.
   entry points behave per spec for the subset we implement. Apps need no source changes.
 - **Portability.** The GL core and the GPU back ends are OS-agnostic Rust (one
   `no_std` crate with no runtime dependencies, exporting the C ABI; see "The Rust
-  crate" below). All OS/platform coupling is behind one interface (`gles_osal.h`).
+  crate" below). All OS/platform coupling is behind one interface (`include/gles_osal.h`).
   Targets, in priority order: **Zephyr** (primary), **bare-metal**, then other OSes
   (**Linux**). One `.a` of portable core + one small OSAL `.o` (C) per platform.
 - **dEQP-GLES2.** Zero dEQP-GLES2 failures on the three boards was the first goal
@@ -81,7 +81,7 @@ Backend interface (as built): `int pvr_backend_draw(const struct gles_draw *draw
 (`src/pvr/pvr_backend.h`) consumes a resolved draw (vertex buffers, index buffer,
 VS+FS USC + their PDS programs, render state) and emits the VDM/PPP/PDS/frag-command
 into GPU memory, then submits via OSAL. The backend is `src/pvr/backend.rs`; the
-OS-free command generators (`pvr_vdm_ppp_gen.c`, `pvr_fw_boot.c`) live in
+OS-free command generators (`driver/src/pvr_vdm_ppp_gen.c`, `driver/src/pvr_fw_boot.c`) live in
 `driver/src/` and are called through FFI (see "The Rust crate" below).
 
 ## Shaders (layer 5a) — the key design decision
@@ -89,7 +89,7 @@ OS-free command generators (`pvr_vdm_ppp_gen.c`, `pvr_fw_boot.c`) live in
 `glShaderSource(GLSL ES)` + `glCompileShader` must turn GLSL text into USC at the API
 boundary. Mesa's path, GLSL→USC = glslang(GLSL→SPIR-V) → `spirv_to_nir` → PCO backend, runs
 only on the host (`pco_shc`), to make the Mesa reference table. Three back ends behind one interface
-(`gles_shaderc.h`: `struct shc_backend` — `compile`, `link`, `blend_variant`,
+(`include/gles_shaderc.h`: `struct shc_backend` — `compile`, `link`, `blend_variant`,
 `compile_vs_linked`, `lod_sensitivity`, `sampler_variant` — reached through
 `g_shaderc`, whose initial value `src/shaderc/mod.rs` picks from the build's features;
 `shc_offline_register()` / `shc_online_register()` switch it):
@@ -116,7 +116,7 @@ DOUTD shared-reg layout for uniforms (push-const → sh0..), vertex attribute �
 and the `po0..` outputs. This ABI is already characterised (`docs/online-shaderc/abi.md`,
 `docs/online-shaderc/gc7000-abi.md`).
 
-## OS abstraction (layer 5b) — `gles_osal.h`
+## OS abstraction (layer 5b) — `include/gles_osal.h`
 
 Everything platform-specific is one struct of function pointers (or link-time symbols):
 GPU-visible memory alloc + GPU MMU map/unmap; firmware load; MMIO/register access; submit
@@ -128,7 +128,7 @@ nothing. The GL core never calls an OS API directly.
 
 One thread issues every GL and EGL call of the process; the core keeps no per-thread
 state (no TLS in `no_std`). The OSAL's optional `thread_id` lets the core refuse a
-call from a second thread while a context is current (`gles_osal.h`, "threads").
+call from a second thread while a context is current (`include/gles_osal.h`, "threads").
 
 ## Repository layout
 
@@ -223,7 +223,7 @@ enums, `gles_texfmt`, `gles_surf_format` and the three heaps the core allocates 
 `src/backend.rs` (`YakoglBackend`, `GlesDraw`, ...; `#[repr(C)]`, the C enums as `u32`
 aliases) and `src/backend.h` is its C view. `src/backend.rs` also names the
 backend of the build (`g_backend`: `yakogl_backend_pvr`, `yakogl_backend_vivante`,
-`yakogl_backend_v3d` or `yakogl_backend_mali`, from that GPU's `backend.rs`). Everything PowerVR-specific (the options, the debug hooks,
+`yakogl_backend_v3d` or `yakogl_backend_mali`, from that GPU's `src/<gpu>/backend.rs`). Everything PowerVR-specific (the options, the debug hooks,
 `pvr_backend_counters`) stays in `src/pvr/pvr_backend.h`; only the on-silicon test
 suite and the samples' diagnostics include it. Each further GPU adds `src/<gpu>/` with
 its own table and shader back end (`driver/docs/vivante-kernel-rust.md` and
@@ -261,7 +261,7 @@ What deliberately stays C:
   with the driver's own render path and called through the FFI declared in
   `src/pvr/ffi.rs`;
 - `src/pvr/ffi_layout_check.c`, which has no code, only `_Static_assert`s: it pins the
-  driver structs, constants and prototypes that `ffi.rs` mirrors, so a driver header
+  driver structs, constants and prototypes that `src/pvr/ffi.rs` mirrors, so a driver header
   change fails the build. `src/abi_layout_check.c` (generated, with its Rust twin
   `src/abi_layout.rs`, by `yakogl-tools abi-layout <driver src dir>`) does the same
   for the `#[repr(C)]` structs the C headers share with the crate:
