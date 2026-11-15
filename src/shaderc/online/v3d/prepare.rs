@@ -245,6 +245,16 @@ pub struct Prepared<'a> {
     /// output (1..4; 4 for `gl_FragColor` and for an RT with no
     /// declaration), the words an integer write takes.
     pub rt_comps: [u8; MAX_RTS],
+    /// Fragment shaders: bit n, render target n is a 32-bit float target
+    /// (R32F, RG32F, RGBA32F): its float output is written to the TLB as
+    /// one 32-bit word per declared component (`rt_comps`), with the
+    /// 32-bit config, as an integer output is, in place of two f16 pairs
+    /// (Mesa's `f32_color_rb` key, v3d_compile.h; vir_emit_tlb_color_write,
+    /// nir_to_vir.c:1974-1977, 2005-2021). A compile key, not a fact of the
+    /// source: prepare leaves it 0, and only the chain's
+    /// `compile_program_rt` sets it. With 0 the code is what it was before
+    /// the key existed.
+    pub rt_f32: u8,
     /// Fragment shaders: the bool (~0 / 0) that holds in the lanes a
     /// `discard` ran in; `None` when the shader never discards.
     pub discard: Option<S>,
@@ -2626,6 +2636,7 @@ pub fn prepare_fragment_with<'a>(
         rt_mask,
         rt_int,
         rt_comps,
+        rt_f32: 0,
         discard,
         psiz: None,
         depth,
@@ -2712,6 +2723,7 @@ pub fn prepare_vertex_with<'a>(
         rt_mask: 0,
         rt_int: 0,
         rt_comps: [4; MAX_RTS],
+        rt_f32: 0,
         discard: None,
         psiz,
     })

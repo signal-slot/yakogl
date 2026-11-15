@@ -159,6 +159,11 @@ pub struct FsProg<'a> {
     /// Bit n: the program writes colour to render target n (prepare's
     /// rt_mask; the backend checks it against the draw's attachments).
     pub rt_mask: u8,
+    /// The compile's render-target key ([`compile_program_rt`]): bit n,
+    /// render target n's float output is written as 32-bit words. The
+    /// backend draws the program only to targets of the classes it was
+    /// keyed for.
+    pub rt_f32: u8,
     pub force_per_sample_msaa: bool,
     pub tmu_dirty_rcl: bool,
     /// The shader can discard (prog_data `uses_discard`). Such a shader always
@@ -409,6 +414,25 @@ pub fn compile_program_keyed<'a>(
     fs_key: crate::shaderc::LodKey,
     a: &'a Arena<'a>,
 ) -> Result<V3dProgram<'a>, V3dError> {
+    compile_program_rt(vs, fs, prim, target, vs_key, fs_key, 0, a)
+}
+
+/// [`compile_program_keyed`] with the render-target key `rt_f32`: bit n,
+/// render target n is a 32-bit float target (R32F, RG32F, RGBA32F), and
+/// the fragment shader writes its float output as 32-bit words
+/// (`Prepared::rt_f32`, Mesa's `f32_color_rb`). With 0 the program is
+/// [`compile_program_keyed`]'s, word for word.
+#[allow(clippy::too_many_arguments)]
+pub fn compile_program_rt<'a>(
+    vs: &'a ir::Module<'a>,
+    fs: &'a ir::Module<'a>,
+    prim: Prim,
+    target: Target,
+    vs_key: crate::shaderc::LodKey,
+    fs_key: crate::shaderc::LodKey,
+    rt_f32: u8,
+    a: &'a Arena<'a>,
+) -> Result<V3dProgram<'a>, V3dError> {
     match prim {
         Prim::Triangles => {}
         Prim::Lines => return Err(V3dError::NotYet("the lines variant of the fragment shader")),
@@ -424,7 +448,8 @@ pub fn compile_program_keyed<'a>(
     let (fs, fs_trips) = unrolled(fs, a)?;
 
     /* The fragment shader, and the order of its inputs. */
-    let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
+    let mut fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
+    fsp.rt_f32 = rt_f32;
     let inputs = fragment_inputs(&fsp, a)?;
     /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
      * flat_shade_flags at the input's index). Inputs 0..31 are in
@@ -548,6 +573,7 @@ pub fn compile_program_keyed<'a>(
             uses_implicit_point_line_varyings: fsel.implicit_point_varyings,
             uses_pid: false,
             rt_mask: fsp.rt_mask,
+            rt_f32,
             /* Mesa flags a shader with no colour write as discarding
              * (nir_to_vir.c:2124-2126): its Z write is its TLB write. */
             uses_discard: fsp.discard.is_some() || fsp.rt_mask == 0,
