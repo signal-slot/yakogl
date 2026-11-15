@@ -1099,11 +1099,11 @@ Linux's log), and refuses when Linux's log names no GIC table (its ring
 wrapped), since the tables' place is then unknown.
 
 Why 256 MiB: the dEQP-GLES2 image with the Mali OSAL (`driver/samples/zephyr/
-deqp` on `nanopc_t6`) takes 151140 KB: the GL core's statics and the
+deqp` on `nanopc_t6`) takes about 148 MiB: the GL core's statics and the
 in-process compiler's scratch, the OSAL's `__nocache` memory (the 32 MiB
 carve-out, the tiler heap's chunks, the firmware arena, the queue memory),
 dEQP's code, and the 64 MiB C heap every board's dEQP image has. 128 MiB is
-19 MiB short of it. The probes take under 6 MiB; their RAM use counts the
+20 MiB short of it. The probes take under 6 MiB; their RAM use counts the
 page-frame table, which Zephyr sizes for the whole of `zephyr,sram`. Three
 places hold the window: the dts, `nanopc-t6.sh` (`WINDOW_BASE`,
 `WINDOW_SIZE`) and the U-Boot script (`driver/tools/uboot-t6/t6-zephyr.cmd`,

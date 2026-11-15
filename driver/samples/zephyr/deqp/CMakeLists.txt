@@ -7,7 +7,10 @@
 # layer's stm32mp2/app.conf (below). The Raspberry Pi 4 (V3D) adds src/v3d_board.c
 # (the V3D's EGL default display and the result record, one screen the lead
 # photographs), the mailbox framebuffer, the HDMI console and the
-# bounded-lifetime watchdog of the rpi4 board layer.
+# bounded-lifetime watchdog of the rpi4 board layer. The NanoPC-T6 (Mali) adds
+# src/mali_board.c (the build line and the end of the run) over the board glue
+# of every nanopc_t6 image (driver/zephyr/lib/board/nanopc_t6: WDT0, the CSF
+# firmware, the PSCI reset back into Armbian).
 #   -DDEQP_SRC=<CTS copy with cts-yakogl-zephyr.patch applied>
 #   -DDEQP_BUILD=<its stage-1 build (static libraries)>
 # tools/cts/cts-build-zephyr.sh makes both.
@@ -32,7 +35,7 @@ foreach(v DEQP_SRC DEQP_BUILD)
   endif()
 endforeach()
 
-if(NOT CONFIG_YAKOGL_GPU_V3D)
+if(NOT CONFIG_YAKOGL_GPU_V3D AND NOT CONFIG_YAKOGL_GPU_MALI)
   include("${PVR_SAMPLES}/common/sample.cmake")
 endif()
 # STM32MP257F-DK: the board layer (driver/zephyr/lib/board/stm32mp2) powers
@@ -126,6 +129,35 @@ if(CONFIG_YAKOGL_GPU_V3D)
     "${V3D_BOARD}"
     "${YAKOGL_DIR}/src/osal"                 # struct osal_zephyr_v3d_init
     "${PVR_REPO}/src/v3d")                   # struct v3d_clock_ops (v3d.h)
+endif()
+
+# NanoPC-T6 (Mali-G610): driver/docs/nanopc-t6-mali.md. Through YakoGL's GL
+# core, its in-process compiler and its Mali backend on the OSAL
+# src/osal/zephyr_mali.c (our own kernel side, board::nanopc_t6_osal).
+if(CONFIG_YAKOGL_GPU_MALI)
+  if(NOT CONFIG_YAKOGL_NANOPC_T6)
+    message(FATAL_ERROR "deqp: CONFIG_YAKOGL_GPU_MALI needs the nanopc_t6 board (CONFIG_YAKOGL_NANOPC_T6)")
+  endif()
+  execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
+                  OUTPUT_VARIABLE T6_DEQP_BUILD OUTPUT_STRIP_TRAILING_WHITESPACE
+                  ERROR_QUIET RESULT_VARIABLE describe_rc)
+  if(NOT describe_rc EQUAL 0 OR T6_DEQP_BUILD STREQUAL "")
+    set(T6_DEQP_BUILD "unknown")
+  endif()
+  message(STATUS "deqp (nanopc_t6) build: ${T6_DEQP_BUILD}")
+  target_sources(app PRIVATE src/mali_board.c)
+  target_compile_definitions(app PRIVATE T6_DEQP_BUILD="${T6_DEQP_BUILD}")
+  target_include_directories(app PRIVATE "${YAKOGL_DIR}/src/osal")   # osal_mali_diag_print
+endif()
+
+# Zero warnings in our own files with -DYAKOGL_WERROR=ON, the option gl_test
+# has, the data embed_data.py writes included; dEQP's package entry is not
+# ours and stays outside it.
+if(YAKOGL_WERROR)
+  get_target_property(_deqp_ours app SOURCES)
+  list(FILTER _deqp_ours EXCLUDE REGEX "TestPackageEntry\\.cpp$")
+  set_source_files_properties(${_deqp_ours} TARGET_DIRECTORY app
+    PROPERTIES COMPILE_OPTIONS -Werror)
 endif()
 
 # PowerVR: the backend's option numbers (pvr/pvr_backend.h) for the A/B switches

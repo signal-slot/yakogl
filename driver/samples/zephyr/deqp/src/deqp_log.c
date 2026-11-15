@@ -16,6 +16,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/sys/printk.h>
+#ifdef CONFIG_YAKOGL_NANOPC_T6
+/* The NanoPC-T6's WDT0 is fed only while the run says it makes progress
+ * (nanopc_t6.h): a case that begins or ends does (src/mali_board.c). */
+#include <nanopc_t6.h>
+#endif
 
 #define DEQP_LOG_NAME "deqp.qpa"
 
@@ -52,6 +57,9 @@ static void take_line(void)
 #ifdef CONFIG_GC_COMMON_RESULT_SNVS
 		deqp_snvs_progress(NULL, cur_case);
 #endif
+#ifdef CONFIG_YAKOGL_NANOPC_T6
+		t6_watchdog_feed();
+#endif
 		return;
 	}
 	/* The info group's answers (GL_VERSION, GL_VENDOR, ...) are the only
@@ -81,6 +89,9 @@ static void take_line(void)
 		n_result++;
 #ifdef CONFIG_GC_COMMON_RESULT_SNVS
 		deqp_snvs_progress(status, cur_case);
+#endif
+#ifdef CONFIG_YAKOGL_NANOPC_T6
+		t6_watchdog_feed();
 #endif
 		cur_case[0] = 0;
 	}
