@@ -910,7 +910,35 @@ pub fn first_refusal() -> Option<&'static str> {
 fn refuse(why: &'static str) -> i32 {
     FIRST_REFUSAL.note(why);
     backend::note_draw_refused(why, 0);
+    refusal_line(why.as_ptr() as usize, -ENOTSUP, format_args!("{}", why));
     -ENOTSUP
+}
+
+/// What the last refusal line was about (a reason's address, or a small
+/// errno), 0 after a draw was recorded: a run of draws refused for one
+/// reason logs one line, the next case's first refusal logs another.
+static LAST_REFUSAL: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Lines [`refusal_line`] wrote, for the host test.
+#[cfg(test)]
+pub(crate) static REFUSAL_LINES: std::sync::Mutex<std::vec::Vec<std::string::String>> =
+    std::sync::Mutex::new(std::vec::Vec::new());
+
+/// One line per refused draw, `yakogl-mali-refusal: <errno> <reason>`
+/// (docs/notes/mali-frame-refusals.md, "The per-draw refusal line"), unless
+/// the draw before it was refused for the same `key` with none recorded in
+/// between.
+fn refusal_line(key: usize, errno: i32, why: core::fmt::Arguments) {
+    if LAST_REFUSAL.swap(key, Ordering::Relaxed) == key {
+        return;
+    }
+    #[cfg(test)]
+    REFUSAL_LINES.lock().unwrap_or_else(|e| e.into_inner()).push(std::format!(
+        "yakogl-mali-refusal: {} {}",
+        errno,
+        why
+    ));
+    glog!("yakogl-mali-refusal: {} {}", errno, why);
 }
 
 /// Why a draw or a clear was not recorded: a frame error (its errno and log
@@ -933,7 +961,10 @@ impl From<FrameError> for Fail {
 fn fail_errno(f: Fail) -> i32 {
     match f {
         Fail::Frame(e) => frame_error(e),
-        Fail::Errno(rc) => rc,
+        Fail::Errno(rc) => {
+            refusal_line(rc.unsigned_abs() as usize, rc, format_args!("errno"));
+            rc
+        }
     }
 }
 
@@ -942,12 +973,14 @@ fn frame_error(e: FrameError) -> i32 {
         FrameError::NotBuilt(why) => refuse(why),
         FrameError::Arena(a) => {
             glog_once!("{}", a);
+            refusal_line(ENOMEM as usize, -ENOMEM, format_args!("{}", a));
             -ENOMEM
         }
         /* a value the packer or the encoder refused, or an input outside the
          * hardware's range: a builder or caller defect, never masked */
         other => {
             glog_once!("{}", other);
+            refusal_line(EINVAL as usize, -EINVAL, format_args!("{}", other));
             -EINVAL
         }
     }
@@ -3250,7 +3283,13 @@ pub unsafe extern "C" fn mali_draw(draw: *const GlesDraw) -> i32 {
         return -EINVAL;
     };
     // SAFETY: as in `mali_init`.
-    record_in(unsafe { STATE.get() }, d).err().map_or(0, fail_errno)
+    match record_in(unsafe { STATE.get() }, d) {
+        Ok(()) => {
+            LAST_REFUSAL.store(0, Ordering::Relaxed);
+            0
+        }
+        Err(f) => fail_errno(f),
+    }
 }
 
 /// Submit the open frame.

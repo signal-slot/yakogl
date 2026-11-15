@@ -1021,3 +1021,27 @@ under Mesa); citations in each section's pin block):
 | depth/stencil AVERAGE, tile, allocation | answered: AVERAGE, one packed ZS view, tile **1024**, allocation **16384** on 25.0.7 (not 512/8192) | section 4, `mesa-msrtt.pandecode:733,740,869,873` |
 | single-sampled preload on a 4-sample tile | answered (case 208): `Pre Frame 0: Intersect`, the 1x preload DCD (multisample and per-sample off, 1-sample 2D texture) on the 4x FBD, and every edge pixel right: the reload lands in all four samples | section 5, `R3/mesa/mesa-msaapre.pandecode:2276,2589-2600,2528`, `R3/mesa/mesa-msaapre.stdout:8-20` |
 | varying layout (case 209) | answered: both orders' fragment programs read with the same `LD_VAR_BUF_IMM` words (offsets 16, 32, 0), the vertex layout 0/16/32, allocation 48 | section 6, `R3/mesa/mesa-varyorder.pandecode:525-533,562-564,1270-1272` |
+
+## The per-draw refusal line
+
+Every draw or clear the Mali backend refuses (non-zero return of `mali_draw`)
+writes one line through the OSAL log, from `src/mali/backend.rs`
+(`refusal_line`):
+
+    yakogl-mali-refusal: <errno> <reason>
+
+`<errno>` is the negative errno the draw returned (-95 a named refusal, -12
+the arena, -22 a builder or caller defect, others from a lost slot or a
+depth/stencil buffer); `<reason>` is the refusal text (a `NOT_BUILT_*` string
+or the frame error message; the word `errno` alone when the cause was already
+logged where it happened). It is cut at the OSAL line limit, and is separate
+from `yakogl: a draw was refused:` (first refusal only) and the
+`yakogl-mali-exit` line, whose formats are unchanged.
+
+Rate limit: a draw refused for the same reason as the draw before it, with no
+draw or clear recorded between, writes nothing. Identical refusals inside one
+case are one line. Blind spot: two consecutive cases that both fail on their
+first draw for one reason (a case normally records its clear first, which
+re-arms the line). A tally reads the lines between dEQP's `Test case` lines
+in the chunk log; stdout buffering of dEQP into a file may reorder them, so
+the board run must check the order in the raw `.out`.
