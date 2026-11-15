@@ -77,7 +77,6 @@ config YAKOGL_GPU_MALI
 	bool "Arm Mali-G610 (NanoPC-T6, RK3588)"
 	depends on YAKOGL_SHADERC_ONLINE
 	depends on YAKOGL_NANOPC_T6
-	select NOCACHE_MEMORY
 	help
 	  The Mali backend (src/mali): CSF command streams and the frame
 	  descriptors, submitted by the OSAL in src/osal/zephyr_mali.c over our
@@ -373,12 +372,13 @@ config YAKOGL_MALI_CARVEOUT_BYTES
 	range 4096 268435456
 	default 33554432
 	help
-	  The memory every Mali buffer comes from: a __nocache static of the
-	  image, mapped whole in the GPU's address space at init, handed out in
-	  whole pages. The backend's own buffers take about 4 MiB (two frame
-	  slots); textures, vertex buffers and surfaces take the rest. At most
-	  256 MiB (board::nanopc_t6_osal::MAX_CARVE_PAGES). The image's RAM must
-	  hold it besides the kernel.
+	  The memory every Mali buffer comes from: part of the image's .noinit
+	  (src/osal/zephyr_mali.c; RAM, not bytes of zephyr.bin), mapped whole
+	  in the GPU's address space at init, handed out in whole pages. The
+	  backend's own buffers take about 4 MiB (two frame slots); textures,
+	  vertex buffers and surfaces take the rest. At most 256 MiB
+	  (board::nanopc_t6_osal::MAX_CARVE_PAGES). The image's RAM must hold
+	  it besides the kernel.
 
 config YAKOGL_MALI_HEAP_CHUNKS
 	int "Mali tiler heap: 2 MiB chunks at most"
@@ -386,12 +386,12 @@ config YAKOGL_MALI_HEAP_CHUNKS
 	range 1 64
 	default 5
 	help
-	  The tiler heap's chunks at most: a __nocache static of this many
-	  2 MiB chunks. The heap starts with YAKOGL_MALI_HEAP_INITIAL_CHUNKS of
-	  them and is given one more on each tiler out-of-memory event until
-	  all are its (board::nanopc_t6_osal); then the event is answered with
-	  no chunk and the firmware waits for fragment work, as panthor does.
-	  Mesa grows its heap to 64.
+	  The tiler heap's chunks at most: this many 2 MiB chunks of the
+	  image's .noinit (beside the carve-out). The heap starts with
+	  YAKOGL_MALI_HEAP_INITIAL_CHUNKS of them and is given one more on each
+	  tiler out-of-memory event until all are its (board::nanopc_t6_osal);
+	  then the event is answered with no chunk and the firmware waits for
+	  fragment work, as panthor does. Mesa grows its heap to 64.
 
 config YAKOGL_MALI_HEAP_INITIAL_CHUNKS
 	int "Mali tiler heap: 2 MiB chunks made at init"

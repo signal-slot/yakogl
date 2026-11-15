@@ -4097,9 +4097,11 @@ zephyr_nanopc_t6_fw_image() {
 # the image is one driver/tools/kexec-zephyr/nanopc-t6.sh would load: one
 # watchdog marker, the RAM footprint (the AArch64 header's image_size) inside
 # zephyr,sram (the window), and the file at most kexec_zephyr's 64 MiB
-# (IMG_MAX; the __nocache statics lie inside the file's span).
+# (IMG_MAX). The file is also smaller than the carve-out: the OSAL's memory
+# is .noinit (src/osal/zephyr_mali.c) and must not be in zephyr.bin, where
+# the carve-out would count against IMG_MAX.
 zephyr_nanopc_t6_gltest_image() {
-  local dir=build/zephyr-werror/nanopc_t6-gl_test bin footprint size window marker
+  local dir=build/zephyr-werror/nanopc_t6-gl_test bin footprint size window marker carve
   zephyr_nanopc_t6_fw_image "$1" gl_test gl_test nanopc_t6-gl_test || return 1
   bin="$dir/zephyr/zephyr.bin"
   marker=$(strings -n 20 "$bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
@@ -4113,6 +4115,11 @@ zephyr_nanopc_t6_gltest_image() {
   }
   [ "$size" -le $((64 << 20)) ] || { echo "zephyr.bin is $size bytes; kexec_zephyr reads at most 64 MiB"; return 1; }
   grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
+  carve=$(sed -n 's/^CONFIG_YAKOGL_MALI_CARVEOUT_BYTES=//p' "$dir/zephyr/.config")
+  [ -n "$carve" ] && [ "$size" -lt "$carve" ] || {
+    echo "zephyr.bin is $size bytes, not under the carve-out's ${carve:-?}: the file holds the GPU's memory"
+    return 1
+  }
 }
 # No input key: an image's inputs include the west workspace and the Zephyr
 # SDK, thousands of files outside the checkout, and a module edited in place
