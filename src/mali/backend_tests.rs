@@ -2378,6 +2378,76 @@ fn a_buffer_object_attribute_is_fetched_in_place() {
     unsafe { m_free(&mut vbo) };
 }
 
+/// A vertex shader that does not read the attribute at location 1 but
+/// reads locations 0 and 2 (tools/mali/testdata/vsattr_between: `p`, `a`,
+/// `b`, `a` unread) loads records 0 and 1, Mesa's numbering
+/// (docs/notes/mali-builtin-inputs.md, "Attribute records"). The draw
+/// carries all three locations, each its own buffer object, size, stride
+/// and offset: Attribute descriptor 0 and its Buffer are location 0's,
+/// descriptor 1 and its Buffer location 2's; location 1's array is in
+/// neither.
+#[test]
+fn a_draw_fills_the_attribute_records_of_the_locations_the_shader_reads() {
+    use crate::mali::genxml::v10::*;
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = target();
+    let mut vbo = OsalGpuMem::ZERO;
+    // SAFETY: a valid out-parameter.
+    assert_eq!(unsafe { m_alloc(0, 1024, OSAL_MEM_DATA, &mut vbo) }, 0);
+    let array = |loc: u8, comps: u8, at: u64, bytes: u64, offset: u32| GlesAttrib {
+        vi_reg: loc,
+        components: comps,
+        format: GLES_ATTRIBF_FLOAT32,
+        stride: 4 * u32::from(comps),
+        offset,
+        buffer_gpu: vbo.gpu + at,
+        buffer_bytes: bytes,
+        ..GlesAttrib::ZERO
+    };
+    let arrays = [array(0, 4, 0, 256, 16), array(1, 3, 256, 192, 12), array(2, 2, 512, 128, 8)];
+    let vs = include_str!("../../tools/mali/testdata/vsattr_between.vert");
+    let fs = include_str!("../../tools/mali/testdata/vsattr_between.frag");
+    let words = with_programs(vs, fs, |vs, fs| {
+        let mut d = triangle(t, &VERTICES);
+        (d.vs, d.fs) = (vs, fs);
+        d.num_attribs = 3;
+        d.attribs[..3].copy_from_slice(&arrays);
+        assert_eq!(draw_flush(&d), 0);
+        with(|m| m.submits.last().unwrap().1.clone())
+    });
+    let srt = reg_at_idvs(&words, 0).expect("the VS SRT") & !63;
+    let entry = |i: u64| u64::from_le_bytes(with(|m| m.read(srt + 16 * i, 8)).try_into().unwrap()) & ((1 << 56) - 1);
+    let (attrs, bufs) = (entry(1), entry(2));
+    for (record, a) in [(0usize, &arrays[0]), (1, &arrays[2])] {
+        let format = if a.components == 4 {
+            Format::RGBA32F.0 << 12 | RgbComponentOrder::RGBA.0
+        } else {
+            Format::RG32F.0 << 12 | RgbComponentOrder::RGB1.0
+        };
+        let want_attr = Attribute {
+            table: 2,
+            frequency: AttributeFrequency::VERTEX,
+            format,
+            offset: a.offset as i32,
+            buffer_index: record as u32,
+            stride: a.stride,
+            attribute_type: AttributeType::_1D,
+            offset_enable: true,
+            ..Default::default()
+        }
+        .pack()
+        .unwrap();
+        let at = |base: u64, len: usize| with(|m| m.read(base + (record * len) as u64, len));
+        assert_eq!(at(attrs, Attribute::LENGTH), want_attr, "record {record}'s Attribute");
+        let want_buf = Buffer { address: a.buffer_gpu, size: a.buffer_bytes as u32, ..Default::default() };
+        assert_eq!(at(bufs, Buffer::LENGTH), want_buf.pack().unwrap(), "record {record}'s Buffer");
+    }
+    assert_eq!(mali_finish(), 0);
+    // SAFETY: the buffer allocated above; its frame completed (finish).
+    unsafe { m_free(&mut vbo) };
+}
+
 /// A draw into another target ends the open frame: two frames, one per
 /// target, each submitted when it ends.
 #[test]
@@ -4253,6 +4323,79 @@ mod gl {
                     assert_eq!(scan(|b| (b == &want).then_some(())).len(), 1, "{kind}: the divisor-3 Attribute");
                 },
             );
+        }
+    }
+
+    /// A location Mesa numbers whose load its back end removes later keeps
+    /// its Attribute descriptor (docs/notes/mali-builtin-inputs.md,
+    /// "Attribute records"): tools/mali/testdata/vsattr_latefold reads `d`
+    /// only in `d * vec4(0.0, -0.0, 0.0, 0.0)`, which the code has no load
+    /// of, and Mesa's draw has three descriptors, `b` the third. Through the
+    /// GL API (glLinkProgram at the default locations, a buffer object per
+    /// array, each its own stride and offset, glDrawArrays): three
+    /// Attributes and three Buffers in the VS resource table, record `i`
+    /// from array `i`.
+    #[test]
+    fn a_gl_draw_keeps_the_descriptor_of_a_location_whose_load_folds_late() {
+        use crate::gl::buffer::{glBindBuffer, glBufferData, glGenBuffers};
+        use crate::gl::state::glFinish;
+        use crate::mali::genxml::v10::*;
+        const VS: &str = include_str!("../../tools/mali/testdata/vsattr_latefold.vert");
+        const FS: &str = include_str!("../../tools/mali/testdata/vsattr_latefold.frag");
+        let _rig = Rig::new(true);
+        assert_eq!(backend::init(), 0);
+        // SAFETY: the rig serialises the library; plain GL calls.
+        unsafe {
+            let ctx = context::gl_context_create(64, 64);
+            assert!(!ctx.is_null());
+            let p = glCreateProgram();
+            glAttachShader(p, shader(GL_VERTEX_SHADER, VS));
+            glAttachShader(p, shader(GL_FRAGMENT_SHADER, FS));
+            glLinkProgram(p);
+            let mut ok: GLint = 0;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+            assert_eq!(ok, 1, "vsattr_latefold links");
+            glUseProgram(p);
+            glViewport(0, 0, 64, 64);
+            let mut bufs = [0u32; 3];
+            glGenBuffers(3, bufs.as_mut_ptr());
+            let stride = |i: u32| 16 + 16 * i;
+            for (i, b) in (0u32..).zip(bufs) {
+                let data = vec![0u8; 256];
+                glBindBuffer(GL_ARRAY_BUFFER, b);
+                glBufferData(GL_ARRAY_BUFFER, data.len() as GLsizeiptr, data.as_ptr().cast(), GL_STATIC_DRAW);
+                glEnableVertexAttribArray(i);
+                glVertexAttribPointer(i, 4, GL_FLOAT, 0, stride(i) as GLsizei, (4 * i as usize) as *const _);
+            }
+            let before = with(|m| m.submits.len());
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR, "the draw");
+            let frames: Vec<Vec<u64>> = with(|m| m.submits[before..].iter().map(|s| s.1.clone()).collect());
+            assert_eq!(frames.len(), 1);
+            let srt = reg_at_idvs(&frames[0], 0).expect("the VS SRT") & !63;
+            let entry = |i: u64| with(|m| m.read(srt + 16 * i, 16));
+            let size = |e: Vec<u8>| u64::from_le_bytes(e[8..16].try_into().unwrap());
+            assert_eq!((size(entry(1)), size(entry(2))), (96, 96), "3 Attributes and 3 Buffers, 32 bytes each");
+            let attrs = u64::from_le_bytes(entry(1)[..8].try_into().unwrap()) & ((1 << 56) - 1);
+            for i in 0..3u32 {
+                let want = Attribute {
+                    table: 2,
+                    frequency: AttributeFrequency::VERTEX,
+                    format: Format::RGBA32F.0 << 12 | RgbComponentOrder::RGBA.0,
+                    offset: 4 * i as i32,
+                    buffer_index: i,
+                    stride: stride(i),
+                    attribute_type: AttributeType::_1D,
+                    offset_enable: true,
+                    ..Default::default()
+                }
+                .pack()
+                .unwrap();
+                let got = with(|m| m.read(attrs + u64::from(i) * Attribute::LENGTH as u64, Attribute::LENGTH));
+                assert_eq!(got, want, "record {i}'s Attribute is array {i}'s");
+            }
+            context::gl_context_destroy(ctx);
         }
     }
 }

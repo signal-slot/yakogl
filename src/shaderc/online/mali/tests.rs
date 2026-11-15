@@ -1077,6 +1077,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::CompareForm
         | E::AlgebraicForm
         | E::MovedTooLarge
+        | E::AttributeNumbering
         | E::FragCoordMediump => None,
         E::OutOfScratch | E::Defect(_) => Some("not a gap"),
     }
@@ -1098,6 +1099,14 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; attribute float q; void main(){ gl_Position = vec4(vec2(3.0) * (q * 0.75), 0.0, 1.0); }", MaliError::ArithConstant),
         /* fmul(fneg(a), fneg(b)) */
         (VS, "attribute vec2 p; attribute vec2 q; void main(){ gl_Position = vec4((-p) * (-q), 0.0, 1.0); }", MaliError::ArithConstant),
+        /* the same product after a fold the back end makes late: the code
+         * walk folds `d`'s lanes away, the numbering walk keeps them and
+         * meets `fmul(fneg(a), fneg(b))` (nir.rs `build`) */
+        (VS, "attribute vec4 p; attribute vec4 d; attribute vec4 b; varying vec4 v; void main(){ gl_Position = p; v = b + (-(d * vec4(0.0, -0.0, 0.0, 0.0))) * (-b); }", MaliError::AttributeNumbering),
+        /* a varying lane only that late fold makes a constant (dEQP
+         * 1405_0's shape): Mesa's link keeps it computed, ours would
+         * propagate it */
+        (VS, "attribute vec4 p; attribute float d; attribute float a; attribute float b; varying vec4 v; void main(){ gl_Position = p; v = vec4(0.5, d, 1.0, 1.0) * vec4(0.5, -0.0, b, a); }", MaliError::AttributeNumbering),
         (FS, "precision mediump float; varying vec2 a2; const float z = -0.0; void main() { if (z == a2.x) discard; gl_FragColor = vec4(1.0); }", MaliError::NegZeroShared),
         (VS, "uniform mat2 m; attribute vec2 p; void main(){ gl_Position = vec4(m * p, 0.0, 1.0); }", MaliError::UniformType),
         (VS, "uniform vec3 u[2]; void main(){ gl_Position = vec4(u[1], 1.0); }", MaliError::UniformArray),
@@ -3402,19 +3411,27 @@ fn a_negated_swapped_varying_pair_is_byte_equal_to_mesa_26_2_1() {
     check_linked(vs, fs, td!("fstex_cubedir_negyx.expect.json"));
 }
 
-/// The cube look-up references of tools/mali/testdata named `<prefix>*`
+/// The references of tools/mali/testdata named `<prefix>*`
 /// (the directory read, so a reference added there is checked with no
-/// list to edit): each name with its sources and expect.json, sorted.
-fn cube_references(prefix: &str) -> Vec<(String, String, String, String)> {
+/// list to edit): each name with its sources and expect.json, sorted. A
+/// name with a .vert or a .frag but not all three files fails here.
+fn testdata_references(prefix: &str) -> Vec<(String, String, String, String)> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
     let mut names: Vec<String> = std::fs::read_dir(&root)
         .expect("a readable directory")
         .flatten()
-        .filter_map(|e| e.file_name().to_str().and_then(|n| n.strip_suffix(".frag")).map(String::from))
+        .filter_map(|e| {
+            let n = e.file_name().to_str()?.to_string();
+            n.strip_suffix(".frag").or_else(|| n.strip_suffix(".vert")).map(String::from)
+        })
         .filter(|n| n.starts_with(prefix))
         .collect();
     names.sort();
-    let read = |n: &str, ext: &str| std::fs::read_to_string(root.join(format!("{n}.{ext}"))).expect("the reference");
+    names.dedup();
+    let read = |n: &str, ext: &str| {
+        std::fs::read_to_string(root.join(format!("{n}.{ext}")))
+            .unwrap_or_else(|e| panic!("{n}.{ext}: the reference's file: {e}"))
+    };
     names
         .into_iter()
         .map(|n| (read(&n, "vert"), read(&n, "frag"), read(&n, "expect.json"), n))
@@ -3434,7 +3451,7 @@ fn cube_references(prefix: &str) -> Vec<(String, String, String, String)> {
 /// along the draw's linked path.
 #[test]
 fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa_26_2_1() {
-    let refs = cube_references("fstex_cubedir_");
+    let refs = testdata_references("fstex_cubedir_");
     assert!(!refs.is_empty());
     for (name, vs, fs, json) in &refs {
         let r = std::panic::catch_unwind(|| check_linked(vs, fs, json));
@@ -3460,7 +3477,7 @@ fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa
 #[test]
 fn cube_look_ups_mesa_compiles_otherwise_are_refused_by_the_name_of_their_reference() {
     use MaliError as E;
-    let refs = cube_references("fstex_cubeno_");
+    let refs = testdata_references("fstex_cubeno_");
     assert!(!refs.is_empty());
     for (name, vs, fs, _) in &refs {
         let want = match name.strip_prefix("fstex_cubeno_").and_then(|r| r.split('_').next()) {
@@ -7952,6 +7969,77 @@ fn other_63_matattr_is_byte_equal_to_mesa_26_2_1() {
         v.info.attributes.iter().map(|&(_, rec)| ("RGBA32F RGBA".to_string(), u32::from(rec))).collect();
     assert_eq!(ours, attribute_records(json));
     assert_eq!(after(json, "attribute_buffers").expect("a buffer table").matches("\"size\"").count(), ours.len());
+}
+
+/// The attribute index of a vertex shader's loads is Mesa's
+/// (docs/notes/mali-builtin-inputs.md, "Attribute records"): the
+/// locations a load reads where Mesa numbers them (`nir_recompute_io_bases`,
+/// before the back end's late folds) are numbered in location order, and
+/// attribute record `i` is the `i`-th of them. tools/mali/testdata/vsattr_*,
+/// each drawn on the Mesa 26.2.1 drm-shim with `--uniform-values --attributes`
+/// (gl_ref.py binds every declared attribute in declaration order):
+/// - an unread attribute before (`_before`), between (`_between`) and
+///   after (`_after`) the read ones, and two of them (`_twoholes`);
+/// - an attribute read only by a local nothing uses (`_deadlocal`) and
+///   only on a comma's discarded side (`_comma`);
+/// - every attribute read (`_allread`);
+/// - a mat2 of which only column 1 is read (`_matcol`, `--mat-columns`:
+///   column 0's location is a hole);
+/// - ES 3.00 locations against the declaration order and with holes
+///   (`_es3_order`: `p` at 3 and `b` at 1 are records 1 and 0). gl_ref.py
+///   cannot bind ES 1.00 attributes in another order;
+/// - an attribute whose only use is a product by a vector of zeros of both
+///   signs (`_latefold*`): its load goes in the back end, after the
+///   numbering, so it keeps its record and its descriptor and the next
+///   attribute's index counts it. A product by one zero in every lane
+///   (`_earlyfold_negvec`, `vec4(-0.0)`) goes before the numbering: no
+///   record.
+///
+/// Each program is the shim's to the byte along the draw's linked path,
+/// and has as many attribute records as Mesa's draw has Attribute
+/// descriptors.
+#[test]
+fn vertex_attribute_indices_count_the_locations_mesa_numbers() {
+    let refs = testdata_references("vsattr_");
+    assert!(!refs.is_empty());
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in &refs {
+        if let Err(e) = try_compile_linked(vs, fs) {
+            failed.push(format!("{name}: refused, {e:?}"));
+            continue;
+        }
+        let Ok((v, _)) = std::panic::catch_unwind(|| check_linked(vs, fs, json)) else {
+            failed.push(format!("{name}: not the shim's words"));
+            continue;
+        };
+        let mut records = v.info.attributes.clone();
+        records.sort_unstable();
+        let want: Vec<u8> = (0..records.len() as u8).collect();
+        assert_eq!(records.iter().map(|&(_, rec)| rec).collect::<Vec<_>>(), want, "{name}: records by location");
+        assert_eq!(records.len(), attribute_records(json).len(), "{name}: Mesa's Attribute descriptors");
+    }
+    assert!(failed.is_empty(), "{failed:#?}");
+}
+
+/// `Nir::attribute_record` counts locations, not loads: `Nir::load` keeps
+/// one node per location, but a second node of one location (pushed here
+/// by hand) is still one bit of Mesa's `inputs` (nir_recompute_io_bases.c
+/// sets a bit per location read), so the record above it stays 1.
+#[test]
+fn an_attribute_record_counts_each_location_read_once() {
+    use super::nir::{Kind, Nir, NirNode, Val};
+    let r = store::with_scratch(|s| {
+        let mut vs = Nir::new(s).expect("a graph");
+        let nd = NirNode { kind: Kind::Input { loc: 0, comps: 4 }, src: [Val::Undef; 3], bits: 32, width: 1 };
+        for _ in 0..2 {
+            vs.push_node(nd).expect("a node");
+        }
+        vs.load(Kind::Input { loc: 3, comps: 4 }).expect("the attribute");
+        vs.counted = vs.inputs_read().expect("the locations");
+        (vs.counted, vs.attribute_record(0), vs.attribute_record(3))
+    })
+    .expect("the scratch arena is free");
+    assert_eq!(r, (0b1001, Ok(0), Ok(1)));
 }
 
 /// The corpus sources the chain references draw are the references'

@@ -216,13 +216,13 @@ fn lea(p: &mut Prog<'_>, psiz: bool) -> Result<[u16; 2], MaliError> {
     Ok([s[0], s[1]])
 }
 
-/// `LD_ATTR_IMM` of attribute record `loc` (the GL location: tri_varying's
-/// `col` at location 1 is record 1, pan_shc's `attributes`), vertex and
-/// instance id in r60/r61, and its SPLIT.
-fn ld_attr(p: &mut Prog<'_>, loc: u8, n: u8) -> Result<[u16; 4], MaliError> {
+/// `LD_ATTR_IMM` of attribute record `record` ([`nir::Nir::attribute_record`]:
+/// vsattr_between's `b` at location 2 is record 1 when location 1 is not
+/// read), vertex and instance id in r60/r61, and its SPLIT.
+fn ld_attr(p: &mut Prog<'_>, record: u8, n: u8) -> Result<[u16; 4], MaliError> {
     let v = p.temp()?;
     p.push(Ins::new(
-        Op::LdAttrImm { index: loc, vecsize: n },
+        Op::LdAttrImm { index: record, vecsize: n },
         &[Dest::ssa(v)],
         &[Src::of(Idx::Reg(60)), Src::of(Idx::Reg(61))],
     ))?;
@@ -691,7 +691,7 @@ pub fn vs_variant(
         }
         match nd.kind {
             nir::Kind::Input { loc, comps } => {
-                let s = ld_attr(p, loc, comps)?;
+                let s = ld_attr(p, vs.attribute_record(loc)?, comps)?;
                 for c in 0..comps as usize {
                     lanes[id][c] = Src::ssa(s[c]);
                 }
