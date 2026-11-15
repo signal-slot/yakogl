@@ -1163,11 +1163,12 @@ fn run_selected_from(
             cube_z = Some(read(g.srcs[0].as_ref()?, &v)?);
             continue;
         }
-        if let SelOp::Sample { binding, proj, lod, fetch, offset, cube, layer, gather } = g.op {
-            /* a 2D array by layer address (`tao`) or a gather: this
-             * selection-level model has neither layers nor a footprint; the
-             * byte model (usc_exec) runs them */
-            if layer || gather {
+        if let SelOp::Sample { binding, proj, lod, fetch, offset, cube, layer, gather, ms } = g.op {
+            /* a 2D array by layer address (`tao`), a gather or a multisample
+             * load (`sno`): this selection-level model has neither layers,
+             * a footprint nor samples; the byte model (usc_exec) runs the
+             * first two */
+            if layer || gather || ms {
                 return None;
             }
             let (mut u, mut w) = (read(g.srcs[0].as_ref()?, &v)?, read(g.srcs[1].as_ref()?, &v)?);

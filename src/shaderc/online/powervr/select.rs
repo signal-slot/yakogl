@@ -1114,7 +1114,7 @@ impl<'a> Sel<'a> {
                     SmpLod::Implicit
                 };
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj, lod, fetch: false, offset: None, cube: false, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj, lod, fetch: false, offset: None, cube: false, layer: false, gather: false, ms: false },
                     ty: OpType::F32,
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), q],
@@ -1161,7 +1161,7 @@ impl<'a> Sel<'a> {
                 }
                 let offset = offset.map(|[du, dv, _]| super::sel::lookup_word(du, dv));
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: false, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: false, layer: false, gather: false, ms: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), level],
@@ -1201,7 +1201,7 @@ impl<'a> Sel<'a> {
                 let level = self.src(l, 0)?;
                 let lf = g(self, I2f, [Some(level), None, None])?;
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: false, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: false, layer: false, gather: false, ms: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(uv[0]), Some(uv[1]), Some(lf)],
@@ -1275,6 +1275,7 @@ impl<'a> Sel<'a> {
                         cube: false,
                         layer: true,
                         gather: false,
+                        ms: false,
                     },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
@@ -1321,7 +1322,7 @@ impl<'a> Sel<'a> {
                 }
                 let lf = g(self, I2f, [Some(level), None, None])?;
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: false, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: false, layer: false, gather: false, ms: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(uv[0]), Some(uv[1]), Some(lf)],
@@ -1367,7 +1368,7 @@ impl<'a> Sel<'a> {
                 let offset = offset.map(|[du, dv, dw]| super::sel::lookup_word_3d(du, dv, dw));
                 self.emit(SelGroup { op: SelOp::SampleZ { vol: true }, ty: OpType::F32, dst: None, srcs: [Some(w), None, None] })?;
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: true, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: true, layer: false, gather: false, ms: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), level],
@@ -1408,7 +1409,7 @@ impl<'a> Sel<'a> {
                 let lf = g(self, I2f, [Some(level), None, None])?;
                 self.emit(SelGroup { op: SelOp::SampleZ { vol: true }, ty: OpType::F32, dst: None, srcs: [Some(c[2]), None, None] })?;
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: true, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: true, layer: false, gather: false, ms: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(c[0]), Some(c[1]), Some(lf)],
@@ -1475,7 +1476,7 @@ impl<'a> Sel<'a> {
                     uv[k] = g(self, Fadd, [Some(tf), half, None])?;
                 }
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: false, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: false, layer: false, gather: false, ms: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(uv[0]), Some(uv[1]), Some(SelSrc::Imm(0.0f32.to_bits()))],
@@ -1572,6 +1573,7 @@ impl<'a> Sel<'a> {
                             cube: false,
                             layer: false,
                             gather: false,
+                            ms: false,
                         },
                         ty: smp_type(ret),
                         dst: Some(SelDst::Virtual(self.tex_out(id))),
@@ -1596,6 +1598,7 @@ impl<'a> Sel<'a> {
                             cube: false,
                             layer: false,
                             gather: false,
+                            ms: false,
                         },
                         ty: OpType::F32,
                         dst: Some(SelDst::Virtual(*tap)),
@@ -1660,7 +1663,7 @@ impl<'a> Sel<'a> {
                 };
                 let offset = offset.map(|[du, dv, _]| super::sel::lookup_word(du, dv));
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: false, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: false, layer: false, gather: false, ms: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), level],
@@ -1706,7 +1709,7 @@ impl<'a> Sel<'a> {
                     }
                     self.emit(SelGroup { op: SelOp::SampleZ { vol: false }, ty: smp_type(ret), dst: None, srcs: [Some(z), None, None] })?;
                     return self.emit(SelGroup {
-                        op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset: None, cube: true, layer: false, gather: false },
+                        op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset: None, cube: true, layer: false, gather: false, ms: false },
                         ty: smp_type(ret),
                         dst: Some(SelDst::Virtual(self.tex_out(id))),
                         srcs: [Some(x), Some(y), level],
@@ -1723,7 +1726,7 @@ impl<'a> Sel<'a> {
                     self.sample_grads(&d)?;
                 }
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset: None, cube: false, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset: None, cube: false, layer: false, gather: false, ms: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), level],
@@ -3346,6 +3349,7 @@ impl<'a> Sel<'a> {
                     cube: false,
                     layer: layer.is_some(),
                     gather: true,
+                    ms: false,
                 },
                 ty: OpType::F32,
                 dst: Some(SelDst::Virtual(at)),
@@ -3570,6 +3574,7 @@ impl<'a> Sel<'a> {
                         cube: native,
                         layer: false,
                         gather: true,
+                        ms: false,
                     },
                     ty: OpType::F32,
                     dst: Some(SelDst::Virtual(tap)),

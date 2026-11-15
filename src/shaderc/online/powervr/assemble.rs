@@ -248,7 +248,7 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
     /* A resolved sample and the wait after it (`chain::expand_samples`
      * produced both). */
     match g.op {
-        SelOp::Sample { proj, lod, fetch, offset, cube, layer, gather, .. } => {
+        SelOp::Sample { proj, lod, fetch, offset, cube, layer, gather, ms, .. } => {
             let fixed = |s: Option<SelSrc>, bank: super::sel::Bank| match s {
                 Some(SelSrc::Fixed { bank: b, reg, mods }) if b == bank && mods == Mods::default() => Ok(reg),
                 _ => Err(BuildError::Unsupported("a sample that was not expanded")),
@@ -276,7 +276,17 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
                 data,
                 sampler,
                 dest,
-                super::fragment::SmpForm { proj, lod, fetch, offset: offset.is_some(), cube, layer, gather, integer },
+                super::fragment::SmpForm {
+                    proj,
+                    lod,
+                    fetch,
+                    offset: offset.is_some(),
+                    cube,
+                    layer,
+                    gather,
+                    integer,
+                    ms,
+                },
             );
         }
         SelOp::WaitData => return super::fragment::wait_data(),

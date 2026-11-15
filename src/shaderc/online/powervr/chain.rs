@@ -1467,14 +1467,14 @@ fn expand_samples<'a>(
             /* words 2 and 3: a divisor or a level, then a layer's two
              * address words, then an offset's lookup */
             for x in body.clone() {
-                if let SelOp::Sample { proj, lod, offset, cube, layer, .. } = x.op {
+                if let SelOp::Sample { proj, lod, offset, cube, layer, ms, .. } = x.op {
                     let coords = 2 + usize::from(cube);
                     let grad_words = if lod == SmpLod::Gradients { 2 * coords } else { 0 };
                     let data_words = coords
                         + grad_words
                         + usize::from(proj || lod.in_block())
                         + 2 * usize::from(layer)
-                        + usize::from(offset.is_some());
+                        + usize::from(offset.is_some() || ms);
                     zeroed[2..data_words.max(2)].fill(false);
                 }
             }
@@ -1493,10 +1493,17 @@ fn expand_samples<'a>(
                 .map_err(oom)?;
             continue;
         }
-        let SelOp::Sample { binding, proj, lod, fetch, offset, cube, layer, gather } = g.op else {
+        let SelOp::Sample { binding, proj, lod, fetch, offset, cube, layer, gather, ms } = g.op else {
             out.push(a, g).map_err(oom)?;
             continue;
         };
+        /* a multisample load's `srcs[2]` is its sample index: no divisor or
+         * level word beside it (`fragment::build_smp` refuses the rest) */
+        if ms && (proj || lod != SmpLod::Implicit || cube || layer || gather) {
+            return Err(ChainError::Build(BuildError::Unsupported(
+                "a multisample load with a divisor, a level, a cube, a layer or a gather",
+            )));
+        }
         let (Some(u), Some(v), Some(SelDst::Virtual(r))) = (g.srcs[0], g.srcs[1], g.dst) else {
             return Err(ChainError::FragmentInputsNotBuilt);
         };
@@ -1557,17 +1564,45 @@ fn expand_samples<'a>(
         } else {
             first_zero
         };
-        /* The offset's lookup word ends the block (pco_emit_nir_smp's order:
-         * coordinates, divisor, level, then the lookup). */
-        let first_zero = if let Some(word) = offset {
-            out.push(
-                a,
-                copy(
-                    SelDst::Fixed { bank: Bank::Temp, reg: data + first_zero },
-                    SelSrc::Imm(super::sel::lookup_bits(word)),
-                ),
-            )
-            .map_err(oom)?;
+        /* The lookup word ends the block (pco_emit_nir_smp's order:
+         * coordinates, divisor, level, then the lookup): an offset's bits
+         * and a multisample load's sample index in MS_NUM, one word for both
+         * (pco_nir_tex.c:303-336). A constant index is folded into the
+         * word; a register's is shifted into place (pco's bitfield_insert,
+         * without its mask: the index is the caller's 0..7). */
+        let first_zero = if offset.is_some() || ms {
+            let bits = offset.map_or(0, super::sel::lookup_bits);
+            let word = match (ms, g.srcs[2]) {
+                (false, _) => SelSrc::Imm(bits),
+                (true, Some(SelSrc::Imm(n))) if n >> super::sel::LOOKUP_MS_NUM_BITS == 0 => {
+                    SelSrc::Imm(bits | super::sel::lookup_ms_bits(n))
+                }
+                (true, Some(index @ (SelSrc::Virtual { .. } | SelSrc::Fixed { .. }))) => {
+                    let mut alu = |op, srcs: [Option<SelSrc>; 3]| {
+                        let at = VReg(vregs);
+                        vregs += 1;
+                        out.push(
+                            a,
+                            SelGroup { op: SelOp::Alu(op), ty: OpType::U32, dst: Some(SelDst::Virtual(at)), srcs },
+                        )
+                        .map(|_| SelSrc::Virtual { v: at, mods: Mods::default() })
+                    };
+                    use crate::shaderc::online::ir::AluOp::{Ior, Ishl};
+                    let start = SelSrc::Imm(super::sel::LOOKUP_MS_NUM_START);
+                    let w = alu(Ishl, [Some(index), Some(start), None]).map_err(oom)?;
+                    if bits == 0 {
+                        w
+                    } else {
+                        alu(Ior, [Some(w), Some(SelSrc::Imm(bits)), None]).map_err(oom)?
+                    }
+                }
+                (true, _) => {
+                    return Err(ChainError::Build(BuildError::Unsupported(
+                        "a multisample load whose sample index is not a register or a constant below 8",
+                    )))
+                }
+            };
+            out.push(a, copy(SelDst::Fixed { bank: Bank::Temp, reg: data + first_zero }, word)).map_err(oom)?;
             first_zero + 1
         } else {
             first_zero
@@ -1587,7 +1622,7 @@ fn expand_samples<'a>(
         out.push(
             a,
             SelGroup {
-                op: SelOp::Sample { binding, proj, lod, fetch, offset, cube, layer, gather },
+                op: SelOp::Sample { binding, proj, lod, fetch, offset, cube, layer, gather, ms },
                 /* F32, or an integer look-up's S32 / U32 (`select::smp_type`) */
                 ty: g.ty,
                 dst: Some(SelDst::Fixed { bank: Bank::Temp, reg: dest }),
@@ -1897,6 +1932,7 @@ mod tests {
                 cube: false,
                 layer: false,
                 gather: false,
+                ms: false,
             },
             ty: OpType::F32,
             dst: Some(SelDst::Virtual(VReg(dst))),
@@ -1940,6 +1976,7 @@ mod tests {
                 cube: false,
                 layer: false,
                 gather: false,
+                ms: false,
             },
             ty: OpType::F32,
             dst: Some(SelDst::Virtual(VReg(dst))),
@@ -1956,6 +1993,90 @@ mod tests {
             .map(|run| run.iter().filter(|g| g.op == SelOp::Copy && g.srcs[0] == Some(SelSrc::Imm(0))).count())
             .collect();
         assert_eq!(zeros_before[..3], [14, 0, 1]);
+    }
+
+    /// A multisample load's lookup word, after the two coordinates as pco
+    /// orders the block (pco_nir_tex.c:303-336): a constant sample index
+    /// folded into `MS_NUM` (bits 16..18) beside the offset's bits; a
+    /// register's shifted there (`ishl` by 16) and ORed with the offset's
+    /// bits when there is one. The resolved sample keeps `ms` and reads the
+    /// sampler state from srcs[2], not the index. A level beside `ms` is
+    /// refused.
+    #[test]
+    fn a_multisample_load_puts_its_sample_index_in_the_lookup_word() {
+        use crate::shaderc::online::ir::AluOp;
+        use crate::shaderc::online::powervr::sel::{lookup_bits, lookup_word, Bank};
+        let v = |r: u32| Some(SelSrc::Virtual { v: VReg(r), mods: Mods::default() });
+        let sample = |offset, lod, index: Option<SelSrc>| SelGroup {
+            op: SelOp::Sample {
+                binding: 0,
+                proj: false,
+                lod,
+                fetch: true,
+                offset,
+                cube: false,
+                layer: false,
+                gather: false,
+                ms: true,
+            },
+            ty: OpType::F32,
+            dst: Some(SelDst::Virtual(VReg(10))),
+            srcs: [v(0), v(1), index],
+        };
+        let word2 = |dst: &SelDst| *dst == SelDst::Fixed { bank: Bank::Temp, reg: 8 + 2 };
+        let off = lookup_word(1, -1);
+        for (offset, index, want) in [
+            (None, SelSrc::Imm(3), 3 << 16),
+            (Some(off), SelSrc::Imm(2), lookup_bits(off) | 2 << 16),
+            (Some(off), SelSrc::Imm(0), lookup_bits(off)),
+        ] {
+            let groups = [sample(offset, SmpLod::Implicit, Some(index))];
+            let sel =
+                Selected { groups: &groups, vregs: 40, outputs: &[], inputs: &[], discard: None, alpha_to_one: None };
+            let mut buf = std::vec![0u8; 64 << 10];
+            let a = Arena::new(&mut buf);
+            let (out, _) = expand_samples(sel, 8, &[], &a).expect("expands");
+            let w: std::vec::Vec<_> = out.groups.iter().filter(|g| g.dst.as_ref().is_some_and(word2)).collect();
+            assert_eq!(w.len(), 1, "{offset:?} {index:?}");
+            assert_eq!((w[0].op, w[0].srcs[0]), (SelOp::Copy, Some(SelSrc::Imm(want))));
+            let s = out.groups.iter().find(|g| matches!(g.op, SelOp::Sample { .. })).unwrap();
+            assert!(matches!(s.op, SelOp::Sample { ms: true, .. }));
+            assert_eq!(s.srcs[2], Some(SelSrc::Fixed { bank: Bank::Shared, reg: 8, mods: Mods::default() }));
+            assert_eq!(out.groups.iter().filter(|g| matches!(g.op, SelOp::Alu(_))).count(), 0);
+        }
+        for offset in [None, Some(off)] {
+            let groups = [sample(offset, SmpLod::Implicit, v(5))];
+            let sel =
+                Selected { groups: &groups, vregs: 40, outputs: &[], inputs: &[], discard: None, alpha_to_one: None };
+            let mut buf = std::vec![0u8; 64 << 10];
+            let a = Arena::new(&mut buf);
+            let (out, _) = expand_samples(sel, 8, &[], &a).expect("expands");
+            let alu: std::vec::Vec<_> = out.groups.iter().filter(|g| matches!(g.op, SelOp::Alu(_))).collect();
+            assert_eq!(alu[0].op, SelOp::Alu(AluOp::Ishl));
+            assert_eq!(alu[0].srcs[..2], [v(5), Some(SelSrc::Imm(16))]);
+            let last = alu.last().unwrap();
+            if offset.is_some() {
+                assert_eq!(alu.len(), 2);
+                assert_eq!(last.op, SelOp::Alu(AluOp::Ior));
+                assert_eq!(last.srcs[1], Some(SelSrc::Imm(lookup_bits(off))));
+            } else {
+                assert_eq!(alu.len(), 1);
+            }
+            let Some(SelDst::Virtual(at)) = last.dst else { panic!("a virtual word") };
+            let w = out.groups.iter().find(|g| g.dst.as_ref().is_some_and(word2)).unwrap();
+            assert_eq!(w.srcs[0], Some(SelSrc::Virtual { v: at, mods: Mods::default() }));
+            assert!(out.vregs > 40);
+        }
+        for (lod, index) in
+            [(SmpLod::Replace, v(5)), (SmpLod::Implicit, Some(SelSrc::Imm(8))), (SmpLod::Implicit, None)]
+        {
+            let groups = [sample(None, lod, index)];
+            let sel =
+                Selected { groups: &groups, vregs: 40, outputs: &[], inputs: &[], discard: None, alpha_to_one: None };
+            let mut buf = std::vec![0u8; 64 << 10];
+            let a = Arena::new(&mut buf);
+            assert!(expand_samples(sel, 8, &[], &a).is_err(), "{lod:?} {index:?}");
+        }
     }
 
     /// dEQP-GLES2.functional.shaders.invariance's subexpression cases, as
