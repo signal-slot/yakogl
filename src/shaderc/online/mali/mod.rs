@@ -1033,9 +1033,9 @@ pub struct FsPrecision {
     /// docs/notes/mali-fragcoord-mediump.md 1).
     pub frag_coord_highp: bool,
     /// The vertex shader's constant varying lanes Mesa's link propagates
-    /// into this shader ([`link::VaryingConsts`]; none for a shader
-    /// compiled alone).
-    pub consts: link::VaryingConsts,
+    /// into this shader, at this shader's varying locations
+    /// ([`link::FsConsts`]; none for a shader compiled alone).
+    pub consts: link::FsConsts,
 }
 
 impl FsPrecision {
@@ -1639,7 +1639,7 @@ pub fn compile_linked_blocks<'s>(
         (_, Some(o)) if stage == SHC_STAGE_FRAGMENT => Some(o),
         _ => return Err(refused(MaliError::BlendVariantNotLowered)),
     };
-    compile_lowered(stage, glsl, l, order, link::VaryingConsts::NONE, scratch, keep)
+    compile_lowered(stage, glsl, l, order, link::FsConsts::NONE, scratch, keep)
 }
 
 /// [`compile_linked_blocks`] past the front end: `consts` are the vertex
@@ -1649,7 +1649,7 @@ fn compile_lowered<'s>(
     glsl: &[u8],
     l: super::lower::Lowered<'s>,
     order: Option<link::VaryingOrder>,
-    consts: link::VaryingConsts,
+    consts: link::FsConsts,
     scratch: &Arena<'s>,
     keep: &'static Arena<'static>,
 ) -> Result<(ShcShader, Blocks<'s>), CompileError> {
@@ -1670,14 +1670,23 @@ fn compile_lowered<'s>(
 
 /// The varying lanes vertex shader `glsl` stores as constants, which Mesa's
 /// link propagates into the program's fragment shader (nir_opt_varyings,
-/// [`link::VaryingConsts`]): the first step of the link that builds both
-/// stages for the program. Then [`compile_fs_for_vs`] with them, then
-/// [`compile_vs_for_reads`] with that fragment shader's reads, which no
-/// longer hold the constant lanes (case114_f.expect.json). The lanes of
-/// uniforms alone ride along, marked flat (`VaryingConsts::flat`): the
-/// fragment shader loads them `.src_flat32` (varyconst_117_uniidxf).
+/// [`link::VaryingConsts`]), at the vertex shader's own varying locations:
+/// what the shader object's own record leaves out
+/// (codegen.rs `compile_vs_without_consts`). The program's fragment shader
+/// takes them at its locations ([`fs_constants`]). The lanes of uniforms
+/// alone ride along, marked flat (`VaryingConsts::flat`): the fragment
+/// shader loads them `.src_flat32` (varyconst_117_uniidxf).
 pub fn vs_constants(glsl: &[u8], scratch: &Arena<'_>) -> Result<link::VaryingConsts, CompileError> {
     let l = lower_source(SHC_STAGE_VERTEX, glsl, &[], scratch)?;
+    lowered_vs_constants(&l, glsl, scratch)
+}
+
+/// [`vs_constants`] past the front end.
+fn lowered_vs_constants<'s>(
+    l: &super::lower::Lowered<'s>,
+    glsl: &[u8],
+    scratch: &Arena<'s>,
+) -> Result<link::VaryingConsts, CompileError> {
     /* built as for a fragment shader that reads nothing: no lane is stored,
      * so none is refused for what it holds */
     let rw = glsl::passes(&l.module, false, scratch).map_err(refused)?;
@@ -1703,14 +1712,51 @@ pub fn vs_constants(glsl: &[u8], scratch: &Arena<'_>) -> Result<link::VaryingCon
     Ok(vs.consts)
 }
 
+/// The varying `hit` picks among a stage's `ios`: its name and location.
+/// The stages of a program are paired by name (each numbers its varyings in
+/// its own declaration order).
+fn varying_decl<'a>(ios: &[ir_mod::IoDecl<'a>], hit: impl Fn(&ir_mod::IoDecl<'a>) -> bool) -> Option<(&'a str, u8)> {
+    ios.iter().find(|io| io.kind == ir_mod::IoKind::Varying && hit(io)).map(|io| (io.name, io.location))
+}
+
+/// The lanes of vertex shader `vs_glsl` that Mesa's link folds into
+/// fragment shader `fs_glsl` ([`vs_constants`]), at the fragment shader's
+/// varying locations, each varying paired by name
+/// ([`link::VaryingConsts::at_fragment`]): the first step of the link that
+/// builds both stages for the program. Then [`compile_fs_for_vs`] with them,
+/// then [`compile_vs_for_reads`] with that fragment shader's reads, which no
+/// longer hold the constant lanes (case114_f.expect.json).
+///
+/// None when the vertex shader stores no such lane: the link has nothing to
+/// fold. `Some` of no lane when it stores some and the fragment shader
+/// declares none of their varyings: the link removes those varyings, so
+/// the program's vertex shader is built for the fragment shader's reads as
+/// well (varyconst_names_undeclared).
+pub fn fs_constants(
+    vs_glsl: &[u8],
+    fs_glsl: &[u8],
+    scratch: &Arena<'_>,
+) -> Result<Option<link::FsConsts>, CompileError> {
+    let v = lower_source(SHC_STAGE_VERTEX, vs_glsl, &[], scratch)?;
+    let consts = lowered_vs_constants(&v, vs_glsl, scratch)?;
+    if consts.as_slice().is_empty() {
+        return Ok(None);
+    }
+    let f = lower_source(SHC_STAGE_FRAGMENT, fs_glsl, &[], scratch)?;
+    Ok(Some(consts.at_fragment(|loc| {
+        let (name, _) = varying_decl(v.module.outputs, |io| io.location == loc)?;
+        varying_decl(f.module.inputs, |io| io.name == name).map(|(_, l)| l)
+    })))
+}
+
 /// A fragment shader for a program whose vertex shader stores `consts`
-/// ([`vs_constants`]): each read of one of those lanes is the constant, as
+/// ([`fs_constants`]): each read of one of those lanes is the constant, as
 /// after Mesa's link, and the varyings it reads are laid out without them
 /// (the record's reads, compacted, are what [`compile_vs_for_reads`]
 /// builds the program's vertex shader for).
 pub fn compile_fs_for_vs<'s>(
     glsl: &[u8],
-    consts: link::VaryingConsts,
+    consts: link::FsConsts,
     scratch: &Arena<'s>,
     keep: &'static Arena<'static>,
 ) -> Result<(ShcShader, Blocks<'s>), CompileError> {
@@ -1809,12 +1855,9 @@ pub fn reads_at_vertex_locations(
 ) -> Result<Option<ProgramReads>, CompileError> {
     let f = lower_source(SHC_STAGE_FRAGMENT, fs_glsl, &[], scratch)?;
     let v = lower_source(SHC_STAGE_VERTEX, vs_glsl, &[], scratch)?;
-    fn varying<'a>(ios: &[ir_mod::IoDecl<'a>], hit: impl Fn(&ir_mod::IoDecl<'a>) -> bool) -> Option<(&'a str, u8)> {
-        ios.iter().find(|io| io.kind == ir_mod::IoKind::Varying && hit(io)).map(|io| (io.name, io.location))
-    }
     let at_vertex = |loc: u8| {
-        let (name, _) = varying(f.module.inputs, |io| io.location == loc)?;
-        varying(v.module.outputs, |io| io.name == name).map(|(_, l)| l)
+        let (name, _) = varying_decl(f.module.inputs, |io| io.location == loc)?;
+        varying_decl(v.module.outputs, |io| io.name == name).map(|(_, l)| l)
     };
     let mut out = *pr;
     for r in &mut out.reads[..out.n] {

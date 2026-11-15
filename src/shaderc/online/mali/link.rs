@@ -215,6 +215,93 @@ impl VaryingConsts {
     pub fn as_slice(&self) -> &[(u8, u8, u32)] {
         &self.at[..self.n]
     }
+
+    /// These lanes at the varying locations of the program's fragment
+    /// shader: `at` gives the fragment location of the varying at a vertex
+    /// location, paired by name as Mesa's link pairs the stages, None when
+    /// the fragment shader does not declare it. A location is each stage's
+    /// own declaration order, so the two stages number one varying
+    /// differently as soon as they declare their varyings in another order
+    /// or the fragment shader declares fewer (varyconst_names_swap: `a, b`
+    /// in the vertex shader, `b, a` in the fragment one).
+    ///
+    /// A lane of a varying the fragment shader does not declare is left
+    /// out: no one reads it, the link removes it before it propagates or
+    /// merges anything (`remove_dead_varyings`, nir_opt_varyings.c:2113,
+    /// called at :5973, the two other passes at :6037-6041). So a lane
+    /// equal to such a lane ([`VaryingConsts::push_equal`]) has lost the
+    /// lane it was read from: the first lane of that value the fragment
+    /// shader declares takes its place, and the later ones are read from
+    /// that one.
+    pub fn at_fragment(&self, at: impl Fn(u8) -> Option<u8>) -> FsConsts {
+        let mut out = VaryingConsts::NONE;
+        /* (a vertex lane the fragment shader does not declare, the first
+         * declared lane of its value, at its fragment location) */
+        let mut heads = [((0u8, 0u8), (0u8, 0u8)); MAX_CONSTS];
+        let mut nheads = 0;
+        for &(location, comp, bits) in self.as_slice() {
+            let Some(l) = at(location) else { continue };
+            if comp & EQUAL_LANE == 0 {
+                /* a constant or a flat lane: `comp` holds the flat tag */
+                out.push(l, comp, bits);
+                continue;
+            }
+            let (c, of) = (comp & !EQUAL_LANE, ((bits >> 8) as u8, bits as u8));
+            let head = match at(of.0) {
+                Some(of_l) => Some((of_l, of.1)),
+                None => heads[..nheads].iter().find(|h| h.0 == of).map(|h| h.1),
+            };
+            match (head, heads.get_mut(nheads)) {
+                (Some((of_l, of_c)), _) => out.push_equal(l, c, of_l, of_c),
+                (None, Some(h)) => {
+                    *h = (of, (l, c));
+                    nheads += 1;
+                }
+                /* never: each head is a lane of this table, MAX_CONSTS at most */
+                (None, None) => {}
+            }
+        }
+        FsConsts(out)
+    }
+}
+
+/// [`VaryingConsts`] at the varying locations of the program's fragment
+/// shader: what that shader is compiled with (mod.rs `compile_fs_for_vs`)
+/// and what its record key holds (backend.rs `LinkConsts::key`). Made by
+/// [`VaryingConsts::at_fragment`] alone, so that no vertex location reaches
+/// a fragment shader.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct FsConsts(VaryingConsts);
+
+impl FsConsts {
+    pub const NONE: FsConsts = FsConsts(VaryingConsts::NONE);
+
+    /// No lane of the vertex shader's reaches this fragment shader.
+    pub fn is_empty(&self) -> bool {
+        self.0.as_slice().is_empty()
+    }
+
+    /// [`VaryingConsts::get`], at the fragment shader's `location`.
+    pub fn get(&self, location: u8, comp: u8) -> Option<u32> {
+        self.0.get(location, comp)
+    }
+
+    /// [`VaryingConsts::flat`], at the fragment shader's `location`.
+    pub fn flat(&self, location: u8, comp: u8) -> bool {
+        self.0.flat(location, comp)
+    }
+
+    /// [`VaryingConsts::class`], both lanes at the fragment shader's
+    /// locations.
+    pub fn class(&self, location: u8, comp: u8) -> (u8, u8) {
+        self.0.class(location, comp)
+    }
+
+    /// Each lane as (fragment location, tagged component, bits): the record
+    /// key's bytes.
+    pub fn as_slice(&self) -> &[(u8, u8, u32)] {
+        self.0.as_slice()
+    }
 }
 
 /// The Mali's `struct shc_backend.link` table rule: the null and name checks
@@ -375,6 +462,76 @@ fn pair(vs: &ShcShader, fs: &ShcShader, log: &mut CStrWriter, who: &str) -> Pair
     match differ {
         None => Pairing::Linked,
         Some(at) => Pairing::Differ { at, order: orderable.then_some(VaryingOrder(order)) },
+    }
+}
+
+/// [`VaryingConsts::at_fragment`] on tables built by hand: the vertex
+/// shader's lanes at the fragment shader's locations.
+#[cfg(test)]
+mod at_fragment_tests {
+    use super::*;
+
+    /// The vertex locations 0..3 are the varyings `a, b, c, d`; the fragment
+    /// shader declares `d, b, a`: `c` is not declared.
+    fn at(location: u8) -> Option<u8> {
+        [Some(2), Some(1), None, Some(0)].get(usize::from(location)).copied().flatten()
+    }
+
+    /// A constant and a flat lane move to the fragment location of their
+    /// varying's name; a lane of a varying the fragment shader does not
+    /// declare is left out.
+    #[test]
+    fn a_constant_or_flat_lane_moves_to_its_names_location() {
+        let mut v = VaryingConsts::NONE;
+        v.push(0, 1, 0x3f00_0000);
+        v.push_flat(3, 2);
+        v.push(2, 0, 0x3f80_0000);
+        v.push_flat(2, 1);
+        let f = v.at_fragment(at);
+        assert_eq!(f.get(2, 1), Some(0x3f00_0000), "`a`: the vertex location 0, the fragment location 2");
+        assert!(f.flat(0, 2), "`d`: the vertex location 3, the fragment location 0");
+        assert_eq!(f.as_slice().len(), 2, "no lane of `c`: {f:?}");
+        assert_eq!((f.get(0, 1), f.flat(2, 2)), (None, false), "nothing is left at the vertex locations");
+    }
+
+    /// The same table when both stages number the varyings alike.
+    #[test]
+    fn equal_locations_keep_the_table() {
+        let mut v = VaryingConsts::NONE;
+        v.push(0, 1, 7);
+        v.push_flat(1, 0);
+        v.push_equal(3, 2, 1, 3);
+        assert_eq!(v.at_fragment(Some).as_slice(), v.as_slice());
+        assert!(VaryingConsts::NONE.at_fragment(Some).is_empty());
+    }
+
+    /// A lane equal to a lane of a declared varying is read from that lane
+    /// at its fragment location.
+    #[test]
+    fn an_equal_lane_follows_the_lane_it_is_read_from() {
+        let mut v = VaryingConsts::NONE;
+        v.push_equal(3, 2, 0, 1);
+        let f = v.at_fragment(at);
+        assert_eq!(f.class(0, 2), (2, 1), "`d.z` is read from `a.y`");
+        assert_eq!(f.class(2, 1), (2, 1), "`a.y` is its own lane");
+    }
+
+    /// Lanes equal to a lane of the varying that is not declared: the first
+    /// declared one is the lane the later ones are read from, and is no
+    /// equal lane itself. An equal lane of the undeclared varying is left
+    /// out with it.
+    #[test]
+    fn equal_lanes_of_an_undeclared_lane_are_read_from_the_first_declared_one() {
+        let mut v = VaryingConsts::NONE;
+        v.push_equal(2, 3, 2, 0);
+        v.push_equal(3, 0, 2, 0);
+        v.push_equal(3, 1, 2, 0);
+        v.push_equal(1, 2, 2, 1);
+        let f = v.at_fragment(at);
+        assert_eq!(f.class(0, 0), (0, 0), "`d.x` is the first declared lane of `c.x`'s value");
+        assert_eq!(f.class(0, 1), (0, 0), "`d.y` is read from `d.x`");
+        assert_eq!(f.class(1, 2), (1, 2), "`b.z` is the only declared lane of `c.y`'s value");
+        assert_eq!(f.as_slice().len(), 1, "one equal lane: {f:?}");
     }
 }
 

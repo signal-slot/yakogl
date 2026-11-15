@@ -503,3 +503,71 @@ uniform buffer), `discard_dynloop.vert`'s own vertex program (same shape as
 `va_vec2`, so expected equal), and the frame side: the varying's stride and
 which varyings are flat are not in the record (see the last paragraph of the
 previous section).
+
+## The table at the fragment shader's locations (issue #4510)
+
+A varying's location is its place in its own stage's declaration order
+(`ir` `IoDecl::location`), so the two stages of a program number one
+varying differently as soon as they declare their varyings in another
+order, or the fragment shader declares fewer of them. Mesa's link pairs the
+stages by name.
+
+`vs_constants` builds the table from the vertex shader alone, so its lanes
+are at the *vertex* shader's locations (`link::VaryingConsts`). The fragment
+shader reads varyings at *its* locations. The link therefore maps the table
+before the fragment shader sees it:
+
+- `mod.rs` `fs_constants(vs, fs)` lowers both stages and calls
+  `VaryingConsts::at_fragment` with the name pairing. Its result is a
+  `link::FsConsts`, the only type `compile_fs_for_vs`, `FsPrecision::consts`
+  and the backend's record key (`LinkConsts`) take: a vertex location cannot
+  reach a fragment shader by type.
+- A lane of a varying the fragment shader does not declare is left out.
+  Mesa removes that varying before it propagates constants or merges equal
+  lanes (`remove_dead_varyings`, nir_opt_varyings.c:2113, called at :5973;
+  `propagate_uniform_expressions` and `deduplicate_outputs` at :6037-6041).
+  A lane that was equal to such a lane is read from the first declared lane
+  of the same value instead.
+- `fs_constants` has three results. None: the vertex shader stores no such
+  lane, the plain link decides. `Some` of no lane: it stores some, in
+  varyings the fragment shader does not declare; the shader object's
+  fragment record is the program's, and the program's vertex shader is
+  still built for the fragment shader's reads (`mali::fragment_reads`),
+  because the link removes the undeclared varyings. `Some` of lanes: the
+  fragment shader is compiled with them.
+- The record key of a linked fragment shader holds the lanes at the
+  fragment locations: two vertex shaders that fold the same lanes into one
+  fragment shader share its record, whatever order each declares its
+  varyings in.
+- A program whose every fragment read is folded has no varying program
+  (`secondary_offset` null in the reference, `varyconst_names_swap_const`).
+  The vertex record's key says whether it was built for a program
+  (`FsReads::program`), so "a program's vertex shader for no reads" and
+  "the shader object's own vertex shader" are two records.
+
+Before this, the fragment shader read the table at its own locations. With
+`varying vec4 a; varying vec4 b;` in the vertex shader (`b` a constant) and
+`varying vec4 b; varying vec4 a;` in the fragment shader, a read of `a` (the
+fragment location 1) was folded to `b`'s constant: a program that draws a
+wrong value.
+
+References (Mesa 26.2.1 on drm-shim, `tools/mali/testdata/`):
+
+| pair | vertex varyings | fragment varyings, read | result |
+|---|---|---|---|
+| `varyconst_names_swap` | `a` (attribute), `b` (constant) | `b, a`; reads `a` | `a` loaded, 15-word varying program |
+| `varyconst_names_swap_const` | the same | `b, a`; reads `b` | the constant, no varying program |
+| `varyconst_names_subset` | `b` (constant), `a` (attribute) | `a`; reads `a` | `a` loaded, the object's fragment record |
+| `varyconst_names_undeclared` | `v` (constant), `w` (attribute) | `w`; reads `w` | `w` loaded, 3-word varying program |
+| `varyconst_names_undeclared_mixed` | `v` (attribute), `w_k` (attribute and constants) | `v`; reads `v` | `v` loaded, 20-word varying program |
+
+Tests: `link.rs` `at_fragment_tests` (the mapping), `tests.rs`
+`the_fragment_shaders_table_is_keyed_by_its_own_locations` and
+`a_constant_lane_reaches_the_fragment_varying_of_its_name` (the link step),
+`backend.rs` `mod mali` (the product's entry points: compile of each stage,
+`compile_vs_linked`, link).
+
+Measured through the product's entry points against main, 18,367 reference
+programs: no program that was byte-equal changed, no refused program became
+"compiled, not Mesa's", 21 programs became byte-equal (14 that differed,
+7 that were refused).

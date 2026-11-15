@@ -120,9 +120,10 @@ type LaneFlag = (String, u8, Flag);
 
 /// [`flag`] of every lane of the fragment shader `src`'s varyings, after
 /// the front end and the fragment graph (nir_fs.rs `walk`), with the link's
-/// uniform-only lanes `consts`; and of the first node of each listed
-/// operation.
+/// uniform-only lanes `consts`, given at `src`'s own varying locations; and
+/// of the first node of each listed operation.
 fn flags_of(src: &str, consts: VaryingConsts, ops: &[Alu]) -> (Vec<LaneFlag>, Vec<(Alu, Flag)>) {
+    let consts = consts.at_fragment(Some);
     store::with_scratch(|s| {
         let l = lower_source(SHC_STAGE_FRAGMENT, src.as_bytes(), &[], s).expect("lowers");
         let text = s.alloc_str(src).expect("scratch");
