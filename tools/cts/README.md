@@ -37,7 +37,9 @@ tools/cts/
   imx8mp-full-tree.txt         the whole GLES2 tree for the i.MX8MP, 29 entries
   imx8mp-full-tree-29460f96.results.tsv  the committed reference tally of that tree (2026-10-03)
   imx8mp-gltest-build.sh       one gl_test image in the sweep configuration
-  pi4-deqp-images.sh           stage 2, Pi 4
+  deqp-tree-images.sh          stage 2 for a labelled tree table, one image per row (Pi 4, NanoPC-T6)
+  pi4-deqp-images.sh           stage 2, Pi 4 (deqp-tree-images.sh rpi_4b)
+  t6-deqp-images.sh            stage 2, NanoPC-T6 Zephyr (deqp-tree-images.sh nanopc_t6, mali-gles2-tree.txt)
   pi4-full-tree.txt            the whole GLES2 tree for the Pi 4, 29 images
   pi4-gles3-tree.txt           the whole GLES3 tree for the Pi 4, 91 images
   check-deqp-images.py         do the image recipes still build what conformance needs (2d)
@@ -1043,6 +1045,17 @@ export DEQP_WORK=<stage 1: cts-build-zephyr.sh with BOARD=rpi_4b>
 tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/img
 TREE_IMAGE_DIR=build/img tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt records/pi4/<tree>
 tools/board.sh pi4 diff records/pi4/<earlier tree> records/pi4/<tree>
+```
+
+The NanoPC-T6's Zephyr tree is built the same way, by the same builder
+(`t6-deqp-images.sh` is `deqp-tree-images.sh nanopc_t6`: `-DYAKOGL_WERROR=ON`,
+and it refuses to start without `driver/src/fw/mali_csffw_blob.h`):
+
+```sh
+driver/tools/mkmalifw.sh <mali_csffw.bin>      # the header, never committed
+export DEQP_WORK=<stage 1: cts-build-zephyr.sh with BOARD=nanopc_t6>
+tools/cts/t6-deqp-images.sh tools/cts/mali-gles2-tree.txt build/t6-img
+TREE_IMAGE_DIR=build/t6-img tools/board.sh nanopc-t6 tree tools/cts/mali-gles2-tree.txt records/nanopc-t6/<tree>
 ```
 
 A dEQP image costs its lifetime (`CONFIG_V3D_DEQP_LIFETIME_S`, 240 s) plus

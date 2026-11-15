@@ -52,7 +52,7 @@ mkdir -p "$R/tools/cts" "$R/driver/src/fw" "$R/driver/samples/zephyr/deqp" \
     "$R/driver/samples/zephyr/gl_test" "$T/bin" "$T/ws/zephyr" \
     "$T/ws/modules/fs/fatfs" "$T/work/cts" "$T/work/build/modules/gles2" "$T/venv/bin"
 cp "$HERE/am62p-deqp-images.sh" "$HERE/imx8mp-gltest-build.sh" "$HERE/imx8mp-deqp-build.sh" "$HERE/imx8mp-env.sh" \
-    "$HERE/zephyr-modules.sh" "$HERE/pi4-deqp-images.sh" "$R/tools/cts/"
+    "$HERE/zephyr-modules.sh" "$HERE/pi4-deqp-images.sh" "$HERE/t6-deqp-images.sh" "$HERE/deqp-tree-images.sh" "$R/tools/cts/"
 # the fake conformance check passes, and appends its arguments to $CHECK_LOG
 # when that is set (section 7 reads which flags the Pi 4 builder gave it)
 printf 'import os, sys\nwith open(os.environ.get("CHECK_LOG", os.devnull), "a") as f:\n    f.write(" ".join(sys.argv[1:]) + "\\n")\nsys.exit(0)\n' \
@@ -232,12 +232,13 @@ out=$(PATH="$T/nowest" "$G" n4 96 2>&1); rc=$?
 check "names west" "west not on PATH" "$out"
 
 echo
-echo "== 7. pi4-deqp-images.sh: the gles2 path as it was, the gles3 path's arguments, the stage 1 check"
+echo "== 7. pi4-deqp-images.sh and t6-deqp-images.sh: the gles2 path as it was, the gles3 path's arguments, the stage 1 check, the T6 arm"
 # The Pi 4 builder runs cmake -GNinja and ninja itself (no west build). The
 # fake cmake records its arguments in <B>/cmake.args and writes a build.ninja
-# carrying V3D_BUILD (the .built line's build= field reads it); the fake ninja
-# writes zephyr/zephyr.bin and zephyr/.config. The fake west (section 6 removed
-# it) serves zephyr-modules.sh's `west list`.
+# carrying V3D_BUILD and T6_DEQP_BUILD (the .built line's build= field reads
+# the board's own one); the fake ninja writes zephyr/zephyr.bin and
+# zephyr/.config. The fake west (section 6 removed it) serves
+# zephyr-modules.sh's `west list`.
 P=$R/tools/cts/pi4-deqp-images.sh
 cp "$T/west.fake" "$T/bin/west"; chmod +x "$T/bin/west"
 cat > "$T/bin/cmake" <<'EOF'
@@ -246,7 +247,7 @@ cat > "$T/bin/cmake" <<'EOF'
 while [ $# -gt 0 ]; do [ "$1" = -B ] && { d=$2; break; }; shift; done
 mkdir -p "$d"
 printf '%s\n' "$@" > "$d/cmake.args"
-printf 'build zephyr/zephyr.elf: link\n  DEFINES = -DV3D_BUILD=\\"fake-1\\"\n' > "$d/build.ninja"
+printf 'build zephyr/zephyr.elf: link\n  DEFINES = -DV3D_BUILD=\\"fake-1\\" -DT6_DEQP_BUILD=\\"fake-t6\\"\n' > "$d/build.ninja"
 case "$*" in *FAILME*) echo "fake cmake: failing" >&2; exit 1 ;; esac
 EOF
 cat > "$T/bin/ninja" <<'EOF'
@@ -334,6 +335,50 @@ out=$(DEQP_WORK=$T/work3 "$P" "$T/pi4-es2.txt" "$T/p5" 2>&1); rc=$?
 out=$("$P" "$T/pi4-es2.txt" "$T/p2" A1 2>/dev/null); rc=$?
 [ "$rc" = 0 ] && ok "an existing image directory: rc 0" || bad "existing directory: rc=$rc: $out"
 check "an existing image directory is reported, not reused" "A1 rc=exists sha256=none" "$(cat "$T/p2/A1.built" 2>&1)"
+
+# 7f. t6-deqp-images.sh: the same builder (deqp-tree-images.sh) with the board
+# nanopc_t6. The dry run over the repository's own Mali table names every
+# "# image" label once, in table order, each with the filter line under it and
+# no extra argument; the expected list is read from the table here, so no row
+# or count is kept by hand.
+P6=$R/tools/cts/t6-deqp-images.sh
+MT=$HERE/mali-gles2-tree.txt
+out=$(env -u ZEPHYR_WS -u DEQP_WORK "$P6" --dry-run "$MT" "$T/t0" 2>&1); rc=$?
+want=$(awk '/^# image / { l = $3; sub(/:$/, "", l); getline f; print l " " f }' "$MT")
+[ "$rc" = 0 ] && [ -n "$want" ] && [ "$out" = "$want" ] \
+    && ok "mali-gles2-tree.txt dry run: rc 0, every label with the filter of its row, in table order ($(grep -c . <<< "$out") images)" \
+    || bad "mali-gles2-tree.txt dry run: rc=$rc: $(diff <(printf '%s\n' "$want") <(printf '%s\n' "$out") | head -4 | paste -sd';' -)"
+dup=$(printf '%s\n' "$out" | cut -d' ' -f1 | sort | uniq -d)
+[ -z "$dup" ] && ok "mali-gles2-tree.txt dry run: no label twice" || bad "labels twice: $dup"
+[ ! -e "$T/t0" ] && ok "the T6 dry run wrote nothing" || bad "the T6 dry run wrote $T/t0"
+# a filter line under no "# image" line of its own is refused, never given the
+# label of the row above (the runner would run that row's image for it)
+printf '# image A1: x\ndEQP-GLES2.a.*\ndEQP-GLES2.b.*\n' > "$T/nolabel.txt"
+out=$("$P6" --dry-run "$T/nolabel.txt" "$T/t0" 2>&1); rc=$?
+[ "$rc" = 2 ] && [[ $out == *"filter line without a label: dEQP-GLES2.b.*"* ]] \
+    && ok "a filter line without its own label: rc 2, the line named" || bad "a filter line without its own label: rc=$rc: $out"
+# the build: refused without the CSF firmware header, before any image
+out=$("$P6" "$T/pi4-es2.txt" "$T/t1" 2>&1); rc=$?
+[ "$rc" = 2 ] && [ ! -e "$T/t1" ] && ok "nanopc_t6 without mali_csffw_blob.h: rc 2, nothing built" \
+    || bad "nanopc_t6 without the firmware header: rc=$rc: $out"
+check "the refusal names the header and mkmalifw.sh" "driver/src/fw/mali_csffw_blob.h missing: make it from the board's CSF firmware with driver/tools/mkmalifw.sh" "$out"
+# with the header: board nanopc_t6, -Werror on our files, the board's own build string
+: > "$R/driver/src/fw/mali_csffw_blob.h"
+out=$(CHECK_LOG=$T/check6.log "$P6" "$T/pi4-es2.txt" "$T/t2" A1 2>/dev/null); rc=$?
+[ "$rc" = 0 ] && ok "nanopc_t6 build: rc 0" || bad "nanopc_t6 build: rc=$rc: $out"
+check "nanopc_t6 build: the header line names the T6 builder" "t6-deqp-images: build from " "$out"
+check "nanopc_t6: A1.built says rc 0" "A1 rc=0 sha256=" "$(cat "$T/t2/A1.built" 2>&1)"
+check "A1.built: build= is T6_DEQP_BUILD's" "build=fake-t6" "$(cat "$T/t2/A1.built" 2>&1)"
+a=$(cat "$T/t2/A1/cmake.args" 2>&1)
+check "nanopc_t6 cmake: -DBOARD=nanopc_t6" "-DBOARD=nanopc_t6" "$a"
+check "nanopc_t6 cmake: -DYAKOGL_WERROR=ON" "-DYAKOGL_WERROR=ON" "$a"
+check "nanopc_t6 cmake: the filter" '-DCONFIG_DEQP_CASE="dEQP-GLES2.a.*"' "$a"
+check "nanopc_t6: the conformance check ran on the resolved .config" "--config $T/t2/A1/zephyr/.config" "$(cat "$T/check6.log" 2>&1)"
+rm -f "$R/driver/src/fw/mali_csffw_blob.h"
+# the Pi 4 arm does not get the T6's arguments
+absent "rpi_4b cmake: no -DYAKOGL_WERROR" "YAKOGL_WERROR" "$(cat "$T/p2/A1/cmake.args" 2>&1)"
+out=$("$R/tools/cts/deqp-tree-images.sh" rpi_5 --dry-run "$T/pi4-es2.txt" "$T/t3" 2>&1); rc=$?
+[ "$rc" = 2 ] && ok "deqp-tree-images.sh: a board without an arm is refused (rc 2)" || bad "board rpi_5: rc=$rc: $out"
 
 echo
 echo "== 8. a rerun resumes: common-images.sh reuses a complete build, rebuilds an interrupted one; board-stage.sh clears a stale once-*.bin"
@@ -551,7 +596,7 @@ unlisted_deps() {
     done
     printf '%s' "$hits"
 }
-builders="cts-common.sh common-images.sh zephyr-modules.sh am62p-deqp-images.sh pi4-deqp-images.sh cts-build-zephyr.sh imx8mp-deqp-build.sh imx8mp-deqp-stage1.sh imx8mp-env.sh imx8mp-gltest-build.sh imx8mp-gles3-board.sh imx8mp-gles3-artefacts.sh"
+builders="cts-common.sh common-images.sh zephyr-modules.sh am62p-deqp-images.sh deqp-tree-images.sh pi4-deqp-images.sh t6-deqp-images.sh cts-build-zephyr.sh imx8mp-deqp-build.sh imx8mp-deqp-stage1.sh imx8mp-env.sh imx8mp-gltest-build.sh imx8mp-gles3-board.sh imx8mp-gles3-artefacts.sh"
 out=$(unlisted_deps "$HERE" $builders)
 [ -z "$out" ] && ok "every deps.toml entry a builder reads is in a needed_deps row" \
     || bad "read by a builder, in no needed_deps row: $(paste -sd';' <<< "$out")"

@@ -120,6 +120,10 @@ west build -p always -b nanopc_t6 -d build/t6-deqp driver/samples/zephyr/deqp --
     -DCONFIG_DEQP_CASE='"dEQP-GLES2.functional.prerequisite.*"'
 ```
 
+The whole tree, one image per row of `tools/cts/mali-gles2-tree.txt`, is
+built by `tools/cts/t6-deqp-images.sh` and run by `tools/board.sh nanopc-t6
+tree` (`tools/cts/README.md`, section 2d).
+
 Memory: about 148 MiB of the board's 256 MiB window (`nanopc_t6.dts`): the
 gl_test image's GL core and OSAL memory (32 MiB carve-out), dEQP's code and
 the 64 MiB C heap. `zephyr.bin` is about 56 MiB of the 64 MiB `kexec_zephyr`
