@@ -52,8 +52,12 @@
 #    redacted, and the verdict of each way a run ends: back with a probe's
 #    record (t6-verdict.sh's PASS or FAIL, the testdata/ records), back with
 #    a gl_test set, Armbian not back, no jump, a refusal before any change.
-# Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and N is
-# the pinned count (a check that silently stops running fails the pin).
+# Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and
+# every check written in this file ran: each "check" and "same" call notes the
+# line it was called from, and at the end every line of this file that starts
+# with such a call must be among them (a block that silently stops running
+# leaves its lines out and fails). An end before the last line fails too,
+# whatever its exit code. No count is kept by hand.
 set -uo pipefail
 # One locale for every check, whatever the host's: a LANG or LC_ALL that names
 # a locale the host has not installed (LC_ALL=ja_JP.UTF-8 without it) makes
@@ -64,12 +68,13 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=378
 
 S=$(mktemp -d)
-trap 'rm -rf "$S"' EXIT
+at_end=
+trap 'rc=$?; rm -rf "$S"; [ -n "$at_end" ] || { echo "board_selftest: ended before its last line (rc $rc)"; [ "$rc" != 0 ] || exit 1; }' EXIT
 n=0
 fails=0
+declare -A ran=() # the lines of this file a check or a same was called from
 # (the description is not called d: an eval'd check reads the caller's $d)
 # gold SECTION: the lines of one section of tools/testdata/old-runner-outputs.txt
 gold() { awk -v h="### $1" '$0 == h { on = 1; next } /^### / { on = 0 } on' "$TD/old-runner-outputs.txt"; }
@@ -77,11 +82,13 @@ check() { # check DESCRIPTION COMMAND...
     local what=$1
     shift
     n=$((n + 1))
+    ran[${BASH_LINENO[0]}]=1
     if "$@"; then echo "  PASS  $what"; else echo "  FAIL  $what"; fails=$((fails + 1)); fi
 }
 same() { # same DESCRIPTION FILE-A FILE-B: the files are equal (the diff printed when not)
     local what=$1
     n=$((n + 1))
+    ran[${BASH_LINENO[0]}]=1
     if [ -s "$2" ] && cmp -s "$2" "$3"; then
         echo "  PASS  $what"
     else
@@ -1474,5 +1481,14 @@ check "nanopc-t6 runner refused before any change (rc 3, no record): rc 3, its l
     eval '[ "$T6_RC" = 3 ] && grep -q "nanopc-t6.sh: REFUSED: under the lock" <<<"$T6_OUT" && grep -q "refused (rc 3) before it changed anything" <<<"$T6_OUT" &&
           [ ! -e "$T6_RD/INDEX.txt" ] && ! grep -rq "t6fake-host" "$T6_RD" && [ "$(tail -1 "$S/t6/ssh.log" | grep -c "rm -f /var/tmp/yakogl-board.lease")" = 1 ]'
 
-echo "board_selftest: $n checks, $fails failed (pinned: $WANT_CHECKS)"
-[ "$fails" = 0 ] && [ "$n" = "$WANT_CHECKS" ]
+# every check written above ran (the header says why): the call lines of this
+# file against the lines noted by check and same
+at_end=1
+notrun=0
+while IFS=: read -r line _; do
+    [ -n "${ran[$line]:-}" ] && continue
+    echo "  FAIL  the check written at line $line did not run"
+    notrun=$((notrun + 1))
+done < <(grep -nE '^[[:space:]]*(check|same) ' "$0")
+echo "board_selftest: $n checks, $fails failed, $notrun written but not run"
+[ "$fails" = 0 ] && [ "$notrun" = 0 ]
