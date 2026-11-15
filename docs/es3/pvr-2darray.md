@@ -402,19 +402,24 @@ what Mesa has for gather:
   chose; the gather uses `lodm = replace`, so the level is the program's to
   compute (from the plane gradients as `plane_gradients` does for a gradient
   sample, or from `smp` `sbmode = coeffs`, `pco_nir_tex.c:132-190,720-725`), and
-  `MIPMAP_LINEAR` is two PCFs lerped by the LOD fraction. This is the larger half
-  of the 180; do it second.
+  `MIPMAP_LINEAR` is two PCFs lerped by the LOD fraction. Done on the host for
+  the 2D sampler and both 2D-array layouts (`919db72b`, `tests/es3_pvr_pcf.rs`,
+  with mirrored-repeat weights taken from the unwrapped coordinate), and for the
+  cube, native and stacked, seamless over edges and corners (`43af85d7`,
+  `tests/es3_pvr_pcf_cube.rs`). ETC2 arrays are pinned in `81bfac76`
+  (`tests/es3_pvr_etc_array.rs`). Board pending: the dEQP
+  `texture.shadow.{2d,2d_array,cube}` rows, and the TPU's first gather tap for a
+  cube direction.
 - The five non-NEAREST filters times 18 cases times (2D, cube) is 180
   (`RESULTS.md:994`), and 108 for the array. `NEAREST_MIPMAP_NEAREST` needs no
   per-texel weighting (one texel), so its warnings may have another cause (level
   selection); the row itself says it was "a reading from the pattern, not
   measured". Reproduce one on the board before assuming PCF is the whole fix.
 
-Scope split: `pvr-2darray` (this design, sections 3-6, 8-10) does the array
-addressing and makes the array shadow forms correct for NEAREST. `pvr-shadow`
-does 7.2 (gather, PCF, the remaining forms of `RESULTS.md:998`, `textureSize` on
-shadow samplers) on top of it. The gather arm takes the same `tao` words, so
-the order is array first.
+Scope split (done): `pvr-2darray` (this design, sections 3-6, 8-10) did the array
+addressing and the array shadow forms for NEAREST; the shadow work did 7.2
+(gather, PCF, the remaining forms of `RESULTS.md:998`) on top of it. The gather
+arm takes the same `tao` words, so the order was array first.
 
 ## 8. What changes in `src/`
 
