@@ -345,6 +345,7 @@ pub fn split_planes<'a>(a: &Arena<'a>, l: Lowered<'a>, p: Planes) -> R<'a, Lower
     }
     let new_id = new_id.into_slice();
     let map = |v: ValueId| ValueId(new_id.get(v.0 as usize).copied().unwrap_or(v.0));
+    let read = lanes_read(a, &m)?;
 
     let total = n + acc as usize;
     let mut instrs: AVec<Op> = AVec::with_capacity(a, total)?;
@@ -384,7 +385,17 @@ pub fn split_planes<'a>(a: &Arena<'a>, l: Lowered<'a>, p: Planes) -> R<'a, Lower
             comps.push(a, 4)?;
         }
         if j.lo != 0 {
-            instrs.push(a, store(lo, j.lo_swizzle, j.lo))?;
+            /* When the shader reads lanes of the R,G plane and none of the
+             * B,A plane's, selection drops the companion's look-up and the
+             * coordinate dies at this one. Written whole (the stores below
+             * overwrite the lanes that are not its own), the temporary is
+             * defined here and may take the coordinate's register; a masked
+             * first write keeps it apart and costs a copy. With a B,A lane
+             * read the coordinate lives on into the companion's look-up,
+             * and the masked store is the code it always was. */
+            let r = read.get(i).copied().unwrap_or(0xf);
+            let mask = if r & j.lo != 0 && r & j.hi == 0 { 0xf } else { j.lo };
+            instrs.push(a, store(lo, j.lo_swizzle, mask))?;
             if sized {
                 comps.push(a, 0)?;
             }
@@ -442,6 +453,27 @@ pub fn split_planes<'a>(a: &Arena<'a>, l: Lowered<'a>, p: Planes) -> R<'a, Lower
         },
         reflection: l.reflection,
     })
+}
+
+/// For each instruction of `m`, the lanes of its value any reader may read
+/// (bit `k`: lane `k`): every lane a reading source's swizzle names, so a
+/// reader whose width is not looked at counts as reading more, never less.
+fn lanes_read<'a>(a: &Arena<'a>, m: &Module<'_>) -> R<'a, &'a [u8]> {
+    let read = a.alloc_filled(m.instrs.len(), 0u8)?;
+    let mut mark = |s: Src| {
+        if let Some(r) = read.get_mut(s.val.0 as usize) {
+            *r |= s.swizzle.iter().fold(0, |acc, &c| acc | 1 << (c & 3));
+        }
+    };
+    for op in m.instrs.iter() {
+        op.for_each_src(&mut mark);
+    }
+    for node in m.nodes.iter() {
+        if let Node::If { cond, .. } = *node {
+            mark(cond);
+        }
+    }
+    Ok(read)
 }
 
 /// One block of `m.nodes` into `out`, with the new ids and each split
@@ -919,5 +951,51 @@ mod tests {
     fn a_source_that_is_no_lane_is_refused() {
         let e = split_ir(Stage::Fragment, &float_fs(), Planes::NONE.with_swizzle(0, 5, [R, G, B, 6])).expect_err("no");
         assert!(e.contains("lane source is not a lane, zero or one"), "{e}");
+    }
+
+    /// A shader that reads only the R,G plane's lanes gets the first
+    /// look-up's store written whole, and its join costs no copy: the keyed
+    /// shader is as long as the plain one, where a masked store cost one
+    /// `mov` more. Reading a B,A lane keeps the masked store
+    /// ([`an_identity_unit_is_the_join_as_it_was`]), and so does a shader
+    /// that reads no lane of the R,G plane, whose look-up selection drops.
+    #[test]
+    fn a_join_read_only_on_the_first_plane_costs_no_copy() {
+        let xy = fs("uniform highp sampler2D s;", "vec4", "vec4(texture(s, v_uv).xy, 0.0, 1.0)");
+        let first = |ops: &[Op]| {
+            ops.iter()
+                .find_map(|op| match *op {
+                    Op::StoreLocal { src, write_mask, .. } if matches!(ops[src.val.0 as usize], Op::Tex { .. }) => {
+                        Some(write_mask)
+                    }
+                    _ => None,
+                })
+                .expect("a store from a look-up")
+        };
+        let p = Planes::NONE.with(0, 5);
+        let ops = split_fs(&xy, p);
+        assert_eq!(first(&ops), 0b1111, "{ops:#?}");
+        let companion = ops.iter().any(|op| {
+            matches!(*op, Op::StoreLocal { src, write_mask: 0b1100, .. }
+                if matches!(ops[src.val.0 as usize], Op::Tex { sampler: 5, .. }))
+        });
+        assert!(companion, "the companion's store still overwrites z,w: {ops:#?}");
+        assert_eq!(first(&split_fs(&float_fs(), p)), 0b0011);
+        let w = fs("uniform highp sampler2D s;", "vec4", "vec4(texture(s, v_uv).w)");
+        let na = p.without_alpha(0);
+        assert_eq!(first(&split_fs(&w, na)), 0b0011, "lane w is the constant: the look-up stays unread");
+        let rg = Planes::NONE.with_swizzle(0, 5, [ONE, ONE, R, G]);
+        assert_eq!(first(&split_fs(&float_fs(), rg)), 0b1111);
+
+        let _k = store::test_keep();
+        let plain = compile_fs(&xy, Planes::NONE).expect("compiles");
+        for key in [p, na] {
+            let ws = compile_fs(&xy, key).expect("compiles");
+            assert_eq!(units(&ws), [("texld", 0)], "{:#?}", listing(&ws));
+            assert_eq!(ws.len(), plain.len(), "{:#?}", listing(&ws));
+        }
+        let ws = compile_fs(&float_fs(), rg).expect("compiles");
+        assert_eq!(ws.len(), 3, "texld, the lanes' move, the constant: {:#?}", listing(&ws));
+        assert_eq!(compile_fs(&w, na).expect("compiles").len(), 1, "the constant alone");
     }
 }
