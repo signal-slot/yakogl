@@ -1675,6 +1675,20 @@ pub fn wide128_variant(
     online::backend::wide128_variant(sh, planes, lod, out, log)
 }
 
+/// `sh` compiled with the colour outputs on the targets of `rt` split into
+/// their two plane stores ([`online::backend::rt_planes_variant`]). An empty
+/// key is `sampler_variant(sh, lod)` exactly. Nothing calls it yet.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+pub fn rt_planes_variant(
+    sh: &ShcShader,
+    rt: online::vivante::wide128_rt::RtPlanes,
+    lod: LodKey,
+    out: &mut ShcShader,
+    log: &mut [c_char],
+) -> i32 {
+    online::backend::rt_planes_variant(sh, rt, lod, out, log)
+}
+
 /* ---- the offline table's row types (blobs.rs is generated) ---------------- */
 
 /// One precompiled shader: the SHA-256 of its GLSL source, the stage, and the
