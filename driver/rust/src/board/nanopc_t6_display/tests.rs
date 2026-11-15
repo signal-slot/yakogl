@@ -7,7 +7,8 @@
 //! blocks (PMU, CRU, GRFs, HDMI controller), which refuse any write.
 //! Addresses are restated here from driver/docs/nanopc-t6-display.md and
 //! the dump, not taken from the module, so a wrong constant cannot agree
-//! with itself.
+//! with itself. The show and busy tests (step D3) run on the same model:
+//! Esmart0's address in force is the buffer the display scans.
 
 use super::*;
 use std::cell::RefCell;
@@ -42,6 +43,9 @@ const E0: usize = 0x1800;
 
 /// The frame buffer of the tests: inside the image window, 64-byte aligned.
 const FB: u64 = 0x1040_0000;
+/// The buffers of the show tests (EGL keeps four on a board that answers
+/// "busy"): [`FB`] and three more, 4 MiB apart.
+const FBS: [u64; 4] = [FB, FB + 0x40_0000, FB + 0x80_0000, FB + 0xc0_0000];
 /// 1344 x 806 at 65 MHz.
 const FRAME_US: u64 = 16_666;
 
@@ -61,6 +65,11 @@ struct Faults {
     /// `OVL_PORT_SEL` reads this from the frame start that takes Esmart0's
     /// enable on: the port select in force is not the one written.
     port_sel_drift: Option<u32>,
+    /// A port's bit of `REG_CFG_DONE` reads 1 from its first write on; the
+    /// frame start still takes the update (one of U8's possible answers).
+    done_stuck: bool,
+    /// The ports' bits of `REG_CFG_DONE` always read 0 (U8's other answer).
+    done_reads_zero: bool,
 }
 
 /// The window enable words (Cluster n `WIN_CTRL0`, `CLUSTER_CTRL`; Esmart n
@@ -79,10 +88,15 @@ struct State {
     regs: BTreeMap<usize, u32>,
     log: Vec<Op>,
     pending: [bool; 4],
+    /// `REG_CFG_DONE` was written for the port at least once.
+    cfg_written: [bool; 4],
     raw: [u32; 4],
     port_sel_written: Option<u32>,
     next_frame_us: [u64; 4],
     now_us: u64,
+    /// VP0 starts a frame right after this many more VOP writes
+    /// ([`Soc::frame_after`]).
+    frame_after_writes: Option<u32>,
     /// The window words in force (offsets from the VOP).
     in_force: BTreeMap<usize, u32>,
     /// What broke a rule of the model (the tests require none).
@@ -129,8 +143,8 @@ impl Soc {
     fn running(s: &State, p: usize) -> bool {
         s.regs.get(&(VOP + 0xc00 + 0x100 * p)).copied().unwrap_or(0) & 1 << 31 == 0
     }
-    /// A Linux window (any Cluster, or an Esmart not on our buffer) is
-    /// enabled in force on a running port.
+    /// A Linux window (any Cluster, or an Esmart not on one of our buffers)
+    /// is enabled in force on a running port.
     fn linux_fetches(s: &State) -> Option<usize> {
         let sel = s.regs.get(&(VOP + PORT_SEL)).copied().unwrap_or(0);
         for n in 0..4 {
@@ -141,11 +155,38 @@ impl Soc {
             }
             let port = (sel >> (24 + 2 * n)) as usize & 3;
             let on = s.in_force[&(0x1810 + 0x200 * n)] & 1 != 0;
-            if on && Self::running(s, port) && u64::from(s.in_force[&(0x1814 + 0x200 * n)]) != FB {
+            if on && Self::running(s, port) && !FBS.contains(&u64::from(s.in_force[&(0x1814 + 0x200 * n)])) {
                 return Some(0x1800 + 0x200 * n);
             }
         }
         None
+    }
+    /// One frame start of port `p`: the event bit, and a pending
+    /// `REG_CFG_DONE` taken.
+    fn frame_start(&self, s: &mut State, p: usize) {
+        s.raw[p] |= 1;
+        if s.pending[p] {
+            s.pending[p] = false;
+            if let Some(sel) = s.port_sel_written.take() {
+                s.regs.insert(VOP + PORT_SEL, sel);
+            }
+            let e0_was_on = s.in_force[&0x1810] & 1 != 0;
+            for w in window_words() {
+                let v = s.regs.get(&(VOP + w)).copied().unwrap_or(0);
+                s.in_force.insert(w, v);
+            }
+            if let (false, true, Some(sel)) = (e0_was_on, s.in_force[&0x1810] & 1 != 0, self.f.port_sel_drift) {
+                s.regs.insert(VOP + PORT_SEL, sel);
+            }
+        }
+        // with paging off, a Linux window fetches its IOVA as a
+        // physical address
+        let off = [0usize, 1].iter().all(|i| s.regs[&(MMU0 + 0x100 * i + 4)] & 1 == 0);
+        if off {
+            if let Some(w) = Self::linux_fetches(s) {
+                s.violations.push(format!("frame start with paging off while window {w:#x} fetches"));
+            }
+        }
     }
     fn advance(&self, us: u32) {
         let mut s = self.s.borrow_mut();
@@ -154,32 +195,21 @@ impl Soc {
         for p in 0..4 {
             while !self.f.no_frames && Self::running(&s, p) && s.next_frame_us[p] <= end {
                 s.next_frame_us[p] += FRAME_US;
-                s.raw[p] |= 1;
-                if s.pending[p] {
-                    s.pending[p] = false;
-                    if let Some(sel) = s.port_sel_written.take() {
-                        s.regs.insert(VOP + PORT_SEL, sel);
-                    }
-                    let e0_was_on = s.in_force[&0x1810] & 1 != 0;
-                    for w in window_words() {
-                        let v = s.regs.get(&(VOP + w)).copied().unwrap_or(0);
-                        s.in_force.insert(w, v);
-                    }
-                    if let (false, true, Some(sel)) = (e0_was_on, s.in_force[&0x1810] & 1 != 0, self.f.port_sel_drift) {
-                        s.regs.insert(VOP + PORT_SEL, sel);
-                    }
-                }
-                // with paging off, a Linux window fetches its IOVA as a
-                // physical address
-                let off = [0usize, 1].iter().all(|i| s.regs[&(MMU0 + 0x100 * i + 4)] & 1 == 0);
-                if off {
-                    if let Some(w) = Self::linux_fetches(&s) {
-                        s.violations.push(format!("frame start with paging off while window {w:#x} fetches"));
-                    }
-                }
+                self.frame_start(&mut s, p);
             }
         }
         s.now_us = end;
+    }
+    /// VP0 starts a frame right after the `n`th VOP write from now (n >= 1),
+    /// whatever the clock says: a frame boundary between two writes of one
+    /// call. The frames after it keep the period.
+    fn frame_after(&self, n: u32) {
+        assert!(n >= 1);
+        self.s.borrow_mut().frame_after_writes = Some(n);
+    }
+    /// The address Esmart0 scans: `YRGB_MST` in force.
+    fn scanned(&self) -> u64 {
+        u64::from(self.s.borrow().in_force[&0x1814])
     }
     fn now(&self) -> u64 {
         self.s.borrow().now_us
@@ -211,8 +241,13 @@ impl Mmio for Soc {
             let off = addr - VOP;
             let raw = (0..4).find(|p| 0x0ac + 0x10 * p == off);
             if off == CFG_DONE {
-                let pend = (0..4).fold(0, |a, p| a | u32::from(s.pending[p]) << p);
-                s.regs.get(&addr).copied().unwrap_or(0) | pend
+                let bit = |p: usize| match (self.f.done_reads_zero, self.f.done_stuck) {
+                    (true, _) => false,
+                    (false, true) => s.cfg_written[p],
+                    (false, false) => s.pending[p],
+                };
+                let ports = (0..4).fold(0, |a, p| a | u32::from(bit(p)) << p);
+                s.regs.get(&addr).copied().unwrap_or(0) | ports
             } else if let Some(p) = raw {
                 s.raw[p]
             } else {
@@ -271,6 +306,7 @@ impl Mmio for Soc {
             for p in 0..4 {
                 if val & 1 << p != 0 && val & 1 << (p + 16) != 0 {
                     s.pending[p] = true;
+                    s.cfg_written[p] = true;
                 }
             }
         } else if let Some(p) = (0..4).find(|p| 0x0a4 + 0x10 * p == off) {
@@ -280,6 +316,15 @@ impl Mmio for Soc {
         } else {
             assert!((0..4).all(|p| off != 0xc00 + 0x100 * p), "the adopt never writes DSP_CTRL");
             s.regs.insert(addr, val);
+        }
+        match s.frame_after_writes {
+            Some(1) => {
+                s.frame_after_writes = None;
+                s.next_frame_us[0] = s.now_us + FRAME_US;
+                self.frame_start(&mut s, 0);
+            }
+            Some(n) => s.frame_after_writes = Some(n - 1),
+            None => {}
         }
     }
 
@@ -292,7 +337,7 @@ impl Mmio for Soc {
 }
 
 fn run(soc: &Soc, fb: u64) -> Adopt {
-    adopt(soc, &B, fb, &mut |us| soc.advance(us))
+    adopt(soc, &B, &mode_window(fb), &mut |us| soc.advance(us))
 }
 
 /// What the adopt must write from the dump's state, in order (section 2
@@ -576,4 +621,289 @@ fn the_pattern_has_four_quadrants_and_a_white_border() {
     assert!(!draw_pattern(&mut fb, 4, 4, 4));
     assert!(!draw_pattern(&mut fb, 5, 1, 4));
     assert!(fb.iter().all(|p| *p == 7));
+}
+
+/// [`show`] of a [`MODE`]-sized window at `addr`, on the model's clock.
+fn show_at(soc: &Soc, s: &mut Screen, addr: u64) -> i32 {
+    let mut a = Adopt::default();
+    show(soc, &B, s, addr, MODE.hactive, MODE.vactive, FB_STRIDE, &mut |us| soc.advance(us), &mut a)
+}
+
+/// [`busy`] of the four buffers: bit k for `FBS[k]`.
+fn busy_fbs(soc: &Soc, s: &mut Screen) -> u32 {
+    busy(soc, &B, s, &FBS)
+}
+
+/// A screen whose first show adopted `soc` on `FBS[0]`.
+fn shown(soc: &Soc) -> Screen {
+    let mut s = Screen::default();
+    assert_eq!(show_at(soc, &mut s, FBS[0]), 0);
+    assert_eq!((s.state, s.last, s.flips), (SCREEN_SHOWN, FBS[0], 0));
+    s
+}
+
+/// The first show is the adopt, with the window's own size: a 1024x600
+/// window writes its `ACT_INFO` and `DSP_INFO`, and the adopt's record and
+/// the screen keep its address and geometry.
+#[test]
+fn the_first_show_adopts_with_the_windows_own_size() {
+    let soc = Soc::dump();
+    let (mut s, mut a) = (Screen::default(), Adopt::default());
+    assert_eq!(show(&soc, &B, &mut s, FB, 1024, 600, 4096, &mut |us| soc.advance(us), &mut a), 0);
+    let mut want = expected_writes();
+    for w in want.iter_mut().filter(|w| w.0 == VOP + E0 + 0x20 || w.0 == VOP + E0 + 0x24) {
+        w.1 = 0x0257_03ff;
+    }
+    assert_eq!(soc.writes(), want);
+    assert_eq!((a.stop, a.fb, a.stride), (Stop::None as u32, FB as u32, 4096));
+    assert_eq!(
+        s,
+        Screen { last: FB, state: SCREEN_SHOWN, width: 1024, height: 600, stride: 4096, ..Screen::default() }
+    );
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (0b0001, FB));
+    assert_eq!(soc.violations(), Vec::<String>::new());
+}
+
+/// A flip is the address, `REG_CFG_DONE` for VP0 and the frame start
+/// cleared, in this order and nothing else.
+#[test]
+fn a_flip_writes_the_address_then_cfg_done_then_clears_the_frame_start() {
+    let soc = Soc::dump();
+    let mut s = shown(&soc);
+    assert_eq!(show_at(&soc, &mut s, FBS[1]), 0);
+    assert_eq!(
+        soc.writes().split_off(expected_writes().len()),
+        vec![(VOP + E0 + 0x14, FBS[1] as u32), (VOP + CFG_DONE, 0x0001_8001), (VOP + VP0_INT_CLR, 0x0001_0001)]
+    );
+    assert_eq!((s.last, s.flips), (FBS[1], 1));
+}
+
+/// After a flip the display still scans the old buffer: both are busy until
+/// a frame start takes the new address. The frame start the adopt left
+/// flagged is older than the flip and frees nothing.
+#[test]
+fn a_flip_keeps_the_old_buffer_busy_until_a_frame_start_takes_it() {
+    let soc = Soc::dump();
+    let mut s = shown(&soc);
+    assert_eq!(busy_fbs(&soc, &mut s), 0b0001);
+    assert_eq!(vop2::vp_raw_status(&soc, VOP, Vp::Vp0) & 1, 1, "the adopt's frame start is still flagged");
+    assert_eq!(show_at(&soc, &mut s, FBS[1]), 0);
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (0b0011, FBS[0]));
+    // asking again changes nothing
+    assert_eq!(busy_fbs(&soc, &mut s), 0b0011);
+    soc.advance(FRAME_US as u32);
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (0b0010, FBS[1]));
+    assert_eq!(soc.violations(), Vec::<String>::new());
+}
+
+/// Two flips inside one frame: the buffer scanned and the one replaced
+/// before it was taken both stay busy (the model does not tell which of
+/// them the display holds); the frame start frees both.
+#[test]
+fn flips_faster_than_frames_keep_every_earlier_buffer_busy() {
+    let soc = Soc::dump();
+    let mut s = shown(&soc);
+    assert_eq!(show_at(&soc, &mut s, FBS[1]), 0);
+    assert_eq!(show_at(&soc, &mut s, FBS[2]), 0);
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (0b0111, FBS[0]));
+    soc.advance(FRAME_US as u32);
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (0b0100, FBS[2]));
+}
+
+/// Three flips inside one frame are more earlier buffers than the screen
+/// keeps: every address is busy, also one never shown, until the frame
+/// start.
+#[test]
+fn more_earlier_buffers_than_it_keeps_make_every_buffer_busy() {
+    let soc = Soc::dump();
+    let mut s = shown(&soc);
+    for fb in &FBS[1..] {
+        assert_eq!(show_at(&soc, &mut s, *fb), 0);
+    }
+    let never_shown = FB + 0x100_0000;
+    assert_eq!(busy(&soc, &B, &mut s, &[FBS[0], FBS[1], FBS[2], FBS[3], never_shown]), 0b1_1111);
+    soc.advance(FRAME_US as u32);
+    assert_eq!(busy(&soc, &B, &mut s, &[FBS[0], FBS[1], FBS[2], FBS[3], never_shown]), 0b0_1000);
+    assert_eq!((soc.scanned(), s.flips), (FBS[3], 3));
+}
+
+/// Back to the first buffer before the second was taken: the second stays
+/// busy until the frame start, though the display never scanned it.
+#[test]
+fn a_flip_back_before_the_frame_start_keeps_both_busy() {
+    let soc = Soc::dump();
+    let mut s = shown(&soc);
+    assert_eq!(show_at(&soc, &mut s, FBS[1]), 0);
+    assert_eq!(show_at(&soc, &mut s, FBS[0]), 0);
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (0b0011, FBS[0]));
+    soc.advance(FRAME_US as u32);
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned(), s.flips), (0b0001, FBS[0], 2));
+}
+
+/// The frame boundary at each place of a flip's three writes. Before
+/// `REG_CFG_DONE`: the old buffer is scanned for one more frame. Between
+/// `REG_CFG_DONE` and the clear: the new buffer is scanned and the old one
+/// is freed one frame late. After the clear: freed at once. Never is the
+/// buffer scanned reported free.
+#[test]
+fn a_frame_start_anywhere_inside_a_flip_never_frees_the_buffer_scanned() {
+    // the write the frame start follows, the buffer scanned and the busy
+    // bits right after the show
+    for (after, scanned, bits) in [(1, FBS[0], 0b0011), (2, FBS[1], 0b0011), (3, FBS[1], 0b0010)] {
+        let soc = Soc::dump();
+        let mut s = shown(&soc);
+        soc.frame_after(after);
+        assert_eq!(show_at(&soc, &mut s, FBS[1]), 0);
+        assert_eq!((soc.scanned(), busy_fbs(&soc, &mut s)), (scanned, bits), "after write {after}");
+        soc.advance(FRAME_US as u32);
+        assert_eq!((soc.scanned(), busy_fbs(&soc, &mut s)), (FBS[1], 0b0010), "after write {after}");
+    }
+    // with an earlier flip not taken yet, the frame start right after the
+    // address write already scans the newest buffer
+    let soc = Soc::dump();
+    let mut s = shown(&soc);
+    assert_eq!(show_at(&soc, &mut s, FBS[1]), 0);
+    soc.frame_after(1);
+    assert_eq!(show_at(&soc, &mut s, FBS[2]), 0);
+    assert_eq!((soc.scanned(), busy_fbs(&soc, &mut s)), (FBS[2], 0b0111));
+    soc.advance(FRAME_US as u32);
+    assert_eq!((soc.scanned(), busy_fbs(&soc, &mut s)), (FBS[2], 0b0100));
+}
+
+/// Showing the buffer already shown touches no register.
+#[test]
+fn a_show_of_the_same_buffer_touches_no_register() {
+    let soc = Soc::dump();
+    let mut s = shown(&soc);
+    let ops = soc.ops().len();
+    assert_eq!(show_at(&soc, &mut s, FBS[0]), 0);
+    assert_eq!((soc.ops().len(), s.flips), (ops, 0));
+}
+
+/// The geometry is the first show's: a later window of another size or
+/// stride is refused and nothing is written.
+#[test]
+fn a_later_window_of_another_geometry_is_refused_with_no_write() {
+    let soc = Soc::dump();
+    let mut s = shown(&soc);
+    let writes = soc.writes().len();
+    let before = s;
+    let mut a = Adopt::default();
+    for (w, h, stride) in [(1024, 600, 4096), (1000, 768, 4096), (1024, 768, 4160)] {
+        let rc = show(&soc, &B, &mut s, FBS[1], w, h, stride, &mut |us| soc.advance(us), &mut a);
+        assert_eq!((rc, soc.writes().len(), s), (-ENOTSUP, writes, before), "{w}x{h} stride {stride}");
+    }
+}
+
+/// A window the VOP cannot scan (outside the mode, an address off 64 bytes,
+/// memory at or above 4 GiB) is refused before any register is touched, as
+/// the first show and as a later one; the first show can still follow.
+#[test]
+fn a_window_the_vop_cannot_scan_is_refused_before_any_access() {
+    let cases = [(FB, 1024, 769, 4096), (FB, 1028, 768, 4112), (FB + 4, 1024, 768, 4096), (1 << 32, 1024, 768, 4096)];
+    let soc = Soc::dump();
+    let (mut s, mut a) = (Screen::default(), Adopt::default());
+    for (addr, w, h, stride) in cases {
+        let rc = show(&soc, &B, &mut s, addr, w, h, stride, &mut |us| soc.advance(us), &mut a);
+        assert_eq!((rc, soc.ops(), s), (-ENOTSUP, vec![], Screen::default()), "{addr:#x} {w}x{h}");
+    }
+    assert_eq!(show_at(&soc, &mut s, FBS[0]), 0);
+    let (writes, before) = (soc.writes().len(), s);
+    for (addr, w, h, stride) in cases {
+        let rc = show(&soc, &B, &mut s, addr, w, h, stride, &mut |us| soc.advance(us), &mut a);
+        assert_eq!((rc, soc.writes().len(), s), (-ENOTSUP, writes, before), "{addr:#x} {w}x{h}");
+    }
+}
+
+/// An adopt that stopped is final: the show names the stop once, every
+/// later show is refused without touching a register, and the buffer of
+/// that show stays busy (the adopt may have stopped after it pointed Esmart0
+/// at it), also read from no register.
+#[test]
+fn a_stopped_adopt_is_final() {
+    let soc = Soc::with(Faults { no_frames: true, ..Faults::default() }, &[]);
+    let (mut s, mut a) = (Screen::default(), Adopt::default());
+    let rc = show(&soc, &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a);
+    assert_eq!((rc, a.stop, s.state), (-ENODEV, Stop::TakeOver as u32, SCREEN_STOPPED));
+    let ops = soc.ops().len();
+    let first = a;
+    assert_eq!(show(&soc, &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a), -ENODEV);
+    assert_eq!(busy_fbs(&soc, &mut s), 0b0001);
+    assert_eq!((soc.ops().len(), a), (ops, first), "the record of the stop is kept");
+}
+
+/// Before the first show nothing of this image is scanned: no buffer is
+/// busy and no register is read.
+#[test]
+fn nothing_is_busy_before_the_first_show() {
+    let soc = Soc::dump();
+    assert_eq!(busy_fbs(&soc, &mut Screen::default()), 0);
+    assert_eq!(soc.ops(), vec![]);
+}
+
+/// U8, one answer: VP0's bit of `REG_CFG_DONE` stays 1 after the frame
+/// start took the update. The adopt records it; a flip's old buffer then
+/// never reads as taken and stays busy (too large, never too small).
+#[test]
+fn a_cfg_done_bit_that_never_clears_keeps_the_old_buffers_busy() {
+    let soc = Soc::with(Faults { done_stuck: true, ..Faults::default() }, &[]);
+    let (mut s, mut a) = (Screen::default(), Adopt::default());
+    assert_eq!(show(&soc, &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a), 0);
+    assert_eq!((a.cfg_done_written & 1, a.cfg_done_after & 1), (1, 1));
+    assert_eq!(show_at(&soc, &mut s, FBS[1]), 0);
+    soc.advance(10 * FRAME_US as u32);
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (0b0011, FBS[1]));
+}
+
+/// U8, the other answer: the bit always reads 0. The frame start after the
+/// flip's clear alone frees the old buffer, and not before.
+#[test]
+fn a_cfg_done_bit_that_reads_zero_leaves_the_frame_start_to_decide() {
+    let soc = Soc::with(Faults { done_reads_zero: true, ..Faults::default() }, &[]);
+    let mut s = shown(&soc);
+    assert_eq!(show_at(&soc, &mut s, FBS[1]), 0);
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (0b0011, FBS[0]));
+    soc.advance(FRAME_US as u32);
+    assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (0b0010, FBS[1]));
+}
+
+/// 2000 steps of shows among the four buffers, waits and frame boundaries
+/// inside a flip, in a fixed pseudo-random order, under each answer to U8:
+/// after every step the buffer scanned and the last one shown are busy, and
+/// (where the bit clears) two frames with no show leave exactly the last
+/// one busy.
+#[test]
+fn any_order_of_shows_and_frames_never_frees_the_buffer_scanned() {
+    let bit = |addr: u64| 1u32 << FBS.iter().position(|f| *f == addr).expect("one of the four buffers");
+    for (name, f) in [
+        ("the bit clears", Faults::default()),
+        ("the bit stays", Faults { done_stuck: true, ..Faults::default() }),
+        ("the bit reads 0", Faults { done_reads_zero: true, ..Faults::default() }),
+    ] {
+        let soc = Soc::with(f, &[]);
+        let mut s = shown(&soc);
+        let mut x: u64 = 0x2026_1116;
+        let mut next = |n: u64| {
+            x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            (x >> 33) % n
+        };
+        for step in 0..2000 {
+            match next(4) {
+                0 => soc.advance(next(20_000) as u32),
+                1 => {
+                    soc.frame_after(1 + next(3) as u32);
+                    assert_eq!(show_at(&soc, &mut s, FBS[next(4) as usize]), 0);
+                }
+                _ => assert_eq!(show_at(&soc, &mut s, FBS[next(4) as usize]), 0),
+            }
+            let b = busy_fbs(&soc, &mut s);
+            assert_eq!(b & bit(soc.scanned()), bit(soc.scanned()), "{name}, step {step}: the buffer scanned is free");
+            assert_eq!(b & bit(s.last), bit(s.last), "{name}, step {step}: the buffer shown last is free");
+            if step % 50 == 49 && !f.done_stuck {
+                soc.advance(2 * FRAME_US as u32);
+                assert_eq!((busy_fbs(&soc, &mut s), soc.scanned()), (bit(s.last), s.last), "{name}, step {step}");
+            }
+        }
+        assert_eq!(soc.violations(), Vec::<String>::new(), "{name}");
+    }
 }

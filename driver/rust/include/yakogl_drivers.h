@@ -655,7 +655,7 @@ int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uin
 #define YD_T6_SUBMIT_STEP_AS0_MAP    6 /* adding the queue memory to AS0 refused (refusal: YD_MALI_PT_*, detail: the MCU VA) */
 #define YD_T6_SUBMIT_STEP_CLEAN      7 /* a clean() of table pages failed (refusal 1 AS0, 2 the group VM; detail: rc) */
 #define YD_T6_SUBMIT_STEP_AS0_FLUSH  8 /* AS0's FLUSH_PT stopped (refusal: YD_MALI_FLUSH_*) */
-#define YD_T6_SUBMIT_STEP_VM_MAP     9 /* the group VM's tables refused (refusal: YD_MALI_PT_*, detail: the VA) */
+#define YD_T6_SUBMIT_STEP_VM_MAP     9 /* the group VM's tables refused (refusal: YD_MALI_PT_*, detail: the VA), or a region's size (refusal 0 or YD_T6_OSAL_VM_MAP_RESERVED, detail: the size) */
 #define YD_T6_SUBMIT_STEP_VM_ENABLE 10 /* address space 1's enable stopped (refusal: YD_MALI_*) */
 #define YD_T6_SUBMIT_STEP_HEAP      11 /* the tiler heap refused (refusal: HeapError 1-17 in heap.rs's order, 8 = the pool, 9 = the chunk not inside its region) */
 #define YD_T6_SUBMIT_STEP_START     12 /* sched::start refused (refusal: SchedRefusal) */
@@ -785,7 +785,12 @@ int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, ui
  * slot is HEAP_SET's operand), its chunks (whole 2 MiB chunks,
  * heap_initial_chunks made at the start, the others on a tiler OOM), and
  * the carve-out every gpu_alloc comes from (whole pages, at
- * most YD_T6_OSAL_CARVE_MAX bytes), mapped whole at YD_T6_OSAL_CARVE_VA. */
+ * most YD_T6_OSAL_CARVE_MAX bytes), mapped whole at YD_T6_OSAL_CARVE_VA.
+ * Its last carve_reserved bytes are no gpu_alloc's: the board's window
+ * buffer, which the GPU reaches through yd_t6_osal_map_phys. A
+ * carve_reserved that is not whole 4 KiB pages, or leaves no page to hand
+ * out, stops yd_t6_osal_up at YD_T6_SUBMIT_STEP_VM_MAP with the refusal
+ * YD_T6_OSAL_VM_MAP_RESERVED (detail: the value). */
 #define YD_T6_OSAL_QUEUE_VA       0x100800000ull
 #define YD_T6_OSAL_QUEUE_SIZE     0x2000u
 #define YD_T6_OSAL_HEAP_POOL_VA   0x800000015000ull
@@ -794,6 +799,7 @@ int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, ui
 #define YD_T6_OSAL_HEAP_CHUNK     0x200000u
 #define YD_T6_OSAL_CARVE_VA       0x4000000000ull
 #define YD_T6_OSAL_CARVE_MAX      0x10000000u
+#define YD_T6_OSAL_VM_MAP_RESERVED 16
 
 struct yd_t6_osal_mem {
 	struct yd_t6_fw_backing fw;    /* the firmware's sections are placed here */
@@ -809,6 +815,7 @@ struct yd_t6_osal_mem {
 	uint32_t vm_pool_pages;
 	uint64_t vm_tables_pa;
 	uint32_t heap_initial_chunks;  /* 1 to the chunks heap_chunks holds (at most 64) */
+	uint32_t carve_reserved;       /* bytes at carve's end no yd_t6_osal_alloc gets */
 };
 
 struct yd_t6_osal_counts {
@@ -969,6 +976,42 @@ int yd_t6_display_adopt(const struct yd_t6_display_bases *b, uint64_t fb_pa,
 int yd_t6_display_status(const struct yd_t6_display_bases *b, uint32_t wait_us, uint32_t frames,
 			 uint64_t (*now_us)(void), void (*delay_us)(uint32_t us),
 			 struct yd_t6_display_status *out);
+
+/* Step D3, the screen a window surface is shown on: what yd_t6_screen_show and
+ * yd_t6_screen_busy keep between calls. All zero before the first show, then
+ * only theirs; one thread calls both. */
+#define YD_T6_SCREEN_NEW     0 /* no show yet */
+#define YD_T6_SCREEN_SHOWN   1 /* the first show's adopt ran to its end */
+#define YD_T6_SCREEN_STOPPED 2 /* the first show's adopt stopped: final */
+
+struct yd_t6_screen {
+	uint64_t last;    /* the buffer of the last show that reached the VOP */
+	uint64_t held[2]; /* shown before it, maybe still scanned: the first n_held */
+	uint32_t state;   /* YD_T6_SCREEN_* */
+	uint32_t n_held;  /* 3: more than held[] keeps; every buffer counts as busy */
+	uint32_t width;   /* the first show's size and stride in bytes */
+	uint32_t height;
+	uint32_t stride;
+	uint32_t flips;   /* shows that changed the address since the first (wraps) */
+};
+
+/* Show the width x height XRGB8888 buffer at physical phys (rows stride_bytes
+ * apart, top row first) at the screen's origin. The first call is the adopt
+ * with this buffer (record in *adopt); a later call with another address is a
+ * flip, which never waits and leaves *adopt alone. 0; -ENOTSUP for a window the
+ * VOP cannot scan or one that is not the first show's size and stride (nothing
+ * read or written); -ENODEV when the adopt stopped, now or at the first show (a
+ * stopped screen is not tried again); -EINVAL for a null argument. */
+int yd_t6_screen_show(const struct yd_t6_display_bases *b, struct yd_t6_screen *s, uint64_t phys,
+		      uint32_t width, uint32_t height, uint32_t stride_bytes,
+		      void (*delay_us)(uint32_t us), struct yd_t6_display_adopt *adopt);
+
+/* Which of the n buffers at phys[] the screen may still scan: bit k for
+ * phys[k], of the first 32. Too large is possible (a buffer is freed up to one
+ * frame late), too small never. Never waits, writes no register. Every bit for
+ * a null argument with n not 0. */
+uint32_t yd_t6_screen_busy(const struct yd_t6_display_bases *b, struct yd_t6_screen *s,
+			   const uint64_t *phys, size_t n);
 
 /* ---- TI SN65DSI83/84 (ip::sn65dsi8x; yakogl,sn65dsi8x) ------------------
  * I2C bus 0 of the env is the bridge; GPIO line 0 its EN pin, line 1 the
@@ -2063,6 +2106,7 @@ _Static_assert(offsetof(struct yd_t6_osal_mem, vm_pool) == 168, "yd_t6_osal_mem.
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_pool_pages) == 176, "yd_t6_osal_mem.vm_pool_pages");
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_tables_pa) == 184, "yd_t6_osal_mem.vm_tables_pa");
 _Static_assert(offsetof(struct yd_t6_osal_mem, heap_initial_chunks) == 192, "yd_t6_osal_mem.heap_initial_chunks");
+_Static_assert(offsetof(struct yd_t6_osal_mem, carve_reserved) == 196, "yd_t6_osal_mem.carve_reserved");
 _Static_assert(sizeof(struct yd_t6_osal_counts) == 80, "struct yd_t6_osal_counts");
 _Static_assert(offsetof(struct yd_t6_osal_counts, submitted) == 0, "yd_t6_osal_counts.submitted");
 _Static_assert(offsetof(struct yd_t6_osal_counts, completed) == 8, "yd_t6_osal_counts.completed");
@@ -2101,6 +2145,15 @@ _Static_assert(offsetof(struct yd_t6_display_status, soc_status1) == 96, "yd_t6_
 _Static_assert(offsetof(struct yd_t6_display_status, vo1_usable) == 104, "yd_t6_display_status.vo1_usable");
 _Static_assert(offsetof(struct yd_t6_display_status, monitor) == 120, "yd_t6_display_status.monitor");
 _Static_assert(offsetof(struct yd_t6_display_status, cru_gate60) == 148, "yd_t6_display_status.cru_gate60");
+_Static_assert(sizeof(struct yd_t6_screen) == 48, "struct yd_t6_screen");
+_Static_assert(offsetof(struct yd_t6_screen, last) == 0, "yd_t6_screen.last");
+_Static_assert(offsetof(struct yd_t6_screen, held) == 8, "yd_t6_screen.held");
+_Static_assert(offsetof(struct yd_t6_screen, state) == 24, "yd_t6_screen.state");
+_Static_assert(offsetof(struct yd_t6_screen, n_held) == 28, "yd_t6_screen.n_held");
+_Static_assert(offsetof(struct yd_t6_screen, width) == 32, "yd_t6_screen.width");
+_Static_assert(offsetof(struct yd_t6_screen, height) == 36, "yd_t6_screen.height");
+_Static_assert(offsetof(struct yd_t6_screen, stride) == 40, "yd_t6_screen.stride");
+_Static_assert(offsetof(struct yd_t6_screen, flips) == 44, "yd_t6_screen.flips");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");

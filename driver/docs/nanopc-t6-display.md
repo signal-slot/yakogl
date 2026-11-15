@@ -492,11 +492,12 @@ stride_bytes, native_format)` (`src/osal/mod.rs:576-583`) -> the Zephyr OSAL's
 `yakogl_osal_zephyr_present` (`src/osal/zephyr_timing.c:123-130`) ->
 `yakogl_zephyr_present` (`driver/zephyr/lib/board/common/board.c:31-40`) ->
 the board's `board_show()` (AM62P `board_am62p.c:69-89`, i.MX8MP
-`board_imx8mp.c:358`, Pi 4 `board_rpi4.c:299`). The T6 board glue has no
-`board_show()` yet, and the Mali build has no Zephyr OSAL yet (milestone Z4);
-when it comes it fills `.present` with the same function, as `zephyr.c`,
-`zephyr_v3d.c` and `zephyr_gc.c` do. A `board_display_busy()` (as the AM62P's)
-lets EGL keep four buffers while the VOP may still scan one.
+`board_imx8mp.c:358`, Pi 4 `board_rpi4.c:299`). The Mali Zephyr OSAL
+(`src/osal/zephyr_mali.c`) fills `.present` with the same function, as
+`zephyr.c`, `zephyr_v3d.c` and `zephyr_gc.c` do. The T6's `board_show()` and
+`board_display_busy()` are step D3 (the end of this section); with a
+`board_display_busy()` (as the AM62P's) EGL keeps four buffers while the VOP
+may still scan one.
 
 The Mali render target for a window today (`src/mali/backend.rs:1451-1475`,
 `src/mali/frame.rs:928-1004`): **XRGB8888 linear**, bytes B, G, R, X in memory
@@ -529,6 +530,92 @@ Can Esmart0 scan it directly: **yes, with no copy.**
 - Coherence: the Mali is not coherent (`nanopc-t6-mali.md`); the frame is in
   memory once its fence has signalled, and the VOP reads memory. The CPU
   pattern of route (a) needs a cache clean before `REG_CFG_DONE`.
+
+### Step D3: `board_show()` and `board_display_busy()` on the T6
+
+The T6 takes the common board layer (`one-method.md`, section 2) as the
+other boards do, so `examples/triangle` and every other sample run on it
+unchanged. The step has two parts:
+
+- **D3a, host only.** The rules below in Rust, with their tests on the
+  register model: `board::nanopc_t6_display` (`Screen`, `show`, `busy`), the
+  reserved end of the carve-out in `board::nanopc_t6_osal`, and their C
+  entries in `yakogl_drivers.h` (`struct yd_t6_screen`, `yd_t6_screen_show`,
+  `yd_t6_screen_busy`, `yd_t6_osal_mem.carve_reserved`).
+- **D3b, the board library and the image.**
+  `driver/zephyr/lib/board/nanopc_t6/`: `board_window()`, `board_show()` and
+  `board_display_busy()` call those entries; the triangle image and its gate
+  row; then the board proof.
+
+**Where the window's memory is.** The Mali renders into the window, so the
+window must be memory the GPU's address space maps, and that is the OSAL's
+carve-out and nothing else. A sample asks for its window before EGL starts
+the OSAL. The OSAL therefore keeps the last `carve_reserved` bytes of the
+carve-out out of its allocator: they are mapped with the rest, no
+`yd_t6_osal_alloc` returns them, and a kick whose stream reaches into them
+is refused. `board_window()` hands that end out, once. `carve_reserved` is
+whole pages and less than the carve-out, or the OSAL does not come up
+(`YD_T6_SUBMIT_STEP_VM_MAP`, refusal `YD_T6_OSAL_VM_MAP_RESERVED`, before any
+register is written). The window needs no entry of its own in the GPU's
+address space: the OSAL's `window()` already resolves any range inside the
+carve-out. EGL's other three buffers are ordinary allocations.
+
+**The first show adopts.** The first `board_show()` is the adopt of route
+(a) with the GL window in place of the probe's CPU pattern: the same checks,
+the same order, the same record (`struct yd_t6_display_adopt`). The window
+sits at the screen's origin and is scanned in place; nothing is copied. An
+adopt that stops is final: that show and every later one return `-ENODEV`,
+and the display is not written again. It is in a state the adopt did not
+expect, and a second try per frame would write to it again without knowing
+more.
+
+**The geometry is the first show's.** A later show must have the first
+show's width, height and stride; another one is refused with `-ENOTSUP`
+before any register is read or written. The reason is tearing. A flip writes
+one register, the address, and the VOP takes a register whole at a frame
+start. A size change is several registers, and a frame start between two of
+the writes can take half of them when an earlier `REG_CFG_DONE` is still
+pending.
+
+**A flip never waits.** A show of another buffer writes the address, then
+`REG_CFG_DONE` for VP0, then clears VP0's frame start flag, and returns. A
+show of the buffer already shown does nothing.
+
+**Which buffers are busy.** Until a frame start takes the new address, the
+display scans an earlier buffer. `board_display_busy()` reports the last
+buffer shown and every buffer that was the last one at a flip since the
+display last caught up. The display has caught up when both hold: VP0's raw
+frame start flag is set (it was cleared after the last flip's
+`REG_CFG_DONE`), and VP0's bit of `REG_CFG_DONE` reads 0. Linux tests the
+same two things before it completes a page flip: `vop2_crtc_atomic_flush`
+ends with `vop2_cfg_done` (`rockchip_drm_vop2.c:1846-1866` in v6.18), and
+`vop2_isr` sends the flip event on a frame start interrupt only when the
+port's bit of `REG_CFG_DONE` is clear (`:2175-2188`). The screen remembers
+two earlier buffers. A third flip inside one frame makes every buffer busy
+until the display catches up: the answer may be too large for a frame and
+is never too small, which is `yakogl_board.h`'s contract. EGL then waits for
+a free buffer and says so once (`next_window_buffer`, `src/gl/egl.rs`).
+
+Whether VP0's bit of `REG_CFG_DONE` clears at the frame start is U8. Both
+answers are safe here. A bit that always reads 0 leaves the frame start flag
+to decide, and that is enough because the flag is cleared after the
+`REG_CFG_DONE` write. A bit that never clears keeps the buffers busy, and
+EGL's once-only line shows it on the UART.
+
+Before the first show no buffer is busy. After an adopt that stopped, the
+buffer of that show is busy (the adopt may have stopped after it pointed
+Esmart0 at the buffer) and no register is read.
+
+**Not in D3.** The Mali OSAL has no `wait_vblank`. EGL's wait for a free
+buffer is then its poll of up to 100 ms (`BUSY_WAIT_NS`), not a wait for
+vertical periods. A frame start interrupt for it is a later step.
+
+**What the triangle proves.** `examples/triangle` is single-buffered and
+shows the same window every frame, so its picture proves the first show: a
+Mali-rendered window adopted in place. It does not flip. The flip and the
+busy rule are first run on the board by a double-buffered image (gl_test,
+dEQP); the board library prints the screen's flip count at the end of a run
+so that the UART record says whether they ran.
 
 ## 5. Proof without a camera
 
@@ -681,7 +768,8 @@ answers polls, takes injected failures and records the order.
 | D0 | The dump: `driver/tools/kexec-zephyr/t6-display-dump.sh` (read only), its output committed as the dump file and the allow file seeded. Done on 2026-11-12 (section 6) | `t6-display-dump-selftest.sh`: the list check, the refusals and a whole run against a fake board | the run of section 6: 1120 words, the picture stayed on | script 490 lines, self-test 390 | yes |
 | D1 | `ip::vop2`: register map, Esmart window (format, address, stride, size, enable, AXI ids), overlay select, VP timing and dividers, `REG_CFG_DONE`, internal PD (`SYS_PD_CTRL`), STANDBY with DSP_HOLD wait, status read-back; `ip::rk_iommu`: paging off and check | layout = section 1; timing words for the dump's mode; a window refused above 4 GiB, unaligned, or with a stride over 16 bits; CFG_DONE after the window writes; standby waits for DSP_HOLD | none alone | 700 lines + tests | no |
 | D2 | Adopt (route a): `nanopc-t6.sh --crash` and the T6 crash reservation; a `t6_display` probe that adopts VP0, turns the IOMMU off, shows a CPU pattern in Esmart0, prints the section 5 read-backs | the adopt policy over the model loaded with the dump (mode match, mode mismatch refused, AFBC cluster replaced by Esmart0) | read-backs as in section 5, then the person confirms the pattern | 250 lines + script change | yes |
-| D3 | `board_show()` / `board_display_busy()` for the T6 over `ip::vop2` (flip by address at `REG_CFG_DONE`, busy until the next frame start) | the flip and busy logic on the model | with the Mali Zephyr OSAL (Z4): `gl_triangle` on screen by crash kexec | 200 lines | yes |
+| D3a | The T6's show, flip and busy rules over `ip::vop2` (section 4, step D3): `board::nanopc_t6_display` `show` / `busy`, the carve-out's reserved end, the C entries. Done, host only | the first show is the adopt with the GL window; a flip writes the address then `REG_CFG_DONE` and never waits; busy until the frame start that takes the flip; a stopped adopt is final; the reserved end is mapped and never allocated | none alone | 330 lines + tests | no |
+| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row | the image builds with `-Werror` (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
 | D4 | `soc::rk3588` display power and clocks: PD_VOP, PD_VO1 on/off (the PD_GPU code with a domain table), the gates, muxes and resets of section 1, the PMU1 CRU | the domain table = `pm-domains.c` lines cited; order: clocks, power, repair poll, idle release; reset assert/release words; off-then-on loses block state in the model | none alone | 400 lines + tests | no |
 | D5 | `ip::hdptx`: the TMDS bring-up order of section 1, the ROPLL plan (integer and SDM) and the register values from the dump, lock and ready polls, power-off | the plan for 25.2, 27, 74.25, 148.5 MHz; the write order inside the reset window; no lock = timeout; the dump's register file equals the model's image | none alone | 600 lines + tests | no |
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |
@@ -696,8 +784,8 @@ new file (`ip/vop2.rs` with `ip/rk_iommu.rs`, `soc/rk3588/display_power.rs`
 or an extension of `soc/rk3588.rs`, `ip/hdptx.rs`, `ip/dw_hdmi_qp.rs`), each
 with its own register model in its tests; only the `mod.rs` lines and
 `Cargo.toml` features touch shared files, one line each. D5's values wait for
-the D0 dump; its structure does not. D2 needs D1; D3 needs D1 and the Mali
-Zephyr OSAL (Z4); D7 needs D1, D4, D5, D6 and owns the combined model
+the D0 dump; its structure does not. D2 needs D1; D3a needs D2; D3b needs
+D3a and the Mali Zephyr OSAL (Z4); D7 needs D1, D4, D5, D6 and owns the combined model
 (`model_rk3588_display.rs`, as `model_hdmi.rs` is for the X2); D8 needs D7;
 D9 needs D8 and the U-Boot boot of the image (the sign-off form of Z1-Z4);
 D10 needs D6 and D8.
@@ -717,7 +805,7 @@ variant of it.
 | U5 | Does a read of a block whose domain is off hang the bus or return zeros? | not to be tested by reading; the code reads status only after power-on and repair status, so the answer is not needed |
 | U6 | Are `SYS_PD_CTRL`'s internal domains on as soon as the bit is cleared, or is there a settle time (Linux polls nothing)? | D8: read `SYS_PD_CTRL` back, then a window read-back |
 | U7 | `CMU_*_FREQ` units and `VIDEO_MONITOR_STATUS` fields | answered by D0: 4 kHz per count; the monitor words hold sync, porch, total and active (section 6) |
-| U8 | Is `REG_CFG_DONE`'s VP bit self-clearing at the frame boundary (usable as "update taken")? | D2: read it right after the write and after one frame |
+| U8 | Is `REG_CFG_DONE`'s VP bit self-clearing at the frame boundary (usable as "update taken")? | D2: read it right after the write and after one frame. D3's busy rule is safe with either answer (section 4, step D3) |
 | U9 | Does the crash reservation fit the image window (0x10000000-0x1fffffff) on Armbian without moving anything else, and does the crash route leave panthor's GPU in a state Z1's power-on handles? | D2: `/proc/iomem` after reboot with `crashkernel=`; the probe draws with the CPU, the Mali case is D3 |
 | U10 | Which physical connector is HDMI0 on the T6? | answered by D0: the one the LCD is on is `card0-HDMI-A-1`, `fde80000.hdmi` |
 | U11 | The 1920x720 panel's pixel clock and whether it accepts DVI | D0 with that panel: `modes`, the EDID, the PHY registers |

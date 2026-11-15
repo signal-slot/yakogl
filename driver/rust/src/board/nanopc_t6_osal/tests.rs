@@ -36,6 +36,23 @@ fn rig() -> Rig {
 /// The rig with `chunks` chunk slots, `initial` of them the heap's at the
 /// start.
 fn rig_with(chunks: u64, initial: u32) -> Rig {
+    came_up(rig_up(chunks, initial, 0))
+}
+
+/// The rig whose carve-out keeps its last `reserved` bytes from `alloc`.
+fn rig_reserved(reserved: u64) -> Rig {
+    came_up(rig_up(1, 1, reserved))
+}
+
+fn came_up((r, up): (Rig, Result<(), u32>)) -> Rig {
+    assert_eq!((up, r.o.step, r.o.refusal, r.o.detail), (Ok(()), STEP_NONE, 0, 0));
+    r
+}
+
+/// The rig and what [`Osal::up`] answered: `chunks` chunk slots, `initial`
+/// of them the heap's at the start, `reserved` bytes at the carve-out's end
+/// kept from `alloc`.
+fn rig_up(chunks: u64, initial: u32, reserved: u64) -> (Rig, Result<(), u32>) {
     let blob = synth::small();
     let z = Box::new(Z4::with_regions(
         blob.clone(),
@@ -60,8 +77,9 @@ fn rig_with(chunks: u64, initial: u32) -> Rig {
         vm_pool: &mut vm_pool,
         vm_tables_pa: VM_TABLES_PA,
         heap_initial_chunks: initial,
+        carve_reserved: reserved,
     };
-    let r = osal.up(
+    let up = osal.up(
         &*z,
         B,
         &blob,
@@ -76,8 +94,7 @@ fn rig_with(chunks: u64, initial: u32) -> Rig {
         &mut GpuUp::default(),
         &mut o,
     );
-    assert_eq!((r, o.step, o.refusal, o.detail), (Ok(()), STEP_NONE, 0, 0));
-    Rig { z, osal, o, _pool: pool, _vm_pool: vm_pool }
+    (Rig { z, osal, o, _pool: pool, _vm_pool: vm_pool }, up)
 }
 
 fn no_delay(_: u32) {}
@@ -322,47 +339,9 @@ fn the_heap_starts_with_its_initial_chunks_and_answers_group_up_s() {
 #[test]
 fn an_initial_chunk_count_the_region_cannot_hold_is_refused() {
     for (chunks, initial, code) in [(2, 0, 1), (2, 3, 2)] {
-        let blob = synth::small();
-        let z = Z4::with_regions(
-            blob.clone(),
-            &[
-                (QUEUE_VA, QUEUE_VM_BYTES),
-                (HEAP_POOL_VA, HEAP_POOL_SIZE),
-                (HEAP_CHUNK_VA, chunks * u64::from(HEAP_CHUNK_SIZE)),
-                (CARVE_VA, CARVE),
-            ],
-        );
-        let vm = z.backings();
-        let mut pool = vec![[0u64; ENTRIES]; 16];
-        let mut vm_pool = vec![[0u64; ENTRIES]; 32];
-        let mem = OsalMem {
-            queue: crate::board::nanopc_t6_submit::tests::QUEUE,
-            ring: vm[0],
-            heap_pool: vm[1],
-            heap_chunks: vm[2],
-            carve: vm[3],
-            vm_pool: &mut vm_pool,
-            vm_tables_pa: VM_TABLES_PA,
-            heap_initial_chunks: initial,
-        };
-        let (mut osal, mut o) = (Box::new(Osal::EMPTY), SubmitUp::default());
-        let r = osal.up(
-            &z,
-            B,
-            &blob,
-            &backings(&blob),
-            &mut pool,
-            TABLES_PA,
-            RK3588_TIMER_HZ,
-            mem,
-            &|a, n| z.t6.clean(a, n),
-            &mut |_| {},
-            &mut |_| {},
-            &mut GpuUp::default(),
-            &mut o,
-        );
-        assert_eq!((r, o.refusal, o.detail), (Err(z4::STEP_HEAP), code, u64::from(initial)));
-        assert!(!osal.is_up());
+        let (r, up) = rig_up(chunks, initial, 0);
+        assert_eq!((up, r.o.refusal, r.o.detail), (Err(z4::STEP_HEAP), code, u64::from(initial)));
+        assert!(!r.osal.is_up());
     }
 }
 
@@ -1005,6 +984,55 @@ fn a_window_is_the_carve_out_s_own_pages() {
     assert_eq!(r.osal.window(a.phys - 1, 16), Err(-ENOTSUP));
     assert_eq!(r.osal.window(a.phys + CARVE - 8, 16), Err(-ENOTSUP));
     assert_eq!(r.osal.window(a.phys, 0), Err(-EINVAL));
+}
+
+/// The carve-out's reserved end is the GPU's and the CPU's like the rest, and
+/// never an allocation's: `alloc` fills the pages before it and stops there,
+/// `map_phys` answers it, and a kick's stream cannot lie in it.
+#[test]
+fn the_reserved_end_is_mapped_and_never_allocated() {
+    const RESERVED: u64 = 3 << 20;
+    let mut r = rig_reserved(RESERVED);
+    let first = r.osal.alloc(4096).unwrap();
+    assert_eq!(first.gpu, CARVE_VA, "the first page is the carve-out's");
+    let (pa, cpu) = (first.phys, first.cpu);
+
+    // the window: the reserved end, whole, and a range across its start
+    let tail = CARVE - RESERVED;
+    let w = r.osal.window(pa + tail, RESERVED as usize).unwrap();
+    assert_eq!((w.gpu, w.cpu, w.handle), (CARVE_VA + tail, cpu + tail as usize, WINDOW));
+    assert!(r.osal.window(pa + tail - 4096, 8192).is_ok());
+    assert_eq!(r.osal.window(pa + tail, RESERVED as usize + 1), Err(-ENOTSUP), "past the carve-out's end");
+
+    // alloc: everything before the reserved end, and not one page of it
+    let live = r.osal.live_pages as u64;
+    assert_eq!(r.osal.alloc((tail - live * 4096) as usize + 1), Err(-ENOMEM));
+    let all = r.osal.alloc((tail - live * 4096) as usize).unwrap();
+    assert_eq!(all.gpu + all.size as u64, CARVE_VA + tail);
+    assert_eq!(r.osal.alloc(1), Err(-ENOMEM));
+
+    // a kick: its stream is an allocation's, so it ends before the reserved end
+    assert_eq!(r.osal.submit(&*r.z, CARVE_VA + tail, 24, &mut no_delay), -i64::from(EINVAL));
+    assert_eq!(r.osal.submit(&*r.z, CARVE_VA + tail - 64, 128, &mut no_delay), -i64::from(EINVAL));
+    // a free of the window leaves the allocator alone, as any window's does
+    assert_eq!(r.osal.free(&*r.z, w.gpu, w.handle, &mut no_delay), 0);
+    assert_eq!(r.osal.alloc(1), Err(-ENOMEM));
+}
+
+/// A reserved end that is not whole pages, or that leaves no page to hand
+/// out: refused before anything runs, under its own refusal.
+#[test]
+fn a_reserved_end_the_carve_out_cannot_give_is_refused() {
+    for reserved in [1, 4095, 4097, CARVE, CARVE + 4096, !4095u64] {
+        let (r, up) = rig_up(1, 1, reserved);
+        assert_eq!((up, r.o.refusal, r.o.detail), (Err(z4::STEP_VM_MAP), VM_MAP_RESERVED, reserved));
+        assert!(!r.osal.is_up());
+        assert!(r.z.writes().is_empty(), "no register was written");
+    }
+    // all but one page: the one page is handed out, once
+    let mut r = rig_reserved(CARVE - 4096);
+    assert_eq!(r.osal.alloc(4096).map(|a| a.gpu), Ok(CARVE_VA));
+    assert_eq!(r.osal.alloc(1), Err(-ENOMEM));
 }
 
 /// A free of a window frees nothing, not even when the window starts where
