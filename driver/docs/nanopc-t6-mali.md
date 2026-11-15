@@ -1517,15 +1517,15 @@ board's values). The order:
    the t6_gpu probe's CMake variable `T6_GPU_QOS` (`reset` or `linux-zero`,
    the default; `tools/probes/nanopc_t6/t6_gpu/CMakeLists.txt:31`): the
    probe passes its id to `yd_t6_gpu_qos_policy` before `yd_t6_gpu_up`
-   (`tools/probes/nanopc_t6/t6_gpu/src/main.c:65`,
-   `driver/rust/src/ffi/rk3588.rs:624`); without that call the default
+   (`tools/probes/nanopc_t6/t6_gpu/src/main.c:67`,
+   `driver/rust/src/ffi/rk3588.rs:654`); without that call the default
    applies — `gpu_up` is `gpu_up_with(GPU_QOS_POLICY, ...)`,
-   `driver/rust/src/board/nanopc_t6_gpu.rs:268`). The Z1 record names the
+   `driver/rust/src/board/nanopc_t6_gpu.rs:274`). The Z1 record names the
    policy that ran: `GpuUp::qos_policy` / `struct yd_t6_gpu_up.qos_policy`,
    `YD_T6_QOS_RESET` 1, `YD_T6_QOS_LINUX_ZERO` 2, 0 when the run stopped
    before the step, with `qos_gpu_m0`'s three words read back in
-   `qos_words` (`driver/rust/include/yakogl_drivers.h:432`,
-   `tools/probes/nanopc_t6/common/t6_z1.c:176`). Host tests:
+   `qos_words` (`driver/rust/include/yakogl_drivers.h:442`,
+   `tools/probes/nanopc_t6/common/t6_z1.c:184`). Host tests:
    `qos_reset_policy_writes_only_mode_bandwidth_saturation` and
    `qos_linux_zero_policy_writes_only_mode_bandwidth_saturation`
    (`soc::rk3588`, each block's other words and every other address
@@ -1534,10 +1534,10 @@ board's values). The order:
    (`board::nanopc_t6_gpu`, the twelve writes of 0 and the read-back), and
    for the selector and the record
    `each_qos_policy_is_applied_and_named_in_the_record`
-   (`driver/rust/src/board/nanopc_t6_gpu.rs:854`),
-   `a_run_stopped_before_the_qos_step_names_no_policy` (same file, :870)
+   (`driver/rust/src/board/nanopc_t6_gpu.rs:870`),
+   `a_run_stopped_before_the_qos_step_names_no_policy` (same file, :886)
    and `z1_record_appends_the_qos_policy_and_its_words`
-   (`driver/rust/src/ffi/rk3588.rs:2414`). What the hardware does with each
+   (`driver/rust/src/ffi/rk3588.rs:2522`). What the hardware does with each
    policy is unmeasured ("Open").
 6. The take-over of a GPU found running, `gpu::mali::takeover::take_over`,
    only when PD_GPU read powered at hand-over (`REPAIR_STATUS` bit 1). That
@@ -1565,8 +1565,10 @@ board's values). The order:
      `GPU_INT_RAWSTAT` (the sequence of step 7); when it does not rise in
      100 ms, `GPU_CMD` := `HARD_RESET` (`GPU_CMD_DEF(1, 2)`,
      panthor_regs.h:52) and the same wait; refusal 11 `HardResetTimeout`
-     when that times out too. After the reset the address spaces are off:
-     the GPU no longer walks Linux's page tables.
+     when that times out too. After the reset the address spaces are
+     expected to be off, so that the GPU no longer walks Linux's page
+     tables: expected from what a reset does, not measured (see the end of
+     this step).
 
    panthor's own reset on a hang differs in order: it masks the job
    interrupt and stops the MCU, and only then masks the MMU interrupt,
@@ -1576,19 +1578,30 @@ board's values). The order:
    earlier, and polls the reset. panthor has no hard reset
    (panthor_gpu.c:325-330). The take-over touches GPU offsets up to
    `MMU_INT_MASK` (0x2008), so every image maps the GPU for at least
-   `YD_T6_GPU_MAP_MIN` = 0x3000 bytes (`nanopc_t6_gpu::GPU_MAP_MIN`; t6_gpu
-   maps exactly that, t6_mmu 0x4000, t6_fw and t6_submit 0x280000, each with
-   a `BUILD_ASSERT` against it; host test
-   `z1_touches_no_gpu_register_past_gpu_map_min`). The record
+   `YD_T6_GPU_MAP_MIN` = 0x3000 bytes (`nanopc_t6_gpu::GPU_MAP_MIN`; host
+   test `z1_touches_no_gpu_register_past_gpu_map_min`). Each C entry that
+   runs Z1 (`yd_t6_gpu_up`, `yd_t6_fw_up`, `yd_t6_submit`, `yd_t6_osal_up`)
+   takes the length the caller mapped (`gpu_len`, after `gpu`) and answers
+   `-EINVAL`, nothing touched, below that (`t6_bases`; host tests
+   `t6_bases_refuses_a_gpu_map_below_gpu_map_min` and
+   `every_z1_entry_takes_its_bases_from_t6_bases`). t6_gpu maps exactly
+   the minimum, t6_mmu 0x4000, t6_fw, t6_submit and `src/osal/zephyr_mali.c`
+   0x280000, and each passes the size it mapped. The record
    (`GpuUp::take_over`, `struct yd_t6_gpu_up`'s `take_over_*` words) keeps
    the steps done, the masks, the raw status and `MCU_STATUS` as found, the
    raw status after the clear, the halt's polls, whether it timed out and
    `MCU_STATUS` at its end, which reset ran, and the masks and `MCU_STATUS`
    after the reset. `t6_z1.c` prints one `take-over:` line per step reached
    (found; masked and cleared; MCU halt; reset), so a refusal shows only
-   words that were read. `t6-verdict.sh`'s t6_gpu table expects the
-   hand-over line `: on` and the four `take-over:` lines when the hand-over
-   reads on (the crash route), `: off or idle` and none otherwise. A domain that read off gets none of this:
+   words that were read. `t6-verdict.sh`'s t6_gpu table chooses the route
+   by the same fact as the code, `REPAIR_STATUS` bit 1 on the hand-over
+   line (its `: on` / `: off or idle` text is not that fact: a domain
+   powered with its idle request set prints `: off or idle` and is taken
+   over). Bit 1 set (the crash route): the four `take-over:` lines, with
+   the masks as found panthor's words or 0, the MCU halt `MCU_STATUS 0 ...:
+   DISABLED`, a `soft` reset and after it the masks and `MCU_STATUS` all 0;
+   anything else differs and a person reads it. Bit 1 clear: `: off or
+   idle` and no `take-over:` line anywhere. A domain that read off gets none of this:
    its GPU words are exactly those of step 7 alone (host test
    `a_gpu_found_off_is_written_the_same_gpu_words_as_without_the_take_over`).
    PD_GPU is never powered off by Z1; the host model refuses a cut without
@@ -2866,20 +2879,20 @@ and nothing written:
   build-time choice, not an edit: `west build ... -- -DT6_GPU_QOS=reset` or
   `=linux-zero` (the default; `tools/probes/nanopc_t6/t6_gpu/CMakeLists.txt:31`)
   reaches `gpu_up_with` through `yd_t6_gpu_qos_policy()`
-  (`driver/rust/src/ffi/rk3588.rs:553`) before `yd_t6_gpu_up`, and the record's
+  (`driver/rust/src/ffi/rk3588.rs:654`) before `yd_t6_gpu_up`, and the record's
   `qos_policy` names the one that ran (`YD_T6_QOS_RESET` 1,
   `YD_T6_QOS_LINUX_ZERO` 2, 0 when the run stopped before the step;
-  `driver/rust/include/yakogl_drivers.h:401`), so each run's own Z1 printout
-  says which words it wrote (`tools/probes/nanopc_t6/common/t6_z1.c:176`). A
+  `driver/rust/include/yakogl_drivers.h:442`), so each run's own Z1 printout
+  says which words it wrote (`tools/probes/nanopc_t6/common/t6_z1.c:184`). A
   Z3 or Z4 run applies the same choice: `yd_t6_fw_up` and `yd_t6_submit` read the
-  one `T6_GPU_QOS_POLICY` (`rk3588.rs:542`) and pass it to
+  one `T6_GPU_QOS_POLICY` (`rk3588.rs:638`) and pass it to
   `board::nanopc_t6_fw::fw_up_with` (`nanopc_t6_fw.rs:223`; `fw_up` keeps the
-  `GPU_QOS_POLICY` default, and `submit_up_with`, `nanopc_t6_submit.rs:1201`,
+  `GPU_QOS_POLICY` default, and `submit_up_with`, `nanopc_t6_submit.rs:1204`,
   carries the policy into Z3), so the probe's `-DT6_GPU_QOS` reaches Z3 and Z4,
   host-tested by `fw_up_applies_the_given_qos_policy_and_the_default_without_one`
   (`nanopc_t6_fw.rs:820`, each policy's words written, the record's GPU part
   naming it) and `the_entry_applies_the_build_time_qos_policy_z1_reads`
-  (`ffi/rk3588.rs:1583`). The record names the
+  (`ffi/rk3588.rs:1742`). The record names the
   applied policy either way, host-tested by
   `each_qos_policy_is_applied_and_named_in_the_record`
-  (`driver/rust/src/board/nanopc_t6_gpu.rs:854`).
+  (`driver/rust/src/board/nanopc_t6_gpu.rs:870`).
