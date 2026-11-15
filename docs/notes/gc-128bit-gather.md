@@ -122,11 +122,24 @@ and the back end's `builtins.rs:452` notes the corpus holds no `tg4`
 (Mesa's emit transcribed, not measured). So there are two prerequisites that
 are not about planes: a front-end `Gather { comp }` form (ES 3.2 core, ES
 3.1 + `GL_EXT_texture_gather`-style extensions; **not ES 3.0**, which has no
-`textureGather`) and a `tg4` selection path. Until they exist, a gather is a
-compile error before it can reach the join, and the plan's "refused by
-name" item has to place its refusal where the gather is first named (the
-builtin lookup), with the text pointing at this note, and keep an equivalent
-check in `split_planes` for when the IR grows the op.
+`textureGather`) and a `tg4` selection path.
+
+**Today** (item gc-w128-gather, commit d471344f): the front end has no
+`textureGather` builtin, so a gather is rejected during lowering, before
+`split_planes` runs, with "no function of this name is declared". This holds
+for keyed and unkeyed units alike; the pass is never reached and has no
+gather refusal of its own. The unit test
+`a_gather_on_a_keyed_unit_is_refused_by_name` (`wide128.rs`) pins it for
+`sampler2D` and `usampler2D`, with and without a key. The refusal is thus the
+front end's, not the plane split's, and no half texel can be produced.
+
+**When the front end gains `textureGather`** (a new `Op` or a flag on
+`Op::Tex`), `split_planes` must refuse it on a keyed unit by name, next to
+the shadow, gradient and offset refusals (`:159-167`), with the text `a
+gather on a 128-bit texture is not split yet`. The test's two cases then
+differ: the keyed case expects that text, and the unkeyed case compiles. The
+real fix, later, is the arm below (Mesa's 16-bit-halves lowering,
+`etnaviv_nir_lower_128bit.c:115-151`, section 1).
 
 Once the IR has a gather (call it `TexLod::Gather { comp }` or a field of
 `Op::Tex`; the choice is the front-end item's), the arm in `split_planes` is:
@@ -222,8 +235,9 @@ planes and may be done by whoever adds `textureGather` to this back end):
    has none; Mesa's emit `:238-241` is transcribed). Offset and shadow
    forms refused by name.
 2. **The named refusal** (the plan's gc-w128-gather item): `split_planes`
-   refuses a gather on a keyed unit ("a gather on a 128-bit sampler is not
-   split into its two planes"); until step 1 the refusal is at the builtin.
+   refuses a gather on a keyed unit ("a gather on a 128-bit texture is not
+   split yet"); until step 1 the front end's "no function of this name is
+   declared" is the refusal (section 3, today).
 3. **The arm** for the identity key (sections 1-3) in `split_planes`.
 4. **The swizzle case** (section 4), after gc-w128-key-pass.
 5. **Board**: an RGBA32F, an RGBA32I and an RGBA32UI texture gathered at
