@@ -10,9 +10,11 @@ Usage:
                                                      equals what would be generated
 
 SLICEDIR is tools/cts/log/<name>-t6-gles2-<...>/ as tools/cts/mali-deqp-run.sh
-writes it: meta.txt, chunks.tsv, results.tsv and kmsg/<label>.txt. The README
-gives the session, rows, commit, kernel and library, start and end, the dEQP
-status counts, the Lost counts by reason, the chunks that were not done or
+writes it: meta.txt, chunks.tsv, results.tsv, kmsg/<label>.txt and, since
+2026-11-15, refusals.tsv. The README gives the session, rows, commit, kernel
+and library, start and end, the dEQP status counts, the count of cases with
+their own refusal (when the slice has refusals.tsv), the Lost counts by
+reason, the chunks that were not done or
 had kernel lines or resets (or whose ssh_after or boot_same is not yes), and
 the runner command with BOARD_HOST left as a placeholder. The output depends
 on the slice alone (no clock, no host). Input holding an IP address or
@@ -88,6 +90,9 @@ def build(d):
             meta[k.strip()] = v.strip()
     chunks = tsv(read(os.path.join(d, "chunks.tsv")), CHUNK_COLS)
     results = tsv(read(os.path.join(d, "results.tsv")), ["case", "status", "detail"])
+    refusals = None
+    if os.path.exists(os.path.join(d, "refusals.tsv")):
+        refusals = tsv(read(os.path.join(d, "refusals.tsv")), ["case", "refusal"])
     kdir = os.path.join(d, "kmsg")
     if os.path.isdir(kdir):
         for n in sorted(os.listdir(kdir)):
@@ -134,6 +139,11 @@ def build(d):
         "",
     ]
     out += table(["status", "cases"], [(k, str(v)) for k, v in counts(st)] or [("-", "0")])
+    if refusals is not None:
+        not_pass = {r["case"] for r in results if r["status"] != "Pass"}
+        out += ["", "Cases with the library's own refusal of a shader or a program "
+                "(`refusals.tsv`): %d, of which %d are not Pass."
+                % (len(refusals), sum(1 for r in refusals if r["case"] in not_pass))]
     out += ["", "Lost cases by reason (`results.tsv` detail):", ""]
     out += table(["reason", "cases"], [(k, str(v)) for k, v in counts(lost)] or [("none", "0")])
     out += ["", "Chunks by status (`chunks.tsv`): %s." %

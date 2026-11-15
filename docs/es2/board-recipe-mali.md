@@ -334,7 +334,9 @@ user, and `YAKOGL_REDACTION_PRIVATE`/`_FILE`):
 | `meta.txt` | `key=value`, in this order: `commit` (full), `session`, `rows`, `tree`, `boot_id_before`, `boot_id_after`, `kernel`, `lib`, `started`, `ended`. `boot_id_after` is `unreachable` or `unknown` when the board was lost |
 | `chunks.tsv` | header `row label cases status seconds kmsg resets ssh_after boot_same exit_line`; one row per tree row of the plan; `-` where unknown (a chunk never run, a lost capture); `exit_line` is the last `yakogl-mali-exit:` line, whitespace folded |
 | `results.tsv` | header `case status detail`; one row per case of the plan: dEQP's status (`Pass`, `Fail`, `NotSupported`, ...) and its Result text, or `Lost` with the reason above |
+| `refusals.tsv` | header `case refusal`; one row per case whose log holds one: the first shader or program info log in which the library refuses (`... refused this fragment shader: Mali(...)`), whitespace folded. `exit_line` of `chunks.tsv` names only the chunk's first refusal; this file names each case's own |
 | `kmsg/<label>.txt` | the kernel lines between the chunk's markers (or `# kernel capture unavailable: ...`) |
+| `<file>.license` | beside each file above: the licence of our results, so the slice is committed as written |
 
 The raw logs (every process's `.qpa`, stdout, stderr, and the whole dmesg
 capture) go to `RAW_DIR`, default `build/mali-deqp-run/<slice name>/` (ignored
@@ -366,8 +368,8 @@ tools/cts/mali-deqp-selftest.sh
 ```
 
 Host only, about 20 s (the hang waits for a 2 s timeout); prints a line per
-check and ends `mali-deqp-selftest: 26 checks passed` (run on the tip:
-26 passed, 0 failed). A fake `ssh` and `scp` on `PATH` run the board's side in
+check and ends `mali-deqp-selftest: N checks passed` (N is pinned in the
+script). A fake `ssh` and `scp` on `PATH` run the board's side in
 a directory of this host, and a fake `deqp-gles2` writes its `.qpa` from
 `tools/cts/testdata/mali-deqp-run/` (its README says what each fixture is).
 The cases: a clean run (16 Pass, 1 Fail, slice format, redaction, the stage
@@ -450,13 +452,18 @@ slices of section 4:
 - `--check-cover MUSTPASS SLICE...` exits 0 only when every mustpass case is
   in exactly one slice with a status (`Lost` with one of `chunk-crash`,
   `chunk-hang`, `board-lost`, `not-run`), every `chunks.tsv` row has its
-  `kmsg`, `resets`, `ssh_after` and `boot_same` fields, and every slice's
+  `kmsg`, `resets`, `ssh_after` and `boot_same` fields, every `refusals.tsv`
+  row names once a case of its slice's `results.tsv` that is not `Lost`
+  (`RULE refusal-case`), and every slice's
   `commit` is an ancestor of `origin/main` (`--no-git` skips that, for
   fixtures; `--main-ref` names another ref).
 - `--tally [--markdown] SLICE...` prints the counts by status and the non-Pass
-  counts by cause: the detail with numbers and case names stripped, or
-  `refused:<name>` when the detail or the chunk's exit line names a back-end
-  refusal. `--markdown` prints the table that goes into
+  counts by cause. In a slice with `refusals.tsv` the cause of a case is its
+  own refusal when the file names it (`refused, <vertex|fragment> shader:
+  <why>`), else the detail with numbers and case names stripped. In an older
+  slice without the file the tally can only take the refusal of the chunk's
+  exit line (`refused:<name>`) for all non-Pass cases of the chunk.
+  `--markdown` prints the table that goes into
   `docs/es2-cts-failures.md` between `<!-- mali-deqp-tally begin -->` and
   `<!-- mali-deqp-tally end -->`.
 - `--check-doc DOC SLICE...` exits 0 only when that block equals the
@@ -467,7 +474,7 @@ slices of `tools/cts/testdata/mali-deqp/good/` (two slices, eight cases, a toy
 mustpass list; `--no-git` because their commit is not on main):
 
 ```sh
-python3 -I tools/cts/mali-deqp-tally.py --self-test     # ends: 22 checks passed
+python3 -I tools/cts/mali-deqp-tally.py --self-test     # ends: N checks passed
 python3 -I tools/cts/mali-deqp-tally.py --check-cover tools/cts/testdata/mali-deqp/mustpass.txt \
     --no-git tools/cts/testdata/mali-deqp/good/*         # no output, exit 0
 python3 -I tools/cts/mali-deqp-tally.py --tally --no-git tools/cts/testdata/mali-deqp/good/*

@@ -1,0 +1,6 @@
+case	status	detail
+dEQP-GLES2.functional.a.one	Pass	Pass
+dEQP-GLES2.functional.a.two	Fail	Image comparison failed
+dEQP-GLES2.functional.a.three	NotSupported	Loop type is not supported
+dEQP-GLES2.functional.b.four	Fail	Failed to compile shader (program)
+dEQP-GLES2.functional.b.five	InternalError	glDrawArrays: refused blend_equation_separate
