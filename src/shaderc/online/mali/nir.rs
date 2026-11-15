@@ -756,6 +756,18 @@ pub struct Nir<'s> {
     /// The attribute locations Mesa numbers, one bit each
     /// ([`Nir::attribute_record`]); set by [`build`].
     pub counted: u64,
+    /// The attribute locations the values of the shader's output lanes
+    /// read, every lane as if the fragment shader read it, one bit each;
+    /// set by the walk that makes the late folds ([`build`]).
+    output_inputs: u64,
+    /// The attribute locations the value of each varying lane reads (lane
+    /// `c` of location `l` at `4 * l + c`), one bit each; set by the
+    /// numbering walk ([`build`]).
+    lane_inputs: [u64; 4 * MAX_VARYINGS],
+    /// The reads a shader alone is built for when it stores a constant
+    /// lane: its lanes less the constant ones ([`walk`]). The numbering
+    /// walk stores the same lanes ([`build`]).
+    own_reads: Option<([(u8, u8); MAX_VARYINGS], usize)>,
 }
 
 const F32_ZERO: u32 = 0;
@@ -1121,6 +1133,9 @@ impl<'s> Nir<'s> {
             numbering_walk: false,
             late_fold: false,
             counted: 0,
+            output_inputs: 0,
+            lane_inputs: [0; 4 * MAX_VARYINGS],
+            own_reads: None,
         })
     }
 
@@ -1808,6 +1823,42 @@ impl<'s> Nir<'s> {
         for &id in &self.order[..self.len] {
             if let Kind::Input { loc, .. } = self.nodes[id as usize].kind {
                 read |= 1u64.checked_shl(u32::from(loc)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            }
+        }
+        Ok(read)
+    }
+
+    /// The attribute locations the values `roots` read, themselves or
+    /// through their sources, one bit each.
+    fn inputs_of(&self, roots: &[Val]) -> Result<u64, MaliError> {
+        let mut seen = [0u64; MAX_NODES.div_ceil(64)];
+        let mut stack = [0u16; MAX_NODES];
+        let mut sp = 0;
+        let mut read = 0u64;
+        /* a node is marked when pushed, so each is pushed once: the stack
+         * holds them all */
+        let push = |v: Val, seen: &mut [u64], stack: &mut [u16], sp: &mut usize| {
+            if let Val::Lane(y, _) | Val::Pair(y, _) = v {
+                let y = y as usize;
+                if seen[y / 64] & (1 << (y % 64)) == 0 {
+                    seen[y / 64] |= 1 << (y % 64);
+                    *stack.get_mut(*sp).ok_or(MaliError::Defect(Defect::IrIndex))? = y as u16;
+                    *sp += 1;
+                }
+            }
+            Ok::<(), MaliError>(())
+        };
+        for &v in roots {
+            push(v, &mut seen, &mut stack, &mut sp)?;
+        }
+        while sp > 0 {
+            sp -= 1;
+            let nd = self.nodes[stack[sp] as usize];
+            if let Kind::Input { loc, .. } = nd.kind {
+                read |= 1u64.checked_shl(u32::from(loc)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            }
+            for v in nd.src {
+                push(v, &mut seen, &mut stack, &mut sp)?;
             }
         }
         Ok(read)
@@ -2735,12 +2786,28 @@ pub fn build<'s>(
      * ([`vs_fmul`]) the locations are those of a second walk without it,
      * whose loads are a superset of the first's (it keeps a node where the
      * first folds one). A second walk that refuses is a form not
-     * modelled. So is a varying lane such a fold makes a constant: Mesa's
-     * link (`nir_opt_varyings`, on the vectors) keeps it a computed lane,
-     * which our link would propagate into the fragment shader
-     * ([`Nir::consts`]; dEQP 1405_0's `vec4(.., d, ..) * vec4(.., -0.0, b,
-     * a)`) */
+     * modelled. So is a varying lane such a fold makes a constant (or a
+     * lane of uniforms, or equal to another) where the numbering depends
+     * on the fold: Mesa's link (`nir_opt_varyings`, on the vectors) keeps
+     * the lane computed and its location read, where our link would
+     * propagate the constant into the fragment shader ([`Nir::consts`])
+     * and leave the location unread (dEQP 1405_0's `vec4(.., d, ..) *
+     * vec4(.., -0.0, b, a)`, `d`). The numbering depends on it when such a
+     * lane of the second walk reads a location no output lane of the
+     * first reads, each lane as if the fragment shader read it
+     * ([`Nir::lane_inputs`], [`Nir::output_inputs`]: the link's constant
+     * pass reads none). Where it does not, the first walk stands as it is,
+     * as without the second (the factor a uniform, dEQP
+     * basic_expression.vertex.12's `d`, or an attribute read in another
+     * lane) */
     if vs.late_fold {
+        /* a shader alone stores the lanes the first walk does not make
+         * constant, whatever the second makes of them */
+        let own = vs.own_reads;
+        let reads = match (reads, &own) {
+            (None, Some((own, n))) => Some(&own[..*n]),
+            _ => reads,
+        };
         let numbered = walk(m, scratch, reads, moved, fp16, true).map_err(|e| match e {
             MaliError::OutOfScratch => e,
             _ => MaliError::AttributeNumbering,
@@ -2749,7 +2816,19 @@ pub fn build<'s>(
         if vs.counted & !counted != 0 {
             return Err(MaliError::Defect(Defect::IrIndex));
         }
-        if numbered.consts != vs.consts {
+        let mut depends = 0u64;
+        for o in m.outputs.iter().filter(|o| o.kind == IoKind::Varying) {
+            for c in 0..o.components.min(4) {
+                let link = |k: &super::link::VaryingConsts| {
+                    (k.get(o.location, c), k.flat(o.location, c), k.class(o.location, c))
+                };
+                if link(&vs.consts) != link(&numbered.consts) {
+                    depends |=
+                        numbered.lane_inputs.get(usize::from(o.location) * 4 + usize::from(c)).copied().unwrap_or(0);
+                }
+            }
+        }
+        if depends & !vs.output_inputs != 0 {
             return Err(MaliError::AttributeNumbering);
         }
         vs.counted = counted;
@@ -3232,6 +3311,25 @@ fn walk<'s>(
     if m.outputs.iter().any(|o| o.invariant) {
         return Err(MaliError::Invariant);
     }
+    /* the locations the output lanes read, whichever the fragment shader
+     * reads ([`build`]) */
+    if numbering {
+        for (l, lanes) in varyings.iter().enumerate() {
+            for (c, &v) in lanes.iter().flatten().enumerate() {
+                let read = vs.inputs_of(&[v])?;
+                if let Some(x) = vs.lane_inputs.get_mut(4 * l + c) {
+                    *x = read;
+                }
+            }
+        }
+    } else if vs.late_fold {
+        let mut roots = [Val::Undef; 4 * MAX_VARYINGS + 5];
+        let lanes = varyings.iter().flatten().flatten().chain(position.iter().flatten()).chain(point_size.iter());
+        for (r, &v) in roots.iter_mut().zip(lanes) {
+            *r = v;
+        }
+        vs.output_inputs = vs.inputs_of(&roots)?;
+    }
     /* the constant lanes of the shader's own stores, which Mesa's link
      * propagates into the fragment shader before it moves code
      * (nir_opt_varyings.c:2880-2900, `propagate_uniform_expressions`: a
@@ -3331,6 +3429,7 @@ fn walk<'s>(
                 *own.get_mut(nown).ok_or(MaliError::VaryingLocation)? = (o.location, mask);
                 nown += 1;
             }
+            vs.own_reads = Some((own, nown));
             Some(&own[..nown])
         }
         r => r,

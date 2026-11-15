@@ -319,7 +319,7 @@ pub enum MaliError {
     /// attribute locations (nir.rs `build`, docs/notes/mali-builtin-inputs.md
     /// "Attribute records"), where the walk without that fold refuses, or
     /// where the fold makes a varying lane a constant that Mesa's link
-    /// keeps computed.
+    /// keeps computed and the attribute numbering depends on the fold.
     AttributeNumbering,
     /// The scratch arena ran out (reported as capacity, not as a gap).
     OutOfScratch,

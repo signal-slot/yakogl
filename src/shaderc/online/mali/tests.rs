@@ -7993,7 +7993,11 @@ fn other_63_matattr_is_byte_equal_to_mesa_26_2_1() {
 ///   numbering, so it keeps its record and its descriptor and the next
 ///   attribute's index counts it. A product by one zero in every lane
 ///   (`_earlyfold_negvec`, `vec4(-0.0)`) goes before the numbering: no
-///   record.
+///   record. `_latefold_negfactor`, `((-d) * vec4(0.0, -0.0, 0.0, 0.0)) *
+///   (-b)`: at the numbering the product is not an `fneg`, so the
+///   product by `-b` is no `fmul(fneg(a), fneg(b))`;
+/// - a constant times a vector of zeros of both signs (`_constfactor`):
+///   no late fold, a constant reads no location.
 ///
 /// Each program is the shim's to the byte along the draw's linked path,
 /// and has as many attribute records as Mesa's draw has Attribute
@@ -8019,6 +8023,86 @@ fn vertex_attribute_indices_count_the_locations_mesa_numbers() {
         assert_eq!(records.len(), attribute_records(json).len(), "{name}: Mesa's Attribute descriptors");
     }
     assert!(failed.is_empty(), "{failed:#?}");
+}
+
+/// A late fold (the `vsattr_latefold*` of
+/// [`vertex_attribute_indices_count_the_locations_mesa_numbers`]) that
+/// makes a varying lane a constant, a lane of uniforms or a lane equal to
+/// another, which our link then takes out of the vertex shader, is
+/// refused only where the attribute numbering depends on it: that lane of
+/// the walk without the late folds reads a location no output lane of the
+/// walk with them reads (nir.rs `build`; docs/notes/mali-builtin-inputs.md,
+/// "Attribute records").
+/// - Refused, `d` read only in such a lane: dEQP
+///   `random.basic_expression.vertex.96` (`vec4(.., d, ..) * vec4(0.5,
+///   -0.0, b, a)`, a constant), `u + d * vec4(0.0, -0.0, 0.0, 0.0)` (a lane
+///   of uniforms, which our link makes flat) and `w = b + d * ..` after
+///   `v = b` (equal to `v`, so our link reads `w` from `v`). Mesa keeps
+///   each lane a computed varying of its own and counts `d` (measured on
+///   its drm-shim).
+/// - The factor of the folded zero is a uniform (`vslate_uniform`;
+///   `vslate_v12`, the shape of dEQP `random.basic_expression.vertex.12`),
+///   or an attribute the shader also reads in another lane, in
+///   gl_Position or in gl_PointSize. No location depends on the fold, so
+///   the program is the one the first walk gives: compiled (alone and
+///   linked), with Mesa's
+///   attribute records (its fragment words are not Mesa's: the propagated
+///   lane), or refused for its fragment shader's colour pair
+///   (`ColourPair`).
+/// - `d`'s late fold beside a lane that a fold of two constants makes a
+///   constant (`vslate_constlane`'s `w`): `d` is counted, and `w`'s lanes
+///   refuse nothing, because no location depends on them.
+#[test]
+fn a_late_fold_is_refused_only_where_the_attribute_numbering_depends_on_it() {
+    let linked = |vs: &str, fs: &str| match try_compile_linked(vs, fs) {
+        Ok((v, _)) => Ok(v),
+        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => Err(e),
+        Err(e) => panic!("not a Mali refusal: {e:?}"),
+    };
+    let fs = "precision mediump float; varying mediump vec4 v; void main() { gl_FragColor = v; }";
+    let vertex_96 = "attribute vec4 p; const float e = -6.5 - float(7.0) * -1.0; attribute float d; \
+        float c = float(float(-7.625)) + float(float(7.5)); attribute float a; attribute float b; \
+        varying mediump vec4 v; void main() { gl_Position = p; \
+        v = vec4(float(e) * 2.0, (float(d)), c * 2.0, float(c)); v = (v) * (vec4(0.5, -0.0, b, a)); }";
+    assert_eq!(linked(vertex_96, fs).err(), Some(MaliError::AttributeNumbering), "vertex.96");
+    assert_eq!(gap(SHC_STAGE_VERTEX, vertex_96), MaliError::AttributeNumbering, "vertex.96 alone");
+    for (decl, body, fs) in [
+        ("uniform highp vec4 u;", "v = u + d * vec4(0.0, -0.0, 0.0, 0.0);", fs),
+        (
+            "attribute highp vec4 b; varying mediump vec4 w;",
+            "v = b; w = b + d * vec4(0.0, -0.0, 0.0, 0.0);",
+            "precision mediump float; varying vec4 v; varying vec4 w; void main(){ gl_FragColor = v + w; }",
+        ),
+    ] {
+        let vs = format!(
+            "attribute highp vec4 p; attribute highp vec4 d; varying mediump vec4 v; {decl} \
+             void main(){{ gl_Position = p; {body} }}"
+        );
+        assert_eq!(linked(&vs, fs).err(), Some(MaliError::AttributeNumbering), "{body}");
+    }
+    for read in [
+        "gl_Position = p; v = b * vec4(1.0, 1.0, 0.0, 1.0);",
+        "gl_Position = p + b; v = vec4(p.x, p.y, b.z, p.w) * vec4(1.0, 1.0, 0.0, 1.0);",
+        "gl_Position = p; gl_PointSize = b.z; v = vec4(p.x, p.y, b.z, p.w) * vec4(1.0, 1.0, 0.0, 1.0);",
+    ] {
+        let vs =
+            format!("attribute highp vec4 p; attribute highp vec4 b; varying mediump vec4 v; void main(){{ {read} }}");
+        assert_eq!(linked(&vs, fs).err(), Some(MaliError::ColourPair), "{read}");
+    }
+    let refs = testdata_references("vslate_");
+    assert!(!refs.is_empty());
+    for (name, vs, fs, json) in &refs {
+        /* the shader alone too, as `glCompileShader` builds it */
+        if let Err(e) = compile(SHC_STAGE_VERTEX, vs) {
+            panic!("{name}: alone: refused, {e:?}");
+        }
+        let v = linked(vs, fs).unwrap_or_else(|e| panic!("{name}: refused, {e:?}"));
+        let mut records = v.info.attributes.clone();
+        records.sort_unstable();
+        let want: Vec<u8> = (0..records.len() as u8).collect();
+        assert_eq!(records.iter().map(|&(_, rec)| rec).collect::<Vec<_>>(), want, "{name}: records by location");
+        assert_eq!(records.len(), attribute_records(json).len(), "{name}: Mesa's Attribute descriptors");
+    }
 }
 
 /// `Nir::attribute_record` counts locations, not loads: `Nir::load` keeps

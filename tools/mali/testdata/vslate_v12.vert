@@ -1,0 +1,1 @@
+attribute highp vec4 p; attribute highp float b; attribute highp float c; uniform mediump float d; uniform mediump float e; varying mediump vec4 v; void main(){ gl_Position = p; float a = 0.0; v = vec4(e, c, d, -0.0) * vec4(c, b, a, a); }
