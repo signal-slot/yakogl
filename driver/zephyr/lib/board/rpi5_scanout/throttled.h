@@ -14,7 +14,7 @@
  * Tag id: RPI_FIRMWARE_GET_THROTTLED = 0x00030046, include/soc/bcm2835/
  * raspberrypi-firmware.h:78 in rpi-6.12.y (the line before GET_CLOCK_MEASURED
  * 0x00030047 at :79, which driver/docs/rpi5-v3d71-facts.md section 9 cites).
- * The :78 is inferred from that neighbour, not read in a checkout.
+ * The enum entry was read in the rpi-6.12.y file; :78 is counted by hand.
  * Response code 0x80000000 (raspberrypi-firmware.h:16) and the tag's response
  * bit 31, low 31 bits = the value length (facts section 9).
  *
