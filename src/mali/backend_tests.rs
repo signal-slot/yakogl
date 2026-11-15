@@ -4073,6 +4073,66 @@ mod gl {
         );
     }
 
+    /// A cube look-up through the GL core (gl_test's texcube pair,
+    /// tools/mali/testdata/fstex_cube_whole): with a complete 1x1 cube map
+    /// on unit 0 the draw is recorded (one `RUN_IDVS`); with face 5 never
+    /// specified the core marks the bind incomplete and the Mali draw
+    /// refuses it ([`NOT_BUILT_CUBE_INCOMPLETE`]): no `RUN_IDVS`, where a 2D
+    /// black texel through the cube descriptor would have been drawn.
+    #[test]
+    fn an_incomplete_cube_map_through_the_gl_core_is_refused_at_the_mali_draw() {
+        use crate::gl::program::{glGetAttribLocation, glGetUniformLocation, glUniform1i};
+        use crate::gl::texture::{glActiveTexture, glTexParameteri};
+        const QUAD: [f32; 12] = [-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
+        let vs = include_str!("../../tools/mali/testdata/fstex_cube_whole.vert");
+        let fs = include_str!("../../tools/mali/testdata/fstex_cube_whole.frag");
+        for faces in [6u32, 5] {
+            run_case(
+                vs,
+                fs,
+                &mut |p| {
+                    let texel = [0xffu8, 0, 0, 0xff];
+                    // SAFETY: plain GL calls; the arrays outlive the draw.
+                    unsafe {
+                        let mut tex = 0;
+                        glGenTextures(1, &mut tex);
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_CUBE_MAP, tex);
+                        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+                        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+                        for face in 0..faces {
+                            let target = GL_TEXTURE_CUBE_MAP_POSITIVE_X + face;
+                            let fmt = GL_RGBA;
+                            glTexImage2D(
+                                target,
+                                0,
+                                fmt as GLint,
+                                1,
+                                1,
+                                0,
+                                fmt,
+                                GL_UNSIGNED_BYTE,
+                                texel.as_ptr().cast(),
+                            );
+                        }
+                        glUniform1i(glGetUniformLocation(p, c"u_s".as_ptr()), 0);
+                        let loc = glGetAttribLocation(p, c"a_pos".as_ptr()) as GLuint;
+                        glEnableVertexAttribArray(loc);
+                        glVertexAttribPointer(loc, 2, GL_FLOAT, 0, 0, QUAD.as_ptr().cast());
+                        glDrawArrays(GL_TRIANGLES, 0, 6);
+                    }
+                },
+                |frames, _| {
+                    let draws: usize = frames
+                        .iter()
+                        .map(|f| f.iter().filter(|&&w| matches!(Instr::decode(w), Ok(Instr::RunIdvs(_)))).count())
+                        .sum();
+                    assert_eq!(draws, usize::from(faces == 6), "{faces} faces specified: the draws recorded");
+                },
+            );
+        }
+    }
+
     /// gl_test case 221 (instmix) through the GL core: the case's program
     /// (vsfma_221_instmix), a per-vertex vec4, a divisor-1 and a divisor-3
     /// float, 4 instances, as glDrawArraysInstanced and as
