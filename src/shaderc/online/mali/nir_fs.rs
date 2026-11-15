@@ -7696,6 +7696,15 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                 (Some(x), Some(y), Some(z)) => Some(CubeDir::Raw([x, y, z])),
                 _ => {
                     let xy = vectorise(f, &mut pr, nd.src[0], nd.src[1], 0, ubo)?;
+                    /* the pair's productions are the colour's
+                     * ([`ADMITTED`]): a form in a place no reference
+                     * draws is refused here as it is there (`a2 * -3.0 +
+                     * 0.25`: Mesa's FMA reads -3.0 as a FAU word,
+                     * ours its negation, fstex_cubedir_fmanegk) */
+                    pr.note(xy, Place::Output, &mut f.prods);
+                    if f.prods & !ADMITTED != 0 {
+                        return Err(MaliError::FsOperandForm);
+                    }
                     let z = cube_lane(f, &mut pr, nd.src[2], ubo)?;
                     Some(CubeDir::Pair(xy, z))
                 }
