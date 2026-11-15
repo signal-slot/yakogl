@@ -32,7 +32,8 @@
 # driver/tools/kexec-zephyr/README.md).
 # nanopc-t6 is the NanoPC-T6 (RK3588, Mali-G610) under Armbian: it has
 # kexec-dev only, and its run is its own runner's,
-# driver/tools/kexec-zephyr/nanopc-t6.sh --go (kexec_t6, below), with every
+# driver/tools/kexec-zephyr/nanopc-t6.sh --go (kexec_t6, below; --go --crash,
+# the runner's crash route, with T6_CRASH=1), with every
 # rule of that runner as it is: the runner takes the board lock itself and
 # refuses at once while it is held (LOCK_WAIT 0; the board lease here waits
 # no longer), reads the board again under it, needs the person at the power
@@ -193,6 +194,11 @@
 #                      also read; redacted in the record)
 #   T6_HAND            nanopc-t6: the name of the person at the power switch for
 #                      this run (nanopc-t6.sh --go refuses without it)
+#   T6_CRASH           nanopc-t6: 1: the runner's crash route (--go --crash: no
+#                      device_shutdown, so the display and the GPU stay as
+#                      Linux left them; the runner refuses it without a
+#                      crashkernel= reservation that holds the image's
+#                      window); 0 or unset: the normal route
 #   T6_RUNNER          nanopc-t6: the runner (default driver/tools/kexec-zephyr/
 #                      nanopc-t6.sh; tools/board_selftest.sh puts a fake there)
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
@@ -1877,7 +1883,9 @@ t6_lifetime() {
     echo "${l##* }" | grep -E '^[0-9]+$' || echo 0
 }
 
-# kexec_t6: the jump through nanopc-t6.sh --go, then its record taken into the
+# kexec_t6: the jump through nanopc-t6.sh --go (--go --crash with T6_CRASH=1:
+# the route is the runner's, its checks and its "jumping (... route ...)"
+# record line too), then its record taken into the
 # run directory and read. Every check of the runner stays the runner's: the
 # image's marker and window, the board's identity, root and kexec state,
 # /proc/iomem and the GIC tables, the board lock (taken there, LOCK_WAIT 0),
@@ -1892,15 +1900,17 @@ t6_lifetime() {
 # board, no jump".
 kexec_t6() {
     local runner=${T6_RUNNER:-$REPO/driver/tools/kexec-zephyr/nanopc-t6.sh} rc rec recs jl back t0 n
+    local go=(--go)
+    [ "${T6_CRASH:-0}" != 1 ] || go+=(--crash)
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ BOARD_HOST=\$BOARD_HOST T6_UART=<BOARD_UART> T6_HAND=${T6_HAND:-<unset: the runner refuses>} T6_RECORD_DIR=<rundir> bash ${runner#"$REPO"/} $IMG --go 2>&1 | tee <rundir>/kexec.log"
+        echo "DRY host\$ BOARD_HOST=\$BOARD_HOST T6_UART=<BOARD_UART> T6_HAND=${T6_HAND:-<unset: the runner refuses>} T6_RECORD_DIR=<rundir> bash ${runner#"$REPO"/} $IMG ${go[*]} 2>&1 | tee <rundir>/kexec.log"
         echo "DRY host\$   # the runner: its board checks, board_lock.sh (LOCK_WAIT ${LOCK_WAIT}: refused while held), the board again under the lock, the record <rundir>/<date>-t6/, the jump, Armbian back (a new boot_id) within the image's bound + 180 s"
         echo "DRY host\$ move <rundir>/<date>-t6/* (uart.log, record.txt, linux-before.dmesg-w, linux-after.dmesg) into <rundir>; console.txt = uart.log"
         exit 0
     fi
     trap 'lease_release; rm -rf "$TMP"' EXIT
     BOARD_HOST=$BOARD_HOST T6_UART=${BOARD_UART:-} T6_HAND=${T6_HAND:-} T6_RECORD_DIR=$RD \
-        bash "$runner" "$IMG" --go < /dev/null 2>&1 | tee "$RD/kexec.log"
+        bash "$runner" "$IMG" "${go[@]}" < /dev/null 2>&1 | tee "$RD/kexec.log"
     rc=${PIPESTATUS[0]}
     meta runner_rc "$rc"
     recs=("$RD"/*-t6)
@@ -2199,7 +2209,13 @@ cmd_run() {
         check_image "$IMG"
         sha8=${IMG_SHA:0:8}
         # the NanoPC-T6 runner's record goes into the run directory: its rule holds
-        if [ "$BOARD" = nanopc-t6 ]; then t6_outside_checkout "$LOGDIR"; fi
+        if [ "$BOARD" = nanopc-t6 ]; then
+            t6_outside_checkout "$LOGDIR"
+            case ${T6_CRASH:-0} in
+            0 | 1) ;;
+            *) die "T6_CRASH='$T6_CRASH': 1 (the crash route, nanopc-t6.sh --crash) or 0 (the normal route)" 2 ;;
+            esac
+        fi
     fi
     RD="$LOGDIR/$(date +%Y%m%d-%H%M)-$NAME-$sha8"
     if [ "$DRY" = 1 ]; then
