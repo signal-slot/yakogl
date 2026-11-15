@@ -1415,6 +1415,15 @@ fn current_blend_key(c: &GlContext) -> u32 {
     let n = framebuffer::frame_attachment(c);
     let fmt = framebuffer::fb_target_format_n(c, n);
 
+    /* integer and other-class targets in one draw: the mixed key of the
+     * per-target list, which carries neither blend nor colour mask (the back
+     * end refuses a draw that has either, by name) */
+    if several_targets(c) {
+        if let Some(k) = super::target_keys::draw_mixed_key(c) {
+            return k;
+        }
+    }
+
     /* an integer target: the variant that packs the integer output for its
      * layout (never blended, ES 3.0 4.1.7), with the mask of the channels it
      * has (a channel it lacks is never written, masked or not; an R or RG
@@ -5378,6 +5387,7 @@ pub(crate) fn reset_for_tests(also_programs: bool) {
 mod tests {
     use super::*;
     use crate::gl::{buffer::*, framebuffer::*, program::*, state::*, texture::*, vertex::*};
+    use crate::target_key::{gles_surf_target_key, shc_blend_key_is_mixed, shc_blend_key_mixed};
     use crate::testutil::{CacheOp, MemEvent, RecordedDraw, TestGl, FILL, HEAP_DATA, HEAP_SHADER};
     use std::vec::Vec;
 
@@ -13033,6 +13043,125 @@ mod tests {
         let key = current_blend_key(gl.ctx());
         assert_eq!(key, SHC_BLEND_KEY_REPLACE | shc_blend_key_rt(SHC_RT_F16));
         assert_eq!(shc_blend_key_class(key), SHC_RT_F16);
+    }
+
+    /// Bind a framebuffer with one renderbuffer per internal format on
+    /// attachment 0.. (0 skips the attachment) and select the draw buffers.
+    #[cfg(not(feature = "report-es2"))]
+    fn mixed_fbo(gl: &Gl, fmts: &[GLenum], bufs: &[GLenum]) {
+        let mut fbo: GLuint = 0;
+        // SAFETY: plain GL calls.
+        unsafe {
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        }
+        for (i, f) in fmts.iter().enumerate() {
+            if *f == 0 {
+                continue;
+            }
+            let mut rb: GLuint = 0;
+            // SAFETY: plain GL calls.
+            unsafe {
+                glGenRenderbuffers(1, &mut rb);
+                glBindRenderbuffer(GL_RENDERBUFFER, rb);
+                glRenderbufferStorage(GL_RENDERBUFFER, *f, 8, 8);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i as GLenum, GL_RENDERBUFFER, rb);
+            }
+        }
+        // SAFETY: `bufs` draw buffers.
+        unsafe { glDrawBuffers(bufs.len() as i32, bufs.as_ptr()) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
+    /// An integer attachment beside another class keys the mixed key of the
+    /// per-target list, before the integer branch. It carries neither blend
+    /// nor colour mask (the back end refuses a draw that has either).
+    #[test]
+    #[cfg(not(feature = "report-es2"))] /* glDrawBuffers and integer targets are ES 3.0 */
+    fn mixed_integer_draw_buffers_key_the_mixed_key() {
+        let rgba8 = gles_surf_target_key(GLES_SURF_RGBA8888).unwrap();
+        let u32k = gles_surf_target_key(GLES_SURF_R32UI).unwrap();
+        let i32k = gles_surf_target_key(GLES_SURF_R32I).unwrap();
+        let r16f = gles_surf_target_key(GLES_SURF_R16F).unwrap();
+        let a01 = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1];
+
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_RGBA8, GL_R32UI], &a01);
+        let mixed = shc_blend_key_mixed(&[rgba8, u32k]).unwrap();
+        assert_eq!(current_blend_key(gl.ctx()), mixed);
+        assert!(shc_blend_key_is_mixed(mixed));
+        // SAFETY: plain GL calls.
+        unsafe {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glColorMask(GL_FALSE_B, GL_TRUE_B, GL_TRUE_B, GL_TRUE_B);
+        }
+        assert_eq!(current_blend_key(gl.ctx()), mixed, "blend and mask are the back end's to refuse");
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_RGBA8], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_mixed(&[u32k, rgba8]).unwrap());
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_R32I], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_mixed(&[u32k, i32k]).unwrap());
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        let a012 = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2];
+        mixed_fbo(&gl, &[GL_RGBA8, GL_R32UI, GL_R16F], &a012);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_mixed(&[rgba8, u32k, r16f]).unwrap());
+
+        /* a list that starts at attachment 1 is keyed by the dense list */
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        let bufs = [GL_NONE, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2];
+        mixed_fbo(&gl, &[0, GL_RGBA8, GL_R32UI], &bufs);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_mixed(&[rgba8, u32k]).unwrap());
+    }
+
+    /// A list that is not a mix, or that the mixed key cannot carry (an sRGB
+    /// slot, a `GL_NONE` gap), keeps the key it had.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] /* glDrawBuffers and integer targets are ES 3.0 */
+    fn non_mixed_draw_buffers_keep_their_keys() {
+        let a01 = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1];
+        let rt = ShcIntRt { channels: 1, bits: 32, signed: false };
+
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_R32UI], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "one layout: the integer key");
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_RGBA8, GL_RGBA8], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), 0);
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_SRGB8_ALPHA8, GL_R32UI], &a01);
+        assert!(!shc_blend_key_is_mixed(current_blend_key(gl.ctx())), "an sRGB slot");
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_SRGB8_ALPHA8], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "an sRGB slot");
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        let gap = [GL_COLOR_ATTACHMENT0, GL_NONE, GL_COLOR_ATTACHMENT2];
+        mixed_fbo(&gl, &[GL_RGBA8, 0, GL_R32UI], &gap);
+        assert_eq!(current_blend_key(gl.ctx()), 0, "a gap: attachment 0's key as before");
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_RGBA8, GL_R32UI], &a01[..1]);
+        assert_eq!(current_blend_key(gl.ctx()), 0, "one target");
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_RGBA8], &a01[..1]);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "one target");
     }
 
     /// A draw buffer list that starts at attachment 1 (`out_shift` 1): the
