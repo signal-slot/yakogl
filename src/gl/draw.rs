@@ -28,8 +28,8 @@ use super::buffer;
 use super::consts::*;
 use super::context::{
     self, gl_trace, obj_index, tex_pitch, GlBuffer, GlContext, GlProgram, GlTexture, GlVertexAttrib,
-    CAP_COLOR_ATTACHMENTS, CAP_SAMPLERS, MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_TEXTURES, MAX_UNIFORM_DWORDS,
-    MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
+    CAP_COLOR_ATTACHMENTS, CAP_SAMPLERS, MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_STAGE_UNIFORM_DWORDS,
+    MAX_TEXTURES, MAX_UNIFORM_DWORDS, MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
 };
 use super::framebuffer;
 use super::tf;
@@ -942,6 +942,46 @@ fn put(mem: &mut OsalGpuMem, off: usize, src: &[u8]) -> i32 {
         Some(f) => unsafe { f(mem, off, src.as_ptr() as *const c_void, src.len()) },
         None => -1,
     }
+}
+
+/// The host pointer the back end snapshots a fragment block from, or `None`
+/// when no view of `fs_dw` dwords is in bounds. A block that fits the program's
+/// array (`alloc` dwords) is read from the array; a larger one from the GPU
+/// buffer's CPU view at `fs_off`, which must hold `fs_dw` dwords after that
+/// offset (`MAX_STAGE_UNIFORM_DWORDS` can exceed the buffer). No CPU view
+/// (null) is a null pointer: the back end reads the GPU buffer then.
+fn fs_uniform_cpu_view(
+    fs_dw: u16,
+    alloc: u16,
+    array: *const c_void,
+    buf_cpu: *const u8,
+    buf_size: usize,
+    fs_off: usize,
+) -> Option<*const c_void> {
+    if fs_dw <= alloc {
+        return Some(array);
+    }
+    if buf_cpu.is_null() {
+        return Some(core::ptr::null());
+    }
+    let end = fs_off.checked_add(fs_dw as usize * 4)?;
+    if end > buf_size {
+        return None;
+    }
+    // SAFETY: fs_off + fs_dw * 4 <= buf_size, and the buffer's CPU view spans buf_size bytes,
+    // so fs_off is inside it and the back end's fs_dw dwords from there are too.
+    Some(unsafe { buf_cpu.add(fs_off) as *const c_void })
+}
+
+/// [`put`] into a program's uniform staging, which holds two default blocks
+/// (`MAX_UNIFORM_DWORDS`): a block of a GPU whose storage is larger
+/// (`MAX_STAGE_UNIFORM_DWORDS`, the V3D, which reads the host arrays and
+/// never stages) that does not fit is an error, not a write past the end.
+fn put_uniforms(mem: &mut OsalGpuMem, off: usize, src: &[u8]) -> i32 {
+    if off + src.len() > mem.size {
+        return -1;
+    }
+    put(mem, off, src)
 }
 
 /// Grow-only scratch: (re)allocate when too small; the bump allocator cannot
@@ -3904,11 +3944,11 @@ fn build_common(
         let mut fs_app_dw = p.rfs.uniform_dwords;
         let fs_off = (vs_dw as usize * 4 + 15) & !15usize;
 
-        if vs_dw as usize > MAX_UNIFORM_DWORDS {
-            vs_dw = MAX_UNIFORM_DWORDS as u16;
+        if vs_dw as usize > MAX_STAGE_UNIFORM_DWORDS {
+            vs_dw = MAX_STAGE_UNIFORM_DWORDS as u16;
         }
-        if fs_dw as usize > MAX_UNIFORM_DWORDS {
-            fs_dw = MAX_UNIFORM_DWORDS as u16;
+        if fs_dw as usize > MAX_STAGE_UNIFORM_DWORDS {
+            fs_dw = MAX_STAGE_UNIFORM_DWORDS as u16;
         }
         if fs_app_dw > fs_dw {
             fs_app_dw = fs_dw;
@@ -3928,10 +3968,10 @@ fn build_common(
         /* a failing upload leaves the previous draw's values: the draw is refused */
         let mut rc = 0;
         if vs_dw != 0 {
-            /* the block holds min(uniform_dwords, MAX_UNIFORM_DWORDS) = vs_dw dwords */
+            /* the block holds min(uniform_dwords, MAX_STAGE_UNIFORM_DWORDS) = vs_dw dwords */
             let blk = p.vs_block();
             if !host_only {
-                rc |= put(&mut pg.uniforms, 0, dword_bytes(&blk[..(vs_dw as usize).min(blk.len())]));
+                rc |= put_uniforms(&mut pg.uniforms, 0, dword_bytes(&blk[..(vs_dw as usize).min(blk.len())]));
             }
             d.vs_uniform_gpu = pg.uniforms.gpu;
             d.vs_uniform_dwords = vs_dw;
@@ -3942,7 +3982,12 @@ fn build_common(
              * holds between the copy above and the backend's read is the
              * program's business, while this array is the values the
              * application set (upstream 98f7331). */
-            d.vs_uniform_cpu = p.vs_uniforms as *const c_void;
+            if vs_dw as usize <= p.vs_uniform_cap as usize && !p.vs_uniforms.is_null() {
+                d.vs_uniform_cpu = p.vs_uniforms as *const c_void;
+            } else {
+                /* the backend would read vs_dw dwords past the program's array */
+                rc = -1;
+            }
         }
         if fs_dw != 0 {
             /* a variant whose block is larger than the program's array is
@@ -3951,13 +3996,17 @@ fn build_common(
             let host_only = host_only && fs_dw <= p.fs_uniform_alloc;
             if fs_app_dw != 0 && !host_only {
                 let blk = p.fs_block();
-                rc |= put(&mut pg.uniforms, fs_off, dword_bytes(&blk[..(fs_app_dw as usize).min(blk.len())]));
+                rc |= put_uniforms(&mut pg.uniforms, fs_off, dword_bytes(&blk[..(fs_app_dw as usize).min(blk.len())]));
             }
             if !host_only
                 && fs_blend_consts_off != SHC_NO_BLEND_CONSTS
                 && fs_blend_consts_off as u32 + 4 <= fs_dw as u32
             {
-                rc |= put(&mut pg.uniforms, fs_off + fs_blend_consts_off as usize * 4, dword_bytes(&c.blend_color));
+                rc |= put_uniforms(
+                    &mut pg.uniforms,
+                    fs_off + fs_blend_consts_off as usize * 4,
+                    dword_bytes(&c.blend_color),
+                );
             }
             d.fs_uniform_gpu = pg.uniforms.gpu + fs_off as u64;
             d.fs_uniform_dwords = fs_dw;
@@ -3965,16 +4014,19 @@ fn build_common(
             /* as the vertex stage above. The variant's block is the shader's
              * uniforms plus the blend constants, which is what the array
              * holds; a variant that somehow asks for more than that keeps
-             * the GPU buffer's view, which is always large enough. */
-            d.fs_uniform_cpu = if fs_dw <= p.fs_uniform_alloc {
-                p.fs_uniforms as *const c_void
-            } else if pg.uniforms.cpu.is_null() {
-                core::ptr::null()
-            } else {
-                // SAFETY: fs_off is inside the uniforms allocation
-                // (2 * MAX_UNIFORM_DWORDS * 4 + 16 bytes).
-                unsafe { (pg.uniforms.cpu as *const u8).add(fs_off) as *const c_void }
-            };
+             * the GPU buffer's view when its dwords fit the buffer after fs_off,
+             * and is refused (GL_OUT_OF_MEMORY) when they do not. */
+            match fs_uniform_cpu_view(
+                fs_dw,
+                p.fs_uniform_alloc,
+                p.fs_uniforms as *const c_void,
+                pg.uniforms.cpu as *const u8,
+                pg.uniforms.size,
+                fs_off,
+            ) {
+                Some(ptr) => d.fs_uniform_cpu = ptr,
+                None => rc = -1,
+            }
         }
         if rc != 0 {
             return Err((GL_OUT_OF_MEMORY, FUNC));
@@ -13561,6 +13613,28 @@ mod tests {
         let d = draw_tri(&gl).draw;
         assert_eq!(d.num_targets, 1);
         assert_eq!((d.targets[0].gpu, d.targets[0].w, d.targets[0].h), (d.target_gpu, 8, 8));
+    }
+
+    #[test]
+    fn the_fragment_snapshot_view_is_refused_past_the_uniform_buffer() {
+        let buf = [0u8; 64];
+        let (arr, cpu) = (0x10 as *const c_void, buf.as_ptr());
+        /* fits the program's array: the array, whatever the buffer */
+        assert_eq!(fs_uniform_cpu_view(8, 8, arr, cpu, 64, 16), Some(arr));
+        /* larger than the array, inside the buffer after fs_off: the buffer's view */
+        assert_eq!(fs_uniform_cpu_view(12, 8, arr, cpu, 64, 16), Some(cpu.wrapping_add(16) as *const c_void));
+        /* exactly to the end is in bounds; one dword more is not */
+        assert!(fs_uniform_cpu_view(12, 8, arr, cpu, 64, 16).is_some());
+        assert_eq!(fs_uniform_cpu_view(13, 8, arr, cpu, 64, 16), None);
+        /* the V3D's largest block against a 2 * MAX_UNIFORM_DWORDS buffer */
+        let size = MAX_UNIFORM_DWORDS * 4 * 2 + 16;
+        assert_eq!(
+            fs_uniform_cpu_view(MAX_STAGE_UNIFORM_DWORDS as u16, 8, arr, cpu, size, 0).is_some(),
+            MAX_STAGE_UNIFORM_DWORDS * 4 <= size
+        );
+        assert_eq!(fs_uniform_cpu_view(u16::MAX, 8, arr, cpu, size, usize::MAX - 8), None, "no overflow");
+        /* no CPU view: null, the GPU buffer is read */
+        assert_eq!(fs_uniform_cpu_view(12, 8, arr, core::ptr::null(), 64, 16), Some(core::ptr::null()));
     }
 
     #[test]
