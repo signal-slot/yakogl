@@ -10,7 +10,12 @@
 //! `<path>: <exact message>` line each (a link refusal is `<vert>+<frag>:
 //! <message>`), with the reason in `#` lines above it. The test fails on a
 //! refusal that is not listed, on a listed one whose message changed, and on a
-//! listed one that now compiles, so the list stays exact.
+//! listed one that now compiles, so the list stays exact. A line starting
+//! `@report-es2 ` is read only by the build with the `report-es2` feature (the
+//! ES 2.0 build refuses every ES 3.00 source and links only 8 varying vectors);
+//! a plain line applies to every build.
+//!
+//! Builds: the default one below, and the same with `,report-es2` added.
 //!
 //! Links: a `X.vert` and an `X.frag` in one directory are one program. Only
 //! pairs whose two sources both compile are linked.
@@ -72,6 +77,12 @@ fn listed() -> BTreeMap<String, String> {
     let list = std::fs::read_to_string(&path).expect("the V3D list exists");
     let mut m = BTreeMap::new();
     for l in list.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
+        /* `@report-es2 ` lines belong to the report-es2 build only */
+        let l = match l.strip_prefix("@report-es2 ") {
+            Some(rest) if cfg!(feature = "report-es2") => rest,
+            Some(_) => continue,
+            None => l,
+        };
         let (k, msg) = l.split_once(": ").expect("`<path>: <message>`");
         assert!(m.insert(k.to_string(), msg.to_string()).is_none(), "{k} is listed twice");
     }
