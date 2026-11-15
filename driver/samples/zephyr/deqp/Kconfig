@@ -133,6 +133,19 @@ config DEQP_SNVS_ADDRESS
 	  (the default), w3 carries the first failing case's name check and
 	  index with the counters (gc_result.h), which is what every run
 	  should be read by.
+
+config PVR_DEQP_MRT4
+	bool "PowerVR: ask for four draw targets before the first context (test knob)"
+	default n
+	depends on YAKOGL_GPU_POWERVR && DEQP_TEST_KNOBS
+	help
+	  Makes the image call pvr_debug_set_draw_targets(4) before the first
+	  context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS answer
+	  4 instead of 3 for the dEQP-GLES3 fragment_out and
+	  implementation_limits cases (docs/notes/mrt4-deqp-cases.md). The
+	  call is wired by a later change; until then the symbol does nothing.
+	  A test knob for a board session: a product never sets it.
+	  The V3D image's twin is CONFIG_V3D_DEQP_MRT4.
 endmenu
 menu "deqp on the Raspberry Pi 4 (V3D)"
 	depends on YAKOGL_GPU_V3D
@@ -163,6 +176,18 @@ config V3D_DEQP_QPA_UART
 	  sources off; this option turns them back on). The images make it slow (the UART is 115200 baud), so it is
 	  meant for a filter of a few cases, where one case's pixels decide a
 	  question. Off for every sweep image.
+config V3D_DEQP_MRT4
+	bool "Ask for four draw targets before the first context (test knob)"
+	default n
+	depends on DEQP_TEST_KNOBS
+	help
+	  Makes the image call v3d_debug_set_draw_targets(4) before the first
+	  context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS answer
+	  4 instead of 3 for the dEQP-GLES3 fragment_out and
+	  implementation_limits cases (docs/notes/mrt4-deqp-cases.md). The
+	  call is wired by a later change; until then the symbol does nothing.
+	  A test knob for a board session: a product never sets it.
+	  The PowerVR image's twin is CONFIG_PVR_DEQP_MRT4.
 endmenu
 rsource "../common/Kconfig"
 source "Kconfig.zephyr"

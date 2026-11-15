@@ -55,6 +55,17 @@ Configuration that matters:
 - A 600 s bounded watchdog feed on the AM62P. The online compiler takes about
   0.2 s per shader on the A53, so size a run's case list to that budget.
 
+## Four draw targets
+
+`CONFIG_V3D_DEQP_MRT4=y` (Pi 4, V3D) and `CONFIG_PVR_DEQP_MRT4=y` (AM62P,
+PowerVR) make the image ask for four draw targets before the first context
+(`v3d_debug_set_draw_targets(4)` / `pvr_debug_set_draw_targets(4)`; the call is
+wired by a later change). Both default to n and need `DEQP_TEST_KNOBS`, which
+the image always selects. A board session adds the symbol to the stage 2
+command, for example `-DCONFIG_V3D_DEQP_MRT4=y` for the Pi 4 or
+`-DCONFIG_PVR_DEQP_MRT4=y` for the AM62P, with a dEQP-GLES3 case filter. The
+cases to run are in `docs/notes/mrt4-deqp-cases.md`. A product never sets it.
+
 ## STM32MP257F-DK (A35)
 
 ```sh
