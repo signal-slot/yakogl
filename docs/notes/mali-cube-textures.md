@@ -773,25 +773,67 @@ only in a shape measured byte-equal to Mesa 26.2.1's drm-shim
 
 | shape | taken when | references |
 |---|---|---|
-| raw | each lane a varying's lane or a constant fp16 holds exactly, one varying lane at least; the cube ops read the load's fp32 words and the constant as an operand (+-1.0 the table's `0x3F800000`, 0.5 an FAU word) | `fstex_cube`, `fstex_cubedir_twovary`, `_constneg`, `_rawhalf`, `fstex_cubebias_uni` |
+| raw | each lane a varying's lane or a constant fp16 holds exactly, one varying lane at least; when the direction is built of parts (`vec3(a2, 1.0)`), each varying read whole; the cube ops read the load's fp32 words and the constant as an operand (+-1.0 the table's `0x3F800000`, 0.5 an FAU word) | `fstex_cube`, `fstex_cubedir_twovary`, `_constneg`, `_rawhalf`, `_v4part`, `_v4yzw`, `_biasv4yzw`, `fstex_cubebias_uni` |
 | pair | x and y fp16 trees of `+`, `*` and negation over varying lanes, constants and uniforms, vectorised as one pair; z a constant (rounded to fp16) or a uniform lane; each lane `F16_TO_F32` at the look-up | `fstex_cubeface4`, `fstex_cubedir_face4uni`, `_uniscale`, `_fmak`, `_mulnegk`, `_pairhalf`, `_negyx`, `_vec4zw`, `_vec4w` |
 
 The pair's operand forms are also the colour's: `select` notes them and
 checks them against `ADMITTED`, as it does for the colour's pairs. A form
 the colour refuses is refused in the direction too (`FsOperandForm`).
 
+**The raw load's width.** The cube ops are fp32 only, so Mesa keeps a raw
+lane's varying fp32 (`src_f32`). How many lanes it loads depends on GLSL's
+`lower_precision`:
+
+- A direction built of parts, `vec3(a2.x, 1.0, 1.0)`, is a mediump
+  temporary the pass lowers. Each varying is converted whole at its
+  dereference, before the swizzle (`handle_rvalue`,
+  `src/compiler/glsl/lower_precision.cpp:731-733`). The link then keeps every
+  lane, and the load is the varying's width (`a2.x` loads `.v2`; two
+  varyings read in part share one `.v4` slot).
+- A varying that is the coordinate itself, `textureCube(s, a4.xyz)`, is a
+  texture argument, which the pass does not convert
+  (`lower_precision_visitor::visit_enter(ir_texture *)`, `:785-790`). The
+  load holds the lanes read (`.v3`).
+
+Our raw load holds the lanes read. So a built direction is taken only when
+it reads each of its varyings whole (`a3.zyx` order is free). A varying the
+coordinate is directly is taken as read.
+
+The references in `tools/mali/testdata`:
+
+- `fstex_cubedir_*`: the shapes taken. A test reads the directory and checks
+  each one byte for byte along the draw's linked path.
+- `fstex_cubeno_<refusal>_*`: the shapes refused. A test reads the directory
+  and checks that each is refused by the name in its file name, alone and
+  linked. Each holds the drm-shim reference of Mesa's words. Adding a file
+  needs no list edit.
+
 Measured otherwise, and so refused:
 
-- a raw constant fp16 does not hold (`vec3(a2, 0.1)`,
-  `fstex_cubedir_rawtenth`): Mesa rounds it to fp16 and reads the widened
-  value from an FAU word; the raw lane keeps the fp32 constant;
-- raw lanes beside a uniform (`vec3(a2, u)`, `fstex_cubebias_unilane`):
-  Mesa keeps the varying fp32, the pair narrows it;
+- a built direction that reads a varying in part (`_texcoord_partialx`,
+  `_partialxy`, `_partialb`, `_twopartial`, `_biaspartial`): our load is
+  narrower than Mesa's;
+- a raw constant fp16 does not hold (`vec3(a2, 0.1)`, `_texcoord_rawtenth`):
+  Mesa rounds it to fp16 and reads the widened value from an FAU word; the
+  raw lane keeps the fp32 constant;
+- raw lanes beside a uniform (`vec3(a2, u)`, `_texcoord_biasunilane`): Mesa
+  keeps the varying fp32, the pair narrows it;
 - gl_FragCoord or gl_PointCoord: Mesa reads them fp32;
 - a lone product with 2.0 (`a2 * 2.0`): Mesa's late rule makes it
-  `FADD.v2f16 r0, r0^, r0^`;
+  `FADD.v2f16 r0, r0^, r0^`. In a sum of two products, one of them with 2.0
+  (`_texcoord_twoproducts`), which product Mesa fuses is not measured;
+- an all-constant direction (`_texcoord_allconst`), and a varying z beside
+  the pair (`_texcoord_pairzvary`);
 - a fused product with a negative constant first (`a2 * -3.0 + 0.25`,
-  `fstex_cubedir_fmanegk`): Mesa reads -3.0 from the FAU word, ours reads
-  3.0 negated (`FsOperandForm`, as in the colour).
+  `_operandform_fmanegk`): Mesa reads -3.0 from the FAU word, ours reads 3.0
+  negated (`FsOperandForm`, as in the colour);
+- an element of a sampler array other than the first
+  (`textureCube(sa[1], ..)`, `_texarrayelement_implicit`, `_bias`;
+  `TexArrayElement`):
+  - Mesa numbers an array's elements together, so `sa[1]` is descriptor
+    index 1 (handle `0x20011801`).
+  - Our `layout` counts the samplers read, which gives index 0: `sa[0]`'s
+    texture.
+  - The same defect is on main for `texture2D(ta[1], ..)`.
 
 A highp shader's implicit level has no reference (`TexKind`).
