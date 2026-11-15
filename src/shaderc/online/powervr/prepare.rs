@@ -1555,6 +1555,7 @@ mod tests {
             cube: false,
             layer: false,
             gather: false,
+            ms: false,
         };
         assert_eq!(pairs(&[mul, write(sample, 2), add]), [], "t4 is written by the sample");
         assert_eq!(pairs(&[mul, write(sample, 5), add]), [SelOp::Alu(AluOp::Ffma)], "t5..t8: t4 is not");
@@ -1971,6 +1972,7 @@ mod tests {
                 cube: false,
                 layer: false,
                 gather: false,
+                ms: false,
             },
             ty: OpType::F32,
             dst: Some(SelDst::Fixed { bank: Bank::Temp, reg: 4 }),

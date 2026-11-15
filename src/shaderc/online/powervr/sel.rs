@@ -298,6 +298,22 @@ pub fn lookup_bits(word: core::num::NonZeroU16) -> u32 {
     u32::from(word.get() ^ LOOKUP_NICHE)
 }
 
+/// Where the lookup word holds a multisampled image's sample index
+/// (`MS_NUM`, read with `smp`'s `sno`): bits 16..18, above the offsets
+/// (rogue_hw_defs.h ROGUE_SMP_LOOKUP_MS_NUM_START / _BITS, Mesa 26.2.1
+/// src/imagination/include/hwdef/rogue_hw_defs.h:193-194).
+pub const LOOKUP_MS_NUM_START: u32 = 16;
+/// The width of [`LOOKUP_MS_NUM_START`]'s field.
+pub const LOOKUP_MS_NUM_BITS: u32 = 3;
+
+/// The lookup word's `MS_NUM` bits for constant sample `sample`, truncated
+/// to the field as pco's bitfield_insert does (pco_nir_tex.c:325-333).
+/// The word is ORed with an offset's [`lookup_bits`] when the look-up has
+/// both: one lookup word carries both.
+pub fn lookup_ms_bits(sample: u32) -> u32 {
+    (sample & ((1 << LOOKUP_MS_NUM_BITS) - 1)) << LOOKUP_MS_NUM_START
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SelOp {
     /// A kernel operation. [`super::builtins::shape`] says how it is built.
@@ -343,6 +359,14 @@ pub enum SelOp {
     /// (i0, j0), (i1, j0), (i0, j1), (i1, j1) (the order pco's
     /// lower_tex_gather swizzles {2, 3, 1, 0} from); always with a replaced
     /// level (pco_nir_tex.c:645-649), for the shadow compare per texel.
+    /// `ms`: one sample of a multisampled image (`smp` with `sno`): the
+    /// sample index is `srcs[2]` of the selection form (a U32 register, or
+    /// an immediate below 8), which the chain packs into the lookup word's
+    /// `MS_NUM` field ([`LOOKUP_MS_NUM_START`]) beside any offset; the image
+    /// descriptor says how many samples the image holds. Never with `proj`,
+    /// a level word, gradients, `cube`, `layer` or `gather` (pco's
+    /// multisample load has none of them, pvr_usc.c's transfer shader).
+    /// Nothing selects it yet.
     Sample {
         binding: u8,
         proj: bool,
@@ -357,6 +381,7 @@ pub enum SelOp {
         cube: bool,
         layer: bool,
         gather: bool,
+        ms: bool,
     },
     /// The third coordinate of the cube [`SelOp::Sample`] that follows
     /// (`srcs[0]`): a group of its own so that liveness sees the read. The

@@ -73,11 +73,12 @@ fn field_or_zero(r: &Region, name: &str) -> u32 {
 /// `srcs` name them), the result block in s4, special 0 in s3, and the
 /// extended form's flags as the sample asks -- `proj`, the level replaced
 /// or biased per pixel (`lodm`, `pplod`), `nncoords` for a fetch, `soo`
-/// for an offset, `tao` for a 2D array's layer address. It writes
-/// through s4, so the destination region holds nothing.
+/// for an offset, `sno` for a multisampled image's sample, `tao` for a 2D
+/// array's layer address. It writes through s4, so the destination region
+/// holds nothing.
 fn check_smp(
     meant: &SelGroup,
-    (proj, lod, fetch, offset, layer, gather): (bool, super::sel::SmpLod, bool, bool, bool, bool),
+    (proj, lod, fetch, offset, layer, gather, ms): (bool, super::sel::SmpLod, bool, bool, bool, bool, bool),
     g: &Group,
 ) -> Result<usize, Mismatch> {
     use super::sel::Bank;
@@ -122,6 +123,7 @@ fn check_smp(
         ("pplod", u32::from(lod.in_block())),
         ("nncoords", u32::from(fetch)),
         ("soo", u32::from(offset)),
+        ("sno", u32::from(ms)),
         ("tao", u32::from(layer)),
         ("sbmode", if gather { rawdata } else { 0 }),
         ("chan", if gather { 1 } else { 4 }),
@@ -200,8 +202,8 @@ fn check_cnd(meant: &SelGroup, m: MachineOp, g: &Group) -> Result<usize, Mismatc
 /// single step, or `mbyp` for a copy). Returns the group's length.
 pub fn check_group(meant: &SelGroup, want_op: &'static str, bytes: &[u8]) -> Result<usize, Mismatch> {
     let g = decode_group(bytes, 0).map_err(|_| Mismatch::DoesNotDecode)?;
-    if let SelOp::Sample { proj, lod, fetch, offset, layer, gather, .. } = meant.op {
-        return check_smp(meant, (proj, lod, fetch, offset.is_some(), layer, gather), &g);
+    if let SelOp::Sample { proj, lod, fetch, offset, layer, gather, ms, .. } = meant.op {
+        return check_smp(meant, (proj, lod, fetch, offset.is_some(), layer, gather, ms), &g);
     }
     if let SelOp::Machine(m) = meant.op {
         if m.is_cnd() {

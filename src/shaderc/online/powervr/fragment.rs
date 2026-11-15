@@ -275,6 +275,9 @@ pub struct SmpForm {
     pub gather: bool,
     /// An integer destination: no `fcnorm`.
     pub integer: bool,
+    /// One sample of a multisampled image (`sno`): the lookup word that
+    /// ends the data block holds the sample index in `MS_NUM`.
+    pub ms: bool,
 }
 
 /// `texture2D` as pco emits it in a fragment shader: `smp` in the backend
@@ -311,9 +314,17 @@ pub struct SmpForm {
 /// enabled_channels` = 1 for the first channel, the destination `chans * 4`
 /// registers): the extended form with `sbmode` rawdata and one channel,
 /// the level replaced (pco_nir_tex.c:645-649).
+///
+/// `form.ms`: one sample of a multisampled image, as pco emits it for a
+/// multisample load (pco_nir_tex.c:325-333: the sample index inserted at
+/// `ROGUE_SMP_LOOKUP_MS_NUM_START` of the lookup word, `sno` set; the
+/// transfer shader's load, pvr_usc.c:800-811): the extended form with `sno`,
+/// the lookup word last in the data block (shared with an offset's, `soo`
+/// beside `sno`). Neither a divisor nor a level word, and no cube, layer or
+/// gather: pco's multisample load has none of them.
 pub fn build_smp(image: Operand, data: u16, sampler: Operand, dest: u16, form: SmpForm) -> Result<Group, BuildError> {
     use super::isa::PH_BACKEND;
-    let SmpForm { proj, lod, fetch, offset, cube, layer, gather, integer } = form;
+    let SmpForm { proj, lod, fetch, offset, cube, layer, gather, integer, ms } = form;
     let fcnorm = u32::from(!integer);
     let v = |f: &str, n: &str| super::shapes::value(BitSetId::Backend, f, n);
     let chan = if gather { 1 } else { 4 };
@@ -346,6 +357,7 @@ pub fn build_smp(image: Operand, data: u16, sampler: Operand, dest: u16, form: S
         ("sbmode", sbmode),
         ("nncoords", u32::from(fetch)),
         ("soo", u32::from(offset)),
+        ("sno", u32::from(ms)),
         ("tao", u32::from(layer)),
     ];
     if proj && lod.in_block() {
@@ -362,7 +374,10 @@ pub fn build_smp(image: Operand, data: u16, sampler: Operand, dest: u16, form: S
     if gather && (proj || fetch || lod != super::sel::SmpLod::Replace) {
         return Err(BuildError::Unsupported("a gather that is projective, a fetch or without a replaced level"));
     }
-    let extra: &[(&str, u32)] = if proj || lod.in_block() || offset || layer || gather { &exta } else { &brief };
+    if ms && (proj || lod != super::sel::SmpLod::Implicit || cube || layer || gather) {
+        return Err(BuildError::Unsupported("a multisample load with a divisor, a level, a cube, a layer or a gather"));
+    }
+    let extra: &[(&str, u32)] = if proj || lod.in_block() || offset || layer || gather || ms { &exta } else { &brief };
     let r = instr_region("smp", PH_BACKEND, &[Mods::default(); 3], extra).map_err(BuildError::Form)?;
     let slot = super::pack::slot_of(PH_BACKEND)
         .ok_or(BuildError::Phases(super::pack::NotPackable::UnknownPhase { phase: PH_BACKEND }))?;
@@ -415,4 +430,165 @@ pub fn end_nop() -> Result<Group, BuildError> {
 /// `wdf` on data-return channel 0: the wait after a sample.
 pub fn wait_data() -> Result<Group, BuildError> {
     control("wdf", &[], "e1_zx", "wdf")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::decode::decode_group;
+    use super::super::encode::encode_group;
+    use super::super::isa::ops_for;
+    use super::super::sel::{Bank, OpType, SelDst, SelGroup, SelOp, SelSrc, SmpLod};
+    use super::*;
+
+    /// Descriptor 0's image at sh0 and sampler at sh8, the data block at
+    /// t8, the result at t24: `chain::expand_samples`' registers.
+    const DATA: u16 = 8;
+    const DEST: u16 = 24;
+    fn shared(r: u32) -> Operand {
+        Operand { bank: Bank::Shared.hw(), index: r }
+    }
+
+    fn form(fetch: bool, offset: bool, ms: bool) -> SmpForm {
+        SmpForm {
+            proj: false,
+            lod: SmpLod::Implicit,
+            fetch,
+            offset,
+            cube: false,
+            layer: false,
+            gather: false,
+            integer: false,
+            ms,
+        }
+    }
+
+    /// The group's bytes and the byte its `smp` starts at (the only
+    /// instruction, right after the header: encode.rs's order).
+    fn bytes(f: SmpForm) -> (std::vec::Vec<u8>, usize) {
+        let g = build_smp(shared(0), DATA, shared(8), DEST, f).expect("builds");
+        let mut out = std::vec![0u8; g.total];
+        assert_eq!(encode_group(&g, &mut out, 0), Ok(g.total));
+        (out, g.hdr.bytes())
+    }
+
+    fn smp_region(g: &Group) -> Region {
+        let mut it = g.instrs();
+        let (_, ph, r) = it.next().expect("one instruction");
+        assert!(it.next().is_none());
+        assert!(ops_for(r, ph).any(|o| o.name == "smp"));
+        *r
+    }
+
+    /// The multisample form encodes as the extended `smp` with `sno`, decodes
+    /// to the same fields, writes back byte for byte and lists `sno=1`; the
+    /// other flags are the plain look-up's.
+    #[test]
+    fn a_multisample_smp_encodes_decodes_and_round_trips() {
+        for (fetch, offset) in [(true, false), (false, false), (true, true)] {
+            let (b, _) = bytes(form(fetch, offset, true));
+            let g = decode_group(&b, 0).expect("decodes");
+            assert_eq!(g.total, b.len());
+            let r = smp_region(&g);
+            assert_eq!(r.variant().name, "smp_exta", "fetch {fetch} offset {offset}");
+            assert_eq!(r.get("sno"), Some(1));
+            assert_eq!(r.get("soo"), Some(u32::from(offset)));
+            assert_eq!(r.get("nncoords"), Some(u32::from(fetch)));
+            assert_eq!(r.get("tao"), Some(0));
+            assert_eq!(r.get("proj"), Some(0));
+            assert_eq!(r.get("pplod"), Some(0));
+            assert_eq!(r.get("chan"), Some(4));
+            assert_eq!(r.get("fcnorm"), Some(1));
+            assert_eq!(r.get("lodm"), Some(super::super::shapes::value(BitSetId::Backend, "lodm", "normal").unwrap()));
+            let mut back = std::vec![0u8; b.len()];
+            assert_eq!(encode_group(&g, &mut back, 0), Ok(b.len()));
+            assert_eq!(back, b, "fetch {fetch} offset {offset}");
+            let mut text = std::string::String::new();
+            super::super::listing::group_text(&mut text, 0, &g).unwrap();
+            assert!(text.contains(" sno=1 ") && text.contains(&format!(" soo={} ", u32::from(offset))), "{text}");
+        }
+    }
+
+    /// `sno` is the one bit Mesa's ISA puts at bit 2 of the `smp`
+    /// instruction's byte 2, beside `soo` at bit 1 (Mesa 26.2.1
+    /// src/imagination/pco/pco_isa.py:1944-1945, `('sno', (2, '2'))`,
+    /// `('soo', (2, '1'))`), in the extended form (`exta`, byte 1 bit 4,
+    /// pco_isa.py:1936). An offset look-up with and without the sample
+    /// differ in that bit alone.
+    #[test]
+    fn sno_is_bit_2_of_the_smp_words_byte_2_as_in_mesa() {
+        let (with, at) = bytes(form(true, true, true));
+        let (without, at2) = bytes(form(true, true, false));
+        assert_eq!((with.len(), at), (without.len(), at2));
+        let diff: std::vec::Vec<(usize, u8)> =
+            with.iter().zip(&without).enumerate().filter(|(_, (a, b))| a != b).map(|(i, (a, b))| (i, a ^ b)).collect();
+        assert_eq!(diff, [(at + 2, 0b100)], "only sno differs");
+        assert_eq!(with[at + 2] & 0b110, 0b110, "sno and soo");
+        assert_eq!(with[at + 1] & 0x10, 0x10, "exta");
+        /* without an offset `soo` is clear and the word still extended */
+        let (ms_only, at) = bytes(form(true, false, true));
+        assert_eq!((ms_only[at + 1] & 0x10, ms_only[at + 2] & 0b110), (0x10, 0b100));
+    }
+
+    /// The plain look-up keeps its brief form: `ms` off adds nothing.
+    #[test]
+    fn without_ms_the_plain_lookup_stays_brief() {
+        let (b, _) = bytes(form(false, false, false));
+        let g = decode_group(&b, 0).unwrap();
+        assert_eq!(smp_region(&g).variant().name, "smp_brief");
+        let (b, _) = bytes(form(false, true, false));
+        assert_eq!(smp_region(&decode_group(&b, 0).unwrap()).get("sno"), Some(0));
+    }
+
+    /// pco's multisample load has no divisor, level word, cube, layer or
+    /// gather; the builder refuses each beside `ms`.
+    #[test]
+    fn the_multisample_form_refuses_what_pco_never_combines_with_it() {
+        let ms = form(true, false, true);
+        for f in [
+            SmpForm { proj: true, fetch: false, ..ms },
+            SmpForm { lod: SmpLod::Replace, ..ms },
+            SmpForm { lod: SmpLod::Bias, ..ms },
+            SmpForm { lod: SmpLod::Gradients, ..ms },
+            SmpForm { cube: true, ..ms },
+            SmpForm { layer: true, lod: SmpLod::Bias, ..ms },
+            SmpForm { gather: true, lod: SmpLod::Replace, fetch: false, ..ms },
+        ] {
+            assert!(build_smp(shared(0), DATA, shared(8), DEST, f).is_err(), "{f:?}");
+        }
+    }
+
+    /// The checker reads `sno` back: the multisample group passes as the
+    /// sample that asked for it, and not as one that did not (nor the plain
+    /// group as a multisample one). Normalised coordinates: the plain group
+    /// is then the brief form.
+    #[test]
+    fn the_checker_tells_a_multisample_smp_from_a_plain_one() {
+        let meant = |ms: bool| SelGroup {
+            op: SelOp::Sample {
+                binding: 0,
+                proj: false,
+                lod: SmpLod::Implicit,
+                fetch: false,
+                offset: None,
+                cube: false,
+                layer: false,
+                gather: false,
+                ms,
+            },
+            ty: OpType::F32,
+            dst: Some(SelDst::Fixed { bank: Bank::Temp, reg: DEST }),
+            srcs: [
+                Some(SelSrc::Fixed { bank: Bank::Shared, reg: 0, mods: Mods::default() }),
+                Some(SelSrc::Fixed { bank: Bank::Temp, reg: DATA, mods: Mods::default() }),
+                Some(SelSrc::Fixed { bank: Bank::Shared, reg: 8, mods: Mods::default() }),
+            ],
+        };
+        let check = super::super::verify::check_group;
+        let (ms, _) = bytes(form(false, false, true));
+        let (plain, _) = bytes(form(false, false, false));
+        assert_eq!(check(&meant(true), "smp", &ms), Ok(ms.len()));
+        assert!(check(&meant(false), "smp", &ms).is_err());
+        assert!(check(&meant(true), "smp", &plain).is_err());
+        assert_eq!(check(&meant(false), "smp", &plain), Ok(plain.len()));
+    }
 }
