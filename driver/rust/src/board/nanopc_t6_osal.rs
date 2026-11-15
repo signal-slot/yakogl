@@ -27,7 +27,10 @@
 //! `MAP_NOEXEC`. `map_phys` of a range inside the carve-out answers its own
 //! pages ([`Osal::window`]) under the handle [`WINDOW`], which a free takes
 //! and leaves alone; the CPU's view is uncached, so the cache operations
-//! have nothing to do.
+//! have nothing to do. The carve-out's last [`OsalMem::carve_reserved`]
+//! bytes are never handed out: they are the board's window buffer, which
+//! the GPU reaches through `map_phys` like any other range of the
+//! carve-out and which no allocation may share.
 //!
 //! A kick is one job on the ring ([`sched::submit`]) whose `CALL` runs the
 //! kick's stream; its fence is the job's sequence number. A wait is the
@@ -123,6 +126,11 @@ pub const CARVE_VA: u64 = 0x40_0000_0000;
 pub const HEAP_CHUNK_SIZE: u32 = 2 * 1024 * 1024;
 /// The largest carve-out: 256 MiB, one bit a page in [`Osal`].
 pub const MAX_CARVE_PAGES: usize = 64 * 1024;
+/// [`Osal::up`]'s refusal at `STEP_VM_MAP` for an
+/// [`OsalMem::carve_reserved`] it does not take (the detail is the value):
+/// a number no [`PtRefusal`](crate::gpu::mali::pgtable::PtRefusal), the
+/// step's other refusals, has.
+pub const VM_MAP_RESERVED: u32 = 16;
 /// Frees held at once; a free into a full queue is refused and its pages
 /// kept (`-ENOSPC`), as src/osal/pending_frees.h does without its wait.
 pub const PENDING_FREES: usize = 256;
@@ -169,7 +177,10 @@ const _: () = assert!(core::mem::size_of::<OsalMaliGpu>() == 16);
 /// module's table), and the group VM's table pages at `vm_tables_pa`.
 /// `heap_initial_chunks` of the chunk region's 2 MiB slots are the heap's
 /// at the start; the others are its growth (1 to all of them, at most
-/// [`MAX_HEAP_CHUNKS`]).
+/// [`MAX_HEAP_CHUNKS`]). `carve_reserved` bytes at the carve-out's end are
+/// mapped with the rest and answered by `map_phys`, and no `gpu_alloc`
+/// gets them: 0, or a multiple of the page size smaller than the carve-out
+/// ([`Osal::up`] refuses any other value).
 pub struct OsalMem<'a> {
     pub queue: McuBacking,
     pub ring: GroupBacking,
@@ -179,6 +190,7 @@ pub struct OsalMem<'a> {
     pub vm_pool: &'a mut [Table],
     pub vm_tables_pa: u64,
     pub heap_initial_chunks: u32,
+    pub carve_reserved: u64,
 }
 
 /// The tiler heap's memory ([`HeapMemory`]): the pool region, handed out
@@ -339,7 +351,11 @@ pub struct Osal {
     up: Option<GroupUp>,
     gpu: usize,
     carve: GroupBacking,
+    /// The carve-out's pages `alloc` hands out, from its start, and all of
+    /// its pages, which `window` answers: the difference is
+    /// [`OsalMem::carve_reserved`].
     pages: usize,
+    window_pages: usize,
     /// One bit a page: in use, and the first page of an allocation.
     used: [u64; MAX_CARVE_PAGES / 64],
     head: [u64; MAX_CARVE_PAGES / 64],
@@ -438,6 +454,7 @@ impl Osal {
         // SAFETY: an empty backing; nothing is read or written through it.
         carve: unsafe { GroupBacking::new(0, 0, 0) },
         pages: 0,
+        window_pages: 0,
         used: [0; MAX_CARVE_PAGES / 64],
         head: [0; MAX_CARVE_PAGES / 64],
         hint: 0,
@@ -493,13 +510,21 @@ impl Osal {
         if self.up.is_some() {
             return Ok(());
         }
-        let pages = (mem.carve.size() / PAGE) as usize;
-        if pages == 0 || pages > MAX_CARVE_PAGES || mem.ring.size() < QUEUE_VM_BYTES {
+        let window_pages = (mem.carve.size() / PAGE) as usize;
+        if window_pages == 0 || window_pages > MAX_CARVE_PAGES || mem.ring.size() < QUEUE_VM_BYTES {
             o.step = z4::STEP_VM_MAP;
             o.refusal = 0;
             o.detail = if mem.ring.size() < QUEUE_VM_BYTES { mem.ring.size() } else { mem.carve.size() };
             return Err(o.step);
         }
+        // at least one page is left to hand out
+        if !mem.carve_reserved.is_multiple_of(PAGE) || mem.carve_reserved / PAGE >= window_pages as u64 {
+            o.step = z4::STEP_VM_MAP;
+            o.refusal = VM_MAP_RESERVED;
+            o.detail = mem.carve_reserved;
+            return Err(o.step);
+        }
+        let pages = window_pages - (mem.carve_reserved / PAGE) as usize;
         let regions = regions(&mem);
         let slots = (regions[2].size / u64::from(HEAP_CHUNK_SIZE)).min(MAX_HEAP_CHUNKS as u64) as u32;
         let initial = mem.heap_initial_chunks;
@@ -547,6 +572,7 @@ impl Osal {
         self.gpu = b.gpu;
         self.carve = mem.carve;
         self.pages = pages;
+        self.window_pages = window_pages;
         self.heap_initial = initial;
         Ok(())
     }
@@ -823,13 +849,13 @@ impl Osal {
         0
     }
 
-    /// `map_phys`: `size` bytes at physical `phys` inside the carve-out, at
-    /// their own GPU VA and CPU address (no new mapping, and nothing to
-    /// free: the handle is [`WINDOW`]). `-ENOTSUP` for a range the
-    /// carve-out does not hold.
+    /// `map_phys`: `size` bytes at physical `phys` inside the carve-out
+    /// (its reserved end included), at their own GPU VA and CPU address (no
+    /// new mapping, and nothing to free: the handle is [`WINDOW`]).
+    /// `-ENOTSUP` for a range the carve-out does not hold.
     pub fn window(&self, phys: u64, size: usize) -> Result<Alloc, i32> {
         let off = phys.wrapping_sub(self.carve.pa());
-        let end = (self.pages as u64) * PAGE;
+        let end = (self.window_pages as u64) * PAGE;
         if self.up.is_none() || size == 0 {
             return Err(-EINVAL);
         }

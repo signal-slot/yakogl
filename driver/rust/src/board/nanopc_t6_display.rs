@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Step D2 on the NanoPC-T6 (driver/docs/nanopc-t6-display.md, section 2
-//! route (a) and section 7 row D2): adopt the display a crash kexec left
-//! running. Linux 6.18 scans its frame buffer on VP0 through the VOP's
+//! Steps D2 and D3 on the NanoPC-T6 (driver/docs/nanopc-t6-display.md,
+//! section 2 route (a), section 4 and section 7 rows D2 and D3): adopt the
+//! display a crash kexec left running, then show the GPU's window buffers on
+//! it. Step D2: Linux 6.18 scans its frame buffer on VP0 through the VOP's
 //! IOMMU, in Cluster0 (linear XRGB8888; board dump of 2026-11-12: Cluster0
 //! `WIN_CTRL0` and `CLUSTER_CTRL` = 1, Esmart0 off, VP1-VP3 in STANDBY).
 //! The adopt keeps Linux's power, clocks, PHY, HDMI controller and VP0
@@ -25,9 +26,9 @@
 //! 3. `rk_iommu::paging_off` on both `vop_mmu` sets; a set that keeps paging
 //!    is [`Stop::Iommu`].
 //! 4. `vop2::overlay_single`: Esmart0 the only, bottom layer of VP0.
-//! 5. `vop2::window_show`: Esmart0 on the caller's buffer at physical
-//!    `fb_pa`, [`MODE`]'s size, stride [`FB_STRIDE`]; `REG_CFG_DONE` for VP0
-//!    (bit 15 | bit 16 | bit 0).
+//! 5. `vop2::window_show`: Esmart0 on the caller's window (the probe's is
+//!    [`mode_window`]: [`MODE`]'s size, stride [`FB_STRIDE`]); `REG_CFG_DONE`
+//!    for VP0 (bit 15 | bit 16 | bit 0).
 //! 6. One frame start, then the read-back of section 5's "our buffer is the
 //!    one shown": `YRGB_MST`, `REGION0_CTRL` enable, the two overlay selects.
 //!
@@ -39,9 +40,20 @@
 //! GRF status and, only when PD_VO1 is usable and PCLK_HDMITX0 is open, the
 //! HDMI controller's clock monitor and video monitor words.
 //!
+//! Step D3 is the board layer's `board_show()` and `board_display_busy()`
+//! over a [`Screen`] the caller keeps. The first [`show`] is the adopt, with
+//! the window the GL side renders into, in place at the screen's origin: no
+//! copy. A later [`show`] of another buffer is `vop2::window_flip` (the
+//! address, then `REG_CFG_DONE`) and returns without waiting for the frame
+//! start that takes it; until then the display scans an earlier buffer, and
+//! [`busy`] says which buffers that may be. The geometry is the first show's:
+//! only the address is one register, taken whole at a frame start, so only
+//! an address change cannot tear.
+//!
 //! Nothing here touches the GPU, the interrupt controller, the PHY or the
 //! HDMI controller's registers beyond those reads.
 
+use crate::errno::{ENODEV, ENOTSUP};
 use crate::ip::dw_hdmi_qp;
 use crate::ip::hdptx;
 use crate::ip::rk_iommu;
@@ -263,9 +275,24 @@ impl Adopt {
     }
 }
 
-/// The adopt (see the module). `fb_pa` is the physical address of a buffer
-/// of [`FB_BYTES`] at stride [`FB_STRIDE`], drawn and cleaned by the caller.
-pub fn adopt(m: &impl Mmio, b: &Bases, fb_pa: u64, delay_us: &mut impl FnMut(u32)) -> Adopt {
+/// The window the adopt probe shows: [`MODE`]'s size in XRGB8888 at the
+/// screen's origin, a buffer of [`FB_BYTES`] at stride [`FB_STRIDE`] at
+/// physical `fb_pa`.
+pub fn mode_window(fb_pa: u64) -> Window {
+    Window {
+        addr: fb_pa,
+        width: MODE.hactive,
+        height: MODE.vactive,
+        stride_bytes: FB_STRIDE,
+        x: 0,
+        y: 0,
+        format: Format::Xrgb8888,
+    }
+}
+
+/// The adopt (see the module). `w` is the window Esmart0 shows at the end,
+/// its buffer drawn and cleaned by the caller.
+pub fn adopt(m: &impl Mmio, b: &Bases, w: &Window, delay_us: &mut impl FnMut(u32)) -> Adopt {
     let mut a = Adopt::default();
     let v = b.vop;
 
@@ -368,21 +395,12 @@ pub fn adopt(m: &impl Mmio, b: &Bases, fb_pa: u64, delay_us: &mut impl FnMut(u32
     }
 
     // 5. our buffer
-    let w = Window {
-        addr: fb_pa,
-        width: MODE.hactive,
-        height: MODE.vactive,
-        stride_bytes: FB_STRIDE,
-        x: 0,
-        y: 0,
-        format: Format::Xrgb8888,
-    };
-    if let Err(r) = vop2::window_show(m, v, PORT, WINDOW, &w, (MODE.hactive, MODE.vactive)) {
+    if let Err(r) = vop2::window_show(m, v, PORT, WINDOW, w, (MODE.hactive, MODE.vactive)) {
         return a.stopped(Stop::Window, r.why as u32, 0, r.read_back);
     }
     // window_show refuses an address at or above 4 GiB
-    a.fb = fb_pa as u32;
-    a.stride = FB_STRIDE;
+    a.fb = w.addr as u32;
+    a.stride = w.stride_bytes;
     a.cfg_done_written = m.read32(v + sys::REG_CFG_DONE);
 
     // 6. one frame later the update is in force
@@ -408,6 +426,145 @@ pub fn adopt(m: &impl Mmio, b: &Bases, fb_pa: u64, delay_us: &mut impl FnMut(u32
         return a.stopped(Stop::Shown, 0, i as u32, a.shown[i]);
     }
     a
+}
+
+/// [`Screen::state`]: no show yet.
+pub const SCREEN_NEW: u32 = 0;
+/// [`Screen::state`]: the first show's adopt ran to its end; Esmart0 shows
+/// this image's buffers.
+pub const SCREEN_SHOWN: u32 = 1;
+/// [`Screen::state`]: the first show's adopt stopped. Final: every later
+/// show is refused. Any value other than the three is treated as this one.
+pub const SCREEN_STOPPED: u32 = 2;
+
+/// What [`show`] and [`busy`] keep between calls: the C side's `struct
+/// yd_t6_screen`, all zero before the first show.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Screen {
+    /// The buffer of the last show that reached the VOP (the first show's
+    /// when its adopt stopped): physical address.
+    pub last: u64,
+    /// Buffers shown before `last` that the display may still scan: the
+    /// first `n_held` entries.
+    pub held: [u64; 2],
+    /// [`SCREEN_NEW`], [`SCREEN_SHOWN`] or [`SCREEN_STOPPED`].
+    pub state: u32,
+    /// The entries of `held` in use. 3: more buffers were shown inside one
+    /// frame than `held` keeps, and every buffer counts as busy.
+    pub n_held: u32,
+    /// The first show's width, height and stride in bytes.
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32,
+    /// Shows that changed the address since the first one (wraps).
+    pub flips: u32,
+}
+
+/// Show the `width` x `height` XRGB8888 buffer at physical `addr` (rows
+/// `stride_bytes` apart, top row first) at the screen's origin. The first
+/// call is [`adopt`] with this window, its record in `a`; a later call with
+/// another address is a flip, which never waits (`a` is left as it is).
+/// Returns 0, or
+/// - `-ENOTSUP`: a window the VOP cannot scan (`vop2::window_check`), or one
+///   whose size or stride is not the first show's. Nothing was read or
+///   written; the screen stays as it was.
+/// - `-ENODEV`: the adopt stopped (`a.stop` names the step), now or at the
+///   first show. A screen that stopped is not tried again.
+#[allow(clippy::too_many_arguments)]
+pub fn show(
+    m: &impl Mmio,
+    b: &Bases,
+    s: &mut Screen,
+    addr: u64,
+    width: u32,
+    height: u32,
+    stride_bytes: u32,
+    delay_us: &mut impl FnMut(u32),
+    a: &mut Adopt,
+) -> i32 {
+    if s.state != SCREEN_NEW && s.state != SCREEN_SHOWN {
+        return -ENODEV;
+    }
+    let w = Window { addr, width, height, stride_bytes, x: 0, y: 0, format: Format::Xrgb8888 };
+    if vop2::window_check(&w, MODE.hactive, MODE.vactive).is_err() {
+        return -ENOTSUP;
+    }
+    if s.state == SCREEN_NEW {
+        *a = adopt(m, b, &w, delay_us);
+        let state = if a.stop == Stop::None as u32 { SCREEN_SHOWN } else { SCREEN_STOPPED };
+        *s = Screen { last: addr, state, width, height, stride: stride_bytes, ..Screen::default() };
+        return if state == SCREEN_SHOWN { 0 } else { -ENODEV };
+    }
+    if (width, height, stride_bytes) != (s.width, s.height, s.stride) {
+        return -ENOTSUP;
+    }
+    if addr == s.last {
+        return 0;
+    }
+    settle(m, b, s);
+    // the check above is window_flip's own: it writes or refuses as a whole
+    if vop2::window_flip(m, b.vop, PORT, WINDOW, &w, (MODE.hactive, MODE.vactive)).is_err() {
+        return -ENOTSUP;
+    }
+    // The display scans `last`, or a buffer already held, until a frame
+    // start takes this address. The frame start flag is cleared after
+    // REG_CFG_DONE, so a flag set later is a frame start after the commit
+    // (see settle).
+    let n = s.n_held as usize;
+    if n <= s.held.len() && !s.held[..n].contains(&s.last) {
+        if n < s.held.len() {
+            s.held[n] = s.last;
+        }
+        s.n_held += 1;
+    }
+    vop2::vp_clear(m, b.vop, PORT, sys::INT_FS);
+    s.last = addr;
+    s.flips = s.flips.wrapping_add(1);
+    0
+}
+
+/// Which of the buffers at `addrs` the display may still scan: bit k for
+/// `addrs[k]`, of the first 32. Too large is possible (a buffer is freed up
+/// to one frame late), too small never. Never waits; writes no register.
+/// - Before the first show: none.
+/// - After an adopt that stopped: the buffer of that show (the adopt may
+///   have stopped after it pointed Esmart0 at it). No register is read.
+/// - Else the last buffer shown and the ones held since the last frame
+///   start that took a flip (see `settle`).
+pub fn busy(m: &impl Mmio, b: &Bases, s: &mut Screen, addrs: &[u64]) -> u32 {
+    if s.state == SCREEN_NEW {
+        return 0;
+    }
+    if s.state == SCREEN_SHOWN {
+        settle(m, b, s);
+    }
+    let n = s.n_held as usize;
+    let all = n > s.held.len();
+    let mut bits = 0;
+    for (k, a) in addrs.iter().take(32).enumerate() {
+        if all || *a == s.last || s.held[..n].contains(a) {
+            bits |= 1 << k;
+        }
+    }
+    bits
+}
+
+/// Forget the held buffers once the display scans `last`: VP0 flagged a
+/// frame start since the last flip cleared the flag, and VP0's bit of
+/// `REG_CFG_DONE` reads 0. Linux tests the same two things before it
+/// completes a flip (v6.18 rockchip_drm_vop2.c, `vop2_isr`: on `VP_INT_FS`
+/// it reads `REG_CFG_DONE` and sends the event only when the port's bit is
+/// clear). Whether the bit clears at the frame start is U8 of the design
+/// note, which the adopt records on the board. Each answer is safe here: a
+/// bit that always reads 0 leaves the frame start alone to decide, which is
+/// enough because the flag is cleared after the `REG_CFG_DONE` write; a bit
+/// that never clears keeps the buffers held, which EGL reports once as its
+/// wait for a free buffer.
+fn settle(m: &impl Mmio, b: &Bases, s: &mut Screen) {
+    if s.n_held != 0 && vop2::vp_raw_status(m, b.vop, PORT) & sys::INT_FS != 0 && !vop2::cfg_pending(m, b.vop, PORT) {
+        s.n_held = 0;
+    }
 }
 
 /// What [`status`] read: section 5 of driver/docs/nanopc-t6-display.md, in

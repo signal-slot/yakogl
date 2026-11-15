@@ -1216,7 +1216,10 @@ pub unsafe extern "C" fn yd_t6_submit(
 /// `heap_pool`, `heap_chunks` and `carve` the group VM's four regions
 /// (`YD_T6_OSAL_*_VA`); `vm_pool` the group VM's table pages;
 /// `heap_initial_chunks` the tiler heap's chunks at the start (the others
-/// of `heap_chunks` are its growth).
+/// of `heap_chunks` are its growth); `carve_reserved` the bytes at
+/// `carve`'s end no `yd_t6_osal_alloc` gets (the board's window buffer,
+/// reached through `yd_t6_osal_map_phys`): 0, or whole 4 KiB pages that
+/// leave at least one page to hand out.
 #[cfg(any(feature = "mali", test))]
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -1234,6 +1237,7 @@ pub struct YdT6OsalMem {
     pub vm_pool_pages: u32,
     pub vm_tables_pa: u64,
     pub heap_initial_chunks: u32,
+    pub carve_reserved: u32,
 }
 
 #[cfg(all(any(feature = "mali", test), target_pointer_width = "64"))]
@@ -1361,6 +1365,7 @@ pub unsafe extern "C" fn yd_t6_osal_up(
         vm_pool,
         vm_tables_pa: z.vm_tables_pa,
         heap_initial_chunks: z.heap_initial_chunks,
+        carve_reserved: u64::from(z.carve_reserved),
     };
     // SAFETY: one thread (the contract).
     let s = unsafe { osal() };
@@ -2036,6 +2041,7 @@ mod fw_tests {
             ("YD_T6_OSAL_HEAP_CHUNK", u64::from(osal::HEAP_CHUNK_SIZE)),
             ("YD_T6_OSAL_CARVE_VA", osal::CARVE_VA),
             ("YD_T6_OSAL_CARVE_MAX", (osal::MAX_CARVE_PAGES as u64) * crate::gpu::mali::pgtable::PAGE),
+            ("YD_T6_OSAL_VM_MAP_RESERVED", u64::from(osal::VM_MAP_RESERVED)),
         ] {
             assert_eq!(def64(name), v, "{name}");
         }
@@ -2062,7 +2068,8 @@ mod fw_tests {
             vm_pool,
             vm_pool_pages,
             vm_tables_pa,
-            heap_initial_chunks
+            heap_initial_chunks,
+            carve_reserved
         );
         field!(
             YdT6OsalCounts,
@@ -2206,9 +2213,10 @@ mod fw_tests {
 
 /// The display adopt of step D2 ([`crate::board::nanopc_t6_display`]):
 /// `struct yd_t6_display_bases`, `struct yd_t6_display_adopt` and `struct
-/// yd_t6_display_status` are the board module's own `#[repr(C)]` records.
+/// yd_t6_display_status` are the board module's own `#[repr(C)]` records,
+/// and so is step D3's `struct yd_t6_screen`.
 pub use crate::board::nanopc_t6_display::{
-    Adopt as YdT6DisplayAdopt, Bases as YdT6DisplayBases, Status as YdT6DisplayStatus,
+    Adopt as YdT6DisplayAdopt, Bases as YdT6DisplayBases, Screen as YdT6Screen, Status as YdT6DisplayStatus,
 };
 
 #[cfg(target_pointer_width = "64")]
@@ -2233,6 +2241,13 @@ const _: () = assert!(offset_of!(YdT6DisplayStatus, soc_status1) == 4 * 24);
 const _: () = assert!(offset_of!(YdT6DisplayStatus, vo1_usable) == 4 * 26);
 const _: () = assert!(offset_of!(YdT6DisplayStatus, monitor) == 4 * 30);
 const _: () = assert!(offset_of!(YdT6DisplayStatus, cru_gate60) == 4 * 37);
+const _: () = assert!(size_of::<YdT6Screen>() == 48);
+const _: () = assert!(offset_of!(YdT6Screen, held) == 8);
+const _: () = assert!(offset_of!(YdT6Screen, state) == 24);
+const _: () = assert!(offset_of!(YdT6Screen, n_held) == 28);
+const _: () = assert!(offset_of!(YdT6Screen, width) == 32);
+const _: () = assert!(offset_of!(YdT6Screen, stride) == 40);
+const _: () = assert!(offset_of!(YdT6Screen, flips) == 44);
 
 /// Draw the adopt's pattern ([`crate::board::nanopc_t6_display::draw_pattern`])
 /// into `fb`: `height` rows of `stride_bytes`, `width` pixels each. 0, or
@@ -2279,7 +2294,8 @@ pub unsafe extern "C" fn yd_t6_display_adopt(
     }
     // SAFETY: the caller's contract.
     let (hw, b) = unsafe { (Hw::new(), &*b) };
-    let a = crate::board::nanopc_t6_display::adopt(&hw, b, fb_pa, &mut |us| delay_us(us));
+    let w = crate::board::nanopc_t6_display::mode_window(fb_pa);
+    let a = crate::board::nanopc_t6_display::adopt(&hw, b, &w, &mut |us| delay_us(us));
     // SAFETY: the caller's contract.
     unsafe { *out = a };
     if a.stop == crate::board::nanopc_t6_display::Stop::None as u32 {
@@ -2321,6 +2337,65 @@ pub unsafe extern "C" fn yd_t6_display_status(
     }
 }
 
+/// Show the buffer at physical `phys` on the screen `s`
+/// ([`crate::board::nanopc_t6_display::show`]): the first call is the adopt
+/// with this buffer as its window (record in `adopt`), a later call with
+/// another address a flip that never waits. 0; `-ENOTSUP` for a window the
+/// VOP cannot scan or one that is not the first show's size and stride
+/// (nothing read or written); `-ENODEV` when the adopt stopped, now or at
+/// the first show (`adopt.stop` names the step of this call's adopt);
+/// `-EINVAL` for a null argument.
+///
+/// # Safety
+/// As [`yd_t6_display_adopt`]; `s` is valid, all zero before the first
+/// call and then only this module's; `adopt` is valid. One thread calls
+/// this and [`yd_t6_screen_busy`] for one `s`.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_screen_show(
+    b: *const YdT6DisplayBases,
+    s: *mut YdT6Screen,
+    phys: u64,
+    width: u32,
+    height: u32,
+    stride_bytes: u32,
+    delay_us: Option<extern "C" fn(u32)>,
+    adopt: *mut YdT6DisplayAdopt,
+) -> i32 {
+    let Some(delay_us) = delay_us else { return -EINVAL };
+    if b.is_null() || s.is_null() || adopt.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (hw, b, s, adopt) = unsafe { (Hw::new(), &*b, &mut *s, &mut *adopt) };
+    crate::board::nanopc_t6_display::show(&hw, b, s, phys, width, height, stride_bytes, &mut |us| delay_us(us), adopt)
+}
+
+/// Which of the `n` buffers at `phys[]` the screen `s` may still scan
+/// ([`crate::board::nanopc_t6_display::busy`]): bit k for `phys[k]`, of the
+/// first 32. Too large is possible, too small never; never waits. A null
+/// `b` or `s`, or a null `phys` with `n` not 0, answers every bit: this
+/// call cannot name a buffer free.
+///
+/// # Safety
+/// As [`yd_t6_screen_show`]; `phys` is valid for `n` reads.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_screen_busy(
+    b: *const YdT6DisplayBases,
+    s: *mut YdT6Screen,
+    phys: *const u64,
+    n: usize,
+) -> u32 {
+    if n == 0 {
+        return 0;
+    }
+    if b.is_null() || s.is_null() || phys.is_null() {
+        return u32::MAX;
+    }
+    // SAFETY: the caller's contract.
+    let (hw, b, s, addrs) = unsafe { (Hw::new(), &*b, &mut *s, core::slice::from_raw_parts(phys, n)) };
+    crate::board::nanopc_t6_display::busy(&hw, b, s, addrs)
+}
+
 #[cfg(test)]
 mod display_tests {
     use super::*;
@@ -2352,6 +2427,16 @@ mod display_tests {
         ] {
             assert_eq!(def(name), v as u32, "{name}");
         }
+        {
+            use crate::board::nanopc_t6_display::{SCREEN_NEW, SCREEN_SHOWN, SCREEN_STOPPED};
+            for (name, v) in [
+                ("YD_T6_SCREEN_NEW", SCREEN_NEW),
+                ("YD_T6_SCREEN_SHOWN", SCREEN_SHOWN),
+                ("YD_T6_SCREEN_STOPPED", SCREEN_STOPPED),
+            ] {
+                assert_eq!(def(name), v, "{name}");
+            }
+        }
         let pins = [
             ("sizeof(struct yd_t6_display_bases)", size_of::<YdT6DisplayBases>()),
             ("offsetof(struct yd_t6_display_bases, vop_mmu)", offset_of!(YdT6DisplayBases, vop_mmu)),
@@ -2372,6 +2457,15 @@ mod display_tests {
             ("offsetof(struct yd_t6_display_status, vo1_usable)", offset_of!(YdT6DisplayStatus, vo1_usable)),
             ("offsetof(struct yd_t6_display_status, monitor)", offset_of!(YdT6DisplayStatus, monitor)),
             ("offsetof(struct yd_t6_display_status, cru_gate60)", offset_of!(YdT6DisplayStatus, cru_gate60)),
+            ("sizeof(struct yd_t6_screen)", size_of::<YdT6Screen>()),
+            ("offsetof(struct yd_t6_screen, last)", offset_of!(YdT6Screen, last)),
+            ("offsetof(struct yd_t6_screen, held)", offset_of!(YdT6Screen, held)),
+            ("offsetof(struct yd_t6_screen, state)", offset_of!(YdT6Screen, state)),
+            ("offsetof(struct yd_t6_screen, n_held)", offset_of!(YdT6Screen, n_held)),
+            ("offsetof(struct yd_t6_screen, width)", offset_of!(YdT6Screen, width)),
+            ("offsetof(struct yd_t6_screen, height)", offset_of!(YdT6Screen, height)),
+            ("offsetof(struct yd_t6_screen, stride)", offset_of!(YdT6Screen, stride)),
+            ("offsetof(struct yd_t6_screen, flips)", offset_of!(YdT6Screen, flips)),
         ];
         for (what, v) in pins {
             let pin = format!("_Static_assert({what} == {v},");
@@ -2394,6 +2488,29 @@ mod display_tests {
             assert_eq!(yd_t6_display_status(b, 0, 0, Some(no_clock), Some(no_delay), &mut s), -EINVAL);
             assert_eq!(yd_t6_display_pattern(core::ptr::null_mut(), 4, 4, 16), -EINVAL);
         }
+        // the screen: nothing is touched without the bases, the screen and
+        // the adopt's record; no buffer is named free without them
+        let mut sc = YdT6Screen::default();
+        let live = core::ptr::NonNull::<YdT6DisplayBases>::dangling().as_ptr().cast_const();
+        let addrs = [0x1000u64, 0x2000];
+        // SAFETY: each call is refused before it dereferences anything.
+        unsafe {
+            assert_eq!(yd_t6_screen_show(b, &mut sc, 0x1000, 1024, 768, 4096, Some(no_delay), &mut a), -EINVAL);
+            assert_eq!(
+                yd_t6_screen_show(live, core::ptr::null_mut(), 0x1000, 1024, 768, 4096, Some(no_delay), &mut a),
+                -EINVAL
+            );
+            assert_eq!(yd_t6_screen_show(live, &mut sc, 0x1000, 1024, 768, 4096, None, &mut a), -EINVAL);
+            assert_eq!(
+                yd_t6_screen_show(live, &mut sc, 0x1000, 1024, 768, 4096, Some(no_delay), core::ptr::null_mut()),
+                -EINVAL
+            );
+            assert_eq!(yd_t6_screen_busy(b, &mut sc, addrs.as_ptr(), 2), u32::MAX);
+            assert_eq!(yd_t6_screen_busy(live, core::ptr::null_mut(), addrs.as_ptr(), 2), u32::MAX);
+            assert_eq!(yd_t6_screen_busy(live, &mut sc, core::ptr::null(), 2), u32::MAX);
+            assert_eq!(yd_t6_screen_busy(b, core::ptr::null_mut(), core::ptr::null(), 0), 0);
+        }
+        assert_eq!((sc, a), (YdT6Screen::default(), YdT6DisplayAdopt::default()));
         let mut fb = [7u32; 16];
         // SAFETY: fb holds 4 rows of 16 bytes.
         unsafe {
