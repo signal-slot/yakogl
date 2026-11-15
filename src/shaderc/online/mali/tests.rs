@@ -3402,7 +3402,9 @@ fn a_negated_swapped_varying_pair_is_byte_equal_to_mesa_26_2_1() {
 /// negative constant `a * -0.5` (Mesa's `FMA` by 0.5 then `FADD .neg`,
 /// which ours makes too since main's fp16 lowering), constant lanes fp16
 /// holds other than +-1.0, raw (`vec3(1.0, b1, 0.5)`) and beside a pair
-/// (`vec3(a2 - 0.5, 0.5)`), which the cube ops read from an FAU word.
+/// (`vec3(a2 - 0.5, 0.5)`), which the cube ops read from an FAU word, and
+/// a uniform lane in the second word of a vec4 (`a2 + u4.zw`, z `u4.w`:
+/// Mesa pushes the uniform from its first word, `u2.w1`, as main does).
 /// Both programs the shim's to the byte.
 #[test]
 fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa_26_2_1() {
@@ -3443,6 +3445,8 @@ fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa
             td!("fstex_cubedir_pairhalf.frag"),
             td!("fstex_cubedir_pairhalf.expect.json"),
         ),
+        (td!("fstex_cubedir_vec4zw.vert"), td!("fstex_cubedir_vec4zw.frag"), td!("fstex_cubedir_vec4zw.expect.json")),
+        (td!("fstex_cubedir_vec4w.vert"), td!("fstex_cubedir_vec4w.frag"), td!("fstex_cubedir_vec4w.expect.json")),
     ] {
         check_program(vs, fs, json);
     }
