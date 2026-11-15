@@ -1866,9 +1866,9 @@ pub fn tlb_config_f16(rt: u32, components: u32) -> u32 {
 /// internal type (8I, 16UI, 32F, ...) says what they are. The words are the
 /// shader's 32-bit values as they are; the tile buffer narrows them to the
 /// target's internal type. Never the TLB's default, so the first word
-/// always goes through TLBU. A float output to a 32F target would take the
-/// same config; the V3D program is not keyed by the target's class, so a
-/// float output always writes f16 pairs.
+/// always goes through TLBU. A float output to a 32F target takes the same
+/// config when the compile's `rt_f32` key names the target
+/// (`Prepared::rt_f32`); without it a float output writes f16 pairs.
 pub fn tlb_config_32b(rt: u32, components: u32) -> u32 {
     const TLB_TYPE_F32_COLOR: u32 = 0 << 6;
     const TLB_RENDER_TARGET_SHIFT: u32 = 3;
@@ -2383,12 +2383,15 @@ pub fn select_fragment<'a>(
      * `uvec2`, `int`, ...) one 32-bit word per declared component as it is,
      * MOVed to TLBU then TLB with the 32-bit config (vir_emit_tlb_color_write's
      * 32-bit branch, nir_to_vir.c:2005-2021: vir_MOV_dest of each colour
-     * channel to tlbu / tlb; the hardware narrows to the target's type). */
+     * channel to tlbu / tlb; the hardware narrows to the target's type).
+     * A float output to a 32-bit float target (`Prepared::rt_f32`, Mesa's
+     * `f32_color_rb`) takes the same 32-bit write, its words the floats as
+     * they are (nir_to_vir.c:1974-1977, 2005-2021). */
     for (rt, colour) in p.color.iter().enumerate() {
         if p.rt_mask & (1 << rt) == 0 {
             continue;
         }
-        if p.rt_int & (1 << rt) != 0 {
+        if (p.rt_int | p.rt_f32) & (1 << rt) != 0 {
             let n = usize::from(p.rt_comps[rt].clamp(1, 4));
             let conf = tlb_config_32b(rt as u32, n as u32);
             for (i, &x) in colour.iter().enumerate().take(n) {
