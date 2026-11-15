@@ -744,10 +744,10 @@ out=$(dry nanopc-t6 run "$S/img/x2.bin" "$S/logs" 2>&1)
 rc=$?
 check "nanopc-t6 run of an image without the T6 watchdog marker (an i.MX8MP one): rc 3, REFUSED, no board command" \
     eval '[ "$rc" = 3 ] && grep -q "REFUSED" <<<"$out" && ! grep -q "^DRY board" <<<"$out"'
-mkimg "$S/img/t6-big.bin" $((16 * 1024 * 1024 + 4096)) 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60'
+mkimg "$S/img/t6-big.bin" $((256 * 1024 * 1024 + 4096)) 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60'
 out=$(dry nanopc-t6 run "$S/img/t6-big.bin" "$S/logs" 2>&1)
 rc=$?
-check "nanopc-t6 run of an image past the 16 MiB window at 0x10000000: rc 3" eval '[ "$rc" = 3 ] && grep -q "does not fit" <<<"$out"'
+check "nanopc-t6 run of an image past the 256 MiB window at 0x10000000: rc 3" eval '[ "$rc" = 3 ] && grep -q "does not fit" <<<"$out"'
 out=$(dry x2 nodefault 2>&1)
 check "x2 nodefault: rc 2" [ $? = 2 ]
 out=$(TREE_IMAGE=$S/img/pi4.bin dry pi4 tree "$S/am.txt" "$S/tree" 2>&1)

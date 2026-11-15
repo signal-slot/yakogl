@@ -373,8 +373,9 @@ nanopc-t6)
     # boot loader backend is not here yet (uboot-mmc, #4168).
     BOOTS="kexec-dev"
     NB_MMC=-
-    # nanopc_t6.dts zephyr,sram: 16 MiB at 0x10000000 (nanopc-t6.sh's window)
-    YAKO_ADDR=0x10000000; LOAD_END=0x11000000
+    # nanopc_t6.dts zephyr,sram: 256 MiB at 0x10000000 (nanopc-t6.sh's
+    # window; board_lock_selftest.sh fails when this differs from the dts)
+    YAKO_ADDR=0x10000000; LOAD_END=0x20000000
     # driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c, t6_marker; the runner
     # checks the whole marker and the board layer's line again
     MARKER='yakogl-wdt: nanopc_t6 WDT0 armed at boot'
