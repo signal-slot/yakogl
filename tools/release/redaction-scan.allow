@@ -92,4 +92,10 @@ drop | tailnet-dns | tools/mp2_uboot_record_check.py | \bdk1\.tail1234\.ts\.net\
 drop | private-ipv4 | tools/probes/rpi5_display/verdicts_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a console line the verdict tool must not print
 drop | ipv6-local | tools/probes/rpi5_display/verdicts_selftest.sh | \bfe80::1\b | link-local input of the same redaction test
 drop | email | tools/probes/rpi5_display/verdicts_selftest.sh | \bserial-getty@ttyS2\.service\b | systemd unit name in the same console line
+# The i.MX8MP GLES3 acceptance checks and their self-tests (5ddb981f,
+# 36339a2e): their own fixtures and pattern text.  The owners may drop the
+# fixtures instead.
+drop | private-ipv4 | tools/cts/imx8mp-gles3-acceptance-selftest.sh | \b192\.168\.1\.5\b | private-range input of a redaction test: the fake es2 log address the acceptance check c8 must catch (RFC 1918)
+drop | email | tools/cts/imx8mp-gles3-acceptance.sh | \buser@host\.domain\b | the acceptance check's own description of its login pattern, placeholder text not an address
+drop | email | tools/cts/imx8mp-gles3-redact-selftest.sh | c@host\.exa | fragment of a fixture login built by concatenation, a look-alike input of the redact check's self-test
 drop | email | driver/tools/uboot-t6/prompt-reads.sh | serial-getty[@]ttyS2\.service\b | systemd unit instance the tool asks the board about, not an address
