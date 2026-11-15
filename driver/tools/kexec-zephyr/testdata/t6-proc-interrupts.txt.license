@@ -1,0 +1,5 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+/proc/interrupts of the NanoPC-T6 (Linux 6.18.55, 2026-11-15), read on our
+board and cut down to the rows crash_irq_test.c needs.

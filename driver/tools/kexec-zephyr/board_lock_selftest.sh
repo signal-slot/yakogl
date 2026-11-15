@@ -93,7 +93,10 @@
 # registers of the running Linux. Its own self-test, on a made-up board, runs
 # from here as one check: the read list stays inside its windows, a display
 # that is off or a held lock refuses before any read, and a read that fails
-# stops the run.
+# stops the run. The crash route's interrupt steps in kexec_zephyr
+# (crash_irq.h: the PMIC's power key unbound, /proc/interrupts checked, the
+# power key bound again on a refusal) have a self-test of their own too,
+# crash_irq_selftest.sh, run from here as one check the same way.
 #
 # A tenth, for the crash route (nanopc-t6.sh --crash, D2 of
 # driver/docs/nanopc-t6-display.md): on made-up facts, --crash refuses
@@ -449,6 +452,10 @@ out=$(bash "$here/t6-display-dump-selftest.sh" 2>&1)
 rc=$?
 [ "$rc" = 0 ] || grep ' FAIL$' <<<"$out"
 check "t6-display-dump.sh: its self-test passes (rc $rc: $(tail -n 1 <<<"$out"))" "$rc"
+out=$(sh "$here/crash_irq_selftest.sh" 2>&1)
+rc=$?
+[ "$rc" = 0 ] || grep -E ' FAIL$|error' <<<"$out"
+check "kexec_zephyr's crash_irq.h: its self-test passes (rc $rc: $(tail -n 1 <<<"$out"))" "$rc"
 
 # The crash route. The reservation t6-crashkernel.sh makes is
 # 0x10000000-0x1fffffff, under the bank after the kernel.
