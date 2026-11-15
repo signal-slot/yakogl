@@ -124,11 +124,12 @@ The whole tree, one image per row of `tools/cts/mali-gles2-tree.txt`, is
 built by `tools/cts/t6-deqp-images.sh` and run by `tools/board.sh nanopc-t6
 tree` (`tools/cts/README.md`, section 2d).
 
-Memory: about 148 MiB of the board's 256 MiB window (`nanopc_t6.dts`): the
-gl_test image's GL core and OSAL memory (32 MiB carve-out), dEQP's code and
-the 64 MiB C heap. `zephyr.bin` is about 56 MiB of the 64 MiB `kexec_zephyr`
-reads, because the OSAL's `__nocache` statics lie inside the file's span: a
-carve-out about 8 MiB larger does not fit that limit. Every case
+Memory: about 183 MiB of the board's 256 MiB window (`nanopc_t6.dts`): the
+gl_test image's GL core and OSAL memory, with a 64 MiB carve-out
+(`boards/nanopc_t6.conf`: a 2048x2048 texture and its mip chain take
+33.5 MiB), dEQP's code and the 64 MiB C heap. `zephyr.bin` is about 12 MiB
+of the 64 MiB `kexec_zephyr` reads: the OSAL's memory is `.noinit`
+(`src/osal/zephyr_mali.c`), so the file does not hold it. Every case
 filter gives the same sizes (the whole package is linked; only the filter
 string differs). `driver/tools/kexec-zephyr/nanopc-t6.sh` refuses an image
 over either limit before it copies anything to the board.

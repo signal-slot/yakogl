@@ -219,11 +219,12 @@ with sha256 X ...`; not computed over the bytes at run time).
 west build -p always -b nanopc_t6 -d build/t6_gl_test yakogl/driver/samples/zephyr/gl_test
 ```
 
-Memory: about 78 MiB of the board's 256 MiB window (`nanopc_t6.dts`,
-`zephyr,sram`), of it the OSAL's `__nocache` memory with its 32 MiB
-carve-out; `zephyr.bin` is about 50 MB, since those statics lie inside the
-file's span, and `kexec_zephyr` reads at most 64 MiB. `tools/check.sh`
-(`zephyr  nanopc_t6 gl_test image`) checks both limits.
+Memory: about 81 MiB of the board's 256 MiB window (`nanopc_t6.dts`,
+`zephyr,sram`), of it the OSAL's memory with its 32 MiB carve-out. That
+memory is `.noinit` (`src/osal/zephyr_mali.c`), so `zephyr.bin` does not
+hold it: the file is about 4 MiB, and `kexec_zephyr` reads at most 64 MiB.
+`tools/check.sh` (`zephyr  nanopc_t6 gl_test image`) checks both limits, and
+that the file is smaller than the carve-out.
 
 Kconfig (the NanoPC-T6 menu): `T6_GL_TEST_CASE` (7, the regression set, by
 default) and `T6_GL_TEST_CASES` (a list on one context). A full tiler heap

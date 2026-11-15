@@ -22,7 +22,9 @@ Zephyr merges them), the Kconfig files and the tables, and fails when
     test knob on by default);
   - the memory carve-outs differ from the ones of the last passing sweeps
     (Pi 4: 48 MiB / 16 MiB of tiled copies, and texture-2048.conf's 64 / 24
-    MiB for image T5; i.MX8MP: 160 MiB heap; AM62P: 256 MiB GPU carve-out);
+    MiB for image T5; i.MX8MP: 160 MiB heap; AM62P: 256 MiB GPU carve-out),
+    or the T6's is under 64 MiB (no passing sweep yet: the size the 2048x2048
+    textures need, as image T5);
   - a table no longer selects every case of gles2-mustpass.txt, or the AM62P
     multisample table is not the rgba8888d24s8ms4 image;
   - a dEQP-GLES3 table (am62p-gles3-tree.txt, pi4-gles3-tree.txt) does not
@@ -254,6 +256,12 @@ def check_repo():
         bad.append('AM62P conf: CONFIG_KERNEL_VM_SIZE is not 0x20000000')
     if not re.search(r'reg = <0xa0000000 0x10000000>', read(os.path.join(DEQP, 'boards/verdin_am62p_am62p54_a53.overlay'))):
         bad.append('AM62P overlay: the 256 MiB GPU carve-out at 0xa0000000 is gone')
+    # the T6 has no passing sweep yet. A 2048x2048 texture's mip chain is
+    # 33,546,240 bytes on the Mali, over zephyr/Kconfig's default 32 MiB
+    t6 = boards['T6'].get('YAKOGL_MALI_CARVEOUT_BYTES')
+    if not (t6 or '').isdigit() or int(t6) < 67108864:
+        bad.append('T6 nanopc_t6.conf: YAKOGL_MALI_CARVEOUT_BYTES=%s, under the 64 MiB '
+                   'texture.size.2d.2048x2048_* need' % t6)
 
     # 5. the tables
     must = [l.strip() for l in read(os.path.join(HERE, 'gles2-mustpass.txt')).splitlines()

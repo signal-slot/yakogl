@@ -1099,11 +1099,11 @@ Linux's log), and refuses when Linux's log names no GIC table (its ring
 wrapped), since the tables' place is then unknown.
 
 Why 256 MiB: the dEQP-GLES2 image with the Mali OSAL (`driver/samples/zephyr/
-deqp` on `nanopc_t6`) takes about 148 MiB: the GL core's statics and the
-in-process compiler's scratch, the OSAL's `__nocache` memory (the 32 MiB
-carve-out, the tiler heap's chunks, the firmware arena, the queue memory),
-dEQP's code, and the 64 MiB C heap every board's dEQP image has. 128 MiB is
-20 MiB short of it. The probes take under 6 MiB; their RAM use counts the
+deqp` on `nanopc_t6`) takes about 183 MiB: the GL core's statics and the
+in-process compiler's scratch, the OSAL's memory (the 64 MiB carve-out, the
+tiler heap's chunks, the firmware arena, the queue memory), dEQP's code, and
+the 64 MiB C heap every board's dEQP image has. 128 MiB is 55 MiB short of
+it. The probes take under 6 MiB; their RAM use counts the
 page-frame table, which Zephyr sizes for the whole of `zephyr,sram`. Three
 places hold the window: the dts, `nanopc-t6.sh` (`WINDOW_BASE`,
 `WINDOW_SIZE`) and the U-Boot script (`driver/tools/uboot-t6/t6-zephyr.cmd`,
@@ -1116,8 +1116,11 @@ to `KERNEL_VM_BASE + KERNEL_VM_SIZE`, so with Zephyr's 8 MiB default
 glue asserts it at build time). And `kexec_zephyr` reads at most 64 MiB of
 file (`IMG_MAX`), while Zephyr places the NOLOAD `nocache` section before
 initialised kernel sections, so the zeros of `__nocache` statics lie inside
-`zephyr.bin`: the Mali OSAL's carve-out counts against the file limit as
-well as the window.
+`zephyr.bin`. The Mali OSAL therefore keeps its memory in `.noinit`, which
+lies after `.bss` and outside the file, and changes that block's mapping to
+uncached at init (`k_mem_update_flags`, `src/osal/zephyr_mali.c`; one
+mapping, as the `nocache` section has): the carve-out counts against the
+window only.
 
 **Watchdog: WDT0, a DesignWare APB watchdog.** The facts, with sources:
 

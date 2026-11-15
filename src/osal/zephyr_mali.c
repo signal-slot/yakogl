@@ -9,7 +9,7 @@
  *
  * The OSAL's logic is Rust (driver/rust, board::nanopc_t6_osal, through the
  * yd_t6_osal_* entries of yakogl_drivers.h); this file holds what is the
- * image's: the memory the GPU uses (statics, uncached), the register
+ * image's: the memory the GPU uses (one static, made uncached), the register
  * mappings, the delay that feeds the board's watchdog, the log and the
  * table. Every op forwards to one call:
  *
@@ -35,8 +35,9 @@
  *                  stopped and CSG 0 terminated; then the counts
  *   query       -> OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP; the
  *                  clock and draw stats of zephyr_timing.c
- *   cache_*     -> nothing: every CPU view is uncached, and each job's
- *                  FLUSH_CACHE2 cleans the GPU's caches
+ *   cache_*     -> nothing: the CPU's mapping of the GPU's memory is
+ *                  uncached, and each job's FLUSH_CACHE2 cleans the GPU's
+ *                  caches
  *
  * Absent: mmu_map, gpu_read/write, reg_*, wait_vblank, present (the board
  * has no display on Zephyr yet). A tiler out-of-memory event grows the
@@ -44,8 +45,8 @@
  * job timeout loses the kicks in flight and restarts the group; what needs
  * a GPU reset stops the OSAL (board::nanopc_t6_osal, "Recovery").
  *
- * Memory: __nocache statics (CONFIG_NOCACHE_MEMORY), physical address =
- * k_mem_phys_addr() of the CPU address, as the t6_* probes place theirs.
+ * Memory: one .noinit block of the image, whose mapping init makes uncached
+ * ("The GPU's memory" below).
  */
 
 #include <stdarg.h>
@@ -67,10 +68,6 @@
 #include "osal_log.h"
 #include <nanopc_t6.h>
 #include <yakogl_drivers.h>
-
-#if !defined(CONFIG_NOCACHE_MEMORY)
-#error "the Mali OSAL's memory is __nocache: CONFIG_NOCACHE_MEMORY=y"
-#endif
 
 /* The RK3588's blocks Z1 to Z3 touch (soc::rk3588, board::nanopc_t6_gpu:
  * the CRU, the PMU, SPI2 to the RK806 PMIC, the GPU's QoS, the GPU), and
@@ -108,25 +105,78 @@ BUILD_ASSERT(MALI_CHUNKS_INITIAL >= 1 && MALI_CHUNKS_INITIAL <= MALI_CHUNKS,
 	     "the heap starts with 1 to YAKOGL_MALI_HEAP_CHUNKS chunks");
 BUILD_ASSERT(MALI_CARVE <= YD_T6_OSAL_CARVE_MAX, "the carve-out is at most YD_T6_OSAL_CARVE_MAX");
 
-static __nocache uint8_t mali_fw[MALI_FW_ARENA] __aligned(PAGE);
-static __nocache uint8_t mali_pool[MALI_POOL_PAGES * PAGE] __aligned(PAGE);
-static __nocache uint8_t mali_queue[MALI_QUEUE_MEM] __aligned(PAGE);
-static __nocache uint8_t mali_ring[YD_T6_OSAL_QUEUE_SIZE] __aligned(PAGE);
-static __nocache uint8_t mali_heap_pool[YD_T6_OSAL_HEAP_POOL_SIZE] __aligned(PAGE);
-static __nocache uint8_t mali_chunks[MALI_CHUNKS * (size_t)YD_T6_OSAL_HEAP_CHUNK] __aligned(PAGE);
-static __nocache uint8_t mali_carve[MALI_CARVE] __aligned(PAGE);
-static __nocache uint8_t mali_vm_pool[MALI_VM_POOL_PAGES * PAGE] __aligned(PAGE);
+/* The GPU's memory: one block of the image's .noinit, which lies after
+ * .bss and so is not in zephyr.bin. (A __nocache static is in the file:
+ * Zephyr's nocache section lies before the loaded data, and the file holds
+ * it as zeros. The carve-out then counts against the 64 MiB that
+ * kexec_zephyr reads.) The CPU must not cache what the GPU reads and writes,
+ * so init zeroes the block, takes it out of the CPU's caches and changes its
+ * mapping to Normal non-cacheable in place (mem_uncache): what Zephyr's own
+ * tables do for the nocache section. The block keeps its one mapping; the
+ * same RAM is never mapped a second time with other attributes (the Arm
+ * ARM's "mismatched memory attributes").
+ *
+ * The block is aligned and sized to 2 MiB: the change then replaces whole
+ * level-2 block entries that map nothing else, so no entry that maps other
+ * data of the image is split, and no translation table is taken
+ * (CONFIG_MAX_XLAT_TABLES). Each area starts on a page, in this order. */
+#define MALI_BLOCK	(2u * 1024u * 1024u)
+#define OFF_FW		((size_t)0)
+#define OFF_POOL	(OFF_FW + MALI_FW_ARENA)
+#define OFF_QUEUE	(OFF_POOL + MALI_POOL_PAGES * PAGE)
+#define OFF_RING	(OFF_QUEUE + MALI_QUEUE_MEM)
+#define OFF_HEAP_POOL	(OFF_RING + YD_T6_OSAL_QUEUE_SIZE)
+#define OFF_CHUNKS	(OFF_HEAP_POOL + YD_T6_OSAL_HEAP_POOL_SIZE)
+#define OFF_CARVE	(OFF_CHUNKS + MALI_CHUNKS * (size_t)YD_T6_OSAL_HEAP_CHUNK)
+#define OFF_VM_POOL	(OFF_CARVE + (size_t)MALI_CARVE)
+#define MALI_MEM_USED	(OFF_VM_POOL + MALI_VM_POOL_PAGES * PAGE)
+#define MALI_MEM_BYTES	ROUND_UP(MALI_MEM_USED, MALI_BLOCK)
+
+BUILD_ASSERT(MALI_FW_ARENA % PAGE == 0 && MALI_QUEUE_MEM % PAGE == 0 &&
+		     YD_T6_OSAL_QUEUE_SIZE % PAGE == 0 && YD_T6_OSAL_HEAP_POOL_SIZE % PAGE == 0 &&
+		     YD_T6_OSAL_HEAP_CHUNK % PAGE == 0,
+	     "every area of the GPU's memory is whole pages");
+
+static uint8_t mali_mem[MALI_MEM_BYTES] __noinit __aligned(MALI_BLOCK);
 
 static struct {
 	bool inited;
+	bool uncached;     /* mem_uncache changed mali_mem's mapping */
 	uint32_t restarts; /* the last count note_restart printed */
 	bool stopped;      /* note_restart printed the stop */
 } s;
 
-static struct yd_t6_fw_backing backing(uint8_t *cpu, size_t size)
+/* Zero mali_mem and make its mapping uncached, once. The zeros are written
+ * through the cached mapping and cleaned to memory, and the lines
+ * invalidated, before the mapping changes: no cached line of the block is
+ * left to be written back over what the GPU writes later. -ENOTSUP: the
+ * image has no cache maintenance (CONFIG_CACHE_MANAGEMENT), so the block
+ * cannot be taken out of the caches. k_mem_update_flags() unmaps the range
+ * and maps it again with the new flags, under the kernel's memory lock;
+ * the block has no user yet, so nothing reads it in between. */
+static int mem_uncache(void)
+{
+	int rc;
+
+	if (s.uncached)
+		return 0;
+	memset(mali_mem, 0, sizeof(mali_mem));
+	rc = sys_cache_data_flush_and_invd_range(mali_mem, sizeof(mali_mem));
+	if (rc)
+		return rc;
+	rc = k_mem_update_flags(mali_mem, sizeof(mali_mem), K_MEM_PERM_RW | K_MEM_ARM_NORMAL_NC);
+	if (rc)
+		return rc;
+	s.uncached = true;
+	return 0;
+}
+
+static struct yd_t6_fw_backing backing(size_t off, size_t size)
 {
 	return (struct yd_t6_fw_backing){
-		.pa = k_mem_phys_addr(cpu), .cpu = (uintptr_t)cpu, .size = size,
+		.pa = k_mem_phys_addr(mali_mem + off),
+		.cpu = (uintptr_t)(mali_mem + off),
+		.size = size,
 	};
 }
 
@@ -187,18 +237,24 @@ static int z_init(void *platform_arg)
 	device_map(&qos, T6_QOS_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	device_map(&gpu, T6_GPU_PHYS, T6_GPU_MAP, K_MEM_CACHE_NONE);
 
-	mem.fw = backing(mali_fw, sizeof(mali_fw));
-	mem.pool = mali_pool;
+	t6_watchdog_feed();
+	rc = mem_uncache();
+	if (rc) {
+		printk("osal(mali): the GPU's memory was not made uncached: rc %d\n", rc);
+		return rc;
+	}
+	mem.fw = backing(OFF_FW, MALI_FW_ARENA);
+	mem.pool = mali_mem + OFF_POOL;
 	mem.pool_pages = MALI_POOL_PAGES;
-	mem.tables_pa = k_mem_phys_addr(mali_pool);
-	mem.queue = backing(mali_queue, sizeof(mali_queue));
-	mem.ring = backing(mali_ring, sizeof(mali_ring));
-	mem.heap_pool = backing(mali_heap_pool, sizeof(mali_heap_pool));
-	mem.heap_chunks = backing(mali_chunks, sizeof(mali_chunks));
-	mem.carve = backing(mali_carve, sizeof(mali_carve));
-	mem.vm_pool = mali_vm_pool;
+	mem.tables_pa = k_mem_phys_addr(mali_mem + OFF_POOL);
+	mem.queue = backing(OFF_QUEUE, MALI_QUEUE_MEM);
+	mem.ring = backing(OFF_RING, YD_T6_OSAL_QUEUE_SIZE);
+	mem.heap_pool = backing(OFF_HEAP_POOL, YD_T6_OSAL_HEAP_POOL_SIZE);
+	mem.heap_chunks = backing(OFF_CHUNKS, MALI_CHUNKS * (size_t)YD_T6_OSAL_HEAP_CHUNK);
+	mem.carve = backing(OFF_CARVE, MALI_CARVE);
+	mem.vm_pool = mali_mem + OFF_VM_POOL;
 	mem.vm_pool_pages = MALI_VM_POOL_PAGES;
-	mem.vm_tables_pa = k_mem_phys_addr(mali_vm_pool);
+	mem.vm_tables_pa = k_mem_phys_addr(mali_mem + OFF_VM_POOL);
 	mem.heap_initial_chunks = MALI_CHUNKS_INITIAL;
 
 	t6_watchdog_feed();
