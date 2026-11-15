@@ -18,6 +18,8 @@ drop | * | * | <(user|login)@(host|board)> | placeholder
 # The RFC 1918 fixtures that the console redaction self-test rewrites.
 drop | private-ipv4 | tools/board_selftest.sh | \b(10\.11\.12\.(1|13)|172\.16\.0\.9)\b | redact_dir fixture input (RFC 1918)
 drop | private-ipv4 | tools/cts/pr-session-selftest.sh | secret-user@10\.9\.8\.7\b | fixture of the self-test's BOARD_HOST refusal
+drop | private-ipv4 | tools/cts/imx8mp-gles3-acceptance-selftest.sh | \bhost 192\.168\.1\.5:22\b | fixture of the acceptance check c8 (an address in an es2 log)
+drop | email | tools/cts/imx8mp-gles3-acceptance.sh | \buser@host\.domain\b | the acceptance check c8's description of what it refuses
 # ST's compiled-in U-Boot default environment (a vendor value, not ours).
 drop | private-ipv4 | driver/tools/mp2-standalone/st-env/stm32mp25-dk-initial-env.txt | ^serverip=192\.168\.1\.1$ | ST's default serverip in the stm32mp25 initial env
 # The preflight selftest's fake BOARD_UART canary (a look-alike, never a real value).
