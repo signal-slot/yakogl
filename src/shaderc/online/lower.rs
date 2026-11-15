@@ -7131,20 +7131,26 @@ impl<'a> Lower<'_, 'a> {
                 }
                 return Ok(cols);
             }
-            /* A scalar fills the diagonal and leaves the rest zero, as a
-             * float whatever its own type (5.4.1). */
-            let d = self.convert(ids[0], BaseType::Float, 1, out)?;
-            let zero = self.const_value([0.0; 4], out)?;
-            for (j, c) in cols.iter_mut().enumerate().take(n as usize) {
-                if j >= r as usize {
-                    *c = zero;
-                    continue;
+            if self.width(ids[0])? == 1 {
+                /* A scalar fills the diagonal and leaves the rest zero, as
+                 * a float whatever its own type (5.4.1). */
+                let d = self.convert(ids[0], BaseType::Float, 1, out)?;
+                let zero = self.const_value([0.0; 4], out)?;
+                for (j, c) in cols.iter_mut().enumerate().take(n as usize) {
+                    if j >= r as usize {
+                        *c = zero;
+                        continue;
+                    }
+                    let mut lanes = [None; 4];
+                    lanes[j] = Some(0);
+                    *c = self.zero_column_except(r, zero, d, 1 << j, lanes, out)?;
                 }
-                let mut lanes = [None; 4];
-                lanes[j] = Some(0);
-                *c = self.zero_column_except(r, zero, d, 1 << j, lanes, out)?;
+                return Ok(cols);
             }
-            return Ok(cols);
+            /* One VECTOR is not the scalar form: `mat2(vec4)` is the
+             * vector's four components in column-major order, the general
+             * form below. Taking the scalar arm for it gave `v.x` on the
+             * diagonal and zero off it. */
         }
         /* One argument per column, each already a vector of the right
          * width: the fast path, and the only one that emits no local at
@@ -13416,6 +13422,184 @@ mod matrix_product_tests {
     }
 }
 
+/// A matrix built from ONE vector (section 5.4.2 of GLSL ES 1.00 and of
+/// 3.00): `mat2(v)` with a `vec4 v` is `mat2(v.x, v.y, v.z, v.w)`. Only a
+/// single SCALAR fills the diagonal.
+///
+/// > If there is a single scalar parameter to a matrix constructor, it is
+/// > used to initialize all the components on the matrix's diagonal, with
+/// > the remaining components initialized to 0.0.
+/// >
+/// > A wide range of other possibilities exist, as long as enough
+/// > components are present to initialize the constructed value.
+///
+/// A matrix of 2 by 2 is the only one a single vector can fill: no vector
+/// has six components. dEQP-GLES2 and dEQP-GLES3 have no case of the form
+/// (`conversions` has the scalar and the matrix arguments), so these tests
+/// are what pins it. Every check RUNS the module on four different lanes:
+/// the form used to compile, and to hold `v.x` on the diagonal and zero off
+/// it.
+#[cfg(test)]
+mod matrix_from_vector_tests {
+    use super::*;
+    use crate::shaderc::online::eval::{f32x4, run, Inputs};
+
+    /// `gl_FragColor` of a fragment shader whose one input is `uniform vec4
+    /// u`, on the reference evaluator.
+    fn colour_of(src: &str, u: [f32; 4]) -> [f32; 4] {
+        let mut buf = std::vec![0u8; 1 << 19];
+        let a = Arena::new(&mut buf);
+        let l = match compile_to_ir(&a, Stage::Fragment, src) {
+            Ok(l) => l,
+            Err(e) => panic!("line {} at {:?}: {}\n{src}", e.line, e.tok, e.msg),
+        };
+        let m = &l.module;
+        let mut block = std::vec![0u32; usize::from(m.uniform_dwords).max(4)];
+        if let Some(d) = m.uniforms.iter().find(|d| d.name == "u") {
+            block[usize::from(d.dword_off)..usize::from(d.dword_off) + 4].copy_from_slice(&f32x4(u));
+        }
+        let got = run(m, &Inputs { io: &[], uniforms: &block }).unwrap_or_else(|why| panic!("{why}\n{src}"));
+        got.output_f32(ir::IoSlot::FragColor(0)).expect("gl_FragColor is written")
+    }
+
+    /// The message a fragment shader is refused with.
+    fn refusal(src: &str) -> std::string::String {
+        let mut buf = std::vec![0u8; 1 << 19];
+        let a = Arena::new(&mut buf);
+        match compile_to_ir(&a, Stage::Fragment, src) {
+            Ok(_) => panic!("compiled:\n{src}"),
+            Err(e) => e.msg.into(),
+        }
+    }
+
+    fn es100(body: &str) -> std::string::String {
+        format!("precision mediump float;\nuniform vec4 u;\nvoid main() {{ {body} }}\n")
+    }
+
+    #[cfg(not(feature = "report-es2"))] // used only by the tests here that compile GLSL ES 3.00
+    fn es300(body: &str) -> std::string::String {
+        format!(
+            "#version 300 es\nprecision mediump float;\nuniform vec4 u;\n\
+             layout(location = 0) out vec4 o;\nvoid main() {{ {body} }}\n"
+        )
+    }
+
+    const U: [f32; 4] = [1.5, 2.25, -3.0, 4.75];
+
+    /// The message of a constructor with too few components.
+    const SHORT: &str = "not enough arguments for this constructor";
+
+    /// The four components in column-major order, read back one by one and
+    /// as columns. Revert check: let `matrix_constructor` take its scalar
+    /// arm for one argument of any width and every line reads
+    /// [1.5, 0.0, 0.0, 1.5].
+    #[test]
+    fn a_matrix_from_one_vector_takes_its_four_components() {
+        let columns = es100("mat2 m = mat2(u); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&columns, U), U);
+        let elements = es100("mat2 m = mat2(u); gl_FragColor = vec4(m[0][0], m[0][1], m[1][0], m[1][1]);");
+        assert_eq!(colour_of(&elements, U), U);
+        /* Not only as an initializer. */
+        let operand = es100("vec2 r = mat2(u) * vec2(1.0, 10.0); gl_FragColor = vec4(r, mat2(u)[1]);");
+        assert_eq!(colour_of(&operand, U), [1.5 - 30.0, 2.25 + 47.5, -3.0, 4.75]);
+        /* The form the specification says it is. */
+        let spelled = es100("mat2 m = mat2(u.x, u.y, u.z, u.w); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&spelled, U), colour_of(&columns, U));
+        /* A swizzle is a vector like any other. */
+        let swizzled = es100("mat2 m = mat2(u.wzyx); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&swizzled, U), [4.75, -3.0, 2.25, 1.5]);
+    }
+
+    /// The module: the vector is evaluated once and each column is one
+    /// store of two of its lanes, (x, y) then (z, w). The spelled form
+    /// `mat2(v.x, v.y, v.z, v.w)` computes the same and is not the same
+    /// module: it loads `v` once per argument.
+    #[test]
+    fn a_matrix_from_one_vector_is_one_store_per_column() {
+        let mut buf = std::vec![0u8; 1 << 19];
+        let a = Arena::new(&mut buf);
+        let src = "precision mediump float;\nvarying vec4 v;\n\
+                   void main() { mat2 m = mat2(v); gl_FragColor = vec4(m[0], m[1]); }";
+        let l = compile_to_ir(&a, Stage::Fragment, src).unwrap_or_else(|e| panic!("line {}: {}", e.line, e.msg));
+        let m = &l.module;
+        let loads = m.instrs.iter().filter(|o| matches!(o, Op::LoadInput { .. })).count();
+        assert_eq!(loads, 1, "the argument is evaluated once: {:?}", m.instrs);
+        let mut columns = std::vec::Vec::new();
+        for o in m.instrs.iter() {
+            if let Op::StoreLocal { src, write_mask, .. } = *o {
+                if src.val == ValueId(0) {
+                    columns.push((write_mask, [src.swizzle[0], src.swizzle[1]]));
+                }
+            }
+        }
+        assert_eq!(columns, [(0b0011, [0, 1]), (0b0011, [2, 3])], "{:?}", m.instrs);
+    }
+
+    /// A constant expression takes the same path; a global and a local one.
+    #[test]
+    fn a_constant_matrix_from_one_vector_takes_its_four_components() {
+        let local = es100("const mat2 m = mat2(vec4(1.0, 2.0, 3.0, 4.0)); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&local, U), [1.0, 2.0, 3.0, 4.0]);
+        let global = "precision mediump float;\nconst mat2 M = mat2(vec4(1.0, 2.0, 3.0, 4.0));\n\
+                      void main() { gl_FragColor = vec4(M[0], M[1]); }\n";
+        assert_eq!(colour_of(global, U), [1.0, 2.0, 3.0, 4.0]);
+    }
+
+    /// Section 5.4.1's conversion applies to each component: an int vector
+    /// and a bool vector give floats. The bool lanes are chosen off the
+    /// diagonal, so the diagonal form reads all zero.
+    #[test]
+    fn a_matrix_from_one_int_or_bool_vector_converts_each_component() {
+        let ints = es100("mat2 m = mat2(ivec4(u)); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&ints, U), [1.0, 2.0, -3.0, 4.0]);
+        let bools = es100("mat2 m = mat2(bvec4(u)); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&bools, [0.0, 3.0, 0.5, 0.0]), [0.0, 1.0, 1.0, 0.0]);
+    }
+
+    /// GLSL ES 3.00 spells the same matrix `mat2x2` too and has `uvec4`.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn es300_follows_the_same_rule() {
+        for ctor in ["mat2(u)", "mat2x2(u)", "mat2(uvec4(u))", "mat2x2(ivec4(u))"] {
+            let src = es300(&format!("mat2 m = {ctor}; o = vec4(m[0], m[1]);"));
+            let want = if ctor.contains("vec4(u)") { [1.0, 2.0, 3.0, 4.0] } else { [1.5, 2.25, 3.0, 4.75] };
+            assert_eq!(colour_of(&src, [1.5, 2.25, 3.0, 4.75]), want, "{ctor}");
+        }
+    }
+
+    /// A single scalar still fills the diagonal, whatever its type: the
+    /// scalar arm is chosen by the argument's width, not by the count of
+    /// arguments.
+    #[test]
+    fn a_single_scalar_still_fills_the_diagonal() {
+        let float = es100("mat2 m = mat2(u.y); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&float, U), [2.25, 0.0, 0.0, 2.25]);
+        let int = es100("mat3 m = mat3(int(u.w)); gl_FragColor = vec4(m[0].xy, m[1].y, m[2].z);");
+        assert_eq!(colour_of(&int, U), [4.0, 0.0, 4.0, 4.0]);
+    }
+
+    /// One vector with too few components is a compile error, never a
+    /// matrix with lanes nothing wrote.
+    #[test]
+    fn a_single_vector_with_too_few_components_is_refused() {
+        for ctor in ["mat2(u.xyz)", "mat2(u.xy)", "mat3(u)", "mat4(u)", "mat3(ivec3(u.xyz))"] {
+            let src = es100(&format!("gl_FragColor = vec4({ctor}[0][0]);"));
+            assert_eq!(refusal(&src), SHORT, "{ctor}");
+        }
+    }
+
+    /// The same in GLSL ES 3.00, whose matrices of other shapes no single
+    /// vector fills either.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn es300_refuses_a_single_vector_with_too_few_components() {
+        for ctor in ["mat2x3(u)", "mat3x2(u)", "mat2x4(u)", "mat4x2(u)", "mat2(u.xyz)", "mat3(uvec4(u))"] {
+            let src = es300(&format!("o = vec4({ctor}[0][0]);"));
+            assert_eq!(refusal(&src), SHORT, "{ctor}");
+        }
+    }
+}
+
 /// A member of a struct value that is not a variable.
 #[cfg(test)]
 mod struct_value_member_tests {
@@ -16231,7 +16415,9 @@ mod report_es2_tests {
 /// compiles what it compiled before. Second review B-B: `pow` of a `const`
 /// exponent moved when a built-in's steps recorded their width in `comps`
 /// (now in `lanes`), and a `mediump mat2` divided by 2.2 moved when the
-/// reciprocal was kept as an `Frcp`.
+/// reciprocal was kept as an `Frcp`. That pin's matrix is `mat2(a.x)`: the
+/// review's shader said `mat2(a)` of a `vec4 a`, which main built as
+/// `mat2(a.x)` (issue 6564), so these are the words main compiled.
 #[cfg(all(test, feature = "gpu-powervr", not(feature = "report-es2")))]
 mod powervr_word_pins {
     use crate::shaderc::online::{codegen, store};
@@ -16271,7 +16457,7 @@ mod powervr_word_pins {
     #[test]
     fn a_mediump_matrix_divided_by_a_constant_compiles_to_main_s_words() {
         let src = "attribute highp vec4 p; attribute mediump vec4 a; varying highp vec4 v;\n\
-                   void main(){ gl_Position = p; mediump mat2 m2 = mat2(a) / 2.2; v = vec4(m2 * a.xy, 0.0, 1.0); }";
+                   void main(){ gl_Position = p; mediump mat2 m2 = mat2(a.x) / 2.2; v = vec4(m2 * a.xy, 0.0, 1.0); }";
         assert_eq!(
             words(src),
             "869240132ebae83e000040ff3582004084e0100000413582004080a0000042ff35820040c2c50800004035820040c1c5\
