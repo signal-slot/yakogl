@@ -27,6 +27,8 @@ pub mod genxml;
 pub mod program;
 
 #[cfg(test)]
+mod blend_choice_tests;
+#[cfg(test)]
 mod frame_blend_tests;
 #[cfg(test)]
 mod frame_cull_tests;
