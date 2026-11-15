@@ -701,3 +701,96 @@ pub fn inplace_resolve(c: &InplaceResolve) -> Words {
     r.end();
     w
 }
+
+// --- TS-sourced resolve into linear storage (W8 groundwork) -------------------
+
+/// `RS_SOURCE_STRIDE` `TS_MODE` (bit 29): the golden's resolve sets it
+/// (`RS_SOURCE_STRIDE` 0xa8000400); `regs.rs` has no name for it.
+const RS_SOURCE_STRIDE_TS_MODE_SHIFT: u32 = 29;
+
+/// How the source surface of a TS-sourced resolve is laid out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TsSourceLayout {
+    /// `TILED`: `RS_SOURCE_STRIDE` `TILING` only (W8's shadow).
+    Tiled,
+    /// `SUPER_TILED`: `TILING | SUPER_TILED_NEW` (the golden's source).
+    SuperTiled,
+}
+
+/// A copy of a TS-backed colour target to linear storage, the TS read by the
+/// RS (`etna_try_rs_blit`, `etnaviv_rs.c:852-891`): cleared tiles read as the
+/// clear value, so the linear destination needs no prior fill.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TsResolve {
+    /// The source's TS buffer and surface; its padded size is the RS window.
+    pub target: TsTarget,
+    pub layout: TsSourceLayout,
+    /// RS format of both sides (`rs_format`).
+    pub format: u32,
+    /// `TS_COLOR_CLEAR_VALUE` of the source (`TS_COLOR_CLEAR_VALUE_EXT` is the
+    /// same word, as for the clear).
+    pub clear_value: u32,
+    /// GPU address of the linear destination.
+    pub dest_addr: u32,
+    /// Bytes per row of the linear destination (not shifted, `RS_DEST_STRIDE`).
+    pub dest_stride: u32,
+    /// Bytes per row of the source, untiled (the register takes it times 4).
+    pub source_stride: u32,
+    /// `RS_CONFIG` `SWAP_RB` (the golden's RGBA8 target).
+    pub swap_rb: bool,
+    /// `RS_SOURCE_STRIDE` bit 29 (golden 1, the MSAA resolve's `TS_MODE(0)`).
+    pub source_ts_mode: u32,
+    /// `RS_EXTRA_CONFIG` `TS_MODE` (`etnaviv_rs.c:852-891`; the golden has 0).
+    pub extra_ts_mode: u32,
+    /// `TS_MEM_CONFIG` bits of the depth plane (kept).
+    pub keep: u32,
+}
+
+/// `TS_FLUSH_CACHE`, `TS_MEM_CONFIG` `COLOR_FAST_CLEAR`, the source's
+/// `TS_COLOR_STATUS_BASE`, `_SURFACE_BASE`, `_CLEAR_VALUE` (+ `_EXT`),
+/// then the RS block (source tiled, destination linear, the TS read through
+/// `RS_EXTRA_CONFIG` `TS_MODE`) and the single-buffer kick.
+pub fn ts_resolve(c: &TsResolve) -> Words {
+    let t = &c.target;
+    let mut w = Words::new();
+
+    w.state(GC_TS_FLUSH_CACHE, GC_TS_FLUSH);
+    let mut r = Coalesce::new(&mut w);
+    r.emit(GC_TS_MEM_CONFIG, GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR | c.keep);
+    r.emit(GC_TS_COLOR_STATUS_BASE, t.ts_addr);
+    r.emit(GC_TS_COLOR_SURFACE_BASE, t.surface_addr);
+    r.emit(GC_TS_COLOR_CLEAR_VALUE, c.clear_value);
+    r.emit(GC_TS_COLOR_CLEAR_VALUE_EXT, c.clear_value);
+    r.end();
+    let super_tiled = match c.layout {
+        TsSourceLayout::Tiled => 0,
+        TsSourceLayout::SuperTiled => GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW,
+    };
+    let mut r = Coalesce::new(&mut w);
+    r.emit(GC_RS_CONFIG, rs_config(c.format) | GC_RS_SOURCE_TILED | if c.swap_rb { GC_RS_SWAP_RB } else { 0 });
+    r.emit(
+        GC_RS_SOURCE_STRIDE,
+        (c.source_stride << 2)
+            | GC_RS_SOURCE_STRIDE_TILING
+            | ((c.source_ts_mode & 1) << RS_SOURCE_STRIDE_TS_MODE_SHIFT)
+            | super_tiled,
+    );
+    r.emit(GC_RS_DEST_STRIDE, c.dest_stride);
+    r.emit(rs_pipe_source_addr(0), t.surface_addr);
+    r.emit(rs_pipe_dest_addr(0), c.dest_addr);
+    r.emit(rs_pipe_offset(0), 0);
+    r.emit(rs_pipe_offset(1), 0);
+    r.emit(GC_RS_WINDOW_SIZE, rs_window_width(t.padded_width) | rs_window_height(t.padded_height));
+    r.emit(rs_dither(0), 0xffff_ffff);
+    r.emit(rs_dither(1), 0xffff_ffff);
+    r.emit(GC_RS_CLEAR_CONTROL, 0);
+    for i in 0..4 {
+        r.emit(rs_fill_value(i), 0);
+    }
+    r.emit(GC_RS_EXTRA_CONFIG, rs_extra_ts_mode(c.extra_ts_mode));
+    r.emit(GC_RS_SINGLE_BUFFER, GC_RS_SINGLE_BUFFER_ENABLE);
+    r.emit(GC_RS_KICKER, GC_RS_KICKER_VALUE);
+    r.emit(GC_RS_SINGLE_BUFFER, 0);
+    r.end();
+    w
+}

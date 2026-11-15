@@ -321,3 +321,71 @@ fn inplace_resolve_is_a_super_tiled_self_copy_kicked_inplace() {
     assert_eq!(get(GC_TS_DEPTH_STATUS_BASE), 0xffff_1000);
     assert_eq!(get(GC_TS_DEPTH_CLEAR_VALUE), 0xbfff_ff5a);
 }
+
+fn resolve(layout: TsSourceLayout) -> TsResolve {
+    TsResolve {
+        target: colour_target(),
+        layout,
+        format: GC_RS_FORMAT_A8R8G8B8,
+        clear_value: 0xff40_80bf,
+        dest_addr: 0xffee_a000,
+        dest_stride: 0x100,
+        source_stride: 64 * 4,
+        swap_rb: true,
+        source_ts_mode: 1,
+        extra_ts_mode: 0,
+        keep: 0,
+    }
+}
+
+/// The golden's TS-sourced resolve (its last RS block, after the second
+/// TS_FLUSH_CACHE) with a super-tiled source: every register but the TS
+/// config's masked bits is Mesa's word.
+#[test]
+fn ts_resolve_matches_golden() {
+    let g = golden();
+    let at = g.iter().rposition(|r| r.0 == GC_TS_FLUSH_CACHE).unwrap();
+    let gf = flat(&g[at..]);
+    let mine = flat(&decode(ts_resolve(&resolve(TsSourceLayout::SuperTiled)).as_slice()));
+
+    let regs = |f: &[(u32, u32)]| f.iter().map(|(r, _)| *r).collect::<Vec<_>>();
+    assert_eq!(regs(&mine), regs(&gf));
+    for ((reg, v), (_, want)) in mine.iter().zip(&gf) {
+        if *reg == GC_TS_MEM_CONFIG {
+            assert_eq!(*v, want & !COMPRESSION_BITS, "TS_MEM_CONFIG");
+        } else {
+            assert_eq!(v, want, "reg {reg:#x}");
+        }
+    }
+}
+
+/// W8's source is TILED, not super-tiled, and carries the TS mode of
+/// `RS_EXTRA_CONFIG`; from `etna_try_rs_blit` (`etnaviv_rs.c:852-891`):
+/// `TS_FLUSH_CACHE` first (:857), COLOR_FAST_CLEAR (:864), the three TS source
+/// registers (:866-875), `RS_EXTRA_CONFIG` TS_MODE (:880). The kick is the
+/// ordinary single-buffer one, not `RS_KICKER_INPLACE`.
+#[test]
+fn ts_resolve_tiled_source_and_ts_mode() {
+    let c = TsResolve { source_ts_mode: 0, extra_ts_mode: 1, keep: 0x40, ..resolve(TsSourceLayout::Tiled) };
+    let w = ts_resolve(&c);
+    let recs = decode(w.as_slice());
+    let f = flat(&recs);
+    let get = |r| f.iter().find(|(x, _)| *x == r).unwrap().1;
+
+    assert_eq!(recs[0], (GC_TS_FLUSH_CACHE, vec![GC_TS_FLUSH]));
+    assert_eq!(get(GC_TS_MEM_CONFIG), GC_TS_MEM_CONFIG_COLOR_FAST_CLEAR | 0x40);
+    assert_eq!(get(GC_TS_COLOR_STATUS_BASE), 0xffff_6000);
+    assert_eq!(get(GC_TS_COLOR_SURFACE_BASE), 0xffff_7000);
+    assert_eq!(get(GC_TS_COLOR_CLEAR_VALUE), 0xff40_80bf);
+    assert_eq!(get(GC_TS_COLOR_CLEAR_VALUE_EXT), 0xff40_80bf);
+    assert_eq!(get(GC_RS_SOURCE_STRIDE), 0x400 | GC_RS_SOURCE_STRIDE_TILING);
+    assert_eq!(get(GC_RS_CONFIG) & GC_RS_DEST_TILED, 0);
+    assert_ne!(get(GC_RS_CONFIG) & GC_RS_SOURCE_TILED, 0);
+    assert_eq!(get(GC_RS_DEST_STRIDE), 0x100);
+    assert_eq!(get(rs_pipe_dest_addr(0)), 0xffee_a000);
+    assert_eq!(get(GC_RS_EXTRA_CONFIG), rs_extra_ts_mode(1));
+    assert_eq!(get(GC_RS_EXTRA_CONFIG), 0x0100_0000);
+    assert_eq!(recs.last().unwrap(), &(GC_RS_SINGLE_BUFFER, vec![0]));
+    assert!(f.iter().any(|(r, v)| *r == GC_RS_KICKER && *v == GC_RS_KICKER_VALUE));
+    assert!(!f.iter().any(|(r, _)| *r == GC_RS_KICKER_INPLACE));
+}
