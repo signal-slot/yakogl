@@ -18,9 +18,9 @@
 # libEGL and libGLESv2).
 #
 # Inputs:
-#   - the four shaders in the out dir, verbatim from VK-GL-CTS main at
-#     5bb4c7e83ace (the board's deqp-gles2 is CTS_COMMIT 93bca01861b0 of
-#     tools/cts/mali-deqp-build.sh; these strings were not compared there):
+#   - the four shaders in the out dir, verbatim from VK-GL-CTS at
+#     93bca01861b0, the CTS_COMMIT of tools/cts/mali-deqp-build.sh (the
+#     board's deqp-gles2); the lines cited below are that commit's:
 #       vcube.vert, vcube.frag: VertexCubeTextureCase::init,
 #         modules/gles2/functional/es2fVertexTextureTests.cpp:858-875;
 #       cubebias.vert, cubebias.frag: ProgramLibrary::getProgram,
