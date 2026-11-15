@@ -135,8 +135,8 @@ front end's, not the plane split's, and no half texel can be produced.
 
 **When the front end gains `textureGather`** (a new `Op` or a flag on
 `Op::Tex`), `split_planes` must refuse it on a keyed unit by name, next to
-the shadow, gradient and offset refusals (`:159-167`), with the text `a
-gather on a 128-bit texture is not split yet`. The test's two cases then
+the shadow, gradient and offset refusals (`:159-167`), with the text
+`a gather on a 128-bit texture is not split yet`. The test's two cases then
 differ: the keyed case expects that text, and the unkeyed case compiles. The
 real fix, later, is the arm below (Mesa's 16-bit-halves lowering,
 `etnaviv_nir_lower_128bit.c:115-151`, section 1).
