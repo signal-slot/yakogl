@@ -8,7 +8,9 @@
 //! [`super::sched71_cf`] run on one selected shader at 4 threads, then 2,
 //! and the words encoded ([`super::codec71::encode71`]) and verified
 //! ([`super::verify71::verify71`]), as `docs/notes/v3d71-backend.md`
-//! section (a) and the contract in [`super::vop71`]'s header say.
+//! section (a) and the contract in [`super::vop71`]'s header say. Until
+//! sched71-cf, a program with no control-flow [`Op71`] is packed by
+//! [`super::sched71::pack71`] directly ([`build71`]).
 //!
 //! The front half is chain.rs's and shared: unrolling, prepare and the 4.2
 //! selection run unchanged, and their refusals come back as
@@ -31,12 +33,12 @@ use super::codec71::encode71;
 use super::encode::EncodeError;
 use super::prepare::{fragment_inputs, prepare_fragment_with, prepare_vertex_with, Prepared, SOp};
 use super::qpu_ffi::Gen;
-use super::sched71::Sched71Error;
-use super::sched71_cf::schedule71;
+use super::sched71::{pack71, Sched71Error};
+use super::sched71_cf::{schedule71, Scheduled71};
 use super::select::{select_fragment, select_vertex, tmu_input_writes, Pressure, SelectError, Selected, VOp};
 use super::select71::{select71, Select71Error};
 use super::verify71::{registers_fit_threads71, verify71, VerifyError};
-use super::vop71::{Instr71, Uniform};
+use super::vop71::{Instr71, Op71, Uniform};
 use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
 use crate::shaderc::online::ir::{self, IoKind};
 use crate::shaderc::online::powervr::unroll::Trip;
@@ -200,7 +202,16 @@ pub fn build71<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Resul
         Err(Alloc71Error::DoesNotFit) => (allocate71(&sel71, 2, a)?, 2),
         Err(e) => return Err(e.into()),
     };
-    let s = schedule71(&sel71, &al, a)?;
+    /* sched71-cf replaces this: until schedule71 handles both cases, a
+     * program with no control-flow Op71 is packed by pack71 as one
+     * straight-line run, with no branches; anything else goes to
+     * schedule71. */
+    let s = if sel71.ops.iter().any(Op71::is_control_flow) {
+        schedule71(&sel71, &al, a)?
+    } else {
+        let p = pack71(sel71.ops, &al, a)?;
+        Scheduled71 { instrs: p.instrs, uniforms: p.uniforms, back_edges: &[], fwd_branches: &[] }
+    };
     let words = a.alloc_filled(s.instrs.len(), 0u64)?;
     for (n, (w, i)) in words.iter_mut().zip(s.instrs).enumerate() {
         *w = encode71(i).map_err(|e| V3d71Error::Encode(n, e))?;
@@ -532,18 +543,6 @@ mod tests {
         .expect("scratch");
     }
 
-    /// A refusal of one of the 7.1 back half's stages by name: what a 7.1
-    /// compile returns while select71, alloc71 or sched71 is unfinished.
-    fn is_stage_refusal(e: &V3d71Error) -> bool {
-        matches!(
-            e,
-            V3d71Error::NotYet(_)
-                | V3d71Error::Select(Select71Error::NotYet(_))
-                | V3d71Error::Alloc(Alloc71Error::NotYet(_))
-                | V3d71Error::Sched(Sched71Error::NotYet(_) | Sched71Error::ControlFlow(_))
-        )
-    }
-
     /// A 7.1 stage that compiled: its words decode to its instructions and
     /// pass verify71 at its thread count.
     fn check71(what: &str, c: &Code71<'_>, threads: u32, single_seg: bool) {
@@ -585,7 +584,7 @@ mod tests {
     }
 
     #[test]
-    fn v71_compiles_or_refuses_by_stage_name() {
+    fn v71_compiles_straight_line_pairs() {
         for (what, vs, fs) in PAIRS {
             with_modules(vs, fs, |v, f, a| {
                 match compile_program_for(Gen::V71, v, f, Prim::Triangles, TARGET71, LodKey::NONE, LodKey::NONE, a) {
@@ -610,7 +609,9 @@ mod tests {
                         assert_eq!(p.vs.vattr_sizes, q.vs.vattr_sizes, "{what}");
                     }
                     Ok(AnyV3dProgram::V42(_)) => panic!("{what}: a 4.2 program for Gen::V71"),
-                    Err(e) => assert!(is_stage_refusal(&e), "{what}: {e:?} is not a named stage refusal"),
+                    /* both pairs are straight-line after select71: pack71
+                     * compiles them (the path sched71-cf replaces) */
+                    Err(e) => panic!("{what}: {e:?}"),
                 }
             });
         }
@@ -655,11 +656,15 @@ mod tests {
         let a = Arena::new(&mut buf);
         /* A fragment shader: an empty vertex shader has no viewport x/y
          * pair, which select71 refuses as a defect (ViewportXyMissing),
-         * not as an unfinished stage. */
+         * not as an unfinished stage. An empty fragment selection has no
+         * THRSW of its own (select.rs `last_thrsw` gives every selected
+         * fragment shader the last-thread-switch pair), so pack71's end THRSW is taken as the
+         * last thread switch, and verify71 refuses the program by its
+         * rule (qpu_validate.c:478-484), never returning it. */
         let sel = super::super::vop71::empty_selected(true);
-        match compile_stage71(&sel, &a) {
-            Ok(s) => check71("empty", &s.code, s.threads, s.single_seg),
-            Err(e) => assert!(is_stage_refusal(&e), "{e:?}"),
-        }
+        assert_eq!(
+            compile_stage71(&sel, &a).err(),
+            Some(V3d71Error::Verify(VerifyError { ip: 2, rule: "No program-end THRSW found" }))
+        );
     }
 }
