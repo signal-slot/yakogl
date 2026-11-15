@@ -3427,8 +3427,10 @@ fn cube_references(prefix: &str) -> Vec<(String, String, String, String)> {
 /// of whole varyings and constants fp16 holds, an fp16 pair beside a
 /// constant or uniform z, scaled, fused, negated, a uniform lane in the
 /// second word of a vec4 (Mesa pushes the uniform from its first word, as
-/// main does). Both programs the shim's to the byte along the draw's
-/// linked path.
+/// main does), a plain sampler after a sampler array and a sampler beside a
+/// non-sampler uniform array (neither an array element,
+/// `nir_fs::sampler_array_element`). Both programs the shim's to the byte
+/// along the draw's linked path.
 #[test]
 fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa_26_2_1() {
     let refs = cube_references("fstex_cubedir_");
@@ -3493,6 +3495,32 @@ fn mediump_texture_cube_directions_mesa_compiles_otherwise_are_refused_by_name()
         fs("varying vec2 a2;", "vec3(a2 * 2.0, -1.0)"),
         fs("", "vec3(gl_FragCoord.xy, 1.0)"),
         fs("", "vec3(gl_PointCoord, 1.0)"),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::TexCoord, "{src}");
+    }
+}
+
+/// A matrix varying's column read in parts is refused (`TexCoord`): the
+/// raw arm's whole-varying test takes vector varyings only, and no matrix
+/// reference is committed (docs/notes/mali-cube-textures.md (h)). With
+/// that test widened to matrices, the drm-shim measured a mat2 column and
+/// mat3 columns 0 and 2 read whole in parts equal to Mesa 26.2.1, and a
+/// mat3 column 1 read alone not equal (the vertex program's attribute
+/// index of the unread columns' attribute): a widening needs a reference
+/// for each form it takes.
+#[test]
+fn a_matrix_varying_column_read_in_parts_is_refused_as_a_cube_direction() {
+    let fs = |ty: &str, dir: &str| {
+        format!(
+            "precision mediump float; uniform samplerCube s; varying mediump {ty} m; \
+             void main() {{ gl_FragColor = textureCube(s, {dir}); }}"
+        )
+    };
+    for src in [
+        fs("mat2", "vec3(m[0].x, m[0].y, 1.0)"),
+        fs("mat2", "vec3(m[1], 1.0)"),
+        fs("mat3", "vec3(m[1].x, m[1].y, m[1].z)"),
+        fs("mat3", "vec3(m[2].z, m[2].y, m[2].x)"),
     ] {
         assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::TexCoord, "{src}");
     }
