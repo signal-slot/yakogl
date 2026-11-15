@@ -92,4 +92,7 @@ drop | tailnet-dns | tools/mp2_uboot_record_check.py | \bdk1\.tail1234\.ts\.net\
 drop | private-ipv4 | tools/probes/rpi5_display/verdicts_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a console line the verdict tool must not print
 drop | ipv6-local | tools/probes/rpi5_display/verdicts_selftest.sh | \bfe80::1\b | link-local input of the same redaction test
 drop | email | tools/probes/rpi5_display/verdicts_selftest.sh | \bserial-getty@ttyS2\.service\b | systemd unit name in the same console line
+# The Pi 5 report-text self-test: private-range inputs its redaction check must refuse.
+drop | private-ipv4 | tools/probes/rpi5_display/report_texts_selftest.sh | \b10\.21\.7\.9\b | private-range input of a redaction test: an address the texts must not carry
+drop | private-ipv4 | tools/probes/rpi5_display/report_texts_selftest.sh | \b192\.168\.1\.5\b | private-range input of a redaction test: an address inside a Linux reference the texts must refuse
 drop | email | driver/tools/uboot-t6/prompt-reads.sh | serial-getty[@]ttyS2\.service\b | systemd unit instance the tool asks the board about, not an address
