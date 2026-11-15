@@ -3,7 +3,9 @@
 # tests/v3d_online_corpus.rs compares its run against this file: `<path>: <exact
 # message>`, a link refusal as `<vert>+<frag>: <message>`. A refusal not listed, a
 # message that changed, and a listed entry that now compiles all fail the test, so
-# the list stays exact. No Slint, cluster or FemtoVG shader is listed: the V3D
+# the list stays exact. A line starting `@report-es2 ` applies only to the build with
+# the `report-es2` feature (it reports OpenGL ES 2.0: MAX_VARYING_VECTORS 8, no
+# `#version 300 es`); a plain line applies to every build. No Slint, cluster or FemtoVG shader is listed: the V3D
 # compiles all of them (tools/shaders/femtovg).
 
 # Desktop GLSL (`#version 110`..`150`) test sources of the offline generators, not ES.
@@ -34,3 +36,62 @@ zorder.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compile
 # shader does not declare `v_coords`). Not a V3D refusal; the pairing is the test's.
 es100/loop_nested.vert+es100/loop_nested.frag: rc -22: online shaderc: fragment varying 'v_coords' is not declared in the vertex shader; GLSL ES 1.00 section 4.3.5: a varying the fragment shader uses must be declared by the vertex shader, with the same type
 es100/ret_nested.vert+es100/ret_nested.frag: rc -22: online shaderc: fragment varying 'v_coords' is not declared in the vertex shader; GLSL ES 1.00 section 4.3.5: a varying the fragment shader uses must be declared by the vertex shader, with the same type
+
+# `report-es2` build only. es100/varyings15 needs 15 varying vectors; that build
+# reports MAX_VARYING_VECTORS 8 and refuses the link (the ES 3.0 build links it).
+@report-es2 es100/varyings15.vert+es100/varyings15.frag: rc -22: online shaderc: link error: the program's varyings do not fit MAX_VARYING_VECTORS = 8 (Appendix A packing)
+
+# `report-es2` build only. Every GLSL ES 3.00 source is refused at `#version`.
+@report-es2 es300/array.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/bands.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/cube.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/cube.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/cubelodf.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/cubelodf.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/cubelodv.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/cubelodv.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/derivs.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/divloop.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/divnest.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/dynidx.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/facing.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/flatlast.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/flatlast.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/gcops.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/hdrsample.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/idxtex.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/idxtex.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/ifelse_uint.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/inst.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/inst2.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/int_div.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/int_div.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/ishr.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/layers2.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/layersunused.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/loop_exit.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/loop_exit.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/mrt2.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/mrt2.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/mrt3.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/mrt3.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/texfetch.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/texoffset.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/texsize.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/tmpidx.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/uniidx.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/uniloop.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/uops.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/vcolor.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/vid.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 es300/vol.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 gltest/es3trunc_fs.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 gltest/es3trunc_vary_fs.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 gltest/es3trunc_vs.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 gltest/es3trunc_vsc.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 gltest/intrt.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 gltest/isamp.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 gltest/usamp.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 internal/es/fbload.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 internal/es/fbload_int.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 internal/es/mipgen.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
