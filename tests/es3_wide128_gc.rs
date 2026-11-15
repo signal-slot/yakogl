@@ -17,8 +17,19 @@
 //!   the plain shader and the split one are two records: a plain compile of
 //!   the same source never gets the split code.
 //!
-//! What it cannot see: the GPU, and the GL core's draw (which does not call
-//! this entry yet).
+//! - a `usampler2D` and an `isampler2D` join as two look-ups and moves, with
+//!   no float conversion of the words;
+//! - a GL texture swizzle leaves CONFIG1 of a 128-bit class at the identity
+//!   (a pure `format_words` call), so both plane descriptors carry it;
+//! - wrap R of a 3D RGBA32F binding is the W field of the slot's SAMP_CTRL0
+//!   (and the companion's, once the class is sampled), S and T their own.
+//!
+//! The in-crate mask hook `backend::TEST_EXTRA_SAMPLED` is `#[cfg(test)]`, so
+//! no test here can open the class: the draw cases check the closed state
+//! (and say so on stderr) until GC_SAMPLED_TEXFMTS holds it, and the
+//! companion half of the wrap R case runs for real from the flip on.
+//!
+//! What it cannot see: the GPU.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_wide128_gc
@@ -288,6 +299,78 @@ fn a_no_alpha_binding_joins_a_constant_one_for_w() {
     }
 }
 
+/// An integer sampler of a 128-bit binding (`usampler2D` over RGBA32UI,
+/// `isampler2D` over RGBA32I): the key splits the look-up into two `texld`s,
+/// the second on the companion slot, and the result stays integer all the
+/// way: the joined code is look-ups and moves, no conversion to or from float.
+#[test]
+fn an_integer_sampler_joins_without_a_float_conversion() {
+    let _g = serial();
+    for (sampler, out) in [("usampler2D", "uvec4"), ("isampler2D", "ivec4")] {
+        let sh = compile(SHC_STAGE_FRAGMENT, &fs(&format!("uniform highp {sampler} s;"), out, "o = texture(s, uv);"));
+        let sense = wide128_sensitivity(&sh);
+        assert_eq!(sense, 1, "{sampler}");
+        let v = variant(&sh, wide128_planes(sense, &[Some(4)])).unwrap_or_else(|e| panic!("{sampler}: {e}"));
+        assert_eq!(units(&v), [("texld", 0), ("texld", 4)], "{sampler}: the unit and its companion");
+        assert_eq!(units(&sh), [("texld", 0)], "{sampler}: the program's own shader is untouched");
+        let joined = listing(&v);
+        assert!(
+            joined.iter().all(|t| t.starts_with("texld") || t.starts_with("mov")),
+            "{sampler}: the join is look-ups and moves, no conversion of the words: {joined:#?}"
+        );
+        assert!(joined.iter().all(|t| !t.contains("f20")), "{sampler}: no float constant: {joined:#?}");
+        assert!(
+            joined.iter().any(|t| t.starts_with("mov") && t.contains(".__zw")),
+            "{sampler}: the B,A plane's words land in z,w: {joined:#?}"
+        );
+        release_shader(&v);
+        release_shader(&sh);
+    }
+}
+
+/// A GL swizzle on a 128-bit binding never reaches the descriptor words: both
+/// planes are the one descriptor (a byte copy but for the level addresses),
+/// and a swizzle could only permute inside each plane's (r, g) pair, so
+/// CONFIG1 carries the identity. A pure call of `format_words`, which
+/// needs neither the mask nor a draw; the swizzle's own handling (the guard
+/// that refuses it) is the flip's item.
+#[test]
+fn a_gl_swizzle_leaves_both_plane_descriptors_at_the_identity() {
+    use yakogl::backend::*;
+    use yakogl::vivante::regs::*;
+    use yakogl::vivante::texture::{descriptor_swizzle, format_words, wide128_plane_format};
+    let swizzles = [
+        [GLES_SWIZZLE_BLUE, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_RED, GLES_SWIZZLE_ALPHA],
+        [GLES_SWIZZLE_ALPHA, GLES_SWIZZLE_BLUE, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_RED],
+        [GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE, GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE],
+        [GLES_SWIZZLE_GREEN, GLES_SWIZZLE_RED, GLES_SWIZZLE_SAME, GLES_SWIZZLE_SAME],
+    ];
+    let identity = [GC_SWIZZLE_R, GC_SWIZZLE_G, GC_SWIZZLE_B, GC_SWIZZLE_A];
+    for format in [GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA32I] {
+        let plain = GlesTextureBind { format, width: 4, height: 4, mip_levels: 1, ..GlesTextureBind::ZERO };
+        let own = format_words(&plain, true);
+        assert_eq!(descriptor_swizzle(&wide128_plane_format(format).unwrap(), &plain), identity, "format {format}");
+        for swizzle in swizzles {
+            let t = GlesTextureBind { swizzle, ..plain };
+            assert_eq!(
+                descriptor_swizzle(&wide128_plane_format(format).unwrap(), &t),
+                identity,
+                "format {format} swizzle {swizzle:?}"
+            );
+            assert_eq!(format_words(&t, true), own, "format {format} swizzle {swizzle:?}: the same words");
+            let w = format_words(&t, true)[1];
+            assert_eq!(
+                w & (texdesc_swizzle_r(7) | texdesc_swizzle_g(7) | texdesc_swizzle_b(7) | texdesc_swizzle_a(7)),
+                texdesc_swizzle_r(GC_SWIZZLE_R)
+                    | texdesc_swizzle_g(GC_SWIZZLE_G)
+                    | texdesc_swizzle_b(GC_SWIZZLE_B)
+                    | texdesc_swizzle_a(GC_SWIZZLE_A),
+                "format {format} swizzle {swizzle:?}: CONFIG1's four fields"
+            );
+        }
+    }
+}
+
 /* ---- the GL core's draw (item wide128-shader) ----------------------------
  *
  * The draw picks the key from the texture bound NOW (src/gl/draw.rs,
@@ -324,6 +407,7 @@ mod draw {
     use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
     use yakogl::shaderc::Wide128Planes;
     use yakogl::vivante::kick::{GcKick, GC_KICK_MAGIC};
+    use yakogl::vivante::regs::*;
 
     /* the stand-in OSAL: plain memory, every kick completes at once */
 
@@ -332,6 +416,7 @@ mod draw {
         allocs: BTreeMap<u64, Box<[u64]>>,
         bump: BTreeMap<u64, u64>,
         fence: i64,
+        kicks: Vec<Vec<u32>>,
         faults: Vec<String>,
     }
 
@@ -385,6 +470,12 @@ mod draw {
             if k.magic != GC_KICK_MAGIC {
                 p.faults.push(format!("submit with magic 0x{:x}", k.magic));
                 return -22;
+            }
+            if let Some(a) = p.allocs.get(&k.stream_gpu) {
+                // SAFETY: the allocation holds at least `stream_bytes` bytes.
+                let words: &[u32] =
+                    unsafe { core::slice::from_raw_parts(a.as_ptr() as *const u32, k.stream_bytes as usize / 4) };
+                p.kicks.push(words.to_vec());
             }
             p.fence += 1;
             p.fence
@@ -605,6 +696,161 @@ mod draw {
             /* back to RGBA8UI on the same program: no key */
             assert_eq!(uint_texture(GL_RGBA8UI), GL_NO_ERROR);
             assert_eq!(draw(p).1, [Wide128Planes::NONE; 2]);
+        });
+    }
+
+    /* ---- wrap R on a 3D RGBA32F binding ----------------------------------
+     *
+     * SAMP_CTRL0's W field is GL_TEXTURE_WRAP_R on a 3D texture, its U and V
+     * fields S and T; the companion slot of a two-plane binding is written
+     * with the same SAMP_CTRL0 as its binding's. Closed (before wide128-flip)
+     * the GL core stores the texture as RGBA16F: the slot's fields are
+     * checked and no companion is written. */
+
+    const FS_3D: &str = concat!(
+        "#version 300 es\nprecision highp float;\nuniform highp sampler3D s;\nin vec2 uv;\n",
+        "out vec4 o;\nvoid main() { o = texture(s, vec3(uv, 0.5)); }\n"
+    );
+
+    /// Every `(register, value)` a LOAD_STATE of the stream writes, in order.
+    fn writes(words: &[u32]) -> Vec<(u32, u32)> {
+        let mut out = Vec::new();
+        let mut i = 0usize;
+        while i < words.len() {
+            let w = words[i];
+            if w & 0xf800_0000 == GC_OP_LOAD_STATE {
+                let count = ((w >> 16) & 0x3ff) as usize;
+                let base = (w & 0xffff) * 4;
+                for k in 0..count {
+                    if let Some(v) = words.get(i + 1 + k) {
+                        out.push((base + 4 * k as u32, *v));
+                    }
+                }
+                i += 1 + count;
+                continue;
+            }
+            i += match w & 0xf800_0000 {
+                GC_OP_DRAW_INSTANCED => 4,
+                GC_OP_STALL => 2,
+                _ => 1,
+            };
+        }
+        out
+    }
+
+    fn program_3d() -> GLuint {
+        // SAFETY: plain GL calls.
+        unsafe {
+            let p = glCreateProgram();
+            glAttachShader(p, shader(GL_VERTEX_SHADER, VS));
+            glAttachShader(p, shader(GL_FRAGMENT_SHADER, FS_3D));
+            glBindAttribLocation(p, 0, c"p".as_ptr());
+            glLinkProgram(p);
+            let mut ok: GLint = 0;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+            assert_eq!(ok, 1, "link failed");
+            p
+        }
+    }
+
+    /// A 2x2x2 RGBA32F 3D texture on unit 0, NEAREST, with the three wrap
+    /// modes given; the error of its glTexImage3D.
+    fn texture_3d(s: GLenum, t: GLenum, r: GLenum) -> GLenum {
+        let texels = [1.0f32; 32];
+        // SAFETY: plain GL calls; `texels` holds 2x2x2 RGBA32F texels.
+        unsafe {
+            let mut tex: GLuint = 0;
+            glActiveTexture(GL_TEXTURE0);
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_3D, tex);
+            for (name, v) in [
+                (GL_TEXTURE_MIN_FILTER, GL_NEAREST),
+                (GL_TEXTURE_MAG_FILTER, GL_NEAREST),
+                (GL_TEXTURE_WRAP_S, s),
+                (GL_TEXTURE_WRAP_T, t),
+                (GL_TEXTURE_WRAP_R, r),
+            ] {
+                glTexParameteri(GL_TEXTURE_3D, name, v as GLint);
+            }
+            glTexImage3D(
+                GL_TEXTURE_3D,
+                0,
+                GL_RGBA32F as GLint,
+                2,
+                2,
+                2,
+                0,
+                GL_RGBA,
+                GL_FLOAT,
+                texels.as_ptr() as *const c_void,
+            );
+        }
+        error()
+    }
+
+    /// One quad on unit 0 with `p`: the register writes of the last kick.
+    fn draw_stream(p: GLuint) -> Vec<(u32, u32)> {
+        let kicks0 = with_platform(|p| p.kicks.len());
+        // SAFETY: plain GL calls; QUAD is a static.
+        unsafe {
+            glViewport(0, 0, 64, 64);
+            glUseProgram(p);
+            glUniform1i(glGetUniformLocation(p, c"s".as_ptr()), 0);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, QUAD.as_ptr() as *const c_void);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+            glFinish();
+        }
+        assert_eq!(error(), GL_NO_ERROR, "draw");
+        let stream = with_platform(|p| {
+            assert!(p.kicks.len() > kicks0, "the quad produced no kick");
+            p.kicks.last().cloned().unwrap()
+        });
+        writes(&stream)
+    }
+
+    /// The last value written to `reg`.
+    fn last(stream: &[(u32, u32)], reg: u32) -> Option<u32> {
+        stream.iter().rev().find(|(r, _)| *r == reg).map(|(_, v)| *v)
+    }
+
+    /// A 3D RGBA32F binding with wrap R unlike S and T: the slot's W field is
+    /// the R mode and its U, V fields are S and T; where the binding is two
+    /// planes the companion's SAMP_CTRL0 is the slot's, W included.
+    #[test]
+    fn wrap_r_reaches_the_slot_and_its_companion_on_a_3d_binding() {
+        on_gc7000(|| {
+            let p = program_3d();
+            let modes = [
+                (GL_CLAMP_TO_EDGE, GL_MIRRORED_REPEAT, GL_REPEAT),
+                (GL_REPEAT, GL_CLAMP_TO_EDGE, GL_MIRRORED_REPEAT),
+                (GL_MIRRORED_REPEAT, GL_REPEAT, GL_CLAMP_TO_EDGE),
+            ];
+            let hw = |m: GLenum| match m {
+                GL_CLAMP_TO_EDGE => GC_TEX_WRAP_CLAMP_TO_EDGE,
+                GL_MIRRORED_REPEAT => GC_TEX_WRAP_MIRROR_REPEAT,
+                _ => GC_TEX_WRAP_REPEAT,
+            };
+            let two_planes = open(GLES_TEXFMT_RGBA32F);
+            if !two_planes {
+                eprintln!(
+                    "RGBA32F is not in GC_SAMPLED_TEXFMTS (wide128-flip): checking the slot of the stored \
+                     texture; the companion is checked from the flip on"
+                );
+            }
+            for (s, t, r) in modes {
+                assert_eq!(texture_3d(s, t, r), GL_NO_ERROR, "glTexImage3D");
+                let stream = draw_stream(p);
+                let ctrl0 = last(&stream, nte_descriptor_samp_ctrl0(0)).expect("the unit's sampler is written");
+                let field = |k: u32| (ctrl0 >> (3 * k)) & 7;
+                assert_eq!([field(0), field(1), field(2)], [hw(s), hw(t), hw(r)], "S 0x{s:x} T 0x{t:x} R 0x{r:x}");
+                let companion = last(&stream, nte_descriptor_samp_ctrl0(1));
+                if two_planes {
+                    assert_eq!(companion, Some(ctrl0), "the companion slot takes the slot's sampler state");
+                } else {
+                    assert_eq!(companion, None, "one plane: no companion slot");
+                }
+            }
         });
     }
 }
