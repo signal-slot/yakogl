@@ -1001,10 +1001,10 @@ layout):
 
 ```sh
 export BOARD_HOST=<user>@<pi4>                 # key login, passwordless sudo (PI4_HOST is read too)
-# the Raspberry Pi Debug Probe; its ttyACM number changes when USB re-enumerates
-# (ttyACM0 on 2026-09-25, ttyACM2 on 2026-10-03), the by-id name does not
+# the Raspberry Pi Debug Probe; its tty number changes when USB re-enumerates,
+# the by-id name does not
 export BOARD_UART=/dev/serial/by-id/usb-Raspberry_Pi_Debug_Probe__CMSIS-DAP__<serial>-if01
-# or the probe behind a serial bridge (usb-serial-over-tailscale): its host:port
+# or the probe behind a serial bridge: its host:port
 # export BOARD_UART=<bridge>:<port>
 # the 1920x720 bar panel (17 fields, as the board's own tryboot.txt had them)
 export BOARD_HDMI_TIMINGS='1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1'
