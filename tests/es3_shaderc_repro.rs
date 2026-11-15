@@ -114,9 +114,9 @@ fn fragdepth(body: &str) -> String {
 
 /// The eight `gl_FragDepth` writers of `fragdepth.write.*` and
 /// `fragdepth.compare.*` (15 AM62P "Compile failed"): each lowers to a
-/// colour output and a `Depth` output. Refused on every back end today
-/// (PowerVR `Usc(FragmentOutputsNotBuilt)`, GC7000UL "this output is not
-/// selected yet", V3D `NotYet("gl_FragDepth")`).
+/// colour output and an `IoKind::Depth` output. The PowerVR, GC7000UL and
+/// V3D back ends compile that depth output (docs/notes/gl-fragdepth.md
+/// has what each one emits and which state it sets).
 #[test]
 fn fragdepth_writes_lower_to_a_depth_output() {
     let bodies = [
