@@ -1911,6 +1911,12 @@ step "test    host-test,gpu-vivante,shaderc-online (tests/es3_flatshade_guard.rs
 # the GL core and the real job builder. Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_v3d_varyings.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_varyings
+# Uniform blocks of the size MAX_UNIFORM_BLOCK_SIZE reports, drawn through the
+# GL core and read by the V3D's compiled code (the 16384-byte cases are
+# ignored until the block moves out of the default-block budget). Compiles to
+# nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_ubo_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_ubo_v3d
 # The `msaa-fbo` feature (no effect yet) builds with each GPU's host
 # configuration, so a later item that reads it starts from a tree that
 # compiles.
