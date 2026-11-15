@@ -8,6 +8,16 @@
   python3 -I tools/cts/mali-deqp-tally.py --check-doc DOC SLICE...
   python3 -I tools/cts/mali-deqp-tally.py --self-test
 
+--per-case (with --tally, text or --markdown) takes the cause of a non-Pass
+case from the refusal line logged inside that case's own output, not from
+the chunk's exit line. It reads the optional slice file refusals/<label>.txt:
+a chunk's stdout and stderr merged in the order the process wrote them, with
+dEQP's "Test case '<case>'.." lines and the library's "yakogl: a draw was
+refused: <reason>" lines. A refusal belongs to the last Test case line before
+it; the case's first refusal is its cause. A case without one, and a slice or
+chunk without the file, keep the default cause. Without --per-case nothing
+reads those files, so --tally, --check-doc and --check-cover are unchanged.
+
 A slice is tools/cts/log/<YYYY-MM-DD>-t6-gles2-<session>-<sha8>/ with
 
   meta.txt     key=value: commit (40 hex), session, rows (<a>-<b>), tree,
@@ -68,6 +78,8 @@ END = "<!-- mali-deqp-tally end -->"
 # A back end refusal in a detail or an exit line: "refused <name>",
 # "refused: <name>" or "refusal=<name>".
 REFUSED = re.compile(r"\brefus(?:ed|al)\b[\s:=]+([A-Za-z_][A-Za-z0-9_.:-]*)")
+CASE_LINE = re.compile(r"Test case '([^']+)'")
+DRAW_REFUSED = re.compile(r"yakogl: a draw was refused:\s*(.*\S)")
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURES = os.path.join(HERE, "testdata", "mali-deqp")
 
@@ -284,6 +296,37 @@ def chunk_exit_lines(s):
     return out
 
 
+def case_refusals(path):
+    """{case: first refusal reason} of a merged chunk log (see --per-case),
+    {} if the file is missing."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return {}
+    out = {}
+    cur = None
+    for ln in lines:
+        m = CASE_LINE.search(ln)
+        if m:
+            cur = m.group(1)
+            continue
+        m = DRAW_REFUSED.search(ln)
+        if m and cur is not None and cur not in out:
+            out[cur] = m.group(1)
+    return out
+
+
+def refusal_causes(s):
+    """{case: cause} from the slice's refusals/<label>.txt files."""
+    out = {}
+    for lab in sorted({f[1] for _, f, _w in s["chunks"]}):
+        for case, why in case_refusals(
+                os.path.join(s["path"], "refusals", lab + ".txt")).items():
+            out[case] = "refused:" + normalize(why)
+    return out
+
+
 def cause(status, detail, exit_line):
     m = REFUSED.search(detail) or REFUSED.search(exit_line)
     if m:
@@ -291,19 +334,20 @@ def cause(status, detail, exit_line):
     return normalize(detail)
 
 
-def tally(slices):
+def tally(slices, per_case=False):
     by_status = {}
     by_cause = {}
     ordered, superseded, _d, _e = resolve(slices)
     for s in ordered:
         ex = chunk_exit_lines(s)
+        own = refusal_causes(s) if per_case else {}
         for i, (_, f, _w) in enumerate(s["results"]):
             if i in superseded[s["name"]]:
                 continue
             st = f[1]
             by_status[st] = by_status.get(st, 0) + 1
             if st != "Pass":
-                k = (st, cause(st, f[2], ex[i]))
+                k = (st, own.get(f[0]) or cause(st, f[2], ex[i]))
                 by_cause[k] = by_cause.get(k, 0) + 1
     return by_status, by_cause
 
@@ -313,8 +357,8 @@ def status_order(by_status):
         sorted(s for s in by_status if s not in STATUSES)
 
 
-def render_text(slices):
-    by_status, by_cause = tally(slices)
+def render_text(slices, per_case=False):
+    by_status, by_cause = tally(slices, per_case)
     out = ["slices: %d" % len(slices)]
     for st in status_order(by_status):
         out.append("%-22s %d" % (st, by_status[st]))
@@ -324,8 +368,8 @@ def render_text(slices):
     return "\n".join(out) + "\n"
 
 
-def render_markdown(slices):
-    by_status, by_cause = tally(slices)
+def render_markdown(slices, per_case=False):
+    by_status, by_cause = tally(slices, per_case)
     commits = sorted({s["meta"].get("commit", "")[:8] for s in slices})
     out = [BEGIN, "",
            "Slices: " + ", ".join("`%s`" % s["name"] for s in
@@ -483,6 +527,24 @@ def self_test():
          "--no-git", mp, r2x, r2y, b("rerun2unknown"))
     must("rerun list naming the slice itself", "rerun-target",
          "--check-cover", "--no-git", mp, r2x, r2y, b("rerun2self"))
+    # --per-case: the refusal line inside a case's output is its cause
+    pc = os.path.join(FIXTURES, "percase", "2026-11-08-t6-gles2-S1-00000000")
+    rc, o, _e = run("--tally", "--no-git", pc)
+    chk("per-case fixture, default tally: chunk-wide causes only",
+        rc == 0 and "NOT_BUILT" not in o
+        and re.search(r"Fail +1 +Image comparison", o) is not None)
+    rc, o, _e = run("--tally", "--per-case", "--no-git", pc)
+    chk("per-case: a Fail takes its own refusal as cause",
+        re.search(r"Fail +1 +refused:NOT_BUILT_BLEND_SHADER", o) is not None)
+    chk("per-case: a case after the refusal keeps its own cause",
+        re.search(r"NotSupported +1 +not supported", o) is not None)
+    chk("per-case: a chunk without a refusals file falls back",
+        re.search(r"InternalError +1 +refused:blend_equation_separate", o)
+        is not None)
+    chk("per-case: totals unchanged", re.search(r"^TOTAL +5$", o, re.M)
+        is not None)
+    chk("per-case: --check-doc is unchanged", run("--check-doc",
+        os.path.join(FIXTURES, "doc-current.md"), *good)[0] == 0)
     rc, _o, e = run("--check-cover", "--no-git", mp, os.path.join(FIXTURES, "nope"))
     chk("unreadable slice exits 2", rc == 2)
     # ancestor rule, in a throwaway repository
@@ -537,6 +599,7 @@ def self_test():
 def main(argv):
     git = True
     markdown = False
+    per_case = False
     main_ref = "origin/main"
     args = []
     mode = None
@@ -547,6 +610,8 @@ def main(argv):
             git = False
         elif a == "--markdown":
             markdown = True
+        elif a == "--per-case":
+            per_case = True
         elif a == "--main-ref":
             i += 1
             if i >= len(argv):
@@ -570,7 +635,8 @@ def main(argv):
                                       main_ref))
         if mode == "--tally" and args:
             s = [load_slice(p) for p in args]
-            sys.stdout.write(render_markdown(s) if markdown else render_text(s))
+            sys.stdout.write(render_markdown(s, per_case) if markdown
+                             else render_text(s, per_case))
             return 0
         if mode == "--check-doc" and len(args) >= 2:
             return report(check_doc(args[0], [load_slice(p) for p in args[1:]]))

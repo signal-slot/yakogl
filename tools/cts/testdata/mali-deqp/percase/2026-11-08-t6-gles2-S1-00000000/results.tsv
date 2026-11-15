@@ -1,0 +1,6 @@
+case	status	detail
+dEQP-GLES2.functional.a.one	Pass	Pass
+dEQP-GLES2.functional.a.two	Fail	Image comparison failed: max difference = (12, 0, 3)
+dEQP-GLES2.functional.a.three	NotSupported	not supported
+dEQP-GLES2.functional.b.four	Pass	Pass
+dEQP-GLES2.functional.b.five	InternalError	glDrawArrays: refused blend_equation_separate

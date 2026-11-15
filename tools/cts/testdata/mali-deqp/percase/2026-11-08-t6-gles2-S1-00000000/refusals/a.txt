@@ -1,0 +1,8 @@
+Test case 'dEQP-GLES2.functional.a.one'..
+  Pass (Pass)
+Test case 'dEQP-GLES2.functional.a.two'..
+yakogl: a draw was refused: NOT_BUILT_BLEND_SHADER: a blend shader other than a constant colour's is not built yet
+yakogl: a draw was refused: NOT_BUILT_OTHER
+  Fail (Image comparison failed)
+Test case 'dEQP-GLES2.functional.a.three'..
+  NotSupported (not supported)
