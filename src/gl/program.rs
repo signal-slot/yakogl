@@ -4076,7 +4076,7 @@ mod tests {
                  * the row of that name, or element j of the row `name[j]`
                  * belongs to, at the row's binding + j. */
                 let pr = &gl.ctx().objs().programs[obj_index(p)];
-                let rows: std::vec::Vec<(std::string::String, u8, u8)> = pr
+                let rows: std::vec::Vec<(std::string::String, u8, u16)> = pr
                     .rfs
                     .uniform_table()
                     .iter()
@@ -4090,7 +4090,7 @@ mod tests {
                     let binding = rows.iter().find(|r| r.0 == *name).map(|r| r.1).or_else(|| {
                         let (base, j) = name.rsplit_once('[')?;
                         let j: u8 = j.trim_end_matches(']').parse().ok()?;
-                        rows.iter().find(|r| r.0 == base && j < r.2).map(|r| r.1 + j)
+                        rows.iter().find(|r| r.0 == base && u16::from(j) < r.2).map(|r| r.1 + j)
                     });
                     let binding = binding.unwrap_or_else(|| panic!("{name}: no sampler row among {rows:?}"));
                     let want = gl.ctx().objs().textures[names[i] as usize].mem.gpu;
@@ -4877,7 +4877,7 @@ mod tests {
         assert_eq!((attrib_loc(p, "p"), attrib_loc(p, "q")), (2, 2));
     }
 
-    fn uni(name: &str, dword_off: u16, dwords: u16, gl_type: u32, array_len: u8) -> ShcUniform {
+    fn uni(name: &str, dword_off: u16, dwords: u16, gl_type: u32, array_len: u16) -> ShcUniform {
         let mut u = ShcUniform { dword_off, dwords, gl_type: gl_type as u16, array_len, inner: 1, ..ShcUniform::ZERO };
         util::set_name(&mut u.name, name.as_bytes());
         u
@@ -5366,7 +5366,7 @@ mod tests {
         (0..rows.div_ceil(255))
             .map(|k| {
                 let n = (rows - k * 255).min(255);
-                uni(&std::format!("v{k}"), 0, (4 * n) as u16, GL_FLOAT_VEC4, n as u8)
+                uni(&std::format!("v{k}"), 0, (4 * n) as u16, GL_FLOAT_VEC4, n as u16)
             })
             .collect()
     }
@@ -5442,7 +5442,7 @@ mod tests {
 
     /// An array of `n` 2D samplers from `binding` on: `n` active samplers.
     fn samplers(name: &str, binding: u8, n: u8) -> ShcUniform {
-        let mut u = uni(name, SHC_UNIFORM_NO_BLOCK, n as u16, GL_SAMPLER_2D, n);
+        let mut u = uni(name, SHC_UNIFORM_NO_BLOCK, n as u16, GL_SAMPLER_2D, n.into());
         u.binding = binding;
         u
     }
@@ -6650,7 +6650,7 @@ mod tests {
     /// .dimensionsInverted vec4[4] @440, u_suns.count @456. The vertex stage:
     /// u_xf.mvp and u_xf.model mat4 @0 and @16, u_xf.normalMatrix mat3 @32.
     fn lit_program(gl: &TestGl) -> GLuint {
-        let flat = |name: &str, off: u16, dwords: u16, ty: u32, len: u8, inner: u8| {
+        let flat = |name: &str, off: u16, dwords: u16, ty: u32, len: u16, inner: u8| {
             let mut u = uni(name, off, dwords, ty, len);
             u.inner = inner;
             u

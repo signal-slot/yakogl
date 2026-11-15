@@ -1516,8 +1516,8 @@ pub fn compile_fragment_for<'a>(
 
 /// Does sampler row (binding, array_len) cover a sampled binding? Element
 /// k of an array of samplers is binding `binding + k`.
-fn row_sampled(binding: u8, array_len: u8, sampled: &[u8]) -> bool {
-    let end = u16::from(binding) + u16::from(array_len.max(1));
+fn row_sampled(binding: u8, array_len: u16, sampled: &[u8]) -> bool {
+    let end = u16::from(binding) + array_len.max(1);
     sampled.iter().any(|&b| (u16::from(binding)..end).contains(&u16::from(b)))
 }
 

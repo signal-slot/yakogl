@@ -56,7 +56,7 @@ pub struct UniformRow<'a> {
     pub dword_off: u16,
     pub dwords: u16,
     pub gl_type: u16,
-    pub array_len: u8,
+    pub array_len: u16,
     /// Samplers: the texture unit. Zero for a block member.
     pub binding: u8,
     /// Elements per outer index of a flattened array-of-structs member.
@@ -810,7 +810,7 @@ fn push_block_member<'a>(
             dword_off: fit_u16(off, line, name)?,
             dwords: fit_u16(stride * count, line, name)?,
             gl_type,
-            array_len: fit_u8(count, line, name)?,
+            array_len: fit_u16(count, line, name)?,
             binding: 0,
             inner: 1,
             statically_used: true,
@@ -1117,7 +1117,7 @@ fn sampler_row<'a>(
         dword_off: NO_BLOCK,
         dwords: fit_u16(count, line, name)?,
         gl_type,
-        array_len: fit_u8(count, line, name)?,
+        array_len: fit_u16(count, line, name)?,
         binding: fit_u8(*next, line, name)?,
         inner: 1,
         statically_used: true,
@@ -1515,7 +1515,7 @@ mod tests {
         }
     }
 
-    type Row = (std::string::String, u16, u16, u16, u8, u8);
+    type Row = (std::string::String, u16, u16, u16, u16, u8);
 
     fn rows(r: &Reflection<'_>) -> std::vec::Vec<Row> {
         r.uniforms
@@ -1524,7 +1524,7 @@ mod tests {
             .collect()
     }
 
-    fn row(name: &str, off: u16, dwords: u16, gl_type: u16, len: u8, binding: u8) -> Row {
+    fn row(name: &str, off: u16, dwords: u16, gl_type: u16, len: u16, binding: u8) -> Row {
         (name.to_string(), off, dwords, gl_type, len, binding)
     }
 
@@ -1689,7 +1689,7 @@ mod tests {
             "precision mediump float;\nuniform sampler2D a;\nuniform sampler2D s[3];\n\
              struct T { samplerCube c[2]; sampler2D d; };\nuniform T t;\nvoid main() {}",
         );
-        let rows: std::vec::Vec<(&str, u8, u8, u16)> =
+        let rows: std::vec::Vec<(&str, u8, u16, u16)> =
             r.uniforms.iter().map(|u| (u.name, u.binding, u.array_len, u.dword_off)).collect();
         assert_eq!(
             rows,

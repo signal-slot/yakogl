@@ -945,7 +945,7 @@ pub struct ShcUniform {
     pub dword_off: u16,
     pub dwords: u16,
     pub gl_type: u16,
-    pub array_len: u8,
+    pub array_len: u16,
     /// Samplers: descriptor binding (texture unit).
     pub binding: u8,
     /// Elements per outer index of a flattened array-of-structs member (0 = 1).
@@ -1492,7 +1492,7 @@ impl ShcShader {
         self.uniform_table()
             .iter()
             .filter(|su| su.dword_off == SHC_UNIFORM_NO_BLOCK)
-            .flat_map(|su| (0..su.array_len.max(1)).map(move |k| (su.binding.saturating_add(k), su.gl_type)))
+            .flat_map(|su| (0..su.array_len.max(1)).map(move |k| (su.binding.saturating_add(k as u8), su.gl_type)))
     }
 }
 

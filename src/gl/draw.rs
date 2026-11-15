@@ -10886,7 +10886,7 @@ mod tests {
                 let mut row = ShcUniform::ZERO;
                 util::set_name(&mut row.name, b"u_s");
                 (row.dword_off, row.gl_type, row.binding, row.array_len, row.dwords) =
-                    (SHC_UNIFORM_NO_BLOCK, GL_SAMPLER_2D as u16, 0, n, n as u16);
+                    (SHC_UNIFORM_NO_BLOCK, GL_SAMPLER_2D as u16, 0, n as u16, n as u16);
                 table.push(row);
                 let table: &'static [ShcUniform] = Vec::leak(table);
                 p.rvs.uniforms = table.as_ptr();
