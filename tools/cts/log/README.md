@@ -49,6 +49,7 @@ the plan item's letter) — the newest one and the model for what follows.
   verdict=done boot=uboot-mmc row boot_verdict=done result=... resets=absent
   record=... back_after=531s`. A clean row is `verdict=done` with `resets`
   absent or 0; `done_with_resets`, `done_lossy` (with `lost=<n>`),
+  `done_stopped` (dEQP ended the session early),
   `scan_failed`, `died_after=<stage>` and a row that took the 600 s RTI
   watchdog are named as such, with the rerun that replaced them.
 - **Resets**: per row and for the session — GPU recoveries (AM62P: from the

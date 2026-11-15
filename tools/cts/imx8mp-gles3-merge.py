@@ -38,7 +38,7 @@ tools/cts/check-imx8mp-gles3-tree.py does (dEQP's filter: comma-separated patter
            problems on stderr and go on. Also exit 1 when an entry has no record ('no record: N of 133 entries
            (span)'; --partial allows it, for one slice alone), when a slice README has no verdict lines, or
            when an entry's `board.sh <board> e<NN> rc=.. verdict=.. resets=..` line is not verdict=done with
-           resets absent or 0 (done_with_resets, done_lossy, died_after=..., ...).
+           resets absent or 0 (done_with_resets, done_lossy, done_stopped, died_after=..., ...).
            A row whose fields are all '-' (board.sh tally's row for an entry a TREE_ROWS slice did not run)
            claims nothing when another input has a real row; with none it is a no-record entry.
 """

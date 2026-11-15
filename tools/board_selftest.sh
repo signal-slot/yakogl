@@ -1217,6 +1217,40 @@ check "the mustpass table has a lost column of 261 and calls none of them NoResu
           [ "$(grep -c "^Lost dEQP" "$S/lossy-tally.txt")" = 261 ]'
 check "a complete dEQP record keeps verdict=done (TF)" says pi4 "$S/pi4/full/20261003-1300-TF-0123abcd" "verdict=done "
 
+echo "== 3c3. a dEQP session that dEQP ended itself (complete=0): done_stopped, not done"
+# stopped_console COMPLETE: the console of a session of two cases, as
+# driver/samples/zephyr/deqp/src/main.cpp prints it; its "done" line says
+# whether dEQP went through its whole case list (1) or ended early (0).
+stopped_console() {
+    local c
+    for c in a b; do
+        printf '%s\r\n' "Test case 'dEQP-GLES2.info.$c'.." "deqp: Pass dEQP-GLES2.info.$c" '  Pass (Pass)'
+    done
+    printf '%s\r\n' "deqp: done: 2 passed, 0 failed, 0 not supported, 0 warnings, complete=$1" \
+        'deqp: summary: 2 cases begun, 2 with a result, 0 without'
+}
+for bb in pi4:tryboot nanopc-t6:kexec-dev; do
+    b=${bb%%:*}
+    for c in 0 1; do
+        d="$S/stopped/$b/20261116-0400-c$c-0123abcd"
+        mkrun "$d" "board=$b" "boot=${bb#*:}" "name=c$c" probe=0 back=1 t_reboot=100 t_back=130
+        stopped_console "$c" > "$d/console.txt"
+    done
+    check "$b: a session dEQP ended early (complete=0) is done_stopped rc 4, its summary line still the result" \
+        says "$b" "$S/stopped/$b/20261116-0400-c0-0123abcd" "rc=4 verdict=done_stopped .*result=legacy:deqp_summary "
+    check "$b: the same session with complete=1 is done rc 0" \
+        says "$b" "$S/stopped/$b/20261116-0400-c1-0123abcd" "rc=0 verdict=done .*result=legacy:deqp_summary "
+done
+# a stopped session of a lossy capture: the stop is named, the lost count stays on the line
+ds="$S/stopped/pi4/20261116-0400-lossy-0123abcd"
+mkrun "$ds" board=pi4 boot=tryboot name=lossy probe=0 back=1 t_reboot=100 t_back=130
+stopped_console 0 | sed 's/2 cases begun, 2 with a result/5 cases begun, 5 with a result/' > "$ds/console.txt"
+check "pi4: a stopped session whose capture also lost 3 result lines: done_stopped with lost=3 (not done_lossy)" \
+    says pi4 "$ds" "rc=4 verdict=done_stopped .* lost=3$"
+"$B" pi4 tally "$S/stopped/pi4" > "$S/stopped-tally.txt" 2>&1
+check "the tree tally names the stopped sessions STOPPED and the complete one not" \
+    eval '[ "$(grep -c "STOPPED: dEQP ended the session early (complete=0)" "$S/stopped-tally.txt")" = 2 ]'
+
 echo "== 3d. Pi 4 tree tally and diff against the old Pi 4 tree runner's (old-runner-outputs.txt)"
 "$B" pi4 tally "$S/pi4/full" > "$S/new-tally.txt" 2>&1
 P="pi4 tree runner: tally (TF, XT)"
