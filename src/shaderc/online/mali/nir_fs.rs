@@ -5273,7 +5273,7 @@ fn walk_nodes(
 ///
 /// Measured otherwise, and so refused:
 /// - a raw constant fp16 does not hold (`vec3(a2, 0.1)`,
-///   fstex_cubedir_rawtenth): Mesa rounds it to fp16 and reads the
+///   fstex_cubeno_texcoord_rawtenth): Mesa rounds it to fp16 and reads the
 ///   widened value from an FAU word; the raw lanes here keep the fp32
 ///   constant;
 /// - raw lanes beside a uniform (`vec3(a2, u)`): Mesa keeps the varying
@@ -7707,7 +7707,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                      * ([`ADMITTED`]): a form in a place no reference
                      * draws is refused here as it is there (`a2 * -3.0 +
                      * 0.25`: Mesa's FMA reads -3.0 as a FAU word,
-                     * ours its negation, fstex_cubedir_fmanegk) */
+                     * ours its negation, fstex_cubeno_operandform_fmanegk) */
                     pr.note(xy, Place::Output, &mut f.prods);
                     if f.prods & !ADMITTED != 0 {
                         return Err(MaliError::FsOperandForm);
