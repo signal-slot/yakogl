@@ -82,6 +82,16 @@ at `BOARD_HOST` unset, and `ask_farm` for the board's login timed out. No
 jump, no image, the board was not touched. `gc_tiled_rt` (W1 to W5) is already
 on main, so no host change was made.
 
+## Seventh attempt (plan #355, 2026-11-15): still no measurement
+
+Host `orion` again, no `target:x2` or `target:x2-console` lease in the task:
+`getent hosts armadillo` returned nothing and `tools/board.sh x2 status`
+stopped at `BOARD_HOST` unset. No jump, no image, the board was not touched.
+`gc_tiled_rt` (W1 to W5) is on main, so no host change was made. The earlier
+closed pull request (`cf0709ff`, the W8/W9 fast-clear word builders in
+`rs_clear.rs` with no caller) failed CI and was not reused: W7 to W9 wait for
+session A.
+
 ## What is left
 
 Rerun from one of the nodes that log in (see the checks above), with
