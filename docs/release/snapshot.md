@@ -122,6 +122,98 @@ change the file in an ordinary commit.
 
 ## Procedure and rehearsal
 
-Placeholder. The snapshot-rehearsal item fills this in: how to run
-`tools/release/make-snapshot.py` and the scan, and the result of the
-rehearsal on the origin/main tip.
+### Procedure
+
+From a clean checkout of this repository (the tool refuses uncommitted
+changes to tracked files, exit 4), with `OUT` an absent or empty directory
+outside the checkout and under `$TMPDIR`, never `/tmp`:
+
+```sh
+python3 -I tools/release/make-snapshot.py --self-test
+GIT_AUTHOR_NAME='<name>' GIT_AUTHOR_EMAIL='<email>' GIT_AUTHOR_DATE='<date>' \
+  python3 -I tools/release/make-snapshot.py <rev> "$OUT"
+# or: python3 -I tools/release/make-snapshot.py \
+#       --author '<name> <<email>>' --date '<date>' <rev> "$OUT"
+git -C "$OUT" rev-list --count HEAD    # 1
+git -C "$OUT" log --format=%P          # empty: no parent
+git -C "$OUT" remote                   # empty: no remote
+```
+
+The tool prints `source`, `snapshot`, `files` and `exclusions:` (its
+`--help` gives the exit codes). Then, inside `$OUT`, with the snapshot's own
+copies of the tools:
+
+```sh
+python3 -I tools/release/redaction-scan.py HEAD
+YAKOGL_REDACTION_PRIVATE_FILE=<file outside the repo> \
+  python3 -I tools/release/redaction-scan.py HEAD
+python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license
+python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license,undecided
+```
+
+Where commands cannot run inside `$OUT`, run them from the source checkout
+instead. Use the same tools (byte-equal), the snapshot's commit (after
+`git fetch "$OUT" HEAD`, scan `FETCH_HEAD`), `--allow
+"$OUT/tools/release/redaction-scan.allow"` for the scan and `--root "$OUT"`
+for the audit.
+
+Line 8 needs exit 0 from the second command (all classes ran, 0 H/M); exit 3
+from the first is "private classes not run", not a pass. The snapshot
+directory is removed after a rehearsal; nothing is pushed and no remote is
+added.
+
+### Rehearsal on the origin/main tip (2026-11-15)
+
+- **R** (source): `cc2cc536c12a6778b348a28f3ef215127f509b78`, origin/main's
+  tip as last fetched by the farm (a fresh `git fetch origin` was not possible
+  from the worker).
+- **Identity and date**: `YakoGL rehearsal <rehearsal@example.invalid>`,
+  `2026-11-15T00:00:00+00:00`, given as `--author` and `--date`.
+- **Tool output**: `source cc2cc536c12a6778b348a28f3ef215127f509b78`,
+  `snapshot 02b31704b517434f65f2e9d314b0a63c9093e9be`, `files 6892`,
+  `exclusions: none (tools/release/snapshot-exclude lists no path)`; exit 0.
+  The self-test passed.
+- **Shape**: `git rev-list --count 02b31704` 1; `git log --format=%P` empty;
+  `.git/config` of the snapshot has no `[remote]` section (no remote). Author
+  and committer are the rehearsal identity at `2026-11-15T00:00:00Z`. The
+  snapshot's tree (`b295edbf`) is R's tree byte for byte. `fresh/yakogl`
+  (Undecided item 6) is no longer in R's tree, so no gitlink was carried.
+- **Redaction scan, public classes**: exit **3**, "0 H/M finding(s), 3
+  class(es) not run, 98 informational, 128 look-alike(s) dropped: NOT
+  COMPLETE (private classes not run)" (6669 files scanned). Exit 3 is not a
+  pass. The scan ran on the snapshot commit (fetched into the source
+  checkout) with the snapshot's own `redaction-scan.allow` (`--allow`); the
+  script is byte-equal to the snapshot's copy.
+- **Redaction scan, private classes**: not run on this snapshot; no
+  private-values file exists on the farm, and the worker could not put a
+  value set in the scan's environment. This is a gap, not a pass. An earlier
+  run with a partial set held in process memory only, as in `da99b2d7`, on
+  the snapshot of an earlier tip (`2b94031f`) found the 7 `lab-host` hits
+  below; their lines are unchanged at R.
+- **Licence audit** (`--root` the snapshot, byte-equal script): exit **0**
+  with the five `--fail-on` classes, exit **0** with `,undecided` appended:
+  6858 files, 3117 with an SPDX line, 3428 allowlisted; missing-spdx 0,
+  unknown-id 0, unused-license 0, third-party-mismatch 0, undecided 0,
+  generated 71 (mismatch 0), third-party-unlabelled 13 (information);
+  findings 0.
+
+H/M hits on the snapshot (masked; paths and lines in the snapshot, the same
+as in R): none on the public classes. R's allow file carries the rules for
+the three fixture values of `tools/probes/rpi5_display/verdicts_selftest.sh`
+that earlier tips reported. From the earlier private run:
+
+| Class | Where | Value | Disposition |
+|---|---|---|---|
+| `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:41` | `L***[6]` ×2, `h***[4]` | open: farm machine names in a board note; plan #363's notes-hostnames item rewords them |
+| `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:42` | `n***[5]`, `n***[3]`, `s***[8]` | open: as above |
+| `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:43` | `n***[5]` | open: as above |
+
+The same note also names a worker's host (`o***[5]`) at lines 32, 42, 52,
+62, 71, 79 and 87; the partial set did not hold it, so whether the private
+class counts it is the owner's set to decide. The notes-hostnames item
+covers the file. None was fixed in the rehearsal. R does not meet line 8: the private
+classes have not passed on it. Checklist row 8 is unchanged.
+
+The real snapshot of the commit to publish, line 8 on it with the owner's
+private file, D7 (promote and make public) and D8 (the date) are the
+owner's, with the first tag of #1606 step 8.
