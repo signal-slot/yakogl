@@ -1484,7 +1484,7 @@ impl<'a> Lower<'_, 'a> {
     fn builtin_output_names(&self) -> &'static [&'static str] {
         match self.stage {
             Stage::Vertex => &["gl_Position", "gl_PointSize"],
-            Stage::Fragment => &["gl_FragColor", "gl_FragDepth"],
+            Stage::Fragment => &["gl_FragColor", "gl_FragDepth", "gl_FragData"],
         }
     }
 
@@ -1514,6 +1514,13 @@ impl<'a> Lower<'_, 'a> {
 
     /// Record a built-in output the shader writes, once, and give its slot.
     fn output_slot(&mut self, name: &'a str) -> R<'a, (ir::IoSlot, u8)> {
+        /* `gl_FragData` has no output slot of its own: its one element is the
+         * fragment colour output (`frag_data_slot`, the same slot as
+         * `gl_FragColor`). Holding it in a local, for a shader that reads it
+         * back, still stores it there at the end of `main`. */
+        if self.stage == Stage::Fragment && name == "gl_FragData" {
+            return Ok((self.frag_data_slot(name)?, 4));
+        }
         if let Some((slot, kind, comps)) = self.builtin_output(name) {
             if !self.outputs.as_slice().iter().any(|o| o.name == name) {
                 self.outputs.push(
@@ -1588,15 +1595,35 @@ impl<'a> Lower<'_, 'a> {
         for i in 0..names.len() {
             let name = names.as_slice()[i];
             let declared = self.global_type(name);
-            let is_array = declared.is_some_and(|t| t.array_len.is_some());
+            /* `gl_FragData` is a built-in array of one element (ES 2.0 has one
+             * draw buffer): it is held as a run of one slot, but only when the
+             * shader does more than write an element, which keeps the direct
+             * store of every write-only shader (dEQP fragdata). */
+            let frag_data = self.stage == Stage::Fragment && name == "gl_FragData";
+            let is_array = declared.is_some_and(|t| t.array_len.is_some()) || frag_data;
             /* An array is always held: even assigned whole (`v = T[2](...)`,
              * ES 3.00) it is its elements, which a direct store cannot take. */
-            if self.output_is_written_whole(name) && !is_array {
+            if frag_data {
+                if self.frag_data_is_only_written() {
+                    continue;
+                }
+            } else if self.output_is_written_whole(name) && !is_array {
                 continue;
             }
             if !self.ast.exprs.iter().any(|e| matches!(e, Expr::Ident(n) if *n == name)) {
                 /* Not mentioned at all: nothing to shadow. */
                 continue;
+            }
+            if frag_data && self.ast.exprs.iter().any(|e| matches!(e, Expr::Ident("gl_FragColor"))) {
+                /* The held element is stored to the colour output at the end
+                 * of `main`: beside a `gl_FragColor` that store would
+                 * overwrite its colour with a slot the shader may never have
+                 * written (GLSL ES 1.00, section 7.2: one of the two). */
+                return Err(Error::new(
+                    0,
+                    "gl_FragData",
+                    "gl_FragData is read back in a shader that also uses gl_FragColor; use one of them",
+                ));
             }
             let (_, comps) = self.output_slot(name)?;
             let id = ir::LocalId(self.locals.len() as u32);
@@ -1717,6 +1744,29 @@ impl<'a> Lower<'_, 'a> {
     /// The shadow slot for `name`, if it has one.
     fn shadow_of(&self, name: &str) -> Option<Local<'a>> {
         self.shadows.as_slice().iter().find(|(n, _)| *n == name).map(|(_, l)| *l)
+    }
+
+    /// Is every mention of `gl_FragData` the element on the left side of a
+    /// plain assignment (`gl_FragData[i] = v;`)? Then it needs no slot: the
+    /// element is stored directly. A read (`gl_FragData[0] *= x`, an operand)
+    /// or a partial write (`gl_FragData[0].a = x`) is another mention, and
+    /// the shader reads its own output (GLSL ES 1.00, section 7.2: the values
+    /// written "may be read back after writing them").
+    fn frag_data_is_only_written(&self) -> bool {
+        let mentions = self.ast.exprs.iter().filter(|e| matches!(e, Expr::Ident("gl_FragData"))).count();
+        let plain = self
+            .ast
+            .exprs
+            .iter()
+            .filter(|e| match e {
+                Expr::Assign(None, lhs, _) => match *self.ast.expr(*lhs) {
+                    Expr::Index(base, _) => matches!(self.ast.expr(base), Expr::Ident("gl_FragData")),
+                    _ => false,
+                },
+                _ => false,
+            })
+            .count();
+        mentions == plain
     }
 
     /// Is every mention of this output the whole left side of a plain
@@ -2871,7 +2921,28 @@ impl<'a> Lower<'_, 'a> {
                  * fragment shader and says so first ("undeclared
                  * identifier"), which is the better message anyway. A second
                  * copy here could only rot. */
-                if bname == "gl_FragData" {
+                if bname == "gl_FragData" && self.shadow_of(bname).is_some() {
+                    /* Held in a local because the shader reads it back or
+                     * writes part of it: the write goes to that local array
+                     * below, like any element of one. Only the refusal of an
+                     * index other than 0 stays here, so that it keeps its own
+                     * message ("only gl_FragData[0] exists") rather than the
+                     * local array's "index out of range".
+                     *
+                     * A run-time index differs from the direct store below:
+                     * here it selects an element, so an index other than 0
+                     * writes nothing; there it is evaluated and the colour
+                     * is stored anyway. Both are out of range, which section
+                     * 4.1.9 leaves undefined (gl_MaxDrawBuffers is 1). */
+                    if reflect::const_int_expr(self.ast, idx).is_some_and(|n| n != 0) {
+                        return Err(Error::new(
+                            0,
+                            bname,
+                            "OpenGL ES 2.0 has one draw buffer, so only gl_FragData[0] exists",
+                        ));
+                    }
+                }
+                if bname == "gl_FragData" && self.shadow_of(bname).is_none() {
                     /* A constant EXPRESSION, not only a literal: `0 + 1` is
                      * the second draw buffer and gets the verdict below. */
                     let Some(n) = reflect::const_int_expr(self.ast, idx) else {
@@ -10922,6 +10993,149 @@ mod tests {
         let l = lowered(&mut buf, "attribute vec4 a;\nvoid main() { gl_Position = a; }", Stage::Vertex);
         assert!(l.module.locals.is_empty(), "no slot");
         assert_eq!(l.module.instrs.len(), 2, "a load and a store, as before");
+    }
+
+    /// `gl_FragData[0]` is the other spelling of `gl_FragColor` and, like it,
+    /// can be read back after it is written (GLSL ES 1.00, section 7.2). It
+    /// used to be refused ("reading this is not lowered yet") while
+    /// `gl_FragColor *= x;` compiled: Qt Graphs' shaders end with
+    /// `fragColor = fragColor * qt_Opacity;`, which the shader baker spells
+    /// `gl_FragData[0] *= ...;`. Read or partly written, it is held in a slot
+    /// and stored once at the end of `main`, as `gl_FragColor` is.
+    #[test]
+    fn a_fragdata_output_read_back_is_held_in_a_slot() {
+        for src in [
+            "precision mediump float;\nuniform float u_o;\n\
+             void main() { gl_FragData[0] = vec4(1.0); gl_FragData[0] *= u_o; }",
+            "precision mediump float;\nuniform float u_o;\n\
+             void main() { gl_FragData[0] = vec4(1.0); gl_FragData[0] = gl_FragData[0] * u_o; }",
+            "precision mediump float;\nuniform vec4 u_c;\n\
+             void main() { gl_FragData[0] = u_c; gl_FragData[0].a = gl_FragData[0].r; }",
+        ] {
+            let mut buf = [0u8; 1 << 18];
+            let l = lowered(&mut buf, src, Stage::Fragment);
+            let m = &l.module;
+            assert_eq!(m.locals.len(), 1, "one slot, for gl_FragData: {src}");
+            assert_eq!(m.locals[0].name, "gl_FragData");
+            let stores = m.instrs.iter().filter(|o| matches!(o, Op::StoreOutput { .. })).count();
+            assert_eq!(stores, 1, "the output is written once: {src}");
+            assert!(
+                matches!(m.instrs.last(), Some(Op::StoreOutput { slot: ir::IoSlot::FragColor(0), .. })),
+                "and it is the last thing that happens, to colour output 0: {src}"
+            );
+        }
+    }
+
+    /// The partial write is a masked store of the one lane.
+    #[test]
+    fn a_fragdata_partial_write_is_a_masked_store_of_its_lane() {
+        let mut buf = [0u8; 1 << 18];
+        let l = lowered(
+            &mut buf,
+            "precision mediump float;\nuniform vec4 u_c;\n\
+             void main() { gl_FragData[0] = u_c; gl_FragData[0].a = gl_FragData[0].r; }",
+            Stage::Fragment,
+        );
+        let masks: std::vec::Vec<u8> = l
+            .module
+            .instrs
+            .iter()
+            .filter_map(|o| if let Op::StoreLocal { write_mask, .. } = *o { Some(write_mask) } else { None })
+            .collect();
+        assert_eq!(masks, [0b1111, 0b1000], "the whole assignment, then w alone");
+    }
+
+    /// A run-time index read picks among the held elements; there is one
+    /// draw buffer, so it is a select over one element and the output is
+    /// still stored once.
+    #[test]
+    fn a_fragdata_read_at_a_run_time_index_lowers() {
+        let mut buf = [0u8; 1 << 18];
+        let l = lowered(
+            &mut buf,
+            "precision mediump float;\nuniform int u_i;\n\
+             void main() { gl_FragData[0] = vec4(1.0); gl_FragData[0] = gl_FragData[u_i] * 0.5; }",
+            Stage::Fragment,
+        );
+        let stores = l.module.instrs.iter().filter(|o| matches!(o, Op::StoreOutput { .. })).count();
+        assert_eq!(stores, 1, "the output is written once");
+    }
+
+    /// The shape of the Qt Graphs 2D fragment shaders after the shader baker
+    /// (written here, not copied: a struct uniform with the opacity, a value
+    /// computed from the interpolants, then `gl_FragData[0] *= opacity`).
+    #[test]
+    fn a_fragdata_shader_shaped_like_qt_graphs_lowers() {
+        let mut buf = [0u8; 1 << 19];
+        let l = lowered(
+            &mut buf,
+            "precision highp float;\n\
+             struct buf { mat4 qt_Matrix; float qt_Opacity; vec3 iResolution; vec4 color; float lineWidth; };\n\
+             uniform buf _29;\n\
+             varying vec2 fragCoord;\n\
+             void main() {\n\
+                 float line = abs(2.0 * fract(fragCoord.y / _29.iResolution.y) - 1.0);\n\
+                 float alpha = smoothstep(0.0, _29.lineWidth, line) * _29.color.w;\n\
+                 vec3 lineColor = mix(vec3(0.0), _29.color.xyz, vec3(alpha));\n\
+                 gl_FragData[0] = vec4(lineColor, alpha);\n\
+                 gl_FragData[0] *= _29.qt_Opacity;\n\
+             }\n",
+            Stage::Fragment,
+        );
+        let stores = l.module.instrs.iter().filter(|o| matches!(o, Op::StoreOutput { .. })).count();
+        assert_eq!(stores, 1, "the output is written once");
+    }
+
+    /// A shader that only writes `gl_FragData[0]` keeps the direct store and
+    /// gets no slot, as one that only assigns `gl_FragColor` does.
+    #[test]
+    fn a_fragdata_output_only_written_needs_no_slot() {
+        let mut buf = [0u8; 1 << 18];
+        let l =
+            lowered(&mut buf, "precision mediump float;\nvoid main() { gl_FragData[0] = vec4(0.5); }", Stage::Fragment);
+        assert!(l.module.locals.is_empty(), "no slot");
+        let stores = l.module.instrs.iter().filter(|o| matches!(o, Op::StoreOutput { .. })).count();
+        assert_eq!(stores, 1, "the direct store");
+    }
+
+    /// A held `gl_FragData[0]` is stored at the end of `main` to the colour
+    /// output, so a shader that also uses `gl_FragColor` would have its colour
+    /// overwritten by a slot it never wrote (GLSL ES 1.00, section 7.2: one of
+    /// the two, and a read before a write is undefined). It is refused by name.
+    #[test]
+    fn a_fragdata_read_back_beside_fragcolor_is_refused() {
+        for src in [
+            "precision mediump float;\nvoid main() { gl_FragColor = vec4(1.0); gl_FragColor = gl_FragData[0] * 2.0; }",
+            "precision mediump float;\nvoid main() { gl_FragData[0] = vec4(1.0); gl_FragData[0] *= 0.5; gl_FragColor = vec4(1.0); }",
+        ] {
+            let mut buf = [0u8; 1 << 18];
+            let a = Arena::new(&mut buf);
+            match compile_to_ir(&a, Stage::Fragment, src) {
+                Ok(_) => panic!("expected a compile failure for {src:?}"),
+                Err(e) => assert!(e.msg.contains("gl_FragColor"), "{src:?}: {}", e.msg),
+            }
+        }
+    }
+
+    /// Only index 0 exists in ES 2.0 (one draw buffer). A shader that also
+    /// reads `gl_FragData[0]` still gets the refusal by name for a write at
+    /// another index, and an index that is out of range is refused for a read.
+    #[test]
+    fn a_fragdata_index_other_than_zero_is_still_refused_when_read_back() {
+        let refused = |src: &str| {
+            let mut buf = [0u8; 1 << 18];
+            let a = Arena::new(&mut buf);
+            match compile_to_ir(&a, Stage::Fragment, src) {
+                Ok(_) => panic!("expected a compile failure for {src:?}"),
+                Err(e) => std::string::String::from(e.msg),
+            }
+        };
+        let w = refused("precision mediump float;\nvoid main() { gl_FragData[0] *= 0.5; gl_FragData[1] = vec4(1.0); }");
+        assert!(w.contains("only gl_FragData[0] exists"), "{w}");
+        let r = refused(
+            "precision mediump float;\nvoid main() { gl_FragData[0] = vec4(1.0); gl_FragData[0] = gl_FragData[1]; }",
+        );
+        assert!(r.contains("out of range"), "{r}");
     }
 
     /// An lvalue swizzle names its lanes by the DESTINATION, so `c.zx = v`

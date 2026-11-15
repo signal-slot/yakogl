@@ -118,6 +118,51 @@ fn valid_dynamic_index() {
     assert_eq!(ok(Stage::Fragment, &valid_fs("int(v_index)")), 1);
 }
 
+/// The fragment shaders that read `gl_FragData[0]` back after writing it:
+/// GLSL ES 1.00 section 7.2, "the values written to these variables may be
+/// read back after writing them". Qt's shader baker spells
+/// `fragColor = fragColor * qt_Opacity;` this way (the compound form).
+const READ_BACK_FS: [(&str, &str); 4] = [
+    (
+        "compound",
+        "varying mediump vec4 v_color;\nuniform mediump float u_o;\n\
+         void main (void)\n{\n    gl_FragData[0] = v_color;\n    gl_FragData[0] *= u_o;\n}\n",
+    ),
+    (
+        "read_operand",
+        "varying mediump vec4 v_color;\nuniform mediump float u_o;\n\
+         void main (void)\n{\n    gl_FragData[0] = v_color;\n    gl_FragData[0] = gl_FragData[0] * u_o;\n}\n",
+    ),
+    (
+        "partial_write",
+        "varying mediump vec4 v_color;\n\
+         void main (void)\n{\n    gl_FragData[0] = v_color;\n    gl_FragData[0].a = gl_FragData[0].r;\n}\n",
+    ),
+    (
+        "dynamic_index",
+        "varying mediump vec4 v_color;\nvarying mediump float v_index;\n\
+         void main (void)\n{\n    gl_FragData[0] = v_color;\n    gl_FragData[0] = gl_FragData[int(v_index)] * 0.5;\n}\n",
+    ),
+];
+
+/// A read of `gl_FragData[0]` compiles, and the colour output is still stored
+/// once (the read-back value is held and stored at the end of `main`).
+#[test]
+fn valid_read_back() {
+    ok(Stage::Vertex, VALID_VS);
+    for (name, fs) in READ_BACK_FS {
+        assert_eq!(compile(Stage::Fragment, fs), Ok(1), "{name}");
+    }
+}
+
+/// Reading back does not lift the rule that only index 0 exists.
+#[test]
+fn read_back_with_index_1_is_refused() {
+    let fs = "void main (void)\n{\n    gl_FragData[0] *= 0.5;\n    gl_FragData[1] = vec4(1.0);\n}\n";
+    let m = refused(Stage::Fragment, fs);
+    assert!(m.contains("one draw buffer"), "{m}");
+}
+
 /// fragdata.test:2. The case is NotSupported on a context whose
 /// GL_MAX_DRAW_BUFFERS query answers more than 1; with the query refused
 /// (report-es2) it runs, and the compile must fail.
@@ -426,6 +471,21 @@ mod gl_api {
             assert!(p.vs.0, "{name}: the vertex shader is valid: {:?}", p.vs.1);
             assert!(!p.fs.0, "{name}: compiled");
             assert_eq!(expect_compile_fail(&p), Ok(()), "{name}");
+            // SAFETY: a plain GL call.
+            unsafe { glDeleteProgram(p.id) };
+        }
+    }
+
+    /// The read-back shaders go through the public API as well: each compiles
+    /// and the program links.
+    #[test]
+    fn read_back_compiles_and_links() {
+        let _g = context();
+        for (name, fs) in super::READ_BACK_FS {
+            let p = program(VALID_VS, fs);
+            assert!(p.vs.0, "{name}: vertex shader: {:?}", p.vs.1);
+            assert!(p.fs.0, "{name}: gl_FragData read back: {:?}", p.fs.1);
+            assert!(p.linked, "{name}: link failed");
             // SAFETY: a plain GL call.
             unsafe { glDeleteProgram(p.id) };
         }
