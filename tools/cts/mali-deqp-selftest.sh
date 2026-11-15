@@ -9,7 +9,8 @@
 # clean run, a crash mid-row with resume, a hang hitting the timeout, a panthor
 # job-timeout line counted in resets, a missing "yakogl-mali: loaded" line
 # (wrong-lib), lost ssh, a commit not on the main ref refused, and --dry-run
-# making no ssh call (also bare, without --build and --out, with fakes that fail); that the slice keeps no host name or address;
+# making no ssh call (also bare, without --build and --out, with fakes that fail); --out equal to the raw
+# log directory refused; that the slice keeps no host name or address;
 # and the default 256x256 pbuffer; and the hold deadline (exit 11, the cut rows
 # Lost not-run, the slice written, the lock released).
 #
@@ -20,7 +21,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-deqp-run
 RUN=$HERE/mali-deqp-run.sh
-EXPECT=45
+EXPECT=46
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-selftest-XXXXXX")
 # The fake board's dmesg -w of the lost-ssh case is never stopped by the
 # runner (the board is gone): end every process still reading under $tmp.
@@ -208,7 +209,7 @@ bare a --dry-run --rows 1-1 --tree "$FIX/tree.txt"
 check "--dry-run --rows 1-1 --tree T without --build/--out exits 0 and prints the plan" \
   bash -c "[ \"\$(cat '$tmp/bare/a.rc')\" = 0 ] && grep -q 'build: not given' '$tmp/bare/a.txt' &&
     grep -q 'skipped (no build)' '$tmp/bare/a.txt' && grep -q 'row 1 T1: 6 case(s)' '$tmp/bare/a.txt' &&
-    grep -q 'slice .*build/mali-deqp-run/adhoc-rows1-1,' '$tmp/bare/a.txt'"
+    grep -q 'slice .*build/mali-deqp-slice/adhoc-rows1-1, raw logs .*build/mali-deqp-run/adhoc-rows1-1\$' '$tmp/bare/a.txt'"
 MALI_DEQP_TREE=$FIX/tree.txt bare b --dry-run --rows 1-1
 check "the bare form takes its tree from MALI_DEQP_TREE" \
   bash -c "[ \"\$(cat '$tmp/bare/b.rc')\" = 0 ] && grep -q 'row 1 T1: 6 case(s)' '$tmp/bare/b.txt'"
@@ -220,6 +221,13 @@ check "a bare dry run never calls ssh or scp and creates nothing" \
 bare d --rows 1-1 --tree "$FIX/tree.txt"
 check "a real run without --build or --out still exits 1 (usage)" \
   bash -c "[ \"\$(cat '$tmp/bare/d.rc')\" = 1 ]"
+mkdir -p "$tmp/same"
+(cd "$tmp/bare" && env PATH="$tmp/nobin:$PATH" RAW_DIR="$tmp/same/o" \
+  bash "$RUN" --build "$FIX/fixture-build" --out "$tmp/same/o" --rows 1-1 --tree "$FIX/tree.txt" > "$tmp/same/out.txt" 2>&1
+  echo $? > "$tmp/same/rc")
+check "--out that is also the raw log directory is refused (exit 1) before anything is written or called" \
+  bash -c "[ \"\$(cat '$tmp/same/rc')\" = 1 ] && grep -q 'is also the raw log directory' '$tmp/same/out.txt' &&
+    [ ! -e '$tmp/same/o' ] && [ ! -e '$tmp/bare/called.log' ]"
 
 echo "mali-deqp-selftest: --reruns"
 pkill -f -- "$tmp/" 2>/dev/null   # the lost-ssh case's tail still holds the lock

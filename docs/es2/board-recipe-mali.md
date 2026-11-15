@@ -195,7 +195,7 @@ BOARD_HOST=root@<t6> tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR \
 | option | meaning |
 |---|---|
 | `--build DIR` | a build directory with `deqp-gles2`, `data/` (holding `gles2/`), `build.txt` with a `commit=<hex>` line, and `lib/` with `libGLESv2.so.2` and `libEGL.so.1` |
-| `--out SLICEDIR` | where the slice is written; must be absent or empty (a slice is never overwritten) |
+| `--out SLICEDIR` | where the slice is written; must be absent or empty (a slice is never overwritten) and must not be the raw log directory (`RAW_DIR`, below) |
 | `--rows A-B` | the tree rows to run, 1-based, inclusive; outside the table is refused |
 | `--tree FILE` | the tree table (default `tools/cts/mali-gles2-tree.txt`) |
 | `--session S` | `S1`, `S2`, `S3`, `S4`, `smoke` or `adhoc` (default), recorded in `meta.txt` |
@@ -254,7 +254,8 @@ filter that matches no case or a wrong count shows here, without a board.
 ### What a real run does
 
 1. **Refusals before the board is touched**: a missing or incomplete build
-   directory, a `build.txt` without `commit=<hex>`, a non-empty `--out`, and a
+   directory, a `build.txt` without `commit=<hex>`, an `--out` that is also the
+   raw log directory, a non-empty `--out`, and a
    build commit that is not an ancestor of `origin/main` (exit 6): every
    result is built from one origin/main commit. Then `BOARD_HOST` must be set.
 2. **The board lock**: sourced from `driver/tools/kexec-zephyr/board_lock.sh`,
@@ -310,7 +311,7 @@ markers), or `lost`.
 | code | meaning |
 |---|---|
 | 0 | every chunk ran, whatever dEQP said (read the slice) |
-| 1 | usage, or a refusal before the board (missing build, tree or mustpass, non-empty `--out`) |
+| 1 | usage, or a refusal before the board (missing build, tree or mustpass, non-empty `--out`, `--out` equal to the raw log directory) |
 | 3 | `/dev/dri/renderD128` is held by a process |
 | 4 | the board or its tools: missing `fuser`/`dmesg`/`setsid`/`timeout`, ssh failed, no space, staging failed |
 | 6 | the build's commit is not on origin/main |
