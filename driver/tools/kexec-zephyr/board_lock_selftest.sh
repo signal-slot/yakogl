@@ -818,10 +818,12 @@ check "t6-crashkernel.sh: no output of status, set or undo shows the root UUID (
 
 # The window is decided by nanopc_t6.dts (zephyr,sram) and held again where an
 # image is loaded into it: nanopc-t6.sh checks /proc/iomem over WINDOW_BASE
-# ..+WINDOW_SIZE, and the U-Boot script loads to t6z_load and refuses above
-# t6z_window. A window grown in the dts alone would leave the dry run
-# checking less RAM than the image takes as its own; one shrunk there would
-# leave U-Boot loading past it. Each must equal the node's reg.
+# ..+WINDOW_SIZE, the U-Boot script loads to t6z_load and refuses above
+# t6z_window, and tools/board.sh refuses an image whose image_size runs past
+# LOAD_END before it calls nanopc-t6.sh. A window grown in the dts alone
+# would leave the dry run checking less RAM than the image takes as its own,
+# and board.sh refusing an image that fits; one shrunk there would leave
+# U-Boot loading past it. Each must equal the node's reg.
 dts=$here/../../boards/friendlyarm/nanopc_t6/nanopc_t6.dts
 ub=$here/../uboot-t6/t6-zephyr.cmd
 reg=$(awk '/^\tzephyr_ram: memory@/ { n = 1 } n && /reg = / { print; exit }' "$dts")
@@ -837,6 +839,14 @@ script_value() {
 }
 got="$(script_value WINDOW_BASE) $(script_value WINDOW_SIZE)"
 check "nanopc-t6.sh: WINDOW_BASE WINDOW_SIZE ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_size: '${reg#"${reg%%[! 	]*}"}')" \
+	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_size" ]; echo $?)"
+# YAKO_ADDR=<hex>; LOAD_END=<hex> in the nanopc-t6) case of tools/board.sh.
+bsh=$here/../../../tools/board.sh
+got=$(awk '/^nanopc-t6\)/ { n = 1 } n && /YAKO_ADDR=0x[0-9a-fA-F]+; LOAD_END=0x[0-9a-fA-F]+$/ { print $1, $2; exit }' "$bsh")
+if [[ "$got" =~ ^YAKO_ADDR=(0x[0-9a-fA-F]+)\;\ LOAD_END=(0x[0-9a-fA-F]+)$ ]]; then
+	got="$((BASH_REMATCH[1])) $((BASH_REMATCH[2] - BASH_REMATCH[1]))"
+fi
+check "tools/board.sh: nanopc-t6's YAKO_ADDR and LOAD_END - YAKO_ADDR ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_size)" \
 	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_size" ]; echo $?)"
 uboot_value() {
 	local v
