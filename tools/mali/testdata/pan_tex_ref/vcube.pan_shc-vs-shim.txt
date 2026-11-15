@@ -1,0 +1,9 @@
+pan_shc: build (not recorded) mesa 26.2.1
+fs.fragment vs 7fffffffc280: byte-equal, 7 instructions
+fs.fragment facts: equal, work_reg_count 32, preload 0x3000000000000000 (0 fau words compared)
+vs.position vs 7fffffffc000: byte-equal, 19 instructions
+vs.position facts: equal, work_reg_count 32, preload 0x3800000000000000 (7 fau words compared)
+vs.varying vs 7fffffffc100: byte-equal, 32 instructions
+vs.varying facts: equal, work_reg_count 32, preload 0x3800000000000000 (7 fau words compared)
+secondary_offset: equal, 256
+pan_ref_diff: 3 region(s) compared, 0 differ or missing
