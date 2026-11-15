@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# i.MX8MP dEQP-GLES3 table image es3-9bc82915, row e48 (table entry 48): the console tools/board.sh captured through BOARD_UART (see README.md: the bridge delivered no text, only NUL bytes at the resets)
+# capture: 1 bytes in console.raw, 1 line(s) in console.ts
+21:16:01 
