@@ -1763,8 +1763,9 @@ fn a_draw_with_depth_texels_preloads_them_from_its_buffer() {
 /// the window's D24S8: without the Z/S preload programs (init could not
 /// build them) a frame that tests that depth again is refused
 /// [`NOT_BUILT_ZS_PRELOAD`]; with them, the same depth object attached in
-/// another pair (another `ds_id`, whose buffer does not hold it) is refused
-/// [`NOT_BUILT_ZS_ELSEWHERE`], and in its own pair it is preloaded.
+/// another pair (another `ds_id`) is refused [`NOT_BUILT_ZS_ELSEWHERE`] only
+/// when no buffer holds it any more, and is otherwise preloaded there and
+/// back in its own pair.
 #[test]
 fn a_depth_preload_without_its_program_or_its_buffer_is_refused() {
     let _rig = Rig::new(true);
@@ -1787,14 +1788,391 @@ fn a_depth_preload_without_its_program_or_its_buffer_is_refused() {
         let _ = mali_finish();
         let mut moved = again;
         moved.ds_id ^= 1;
+        /* the pair's buffer entry given up: nothing holds the depth */
         // SAFETY: as above.
         let g = unsafe { STATE.get() };
+        let held = g.zsbufs.iter().position(|z| z.ds_id == d.ds_id).expect("the pair's buffer");
+        g.zsbufs[held].ds_id = 0;
         assert_eq!(record_in(g, &moved), Err(Fail::Frame(FrameError::NotBuilt(NOT_BUILT_ZS_ELSEWHERE))));
+        g.zsbufs[held].ds_id = d.ds_id;
         let _ = mali_finish();
+        /* with it, the depth is taken into the other pair's buffer and
+         * preloaded there (`take_plane`), then taken back */
+        for pair in [&moved, &again] {
+            // SAFETY: as above.
+            let g = unsafe { STATE.get() };
+            assert_eq!(record_in(g, pair), Ok(()));
+            assert!(g.open.is_some_and(|o| o.frame.zs_preload.is_some_and(|p| p.z)), "preloaded in {:#x}", pair.ds_id);
+            let _ = mali_finish();
+        }
+    });
+    assert_eq!(mali_finish(), 0);
+}
+
+/* ---- depth/stencil objects shared between framebuffers ------------------
+ *
+ * dEQP-GLES2 fbo.render.{shared_depthbuffer, recreate_depthbuffer,
+ * recreate_stencilbuffer}.*_depth_component16_stencil_index8 (cause 5 of
+ * docs/es2-cts-failures.md M.1, docs/notes/mali-zs-sharing.md): the draws
+ * below are the ones the GL core hands the backend for those cases (an ES
+ * 2.0 build, `report-es2`, where a DEPTH_COMPONENT16 and a STENCIL_INDEX8
+ * renderbuffer make a complete framebuffer; Mesa reports it
+ * GL_FRAMEBUFFER_UNSUPPORTED, fbobject.c:1248-1253, so its traces have the
+ * DEPTH_COMPONENT16 cases only), recorded by `gl::zs_cases_through_the_gl_core`
+ * below: the object ids, generations and pair ids are the core's. */
+
+/// Two 128x128 RGB565 targets, the cases' (es2fFboRenderTest.cpp's size),
+/// one after the other in one buffer (the rig lets a test keep one).
+fn rgb565_targets() -> (u64, u64) {
+    let mut t = OsalGpuMem::ZERO;
+    // SAFETY: a valid out-parameter.
+    assert_eq!(unsafe { m_alloc(0, 2 * 128 * 128 * 2, OSAL_MEM_DATA, &mut t) }, 0);
+    (t.gpu, t.gpu + 128 * 128 * 2)
+}
+
+/// One draw of a case into `t`: pair `ds`, depth object `depth` and stencil
+/// object `stencil` (id, generation), the triangle program; no clear, no
+/// depth or stencil test.
+fn zs_case_draw(t: u64, ds: u32, depth: (u32, u32), stencil: (u32, u32)) -> GlesDraw {
+    let mut d = triangle(t, &VERTICES);
+    (d.target_w, d.target_h, d.target_format) = (128, 128, backend::GLES_SURF_RGB565);
+    d.viewport = [0, 0, 128, 128];
+    d.do_clear = false;
+    d.ds_persist = true;
+    d.ds_id = ds;
+    (d.depth_id, d.depth_gen, d.stencil_id, d.stencil_gen) = (depth.0, depth.1, stencil.0, stencil.1);
+    (d.ds_w, d.ds_h) = (128, 128);
+    (d.stencil_write_mask, d.stencil_back_write_mask) = (0xff, 0xff);
+    (d.stencil_cmp_mask, d.stencil_back_cmp_mask) = (0xff, 0xff);
+    d
+}
+
+fn depth_less(mut d: GlesDraw) -> GlesDraw {
+    (d.depth_test, d.depth_write, d.depth_func) = (true, true, backend::GLES_CMP_LESS);
+    d
+}
+
+/// glStencilFunc(GL_EQUAL, 0, 0xff) and GL_STENCIL_TEST on.
+fn stencil_equal_0(mut d: GlesDraw) -> GlesDraw {
+    d.stencil = true;
+    (d.stencil_func, d.stencil_back_func) = (backend::GLES_CMP_EQUAL, backend::GLES_CMP_EQUAL);
+    d
+}
+
+/// The scissored glClear(GL_STENCIL_BUFFER_BIT) of the cases: a clear quad
+/// of the stencil alone (no colour: `do_clear` off).
+fn scissored_stencil_clear(mut d: GlesDraw, value: u8, rect: [i32; 4]) -> GlesDraw {
+    d.index_count = 0;
+    (d.clear_quad, d.do_clear_stencil, d.clear_stencil) = (true, true, value);
+    (d.scissor, d.scissor_rect) = (true, rect);
+    /* the clear colour of the GL state, which this clear does not write */
+    d.clear_rgba = [1.0, 0.0, 0.0, 1.0];
+    d
+}
+
+/// The D24S8 buffer the open frame's attachment pair writes back to.
+fn open_zs_buffer() -> u64 {
+    // SAFETY: as in `fresh`.
+    let g = unsafe { STATE.get() };
+    let z = g.open.and_then(|o| o.zs).expect("an open frame with a depth/stencil attachment");
+    assert_ne!(z.buf, usize::MAX, "its buffer is taken");
+    g.zsbufs[z.buf].mem.gpu
+}
+
+/// What the "GPU" leaves in a 128x128 D24S8 buffer: `depth(x, y)` in each
+/// word's low 24 bits, `stencil` in its high byte.
+fn gpu_writes_zs(base: u64, depth: impl Fn(u32, u32) -> u32, stencil: u8) {
+    let words: Vec<u8> = (0..128 * 128)
+        .flat_map(|i| (u32::from(stencil) << 24 | (depth(i % 128, i / 128) & 0xff_ffff)).to_le_bytes())
+        .collect();
+    with(|m| m.write(base, &words));
+}
+
+/// The 128x128 D24S8 words at `base`.
+fn zs_words(base: u64) -> Vec<u32> {
+    with(|m| m.read(base, 4 * 128 * 128)).as_chunks::<4>().0.iter().map(|&w| u32::from_le_bytes(w)).collect()
+}
+
+/// The framebuffer parameters and the ZS target of the last submit.
+fn last_fbd() -> (crate::mali::genxml::v10::FramebufferParameters, crate::mali::genxml::v10::ZsTarget, Vec<u64>) {
+    use crate::mali::genxml::v10::{FramebufferParameters, ZsTarget};
+    let words = with(|m| m.submits.last().unwrap().1.clone());
+    let fbd = fbd_at_fragment(&words).expect("a fragment job");
+    let params = FramebufferParameters::unpack(&with(|m| m.read(fbd, 64)).try_into().unwrap()).unwrap();
+    let ext = ZsTarget::unpack(&with(|m| m.read(fbd + 128, 64)).try_into().unwrap()).unwrap();
+    (params, ext, words)
+}
+
+/// `pandecode`'s field `key` in block `block` of a zs-refs trace
+/// (tools/mali/testdata/pan_zs_ref/, `## <block> lines a-b` headed).
+fn ref_field<'a>(trace: &'a str, block: &str, key: &str) -> &'a str {
+    let mut inside = false;
+    for line in trace.lines() {
+        if let Some(h) = line.strip_prefix("## ") {
+            inside = h.starts_with(&format!("{block} lines "));
+            continue;
+        }
+        if let Some(v) = line.trim().strip_prefix(key).and_then(|r| r.strip_prefix(": ")).filter(|_| inside) {
+            return v;
+        }
+    }
+    panic!("{block}: no field {key}")
+}
+
+/// shared_depthbuffer.*_depth_component16_stencil_index8 on the mock.
+/// Framebuffer A (pair 0x20003: depth renderbuffer 3, stencil 5) draws the
+/// depth; framebuffer B (pair 0x20005: A's depth 3 and its own stencil 9)
+/// then tests it, clears its stencil in a scissor box and draws with the
+/// stencil test, all with no refusal: B's frame takes the depth into its
+/// pair's buffer (each word's depth bits A's frame wrote, B's stencil byte
+/// kept) and preloads it. B's frame is Mesa's frame of the same draw in the
+/// DEPTH_COMPONENT16 case (shared_depthbuffer__rbo_rgb565_depth_component16
+/// .txt frame3: B's colour and the shared depth preloaded) byte for byte in
+/// the framebuffer parameters, except what is not the same thing here (the
+/// addresses, the D24S8 buffer for Mesa's D16 one, B's stencil plane), and
+/// its draw's depth state is Mesa's. A frame of A after it takes the depth
+/// back, as B left it, keeping A's stencil byte.
+///
+/// Revert check: without `take_plane` B's three draws are refused
+/// [`NOT_BUILT_ZS_ELSEWHERE`] (the board's 3 refusals a case, T6S1R06).
+#[test]
+fn a_depth_object_shared_by_two_framebuffers_is_drawn_in_both() {
+    use crate::mali::genxml::v10::{DepthSource, FramebufferParameters, Func, PrePostFrameShaderMode, ZInternalFormat};
+    const MESA: &str =
+        include_str!("../../tools/mali/testdata/pan_zs_ref/shared_depthbuffer__rbo_rgb565_depth_component16.txt");
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let (ta, tb) = rgb565_targets();
+    with_programs(TRI_VS, TRI_FS, |vs, fs| {
+        let program = |mut d: GlesDraw| {
+            (d.vs, d.fs) = (vs, fs);
+            d
+        };
+        let a = || program(zs_case_draw(ta, 0x20003, (3, 4), (5, 6)));
+        let b = || program(zs_case_draw(tb, 0x20005, (3, 4), (9, 10)));
+        /* B: glClearColor(1, 0, 0, 1) glClearStencil(1) glClear(all) */
+        let mut clear_b = b();
+        (clear_b.index_count, clear_b.do_clear, clear_b.clear_rgba) = (0, true, [1.0, 0.0, 0.0, 1.0]);
+        (clear_b.do_clear_depth, clear_b.clear_depth, clear_b.do_clear_stencil, clear_b.clear_stencil) =
+            (true, 1.0, true, 1);
+        /* A: glClear(all) and the depth-tested quad */
+        let mut draw_a = depth_less(a());
+        (draw_a.do_clear, draw_a.clear_rgba) = (true, [0.0, 0.0, 0.0, 1.0]);
+        (draw_a.do_clear_depth, draw_a.clear_depth, draw_a.do_clear_stencil, draw_a.clear_stencil) =
+            (true, 1.0, true, 1);
+        // SAFETY: valid draws whose records `with_programs` keeps.
+        assert_eq!(unsafe { mali_draw(&clear_b) }, 0);
+        assert_eq!(draw_flush(&draw_a), 0);
+        let (_, a_ext, _) = last_fbd();
+        let a_buf = a_ext.base;
+        /* what A's frame wrote back: depth x + 128 y, its stencil 1 */
+        gpu_writes_zs(a_buf, |x, y| x + 128 * y, 1);
+
+        /* B: the depth-tested quad, the scissored stencil clear, the
+         * stencil-tested quad */
+        let draw_b = depth_less(b());
         // SAFETY: as above.
+        assert_eq!(unsafe { mali_draw(&draw_b) }, 0, "B tests A's depth");
+        let b_buf = open_zs_buffer();
+        assert_ne!(b_buf, a_buf, "B's pair has a buffer of its own");
+        for (i, w) in zs_words(b_buf).iter().enumerate() {
+            assert_eq!(w & 0xff_ffff, i as u32, "word {i}: A's depth");
+            assert_eq!(w >> 24, 0, "word {i}: B's stencil byte as its buffer held it");
+        }
+        // SAFETY: as in `fresh`.
         let g = unsafe { STATE.get() };
-        assert_eq!(record_in(g, &again), Ok(()));
-        assert!(g.open.is_some_and(|o| o.frame.zs_preload.is_some()), "preloaded in its own pair");
+        let p = g.open.and_then(|o| o.frame.zs_preload).expect("the depth is preloaded");
+        assert_eq!((p.z, p.s, p.cleared), (true, false, true), "the depth; B's stencil from its clear");
+        assert!(g.planes.iter().any(|p| (p.id, p.aspect, p.ds_id) == (3, 0, 0x20005) && p.plane.is_live()));
+        let clear = scissored_stencil_clear(b(), 0, [10, 10, 12, 25]);
+        // SAFETY: as above.
+        assert_eq!(unsafe { mali_draw(&clear) }, 0, "the scissored stencil clear");
+        // SAFETY: as above.
+        assert_eq!(unsafe { mali_draw(&stencil_equal_0(b())) }, 0, "the stencil-tested quad");
+        assert_eq!(mali_flush(), 0);
+        let (params, ext, words) = last_fbd();
+        assert_eq!(ext.base, b_buf);
+        let regs = regs_at_each_idvs(&words);
+        assert_eq!(regs.len(), 3, "B's three draws in one frame");
+
+        /* Mesa's frame3: the parameters byte for byte, where they are the
+         * same thing */
+        let mem = crate::mali::trace::memory_of(MESA, "frame3-words");
+        /* the trace's "frame3: FBD 7ffffffb6000" */
+        let mesa: [u8; 64] = crate::mali::trace::bytes(&mem, 0x7fff_fffb_6000, 64).try_into().unwrap();
+        let mut want = FramebufferParameters::unpack(&mesa).unwrap();
+        assert_eq!(
+            (want.pre_frame_0, want.pre_frame_1, want.z_internal_format),
+            (PrePostFrameShaderMode::INTERSECT, PrePostFrameShaderMode::EARLY_ZS_ALWAYS, ZInternalFormat::D16),
+            "the trace's frame3 is the preloaded one"
+        );
+        /* the addresses; the depth format (a D24S8 buffer for Mesa's D16
+         * resource); B's stencil plane, which Mesa's case has not */
+        (want.sample_locations, want.frame_shader_dcds, want.tiler) =
+            (params.sample_locations, params.frame_shader_dcds, params.tiler);
+        want.z_internal_format = params.z_internal_format;
+        (want.s_clear, want.s_write_enable) = (params.s_clear, params.s_write_enable);
+        assert_eq!(params.pack().unwrap(), want.pack().unwrap(), "{params:#?}\nMesa: {want:#?}");
+        assert_eq!((params.z_clear, params.s_clear), (0.0, 1), "the depth preloaded; the stencil B's clear");
+        /* the depth-tested draw's state is Mesa's frame3-draw1 */
+        let z = zsd(&regs[0]);
+        assert_eq!(ref_field(MESA, "frame3-draw1", "Depth function"), "Less");
+        assert_eq!(ref_field(MESA, "frame3-draw1", "Depth write enable"), "true");
+        assert_eq!(ref_field(MESA, "frame3-draw1", "Stencil test enable"), "false");
+        assert_eq!(ref_field(MESA, "frame3-draw1", "Depth source"), "Fixed function");
+        assert_eq!(
+            (z.depth_function, z.depth_write_enable, z.stencil_test_enable, z.depth_source),
+            (Func::LESS, true, false, DepthSource::FIXED_FUNCTION)
+        );
+
+        /* what B's frame wrote back: depth 0x800000 - i, its stencil 0x5a;
+         * A depth-tests again: the depth comes back, A's stencil byte kept */
+        gpu_writes_zs(b_buf, |x, y| 0x80_0000 - (x + 128 * y), 0x5a);
+        let mut again = depth_less(a());
+        again.do_clear = false;
+        // SAFETY: as above.
+        assert_eq!(unsafe { mali_draw(&again) }, 0, "A tests the depth B left");
+        assert_eq!(open_zs_buffer(), a_buf);
+        for (i, w) in zs_words(a_buf).iter().enumerate() {
+            assert_eq!(*w, 1 << 24 | (0x80_0000 - i as u32), "word {i}: B's depth, A's stencil byte");
+        }
+        assert_eq!(mali_flush(), 0);
+    });
+    assert_eq!(mali_finish(), 0);
+}
+
+/// recreate_{depth,stencil}buffer.no_rebind_*_depth_component16_stencil_index8
+/// on the mock. The framebuffer draws its depth and clears its stencil in a
+/// scissor box; unbound, the recreated renderbuffer's old object stays
+/// attached, an orphan in another slot, so the GL core names the pair anew
+/// (0x20003 to 0x40003 for the depth, to 0x20004 for the stencil) with the
+/// same objects. The pending scissored stencil clear and the quad after it
+/// are drawn, not refused: the frame takes the depth the old pair's buffer
+/// holds, which its draw then tests (the stencil recreated) or clears (the
+/// depth recreated), and the scissored clear writes no colour.
+///
+/// Revert check: without `take_plane` the scissored clear is refused
+/// [`NOT_BUILT_ZS_ELSEWHERE`] (and, with the stencil, the quad too: the
+/// board's 1 and 2 refusals of these cases).
+#[test]
+fn a_framebuffer_whose_pair_is_named_anew_keeps_its_depth() {
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = rgb565_targets().0;
+    with_programs(TRI_VS, TRI_FS, |vs, fs| {
+        /* (the pair after, the depth object, the stencil object, the buffer
+         * the case recreates) */
+        let cases = [(0x40003, (0xb, 12), (0xd, 14), "depth"), (0x20004, (0x1b, 28), (0x1d, 30), "stencil")];
+        for (pair, depth, stencil, recreated) in cases {
+            fresh();
+            let draw = |ds| {
+                let mut d = zs_case_draw(t, ds, depth, stencil);
+                (d.vs, d.fs) = (vs, fs);
+                d
+            };
+            let mut first = depth_less(draw(0x20003));
+            (first.do_clear, first.clear_rgba) = (true, [1.0, 0.0, 0.0, 1.0]);
+            (first.do_clear_depth, first.clear_depth, first.do_clear_stencil, first.clear_stencil) =
+                (true, 1.0, true, 0);
+            assert_eq!(draw_flush(&first), 0, "{recreated}: the first quad");
+            let (_, ext, _) = last_fbd();
+            gpu_writes_zs(ext.base, |x, y| 3 * x + y, 0);
+            let clear = scissored_stencil_clear(draw(pair), 1, [32, 32, 64, 64]);
+            // SAFETY: valid draws whose records `with_programs` keeps.
+            assert_eq!(unsafe { mali_draw(&clear) }, 0, "{recreated}: the scissored stencil clear");
+            let buf = open_zs_buffer();
+            assert_ne!(buf, ext.base, "{recreated}: the new pair's buffer");
+            for (i, w) in (0u32..).zip(zs_words(buf)) {
+                assert_eq!(w & 0xff_ffff, 3 * (i % 128) + i / 128, "{recreated}: word {i}, the old pair's depth");
+            }
+            let mut last = stencil_equal_0(depth_less(draw(pair)));
+            if recreated == "depth" {
+                (last.do_clear_depth, last.clear_depth) = (true, 1.0);
+            } else {
+                (last.do_clear_stencil, last.clear_stencil) = (true, 0);
+            }
+            // SAFETY: as above.
+            assert_eq!(unsafe { mali_draw(&last) }, 0, "{recreated}: the last quad");
+            assert_eq!(mali_flush(), 0);
+            let (params, ext, words) = last_fbd();
+            assert_eq!(ext.base, buf);
+            assert_eq!(params.pre_frame_1, crate::mali::genxml::v10::PrePostFrameShaderMode::EARLY_ZS_ALWAYS);
+            let regs = regs_at_each_idvs(&words);
+            /* the clear quad (stencil only), the clear of the recreated
+             * buffer drawn as a quad (the frame used the attachment), the
+             * quad */
+            assert_eq!(regs.len(), 3, "{recreated}");
+            assert_eq!(quad_colour_mask(&regs[0]), 0, "{recreated}: the stencil clear writes no colour");
+        }
+    });
+    assert_eq!(mali_finish(), 0);
+}
+
+/// The colour mask of render target 0's Blend descriptor a RUN_IDVS reads
+/// (d50).
+fn quad_colour_mask(r: &std::collections::BTreeMap<u32, u32>) -> u32 {
+    use crate::mali::genxml::v10::BlendEquation;
+    /* the Equation, bits 32..=63 of the Blend descriptor */
+    let at = (u64::from(r[&50] & !63) | u64::from(r[&51]) << 32) + 4;
+    BlendEquation::unpack(&with(|m| m.read(at, 4)).try_into().unwrap()).unwrap().color_mask
+}
+
+/// recreate_{depth,stencil}buffer.rebind_*_depth_component16_stencil_index8
+/// on the mock, the 14 cases the board failed on pixels (no refusal): the
+/// framebuffer stays bound, glDeleteRenderbuffers ends the frame that holds
+/// the quad (`mali_attachment_gone`), and the GL core draws the scissored
+/// stencil clear it still held with the recreated object, opening a frame
+/// of no colour clear. That clear wrote the clear colour into its box (the
+/// red the board's image showed where the last quad fails its depth or
+/// stencil test); it now writes the stencil alone, as Mesa's clear quad
+/// (st_cb_clear.c:224-240), and the frame starts from the old image.
+#[test]
+fn a_stencil_clear_that_opens_a_frame_writes_no_colour() {
+    use crate::mali::genxml::v10::PrePostFrameShaderMode;
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = rgb565_targets().0;
+    with_programs(TRI_VS, TRI_FS, |vs, fs| {
+        /* (the gone object, the depth and stencil objects after) */
+        let cases = [(3, (7, 8), (5, 6), "depth"), (0x15, (0x13, 20), (0x17, 24), "stencil")];
+        for (gone, depth, stencil, recreated) in cases {
+            fresh();
+            let (d0, s0) = if recreated == "depth" { ((gone, 4), stencil) } else { (depth, (gone, 22)) };
+            let program = |mut d: GlesDraw| {
+                (d.vs, d.fs) = (vs, fs);
+                d
+            };
+            let mut first = depth_less(program(zs_case_draw(t, 0x20003, d0, s0)));
+            (first.do_clear, first.clear_rgba) = (true, [1.0, 0.0, 0.0, 1.0]);
+            (first.do_clear_depth, first.clear_depth, first.do_clear_stencil, first.clear_stencil) =
+                (true, 1.0, true, 0);
+            // SAFETY: a valid draw whose records `with_programs` keeps.
+            assert_eq!(unsafe { mali_draw(&first) }, 0);
+            let kicks = with(|m| m.submits.len());
+            mali_attachment_gone(gone);
+            assert_eq!(with(|m| m.submits.len()), kicks + 1, "{recreated}: the delete ends the frame");
+            let after = program(zs_case_draw(t, 0x20003, depth, stencil));
+            let clear = scissored_stencil_clear(after, 1, [32, 32, 64, 64]);
+            let mut last = stencil_equal_0(depth_less(after));
+            if recreated == "depth" {
+                (last.do_clear_depth, last.clear_depth) = (true, 1.0);
+            } else {
+                (last.do_clear_stencil, last.clear_stencil) = (true, 0);
+            }
+            // SAFETY: as above.
+            assert_eq!(unsafe { mali_draw(&clear) }, 0);
+            // SAFETY: as above.
+            assert_eq!(unsafe { mali_draw(&last) }, 0);
+            assert_eq!(mali_flush(), 0);
+            let (params, _, words) = last_fbd();
+            assert_eq!(params.pre_frame_0, PrePostFrameShaderMode::INTERSECT, "{recreated}: the old image preloaded");
+            let regs = regs_at_each_idvs(&words);
+            assert_eq!(regs.len(), 3, "{recreated}: the stencil clear, the clear of the recreated buffer, the quad");
+            assert_eq!(quad_colour_mask(&regs[0]), 0, "{recreated}: the stencil clear writes no colour");
+            let z = zsd(&regs[0]);
+            assert!(z.stencil_test_enable && !z.depth_write_enable, "{recreated}: it writes the stencil");
+            assert_eq!(quad_colour_mask(&regs[2]), 0xf, "{recreated}: the quad writes the colour");
+        }
     });
     assert_eq!(mali_finish(), 0);
 }
@@ -4396,6 +4774,196 @@ mod gl {
                 assert_eq!(got, want, "record {i}'s Attribute is array {i}'s");
             }
             context::gl_context_destroy(ctx);
+        }
+    }
+
+    /// The five dEQP-GLES2 sequences of cause 5 (es2fFboRenderTest.cpp's
+    /// SharedDepthbufferTest and RecreateBuffersTest, as
+    /// tools/mali/testdata/pan_zs_ref/zs_seq.py transcribes them) through
+    /// the GL core on the mock, with a DEPTH_COMPONENT16 and a
+    /// STENCIL_INDEX8 renderbuffer: an ES 2.0 build (`report-es2`, the
+    /// board's dEQP-GLES2 build) reports that framebuffer complete, where
+    /// the ES 3.0 rule (and Mesa, fbobject.c:1248-1253) says
+    /// GL_FRAMEBUFFER_UNSUPPORTED. Every call is without a GL error (no draw
+    /// refused), the pairs are the ones the backend tests above replay
+    /// (`a_depth_object_shared_by_two_framebuffers_is_drawn_in_both`,
+    /// `a_framebuffer_whose_pair_is_named_anew_keeps_its_depth`,
+    /// `a_stencil_clear_that_opens_a_frame_writes_no_colour`), and the
+    /// scissored stencil clear the GL core holds past glDeleteRenderbuffers
+    /// opens the last frame and writes no colour.
+    #[cfg(feature = "report-es2")]
+    #[test]
+    fn zs_cases_through_the_gl_core() {
+        use crate::gl::state::{glClearStencil, glDisable, glFinish, glScissor, glStencilFunc};
+        const VS: &str = "attribute highp vec4 a_position; void main(){ gl_Position = a_position; }";
+        const FS: &str = "precision mediump float; void main(){ gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); }";
+        const ALL: GLbitfield = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+        const INDICES: [u16; 6] = [0, 2, 1, 2, 1, 3];
+        #[derive(Clone, Copy, Debug, PartialEq)]
+        enum Case {
+            Shared,
+            Recreate { depth: bool, rebind: bool },
+        }
+        /* sglr::drawQuad: the corners' z p0, mid, mid, p1, its six indices
+         * expanded into six vertices of glDrawArrays (the GL core's staging
+         * of client indices is a block of its own the rig would count as
+         * left after shutdown; the backend sees the same quad either way) */
+        unsafe fn quad(z0: f32, z1: f32) -> GLenum {
+            let mid = 0.5 * (z0 + z1);
+            let corners = [[-1.0, -1.0, z0, 1.0], [-1.0, 1.0, mid, 1.0], [1.0, -1.0, mid, 1.0], [1.0, 1.0, z1, 1.0f32]];
+            let pos: Vec<f32> = INDICES.iter().flat_map(|&i| corners[usize::from(i)]).collect();
+            // SAFETY: the caller's context; client arrays read at the draw.
+            unsafe {
+                glEnableVertexAttribArray(0);
+                glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, pos.as_ptr().cast());
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                glGetError()
+            }
+        }
+        unsafe fn rb(fmt: GLenum) -> GLuint {
+            let mut r = 0;
+            // SAFETY: the caller's context.
+            unsafe {
+                glGenRenderbuffers(1, &mut r);
+                glBindRenderbuffer(GL_RENDERBUFFER, r);
+                glRenderbufferStorage(GL_RENDERBUFFER, fmt, 64, 64);
+            }
+            r
+        }
+        /* es2fFboRenderTest.cpp's Framebuffer: colour, depth, stencil, then
+         * unbound */
+        unsafe fn fbo(depth: bool) -> (GLuint, GLuint, GLuint) {
+            let mut f = 0;
+            // SAFETY: the caller's context.
+            unsafe {
+                glGenFramebuffers(1, &mut f);
+                glBindFramebuffer(GL_FRAMEBUFFER, f);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb(GL_RGB565));
+                let d = if depth { rb(GL_DEPTH_COMPONENT16) } else { 0 };
+                if depth {
+                    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, d);
+                }
+                let s = rb(GL_STENCIL_INDEX8);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, s);
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                (f, d, s)
+            }
+        }
+        let cases = [
+            Case::Shared,
+            Case::Recreate { depth: true, rebind: true },
+            Case::Recreate { depth: true, rebind: false },
+            Case::Recreate { depth: false, rebind: true },
+            Case::Recreate { depth: false, rebind: false },
+        ];
+        for case in cases {
+            let _rig = Rig::new(true);
+            assert_eq!(backend::init(), 0);
+            // SAFETY: the rig serialises the library; plain GL calls.
+            unsafe {
+                let ctx = context::gl_context_create(64, 64);
+                assert!(!ctx.is_null());
+                let p = glCreateProgram();
+                glAttachShader(p, shader(GL_VERTEX_SHADER, VS));
+                glAttachShader(p, shader(GL_FRAGMENT_SHADER, FS));
+                glLinkProgram(p);
+                glUseProgram(p);
+                glViewport(0, 0, 64, 64);
+                let pair = || STATE.get().open.map(|o| o.key.ds_id);
+                match case {
+                    Case::Shared => {
+                        let a = fbo(true);
+                        let b = fbo(false);
+                        glBindFramebuffer(GL_FRAMEBUFFER, b.0);
+                        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, a.1);
+                        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+                        glClearColor(1.0, 0.0, 0.0, 1.0);
+                        glClearStencil(1);
+                        glClear(ALL);
+                        glEnable(GL_DEPTH_TEST);
+                        glBindFramebuffer(GL_FRAMEBUFFER, a.0);
+                        glClearColor(0.0, 0.0, 0.0, 1.0);
+                        glClear(ALL);
+                        assert_eq!(quad(0.0, 0.0), GL_NO_ERROR, "A's quad");
+                        assert_eq!(pair(), Some(0x20003), "A's pair");
+                        glBindFramebuffer(GL_FRAMEBUFFER, b.0);
+                        assert_eq!(quad(-1.0, 1.0), GL_NO_ERROR, "B's depth-tested quad");
+                        assert_eq!(pair(), Some(0x20005), "B's pair");
+                        let g = STATE.get();
+                        let shared = g.open.map(|o| o.key.objects[0]).expect("B's frame");
+                        let entry = g.planes.iter().find(|e| (e.id, e.gen, e.aspect) == (shared.0, shared.1, 0));
+                        assert_eq!(entry.map(|e| e.ds_id), Some(0x20005), "the shared depth is taken into B's pair");
+                        glDisable(GL_DEPTH_TEST);
+                        glEnable(GL_SCISSOR_TEST);
+                        glScissor(10, 10, 12, 25);
+                        glClearStencil(0);
+                        glClear(GL_STENCIL_BUFFER_BIT);
+                        glDisable(GL_SCISSOR_TEST);
+                        glEnable(GL_STENCIL_TEST);
+                        glStencilFunc(GL_EQUAL, 0, 0xff);
+                        assert_eq!(quad(0.0, 0.0), GL_NO_ERROR, "B's stencil-tested quad");
+                        glDisable(GL_STENCIL_TEST);
+                    }
+                    Case::Recreate { depth, rebind } => {
+                        let f = fbo(true);
+                        glBindFramebuffer(GL_FRAMEBUFFER, f.0);
+                        glClearColor(1.0, 0.0, 0.0, 1.0);
+                        glClear(ALL);
+                        glEnable(GL_DEPTH_TEST);
+                        assert_eq!(quad(0.0, 0.0), GL_NO_ERROR, "{case:?}: the first quad");
+                        assert_eq!(pair(), Some(0x20003), "{case:?}: the first pair");
+                        glEnable(GL_SCISSOR_TEST);
+                        glScissor(16, 16, 32, 32);
+                        glClearStencil(1);
+                        glClear(GL_STENCIL_BUFFER_BIT);
+                        glDisable(GL_SCISSOR_TEST);
+                        if !rebind {
+                            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                        }
+                        let (attach, fmt, name) = if depth {
+                            (GL_DEPTH_ATTACHMENT, GL_DEPTH_COMPONENT16, f.1)
+                        } else {
+                            (GL_STENCIL_ATTACHMENT, GL_STENCIL_INDEX8, f.2)
+                        };
+                        glDeleteRenderbuffers(1, &name);
+                        glBindRenderbuffer(GL_RENDERBUFFER, name);
+                        glRenderbufferStorage(GL_RENDERBUFFER, fmt, 64, 64);
+                        if rebind {
+                            glFramebufferRenderbuffer(GL_FRAMEBUFFER, attach, GL_RENDERBUFFER, name);
+                        } else {
+                            glBindFramebuffer(GL_FRAMEBUFFER, f.0);
+                        }
+                        glClearColor(0.0, 0.0, 1.0, 0.0);
+                        glClearStencil(0);
+                        glClear(if depth { GL_DEPTH_BUFFER_BIT } else { GL_STENCIL_BUFFER_BIT });
+                        glEnable(GL_STENCIL_TEST);
+                        glStencilFunc(GL_EQUAL, 0, 0xff);
+                        let kicks = with(|m| m.submits.len());
+                        assert_eq!(quad(1.0, -1.0), GL_NO_ERROR, "{case:?}: the last quad");
+                        let want = match (rebind, depth) {
+                            (true, _) => 0x20003,
+                            (false, true) => 0x40003,
+                            (false, false) => 0x20004,
+                        };
+                        assert_eq!(pair(), Some(want), "{case:?}: the pair the backend tests replay");
+                        glFinish();
+                        let frames: Vec<Vec<u64>> = with(|m| m.submits[kicks..].iter().map(|s| s.1.clone()).collect());
+                        assert_eq!(frames.len(), 1, "{case:?}: the last frame");
+                        let regs = regs_at_each_idvs(&frames[0]);
+                        assert_eq!(regs.len(), 3, "{case:?}: the held stencil clear, the clear, the quad");
+                        assert_eq!(
+                            super::quad_colour_mask(&regs[0]),
+                            0,
+                            "{case:?}: the stencil clear writes no colour"
+                        );
+                        glDisable(GL_STENCIL_TEST);
+                        glDisable(GL_DEPTH_TEST);
+                    }
+                }
+                glFinish();
+                assert_eq!(glGetError(), GL_NO_ERROR, "{case:?}");
+                context::gl_context_destroy(ctx);
+            }
         }
     }
 }

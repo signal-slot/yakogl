@@ -52,7 +52,9 @@
 //! when a past frame drew it, from the buffer: the frame's first draw that
 //! uses the attachment starts the Z/S preload (pre frame 1, one of three
 //! programs for the depth, the stencil or both). A plane held in another
-//! pair's buffer is refused ([`NOT_BUILT_ZS_ELSEWHERE`]).
+//! pair's buffer (one object attached in two framebuffers) is copied into
+//! this pair's buffer at the frame's first use of the attachment, and then
+//! preloaded ([`take_plane`], docs/notes/mali-zs-sharing.md).
 //!
 //! What the frame builder does not build is refused before any of that,
 //! each cause with its own line (the `NOT_BUILT_*` of `frame.rs` and of this
@@ -234,12 +236,13 @@ pub const NOT_BUILT_ZS_SIZE: &str = "mali: a depth/stencil attachment smaller th
 /// program did not build at `init` (its line was logged then).
 pub const NOT_BUILT_ZS_PRELOAD: &str =
     "mali: a frame that uses depth or stencil drawn by an earlier frame and not cleared since, and no Z/S preload program (see its log line at init)";
-/// A plane a past frame drew holds its contents in the buffer of another
-/// attachment pair (the object was drawn in another framebuffer): this
-/// pair's buffer does not hold them, so a preload of it would read the
-/// wrong memory.
+/// A plane a past frame drew in the buffer of another attachment pair (the
+/// object was drawn in another framebuffer), when no buffer holds it any
+/// more: its pair's buffer entry was given up (`zs_buffer`), so there is
+/// nothing to copy into this pair's buffer ([`take_plane`]). A plane whose
+/// buffer is there is copied and drawn.
 pub const NOT_BUILT_ZS_ELSEWHERE: &str =
-    "mali: a depth or stencil object drawn in another framebuffer's depth/stencil pair is not built yet";
+    "mali: a depth or stencil object drawn in another framebuffer's depth/stencil pair whose buffer no longer holds it is not built yet";
 /// The clear program did not compile or link at `init` (its line was
 /// logged then): a clear that needs the quad is refused.
 pub const NOT_BUILT_CLEAR_PROGRAM: &str =
@@ -456,8 +459,9 @@ enum Start {
     /// A past frame drew into it: this pair's buffer holds its contents,
     /// which a frame that uses the attachment preloads.
     Unloaded,
-    /// A past frame drew into it in another pair's buffer
-    /// ([`NOT_BUILT_ZS_ELSEWHERE`]).
+    /// A past frame drew into it in another pair's buffer: the frame's
+    /// first use of the attachment copies it into this pair's
+    /// ([`take_plane`]), and it is then `Unloaded`.
     Elsewhere,
 }
 
@@ -2708,6 +2712,77 @@ fn seed_depth(g: &mut MaliState, key: &TargetKey, t: ds_retention::DepthTexels) 
         .map_err(|()| Fail::Errno(ds_retention::refuse("mali", id, PLANES)))
 }
 
+/// Take plane `aspect` of the object at that attachment point of `key`,
+/// which a past frame of another attachment pair drew (`Start::Elsewhere`:
+/// the object is attached in two framebuffers, or the GL core named the pair
+/// anew, as an orphaned renderbuffer's slot does), into this pair's buffer
+/// `buf`, and record it live there: the frame then preloads it as any plane
+/// its own pair drew (docs/notes/mali-zs-sharing.md).
+///
+/// Mesa keeps the depth and the stencil in the GL object's own resource, so
+/// two framebuffers' batches name the same memory, and a batch that uses a
+/// resource another batch wrote first submits that writer (Mesa 26.2.1,
+/// src/gallium/drivers/panfrost/pan_job.c:41-52, 91, 243-265) and preloads what
+/// it does not clear (pan_fb_preload.c:746-760). Here the memory is the
+/// pair's ([`ZsBuf`]), so the plane moves to the pair that uses it: every
+/// submitted frame is waited for (the writer and any frame still writing
+/// this pair's buffer back, as [`seed_depth`] does), then the plane's bits
+/// of each word are copied, the depth's low 24 or the stencil's high 8,
+/// each word's other plane kept, over the rows and columns both buffers
+/// have (the same linear D24S8 at `4 * w` bytes a row). The other pair's
+/// buffer is left as it is: its entry no longer names the plane, so a later
+/// frame of that pair takes the plane back the same way.
+///
+/// `Err`: [`NOT_BUILT_ZS_ELSEWHERE`] when no buffer holds the plane any more
+/// (its pair's entry was given up), a wait's errno, `-EINVAL` for a buffer
+/// shorter than its `4 * w * h` bytes or with no CPU view, or every plane
+/// entry holding a plane GL keeps.
+fn take_plane(g: &mut MaliState, key: &TargetKey, buf: usize, aspect: usize) -> Result<(), Fail> {
+    let (id, gen) = key.objects[aspect];
+    let from = g.planes.iter().find(|p| p.id == id && p.aspect == aspect && p.gen == gen && p.plane.is_live());
+    let src = from
+        .map(|p| p.ds_id)
+        .filter(|&ds| ds != key.ds_id)
+        .and_then(|ds| g.zsbufs.iter().position(|z| z.ds_id == ds && !z.mem.cpu.is_null()))
+        .filter(|&s| s != buf)
+        .ok_or(FrameError::NotBuilt(NOT_BUILT_ZS_ELSEWHERE))?;
+    if let Err((rc, why)) = wait_all(g) {
+        backend::note_work_lost(why, rc);
+        return Err(Fail::Errno(rc));
+    }
+    let (s, d) = (g.zsbufs[src], g.zsbufs[buf]);
+    let words = |z: &ZsBuf| (z.w as usize).saturating_mul(z.h as usize);
+    for z in [&s, &d] {
+        if z.mem.cpu.is_null() || words(z) == 0 || words(z).saturating_mul(4) > z.mem.size {
+            return Err(Fail::Errno(-EINVAL));
+        }
+    }
+    // SAFETY: two live, CPU-mapped allocations of different entries (`src`
+    // is not `buf`), each of at least `4 * w * h` bytes (checked above),
+    // which no frame writes: every submitted one was waited for, and the
+    // open frame's write-back runs only after its submit.
+    let (from, to) = unsafe {
+        osal::cache_invd(s.mem.cpu, 4 * words(&s));
+        osal::cache_invd(d.mem.cpu, 4 * words(&d));
+        (
+            core::slice::from_raw_parts(s.mem.cpu as *const u32, words(&s)),
+            core::slice::from_raw_parts_mut(d.mem.cpu as *mut u32, words(&d)),
+        )
+    };
+    let mask = if aspect == ds_retention::DEPTH { 0x00ff_ffff } else { 0xff00_0000 };
+    let (sw, dw) = (s.w as usize, d.w as usize);
+    let cols = sw.min(dw);
+    for (src_row, dst_row) in from.chunks_exact(sw).zip(to.chunks_exact_mut(dw)) {
+        for (w, &v) in dst_row[..cols].iter_mut().zip(&src_row[..cols]) {
+            *w = (*w & !mask) | (v & mask);
+        }
+    }
+    // SAFETY: the words just written, inside the allocation.
+    unsafe { osal::cache_flush(d.mem.cpu, 4 * words(&d)) };
+    set_plane(g, id, gen, aspect, Plane::LIVE, key.ds_id)
+        .map_err(|()| Fail::Errno(ds_retention::refuse("mali", id, PLANES)))
+}
+
 /* ---- the open frame ------------------------------------------------------ */
 
 impl TargetKey {
@@ -2995,16 +3070,32 @@ fn add_to_open(g: &mut MaliState, d: &GlesDraw, ctx: &frame::Context) -> Result<
     let mut metas = None;
     let (shaders, vs_attributes) = programs(d, &mut metas)?;
     let zs = depth_stencil_state(d);
-    let o = g.open.ok_or(FrameError::Invalid(frame::INVALID_OPEN_FRAME))?;
+    let mut o = g.open.ok_or(FrameError::Invalid(frame::INVALID_OPEN_FRAME))?;
     /* the Z/S preload this draw starts, when it is the frame's first use of
      * an attachment a past frame drew */
     let mut zs_preload = None;
     if zs.uses_attachment() {
-        let z = o.zs.ok_or(FrameError::Invalid(frame::INVALID_NO_ZS))?;
+        let mut z = o.zs.ok_or(FrameError::Invalid(frame::INVALID_NO_ZS))?;
         /* the write-back writes both planes of the D24S8 buffer: neither may
-         * hold contents the tile buffer did not load */
+         * hold contents the tile buffer did not load. A plane another pair's
+         * buffer holds is copied into this pair's first, and is then
+         * preloaded as any (`take_plane`) */
         if z.start.contains(&Start::Elsewhere) {
-            return Err(FrameError::NotBuilt(NOT_BUILT_ZS_ELSEWHERE).into());
+            if z.buf == usize::MAX {
+                z.buf = zs_buffer(g, &o.key)?;
+            }
+            for aspect in 0..2 {
+                if z.start[aspect] == Start::Elsewhere {
+                    take_plane(g, &o.key, z.buf, aspect)?;
+                    z.start[aspect] = Start::Unloaded;
+                }
+                /* each plane taken is recorded at once: its entry names
+                 * this pair now, whatever the other plane does */
+                o.zs = Some(z);
+                if let Some(open) = g.open.as_mut() {
+                    open.zs = o.zs;
+                }
+            }
         }
         if o.frame.zs_preload.is_none() {
             /* a plane a past frame drew is preloaded; one cleared for the
@@ -3236,7 +3327,14 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
             samples: u32::from(d.samples.max(1)),
         };
         open_frame(g, key, target, None)?;
-        quad.colour = !no_colour && (d.do_clear || d.clear_quad);
+        /* `do_clear` says whether the colour is cleared; `clear_quad` only
+         * says how. A scissored depth or stencil clear that opens the frame
+         * (one the GL core held past the frame of its draw, e.g. across
+         * glDeleteRenderbuffers) writes no colour: its quad has colour
+         * writes off, as st_cb_clear.c's blend state leaves every colormask
+         * 0 when the quad clears no colour buffer (Mesa 26.2.1,
+         * src/mesa/state_tracker/st_cb_clear.c:224-240) */
+        quad.colour = !no_colour && d.do_clear;
     }
     /* the clear quad's program writes output 0, target 0 only */
     if quad.colour && key.more[0].is_some() {
