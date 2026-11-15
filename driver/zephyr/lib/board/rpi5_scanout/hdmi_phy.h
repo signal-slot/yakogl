@@ -19,11 +19,10 @@
  *
  * Offsets are relative to the base of their block (yd5_hdmi_phy_block): the
  * hdmi0 node's "phy", "rm" and "hd" regions (facts section 10,
- * rpi:arch/arm64/boot/dts/broadcom/bcm2712.dtsi:370-397). They were read
- * from vc6_hdmi_hdmi0_fields in rpi:drivers/gpu/drm/vc4/vc4_hdmi_regs.h
- * (from about :430, rpi-6.12.y 5bd564aa) through a web view of the file, not
- * a checkout, so the exact line of each is not confirmed: every offset is
- * marked "unverified" until a board session or a checkout confirms it.
+ * rpi:arch/arm64/boot/dts/broadcom/bcm2712.dtsi:370-397), from
+ * vc6_hdmi_hdmi0_fields (rpi:drivers/gpu/drm/vc4/vc4_hdmi_regs.h:431,
+ * rpi-6.12.y 5bd564aa); each carries its line. Steps of the plan whose
+ * effect on the hardware is our own choice are marked "unverified".
  *
  * No MMIO happens here: reads go through an injected reader, the plan is a
  * list of {op, block, offset, value} entries, and yd5_hdmi_phy_run() replays
@@ -46,27 +45,26 @@ enum yd5_hdmi_phy_block {
 	YD5_HDMI_BLK_HD = 2,	/* hdmi0 reg-name "hd" */
 };
 
-/* Offsets in the "phy" block. All: rpi:vc4_hdmi_regs.h, vc6_hdmi_hdmi0_fields
- * (VC5_PHY_REG entries), line unverified. */
-#define YD5_HDMI_PHY_RESET_CTL		0x000u	/* unverified */
-#define YD5_HDMI_PHY_POWERUP_CTL	0x004u	/* unverified */
-#define YD5_HDMI_PHY_CTL_0		0x008u	/* unverified */
-#define YD5_HDMI_PHY_CTL_1		0x00cu	/* unverified */
-#define YD5_HDMI_PHY_CTL_2		0x010u	/* unverified */
-#define YD5_HDMI_PHY_CTL_CK		0x014u	/* unverified */
-#define YD5_HDMI_PHY_PLL_REFCLK		0x01cu	/* unverified */
-#define YD5_HDMI_PHY_PLL_POST_KDIV	0x028u	/* unverified */
-#define YD5_HDMI_PHY_PLL_VCOCLK_DIV	0x02cu	/* unverified */
-#define YD5_HDMI_PHY_PLL_CFG		0x044u	/* unverified */
-#define YD5_HDMI_PHY_TMDS_CLK_WORD_SEL	0x054u	/* unverified */
-#define YD5_HDMI_PHY_PLL_MISC_0		0x060u	/* unverified; _1.._8 follow at +4 */
+/* Offsets in the "phy" block (VC5_PHY_REG entries of vc6_hdmi_hdmi0_fields) */
+#define YD5_HDMI_PHY_RESET_CTL		0x000u	/* rpi:vc4_hdmi_regs.h:478 */
+#define YD5_HDMI_PHY_POWERUP_CTL	0x004u	/* rpi:vc4_hdmi_regs.h:479 */
+#define YD5_HDMI_PHY_CTL_0		0x008u	/* rpi:vc4_hdmi_regs.h:480 */
+#define YD5_HDMI_PHY_CTL_1		0x00cu	/* rpi:vc4_hdmi_regs.h:481 */
+#define YD5_HDMI_PHY_CTL_2		0x010u	/* rpi:vc4_hdmi_regs.h:482 */
+#define YD5_HDMI_PHY_CTL_CK		0x014u	/* rpi:vc4_hdmi_regs.h:483 */
+#define YD5_HDMI_PHY_PLL_REFCLK		0x01cu	/* rpi:vc4_hdmi_regs.h:484 */
+#define YD5_HDMI_PHY_PLL_POST_KDIV	0x028u	/* rpi:vc4_hdmi_regs.h:485 */
+#define YD5_HDMI_PHY_PLL_VCOCLK_DIV	0x02cu	/* rpi:vc4_hdmi_regs.h:486 */
+#define YD5_HDMI_PHY_PLL_CFG		0x044u	/* rpi:vc4_hdmi_regs.h:487 */
+#define YD5_HDMI_PHY_TMDS_CLK_WORD_SEL	0x054u	/* rpi:vc4_hdmi_regs.h:488 */
+#define YD5_HDMI_PHY_PLL_MISC_0		0x060u	/* rpi:vc4_hdmi_regs.h:489; _1.._8 at +4, :490-497 */
 #define YD5_HDMI_PHY_PLL_MISC_N		9u	/* facts s.10 step 2 (:974-982) */
-#define YD5_HDMI_PHY_PLL_RESET_CTL	0x190u	/* unverified */
-#define YD5_HDMI_PHY_PLL_POWERUP_CTL	0x194u	/* unverified */
-/* "rm" block (VC5_RM_REG), line unverified */
-#define YD5_HDMI_RM_OFFSET		0x018u	/* unverified */
-/* "hd" block (VC4_HD_REG), line unverified */
-#define YD5_HDMI_HD_VID_CTL		0x044u	/* unverified */
+#define YD5_HDMI_PHY_PLL_RESET_CTL	0x190u	/* rpi:vc4_hdmi_regs.h:498 */
+#define YD5_HDMI_PHY_PLL_POWERUP_CTL	0x194u	/* rpi:vc4_hdmi_regs.h:499 */
+/* "rm" block (VC5_RM_REG) */
+#define YD5_HDMI_RM_OFFSET		0x018u	/* rpi:vc4_hdmi_regs.h:502 */
+/* "hd" block (VC4_HD_REG) */
+#define YD5_HDMI_HD_VID_CTL		0x044u	/* rpi:vc4_hdmi_regs.h:438 */
 #define YD5_HDMI_HD_VID_CTL_ENABLE	0x80000000u /* bit 31, rpi:vc4_regs.h:1007 */
 
 /* --- the capture list ---------------------------------------------------- */
@@ -258,7 +256,8 @@ struct yd5_hdmi_phy_step {
  * 11  PLL_RESET_CTL: 0 (PLL reset held), then the captured value (released).
  *     Writing the whole register as 0 rather than clearing one bit is
  *     unverified.
- * 12  a bounded poll. vc6_hdmi_phy_init has no lock wait (facts s.10); this
+ * 12  a bounded poll. vc6_hdmi_phy_init has no lock wait (its last writes
+ *     are the PLL reset at :1189-1195, then the unlock at :1197); this
  *     entry is ours, and since no lock-status bit is confirmed it reads back
  *     PLL_RESET_CTL until it equals the captured value (unverified as a lock
  *     indication). A later item may swap in a real lock bit: only the poll
