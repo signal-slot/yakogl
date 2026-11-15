@@ -1,0 +1,387 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=2028
+# section tip
+vivante	functional.fbo	551	1222	255	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_r16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_r8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rg16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rg8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rgb10_a2	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rgb565	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rgb5_a1	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rgb8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rgba16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rgba4	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rgba8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_srgb8_alpha8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r16i_to_rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r16ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_r16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_r8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rg16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rg8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rgb10_a2	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rgb565	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rgb5_a1	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rgb8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rgba16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rgba4	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_rgba8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32f_to_srgb8_alpha8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32i_to_rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r32ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r8_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r8_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r8_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r8_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r8i_to_rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.r8ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg16f_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg16f_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg16f_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg16f_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg16i_to_rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg16ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_r16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_r8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rg16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rg8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rgb10_a2	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rgb565	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rgb5_a1	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rgb8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rgba16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rgba4	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_rgba8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32f_to_srgb8_alpha8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32i_to_rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg32ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg8_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg8_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg8_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg8_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg8i_to_rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rg8ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb10_a2_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb10_a2_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb10_a2_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb10_a2_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb10_a2ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb565_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb565_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb565_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb565_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb5_a1_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb5_a1_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb5_a1_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb5_a1_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb8_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb8_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb8_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgb8_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba16f_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba16f_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba16f_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba16f_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba16i_to_rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba16ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_r16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_r8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rg16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rg8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rgb10_a2	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rgb565	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rgb5_a1	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rgb8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rgba16f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rgba4	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_rgba8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32f_to_srgb8_alpha8	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32i_to_r16i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32i_to_r32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32i_to_r8i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32i_to_rg16i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32i_to_rg32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32i_to_rg8i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32i_to_rgba16i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32i_to_rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32i_to_rgba8i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_r16ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_r32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_r8ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_rg16ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_rg32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_rg8ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_rgb10_a2ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_rgba16ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba32ui_to_rgba8ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba4_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba4_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba4_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba4_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba8_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba8_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba8_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba8_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba8i_to_rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.rgba8ui_to_rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.srgb8_alpha8_to_r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.srgb8_alpha8_to_r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.srgb8_alpha8_to_rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.conversion.srgb8_alpha8_to_rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r11f_g11f_b10f_linear_out_of_bounds_blit_from_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r11f_g11f_b10f_linear_out_of_bounds_blit_to_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r11f_g11f_b10f_linear_scale_blit_from_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r11f_g11f_b10f_linear_scale_blit_to_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r11f_g11f_b10f_nearest_scale_blit_from_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r11f_g11f_b10f_nearest_scale_blit_to_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r32f_nearest_out_of_bounds_blit_from_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r32f_nearest_out_of_bounds_blit_to_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r32f_nearest_scale_blit_from_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.r32f_nearest_scale_blit_to_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rg32f_nearest_out_of_bounds_blit_from_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rg32f_nearest_out_of_bounds_blit_to_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rg32f_nearest_scale_blit_from_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rg32f_nearest_scale_blit_to_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rgba32f_nearest_out_of_bounds_blit_from_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rgba32f_nearest_out_of_bounds_blit_to_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rgba32f_nearest_scale_blit_from_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.default_framebuffer.rgba32f_nearest_scale_blit_to_default	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_basic	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_depth_only	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_scale	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_stencil_only	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_basic	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_depth_only	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_scale	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_stencil_only	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component16_basic	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component16_scale	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component16_stencil_index8_basic	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component16_stencil_index8_depth_only	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component16_stencil_index8_scale	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component16_stencil_index8_stencil_only	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component24_basic	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component24_scale	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component24_stencil_index8_basic	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component24_stencil_index8_depth_only	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component24_stencil_index8_scale	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component24_stencil_index8_stencil_only	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component32f_basic	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component32f_scale	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component32f_stencil_index8_basic	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component32f_stencil_index8_depth_only	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component32f_stencil_index8_scale	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component32f_stencil_index8_stencil_only	NotSupported	refusal	Separate depth and stencil buffers not supported		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.stencil_index8_basic	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.blit.depth_stencil.stencil_index8_scale	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.color.blend.r11f_g11f_b10f_src_over	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.clear.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.clear.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.clear.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.clear.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.clear.rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.clear.rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.tex2d.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex2d.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex2d.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex2d.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex2d.rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.tex2d.rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.tex2darray.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex2darray.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex2darray.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex2darray.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex2darray.rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.tex2darray.rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.tex3d.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex3d.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex3d.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex3d.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.tex3d.rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.tex3d.rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.texcube.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.texcube.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.texcube.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.texcube.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.color.texcube.rgba32i	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.color.texcube.rgba32ui	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rgb32i	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rgb32ui	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rgba32i	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rgba32ui	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.depth.rgb32i	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.depth.rgb32ui	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.depth.rgba32i	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.depth.rgba32ui	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.stencil.rgb32i	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.stencil.rgb32ui	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.stencil.rgba32i	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.renderable.texture.stencil.rgba32ui	Fail	gl-error	Expected no error but got GL_INVALID_OPERATION		
+vivante	dEQP-GLES3.functional.fbo.completeness.samples.rbo1_rbo2_rbo0	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
+vivante	dEQP-GLES3.functional.fbo.completeness.samples.rbo1_rbo2_rbo4	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
+vivante	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_none_none	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
+vivante	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_rbo1_none	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
+vivante	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_rbo2_none	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
+vivante	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_rbo2_rbo0	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
+vivante	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_tex_none	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
+vivante	dEQP-GLES3.functional.fbo.invalidate.format.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.invalidate.format.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.invalidate.format.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.invalidate.format.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_color	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_depth	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_stencil	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_color	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_depth	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_stencil	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.depth24_stencil8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.depth32f_stencil8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component16	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component24	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component32f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.r16f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.r8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rg16f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rg8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rgb10_a2	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rgb565	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rgb5_a1	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rgb8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rgba16f	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rgba4	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.rgba8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.srgb8_alpha8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.2_samples.stencil_index8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.depth24_stencil8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.depth32f_stencil8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component16	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component24	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component32f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.r16f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.r8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rg16f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rg8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rgb10_a2	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rgb565	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rgb5_a1	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rgb8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rgba16f	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rgba4	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.rgba8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.srgb8_alpha8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.4_samples.stencil_index8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.depth24_stencil8	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.depth32f_stencil8	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component16	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component24	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component32f	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.r16f	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.r32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.r8	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rg16f	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rg32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rg8	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rgb10_a2	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rgb565	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rgb5_a1	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rgb8	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rgba16f	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rgba32f	NotSupported	refusal	Format not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rgba4	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.rgba8	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.srgb8_alpha8	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.msaa.8_samples.stencil_index8	NotSupported	refusal	Sample count not supported		
+vivante	dEQP-GLES3.functional.fbo.multiview.samples_1	NotSupported	refusal	Multiview is not supported at es3fMultiviewTests.cpp:158		
+vivante	dEQP-GLES3.functional.fbo.multiview.samples_2	NotSupported	refusal	Multiview is not supported at es3fMultiviewTests.cpp:158		
+vivante	dEQP-GLES3.functional.fbo.multiview.samples_4	NotSupported	refusal	Multiview is not supported at es3fMultiviewTests.cpp:158		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32i_depth_stencil_rbo_depth24_stencil8	Fail	gl-error	Got unexpected error		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32ui_depth_stencil_rbo_depth24_stencil8	Fail	gl-error	Got unexpected error		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32i_depth_stencil_rbo_depth24_stencil8	Fail	gl-error	GL_INVALID_OPERATION: '' at es3fFboRenderTest.cpp:340		
+vivante	dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32ui_depth_stencil_rbo_depth24_stencil8	Fail	gl-error	GL_INVALID_OPERATION: '' at es3fFboRenderTest.cpp:340		
+vivante	dEQP-GLES3.functional.fbo.render.resize.rbo_r11f_g11f_b10f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.resize.rbo_r32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.resize.rbo_rg32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32i	Fail	gl-error	Got unexpected error		
+vivante	dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32ui	Fail	gl-error	Got unexpected error		
+vivante	dEQP-GLES3.functional.fbo.render.resize.tex2d_r11f_g11f_b10f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.resize.tex2d_r32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32i	Fail	gl-error	GL_INVALID_OPERATION: '' at es3fFboRenderTest.cpp:340		
+vivante	dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32ui	Fail	gl-error	GL_INVALID_OPERATION: '' at es3fFboRenderTest.cpp:340		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f_depth_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f_depth_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r11f_g11f_b10f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r11f_g11f_b10f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
+vivante	dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba32f	NotSupported	refusal	Format not supported, requires GL_EXT_color_buffer_float		
