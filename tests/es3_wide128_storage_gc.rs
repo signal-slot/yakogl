@@ -631,7 +631,7 @@ fn run(
 /// Four tests of one format of `FORMATS` (by index), each format its own
 /// module so a defect of one format is ignored alone.
 macro_rules! format_tests {
-    ($($mod:ident: $idx:expr $(, $why:literal)?;)*) => {$(
+    ($($mod:ident: $idx:expr;)*) => {$(
         mod $mod {
             use super::*;
 
@@ -640,7 +640,6 @@ macro_rules! format_tests {
             /// channels it lacks as 0 and alpha as 1.0f / 1, at sizes that are
             /// not tile-aligned.
             #[test]
-            $(#[ignore = $why])?
             fn stores_16_byte_texels_bit_exact() {
                 let fmt = &FORMATS[$idx];
                 for path in [Path::Image2D, Path::Storage2D] {
@@ -656,7 +655,6 @@ macro_rules! format_tests {
             /// 16-byte layout's, plane 1 half-way into each level, stride and
             /// slice of level 0.
             #[test]
-            $(#[ignore = $why])?
             fn three_level_npot_chain_has_the_16_byte_layout() {
                 let fmt = &FORMATS[$idx];
                 for path in [Path::Image2D, Path::Storage2D] {
@@ -669,7 +667,6 @@ macro_rules! format_tests {
             /// A glTexSubImage2D into the middle of a level (across the tile
             /// column at 4) changes exactly its texels in both planes.
             #[test]
-            $(#[ignore = $why])?
             fn sub_image_into_the_middle_of_a_level_touches_only_its_texels() {
                 let fmt = &FORMATS[$idx];
                 run(fmt, Path::Image2D, (7, 5, 1), 3, |m, again| {
@@ -684,7 +681,6 @@ macro_rules! format_tests {
             /// layer z at `z * align4(w) * align4(h) * 8` in both planes of
             /// every level.
             #[test]
-            $(#[ignore = $why])?
             fn a_2d_array_stores_its_layers_in_both_planes() {
                 let fmt = &FORMATS[$idx];
                 for (w, h, layers) in [(7u32, 5u32, 3u32), (4, 4, 2)] {
@@ -698,13 +694,43 @@ macro_rules! format_tests {
 }
 
 format_tests! {
-    rgba32f: 0, "GL_RGBA32F is stored as RGBA16F whatever the sampled mask says: sized_format (src/gl/texture.rs) hard-codes GL_RGBA32F => GLES_TEXFMT_RGBA16F";
     rgb32f: 1;
     rg32f: 2;
     rgba32ui: 3;
     rgba32i: 4;
     rgb32ui: 5;
     rgb32i: 6;
+}
+
+/// GL_RGBA32F is still stored as RGBA16F whatever the sampled mask says:
+/// `sized_format` (src/gl/texture.rs) hard-codes GL_RGBA32F =>
+/// GLES_TEXFMT_RGBA16F. Pinned as it is so that gc-w128-flip changes this
+/// test (to the 16-byte checks of the other formats, FORMATS[0]) with the
+/// code.
+#[test]
+fn rgba32f_is_still_stored_as_rgba16f() {
+    on_gc7000(|| {
+        let data = vec![0u8; 2 * 2 * 16];
+        // SAFETY: plain GL calls; 2x2 RGBA floats.
+        unsafe {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            let mut t: GLuint = 0;
+            glGenTextures(1, &mut t);
+            glBindTexture(GL_TEXTURE_2D, t);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F as GLint, 2, 2, 0, GL_RGBA, GL_FLOAT, data.as_ptr().cast());
+        }
+        no_error("glTexImage2D RGBA32F");
+        let s = draw(program("sampler2D", false));
+        let d = descriptor(&s, 0).expect("a descriptor in slot 0");
+        assert_ne!(
+            d[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f,
+            rnndb("TEXTURE_FORMAT_EXT_G32R32F"),
+            "RGBA32F is stored as halves until gc-w128-flip"
+        );
+        assert!(descriptor(&s, 1).is_none(), "no companion descriptor for a one-plane class");
+    });
 }
 
 /// GL_R32F is no 128-bit class: the core keeps its own 4-byte class for it,
