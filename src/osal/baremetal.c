@@ -216,9 +216,9 @@ static int bm_gpu_alloc(uint64_t heap_base, size_t size, uint32_t flags,
 	out->gpu  = gpu;
 	out->phys = phys;
 	out->size = msz;
-	/* The GL core reads impl == NULL as "no storage" (R-10), so the
-	 * allocation's handle is its CPU address, as linux.c does: never NULL,
-	 * because init refused a NULL or wrapping carveout. */
+	/* The GL core reads impl == NULL as "no storage" (include/gles_osal.h),
+	 * so the allocation's handle is its CPU address, as linux.c does: never
+	 * NULL, because init refused a NULL or wrapping carveout. */
 	out->impl = cpu;
 	return 0;
 }

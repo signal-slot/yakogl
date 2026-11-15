@@ -38,13 +38,16 @@ extern "C" {
 
 /* A chunk of GPU-visible memory. cpu may be NULL if the platform cannot CPU-map
  * it (then the caller must use osal_gpu_write/read). gpu is the device VA the
- * backend chose; phys is informational. */
+ * backend chose; phys is informational. impl is the platform's handle, and
+ * non-NULL in every descriptor that names memory, what gpu_alloc answers and
+ * what map_phys answers alike: the library takes a NULL impl for "no memory"
+ * (it gives a texture no such storage, and a release skips it). */
 struct osal_gpu_mem {
 	void     *cpu;   /* CPU-mapped address, or NULL */
 	uint64_t  gpu;   /* GPU device virtual address */
 	uint64_t  phys;  /* physical address (informational/debug) */
 	size_t    size;  /* rounded-up allocation size in bytes */
-	void     *impl;  /* platform bookkeeping handle */
+	void     *impl;  /* platform bookkeeping handle; NULL only for no memory */
 };
 
 /* Memory attributes for allocation/mapping. */
@@ -79,8 +82,11 @@ struct osal_ops {
 	int  (*mmu_map)(uint64_t gpu_va, uint64_t phys, size_t size, uint32_t flags);
 	/* Map physical memory the caller owns (a scan-out buffer) at a fresh
 	 * device VA of heap `heap_base`, consuming no pool memory. out->cpu is
-	 * NULL (the platform may not have a CPU view). Optional: without it the
-	 * caller allocates a VA range with gpu_alloc and repoints it with mmu_map. */
+	 * the platform's CPU view of the pages, or NULL when it has none.
+	 * out->impl is non-NULL, as for an allocation. The pages stay the
+	 * caller's: the library does not pass what this answers to gpu_free.
+	 * Optional: without it the caller allocates a VA range with gpu_alloc
+	 * and repoints it with mmu_map. */
 	int  (*map_phys)(uint64_t heap_base, uint64_t phys, size_t size, uint32_t flags,
 			 struct osal_gpu_mem *out);
 	/* For platforms without a CPU mapping: bulk copy in/out of GPU memory.
