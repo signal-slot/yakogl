@@ -82,10 +82,14 @@ mapfile -t LINES < <(tr -d '\r\000' <"$LOG")
 TPL=()  # the templates, in order
 PFX=()  # an ERE that marks the candidate line ('' = the template's leading text)
 HOOK=() # a function run after the line was found ('' = none)
+NOT=()  # EREs no line of the record may match (anywhere)
 declare -A V=() # captured and derived values
 
 # e <template> [prefix ERE] [hook]
 e() { TPL+=("$1"); PFX+=("${2:-}"); HOOK+=("${3:-}"); }
+
+# never <ERE>: no line of the record may match it
+never() { NOT+=("$1"); }
 
 # The image's first lines (driver/rust/src/board/nanopc_t6_early.rs,
 # banner_a_el2 .. banner_a3, printed raw on uart2) and the board glue's at
@@ -131,6 +135,36 @@ table_t6_hello() {
 	table_reset t6_hello
 }
 
+# PD_GPU read powered at hand-over: REPAIR_STATUS bit 1 on t6_gpu's
+# hand-over line, the fact gpu_up takes the GPU over by
+# (board::nanopc_t6_gpu, rk3588::pd_gpu::REPAIR_ON_BIT). The line's own
+# ": on" is not that fact: t6_z1.c prints it only when no idle bit is set
+# either, and gpu_up also takes over a domain powered with its idle request
+# set (": off or idle").
+gpu_found_powered() {
+	local l re='^t6_gpu: PD_GPU at hand-over: .* REPAIR_STATUS 0x([0-9a-f]{8}): '
+	for l in "${LINES[@]}"; do
+		if [[ $l =~ $re ]]; then
+			((16#${BASH_REMATCH[1]} & 0x2))
+			return
+		fi
+	done
+	return 1
+}
+
+# the take-over's masks as found are panthor's or 0 (panthor zeroes a
+# block's mask while its handler runs and while it is suspended):
+# GPU_INT_MASK GPU_INTERRUPTS_MASK 0x00020103 (panthor_gpu.c v6.18:43-47),
+# JOB_INT_MASK ~0 (panthor_fw.c:1033), MMU_INT_MASK fault bits 15:0 only
+# (panthor_mmu_fault_mask). Another word (a JOB_INT_MASK of 0x80000000, the
+# QoS PRIORITY) is most likely not the GPU's register: a wrong map.
+gpu_found_masks() {
+	local k
+	for k in TG TJ TM; do [ ${#V[$k]} -eq 8 ] || return 1; done
+	local g=$((16#${V[TG]})) j=$((16#${V[TJ]})) m=$((16#${V[TM]}))
+	(((g == 0 || g == 0x20103) && (j == 0 || j == 0xffffffff) && (m & ~0xffff) == 0))
+}
+
 # Z1's second half, tools/probes/nanopc_t6/t6_gpu/src/main.c on the success
 # path; the doc's "The GPU power-on", measured 2026-10-19: the identity
 # registers exactly (panthor's probe line, value for value), what Linux
@@ -140,15 +174,18 @@ table_t6_gpu() {
 	e 't6_gpu: build {s}'
 	e 't6_gpu: WDT0 period 22369 ms, fed until 60000 ms of uptime'
 	# on_handover. A crash kexec (Linux's devices left on) hands PD_GPU over
-	# on: Z1 then takes the GPU over (four take-over lines after the PD_GPU
-	# lines, t6_z1.c); every other route hands it over off or idle, and Z1
-	# prints no take-over line.
-	local crash=0
-	if seen_line '^t6_gpu: PD_GPU at hand-over: .*: on$'; then crash=1; fi
-	if [ "$crash" = 1 ]; then
-		e 't6_gpu: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: on'
+	# powered: Z1 then takes the GPU over (four take-over lines after the
+	# PD_GPU lines, t6_z1.c). Every other route hands it over off, and no
+	# take-over line may appear. The route is chosen as gpu_up chooses it
+	# (gpu_found_powered).
+	local powered=0
+	if gpu_found_powered; then powered=1; fi
+	if [ "$powered" = 1 ]; then
+		# ": on", or ": off or idle" with an idle request set
+		e 't6_gpu: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: {s}'
 	else
 		e 't6_gpu: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: off or idle'
+		never '^t6_gpu: take-over: '
 	fi
 	e 't6_gpu: CRU at hand-over: CLKSEL_CON(158) 0x{x8} CLKSEL_CON(159) 0x{x8} CLKGATE_CON(66) 0x{x8} MODE_CON0 0x{x8} PLL_CON 0x{x8} 0x{x8} 0x{x8}: clk_gpu_src {d} Hz'
 	e 't6_gpu: SPI2 gates CLKGATE_CON(14) 0x{x8}, opened 0x{x}'
@@ -157,14 +194,17 @@ table_t6_gpu() {
 	e 't6_gpu: GPU PLL on: PLL_CON6 0x{x8} at hand-over, was on {d}, waited {d} us, PLL_CON6 0x{x8}'
 	e 't6_gpu: PD_GPU on: gates opened 0x{x}, was on {d}, waited {d}/{d}/{d} us'
 	e 't6_gpu: PD_GPU after: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: on'
-	if [ "$crash" = 1 ]; then
-		# what panthor left is recorded, not predicted; the masks are 0 after
-		# the clear, the MCU halt ends either way (a timed-out halt is reset
-		# anyway), and the reset's after-words are what the hardware leaves
-		e 't6_gpu: take-over: found GPU_INT_MASK 0x{x8} JOB_INT_MASK 0x{x8} MMU_INT_MASK 0x{x8}, RAWSTAT 0x{x8} 0x{x8} 0x{x8}, MCU_STATUS {d}'
+	if [ "$powered" = 1 ]; then
+		# What panthor left is recorded: the masks only checked for being
+		# panthor's words (gpu_found_masks), the RAWSTATs as tokens. Pinned:
+		# the MCU halted (MCU_STATUS 0, DISABLED), the soft reset, and after
+		# it the three masks 0 and MCU_STATUS 0. A halt that timed out, a
+		# hard reset, or other words after the reset differ: a person reads them
+		e 't6_gpu: take-over: found GPU_INT_MASK 0x{@TG} JOB_INT_MASK 0x{@TJ} MMU_INT_MASK 0x{@TM}, RAWSTAT 0x{x8} 0x{x8} 0x{x8}, MCU_STATUS {d}' '' gpu_found_masks
 		e 't6_gpu: take-over: masks 0, RAWSTAT after the clear 0x{x8} 0x{x8} 0x{x8}'
-		e 't6_gpu: take-over: MCU halt: MCU_STATUS {d} after {d} polls of 1 us: {s}'
-		e 't6_gpu: take-over: {s} reset: GPU_INT_RAWSTAT 0x{x8} before the clear, 0x{x8} after; RESET_COMPLETED after {d} polls; then masks 0x{x8} 0x{x8} 0x{x8} MCU_STATUS {d}'
+		e 't6_gpu: take-over: MCU halt: MCU_STATUS 0 after {d} polls of 1 us: DISABLED'
+		e 't6_gpu: take-over: soft reset: GPU_INT_RAWSTAT 0x{x8} before the clear, 0x{x8} after; RESET_COMPLETED after {d} polls; then masks 0x00000000 0x00000000 0x00000000 MCU_STATUS 0' \
+			't6_gpu: take-over: [a-z]+ reset:'
 	fi
 	local b
 	for b in 0 1 2 3; do
@@ -470,6 +510,16 @@ if [ "$PROBE" = t6_fw ] || [ "$PROBE" = t6_submit ]; then
 		fi
 	done
 fi
+
+# the lines no record may have
+for re in "${NOT[@]}"; do
+	for ((j = 0; j < ${#LINES[@]}; j++)); do
+		if [[ ${LINES[j]} =~ $re ]]; then
+			printf 'differs  expected no line matching "%s"; seen "%s" (line %d)\n' "$re" "${LINES[j]}" $((j + 1))
+			bad=$((bad + 1))
+		fi
+	done
+done
 
 if [ "$bad" -eq 0 ]; then
 	echo "VERDICT $PROBE PASS"

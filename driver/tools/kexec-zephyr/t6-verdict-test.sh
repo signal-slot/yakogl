@@ -98,9 +98,62 @@ check t6_gpu-crash-pass 0 'VERDICT t6_gpu PASS' "$((GPU + TAKE)) 0 0" t6_gpu "$D
 # an image without the take-over on the crash route: its four lines missing
 sed '/^t6_gpu: take-over: /d' "$D/t6_gpu-crash-pass.uart" >"$WORK/notake.log"
 check t6_gpu-crash-no-take-over 1 "VERDICT t6_gpu FAIL ($TAKE of $((GPU + TAKE)))" "$GPU $TAKE 0" t6_gpu "$WORK/notake.log"
-# a crash run is not judged against the off route's hand-over, nor the reverse
-sed 's/^\(t6_gpu: PD_GPU at hand-over: .*\): off or idle$/\1: on/' "$D/t6_gpu-pass.uart" >"$WORK/on.log"
+# the route is chosen by REPAIR_STATUS bit 1 on the hand-over line, as
+# gpu_up chooses it: an off-route record whose PD_GPU read powered lacks the
+# four take-over lines
+sed 's/^\(t6_gpu: PD_GPU at hand-over: .* REPAIR_STATUS 0xfad4000\)1: off or idle$/\13: off or idle/' "$D/t6_gpu-pass.uart" >"$WORK/on.log"
 check t6_gpu-on-without-take-over 1 "VERDICT t6_gpu FAIL ($TAKE of $((GPU + TAKE)))" "$GPU $TAKE 0" t6_gpu "$WORK/on.log"
+
+# not_pass <name> <log> <ERE>: t6_gpu's verdict on <log> is FAIL (exit 1),
+# and a line not ok names the line that <ERE> matches
+not_pass() {
+	local name=$1 log=$2 re=$3 out rc=0
+	out=$(bash "$V" t6_gpu "$log" 2>&1) || rc=$?
+	runs=$((runs + 1))
+	if [ "$rc" = 1 ] && [[ $(printf '%s\n' "$out" | tail -n 1) == 'VERDICT t6_gpu FAIL ('* ]] &&
+		printf '%s\n' "$out" | grep -v '^ok ' | grep -Eq "$re"; then
+		echo "ok   $name: rc 1, not ok: $re"
+	else
+		echo "FAIL $name: rc $rc (want 1), no line not ok matching $re"
+		printf '%s\n' "$out" | grep -v '^ok ' | sed 's/^/     /'
+		fails=$((fails + 1))
+	fi
+}
+
+# a take-over that did not go cleanly is no PASS: each altered crash record
+# differs on the line that shows it
+X="$D/t6_gpu-crash-pass.uart"
+sed 's/MCU halt: MCU_STATUS 0 after 3 polls of 1 us: DISABLED$/MCU halt: MCU_STATUS 1 after 100001 polls of 1 us: not DISABLED in 100 ms, reset anyway/' "$X" >"$WORK/halt-timeout.log"
+not_pass t6_gpu-take-over-halt-timed-out "$WORK/halt-timeout.log" '^differs .*seen "t6_gpu: take-over: MCU halt: MCU_STATUS 1 '
+sed 's/MCU halt: MCU_STATUS 0 after/MCU halt: MCU_STATUS 3 after/' "$X" >"$WORK/halt-fatal.log"
+not_pass t6_gpu-take-over-halt-fatal "$WORK/halt-fatal.log" '^differs .*seen "t6_gpu: take-over: MCU halt: MCU_STATUS 3 '
+sed 's/^t6_gpu: take-over: soft reset:/t6_gpu: take-over: hard reset:/' "$X" >"$WORK/hard.log"
+not_pass t6_gpu-take-over-hard-reset "$WORK/hard.log" '^differs .*seen "t6_gpu: take-over: hard reset:'
+sed 's/then masks 0x00000000 0x00000000 0x00000000 MCU_STATUS 0$/then masks 0x00020103 0xffffffff 0x0000ffff MCU_STATUS 1/' "$X" >"$WORK/after.log"
+not_pass t6_gpu-take-over-not-quiet-after-reset "$WORK/after.log" '^differs .*seen "t6_gpu: take-over: soft reset: .*MCU_STATUS 1"'
+sed 's/MCU_STATUS 0$/MCU_STATUS 1/' "$X" >"$WORK/after-mcu.log"
+not_pass t6_gpu-take-over-mcu-enabled-after-reset "$WORK/after-mcu.log" '^differs .*seen "t6_gpu: take-over: soft reset: .*MCU_STATUS 1"'
+# the masks as found are not panthor's (the JOB mask reads the QoS PRIORITY
+# word): a wrong map
+sed 's/JOB_INT_MASK 0xffffffff MMU_INT_MASK 0x0000ffff/JOB_INT_MASK 0x80000000 MMU_INT_MASK 0x00000001/' "$X" >"$WORK/aliased.log"
+not_pass t6_gpu-take-over-found-not-panthors "$WORK/aliased.log" '^differs .*seen "t6_gpu: take-over: found '
+# a take-over line on the off route
+sed '/^t6_gpu: PD_GPU after: /a t6_gpu: take-over: found GPU_INT_MASK 0x00000000 JOB_INT_MASK 0x00000000 MMU_INT_MASK 0x00000000, RAWSTAT 0x00000000 0x00000000 0x00000000, MCU_STATUS 0' \
+	"$D/t6_gpu-pass.uart" >"$WORK/off-take.log"
+not_pass t6_gpu-off-route-take-over-line "$WORK/off-take.log" '^differs  expected no line matching "\^t6_gpu: take-over: "'
+# PD_GPU powered with its idle request set: t6_z1.c prints "off or idle",
+# gpu_up takes it over, and the verdict judges the take-over lines (all ok)
+sed 's/^\(t6_gpu: PD_GPU at hand-over: .* BUS_IDLE_REQ 0x000083c\)e\(.*\): on$/\1f\2: off or idle/' "$X" >"$WORK/idle.log"
+out=$(bash "$V" t6_gpu "$WORK/idle.log" 2>&1) && rc=0 || rc=$?
+runs=$((runs + 1))
+n=$(printf '%s\n' "$out" | grep -c '^ok .*seen "t6_gpu: take-over: ' || true)
+if [ "$rc" = 0 ] && [ "$n" = "$TAKE" ] && grep -q 'BUS_IDLE_REQ 0x000083cf .*: off or idle$' "$WORK/idle.log"; then
+	echo "ok   t6_gpu-powered-idle: PASS, its $n take-over lines judged"
+else
+	echo "FAIL t6_gpu-powered-idle: rc $rc, $n take-over lines ok (want $TAKE)"
+	printf '%s\n' "$out" | grep -v '^ok ' | sed 's/^/     /'
+	fails=$((fails + 1))
+fi
 
 # t6_fw: boot 10 + build, WDT0, image, 7 sections, pool, Z3's rc line and 7
 # record lines, PASS, reset = 31
