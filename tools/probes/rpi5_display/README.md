@@ -16,6 +16,7 @@ west build -p always -b rpi_5 -DYAKOGL_WERROR=ON -d build/rpi5_display yakogl/to
 | `src/main.c` | the image: D1 (framebuffer GET tags), D2/D4 (HVS, pixel valve 0 and 1 words before and after), D3 (`rpi_fb_alloc`), D5 (pattern read back, then the split screen: console on top, pattern below) |
 | `linux_ref.sh`, `linux_ref.md` | the read-only Linux dump to run first, over ssh (C0) |
 | `linux_ref_selftest.sh` | host self-test of `linux_ref.sh` against a fake root |
+| `mboxdump/mboxdump.py` | host decoder of recorded property-mailbox buffers (does the BCM2712 answer FRAMEBUFFER_ALLOCATE 0x40001?); `mboxdump/selftest.sh` checks it on fixtures |
 | `screen_mock.sh` | host test of `driver/zephyr/lib/board/rpi5/rpi5_screen.c` (`test/rpi5_screen_mock.c`) |
 
 The image ends with `rpi5_display: PASS (...)` or `rpi5_display: FAIL (reason)`;
