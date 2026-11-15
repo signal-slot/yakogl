@@ -31,7 +31,7 @@
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_wide128_fbo_gc
 //! ```
 
-#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void};
 use std::collections::BTreeMap;
