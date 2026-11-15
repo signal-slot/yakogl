@@ -349,10 +349,16 @@ Rules for every build:
 
 Host dEQP is HOST-ONLY (`tools/cts/README.md` 2b): API, completeness and
 compile verdicts count, pictures do not (the linux OSAL reads black). Each
-cell is `pass/fail/notsupported`. No run directory `build/host-deqp/` was
-present for this item, so no count is filled in: nothing is invented.
-Before cells are filled by items `before-<gpu>`, after cells by the docs
-item (items `after-<gpu>`; for v3d once with the feature off and once on).
+cell is `pass/fail/notsupported`. Before cells were measured at
+commit `ab924857` (the tree before any commit that claims
+`GL_EXT_color_buffer_float`: `src/gl` has none yet), with `MODULE=gles3`,
+`MESA_V3D_TREE` unset, no `EXTRA_FEATURES`, one `OUT=` per run, VK-GL-CTS at
+`93bca01861b0e3ef3c387027a9791e6d065f900c`. Every `Fail` of a picture case
+here is the linux OSAL's black read-back and means nothing; the cells count
+verdicts, they do not claim the GPU renders. No other status (QualityWarning,
+InternalError, Crash, Timeout, Incomplete) occurred in any run. The
+`after` cells come from items `after-v3d` (feature off and on) and
+`after-gc` (powervr and vivante); they stay pending here.
 
 Group globs (all under `dEQP-GLES3.functional.`):
 
@@ -365,9 +371,9 @@ Group globs (all under `dEQP-GLES3.functional.`):
 
 | GPU | `shaders.derivate.*` | `fbo.completeness.*` | `fbo.color.*` | `pbo.renderbuffer.*` (float) |
 |---|---|---|---|---|
-| v3d | before: pending (item `before-v3d`); after: pending | before: pending (item `before-v3d`); after: pending | before: pending (item `before-v3d`); after: pending | before: pending (item `before-v3d`); after: pending |
-| powervr | before: pending (item `before-pvr`); after: pending | before: pending (item `before-pvr`); after: pending | before: pending (item `before-pvr`); after: pending | before: pending (item `before-pvr`); after: pending |
-| vivante | before: pending (item `before-gc`); after: pending | before: pending (item `before-gc`); after: pending | before: pending (item `before-gc`); after: pending | before: pending (item `before-gc`); after: pending |
+| v3d | before: 115/167/0; after: pending | before: 539/14/7; after: pending | before: 0/269/33; after: pending | before: 4/0/4; after: pending |
+| powervr | before: 115/167/0; after: pending | before: 551/2/7; after: pending | before: 0/269/33; after: pending | before: 4/0/4; after: pending |
+| vivante | before: 54/228/0; after: pending | before: 531/22/7; after: pending | before: 0/269/33; after: pending | before: 4/0/4; after: pending |
 
 Expected, not measured: the 15 derivate `texture.msaa4` rows do not move
 (multisample, section 1); `fbo.completeness.renderable.*.color0.r32f` moves
