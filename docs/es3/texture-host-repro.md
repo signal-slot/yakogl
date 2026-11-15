@@ -8,6 +8,8 @@ nothing), every failing case put to a cause with its code site, the GL-core
 causes fixed (`src/backend.rs`, `src/gl/draw.rs`, `src/gl/es3.rs`; the
 tests in `tests/es3_tex_filtering.rs`), the rest listed for the items that
 own them. Integration tip `70142d35`, VK-GL-CTS `93bca01`, 2026-10-22.
+**Refreshed at `26d1c4a2` (2026-11-15, section 1); sections 1a and 3's V3D
+rows are the state at `70142d35`.**
 
 ## 0. What the host can show, and what it cannot
 
@@ -27,7 +29,67 @@ Per-case board data: the AM62P (PowerVR) run of build `ad2b5ed`
 of the texture group; the i.MX8MP has no dEQP-GLES3 run. So the GC7000 and
 V3D rows below come from reading the back ends, not from a board.
 
-## 1. The host runs, before and after
+## 1. The host runs at 26d1c4a2 (HOST-ONLY)
+
+Plan #364, item `texture-repro`. A detached worktree of `26d1c4a2`;
+VK-GL-CTS `93bca01` with `tools/cts/cts-yakogl-target.patch`; one run per
+group and GPU, `MODULE=gles3 GPU=<gpu> tools/cts/host-deqp-run.sh
+dEQP-GLES3.functional.texture.filtering.` (and `.swizzle.`). Every case began
+on every GPU (540 of 540, 83 of 83), no crash, no lost chunk. **HOST-ONLY:
+the read-back is black, so a picture verdict is not a result.** Only the API,
+compile and refusal outcomes count.
+
+| GPU | group | cases | began | Fail "Image verification/comparison failed" | Pass (black = black) | NotSupported | compile refused | upload refused | draw refused / OOM | crash |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| PowerVR | filtering | 540 | 540 | 492 | 0 | 48 | 0 | 0 | 0 | 0 |
+| PowerVR | swizzle | 83 | 83 | 70 | 13 | 0 | 0 | 0 | 0 | 0 |
+| GC7000 (vivante) | filtering | 540 | 540 | 492 | 0 | 48 | 0 | 0 | 0 | 0 |
+| GC7000 (vivante) | swizzle | 83 | 83 | 70 | 13 | 0 | 0 | 0 | 0 | 0 |
+| V3D | filtering | 540 | 540 | 492 | 0 | 48 | 0 | 0 | 0 | 0 |
+| V3D | swizzle | 83 | 83 | 70 | 13 | 0 | 0 | 0 | 0 | 0 |
+
+The three GPUs give the same table, case for case. Per subgroup
+(`Fail` / `NotSupported`, all three GPUs): filtering.2d.combinations 23 / 0,
+2d.formats 66 / 12, 2d.sizes 28 / 0, 2d_array.combinations 36 / 0,
+2d_array.formats 60 / 12, 2d_array.sizes 26 / 0, 3d.combinations 56 / 0,
+3d.formats 59 / 12, 3d.sizes 26 / 0, cube.combinations 18 / 0,
+cube.formats 66 / 12, cube.no_edges_visible 2 / 0, cube.sizes 26 / 0;
+swizzle.single_channel 20 fail, swizzle.multi_channel 50 fail and 13
+"pass" (the same 13 cases as before: the `*_all_zero`
+of the seven formats, `alpha_all_{red,green,blue}`, `red_all_{green,blue}`,
+`rg_all_blue`, black equals the black reference, not passes of the swizzle).
+
+The 48 `NotSupported` are `GL_EXT_texture_sRGB_R8` (24) and `_RG8` (24), the
+optional extensions the library does not advertise (the same as on the AM62P;
+not a failure). Every other row is `Image verification failed` (filtering) or
+`Image comparison failed` (swizzle): the host's normal answer.
+
+**What changed since `70142d35` (section 1a):** the V3D library no longer
+refuses anything in these groups. The 227 compile refusals (`sampler2DArray`
+and `sampler3D`), the 72 upload refusals (`r11f_g11f_b10f`, `rgb9_e5`,
+`rgba8_snorm`) and the 24 `GL_OUT_OF_MEMORY` draws (`rgba16f_*`, and the
+`srgb8_alpha8_*` `v3d_tex_pack_state` refusal) are all gone. **The V3D
+out-of-memory rows do not appear at `26d1c4a2`** (0 of 24), so there is no new
+unowned V3D out-of-memory cause from these groups; the earlier ones were the
+`formats-v3d` and v3d-qpu-array-3d items' to fix and are fixed. The host
+cannot say the pictures are right.
+
+Classes and owners at `26d1c4a2` (every class the host shows has a cause):
+
+| class | count per GPU | cause or owner |
+|---|---|---|
+| NotSupported `GL_EXT_texture_sRGB_R8/RG8` | 48 (filtering) | an optional extension, not claimed; not a failure (`src/gl/state.rs` extension string) |
+| API error, compile, link, upload, draw refusal, crash, out of memory | 0 | none to own: nothing refused |
+| picture Fail, filtering | 492 | black read-back, not a result; the board's to judge. The causes recorded in section 3 (PowerVR 2D array and 3D, RC6 and RC15, board data) are board-only and unchanged by this run |
+| picture Fail, swizzle | 70 | black read-back; the GL core delivers `GlesTextureBind::swizzle` (section 4, `tests/es3_tex_filtering.rs`); whether each back end applies it is the board's to show (section 5) |
+| swizzle black-on-black "Pass" | 13 | not passes (section 2's three board passes are the only real ones) |
+
+`tests/es3_tex_filtering.rs`, run unchanged at this checkout with
+`cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online
+--test es3_tex_filtering`: 7 passed, 0 failed.
+
+## 1a. The host runs at 70142d35, before and after (superseded by section 1)
+
 
 Six runs per tree: `texture.filtering.` (540 cases) and `texture.swizzle.`
 (83) on each GPU's library. "Before" is a clean copy of `70142d35` (the
@@ -118,6 +180,10 @@ minutes per case and the image's 600 s window runs out
 (`docs/notes/pvr-3d-mipmap-hang.md`); they are failures of the same cause.
 
 ## 3. Every failing case put to a cause
+
+*Counts and the V3D rows are as of `70142d35`; at `26d1c4a2` the V3D rows'
+host refusals are gone (section 1). The board-only causes stand until a board
+run.*
 
 Columns: the count is the AM62P figure where there is one (the host figure
 is the same on every GPU and says nothing more); "code site" names the line
