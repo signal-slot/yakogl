@@ -36,7 +36,7 @@ import re
 import sys
 
 PBE_STRIDE_DW = 4  # render.rs:57
-MAX_RT = 3  # render.rs:61
+MAX_RT = 4  # render.rs:61
 
 # (dword, name, citation). CMDTA3D_SHARED is 16 bytes (ddk_abi_pins.h:236):
 # sCmn (CMD_COMMON, one dword ui32FrameNum, rgx_fwif_shared.h:151-155) at 0

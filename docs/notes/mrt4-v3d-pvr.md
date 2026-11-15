@@ -271,6 +271,24 @@ knob asks, which needs a render-layer entry point the knob can reach before
 second code path nobody ships. B and C are listed so the choice is made, not
 inherited.
 
+**Taken: C** (item `pvr-render`), because the plan's hard rule asks that a
+render of one to three targets keep its bytes. `PVR_RENDER_MAX_RT` is 4 in
+the three places. `PVR_RENDER_EOT_PDS_PAIRS` (3) is how many pairs the static
+code moves by default. The driver switch `pvr_render_eot_four_rt` (default
+`PVR_RENDER_EOT_FOUR_RT_DEFAULT` 0, read once by `pvr_render_init`, chosen by
+`pvr_render_eot_pds_pairs()` in `pvr_render.h`) builds the four-pair code and
+info word (0x204) instead. With the switch off the code, the info word
+(0x203) and a three-target render's DATA are the words they were. Those
+words, the switch-on words and the fourth DOUTW (to shared registers 6, 7)
+are pinned by `tests/pvr_render_rt4.rs`. The kick's fourth PBE pair (dw42-45,
+written only for `num_rt` 4) is pinned by `render.rs`
+`rc14_the_fourth_pbe_pair_is_written_for_four_targets_only`. The partial
+render's RTA arrays do not move: they count a render-target array's layers,
+not colour attachments, so they keep their own `RTA_MAX_RTS` 3. The back end
+stays at three (`PVR_BACKEND_MAX_RT` = `PVR_RENDER_EOT_PDS_PAIRS`) until
+`pvr-backend`. That item generates the four-pair DATA when the switch is on,
+and the knob of section 3 sets the switch before `pvr_render_init`.
+
 ### 2.3 The USC output-register packing: four registers a pixel
 
 The BXS-4-64 has **four 32-bit output registers per pixel** (`
