@@ -31,9 +31,11 @@ describes. Software rendering is out of scope: every result here comes from the 
 
 A fourth back end, `gpu-mali`, is in progress for the Arm Mali-G610 of the
 FriendlyElec NanoPC-T6 (Rockchip RK3588). It is not one of the three boards
-above: so far it runs `gl_test` cases on the board's own Linux, through the
-panthor kernel driver, not on Zephyr (`driver/docs/nanopc-t6-mali.md`,
-`tools/cts/RESULTS.md`, issue #7).
+above. On Zephyr it passes the regression set of `gl_test` (50 cases, drawn
+off-screen), started from the board's Linux by kexec: a development result,
+with no display and no boot from U-Boot yet. dEQP-GLES2 has run only on the
+board's own Linux, through the panthor kernel driver, and still has failures
+(`driver/docs/nanopc-t6-mali.md`, `tools/cts/RESULTS.md`, issue #7).
 
 ## Status
 

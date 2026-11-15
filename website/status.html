@@ -63,8 +63,10 @@ and warnings; the <a href="#records">records</a> list them.</p>
 <thead><tr><th scope="col">Board</th><th scope="col">GPU</th><th scope="col">Where it is</th></tr></thead>
 <tbody>
 <tr id="mali"><th scope="row"><a href="https://wiki.friendlyelec.com/wiki/index.php/NanoPC-T6">FriendlyElec NanoPC-T6</a></th><td>Arm Mali-G610</td>
-<td>On the board's Linux, 147 of 256 <code>gl_test</code> cases pass (2026-11-07).
-On Zephyr, the GPU powers on and reports its ID; drawing does not run yet.
+<td>On the board's Linux, 165 of 256 <code>gl_test</code> cases pass (2026-11-12) and
+dEQP-GLES2 reads 5,456 passes of 17,165 cases (2026-11-15).
+On Zephyr, the regression set of <code>gl_test</code> passes 50 of 50 cases, drawn off-screen
+(2026-11-16, started from the board's Linux by kexec); there is no display yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Details</a></td></tr>
 <tr id="x2"><th scope="row"><a href="https://armadillo.atmark-techno.com/armadillo-x2">Atmark Techno Armadillo-X2</a></th><td>Vivante GC7000UL</td>
 <td>The same SoC and GPU as the Verdin iMX8M Plus. Zephyr starts from the board's
