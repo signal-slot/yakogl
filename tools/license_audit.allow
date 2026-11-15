@@ -42,6 +42,7 @@ tools/cts/testdata/ladder/* | Apache-2.0 | probe shaders written for this projec
 tools/cts/wedge_probe/*.vert | Apache-2.0 | probe shaders written for this project
 tools/testdata/*.uart.ts | Apache-2.0 | UART captures of our board runs
 tools/testdata/*.console.txt | Apache-2.0 | console captures of our board runs
+tools/testdata/mp2s-env/*.bin | Apache-2.0 | u-boot-env images regen.sh builds from st-env/stm32mp25-dk-initial-env.txt, a table of values, no code
 tools/hostharness/allow.txt | Apache-2.0 | our allowlist table
 tools/pvr/km/records.sha256 | Apache-2.0 | hashes of our records
 tools/v3d/qpu_corpus.txt | Apache-2.0 | QPU words Mesa's v3d_shc emits for our tools/shaders corpus (own and femtovg sources), written by tools/v3d/qpu_corpus.py at e0c441974
