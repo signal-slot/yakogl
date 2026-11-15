@@ -1701,6 +1701,15 @@ step "clippy  $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs)" \
   cargo clippy --no-default-features --features "$KNOBS_ES2_CONFIG" --test gc_scene_kicks_tiled_rt
 step "test    $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs, every declared test)" \
   knobs_file_tests gc_scene_kicks_tiled_rt "$KNOBS_ES2_CONFIG"
+# The ES 2.0 context's default-path stream against the tiled-target work
+# (tests/gc_es2ctx_tiled_ts.rs): the i.MX8MP dEQP-GLES2 images' feature set,
+# gc_tiled_rt off. report-es2 is on no other vivante row without the knobs.
+ES2CTX_GC_CONFIG="host-test,gpu-vivante,shaderc-online,no-shader-table,report-es2"
+step "clippy  $ES2CTX_GC_CONFIG (tests/gc_es2ctx_tiled_ts.rs)" \
+  cargo clippy --no-default-features --features "$ES2CTX_GC_CONFIG" --test gc_es2ctx_tiled_ts
+tests_row gc_es2ctx_tiled_ts
+step "test    $ES2CTX_GC_CONFIG (tests/gc_es2ctx_tiled_ts.rs, every declared test)" \
+  knobs_file_tests gc_es2ctx_tiled_ts "$ES2CTX_GC_CONFIG"
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
