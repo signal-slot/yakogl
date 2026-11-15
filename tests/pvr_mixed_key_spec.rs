@@ -404,3 +404,64 @@ fn signed_rgb10_a2_is_not_a_valid_target_ignored() {
     assert_eq!(shc_target_key_dwords(t), None);
     assert_eq!(shc_blend_key_mixed(&[0, t]), None);
 }
+
+/// Section 2.1's class of a colour surface format, written from the note's
+/// table and the format's name: the 8-bit and packed unorm formats share the
+/// RGBA8 class, the 19 integer formats their layout, and the sRGB surface is
+/// refused. `tests/gles_surf_class_pin.rs` pins the class and layout map of
+/// the two `src/backend.rs` functions; this table carries the map on to the
+/// key itself, which is what both a mix's constructor and the emit read.
+fn class_of_format(fmt: u8) -> Option<Class> {
+    use yakogl::backend::*;
+    Some(match fmt {
+        GLES_SURF_RGBA8888 | GLES_SURF_XRGB8888 | GLES_SURF_RGB565 | GLES_SURF_RGB10_A2 => Rgba8,
+        GLES_SURF_RGBA16F => Rgba16f,
+        GLES_SURF_R16F => R16f,
+        GLES_SURF_R32F => R32f,
+        GLES_SURF_R8I => Int(1, 8, true),
+        GLES_SURF_R8UI => Int(1, 8, false),
+        GLES_SURF_R16I => Int(1, 16, true),
+        GLES_SURF_R16UI => Int(1, 16, false),
+        GLES_SURF_R32I => Int(1, 32, true),
+        GLES_SURF_R32UI => Int(1, 32, false),
+        GLES_SURF_RG8I => Int(2, 8, true),
+        GLES_SURF_RG8UI => Int(2, 8, false),
+        GLES_SURF_RG16I => Int(2, 16, true),
+        GLES_SURF_RG16UI => Int(2, 16, false),
+        GLES_SURF_RG32I => Int(2, 32, true),
+        GLES_SURF_RG32UI => Int(2, 32, false),
+        GLES_SURF_RGBA8I => Int(4, 8, true),
+        GLES_SURF_RGBA8UI => Int(4, 8, false),
+        GLES_SURF_RGBA16I => Int(4, 16, true),
+        GLES_SURF_RGBA16UI => Int(4, 16, false),
+        GLES_SURF_RGBA32I => Int(4, 32, true),
+        GLES_SURF_RGBA32UI => Int(4, 32, false),
+        GLES_SURF_RGB10_A2UI => Int(4, 10, false),
+        // the refused sRGB surface, and every value src/backend.rs does not
+        // name as a colour format, give no per-target key (2.1)
+        _ => return None,
+    })
+}
+
+/// `gles_surf_target_key` against the model for every value the `u8` format
+/// can hold: the model's key for the format's class (2.1) and that class's
+/// register count, and `None` for the refused sRGB surface and the
+/// undefined values. The non-sRGB colour formats give exactly the model's
+/// classes.
+#[test]
+fn gles_surf_target_key_agrees_with_the_model() {
+    use yakogl::target_key::{gles_surf_target_key, shc_target_key_dwords};
+    let mut seen = vec![];
+    for fmt in 0u8..=255 {
+        let class = class_of_format(fmt);
+        assert_eq!(gles_surf_target_key(fmt), class.map(target_key), "format {fmt}");
+        if let Some(c) = class {
+            let k = target_key(c);
+            assert_eq!(shc_target_key_dwords(k), Some(dwords(c) as u32), "format {fmt} {c:?}");
+            if !seen.contains(&c) {
+                seen.push(c);
+            }
+        }
+    }
+    assert_eq!(seen.len(), classes().len(), "the formats and the model's classes differ");
+}
