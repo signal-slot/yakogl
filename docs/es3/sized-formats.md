@@ -99,6 +99,13 @@ change; the tests state the expectation per mask.
   3.16); into the others it converts from the framebuffer's RGBA8.
 * A texture of these formats is no render target except `RGB10_A2` (its own
   surface on the V3D, `RGBA8` elsewhere) (`framebuffer.rs` attachment guard).
+* `glBlitFramebuffer` from and into an `RGB10_A2` renderbuffer or texture
+  attachment copies 10/10/10/2 words on the host (`src/gl/blit.rs`): to and
+  from `RGBA8`, an exact class-to-class copy, NEAREST and LINEAR. Renderbuffer
+  `18d83492`; texture attachment `4082f91a`; texture LINEAR and the fallback
+  pin `019aa841`; tests `gl::blit::tests::rgb10a2_*`. Builds that hold the
+  format as `RGBA8` (PowerVR, GC7000UL, report-es2) are unchanged. The Pi 4
+  dEQP run is pending.
 
 ## Float colour targets
 
