@@ -1,0 +1,213 @@
+#sessionInfo releaseName fixture
+#beginSession
+#beginTestCaseResult dEQP-GLES3.functional.implementation_limits.max_combined_fragment_uniform_components
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.implementation_limits.max_combined_fragment_uniform_components" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.implementation_limits.max_combined_vertex_uniform_components
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.implementation_limits.max_combined_vertex_uniform_components" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.implementation_limits.max_fragment_input_components
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.implementation_limits.max_fragment_input_components" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.implementation_limits.max_uniform_block_size
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.implementation_limits.max_uniform_block_size" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.implementation_limits.max_varying_components
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.implementation_limits.max_varying_components" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.implementation_limits.max_varying_vectors
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.implementation_limits.max_varying_vectors" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.implementation_limits.max_vertex_output_components
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.implementation_limits.max_vertex_output_components" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getboolean
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getboolean" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getfloat
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getfloat" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getinteger64
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getinteger64" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_varying_components_getboolean
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_varying_components_getboolean" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_varying_components_getfloat
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_varying_components_getfloat" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_varying_components_getinteger64
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_varying_components_getinteger64" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getboolean
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getboolean" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getfloat
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getfloat" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getinteger64
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getinteger64" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getboolean
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getboolean" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getfloat
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getfloat" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getinteger64
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getinteger64" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getboolean
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getboolean" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getfloat
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getfloat" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getinteger
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getinteger" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getboolean
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getboolean" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getfloat
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getfloat" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getinteger
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getinteger" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getboolean
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getboolean" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getfloat
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getfloat" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getinteger
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getinteger" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.implementation_limits.max_texture_size
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.implementation_limits.max_texture_size" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Fail">Got 1024, expected at least 2048 &amp; more</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getinteger
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getinteger" CaseType="SelfValidate">
+ <Text>limit query</Text>
+ <Result StatusCode="Fail">Got invalid integer value</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+#endSession

@@ -1,0 +1,10 @@
+run onefail  gpu=v3d module=gles3 commit=0fa110f  asked 30  began 30  (HOST-ONLY: tools/cts/README.md 2b; never quote a render verdict from these counts)
+group                               cases  asked  began   pass   fail notsup  other noresult
+implementation_limits                   8      8      8      7      1      0      0        0
+state_query.integers                   13     13     13     12      1      0      0        0
+state_query.integers64                  9      9      9      8      1      0      0        0
+TOTAL                                  30     30     30     27      3      0      0        0
+whole run (30 case(s)): Fail 3  Pass 27
+limit rows (case name contains: max_varying_vectors max_varying_components max_fragment_input_components max_vertex_output_components max_uniform_block_size max_combined_vertex_uniform_components max_combined_fragment_uniform_components):
+  Fail          dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getinteger  Got invalid integer value
+  Fail          dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getfloat  Got invalid float value: 6144, expected at least 16384
