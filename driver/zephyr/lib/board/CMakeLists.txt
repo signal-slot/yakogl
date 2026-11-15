@@ -32,6 +32,16 @@ if(CONFIG_YAKOGL_NANOPC_T6)
     COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DOBJDUMP=${CMAKE_OBJDUMP}
             -DELF=${ZEPHYR_BINARY_DIR}/${KERNEL_ELF_NAME}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/nanopc_t6/check_early_hooks.cmake)
+  # The main thread's stack must hold the image's deepest direct call path
+  # (common/check_main_stack.py, its own cases first): nothing guards the
+  # stack, and below it lie the idle thread's and the interrupt stack.
+  set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
+    COMMAND ${PYTHON_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/common/check_main_stack.py --selftest
+    COMMAND ${PYTHON_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/common/check_main_stack.py
+            ${CMAKE_NM} ${CMAKE_OBJDUMP}
+            ${ZEPHYR_BINARY_DIR}/${KERNEL_ELF_NAME})
   # tools/check.sh builds t6_hello with -DYAKOGL_WERROR=ON (the "zephyr" rows).
   if(YAKOGL_WERROR)
     zephyr_library_compile_options(-Werror)
