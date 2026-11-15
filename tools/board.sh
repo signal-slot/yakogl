@@ -104,7 +104,11 @@
 # (`yakogl-tools record --line` status=pass|n/a), or, until the board layer
 # prints yk-record: on a board, the sample's own result line (dEQP's summary,
 # gl_test's "all:" or "RECORD end"). A result record with status=fail (APP,
-# PROBES, CASE, FAULT, GLMARK2) is verdict=failed; status=invalid is bad_record. A GPU
+# PROBES, CASE, FAULT, GLMARK2) is verdict=failed; status=invalid is bad_record. A dEQP
+# session that dEQP ended itself (its "deqp: done:" line says complete=0; dEQP
+# does that after a case's ResourceError or fatal error, and the cases after
+# that one never began) is done_stopped: the result is not the row's; the same
+# image stops at the same case, so the cause is fixed and the image rebuilt. A GPU
 # reset count other than 0 is never a clean done
 # (done_with_resets). A dEQP console whose capture lost result lines the image
 # counted (deqp-uart-tally.py --lost: its summary against the lines seen) is not
@@ -598,6 +602,16 @@ redact_run() {
 # bridge capture's "<unix time> "), NULs and CRs
 plain() { sed -E 's/^([0-9:]{8}|[0-9]{9,}\.[0-9]+) //' "$1" | tr -d '\0\r'; }
 
+# deqp_stopped CONSOLE: dEQP ended the session itself: the console's last
+# "deqp: done:" line (driver/samples/zephyr/deqp/src/main.cpp) says complete=0.
+deqp_stopped() {
+    local l
+    [ -s "$1" ] || return 1
+    # all of plain is read (no early exit: end_seen's note on pipefail)
+    l=$(grep -a '^deqp: done: ' < <(plain "$1" 2>/dev/null) | tail -1)
+    [ "${l##*, }" = complete=0 ]
+}
+
 # end_seen CONSOLE: the image's end is in the console: the board's end line, or
 # a yk-record line whose class is a result (the board layer's last record).
 end_seen() {
@@ -883,6 +897,8 @@ verdict_line() {
     if [ "$resets" = absent ] && [ "$BOARD" = am62p ] && [ -f "$console" ]; then
         resets=$(pvr_resets "$console")
     fi
+    # first of the three "done, but": the line still carries resets= and lost=
+    if [ "$verdict" = done ] && deqp_stopped "$console"; then verdict=done_stopped; fi
     if [ "$verdict" = done ] && [ "$resets" != absent ] && [ "$resets" -gt 0 ]; then verdict=done_with_resets; fi
     # cases the image counted as run whose lines the console capture lost (a serial bridge
     # that stalls drops its backlog): the image's counters against the result lines seen

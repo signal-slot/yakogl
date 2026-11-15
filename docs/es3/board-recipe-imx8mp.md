@@ -451,6 +451,7 @@ Rules that hold for every step:
     It recomputes every run's verdict line from its files, then writes `results.tsv` and `rows.md` in `$OUT`.
     Every `e<NN>` row of the slice must read `rc=0 verdict=done` and `resets=absent` or `0`. The others:
     `verdict=no_record` (died before the first case), `done_lossy` (the capture dropped result lines: rerun),
+    `done_stopped` (dEQP ended the session early, `complete=0`: the cases after the last one never began),
     `done_with_resets`, `died_after=<stage>`, or `back_after` near 600 s plus boot with `begun` below the entry's
     mustpass count (a watchdog end: step 16). Rerun a row that is not clean once; if it repeats, record it as it is
     and treat it in step 16 or the triage. Note each row's `back_after` and scan elapsed time.

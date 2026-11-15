@@ -244,8 +244,9 @@ records ran `board.sh`'s steps by hand (see "On the farm"), so they hold no
 verdict line. The end line the verdict rule matches (`END_RE`) is the last
 of `deqp: summary: `, `v3d_deqp: build <sha8> (DONE|INCOMPLETE|STOPPED)...`
 or `v3d_gl_test RECORD end`, and it accepts all three deqp endings — DONE,
-INCOMPLETE and an aborted STOPPED all read `boot_verdict=complete
-verdict=done`. `result=legacy:v3d_deqp_0` is what a deqp console without a
+INCOMPLETE and an aborted STOPPED all read `boot_verdict=complete`; DONE
+and INCOMPLETE then read `verdict=done`, the aborted one
+`verdict=done_stopped` (the abort bullet below). `result=legacy:v3d_deqp_0` is what a deqp console without a
 `yk-record:` line yields: `legacy_result` takes the last line matching that
 pattern — the image's end line — and names it `v3d_deqp_<its last word>`;
 the end line's last word is its `other <o>` count (`R1` at `0ff58329` ends
@@ -256,7 +257,7 @@ is expected.)
 
 The fields that matter: `rc=0 verdict=done` and `resets=0` — and
 `verdict=done` is completion, not a pass: an image with failures reads
-`done`, and so does a run dEQP aborted (the abort bullet below). Times
+`done`; a run dEQP aborted does not (the abort bullet below). Times
 measured over the three records: a run's cases finish in 0.2-55.7 s (longest
 `DONE` run: S12's 55.1 s at `8990a5cc`, then S24's 54.9 s at `009f62a5`);
 the PM watchdog ends the Zephyr side at ~250 s; Linux answers again
@@ -294,7 +295,7 @@ What a row can say instead, and what to do:
 - `verdict=done_with_resets` (`resets=<n>` from the OSAL's
   `GPU reset (recovery` lines): a result, never a clean pass; name the row in
   the report. 0 recoveries in all 54 board runs so far.
-- **A run dEQP aborted also reads `rc=0 verdict=done`.** A refused draw ends
+- **A run dEQP aborted reads `rc=4 verdict=done_stopped`.** A refused draw ends
   the whole run long inside the window. The back end prints
   `yakogl/v3d: draw refused: ...`, the GL core reports `GL_OUT_OF_MEMORY`
   (`GL error 0x505 in glDrawArrays`; `yakogl: glDrawArrays was not recorded
@@ -302,16 +303,19 @@ What a row can say instead, and what to do:
   `complete=0`, and the cases behind the refusing one never began. The
   console still ends with an end line — `v3d_deqp: build <sha8> STOPPED
   EARLY by dEQP (complete=0; later cases never began): <n> cases, P <p>
-  F <f> R 1 N 0 other <o>` — so `board.sh` reads `verdict=done`, and
-  `deqp-uart-tally.py` reads the log whole with exit 0 (its line is
-  `deqp: done: ... complete=0 | deqp: summary: ...`; no
-  `MISSING`/`INCOMPLETE`/`FATAL`): neither tool can see the abort. Detect
-  it from the console (`Test run was ABORTED!`, the refusal line,
-  `STOPPED EARLY`, `complete=0`), from the tally (`complete=0` in its per-log
-  line; `mustpass cases with a result: <r>` short of the image's mustpass
-  count; the named `ResourceError <case>` line; the `--table` view's `none`
-  column), and over the record with `tools/cts/check-pi4-gles3-log.py`,
-  which exits 1 reporting `aborted, no complete deqp summary (<n>):
+  F <f> R 1 N 0 other <o>` — so `boot_verdict` is `complete`. Both tools
+  read the `complete=0` of the `deqp: done:` line: `board.sh` says
+  `verdict=done_stopped` (rc 4), and `deqp-uart-tally.py` ends its per-log
+  line with `| STOPPED: dEQP ended the session early (complete=0); the cases
+  after the last one here never began` and exits 1 (a tally written
+  before 2026-11-16 shows the abort as `complete=0` only: the tool did not
+  name it then). The console has the cause
+  (`Test run was ABORTED!`, the refusal line, `STOPPED EARLY`), the tally
+  what it cost (`mustpass cases with a result: <r>` short of the image's
+  mustpass count; the named `ResourceError <case>` line; the `--table`
+  view's `none` column), and `tools/cts/check-pi4-gles3-log.py` checks the
+  whole record:
+  it exits 1 reporting `aborted, no complete deqp summary (<n>):
   <labels>` for every tally without `complete=1` (the record contract,
   "On the farm").
   Aborted so far, with their 0-based rows of the 91-image table: FO6 (13)
@@ -491,17 +495,19 @@ python3 tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt \
     --label S32 S32.console.txt          # --label takes exactly one log
 ```
 
-prints one line per log (`<path>: deqp: done: ... | deqp: summary: ...`, an
-aborted log reading `complete=0` there and being otherwise tallied whole, or
-`| MISSING: no summary line`, `| INCOMPLETE: <n> cases have a result line
-here, the summary says <m> had a result`, `| FATAL: dEQP ended the run
-(die()); the cases after it did not run`), then `mustpass cases with a
+prints one line per log (`<path>: deqp: done: ... | deqp: summary: ...`,
+followed for a log that is not whole by `| MISSING: no summary line`,
+`| STOPPED: dEQP ended the session early (complete=0); the cases after the
+last one here never began` (an aborted log: its cases are still tallied),
+`| INCOMPLETE: <n> cases have a result line here, the summary says <m> had
+a result` or `| FATAL: dEQP ended the run (die()); the cases after it did
+not run`), then `mustpass cases with a
 result: <r> (of <l> seen)`, the group table (`group pass fail n/s other`;
 with `--table`, `pass fail n.s. QW other none`), every non-passing case by
 name, and the per-image "the image's own counters" line. Its exit status is
-1 only for a MISSING, INCOMPLETE or FATAL log — all 54 consoles of the three
-records tally with exit 0, the eight aborted ones included; the abort is
-caught by `check-pi4-gles3-log.py` (section 4), not by the tally.
+1 only for a MISSING, STOPPED, INCOMPLETE or FATAL log: of the 54 consoles
+of the three records, the eleven aborted ones. Over a whole record the
+abort is also caught by `check-pi4-gles3-log.py` (section 4).
 
 For RESULTS.md the numbers to carry are the TOTAL row, the per-group rows and,
 per image, its `cases in` line as `cycles.txt` keeps it (section 6).
@@ -551,8 +557,8 @@ Splitting answers two different faults, and they split two different ways.
   record marked INCOMPLETE and its unfinished cases have no result at all
   (section 4). Split by case count, the way the table was sized. Not
   observed yet.
-- **An abort (*at the refusing case*).** No deadline involved, and
-  `board.sh` read `verdict=done` (section 4): split the image **at the
+- **An abort (*at the refusing case*).** No deadline involved;
+  `board.sh` reads `verdict=done_stopped` (section 4): split the image **at the
   case where dEQP stopped**, so the cases behind it get results. At
   `0ff58329`: FO6 at #834 `fragment_ops.scissor.clear_int_buffer` (31
   later cases, 37 mustpass without a result) and M1 at #448

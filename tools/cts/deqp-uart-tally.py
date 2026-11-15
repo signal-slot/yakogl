@@ -19,7 +19,9 @@ status, and prints
     none (the image never finished: its count is not a result), FATAL when
     the log holds "deqp: fatal:" (dEQP ended the run with die(): the cases
     after that point never ran, so the image is not a complete result even
-    though it printed a summary), and
+    though it printed a summary), STOPPED when the "deqp: done:" line says
+    complete=0 (dEQP ended the session itself, which it does after a case's
+    ResourceError or fatal error: the cases after that one never began), and
     INCOMPLETE when the log holds fewer case lines than its own summary
     says had a result (the serial capture lost lines: the image finished,
     but some cases have no name in the log, so they cannot be counted),
@@ -36,7 +38,7 @@ status, and prints
 4 adds the next component (functional.shaders.<subgroup>). dEQP-GLES2.info.*
 counts as the group "info". --label LABEL (one log) names the image in the
 "image's own counters" line instead of the log's directory name. Exit status 1 when a log has no summary line,
-is INCOMPLETE or is FATAL. --self-test checks both verdicts on built-in logs.
+is INCOMPLETE, is STOPPED or is FATAL. --self-test checks these verdicts on built-in logs.
 
 The mustpass views (tools/board.sh tally and diff; the code was
 the old Pi 4 tree runner's "tally", moved here unchanged), each with
@@ -78,6 +80,10 @@ are always the lines seen; the counters are quoted beside them. --lost prints
 one number per log (the cases lost, 0 when none) for tools/board.sh's
 done_lossy verdict.
 
+Why STOPPED exists: on 2026-11-16 a NanoPC-T6 row of 74 cases ended at its
+ninth (a ResourceError); the summary said 9 begun, 9 with a result, the tally
+printed the row as complete, and 65 cases were silently absent from the tree.
+
 Why INCOMPLETE exists: on 2026-09-25 the AM62P bridge dropped 14 of image
 10's 80 result lines (texture.size, 758a3123); the summary still said 80
 with a result, the tally printed its lines, exited 0, and 12 mustpass cases
@@ -96,6 +102,8 @@ STAMP_HMS = re.compile(r"^(\d{2}):(\d{2}):(\d{2}) ")
 STAMP_EPOCH = re.compile(r"^(\d{9,11}\.\d+) ")
 SUMMARY = re.compile(r"^deqp: summary: (\d+) cases begun, (\d+) with a result, (\d+) without")
 DONE = re.compile(r"^deqp: done: (\d+) passed, (\d+) failed, (\d+) not supported, (\d+) warnings")
+# the same line of a session dEQP ended itself (main.cpp prints tcu::TestRunStatus::isComplete)
+DONE_STOPPED = re.compile(r"^deqp: done: .*, complete=0\s*$")
 V3D_DONE = re.compile(r"^v3d_deqp: build \S+ DONE[^:]*: (\d+) cases, P (\d+) F (\d+) R (\d+) N (\d+) other (\d+)")
 V3D_CASE = re.compile(r"^v3d_deqp: case #(\d+) \S .*?(\S+)$")
 LINE = re.compile(r"^deqp: (Pass|Fail|NotSupported|QualityWarning|CompatibilityWarning|"
@@ -278,7 +286,7 @@ def lost_lines(name, r):
 
 def read_log(text):
     """(verdict, {case: status}, tail) of one log's text. verdict is None for a
-    complete log, else the MISSING / INCOMPLETE line to print."""
+    complete log, else the FATAL / MISSING / STOPPED / INCOMPLETE line to print."""
     r = scan(text)
     got, tail = r["got"], r["tail"]
     if any(l.startswith("deqp: fatal") for l in tail):
@@ -286,6 +294,10 @@ def read_log(text):
     summary = [SUMMARY.match(l) for l in tail if SUMMARY.match(l)]
     if not summary:
         return "MISSING: no summary line", got, tail
+    done = [l for l in tail if l.startswith("deqp: done")]
+    if done and DONE_STOPPED.match(done[-1]):
+        return ("STOPPED: dEQP ended the session early (complete=0); the cases after the last one here "
+                "never began"), got, tail
     with_result = int(summary[-1].group(2))
     if len(got) != with_result:
         return ("INCOMPLETE: %d cases have a result line here, the summary says %d had a result"
@@ -301,6 +313,12 @@ def self_test():
         ("a result line lost", head + done + "deqp: summary: 3 cases begun, 3 with a result, 0 without\n",
          "INCOMPLETE"),
         ("no summary", head, "MISSING"),
+        ("dEQP ended the session after two cases (complete=0)",
+         head + done.replace("complete=1", "complete=0") + "deqp: summary: 2 cases begun, 2 with a result, 0 without\n",
+         "STOPPED"),
+        ("complete=0 with a time stamp and a CR on the line",
+         "".join("20:56:%02d %s\r\n" % (i, l) for i, l in enumerate((head + done.replace("=1", "=0")).splitlines()))
+         + "20:56:59 deqp: summary: 2 cases begun, 2 with a result, 0 without\r\n", "STOPPED"),
         ("dEQP died after two cases, summary printed",
          head + "FATAL ERROR: Runtime check failed: 'isOk()' at x.cpp:97\n"
          + "deqp: fatal: dEQP ended the run (die()); later cases did not run\n"

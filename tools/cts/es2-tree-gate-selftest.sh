@@ -101,6 +101,11 @@ run "unaccepted NotSupported: exit 1" 1 '^NotSupported 3$' "^NotSupported names:
 pi4_rec "$D/passed" "Pass $P.b.one" "Pass $P.b.two" "Pass $P.clip_control.errors" "$NS2"
 run "an accepted case that passed: exit 1" 1 '^NotSupported 1$' '^stage1: FAIL \(.*accepted name' "$D/passed"
 
+# a row dEQP ended itself: every case has a result line here, and the row is still not finished
+pi4_rec "$D/stopped" "Pass $P.b.one" "Pass $P.b.two" "$NS1" "$NS2"
+sed -i 's/complete=1$/complete=0/' "$D"/stopped/*-B-*/console.txt
+run "a row dEQP ended early (complete=0): exit 1" 1 '^stage1: FAIL \(.*row\(s\) not finished: B STOPPED' "$D/stopped"
+
 # i.MX8MP selector form: one table image, rows e00 and e01 (selectors 0 and 1), results.tsv beside the consoles.
 # imx_rec DIR FAILED_COUNT_OF_ROW_1 (the Fail column of results.tsv's second row)
 imx_rec() {

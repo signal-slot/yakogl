@@ -799,6 +799,14 @@ its summary counts, is a missing result, never a pass
 (`deqp-uart-tally.py`'s MISSING, INCOMPLETE and FATAL); rerun that image
 (`TREE_ROWS=<n>`; a finished run of the same image is skipped).
 
+So is an image dEQP ended early. dEQP stops a session itself after a case
+that ends in ResourceError, in a fatal error or with an error in its deinit
+(`tcuTestSessionExecutor.cpp`): the image then prints `deqp: done: ...,
+complete=0`, and the cases after that one never began. The tally names it
+`STOPPED` (exit 1) and `board.sh` gives the verdict `done_stopped` (rc 4).
+A rerun of the same image stops at the same case: fix what the case ran
+into, or split the image at that case, and run the new image.
+
 The tally tells a case the capture lost from a case that never ran. NoResult
 is a mustpass case in the records' case filters with no line, which the image
 never began. Lost is a case the image counted as run (`deqp: summary: N cases
