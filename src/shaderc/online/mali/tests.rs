@@ -3398,7 +3398,9 @@ fn a_negated_swapped_varying_pair_is_byte_equal_to_mesa_26_2_1() {
 /// with `--uniform-values` (one attribute per varying, so the link merges
 /// none; tools/mali/testdata/fstex_cubedir_*): two varyings' raw lanes,
 /// raw lanes with -1.0 between them, an fp16 pair beside a uniform z, a
-/// pair scaled by a uniform, a pair `a * 3.0 + 0.25`. Both programs the
+/// pair scaled by a uniform, a pair `a * 3.0 + 0.25`, a pair times a
+/// negative constant `a * -0.5` (Mesa's `FMA` by 0.5 then `FADD .neg`,
+/// which ours makes too since main's fp16 lowering). Both programs the
 /// shim's to the byte.
 #[test]
 fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa_26_2_1() {
@@ -3424,6 +3426,11 @@ fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa
             td!("fstex_cubedir_uniscale.expect.json"),
         ),
         (td!("fstex_cubedir_fmak.vert"), td!("fstex_cubedir_fmak.frag"), td!("fstex_cubedir_fmak.expect.json")),
+        (
+            td!("fstex_cubedir_mulnegk.vert"),
+            td!("fstex_cubedir_mulnegk.frag"),
+            td!("fstex_cubedir_mulnegk.expect.json"),
+        ),
     ] {
         check_program(vs, fs, json);
     }
@@ -3455,6 +3462,25 @@ fn mediump_texture_cube_directions_mesa_compiles_otherwise_are_refused_by_name()
     ] {
         assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::TexCoord, "{src}");
     }
+}
+
+/// The direction's fp16 pair takes the colour's productions
+/// ([`nir_fs::ADMITTED`]): a form in a place no reference draws is
+/// refused as it is in the colour. `a2 * -3.0 + 0.25` is the fused
+/// `FMA.v2f16` with the constant first; Mesa 26.2.1 reads it as `u2.w0`
+/// (-3.0 in the FAU word), ours as `u2.w0.neg` (the review's probes s01,
+/// s11; tools/mali/testdata/fstex_cubedir_fmanegk.expect.json). The same
+/// sum as a colour is refused on main by this rule (FsOperandForm).
+#[test]
+fn a_cube_direction_pair_with_a_form_the_colour_refuses_is_refused_by_name() {
+    let fs = td!("fstex_cubedir_fmanegk.frag");
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::FsOperandForm, "{fs}");
+    let colour = "precision mediump float; varying mediump vec2 a2; \
+                  void main() { gl_FragColor = vec4(a2 * -3.0 + 0.25, 0.0, 1.0); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, colour), MaliError::FsOperandForm);
+    let src = "precision mediump float; uniform samplerCube s; varying mediump vec2 a2; \
+               void main() { gl_FragColor = textureCube(s, vec3(a2 * -3.0 - 1.0, -1.0)); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, src), MaliError::FsOperandForm);
 }
 
 /// A mediump `textureCube(s, v3, u)` with a uniform bias and a vec3
