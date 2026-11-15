@@ -1030,17 +1030,11 @@ fn floats(texture: bool) -> Vec<Fmt> {
 
 /* ---- the float class --------------------------------------------------------- */
 
-/// What a float format's clear reads back as RGBA / FLOAT today: the clear
-/// in the channels the format has; a lacking blue is 0 and a lacking alpha 1
-/// for R16F, R32F and RGB16F; RG16F's lacking blue is the clear's blue
-/// (`rg16f_reads_its_missing_blue_as_0` below). RGBA / UNSIGNED_BYTE is the
-/// same, clamped to [0, 1] and rounded to a byte.
+/// What a float format's clear reads back as RGBA / FLOAT: the clear in the
+/// channels the format has; a lacking blue is 0 and a lacking alpha 1.
+/// RGBA / UNSIGNED_BYTE is the same, clamped to [0, 1] and rounded to a byte.
 fn float_read_today(f: &Fmt) -> [f32; 4] {
-    let mut want = f.expect().map(f32::from_bits);
-    if f.gl == GL_RG16F {
-        want[2] = Fmt::CLEAR_FLOATS[2];
-    }
-    want
+    f.expect().map(f32::from_bits)
 }
 
 /// Every float format: the clear read as RGBA / FLOAT and as RGBA /
@@ -1087,16 +1081,9 @@ fn float_formats_refuse_every_other_pair() {
 }
 
 /// ES 3.0 4.3.1: the channels a format lacks read 0, 0, 1. RG16F lacks
-/// blue; today its blue reads what the RGBA16F storage holds, the clear's own
-/// blue (the clear colour reaches the back end with all four channels, and
-/// the read hands the four halves out).
-/// Cause: src/gl/framebuffer.rs `read_float_row` applies no channel mask to
-/// a float target (`read_int_row`'s caller does for the integer class). RGB16F
-/// and R16F/R32F come out right because the clear's alpha is forced to 1 for a
-/// format without alpha (`fb_target_alpha_bits`) and R16F/R32F store one
-/// channel.
+/// blue, though the RGBA16F storage holds the clear's own blue: the read
+/// masks the channels the renderbuffer's format lacks (`read_pixels`).
 #[test]
-#[ignore = "GL core: RGBA/FLOAT of an RG16F buffer reads the storage's blue, not 0 (read_float_row, plan #186)"]
 fn rg16f_reads_its_missing_blue_as_0() {
     let _g = gl_rig::rig();
     let f = FLOATS[1];
@@ -1198,9 +1185,8 @@ fn a_negative_size_is_invalid_value() {
 
 /// A framebuffer whose colour attachment was taken away is not complete, and
 /// a read of it is GL_INVALID_FRAMEBUFFER_OPERATION through RGBA /
-/// UNSIGNED_BYTE; through an integer pair today's GL core answers
-/// GL_INVALID_OPERATION, the pair checked against the absent buffer (taken
-/// for a fixed-point one) before completeness.
+/// UNSIGNED_BYTE; through an integer pair too (completeness is checked
+/// before the pair).
 #[test]
 fn an_incomplete_framebuffer_is_refused() {
     let _g = gl_rig::rig();
@@ -1213,17 +1199,14 @@ fn an_incomplete_framebuffer_is_refused() {
         glReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr() as *mut c_void);
         assert_eq!(glGetError(), GL_INVALID_FRAMEBUFFER_OPERATION);
         glReadPixels(0, 0, 1, 1, GL_RGBA_INTEGER, GL_UNSIGNED_INT, px.as_mut_ptr() as *mut c_void);
-        assert_eq!(glGetError(), GL_INVALID_OPERATION, "today: the pair before completeness");
+        assert_eq!(glGetError(), GL_INVALID_FRAMEBUFFER_OPERATION, "completeness before the pair");
     }
     assert_eq!(px, [0xdead_beef; 4], "nothing was written");
 }
 
 /// ES 3.0 4.3.1: reading an incomplete framebuffer is
 /// GL_INVALID_FRAMEBUFFER_OPERATION whatever the pair.
-/// Cause: src/gl/framebuffer.rs `read_pixels` checks (format, type) against
-/// `fb_target_format` before `target_loc` reports the framebuffer incomplete.
 #[test]
-#[ignore = "GL core: read_pixels checks the pair before the framebuffer's completeness (src/gl/framebuffer.rs, plan #186)"]
 fn an_incomplete_framebuffer_is_invalid_framebuffer_operation_whatever_the_pair() {
     let _g = gl_rig::rig();
     let _fb = Fb::new(&[INTS[13]]);
@@ -1338,8 +1321,7 @@ fn release_texture_fb(tex: GLuint, fbo: GLuint) {
 }
 
 /// A texture attachment reads its clear as the renderbuffer does: the
-/// four-channel integer formats, RGB10_A2UI, R16F, RG16F (its blue the
-/// clear's, as above), RGBA16F and — while `floats(true)` makes it one —
+/// four-channel integer formats, RGB10_A2UI, R16F, RG16F, RGBA16F and — while `floats(true)` makes it one —
 /// R32F, through the class's pair and the implementation's.
 #[test]
 fn texture_attachments_read_their_clear_the_same() {

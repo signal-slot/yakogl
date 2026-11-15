@@ -3069,6 +3069,12 @@ pub unsafe fn read_pixels(
         c.set_error(GL_INVALID_VALUE, FN);
         return;
     }
+    /* ES 3.0 4.3.1: an incomplete read framebuffer is
+     * GL_INVALID_FRAMEBUFFER_OPERATION before the pair is looked at */
+    if target_loc(c).is_none() {
+        c.set_error(GL_INVALID_FRAMEBUFFER_OPERATION, FN);
+        return;
+    }
     /* the target's real format: a float FBO attachment is read back either as
      * RGBA/UNSIGNED_BYTE (clamped) or as RGBA/FLOAT (ES 3.0's read type for
      * float colour buffers) */
@@ -3079,9 +3085,26 @@ pub unsafe fn read_pixels(
      * read buffer refuses GL_RGBA_INTEGER */
     let int_layout = gles_surf_int_layout(fmt);
     let own = fb_target_channel_mask_n(c, 0);
+    /* the attachment's channel widths where its format lacks some of the
+     * four a float surface holds */
+    let float_bits = if float_target && c.bound_framebuffer != 0 {
+        c.framebuffer_ref(c.bound_framebuffer).map(|fb| &fb.color).and_then(|a| match a.type_ {
+            GL_RENDERBUFFER => c.renderbuffer_ref(a.name).map(|rb| renderbuffer_bits(rb.internalformat).rgba),
+            GL_TEXTURE => c.texture_ref(a.name).map(|t| texture_bits(t).rgba),
+            _ => None,
+        })
+    } else {
+        None
+    };
     let accepted = match int_layout {
         Some(l) => format == GL_RGBA_INTEGER && type_ == if l.signed { GL_INT } else { GL_UNSIGNED_INT },
-        None => format == GL_RGBA && (type_ == GL_UNSIGNED_BYTE || (float_target && type_ == GL_FLOAT)),
+        None => {
+            format == GL_RGBA
+                && (type_ == GL_UNSIGNED_BYTE
+                    || (float_target && type_ == GL_FLOAT)
+                    /* ES 3.0 table 3.2: the packed word of an RGB10_A2 buffer */
+                    || (fmt == GLES_SURF_RGB10_A2 && type_ == GL_UNSIGNED_INT_2_10_10_10_REV))
+        }
     };
 
     if !accepted {
@@ -3193,6 +3216,19 @@ pub unsafe fn read_pixels(
         }
         if float_target {
             io_failed |= !read_float_row(ops, m, cpu, src_off, fmt, count, o, type_);
+            /* a format without a channel reads 0 there (alpha: 1), whatever the
+             * RGBA16F storage holds */
+            if let Some(bits) = float_bits.filter(|b| b.iter().any(|&v| v == 0)) {
+                for px in o.chunks_exact_mut(out_bpp) {
+                    for ch in (0..4).filter(|&ch| bits[ch] == 0) {
+                        if type_ == GL_FLOAT {
+                            px[ch * 4..ch * 4 + 4].copy_from_slice(&f32::from(ch == 3).to_ne_bytes());
+                        } else {
+                            px[ch] = if ch == 3 { 255 } else { 0 };
+                        }
+                    }
+                }
+            }
             continue;
         }
 
@@ -3225,6 +3261,14 @@ pub unsafe fn read_pixels(
                 o[i * 4 + 1] = ((g6 << 2) | (g6 >> 4)) as u8;
                 o[i * 4 + 2] = ((b5 << 3) | (b5 >> 2)) as u8;
                 o[i * 4 + 3] = 0xff;
+            }
+        }
+        if fmt == GLES_SURF_RGB10_A2 && type_ == GL_UNSIGNED_BYTE {
+            /* each 10-bit field (2-bit alpha) scaled to a byte */
+            for px in o[..n].as_chunks_mut::<4>().0 {
+                let w = u32::from_le_bytes(*px);
+                let f = |v: u32, max: u32| ((v * 255 + max / 2) / max) as u8;
+                *px = [f(w & 0x3ff, 1023), f((w >> 10) & 0x3ff, 1023), f((w >> 20) & 0x3ff, 1023), f(w >> 30, 3)];
             }
         }
         if bgra {

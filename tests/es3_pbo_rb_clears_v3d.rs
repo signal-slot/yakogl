@@ -830,19 +830,9 @@ mod trampolines {
         Outcome::Pass
     }
 
-    /// Today's outcome of every format, by dEQP name: everything passes but
-    /// RGB10_A2, whose two reads the GL core gets wrong (see the ignored
-    /// tests below).
-    fn pinned(name: &str) -> Outcome {
-        match name {
-            "rgb10_a2" => {
-                Outcome::Error("glReadPixels", GL_INVALID_OPERATION, vec!["GL error 0x502 in glReadPixels".into()])
-            }
-            "rgb10_a2_ubyte" => {
-                Outcome::Wrong("(0,0) channel 1: 53, the full clear is 51; pixel [85, 53, 35, 201]".into())
-            }
-            _ => Outcome::Pass,
-        }
+    /// The outcome of every format, by dEQP name: all pass.
+    fn pinned(_name: &str) -> Outcome {
+        Outcome::Pass
     }
 
     fn outcome_of(name: &str) -> Outcome {
@@ -885,20 +875,16 @@ mod trampolines {
         assert_eq!(names.len(), 29);
     }
 
-    /// Fix: RGB10_A2 reads as RGBA / UNSIGNED_INT_2_10_10_10_REV, the format
-    /// and type ES 3.0 4.3.2 gives the implementation-chosen read of the
-    /// class, and glReadPixels takes them (today GL_INVALID_OPERATION, a GL
-    /// core refusal, src/gl/framebuffer.rs).
+    /// RGB10_A2 reads as RGBA / UNSIGNED_INT_2_10_10_10_REV (ES 3.0 table
+    /// 3.2), and glReadPixels takes it.
     #[test]
-    #[ignore = "GL core: glReadPixels of RGB10_A2 with UNSIGNED_INT_2_10_10_10_REV is GL_INVALID_OPERATION"]
     fn rgb10_a2_reads_as_the_packed_word() {
         assert_eq!(outcome_of("rgb10_a2"), Outcome::Pass);
     }
 
-    /// Fix: RGBA / UNSIGNED_BYTE of an RGB10_A2 buffer is each 10-bit field
-    /// scaled to a byte (ES 3.0 4.3.2); today the buffer's four raw bytes come back.
+    /// RGBA / UNSIGNED_BYTE of an RGB10_A2 buffer is each 10-bit field
+    /// scaled to a byte (ES 3.0 4.3.2).
     #[test]
-    #[ignore = "GL core: glReadPixels RGBA/UNSIGNED_BYTE of RGB10_A2 returns the packed word's bytes, not the fields"]
     fn rgb10_a2_reads_as_bytes() {
         assert_eq!(outcome_of("rgb10_a2_ubyte"), Outcome::Pass);
     }
