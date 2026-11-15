@@ -5394,6 +5394,7 @@ pub(crate) fn reset_for_tests(also_programs: bool) {
 mod tests {
     use super::*;
     use crate::gl::{buffer::*, framebuffer::*, program::*, state::*, texture::*, vertex::*};
+    #[cfg(not(feature = "report-es2"))]
     use crate::target_key::{gles_surf_target_key, shc_blend_key_is_mixed, shc_blend_key_mixed};
     use crate::testutil::{CacheOp, MemEvent, RecordedDraw, TestGl, FILL, HEAP_DATA, HEAP_SHADER};
     use std::vec::Vec;
