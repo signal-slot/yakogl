@@ -42,6 +42,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "crash_irq.h"
+
 #define SYS_openat     56
 #define SYS_close      57
 #define SYS_rt_sigaction 134
@@ -156,22 +158,26 @@ static unsigned long parse_hex(const char *s)
 #define IMG_MAX (64UL << 20)
 #define MAX_SEGMENTS 16
 
-/* Read a small text file (a sysfs attribute) into buf; returns its length. */
+/* Read a text file (a sysfs attribute, /proc/interrupts) into buf, up to
+ * max - 1 bytes; returns its length. Read until the end: a procfs file may
+ * come in more than one read. */
 static long read_small(const char *path, char *buf, long max)
 {
 	long fd = sys(SYS_openat, AT_FDCWD, (long)path, O_RDONLY, 0, 0, 0);
-	long n;
+	long n = 0, size = 0;
 
 	if (fd < 0) {
 		return fd;
 	}
-	n = sys(SYS_read, fd, (long)buf, max - 1, 0, 0, 0);
+	while (size < max - 1 && (n = sys(SYS_read, fd, (long)(buf + size), max - 1 - size, 0, 0, 0)) > 0) {
+		size += n;
+	}
 	sys(SYS_close, fd, 0, 0, 0, 0, 0);
 	if (n < 0) {
 		return n;
 	}
-	buf[n] = 0;
-	return n;
+	buf[size] = 0;
+	return size;
 }
 
 /* The AM62P's MAIN RTI0 (k3-am62-main.dtsi main_rti0: watchdog@e000000) and
@@ -329,6 +335,39 @@ static int write_file(const char *path, const char *text)
 	return n < 0 ? (int)n : 0;
 }
 
+/* The names in dir, each ended by a NUL, into names; their total length,
+ * or -errno (-7, E2BIG, when they do not fit). */
+static long list_dir(const char *dir, char *names, long max)
+{
+	static char buf[4096];
+	long fd = sys(SYS_openat, AT_FDCWD, (long)dir, O_RDONLY, 0, 0, 0);
+	long n, size = 0;
+
+	if (fd < 0) {
+		return fd;
+	}
+	while ((n = sys(SYS_getdents64, fd, (long)buf, sizeof(buf), 0, 0, 0)) > 0) {
+		for (long off = 0; off < n;) {
+			/* struct linux_dirent64: d_ino, d_off, d_reclen, d_type, d_name */
+			unsigned short reclen = *(unsigned short *)(buf + off + 16);
+			const char *name = buf + off + 19;
+			long len = (long)slen(name);
+
+			off += reclen;
+			if (size + len + 1 > max) {
+				sys(SYS_close, fd, 0, 0, 0, 0, 0);
+				return -7;
+			}
+			for (long i = 0; i <= len; i++) {
+				names[size + i] = name[i];
+			}
+			size += len + 1;
+		}
+	}
+	sys(SYS_close, fd, 0, 0, 0, 0, 0);
+	return n < 0 ? n : size;
+}
+
 /*
  * The crash route. The normal kexec (reboot(KEXEC)) first runs
  * device_shutdown(), and the display drivers turn the panel off in theirs, so
@@ -339,7 +378,7 @@ static int write_file(const char *path, const char *text)
  * offlined first so they go through PSCI CPU_OFF and the image can CPU_ON
  * them, rather than being left spinning in the old kernel's park loop.
  *
- * Two things differ from the normal route, and are checked or done here:
+ * Three things differ from the normal route, and are checked or done here:
  *  - The image starts on the CPU that panics. The normal route moves to the
  *    reboot CPU by itself; here only the offlining puts us on CPU 0, so the
  *    trigger is refused unless /sys/devices/system/cpu/online reads "0"
@@ -349,11 +388,20 @@ static int write_file(const char *path, const char *text)
  *    named enP..., which the three fixed names of quiesce_bus_masters miss).
  *    Every interface in /sys/class/net except lo is taken down instead. The
  *    netlink ACK is not read, so the line printed says "requested".
+ *  - The panic masks and shuts down every started interrupt, and hangs on
+ *    one whose chip sleeps in its bus lock: the PMIC's power key on the
+ *    NanoPC-T6. The power key is unbound, and the trigger is refused while
+ *    /proc/interrupts has a row with a handler on a chip the crash route was
+ *    not measured with (crash_irq.h).
  * The trigger is opened first: once the links are down the board may be
- * unreachable, so whatever can be refused is refused before that. A refusal
- * brings CPUs 1-7 back online and unloads the crash image again (the next
- * run then does not find one loaded): exit 1, or exit 3 naming the failed
- * unload.
+ * unreachable, so whatever can be refused is refused before that. The power
+ * key is unbound before the CPUs go offline, as it was (by hand) in the two
+ * runs that went through (2026-11-15). The interrupt check is the last step
+ * that can refuse, after the CPU check: what follows it is the sysrq
+ * switch, the sync and the links going down, as in those runs. A refusal
+ * brings CPUs 1-7 back online, binds the power key again and unloads the
+ * crash image again (the next run then does not find one loaded): exit 1,
+ * or exit 3 when the bind or the unload failed (each named).
  */
 static void crash_links_down(void)
 {
@@ -389,10 +437,12 @@ static const char *const crash_cpus[] = {
 	"/sys/devices/system/cpu/cpu7/online",
 };
 
-/* Not triggering: CPUs 1-7 back online, the crash image unloaded. */
+/* Not triggering: CPUs 1-7 back online, the power key bound again, the
+ * crash image unloaded. */
 static void crash_refuse(const char *why)
 {
 	long n;
+	int not_back;
 
 	put("crash: ");
 	put(why);
@@ -404,15 +454,17 @@ static void crash_refuse(const char *why)
 			put(": could not be brought back online\n");
 		}
 	}
+	not_back = crash_pwrkey_rebind();
 	n = sys(SYS_kexec_load, 0, 0, 0, KEXEC_ARCH_AARCH64 | KEXEC_ON_CRASH, 0, 0);
 	if (n < 0) {
 		put("crash: unloading the crash image FAILED: error ");
 		put_hex(-n);
 		put(" (it stays loaded; /sys/kernel/kexec_crash_loaded)\n");
-		sys(SYS_exit, 3, 0, 0, 0, 0, 0);
+		not_back++;
+	} else {
+		put("crash: crash image unloaded\n");
 	}
-	put("crash: crash image unloaded\n");
-	sys(SYS_exit, 1, 0, 0, 0, 0, 0);
+	sys(SYS_exit, not_back ? 3 : 1, 0, 0, 0, 0, 0);
 }
 
 static void crash_jump(void)
@@ -426,6 +478,7 @@ static void crash_jump(void)
 	if (trigger < 0) {
 		crash_refuse("/proc/sysrq-trigger cannot be opened for writing");
 	}
+	crash_pwrkey_unbind();
 	for (unsigned long i = 0; i < sizeof(crash_cpus) / sizeof(crash_cpus[0]); i++) {
 		(void)write_file(crash_cpus[i], "0");
 	}
@@ -434,6 +487,9 @@ static void crash_jump(void)
 		put("crash: /sys/devices/system/cpu/online reads ");
 		put(online[0] ? online : "nothing\n");
 		crash_refuse("CPUs other than 0 are still online, and the image would start on the one that panics");
+	}
+	if (crash_irq_check() != 0) {
+		crash_refuse("an interrupt is left on a chip the crash route was not measured with, and the panic may hang on it");
 	}
 	(void)write_file("/proc/sys/kernel/sysrq", "1");
 	sys(SYS_sync, 0, 0, 0, 0, 0, 0);
