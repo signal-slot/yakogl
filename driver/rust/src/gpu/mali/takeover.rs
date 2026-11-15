@@ -20,8 +20,9 @@
 //! 3. `GPU_CMD` := `SOFT_RESET` and `RESET_COMPLETED` waited for in
 //!    `GPU_INT_RAWSTAT` ([`super::soft_reset`]); when it does not rise in
 //!    100 ms, `GPU_CMD` := `HARD_RESET` (panthor_regs.h:52) and the same
-//!    wait. After the reset the address spaces are off: the GPU no longer
-//!    walks the other kernel's page tables.
+//!    wait. After the reset the address spaces are expected to be off, so
+//!    that the GPU no longer walks the other kernel's page tables: expected
+//!    from what a reset does, not measured on the board yet.
 //!
 //! panthor's own reset on a hang differs in order: it masks the job
 //! interrupt and stops the MCU (`panthor_fw_pre_reset`, :1080-1102), and
@@ -203,7 +204,9 @@ fn wait32(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::super::csf::{JOB_INT_GLOBAL_IF, MCU_CONTROL_AUTO, MCU_STATUS_ENABLED};
+    use super::super::csf::{
+        JOB_INT_GLOBAL_IF, MCU_CONTROL_AUTO, MCU_STATUS_ENABLED, MCU_STATUS_FATAL, MCU_STATUS_HALT,
+    };
     use super::super::{CMD_SOFT_RESET, GPU_CMD, IRQ_RESET_COMPLETED, RESET_WAIT_US};
     use super::*;
     use std::cell::RefCell;
@@ -218,21 +221,25 @@ pub(crate) mod tests {
     /// interrupt and an MMU fault pending, the MCU enabled. While the MCU is
     /// enabled the firmware raises the global interrupt again on each read
     /// of `JOB_INT_RAWSTAT`. `MCU_CONTROL` := `DISABLE` stops it after
-    /// `halt_lag` polls (`None`: never). The model knows the reset commands
+    /// `halt_lag` polls (`None`: never), in the state `halt_to` (`DISABLED`
+    /// unless a test says otherwise). The model knows the reset commands
     /// by panthor's numbers, written out (panthor_regs.h v6.18:50-52: 0x101
     /// soft, 0x201 hard), not by this module's constants. A reset completes
     /// at once unless its command is in `dead`; it stops the MCU and leaves
     /// the masks and `MCU_STATUS` as `after_reset` says (`None`: masks as
-    /// they were, MCU disabled). Every write is logged, and each reset
+    /// they were, MCU disabled). The bits of `GPU_INT_RAWSTAT` in
+    /// `stuck_raw` do not clear. Every write is logged, and each reset
     /// command keeps the masks and `MCU_STATUS` it met.
     pub(crate) struct Running {
         pub(crate) regs: RefCell<HashMap<usize, u32>>,
         pub(crate) writes: RefCell<Vec<(usize, u32)>>,
         pub(crate) halt_lag: Option<u32>,
+        pub(crate) halt_to: u32,
         halt_left: RefCell<Option<u32>>,
         pub(crate) dead: Vec<u32>,
         /// Masks whose writes do not take.
         pub(crate) stuck_mask: Option<usize>,
+        pub(crate) stuck_raw: u32,
         /// (command, masks, `MCU_STATUS`) at each reset command.
         pub(crate) resets: RefCell<Vec<(u32, [u32; 3], u32)>>,
         /// The three masks and `MCU_STATUS` a completed reset leaves.
@@ -258,9 +265,11 @@ pub(crate) mod tests {
                 regs: RefCell::new(r.into_iter().collect()),
                 writes: RefCell::new(vec![]),
                 halt_lag: Some(3),
+                halt_to: MCU_STATUS_DISABLED,
                 halt_left: RefCell::new(None),
                 dead: vec![],
                 stuck_mask: None,
+                stuck_raw: 0,
                 resets: RefCell::new(vec![]),
                 after_reset: None,
             }
@@ -280,7 +289,7 @@ pub(crate) mod tests {
                 let mut left = self.halt_left.borrow_mut();
                 match *left {
                     Some(0) => {
-                        self.regs.borrow_mut().insert(MCU_STATUS, MCU_STATUS_DISABLED);
+                        self.regs.borrow_mut().insert(MCU_STATUS, self.halt_to);
                         *left = None;
                     }
                     Some(n) => *left = Some(n - 1),
@@ -296,7 +305,8 @@ pub(crate) mod tests {
             let off = a - BASE;
             self.writes.borrow_mut().push((off, v));
             if let Some(&(raw, _, _)) = IRQ_BLOCKS.iter().find(|b| b.1 == off) {
-                *self.regs.borrow_mut().entry(raw).or_insert(0) &= !v;
+                let keep = if raw == GPU_INT_RAWSTAT { self.stuck_raw } else { 0 };
+                *self.regs.borrow_mut().entry(raw).or_insert(0) &= !v | keep;
                 return;
             }
             if Some(off) == self.stuck_mask {
@@ -403,6 +413,21 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn an_mcu_that_stops_in_halt_or_fatal_is_not_disabled() {
+        // panthor_fw_stop waits for DISABLED alone (panthor_fw.c v6.18:1066):
+        // HALT and FATAL are not a stopped MCU, the reset follows the timeout
+        for state in [MCU_STATUS_HALT, MCU_STATUS_FATAL] {
+            let mut g = Running::new();
+            g.halt_to = state;
+            let (r, out, _) = run(&g);
+            assert_eq!(r, Ok(()), "{state}");
+            assert!(out.mcu_halt_timed_out, "{state}");
+            assert_eq!((out.mcu_waited_us, out.mcu_status_halted), (MCU_HALT_WAIT_US + 1, state));
+            assert_eq!(*g.resets.borrow(), vec![(SOFT, [0; 3], state)]);
+        }
+    }
+
+    #[test]
     fn the_mcu_wait_is_panthors_100_ms() {
         // panthor_fw.c v6.18:1066-1067: 100000 us
         for (lag, timed_out) in [(100_000, false), (100_001, true)] {
@@ -456,6 +481,22 @@ pub(crate) mod tests {
         let hard = w.iter().position(|w| *w == (GPU_CMD, HARD)).unwrap();
         assert_eq!(w[hard - 1], (GPU_INT_CLEAR, IRQ_RESET_COMPLETED));
         assert_eq!(*w.last().unwrap(), (GPU_INT_CLEAR, IRQ_RESET_COMPLETED));
+    }
+
+    #[test]
+    fn a_reset_bit_that_does_not_clear_commands_no_reset_and_no_hard_reset() {
+        // RESET_COMPLETED set before the clear and still set after it: a
+        // completion could not be told from this reset's, so neither reset
+        // is commanded (the hard reset is only for a soft reset that timed out)
+        let mut g = Running::new();
+        g.stuck_raw = IRQ_RESET_COMPLETED;
+        g.regs.borrow_mut().insert(GPU_INT_RAWSTAT, IRQ_RESET_COMPLETED);
+        let (r, out, _) = run(&g);
+        assert_eq!(r, Err((MaliRefusal::ResetBitStuck, u64::from(IRQ_RESET_COMPLETED))));
+        assert!(!out.hard);
+        assert_eq!(out.steps, STEP_HALT_WAITED);
+        assert!(g.resets.borrow().is_empty());
+        assert!(!g.writes.borrow().iter().any(|w| w.0 == GPU_CMD), "{:x?}", g.writes.borrow());
     }
 
     #[test]
