@@ -10,7 +10,9 @@
 # The fixtures are the predicted records (driver/docs/nanopc-t6-mali.md:
 # Z1's measured t6_hello and t6_gpu lines, Z2's "The expected uart2 record" with
 # P = 0x10027000 and B = 0x10037000), not board output. The Z1 stop fixtures
-# (t6_mmu-z1stop, t6_fw-z1fail, t6_submit-z3-stop) carry Z1's record as
+# (t6_mmu-z1stop, t6_fw-z1fail, t6_submit-z3-stop, and the crash route's
+# t6_fw-z1-takeover-mask and -hard) and the crash route's success record
+# (t6_gpu-crash-pass) carry Z1's record as
 # tools/probes/nanopc_t6/common/t6_z1.c prints it: the host cc builds that file
 # with common/test/t6_z1_test.c, and its lines must be the fixture's.
 set -euo pipefail
@@ -90,6 +92,15 @@ check t6_gpu-over-mmu 1 "VERDICT t6_gpu FAIL ($((GPU - 10)) of $GPU)" "10 $((GPU
 
 check t6_hello-pass 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$D/t6_hello-pass.uart"
 check t6_gpu-pass 0 'VERDICT t6_gpu PASS' "$GPU 0 0" t6_gpu "$D/t6_gpu-pass.uart"
+# the crash kexec: PD_GPU handed over on, Z1 takes the GPU over (four lines)
+TAKE=4
+check t6_gpu-crash-pass 0 'VERDICT t6_gpu PASS' "$((GPU + TAKE)) 0 0" t6_gpu "$D/t6_gpu-crash-pass.uart"
+# an image without the take-over on the crash route: its four lines missing
+sed '/^t6_gpu: take-over: /d' "$D/t6_gpu-crash-pass.uart" >"$WORK/notake.log"
+check t6_gpu-crash-no-take-over 1 "VERDICT t6_gpu FAIL ($TAKE of $((GPU + TAKE)))" "$GPU $TAKE 0" t6_gpu "$WORK/notake.log"
+# a crash run is not judged against the off route's hand-over, nor the reverse
+sed 's/^\(t6_gpu: PD_GPU at hand-over: .*\): off or idle$/\1: on/' "$D/t6_gpu-pass.uart" >"$WORK/on.log"
+check t6_gpu-on-without-take-over 1 "VERDICT t6_gpu FAIL ($TAKE of $((GPU + TAKE)))" "$GPU $TAKE 0" t6_gpu "$WORK/on.log"
 
 # t6_fw: boot 10 + build, WDT0, image, 7 sections, pool, Z3's rc line and 7
 # record lines, PASS, reset = 31
@@ -100,6 +111,12 @@ check t6_fw-missing 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 1 0" t6_fw "$
 # the stop line, the FAIL line stands for PASS (differs, it names the step)
 # and the Z3 record never came; Z1's record follows the stop line (8 ok)
 check t6_fw-z1fail 1 "VERDICT t6_fw FAIL (10 of $((FW + Z1)))" "$((FW + Z1 - 9)) 7 3" t6_fw "$D/t6_fw-z1fail.uart"
+# the crash route's take-over refused (stop 14): judged as any Z1 stop; the
+# record's take-over lines show only the words read (a mask stuck: the found
+# line; neither reset: found, cleared, the MCU halt that timed out)
+for m in mask hard; do
+	check "t6_fw-z1-takeover-$m" 1 "VERDICT t6_fw FAIL (10 of $((FW + Z1)))" "$((FW + Z1 - 9)) 7 3" t6_fw "$D/t6_fw-z1-takeover-$m.uart"
+done
 # the same stop from an image that does not print Z1's record: its 8 lines
 # are named missing
 sed '/^t6_fw: Z3: stop /,/^t6_fw: Z1 stopped: /{/^t6_fw: Z3: stop /!d}' "$D/t6_fw-z1fail.uart" >"$WORK/z1bare.log"
@@ -161,11 +178,14 @@ elif ! cc -std=c11 -Wall -Wextra -Werror -I"$P/test" -I"$P" -I"$HERE/../../rust/
 	echo "FAIL t6_z1.c host build"
 	fails=$((fails + 1))
 else
-	for c in t6_mmu:pd:t6_mmu-z1stop t6_fw:pll:t6_fw-z1fail t6_submit:pd:t6_submit-z3-stop; do
+	for c in t6_mmu:pd:t6_mmu-z1stop t6_fw:pll:t6_fw-z1fail t6_submit:pd:t6_submit-z3-stop \
+		t6_fw:mask:t6_fw-z1-takeover-mask t6_fw:hard:t6_fw-z1-takeover-hard \
+		t6_gpu:crash:t6_gpu-crash-pass; do
 		IFS=: read -r probe stop fx <<<"$c"
 		runs=$((runs + 1))
 		"$WORK/t6_z1_test" "$probe" "$stop" >"$WORK/z1.want"
-		sed -n "/^$probe: PD_GPU at hand-over/,/^$probe: Z1 stopped: /p" "$D/$fx.uart" >"$WORK/z1.got"
+		# a stop record ends with its stop line, a run-through with the L2 line
+		sed -n "/^$probe: PD_GPU at hand-over/,/^$probe: \(Z1 stopped\|L2 mask\)/p" "$D/$fx.uart" >"$WORK/z1.got"
 		if [ -s "$WORK/z1.want" ] && cmp -s "$WORK/z1.want" "$WORK/z1.got"; then
 			echo "ok   $fx: Z1's record is t6_z1.c's ($(wc -l <"$WORK/z1.want") lines)"
 		else

@@ -139,8 +139,17 @@ table_t6_gpu() {
 	table_boot
 	e 't6_gpu: build {s}'
 	e 't6_gpu: WDT0 period 22369 ms, fed until 60000 ms of uptime'
-	# on_handover
-	e 't6_gpu: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: off or idle'
+	# on_handover. A crash kexec (Linux's devices left on) hands PD_GPU over
+	# on: Z1 then takes the GPU over (four take-over lines after the PD_GPU
+	# lines, t6_z1.c); every other route hands it over off or idle, and Z1
+	# prints no take-over line.
+	local crash=0
+	if seen_line '^t6_gpu: PD_GPU at hand-over: .*: on$'; then crash=1; fi
+	if [ "$crash" = 1 ]; then
+		e 't6_gpu: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: on'
+	else
+		e 't6_gpu: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: off or idle'
+	fi
 	e 't6_gpu: CRU at hand-over: CLKSEL_CON(158) 0x{x8} CLKSEL_CON(159) 0x{x8} CLKGATE_CON(66) 0x{x8} MODE_CON0 0x{x8} PLL_CON 0x{x8} 0x{x8} 0x{x8}: clk_gpu_src {d} Hz'
 	e 't6_gpu: SPI2 gates CLKGATE_CON(14) 0x{x8}, opened 0x{x}'
 	e 't6_gpu: SPI2 as found: CTRLR0 0x{x8} CTRLR1 0x{x8} SSIENR 0x{x} SER 0x{x} BAUDR 0x{x} SR 0x{x8} RXFLR 0x{x} VERSION 0x{x8}'
@@ -148,6 +157,15 @@ table_t6_gpu() {
 	e 't6_gpu: GPU PLL on: PLL_CON6 0x{x8} at hand-over, was on {d}, waited {d} us, PLL_CON6 0x{x8}'
 	e 't6_gpu: PD_GPU on: gates opened 0x{x}, was on {d}, waited {d}/{d}/{d} us'
 	e 't6_gpu: PD_GPU after: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: on'
+	if [ "$crash" = 1 ]; then
+		# what panthor left is recorded, not predicted; the masks are 0 after
+		# the clear, the MCU halt ends either way (a timed-out halt is reset
+		# anyway), and the reset's after-words are what the hardware leaves
+		e 't6_gpu: take-over: found GPU_INT_MASK 0x{x8} JOB_INT_MASK 0x{x8} MMU_INT_MASK 0x{x8}, RAWSTAT 0x{x8} 0x{x8} 0x{x8}, MCU_STATUS {d}'
+		e 't6_gpu: take-over: masks 0, RAWSTAT after the clear 0x{x8} 0x{x8} 0x{x8}'
+		e 't6_gpu: take-over: MCU halt: MCU_STATUS {d} after {d} polls of 1 us: {s}'
+		e 't6_gpu: take-over: {s} reset: GPU_INT_RAWSTAT 0x{x8} before the clear, 0x{x8} after; RESET_COMPLETED after {d} polls; then masks 0x{x8} 0x{x8} 0x{x8} MCU_STATUS {d}'
+	fi
 	local b
 	for b in 0 1 2 3; do
 		e "t6_gpu: qos_gpu_m$b: 0x{x8} 0x{x8} 0x{x8} 0x{x8} 0x{x8}"
