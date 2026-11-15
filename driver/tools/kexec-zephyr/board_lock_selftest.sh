@@ -841,13 +841,16 @@ check "t6-zephyr.cmd: t6z_load t6z_entry t6z_window ($got) are nanopc_t6.dts's z
 	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_base $win_size" ]; echo $?)"
 
 # The test leaves no process behind: the sweep ends every marked process,
-# and a known one (the holder, still running here) shows that the search
-# finds what it looks for.
-found=$(marked | grep -cx "$holder_pid")
+# and a known one, started here, shows that the search finds what it looks
+# for. (Not the holder: it ends by itself 60 s after its start, so a run
+# that takes longer than that would not find it.)
+sleep 300 &
+known_pid=$!
+found=$(marked | grep -cx "$known_pid")
 sweep
 left=$(marked)
 left=${left//$'\n'/ }
-check "no process of the test is left (the holder found by the search: $found; left: ${left:-none})" \
+check "no process of the test is left (a known one found by the search: $found; left: ${left:-none})" \
 	"$([ "$found" = 1 ] && [ -z "$left" ]; echo $?)"
 
 not_run=
