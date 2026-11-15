@@ -7,9 +7,10 @@
 //! ([`rk3588::gpu_clock_set`]: the PVTPLL, an unknown mux or a divider off
 //! the table become CPLL / 5 = 300 MHz; Armbian's state is left as it is),
 //! check the supply covers that rate, power the clock's PLL on when Linux
-//! left it powered down, power PD_GPU on, read the GPU's identity, soft
-//! reset it and power its L2 on. Every value read is kept in [`GpuUp`] for
-//! the image to print; the first step that refuses ends the run there.
+//! left it powered down, power PD_GPU on, take over a GPU found powered
+//! ([`takeover::take_over`]), read the GPU's identity, soft reset it and
+//! power its L2 on. Every value read is kept in [`GpuUp`] for the image to
+//! print; the first step that refuses ends the run there.
 //!
 //! The supply's voltage is read, never written. A supply lower than the GPU
 //! OPP table asks for the rate the clock is on stops the run before PD_GPU
@@ -37,12 +38,27 @@
 //!   on only. A domain that reads powered (`REPAIR_STATUS` bit 1) while
 //!   DCDC1 reads off is no state the facts cover: [`Stop::SupplyOff`],
 //!   refusal [`SUPPLY_OFF_DOMAIN_POWERED`], nothing written to the RK806.
+//!   A domain powered with its idle request still set gets the request
+//!   released by the same step.
+//!
+//! A domain that read powered at hand-over holds a GPU another kernel may
+//! still run (the crash kexec: panthor's firmware on the MCU, its masks set,
+//! its address spaces on Linux's tables). Right after the PD_GPU step, which
+//! writes no PMU word for it but opens the GPU's clock gates the GPU's
+//! registers need, [`takeover::take_over`] masks and clears the three
+//! interrupt blocks, halts the MCU and resets the GPU (hard when the soft
+//! reset times out); only then the QoS words, the identity, Z1's own soft
+//! reset and the L2. A refusal there is [`Stop::TakeOver`]. A domain that
+//! read off gets none of it: its GPU words are those of the reset and the L2
+//! alone. PD_GPU is never powered off here, so no idle request is needed
+//! for a cut.
 //!
 //! No PMU step is added for U-Boot's state: [`rk3588::pd_gpu_on`] writes
 //! `PWR_GATE` and `BUS_IDLE_REQ` through their write masks and waits on the
 //! result, so it does not depend on the other domains' bits or on whether
 //! the GPU's idle request was set when the domain is off.
 
+use crate::gpu::mali::takeover::{self, TakeOver};
 use crate::gpu::mali::{self, Ident, L2On, Reset};
 use crate::ip::{rk806, rockchip_spi};
 use crate::mmio::Mmio;
@@ -148,6 +164,11 @@ pub enum Stop {
     /// [`rockchip_spi::SpiRefusal`], the detail its value). Whether it
     /// reached the PMIC is unknown; nothing was written to the PMU.
     Rk806Write = 13,
+    /// The take-over of a GPU found powered ([`takeover::take_over`])
+    /// refused (`refusal` is the [`mali::MaliRefusal`], the detail its
+    /// value). No QoS word, no `GPU_CMD` past the take-over's and no L2
+    /// power-on was written.
+    TakeOver = 14,
 }
 
 /// The refusal of [`Stop::ClockNotCovered`] when the GPU clock's PLL did not
@@ -164,6 +185,12 @@ pub const SUPPLY_BELOW_AFTER_ENABLE: u32 = 1;
 /// The wait between two `POWER_EN0` reads while DCDC1 comes on, in µs (each
 /// read is itself 4 frames, about 32 µs at 1 MHz).
 pub const SUPPLY_POLL_US: u32 = 100;
+
+/// The least GPU mapping [`gpu_up`] needs at `Bases::gpu`: the take-over
+/// reaches the MMU interrupt block ([`takeover::MAP_MIN`]); every other step
+/// stays below 0x1000. The C side maps at least `YD_T6_GPU_MAP_MIN`, which
+/// the header pins to this.
+pub const GPU_MAP_MIN: usize = takeover::MAP_MIN;
 
 /// The QoS words `gpu_up` writes after the power-on. Every Z1-Z4 board run
 /// so far worked under Linux's zeroed QoS, so the U-Boot route applies the
@@ -203,6 +230,9 @@ pub struct GpuUp {
     pub pll_on: PllOn,
     pub pd_on: PdOn,
     pub pd_after: PdGpuRegs,
+    /// The take-over of a GPU found powered; `None` when PD_GPU read off at
+    /// hand-over (or the run stopped before the step).
+    pub take_over: Option<TakeOver>,
     /// `qos_gpu_m0..m3`, five words each, read after the power-on.
     pub qos: [[u32; 5]; 4],
     /// [`QosPolicy::id`] of the policy applied after the power-on; 0 when
@@ -334,6 +364,17 @@ pub fn gpu_up_with(
         }
     }
     o.pd_after = PdGpuRegs::read(m, b.pmu);
+    // a GPU found powered may still run another kernel's firmware: quiet and
+    // reset before anything else is written to it (or to its QoS blocks)
+    if o.pd_before.repair & rk3588::pd_gpu::REPAIR_ON_BIT != 0 {
+        let mut t = TakeOver::default();
+        let r = takeover::take_over(m, b.gpu, delay_us, &mut t);
+        o.take_over = Some(t);
+        if let Err((why, detail)) = r {
+            o.stopped(Stop::TakeOver, why as u32, detail);
+            return o;
+        }
+    }
     rk3588::qos_apply(m, b.qos, qos);
     o.qos_policy = qos.id();
     for (blk, words) in o.qos.iter_mut().enumerate() {
@@ -429,6 +470,7 @@ fn supply_on(m: &impl Mmio, bus: &rockchip_spi::Host, delay_us: &mut impl FnMut(
 mod tests {
     use super::*;
 
+    use crate::gpu::mali::{csf, mmu, MaliRefusal};
     use crate::soc::rk3588::{clkgate_con, clksel_con, pd_gpu, pll_con, CRU_BASE, MODE_CON0, PMU_BASE};
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -465,6 +507,19 @@ mod tests {
         pll_dead: bool,
         /// Registers that ignore writes (logged, not applied).
         stuck: Vec<usize>,
+        /// After `MCU_CONTROL` := `DISABLE`, the `MCU_STATUS` reads that
+        /// still find the MCU enabled; `None`: it never stops.
+        mcu_halt_lag: Option<u32>,
+        halt_left: RefCell<Option<u32>>,
+        /// How many soft resets (from the first) do not complete; a hard
+        /// reset completes unless `hard_reset_dead`.
+        soft_resets_dead: RefCell<u32>,
+        hard_reset_dead: bool,
+        /// (command, the three `*_INT_MASK`, `MCU_STATUS`) at each reset
+        /// command.
+        resets: RefCell<Vec<(u32, [u32; 3], u32)>>,
+        /// The highest GPU offset read or written, plus 4.
+        gpu_end: std::cell::Cell<usize>,
     }
 
     const SEL158: usize = CRU_BASE + clksel_con(158);
@@ -521,7 +576,47 @@ mod tests {
                 l2_on: RefCell::new(false),
                 pll_dead: false,
                 stuck: vec![],
+                mcu_halt_lag: Some(3),
+                halt_left: RefCell::new(None),
+                soft_resets_dead: RefCell::new(0),
+                hard_reset_dead: false,
+                resets: RefCell::new(vec![]),
+                gpu_end: std::cell::Cell::new(0),
             }
+        }
+        /// After a crash kexec (driver/docs/nanopc-t6-display.md 2(a)): PD_GPU
+        /// on and out of idle, and the GPU as panthor runs it: its interrupt
+        /// masks (`GPU_INTERRUPTS_MASK`, panthor_gpu.c v6.18:43-47; the job
+        /// mask ~0, panthor_fw.c:1033; the MMU's fault bits), the
+        /// firmware's global interrupt and an MMU fault pending, the MCU
+        /// enabled (`MCU_CONTROL` `AUTO`), AS0 on a table in Linux's memory.
+        fn left_by_panthor() -> T6 {
+            let t6 = T6::handed_over_domain_on();
+            for (a, v) in [
+                (mali::GPU_INT_MASK, 0x2_0103),
+                (csf::JOB_INT_MASK, u32::MAX),
+                (mmu::MMU_INT_MASK, mmu::MMU_INT_FAULTS),
+                (csf::JOB_INT_RAWSTAT, csf::JOB_INT_GLOBAL_IF),
+                (mmu::MMU_INT_RAWSTAT, 1),
+                (csf::MCU_CONTROL, csf::MCU_CONTROL_AUTO),
+                (mali::MCU_STATUS, csf::MCU_STATUS_ENABLED),
+                (mmu::mmu_as(0) + mmu::AS_TRANSTAB, 0x1_2340_0000_u64 as u32),
+                (mmu::mmu_as(0) + mmu::AS_TRANSCFG, 0x4200_01c6),
+            ] {
+                t6.regs.borrow_mut().insert(GPU + a, v);
+            }
+            t6
+        }
+        fn touch(&self, a: usize) {
+            if (GPU..GPU + 0x10000).contains(&a) {
+                self.gpu_end.set(self.gpu_end.get().max(a - GPU + 4));
+            }
+        }
+        fn gpu_reg(&self, off: usize) -> u32 {
+            *self.regs.borrow().get(&(GPU + off)).unwrap_or(&0)
+        }
+        fn masks(&self) -> [u32; 3] {
+            takeover::IRQ_BLOCKS.map(|(_, _, mask)| self.gpu_reg(mask))
         }
         /// The hand-over of 2026-11-11: the GPU last ran at 850 MHz, so
         /// `CLK_GPU_SRC` is NPLL / 1 at 800 mV, and Linux powered NPLL down
@@ -613,8 +708,25 @@ mod tests {
 
     impl Mmio for T6 {
         fn read32(&self, a: usize) -> u32 {
+            self.touch(a);
             if (GPU..GPU + 0x10000).contains(&a) || (QOS..QOS + 0x800).contains(&a) {
                 assert!(self.gpu_powered(), "read of {a:#x} with PD_GPU off: an external abort on the board");
+            }
+            // the MCU stops `mcu_halt_lag` reads after its disable; while it
+            // runs, the firmware raises its global interrupt again
+            if a == GPU + mali::MCU_STATUS {
+                let mut left = self.halt_left.borrow_mut();
+                match *left {
+                    Some(0) => {
+                        self.regs.borrow_mut().insert(a, csf::MCU_STATUS_DISABLED);
+                        *left = None;
+                    }
+                    Some(n) => *left = Some(n - 1),
+                    None => {}
+                }
+            }
+            if a == GPU + csf::JOB_INT_RAWSTAT && self.gpu_reg(mali::MCU_STATUS) == csf::MCU_STATUS_ENABLED {
+                *self.regs.borrow_mut().entry(a).or_insert(0) |= csf::JOB_INT_GLOBAL_IF;
             }
             match a {
                 _ if a == SPI + rockchip_spi::RXFLR => self.rxq.borrow().len() as u32,
@@ -624,6 +736,7 @@ mod tests {
             }
         }
         fn write32(&self, a: usize, v: u32) {
+            self.touch(a);
             self.writes.borrow_mut().push((a, v));
             // the CRU's PLL_CON and MODE_CON words (CRU + 0..0x300): the only
             // write the run may make there is a PLL's power-down bit
@@ -682,14 +795,40 @@ mod tests {
             if a == GPU + mali::L2_PWRON && v & 1 != 0 {
                 *self.l2_on.borrow_mut() = true;
             }
-            // a soft reset completes at once; GPU_INT_CLEAR clears raw bits
-            if a == GPU + mali::GPU_CMD && v == mali::CMD_SOFT_RESET {
-                *self.regs.borrow_mut().entry(GPU + mali::GPU_INT_RAWSTAT).or_insert(0) |= mali::IRQ_RESET_COMPLETED;
+            // a reset completes at once (unless dead) and stops the MCU; it
+            // keeps the masks and MCU_STATUS it met
+            if a == GPU + mali::GPU_CMD && (v == mali::CMD_SOFT_RESET || v == mali::CMD_HARD_RESET) {
+                self.resets.borrow_mut().push((v, self.masks(), self.gpu_reg(mali::MCU_STATUS)));
+                let dead = if v == mali::CMD_SOFT_RESET {
+                    let mut n = self.soft_resets_dead.borrow_mut();
+                    let dead = *n > 0;
+                    *n = n.saturating_sub(1);
+                    dead
+                } else {
+                    self.hard_reset_dead
+                };
+                if !dead {
+                    let mut r = self.regs.borrow_mut();
+                    *r.entry(GPU + mali::GPU_INT_RAWSTAT).or_insert(0) |= mali::IRQ_RESET_COMPLETED;
+                    r.insert(GPU + mali::MCU_STATUS, csf::MCU_STATUS_DISABLED);
+                }
                 return;
             }
-            if a == GPU + mali::GPU_INT_CLEAR {
-                *self.regs.borrow_mut().entry(GPU + mali::GPU_INT_RAWSTAT).or_insert(0) &= !v;
+            // an *_INT_CLEAR clears raw bits
+            if let Some(&(raw, _, _)) = takeover::IRQ_BLOCKS.iter().find(|b| a == GPU + b.1) {
+                *self.regs.borrow_mut().entry(GPU + raw).or_insert(0) &= !v;
                 return;
+            }
+            if a == GPU + csf::MCU_CONTROL && v == csf::MCU_CONTROL_DISABLE {
+                *self.halt_left.borrow_mut() = self.mcu_halt_lag;
+            }
+            // PD_GPU is cut only after its idle request (pm-domains.c v6.18:
+            // 615-660): a power-off word with the request released is a bug
+            if a == PMU_BASE + pd_gpu::PWR_GATE
+                && v & (pd_gpu::PWR_BIT << 16 | pd_gpu::PWR_BIT) == (pd_gpu::PWR_BIT << 16 | pd_gpu::PWR_BIT)
+            {
+                let req = self.regs.borrow()[&(PMU_BASE + pd_gpu::BUS_IDLE_REQ)];
+                assert!(req & 1 != 0, "PD_GPU cut without its idle request: {:#x}", req);
             }
             let mut r = self.regs.borrow_mut();
             if (CRU_BASE..CRU_BASE + 0x1000).contains(&a) || (PMU_BASE..PMU_BASE + 0x400).contains(&a) {
@@ -1176,5 +1315,194 @@ mod tests {
                 }
             }
         }
+    }
+
+    // The take-over of a GPU found running (issue: after a crash kexec
+    // Linux's devices stay on). Each test names the rule it holds.
+
+    fn in_gpu(a: usize) -> bool {
+        (GPU..GPU + 0x10000).contains(&a)
+    }
+
+    /// The index of the first write `f` matches, if any.
+    fn first_write(t6: &T6, f: impl Fn(&(usize, u32)) -> bool) -> Option<usize> {
+        t6.writes.borrow().iter().position(f)
+    }
+
+    #[test]
+    fn every_reset_of_a_gpu_left_running_meets_the_masks_at_0_and_the_mcu_disabled() {
+        let t6 = T6::left_by_panthor();
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        let resets = t6.resets.borrow();
+        assert!(!resets.is_empty());
+        for (cmd, masks, mcu) in resets.iter() {
+            assert_eq!((masks, *mcu), (&[0; 3], csf::MCU_STATUS_DISABLED), "reset {cmd:#x}: {resets:x?}");
+        }
+        let t = o.take_over.expect("a GPU found powered is taken over");
+        assert_eq!(t.masks, [0x2_0103, u32::MAX, mmu::MMU_INT_FAULTS]);
+        assert_eq!(t.raw, [0, csf::JOB_INT_GLOBAL_IF, 1]);
+        assert_eq!((t.mcu_status, t.mcu_waited_us, t.hard), (csf::MCU_STATUS_ENABLED, 3, false));
+        // and Z1 went on to the G610 and its L2 as on any other route
+        assert_eq!((o.ident.gpu_id, o.l2.ready), (mali::G610_GPU_ID, 1));
+        assert_eq!(t6.masks(), [0; 3]);
+    }
+
+    #[test]
+    fn the_first_gpu_words_mask_then_clear_then_halt_then_reset() {
+        let t6 = T6::left_by_panthor();
+        gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        let w = t6.writes.borrow();
+        let gpu: Vec<(usize, u32)> = w.iter().filter(|w| in_gpu(w.0)).map(|w| (w.0 - GPU, w.1)).collect();
+        let blocks = takeover::IRQ_BLOCKS;
+        let n = blocks.len();
+        // the masks before anything else, then the clears, then the halt
+        assert!(gpu[..n].iter().all(|w| w.1 == 0 && blocks.iter().any(|b| b.2 == w.0)), "{gpu:x?}");
+        assert!(gpu[n..2 * n].iter().all(|w| w.1 == u32::MAX && blocks.iter().any(|b| b.1 == w.0)), "{gpu:x?}");
+        assert_eq!(gpu[2 * n], (csf::MCU_CONTROL, csf::MCU_CONTROL_DISABLE), "{gpu:x?}");
+        let first_reset = gpu.iter().position(|w| w.0 == mali::GPU_CMD).unwrap();
+        assert!(2 * n < first_reset);
+    }
+
+    #[test]
+    fn the_take_over_reset_comes_before_the_qos_words_and_the_l2() {
+        let t6 = T6::left_by_panthor();
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!(o.stop, Stop::None);
+        let reset = first_write(&t6, |w| *w == (GPU + mali::GPU_CMD, mali::CMD_SOFT_RESET)).unwrap();
+        let qos = first_write(&t6, |w| (QOS..QOS + 0x800).contains(&w.0)).unwrap();
+        let l2 = first_write(&t6, |w| w.0 == GPU + mali::L2_PWRON).unwrap();
+        assert!(reset < qos && qos < l2, "{:x?}", t6.writes.borrow());
+        // the take-over's reset and Z1's own: two soft resets
+        let cmds: Vec<u32> = t6.resets.borrow().iter().map(|r| r.0).collect();
+        assert_eq!(cmds, vec![mali::CMD_SOFT_RESET; 2]);
+    }
+
+    /// The GPU words of `soft_reset` then `l2_power_on`, on a fresh model:
+    /// what Z1 wrote to a GPU it found off before the take-over existed.
+    fn reset_then_l2_words() -> Vec<(usize, u32)> {
+        let t6 = T6::handed_over_domain_on();
+        mali::soft_reset(&t6, GPU, &mut |_| {}).unwrap();
+        mali::l2_power_on(&t6, GPU, &mut |_| {}).unwrap();
+        let w = t6.writes.borrow();
+        w.iter().filter(|w| in_gpu(w.0)).copied().collect()
+    }
+
+    #[test]
+    fn a_gpu_found_off_is_written_the_same_gpu_words_as_without_the_take_over() {
+        let want = reset_then_l2_words();
+        for t6 in [T6::handed_over(), T6::handed_over_supply_off(0x1c), T6::handed_over_on_npll_900()] {
+            let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+            assert_eq!(o.stop, Stop::None);
+            assert_eq!(o.take_over, None);
+            let w = t6.writes.borrow();
+            let gpu: Vec<(usize, u32)> = w.iter().filter(|w| in_gpu(w.0)).copied().collect();
+            assert_eq!(gpu, want);
+        }
+    }
+
+    #[test]
+    fn a_domain_powered_with_its_idle_request_set_is_released_before_the_take_over() {
+        // the domain powered but its bus idle (a power-off cut short): the
+        // GPU's registers abort until the request is released
+        let t6 = T6::left_by_panthor();
+        for (a, v) in
+            [(pd_gpu::BUS_IDLE_REQ, 0x83cf), (pd_gpu::BUS_IDLE_ACK, 0x000a_9fff), (pd_gpu::BUS_IDLE_ST, 0x000a_9fff)]
+        {
+            t6.regs.borrow_mut().insert(PMU_BASE + a, v);
+        }
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert!(o.take_over.is_some());
+        let release = first_write(&t6, |w| *w == (PMU_BASE + pd_gpu::BUS_IDLE_REQ, 1 << 16)).unwrap();
+        let first_gpu = first_write(&t6, |w| in_gpu(w.0)).unwrap();
+        assert!(release < first_gpu);
+        assert!(t6.resets.borrow().iter().all(|r| r.1 == [0; 3] && r.2 == csf::MCU_STATUS_DISABLED));
+    }
+
+    #[test]
+    fn pd_gpu_is_never_cut_on_any_route() {
+        let off = |t6: &T6| {
+            t6.writes.borrow().iter().any(|w| w.0 == PMU_BASE + pd_gpu::PWR_GATE && w.1 & pd_gpu::PWR_BIT != 0)
+        };
+        for t6 in
+            [T6::handed_over(), T6::handed_over_supply_off(0x1c), T6::handed_over_domain_on(), T6::left_by_panthor()]
+        {
+            let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+            assert_eq!(o.stop, Stop::None);
+            assert!(!off(&t6), "{:x?}", t6.writes.borrow());
+        }
+    }
+
+    /// No QoS word, no Z1 reset past the take-over's, no L2 power-on.
+    fn nothing_past_the_take_over(t6: &T6, take_over_resets: usize) {
+        let w = t6.writes.borrow();
+        assert!(w.iter().all(|w| !(QOS..QOS + 0x800).contains(&w.0) && w.0 != GPU + mali::L2_PWRON), "{w:x?}");
+        assert_eq!(t6.resets.borrow().len(), take_over_resets);
+    }
+
+    #[test]
+    fn an_mcu_that_does_not_halt_is_reset_and_z1_goes_on() {
+        let mut t6 = T6::left_by_panthor();
+        t6.mcu_halt_lag = None;
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        let t = o.take_over.unwrap();
+        assert!(t.mcu_halt_timed_out);
+        assert_eq!((t.mcu_status_halted, t.steps), (csf::MCU_STATUS_ENABLED, takeover::STEP_RESET));
+        // the take-over's reset met the masks at 0 (the MCU still enabled: the
+        // reset is what stops it), then Z1's own met it disabled
+        let resets = t6.resets.borrow();
+        assert_eq!(resets[0], (mali::CMD_SOFT_RESET, [0; 3], csf::MCU_STATUS_ENABLED));
+        assert_eq!(resets[1], (mali::CMD_SOFT_RESET, [0; 3], csf::MCU_STATUS_DISABLED));
+    }
+
+    #[test]
+    fn z1_touches_no_gpu_register_past_gpu_map_min() {
+        let mut states = vec![T6::handed_over(), T6::handed_over_domain_on(), T6::left_by_panthor()];
+        let mut stuck = T6::left_by_panthor();
+        stuck.mcu_halt_lag = None;
+        *stuck.soft_resets_dead.get_mut() = 1;
+        states.push(stuck);
+        let mut hi = 0;
+        for t6 in states {
+            gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+            hi = hi.max(t6.gpu_end.get());
+        }
+        // MMU_INT_MASK is the highest register Z1 touches
+        assert_eq!(hi, mmu::MMU_INT_MASK + 4);
+        assert!(hi <= GPU_MAP_MIN);
+    }
+
+    #[test]
+    fn a_take_over_soft_reset_that_times_out_is_followed_by_a_hard_reset() {
+        let t6 = T6::left_by_panthor();
+        *t6.soft_resets_dead.borrow_mut() = 1;
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert!(o.take_over.unwrap().hard);
+        let cmds: Vec<u32> = t6.resets.borrow().iter().map(|r| r.0).collect();
+        assert_eq!(cmds, vec![mali::CMD_SOFT_RESET, mali::CMD_HARD_RESET, mali::CMD_SOFT_RESET]);
+    }
+
+    #[test]
+    fn a_take_over_whose_hard_reset_times_out_stops_before_the_power_on() {
+        let mut t6 = T6::left_by_panthor();
+        *t6.soft_resets_dead.get_mut() = 1;
+        t6.hard_reset_dead = true;
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::TakeOver, MaliRefusal::HardResetTimeout as u32, 0));
+        nothing_past_the_take_over(&t6, 2);
+    }
+
+    #[test]
+    fn a_mask_that_stays_set_stops_z1_before_the_halt() {
+        let mut t6 = T6::left_by_panthor();
+        t6.stuck.push(GPU + mmu::MMU_INT_MASK);
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        let detail = (mmu::MMU_INT_MASK as u64) << 32 | u64::from(mmu::MMU_INT_FAULTS);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::TakeOver, MaliRefusal::IrqMaskStuck as u32, detail));
+        assert!(t6.writes.borrow().iter().all(|w| w.0 != GPU + csf::MCU_CONTROL));
+        nothing_past_the_take_over(&t6, 0);
     }
 }

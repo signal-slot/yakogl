@@ -119,6 +119,7 @@ BUILD_ASSERT(sizeof(struct yd_t6_submit_up) == 448, "struct yd_t6_submit_up move
 BUILD_ASSERT(sizeof(struct yd_t6_submit_mem) == 192, "struct yd_t6_submit_mem moved");
 
 #define GPU_MAP_SIZE 0x280000 /* the doorbells are at 0x80000 and up */
+BUILD_ASSERT(GPU_MAP_SIZE >= YD_T6_GPU_MAP_MIN, "Z1 needs YD_T6_GPU_MAP_MIN of the GPU");
 #define TIMER_HZ     24000000 /* CNTFRQ_EL0 on the RK3588 */
 
 static const char *const step_name[] = {
@@ -252,7 +253,7 @@ int main(void)
 	mm_reg_t cru, pmu, spi2, qos, gpu;
 	struct yd_t6_fw_backing backings[SECTIONS];
 	struct yd_t6_submit_mem mem = { 0 };
-	static struct yd_t6_gpu_up z1; /* 500 bytes: not on main()'s stack */
+	static struct yd_t6_gpu_up z1; /* hundreds of bytes: not on main()'s stack */
 	static struct yd_t6_submit_up o;
 	int64_t t0;
 	int rc;

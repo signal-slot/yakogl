@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The Mali-G610 (Valhall, CSF) of the RK3588: the kernel side's first
-//! steps (feature `mali`): read the identity, soft reset, set the coherency
+//! steps (feature `mali`): take over a GPU another kernel left running
+//! ([`takeover`]), read the identity, soft reset, set the coherency
 //! mode, power the L2 cache on (driver/docs/nanopc-t6-mali.md, "Z1"); flush
 //! the caches, and in [`mmu`] and [`pgtable`] an address space's tables and
 //! its `AS_COMMAND` sequences ("Z2").
@@ -35,6 +36,7 @@ pub mod csf;
 pub mod fw;
 pub mod heap;
 pub mod sched;
+pub mod takeover;
 
 use crate::mmio::Mmio;
 
@@ -68,6 +70,8 @@ pub const MCU_STATUS: usize = 0x704;
 pub const IRQ_RESET_COMPLETED: u32 = 1 << 8;
 /// `GPU_SOFT_RESET` = `GPU_CMD_DEF(1, 1)` (panthor_regs.h:51-53).
 pub const CMD_SOFT_RESET: u32 = 1 | (1 << 8);
+/// `GPU_HARD_RESET` = `GPU_CMD_DEF(1, 2)` (panthor_regs.h:52).
+pub const CMD_HARD_RESET: u32 = 1 | (2 << 8);
 /// `GPU_IRQ_CLEAN_CACHES_COMPLETED` (panthor_regs.h, the `GPU_INT_*` bits).
 pub const IRQ_CLEAN_CACHES_COMPLETED: u32 = 1 << 17;
 /// The cache operations of `GPU_FLUSH_CACHES` (panthor_regs.h
@@ -162,6 +166,14 @@ pub enum MaliRefusal {
     FlushBitStuck = 7,
     /// `AS_STATUS.AS_ACTIVE` stayed set ([`mmu::READY_WAIT_US`]).
     AsActiveStuck = 8,
+    /// An `*_INT_MASK` read back other than the 0 written
+    /// ([`takeover::take_over`]).
+    IrqMaskStuck = 9,
+    // 10 is not used: an MCU that does not halt is recorded, not refused
+    // (`takeover::TakeOver::mcu_halt_timed_out`).
+    /// The soft reset timed out and `RESET_COMPLETED` did not rise within
+    /// [`RESET_WAIT_US`] after the hard reset either.
+    HardResetTimeout = 11,
 }
 
 /// Poll the 64-bit register at `addr` once per microsecond for at most
@@ -192,13 +204,24 @@ fn wait64(
 /// before the clear, after it (the command is written only when it reads
 /// clear), and the polls it took.
 pub fn soft_reset(m: &impl Mmio, base: usize, delay_us: &mut impl FnMut(u32)) -> Result<Reset, (MaliRefusal, u32)> {
+    reset_with(m, base, CMD_SOFT_RESET, delay_us)
+}
+
+/// [`soft_reset`]'s sequence with the reset command `cmd`
+/// ([`CMD_SOFT_RESET`] or [`CMD_HARD_RESET`]).
+pub(crate) fn reset_with(
+    m: &impl Mmio,
+    base: usize,
+    cmd: u32,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Reset, (MaliRefusal, u32)> {
     let raw_before = m.read32(base + GPU_INT_RAWSTAT);
     m.write32(base + GPU_INT_CLEAR, IRQ_RESET_COMPLETED);
     let raw_cleared = m.read32(base + GPU_INT_RAWSTAT);
     if raw_cleared & IRQ_RESET_COMPLETED != 0 {
         return Err((MaliRefusal::ResetBitStuck, raw_cleared));
     }
-    m.write32(base + GPU_CMD, CMD_SOFT_RESET);
+    m.write32(base + GPU_CMD, cmd);
     for t in 0..=RESET_WAIT_US {
         if m.read32(base + GPU_INT_RAWSTAT) & IRQ_RESET_COMPLETED != 0 {
             m.write32(base + GPU_INT_CLEAR, IRQ_RESET_COMPLETED);

@@ -14,7 +14,7 @@
 #include <stddef.h>
 
 /* driver/rust/src/ffi/rk3588.rs pins the same layout. */
-_Static_assert(sizeof(struct yd_t6_gpu_up) == 4 * 129, "struct yd_t6_gpu_up moved");
+_Static_assert(sizeof(struct yd_t6_gpu_up) == 4 * 152, "struct yd_t6_gpu_up moved");
 _Static_assert(offsetof(struct yd_t6_gpu_up, rk806) == 4 * 18, "struct yd_t6_gpu_up moved");
 _Static_assert(offsetof(struct yd_t6_gpu_up, ident) == 4 * 65, "struct yd_t6_gpu_up moved");
 _Static_assert(offsetof(struct yd_t6_gpu_up, stop) == 4 * 108, "struct yd_t6_gpu_up moved");
@@ -24,6 +24,7 @@ _Static_assert(offsetof(struct yd_t6_gpu_up, supply_waited_us) == 4 * 124,
 
 _Static_assert(offsetof(struct yd_t6_gpu_up, qos_policy) == 4 * 125, "struct yd_t6_gpu_up moved");
 _Static_assert(offsetof(struct yd_t6_gpu_up, qos_words) == 4 * 126, "struct yd_t6_gpu_up moved");
+_Static_assert(offsetof(struct yd_t6_gpu_up, take_over_ran) == 4 * 129, "struct yd_t6_gpu_up moved");
 
 static const char *const stop_name[] = {
 	[YD_T6_GPU_STOP_NONE] = "none",
@@ -42,6 +43,7 @@ static const char *const stop_name[] = {
 	[YD_T6_GPU_STOP_SUPPLY_BELOW_OPP] = "BUCK1_ON_VSEL is below the OPP voltage for the clock",
 	[YD_T6_GPU_STOP_SUPPLY_RAMP_TIMEOUT] = "DCDC1 did not read on after the enable frame",
 	[YD_T6_GPU_STOP_RK806_WRITE] = "the DCDC1-enable frame could not be sent",
+	[YD_T6_GPU_STOP_TAKE_OVER] = "the take-over of the GPU found powered refused",
 };
 
 const char *t6_z1_stop_name(uint32_t stop)
@@ -55,11 +57,13 @@ const char *t6_z1_stop_name(uint32_t stop)
  * numbers of the causes are in the order they were added, so 9..13 cannot be
  * compared with 5..8): 5 and more means PD_GPU was tried, 6 the GPU_ID was
  * read, 8 the reset ran. Stops 1..4, 9 and 10 (and 11 with refusal 0) come
- * before PD_GPU and before on_handover; the others are after on_handover. */
+ * before PD_GPU and before on_handover; the others are after on_handover.
+ * The take-over (14) runs after PD_GPU's step, before the QoS words. */
 static unsigned int progress(uint32_t s)
 {
 	switch (s) {
 	case YD_T6_GPU_STOP_PD:
+	case YD_T6_GPU_STOP_TAKE_OVER:
 		return 5;
 	case YD_T6_GPU_STOP_NOT_G610:
 		return 6;
@@ -142,6 +146,34 @@ void t6_z1_print_record(const char *probe, const struct yd_t6_gpu_up *o, bool ha
 		       o->pd_opened, o->pd_was_on, o->pd_waited_us[0], o->pd_waited_us[1],
 		       o->pd_waited_us[2]);
 		print_pd(probe, "after", o->pd_after);
+	}
+	/* Only a GPU found powered (the crash kexec) is taken over: the lines of every
+	 * other route are as before. Each line is printed only when the take-over got
+	 * that far (take_over_steps), so a refusal shows the words it read, no zeros. */
+	if (o->take_over_ran) {
+		printk("%s: take-over: found GPU_INT_MASK 0x%08x JOB_INT_MASK 0x%08x MMU_INT_MASK "
+		       "0x%08x, RAWSTAT 0x%08x 0x%08x 0x%08x, MCU_STATUS %u\n",
+		       probe, o->take_over_masks[0], o->take_over_masks[1], o->take_over_masks[2],
+		       o->take_over_raw[0], o->take_over_raw[1], o->take_over_raw[2],
+		       o->take_over_mcu[0]);
+	}
+	if (o->take_over_ran && o->take_over_steps >= YD_T6_TAKE_OVER_MASKED) {
+		printk("%s: take-over: masks 0, RAWSTAT after the clear 0x%08x 0x%08x 0x%08x\n", probe,
+		       o->take_over_raw_cleared[0], o->take_over_raw_cleared[1],
+		       o->take_over_raw_cleared[2]);
+	}
+	if (o->take_over_ran && o->take_over_steps >= YD_T6_TAKE_OVER_HALT_WAITED) {
+		printk("%s: take-over: MCU halt: MCU_STATUS %u after %u polls of 1 us: %s\n", probe,
+		       o->take_over_mcu[3], o->take_over_mcu[1],
+		       o->take_over_mcu[2] ? "not DISABLED in 100 ms, reset anyway" : "DISABLED");
+	}
+	if (o->take_over_ran && o->take_over_steps >= YD_T6_TAKE_OVER_RESET) {
+		printk("%s: take-over: %s reset: GPU_INT_RAWSTAT 0x%08x before the clear, 0x%08x "
+		       "after; RESET_COMPLETED after %u polls; then masks 0x%08x 0x%08x 0x%08x "
+		       "MCU_STATUS %u\n",
+		       probe, o->take_over_hard ? "hard" : "soft", o->take_over_reset[0],
+		       o->take_over_reset[1], o->take_over_reset[2], o->take_over_after[0],
+		       o->take_over_after[1], o->take_over_after[2], o->take_over_after[3]);
 	}
 	if (progress(o->stop) >= 6) {
 		for (int b = 0; b < 4; b++) {

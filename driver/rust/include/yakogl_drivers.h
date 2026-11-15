@@ -330,14 +330,25 @@ int yd_t6_early_arm(uintptr_t wdt_phys, uintptr_t cru_phys, uint32_t top, struct
  * read PD_GPU, the CRU's GPU clock and the RK806 (vdd_gpu_s0, read only),
  * stop when the supply is off or below the OPP table's voltage for the
  * clock, power the clock's PLL on when Linux left it powered down, power
- * PD_GPU on, read the GPU's identity, soft reset, L2 on.
+ * PD_GPU on (a domain found on is left as it is), take over a GPU found
+ * powered (interrupt masks 0 and cleared, MCU halted, soft reset, hard reset
+ * when that times out; an MCU that does not halt is recorded and reset
+ * anyway), read the GPU's identity, soft reset, L2 on.
  * on_handover is called once with what was read before the first write to
  * the PMU or the GPU (the hand-over state, the supply and the PLL's
  * power-on), so it can be printed before a step that could fault. 0 when
  * every step ran, -EIO when one stopped (stop says which), -EINVAL for a
  * null argument. The bases: CRU 0xfd7c0000, PMU 0xfd8d8000,
- * SPI2 0xfeb20000, qos_gpu_m0 0xfdf35000 (0x800), GPU 0xfb000000, each
- * mapped at least 0x1000. A 64-bit value is two words, lo first. */
+ * SPI2 0xfeb20000, qos_gpu_m0 0xfdf35000 (0x800), each mapped at least
+ * 0x1000, and GPU 0xfb000000 mapped at least YD_T6_GPU_MAP_MIN (the take-over
+ * reaches the MMU interrupt block at 0x2000..0x200b; a smaller map makes it
+ * write whatever the next virtual page maps). A 64-bit value is two words,
+ * lo first. */
+#define YD_T6_GPU_MAP_MIN 0x3000 /* board::nanopc_t6_gpu::GPU_MAP_MIN; rk3588.rs pins it */
+/* take_over_steps (gpu::mali::takeover::STEP_*) */
+#define YD_T6_TAKE_OVER_MASKED      1 /* the masks read back 0 and the raw status was cleared */
+#define YD_T6_TAKE_OVER_HALT_WAITED 2 /* the MCU halt was waited for (done or timed out) */
+#define YD_T6_TAKE_OVER_RESET       3 /* a reset completed */
 #define YD_T6_GPU_STOP_NONE        0 /* GPU_ID read, reset done, L2 ready */
 #define YD_T6_GPU_STOP_SPI_GATE    1 /* an SPI2 CRU gate stays closed (refusal: its bit) */
 #define YD_T6_GPU_STOP_RK806_READ  2 /* an RK806 read failed (detail hi: the register) */
@@ -368,6 +379,16 @@ int yd_t6_early_arm(uintptr_t wdt_phys, uintptr_t cru_phys, uint32_t top, struct
 #define YD_T6_GPU_STOP_RK806_WRITE 13 /* the DCDC1-enable frame could not be sent (refusal: the
 				      * SpiRefusal, as YD_T6_GPU_STOP_RK806_READ); whether it reached
 				      * the PMIC is unknown */
+#define YD_T6_GPU_STOP_TAKE_OVER 14 /* the take-over of a GPU found powered refused (refusal:
+				      * YD_MALI_*, below); no QoS word, no later reset and no L2
+				      * power-on was written */
+
+/* refusal of YD_T6_GPU_STOP_TAKE_OVER (gpu::mali::MaliRefusal) */
+#define YD_MALI_RESET_BIT_STUCK  5 /* RESET_COMPLETED reads set after its clear (detail: RAWSTAT) */
+#define YD_MALI_IRQ_MASK_STUCK   9 /* a *_INT_MASK read back not 0 (detail hi: its offset, lo:
+				    * the word); nothing written after the masks */
+#define YD_MALI_HARD_RESET_TIMEOUT 11 /* the soft reset and then the hard reset did not complete
+				       * in 100 ms each (detail: GPU_INT_RAWSTAT) */
 
 #define YD_T6_GPU_CLOCK_PLL_NO_LOCK 1
 #define YD_T6_GPU_SUPPLY_OFF_DOMAIN_POWERED 1
@@ -418,7 +439,25 @@ struct yd_t6_gpu_up {
 	uint32_t qos_policy;    /* YD_T6_QOS_* applied after the power-on, 0 when the run stopped
 				 * before it */
 	uint32_t qos_words[3];  /* qos_gpu_m0 QOS_MODE, QOS_BANDWIDTH, QOS_SATURATION read back */
+	/* appended: the take-over of a GPU found powered (gpu::mali::takeover; the words above
+	 * are unmoved) */
+	uint32_t take_over_ran; /* 1: PD_GPU read powered at hand-over and the step ran */
+	uint32_t take_over_steps; /* 1 masked and cleared, 2 the MCU halt waited for, 3 a reset
+				   * completed; the words of a step not reached are 0 */
+	uint32_t take_over_masks[3]; /* GPU_INT_MASK, JOB_INT_MASK, MMU_INT_MASK as found */
+	uint32_t take_over_raw[3]; /* the three *_INT_RAWSTAT as found */
+	uint32_t take_over_raw_cleared[3]; /* and after the clear */
+	uint32_t take_over_mcu[4]; /* MCU_STATUS as found; polls of 1 us until it read DISABLED
+				    * (100001: it did not); 1 when it did not in 100 ms (the reset
+				    * ran anyway); MCU_STATUS at the end of the wait */
+	uint32_t take_over_hard; /* 1: the soft reset timed out and the hard reset ran */
+	uint32_t take_over_reset[3]; /* that reset: GPU_INT_RAWSTAT before the clear, after it;
+				      * polls of 1 us */
+	uint32_t take_over_after[4]; /* the three masks and MCU_STATUS after the reset */
 };
+_Static_assert(sizeof(struct yd_t6_gpu_up) == 608, "driver/rust/src/ffi/rk3588.rs pins it");
+_Static_assert(offsetof(struct yd_t6_gpu_up, take_over_ran) == 516, "rk3588.rs pins it");
+_Static_assert(offsetof(struct yd_t6_gpu_up, take_over_after) == 592, "rk3588.rs pins it");
 
 #define YD_T6_QOS_RESET      1 /* MODE 3, BANDWIDTH 0x12d, SATURATION 0x40: the reset values */
 #define YD_T6_QOS_LINUX_ZERO 2 /* all three 0, what Linux reads with the GPU active (default) */
