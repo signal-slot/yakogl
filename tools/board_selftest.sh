@@ -866,6 +866,11 @@ cp "$S/img/am62p.bin" "$S/bd/zephyr/zephyr.bin"
 printf 'build x: phony\n  DEFINES = -DYAKOGL_SAMPLE_TREE=\\"71145c16\\" -DYAKOGL_SAMPLE_TABLE=\\"1449eb0f\\"\n' > "$S/bd/build.ninja"
 check "image_build: the ids of the build.ninja beside the image" \
     eval '[ "$(image_build "$S/bd/zephyr/zephyr.bin")" = "YAKOGL_SAMPLE_TABLE=1449eb0f YAKOGL_SAMPLE_TREE=71145c16" ]'
+mkdir -p "$S/bd-t6/zephyr"
+cp "$S/img/am62p.bin" "$S/bd-t6/zephyr/zephyr.bin"
+printf 'build x: phony\n  DEFINES = -DT6_DEQP_BUILD=\\"v0.1.0-7-g0123abcd\\" -DKERNEL\n  FLAGS = -DDEQP_BUILD=/w/build -DNOT_A_BUILD_ID=\\"x\\"\n' > "$S/bd-t6/build.ninja"
+check "image_build: a <NAME>_BUILD string define is the id (the NanoPC-T6's dEQP image), no other define" \
+    eval '[ "$(image_build "$S/bd-t6/zephyr/zephyr.bin")" = "T6_DEQP_BUILD=v0.1.0-7-g0123abcd" ]'
 check "image_build without a build.ninja: absent with the reason, never empty" \
     eval '[ "$(image_build "$S/img/am62p.bin")" = "absent (no build id in a build.ninja beside the image)" ]'
 check "boot_build: the line a real capture printed at boot" \

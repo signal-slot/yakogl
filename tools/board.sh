@@ -986,16 +986,19 @@ check_image() {
 
 # image_build IMAGE: the build ids of the image's own build directory
 # (<build>/zephyr/zephyr.bin -> <build>/build.ninja; the samples' defines:
-# YAKOGL_SAMPLE_TREE/TABLE on the AM62P, V3D_BUILD on the Pi 4, GC_BUILD_STAMP on
-# the i.MX8MP; tools/cts/pi4-deqp-images.sh reads V3D_BUILD the same way). The image bytes
-# hold only the printf formats ("sample: build tree=%s ..."), so a scan of the
-# image cannot name the tree; without a build.ninja the value is absent.
+# YAKOGL_SAMPLE_TREE/TABLE on the AM62P, GC_BUILD_STAMP on the i.MX8MP, and
+# every string define named <NAME>_BUILD: V3D_BUILD on the Pi 4, T6_DEQP_BUILD
+# and T6_GL_TEST_BUILD on the NanoPC-T6, the probes' own;
+# tools/cts/deqp-tree-images.sh reads its board's define the same way). The
+# image bytes hold only the printf formats ("sample: build tree=%s ..."), so a
+# scan of the image cannot name the tree; without a build.ninja the value is
+# absent.
 image_build() {
     local ninja ids
     ninja=$(dirname "$(dirname "$(readlink -f "$1")")")/build.ninja
     if [ -f "$ninja" ]; then
-        ids=$(grep -oE '(YAKOGL_SAMPLE_TREE|YAKOGL_SAMPLE_TABLE|V3D_BUILD|GC_BUILD_STAMP)=\\"[^\\"]*' "$ninja" |
-            sed 's/\\"//' | sort -u | paste -sd' ' -)
+        ids=$(grep -oE -e '-D(YAKOGL_SAMPLE_TREE|YAKOGL_SAMPLE_TABLE|GC_BUILD_STAMP|[A-Z0-9_]+_BUILD)=\\"[^\\"]*' "$ninja" |
+            sed 's/^-D//; s/\\"//' | sort -u | paste -sd' ' -)
     fi
     echo "${ids:-absent (no build id in a build.ninja beside the image)}"
 }
