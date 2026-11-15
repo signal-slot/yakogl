@@ -1,0 +1,18 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=52
+# section tip
+vivante	functional.shader_api	38	0	14	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.delete_shader_fragment	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.delete_shader_vertex	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.detach_shader_fragment	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.detach_shader_vertex	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.reattach_shader_fragment	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.reattach_shader_vertex	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_fragment	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_vertex	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_shader_fragment	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_shader_vertex	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_fragment	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_vertex	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.simple.get_program_binary_vertex_fragment	NotSupported	refusal	Not supported		
+vivante	dEQP-GLES3.functional.shader_api.program_binary.simple.uniform_reset_on_binary_load	NotSupported	refusal	Not supported		

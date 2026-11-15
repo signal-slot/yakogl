@@ -1,0 +1,12 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=312
+# section tip
+vivante	functional.negative_api	304	4	4	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.negative_api.buffer.blit_framebuffer_multisample	Fail	gl-error	Got invalid error		
+vivante	dEQP-GLES3.functional.negative_api.buffer.clear_bufferiv	Fail	gl-error	Got invalid error		
+vivante	dEQP-GLES3.functional.negative_api.buffer.clear_bufferuiv	Fail	gl-error	Got invalid error		
+vivante	dEQP-GLES3.functional.negative_api.buffer.read_pixels_fbo_format_mismatch	Fail	gl-error	Got invalid error		
+vivante	dEQP-GLES3.functional.negative_api.fragment.blend_equation_separatei	NotSupported	refusal	GL_EXT_draw_buffers_indexed is not supported at es3fNegativeFragmentApiTests.cpp:209		
+vivante	dEQP-GLES3.functional.negative_api.fragment.blend_equationi	NotSupported	refusal	GL_EXT_draw_buffers_indexed is not supported at es3fNegativeFragmentApiTests.cpp:191		
+vivante	dEQP-GLES3.functional.negative_api.fragment.blend_func_separatei	NotSupported	refusal	GL_EXT_draw_buffers_indexed is not supported at es3fNegativeFragmentApiTests.cpp:252		
+vivante	dEQP-GLES3.functional.negative_api.fragment.blend_funci	NotSupported	refusal	GL_EXT_draw_buffers_indexed is not supported at es3fNegativeFragmentApiTests.cpp:232		
