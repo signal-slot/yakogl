@@ -1,0 +1,21 @@
+           CPU0       CPU1       CPU2       CPU3       CPU4       CPU5       CPU6       CPU7
+ 19:      24730      17307      17265      18807      18081      19040      13387      16023    GICv3  26 Level     arch_timer
+ 20:          0          0          0          0          0          0          0          0    GICv3  27 Level     kvm guest vtimer
+ 52:       1608          0          0          0          0          0          0          0    GICv3 360 Level     feb20000.spi
+ 62:          0          0          0          0          0          0          0          0 GICv3-23   0 Level     arm-pmu
+ 74:          0          0          0          0          0          0          0          0 ITS-PCI-MSI-0003:30:00.0   8 Edge      PCIe PME, PCIe bwctrl
+ 78:          0          0          0          0          0          0          0          0 rockchip_gpio_irq  27 Level     fsc_interrupt_int_n
+ 85:          0          0          0          0          0          0          0          0 rockchip_gpio_irq   7 Level     rk806
+ 86:          0          0          0          0          0          0          0          0    rk806   0 Edge      rk805_pwrkey_fall
+ 87:          0          0          0          0          0          0          0          0    rk806   1 Edge      rk805_pwrkey_rise
+130:          0          0          0          0          0          0          0      14192 ITS-PCI-MSIX-0002:21:00.0   0 Edge      lan2
+163:          0          0          0          0          0          0          0          0 rockchip_gpio_irq  20 Edge      Headphone detection
+IPI0:      6472       6265       4606       4084        831        764        687        901       Rescheduling interrupts
+IPI1:     24663      17896      19376      23483      20117      22920      18399      16317       Function call interrupts
+IPI2:         0          0          0          0          0          0          0          0       CPU stop interrupts
+IPI3:         0          0          0          0          0          0          0          0       CPU stop NMIs
+IPI4:     27944      45612      49834      62737      10014       6186       2790       4226       Timer broadcast interrupts
+IPI5:      1135       1109       1206       1651       1542       1334       1360       1489       IRQ work interrupts
+IPI6:         0          0          0          0          0          0          0          0       CPU backtrace interrupts
+IPI7:         0          0          0          0          0          0          0          0       KGDB roundup interrupts
+Err:          0
