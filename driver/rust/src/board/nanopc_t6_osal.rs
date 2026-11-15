@@ -25,8 +25,9 @@
 //! panthor OSAL hold it ([`Osal::free`]). `OSAL_MEM_GPU_EXEC` needs nothing:
 //! the carve-out is executable, as panthor maps a buffer without
 //! `MAP_NOEXEC`. `map_phys` of a range inside the carve-out answers its own
-//! pages ([`Osal::window`]); the CPU's view is uncached, so the cache
-//! operations have nothing to do.
+//! pages ([`Osal::window`]) under the handle [`WINDOW`], which a free takes
+//! and leaves alone; the CPU's view is uncached, so the cache operations
+//! have nothing to do.
 //!
 //! A kick is one job on the ring ([`sched::submit`]) whose `CALL` runs the
 //! kick's stream; its fence is the job's sequence number. A wait is the
@@ -306,7 +307,9 @@ pub fn place_sections(blob: &[u8], arena: Backing) -> Option<([Backing; fw::MAX_
 }
 
 /// One allocation: what `gpu_alloc` answers. `handle` goes back in
-/// `gpu_free` (the descriptor's `impl`): the allocation's pages.
+/// `gpu_free` (the descriptor's `impl`): the allocation's pages, or
+/// [`WINDOW`] for what `map_phys` answers. Never 0: the GL library takes a
+/// descriptor with a null `impl` for no memory (include/gles_osal.h).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Alloc {
     pub cpu: usize,
@@ -315,6 +318,10 @@ pub struct Alloc {
     pub size: usize,
     pub handle: usize,
 }
+
+/// The handle of a window ([`Osal::window`]): no allocation's, whose
+/// handle is its pages, [`MAX_CARVE_PAGES`] at most.
+pub const WINDOW: usize = usize::MAX;
 
 /// A free held until `fence` completes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -762,8 +769,10 @@ impl Osal {
 
     /// `gpu_free` of the allocation at `gpu` with `handle` ([`Alloc`]):
     /// held until the kick being recorded completes (fence `submitted +
-    /// 1`); after [`Osal::shutdown`] given back at once. `-EINVAL` for one
-    /// this OSAL did not hand out or already freed. With [`PENDING_FREES`]
+    /// 1`); after [`Osal::shutdown`] given back at once. A window
+    /// ([`WINDOW`]) has nothing to give back: 0, and the allocation it lies
+    /// in is untouched. `-EINVAL` for an allocation this OSAL did not hand
+    /// out or already freed. With [`PENDING_FREES`]
     /// held, src/osal/pending_frees.h's rule: the oldest held fence is
     /// waited for (panthor's 5 s; an error restarts the group, which
     /// completes every fence), and then the free is held; when that fence
@@ -771,6 +780,9 @@ impl Osal {
     /// when the OSAL is dead, `-ENOSPC`. A refused free's pages are kept
     /// for good and counted.
     pub fn free(&mut self, m: &impl Mmio, gpu: u64, handle: usize, delay_us: &mut impl FnMut(u32)) -> i32 {
+        if handle == WINDOW {
+            return 0;
+        }
         let off = gpu.wrapping_sub(CARVE_VA);
         let first = (off / PAGE) as usize;
         if self.up.is_none()
@@ -813,7 +825,8 @@ impl Osal {
 
     /// `map_phys`: `size` bytes at physical `phys` inside the carve-out, at
     /// their own GPU VA and CPU address (no new mapping, and nothing to
-    /// free). `-ENOTSUP` for a range the carve-out does not hold.
+    /// free: the handle is [`WINDOW`]). `-ENOTSUP` for a range the
+    /// carve-out does not hold.
     pub fn window(&self, phys: u64, size: usize) -> Result<Alloc, i32> {
         let off = phys.wrapping_sub(self.carve.pa());
         let end = (self.pages as u64) * PAGE;
@@ -823,7 +836,7 @@ impl Osal {
         if phys < self.carve.pa() || off >= end || size as u64 > end - off {
             return Err(-ENOTSUP);
         }
-        Ok(Alloc { cpu: self.carve.cpu() + off as usize, gpu: CARVE_VA + off, phys, size, handle: 0 })
+        Ok(Alloc { cpu: self.carve.cpu() + off as usize, gpu: CARVE_VA + off, phys, size, handle: WINDOW })
     }
 
     fn stop(&mut self, why: Dead) -> i32 {

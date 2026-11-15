@@ -1445,8 +1445,11 @@ pub unsafe extern "C" fn yd_t6_osal_free(mem: *mut OsalGpuMem) -> i32 {
     rc
 }
 
-/// `map_phys` ([`crate::board::nanopc_t6_osal::Osal::window`]): `*out`
-/// with a null `impl` (nothing to free), or a negative errno.
+/// `map_phys` ([`crate::board::nanopc_t6_osal::Osal::window`]): 0 and
+/// `*out`, its `impl` the window's handle
+/// ([`crate::board::nanopc_t6_osal::WINDOW`]: non-null as the GL library
+/// needs it, and [`yd_t6_osal_free`] frees nothing for it), or a negative
+/// errno.
 ///
 /// # Safety
 /// As [`yd_t6_osal_alloc`].

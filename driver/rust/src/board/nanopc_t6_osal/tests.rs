@@ -994,16 +994,33 @@ fn a_kick_the_carve_out_does_not_hold_is_refused() {
     assert_eq!(r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay), 1);
 }
 
-/// `map_phys` of the carve-out's own pages answers them where they are.
+/// `map_phys` of the carve-out's own pages answers them where they are,
+/// under the window's handle.
 #[test]
 fn a_window_is_the_carve_out_s_own_pages() {
     let mut r = rig();
     let a = r.osal.alloc(3 * 4096).unwrap();
     let w = r.osal.window(a.phys + 0x100, 0x2000).unwrap();
-    assert_eq!((w.gpu, w.cpu, w.handle), (a.gpu + 0x100, a.cpu + 0x100, 0));
+    assert_eq!((w.gpu, w.cpu, w.handle), (a.gpu + 0x100, a.cpu + 0x100, WINDOW));
     assert_eq!(r.osal.window(a.phys - 1, 16), Err(-ENOTSUP));
     assert_eq!(r.osal.window(a.phys + CARVE - 8, 16), Err(-ENOTSUP));
     assert_eq!(r.osal.window(a.phys, 0), Err(-EINVAL));
+}
+
+/// A free of a window frees nothing, not even when the window starts where
+/// an allocation does: the allocation stays, and its own free takes it.
+#[test]
+fn a_window_s_free_leaves_the_allocation_under_it() {
+    let mut r = rig();
+    let a = r.osal.alloc(3 * 4096).unwrap();
+    let live = r.osal.live_pages;
+    for w in [r.osal.window(a.phys, 4096).unwrap(), r.osal.window(a.phys + 4096, 0x2000).unwrap()] {
+        assert_eq!(r.osal.free(&*r.z, w.gpu, w.handle, &mut no_delay), 0);
+        assert_eq!(r.osal.free(&*r.z, w.gpu, w.handle, &mut no_delay), 0, "and again: nothing is held for it");
+    }
+    assert_eq!((r.osal.held(), r.osal.live_pages), (0, live));
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), -EINVAL);
 }
 
 /// The sections one after the other from page boundaries, in the image's
@@ -1038,7 +1055,8 @@ mod gl {
     use yakogl::gl::consts::*;
     use yakogl::gl::draw::glDrawArrays;
     use yakogl::gl::egl::{
-        eglChooseConfig, eglCreateContext, eglCreatePbufferSurface, eglGetDisplay, eglInitialize, eglMakeCurrent,
+        eglChooseConfig, eglCreateContext, eglCreateImage, eglCreatePbufferSurface, eglDestroyImage, eglGetDisplay,
+        eglInitialize, eglMakeCurrent, glEGLImageTargetTexture2DOES, GlesNativeWindow, GLES_NATIVE_FORMAT_RGBA8888,
     };
     use yakogl::gl::egl_consts::*;
     use yakogl::gl::framebuffer::glReadPixels;
@@ -1048,7 +1066,7 @@ mod gl {
     use yakogl::gl::program::{glAttachShader, glBindAttribLocation, glCreateProgram, glLinkProgram, glUseProgram};
     use yakogl::gl::shader::{glCompileShader, glCreateShader, glGetShaderiv, glShaderSource};
     use yakogl::gl::state::{glClear, glClearColor, glFinish, glGetError, glViewport};
-    use yakogl::gl::texture::{glBindTexture, glGenTextures, glTexImage2D};
+    use yakogl::gl::texture::{glBindTexture, glDeleteTextures, glGenTextures, glTexImage2D};
     use yakogl::gl::types::*;
     use yakogl::gl::vertex::{glEnableVertexAttribArray, glVertexAttribPointer};
     use yakogl::osal::mali::{OsalMaliKick, OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP};
@@ -1132,7 +1150,7 @@ mod gl {
     unsafe extern "C" fn o_map_phys(_: u64, phys: u64, size: usize, _: u32, out: *mut OsalGpuMem) -> i32 {
         with(|g| match g.r.osal.window(phys, size) {
             Ok(a) => {
-                fill(out, &Alloc { handle: 0, ..a });
+                fill(out, &a);
                 0
             }
             Err(e) => e,
@@ -1272,6 +1290,47 @@ mod gl {
         (red, blue)
     }
 
+    /// gl_test's case 18 in small: an EGL image of a native buffer inside the
+    /// carve-out (`map_phys`, [`Osal::window`]) becomes a texture's storage,
+    /// and the buffer stays the application's: the library frees none of it
+    /// when the texture and the image go.
+    ///
+    /// # Safety
+    /// On the test's thread, with `g` installed and a context current.
+    unsafe fn a_native_buffer_is_a_texture_s_storage(g: &mut Gl, dpy: EGLDisplay) {
+        let buf = g.r.osal.alloc(4 * 4 * 4).unwrap();
+        let live = g.r.osal.live_pages;
+        let nb = GlesNativeWindow {
+            phys: buf.phys,
+            width: 4,
+            height: 4,
+            stride_bytes: 16,
+            format: GLES_NATIVE_FORMAT_RGBA8888,
+        };
+        // SAFETY: the caller's contract; `nb` lives across the call that reads it
+        unsafe {
+            let img = eglCreateImage(
+                dpy,
+                core::ptr::null_mut(),
+                EGL_NATIVE_PIXMAP_KHR as EGLenum,
+                (&raw const nb).cast_mut().cast(),
+                core::ptr::null(),
+            );
+            assert!(!img.is_null(), "an image of the native buffer");
+            let mut tex = 0;
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, img);
+            assert_eq!(glGetError(), GL_NO_ERROR, "the window is the texture's storage");
+            glDeleteTextures(1, &tex);
+            assert_ne!(eglDestroyImage(dpy, img), 0);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR);
+        }
+        assert_eq!(g.r.osal.live_pages, live, "the library freed none of the buffer");
+        assert_eq!(g.r.osal.free(&*g.r.z, buf.gpu, buf.handle, &mut no_delay), 0, "the application's free");
+    }
+
     /// The L2 program through the OSAL over the model. The model runs each
     /// job the ring holds: the job's `CALL` runs the backend's stream at
     /// its VA in the carve-out, its `SYNC_ADD64` completes the fence, and
@@ -1280,7 +1339,9 @@ mod gl {
     /// path to them is the OSAL's (the board run checks the GPU's own).
     /// Then K2's recovery: the next frame's kick faults, the frame is lost
     /// and counted (`yakogl_gpu_work_lost`), the OSAL restarts its group,
-    /// and the frame after it draws again.
+    /// and the frame after it draws again. Last, the native buffer
+    /// ([`a_native_buffer_is_a_texture_s_storage`]): the library's state is
+    /// the process's, so the one test holds every part.
     #[test]
     fn the_l2_triangle_draws_through_the_osal_and_again_after_a_lost_frame() {
         let mut g = Box::new(Gl { r: rig(), allocs: vec![] });
@@ -1385,6 +1446,7 @@ mod gl {
             let (sub2, done2) = g.r.osal.fences();
             assert!(sub2 > sub && done2 == sub2, "the frame was a kick, complete: {sub2} {done2}");
             assert_eq!(g.r.osal.restarts, 1);
+            a_native_buffer_is_a_texture_s_storage(&mut g, dpy);
             yakogl::osal::osal_set_ops(core::ptr::null());
         }
         GL.store(core::ptr::null_mut(), Ordering::Release);
