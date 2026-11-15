@@ -1,0 +1,64 @@
+ok_minimal	71	-	0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+ok_two_adds_then_end	71	-	0x380021833803f042,0x380021843803f0c3,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+no_program_end	71	-	0x38003186bb03f000,0x38003186bb03f000	fail	2	No program-end THRSW found
+branch_in_branch_slot	71	-	0x0200000000001000,0x0200000000001000	fail	1	branch in a branch delay slot.
+branch_in_thrsw_slot	71	-	0x38203186bb03f000,0x38003186bb03f000,0x0200000000001000	fail	2	branch in a THRSW delay slot.
+thrsw_in_branch_slot	71	-	0x0200000000001000,0x38203186bb03f000	fail	1	THRSW in a branch delay slot.
+thrsw_too_close	71	-	0x38203186bb03f000,0x38003186bb03f000,0x38203186bb03f000	fail	2	THRSW too close to another THRSW.
+ok_last_thrsw_pair	71	last	0x38203186bb03f000,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000,0x38003186bb03f000,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+two_last_thrsw_signals	71	-	0x38203186bb03f000,0x38203186bb03f000	fail	1	Two last-THRSW signals
+thrsw_without_last_thrsw	71	last	0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000,0x38003186bb03f000,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	fail	7	thread switch found without last-THRSW in program
+ldunif_after_ldvary	71	-	0x39003186bb03f000,0x38403186bb03f000	fail	1	LDUNIF after a LDVARY
+ok_ldunifrf_after_ldvary	71	-	0x39003186bb03f000,0x39817186bb03f000,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+ok_ldvary_in_thrsw_slot_1	71	-	0x38203186bb03f000,0x39003186bb03f000,0x38003186bb03f000	ok	-	-
+ldvary_in_thrsw_slot_2	71	-	0x38203186bb03f000,0x38003186bb03f000,0x39003186bb03f000	fail	2	LDVARY in 2nd THRSW delay slot
+ok_ldvary_in_thrsw_instruction	71	-	0x39203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_0_r0	71	-	0x38003180f903f043	fail	0	write to a reserved magic waddr
+add_waddr_4	71	-	0x38003184f903f043	fail	0	write to a reserved magic waddr
+add_waddr_10	71	-	0x3800318af903f043	fail	0	write to a reserved magic waddr
+add_waddr_14_vpm	71	-	0x3800318ef903f043	fail	0	write to a reserved magic waddr
+add_waddr_15_vpmu	71	-	0x3800318ff903f043	fail	0	write to a reserved magic waddr
+add_waddr_19_recip	71	-	0x38003193f903f043	fail	0	write to a reserved magic waddr
+add_waddr_31	71	-	0x3800319ff903f043	fail	0	write to a reserved magic waddr
+add_waddr_47	71	-	0x380031aff903f043	fail	0	write to a reserved magic waddr
+add_waddr_55_r5rep	71	-	0x380031b7f903f043	fail	0	write to a reserved magic waddr
+add_waddr_5_r5	71	-	0x38003185f903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_6_nop	71	-	0x38003186f903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_7_tlb	71	-	0x38003187f903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_8_tlbu	71	-	0x38003188f903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_9_unifa	71	-	0x38003189f903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_11_tmud	71	-	0x3800318bf903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_13_tmuau	71	-	0x3800318df903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_16_tsy	71	-	0x38003190f903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_32_tmuc	71	-	0x380031a0f903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_waddr_46_tmuhsl	71	-	0x380031aef903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+mul_waddr_3_reserved	71	-	0x380030c6bb043000	fail	0	write to a reserved magic waddr
+mul_waddr_22_reserved	71	-	0x38003586bb043000	fail	0	write to a reserved magic waddr
+mul_waddr_7_tlb_ok	71	-	0x380031c6bb043000,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+sfu_magic_write_in_thrsw_slot	71	-	0x38203186bb03f000,0x38003194f903f043	fail	1	SFU write started during THRSW delay slots
+ok_recip_op_in_thrsw_slot	71	-	0x38203186bb03f000,0x38002184bc03f060,0x38003186bb03f000	ok	-	-
+ok_sfu_ops_back_to_back	71	-	0x38002184bc03f060,0x38002184bc03f060,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+tmu_and_tlb_write	71	-	0x380031cbf9083043	fail	0	Only one of [TMU, SFU, TSY, TLB read, VPM] allowed
+tsy_and_tmu_write	71	-	0x38003350f9083043	fail	0	Only one of [TMU, SFU, TSY, TLB read, VPM] allowed
+ldtlb_and_tmu_write	71	-	0x3a01b18bf903f043	fail	0	Only one of [TMU, SFU, TSY, TLB read, VPM] allowed
+ok_ldtmu_and_tlb_write	71	-	0x3881b187f903f043,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+small_imm_a_without_add	71	-	0x39c01106bb043000	fail	0	small imm a/b used but no ADD inst
+small_imm_b_without_add	71	-	0x39e01106bb043000	fail	0	small imm a/b used but no ADD inst
+small_imm_c_without_mul	71	-	0x3bc021833803f042	fail	0	small imm c/d used but no MUL inst
+small_imm_d_without_mul	71	-	0x3be021833803f042	fail	0	small imm c/d used but no MUL inst
+ok_small_imm_b_with_add	71	-	0x39e021833803f040,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+ok_small_imm_d_with_mul	71	-	0x3be01106bb043000,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+add_rf_write_in_thrend_instr	71	-	0x3820218a3803f042	fail	0	ADD RF write at THREND
+mul_rf_write_in_thrend_instr	71	-	0x38201286bb043000	fail	0	MUL RF write at THREND
+add_rf2_write_after_thrend	71	-	0x38203186bb03f000,0x380021823803f041	fail	1	RF2-3 write after THREND
+mul_rf3_write_after_thrend	71	-	0x38203186bb03f000,0x38003186bb03f000,0x380010c6bb043000	fail	2	RF2-3 write after THREND
+ldunifrf_rf2_after_thrend	71	-	0x38203186bb03f000,0x3980b186bb03f000	fail	1	RF2-3 write after THREND
+ok_rf5_writes_after_thrend	71	-	0x38203186bb03f000,0x380021853803f041,0x38001186bb043000	ok	-	-
+ok_rf2_write_third_slot_after_thrend	71	-	0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000,0x380021823803f041	ok	-	-
+ok_ldunifrf_rf5_in_thrend_instr	71	-	0x39a17186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+ok_tmuwt_in_last_instruction	71	-	0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f00f	ok	-	-
+multop_thrsw_umul24	71	-	0x28001106bb042000,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000,0x0c001106bb042000	fail	4	UMUL24 reads rtop from MULTOP but it got cleared by a previous THRSW
+ok_multop_umul24_adjacent	71	-	0x28001106bb042000,0x0c001106bb042000,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000	ok	-	-
+ok_multop_in_branch_slot_umul24	71	-	0x0200000000001000,0x28001106bb042000,0x38003186bb03f000,0x38003186bb03f000,0x38203186bb03f000,0x38003186bb03f000,0x38003186bb03f000,0x0c001106bb042000	ok	-	-
+setmsf_after_tlb_z_write	71	z=0	0x38003187f903f043,0x38003186ba03f046	fail	1	SETMSF after TLB Z write
+msf_after_tlb_z_write	71	z=0	0x38003187f903f043,0x38002184bb03f00a	fail	1	MSF read after TLB Z write
