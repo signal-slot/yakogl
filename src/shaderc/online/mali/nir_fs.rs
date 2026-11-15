@@ -5004,6 +5004,9 @@ fn walk_nodes(
                 if !cube_dir_measured(f, m, coord, dir) {
                     return Err(MaliError::TexCoord);
                 }
+                if sampler_array_element(m, sampler) {
+                    return Err(MaliError::TexArrayElement);
+                }
                 if f.uniform_dword(bias).is_none() {
                     return Err(MaliError::TexKind);
                 }
@@ -5037,6 +5040,9 @@ fn walk_nodes(
                 let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
                 if !cube_dir_measured(f, m, coord, dir) {
                     return Err(MaliError::TexCoord);
+                }
+                if sampler_array_element(m, sampler) {
+                    return Err(MaliError::TexArrayElement);
                 }
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: dir, bits: 16, width: 1 })?;
                 f.origin[n as usize] = at as u16;
@@ -5334,6 +5340,17 @@ fn cube_dir_measured(f: &Fs<'_>, m: &Module<'_>, coord: ir::Src, dir: [Val; 3]) 
     let pair = dir[..2].iter().all(|&v| f.alu_of(v).is_some() && tree(f, v, false, &leaf))
         && (matches!(dir[2], Val::Const(_)) || uniform(dir[2]));
     raw || pair
+}
+
+/// Sampler binding `b` is an element of a sampler array other than its
+/// first. Mesa numbers an array's elements together, so `sa[1]` read alone
+/// is descriptor index 1 (fstex_cubeno_texarrayelement_implicit: the
+/// handle `0x20011801`); [`layout`] counts the samplers read and gives it
+/// 0, `sa[0]`'s texture. Refused until the index counts the array.
+fn sampler_array_element(m: &Module<'_>, b: u8) -> bool {
+    m.uniforms
+        .iter()
+        .any(|u| u.dword_off == crate::shaderc::SHC_UNIFORM_NO_BLOCK && b > u.binding && b - u.binding < u.array_len)
 }
 
 /// The sources `t` and `x` of atan's `fabs(t) * fsign(x)`, `t` the
