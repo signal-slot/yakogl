@@ -27,8 +27,9 @@
 #       lines 'board.sh imx8mp e<N> rc='.
 #   c7  check-imx8mp-gles3-tree.py -q prints 'matched exactly once 42810'
 #       and OK.
-#   c8  no /dev/tty(USB|ACM), IPv4 address or user@host.domain in
-#       tools/cts/log/*-imx8mp-gles3-* and *-imx8mp-es2-*.
+#   c8  no /dev/tty(USB|ACM), IPv4 address or login (a user name, '@',
+#       a host name with a domain) in tools/cts/log/*-imx8mp-gles3-* and
+#       *-imx8mp-es2-*.
 #
 # One line per check on stdout, 'c<N> ok|FAIL <detail>', then a summary.
 # Exit 0 only when all pass, 1 otherwise, 2 on a usage error.
