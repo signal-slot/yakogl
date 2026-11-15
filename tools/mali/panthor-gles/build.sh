@@ -18,9 +18,10 @@
 # GLIBC version the board lacks. The sysroot is four pinned Debian packages
 # (PKGS below, sha256-checked), unpacked once into
 #   $YAKOGL_MALI_SYSROOT, else
-#   ${CONNECTED_DEPS_DIR:-${CCFARM_DEPS_DIR:-~/.local/share/connected/deps/yakogl}}/debian-trixie-arm64-sysroot
-# (the layout directory of tools/cts/deps-env.sh). The linker is lld:
-# `ld.lld` on PATH, else the `rust-lld` of the active Rust toolchain.
+#   <deps>/debian-trixie-arm64-sysroot
+# (<deps> is the dependency layout, tools/cts/deps-env.sh --layout). The
+# linker is lld: `ld.lld` on PATH, else the `rust-lld` of the active Rust
+# toolchain.
 #
 # Override: YAKOGL_MALI_CC=<compiler driver> (for example
 # aarch64-linux-gnu-gcc of a host whose cross glibc is at most 2.41) links
@@ -136,9 +137,14 @@ else
 		echo "build.sh: needs clang (or YAKOGL_MALI_CC=<an aarch64 linux gcc>)" >&2
 		exit 1
 	}
-	deps=${CONNECTED_DEPS_DIR:-${CCFARM_DEPS_DIR:-$HOME/.local/share/connected/deps/yakogl}}
-	sysroot=${YAKOGL_MALI_SYSROOT:-$deps/debian-trixie-arm64-sysroot}
-	if [ -z "${YAKOGL_MALI_SYSROOT:-}" ]; then
+	if [ -n "${YAKOGL_MALI_SYSROOT:-}" ]; then
+		sysroot=$YAKOGL_MALI_SYSROOT
+	else
+		deps=$("$here/../../cts/deps-env.sh" --layout) || {
+			echo "build.sh: tools/cts/deps-env.sh --layout failed" >&2
+			exit 1
+		}
+		sysroot=$deps/debian-trixie-arm64-sysroot
 		make_sysroot "$sysroot"
 	fi
 	[ -e "$sysroot/usr/lib/aarch64-linux-gnu/libc.so.6" ] || {
