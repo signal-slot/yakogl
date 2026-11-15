@@ -51,7 +51,9 @@
 #    runner's record taken into the run directory and
 #    redacted, and the verdict of each way a run ends: back with a probe's
 #    record (t6-verdict.sh's PASS or FAIL, the testdata/ records), back with
-#    a gl_test set, Armbian not back, no jump, a refusal before any change.
+#    a gl_test set, Armbian not back, no jump, a refusal before any change
+#    (kept in meta.txt and tallied as verdict=refused with its exit code, as
+#    the lease's refusals in 2 are).
 # Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and
 # every check written in this file ran: each "check" and "same" call notes the
 # line it was called from, and at the end every line of this file that starts
@@ -518,6 +520,32 @@ check "pi5-fake, ssh refused: rc 3, ssh's own error printed with <board-host> an
           ! grep -q "pi5-fake\|100\.64\.7\.9\|tester@" "$S/fake-pi5.out"'
 check "pi4, ssh refused: rc 3, ssh's error as it was (pi4 output unchanged)" \
     eval 'grep -q "^rc=3$" "$S/fake-pi4.out" && grep -qF "connect to host pi5-fake.example (100.64.7.9) port 22" "$S/fake-pi4.out"'
+# the same two runs (#6838): the sentence is the lease's ssh, not another run's
+# lease; the refusal is in the run's meta.txt and the tally reads it
+for board in pi5 pi4; do
+    rd=$(ls -d "$S/logs-fake-$board"/*/ 2>/dev/null | head -1)
+    rd=${rd%/}
+    check "$board, ssh refused: 'did not answer the lease's ssh (rc 255)', never 'leased to another run'; meta.txt keeps rc 3 and the sentence without the host or its address" \
+        eval 'grep -qF "the board did not answer the lease'"'"'s ssh (rc 255) and LOCK_WAIT ran out: ssh: connect to host" "$S/fake-$board.out" &&
+              ! grep -q "leased to another run" "$S/fake-$board.out" && grep -qx "refused_rc=3" "$rd/meta.txt" &&
+              grep -q "^refused=the board did not answer the lease.s ssh (rc 255) and LOCK_WAIT ran out: ssh: connect to host <board-host> " "$rd/meta.txt" &&
+              grep -q "^ended=" "$rd/meta.txt" && ! grep -rq "pi5-fake\|100\.64\.7\.9\|tester@" "$rd"'
+    check "$board, ssh refused: the tally of its run says rc=3 verdict=refused (was rc=5 not_back), exit code 3" \
+        eval 'says "$board" "$rd" "rc=3 verdict=refused boot=tryboot row boot_verdict=refused result=none " && { "$B" "$board" tally "$rd" > /dev/null 2>&1; [ $? = 3 ]; }'
+done
+# a lease that another run holds (the board answers, exit code 3): that sentence, with the lease
+mkdir -p "$S/stub-held"
+printf '#!/bin/sh\nprintf "holder=other-host:4242\\nrow=TF\\nexpires=9999999999\\n"\nexit 3\n' > "$S/stub-held/ssh"
+chmod +x "$S/stub-held/ssh"
+LOCK="$S/held-pi4.lock" LOCK_WAIT=0 BOARD_HOST=tester@pi5-fake.example BOARD_UART=/dev/ttyFAKE5 PATH="$S/stub-held:$PATH" \
+    "$B" pi4 probe "$S/logs-held-pi4" > "$S/held-pi4.out" 2>&1
+echo "rc=$?" >> "$S/held-pi4.out"
+rd=$(ls -d "$S/logs-held-pi4"/*/ 2>/dev/null | head -1)
+rd=${rd%/}
+check "pi4, the lease held by another run: rc 3, 'the board is leased to another run' with the lease, kept in meta.txt, the tally rc=3 verdict=refused" \
+    eval 'grep -q "^rc=3$" "$S/held-pi4.out" && grep -q "the board is leased to another run and LOCK_WAIT ran out: holder=other-host:4242 row=TF expires=9999999999" "$S/held-pi4.out" &&
+          ! grep -q "did not answer" "$S/held-pi4.out" && grep -q "^refused=the board is leased to another run and LOCK_WAIT ran out: holder=other-host:4242 " "$rd/meta.txt" &&
+          says pi4 "$rd" "rc=3 verdict=refused "'
 # the record: finish's redact_run on a pi5 run directory (the console path,
 # the bridge, the host names, the addresses; INDEX.txt is written after it)
 eval "$(sed -n '/^redact_run() {/,/^}/p; /^redact_dir() {/,/^}/p; /^redact_words() {/,/^}/p; /^uart_is_bridge() /p' "$B")"
@@ -1019,6 +1047,20 @@ mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 back=1 up=40 t_reboot=100 t_
 check "x2 kexec-dev: the ping never lost (no jump) -> no_jump rc 4" says x2 "$d" "rc=4 verdict=no_jump"
 mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 lost=3 rc_cycle=5 t_reboot=100
 check "x2 kexec-dev: Linux not back -> not_back rc 5" says x2 "$d" "rc=5 verdict=not_back"
+# a run refused before its reboot (run_refused, #6838): its exit code and its
+# message, never "the board did not come back"; a run that rebooted is not one
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 refused_rc=3 "refused=the board is leased to another run and LOCK_WAIT ran out: holder=other:1"
+check "x2 kexec-dev: refused before the jump (refused_rc 3, no t_reboot) -> refused rc 3, the message on its own line, exit code 3" \
+    eval 'says x2 "$d" "rc=3 verdict=refused boot=kexec-dev DEV boot_verdict=refused result=none .*never a row" &&
+          says x2 "$d" "^  refused: the board is leased to another run and LOCK_WAIT ran out: holder=other:1$" &&
+          { "$B" x2 tally "$d" > /dev/null 2>&1; [ $? = 3 ]; }'
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 refused_rc=2 "refused=no image"
+check "x2 kexec-dev: refused with exit code 2 -> refused rc 2" says x2 "$d" "rc=2 verdict=refused "
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 lost=3 rc_cycle=5 t_reboot=100 refused_rc=3 "refused=a later refusal"
+check "x2 kexec-dev: a refusal in a run that jumped (t_reboot) is not read: Linux not back stays not_back rc 5" \
+    eval 'says x2 "$d" "rc=5 verdict=not_back" && ! says x2 "$d" "refused"'
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0
+check "x2 kexec-dev: meta.txt alone, no refusal kept -> not_back rc 5 (unchanged)" says x2 "$d" "rc=5 verdict=not_back"
 # the TFTP and boot verdicts the old netboot runner gave without a record (its step 9)
 d="$S/imx/x/20261003-1200-nr-0123abcd"
 mkrun "$d" board=imx8mp boot=uboot-tftp name=nr probe=0 back=1 up=40 "rec0=00000000 00000000 00000000 00000000"
@@ -1480,6 +1522,11 @@ t6run refused "$KT/t6_hello-pass.uart"
 check "nanopc-t6 runner refused before any change (rc 3, no record): rc 3, its line shown, no INDEX.txt, the lease given back" \
     eval '[ "$T6_RC" = 3 ] && grep -q "nanopc-t6.sh: REFUSED: under the lock" <<<"$T6_OUT" && grep -q "refused (rc 3) before it changed anything" <<<"$T6_OUT" &&
           [ ! -e "$T6_RD/INDEX.txt" ] && ! grep -rq "t6fake-host" "$T6_RD" && [ "$(tail -1 "$S/t6/ssh.log" | grep -c "rm -f /var/tmp/yakogl-board.lease")" = 1 ]'
+check "nanopc-t6 runner refused: meta.txt keeps rc 3 and the sentence, no t_reboot; the tally says rc=3 verdict=refused (was rc=5 not_back), exit code 3 (#6838)" \
+    eval 'grep -qx "refused_rc=3" "$T6_RD/meta.txt" && grep -q "^refused=nanopc-t6.sh refused (rc 3) before it changed anything on the board" "$T6_RD/meta.txt" &&
+          grep -q "^ended=" "$T6_RD/meta.txt" && ! grep -q "^t_reboot=" "$T6_RD/meta.txt" &&
+          says nanopc-t6 "$T6_RD" "rc=3 verdict=refused boot=kexec-dev DEV boot_verdict=refused result=none .*never a row" &&
+          { "$B" nanopc-t6 tally "$T6_RD" > /dev/null 2>&1; [ $? = 3 ]; }'
 
 # every check written above ran (the header says why): the call lines of this
 # file against the lines noted by check and same
