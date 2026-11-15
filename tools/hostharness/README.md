@@ -45,7 +45,7 @@ those before looking for a regression.
 ## Usage
 
 The `<driver repo>` argument of `run.sh` is a driver tree: this repository's
-`driver/` (its `src/` and `tools/pvrlab/gl_test.c`), or the `driver/` of
+`driver/` (its `src/` and `driver/tools/pvrlab/gl_test.c`), or the `driver/` of
 another checkout for the other side of a comparison.
 
 ```sh
