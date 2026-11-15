@@ -41,10 +41,10 @@ record 1: c3d, 80 words
   dw39 a0000027  pbe_word[2][0].hi
   dw40 a0000028  pbe_word[2][1].lo
   dw41 a0000029  pbe_word[2][1].hi
-  dw42 a000002a  (unplaced)
-  dw43 a000002b  (unplaced)
-  dw44 a000002c  (unplaced)
-  dw45 a000002d  (unplaced)
+  dw42 a000002a  pbe_word[3][0].lo
+  dw43 a000002b  pbe_word[3][0].hi
+  dw44 a000002c  pbe_word[3][1].lo
+  dw45 a000002d  pbe_word[3][1].hi
   dw46 a000002e  (unplaced)
   dw47 a000002f  (unplaced)
   dw48 a0000030  (unplaced)

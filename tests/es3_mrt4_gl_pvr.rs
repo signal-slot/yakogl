@@ -655,7 +655,7 @@ enum Outcome {
 /// assertion: it updates it when it lands.
 ///
 /// Today both reach the back end and kick: `pvr::backend` clamps the
-/// target list to PVR_BACKEND_MAX_RT (= PVR_RENDER_MAX_RT, 3,
+/// target list to PVR_BACKEND_MAX_RT (= PVR_RENDER_EOT_PDS_PAIRS, 3,
 /// src/pvr/backend.rs:5235) and drops attachment 3 without a GL error.
 /// There is no refusal from the back end; only a log line about the
 /// attachment/output count mismatch.
