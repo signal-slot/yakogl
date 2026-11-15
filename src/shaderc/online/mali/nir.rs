@@ -1772,6 +1772,15 @@ impl<'s> Nir<'s> {
         })
     }
 
+    /// The descriptor indices of the live cube look-ups ([`Kind::VsTex`]
+    /// with `cube`), in program order ([`super::MaliShader::cube_samplers`]).
+    pub fn cube_samplers(&self) -> impl Iterator<Item = u8> + '_ {
+        self.order[..self.len].iter().filter_map(|&id| match self.nodes[id as usize].kind {
+            Kind::VsTex { cube: true, index, .. } => Some(index),
+            _ => None,
+        })
+    }
+
     fn push(&mut self, kind: Kind, src: [Val; 3]) -> Result<u16, MaliError> {
         self.push_sized(kind, src, 32)
     }

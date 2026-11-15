@@ -672,7 +672,8 @@ pub struct MaliShader<'k> {
     /// Bit i: the look-up at descriptor index i ([`MaliShader::samplers`]
     /// `[i]`) is a cube map's (`TEX_SINGLE ... .cube`), whose texture
     /// descriptor must be a cube's: the draw refuses a unit with no
-    /// complete cube map for it (src/mali/backend.rs `fs_textures`).
+    /// complete cube map for it, in either stage (src/mali/backend.rs
+    /// `stage_texture`).
     pub cube_samplers: u64,
     /// Fragment: the uniform block the program loads from memory (an
     /// `LD_PKA` of a uniform array element at a run-time index), in Mesa's
@@ -1289,11 +1290,8 @@ fn compile_stage<'s>(
             sc.nsamplers = sc.nsamplers.max(i + 1);
         }
         sc.info.sampler = sc.samplers[..sc.nsamplers].first().copied();
-        for &id in &vs.order[..vs.len] {
-            if let nir::Kind::VsTex { cube: true, index, .. } = vs.nodes[id as usize].kind {
-                sc.info.cube_samplers |=
-                    1u64.checked_shl(u32::from(index)).ok_or(MaliError::Defect(Defect::IrIndex))?;
-            }
+        for index in vs.cube_samplers() {
+            sc.info.cube_samplers |= 1u64.checked_shl(u32::from(index)).ok_or(MaliError::Defect(Defect::IrIndex))?;
         }
         if var.words > 0 {
             sc.info.secondary = Some(Secondary {
