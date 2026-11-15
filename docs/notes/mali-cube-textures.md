@@ -759,3 +759,39 @@ Byte-equal: `case41.expect.json`, `case114_v.expect.json` and
 `case114_f.expect.json` (every program, the last through the link step),
 `sel_v_const.expect.json` (the link step on a mediump pair). Corpus:
 `es300/cube.frag`, `cubelodf.frag` and `cubelodv.vert` move to `ok`.
+
+## (h) A mediump `textureCube` at the implicit level or with a bias: the directions taken
+
+dEQP-GLES2's texture cube cases sample with `textureCube(s, dir)` in a
+mediump shader: the look-up at `COMPUTED_LOD` (`.cube.computed`, two staging
+words), or at `COMPUTED_BIAS` with a uniform bias widened before the
+descriptor (`tools/mali/testdata/fstex_cube*`). The direction reaches the
+cube ops (fp32 only) by one of two routes, and both arms take a direction
+only in a shape measured byte-equal to Mesa 26.2.1's drm-shim
+(`cube_dir_measured`, `src/shaderc/online/mali/nir_fs.rs`; default refuse,
+`TexCoord`):
+
+| shape | taken when | references |
+|---|---|---|
+| raw | each lane a varying's lane or a constant fp16 holds exactly, one varying lane at least; the cube ops read the load's fp32 words and the constant as an operand (+-1.0 the table's `0x3F800000`, 0.5 an FAU word) | `fstex_cube`, `fstex_cubedir_twovary`, `_constneg`, `_rawhalf`, `fstex_cubebias_uni` |
+| pair | x and y fp16 trees of `+`, `*` and negation over varying lanes, constants and uniforms, vectorised as one pair; z a constant (rounded to fp16) or a uniform lane; each lane `F16_TO_F32` at the look-up | `fstex_cubeface4`, `fstex_cubedir_face4uni`, `_uniscale`, `_fmak`, `_mulnegk`, `_pairhalf`, `_negyx`, `_vec4zw`, `_vec4w` |
+
+The pair's operand forms are also the colour's: `select` notes them and
+checks them against `ADMITTED`, as it does for the colour's pairs. A form
+the colour refuses is refused in the direction too (`FsOperandForm`).
+
+Measured otherwise, and so refused:
+
+- a raw constant fp16 does not hold (`vec3(a2, 0.1)`,
+  `fstex_cubedir_rawtenth`): Mesa rounds it to fp16 and reads the widened
+  value from an FAU word; the raw lane keeps the fp32 constant;
+- raw lanes beside a uniform (`vec3(a2, u)`, `fstex_cubebias_unilane`):
+  Mesa keeps the varying fp32, the pair narrows it;
+- gl_FragCoord or gl_PointCoord: Mesa reads them fp32;
+- a lone product with 2.0 (`a2 * 2.0`): Mesa's late rule makes it
+  `FADD.v2f16 r0, r0^, r0^`;
+- a fused product with a negative constant first (`a2 * -3.0 + 0.25`,
+  `fstex_cubedir_fmanegk`): Mesa reads -3.0 from the FAU word, ours reads
+  3.0 negated (`FsOperandForm`, as in the colour).
+
+A highp shader's implicit level has no reference (`TexKind`).
