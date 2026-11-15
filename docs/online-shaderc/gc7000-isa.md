@@ -132,7 +132,7 @@ exists to test the table; the shipping decoder and encoder are Rust, in
 `src/shaderc/online/`.
 
 It reads every shader in `tests/reference/vivante_blobs.rs` and
-`tests/reference/gc_clear_shader.rs` (then `src/vivante/clear_shader.rs`) — the
+`tests/reference/gc_clear_shader.rs` (then `clear_shader.rs` (removed from the tree)) — the
 offline table this library shipped and drew with then; etna's clear pair is now
 reference material, the driver's own pair our compiler's (`src/vivante/internal.rs`),
 word for word the same — and decodes each 128-bit instruction. Run of 2026-09-22:
@@ -165,7 +165,7 @@ decides that, at M3.
 
 ### Two independent readings of the XML agree
 
-A second extractor (`tools/etna-isa/extract.py`) was written over the
+A second extractor (`etna-isa/extract.py` (never committed)) was written over the
 same `etnaviv.xml`, independently, before this one landed. Rather than pick one
 and move on, the two were diffed — which turns a duplication into the best
 structural evidence available, because two people reading the same description
@@ -441,7 +441,7 @@ most of them on `cmp` (634), `add` (290), `select` (268) and `mad` (220).
 
 ## The codec in Rust and how it is measured (M1)
 
-Folded from `docs/online-shaderc/design.md` (2026-09), whose M1 measurement
+Folded from `design.md` (folded in here, removed from the tree) (2026-09), whose M1 measurement
 this is. The counts are of the corpus of that day, the offline table now under
 `tests/reference/`; the test names are current.
 
@@ -459,7 +459,7 @@ model, no padding and no framing to work out: each instruction pins its own
 opcode, and the only question is which operation it is. The description
 (Mesa's etnaviv isaspec XML) is a tree of bitsets — a root with the fields
 every instruction has, intermediate bitsets per instruction shape, a leaf per
-operation — and `tools/etna-isa/extract.py` flattens each leaf's inheritance
+operation — and `etna-isa/extract.py` (never committed) flattens each leaf's inheritance
 so an operation is just a mask, the values it pins, and a list of fields.
 
 Measured by `cargo test --no-default-features
