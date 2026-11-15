@@ -756,7 +756,7 @@ pub struct FsVarying {
     pub offset: u16,
     key: u32,
     /// Loaded flat (`.src_flat32`): the vertex shader computes its lanes
-    /// from uniforms alone ([`super::link::VaryingConsts::flat`]).
+    /// from uniforms alone ([`super::link::FsConsts::flat`]).
     pub flat: bool,
     /// Holds lanes the program does not read: of a varying the link keeps
     /// whole ([`kept_whole`], a dot product's), loaded at the slot's width
@@ -4236,7 +4236,7 @@ fn walk_nodes(
                  * (nir_lower_mediump_io, bifrost_nir.c:914-916) */
                 f.mixed |= prec.highp && prec.other >> (v & 31) & 1 != 0;
                 /* a lane the vertex shader stores as a constant is that
-                 * constant ([`super::link::VaryingConsts`]): the load is of
+                 * constant ([`super::link::FsConsts`]): the load is of
                  * the other lanes alone, when one is left */
                 let konst = |c: usize| prec.consts.get(v, c as u8);
                 let n = if (0..comps as usize).all(|c| konst(c).is_some()) { None } else { Some(f.input(v, at)?) };

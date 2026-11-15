@@ -517,8 +517,9 @@ fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
 }
 
 /// A program pair through the Mali's link step: the vertex shader's
-/// constant lanes (`vs_constants`), the fragment shader compiled with them
-/// (`compile_fs_for_vs`), the vertex shader built for its reads
+/// constant lanes at the fragment shader's locations (`fs_constants`), the
+/// fragment shader compiled with them (`compile_fs_for_vs`), the vertex
+/// shader built for its reads
 /// (`compile_vs_for_reads`), as Mesa's link leaves the pair
 /// (nir_opt_varyings).
 fn compile_linked(vs: &str, fs: &str) -> (Stage, Stage) {
@@ -531,7 +532,9 @@ fn compile_linked(vs: &str, fs: &str) -> (Stage, Stage) {
 /// [`compile_linked`], a refusal of either stage returned, not a panic.
 fn try_compile_linked(vs: &str, fs: &str) -> Result<(Stage, Stage), CompileError> {
     let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s)).expect("the scratch arena is free")?;
+    let consts = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
+        .expect("the scratch arena is free")?
+        .unwrap_or_default();
     let f = store::with_scratch(|s| {
         super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
     })
@@ -550,8 +553,22 @@ fn try_compile_linked(vs: &str, fs: &str) -> Result<(Stage, Stage), CompileError
     Ok((v, f))
 }
 
+/// The vertex shader's location of the varying at the fragment shader's
+/// location `loc`: the stages number their own declarations, the link pairs
+/// them by name (link.rs `pair`).
+fn vertex_location(vs: &str, fs: &str, loc: u8) -> Option<u8> {
+    store::with_scratch(|s| {
+        let f = super::lower_source(SHC_STAGE_FRAGMENT, fs.as_bytes(), &[], s).ok()?;
+        let v = super::lower_source(SHC_STAGE_VERTEX, vs.as_bytes(), &[], s).ok()?;
+        let (name, _) = super::varying_decl(f.module.inputs, |io| io.location == loc)?;
+        super::varying_decl(v.module.outputs, |io| io.name == name).map(|(_, l)| l)
+    })
+    .expect("the scratch arena is free")
+}
+
 /// [`compile_linked`] checked against an expect.json, every region, and
-/// each fragment read at its vertex output's offset (the link's rule).
+/// each fragment read at the offset of the vertex output of its name (the
+/// link's rule).
 fn check_linked(vs: &str, fs: &str, json: &str) -> (Stage, Stage) {
     check_linked_capped(vs, fs, json, &[])
 }
@@ -563,9 +580,10 @@ fn check_linked_capped(vs: &str, fs: &str, json: &str, edits: &[CapEdit]) -> (St
     check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
     check_fs_stage_capped(&f, vs, fs, json, VIEWPORT_64X64, edits);
     for s in &f.info.varyings {
+        let at = s.varying.map(|loc| vertex_location(vs, fs, loc).expect("a vertex output of the read's name"));
         assert!(
-            v.info.varyings.iter().any(|x| x.varying == s.varying && x.offset == s.offset && x.mask == s.mask),
-            "{s:?} in {:?}",
+            v.info.varyings.iter().any(|x| x.varying == at && x.offset == s.offset && x.mask == s.mask),
+            "{s:?} (vertex location {at:?}) in {:?}",
             v.info.varyings
         );
     }
@@ -2308,9 +2326,10 @@ fn equal_lanes_of_two_qualifiers_are_not_merged() {
         let r = region(json, "fs.fragment").expect("fs.fragment");
         assert!(r.words.iter().any(|w| text(*w).contains(".src_flat32")), "{fs}");
         let _k = store::test_keep();
-        let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
+        let consts = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
             .expect("the scratch arena is free")
-            .expect("the vertex shader's constant lanes");
+            .expect("the vertex shader's constant lanes")
+            .unwrap_or_default();
         let f = store::with_scratch(|s| super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|_| ()))
             .expect("the scratch arena is free");
         match f {
@@ -2418,9 +2437,10 @@ fn equal_varying_lanes_are_merged_as_mesa_26_2_1() {
      * words are not this back end's) */
     let (vs, fs) = (td!("fsload_dup_phi.vert"), td!("fsload_dup_phi.frag"));
     let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
+    let consts = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
         .expect("the scratch arena is free")
-        .expect("the vertex shader's constant lanes");
+        .expect("the vertex shader's constant lanes")
+        .unwrap_or_default();
     let f = store::with_scratch(|s| {
         super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
     })
@@ -3739,7 +3759,7 @@ fn a_cube_bias_direction_mesa_compiles_otherwise_is_refused_by_name() {
 /// `v_dir = vec3(1.0, a_pos.y * 0.95, a_pos.x * 0.95)`. Mesa's link
 /// propagates the constant lane into the fragment shader (nir_opt_varyings)
 /// and stores the two others, which the link step does too (mod.rs
-/// `vs_constants`, `compile_fs_for_vs`, then the vertex shader for the
+/// `fs_constants`, `compile_fs_for_vs`, then the vertex shader for the
 /// reads): `build_cube_desc` at fp32 with the constant an operand
 /// (`CUBEFACE1.discard r2, 0x3F800000, r0, r1`), the 8.8 level,
 /// `TEX_SINGLE.32.cube.explicit` at three staging words (the sampler's
@@ -3953,9 +3973,10 @@ fn a_vertex_float_array_read_at_an_int_uniform_is_byte_equal_to_mesa_26_2_1() {
     );
     assert_eq!(v.info.fau[11], FauWord::Uniform { dword: idx });
     /* the linked fragment shader's own gap */
-    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
+    let consts = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
         .expect("the scratch arena is free")
-        .expect("the vertex shader's constant lanes");
+        .expect("the vertex shader's constant lanes")
+        .unwrap_or_default();
     let f = store::with_scratch(|s| super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|_| ()))
         .expect("the scratch arena is free");
     assert!(matches!(f, Err(CompileError::BackEnd(codegen::BackEndError::Mali(MaliError::ColourZeroHalf)))), "{f:?}");
@@ -6545,9 +6566,10 @@ fn case_199_fragment_trunc_is_byte_equal_to_mesa_26_2_1() {
     let attr = "#version 300 es\nin vec4 a_color;\nin vec4 a_pos;\nout vec4 v;\n\
                 void main() { gl_Position = a_pos; v = a_color; }\n";
     let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::vs_constants(attr.as_bytes(), s))
+    let consts = store::with_scratch(|s| super::fs_constants(attr.as_bytes(), fs.as_bytes(), s))
         .expect("the scratch arena is free")
-        .expect("the vertex shader's constant lanes");
+        .expect("the vertex shader's constant lanes")
+        .unwrap_or_default();
     let f = store::with_scratch(|s| {
         super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
     })
@@ -6763,6 +6785,104 @@ fn the_varyconst_population_is_byte_equal_to_mesa_26_2_1() {
         }
     }
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), VARYCONST_POPULATION.len(), failed.join("\n"));
+}
+
+/// Pairs whose two stages number their varyings differently (issue #4510):
+/// a stage's location is the order of its own declarations, so the vertex
+/// shader's table of constant lanes (`vs_constants`) names other varyings
+/// at the fragment shader's locations. The link maps it by name
+/// (`fs_constants`, link.rs `VaryingConsts::at_fragment`). Each pair is
+/// Mesa 26.2.1's on drm-shim to the byte.
+const VARYCONST_NAMES: [(&str, &str, &str, &str); 5] = [
+    /* the issue's pair: `b` constant at the vertex location 1, where the
+     * fragment shader holds `a`, the varying it reads */
+    (
+        "swap",
+        td!("varyconst_names_swap.vert"),
+        td!("varyconst_names_swap.frag"),
+        td!("varyconst_names_swap.expect.json"),
+    ),
+    /* the same vertex shader, the constant varying read: no read is left
+     * and the vertex shader has no varying program */
+    (
+        "swap_const",
+        td!("varyconst_names_swap_const.vert"),
+        td!("varyconst_names_swap_const.frag"),
+        td!("varyconst_names_swap_const.expect.json"),
+    ),
+    /* a fragment shader that declares a subset: its location 0 is the
+     * vertex shader's 1 */
+    (
+        "subset",
+        td!("varyconst_names_subset.vert"),
+        td!("varyconst_names_subset.frag"),
+        td!("varyconst_names_subset.expect.json"),
+    ),
+    /* the constant varying is not declared at all: its lane reaches no
+     * fragment location */
+    (
+        "undeclared",
+        td!("varyconst_names_undeclared.vert"),
+        td!("varyconst_names_undeclared.frag"),
+        td!("varyconst_names_undeclared.expect.json"),
+    ),
+    /* as above, constant lanes beside a lane of an attribute, declared
+     * after the varying that is read */
+    (
+        "undeclared_mixed",
+        td!("varyconst_names_undeclared_mixed.vert"),
+        td!("varyconst_names_undeclared_mixed.frag"),
+        td!("varyconst_names_undeclared_mixed.expect.json"),
+    ),
+];
+
+#[test]
+fn a_constant_lane_reaches_the_fragment_varying_of_its_name() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in VARYCONST_NAMES {
+        if let Err(e) = std::panic::catch_unwind(|| check_linked(vs, fs, json)) {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), VARYCONST_NAMES.len(), failed.join("\n"));
+}
+
+/// The tables of [`VARYCONST_NAMES`]'s pairs in the two location spaces.
+/// Revert check: hand the vertex shader's table to the fragment shader as
+/// it is (`at_fragment(Some)`) and `swap` reads `a` as the constants of
+/// `b`, `undeclared` reads `w` as 0.5.
+#[test]
+fn the_fragment_shaders_table_is_keyed_by_its_own_locations() {
+    let tables = |vs: &str, fs: &str| {
+        let v = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s)).expect("free").expect("the lanes");
+        let f = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
+            .expect("free")
+            .expect("both stages lower")
+            .expect("a vertex shader with constant lanes");
+        (v, f)
+    };
+    let b = [0.25f32, 0.5, 0.75, 1.0].map(f32::to_bits);
+    let lanes = |c: &dyn Fn(u8) -> Option<u32>| [0, 1, 2, 3].map(c);
+    /* `b`: the vertex location 1, the fragment location 0 */
+    let (vs, fs) = (td!("varyconst_names_swap.vert"), td!("varyconst_names_swap.frag"));
+    let (v, f) = tables(vs, fs);
+    assert_eq!(lanes(&|c| v.get(1, c)), b.map(Some));
+    assert_eq!(lanes(&|c| f.get(0, c)), b.map(Some));
+    assert_eq!(lanes(&|c| f.get(1, c)), [None; 4], "`a` holds no constant");
+    /* `b` is the vertex location 0 and no fragment location */
+    let (v, f) = tables(td!("varyconst_names_subset.vert"), td!("varyconst_names_subset.frag"));
+    assert_eq!(lanes(&|c| v.get(0, c)), b.map(Some));
+    assert!(f.is_empty(), "{f:?}");
+    /* `v = 0.5` is the vertex location 0, where the fragment shader holds `w` */
+    let (v, f) = tables(td!("varyconst_names_undeclared.vert"), td!("varyconst_names_undeclared.frag"));
+    assert_eq!(v.get(0, 0), Some(0.5f32.to_bits()));
+    assert!(f.is_empty(), "{f:?}");
+    /* a vertex shader with no lane: no table, so the link changes nothing */
+    let none = store::with_scratch(|s| {
+        super::fs_constants(td!("tri_varying.vert").as_bytes(), td!("tri_varying.frag").as_bytes(), s)
+    });
+    assert_eq!(none.expect("free").expect("both stages lower"), None);
 }
 
 /// Case 117 (uniidx_f.vert, `v_color = u_k`): a lane computed from

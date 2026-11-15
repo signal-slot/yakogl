@@ -3363,7 +3363,7 @@ fn walk<'s>(
      * vertex words for the join are not this back end's (the third
      * review's b14): those lanes stay apart and the program is refused
      * (`VaryingDuplicate`). The interpolation qualifier is the fragment
-     * shader's ([`super::link::VaryingConsts::class`]'s reader, nir_fs.rs
+     * shader's ([`super::link::FsConsts::class`]'s reader, nir_fs.rs
      * `layout`) */
     let lane_at = |o: &ir::IoDecl<'_>, c: usize| {
         let l = varyings.get(o.location as usize).copied().flatten()?;

@@ -659,18 +659,32 @@ pub fn compile_vs_for_reads<'s>(
 
 /// The varying lanes vertex shader `glsl` stores as constants, which the
 /// link propagates into the program's fragment shader (Mesa's
-/// nir_opt_varyings), `mali::vs_constants`.
+/// nir_opt_varyings), at the vertex shader's own varying locations:
+/// `mali::vs_constants`.
 #[cfg(feature = "gpu-mali")]
 pub fn vs_constants(glsl: &[u8], scratch: &Arena<'_>) -> Result<super::mali::link::VaryingConsts, CompileError> {
     super::mali::vs_constants(glsl, scratch)
 }
 
+/// The lanes of [`vs_constants`] that the link folds into the program's
+/// fragment shader `fs_glsl`, at that shader's varying locations (the
+/// stages paired by name); None when the vertex shader stores no such
+/// lane: `mali::fs_constants`.
+#[cfg(feature = "gpu-mali")]
+pub fn fs_constants(
+    vs_glsl: &[u8],
+    fs_glsl: &[u8],
+    scratch: &Arena<'_>,
+) -> Result<Option<super::mali::link::FsConsts>, CompileError> {
+    super::mali::fs_constants(vs_glsl, fs_glsl, scratch)
+}
+
 /// A program's fragment shader compiled with its vertex shader's constant
-/// lanes folded into the reads ([`vs_constants`]), `mali::compile_fs_for_vs`.
+/// lanes folded into the reads ([`fs_constants`]), `mali::compile_fs_for_vs`.
 #[cfg(feature = "gpu-mali")]
 pub fn compile_fs_for_vs<'s>(
     glsl: &[u8],
-    consts: super::mali::link::VaryingConsts,
+    consts: super::mali::link::FsConsts,
     scratch: &Arena<'s>,
     keep: &'static Arena<'static>,
 ) -> Result<(ShcShader, Blocks<'s>), CompileError> {

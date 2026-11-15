@@ -107,8 +107,9 @@ struct Compiled {
     fs_reads: FsReads<'static>,
     /// A program's fragment shader compiled with its vertex shader's
     /// constant varying lanes folded in ([`link_by_sources`], the Mali's
-    /// link): the lanes. [`LinkConsts::NONE`] for every other compile, and
-    /// no bytes on any other GPU.
+    /// link): the lanes, at this shader's varying locations.
+    /// [`LinkConsts::NONE`] for every other compile, and no bytes on any
+    /// other GPU.
     consts: LinkConsts,
     /// What the code generator left in `ShcShader::priv_` before this
     /// record took the field (the Mali's `MaliShader`, in this record's
@@ -371,10 +372,13 @@ impl Facts<'_> {
 
 /// The constant varying lanes of a program's vertex shader that its
 /// fragment shader is compiled with (the Mali's link, Mesa's
-/// nir_opt_varyings: `mali::vs_constants`, `mali::compile_fs_for_vs`).
+/// nir_opt_varyings: `mali::fs_constants`, `mali::compile_fs_for_vs`), at
+/// the fragment shader's varying locations: two vertex shaders that fold
+/// the same lanes into one fragment shader share its record, whatever
+/// order each declares its varyings in.
 #[cfg(feature = "gpu-mali")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct LinkConsts(super::mali::link::VaryingConsts);
+struct LinkConsts(super::mali::link::FsConsts);
 
 /// No other GPU folds a vertex shader's constants into the fragment shader:
 /// nothing, in no bytes.
@@ -384,13 +388,13 @@ struct LinkConsts;
 
 impl LinkConsts {
     #[cfg(feature = "gpu-mali")]
-    const NONE: LinkConsts = LinkConsts(super::mali::link::VaryingConsts::NONE);
+    const NONE: LinkConsts = LinkConsts(super::mali::link::FsConsts::NONE);
     #[cfg(not(feature = "gpu-mali"))]
     const NONE: LinkConsts = LinkConsts;
 
     #[cfg(feature = "gpu-mali")]
     fn is_none(&self) -> bool {
-        self.0.as_slice().is_empty()
+        self.0.is_empty()
     }
     /* the V3D links a program record, never `link_substituted` */
     #[cfg(not(any(feature = "gpu-mali", feature = "gpu-v3d")))]
@@ -399,7 +403,7 @@ impl LinkConsts {
     }
 
     /// The bytes the record key chains ([`record_key`]): each lane's
-    /// location, component and fp32 bits. None for no lanes, so every
+    /// fragment location, component and fp32 bits. None for no lanes, so every
     /// other key is the one it was.
     #[cfg(feature = "gpu-mali")]
     fn key(&self) -> Option<[u8; 6 * super::mali::link::MAX_CONSTS]> {
@@ -417,8 +421,10 @@ impl LinkConsts {
 }
 
 /// The varyings a program's fragment shader reads, which its vertex shader
-/// is built for (the Mali's varying compaction, `mali::partial_reads`): a
-/// location and a component mask each, and the fragment shader's
+/// is built for (the Mali's varying compaction: `mali::partial_reads`, or
+/// `mali::fragment_reads` when the link removes a varying of constant
+/// lanes that the fragment shader does not declare): a location and a
+/// component mask each, and the fragment shader's
 /// expressions the link moves into the vertex shader, as the bytes the
 /// back end encodes them in (`mali::motion`): a slice, empty for every
 /// other compile, so a record of any other GPU carries no room for them.
@@ -427,6 +433,10 @@ impl LinkConsts {
 /// the caller's.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct FsReads<'a> {
+    /// Built for a program's fragment shader: the vertex shader stores
+    /// `reads` and nothing else, none when there are none. False for every
+    /// other compile (the shader's own outputs, all of them).
+    program: bool,
     at: [(u8, u8); MAX_FS_READS],
     n: u8,
     moved: &'a [u8],
@@ -437,18 +447,19 @@ struct FsReads<'a> {
 const MAX_FS_READS: usize = 16;
 
 impl FsReads<'_> {
-    const NONE: FsReads<'static> = FsReads { at: [(0, 0); MAX_FS_READS], n: 0, moved: &[] };
+    const NONE: FsReads<'static> = FsReads { program: false, at: [(0, 0); MAX_FS_READS], n: 0, moved: &[] };
 
     fn reads(&self) -> &[(u8, u8)] {
         &self.at[..self.n as usize]
     }
 
-    /// The bytes the record key chains ([`record_key`]): each read's
-    /// location and mask. None for no reads, so every other key is the one
-    /// it was; the moved expressions' bytes are chained after them, as they
-    /// are.
+    /// The bytes the record key chains ([`record_key`]): the count, then
+    /// each read's location and mask. None for a shader not built for a
+    /// program (`program` false), so every other key is the one it was; a
+    /// program's vertex shader for no reads has the count 0. The moved
+    /// expressions' bytes are chained after them, as they are.
     fn key(&self) -> Option<[u8; 2 * MAX_FS_READS + 1]> {
-        if self.n == 0 {
+        if !self.program {
             return None;
         }
         let mut k = [0u8; 2 * MAX_FS_READS + 1];
@@ -1130,7 +1141,7 @@ fn compile_and_publish_keyed(
             /* only the Mali builds a vertex shader for a fragment shader's
              * reads (`vs_for_fragment`) */
             #[cfg(feature = "gpu-mali")]
-            None if facts.fs_reads.n != 0 || !facts.fs_reads.moved.is_empty() => codegen::compile_vs_for_reads(
+            None if facts.fs_reads.program => codegen::compile_vs_for_reads(
                 glsl,
                 facts.fs_reads.reads(),
                 facts.fs_reads.moved,
@@ -1206,15 +1217,17 @@ fn or_without_consts<'s>(
     }
 }
 
-/// The constant varying lanes of vertex shader `text` that the Mali's link
-/// folds into the program's fragment shader (`codegen::vs_constants`, Mesa's
-/// nir_opt_varyings); [`LinkConsts::NONE`] when it stores none, or when the
-/// front end cannot run here (the plain link then decides).
+/// The constant varying lanes of vertex shader `vs` that the Mali's link
+/// folds into the program's fragment shader `fs`, at `fs`'s varying
+/// locations (`codegen::fs_constants`, Mesa's nir_opt_varyings):
+/// [`LinkConsts::NONE`] when `fs` declares none of the varyings `vs`
+/// stores them in. None when `vs` stores no such lane, or when the front
+/// end cannot run here (the plain link then decides).
 #[cfg(feature = "gpu-mali")]
-fn vs_consts_of(text: &[u8]) -> LinkConsts {
-    match store::with_scratch(|a| codegen::vs_constants(text, a)) {
-        Some(Ok(c)) => LinkConsts(c),
-        _ => LinkConsts::NONE,
+fn link_consts_of(vs: &[u8], fs: &[u8]) -> Option<LinkConsts> {
+    match store::with_scratch(|a| codegen::fs_constants(vs, fs, a)) {
+        Some(Ok(c)) => c.map(LinkConsts),
+        _ => None,
     }
 }
 
@@ -1767,7 +1780,7 @@ fn link_by_sources(vs: &ShcShader, vr: &Base, fr: &Base, fs: &mut ShcShader, log
          * list: a vertex shader that leaves a varying unwritten is refused
          * at its compile on this GPU. */
         #[cfg(feature = "gpu-mali")]
-        let consts = if zero.n == 0 { vs_consts_of(vsrc) } else { LinkConsts::NONE };
+        let consts = if zero.n == 0 { link_consts_of(vsrc, fsrc) } else { None }.unwrap_or(LinkConsts::NONE);
         #[cfg(not(feature = "gpu-mali"))]
         let consts = LinkConsts::NONE;
         let rc = link_substituted(fr, &zero, affine, consts, fs, log);
@@ -1994,13 +2007,18 @@ unsafe extern "C" fn online_compile_vs_linked(
 /// fragment shader the link makes of `fs`, with those lanes folded in
 /// ([`link_by_sources`]): the GL core asks for the program's vertex shader
 /// before it calls the link, so that fragment shader is compiled here first,
-/// under the record key the link's compile finds again.
+/// under the record key the link's compile finds again. The vertex shader
+/// stores what that fragment shader still reads and nothing else: none when
+/// the fold leaves no read, as Mesa's link then keeps no varying program.
 fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut CStrWriter) -> i32 {
     #[cfg(feature = "gpu-mali")]
-    let consts = vs_consts_of(text);
+    let linked = base_of(fs).and_then(|fr| Some((link_consts_of(text, fr.source)?, fr)));
     #[cfg(feature = "gpu-mali")]
-    let reads = match base_of(fs) {
-        Some(fr) if !consts.is_none() => {
+    let reads = match linked {
+        /* no lane reaches `fs`: its own record is the program's, and the
+         * link still removes the varyings that hold the lanes */
+        Some((consts, _)) if consts.is_none() => super::mali::MaliShader::of(fs).map(super::mali::fragment_reads),
+        Some((consts, fr)) => {
             let facts = Facts { consts, ..Facts::of(&fr) };
             let linked = match compile_and_publish_linked(
                 SHC_STAGE_FRAGMENT,
@@ -2019,7 +2037,7 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
             release(&linked);
             pr
         }
-        _ => super::mali::partial_reads(fs),
+        None => super::mali::partial_reads(fs),
     };
     #[cfg(feature = "gpu-mali")]
     if let Some(pr) = reads {
@@ -2043,7 +2061,7 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
         };
         /* the moved bytes are borrowed from `pr` for the compile; the record
          * gets its own copy (`publish_as`) */
-        let mut reads = FsReads { moved: pr.moved(), ..FsReads::NONE };
+        let mut reads = FsReads { program: true, moved: pr.moved(), ..FsReads::NONE };
         for (r, a) in reads.at.iter_mut().zip(pr.reads()) {
             *r = *a;
         }
@@ -4770,7 +4788,7 @@ void main (void)
         /// case114_f.*, `v_dir = vec3(1.0, a_pos.y * 0.95, a_pos.x * 0.95)`)
         /// through the online back end: the vertex shader alone, refused for its
         /// constant lane by the code generator, compiles without it; at link the
-        /// lane is folded into the fragment shader (`vs_constants`,
+        /// lane is folded into the fragment shader (`fs_constants`,
         /// `compile_fs_for_vs`) and the program's vertex shader is built for the
         /// two lanes left (`compile_vs_for_reads`). Every program is Mesa
         /// 26.2.1's on drm-shim to the byte (case114_f.expect.json), as is the
@@ -4840,6 +4858,83 @@ void main (void)
             let (vc, fc, oc) = link_through_the_entry_points(vs, fs);
             assert!(core::ptr::eq(fa.priv_, fc.priv_), "the first pair again: its record, from the cache");
             for sh in [&va, &fa, &oa, &vb, &fb, &ob, &vc, &fc, &oc] {
+                release(sh);
+            }
+        }
+
+        /// The pairs of issue #4510 (tools/mali/testdata/varyconst_names_*):
+        /// its vertex shader, fragment shader and Mesa 26.2.1's programs on
+        /// drm-shim.
+        macro_rules! names_pair {
+            ($name:literal) => {
+                (
+                    $name,
+                    include_str!(concat!("../../../tools/mali/testdata/varyconst_names_", $name, ".vert")),
+                    include_str!(concat!("../../../tools/mali/testdata/varyconst_names_", $name, ".frag")),
+                    include_str!(concat!("../../../tools/mali/testdata/varyconst_names_", $name, ".expect.json")),
+                )
+            };
+        }
+
+        /// Issue #4510: each stage numbers its varyings in its own
+        /// declaration order, so the vertex shader's constant lane belongs
+        /// to the fragment varying of the same name, not to the one at the
+        /// same location. `swap` declares `a, b` in the vertex shader and
+        /// `b, a` in the fragment shader, which reads `a`: the constant `b`
+        /// is the fragment shader's location 0, and `a` is still loaded.
+        /// Before the fix the fragment shader took `a` for the constant.
+        #[test]
+        fn a_constant_lane_is_folded_into_the_fragment_varying_of_its_name() {
+            let _serial = test_lock();
+            let (name, vs, fs, json) = names_pair!("swap");
+            let (v, f, object) = link_through_the_entry_points(vs, fs);
+            assert!(!core::ptr::eq(f.priv_, object.priv_), "{name}: the link replaced the fragment shader");
+            assert!(!base_of(&f).expect("a record").consts.is_none(), "{name}: compiled with the lanes");
+            assert_mali_program(&v, &f, json);
+            for sh in [&v, &f, &object] {
+                release(sh);
+            }
+        }
+
+        /// A fragment shader that declares none of the varyings the vertex
+        /// shader stores constants in takes no lane: the link keeps the
+        /// shader object's record, and the program's vertex shader stores
+        /// only what the fragment shader reads, as Mesa's link removes the
+        /// other varyings. `subset` and `undeclared` store one constant
+        /// varying the fragment shader does not declare; in
+        /// `undeclared_mixed` that varying holds an attribute lane as well.
+        #[test]
+        fn constant_lanes_of_a_varying_the_fragment_shader_does_not_declare_reach_no_lane() {
+            let _serial = test_lock();
+            for (name, vs, fs, json) in
+                [names_pair!("subset"), names_pair!("undeclared"), names_pair!("undeclared_mixed")]
+            {
+                let (v, f, object) = link_through_the_entry_points(vs, fs);
+                assert!(core::ptr::eq(f.priv_, object.priv_), "{name}: the link kept the fragment shader");
+                assert!(base_of(&f).expect("a record").consts.is_none(), "{name}: no lane");
+                assert_mali_program(&v, &f, json);
+                for sh in [&v, &f, &object] {
+                    release(sh);
+                }
+            }
+        }
+
+        /// `swap_const` is `swap` with a fragment shader that reads the
+        /// constant `b`: every read is folded, the fragment shader loads no
+        /// varying, and the program's vertex shader has no varying program,
+        /// as Mesa's has none (`secondary_offset` null in the reference).
+        #[test]
+        fn a_program_whose_every_read_is_a_constant_has_no_varying_program() {
+            let _serial = test_lock();
+            let (name, vs, fs, json) = names_pair!("swap_const");
+            assert!(!json.contains("\"vs.varying\""), "{name}: the reference has no varying program");
+            let (v, f, object) = link_through_the_entry_points(vs, fs);
+            assert!(!core::ptr::eq(f.priv_, object.priv_), "{name}: the link replaced the fragment shader");
+            assert_eq!(mali_words(&f, 0, None), mali_ref_words(json, "fs.fragment"), "{name}: fs.fragment");
+            let record = crate::shaderc::online::mali::MaliShader::of(&v).expect("a vertex record");
+            assert!(record.secondary.is_none(), "{name}: no varying program");
+            assert_eq!(mali_words(&v, 0, None), mali_ref_words(json, "vs.position"), "{name}: vs.position");
+            for sh in [&v, &f, &object] {
                 release(sh);
             }
         }
