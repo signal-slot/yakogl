@@ -251,11 +251,15 @@ answers (`tests/es3_limits_v3d.rs`, `tests/es3_v3d_varyings.rs`), so a
 `*_getfloat` / `*_getinteger64` row fails exactly when the limit is below its
 minimum. The V3D's varying family is closed on the host (v3d-varyings-raise:
 `MAX_VARYING_VECTORS` 15, the components 60 / 60 / 64; `tests/es3_v3d_varyings.rs`;
-board rows to re-run). Left: the uniform-block size and the combined
-uniform components (every GPU), `MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the
-PowerVR and GC7000UL, and RC14. The compressed-format list is closed on the
-host: `GL_NUM_COMPRESSED_TEXTURE_FORMATS` is 11 (ETC1 and the ten ETC2/EAC
-formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
+board rows to re-run), and so is its uniform-block family (v3d-ubo-size:
+`MAX_UNIFORM_BLOCK_SIZE` 16384 and the combined uniform components 50688,
+above the 50176 / 50048 minimums, in all three integer query forms
+(`tests/es3_v3d_ubo_size.rs`); the Pi 4 board rows to re-run). Left: the
+uniform-block size and the combined uniform components on the PowerVR and
+GC7000UL and `MAX_VERTEX_OUTPUT_COMPONENTS` 60 on those two (issue drafts,
+`docs/notes/ubo-limits.md` 10), and RC14. The compressed-format list is
+closed on the host: `GL_NUM_COMPRESSED_TEXTURE_FORMATS` is 11 (ETC1 and
+the ten ETC2/EAC formats) on the PowerVR, the GC7000UL and the V3D under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,
 `tests/gltest_case20_formats.rs`, `tests/vivante_imx8mp_limits.rs`; host dEQP
 at `93bca01`: the two `implementation_limits.*compressed*` and the three
