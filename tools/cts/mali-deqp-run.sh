@@ -221,10 +221,13 @@ def plan(tree, mustpass, a, b, casedir):
 
 
 def qpa_refusal(body):
-    """The first <InfoLog> of a case's log in which the library refuses a
-    shader or a program, or ''."""
-    for m in re.finditer(r'<InfoLog>(.*?)</InfoLog>', body, re.S):
-        text = html.unescape(m.group(1))
+    """The first info log of a case's log in which the library refuses a
+    shader or a program, or ''. dEQP writes an info log in two forms:
+    <InfoLog> inside a <ShaderProgram>, and the <Text> of a
+    <Section Name="Info Log"> (the attribute-location tests)."""
+    for m in re.finditer(r'<InfoLog>(.*?)</InfoLog>'
+                         r'|<Section Name="Info Log"[^>]*>\s*<Text>(.*?)</Text>', body, re.S):
+        text = html.unescape(m.group(1) if m.group(1) is not None else m.group(2))
         if re.search(r'\brefused\b', text):
             return text
     return ''

@@ -5,7 +5,7 @@
 Fixtures for the tools in `tools/cts/`, so a parser can be checked without a
 board and without a 40-minute sweep.
 
-`refusals-new-format.qpa` — three `TestCaseResult` blocks in dEQP's own XML,
+`refusals/new-format.qpa` — three `TestCaseResult` blocks in dEQP's own XML,
 carrying the online compiler's message format from `fc88b41`:
 
     0:59: &apos;.&apos; : assignment to this is not lowered yet
@@ -22,13 +22,13 @@ row. The fixture pins:
 - a case dEQP marked `Pass` is counted as a **correct** refusal, not a gap
 - one message over two different tokens splits by construct
 
-`refusals-text-and-notsupported.qpa`: the other refusal forms
+`refusals/text-and-notsupported.qpa`: the other refusal forms
 `cts-refusals.py` reads. A code-generator refusal written in a `<Text>`
 element (not an `<InfoLog>`), one in an `<InfoLog>` with an
 entity-escaped message, and a case dEQP marked `NotSupported`. Check 16
-of `cts-selftest.sh` runs `cts-refusals.py` over the whole directory, so it
-reads both `.qpa` files and expects, among others, one refusal on a
-NotSupported case (excused, not a gap) and the
+of `cts-selftest.sh` runs `cts-refusals.py` over `refusals/` alone, so it
+reads these two `.qpa` files and no other tool's fixture, and expects, among
+others, one refusal on a NotSupported case (excused, not a gap) and the
 `Usc(Record(MatrixAttrib { index: 0 }))` reason.
 
 `by-message.qpa` — a batch log as deqp-gles3 writes one (`#beginTestCaseResult`
@@ -37,8 +37,7 @@ refusal fixtures do not have), for `cts-summary.py --by-message`
 (`cts-selftest.sh` check 21). Session header from a real host run; the four
 cases are scaffolding: one Pass, "Got invalid error", and two "Compile failed"
 details that differ only in the shader line `0:12:` / `0:7:`, which must fold
-into one row of 2. It carries no info log, so `cts-refusals.py`'s counts over
-this directory (check 16) do not change.
+into one row of 2.
 
 `deqp-config/` — resolved Zephyr configurations in the form a build writes
 its `zephyr/.config` (`CONFIG_X=value` lines, a disabled bool as

@@ -467,7 +467,12 @@ slices of section 4:
   `docs/es2-cts-failures.md` between `<!-- mali-deqp-tally begin -->` and
   `<!-- mali-deqp-tally end -->`.
 - `--check-doc DOC SLICE...` exits 0 only when that block equals the
-  `--markdown` output.
+  `--markdown` output. `--check-doc DOC --log LOGDIR` takes the slices from
+  the block's own `Slices:` line, as directories of `LOGDIR`; a block
+  without that line fails (`RULE doc-slices`). The gate runs this form on
+  the real document: the `tools/check.sh` row `es2-cts-failures.md's Mali
+  block equals the tally of its slices`, reached by a change to the
+  document, the slices or the tally.
 
 Commands and expected output, run on a host with no board, on the synthetic
 slices of `tools/cts/testdata/mali-deqp/good/` (two slices, eight cases, a toy
@@ -515,8 +520,9 @@ python3 -I tools/cts/mali-deqp-tally.py --tally --markdown S1 S2 S3 S4   # the b
 python3 -I tools/cts/mali-deqp-tally.py --check-doc docs/es2-cts-failures.md S1 S2 S3 S4
 ```
 
-The first must print nothing. `docs/es2-cts-failures.md` has no tally block
-yet; the first real tally adds it.
+The first must print nothing. A new whole tree replaces the block of
+`docs/es2-cts-failures.md` section M with the third command's output, and
+the text around it; the last command, or the gate row, then exits 0.
 
 `tools/cts/mali-deqp-tally-selftest.sh` runs `--self-test` on the synthetic
 slices of `tools/cts/testdata/mali-deqp/` and pins its count of passed checks;
