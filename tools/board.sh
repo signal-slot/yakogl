@@ -111,6 +111,8 @@
 # a complete result either: done_lossy, with lost=<n> at the end of the line;
 # rerun the row until the capture is whole. A breadcrumb gives died_after=<stage>. boot_verdict is
 # the backend's own word (the AM62P phase scan's, the i.MX8MP TFTP log's).
+# A run that ended with exit code 2 or 3 before its reboot is verdict=refused
+# with that code (run_refused): the board was not rebooted.
 #
 # Exit codes: 0 done (probe: passed); 2 usage; 3 refused before the board was
 # changed; 4 the verdict is not done; 5 the board did not come back, or an env
@@ -439,10 +441,16 @@ scrub() {
 # uart_shown: BOARD_UART as the dry run and the messages print it
 uart_shown() { if [ "$BOARD" = pi5 ]; then echo '<BOARD_UART>'; else echo "$BOARD_UART"; fi; }
 UART_REAL=
+# die MESSAGE [RC]: the library's die (the pi5's message scrubbed, as note),
+# and a run's refusal kept in its record (run_refused)
+die() {
+    echo "$NB_TAG: $1" | scrub >&2
+    run_refused "$1" "${2:-3}"
+    exit "${2:-3}"
+}
 if [ "$BOARD" = pi5 ]; then
-    # the library's die, act and b, with what they print scrubbed: the
-    # messages, the dry run's host commands and ssh's own errors
-    die() { echo "$NB_TAG: $1" | scrub >&2; exit "${2:-3}"; }
+    # the library's act and b, with what they print scrubbed: the dry run's
+    # host commands and ssh's own errors
     act() {
         if [ "$DRY" = 1 ]; then echo "DRY host\$ $*" | scrub; return 0; fi
         "$@" 2> >(scrub >&2)
@@ -517,6 +525,8 @@ ytools() {
 
 # ---- the run directory -------------------------------------------------------
 RD=
+# RD_MADE: 1 once this run made RD (before that RD can name another run's record)
+RD_MADE=0
 # meta KEY VALUE: one measured fact of this run (meta.txt, key=value; the last wins)
 meta() {
     if [ "$DRY" = 1 ]; then return 0; fi
@@ -524,6 +534,25 @@ meta() {
 }
 # mget KEY [DIR]: a fact of a run, empty when absent
 mget() { sed -n "s/^$1=//p" "${2:-$RD}/meta.txt" 2>/dev/null | tail -1; }
+
+# run_refused MESSAGE RC: die's hook. A run that die ends with exit code 2 or 3
+# before its reboot is a refusal: meta.txt keeps the code and the message, and
+# verdict_line reads them as "rc=<RC> verdict=refused". Without them a tally
+# read the directory (meta.txt, no back=1) as "the board did not come back",
+# rc 5, the line that means "stop, never keep booting" (#6838). t_reboot is
+# written before every reboot and jump (the NanoPC-T6's from its runner's
+# "jumping" line); a run that has it is never a refusal.
+run_refused() {
+    local msg=$1 rc=$2
+    case "$rc" in 2 | 3) ;; *) return 0 ;; esac
+    # (RD_MADE unset: die before the run directory's section was read)
+    { [ "${RD_MADE:-0}" = 1 ] && [ -z "$(mget t_reboot)" ]; } || return 0
+    meta refused_rc "$rc"
+    meta refused "${msg//$'\n'/ }"
+    meta ended "$(date '+%F %T')"
+    # the message can hold ssh's own error, which names the board
+    redact_run "$RD"
+}
 
 # is_run_of NAME DIR [SHA8]: DIR's name is <YYYYMMDD-HHMM>-NAME-<sha8|probe>
 # (a glob would take "e01-p0"'s directory for "e01"'s)
@@ -734,16 +763,26 @@ single_case() {
 }
 
 # verdict_line DIR: the verdict of a run, from its files alone (run and tally
-# both call it). Sets V_LINE, V_RC, V_VERDICT, V_SCAN.
+# both call it). Sets V_LINE, V_RC, V_VERDICT, V_SCAN, and V_WHY (a refusal's
+# message, else empty).
 verdict_line() {
-    local dir=$1 name boot probe rcc bv="" verdict="" result=none resets=absent rec="" shown="" rec0 line cls kname unsup="" status t6p
+    local dir=$1 name boot probe rcc bv="" verdict="" result=none resets=absent rec="" shown="" rec0 line cls kname unsup="" status t6p route
     local console=$dir/console.txt scan="" lost=0 tftp=none tl up="" ba=? recf=absent sc
     # a capture whose console.txt was never derived (an imported bridge log)
     [ -f "$console" ] || [ ! -f "$dir/console.ts" ] || console=$dir/console.ts
     name=$(mget name "$dir"); boot=$(mget boot "$dir"); probe=$(mget probe "$dir"); rcc=$(mget rc_cycle "$dir")
     # shellcheck disable=SC2046  # the words of the cleared record
     rec0=$(rec_args $(mget rec0 "$dir"))
-    case "$boot" in
+    # a refusal (run_refused) is read before the backend's files: the board was
+    # not rebooted, so no back=1 is not "the board did not come back"
+    route=$boot
+    V_WHY=
+    if [ -n "$(mget refused_rc "$dir")" ] && [ -z "$(mget t_reboot "$dir")" ]; then
+        route=refused
+        V_WHY=$(mget refused "$dir")
+    fi
+    case "$route" in
+    refused) bv=refused; verdict=refused; rcc=$(mget refused_rc "$dir") ;;
     tryboot)
         if [ "$(mget back "$dir")" != 1 ]; then bv=not_back; rcc=${rcc:-5}
         elif end_seen "$console"; then bv=complete
@@ -1067,7 +1106,8 @@ LEASE_HELD=0
 LEASE_ME="$(hostname -s 2>/dev/null || echo host):$$"
 
 # lease_try: one attempt on the board. 0 taken (or renewed), 3 held by another
-# (the lease printed), anything else the board did not answer.
+# (the lease printed), 4 the board could not write it, anything else the board
+# did not answer (ssh's own exit code, its error printed).
 lease_try() {
     b "L=$LEASE; me='$LEASE_ME'; row='${NAME:-$VERB}'; hold=${HOLD_MAX:-900}
 now=\$(date +%s)
@@ -1091,7 +1131,7 @@ exit \$rc"
 }
 
 lease_take() {
-    local out rc deadline
+    local out rc deadline why
     if [ "$DRY" = 1 ]; then
         echo "DRY board\$ take $LEASE   # holder=<host>:<pid>, expires now + HOLD_MAX on the board's clock; wait while another holder's lease runs"
         return 0
@@ -1108,12 +1148,18 @@ lease_take() {
             [ -n "$out" ] && note "board lease: $out"
             return 0
         fi
-        [ "$(date +%s)" -lt "$deadline" ] ||
-            die "the board is leased to another run and LOCK_WAIT ran out: $(tr '\n' ' ' <<<"$out")"
+        # what failed, by lease_try's exit code: only 3 is another run's lease
+        # (the sentence said "leased to another run" for a failed ssh too, #6838)
+        case "$rc" in
+        3) why="the board is leased to another run" ;;
+        4) why="the board could not write the lease" ;;
+        *) why="the board did not answer the lease's ssh (rc $rc)" ;;
+        esac
+        [ "$(date +%s)" -lt "$deadline" ] || die "$why and LOCK_WAIT ran out: $(tr '\n' ' ' <<<"$out")"
         if [ "$rc" = 3 ]; then
             note "board lease held by another run, waiting: $(tr '\n' ' ' <<<"$out")" >&2
         else
-            note "board lease: the board did not answer (rc $rc), retrying" >&2
+            note "board lease: $why, retrying" >&2
         fi
         sleep 20
     done
@@ -1920,8 +1966,6 @@ kexec_t6() {
     recs=("$RD"/*-t6)
     if [ ! -d "${recs[0]}" ]; then
         # no record: the runner stopped before it changed anything on the board
-        meta ended "$(date '+%F %T')"
-        redact_run "$RD"
         # (rc 2: a usage error or a host failure, as the runner's die; else its refusal, rc 3)
         die "nanopc-t6.sh refused (rc $rc) before it changed anything on the board; its output: $RD/kexec.log" "$([ "$rc" = 2 ] && echo 2 || echo 3)"
     fi
@@ -2227,6 +2271,7 @@ cmd_run() {
     else
         [ -e "$RD" ] && die "$RD exists: a record is never overwritten"
         mkdir -p "$RD" || die "cannot create $RD"
+        RD_MADE=1
     fi
     meta board "$BOARD"
     meta boot "$BOOT"
@@ -2781,6 +2826,7 @@ cmd_tally() {
     if [ -f "$dir/meta.txt" ]; then
         verdict_line "$dir"
         echo "$V_LINE"
+        [ -z "$V_WHY" ] || echo "  refused: $V_WHY"
         if [ -f "$dir/INDEX.txt" ]; then
             if grep -qxF "verdict: $V_LINE" "$dir/INDEX.txt"; then echo "  (INDEX.txt says the same)"
             else echo "  DIFFERS from INDEX.txt: $(sed -n 's/^verdict: //p' "$dir/INDEX.txt")"; fi
@@ -2790,7 +2836,11 @@ cmd_tally() {
     mapfile -t runs < <(run_dirs "$dir")
     [ ${#runs[@]} -gt 0 ] || die "no runs in $dir (no */meta.txt)" 2
     echo "== per run (the verdict line, recomputed from each run's files)"
-    for d in "${runs[@]}"; do verdict_line "$d"; echo "$V_LINE"; done
+    for d in "${runs[@]}"; do
+        verdict_line "$d"
+        echo "$V_LINE"
+        [ -z "$V_WHY" ] || echo "  refused: $V_WHY"
+    done
     if [ -f "$dir/tree.txt" ] && [ "$(cut -f3 "$dir/tree.txt" | head -1)" != - ]; then
         echo "== results per row (the selector form)"
         results_tsv "$dir"
