@@ -9,6 +9,26 @@
   python3 -I tools/cts/mali-deqp-tally.py --check-doc DOC --log LOGDIR
   python3 -I tools/cts/mali-deqp-tally.py --self-test
 
+--per-case (with --tally, text or --markdown) takes the cause of a non-Pass
+case from the refusal line the Mali backend logged inside that case's own
+output, not from the chunk's exit line. It reads the optional slice file
+refusals/<label>.txt: a chunk's stdout and stderr merged in the order the
+process wrote them, holding dEQP's "Test case '<case>'.." lines and the
+backend's per-draw line (src/mali/backend.rs refusal_line)
+
+  yakogl-mali-refusal: <errno> <reason>
+
+A refusal belongs to the last Test case line before it; the case's first
+such line is its cause. The cause is "refused:<normalized reason>", or
+"errno:<errno>" (for example "errno:-12") when the reason is the bare word
+"errno" (cause already logged elsewhere), so ResourceError cases split by
+errno. The "yakogl: a draw was refused:" line (first refusal of the whole
+process only) is ignored. A case's refusals.tsv text, if its slice has one,
+still comes first; a case without a line, and a slice or chunk without the
+file, keep the default cause. Without --per-case nothing reads those
+files, so --tally, --check-doc and --check-cover are unchanged.
+dEQP stdout buffering into a file can reorder lines: check the raw order.
+
 A slice is tools/cts/log/<YYYY-MM-DD>-t6-gles2-<session>-<sha8>/ with
 
   meta.txt     key=value: commit (40 hex), session, rows (<a>-<b>), tree,
@@ -84,6 +104,8 @@ REFUSED = re.compile(r"\brefus(?:ed|al)\b[\s:=]+([A-Za-z_][A-Za-z0-9_.:-]*)")
 # A refusals.tsv text: "... refused this <stage> shader: <why>", where <why>
 # is the compiler's error, "Mali(<text>)" for this back end.
 SHADER_REFUSAL = re.compile(r"\brefused this (\w+) shader: (.*)$")
+CASE_LINE = re.compile(r"Test case '([^']+)'")
+MALI_REFUSAL = re.compile(r"yakogl-mali-refusal:\s+(-?\d+)\s*(.*\S)?")
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURES = os.path.join(HERE, "testdata", "mali-deqp")
 
@@ -327,6 +349,38 @@ def cause(status, detail, exit_line):
     return normalize(detail)
 
 
+def case_refusals(path):
+    """{case: cause} of a merged chunk log (see --per-case), {} if the file
+    is missing."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return {}
+    out = {}
+    cur = None
+    for ln in lines:
+        m = CASE_LINE.search(ln)
+        if m:
+            cur = m.group(1)
+            continue
+        m = MALI_REFUSAL.search(ln)
+        if m and cur is not None and cur not in out:
+            why = (m.group(2) or "errno").strip()
+            out[cur] = ("errno:" + m.group(1) if why == "errno"
+                        else "refused:" + normalize(why))
+    return out
+
+
+def refusal_causes(s):
+    """{case: cause} from the slice's refusals/<label>.txt files."""
+    out = {}
+    for lab in sorted({f[1] for _, f, _w in s["chunks"]}):
+        out.update(case_refusals(
+            os.path.join(s["path"], "refusals", lab + ".txt")))
+    return out
+
+
 def refusal_cause(text):
     """The cause a refusals.tsv text gives: the shader stage and the
     compiler's own words, without the "Mali(...)" around them."""
@@ -348,23 +402,26 @@ def refusal_map(s):
     return {f[0]: f[1] for _, f, _w in s["refusals"]}
 
 
-def tally(slices):
+def tally(slices, per_case=False):
     by_status = {}
     by_cause = {}
     ordered, superseded, _d, _e = resolve(slices)
     for s in ordered:
         ex = chunk_exit_lines(s)
         own = refusal_map(s)
+        pc = refusal_causes(s) if per_case else {}
         for i, (_, f, _w) in enumerate(s["results"]):
             if i in superseded[s["name"]]:
                 continue
             st = f[1]
             by_status[st] = by_status.get(st, 0) + 1
             if st != "Pass":
-                if own is None:
-                    c = cause(st, f[2], ex[i])
-                elif f[0] in own:
+                if own is not None and f[0] in own:
                     c = refusal_cause(own[f[0]])
+                elif f[0] in pc:
+                    c = pc[f[0]]
+                elif own is None:
+                    c = cause(st, f[2], ex[i])
                 else:
                     c = cause(st, f[2], "")
                 k = (st, c)
@@ -377,8 +434,8 @@ def status_order(by_status):
         sorted(s for s in by_status if s not in STATUSES)
 
 
-def render_text(slices):
-    by_status, by_cause = tally(slices)
+def render_text(slices, per_case=False):
+    by_status, by_cause = tally(slices, per_case)
     out = ["slices: %d" % len(slices)]
     for st in status_order(by_status):
         out.append("%-22s %d" % (st, by_status[st]))
@@ -388,8 +445,8 @@ def render_text(slices):
     return "\n".join(out) + "\n"
 
 
-def render_markdown(slices):
-    by_status, by_cause = tally(slices)
+def render_markdown(slices, per_case=False):
+    by_status, by_cause = tally(slices, per_case)
     commits = sorted({s["meta"].get("commit", "")[:8] for s in slices})
     out = [BEGIN, "",
            "Slices: " + ", ".join("`%s`" % s["name"] for s in
@@ -596,6 +653,29 @@ def self_test():
          "--check-cover", "--no-git", mp, r2x, r2y, b("rerun2self"))
     rc, _o, e = run("--check-cover", "--no-git", mp, os.path.join(FIXTURES, "nope"))
     chk("unreadable slice exits 2", rc == 2)
+    # --per-case: the refusal line inside a case's output is its cause
+    pc = os.path.join(FIXTURES, "percase", "2026-11-08-t6-gles2-S1-00000000")
+    rc, o, _e = run("--tally", "--no-git", pc)
+    chk("per-case fixture, default tally: chunk-wide causes only",
+        rc == 0 and "NOT_BUILT" not in o and "errno:" not in o
+        and re.search(r"Fail +1 +Image comparison", o) is not None)
+    rc, o, _e = run("--tally", "--per-case", "--no-git", pc)
+    chk("per-case: a Fail takes its first refusal line, not the decoy",
+        re.search(r"Fail +1 +refused:NOT_BUILT_BLEND_SHADER", o) is not None
+        and "DECOY" not in o and "NOT_BUILT_OTHER" not in o)
+    chk("per-case: a bare errno reason splits by errno",
+        re.search(r"ResourceError +1 +errno:-12", o) is not None)
+    chk("per-case: a case without a line keeps its cause",
+        re.search(r"NotSupported +1 +not supported", o) is not None)
+    chk("per-case: a chunk without a refusals file falls back",
+        re.search(r"InternalError +1 +refused:blend_equation_separate", o)
+        is not None)
+    chk("per-case: totals unchanged", re.search(r"^TOTAL +6$", o, re.M)
+        is not None)
+    rc, o, _e = run("--tally", "--per-case", "--markdown", "--no-git", pc)
+    chk("per-case: --markdown takes it too", rc == 0 and "errno:-12" in o)
+    chk("per-case: --check-doc is unchanged", run("--check-doc",
+        os.path.join(FIXTURES, "doc-current.md"), *good)[0] == 0)
     # ancestor rule, in a throwaway repository
     with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as t:
         def git(*a):
@@ -648,6 +728,7 @@ def self_test():
 def main(argv):
     git = True
     markdown = False
+    per_case = False
     main_ref = "origin/main"
     log = None
     args = []
@@ -659,6 +740,8 @@ def main(argv):
             git = False
         elif a == "--markdown":
             markdown = True
+        elif a == "--per-case":
+            per_case = True
         elif a == "--main-ref":
             i += 1
             if i >= len(argv):
@@ -688,7 +771,8 @@ def main(argv):
                                       main_ref))
         if mode == "--tally" and args:
             s = [load_slice(p) for p in args]
-            sys.stdout.write(render_markdown(s) if markdown else render_text(s))
+            sys.stdout.write(render_markdown(s, per_case) if markdown
+                             else render_text(s, per_case))
             return 0
         if mode == "--check-doc" and log is not None and len(args) == 1:
             return report(check_doc(args[0], [], log))
