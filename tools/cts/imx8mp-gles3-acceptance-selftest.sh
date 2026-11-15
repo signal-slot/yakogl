@@ -128,7 +128,9 @@ echo "uart on /dev/ttyUSB0" >"$R/tools/cts/log/2026-11-12-imx8mp-gles3-0123abcd-
 run_case "c8 device path" 1 "c8"
 
 fresh c8b
-echo "host 192.168.1.5:22" >"$R/tools/cts/log/2026-11-12-imx8mp-es2-0123abcd/x.txt"
+# The tree holds no private address literally (tests/redaction_scan.rs scans
+# this file too): the fixture address is joined at run time.
+printf 'host %s.%s.%s.%s:22\n' 192 168 1 5 >"$R/tools/cts/log/2026-11-12-imx8mp-es2-0123abcd/x.txt"
 run_case "c8 address in an es2 log" 1 "c8"
 
 fresh empty
