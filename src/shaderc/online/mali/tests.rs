@@ -3381,6 +3381,18 @@ fn deqp_cube_face_4_is_byte_equal_to_mesa_26_2_1() {
     }
 }
 
+/// A negated pair of a varying's lanes in the other order, `-a2.yx`: the
+/// swapped halves under the fneg (`FADD.v2f16 r0, r0^.neg.h10, 0x0.neg`
+/// in both). As the colour (tools/mali/testdata/fsneg_swapped) and as a
+/// cube direction's pair (fstex_cubedir_negyx), both programs the Mesa
+/// 26.2.1 drm-shim's to the byte.
+#[test]
+fn a_negated_swapped_varying_pair_is_byte_equal_to_mesa_26_2_1() {
+    check_program(td!("fsneg_swapped.vert"), td!("fsneg_swapped.frag"), td!("fsneg_swapped.expect.json"));
+    let (vs, fs) = (td!("fstex_cubedir_negyx.vert"), td!("fstex_cubedir_negyx.frag"));
+    check_program(vs, fs, td!("fstex_cubedir_negyx.expect.json"));
+}
+
 /// The direction shapes the implicit-level cube arm takes
 /// (`nir_fs::cube_dir_measured`), each drawn on the Mesa 26.2.1 drm-shim
 /// with `--uniform-values` (one attribute per varying, so the link merges
@@ -4395,6 +4407,8 @@ fn the_fragment_productions_are_the_references() {
     /* a uniform's component first in a product, a look-up's word second in
      * a product and its fusion (case 166) */
     fs.extend(UNITYPE_166_POPULATION.iter().map(|c| c.1));
+    /* a varying's lanes swapped under an fneg (`-a2.yx`) */
+    fs.push(td!("fsneg_swapped.frag"));
     let mut seen = 0u128;
     for src in fs {
         let _k = store::test_keep();

@@ -702,6 +702,8 @@ pub const ADMITTED: u128 = {
         | prod(Op, Output)
         | prod(Const, AddA)
         | prod(HalfSwapped, AddB)
+        /* `-a2.yx` (fsneg_swapped, fstex_cubedir_negyx) */
+        | prod(HalfSwapped, NegSrc)
         | prod(Half, NegSrc)
         | prod(Op, NegSrc)
         | prod(Neg, AddB)
