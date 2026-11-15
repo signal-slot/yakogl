@@ -96,11 +96,11 @@ Both scenes render depth into a depth texture of twice the canvas,
 `width_ = canvas_.width() * 2`), then sample it in the next draw of the frame.
 On this back end the texture unit does not sample the D24S8 surface, so that
 draw resolves the depth into the texture's R32F texels on the CPU
-(`gl/texture.rs` `depth_for_draw` → `resolve_depth` →
-`vivante/ds_cache.rs` `resolve_depth`): 1.92 M texels, a 7.68 MB read and a
+(`src/gl/texture.rs` `depth_for_draw` → `resolve_depth` →
+`src/vivante/ds_cache.rs` `resolve_depth`): 1.92 M texels, a 7.68 MB read and a
 7.68 MB write each frame. The R32F texture has one level and is plain 2D, so
 it is sampled as it is, with no tiled copy made after the resolve
-(`vivante/tiled_copy.rs`). The timing test above gives 0.35 ms (best) and
+(`src/vivante/tiled_copy.rs`). The timing test above gives 0.35 ms (best) and
 1.10 ms (mean) for 1 M texels on this host, so the 1.92 M texels come to about
 0.7 ms at best and 2.1 ms at that mean, and more with the 15 MB working
 set out of the cache. Any other draw
