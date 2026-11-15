@@ -1,0 +1,1452 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-15, image T03: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.14 [sdcard] pieeprom.upd not found
+  4.15 [sdcard] recover4.elf not found
+  4.15 [sdcard] recovery.elf not found
+  4.79 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.85 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.86 0x00d03114 0x00000000 0x00001fff
+  4.90 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.26 Starting start4.elf @ 0xfec00200 partition 1
+  4.32 XHCI-STOP
+  4.32 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.33 USBSTS 18
+  4.33 PCI0 reset
+  4.34 +
+
+MESS:00:00:04.360962:0: arasan: arasan_emmc_open
+MESS:00:00:04.362621:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.482848:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.495718:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.529999:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.531412:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.535796:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.700987:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.703789:0: brfs: File read: 70 bytes
+MESS:00:00:04.796756:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.801257:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.818142:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.284155:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.289710:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.298743:0: *** Restart logging
+MESS:00:00:05.300519:0: brfs: File read: 70 bytes
+MESS:00:00:05.379190:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.384222:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.395702:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.405684:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.410381:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.418262:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.423734:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.445965:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.461387:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.464674:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.505583:0: brfs: File read: 56249 bytes
+MESS:00:00:05.525876:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.590723:0: brfs: File read: 5971 bytes
+MESS:00:00:05.597550:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.638628:0: brfs: File read: 70 bytes
+MESS:00:00:05.642744:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.645700:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.651551:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.808452:0: brfs: File read: 145 bytes
+MESS:00:00:07.203334:0: brfs: File read: /mfs/sd/yakogl-T03.bin
+MESS:00:00:07.206147:0: Loaded 'yakogl-T03.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:07.212673:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.221460:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.227981:0: uart: Baud rate change done...
+MESS:00:00:07.229998:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.filtering.2d_array.*'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_clamp_clamp
+v3d_deqp: case #0 F 156ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_clamp_mirror
+v3d_deqp: case #1 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_clamp_repeat
+v3d_deqp: case #2 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_clamp
+v3d_deqp: case #3 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_mirror
+v3d_deqp: case #4 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_repeat
+v3d_deqp: case #5 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_repeat_clamp
+v3d_deqp: case #6 F 67ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_repeat_mirror
+v3d_deqp: case #7 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_repeat_repeat
+v3d_deqp: case #8 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_clamp_clamp
+v3d_deqp: case #9 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_clamp_mirror
+v3d_deqp: case #10 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_clamp_repeat
+v3d_deqp: case #11 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_mirror_clamp
+v3d_deqp: case #12 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_mirror_mirror
+v3d_deqp: case #13 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_mirror_repeat
+v3d_deqp: case #14 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_repeat_clamp
+v3d_deqp: case #15 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_repeat_mirror
+v3d_deqp: case #16 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_repeat_repeat
+v3d_deqp: case #17 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_linear_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_clamp_clamp
+v3d_deqp: case #18 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_clamp_mirror
+v3d_deqp: case #19 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_clamp_repeat
+v3d_deqp: case #20 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_mirror_clamp
+v3d_deqp: case #21 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_mirror_mirror
+v3d_deqp: case #22 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_mirror_repeat
+v3d_deqp: case #23 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_repeat_clamp
+v3d_deqp: case #24 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_repeat_mirror
+v3d_deqp: case #25 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_repeat_repeat
+v3d_deqp: case #26 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_linear_nearest_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_clamp_clamp
+v3d_deqp: case #27 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_clamp_mirror
+v3d_deqp: case #28 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_clamp_repeat
+v3d_deqp: case #29 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_mirror_clamp
+v3d_deqp: case #30 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_mirror_mirror
+v3d_deqp: case #31 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_mirror_repeat
+v3d_deqp: case #32 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_repeat_clamp
+v3d_deqp: case #33 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_repeat_mirror
+v3d_deqp: case #34 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_repeat_repeat
+v3d_deqp: case #35 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_linear_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_clamp_clamp
+v3d_deqp: case #36 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_clamp_mirror
+v3d_deqp: case #37 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_clamp_repeat
+v3d_deqp: case #38 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_mirror_clamp
+v3d_deqp: case #39 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_mirror_mirror
+v3d_deqp: case #40 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_mirror_repeat
+v3d_deqp: case #41 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_repeat_clamp
+v3d_deqp: case #42 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_repeat_mirror
+v3d_deqp: case #43 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_repeat_repeat
+v3d_deqp: case #44 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_mipmap_nearest_nearest_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_clamp_clamp
+v3d_deqp: case #45 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_clamp_mirror
+v3d_deqp: case #46 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_clamp_repeat
+v3d_deqp: case #47 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_mirror_clamp
+v3d_deqp: case #48 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_mirror_mirror
+v3d_deqp: case #49 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_mirror_repeat
+v3d_deqp: case #50 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_repeat_clamp
+v3d_deqp: case #51 F 71ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_repeat_mirror
+v3d_deqp: case #52 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_repeat_repeat
+v3d_deqp: case #53 F 71ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_nearest_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_clamp_clamp
+v3d_deqp: case #54 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_clamp_mirror
+v3d_deqp: case #55 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_clamp_repeat
+v3d_deqp: case #56 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_mirror_clamp
+v3d_deqp: case #57 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_mirror_mirror
+v3d_deqp: case #58 F 69ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_mirror_repeat
+v3d_deqp: case #59 F 69ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_repeat_clamp
+v3d_deqp: case #60 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_repeat_mirror
+v3d_deqp: case #61 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_repeat_repeat
+v3d_deqp: case #62 F 69ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_linear_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_clamp_clamp
+v3d_deqp: case #63 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_clamp_mirror
+v3d_deqp: case #64 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_clamp_repeat
+v3d_deqp: case #65 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_mirror_clamp
+v3d_deqp: case #66 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_mirror_mirror
+v3d_deqp: case #67 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_mirror_repeat
+v3d_deqp: case #68 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_repeat_clamp
+v3d_deqp: case #69 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_repeat_mirror
+v3d_deqp: case #70 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_repeat_repeat
+v3d_deqp: case #71 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_linear_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_clamp_clamp
+v3d_deqp: case #72 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_clamp_mirror
+v3d_deqp: case #73 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_clamp_repeat
+v3d_deqp: case #74 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_mirror_clamp
+v3d_deqp: case #75 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_mirror_mirror
+v3d_deqp: case #76 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_mirror_repeat
+v3d_deqp: case #77 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_repeat_clamp
+v3d_deqp: case #78 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_repeat_mirror
+v3d_deqp: case #79 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_repeat_repeat
+v3d_deqp: case #80 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_linear_nearest_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_clamp_clamp
+v3d_deqp: case #81 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_clamp_mirror
+v3d_deqp: case #82 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_clamp_repeat
+v3d_deqp: case #83 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_mirror_clamp
+v3d_deqp: case #84 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_mirror_mirror
+v3d_deqp: case #85 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_mirror_repeat
+v3d_deqp: case #86 F 74ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_repeat_clamp
+v3d_deqp: case #87 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_repeat_mirror
+v3d_deqp: case #88 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_repeat_repeat
+v3d_deqp: case #89 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_linear_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_clamp_clamp
+v3d_deqp: case #90 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_clamp_mirror
+v3d_deqp: case #91 F 71ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_clamp_repeat
+v3d_deqp: case #92 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_mirror_clamp
+v3d_deqp: case #93 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_mirror_mirror
+v3d_deqp: case #94 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_mirror_repeat
+v3d_deqp: case #95 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_repeat_clamp
+v3d_deqp: case #96 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_repeat_mirror
+v3d_deqp: case #97 F 72ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_repeat_repeat
+v3d_deqp: case #98 F 73ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_mipmap_nearest_nearest_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_clamp_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_clamp_clamp
+v3d_deqp: case #99 F 68ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_clamp_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_clamp_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_clamp_mirror
+v3d_deqp: case #100 F 71ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_clamp_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_clamp_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_clamp_repeat
+v3d_deqp: case #101 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_clamp_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_mirror_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_mirror_clamp
+v3d_deqp: case #102 F 69ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_mirror_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_mirror_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_mirror_mirror
+v3d_deqp: case #103 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_mirror_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_mirror_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_mirror_repeat
+v3d_deqp: case #104 F 71ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_mirror_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_repeat_clamp'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_repeat_clamp
+v3d_deqp: case #105 F 70ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_repeat_clamp
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_repeat_mirror'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_repeat_mirror
+v3d_deqp: case #106 F 69ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_repeat_mirror
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_repeat_repeat'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_repeat_repeat
+v3d_deqp: case #107 F 69ms k2/6 c15272/16598 r0 dEQP-GLES3.functional.texture.filtering.2d_array.combinations.nearest_nearest_repeat_repeat
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_linear
+v3d_deqp: case #108 F 77ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_linear_mipmap_linear
+v3d_deqp: case #109 F 78ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_linear_mipmap_nearest
+v3d_deqp: case #110 F 79ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_nearest
+v3d_deqp: case #111 F 77ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_nearest_mipmap_linear
+v3d_deqp: case #112 F 78ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_nearest_mipmap_nearest
+v3d_deqp: case #113 F 80ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra8_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_linear
+v3d_deqp: case #114 F 77ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_linear_mipmap_linear
+v3d_deqp: case #115 F 77ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_linear_mipmap_nearest
+v3d_deqp: case #116 F 79ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_nearest
+v3d_deqp: case #117 F 77ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_nearest_mipmap_linear
+v3d_deqp: case #118 F 78ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_nearest_mipmap_nearest
+v3d_deqp: case #119 F 79ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.bgra_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_linear
+v3d_deqp: case #120 F 86ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_linear_mipmap_linear
+v3d_deqp: case #121 F 89ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_linear_mipmap_nearest
+v3d_deqp: case #122 F 89ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_nearest
+v3d_deqp: case #123 F 88ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_nearest_mipmap_linear
+v3d_deqp: case #124 F 88ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_nearest_mipmap_nearest
+v3d_deqp: case #125 F 90ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.r11f_g11f_b10f_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_linear
+v3d_deqp: case #126 F 98ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_linear_mipmap_linear
+v3d_deqp: case #127 F 99ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_linear_mipmap_nearest
+v3d_deqp: case #128 F 100ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_nearest
+v3d_deqp: case #129 F 97ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_nearest_mipmap_linear
+v3d_deqp: case #130 F 99ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_nearest_mipmap_nearest
+v3d_deqp: case #131 F 100ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb10_a2_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_linear
+v3d_deqp: case #132 F 73ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_linear_mipmap_linear
+v3d_deqp: case #133 F 74ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_linear_mipmap_nearest
+v3d_deqp: case #134 F 75ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_nearest
+v3d_deqp: case #135 F 73ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_nearest_mipmap_linear
+v3d_deqp: case #136 F 74ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_nearest_mipmap_nearest
+v3d_deqp: case #137 F 76ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb565_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_linear
+v3d_deqp: case #138 F 75ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_linear_mipmap_linear
+v3d_deqp: case #139 F 77ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_linear_mipmap_nearest
+v3d_deqp: case #140 F 78ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_nearest
+v3d_deqp: case #141 F 75ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_nearest_mipmap_linear
+v3d_deqp: case #142 F 77ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_nearest_mipmap_nearest
+v3d_deqp: case #143 F 78ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb5_a1_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_linear
+v3d_deqp: case #144 F 199ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_linear_mipmap_linear
+v3d_deqp: case #145 F 199ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_linear_mipmap_nearest
+v3d_deqp: case #146 F 201ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_nearest
+v3d_deqp: case #147 F 199ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_nearest_mipmap_linear
+v3d_deqp: case #148 F 199ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_nearest_mipmap_nearest
+v3d_deqp: case #149 F 202ms k2/6 c15272/16638 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgb9_e5_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_linear
+v3d_deqp: case #150 F 100ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_linear_mipmap_linear
+v3d_deqp: case #151 F 101ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_linear_mipmap_nearest
+v3d_deqp: case #152 F 103ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_nearest
+v3d_deqp: case #153 F 100ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_nearest_mipmap_linear
+v3d_deqp: case #154 F 102ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_nearest_mipmap_nearest
+v3d_deqp: case #155 F 103ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba16f_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_linear
+v3d_deqp: case #156 F 75ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_linear_mipmap_linear
+v3d_deqp: case #157 F 76ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_linear_mipmap_nearest
+v3d_deqp: case #158 F 77ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_nearest
+v3d_deqp: case #159 F 75ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_nearest_mipmap_linear
+v3d_deqp: case #160 F 76ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_nearest_mipmap_nearest
+v3d_deqp: case #161 F 78ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba4_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear
+v3d_deqp: case #162 F 63ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear_mipmap_linear
+v3d_deqp: case #163 F 64ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear_mipmap_nearest
+v3d_deqp: case #164 F 66ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest
+v3d_deqp: case #165 F 63ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest_mipmap_linear
+v3d_deqp: case #166 F 65ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest_mipmap_nearest
+v3d_deqp: case #167 F 66ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_linear
+v3d_deqp: case #168 F 108ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_linear_mipmap_linear
+v3d_deqp: case #169 F 109ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_linear_mipmap_nearest
+v3d_deqp: case #170 F 110ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_nearest
+v3d_deqp: case #171 F 108ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_nearest_mipmap_linear
+v3d_deqp: case #172 F 110ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_nearest_mipmap_nearest
+v3d_deqp: case #173 F 110ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_snorm_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_linear
+v3d_deqp: case #174 F 66ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_linear_mipmap_linear
+v3d_deqp: case #175 F 66ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_linear_mipmap_nearest
+v3d_deqp: case #176 F 67ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_nearest
+v3d_deqp: case #177 F 65ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_nearest_mipmap_linear
+v3d_deqp: case #178 F 67ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_nearest_mipmap_nearest
+v3d_deqp: case #179 F 68ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb8_alpha8_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear
+v3d_deqp: case #180 N 35ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear
+  NotSupported (GL_EXT_texture_sRGB_R8 is not supported. at es3fTextureFilteringTests.cpp:75)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear_mipmap_linear'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear_mipmap_linear
+v3d_deqp: case #181 N 37ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear_mipmap_linear
+  NotSupported (GL_EXT_texture_sRGB_R8 is not supported. at es3fTextureFilteringTests.cpp:75)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear_mipmap_nearest'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear_mipmap_nearest
+v3d_deqp: case #182 N 39ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear_mipmap_nearest
+  NotSupported (GL_EXT_texture_sRGB_R8 is not supported. at es3fTextureFilteringTests.cpp:75)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest
+v3d_deqp: case #183 N 36ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest
+  NotSupported (GL_EXT_texture_sRGB_R8 is not supported. at es3fTextureFilteringTests.cpp:75)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest_mipmap_linear'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest_mipmap_linear
+v3d_deqp: case #184 N 37ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest_mipmap_linear
+  NotSupported (GL_EXT_texture_sRGB_R8 is not supported. at es3fTextureFilteringTests.cpp:75)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest_mipmap_nearest'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest_mipmap_nearest
+v3d_deqp: case #185 N 39ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest_mipmap_nearest
+  NotSupported (GL_EXT_texture_sRGB_R8 is not supported. at es3fTextureFilteringTests.cpp:75)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear
+v3d_deqp: case #186 N 37ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear
+  NotSupported (GL_EXT_texture_sRGB_RG8 is not supported. at es3fTextureFilteringTests.cpp:78)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear_mipmap_linear'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear_mipmap_linear
+v3d_deqp: case #187 N 38ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear_mipmap_linear
+  NotSupported (GL_EXT_texture_sRGB_RG8 is not supported. at es3fTextureFilteringTests.cpp:78)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear_mipmap_nearest'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear_mipmap_nearest
+v3d_deqp: case #188 N 39ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear_mipmap_nearest
+  NotSupported (GL_EXT_texture_sRGB_RG8 is not supported. at es3fTextureFilteringTests.cpp:78)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest
+v3d_deqp: case #189 N 36ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest
+  NotSupported (GL_EXT_texture_sRGB_RG8 is not supported. at es3fTextureFilteringTests.cpp:78)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest_mipmap_linear'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest_mipmap_linear
+v3d_deqp: case #190 N 38ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest_mipmap_linear
+  NotSupported (GL_EXT_texture_sRGB_RG8 is not supported. at es3fTextureFilteringTests.cpp:78)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest_mipmap_nearest'..
+deqp: NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest_mipmap_nearest
+v3d_deqp: case #191 N 40ms k2/6 c15272/18003 r0 dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest_mipmap_nearest
+  NotSupported (GL_EXT_texture_sRGB_RG8 is not supported. at es3fTextureFilteringTests.cpp:78)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_linear
+v3d_deqp: case #192 F 83ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_linear_mipmap_linear
+v3d_deqp: case #193 F 82ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_linear_mipmap_nearest
+v3d_deqp: case #194 F 83ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_nearest
+v3d_deqp: case #195 F 81ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_nearest_mipmap_linear
+v3d_deqp: case #196 F 83ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_nearest_mipmap_nearest
+v3d_deqp: case #197 F 83ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.128x32x64_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_linear
+v3d_deqp: case #198 F 51ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_linear_mipmap_linear
+v3d_deqp: case #199 F 51ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_linear_mipmap_nearest
+v3d_deqp: case #200 F 53ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_nearest
+v3d_deqp: case #201 F 51ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_nearest_mipmap_linear
+v3d_deqp: case #202 F 51ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_nearest_mipmap_nearest
+v3d_deqp: case #203 F 54ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.32x64x16_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_linear
+v3d_deqp: case #204 F 45ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_linear_mipmap_linear
+v3d_deqp: case #205 F 47ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_linear_mipmap_nearest
+v3d_deqp: case #206 F 47ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_nearest
+v3d_deqp: case #207 F 46ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_nearest_mipmap_linear
+v3d_deqp: case #208 F 46ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_nearest_mipmap_nearest
+v3d_deqp: case #209 F 48ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.3x7x5_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_linear
+v3d_deqp: case #210 F 46ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_linear_mipmap_linear
+v3d_deqp: case #211 F 46ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_linear_mipmap_nearest
+v3d_deqp: case #212 F 48ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_nearest
+v3d_deqp: case #213 F 45ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_nearest_mipmap_linear
+v3d_deqp: case #214 F 47ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_nearest_mipmap_nearest
+v3d_deqp: case #215 F 48ms k2/6 c15272/18004 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.4x8x8_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_linear
+v3d_deqp: case #216 F 107ms k2/6 c15272/18889 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_linear_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_linear_mipmap_linear
+v3d_deqp: case #217 F 107ms k2/6 c15272/18889 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_linear_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_linear_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_linear_mipmap_nearest
+v3d_deqp: case #218 F 110ms k2/6 c15272/18889 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_linear_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_nearest
+v3d_deqp: case #219 F 107ms k2/6 c15272/18889 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_nearest_mipmap_linear'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_nearest_mipmap_linear
+v3d_deqp: case #220 F 108ms k2/6 c15272/18889 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_nearest_mipmap_linear
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_nearest_mipmap_nearest'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_nearest_mipmap_nearest
+v3d_deqp: case #221 F 109ms k2/6 c15272/18889 r0 dEQP-GLES3.functional.texture.filtering.2d_array.sizes.63x63x63_nearest_mipmap_nearest
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+
+DONE!
+
+Test run totals:
+  Passed:        0/222 (0.0%)
+  Failed:        210/222 (94.6%)
+  Not supported: 12/222 (5.4%)
+  Warnings:      0/222 (0.0%)
+  Waived:        0/222 (0.0%)
+deqp: done: 0 passed, 210 failed, 12 not supported, 0 warnings, complete=1
+deqp: summary: 222 cases begun, 222 with a result, 0 without
+v3d_deqp DONE: build b1b5b845, filter 'dEQP-GLES3.functional.texture.filtering.2d_array.*'
+  222 cases in 16947 ms, record at 17 s after boot, reset at ~250 s
+  totals: F 210 N 12  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 0 passed, 210 failed, 12 not supported, 0 warnings, complete=1
+  summary: 222 cases begun, 222 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 6, before #0 (first not passed) 0; slowest #149 202 ms
+  carve-out (KiB, of 48636): after #0 15272, last 15272, high-water 18889
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 1 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15376896 bytes used now, 19343104 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 678 calls, 94779 map reads (139 a call, at most 1153 in one); free runs 1, longest 34426368 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 1 jobs ended; emitted 0, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+  128 FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFNNNNNNNNNNNNFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 216 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  combinations                                              108 F108                  108x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  formats                                                    84 F72 N12                72x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+                                                                                        6x ~xture_sRGB_R8 is not supported. at es3fTextureFilteringTests.cpp:75
+                                                                                        6x ~ture_sRGB_RG8 is not supported. at es3fTextureFilteringTests.cpp:78
+  sizes                                                      30 F30                    30x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+    0 F combinations.linear_linear_clamp_clamp           156ms k2/6 c15272/16598         ~fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+    1 F combinations.linear_linear_clamp_mirror          70ms k2/6 c15272/16598          ~fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+    2 F combinations.linear_linear_clamp_repeat          68ms k2/6 c15272/16598          ~fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+    3 F combinations.linear_linear_mirror_clamp          68ms k2/6 c15272/16598          ~fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+    4 F combinations.linear_linear_mirror_mirror         68ms k2/6 c15272/16598          ~fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+    5 F combinations.linear_linear_mirror_repeat         70ms k2/6 c15272/16598          ~fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+    6 F combinations.linear_linear_repeat_clamp          67ms k2/6 c15272/16598          ~fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+  ... 215 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 DONE: 222 cases, P 0 F 210 R 0 N 12 other 0
