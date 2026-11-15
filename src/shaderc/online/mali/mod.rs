@@ -194,6 +194,10 @@ pub enum MaliError {
     TexCount,
     /// A coordinate other than a vec2 varying read whole or two constants.
     TexCoord,
+    /// A cube look-up through an element of a sampler array other than
+    /// the first: Mesa numbers the array's elements together, the
+    /// descriptor index here counts the samplers read.
+    TexArrayElement,
     /// A varying read both as a coordinate and in the colour's arithmetic.
     TexCoordShared,
     /// The look-up's lanes other than in its own pairs, in order.
@@ -338,6 +342,7 @@ impl MaliError {
         MaliError::TexKind,
         MaliError::TexCount,
         MaliError::TexCoord,
+        MaliError::TexArrayElement,
         MaliError::TexCoordShared,
         MaliError::TexLanes,
         MaliError::TexHighp,
@@ -446,6 +451,9 @@ impl MaliError {
             }
             MaliError::TexCoord => {
                 "Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet"
+            }
+            MaliError::TexArrayElement => {
+                "Valhall: a cube map look-up through a sampler array element other than the first is not lowered yet"
             }
             MaliError::TexCoordShared => {
                 "Valhall: a varying read both as a texture coordinate and in the colour's arithmetic is not lowered yet"

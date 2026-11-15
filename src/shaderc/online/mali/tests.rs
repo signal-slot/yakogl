@@ -1043,6 +1043,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::TexKind
         | E::TexCount
         | E::TexCoord
+        | E::TexArrayElement
         | E::TexCoordShared
         | E::TexLanes
         | E::TexHighp
@@ -1174,6 +1175,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         /* a cube at the implicit level is lowered in a mediump shader
          * (fstex_cube); a highp shader's has no reference */
         (FS, "precision highp float; uniform samplerCube s; varying vec3 v; void main(){ gl_FragColor = textureCube(s, v); }", MaliError::TexKind),
+        /* an element of a cube sampler array past the first: Mesa numbers
+         * the array's elements together (fstex_cubeno_texarrayelement_*) */
+        (FS, "precision mediump float; uniform samplerCube s[2]; varying vec3 v; void main(){ gl_FragColor = textureCube(s[1], v); }", MaliError::TexArrayElement),
         /* a mediump computed coordinate (case 121's form) beside another
          * look-up: no reference draws it (texmore_2's two read a varying) */
         (FS, "precision mediump float; uniform sampler2D s; uniform sampler2D t; uniform vec4 u; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) + texture2D(t, vec2(u.w * 0.5)); }", MaliError::TexCount),
@@ -3443,6 +3447,9 @@ fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa
 /// - an all-constant direction, a varying z beside the pair, a sum of two
 ///   products one of which is `* 2.0` (which one Mesa fuses is not
 ///   measured);
+/// - an element of a sampler array other than the first: Mesa numbers the
+///   array's elements together (`sa[1]` is index 1), ours by the elements
+///   read (index 0, the texture of `sa[0]`).
 #[test]
 fn cube_look_ups_mesa_compiles_otherwise_are_refused_by_the_name_of_their_reference() {
     use MaliError as E;
@@ -3452,6 +3459,7 @@ fn cube_look_ups_mesa_compiles_otherwise_are_refused_by_the_name_of_their_refere
         let want = match name.strip_prefix("fstex_cubeno_").and_then(|r| r.split('_').next()) {
             Some("texcoord") => E::TexCoord,
             Some("operandform") => E::FsOperandForm,
+            Some("texarrayelement") => E::TexArrayElement,
             r => panic!("{name}: no refusal named {r:?}"),
         };
         assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), want, "{name}");
