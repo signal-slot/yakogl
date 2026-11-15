@@ -85,6 +85,40 @@ fn compare_module(name: &str, stage: sema::Stage, m: &ir::Module, a: &Arena, see
 /// selected, passed and allocated once and run on each seed's inputs; the
 /// first verdict that is not an agreement is the answer.
 fn compare_module_seeds(name: &str, stage: sema::Stage, m: &ir::Module, a: &Arena, seeds: &[u64]) -> Option<Verdict> {
+    compare_modules(name, stage, m, m, a, seeds)
+}
+
+/// The program built from `text` against the IR of `reference`, another
+/// spelling of the same shader: where the two sources mean the same, the
+/// program of the first computes what the second's IR says. Unlike
+/// [`compare`], this fails when the front end gives `text` the wrong IR,
+/// because the reference does not share it.
+fn compare_with(name: &str, stage: sema::Stage, text: &str, reference: &str, seeds: &[u64]) -> Option<Verdict> {
+    let mut mem = vec![0u8; 8 << 20];
+    let a = Arena::new(&mut mem);
+    let lower = |s: &str| lower::compile_to_ir(&a, stage, a.alloc_str(s).ok()?).ok();
+    let (built, want) = (lower(text)?, lower(reference)?);
+    /* The inputs are drawn for the built module and handed to both: the two
+     * sources must declare the same interface. */
+    let interface = |m: &ir::Module| {
+        let io: Vec<_> = m.inputs.iter().map(|d| (d.kind, d.location)).collect();
+        let uniforms: Vec<_> = m.uniforms.iter().map(|u| (u.gl_type, u.dword_off, u.dwords)).collect();
+        (io, uniforms, m.uniform_dwords)
+    };
+    assert_eq!(interface(&built.module), interface(&want.module), "{name}: the two sources' interfaces");
+    compare_modules(name, stage, &built.module, &want.module, &a, seeds)
+}
+
+/// The program built from `m` against the evaluator's run of `reference`
+/// (`m` itself, or a module that must mean the same: [`compare_with`]).
+fn compare_modules(
+    name: &str,
+    stage: sema::Stage,
+    m: &ir::Module,
+    reference: &ir::Module,
+    a: &Arena,
+    seeds: &[u64],
+) -> Option<Verdict> {
     let sel = select::select(m, a).ok()?;
 
     /* The product's passes and allocation (codegen.rs). */
@@ -223,7 +257,7 @@ fn compare_module_seeds(name: &str, stage: sema::Stage, m: &ir::Module, a: &Aren
         /* The reference: the IR evaluator. What it does not implement comes back
          * as an error naming it; that is a skip, not a failure. */
         let inputs_ev = eval::Inputs { io: &io, uniforms: &block };
-        let want = match eval::run(m, &inputs_ev) {
+        let want = match eval::run(reference, &inputs_ev) {
             Ok(o) => o,
             Err(why) => return Some(Verdict::Skip(format!("evaluator: {why}"))),
         };
@@ -305,6 +339,44 @@ fn a_loaded_element_keeps_its_components_whatever_lanes_are_read() {
                 Some(Verdict::Agree) => {}
                 other => panic!("{name} seed {seed}: {other:?}"),
             }
+        }
+    }
+}
+
+/// A matrix built from ONE vector (GLSL ES 1.00 section 5.4.2: the vector's
+/// components fill the matrix in column-major order). The front end took the
+/// scalar form for it, `v.x` on the diagonal and zero off it (#6564). The
+/// program of each source computes what the IR of the same shader with the
+/// components spelled out says: as a varying's two columns, as a local that
+/// is multiplied and indexed (all four elements reach the colour), and from
+/// an integer vector. The IR's own values are pinned in lower.rs
+/// (`matrix_from_vector_tests`).
+#[test]
+fn a_matrix_from_one_vector_computes_its_four_components() {
+    for (name, stage, text, spelled) in [
+        (
+            "matvec.vert",
+            sema::Stage::Vertex,
+            "attribute vec4 a_pos;\nattribute vec4 a_color;\nvarying mat2 v_m;\nvoid main() { v_m = mat2(a_color); gl_Position = a_pos; }\n",
+            "attribute vec4 a_pos;\nattribute vec4 a_color;\nvarying mat2 v_m;\nvoid main() { v_m = mat2(a_color.x, a_color.y, a_color.z, a_color.w); gl_Position = a_pos; }\n",
+        ),
+        (
+            "matvec.frag",
+            sema::Stage::Fragment,
+            "precision highp float;\nvarying vec4 v;\nvoid main() { mat2 m = mat2(v); gl_FragColor = vec4(m * vec2(1.0, 0.5), m[1][0], m[0][1]); }\n",
+            "precision highp float;\nvarying vec4 v;\nvoid main() { mat2 m = mat2(v.x, v.y, v.z, v.w); gl_FragColor = vec4(m * vec2(1.0, 0.5), m[1][0], m[0][1]); }\n",
+        ),
+        (
+            "mativec.frag",
+            sema::Stage::Fragment,
+            "precision highp float;\nvarying vec4 v;\nvoid main() { ivec4 i = ivec4(v * 8.0); mat2 m = mat2(i); gl_FragColor = vec4(m[0], m[1]) / 16.0; }\n",
+            "precision highp float;\nvarying vec4 v;\nvoid main() { ivec4 i = ivec4(v * 8.0); mat2 m = mat2(i.x, i.y, i.z, i.w); gl_FragColor = vec4(m[0], m[1]) / 16.0; }\n",
+        ),
+    ] {
+        let seeds: [u64; 4] = core::array::from_fn(|k| 0x6564 + k as u64);
+        match compare_with(name, stage, text, spelled, &seeds) {
+            Some(Verdict::Agree) => {}
+            other => panic!("{name}: {other:?}"),
         }
     }
 }

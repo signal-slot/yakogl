@@ -2167,6 +2167,17 @@ fn varyings_sharing_a_slot_are_loaded_per_slot_as_mesa_26_2_1() {
     assert_words("fsload_pcv vs.varying", &vs_regions(&v).1, &region(json, "vs.varying").expect("vs.varying").words);
 }
 
+/// A mat2 varying built from ONE vector, `m = mat2(a_a)` with a `vec4 a_a`,
+/// is the vector's four components (GLSL ES 1.00 section 5.4.2): Mesa
+/// 26.2.1 makes the program of `mat2(a_a.x, a_a.y, a_a.z, a_a.w)` for it,
+/// byte for byte. The fragment shader reads both columns. With the vector
+/// taken for a scalar (`a_a.x` on the diagonal) the pair was refused: the
+/// colour then held zeros beside the varying's lanes.
+#[test]
+fn a_matrix_varying_from_one_vector_is_its_four_components_as_mesa_26_2_1() {
+    check_linked_for("matvec_mat2", td!("matvec_mat2.vert"), td!("matvec_mat2.frag"), td!("matvec_mat2.expect.json"));
+}
+
 /// Shapes whose load or conversions Mesa makes in a form the selection has
 /// no reference for, each refused by name; each reference holds the load:
 /// both lanes of an aligned pair beside constants (Mesa converts the pair
