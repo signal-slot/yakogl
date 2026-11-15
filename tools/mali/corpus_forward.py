@@ -4,6 +4,7 @@
 """Mechanical check that corpus-verdicts.txt moves forward only (plan #153, c6).
 
     python3 -I tools/mali/corpus_forward.py [--verbose] <BASE_REV> [<HEAD_REV>]
+    python3 -I tools/mali/corpus_forward.py [--verbose] --compare <CANDIDATE> [<PINNED>]
 
 tools/mali/corpus-verdicts.txt has one line per shader, `<path>: ok` or
 `<path>: <refusal text>`; `#` lines are comments. The file is read at BASE_REV,
@@ -14,6 +15,12 @@ line `rev path: ok -> new`, exit 1. Every commit must be green, so a
 regression that a later commit fixes is still reported. Added paths, refusals
 whose text changes and refusals that become ok are allowed (listed under
 --verbose). A malformed line or an unreadable revision is exit 2.
+
+--compare is the same forward-only rule for a single step given by hand
+instead of a commit range: <PINNED> (default tools/mali/corpus-verdicts.txt)
+is the base state, <CANDIDATE> (a file, `-` for stdin) the fresh verdicts;
+each offence line names the mode instead of a revision: `check <path>: ok ->
+new`. This is the check `tools/mali/corpus-verdicts.sh --check` runs.
 
 No exemption exists, none is needed over the public range. Plan #154 (a)
 expected to accept the removal of the tools/shaders/qt* lines, whose sources
@@ -66,9 +73,62 @@ def count_ok(state):
     return sum(1 for v in state.values() if v == "ok")
 
 
+def step(base, cur, name, verbose):
+    """The moves of one forward-only step base -> cur, in path order, as pairs
+    (offence?, line): a path that was ok and is now another verdict or gone is
+    an offence, `name path: ok -> new`. An added path, a refusal becoming ok
+    and a refusal whose text changes are allowed (reported as info lines with
+    --verbose)."""
+    moves = []
+    for path in sorted(set(base) | set(cur)):
+        old, new = base.get(path), cur.get(path)
+        if old == new:
+            continue
+        shown = new if new is not None else GONE
+        if old == "ok":
+            moves.append((True, "%s %s: ok -> %s" % (name, path, shown)))
+        elif verbose:
+            moves.append((False, "info %s %s: %s -> %s" % (name, path, old or "(new)", shown)))
+    return moves
+
+
+def compare(args, verbose):
+    """--compare <CANDIDATE> [<PINNED>]: the pinned verdicts -> fresh verdicts
+    as one step, read from files instead of from git."""
+    if not 1 <= len(args) <= 2:
+        print(__doc__)
+        return 2
+    pinned = args[1] if len(args) > 1 else CORPUS
+    try:
+        if args[0] == "-":
+            cand, cand_where = sys.stdin.read(), "candidate"
+        else:
+            with open(args[0]) as f:
+                cand, cand_where = f.read(), args[0]
+        with open(pinned) as f:
+            pin = f.read()
+    except OSError as e:
+        print("corpus_forward: %s" % e, file=sys.stderr)
+        return 2
+    try:
+        base, cur = parse(pin, pinned), parse(cand, cand_where)
+    except Error as e:
+        print("corpus_forward: %s" % e, file=sys.stderr)
+        return 2
+    bad = 0
+    for offence, line in step(base, cur, "check", verbose):
+        print(line)
+        bad += 1 if offence else 0
+    print("corpus-verdicts: compare, %d ok -> %d ok, %d regressions"
+          % (count_ok(base), count_ok(cur), bad))
+    return 1 if bad else 0
+
+
 def main(argv):
     verbose = "--verbose" in argv
     args = [a for a in argv if a != "--verbose"]
+    if args and args[0] == "--compare":
+        return compare(args[1:], verbose)
     if not 1 <= len(args) <= 2:
         print(__doc__)
         return 2
@@ -89,16 +149,9 @@ def main(argv):
     bad = 0
     prev = states[0][1]
     for name, cur in states[1:]:
-        for path in sorted(set(prev) | set(cur)):
-            old, new = prev.get(path), cur.get(path)
-            if old == new:
-                continue
-            shown = new if new is not None else GONE
-            if old == "ok":
-                bad += 1
-                print("%s %s: ok -> %s" % (name, path, shown))
-            elif verbose:
-                print("info %s %s: %s -> %s" % (name, path, old or "(new)", shown))
+        for offence, line in step(prev, cur, name, verbose):
+            print(line)
+            bad += 1 if offence else 0
         prev = cur
     print("corpus-verdicts: %d commits, %d ok -> %d ok, %d regressions"
           % (len(revs), count_ok(states[0][1]), count_ok(states[-1][1]), bad))
