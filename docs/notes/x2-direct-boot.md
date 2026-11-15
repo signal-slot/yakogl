@@ -217,13 +217,13 @@ other one B.
 ### 2. Back up, write the inactive copy, flip
 
 ```sh
-# laptop (BOARD = how ssh reaches it: armadillo.local, or -P 2222 root@localhost via the tunnel)
-scp build/x2/flash-zephyr.bin root@BOARD:/tmp/
+# laptop (BOARD_HOST = the ssh destination of the board's root shell, user@host)
+scp build/x2/flash-zephyr.bin "$BOARD_HOST:/tmp/"
 # board
 dd if=/dev/mmcblk2boot0 of=/tmp/mmcblk2boot0.bak bs=1M
 dd if=/dev/mmcblk2boot1 of=/tmp/mmcblk2boot1.bak bs=1M
 # laptop: keep the backups (/tmp on the board is lost at power-off)
-scp 'root@BOARD:/tmp/mmcblk2boot*.bak' build/x2/
+scp "$BOARD_HOST:/tmp/mmcblk2boot*.bak" build/x2/
 # board, B = the inactive partition, e.g. boot1 when boot0 is active
 echo 0 > /sys/block/mmcblk2boot1/force_ro
 dd if=/tmp/flash-zephyr.bin of=/dev/mmcblk2boot1 bs=1M conv=fsync
