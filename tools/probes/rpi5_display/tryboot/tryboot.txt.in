@@ -1,0 +1,46 @@
+# One-shot tryboot.txt for the rpi5_display board session (U3).
+# Rendered by render.sh, which fills in the image name and one display route.
+# Only a '#' at the start of a line is a comment: key lines are bare key=value.
+# Each key is cited in the comment lines directly above it.
+
+# [all] section, https://www.raspberrypi.com/documentation/computers/config_txt.html#conditional-filters
+[all]
+# kernel, https://www.raspberrypi.com/documentation/computers/config_txt.html#kernel
+kernel=@IMAGE@
+# enable_uart, https://www.raspberrypi.com/documentation/computers/config_txt.html#enable_uart
+enable_uart=1
+# uart_2ndstage, https://www.raspberrypi.com/documentation/computers/config_txt.html#uart_2ndstage
+uart_2ndstage=1
+# arm_64bit, https://www.raspberrypi.com/documentation/computers/config_txt.html#arm_64bit
+# The docs say models from the Pi 5 on ignore it.
+arm_64bit=1
+@ROUTE@
+
+# @ROUTE fw
+# Display routes 1 and 2 of driver/docs/rpi5-display.md (routes A and B of verdicts.sh).
+# hdmi_force_hotplug (legacy), https://www.raspberrypi.com/documentation/computers/legacy_config_txt.html#hdmi_force_hotplug
+hdmi_force_hotplug=1
+# disable_fw_kms_setup, https://www.raspberrypi.com/documentation/computers/config_txt.html#disable_fw_kms_setup
+disable_fw_kms_setup=0
+# The framebuffer keys are legacy: unverified on the Pi 5 (U3, board check).
+# framebuffer_width, https://www.raspberrypi.com/documentation/computers/legacy_config_txt.html#framebuffer_width
+framebuffer_width=1920
+# framebuffer_height, https://www.raspberrypi.com/documentation/computers/legacy_config_txt.html#framebuffer_height
+framebuffer_height=1080
+# framebuffer_depth, https://www.raspberrypi.com/documentation/computers/legacy_config_txt.html#framebuffer_depth
+framebuffer_depth=32
+# framebuffer_ignore_alpha, https://www.raspberrypi.com/documentation/computers/legacy_config_txt.html#framebuffer_ignore_alpha
+framebuffer_ignore_alpha=1
+# @ENDROUTE
+
+# @ROUTE bare
+# Display route 3 (route C of verdicts.sh).
+# No config.txt key is documented to stop a scanout the firmware started.
+# The documented stop is RPI_FIRMWARE_NOTIFY_DISPLAY_DONE
+# (driver/docs/rpi5-v3d71-facts.md section 10, Linux vc4_drv.c:397-400),
+# which the probe image sends itself.
+# disable_fw_kms_setup, https://www.raspberrypi.com/documentation/computers/config_txt.html#disable_fw_kms_setup
+disable_fw_kms_setup=1
+# hdmi_force_hotplug (legacy), https://www.raspberrypi.com/documentation/computers/legacy_config_txt.html#hdmi_force_hotplug
+hdmi_force_hotplug=0
+# @ENDROUTE
