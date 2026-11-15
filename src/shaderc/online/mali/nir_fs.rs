@@ -5001,7 +5001,7 @@ fn walk_nodes(
             } if !prec.highp => {
                 let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
                 let bias = lane(vals, bias, 0);
-                if !cube_dir_measured(f, dir) {
+                if !cube_dir_measured(f, m, coord, dir) {
                     return Err(MaliError::TexCoord);
                 }
                 if f.uniform_dword(bias).is_none() {
@@ -5035,7 +5035,7 @@ fn walk_nodes(
                 offset: None,
             } if !prec.highp => {
                 let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
-                if !cube_dir_measured(f, dir) {
+                if !cube_dir_measured(f, m, coord, dir) {
                     return Err(MaliError::TexCoord);
                 }
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: dir, bits: 16, width: 1 })?;
@@ -5259,8 +5259,9 @@ fn walk_nodes(
 /// drm-shim (fstex_cube*):
 ///
 /// - raw: each lane a varying's lane or a constant fp16 holds exactly,
-///   one varying lane at least (fstex_cube, fstex_cubedir_twovary,
-///   _constneg, _rawhalf). The cube ops read the load's fp32 words
+///   one varying lane at least, each varying read whole unless it is the
+///   coordinate itself (fstex_cube, fstex_cubedir_twovary, _constneg,
+///   _rawhalf, _v4part). The cube ops read the load's fp32 words
 ///   (`src_f32`) and the constant as an operand: +-1.0 the table's
 ///   `0x3F800000`, 0.5 an FAU word (their sources have no swizzle,
 ///   valhall.c CUBEFACE1).
@@ -5283,9 +5284,31 @@ fn walk_nodes(
 ///   `FADD.v2f16 r0, r0^, r0^` (bifrost_nir_algebraic.py:31), which the
 ///   pair here does not. Under an add it is the fused `FMA` (dEQP's
 ///   `v.x*2.0 - 1.0`), measured equal.
-fn cube_dir_measured(f: &Fs<'_>, dir: [Val; 3]) -> bool {
+fn cube_dir_measured(f: &Fs<'_>, m: &Module<'_>, coord: ir::Src, dir: [Val; 3]) -> bool {
     /* a varying's lane; gl_PointCoord's ([`POINT_COORD`]) is none */
     let varying = |v: Val| f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS);
+    /* a direction built of parts (`vec3(a2.x, 1.0, 1.0)`) is a mediump
+     * temporary GLSL's lower_precision converts: each varying read whole at
+     * its dereference, before the swizzle (`handle_rvalue`,
+     * lower_precision.cpp:731-733), so the link keeps every lane and the
+     * load is the varying's width (fstex_cubeno_texcoord_partialx: `a2.x`
+     * loads `.v2`). Ours loads the lanes read, so the raw lanes must read
+     * every component of each float vector varying. A varying that is the coordinate itself (`a4.xyz`)
+     * is a texture argument, which the pass leaves as it is
+     * (`visit_enter(ir_texture *)`, lower_precision.cpp:785-790): the
+     * lanes read (fstex_cubedir_v4part) */
+    let direct = matches!(m.def(coord.val), Some(ir::Op::LoadInput { .. }));
+    let whole = |loc: u8| {
+        let lanes = dir.iter().filter_map(|&v| f.input_lane(v)).filter(|&(l, _)| l == loc);
+        let read = lanes.fold(0u8, |r, (_, c)| r | 1 << c);
+        m.inputs.iter().any(|d| {
+            d.kind == IoKind::Varying
+                && d.location == loc
+                && is_float_varying(d.gl_type)
+                && !is_matrix(d.gl_type)
+                && u32::from(read) + 1 == 1 << d.components
+        })
+    };
     let uniform = |v: Val| f.alu_of(v).is_none() && f.uniform_dword(v).is_some();
     /* an fp16 tree; `fused`: an fadd takes it into its FMA (the fadd's
      * one product; with two, which one fuses is not measured) */
@@ -5304,7 +5327,9 @@ fn cube_dir_measured(f: &Fs<'_>, dir: [Val; 3]) -> bool {
         }
     }
     let exact = |v: Val| matches!(v, Val::Const(c) if f16_exact(c).is_some());
-    let raw = dir.iter().all(|&v| varying(v) || exact(v)) && dir.iter().any(|&v| varying(v));
+    let raw = dir.iter().all(|&v| varying(v) || exact(v))
+        && dir.iter().any(|&v| varying(v))
+        && (direct || dir.iter().filter_map(|&v| f.input_lane(v)).all(|(loc, _)| whole(loc)));
     let leaf = |v: Val| varying(v) || uniform(v) || matches!(v, Val::Const(_));
     let pair = dir[..2].iter().all(|&v| f.alu_of(v).is_some() && tree(f, v, false, &leaf))
         && (matches!(dir[2], Val::Const(_)) || uniform(dir[2]));
