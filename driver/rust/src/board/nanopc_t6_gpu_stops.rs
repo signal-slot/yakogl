@@ -344,7 +344,8 @@ fn power_domain_does_not_come_on() {
 
 #[test]
 fn reset_does_not_complete() {
-    let mut b = Board::new().domain_on();
+    // PD_GPU off at hand-over, so no take-over runs and the reset is Z1's own
+    let mut b = Board::new();
     b.reset_dead = true;
     let o = b.run();
     // refusal MaliRefusal::ResetTimeout, detail RAWSTAT as read
@@ -358,7 +359,8 @@ fn reset_does_not_complete() {
 
 #[test]
 fn reset_completion_bit_is_stuck_set() {
-    let mut b = Board::new().domain_on();
+    // PD_GPU off at hand-over, so no take-over runs and the reset is Z1's own
+    let mut b = Board::new();
     b.sticky_raw = true;
     b.regs.get_mut().insert(GPU + mali::GPU_INT_RAWSTAT, mali::IRQ_RESET_COMPLETED);
     let o = b.run();
@@ -424,6 +426,7 @@ fn reached(s: Stop) -> Reached {
         Stop::SupplyBelowOpp => Module,
         Stop::SupplyRampTimeout => Module,
         Stop::Rk806Write => Module,
+        Stop::TakeOver => Module,
     }
 }
 
@@ -444,8 +447,9 @@ fn every_stop_variant_is_listed() {
         Stop::SupplyBelowOpp,
         Stop::SupplyRampTimeout,
         Stop::Rk806Write,
+        Stop::TakeOver,
     ];
-    // the values are the enum's discriminants 0..=13, each once
+    // the values are the enum's discriminants 0..=14, each once
     for (i, s) in all.into_iter().enumerate() {
         assert_eq!(s as usize, i, "{s:?}");
         if let Reached::Here(names) = reached(s) {

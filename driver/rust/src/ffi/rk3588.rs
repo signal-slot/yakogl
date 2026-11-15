@@ -464,10 +464,31 @@ pub struct YdT6GpuUp {
     /// `qos_gpu_m0` read back.
     pub qos_policy: u32,
     pub qos_words: [u32; 3],
+    /// Appended: the take-over of a GPU found powered
+    /// ([`crate::gpu::mali::takeover::TakeOver`]): 1 when it ran (0: PD_GPU
+    /// read off at hand-over, or the run stopped before the step); the
+    /// steps it got through (`TakeOver::steps`: 1 masked and cleared, 2 the
+    /// MCU halt waited for, 3 a reset completed; the words of a step not
+    /// reached are 0); `GPU_INT_MASK`, `JOB_INT_MASK`, `MMU_INT_MASK` as
+    /// found; the three `*_INT_RAWSTAT` as found and after the clear;
+    /// `MCU_STATUS` as found, the polls of the halt wait, 1 when it timed
+    /// out, `MCU_STATUS` at its end; 1 when the soft reset timed out and the
+    /// hard reset ran; that reset's `GPU_INT_RAWSTAT` before the clear,
+    /// after it, and its polls; the three masks and `MCU_STATUS` after the
+    /// reset.
+    pub take_over_ran: u32,
+    pub take_over_steps: u32,
+    pub take_over_masks: [u32; 3],
+    pub take_over_raw: [u32; 3],
+    pub take_over_raw_cleared: [u32; 3],
+    pub take_over_mcu: [u32; 4],
+    pub take_over_hard: u32,
+    pub take_over_reset: [u32; 3],
+    pub take_over_after: [u32; 4],
 }
 
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 129);
+const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 152);
 #[cfg(any(feature = "mali", test))]
 const _: () = assert!(offset_of!(YdT6GpuUp, rk806) == 4 * 18);
 #[cfg(any(feature = "mali", test))]
@@ -494,6 +515,10 @@ const _: () = assert!(offset_of!(YdT6GpuUp, supply_waited_us) == 4 * 124);
 const _: () = assert!(offset_of!(YdT6GpuUp, qos_policy) == 4 * 125);
 #[cfg(any(feature = "mali", test))]
 const _: () = assert!(offset_of!(YdT6GpuUp, qos_words) == 4 * 126);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, take_over_ran) == 4 * 129);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, take_over_after) == 4 * 148);
 
 #[cfg(any(feature = "mali", test))]
 fn lo_hi(v: u64) -> [u32; 2] {
@@ -534,6 +559,7 @@ fn ident_words(i: &crate::gpu::mali::Ident) -> [u32; 16] {
 impl From<&crate::board::nanopc_t6_gpu::GpuUp> for YdT6GpuUp {
     fn from(o: &crate::board::nanopc_t6_gpu::GpuUp) -> YdT6GpuUp {
         let c = &o.clock;
+        let t = o.take_over.unwrap_or_default();
         YdT6GpuUp {
             pd_before: pd_words(&o.pd_before),
             clock: [c.sel158, c.sel159, c.gate66, c.mode_con0, c.pll_con[0], c.pll_con[1], c.pll_con[2], c.pll_con6],
@@ -569,6 +595,15 @@ impl From<&crate::board::nanopc_t6_gpu::GpuUp> for YdT6GpuUp {
             supply_waited_us: o.supply_waited_us,
             qos_policy: o.qos_policy,
             qos_words: [o.qos[0][1], o.qos[0][2], o.qos[0][3]],
+            take_over_ran: u32::from(o.take_over.is_some()),
+            take_over_steps: t.steps,
+            take_over_masks: t.masks,
+            take_over_raw: t.raw,
+            take_over_raw_cleared: t.raw_cleared,
+            take_over_mcu: [t.mcu_status, t.mcu_waited_us, u32::from(t.mcu_halt_timed_out), t.mcu_status_halted],
+            take_over_hard: u32::from(t.hard),
+            take_over_reset: [t.reset.raw_before, t.reset.raw_cleared, t.reset.waited_us],
+            take_over_after: t.after_reset,
         }
     }
 }
@@ -605,7 +640,9 @@ pub extern "C" fn yd_t6_gpu_qos_policy(id: u32) -> i32 {
 /// called once with the hand-over state, before the first PMU or GPU write. The bases are the shim's
 /// `device_map()`s of the CRU (0xfd7c0000, 0x1000), the PMU (0xfd8d8000),
 /// SPI2 (0xfeb20000), `qos_gpu_m0` (0xfdf35000, 0x800) and the GPU
-/// (0xfb000000, 0x1000); `delay_us` busy-waits.
+/// (0xfb000000, at least `YD_T6_GPU_MAP_MIN` =
+/// [`crate::board::nanopc_t6_gpu::GPU_MAP_MIN`] bytes: the take-over of a
+/// GPU found powered reaches its MMU interrupt block); `delay_us` busy-waits.
 ///
 /// # Safety
 /// The bases are mapped device memory covering those blocks; `out` is valid.
@@ -2325,10 +2362,75 @@ mod tests {
     }
 
     #[test]
+    fn z1_record_appends_the_take_over_and_the_header_names_its_numbers() {
+        use crate::board::nanopc_t6_gpu::{GpuUp, Stop};
+        use crate::gpu::mali::takeover::TakeOver;
+        use crate::gpu::mali::{MaliRefusal, Reset};
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let def = |name: &str| -> u32 {
+            let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
+            l.split_whitespace().nth(2).expect(name).parse().unwrap_or_else(|_| panic!("{name}"))
+        };
+        for (name, v) in [
+            ("YD_T6_GPU_STOP_TAKE_OVER", Stop::TakeOver as u32),
+            ("YD_MALI_RESET_BIT_STUCK", MaliRefusal::ResetBitStuck as u32),
+            ("YD_MALI_IRQ_MASK_STUCK", MaliRefusal::IrqMaskStuck as u32),
+            ("YD_MALI_HARD_RESET_TIMEOUT", MaliRefusal::HardResetTimeout as u32),
+            ("YD_T6_TAKE_OVER_MASKED", crate::gpu::mali::takeover::STEP_MASKED),
+            ("YD_T6_TAKE_OVER_HALT_WAITED", crate::gpu::mali::takeover::STEP_HALT_WAITED),
+            ("YD_T6_TAKE_OVER_RESET", crate::gpu::mali::takeover::STEP_RESET),
+        ] {
+            assert_eq!(def(name), v, "{name}");
+        }
+        for (what, v) in [
+            ("sizeof(struct yd_t6_gpu_up)", size_of::<YdT6GpuUp>()),
+            ("offsetof(struct yd_t6_gpu_up, take_over_ran)", offset_of!(YdT6GpuUp, take_over_ran)),
+            ("offsetof(struct yd_t6_gpu_up, take_over_after)", offset_of!(YdT6GpuUp, take_over_after)),
+        ] {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
+        let map = H.lines().find(|l| l.starts_with("#define YD_T6_GPU_MAP_MIN ")).expect("YD_T6_GPU_MAP_MIN");
+        let map = map.split_whitespace().nth(2).and_then(|v| v.strip_prefix("0x")).expect("a hex value");
+        assert_eq!(usize::from_str_radix(map, 16), Ok(crate::board::nanopc_t6_gpu::GPU_MAP_MIN));
+        // a run that found PD_GPU off carries none
+        assert_eq!(YdT6GpuUp::from(&GpuUp::default()).take_over_ran, 0);
+        let t = TakeOver {
+            steps: 3,
+            masks: [4, 5, 6],
+            raw: [7, 8, 9],
+            raw_cleared: [10, 11, 12],
+            mcu_status: 13,
+            mcu_waited_us: 14,
+            mcu_halt_timed_out: true,
+            mcu_status_halted: 16,
+            hard: true,
+            reset: Reset { raw_before: 18, raw_cleared: 19, waited_us: 20 },
+            after_reset: [21, 22, 23, 24],
+        };
+        let r = YdT6GpuUp::from(&GpuUp { take_over: Some(t), ..GpuUp::default() });
+        assert_eq!(r.take_over_ran, 1);
+        let words: Vec<u32> = [
+            &[r.take_over_steps][..],
+            &r.take_over_masks,
+            &r.take_over_raw,
+            &r.take_over_raw_cleared,
+            &r.take_over_mcu,
+            &[r.take_over_hard],
+            &r.take_over_reset,
+            &r.take_over_after,
+        ]
+        .concat();
+        // in the order of the fields, each flag as 1
+        let want: Vec<u32> = [3].into_iter().chain(4..=14).chain([1, 16, 1]).chain(18..=24).collect();
+        assert_eq!(words, want);
+    }
+
+    #[test]
     fn z1_record_appends_the_qos_policy_and_its_words() {
         use crate::board::nanopc_t6_gpu::GpuUp;
         const H: &str = include_str!("../../include/yakogl_drivers.h");
-        assert_eq!(size_of::<YdT6GpuUp>(), 4 * 129);
+        assert_eq!(size_of::<YdT6GpuUp>(), 4 * 152);
         assert_eq!(offset_of!(YdT6GpuUp, qos_policy), 4 * 125);
         assert_eq!(offset_of!(YdT6GpuUp, qos_words), 4 * 126);
         for what in ["YD_T6_QOS_RESET      1 ", "YD_T6_QOS_LINUX_ZERO 2 "] {

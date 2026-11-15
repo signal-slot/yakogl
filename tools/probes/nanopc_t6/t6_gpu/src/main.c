@@ -6,8 +6,9 @@
  * the build, then yd_t6_gpu_up (board::nanopc_t6_gpu in the drivers crate)
  * reads what the kexec from Linux handed over -- PD_GPU in the PMU, the
  * GPU's clock in the CRU, vdd_gpu_s0 in the RK806 over SPI2, read only --
- * and this prints it before anything is written; then PD_GPU on, the GPU's
- * identity, a soft reset and the L2 on. The lines are Z1's record
+ * and this prints it before anything is written; then PD_GPU on, the
+ * take-over of a GPU found powered (the crash kexec), the GPU's identity, a
+ * soft reset and the L2 on. The lines are Z1's record
  * (../common/t6_z1.c, which the later probes print on a Z1 stop). The last
  * line is PASS or FAIL with the step that stopped; the board then resets back
  * into Armbian.
@@ -58,7 +59,8 @@ int main(void)
 	device_map(&pmu, PMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	device_map(&spi2, SPI2_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	device_map(&qos, QOS_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&gpu, GPU_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	/* the take-over of a GPU found powered reaches 0x2008 (yakogl_drivers.h) */
+	device_map(&gpu, GPU_PHYS, YD_T6_GPU_MAP_MIN, K_MEM_CACHE_NONE);
 	t6_watchdog_feed();
 
 	/* -DT6_GPU_QOS=reset|linux-zero at build time (CMakeLists.txt) */

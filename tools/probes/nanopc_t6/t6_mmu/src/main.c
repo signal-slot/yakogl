@@ -43,7 +43,7 @@ static uint8_t t6_mmu_pool[POOL_PAGES * 4096] __aligned(4096);
 static uint8_t t6_mmu_backing[64 * 1024] __aligned(4096);
 
 /* driver/rust/src/ffi/rk3588.rs pins the same layouts. */
-BUILD_ASSERT(sizeof(struct yd_t6_gpu_up) == 4 * 129, "struct yd_t6_gpu_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_gpu_up) == 4 * 152, "struct yd_t6_gpu_up moved");
 BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, ident) == 4 * 65, "struct yd_t6_gpu_up moved");
 BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, stop) == 4 * 108, "struct yd_t6_gpu_up moved");
 
@@ -118,6 +118,7 @@ int main(void)
 	device_map(&spi2, SPI2_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	device_map(&qos, QOS_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	/* GPU control at 0x0, the MMU block at 0x2000-0x25ff */
+	BUILD_ASSERT(0x4000 >= YD_T6_GPU_MAP_MIN, "Z1 needs YD_T6_GPU_MAP_MIN of the GPU");
 	device_map(&gpu, GPU_PHYS, 0x4000, K_MEM_CACHE_NONE);
 	t6_watchdog_feed();
 
