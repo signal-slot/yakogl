@@ -777,7 +777,7 @@ pub struct UniformDecl<'a> {
     pub dword_off: u16,
     pub dwords: u16,
     pub gl_type: u16,
-    pub array_len: u8,
+    pub array_len: u16,
     /// Samplers: the texture unit this binding names.
     pub binding: u8,
     /// Elements per outer index of a flattened array-of-structs member

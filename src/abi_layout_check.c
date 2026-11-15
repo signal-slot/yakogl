@@ -138,8 +138,8 @@ _Static_assert(offsetof(struct shc_uniform, dword_off) == 64, "struct shc_unifor
 _Static_assert(offsetof(struct shc_uniform, dwords) == 66, "struct shc_uniform.dwords");
 _Static_assert(offsetof(struct shc_uniform, gl_type) == 68, "struct shc_uniform.gl_type");
 _Static_assert(offsetof(struct shc_uniform, array_len) == 70, "struct shc_uniform.array_len");
-_Static_assert(offsetof(struct shc_uniform, binding) == 71, "struct shc_uniform.binding");
-_Static_assert(offsetof(struct shc_uniform, inner) == 72, "struct shc_uniform.inner");
+_Static_assert(offsetof(struct shc_uniform, binding) == 72, "struct shc_uniform.binding");
+_Static_assert(offsetof(struct shc_uniform, inner) == 73, "struct shc_uniform.inner");
 _Static_assert(sizeof(struct shc_v3d_uniform) == 8, "struct shc_v3d_uniform");
 _Static_assert(offsetof(struct shc_v3d_uniform, contents) == 0, "struct shc_v3d_uniform.contents");
 _Static_assert(offsetof(struct shc_v3d_uniform, data) == 4, "struct shc_v3d_uniform.data");

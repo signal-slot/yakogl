@@ -5351,9 +5351,9 @@ fn cube_dir_measured(f: &Fs<'_>, m: &Module<'_>, coord: ir::Src, dir: [Val; 3]) 
 /// handle `0x20011801`); [`layout`] counts the samplers read and gives it
 /// 0, `sa[0]`'s texture. Refused until the index counts the array.
 fn sampler_array_element(m: &Module<'_>, b: u8) -> bool {
-    m.uniforms
-        .iter()
-        .any(|u| u.dword_off == crate::shaderc::SHC_UNIFORM_NO_BLOCK && b > u.binding && b - u.binding < u.array_len)
+    m.uniforms.iter().any(|u| {
+        u.dword_off == crate::shaderc::SHC_UNIFORM_NO_BLOCK && b > u.binding && u16::from(b - u.binding) < u.array_len
+    })
 }
 
 /// The sources `t` and `x` of atan's `fabs(t) * fsign(x)`, `t` the

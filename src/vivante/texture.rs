@@ -855,7 +855,7 @@ fn declared_samplers(sh: &ShcShader) -> impl Iterator<Item = u8> + '_ {
     sh.uniform_table()
         .iter()
         .filter(|u| u.dword_off == SHC_UNIFORM_NO_BLOCK)
-        .flat_map(|u| (0..u.array_len.max(1)).map(move |k| u.binding.saturating_add(k)))
+        .flat_map(|u| (0..u.array_len.max(1)).map(move |k| u.binding.saturating_add(k as u8)))
 }
 
 #[cfg(test)]
