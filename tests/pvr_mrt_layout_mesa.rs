@@ -11,9 +11,10 @@
 //! registers, so a PBE source position computed here is the one Mesa's
 //! driver would give the same render.
 //!
-//! Every list of 1 to 3 targets whose dword counts are in {1, 2, 4} runs
-//! through both. Where both place every target in the output registers the
-//! starts must be equal. The lists where the two differ are pinned in
+//! Every list of 1 to 4 targets (RC14's fourth draw buffer) whose dword
+//! counts are in {1, 2, 4} runs through both; the 1-3 target rows of the
+//! table are the ones pinned before the fourth target joined. Where both
+//! place every target in the output registers the starts must be equal. The lists where the two differ are pinned in
 //! `differences()` with each side's outcome: yakogl never back-fills a
 //! register hole left by the even alignment (`layout` walks the targets in
 //! emit order and spills the first that does not fit and all after it), Mesa
@@ -75,10 +76,10 @@ fn yakogl_layout(dwords: &[u8]) -> Result<Starts, ()> {
         .collect())
 }
 
-/// Every list of 1 to 3 dword counts from {1, 2, 4}.
+/// Every list of 1 to 4 dword counts from {1, 2, 4}.
 fn all_lists() -> Vec<Vec<u8>> {
     let mut out = Vec::new();
-    for n in 1..=3u32 {
+    for n in 1..=4u32 {
         for k in 0..3usize.pow(n) {
             out.push((0..n).map(|i| [1u8, 2, 4][(k / 3usize.pow(i)) % 3]).collect());
         }
@@ -96,7 +97,7 @@ const fn s(v: u8) -> Option<u8> {
 /// target outside the output registers (a tile buffer); `Err` a list
 /// `layout` refuses (`NoProgram`: no end-of-tile program was captured for it).
 ///
-/// Two causes. (a) `[1, 2, 1]`: the even start of the 2-register target
+/// Three causes. (a) `[1, 2, 1]`: the even start of the 2-register target
 /// leaves register 1 free; Mesa gives it to the third target, `layout`
 /// continues at register 4, finds no room and spills it (a three-target
 /// program with target 2 spilled exists, `eot3_tb`). (b) Every list with a
@@ -104,7 +105,14 @@ const fn s(v: u8) -> Option<u8> {
 /// anything): Mesa spills that target to a tile buffer and still places
 /// later ones that fit in the free registers; `layout` spills it and every
 /// later target, which leaves target 1 spilled in a two- or three-target
-/// list, a layout no program was captured for, so it refuses.
+/// list, a layout no program was captured for, so it refuses. (c) Four
+/// targets: `layout` spills the first that does not fit and every later
+/// one, and every such four-target spill has a program (`eot4_tb`,
+/// `eot4_tb2`, `eot4_tb3`), so it never refuses; Mesa back-fills register
+/// 1 behind an even pair, or places a later target in the registers left
+/// after one that did not fit. Before the first target `layout` spills,
+/// the two agree in every row. (`register_layout` refuses the target
+/// `layout` spills; tests/pvr_mrt_layout4.rs checks it against Mesa.)
 fn differences() -> Vec<Diff> {
     let e = || Err(());
     vec![
@@ -129,6 +137,32 @@ fn differences() -> Vec<Diff> {
         (vec![1, 4, 4], e(), vec![s(0), None, None]),
         (vec![2, 4, 4], e(), vec![s(0), None, None]),
         (vec![4, 4, 4], e(), vec![s(0), None, None]),
+        /* four targets: cause (c) */
+        (vec![1, 2, 1, 1], Ok(vec![s(0), s(2), None, None]), vec![s(0), s(2), s(1), None]),
+        (vec![1, 4, 1, 1], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(1), s(2)]),
+        (vec![2, 4, 1, 1], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(2), s(3)]),
+        (vec![2, 1, 2, 1], Ok(vec![s(0), s(2), None, None]), vec![s(0), s(2), None, s(3)]),
+        (vec![1, 2, 2, 1], Ok(vec![s(0), s(2), None, None]), vec![s(0), s(2), None, s(1)]),
+        (vec![1, 4, 2, 1], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(2), s(1)]),
+        (vec![2, 4, 2, 1], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(2), None]),
+        (vec![1, 1, 4, 1], Ok(vec![s(0), s(1), None, None]), vec![s(0), s(1), None, s(2)]),
+        (vec![2, 1, 4, 1], Ok(vec![s(0), s(2), None, None]), vec![s(0), s(2), None, s(3)]),
+        (vec![1, 2, 4, 1], Ok(vec![s(0), s(2), None, None]), vec![s(0), s(2), None, s(1)]),
+        (vec![1, 4, 4, 1], Ok(vec![s(0), None, None, None]), vec![s(0), None, None, s(1)]),
+        (vec![2, 4, 4, 1], Ok(vec![s(0), None, None, None]), vec![s(0), None, None, s(2)]),
+        (vec![1, 2, 1, 2], Ok(vec![s(0), s(2), None, None]), vec![s(0), s(2), s(1), None]),
+        (vec![1, 4, 1, 2], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(1), s(2)]),
+        (vec![2, 4, 1, 2], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(2), None]),
+        (vec![1, 4, 2, 2], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(2), None]),
+        (vec![2, 4, 2, 2], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(2), None]),
+        (vec![1, 1, 4, 2], Ok(vec![s(0), s(1), None, None]), vec![s(0), s(1), None, s(2)]),
+        (vec![1, 4, 4, 2], Ok(vec![s(0), None, None, None]), vec![s(0), None, None, s(2)]),
+        (vec![2, 4, 4, 2], Ok(vec![s(0), None, None, None]), vec![s(0), None, None, s(2)]),
+        (vec![1, 2, 1, 4], Ok(vec![s(0), s(2), None, None]), vec![s(0), s(2), s(1), None]),
+        (vec![1, 4, 1, 4], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(1), None]),
+        (vec![2, 4, 1, 4], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(2), None]),
+        (vec![1, 4, 2, 4], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(2), None]),
+        (vec![2, 4, 2, 4], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(2), None]),
     ]
 }
 
@@ -152,6 +186,11 @@ fn differing_lists_are_exactly_the_pinned_table() {
         }
     }
     assert_eq!(found, differences());
+    for (d, y, m) in found {
+        let Ok(y) = y else { continue };
+        let spill = y.iter().position(|p| p.is_none()).unwrap();
+        assert_eq!(y[..spill], m[..spill], "{d:?}");
+    }
 }
 
 #[test]
