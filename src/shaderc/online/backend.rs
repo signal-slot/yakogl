@@ -2289,6 +2289,22 @@ pub fn wide128_planes(sense: u32, companion: &[Option<u8>]) -> wide128::Planes {
     })
 }
 
+/// [`wide128_planes`], each keyed unit `b` also reading the lane sources
+/// `sources[b]` (the GL texture swizzle composed onto the binding,
+/// [`wide128::Planes::swizzle`]). The sources of a unit that is not keyed
+/// are ignored.
+#[cfg(feature = "gpu-vivante")]
+pub fn wide128_planes_swizzled(
+    sense: u32,
+    companion: &[Option<u8>],
+    sources: &[[u8; 4]; wide128::UNITS],
+) -> wide128::Planes {
+    companion.iter().take(wide128::UNITS).enumerate().fold(wide128::Planes::NONE, |p, (b, c)| match *c {
+        Some(c) if sense & 1 << b != 0 => p.with_swizzle(b as u8, c, sources[b]),
+        _ => p,
+    })
+}
+
 /// Step 4 of [`wide128_sensitivity`]'s call contract: `sh` compiled again
 /// with its look-ups on the units of `planes` split into their two plane
 /// look-ups (`wide128::split_planes`) and for the sampler-state key `lod`
@@ -2346,6 +2362,24 @@ pub fn wide128_variant(
         both[..32].copy_from_slice(&sha);
         both[32..].copy_from_slice(&sha256(extra));
         sha = sha256(&both);
+    }
+    /* the lane sources, only for keyed units that are not the identity: a
+     * key with every unit the identity is the one it always was */
+    let mut sw = [0u8; 4 * wide128::UNITS];
+    let mut swizzled = false;
+    for u in 0..wide128::UNITS {
+        if planes.mask & 1 << u != 0 && planes.swizzle_of(u as u8) != wide128::IDENTITY {
+            sw[4 * u..4 * u + 4].copy_from_slice(&planes.swizzle_of(u as u8));
+            swizzled = true;
+        }
+    }
+    if swizzled {
+        for extra in [&b"wide128-swizzle"[..], &sw[..]] {
+            let mut both = [0u8; 64];
+            both[..32].copy_from_slice(&sha);
+            both[32..].copy_from_slice(&sha256(extra));
+            sha = sha256(&both);
+        }
     }
     struct Restore(wide128::Planes);
     impl Drop for Restore {
@@ -4850,5 +4884,19 @@ mod wide128_tests {
         wide[31] = Some(1);
         wide[35] = Some(2);
         assert_eq!(wide128_planes(u32::MAX, &wide), wide128::Planes::NONE.with(31, 1), "units past 31 are not keyed");
+    }
+
+    /// The swizzled key keys the same units as the plain one and carries
+    /// the sources of the keyed ones only.
+    #[test]
+    fn the_swizzled_key_carries_the_sources_of_keyed_units() {
+        let mut src = [wide128::IDENTITY; wide128::UNITS];
+        src[0] = [2, 1, 0, 3];
+        src[1] = [3, 3, 3, 3];
+        let p = wide128_planes_swizzled(0b01, &[Some(3), Some(4)], &src);
+        assert_eq!(p, wide128::Planes::NONE.with_swizzle(0, 3, [2, 1, 0, 3]), "binding 1 is not sampled");
+        assert_eq!(p.swizzle_of(1), wide128::IDENTITY);
+        let ident = [wide128::IDENTITY; wide128::UNITS];
+        assert_eq!(wide128_planes_swizzled(0b11, &[Some(3), None], &ident), wide128_planes(0b11, &[Some(3), None]));
     }
 }
