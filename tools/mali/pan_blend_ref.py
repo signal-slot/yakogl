@@ -16,7 +16,8 @@ fragment_ops.blend draws, written to tools/mali/testdata/pan_blend_ref/.
     pan_blend_ref.py draw <libdir> <states.tsv>
         (internal) the GL calls, run under the shim by gen.
 
-DIR defaults to tools/mali/testdata/pan_blend_ref.
+DIR defaults to tools/mali/testdata/pan_blend_ref. `--shim WORK` before or
+after the mode sets MESA_PAN_SHIM to WORK.
 
 Inputs.
 - The shim driver: MESA_PAN_SHIM names the work directory of
@@ -24,7 +25,10 @@ Inputs.
   inst/lib64 or inst/lib/<multiarch> with libEGL.so.1, libGLESv2.so.2 and
   libpanfrost_noop_drm_shim.so). It must not be MESA_PAN_TREE's directory:
   build_pan_shc.sh's tree has no EGL, and drm_shim_ref.sh build deletes the
-  tree it extracts into. PAN_SHC is not used.
+  tree it extracts into. PAN_SHC is not used. The committed files were made
+  with a second build of MESA_PAN_TREE's 26.2.1 source: `meson setup <build>
+  $MESA_PAN_TREE` with drm_shim_ref.sh build's options and
+  -Dprefix=<work dir>/inst, LLVM 21, then `ninja install -C <build>`.
 - The environment of drm_shim_ref.sh run: PAN_GPU_ID=a867,
   MESA_LOADER_DRIVER_OVERRIDE=panthor, MESA_SHADER_CACHE_DISABLE=true,
   PAN_MESA_DEBUG=trace, PANDECODE_DUMP_FILE.
@@ -219,9 +223,12 @@ def draw(libdir, states_path):
 
 # --- the trace --------------------------------------------------------------
 
-OPERAND_A = {"Zero": 1, "Src": 2, "Dest": 3}
+# pandecode prints a 0 operand A or C as "XXX: INVALID"; a Shader-mode
+# descriptor's equation word is 0 (Mesa sets only word0 and the internal).
+OPERAND_A = {"XXX: INVALID": 0, "Zero": 1, "Src": 2, "Dest": 3}
 OPERAND_B = {"Src Minus Dest": 0, "Src Plus Dest": 1, "Src": 2, "Dest": 3}
-OPERAND_C = {"Zero": 1, "Src": 2, "Dest": 3, "Src x 2": 4, "Src Alpha": 5, "Dest Alpha": 6, "Constant": 7}
+OPERAND_C = {"XXX: INVALID": 0, "Zero": 1, "Src": 2, "Dest": 3, "Src x 2": 4, "Src Alpha": 5, "Dest Alpha": 6,
+             "Constant": 7}
 BOOL = {"false": 0, "true": 1}
 WORD_LINE = re.compile(r"^(?:[0-9a-f]{2} ){7}[0-9a-f]{2}    \S")
 
@@ -345,7 +352,9 @@ def gen(out):
     shaders, rows = {}, []
     for i, ((p, mask, _), (block, sh)) in enumerate(zip(st, found)):
         mask_bits = mask[0] | mask[1] << 1 | mask[2] << 2 | mask[3] << 3
-        if int(field(block, ["Equation", "Color Mask"])) != mask_bits:
+        # a blend shader applies the mask itself; its descriptor's mask is 0
+        if (field(block, ["Internal", "Mode"]) != "Shader"
+                and int(field(block, ["Equation", "Color Mask"])) != mask_bits):
             sys.exit("pan_blend_ref: draw %d has colour mask %s, the state %d" %
                      (i, field(block, ["Equation", "Color Mask"]), mask_bits))
         rows.append("%d\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n" % ((i, state_name(p, mask)) + describe(block, sh, shaders)))
@@ -388,6 +397,10 @@ def check():
 
 
 def main(argv):
+    if "--shim" in argv[:-1]:
+        i = argv.index("--shim")
+        os.environ["MESA_PAN_SHIM"] = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
     if argv[:1] == ["--check"] and len(argv) == 1:
         return check()
     if len(argv) == 3 and argv[0] == "draw":

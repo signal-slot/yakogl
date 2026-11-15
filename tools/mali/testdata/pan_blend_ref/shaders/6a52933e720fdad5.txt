@@ -1,0 +1,15 @@
+83 c0 00 00 10 42 a4 00    FADD.f32 r2.h0, u1.w1, 0x0.neg
+42 c0 00 28 13 c2 a5 00    FADD.v2f16.clamp_0_1 r2, r2^, 0x0.neg
+41 c0 00 28 13 c1 a5 00    FADD.v2f16.clamp_0_1 r1, r1^, 0x0.neg
+40 c0 00 28 13 c0 a5 00    FADD.v2f16.clamp_0_1 r0, r0^, 0x0.neg
+01 42 c0 32 04 c2 b3 00    FMA.v2f16 r2, r1.h11, r2^.h00, 0x0.neg
+01 db 00 3c 40 c3 a5 00    FADD.v2f16 r3, r1.neg.h11, 0x3C000000.h11
+41 03 c0 02 04 c1 b3 00    FMA.v2f16 r1, r1^.h00, r3.h00, 0x0.neg
+40 43 c0 22 04 c0 b3 00    FMA.v2f16 r0, r0^, r3^.h00, 0x0.neg
+41 42 05 00 00 c1 a1 00    MKVEC.v2i16 r1, r1^.h0, r2^.h0
+c0 00 d0 0e 00 c2 10 01    IADD_IMM.i32 r2, 0x0, #0xED000
+c0 19 00 00 00 c3 10 01    IADD_IMM.i32 r3, 0x0, #0x19
+43 00 00 00 00 c4 91 00    MOV.i32 r4, r3^
+42 00 00 00 00 c5 91 00    MOV.i32 r5, r2^
+44 00 3c 33 04 40 7f 00    BLEND.slot0.v4.f16 @r0:r1, [r4^:r5^], r60, target:0x0
+70 70 00 00 00 c1 2f 78    BRANCHZI.absolute.end r48^, r48^

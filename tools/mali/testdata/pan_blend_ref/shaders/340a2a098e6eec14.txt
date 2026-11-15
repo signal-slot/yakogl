@@ -1,0 +1,15 @@
+c0 1f 00 00 00 c0 10 01    IADD_IMM.i32 r0, 0x0, #0x1F
+3c c0 40 10 01 c0 b4 00    LSHIFT_AND.i32 r0, r60, 0x0.b00, r0^
+c0 00 d0 0e 00 c1 10 01    IADD_IMM.i32 r1, 0x0, #0xED000
+c0 00 00 00 ff c2 10 01    IADD_IMM.i32 r2, 0x0, #0xFF000000
+42 40 01 33 04 82 78 00    LD_TILE.v4.f16.slot0 @r2:r3, r2^, r0^, r1
+83 c0 00 00 10 40 a4 00    FADD.f32 r0.h0, u1.w1, 0x0.neg
+db 40 00 30 13 c0 a5 08    FADD.v2f16.clamp_0_1.wait0 r0, 0x3C000000.h11, r0^.neg.h00
+03 40 c0 32 04 c0 b3 00    FMA.v2f16 r0, r3.h11, r0^.h00, 0x0.neg
+43 43 c0 02 04 c3 b3 00    FMA.v2f16 r3, r3^.h00, r3^.h00, 0x0.neg
+43 40 05 00 00 c0 a1 00    MKVEC.v2i16 r0, r3^.h0, r0^.h0
+42 42 c0 2a 04 c2 b3 00    FMA.v2f16 r2, r2^, r2^, 0x0.neg
+40 00 00 00 00 c3 91 00    MOV.i32 r3, r0^
+c0 19 00 00 00 c0 10 01    IADD_IMM.i32 r0, 0x0, #0x19
+40 00 3c 73 04 42 7f 00    BLEND.slot1.v4.f16 @r2:r3, [r0^:r1^], r60, target:0x0
+70 70 00 00 00 c1 2f 78    BRANCHZI.absolute.end r48^, r48^
