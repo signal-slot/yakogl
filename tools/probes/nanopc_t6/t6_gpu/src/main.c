@@ -48,7 +48,7 @@ static void on_handover(const struct yd_t6_gpu_up *h)
 int main(void)
 {
 	mm_reg_t cru, pmu, spi2, qos, gpu;
-	struct yd_t6_gpu_up o;
+	static struct yd_t6_gpu_up o; /* hundreds of bytes: not on main()'s stack */
 	int64_t t0;
 	int rc;
 
@@ -70,7 +70,7 @@ int main(void)
 	}
 
 	t0 = k_uptime_get();
-	rc = yd_t6_gpu_up(cru, pmu, spi2, qos, gpu, delay_us, on_handover, &o);
+	rc = yd_t6_gpu_up(cru, pmu, spi2, qos, gpu, YD_T6_GPU_MAP_MIN, delay_us, on_handover, &o);
 	t6_watchdog_feed();
 	if (rc == -EINVAL) {
 		printk("t6_gpu: FAIL: yd_t6_gpu_up refused its arguments\n");

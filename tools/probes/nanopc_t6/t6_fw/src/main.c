@@ -186,9 +186,9 @@ int main(void)
 	 * boot, in one run. Every register access carries its own dmb (mmio.rs,
 	 * Hw), the doorbell's included; clean() cleans each loaded section. */
 	t0 = k_uptime_get();
-	rc = yd_t6_fw_up(cru, pmu, spi2, qos, gpu, mali_csffw_blob, MALI_CSFFW_SIZE, backings,
-			 SECTIONS, t6_fw_pool, POOL_PAGES, k_mem_phys_addr(t6_fw_pool), TIMER_HZ,
-			 clean, delay_us, on_handover, &z1, &o);
+	rc = yd_t6_fw_up(cru, pmu, spi2, qos, gpu, GPU_MAP_SIZE, mali_csffw_blob, MALI_CSFFW_SIZE,
+			 backings, SECTIONS, t6_fw_pool, POOL_PAGES, k_mem_phys_addr(t6_fw_pool),
+			 TIMER_HZ, clean, delay_us, on_handover, &z1, &o);
 	t6_watchdog_feed();
 	printk("t6_fw: Z3: rc %d step %u, %lld ms\n", rc, o.step, (long long)(k_uptime_get() - t0));
 

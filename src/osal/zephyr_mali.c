@@ -171,7 +171,7 @@ static int z_init(void *platform_arg)
 {
 	const struct osal_zephyr_mali_init *arg = platform_arg;
 	static struct yd_t6_submit_up o;
-	static struct yd_t6_gpu_up z1; /* 500 bytes: not on the caller's stack */
+	static struct yd_t6_gpu_up z1; /* hundreds of bytes: not on the caller's stack */
 	struct yd_t6_osal_mem mem = { 0 };
 	mm_reg_t cru, pmu, spi2, qos, gpu;
 	int rc;
@@ -205,8 +205,8 @@ static int z_init(void *platform_arg)
 	mem.heap_initial_chunks = MALI_CHUNKS_INITIAL;
 
 	t6_watchdog_feed();
-	rc = yd_t6_osal_up(cru, pmu, spi2, qos, gpu, arg->fw, arg->fw_len, T6_TIMER_HZ, &mem, clean,
-			   delay_us, on_handover, &z1, &o);
+	rc = yd_t6_osal_up(cru, pmu, spi2, qos, gpu, T6_GPU_MAP, arg->fw, arg->fw_len, T6_TIMER_HZ,
+			   &mem, clean, delay_us, on_handover, &z1, &o);
 	t6_watchdog_feed();
 	if (rc) {
 		printk("osal(mali): up: rc %d step %u refusal %u detail 0x%llx; Z3 step %u stop %u "

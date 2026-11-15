@@ -608,6 +608,31 @@ impl From<&crate::board::nanopc_t6_gpu::GpuUp> for YdT6GpuUp {
     }
 }
 
+/// The bases of a C entry that runs Z1 ([`yd_t6_gpu_up`], [`yd_t6_fw_up`],
+/// [`yd_t6_submit`], [`yd_t6_osal_up`]), or `None` when the caller mapped
+/// fewer than [`crate::board::nanopc_t6_gpu::GPU_MAP_MIN`] bytes of the GPU
+/// at `gpu` (`gpu_len`): the take-over of a GPU found powered writes up to
+/// its MMU interrupt block, past a shorter map. The entry then answers
+/// `-EINVAL` before it touches anything. Each entry gets its bases here and
+/// nowhere else (`every_z1_entry_takes_its_bases_from_t6_bases`).
+#[cfg(feature = "mali")]
+fn t6_bases(
+    cru: usize,
+    pmu: usize,
+    spi2: usize,
+    qos: usize,
+    gpu: usize,
+    gpu_len: usize,
+) -> Option<crate::board::nanopc_t6_gpu::Bases> {
+    (gpu_len >= crate::board::nanopc_t6_gpu::GPU_MAP_MIN).then_some(crate::board::nanopc_t6_gpu::Bases {
+        cru,
+        pmu,
+        spi2,
+        qos,
+        gpu,
+    })
+}
+
 /// The GPU QoS policy [`yd_t6_gpu_up`] applies, as [`rk3588::QosPolicy::id`].
 #[cfg(feature = "mali")]
 static T6_GPU_QOS_POLICY: core::sync::atomic::AtomicU32 =
@@ -636,16 +661,18 @@ pub extern "C" fn yd_t6_gpu_qos_policy(id: u32) -> i32 {
 
 /// The NanoPC-T6's GPU power-on ([`crate::board::nanopc_t6_gpu::gpu_up`]):
 /// 0 when every step ran, `-EIO` when one stopped (`out.stop` says which),
-/// `-EINVAL` for a null `out`, `delay_us` or `on_handover`; `on_handover` is
+/// `-EINVAL` for a null `out`, `delay_us` or `on_handover`, or a `gpu_len`
+/// below `YD_T6_GPU_MAP_MIN` ([`t6_bases`]); `on_handover` is
 /// called once with the hand-over state, before the first PMU or GPU write. The bases are the shim's
 /// `device_map()`s of the CRU (0xfd7c0000, 0x1000), the PMU (0xfd8d8000),
 /// SPI2 (0xfeb20000), `qos_gpu_m0` (0xfdf35000, 0x800) and the GPU
-/// (0xfb000000, at least `YD_T6_GPU_MAP_MIN` =
-/// [`crate::board::nanopc_t6_gpu::GPU_MAP_MIN`] bytes: the take-over of a
+/// (0xfb000000, `gpu_len` bytes, at least `YD_T6_GPU_MAP_MIN` =
+/// [`crate::board::nanopc_t6_gpu::GPU_MAP_MIN`]: the take-over of a
 /// GPU found powered reaches its MMU interrupt block); `delay_us` busy-waits.
 ///
 /// # Safety
-/// The bases are mapped device memory covering those blocks; `out` is valid.
+/// The bases are mapped device memory covering those blocks, the GPU's for
+/// `gpu_len` bytes; `out` is valid.
 #[cfg(feature = "mali")]
 #[no_mangle]
 pub unsafe extern "C" fn yd_t6_gpu_up(
@@ -654,17 +681,18 @@ pub unsafe extern "C" fn yd_t6_gpu_up(
     spi2: usize,
     qos: usize,
     gpu: usize,
+    gpu_len: usize,
     delay_us: Option<extern "C" fn(u32)>,
     on_handover: Option<extern "C" fn(*const YdT6GpuUp)>,
     out: *mut YdT6GpuUp,
 ) -> i32 {
+    let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(delay_us), Some(on_handover)) = (delay_us, on_handover) else { return -EINVAL };
     if out.is_null() {
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
-    let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
     let qos = t6_gpu_qos_policy();
     let o = crate::board::nanopc_t6_gpu::gpu_up_with(qos, &hw, b, &mut |us| delay_us(us), &mut |h| {
         let h = YdT6GpuUp::from(h);
@@ -896,8 +924,9 @@ fn fw_up_run(
 /// with a `clean` of each section, the MCU's start, the global
 /// configuration and one `PING`. 0 when every step ran (`out->step` is
 /// `YD_T6_FW_STEP_NONE`), `-EIO` when one stopped (`out->step` says which),
-/// `-EINVAL` for a null or misaligned argument. The bases are those of
-/// [`yd_t6_gpu_up`], `gpu` mapped for 0x280000 bytes (the doorbells);
+/// `-EINVAL` for a null or misaligned argument or a `gpu_len` below
+/// `YD_T6_GPU_MAP_MIN`. The bases are those of
+/// [`yd_t6_gpu_up`], `gpu` mapped for `gpu_len` = 0x280000 bytes (the doorbells);
 /// `pool` is `pool_pages` 4 KiB pages at physical `tables_pa`, written by
 /// this call; `timer_hz` is CNTFRQ_EL0; `clean` cleans the data cache over
 /// a range to the point of coherency, 0 on success; `on_handover` as
@@ -920,6 +949,7 @@ pub unsafe extern "C" fn yd_t6_fw_up(
     spi2: usize,
     qos: usize,
     gpu: usize,
+    gpu_len: usize,
     blob: *const u8,
     blob_len: usize,
     backings: *const YdT6FwBacking,
@@ -936,6 +966,7 @@ pub unsafe extern "C" fn yd_t6_fw_up(
 ) -> i32 {
     use crate::board::nanopc_t6_sections::Backing;
     use crate::gpu::mali::pgtable::{Table, PAGE};
+    let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
     if out.is_null()
         || z1.is_null()
@@ -960,7 +991,6 @@ pub unsafe extern "C" fn yd_t6_fw_up(
     let pages = unsafe { core::slice::from_raw_parts_mut(pool.cast::<Table>(), pool_pages as usize) };
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
-    let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
     let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
     let o = fw_up_run(
         &hw,
@@ -1072,7 +1102,8 @@ fn submit_run(
 /// group stopped and terminated, the target read back. 0 when every step
 /// ran (`out->step` is `YD_T6_SUBMIT_STEP_NONE`), `-EIO` when one stopped
 /// (`out->step` says which; Z3's own record is `out->fw`, Z1's is `z1` as
-/// [`yd_t6_fw_up`] writes it), `-EINVAL` for a null or misaligned argument.
+/// [`yd_t6_fw_up`] writes it), `-EINVAL` for a null or misaligned argument
+/// or a `gpu_len` below `YD_T6_GPU_MAP_MIN`.
 ///
 /// # Safety
 /// As [`yd_t6_fw_up`]'s; and `mem` is valid, each backing in it the memory
@@ -1088,6 +1119,7 @@ pub unsafe extern "C" fn yd_t6_submit(
     spi2: usize,
     qos: usize,
     gpu: usize,
+    gpu_len: usize,
     blob: *const u8,
     blob_len: usize,
     backings: *const YdT6FwBacking,
@@ -1106,6 +1138,7 @@ pub unsafe extern "C" fn yd_t6_submit(
     use crate::board::nanopc_t6_sections::Backing;
     use crate::board::nanopc_t6_submit::{GroupBacking, McuBacking, Z4Mem, GENERATED, QUEUE_MCU_VA};
     use crate::gpu::mali::pgtable::{Table, PAGE};
+    let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
     if out.is_null()
         || z1.is_null()
@@ -1146,7 +1179,6 @@ pub unsafe extern "C" fn yd_t6_submit(
     let mem = Z4Mem { queue, vm: &vm, vm_pool, vm_tables_pa: z4.vm_tables_pa };
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
-    let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
     let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
     let o = submit_run(
         &hw,
@@ -1261,7 +1293,8 @@ fn osal_hw() -> Hw {
 /// group over `mem`'s regions. 0 when up (or already up), `-EIO` when a
 /// step stopped (`out->step` says which, as for [`yd_t6_submit`]; Z1's
 /// whole record is `z1`, as [`yd_t6_fw_up`] gives it),
-/// `-EINVAL` for a null or misaligned argument, a firmware that does not
+/// `-EINVAL` for a null or misaligned argument, a `gpu_len` below
+/// `YD_T6_GPU_MAP_MIN`, a firmware that does not
 /// parse or an `mem->fw` too small for its sections. `delay_us` is kept
 /// for the waits of the later calls.
 ///
@@ -1281,6 +1314,7 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     spi2: usize,
     qos: usize,
     gpu: usize,
+    gpu_len: usize,
     blob: *const u8,
     blob_len: usize,
     timer_hz: u32,
@@ -1295,6 +1329,7 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     use crate::board::nanopc_t6_sections::Backing;
     use crate::board::nanopc_t6_submit::{GroupBacking, McuBacking, SubmitUp, QUEUE_MCU_VA};
     use crate::gpu::mali::pgtable::{Table, PAGE};
+    let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
     if out.is_null() || z1.is_null() || blob.is_null() || mem.is_null() {
         return -EINVAL;
@@ -1334,7 +1369,7 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
     let r = s.0.up(
         &osal_hw(),
-        crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu },
+        b,
         blob,
         &backings[..n],
         pool,
@@ -1743,7 +1778,8 @@ mod fw_tests {
         let bk = [YdT6FwBacking::default()];
         let blob = [0u8; 4];
         let off = pool.as_mut_ptr().align_offset(4096);
-        let call = |blob: *const u8,
+        let call = |gpu_len: usize,
+                    blob: *const u8,
                     pool: *mut u8,
                     clean: Option<extern "C" fn(usize, usize) -> i32>,
                     out: *mut FwUp| unsafe {
@@ -1753,6 +1789,7 @@ mod fw_tests {
                 0,
                 0,
                 0,
+                gpu_len,
                 blob,
                 4,
                 bk.as_ptr(),
@@ -1769,10 +1806,60 @@ mod fw_tests {
             )
         };
         let p = unsafe { pool.as_mut_ptr().add(off) };
-        assert_eq!(call(blob.as_ptr(), p, Some(clean_ok), core::ptr::null_mut()), -EINVAL);
-        assert_eq!(call(core::ptr::null(), p, Some(clean_ok), &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), p, None, &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), unsafe { p.add(8) }, Some(clean_ok), &mut out), -EINVAL);
+        const MAP: usize = crate::board::nanopc_t6_gpu::GPU_MAP_MIN;
+        assert_eq!(call(MAP, blob.as_ptr(), p, Some(clean_ok), core::ptr::null_mut()), -EINVAL);
+        assert_eq!(call(MAP, core::ptr::null(), p, Some(clean_ok), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, None, &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), unsafe { p.add(8) }, Some(clean_ok), &mut out), -EINVAL);
+        // every argument in order: the run starts and refuses the 4-byte
+        // blob (STEP_PARSE) before it touches anything; so the same call
+        // with one byte less of the GPU mapped is refused by the map alone
+        assert_eq!(call(MAP, blob.as_ptr(), p, Some(clean_ok), &mut out), -EIO);
+        assert_eq!(out.step, fwb::STEP_PARSE);
+        assert_eq!(call(MAP - 1, blob.as_ptr(), p, Some(clean_ok), &mut out), -EINVAL);
+    }
+
+    #[test]
+    fn t6_bases_refuses_a_gpu_map_below_gpu_map_min() {
+        use crate::board::nanopc_t6_gpu::GPU_MAP_MIN;
+        assert!(t6_bases(1, 2, 3, 4, 5, 0).is_none());
+        assert!(t6_bases(1, 2, 3, 4, 5, GPU_MAP_MIN - 1).is_none());
+        let b = t6_bases(1, 2, 3, 4, 5, GPU_MAP_MIN).expect("GPU_MAP_MIN is enough");
+        assert_eq!((b.cru, b.pmu, b.spi2, b.qos, b.gpu), (1, 2, 3, 4, 5));
+    }
+
+    /// Every C entry here that runs Z1 (one that takes `on_handover`) takes
+    /// the GPU map's length right after `gpu`, gets its bases from
+    /// [`t6_bases`] before anything else, and the header declares the
+    /// length; nothing else in this file builds the bases. An entry added
+    /// later is found by the same rule, not from a list.
+    #[test]
+    fn every_z1_entry_takes_its_bases_from_t6_bases() {
+        const SRC: &str = include_str!("rk3588.rs");
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let entry = ["pub unsafe extern ", "\"C\" fn "].concat();
+        let first = "let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };";
+        let mut names = vec![];
+        for chunk in SRC.split(entry.as_str()).skip(1) {
+            let (sig, body) = chunk.split_once(" {\n").expect("a signature");
+            if !sig.contains("on_handover: Option<") {
+                continue;
+            }
+            let name = &sig[..sig.find('(').expect("a name")];
+            assert!(sig.contains("    gpu: usize,\n    gpu_len: usize,\n"), "{name}: no gpu_len after gpu");
+            let body = &body[..body.find("\n}\n").expect("an end")];
+            let code: Vec<&str> =
+                body.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("//")).collect();
+            let at = code.iter().position(|l| *l == first);
+            // only `use` lines before it
+            assert!(at.is_some_and(|i| code[..i].iter().all(|l| l.starts_with("use "))), "{name}: {code:?}");
+            let decl = &H[H.find(&format!("int {name}(")).expect(name)..];
+            let decl = &decl[..decl.find(");").expect(name)];
+            assert!(decl.contains("uintptr_t gpu,") && decl.contains("size_t gpu_len,"), "{name}: {decl}");
+            names.push(name);
+        }
+        assert!(names.contains(&"yd_t6_gpu_up") && names.len() > 1, "{names:?}");
+        assert_eq!(SRC.matches(["nanopc_t6_gpu::Bases", " {"].concat().as_str()).count(), 1);
     }
 
     /// A header value: a decimal or `0x` hex literal, with or without a
@@ -2067,13 +2154,15 @@ mod fw_tests {
             vm_pool_pages: pages,
             vm_tables_pa: 0,
         };
-        let call = |blob: *const u8, pool: *mut u8, mem: *const YdT6SubmitMem, out: *mut SubmitUp| unsafe {
+        const MAP: usize = crate::board::nanopc_t6_gpu::GPU_MAP_MIN;
+        let call = |gpu_len: usize, blob: *const u8, pool: *mut u8, mem: *const YdT6SubmitMem, out: *mut SubmitUp| unsafe {
             yd_t6_submit(
                 0,
                 0,
                 0,
                 0,
                 0,
+                gpu_len,
                 blob,
                 4,
                 bk.as_ptr(),
@@ -2091,21 +2180,24 @@ mod fw_tests {
             )
         };
         let good = mem(unsafe { p.add(4096) }, 1);
-        assert_eq!(call(blob.as_ptr(), p, &good, core::ptr::null_mut()), -EINVAL);
-        assert_eq!(call(core::ptr::null(), p, &good, &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), p, core::ptr::null(), &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), unsafe { p.add(8) }, &good, &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &good, core::ptr::null_mut()), -EINVAL);
+        assert_eq!(call(MAP, core::ptr::null(), p, &good, &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, core::ptr::null(), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), unsafe { p.add(8) }, &good, &mut out), -EINVAL);
         // the group VM's pool: null, empty, misaligned
-        assert_eq!(call(blob.as_ptr(), p, &mem(core::ptr::null_mut(), 1), &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), p, &mem(unsafe { p.add(4096) }, 0), &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), p, &mem(unsafe { p.add(4100) }, 1), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &mem(core::ptr::null_mut(), 1), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &mem(unsafe { p.add(4096) }, 0), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &mem(unsafe { p.add(4100) }, 1), &mut out), -EINVAL);
         // with every pointer in order the run starts and the frame's zero
         // backings are refused before anything is touched: -EIO, STEP_FRAME
-        assert_eq!(call(blob.as_ptr(), p, &good, &mut out), -EIO);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &good, &mut out), -EIO);
         assert_eq!(
             (out.step, out.refusal),
             (crate::board::nanopc_t6_submit::STEP_FRAME, crate::board::nanopc_t6_submit::FrameRefusal::Memory as u32)
         );
+        // the same call with one byte less of the GPU mapped: refused by
+        // the map alone
+        assert_eq!(call(MAP - 1, blob.as_ptr(), p, &good, &mut out), -EINVAL);
     }
 }
 

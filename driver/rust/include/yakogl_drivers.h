@@ -338,11 +338,14 @@ int yd_t6_early_arm(uintptr_t wdt_phys, uintptr_t cru_phys, uint32_t top, struct
  * the PMU or the GPU (the hand-over state, the supply and the PLL's
  * power-on), so it can be printed before a step that could fault. 0 when
  * every step ran, -EIO when one stopped (stop says which), -EINVAL for a
- * null argument. The bases: CRU 0xfd7c0000, PMU 0xfd8d8000,
+ * null argument or a gpu_len below YD_T6_GPU_MAP_MIN (nothing touched).
+ * The bases: CRU 0xfd7c0000, PMU 0xfd8d8000,
  * SPI2 0xfeb20000, qos_gpu_m0 0xfdf35000 (0x800), each mapped at least
- * 0x1000, and GPU 0xfb000000 mapped at least YD_T6_GPU_MAP_MIN (the take-over
- * reaches the MMU interrupt block at 0x2000..0x200b; a smaller map makes it
- * write whatever the next virtual page maps). A 64-bit value is two words,
+ * 0x1000, and GPU 0xfb000000 mapped for gpu_len bytes, at least
+ * YD_T6_GPU_MAP_MIN (the take-over reaches the MMU interrupt block at
+ * 0x2000..0x200b; a smaller map would make it write whatever the next
+ * virtual page maps). yd_t6_fw_up, yd_t6_submit and yd_t6_osal_up take
+ * gpu_len and refuse a short one the same way. A 64-bit value is two words,
  * lo first. */
 #define YD_T6_GPU_MAP_MIN 0x3000 /* board::nanopc_t6_gpu::GPU_MAP_MIN; rk3588.rs pins it */
 /* take_over_steps (gpu::mali::takeover::STEP_*) */
@@ -468,7 +471,7 @@ _Static_assert(offsetof(struct yd_t6_gpu_up, take_over_after) == 592, "rk3588.rs
 int yd_t6_gpu_qos_policy(uint32_t id);
 
 int yd_t6_gpu_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
-		 void (*delay_us)(uint32_t us),
+		 size_t gpu_len, void (*delay_us)(uint32_t us),
 		 void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *out);
 
 /* Z2, after yd_t6_gpu_up returned 0 (board::nanopc_t6_mmu over
@@ -546,14 +549,14 @@ int yd_t6_mmu_up(uintptr_t gpu, uint32_t mmu_features, void *pool, uint32_t pool
  * address the CPU reaches the memory at pa by, the shared section's
  * uncached. pool is pool_pages 4 KiB pages at physical tables_pa (9 of
  * them for the board's file), 4 KiB aligned. gpu maps 0xfb000000 for
- * 0x280000 bytes (the doorbells). timer_hz is CNTFRQ_EL0 (24000000).
+ * gpu_len = 0x280000 bytes (the doorbells). timer_hz is CNTFRQ_EL0 (24000000).
  * clean() cleans the data cache over a range, 0 on success. on_handover as
  * yd_t6_gpu_up's; *z1 receives Z1's whole record as yd_t6_gpu_up writes its
  * out (all zero when the run stopped before Z1), so a stop at
  * YD_T6_FW_STEP_GPU can be explained. 0 when every step ran (out->step
  * YD_T6_FW_STEP_NONE), -EIO when one stopped (out->step says which),
- * -EINVAL for a null or misaligned argument. A 64-bit value is two words,
- * lo first. */
+ * -EINVAL for a null or misaligned argument or a gpu_len below
+ * YD_T6_GPU_MAP_MIN. A 64-bit value is two words, lo first. */
 #define YD_T6_FW_STEP_NONE    0 /* every step ran: GLB version = the image's, PING acknowledged */
 #define YD_T6_FW_STEP_PARSE   1 /* the image was refused (refusal: its error, detail: its value) */
 #define YD_T6_FW_STEP_PLACE   2 /* the backings do not fit the sections (refusal: why, detail: the section) */
@@ -616,8 +619,9 @@ struct yd_t6_fw_up {
 };
 
 int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
-		const void *blob, size_t blob_len, const struct yd_t6_fw_backing *backings,
-		uint32_t n_backings, void *pool, uint32_t pool_pages, uint64_t tables_pa,
+		size_t gpu_len, const void *blob, size_t blob_len,
+		const struct yd_t6_fw_backing *backings, uint32_t n_backings, void *pool,
+		uint32_t pool_pages, uint64_t tables_pa,
 		uint32_t timer_hz, int (*clean)(uintptr_t addr, size_t len),
 		void (*delay_us)(uint32_t us),
 		void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
@@ -765,8 +769,9 @@ struct yd_t6_submit_up {
 };
 
 int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
-		 const void *blob, size_t blob_len, const struct yd_t6_fw_backing *backings,
-		 uint32_t n_backings, void *pool, uint32_t pool_pages, uint64_t tables_pa,
+		 size_t gpu_len, const void *blob, size_t blob_len,
+		 const struct yd_t6_fw_backing *backings, uint32_t n_backings, void *pool,
+		 uint32_t pool_pages, uint64_t tables_pa,
 		 uint32_t timer_hz, const struct yd_t6_submit_mem *mem,
 		 int (*clean)(uintptr_t addr, size_t len), void (*delay_us)(uint32_t us),
 		 void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
@@ -839,7 +844,7 @@ struct osal_mali_heap;
  * other calls are the OSAL ops (one thread, after yd_t6_osal_up): their
  * results are those src/osal/mali.rs and include/gles_osal.h give. */
 int yd_t6_osal_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
-		  const void *blob, size_t blob_len, uint32_t timer_hz,
+		  size_t gpu_len, const void *blob, size_t blob_len, uint32_t timer_hz,
 		  const struct yd_t6_osal_mem *mem, int (*clean)(uintptr_t addr, size_t len),
 		  void (*delay_us)(uint32_t us), void (*on_handover)(const struct yd_t6_gpu_up *h),
 		  struct yd_t6_gpu_up *z1, struct yd_t6_submit_up *out);

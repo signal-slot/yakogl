@@ -299,9 +299,10 @@ int main(void)
 
 	/* Z1 to Z3 as t6_fw, then Z4, in one run; the probe feeds around it. */
 	t0 = k_uptime_get();
-	rc = yd_t6_submit(cru, pmu, spi2, qos, gpu, mali_csffw_blob, MALI_CSFFW_SIZE, backings,
-			  SECTIONS, t6_submit_pool, POOL_PAGES, k_mem_phys_addr(t6_submit_pool),
-			  TIMER_HZ, &mem, clean, delay_us, on_handover, &z1, &o);
+	rc = yd_t6_submit(cru, pmu, spi2, qos, gpu, GPU_MAP_SIZE, mali_csffw_blob, MALI_CSFFW_SIZE,
+			  backings, SECTIONS, t6_submit_pool, POOL_PAGES,
+			  k_mem_phys_addr(t6_submit_pool), TIMER_HZ, &mem, clean, delay_us, on_handover,
+			  &z1, &o);
 	t6_watchdog_feed();
 	printk("t6_submit: Z3: rc %d step %u, %lld ms\n", rc, o.fw.step,
 	       (long long)(k_uptime_get() - t0));
