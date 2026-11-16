@@ -46,6 +46,7 @@ Not here: the 7.1 Rust lib tests (`isa71`, `codec71`, `listing71`, `golden71`,
 | `gen71.sh` | `driver/src/v3d/generated/v3d_packet_v71_pack.h` is, byte for byte, Mesa's `gen_pack_header.py` run on the vendored `v3d_packet.xml` for 71 (the 4.2 header's check is the gate's `gen driver/src/v3d/generated` row); needs no Mesa build |
 | `mbox_mock.sh` | `driver/zephyr/lib/board/rpi4/rpi_mbox.c`, unchanged, for the BCM2711 and the BCM2712 against a mocked mailbox and firmware model (`driver/zephyr/lib/board/test/rpi_mbox_mock.c`): the mailbox base, the MAIL1 word (bus address without the 0xc0000000 alias on the BCM2712), cache maintenance, the clock tags, the framebuffer's address and mapping, -ERANGE above 4 GiB, -EIO, -ETIMEDOUT |
 | `pv_hdmi.sh` | `driver/zephyr/lib/board/rpi5_scanout/pv_hdmi.h` (the BCM2712 pixel valve and HDMI0 state decoder, Pi 5 display route A) against register vectors (`driver/zephyr/lib/board/test/pv_hdmi_mock.c`): 1080p and 720p timings, pixel valve off, HDMI0 off, the region addresses |
+| `sources71.sh` | `qpu_corpus_71_sources.tsv` (each `qpu_corpus_71.txt` program's GLSL source, stage, dialect and Mesa count) is what `tools/v3d/qpu_corpus_71_sources.py` writes from `qpu_counts_71.tsv` and `tools/shaders`; a copy with one row changed is refused |
 | `shim71.sh` | every packet in `tools/v3d/shim71/*.clif` is a command of Mesa's V3D 7.1 packet spec |
 
 Planned (other items): `hw_mock.sh` (7.x register map, SMS, power).
