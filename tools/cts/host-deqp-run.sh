@@ -261,7 +261,8 @@ mkdir -p "$OUT"
 # shellcheck disable=SC2086  # MUSTPASS may be a glob of increments
 awk '!seen[$0]++' $MUSTPASS > "$OUT/mustpass.txt"
 if [ -n "$FILTER" ]; then
-    grep -F -- "$FILTER" "$OUT/mustpass.txt" > "$OUT/all.txt" || true
+    printf '%s\n' "$FILTER" | tr ',' '\n' | sed 's/\*$//' > "$OUT/filter.txt"
+    grep -F -f "$OUT/filter.txt" "$OUT/mustpass.txt" > "$OUT/all.txt" || true
 else
     cp "$OUT/mustpass.txt" "$OUT/all.txt"
 fi

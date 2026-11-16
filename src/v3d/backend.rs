@@ -432,7 +432,7 @@ impl RtImage {
 }
 
 /// The largest target the tile memory is sized for at init.
-pub const MAX_TARGET: u32 = 2048;
+pub const MAX_TARGET: u32 = 4096;
 /// The most tiles one job may bin: what the pools hold, sized at init for
 /// `MAX_TARGET` square at four 32-bpp render targets (32x32 tiles). A typed
 /// job (an ES 3.0 colour format at 64 or 128 bpp) bins smaller tiles
