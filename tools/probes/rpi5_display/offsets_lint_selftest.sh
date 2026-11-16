@@ -17,7 +17,7 @@ check() { # name, condition result (0 = pass)
 }
 # run <dir-name> <expected rc> <expected last line>; sets out
 run() {
-	out=$(bash "$lint" "$tmp/$1"/*.h 2>&1)
+	out=$(LC_ALL=C bash "$lint" "$tmp/$1"/*.h 2>&1)
 	rc=$?
 }
 
