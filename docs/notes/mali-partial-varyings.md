@@ -71,8 +71,9 @@ name. It maps both kinds of location the reads carry:
   `Node::Lane`), decoded and encoded again.
 
 The fragment source's own inputs give the names, not the fragment record.
-The record lists only the inputs it laid out, and a moved expression can
-read one it does not list.
+The record's list holds the inputs the shader statically uses, for the
+link's name and type checks (GLSL ES 1.00 section 4.3.5); an input no code
+reads is in the list and has no slot in the record's layout.
 
 `vs_for_fragment` (backend.rs) applies the mapping before the reads become
 the vertex record's key (`FsReads`). The cache therefore keys the program's
