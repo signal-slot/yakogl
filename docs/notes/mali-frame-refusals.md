@@ -41,7 +41,7 @@ Our own code is cited as `src/...:line` at `origin/main` db5701fb. Mesa
 | --- | --- | --- |
 | occlusion query | `NOT_BUILT_QUERY`, `check()` | `src/mali/backend.rs:166`, `:1100` |
 | alpha-to-coverage | `NOT_BUILT_ALPHA_TO_COVERAGE`, `check()` | `backend.rs:167`, `:1101` |
-| blend shader | `NOT_BUILT_BLEND_SHADER`, `check_draw()` | `src/mali/frame.rs:176`, `:1826-1829` |
+| blend shader of a target or sample count with none built (not RGBA8 at 1x/4x, e.g. RGB565, 2x; or a key the blend compiler refuses) | `NOT_BUILT_BLEND_SHADER`, `check_draw()` | `src/mali/frame.rs:209`, `:2563-2565` (RGBA16F outside the float set: `NOT_BUILT_FLOAT_BLEND`, `:226`, `:2561`) |
 | 4x with depth/stencil | `NOT_BUILT_SAMPLES`, `check_target()` | `frame.rs:182`, `:1417-1420` |
 | preload of a 4x target | `NOT_BUILT_PRELOAD_SAMPLES`, `open_frame()` | `frame.rs:146`, `backend.rs:1865-1867` |
 | varyings in different orders | `MALI_LAYOUTS_DIFFER`, `link_shaders_mali()` | `src/shaderc/online/mali/link.rs:33`, `:211` |
@@ -381,8 +381,11 @@ programs do not change.
   distinct constants; MIN, MAX; SATURATE).
 - `src/mali/blend.rs`: the discriminator of `panfrost_get_blend` (it has the
   equation checks and `constant()`); `frame.rs`: the `Blend` descriptor branch
-  (`:2343-2397`) writes the shader mode, `check_draw` drops
-  `NOT_BUILT_BLEND_SHADER` (`:1826-1829`), `dcd0.evaluate_per_sample`. A
+  (`:3267-3272`) writes the shader mode, `check_draw` raises
+  `NOT_BUILT_BLEND_SHADER` (`:2563-2565`) only when a draw needs a shader
+  and the backend gave no address (a target other than RGBA8, a 2x one, or a
+  key the compiler refuses; built for every other equation, see
+  `mali-blend-shaders.md` section 6), `evaluate_per_sample` (`:3593`). A
   per-frame blend-shader cache next to `ProgramCache` (`frame.rs:684-760`).
 - Tests: `frame_blend_tests.rs:210` (the refusal row) turns into a descriptor
   pin; `backend_tests.rs:864`.
@@ -1017,7 +1020,7 @@ under Mesa); citations in each section's pin block):
 | a2c depth clear / 1024 draws | answered for Mesa (no ZS extension; one frame of 1024); ours is open: first `panthor-gltest 198` | section 2 |
 | blend shader bytes, address, descriptor | answered: 152 bytes at `0x7FFFFFFC7000`, word 3 `0xFFFC7000`, mode Shader | section 3, `mesa-blend.pandecode:11251-11262,11117,10231-10233` |
 | blend shader's 4 GiB window | not contradicted (same top 32 bits as the fragment program), not tested | section 3 |
-| blend shader `BLEND` at 4x with the sample id | answered (case 211): `Evaluate per-sample` set; the 4x shader takes the sample id from r61 into the `LD_TILE` pixel word and ends in `ST_TILE`, not `BLEND`; the diagonal `0x80008060` | section 3, `R3/mesa/mesa-msaablend.pandecode:1267-1269,1329`, `R3/blend-shaders.disasm.txt:26-44` |
+| blend shader `BLEND` at 4x with the sample id | answered (case 211): `Evaluate per-sample` set; the 4x shader takes the sample id from r61 into the `LD_TILE` pixel word and ends in `ST_TILE`, not `BLEND` (the board's Mesa 25.0.7; 26.2.1 ends in `BLEND`, `mali-blend-shaders.md` section 4); the diagonal `0x80008060` | section 3, `R3/mesa/mesa-msaablend.pandecode:1267-1269,1329`, `R3/blend-shaders.disasm.txt:26-44` |
 | depth/stencil AVERAGE, tile, allocation | answered: AVERAGE, one packed ZS view, tile **1024**, allocation **16384** on 25.0.7 (not 512/8192) | section 4, `mesa-msrtt.pandecode:733,740,869,873` |
 | single-sampled preload on a 4-sample tile | answered (case 208): `Pre Frame 0: Intersect`, the 1x preload DCD (multisample and per-sample off, 1-sample 2D texture) on the 4x FBD, and every edge pixel right: the reload lands in all four samples | section 5, `R3/mesa/mesa-msaapre.pandecode:2276,2589-2600,2528`, `R3/mesa/mesa-msaapre.stdout:8-20` |
 | varying layout (case 209) | answered: both orders' fragment programs read with the same `LD_VAR_BUF_IMM` words (offsets 16, 32, 0), the vertex layout 0/16/32, allocation 48 | section 6, `R3/mesa/mesa-varyorder.pandecode:525-533,562-564,1270-1272` |

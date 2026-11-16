@@ -337,10 +337,11 @@ for an address given where none is needed). Any other target (RGB565,
 XRGB8888, RGBA16F) or a 2x one has no key, so the backend gives the frame no
 address and the draw stays `NOT_BUILT_BLEND_SHADER` / `NOT_BUILT_FLOAT_BLEND`.
 
-The Mesa 26.2.1 sources it follows (`MESA_PAN_TREE`): `pan_blend.c`
-(`pan_blend_can_fixed_function`, `can_fixed_function_equation`,
+The Mesa 26.2.1 sources it follows (`MESA_PAN_TREE`): `pan_blend.c` and
+`pan_blend.h` (`L/`; `pan_blend_can_fixed_function`, `can_fixed_function_equation`,
 `pan_blend_is_homogenous_constant`, `pan_blend_create_shader`), the choice in
-`pan_context.c` `panfrost_get_blend`, `bifrost_compile.c` (the selection of
+`pan_context.c` `panfrost_get_blend`, the descriptor in `pan_cmdstream.c`
+`panfrost_emit_blend`, the cache in `pan_blend_cso.c`, `bifrost_compile.c` (the selection of
 the blend NIR: `load_blend_input`, `load_tile_pan`, `blend_pan`,
 `blend_return_pan`, the preloaded r60/r61) and `nir_opt_algebraic.py` with
 `bifrost_nir_algebraic.py` (the transforms `blend_nir_rules.rs` is generated
@@ -350,10 +351,10 @@ from).
 
 | Test | What it pins |
 |---|---|
-| `src/mali/blend_choice_tests.rs` | `needs_shader` / `can_fixed_function` against a transcription of Mesa's rule over every GLES2 state (all fifteen factors, five equations, separate colour and alpha, homogeneous or not constants); RGBA8 and RGB565 the same path, RGBA16F the float one |
-| `src/mali/frame_blend_tests.rs` | the frame: fixed-function descriptors byte for byte against the board (ten modes) and the drm-shim (case 91); the `Shader`-mode descriptor of case 8 and case 190 against the board; every shader-needing equation builds into an RGBA8 target at 1x and 4x given an address (descriptor `01 02 00 00`, no equation, address in word 3; DCD0 per-sample at 4x only); every fixed-function equation keeps the fixed-function descriptor and refuses a shader; no channel written needs none; what stays refused by name (an unbuilt target or sample count: no key, no address, `NOT_BUILT_BLEND_SHADER`; RGBA16F outside the float set: `NOT_BUILT_FLOAT_BLEND`) |
-| `tests/mali_blend_states.rs` | every `fragment_ops.blend` state (the three families) through the GL core on the Mali mock: none refused |
-| `src/shaderc/online/mali/blend_tests.rs`, `tests.rs` | the words: every dEQP state of the drm-shim reference (`pan_blend_ref.py`, RGBA8, 1x, fp16 colour) equals the builder's; `blend_random.sha` and `blend_u32.words` cover 4x and fp32 colours |
+| `src/mali/blend_choice_tests.rs` (`the_fixed_function_choice_is_mesa_s_over_every_gles2_state`) | `needs_shader` / `can_fixed_function` against a transcription of Mesa's rule over every GLES2 state (all fifteen factors, five equations, separate colour and alpha, homogeneous or not constants); RGBA8 and RGB565 the same path, RGBA16F the float one |
+| `src/mali/frame_blend_tests.rs` (`each_blend_mode_is_the_board_s`, `an_equation_mesa_runs_in_a_blend_shader_builds_with_its_shader`, `a_draw_that_writes_nothing_needs_no_blend_shader_for_any_equation`, `a_blend_shader_the_backend_does_not_build_is_still_refused_by_name`, `a_fixed_function_equation_keeps_its_fixed_function_descriptor`, `a_constant_colour_blend_runs_in_its_blend_shader_as_on_the_board`, `the_reference_blend_shaders_are_the_drm_shim_s_words`, `case_190_s_blend_shader_columns_are_the_board_s`, `a_blend_shader_out_of_place_is_refused`, `an_rgba16f_blend_that_needs_a_blend_shader_is_refused_by_name`) | the frame: fixed-function descriptors byte for byte against the board (ten modes) and the drm-shim (case 91); the `Shader`-mode descriptor of case 8 and case 190 against the board; every shader-needing equation builds into an RGBA8 target at 1x and 4x given an address (descriptor `01 02 00 00`, no equation, address in word 3; DCD0 per-sample at 4x only); every fixed-function equation keeps the fixed-function descriptor and refuses a shader; no channel written needs none; what stays refused by name (an unbuilt target or sample count: no key, no address, `NOT_BUILT_BLEND_SHADER`; RGBA16F outside the float set: `NOT_BUILT_FLOAT_BLEND`) |
+| `tests/mali_blend_states.rs` (`blend_states`) | every `fragment_ops.blend` state (the three families) through the GL core on the Mali mock: none refused |
+| `src/shaderc/online/mali/blend_tests.rs` (`the_builder_makes_mesa_s_blend_shaders_for_every_reference_state`), `tests.rs` (`a_uint32_colour_s_blend_shaders_are_mesa_s`) | the words: every dEQP state of the drm-shim reference (`tools/mali/testdata/pan_blend_ref`, RGBA8, 1x, fp16 colour) equals the builder's; `blend_random.sha` and `blend_u32.words` cover 4x and fp32 colours |
 
 ## 7. Facts and open points, one line each
 
