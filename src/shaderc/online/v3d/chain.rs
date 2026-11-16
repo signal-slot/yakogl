@@ -1804,11 +1804,13 @@ mod tests {
          * fixture's two EXTRA_REAL pairs (texfetch.frag, texoffset.frag);
          * over the 193 programs compiled before it is still
          * 0xd705_1e75_32ff_19e7, 21_006 words (measured by skipping those
-         * five pairs): no word of an existing program changed. */
+         * five pairs): no word of an existing program changed.
+         * 2026-11-16 (v3d-shout4): a one- or two-component float output writes
+         * its own size and one word, 16 words fewer (21_345 to 21_329; report-es2 18_702 to 18_686). */
         let want: (usize, u64) = if cfg!(feature = "report-es2") {
-            (18_702, 0x177f_ab20_d963_ef95)
+            (18_686, 0x0d56_9f4e_cfea_e68c)
         } else {
-            (21_345, 0x90c7_6faf_0d64_98ae)
+            (21_329, 0xe054_93bb_c039_a267)
         };
         assert_eq!((words, h), want, "the words the compiler emits changed");
     }
@@ -3408,6 +3410,16 @@ mod tests {
         assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(0, 4), !0, "RT 0: the TLB's default, no TLBU");
         assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(1, 4), 0xffff_fff7, "RT 1: (7 - 1) << 3");
         assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(2, 4), 0xffff_ffef, "RT 2: (7 - 2) << 3");
+        assert_eq!(
+            crate::shaderc::online::v3d::select::tlb_config_f16(0, 2),
+            0xffff_fffe,
+            "RT 0, 2 components: not the default"
+        );
+        assert_eq!(
+            crate::shaderc::online::v3d::select::tlb_config_f16(3, 1),
+            0xffff_ffe6,
+            "RT 3, 1 component: (7 - 3) << 3, vec2 size"
+        );
         const VS: &str = "#version 300 es\nlayout(location = 0) in vec4 p;\nout vec4 v;\n\
             void main() { v = p; gl_Position = p; }\n";
         const FS: &str = "#version 300 es\nprecision highp float;\nin vec4 v;\n\
