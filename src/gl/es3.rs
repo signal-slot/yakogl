@@ -1322,7 +1322,8 @@ pub unsafe extern "C" fn glGetBufferParameteri64v(target: GLenum, pname: GLenum,
 /// before anything is said about the draw buffer; then GL_COLOR takes a
 /// draw buffer below GL_MAX_DRAW_BUFFERS and the others take 0 only
 /// (GL_INVALID_VALUE). The draw-buffer test came first until 2026-09-24, so
-/// glClearBufferfv(GL_STENCIL, 1, ..) was GL_INVALID_VALUE.
+/// glClearBufferfv(GL_STENCIL, 1, ..) was GL_INVALID_VALUE. Last, the
+/// framebuffer must be complete ([`clear_target_complete`]).
 fn clear_buffer_args_ok(c: &mut GlContext, buffer: GLenum, drawbuffer: GLint, takes: &[GLenum], func: &str) -> bool {
     if !takes.contains(&buffer) {
         c.set_error(GL_INVALID_ENUM, func);
@@ -1335,6 +1336,18 @@ fn clear_buffer_args_ok(c: &mut GlContext, buffer: GLenum, drawbuffer: GLint, ta
     };
     if !ok {
         c.set_error(GL_INVALID_VALUE, func);
+        return false;
+    }
+    clear_target_complete(c, func)
+}
+
+/// The arguments being right, the framebuffer must be complete (ES 3.0
+/// 4.4.4.4): else GL_INVALID_FRAMEBUFFER_OPERATION, before the draw buffer's
+/// kind is looked at (its GL_INVALID_OPERATION) and with nothing cleared. The
+/// check glClear makes (`state::draw_framebuffer_complete`).
+fn clear_target_complete(c: &mut GlContext, func: &str) -> bool {
+    if !super::state::draw_framebuffer_complete(c) {
+        c.set_error(GL_INVALID_FRAMEBUFFER_OPERATION, func);
         return false;
     }
     true
@@ -1466,6 +1479,9 @@ pub unsafe extern "C" fn glClearBufferfi(buffer: GLenum, drawbuffer: GLint, dept
     }
     if drawbuffer != 0 {
         c.set_error(GL_INVALID_VALUE, FUNC);
+        return;
+    }
+    if !clear_target_complete(c, FUNC) {
         return;
     }
     let (sd, ss) = (c.clear_depth, c.clear_stencil);
