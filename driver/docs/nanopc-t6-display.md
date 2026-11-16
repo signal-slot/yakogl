@@ -489,8 +489,8 @@ back from the registers).
 The swap path on every board: `eglSwapBuffers` -> `swap_window_buffers`
 (`src/gl/egl.rs:2324-2340`) calls `osal::present(mem, width, height,
 stride_bytes, native_format)` (`src/osal/mod.rs:576-583`) -> the Zephyr OSAL's
-`yakogl_osal_zephyr_present` (`src/osal/zephyr_timing.c:123-130`) ->
-`yakogl_zephyr_present` (`driver/zephyr/lib/board/common/board.c:31-40`) ->
+`present` op, which is the board library's `yakogl_zephyr_present`
+(`driver/zephyr/lib/board/common/board.c`) ->
 the board's `board_show()` (AM62P `board_am62p.c:69-89`, i.MX8MP
 `board_imx8mp.c:358`, Pi 4 `board_rpi4.c:299`). The Mali Zephyr OSAL
 (`src/osal/zephyr_mali.c`) fills `.present` with the same function, as

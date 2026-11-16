@@ -317,6 +317,15 @@ void osal_set_ops(const struct osal_ops *ops);
 #if defined(YAKOGL_OSAL_ZEPHYR)
 extern const struct osal_ops osal_zephyr_ops;
 void osal_zephyr_register(void);
+/* The display's "show this buffer" on Zephyr (gles_osal.h, present). The
+ * display is the board's, not the OSAL's: the board library defines this
+ * over board_show() (driver/zephyr/lib/board/common/board.c), and every
+ * Zephyr OSAL puts it in its table as it is. Declared weak and defined
+ * nowhere in the OSAL, so in an image that does not define it the symbol is
+ * 0 and the op is NULL: there is no display, and every window surface is
+ * single-buffered, rendered in place. */
+extern int yakogl_zephyr_present(const struct osal_gpu_mem *mem, uint32_t width, uint32_t height,
+				 uint32_t stride_bytes, uint32_t format) __attribute__((weak));
 #endif
 #if defined(YAKOGL_OSAL_BAREMETAL)
 extern const struct osal_ops osal_baremetal_ops;

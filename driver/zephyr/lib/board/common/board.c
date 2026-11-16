@@ -8,6 +8,9 @@
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+#include <errno.h>
+
+#include <gles_osal.h>
 
 #include "yakogl_board.h"
 #include "yakogl_record.h"
@@ -22,17 +25,22 @@ uint32_t yakogl_draws_refused(void); /* src/backend.rs */
 #endif
 
 /*
- * The OSAL's "show this buffer" (gles_osal.h, present; src/osal/zephyr_timing.c
- * declares the weak default): a window surface's finished colour buffer,
- * shown the way board_show() shows a sample's window. With it EGL
- * double-buffers its window surfaces (EGL_BACK_BUFFER) and no sample has to
- * show anything itself.
+ * The OSAL's "show this buffer" (gles_osal.h, present; every Zephyr OSAL
+ * takes it when it is linked, src/osal/osal_internal.h): a window surface's
+ * finished colour buffer, shown the way board_show() shows a sample's
+ * window. With it EGL double-buffers its window surfaces (EGL_BACK_BUFFER)
+ * and no sample has to show anything itself. An image without this has no
+ * display for EGL: its window surfaces are single-buffered.
  */
-int yakogl_zephyr_present(uintptr_t phys, void *cpu, uint32_t width, uint32_t height,
+int yakogl_zephyr_present(const struct osal_gpu_mem *mem, uint32_t width, uint32_t height,
 			  uint32_t stride_bytes, uint32_t format)
 {
+	if (mem == NULL || mem->phys == 0u) {
+		return -EINVAL;
+	}
+
 	const struct board_window win = {
-		.phys = phys, .cpu = cpu, .w = width, .h = height, .stride = stride_bytes,
+		.phys = (uintptr_t)mem->phys, .cpu = mem->cpu, .w = width, .h = height, .stride = stride_bytes,
 		.format = format,
 	};
 

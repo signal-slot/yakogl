@@ -48,8 +48,9 @@ No change to the X2 conf or overlay is needed for this.
    it returns before any scene (`:1389-1392`). glmark2 sees no 1080 anywhere.
 5. **Which call shows the frame.** EGL double-buffers the window
    (`src/gl/egl.rs:1414`, `s.back`), so the swap presents it:
-   `egl.rs:2331-2334` -> `osal::present` -> `src/osal/zephyr_gc.c:600`
-   (`.present`) -> `zephyr_timing.c:116-122` -> `board.c:31-40` -> `board_show`.
+   `egl.rs:2331-2334` -> `osal::present` -> the OSAL's `.present`
+   (`src/osal/zephyr_gc.c`), which is the board library's
+   `yakogl_zephyr_present` (`common/board.c`) -> `board_show`.
    A refusal would be logged once as `eglSwapBuffers: the display refused the
    window's buffer`. A scan-out window is the exception (`egl.rs:1369`:
    `EGL_BAD_MATCH` without `EGL_SINGLE_BUFFER`). `flip()`

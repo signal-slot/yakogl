@@ -60,8 +60,6 @@
 #include "gc_render.h"
 #include "gc_frees.h"
 #include "gc_cache_range.h"
-int yakogl_osal_zephyr_present(const struct osal_gpu_mem *mem, uint32_t width, uint32_t height,
-			       uint32_t stride_bytes, uint32_t format); /* zephyr_timing.c */
 
 LOG_MODULE_REGISTER(gles_osal_gc, CONFIG_YAKOGL_LOG_LEVEL);
 
@@ -631,7 +629,7 @@ const struct osal_ops osal_zephyr_ops = {
 	.query       = z_query,
 	.log         = z_log,
 	.thread_id   = z_thread_id,
-	.present     = yakogl_osal_zephyr_present,
+	.present     = yakogl_zephyr_present,
 };
 
 void osal_zephyr_register(void)
