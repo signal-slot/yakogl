@@ -95,3 +95,10 @@ drop | private-ipv4 | tools/probes/rpi5_display/verdicts_selftest.sh | \b100\.64
 drop | ipv6-local | tools/probes/rpi5_display/verdicts_selftest.sh | \bfe80::1\b | link-local input of the same redaction test
 drop | email | tools/probes/rpi5_display/verdicts_selftest.sh | \bserial-getty@ttyS2\.service\b | systemd unit name in the same console line
 drop | email | driver/tools/uboot-t6/prompt-reads.sh | serial-getty[@]ttyS2\.service\b | systemd unit instance the tool asks the board about, not an address
+# The DK standalone redact check's self-test (tools/mp2s_redact_check_selftest.sh):
+# synthetic inputs the tool must flag and mask; the selftest asserts none is
+# printed.
+drop | tailnet-dns | tools/mp2s_redact_check_selftest.sh | \bzzhost9\.tail1234\.ts\.net\b | fake tailnet host name input of the redact check's self-test
+drop | tailnet-dns | tools/mp2s_redact_check_selftest.sh | \bzzh9\.tail1\.ts\.net\b | fake tailnet host name input of the same self-test (--fix)
+drop | password | tools/mp2s_redact_check_selftest.sh | \bhunter2\b | fake secret value input of the redact check's self-test
+drop | password | tools/mp2s_redact_check_selftest.sh | \bs3cret\b | fake secret value input of the same self-test
