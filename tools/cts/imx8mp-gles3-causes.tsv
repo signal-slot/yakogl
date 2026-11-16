@@ -33,3 +33,66 @@ rc13-shader-compiler	dEQP-GLES3.functional.shaders.texture_functions.*	RC13 shad
 rc13-shader-compiler	dEQP-GLES3.functional.shaders.fragdepth.*	RC13 shader compiler refusals
 rc13-shader-compiler	dEQP-GLES3.functional.shaders.builtin_functions.precision.*	RC13 shader compiler refusals
 rc13-shader-compiler	dEQP-GLES3.functional.shaders.builtin_functions.common.round*	RC13 shader compiler refusals
+# Added for the 9bc82915 board slices (rows01-13, rows17-34, rows35-51) and the HOST-ONLY parts hgc3-hgc6 (5454be1b).
+# These lines come after the RC rows above and match only cases they left unclassified. The title names the doc that
+# explains the group; a group no doc explains is 'unexplained: <group>' (honest, not a guess).
+rc1-int-color-rt	dEQP-GLES3.functional.fbo.*[._]r*[0-9]i	RC1 integer colour render targets
+rc1-int-color-rt	dEQP-GLES3.functional.fbo.*[._]r*[0-9]ui	RC1 integer colour render targets
+rc1-int-color-rt	dEQP-GLES3.functional.fbo.*[._]r*[0-9]i_*	RC1 integer colour render targets
+rc1-int-color-rt	dEQP-GLES3.functional.fbo.*[._]r*[0-9]ui_*	RC1 integer colour render targets
+rc1-int-color-rt	dEQP-GLES3.functional.read_pixels.*rgba_int*	RC1 integer colour render targets
+rc1-int-color-rt	dEQP-GLES3.functional.read_pixels.*rgba_uint*	RC1 integer colour render targets
+rc1-int-color-rt	dEQP-GLES3.functional.pbo.renderbuffer.rgba32*i*	RC1 integer colour render targets
+rc7-srgb	dEQP-GLES3.functional.fbo.*srgb8_alpha8*	RC7 sRGB
+rc1-float-targets	dEQP-GLES3.functional.fbo.*[._]r32f*	RC1 float targets: no 32-bit float render target on the GC7000UL (docs/es3-cts-failures.md RC1 'Float targets')
+rc1-float-targets	dEQP-GLES3.functional.fbo.*[._]rg32f*	RC1 float targets: no 32-bit float render target on the GC7000UL (docs/es3-cts-failures.md RC1 'Float targets')
+rc1-float-targets	dEQP-GLES3.functional.fbo.*[._]rgba32f*	RC1 float targets: no 32-bit float render target on the GC7000UL (docs/es3-cts-failures.md RC1 'Float targets')
+rc1-float-targets	dEQP-GLES3.functional.fbo.*[._]r11f_g11f_b10f*	RC1 float targets: no 32-bit float render target on the GC7000UL (docs/es3-cts-failures.md RC1 'Float targets')
+rc1-float-targets	dEQP-GLES3.functional.pbo.renderbuffer.*32f*	RC1 float targets: no 32-bit float render target on the GC7000UL (docs/es3-cts-failures.md RC1 'Float targets')
+rc1-float-targets	dEQP-GLES3.functional.pbo.renderbuffer.r11f_g11f_b10f*	RC1 float targets: no 32-bit float render target on the GC7000UL (docs/es3-cts-failures.md RC1 'Float targets')
+rc1-float-targets	dEQP-GLES3.functional.shaders.derivate.*.fbo_float.*	RC1 float targets: no 32-bit float render target on the GC7000UL (docs/es3-cts-failures.md RC1 'Float targets')
+rc8-blit-msaa	dEQP-GLES3.functional.shaders.derivate.*.texture.*	RC8 glBlitFramebuffer and multisample (the derivate texture rows are texture.msaa4, docs/es3-cts-failures.md RC1)
+rc8-blit-msaa	dEQP-GLES3.functional.fbo.invalidate.*unbind_blit*	RC8 glBlitFramebuffer and multisample
+rc8-blit-msaa	dEQP-GLES3.functional.fbo.color.repeated_clear.blit.*	RC8 glBlitFramebuffer and multisample
+rc8-blit-msaa	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample*	RC8 glBlitFramebuffer and multisample
+rc8-blit-msaa	dEQP-GLES3.functional.negative_api.buffer.blit_framebuffer_multisample	RC8 glBlitFramebuffer and multisample
+rc8-blit-msaa	dEQP-GLES3.functional.negative_api.buffer.read_pixels_fbo_format_mismatch	RC8 glBlitFramebuffer and multisample (docs/es3-cts-failures.md negative_api row: RC8 / #339 on GPU=vivante)
+rc17-fbo-completeness	dEQP-GLES3.functional.negative_api.buffer.clear_buffer*iv	RC17 framebuffer completeness (docs/es3-cts-failures.md negative_api row: clear_bufferiv / clear_bufferuiv, RC17 / #335 / #355)
+rc10-limits-state	dEQP-GLES3.functional.shader_api.program_binary.*	RC10 limits and state queries (program_binary, docs/es3-cts-failures.md state_query row; NotSupported)
+rc13-shader-compiler	dEQP-GLES3.functional.shaders.random.texture.*	RC13 shader compiler refusals (docs/es3-cts-failures.md RC13: shaders.random.texture and all_features)
+rc13-shader-compiler	dEQP-GLES3.functional.shaders.random.all_features.*	RC13 shader compiler refusals (docs/es3-cts-failures.md RC13: shaders.random.texture and all_features)
+rc14-mrt-draw-buffers	dEQP-GLES3.functional.fragment_out.*	RC14 four draw buffers (fragment_out fixed, float and random: docs/es3-cts-failures.md fragment_out row, RC1 / RC14)
+ext-draw-buffers-indexed	dEQP-GLES3.functional.negative_api.fragment.blend_*i	GL_EXT_draw_buffers_indexed NotSupported, allowed for ES 3.0 (docs/es3-cts-failures.md negative_api row)
+ext-draw-buffers-indexed	dEQP-GLES3.functional.negative_api.fragment.blend_*i*	GL_EXT_draw_buffers_indexed NotSupported, allowed for ES 3.0 (docs/es3-cts-failures.md negative_api row)
+t6-instanced-mixed	dEQP-GLES3.functional.instanced.*.mixed.*	T6 instancing with a divisor and gl_InstanceID (docs/es3-cts-failures.md Appendix A, T6: GC7000UL board check open)
+astc-not-supported	dEQP-GLES3.functional.texture.compressed.astc.*	ASTC refused by name: NotSupported, not a failure (docs/es3/texture-failure-map.md section 3, hgc4 README)
+astc-not-supported	dEQP-GLES3.functional.texture.wrap.astc*	ASTC refused by name: NotSupported, not a failure (docs/es3/texture-failure-map.md section 3, hgc4 README)
+unexplained-fbo-color-format	dEQP-GLES3.functional.fbo.color.*	unexplained: fbo.color non-integer rows (blend, sampled repeated_clear, rgb16f, rgb565, r8, rg8): no doc names them
+unexplained-fbo-color-format	dEQP-GLES3.functional.fbo.render.*	unexplained: fbo.render recreate_color / resize rows of rbo and texture formats (rgb16f, rgb565, r8, rg8, rgb8): no doc names them
+unexplained-fbo-color-format	dEQP-GLES3.functional.fbo.invalidate.*	unexplained: fbo.invalidate format rows: no doc names them
+unexplained-fbo-depth-clamp	dEQP-GLES3.functional.fbo.depth.*	unexplained: fbo.depth depth_test_clamp / depth_write_clamp on the GC7000UL (docs/es3-cts-failures.md closes them for the PowerVR only)
+unexplained-fbo-multiview	dEQP-GLES3.functional.fbo.multiview.*	unexplained: fbo.multiview NotSupported (docs/es3-cts-failures.md lists 3, names no cause)
+unexplained-default-vertex-attrib-mat	dEQP-GLES3.functional.default_vertex_attrib.mat*	unexplained: default_vertex_attrib matrix current values (RC12 says closed, 0 failures; the board shows 25 Fail)
+unexplained-draw-random	dEQP-GLES3.functional.draw.random.*	unexplained: draw.random board Fail (7 cases, no doc names them)
+unexplained-negative-api	dEQP-GLES3.functional.negative_api.shader.*	unexplained: negative_api uniformui / texsubimage board Fail (docs/es3-cts-failures.md says fixed in G8 on the host)
+unexplained-negative-api	dEQP-GLES3.functional.negative_api.texture.*	unexplained: negative_api uniformui / texsubimage board Fail (docs/es3-cts-failures.md says fixed in G8 on the host)
+unexplained-rasterization	dEQP-GLES3.functional.rasterization.*	unexplained: rasterization interpolation, fbo.rbo_singlesample and fbo.texture_2d board Fail (docs/es3-cts-failures.md: rasterization 'not classified')
+unexplained-lifetime-attach	dEQP-GLES3.functional.lifetime.*	unexplained: lifetime.attach.deleted_output (docs/es3-cts-failures.md: 'not classified')
+unexplained-shader-single-case	dEQP-GLES3.functional.shaders.constant_expressions.*	unexplained: single shaders failures (constant_expressions builtin_functions.common, conversions matrix_combine, precision int highp_div, random basic_expression / scalar_conversion)
+unexplained-shader-single-case	dEQP-GLES3.functional.shaders.conversions.*	unexplained: single shaders failures (constant_expressions builtin_functions.common, conversions matrix_combine, precision int highp_div, random basic_expression / scalar_conversion)
+unexplained-shader-single-case	dEQP-GLES3.functional.shaders.precision.*	unexplained: single shaders failures (constant_expressions builtin_functions.common, conversions matrix_combine, precision int highp_div, random basic_expression / scalar_conversion)
+unexplained-shader-single-case	dEQP-GLES3.functional.shaders.random.*	unexplained: single shaders failures (constant_expressions builtin_functions.common, conversions matrix_combine, precision int highp_div, random basic_expression / scalar_conversion)
+unexplained-texture-no-record	dEQP-GLES3.functional.texture.specification.*	unexplained: texture.specification, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
+unexplained-texture-no-record	dEQP-GLES3.functional.texture.wrap.*	unexplained: texture.wrap, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
+unexplained-texture-no-record	dEQP-GLES3.functional.texture.filtering.*	unexplained: texture.filtering, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
+unexplained-texture-no-record	dEQP-GLES3.functional.texture.mipmap.*	unexplained: texture.mipmap, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
+unexplained-texture-no-record	dEQP-GLES3.functional.texture.size.*	unexplained: texture.size, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
+unexplained-texture-no-record	dEQP-GLES3.functional.texture.units.*	unexplained: texture.units, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
+unexplained-texture-no-record	dEQP-GLES3.functional.texture.vertex.*	unexplained: texture.vertex, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
+unexplained-ubo-no-record	dEQP-GLES3.functional.ubo.*	unexplained: ubo, no board record (the tree expects hangs on entries 122-127, docs/es3/board-recipe-imx8mp.md; docs/notes/gc-ubo-const-limit.md names four cases)
+unexplained-ubo-no-record	dEQP-GLES3.functional.shaders.uniform_block.*	unexplained: ubo, no board record (the tree expects hangs on entries 122-127, docs/es3/board-recipe-imx8mp.md; docs/notes/gc-ubo-const-limit.md names four cases)
+unexplained-no-record	dEQP-GLES3.functional.uniform_api.*	unexplained: no board record (entry not in the three committed slices), no host failure
+unexplained-no-record	dEQP-GLES3.functional.vertex_arrays.*	unexplained: no board record (entry not in the three committed slices), no host failure
+unexplained-no-record	dEQP-GLES3.functional.vertex_array_objects.*	unexplained: no board record (entry not in the three committed slices), no host failure
+unexplained-no-record	dEQP-GLES3.functional.fragment_ops.*	unexplained: no board record (entry not in the three committed slices), no host failure
+unexplained-no-record	dEQP-GLES3.info.*	unexplained: no board record (entry not in the three committed slices), no host failure
