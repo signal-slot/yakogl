@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # triangle: the triangle example (the GL calls in C, the scene and its check in
-# a Rust crate), for the Raspberry Pi 4, the Verdin AM62P and the Verdin
-# iMX8M Plus. The board is chosen by the Zephyr board (-b) only; there is no
-# per-board option here. What differs per board is the board layer's
-# (driver/zephyr/lib/board, CONFIG_YAKOGL_BOARD, and its app.conf and
-# app.overlay, which ../zephyr.cmake applies).
+# a Rust crate), for the Raspberry Pi 4, the Verdin AM62P, the Verdin
+# iMX8M Plus and the NanoPC-T6. The board is chosen by the Zephyr board (-b)
+# only; there is no per-board option here. What differs per board is the
+# board layer's (driver/zephyr/lib/board, CONFIG_YAKOGL_BOARD, and its
+# app.conf and app.overlay, which ../zephyr.cmake applies).
 #
 # What is shared, by path: the scene and the check, ./check (crate
 # yakogl-triangle-check, host-tested by tools/check.sh), and through it

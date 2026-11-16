@@ -82,15 +82,6 @@ config YAKOGL_SAMPLE_SHOW_ON_DSS
 	default y
 	depends on YAKOGL_DRV_DSS_AM62P
 
-config YAKOGL_BOARD_DISPLAY_BUSY
-	def_bool YAKOGL_BOARD_AM62P && YAKOGL_SAMPLE_SHOW_ON_DSS
-	help
-	  The board layer answers the OSAL's display_busy (gles_osal.h):
-	  board_display_busy() says which window buffers the DSS application
-	  plane may still scan, so EGL keeps four buffers and never draws into
-	  one the panel scans (docs/notes/am62p-flip-latch.md). Set by the
-	  board; nothing to choose.
-
 config YAKOGL_SAMPLE_DISPLAY_DUMP
 	bool "Print the display path's registers with the DSS counters (diagnosis)"
 	depends on YAKOGL_SAMPLE_SHOW_ON_DSS

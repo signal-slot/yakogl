@@ -260,6 +260,15 @@ const struct osal_zephyr_mali_init *osal_zephyr_mali_default_platform(void);
  * completed, carve-out pages in use and at most, frees held and refused,
  * and the sched refusal that stopped it, if one did. printk only. */
 void osal_mali_diag_print(void);
+/* The board's window buffer on the Mali OSAL (zephyr_mali.c): `bytes`,
+ * rounded up to whole 4 KiB pages, at the end of the GPU's carve-out, where
+ * no gpu_alloc reaches; uncached for the CPU, and physically contiguous.
+ * Once per image and before the OSAL's init, which lays the carve-out out:
+ * 0; -EINVAL for no bytes, a null pointer, or a size that leaves the
+ * carve-out no page (CONFIG_YAKOGL_MALI_CARVEOUT_BYTES); -ENOMEM for a
+ * second call; -EBUSY after init; else what making the memory uncached
+ * returned. */
+int osal_mali_board_window(size_t bytes, uint64_t *phys, void **cpu);
 
 /* The V3D OSAL's job record, for a sample that prints one at the end of a
  * run (v3d_gl_test's frozen record): the command-list registers after the

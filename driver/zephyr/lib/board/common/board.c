@@ -50,7 +50,8 @@ int yakogl_zephyr_present(const struct osal_gpu_mem *mem, uint32_t width, uint32
 #ifdef CONFIG_YAKOGL_BOARD_DISPLAY_BUSY
 /*
  * The OSAL's "which of these buffers may the display still scan"
- * (gles_osal.h, display_busy; src/osal/zephyr.c takes it when it is linked):
+ * (gles_osal.h, display_busy; src/osal/zephyr.c and zephyr_mali.c take it
+ * when it is linked):
  * board_display_busy(). Only on a board whose show does not wait; elsewhere
  * the symbol is absent, the op is NULL and EGL keeps its ring of three.
  */
