@@ -22,7 +22,8 @@
 //! Selected (4.2 VOp) --select71--> Selected71 (Op71)
 //!                    --alloc71---> Allocation71 (a register per V)
 //!                    --sched71_cf--> Scheduled71 (Instr71, uniforms, edges)
-//!                       (calls sched71::pack71 on each straight-line run)
+//!                       (drives sched71::Packer71 over the straight-line
+//!                        operations, places the control flow between them)
 //!                    --chain71---> encode71, verify71, registers_fit_threads71
 //! ```
 //!
@@ -42,9 +43,11 @@
 //!   thread switches and their delay slots included.
 //! * [`super::sched71_cf::schedule71`]`(sel: &Selected71<'_>, al:
 //!   &Allocation71<'_>, a: &Arena<'a>) -> Result<Scheduled71<'a>,
-//!   Sched71Error>`: the whole program: splits it at control flow, packs each
-//!   run with `pack71`, places the branches and their three delay slots, and
-//!   moves the uniform stream with them.
+//!   Sched71Error>`: the whole program: one `Packer71` over the straight-line
+//!   operations in order (a program with no control flow is `pack71`'s words
+//!   exactly), the loop heads and labels as word boundaries, the branches
+//!   and their three delay slots placed, and the uniform stream moved with
+//!   them.
 //! * [`super::chain71::compile_stage71`]`(sel: &Selected<'_>, a: &Arena<'a>)
 //!   -> Result<Stage71<'a>, V3d71Error>`: the stages above for one selected
 //!   shader at 4 threads, then 2, encoded and verified;
