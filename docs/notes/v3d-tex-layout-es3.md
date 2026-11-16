@@ -270,7 +270,11 @@ block, so the texel entry points (`v3d_tex_store_level/_box`,
 `v3d_tex_load_box`, the TFU packers) also refuse a box past the slice's
 stride or padded height, which is what they would do to a compressed
 layout. `tools/v3d/tex_check.c` part 12 checks all of it against Mesa. The
-Rust back end still refuses ETC2/EAC by name (item `v3d-vs-ret32`).
+Rust back end samples the four ETC2 block classes since plan #354
+(`455c3bb5`: `V3D_SAMPLED_TEXFMTS` in `src/backend.rs`, host draws
+`tests/es3_etc2_v3d.rs`); the six EAC and punch-through formats are decoded
+by the GL core at upload (`docs/notes/etc2-eac.md`), so their TMU rows have
+no class yet.
 
 ## 5. What the next items take from this
 
