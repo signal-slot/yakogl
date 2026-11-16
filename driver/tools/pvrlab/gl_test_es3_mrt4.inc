@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 /* ---- ES 3.0 four colour targets: GL_MAX_DRAW_BUFFERS 4 (case 245 mrt4) ----
- * Case bodies, not yet wired in: gl_test.c includes this file after
+ * Case bodies, wired in: gl_test.c includes this file after
  * gl_test_es3_divmix.inc and gives the function case number 245. Everything
  * here is static and uses gl_test.c's helpers (link_program, check_gl_error,
  * upload_vbo, free_all_objects, expect_int, rgba_u32, chan_diff, TW, TH).
