@@ -282,3 +282,97 @@ its merged notes for a select rule of its own first.
   depends on the colour gap after it, and for `_both` on the vertex
   refusals.
 - M2, M3, V2, V3: not probed (no generated source here).
+
+## 6. References
+
+Item `ref-mixprec`, 2026-11-16. Eight Mesa 26.2.1 drm-shim references,
+`tools/mali/testdata/deqp_mixprec_<shape>.{vert,frag,expect.json}`, one per
+shape of section 4's table except `rot2` (below). The tree had no
+`tools/mali/testdata/deqp_shapes/` pair and no `tools/mali/deqp_ref.sh`, so
+each pair is the dEQP-GLES2 text rebuilt from the generator at VK-GL-CTS
+`93bca01861b0` (the revision of section M), one real case each. Neither stage
+was changed: the vertex shader is the dEQP one (section 4).
+
+The literals in the `uniform_api` shaders are the case's own values. The case
+seeds `de::Random` with `deStringHash(getName()) ^ base seed`
+(es2fUniformApiTests.cpp:1899; `getName()` is the leaf name, for example
+`vec4_fragment`; the base seed is dEQP's default 0). It then draws
+`getFloat(-10, 10)` per component, or `getFloat(0, 1)` four times for a
+sampler's fill colour (:600-636). The literal is that value with two
+decimals (:538-567, `de::floatToString`). The values were replayed off the
+board in float32 (deRandom.c and deRandom.hpp transcribed). The same replay
+gives random.3's first literals in `tests/gc_es2ctx_random3.rs` (seed
+`deStringHash("3")`: `bvec2(true, true)`, `bvec3(true, true, false)`,
+`vec4(0.97, 0.27, 0.21, 0.27)`). A leaf name gives the same values in every
+group, so `info_query`, `by_value`, `by_pointer` and `basic_array_assign_*`
+of one type and stage share this text. `value.initial.*` uses zeros
+(`FEATURE_UNIFORMVALUE_ZERO`, :2103), so its literals are `0.00` and are not
+covered here.
+
+Each reference was made with the same command (work dir: Mesa 26.2.1 built
+by `tools/mali/drm_shim_ref.sh build`, tarball sha256 as
+`third_party/mesa-26.2.1/UPSTREAM`):
+
+```sh
+T=tools/mali/testdata/deqp_mixprec_<shape>
+tools/mali/drm_shim_ref.sh run <work dir> $T.vert $T.frag <out>/deqp_mixprec_<shape> --uniform-values
+tools/mali/pan_ref_diff.py extract <out>/deqp_mixprec_<shape>.trace --draw > $T.expect.json
+```
+
+Two runs gave the same `expect.json`. The `.trace`, `.stdout` and `.stderr`
+files and the `cases.txt` lines are not committed. `cases.txt` is a phase 2
+file. Section 4 asks for them, but the item delivers only the triples.
+
+| Reference | Case (dEQP-GLES2.functional.) | Source (rebuilt) | Pins for `lower-mixprec` |
+|---|---|---|---|
+| `deqp_mixprec_cmpf` | `uniform_api.value.assigned.by_pointer.render.basic.float_fragment` | es2fUniformApiTests.cpp:1237-1261 (VS), :1263-1286 (FS), :1135-1204 (`compare_float`, :1154), :1206-1217; value -2.16 | one compare: `FADD.v2f16` of the fp16 uniform and the negated literal (FAU 0x4052 = 2.16h), `FCMP_OR.v2f16.lt.f1` against 0.05h (FAU 0x2a66). The compare gives 1.0h/0.0h itself. Colour `(r, r, r, 1.0)` is `IADD.v2u16 r.h00` plus `MKVEC (r.h0, 1.0h)`. 10 words. Today it stops at `ColourForm`, not `MixedPrecision` (as the dEQP row does) |
+| `deqp_mixprec_cmpv2` | `...by_pointer.render.basic.vec2_fragment` | as above, `compare_vec2` :1157; `vec2(-0.35, 7.81)` | `FADD_IMM.v2f16` of both lanes with packed fp16 immediates, `FMAX.v2f16 \|x\|, \|y\|`, then one `FCMP_OR`. 11 words |
+| `deqp_mixprec_cmpv3` | `...by_pointer.render.basic.vec3_fragment` | `compare_vec3` :1160; `vec3(-0.56, -6.37, 3.12)` | the odd lane: (x, y) by `FADD_IMM.v2f16`, z by `FADD.v2f16 u.h00` with a pushed -3.12h pair; `FMAX(\|x\|,\|y\|)`, then `FMAX(\|z\|, xy)`. 14 words |
+| `deqp_mixprec_cmpv4` | `...by_pointer.render.basic.vec4_fragment` | `compare_vec4` :1163; `vec4(-1.12, -8.66, 1.74, -5.62)` | the chain's order: `FMAX(\|x\|,\|y\|)`, `FMAX(\|w\|,\|z\|)` (h11 first), `FMAX(zw, xy)`, one `FCMP_OR`. The fp16 uniform block: u2 holds (16, 17), (18, 19) as half pairs. No varying program (`secondary_offset` none). 14 words |
+| `deqp_mixprec_cmpmat2` | `...by_pointer.render.basic.mat2_fragment` | `compare_mat2` :1166 over `compare_vec2`; `mat2(-7.48, 6.25, -0.95, 4.59)` | a matrix column per uniform word (column-major, fp16): `FMAX` per column, then across the columns. 14 words |
+| `deqp_mixprec_cmptex` | `...by_pointer.render.basic.sampler2D_fragment` | `compare_vec4` over `texture2D(u_var, vec2(0.0))` (:1208-1212); fill colour `vec4(0.35, 0.03, 0.40, 0.10)` | `TEX_SINGLE....16.2d.computed` at (0, 0), an fp16 texel, then cmpv4's chain on its lanes. 19 words |
+| `deqp_mixprec_rot3` | `shaders.loops.for_constant_iterations.basic_mediump_int_fragment` | es2fShaderLoopTests.cpp:284-492 (`numLoopIters` 3 :316, body :416, `for` :418-424, footer :452-454) | colour `(w, x, y, 1.0)`: `LD_VAR_BUF_IMM.f32 v4`, `FADD.f32 .h0` of w alone, `V2F32_TO_V2F16` of the aligned pair (x, y), then `MKVEC (w.h0, x.h0)`, `MKVEC (y.h1, 1.0h)`. 11 words |
+| `deqp_mixprec_rot1` | `shaders.loops.for_constant_iterations.unconditional_break_fragment` | es2fShaderLoopTests.cpp:495-566 (`ui_*` :530), :656-659, `forLoopStr` :759-761, footer :1194-1196 | colour `(y, z, w, 1.0)`: `FADD.f32 .h0` of y alone, `V2F32_TO_V2F16` of (z, w), `MKVEC (y.h0, z.h0)`, `MKVEC (w.h1, 1.0h)`. 9 words |
+
+What the references settle:
+
+- **V1** (section 2.2): neither alternative. Mesa makes no unaligned
+  `V2F32_TO_V2F16 r, w, x` and no pair at the colour's first lane. It
+  converts the load's lanes the colour reads, in aligned pairs where both
+  lanes are read ((x, y) for rot3, (z, w) for rot1) and the odd one alone
+  (`FADD.f32 .h0`). Then it builds the colour's halves with `MKVEC.v2i16`,
+  the constant alpha from a pushed 1.0h. So in `conversion_order`/`convert`
+  the step is "convert per aligned lane pair of the load, then repack". It
+  is not "pair at the first colour lane".
+- **M1** (section 2.1): neither `b2f16` nor `CSEL`, and no product chain.
+  `fmul(b2f(a), b2f(b))` becomes `b2f(iand(a, b))`
+  (N/nir_opt_algebraic.py:1679), and `iand(flt(a, c), flt(b, c))` becomes
+  `flt(fmax(a, b), c)` (:1159). So each `compare_vecN` is one fp16
+  `FCMP_OR.lt.f1` of an `FMAX` tree of the absolute differences. `v_vtxOut =
+  1.0` folds across the link (no varying load, and no varying program in the
+  vertex shader), so `result` is the compare result itself. Section 4's step
+  2 ("16-bit selects and an fp16 product chain") should be read as "fold the
+  compare chain to the FMAX tree", with the tree order of cmpv4 and cmpmat2.
+- The whole program is pinned, colour included, so `lower-mixprec` can match
+  the M1 shaders' colour too. The `ColourForm`/`FsOperandForm` that
+  section 2.1 expects after :4502 is part of the same programs here.
+
+Not made:
+
+- `deqp_mixprec_rot2`: no refused V1 case is a (z, w, x) rotation. From the
+  generator, every one of the 54 rotates 1 or 3 times mod 4: the basic,
+  `*_increment`, `single_statement`, `unconditional_continue`,
+  `vector_counter`, `function_call_*` and `nested_tricky_dataflow_2` cases 3,
+  and `unconditional_break`, `infinite_with_unconditional_break_last`,
+  `single_iteration`, `sequence` (5), `nested_sequence` (9) and the while
+  `conditional_body` (`while(i++ < 3) if (i < 2)`, once) 1. The cases that
+  rotate twice (`conditional_break`, `mixed_break_continue`,
+  `infinite_with_conditional_break`) are not in V1's refusal. Their
+  constant-count variants have no line in `refusals.tsv` at all, so the
+  (z, w, x) colour already compiles. Their uniform and dynamic variants stop
+  first at a loop, control-flow or intval refusal. `measure` confirms the
+  counts.
+- M2, M3, V2, V3: no generated pairs yet (section 4). A reference for them
+  waits for `measure`.
+- The `_both` variants, struct, array and samplerCube cases: other families'
+  vertex and layout refusals come first (section 2.1).
