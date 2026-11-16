@@ -446,6 +446,10 @@ struct Sel<'a> {
     /// Kept loops the walk is inside ([`Self::loop_`]): a value computed at
     /// depth 0 is computed on every path, before everything after it.
     loop_depth: u32,
+    /// How many arms run under the execution mask (`if_convert`'s masked
+    /// form) the walk is inside: a value computed there exists only in that
+    /// arm's instances, so nothing computed there is cached for later.
+    mask_depth: u32,
     /// 1/Q and W's two slopes, once computed at loop depth 0
     /// ([`Self::plane_gradients`]).
     grad_w: Option<[SelSrc; 3]>,
@@ -648,11 +652,12 @@ impl<'a> Sel<'a> {
     /// reference takes at the pixel; the TPU's own takes one per 2x2 quad.
     fn plane_gradients(&mut self, coord: ir::Src, n: u32) -> Result<(), SelectError> {
         use ir::AluOp::{Ffma, Fmul, Frcp};
-        /* Computed at loop depth 0, a value is computed on every path before
-         * all that follows (an `if` is if-converted: both arms run), so a
+        /* Computed at loop depth 0 and outside any arm that runs under the
+         * execution mask, a value is computed on every path before all that
+         * follows (a flattened or predicated `if` runs both arms), so a
          * later look-up of the same coordinate reuses it; inside a kept loop
-         * it is computed afresh. */
-        let top = self.loop_depth == 0;
+         * or a masked arm it is computed afresh. */
+        let top = self.loop_depth == 0 && self.mask_depth == 0;
         let Some(ir::Op::LoadInput { slot: ir::IoSlot::Varying(loc), .. }) = self.m.def(coord.val).copied() else {
             return Err(SelectError::Unsupported("exact gradients of a value that is not a varying"));
         };
@@ -1050,6 +1055,25 @@ impl<'a> Sel<'a> {
         }
         self.flat_depth += 1;
         self.guards = [None; GUARD_CACHE];
+    }
+
+    /// Enter an arm that runs under the execution mask (`masked`), or do
+    /// nothing. The guards computed so far stay valid inside (computed
+    /// before it, for every instance); one computed inside is not valid
+    /// past it, nor in the other arm.
+    fn enter_masked_arm(&mut self, masked: bool) {
+        if masked {
+            self.mask_depth += 1;
+            self.guards = [None; GUARD_CACHE];
+        }
+    }
+
+    /// Leave such an arm.
+    fn leave_masked_arm(&mut self, masked: bool) {
+        if masked {
+            self.mask_depth -= 1;
+            self.guards = [None; GUARD_CACHE];
+        }
     }
 
     /// Leave the innermost flattened arm.
@@ -2661,16 +2685,13 @@ impl<'a> Sel<'a> {
         let op_at = |g: &AVec<'a, SelGroup>, i: usize| g.as_slice().get(i).map(|x| x.op);
         let mut i = 0;
         while i < self.groups.len() {
-            if op_at(&self.groups, i) != Some(SelOp::Machine(MachineOp::CndIf)) {
+            if !matches!(op_at(&self.groups, i), Some(SelOp::Machine(MachineOp::CndIf | MachineOp::CndIfMasked))) {
                 i += 1;
                 continue;
             }
             /* CndIf, Pred(Then), then arm, Pred(Else), CndElse, else arm,
-             * Pred(End), CndIfEnd (`if_convert`) */
-            let at = |m: PredArm, from: usize| {
-                (from..self.groups.len()).find(|&k| op_at(&self.groups, k) == Some(SelOp::Pred(m)))
-            };
-            let (Some(els), Some(end)) = (at(PredArm::Else, i), at(PredArm::End, i)) else { return };
+             * Pred(End), CndIfEnd (`if_convert`); the arms may hold `if`s */
+            let Some((els, end)) = arm_markers(self.groups.as_slice(), i + 1) else { return };
             let then_empty = els == i + 2;
             let else_empty = end == els + 2;
             if else_empty && op_at(&self.groups, els + 1) == Some(SelOp::Machine(MachineOp::CndElse)) {
@@ -2784,8 +2805,28 @@ impl<'a> Sel<'a> {
          * `choose_if_lowering` take the mask out again, once the arms'
          * groups are final (after `prepare`), where `branch_pays` says the
          * branch cannot win. */
-        let branch = pred && crate::shaderc::compile_if_lowering() != crate::shaderc::IfLowering::Predicate;
-        if pred {
+        let lowering = crate::shaderc::compile_if_lowering();
+        /* Arms the predicated form cannot carry -- a nested `if`, a look-up,
+         * a varying read, a derivative, a sine -- run under the execution
+         * mask too, as pco runs every `if` it does not predicate
+         * (pco_cf.c lower_if_cond_exec, at any depth: the emc counts the
+         * levels): only the instances of the arm run its groups, and a
+         * `br` passes over an arm none of them is in. Both arms of every
+         * level ran before, joined by selects, whatever the condition (Qt
+         * Quick 3D's light loops: 1,300 executed groups a light). A discard
+         * or a kept loop in an arm keeps the flattened form. */
+        let masked = !pred
+            && lowering != crate::shaderc::IfLowering::Predicate
+            && !self.arm_not_maskable(then_)
+            && !self.arm_not_maskable(else_)
+            && self.ir_instrs(then_) + self.ir_instrs(else_) > MASK_MIN_INSTRS;
+        #[cfg(feature = "host-test")]
+        if masked {
+            MASKED_IFS.with(|c| c.set(c.get() + 1));
+        }
+        let branch = (pred && lowering != crate::shaderc::IfLowering::Predicate) || masked;
+        let structured = pred || masked;
+        if structured {
             let c = self.src(cond, 0)?;
             let emc = if branch { Some(self.emc_reg()?) } else { None };
             self.emit(SelGroup {
@@ -2795,16 +2836,18 @@ impl<'a> Sel<'a> {
                 srcs: [Some(c), None, None],
             })?;
             if let Some(emc) = emc {
-                self.cnd(MachineOp::CndIf, emc)?;
+                self.cnd(if masked { MachineOp::CndIfMasked } else { MachineOp::CndIf }, emc)?;
             }
             self.emit(SelGroup { op: SelOp::Pred(PredArm::Then), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
         }
         let then_at = self.groups.len();
-        let flat = if pred { None } else { Some(self.src(cond, 0)?) };
+        let flat = if structured { None } else { Some(self.src(cond, 0)?) };
         if let Some(c) = flat {
             self.enter_flat_arm(c, true);
         }
+        self.enter_masked_arm(masked);
         self.nodes(then_)?;
+        self.leave_masked_arm(masked);
         if flat.is_some() {
             self.leave_flat_arm();
         }
@@ -2817,7 +2860,7 @@ impl<'a> Sel<'a> {
         let outputs_then = core::mem::replace(&mut self.outputs, outputs_before);
 
         let else_at = self.groups.len();
-        if pred {
+        if structured {
             self.emit(SelGroup { op: SelOp::Pred(PredArm::Else), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
         }
         /* The other arm's mask (`drop_idle_masks` takes it out again where
@@ -2829,12 +2872,14 @@ impl<'a> Sel<'a> {
         if let Some(c) = flat {
             self.enter_flat_arm(c, false);
         }
+        self.enter_masked_arm(masked);
         self.nodes(else_)?;
+        self.leave_masked_arm(masked);
         if flat.is_some() {
             self.leave_flat_arm();
         }
         let end_at = self.groups.len();
-        if pred {
+        if structured {
             self.emit(SelGroup { op: SelOp::Pred(PredArm::End), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
         }
         if let Some(emc) = emc {
@@ -4537,6 +4582,34 @@ impl<'a> Sel<'a> {
         })
     }
 
+    /// The IR instructions of `r`, nested `if`s included: each is at least
+    /// one group, so a count is a lower bound on the arm's groups.
+    fn ir_instrs(&self, r: ir::Range) -> usize {
+        self.m
+            .nodes_of(r)
+            .iter()
+            .map(|n| match *n {
+                ir::Node::Instr(_) => 1,
+                ir::Node::If { then_, else_, .. } => self.ir_instrs(then_) + self.ir_instrs(else_),
+                ir::Node::Loop { body } => self.ir_instrs(body),
+                _ => 0,
+            })
+            .sum()
+    }
+
+    /// Does `r` discard or hold a kept loop, at any depth? Such an arm
+    /// keeps the flattened form (`if_convert`): the discard flag's join is
+    /// the flattened one, and a loop's edges and mask levels are not placed
+    /// inside a masked arm (`assemble`).
+    fn arm_not_maskable(&self, r: ir::Range) -> bool {
+        self.m.nodes_of(r).iter().any(|n| match *n {
+            ir::Node::Instr(id) => matches!(self.m.instr(id), Some(ir::Op::Discard)),
+            ir::Node::If { then_, else_, .. } => self.arm_not_maskable(then_) || self.arm_not_maskable(else_),
+            ir::Node::Loop { .. } => true,
+            _ => false,
+        })
+    }
+
     fn arm_has_non_if_flow(&self, r: ir::Range) -> bool {
         self.m.nodes_of(r).iter().any(|n| match n {
             ir::Node::Instr(_) => false,
@@ -5029,23 +5102,16 @@ impl<'a> Sel<'a> {
         let partial = self.arena.alloc_filled(n, false)?;
         {
             let groups = self.groups.as_slice();
-            let mut then_from = None;
-            let mut else_from = None;
-            for (i, g) in groups.iter().enumerate() {
-                match g.op {
-                    SelOp::Pred(PredArm::Then) => then_from = Some(i + 1),
-                    SelOp::Pred(PredArm::Else) => else_from = Some(i + 1),
-                    SelOp::Pred(PredArm::End) => {
-                        let (Some(t), Some(e)) = (then_from, else_from) else {
-                            return Err(SelectError::Unsupported("a predicated arm's end with no then or else"));
-                        };
-                        for k in e..i {
-                            partial[k] =
-                                groups[k].dst.is_some_and(|d| groups[t..e - 1].iter().any(|x| x.dst == Some(d)));
-                        }
-                        (then_from, else_from) = (None, None);
-                    }
-                    _ => {}
+            for (t0, g) in groups.iter().enumerate() {
+                if g.op != SelOp::Pred(PredArm::Then) {
+                    continue;
+                }
+                let Some((els, end)) = arm_markers(groups, t0) else {
+                    return Err(SelectError::Unsupported("a predicated arm's end with no then or else"));
+                };
+                let (t, e) = (t0 + 1, els + 1);
+                for k in e..end {
+                    partial[k] |= groups[k].dst.is_some_and(|d| groups[t..e - 1].iter().any(|x| x.dst == Some(d)));
                 }
             }
         }
@@ -5293,9 +5359,10 @@ pub fn choose_if_lowering<'a>(sel: Selected<'a>, arena: &'a Arena<'a>) -> Result
         return Ok(sel);
     }
     let mut gone_v = filled_vec(arena, g.len(), false)?;
-    let pos = |from: usize, op: SelOp| (from..g.len()).find(|&k| g[k].op == op);
+    /* A `CndIfMasked` `if` keeps its mask: its arms are not ones the
+     * predicated form can carry. */
     for i in (0..g.len()).filter(|&i| g[i].op == SelOp::Machine(MachineOp::CndIf)) {
-        let (Some(els), Some(end)) = (pos(i, SelOp::Pred(PredArm::Else)), pos(i, SelOp::Pred(PredArm::End))) else {
+        let Some((els, end)) = arm_markers(g, i + 1) else {
             return Err(SelectError::Unsupported("a branched `if` with no else marker or end"));
         };
         let cndef = g[els + 1].op == SelOp::Machine(MachineOp::CndElse);
@@ -5325,7 +5392,13 @@ pub fn choose_if_lowering<'a>(sel: Selected<'a>, arena: &'a Arena<'a>) -> Result
     let init = g.iter().position(|x| x.op == SelOp::Machine(MachineOp::CndInit));
     let first_user =
         (0..g.len()).find(|&k| !d[k] && matches!(g[k].op, SelOp::Machine(m) if m.is_cnd() && m != MachineOp::CndInit));
-    let init_at = first_user.map(|k| if g[k].op == SelOp::Machine(MachineOp::CndIf) { k - 1 } else { k });
+    let init_at = first_user.map(|k| {
+        if matches!(g[k].op, SelOp::Machine(MachineOp::CndIf | MachineOp::CndIfMasked)) {
+            k - 1
+        } else {
+            k
+        }
+    });
     let mut out: AVec<'a, SelGroup> = AVec::with_capacity(arena, g.len())?;
     for (k, (x, gone)) in g.iter().zip(d).enumerate() {
         if let (Some(i), Some(at)) = (init, init_at) {
@@ -5338,6 +5411,44 @@ pub fn choose_if_lowering<'a>(sel: Selected<'a>, arena: &'a Arena<'a>) -> Result
         }
     }
     Ok(Selected { groups: out.into_slice(), ..sel })
+}
+
+/// An `if` whose arms cannot be predicated runs under the execution mask
+/// only when its two arms together are longer than this many IR
+/// instructions, each at least one group: the branch's fixed cost is about
+/// 6.8 executed groups ([`BRANCH_FIXED_US`]), and the flattened form it
+/// replaces runs every group of both arms. Past it the mask cannot lose.
+pub const MASK_MIN_INSTRS: usize = 7;
+
+#[cfg(feature = "host-test")]
+std::thread_local! {
+    /// `if`s selection put under the execution mask (`if_convert`'s masked
+    /// form) on this thread: the host survey counts them apart.
+    static MASKED_IFS: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+}
+
+/// Host tests: the masked `if`s selected on this thread since the last call.
+#[cfg(feature = "host-test")]
+pub fn take_masked_ifs() -> u32 {
+    MASKED_IFS.with(|c| c.replace(0))
+}
+
+/// The else and end markers of the `if` whose then marker is at `then_at`,
+/// matched by depth: a nested `if`'s markers inside either arm are skipped.
+/// Every `if` selection emits has all three markers.
+pub(crate) fn arm_markers(g: &[SelGroup], then_at: usize) -> Option<(usize, usize)> {
+    let mut depth = 0usize;
+    let mut els = None;
+    for (k, x) in g.iter().enumerate().skip(then_at + 1) {
+        match x.op {
+            SelOp::Pred(PredArm::Then) => depth += 1,
+            SelOp::Pred(PredArm::Else) if depth == 0 => els = Some(k),
+            SelOp::Pred(PredArm::End) if depth == 0 => return els.map(|e| (e, k)),
+            SelOp::Pred(PredArm::End) => depth -= 1,
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Take group `i` out of `groups`, keeping the order of the rest.
@@ -5486,7 +5597,7 @@ fn verify_loops(groups: &[SelGroup]) -> Result<(), SelectError> {
                     groups.get(i + 1).map(|x| x.op),
                     Some(
                         SelOp::LoopEnd
-                            | SelOp::Machine(MachineOp::CndLeave | MachineOp::CndIf)
+                            | SelOp::Machine(MachineOp::CndLeave | MachineOp::CndIf | MachineOp::CndIfMasked)
                             | SelOp::Pred(PredArm::Then)
                     )
                 ) =>
@@ -5576,6 +5687,7 @@ pub fn select_in<'a>(
         front_facing: None,
         frag_zw: [None; 2],
         loop_depth: 0,
+        mask_depth: 0,
         grad_w: None,
         grad_cache: [None; 4],
         layout,

@@ -942,22 +942,26 @@ pub fn share_common<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<Sele
     let mut out: AVec<'a, SelGroup> = AVec::with_capacity(arena, sel.groups.len())?;
     /* Indices into `out` of the groups a later one may reuse. */
     let mut kept: AVec<'a, u32> = AVec::with_capacity(arena, sel.groups.len())?;
-    /* How many of `kept` were before the open predicated `if` arm: a value
-     * an arm computes exists only where the arm runs, so it is offered to
-     * nothing past the arm's end (the other arm included); a value from
-     * before the `if` is offered inside either arm. */
-    let mut before_arm: Option<usize> = None;
+    /* Per open `if` arm, innermost last, how many of `kept` were before
+     * its `if`: a value an arm computes exists only where the arm runs, so
+     * it is offered to nothing past the arm's end (the other arm included);
+     * a value from before the `if` is offered inside either arm. Arms nest
+     * (an `if` under the execution mask may hold `if`s). */
+    let mut before_arm: AVec<'a, usize> = AVec::new();
     for g in sel.groups {
         if let SelOp::Pred(m) = g.op {
             match m {
-                super::sel::PredArm::Then => before_arm = Some(kept.len()),
+                super::sel::PredArm::Then => before_arm.push(arena, kept.len())?,
                 super::sel::PredArm::Else | super::sel::PredArm::End => {
-                    let n = before_arm.ok_or(PrepareError::Unsupported("an `if` arm marker out of order"))?;
+                    let n = *before_arm
+                        .as_slice()
+                        .last()
+                        .ok_or(PrepareError::Unsupported("an `if` arm marker out of order"))?;
                     while kept.len() > n {
                         kept.pop();
                     }
                     if m == super::sel::PredArm::End {
-                        before_arm = None;
+                        before_arm.pop();
                     }
                 }
             }

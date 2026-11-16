@@ -584,10 +584,13 @@ fn an_array_sample_in_a_loop_agrees_with_the_ir() {
     let refs: Vec<&InputFn<'_>> = cases.iter().map(|b| b.as_ref()).collect();
     let _ = usc_exec::take_layers();
     let px = run_against_ir(&src, &refs);
-    /* the byte model executes a masked-off iteration too (the execution
-     * mask hides its result), so one layer past n appears per run */
+    /* the layers of n = 1, then of n = 3. The pass after the last runs
+     * with no instance in the loop's guarded arm, and since 2026-11-17 that
+     * arm (it samples, so it cannot be predicated) is under the execution
+     * mask and branched past: no layer past n is read. Before, the arm was
+     * flattened and the byte model read one layer past n each run. */
     let layers = usc_exec::take_layers();
-    assert!(layers.starts_with(&[0]) && layers.ends_with(&[0, 1, 2, 3]), "{layers:?}");
+    assert_eq!(layers, [0, 0, 1, 2], "the layers read");
     assert_ne!(px[0], px[1]);
 }
 
