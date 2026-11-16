@@ -22,7 +22,13 @@ passed before and are drawn as they were.
 
 Mesa citations are `file:line` in Mesa 26.2.1
 (`$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`); `G/` is
-`src/gallium/drivers/panfrost/`.
+`src/gallium/drivers/panfrost/`. The Mesa 26.2.1 sources the design reads:
+`src/mesa/main/fbobject.c` (attachment and completeness rules),
+`G/pan_job.c` (`panfrost_batch_add_surface`, `panfrost_batch_update_access`),
+`G/pan_fb_preload.c` (`pan_preload_needed`) and
+`src/mesa/state_tracker/st_cb_clear.c` (the clear quad's colour mask). The
+descriptor references are drm-shim traces of Mesa 26.2.1 in
+`tools/mali/testdata/pan_zs_ref/`.
 
 ## 1. Why only the separate DEPTH_COMPONENT16 + STENCIL_INDEX8 cases
 
@@ -170,6 +176,13 @@ of `record_in` already did.
   (`cargo test --no-default-features --features
   host-test,gpu-mali,shaderc-online,no-shader-table,report-es2 --lib
   zs_cases_through`).
+
+`src/mali/frame_zs_tests.rs` is unchanged: the frame builder writes the same
+Z/S descriptors, and its pins (`the_depth_tested_frame_is_the_board_s`,
+`the_frame_with_the_depth_test_off_is_the_board_s`,
+`a_masked_draw_s_blend_and_dcd_are_the_board_s_masked_clear`,
+`a_draw_with_no_colour_is_the_board_s_depth_only_draw`) keep holding for the
+one-pair case.
 
 Revert checks: without `take_plane`, the first two tests and the GL test
 fail on the refused draws (`-ENOTSUP`, the board's `GL_INVALID_OPERATION`);
