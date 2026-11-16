@@ -11,7 +11,7 @@ Usage:
 SESSION_DIR is tools/cts/log/<date>-pi4-gles3-<sha8>-rowsAA-BB/ with a
 <LABEL>.tally.txt (deqp-uart-tally.py --label LABEL) and a
 <LABEL>.console.txt per image. The README (default: SESSION_DIR/README.md,
--o - for stdout) holds a 'commit <sha>' line (what check-pi4-gles3-log.py and
+-o - for stdout) holds a 'commit: <sha>' line (what check-pi4-gles3-log.py and
 gles3-notpass.py --pi4 read), the row range and image labels of the tree
 ('# image <LABEL>:' lines, rows counted from 1), and a table per image:
 the mustpass Pass / Fail / NotSupported / other counts of the tally's TOTAL
@@ -97,7 +97,7 @@ def build(sessdir, commit, tree, times, notes):
         "<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->",
         "# Pi 4 dEQP-GLES3 rows %d-%d (%s) at %s" % (lo, hi, " ".join(have), commit[:8]),
         "",
-        "commit %s" % commit,
+        "commit: %s" % commit,
         "",
         "Session `%s`: rows %d-%d of `tools/cts/pi4-gles3-tree.txt` (%d images: %s)."
         % (name, lo, hi, len(have), " ".join(have)),
@@ -152,7 +152,7 @@ def self_test():
             f.write("B2\t12.5 s\t0\t0\n")
         text = build(d, sha, tree, read_times(tsv), [])
         check("commit line with the full sha",
-              re.search(r"^commit %s$" % sha, text, re.M) is not None)
+              re.search(r"^commit: %s$" % sha, text, re.M) is not None)
         check("row range and labels", "rows 2-3 of" in text and "B2 C3" in text)
         check("counts and verdict of B2",
               "| 2 | B2 | 5 | 1 | 0 | 0 | 12.5 s | 0 | 0 | DONE |" in text)
