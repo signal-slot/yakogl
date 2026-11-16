@@ -11523,7 +11523,7 @@ mod tests {
             table.push(row);
             let table: &'static [ShcUniform] = Vec::leak(table);
             p.rfs.uniforms = table.as_ptr();
-            p.rfs.num_uniforms = table.len() as u8;
+            p.rfs.num_uniforms = table.len() as u16;
             (p.fs_sampler_unit[0], p.fs_sampler_unit[1]) = (3, 1);
         }
         // SAFETY: plain GL calls; valid names; TRI is a static.
@@ -11571,7 +11571,7 @@ mod tests {
                 table.push(row);
                 let table: &'static [ShcUniform] = Vec::leak(table);
                 p.rvs.uniforms = table.as_ptr();
-                p.rvs.num_uniforms = table.len() as u8;
+                p.rvs.num_uniforms = table.len() as u16;
                 for k in 0..16u8 {
                     p.vs_sampler_unit[k as usize] = k;
                 }
@@ -13451,7 +13451,7 @@ mod tests {
             let table: &'static [ShcUniform] = Vec::leak(p.rfs.uniform_table().to_vec());
 
             p.rvs.uniforms = table.as_ptr();
-            p.rvs.num_uniforms = table.len() as u8;
+            p.rvs.num_uniforms = table.len() as u16;
             p.rvs.uniform_dwords = p.rvs.uniform_dwords.max(1);
             p.vs_sampler_unit = p.fs_sampler_unit;
             if p.vs_uniform_cap == 0 {
@@ -13603,7 +13603,7 @@ mod tests {
         };
         let rows =
             [row("k", 0), row("gl_DepthRange.far", 2), row("gl_DepthRange.near", 1), row("gl_DepthRange.diff", 3)];
-        let sh = ShcShader { uniforms: rows.as_ptr(), num_uniforms: rows.len() as u8, ..ShcShader::ZERO };
+        let sh = ShcShader { uniforms: rows.as_ptr(), num_uniforms: rows.len() as u16, ..ShcShader::ZERO };
         let mut block = [-9.0f32; 5];
         fill_stage_depth_range(&sh, &mut block, [0.25, 0.75, 0.5]);
         assert_eq!(block, [-9.0, 0.25, 0.75, 0.5, -9.0]);

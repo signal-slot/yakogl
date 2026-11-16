@@ -1086,6 +1086,9 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
              UboFallback",
         ),
         E::Spill | E::TooManyConstants | E::InstrTableFull | E::ValueTableFull | E::BlockTableFull => None,
+        E::TooManyUniforms => {
+            Some("a stage's uniforms are bounded by MAX_*_UNIFORM_VECTORS, far below the record's 65,535 rows (#7106)")
+        }
         E::IfForm => Some(
             "the front end makes every if condition a comparison's value or a bool value it refuses first \
              (IntValue for a constant, Arithmetic for a boolean operator, UniformType for a bool uniform)",

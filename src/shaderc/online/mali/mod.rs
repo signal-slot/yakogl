@@ -321,6 +321,9 @@ pub enum MaliError {
     /// where the fold makes a varying lane a constant that Mesa's link
     /// keeps computed and the attribute numbering depends on the fold.
     AttributeNumbering,
+    /// More uniform rows than the record's 16-bit count (#7106; a capacity,
+    /// not a gap, like `OutOfScratch`).
+    TooManyUniforms,
     /// The scratch arena ran out (reported as capacity, not as a gap).
     OutOfScratch,
     Defect(Defect),
@@ -567,6 +570,7 @@ impl MaliError {
             MaliError::AttributeNumbering => {
                 "Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not lowered yet"
             }
+            MaliError::TooManyUniforms => "Valhall: a shader with more than 65535 uniform rows does not fit the record",
             MaliError::OutOfScratch => "Valhall: the scratch arena ran out",
             MaliError::Defect(_) => "Valhall back end defect: an invariant of the pipeline did not hold",
         }
@@ -1711,7 +1715,7 @@ fn record(
     if !rows.is_empty() {
         let kept = keep.alloc_copy(rows).map_err(oom_keep)?;
         sh.uniforms = kept.as_ptr();
-        sh.num_uniforms = kept.len() as u8;
+        sh.num_uniforms = u16::try_from(kept.len()).map_err(|_| refused(MaliError::TooManyUniforms))?;
     }
     sh.uniform_dwords = l.reflection.uniform_dwords;
     let fau = keep.alloc_copy(sc.fau.as_slice()).map_err(oom_keep)?;
