@@ -62,7 +62,16 @@ upload refusals 200 -> 64 (compile 0, image 434); `texture.specification`
 1,163 cases, 6 pass / 1,157 fail, upload refusals 448 -> 141 (compile 0,
 image 1,013, framebuffer incomplete 3). `docs/es3/gc-formats.md` section 5.
 
-**i.MX8MP**: never run on the board (`docs/es3/board-recipe-imx8mp.md`).
+**i.MX8MP**: 48 of the 133 entries of `tools/cts/imx8mp-gles3-tree.txt`, in three slices of one campaign
+commit `9bc82915` (2026-11-14 and 11-15, plan #316; `tools/cts/log/2026-11-imx8mp-gles3-9bc82915-rows01-13/`,
+`-rows17-34/`, `-rows35-51/`, recipe `docs/es3/board-recipe-imx8mp.md`): 28,459 mustpass cases, 29,594 begun,
+**27,201 pass / 1,851 fail / 530 NotSupported / 12 other / 123 without a result**, 0 resets, no entry out of
+its 600 s window (longest 338 s). Of the 1,851 fails 873 are named — the CRC pages name at most 240 cases of a
+row, and e25 (364 fails), e26 (277) and e29 (328) were left with counts only — plus 25 unresolved CRCs; the 530
+NotSupported and 12 other cases have no names, because the board's A53 console delivered no text in any of the
+three sessions (recipe, "What the three sessions measured"). e26 stops at its first `precision.reflect` case
+with an `other` status and never begins the 123 cases after it, the same record on a rerun: not a watchdog end.
+Entries 13-15 and 51-132 (14,351 mustpass cases) have not run.
 
 ## Feature state
 
