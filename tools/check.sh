@@ -217,7 +217,7 @@ scope_of_path() {
   # scope): the `tests` scope, the test rows of the targets it reaches
   # (tools/check_tests_reach.py)
   tests/*) echo tests ;;
-  tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
 }
@@ -352,6 +352,21 @@ no_board_env() {
     esac
   done
   env "${drop[@]+"${drop[@]}"}" "$@"
+}
+
+# selftest_row <path>: a self-test that takes no argument, without the board
+# variables and with a temporary directory of its own under the gitignored
+# build/ (several refuse to write under /tmp or without TMPDIR), removed when
+# the self-test is over.
+selftest_row() {
+  local t=$1 tmp run=bash status=0
+  case "$t" in *.py) run=python3 ;; esac
+  tmp="$PWD/build/selftest/${t//\//_}"
+  rm -rf "$tmp" || return 1
+  mkdir -p "$tmp" || return 1
+  no_board_env env TMPDIR="$tmp" "$run" "$t" || status=$?
+  rm -rf "$tmp"
+  return "$status"
 }
 
 # The scopes a cargo feature set reaches: its GPU, and the precompiled tier.
@@ -3213,6 +3228,45 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # tools/hostharness/glmark2/compare.py on its fixture run directories: the
   # before/after ms-per-frame table of two GM2_PROFILE runs. Host only.
   step "tools   glmark2 compare-selftest.sh (before/after profile table)" bash tools/hostharness/glmark2/compare-selftest.sh
+  # tools/host-replay/selftest/selftest.sh: the replay glue against a stand-in
+  # sample (fake_sample.c), per GPU. A clean run must pass and a FAKE_BAD=1 run
+  # must be reported. It builds the library per GPU into its output directory
+  # (about 500 MB, 2 min on a warm host), removed when it passed; a failed
+  # run keeps it, for the logs it names.
+  host_replay_selftest() {
+    local out=build/host-replay-selftest
+    rm -rf "$out" || return 1
+    no_board_env tools/host-replay/selftest/selftest.sh "$out" || return 1
+    rm -rf "$out"
+  }
+  scope samples pvr vivante v3d
+  step "tools   host-replay selftest.sh (the replay glue against a stand-in sample, per GPU)" host_replay_selftest
+  scope tools
+  # Every self-test no row names. At `b72adb59c` (2026-11-16), 53 of the 94
+  # tracked self-tests were named by no row and by no self-test that runs
+  # others (issue #6907): they passed when written and nothing ran them again,
+  # so the tool under each could break with the gate green.
+  # tools/check_selftests.py prints them and each gets a row here, under the
+  # scope of its own path (the tools scope where the path reaches every row),
+  # so a self-test is in the gate from the commit that adds it. One that needs
+  # an argument has a row of its own, which names it (host-replay above).
+  # Rows run side by side: with the rest of the file system read-only, each
+  # wrote nothing outside its TMPDIR but three, which write a place of their
+  # own (build/rpi5_display/fwfb, build/v3d71/selftest, a git worktree under
+  # TMPDIR).
+  if selftests=$(python3 -I tools/check_selftests.py); then
+    while IFS= read -r selftest; do
+      [ -n "$selftest" ] || continue
+      selftest_scopes=$(scope_of_path "$selftest")
+      [ "$selftest_scopes" = all ] && selftest_scopes=tools
+      # shellcheck disable=SC2086  # a path may have two scopes, one word each
+      scope $selftest_scopes
+      step "tools   $selftest" selftest_row "$selftest"
+    done <<< "$selftests"
+  else
+    gap "tools/check_selftests.py did not list the self-tests no row names: none of them run"
+  fi
+  scope tools
   # R-23: nothing checked the public headers against what the library
   # exports and what eglGetProcAddress answers, so a header could promise an
   # entry point the archive never carried, or eglGetProcAddress could answer
