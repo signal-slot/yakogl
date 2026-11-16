@@ -90,6 +90,18 @@ fn build_with(
     blend_color: [f32; 4],
     blend_shader: Option<u64>,
 ) -> Result<(Vec<u8>, BTreeMap<u32, u32>), FrameError> {
+    build_into(blend, blend_color, blend_shader, TargetFormat::Rgba8888, 1, 0xf)
+}
+
+/// [`build_with`] into a target of `format` and `samples` under `colour_mask`.
+fn build_into(
+    blend: Option<Blending>,
+    blend_color: [f32; 4],
+    blend_shader: Option<u64>,
+    format: TargetFormat,
+    samples: u32,
+    colour_mask: u8,
+) -> Result<(Vec<u8>, BTreeMap<u32, u32>), FrameError> {
     let (mut desc_m, mut code_m, mut spd_m, mut ctx_m) =
         (vec![0u8; 0x4000], vec![0u8; 0x800], vec![0u8; 0x100], vec![0u8; 0x200]);
     let mut words = vec![0u64; 512];
@@ -119,18 +131,11 @@ fn build_with(
         }];
         let input = FrameInput {
             zs: None,
-            target: Target {
-                gpu: 0x7fff_fffe_4000,
-                width: 64,
-                height: 64,
-                row_stride: 256,
-                format: TargetFormat::Rgba8888,
-                samples: 1,
-            },
+            target: Target { gpu: 0x7fff_fffe_4000, width: 64, height: 64, row_stride: 256, format, samples },
             clear_rgba: Some([0.25, 0.5, 0.75, 0.5]),
             draw: Some(DrawCall {
                 zs: DepthStencilState::OFF,
-                colour_mask: 0xf,
+                colour_mask,
                 front_cw: false,
                 cull: Cull::None,
                 vs: &vs,
@@ -240,19 +245,142 @@ fn each_blend_mode_is_the_board_s() {
     assert_eq!(row("const").0, vec![1, 2, 0, 0x7f]);
 }
 
-/// What Mesa runs in a blend shader is refused before any word: min, and
-/// two different constants read.
+/// The equations of the GLES 2 state space that Mesa runs in a blend shader
+/// (`needs_shader`), with the blend colour each is drawn under: MIN and MAX,
+/// a destination factor against an unequal source factor, a saturated
+/// factor, and a constant read through channels of different values.
+fn shader_states() -> Vec<(&'static str, Blending, [f32; 4])> {
+    use Base::*;
+    let ch = |func, src, dst| Channel { func, src, dst };
+    let same = |c: Channel| Blending { rgb: c, alpha: c };
+    let (one, zero) = (Factor::ONE, Factor::ZERO);
+    let min = Blending { rgb: ch(Func::Min, one, one), alpha: ch(Func::Add, one, zero) };
+    let max = same(ch(Func::Max, one, one));
+    let (constant, _) = mode("const");
+    vec![
+        ("min", min, [0.0; 4]),
+        ("max", max, [0.0; 4]),
+        ("const, three values", constant, [0.25, 0.5, 0.75, 1.0]),
+        ("const, red differs", constant, [0.5, 0.25, 0.5, 0.5]),
+        ("case 190 column 3", case190(3), [0.0; 4]),
+        ("case 190 column 4", case190(4), [0.0; 4]),
+        ("saturate", same(ch(Func::Add, f(SrcAlphaSaturate, false), one)), [0.0; 4]),
+        ("dst against src colour", same(ch(Func::Add, f(DstColor, false), f(SrcAlpha, true))), [0.0; 4]),
+    ]
+}
+
+/// The blend descriptor of a draw: the arena's 16 bytes at register 50.
+fn blend_bytes(desc: &[u8], regs: &BTreeMap<u32, u32>) -> Vec<u8> {
+    let at = (d50(regs) - DESC) as usize;
+    desc[at..at + Blend::LENGTH].to_vec()
+}
+
+/// Every equation Mesa runs in a blend shader builds into a single-sampled
+/// RGBA8 target, at 1x and 4x, once the backend hands the frame the
+/// shader's address: no `NOT_BUILT_BLEND_SHADER`. The descriptor is the
+/// `Shader`-mode one of the board's blended draws
+/// ([`a_constant_colour_blend_runs_in_its_blend_shader_as_on_the_board`]):
+/// the destination loaded and enabled, no constant, no equation, no
+/// fixed-function conversion, the address in word 3; DCD0 is the
+/// destination-reading draw's at 1x and sets per-sample evaluation at 4x
+/// (docs/notes/mali-blend-shaders.md section 3).
 #[test]
-fn an_equation_mesa_runs_in_a_blend_shader_is_refused_by_name() {
-    let min = Blending {
-        rgb: Channel { func: Func::Min, src: Factor::ONE, dst: Factor::ONE },
-        alpha: Channel { func: Func::Add, src: Factor::ONE, dst: Factor::ZERO },
-    };
-    let (c, _) = mode("const");
-    for (b, colour) in [(min, [0.0; 4]), (c, [0.5, 0.25, 0.5, 0.5])] {
-        assert_eq!(build(Some(b), colour).err(), Some(FrameError::NotBuilt(NOT_BUILT_BLEND_SHADER)));
+fn an_equation_mesa_runs_in_a_blend_shader_builds_with_its_shader() {
+    use super::blend::{needs_shader, shader_key};
+    const PC: u64 = 0x7fff_fffc_7000;
+    let (_, over) = build(Some(mode("over").0), [0.0; 4]).expect("over builds");
+    for (name, b, colour) in shader_states() {
+        assert!(needs_shader(&b, &colour), "{name}: a blend shader state");
+        for samples in [1, 4] {
+            assert!(
+                shader_key(&b, 0xf, samples, TargetFormat::Rgba8888, true).is_some(),
+                "{name} at {samples}x: a key"
+            );
+            let (desc, regs) = build_into(Some(b), colour, Some(PC), TargetFormat::Rgba8888, samples, 0xf)
+                .unwrap_or_else(|e| panic!("{name} at {samples}x: {e:?}"));
+            let blend = blend_bytes(&desc, &regs);
+            assert_eq!(
+                blend,
+                [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x70, 0xfc, 0xff],
+                "{name} at {samples}x: the Shader-mode descriptor"
+            );
+            let per_sample = 1 << 11; /* DCD0 `Evaluate per-sample` */
+            if samples == 1 {
+                assert_eq!(regs[&57], over[&57], "{name}: DCD0 as the fixed-function blended draw's");
+            } else {
+                assert_eq!(regs[&57] & per_sample, per_sample, "{name} at 4x: DCD0 evaluates per sample");
+            }
+        }
     }
-    assert!(build(Some(c), [0.5, 0.5, 0.5, 0.25]).is_ok(), "alpha is not read: one constant");
+}
+
+/// A draw that writes no channel needs no blend shader whatever the
+/// equation (`panfrost_get_blend`, pan_context.c:186-190), and a shader
+/// given to it is the caller's defect.
+#[test]
+fn a_draw_that_writes_nothing_needs_no_blend_shader_for_any_equation() {
+    for (name, b, colour) in shader_states() {
+        let (_, regs) =
+            build_into(Some(b), colour, None, TargetFormat::Rgba8888, 1, 0).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        assert!(regs.contains_key(&57), "{name}: built");
+        let invalid = Some(FrameError::Invalid(INVALID_BLEND_SHADER));
+        assert_eq!(
+            build_into(Some(b), colour, Some(0x7fff_fffc_7000), TargetFormat::Rgba8888, 1, 0).err(),
+            invalid,
+            "{name}: a shader given"
+        );
+    }
+}
+
+/// What stays refused by name: a draw that needs a blend shader the backend
+/// does not build, so the frame is given none. `shader_key` builds RGBA8
+/// keys at 1x and 4x only: an RGB565 target and a 2x one have none, and the
+/// frame names the refusal rather than drawing with the wrong blend.
+#[test]
+fn a_blend_shader_the_backend_does_not_build_is_still_refused_by_name() {
+    use super::blend::shader_key;
+    let refused = Some(FrameError::NotBuilt(NOT_BUILT_BLEND_SHADER));
+    for (name, b, colour) in shader_states() {
+        assert_eq!(build(Some(b), colour).err(), refused, "{name}: no address given");
+        assert!(shader_key(&b, 0xf, 1, TargetFormat::Rgb565, true).is_none(), "{name}: RGB565 has no key");
+        assert!(shader_key(&b, 0xf, 2, TargetFormat::Rgba8888, true).is_none(), "{name}: 2x has no key");
+        assert_eq!(
+            build_into(Some(b), colour, None, TargetFormat::Rgb565, 1, 0xf).err(),
+            refused,
+            "{name}: into RGB565"
+        );
+    }
+    let (c, _) = mode("const");
+    assert!(build(Some(c), [0.5, 0.5, 0.5, 0.25]).is_ok(), "alpha is not read: one constant, fixed function");
+}
+
+/// The equations Mesa runs in the blend unit still produce the
+/// fixed-function descriptor, 1x and 4x: mode Fixed-Function (word 2 holds
+/// the component count and RT, the top word the RGBA8 conversion 0xED000),
+/// the equation word set, no shader; and a shader given to one is refused.
+#[test]
+fn a_fixed_function_equation_keeps_its_fixed_function_descriptor() {
+    use super::blend::needs_shader;
+    for name in MODES {
+        let (b, colour) = mode(name);
+        assert!(!needs_shader(&b, &colour), "{name}: fixed function");
+        for samples in [1, 4] {
+            let (desc, regs) = build_into(Some(b), colour, None, TargetFormat::Rgba8888, samples, 0xf)
+                .unwrap_or_else(|e| panic!("{name} at {samples}x: {e:?}"));
+            let blend = blend_bytes(&desc, &regs);
+            assert_ne!(blend[4..8], [0; 4], "{name} at {samples}x: an equation");
+            assert_ne!(blend[8..12], [0; 4], "{name} at {samples}x: components and RT");
+            assert_eq!(blend[12..16], 0xed000u32.to_le_bytes(), "{name} at {samples}x: the RGBA8 conversion");
+            let per_sample = 1 << 11;
+            assert_eq!(regs[&57] & per_sample, 0, "{name} at {samples}x: no per-sample evaluation");
+            let invalid = Some(FrameError::Invalid(INVALID_BLEND_SHADER));
+            assert_eq!(
+                build_into(Some(b), colour, Some(0x7fff_fffc_7000), TargetFormat::Rgba8888, samples, 0xf).err(),
+                invalid,
+                "{name} at {samples}x: a shader given"
+            );
+        }
+    }
 }
 
 /// gl_test case 8's fifth frame (glBlendColor 0.25, 0.5, 0.75, 1.0 with
