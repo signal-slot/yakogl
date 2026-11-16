@@ -21,7 +21,7 @@
 //! refuses it, "too many of this kind of declaration"; 6144 bytes are 384
 //! vec4 already. The 16384-byte block is a vec4[1024] in the dEQP cases
 //! (`ubo.2_level_array`, `max_block_size`), so the front end has to carry it
-//! before `ubo-v3d` can be accepted: the ignored
+//! (it does not yet): the ignored
 //! `a_single_vec4_array_of_1024_elements_compiles` pins that.) A distinct
 //! float in every component (`value`, below 1024), bound with glUniformBlockBinding and
 //! glBindBufferRange. The element is a constant index (the last element, N - 1,
@@ -35,11 +35,12 @@
 //!
 //! - the live tests use the size the build reports (6144 today) and follow
 //!   the limit when it moves;
-//! - the `#[ignore]`d tests state ES 3.0: exactly 16384 bytes (1024 vec4,
-//!   the last one included) and two blocks of one program whose sizes sum
-//!   past 16384. They need the V3D to report and carry 16384 (item
-//!   `ubo-v3d` of plan #359); removing the `#[ignore]` is that item's
-//!   acceptance.
+//! - the ES 3.0 tests state exactly 16384 bytes (1024 vec4, the last one
+//!   included) and two blocks of one program whose sizes sum past 16384. They
+//!   run: the V3D reports and carries 16384 now. Two tests stay `#[ignore]`d:
+//!   the vec4[1024] case waits on `UniformRow::array_len` being wider than u8
+//!   (tests/v3d_ubo_array_len_limit.rs pins that limit), and the run-time
+//!   index over 128 vec4 waits on ldunifa.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_ubo_v3d
@@ -515,19 +516,16 @@ fn vertex_passes_a_block_of_the_reported_size_through_a_flat_varying() {
 const ES3_BLOCK: usize = 16384;
 
 #[test]
-#[ignore = "needs ubo-v3d: 16384-byte blocks"]
 fn the_limit_is_at_least_the_es3_minimum() {
     assert!(reported_block_size() >= ES3_BLOCK);
 }
 
 #[test]
-#[ignore = "needs ubo-v3d: 16384-byte blocks"]
 fn fragment_reads_a_16384_byte_block_last_vec4_included() {
     check_one_block(ES3_BLOCK, Stage::Fragment, &[0, 383, 384, 511, 1022, 1023]).unwrap();
 }
 
 #[test]
-#[ignore = "needs ubo-v3d: 16384-byte blocks"]
 fn vertex_passes_a_16384_byte_block_through_a_flat_varying() {
     check_one_block(ES3_BLOCK, Stage::Vertex, &[0, 383, 384, 511, 1022, 1023]).unwrap();
 }
@@ -556,13 +554,11 @@ fn two_blocks(stage: Stage) {
 }
 
 #[test]
-#[ignore = "needs ubo-v3d: 16384-byte blocks"]
 fn two_blocks_past_16384_bytes_in_one_program_fragment() {
     two_blocks(Stage::Fragment);
 }
 
 #[test]
-#[ignore = "needs ubo-v3d: 16384-byte blocks"]
 fn two_blocks_past_16384_bytes_in_one_program_vertex() {
     two_blocks(Stage::Vertex);
 }
@@ -570,7 +566,7 @@ fn two_blocks_past_16384_bytes_in_one_program_vertex() {
 /// The block the dEQP cases use: one `vec4 v[1024]`. Refused by the front
 /// end today (`array_len: u8`, reflect.rs `fit_u8`), whatever the limit.
 #[test]
-#[ignore = "needs ubo-v3d: the front end carries arrays past 255 elements"]
+#[ignore = "waits on UniformRow::array_len wider than u8 (tests/v3d_ubo_array_len_limit.rs pins it): vec4[1024] is refused, 'v' : too many of this kind of declaration"]
 fn a_single_vec4_array_of_1024_elements_compiles() {
     let decl = "layout(std140) uniform Data0 { highp vec4 v[1024]; };\nuniform int u_idx;\n";
     let fs = fs_picking(decl, "v[u_idx]");
