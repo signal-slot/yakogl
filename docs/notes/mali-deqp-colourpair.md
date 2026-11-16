@@ -167,3 +167,91 @@ the two sites still exist. The shapes with a non-own lane (swizzles) stay
   item gives the exact split.
 - Whether Mesa orders (const, lane) as `MKVEC c, lane` for highp is *not*
   measured; the mediump case 72 is the only reference of the form.
+  Settled by `deqp_colourpair_ck_lane_highpcolour` (References below):
+  `MKVEC.v2i16 r1, 0x0.h0, r0.h0`, the constant is src0.
+
+## References (item ref-colourpair, 2026-11-16)
+
+Five Mesa 26.2.1 drm-shim references,
+`tools/mali/testdata/deqp_colourpair_<shape>.{vert,frag,expect.json}`, each
+`.vert`/`.frag` with a `.license` sidecar (dEQP's text, The Khronos Group
+Inc.). They follow the `gm2_*` method (`README-pan_shc.md`, "The shim
+driver"). For each `<shape>`:
+
+```sh
+tools/mali/drm_shim_ref.sh run <work> tools/mali/testdata/deqp_colourpair_<shape>.vert \
+    tools/mali/testdata/deqp_colourpair_<shape>.frag <out>/deqp_colourpair_<shape>
+tools/mali/pan_ref_diff.py extract <out>/deqp_colourpair_<shape>.trace --draw --attributes \
+    > tools/mali/testdata/deqp_colourpair_<shape>.expect.json
+```
+
+The draw uses the defaults: 64x64, the whole viewport, and no
+`--uniform-values` (none of the programs has a uniform). `<work>` is a
+drm-shim build with `drm_shim_ref.sh build`'s meson options. It was configured
+on the 26.2.1 source of the pan_shc tree (`build_pan_shc.sh`) with the
+`subdir('pan_shc')` line taken out again, because the tarball could not be
+downloaded on this host. The 159 vendored source files listed in
+`third_party/mesa-26.2.1/UPSTREAM` match its sha256. Three committed
+references from the same build are byte-equal (`pan_ref_diff.py diff-ref`, 0
+differ): `tri` (2 regions), `sel_vc_zero` and `gm2_arithconst_1` (3 regions
+each). Two draws of `ck_lane`, `default_attrib` and `ck_lane_highpcolour` are
+identical.
+
+| Reference | Case | Source | Fragment program (Mesa) | Pins for lower-colourpair |
+|---|---|---|---|---|
+| `ck_lane` | `shaders.operator.binary_operator.add.highp_float_vec2_vertex` (board: ColourPair) | `deqp_shapes/colourpair_constant_then_varying.{vert,frag}` on main (3b926d42), verbatim | 7 instrs: `LD_VAR_BUF_IMM.f32...v4`, `V2F32_TO_V2F16 r0, r0, r1`, `V2F32_TO_V2F16 r1, r2, r3`, `ATEST r1.h1`, `BLEND.v4.f16` | **no colour pair**: Mesa keeps all four lanes of `v_color` as varyings, the constants included (varying shader: 4 `STORE.i32.estream`, `0.0` from `IADD_IMM #0x0`, `1.0` from `#0x3F800000`) |
+| `ck_lane_mediump` | `...add.mediump_float_vec2_vertex` (ColourPair) | rebuilt: `ck_lane` with the precision the `ShaderOperatorCase` constructor of `modules/gles2/functional/es2fShaderOperatorTests.cpp` puts on `a_in0`, `a_in1`, `in0`, `in1`, `res` (`mediump`); same fragment text | byte-equal to `ck_lane`'s | the same, with an fp16 vertex shader (varying shader of 23 instrs: `FADD.v2f16`, `F16_TO_F32`) |
+| `lane_zero_load` | `...add.highp_float_vertex` (board: ColourZeroHalf) | `deqp_shapes/colourpair_varying_and_zero.{vert,frag}` on main, verbatim | byte-equal to `ck_lane`'s | **no (lane, 0.0) pair** either: the four lanes are varyings (`0.0` stored twice) |
+| `default_attrib` | `default_vertex_attrib.float.vertex_attrib_1f` (ColourZeroHalf) | rebuilt: `es2fDefaultVertexAttributeTests.cpp` `genVertexSource` (TYPE_FLOAT, not normalizing, negative values, `s_valueRange` 10) and `s_passThroughFragmentShaderSource` | 8 instrs: `LD_VAR_BUF_IMM.f32` (one lane), `FADD.f32 r0.h0, r0, 0x0.neg`, `ATEST 0x3F800000`, `U16_TO_U32 r0, r0.h0`, `MOV.i32 r1, 0x3C000000`, `BLEND` | the (lane, 0.0) word is `U16_TO_U32`, and the (0.0, 1.0) word is an immediate `MOV`, not a FAU word. The link drops lanes y, z, w (varying shader: 5 instrs, one store) |
+| `ck_lane_highpcolour` | not a dEQP case: `ck_lane` with `mediump vec4 color` changed to `highp vec4 color` | `ck_lane` + that one edit (sidecar says so) | 10 instrs: `LD_VAR...v2`, `V2F32_TO_V2F16 r0`, `ATEST 0x3F800000`, `MKVEC.v2i16 r1, 0x0.h0, r0.h0`, `MKVEC.v2i16 r2, r0^.h1, u2.w0.h0` (FAU word 4 `0x3c003c00`), `MOV r0, r1`, `MOV r1, r2`, `BLEND` | the (constant, lane) order of a pair Mesa *does* fold: constant as src0 (inline `0x0.h0`, not FAU), then the second half of the converted pair (`.h1`) with the FAU `1.0`. The varying is compacted to `v2` |
+
+Rebuilt texts were checked against a copy of VK-GL-CTS main fetched on
+2026-11-16 (not a pinned checkout; the git fetch of a sparse clone needed an
+approval this run did not have). The `deqp_shapes` pairs come from VK-GL-CTS
+93bca01. The two rebuilt texts still have to be confirmed byte for byte
+against a fresh measure `.qpa` of their cases.
+
+### What the references change in the lowering plan
+
+- **The operator harness has no colour pair in Mesa.** For
+  `ck_lane`, `ck_lane_mediump` and `lane_zero_load` the fragment program is
+  the plain 4-lane load: our refusal comes from our link, which removes
+  the vertex shader's constant lanes (rule 1 of `mali-varying-constants.md`).
+  Mesa's link does not remove them here. A scratch probe (not committed) found
+  the cause in the vertex shader's local `mediump vec4 color`:
+  - with `highp vec4 color` (`ck_lane_highpcolour`), Mesa drops the
+    constant lanes;
+  - with only `v_color` made highp, Mesa keeps them.
+
+  The likely mechanism is that the lane reaches the store as a precision
+  conversion of a constant (`f2fmp`), which `nir_opt_varyings` does not treat
+  as a constant. This is *not verified* in Mesa's source. So for these cases
+  (all of the 141 operator `constant_then_varying` cases, and the operator
+  `*_float_vertex` / `inversesqrt` cases of the 29) the lowering is a **link
+  rule**, not the `vectorise`/`word_of` edit of step 2: a vertex output lane
+  that is a constant written through a mediump value stays a varying. The
+  fragment shader is then the load/convert form we already draw. This touches
+  the varying link, which `lower-varylink` and #367's link rules also edit.
+- **The (lane, 0.0) form is real** for `default_vertex_attrib.float` (8
+  cases), whose constants are written straight into a highp `v_color`. Step 2's
+  `Leaf::Zext` at `nir_fs.rs:6890` matches `U16_TO_U32 r0, r0.h0`. The
+  (0.0, 1.0) word is `MOV.i32 r1, 0x3C000000`, an immediate.
+- **(constant, lane), where Mesa folds it** (`ck_lane_highpcolour`):
+  `MKVEC.v2i16 c, lane.h0` with the 0.0 as an inline `0x0.h0` src0, as
+  step 2 planned for `:6918`/`:8374`. No dEQP case the measure classified
+  needs it, so it guards the classifier edit if that edit is made, for
+  example for `shaders.random.*`.
+
+### References the study listed that were not made
+
+- `ck_pair_second` ("constant then the `.h1` half"): no case draws it. The
+  `.h1` half appears in `ck_lane_highpcolour`'s second word, as
+  (lane `.h1`, constant).
+- `lane_zero_tree` (`random.basic_expression.fragment.68`): the
+  `deqp_shapes` pairs hold one example per shape, and the measure's rules put
+  the `shaders.random.*` cases under the two operator shapes. dEQP's random
+  shader text is generated by its random shader generator and cannot be
+  rebuilt from the source by hand. The pair is in the `.qpa` of a
+  `tools/mali/deqp-host-measure.sh` run. The 23 `shaders.random.*` cases of
+  the two refusals stay unreferenced until a reference is made from that
+  `.qpa`.
