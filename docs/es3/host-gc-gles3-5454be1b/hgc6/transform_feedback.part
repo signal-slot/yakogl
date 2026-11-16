@@ -1,0 +1,6 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=882
+# section tip
+vivante	functional.transform_feedback	880	2	0	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.transform_feedback.random_full_array_capture.interleaved.points.3	Fail	compile	Compile failed: '' at es3fTransformFeedbackTests.cpp:1043		
+vivante	dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.8	Fail	compile	Compile failed: '' at es3fTransformFeedbackTests.cpp:1043		

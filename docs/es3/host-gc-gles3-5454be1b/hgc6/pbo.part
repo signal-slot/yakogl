@@ -1,0 +1,14 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=49
+# section tip
+vivante	functional.pbo	39	4	6	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.r11f_g11f_b10f_clears	NotSupported	refusal	Renderbuffer format not supported: '' at es3fPixelBufferObjectTests.cpp:200		
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.r11f_g11f_b10f_triangles	NotSupported	refusal	Renderbuffer format not supported: '' at es3fPixelBufferObjectTests.cpp:200		
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.rg32f_clears	NotSupported	refusal	Renderbuffer format not supported: '' at es3fPixelBufferObjectTests.cpp:200		
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.rg32f_triangles	NotSupported	refusal	Renderbuffer format not supported: '' at es3fPixelBufferObjectTests.cpp:200		
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.rgba32f_clears	NotSupported	refusal	Renderbuffer format not supported: '' at es3fPixelBufferObjectTests.cpp:200		
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.rgba32f_triangles	NotSupported	refusal	Renderbuffer format not supported: '' at es3fPixelBufferObjectTests.cpp:200		
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.rgba32i_clears	Fail	gl-error	glClearBufferiv(GL_COLOR, 0, color): glGetError() returned GL_INVALID_OPERATION at es3fPixelBufferObjectTests.cpp:345		
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.rgba32i_triangles	Fail	gl-error	glGenFramebuffers(1, &framebuffer): glGetError() returned GL_INVALID_OPERATION at es3fPixelBufferObjectTests.cpp:389		
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.rgba32ui_clears	Fail	gl-error	glClearBufferuiv(GL_COLOR, 0, color): glGetError() returned GL_INVALID_OPERATION at es3fPixelBufferObjectTests.cpp:353		
+vivante	dEQP-GLES3.functional.pbo.renderbuffer.rgba32ui_triangles	Fail	gl-error	glGenFramebuffers(1, &framebuffer): glGetError() returned GL_INVALID_OPERATION at es3fPixelBufferObjectTests.cpp:389		

@@ -1,0 +1,52 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=64
+# section tip
+vivante	functional.multisample	9	7	48	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.common_edge_big_quad	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.common_edge_small_quads	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.common_edge_viewport_quad	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.constancy_alpha_to_coverage	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.constancy_both	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.constancy_both_inverted	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.constancy_sample_coverage	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.constancy_sample_coverage_inverted	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.depth	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.num_samples_line	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.num_samples_polygon	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.proportionality_alpha_to_coverage	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.proportionality_sample_coverage	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.proportionality_sample_coverage_inverted	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.sample_coverage_invert	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.default_framebuffer.stencil	NotSupported	refusal	No multisample buffers		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.common_edge_big_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.common_edge_small_quads	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.common_edge_viewport_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_both	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_both_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.depth	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.num_samples_line	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.num_samples_polygon	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.proportionality_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.proportionality_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.proportionality_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.sample_coverage_invert	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_4_samples.stencil	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.common_edge_big_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.common_edge_small_quads	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.common_edge_viewport_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_both	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_both_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.depth	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.num_samples_line	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.num_samples_polygon	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.proportionality_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.proportionality_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.proportionality_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.sample_coverage_invert	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
+vivante	dEQP-GLES3.functional.multisample.fbo_8_samples.stencil	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		

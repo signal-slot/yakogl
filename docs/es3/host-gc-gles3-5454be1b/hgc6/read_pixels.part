@@ -1,0 +1,28 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=48
+# section tip
+vivante	functional.read_pixels	0	48	0	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.read_pixels.alignment.rgba_int_1	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.alignment.rgba_int_2	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.alignment.rgba_int_4	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.alignment.rgba_int_8	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_1	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_2	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_4	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_8	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_17	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_19	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_23	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_29	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_17	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_19	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_23	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_29	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.skip.rgba_int_0_3	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_0	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_3	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_5	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.skip.rgba_uint_0_3	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_0	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
+vivante	dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_3	Fail	gl-error	glDrawArrays(GL_TRIANGLES, 0, 6): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:165		
+vivante	dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_5	Fail	gl-error	glPixelStorei(GL_PACK_ALIGNMENT, m_alignment): glGetError() returned GL_INVALID_OPERATION at es3fReadPixelsTests.cpp:338		
