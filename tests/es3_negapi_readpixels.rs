@@ -267,8 +267,8 @@ fn rgba8_read_as_float_is_invalid_operation() {
 /// sample the class gets no texture (glTexImage2D GL_INVALID_OPERATION),
 /// which is checked instead; one that samples it but cannot render into the
 /// surface (the GC7000UL, `GC_INT_RT_128BPP`) gets an incomplete framebuffer:
-/// dEQP's read is still GL_INVALID_OPERATION and the class's own pair is
-/// refused too (no pixels read from an incomplete framebuffer).
+/// glReadPixels checks completeness before the pair, so dEQP's read and the
+/// class's own pair are both GL_INVALID_FRAMEBUFFER_OPERATION there.
 fn int32_read_as_float(internalformat: GLenum, class: u8, surf: u8, type_: GLenum) {
     let _g = context();
     let mut f = Fbo::new();
@@ -281,8 +281,8 @@ fn int32_read_as_float(internalformat: GLenum, class: u8, surf: u8, type_: GLenu
     assert_eq!(e, GL_NO_ERROR, "texture {internalformat:#x}");
     if !rt_format_drawable(surf) {
         assert_eq!(f.status(), GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "texture {internalformat:#x}: not a target");
-        assert_eq!(read(GL_RGBA, GL_FLOAT), GL_INVALID_OPERATION, "the pair dEQP reads, refused");
-        assert_ne!(read(GL_RGBA_INTEGER, type_), GL_NO_ERROR, "the class's own pair: incomplete, not read");
+        assert_eq!(read(GL_RGBA, GL_FLOAT), GL_INVALID_FRAMEBUFFER_OPERATION, "the pair dEQP reads");
+        assert_eq!(read(GL_RGBA_INTEGER, type_), GL_INVALID_FRAMEBUFFER_OPERATION, "the class's own pair");
         eprintln!("texture {internalformat:#x}: surface {surf} not rendered by this back end, the incomplete framebuffer checked");
         return;
     }
