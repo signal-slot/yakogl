@@ -511,11 +511,13 @@ Predicted change, a frame, **host-derived**:
 - **Gain: 0 to -14 ms** (to -19 at 0.8 ns an instruction): early depth rejects
   hidden fragments of the 148-instruction terrain pass, 42.6 ms at full cover
   (`gc-tiled-targets.md`, "5. Early depth", Gain, and "The part"). The note puts
-  the range's width on `make_grid`'s draw order; the model of that order is
-  item terrain-overdraw's, in review and not in this tree, so the range is not
-  narrowed here.
-- **Net: from about -14 ms to about +3 ms**, the sign depending on the draw
-  order. Of a board frame of about 250 ms (`gc-slow-terrain.md`, before plan
+  the range's width on `make_grid`'s draw order. The model of that order,
+  `gc-terrain-overdraw.md` (host model, no board), narrows it to -0.75 to
+  -1.6 ms a frame (2.5 % of the fragments, mean -1.0 to -1.3 ms): make_grid's
+  order already reaches the per-pixel floor, and the overdraw is only 1.02 to
+  1.03.
+- **Net: from about -14 ms to about +3 ms** on the cited range; about -0.9 to
+  +2.3 ms with the order model's gain, the sign set by the RS rate. Of a board frame of about 250 ms (`gc-slow-terrain.md`, before plan
   #328's fixes) this is at most a twentieth: the knob cannot take terrain off
   its GPU-shading bound (140 to 205 ms, the same note, rank 1).
 
