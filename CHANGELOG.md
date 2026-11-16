@@ -57,12 +57,14 @@ records at the tip.
   `b1b5b845`: 8,350 mustpass cases all with a result, 7,346 pass, 558
   fail, 446 not supported, 0 GPU recoveries (`d498d5ad`).
 - dEQP-GLES2 on the NanoPC-T6 (Mali-G610, panthor, the board's own
-  Armbian), the whole tree in two sessions, kept as slices under
-  `tools/cts/log/` (not yet a RESULTS.md row): S1 at main `a50d87b5`,
-  5,141 cases, 2,659 Pass, 2,445 Fail, 34 NotSupported, 3 QualityWarning
-  (`8fd2e909`); S2 at main `1bd2074f`, 4,872 cases, 1,245 Pass, 3,626
-  Fail, 1 ResourceError (`4ecefc7b`). Both ran with the same boot before
-  and after every chunk.
+  Armbian): the whole mustpass tree at main `37305608`, 2026-11-15, one
+  boot, four slices under `tools/cts/log/2026-11-15-t6-gles2-S<n>-37305608/`:
+  17,165 cases, 5,456 Pass, 10,700 Fail, 973 NotSupported, 33
+  ResourceError, 3 QualityWarning, 0 Lost; all 76 chunks done, 0 panthor
+  kernel lines, 0 resets (`1db8fd3d`, a `tools/cts/RESULTS.md` row). Since
+  the first tally (`ce050715`, 5,260 Pass) 224 cases newly pass and 28 that
+  passed are refused; most of the rest are refusals by the online compiler
+  (`docs/es2-cts-failures.md` section M).
 - The full gate reads 222 ok, 0 failed, 0 gap(s) at `c66bea9f`
   (`4946e879`); green means that one commit and is re-run on the commit
   to publish.
