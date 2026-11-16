@@ -3933,6 +3933,40 @@ zephyr_rpi5_probe_images() {
   done
   [ "$n" -gt 0 ] || { echo "no rpi_5 probe image under tools/probes/rpi_5/"; return 1; }
 }
+# Every Zephyr image under tools/probes/stm32mp257f_dk/ (a directory with a
+# CMakeLists.txt and a prj.conf: mp2_hello, mp2_identify, mp2_wdt, mp2_product,
+# mp2_display, mp2_display_state, mp2_gpu, mp2_gpu_scanout), built for the
+# STM32MP257F-DK's A35 with -Werror on our C files. One row for all of them, so
+# a new probe needs no new row. The board layer's OP-TEE watchdog arm
+# (stm32mp2_wdog.c, CONFIG_YAKOGL_STM32MP2_WDOG=y) is in mp2_identify, whose
+# prj.conf sets it, and not in mp2_hello ("no watchdog armed by this image"):
+# the marker string is required exactly once in mp2_identify's zephyr.bin and
+# not at all in mp2_hello's.
+zephyr_stm32mp257f_dk_probe_images() {
+  local d name n=0 bin want got
+  for d in tools/probes/stm32mp257f_dk/*/; do
+    d=${d%/}
+    [ -f "$d/CMakeLists.txt" ] && [ -f "$d/prj.conf" ] || continue
+    name=${d##*/}
+    zephyr_werror_image stm32mp257f_dk/stm32mp257fxx/a35 "$d" "stm32mp257f_dk-$name" ||
+      { echo "stm32mp257f_dk probe $name did not build"; return 1; }
+    case "$name" in
+      mp2_identify) want=1 ;;
+      mp2_hello) want=0 ;;
+      *) want= ;;
+    esac
+    if [ -n "$want" ]; then
+      bin="build/zephyr-werror/stm32mp257f_dk-$name/zephyr/zephyr.bin"
+      got=$(grep -a -o 'gc_wdog_arm: armed OP-TEE arm,smc-wdt' "$bin" | wc -l)
+      [ "$got" -eq "$want" ] || {
+        echo "$name: the gc_wdog_arm marker is in $bin $got times, expected $want"
+        return 1
+      }
+    fi
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] || { echo "no stm32mp257f_dk probe image under tools/probes/stm32mp257f_dk/"; return 1; }
+}
 # The FDT walker's host test. Without dtc it prints a SKIPPED line and passes
 # on 10 checks only, so the row is ok only with dtc and "fdt_walk: N checks,
 # 0 failed" without a SKIPPED line. If it fails, test/test_fdt.c lines 211 to
@@ -4155,6 +4189,11 @@ if [ "$QUICK" -eq 0 ]; then
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
+    # The DK's probes link the Vivante driver and the crate's gpu::vivante
+    # (driver/zephyr/lib/board/stm32mp2/CMakeLists.txt): a Vivante change builds them.
+    scope vivante drivers samples
+    step "zephyr  stm32mp257f_dk probe images (tools/probes/stm32mp257f_dk/*), -Werror on our C files, the watchdog marker in mp2_identify only" \
+      zephyr_stm32mp257f_dk_probe_images
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
   fi
