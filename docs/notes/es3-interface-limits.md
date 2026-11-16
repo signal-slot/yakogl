@@ -98,17 +98,28 @@ defect.
 
 ## 5. Order of work and issue drafts
 
-1. V3D: `MAX_VARYING_VECTORS` 15 and a vertex-output constant 64 under
-   `!report-es2`; `tests/es3_v3d_varyings.rs` draws and compiles with 15
-   varyings and 64 output components (flat, centroid, and the point coordinate
-   in front); update `tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`
-   `known_gaps()` and `tests/es2_report_guard.rs` (the report-es2 answer stays 8).
-2. Float/int64: the host test of section 4, no code change expected.
-3. Uniform blocks: per `docs/notes/ubo-limits.md`, V3D first.
-4. Issue drafts: "PowerVR: MAX_VERTEX_OUTPUT_COMPONENTS 64" (needs a 16-vector
-   vertex compile; waits for `src/pvr/**`), "GC7000UL: MAX_VERTEX_OUTPUT_COMPONENTS
-   64" (waits for `src/vivante/**`), "Mali: varying limits" (stays as the Mali
-   plans have it).
+Done on main (plan #359): items 1-3 below, each pinned by a host test
+(`tests/es3_v3d_varyings.rs`, `tests/es3_query_forms.rs`,
+`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs` `known_gaps()`,
+`tests/es2_report_limits.rs`; the report-es2 answer stays 8 / 32 / 6144 / 1536).
 
-Most of this waits for the holders of `src/gl/context.rs` and `src/gl/state.rs`
-(plans #354 and #339), which is why this change is the note only.
+1. V3D: `MAX_VARYING_VECTORS` 15 and `MAX_VERTEX_OUTPUT_COMPONENTS` 64 under
+   `!report-es2`.
+2. Float/int64: no separate defect; the three forms share one arm
+   (section 4).
+3. V3D uniform blocks: `MAX_UNIFORM_BLOCK_SIZE` 16384, combined components
+   50688 (`gl/limits.rs`).
+4. Issue drafts for what is left (each waits for its owner of
+   `src/pvr/**` or `src/vivante/**`):
+   - "PowerVR: MAX_UNIFORM_BLOCK_SIZE 16384 and the combined uniform
+     components 50176 / 50048": the user blocks must be read from memory
+     (or behind the constant file); report 6144 / 1536 until then.
+   - "GC7000UL: the same", design in `docs/notes/gc-ubo-const-limit.md` (`load`).
+   - "PowerVR and GC7000UL: MAX_VERTEX_OUTPUT_COMPONENTS 64": needs a
+     16-vector vertex compile (16 output rows, one the position) and the VDM
+     output size / SHC io rows to carry it; reports 60 until then.
+   - "Mali: varying limits": stays with the Mali plans (8 / 32 / 32).
+   - "Host dEQP before/after on implementation_limits, state_query.integers*,
+     ubo and the varying groups for v3d, pvr, vivante": needs the patched
+     VK-GL-CTS 93bca01 build (`tools/cts/README.md` 2b), not present in the
+     dependency cache; the Pi 4 board rows are to be re-run.
