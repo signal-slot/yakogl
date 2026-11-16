@@ -443,6 +443,40 @@ Until then, whoever reads the nightly's result opens that issue by hand.
 The nightly full run on main stays the proof of the whole; it is also the
 run that writes the caches, so the next day's pull requests start from it.
 
+### 3.5 A pull request from a fork gets no runner (2026-11-16)
+
+The runners are lab machines: they share their hosts with the farm's agents
+and hold the firmware blob and the dependency layout, and a gate run executes
+the code it checks (`build.rs`, the tests, `check.sh`). So `gate.yml` runs
+the `check` job only for the schedule, a dispatch and a pull request whose
+head repository is this repository (`github.event.pull_request.head.repo.full_name
+== github.repository`; a head repository that no longer exists counts as a
+fork). This is the CI side of #1606 step 9 (D7, "promote and make public");
+plan #363's workflow-readiness finding named fork pull requests on the
+self-hosted runners as the one blocking question.
+
+What an outside contributor sees: their pull request gets one check,
+`outside`, on a GitHub-hosted runner with no token and no checkout. It prints
+that the gate runs on the project's own runners and does not run on a pull
+request from a fork, and it fails on purpose: a skipped required check counts
+as a pass, and a green on a pull request nothing checked would mislead. What
+a maintainer does: reads the change, fetches the fork's branch, pushes it as
+a branch of this repository and opens a pull request from it. That pull
+request gets the gate as any other. Same-repository pull requests, the
+nightly and `workflow_dispatch` are unchanged.
+
+The `if` is not a security boundary. A `pull_request` run uses the workflow
+file of the pull request's merge commit, so a fork can edit `gate.yml` and
+remove the `if`; GitHub's default approval covers only a first-time
+contributor's workflows. Before the repository is public, one of these is
+set in GitHub (the owner, D7; a requirement, not an option): "Require
+approval for all outside collaborators" for fork pull request workflows
+(Settings > Actions > General), or a runner group for the `yakogl-gate`
+runners that does not allow public repositories. `gate.yml` uses no
+`pull_request_target` and no `workflow_run`; `pages.yml` runs on
+`ubuntu-latest` on pushes to main and by dispatch only, so no fork reaches
+it.
+
 ## 5. Steps, in order
 
 1. `gate.yml`: a pull request runs `tools/check.sh --changed <merge-base>`;

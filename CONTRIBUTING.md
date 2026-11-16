@@ -32,6 +32,14 @@ CI, a review, then the merge. Never push main by hand.
    them and is clippy's gate. Run clippy on the crates you touched when it
    is quick, and fix a red nightly's clippy rows first (docs/ci.md, "The
    nightly").
+   A pull request from a fork gets no gate: the runners are the project's
+   own machines and a run executes the code it checks, so `gate.yml` runs
+   the gate only for a pull request from a branch of this repository. A
+   fork's pull request gets one check instead, `outside`, on a GitHub-hosted
+   runner, which says so and fails on purpose (nothing checked the pull
+   request). A maintainer who takes such a change reads it, pushes the
+   branch to this repository and opens a pull request from it; that pull
+   request gets the gate (docs/ci.md, section 3.5).
 3. The review reads the commit; it runs no check.
 4. Merge when the CI is green and the review approves.
 
