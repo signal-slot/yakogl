@@ -128,12 +128,12 @@ remote). The state of each checklist line is in
   2026-10-20 run with the AM62P's `86d0b482` (2026-10-28).
 - The `CONTRIBUTING.md` walk (line 3): met on 2026-11-12, fresh clone of
   `570cd8c6`, `--quick` 181 ok, 0 failed, 0 gap(s).
-- A green full `tools/check.sh` on the snapshot (line 12): the nightly
-  `rust_eh_personality` link failure is fixed (`fce3e6aa`, `2e949ed5`), and
-  the last green full run is `c66bea9f` (2026-11-11, 222 ok, 0 failed,
-  0 gap(s), recorded in `4946e879`); that holds for that commit only. The
-  full run on `760aad3d` (2026-11-14, `cde1db8d`) failed 9 rows on
-  `tests/redaction_scan.rs` (fixture values of
+- A green full `tools/check.sh` on the snapshot (line 12): line 12 was met
+  at `c66bea9f` (2026-11-11, full gate 222 ok, 0 failed, 0 gap(s), recorded
+  in `4946e879`), which holds for that commit only. The nightly
+  `rust_eh_personality` link failure is fixed (`fce3e6aa`, `2e949ed5`).
+  Since `760aad3d` (2026-11-14, `cde1db8d`) the line is partial: the full
+  run failed 9 rows on `tests/redaction_scan.rs` (fixture values of
   `tools/mp2_uboot_record_check.py`, fixed in `31608f8e`) and was cut by a
   full disk, so the gate is re-run on the snapshot.
 
