@@ -132,6 +132,8 @@ pub const OSAL_QUERY_DRAW_STATS: u32 = 14;
 pub const OSAL_QUERY_MALI_GPU: u32 = mali::OSAL_QUERY_MALI_GPU;
 /// out = [`mali::OsalMaliHeap`] (a `gpu-mali` OSAL only).
 pub const OSAL_QUERY_MALI_TILER_HEAP: u32 = mali::OSAL_QUERY_MALI_TILER_HEAP;
+/// in = `u32`: whether the Mali backend records a frame (a `gpu-mali` OSAL only).
+pub const OSAL_QUERY_MALI_FRAME_OPEN: u32 = mali::OSAL_QUERY_MALI_FRAME_OPEN;
 
 /// `struct osal_v3d_tfu` (osal_internal.h): one TFU job's registers, in
 /// `struct v3d_tfu_job`'s order, and its result and time.

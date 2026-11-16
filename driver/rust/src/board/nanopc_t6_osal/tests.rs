@@ -152,6 +152,52 @@ fn allocations_are_carve_pages_and_a_free_waits_for_the_kick_being_recorded() {
     assert_eq!(r.osal.live_pages, 5);
 }
 
+/// More than half of the carve-out: two of them never fit.
+const MORE_THAN_HALF: usize = CARVE as usize / 2 + 4096;
+
+/// With no frame being recorded a free waits only for the last submitted
+/// kick: that one has completed here, so the pages go back at once and an
+/// allocation of the same size fits (dEQP's texture.size 2048x2048 cases on
+/// the board: 8190 pages freed after a case's last kick, 8190 wanted before
+/// the next case's first draw, a carve-out of 16384). Freed while a frame
+/// is recorded they are held for its kick.
+#[test]
+fn a_free_with_no_frame_open_waits_only_for_the_last_submitted_kick() {
+    let mut r = rig();
+    let s = stream(&mut r);
+    let a = r.osal.alloc(MORE_THAN_HALF).unwrap();
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), 0);
+    r.osal.frame_open(false);
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
+    assert_eq!(r.osal.held(), 0, "no kick may read the pages");
+    let b = r.osal.alloc(MORE_THAN_HALF).unwrap();
+    assert_eq!(b.gpu, a.gpu);
+
+    r.osal.frame_open(true);
+    assert_eq!(r.osal.free(&*r.z, b.gpu, b.handle, &mut no_delay), 0);
+    assert_eq!(r.osal.held(), 1, "the frame being recorded may read them");
+    assert_eq!(r.osal.alloc_reclaiming(&*r.z, MORE_THAN_HALF, &mut no_delay), Err(-ENOMEM));
+    assert_eq!(r.osal.held(), 1, "no wait completes a kick that is not submitted");
+}
+
+/// An allocation the carve-out refuses waits for the submitted kicks and
+/// takes back what they held.
+#[test]
+fn a_refused_allocation_waits_for_the_submitted_kicks() {
+    let mut r = rig();
+    let s = stream(&mut r);
+    let a = r.osal.alloc(MORE_THAN_HALF).unwrap();
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    r.osal.frame_open(false);
+    // freed while kick `f` runs: held for it
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
+    assert_eq!((r.osal.held(), r.osal.fences()), (1, (f as u64, 0)));
+    assert_eq!(r.osal.alloc(MORE_THAN_HALF), Err(-ENOMEM));
+    let b = r.osal.alloc_reclaiming(&*r.z, MORE_THAN_HALF, &mut no_delay).unwrap();
+    assert_eq!((b.gpu, r.osal.held(), r.osal.fences()), (a.gpu, 0, (f as u64, f as u64)));
+}
+
 /// A 24-byte stream in the carve-out that adds 1 to the word 32 bytes from
 /// its start: `MOV48 d0, word`, `MOV48 d2, 1`, `SYNC_ADD64 d0, d2`.
 fn stream(r: &mut Rig) -> Alloc {
@@ -1097,7 +1143,9 @@ mod gl {
     use yakogl::gl::texture::{glBindTexture, glDeleteTextures, glGenTextures, glTexImage2D};
     use yakogl::gl::types::*;
     use yakogl::gl::vertex::{glEnableVertexAttribArray, glVertexAttribPointer};
-    use yakogl::osal::mali::{OsalMaliKick, OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP};
+    use yakogl::osal::mali::{
+        OsalMaliKick, OSAL_QUERY_MALI_FRAME_OPEN, OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP,
+    };
     use yakogl::osal::{OsalGpuMem, OsalOps};
 
     const TRI_VS: &str = include_str!("../../../../../tools/mali/testdata/tri.vert");
@@ -1154,7 +1202,7 @@ mod gl {
     }
 
     unsafe extern "C" fn o_alloc(_: u64, size: usize, _: u32, out: *mut OsalGpuMem) -> i32 {
-        with(|g| match g.r.osal.alloc(size) {
+        with(|g| match g.r.osal.alloc_reclaiming(&*g.r.z, size, &mut no_delay) {
             Ok(a) => {
                 g.allocs.push((a.gpu, size, a.cpu));
                 fill(out, &a);
@@ -1216,6 +1264,7 @@ mod gl {
                     OSAL_QUERY_MALI_TILER_HEAP if sz == size_of::<OsalMaliHeap>() => {
                         *out.cast::<OsalMaliHeap>() = g.r.osal.heap().unwrap()
                     }
+                    OSAL_QUERY_MALI_FRAME_OPEN if sz == 4 => g.r.osal.frame_open(*out.cast::<u32>() != 0),
                     _ => return -ENOTSUP,
                 }
             }

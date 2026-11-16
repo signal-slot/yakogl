@@ -857,6 +857,7 @@ int yd_t6_osal_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, u
 		  struct yd_t6_gpu_up *z1, struct yd_t6_submit_up *out);
 int yd_t6_osal_alloc(size_t size, struct osal_gpu_mem *out);
 int yd_t6_osal_free(struct osal_gpu_mem *mem);
+void yd_t6_osal_frame_open(bool open);
 int yd_t6_osal_map_phys(uint64_t phys, size_t size, struct osal_gpu_mem *out);
 int64_t yd_t6_osal_submit(uint64_t stream_gpu, uint32_t stream_bytes);
 int yd_t6_osal_wait(int64_t fence, int64_t timeout_us);

@@ -71,6 +71,8 @@ pub(crate) struct Mock {
     /// completes (`gpu_free`'s contract, as tools/mali/panthor's OSAL and
     /// zephyr.c keep it): (id, VA, fence).
     held: Vec<(usize, u64, i64)>,
+    /// Every `OSAL_QUERY_MALI_FRAME_OPEN` the backend sent, in order.
+    frame_open: Vec<bool>,
 }
 
 static MOCK: Mutex<Option<Mock>> = Mutex::new(None);
@@ -208,6 +210,10 @@ unsafe extern "C" fn m_query(what: u32, out: *mut c_void, sz: usize) -> i32 {
             OSAL_QUERY_MALI_GPU if sz == core::mem::size_of::<OsalMaliGpu>() => *out.cast::<OsalMaliGpu>() = GPU,
             OSAL_QUERY_MALI_TILER_HEAP if sz == core::mem::size_of::<OsalMaliHeap>() => {
                 *out.cast::<OsalMaliHeap>() = HEAP
+            }
+            OSAL_QUERY_MALI_FRAME_OPEN if sz == 4 => {
+                let open = *out.cast::<u32>() != 0;
+                with(|m| m.frame_open.push(open));
             }
             _ => return -ENOTSUP,
         }
@@ -614,6 +620,26 @@ fn a_draw_with_a_varying_names_the_varying_program() {
     let entry = |i: u64| with(|m| m.read(srt + 16 * i, 16));
     let size = |e: Vec<u8>| u64::from_le_bytes(e[8..16].try_into().unwrap());
     assert_eq!((size(entry(1)), size(entry(2))), (64, 64), "2 attributes, 2 buffers of 32 bytes a descriptor");
+}
+
+/// The OSAL is told whether a frame is being recorded
+/// (`OSAL_QUERY_MALI_FRAME_OPEN`): none after the init, one from a frame's
+/// first draw, none again once the frame is submitted. An OSAL holds what
+/// is freed with no frame open only for the last submitted kick.
+#[test]
+fn the_osal_is_told_while_a_frame_is_recorded() {
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    assert_eq!(with(|m| m.frame_open.clone()), [false]);
+    let mut clear = triangle(target(), &VERTICES);
+    clear.index_count = 0;
+    // SAFETY: a valid draw whose records the test keeps.
+    assert_eq!(unsafe { mali_draw(&clear) }, 0);
+    assert_eq!(with(|m| m.frame_open.clone()), [false, true]);
+    assert_eq!(mali_flush(), 0);
+    assert_eq!(with(|m| m.frame_open.clone()), [false, true, false]);
+    assert_eq!(mali_flush(), 0, "no frame to end");
+    assert_eq!(with(|m| m.frame_open.len()), 3);
 }
 
 /// A slot's memory is written again only after its last frame's fence: with

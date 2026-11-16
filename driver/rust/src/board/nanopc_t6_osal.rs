@@ -20,9 +20,13 @@
 //! The carve-out is mapped once, whole, so an allocation is a range of its
 //! pages and nothing else: `gpu` is [`CARVE_VA`] plus the offset, `cpu` and
 //! `phys` the backing's at the same offset. Pages are handed out first fit
-//! ([`Osal::alloc`]); a free is held until the kick being recorded
-//! completes, the fence `submitted + 1`, as src/osal/zephyr.c and the
-//! panthor OSAL hold it ([`Osal::free`]). `OSAL_MEM_GPU_EXEC` needs nothing:
+//! ([`Osal::alloc`]); a free is held until the last kick that may read its
+//! pages completes ([`Osal::free`]): the kick being recorded, the fence
+//! `submitted + 1`, while the backend records a frame
+//! ([`Osal::frame_open`]), else the last submitted one, as
+//! src/osal/gc_frees.h holds it. An allocation the carve-out refuses takes
+//! back what the submitted kicks hold ([`Osal::alloc_reclaiming`], the
+//! reclaim of src/osal/zephyr.c). `OSAL_MEM_GPU_EXEC` needs nothing:
 //! the carve-out is executable, as panthor maps a buffer without
 //! `MAP_NOEXEC`. `map_phys` of a range inside the carve-out answers its own
 //! pages ([`Osal::window`]) under the handle [`WINDOW`], which a free takes
@@ -373,6 +377,8 @@ pub struct Osal {
     dead: Option<Dead>,
     /// [`Osal::shutdown`] ended the group.
     down: bool,
+    /// The backend records a frame ([`Osal::frame_open`]).
+    frame_open: bool,
     /// The group is not known ended: its terminate was not acknowledged,
     /// or never asked for an error that needs a GPU reset. The GPU may
     /// still run it and write what its kicks used. Implies `memory_kept`.
@@ -467,6 +473,7 @@ impl Osal {
         n_lost: 0,
         dead: None,
         down: false,
+        frame_open: true,
         unended: false,
         memory_kept: false,
         restarts: 0,
@@ -691,6 +698,14 @@ impl Osal {
         (self.submitted, self.completed)
     }
 
+    /// `OSAL_QUERY_MALI_FRAME_OPEN`: whether the backend records a frame,
+    /// whose kick may read what is freed meanwhile ([`Osal::free`]). True
+    /// until the backend says otherwise: a free is then held for the next
+    /// kick, which is safe for a backend that never says.
+    pub fn frame_open(&mut self, open: bool) {
+        self.frame_open = open;
+    }
+
     /// Frees held now.
     pub fn held(&self) -> usize {
         self.n_held
@@ -764,6 +779,39 @@ impl Osal {
         Err(-ENOMEM)
     }
 
+    /// `gpu_alloc` as the OSAL's op serves it: [`Osal::alloc`], and when
+    /// the carve-out has no run of free pages long enough (`-ENOMEM`), the
+    /// reclaim of src/osal/zephyr.c. First the frees whose kick has
+    /// completed by now go back (one read of the sync object) and the
+    /// allocation is tried again. Then, when a free is held for a kick
+    /// already submitted, the last submitted kick is waited for (panthor's
+    /// 5 s; an error restarts the group, [`Osal::wait`]) and the allocation
+    /// tried once more. A free held for the kick being recorded stays
+    /// held: no wait completes a kick that is not submitted.
+    pub fn alloc_reclaiming(
+        &mut self,
+        m: &impl Mmio,
+        size: usize,
+        delay_us: &mut impl FnMut(u32),
+    ) -> Result<Alloc, i32> {
+        let refused = match self.alloc(size) {
+            Err(e) if e == -ENOMEM && self.n_held != 0 => e,
+            r => return r,
+        };
+        self.completed(m, delay_us);
+        if let Ok(a) = self.alloc(size) {
+            return Ok(a);
+        }
+        let submitted = self.submitted;
+        if !self.runs() || !self.held[..self.n_held].iter().any(|h| h.fence <= submitted) {
+            return Err(refused);
+        }
+        // whatever the wait says, the allocation says whether the pages
+        // came back
+        let _ = self.wait(m, submitted as i64, -1, delay_us);
+        self.alloc(size)
+    }
+
     fn release(&mut self, first: usize, pages: usize) {
         for p in first..first + pages {
             set(&mut self.used, p, false);
@@ -794,8 +842,11 @@ impl Osal {
     }
 
     /// `gpu_free` of the allocation at `gpu` with `handle` ([`Alloc`]):
-    /// held until the kick being recorded completes (fence `submitted +
-    /// 1`); after [`Osal::shutdown`] given back at once. A window
+    /// held until the last kick that may read it completes. While the
+    /// backend records a frame ([`Osal::frame_open`]) that is the kick
+    /// being recorded (fence `submitted + 1`); with no frame open, and
+    /// after [`Osal::shutdown`], the last submitted one, so the pages go
+    /// back at once when that has completed. A window
     /// ([`WINDOW`]) has nothing to give back: 0, and the allocation it lies
     /// in is untouched. `-EINVAL` for an allocation this OSAL did not hand
     /// out or already freed. With [`PENDING_FREES`]
@@ -841,8 +892,9 @@ impl Osal {
                 return -ENOSPC;
             }
         }
-        // after the shutdown no kick comes: the pages go back at once
-        let fence = if self.down { self.submitted } else { self.submitted + 1 };
+        // the kick being recorded may read the pages; with no frame open,
+        // and after the shutdown, only the kicks already submitted may
+        let fence = if self.down || !self.frame_open { self.submitted } else { self.submitted + 1 };
         self.held[self.n_held] = Held { first: first as u32, pages: handle as u32, fence };
         self.n_held += 1;
         self.drain();

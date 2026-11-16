@@ -9,6 +9,7 @@
 //! | a buffer the CPU writes and the GPU reads, at a GPU VA | `gpu_alloc` | [`super::OsalGpuMem`]: `cpu` and `gpu` (shader code with [`super::OSAL_MEM_GPU_EXEC`]) |
 //! | the device's counts | `query(OSAL_QUERY_MALI_GPU)` | [`OsalMaliGpu`] |
 //! | the tiler heap the kernel side made | `query(OSAL_QUERY_MALI_TILER_HEAP)` | [`OsalMaliHeap`] |
+//! | a free that goes back before the next kick when no frame is recorded | `query(OSAL_QUERY_MALI_FRAME_OPEN)` | a `u32` in: 1 while the backend records a frame |
 //! | run a command stream | `submit(&OsalMaliKick, size)` | a fence (>= 0) or a negative errno |
 //! | its completion | `wait(fence, timeout_us)` | 0, > 0 on timeout, < 0 on a fault |
 //!
@@ -28,6 +29,13 @@ pub const OSAL_QUERY_MALI_GPU: u32 = 15;
 /// out = [`OsalMaliHeap`]: the tiler heap the OSAL made for the backend's
 /// queue (the same heap at every query while the OSAL is up).
 pub const OSAL_QUERY_MALI_TILER_HEAP: u32 = 16;
+/// in = `u32` (the out pointer, 4 bytes): nonzero while the backend records
+/// a frame, whose kick may read GPU memory freed meanwhile. With no frame
+/// open the OSAL holds a free only for the last submitted kick instead of
+/// the next one, which does not exist until something draws
+/// (`OSAL_QUERY_GC_FRAME_OPEN`'s rule). `-ENOTSUP` from an OSAL that holds
+/// every free for the next kick.
+pub const OSAL_QUERY_MALI_FRAME_OPEN: u32 = 19;
 
 /// The device facts the backend builds from (panthor: `DRM_PANTHOR_DEV_QUERY_GPU_INFO`
 /// and `_CSIF_INFO`, panthor_drm.h).
@@ -122,6 +130,7 @@ mod tests {
         for line in [
             format!("#define OSAL_QUERY_MALI_GPU {}u\n", super::OSAL_QUERY_MALI_GPU),
             format!("#define OSAL_QUERY_MALI_TILER_HEAP {}u\n", super::OSAL_QUERY_MALI_TILER_HEAP),
+            format!("#define OSAL_QUERY_MALI_FRAME_OPEN {}u\n", super::OSAL_QUERY_MALI_FRAME_OPEN),
         ] {
             assert!(internal.contains(&line), "osal_internal.h has {line:?}");
         }
