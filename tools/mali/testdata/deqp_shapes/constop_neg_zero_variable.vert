@@ -1,0 +1,27 @@
+attribute vec4 dEQP_Position;
+attribute float a_b;
+attribute float a_e;
+attribute float a_t;
+attribute float a_g;
+attribute float a_ad;
+attribute float a_af;
+attribute vec2 a_aq;
+varying mediump float b;
+varying mediump float e;
+varying mediump float t;
+varying mediump float g;
+varying mediump float ad;
+varying mediump float af;
+varying mediump vec2 aq;
+
+void main()
+{
+	gl_Position = dEQP_Position;
+	b = a_b;
+	e = a_e;
+	t = a_t;
+	g = a_g;
+	ad = a_ad;
+	af = a_af;
+	aq = a_aq;
+}

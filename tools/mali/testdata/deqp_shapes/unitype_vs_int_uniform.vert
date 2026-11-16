@@ -1,0 +1,18 @@
+attribute highp vec4 a_position;
+attribute highp vec4 a_coords;
+varying mediump vec4 v_color;
+uniform mediump int ui_zero, ui_one;
+uniform mediump int ui_two;
+
+void main()
+{
+    gl_Position = a_position;
+    mediump vec4 coords = a_coords;
+    mediump mat2 tmp;
+    tmp[ui_zero]  = vec2(coords);
+    tmp[ui_one]   = vec2(coords.yzwx) * 0.5;
+    mediump vec2 res = vec2(0.0);
+    for (int i = 0; i < ui_two; i++)
+        res += tmp[i];
+    v_color = vec4(res, 0.0, 1.0);
+}
