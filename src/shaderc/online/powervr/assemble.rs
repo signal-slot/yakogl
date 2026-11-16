@@ -1807,14 +1807,14 @@ pub fn build_fragment_shader_targets(
         Kill(u8),
         Write { index: u16, src: u16 },
     }
-    if outs.is_empty() || outs.len() > 3 {
-        return Err(BuildError::Unsupported("a target list of other than 1..=3 outputs"));
+    if outs.is_empty() || outs.len() > MAX_RGBA8_OUTPUTS {
+        return Err(BuildError::Unsupported("a target list of other than 1..=4 outputs"));
     }
     let temps = free
         .checked_add(6 * outs.len() as u16)
         .ok_or(BuildError::Unsupported("no temporaries left for the colours"))?;
-    /* at most 3 x (4 moves, 2 packs, 4 writes) and the 3 kill steps */
-    let mut steps = [Step::Kill(0); 33];
+    /* at most 4 x (4 moves, 2 packs, 4 writes) and the 3 kill steps */
+    let mut steps = [Step::Kill(0); 43];
     let mut n = 0usize;
     let mut push = |s: Step| {
         steps[n] = s;

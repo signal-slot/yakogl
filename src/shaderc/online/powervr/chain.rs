@@ -1121,8 +1121,10 @@ fn insert_int_channels(
 }
 
 /// The most colour attachments a per-target list ([`TargetPack`]) names:
-/// one per draw buffer, the pixel's four output registers shared among them.
-pub const MAX_PACK_TARGETS: usize = 3;
+/// one per draw buffer, the pixel's four output registers shared among them
+/// (RC14: the four draw buffers of `src/pvr/mrt_layout.rs`, four one-dword
+/// targets at registers 0..3).
+pub const MAX_PACK_TARGETS: usize = crate::backend::GLES_MAX_TARGETS;
 
 /// What one colour attachment of a draw into attachments of different
 /// classes takes from its fragment output: draw buffer `i` is written from
@@ -2253,23 +2255,37 @@ mod tests {
     fn target_out_regs_follow_the_end_of_tile_emit() {
         use crate::shaderc::{SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8};
         use TargetPack::{Class, Int};
-        assert_eq!(target_out_regs(&[Class(SHC_RT_RGBA8), Int(R32UI)]), Some([(0, 1), (1, 1), (0, 0)]));
-        assert_eq!(target_out_regs(&[Class(SHC_RT_F32), Int(R32I)]), Some([(0, 1), (1, 1), (0, 0)]));
+        assert_eq!(target_out_regs(&[Class(SHC_RT_RGBA8), Int(R32UI)]), Some([(0, 1), (1, 1), (0, 0), (0, 0)]));
+        assert_eq!(target_out_regs(&[Class(SHC_RT_F32), Int(R32I)]), Some([(0, 1), (1, 1), (0, 0), (0, 0)]));
         assert_eq!(
             target_out_regs(&[Class(SHC_RT_RGBA8), Int(RG16UI), Class(SHC_RT_F32)]),
-            Some([(0, 1), (1, 1), (2, 1)])
+            Some([(0, 1), (1, 1), (2, 1), (0, 0)])
         );
         /* register 1 skipped: a two-dword source starts on an even one */
-        assert_eq!(target_out_regs(&[Class(SHC_RT_RGBA8), Class(SHC_RT_F16X4)]), Some([(0, 1), (2, 2), (0, 0)]));
+        assert_eq!(
+            target_out_regs(&[Class(SHC_RT_RGBA8), Class(SHC_RT_F16X4)]),
+            Some([(0, 1), (2, 2), (0, 0), (0, 0)])
+        );
         assert_eq!(target_out_regs(&[Class(SHC_RT_F16), Int(RG32UI), Class(SHC_RT_RGBA8)]), None);
         assert_eq!(
             target_out_regs(&[Int(RG32UI), Class(SHC_RT_F16), Class(SHC_RT_RGBA8)]),
-            Some([(0, 2), (2, 1), (3, 1)])
+            Some([(0, 2), (2, 1), (3, 1), (0, 0)])
         );
         assert_eq!(target_out_regs(&[Class(SHC_RT_RGBA8), Int(RGBA32UI)]), None);
-        assert_eq!(target_out_regs(&[Int(RGBA32UI)]), Some([(0, 4), (0, 0), (0, 0)]));
+        assert_eq!(target_out_regs(&[Int(RGBA32UI)]), Some([(0, 4), (0, 0), (0, 0), (0, 0)]));
         assert_eq!(target_out_regs(&[]), None);
-        assert_eq!(target_out_regs(&[Class(SHC_RT_F16); 4]), None);
+        /* RC14: four one-dword targets take registers 0..3; a fifth, or a
+         * pair among four, does not fit */
+        assert_eq!(target_out_regs(&[Class(SHC_RT_F16); 4]), Some([(0, 1), (1, 1), (2, 1), (3, 1)]));
+        assert_eq!(
+            target_out_regs(&[Class(SHC_RT_RGBA8), Int(R32UI), Class(SHC_RT_F32), Int(RG16UI)]),
+            Some([(0, 1), (1, 1), (2, 1), (3, 1)])
+        );
+        assert_eq!(target_out_regs(&[Class(SHC_RT_F16); 5]), None);
+        assert_eq!(
+            target_out_regs(&[Class(SHC_RT_RGBA8), Class(SHC_RT_RGBA8), Class(SHC_RT_F16X4), Class(SHC_RT_RGBA8)]),
+            None
+        );
     }
 
     /// An integer target's output packed by [`pack_target_outputs`]: RG16UI
