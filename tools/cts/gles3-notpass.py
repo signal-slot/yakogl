@@ -348,7 +348,7 @@ def pi4_rows(dirs, mustpass, tree):
     commit = pi4_commit(dirs)
     tally = uart_tally()
     filters = dict(tree)
-    got, where = {}, {}
+    got, where, begun = {}, {}, {}
     for d in dirs:
         consoles = sorted(glob.glob(os.path.join(d, "*.console.txt")))
         if not consoles:
@@ -360,24 +360,31 @@ def pi4_rows(dirs, mustpass, tree):
             if label in got:
                 raise NotpassError("image %s is in both %s and %s" % (label, where[label], d))
             with open(c, encoding="utf-8", errors="replace") as f:
-                got[label] = tally.scan(f.read())["got"]
+                scanned = tally.scan(f.read())
+            got[label] = scanned["got"]
+            begun[label] = scanned["cases"]
             where[label] = d
-    rows, stopped = [], []
+    rows, stopped, stops = [], [], {}
     for label, _ in tree:
         if label not in got:
             continue
         rx = tally.filter_regex(filters[label])
-        none = 0
+        none, nones = 0, []
         for case in mustpass:
             if not rx.match(case):
                 continue
             st = got[label].get(case)
             if st is None:
                 st, none = "NoResult", none + 1
+                nones.append(case)
             if st != "Pass":
                 rows.append((case, "%s.console.txt:%s %s\n" % (label, st, case)))
         if none:
             stopped.append(label)
+            # the case the console's last "case #N" line names, and the cases
+            # after it that never began (that case itself began, without a result)
+            last = begun[label][max(begun[label])][0] if begun[label] else None
+            stops[label] = (last, none - (1 if last in nones else 0))
     run = [l for l, _ in tree if l in got]
     head = ("# Pi 4 dEQP-GLES3 at %s: every case that is not Pass, per image of tools/cts/pi4-gles3-tree.txt\n"
             "# rows: <record>:<status> <case>, sorted by case name   (<image>.console.txt = the UART console of the image, "
@@ -386,6 +393,10 @@ def pi4_rows(dirs, mustpass, tree):
             % (commit, ", ".join(sorted(os.path.basename(os.path.normpath(d)) for d in dirs)),
                len(run), len(tree), " ".join(l + ("*" if l in stopped else "") for l in run),
                " (*: cases of the image never began)" if stopped else ""))
+    for l in stopped:
+        last, never = stops[l]
+        head += ("# stopped early: %s at %s, %d case(s) never began\n"
+                 % (l, last or "(no case began)", never))
     return head + "".join(r for _, r in sorted(rows)), run, stopped
 
 
@@ -501,6 +512,8 @@ def pi4_self_test(check):
     check("pi4: a case that never began is NoResult and its image is marked *",
           "B1.console.txt:NoResult dEQP-GLES3.b.never" in text and stopped == ["B1"]
           and "# images run (3 of 4): A1 B1* C1 (*:" in text, "(%s, %s)" % (stopped, run))
+    check("pi4: the header names the stopped image, its last begun case and the cases never begun",
+          "# stopped early: B1 at (no case began), 1 case(s) never began\n" in text)
     rows = [l for l in text.splitlines() if not l.startswith("#")]
     cases = [l.split()[1] for l in rows]
     check("pi4: Pass cases are absent and rows are sorted by case name",

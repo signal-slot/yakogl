@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 dEQP-GLES3 rows 47-64 (S26 S27 S5f S5v S30 S31 S32a S32b S32c S32d T01 T02 T03 T04 F3C1 F3C2 F3C3 F3C4) at b1b5b845
 
-commit b1b5b8456ec69247c64d1bd07e42461266dc5136
+commit: b1b5b8456ec69247c64d1bd07e42461266dc5136
 
 Session `2026-11-pi4-gles3-b1b5b845-rows46-60`: rows 47-64 of `tools/cts/pi4-gles3-tree.txt` (18 images: S26 S27 S5f S5v S30 S31 S32a S32b S32c S32d T01 T02 T03 T04 F3C1 F3C2 F3C3 F3C4).
 Per-image files, relative to this directory: `<LABEL>.console.txt`, `<LABEL>.tally.txt`. Counts are the mustpass view of the tally's TOTAL line; '-' is unknown.
