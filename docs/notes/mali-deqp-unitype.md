@@ -408,3 +408,83 @@ Caveats for the references:
   3.5).
 - **measure**: T13 and F8 (53 random programs) need the generated sources
   to be split by type.
+
+## References
+
+Plan #377 item `ref-unitype`. One reference per row of section 5, made
+with the shim driver (Mesa 26.2.1 gallium panfrost on drm-shim, the GLSL
+path). `gl_DepthRange` is two references, one per case
+(`depthrange_vs`, `depthrange_fs`), because each dEQP case reads it in one
+stage only and a reference is one real program. So there are 20 triples
+`tools/mali/testdata/deqp_unitype_<name>.{vert,frag,expect.json}`.
+
+**Source.** The integration tip has no `tools/mali/testdata/deqp_shapes/`
+pair yet (the `measure` item is still running). Every `.vert`/`.frag` is
+therefore the dEQP-GLES2 text **rebuilt** from VK-GL-CTS `93bca01861b0`
+(`tools/cts/deps.toml`): the generator's code transcribed for the case's
+parameters, or the `.test` case parsed the way `gluShaderLibrary.cpp`
+parses it (`removeExtraIndentation`, which keeps dEQP's own odd indents)
+and specialized the way `glsShaderLibraryCase.cpp` specializes it. A file
+path below is under `modules/gles2/functional/` unless it starts with
+`modules/` or `data/`. The `uniform_api` cases are the `value.initial`
+ones, so every compared value is zero (`generateZeroVarValue`) and the text
+has no random part.
+
+**Command.** From the repository root, with `D=tools/mali/testdata`,
+`<work>` the `drm_shim_ref.sh build` directory (Mesa 26.2.1 tarball, sha256
+as in `third_party/mesa-26.2.1/UPSTREAM`) and `<out>` a scratch directory:
+
+```sh
+tools/mali/drm_shim_ref.sh run <work> $D/deqp_unitype_<name>.vert $D/deqp_unitype_<name>.frag <out>/deqp_unitype_<name> [--uniform-values]
+python3 -I tools/mali/pan_ref_diff.py extract <out>/deqp_unitype_<name>.trace --draw --attributes > $D/deqp_unitype_<name>.expect.json
+```
+
+`--uniform-values` (column "values") is left out where `gl_ref.py` cannot
+set a uniform: bool, bvec and struct uniforms (section 5, caveat 1). Three
+runs of all 20 gave byte-equal expect.json files.
+
+| name | case | source (rebuilt) | values | what it pins for `lower-unitype` | step |
+|---|---|---|---|---|---|
+| `vsmat2_highp` | `shaders.matrix.add.uniform_highp_mat2_mat2_vertex` | `es2fShaderMatrixTests.cpp:888-1121`, `:1255-1391` | yes | fp32 mat2: 4 FAU words per matrix, column-major, each lane read as its own `uN.wM` (`FADD.f32`) | 1 |
+| `vsmat3_highp` | `shaders.matrix.mul.uniform_highp_mat3_vec3_vertex` | as above | yes | fp32 mat3: 9 packed words (no column padding), the `FMA.f32` chain of `mat3 * vec3` | 1 |
+| `vsmat3_light` | `light_amount.1dir` | `es2fLightAmountTest.cpp:62-120`, `:156-157`, `:194` | no | highp mat3 `u_normalMatrix` beside two mat4s and the `Light` struct array, then `normalize` (`FRSQ.f32`). Mesa takes it; ours stays refused behind the struct array (uniarray), so its bytes are for later | 1 |
+| `vsmat2_mediump` | `shaders.matrix.add.uniform_mediump_mat2_float_vertex` | as `vsmat2_highp` | yes | fp16 mat2: 2 words, one per column, read as `v2f16`; the sum `F16_TO_F32` per lane before the 32-bit varying store | 2 |
+| `vsmat3_mediump` | `shaders.matrix.mul.uniform_mediump_mat3_vec3_vertex` | as above | yes | fp16 mat3: 6 words, 2 per column, the third half of each column alone with a zero pad half. All 6 are pushed FAU words; lane 2 is read as `uN.wM.h00`. No unaligned load and no `LD_PKA` | 2 |
+| `vsmat3_lowp` | `shaders.matrix.sub.uniform_lowp_mat3_mat3_vertex` | as above | yes | lowp is laid out and computed as mediump (fp16 words, `FADD.v2f16` with `.neg`) | 2 |
+| `vsapi_mat2` | `uniform_api.value.initial.render.basic.mat2_vertex` | `es2fUniformApiTests.cpp:345-351`, `:1135-1286`, `:538-567` | yes | the `compare_mat2` chain against zeros in VS fp16: Mesa folds it to an fp16 max of `abs` lanes, one `FCMP_OR.v2f16.lt` against the 0.05 word (`2a662a66`), `S16_TO_S32`, `CSEL.u32.eq` | 2 |
+| `vsstruct_partial` | `linkage.uniform_struct_partial` | `data/gles2/shaders/linkage.test:741`, expanded by `modules/glshared/glsShaderLibraryCase.cpp:193-226`, `:441-511` and `framework/opengl/gluShaderLibrary.cpp:473-558`, `:1912-1991` | no | `res = val.a`: the member is one fp32 word and no conversion is left (`f2f32(f2fmp(x))` folds). The varying program is `FMA.f32 r0, u5.w1, 0x0, u5.w1` and the store | 3 |
+| `vsstruct_add` | `linkage.uniform_struct` | `linkage.test:646`, expanded as above | no | Mesa drops the `dummy` varying (`out0 + dummy - dummy` folds), so the VS has no varying program. The FS reads both members as fp32 words and narrows them with one `V2F32_TO_V2F16` (a struct stays fp32 in the FS too) | 3 |
+| `vsstruct_rip` | `linkage.uniform_struct_use_case_rip` | `linkage.test:1619`, expanded as above | no | highp and mediump members in one struct: the whole struct is fp32 words in declaration order; `res = val.constantAttenuation` is the same one `FMA.f32` as `vsstruct_partial` | 3 |
+| `vsapi_struct` | `uniform_api.value.initial.render.basic_struct.float_vec4_vertex` | as `vsapi_mat2` | no | mediump struct members `float` and `vec4` as 5 fp32 words, narrowed with `V2F32_TO_V2F16` pairs (and `FADD.f32 rN.h0` for the odd lane) into the fp16 compares | 3 |
+| `vsbvec3` | `uniform_api.value.initial.render.basic.bvec3_vertex` | as `vsapi_mat2` | no | bvec3: 3 raw 32-bit words. `compare_bvec3(u, bvec3(false))` is `LSHIFT_OR` of the three words and `CSEL.u32.eq` against 0 | 4 |
+| `fshighp_color` | `fragment_ops.scissor.contained_tri` | `modules/glshared/glsScissorTests.cpp:120-158` (`#version 100`) | yes | a highp vec4 into the fp16 colour: 4 fp32 FAU words, two `V2F32_TO_V2F16` | 5 |
+| `depthrange_vs` | `shaders.builtin_variable.depth_range_vertex` | `es2fShaderBuiltinVarTests.cpp:203-232`, `:714-715` | yes (none declared) | `gl_DepthRange.near/far/diff` as fp32 FAU words in the VS (`u5.w1`, `u6.w0`, `u6.w1`), `diff*0.5 + 0.5` as one `FMA.f32` with `0x38000000.h1` | 5 |
+| `depthrange_fs` | `shaders.builtin_variable.depth_range_fragment` | as above | yes (none declared) | the same words in the FS: near and far narrowed by one `V2F32_TO_V2F16`, `diff` through `FMA.f32` and `FADD.f32 r0.h0` | 5 |
+| `fsmat2_mediump` | `shaders.matrix.add.uniform_mediump_mat2_mat2_fragment` | as `vsmat2_highp` | yes | fp16 mat2 in the FS: 2 words per matrix, `FADD.v2f16` of whole words | 6 |
+| `fsmat3_mediump` | `shaders.matrix.add.uniform_mediump_mat3_float_fragment` | as above | yes | fp16 mat3 in the FS: 6 words, lane 2 of each column read as `uN.wM.h00` (the pad half unread) | 6 |
+| `fsmat4_mediump` | `shaders.matrix.mul.uniform_mediump_mat4_vec4_fragment` | as above | yes | fp16 mat4 times a vector: 8 words, the `FMA.v2f16` chain with `.h00`/`.h11` swizzles of the vector | 6 |
+| `fsivec4` | `negative_api.shader.uniform_matrixfv_invalid_count` | `es2fNegativeShaderApiTests.cpp:46-58`, `:985-987` | yes | mediump ivec4: one 32-bit word per lane; only `.xy` is read, `S32_TO_F32` of `u2.w0` and `u2.w1`, then `V2F32_TO_V2F16`. The VS is the mediump `mat4 * vec4` fp16 path | 7 |
+| `fsmulti` | `uniform_api.value.initial.render.multiple_basic.fragment` | as `vsapi_mat2` | no | `float`, `ivec3`, `mat3` and `bvec2` in one mediump FS: the float is an fp16 word, the ivec3 3 raw words, the mat3 6 fp16 words, the bvec2 2 raw words (`LSHIFT_OR` and `.not`) | 6, 7 |
+
+The three questions section 5 left to the references:
+
+1. **The pad half of a mediump `mat3`** (`vsmat3_mediump`, `fsmat3_mediump`):
+   no unaligned load. Every column is two whole pushed words, the pad half
+   is the zero high half of the second word, and lane 2 is read as
+   `uN.wM.h00`. So `UboRow` with `halves` and `div_ceil(3, 2) = 2` words per
+   column is the layout.
+2. **`f2f32(f2fmp(x))` for `res = val.a`** (`vsstruct_partial`,
+   `vsstruct_rip`): it folds. No `F32_TO_F16` or `F16_TO_F32` is left. The
+   one `FMA.f32 x, 0, x` before the store is also in programs with no struct
+   (`vsmat2_highp`, `vsmat3_lowp`, `vsbvec3`), so it belongs to the varying
+   store, not to the member read.
+3. **The scissor fragment shader's narrowing** (`fshighp_color`): two
+   `V2F32_TO_V2F16` straight from the FAU words, no move.
+
+`vsbvec3` with true values (section 5, caveat 2) was not made. It needs a
+`gl_ref.py` change, and this item changes no `tools/mali` script. It is not
+needed for the mask question: `vsbvec3` and `fsmulti` only OR the raw bvec
+words and test the result against 0 (`LSHIFT_OR`, then `CSEL.u32.eq` or
+`.not`), and that is the same for a true of `1` and of `~0`. The bytes do
+not depend on the values; with `--uniform-values` only the printed FAU
+words change.
