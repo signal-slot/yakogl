@@ -2060,6 +2060,10 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_refusals.rs)" \
 # report-es2 rows run it with the rest of tests/.
 step "test    $V3D_ES2_CONFIG (tests/es2_report_limits.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es2_report_limits
+# The report-es2 compressed format list stays the three extension names
+# (the ES 3.0 ten of plan #354 do not show under it).
+step "test    $V3D_ES2_CONFIG (tests/es2_compressed_list.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es2_compressed_list
 # The report-es2 program binary answers the ES 3.0 program binary
 # (docs/notes/es3-program-binary.md, (f)) must keep; the file needs the
 # online compiler without the table, so only this row runs it.
