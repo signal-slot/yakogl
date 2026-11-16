@@ -21,9 +21,10 @@
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es2_compressed_list
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es2_compressed_list
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es2_compressed_list
+//! (no Mali build: it samples no ETC2 class and keeps its three names)
 //! ```
 
-#![cfg(all(feature = "host-test", feature = "shaderc-online"))]
+#![cfg(all(feature = "host-test", feature = "shaderc-online", not(feature = "gpu-mali")))]
 
 use core::ffi::{c_char, c_void};
 use std::sync::{Mutex, MutexGuard, Once};
