@@ -743,6 +743,11 @@ pub const ADMITTED: u128 = {
          * `ffma(u_w[k].x, t, r)` */
         | prod(Tex, MulB)
         | prod(Tex, FmaB)
+        /* glmark2's `Color = vec4(diffuse * Albedo.rgb, Albedo.a)` of a
+         * white `Albedo` (gm2_arithconst_3): three colour lanes the link
+         * merged into one, the first output word that lane in both
+         * halves, `IADD.v2u16 r1, r0.h00, 0x0` */
+        | prod(Splat, Output)
 };
 
 /// One load of the fragment shader: a 16-byte slot of the compacted
@@ -8140,6 +8145,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         *w = match pr.nodes[roots[k] as usize] {
             P::Leaf(Leaf::Mk { k: v, c, half }) => Src::ssa(mkvec(p, &lv, v, c, half, &mut rows)?),
             P::Leaf(Leaf::Lanes { k: v, c, e, d }) => Src::ssa(mkvec_lanes(p, &lv, [(v, c), (e, d)], &mut rows)?),
+            /* one lane in both halves: `MKVEC.v2i16 x.h0, x.h0`, which
+             * opt.rs `lower_mkvec_swz` makes `IADD.v2u16 r1, r0.h00, 0x0`
+             * (gm2_arithconst_3) */
+            P::Leaf(Leaf::Splat { k: v, c }) => Src::ssa(mkvec_lanes(p, &lv, [(v, c), (v, c)], &mut rows)?),
             P::Leaf(Leaf::Zext(x)) => {
                 /* a read the word alone reads is loaded here, after ATEST
                  * (`nir_opt_move` sinks it to the colour's store; uniarray_b:

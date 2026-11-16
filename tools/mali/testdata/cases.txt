@@ -97,3 +97,11 @@ vtl_fs                                           tex_vs_lod.vert vtl_fs.frag tri
 cube_vs                                          cube_vs.vert cube_vs_color.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
 uniidx_d                                         uniidx_i.vert uniidx_d.frag triangles vs.position=equal fs.fragment=differs:mediump:9:38d6d50646c6
 uniidx_i                                         uniidx_i.vert uniidx_i.frag triangles vs.position=equal fs.fragment=differs:mediump:22:fbd50be9947b
+# #367: glmark2's vertex ARITH_CONST shapes (docs/notes/mali-vs-constant-products.md section 5), drawn without
+# --uniform-values. Our compiler is byte-equal to each reference (tests/mali_arith_const.rs); pan_shc's SPIR-V path
+# is not in the vertex stage. gm2_arithconst_2's `proj * view * p` is multiplied as written there (a matrix times a
+# matrix first), where the GLSL path computes `view * p` first.
+gm2_arithconst_1                                 gm2_arithconst_1.vert gm2_arithconst_1.frag triangles vs.position=differs:mat-order:8:0c4ae20f4968 vs.varying=differs:mat-order:8:2debec11f4b9 fs.fragment=differs:mediump:13:3d3c6396766d
+gm2_arithconst_2                                 gm2_arithconst_2.vert gm2_arithconst_2.frag triangles vs.position=differs:unanalysed:93:5de51992cb03 fs.fragment=equal
+gm2_arithconst_3                                 gm2_arithconst_3.vert gm2_arithconst_3.frag triangles vs.position=differs:mat-order:38:5e3aae929c53 vs.varying=differs:mat-order:20:3ab32d65dc03 fs.fragment=equal
+gm2_arithconst_4                                 gm2_arithconst_4.vert gm2_arithconst_4.frag triangles vs.position=differs:mat-order:38:5e3aae929c53 vs.varying=differs:mat-order:17:f5378e849f81 fs.fragment=equal
