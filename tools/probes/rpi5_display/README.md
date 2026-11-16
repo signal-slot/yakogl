@@ -97,6 +97,8 @@ EEPROM or persist anything on the board.
 | `route_choice.sh`, `route_choice_selftest.sh` | the host rule that picks the route the board takes, from the verdict lines (`driver/docs/rpi5-display.md` section 8) |
 | `offsets_lint.sh`, `offsets_lint_selftest.sh` | host lint: register offsets and bits agree across the `driver/zephyr/lib/board/rpi5_scanout` headers (a name shared by two headers carries one value; an offset shared by two names sits in one block); last line `offsets_lint: 29 headers, 31 shared names, 0 conflicts`, its self-test 13 checks on fixture headers |
 | `throttled.sh`, `throttled_selftest.sh` | `get_throttled` decoded, from a record |
+| `record.sh`, `record_selftest.sh` | the record directory `records/rpi5/<stamp>-<name>-<sha8>/`: `new`, `throttled` (`get_throttled` per label), `redact`, `check` (no address, UART path or home directory left) |
+| `session/run_u3.sh`, `session/run_u3_selftest.sh` | the U3 board session driver (`session/README.md`): Linux reference, `tools/board.sh pi5` run, record, redaction; its self-test runs against a fake board |
 | `dump2png.py`, `dump2png_selftest.sh` | scanout readback bytes to a PNG |
 | `linux_ref.sh`, `linux_ref.md`, `linux_ref_selftest.sh` | the read-only Linux dump to run first, over ssh (C0), its facts file, and the self-test of that script against a fake root |
 | `mboxdump/mboxdump.py`, `mboxdump/selftest.sh` | host decoder of recorded property-mailbox buffers (does the BCM2712 answer FRAMEBUFFER_ALLOCATE 0x40001?); the self-test checks it on the fixtures under `mboxdump/fixtures/` |
