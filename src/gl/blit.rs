@@ -2346,3 +2346,111 @@ mod tests {
         }
     }
 }
+
+/* The ES 2.0 report beside the module above, whose `rgb10a2` tests compile
+ * only for the ES 3.0 build: a GL_RGB10_A2 renderbuffer storage is refused,
+ * the 10/10/10/2 word type is not a type this surface takes, and
+ * glBlitFramebuffer is GL_INVALID_OPERATION whatever the attachments are
+ * (`framebuffer::tests::blit_framebuffer_is_es3_only`). These refusals are
+ * the shared GL core's, so every back end's report-es2 build answers them
+ * the same way. */
+#[cfg(all(test, feature = "report-es2"))]
+mod es2_tests {
+    //! The rgb10a2 names as the ES 2.0 build answers them: storage and
+    //! upload-type refusals on the way in, and the blit refused between
+    //! attachments this build does have. The name itself with the ES 2.0
+    //! pair (GL_RGBA / GL_UNSIGNED_BYTE) is not refused: it takes the RGBA8
+    //! fallback this build chooses for the class, and pinning the fallback
+    //! is a separate item.
+    use super::*;
+    use crate::gl::framebuffer::{
+        glBindFramebuffer, glBindRenderbuffer, glBlitFramebuffer, glFramebufferRenderbuffer, glGenFramebuffers,
+        glGenRenderbuffers, glRenderbufferStorage,
+    };
+    use crate::gl::texture::{glBindTexture, glGenTextures, glTexImage2D};
+    use crate::testutil::TestGl;
+
+    /// A framebuffer with a `format` renderbuffer of `w` x `h` at colour
+    /// attachment 0, bound to GL_FRAMEBUFFER: (framebuffer, renderbuffer).
+    fn rbo_fbo(format: GLenum, w: i32, h: i32) -> (GLuint, GLuint) {
+        let (mut fb, mut rb) = (0, 0);
+        // SAFETY: plain GL calls with room for one name each.
+        unsafe {
+            glGenFramebuffers(1, &mut fb);
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, format, w, h);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        }
+        (fb, rb)
+    }
+
+    fn rb_gpu(gl: &TestGl, rb: GLuint) -> u64 {
+        gl.ctx().objs_ref().renderbuffers[rb as usize].mem.gpu
+    }
+
+    /// No renderbuffer storage of GL_RGB10_A2: this build's advertised
+    /// renderbuffer formats are ES 2.0's and the OES/EXT names
+    /// (`renderbuffer_format_advertised`), and the name is neither.
+    #[test]
+    fn rgb10a2_renderbuffer_storage_is_refused() {
+        let gl = TestGl::new(8, 8);
+        let mut rb = 0;
+        // SAFETY: plain GL calls with room for one name.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB10_A2, 4, 4);
+        }
+        assert_eq!(gl.error(), GL_INVALID_ENUM);
+    }
+
+    /// A texture of the name uploaded with the word type is refused on the
+    /// type: GL_UNSIGNED_INT_2_10_10_10_REV is not a type this surface takes
+    /// (`es3_only_pixel_type`), GL_INVALID_ENUM in every unpacking call.
+    #[test]
+    fn rgb10a2_texture_is_refused() {
+        let gl = TestGl::new(8, 8);
+        let mut tex = 0;
+        // SAFETY: plain GL calls; null pixels only allocate.
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGB10_A2 as GLint,
+                2,
+                1,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_INT_2_10_10_10_REV,
+                core::ptr::null(),
+            );
+        }
+        assert_eq!(gl.error(), GL_INVALID_ENUM);
+    }
+
+    /// glBlitFramebuffer is refused with the attachments this build does
+    /// have — an RGBA8 renderbuffer pair (GL_OES_rgb8_rgba8 is advertised,
+    /// the storage above answers GL_NO_ERROR) — before either attachment is
+    /// read, and the destination keeps the bytes it was given.
+    #[test]
+    fn rgb10a2_blit_between_rgba8_attachments_is_refused_untouched() {
+        let gl = TestGl::new(8, 8);
+        let (_, s_rb) = rbo_fbo(GL_RGBA8, 2, 1);
+        let (_, d_rb) = rbo_fbo(GL_RGBA8, 2, 1);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let pattern = [1u8, 2, 3, 4, 5, 6, 7, 8];
+        gl.gpu_render(rb_gpu(&gl, s_rb), &[9u8; 8]);
+        gl.gpu_render(rb_gpu(&gl, d_rb), &pattern);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glBlitFramebuffer(0, 0, 2, 1, 0, 0, 2, 1, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+        }
+        assert_eq!(gl.gpu_bytes(rb_gpu(&gl, d_rb), 8), pattern.to_vec());
+        assert!(gl.draws().is_empty());
+    }
+}
