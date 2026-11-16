@@ -3406,6 +3406,17 @@ mod tests {
     fn each_render_target_is_one_tlb_write_with_its_config() {
         use crate::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, Varying, LANES};
         assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(0, 4), !0, "RT 0: the TLB's default, no TLBU");
+        assert_eq!(
+            crate::shaderc::online::v3d::select::tlb_config_f16(0, 2),
+            0xffff_fffe,
+            "RT 0, 2 components: not the default"
+        );
+        assert_eq!(
+            crate::shaderc::online::v3d::select::tlb_config_f16(3, 1),
+            0xffff_ffe6,
+            "RT 3, 1 component: 2-wide size"
+        );
+        assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(3, 2), 0xffff_ffe6, "RT 3, 2 components");
         assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(1, 4), 0xffff_fff7, "RT 1: (7 - 1) << 3");
         assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(2, 4), 0xffff_ffef, "RT 2: (7 - 2) << 3");
         const VS: &str = "#version 300 es\nlayout(location = 0) in vec4 p;\nout vec4 v;\n\
