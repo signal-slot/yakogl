@@ -205,11 +205,23 @@ identical.
 | `default_attrib` | `default_vertex_attrib.float.vertex_attrib_1f` (ColourZeroHalf) | rebuilt: `es2fDefaultVertexAttributeTests.cpp` `genVertexSource` (TYPE_FLOAT, not normalizing, negative values, `s_valueRange` 10) and `s_passThroughFragmentShaderSource` | 8 instrs: `LD_VAR_BUF_IMM.f32` (one lane), `FADD.f32 r0.h0, r0, 0x0.neg`, `ATEST 0x3F800000`, `U16_TO_U32 r0, r0.h0`, `MOV.i32 r1, 0x3C000000`, `BLEND` | the (lane, 0.0) word is `U16_TO_U32`, and the (0.0, 1.0) word is an immediate `MOV`, not a FAU word. The link drops lanes y, z, w (varying shader: 5 instrs, one store) |
 | `ck_lane_highpcolour` | not a dEQP case: `ck_lane` with `mediump vec4 color` changed to `highp vec4 color` | `ck_lane` + that one edit (sidecar says so) | 10 instrs: `LD_VAR...v2`, `V2F32_TO_V2F16 r0`, `ATEST 0x3F800000`, `MKVEC.v2i16 r1, 0x0.h0, r0.h0`, `MKVEC.v2i16 r2, r0^.h1, u2.w0.h0` (FAU word 4 `0x3c003c00`), `MOV r0, r1`, `MOV r1, r2`, `BLEND` | the (constant, lane) order of a pair Mesa *does* fold: constant as src0 (inline `0x0.h0`, not FAU), then the second half of the converted pair (`.h1`) with the FAU `1.0`. The varying is compacted to `v2` |
 
-Rebuilt texts were checked against a copy of VK-GL-CTS main fetched on
-2026-11-16 (not a pinned checkout; the git fetch of a sparse clone needed an
-approval this run did not have). The `deqp_shapes` pairs come from VK-GL-CTS
-93bca01. The two rebuilt texts still have to be confirmed byte for byte
-against a fresh measure `.qpa` of their cases.
+The rebuilt texts follow VK-GL-CTS 5bb4c7e8 (a sparse checkout of main,
+2026-11-13), rebuilt by hand from these lines:
+- `es2fShaderOperatorTests.cpp:605-613`: input precision; a float input keeps
+  the case's precision.
+- `:616-618`: `a_position` highp, `a_in<i>` at that precision.
+- `:656`, `:692`: `in<i>` and `res` at the case's precision.
+- `:703`: the colour is always `mediump`.
+- `es2fDefaultVertexAttributeTests.cpp:337-345`: the header, with the blank
+  line after `gl_Position`.
+- `:352-354`: not normalizing, `/ float(10)`, `s_valueRange` at `:51`.
+- `:357-358`: negative values, because `is_signed` at `:222` holds for a
+  float loader and `NORMALIZING = 0` at `:93`.
+- `:363`: one component.
+- `:53-57`: the fragment shader.
+
+The `deqp_shapes` pairs come from VK-GL-CTS 93bca01. A fresh measure `.qpa`
+of the two rebuilt cases would confirm them byte for byte.
 
 ### What the references change in the lowering plan
 
