@@ -3,7 +3,8 @@
 # Mali (Valhall): the small dEQP-GLES2 refusals (study)
 
 **Status: study** (plan #377, item `study-misc`; issues #20, #7). This note
-changes no code and adds no reference. It covers the seven small compile
+changes no code; its references are the `deqp_misc_*` of "References"
+(item `ref-misc`) at the end. It covers the seven small compile
 refusals of section M of `docs/es2-cts-failures.md` (whole tree at
 `37305608`, 2026-11-15). For each one it gives where we refuse, which dEQP
 cases hit it, what Mesa 26.2.1 does, and a verdict: **lower now** (in the one
@@ -448,3 +449,86 @@ each was not measured, because a lowered step is needed to see past it.
 `lower-misc` should rerun these cases through `compile_pair` and report the
 next refusal for any that still refuse. Left for later: `Invariant` (12),
 `TexLanes` (2), `TooManyValues` (3).
+
+## References (item `ref-misc`, 2026-11-16)
+
+Eleven Mesa 26.2.1 drm-shim references (the GL path; none through the
+SPIR-V `pan_shc`), `tools/mali/testdata/deqp_misc_<name>.{vert,frag,expect.json}`,
+one per reference the Plan above lists. Each `.vert`/`.frag` from dEQP's text
+has a `.license` sidecar (The Khronos Group Inc.) naming the case and how the
+text was obtained; the three small shaders of our own carry a comment, as the
+`gm2_*` ones do.
+
+**Build.** `drm_shim_ref.sh build` (through `deqp_ref.sh`) into
+`$CONNECTED_DEPS_DIR/mesa-shim`, from `mesa-26.2.1.tar.xz` fetched into
+`$CONNECTED_DEPS_DIR/mesa-tarball/` (sha256 `c47e81bd…a4442`, the
+`tarball-sha256` of `third_party/mesa-26.2.1/UPSTREAM`), `LLVM_DIR=/usr/lib/llvm-21`.
+Check of the build: `README-deqp_ref.md`'s self-check, `gm2_cf_ifelse_vs` and
+`gm2_cf_ifelse_fs` remade byte for byte (`cmp` silent). `cmp_fne_hp` and
+`cmp_ine0_hp` also give the fragment word hashes that `mali-compare-forms.md`
+measured on another build (`79b6d6b8…`, `fdbe94b2…`). Every draw printed
+`glGetError 0x0`.
+
+**Command.** For each reference except `cmp_notequal_vec2`:
+
+```sh
+LLVM_DIR=/usr/lib/llvm-21 tools/mali/deqp_ref.sh tools/mali/testdata/deqp_misc_<name>.vert \
+    tools/mali/testdata/deqp_misc_<name>.frag <scratch>/deqp_misc_<name> --instrument shim
+# then the sources were checked equal (cmp) and <scratch>/deqp_misc_<name>.expect.json copied in
+```
+
+That is `drm_shim_ref.sh run ... --prim triangles --uniform-values`, then
+`pan_ref_diff.py extract <trace> --draw`. `cmp_notequal_vec2` has a `bool`
+uniform, and `gl_ref.py --uniform-values` refuses one ("does not set a bool
+uniform"), so it is the same two steps without `--uniform-values`:
+
+```sh
+tools/mali/drm_shim_ref.sh run "$CONNECTED_DEPS_DIR/mesa-shim" tools/mali/testdata/deqp_misc_cmp_notequal_vec2.vert \
+    tools/mali/testdata/deqp_misc_cmp_notequal_vec2.frag <scratch>/deqp_misc_cmp_notequal_vec2 --prim triangles
+python3 -I tools/mali/pan_ref_diff.py extract <scratch>/deqp_misc_cmp_notequal_vec2.trace --draw \
+    > tools/mali/testdata/deqp_misc_cmp_notequal_vec2.expect.json
+```
+
+`ref_out0` is then 0 (false); dEQP sets it true. The words do not depend on the
+value; the FAU word is the uniform the driver fills.
+
+**Sources.** "verbatim" is the `tools/mali/testdata/deqp_shapes/misc_*` pair
+(the `.qpa` of `deqp-host-measure.sh`, VK-GL-CTS `93bca01`). "rebuilt" is that
+pair edited as `modules/gles2/functional/es2fShaderMatrixTests.cpp` at
+`93bca01` generates the named case (read on GitHub; the file is cited by
+function, not line). The edits:
+- the case's precision on its inputs and `res` (`ShaderMatrixCase::init`,
+  `getPrecisionName`);
+- the mat4 constant `s_constInMat4[0]` = `tcu::translationMatrix(Vec3(0.2,
+  -0.3, 0.15))`, written column by column by `writeMatrixConstructor<4, 4>`
+  with `de::floatToString(x, 1)`, so `0.15f` prints `0.2`;
+- `genGLSLMatToVec3Reduction`'s mat4 colour.
+
+The rebuilt texts are dEQP's generator output by reading, not a captured
+`.qpa`; `measure`'s pairs confirm them only for the verbatim ones.
+
+| Reference | Case | Source | What Mesa does | Pins for `lower-misc` |
+|---|---|---|---|---|
+| `cmp_notequal_vec2` | `shaders.constant_expressions.builtin_functions.vector_relational.notEqual_vec2_fragment` | verbatim `misc_comparison_form` | 10 words, **no compare**: `MOV.i32 r0, u2.w0` (the bool uniform is the 32-bit mask itself), `MUX.v2i16 r0, 0x0, 0x3C000000.h11, r0^.h00`, `IADD.v2u16 r1, r0.h00, 0x0`, `MKVEC.v2i16 r2, r0^.h0, u2.w1.h0` (FAU `0x3c003c00`) | the case does **not** need the `Ine` arm: `cval` is true, so `out0 == ref_out0` is `ref_out0` itself and Mesa drops the `ine(u, 0)`. Our `CompareForm` here comes from the bool uniform's `ine(u, 0)` (section 4); the step is to read a bool uniform as its own mask, then the `(RES, RES, RES, 1.0)` colour |
+| `cmp_fne_hp` | none (`mali-compare-forms.md`'s `fne_hp`, with its `tc.vert`) | our text, as that note's table | 9 words: `FCMP_OR.f32.ne.m1 r0, r0^, r1^, 0x0` after a `.v2` load, then `MUX`/`ATEST`/`U16_TO_U32`/`MOV`/`BLEND` | the highp `Fne` arm, byte for byte (that note's step 1); no dEQP case of this list needs it, `bool(float)` cases do (`mali-alu-ops.md`) |
+| `cmp_ine0_hp` | none (`ine0_hp`, `tc.vert`, `--uniform-values`: `m` = 16) | our text | 8 words: `ICMP_OR.u32.ne.m1.discard r0, u2.w0, 0x0, 0x0` | the highp `Ine` arm; `sharedint.frag`'s `u_p.mode != 0` is this compare |
+| `spill_lowp_mat4_mat4` | `shaders.matrix.mul.uniform_lowp_mat4_mat4_vertex` | verbatim `misc_work_registers` | varying program 71 words, **`work_reg_count` 32** (the secondary program), highest register r8: the product is fp16, `FMA.v2f16` on the uniforms' fp16 FAU halves (`u5.w1`, `u6.w0.h00`, ...), sums by `FADD.v2f16`, then three `F16_TO_F32` of the results only | **neither register fix of section 2**: Mesa needs no whole file and places no widenings, because it widens nothing. The step is the mediump vertex `mat4 * mat4` in fp16 (`FMA.v2f16` with FAU half operands), which then fits the split file. Keep `Spill` and its pin `tests.rs:4081` for a program that is still over 32 |
+| `spill_mediump_mat4_mat4` | `...uniform_mediump_mat4_mat4_vertex` | rebuilt: `lowp` → `mediump` on `u_in0`, `u_in1`, `res` | every region equal to `spill_lowp_mat4_mat4`'s (words, registers, preload, FAU) | lowp and mediump are one shape in Mesa |
+| `fragcoord_xyz` | `shaders.builtin_variable.fragcoord_xyz` | verbatim `misc_builtin_input` | 17 words: x, y `U16_TO_F32` of `r59.h0`/`.h1` + 0.5 (y flipped by `FMA.f32 .., u2.w0, u2.w1`), converted by `FADD.f32 rN.h0, rN^, 0x0.neg`; z `LD_VAR_SPECIAL.f32.center.clobber.slot0 @r2, r61^, index:0x3`, converted the same way (**not** `F32_TO_F16`); `MKVEC` x/y, `FMA.v2f16 r0, r0^, u3.w0` (u_scale.xy), `FMA.v2f16 r1, r2^.h00, u3.w1.h00`, `MKVEC.v2i16 r1, r1^.h0, u4.w0.h0` (pushed 1.0); preload `0x3800000000000000` | the mediump z: the highp `frag_z` load, then the f32→f16 `FADD` (as x, y), then an fp16 product. The Plan's step 3 said `F32_TO_F16`; Mesa's word is the `FADD.f32 .h0` |
+| `constmat_mat2_highp` | `shaders.matrix.mul.const_highp_mat2_float_fragment` | verbatim `misc_algebraic_rewrite` | 12 words: x `FMA.f32 r1, u2.w0, r0, 0x0.neg` (0.6), y `FADD.f32 r0.h0, r0^.neg, 0x0.neg` (the `-1.0` product is a `fneg` folded into the conversion), z `FMA.f32 r2, r0, u2.w1` with FAU `0x3f8ccccd` (1.1 = 0.7 + 0.4, one product); FAU `3f19999a 3f8ccccd 3c003c00` | step A: the sum `0.7 + 0.4` folded to one constant in fp32, and `-1.0` → `fneg`. dEQP's in0 is `mat2(0.6, 0.7, -1.0, 0.4)` (column-major), so the z sum is 1.1, not section 7's -0.6 |
+| `constmat_mat2_mediump` | `...const_mediump_mat2_float_fragment` | rebuilt: `highp` → `mediump` (inputs, `in0`, `res`) | 13 words: `v` converted first (`FADD.f32 r0.h0`), then `FMA.v2f16 r1, u2.w0, r0.h00` (`0x38cd38cd`, 0.6 twice), `FADD.v2f16 r2, r0.neg.h00, 0x0.neg`, `FMA.v2f16 r0, r0^.h00, u2.w1` (`0x3c663c66`, 1.1 folded in fp16) | the mediump step A: fp16 products after one conversion, the folded sum an fp16 constant pushed twice in a word |
+| `constmat_mat4_highp` | `...const_highp_mat4_float_fragment` | rebuilt (mat4 constant and colour) | 15 words: x `FMA.f32 r1, r0, 0x44000000.h1, 0x0.neg` (4.0, the four 1.0 products folded to one), y `v * 0x3e4ccccd` (0.2), z `v * 0xbe99999a` (-0.3) | step B: the four-term chain of products of `v` is one product with 4.0, an inline fp16 constant (`0x4400` of the table), as the SPIR-V run in section 7 showed |
+| `constmat_mat4_mediump` | `...const_mediump_mat4_float_fragment` | rebuilt | 11 words: `v` converted, then **one** `FMA.v2f16 r1, r0.h00, u2.w0` with FAU `0x32664400` (halves 4.0, 0.2: x and y in one instruction), `FMA.v2f16 r0, r0^.h00, u2.w1` (`0xb4cdb4cd`, -0.3) | the mediump step B: the folded 4.0 is a FAU half next to 0.2 (not the inline `0x4400`), and x and y are one vector product |
+| `invariant_position` | none (section 1's open question: `invariant gl_Position; gl_Position = a_pos;`, a constant mediump colour) | our text | position program 24 words, **every field equal** to `fragcoord_xyz`'s non-invariant `gl_Position = a_position` program: the viewport transform stays fused, `FMA.f32 r0, r0^, u0.w0, u0.w1` | answers section 1: on the GL path an invariant `gl_Position` that is a copy keeps the fused transform, so the cheap subset (`pragma_vertex`, `invariant_storage*`) needs no unfused viewport transform. An invariant output with arithmetic (the `common_subexpression_*` cases) is not covered by this reference |
+
+What these references change in the Plan above, for `lower-misc`:
+1. `CompareForm`: the three `notEqual_vec*_fragment` cases are the bool uniform
+   read as a mask (`cmp_notequal_vec2`), not the `Ine` arm. The `Fne`/`Ine`
+   arm (`cmp_fne_hp`, `cmp_ine0_hp`) is still what `sharedint.frag` needs.
+   Only `_vec2` was drawn; `_vec3` and `_vec4` take another lane of the same
+   folded `cval` and are expected to be the same program (**inferred**).
+2. `Spill`: the answer is "32", but not because of where widenings go: Mesa's
+   mediump/lowp vertex `mat4 * mat4` is fp16 arithmetic on FAU halves. The
+   step is that fp16 product, not a register-allocator change.
+3. `SpecialInput`: the conversion of z is `FADD.f32 rN.h0, rN^, 0x0.neg`.
+4. `AlgebraicForm`: as the Plan, with the mediump forms above.
