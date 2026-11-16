@@ -112,7 +112,7 @@ printf 'table' > "$ao/$img.table.conf"
 printf 'package' > "$s/libdeqp-gles3-package.a"
 printf 'functional-lib' > "$s/functional/libdeqp-gles3-functional.a"
 printf '# CONFIG_DEQP_REPORT_ES2 is not set\n# CONFIG_YAKOGL_REPORT_ES2 is not set\n' > "$ao/$img/zephyr/.config"
-printf 'Memory region Used\nRAM: 1 B\nnoise\n' > "$ao/$img.log"
+printf 'Memory region Used\n             RAM:     1 KB       256 MB      0.00%%\nnoise\n' > "$ao/$img.log"
 files=("$ao/$img/zephyr/zephyr.bin" "$ao/$img/zephyr/zephyr.elf" "$ao/$img.table.conf" "$s/libdeqp-gles3-package.a" "$s/functional/libdeqp-gles3-functional.a")
 env -u DEQP_STAGE1_GLES3 IMX8MP_OUT="$ao" "$a" $img > "$tmp/o" 2> "$tmp/e"; rc=$?
 good=1
@@ -126,7 +126,7 @@ else bad "artefacts: exit $rc, out: $(cat "$tmp/o")"; fi
 if grep -qx '# CONFIG_DEQP_REPORT_ES2 is not set' "$tmp/o" && grep -qx '# CONFIG_YAKOGL_REPORT_ES2 is not set' "$tmp/o"; then
 	ok "artefacts: .config keys of a GLES3 image (both REPORT_ES2 not set) printed"
 else bad "artefacts: .config keys: $(cat "$tmp/o")"; fi
-if grep -qx 'RAM: 1 B' "$tmp/o" && grep -qx 'Memory region Used' "$tmp/o" && ! grep -q noise "$tmp/o"; then
+if grep -qx '             RAM:     1 KB       256 MB      0.00%' "$tmp/o" && grep -qx 'Memory region Used' "$tmp/o" && ! grep -q noise "$tmp/o"; then
 	ok "artefacts: memory lines of the build log printed"
 else bad "artefacts: memory lines"; fi
 printf 'CONFIG_DEQP_REPORT_ES2=y\nCONFIG_YAKOGL_REPORT_ES2=y\n' > "$ao/$img/zephyr/.config"
