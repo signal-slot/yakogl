@@ -2405,12 +2405,18 @@ pub fn select_fragment<'a>(
         for (o, &x) in c.iter_mut().zip(colour) {
             *o = s.val(a, x)?;
         }
-        let conf = tlb_config_f16(rt as u32, 4);
+        /* The output's own width picks the vector size, and a one- or
+         * two-component output is one f16 pair (nir_to_vir.c:1979-1983,
+         * 2028-2032: VEC_SIZE_2_F16 and one vfpack, no second word). */
+        let n = u32::from(p.rt_comps[rt].clamp(1, 4));
+        let conf = tlb_config_f16(rt as u32, n);
         let first = if conf != !0 { Dst::Tlbu(Uniform::constant(conf)) } else { Dst::Tlb };
         let (r, g) = s.pair(a, c[0], c[1])?;
         let (b, al) = s.pair(a, c[2], c[3])?;
         s.push(a, VOp::Add { op: AddOp::Vfpack, dst: first, a: r, b: g })?;
-        s.push(a, VOp::Add { op: AddOp::Vfpack, dst: Dst::Tlb, a: b, b: al })?;
+        if n >= 3 {
+            s.push(a, VOp::Add { op: AddOp::Vfpack, dst: Dst::Tlb, a: b, b: al })?;
+        }
     }
     fold_unpacks(a, &mut s.ops, s.next)?;
     merge_exits(a, &mut s.ops)?;

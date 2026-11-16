@@ -3408,6 +3408,17 @@ mod tests {
         assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(0, 4), !0, "RT 0: the TLB's default, no TLBU");
         assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(1, 4), 0xffff_fff7, "RT 1: (7 - 1) << 3");
         assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(2, 4), 0xffff_ffef, "RT 2: (7 - 2) << 3");
+        assert_eq!(
+            crate::shaderc::online::v3d::select::tlb_config_f16(0, 2),
+            0xffff_fffe,
+            "RT 0, vec2: VEC_SIZE_2_F16, TLBU"
+        );
+        assert_eq!(
+            crate::shaderc::online::v3d::select::tlb_config_f16(3, 1),
+            0xffff_ffe6,
+            "RT 3, float: VEC_SIZE_2_F16"
+        );
+        assert_eq!(crate::shaderc::online::v3d::select::tlb_config_f16(3, 4), 0xffff_ffe7, "RT 3, vec4");
         const VS: &str = "#version 300 es\nlayout(location = 0) in vec4 p;\nout vec4 v;\n\
             void main() { v = p; gl_Position = p; }\n";
         const FS: &str = "#version 300 es\nprecision highp float;\nin vec4 v;\n\

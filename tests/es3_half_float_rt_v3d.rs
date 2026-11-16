@@ -772,15 +772,15 @@ fn a_vec4_output_is_two_f16_pairs() {
     assert_eq!(w, [(None, 0x3800_3c00), (None, 0x4400_c000)]);
 }
 
-/// A `vec2` or `float` output is written as a vec4 today: the same two f16
-/// pairs through TLB with the TLB's default config (no TLBU), the missing
-/// components 0, whatever the target (R16F and R32F included). Mesa writes a
-/// shorter vector with a size in the config (`tlb_config_f16(0, 1 or 2)`).
+/// A `vec2` or `float` output is one f16 pair (Mesa, nir_to_vir.c:1979-1983,
+/// 2028-2032): the 2-wide config through TLBU, then no second word, the
+/// missing component 0, whatever the target.
 #[test]
-fn a_vec2_and_a_float_output_are_padded_to_two_f16_pairs() {
+fn a_vec2_and_a_float_output_are_one_f16_pair() {
+    let conf = Some(0xffff_fffe);
     assert_eq!(tlb_config_f16(0, 2), 0xffff_fffe, "Mesa's f16 config of a 1 or 2 component output");
-    assert_eq!(run_fs(&fs_of("vec2", "vec2(1.0, 0.5)")), [(None, 0x3800_3c00), (None, 0)]);
-    assert_eq!(run_fs(&fs_of("float", "-2.0")), [(None, 0x0000_c000), (None, 0)]);
+    assert_eq!(run_fs(&fs_of("vec2", "vec2(1.0, 0.5)")), [(conf, 0x3800_3c00)]);
+    assert_eq!(run_fs(&fs_of("float", "-2.0")), [(conf, 0x0000_c000)]);
 }
 
 /// The f16 config names its render target (7 - rt in bits 3..5).
