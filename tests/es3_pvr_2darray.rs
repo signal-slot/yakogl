@@ -371,14 +371,18 @@ fn a_dead_array_sample_takes_its_address_with_it_and_a_cube_beside_it_sets_both_
 /// `textureSize` of a native array: one layer's size at the level and the
 /// layer count from the image word's `depth` field plus one (section 3.5),
 /// no `smp` and no `pvr_layers_` uniform read -- the program compiles
-/// without that uniform declared and reads descriptor dword 2.
+/// without that uniform declared and reads descriptor dword 2. That word is
+/// the layer-major copy's (the stacked image's dword 2 is a STRIDE word with
+/// no depth, and its height the whole stack's), so the record asks for the
+/// copy (bit 1) even though nothing samples the array, as a native volume's
+/// size does (bit 2).
 #[test]
 fn texture_size_reads_the_layer_count_from_the_image_word() {
     let src = fragment("uniform highp sampler2DArray s;", "o = vec4(vec3(textureSize(s, il)) / 2048.0, 1.0);");
     let (flag, n) = with_native_array(true, || {
         compile_with(Stage::Fragment, &src, |rec, image| (rec.native_cube, smps(image).len())).unwrap()
     });
-    assert_eq!((flag, n), (0, 0), "no sample, and textureSize alone binds no copy");
+    assert_eq!((flag, n), (2, 0), "no sample; textureSize alone binds the copy whose word it reads");
     /* its value: the byte model against the IR (which reads the same
      * descriptor words) at levels 0 and 1 */
     let level0 = |_n: &str, _c: u32| 0;

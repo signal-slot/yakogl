@@ -2,9 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # ES 3.0 uniform-block size and combined uniform components, per GPU
 
-Date 2026-11-13, tip `de328573`. Plan #359 item `ubo-design-note`
-(re-derived from the finished read-only study `design-ubo-limits`). Docs
-only: no code was changed and nothing was run. Mesa is the 26.2.1 tree
+Date 2026-11-16, tip `cb2f0ffb`. Written 2026-11-13 as plan #359 item
+`ubo-design-note` (from the read-only study `design-ubo-limits`); brought to
+the tree's state by plan #375 item `ubo-note-update`: **the V3D raise is
+implemented (`cb52fae8`)**, see sections 8 and 9. Sections 1-7 are the design
+as written; 4-6 (PowerVR, GC7000UL, Mali) are still the plan. Docs only:
+nothing was run. Mesa is the 26.2.1 tree
 (`$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`, MIT; facts only quoted).
 `[M]` = measured by reading, `[U]` = unknown, not measured.
 
@@ -78,11 +81,14 @@ past it is simply not stored, `copy_block_member` refuses writes past `cap`)
 and again at `draw.rs:3908`**. The GL core is the first limit on all three
 GPUs; the back ends are the second, below.
 
-Not yet checked [U]: whether block-member rows count against the 384-row
-Appendix A budget at link (`packing.rs:150` `MAX_ROWS`; `program.rs:1117`
-excludes `blocks.members` rows from the default-uniform list, which suggests
-they do not). `ubo-v3d` must test a 16384-byte block next to 384 default rows
-before relying on it.
+Block rows and the packing budget [M], settled: block-member rows do not
+count against the 384-row Appendix A budget at link (`packing.rs:150`
+`MAX_ROWS`; `program.rs:1117` leaves `blocks.members` rows out of the
+default-uniform list). `tests/v3d_ubo_full_stage.rs` (`cb2f0ffb`) links 384
+default vec4 next to a 16384-byte block in the fragment and the vertex stage,
+and a 385th default vec4 does not link. The same test draws a stage with the
+full default block and 12 blocks of 16384 bytes: 50688 dwords reach the draw,
+each block at its 4096-dword slot, first and last dword read.
 
 ## 3. V3D (Raspberry Pi 4)
 
@@ -220,36 +226,66 @@ block size is not raised here.
    `u16` of `vs_uniform_dwords`/`V3dUniformStorage` (65535). No wider field
    is needed for the V3D.
 
-## 8. Ordered change list for the V3D (what `ubo-v3d` edits)
+## 8. Ordered change list for the V3D (the plan; status as built)
 
 Order matters: each step keeps the tree green.
 
-1. `src/gl/limits.rs` (from `gl-limits-formula`): `combined_components(default_components,
-   blocks, block_bytes)` const fn; wire nothing yet.
-2. Back-end capability: a field on `YakoglBackend` (`src/backend.rs`) for the
-   stage block capacity in dwords, default `MAX_UNIFORM_DWORDS` for PowerVR,
-   GC7000UL and Mali, `1536 + 12 * 4096` for the V3D (`src/v3d/backend.rs`
-   table). Grep every `YakoglBackend {` literal in `tests/` and `src/` and
-   add the field. Wait for #354's edits to `src/backend.rs`,
-   `src/v3d/backend.rs` and `src/gl/context.rs`.
-3. `src/gl/program.rs:1869` `block_dwords` and `draw.rs:3908-3913`: replace
-   `MAX_UNIFORM_DWORDS` by the capability. Check §2's open question: block
-   rows must not count against `packing::MAX_ROWS`. The `draw.rs:2314`/`:8404`
-   staging buffers stay `MAX_UNIFORM_DWORDS`-sized (the V3D is host-only).
-   Wait for #343 (program.rs).
-4. `src/gl/state.rs:1266-1270` (`!report-es2`): `MAX_UNIFORM_BLOCK_SIZE` =
-   capability-derived (V3D 16384), combined components from the §1 formula;
-   other GPUs keep 6144 / 1536 until their raise. Keep
-   `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` at 1536.
-5. Tests: `tests/es3_caps.rs` `known_gaps()` (V3D rows leave the list),
-   `tests/es3_limits_v3d.rs` (16384 / 50688), `tests/vivante_imx8mp_limits.rs`
-   and `tests/es3_limits_*` for the unchanged GPUs, `tests/es2_report_guard.rs`
-   unchanged; `v3d-ubo-sim-probe`'s test grows into a 16384-byte block
-   compile + sim read at the last dword; a host draw test of a full block.
-6. Only if dEQP shows it needed: `ldunifa` for a run-time index over more than
-   256 values (`prepare.rs:1396`), after the constant-offset path is green;
-   its own item, with a copy of the block into the job's data arena for
-   `QUNIFORM_UBO_ADDR`.
-7. A Pi 4 board step (#320): a draw with a 16384-byte block read at the first
-   and last dword, and `functional.ubo` and `implementation_limits` of the
-   dEQP tree.
+1. **Done** (`31127ec8`). `src/gl/limits.rs`: `combined_uniform_components(default_components,
+   blocks, block_bytes)` const fn and the ES 3.0 minimums.
+2. **Done differently** (`cb52fae8`). Planned: a `YakoglBackend` field. Built:
+   a cfg-gated const pair, see section 9.
+3. **Done** (`cb52fae8`). `block_dwords` (`program.rs:1889`) and the draw.rs
+   upload caps (`staging_stage_dwords`, `draw.rs:2336-2342`) are bounded by
+   `MAX_STAGE_UNIFORM_DWORDS`. Section 2's question is answered: block rows
+   are outside `packing::MAX_ROWS`, pinned by `tests/v3d_ubo_full_stage.rs`
+   (`cb2f0ffb`). The default-uniform budget and the packing stay
+   `MAX_UNIFORM_DWORDS`.
+4. **Done** (`cb52fae8`). `state.rs:1268-1271` answers
+   `MAX_UNIFORM_BLOCK_SIZE` and the combined components from the consts (V3D
+   16384 / 50688 under `!report-es2`, the others 6144 / 1536);
+   `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` stay 1536.
+5. **Done.** `cb52fae8`: `tests/es3_limits_v3d.rs` (16384 / 50688),
+   `tests/es3_caps.rs` `known_gaps()` lists the family for the other GPUs
+   only, `v3d/backend_tests.rs` `a_uniform_block_of_16384_bytes_reaches_the_stream_whole`
+   (host compile and sim read), the per-GPU pin in the `state.rs` unit test.
+   Since: `tests/v3d_ubo_large_vs.rs` (`06e4b56e`, a vertex stage reads the
+   first and last dword) and `tests/v3d_ubo_full_stage.rs` (`cb2f0ffb`, the
+   full-stage host draw).
+6. **Undecided [U]** (`ldunifa`, `prepare.rs:1396`): see section 9.
+7. **Pending**: the Pi 4 board step (#320): a draw with a 16384-byte block
+   read at the first and last dword, and `functional.ubo` and
+   `implementation_limits` of the dEQP tree. The boards are held by plan #347.
+
+## 9. As implemented (`cb52fae8`, plan #359)
+
+**The capability is two consts, not a `YakoglBackend` field** (the deviation
+from section 7 item 2 and section 8 step 2). `src/gl/context.rs:94-131`:
+
+- `MAX_UNIFORM_BLOCK_SIZE` (bytes): `ES3_MIN_MAX_UNIFORM_BLOCK_SIZE` = 16384
+  under `gpu-v3d` without `report-es2`, `MAX_UNIFORM_DWORDS * 4` = 6144
+  otherwise;
+- `MAX_STAGE_UNIFORM_DWORDS`, the per-stage block storage capacity:
+  `limits::combined_uniform_components(MAX_UNIFORM_DWORDS,
+  MAX_STAGE_UNIFORM_BLOCKS, MAX_UNIFORM_BLOCK_SIZE)` = 1536 + 12 * 4096 =
+  50688 on the same cfg arm, `MAX_UNIFORM_DWORDS` otherwise; asserted to fit
+  the `u16` dword counts (`context.rs:134`).
+
+Why: a struct field adds a member to every `YakoglBackend` literal in `src/`
+and `tests/` (CLAUDE.md, the 2026-10-14 breakage) for a value that is a
+compile-time property of the GPU feature, and the consts give `state.rs`,
+`program.rs` and `draw.rs` one source, so the queries and the storage cannot
+disagree. The cost: a build carries one GPU's limits, as the rest of
+`context.rs` already does. **Raising the PowerVR or GC7000UL later means
+editing the cfg arms of these two consts** (and the back end's own bounds);
+sections 4 and 5 stay the plan for them. The Mali is unchanged.
+
+**`ldunifa` (step 6).** `LoadUniformIdx` still refuses an array over
+`MAX_SELECTED` = 256 values. Host dEQP-GLES3 at `26d1c4a2`
+(`docs/es3/host-gles3-part-v3d.tsv`, HOST-ONLY) [M], which predates
+`cb52fae8`: `functional.ubo` 0 pass / 2355 fail, `functional.implementation_limits`
+38 pass / 11 fail, `functional.state_query` 914 pass / 23 fail / 9 not
+supported. That is the baseline, not a verdict on the raise. The result of
+the post-raise host run (plan #375 item `ubo-host-deqp`) is not recorded here
+[U]; `ldunifa` is not started and becomes its own item only if that run
+names run-time-index cases failing on the 256-value refusal.
+

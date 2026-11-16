@@ -33,6 +33,7 @@
 #define SPI2_PHYS 0xfeb20000UL
 #define QOS_PHYS  0xfdf35000UL
 #define GPU_PHYS  0xfb000000UL
+#define GPU_MAP_SIZE 0x4000 /* GPU control at 0x0, the MMU block at 0x2000-0x25ff */
 
 /* AS0's tables: Z2 uses four pages (one table a level); Z3's firmware
  * sections need nine (the design page, "Z2"), so the pool has sixteen. */
@@ -43,7 +44,7 @@ static uint8_t t6_mmu_pool[POOL_PAGES * 4096] __aligned(4096);
 static uint8_t t6_mmu_backing[64 * 1024] __aligned(4096);
 
 /* driver/rust/src/ffi/rk3588.rs pins the same layouts. */
-BUILD_ASSERT(sizeof(struct yd_t6_gpu_up) == 4 * 129, "struct yd_t6_gpu_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_gpu_up) == 4 * 152, "struct yd_t6_gpu_up moved");
 BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, ident) == 4 * 65, "struct yd_t6_gpu_up moved");
 BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, stop) == 4 * 108, "struct yd_t6_gpu_up moved");
 
@@ -117,11 +118,11 @@ int main(void)
 	device_map(&pmu, PMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	device_map(&spi2, SPI2_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	device_map(&qos, QOS_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	/* GPU control at 0x0, the MMU block at 0x2000-0x25ff */
-	device_map(&gpu, GPU_PHYS, 0x4000, K_MEM_CACHE_NONE);
+	BUILD_ASSERT(GPU_MAP_SIZE >= YD_T6_GPU_MAP_MIN, "Z1 needs YD_T6_GPU_MAP_MIN of the GPU");
+	device_map(&gpu, GPU_PHYS, GPU_MAP_SIZE, K_MEM_CACHE_NONE);
 	t6_watchdog_feed();
 
-	rc = yd_t6_gpu_up(cru, pmu, spi2, qos, gpu, delay_us, on_handover, &z1);
+	rc = yd_t6_gpu_up(cru, pmu, spi2, qos, gpu, GPU_MAP_SIZE, delay_us, on_handover, &z1);
 	t6_watchdog_feed();
 	printk("t6_mmu: Z1: rc %d stop %u refusal %u: GPU_ID 0x%08x MMU_FEATURES 0x%08x "
 	       "AS_PRESENT 0x%08x L2_READY 0x%x\n",

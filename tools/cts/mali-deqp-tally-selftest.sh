@@ -10,11 +10,15 @@
 # missing chunk field, non-ancestor commit, stale doc block, ...) must make
 # its mode exit non-zero naming the rule. A rerun slice (meta.txt reruns=)
 # replaces the Lost rows of the slice it names (rerun/ pair); a rerun of a
-# non-Lost case or of a slice not given fails. Nothing here is a real run.
+# non-Lost case or of a slice not given fails. A slice with refusals.tsv
+# (refusals/) gives each named case its own refusal as the cause; a row naming
+# a case the slice does not hold fails. --check-doc with --log takes the
+# slices from the block's own "Slices:" line; a block without it fails.
+# Nothing here is a real run.
 set -u
 
 HERE=$(dirname "$0")
-WANT=37
+WANT=54
 OUT=$(python3 -I "$HERE/mali-deqp-tally.py" --self-test 2>&1)
 RC=$?
 printf '%s\n' "$OUT"

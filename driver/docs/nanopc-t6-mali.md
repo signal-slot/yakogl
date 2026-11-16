@@ -610,7 +610,7 @@ registration forces it, as for the GC7000's kernel side.
 | Descriptor and CS packers | generated from `v10.xml`, vendored under `third_party/mesa-26.2.1/` | the V3D packets |
 | Shader back end | `src/shaderc/online/mali/` | `src/shaderc/online/v3d/` |
 | Kernel side (power, MMU, firmware, CSF) | `driver/rust/src/gpu/mali/`, feature `mali`, SoC feature `rk3588` | `driver/rust/src/gpu/vivante/` |
-| Zephyr registration | `driver/drivers/gpu/gpu_mali_rust.c` (thin) | `gpu_vivante_gc_rust.c` |
+| Zephyr registration | `gpu_mali_rust.c` (thin) | `gpu_vivante_gc_rust.c` |
 | Development OSAL on Linux | a std crate that implements `OsalOps` over panthor's uAPI (`include/uapi/drm/panthor_drm.h`, MIT); never in an image | `tools/mali/panthor/` (crate `yakogl-mali-panthor`); the `OsalOps` table is filled at L2, when the `gpu-mali` back end exists |
 | Board glue | `driver/zephyr/lib/board/nanopc_t6/` (Zephyr side); `driver/rust/src/ip/dw_wdt.rs`, `soc/rk3588.rs`, `aarch64.rs` (feature `rk3588`) | `.../rpi4/`, `ip/imx_wdog.rs` |
 | Zephyr board | `driver/boards/friendlyarm/nanopc_t6/` (target `nanopc_t6`) | `driver/boards/toradex/` |
@@ -1099,11 +1099,11 @@ Linux's log), and refuses when Linux's log names no GIC table (its ring
 wrapped), since the tables' place is then unknown.
 
 Why 256 MiB: the dEQP-GLES2 image with the Mali OSAL (`driver/samples/zephyr/
-deqp` on `nanopc_t6`) takes 151140 KB: the GL core's statics and the
+deqp` on `nanopc_t6`) takes about 148 MiB: the GL core's statics and the
 in-process compiler's scratch, the OSAL's `__nocache` memory (the 32 MiB
 carve-out, the tiler heap's chunks, the firmware arena, the queue memory),
 dEQP's code, and the 64 MiB C heap every board's dEQP image has. 128 MiB is
-19 MiB short of it. The probes take under 6 MiB; their RAM use counts the
+20 MiB short of it. The probes take under 6 MiB; their RAM use counts the
 page-frame table, which Zephyr sizes for the whole of `zephyr,sram`. Three
 places hold the window: the dts, `nanopc-t6.sh` (`WINDOW_BASE`,
 `WINDOW_SIZE`) and the U-Boot script (`driver/tools/uboot-t6/t6-zephyr.cmd`,
@@ -1159,14 +1159,19 @@ well as the window.
 The glue (`driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c` over
 `ip::dw_wdt`, `soc::rk3588`, `aarch64`):
 
-- At EARLY it puts the GIC CPU interface back into EOImode 0. Armbian runs it
-  in split mode (dmesg: "GICv3: GIC: Using split EOI/Deactivate mode").
-- At PRE_KERNEL_1 it opens the two gates if they are closed and arms WDT0:
+- At the end of Zephyr's `z_arm64_el1_init` (its weak
+  `z_arm64_el1_plat_init`, MMU off), before `z_prep_c` and so before every
+  init hook of every level, it opens the two gates if they are closed and
+  arms WDT0 (an arming in a SYS_INIT hook ran after the hooks the linker put
+  before it at the same priority: with `CONFIG_POSIX_API`, four POSIX hooks
+  at PRE_KERNEL_1 0; `nanopc_t6.c`, "Order", has the Zephyr lines):
   `TORR` = top | top << 4, `CR` = RPL as found | `WDT_EN`, a restart, then
   `CR`, `TORR` and `CCVR` are read back. Seven refusals, one number each. A
   WDT0 that is already running (Linux's, under `--linux-wdt`) is only given
   the new `TOP` and restarted: every `CR` write keeps `WDT_EN` (host test
   `a_watchdog_linux_left_running_is_re_topped_and_restarted_never_stopped`).
+- At EARLY it puts the GIC CPU interface back into EOImode 0. Armbian runs it
+  in split mode (dmesg: "GICv3: GIC: Using split EOI/Deactivate mode").
 - After the early console it prints the marker and the arming. If the arming
   refused, it resets through PSCI at once. If PSCI returns, it arms WDT0 once
   more with `TOP` 15 (89.5 s) and waits for it.
@@ -1174,18 +1179,25 @@ The glue (`driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c` over
   and only while the sample's `t6_watchdog_feed()` calls come at most
   `..._ALIVE_S` (5 s) apart (the rule is `board::nanopc_t6::feed_verdict`
   in the drivers crate, with host tests at its edges). Once WDT0 is armed,
-  the board resets at most 60 s + 22.4 s = 82.4 s after the arming,
-  whatever the image does next.
+  the board resets at most 60 s + 22.4 s = 82.4 s after uptime 0, whatever
+  the image does next. Uptime 0 is when the system timer starts
+  (PRE_KERNEL_2), after `z_prep_c` and the PRE_KERNEL_1 hooks; the arming
+  comes before `z_prep_c`, so the bound from the arming is 82.4 s plus that
+  stretch (not measured; it includes zeroing the BSS with the MMU off).
 - **The pre-arm window.** Before the arming, nothing of the image's own can
-  reset the board: reset.S (EL2 to EL1), `z_prep_c` (BSS, data, the MMU
-  tables), `z_cstart` up to PRE_KERNEL_1 (the EARLY hook that resets the
-  GIC's EOI mode, `arch_kernel_init`, the SoC and board early hooks), and
-  `t6_wdt_arm`'s own `device_map()` calls. `t6_wdt_arm` is the first
-  PRE_KERNEL_1 hook (the gate row checks this in the ELF). This is
-  straight-line code with no wait on a device, and its length is not
-  measured. A fault in it halts the CPU for good: an exception, or the
-  `k_panic()` of the arm64 MMU code when its `CONFIG_MAX_XLAT_TABLES` (8)
-  tables run out, which `device_map()` can reach. With `--linux-wdt` the
+  reset the board: reset.S, the `T6:A` code, Zephyr's `z_arm64_el2_init`
+  and `z_arm64_el1_init`. This is straight-line register code with no wait
+  on a device and no memory but the stack; its length is not measured. A
+  fault in it halts the CPU for good (`T6:X` at EL2). The build fails
+  (`check_early_hooks.cmake`, after every link) unless the arming is called
+  from `z_arm64_el1_plat_init` and the code that runs with the MMU off
+  passes three checks: it calls no `memset`, `memcpy` or `memmove` (their
+  `dc zva` and unaligned accesses fault on the Device memory every access
+  is then), it branches through no register (`br`, `blr` and their
+  pointer-authentication forms: the walk could not follow them), and no
+  load or store has an immediate offset that is not a multiple of its
+  access size. Whether a base register holds an aligned address is not
+  checked; that rests on the code. With `--linux-wdt` the
   recipe covers it: `/dev/watchdog0` is opened in the jump's own ssh
   command, so WDT0 is already counting Linux's 44.7 s when the image
   starts, and nothing in Linux feeds or stops it across the kexec (linux
@@ -1343,11 +1355,18 @@ says where the image stopped:
 |---|---|---|
 | `T6:A` | the image's first code: reset.S's weak `z_arm64_el2_plat_prep_c` (and the EL1 one), MMU off, before any C code | `yd_t6_early_entry`: the EL; at EL2 `HCR_EL2` found and written, `SCTLR_EL2`, `VBAR_EL2` found and set |
 | `T6:A1` | the end of `z_arm64_el1_init` (`z_arm64_el1_plat_init`, weak), MMU off | the glue over the crate |
-| `T6:A2` | the first PRE_KERNEL_1 hook, MMU on, before the WDT0 arming | through a `device_map()` of uart2 |
+| `T6:A2` | the same hook, MMU off, right before the WDT0 arming | the glue over the crate (`yd_t6_early_arm`) |
 | `T6:A3` | right after the arming, with rc, `CR` and the period | the same |
 | `T6:B` | the first console line (ns16550 driver) | `printk` |
 | `T6:C` | WDT0 armed, before "board: watchdog armed" | `printk` |
 | `T6:X` | any exception taken to EL2 after `T6:A` | the EL2 vector table `T6:A` installs: `ESR_EL2`, `ELR_EL2`, `FAR_EL2`, `SPSR_EL2`, `HCR_EL2`, then halt |
+
+Between `T6:A3` and `T6:B` run `z_prep_c` (the BSS, the MMU tables and the
+`k_panic()` when the XLAT tables run out), `z_cstart`'s EARLY hooks, the
+SoC and board early hooks, the kernel pre-init entries and the PRE_KERNEL_1
+hooks before the console (the POSIX pools, with `CONFIG_POSIX_API`). WDT0
+already runs there: `T6:A3` with rc 0 and no `T6:B` is a stop in that
+stretch, and WDT0 resets the board one period (22.4 s) after the arming.
 
 The hooks are reset.S's, the earliest a board can own in the pinned Zephyr
 (af17c0c8 `arch/arm64/core/reset.S`: `WTEXT(z_arm64_el2_plat_prep_c)`, called
@@ -1498,15 +1517,15 @@ board's values). The order:
    the t6_gpu probe's CMake variable `T6_GPU_QOS` (`reset` or `linux-zero`,
    the default; `tools/probes/nanopc_t6/t6_gpu/CMakeLists.txt:31`): the
    probe passes its id to `yd_t6_gpu_qos_policy` before `yd_t6_gpu_up`
-   (`tools/probes/nanopc_t6/t6_gpu/src/main.c:65`,
-   `driver/rust/src/ffi/rk3588.rs:553`); without that call the default
+   (`tools/probes/nanopc_t6/t6_gpu/src/main.c:67`,
+   `driver/rust/src/ffi/rk3588.rs:654`); without that call the default
    applies — `gpu_up` is `gpu_up_with(GPU_QOS_POLICY, ...)`,
-   `driver/rust/src/board/nanopc_t6_gpu.rs:244`). The Z1 record names the
+   `driver/rust/src/board/nanopc_t6_gpu.rs:274`). The Z1 record names the
    policy that ran: `GpuUp::qos_policy` / `struct yd_t6_gpu_up.qos_policy`,
    `YD_T6_QOS_RESET` 1, `YD_T6_QOS_LINUX_ZERO` 2, 0 when the run stopped
    before the step, with `qos_gpu_m0`'s three words read back in
-   `qos_words` (`driver/rust/include/yakogl_drivers.h:401`,
-   `tools/probes/nanopc_t6/common/t6_z1.c:152`). Host tests:
+   `qos_words` (`driver/rust/include/yakogl_drivers.h:442`,
+   `tools/probes/nanopc_t6/common/t6_z1.c:184`). Host tests:
    `qos_reset_policy_writes_only_mode_bandwidth_saturation` and
    `qos_linux_zero_policy_writes_only_mode_bandwidth_saturation`
    (`soc::rk3588`, each block's other words and every other address
@@ -1515,21 +1534,98 @@ board's values). The order:
    (`board::nanopc_t6_gpu`, the twelve writes of 0 and the read-back), and
    for the selector and the record
    `each_qos_policy_is_applied_and_named_in_the_record`
-   (`driver/rust/src/board/nanopc_t6_gpu.rs:731`),
-   `a_run_stopped_before_the_qos_step_names_no_policy` (same file, :747)
+   (`driver/rust/src/board/nanopc_t6_gpu.rs:870`),
+   `a_run_stopped_before_the_qos_step_names_no_policy` (same file, :886)
    and `z1_record_appends_the_qos_policy_and_its_words`
-   (`driver/rust/src/ffi/rk3588.rs:1674`). What the hardware does with each
+   (`driver/rust/src/ffi/rk3588.rs:2522`). What the hardware does with each
    policy is unmeasured ("Open").
-6. `GPU_ID`; soft reset; `GPU_COHERENCY_PROTOCOL` = none; L2 on
+6. The take-over of a GPU found running, `gpu::mali::takeover::take_over`,
+   only when PD_GPU read powered at hand-over (`REPAIR_STATUS` bit 1). That
+   is the crash kexec (driver/docs/nanopc-t6-display.md 2(a)): Linux's
+   devices stay on, so panthor's CSF firmware may still run on the MCU from
+   Linux's memory through the GPU's MMU, with the interrupt masks set. It
+   runs right after step 5, which writes no PMU word for a usable domain but
+   opens the GPU's clock gates (the GPU's registers need them; a domain
+   powered with its idle request set has the request released there first),
+   and before any QoS word. In this order, each step read back:
+   - `GPU_INT_MASK`, `JOB_INT_MASK`, `MMU_INT_MASK` := 0, each read back 0
+     (else stop 14, `TakeOver`, refusal 9 `IrqMaskStuck`, `detail` the mask's
+     offset << 32 | the word); then all bits of the three `*_INT_CLEAR`.
+   - `MCU_CONTROL` := `DISABLE`, then `MCU_STATUS` polled until `DISABLED`,
+     at most 100 ms (panthor's `panthor_fw_stop`, panthor_fw.c:1061-1069).
+     An MCU that does not read `DISABLED` in time is no refusal: the record
+     says so (`mcu_halt_timed_out`, `MCU_STATUS` at the end of the wait) and
+     the reset follows anyway, as in panthor, whose `panthor_fw_stop` only
+     logs "Failed to stop MCU" before its reset path's soft reset
+     (panthor_device.c:142-144); a stuck MCU (one stalled on an MMU fault,
+     say) is stopped by the reset. The halt does not go through the
+     firmware's `GLB_HALT`: that interface is in Linux's memory, which the
+     image does not map.
+   - `GPU_CMD` := `SOFT_RESET` and `RESET_COMPLETED` waited for in
+     `GPU_INT_RAWSTAT` (the sequence of step 7); when it does not rise in
+     100 ms, `GPU_CMD` := `HARD_RESET` (`GPU_CMD_DEF(1, 2)`,
+     panthor_regs.h:52) and the same wait; refusal 11 `HardResetTimeout`
+     when that times out too. After the reset the address spaces are
+     expected to be off, so that the GPU no longer walks Linux's page
+     tables: expected from what a reset does, not measured (see the end of
+     this step).
+
+   panthor's own reset on a hang differs in order: it masks the job
+   interrupt and stops the MCU, and only then masks the MMU interrupt,
+   before the soft reset (panthor_device.c:141-144); it leaves the GPU
+   interrupt unmasked because it waits for the reset through it. This masks
+   all three before the MCU stop, which only removes interrupt sources
+   earlier, and polls the reset. panthor has no hard reset
+   (panthor_gpu.c:325-330). The take-over touches GPU offsets up to
+   `MMU_INT_MASK` (0x2008), so every image maps the GPU for at least
+   `YD_T6_GPU_MAP_MIN` = 0x3000 bytes (`nanopc_t6_gpu::GPU_MAP_MIN`; host
+   test `z1_touches_no_gpu_register_past_gpu_map_min`). Each C entry that
+   runs Z1 (`yd_t6_gpu_up`, `yd_t6_fw_up`, `yd_t6_submit`, `yd_t6_osal_up`)
+   takes the length the caller mapped (`gpu_len`, after `gpu`) and answers
+   `-EINVAL`, nothing touched, below that (`t6_bases`; host tests
+   `t6_bases_refuses_a_gpu_map_below_gpu_map_min` and
+   `every_z1_entry_takes_its_bases_from_t6_bases`). t6_gpu maps exactly
+   the minimum, t6_mmu 0x4000, t6_fw, t6_submit and `src/osal/zephyr_mali.c`
+   0x280000, and each passes the size it mapped. The record
+   (`GpuUp::take_over`, `struct yd_t6_gpu_up`'s `take_over_*` words) keeps
+   the steps done, the masks, the raw status and `MCU_STATUS` as found, the
+   raw status after the clear, the halt's polls, whether it timed out and
+   `MCU_STATUS` at its end, which reset ran, and the masks and `MCU_STATUS`
+   after the reset. `t6_z1.c` prints one `take-over:` line per step reached
+   (found; masked and cleared; MCU halt; reset), so a refusal shows only
+   words that were read. `t6-verdict.sh`'s t6_gpu table chooses the route
+   by the same fact as the code, `REPAIR_STATUS` bit 1 on the hand-over
+   line (its `: on` / `: off or idle` text is not that fact: a domain
+   powered with its idle request set prints `: off or idle` and is taken
+   over). Bit 1 set (the crash route): the four `take-over:` lines, with
+   the masks as found panthor's words or 0, the MCU halt `MCU_STATUS 0 ...:
+   DISABLED`, a `soft` reset and after it the masks and `MCU_STATUS` all 0;
+   anything else differs and a person reads it. Bit 1 clear: `: off or
+   idle` and no `take-over:` line anywhere. A domain that read off gets none of this:
+   its GPU words are exactly those of step 7 alone (host test
+   `a_gpu_found_off_is_written_the_same_gpu_words_as_without_the_take_over`).
+   PD_GPU is never powered off by Z1; the host model refuses a cut without
+   the idle request (`pd_gpu_is_never_cut_on_any_route`). The other host
+   tests: `gpu::mali::takeover` (each refusal, the order, the hard reset)
+   and, over the board model left as panthor runs it, in
+   `board::nanopc_t6_gpu`:
+   `every_reset_of_a_gpu_left_running_meets_the_masks_at_0_and_the_mcu_disabled`,
+   `the_first_gpu_words_mask_then_clear_then_halt_then_reset`,
+   `the_take_over_reset_comes_before_the_qos_words_and_the_l2`,
+   `a_domain_powered_with_its_idle_request_set_is_released_before_the_take_over`,
+   `an_mcu_that_does_not_halt_is_reset_and_z1_goes_on`.
+   Not measured on the board yet: what a reset does to the masks and to the
+   AS registers (the record's `take_over_after` shows the first).
+7. `GPU_ID`; soft reset; `GPU_COHERENCY_PROTOCOL` = none; L2 on
    (panthor_gpu.c, under its MIT option). The L2 wait needs `L2_READY` to
    show the L2: panthor's condition (`(mask & val) == val`,
    panthor_gpu.c:210) also accepts 0. Stops: a `GPU_ID` that is not the G610's
    is stop 6 (`NotG610`), a soft reset that does not complete stop 7
    (`Reset`), an L2 that does not come up stop 8 (`L2`).
 
-The stop numbers are `board::nanopc_t6_gpu::Stop`; the C names of 9 and up
-(`YD_T6_GPU_STOP_*`) and the clock-set and supply-enable fields of the record
-are not in the header yet.
+The stop numbers are `board::nanopc_t6_gpu::Stop`, in C `YD_T6_GPU_STOP_*`
+(driver/rust/include/yakogl_drivers.h), with the refusals of stop 14 as
+`YD_MALI_*`.
 
 **Measured, 2026-10-19 (records `0dce654a8:tools/mali/board-ref/2026-10-19-z1-gpu/`,
 three jumps; the recipe now records the GPU's power under Linux before
@@ -2040,7 +2136,8 @@ and ten `AS_STATUS` waits of at most 100 ms each, so Z2 adds at most
 about 1.3 s, under the 5 s the feeder allows between `t6_watchdog_feed()`
 calls (one before and one after each of `yd_t6_gpu_up` and
 `yd_t6_mmu_up`). A hang anywhere after the arming is reset by WDT0 at
-most 82.4 s after it (Z1: 60 s lifetime + 22.4 s period); before it, by
+most 82.4 s after uptime 0 (Z1: 60 s lifetime + 22.4 s period; the arming
+is a little earlier, before `z_prep_c`); before it, by
 Linux's watchdog (44.7 s from the open). If PSCI `SYSTEM_RESET` returns,
 WDT0 resets the board within one period. A stuck GPU register is a
 bounded refusal, not a hang: a read of the GPU with PD_GPU off would be
@@ -2603,8 +2700,8 @@ handover callback); the feeder's rule is as for Z2 and Z3 (`TOP` 13,
 `ALIVE_S` = 5 s apart, and until `LIFETIME_S` = 60 s of uptime). Z3's
 boot, the 5 s wait and the stop and terminate waits can together pass 5 s
 between calls: the feeding then stops and WDT0 resets the board within
-22.4 s of its last feed, at most 82.4 s after the arming, whatever the
-image does. Whether the probe also feeds inside the wait is not
+22.4 s of its last feed, at most 82.4 s after uptime 0 (the arming is a
+little earlier, before `z_prep_c`), whatever the image does. Whether the probe also feeds inside the wait is not
 assumed here.
 
 **Verdict.** `driver/tools/kexec-zephyr/t6-verdict.sh t6_submit
@@ -2734,39 +2831,32 @@ Decided by the user on 2026-10-18:
 Measured under Armbian over ssh on 2026-10-26 and moved to their sections: the live
 `AS_MEMATTR` ("MMU (Z2)"), `TIMESTAMP_OFFSET` and the runtime CS/CSG values ("The
 firmware (Z3)"), Mesa 25.0.7 against 26.2.1 ("The command stream and descriptors
-(L1)"), the Linux QoS words ("The GPU power-on"). What is left needs U-Boot or a job
-from Zephyr; a UART / U-Boot session reads exactly this (issue #26 names them as
-Z-prerequisites), each with the board in U-Boot's prompt, before `bootm` / `booti`,
-and nothing written:
+(L1)"), the Linux QoS words ("The GPU power-on"). Read at the U-Boot prompt on
+2026-11-12, nothing written (`driver/tools/uboot-t6/prompt-reads.sh`; the values are
+in docs/notes/nanopc-t6-uboot-handover.md, section 4 (c)): the first two items below.
+What is left needs a run from U-Boot or a job from Zephyr:
 
 - **PD_GPU and vdd_gpu_s0 at the U-Boot hand-over** (the supply is boot-on but not
   always-on). After Linux's kexec: PD_GPU off, vdd_gpu_s0 on at 675 mV, the clock
-  300 MHz from CPLL (measured; "The GPU power-on"). Read in U-Boot, `md.l` each:
-  the PMU (0xfd8d8000) `PWR_GATE`,
-  `REPAIR_STATUS`, `BUS_IDLE_REQ`, `BUS_IDLE_ACK`, `BUS_IDLE_ST` (the registers
-  and the Linux values are in `0dce654a8:tools/mali/board-ref/2026-10-19-z1-gpu/README.md`:
-  off is 0xffff / 0xfad50001); and the RK806 (SPI2) `POWER_EN0`, `POWER_SLP_EN0`,
-  `BUCK1_CONFIG`, `BUCK1_ON_VSEL` (Linux and the image: 0x0f, 0xe0, 0xa4, 0x1c =
-  675 mV), through U-Boot's `regulator dev vdd_gpu_s0` / `regulator status` or
-  `pmic dump` when its driver has the supply, else the same SPI2 read the image does.
-  The image already handles the states U-Boot could plausibly leave (PD_GPU off with
-  vdd_gpu_s0 off or on, or PD_GPU powered with its idle request set; `board::nanopc_t6_gpu::gpu_up`,
-  "The GPU power-on" step 3 and 5), each host-tested with a stop for every refusal.
-  What decides: whether U-Boot's real state is one of those, whether it leaves PD_GPU
-  powered with the idle request set, and how fast DCDC1 ramps (the image polls up to
+  300 MHz from CPLL (measured; "The GPU power-on"). Measured at the U-Boot prompt:
+  PD_GPU is off with its idle request clear (`PWR_GATE` 0x0000fff9, `REPAIR_STATUS`
+  0xfff70001, `BUS_IDLE_REQ` 0, `BUS_IDLE_ACK` and `BUS_IDLE_ST` 0x00021fff). That
+  is a state the image handles (`board::nanopc_t6_gpu::gpu_up`, "The GPU power-on"
+  step 3 and 5; host-tested with a stop for every refusal). Not measured: whether
+  vdd_gpu_s0 is on there (the U-Boot build has no `pmic` command; the image reads
+  the RK806's `POWER_EN0` over SPI2 and reports it on its first run from U-Boot),
+  and how fast DCDC1 ramps (the image polls up to
   `rk806::DCDC1_RAMP_POLL_BUDGET_US`, a budget and not a fact). The design is in
   docs/notes/nanopc-t6-uboot-handover.md.
-- **The GPU clock without Linux**: SCMI clock 5 against the CRU. In U-Boot read the CRU
-  (0xfd7c0000) `CLKSEL_CON(158)` (0xfd7c0578; Linux leaves 0x1f24: `clk_gpu_src`
-  CPLL / 5 = 300 MHz, PVTPLL bit 14 clear), `CLKGATE_CON(66)`, the CPLL and GPLL
-  `PLL_CON` words, and `clk dump` (the rates U-Boot believes, SCMI clock 5
-  included), at the prompt with nothing run before. The image refuses the PVTPLL
-  and, when the CRU is not at a rate inside the OPP table, sets `CLKSEL_CON(158)`
-  (and (159)) itself: `soc::rk3588::gpu_clock_set`, CPLL / 5 = 300 MHz while the
-  CPLL reads 1500 MHz in normal mode, host-tested over the register model for
-  Armbian's 0x1f24 (kept), a PVTPLL state, an out-of-table divider and an unknown
-  mux ("The GPU power-on", step 2). What the prompt read decides is whether U-Boot's
-  CRU is in one of those states, and whether the CPLL reads 1500 MHz there.
+- **The GPU clock without Linux.** Measured at the U-Boot prompt: `CLKSEL_CON(158)`
+  (0xfd7c0578) reads 0x00001f80, the SPLL, where Linux leaves 0x1f24 (`clk_gpu_src`
+  CPLL / 5 = 300 MHz, PVTPLL bit 14 clear); the CPLL reads 1500 MHz in normal mode.
+  So `soc::rk3588::gpu_clock_set` moves the GPU to CPLL / 5 = 300 MHz ("The GPU
+  power-on", step 2; host-tested over the register model for Armbian's 0x1f24
+  (kept), a PVTPLL state, an out-of-table divider and an unknown mux). Not
+  measured: the rates U-Boot itself believes, SCMI clock 5 included (the build has
+  no `clk` command), and the move on the board (no image has run from U-Boot yet;
+  issue #4627).
 - **The QoS words' effect.** The choice is made in code: `soc::rk3588::QosPolicy`
   holds the two candidates — `Reset`, the hardware reset values (`MODE` 3,
   `BANDWIDTH` 0x12d, `SATURATION` 0x40), and `LinuxZero`, what Linux reads with the
@@ -2782,20 +2872,20 @@ and nothing written:
   build-time choice, not an edit: `west build ... -- -DT6_GPU_QOS=reset` or
   `=linux-zero` (the default; `tools/probes/nanopc_t6/t6_gpu/CMakeLists.txt:31`)
   reaches `gpu_up_with` through `yd_t6_gpu_qos_policy()`
-  (`driver/rust/src/ffi/rk3588.rs:553`) before `yd_t6_gpu_up`, and the record's
+  (`driver/rust/src/ffi/rk3588.rs:654`) before `yd_t6_gpu_up`, and the record's
   `qos_policy` names the one that ran (`YD_T6_QOS_RESET` 1,
   `YD_T6_QOS_LINUX_ZERO` 2, 0 when the run stopped before the step;
-  `driver/rust/include/yakogl_drivers.h:401`), so each run's own Z1 printout
-  says which words it wrote (`tools/probes/nanopc_t6/common/t6_z1.c:152`). A
+  `driver/rust/include/yakogl_drivers.h:442`), so each run's own Z1 printout
+  says which words it wrote (`tools/probes/nanopc_t6/common/t6_z1.c:184`). A
   Z3 or Z4 run applies the same choice: `yd_t6_fw_up` and `yd_t6_submit` read the
-  one `T6_GPU_QOS_POLICY` (`rk3588.rs:542`) and pass it to
+  one `T6_GPU_QOS_POLICY` (`rk3588.rs:638`) and pass it to
   `board::nanopc_t6_fw::fw_up_with` (`nanopc_t6_fw.rs:223`; `fw_up` keeps the
-  `GPU_QOS_POLICY` default, and `submit_up_with`, `nanopc_t6_submit.rs:1201`,
+  `GPU_QOS_POLICY` default, and `submit_up_with`, `nanopc_t6_submit.rs:1204`,
   carries the policy into Z3), so the probe's `-DT6_GPU_QOS` reaches Z3 and Z4,
   host-tested by `fw_up_applies_the_given_qos_policy_and_the_default_without_one`
   (`nanopc_t6_fw.rs:820`, each policy's words written, the record's GPU part
   naming it) and `the_entry_applies_the_build_time_qos_policy_z1_reads`
-  (`ffi/rk3588.rs:1583`). The record names the
+  (`ffi/rk3588.rs:1742`). The record names the
   applied policy either way, host-tested by
   `each_qos_policy_is_applied_and_named_in_the_record`
-  (`driver/rust/src/board/nanopc_t6_gpu.rs:731`).
+  (`driver/rust/src/board/nanopc_t6_gpu.rs:870`).

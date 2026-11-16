@@ -3684,6 +3684,9 @@ fn programs(d: &GlesDraw, fs: &ShcShader) -> Result<(V3dFsProg, V3dVsProg, V3dVs
         flat_shade_flags: f.flat_shade_flags,
         noperspective_flags: f.noperspective_flags,
         centroid_flags: f.centroid_flags,
+        flat_shade_flags_hi: f.flat_shade_flags_hi,
+        noperspective_flags_hi: f.noperspective_flags_hi,
+        centroid_flags_hi: f.centroid_flags_hi,
         writes_z: f.writes_z != 0,
         disable_ez: f.disable_ez != 0,
         uses_center_w: f.uses_center_w != 0,
@@ -6699,7 +6702,9 @@ pub static yakogl_backend_v3d: YakoglBackend = YakoglBackend {
      * read every byte of the clear back on the board */
     rt_rgba8888_is_bgra: false,
     mip_level_align: 0,
-    compressed_blocks_in_rows: false,
+    /* gl_level_blocks and tile read raster rows of blocks (v3d::texture);
+     * the twiddled grid the GL core stores for false is the PowerVR's */
+    compressed_blocks_in_rows: true,
     /* the TMU samples a cube itself (depth 6, array stride): the GL core
      * gives one face's size and the layer count, and stacks the faces */
     native_layered_textures: true,

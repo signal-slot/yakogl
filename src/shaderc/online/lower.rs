@@ -33,7 +33,8 @@
 use super::arena::{AVec, Arena};
 use super::ast::*;
 use super::builtin_call::{self, Operand};
-use super::ir::{self, IoDecl, IoKind, Node, Op, Range as IrRange, Src, ValueId};
+use super::ir::{self, IoDecl, IoKind, Node, Op, Prec, Range as IrRange, Src, ValueId};
+use super::precision::{self, Precs};
 use super::sema::{ExprTypes, Stage};
 use super::{parser, pp, reflect, Error, R};
 use crate::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
@@ -610,6 +611,23 @@ struct Moved {
     dst: usize,
 }
 
+#[cfg(test)]
+std::thread_local! {
+    /// How many expressions this thread's lowerings lowered that the
+    /// precision scan never reached ([`precision::Precs::seen`]): an
+    /// Unknown no rule decided. The corpus test asserts it stays 0.
+    pub(crate) static UNSEEN: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+    /// How many float or bool values were lowered under a context with no
+    /// class and got [`Prec::Unknown`] from the rule in
+    /// `Lower::instr_prec`, not from a site's measured class. The corpus
+    /// test asserts it stays 0: every such site the corpus reaches has its
+    /// class from Mesa.
+    pub(crate) static NO_CONTEXT: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+    /// Set by the test of the no-context rule: the copy in of a parameter
+    /// keeps the call's context, as a site that sets no class would.
+    pub(crate) static UNMEASURED: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
 /// Turns [`relocate`] off, for the test that compares a compile with and
 /// without it (under `store::test_lock`, so no other compile sees it).
 #[cfg(test)]
@@ -657,6 +675,9 @@ pub fn relocate<'a>(a: &Arena<'a>, l: Lowered<'a>, text: &'a str, mark: usize) -
     }
     blk!(m.instrs);
     blk!(m.comps);
+    blk!(m.lanes);
+    blk!(m.prec);
+    blk!(m.local_prec);
     blk!(m.nodes);
     blk!(m.locals);
     blk!(m.inputs);
@@ -789,6 +810,9 @@ pub fn relocate<'a>(a: &Arena<'a>, l: Lowered<'a>, text: &'a str, mark: usize) -
     let module = ir::Module {
         instrs: moved_slice(m.instrs, &map),
         comps: moved_slice(m.comps, &map),
+        lanes: moved_slice(m.lanes, &map),
+        prec: moved_slice(m.prec, &map),
+        local_prec: moved_slice(m.local_prec, &map),
         nodes: moved_slice(m.nodes, &map),
         locals,
         inputs,
@@ -904,6 +928,7 @@ fn lower_ordered<'a>(
     types: ExprTypes<'a>,
     mat_order: ir::MatOrder,
 ) -> R<'a, ir::Module<'a>> {
+    let precs = precision::classify(a, ast, &types, stage)?;
     let mut l = Lower {
         a,
         ast,
@@ -913,6 +938,16 @@ fn lower_ordered<'a>(
         mat_order,
         instrs: AVec::new(),
         comps: AVec::new(),
+        lanes: AVec::new(),
+        precs,
+        prec: AVec::new(),
+        kinds: AVec::new(),
+        local_prec: AVec::new(),
+        cur: Prec::High,
+        cur_class: Prec::None,
+        slot_prec: None,
+        pinned: AVec::new(),
+        var_params: AVec::new(),
         nodes: AVec::new(),
         inputs: AVec::new(),
         outputs: AVec::new(),
@@ -939,8 +974,18 @@ fn lower_ordered<'a>(
     l.declare_io()?;
     let body = l.main_body()?;
     let uniforms = l.uniform_decls()?;
+    /* The precision tables are property maps of `instrs` and `locals`
+     * (ir.rs `Module::prec`): a slot or an instruction pushed beside
+     * `push_local` or `push_sized` would shift every entry after it onto
+     * another value. Refused rather than handed on. */
+    if l.prec.len() != l.instrs.len() || l.lanes.len() != l.instrs.len() || l.local_prec.len() != l.locals.len() {
+        return Err(Error::new(l.line, "precision", "the precision tables are out of step with the IR"));
+    }
     Ok(ir::Module {
         comps: a.alloc_copy(l.comps.as_slice())?,
+        lanes: a.alloc_copy(l.lanes.as_slice())?,
+        prec: a.alloc_copy(l.prec.as_slice())?,
+        local_prec: a.alloc_copy(l.local_prec.as_slice())?,
         stage: match stage {
             Stage::Vertex => SHC_STAGE_VERTEX,
             Stage::Fragment => SHC_STAGE_FRAGMENT,
@@ -974,6 +1019,40 @@ struct Lower<'x, 'a> {
     /// The component count of each instruction's value, in step with
     /// [`Lower::instrs`]. See [`ir::Module::comps`].
     comps: AVec<'a, u8>,
+    /// The exact width of each instruction's value, in step with
+    /// [`Lower::instrs`]. See [`ir::Module::lanes`].
+    lanes: AVec<'a, u8>,
+    /// Mesa's precision class of every expression, from the tree
+    /// ([`precision::classify`]).
+    precs: Precs<'a>,
+    /// The [`Prec`] of each instruction, in step with [`Lower::instrs`].
+    /// See [`ir::Module::prec`].
+    prec: AVec<'a, Prec>,
+    /// The [`ir::ValueKind`] of each instruction, in step with
+    /// [`Lower::instrs`]: what [`Lower::instr_prec`] decides by, and
+    /// what a later instruction's kind is made from.
+    kinds: AVec<'a, ir::ValueKind>,
+    /// The [`Prec`] of each local's storage, in step with
+    /// [`Lower::locals`]. See [`ir::Module::local_prec`].
+    local_prec: AVec<'a, Prec>,
+    /// The [`Prec`] the instructions of the expression being lowered
+    /// record ([`Precs::instr`]); High outside any expression (a copy the
+    /// lowering makes is read at full width).
+    cur: Prec,
+    /// That expression's class ([`Precs::class`]): what a temporary the
+    /// lowering makes for it is stored at.
+    cur_class: Prec,
+    /// The storage of the slots being allocated, when a declaration says
+    /// it ([`Lower::push_local`]); `None`: a temporary of the current
+    /// expression.
+    slot_prec: Option<Prec>,
+    /// Float constants a full-width built-in reads at their fp16 value
+    /// ([`Lower::full_width_args`]).
+    pinned: AVec<'a, u32>,
+    /// The parameters of the bodies being inlined whose argument is known
+    /// to vary ([`Lower::varies`]), by inline depth. Any other parameter
+    /// may be a constant once NIR has inlined and propagated it.
+    var_params: AVec<'a, (u32, ir::LocalId, Option<Src>)>,
     nodes: AVec<'a, Node>,
     inputs: AVec<'a, IoDecl<'a>>,
     outputs: AVec<'a, IoDecl<'a>>,
@@ -1264,6 +1343,7 @@ impl<'a> Lower<'_, 'a> {
                     interp: ir::INTERP_SMOOTH,
                     gl_type: at.gl_type,
                     invariant: false,
+                    prec: self.precs.global_path(self.ast, at.name),
                 },
             )?;
         }
@@ -1291,6 +1371,7 @@ impl<'a> Lower<'_, 'a> {
                     interp: v.interp,
                     gl_type: v.gl_type,
                     invariant: self.declared_invariant(v.name),
+                    prec: self.precs.global_path(self.ast, v.name),
                 };
                 match self.stage {
                     Stage::Vertex => self.outputs.push(self.a, decl)?,
@@ -1313,6 +1394,7 @@ impl<'a> Lower<'_, 'a> {
                         interp: ir::INTERP_SMOOTH,
                         gl_type: o.gl_type,
                         invariant: self.declared_invariant(o.name),
+                        prec: self.precs.global_path(self.ast, o.name),
                     },
                 )?;
             }
@@ -1423,6 +1505,7 @@ impl<'a> Lower<'_, 'a> {
                     interp: ir::INTERP_SMOOTH,
                     gl_type: 0x8B52,
                     invariant: self.declared_invariant(name),
+                    prec: self.output_prec(slot),
                 },
             )?;
         }
@@ -1443,6 +1526,7 @@ impl<'a> Lower<'_, 'a> {
                         interp: ir::INTERP_SMOOTH,
                         gl_type: if comps == 4 { 0x8B52 } else { 0x1406 },
                         invariant: self.declared_invariant(name),
+                        prec: self.output_prec(slot),
                     },
                 )?;
             }
@@ -1544,8 +1628,7 @@ impl<'a> Lower<'_, 'a> {
                 _ => Run::Single,
             };
             for _ in 0..run.slots() {
-                self.locals
-                    .push(self.a, ir::VarDecl { name, ty: ir::Type::new(ir::ScalarType::F32, comps), array_len: 1 })?;
+                self.push_local(ir::VarDecl { name, ty: ir::Type::new(ir::ScalarType::F32, comps), array_len: 1 })?;
             }
             let mut l = Local::scalar(name, id, comps);
             l.run = run;
@@ -1612,10 +1695,11 @@ impl<'a> Lower<'_, 'a> {
             let id = ir::LocalId(self.locals.len() as u32);
             let run = Run::MatrixArray { len: v.count.max(1), cols };
             for _ in 0..run.slots() {
-                self.locals.push(
-                    self.a,
-                    ir::VarDecl { name: v.name, ty: ir::Type::new(ir::ScalarType::F32, v.components), array_len: 1 },
-                )?;
+                self.push_local(ir::VarDecl {
+                    name: v.name,
+                    ty: ir::Type::new(ir::ScalarType::F32, v.components),
+                    array_len: 1,
+                })?;
             }
             let mut l = Local::scalar(v.name, id, v.components);
             l.run = run;
@@ -1714,6 +1798,13 @@ impl<'a> Lower<'_, 'a> {
         #[cfg(not(test))]
         let off = false;
         let saved = core::mem::take(&mut self.folded);
+        /* A statement is no expression: what it emits outside one is a
+         * copy the lowering makes (a held input, an output's shadow, a
+         * flag), at full width like any bare read (stores and ints record
+         * None by `instr_prec`), also inside a body inlined into an
+         * expression. */
+        let outer = (self.cur, self.cur_class);
+        (self.cur, self.cur_class) = (Prec::High, Prec::None);
         let r = if off || self.fold_depth > 0 {
             self.statement_inner(id, out)
         } else {
@@ -1725,6 +1816,7 @@ impl<'a> Lower<'_, 'a> {
                 _ => self.statement_inner(id, out),
             }
         };
+        (self.cur, self.cur_class) = outer;
         let done = core::mem::replace(&mut self.folded, saved);
         done.release(self.a);
         r
@@ -2270,7 +2362,7 @@ impl<'a> Lower<'_, 'a> {
     /// A fresh one-lane bool local, for a flag the lowering keeps.
     fn bool_local(&mut self) -> R<'a, Local<'a>> {
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::Bool, 1), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::Bool, 1), array_len: 1 })?;
         Ok(Local { name: "", id, comps: 1, run: Run::Single, value: None })
     }
 
@@ -2688,6 +2780,11 @@ impl<'a> Lower<'_, 'a> {
     /// The only expression statement in the subset: an assignment to an
     /// output.
     fn expr_statement(&mut self, e: ExprId, out: &mut AVec<'a, Node>) -> R<'a, ()> {
+        self.at(e, |s| s.expr_statement_at(e, out))
+    }
+
+    /// [`Lower::expr_statement`] under `e`'s [`Prec`].
+    fn expr_statement_at(&mut self, e: ExprId, out: &mut AVec<'a, Node>) -> R<'a, ()> {
         /* `++i;` and `i--;` as statements. As an expression they also have
          * a value, which no shader in either corpus uses and which would
          * need the old value kept; as a statement they are exactly
@@ -3159,6 +3256,11 @@ impl<'a> Lower<'_, 'a> {
     /// Lower `e`, appending the instructions that produce it, and give the
     /// operand that reads the result.
     fn value(&mut self, e: ExprId, want: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
+        self.at(e, |s| s.value_at(e, want, out))
+    }
+
+    /// [`Lower::value`] under `e`'s [`Prec`].
+    fn value_at(&mut self, e: ExprId, want: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
         /* Narrowed to the expression and not restored afterwards: an error
          * carries the line it was built at, and the next node sets it again,
          * so the innermost construct that failed is the one reported. */
@@ -4152,6 +4254,8 @@ impl<'a> Lower<'_, 'a> {
             ty: crate::shaderc::online::ast::SamplerType::new(SamplerDim::D2, SamplerRet::Float, false),
         }; MAX_BUILTIN_OPERANDS];
         let mut n = 0usize;
+        /* where this call's arguments begin: a constant before it is shared */
+        let start = self.instrs.len();
         for &e in ids {
             let ty = self.types.of(e);
             if let BaseType::Mat(cols, rows) = ty.base {
@@ -4173,17 +4277,206 @@ impl<'a> Lower<'_, 'a> {
         }
         let ops = &ops[..n];
         let es3 = self.ast.es3;
-        let mut sink = Sink { l: self, out };
+        /* The width every instruction of the expansion records: the call's
+         * or the widest operand's, whichever is wider (`Sink::width`). */
+        let width = ops
+            .iter()
+            .filter_map(|o| match *o {
+                Operand::Value { comps, .. } => Some(comps),
+                Operand::Sampler { .. } => None,
+            })
+            .fold(want, u8::max)
+            .min(4);
+        /* `pow` is one NIR `fpow` in Mesa, which bi_lower_bit_size runs at
+         * 32 bits even in a 16-bit tree (precrule_e3_pow on branch
+         * mali-prec-width: one 32-bit fpow, no conversion). Its expansion
+         * here, `exp2(y * log2(x))`, would otherwise read as a user's own
+         * 16-bit product; so it records High, and a Medium reader of the
+         * result narrows it as Mesa's f2f16 of the fpow does. */
+        let outer = self.cur;
+        /* pow, asin and acos are each one NIR op that Mesa builds at 32 bits
+         * from its 16-bit operands (bi_lower_bit_size for fpow;
+         * nir_builtin_builder.c:232-233, :243-244 for asin and acos). */
+        if matches!(name, "pow" | "asin" | "acos") && self.cur == Prec::Medium {
+            self.full_width_args(ids, &ops[..n], start)?;
+            self.cur = Prec::High;
+        }
+        /* The pack built-ins take a highp argument: Mesa widens it and
+         * clamps, scales and rounds at 32 bits (eighth review B-J, probes
+         * p8/m1, m3: `vec2 f162f`, `vec2 sat`, `vec2 *`, `vec2 round_even`).
+         * The call's own value is a uint, which records None. */
+        if matches!(name, "packHalf2x16" | "packUnorm2x16" | "packSnorm2x16") {
+            self.cur = Prec::High;
+        }
+        /* A look-up's own arithmetic (a projective divide) works on its
+         * coordinate, a 32-bit root (A.3); only the `Tex` is the
+         * sampler's class. */
+        let look_up = matches!(ops.first(), Some(Operand::Sampler { .. }));
+        let start = self.instrs.len() as u32;
+        /* each value argument's width, by the type checker */
+        let mut args = [(u32::MAX, 0u8); MAX_BUILTIN_OPERANDS];
+        for (a, o) in args.iter_mut().zip(ops) {
+            if let Operand::Value { src, comps, .. } = *o {
+                *a = (src.val.0, comps);
+            }
+        }
+        let mut sink = Sink { l: self, out, width, look_up, start, args, steps: AVec::new() };
         let lowered = match builtin_call::lower_call(&mut sink, name, ops, want) {
             None if es3 => builtin_call::lower_es3(&mut sink, name, ops),
             r => r,
         };
+        self.cur = outer;
         match lowered {
             Some(r) => r,
             /* Not a built-in: a user-defined function, which needs inlining
              * or a call in the IR. Neither exists yet. */
             None => Err(self.err(name, "this function call is not lowered yet")),
         }
+    }
+
+    /// The constant arguments of a Medium built-in whose expansion is
+    /// computed at full width (pow, asin, acos). Mesa passes each argument
+    /// to the built-in's mediump parameter, so a constant one is its fp16
+    /// value there (review probe v_pow: `pow (f2fmp a) (f2fmp (constant
+    /// float (0.100000)))`). A constant the call made records Medium (every
+    /// reader takes the fp16 value) and is pinned, so a later 32-bit reuse
+    /// makes it Unknown rather than High ([`Lower::const_value`]). A
+    /// shared constant already read at full width, or a folded argument
+    /// that is no single constant (its fold is High and its rounding into
+    /// the parameter has no form here), records Unknown.
+    fn full_width_args(&mut self, ids: &[ExprId], ops: &[Operand<'a>], start: usize) -> R<'a, ()> {
+        if ops.len() != ids.len() {
+            return Ok(());
+        }
+        for (&e, op) in ids.iter().zip(ops) {
+            let Operand::Value { src, .. } = *op else { continue };
+            /* An argument not known to vary may be a constant to NIR,
+             * after inlining and propagation: a local set to 0.1, a
+             * parameter given one (fourth review, probes p4/f06, f09: Mesa
+             * folds the parameter's `f2fmp` to the fp16 constant). The
+             * lowering reads its 32-bit value and has no form for that
+             * rounding: Unknown. A constant expression is the case below. */
+            if !self.precs.folds(e) && !self.varies(e, 0) {
+                if let Some(x) = self.prec.as_mut_slice().get_mut(src.val.0 as usize) {
+                    *x = Prec::Unknown;
+                }
+                continue;
+            }
+            if !self.precs.folds(e) {
+                continue;
+            }
+            let i = src.val.0 as usize;
+            let constant = matches!(self.instrs.as_slice().get(i), Some(Op::ConstF32(_)));
+            /* a constant with an exact fp16 value in every lane it gives is
+             * the same read at either width: nothing to record, and no pin
+             * that a 32-bit reuse would turn Unknown (sixth review (c),
+             * p3/x1's 0.5) */
+            if constant && self.const_lanes_of(src).is_some_and(|l| l.iter().all(|&x| precision::f16_exact(x))) {
+                continue;
+            }
+            /* a `const` variable: ast_to_hir folds its read to its value,
+             * so the parameter gets that value's fp16 rounding; the slot
+             * holds the 32-bit value (`declare_var`), and this read of it,
+             * made for this argument, narrows it */
+            let read = matches!(self.instrs.as_slice().get(i), Some(Op::LoadLocal { index: None, .. })) && i >= start;
+            let had = self.prec.as_slice().get(i).copied();
+            let p = match (constant, i >= start, had) {
+                (true, true, _) | (true, false, Some(Prec::Medium)) => Prec::Medium,
+                _ if read => Prec::Medium,
+                _ => Prec::Unknown,
+            };
+            if let Some(x) = self.prec.as_mut_slice().get_mut(i) {
+                *x = p;
+            }
+            if p == Prec::Medium && constant {
+                self.pinned.push(self.a, i as u32)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// `e` is known to vary from one invocation to the next, so NIR cannot
+    /// fold it to a constant: a BARE read of an input, a uniform or a
+    /// built-in input -- swizzled, a struct member, an array element -- or
+    /// of a parameter of the innermost inlined body that every call gives
+    /// such a read and the body never writes ([`Lower::var_params`]).
+    /// A whitelist: any operation, conversion, call or `?:` is not known
+    /// to vary, even over such reads, because NIR's algebra may fold it
+    /// (fifth review B-G: `uh * 0.0 + 0.1`, `h.x - h.x + 0.1` and
+    /// `h.x * 0.0 + 0.1` are the fp16 constant 0x3dccc000 in Mesa's final
+    /// NIR, probes p5/g02, g04, g05). Forms Mesa keeps at 32 bits are
+    /// refused too (g09 `float(gl_VertexID)`, g10 `x * 1.0`, g11
+    /// `max(h.x, 0.1)`, g03 `?:` with an input side): a refusal, never a
+    /// wrong record.
+    fn varies(&self, e: ExprId, depth: u32) -> bool {
+        if depth > 64 {
+            return false;
+        }
+        match *self.ast.expr(e) {
+            /* What the name resolves to, in the lowering's own order
+             * (`value_at`): a held output, a local or parameter in scope,
+             * then an input, a built-in input, a uniform. */
+            Expr::Ident(n) => {
+                if let Some(l) = self.scope_entry(n) {
+                    return self
+                        .var_params
+                        .as_slice()
+                        .iter()
+                        .any(|&(d, id, v)| d == self.inline_depth && id == l.id && v == l.value);
+                }
+                if self.shadow_of(n).is_some() {
+                    return false;
+                }
+                let row = |r: &str| {
+                    r == n || (r.len() > n.len() && r.starts_with(n) && matches!(r.as_bytes()[n.len()], b'.' | b'['))
+                };
+                self.input_of(n).is_some()
+                    || matches!(
+                        n,
+                        "gl_FragCoord" | "gl_PointCoord" | "gl_FrontFacing" | "gl_VertexID" | "gl_InstanceID"
+                    )
+                    || self.reflection.uniforms.iter().any(|u| row(u.name))
+            }
+            /* a swizzle or a member of a bare read; an element at any index
+             * (p5/g08: `us.m`, `ua[1]` stay 32-bit in Mesa) */
+            Expr::Field(b, _) | Expr::Index(b, _) => self.varies(b, depth + 1),
+            _ => false,
+        }
+    }
+
+    /// `body` writes the parameter `name`: assigns it, steps it, or passes
+    /// it as an `out` or `inout` argument (a built-in with an `out`
+    /// parameter counts whatever position). Fifth review B-F, probe p5/g01:
+    /// `e = 0.1;` in the callee makes the parameter a constant to NIR.
+    fn writes_param(&self, body: StmtId, name: &'a str) -> bool {
+        /* `assigns_to` counts every call that takes the name; its `ro`
+         * callback clears an argument a call reads only. */
+        let ro = |a: ExprId| !self.passed_out(a);
+        assigns_to(self.ast, body, name, &ro)
+    }
+
+    /// The argument `a` is passed where the callee may write it: an `out`
+    /// or `inout` parameter of a user function, any argument of a built-in
+    /// with an `out` parameter (`modf`, `frexp`), or a call this cannot
+    /// resolve.
+    fn passed_out(&self, a: ExprId) -> bool {
+        for e in self.ast.exprs.iter() {
+            let Expr::Call { name, args } = *e else { continue };
+            let ids: &[ExprId] = &self.ast.expr_ids[args.indices()];
+            let Some(k) = ids.iter().position(|&x| x == a) else { continue };
+            if super::sema::constructor_type(name, self.ast.es3).is_some() {
+                return false;
+            }
+            if matches!(name, "modf" | "frexp") {
+                return true;
+            }
+            let Some((params, _)) = self.user_function(name, args) else {
+                /* a built-in without an `out` parameter */
+                return false;
+            };
+            return self.ast.params.get(params.start as usize + k).is_none_or(|p| p.direction != ParamDirection::In);
+        }
+        true
     }
 
     /// The definition a call names, resolved against the argument types.
@@ -4261,6 +4554,19 @@ impl<'a> Lower<'_, 'a> {
         } else {
             self.a.alloc_filled(param_ids.len(), Bound::EMPTY)?
         };
+        /* The copy IN of the arguments is a full-width read into the 32-bit
+         * parameters (Mesa: `lowerp = f162f(inout_tmp)`, eighth review B-I,
+         * probes p8/n2, n3): High, whatever the call's own class (`sp(a);`
+         * is a void call). An argument that is an expression lowers under
+         * its own class (`Lower::at`). */
+        let call_ctx = (self.cur, self.cur_class);
+        (self.cur, self.cur_class) = (Prec::High, Prec::None);
+        /* the test of the no-context rule takes this measured class away,
+         * to stand for a site that sets none */
+        #[cfg(test)]
+        if UNMEASURED.with(|u| u.get()) {
+            self.cur = call_ctx.0;
+        }
         for (slot, (p, &arg)) in bound.iter_mut().zip(param_ids.iter().zip(arg_ids)) {
             let Some(pname) = p.name else {
                 return Err(self.err(name, "this call's parameter has no name"));
@@ -4380,6 +4686,9 @@ impl<'a> Lower<'_, 'a> {
                  * an unused one behind, which is a register the back end
                  * still counts. */
                 let id = ir::LocalId(self.locals.len() as u32);
+                /* A parameter is stored at full width (Mesa's
+                 * `lower_variables` lowers no parameter, A.5). */
+                self.slot_prec = Some(Prec::High);
                 if run.elements().is_some() && self.ast.es3 {
                     /* The same layout a declaration gets. */
                     let n = u32::from(run.elements().unwrap_or(0));
@@ -4393,12 +4702,10 @@ impl<'a> Lower<'_, 'a> {
                     self.push_struct_slots(sname, pname, 0, 0)?;
                 } else {
                     for _ in 0..run.slots() {
-                        self.locals.push(
-                            self.a,
-                            ir::VarDecl { name: pname, ty: ir::Type::new(scalar, comps), array_len: 1 },
-                        )?;
+                        self.push_local(ir::VarDecl { name: pname, ty: ir::Type::new(scalar, comps), array_len: 1 })?;
                     }
                 }
+                self.slot_prec = None;
                 let param = Local { name: pname, id, comps, run, value: None };
                 if p.direction != ParamDirection::Out {
                     /* `out` does not read the argument -- the parameter
@@ -4505,10 +4812,22 @@ impl<'a> Lower<'_, 'a> {
             let elem = p.ty.array_len.map(|_| p.ty.base);
             *slot = Bound { param, target, struct_name, elem, lref };
         }
+        (self.cur, self.cur_class) = call_ctx;
 
         /* A function body sees the globals and its own parameters, never the
          * caller's locals: its entries start above the caller's, and lookup
          * starts there (`scope_base`). */
+        /* Which arguments are known to vary: decided HERE, in the caller's
+         * scope, before the callee's frame hides the caller's locals (a
+         * `main` local named like an attribute is that local, sixth review
+         * B-H). */
+        let mut vary = [false; MAX_PARAMS];
+        for ((v, p), &arg) in vary.iter_mut().zip(param_ids).zip(arg_ids) {
+            *v = p.direction == ParamDirection::In
+                && self.varies(arg, 0)
+                && p.name.is_some_and(|n| !self.writes_param(body, n));
+        }
+
         let caller_base = self.scope_base;
         let caller_top = self.scope.len();
         self.scope_base = caller_top;
@@ -4516,6 +4835,15 @@ impl<'a> Lower<'_, 'a> {
             self.scope.push(self.a, b.param)?;
         }
 
+        /* The parameters known to vary, by the binding itself (its slot or
+         * the value it aliases), not by name: a local of the body that
+         * shadows one is not it. */
+        let marks = self.var_params.len();
+        for (b, &v) in bound.iter().zip(&vary) {
+            if v {
+                self.var_params.push(self.a, (self.inline_depth + 1, b.param.id, b.param.value))?;
+            }
+        }
         /* The callee's returns are its own: a `return` in a loop of the
          * callee must leave the callee, not the caller's loop around the
          * call. */
@@ -4523,6 +4851,9 @@ impl<'a> Lower<'_, 'a> {
         self.inline_depth += 1;
         let r = self.inline_body(name, body, want, out);
         self.inline_depth -= 1;
+        while self.var_params.len() > marks {
+            self.var_params.pop();
+        }
         self.ret = caller_ret;
         while self.scope.len() > caller_top {
             self.scope.pop();
@@ -4531,7 +4862,18 @@ impl<'a> Lower<'_, 'a> {
         let r = r?;
 
         /* The copy back happens after the caller's scope is restored, which
-         * is when its variables exist again. */
+         * is when its variables exist again. It reads the parameter's slot,
+         * stored at 32 bits (A.5): a full-width copy, High, whatever the
+         * call's own class (`f(m);` is a void call, which records None). */
+        let outer = (self.cur, self.cur_class);
+        (self.cur, self.cur_class) = (Prec::High, Prec::None);
+        let r = self.copy_back(bound, out).map(|()| r);
+        (self.cur, self.cur_class) = outer;
+        r
+    }
+
+    /// The copy back of [`Lower::inline`]'s `out` and `inout` parameters.
+    fn copy_back(&mut self, bound: &[Bound<'a>], out: &mut AVec<'a, Node>) -> R<'a, ()> {
         for &b in bound.iter() {
             if let Some(r) = b.lref {
                 let p = b.param;
@@ -4559,7 +4901,7 @@ impl<'a> Lower<'_, 'a> {
                 self.store_local(t.column(j), Src::id(v), out)?;
             }
         }
-        Ok(r)
+        Ok(())
     }
 
     /// The body of an inlined function: statements, then the return.
@@ -4682,8 +5024,7 @@ impl<'a> Lower<'_, 'a> {
         let columns = run.slots();
         let id = ir::LocalId(self.locals.len() as u32);
         for _ in 0..columns {
-            self.locals
-                .push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, comps), array_len: 1 })?;
+            self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, comps), array_len: 1 })?;
         }
         let slot = Local { name: "", id, comps, run, value: None };
         let mut run: AVec<Node> = AVec::new();
@@ -4809,10 +5150,11 @@ impl<'a> Lower<'_, 'a> {
                         Some(c) => c.flag,
                         None => {
                             let fid = ir::LocalId(self.locals.len() as u32);
-                            self.locals.push(
-                                self.a,
-                                ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::Bool, 1), array_len: 1 },
-                            )?;
+                            self.push_local(ir::VarDecl {
+                                name: "",
+                                ty: ir::Type::new(ir::ScalarType::Bool, 1),
+                                array_len: 1,
+                            })?;
                             let flag = Local { name: "", id: fid, comps: 1, run: Run::Single, value: None };
                             self.ret = Some(RetCtx { flag, slot, want, name, loops: 0 });
                             flag
@@ -5071,8 +5413,8 @@ impl<'a> Lower<'_, 'a> {
         };
         let step = match (op, scalar) {
             (UnOp::PreInc | UnOp::PostInc, _) => one,
-            (_, ir::ScalarType::F32) => self.alu(ir::AluOp::Fneg, [one, one, one], out)?,
-            _ => self.alu(ir::AluOp::Ineg, [one, one, one], out)?,
+            (_, ir::ScalarType::F32) => self.alu_l(ir::AluOp::Fneg, [one, one, one], w, out)?,
+            _ => self.alu_l(ir::AluOp::Ineg, [one, one, one], w, out)?,
         };
         let new = self.alu_w(add, [old, step, step], w, out)?;
         self.store_lref(r, new, out)?;
@@ -5098,7 +5440,7 @@ impl<'a> Lower<'_, 'a> {
             let one = self.const_value([1.0; 4], out)?;
             let step = match op {
                 UnOp::PreInc | UnOp::PostInc => one,
-                _ => self.alu(ir::AluOp::Fneg, [one, one, one], out)?,
+                _ => self.alu_l(ir::AluOp::Fneg, [one, one, one], l.comps, out)?,
             };
             for j in 0..n {
                 let col = l.column(j);
@@ -5127,19 +5469,21 @@ impl<'a> Lower<'_, 'a> {
         let add = match (op, scalar) {
             (UnOp::PreInc | UnOp::PostInc, ir::ScalarType::F32) => ir::AluOp::Fadd,
             (UnOp::PreDec | UnOp::PostDec, ir::ScalarType::F32) => {
-                let neg = self.alu(ir::AluOp::Fneg, [one, one, one], out)?;
-                let v = self.alu(ir::AluOp::Fadd, [Src::id(old), neg, neg], out)?;
+                let neg = self.alu_l(ir::AluOp::Fneg, [one, one, one], l.comps, out)?;
+                let v = self.alu_l(ir::AluOp::Fadd, [Src::id(old), neg, neg], l.comps, out)?;
                 return self.store_local(l, v, out);
             }
             (UnOp::PreInc | UnOp::PostInc, ir::ScalarType::I32 | ir::ScalarType::U32) => ir::AluOp::Iadd,
             (UnOp::PreDec | UnOp::PostDec, ir::ScalarType::I32 | ir::ScalarType::U32) => {
-                let neg = self.alu(ir::AluOp::Ineg, [one, one, one], out)?;
-                let v = self.alu(ir::AluOp::Iadd, [Src::id(old), neg, neg], out)?;
+                let neg = self.alu_l(ir::AluOp::Ineg, [one, one, one], l.comps, out)?;
+                let v = self.alu_l(ir::AluOp::Iadd, [Src::id(old), neg, neg], l.comps, out)?;
                 return self.store_local(l, v, out);
             }
             _ => return Err(self.err(op.text(), "this expression statement is not lowered yet")),
         };
-        let v = self.alu(add, [Src::id(old), one, one], out)?;
+        /* The sum has the variable's width: `alu` records none, which
+         * `Module::comps_of` answered as 4 for `r--` of a `vec2`. */
+        let v = self.alu_l(add, [Src::id(old), one, one], l.comps, out)?;
         self.store_local(l, v, out)
     }
 
@@ -5224,7 +5568,7 @@ impl<'a> Lower<'_, 'a> {
             return Err(self.err(name, "this constructor is not lowered yet"));
         };
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
 
         /* Consecutive arguments that came from the SAME value share one
          * store. `vec4(v_uv, 1.0, 1.0)` is the shape that pays: with the
@@ -5305,7 +5649,7 @@ impl<'a> Lower<'_, 'a> {
         };
         let to = self.scalar_of_type(base);
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
         let mut lane = 0u8;
         for &e in ids {
             if lane >= comps {
@@ -5405,22 +5749,22 @@ impl<'a> Lower<'_, 'a> {
             return Ok(v);
         }
         match (from, to) {
-            (ir::ScalarType::I32, ir::ScalarType::F32) => self.alu(ir::AluOp::I2f, [v, v, v], out),
-            (ir::ScalarType::F32, ir::ScalarType::I32) => self.alu(ir::AluOp::F2i, [v, v, v], out),
-            (ir::ScalarType::Bool, ir::ScalarType::F32) => self.alu(ir::AluOp::B2f, [v, v, v], out),
-            (ir::ScalarType::Bool, ir::ScalarType::I32) => self.alu(ir::AluOp::B2i, [v, v, v], out),
-            (ir::ScalarType::F32, ir::ScalarType::Bool) => self.alu(ir::AluOp::F2b, [v, v, v], out),
-            (ir::ScalarType::I32, ir::ScalarType::Bool) => self.alu(ir::AluOp::I2b, [v, v, v], out),
+            (ir::ScalarType::I32, ir::ScalarType::F32) => self.alu_l(ir::AluOp::I2f, [v, v, v], want, out),
+            (ir::ScalarType::F32, ir::ScalarType::I32) => self.alu_l(ir::AluOp::F2i, [v, v, v], want, out),
+            (ir::ScalarType::Bool, ir::ScalarType::F32) => self.alu_l(ir::AluOp::B2f, [v, v, v], want, out),
+            (ir::ScalarType::Bool, ir::ScalarType::I32) => self.alu_l(ir::AluOp::B2i, [v, v, v], want, out),
+            (ir::ScalarType::F32, ir::ScalarType::Bool) => self.alu_l(ir::AluOp::F2b, [v, v, v], want, out),
+            (ir::ScalarType::I32, ir::ScalarType::Bool) => self.alu_l(ir::AluOp::I2b, [v, v, v], want, out),
             /* ES 3.00 section 5.4.1: between `int` and `uint` "the bit
              * pattern ... is preserved" -- the same value, no instruction
              * (ir.md: the front end reuses the ValueId). */
             (ir::ScalarType::I32, ir::ScalarType::U32) | (ir::ScalarType::U32, ir::ScalarType::I32) => Ok(v),
-            (ir::ScalarType::U32, ir::ScalarType::F32) => self.alu(ir::AluOp::U2f, [v, v, v], out),
-            (ir::ScalarType::F32, ir::ScalarType::U32) => self.alu(ir::AluOp::F2u, [v, v, v], out),
+            (ir::ScalarType::U32, ir::ScalarType::F32) => self.alu_l(ir::AluOp::U2f, [v, v, v], want, out),
+            (ir::ScalarType::F32, ir::ScalarType::U32) => self.alu_l(ir::AluOp::F2u, [v, v, v], want, out),
             /* A bool is 0 or all ones; `B2i` gives 0 or 1 and `I2b` tests
              * against 0, which is the same question for either signedness. */
-            (ir::ScalarType::Bool, ir::ScalarType::U32) => self.alu(ir::AluOp::B2i, [v, v, v], out),
-            (ir::ScalarType::U32, ir::ScalarType::Bool) => self.alu(ir::AluOp::I2b, [v, v, v], out),
+            (ir::ScalarType::Bool, ir::ScalarType::U32) => self.alu_l(ir::AluOp::B2i, [v, v, v], want, out),
+            (ir::ScalarType::U32, ir::ScalarType::Bool) => self.alu_l(ir::AluOp::I2b, [v, v, v], want, out),
             /* The equal pairs returned above; the compiler cannot see that
              * through the guard, and a silent `Ok(v)` here would hide a
              * conversion that was forgotten. */
@@ -5467,7 +5811,24 @@ impl<'a> Lower<'_, 'a> {
             if lanes.iter().all(|x| x.is_finite()) {
                 let inv = [1.0 / lanes[0], 1.0 / lanes[1], 1.0 / lanes[2], 1.0 / lanes[3]];
                 if inv.iter().all(|x| x.is_finite()) {
-                    return self.const_value(inv, out);
+                    let r = self.const_value(inv, out)?;
+                    /* Mesa divides inside a 16-bit tree at 16 bits, by the
+                     * 16-bit `c`: the same value as this fold narrowed only
+                     * when `c` is a 16-bit value (open question E.5 of
+                     * docs/notes/mali-precision.md). Keeping the `Frcp`
+                     * instead moves other back ends' words (a `mediump
+                     * mat2` divided by 2.2 on the PowerVR), so the fold
+                     * stays and its constant records Unknown: a refusal for
+                     * the back end that lowers precision. A constant shared
+                     * with another use is Unknown for both. */
+                    if self.cur == Prec::Medium
+                        && !lanes[..usize::from(want.clamp(1, 4))].iter().all(|&x| precision::f16_exact(x))
+                    {
+                        if let Some(p) = self.prec.as_mut_slice().get_mut(r.val.0 as usize) {
+                            *p = Prec::Unknown;
+                        }
+                    }
+                    return Ok(r);
                 }
             }
         }
@@ -5501,6 +5862,18 @@ impl<'a> Lower<'_, 'a> {
         for n in out.as_slice() {
             if let Node::Instr(ir::InstrId(i)) = *n {
                 if self.instrs.as_slice().get(i as usize) == Some(&Op::ConstF32(bits)) {
+                    /* Shared by a 16-bit tree and a 32-bit one: a literal
+                     * read at each user's width, High (Medium on a constant
+                     * says every reader is 16-bit). */
+                    let pinned = self.pinned.as_slice().contains(&i);
+                    if let Some(p) = self.prec.as_mut_slice().get_mut(i as usize) {
+                        if *p == Prec::Medium && self.cur != Prec::Medium {
+                            /* a constant pinned to its fp16 value
+                             * (`full_width_args`) cannot also be read
+                             * exactly */
+                            *p = if pinned { Prec::Unknown } else { Prec::High };
+                        }
+                    }
                     return Ok(Src::id(ValueId(i)));
                 }
             }
@@ -5949,7 +6322,7 @@ impl<'a> Lower<'_, 'a> {
     /// slot for a value that is decided on a branch.
     fn temp(&mut self, scalar: ir::ScalarType, comps: u8) -> R<'a, Local<'a>> {
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(scalar, comps), array_len: 1 })?;
         Ok(Local::scalar("", id, comps))
     }
 
@@ -6179,6 +6552,11 @@ impl<'a> Lower<'_, 'a> {
     ///
     /// Only the first `n` entries are meaningful.
     fn matrix_value(&mut self, m: ExprId, n: u8, out: &mut AVec<'a, Node>) -> R<'a, [Src; 4]> {
+        self.at(m, |s| s.matrix_value_at(m, n, out))
+    }
+
+    /// [`Lower::matrix_value`] under `m`'s [`Prec`].
+    fn matrix_value_at(&mut self, m: ExprId, n: u8, out: &mut AVec<'a, Node>) -> R<'a, [Src; 4]> {
         /* `n` is the column count; the rows are the expression's own type's
          * (ES 3.00's matCxR has C != R). */
         let r = self.rows_of(m);
@@ -6730,10 +7108,7 @@ impl<'a> Lower<'_, 'a> {
                         continue;
                     }
                     let id = ir::LocalId(self.locals.len() as u32);
-                    self.locals.push(
-                        self.a,
-                        ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, r), array_len: 1 },
-                    )?;
+                    self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, r), array_len: 1 })?;
                     let l = Local::scalar("", id, r);
                     self.store_local(l, zero, out)?;
                     let mut on_diagonal = j8 < r;
@@ -6756,20 +7131,26 @@ impl<'a> Lower<'_, 'a> {
                 }
                 return Ok(cols);
             }
-            /* A scalar fills the diagonal and leaves the rest zero, as a
-             * float whatever its own type (5.4.1). */
-            let d = self.convert(ids[0], BaseType::Float, 1, out)?;
-            let zero = self.const_value([0.0; 4], out)?;
-            for (j, c) in cols.iter_mut().enumerate().take(n as usize) {
-                if j >= r as usize {
-                    *c = zero;
-                    continue;
+            if self.width(ids[0])? == 1 {
+                /* A scalar fills the diagonal and leaves the rest zero, as
+                 * a float whatever its own type (5.4.1). */
+                let d = self.convert(ids[0], BaseType::Float, 1, out)?;
+                let zero = self.const_value([0.0; 4], out)?;
+                for (j, c) in cols.iter_mut().enumerate().take(n as usize) {
+                    if j >= r as usize {
+                        *c = zero;
+                        continue;
+                    }
+                    let mut lanes = [None; 4];
+                    lanes[j] = Some(0);
+                    *c = self.zero_column_except(r, zero, d, 1 << j, lanes, out)?;
                 }
-                let mut lanes = [None; 4];
-                lanes[j] = Some(0);
-                *c = self.zero_column_except(r, zero, d, 1 << j, lanes, out)?;
+                return Ok(cols);
             }
-            return Ok(cols);
+            /* One VECTOR is not the scalar form: `mat2(vec4)` is the
+             * vector's four components in column-major order, the general
+             * form below. Taking the scalar arm for it gave `v.x` on the
+             * diagonal and zero off it. */
         }
         /* One argument per column, each already a vector of the right
          * width: the fast path, and the only one that emits no local at
@@ -6865,7 +7246,7 @@ impl<'a> Lower<'_, 'a> {
     fn column_from_components(&mut self, comps_in: &[(Src, u8)], n: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
         let id = ir::LocalId(self.locals.len() as u32);
         let scalar = self.scalar_of_type(BaseType::Float);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(scalar, n), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(scalar, n), array_len: 1 })?;
         let mut pending: Option<(Src, u8, [u8; 4])> = None;
         for (lane, &(v, k)) in comps_in.iter().enumerate() {
             let mask = 1u8 << lane;
@@ -6912,7 +7293,7 @@ impl<'a> Lower<'_, 'a> {
         out: &mut AVec<'a, Node>,
     ) -> R<'a, Src> {
         let id = ir::LocalId(self.locals.len() as u32);
-        self.locals.push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, n), array_len: 1 })?;
+        self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, n), array_len: 1 })?;
         let l = Local::scalar("", id, n);
         self.store_local(l, zero, out)?;
         self.store_lanes(l, src, mask, lanes, out)?;
@@ -7267,6 +7648,15 @@ impl<'a> Lower<'_, 'a> {
         self.alu_sized(op, srcs, op.result_comps(comps), out)
     }
 
+    /// One ALU instruction whose exact width `w` goes to
+    /// [`ir::Module::lanes`] only: `comps` records nothing, as `alu` did
+    /// before the width was learned, so no back end reads a new width.
+    fn alu_l(&mut self, op: ir::AluOp, srcs: [Src; 3], w: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
+        let v = self.push_lanes(Op::Alu(op, srcs), 0, op.result_comps(w))?;
+        out.push(self.a, Node::Instr(ir::InstrId(v.0)))?;
+        Ok(Src::id(v))
+    }
+
     fn alu_sized(&mut self, op: ir::AluOp, srcs: [Src; 3], comps: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
         let v = self.push_sized(Op::Alu(op, srcs), comps)?;
         out.push(self.a, Node::Instr(ir::InstrId(v.0)))?;
@@ -7431,7 +7821,22 @@ impl<'a> Lower<'_, 'a> {
             self.const_arrays.push(self.a, vals.into_slice())?;
             return self.bind(Local { name, id, comps, run: Run::Constants, value: None }, global);
         }
-        let l = self.alloc_var(name, ty.base, len, line)?;
+        /* Its storage (A.5): a mediump or lowp float local or global,
+         * `const` included, is stored at 16 bits; a struct's members and a
+         * highp float at full width. */
+        /* A `const` whose initialiser folds is the exception: where
+         * `ast_to_hir` folds a read of it (a call's or a constructor's
+         * argument) the read is its 32-bit value, so the slot holds that,
+         * and a 16-bit reader narrows it to the same fp16 value Mesa's
+         * 16-bit storage gives (review probe v_constarg). */
+        let folded_const = storage == StorageQualifier::Const && init.is_some_and(|e| self.precs.folds(e));
+        let medium = self.precs.decl(id) == Prec::Medium
+            && matches!(ty.base, BaseType::Float | BaseType::Vec(_) | BaseType::Mat(..))
+            && !folded_const;
+        self.slot_prec = Some(if medium { Prec::Medium } else { Prec::High });
+        let l = self.alloc_var(name, ty.base, len, line);
+        self.slot_prec = None;
+        let l = l?;
         let run = l.run;
         /* Declared before the initialiser is lowered would let `float x = x;`
          * read itself; ES 1.00 section 4.3 says the declared name is not in
@@ -7495,7 +7900,7 @@ impl<'a> Lower<'_, 'a> {
             (Run::Struct(_), BaseType::Struct(sname)) => self.push_struct_slots(sname, name, line, 0)?,
             _ => {
                 for _ in 0..run.slots() {
-                    self.locals.push(self.a, ir::VarDecl { name, ty: ir::Type::new(scalar, comps), array_len: 1 })?;
+                    self.push_local(ir::VarDecl { name, ty: ir::Type::new(scalar, comps), array_len: 1 })?;
                 }
             }
         }
@@ -7560,6 +7965,11 @@ impl<'a> Lower<'_, 'a> {
     /// An array has no single value, so it is always MOVED into a run --
     /// the move `struct_fill` makes for a struct, element by element here.
     fn array_fill(&mut self, e: ExprId, dst: Local<'a>, out: &mut AVec<'a, Node>) -> R<'a, ()> {
+        self.at(e, |s| s.array_fill_at(e, dst, out))
+    }
+
+    /// [`Lower::array_fill`] under `e`'s [`Prec`].
+    fn array_fill_at(&mut self, e: ExprId, dst: Local<'a>, out: &mut AVec<'a, Node>) -> R<'a, ()> {
         let Some(n) = dst.run.elements() else {
             return Err(self.err(dst.name, "an array value for something that is not an array"));
         };
@@ -7917,7 +8327,7 @@ impl<'a> Lower<'_, 'a> {
         let mut leaves: AVec<Leaf<'a>> = AVec::new();
         self.struct_leaf_list(sname, "", 0, &mut leaves)?;
         for lf in leaves.as_slice() {
-            self.locals.push(self.a, ir::VarDecl { name, ty: ir::Type::new(lf.scalar, lf.comps), array_len: 1 })?;
+            self.push_local(ir::VarDecl { name, ty: ir::Type::new(lf.scalar, lf.comps), array_len: 1 })?;
         }
         Ok(())
     }
@@ -7947,6 +8357,18 @@ impl<'a> Lower<'_, 'a> {
     /// leaf count instead would refuse `S(I(1.0, 2.0), 3.0)` and accept the
     /// flattened `S(1.0, 2.0, 3.0)`, which section 5.4.3 does not allow.
     fn struct_fill(
+        &mut self,
+        e: ExprId,
+        l: Local<'a>,
+        base: BaseType<'a>,
+        name: &'a str,
+        out: &mut AVec<'a, Node>,
+    ) -> R<'a, ()> {
+        self.at(e, |s| s.struct_fill_at(e, l, base, name, out))
+    }
+
+    /// [`Lower::struct_fill`] under `e`'s [`Prec`].
+    fn struct_fill_at(
         &mut self,
         e: ExprId,
         l: Local<'a>,
@@ -8546,13 +8968,146 @@ impl<'a> Lower<'_, 'a> {
     /// That is why the width is recorded here rather than estimated in a
     /// back end.
     fn push_sized(&mut self, op: Op, comps: u8) -> R<'a, ValueId> {
+        self.push_lanes(op, comps, comps)
+    }
+
+    /// [`Lower::push_sized`] with the value's exact width, `lanes`,
+    /// recorded apart from `comps` ([`ir::Module::lanes`]): where this
+    /// branch learned a width the back ends were not built against (a
+    /// built-in's steps, an increment's sum, a conversion), `comps` keeps
+    /// what they read before, so their code cannot move.
+    fn push_lanes(&mut self, op: Op, comps: u8, lanes: u8) -> R<'a, ValueId> {
         if let Op::StoreLocal { local, .. } = op {
             self.forget_known(local);
         }
         let id = ValueId(self.instrs.len() as u32);
+        let kind = self.value_kind(&op);
+        let p = self.instr_prec(&op, kind);
         self.instrs.push(self.a, op)?;
         self.comps.push(self.a, comps)?;
+        self.lanes.push(self.a, lanes)?;
+        self.prec.push(self.a, p)?;
+        self.kinds.push(self.a, kind)?;
         Ok(id)
+    }
+
+    /// The [`ir::ValueKind`] of `op` ([`ir::Op::value_kind`]), over the
+    /// instructions, slots, inputs and uniform rows lowered so far.
+    fn value_kind(&self, op: &Op) -> ir::ValueKind {
+        op.value_kind(
+            |v| self.kinds.as_slice().get(v.0 as usize).copied().unwrap_or(ir::ValueKind::Void),
+            |l| {
+                self.locals
+                    .as_slice()
+                    .get(l.0 as usize)
+                    .map_or(ir::ValueKind::Void, |d| ir::ValueKind::of_scalar(d.ty.scalar))
+            },
+            |slot| ir::ValueKind::of_input(slot, self.inputs.as_slice().iter().find(|d| d.slot() == slot)),
+            |dw| {
+                self.reflection
+                    .uniforms
+                    .iter()
+                    .find(|u| {
+                        (u32::from(u.dword_off)..u32::from(u.dword_off) + u32::from(u.dwords.max(1)))
+                            .contains(&u32::from(dw))
+                    })
+                    .map_or(ir::ValueKind::Float, |u| ir::ValueKind::of_block_gl_type(u.gl_type))
+            },
+        )
+    }
+
+    /// The [`Prec`] `op` records, `kind` its value's kind. The rule is
+    /// stated by the kind (docs/notes/mali-precision.md):
+    ///
+    /// - no value (a store, a discard): None, except an output's store,
+    ///   which records the output's declared precision;
+    /// - an int value: None, it has no float width;
+    /// - a bool made from ints (an int compare, `I2b`): High, a 32-bit
+    ///   bool whatever tree it serves (Mesa lowers no int,
+    ///   `can_lower_type`; the index compares of a run-time element
+    ///   select are these);
+    /// - any other float or bool value: the current expression's class
+    ///   ([`Lower::cur`]). Mesa's bool operations take their sources'
+    ///   width (`nir_lower_bool_to_bitsize`), which is that class: 16 bits
+    ///   for `&&` of two mediump compares, 32 when a side is an int
+    ///   compare. Where the context has no class (an int, uint, void or
+    ///   sampler expression) the value records Unknown, never None; a
+    ///   site Mesa was measured at sets its class itself (the copy in and
+    ///   back of a parameter, the pack built-ins: High).
+    fn instr_prec(&self, op: &Op, kind: ir::ValueKind) -> Prec {
+        use ir::AluOp::*;
+        let src_kind = |s: ir::Src| self.kinds.as_slice().get(s.val.0 as usize).copied();
+        match kind {
+            ir::ValueKind::Void => match *op {
+                Op::StoreOutput { slot, .. } => self.output_prec(slot),
+                _ => Prec::None,
+            },
+            ir::ValueKind::Int => Prec::None,
+            ir::ValueKind::Bool if matches!(op, Op::Alu(Ilt | Ile | Ult | Ule | I2b, _)) => Prec::High,
+            ir::ValueKind::Bool if matches!(op, Op::Alu(Ieq | Ine, [a, ..]) if src_kind(*a) != Some(ir::ValueKind::Bool)) => {
+                Prec::High
+            }
+            ir::ValueKind::Float | ir::ValueKind::Bool if self.cur == Prec::None => {
+                #[cfg(test)]
+                NO_CONTEXT.with(|n| n.set(n.get() + 1));
+                Prec::Unknown
+            }
+            ir::ValueKind::Float | ir::ValueKind::Bool => self.cur,
+        }
+    }
+
+    /// The declared precision of the output `slot` stores (A.2 and A.7 of
+    /// docs/notes/mali-precision.md): `gl_Position` and `gl_FragDepth`
+    /// highp, `gl_PointSize` and ES 1.00's colour mediump, a declared
+    /// varying or ES 3.00 output its own.
+    fn output_prec(&self, slot: ir::IoSlot) -> Prec {
+        match slot {
+            ir::IoSlot::Position | ir::IoSlot::FragDepth => Prec::High,
+            ir::IoSlot::PointSize if self.ast.es3 => Prec::High,
+            ir::IoSlot::PointSize => Prec::Medium,
+            ir::IoSlot::FragColor(_) if !self.ast.es3 => Prec::Medium,
+            _ => {
+                let Some(d) = self.outputs.as_slice().iter().find(|d| d.slot() == slot) else {
+                    return Prec::None;
+                };
+                d.prec
+            }
+        }
+    }
+
+    /// Allocate the slot `d` (the one place a local is pushed), with its
+    /// storage (A.5): an int is None, a bool full width; a float what the
+    /// declaration being allocated says ([`Lower::slot_prec`]), else Medium
+    /// for a temporary of a Medium expression.
+    fn push_local(&mut self, d: ir::VarDecl<'a>) -> R<'a, ()> {
+        let p = match d.ty.scalar {
+            ir::ScalarType::I32 | ir::ScalarType::U32 => Prec::None,
+            ir::ScalarType::Bool => Prec::High,
+            ir::ScalarType::F32 => match self.slot_prec {
+                Some(p) => p,
+                None if self.cur_class == Prec::Medium => Prec::Medium,
+                None => Prec::High,
+            },
+        };
+        self.locals.push(self.a, d)?;
+        self.local_prec.push(self.a, p)?;
+        Ok(())
+    }
+
+    /// Run `f` as the lowering of the expression `e`: its instructions
+    /// record `e`'s [`Prec`], its temporaries `e`'s class.
+    #[inline]
+    fn at<T>(&mut self, e: ExprId, f: impl FnOnce(&mut Self) -> R<'a, T>) -> R<'a, T> {
+        #[cfg(test)]
+        if !self.precs.seen(e) {
+            UNSEEN.with(|n| n.set(n.get() + 1));
+        }
+        let saved = (self.cur, self.cur_class);
+        self.cur = self.precs.instr(e);
+        self.cur_class = self.precs.class(e);
+        let r = f(self);
+        (self.cur, self.cur_class) = saved;
+        r
     }
 }
 
@@ -8564,17 +9119,134 @@ impl<'a> Lower<'_, 'a> {
 struct Sink<'s, 'x, 'a> {
     l: &'s mut Lower<'x, 'a>,
     out: &'s mut AVec<'a, Node>,
+    /// The width an `Alu` of the expansion records: the widest of the
+    /// call's result and its value operands. A component-wise step of an
+    /// expansion works on the operands' lanes or the result's (`smoothstep`
+    /// of a `vec2` with scalar edges: two; `distance` of two `vec3`s: the
+    /// difference three, the dot one by [`ir::AluOp::result_comps`]). A
+    /// step after a reduction (`length`'s square root) is recorded wider
+    /// than its one lane: an over-estimate, which `Module::comps_of` allows,
+    /// never a narrow answer.
+    width: u8,
+    /// The call is a look-up: what it emits besides the `Tex` (the
+    /// divide of a projective form) records High.
+    look_up: bool,
+    /// The first value of the expansion: a value at or past it is one of
+    /// the expansion's own steps.
+    start: u32,
+    /// Each value argument and its width.
+    args: [(u32, u8); MAX_BUILTIN_OPERANDS],
+    /// Each step of the expansion and the lanes it holds distinct values
+    /// in: 1 for a step whose lanes all hold one scalar.
+    steps: AVec<'a, (u32, u8)>,
+}
+
+impl Sink<'_, '_, '_> {
+    /// How many lanes of distinct values `alu` over `srcs` makes: the
+    /// widest source's, a reduction's one, `None` where a source's is not
+    /// known. A splat of a one-lane value is one lane, whatever lanes it
+    /// fills; a constant of the expansion's own takes any width.
+    fn distinct(&self, alu: ir::AluOp, srcs: &[Src; 3]) -> Option<u8> {
+        if alu.result_comps(4) == 1 {
+            return Some(1);
+        }
+        let instrs = self.l.instrs.as_slice();
+        let mut t = 0u8;
+        for s in &srcs[..alu.arity()] {
+            let id = s.val.0;
+            let w = match instrs.get(id as usize) {
+                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) if id >= self.start => continue,
+                _ => {
+                    if let Some(&(_, w)) = self.steps.as_slice().iter().find(|x| x.0 == id) {
+                        w
+                    } else if let Some(&(_, w)) = self.args.iter().find(|x| x.0 == id) {
+                        w
+                    } else {
+                        self.l.lanes.as_slice().get(id as usize).copied().filter(|c| (1..=4).contains(c))?
+                    }
+                }
+            };
+            t = t.max(w);
+        }
+        Some(if t == 0 { self.width } else { t })
+    }
+
+    /// The width an `Alu` of the expansion over `srcs` records. One lane
+    /// when every source that is not a constant of the expansion's own is
+    /// a one-lane step of this expansion read lane for lane (the square
+    /// root of `length`'s dot): only lane 0 of such a read exists, so the
+    /// operation makes one value.
+    /// Otherwise [`Sink::width`] by [`ir::AluOp::result_comps`]: an
+    /// argument read through a splat (`smoothstep`'s scalar edge) still
+    /// serves every lane, and so does a constant argument (`normalize` of
+    /// a constant vector multiplies its lanes by the one-lane reciprocal).
+    fn alu_width(&self, alu: ir::AluOp, srcs: &[Src; 3]) -> u8 {
+        let instrs = self.l.instrs.as_slice();
+        let mut any = false;
+        for s in &srcs[..alu.arity()] {
+            match instrs.get(s.val.0 as usize) {
+                /* a constant of the expansion's own (smoothstep's 3.0) */
+                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) if s.val.0 >= self.start => continue,
+                /* lane i read from lane i of a one-lane value: only lane 0
+                 * is one (a splat read serves every lane, as refract's
+                 * `splat(dot)` chain does) */
+                _ if s.val.0 >= self.start
+                    && s.swizzle == ir::SWIZZLE_IDENTITY
+                    && self.l.lanes.as_slice().get(s.val.0 as usize) == Some(&1) =>
+                {
+                    any = true
+                }
+                _ => return alu.result_comps(self.width),
+            }
+        }
+        if any {
+            1
+        } else {
+            alu.result_comps(self.width)
+        }
+    }
 }
 
 impl<'a> builtin_call::Emit<'a> for Sink<'_, '_, 'a> {
     fn emit(&mut self, op: Op) -> R<'a, Src> {
-        let v = self.l.push_instr(op)?;
+        let outer = self.l.cur;
+        if self.look_up && !matches!(op, Op::Tex { .. } | Op::TexSize { .. }) {
+            self.l.cur = Prec::High;
+        }
+        let v = match op {
+            /* `comps` as before ([`Lower::push_lanes`]); the step's
+             * width in `lanes` */
+            Op::Alu(alu, srcs) => {
+                let w = self.alu_width(alu, &srcs);
+                let comps = op.stated_comps().unwrap_or(0);
+                /* `lanes` is exact or 0: a step that fills more lanes than
+                 * it has distinct values (refract's scalar `k` chain, read
+                 * through splats) records 0, not an over-estimate a
+                 * reader could trust (third review S-D) */
+                let t = self.distinct(alu, &srcs);
+                let exact = if t == Some(w) { w } else { 0 };
+                let v = self.l.push_lanes(op, comps, exact);
+                if let Ok(v) = v {
+                    self.steps.push(self.l.a, (v.0, t.unwrap_or(w)))?;
+                }
+                v
+            }
+            _ => self.l.push_instr(op),
+        };
+        self.l.cur = outer;
+        let v = v?;
         self.out.push(self.l.a, Node::Instr(ir::InstrId(v.0)))?;
         Ok(Src::id(v))
     }
 
     fn constant(&mut self, lanes: [f32; 4]) -> R<'a, Src> {
-        self.l.const_value(lanes, self.out)
+        let outer = self.l.cur;
+        if self.look_up {
+            self.l.cur = Prec::High;
+        }
+        let r = self.l.const_value(lanes, self.out);
+        self.l.cur = outer;
+        r
     }
 
     fn vertex(&self) -> bool {
@@ -12113,6 +12785,149 @@ mod value_width_tests {
         );
         assert_eq!(l.module.comps.len(), l.module.instrs.len());
     }
+
+    /// The exact width ([`ir::Module::lanes_of`]) of every `Alu` using
+    /// `op`, in program order.
+    fn all_comps_of(m: &ir::Module, op: ir::AluOp) -> std::vec::Vec<u8> {
+        let ids = m.instrs.iter().enumerate().filter(|(_, o)| matches!(o, Op::Alu(x, _) if *x == op));
+        ids.map(|(i, _)| m.lanes_of(ValueId(i as u32)).unwrap_or(0)).collect()
+    }
+
+    /// What `comps` records for every `Alu` using `op`: the width the
+    /// other back ends read, which this branch leaves as it was.
+    fn all_recorded(m: &ir::Module, op: ir::AluOp) -> std::vec::Vec<u8> {
+        let ids = m.instrs.iter().enumerate().filter(|(_, o)| matches!(o, Op::Alu(x, _) if *x == op));
+        ids.map(|(i, _)| m.comps.get(i).copied().unwrap_or(0)).collect()
+    }
+
+    /// A built-in's result has the width of the call's type. The library
+    /// emits through `Sink::emit`, which recorded no width, so `abs(v)` of
+    /// a `vec2` read as four lanes, two of which no lane of `v` makes (the
+    /// Mali fragment walk refused them as a colour form).
+    #[test]
+    fn a_builtin_s_result_has_the_call_s_width() {
+        let mut buf = [0u8; 1 << 19];
+        let l = ir(
+            &mut buf,
+            "precision mediump float;\n\
+             varying vec2 v;\n\
+             void main(){ gl_FragColor = vec4(abs(v), 0.5, 1.0); }",
+        );
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fabs), [2], "abs of a vec2 is two lanes");
+        assert_eq!(all_recorded(&l.module, ir::AluOp::Fabs), [0], "comps records nothing, as before");
+    }
+
+    /// Every instruction of an expansion is as wide as the widest of the
+    /// call's operands and result: `smoothstep` of a `vec2` is two lanes
+    /// throughout, its splatted scalar edges and four-lane constants
+    /// included; `distance` of two `vec3`s subtracts three lanes, then the
+    /// dot is one.
+    #[test]
+    fn every_instruction_of_an_expansion_has_the_call_s_width() {
+        let mut buf = [0u8; 1 << 19];
+        let l = ir(
+            &mut buf,
+            "precision mediump float;\n\
+             varying vec2 v;\n\
+             void main(){ gl_FragColor = vec4(smoothstep(0.2, 0.8, v), 0.5, 1.0); }",
+        );
+        /* the steps on the scalar edges alone (`-e0`, `e1 - e0`, its
+         * reciprocal) hold one scalar in every lane: not exact (0, third
+         * review S-D); every step that reads `v` is two lanes */
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fneg), [0]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Frcp), [0]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fadd)[0], 2, "v - e0");
+        for op in [ir::AluOp::Fmul, ir::AluOp::Fmax] {
+            assert!(all_comps_of(&l.module, op).iter().all(|&c| c == 2), "{op:?} of smoothstep(vec2) is two lanes");
+        }
+        let mut b2 = [0u8; 1 << 19];
+        let l2 = ir(
+            &mut b2,
+            "precision mediump float;\n\
+             varying vec3 v;\n\
+             uniform vec3 u;\n\
+             void main(){ gl_FragColor = vec4(distance(v, u)); }",
+        );
+        assert_eq!(all_comps_of(&l2.module, ir::AluOp::Fadd), [3], "the difference is three lanes");
+        assert_eq!(all_comps_of(&l2.module, ir::AluOp::Fdot3), [1], "its dot is one");
+    }
+
+    /// A step after a reduction is one lane: `length`'s and `distance`'s
+    /// square root, `normalize`'s reciprocal square root. They read only
+    /// the dot inside the expansion; recording the operands' width (2 or
+    /// 3) was an over-estimate the Mali width pass reads as lanes (review
+    /// S1, probe v_sqlen; Mesa has a 16-bit scalar `sqrt`). A conversion
+    /// records its constructor's width: `float(k)` is one lane.
+    #[test]
+    fn a_step_after_a_reduction_and_a_conversion_record_their_own_width() {
+        let mut buf = [0u8; 1 << 19];
+        let l = ir(
+            &mut buf,
+            "precision mediump float;\n\
+             varying vec4 a;\n\
+             void main(){ gl_FragColor = vec4(length(a.xy), 1.0 / length(a.xyz), 0.0, 1.0); }",
+        );
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fsqrt), [1, 1]);
+        let mut b2 = [0u8; 1 << 19];
+        let l = ir(
+            &mut b2,
+            "precision mediump float;\n\
+             varying vec4 a;\n\
+             void main(){ gl_FragColor = vec4(normalize(a.xyz) * distance(a.xy, a.zw), 1.0); }",
+        );
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Frsq), [1]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fsqrt), [1]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fmul), [3, 3], "normalize's product, then the scale");
+        /* a constant argument keeps its lanes (the review's corpus:
+         * vsfold_normconst, refract of constants) */
+        let mut b4 = std::vec![0u8; 1 << 19];
+        let l = ir(
+            &mut b4,
+            "precision mediump float;\nvoid main(){ gl_FragColor = vec4(normalize(vec3(1.0, 2.0, 2.0)), 1.0); }",
+        );
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Frsq), [1]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fmul), [3], "the constant's three lanes");
+        /* a one-lane step read through a splat serves every lane: refract
+         * squares `splat(dot)` and adds its root to a two-lane product
+         * (the review's q1 refr2) */
+        let mut b5 = std::vec![0u8; 1 << 19];
+        let l = ir(
+            &mut b5,
+            "precision mediump float;\nvarying vec2 a;\nvarying vec2 n;\n\
+             void main(){ gl_FragColor = vec4(refract(a, n, 0.5), 0.0, 1.0); }",
+        );
+        /* refract's k chain holds one scalar in every lane (Mesa: a scalar
+         * `k`); two lanes would be an over-estimate a consumer could trust,
+         * one lane would say lane 1 is not there: not exact, 0 (third
+         * review S-D); its final vector `Ffma` and select are two lanes */
+        assert!(all_comps_of(&l.module, ir::AluOp::Fsqrt).iter().all(|&c| c == 0), "refract's root of k");
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Ffma), [2]);
+        let mut b3 = [0u8; 1 << 19];
+        let l = ir(
+            &mut b3,
+            "precision mediump float;\n\
+             uniform int k;\n\
+             void main(){ gl_FragColor = vec4(float(k), vec3(k)); }",
+        );
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::I2f), [1, 3]);
+    }
+
+    /// `r--` and `r++` of a `vec2` write two lanes: the sum `step_by_one`
+    /// emits records the variable's width, not the 4 it answered.
+    #[test]
+    fn an_increment_s_sum_has_the_variable_s_width() {
+        for step in ["r--;", "r++;", "--r;", "++r;"] {
+            let src = format!(
+                "precision mediump float;\n\
+                 varying vec2 v;\n\
+                 void main(){{ vec2 r = v; {step} gl_FragColor = vec4(r, 0.5, 1.0); }}"
+            );
+            let mut buf = [0u8; 1 << 19];
+            let a = Arena::new(&mut buf);
+            let l = compile_to_ir(&a, Stage::Fragment, &src).expect("compiles");
+            assert_eq!(all_comps_of(&l.module, ir::AluOp::Fadd), [2], "{step} of a vec2 is two lanes");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -12604,6 +13419,184 @@ mod matrix_product_tests {
             "{V}void main(){{ vec4 o = vec4(in0, 10.0, 7.0, 9.0); o.xy *= mat2(1.0, 2.0, 3.0, 4.0); out0 = o.x * 1000.0 + o.y * 10.0 + o.z + o.w * 0.1; gl_Position=p; }}"
         );
         assert_eq!(out0_of(&comp, 1.0), 21000.0 + 430.0 + 7.0 + 0.9);
+    }
+}
+
+/// A matrix built from ONE vector (section 5.4.2 of GLSL ES 1.00 and of
+/// 3.00): `mat2(v)` with a `vec4 v` is `mat2(v.x, v.y, v.z, v.w)`. Only a
+/// single SCALAR fills the diagonal.
+///
+/// > If there is a single scalar parameter to a matrix constructor, it is
+/// > used to initialize all the components on the matrix's diagonal, with
+/// > the remaining components initialized to 0.0.
+/// >
+/// > A wide range of other possibilities exist, as long as enough
+/// > components are present to initialize the constructed value.
+///
+/// A matrix of 2 by 2 is the only one a single vector can fill: no vector
+/// has six components. dEQP-GLES2 and dEQP-GLES3 have no case of the form
+/// (`conversions` has the scalar and the matrix arguments), so these tests
+/// are what pins it. Every check RUNS the module on four different lanes:
+/// the form used to compile, and to hold `v.x` on the diagonal and zero off
+/// it.
+#[cfg(test)]
+mod matrix_from_vector_tests {
+    use super::*;
+    use crate::shaderc::online::eval::{f32x4, run, Inputs};
+
+    /// `gl_FragColor` of a fragment shader whose one input is `uniform vec4
+    /// u`, on the reference evaluator.
+    fn colour_of(src: &str, u: [f32; 4]) -> [f32; 4] {
+        let mut buf = std::vec![0u8; 1 << 19];
+        let a = Arena::new(&mut buf);
+        let l = match compile_to_ir(&a, Stage::Fragment, src) {
+            Ok(l) => l,
+            Err(e) => panic!("line {} at {:?}: {}\n{src}", e.line, e.tok, e.msg),
+        };
+        let m = &l.module;
+        let mut block = std::vec![0u32; usize::from(m.uniform_dwords).max(4)];
+        if let Some(d) = m.uniforms.iter().find(|d| d.name == "u") {
+            block[usize::from(d.dword_off)..usize::from(d.dword_off) + 4].copy_from_slice(&f32x4(u));
+        }
+        let got = run(m, &Inputs { io: &[], uniforms: &block }).unwrap_or_else(|why| panic!("{why}\n{src}"));
+        got.output_f32(ir::IoSlot::FragColor(0)).expect("gl_FragColor is written")
+    }
+
+    /// The message a fragment shader is refused with.
+    fn refusal(src: &str) -> std::string::String {
+        let mut buf = std::vec![0u8; 1 << 19];
+        let a = Arena::new(&mut buf);
+        match compile_to_ir(&a, Stage::Fragment, src) {
+            Ok(_) => panic!("compiled:\n{src}"),
+            Err(e) => e.msg.into(),
+        }
+    }
+
+    fn es100(body: &str) -> std::string::String {
+        format!("precision mediump float;\nuniform vec4 u;\nvoid main() {{ {body} }}\n")
+    }
+
+    #[cfg(not(feature = "report-es2"))] // used only by the tests here that compile GLSL ES 3.00
+    fn es300(body: &str) -> std::string::String {
+        format!(
+            "#version 300 es\nprecision mediump float;\nuniform vec4 u;\n\
+             layout(location = 0) out vec4 o;\nvoid main() {{ {body} }}\n"
+        )
+    }
+
+    const U: [f32; 4] = [1.5, 2.25, -3.0, 4.75];
+
+    /// The message of a constructor with too few components.
+    const SHORT: &str = "not enough arguments for this constructor";
+
+    /// The four components in column-major order, read back one by one and
+    /// as columns. Revert check: let `matrix_constructor` take its scalar
+    /// arm for one argument of any width and every line reads
+    /// [1.5, 0.0, 0.0, 1.5].
+    #[test]
+    fn a_matrix_from_one_vector_takes_its_four_components() {
+        let columns = es100("mat2 m = mat2(u); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&columns, U), U);
+        let elements = es100("mat2 m = mat2(u); gl_FragColor = vec4(m[0][0], m[0][1], m[1][0], m[1][1]);");
+        assert_eq!(colour_of(&elements, U), U);
+        /* Not only as an initializer. */
+        let operand = es100("vec2 r = mat2(u) * vec2(1.0, 10.0); gl_FragColor = vec4(r, mat2(u)[1]);");
+        assert_eq!(colour_of(&operand, U), [1.5 - 30.0, 2.25 + 47.5, -3.0, 4.75]);
+        /* The form the specification says it is. */
+        let spelled = es100("mat2 m = mat2(u.x, u.y, u.z, u.w); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&spelled, U), colour_of(&columns, U));
+        /* A swizzle is a vector like any other. */
+        let swizzled = es100("mat2 m = mat2(u.wzyx); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&swizzled, U), [4.75, -3.0, 2.25, 1.5]);
+    }
+
+    /// The module: the vector is evaluated once and each column is one
+    /// store of two of its lanes, (x, y) then (z, w). The spelled form
+    /// `mat2(v.x, v.y, v.z, v.w)` computes the same and is not the same
+    /// module: it loads `v` once per argument.
+    #[test]
+    fn a_matrix_from_one_vector_is_one_store_per_column() {
+        let mut buf = std::vec![0u8; 1 << 19];
+        let a = Arena::new(&mut buf);
+        let src = "precision mediump float;\nvarying vec4 v;\n\
+                   void main() { mat2 m = mat2(v); gl_FragColor = vec4(m[0], m[1]); }";
+        let l = compile_to_ir(&a, Stage::Fragment, src).unwrap_or_else(|e| panic!("line {}: {}", e.line, e.msg));
+        let m = &l.module;
+        let loads = m.instrs.iter().filter(|o| matches!(o, Op::LoadInput { .. })).count();
+        assert_eq!(loads, 1, "the argument is evaluated once: {:?}", m.instrs);
+        let mut columns = std::vec::Vec::new();
+        for o in m.instrs.iter() {
+            if let Op::StoreLocal { src, write_mask, .. } = *o {
+                if src.val == ValueId(0) {
+                    columns.push((write_mask, [src.swizzle[0], src.swizzle[1]]));
+                }
+            }
+        }
+        assert_eq!(columns, [(0b0011, [0, 1]), (0b0011, [2, 3])], "{:?}", m.instrs);
+    }
+
+    /// A constant expression takes the same path; a global and a local one.
+    #[test]
+    fn a_constant_matrix_from_one_vector_takes_its_four_components() {
+        let local = es100("const mat2 m = mat2(vec4(1.0, 2.0, 3.0, 4.0)); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&local, U), [1.0, 2.0, 3.0, 4.0]);
+        let global = "precision mediump float;\nconst mat2 M = mat2(vec4(1.0, 2.0, 3.0, 4.0));\n\
+                      void main() { gl_FragColor = vec4(M[0], M[1]); }\n";
+        assert_eq!(colour_of(global, U), [1.0, 2.0, 3.0, 4.0]);
+    }
+
+    /// Section 5.4.1's conversion applies to each component: an int vector
+    /// and a bool vector give floats. The bool lanes are chosen off the
+    /// diagonal, so the diagonal form reads all zero.
+    #[test]
+    fn a_matrix_from_one_int_or_bool_vector_converts_each_component() {
+        let ints = es100("mat2 m = mat2(ivec4(u)); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&ints, U), [1.0, 2.0, -3.0, 4.0]);
+        let bools = es100("mat2 m = mat2(bvec4(u)); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&bools, [0.0, 3.0, 0.5, 0.0]), [0.0, 1.0, 1.0, 0.0]);
+    }
+
+    /// GLSL ES 3.00 spells the same matrix `mat2x2` too and has `uvec4`.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn es300_follows_the_same_rule() {
+        for ctor in ["mat2(u)", "mat2x2(u)", "mat2(uvec4(u))", "mat2x2(ivec4(u))"] {
+            let src = es300(&format!("mat2 m = {ctor}; o = vec4(m[0], m[1]);"));
+            let want = if ctor.contains("vec4(u)") { [1.0, 2.0, 3.0, 4.0] } else { [1.5, 2.25, 3.0, 4.75] };
+            assert_eq!(colour_of(&src, [1.5, 2.25, 3.0, 4.75]), want, "{ctor}");
+        }
+    }
+
+    /// A single scalar still fills the diagonal, whatever its type: the
+    /// scalar arm is chosen by the argument's width, not by the count of
+    /// arguments.
+    #[test]
+    fn a_single_scalar_still_fills_the_diagonal() {
+        let float = es100("mat2 m = mat2(u.y); gl_FragColor = vec4(m[0], m[1]);");
+        assert_eq!(colour_of(&float, U), [2.25, 0.0, 0.0, 2.25]);
+        let int = es100("mat3 m = mat3(int(u.w)); gl_FragColor = vec4(m[0].xy, m[1].y, m[2].z);");
+        assert_eq!(colour_of(&int, U), [4.0, 0.0, 4.0, 4.0]);
+    }
+
+    /// One vector with too few components is a compile error, never a
+    /// matrix with lanes nothing wrote.
+    #[test]
+    fn a_single_vector_with_too_few_components_is_refused() {
+        for ctor in ["mat2(u.xyz)", "mat2(u.xy)", "mat3(u)", "mat4(u)", "mat3(ivec3(u.xyz))"] {
+            let src = es100(&format!("gl_FragColor = vec4({ctor}[0][0]);"));
+            assert_eq!(refusal(&src), SHORT, "{ctor}");
+        }
+    }
+
+    /// The same in GLSL ES 3.00, whose matrices of other shapes no single
+    /// vector fills either.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn es300_refuses_a_single_vector_with_too_few_components() {
+        for ctor in ["mat2x3(u)", "mat3x2(u)", "mat2x4(u)", "mat4x2(u)", "mat2(u.xyz)", "mat3(uvec4(u))"] {
+            let src = es300(&format!("o = vec4({ctor}[0][0]);"));
+            assert_eq!(refusal(&src), SHORT, "{ctor}");
+        }
     }
 }
 
@@ -14946,7 +15939,12 @@ mod relocate_tests {
         let mark = a.used();
         let l = compile_to_ir(&a, super::super::sema::Stage::Fragment, text).expect("the stand-in compiles");
         let top = a.used();
+        let (prec, local_prec) = (l.module.prec.to_vec(), l.module.local_prec.to_vec());
         let l = relocate(&a, l, text, mark).expect("relocate");
+        /* the precision tables are moved with the rest, in step */
+        assert_eq!((l.module.prec, l.module.local_prec), (&prec[..], &local_prec[..]));
+        assert_eq!((prec.len(), local_prec.len()), (l.module.instrs.len(), l.module.locals.len()));
+        assert!(prec.contains(&ir::Prec::Medium), "the stand-in has mediump values");
         std::println!("front end top {top} bytes, {} after the release; peak {}", a.used(), a.peak());
         assert!(top > 1_000_000, "the stand-in still exercises the front end: {top}");
         assert!(a.used() < 500_000, "{} bytes left for the back end to start from", a.used());
@@ -15409,5 +16407,62 @@ mod report_es2_tests {
         let a = Arena::new(&mut buf);
         let es100 = "precision mediump float;\nvoid main() { gl_FragColor = vec4(1.0); }\n";
         assert!(compile_to_ir(&a, Stage::Fragment, es100).is_ok(), "an ES 1.00 shader compiles in the same build");
+    }
+}
+
+/// The PowerVR words of shapes this branch's precision work once moved,
+/// pinned to main's (d208eafa5): a back end that does not lower precision
+/// compiles what it compiled before. Second review B-B: `pow` of a `const`
+/// exponent moved when a built-in's steps recorded their width in `comps`
+/// (now in `lanes`), and a `mediump mat2` divided by 2.2 moved when the
+/// reciprocal was kept as an `Frcp`. That pin's matrix is `mat2(a.x)`: the
+/// review's shader said `mat2(a)` of a `vec4 a`, which main built as
+/// `mat2(a.x)` (issue 6564), so these are the words main compiled.
+#[cfg(all(test, feature = "gpu-powervr", not(feature = "report-es2")))]
+mod powervr_word_pins {
+    use crate::shaderc::online::{codegen, store};
+    use crate::shaderc::SHC_STAGE_VERTEX;
+
+    /// The program words, the temporaries, the varyings, the output size
+    /// and the uniform dwords, as hex.
+    fn words(src: &str) -> std::string::String {
+        let _k = store::test_keep();
+        store::with_scratch(|s| {
+            let sh = codegen::compile(SHC_STAGE_VERTEX, src.as_bytes(), 0, s, store::keep()).expect("compiles");
+            let mut v = std::vec::Vec::new();
+            for x in sh.usc_words() {
+                v.extend_from_slice(&x.to_le_bytes());
+            }
+            v.extend_from_slice(&sh.temps.to_le_bytes());
+            v.push(sh.num_varyings);
+            v.push(sh.vs_output_size);
+            v.extend_from_slice(&sh.uniform_dwords.to_le_bytes());
+            v.iter().map(|b| std::format!("{b:02x}")).collect()
+        })
+        .expect("the scratch arena is free")
+    }
+
+    #[test]
+    fn pow_of_a_const_exponent_compiles_to_main_s_words() {
+        let src = "attribute highp vec4 p; attribute mediump vec4 a; attribute highp vec4 h; varying highp vec4 v; \
+                   const mediump float E = 0.1; void main(){ gl_Position = p; v = vec4(pow(a.x, E)); }";
+        assert_eq!(
+            words(src),
+            "86924013cdcccc3d000040ff35820087840400000041348200824100004235820040c0a2000041ff3482008341000040\
+             55a0060800800400003055a0000804c00000003055a0000805c00000003055a0000806c00000003058a0000807c00000\
+             0030f3ffffffffff44a08005000000ff030001080000"
+        );
+    }
+
+    #[test]
+    fn a_mediump_matrix_divided_by_a_constant_compiles_to_main_s_words() {
+        let src = "attribute highp vec4 p; attribute mediump vec4 a; varying highp vec4 v;\n\
+                   void main(){ gl_Position = p; mediump mat2 m2 = mat2(a.x) / 2.2; v = vec4(m2 * a.xy, 0.0, 1.0); }";
+        assert_eq!(
+            words(src),
+            "869240132ebae83e000040ff3582004084e0100000413582004080a0000042ff35820040c2c50800004035820040c1c5\
+             08000043368200c0c1440840000044ff368200c0c2440843000040ff34820087000000413582008780010000004255a0\
+             060800800400003055a0000804c40000003057a0040805c000000030f2ffffff44a08005000000ff050001080000"
+        );
     }
 }

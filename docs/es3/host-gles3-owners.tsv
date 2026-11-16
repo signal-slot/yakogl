@@ -1,0 +1,56 @@
+# host-gles3-owners: gpu	case_re	message_re	rc	owner	note
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# Owner rules for the HOST-ONLY not-pass list (tools/cts/host-gles3-tally.py
+# --owners / --apply-owners; tools/cts/README.md 2b). The first rule that
+# matches a row wins: specific rules first. Rows of the part files at 26d1c4a2
+# (docs/es3/host-gles3-part-{v3d,powervr}.tsv); the vivante rules are the
+# tally item's. A note "fixed at <sha>" means a commit after 26d1c4a2 changes
+# the answer; the rows move at the next host run.
+#
+# --- NotSupported rows the ES 3.0 mustpass permits (an extension, or a sample count above GL_MAX_SAMPLES)
+*		ASTC not supported	allowed	none	ASTC is no ES 3.0 format
+*		GL_EXT_draw_buffers_indexed (is )?not supported	allowed	none	extension (draw_buffers_indexed, state_query.indexed, negative_api.fragment *i)
+*		GL_KHR_blend_equation_advanced not supported	allowed	none	extension
+*		GL_EXT_texture_sRGB_RG?8 is not supported	allowed	none	extension
+*	\.fbo\.multiview\.	Multiview is not supported	allowed	none	GL_OVR_multiview, an extension
+*	\.(multisample\.fbo_8_samples|fbo\.msaa\.8_samples)\.	Maximum sample count|Sample count not supported	allowed	none	8 samples: above GL_MAX_SAMPLES 4 once #339 raises it from 1 (the V3D's one mode is 4x)
+powervr		^Format not supported|requires GL_EXT_color_buffer_float|Unsupported attachment format|Renderbuffer format not supported	allowed	none	32-bit float and R11F_G11F_B10F targets: #360 decided the PowerVR does not claim GL_EXT_color_buffer_float (RC1 Float targets)
+#
+# --- G7 program binaries (this plan)
+*	\.shader_api\.program_binary\.|\.state_query\.shader\.program_binary$		G7	#364	GL_NUM_PROGRAM_BINARY_FORMATS 0 (src/gl/es3.rs)
+#
+# --- ETC2/EAC (#354): the six decoded names were not in GL_COMPRESSED_TEXTURE_FORMATS, and the V3D refused its two listed ETC2 names at upload
+*	\.texture\.(wrap|format)\.	Compressed texture format not supported	RC2	#354	fixed at 455c3bb5 (docs/notes/etc2-eac.md section 7)
+v3d	\.texture\.(wrap|format\.compressed)\.etc2_	Set texturing state: .*GL_INVALID_OPERATION	RC2	#354	fixed at 455c3bb5 (V3D_SAMPLED_TEXFMTS holds the ETC2 block classes)
+#
+# --- float targets (#360)
+v3d		^Format not supported|requires GL_EXT_color_buffer_float|Unsupported attachment format|Renderbuffer format not supported	RC1	#360	32-bit float and R11F_G11F_B10F targets want GL_EXT_color_buffer_float (V3D, feature color-buffer-float)
+#
+# --- multisample (#339): GL_MAX_SAMPLES 1 at 26d1c4a2
+*	\.(multisample|fbo\.msaa|fbo\.completeness\.samples|rasterization\.fbo\.rbo_multisample_4)\.		RC8	#339	4 samples (fbo.msaa 'Got GL_INVALID_OPERATION' at es3fFboTestCase.cpp:154 included)
+*	\.negative_api\.buffer\.blit_framebuffer_multisample$		RC8	#339	multisample blit errors
+#
+# --- separate depth and stencil images (#354, src/gl/framebuffer.rs)
+*	\.fbo\.blit\.depth_stencil\..*stencil_index8	Separate depth and stencil buffers not supported	RC17	#354	GL_FRAMEBUFFER_UNSUPPORTED for separate depth and stencil (RC17 Left)
+#
+# --- this plan: glReadPixels format/type checks (item fix-readpixels)
+*	\.negative_api\.buffer\.read_pixels_fbo_format_mismatch$		new	#364	glReadPixels format/type pair of the read buffer
+#
+# --- PowerVR mixed integer targets (#361)
+powervr	\.fragment_out\.random\.	glDrawElements: .*GL_INVALID_OPERATION	RC1	#361	an integer target beside other targets refused (mrt_layout)
+#
+# --- V3D varyings (#359): MAX_VARYING_VECTORS 8 and 24 fragment input scalars at 26d1c4a2
+v3d	\.transform_feedback\.		RC10	#359	fixed at 6581f22b: draws over 24 inputs no longer refused (render GL_INVALID_OPERATION), programs over 8 vectors link (the 'Capturing arrays' NotSupported is dEQP's answer to a failed link)
+#
+# --- unowned causes (issue texts in the triage report)
+*	\.shaders\.builtin_functions\.	Failed to set up framebuffer object: .*GL_INVALID_ENUM	RC14	unowned	mat4/mat4x2/mat4x3 outputs attach GL_COLOR_ATTACHMENT3; DRAW_TARGETS is 3
+*	\.fragment_out\.random\.	After framebuffer setup: .*GL_INVALID_ENUM	RC14	unowned	a fourth target, GL_COLOR_ATTACHMENT3 (docs/notes/v3d-fragment-out.md G5)
+v3d	\.shaders\.builtin_functions\.precision\.	Error in draw: .*GL_INVALID_OPERATION	RC10	unowned	GL_MAX_RENDERBUFFER_SIZE 4096 (src/gl/state.rs) but the V3D refuses a target over MAX_TARGET 2048 (-ENOTSUP); dEQP's executor draws min(4096, values) wide
+v3d		GL_OUT_OF_MEMORY	new	unowned	V3D host GPU memory runs out (texture.units cube uploads and draws, two builtin_functions renderbuffers)
+v3d	\.fbo\.blit\.depth_stencil\.	GL_INVALID_OPERATION	RC8	unowned	V3D has no ds_write / stencil_resolve entry (docs/notes/v3d-fbo-blit.md G6a)
+*	\.fbo\.invalidate\.(sub|whole)\.unbind_blit_	GL_INVALID_OPERATION	RC8	unowned	depth and stencil blit into the window refused (src/gl/blit.rs, docs/notes/blit-depth-window.md)
+v3d	\.shaders\.texture_functions\.texture(proj)?grad(offset)?\.[iu]?sampler3d_	draw: .*GL_INVALID_OPERATION	RC2	unowned	the V3D refuses the draw of a gradient look-up on a 3D sampler (cause not read to the line)
+v3d	\.(uniform_api\.random\.83|shaders\.metamorphic\.synthetic\.variant_3)$	Compile failed	RC13	unowned	V3D code generator: Program(Select(OutOfScratch)) (tools/cts/log/2026-11-pi4-gles3-c/UA1.console.txt, 2026-11-pi4-gles3-b/S16.console.txt)
+powervr	\.uniform_api\.random\.83$	Compile failed	RC13	unowned	PowerVR code generator refuses the program (reason not in the part file)

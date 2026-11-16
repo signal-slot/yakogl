@@ -306,10 +306,74 @@ The follow-up that closes both gaps is a GLSL front end for pan_shc (Mesa's
 GLSL compiler and `gl_nir_link_glsl` with panfrost's caps), checked with the
 same case list.
 
-Not covered: blend shaders (the blend-shader need per GLES 2 blend mode), more
-than one colour buffer, line smoothing and user clip planes (not GLES 2),
+Not covered by the case list: blend shaders (their own mode, "Blend shaders"
+below), more than one colour buffer, line smoothing and user clip planes (not GLES 2),
 transform feedback, and anything the case list does not exercise. A score here
 says only that nothing the cases cover differs unexpectedly.
+
+## Blend shaders
+
+`pan_shc --blend` compiles Mesa's blend shader for each key it reads on stdin,
+one a line, as `GENX(pan_blend_get_shader_locked)` does
+(`src/gallium/drivers/panfrost/pan_blend_cso.c:59-132`): the key's state
+through `GENX(pan_blend_create_shader)` (`src/panfrost/lib/pan_blend.c:798-946`),
+the constants lowered to the sysval UBO, `is_blend`, the sysval UBO pushable,
+`pan_preprocess_nir`, `pan_postprocess_nir`, `pan_shader_compile`. The target
+is RGBA8 UNORM and the fragment colour fp16 (a mediump gl_FragColor):
+
+```sh
+echo "add const_color inv_const_color add const_color inv_const_color 15 1" | pan_shc --blend
+#    <rgb func> <rgb src> <rgb dst> <alpha func> <alpha src> <alpha dst> <mask> <samples>
+```
+
+stdout: one JSON object a key (`equation`, `work_reg_count`, `words`); stderr:
+the disassembly. `NIR_DEBUG=print_fs,print_internal,print_no_inline_consts`
+prints the NIR after every NIR pass that changes it (the debug build), which
+is what `src/shaderc/online/mali/blend_nir.rs` reproduces pass by pass.
+
+Its words equal the shim driver's for all 13 blend shaders the shim recorded
+(`blend_*.expect.json`, `blend_case190_col3`, `blend_case190_col4`,
+`blend_case211`; measured 2026-11-12). The references made with it:
+
+```sh
+T=tools/mali
+python3 -I $T/blend_deqp_ref.py list | pan_shc --blend > out.json
+python3 -I $T/blend_deqp_ref.py words out.json > $T/testdata/blend_deqp.words   # 1403 keys
+python3 -I $T/blend_deqp_ref.py random | pan_shc --blend > rnd.json
+python3 -I $T/blend_deqp_ref.py digest rnd.json > $T/testdata/blend_random.sha   # 2700 keys
+python3 -I $T/blend_deqp_ref.py u32 | pan_shc --blend > u32.json
+python3 -I $T/blend_deqp_ref.py u32words u32.json > $T/testdata/blend_u32.words   # 100 keys
+python3 -I $T/blend_deqp_ref.py min_f32 | pan_shc --blend > min.json
+python3 -I $T/blend_deqp_ref.py lines min.json > $T/testdata/blend_min_f32.words   # 1 key, a word a line
+```
+
+A key may end in `f32`: the fragment colour is fp32 (a highp ES 3.00
+`out vec4`, `src0_type` `nir_type_float32`); or in `u32`: uint32 (a highp
+`out uvec4`, `nir_type_uint32`). Mesa converts a uint32 colour from float,
+the target's base type (pan_blend.c:837-862), so its words are the fp32
+key's: `blend_u32.words` holds the first 100 fp32 keys of `random` with
+`u32`, and the backend takes the fp32 key for such a colour
+(`a_uint32_colour_s_blend_shaders_are_mesa_s`; measured 2026-11-15, the
+100 equal the same keys' fp32 words).
+
+`blend_deqp.words` is every blend shader of dEQP-GLES2
+`functional.fragment_ops.blend` (es2fBlendTests.cpp's states that Mesa draws
+with a blend shader, the blend colour 0.2, 0.4, 0.6, 0.8); `blend_random.sha`
+2700 keys of every function, factor and colour mask: 1500 at 1x and 600 at
+4x with an fp16 colour, 600 with an fp32 one. Both runs were made twice and
+are identical. The tests are `every_deqp_gles2_blend_shader_is_mesa_s` and
+`random_blend_shaders_are_mesa_s` (src/shaderc/online/mali/tests.rs); the
+gate's pan_shc row (MESA_PAN_TREE; a gap without it) makes them,
+`blend_u32.words`, `blend_min_f32.words` (the backend test
+`a_highp_colour_s_blend_shader_reads_it_as_fp32` reads it) and
+`blend_nir_rules.rs` again and compares the bytes.
+
+`src/shaderc/online/mali/blend_nir_rules.rs` is generated from the same tree's
+`nir_opt_algebraic.py` and `bifrost_nir_algebraic.py`:
+
+```sh
+python3 -I tools/mali/gen_blend_nir_rules.py $MESA_PAN_TREE > src/shaderc/online/mali/blend_nir_rules.rs
+```
 
 ## Gate
 

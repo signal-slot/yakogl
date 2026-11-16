@@ -359,6 +359,9 @@ those test rows are skipped.
 - **History**: not scanned here. The history purge and the one-commit public
   snapshot are #1606 step 8, owner decisions D7 and D8; this part only keeps
   the tree ready and the scan re-runnable.
+- **Snapshot rehearsal**: the scan on a one-commit snapshot of origin/main,
+  with its hits and their dispositions, is in `docs/release/snapshot.md`
+  ("Procedure and rehearsal").
 
 ## Verdict of part 4
 

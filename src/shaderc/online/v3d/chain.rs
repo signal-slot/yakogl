@@ -69,6 +69,9 @@ pub enum V3dError {
     /// The VPM cannot hold two batches of the vertex outputs
     /// (v3d_vs_set_prog_data asserts `vpm_output_batches >= 2`, vir.c:936).
     VpmTooSmall,
+    /// The fragment shader reads more than [`MAX_FS_INPUTS`] scalar inputs,
+    /// the most the hardware interpolates.
+    TooManyFragmentInputs,
     OutOfScratch,
 }
 
@@ -138,6 +141,10 @@ pub struct FsProg<'a> {
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
+    /// Inputs 32..63 of the three: bit i is input 32 + i.
+    pub flat_shade_flags_hi: u32,
+    pub noperspective_flags_hi: u32,
+    pub centroid_flags_hi: u32,
     /// The shader writes Z to the TLB (prog_data `writes_z`): the pass-
     /// through Z (a discard, no colour write, a read of gl_FragCoord.z) or
     /// its own `gl_FragDepth` (select.rs `TLB_Z_PER_PIXEL`).
@@ -152,6 +159,11 @@ pub struct FsProg<'a> {
     /// Bit n: the program writes colour to render target n (prepare's
     /// rt_mask; the backend checks it against the draw's attachments).
     pub rt_mask: u8,
+    /// The compile's render-target key ([`compile_program_rt`]): bit n,
+    /// render target n's float output is written as 32-bit words. The
+    /// backend draws the program only to targets of the classes it was
+    /// keyed for.
+    pub rt_f32: u8,
     pub force_per_sample_msaa: bool,
     pub tmu_dirty_rcl: bool,
     /// The shader can discard (prog_data `uses_discard`). Such a shader always
@@ -206,6 +218,9 @@ pub fn attribute_locations(gl_type: u16) -> u8 {
 /// `VARYING_SLOT_VAR0` (compiler/shader_enums.h): Mesa's slot number of the
 /// first generic varying.
 pub const VARYING_SLOT_VAR0: u8 = 32;
+/// The scalar fragment shader inputs the hardware takes (Mesa
+/// `V3D_MAX_FS_INPUTS`, v3d_limits.h): 16 vec4 varyings.
+pub const MAX_FS_INPUTS: usize = 64;
 
 /// `m` with its loops expanded where the unroller can (`None` from it: no
 /// loop, `m` as it is). Its refusals are named gaps, not verdicts on the
@@ -399,6 +414,25 @@ pub fn compile_program_keyed<'a>(
     fs_key: crate::shaderc::LodKey,
     a: &'a Arena<'a>,
 ) -> Result<V3dProgram<'a>, V3dError> {
+    compile_program_rt(vs, fs, prim, target, vs_key, fs_key, 0, a)
+}
+
+/// [`compile_program_keyed`] with the render-target key `rt_f32`: bit n,
+/// render target n is a 32-bit float target (R32F, RG32F, RGBA32F), and
+/// the fragment shader writes its float output as 32-bit words
+/// (`Prepared::rt_f32`, Mesa's `f32_color_rb`). With 0 the program is
+/// [`compile_program_keyed`]'s, word for word.
+#[allow(clippy::too_many_arguments)]
+pub fn compile_program_rt<'a>(
+    vs: &'a ir::Module<'a>,
+    fs: &'a ir::Module<'a>,
+    prim: Prim,
+    target: Target,
+    vs_key: crate::shaderc::LodKey,
+    fs_key: crate::shaderc::LodKey,
+    rt_f32: u8,
+    a: &'a Arena<'a>,
+) -> Result<V3dProgram<'a>, V3dError> {
     match prim {
         Prim::Triangles => {}
         Prim::Lines => return Err(V3dError::NotYet("the lines variant of the fragment shader")),
@@ -414,16 +448,23 @@ pub fn compile_program_keyed<'a>(
     let (fs, fs_trips) = unrolled(fs, a)?;
 
     /* The fragment shader, and the order of its inputs. */
-    let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
+    let mut fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
+    fsp.rt_f32 = rt_f32;
     let inputs = fragment_inputs(&fsp, a)?;
     /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
-     * flat_shade_flags at the input's index). The job builder reads word 0
-     * only and refuses more than 24 inputs. */
-    let mut flat = 0u32;
+     * flat_shade_flags at the input's index). Inputs 0..31 are in
+     * `flat_shade_flags`, 32..63 in `flat_shade_flags_hi`; the job builder
+     * writes them in the groups of 24 the packet carries. */
+    let mut flat = 0u64;
     /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
      * BITSET_SET of centroid_flags, the W it multiplies by the centroid
      * W). */
-    let mut centroid = 0u32;
+    let mut centroid = 0u64;
+    /* V3D_MAX_FS_INPUTS: the shader record's count and the flag words stop
+     * here; a program past them does not link on this GPU. */
+    if inputs.len() > MAX_FS_INPUTS {
+        return Err(V3dError::TooManyFragmentInputs);
+    }
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
             .inputs
@@ -431,15 +472,9 @@ pub fn compile_program_keyed<'a>(
             .find(|d| d.kind == IoKind::Varying && d.location == loc)
             .ok_or(V3dError::VaryingWithoutVertexOutput)?;
         if d.interp == crate::shaderc::online::ir::INTERP_FLAT {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a flat varying past input 31"));
-            }
             flat |= 1 << i;
         }
         if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
-            if i >= 32 {
-                return Err(V3dError::NotYet("a centroid varying past input 31"));
-            }
             centroid |= 1 << i;
         }
     }
@@ -522,9 +557,12 @@ pub fn compile_program_keyed<'a>(
             single_seg: false,
             num_inputs: inputs.len() as u32,
             input_slots: slots,
-            flat_shade_flags: flat,
+            flat_shade_flags: flat as u32,
             noperspective_flags: 0,
-            centroid_flags: centroid,
+            centroid_flags: centroid as u32,
+            flat_shade_flags_hi: (flat >> 32) as u32,
+            noperspective_flags_hi: 0,
+            centroid_flags_hi: (centroid >> 32) as u32,
             /* select.rs select_fragment: a discard, a read of Z, or a
              * gl_FragDepth write */
             writes_z: fsel.writes_z,
@@ -535,6 +573,7 @@ pub fn compile_program_keyed<'a>(
             uses_implicit_point_line_varyings: fsel.implicit_point_varyings,
             uses_pid: false,
             rt_mask: fsp.rt_mask,
+            rt_f32,
             /* Mesa flags a shader with no colour write as discarding
              * (nir_to_vir.c:2124-2126): its Z write is its TLB write. */
             uses_discard: fsp.discard.is_some() || fsp.rt_mask == 0,

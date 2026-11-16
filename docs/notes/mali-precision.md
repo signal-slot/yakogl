@@ -48,6 +48,17 @@ reference arm (Mesa 26.2.1, GPU id 0xa867), the NIR read from the run's
   mediump, float none (the shader must declare one); `sampler2D` and
   `samplerCube` lowp in both stages. `reflect.rs:848-863` has the same
   table.
+- A `precision` statement inside a block or a function does not end with
+  it in Mesa: `add_default_precision_qualifier`
+  (`G/glsl_symbol_table.cpp:194-207`) replaces a default that exists in any
+  scope, so every later declaration, in any function, takes the new one.
+  Only a type with no default yet (the fragment stage's float) gets one
+  scoped to the block. [probe v_inner2, v_inner4: a vertex `{ precision
+  mediump float; }`, or one in another function, then `float u` is
+  `float16_t`; f_inner2: a mediump fragment shader's `{ precision highp
+  float; }` makes a later `float u` highp] `precision.rs` follows this
+  (`Defaults::leave`). The lowering refuses a `precision` statement inside
+  a body today ("this statement is not lowered yet").
 - Built-in variables (`G/builtin_variables.cpp`): `gl_Position` highp
   (`:1576`); `gl_PointSize` mediump in ES 1.00, highp in 3.00
   (`:1587-1591`); `gl_FragCoord` mediump in 1.00, highp in 3.00
@@ -332,6 +343,20 @@ Mali back end, not in the shared front end.
 - The instruction stream, `comps`, `nodes` and the declarations do not
   change. The new tables are read by `mali/` only; `gpu-v3d`,
   `gpu-vivante`, `gpu-powervr` and the offline table never read them.
+- The widths step D.1 learned (a built-in's steps, an increment's sum, a
+  conversion) go to a table of their own, `Module::lanes`, read through
+  `Module::lanes_of`: `comps` keeps what the other back ends read
+  before, because the PowerVR selector computes the lanes `comps` says
+  and recording them in `comps` moved its words (`pow` of a `const`
+  exponent; lower.rs `powervr_word_pins`). `lanes` is exact or 0, and
+  `lanes_of` answers `None` for 0. It is exact where a step reads a
+  one-lane value lane for lane (`length`'s square root of its dot). A
+  step that fills more lanes than it has distinct values records 0:
+  `refract`'s scalar `k` chain (it reads `splat(dot)`, so every lane holds
+  the scalar, and a later step reads `sqrt(k)` lane for lane, so one lane
+  would say those lanes do not exist) and `smoothstep`'s scalar edges.
+  Mesa has a scalar there; a precision back end that tells scalar lanes
+  apart (the late rule) gets `None` and refuses.
 - The cost they see: two more arena slices per compile (one byte per
   instruction, one per local) in the shared scratch arena (`store.rs`
   `with_scratch`). A shader near the arena's limit could meet
@@ -403,7 +428,11 @@ References each step needs (shader text, Mesa 26.2.1 drm-shim):
 - D.3: the ten probes of A.9; plus a `?:` whose first branch is highp
   (`? b : m`), a mediump `out` parameter, a lowered built-in with a
   sequence (`normalize(m)`, `length(m)`), and the A.6 contraction form
-  (`mediump float m = x + y;` read by `m * 2.0`), for E.1-E.4.
+  (`mediump float m = x + y;` read by `m * 2.0`), for E.1-E.4. A bool's
+  width is not its class: `(v.z > 0.5) != (hu < 0.3)` of a mediump and a
+  highp compare records High (no lowered tree, as in Mesa's GLSL IR), but
+  Mesa 26.2.1 computes the `ine` at 16 bits (`16 ine_pan`, review probe
+  t06), so D.3 models `pan_nir_lower_bool_to_bitsize` for a mixed pair.
 - D.4: the `vsmp_*` set of `mali-vs-int` (if_else, return_in_else, vec3,
   in_float, missing_returns, vec3_highpu, if_else_highp); `vsstruct_*` and
   `vsneg_*` of `mali-uniforms`; dEQP

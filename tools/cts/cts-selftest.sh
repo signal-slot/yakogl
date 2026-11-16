@@ -45,11 +45,12 @@ echo
 # tool went silently EMPTY rather than failing, because dEQP escapes the
 # token's quotes as `&apos;` and the pattern stopped at `&`. A sweep run on
 # that would have cost 40 minutes of board time and produced one nameless row.
-# This uses the fixture in testdata/ rather than the `check` helper above,
-# which compares a decide() verdict and takes different arguments.
+# This uses the fixtures in testdata/refusals/ (its own directory: a .qpa of
+# another tool's fixtures must not move these counts) rather than the `check`
+# helper above, which compares a decide() verdict and takes different arguments.
 echo
-echo "== 16. cts-refusals.py on the tokened format (testdata fixture)"
-rout=$(python3 "$HERE/cts-refusals.py" --cases 1 "$HERE/testdata" 2>&1)
+echo "== 16. cts-refusals.py on the tokened format (testdata/refusals)"
+rout=$(python3 "$HERE/cts-refusals.py" --cases 1 "$HERE/testdata/refusals" 2>&1)
 for want in "assignment to this is not lowered yet" \
             "the code generator refused this fragment shader: Select(OutOfScratch)" \
             "on cases dEQP FAILED (real gaps)        : 4" \
@@ -160,13 +161,15 @@ done
 # a failed or image-less build, the WDOG self-arm flag, refused arguments),
 # pi4-deqp-images.sh against a fake cmake/ninja (the gles2 dry run and
 # build exactly as before, the gles3 path's three arguments and --gles3
-# check, the stage 1 check), needed_deps against what the builders read, and
+# check, the stage 1 check), t6-deqp-images.sh (the same builder for
+# nanopc_t6: the dry run over mali-gles2-tree.txt, the firmware header check,
+# its cmake arguments), needed_deps against what the builders read, and
 # board-stage.sh x2 gles3 (its deps, its dry run, the sets still refused).
 # Its count of passed checks is pinned, so a selftest that stops checking
 # reads as a failure here, not as a pass -- and a new check in
 # images-selftest.sh without a bump here is a red row too (pull request
 # #1838 failed exactly there).
-IMAGES_SELFTEST_CHECKS=174
+IMAGES_SELFTEST_CHECKS=190
 echo
 echo "== 20. images-selftest.sh: the image builders against a fake west"
 iout=$("$HERE/images-selftest.sh" 2>&1)

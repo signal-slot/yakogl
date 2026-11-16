@@ -6,10 +6,12 @@
 # runner, without a board: a fake ssh and scp on PATH run the board's side in
 # a directory of this host, and a fake deqp-gles2 writes its .qpa from the
 # fixtures in tools/cts/testdata/mali-deqp-run/ (README.md there). It covers a
-# clean run, a crash mid-row with resume, a hang hitting the timeout, a panthor
+# clean run (with two cases whose shader the library refuses, one per info-log
+# form of dEQP, kept in refusals.tsv), a crash mid-row with resume, a hang hitting the timeout, a panthor
 # job-timeout line counted in resets, a missing "yakogl-mali: loaded" line
 # (wrong-lib), lost ssh, a commit not on the main ref refused, and --dry-run
-# making no ssh call (also bare, without --build and --out, with fakes that fail); that the slice keeps no host name or address;
+# making no ssh call (also bare, without --build and --out, with fakes that fail); --out equal to the raw
+# log directory refused; that the slice keeps no host name or address;
 # and the default 256x256 pbuffer; and the hold deadline (exit 11, the cut rows
 # Lost not-run, the slice written, the lock released).
 #
@@ -20,7 +22,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-deqp-run
 RUN=$HERE/mali-deqp-run.sh
-EXPECT=45
+EXPECT=51
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-selftest-XXXXXX")
 # The fake board's dmesg -w of the lost-ssh case is never stopped by the
 # runner (the board is gone): end every process still reading under $tmp.
@@ -86,6 +88,18 @@ rc_is() { [ "$(cat "$tmp/$1/rc")" = "$2" ]; }
 # col <name> <file> <key column value> <column number>: one field of a slice table
 col() { awk -F'\t' -v k="$3" -v c="$4" '$1 == k || $2 == k { print $c; exit }' "$tmp/$1/slice/$2"; }
 status_of() { [ "$(col "$1" results.tsv "$2" 2)	$(col "$1" results.tsv "$2" 3)" = "$3" ]; }
+# sidecars <name> <n>: the slice has n files, each with the licence sidecar
+sidecars() {
+  local d=$tmp/$1/slice f n=0
+  while read -r f; do
+    n=$((n + 1))
+    [ "$(cat "$f.license" 2>/dev/null)" = "SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+Results of our NanoPC-T6 dEQP-GLES2 run, written by tools/cts/mali-deqp-run.sh." ] || return 1
+  done < <(find "$d" -type f ! -name '*.license')
+  [ "$n" = "$2" ] && [ "$(find "$d" -type f -name '*.license' | wc -l)" = "$2" ]
+}
+refusal_is() { [ "$(col "$1" refusals.tsv "$2" 2)" = "$3" ]; }
 count() { [ "$(awk -F'\t' -v s="$2" 'NR > 1 && $2 "\t" $3 ~ s' "$tmp/$1/slice/results.tsv" | wc -l)" = "$3" ]; }
 clean_slice() { ! grep -rqiE 'board.invalid|198\.51\.100|02:00:5e' "$tmp/$1/slice"; }
 
@@ -96,8 +110,16 @@ check "chunks.tsv has the shared header" \
   bash -c "head -1 '$tmp/clean/slice/chunks.tsv' | grep -qxP 'row\tlabel\tcases\tstatus\tseconds\tkmsg\tresets\tssh_after\tboot_same\texit_line'"
 check "every chunk is done, 0 resets, ssh_after yes, boot_same yes" \
   bash -c "[ \"\$(awk -F'\t' 'NR > 1 { print \$2, \$3, \$4, \$7, \$8, \$9 }' '$tmp/clean/slice/chunks.tsv' | paste -sd,)\" = 'T1 6 done 0 yes yes,T2 6 done 0 yes yes,T3 5 done 0 yes yes' ]"
-check "results.tsv has its header and all 17 cases: 16 Pass, 1 Fail" \
-  bash -c "head -1 '$tmp/clean/slice/results.tsv' | grep -qxP 'case\tstatus\tdetail' && [ \$(wc -l < '$tmp/clean/slice/results.tsv') = 18 ] && [ \$(grep -cP '\tPass\t' '$tmp/clean/slice/results.tsv') = 16 ]"
+check "results.tsv has its header and all 17 cases: 14 Pass, 3 Fail" \
+  bash -c "head -1 '$tmp/clean/slice/results.tsv' | grep -qxP 'case\tstatus\tdetail' && [ \$(wc -l < '$tmp/clean/slice/results.tsv') = 18 ] && [ \$(grep -cP '\tPass\t' '$tmp/clean/slice/results.tsv') = 14 ] && [ \$(grep -cP '\tFail\t' '$tmp/clean/slice/results.tsv') = 3 ]"
+check "refusals.tsv has its header and the two cases the library refused a shader of" \
+  bash -c "[ \"\$(cut -f1 '$tmp/clean/slice/refusals.tsv' | paste -sd,)\" = 'case,dEQP-GLES2.functional.flush_finish.finish,dEQP-GLES2.functional.flush_finish.flush' ] && head -1 '$tmp/clean/slice/refusals.tsv' | grep -qxP 'case\trefusal'"
+check "the refusal is the shader's own info log, unescaped, its host and address redacted" \
+  refusal_is clean dEQP-GLES2.functional.flush_finish.flush \
+  "online shaderc: the code generator refused this fragment shader: Mali(Valhall: a > b on <host> at <addr> is not lowered yet)"
+check "a refusal logged as the <Text> of an \"Info Log\" section is read the same way" \
+  refusal_is clean dEQP-GLES2.functional.flush_finish.finish \
+  "online shaderc: the code generator refused this vertex shader: Mali(Valhall: Mesa's link on <host> is not lowered yet)"
 check "meta.txt has the ten keys in order, the full commit and both boot_ids" \
   bash -c "[ \"\$(cut -d= -f1 '$tmp/clean/slice/meta.txt' | paste -sd' ')\" = 'commit session rows tree boot_id_before boot_id_after kernel lib started ended' ] &&
     grep -qx 'commit=$c1' '$tmp/clean/slice/meta.txt' && grep -qx 'session=smoke' '$tmp/clean/slice/meta.txt' &&
@@ -109,6 +131,7 @@ check "the Fail's detail is kept, its host, address and MAC redacted" \
   status_of clean dEQP-GLES2.functional.flush_finish.wait "Fail	Image comparison failed on <host> at <addr> & <mac>"
 check "kmsg/<label>.txt for each row, empty for a quiet chunk" \
   bash -c "for l in T1 T2 T3; do [ -f '$tmp/clean/slice/kmsg/'\$l.txt ] && [ ! -s '$tmp/clean/slice/kmsg/'\$l.txt ] || exit 1; done"
+check "each of the 7 slice files has its .license sidecar, the three lines of our results" sidecars clean 7
 check "the stage is deleted from the board at the end" \
   bash -c "[ -d '$tmp/clean/board/root/yakogl-mali' ] && [ -z \"\$(ls -A '$tmp/clean/board/root/yakogl-mali')\" ]"
 check "the run staged only under /root/yakogl-mali/<sha8>/" \
@@ -123,6 +146,8 @@ run crash crash 1-1
 check "a crash mid-row: chunk status crash, exit 0" \
   bash -c "rc_is() { [ \"\$(cat '$tmp/crash/rc')\" = 0 ]; }; rc_is && [ \"\$(awk -F'\t' 'NR == 2 { print \$4 }' '$tmp/crash/slice/chunks.tsv')\" = crash ]"
 check "the crashed case is Lost chunk-crash" status_of crash dEQP-GLES2.info.renderer "Lost	chunk-crash"
+check "a run without a refusal writes refusals.tsv with its header alone" \
+  bash -c "[ \"\$(cat '$tmp/crash/slice/refusals.tsv')\" = \$'case\trefusal' ]"
 check "the row resumes after it: the 5 other cases Pass, in a second process" \
   bash -c "[ \$(grep -cP '\tPass\t' '$tmp/crash/slice/results.tsv') = 5 ] && [ -s '$tmp/crash/raw/qpa/T1.r1.qpa' ] && [ ! -e '$tmp/crash/raw/qpa/T1.r2.qpa' ]"
 
@@ -208,7 +233,7 @@ bare a --dry-run --rows 1-1 --tree "$FIX/tree.txt"
 check "--dry-run --rows 1-1 --tree T without --build/--out exits 0 and prints the plan" \
   bash -c "[ \"\$(cat '$tmp/bare/a.rc')\" = 0 ] && grep -q 'build: not given' '$tmp/bare/a.txt' &&
     grep -q 'skipped (no build)' '$tmp/bare/a.txt' && grep -q 'row 1 T1: 6 case(s)' '$tmp/bare/a.txt' &&
-    grep -q 'slice .*build/mali-deqp-run/adhoc-rows1-1,' '$tmp/bare/a.txt'"
+    grep -q 'slice .*build/mali-deqp-slice/adhoc-rows1-1, raw logs .*build/mali-deqp-run/adhoc-rows1-1\$' '$tmp/bare/a.txt'"
 MALI_DEQP_TREE=$FIX/tree.txt bare b --dry-run --rows 1-1
 check "the bare form takes its tree from MALI_DEQP_TREE" \
   bash -c "[ \"\$(cat '$tmp/bare/b.rc')\" = 0 ] && grep -q 'row 1 T1: 6 case(s)' '$tmp/bare/b.txt'"
@@ -220,6 +245,13 @@ check "a bare dry run never calls ssh or scp and creates nothing" \
 bare d --rows 1-1 --tree "$FIX/tree.txt"
 check "a real run without --build or --out still exits 1 (usage)" \
   bash -c "[ \"\$(cat '$tmp/bare/d.rc')\" = 1 ]"
+mkdir -p "$tmp/same"
+(cd "$tmp/bare" && env PATH="$tmp/nobin:$PATH" RAW_DIR="$tmp/same/o" \
+  bash "$RUN" --build "$FIX/fixture-build" --out "$tmp/same/o" --rows 1-1 --tree "$FIX/tree.txt" > "$tmp/same/out.txt" 2>&1
+  echo $? > "$tmp/same/rc")
+check "--out that is also the raw log directory is refused (exit 1) before anything is written or called" \
+  bash -c "[ \"\$(cat '$tmp/same/rc')\" = 1 ] && grep -q 'is also the raw log directory' '$tmp/same/out.txt' &&
+    [ ! -e '$tmp/same/o' ] && [ ! -e '$tmp/bare/called.log' ]"
 
 echo "mali-deqp-selftest: --reruns"
 pkill -f -- "$tmp/" 2>/dev/null   # the lost-ssh case's tail still holds the lock

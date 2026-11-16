@@ -7,7 +7,7 @@
 #   driver/tools/kexec-zephyr/t6-verdict.sh <probe> <uart.log>
 #   T6_POOL_PA=<hex> T6_BACKING_PA=<hex> t6-verdict.sh t6_mmu <uart.log>
 #
-# probe: t6_hello, t6_gpu, t6_mmu, t6_fw or t6_submit. The expected lines are in order: the
+# probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit or t6_display. The expected lines are in order: the
 # early banner (T6:A .. T6:A3, board::nanopc_t6_early), the board glue's
 # lines (T6:B, the marker, the GIC line, the arming, T6:C, "board: watchdog
 # armed"; driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c), the probe's own
@@ -67,7 +67,7 @@
 set -euo pipefail
 export LC_ALL=C
 
-usage() { echo "usage: $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit} <uart.log>" >&2; exit 2; }
+usage() { echo "usage: $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit|t6_display} <uart.log>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
 PROBE=$1
 LOG=$2
@@ -82,10 +82,14 @@ mapfile -t LINES < <(tr -d '\r\000' <"$LOG")
 TPL=()  # the templates, in order
 PFX=()  # an ERE that marks the candidate line ('' = the template's leading text)
 HOOK=() # a function run after the line was found ('' = none)
+NOT=()  # EREs no line of the record may match (anywhere)
 declare -A V=() # captured and derived values
 
 # e <template> [prefix ERE] [hook]
 e() { TPL+=("$1"); PFX+=("${2:-}"); HOOK+=("${3:-}"); }
+
+# never <ERE>: no line of the record may match it
+never() { NOT+=("$1"); }
 
 # The image's first lines (driver/rust/src/board/nanopc_t6_early.rs,
 # banner_a_el2 .. banner_a3, printed raw on uart2) and the board glue's at
@@ -97,7 +101,7 @@ table_boot() {
 	# 0x000000048800003a -> 0x0000000080000002; not a prediction for a probe)
 	e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{x16} VBAR_EL2 0x{x16} -> 0x{x16}' 'T6:A EL'
 	e 'T6:A1 EL1 init done, MMU off'
-	e 'T6:A2 PRE_KERNEL_1, MMU on: arming WDT0'
+	e 'T6:A2 EL1, MMU off: arming WDT0'
 	# banner_a3: rc 0, CR read back 0x9 (WDT_EN, RMOD), TOP 13's period
 	e 'T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369'
 	e 'T6:B console up (uart2 through the ns16550 driver)'
@@ -131,6 +135,36 @@ table_t6_hello() {
 	table_reset t6_hello
 }
 
+# PD_GPU read powered at hand-over: REPAIR_STATUS bit 1 on t6_gpu's
+# hand-over line, the fact gpu_up takes the GPU over by
+# (board::nanopc_t6_gpu, rk3588::pd_gpu::REPAIR_ON_BIT). The line's own
+# ": on" is not that fact: t6_z1.c prints it only when no idle bit is set
+# either, and gpu_up also takes over a domain powered with its idle request
+# set (": off or idle").
+gpu_found_powered() {
+	local l re='^t6_gpu: PD_GPU at hand-over: .* REPAIR_STATUS 0x([0-9a-f]{8}): '
+	for l in "${LINES[@]}"; do
+		if [[ $l =~ $re ]]; then
+			((16#${BASH_REMATCH[1]} & 0x2))
+			return
+		fi
+	done
+	return 1
+}
+
+# the take-over's masks as found are panthor's or 0 (panthor zeroes a
+# block's mask while its handler runs and while it is suspended):
+# GPU_INT_MASK GPU_INTERRUPTS_MASK 0x00020103 (panthor_gpu.c v6.18:43-47),
+# JOB_INT_MASK ~0 (panthor_fw.c:1033), MMU_INT_MASK fault bits 15:0 only
+# (panthor_mmu_fault_mask). Another word (a JOB_INT_MASK of 0x80000000, the
+# QoS PRIORITY) is most likely not the GPU's register: a wrong map.
+gpu_found_masks() {
+	local k
+	for k in TG TJ TM; do [ ${#V[$k]} -eq 8 ] || return 1; done
+	local g=$((16#${V[TG]})) j=$((16#${V[TJ]})) m=$((16#${V[TM]}))
+	(((g == 0 || g == 0x20103) && (j == 0 || j == 0xffffffff) && (m & ~0xffff) == 0))
+}
+
 # Z1's second half, tools/probes/nanopc_t6/t6_gpu/src/main.c on the success
 # path; the doc's "The GPU power-on", measured 2026-10-19: the identity
 # registers exactly (panthor's probe line, value for value), what Linux
@@ -139,8 +173,20 @@ table_t6_gpu() {
 	table_boot
 	e 't6_gpu: build {s}'
 	e 't6_gpu: WDT0 period 22369 ms, fed until 60000 ms of uptime'
-	# on_handover
-	e 't6_gpu: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: off or idle'
+	# on_handover. A crash kexec (Linux's devices left on) hands PD_GPU over
+	# powered: Z1 then takes the GPU over (four take-over lines after the
+	# PD_GPU lines, t6_z1.c). Every other route hands it over off, and no
+	# take-over line may appear. The route is chosen as gpu_up chooses it
+	# (gpu_found_powered).
+	local powered=0
+	if gpu_found_powered; then powered=1; fi
+	if [ "$powered" = 1 ]; then
+		# ": on", or ": off or idle" with an idle request set
+		e 't6_gpu: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: {s}'
+	else
+		e 't6_gpu: PD_GPU at hand-over: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: off or idle'
+		never '^t6_gpu: take-over: '
+	fi
 	e 't6_gpu: CRU at hand-over: CLKSEL_CON(158) 0x{x8} CLKSEL_CON(159) 0x{x8} CLKGATE_CON(66) 0x{x8} MODE_CON0 0x{x8} PLL_CON 0x{x8} 0x{x8} 0x{x8}: clk_gpu_src {d} Hz'
 	e 't6_gpu: SPI2 gates CLKGATE_CON(14) 0x{x8}, opened 0x{x}'
 	e 't6_gpu: SPI2 as found: CTRLR0 0x{x8} CTRLR1 0x{x8} SSIENR 0x{x} SER 0x{x} BAUDR 0x{x} SR 0x{x8} RXFLR 0x{x} VERSION 0x{x8}'
@@ -148,6 +194,18 @@ table_t6_gpu() {
 	e 't6_gpu: GPU PLL on: PLL_CON6 0x{x8} at hand-over, was on {d}, waited {d} us, PLL_CON6 0x{x8}'
 	e 't6_gpu: PD_GPU on: gates opened 0x{x}, was on {d}, waited {d}/{d}/{d} us'
 	e 't6_gpu: PD_GPU after: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: on'
+	if [ "$powered" = 1 ]; then
+		# What panthor left is recorded: the masks only checked for being
+		# panthor's words (gpu_found_masks), the RAWSTATs as tokens. Pinned:
+		# the MCU halted (MCU_STATUS 0, DISABLED), the soft reset, and after
+		# it the three masks 0 and MCU_STATUS 0. A halt that timed out, a
+		# hard reset, or other words after the reset differ: a person reads them
+		e 't6_gpu: take-over: found GPU_INT_MASK 0x{@TG} JOB_INT_MASK 0x{@TJ} MMU_INT_MASK 0x{@TM}, RAWSTAT 0x{x8} 0x{x8} 0x{x8}, MCU_STATUS {d}' '' gpu_found_masks
+		e 't6_gpu: take-over: masks 0, RAWSTAT after the clear 0x{x8} 0x{x8} 0x{x8}'
+		e 't6_gpu: take-over: MCU halt: MCU_STATUS 0 after {d} polls of 1 us: DISABLED'
+		e 't6_gpu: take-over: soft reset: GPU_INT_RAWSTAT 0x{x8} before the clear, 0x{x8} after; RESET_COMPLETED after {d} polls; then masks 0x00000000 0x00000000 0x00000000 MCU_STATUS 0' \
+			't6_gpu: take-over: [a-z]+ reset:'
+	fi
 	local b
 	for b in 0 1 2 3; do
 		e "t6_gpu: qos_gpu_m$b: 0x{x8} 0x{x8} 0x{x8} 0x{x8} 0x{x8}"
@@ -309,6 +367,66 @@ table_t6_fw() {
 	table_reset t6_fw
 }
 
+# t6_display: the frame buffer's %p is its PA (the identity map); FB8 is the
+# PA as the later lines print it (%08x)
+display_fb() {
+	[ $((16#${V[FBV]})) -eq $((16#${V[FB]})) ] || return 1
+	V[FB8]=$(printf '%08x' $((16#${V[FB]})))
+}
+
+# the pixel clock (decimal kHz) within 0.5 % of the mode's 65 MHz
+display_pclk() { [[ ${V[PCLK]} =~ ^[0-9]+$ ]] && ((10#${V[PCLK]} >= 64675 && 10#${V[PCLK]} <= 65325)); }
+
+# the HDPTX PHY0 GRF STATUS has PLL_LOCK_DONE, PHY_CLK_RDY and PHY_RDY
+display_phy() { (((16#${V[PHY]} & 0xe) == 0xe)); }
+
+# the controller's clock monitor reads locked (CMU_STATUS & 0x3f = 0x15)
+display_cmu() { (((16#${V[CMU]} & 0x3f) == 0x15)); }
+
+# Step D2, tools/probes/nanopc_t6/t6_display/src/main.c on the success path
+# (driver/docs/nanopc-t6-display.md, section 2 route (a), section 5). Pinned:
+# what the adopt requires (VERSION_INFO, VP0's DSP_CTRL and 1024x768@60
+# timing words, Esmart0 off as found), what it writes (the buffer's address,
+# stride 4096, REGION0_CTRL 1, VIR 0x400, and the overlay selects of the
+# "overlay:" line, which the "shown:" line and the status after the hold
+# must read back: otherwise Esmart0 may be outside VP0's layers and the
+# screen shows only the background), the frame check (a frame start, no
+# underflow, no bus error), HPD, and the controller's video monitor words of
+# the mode (the board dump of 2026-11-12). Linux's other words as found, the
+# overlay values written (they follow Linux's selects), the IOMMU status and the timing of
+# the waits are tokens; the pixel clock, the PHY status and the CMU status
+# are checked by hooks. What the display shows only a person can say.
+table_t6_display() {
+	table_boot
+	e 't6_display: build {s}'
+	e 't6_display: WDT0 period 22369 ms, fed until 60000 ms of uptime'
+	e 't6_display: frame buffer 0x{@FBV} at PA 0x{@FB}, 1024x768 XRGB8888 stride 4096, pattern rc 0, clean rc 0' '' display_fb
+	e 't6_display: found PD_VOP PWR 0x{x8} STATUS 0x{x8} IDLE_REQ 0x{x8} IDLE_ACK 0x{x8} IDLE_ST 0x{x8} REPAIR 0x{x8} CLKGATE_CON(52) 0x{x8}'
+	e 't6_display: found VERSION_INFO 0x40176786 DSP_CTRL 0x0000000f 0x{x8} 0x{x8} 0x{x8} DSP_IF_EN 0x{x8} SYS_PD_CTRL 0x{x8}'
+	e 't6_display: found VP0 timing 0x05400088 0x01280528 0x03260006 0x00230323 OVL_LAYER_SEL 0x{x8} OVL_PORT_SEL 0x{x8}'
+	e 't6_display: found Cluster0 0x{x8} 0x{x8} Esmart0 0x00000000 vop_mmu STATUS 0x{x8} 0x{x8} DTE_ADDR 0x{x8} 0x{x8}'
+	e 't6_display: take-over: running ports 0x{x}, windows off 0x{x}'
+	e 't6_display: vop_mmu: STATUS 0x{x8} 0x{x8} after paging off, stall time-out {d}'
+	e 't6_display: overlay: OVL_LAYER_SEL 0x{@OLS} OVL_PORT_SEL 0x{@OPS} written, in force after {d} us'
+	e 't6_display: window: Esmart0 on 0x{=FB8} stride 4096; REG_CFG_DONE 0x{x8} after the write, 0x{x8} after the frame start ({d} us)'
+	e 't6_display: shown: YRGB_MST 0x{=FB8} REGION0_CTRL 0x00000001 OVL_PORT_SEL 0x{=OPS} OVL_LAYER_SEL 0x{=OLS}'
+	e 't6_display: adopt rc 0 stop 0 (none), refusal 0, index 0, detail 0x00000000' 't6_display: adopt rc'
+	e 't6_display: holding the picture for 30 s: red top left, green top right, blue bottom left, yellow bottom right, white 1-pixel border'
+	local i
+	for i in 10 20 30; do
+		e "t6_display: held $i s"
+	done
+	e 't6_display: frame check over 100 ms: frame start 1, underflow 0, bus error 0 0, VP0 INT_RAW_STATUS 0x{x8}'
+	e 't6_display: 60 frames in {d} us: {d} mHz, pixel clock {@PCLK} kHz' '' display_pclk
+	e 't6_display: VOP VERSION_INFO 0x40176786 SYS_PD_CTRL 0x{x8} REG_CFG_DONE 0x{x8} DSP_IF_EN 0x{x8} DSP_CTRL 0x0000000f HTOTAL_HS_END 0x05400088 VTOTAL_VS_END 0x03260006'
+	e 't6_display: VOP OVL_PORT_SEL 0x{=OPS} OVL_LAYER_SEL 0x{=OLS} Esmart0 REGION0_CTRL 0x00000001 YRGB_MST 0x{=FB8} VIR 0x00000400 INT_RAW_STATUS 0x{x8} SYS0 0x{x8} SYS1 0x{x8}'
+	e 't6_display: HPD 1 (SOC_STATUS1 0x{x8}), PHY0 GRF STATUS 0x{@PHY}' '' display_phy
+	e 't6_display: HDMI0 CMU_STATUS 0x{@CMU} VIDQPCLK_FREQ {d} LINKQPCLK_FREQ {d}' '' display_cmu
+	e 't6_display: HDMI0 VIDEO_MONITOR_STATUS0-6 0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300 0x{x8}'
+	e 't6_display: PASS: Esmart0 of VP0 shows 0x{=FB8}, frames run, no underflow, no bus error' 't6_display: (PASS|FAIL)'
+	table_reset t6_display
+}
+
 # the target's counts (printed in decimal) add up to the pixels read
 z4_pixels() {
 	local k
@@ -357,7 +475,7 @@ table_t6_submit() {
 }
 
 case "$PROBE" in
-t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit) "table_$PROBE" ;;
+t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit | t6_display) "table_$PROBE" ;;
 *) usage ;;
 esac
 
@@ -452,6 +570,16 @@ if [ "$PROBE" = t6_fw ] || [ "$PROBE" = t6_submit ]; then
 		fi
 	done
 fi
+
+# the lines no record may have
+for re in "${NOT[@]}"; do
+	for ((j = 0; j < ${#LINES[@]}; j++)); do
+		if [[ ${LINES[j]} =~ $re ]]; then
+			printf 'differs  expected no line matching "%s"; seen "%s" (line %d)\n' "$re" "${LINES[j]}" $((j + 1))
+			bad=$((bad + 1))
+		fi
+	done
+done
 
 if [ "$bad" -eq 0 ]; then
 	echo "VERDICT $PROBE PASS"

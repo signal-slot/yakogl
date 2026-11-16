@@ -198,7 +198,12 @@ keep their keys, their programs and their back-end paths. A draw with a
 constructor takes a dense list) and keeps its old key; the back end
 refuses it by name (section 5).
 
-### 2.5 The API in `src/shaderc/mod.rs` (item `design-key`)
+### 2.5 The API in `src/target_key.rs` (item `design-key`, merged)
+
+The API is a module of its own (`pub mod target_key`, `src/lib.rs`), so that
+the key does not wait on `src/shaderc/mod.rs`. The signatures below are the
+ones in the tree, plus `gles_surf_target_key`, which maps a format to its
+per-target key and which both the GL core and the back end use.
 
 ```rust
 /// The most draw buffers a mixed key carries (the PowerVR's
@@ -207,6 +212,11 @@ pub const SHC_MIXED_MAX_TARGETS: usize = 3;
 
 /// Bit 25: the tag of a mixed key ([0:9] and [26:31] clear).
 pub const SHC_BLEND_KEY_MIXED_TAG: u32 = 1 << 25;
+
+/// The per-target key of a colour surface format (`GLES_SURF_*`), section
+/// 2.1. `None` for the sRGB surface (refused in a mix) and for any format
+/// that is not a colour surface.
+pub const fn gles_surf_target_key(fmt: u8) -> Option<u32>;
 
 /// The pixel output registers one per-target key's colour takes (section
 /// 2.1), or `None` when `t` is not a valid per-target key.
@@ -233,7 +243,7 @@ pub const fn shc_blend_key_is_mixed(key: u32) -> bool;
 Round trip: for every list `l` with `shc_blend_key_mixed(l) == Some(k)`,
 `shc_blend_key_mixed_targets(k)` gives `l` back (unused entries 0). The
 slot codes are private (`const fn` helpers in the same file); every user
-goes through the five items above. `const fn` because the GL core's tests
+goes through the items above. `const fn` because the GL core's tests
 and the back end compare constants; the bodies need only loops and
 matches.
 
@@ -316,7 +326,15 @@ as `build_fragment_shader_packed` orders them (`assemble.rs:1689-1757`).
 `docs/notes/pvr-int-output-alu.md` section 3 holds: the packs read only the
 lanes a value has (lanes past the declared width repeat lane 0).
 
-### 3.2 The compiler's API (items `chain-core` and `chain-pack`)
+### 3.2 The compiler's API (items `chain-core` and `chain-pack`; pending)
+
+Not in the tree yet: `chain-core` is in review and `chain-pack` is to come,
+so `TargetOut`, `build_fragment_shader_targets`, `build_fragment_for_targets`
+and `BuiltFragment::target_regs` below are the design's names, not merged
+code. What exists today for the compiler's side is the pins of the programs
+that must not move (`tests/pvr_fragment_bytes_pin.rs`, section 6) and the
+host byte model that will run the mixed programs (`tests/usc_exec`, with
+`take_pixout_writes`).
 
 `chain-core`, written against the per-target keys of section 2.1 only:
 
@@ -384,25 +402,69 @@ with these strings:
 
 ## 4. The GL core (item `gl-key`)
 
-`current_blend_key` (`src/gl/draw.rs:1409-1462`) tries the mixed key
-**first**, before the integer branch: for a draw with several targets
-(`several_targets`, `draw.rs:1398-1403`), the per-target key of each draw
-buffer slot `resolve_targets` builds (`draw.rs:2499-2515`: slot `i` is
-attachment `frame_attachment + i`), from its format:
-`gles_surf_int_layout` -> `shc_blend_key_int_rt`, else
-`gles_surf_rt_class` -> `shc_blend_key_rt` for RGBA8, RGBA16F, R16F, R32F.
-An sRGB slot, a `GL_NONE` slot before the last target, or a list that is
-not a mix: no mixed key, the function goes on as today. The mixed key
-carries neither the blend state nor the colour mask: those are the back
-end's to refuse (section 5), so a blended or masked mix compiles the plain
-mixed program and is refused at the draw, by name, rather than drawn with
-a variant of attachment 0. The stencil-only `discard` override
-(`draw.rs:3792-3806`) replaces the key with attachment 0's KEEP key as
-today; such a draw is refused by the back end's fallback string.
+Merged: `src/gl/target_keys.rs` (`pub mod target_keys`, `src/gl/mod.rs`),
+not yet called by `current_blend_key`:
+
+```rust
+/// The per-target keys of the context's draw buffers, dense from the frame's
+/// own attachment, and how many; `None` for a gap, an sRGB target (no
+/// per-target key), more than `SHC_MIXED_MAX_TARGETS`, or no target.
+pub fn draw_target_keys(c: &GlContext) -> Option<([u32; SHC_MIXED_MAX_TARGETS], usize)>;
+
+/// `shc_blend_key_mixed` of `draw_target_keys`; `None` for one target, no
+/// integer target, one integer layout everywhere, or no keys.
+pub fn draw_mixed_key(c: &GlContext) -> Option<u32>;
+```
+
+Pending (`gl-key`): `current_blend_key` (`src/gl/draw.rs`, `fn
+current_blend_key(c: &GlContext) -> u32`) tries `draw_mixed_key` **first**,
+before the integer branch, for a draw with several targets
+(`several_targets`). Slot `i` is attachment `frame_attachment + i`
+(`resolve_targets`); its per-target key is `gles_surf_target_key(format)`
+(an integer format through `gles_surf_int_layout`, every other through
+`gles_surf_rt_class`). An sRGB slot, a `GL_NONE` slot before the last
+target, or a list that is not a mix: no mixed key, the function goes on as
+today. The mixed key carries neither the blend state nor the colour mask:
+those are the back end's to refuse (section 5), so a blended or masked mix
+compiles the plain mixed program and is refused at the draw, by name,
+rather than drawn with a variant of attachment 0. The stencil-only
+`discard` override replaces the key with attachment 0's KEEP key as today;
+such a draw is refused by the back end's fallback string.
+
+Pinned today: `tests/gl_blend_key_pin.rs` holds the keys of every draw that
+is not a mix (one target, several RGBA8 or sRGB, one integer layout), so
+`gl-key` must leave them unchanged. `tests/gles_surf_class_pin.rs` holds the
+format to class and layout map both sides read.
 
 ## 5. The back end (item `pvr-accept`)
 
-The block at `backend.rs:5848-5860` becomes, for a draw with more than one
+Merged: `src/pvr/target_keys.rs` (`pub mod target_keys`, `src/pvr/mod.rs`),
+the refusal lines and the per-draw key list, not yet called by
+`pvr_backend_draw`:
+
+```rust
+pub const REFUSE_GL_NONE: &str =
+    "yakogl/pvr: draw refused: a GL_NONE draw buffer between an integer colour attachment and another (not built)";
+pub const REFUSE_SRGB: &str =
+    "yakogl/pvr: draw refused: an SRGB8_ALPHA8 colour attachment beside an integer one (not built)";
+pub const REFUSE_FOUR_REGISTERS: &str =
+    "yakogl/pvr: draw refused: integer and other colour attachments past the pixel's four output registers";
+pub const REFUSE_NOT_A_MIX: &str =
+    "yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment";
+
+/// Err is one of the lines above, checked in the order GL_NONE gap, sRGB,
+/// four registers (more than three targets, or `shc_mixed_out_layout` None);
+/// a format without a per-target key gives REFUSE_NOT_A_MIX.
+pub fn draw_target_keys(d: &GlesDraw) -> Result<([u32; SHC_MIXED_MAX_TARGETS], usize), &'static str>;
+/// `shc_blend_key_mixed` of `draw_target_keys`; Err(REFUSE_NOT_A_MIX) when
+/// the list is not a mix.
+pub fn draw_mixed_key(d: &GlesDraw) -> Result<u32, &'static str>;
+```
+
+The GL side (`gl::target_keys::draw_mixed_key`) and this one are written
+separately; `target-keys-parity` is the item that ties them.
+
+Pending (`pvr-accept`, `pvr-clear-load`): the block at `backend.rs:5848-5860` becomes, for a draw with more than one
 target and an integer one among them:
 
 1. `several_int_targets_drawn(d, fs)`: drawn, unchanged.
@@ -450,12 +512,29 @@ and a host test checks `shc_target_key_dwords(key_of(fmt)) ==
 surf_out_dwords(fmt)` for every non-sRGB colour format, so the program's
 layout and the emit's cannot drift apart.
 
-## 6. Tests the later items add
+## 6. Tests
 
 Run each with the feature set in its header; for all of these it is
 `--no-default-features --features host-test,gpu-powervr,shaderc-online`.
 
-- **`src/shaderc/mod.rs` `key_tests`** (`design-key`): the four worked keys
+### 6.1 Pins already in the tree
+
+| file | holds |
+|---|---|
+| `src/target_key.rs` `tests` | the keys and layouts of sections 2.2 and 3 through the functions of section 2.5 |
+| `tests/pvr_mixed_key_spec.rs` | an independent model of sections 2.1-2.3 and 3, checked against the worked keys, `pvr::mrt_layout::layout` and the existing key shapes (it checks the model, not the real functions) |
+| `tests/pvr_mrt_layout_mesa.rs` | `mrt_layout::layout` against a port of Mesa's allocator: equal starts wherever both fit, the differences pinned (section 3: no back-filling) |
+| `tests/pvr_pbe_mixed_words.rs` | PBE STATE_WORD1 of the three mixes (RGBA8 + R32UI, RGBA8 + RG32UI, RGBA16F + R32UI + RGBA8) through csbgen against Mesa's field values |
+| `tests/usc_exec_writes.rs`, `tests/usc_exec_pck_model.rs` | the host byte model's ordered pixel-output write log and its half-float / coverage models, which the mixed program tests will read |
+| `tests/gl_blend_key_pin.rs` | the keys of draws that are not mixes (section 4) |
+| `tests/gles_surf_class_pin.rs` | the format to class and layout map behind `gles_surf_target_key` |
+| `tests/pvr_fragment_bytes_pin.rs` | the bytes of the single-class programs the mixed variant must not move (section 3.2) |
+| `tests/es3_pvr_mixed_shapes.rs` | what the compiler does today with the dEQP `fragment_out` / `modf` output shapes under keys 0 and the integer key |
+| `tests/es3_int_mixed_other_gpus.rs` | the V3D and GC7000UL handling of RGBA8 + R32UI and R32UI + R32I, which must not change |
+
+### 6.2 Pending
+
+- **`src/target_key.rs` `tests`** (`design-key`, merged): the four worked keys
   of section 2.2; the round trip; `None` for one target, for no integer
   target, for one layout everywhere, for a gap, for an invalid per-target
   key (a masked integer key, a blend key, the sRGB class), for a list past

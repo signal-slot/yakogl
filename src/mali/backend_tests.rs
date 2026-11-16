@@ -18,8 +18,8 @@ use crate::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use crate::testutil::OwnOsal;
 use std::sync::Mutex;
 
-const TRI_VS: &str = include_str!("../../tools/mali/testdata/tri.vert");
-const TRI_FS: &str = include_str!("../../tools/mali/testdata/tri.frag");
+pub(crate) const TRI_VS: &str = include_str!("../../tools/mali/testdata/tri.vert");
+pub(crate) const TRI_FS: &str = include_str!("../../tools/mali/testdata/tri.frag");
 const TV_VS: &str = include_str!("../../tools/mali/testdata/tri_varying.vert");
 const TV_FS: &str = include_str!("../../tools/mali/testdata/tri_varying.frag");
 
@@ -32,7 +32,7 @@ const GPU: OsalMaliGpu =
 const HEAP: OsalMaliHeap =
     OsalMaliHeap { ctx_gpu: 0x8000_0001_5000, first_chunk_gpu: 0x8000_00a0_0000, chunk_size: 2 << 20, reserved: 0 };
 
-struct Buf {
+pub(crate) struct Buf {
     id: usize,
     gpu: u64,
     size: usize,
@@ -51,11 +51,11 @@ enum Event {
 }
 
 #[derive(Default)]
-struct Mock {
+pub(crate) struct Mock {
     bufs: Vec<Buf>,
     allocs: usize,
     /// Each submit's stream VA and words, read from the buffer at that VA.
-    submits: Vec<(u64, Vec<u64>)>,
+    pub(crate) submits: Vec<(u64, Vec<u64>)>,
     events: Vec<Event>,
     fences: i64,
     /// The fences that completed: only the one a wait asked for, or one a
@@ -75,15 +75,15 @@ struct Mock {
 
 static MOCK: Mutex<Option<Mock>> = Mutex::new(None);
 
-fn with<R>(f: impl FnOnce(&mut Mock) -> R) -> R {
+pub(crate) fn with<R>(f: impl FnOnce(&mut Mock) -> R) -> R {
     f(MOCK.lock().unwrap_or_else(|e| e.into_inner()).as_mut().expect("the mock is installed"))
 }
 
 impl Mock {
-    fn find(&self, gpu: u64, len: usize) -> Option<&Buf> {
+    pub(crate) fn find(&self, gpu: u64, len: usize) -> Option<&Buf> {
         self.bufs.iter().find(|b| gpu >= b.gpu && gpu + len as u64 <= b.gpu + b.size as u64)
     }
-    fn read(&self, gpu: u64, len: usize) -> Vec<u8> {
+    pub(crate) fn read(&self, gpu: u64, len: usize) -> Vec<u8> {
         let b = self.find(gpu, len).unwrap_or_else(|| panic!("{len} bytes at {gpu:#x}: no buffer holds them"));
         // SAFETY: inside the buffer's words.
         let bytes = unsafe { core::slice::from_raw_parts(b.mem.as_ptr().cast::<u8>(), b.size) };
@@ -91,7 +91,7 @@ impl Mock {
         bytes[at..at + len].to_vec()
     }
     /// What a GPU writes: `bytes` at `gpu`.
-    fn write(&mut self, gpu: u64, bytes: &[u8]) {
+    pub(crate) fn write(&mut self, gpu: u64, bytes: &[u8]) {
         let len = bytes.len();
         let b = self.bufs.iter_mut().find(|b| gpu >= b.gpu && gpu + len as u64 <= b.gpu + b.size as u64);
         let b = b.unwrap_or_else(|| panic!("{len} bytes at {gpu:#x}: no buffer holds them"));
@@ -246,12 +246,12 @@ unsafe extern "C" fn m_init(_arg: *mut c_void) -> i32 {
 }
 
 /// The mock installed, the backend down, for the guard's life.
-struct Rig {
+pub(crate) struct Rig {
     _osal: OwnOsal,
 }
 
 impl Rig {
-    fn new(mali: bool) -> Rig {
+    pub(crate) fn new(mali: bool) -> Rig {
         let osal = OwnOsal::new(&OPS, &yakogl_backend_mali);
         *MOCK.lock().unwrap_or_else(|e| e.into_inner()) = Some(Mock { mali, ..Mock::default() });
         Rig { _osal: osal }
@@ -273,7 +273,7 @@ impl Drop for Rig {
 }
 
 /// A target buffer the GL core would own: 64x64 RGBA8.
-fn target() -> u64 {
+pub(crate) fn target() -> u64 {
     let mut t = OsalGpuMem::ZERO;
     // SAFETY: a valid out-parameter.
     assert_eq!(unsafe { m_alloc(0, 64 * 64 * 4, OSAL_MEM_DATA, &mut t) }, 0);
@@ -282,7 +282,7 @@ fn target() -> u64 {
 
 /// The board's triangle as the GL core resolves it: a 64x64 RGBA8 FBO
 /// cleared to blue, six vertices of one vec2 attribute at location 0.
-fn triangle(target_gpu: u64, vertices: &[f32; 12]) -> GlesDraw {
+pub(crate) fn triangle(target_gpu: u64, vertices: &[f32; 12]) -> GlesDraw {
     let mut d = GlesDraw::ZERO;
     d.target_gpu = target_gpu;
     d.target_w = 64;
@@ -311,10 +311,10 @@ fn triangle(target_gpu: u64, vertices: &[f32; 12]) -> GlesDraw {
     d
 }
 
-const VERTICES: [f32; 12] = [-1.0, -1.0, 0.0, -1.0, -1.0, 1.0, 0.0, -1.0, 0.0, 1.0, -1.0, 1.0];
+pub(crate) const VERTICES: [f32; 12] = [-1.0, -1.0, 0.0, -1.0, -1.0, 1.0, 0.0, -1.0, 0.0, 1.0, -1.0, 1.0];
 
 /// One draw or clear, then the flush that submits its frame.
-fn draw_flush(d: &GlesDraw) -> i32 {
+pub(crate) fn draw_flush(d: &GlesDraw) -> i32 {
     // SAFETY: a valid draw whose records the caller keeps.
     let rc = unsafe { mali_draw(d) };
     if rc != 0 {
@@ -325,7 +325,7 @@ fn draw_flush(d: &GlesDraw) -> i32 {
 
 /// Compile a vertex and a fragment shader with the Valhall back end into
 /// keep, and run `f` on the two records while keep holds them.
-fn with_programs<R>(vs: &str, fs: &str, f: impl FnOnce(&ShcShader, &ShcShader) -> R) -> R {
+pub(crate) fn with_programs<R>(vs: &str, fs: &str, f: impl FnOnce(&ShcShader, &ShcShader) -> R) -> R {
     let _k = store::test_keep();
     let one = |stage, src: &str| {
         store::with_scratch(|s| {
@@ -348,7 +348,7 @@ fn move48(w: u64) -> Option<(u32, u64)> {
 /// The 64-bit register pair `reg` as the moves before `RUN_IDVS` left it
 /// (a `MOVE48`, or the two `MOVE32`s `cs_move64_to` emits for a wider
 /// value); None when no move wrote it.
-fn reg_at_idvs(words: &[u64], reg: u32) -> Option<u64> {
+pub(crate) fn reg_at_idvs(words: &[u64], reg: u32) -> Option<u64> {
     let run = words.iter().position(|&w| matches!(Instr::decode(w), Ok(Instr::RunIdvs(_))))?;
     let mut r = [None::<u32>; 128];
     for &w in &words[..run] {
@@ -866,6 +866,8 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         let mut rgba16f_blend = blend;
         rgba16f_blend.target_format = backend::GLES_SURF_RGBA16F;
         let rgba16f_masked = state(|d| (d.target_format, d.color_mask) = (backend::GLES_SURF_RGBA16F, 0x7));
+        let mut rgb565_min = min_blend;
+        rgb565_min.target_format = backend::GLES_SURF_RGB565;
         let mut rgba16f_min = min_blend;
         rgba16f_min.target_format = backend::GLES_SURF_RGBA16F;
         let mut bad_blend = blend;
@@ -979,22 +981,19 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("a stencil test with a D24S8", why(&with_ds(stencil)), built),
             ("a D24S8 smaller than the target", why(&small_ds), not_built(NOT_BUILT_ZS_SIZE)),
             ("a fixed-function blend is built", why(&blend), built),
-            ("a min blend needs a blend shader", why(&min_blend), not_built(frame::NOT_BUILT_BLEND_SHADER)),
+            ("a min blend runs in Mesa's blend shader", why(&min_blend), built),
+            (
+                "a min blend into RGB565 needs a blend shader not built",
+                why(&rgb565_min),
+                not_built(frame::NOT_BUILT_BLEND_SHADER),
+            ),
             ("a constant colour of three values runs in a blend shader", why(&const_blend), built),
-            (
-                "a constant colour's blend shader through a colour mask",
-                why(&const_blend_masked),
-                not_built(frame::NOT_BUILT_BLEND_SHADER),
-            ),
+            ("a constant colour's blend shader through a colour mask", why(&const_blend_masked), built),
             ("case 211's constant colour at 4x runs in Mesa's blend shader", why(&const_blend_4x), built),
-            (
-                "case 211's 4x blend shader through a colour mask",
-                why(&const_blend_4x_masked),
-                not_built(frame::NOT_BUILT_BLEND_SHADER),
-            ),
+            ("case 211's 4x blend shader through a colour mask", why(&const_blend_4x_masked), built),
             ("case 190's GL_MIN column runs in Mesa's blend shader", why(&blend_190_3), built),
             ("case 190's ONE_MINUS_DST_ALPHA column runs in Mesa's blend shader", why(&blend_190_4), built),
-            ("case 190's GL_MIN column at 4x", why(&blend_190_3_4x), not_built(frame::NOT_BUILT_BLEND_SHADER)),
+            ("case 190's GL_MIN column at 4x runs in Mesa's blend shader", why(&blend_190_3_4x), built),
             ("a blend code that is not the core's", why(&bad_blend), invalid(INVALID_BLEND_CODE)),
             ("face culling", why(&cull), built),
             ("a cull code that is not the core's", why(&bad_cull), invalid(INVALID_CULL)),
@@ -1227,6 +1226,52 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         assert_eq!(got, not_built(NOT_BUILT_VERTEX_TEXTURES), "two vertex samplers");
         reached.push(NOT_BUILT_VERTEX_TEXTURES);
     });
+    /* a cube look-up (fstex_cube_whole: `textureCube(u_s, v_dir)`, its
+     * direction an attribute passed through): a complete cube of six faces
+     * is built; a unit with no texture, or an incomplete cube, would be GL's
+     * black texel as a 2D image under a `.cube` look-up, which has no
+     * reference: refused by name */
+    let cube_vs = "attribute vec4 a_pos; attribute vec3 a_dir; varying vec3 v_dir; \
+                   void main() { v_dir = a_dir; gl_Position = a_pos; }";
+    let cube_fs = include_str!("../../tools/mali/testdata/fstex_cube_whole.frag");
+    // SAFETY: a valid out-parameter.
+    assert_eq!(unsafe { m_alloc(0, 16 * 96 * 4, OSAL_MEM_DATA, &mut texels) }, 0);
+    with_programs(cube_vs, cube_fs, |vs, fs| {
+        let mut draw = base;
+        (draw.vs, draw.fs) = (vs, fs);
+        draw.num_attribs = 2;
+        draw.attribs[1] = GlesAttrib { vi_reg: 1, components: 3, cpu: uv.as_ptr().cast(), ..draw.attribs[0] };
+        draw.num_textures = 1;
+        draw.textures[0] = backend::GlesTextureBind {
+            unit: 0,
+            format: backend::GLES_TEXFMT_RGBA8,
+            type_: backend::GLES_TEXTYPE_CUBE,
+            layers: 6,
+            base_gpu: texels.gpu,
+            width: 16,
+            height: 96,
+            stride_texels: 16,
+            bytes: 16 * 96 * 4,
+            ..backend::GlesTextureBind::ZERO
+        };
+        let mut unbound = draw;
+        unbound.num_textures = 0;
+        let mut incomplete = draw;
+        incomplete.textures[0].incomplete = 1;
+        let cases: Vec<Case> = vec![
+            ("a complete cube map", why(&draw), built),
+            ("a cube look-up, no texture on its unit", why(&unbound), not_built(NOT_BUILT_CUBE_INCOMPLETE)),
+            ("a cube look-up, an incomplete cube map", why(&incomplete), not_built(NOT_BUILT_CUBE_INCOMPLETE)),
+        ];
+        for (what, got, want) in &cases {
+            assert_eq!(got, want, "{what}");
+            if let Err(Fail::Frame(FrameError::NotBuilt(l) | FrameError::Invalid(l))) = got {
+                reached.push(*l);
+            }
+        }
+    });
+    // SAFETY: the texels allocated above; no frame holds them now.
+    unsafe { m_free(&mut texels) };
     let lines = [
         NO_MALI_PROGRAM,
         INVALID_NO_TARGET,
@@ -1260,6 +1305,7 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         INVALID_TEXTURE_STORAGE,
         NOT_BUILT_TEXTURE_FEEDBACK,
         NOT_BUILT_VERTEX_TEXTURES,
+        NOT_BUILT_CUBE_INCOMPLETE,
         frame::INVALID_TEXTURE_ALIGN,
         frame::NOT_BUILT_TEXTURE_SIZE,
     ];
@@ -1369,8 +1415,50 @@ fn mesa_s_blend_shader_words_are_uploaded_where_the_descriptor_points() {
     });
 }
 
+/// A highp ES 3.00 colour reaches the blend shader as fp32 (Mesa keys the
+/// shader on the fragment shader's `blend[0].type`, pan_context.c:210-216:
+/// the fragment program's `BLEND.v4.f32` leaves r0-r3): a min blend's
+/// shader is Mesa's for an fp32 colour (`pan_shc --blend` with `f32`,
+/// tools/mali/testdata/blend_min_f32.words), not the mediump colour's.
+#[test]
+fn a_highp_colour_s_blend_shader_reads_it_as_fp32() {
+    const HIGHP_FS: &str =
+        "#version 300 es\nprecision highp float;\nout vec4 c;\nvoid main() { c = vec4(0.25, 0.5, 0.75, 1.0); }\n";
+    let want: Vec<u64> = include_str!("../../tools/mali/testdata/blend_min_f32.words")
+        .lines()
+        .map(|l| u64::from_str_radix(l.trim(), 16).expect("a hex word"))
+        .collect();
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = target();
+    with_programs(TRI_VS, HIGHP_FS, |vs, fs| {
+        let mut d = triangle(t, &VERTICES);
+        (d.vs, d.fs, d.blend) = (vs, fs, true);
+        (d.blend_eq_rgb, d.blend_eq_alpha) = (crate::shaderc::SHC_BLEND_MIN as u8, crate::shaderc::SHC_BLEND_MIN as u8);
+        let one = crate::shaderc::SHC_BF_ONE as u8;
+        (d.blend_src_rgb, d.blend_dst_rgb, d.blend_src_alpha, d.blend_dst_alpha) = (one, one, one, one);
+        assert_eq!(why(&d), Ok(()));
+        let before = with(|m| m.submits.len());
+        assert_eq!(draw_flush(&d), 0);
+        let stream = with(|m| m.submits[before..].last().expect("a frame").1.clone());
+        let blend_va = reg_at_idvs(&stream, 50).expect("a blend descriptor") & !63;
+        let bd = with(|m| m.read(blend_va, crate::mali::genxml::v10::Blend::LENGTH));
+        let pc = u64::from(u32::from_le_bytes(bd[12..16].try_into().unwrap()));
+        let code = with(|m| {
+            m.bufs
+                .iter()
+                .map(|b| (b.gpu & !0xffff_ffff) | pc)
+                .find(|&va| m.find(va, 8 * want.len()).is_some())
+                .map(|va| m.read(va, 8 * want.len()))
+        })
+        .expect("a buffer at the shader's address");
+        let got: Vec<u64> = code.chunks(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())).collect();
+        assert_eq!(got, want, "the fp32 colour's blend shader");
+    });
+}
+
 /// The registers each RUN_IDVS of a stream reads.
-fn regs_at_each_idvs(words: &[u64]) -> Vec<std::collections::BTreeMap<u32, u32>> {
+pub(crate) fn regs_at_each_idvs(words: &[u64]) -> Vec<std::collections::BTreeMap<u32, u32>> {
     let mut r = std::collections::BTreeMap::new();
     let mut out = Vec::new();
     for &w in words {
@@ -2290,6 +2378,76 @@ fn a_buffer_object_attribute_is_fetched_in_place() {
     unsafe { m_free(&mut vbo) };
 }
 
+/// A vertex shader that does not read the attribute at location 1 but
+/// reads locations 0 and 2 (tools/mali/testdata/vsattr_between: `p`, `a`,
+/// `b`, `a` unread) loads records 0 and 1, Mesa's numbering
+/// (docs/notes/mali-builtin-inputs.md, "Attribute records"). The draw
+/// carries all three locations, each its own buffer object, size, stride
+/// and offset: Attribute descriptor 0 and its Buffer are location 0's,
+/// descriptor 1 and its Buffer location 2's; location 1's array is in
+/// neither.
+#[test]
+fn a_draw_fills_the_attribute_records_of_the_locations_the_shader_reads() {
+    use crate::mali::genxml::v10::*;
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = target();
+    let mut vbo = OsalGpuMem::ZERO;
+    // SAFETY: a valid out-parameter.
+    assert_eq!(unsafe { m_alloc(0, 1024, OSAL_MEM_DATA, &mut vbo) }, 0);
+    let array = |loc: u8, comps: u8, at: u64, bytes: u64, offset: u32| GlesAttrib {
+        vi_reg: loc,
+        components: comps,
+        format: GLES_ATTRIBF_FLOAT32,
+        stride: 4 * u32::from(comps),
+        offset,
+        buffer_gpu: vbo.gpu + at,
+        buffer_bytes: bytes,
+        ..GlesAttrib::ZERO
+    };
+    let arrays = [array(0, 4, 0, 256, 16), array(1, 3, 256, 192, 12), array(2, 2, 512, 128, 8)];
+    let vs = include_str!("../../tools/mali/testdata/vsattr_between.vert");
+    let fs = include_str!("../../tools/mali/testdata/vsattr_between.frag");
+    let words = with_programs(vs, fs, |vs, fs| {
+        let mut d = triangle(t, &VERTICES);
+        (d.vs, d.fs) = (vs, fs);
+        d.num_attribs = 3;
+        d.attribs[..3].copy_from_slice(&arrays);
+        assert_eq!(draw_flush(&d), 0);
+        with(|m| m.submits.last().unwrap().1.clone())
+    });
+    let srt = reg_at_idvs(&words, 0).expect("the VS SRT") & !63;
+    let entry = |i: u64| u64::from_le_bytes(with(|m| m.read(srt + 16 * i, 8)).try_into().unwrap()) & ((1 << 56) - 1);
+    let (attrs, bufs) = (entry(1), entry(2));
+    for (record, a) in [(0usize, &arrays[0]), (1, &arrays[2])] {
+        let format = if a.components == 4 {
+            Format::RGBA32F.0 << 12 | RgbComponentOrder::RGBA.0
+        } else {
+            Format::RG32F.0 << 12 | RgbComponentOrder::RGB1.0
+        };
+        let want_attr = Attribute {
+            table: 2,
+            frequency: AttributeFrequency::VERTEX,
+            format,
+            offset: a.offset as i32,
+            buffer_index: record as u32,
+            stride: a.stride,
+            attribute_type: AttributeType::_1D,
+            offset_enable: true,
+            ..Default::default()
+        }
+        .pack()
+        .unwrap();
+        let at = |base: u64, len: usize| with(|m| m.read(base + (record * len) as u64, len));
+        assert_eq!(at(attrs, Attribute::LENGTH), want_attr, "record {record}'s Attribute");
+        let want_buf = Buffer { address: a.buffer_gpu, size: a.buffer_bytes as u32, ..Default::default() };
+        assert_eq!(at(bufs, Buffer::LENGTH), want_buf.pack().unwrap(), "record {record}'s Buffer");
+    }
+    assert_eq!(mali_finish(), 0);
+    // SAFETY: the buffer allocated above; its frame completed (finish).
+    unsafe { m_free(&mut vbo) };
+}
+
 /// A draw into another target ends the open frame: two frames, one per
 /// target, each submitted when it ends.
 #[test]
@@ -2405,7 +2563,7 @@ fn case_55s_draw_into_two_targets_is_mesa_s_frame() {
 
 /// The framebuffer descriptor RUN_FRAGMENT reads (d40's last value before
 /// it, its tag bits off).
-fn fbd_at_fragment(words: &[u64]) -> Option<u64> {
+pub(crate) fn fbd_at_fragment(words: &[u64]) -> Option<u64> {
     let run = words.iter().position(|&w| matches!(Instr::decode(w), Ok(Instr::RunFragment(_))))?;
     words[..run].iter().rev().filter_map(|&w| move48(w)).find(|(d, _)| *d == 40).map(|(_, v)| v & !63)
 }
@@ -4026,6 +4184,66 @@ mod gl {
         );
     }
 
+    /// A cube look-up through the GL core (gl_test's texcube pair,
+    /// tools/mali/testdata/fstex_cube_whole): with a complete 1x1 cube map
+    /// on unit 0 the draw is recorded (one `RUN_IDVS`); with face 5 never
+    /// specified the core marks the bind incomplete and the Mali draw
+    /// refuses it ([`NOT_BUILT_CUBE_INCOMPLETE`]): no `RUN_IDVS`, where a 2D
+    /// black texel through the cube descriptor would have been drawn.
+    #[test]
+    fn an_incomplete_cube_map_through_the_gl_core_is_refused_at_the_mali_draw() {
+        use crate::gl::program::{glGetAttribLocation, glGetUniformLocation, glUniform1i};
+        use crate::gl::texture::{glActiveTexture, glTexParameteri};
+        const QUAD: [f32; 12] = [-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
+        let vs = include_str!("../../tools/mali/testdata/fstex_cube_whole.vert");
+        let fs = include_str!("../../tools/mali/testdata/fstex_cube_whole.frag");
+        for faces in [6u32, 5] {
+            run_case(
+                vs,
+                fs,
+                &mut |p| {
+                    let texel = [0xffu8, 0, 0, 0xff];
+                    // SAFETY: plain GL calls; the arrays outlive the draw.
+                    unsafe {
+                        let mut tex = 0;
+                        glGenTextures(1, &mut tex);
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_CUBE_MAP, tex);
+                        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+                        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+                        for face in 0..faces {
+                            let target = GL_TEXTURE_CUBE_MAP_POSITIVE_X + face;
+                            let fmt = GL_RGBA;
+                            glTexImage2D(
+                                target,
+                                0,
+                                fmt as GLint,
+                                1,
+                                1,
+                                0,
+                                fmt,
+                                GL_UNSIGNED_BYTE,
+                                texel.as_ptr().cast(),
+                            );
+                        }
+                        glUniform1i(glGetUniformLocation(p, c"u_s".as_ptr()), 0);
+                        let loc = glGetAttribLocation(p, c"a_pos".as_ptr()) as GLuint;
+                        glEnableVertexAttribArray(loc);
+                        glVertexAttribPointer(loc, 2, GL_FLOAT, 0, 0, QUAD.as_ptr().cast());
+                        glDrawArrays(GL_TRIANGLES, 0, 6);
+                    }
+                },
+                |frames, _| {
+                    let draws: usize = frames
+                        .iter()
+                        .map(|f| f.iter().filter(|&&w| matches!(Instr::decode(w), Ok(Instr::RunIdvs(_)))).count())
+                        .sum();
+                    assert_eq!(draws, usize::from(faces == 6), "{faces} faces specified: the draws recorded");
+                },
+            );
+        }
+    }
+
     /// gl_test case 221 (instmix) through the GL core: the case's program
     /// (vsfma_221_instmix), a per-vertex vec4, a divisor-1 and a divisor-3
     /// float, 4 instances, as glDrawArraysInstanced and as
@@ -4107,6 +4325,79 @@ mod gl {
             );
         }
     }
+
+    /// A location Mesa numbers whose load its back end removes later keeps
+    /// its Attribute descriptor (docs/notes/mali-builtin-inputs.md,
+    /// "Attribute records"): tools/mali/testdata/vsattr_latefold reads `d`
+    /// only in `d * vec4(0.0, -0.0, 0.0, 0.0)`, which the code has no load
+    /// of, and Mesa's draw has three descriptors, `b` the third. Through the
+    /// GL API (glLinkProgram at the default locations, a buffer object per
+    /// array, each its own stride and offset, glDrawArrays): three
+    /// Attributes and three Buffers in the VS resource table, record `i`
+    /// from array `i`.
+    #[test]
+    fn a_gl_draw_keeps_the_descriptor_of_a_location_whose_load_folds_late() {
+        use crate::gl::buffer::{glBindBuffer, glBufferData, glGenBuffers};
+        use crate::gl::state::glFinish;
+        use crate::mali::genxml::v10::*;
+        const VS: &str = include_str!("../../tools/mali/testdata/vsattr_latefold.vert");
+        const FS: &str = include_str!("../../tools/mali/testdata/vsattr_latefold.frag");
+        let _rig = Rig::new(true);
+        assert_eq!(backend::init(), 0);
+        // SAFETY: the rig serialises the library; plain GL calls.
+        unsafe {
+            let ctx = context::gl_context_create(64, 64);
+            assert!(!ctx.is_null());
+            let p = glCreateProgram();
+            glAttachShader(p, shader(GL_VERTEX_SHADER, VS));
+            glAttachShader(p, shader(GL_FRAGMENT_SHADER, FS));
+            glLinkProgram(p);
+            let mut ok: GLint = 0;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+            assert_eq!(ok, 1, "vsattr_latefold links");
+            glUseProgram(p);
+            glViewport(0, 0, 64, 64);
+            let mut bufs = [0u32; 3];
+            glGenBuffers(3, bufs.as_mut_ptr());
+            let stride = |i: u32| 16 + 16 * i;
+            for (i, b) in (0u32..).zip(bufs) {
+                let data = vec![0u8; 256];
+                glBindBuffer(GL_ARRAY_BUFFER, b);
+                glBufferData(GL_ARRAY_BUFFER, data.len() as GLsizeiptr, data.as_ptr().cast(), GL_STATIC_DRAW);
+                glEnableVertexAttribArray(i);
+                glVertexAttribPointer(i, 4, GL_FLOAT, 0, stride(i) as GLsizei, (4 * i as usize) as *const _);
+            }
+            let before = with(|m| m.submits.len());
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR, "the draw");
+            let frames: Vec<Vec<u64>> = with(|m| m.submits[before..].iter().map(|s| s.1.clone()).collect());
+            assert_eq!(frames.len(), 1);
+            let srt = reg_at_idvs(&frames[0], 0).expect("the VS SRT") & !63;
+            let entry = |i: u64| with(|m| m.read(srt + 16 * i, 16));
+            let size = |e: Vec<u8>| u64::from_le_bytes(e[8..16].try_into().unwrap());
+            assert_eq!((size(entry(1)), size(entry(2))), (96, 96), "3 Attributes and 3 Buffers, 32 bytes each");
+            let attrs = u64::from_le_bytes(entry(1)[..8].try_into().unwrap()) & ((1 << 56) - 1);
+            for i in 0..3u32 {
+                let want = Attribute {
+                    table: 2,
+                    frequency: AttributeFrequency::VERTEX,
+                    format: Format::RGBA32F.0 << 12 | RgbComponentOrder::RGBA.0,
+                    offset: 4 * i as i32,
+                    buffer_index: i,
+                    stride: stride(i),
+                    attribute_type: AttributeType::_1D,
+                    offset_enable: true,
+                    ..Default::default()
+                }
+                .pack()
+                .unwrap();
+                let got = with(|m| m.read(attrs + u64::from(i) * Attribute::LENGTH as u64, Attribute::LENGTH));
+                assert_eq!(got, want, "record {i}'s Attribute is array {i}'s");
+            }
+            context::gl_context_destroy(ctx);
+        }
+    }
 }
 
 /// Each RUN_IDVS's index buffer (d54), in stream order.
@@ -4162,6 +4453,37 @@ fn staged_indices_are_the_draw_s_own_and_an_element_buffer_is_read_in_place() {
     assert_eq!(read(at[1]), bytes([5, 4, 3, 2, 1, 0]), "the second draw's own indices");
     assert!(at[0] != 0x61_0000 && at[1] != 0x61_0000 && at[0] != at[1], "copies, not the scratch");
     assert_eq!(at[2], 0x61_0000, "an element buffer, in place");
+}
+
+/// A refused draw writes one `yakogl-mali-refusal:` line with its reason; a
+/// second draw refused for the same reason with none recorded between writes
+/// none, and the next refusal after a recorded draw writes one again.
+#[test]
+fn a_refused_draw_logs_its_reason_once() {
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    REFUSAL_LINES.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    let lines = || REFUSAL_LINES.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let t = target();
+    let mut blend = triangle(t, &VERTICES);
+    blend.blend = true;
+    // SAFETY: a valid draw.
+    assert_eq!(unsafe { mali_draw(&blend) }, -ENOTSUP);
+    let first = lines();
+    assert_eq!(first.len(), 1, "{first:?}");
+    assert!(first[0].starts_with("yakogl-mali-refusal: -95 "), "{}", first[0]);
+    assert!(first[0].len() > "yakogl-mali-refusal: -95 ".len(), "the reason follows");
+    // SAFETY: as above.
+    assert_eq!(unsafe { mali_draw(&blend) }, -ENOTSUP);
+    assert_eq!(lines().len(), 1, "the same reason again: no new line");
+    let mut ok = triangle(t, &VERTICES);
+    ok.index_count = 0;
+    // SAFETY: as above.
+    assert_eq!(unsafe { mali_draw(&ok) }, 0);
+    // SAFETY: as above.
+    assert_eq!(unsafe { mali_draw(&blend) }, -ENOTSUP);
+    assert_eq!(lines().len(), 2, "after a recorded draw the refusal is logged again");
+    assert_eq!(lines()[1], first[0]);
 }
 
 /// The first reason is kept whole and a later one does not replace it: the

@@ -14,12 +14,18 @@
  *
  *   pan_shc vs.spv fs.spv [--gpu-id HEX] [--gpu-variant N]
  *           [--prim triangles|lines|points] > out.json 2> disasm.txt
+ *   pan_shc --blend [--gpu-id HEX] < keys > out.json 2> disasm.txt
+ *
+ * (--blend: Mesa's blend shader of each key, see "blend shaders" below.)
  *
  * stdout: the line "pan_shc: build <yakogl git describe> mesa <version>", then
  * one JSON object. stderr: the Valhall disassembly of every program region.
  *
  * Transcribed from Mesa 26.2.1 (MIT, Copyright Collabora, Arm, Intel and
- * others), each pass cited by file:line where it is called:
+ * others), each pass cited by file:line where it is called; --blend's
+ * lower_blend_constants from src/gallium/drivers/panfrost/pan_blend_cso.c
+ * (Copyright (C) 2018 Alyssa Rosenzweig, Copyright (C) 2019-2025 Collabora,
+ * Ltd.):
  *   - the GL front half, as in tools/v3d/v3d_shc.c, with panfrost's screen
  *     caps: src/mesa/main/glspirv.c _mesa_spirv_to_nir(),
  *     src/compiler/glsl/gl_nir_linker.c gl_nir_link_spirv(), preprocess_shader(),
@@ -55,6 +61,7 @@
 #include "util/u_math.h"
 
 #include "bifrost/valhall/disassemble.h"
+#include "lib/pan_blend.h"
 #include "lib/pan_earlyzs.h"
 #include "panfrost/model/pan_model.h"
 #include "pan_compiler.h"
@@ -996,10 +1003,174 @@ static void print_earlyzs(const struct pan_earlyzs_lut *lut)
 	printf("]");
 }
 
+
+/* ---- blend shaders ------------------------------------------------------ */
+
+/*
+ * pan_shc --blend: Mesa's blend shader for each equation read from stdin,
+ * one a line:
+ *
+ *   <rgb func> <rgb src> <rgb dst> <alpha func> <alpha src> <alpha dst> <mask> <samples> [f32|u32]
+ *
+ * funcs add, subtract, reverse_subtract, min, max; factors zero, one,
+ * src_color, src_alpha, dst_alpha, dst_color, src_alpha_saturate,
+ * const_color, const_alpha, each with an inv_ form (zero is inv_one); mask
+ * the colour mask (0-15); samples 1 or 4. The target is R8G8B8A8_UNORM and
+ * the fragment shader's colour fp16 (a mediump gl_FragColor, what a GLES 2
+ * draw hands the driver), fp32 with `f32` (a highp ES 3.00 `out vec4`,
+ * blend[0].type nir_type_float32), or uint32 with `u32` (a highp ES 3.00
+ * `out uvec4`, nir_type_uint32).
+ *
+ * Each equation is compiled as GENX(pan_blend_get_shader_locked) does
+ * (src/gallium/drivers/panfrost/pan_blend_cso.c:59-132): the key's state
+ * through GENX(pan_blend_create_shader) (src/panfrost/lib/pan_blend.c:
+ * 798-946), the constants lowered to the sysval UBO (pan_lower_blend_constants,
+ * :41-57, transcribed below), the inputs is_blend and the sysval UBO
+ * pushable, pan_preprocess_nir, pan_postprocess_nir, pan_shader_compile. The
+ * key holds no constant (:64-74), so none is set. src1_type is the one of an
+ * FS without a second colour (blend_src1_type 0), panfrost_get_blend's
+ * (src/gallium/drivers/panfrost/pan_context.c:212-216).
+ *
+ * stdout: one JSON object a line, the equation as given, work_reg_count and
+ * the words; stderr: "--- blend <line>" and the disassembly of each.
+ */
+nir_shader *pan_blend_create_shader_v10(const struct pan_blend_state *state, nir_alu_type src0_type,
+					nir_alu_type src1_type, unsigned rt);
+
+static bool blend_func(const char *s, enum pipe_blend_func *f)
+{
+	static const struct { const char *n; enum pipe_blend_func f; } t[] = {
+		{ "add", PIPE_BLEND_ADD }, { "subtract", PIPE_BLEND_SUBTRACT },
+		{ "reverse_subtract", PIPE_BLEND_REVERSE_SUBTRACT },
+		{ "min", PIPE_BLEND_MIN }, { "max", PIPE_BLEND_MAX },
+	};
+	for (unsigned i = 0; i < ARRAY_SIZE(t); i++)
+		if (strcmp(s, t[i].n) == 0) {
+			*f = t[i].f;
+			return true;
+		}
+	return false;
+}
+
+static bool blend_factor(const char *s, enum pipe_blendfactor *f)
+{
+	static const struct { const char *n; enum pipe_blendfactor f; } t[] = {
+		{ "one", PIPE_BLENDFACTOR_ONE }, { "zero", PIPE_BLENDFACTOR_ZERO },
+		{ "src_color", PIPE_BLENDFACTOR_SRC_COLOR },
+		{ "inv_src_color", PIPE_BLENDFACTOR_INV_SRC_COLOR },
+		{ "src_alpha", PIPE_BLENDFACTOR_SRC_ALPHA },
+		{ "inv_src_alpha", PIPE_BLENDFACTOR_INV_SRC_ALPHA },
+		{ "dst_alpha", PIPE_BLENDFACTOR_DST_ALPHA },
+		{ "inv_dst_alpha", PIPE_BLENDFACTOR_INV_DST_ALPHA },
+		{ "dst_color", PIPE_BLENDFACTOR_DST_COLOR },
+		{ "inv_dst_color", PIPE_BLENDFACTOR_INV_DST_COLOR },
+		{ "src_alpha_saturate", PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE },
+		{ "const_color", PIPE_BLENDFACTOR_CONST_COLOR },
+		{ "inv_const_color", PIPE_BLENDFACTOR_INV_CONST_COLOR },
+		{ "const_alpha", PIPE_BLENDFACTOR_CONST_ALPHA },
+		{ "inv_const_alpha", PIPE_BLENDFACTOR_INV_CONST_ALPHA },
+	};
+	for (unsigned i = 0; i < ARRAY_SIZE(t); i++)
+		if (strcmp(s, t[i].n) == 0) {
+			*f = t[i].f;
+			return true;
+		}
+	return false;
+}
+
+/* pan_blend_cso.c:41-57 */
+static bool lower_blend_constants(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+	if (intr->intrinsic != nir_intrinsic_load_blend_const_color_rgba)
+		return false;
+	b->cursor = nir_before_instr(&intr->instr);
+	nir_def *constant = nir_load_ubo(b, 4, 32, nir_imm_int(b, PAN_UBO_SYSVALS), nir_imm_int(b, 0),
+					 .align_mul = 4, .align_offset = 0, .range_base = 0,
+					 .range = 4);
+	nir_def_replace(&intr->def, constant);
+	return true;
+}
+
+static int blend_main(uint64_t gpu_id, uint32_t gpu_variant)
+{
+	char line[512];
+	unsigned n = 0;
+	while (fgets(line, sizeof(line), stdin)) {
+		line[strcspn(line, "\n")] = 0;
+		if (line[0] == 0 || line[0] == '#')
+			continue;
+		char rf[32], rs[32], rd[32], af[32], as[32], ad[32], ty[32] = "";
+		unsigned mask, samples;
+		struct pan_blend_equation eq = { .blend_enable = 1 };
+		enum pipe_blend_func rgb_func, alpha_func;
+		enum pipe_blendfactor f[4];
+		int fields = sscanf(line, "%31s %31s %31s %31s %31s %31s %u %u %31s", rf, rs, rd, af, as,
+				    ad, &mask, &samples, ty);
+		nir_alu_type src0_type = nir_type_float16;
+		if (fields == 9 && strcmp(ty, "f32") == 0)
+			src0_type = nir_type_float32;
+		else if (fields == 9 && strcmp(ty, "u32") == 0)
+			src0_type = nir_type_uint32;
+		if ((fields != 8 && !(fields == 9 && src0_type != nir_type_float16)) ||
+		    !blend_func(rf, &rgb_func) || !blend_func(af, &alpha_func) ||
+		    !blend_factor(rs, &f[0]) || !blend_factor(rd, &f[1]) ||
+		    !blend_factor(as, &f[2]) || !blend_factor(ad, &f[3]) || mask == 0 || mask > 15 ||
+		    (samples != 1 && samples != 4)) {
+			fprintf(stderr, "pan_shc: not an equation: '%s'\n", line);
+			return 2;
+		}
+		eq.rgb_func = rgb_func;
+		eq.rgb_src_factor = f[0];
+		eq.rgb_dst_factor = f[1];
+		eq.alpha_func = alpha_func;
+		eq.alpha_src_factor = f[2];
+		eq.alpha_dst_factor = f[3];
+		eq.color_mask = mask;
+		struct pan_blend_state state = { .rt_count = 1 };
+		state.rts[0].format = PIPE_FORMAT_R8G8B8A8_UNORM;
+		state.rts[0].nr_samples = samples;
+		state.rts[0].equation = eq;
+
+		/* pan_blend_cso.c:94-125 */
+		nir_shader *nir = pan_blend_create_shader_v10(
+			&state, src0_type, 0, 0);
+		nir->info.num_ubos = PAN_UBO_SYSVALS + 1;
+		nir_shader_intrinsics_pass(nir, lower_blend_constants, nir_metadata_control_flow,
+					   NULL);
+		struct pan_compile_inputs inputs = {
+			.gpu_id = gpu_id,
+			.gpu_variant = gpu_variant,
+			.is_blend = true,
+			.fau.pushable_ubos = BITFIELD_BIT(PAN_UBO_SYSVALS),
+		};
+		struct pan_shader_info info;
+		pan_preprocess_nir(nir, inputs.gpu_id);
+		pan_postprocess_nir(nir, &inputs, &info);
+		struct util_dynarray binary;
+		util_dynarray_init(&binary, NULL);
+		pan_shader_compile(nir, &inputs, &binary, &info);
+
+		printf("{ \"equation\": \"%s\", \"work_reg_count\": %u, \"words\": [", line,
+		       info.work_reg_count);
+		const uint64_t *w = binary.data;
+		for (unsigned i = 0; i < binary.size / 8; i++)
+			printf("%s\"%016" PRIx64 "\"", i ? ", " : "", w[i]);
+		printf("] }\n");
+		fprintf(stderr, "--- blend %s\n", line);
+		disassemble_valhall(stderr, binary.data, binary.size, true);
+		util_dynarray_fini(&binary);
+		ralloc_free(nir);
+		n++;
+	}
+	fflush(stdout);
+	return n ? 0 : 2;
+}
+
 static int usage(void)
 {
 	fprintf(stderr, "usage: pan_shc vs.spv fs.spv [--gpu-id HEX] [--gpu-variant N] "
-			"[--prim triangles|lines|points]\n");
+			"[--prim triangles|lines|points]\n"
+			"       pan_shc --blend [--gpu-id HEX] < equations\n");
 	return 2;
 }
 
@@ -1009,6 +1180,20 @@ int main(int argc, char **argv)
 	printf("pan_shc: build %s mesa %s\n", PAN_SHC_YAKOGL_DESCRIBE, PACKAGE_VERSION);
 	fflush(stdout);
 
+	if (argc >= 2 && strcmp(argv[1], "--blend") == 0) {
+		uint64_t gpu_id = 0xa8670005;
+		if (argc == 4 && strcmp(argv[2], "--gpu-id") == 0)
+			gpu_id = strtoull(argv[3], NULL, 16);
+		else if (argc != 2)
+			return usage();
+		/* the blend shader builder is per arch; the v10 one is linked */
+		if (pan_arch(gpu_id) != 10) {
+			fprintf(stderr, "pan_shc: --blend builds arch 10 (Mali-G610) programs only\n");
+			return 2;
+		}
+		glsl_type_singleton_init_or_ref();
+		return blend_main(gpu_id, 0);
+	}
 	if (argc < 3)
 		return usage();
 

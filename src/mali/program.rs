@@ -118,7 +118,11 @@ impl StageMeta {
             };
         }
         let generic = record.varyings.iter().filter(|v| v.section == Section::Generic);
-        let varyings = generic.clone().count() as u32;
+        /* a vertex row of no component is a placeholder (every lane folded to
+         * a constant Mesa's link moves into the fragment shader; the layout
+         * writes nothing for it): not a varying written, as
+         * pan_nir_collect_varyings.c counts only the slots it stores */
+        let varyings = generic.clone().filter(|v| stage == ShaderStage::FRAGMENT || v.comps != 0).count() as u32;
         let varying_bytes = if stage == ShaderStage::VERTEX {
             generic.map(|v| u32::from(v.offset) + 4 * u32::from(v.comps)).max().unwrap_or(0)
         } else {
@@ -194,3 +198,7 @@ pub unsafe fn code_bytes(sh: &ShcShader) -> Result<&[u8], FrameError> {
     // SAFETY: the caller's contract.
     Ok(unsafe { core::slice::from_raw_parts(sh.usc.cast::<u8>(), 4 * sh.usc_dw as usize) })
 }
+
+#[cfg(test)]
+#[path = "program_tests.rs"]
+mod tests;

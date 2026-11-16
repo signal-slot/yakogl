@@ -14,9 +14,10 @@
 //!
 //! - the framebuffer is complete with the format as a renderbuffer colour
 //!   attachment. A **texture** of the format is stored (the GC
-//!   mask holds the four classes, gc-r32-flip), but as a colour attachment it
-//!   is GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT until the GL core's
-//!   `integer_texture_surface` has rows for them (item gl-r32-surface; RC17,
+//!   mask holds the four classes, gc-r32-flip) and, since the GL core's
+//!   `integer_texture_surface` has rows for them (gl-r32-surface, `6c5b004f`),
+//!   it is a GL_FRAMEBUFFER_COMPLETE colour attachment too, and a
+//!   glClearBuffer{i,ui}v into it reads back bit-exact (RC17,
 //!   fbo.completeness `renderable.texture.*32*`);
 //! - a draw and a glClearBuffer{i,ui}v emit the whole PE_COLOR_FORMAT word
 //!   (FORMAT_EXT, FORMAT_MASK, FORMAT_EXT's own write mask clear; a draw
@@ -596,9 +597,12 @@ fn a_renderbuffer_of_each_is_a_complete_colour_attachment() {
 /// glTexImage2D and glTexStorage2D raise nothing and the attachment is made.
 /// The framebuffer is complete: `integer_texture_surface`
 /// (src/gl/framebuffer.rs) has a surface for each of the four (RC17, dEQP
-/// fbo.completeness `renderable.texture.*32*`).
+/// fbo.completeness `renderable.texture.*32*`). A glClearBuffer{i,ui}v into the
+/// texture-backed target (values above 2^24, negative for the signed formats)
+/// reads back bit for bit through glReadPixels(GL_RGBA_INTEGER).
 #[test]
 fn a_texture_of_each_is_stored_and_a_complete_attachment() {
+    let (w, h) = (16, 16);
     for t in &INT32 {
         on_gc7000(|| {
             let name = t.name();
@@ -621,12 +625,19 @@ fn a_texture_of_each_is_stored_and_a_complete_attachment() {
                 glBindFramebuffer(GL_FRAMEBUFFER, fb);
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[1], 0);
                 assert_eq!(glGetError(), GL_NO_ERROR, "{name}: the attachment itself");
+                let buf = GL_COLOR_ATTACHMENT0;
+                glDrawBuffers(1, &buf);
                 assert_eq!(
                     glCheckFramebufferStatus(GL_FRAMEBUFFER),
                     GL_FRAMEBUFFER_COMPLETE,
                     "{name}: a texture has its own surface class (RC17)"
                 );
             }
+            let c = t.colour();
+            with_platform(|p| p.model = Some((w, h, t.bytes(), t.pixel(c))));
+            let (e, _) = clear(t, c);
+            assert_eq!(e, GL_NO_ERROR, "{name}: glClearBuffer into the texture");
+            assert_read_back(t, w, h, c);
         });
     }
 }

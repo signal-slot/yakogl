@@ -195,7 +195,7 @@ BOARD_HOST=root@<t6> tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR \
 | option | meaning |
 |---|---|
 | `--build DIR` | a build directory with `deqp-gles2`, `data/` (holding `gles2/`), `build.txt` with a `commit=<hex>` line, and `lib/` with `libGLESv2.so.2` and `libEGL.so.1` |
-| `--out SLICEDIR` | where the slice is written; must be absent or empty (a slice is never overwritten) |
+| `--out SLICEDIR` | where the slice is written; must be absent or empty (a slice is never overwritten) and must not be the raw log directory (`RAW_DIR`, below) |
 | `--rows A-B` | the tree rows to run, 1-based, inclusive; outside the table is refused |
 | `--tree FILE` | the tree table (default `tools/cts/mali-gles2-tree.txt`) |
 | `--session S` | `S1`, `S2`, `S3`, `S4`, `smoke` or `adhoc` (default), recorded in `meta.txt` |
@@ -254,7 +254,8 @@ filter that matches no case or a wrong count shows here, without a board.
 ### What a real run does
 
 1. **Refusals before the board is touched**: a missing or incomplete build
-   directory, a `build.txt` without `commit=<hex>`, a non-empty `--out`, and a
+   directory, a `build.txt` without `commit=<hex>`, an `--out` that is also the
+   raw log directory, a non-empty `--out`, and a
    build commit that is not an ancestor of `origin/main` (exit 6): every
    result is built from one origin/main commit. Then `BOARD_HOST` must be set.
 2. **The board lock**: sourced from `driver/tools/kexec-zephyr/board_lock.sh`,
@@ -310,7 +311,7 @@ markers), or `lost`.
 | code | meaning |
 |---|---|
 | 0 | every chunk ran, whatever dEQP said (read the slice) |
-| 1 | usage, or a refusal before the board (missing build, tree or mustpass, non-empty `--out`) |
+| 1 | usage, or a refusal before the board (missing build, tree or mustpass, non-empty `--out`, `--out` equal to the raw log directory) |
 | 3 | `/dev/dri/renderD128` is held by a process |
 | 4 | the board or its tools: missing `fuser`/`dmesg`/`setsid`/`timeout`, ssh failed, no space, staging failed |
 | 6 | the build's commit is not on origin/main |
@@ -333,7 +334,9 @@ user, and `YAKOGL_REDACTION_PRIVATE`/`_FILE`):
 | `meta.txt` | `key=value`, in this order: `commit` (full), `session`, `rows`, `tree`, `boot_id_before`, `boot_id_after`, `kernel`, `lib`, `started`, `ended`. `boot_id_after` is `unreachable` or `unknown` when the board was lost |
 | `chunks.tsv` | header `row label cases status seconds kmsg resets ssh_after boot_same exit_line`; one row per tree row of the plan; `-` where unknown (a chunk never run, a lost capture); `exit_line` is the last `yakogl-mali-exit:` line, whitespace folded |
 | `results.tsv` | header `case status detail`; one row per case of the plan: dEQP's status (`Pass`, `Fail`, `NotSupported`, ...) and its Result text, or `Lost` with the reason above |
+| `refusals.tsv` | header `case refusal`; one row per case whose log holds one: the first shader or program info log in which the library refuses (`... refused this fragment shader: Mali(...)`), whitespace folded. `exit_line` of `chunks.tsv` names only the chunk's first refusal; this file names each case's own |
 | `kmsg/<label>.txt` | the kernel lines between the chunk's markers (or `# kernel capture unavailable: ...`) |
+| `<file>.license` | beside each file above: the licence of our results, so the slice is committed as written |
 
 The raw logs (every process's `.qpa`, stdout, stderr, and the whole dmesg
 capture) go to `RAW_DIR`, default `build/mali-deqp-run/<slice name>/` (ignored
@@ -365,8 +368,8 @@ tools/cts/mali-deqp-selftest.sh
 ```
 
 Host only, about 20 s (the hang waits for a 2 s timeout); prints a line per
-check and ends `mali-deqp-selftest: 26 checks passed` (run on the tip:
-26 passed, 0 failed). A fake `ssh` and `scp` on `PATH` run the board's side in
+check and ends `mali-deqp-selftest: N checks passed` (N is pinned in the
+script). A fake `ssh` and `scp` on `PATH` run the board's side in
 a directory of this host, and a fake `deqp-gles2` writes its `.qpa` from
 `tools/cts/testdata/mali-deqp-run/` (its README says what each fixture is).
 The cases: a clean run (16 Pass, 1 Fail, slice format, redaction, the stage
@@ -449,24 +452,34 @@ slices of section 4:
 - `--check-cover MUSTPASS SLICE...` exits 0 only when every mustpass case is
   in exactly one slice with a status (`Lost` with one of `chunk-crash`,
   `chunk-hang`, `board-lost`, `not-run`), every `chunks.tsv` row has its
-  `kmsg`, `resets`, `ssh_after` and `boot_same` fields, and every slice's
+  `kmsg`, `resets`, `ssh_after` and `boot_same` fields, every `refusals.tsv`
+  row names once a case of its slice's `results.tsv` that is not `Lost`
+  (`RULE refusal-case`), and every slice's
   `commit` is an ancestor of `origin/main` (`--no-git` skips that, for
   fixtures; `--main-ref` names another ref).
 - `--tally [--markdown] SLICE...` prints the counts by status and the non-Pass
-  counts by cause: the detail with numbers and case names stripped, or
-  `refused:<name>` when the detail or the chunk's exit line names a back-end
-  refusal. `--markdown` prints the table that goes into
+  counts by cause. In a slice with `refusals.tsv` the cause of a case is its
+  own refusal when the file names it (`refused, <vertex|fragment> shader:
+  <why>`), else the detail with numbers and case names stripped. In an older
+  slice without the file the tally can only take the refusal of the chunk's
+  exit line (`refused:<name>`) for all non-Pass cases of the chunk.
+  `--markdown` prints the table that goes into
   `docs/es2-cts-failures.md` between `<!-- mali-deqp-tally begin -->` and
   `<!-- mali-deqp-tally end -->`.
 - `--check-doc DOC SLICE...` exits 0 only when that block equals the
-  `--markdown` output.
+  `--markdown` output. `--check-doc DOC --log LOGDIR` takes the slices from
+  the block's own `Slices:` line, as directories of `LOGDIR`; a block
+  without that line fails (`RULE doc-slices`). The gate runs this form on
+  the real document: the `tools/check.sh` row `es2-cts-failures.md's Mali
+  block equals the tally of its slices`, reached by a change to the
+  document, the slices or the tally.
 
 Commands and expected output, run on a host with no board, on the synthetic
 slices of `tools/cts/testdata/mali-deqp/good/` (two slices, eight cases, a toy
 mustpass list; `--no-git` because their commit is not on main):
 
 ```sh
-python3 -I tools/cts/mali-deqp-tally.py --self-test     # ends: 22 checks passed
+python3 -I tools/cts/mali-deqp-tally.py --self-test     # ends: N checks passed
 python3 -I tools/cts/mali-deqp-tally.py --check-cover tools/cts/testdata/mali-deqp/mustpass.txt \
     --no-git tools/cts/testdata/mali-deqp/good/*         # no output, exit 0
 python3 -I tools/cts/mali-deqp-tally.py --tally --no-git tools/cts/testdata/mali-deqp/good/*
@@ -507,8 +520,9 @@ python3 -I tools/cts/mali-deqp-tally.py --tally --markdown S1 S2 S3 S4   # the b
 python3 -I tools/cts/mali-deqp-tally.py --check-doc docs/es2-cts-failures.md S1 S2 S3 S4
 ```
 
-The first must print nothing. `docs/es2-cts-failures.md` has no tally block
-yet; the first real tally adds it.
+The first must print nothing. A new whole tree replaces the block of
+`docs/es2-cts-failures.md` section M with the third command's output, and
+the text around it; the last command, or the gate row, then exits 0.
 
 `tools/cts/mali-deqp-tally-selftest.sh` runs `--self-test` on the synthetic
 slices of `tools/cts/testdata/mali-deqp/` and pins its count of passed checks;

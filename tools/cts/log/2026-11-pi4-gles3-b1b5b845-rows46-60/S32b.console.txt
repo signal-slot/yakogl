@@ -1,0 +1,455 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-15, image S32b: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.05 [sdcard] pieeprom.upd not found
+  5.06 [sdcard] recover4.elf not found
+  5.06 [sdcard] recovery.elf not found
+  5.92 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.98 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.00 0x00d03114 0x00000000 0x00001fff
+  5.03 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.40 Starting start4.elf @ 0xfec00200 partition 1
+  5.24 XHCI-STOP
+  5.24 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.24 USBSTS 18
+  5.25 PCI0 reset
+  5.26 +
+
+MESS:00:00:05.274439:0: arasan: arasan_emmc_open
+MESS:00:00:05.276097:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.396324:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.409193:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.443480:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.444893:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.449276:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.613861:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.616669:0: brfs: File read: 71 bytes
+MESS:00:00:05.709374:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.713876:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.730295:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.196316:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.201871:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.210908:0: *** Restart logging
+MESS:00:00:06.212680:0: brfs: File read: 71 bytes
+MESS:00:00:06.291116:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.296148:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.309183:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.318503:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.322327:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.331082:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.336573:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.358518:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.373905:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.377191:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.418344:0: brfs: File read: 56249 bytes
+MESS:00:00:06.439061:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.503934:0: brfs: File read: 5971 bytes
+MESS:00:00:06.510414:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.551492:0: brfs: File read: 71 bytes
+MESS:00:00:06.555475:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.558563:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.564414:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.720874:0: brfs: File read: 145 bytes
+MESS:00:00:08.119196:0: brfs: File read: /mfs/sd/yakogl-S32b.bin
+MESS:00:00:08.122115:0: Loaded 'yakogl-S32b.bin' to 0x200000 size 0xfc8dc0
+MESS:00:00:08.128727:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.137507:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.144034:0: uart: Baud rate change done...
+MESS:00:00:08.146053:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f0b000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment
+v3d_deqp: case #0 F 414ms k2/9 c15532/15680 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex
+v3d_deqp: case #1 F 42ms k2/9 c15532/15680 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment
+v3d_deqp: case #2 F 45ms k2/9 c15532/15680 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex
+v3d_deqp: case #3 F 43ms k2/9 c15532/15680 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment
+v3d_deqp: case #4 F 43ms k2/9 c15532/15680 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex
+v3d_deqp: case #5 F 42ms k2/9 c15532/15680 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_fragment'..
+  cube-bind: 0x102b200 unit 0 kick 109 (draw)
+  cube(draw) @0x102b200 1x1 x6: fmt 17, cpu 0x1e12a200 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 110 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 111 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 112 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 113 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 114 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 117 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_fragment
+v3d_deqp: case #6 F 105ms k2/9 c15532/15773 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_vertex'..
+  cube-bind: 0x102b200 unit 0 kick 147 (draw)
+  cube(draw) @0x102b200 1x1 x6: fmt 17, cpu 0x1e12a200 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 148 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 149 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 150 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 151 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 152 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 155 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 17, cpu 0x1e1b0000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_vertex
+v3d_deqp: case #7 F 107ms k2/9 c15532/15773 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_fragment'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_fragment
+v3d_deqp: case #8 F 43ms k2/9 c15532/15773 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_vertex'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_vertex
+v3d_deqp: case #9 F 44ms k2/9 c15532/15773 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_fragment'..
+yakogl/v3d: tiled copies high-water 135168 of 16777216 bytes
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_fragment
+v3d_deqp: case #10 F 51ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_vertex'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_vertex
+v3d_deqp: case #11 F 47ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment
+v3d_deqp: case #12 F 46ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex
+v3d_deqp: case #13 F 44ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment
+v3d_deqp: case #14 F 45ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex
+v3d_deqp: case #15 F 45ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment
+v3d_deqp: case #16 F 45ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex
+v3d_deqp: case #17 F 44ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment
+v3d_deqp: case #18 F 44ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex
+v3d_deqp: case #19 F 44ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment
+v3d_deqp: case #20 F 43ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex
+v3d_deqp: case #21 F 44ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_fragment'..
+  cube-bind: 0x102b200 unit 0 kick 347 (draw)
+  cube(draw) @0x102b200 1x1 x6: fmt 0, cpu 0x1e12a200 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 348 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 349 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 350 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 351 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 352 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 355 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_fragment
+v3d_deqp: case #22 F 106ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_vertex'..
+  cube-bind: 0x102b200 unit 0 kick 385 (draw)
+  cube(draw) @0x102b200 1x1 x6: fmt 0, cpu 0x1e12a200 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 386 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 387 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 388 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 389 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 390 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 393 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 0, cpu 0x1e1b0000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_vertex
+v3d_deqp: case #23 F 107ms k2/9 c15532/15811 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_fragment'..
+  cube-bind: 0x102b200 unit 0 kick 423 (draw)
+  cube(draw) @0x102b200 1x1 x6, chain 1, written 1, max_level 12
+  cube(draw) level 0 (1x1 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x10b1000 unit 0 kick 424 (draw)
+  cube(draw) @0x10b1000 64x64 x6, chain 7, written 1, max_level 12
+  cube(draw) level 0 (64x64 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 1 (32x32 @0x30000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (16x16 @0x3c000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (8x8 @0x3f000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x3fc00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x3ff00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x3ffc0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x10b1000 unit 0 kick 425 (draw)
+  cube-bind: 0x10b1000 unit 0 kick 426 (draw)
+  cube-bind: 0x10b1000 unit 0 kick 427 (draw)
+  cube-bind: 0x10b1000 unit 0 kick 428 (draw)
+  cube(draw) @0x10b1000 64x64 x6, chain 7, written 1, max_level 12
+  cube(draw) level 0 (64x64 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 1 (32x32 @0x30000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (16x16 @0x3c000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (8x8 @0x3f000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x3fc00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x3ff00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x3ffc0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x10b1000 unit 0 kick 431 (draw)
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_fragment
+v3d_deqp: case #24 F 190ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_vertex'..
+  cube-bind: 0x102b200 unit 0 kick 461 (draw)
+  cube(draw) @0x102b200 1x1 x6, chain 1, written 1, max_level 12
+  cube(draw) level 0 (1x1 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x10b1000 unit 0 kick 462 (draw)
+  cube(draw) @0x10b1000 64x64 x6, chain 7, written 1, max_level 12
+  cube(draw) level 0 (64x64 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 1 (32x32 @0x30000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (16x16 @0x3c000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (8x8 @0x3f000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x3fc00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x3ff00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x3ffc0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x10b1000 unit 0 kick 463 (draw)
+  cube-bind: 0x10b1000 unit 0 kick 464 (draw)
+  cube-bind: 0x10b1000 unit 0 kick 465 (draw)
+  cube-bind: 0x10b1000 unit 0 kick 466 (draw)
+  cube(draw) @0x10b1000 64x64 x6, chain 7, written 1, max_level 12
+  cube(draw) level 0 (64x64 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 1 (32x32 @0x30000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (16x16 @0x3c000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (8x8 @0x3f000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x3fc00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x3ff00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x3ffc0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x10b1000 unit 0 kick 469 (draw)
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_vertex
+v3d_deqp: case #25 F 190ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_fragment'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_fragment
+v3d_deqp: case #26 F 43ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_vertex'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_vertex
+v3d_deqp: case #27 F 42ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment
+v3d_deqp: case #28 F 44ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex
+v3d_deqp: case #29 F 44ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment
+v3d_deqp: case #30 F 43ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex
+v3d_deqp: case #31 F 42ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex
+  Fail (Shader failed)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment'..
+  cube-bind: 0x102b200 unit 0 kick 579 (draw)
+  cube(draw) @0x102b200 1x1 x6: fmt 16, cpu 0x1e12a200 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 580 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 581 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 582 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 583 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 584 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 587 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment
+v3d_deqp: case #32 F 105ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex'..
+  cube-bind: 0x102b200 unit 0 kick 617 (draw)
+  cube(draw) @0x102b200 1x1 x6: fmt 16, cpu 0x1e12a200 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 618 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 619 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 620 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 621 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 622 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+  cube-bind: 0x10b1000 unit 0 kick 625 (draw)
+  cube(draw) @0x10b1000 64x64 x6: fmt 16, cpu 0x1e1b0000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex
+v3d_deqp: case #33 F 107ms k2/9 c15532/15997 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex
+  Fail (Got unexpected texture size)
+
+DONE!
+
+Test run totals:
+  Passed:        0/34 (0.0%)
+  Failed:        34/34 (100.0%)
+  Not supported: 0/34 (0.0%)
+  Warnings:      0/34 (0.0%)
+  Waived:        0/34 (0.0%)
+deqp: done: 0 passed, 34 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 34 cases begun, 34 with a result, 0 without
+v3d_deqp DONE: build b1b5b845, filter 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment,dEQP-GLES3.functional.shaders.texture...
+  34 cases in 2533 ms, record at 2 s after boot, reset at ~250 s
+  totals: F 34  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 0 passed, 34 failed, 0 not supported, 0 warnings, complete=1
+  summary: 34 cases begun, 34 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 9, before #0 (first not passed) 0; slowest #0 414 ms
+  carve-out (KiB, of 48636): after #0 15532, last 15532, high-water 15997
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 626 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15377152 bytes used now, 16381696 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 739 calls, 57347 map reads (77 a call, at most 1153 in one); free runs 2, longest 34425088 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 626 jobs ended; emitted 6880, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f0b000, GPU VA 0x181000..0x3100000
+driver: ... 25 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  texturesize                                                34 F34                    18x ~ fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+                                                                                       16x Got unexpected texture size
+    0 F isampler2d_fragment                              414ms k2/9 c15532/15680         Got unexpected texture size
+    1 F isampler2d_vertex                                42ms k2/9 c15532/15680          Got unexpected texture size
+    2 F isampler2darray_fragment                         45ms k2/9 c15532/15680          ~ + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+    3 F isampler2darray_vertex                           43ms k2/9 c15532/15680          ~ + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+    4 F isampler3d_fragment                              43ms k2/9 c15532/15680          ~ + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+    5 F isampler3d_vertex                                42ms k2/9 c15532/15680          ~ + fragment): Program(NotYet("textureSize of a 3D or array sampler"))
+    6 F isamplercube_fragment                            105ms k2/9 c15532/15773         Got unexpected texture size
+    7 F isamplercube_vertex                              107ms k2/9 c15532/15773         Got unexpected texture size
+    8 F sampler2d_fixed_fragment                         43ms k2/9 c15532/15773          Got unexpected texture size
+    9 F sampler2d_fixed_vertex                           44ms k2/9 c15532/15773          Got unexpected texture size
+   10 F sampler2d_float_fragment                         51ms k2/9 c15532/15811          Got unexpected texture size
+  ... 23 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 DONE: 34 cases, P 0 F 34 R 0 N 0 other 0

@@ -14,6 +14,20 @@ that `0a922ae2` is an ancestor of, so the counts hold there too. When
 `src/mali/**` or `src/shaderc/online/mali/**` move, the causes (section 2)
 move with them; the counts are only as old as that commit.
 
+**Measured baseline: the first whole tree on the board** (2026-11-12/13, the
+seven `tools/cts/log/*-t6-gles2-*` slices from main `a50d87b5`, `1bd2074f`,
+`4ecefc7b` and `9b5daae8`; `mali-deqp-tally.py --tally` over those seven
+slices gives the tables this note cites): 5,260 Pass, 10,898 Fail, 971
+NotSupported, 33 ResourceError, 3 QualityWarning, 0 Lost. Forecast: 5,970
+pass. No chunk hung, crashed or faulted. Section 2's "measured" column and
+section 6 set that measurement against the forecast; sections 1 to 5 are the
+forecast as it was made.
+
+The current result is the whole tree at main `37305608` (2026-11-15, 5,456
+Pass), with each case's own refusal: `docs/es2-cts-failures.md` section M.
+This note is not redone for it; the per-case list there replaces the
+forecast as the work order.
+
 ## What this is for
 
 Plan #309 owns the back end's *known refusals*: what the Mali back end or its
@@ -160,32 +174,60 @@ for every refusal in `src/mali/**` or `src/shaderc/online/mali/**` (its scope),
 list was not read (no `gh`): the owner column is the scope, not a checked
 assignment.
 
-| cause | message | source | cases | owner |
-|---|---|---|---:|---|
-| `ARITH` (`MaliError::Arithmetic`) | `Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `alu32_lanes` (vertex: `vec16.rs` `chunk`) | 3963 | plan #309 |
-| `INT_VALUE` (`IntValue`) | `Valhall: an integer or boolean value is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` (vertex); `nir_fs.rs` `mask_op` (fragment) | 1798 | plan #309 |
-| `FS_OPERAND` (`FsOperandForm`) | `Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `vectorise` | 1379 | plan #309 |
-| `UNIFORM_TYPE` (`UniformType`) | `Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` | 1089 | plan #309 |
-| `BLEND_SHADER` | `mali frame: a blend shader other than a constant colour's (min/max, SRC_ALPHA_SATURATE, unmatched factors, separate colour and alpha, a masked, 4x or non-RGBA8 target) is not built yet` (`NOT_BUILT_BLEND_SHADER`) | `src/mali/frame.rs` `check_draw` | 845 | plan #309 |
-| `CONTROL_FLOW` (`ControlFlow`) | `Valhall: control flow (if, a loop, a return before the end) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `walk` | 532 | plan #309 |
-| `INDEXED_LOCAL` (`IndexedLocal`) | `Valhall: an indexed local variable is not lowered yet` | `src/shaderc/online/mali/glsl.rs` `passes` | 472 | plan #309 |
-| `LOOP_VERTEX` (`LoopVertex`) | `Valhall: a loop in a vertex shader is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` | 312 | plan #309 |
-| `TEX_KIND` (`TexKind`) | `Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `sampler_index` | 232 | plan #309 |
-| `LOOP_FORM` (`LoopForm`) | `Valhall: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside, is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `walk_passes` | 105 | plan #309 |
-| `VARYING_FORM` (`VaryingForm`) | `Valhall: a varying lane left unwritten is not lowered yet` | `src/shaderc/online/mali/motion.rs` `apply` | 64 | plan #309 |
-| `TEX_VERTEX` (`TexVertex`) | `Valhall: a vertex shader texture look-up other than one 2D look-up at a level (a second one, a size query) is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` | 53 | plan #309 |
-| `INVARIANT` (`Invariant`) | `Valhall: an invariant output (Mesa keeps its arithmetic exact, unfused) is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` | 36 | plan #309 |
-| `UNIFORM_INDEXED` (`UniformIndexed`) | `Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `walk_nodes` | 32 | plan #309 |
-| `DISCARD_FORM` (`DiscardForm`) | `Valhall: a discard other than a highp fragment shader's \`if (a < b) discard;\` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `discard` | 25 | plan #309 |
-| `FRAG_OUTPUT` (`FragOutput`) | `Valhall: a fragment output other than gl_FragColor is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `layout` | 6 | plan #309 |
-| `SPECIAL_INPUT` (`SpecialInput`) | `Valhall: a built-in input (gl_FragCoord, gl_FrontFacing, gl_PointCoord, gl_VertexID, gl_InstanceID) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `layout` | 4 | plan #309 |
-| `MATRIX_ATTRIB` (a FAIL, not a refusal) | none: pixels wrong. `verdict case 63 matattr: FAIL ... got 0xff800000 want 0xff804000`, matrix attribute columns 1..n read 0 | `tools/cts/RESULTS.md` 'Mali' (a draw, not a refusal) | 40 | none yet (issue #32 holds the symptom) |
-| **refusals** | | | **10947** | |
+| cause | message | source | cases | measured | owner |
+|---|---|---|---:|---:|---|
+| `ARITH` (`MaliError::Arithmetic`) | `Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `alu32_lanes` (vertex: `vec16.rs` `chunk`) | 3963 | 1670 | plan #309 |
+| `INT_VALUE` (`IntValue`) | `Valhall: an integer or boolean value is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` (vertex); `nir_fs.rs` `mask_op` (fragment) | 1798 | 5181 | plan #309 |
+| `FS_OPERAND` (`FsOperandForm`) | `Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `vectorise` | 1379 | 0 | plan #309 |
+| `UNIFORM_TYPE` (`UniformType`) | `Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` | 1089 | 0 | plan #309 |
+| `BLEND_SHADER` | `mali frame: a blend shader into a target other than RGBA8 at 1x or 4x, or one the blend shader compiler refuses, is not built yet` (`NOT_BUILT_BLEND_SHADER`; the 845 forecast and the 828 measured were with the earlier text, `a blend shader other than a constant colour's ...`; every blend shader of `fragment_ops.blend` is built since: docs/notes/mali-blend-shaders.md section 6) | `src/mali/frame.rs` `check_draw` | 845 | 828 | plan #309 |
+| `CONTROL_FLOW` (`ControlFlow`) | `Valhall: control flow (if, a loop, a return before the end) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `walk` | 532 | 0 | plan #309 |
+| `INDEXED_LOCAL` (`IndexedLocal`) | `Valhall: an indexed local variable is not lowered yet` | `src/shaderc/online/mali/glsl.rs` `passes` | 472 | 0 | plan #309 |
+| `LOOP_VERTEX` (`LoopVertex`) | `Valhall: a loop in a vertex shader is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` | 312 | 64 | plan #309 |
+| `TEX_KIND` (`TexKind`) | `Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `sampler_index` | 232 | 193 | plan #309 |
+| `LOOP_FORM` (`LoopForm`) | `Valhall: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside, is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `walk_passes` | 105 | 59 | plan #309 |
+| `VARYING_FORM` (`VaryingForm`) | `Valhall: a varying lane left unwritten is not lowered yet` | `src/shaderc/online/mali/motion.rs` `apply` | 64 | 0 | plan #309 |
+| `TEX_VERTEX` (`TexVertex`) | `Valhall: a vertex shader texture look-up other than one 2D look-up at a level (a second one, a size query) is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` | 53 | 0 | plan #309 |
+| `INVARIANT` (`Invariant`) | `Valhall: an invariant output (Mesa keeps its arithmetic exact, unfused) is not lowered yet` | `src/shaderc/online/mali/nir.rs` `build` | 36 | 36 | plan #309 |
+| `UNIFORM_INDEXED` (`UniformIndexed`) | `Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `walk_nodes` | 32 | 0 | plan #309 |
+| `DISCARD_FORM` (`DiscardForm`) | `Valhall: a discard other than a highp fragment shader's \`if (a < b) discard;\` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `discard` | 25 | 0 | plan #309 |
+| `FRAG_OUTPUT` (`FragOutput`) | `Valhall: a fragment output other than gl_FragColor is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `layout` | 6 | 0 | plan #309 |
+| `SPECIAL_INPUT` (`SpecialInput`) | `Valhall: a built-in input (gl_FragCoord, gl_FrontFacing, gl_PointCoord, gl_VertexID, gl_InstanceID) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` `layout` | 4 | 0 | plan #309 |
+| `MATRIX_ATTRIB` (a FAIL, not a refusal) | none: pixels wrong. `verdict case 63 matattr: FAIL ... got 0xff800000 want 0xff804000`, matrix attribute columns 1..n read 0 | `tools/cts/RESULTS.md` 'Mali' (a draw, not a refusal) | 40 | 0 as a pixel FAIL | none yet (issue #32 holds the symptom) |
+| `COLOUR_FORM` (`ColourForm`) | `Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` | 0 | 736 | plan #309 |
+| `CONSTANT_FOLD` (`ConstantFold`) | `Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet` | `src/shaderc/online/mali/nir.rs`, `nir_fs.rs` | 0 | 708 | plan #309 |
+| `VARYING_DUPLICATE` (`VaryingDuplicate`) | `Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet` | `src/shaderc/online/mali/nir.rs` | 0 | 602 | plan #309 |
+| `VARYING_NO_ATTRIB` (`VaryingNotFromAttribute`) | `Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet` | `src/shaderc/online/mali/nir.rs`, `nir_fs.rs` | 0 | 304 | plan #309 |
+| `ALGEBRAIC_FORM` (`AlgebraicForm`) | `Valhall: a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` | 0 | 239 | plan #309 |
+| `POSITION_LANE` (`PositionLane`) | `Valhall: a gl_Position lane left unwritten is not lowered yet` | `src/shaderc/online/mali/nir.rs` | 0 | 208 | plan #309 |
+| `NEG_ZERO_SHARED` (`NegZeroShared`) | `Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet` | `src/shaderc/online/mali/glsl.rs` | 0 | 196 | plan #309 |
+| `UNIFORM_PRECISION` (`UniformPrecision`) | `Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet` | `src/shaderc/online/mali/nir.rs` | 0 | 175 | plan #309 |
+| `TOO_MANY_LOCALS` (`TooManyLocals`) | `Valhall: a shader with more than 32 local variables is not lowered yet` | `src/shaderc/online/mali/nir.rs`, `nir_fs.rs` | 0 | 149 | plan #309 |
+| `LOOP_MEDIUMP` (`LoopMediump`) | `Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` | 0 | 124 | plan #309 |
+| `ARITH_CONSTANT` (`ArithConstant`) | `Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet` | `src/shaderc/online/mali/glsl.rs`, `nir.rs`, `nir_fs.rs` | 0 | 92 | plan #309 |
+| `MIXED_PRECISION` (`MixedPrecision`) | `Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` | 0 | 28 | plan #309 (#4496) |
+| `COLOUR_ZERO_HALF` (`ColourZeroHalf`) | `Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` | 0 | 24 | plan #309 |
+| `ZS_ELSEWHERE` | `mali: a depth or stencil object drawn in another framebuffer's depth/stencil pair is not built yet` (`NOT_BUILT_ZS_ELSEWHERE`) | `src/mali/backend.rs` | 0 | 35 | plan #309 |
+| **refusals** | | | **10947** | **11651** | |
 
 The refusal cases sum to 10947: the sixteen `MaliError` rows are 10102,
 plus `BLEND_SHADER` 845. `MATRIX_ATTRIB` is the 40
 cases of `attribute_location` and `default_vertex_attrib` whose names carry
 `mat`; they are not in the 10947.
+
+The "measured" column is the board's first whole tree (see the baseline at
+the top): the non-Pass cases of the chunks whose `yakogl-mali-exit` line
+names that cause as its `first_refused`, Fail and NotSupported together
+(the tally of the seven slices, by the chunk's first refusal). The library
+names only the first refusal of a chunk, so a column count is where the cause
+stops a
+chunk first, not how many shaders it refuses; a cause with 0 may still
+refuse shaders behind another. The rows from `COLOUR_FORM` down were added
+from the measurement (forecast 0). The measured column sums to 11651:
+10,788 compiler refusals, `BLEND_SHADER` 828 and `ZS_ELSEWHERE` 35. The 40
+`MATRIX_ATTRIB` cases did not fail on pixels: 12 pass, and the 28 that fail are refused
+first (`VaryingDuplicate`, `ColourZeroHalf`), or give `GL_INVALID_OPERATION`
+at the draw.
 
 The rows are the *class* a group is expected to hit. The same shader may be
 refused by a sibling variant of the same family (`Arithmetic` instead of
@@ -344,6 +386,57 @@ or fixed function), `uniform_api` 1267 (link-only cases may pass), the
 `shaders.operator` and `shaders.random` float cases (about 2,900 are
 `ARITH` by group, some may be `FsOperandForm`, `MixedPrecision` or even
 compile), and the pass forecast of the GL-core groups (section 1).
+
+## 6. Measured against the forecast
+
+The first whole tree (the baseline at the top) has 5,260 Pass against the
+5,970 forecast. By section 4's rules every refusal message the board
+returned is known: 19 `MaliError` variants and two `src/mali` constants
+(section 2, "measured"), all plan #309's. Section 1's groups where the
+measured Pass differs from the forecast pass:
+
+| group | cases | forecast pass | measured Pass | why |
+|---|---:|---:|---:|---|
+| `vertex_arrays` | 571 | 571 | 0 | refused at link: `VaryingNotFromAttribute`, `VaryingDuplicate` (the default dEQP shaders) |
+| `shaders.preprocessor` | 516 | 516 | 256 | 260 refused (`IntValue` and `UniformPrecision` first in their chunks) |
+| `texture.filtering` | 248 | 248 | 136 | 112 refused at link (`TexKind` first) |
+| `texture.specification` | 192 | 192 | 86 | 106 refused at link (`ColourForm` first) |
+| `draw` | 101 | 101 | 0 | refused at link (`VaryingNotFromAttribute` first) |
+| `fragment_ops.interaction` | 100 | 100 | 0 | 97 refused at link, 2 `GL_INVALID_OPERATION`, 1 `GL_OUT_OF_MEMORY` |
+| `fragment_ops.random` | 100 | 100 | 0 | `GL error` 29, wrong image 71, in a chunk with 273 refusals |
+| `texture.size` | 74 | 74 | 32 | 42 refused at link (`TexKind` first) |
+| `fbo` | 709 | 709 | 672 | 35 `ZS_ELSEWHERE`, 2 wrong pixels (`stencil_clear.rbo_rgb565_*`) |
+| `negative_api` | 246 | 246 | 213 | 9 accepted NotSupported, 24 after a refused link |
+| `texture.completeness` | 40 | 40 | 19 | 21 refused at link (`TexKind` first) |
+| `shaders.linkage` | 49 | 23 | 4 | 45 refused (`UniformPrecision` first) |
+| `texture.format` | 36 | 36 | 18 | 18 refused at link (`TexKind` first) |
+| `fragment_ops.scissor` | 17 | 17 | 0 | refused at link |
+| `default_vertex_attrib`, `attribute_location`, `state_query`, `flush_finish`, `texture.mipmap`, `shader_api` | 648 | 584 | 536 | refused at link or after it; `texture.mipmap.cube.bias.linear_*` 2 wrong pixels |
+| `shaders.operator` | 2949 | 0 | 367 | forecast all refused; 367 compile and pass |
+| `shaders.matrix` | 738 | 0 | 187 | the same; 24 `*_vertex` draws fail with `GL_OUT_OF_MEMORY` |
+| `shaders.random` | 1898 | 0 | 119 | the same |
+
+More groups pass more than the forecast says: `shaders.constant_expressions`
+(+51), `shaders.loops` (+48), `texture.vertex` (+29, while its 16
+`cube` cases with a mip filter or a clamp or mirror wrap fail on pixels with
+no refusal), `shaders.constants` (+25), `fragment_ops.blend` (+17),
+`shaders.indexing` (+15), `shaders.return` (+14), `shaders.struct` (+10) and
+five smaller ones.
+
+`clip_control`, `multisample` and `multisampled_render_to_texture` (25) are
+the accepted NotSupported of `docs/es2-cts-failures.md` section C, and
+`rasterization` has the 3 accepted QualityWarnings; the forecast counted
+them as pass.
+
+Section 3's 208 hang-risk loops (row `T6S3R08`) were all refused at link,
+`PositionLane` first, and reported NotSupported by dEQP, so no kept loop with
+a run-time bound reached the GPU. No chunk hung, crashed or faulted.
+
+Section 4's new causes, from the measurement (they are still in
+`docs/es2-cts-failures.md` section M.1 for the tree at `37305608`): draws that fail with `GL_OUT_OF_MEMORY` (33 ResourceError),
+wrong pixels of `texture.vertex.cube` with no refusal (16), and 4 wrong
+pixels no refusal explains. The 164 GL errors and missing pixels in chunks
+with refusals (cause 4 there) wait for a per-case refusal record.
 
 ## What the note does not claim
 

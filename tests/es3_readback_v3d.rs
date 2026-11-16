@@ -7,14 +7,20 @@
 //! GL_UNSIGNED_INT, or of GL_RGBA / GL_FLOAT.
 //!
 //! For every sized integer colour format and every float format the GL core
-//! makes renderbuffer storage of (R16F, RG16F, RGB16F, RGBA16F, R32F), a
+//! makes renderbuffer storage of (R16F, RG16F, RGB16F, RGBA16F, and R32F
+//! while the build makes it a colour target: ES 3.0 does not, only
+//! GL_EXT_color_buffer_float does, which no back end claims, so the R32F
+//! rows run when a 1x1 R32F attachment of their kind is complete and
+//! otherwise hold the extension's refusal — no extension listed,
+//! renderbuffer storage GL_INVALID_ENUM — and skip (plan #360)), a
 //! renderbuffer is cleared with glClearBuffer{i,ui,f}v and read back with
 //! every (format, type) pair ES 3.0 4.3.1 lists for the class, the pair
 //! GL_IMPLEMENTATION_COLOR_READ_FORMAT / _TYPE names, and every other pair of
 //! the pixel format and type enums (GL_INVALID_OPERATION for a known pair the
 //! buffer does not take, GL_INVALID_ENUM for a name that is none). The same
 //! formats as texture attachments: the ones the GL core takes (the
-//! four-channel integer classes, R16F, RG16F, RGBA16F, R32F) read the same;
+//! four-channel integer classes, R16F, RG16F, RGBA16F, and R32F under the
+//! same gate as the renderbuffer rows) read the same;
 //! the narrow integer textures and RGB16F are incomplete attachments today
 //! (pinned with their expected results in tests/es3_narrow_int_rt_v3d.rs and
 //! tests/es3_rgb16f_attach_v3d.rs), so no readback of them begins.
@@ -571,6 +577,73 @@ mod trampolines {
         with_platform(|p| p.log.clone())
     }
 
+    /// Is GL_R32F a colour target of this build — does a 1x1 GL_R32F
+    /// attachment (a texture when `texture`, a renderbuffer otherwise)
+    /// complete its framebuffer? ES 3.0 makes R32F colour-renderable under
+    /// GL_EXT_color_buffer_float only, which this build does not claim; the
+    /// core nevertheless completes it today, and plan #360's core-claim gates
+    /// it on the extension (docs/notes/es3-float-targets.md). Once a
+    /// attachment of the kind is no longer complete the probe holds the
+    /// extension's ES 3.0 refusal instead (GL_EXT_color_buffer_float not
+    /// listed, and for the renderbuffer glRenderbufferStorage
+    /// GL_INVALID_ENUM), so the R32F rows read their clear while the target
+    /// is renderable and skip once it is not. Needs the rig.
+    pub fn r32f_target_complete(texture: bool) -> bool {
+        use yakogl::gl::texture::*;
+        // SAFETY: plain GL calls with live out pointers; null pixels only
+        // allocate.
+        let (complete, storage) = unsafe {
+            while glGetError() != GL_NO_ERROR {}
+            let (mut name, mut fbo) = (0u32, 0u32);
+            let mut storage = GL_NO_ERROR;
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            if texture {
+                glGenTextures(1, &mut name);
+                glBindTexture(GL_TEXTURE_2D, name);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F as GLint, 1, 1, 0, GL_RED, GL_FLOAT, core::ptr::null());
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, name, 0);
+            } else {
+                glGenRenderbuffers(1, &mut name);
+                glBindRenderbuffer(GL_RENDERBUFFER, name);
+                glRenderbufferStorage(GL_RENDERBUFFER, GL_R32F, 1, 1);
+                storage = glGetError();
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, name);
+            }
+            let complete = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fbo);
+            if texture {
+                glDeleteTextures(1, &name);
+            } else {
+                glDeleteRenderbuffers(1, &name);
+            }
+            while glGetError() != GL_NO_ERROR {}
+            (complete, storage)
+        };
+        if !complete {
+            // SAFETY: GL_EXTENSIONS is a static NUL-terminated string the GL owns.
+            let ext = unsafe { core::ffi::CStr::from_ptr(glGetString(GL_EXTENSIONS) as *const core::ffi::c_char) }
+                .to_str()
+                .unwrap_or_default()
+                .to_owned();
+            assert!(
+                !ext.split(' ').any(|t| t == "GL_EXT_color_buffer_float"),
+                "the R32F rows skip only while GL_EXT_color_buffer_float is unclaimed: {ext}"
+            );
+            if !texture {
+                assert_eq!(storage, GL_INVALID_ENUM, "R32F renderbuffer storage without GL_EXT_color_buffer_float");
+            }
+            let kind = if texture { "texture" } else { "renderbuffer" };
+            eprintln!(
+                "skipping R32F {kind}: not a colour target of this build (GL_EXT_color_buffer_float not claimed)"
+            );
+        }
+        complete
+    }
+
     pub fn err() -> GLenum {
         // SAFETY: a plain GL call.
         unsafe { glGetError() }
@@ -632,8 +705,9 @@ mod trampolines {
 
     /// The float colour formats the GL core makes renderbuffer storage of
     /// (GL_EXT_color_buffer_half_float's four, and R32F; ES 3.0 itself has no
-    /// colour-renderable float format). RG16F and RGB16F are held in the
-    /// RGBA16F surface, four halves a pixel.
+    /// colour-renderable float format, and R32F joins them only while the
+    /// build makes it one — `floats` drops it once it is not). RG16F and
+    /// RGB16F are held in the RGBA16F surface, four halves a pixel.
     pub const FLOATS: [Fmt; 5] = [
         f("R16F", GL_R16F, Class::Float, 1, 16),
         f("RG16F", GL_RG16F, Class::Float, 2, 16),
@@ -945,6 +1019,15 @@ fn integer_formats_refuse_every_other_pair() {
     assert!(wrong.is_empty(), "{} pairs differ from the spec:\n{}", wrong.len(), wrong.join("\n"));
 }
 
+/// The float formats of `FLOATS` that are colour attachments of the kind
+/// here: R32F only while a 1x1 R32F attachment of the kind completes
+/// (`gl_rig::r32f_target_complete` holds the ES 3.0 refusal of
+/// GL_EXT_color_buffer_float, unclaimed, once it does not). Needs the rig.
+fn floats(texture: bool) -> Vec<Fmt> {
+    let r32f = gl_rig::r32f_target_complete(texture);
+    FLOATS.iter().copied().filter(|f| f.gl != GL_R32F || r32f).collect()
+}
+
 /* ---- the float class --------------------------------------------------------- */
 
 /// What a float format's clear reads back as RGBA / FLOAT today: the clear
@@ -965,7 +1048,7 @@ fn float_read_today(f: &Fmt) -> [f32; 4] {
 #[test]
 fn float_formats_read_their_clear_as_floats_and_bytes() {
     let _g = gl_rig::rig();
-    for f in FLOATS {
+    for f in floats(false) {
         let _fb = Fb::new(&[f]);
         f.clear(0);
         assert_eq!(gl_rig::err(), GL_NO_ERROR, "{}: the clear", f.name);
@@ -995,7 +1078,7 @@ fn float_formats_read_their_clear_as_floats_and_bytes() {
 fn float_formats_refuse_every_other_pair() {
     let _g = gl_rig::rig();
     let mut wrong = Vec::new();
-    for f in FLOATS {
+    for f in floats(false) {
         let _fb = Fb::new(&[f]);
         f.clear(0);
         wrong.extend(pairs_differing_from_the_spec(&f));
@@ -1033,8 +1116,8 @@ fn rg16f_reads_its_missing_blue_as_0() {
 #[test]
 fn the_implementation_pair_is_accepted() {
     let _g = gl_rig::rig();
-    for f in INTS.iter().chain(FLOATS.iter()) {
-        let _fb = Fb::new(&[*f]);
+    for f in INTS.iter().copied().chain(floats(false)) {
+        let _fb = Fb::new(&[f]);
         f.clear(0);
         let pair = implementation_pair();
         let want = match f.class {
@@ -1256,15 +1339,23 @@ fn release_texture_fb(tex: GLuint, fbo: GLuint) {
 
 /// A texture attachment reads its clear as the renderbuffer does: the
 /// four-channel integer formats, RGB10_A2UI, R16F, RG16F (its blue the
-/// clear's, as above), RGBA16F and R32F, through the class's pair and the
-/// implementation's.
+/// clear's, as above), RGBA16F and — while `floats(true)` makes it one —
+/// R32F, through the class's pair and the implementation's.
 #[test]
 fn texture_attachments_read_their_clear_the_same() {
     let _g = gl_rig::rig();
-    let complete: Vec<&Fmt> =
-        INTS.iter().filter(|f| f.channels == 4).chain(FLOATS.iter().filter(|f| f.channels != 3)).collect();
-    assert_eq!(complete.len(), 11);
-    for f in complete {
+    let float_tex = floats(true);
+    let complete: Vec<Fmt> = INTS
+        .iter()
+        .filter(|f| f.channels == 4)
+        .copied()
+        .chain(float_tex.iter().filter(|f| f.channels != 3).copied())
+        .collect();
+    // the seven four-channel integer classes and the float textures of three
+    // channels or more: R32F among them while it is a colour target (11),
+    // once the core gates it on GL_EXT_color_buffer_float it is not (10).
+    assert_eq!(complete.len(), if float_tex.len() == FLOATS.len() { 11 } else { 10 });
+    for f in &complete {
         let (tex, fbo) = texture_fb(f);
         // SAFETY: a plain GL call.
         assert_eq!(unsafe { glCheckFramebufferStatus(GL_FRAMEBUFFER) }, GL_FRAMEBUFFER_COMPLETE, "{}", f.name);

@@ -55,13 +55,20 @@ pub const GEOM_UFO_SLOTS: u32 = 16;
 /// Two PBE register words per colour attachment in this firmware's 3D
 /// command, four dwords apart (measured on the board).
 const PBE_STRIDE_DW: usize = 4;
-/// How many colour attachments one render writes (`PVR_RENDER_MAX_RT`): the
-/// size of the partial render's RTA arrays (`sRTACtl.ui32MaxRTs`).
-pub const MAX_RT: usize = 3;
+/// How many colour attachments one render may write (`PVR_RENDER_MAX_RT`):
+/// the kick carries a PBE pair for each ([`submit`] writes the first
+/// `num_rt`).
+pub const MAX_RT: usize = 4;
 /// How many colour attachments the kick's PBE words and the end-of-tile
-/// programs cover (`PVR_RENDER_EOT_MAX_RT`): one more than a render writes
-/// yet.
+/// programs cover (`PVR_RENDER_EOT_MAX_RT`): as many as a render may write.
 pub const EOT_MAX_RT: usize = 4;
+/// The size of the partial render's render-target-array accounting
+/// (`sRTACtl.ui32MaxRTs`, the dwords of its two arrays). It was
+/// `PVR_RENDER_MAX_RT` while that was three, and stays three now that a
+/// render may write four colour attachments: RGXFWIF_RTA_CTL counts the
+/// render targets of a render-target ARRAY (rgx_fwif_shared.h:1218-1229,
+/// layers), not colour attachments, so the HWRT data keeps its bytes.
+pub const RTA_MAX_RTS: usize = 3;
 /// Render-target tiling constants for this core (Mesa bxs-4-64.h): 16x16
 /// tiles, simple internal parameter format v2, 4x4 macrotiles.
 const TILE_SIZE: u32 = 16;
@@ -973,29 +980,28 @@ pub fn hwrt_get(k: &mut YdPvrKm, r: &mut YdPvrRender, w: u32, h: u32, samples: u
     // target indices, and the partial renders counted per render target
     // (RGXFWIF_RTA_CTL, rgx_fwif_shared.h:1218-1235; the firmware names a
     // null ValidRenderTargets an invalid setup, rgx_fwif_sf.h:569). The
-    // arrays hold MAX_RT (PVR_RENDER_MAX_RT) dwords: the colour attachments
-    // one render can write, what sRTACtl.ui32MaxRTs names.
+    // arrays hold RTA_MAX_RTS dwords, what sRTACtl.ui32MaxRTs names.
     let pr = r.cfg.partial_render != 0;
     if pr {
         let s = &mut r.hwrt[hs];
         for off in [&mut s.rta_valid_off, &mut s.rta_partial_off] {
             if *off == 0 {
-                *off = fw_alloc(k, 4 * MAX_RT as u32);
-                // SAFETY: the MAX_RT dwords just allocated.
-                unsafe { core::ptr::write_bytes(k.heap_cpu(*off), 0, 4 * MAX_RT) };
-                k.flush(k.heap_cpu(*off), 4 * MAX_RT);
+                *off = fw_alloc(k, 4 * RTA_MAX_RTS as u32);
+                // SAFETY: the RTA_MAX_RTS dwords just allocated.
+                unsafe { core::ptr::write_bytes(k.heap_cpu(*off), 0, 4 * RTA_MAX_RTS) };
+                k.flush(k.heap_cpu(*off), 4 * RTA_MAX_RTS);
             }
         }
         // Valid render targets: the index array. The partial-render counts
         // stay zero; the firmware counts them.
         let v = k.heap_cpu(s.rta_valid_off);
-        // SAFETY: MAX_RT dwords.
+        // SAFETY: RTA_MAX_RTS dwords.
         unsafe {
-            for i in 0..MAX_RT {
+            for i in 0..RTA_MAX_RTS {
                 wr32(v, 4 * i, i as u32);
             }
         }
-        k.flush(v, 4 * MAX_RT);
+        k.flush(v, 4 * RTA_MAX_RTS);
     }
     let (hc_fa, fl_fa, gfl_fa, gfl2_fa) =
         (k.heap_fwaddr(hc_off), k.heap_fwaddr(r.fl_off), k.heap_fwaddr(r.gfl_off), k.heap_fwaddr(r.gfl2_off));
@@ -1016,7 +1022,7 @@ pub fn hwrt_get(k: &mut YdPvrKm, r: &mut YdPvrRender, w: u32, h: u32, samples: u
         if pr {
             wr32(hrt, HWRTDATA_RTA_CTL + RTA_CTL_VALID_RENDER_TARGETS, k.heap_fwaddr(s.rta_valid_off));
             wr32(hrt, HWRTDATA_RTA_CTL + RTA_CTL_NUM_PARTIAL_RENDERS, k.heap_fwaddr(s.rta_partial_off));
-            wr32(hrt, HWRTDATA_RTA_CTL + RTA_CTL_MAX_RTS, MAX_RT as u32);
+            wr32(hrt, HWRTDATA_RTA_CTL + RTA_CTL_MAX_RTS, RTA_MAX_RTS as u32);
             // ui32HWRTDataFlags are the firmware's: PARTIAL_RENDERED is the
             // firmware's to set and use; the host only drops it with a
             // reconstruction (freelist::reset_hwrts), as upstream does.
@@ -3753,7 +3759,7 @@ mod submit_tests {
     const HC1: u32 = 0x3180;
     const HRT1: u32 = 0x3200;
     // The pair's partial-render render-target arrays, pre-seeded so the rig
-    // never allocates (MAX_RT dwords each; regions past all of the above).
+    // never allocates (RTA_MAX_RTS dwords each; regions past all of the above).
     const RTA0V: u32 = 0x3400;
     const RTA0P: u32 = 0x3410;
     const RTA1V: u32 = 0x3500;
@@ -4102,13 +4108,15 @@ mod submit_tests {
             let ctl = hrt as usize + HWRTDATA_RTA_CTL;
             assert_eq!(t.word(ctl + RTA_CTL_VALID_RENDER_TARGETS), t.k.heap_fwaddr(rtav));
             assert_eq!(t.word(ctl + RTA_CTL_NUM_PARTIAL_RENDERS), t.k.heap_fwaddr(rtap));
-            assert_eq!(t.word(ctl + RTA_CTL_MAX_RTS), MAX_RT as u32);
+            // three: a render-target array's, not the colour attachments
+            // (RTA_MAX_RTS); the HWRT data's bytes from before MAX_RT was 4
+            assert_eq!(t.word(ctl + RTA_CTL_MAX_RTS), 3);
             // The counters and flags words are the firmware's; the host
             // hands them out zero.
             assert_eq!(t.words(ctl, 4), [0; 4]);
             assert_eq!(t.word(ctl + RTA_CTL_FLAGS), 0);
-            assert_eq!(t.words(rtav as usize, MAX_RT), [0, 1, 2]);
-            assert_eq!(t.words(rtap as usize, MAX_RT), [0; MAX_RT]);
+            assert_eq!(t.words(rtav as usize, RTA_MAX_RTS), [0, 1, 2]);
+            assert_eq!(t.words(rtap as usize, RTA_MAX_RTS), [0; RTA_MAX_RTS]);
         }
     }
 
@@ -4273,6 +4281,40 @@ mod submit_tests {
         assert_eq!(d3[34..46], [1, 0xE0, 2, 0xE1, 3, 0xE2, 4, 0xE3, 5, 0xE4, 6, 0xE5], "the frame's slots 1 to 3");
     }
 
+    /// RC14 (pvr-render): with MAX_RT 4, a kick of 1, 2 or 3 targets writes
+    /// the 3D command it wrote at MAX_RT 3 (its own PBE pairs, the slots
+    /// after them zero even when the kick's array holds more), and a kick of
+    /// four writes the fourth pair at dwords 42..=45; knob off and on.
+    #[test]
+    fn rc14_the_fourth_pbe_pair_is_written_for_four_targets_only() {
+        assert_eq!(MAX_RT, EOT_MAX_RT);
+        for knob in [0, 1] {
+            for n in 1..=MAX_RT {
+                let mut c = kick(1);
+                for (i, pair) in c.frag.pbe_word.iter_mut().enumerate() {
+                    *pair = [0xF0_0000_0010 + i as u64, 0xF1_0000_0020 + i as u64];
+                }
+                c.frag.num_rt = n as u32;
+                let mut t = rig(knob);
+                let mut f1 = 0u32;
+                assert_eq!(submit(&mut t.k, &mut t.r, &c, &mut f1), 0, "log:\n{}", t.log());
+                let (d3, _) = threed_bodies(&t);
+                let mut want = todays_3d_words(&t, HRT0, &c);
+                for i in 1..n {
+                    let o = 30 + i * PBE_STRIDE_DW;
+                    want[o..o + 4].copy_from_slice(&[0x10 + i as u32, 0xF0, 0x20 + i as u32, 0xF1]);
+                }
+                assert_eq!(d3, want, "{n} target(s), knob {knob}");
+                let fourth = &d3[42..46];
+                if n == 4 {
+                    assert_eq!(fourth, [0x13, 0xF0, 0x23, 0xF1], "the fourth pair");
+                } else {
+                    assert_eq!(fourth, [0; 4], "no fourth pair for {n} target(s)");
+                }
+            }
+        }
+    }
+
     /// G2 (kick-abi): the block's size and every offset, as bytes: each
     /// field written with its own value lands where pvr_render.h,
     /// src/abi_layout.rs and src/pvr/ffi_layout_check.c say it does (the
@@ -4333,8 +4375,8 @@ mod submit_tests {
         assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f2), 0, "log:\n{}", t.log());
         for (hrt, rtav, rtap) in [(HRT0, RTA0V, RTA0P), (HRT1, RTA1V, RTA1P)] {
             assert_eq!(t.words(hrt as usize + HWRTDATA_RTA_CTL, HWRTDATA_RTA_CTL_SIZE / 4), [0; 8]);
-            assert_eq!(t.words(rtav as usize, MAX_RT), [0; MAX_RT]);
-            assert_eq!(t.words(rtap as usize, MAX_RT), [0; MAX_RT]);
+            assert_eq!(t.words(rtav as usize, RTA_MAX_RTS), [0; RTA_MAX_RTS]);
+            assert_eq!(t.words(rtap as usize, RTA_MAX_RTS), [0; RTA_MAX_RTS]);
         }
     }
 }

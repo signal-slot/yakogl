@@ -217,6 +217,25 @@ that already passed one: the owner, 2026-10-25). A document or a one-GPU
 change is already small this way. A shared-layer change is not, and the
 next two mechanisms carry it.
 
+**A change confined to `tests/`** (the scope `tests`; any `tests/` path the
+GPU-named scopes above do not claim, and `tools/release/redaction-scan.allow`)
+runs the cargo test rows and the rows every change reaches (fmt, the licence
+audit), and no image, driver, sample, aarch64, table or tool row. In those
+rows it builds, lints and runs only the integration test targets it reaches
+(`tools/check_tests_reach.py`): a changed `tests/<name>.rs` is the target
+`<name>`; a changed module or file under a `tests/` subdirectory reaches
+every target that pulls it in (`mod`, `#[path]`, `include!`) or names it,
+a fixture the targets that name it. `redaction_scan` (it scans the whole
+tree) always runs, and so do the library's `test_rules::` tests (they read
+`tests/*.rs`). The explicit per-target rows (V3D, fragdepth, knobs, the
+glmark2 corpus) are selected by their target, whatever their GPU scope; a
+function that runs a root target says so with `tests_row <target>`. When the
+script cannot tell what a file reaches it runs every target of the test
+rows (still not every row); a fixture that something outside `tests/` also
+reads, and a mix with `src/` or any other `all` path, select every row. The
+log says `check.sh: tests scope: targets ...`. The nightly run on main is
+the backstop.
+
 ### 3.2 Never redo work whose inputs did not change (new)
 
 **Test binaries.** cargo already rebuilds only what changed. The gate
@@ -304,18 +323,15 @@ rows, ran out of memory and hung for two hours. One clippy-driver on the
 yakogl crate peaks at 2.9 GB (2026-10-14). The run prints its slots on its
 first line.
 
-The CI machine's memory is chosen to fill the cores (decided 2026-11-13).
-Run 43372841985 on a 12 GB, 8-core machine printed "3 compiler slot(s)
-(11247 MB available, 3072 MB each, 8 cores)": 41,723 s of rows took 14,851 s
-wall (2.8 in parallel), five cores idle. Eight slots need 24,576 MB
-available; the OS and cargo took about 9 % of 12 GB, so
-`tools/env/yakogl-gate.yaml` gives a CI machine 28 GB (24 GB gives 7 slots,
-20 GB 6). Fewer machines fit per host, each uses its 8 cores instead of 3.
-The job count (4 on 8 cores) came from `YAKOGL_CHECK_JOBS: "4"` in
-`gate.yml`'s job env; it is now set by the job's first step from the cores.
-Not measured: 8 slots with 4 rows at once; the first run after the change
-shows the new wall time. Not checked against the hosts' memory
-(`orion nodes --json` was not reachable): check it before applying.
+The CI machine is 8 vCPU / 12 GB (`tools/env/yakogl-gate.yaml`), so a run
+gets 3 compiler slots (run 43372841985 printed "3 compiler slot(s) (11247 MB
+available, 3072 MB each, 8 cores)"). The size stays 12 GB because the hosts'
+real memory is the limit: on 2026-11-14, 39 CI machines filled every host
+(thinkcentre 0 GB free, system76 3 GB, n5max 7 GB, hx90-2 14 GB). A bigger
+machine adds no cores to the farm, it only lowers how many run at once; nuc
+and hx90 (15 GB hosts) cannot hold a 28 GB machine at all. The job count
+(half the cores, 4 on 8) is set by the job's first step in `gate.yml` from
+`nproc`.
 
 The FIFO is not under the checkout. On 2026-10-18 (run 39062794102) seven
 V3D test rows were red with rustc's "failed to connect to jobserver" for a

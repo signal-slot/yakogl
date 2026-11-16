@@ -88,6 +88,51 @@ pub const MAX_UNIFORM_DWORDS: usize = 1536;
 /// read them, so the three cannot disagree.
 pub const MAX_VERTEX_UNIFORM_VECTORS: usize = MAX_UNIFORM_DWORDS / 4;
 pub const MAX_FRAGMENT_UNIFORM_VECTORS: usize = MAX_UNIFORM_DWORDS / 4;
+/// GL_MAX_VERTEX_UNIFORM_BLOCKS and GL_MAX_FRAGMENT_UNIFORM_BLOCKS, ES 3.0's
+/// twelve on every GPU.
+pub const MAX_STAGE_UNIFORM_BLOCKS: usize = 12;
+/// GL_MAX_UNIFORM_BLOCK_SIZE, in bytes. Uniform blocks are flattened into
+/// each stage's default block behind the default-block uniforms and filled
+/// from the bound range at draw time (program.rs `fill_uniform_blocks`).
+///
+/// V3D: 16384, ES 3.0's minimum. The QPU reads every dword of the stage's
+/// array through the uniform stream (a QUNIFORM_UNIFORM word's `data` is a
+/// dword offset, 32 bits; driver/src/v3d/v3d_job.c `write_uniforms`), so the
+/// array is not bounded by the default block; tests/v3d_ubo_large_sim.rs
+/// reads dword 4095 of a 16384-byte block by constant and by uniform index.
+///
+/// The other GPUs, and the V3D under `report-es2`: one block at most the
+/// stage's default block, MAX_UNIFORM_DWORDS * 4 = 6144 bytes: the GL core
+/// stages at most MAX_UNIFORM_DWORDS dwords a stage for their back ends
+/// (draw.rs), and the GC7000 holds the blocks in its constant file
+/// (docs/notes/gc-ubo-const-limit.md).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_UNIFORM_BLOCK_SIZE: usize = crate::gl::limits::ES3_MIN_MAX_UNIFORM_BLOCK_SIZE;
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+pub const MAX_UNIFORM_BLOCK_SIZE: usize = MAX_UNIFORM_DWORDS * 4;
+/// GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS and
+/// GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS, and the dwords one stage's
+/// array may hold (default block and uniform blocks together;
+/// program.rs `block_dwords`, draw.rs's upload).
+///
+/// V3D: ES 3.0's formula (section 2.11.4, gl/limits.rs), the default block
+/// plus twelve blocks of MAX_UNIFORM_BLOCK_SIZE: 1536 + 12 * 4096 = 50688,
+/// above both minimums (50176 and 50048). A program's array is sized by what
+/// its stages lay out, not by this.
+///
+/// The other GPUs: MAX_UNIFORM_DWORDS, the blocks share the default block.
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_STAGE_UNIFORM_DWORDS: usize = crate::gl::limits::combined_uniform_components(
+    MAX_UNIFORM_DWORDS,
+    MAX_STAGE_UNIFORM_BLOCKS,
+    MAX_UNIFORM_BLOCK_SIZE,
+);
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+pub const MAX_STAGE_UNIFORM_DWORDS: usize = MAX_UNIFORM_DWORDS;
+/* the draw carries a stage's dwords in a u16 (GlesDraw::*_uniform_dwords,
+ * GlProgram::*_uniform_cap) */
+const _: () = assert!(MAX_STAGE_UNIFORM_DWORDS + BLEND_CONSTS_DWORDS <= u16::MAX as usize);
+const _: () = assert!(MAX_STAGE_UNIFORM_DWORDS >= MAX_UNIFORM_DWORDS);
 /// GL_MAX_TEXTURE_IMAGE_UNITS and gl_MaxTextureImageUnits: the samplers a
 /// fragment shader may use. Every backend's per-draw fragment table holds
 /// GLES_MAX_TEX_BINDS (16) bindings, and the link enforces this limit
@@ -146,11 +191,18 @@ pub const MAX_VARYING_VECTORS: usize = 15;
 pub const MAX_VARYING_VECTORS: usize = 15;
 #[cfg(all(feature = "gpu-powervr", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
-/// V3D: 8, the ES 2.0 minimum. Mesa's v3d allows 16 (V3D_MAX_FS_INPUTS, 64
-/// components), but nothing here has drawn with more than a few varyings on
-/// the board: the M6 first cut claims what it has a chance of having
-/// measured, and is raised with the board run that measures more.
-#[cfg(feature = "gpu-v3d")]
+/// V3D: 15, ES 3.0's minimum. The hardware takes 64 scalar fragment inputs
+/// (Mesa v3d_limits.h V3D_MAX_FS_INPUTS), which is 16 vec4; 15 are what a
+/// vertex shader's gl_Position leaves in the 16 the GL names. The compiler
+/// packs one `ldvary` per component (es100/varyings15 builds the 60-component
+/// fragment shader), the shader record carries the count, and the job builder
+/// writes the flat/centroid flag words in groups of 24 inputs as Mesa's
+/// `v3dx_emit_varying_flags` does (tests/es3_v3d_varyings.rs).
+///
+/// Under `report-es2` 8, the ES 2.0 answer as it was (tests/es2_report_guard.rs).
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VARYING_VECTORS: usize = 15;
+#[cfg(all(feature = "gpu-v3d", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// Mali-G610: 8, the ES 2.0 minimum, as the V3D's first cut: nothing has
 /// been compiled for it yet. Mesa's panfrost takes 32 inputs a stage on
@@ -190,6 +242,14 @@ pub fn max_color_attachments() -> usize {
 /// The shader's gl_MaxVertexOutputVectors / gl_MaxFragmentInputVectors are
 /// these divided by four (ES 3.00 section 7.3), so raising one here moves
 /// the shader's value with it.
+///
+/// V3D: 64, one vec4 more than the varyings: the VPM output record is sized by
+/// what the fragment shader reads (the coordinate/vertex shader writes only
+/// the components the linked fragment shader asks for), so a vertex shader
+/// may declare 16 vec4 outputs as long as 15 are read.
+#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = 64;
+#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 /// GL_MIN/MAX_PROGRAM_TEXEL_OFFSET, ES 3.0's minimum range: the values the

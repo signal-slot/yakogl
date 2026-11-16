@@ -40,10 +40,6 @@ Output (stdout):
     files <number of paths in the snapshot>
     exclusions: <what was excluded, or none and why>
 
-The tool publishes nothing: it adds no remote to the new repository, sends
-nothing off this machine and imports no networking module. Making the
-public repository and publishing it are the owner's (checklist D7).
-
 Exit status:
   0  the snapshot was made
   2  usage error, no author name, email or date, or a git error
@@ -54,6 +50,10 @@ Exit status:
   7  the exclusion list is stale (a listed path is not in REV's tree)
   8  REV's tree keeps a submodule gitlink
 """
+
+# The tool publishes nothing: it adds no remote to the new repository, sends
+# nothing off this machine and imports no networking module. Making the
+# public repository and publishing it are the owner's (checklist D7).
 
 import argparse
 import os
@@ -68,7 +68,7 @@ MESSAGE = ("YakoGL: OpenGL ES 2.0 and EGL for embedded GPUs, without an "
            "operating-system GPU driver\n"
            "\n"
            "The source tree of YakoGL as one snapshot commit.\n")
-SELF_TEST_CHECKS = 38
+SELF_TEST_CHECKS = 39
 
 (EXIT_OK, EXIT_USAGE, EXIT_REV, EXIT_DIRTY, EXIT_OUTDIR, EXIT_MALFORMED,
  EXIT_STALE, EXIT_GITLINK) = 0, 2, 3, 4, 5, 6, 7, 8
@@ -451,9 +451,19 @@ def self_test():
               "host-" not in raw)
         check("the message is the fixed text and names no source hash",
               raw.split("\n\n", 1)[1] == MESSAGE and second not in raw)
-        check("the new repository's config has no remote",
-              git(out, "config", "--file", os.path.join(out, ".git", "config"),
-                  "--get-regexp", r"^remote\.", ok=(0, 1)).strip() == b"")
+        keys = git(out, "config", "--file", os.path.join(out, ".git", "config"),
+                   "--name-only", "--list").decode().split()
+        check("the new repository's config holds core.* keys only",
+              bool(keys) and all(k.startswith("core.") for k in keys))
+        out_d1 = os.path.join(tmp, "det1")
+        out_d2 = os.path.join(tmp, "det2")
+        _, so1, _ = tool(*ident, "main", out_d1)
+        _, so2, _ = tool(*ident, "main", out_d2)
+        check("two snapshots of one commit, author and date print the same "
+              "snapshot hash",
+              ["snapshot " + snap] == [l for l in so1.splitlines()
+                                       if l.startswith("snapshot ")]
+              == [l for l in so2.splitlines() if l.startswith("snapshot ")])
         check("the new repository has no hooks (no template)",
               not os.listdir(os.path.join(out, ".git", "hooks"))
               if os.path.isdir(os.path.join(out, ".git", "hooks")) else True)

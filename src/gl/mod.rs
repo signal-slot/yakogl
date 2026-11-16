@@ -25,7 +25,9 @@ pub mod es3;
 pub mod es3_formats;
 pub mod etc1;
 pub mod etc2;
+pub mod etc2_store;
 pub mod framebuffer;
+pub mod limits;
 pub(crate) mod msaa;
 pub(crate) mod msaa_resolve;
 pub mod names;
@@ -36,6 +38,7 @@ pub mod program;
 pub mod shader;
 pub mod srgb;
 pub mod state;
+pub mod target_keys;
 pub mod texture;
 pub mod tf;
 /// The transform-feedback capture: the vertex shader evaluated on the CPU

@@ -84,6 +84,10 @@ pub struct V3dFsProg {
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
+    /// Inputs 32..63 (bit i: input 32 + i).
+    pub flat_shade_flags_hi: u32,
+    pub noperspective_flags_hi: u32,
+    pub centroid_flags_hi: u32,
     pub writes_z: bool,
     pub disable_ez: bool,
     pub uses_center_w: bool,
@@ -828,16 +832,18 @@ const _: () = assert!(size_of::<V3dUniformStorage>() == 16);
 const _: () = assert!(size_of::<V3dVertexAttr>() == 16);
 const _: () = assert!(offset_of!(V3dVertexAttr, divisor) == 12);
 const _: () = assert!(size_of::<V3dTiling>() == 32);
-const _: () = assert!(size_of::<V3dFsProg>() == 56);
+const _: () = assert!(size_of::<V3dFsProg>() == 64);
 const _: () = assert!(offset_of!(V3dFsProg, threads) == 4);
 const _: () = assert!(offset_of!(V3dFsProg, single_seg) == 8);
 const _: () = assert!(offset_of!(V3dFsProg, num_inputs) == 12);
 const _: () = assert!(offset_of!(V3dFsProg, flat_shade_flags) == 16);
 const _: () = assert!(offset_of!(V3dFsProg, centroid_flags) == 24);
-const _: () = assert!(offset_of!(V3dFsProg, writes_z) == 28);
-const _: () = assert!(offset_of!(V3dFsProg, uses_pid) == 33);
-const _: () = assert!(offset_of!(V3dFsProg, uniforms) == 40);
-const _: () = assert!(offset_of!(V3dFsProg, num_uniforms) == 48);
+const _: () = assert!(offset_of!(V3dFsProg, flat_shade_flags_hi) == 28);
+const _: () = assert!(offset_of!(V3dFsProg, centroid_flags_hi) == 36);
+const _: () = assert!(offset_of!(V3dFsProg, writes_z) == 40);
+const _: () = assert!(offset_of!(V3dFsProg, uses_pid) == 45);
+const _: () = assert!(offset_of!(V3dFsProg, uniforms) == 48);
+const _: () = assert!(offset_of!(V3dFsProg, num_uniforms) == 56);
 const _: () = assert!(size_of::<V3dVsProg>() == 64);
 const _: () = assert!(offset_of!(V3dVsProg, single_seg) == 8);
 const _: () = assert!(offset_of!(V3dVsProg, vpm_input_size) == 12);

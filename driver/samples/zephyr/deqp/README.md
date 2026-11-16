@@ -21,19 +21,19 @@ west build -b verdin_am62p/am62p54/a53 driver/samples/zephyr/deqp -- \
 
 What is here, and why:
 
-- `src/main.cpp`: the `tcu::App` loop of dEQP's own `tcuMain.cpp`, with the
+- `driver/samples/zephyr/deqp/src/main.cpp`: the `tcu::App` loop of dEQP's own `tcuMain.cpp`, with the
   arguments built in (`CONFIG_DEQP_CASE`, a `CONFIG_DEQP_SURFACE_SIZE` pbuffer,
   images and shader sources not logged).
-- `src/deqp_archive.cpp`: a `tcu::Archive` over the test data, which
-  `tools/embed_data.py` turns into C arrays at build time (77 files, 1.1 MB for
+- `driver/samples/zephyr/deqp/src/deqp_archive.cpp`: a `tcu::Archive` over the test data, which
+  `driver/samples/zephyr/deqp/tools/embed_data.py` turns into C arrays at build time (77 files, 1.1 MB for
   GLES2). There is no file system.
-- `src/deqp_log.c`: `--wrap=fopen` hands dEQP a picolibc stream (`fdevopen`)
+- `driver/samples/zephyr/deqp/src/deqp_log.c`: `--wrap=fopen` hands dEQP a picolibc stream (`fdevopen`)
   for its QPA log. The stream is parsed line by line and never stored. Each case
   becomes one console line, `deqp: <StatusCode> <case>`, and the summary counts
   the cases that began but never reached a result: absence is its own outcome.
   How the console leaves the board (UART, or the panel for a camera) is the
   board's business, not the sample's.
-- `src/deqp_stubs.c`: what the framework references and Zephyr lacks (child
+- `driver/samples/zephyr/deqp/src/deqp_stubs.c`: what the framework references and Zephyr lacks (child
   processes for the subprocess modes, `getcwd`/`lstat`/`readlink`). Each one
   fails the way the real call fails when the thing does not exist.
 - The package entry (`modules/gles2/tes2TestPackageEntry.cpp`) is compiled into
@@ -54,6 +54,17 @@ Configuration that matters:
   and a 64 MiB C heap.
 - A 600 s bounded watchdog feed on the AM62P. The online compiler takes about
   0.2 s per shader on the A53, so size a run's case list to that budget.
+
+## Four draw targets
+
+`CONFIG_V3D_DEQP_MRT4=y` (Pi 4, V3D) and `CONFIG_PVR_DEQP_MRT4=y` (AM62P,
+PowerVR) make the image ask for four draw targets before the first context
+(`v3d_debug_set_draw_targets(4)` / `pvr_debug_set_draw_targets(4)`; the call is
+wired by a later change). Both default to n and need `DEQP_TEST_KNOBS`, which
+the image always selects. A board session adds the symbol to the stage 2
+command, for example `-DCONFIG_V3D_DEQP_MRT4=y` for the Pi 4 or
+`-DCONFIG_PVR_DEQP_MRT4=y` for the AM62P, with a dEQP-GLES3 case filter. The
+cases to run are in `docs/notes/mrt4-deqp-cases.md`. A product never sets it.
 
 ## STM32MP257F-DK (A35)
 
@@ -83,3 +94,41 @@ runner's 0xa0000000..0xb0000000.
 `tools/board-stm32mp2.sh` stages `zephyr.bin` on bootfs (`/boot/yakogl`) and
 waits `RUN_BOUND` (120 s by default) for the end line: give a dEQP run
 `RUN_BOUND=600` or more.
+
+## NanoPC-T6 (Mali-G610)
+
+The image runs through YakoGL's GL core, its in-process compiler and its Mali
+backend on the OSAL `src/osal/zephyr_mali.c`, over our own kernel side. It is
+kexec'd out of Armbian (`driver/tools/kexec-zephyr/nanopc-t6.sh`, one image
+per jump, a development result only); the record is uart2.
+`boards/nanopc_t6.conf` sets the Mali and WDT0's bounds (fed until 600 s, and
+only while a case begins or ends at least every 60 s); `src/mali_board.c`
+prints the build first and ends the run with the OSAL's close line,
+`deqp: OK|FAILED (rc=N)` and the PSCI reset back into Armbian. The CSF
+firmware is the board glue's (`driver/zephyr/lib/board/nanopc_t6/
+nanopc_t6_mali.c`): make `driver/src/fw/mali_csffw_blob.h` with
+`driver/tools/mkmalifw.sh <mali_csffw.bin>` first.
+
+```sh
+# stage 1 for this board (its own compile flags: Cortex-A55)
+BOARD=nanopc_t6 WORK=$PWD/build/deqp-zephyr-t6 ZEPHYR_BASE=... \
+    ZEPHYR_MODULES="$(tools/cts/zephyr-modules.sh <workspace>)" tools/cts/cts-build-zephyr.sh
+# stage 2: one image per case filter
+west build -p always -b nanopc_t6 -d build/t6-deqp driver/samples/zephyr/deqp -- \
+    -DZEPHYR_MODULES="$ZEPHYR_MODULES" -DYAKOGL_WERROR=ON \
+    -DDEQP_SRC=$PWD/build/deqp-zephyr-t6/cts -DDEQP_BUILD=$PWD/build/deqp-zephyr-t6/build \
+    -DCONFIG_DEQP_CASE='"dEQP-GLES2.functional.prerequisite.*"'
+```
+
+The whole tree, one image per row of `tools/cts/mali-gles2-tree.txt`, is
+built by `tools/cts/t6-deqp-images.sh` and run by `tools/board.sh nanopc-t6
+tree` (`tools/cts/README.md`, section 2d).
+
+Memory: about 148 MiB of the board's 256 MiB window (`nanopc_t6.dts`): the
+gl_test image's GL core and OSAL memory (32 MiB carve-out), dEQP's code and
+the 64 MiB C heap. `zephyr.bin` is about 56 MiB of the 64 MiB `kexec_zephyr`
+reads, because the OSAL's `__nocache` statics lie inside the file's span: a
+carve-out about 8 MiB larger does not fit that limit. Every case
+filter gives the same sizes (the whole package is linked; only the filter
+string differs). `driver/tools/kexec-zephyr/nanopc-t6.sh` refuses an image
+over either limit before it copies anything to the board.

@@ -101,30 +101,3 @@ bool osal_draw_stats(uint64_t ns[OSAL_DRAW_STEPS], uint32_t *untimed)
 	}
 	return true;
 }
-
-/* ---- presentation --------------------------------------------------------
- * The display is the board glue's (yakogl_board.h: board_show()), not the
- * OSAL's: the OSAL only carries the library's "show this buffer" to it. The
- * board library defines yakogl_zephyr_present() over board_show(); the weak
- * default says there is no display, which makes every window surface
- * single-buffered, rendered in place (gles_osal.h, "present"). */
-__weak int yakogl_zephyr_present(uintptr_t phys, void *cpu, uint32_t width, uint32_t height,
-				 uint32_t stride_bytes, uint32_t format)
-{
-	ARG_UNUSED(phys);
-	ARG_UNUSED(cpu);
-	ARG_UNUSED(width);
-	ARG_UNUSED(height);
-	ARG_UNUSED(stride_bytes);
-	ARG_UNUSED(format);
-	return -ENOTSUP;
-}
-
-int yakogl_osal_zephyr_present(const struct osal_gpu_mem *mem, uint32_t width, uint32_t height,
-			       uint32_t stride_bytes, uint32_t format)
-{
-	if (mem == NULL || mem->phys == 0u) {
-		return -EINVAL;
-	}
-	return yakogl_zephyr_present((uintptr_t)mem->phys, mem->cpu, width, height, stride_bytes, format);
-}

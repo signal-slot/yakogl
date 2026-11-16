@@ -89,14 +89,49 @@
 # T6's /proc/iomem, an entry and a GIC table in the window's last part, and
 # --go with and without the tables named.
 #
-# Needs bash, flock(1) and strings(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
+# The T6 display dump (t6-display-dump.sh) takes this lock too and reads
+# registers of the running Linux. Its own self-test, on a made-up board, runs
+# from here as one check: the read list stays inside its windows, a display
+# that is off or a held lock refuses before any read, and a read that fails
+# stops the run. The crash route's interrupt steps in kexec_zephyr
+# (crash_irq.h: the PMIC's power key unbound, /proc/interrupts checked, the
+# power key bound again on a refusal) have a self-test of their own too,
+# crash_irq_selftest.sh, run from here as one check the same way.
+#
+# A tenth, for the crash route (nanopc-t6.sh --crash, D2 of
+# driver/docs/nanopc-t6-display.md): on made-up facts, --crash refuses
+# without a crashkernel= reservation that holds the window, with one that
+# holds only part of it, with a crash image already loaded, with another
+# entry in the window, and with an image whose segment leaves no room for the
+# kernel's control page; with the reservation it passes the dry run and
+# reaches its T6_HAND refusal; the normal route says "route: normal", jumps
+# without --crash, and is refused, naming --crash, when the reservation lies
+# in the window. t6-crashkernel.sh, the tool that makes the reservation, runs
+# against a fake board (a directory, T6CK_ROOT, and an `ssh` that runs the
+# command here): status before and after, the set/undo round trip byte for
+# byte on a file with an extraargs= line and on one without, and its
+# refusals (a crashkernel= already there, two extraargs= lines, undo without
+# set, a file changed after set, another board).
+#
+# The T6's other runner on the lock, driver/tools/uboot-t6/prompt-reads.sh
+# (the reads at the U-Boot prompt), is held to the same rule: LOCK_WAIT 0
+# before it sources board_lock.sh. The tool it starts on the UART,
+# prompt-reads.py, has a self-test against a fake board on a pty (what it
+# types and when, and that it never types into Linux's root shell); the
+# check here runs it, so the gate does too.
+#
+# Needs bash, flock(1), strings(1) and python3. tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-planned=27
 run=0
 failed=0
+# The lines of this file whose check has run. Every line that calls check
+# must be in it at the end: a check that a condition or an early return
+# skipped fails the test, and no count is kept by hand.
+declare -A ran=()
 check() { # <what> <0 = ok>
 	run=$((run + 1))
+	ran[${BASH_LINENO[0]}]=1
 	if [ "$2" = 0 ]; then
 		echo "$1 ok"
 	else
@@ -178,6 +213,20 @@ def=$(grep -n '^LOCK_WAIT=\${LOCK_WAIT:-0}$' "$t6" | cut -d: -f1)
 later=$(awk -v a="${def:-0}" -v b="${src:-0}" 'NR > a && NR < b && /LOCK_WAIT=/' "$t6")
 check "nanopc-t6.sh: LOCK_WAIT defaults to 0 before it sources board_lock.sh (lines ${def:-none} < ${src:-none})" \
 	"$([ -n "$src" ] && [ -n "$def" ] && [ "$def" -lt "$src" ] && [ -z "$later" ]; echo $?)"
+
+# prompt-reads.sh, the same: LOCK_WAIT 0 before it sources board_lock.sh.
+ubr=$here/../uboot-t6/prompt-reads.sh
+src=$(grep -n '^\. "\$K/board_lock.sh"$' "$ubr" | cut -d: -f1)
+def=$(grep -n '^LOCK_WAIT=\${LOCK_WAIT:-0}$' "$ubr" | cut -d: -f1)
+later=$(awk -v a="${def:-0}" -v b="${src:-0}" 'NR > a && NR < b && /LOCK_WAIT=/' "$ubr")
+check "prompt-reads.sh: LOCK_WAIT defaults to 0 before it sources board_lock.sh (lines ${def:-none} < ${src:-none})" \
+	"$([ -n "$src" ] && [ -n "$def" ] && [ "$def" -lt "$src" ] && [ -z "$later" ]; echo $?)"
+
+# prompt-reads.py's own self-test (a fake board on a pty): its last line
+# names the checks run and planned, and how many failed.
+got=$(python3 -I "$here/../uboot-t6/prompt-reads.py" --self-test 2>&1 | tail -n 1)
+check "prompt-reads.py --self-test ('$got')" \
+	"$(grep -qE '^prompt-reads self-test: ([0-9]+) checks run \(planned \1\), 0 failed$' <<<"$got"; echo $?)"
 
 # A holder whose output is piped returns when it ends, not after HOLD_MAX.
 cat > "$tmp/piped.sh" <<EOF
@@ -334,14 +383,34 @@ check "nanopc-t6.sh: an image without the line is refused for it (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF "lacks the 'board: watchdog armed' line" <<<"$err"; echo $?)"
 
 # nanopc-t6.sh's checks of the board's facts, on made-up facts: an `ssh`
-# first in PATH prints $tmp/facts whatever it is asked, so no board is
-# contacted. The facts are the T6's under Armbian: one System RAM bank
+# first in PATH answers from $tmp/facts (below), so no board is contacted.
+# The facts are the T6's under Armbian: one System RAM bank
 # 0x00200000-0xe143ffff, below 0x20000000 only the kernel's entries under
 # it, the GIC's ITS/LPI tables above 4 GiB. An image TOP 13 passes the image
 # checks. t6_board_run <iomem lines under the bank> <gic_tables> [--go]
+# The board's `ssh`: it logs each command and answers by what it asks. The
+# facts and the read under the lock come from $tmp/facts and $tmp/fresh;
+# the jump (the command that runs kexec_zephyr) drops the connection and
+# the board then comes back with another boot_id; anything else prints
+# nothing. stty, fuser and scp stand in for --go's UART checks and copies.
 mkdir "$tmp/fakebin"
-printf '#!/bin/sh\ncat "%s/facts"\n' "$tmp" > "$tmp/fakebin/ssh"
-chmod +x "$tmp/fakebin/ssh"
+cat > "$tmp/fakebin/ssh" <<EOS
+#!/bin/bash
+for a; do last=\$a; done
+printf '%s\n----\n' "\$last" >> "$tmp/ssh.log"
+case "\$last" in
+*'printf "compatible='*) cat "$tmp/facts" ;;
+*'printf "kexec_loaded='*) cat "$tmp/fresh" ;;
+*sha256sum*) printf '%s' "\$T6_FAKE_SHAS" ;;
+*'/kexec_zephyr '*) touch "$tmp/jumped"; exit 255 ;;
+'cat /proc/sys/kernel/random/boot_id') if [ -e "$tmp/jumped" ]; then echo boot-after; else echo boot-before; fi ;;
+esac
+exit 0
+EOS
+printf '#!/bin/sh\ncase " $* " in *" -a "*) echo "speed 1500000 baud; line = 0; -parenb cs8 -cstopb clocal -icrnl -ixon -opost -icanon -echo" ;; esac\n' > "$tmp/fakebin/stty"
+printf '#!/bin/sh\nexit 1\n' > "$tmp/fakebin/fuser"
+printf '#!/bin/sh\nexit 0\n' > "$tmp/fakebin/scp"
+chmod +x "$tmp/fakebin/ssh" "$tmp/fakebin/stty" "$tmp/fakebin/fuser" "$tmp/fakebin/scp"
 t6_image "$tmp/top13.bin" 'board: watchdog armed'
 sed -i 's/; top 9; /; top 13; /' "$tmp/top13.bin"
 t6_board_run() {
@@ -349,13 +418,31 @@ t6_board_run() {
 		printf '%s\n' 'compatible=friendlyarm,nanopc-t6 rockchip,rk3588 ' kernel=6.18.55 \
 			kexec_load_disabled=0 kexec_loaded=0 config_kexec=CONFIG_KEXEC=y uid=0 \
 			wdt_identity=dw_wdt wdt_state=inactive wdt_timeout=44 wdt_nowayout=0 wdt_users= \
+			"config_crash_dump=${t6_crash_dump:-CONFIG_CRASH_DUMP=y}" "kexec_crash_loaded=${t6_crash_loaded:-0}" \
+			"kexec_crash_size=${t6_crash_size:-0}" "sysrq_trigger=${t6_sysrq:-writable}" \
 			"gic_tables=$2" 'iomem<<' '00200000-e143ffff : System RAM'
 		printf '%s\n' "$1" '>>'
 	} > "$tmp/facts"
-	PATH=$tmp/fakebin:$PATH BOARD_HOST=root@board.invalid bash "$t6" "$tmp/top13.bin" ${3:+"$3"} 2>&1
+	PATH=$tmp/fakebin:$PATH BOARD_HOST=root@board.invalid bash "$t6" "${t6_img:-$tmp/top13.bin}" ${3:+"$3"} ${4:+"$4"} 2>&1
 }
 kernel='  02000000-0432ffff : Kernel code'
 gic_out='100220000 100230000 1002f0000 '
+# t6_go_run <iomem lines> [--crash]: --go to the end on the fake board, with
+# T6_HAND, a record directory, /dev/null as the UART (the fake stty and
+# fuser pass it) and stand-ins for the two tools. The read under the lock
+# gives kexec_crash_loaded $t6_fresh_crash (default 0). The jump command
+# reaches the fake ssh's log.
+t6_go_run() {
+	rm -rf "$tmp/rec" "$tmp/jumped" "$tmp/ssh.log"
+	mkdir "$tmp/rec"
+	printf 'kexec_loaded=0\nkexec_crash_loaded=%s\nboot_id=boot-before\ngpu_users=\nwdt_users=\nwho_remote=\n' \
+		"${t6_fresh_crash:-0}" > "$tmp/fresh"
+	: > "$tmp/kz"
+	: > "$tmp/mr"
+	T6_FAKE_SHAS=$(sha256sum "$tmp/top13.bin" "$tmp/kz" | cut -d' ' -f1 | tr '\n' ' ') \
+		T6_HAND=selftest T6_RECORD_DIR=$tmp/rec T6_UART=/dev/null KEXEC_ZEPHYR=$tmp/kz MMIO_RD=$tmp/mr \
+		BOARD_LOCK=$tmp/t6go.lock t6_board_run "$1" "$gic_out" --go ${2:+"$2"}
+}
 out=$(t6_board_run "$kernel" "$gic_out")
 rc=$?
 check "nanopc-t6.sh: the dry run on the T6's facts finds the window 0x10000000-0x1fffffff free (rc $rc)" \
@@ -380,12 +467,384 @@ rc=$?
 check "nanopc-t6.sh: --go with the tables named gets past the board checks to its own T6_HAND refusal (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --go needs T6_HAND' <<<"$out"; echo $?)"
 
+# t6-display-dump.sh: its self-test, with its own made-up board and its own
+# count of check lines.
+out=$(bash "$here/t6-display-dump-selftest.sh" 2>&1)
+rc=$?
+[ "$rc" = 0 ] || grep ' FAIL$' <<<"$out"
+check "t6-display-dump.sh: its self-test passes (rc $rc: $(tail -n 1 <<<"$out"))" "$rc"
+out=$(sh "$here/crash_irq_selftest.sh" 2>&1)
+rc=$?
+[ "$rc" = 0 ] || grep -E ' FAIL$|error' <<<"$out"
+check "kexec_zephyr's crash_irq.h: its self-test passes (rc $rc: $(tail -n 1 <<<"$out"))" "$rc"
+
+# The crash route. The reservation t6-crashkernel.sh makes is
+# 0x10000000-0x1fffffff, under the bank after the kernel.
+ck='  10000000-1fffffff : Crash kernel'
+out=$(t6_board_run "$kernel" "$gic_out")
+check "nanopc-t6.sh: without --crash the dry run names the normal route and no reservation" \
+	"$(grep -qF 'route: normal: kexec_load, then reboot(LINUX_REBOOT_CMD_KEXEC)' <<<"$out" && grep -qF 'crashkernel= reservation: none)' <<<"$out"; echo $?)"
+check "nanopc-t6.sh: the normal route's plan jumps without --crash" \
+	"$(grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000$' <<<"$out"; echo $?)"
+out=$(t6_board_run "$kernel" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash without a reservation is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF "REFUSED: --crash needs a crashkernel= reservation that holds the window 0x10000000-0x1fffffff; the board has: Crash kernel 'none'" <<<"$out"; echo $?)"
+out=$(t6_crash_size=134217728 t6_board_run "$kernel
+  08000000-17ffffff : Crash kernel" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash with a reservation holding half the window is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF "the board has: Crash kernel '08000000-17ffffff : Crash kernel'" <<<"$out"; echo $?)"
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash with the reservation passes the dry run and names the crash route (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'route: crash (--crash)' <<<"$out" && grep -qF 'inside the crashkernel= reservation 0x10000000-0x1fffffff' <<<"$out" && grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000 --crash$' <<<"$out"; echo $?)"
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash --go)
+rc=$?
+check "nanopc-t6.sh: --crash --go with the reservation reaches its T6_HAND refusal (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --go needs T6_HAND' <<<"$out"; echo $?)"
+out=$(t6_crash_loaded=1 t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash with a crash image already loaded is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --crash: a crash image is already loaded' <<<"$out"; echo $?)"
+# The normal route while the reservation holds the window: the kernel
+# limits only crash segments to the reservation (kernel/kexec_core.c:
+# 200-210), so it is allowed while no crash image is loaded there.
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: the normal route is allowed with the reservation in the window and no crash image (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'route: normal:' <<<"$out" && grep -qF 'the window lies in the crashkernel= reservation 10000000-1fffffff : Crash kernel, and no crash image is loaded' <<<"$out"; echo $?)"
+out=$(t6_crash_loaded=1 t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: the normal route is refused when a crash image is loaded in that reservation (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: a crash image is loaded in the crashkernel= reservation the window lies in' <<<"$out"; echo $?)"
+# --go to the end on the fake board: the jump command each route sends.
+out=$(t6_crash_size=268435456 t6_go_run "$kernel
+$ck" --crash)
+rc=$?
+jump=$(grep -m1 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log")
+# After the links are down a returned kexec_zephyr must end in a WDT0
+# reset: no magic close, and WDT0 kept open (unfed) past the ssh session.
+after=$(sed -n '/kexec_zephyr \/tmp\/yakogl-kexec\/zephyr.bin/,/^----$/p' "$tmp/ssh.log")
+check "nanopc-t6.sh: on the crash route a returned kexec_zephyr writes no magic close and keeps WDT0 open" \
+	"$(! grep -qF 'printf V' <<<"$after" && grep -qF 'setsid sleep' <<<"$after"; echo $?)"
+check "nanopc-t6.sh: --crash --go sends the jump with --crash and records the route (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000 --crash; rc=' <<<"$jump" && grep -qF 'route crash (reservation 0x10000000-0x1fffffff)' "$tmp"/rec/*/record.txt; echo $?)"
+out=$(t6_go_run "$kernel")
+rc=$?
+jump=$(grep -m1 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log")
+after=$(sed -n '/kexec_zephyr \/tmp\/yakogl-kexec\/zephyr.bin/,/^----$/p' "$tmp/ssh.log")
+check "nanopc-t6.sh: on the normal route a returned kexec_zephyr is followed by the magic close" \
+	"$(grep -qF 'printf V >&3' <<<"$after"; echo $?)"
+check "nanopc-t6.sh: --go without --crash sends the jump without it (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000; rc=' <<<"$jump" && grep -qF 'route normal' "$tmp"/rec/*/record.txt; echo $?)"
+# The read under the lock: a crash image loaded between the dry checks and
+# the lock stops the jump, on the crash route and on the normal route in
+# the reservation.
+out=$(t6_fresh_crash=1 t6_crash_size=268435456 t6_go_run "$kernel
+$ck" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash --go refuses a crash image loaded before the lock was taken (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: under the lock: a crash image is already loaded' <<<"$out" && ! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log"; echo $?)"
+out=$(t6_fresh_crash=1 t6_crash_size=268435456 t6_go_run "$kernel
+$ck")
+rc=$?
+check "nanopc-t6.sh: --go on the normal route in the reservation refuses the same under the lock (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: under the lock: a crash image is already loaded' <<<"$out" && ! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log"; echo $?)"
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck
+  1ff00000-1fffffff : reserved" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash still refuses another entry in the window (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: the window overlaps: 1ff00000-1fffffff : reserved' <<<"$out"; echo $?)"
+out=$(t6_crash_dump=absent t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash on a kernel without CONFIG_CRASH_DUMP=y is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --crash: the kernel 6.18.55 has absent, so it has no crash route' <<<"$out"; echo $?)"
+out=$(t6_crash_size=266338304 t6_board_run "$kernel
+  10200000-1fffffff : Crash kernel" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash with a reservation that starts 2 MiB into the window is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF "the board has: Crash kernel '10200000-1fffffff : Crash kernel'" <<<"$out"; echo $?)"
+# The trigger is checked before the jump: kexec_zephyr takes every link down
+# before it writes it, so a trigger that is missing would leave the board
+# without network.
+out=$(t6_sysrq=absent t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash without a writable /proc/sysrq-trigger is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --crash: /proc/sysrq-trigger is absent' <<<"$out"; echo $?)"
+# --crash without Linux's watchdog: if the crash kexec does not happen,
+# panic() waits in its timeout loop (kernel/panic.c:508-509, :557), and
+# with panic_timeout 0 nothing ever resets the board.
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash --no-linux-wdt)
+rc=$?
+check "nanopc-t6.sh: --crash with --no-linux-wdt is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --crash needs the Linux watchdog' <<<"$out"; echo $?)"
+# An image whose RAM footprint (header bytes 16..23) is the whole window
+# leaves no page of the reservation for the control page.
+cp "$tmp/top13.bin" "$tmp/full.bin"
+printf '\x00\x00\x00\x10\x00\x00\x00\x00' | dd of="$tmp/full.bin" bs=1 seek=16 conv=notrunc status=none
+out=$(t6_img=$tmp/full.bin t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: --crash refuses a segment that leaves no room for the control page (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF "REFUSED: --crash: the image's segment (268435456 bytes at 0x10000000)" <<<"$out"; echo $?)"
+
+# t6-crashkernel.sh on a fake board: a directory with the board's files, and
+# an `ssh` (and a `dmesg`) that run here.
+ckt=$here/t6-crashkernel.sh
+fb=$tmp/ckboard
+mkdir -p "$tmp/fakessh" "$fb/boot" "$fb/proc/device-tree" "$fb/proc/sys/kernel" "$fb/sys/kernel" "$fb/root"
+printf '#!/bin/sh\nfor a; do last=$a; done\nexec sh -c "$last"\n' > "$tmp/fakessh/ssh"
+printf '#!/bin/sh\ncat "%s/dmesg"\n' "$fb" > "$tmp/fakessh/dmesg"
+# sync: counts its calls, logs whether set's new file is still beside the
+# file and the file's sha256, and at call $CK_KILL_AT kills the board
+# script that called it (a set or undo cut there).
+cat > "$tmp/fakessh/sync" <<'EOS'
+#!/bin/sh
+n=$(( $(cat "$CK_SYNC_N" 2>/dev/null || echo 0) + 1 ))
+echo "$n" > "$CK_SYNC_N"
+t=no
+[ -e "$CK_FILE.yakogl-new" ] && t=yes
+echo "sync $n: new-file $t, file $(sha256sum < "$CK_FILE" | cut -d' ' -f1)" >> "$CK_SYNC_LOG"
+[ "$n" = "${CK_KILL_AT:-0}" ] && kill -9 "$PPID"
+exit 0
+EOS
+chmod +x "$tmp/fakessh/ssh" "$tmp/fakessh/dmesg" "$tmp/fakessh/sync"
+export CK_SYNC_N=$tmp/ck-sync.n CK_SYNC_LOG=$tmp/ck-sync.log CK_FILE=$fb/boot/armbianEnv.txt
+printf 'friendlyarm,nanopc-t6\0rockchip,rk3588\0' > "$fb/proc/device-tree/compatible"
+echo 6.18.55 > "$fb/proc/sys/kernel/osrelease"
+printf 'CONFIG_KEXEC=y\nCONFIG_CRASH_RESERVE=y\nCONFIG_CRASH_DUMP=y\n' > "$fb/boot/config-6.18.55"
+# The root UUID is on the board's command line, in dmesg's "Kernel command
+# line" and in armbianEnv.txt: no output may show it (the end checks).
+uuid=deadbeef-0000-4000-8000-0123456789ab
+printf 'root=UUID=%s rootwait cma=256M\n' "$uuid" > "$fb/proc/cmdline"
+echo 0 > "$fb/sys/kernel/kexec_crash_size"
+echo 0 > "$fb/sys/kernel/kexec_crash_loaded"
+printf '00200000-e143ffff : System RAM\n  02000000-0432ffff : Kernel code\n' > "$fb/proc/iomem"
+printf '%s\n' "Kernel command line: root=UUID=$uuid rootwait cma=256M" \
+	'cma: Reserved 256 MiB at 0x00000000d1400000' > "$fb/dmesg"
+ckrun() { # <command>; every output is kept for the UUID check at the end
+	PATH=$tmp/fakessh:$PATH T6CK_ROOT=$fb BOARD_LOCK=$tmp/ck.lock BOARD_HOST=root@board.invalid bash "$ckt" "$1" 2>&1 |
+		tee -a "$tmp/ck-all.out"
+	return "${PIPESTATUS[0]}"
+}
+env_with="verbosity=1
+rootdev=UUID=$uuid
+bootlogo=false
+overlay_prefix=rockchip-rk3588
+extraargs=cma=256M
+usbstoragequirks=0x2537:0x1066:u
+"
+printf '%s' "$env_with" > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: status without a reservation exits 1 and says so (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'is NOT reserved (no crashkernel=)' <<<"$out" && grep -qF 'cma: Reserved 256 MiB' <<<"$out"; echo $?)"
+# The words of the extraargs= line include its first one (extraargs=cma=...).
+check "t6-crashkernel.sh: status prints the first word of the extraargs= line ($(grep -F 'extraargs line' <<<"$out"))" \
+	"$(grep -qF 'extraargs line: line 5: cma=256M' <<<"$out"; echo $?)"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set prints the words of the line before and after, the first one included" \
+	"$(grep -qx 'board: extraargs before (crashkernel=, cma= words): cma=256M ' <<<"$out" && grep -qx 'board: extraargs after  (crashkernel=, cma= words): cma=256M crashkernel=256M@0x10000000 ' <<<"$out"; echo $?)"
+check "t6-crashkernel.sh: set appends the token to the extraargs= line only (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(grep -v '^extraargs=' "$fb/boot/armbianEnv.txt")" = "$(grep -v '^extraargs=' <<<"$env_with")" ] && grep -qx 'extraargs=cma=256M crashkernel=256M@0x10000000' "$fb/boot/armbianEnv.txt" && grep -qF 'next: reboot the board' <<<"$out"; echo $?)"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: a second set changes nothing (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'already set by this tool' <<<"$out" && [ "$(grep -c crashkernel= "$fb/boot/armbianEnv.txt")" = 1 ]; echo $?)"
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: status after set, before the reboot, says reboot (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'the file has crashkernel= but the running kernel was not given it: reboot' <<<"$out"; echo $?)"
+printf 'root=UUID=%s rootwait cma=256M crashkernel=256M@0x10000000\n' "$uuid" > "$fb/proc/cmdline"
+echo "Kernel command line: root=UUID=$uuid rootwait cma=256M crashkernel=256M@0x10000000" >> "$fb/dmesg"
+printf '00200000-e143ffff : System RAM\n  02000000-0432ffff : Kernel code\n  10000000-1fffffff : Crash kernel\n' > "$fb/proc/iomem"
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: status after the reboot finds the window in the reservation (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'is inside the reservation: nanopc-t6.sh --crash can run' <<<"$out"; echo $?)"
+printf '00200000-e143ffff : System RAM\n  02000000-0432ffff : Kernel code\n  10200000-2fffffff : Crash kernel\n' > "$fb/proc/iomem"
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: status does not take a reservation that starts 2 MiB into the window as holding it (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'is NOT reserved although the kernel was given' <<<"$out"; echo $?)"
+printf '00200000-e143ffff : System RAM\n' > "$fb/proc/iomem"
+echo 'crashkernel reservation failed - memory is in use.' >> "$fb/dmesg"
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: status names a reservation the kernel could not make (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'NOT reserved although the kernel was given' <<<"$out" && grep -qF 'memory is in use' <<<"$out"; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo restores the file byte for byte and removes its copy (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ ! -e "$fb/root/yakogl-crashkernel" ] && grep -qF 'byte for byte' <<<"$out"; echo $?)"
+# No extraargs= line: set adds one at the end; undo takes it away again.
+printf 'verbosity=1\nrootdev=UUID=0\n' > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set on a file without extraargs= adds the line at the end (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(cat "$fb/boot/armbianEnv.txt")" = "verbosity=1
+rootdev=UUID=0
+extraargs=crashkernel=256M@0x10000000" ]; echo $?)"
+check "t6-crashkernel.sh: ... and status names the crashkernel= of the line set added (the line's first word)" \
+	"$(ckrun status | grep -qF 'crashkernel= in it: line 3: crashkernel=256M@0x10000000'; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo on it is byte for byte the old file (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
+# Refusals leave the file as it was.
+printf 'extraargs=root=UUID=%s cma=256M crashkernel=512M\n' "$uuid" > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set refuses a file that already has a crashkernel= (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'already has a crashkernel=' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ ! -e "$fb/root/yakogl-crashkernel" ]; echo $?)"
+printf 'extraargs=a\nextraargs=b\n' > "$fb/boot/armbianEnv.txt"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set refuses two extraargs= lines (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'has 2 extraargs= lines' <<<"$out"; echo $?)"
+# U-Boot's env import skips blanks before a name (lib/hashtable.c:902-904,
+# v2026.07), so " extraargs=" is the live line: set edits it, keeping its
+# blanks, and adds no second line (a later one would replace it).
+printf 'verbosity=1\n \textraargs=cma=256M\nrootdev=UUID=%s\n' "$uuid" > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set edits a live extraargs= line with leading blanks and adds none (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(grep -c 'extraargs=' "$fb/boot/armbianEnv.txt")" = 1 ] && grep -qx ' 	extraargs=cma=256M crashkernel=256M@0x10000000' "$fb/boot/armbianEnv.txt"; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo after it is byte for byte the old file (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
+printf 'verbosity=1\r\nextraargs=cma=256M\r\n' > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set refuses CR line ends and leaves the file (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'has CR line ends' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ ! -e "$fb/root/yakogl-crashkernel" ]; echo $?)"
+printf 'verbosity=1\nextraargs=cma=256M' > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set refuses a file without a final newline and leaves it (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'does not end with a newline' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
+printf ' extraargs=a\nextraargs=b\n' > "$fb/boot/armbianEnv.txt"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set counts a blank-led extraargs= line with the others (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'has 2 extraargs= lines' <<<"$out"; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo without a set refuses (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'nothing to undo' <<<"$out"; echo $?)"
+# A set cut short (S2). set writes new.sha256 before it renames the new
+# file over the old one, and changes nothing else after that, so each cut
+# leaves a state the next set or undo finishes from. Sync 1 is between the
+# new file and the rename, sync 2 after the rename.
+ck_sync() { rm -f "$CK_SYNC_N" "$CK_SYNC_LOG"; }
+printf '%s' "$env_with" > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+ck_sync
+out=$(CK_KILL_AT=1 ckrun set)
+check "t6-crashkernel.sh: a set killed before the rename leaves the file as it was (rc $?)" \
+	"$(grep -qF 'set did not complete' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ -d "$fb/root/yakogl-crashkernel" ]; echo $?)"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: the next set finishes it (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qx 'extraargs=cma=256M crashkernel=256M@0x10000000' "$fb/boot/armbianEnv.txt" && [ ! -e "$fb/boot/armbianEnv.txt.yakogl-new" ]; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: ... and undo after it is byte for byte the old file (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ ! -e "$fb/root/yakogl-crashkernel" ]; echo $?)"
+ck_sync
+out=$(CK_KILL_AT=1 ckrun set)
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo after a set killed before the rename clears its state, file untouched (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ] && [ ! -e "$fb/root/yakogl-crashkernel" ] && [ ! -e "$fb/boot/armbianEnv.txt.yakogl-new" ]; echo $?)"
+ck_sync
+killed=$(CK_KILL_AT=2 ckrun set)
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: after a set killed past the rename, set says it is set (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'set did not complete' <<<"$killed" && grep -qF 'already set by this tool' <<<"$out"; echo $?)"
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: ... and undo restores it byte for byte (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
+mkdir "$fb/root/yakogl-crashkernel"
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set finishes from an empty state directory (killed after its mkdir) (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qx 'extraargs=cma=256M crashkernel=256M@0x10000000' "$fb/boot/armbianEnv.txt"; echo $?)"
+ckrun undo >/dev/null
+# The order on disk: a sync while the new file is still beside the old one
+# (it is on disk before the rename), then one after the rename.
+ck_sync
+ckrun set >/dev/null
+new_sha=$(sha256sum < "$fb/boot/armbianEnv.txt" | cut -d' ' -f1)
+old_sha=${before%% *}
+check "t6-crashkernel.sh: set syncs the new file before the rename and the rename after it ($(tr '\n' ';' < "$CK_SYNC_LOG"))" \
+	"$(grep -qx "sync 1: new-file yes, file $old_sha" "$CK_SYNC_LOG" && grep -qx "sync 2: new-file no, file $new_sha" "$CK_SYNC_LOG"; echo $?)"
+ckrun undo >/dev/null
+printf '%s' "$env_with" > "$fb/boot/armbianEnv.txt"
+ckrun set >/dev/null
+echo 'fdtfile=other.dtb' >> "$fb/boot/armbianEnv.txt"
+changed=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun undo)
+rc=$?
+check "t6-crashkernel.sh: undo refuses a file changed after set and leaves it (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'changed after set' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$changed" ] && [ -e "$fb/root/yakogl-crashkernel/armbianEnv.txt.orig" ]; echo $?)"
+# set on the same state (the file is neither the one set found nor the one it
+# wrote) refuses too, and keeps the copy undo needs.
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set refuses a file changed after set and keeps the copy (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'neither the file set found nor the one it wrote' <<<"$out" && [ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$changed" ] && [ -e "$fb/root/yakogl-crashkernel/armbianEnv.txt.orig" ] && [ -e "$fb/root/yakogl-crashkernel/new.sha256" ]; echo $?)"
+rm -rf "$fb/root/yakogl-crashkernel"
+# A root UUID inside extraargs= itself: set's before and after lines show
+# only the words (the UUID check at the end reads them).
+printf 'verbosity=1\nextraargs=root=UUID=%s cma=256M\n' "$uuid" > "$fb/boot/armbianEnv.txt"
+before=$(sha256sum < "$fb/boot/armbianEnv.txt")
+out=$(ckrun set)
+rc=$?
+check "t6-crashkernel.sh: set on an extraargs= that holds a root UUID prints only its words (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qx 'board: extraargs after  (crashkernel=, cma= words): cma=256M crashkernel=256M@0x10000000 ' <<<"$out"; echo $?)"
+ckrun undo >/dev/null
+check "t6-crashkernel.sh: ... and undo is byte for byte" \
+	"$([ "$(sha256sum < "$fb/boot/armbianEnv.txt")" = "$before" ]; echo $?)"
+printf 'friendlyarm,other\0' > "$fb/proc/device-tree/compatible"
+out=$(ckrun status)
+rc=$?
+check "t6-crashkernel.sh: another board is refused (rc $rc)" \
+	"$([ "$rc" != 0 ] && grep -qF 'not a NanoPC-T6' <<<"$out"; echo $?)"
+# The board's command line holds the root UUID (in /proc/cmdline, dmesg's
+# "Kernel command line" and armbianEnv.txt's rootdev=): status, set and undo
+# print only the crashkernel= and cma= tokens and the reservation lines.
+check "t6-crashkernel.sh: no output of status, set or undo shows the root UUID ($(grep -c "$uuid" "$tmp/ck-all.out") lines do)" \
+	"$([ -s "$tmp/ck-all.out" ] && ! grep -qF "$uuid" "$tmp/ck-all.out"; echo $?)"
+
 # The window is decided by nanopc_t6.dts (zephyr,sram) and held again where an
 # image is loaded into it: nanopc-t6.sh checks /proc/iomem over WINDOW_BASE
-# ..+WINDOW_SIZE, and the U-Boot script loads to t6z_load and refuses above
-# t6z_window. A window grown in the dts alone would leave the dry run
-# checking less RAM than the image takes as its own; one shrunk there would
-# leave U-Boot loading past it. Each must equal the node's reg.
+# ..+WINDOW_SIZE, the U-Boot script loads to t6z_load and refuses above
+# t6z_window, and tools/board.sh refuses an image whose image_size runs past
+# LOAD_END before it calls nanopc-t6.sh. A window grown in the dts alone
+# would leave the dry run checking less RAM than the image takes as its own,
+# and board.sh refusing an image that fits; one shrunk there would leave
+# U-Boot loading past it. Each must equal the node's reg.
 dts=$here/../../boards/friendlyarm/nanopc_t6/nanopc_t6.dts
 ub=$here/../uboot-t6/t6-zephyr.cmd
 reg=$(awk '/^\tzephyr_ram: memory@/ { n = 1 } n && /reg = / { print; exit }' "$dts")
@@ -402,6 +861,14 @@ script_value() {
 got="$(script_value WINDOW_BASE) $(script_value WINDOW_SIZE)"
 check "nanopc-t6.sh: WINDOW_BASE WINDOW_SIZE ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_size: '${reg#"${reg%%[! 	]*}"}')" \
 	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_size" ]; echo $?)"
+# YAKO_ADDR=<hex>; LOAD_END=<hex> in the nanopc-t6) case of tools/board.sh.
+bsh=$here/../../../tools/board.sh
+got=$(awk '/^nanopc-t6\)/ { n = 1 } n && /YAKO_ADDR=0x[0-9a-fA-F]+; LOAD_END=0x[0-9a-fA-F]+$/ { print $1, $2; exit }' "$bsh")
+if [[ "$got" =~ ^YAKO_ADDR=(0x[0-9a-fA-F]+)\;\ LOAD_END=(0x[0-9a-fA-F]+)$ ]]; then
+	got="$((BASH_REMATCH[1])) $((BASH_REMATCH[2] - BASH_REMATCH[1]))"
+fi
+check "tools/board.sh: nanopc-t6's YAKO_ADDR and LOAD_END - YAKO_ADDR ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_size)" \
+	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_size" ]; echo $?)"
 uboot_value() {
 	local v
 	v=$(sed -n "s/^setenv $1 \\(0x[0-9a-fA-F]*\\)\$/\\1/p" "$ub")
@@ -412,14 +879,21 @@ check "t6-zephyr.cmd: t6z_load t6z_entry t6z_window ($got) are nanopc_t6.dts's z
 	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_base $win_size" ]; echo $?)"
 
 # The test leaves no process behind: the sweep ends every marked process,
-# and a known one (the holder, still running here) shows that the search
-# finds what it looks for.
-found=$(marked | grep -cx "$holder_pid")
+# and a known one, started here, shows that the search finds what it looks
+# for. (Not the holder: it ends by itself 60 s after its start, so a run
+# that takes longer than that would not find it.)
+sleep 300 &
+known_pid=$!
+found=$(marked | grep -cx "$known_pid")
 sweep
 left=$(marked)
 left=${left//$'\n'/ }
-check "no process of the test is left (the holder found by the search: $found; left: ${left:-none})" \
+check "no process of the test is left (a known one found by the search: $found; left: ${left:-none})" \
 	"$([ "$found" = 1 ] && [ -z "$left" ]; echo $?)"
 
-echo "board_lock_selftest: $run checks run (planned $planned), $failed failed"
-[ "$failed" = 0 ] && [ "$run" = "$planned" ]
+not_run=
+while IFS=: read -r line _; do
+	[ -n "${ran[$line]:-}" ] || not_run+=" $line"
+done < <(grep -nE '^([^#]*[[:space:];&|(])?check "' "$0")
+echo "board_lock_selftest: $run checks run, $failed failed${not_run:+, check lines not run:$not_run}"
+[ "$failed" = 0 ] && [ "$run" -gt 0 ] && [ -z "$not_run" ]

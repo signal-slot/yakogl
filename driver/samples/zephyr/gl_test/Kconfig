@@ -152,6 +152,17 @@ config GL_TEST_PVR_FS_TEMPS_MIN
 	  and the offline table: never a default. A product option until the
 	  shader-compiler rename.
 
+config PVR_GL_TEST_MRT4
+	bool "Answer 4 draw buffers and colour attachments (a measurement, off in products)"
+	depends on YAKOGL_TEST_KNOBS
+	default n
+	help
+	  The image calls pvr_debug_set_draw_targets(4) at startup, before
+	  the first context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS
+	  answer 4 instead of 3. A measurement: products leave it off. The C
+	  wiring in main_am62p.c follows in a later item
+	  (docs/notes/mrt4-v3d-pvr.md, "The image knobs").
+
 endmenu
 
 menu "gl_test on the STM32MP257F-DK (Vivante GCNanoUltra31)"
@@ -453,6 +464,17 @@ config V3D_GL_TEST_MSAA
 	  the board has measured it (docs/online-shaderc/v3d-backend.md,
 	  "Multisampling").
 
+config V3D_GL_TEST_MRT4
+	bool "Answer 4 draw buffers and colour attachments (a measurement, off in products)"
+	depends on YAKOGL_TEST_KNOBS
+	default n
+	help
+	  The image calls v3d_debug_set_draw_targets(4) at startup, before
+	  the first context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS
+	  answer 4 instead of 3. A measurement: products leave it off. The C
+	  wiring in main_rpi4.c follows in a later item
+	  (docs/notes/mrt4-v3d-pvr.md, "The image knobs").
+
 config V3D_GL_TEST_VTL_PASSES
 	int "Case 129 (vstexlod): run only its first N passes (0: all)"
 	default 0
@@ -498,6 +520,31 @@ config V3D_GL_TEST_HOLD_S
 	help
 	  rpi_wdog resets the board this long after boot (bounded, as every
 	  board image is): the run plus the time the record stays readable.
+endmenu
+
+menu "gl_test on the NanoPC-T6 (Mali-G610)"
+	depends on YAKOGL_GPU_MALI
+
+config T6_GL_TEST_CASE
+	int "gl_test case to run (7 = the regression set)"
+	default 7
+	help
+	  The case numbers are driver/tools/pvrlab/gl_test.c's own; its
+	  header comment lists them. 7 walks the regression set (the
+	  runner's SET_ORDER) on one context.
+
+config T6_GL_TEST_CASES
+	string "Cases to run in order on one context, comma-separated (overrides T6_GL_TEST_CASE)"
+	default ""
+	help
+	  When set, the listed case numbers are walked through
+	  gl_test_set_list on one context, as the other boards' images do.
+	  A GPU fault or the 5 s job timeout fails its case and restarts
+	  the OSAL's group, at most 16 times in an image; an error that
+	  needs a GPU reset, or one past the 16, fails every later case
+	  (YAKOGL_GPU_MALI's help; board::nanopc_t6_osal, "Recovery").
+	  Empty: T6_GL_TEST_CASE.
+
 endmenu
 
 rsource "../common/Kconfig"

@@ -563,3 +563,139 @@ column's byte offset in the Attribute's `Offset` and the whole store in the
 Buffer, where Mesa folds the offset into the Buffer's address and size and
 leaves `Offset` 0. Both fetch the same data; matching Mesa's bytes there is
 frame work (#32).
+
+## Attribute records: the locations Mesa numbers, in location order (#6470)
+
+Mesa 26.2.1 numbers the vertex inputs, so the `LD_ATTR` index and the
+draw's Attribute descriptors, by the GL locations that a load still reads
+at the point where it numbers them, in location order, with no holes:
+
+- `gl_nir_lower_optimize_varyings` (src/compiler/glsl/gl_nir_linker.c)
+  runs `nir_lower_io_passes` (src/compiler/nir/nir_lower_io.c) with
+  `renumber_vs_inputs` true: the inputs become `load_input`, `nir_opt_dce`
+  removes the dead ones, and `nir_recompute_io_bases`
+  (src/compiler/nir/nir_recompute_io_bases.c) sets one bit per location a
+  load reads and gives each load the number of set bits below its
+  location (`BITSET_PREFIX_SUM`). `nir_opt_varyings_bulk`
+  (src/compiler/nir/nir_opt_varyings.c) runs the linker's optimisation
+  loop (`optimize_varyings_opts`, which is `gl_nir_opts`) and
+  `nir_recompute_io_bases` again. A load of one
+  matrix column has its column folded into the location and `num_slots` 1
+  (`nir_opt_constant_folding`), so an unread column is a hole too.
+- That is the numbering. The IR is still vectors there. The back end
+  (`bifrost_preprocess_nir`, src/panfrost/compiler/bifrost/bifrost_nir.c)
+  then runs `bi_optimize_loop`: `nir_lower_alu_width` makes each vector
+  operation one scalar operation per lane, and `nir_opt_algebraic` runs
+  again. A load that only now loses its last use goes, but its location
+  keeps its number and its Attribute descriptor. The load of every other
+  location keeps its base.
+- The rule that does this is `fmul(nsz,nnan)(a, 0.0)` / `(a, -0.0)`
+  (src/compiler/nir/nir_opt_algebraic.py). nir_search.c `match_value`
+  matches a constant of a pattern only against a `load_const` source, and
+  only if every lane read equals it, the sign of a zero included. So
+  `d * vec4(0.0, -0.0, 0.0, 0.0)` is neither form while it is one vector
+  operation, and both, lane by lane, after `nir_lower_alu_width`
+  (measured, NIR_DEBUG=print_vs on the shim: the bases are p 0, d 1, b 2
+  after `nir_recompute_io_bases`, and the load of `d` goes in the back end).
+  `d * 0.0`, `d * -0.0`, `d * vec4(0.0)` match in the linker's
+  `nir_opt_algebraic` and go before the numbering; so does
+  `dot(d, vec4(0.0, -0.0, 0.0, 0.0))`, whose rules (`fdot4(a(w_is_zero),
+  b)` and the like, nir_search_helpers.h `x_is_zero`) test one lane at a
+  time.
+- The bifrost back end puts the base into `LD_ATTR_IMM`'s index
+  (`bi_emit_load_attr`, bifrost_compile.c). On the draw side st/mesa makes
+  vertex element `i` from the `i`-th location in `inputs_read`
+  (st_atom_array.cpp), and panfrost on Valhall packs Attribute descriptor
+  `i` from vertex element `i` (`panfrost_emit_vertex_data`,
+  pan_cmdstream.c).
+
+So a declared attribute that nothing reads, one read only by a local
+nothing uses, and one read only on the discarded side of a comma take no
+record. One whose only use is a product by a vector of zeros of both signs
+(`vsattr_latefold*`) takes a record and a descriptor, with no load.
+
+Ours: the vertex walk (`nir::build`) is per lane from the start, and folds
+`d.y * -0.0` at once, as the back end does. It notes a fold of a lane whose
+constant source is not one constant in every lane (`split_const`,
+`vs_fmul`). Then it walks the shader a second time without those folds:
+the factor stays read, in a `Mov` node no rule folds. It stores the lanes
+the first walk stores: a shader compiled alone stores no lane the first
+walk makes a constant (`Nir::own_reads`). `Nir::counted` is
+the set of locations the second walk's loads read after its dead code
+removal (with no such fold, the first walk's own). If the second walk
+refuses, the shader is refused (`MaliError::AttributeNumbering`), not
+numbered by a guess. The second walk keeps every load the first keeps; one
+that does not read a location the first reads is a defect of the walk
+(`MaliError::Defect(Defect::IrIndex)`), which no source we have reaches.
+
+Such a fold can also change how our link takes a varying lane out of the
+vertex shader: it makes the lane a constant, which the link propagates
+into the fragment shader, a lane of uniforms alone, which it makes flat, or
+a lane equal to an earlier one, which it reads from that one
+(`Nir::consts`). Mesa's link runs on the vectors and keeps the lane a
+computed varying of its own. That is refused
+(`MaliError::AttributeNumbering`) only where the attribute numbering
+depends on the fold: such a lane's value in the second walk reads a
+location that no output lane of the first walk reads, each lane taken as if
+the fragment shader read it (`Nir::lane_inputs`, `Nir::output_inputs`; the
+link's constant pass, `vs_constants`, reads no lane). Mesa then counts the
+location and ours would not read it at all. Refused:
+
+- dEQP 1405_0 (`random.basic_expression.vertex.96`),
+  `vec4(e * 2.0, d, c * 2.0, c) * vec4(0.5, -0.0, b, a)`: `d`'s only use is
+  lane 1, a constant after the fold;
+- `u + d * vec4(0.0, -0.0, 0.0, 0.0)` with `u` a uniform: a lane of
+  uniforms after the fold;
+- `v = b; w = b + d * vec4(0.0, -0.0, 0.0, 0.0);`: `w` equal to `v` after
+  the fold.
+
+Where no location depends on the fold, the shader is what the first walk
+gives, the words it has without the second walk:
+
+- the factor is a uniform: `vec4(b.x, b.y, u, 1.0) * vec4(b.z, b.w, 0.0,
+  1.0)` (`vslate_uniform`) and dEQP `random.basic_expression.vertex.12`,
+  `vec4(e, c, d, -0.0) * vec4(c, b, a, a)` with `a` 0.0 and `d` a uniform
+  (`vslate_v12`): compiled, Mesa's attribute records; the fragment words
+  are not Mesa's, because of the propagated lane (a defect of our link,
+  not of the numbering);
+- the factor is an attribute read in another lane, in gl_Position or in
+  gl_PointSize: `b * vec4(1.0, 1.0, 0.0, 1.0)` is refused, for its
+  fragment shader's colour pair (`MaliError::ColourPair`);
+- a late fold of `d` in one varying beside a lane that a fold of two
+  constants makes a constant in another (`vslate_constlane`): `d` is
+  counted, and the constant lane refuses nothing.
+
+A constant times the zero of a split vector is no late fold: a constant
+reads no location (`vsattr_constfactor`).
+
+`Nir::attribute_record` counts the bits of `counted` below a location;
+`select::ld_attr` takes it as the index, and `mod.rs` writes `(location,
+record)` for every counted location, which `vertex_attributes`
+(src/mali/backend.rs) turns into Attribute descriptor `record` from the
+staged attribute at `location`.
+
+Not modelled: folds Mesa makes before the numbering and ours never makes,
+`d - d` and `clamp(d, 0.0, 0.0)`: Mesa numbers no location for `d`, ours
+keeps its load and its record. Those programs' words differ from Mesa's on
+main too.
+
+The GL path: the words equal Mesa's only when the bindings keep the
+declaration order. Mesa numbers by the location `glBindAttribLocation`
+gives. Our vertex shader is compiled at its own locations (the declaration
+order, or `layout(location)`), and the GL core moves the arrays at the draw
+(`attrib_app_index`, src/gl/program.rs `build_attrib_indices`). An
+attribute bound below one declared before it then reads the right array,
+but its record is not Mesa's.
+
+The references are `tools/mali/testdata/vsattr_*` (`tools/mali/drm_shim_ref.sh
+run <shim> vert frag out --uniform-values`, `--mat-columns` for `_matcol`, then
+`pan_ref_diff.py extract out.trace --draw --attributes`). gl_ref.py binds the
+ES 1.00 attributes in declaration order and has no option for another order;
+`vsattr_es3_order` (ES 3.00, `p` at location 3 and `b` at 1, so `p` is
+record 1 and `b` record 0) is the measurement of the location order. Tests:
+`vertex_attribute_indices_count_the_locations_mesa_numbers` (tests.rs),
+`a_late_fold_is_refused_only_where_the_attribute_numbering_depends_on_it`
+(tests.rs; the `vslate_*` references, drawn as the `vsattr_*` ones),
+`a_draw_fills_the_attribute_records_of_the_locations_the_shader_reads` and
+`a_gl_draw_keeps_the_descriptor_of_a_location_whose_load_folds_late`
+(src/mali/backend_tests.rs).

@@ -31,7 +31,7 @@
 //! compute and is not remapped here; a bias is not either.
 
 use super::arena::{AVec, Arena};
-use super::ir::{self, AluOp, InstrId, Module, Node, Op, Range, Src, TexLod, ValueId};
+use super::ir::{self, AluOp, InstrId, Module, Node, Op, Prec, Range, Src, TexLod, ValueId};
 use super::lower::Lowered;
 use super::R;
 
@@ -123,6 +123,14 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
     let mut instrs: AVec<Op> = AVec::with_capacity(a, total)?;
     let sized = !m.comps.is_empty();
     let mut comps: AVec<u8> = AVec::with_capacity(a, if sized { total } else { 0 })?;
+    /* The precision and width tables in step too. The inserted level
+     * (a constant, a compare, a select) is float or bool math on the
+     * coordinate's level, at full width: High. */
+    let precs = !m.prec.is_empty();
+    let mut prec: AVec<Prec> = AVec::with_capacity(a, if precs { total } else { 0 })?;
+    /* carried only when in step: a stale table is dropped, not renumbered */
+    let laned = !m.lanes.is_empty() && m.lanes.len() == m.instrs.len();
+    let mut lanes: AVec<u8> = AVec::with_capacity(a, if laned { total } else { 0 })?;
     for (i, op) in m.instrs.iter().enumerate() {
         let mut op = map_op(*op, &map);
         let r = plan(i);
@@ -133,6 +141,12 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
                 instrs.push(a, Op::ConstF32([MAGNIFY_LOD.to_bits(); 4]))?;
                 if sized {
                     comps.push(a, 4)?;
+                }
+                if precs {
+                    prec.push(a, Prec::High)?;
+                }
+                if laned {
+                    lanes.push(a, 4)?;
                 }
                 Src::splat(ValueId(base))
             } else {
@@ -146,6 +160,12 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
                 if sized {
                     comps.extend_from_slice(a, &[4, 1, 1])?;
                 }
+                if precs {
+                    prec.extend_from_slice(a, &[Prec::High; 3])?;
+                }
+                if laned {
+                    lanes.extend_from_slice(a, &[4, 1, 1])?;
+                }
                 Src::splat(ValueId(base + 2))
             };
             if let Op::Tex { lod: ref mut lv, .. } = op {
@@ -155,6 +175,12 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
         instrs.push(a, op)?;
         if sized {
             comps.push(a, m.comps.get(i).copied().unwrap_or(0))?;
+        }
+        if precs {
+            prec.push(a, m.prec_of(ValueId(i as u32)))?;
+        }
+        if laned {
+            lanes.push(a, m.lanes.get(i).copied().unwrap_or(0))?;
         }
     }
 
@@ -166,6 +192,8 @@ pub fn remap_mag_switch<'a>(a: &Arena<'a>, l: Lowered<'a>, mask: u32) -> R<'a, L
         module: ir::Module {
             instrs: instrs.into_slice(),
             comps: if sized { comps.into_slice() } else { m.comps },
+            prec: if precs { prec.into_slice() } else { m.prec },
+            lanes: if laned { lanes.into_slice() } else { &[] },
             nodes: nodes.into_slice(),
             body,
             ..m
@@ -439,6 +467,21 @@ mod tests {
         assert_eq!(v[0], -1.0 + 1.25 + 2.25);
     }
 
+    /// A `lanes` table out of step with the instructions is not carried
+    /// over as if it were in step (third review S-E): the remapped module
+    /// has none, so `lanes_of` answers None rather than a stale width.
+    #[test]
+    fn a_lanes_table_out_of_step_is_dropped() {
+        store::with_scratch(|a| {
+            let text = a.alloc_str(VS_2D).unwrap();
+            let mut l = super::super::lower::compile_to_ir(a, Stage::Vertex, text).expect("lowers");
+            l.module.lanes = &l.module.lanes[..1];
+            let l = remap_mag_switch(a, l, 1).unwrap();
+            assert!(l.module.lanes.is_empty(), "{:?}", l.module.lanes);
+        })
+        .unwrap();
+    }
+
     /// No bit, or no look-up of the bit's binding: the module is returned
     /// as it came, the same slices.
     #[test]
@@ -452,9 +495,15 @@ mod tests {
             let l = remap_mag_switch(a, l, 2).unwrap();
             assert_eq!(l.module.instrs.as_ptr(), before);
             let n = l.module.instrs.len();
+            let none = l.module.prec.iter().filter(|p| **p == Prec::None).count();
             let l = remap_mag_switch(a, l, 1).unwrap();
             assert_eq!(l.module.instrs.len(), n + 3, "a constant, a compare and a select");
             assert_eq!(l.module.comps.len(), l.module.instrs.len());
+            assert_eq!(l.module.prec.len(), l.module.instrs.len(), "the precision table in step");
+            assert_eq!(l.module.lanes.len(), l.module.instrs.len(), "the width table in step");
+            /* the inserted level is float math at full width, never None
+             * (second review S-C) */
+            assert_eq!(l.module.prec.iter().filter(|p| **p == Prec::None).count(), none);
         })
         .unwrap();
     }

@@ -58,58 +58,79 @@ const _: () = assert!(offset_of!(YdDwWdtArm, period_ms) == 40);
 /// Open WDT0's two CRU gates (the APB clock first: the block's registers
 /// need it), then [`dw_wdt::arm`] with `top` on xin24m. 0, `-EIO` when the
 /// arming refused (the reason in `out.refusal`).
+///
+/// `out` is written one field at a time, each a volatile 32-bit store, never
+/// as a whole: this also runs with the MMU off (`yd_t6_early_arm`), where
+/// every access is to Device memory, and a whole-struct store may become a
+/// `memset` or `memcpy` call, whose `dc zva` or unaligned accesses fault
+/// there.
 pub fn dw_wdt_arm_with(m: &impl Mmio, wdt_base: usize, cru_base: usize, top: u8, out: &mut YdDwWdtArm) -> i32 {
-    *out = YdDwWdtArm::default();
+    fn set(field: &mut u32, v: u32) {
+        // SAFETY: a valid, aligned u32.
+        unsafe { core::ptr::write_volatile(field, v) }
+    }
+    set(&mut out.comp_type, 0);
+    set(&mut out.param1, 0);
+    set(&mut out.version, 0);
+    set(&mut out.cr_found, 0);
+    set(&mut out.torr_found, 0);
+    set(&mut out.cr_now, 0);
+    set(&mut out.torr_now, 0);
+    set(&mut out.ccvr_now, 0);
+    set(&mut out.flags, 0);
+    set(&mut out.refusal, 0);
+    set(&mut out.period_ms, 0);
+    let mut flags = 0;
     for (gate, flag) in [(rk3588::PCLK_WDT0, YD_DW_WDT_PCLK_OPENED), (rk3588::TCLK_WDT0, YD_DW_WDT_TCLK_OPENED)] {
         match rk3588::gate_open(m, cru_base, gate) {
-            Ok(true) => out.flags |= flag,
+            Ok(true) => flags |= flag,
             Ok(false) => {}
             Err(now) => {
-                out.cr_now = now;
-                out.refusal = YD_DW_WDT_REFUSED_GATE;
+                set(&mut out.flags, flags);
+                set(&mut out.cr_now, now);
+                set(&mut out.refusal, YD_DW_WDT_REFUSED_GATE);
                 return -EIO;
             }
         }
     }
     match dw_wdt::arm(m, wdt_base, top, rk3588::TCLK_WDT0_HZ) {
         Ok(Armed { cr_found, torr_found, param1, version, cr_now, torr_now, ccvr_now, was_running, period_ms }) => {
-            out.comp_type = dw_wdt::COMP_TYPE_VALUE;
-            out.param1 = param1;
-            out.version = version;
-            out.cr_found = cr_found;
-            out.torr_found = torr_found;
-            out.cr_now = cr_now;
-            out.torr_now = torr_now;
-            out.ccvr_now = ccvr_now;
+            set(&mut out.comp_type, dw_wdt::COMP_TYPE_VALUE);
+            set(&mut out.param1, param1);
+            set(&mut out.version, version);
+            set(&mut out.cr_found, cr_found);
+            set(&mut out.torr_found, torr_found);
+            set(&mut out.cr_now, cr_now);
+            set(&mut out.torr_now, torr_now);
+            set(&mut out.ccvr_now, ccvr_now);
             if was_running {
-                out.flags |= YD_DW_WDT_WAS_RUNNING;
+                flags |= YD_DW_WDT_WAS_RUNNING;
             }
-            out.period_ms = period_ms;
+            set(&mut out.flags, flags);
+            set(&mut out.period_ms, period_ms);
             0
         }
         Err(Refused { why, comp_type, param1, cr_found, torr_found, read_back }) => {
-            out.comp_type = comp_type;
-            out.param1 = param1;
-            out.cr_found = cr_found;
-            out.torr_found = torr_found;
-            out.cr_now = read_back;
+            set(&mut out.comp_type, comp_type);
+            set(&mut out.param1, param1);
+            set(&mut out.cr_found, cr_found);
+            set(&mut out.torr_found, torr_found);
+            set(&mut out.cr_now, read_back);
             if cr_found & dw_wdt::cr::WDT_EN != 0 {
-                out.flags |= YD_DW_WDT_WAS_RUNNING;
+                flags |= YD_DW_WDT_WAS_RUNNING;
             }
-            out.refusal = why as u32;
+            set(&mut out.flags, flags);
+            set(&mut out.refusal, why as u32);
             -EIO
         }
     }
 }
 
-/// Arm WDT0 (`wdt_base`, the shim's `device_map()` of 0xfeaf0000) for the
-/// period of `top` (0..=15: 2^(16 + top) cycles of 24 MHz), through the CRU
-/// at `cru_base` (its mapping of 0xfd7c0000, at least 0x1000 bytes).
+/// [`dw_wdt_arm_with`] after the argument checks of [`yd_dw_wdt_arm`].
 ///
 /// # Safety
-/// Both bases are mapped device memory covering the blocks; `out` is valid.
-#[no_mangle]
-pub unsafe extern "C" fn yd_dw_wdt_arm(wdt_base: usize, cru_base: usize, top: u32, out: *mut YdDwWdtArm) -> i32 {
+/// Both bases address the blocks as device memory; `out` is null or valid.
+unsafe fn dw_wdt_arm_checked(wdt_base: usize, cru_base: usize, top: u32, out: *mut YdDwWdtArm) -> i32 {
     if out.is_null() || top > u32::from(dw_wdt::TOP_MAX) {
         return -EINVAL;
     }
@@ -117,6 +138,20 @@ pub unsafe extern "C" fn yd_dw_wdt_arm(wdt_base: usize, cru_base: usize, top: u3
     let hw = unsafe { Hw::new() };
     // SAFETY: the caller's contract.
     unsafe { dw_wdt_arm_with(&hw, wdt_base, cru_base, top as u8, &mut *out) }
+}
+
+/// Arm WDT0 (`wdt_base`, the shim's `device_map()` of 0xfeaf0000) for the
+/// period of `top` (0..=15: 2^(16 + top) cycles of 24 MHz), through the CRU
+/// at `cru_base` (its mapping of 0xfd7c0000, at least 0x1000 bytes). The
+/// image's own arming is `yd_t6_early_arm`; this is the glue's second try
+/// after a refusal.
+///
+/// # Safety
+/// Both bases are mapped device memory covering the blocks; `out` is valid.
+#[no_mangle]
+pub unsafe extern "C" fn yd_dw_wdt_arm(wdt_base: usize, cru_base: usize, top: u32, out: *mut YdDwWdtArm) -> i32 {
+    // SAFETY: the caller's contract.
+    unsafe { dw_wdt_arm_checked(wdt_base, cru_base, top, out) }
 }
 
 /// Restart WDT0's counter.
@@ -190,8 +225,12 @@ pub const YD_T6_EARLY_VHE_EXIT: u64 = 1 << 0;
 /// `yd_t6_el2_vectors` is the EL2 vector table [`yd_t6_early_c`] installs:
 /// every one of the 16 entries passes its offset to [`yd_t6_el2_trap`] on a
 /// stack of its own and never returns.
+///
+/// [`yd_t6_early_arm`] is the image's WDT0 arming, from Zephyr's
+/// `z_arm64_el1_plat_init`, MMU off: before `z_prep_c` and every init hook.
 #[cfg(target_arch = "aarch64")]
 mod early {
+    use super::YdDwWdtArm;
     use crate::aarch64;
     use crate::board::nanopc_t6_early::{self as banner, El2Entry, El2Trap, UART2_PHYS};
     use crate::ip::ns16550_tx::Tx;
@@ -323,38 +362,40 @@ mod early {
         }
     }
 
-    /// `T6:A1`, from Zephyr's `z_arm64_el1_plat_init` (the end of
-    /// `z_arm64_el1_init`).
+    /// `T6:A1`, `T6:A2`, [`super::yd_dw_wdt_arm`] on WDT0 and the CRU at
+    /// their physical bases `wdt_phys` and `cru_phys`, `T6:A3`:
+    /// from Zephyr's `z_arm64_el1_plat_init`, the end of `z_arm64_el1_init`,
+    /// which reset.S runs before `z_prep_c` and so before every init hook of
+    /// every level (nanopc_t6.c, "Order"). Returns what `yd_dw_wdt_arm`
+    /// would; `out` gets the record.
     ///
     /// # Safety
-    /// At EL1 with the MMU off (before `z_prep_c`).
+    /// At EL1 with the MMU off (before `z_prep_c`): every address is the
+    /// physical one, every access is to Device memory. The bases are WDT0's
+    /// and the CRU's; `out` is null or valid, outside `.bss` (which
+    /// `z_prep_c` zeroes after this).
     #[no_mangle]
-    pub unsafe extern "C" fn yd_t6_early_el1() {
+    pub unsafe extern "C" fn yd_t6_early_arm(wdt_phys: usize, cru_phys: usize, top: u32, out: *mut YdDwWdtArm) -> i32 {
         // SAFETY: the MMU is off: UART2_PHYS is uart2.
         let hw = unsafe { Hw::new() };
-        banner::banner_a1(&mut Tx::new(&hw, UART2_PHYS));
-    }
-
-    /// `T6:A2` through `uart`, the glue's `device_map()` of uart2.
-    ///
-    /// # Safety
-    /// `uart` maps uart2's registers as device memory.
-    #[no_mangle]
-    pub unsafe extern "C" fn yd_t6_banner_a2(uart: usize) {
+        let mut tx = Tx::new(&hw, UART2_PHYS);
+        banner::banner_a1(&mut tx);
+        banner::banner_a2(&mut tx);
         // SAFETY: the caller's contract.
-        let hw = unsafe { Hw::new() };
-        banner::banner_a2(&mut Tx::new(&hw, uart));
-    }
-
-    /// `T6:A3` through `uart`: the WDT0 arming's result.
-    ///
-    /// # Safety
-    /// As [`yd_t6_banner_a2`].
-    #[no_mangle]
-    pub unsafe extern "C" fn yd_t6_banner_a3(uart: usize, rc: i32, cr_now: u32, period_ms: u32) {
-        // SAFETY: the caller's contract.
-        let hw = unsafe { Hw::new() };
-        banner::banner_a3(&mut Tx::new(&hw, uart), rc, cr_now, period_ms);
+        let rc = unsafe { super::dw_wdt_arm_checked(wdt_phys, cru_phys, top, out) };
+        let (cr_now, period_ms) = if out.is_null() {
+            (0, 0)
+        } else {
+            // SAFETY: as above; volatile reads of what was just written.
+            unsafe {
+                (
+                    core::ptr::read_volatile(core::ptr::addr_of!((*out).cr_now)),
+                    core::ptr::read_volatile(core::ptr::addr_of!((*out).period_ms)),
+                )
+            }
+        };
+        banner::banner_a3(&mut tx, rc, cr_now, period_ms);
+        rc
     }
 }
 
@@ -423,10 +464,31 @@ pub struct YdT6GpuUp {
     /// `qos_gpu_m0` read back.
     pub qos_policy: u32,
     pub qos_words: [u32; 3],
+    /// Appended: the take-over of a GPU found powered
+    /// ([`crate::gpu::mali::takeover::TakeOver`]): 1 when it ran (0: PD_GPU
+    /// read off at hand-over, or the run stopped before the step); the
+    /// steps it got through (`TakeOver::steps`: 1 masked and cleared, 2 the
+    /// MCU halt waited for, 3 a reset completed; the words of a step not
+    /// reached are 0); `GPU_INT_MASK`, `JOB_INT_MASK`, `MMU_INT_MASK` as
+    /// found; the three `*_INT_RAWSTAT` as found and after the clear;
+    /// `MCU_STATUS` as found, the polls of the halt wait, 1 when it timed
+    /// out, `MCU_STATUS` at its end; 1 when the soft reset timed out and the
+    /// hard reset ran; that reset's `GPU_INT_RAWSTAT` before the clear,
+    /// after it, and its polls; the three masks and `MCU_STATUS` after the
+    /// reset.
+    pub take_over_ran: u32,
+    pub take_over_steps: u32,
+    pub take_over_masks: [u32; 3],
+    pub take_over_raw: [u32; 3],
+    pub take_over_raw_cleared: [u32; 3],
+    pub take_over_mcu: [u32; 4],
+    pub take_over_hard: u32,
+    pub take_over_reset: [u32; 3],
+    pub take_over_after: [u32; 4],
 }
 
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 129);
+const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 152);
 #[cfg(any(feature = "mali", test))]
 const _: () = assert!(offset_of!(YdT6GpuUp, rk806) == 4 * 18);
 #[cfg(any(feature = "mali", test))]
@@ -453,6 +515,10 @@ const _: () = assert!(offset_of!(YdT6GpuUp, supply_waited_us) == 4 * 124);
 const _: () = assert!(offset_of!(YdT6GpuUp, qos_policy) == 4 * 125);
 #[cfg(any(feature = "mali", test))]
 const _: () = assert!(offset_of!(YdT6GpuUp, qos_words) == 4 * 126);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, take_over_ran) == 4 * 129);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, take_over_after) == 4 * 148);
 
 #[cfg(any(feature = "mali", test))]
 fn lo_hi(v: u64) -> [u32; 2] {
@@ -493,6 +559,7 @@ fn ident_words(i: &crate::gpu::mali::Ident) -> [u32; 16] {
 impl From<&crate::board::nanopc_t6_gpu::GpuUp> for YdT6GpuUp {
     fn from(o: &crate::board::nanopc_t6_gpu::GpuUp) -> YdT6GpuUp {
         let c = &o.clock;
+        let t = o.take_over.unwrap_or_default();
         YdT6GpuUp {
             pd_before: pd_words(&o.pd_before),
             clock: [c.sel158, c.sel159, c.gate66, c.mode_con0, c.pll_con[0], c.pll_con[1], c.pll_con[2], c.pll_con6],
@@ -528,8 +595,42 @@ impl From<&crate::board::nanopc_t6_gpu::GpuUp> for YdT6GpuUp {
             supply_waited_us: o.supply_waited_us,
             qos_policy: o.qos_policy,
             qos_words: [o.qos[0][1], o.qos[0][2], o.qos[0][3]],
+            take_over_ran: u32::from(o.take_over.is_some()),
+            take_over_steps: t.steps,
+            take_over_masks: t.masks,
+            take_over_raw: t.raw,
+            take_over_raw_cleared: t.raw_cleared,
+            take_over_mcu: [t.mcu_status, t.mcu_waited_us, u32::from(t.mcu_halt_timed_out), t.mcu_status_halted],
+            take_over_hard: u32::from(t.hard),
+            take_over_reset: [t.reset.raw_before, t.reset.raw_cleared, t.reset.waited_us],
+            take_over_after: t.after_reset,
         }
     }
+}
+
+/// The bases of a C entry that runs Z1 ([`yd_t6_gpu_up`], [`yd_t6_fw_up`],
+/// [`yd_t6_submit`], [`yd_t6_osal_up`]), or `None` when the caller mapped
+/// fewer than [`crate::board::nanopc_t6_gpu::GPU_MAP_MIN`] bytes of the GPU
+/// at `gpu` (`gpu_len`): the take-over of a GPU found powered writes up to
+/// its MMU interrupt block, past a shorter map. The entry then answers
+/// `-EINVAL` before it touches anything. Each entry gets its bases here and
+/// nowhere else (`every_z1_entry_takes_its_bases_from_t6_bases`).
+#[cfg(feature = "mali")]
+fn t6_bases(
+    cru: usize,
+    pmu: usize,
+    spi2: usize,
+    qos: usize,
+    gpu: usize,
+    gpu_len: usize,
+) -> Option<crate::board::nanopc_t6_gpu::Bases> {
+    (gpu_len >= crate::board::nanopc_t6_gpu::GPU_MAP_MIN).then_some(crate::board::nanopc_t6_gpu::Bases {
+        cru,
+        pmu,
+        spi2,
+        qos,
+        gpu,
+    })
 }
 
 /// The GPU QoS policy [`yd_t6_gpu_up`] applies, as [`rk3588::QosPolicy::id`].
@@ -560,14 +661,18 @@ pub extern "C" fn yd_t6_gpu_qos_policy(id: u32) -> i32 {
 
 /// The NanoPC-T6's GPU power-on ([`crate::board::nanopc_t6_gpu::gpu_up`]):
 /// 0 when every step ran, `-EIO` when one stopped (`out.stop` says which),
-/// `-EINVAL` for a null `out`, `delay_us` or `on_handover`; `on_handover` is
+/// `-EINVAL` for a null `out`, `delay_us` or `on_handover`, or a `gpu_len`
+/// below `YD_T6_GPU_MAP_MIN` ([`t6_bases`]); `on_handover` is
 /// called once with the hand-over state, before the first PMU or GPU write. The bases are the shim's
 /// `device_map()`s of the CRU (0xfd7c0000, 0x1000), the PMU (0xfd8d8000),
 /// SPI2 (0xfeb20000), `qos_gpu_m0` (0xfdf35000, 0x800) and the GPU
-/// (0xfb000000, 0x1000); `delay_us` busy-waits.
+/// (0xfb000000, `gpu_len` bytes, at least `YD_T6_GPU_MAP_MIN` =
+/// [`crate::board::nanopc_t6_gpu::GPU_MAP_MIN`]: the take-over of a
+/// GPU found powered reaches its MMU interrupt block); `delay_us` busy-waits.
 ///
 /// # Safety
-/// The bases are mapped device memory covering those blocks; `out` is valid.
+/// The bases are mapped device memory covering those blocks, the GPU's for
+/// `gpu_len` bytes; `out` is valid.
 #[cfg(feature = "mali")]
 #[no_mangle]
 pub unsafe extern "C" fn yd_t6_gpu_up(
@@ -576,17 +681,18 @@ pub unsafe extern "C" fn yd_t6_gpu_up(
     spi2: usize,
     qos: usize,
     gpu: usize,
+    gpu_len: usize,
     delay_us: Option<extern "C" fn(u32)>,
     on_handover: Option<extern "C" fn(*const YdT6GpuUp)>,
     out: *mut YdT6GpuUp,
 ) -> i32 {
+    let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(delay_us), Some(on_handover)) = (delay_us, on_handover) else { return -EINVAL };
     if out.is_null() {
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
-    let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
     let qos = t6_gpu_qos_policy();
     let o = crate::board::nanopc_t6_gpu::gpu_up_with(qos, &hw, b, &mut |us| delay_us(us), &mut |h| {
         let h = YdT6GpuUp::from(h);
@@ -818,8 +924,9 @@ fn fw_up_run(
 /// with a `clean` of each section, the MCU's start, the global
 /// configuration and one `PING`. 0 when every step ran (`out->step` is
 /// `YD_T6_FW_STEP_NONE`), `-EIO` when one stopped (`out->step` says which),
-/// `-EINVAL` for a null or misaligned argument. The bases are those of
-/// [`yd_t6_gpu_up`], `gpu` mapped for 0x280000 bytes (the doorbells);
+/// `-EINVAL` for a null or misaligned argument or a `gpu_len` below
+/// `YD_T6_GPU_MAP_MIN`. The bases are those of
+/// [`yd_t6_gpu_up`], `gpu` mapped for `gpu_len` = 0x280000 bytes (the doorbells);
 /// `pool` is `pool_pages` 4 KiB pages at physical `tables_pa`, written by
 /// this call; `timer_hz` is CNTFRQ_EL0; `clean` cleans the data cache over
 /// a range to the point of coherency, 0 on success; `on_handover` as
@@ -842,6 +949,7 @@ pub unsafe extern "C" fn yd_t6_fw_up(
     spi2: usize,
     qos: usize,
     gpu: usize,
+    gpu_len: usize,
     blob: *const u8,
     blob_len: usize,
     backings: *const YdT6FwBacking,
@@ -858,6 +966,7 @@ pub unsafe extern "C" fn yd_t6_fw_up(
 ) -> i32 {
     use crate::board::nanopc_t6_sections::Backing;
     use crate::gpu::mali::pgtable::{Table, PAGE};
+    let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
     if out.is_null()
         || z1.is_null()
@@ -882,7 +991,6 @@ pub unsafe extern "C" fn yd_t6_fw_up(
     let pages = unsafe { core::slice::from_raw_parts_mut(pool.cast::<Table>(), pool_pages as usize) };
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
-    let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
     let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
     let o = fw_up_run(
         &hw,
@@ -994,7 +1102,8 @@ fn submit_run(
 /// group stopped and terminated, the target read back. 0 when every step
 /// ran (`out->step` is `YD_T6_SUBMIT_STEP_NONE`), `-EIO` when one stopped
 /// (`out->step` says which; Z3's own record is `out->fw`, Z1's is `z1` as
-/// [`yd_t6_fw_up`] writes it), `-EINVAL` for a null or misaligned argument.
+/// [`yd_t6_fw_up`] writes it), `-EINVAL` for a null or misaligned argument
+/// or a `gpu_len` below `YD_T6_GPU_MAP_MIN`.
 ///
 /// # Safety
 /// As [`yd_t6_fw_up`]'s; and `mem` is valid, each backing in it the memory
@@ -1010,6 +1119,7 @@ pub unsafe extern "C" fn yd_t6_submit(
     spi2: usize,
     qos: usize,
     gpu: usize,
+    gpu_len: usize,
     blob: *const u8,
     blob_len: usize,
     backings: *const YdT6FwBacking,
@@ -1028,6 +1138,7 @@ pub unsafe extern "C" fn yd_t6_submit(
     use crate::board::nanopc_t6_sections::Backing;
     use crate::board::nanopc_t6_submit::{GroupBacking, McuBacking, Z4Mem, GENERATED, QUEUE_MCU_VA};
     use crate::gpu::mali::pgtable::{Table, PAGE};
+    let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
     if out.is_null()
         || z1.is_null()
@@ -1068,7 +1179,6 @@ pub unsafe extern "C" fn yd_t6_submit(
     let mem = Z4Mem { queue, vm: &vm, vm_pool, vm_tables_pa: z4.vm_tables_pa };
     // SAFETY: the caller's contract.
     let hw = unsafe { Hw::new() };
-    let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
     let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
     let o = submit_run(
         &hw,
@@ -1104,7 +1214,12 @@ pub unsafe extern "C" fn yd_t6_submit(
 /// AS0's table pages (`pool_pages` 4 KiB pages at physical `tables_pa`);
 /// `queue` the queue's AS0 memory (user pages, suspend buffers); `ring`,
 /// `heap_pool`, `heap_chunks` and `carve` the group VM's four regions
-/// (`YD_T6_OSAL_*_VA`); `vm_pool` the group VM's table pages.
+/// (`YD_T6_OSAL_*_VA`); `vm_pool` the group VM's table pages;
+/// `heap_initial_chunks` the tiler heap's chunks at the start (the others
+/// of `heap_chunks` are its growth); `carve_reserved` the bytes at
+/// `carve`'s end no `yd_t6_osal_alloc` gets (the board's window buffer,
+/// reached through `yd_t6_osal_map_phys`): 0, or whole 4 KiB pages that
+/// leave at least one page to hand out.
 #[cfg(any(feature = "mali", test))]
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -1121,10 +1236,12 @@ pub struct YdT6OsalMem {
     pub vm_pool: *mut u8,
     pub vm_pool_pages: u32,
     pub vm_tables_pa: u64,
+    pub heap_initial_chunks: u32,
+    pub carve_reserved: u32,
 }
 
 #[cfg(all(any(feature = "mali", test), target_pointer_width = "64"))]
-const _: () = assert!(size_of::<YdT6OsalMem>() == 192);
+const _: () = assert!(size_of::<YdT6OsalMem>() == 200);
 
 /// `struct osal_gpu_mem` (include/gles_osal.h), which this crate cannot
 /// import from the library: the same fields at the same offsets.
@@ -1180,7 +1297,8 @@ fn osal_hw() -> Hw {
 /// group over `mem`'s regions. 0 when up (or already up), `-EIO` when a
 /// step stopped (`out->step` says which, as for [`yd_t6_submit`]; Z1's
 /// whole record is `z1`, as [`yd_t6_fw_up`] gives it),
-/// `-EINVAL` for a null or misaligned argument, a firmware that does not
+/// `-EINVAL` for a null or misaligned argument, a `gpu_len` below
+/// `YD_T6_GPU_MAP_MIN`, a firmware that does not
 /// parse or an `mem->fw` too small for its sections. `delay_us` is kept
 /// for the waits of the later calls.
 ///
@@ -1200,6 +1318,7 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     spi2: usize,
     qos: usize,
     gpu: usize,
+    gpu_len: usize,
     blob: *const u8,
     blob_len: usize,
     timer_hz: u32,
@@ -1214,6 +1333,7 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     use crate::board::nanopc_t6_sections::Backing;
     use crate::board::nanopc_t6_submit::{GroupBacking, McuBacking, SubmitUp, QUEUE_MCU_VA};
     use crate::gpu::mali::pgtable::{Table, PAGE};
+    let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
     if out.is_null() || z1.is_null() || blob.is_null() || mem.is_null() {
         return -EINVAL;
@@ -1244,6 +1364,8 @@ pub unsafe extern "C" fn yd_t6_osal_up(
         carve: back(z.carve),
         vm_pool,
         vm_tables_pa: z.vm_tables_pa,
+        heap_initial_chunks: z.heap_initial_chunks,
+        carve_reserved: u64::from(z.carve_reserved),
     };
     // SAFETY: one thread (the contract).
     let s = unsafe { osal() };
@@ -1252,7 +1374,7 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
     let r = s.0.up(
         &osal_hw(),
-        crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu },
+        b,
         blob,
         &backings[..n],
         pool,
@@ -1322,13 +1444,17 @@ pub unsafe extern "C" fn yd_t6_osal_free(mem: *mut OsalGpuMem) -> i32 {
     // SAFETY: the caller's contract.
     let (s, mem) = unsafe { (osal(), mem.as_mut()) };
     let Some(m) = mem else { return -EINVAL };
-    let rc = if m.impl_.is_null() { 0 } else { s.0.free(&osal_hw(), m.gpu, m.impl_ as usize) };
+    let Some(delay) = s.1 else { return -EINVAL };
+    let rc = if m.impl_.is_null() { 0 } else { s.0.free(&osal_hw(), m.gpu, m.impl_ as usize, &mut |us| delay(us)) };
     *m = OsalGpuMem { cpu: core::ptr::null_mut(), gpu: 0, phys: 0, size: 0, impl_: core::ptr::null_mut() };
     rc
 }
 
-/// `map_phys` ([`crate::board::nanopc_t6_osal::Osal::window`]): `*out`
-/// with a null `impl` (nothing to free), or a negative errno.
+/// `map_phys` ([`crate::board::nanopc_t6_osal::Osal::window`]): 0 and
+/// `*out`, its `impl` the window's handle
+/// ([`crate::board::nanopc_t6_osal::WINDOW`]: non-null as the GL library
+/// needs it, and [`yd_t6_osal_free`] frees nothing for it), or a negative
+/// errno.
 ///
 /// # Safety
 /// As [`yd_t6_osal_alloc`].
@@ -1383,7 +1509,25 @@ pub unsafe extern "C" fn yd_t6_osal_wait(fence: i64, timeout_us: i64) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn yd_t6_osal_completed() -> i64 {
     // SAFETY: the caller's contract.
-    unsafe { osal() }.0.completed(&osal_hw())
+    let s = unsafe { osal() };
+    let Some(delay) = s.1 else { return -i64::from(EINVAL) };
+    s.0.completed(&osal_hw(), &mut |us| delay(us))
+}
+
+/// `shutdown` ([`crate::board::nanopc_t6_osal::Osal::shutdown`]): its
+/// [`crate::board::nanopc_t6_osal::Shutdown::code`] (0, `-EIO` or
+/// `-ETIMEDOUT`), or `-EINVAL` when there was nothing to end (not up,
+/// already shut down, or dead).
+///
+/// # Safety
+/// As [`yd_t6_osal_submit`].
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_shutdown() -> i32 {
+    // SAFETY: the caller's contract.
+    let s = unsafe { osal() };
+    let Some(delay) = s.1 else { return -EINVAL };
+    s.0.shutdown(&osal_hw(), &mut |us| delay(us)).map_or(-EINVAL, |d| d.code())
 }
 
 /// `OSAL_QUERY_MALI_GPU`'s answer into `*out` (`struct osal_mali_gpu`):
@@ -1425,9 +1569,11 @@ pub unsafe extern "C" fn yd_t6_osal_heap(out: *mut crate::gpu::mali::heap::OsalM
 }
 
 /// The OSAL's counts for its log: kicks submitted and completed, pages in
-/// use now and at most, frees held and refused; and the sched refusal that
-/// stopped it (`dead_refusal` 0 for none) with its value. 0, or `-EINVAL`
-/// for a null `out`.
+/// use now and at most, frees held and refused; the sched refusal that
+/// stopped it (`dead_refusal` 0 for none) with its value; the group's
+/// restarts and the refusal that caused the last (0 for none) with its
+/// value; tiler OOMs answered with a chunk and with none, and the heap's
+/// chunks now. 0, or `-EINVAL` for a null `out`.
 ///
 /// # Safety
 /// As [`yd_t6_osal_gpu`].
@@ -1440,6 +1586,7 @@ pub unsafe extern "C" fn yd_t6_osal_counts(out: *mut YdT6OsalCounts) -> i32 {
     let o = &s.0;
     let (submitted, completed) = o.fences();
     let (dead_refusal, dead_value) = o.dead().map_or((0, 0), |(r, v)| (r as u32, v));
+    let (last_refusal, last_value) = o.last_error().map_or((0, 0), |(r, v)| (r as u32, v));
     *out = YdT6OsalCounts {
         submitted,
         completed,
@@ -1449,6 +1596,16 @@ pub unsafe extern "C" fn yd_t6_osal_counts(out: *mut YdT6OsalCounts) -> i32 {
         refused_frees: o.refused_frees,
         dead_refusal,
         dead_value,
+        restarts: o.restarts,
+        last_refusal,
+        last_value,
+        oom_chunks: o.oom_chunks,
+        oom_no_chunk: o.oom_no_chunk,
+        heap_chunks: o.heap_chunks().len() as u32,
+        unended: u32::from(o.unended()),
+        down: u32::from(o.is_down()),
+        memory_kept: u32::from(o.memory_kept()),
+        stops_refused: o.stops_refused,
     };
     0
 }
@@ -1466,10 +1623,20 @@ pub struct YdT6OsalCounts {
     pub refused_frees: u32,
     pub dead_refusal: u32,
     pub dead_value: u32,
+    pub restarts: u32,
+    pub last_refusal: u32,
+    pub last_value: u32,
+    pub oom_chunks: u32,
+    pub oom_no_chunk: u32,
+    pub heap_chunks: u32,
+    pub unended: u32,
+    pub down: u32,
+    pub memory_kept: u32,
+    pub stops_refused: u32,
 }
 
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(size_of::<YdT6OsalCounts>() == 40);
+const _: () = assert!(size_of::<YdT6OsalCounts>() == 80);
 
 #[cfg(all(test, feature = "mali"))]
 mod fw_tests {
@@ -1619,7 +1786,8 @@ mod fw_tests {
         let bk = [YdT6FwBacking::default()];
         let blob = [0u8; 4];
         let off = pool.as_mut_ptr().align_offset(4096);
-        let call = |blob: *const u8,
+        let call = |gpu_len: usize,
+                    blob: *const u8,
                     pool: *mut u8,
                     clean: Option<extern "C" fn(usize, usize) -> i32>,
                     out: *mut FwUp| unsafe {
@@ -1629,6 +1797,7 @@ mod fw_tests {
                 0,
                 0,
                 0,
+                gpu_len,
                 blob,
                 4,
                 bk.as_ptr(),
@@ -1645,10 +1814,60 @@ mod fw_tests {
             )
         };
         let p = unsafe { pool.as_mut_ptr().add(off) };
-        assert_eq!(call(blob.as_ptr(), p, Some(clean_ok), core::ptr::null_mut()), -EINVAL);
-        assert_eq!(call(core::ptr::null(), p, Some(clean_ok), &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), p, None, &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), unsafe { p.add(8) }, Some(clean_ok), &mut out), -EINVAL);
+        const MAP: usize = crate::board::nanopc_t6_gpu::GPU_MAP_MIN;
+        assert_eq!(call(MAP, blob.as_ptr(), p, Some(clean_ok), core::ptr::null_mut()), -EINVAL);
+        assert_eq!(call(MAP, core::ptr::null(), p, Some(clean_ok), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, None, &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), unsafe { p.add(8) }, Some(clean_ok), &mut out), -EINVAL);
+        // every argument in order: the run starts and refuses the 4-byte
+        // blob (STEP_PARSE) before it touches anything; so the same call
+        // with one byte less of the GPU mapped is refused by the map alone
+        assert_eq!(call(MAP, blob.as_ptr(), p, Some(clean_ok), &mut out), -EIO);
+        assert_eq!(out.step, fwb::STEP_PARSE);
+        assert_eq!(call(MAP - 1, blob.as_ptr(), p, Some(clean_ok), &mut out), -EINVAL);
+    }
+
+    #[test]
+    fn t6_bases_refuses_a_gpu_map_below_gpu_map_min() {
+        use crate::board::nanopc_t6_gpu::GPU_MAP_MIN;
+        assert!(t6_bases(1, 2, 3, 4, 5, 0).is_none());
+        assert!(t6_bases(1, 2, 3, 4, 5, GPU_MAP_MIN - 1).is_none());
+        let b = t6_bases(1, 2, 3, 4, 5, GPU_MAP_MIN).expect("GPU_MAP_MIN is enough");
+        assert_eq!((b.cru, b.pmu, b.spi2, b.qos, b.gpu), (1, 2, 3, 4, 5));
+    }
+
+    /// Every C entry here that runs Z1 (one that takes `on_handover`) takes
+    /// the GPU map's length right after `gpu`, gets its bases from
+    /// [`t6_bases`] before anything else, and the header declares the
+    /// length; nothing else in this file builds the bases. An entry added
+    /// later is found by the same rule, not from a list.
+    #[test]
+    fn every_z1_entry_takes_its_bases_from_t6_bases() {
+        const SRC: &str = include_str!("rk3588.rs");
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let entry = ["pub unsafe extern ", "\"C\" fn "].concat();
+        let first = "let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };";
+        let mut names = vec![];
+        for chunk in SRC.split(entry.as_str()).skip(1) {
+            let (sig, body) = chunk.split_once(" {\n").expect("a signature");
+            if !sig.contains("on_handover: Option<") {
+                continue;
+            }
+            let name = &sig[..sig.find('(').expect("a name")];
+            assert!(sig.contains("    gpu: usize,\n    gpu_len: usize,\n"), "{name}: no gpu_len after gpu");
+            let body = &body[..body.find("\n}\n").expect("an end")];
+            let code: Vec<&str> =
+                body.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("//")).collect();
+            let at = code.iter().position(|l| *l == first);
+            // only `use` lines before it
+            assert!(at.is_some_and(|i| code[..i].iter().all(|l| l.starts_with("use "))), "{name}: {code:?}");
+            let decl = &H[H.find(&format!("int {name}(")).expect(name)..];
+            let decl = &decl[..decl.find(");").expect(name)];
+            assert!(decl.contains("uintptr_t gpu,") && decl.contains("size_t gpu_len,"), "{name}: {decl}");
+            names.push(name);
+        }
+        assert!(names.contains(&"yd_t6_gpu_up") && names.len() > 1, "{names:?}");
+        assert_eq!(SRC.matches(["nanopc_t6_gpu::Bases", " {"].concat().as_str()).count(), 1);
     }
 
     /// A header value: a decimal or `0x` hex literal, with or without a
@@ -1822,6 +2041,7 @@ mod fw_tests {
             ("YD_T6_OSAL_HEAP_CHUNK", u64::from(osal::HEAP_CHUNK_SIZE)),
             ("YD_T6_OSAL_CARVE_VA", osal::CARVE_VA),
             ("YD_T6_OSAL_CARVE_MAX", (osal::MAX_CARVE_PAGES as u64) * crate::gpu::mali::pgtable::PAGE),
+            ("YD_T6_OSAL_VM_MAP_RESERVED", u64::from(osal::VM_MAP_RESERVED)),
         ] {
             assert_eq!(def64(name), v, "{name}");
         }
@@ -1847,7 +2067,9 @@ mod fw_tests {
             carve,
             vm_pool,
             vm_pool_pages,
-            vm_tables_pa
+            vm_tables_pa,
+            heap_initial_chunks,
+            carve_reserved
         );
         field!(
             YdT6OsalCounts,
@@ -1859,7 +2081,17 @@ mod fw_tests {
             held,
             refused_frees,
             dead_refusal,
-            dead_value
+            dead_value,
+            restarts,
+            last_refusal,
+            last_value,
+            oom_chunks,
+            oom_no_chunk,
+            heap_chunks,
+            unended,
+            down,
+            memory_kept,
+            stops_refused
         );
         for (what, v) in &pins {
             let pin = format!("_Static_assert({what} == {v},");
@@ -1932,13 +2164,15 @@ mod fw_tests {
             vm_pool_pages: pages,
             vm_tables_pa: 0,
         };
-        let call = |blob: *const u8, pool: *mut u8, mem: *const YdT6SubmitMem, out: *mut SubmitUp| unsafe {
+        const MAP: usize = crate::board::nanopc_t6_gpu::GPU_MAP_MIN;
+        let call = |gpu_len: usize, blob: *const u8, pool: *mut u8, mem: *const YdT6SubmitMem, out: *mut SubmitUp| unsafe {
             yd_t6_submit(
                 0,
                 0,
                 0,
                 0,
                 0,
+                gpu_len,
                 blob,
                 4,
                 bk.as_ptr(),
@@ -1956,21 +2190,337 @@ mod fw_tests {
             )
         };
         let good = mem(unsafe { p.add(4096) }, 1);
-        assert_eq!(call(blob.as_ptr(), p, &good, core::ptr::null_mut()), -EINVAL);
-        assert_eq!(call(core::ptr::null(), p, &good, &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), p, core::ptr::null(), &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), unsafe { p.add(8) }, &good, &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &good, core::ptr::null_mut()), -EINVAL);
+        assert_eq!(call(MAP, core::ptr::null(), p, &good, &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, core::ptr::null(), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), unsafe { p.add(8) }, &good, &mut out), -EINVAL);
         // the group VM's pool: null, empty, misaligned
-        assert_eq!(call(blob.as_ptr(), p, &mem(core::ptr::null_mut(), 1), &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), p, &mem(unsafe { p.add(4096) }, 0), &mut out), -EINVAL);
-        assert_eq!(call(blob.as_ptr(), p, &mem(unsafe { p.add(4100) }, 1), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &mem(core::ptr::null_mut(), 1), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &mem(unsafe { p.add(4096) }, 0), &mut out), -EINVAL);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &mem(unsafe { p.add(4100) }, 1), &mut out), -EINVAL);
         // with every pointer in order the run starts and the frame's zero
         // backings are refused before anything is touched: -EIO, STEP_FRAME
-        assert_eq!(call(blob.as_ptr(), p, &good, &mut out), -EIO);
+        assert_eq!(call(MAP, blob.as_ptr(), p, &good, &mut out), -EIO);
         assert_eq!(
             (out.step, out.refusal),
             (crate::board::nanopc_t6_submit::STEP_FRAME, crate::board::nanopc_t6_submit::FrameRefusal::Memory as u32)
         );
+        // the same call with one byte less of the GPU mapped: refused by
+        // the map alone
+        assert_eq!(call(MAP - 1, blob.as_ptr(), p, &good, &mut out), -EINVAL);
+    }
+}
+
+/// The display adopt of step D2 ([`crate::board::nanopc_t6_display`]):
+/// `struct yd_t6_display_bases`, `struct yd_t6_display_adopt` and `struct
+/// yd_t6_display_status` are the board module's own `#[repr(C)]` records,
+/// and so is step D3's `struct yd_t6_screen`.
+pub use crate::board::nanopc_t6_display::{
+    Adopt as YdT6DisplayAdopt, Bases as YdT6DisplayBases, Screen as YdT6Screen, Status as YdT6DisplayStatus,
+};
+
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(size_of::<YdT6DisplayBases>() == 64);
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(offset_of!(YdT6DisplayBases, vop_mmu) == 8);
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(offset_of!(YdT6DisplayBases, hdmi) == 56);
+const _: () = assert!(size_of::<YdT6DisplayAdopt>() == 4 * 48);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, pd_vop) == 4 * 4);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, version) == 4 * 11);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, timing) == 4 * 16);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, mmu_status) == 4 * 27);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, running) == 4 * 31);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, ovl_layer_sel) == 4 * 36);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, fb) == 4 * 39);
+const _: () = assert!(offset_of!(YdT6DisplayAdopt, shown) == 4 * 44);
+const _: () = assert!(size_of::<YdT6DisplayStatus>() == 4 * 38);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, frames) == 4 * 7);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, vop) == 4 * 9);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, soc_status1) == 4 * 24);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, vo1_usable) == 4 * 26);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, monitor) == 4 * 30);
+const _: () = assert!(offset_of!(YdT6DisplayStatus, cru_gate60) == 4 * 37);
+const _: () = assert!(size_of::<YdT6Screen>() == 48);
+const _: () = assert!(offset_of!(YdT6Screen, held) == 8);
+const _: () = assert!(offset_of!(YdT6Screen, state) == 24);
+const _: () = assert!(offset_of!(YdT6Screen, n_held) == 28);
+const _: () = assert!(offset_of!(YdT6Screen, width) == 32);
+const _: () = assert!(offset_of!(YdT6Screen, stride) == 40);
+const _: () = assert!(offset_of!(YdT6Screen, flips) == 44);
+
+/// Draw the adopt's pattern ([`crate::board::nanopc_t6_display::draw_pattern`])
+/// into `fb`: `height` rows of `stride_bytes`, `width` pixels each. 0, or
+/// `-EINVAL` (nothing written) for a null or misaligned `fb`, a stride that
+/// is not whole pixels or shorter than a line, or a zero size.
+///
+/// # Safety
+/// `fb` is valid for writes of `stride_bytes * height` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_display_pattern(fb: *mut u32, width: u32, height: u32, stride_bytes: u32) -> i32 {
+    if fb.is_null() || !(fb as usize).is_multiple_of(4) || !stride_bytes.is_multiple_of(4) || width == 0 || height == 0
+    {
+        return -EINVAL;
+    }
+    let stride_px = stride_bytes as usize / 4;
+    // SAFETY: the caller's contract.
+    let px = unsafe { core::slice::from_raw_parts_mut(fb, stride_px * height as usize) };
+    if crate::board::nanopc_t6_display::draw_pattern(px, width as usize, height as usize, stride_px) {
+        0
+    } else {
+        -EINVAL
+    }
+}
+
+/// The adopt ([`crate::board::nanopc_t6_display::adopt`]) on the blocks of
+/// `b`, showing the buffer at physical `fb_pa` (drawn and cleaned by the
+/// caller). 0 when Esmart0 shows it, `-EIO` when a step stopped
+/// (`out.stop` says which), `-EINVAL` for a null argument.
+///
+/// # Safety
+/// Every base of `*b` is mapped device memory covering what the module
+/// reads and writes (`VOP_MAP` bytes of the VOP, 0x100 of each `vop_mmu`
+/// set, a page of each other block); `b` and `out` are valid.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_display_adopt(
+    b: *const YdT6DisplayBases,
+    fb_pa: u64,
+    delay_us: Option<extern "C" fn(u32)>,
+    out: *mut YdT6DisplayAdopt,
+) -> i32 {
+    let Some(delay_us) = delay_us else { return -EINVAL };
+    if b.is_null() || out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (hw, b) = unsafe { (Hw::new(), &*b) };
+    let w = crate::board::nanopc_t6_display::mode_window(fb_pa);
+    let a = crate::board::nanopc_t6_display::adopt(&hw, b, &w, &mut |us| delay_us(us));
+    // SAFETY: the caller's contract.
+    unsafe { *out = a };
+    if a.stop == crate::board::nanopc_t6_display::Stop::None as u32 {
+        0
+    } else {
+        -EIO
+    }
+}
+
+/// Section 5's read-backs ([`crate::board::nanopc_t6_display::status`]):
+/// the frame check over `wait_us`, `frames` frame starts timed with
+/// `now_us` (µs), the registers. 0, `-EIO` when a frame wait or the check
+/// refused (`out.refusal`), `-EINVAL` for a null argument.
+///
+/// # Safety
+/// As [`yd_t6_display_adopt`].
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_display_status(
+    b: *const YdT6DisplayBases,
+    wait_us: u32,
+    frames: u32,
+    now_us: Option<extern "C" fn() -> u64>,
+    delay_us: Option<extern "C" fn(u32)>,
+    out: *mut YdT6DisplayStatus,
+) -> i32 {
+    let (Some(now_us), Some(delay_us)) = (now_us, delay_us) else { return -EINVAL };
+    if b.is_null() || out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (hw, b) = unsafe { (Hw::new(), &*b) };
+    let s = crate::board::nanopc_t6_display::status(&hw, b, wait_us, frames, &mut || now_us(), &mut |us| delay_us(us));
+    // SAFETY: the caller's contract.
+    unsafe { *out = s };
+    if s.refusal == 0 {
+        0
+    } else {
+        -EIO
+    }
+}
+
+/// Show the buffer at physical `phys` on the screen `s`
+/// ([`crate::board::nanopc_t6_display::show`]): the first call is the adopt
+/// with this buffer as its window (record in `adopt`), a later call with
+/// another address a flip that never waits. 0; `-ENOTSUP` for a window the
+/// VOP cannot scan or one that is not the first show's size and stride
+/// (nothing read or written); `-ENODEV` when the adopt stopped, now or at
+/// the first show (`adopt.stop` names the step of this call's adopt);
+/// `-EINVAL` for a null argument.
+///
+/// # Safety
+/// As [`yd_t6_display_adopt`]; `s` is valid, all zero before the first
+/// call and then only this module's; `adopt` is valid. One thread calls
+/// this and [`yd_t6_screen_busy`] for one `s`.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_screen_show(
+    b: *const YdT6DisplayBases,
+    s: *mut YdT6Screen,
+    phys: u64,
+    width: u32,
+    height: u32,
+    stride_bytes: u32,
+    delay_us: Option<extern "C" fn(u32)>,
+    adopt: *mut YdT6DisplayAdopt,
+) -> i32 {
+    let Some(delay_us) = delay_us else { return -EINVAL };
+    if b.is_null() || s.is_null() || adopt.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (hw, b, s, adopt) = unsafe { (Hw::new(), &*b, &mut *s, &mut *adopt) };
+    crate::board::nanopc_t6_display::show(&hw, b, s, phys, width, height, stride_bytes, &mut |us| delay_us(us), adopt)
+}
+
+/// Which of the `n` buffers at `phys[]` the screen `s` may still scan
+/// ([`crate::board::nanopc_t6_display::busy`]): bit k for `phys[k]`, of the
+/// first 32. Too large is possible, too small never; never waits. A null
+/// `b` or `s`, or a null `phys` with `n` not 0, answers every bit: this
+/// call cannot name a buffer free.
+///
+/// # Safety
+/// As [`yd_t6_screen_show`]; `phys` is valid for `n` reads.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_screen_busy(
+    b: *const YdT6DisplayBases,
+    s: *mut YdT6Screen,
+    phys: *const u64,
+    n: usize,
+) -> u32 {
+    if n == 0 {
+        return 0;
+    }
+    if b.is_null() || s.is_null() || phys.is_null() {
+        return u32::MAX;
+    }
+    // SAFETY: the caller's contract.
+    let (hw, b, s, addrs) = unsafe { (Hw::new(), &*b, &mut *s, core::slice::from_raw_parts(phys, n)) };
+    crate::board::nanopc_t6_display::busy(&hw, b, s, addrs)
+}
+
+#[cfg(test)]
+mod display_tests {
+    use super::*;
+    use crate::board::nanopc_t6_display::Stop;
+
+    #[test]
+    fn the_c_header_has_the_d2_numbers_and_layout() {
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let def = |name: &str| -> u32 {
+            let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
+            l.split_whitespace().nth(2).expect(name).parse().unwrap_or_else(|_| panic!("{name}"))
+        };
+        for (name, v) in [
+            ("YD_T6_DISPLAY_STOP_NONE", Stop::None),
+            ("YD_T6_DISPLAY_STOP_VOP_DOMAIN", Stop::VopDomain),
+            ("YD_T6_DISPLAY_STOP_VOP_CLOCK", Stop::VopClock),
+            ("YD_T6_DISPLAY_STOP_VERSION", Stop::Version),
+            ("YD_T6_DISPLAY_STOP_STANDBY", Stop::Standby),
+            ("YD_T6_DISPLAY_STOP_VP_STATE", Stop::VpState),
+            ("YD_T6_DISPLAY_STOP_MODE", Stop::Mode),
+            ("YD_T6_DISPLAY_STOP_ROUTE", Stop::Route),
+            ("YD_T6_DISPLAY_STOP_ESMART_POWER", Stop::EsmartPower),
+            ("YD_T6_DISPLAY_STOP_TAKE_OVER", Stop::TakeOver),
+            ("YD_T6_DISPLAY_STOP_IOMMU", Stop::Iommu),
+            ("YD_T6_DISPLAY_STOP_OVERLAY", Stop::Overlay),
+            ("YD_T6_DISPLAY_STOP_WINDOW", Stop::Window),
+            ("YD_T6_DISPLAY_STOP_FRAME", Stop::Frame),
+            ("YD_T6_DISPLAY_STOP_SHOWN", Stop::Shown),
+        ] {
+            assert_eq!(def(name), v as u32, "{name}");
+        }
+        {
+            use crate::board::nanopc_t6_display::{SCREEN_NEW, SCREEN_SHOWN, SCREEN_STOPPED};
+            for (name, v) in [
+                ("YD_T6_SCREEN_NEW", SCREEN_NEW),
+                ("YD_T6_SCREEN_SHOWN", SCREEN_SHOWN),
+                ("YD_T6_SCREEN_STOPPED", SCREEN_STOPPED),
+            ] {
+                assert_eq!(def(name), v, "{name}");
+            }
+        }
+        let pins = [
+            ("sizeof(struct yd_t6_display_bases)", size_of::<YdT6DisplayBases>()),
+            ("offsetof(struct yd_t6_display_bases, vop_mmu)", offset_of!(YdT6DisplayBases, vop_mmu)),
+            ("offsetof(struct yd_t6_display_bases, hdmi)", offset_of!(YdT6DisplayBases, hdmi)),
+            ("sizeof(struct yd_t6_display_adopt)", size_of::<YdT6DisplayAdopt>()),
+            ("offsetof(struct yd_t6_display_adopt, pd_vop)", offset_of!(YdT6DisplayAdopt, pd_vop)),
+            ("offsetof(struct yd_t6_display_adopt, version)", offset_of!(YdT6DisplayAdopt, version)),
+            ("offsetof(struct yd_t6_display_adopt, timing)", offset_of!(YdT6DisplayAdopt, timing)),
+            ("offsetof(struct yd_t6_display_adopt, mmu_status)", offset_of!(YdT6DisplayAdopt, mmu_status)),
+            ("offsetof(struct yd_t6_display_adopt, running)", offset_of!(YdT6DisplayAdopt, running)),
+            ("offsetof(struct yd_t6_display_adopt, ovl_layer_sel)", offset_of!(YdT6DisplayAdopt, ovl_layer_sel)),
+            ("offsetof(struct yd_t6_display_adopt, fb)", offset_of!(YdT6DisplayAdopt, fb)),
+            ("offsetof(struct yd_t6_display_adopt, shown)", offset_of!(YdT6DisplayAdopt, shown)),
+            ("sizeof(struct yd_t6_display_status)", size_of::<YdT6DisplayStatus>()),
+            ("offsetof(struct yd_t6_display_status, frames)", offset_of!(YdT6DisplayStatus, frames)),
+            ("offsetof(struct yd_t6_display_status, vop)", offset_of!(YdT6DisplayStatus, vop)),
+            ("offsetof(struct yd_t6_display_status, soc_status1)", offset_of!(YdT6DisplayStatus, soc_status1)),
+            ("offsetof(struct yd_t6_display_status, vo1_usable)", offset_of!(YdT6DisplayStatus, vo1_usable)),
+            ("offsetof(struct yd_t6_display_status, monitor)", offset_of!(YdT6DisplayStatus, monitor)),
+            ("offsetof(struct yd_t6_display_status, cru_gate60)", offset_of!(YdT6DisplayStatus, cru_gate60)),
+            ("sizeof(struct yd_t6_screen)", size_of::<YdT6Screen>()),
+            ("offsetof(struct yd_t6_screen, last)", offset_of!(YdT6Screen, last)),
+            ("offsetof(struct yd_t6_screen, held)", offset_of!(YdT6Screen, held)),
+            ("offsetof(struct yd_t6_screen, state)", offset_of!(YdT6Screen, state)),
+            ("offsetof(struct yd_t6_screen, n_held)", offset_of!(YdT6Screen, n_held)),
+            ("offsetof(struct yd_t6_screen, width)", offset_of!(YdT6Screen, width)),
+            ("offsetof(struct yd_t6_screen, height)", offset_of!(YdT6Screen, height)),
+            ("offsetof(struct yd_t6_screen, stride)", offset_of!(YdT6Screen, stride)),
+            ("offsetof(struct yd_t6_screen, flips)", offset_of!(YdT6Screen, flips)),
+        ];
+        for (what, v) in pins {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
+    }
+
+    #[test]
+    fn null_or_misshapen_arguments_are_refused_before_anything_is_touched() {
+        extern "C" fn no_delay(_: u32) {}
+        extern "C" fn no_clock() -> u64 {
+            0
+        }
+        let mut a = YdT6DisplayAdopt::default();
+        let mut s = YdT6DisplayStatus::default();
+        let b = core::ptr::null::<YdT6DisplayBases>();
+        // SAFETY: each call is refused before it dereferences anything.
+        unsafe {
+            assert_eq!(yd_t6_display_adopt(b, 0, Some(no_delay), &mut a), -EINVAL);
+            assert_eq!(yd_t6_display_status(b, 0, 0, Some(no_clock), Some(no_delay), &mut s), -EINVAL);
+            assert_eq!(yd_t6_display_pattern(core::ptr::null_mut(), 4, 4, 16), -EINVAL);
+        }
+        // the screen: nothing is touched without the bases, the screen and
+        // the adopt's record; no buffer is named free without them
+        let mut sc = YdT6Screen::default();
+        let live = core::ptr::NonNull::<YdT6DisplayBases>::dangling().as_ptr().cast_const();
+        let addrs = [0x1000u64, 0x2000];
+        // SAFETY: each call is refused before it dereferences anything.
+        unsafe {
+            assert_eq!(yd_t6_screen_show(b, &mut sc, 0x1000, 1024, 768, 4096, Some(no_delay), &mut a), -EINVAL);
+            assert_eq!(
+                yd_t6_screen_show(live, core::ptr::null_mut(), 0x1000, 1024, 768, 4096, Some(no_delay), &mut a),
+                -EINVAL
+            );
+            assert_eq!(yd_t6_screen_show(live, &mut sc, 0x1000, 1024, 768, 4096, None, &mut a), -EINVAL);
+            assert_eq!(
+                yd_t6_screen_show(live, &mut sc, 0x1000, 1024, 768, 4096, Some(no_delay), core::ptr::null_mut()),
+                -EINVAL
+            );
+            assert_eq!(yd_t6_screen_busy(b, &mut sc, addrs.as_ptr(), 2), u32::MAX);
+            assert_eq!(yd_t6_screen_busy(live, core::ptr::null_mut(), addrs.as_ptr(), 2), u32::MAX);
+            assert_eq!(yd_t6_screen_busy(live, &mut sc, core::ptr::null(), 2), u32::MAX);
+            assert_eq!(yd_t6_screen_busy(b, core::ptr::null_mut(), core::ptr::null(), 0), 0);
+        }
+        assert_eq!((sc, a), (YdT6Screen::default(), YdT6DisplayAdopt::default()));
+        let mut fb = [7u32; 16];
+        // SAFETY: fb holds 4 rows of 16 bytes.
+        unsafe {
+            assert_eq!(yd_t6_display_pattern(fb.as_mut_ptr(), 4, 4, 15), -EINVAL);
+            assert_eq!(yd_t6_display_pattern(fb.as_mut_ptr(), 5, 4, 16), -EINVAL);
+            assert!(fb.iter().all(|p| *p == 7));
+            assert_eq!(yd_t6_display_pattern(fb.as_mut_ptr(), 4, 4, 16), 0);
+        }
+        assert_eq!(fb[0], crate::board::nanopc_t6_display::WHITE);
+        assert_eq!(fb[5], crate::board::nanopc_t6_display::RED);
     }
 }
 
@@ -2130,6 +2680,65 @@ mod tests {
         assert!(b.wdt.writes().is_empty());
     }
 
+    /// The record is written field by field (it may be Device memory) into
+    /// the glue's `__noinit` s_arm, which holds whatever RAM held at boot:
+    /// every field must be written on every path, none left as found.
+    #[test]
+    fn every_field_is_written_over_what_was_there() {
+        let stale = YdDwWdtArm {
+            comp_type: !0,
+            param1: !0,
+            version: !0,
+            cr_found: !0,
+            torr_found: !0,
+            cr_now: !0,
+            torr_now: !0,
+            ccvr_now: !0,
+            flags: !0,
+            refusal: !0,
+            period_ms: !0,
+        };
+        let mut fresh = YdDwWdtArm::default();
+        let mut out = stale;
+        assert_eq!(dw_wdt_arm_with(&board(0x2ff8), BASE, CRU, 13, &mut fresh), 0);
+        assert_eq!(dw_wdt_arm_with(&board(0x2ff8), BASE, CRU, 13, &mut out), 0);
+        assert_eq!(out, fresh);
+
+        let refused = |out: &mut YdDwWdtArm| {
+            let b = board(0x2ff8);
+            b.wdt.regs.borrow_mut()[COMP_TYPE / 4] = 0;
+            dw_wdt_arm_with(&b, BASE, CRU, 13, out)
+        };
+        let (mut fresh, mut out) = (YdDwWdtArm::default(), stale);
+        assert_eq!(refused(&mut fresh), -EIO);
+        assert_eq!(refused(&mut out), -EIO);
+        assert_eq!(out, fresh);
+
+        // a CRU gate that stays closed (the CRU ignores the write)
+        struct Stuck(Board);
+        impl Mmio for Stuck {
+            fn read32(&self, addr: usize) -> u32 {
+                self.0.read32(addr)
+            }
+            fn write32(&self, addr: usize, val: u32) {
+                if addr != CRU + 0x83c {
+                    self.0.write32(addr, val);
+                }
+            }
+            fn read8(&self, _: usize) -> u8 {
+                unreachable!()
+            }
+            fn write8(&self, _: usize, _: u8) {
+                unreachable!()
+            }
+        }
+        let (mut fresh, mut out) = (YdDwWdtArm::default(), stale);
+        assert_eq!(dw_wdt_arm_with(&Stuck(board(0x2ffb)), BASE, CRU, 13, &mut fresh), -EIO);
+        assert_eq!(fresh.refusal, YD_DW_WDT_REFUSED_GATE);
+        assert_eq!(dw_wdt_arm_with(&Stuck(board(0x2ffb)), BASE, CRU, 13, &mut out), -EIO);
+        assert_eq!(out, fresh);
+    }
+
     #[test]
     fn the_c_header_has_the_same_numbers() {
         const H: &str = include_str!("../../include/yakogl_drivers.h");
@@ -2168,10 +2777,75 @@ mod tests {
     }
 
     #[test]
+    fn z1_record_appends_the_take_over_and_the_header_names_its_numbers() {
+        use crate::board::nanopc_t6_gpu::{GpuUp, Stop};
+        use crate::gpu::mali::takeover::TakeOver;
+        use crate::gpu::mali::{MaliRefusal, Reset};
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let def = |name: &str| -> u32 {
+            let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
+            l.split_whitespace().nth(2).expect(name).parse().unwrap_or_else(|_| panic!("{name}"))
+        };
+        for (name, v) in [
+            ("YD_T6_GPU_STOP_TAKE_OVER", Stop::TakeOver as u32),
+            ("YD_MALI_RESET_BIT_STUCK", MaliRefusal::ResetBitStuck as u32),
+            ("YD_MALI_IRQ_MASK_STUCK", MaliRefusal::IrqMaskStuck as u32),
+            ("YD_MALI_HARD_RESET_TIMEOUT", MaliRefusal::HardResetTimeout as u32),
+            ("YD_T6_TAKE_OVER_MASKED", crate::gpu::mali::takeover::STEP_MASKED),
+            ("YD_T6_TAKE_OVER_HALT_WAITED", crate::gpu::mali::takeover::STEP_HALT_WAITED),
+            ("YD_T6_TAKE_OVER_RESET", crate::gpu::mali::takeover::STEP_RESET),
+        ] {
+            assert_eq!(def(name), v, "{name}");
+        }
+        for (what, v) in [
+            ("sizeof(struct yd_t6_gpu_up)", size_of::<YdT6GpuUp>()),
+            ("offsetof(struct yd_t6_gpu_up, take_over_ran)", offset_of!(YdT6GpuUp, take_over_ran)),
+            ("offsetof(struct yd_t6_gpu_up, take_over_after)", offset_of!(YdT6GpuUp, take_over_after)),
+        ] {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
+        let map = H.lines().find(|l| l.starts_with("#define YD_T6_GPU_MAP_MIN ")).expect("YD_T6_GPU_MAP_MIN");
+        let map = map.split_whitespace().nth(2).and_then(|v| v.strip_prefix("0x")).expect("a hex value");
+        assert_eq!(usize::from_str_radix(map, 16), Ok(crate::board::nanopc_t6_gpu::GPU_MAP_MIN));
+        // a run that found PD_GPU off carries none
+        assert_eq!(YdT6GpuUp::from(&GpuUp::default()).take_over_ran, 0);
+        let t = TakeOver {
+            steps: 3,
+            masks: [4, 5, 6],
+            raw: [7, 8, 9],
+            raw_cleared: [10, 11, 12],
+            mcu_status: 13,
+            mcu_waited_us: 14,
+            mcu_halt_timed_out: true,
+            mcu_status_halted: 16,
+            hard: true,
+            reset: Reset { raw_before: 18, raw_cleared: 19, waited_us: 20 },
+            after_reset: [21, 22, 23, 24],
+        };
+        let r = YdT6GpuUp::from(&GpuUp { take_over: Some(t), ..GpuUp::default() });
+        assert_eq!(r.take_over_ran, 1);
+        let words: Vec<u32> = [
+            &[r.take_over_steps][..],
+            &r.take_over_masks,
+            &r.take_over_raw,
+            &r.take_over_raw_cleared,
+            &r.take_over_mcu,
+            &[r.take_over_hard],
+            &r.take_over_reset,
+            &r.take_over_after,
+        ]
+        .concat();
+        // in the order of the fields, each flag as 1
+        let want: Vec<u32> = [3].into_iter().chain(4..=14).chain([1, 16, 1]).chain(18..=24).collect();
+        assert_eq!(words, want);
+    }
+
+    #[test]
     fn z1_record_appends_the_qos_policy_and_its_words() {
         use crate::board::nanopc_t6_gpu::GpuUp;
         const H: &str = include_str!("../../include/yakogl_drivers.h");
-        assert_eq!(size_of::<YdT6GpuUp>(), 4 * 129);
+        assert_eq!(size_of::<YdT6GpuUp>(), 4 * 152);
         assert_eq!(offset_of!(YdT6GpuUp, qos_policy), 4 * 125);
         assert_eq!(offset_of!(YdT6GpuUp, qos_words), 4 * 126);
         for what in ["YD_T6_QOS_RESET      1 ", "YD_T6_QOS_LINUX_ZERO 2 "] {

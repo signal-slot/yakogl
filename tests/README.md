@@ -22,7 +22,7 @@ cargo test --no-default-features --features host-test,gpu-powervr --test <name>
 Shared code is in `common/` (an interpreter of encoded GC7000 instructions,
 and dEQP-style helpers) and `usc_exec/` (an interpreter of the PowerVR USC
 subset our builder emits). `reference/` holds the Mesa reference tables
-(`blobs.rs`, `vivante_blobs.rs` and the internal programs), used only for
+(`reference/blobs.rs`, `reference/vivante_blobs.rs` and the internal programs), used only for
 measurement. `fixtures/` holds pinned inputs and expected outputs; the
 tests name the files they read.
 

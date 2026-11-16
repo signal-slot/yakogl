@@ -28,3 +28,12 @@ CONFIG_KERNEL_VM_SIZE=0x20000000
 CONFIG_ARMV8_A_NS=y
 CONFIG_CACHE_MANAGEMENT=y
 CONFIG_TICKLESS_KERNEL=y
+
+# The main thread runs the board bring-up, whose Rust frames are large:
+# t6_submit's deepest direct call path is 9280 bytes and t6_fw's 7248, more
+# than Zephyr's 4096 byte default for arm64. Nothing guards the stack (the
+# idle thread's and the interrupt stack lie below it), so each image's size
+# is checked after the link (lib/board/common/check_main_stack.py). The check
+# does not count calls through a register; 64 KiB leaves room for those. A
+# GL sample's prj.conf sets a larger value of its own.
+CONFIG_MAIN_STACK_SIZE=65536

@@ -8137,9 +8137,12 @@ mod tests {
     /// list (dEQP fbo.completeness.renderable.renderbuffer.depth.
     /// depth_component24): an ES 2.0 report without GL_OES_depth24 refuses it
     /// with GL_INVALID_ENUM, leaving the storage as it was; one that lists the
-    /// extension, and ES 3.0, take it and the framebuffer built on it is
-    /// complete. The decision reads the list, not the GPU: no GPU claims
-    /// GL_OES_depth24 here, so every ES 2.0 build refuses.
+    /// extension, and ES 3.0, take it, and the depth-only framebuffer built
+    /// on it has the status of any depth-only one: complete where the back
+    /// end draws without colour (backend::DEPTH_ONLY_TARGETS), unsupported
+    /// where it does not (the Mali), never an incomplete attachment. The
+    /// decision reads the list, not the GPU: no GPU claims GL_OES_depth24
+    /// here, so every ES 2.0 build refuses.
     #[test]
     fn depth_component24_renderbuffer_follows_the_extension_list() {
         let gl = TestGl::new(8, 8);
@@ -8166,7 +8169,12 @@ mod tests {
             // SAFETY: plain GL calls on the bound framebuffer.
             unsafe {
                 glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rb);
-                assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+                let want = if crate::backend::DEPTH_ONLY_TARGETS {
+                    GL_FRAMEBUFFER_COMPLETE
+                } else {
+                    GL_FRAMEBUFFER_UNSUPPORTED
+                };
+                assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), want);
             }
         }
     }

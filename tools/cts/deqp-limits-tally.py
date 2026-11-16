@@ -55,9 +55,34 @@ totals of both runs and the changed count. A side without a single parsed
 result is refused, never a silent 'no changes' (host-deqp-run.sh's
 compare_runs rule).
 
-Exit 0: the tallies printed. 1: a run directory without c_*.qpa, a run with
+Exit 0: the tallies printed (--require-pass: every selected case Pass; 3:
+one is not). 1: a run directory without c_*.qpa, a run with
 no result at all, a --compare side without a single result. 2: a bad
 command line.
+
+--require-pass limits replaces the tally with a verdict: a 0-Fail check of
+the plan's limit cases in each RUN. It selects exactly the
+tools/cts/gles3-mustpass.txt names (the file next to this script, read at
+each run, never a list kept here) in implementation_limits,
+state_query.integers, state_query.integers64, state_query.floats and
+state_query.boolean whose last component is one of the seven default limit
+words, bare or followed by _get<form> (max_varying_vectors,
+max_varying_vectors_getfloat, ...). --limit does not extend it. At the
+mustpass of 2026-11 that is 28 cases: the 7 implementation_limits ones, the
+getboolean/getfloat/getinteger64 forms of the four varying limits in
+state_query.integers, and the getboolean/getfloat/getinteger forms of the
+three uniform limits in state_query.integers64 (floats and boolean hold none
+of them). Per RUN it prints its run line, then one line per selected case,
+'  <verdict>  <case>', the verdict being the logged status, Incomplete (began,
+no Result) or MISSING (the run's logs do not hold the case; '(asked, never
+began)' when all.txt names it), a message after any non-Pass, and then
+'N selected, P pass, F not-pass' (F counts MISSING and Incomplete too).
+Exit 0 when every selected case of every RUN is Pass; 3 when one is not, or
+is missing; 1 and 2 as above (a refused run, an unreadable mustpass or one
+selecting nothing; a bad command line, or --require-pass with --compare).
+Without --require-pass the output is the tally above, unchanged.
+tools/cts/deqp-limits-tally-selftest.sh checks it on the run directories in
+tools/cts/testdata/deqp-limits-tally/.
 
 --selftest writes tiny run directories inline -- the shapes real logs hold:
 unindented, space- and tab-indented <Result> lines, a multi-line message,
@@ -84,6 +109,13 @@ LIMITS_DEFAULT = ("max_varying_vectors", "max_varying_components",
                   "max_fragment_input_components", "max_vertex_output_components",
                   "max_uniform_block_size", "max_combined_vertex_uniform_components",
                   "max_combined_fragment_uniform_components")
+
+# --require-pass: the groups searched in the mustpass, and the sets by name.
+REQUIRE_GROUPS = ("implementation_limits", "state_query.integers",
+                  "state_query.integers64", "state_query.floats",
+                  "state_query.boolean")
+REQUIRE_SETS = {"limits": LIMITS_DEFAULT}
+MUSTPASS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gles3-mustpass.txt')
 
 CASE_RE = re.compile(r'^dEQP-GLES[23]\.functional\.')
 BEGIN = re.compile(r'^#beginTestCaseResult (\S+)')
@@ -419,6 +451,53 @@ def compare_lines(old, new, groups, limits):
     return out
 
 
+def require_cases(words, mustpass=MUSTPASS):
+    """The mustpass names --require-pass checks: a case of REQUIRE_GROUPS
+    (its group is the name less its last component, so integers never takes
+    integers64's) whose last component is a word, bare or with a _get<form>
+    suffix. In the mustpass's order; none selected is refused."""
+    leaf = re.compile(r'^(?:%s)(?:_get[a-z0-9]+)?$' % '|'.join(re.escape(w) for w in words))
+    try:
+        with open(mustpass, encoding='utf-8', errors='replace') as f:
+            lines = [ln.strip() for ln in f]
+    except OSError as e:
+        raise TallyError('cannot read the mustpass %s: %s' % (mustpass, e))
+    out = []
+    for c in lines:
+        if not c.startswith('dEQP-GLES3.functional.'):
+            continue
+        group, _, last = CASE_RE.sub('', c).rpartition('.')
+        if group in REQUIRE_GROUPS and leaf.match(last):
+            out.append(c)
+    if not out:
+        raise TallyError('%s selects no case for --require-pass' % mustpass)
+    return out
+
+
+def require_lines(run, cases):
+    """(lines, not-pass count) of one run's --require-pass block."""
+    out = [run_header(run)]
+    asked = set(run['asked'] or ())
+    npass = 0
+    for c in cases:
+        st = case_status(run, c)
+        if st == 'Pass':
+            npass += 1
+            out.append('  %-13s %s' % (st, c))
+            continue
+        if st is None:
+            st, msg = 'MISSING', ('asked, never began' if c in asked
+                                  else 'not in the run\'s case list or logs')
+        elif st == 'Incomplete':
+            msg = 'began and was cut off (no <Result StatusCode=)'
+        else:
+            msg = run['res'][c][1] or '(no message in the log)'
+        out.append('  %-13s %s  %s' % (st, c, msg))
+    nbad = len(cases) - npass
+    out.append('%d selected, %d pass, %d not-pass' % (len(cases), npass, nbad))
+    return out, nbad
+
+
 def main():
     ap = argparse.ArgumentParser(
         prog='deqp-limits-tally.py',
@@ -430,6 +509,9 @@ def main():
                     help='tally this group too (repeatable)')
     ap.add_argument('--limit', action='append', default=[], metavar='WORD',
                     help='list limit rows named after this word too (repeatable)')
+    ap.add_argument('--require-pass', choices=sorted(REQUIRE_SETS), metavar='SET',
+                    help='verdict mode: exit 3 unless every case of SET (limits: the '
+                         'mustpass limit cases) is Pass in each RUN')
     ap.add_argument('--selftest', action='store_true')
     a = ap.parse_args()
     if a.selftest:
@@ -437,6 +519,21 @@ def main():
     groups = GROUPS_DEFAULT + tuple(norm_group(g) for g in a.group)
     limits = LIMITS_DEFAULT + tuple(w for w in a.limit if w)
     try:
+        if a.require_pass:
+            if a.compare:
+                ap.error('--require-pass takes RUN directories, not --compare')
+            if not a.runs:
+                ap.error('give at least one run directory to --require-pass')
+            cases = require_cases(REQUIRE_SETS[a.require_pass])
+            lines, nbad = [], 0
+            for i, run in enumerate([load_run(p) for p in a.runs]):
+                if i:
+                    lines.append('')
+                ls, nb = require_lines(run, cases)
+                lines.extend(ls)
+                nbad += nb
+            sys.stdout.write('\n'.join(lines) + '\n')
+            return 3 if nbad else 0
         if a.compare:
             if len(a.runs) != 2:
                 ap.error('--compare needs exactly two run directories: OLD NEW')

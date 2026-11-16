@@ -111,6 +111,8 @@ pub mod msaa_store;
 /// The PowerVR BXS-4-64 backend (only in a `gpu-powervr` build).
 pub mod pvr;
 pub mod shaderc;
+/// Per-target and mixed integer/float colour-target keys (pure const code).
+pub mod target_key;
 /// The Raspberry Pi 4's V3D 4.2 backend (only in a `gpu-v3d` build).
 pub mod v3d;
 /// The i.MX8MP's Vivante GC7000 backend (only in a `gpu-vivante` build).

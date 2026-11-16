@@ -759,3 +759,103 @@ Byte-equal: `case41.expect.json`, `case114_v.expect.json` and
 `case114_f.expect.json` (every program, the last through the link step),
 `sel_v_const.expect.json` (the link step on a mediump pair). Corpus:
 `es300/cube.frag`, `cubelodf.frag` and `cubelodv.vert` move to `ok`.
+
+## (h) A mediump `textureCube` at the implicit level or with a bias: the directions taken
+
+dEQP-GLES2's texture cube cases sample with `textureCube(s, dir)` in a
+mediump shader: the look-up at `COMPUTED_LOD` (`.cube.computed`, two staging
+words), or at `COMPUTED_BIAS` with a uniform bias widened before the
+descriptor (`tools/mali/testdata/fstex_cube*`). The direction reaches the
+cube ops (fp32 only) by one of two routes, and both arms take a direction
+only in a shape measured byte-equal to Mesa 26.2.1's drm-shim
+(`cube_dir_measured`, `src/shaderc/online/mali/nir_fs.rs`; default refuse,
+`TexCoord`):
+
+| shape | taken when | references |
+|---|---|---|
+| raw | each lane a varying's lane or a constant fp16 holds exactly, one varying lane at least; when the direction is built of parts (`vec3(a2, 1.0)`), each varying read whole; the cube ops read the load's fp32 words and the constant as an operand (+-1.0 the table's `0x3F800000`, 0.5 an FAU word) | `fstex_cube`, `fstex_cubedir_twovary`, `_constneg`, `_rawhalf`, `_v4part`, `_v4yzw`, `_biasv4yzw`, `fstex_cubebias_uni` |
+| pair | x and y fp16 trees of `+`, `*` and negation over varying lanes, constants and uniforms, vectorised as one pair; z a constant (rounded to fp16) or a uniform lane; each lane `F16_TO_F32` at the look-up | `fstex_cubeface4`, `fstex_cubedir_face4uni`, `_uniscale`, `_fmak`, `_mulnegk`, `_pairhalf`, `_negyx`, `_vec4zw`, `_vec4w` |
+
+The pair's operand forms are also the colour's: `select` notes them and
+checks them against `ADMITTED`, as it does for the colour's pairs. A form
+the colour refuses is refused in the direction too (`FsOperandForm`).
+
+**The raw load's width.** The cube ops are fp32 only, so Mesa keeps a raw
+lane's varying fp32 (`src_f32`). Our raw load holds the lanes the direction
+reads. Mesa's load is not always that, and no single rule found so far
+gives its width for every form. What the drm-shim measured:
+
+- Wider than the lanes read, the varying's whole width, in a mediump
+  direction built of parts: `vec3(a2.x, 1.0, 1.0)` loads `.v2`
+  (`_texcoord_partialx`), `vec3(a3.xy, 1.0)` `.v3` (`_partialxy`),
+  `vec3(a2, b2.x)` `.v4` (`_partialb`), and `vec3(a4.xy, 1.0)` `.v4`
+  (measured, no reference committed). One explanation fits these: GLSL's
+  `lower_precision` converts each dereference of the varying whole,
+  before the swizzle (`handle_rvalue`,
+  `src/compiler/glsl/lower_precision.cpp:731-733`).
+- The lanes read, the same as ours, in mediump forms where that
+  explanation predicts the whole width: `vec3(a4.x, a4.y, a4.z)` loads
+  `.v3`, not `.v4`; `vec3(a3.x, a3.y, a3.z)` where the vertex shader makes
+  `a3.z` a constant loads `.v2`; `vec3(a2, 1.0)` where it makes `a2.y` a
+  constant loads one lane. A highp `vec3(a2.x, 1.0, 1.0)` loads one lane
+  too (the pass does not convert a highp value). Measured, no reference
+  committed.
+- The lanes read when the varying is the coordinate itself,
+  `textureCube(s, a4.xyz)` (`.v3`, `_v4part`, `_v4yzw`, `_biasv4yzw`). The
+  pass does not convert a texture argument
+  (`lower_precision_visitor::visit_enter(ir_texture *)`, `:785-790`).
+
+So the raw arm takes a direction built of parts only when both loads are
+the varying's whole width: it reads every lane of each float vector varying
+(any order: `a3.zyx` is taken). A lane the vertex shader makes constant is
+a constant in the fragment shader, not a read, so its varying is not read
+whole. A varying the coordinate is directly is taken as read. The rest is
+refused (`TexCoord`), including forms measured equal above, because they
+have no committed reference and no rule says which width Mesa takes: a vec4
+read in three parts, a highp varying read in part, a varying with a lane
+the vertex shader makes constant. A matrix varying's column read in parts
+is refused as well: the raw arm admits vector varyings only.
+
+The references in `tools/mali/testdata`:
+
+- `fstex_cubedir_*`: the shapes taken. A test reads the directory and checks
+  each one byte for byte along the draw's linked path.
+- `fstex_cubeno_<refusal>_*`: the shapes refused. A test reads the directory
+  and checks that each is refused by the name in its file name, alone and
+  linked. Each holds the drm-shim reference of Mesa's words. Adding a file
+  needs no list edit.
+
+Measured otherwise, and so refused:
+
+- a built direction that reads a varying in part (`_texcoord_partialx`,
+  `_partialxy`, `_partialb`, `_twopartial`, `_biaspartial`): our load is
+  narrower than Mesa's;
+- a raw constant fp16 does not hold (`vec3(a2, 0.1)`, `_texcoord_rawtenth`):
+  Mesa rounds it to fp16 and reads the widened value from an FAU word; the
+  raw lane keeps the fp32 constant;
+- raw lanes beside a uniform (`vec3(a2, u)`, `_texcoord_biasunilane`): Mesa
+  keeps the varying fp32, the pair narrows it;
+- gl_FragCoord or gl_PointCoord: Mesa reads them fp32;
+- a lone product with 2.0 (`a2 * 2.0`): Mesa's late rule makes it
+  `FADD.v2f16 r0, r0^, r0^`. In a sum of two products, one of them with 2.0
+  (`_texcoord_twoproducts`), which product Mesa fuses is not measured;
+- an all-constant direction (`_texcoord_allconst`), and a varying z beside
+  the pair (`_texcoord_pairzvary`);
+- a fused product with a negative constant first (`a2 * -3.0 + 0.25`,
+  `_operandform_fmanegk`): Mesa reads -3.0 from the FAU word, ours reads 3.0
+  negated (`FsOperandForm`, as in the colour);
+- an element of a sampler array other than the first
+  (`textureCube(sa[1], ..)`, `_texarrayelement_implicit`, `_bias`;
+  `TexArrayElement`):
+  - Mesa numbers an array's elements together, so `sa[1]` is descriptor
+    index 1 (handle `0x20011801`).
+  - Our `layout` counts the samplers read, which gives index 0: `sa[0]`'s
+    texture.
+  - The same defect is on main for `texture2D(ta[1], ..)`.
+  - Not an element, and taken: a plain sampler declared after a sampler
+    array (`fstex_cubedir_arrthenplain`), and a sampler whose binding falls
+    in the range of a uniform array that is not a sampler
+    (`fstex_cubedir_besideuniformarray`: a non-sampler uniform has binding
+    0 and its own `array_len`).
+
+A highp shader's implicit level has no reference (`TexKind`).

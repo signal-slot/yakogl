@@ -176,8 +176,6 @@ struct z_pending {
 #define PF_PAYLOAD  struct z_pending
 #define PF_CAPACITY PENDING_FREES_CAP
 #include "pending_frees.h"
-int yakogl_osal_zephyr_present(const struct osal_gpu_mem *mem, uint32_t width, uint32_t height,
-			       uint32_t stride_bytes, uint32_t format); /* zephyr_timing.c */
 
 static struct pf_queue s_pending;
 static uint32_t s_last_submitted;
@@ -735,7 +733,7 @@ const struct osal_ops osal_zephyr_ops = {
 	.log         = z_log,
 	.thread_id   = z_thread_id,
 	.wait_vblank = z_wait_vblank,
-	.present     = yakogl_osal_zephyr_present,
+	.present     = yakogl_zephyr_present,
 	.display_busy = yakogl_zephyr_display_busy,
 };
 

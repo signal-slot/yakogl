@@ -262,20 +262,28 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
     let mut v: Vec<(&'static str, &'static str)> = vec![
         ("MAX_COLOR_ATTACHMENTS", "3, not 4: gl/context.rs CAP_COLOR_ATTACHMENTS; the mrt4 item"),
         ("MAX_DRAW_BUFFERS", "3, not 4: gl/context.rs MAX_DRAW_BUFFERS = CAP_COLOR_ATTACHMENTS; the mrt4 item"),
-        (
-            "MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",
-            "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/state.rs); MAX_UNIFORM_BLOCK_SIZE is the root",
-        ),
-        (
-            "MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",
-            "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/state.rs)",
-        ),
-        (
-            "MAX_UNIFORM_BLOCK_SIZE",
-            "6144, not 16384: a block gets the default-block budget, MAX_UNIFORM_DWORDS * 4 (ubo-uniform)",
-        ),
         ("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)"),
     ];
+    if !cfg!(feature = "gpu-v3d") {
+        // the V3D reads a stage's uniform blocks past its default block (gl/context.rs
+        // MAX_UNIFORM_BLOCK_SIZE, MAX_STAGE_UNIFORM_DWORDS); the other back ends upload the
+        // default block only
+        v.extend_from_slice(&[
+            (
+                "MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",
+                "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/context.rs MAX_STAGE_UNIFORM_DWORDS); \
+                 MAX_UNIFORM_BLOCK_SIZE is the root",
+            ),
+            (
+                "MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",
+                "1536: MAX_UNIFORM_DWORDS, no uniform-block share added (gl/context.rs MAX_STAGE_UNIFORM_DWORDS)",
+            ),
+            (
+                "MAX_UNIFORM_BLOCK_SIZE",
+                "6144, not 16384: a block gets the default-block budget, MAX_UNIFORM_DWORDS * 4 (ubo-uniform)",
+            ),
+        ]);
+    }
     if cfg!(feature = "gpu-mali") {
         v.push((
             "NUM_COMPRESSED_TEXTURE_FORMATS",
@@ -283,17 +291,22 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
              decoded formats are not stored (gl/texture.rs stored_compressed_formats)",
         ));
     }
-    let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"));
+    let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr", feature = "gpu-v3d"));
     if !fifteen {
-        // V3D and Mali carry 8 varying vectors (gl/context.rs MAX_VARYING_VECTORS), the ES 2.0 minimum
+        // Mali carries 8 varying vectors (gl/context.rs MAX_VARYING_VECTORS), the ES 2.0 minimum
         v.extend_from_slice(&[
             ("MAX_VARYING_VECTORS", "8, not 15: the ES 2.0 minimum is what this back end programs (gl/context.rs)"),
             ("MAX_VARYING_COMPONENTS", "32 = 8 vectors * 4"),
             ("MAX_FRAGMENT_INPUT_COMPONENTS", "32 = 8 vectors * 4, ES 3.0 needs 60 (gl/context.rs)"),
         ]);
     }
-    // the GC7000 and the PowerVR report 15 varyings but 60 vertex output components
-    v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));
+    // the V3D reports 64 vertex output components (gl/context.rs); the GC7000 and the PowerVR report
+    // 15 varyings but 60, and Mali 32
+    if cfg!(feature = "gpu-v3d") {
+        // none: 64
+    } else {
+        v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));
+    }
     v
 }
 

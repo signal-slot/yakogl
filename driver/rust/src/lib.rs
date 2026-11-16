@@ -56,6 +56,8 @@ pub mod model_mp25_display;
 #[cfg(test)]
 pub mod model_mp25_i2c;
 #[cfg(test)]
+pub mod model_rk3588_display;
+#[cfg(test)]
 pub mod model_stm32mp2;
 
 /// errno numbers, one table per C library ([`errno_numbers`]).

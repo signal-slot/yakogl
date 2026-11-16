@@ -25,10 +25,31 @@ if(CONFIG_YAKOGL_NANOPC_T6)
   zephyr_library_sources(nanopc_t6/nanopc_t6.c)
   zephyr_include_directories(nanopc_t6)
   add_dependencies(yakogl_board_nanopc_t6 yakogl_drivers_rust)
-  # The early banner's reset.S hooks must be ours in the linked image.
+  # A GL image (the Mali OSAL in it) embeds the CSF firmware and hands it to
+  # the OSAL (nanopc_t6/nanopc_t6_mali.c): driver/src/fw/mali_csffw_blob.h,
+  # made by driver/tools/mkmalifw.sh, never committed.
+  if(CONFIG_YAKOGL_GPU_MALI)
+    get_filename_component(_t6_repo "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
+    zephyr_library_sources(nanopc_t6/nanopc_t6_mali.c)
+    zephyr_library_include_directories("${_t6_repo}/src/osal" "${_t6_repo}/driver/src")
+  endif()
+  # The early banner's reset.S hooks and the WDT0 arming must be ours in
+  # the linked image, and its MMU-off code must call no memset/memcpy and
+  # branch through no register (nanopc_t6/check_early_hooks.cmake).
   set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
-    COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DELF=${ZEPHYR_BINARY_DIR}/${KERNEL_ELF_NAME}
+    COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DOBJDUMP=${CMAKE_OBJDUMP}
+            -DELF=${ZEPHYR_BINARY_DIR}/${KERNEL_ELF_NAME}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/nanopc_t6/check_early_hooks.cmake)
+  # The main thread's stack must hold the image's deepest direct call path
+  # (common/check_main_stack.py, its own cases first): nothing guards the
+  # stack, and below it lie the idle thread's and the interrupt stack.
+  set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
+    COMMAND ${PYTHON_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/common/check_main_stack.py --selftest
+    COMMAND ${PYTHON_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/common/check_main_stack.py
+            ${CMAKE_NM} ${CMAKE_OBJDUMP}
+            ${ZEPHYR_BINARY_DIR}/${KERNEL_ELF_NAME})
   # tools/check.sh builds t6_hello with -DYAKOGL_WERROR=ON (the "zephyr" rows).
   if(YAKOGL_WERROR)
     zephyr_library_compile_options(-Werror)

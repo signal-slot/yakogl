@@ -29,8 +29,8 @@ It prints
                         (or: not in es2-accepted.txt: <names>)
 
 and last "stage1: PASS" or "stage1: FAIL (<reasons>)". Stage 1 holds when Fail,
-NoResult and crashes are 0, every row finished (a summary line, no lost lines,
-no fatal), every NotSupported case is in the accepted list, and every entry of
+NoResult and crashes are 0, every row finished (a summary line, not a session
+dEQP ended early, no lost lines, no fatal), every NotSupported case is in the accepted list, and every entry of
 that list is NotSupported (exactly the agreed set: 34 on 2026-11-12). Names of
 NotSupported cases come from consoles only; a record without them cannot pass.
 Exit status: 0 PASS, 1 FAIL, 2 the record is unreadable.

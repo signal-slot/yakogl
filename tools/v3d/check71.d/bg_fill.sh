@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# bg_fill: driver/zephyr/lib/board/rpi5_scanout/bg_fill.h, the header-only
+# HVS6 channel background-fill write list (masked read-modify-write writes and
+# their restore), run against a mock register file
+# (driver/zephyr/lib/board/test/bg_fill_mock.c), with -std=c11
+# -Wall -Wextra -Werror and AddressSanitizer + UBSan.
+#
+# Run from anywhere. Builds into build/v3d71/bg_fill/. The last line is
+# "bg_fill: N of N checks, 0 failed" and the exit 0 when the mock passes; exit 1
+# otherwise; exit 77 with "gap: CC" when there is no C compiler.
+set -u
+cd "$(dirname "$0")/../../.." || exit 1
+
+name=bg_fill
+out=build/v3d71/bg_fill
+t=driver/zephyr/lib/board/test
+h=driver/zephyr/lib/board/rpi5_scanout
+cc=${CC:-cc}
+
+if ! command -v "$cc" >/dev/null 2>&1; then
+  echo "gap: CC (no C compiler '$cc')"
+  exit 77
+fi
+for f in $t/bg_fill_mock.c $h/bg_fill.h; do
+  [ -f "$f" ] || { echo "$name: $f missing, 1 failed"; exit 1; }
+done
+
+mkdir -p "$out"
+san="-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+flags="-std=c11 -g -O1 -Wall -Wextra -Werror $san -I$h"
+
+# shellcheck disable=SC2086
+if ! "$cc" $flags "$t/bg_fill_mock.c" -o "$out/bg_fill_mock"; then
+  echo "$name: build failed"
+  exit 1
+fi
+o=$("$out/bg_fill_mock" 2>&1)
+rc=$?
+printf '%s\n' "$o"
+n=$(printf '%s\n' "$o" | sed -nE 's/^bg_fill_mock: ([0-9]+) of \1 checks, 0 failed$/\1/p')
+if [ "$rc" -ne 0 ] || [ -z "$n" ]; then
+  echo "$name: the mock exited $rc or without its result line"
+  exit 1
+fi
+echo "$name: $n of $n checks, 0 failed"
+exit 0

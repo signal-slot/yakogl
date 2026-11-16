@@ -65,8 +65,14 @@
 //! value a packer refused `-EINVAL`, a submit or a wait that failed `-EIO`
 //! (or the wait's own error), and a backend with no Mali OSAL `-ENODEV`.
 //!
+//! A framebuffer with no colour attachment (depth and/or stencil only,
+//! glmark2's shadow pass) is drawn as Mesa's panfrost draws one: a frame
+//! with one dummy render target that stores nothing, its depth/stencil
+//! written back as any frame's ([`DRAWS_WITHOUT_COLOUR`],
+//! [`frame::begin_frame_depth_only`], docs/notes/mali-depth-only.md).
+//!
 //! The capability answers say what this backend does today: it samples no
-//! texel format and renders no integer or depth-only target. A draw writes
+//! texel format and renders no integer target. A draw writes
 //! up to [`DRAW_TARGETS`] colour targets, in a frame that starts from a
 //! whole colour clear of all of them ([`colour_targets`]). Where the GL core
 //! needs a limit that is the hardware's, the value is Mesa's for this GPU,
@@ -88,9 +94,16 @@ use crate::util::{Global, EBUSY, EINVAL, EIO, ENODEV, ENOMEM, ENOTSUP};
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
-/// A framebuffer with no colour attachment: not drawn (nothing is), so the
-/// GL core reports it GL_FRAMEBUFFER_UNSUPPORTED (`backend::DEPTH_ONLY_TARGETS`).
-pub const DRAWS_WITHOUT_COLOUR: bool = false;
+/// A framebuffer with no colour attachment is drawn
+/// (`backend::DEPTH_ONLY_TARGETS`): the GL core reports it complete and
+/// hands its draws over with `target_gpu` 0 at the depth/stencil size. Each
+/// is recorded into a frame with no colour surface, Mesa 26.2.1 panfrost's
+/// frame of `nr_cbufs` 0 (`frame::begin_frame_depth_only`: one dummy
+/// render target, Write Enable off; the draws' blend off and render target
+/// mask 0), whose depth/stencil is written back to its pair's buffer as any
+/// frame's, so a later pass samples the depth texture through
+/// [`mali_depth_resolve`] (docs/notes/mali-depth-only.md).
+pub const DRAWS_WITHOUT_COLOUR: bool = true;
 
 /// The texel formats this backend samples (`backend::sampled_texfmts`):
 /// none, until the texture descriptor (`genxml::v10::Texture`, `Plane`) is
@@ -155,9 +168,12 @@ pub const SLOT_STILL_IN_FLIGHT: &str =
 /// An open frame whose end the builder refused or whose submit failed: its
 /// draws were taken and will never run. Counted as lost work.
 pub const FRAME_LOST: &str = "mali: an open frame could not be ended or submitted; its draws are lost";
-/// The draw names no colour surface. The contract of `backend::draw` makes
-/// that `-EINVAL` (a core bug), not a gap.
-pub const INVALID_NO_TARGET: &str = "mali: the draw has no colour target (target_gpu is 0)";
+/// The draw names no colour surface and no depth or stencil object either:
+/// nothing to draw into. The contract of `backend::draw` makes that
+/// `-EINVAL` (a core bug), not a gap. With a depth or stencil object it is
+/// a depth-only draw ([`depth_only`]).
+pub const INVALID_NO_TARGET: &str =
+    "mali: the draw has no colour target (target_gpu is 0) and no depth or stencil object";
 /// `num_targets` past [`DRAW_TARGETS`], what the GL core was told: its defect.
 pub const INVALID_TARGET_COUNT: &str = "mali: the draw has more colour targets than the backend reports";
 /* A draw of several colour targets (`GlesDraw::num_targets`), refused by
@@ -259,6 +275,13 @@ pub const NOT_BUILT_TEXTURE_FEEDBACK: &str =
 /// frame builds the vertex texture and sampler tables for one
 /// (`DrawCall::vs_texture`), and a look-up past it would read a descriptor
 /// out of the table (docs/notes/mali-vs-lookups.md §3.3 step 4).
+/// A cube map look-up (`TEX_SINGLE ... .cube`, [`MaliShader::cube_samplers`])
+/// whose unit has no complete cube map: GL reads (0, 0, 0, 1) there, which
+/// Mesa samples from a 1x1 cube of six faces (st/mesa's fallback texture,
+/// texobj.c `_mesa_get_fallback_texture`). This backend's black texel is a
+/// 2D image, and a cube look-up through a 2D descriptor has no reference.
+pub const NOT_BUILT_CUBE_INCOMPLETE: &str =
+    "mali: a cube map look-up whose unit has no complete cube map (GL's black texel as a cube) is not built yet";
 pub const NOT_BUILT_VERTEX_TEXTURES: &str = "mali: a vertex shader that reads more than one texture is not built yet";
 /// A frame starts from the old image and the preload program did not build
 /// at init (its log line says why).
@@ -634,8 +657,8 @@ where
     }
 }
 
-/// The longest blend shader kept: Mesa's for case 211's equation is 22
-/// instructions, padded to 32 words.
+/// The longest blend shader kept: the longest of dEQP-GLES2's is 22
+/// instructions (tools/mali/testdata/blend_deqp.words), padded to 32 words.
 const BLEND_SHADER_WORDS: usize = 32;
 
 /// The blend shaders compiled so far, one per equation (Mesa caches them on
@@ -645,17 +668,19 @@ const BLEND_SHADERS: usize = 8;
 
 #[derive(Clone, Copy)]
 struct BlendShaderProgram {
-    eq: crate::shaderc::online::mali::blend::Equation,
+    eq: crate::shaderc::online::mali::blend::Key,
     /// 0: a free entry.
     n: usize,
     words: [u64; BLEND_SHADER_WORDS],
 }
 
 const NO_BLEND_SHADER: BlendShaderProgram = BlendShaderProgram {
-    eq: crate::shaderc::online::mali::blend::Equation::both(
-        crate::shaderc::online::mali::blend::Factor::Zero,
-        crate::shaderc::online::mali::blend::Factor::Zero,
-    ),
+    eq: {
+        use crate::shaderc::online::mali::blend::{Base, Channel, Factor, Func, Key};
+        let zero = Factor { base: Base::One, invert: true };
+        let c = Channel { func: Func::Add, src: zero, dst: zero };
+        Key { rgb: c, alpha: c, mask: 0, samples: 0, colour_f32: false }
+    },
     n: 0,
     words: [0; BLEND_SHADER_WORDS],
 };
@@ -668,7 +693,7 @@ const BLEND_SHADER_RGBA8: u32 = 0xed000;
 /// The blend shader of `eq`, from the cache or compiled now
 /// (src/shaderc/online/mali/blend.rs); None when it does not compile, which
 /// the frame builder then refuses by name.
-fn blend_shader(g: &mut MaliState, eq: crate::shaderc::online::mali::blend::Equation) -> Option<BlendShaderProgram> {
+fn blend_shader(g: &mut MaliState, eq: crate::shaderc::online::mali::blend::Key) -> Option<BlendShaderProgram> {
     if let Some(p) = g.blend_shaders.iter().find(|p| p.n != 0 && p.eq == eq) {
         return Some(*p);
     }
@@ -720,24 +745,25 @@ impl DrawBlendShader {
 }
 
 /// The blend shader a draw needs (`blend::needs_shader`) and that is built
-/// here (`blend::shader_equation`: the constant colour's equations into an
-/// RGBA8 target written whole, single-sampled or case 211's at 4x, and case
-/// 190's columns 3 and 4), compiled. None for a draw that needs none, or one
-/// not built (the frame builder refuses that draw by name).
+/// here (`blend::shader_key`: an RGBA8 target, 1x or 4x, the fragment
+/// program's colour fp16 or fp32), compiled. None
+/// for a draw that needs none, or one not built (the frame builder refuses
+/// that draw by name).
 fn draw_blend_shader(
     g: &mut MaliState,
     d: &GlesDraw,
     target: &frame::Target,
+    colour_f16: bool,
 ) -> Result<Option<DrawBlendShader>, FrameError> {
     let mask = if d.color_write { d.color_mask & 0xf } else { 0 };
-    if !d.blend || mask == 0 {
+    if !d.blend || mask == 0 || depth_only(d) {
         return Ok(None);
     }
     let b = blending(d)?;
     if !blend::needs_shader(&b, &d.blend_color) {
         return Ok(None);
     }
-    let eq = blend::shader_equation(&b, u32::from(mask), target.samples, target.format);
+    let eq = blend::shader_key(&b, u32::from(mask), target.samples, target.format, colour_f16);
     Ok(eq.and_then(|eq| blend_shader(g, eq)).map(|p| DrawBlendShader::of(&p.words[..p.n])))
 }
 
@@ -884,7 +910,35 @@ pub fn first_refusal() -> Option<&'static str> {
 fn refuse(why: &'static str) -> i32 {
     FIRST_REFUSAL.note(why);
     backend::note_draw_refused(why, 0);
+    refusal_line(why.as_ptr() as usize, -ENOTSUP, format_args!("{}", why));
     -ENOTSUP
+}
+
+/// What the last refusal line was about (a reason's address, or a small
+/// errno), 0 after a draw was recorded: a run of draws refused for one
+/// reason logs one line, the next case's first refusal logs another.
+static LAST_REFUSAL: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Lines [`refusal_line`] wrote, for the host test.
+#[cfg(test)]
+pub(crate) static REFUSAL_LINES: std::sync::Mutex<std::vec::Vec<std::string::String>> =
+    std::sync::Mutex::new(std::vec::Vec::new());
+
+/// One line per refused draw, `yakogl-mali-refusal: <errno> <reason>`
+/// (docs/notes/mali-frame-refusals.md, "The per-draw refusal line"), unless
+/// the draw before it was refused for the same `key` with none recorded in
+/// between.
+fn refusal_line(key: usize, errno: i32, why: core::fmt::Arguments) {
+    if LAST_REFUSAL.swap(key, Ordering::Relaxed) == key {
+        return;
+    }
+    #[cfg(test)]
+    REFUSAL_LINES.lock().unwrap_or_else(|e| e.into_inner()).push(std::format!(
+        "yakogl-mali-refusal: {} {}",
+        errno,
+        why
+    ));
+    glog!("yakogl-mali-refusal: {} {}", errno, why);
 }
 
 /// Why a draw or a clear was not recorded: a frame error (its errno and log
@@ -907,7 +961,10 @@ impl From<FrameError> for Fail {
 fn fail_errno(f: Fail) -> i32 {
     match f {
         Fail::Frame(e) => frame_error(e),
-        Fail::Errno(rc) => rc,
+        Fail::Errno(rc) => {
+            refusal_line(rc.unsigned_abs() as usize, rc, format_args!("errno"));
+            rc
+        }
     }
 }
 
@@ -916,12 +973,14 @@ fn frame_error(e: FrameError) -> i32 {
         FrameError::NotBuilt(why) => refuse(why),
         FrameError::Arena(a) => {
             glog_once!("{}", a);
+            refusal_line(ENOMEM as usize, -ENOMEM, format_args!("{}", a));
             -ENOMEM
         }
         /* a value the packer or the encoder refused, or an input outside the
          * hardware's range: a builder or caller defect, never masked */
         other => {
             glog_once!("{}", other);
+            refusal_line(EINVAL as usize, -EINVAL, format_args!("{}", other));
             -EINVAL
         }
     }
@@ -1387,15 +1446,18 @@ fn colour_clear_mask(d: &GlesDraw) -> u8 {
 /// with the flipped viewport ([`frame::DrawCall::flip_y`]).
 fn check(d: &GlesDraw) -> Result<(), FrameError> {
     let not_built = |why| Err(FrameError::NotBuilt(why));
-    if d.target_gpu == 0 {
+    if d.target_gpu == 0 && !depth_only(d) {
         return Err(FrameError::Invalid(INVALID_NO_TARGET));
     }
-    if d.targets[0].out_shift != 0 {
-        return not_built(NOT_BUILT_OUTPUT_SHIFT);
-    }
-    target_format(d)?;
-    if d.num_targets > 1 {
-        check_targets(d)?;
+    /* a depth-only draw has no colour target to check */
+    if !depth_only(d) {
+        if d.targets[0].out_shift != 0 {
+            return not_built(NOT_BUILT_OUTPUT_SHIFT);
+        }
+        target_format(d)?;
+        if d.num_targets > 1 {
+            check_targets(d)?;
+        }
     }
     let touches_zs = d.index_count != 0 || d.do_clear_depth || d.do_clear_stencil;
     if touches_zs && (d.depth_id != 0 || d.stencil_id != 0) && (d.ds_w < d.target_w || d.ds_h < d.target_h) {
@@ -1410,6 +1472,14 @@ fn check(d: &GlesDraw) -> Result<(), FrameError> {
     }
     cull(d.cull)?;
     Ok(())
+}
+
+/// A draw into a framebuffer with no colour attachment
+/// ([`DRAWS_WITHOUT_COLOUR`]): no colour surface (`target_gpu` 0), and a
+/// depth or stencil object, whose size is the draw's (`target_w`,
+/// `target_h`).
+fn depth_only(d: &GlesDraw) -> bool {
+    d.target_gpu == 0 && (d.depth_id != 0 || d.stencil_id != 0)
 }
 
 /// What a draw of several colour targets must be ([`check`]): targets 1..
@@ -1751,7 +1821,9 @@ fn add_gl_draw(
         vs_uniforms: uniform_words(d.vs_uniform_cpu, d.vs_uniform_dwords),
         fs_uniforms: uniform_words(d.fs_uniform_cpu, d.fs_uniform_dwords),
         zs: depth_stencil_state(d),
-        colour_mask: if d.color_write { d.color_mask & 0xf } else { 0 },
+        /* a frame with no colour surface writes no colour, whatever the
+         * mask (the GL core already sends 0) */
+        colour_mask: if d.color_write && !open.no_colour { d.color_mask & 0xf } else { 0 },
         front_cw: d.front_cw,
         cull: cull(d.cull)?,
         textures: fs_tex.as_ref().map_or(&[], |(t, n)| &t[..*n]),
@@ -2114,9 +2186,9 @@ fn fs_textures(
     if bindings.len() > frame::MAX_STAGE_TEXTURES {
         return Err(FrameError::NotBuilt(frame::NOT_BUILT_TEXTURE_SIZE));
     }
-    let mut out = [texture_of(sampled_bind(d, false, first), data)?; frame::MAX_STAGE_TEXTURES];
-    for (slot, &b) in out.iter_mut().zip(bindings).skip(1) {
-        *slot = texture_of(sampled_bind(d, false, b), data)?;
+    let mut out = [stage_texture(d, false, 0, first, data)?; frame::MAX_STAGE_TEXTURES];
+    for (i, (slot, &b)) in out.iter_mut().zip(bindings).enumerate().skip(1) {
+        *slot = stage_texture(d, false, i, b, data)?;
     }
     Ok(Some((out, bindings.len())))
 }
@@ -2125,10 +2197,33 @@ fn fs_textures(
 /// for a vertex shader that samples nothing.
 fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option<frame::SampledTexture>, FrameError> {
     match sampler_bindings(d, vertex) {
-        [b] => texture_of(sampled_bind(d, vertex, *b), data).map(Some),
+        [b] => stage_texture(d, vertex, 0, *b, data).map(Some),
         [] => Ok(None),
         _ => Err(FrameError::NotBuilt(NOT_BUILT_VERTEX_TEXTURES)),
     }
+}
+
+/// The texture at descriptor index `index` of the draw's fragment (or,
+/// `vertex`, vertex) shader, sampler binding `binding` ([`texture_of`]).
+/// A cube look-up needs a complete cube map on its unit: GL's black texel
+/// is bound as a 2D image here, so a unit with none, or an incomplete one,
+/// is refused by name ([`NOT_BUILT_CUBE_INCOMPLETE`]).
+fn stage_texture(
+    d: &GlesDraw,
+    vertex: bool,
+    index: usize,
+    binding: u8,
+    data: &mut Pool,
+) -> Result<frame::SampledTexture, FrameError> {
+    let bind = sampled_bind(d, vertex, binding);
+    let sh = if vertex { d.vs } else { d.fs };
+    // SAFETY: as in `sampler_bindings`.
+    let cubes = unsafe { sh.as_ref() }.and_then(MaliShader::of).map_or(0, |r| r.cube_samplers);
+    let cube = cubes.checked_shr(index as u32).is_some_and(|c| c & 1 != 0);
+    if cube && bind.is_none_or(|t| t.incomplete != 0) {
+        return Err(FrameError::NotBuilt(NOT_BUILT_CUBE_INCOMPLETE));
+    }
+    texture_of(bind, data)
 }
 
 /// The texture a look-up of `bind` reads: its
@@ -2700,7 +2795,13 @@ fn upload_preload(code: &mut Arena, p: &PreloadProgram) -> Result<u64, FrameErro
 /// it can ([`sample_store`]); it then starts from the samples the store
 /// holds, each drawn back by the per-sample preload, when the store holds
 /// its target's, and otherwise from the target's image in every sample.
+///
+/// A frame with no colour surface (`key.gpu` 0, a depth-only draw) has no
+/// image to start from or keep: it is opened as Mesa's frame of no colour
+/// buffer ([`frame::begin_frame_depth_only`]), whatever `clear` says.
 fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: Option<[f32; 4]>) -> Result<(), Fail> {
+    let depth_only = key.gpu == 0;
+    let clear = if depth_only { Some([0.0; 4]) } else { clear };
     let (more, n) = colour_targets(&key);
     if clear.is_none() && n > 0 {
         return Err(FrameError::NotBuilt(NOT_BUILT_TARGETS_PRELOAD).into());
@@ -2719,8 +2820,12 @@ fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: O
     }
     // SAFETY: the slot is free of the GPU since the wait above.
     let (mut a, mut cs) = unsafe { slot_arenas(&g.slots[i], g.user_regs, Tops::ZERO, 0) }?;
-    let mut f = frame::begin_frame_targets(&mut a.desc, &mut cs, &more[..n])?;
-    let store = if target.samples == 4 { sample_store(g, &target) } else { None };
+    let mut f = if depth_only {
+        frame::begin_frame_depth_only(&mut a.desc, &mut cs)?
+    } else {
+        frame::begin_frame_targets(&mut a.desc, &mut cs, &more[..n])?
+    };
+    let store = if target.samples == 4 && !depth_only { sample_store(g, &target) } else { None };
     let mut kept = None;
     if let Some((gpu, surface_stride)) = store {
         let bin = upload_preload(&mut a.code, &g.sample_preload)?;
@@ -2928,7 +3033,11 @@ fn add_to_open(g: &mut MaliState, d: &GlesDraw, ctx: &frame::Context) -> Result<
     let occlusion = query_counter(g, d.occlusion_query);
     texture_ready(g, d)?;
     let copied = sampled_binds(d).any(|t| t.incomplete == 0 && needs_copy(t));
-    let blend = draw_blend_shader(g, d, &target)?;
+    /* the colour type the fragment program writes (Mesa's blend[0].type) */
+    // SAFETY: `programs` found the fragment record non-null; it lives in
+    // the compiler's keep arena past this draw.
+    let colour_f16 = unsafe { MaliShader::of(&*d.fs) }.is_some_and(|r| r.colour_f16);
+    let blend = draw_blend_shader(g, d, &target, colour_f16)?;
     let draw = |fr: &mut frame::OpenFrame, a: &mut Arenas, cs: &mut Stream| {
         /* with the draw, so that a refused draw leaves no preload behind */
         if let Some((p, z, s, cleared)) = zs_preload {
@@ -3046,9 +3155,16 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
         glog_once!("{}", NO_MALI_OSAL);
         return Err(Fail::Errno(-ENODEV));
     };
-    let format = target_format(d)?;
-    let row_stride =
-        backend::draw_pitch(d).checked_mul(format.bytes()).ok_or(FrameError::Invalid(INVALID_ROW_STRIDE))?;
+    /* a depth-only draw's frame has no colour surface: its target is the
+     * depth/stencil size at no address, no row stride, and RGBA8, the
+     * format of Mesa's dummy render target (`frame::begin_frame_depth_only`) */
+    let no_colour = depth_only(d);
+    let format = if no_colour { frame::TargetFormat::Rgba8888 } else { target_format(d)? };
+    let row_stride = if no_colour {
+        0
+    } else {
+        backend::draw_pitch(d).checked_mul(format.bytes()).ok_or(FrameError::Invalid(INVALID_ROW_STRIDE))?
+    };
     let key = TargetKey::of(d, row_stride, format);
     if g.open.is_some_and(|o| o.key != key) {
         let rc = end_open(g);
@@ -3068,12 +3184,15 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
     }
     /* the clear's parts: a whole one is a start value while nothing of the
      * frame has used its buffer; any other is drawn */
-    let colour_whole = d.do_clear && !d.clear_quad && colour_clear_mask(d) == 0xf;
+    /* with no colour surface there is no colour to clear (the GL core sends
+     * none, `do_clear` off) */
+    let do_clear = d.do_clear && !no_colour;
+    let colour_whole = do_clear && !d.clear_quad && colour_clear_mask(d) == 0xf;
     let ds_whole = [d.do_clear_depth && !d.clear_quad, d.do_clear_stencil && !d.clear_quad];
     let values = [d.clear_depth.to_bits(), u32::from(d.clear_stencil)];
     let mut quad = QuadBuffers { colour: false, depth: false, stencil: false };
     if let Some(o) = g.open.as_mut() {
-        if d.do_clear {
+        if do_clear {
             if colour_whole && o.frame.draws == 0 {
                 /* the frame's start: nothing of the old image is kept, so
                  * nothing is preloaded (`pan_preload_needed`,
@@ -3096,7 +3215,7 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
             samples: u32::from(d.samples.max(1)),
         };
         open_frame(g, key, target, Some(d.clear_rgba))?;
-    } else if d.index_count == 0 && !d.do_clear && !d.clear_quad {
+    } else if d.index_count == 0 && !do_clear && !d.clear_quad {
         /* a whole depth/stencil clear and no frame: the plane's value */
         for (aspect, whole) in ds_whole.iter().enumerate() {
             let (id, gen) = key.objects[aspect];
@@ -3117,7 +3236,7 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
             samples: u32::from(d.samples.max(1)),
         };
         open_frame(g, key, target, None)?;
-        quad.colour = d.do_clear || d.clear_quad;
+        quad.colour = !no_colour && (d.do_clear || d.clear_quad);
     }
     /* the clear quad's program writes output 0, target 0 only */
     if quad.colour && key.more[0].is_some() {
@@ -3164,7 +3283,13 @@ pub unsafe extern "C" fn mali_draw(draw: *const GlesDraw) -> i32 {
         return -EINVAL;
     };
     // SAFETY: as in `mali_init`.
-    record_in(unsafe { STATE.get() }, d).err().map_or(0, fail_errno)
+    match record_in(unsafe { STATE.get() }, d) {
+        Ok(()) => {
+            LAST_REFUSAL.store(0, Ordering::Relaxed);
+            0
+        }
+        Err(f) => fail_errno(f),
+    }
 }
 
 /// Submit the open frame.
@@ -3495,4 +3620,4 @@ pub static yakogl_backend_mali: YakoglBackend = YakoglBackend {
 
 #[cfg(test)]
 #[path = "backend_tests.rs"]
-mod tests;
+pub(super) mod tests;

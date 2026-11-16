@@ -1,0 +1,1860 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-15, image T08: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.05 [sdcard] pieeprom.upd not found
+  5.05 [sdcard] recover4.elf not found
+  5.06 [sdcard] recovery.elf not found
+  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.94 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.96 0x00d03114 0x00000000 0x00001fff
+  5.99 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.36 Starting start4.elf @ 0xfec00200 partition 1
+  5.23 XHCI-STOP
+  5.23 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.24 USBSTS 18
+  5.24 PCI0 reset
+  5.25 +
+
+MESS:00:00:05.270610:0: arasan: arasan_emmc_open
+MESS:00:00:05.272269:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.392496:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.405366:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.439639:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.441052:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.445436:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.609733:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.612549:0: brfs: File read: 164 bytes
+MESS:00:00:05.705230:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.709737:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.726197:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.192241:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.197786:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.206823:0: *** Restart logging
+MESS:00:00:06.208595:0: brfs: File read: 164 bytes
+MESS:00:00:06.287018:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.292050:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.305342:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.314401:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.318221:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.326979:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.332470:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.354499:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.369845:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.373135:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.414287:0: brfs: File read: 56249 bytes
+MESS:00:00:06.433764:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.498647:0: brfs: File read: 5971 bytes
+MESS:00:00:06.505237:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.546368:0: brfs: File read: 164 bytes
+MESS:00:00:06.550404:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.553526:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.559377:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.715988:0: brfs: File read: 145 bytes
+MESS:00:00:08.117538:0: brfs: File read: /mfs/sd/yakogl-T08.bin
+MESS:00:00:08.120359:0: Loaded 'yakogl-T08.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:08.126884:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.135655:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.142187:0: uart: Baud rate change done...
+MESS:00:00:08.144210:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.shadow.2d.*,dEQP-GLES3.functional.texture.shadow.2d_array.*'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.always_depth24_stencil8
+v3d_deqp: case #0 F 134ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.always_depth_component16
+v3d_deqp: case #1 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.always_depth_component32f
+v3d_deqp: case #2 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.equal_depth24_stencil8
+v3d_deqp: case #3 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.equal_depth_component16
+v3d_deqp: case #4 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.equal_depth_component32f
+v3d_deqp: case #5 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.greater_depth24_stencil8
+v3d_deqp: case #6 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.greater_depth_component16
+v3d_deqp: case #7 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.greater_depth_component32f
+v3d_deqp: case #8 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.greater_or_equal_depth24_stencil8
+v3d_deqp: case #9 F 45ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.greater_or_equal_depth_component16
+v3d_deqp: case #10 F 45ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.greater_or_equal_depth_component32f
+v3d_deqp: case #11 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.less_depth24_stencil8
+v3d_deqp: case #12 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.less_depth_component16
+v3d_deqp: case #13 F 42ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.less_depth_component32f
+v3d_deqp: case #14 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.less_or_equal_depth24_stencil8
+v3d_deqp: case #15 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.less_or_equal_depth_component16
+v3d_deqp: case #16 F 45ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.less_or_equal_depth_component32f
+v3d_deqp: case #17 F 45ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.never_depth24_stencil8
+v3d_deqp: case #18 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.never_depth_component16
+v3d_deqp: case #19 F 42ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.never_depth_component32f
+v3d_deqp: case #20 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.not_equal_depth24_stencil8
+v3d_deqp: case #21 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.not_equal_depth_component16
+v3d_deqp: case #22 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear.not_equal_depth_component32f
+v3d_deqp: case #23 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth24_stencil8
+v3d_deqp: case #24 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth_component16
+v3d_deqp: case #25 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth_component32f
+v3d_deqp: case #26 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.equal_depth24_stencil8
+v3d_deqp: case #27 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.equal_depth_component16
+v3d_deqp: case #28 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.equal_depth_component32f
+v3d_deqp: case #29 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_depth24_stencil8
+v3d_deqp: case #30 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_depth_component16
+v3d_deqp: case #31 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_depth_component32f
+v3d_deqp: case #32 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_or_equal_depth24_stencil8
+v3d_deqp: case #33 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_or_equal_depth_component16
+v3d_deqp: case #34 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_or_equal_depth_component32f
+v3d_deqp: case #35 F 50ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_depth24_stencil8
+v3d_deqp: case #36 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_depth_component16
+v3d_deqp: case #37 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_depth_component32f
+v3d_deqp: case #38 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_or_equal_depth24_stencil8
+v3d_deqp: case #39 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_or_equal_depth_component16
+v3d_deqp: case #40 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_or_equal_depth_component32f
+v3d_deqp: case #41 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.never_depth24_stencil8
+v3d_deqp: case #42 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.never_depth_component16
+v3d_deqp: case #43 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.never_depth_component32f
+v3d_deqp: case #44 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.not_equal_depth24_stencil8
+v3d_deqp: case #45 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.not_equal_depth_component16
+v3d_deqp: case #46 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.not_equal_depth_component32f
+v3d_deqp: case #47 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.always_depth24_stencil8
+v3d_deqp: case #48 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.always_depth_component16
+v3d_deqp: case #49 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.always_depth_component32f
+v3d_deqp: case #50 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.equal_depth24_stencil8
+v3d_deqp: case #51 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.equal_depth_component16
+v3d_deqp: case #52 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.equal_depth_component32f
+v3d_deqp: case #53 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth24_stencil8
+v3d_deqp: case #54 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth_component16
+v3d_deqp: case #55 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth_component32f
+v3d_deqp: case #56 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth24_stencil8
+v3d_deqp: case #57 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth_component16
+v3d_deqp: case #58 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth_component32f
+v3d_deqp: case #59 F 50ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_depth24_stencil8
+v3d_deqp: case #60 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_depth_component16
+v3d_deqp: case #61 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_depth_component32f
+v3d_deqp: case #62 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_or_equal_depth24_stencil8
+v3d_deqp: case #63 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_or_equal_depth_component16
+v3d_deqp: case #64 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_or_equal_depth_component32f
+v3d_deqp: case #65 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.never_depth24_stencil8
+v3d_deqp: case #66 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.never_depth_component16
+v3d_deqp: case #67 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.never_depth_component32f
+v3d_deqp: case #68 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.not_equal_depth24_stencil8
+v3d_deqp: case #69 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.not_equal_depth_component16
+v3d_deqp: case #70 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.not_equal_depth_component32f
+v3d_deqp: case #71 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.always_depth24_stencil8
+v3d_deqp: case #72 F 45ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.always_depth_component16
+v3d_deqp: case #73 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.always_depth_component32f
+v3d_deqp: case #74 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.equal_depth24_stencil8
+v3d_deqp: case #75 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.equal_depth_component16
+v3d_deqp: case #76 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.equal_depth_component32f
+v3d_deqp: case #77 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_depth24_stencil8
+v3d_deqp: case #78 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_depth_component16
+v3d_deqp: case #79 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_depth_component32f
+v3d_deqp: case #80 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_or_equal_depth24_stencil8
+v3d_deqp: case #81 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_or_equal_depth_component16
+v3d_deqp: case #82 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_or_equal_depth_component32f
+v3d_deqp: case #83 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.less_depth24_stencil8
+v3d_deqp: case #84 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.less_depth_component16
+v3d_deqp: case #85 F 42ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.less_depth_component32f
+v3d_deqp: case #86 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.less_or_equal_depth24_stencil8
+v3d_deqp: case #87 F 45ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.less_or_equal_depth_component16
+v3d_deqp: case #88 F 45ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.less_or_equal_depth_component32f
+v3d_deqp: case #89 F 45ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.never_depth24_stencil8
+v3d_deqp: case #90 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.never_depth_component16
+v3d_deqp: case #91 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.never_depth_component32f
+v3d_deqp: case #92 F 43ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.not_equal_depth24_stencil8
+v3d_deqp: case #93 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.not_equal_depth_component16
+v3d_deqp: case #94 F 44ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest.not_equal_depth_component32f
+v3d_deqp: case #95 F 45ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.always_depth24_stencil8
+v3d_deqp: case #96 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.always_depth_component16
+v3d_deqp: case #97 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.always_depth_component32f
+v3d_deqp: case #98 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.equal_depth24_stencil8
+v3d_deqp: case #99 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.equal_depth_component16
+v3d_deqp: case #100 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.equal_depth_component32f
+v3d_deqp: case #101 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_depth24_stencil8
+v3d_deqp: case #102 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_depth_component16
+v3d_deqp: case #103 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_depth_component32f
+v3d_deqp: case #104 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_or_equal_depth24_stencil8
+v3d_deqp: case #105 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_or_equal_depth_component16
+v3d_deqp: case #106 F 50ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_or_equal_depth_component32f
+v3d_deqp: case #107 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_depth24_stencil8
+v3d_deqp: case #108 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_depth_component16
+v3d_deqp: case #109 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_depth_component32f
+v3d_deqp: case #110 F 46ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_or_equal_depth24_stencil8
+v3d_deqp: case #111 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_or_equal_depth_component16
+v3d_deqp: case #112 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_or_equal_depth_component32f
+v3d_deqp: case #113 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.never_depth24_stencil8
+v3d_deqp: case #114 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.never_depth_component16
+v3d_deqp: case #115 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.never_depth_component32f
+v3d_deqp: case #116 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.not_equal_depth24_stencil8
+v3d_deqp: case #117 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.not_equal_depth_component16
+v3d_deqp: case #118 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.not_equal_depth_component32f
+v3d_deqp: case #119 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_linear.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.always_depth24_stencil8
+v3d_deqp: case #120 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.always_depth_component16
+v3d_deqp: case #121 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.always_depth_component32f
+v3d_deqp: case #122 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.equal_depth24_stencil8
+v3d_deqp: case #123 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.equal_depth_component16
+v3d_deqp: case #124 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.equal_depth_component32f
+v3d_deqp: case #125 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_depth24_stencil8
+v3d_deqp: case #126 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_depth_component16
+v3d_deqp: case #127 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_depth_component32f
+v3d_deqp: case #128 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_or_equal_depth24_stencil8
+v3d_deqp: case #129 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_or_equal_depth_component16
+v3d_deqp: case #130 F 50ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_or_equal_depth_component32f
+v3d_deqp: case #131 F 50ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_depth24_stencil8
+v3d_deqp: case #132 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_depth_component16
+v3d_deqp: case #133 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_depth_component32f
+v3d_deqp: case #134 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_or_equal_depth24_stencil8
+v3d_deqp: case #135 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_or_equal_depth_component16
+v3d_deqp: case #136 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_or_equal_depth_component32f
+v3d_deqp: case #137 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.never_depth24_stencil8
+v3d_deqp: case #138 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.never_depth_component16
+v3d_deqp: case #139 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.never_depth_component32f
+v3d_deqp: case #140 F 47ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.not_equal_depth24_stencil8
+v3d_deqp: case #141 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.not_equal_depth_component16
+v3d_deqp: case #142 F 48ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.not_equal_depth_component32f
+v3d_deqp: case #143 F 49ms k2/6 c15272/15294 r0 dEQP-GLES3.functional.texture.shadow.2d.nearest_mipmap_nearest.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.always_depth24_stencil8
+v3d_deqp: case #144 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.always_depth_component16
+v3d_deqp: case #145 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.always_depth_component32f
+v3d_deqp: case #146 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.equal_depth24_stencil8
+v3d_deqp: case #147 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.equal_depth_component16
+v3d_deqp: case #148 F 48ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.equal_depth_component32f
+v3d_deqp: case #149 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_depth24_stencil8
+v3d_deqp: case #150 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_depth_component16
+v3d_deqp: case #151 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_depth_component32f
+v3d_deqp: case #152 F 50ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_or_equal_depth24_stencil8
+v3d_deqp: case #153 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_or_equal_depth_component16
+v3d_deqp: case #154 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_or_equal_depth_component32f
+v3d_deqp: case #155 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth24_stencil8
+v3d_deqp: case #156 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth_component16
+v3d_deqp: case #157 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth_component32f
+v3d_deqp: case #158 F 48ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_or_equal_depth24_stencil8
+v3d_deqp: case #159 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_or_equal_depth_component16
+v3d_deqp: case #160 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_or_equal_depth_component32f
+v3d_deqp: case #161 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.never_depth24_stencil8
+v3d_deqp: case #162 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.never_depth_component16
+v3d_deqp: case #163 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.never_depth_component32f
+v3d_deqp: case #164 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.not_equal_depth24_stencil8
+v3d_deqp: case #165 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.not_equal_depth_component16
+v3d_deqp: case #166 F 50ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear.not_equal_depth_component32f
+v3d_deqp: case #167 F 50ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth24_stencil8
+v3d_deqp: case #168 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth_component16
+v3d_deqp: case #169 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth_component32f
+v3d_deqp: case #170 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth24_stencil8
+v3d_deqp: case #171 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth_component16
+v3d_deqp: case #172 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth_component32f
+v3d_deqp: case #173 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_depth24_stencil8
+v3d_deqp: case #174 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_depth_component16
+v3d_deqp: case #175 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_depth_component32f
+v3d_deqp: case #176 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_or_equal_depth24_stencil8
+v3d_deqp: case #177 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_or_equal_depth_component16
+v3d_deqp: case #178 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_or_equal_depth_component32f
+v3d_deqp: case #179 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_depth24_stencil8
+v3d_deqp: case #180 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_depth_component16
+v3d_deqp: case #181 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_depth_component32f
+v3d_deqp: case #182 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_or_equal_depth24_stencil8
+v3d_deqp: case #183 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_or_equal_depth_component16
+v3d_deqp: case #184 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_or_equal_depth_component32f
+v3d_deqp: case #185 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.never_depth24_stencil8
+v3d_deqp: case #186 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.never_depth_component16
+v3d_deqp: case #187 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.never_depth_component32f
+v3d_deqp: case #188 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth24_stencil8
+v3d_deqp: case #189 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth_component16
+v3d_deqp: case #190 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth_component32f
+v3d_deqp: case #191 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth24_stencil8
+v3d_deqp: case #192 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth_component16
+v3d_deqp: case #193 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth_component32f
+v3d_deqp: case #194 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth24_stencil8
+v3d_deqp: case #195 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth_component16
+v3d_deqp: case #196 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth_component32f
+v3d_deqp: case #197 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth24_stencil8
+v3d_deqp: case #198 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth_component16
+v3d_deqp: case #199 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth_component32f
+v3d_deqp: case #200 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth24_stencil8
+v3d_deqp: case #201 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth_component16
+v3d_deqp: case #202 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth_component32f
+v3d_deqp: case #203 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth24_stencil8
+v3d_deqp: case #204 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth_component16
+v3d_deqp: case #205 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth_component32f
+v3d_deqp: case #206 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth24_stencil8
+v3d_deqp: case #207 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth_component16
+v3d_deqp: case #208 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth_component32f
+v3d_deqp: case #209 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.never_depth24_stencil8
+v3d_deqp: case #210 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.never_depth_component16
+v3d_deqp: case #211 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.never_depth_component32f
+v3d_deqp: case #212 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth24_stencil8
+v3d_deqp: case #213 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth_component16
+v3d_deqp: case #214 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth_component32f
+v3d_deqp: case #215 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.always_depth24_stencil8
+v3d_deqp: case #216 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.always_depth_component16
+v3d_deqp: case #217 F 50ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.always_depth_component32f
+v3d_deqp: case #218 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.equal_depth24_stencil8
+v3d_deqp: case #219 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.equal_depth_component16
+v3d_deqp: case #220 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.equal_depth_component32f
+v3d_deqp: case #221 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_depth24_stencil8
+v3d_deqp: case #222 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_depth_component16
+v3d_deqp: case #223 F 50ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_depth_component32f
+v3d_deqp: case #224 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_or_equal_depth24_stencil8
+v3d_deqp: case #225 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_or_equal_depth_component16
+v3d_deqp: case #226 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_or_equal_depth_component32f
+v3d_deqp: case #227 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_depth24_stencil8
+v3d_deqp: case #228 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_depth_component16
+v3d_deqp: case #229 F 49ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_depth_component32f
+v3d_deqp: case #230 F 48ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_or_equal_depth24_stencil8
+v3d_deqp: case #231 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_or_equal_depth_component16
+v3d_deqp: case #232 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_or_equal_depth_component32f
+v3d_deqp: case #233 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.never_depth24_stencil8
+v3d_deqp: case #234 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.never_depth_component16
+v3d_deqp: case #235 F 48ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.never_depth_component32f
+v3d_deqp: case #236 F 50ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.not_equal_depth24_stencil8
+v3d_deqp: case #237 F 51ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.not_equal_depth_component16
+v3d_deqp: case #238 F 50ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest.not_equal_depth_component32f
+v3d_deqp: case #239 F 50ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.always_depth24_stencil8
+v3d_deqp: case #240 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.always_depth_component16
+v3d_deqp: case #241 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.always_depth_component32f
+v3d_deqp: case #242 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth24_stencil8
+v3d_deqp: case #243 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth_component16
+v3d_deqp: case #244 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth_component32f
+v3d_deqp: case #245 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_depth24_stencil8
+v3d_deqp: case #246 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_depth_component16
+v3d_deqp: case #247 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_depth_component32f
+v3d_deqp: case #248 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_or_equal_depth24_stencil8
+v3d_deqp: case #249 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_or_equal_depth_component16
+v3d_deqp: case #250 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_or_equal_depth_component32f
+v3d_deqp: case #251 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_depth24_stencil8
+v3d_deqp: case #252 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_depth_component16
+v3d_deqp: case #253 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_depth_component32f
+v3d_deqp: case #254 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_or_equal_depth24_stencil8
+v3d_deqp: case #255 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_or_equal_depth_component16
+v3d_deqp: case #256 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_or_equal_depth_component32f
+v3d_deqp: case #257 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.never_depth24_stencil8
+v3d_deqp: case #258 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.never_depth_component16
+v3d_deqp: case #259 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.never_depth_component32f
+v3d_deqp: case #260 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.not_equal_depth24_stencil8
+v3d_deqp: case #261 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.not_equal_depth_component16
+v3d_deqp: case #262 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.not_equal_depth_component32f
+v3d_deqp: case #263 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.always_depth24_stencil8
+v3d_deqp: case #264 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.always_depth_component16
+v3d_deqp: case #265 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.always_depth_component32f
+v3d_deqp: case #266 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth24_stencil8
+v3d_deqp: case #267 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth_component16
+v3d_deqp: case #268 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth_component32f
+v3d_deqp: case #269 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth24_stencil8
+v3d_deqp: case #270 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth_component16
+v3d_deqp: case #271 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth_component32f
+v3d_deqp: case #272 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth24_stencil8
+v3d_deqp: case #273 F 57ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth_component16
+v3d_deqp: case #274 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth_component32f
+v3d_deqp: case #275 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth24_stencil8
+v3d_deqp: case #276 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth_component16
+v3d_deqp: case #277 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth_component32f
+v3d_deqp: case #278 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth24_stencil8
+v3d_deqp: case #279 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth_component16
+v3d_deqp: case #280 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth_component32f
+v3d_deqp: case #281 F 55ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.never_depth24_stencil8
+v3d_deqp: case #282 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.never_depth_component16
+v3d_deqp: case #283 F 52ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.never_depth_component32f
+v3d_deqp: case #284 F 53ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth24_stencil8
+v3d_deqp: case #285 F 56ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth_component16
+v3d_deqp: case #286 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth_component32f
+v3d_deqp: case #287 F 54ms k2/6 c15272/15443 r0 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+
+DONE!
+
+Test run totals:
+  Passed:        0/288 (0.0%)
+  Failed:        288/288 (100.0%)
+  Not supported: 0/288 (0.0%)
+  Warnings:      0/288 (0.0%)
+  Waived:        0/288 (0.0%)
+deqp: done: 0 passed, 288 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 288 cases begun, 288 with a result, 0 without
+v3d_deqp DONE: build b1b5b845, filter 'dEQP-GLES3.functional.texture.shadow.2d.*,dEQP-GLES3.functional.texture.shadow.2d_array.*'
+  288 cases in 14386 ms, record at 14 s after boot, reset at ~250 s
+  totals: F 288  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 0 passed, 288 failed, 0 not supported, 0 warnings, complete=1
+  summary: 288 cases begun, 288 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 6, before #0 (first not passed) 0; slowest #0 134 ms
+  carve-out (KiB, of 48636): after #0 15272, last 15272, high-water 15443
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 1 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15376896 bytes used now, 15905280 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 594 calls, 29367 map reads (49 a call, at most 1153 in one); free runs 1, longest 34426368 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 1 jobs ended; emitted 0, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout (letters stop before the last cases)
+    0 FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 294 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  2d.linear                                                  24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  2d.linear_mipmap_linear                                    24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  2d.linear_mipmap_nearest                                   24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  2d.nearest                                                 24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  2d.nearest_mipmap_linear                                   24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  2d.nearest_mipmap_nearest                                  24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  2d_array.linear                                            24 F24                    24x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  2d_array.linear_mipmap_linear                              24 F24                    24x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  2d_array.linear_mipmap_nearest                             24 F24                    24x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  2d_array.nearest                                           24 F24                    24x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  2d_array.nearest_mipmap_linear                             24 F24                    24x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  2d_array.nearest_mipmap_nearest                            24 F24                    24x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+    0 F 2d.linear.always_depth24_stencil8                134ms k2/6 c15272/15294         ~this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  ... 287 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 DONE: 288 cases, P 0 F 288 R 0 N 0 other 0

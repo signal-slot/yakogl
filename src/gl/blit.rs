@@ -72,9 +72,9 @@ use super::framebuffer::{
 };
 use super::types::*;
 use crate::backend::{
-    self, gles_surf_bytes_per_pixel, gles_surf_int_layout, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGB565,
-    GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F,
-    GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
+    self, gles_surf_bytes_per_pixel, gles_surf_int_layout, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGB10_A2,
+    GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888, GLES_TEXFMT_R16F,
+    GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
@@ -177,6 +177,11 @@ fn attachment_image(c: &GlContext, a: &GlAttachment) -> Option<Image> {
                 GLES_TEXFMT_R16F => GLES_SURF_R16F,
                 GLES_TEXFMT_R32F => GLES_SURF_R32F,
                 GLES_TEXFMT_SRGB8_A8 => GLES_SURF_SRGB8_A8,
+                /* the class of the 10/10/10/2 word, where GL_RGB10_A2 is its
+                 * own surface (`framebuffer::rgb10a2_texture_surface`); a
+                 * back end without it stores the texture as RGBA8
+                 * (es3_formats' fallback), handled by the arms below */
+                GLES_TEXFMT_RGB10A2 => GLES_SURF_RGB10_A2,
                 GLES_TEXFMT_RGBA8 if t.bgra => GLES_SURF_XRGB8888,
                 GLES_TEXFMT_RGBA8 => GLES_SURF_RGBA8888,
                 _ => return None,
@@ -566,6 +571,11 @@ fn decode_float(img: &Image, raw: &[u8; 16]) -> [f32; 4] {
         GLES_SURF_RGBA16F => [half(0), half(2), half(4), half(6)],
         GLES_SURF_R16F => [half(0), 0.0, 0.0, 1.0],
         GLES_SURF_R32F => [f32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]), 0.0, 0.0, 1.0],
+        GLES_SURF_RGB10_A2 => {
+            let w = u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
+            let c = |s: u32, max: f32| ((w >> s) & if max > 3.0 { 0x3ff } else { 3 }) as f32 / max;
+            [c(0, 1023.0), c(10, 1023.0), c(20, 1023.0), c(30, 3.0)]
+        }
         _ => {
             let (r, b) = if img.bgra { (raw[2], raw[0]) } else { (raw[0], raw[2]) };
             let a = if img.opaque { 255 } else { raw[3] };
@@ -623,6 +633,12 @@ fn encode_float(img: &Image, mut v: [f32; 4], raw: &mut [u8; 16]) {
         }
         GLES_SURF_R16F => half(raw, 0, v[0]),
         GLES_SURF_R32F => raw[..4].copy_from_slice(&v[0].to_le_bytes()),
+        GLES_SURF_RGB10_A2 => {
+            /* round(clamp(v) * (2^b - 1)); NaN clamps through and casts to 0 */
+            let q = |x: f32, max: f32| (x.clamp(0.0, 1.0) * max + 0.5) as u32;
+            let w = q(v[0], 1023.0) | q(v[1], 1023.0) << 10 | q(v[2], 1023.0) << 20 | q(v[3], 3.0) << 30;
+            raw[..4].copy_from_slice(&w.to_le_bytes());
+        }
         _ => {
             let b: [u8; 4] = core::array::from_fn(|ch| {
                 if img.surf == GLES_SURF_SRGB8_A8 && ch < 3 {
@@ -1480,6 +1496,307 @@ mod tests {
         assert_eq!(stored(&gl, rb_gpu(&gl, f_rb), 2, 8, 1, 0), want);
     }
 
+    /// The little-endian bytes of a 10/10/10/2 word.
+    fn a2(r: u32, g: u32, b: u32, a: u32) -> Vec<u8> {
+        (r | g << 10 | b << 20 | a << 30).to_le_bytes().to_vec()
+    }
+
+    /// Is GL_RGB10_A2 its own renderbuffer class in this build (the 10/10/10/2
+    /// word)? Elsewhere it is RGBA8888 and these cases do not apply.
+    fn rgb10a2_class() -> bool {
+        renderbuffer_surf_format(GL_RGB10_A2) == GLES_SURF_RGB10_A2
+    }
+
+    /// A blit out of and into an RGB10_A2 renderbuffer converts through the
+    /// 10/10/10/2 word, not RGBA8 bytes: out is `w / 1023` (alpha `a / 3`)
+    /// rounded to the byte, in is `round(v * 1023)` (alpha `round(v * 3)`),
+    /// and RGB10_A2 to RGB10_A2 is exact.
+    #[test]
+    fn rgb10a2_renderbuffer_converts_as_ten_ten_ten_two() {
+        let gl = TestGl::new(8, 8);
+        if !rgb10a2_class() {
+            return;
+        }
+        let (s_fb, s_rb) = rbo_fbo(GL_RGB10_A2, 2, 1);
+        let (u_fb, u_rb) = rbo_fbo(GL_RGBA8, 2, 1);
+        let (d_fb, d_rb) = rbo_fbo(GL_RGB10_A2, 2, 1);
+        let px = [(1023, 512, 0, 3), (341, 1, 1022, 1)];
+        render(&gl, rb_gpu(&gl, s_rb), 2, 1, 4, |x, _| {
+            let (r, g, b, a) = px[x as usize];
+            a2(r, g, b, a)
+        });
+        /* out: RGBA8 holds round(v * 255) of the 10-bit (2-bit) fraction */
+        bind(s_fb, u_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        for (x, &(r, g, b, a)) in px.iter().enumerate() {
+            let want: Vec<u8> = [r as f64 / 1023.0, g as f64 / 1023.0, b as f64 / 1023.0, a as f64 / 3.0]
+                .iter()
+                .map(|&f| unorm_ref(f, 8))
+                .collect();
+            assert_eq!(stored(&gl, rb_gpu(&gl, u_rb), 2, 4, x as u32, 0), want, "to RGBA8, pixel {x}");
+        }
+        assert_eq!(stored(&gl, rb_gpu(&gl, u_rb), 2, 4, 0, 0), vec![255, 128, 0, 255]);
+        /* in: byte v is v / 255 of full scale, kept to 10 (2) bits */
+        render(
+            &gl,
+            rb_gpu(&gl, u_rb),
+            2,
+            1,
+            4,
+            |x, _| if x == 0 { vec![255, 128, 0, 255] } else { vec![85, 1, 254, 85] },
+        );
+        bind(u_fb, d_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let q = |v: u32, max: f64| (v as f64 / 255.0 * max + 0.5).floor() as u32;
+        let want = |p: [u32; 4]| a2(q(p[0], 1023.0), q(p[1], 1023.0), q(p[2], 1023.0), q(p[3], 3.0));
+        assert_eq!(stored(&gl, rb_gpu(&gl, d_rb), 2, 4, 0, 0), want([255, 128, 0, 255]));
+        assert_eq!(stored(&gl, rb_gpu(&gl, d_rb), 2, 4, 1, 0), want([85, 1, 254, 85]));
+        assert_eq!(stored(&gl, rb_gpu(&gl, d_rb), 2, 4, 0, 0), a2(1023, 514, 0, 3));
+        /* RGB10_A2 to RGB10_A2: every word survives */
+        let (e_fb, e_rb) = rbo_fbo(GL_RGB10_A2, 2, 1);
+        bind(s_fb, e_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        for (x, &(r, g, b, a)) in px.iter().enumerate() {
+            assert_eq!(stored(&gl, rb_gpu(&gl, e_rb), 2, 4, x as u32, 0), a2(r, g, b, a), "round trip, pixel {x}");
+        }
+    }
+
+    /// LINEAR out of an RGB10_A2 renderbuffer filters the decoded floats:
+    /// a 0 / 1023 pair is 0.5 (RGBA8 128), alpha 0 / 3 likewise.
+    #[test]
+    fn rgb10a2_renderbuffer_filters_linear_after_decode() {
+        let gl = TestGl::new(8, 8);
+        if !rgb10a2_class() {
+            return;
+        }
+        let (s_fb, s_rb) = rbo_fbo(GL_RGB10_A2, 2, 1);
+        let (o_fb, o_rb) = rbo_fbo(GL_RGBA8, 1, 1);
+        render(&gl, rb_gpu(&gl, s_rb), 2, 1, 4, |x, _| if x == 0 { a2(0, 0, 1023, 0) } else { a2(1023, 0, 1023, 3) });
+        bind(s_fb, o_fb);
+        blit([0, 0, 2, 1], [0, 0, 1, 1], GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(stored(&gl, rb_gpu(&gl, o_rb), 1, 4, 0, 0), vec![128, 0, 255, 128]);
+    }
+
+    /// An RGB10_A2 texture of `w` x `h` (the class where it exists) at
+    /// colour attachment 0 of a fresh framebuffer: (framebuffer, texture).
+    fn tex10_fbo(w: i32, h: i32) -> (GLuint, GLuint) {
+        let (mut fb, mut tex) = (0, 0);
+        // SAFETY: plain GL calls with room for one name each; null pixels
+        // only allocate.
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGB10_A2 as GLint,
+                w,
+                h,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_INT_2_10_10_10_REV,
+                core::ptr::null(),
+            );
+            glGenFramebuffers(1, &mut fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+        }
+        (fb, tex)
+    }
+
+    fn tex_gpu(gl: &TestGl, tex: GLuint) -> u64 {
+        gl.ctx().objs_ref().textures[tex as usize].mem.gpu
+    }
+
+    /// The class as a texture attachment, both directions: a texture
+    /// source decodes through the 10/10/10/2 word as the renderbuffer does,
+    /// a texture destination encodes into it, and class to class every word
+    /// survives. Before, `attachment_image` had no arm for it: the colour
+    /// bit was silently dropped -- no error, nothing copied.
+    #[test]
+    fn rgb10a2_textures_copy_as_ten_ten_ten_two() {
+        let gl = TestGl::new(8, 8);
+        if !rgb10a2_class() {
+            return;
+        }
+        let (s_fb, s_tex) = tex10_fbo(2, 1);
+        let (d_fb, d_tex) = tex10_fbo(2, 1);
+        let (u_fb, u_rb) = rbo_fbo(GL_RGBA8, 2, 1);
+        let px = [(1023, 512, 0, 3), (341, 1, 1022, 1)];
+        render(&gl, tex_gpu(&gl, s_tex), 2, 1, 4, |x, _| {
+            let (r, g, b, a) = px[x as usize];
+            a2(r, g, b, a)
+        });
+        /* out: the texture source decodes as the renderbuffer does */
+        bind(s_fb, u_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR, "a texture source of the class is copied");
+        for (x, &(r, g, b, a)) in px.iter().enumerate() {
+            let want: Vec<u8> = [r as f64 / 1023.0, g as f64 / 1023.0, b as f64 / 1023.0, a as f64 / 3.0]
+                .iter()
+                .map(|&f| unorm_ref(f, 8))
+                .collect();
+            assert_eq!(stored(&gl, rb_gpu(&gl, u_rb), 2, 4, x as u32, 0), want, "texture source, pixel {x}");
+        }
+        /* in: byte v is v / 255 of full scale, kept to 10 (2) bits */
+        render(
+            &gl,
+            rb_gpu(&gl, u_rb),
+            2,
+            1,
+            4,
+            |x, _| if x == 0 { vec![255, 128, 0, 255] } else { vec![85, 1, 254, 85] },
+        );
+        bind(u_fb, d_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR, "a texture destination of the class is copied");
+        let q = |v: u32, max: f64| (v as f64 / 255.0 * max + 0.5).floor() as u32;
+        let want = |p: [u32; 4]| a2(q(p[0], 1023.0), q(p[1], 1023.0), q(p[2], 1023.0), q(p[3], 3.0));
+        assert_eq!(stored(&gl, tex_gpu(&gl, d_tex), 2, 4, 0, 0), want([255, 128, 0, 255]));
+        assert_eq!(stored(&gl, tex_gpu(&gl, d_tex), 2, 4, 1, 0), want([85, 1, 254, 85]));
+        /* class to class: every word survives */
+        bind(s_fb, d_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        for (x, &(r, g, b, a)) in px.iter().enumerate() {
+            assert_eq!(stored(&gl, tex_gpu(&gl, d_tex), 2, 4, x as u32, 0), a2(r, g, b, a), "round trip, pixel {x}");
+        }
+    }
+
+    /// LINEAR with an RGB10_A2 texture source into RGBA8, and from it into
+    /// an RGB10_A2 texture destination: the filter runs on the decoded
+    /// floats (a 0 / 1023 pair is 0.5, alpha 0 / 3 likewise), then the
+    /// destination encodes: 0.5 is word 512 (alpha 2), RGBA8 128.
+    #[test]
+    fn rgb10a2_texture_filters_linear_after_decode() {
+        let gl = TestGl::new(8, 8);
+        if !rgb10a2_class() {
+            return;
+        }
+        let (s_fb, s_tex) = tex10_fbo(2, 1);
+        let (o_fb, o_rb) = rbo_fbo(GL_RGBA8, 1, 1);
+        let (d_fb, d_tex) = tex10_fbo(1, 1);
+        render(&gl, tex_gpu(&gl, s_tex), 2, 1, 4, |x, _| if x == 0 { a2(0, 0, 1023, 0) } else { a2(1023, 0, 1023, 3) });
+        bind(s_fb, o_fb);
+        blit([0, 0, 2, 1], [0, 0, 1, 1], GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(stored(&gl, rb_gpu(&gl, o_rb), 1, 4, 0, 0), vec![128, 0, 255, 128], "texture source");
+        bind(s_fb, d_fb);
+        blit([0, 0, 2, 1], [0, 0, 1, 1], GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(stored(&gl, tex_gpu(&gl, d_tex), 1, 4, 0, 0), a2(512, 0, 1023, 2), "texture destination");
+    }
+
+    /// Where GL_RGB10_A2 has no class of its own (PowerVR, Vivante, the
+    /// report-es2 V3D build) a texture of it is RGBA8 storage and a blit
+    /// copies its bytes as RGBA8, as before: to an RGBA8 renderbuffer, and
+    /// texture to texture, NEAREST and LINEAR.
+    #[test]
+    fn rgb10a2_texture_without_a_class_blits_as_rgba8() {
+        let gl = TestGl::new(8, 8);
+        if rgb10a2_class() {
+            return;
+        }
+        let (s_fb, s_tex) = tex10_fbo(2, 1);
+        let (u_fb, u_rb) = rbo_fbo(GL_RGBA8, 2, 1);
+        let (d_fb, d_tex) = tex10_fbo(2, 1);
+        let px: [[u8; 4]; 2] = [[255, 128, 0, 255], [85, 1, 254, 85]];
+        render(&gl, tex_gpu(&gl, s_tex), 2, 1, 4, |x, _| px[x as usize].to_vec());
+        bind(s_fb, u_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        for (x, v) in px.iter().enumerate() {
+            assert_eq!(stored(&gl, rb_gpu(&gl, u_rb), 2, 4, x as u32, 0), v.to_vec(), "to RGBA8, pixel {x}");
+        }
+        bind(u_fb, d_fb);
+        blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        for (x, v) in px.iter().enumerate() {
+            assert_eq!(stored(&gl, tex_gpu(&gl, d_tex), 2, 4, x as u32, 0), v.to_vec(), "from RGBA8, pixel {x}");
+        }
+        /* LINEAR averages the bytes: (255 + 85) / 2 = 170 */
+        let (o_fb, o_rb) = rbo_fbo(GL_RGBA8, 1, 1);
+        bind(s_fb, o_fb);
+        blit([0, 0, 2, 1], [0, 0, 1, 1], GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let got = stored(&gl, rb_gpu(&gl, o_rb), 1, 4, 0, 0);
+        assert_eq!(got[0], 170, "{got:?}");
+        assert_eq!(got[2], 127, "{got:?}");
+    }
+
+    /// The 10/10/10/2 word never takes the pixel engine's B,G,R,A order:
+    /// `texture::take_pe_order` (what a draw does before it renders into
+    /// a texture, on a back end whose RGBA8888 target is B,G,R,A) converts
+    /// RGBA8 texels and flags them, and leaves the class as it is -- its
+    /// texels keep decoding and encoding as the word in R,G,B,A. An RGBA8
+    /// texture that took the order is read swapped on the very same blit.
+    #[test]
+    fn an_rgb10a2_texture_never_takes_the_pixel_engine_order() {
+        let gl = TestGl::new(8, 8);
+        gl.backend_like_gc7000();
+        if !rgb10a2_class() {
+            return;
+        }
+        let (s_fb, s_tex) = tex10_fbo(1, 1);
+        render(&gl, tex_gpu(&gl, s_tex), 1, 1, 4, |_, _| a2(1023, 0, 0, 3));
+        let (d_fb, d_tex) = tex10_fbo(1, 1);
+        /* a draw is about to render into each of the two */
+        crate::gl::texture::take_pe_order(gl.ctx(), s_tex as usize);
+        crate::gl::texture::take_pe_order(gl.ctx(), d_tex as usize);
+        let (s, d) = (
+            gl.ctx().objs_ref().textures[s_tex as usize].pe_order,
+            gl.ctx().objs_ref().textures[d_tex as usize].pe_order,
+        );
+        assert!(!s && !d, "the class keeps its word order");
+        /* an RGBA8 texture that CPU-wrote its texels does take it: its
+         * bytes are B,G,R,A once a draw renders into it */
+        let (mut a_tex, mut a_fb) = (0, 0);
+        let apx = [10u8, 20, 30, 40];
+        // SAFETY: plain GL calls; `apx` holds one RGBA texel.
+        unsafe {
+            glGenTextures(1, &mut a_tex);
+            glBindTexture(GL_TEXTURE_2D, a_tex);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA8 as GLint,
+                1,
+                1,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                apx.as_ptr() as *const c_void,
+            );
+            glGenFramebuffers(1, &mut a_fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, a_fb);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, a_tex, 0);
+        }
+        crate::gl::texture::take_pe_order(gl.ctx(), a_tex as usize);
+        assert!(gl.ctx().objs_ref().textures[a_tex as usize].pe_order, "RGBA8 takes it");
+        /* RGBA8 (taken, B,G,R,A) into the class: decoded in the pixel
+         * engine's order, encoded to the word */
+        bind(a_fb, d_fb);
+        blit([0, 0, 1, 1], [0, 0, 1, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let q = |v: u32, max: f64| (v as f64 / 255.0 * max + 0.5).floor() as u32;
+        assert_eq!(
+            stored(&gl, tex_gpu(&gl, d_tex), 1, 4, 0, 0),
+            a2(q(10, 1023.0), q(20, 1023.0), q(30, 1023.0), q(40, 3.0)),
+            "the taken RGBA8 source decodes swapped, the class encodes in order"
+        );
+        /* the class out: still the word, still R,G,B,A, into an RGBA8
+         * destination the pixel engine writes as B,G,R,A */
+        let (o_fb, o_rb) = rbo_fbo(GL_RGBA8, 1, 1);
+        bind(s_fb, o_fb);
+        blit([0, 0, 1, 1], [0, 0, 1, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(stored(&gl, rb_gpu(&gl, o_rb), 1, 4, 0, 0), vec![0, 0, 255, 255], "B,G,R,A storage");
+    }
+
     /// sRGB on either side of a blit (ES 3.0.6 4.3.3; dEQP's
     /// fbo.blit.conversion.*srgb8_alpha8* and repeated_clear.blit srgb):
     /// an sRGB source decodes to linear (byte 188 is 0.5029, written to RGBA8
@@ -2008,5 +2325,24 @@ mod tests {
         assert_ne!(t.content_gen, before);
         assert!(t.levels_written >= 1);
         assert_eq!(stored(&gl, t.mem.gpu, 4, 4, 3, 2), rgba8(3, 2));
+        /* the RGB10_A2 class likewise: its destination takes a new stamp,
+         * counts the level as written, and holds the encoded word */
+        if rgb10a2_class() {
+            let (d_fb, d_tex) = tex10_fbo(4, 4);
+            let before = gl.ctx().objs_ref().textures[d_tex as usize].content_gen;
+            bind(src_fb, d_fb);
+            blit([0, 0, 4, 4], [0, 0, 4, 4], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            let d = &gl.ctx().objs_ref().textures[d_tex as usize];
+            assert_ne!(d.content_gen, before, "the class restamps too");
+            assert!(d.levels_written >= 1);
+            let p = rgba8(3, 2);
+            let q = |v: u32, max: f64| (v as f64 / 255.0 * max + 0.5).floor() as u32;
+            let gpu = d.mem.gpu;
+            assert_eq!(
+                stored(&gl, gpu, 4, 4, 3, 2),
+                a2(q(p[0] as u32, 1023.0), q(p[1] as u32, 1023.0), q(p[2] as u32, 1023.0), q(p[3] as u32, 3.0))
+            );
+        }
     }
 }

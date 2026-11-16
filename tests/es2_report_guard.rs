@@ -747,6 +747,118 @@ fn es3_entry_points_are_refused() {
     assert_eq!(err(), GL_NO_ERROR);
 }
 
+/* ---- compressed textures ------------------------------------------------------------ */
+
+/// ES 2.0 3.7.3: "The number of specific compressed internal formats
+/// supported by the renderer can be obtained by querying the value of
+/// NUM_COMPRESSED_TEXTURE_FORMATS. The set of specific compressed internal
+/// formats supported by the renderer can be obtained by querying the value of
+/// COMPRESSED_TEXTURE_FORMATS." ES 2.0 core defines no compressed format, so
+/// the list is exactly what the claimed extensions add (GL_EXTENSIONS,
+/// `extension_list_is_exact`), one format each and in the order they are
+/// claimed: OES_compressed_ETC1_RGB8_texture adds ETC1_RGB8_OES,
+/// OES_compressed_ETC2_RGB8_texture COMPRESSED_RGB8_ETC2 and
+/// OES_compressed_ETC2_RGBA8_texture COMPRESSED_RGBA8_ETC2_EAC. The
+/// pairing is Khronos's own: ARB_ES3_compatibility's Dependencies section
+/// names ten separate OES_compressed_* extensions, one per ES 3.0
+/// compressed format. The sRGB,
+/// EAC and punch-through ETC2 names are ES 3.0 core (ES 3.0 3.8.3, table
+/// 3.19) and their own OES extensions are not claimed, so none of them is
+/// listed (src/gl/texture.rs `stored_compressed_format`). The query writes
+/// three values and nothing past them.
+#[test]
+fn compressed_format_list_is_the_three_claimed() {
+    let _g = context();
+    assert_eq!(geti(GL_NUM_COMPRESSED_TEXTURE_FORMATS), Ok(3), "GL_NUM_COMPRESSED_TEXTURE_FORMATS");
+    let mut formats = [0x5A5A; 16];
+    // SAFETY: room for sixteen values; the list is three (pinned above).
+    unsafe { glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, formats.as_mut_ptr()) };
+    assert_eq!(err(), GL_NO_ERROR, "glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS)");
+    assert_eq!(
+        formats[..3],
+        [GL_ETC1_RGB8_OES as GLint, GL_COMPRESSED_RGB8_ETC2 as GLint, GL_COMPRESSED_RGBA8_ETC2_EAC as GLint],
+        "GL_COMPRESSED_TEXTURE_FORMATS"
+    );
+    assert_eq!(formats[3..], [0x5A5A; 13], "GL_COMPRESSED_TEXTURE_FORMATS wrote past its three values");
+}
+
+/// ES 2.0 3.7.3: glCompressedTexImage2D with an internalformat that is not
+/// one of the specific compressed formats of COMPRESSED_TEXTURE_FORMATS is
+/// GL_INVALID_ENUM ("If the internalformat is not one of the specific
+/// compressed formats", the man page's first error), and a command that
+/// raises an error has no other effect (2.5). These eight are the ES 3.0
+/// ETC2/EAC formats no claimed extension adds (see
+/// `compressed_format_list_is_the_three_claimed`): each is refused with a
+/// correctly sized 4x4 block, so only the format is wrong.
+///
+/// "Unchanged" is read through the public API: an 8x8 GL_COMPRESSED_RGB8_ETC2
+/// image is in place first, and after the refused 4x4 upload
+/// glCompressedTexSubImage2D of its lower-right block in that format still
+/// succeeds, which needs the level to still be 8x8 GL_COMPRESSED_RGB8_ETC2
+/// (ES 2.0 3.7.3: the format must match the image's, the region lie inside
+/// it). On a fresh texture the refused upload leaves no image, so the same
+/// sub-image call is GL_INVALID_OPERATION.
+#[test]
+fn es3_only_etc2_eac_formats_are_invalid_enum() {
+    let _g = context();
+    let block = [0u8; 16];
+    let image = [0u8; 32];
+    for (n, f, bytes) in [
+        ("GL_COMPRESSED_R11_EAC", GL_COMPRESSED_R11_EAC, 8),
+        ("GL_COMPRESSED_SIGNED_R11_EAC", GL_COMPRESSED_SIGNED_R11_EAC, 8),
+        ("GL_COMPRESSED_RG11_EAC", GL_COMPRESSED_RG11_EAC, 16),
+        ("GL_COMPRESSED_SIGNED_RG11_EAC", GL_COMPRESSED_SIGNED_RG11_EAC, 16),
+        ("GL_COMPRESSED_SRGB8_ETC2", GL_COMPRESSED_SRGB8_ETC2, 8),
+        ("GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2", GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, 8),
+        ("GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2", GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2, 8),
+        ("GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC", GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC, 16),
+    ] {
+        for held in [true, false] {
+            let mut t = 0;
+            // SAFETY: one name; the block and image arrays hold the sizes passed.
+            unsafe {
+                glGenTextures(1, &mut t);
+                glBindTexture(GL_TEXTURE_2D, t);
+                if held {
+                    glCompressedTexImage2D(
+                        GL_TEXTURE_2D,
+                        0,
+                        GL_COMPRESSED_RGB8_ETC2,
+                        8,
+                        8,
+                        0,
+                        32,
+                        image.as_ptr().cast(),
+                    );
+                    assert_eq!(name_of(err()), name_of(GL_NO_ERROR), "the 8x8 GL_COMPRESSED_RGB8_ETC2 image");
+                }
+                glCompressedTexImage2D(GL_TEXTURE_2D, 0, f, 4, 4, 0, bytes, block.as_ptr().cast());
+                assert_eq!(name_of(err()), name_of(GL_INVALID_ENUM), "glCompressedTexImage2D({n})");
+                glCompressedTexSubImage2D(
+                    GL_TEXTURE_2D,
+                    0,
+                    4,
+                    4,
+                    4,
+                    4,
+                    GL_COMPRESSED_RGB8_ETC2,
+                    8,
+                    image.as_ptr().cast(),
+                );
+                let want = if held { GL_NO_ERROR } else { GL_INVALID_OPERATION };
+                assert_eq!(
+                    name_of(err()),
+                    name_of(want),
+                    "after the refused {n}: the {} texture",
+                    if held { "8x8 GL_COMPRESSED_RGB8_ETC2 image of the" } else { "imageless" }
+                );
+                glDeleteTextures(1, &t);
+            }
+        }
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+}
+
 /* ---- the compiler (shaderc-online) ------------------------------------------------ */
 
 /// GLSL ES 1.00 3.3: "#version 100" is the only version the language has;

@@ -289,6 +289,10 @@ pub fn unroll_with<'a>(
         nodes: u.nodes.into_slice(),
         locals: u.locals.into_slice(),
         body,
+        /* rebuilt: no precision (ir.rs `Module::prec`) */
+        lanes: &[],
+        prec: &[],
+        local_prec: &[],
         ..*m
     };
     let module = a.alloc_copy(core::slice::from_ref(&out))?.first().ok_or(UnrollError::OutOfScratch)?;

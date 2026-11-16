@@ -106,5 +106,64 @@ class Forward(Repo):
         self.assertIn("malformed", out)
 
 
+class Compare(Repo):
+    """--compare: the forward-only rule as one step read from files (the entry
+    point `corpus-verdicts.sh --check` uses). The pinned file is the default
+    tools/mali/corpus-verdicts.txt unless named; the candidate is a file or -."""
+
+    def write(self, name, *lines):
+        p = os.path.join(self.root, name)
+        if os.path.dirname(p):
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w") as f:
+            f.write("".join(l + "\n" for l in lines))
+
+    def run_stdin(self, *args):
+        r = subprocess.run([sys.executable, "-I", TOOL, *args], input=self.cand,
+                           capture_output=True, text=True, cwd=self.root)
+        return r.returncode, r.stdout + r.stderr
+
+    def test_forward_ok_new_path_text_change(self):
+        self.write(CORPUS, "# c", "a.frag: x", "c.frag: old text")
+        self.write("cand.txt", "a.frag: ok", "b.frag: ok", "c.frag: new text")
+        rc, out = self.run_tool("--compare", "cand.txt", "--verbose")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("info check a.frag: x -> ok", out)
+        self.assertIn("info check b.frag: (new) -> ok", out)
+        self.assertIn("info check c.frag: old text -> new text", out)
+        self.assertIn("compare, 0 ok -> 2 ok, 0 regressions", out)
+
+    def test_ok_to_refusal_and_removed(self):
+        self.write(CORPUS, "a.frag: ok", "b.frag: ok")
+        self.write("cand.txt", "a.frag: not lowered")
+        rc, out = self.run_tool("--compare", "cand.txt")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("check a.frag: ok -> not lowered", out)
+        self.assertIn("check b.frag: ok -> (removed)", out)
+        self.assertIn("compare, 2 ok -> 0 ok, 2 regressions", out)
+
+    def test_pinned_refusal_may_disappear(self):
+        # The rule of the commit walk, unchanged: only an ok path may not
+        # regress; a pinned refusal missing from the candidate is allowed.
+        self.write(CORPUS, "a.frag: x")
+        self.write("cand.txt")
+        rc, out = self.run_tool("--compare", "cand.txt")
+        self.assertEqual(rc, 0, out)
+
+    def test_stdin_candidate_and_named_pinned(self):
+        self.write("pinned.txt", "a.frag: ok")
+        self.cand = "a.frag: nope\n"
+        rc, out = self.run_stdin("--compare", "-", "pinned.txt")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("check a.frag: ok -> nope", out)
+
+    def test_malformed_candidate(self):
+        self.write(CORPUS, "a.frag: ok")
+        self.write("cand.txt", "a.frag ok")
+        rc, out = self.run_tool("--compare", "cand.txt")
+        self.assertEqual(rc, 2, out)
+        self.assertIn("malformed", out)
+
+
 if __name__ == "__main__":
     unittest.main()

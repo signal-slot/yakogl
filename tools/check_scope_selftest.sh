@@ -52,7 +52,6 @@ want capi/assemble.cmake all
 want Cargo.toml all
 want tools/check.sh all
 want tools/land.sh all
-want tests/es3_tf_api.rs all
 want third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml all
 want some/new/place.rs all
 # one GPU
@@ -104,7 +103,7 @@ want tools/mali/isa-ref/board-2026-10-18.txt mali
 want driver/tools/pvrlab/gl_test.c gltest
 want tools/precompile/prove.sh precompile
 want tools/shaders/precompiled.list precompile
-want tests/fixtures/precompile_counts.txt precompile
+want tests/fixtures/precompile_counts.txt "precompile tests"
 want tools/yakogl-tools/src/main.rs toolscrate
 want tools/mali/panthor/src/dev.rs mali
 want tools/osal/linux_heap_check.c osal
@@ -117,6 +116,8 @@ want tools/cts/deqp-uart-tally.py tools
 want tools/board.sh tools
 want tools/board-stm32mp2.sh tools
 want tools/board_stm32mp2_selftest.sh tools
+want tools/board-stm32mp2-standalone.sh tools
+want tools/board_stm32mp2_standalone_selftest.sh tools
 want tools/uboot_env.py tools
 want tools/env/build-gate-image.sh tools
 want tools/hostharness/glmark2/run.sh tools
@@ -125,6 +126,7 @@ want docs/standalone-boot.md docs
 want website/index.html docs
 want README.md docs
 want docs/notes/x.md docs
+want docs/es2-cts-failures.md "docs ctsdoc"
 # the plan for a given change (YAKOGL_CHECK_PATHS stands in for the diff)
 # A stand-in west workspace, so the image rows are planned rather than gaps
 # (plan mode runs nothing, so the directory only has to exist).
@@ -165,6 +167,14 @@ expect "docs: the summary" '^check.sh: [0-9]+ ok, 0 failed, 0 gap\(s\).*skipped 
 same "docs: only the shared rows" "cargo fmt --check
 sha256  third_party files are the upstream files (UPSTREAM)
 tools   licence audit (SPDX header or allowlist row for every tracked file)" "$(rows 'plan|gap' "$out")"
+# docs/es2-cts-failures.md holds a block generated from the slices under
+# tools/cts/log/: its own edit reaches the row that compares the two, and no
+# other row beyond the shared ones.
+out=$(plan docs/es2-cts-failures.md)
+same "es2-cts-failures.md: the shared rows and its block check" "$(rows 'plan|gap' "$docs_plan")
+tools   es2-cts-failures.md's Mali block equals the tally of its slices" "$(rows 'plan|gap' "$out")"
+out=$(plan tools/cts/log/2026-11-15-t6-gles2-S1-37305608/results.tsv)
+expect "a slice file: the block check" "^plan  tools   es2-cts-failures.md's Mali block equals the tally of its slices\$" "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -191,7 +201,7 @@ out=$(plan tools/hostharness/glmark2/run.sh)
 expect "hostharness: the glmark2 corpus row" '^plan  test    glmark2 corpus generated from GLMARK2_SRC' "$out"
 expect "hostharness: not every row" '^check.sh: .*\(--changed HEAD, scopes: tools \)' "$out"
 out=$(plan tools/mali/pan_shc.c)
-expect "mali: the pan_shc row, a gap without MESA_PAN_TREE" '^gap   mali pan_shc on the tri pair: no MESA_PAN_TREE' "$out"
+expect "mali: the pan_shc row, a gap without MESA_PAN_TREE" '^gap   mali pan_shc on the tri pair, the blend references and blend_nir_rules.rs: no MESA_PAN_TREE' "$out"
 expect "mali: the pan_ref_diff self-test needs no Mesa tree" '^plan  run     mali pan_ref_diff and ref_cases self-test' "$out"
 expect "mali: not every row" '^check.sh: .*\(--changed HEAD, scopes: mali \)' "$out"
 out=$(plan driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c)
@@ -200,6 +210,7 @@ expect "nanopc_t6 glue: the GPU sample's image" '^plan  zephyr  nanopc_t6 t6_gpu
 expect "nanopc_t6 glue: the MMU probe's image" '^plan  zephyr  nanopc_t6 t6_mmu image' "$out"
 # Z3's probe (on a run, a gap naming the firmware without it, as the row below)
 expect "nanopc_t6 glue: the firmware probe's image" '^plan  zephyr  nanopc_t6 t6_fw image' "$out"
+expect "nanopc_t6 glue: the submit probe's image" '^plan  zephyr  nanopc_t6 t6_submit image \(Z4\)' "$out"
 expect "nanopc_t6 glue: the drivers crate tests" '^plan  test    yakogl-drivers' "$out"
 # the Mali firmware row (a plan row here; on a run, `needs` makes it a gap
 # naming the file where MALI_CSFFW or deps-env.sh's place has none)
@@ -318,6 +329,41 @@ expect "fragdepth: the GC7000UL test reaches its row" '^plan  test    host-test,
 expect "fragdepth: a GC7000UL change skips the V3D writer row" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_fragdepth_v3d.rs\)$' "$out"
 out=$(plan tests/es3_fragdepth_cases.rs)
 count "fragdepth: the cases file reaches its two rows" '^plan  test    .*es3_fragdepth_cases.rs\)$' 2 "$out"
+# A change confined to tests/ (scope tests): the test rows of the targets it
+# reaches, and what every change reaches; no image, driver, sample, aarch64,
+# table or tool row (tools/check_tests_reach.py names the targets).
+want tests/es3_tf_api.rs tests
+want tests/common/mod.rs tests
+want tests/usc_exec/mod.rs tests
+want tests/fixtures/v3d_texref.txt tests
+want tests/redaction_scan.rs tests
+want tools/release/redaction-scan.allow tests
+tests_plan=$(plan tests/es3_tf_api.rs)
+expect "tests: the summary" 'scopes: tests' "$tests_plan"
+expect "tests: the targets" '^check.sh: tests scope: targets .*es3_tf_api.*redaction_scan' "$tests_plan"
+expect "tests: a PowerVR suite row" '^plan  test    host-test,gpu-powervr$' "$tests_plan"
+expect "tests: a GC7000 suite row" '^plan  test    host-test,gpu-vivante$' "$tests_plan"
+expect "tests: the library's test_rules" '^plan  test    .*test_rules::' "$tests_plan"
+expect "tests: the target's own row (V3D)" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_tf_api.rs\)$' "$tests_plan"
+expect "tests: no other target's row" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_srgb.rs\)$' "$tests_plan"
+expect "tests: no image" '^skip  zephyr  am62p gl_test image, -Werror' "$tests_plan"
+expect "tests: no table proof" '^skip  gen     precompiled table gpu-powervr:' "$tests_plan"
+expect "tests: fmt and the licence audit run" '^plan  cargo fmt --check$' "$tests_plan"
+expect "tests: the licence audit" '^plan  tools   licence audit' "$tests_plan"
+if printf '%s\n' "$tests_plan" | grep -qE '^plan  (zephyr|cc  |run  |check  |tools  (check|board)|clippy  yakogl-)'; then
+  echo "FAIL tests: an image, driver, sample, cc, run or tool row is planned"; fails=$((fails + 1))
+fi
+checks=$((checks + 1))
+# the tree-wide redaction scan runs whatever test file changed
+expect "tests: redaction_scan is a target of every narrowed run" 'targets .*redaction_scan' "$(plan tests/es3_srgb.rs)"
+# a shared module reaches the targets that use it, and a mix with src/ is every row
+expect "tests: a shared module reaches its users" 'targets .*es3_gc_const_array' "$(plan tests/common/mod.rs)"
+expect "tests: a tests/ and src/ mix is every row" 'scopes: all' "$(plan "tests/es3_tf_api.rs src/gl/draw.rs")"
+# a fixture a tool outside tests/ reads is every row
+expect "tests: a fixture a tool reads is every row" 'scopes: all' "$(plan tests/fixtures/v3d_texref.txt)"
+# the glmark2 corpus test runs from a wrapper row, the knob tests from theirs
+expect "tests: glmark2_corpus selects its corpus row" '^plan  test    glmark2 corpus' "$(plan tests/glmark2_corpus.rs)"
+expect "tests: gc_kick_diff selects its knob row" '^plan  test    .*tests/gc_kick_diff.rs' "$(plan tests/gc_kick_diff.rs)"
 # --local: a shared-layer change runs the local set only
 local_plan() {
   ZEPHYR_WS=$PWD/build/check/plan-ws YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS="$1" tools/check.sh --local HEAD 2>&1 |

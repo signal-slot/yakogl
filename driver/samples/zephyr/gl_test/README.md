@@ -1,15 +1,16 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# gl_test (Zephyr: Verdin AM62P, Verdin iMX8M Plus, Armadillo-X2, STM32MP257F-DK, Raspberry Pi 4)
+# gl_test (Zephyr: Verdin AM62P, Verdin iMX8M Plus, Armadillo-X2, STM32MP257F-DK, Raspberry Pi 4, NanoPC-T6)
 
 Runs `driver/tools/pvrlab/gl_test.c`, YakoGL's on-silicon test suite, on the
 GPUs: the Verdin AM62P's PowerVR, the i.MX8M Plus's Vivante GC7000UL, the
-STM32MP257F-DK's Vivante GCNanoUltra31 and the Pi 4's V3D. It is one sample
-for every board: the Zephyr board (`-b`) picks the GPU, `src/main_am62p.c`,
-`main_imx8mp.c`, `main_stm32mp2.c` or `main_rpi4.c` (the lines that start the
-back end and the board's way to give a verdict) and the files in `boards/`
-(`imx8mp.conf` and `armadillo_x2.conf` are added by `CMakeLists.txt` for the
-i.MX8M Plus boards, the board layer's `stm32mp2/app.conf` for the DK). The options of each GPU are in
+STM32MP257F-DK's Vivante GCNanoUltra31, the Pi 4's V3D and the NanoPC-T6's
+Mali-G610. It is one sample for every board: the Zephyr board (`-b`) picks the
+GPU, `main_am62p.c`, `main_imx8mp.c`, `main_stm32mp2.c`, `main_rpi4.c` or
+`main_nanopc_t6.c` (the lines that start the back end and the board's way to
+give a verdict) and the files in `boards/` (`imx8mp.conf` and
+`armadillo_x2.conf` are added by `CMakeLists.txt` for the i.MX8M Plus boards,
+the board layer's `stm32mp2/app.conf` for the DK). The options of each GPU are in
 their own menu of `Kconfig`. Every case reads its pixels back and prints
 `gl_test: case N <name>: PASS/FAIL`; a run ends with
 `gl_test: all: N of M cases failed`. The header comment of `gl_test.c` lists
@@ -126,7 +127,7 @@ the thing under test, check that it has not moved it onto different code.
 ## STM32MP257F-DK, Cortex-A35 (Vivante GCNanoUltra31)
 
 The DK's GPU (model 0x8000, revision 0x6205; #1281) runs the same suite
-through `src/main_stm32mp2.c` and the board layer (`yakogl_board.h`,
+through `driver/samples/zephyr/gl_test/src/main_stm32mp2.c` and the board layer (`yakogl_board.h`,
 `driver/zephyr/lib/board/stm32mp2`), as `gc_fence` and `gc_clear` do, not the
 i.MX8MP's `yakogl_gc_board`. Before `main()` the layer powers the GPU for the
 driver (`gc_power_mp2.c`: SCMI over OP-TEE, the RCC gate and reset; anything
@@ -181,4 +182,55 @@ backend on the OSAL `src/osal/zephyr_v3d.c` (`docs/online-shaderc/v3d-backend.md
 repeated at the end, and the last lines of the run are frozen into one record
 on the screen (`V3D_GL_TEST_RECORD*`) before the bounded-lifetime watchdog
 (`V3D_GL_TEST_HOLD_S`) resets the board. Kconfig: `V3D_GL_TEST_CASES` (the
-list), `V3D_GL_TEST_CASE` (one case alone), `V3D_GL_TEST_MSAA`.
+list), `V3D_GL_TEST_CASE` (one case alone), `V3D_GL_TEST_MSAA`, `V3D_GL_TEST_MRT4`.
+
+Four-target knobs (measurements, off by default, gated by
+`YAKOGL_TEST_KNOBS`): `V3D_GL_TEST_MRT4` (Pi 4) and `PVR_GL_TEST_MRT4` (AM62P)
+make the image call `v3d_debug_set_draw_targets(4)` /
+`pvr_debug_set_draw_targets(4)` at startup, before the first context, so
+`GL_MAX_DRAW_BUFFERS` and `GL_MAX_COLOR_ATTACHMENTS` answer 4 instead of 3.
+Products leave them off. The C wiring in `main_rpi4.c` and `main_am62p.c`
+follows in a later item (`docs/notes/mrt4-v3d-pvr.md`, "The image knobs").
+
+## NanoPC-T6 (Mali-G610)
+
+The suite runs through YakoGL's GL core, its in-process compiler and its Mali
+backend on the OSAL `src/osal/zephyr_mali.c`, over our own kernel side
+(`board::nanopc_t6_osal`: the GPU powered, the CSF firmware booted, CSG 0 /
+CS 0 started, each kick one job on its ring), with the GL ES 1.00 shader set.
+The board has no display on Zephyr: the console is uart2. The image is
+kexec'd out of Armbian (`driver/tools/kexec-zephyr/nanopc-t6.sh`, a
+development result only) and ends with the board glue's PSCI reset back into
+Armbian; WDT0 bounds it (`boards/nanopc_t6.conf`: fed until 300 s of uptime,
+and only while the run feeds it at least every 30 s).
+
+The CSF firmware is embedded from `driver/src/fw/mali_csffw_blob.h`
+(gitignored, never committed): make it with
+`driver/tools/mkmalifw.sh <mali_csffw.bin>` first. The board glue
+(`driver/zephyr/lib/board/nanopc_t6/nanopc_t6_mali.c`, in every Mali image)
+hands it to the OSAL as `osal_zephyr_mali_default_platform()` and prints,
+before `main()`, its size and the sha256 that `mkmalifw.sh` took of the file
+it made the header from (`t6: CSF firmware N bytes embedded, built from a file
+with sha256 X ...`; not computed over the bytes at run time).
+
+```sh
+# from the top of the west workspace (driver/docs/nanopc-t6-mali.md, "Z4 board
+# procedure", step 1, with this sample in place of t6_submit)
+west build -p always -b nanopc_t6 -d build/t6_gl_test yakogl/driver/samples/zephyr/gl_test
+```
+
+Memory: about 78 MiB of the board's 256 MiB window (`nanopc_t6.dts`,
+`zephyr,sram`), of it the OSAL's `__nocache` memory with its 32 MiB
+carve-out; `zephyr.bin` is about 50 MB, since those statics lie inside the
+file's span, and `kexec_zephyr` reads at most 64 MiB. `tools/check.sh`
+(`zephyr  nanopc_t6 gl_test image`) checks both limits.
+
+Kconfig (the NanoPC-T6 menu): `T6_GL_TEST_CASE` (7, the regression set, by
+default) and `T6_GL_TEST_CASES` (a list on one context). A full tiler heap
+grows the heap; a GPU fault or the 5 s job timeout fails its case and
+restarts the OSAL's group (one `osal(mali): restart N ...` line each), at
+most 16 times in an image. An error that needs a GPU reset, or one past the
+16, stops the OSAL (`osal(mali): stopped by sched refusal N ...`), and every
+later case fails. The OSAL's two close lines (`osal(mali): kicks ...` and
+`osal(mali): restarts ...`) give the counts. The run ends with
+`gl_test: OK|FAILED (rc=N)` and `t6: gl_test done: PSCI SYSTEM_RESET`.

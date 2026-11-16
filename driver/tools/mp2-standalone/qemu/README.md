@@ -15,10 +15,12 @@ cases are other items').
 | file | job |
 | --- | --- |
 | `run.sh` | entry: builds what it needs, runs the cases, prints `run.sh: N ok, M failed` or `run.sh: skip: <why>` |
-| `build-uboot.sh` | builds U-Boot v2023.10 with the fragment into the cache; prints `u-boot.bin`. Reuses the compiler search and cache rules of `../../uboot-mp2/qemu/build-uboot.sh` (sourced, not changed) |
+| `build-uboot.sh` | builds U-Boot v2023.10 with the fragment into the cache; prints `u-boot.bin`. Reuses the compiler search and cache rules of `../../uboot-mp2/qemu/build-uboot.sh` (sourced, not changed). `build-uboot.sh redund` builds the `env_*` cases' U-Boot |
 | `mp2-standalone.config` | the Kconfig fragment: env in flash, `CMD_SAVEENV`, `setexpr`/`itest`/`source`/`go`, bootstd (script and extlinux over mmc), MMC on PCI, ext4 |
-| `drive.py` | the console side: cases, the QEMU boots, the assertions. Builds `boot.scr.uimg` with `tools/uboot_script.py` (no `mkimage`) |
-| `mkdisk.sh` | `mkdisk.sh DISK BOOTFS_DIR`: 32 MiB GPT, partition 1 `fsbl` (placeholder), partition 2 `bootfs` (ext4, bootable flag), no root |
+| `mp2-standalone-redund.config` | layered on it by `redund`: the environment as the DK keeps it, `ENV_IS_IN_MMC` with `SYS_REDUNDAND_ENVIRONMENT`, two 8 KiB copies at the top of a 512 KiB `u-boot-env` partition; `env info` |
+| `redund-default.env` | the `redund` U-Boot's compiled-in default environment: qemu-arm's addresses, `boot_targets=mmc0`, and ST's `env_check` run by `bootcmd` before the scan |
+| `drive.py` | the console side: cases, the QEMU boots, the assertions. Builds `boot.scr.uimg` with `tools/uboot_script.py` (no `mkimage`); reads and breaks the environment copies with `tools/uboot_env.py`'s parser |
+| `mkdisk.sh` | `mkdisk.sh DISK BOOTFS_DIR [env]`: 32 MiB GPT, partition 1 `fsbl` (placeholder), partition 2 `bootfs` (ext4, bootable flag), no root; with `env`, partition 3 `u-boot-env` (512 KiB) |
 | `image.S` | the stand-in image: an arm64 Image header and code that prints and returns to `go`; staged as `/yakogl/mp2z.bin` in bootfs |
 | `demo-counter.cmd` | the demo script: decrement `mp2s_test`, `saveenv`, `echo boots left <n>` |
 
@@ -56,8 +58,27 @@ they preset ST's legacy loop text (`scan_dev_for_scripts`, `boot_a_script`,
 Their test scripts are `cases/*.cmd`; a `Case` lists them as `files` (bootfs
 path to `.cmd`) and may `corrupt` one (data CRC broken).
 
+The `env_*` cases prove the two claims of the design note's section 8 on the
+redundant environment. They run the `redund` U-Boot on a disk with a
+`u-boot-env` partition, with `demo-counter.cmd` and `mp2s_test=3`; the setup
+saves three times, so both copies hold the count. After each boot the harness
+types `env info` and `env info -d -p` and reads both copies from the disk
+image; between two boots a `Case(between={n: f})` breaks stored CRCs:
+
+- `env_powercut_saveenv`: after boot 1 the copy its `saveenv` wrote (the
+  newer, `mp2s_test=2`) gets a bad CRC, as a power cut during that save leaves
+  it. Boot 2 loads the older copy without a warning and says `boots left 2`
+  again (the one extra boot), its save rewrites the torn copy, and boots 3 and
+  4 say `boots left 1` and `0`.
+- `env_both_bad_default`: after boot 1 both copies get a bad CRC. Boot 2 says
+  `*** Warning - bad CRC, using default environment`, `env_check` saves the
+  defaults (`Saving Environment to MMC... Writing to MMC(0)... OK`) and the
+  script finds no `mp2s_test`; boot 3 loads the saved defaults and
+  `env_check` saves nothing.
+
 To add a case, add a `Case(name, script, presets, boots, check)` to `cases()` in
-`drive.py`; `MP2S_QEMU_ONLY=name` runs one.
+`drive.py`; `MP2S_QEMU_ONLY=name` runs one. `run.sh` builds the `redund` U-Boot
+only when an `env_*` case runs.
 
 ## Tools and environment
 
@@ -89,6 +110,14 @@ To add a case, add a `Case(name, script, presets, boots, check)` to `cases()` in
   another item's (`st-env`).
 - The env is CFI flash, not ST's `mmc` env at 0x7e000. `saveenv` and
   `env_check` behave differently; what carries over is that a saved variable
-  survives a reset and that a script must not touch `bootcmd`.
+  survives a reset and that a script must not touch `bootcmd`. The `env_*`
+  cases are the exception: their U-Boot keeps two copies on the card through
+  mainline's `env/mmc.c` and `env_import_redund`, as ST's 2023.10 does, at
+  absolute offsets (QEMU's device tree names no `u-boot,mmc-env-partition`).
+  Its SD controller is on PCI, bound only once PCI is scanned, so it is built
+  with `CONFIG_SYS_EARLY_PCI_INIT` (a board define, passed in `KCFLAGS`) to
+  scan PCI before the environment loads; the DK's SDMMC is on the SoC.
+  Its `bootcmd` is `run env_check; bootflow scan -lb`, not ST's
+  `bootcmd_stm32mp`; `env_check` is ST's text.
 - The stand-in image returns from `go`; a Zephyr image does not.
 - No BL2 watchdog: a hang on QEMU is bounded by the driver's timeouts only.

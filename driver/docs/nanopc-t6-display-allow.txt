@@ -1,0 +1,304 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Bits of the NanoPC-T6's display registers that may differ between the
+# Zephyr cold path (the model's image after the display chain's bring-up) and
+# the Linux dump (nanopc-t6-display-dump-linux.txt), each with its reason.
+# Format: ADDRESS MASK REASON (hex, hex, text). See
+# driver/docs/nanopc-t6-display.md, section 6.
+#
+# The entries below follow from what the registers are, or from two dumps of
+# the same picture taken nine minutes apart (2026-11-12). Entries found by
+# the first comparison with the image are added below them, each with its
+# reason, or the driver changes instead.
+#
+# Linux shows its picture in Cluster0 of VP0 (linear XRGB8888, through the
+# IOMMU; vop2/summary of the dump's record). The design shows ours in Esmart0
+# with the IOMMU off. So the Cluster0 and Esmart0 window registers and the
+# overlay's layer and port selects differ by design; the first comparison
+# adds their rows.
+
+# PMU: status words; only the bits of other power domains are allowed
+0xfd8d81f0 0xf5ffffff chain status: the video codec domains go on and off under Linux (bits 1, 2 and 7 moved between the two dumps); the VOP's bit 25 and VO1's bit 27 are compared
+0xfd8d81f8 0xf5ffffff memory status: likewise
+0xfd8d8294 0xffffffff the word after the repair status: Linux's driver does not use it; bits 5 and 7 moved between the two dumps
+
+# VOP2
+0xfdd90060 0xffffffff SYS_STATUS0: status, sampled at an arbitrary time (moved between the two dumps)
+0xfdd90088 0xffffffff SYS0_INT_STATUS: event flags, sampled at an arbitrary time
+0xfdd90098 0xffffffff SYS1_INT_STATUS: likewise
+0xfdd900a8 0xffffffff VP0_INT_STATUS: likewise
+0xfdd900ac 0xffffffff VP0_INT_RAW_STATUS: likewise
+0xfdd91814 0xffffffff Esmart0 REGION0_YRGB_MST: our buffer; Linux leaves Esmart0 unused
+
+# vop_mmu
+0xfdd97e00 0xffffffff DTE_ADDR: Linux uses the IOMMU, Zephyr does not
+0xfdd97e04 0x00000001 STATUS paging enabled: likewise
+0xfdd97f00 0xffffffff DTE_ADDR (second set): likewise
+0xfdd97f04 0x00000001 STATUS paging enabled (second set): likewise
+
+# HDMI QP TX0
+0xfde800b8 0xffffffff CMU_VIDQPCLK_FREQ: a measurement, varies by a count
+0xfde800bc 0xffffffff CMU_LINKQPCLK_FREQ: likewise
+0xfde83010 0xffffffff MAINUNIT_0_INT_STATUS: event flags
+0xfde83020 0xffffffff MAINUNIT_1_INT_STATUS: event flags
+
+# HDPTX PHY0: registers that read back another value than Linux's tables
+# write. The image holds the value written; the dump holds the read-back.
+# The PHY's registers are 8 bits wide (every PHY word of the dump is below
+# 0x100), so the rows mask bits 7:0.
+0xfed600c0 0x000000ff CMN_REG(0030): reads back unlike the value written
+0xfed60118 0x000000ff CMN_REG(0046): likewise
+0xfed60120 0x000000ff CMN_REG(0048): likewise
+0xfed60c78 0x000000ff LANE_REG(031E): likewise
+0xfed61078 0x000000ff LANE_REG(041E): likewise
+0xfed61478 0x000000ff LANE_REG(051E): likewise
+0xfed61878 0x000000ff LANE_REG(061E): likewise
+
+# Found by the first comparison with the model's image after the display
+# chain's cold bring-up (step D7, 2026-11-12). The CRU's PLL and CLKSEL
+# words need no row: the golden run starts from the dump's values there.
+0xfd8d810c 0xffff9fff PMU idle request: only VOP's bits 13-14 are the chain's; PD_VO0 (bit 15) is not used by HDMI and left as found (Linux: off), the rest are other domains
+0xfd8d8110 0xfffffffe PMU idle request word 2: only VO1's bit 0 is the chain's; the rest are other domains
+0xfd8d8118 0xfffe9fff PMU idle acknowledge: VOP's bits 13-14 and VO1's bit 16 are compared; PD_VO0 bit 15 and other domains are not the chain's
+0xfd8d8120 0xfffe9fff PMU idle state: likewise
+0xfd8d8150 0xfffffff5 PMU power off word 2: VOP's bit 1 and VO1's bit 3 are compared; PD_VO0 bit 2 left as found, the rest are other domains (not modelled)
+0xfd8d8180 0xffffffff PMU power status: not the word Linux reads for these domains (pm-domains.c:1294-1296 have status 0; on is the repair status); not modelled
+0xfd8d81f4 0xffffffff chain status word 2: other domains (not modelled)
+0xfd8d81fc 0xffffffff memory status word 2: other domains (not modelled)
+0xfd8d8290 0xfff8ffff repair status: VOP, VO0, VO1 bits 16-18 are compared; the rest are other domains (not modelled)
+0xfd7c0804 0xfffffffd CLKGATE_CON(1): only pclk_top_root (bit 1, open in both) is the chain's
+0xfd7c08d0 0xffffdcf2 CLKGATE_CON(52): the chain's VOP gates (bits 0, 2, 3, 8, 9, 13) are compared and open in both; the others are not the chain's
+0xfd7c08d4 0xffffffff CLKGATE_CON(53): no gate of the chain
+0xfd7c08dc 0xffffffff CLKGATE_CON(55): PD_VO0's gates, not used by HDMI
+0xfd7c08ec 0xfffffdc8 CLKGATE_CON(59): the chain's bits compared, except bits 3, 6, 12 (HCLK_VO1_S_ROOT, aclk_hdcp1_pre, PCLK_VO1GRF): Linux gates them between uses (59/3, 59/6: genpd switches PD_VO1 with them; 59/12: vo1_grf names PCLK_VO1GRF as its clock, rk3588-base.dtsi:608-612 (clocks at :611), so its regmap opens it per access); the chain leaves them open
+0xfd7c08f0 0xffff77ff CLKGATE_CON(60): the chain's bits compared, except bits 5, 6 (ACLK_HDCP1, HCLK_HDCP1): PD_VO1's switching clocks, gated by Linux after the switch, left open by the chain
+0xfd7c08f4 0xfffffffe CLKGATE_CON(61): only CLK_HDMITX0_REF (bit 0, open in both) is the chain's
+0xfd7c0920 0xffffffdf CLKGATE_CON(72): only PCLK_HDPTX0 (bit 5) is the chain's; the model starts every other gate closed
+0xfd7c0924 0xffffefff CLKGATE_CON(73): only CLK_HDMIHDP0 (bit 12) is the chain's; likewise
+0xfd7c0928 0xfffffffa CLKGATE_CON(74): only bits 0, 2 are the chain's; likewise
+0xfd7c0ad0 0xffffdcff SOFTRST_CON(52): the chain's resets H_VOP, A_VOP, D_VOP0 (bits 8, 9, 13) are compared (released in both); the model starts every other reset asserted, Linux reads them released
+0xfd7c0ad4 0xffffffff SOFTRST_CON(53): no reset of the chain; likewise
+0xfd7c0af0 0xfffff7ff SOFTRST_CON(60): only P_HDMITX0 (bit 11) is the chain's; likewise
+0xfd7c0af4 0xfffffffe SOFTRST_CON(61): only HDMITX0_REF (bit 0) is the chain's; likewise
+0xfd7c0b20 0xffffffdf SOFTRST_CON(72): only P_HDPTX0 (bit 5) is the chain's (HDPTX0, ROPLL, LCPLL are never driven by Linux); likewise
+0xfd7c0b24 0xffffefff SOFTRST_CON(73): only HDMIHDP0 (bit 12) is the chain's; likewise
+0xfd7f0810 0xffffff7f PMU1 CRU CLKGATE_CON(4): only the PHY reference clock (bit 7) is the chain's; the model starts the others closed
+0xfd7f0a0c 0xffffc7ff PMU1 CRU SOFTRST_CON(3): only the PHY's INIT, CMN, LANE (bits 11-13) are the chain's; likewise
+0xfd7f0a10 0xffffffff PMU1 CRU SOFTRST_CON(4): no reset of the chain; likewise
+0xfd58c308 0x0000c000 sys_grf SOC_CON2: HDMI1's HPD interrupt bits 14, 15 (Linux binds both controllers; the chain only HDMI0)
+0xfd58c31c 0x00000a00 sys_grf SOC_CON7: bits 9 and 11 are not the HDMI glue's (glue writes bits 12, 13)
+0xfd58c384 0xffffffff sys_grf SOC_STATUS1: status (HPD levels and others), not modelled. Note: bit 16 (HDMI0 HPD) reads 1 under Linux
+0xfd5a4008 0x00000010 vop_grf GRF_VOP_CON2 bit 4: HDMI1's select (Linux drives HDMI1 from VP1)
+0xfd5a8008 0xffffffff vo1_grf CON2: not written by the HDMI path (not in dw_hdmi_qp-rockchip.c or the VOP's HDMI case)
+0xfd5a8018 0xffffffff vo1_grf CON6: HDMI1's I/O word (Linux binds both controllers)
+0xfd5a8024 0x00001000 vo1_grf CON9 bit 12: HDMI1's GRANT_SEL (Linux binds both controllers)
+0xfd5a8034 0xffffffff vo1_grf CON13: not written by the HDMI path
+0xfdd90008 0x7fffffff SYS_AUTO_GATING_CTRL: only bit 31 is written (cleared in both); the other bits are the reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90024 0xffffffff SYS_AXI_LUT_CTRL: Linux v6.18 does not write it (vop2.h:408 only); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90028 0x000c0020 DSP_IF_EN: HDMI1 enable (bit 5) and its mux = VP1 (bits 19:18): Linux drives HDMI1; the design only HDMI0
+0xfdd9002c 0x00700000 DSP_IF_CTRL: HDMI1's DCLK_DIV (21:20) and PCLK_DIV (22): Linux drives HDMI1
+0xfdd90034 0x00000010 SYS_PD_CTRL bit 4: not named by Linux (vop2.h:69-75 names 0-3 and 7, written 0 in both); the chain keeps it as found, and the model's reset value for it is a guess
+0xfdd90040 0xffffffff not named by Linux v6.18 (vop2.h); status or reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read) (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90044 0xffffffff not named by Linux v6.18 (vop2.h); status or reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read) (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90064 0xffffffff not named by Linux v6.18 (vop2.h); status or reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read) (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd900ec 0xffffffff not named by Linux v6.18 (vop2.h); status or reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read) (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90074 0xffffffff VP_LINE_FLAG(1): a port the design does not use (Linux's VP1, the reset value of VP2-3)
+0xfdd90078 0xffffffff VP_LINE_FLAG(2): a port the design does not use (Linux's VP1, the reset value of VP2-3)
+0xfdd9007c 0xffffffff VP_LINE_FLAG(3): a port the design does not use (Linux's VP1, the reset value of VP2-3)
+0xfdd9008c 0xffffffff SYS0_INT_RAW_STATUS: event flags, sampled
+0xfdd9009c 0xffffffff SYS1_INT_RAW_STATUS: event flags, sampled
+0xfdd900a0 0x0000ffff VP0_INT_EN: Linux enables VP0's interrupts; this driver polls the raw status
+0xfdd900b0 0x0000ffff VP1_INT_EN: Linux's VP1 (not used by the design)
+0xfdd900bc 0xffffffff VP1_INT_RAW_STATUS: event flags of a port the design does not use
+0xfdd900cc 0xffffffff VP2_INT_RAW_STATUS: event flags of a port the design does not use
+0xfdd900dc 0xffffffff VP3_INT_RAW_STATUS: event flags of a port the design does not use
+0xfdd90604 0x000f0fff OVL_LAYER_SEL layers 0-2 and 4: by design, Esmart0 (id 2) is VP0's layer 0; Linux puts Cluster0 there and lays out VP1's layers too, which moves the windows found on those layers
+0xfdd90608 0x205400f3 OVL_PORT_SEL: by design, Esmart0 alone on VP0; Linux has Cluster0 on VP0, Cluster1 on VP1 and splits the layers over two ports
+0xfdd90610 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
+0xfdd90614 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
+0xfdd90618 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
+0xfdd9061c 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
+0xfdd90620 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
+0xfdd90624 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
+0xfdd90628 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
+0xfdd9062c 0xffffffff CLUSTER0/1_MIX_*_CTRL: Linux's blending words for its Cluster windows (rockchip_vop2_reg.c:1902-1918); the design shows no Cluster window
+0xfdd906e4 0xffffffff VP_BG_MIX_CTRL(1): a port the design does not use
+0xfdd906e8 0xffffffff VP_BG_MIX_CTRL(2): a port the design does not use
+0xfdd906ec 0xffffffff VP_BG_MIX_CTRL(3): a port the design does not use
+0xfdd906f0 0xffffffff CLUSTER_DLY_NUM: Linux's delays for its Cluster windows; the design writes 0 (one Esmart layer)
+0xfdd906f4 0xffffffff CLUSTER_DLY_NUM1: likewise
+0xfdd906f8 0xffff00ff SMART_DLY_NUM: Esmart0's field (7:0): the design writes 23 there, Linux leaves Esmart0 unused; Esmart2 and 3 (31:16): Linux writes 23, the design 0. Esmart1's field is compared
+0xfdd90c0c 0x0000000c VP0_CLK_CTRL DCLK_OUT_DIV (3:2): Linux writes an uninitialised variable for HDMI (rockchip_vop2_reg.c:1673, :1683; never assigned for HDMI in :1548-1636), read 3 here; the design writes 0 (ip::vop2 module text). DCLK_OUT is not on the HDMI path (:1564-1580). Decided: the chain writes 0; 3 is the D8 fallback only if there is no picture with every other read-back good
+0xfdd90c10 0xffffffff VP0_3D_LUT_CTRL: Linux v6.18 does not write it; reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90ca0 0xffffffff VP0 +0xa0-0xb4: not named by Linux v6.18 (vop2.h); reset values, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90ca4 0xffffffff VP0 +0xa0-0xb4: not named by Linux v6.18 (vop2.h); reset values, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90ca8 0xffffffff VP0 +0xa0-0xb4: not named by Linux v6.18 (vop2.h); reset values, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90cac 0xffffffff VP0 +0xa0-0xb4: not named by Linux v6.18 (vop2.h); reset values, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90cb0 0xffffffff VP0 +0xa0-0xb4: not named by Linux v6.18 (vop2.h); reset values, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90cb4 0xffffffff VP0 +0xa0-0xb4: not named by Linux v6.18 (vop2.h); reset values, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90cf0 0xffffffff VP0 +0xf0: not named by Linux v6.18; reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90d00 0x0000000f VP1_DSP_CTRL OUT_MODE: Linux's VP1 (in standby); not used by the design
+0xfdd90d04 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d0c 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d10 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d30 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d34 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d38 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d3c 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d48 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d4c 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d50 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d54 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d80 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d84 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d88 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d8c 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d90 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90d94 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90df0 0xffffffff VP1: Linux's second output (HDMI1); the design uses VP0 only
+0xfdd90e00 0x0000000f VP2/VP3 DSP_CTRL OUT_MODE: reset value of an unused port (STANDBY, compared, set in both) (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd90f00 0x0000000f VP2/VP3 DSP_CTRL OUT_MODE: reset value of an unused port (STANDBY, compared, set in both) (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91000 0x00000001 Cluster0 enable (WIN_CTRL0 / CLUSTER_CTRL bit 0): Linux's picture window on VP0; the design shows Esmart0 and switches Cluster0 off
+0xfdd91100 0x00000001 Cluster0 enable (WIN_CTRL0 / CLUSTER_CTRL bit 0): Linux's picture window on VP0; the design shows Esmart0 and switches Cluster0 off
+0xfdd91008 0xffffffff Cluster0: Linux's picture window (VP0), a word the chain does not write; the design shows Esmart0
+0xfdd91018 0xffffffff Cluster0: Linux's picture window (VP0), a word the chain does not write; the design shows Esmart0
+0xfdd91020 0xffffffff Cluster0: Linux's picture window (VP0), a word the chain does not write; the design shows Esmart0
+0xfdd91024 0xffffffff Cluster0: Linux's picture window (VP0), a word the chain does not write; the design shows Esmart0
+0xfdd91050 0xffffffff Cluster0: Linux's picture window (VP0), a word the chain does not write; the design shows Esmart0
+0xfdd9106c 0xffffffff Cluster0: Linux's picture window (VP0), a word the chain does not write; the design shows Esmart0
+0xfdd91088 0xffffffff Cluster0: Linux's picture window (VP0), a word the chain does not write; the design shows Esmart0
+0xfdd910d0 0xffffffff Cluster0: Linux's picture window (VP0), a word the chain does not write; the design shows Esmart0
+0xfdd91200 0x00000001 Cluster1 enable: Linux's window on VP1 (HDMI1); the chain switches it off
+0xfdd91300 0x00000001 Cluster1 enable: Linux's window on VP1 (HDMI1); the chain switches it off
+0xfdd91208 0xffffffff Cluster1: Linux's window on VP1 (HDMI1), a word the chain does not write
+0xfdd91218 0xffffffff Cluster1: Linux's window on VP1 (HDMI1), a word the chain does not write
+0xfdd91220 0xffffffff Cluster1: Linux's window on VP1 (HDMI1), a word the chain does not write
+0xfdd91224 0xffffffff Cluster1: Linux's window on VP1 (HDMI1), a word the chain does not write
+0xfdd91250 0xffffffff Cluster1: Linux's window on VP1 (HDMI1), a word the chain does not write
+0xfdd9126c 0xffffffff Cluster1: Linux's window on VP1 (HDMI1), a word the chain does not write
+0xfdd91288 0xffffffff Cluster1: Linux's window on VP1 (HDMI1), a word the chain does not write
+0xfdd912d0 0xffffffff Cluster1: Linux's window on VP1 (HDMI1), a word the chain does not write
+0xfdd91500 0x00002000 Cluster2/3 CLUSTER_CTRL bit 13: kept as found by the chain's disable (it clears bit 0); the model's reset value lacks it (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91700 0x00002000 Cluster2/3 CLUSTER_CTRL bit 13: kept as found by the chain's disable (it clears bit 0); the model's reset value lacks it (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91810 0x00000001 Esmart0 REGION0_CTRL enable: by design the picture is in Esmart0 (Linux leaves it off)
+0xfdd9181c 0xffffffff Esmart0 REGION0_VIR: by design (our window); Linux leaves Esmart0 unused
+0xfdd91820 0xffffffff Esmart0 REGION0_ACT_INFO: by design (our window); Linux leaves Esmart0 unused
+0xfdd91824 0xffffffff Esmart0 REGION0_DSP_INFO: by design (our window); Linux leaves Esmart0 unused
+0xfdd91830 0xffffffff Esmart0 REGION0_SCL_CTRL: by design (our window); Linux leaves Esmart0 unused
+0xfdd91834 0xffffffff Esmart0 REGION0_SCL_FACTOR_YRGB: the design writes 0 for an unscaled window as Linux does for its own (Cluster0 reads 0, rockchip_drm_vop2.c:530-536); the unused Esmart0 holds its reset value
+0xfdd91838 0xffffffff Esmart0 scale factors not written (CBR, regions 1-3): reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91864 0xffffffff Esmart0 scale factors not written (CBR, regions 1-3): reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91868 0xffffffff Esmart0 scale factors not written (CBR, regions 1-3): reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91894 0xffffffff Esmart0 scale factors not written (CBR, regions 1-3): reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91898 0xffffffff Esmart0 scale factors not written (CBR, regions 1-3): reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd918c4 0xffffffff Esmart0 scale factors not written (CBR, regions 1-3): reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd918c8 0xffffffff Esmart0 scale factors not written (CBR, regions 1-3): reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91a04 0xffffffff Esmart1 CTRL1: reset value of an unused window, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91a34 0xffffffff Esmart1 scale factors: reset value of an unused window, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91a38 0xffffffff Esmart1 scale factors: reset value of an unused window, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91a64 0xffffffff Esmart1 scale factors: reset value of an unused window, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91a68 0xffffffff Esmart1 scale factors: reset value of an unused window, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91a94 0xffffffff Esmart1 scale factors: reset value of an unused window, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91a98 0xffffffff Esmart1 scale factors: reset value of an unused window, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91ac4 0xffffffff Esmart1 scale factors: reset value of an unused window, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd91ac8 0xffffffff Esmart1 scale factors: reset value of an unused window, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfdd97e04 0x00000018 vop_mmu STATUS bits 3, 4 (idle, replay buffer empty; rockchip-iommu.c:51-57): status, not modelled
+0xfdd97f04 0x00000018 vop_mmu STATUS bits 3, 4 (idle, replay buffer empty; rockchip-iommu.c:51-57): status, not modelled
+0xfde80004 0xffffffff VER_NUMBER: identity, read only; not modelled
+0xfde80008 0xffffffff VER_TYPE: identity, read only; not modelled
+0xfde8000c 0xffffffff CONFIG_REG: identity, read only; not modelled
+0xfde80014 0xffffffff CORE_TIMESTAMP_HHMM: identity, read only; not modelled
+0xfde80018 0xffffffff CORE_TIMESTAMP_MMDD: identity, read only; not modelled
+0xfde8001c 0xffffffff CORE_TIMESTAMP_YYYY: identity, read only; not modelled
+0xfde80058 0xffffffff RESET_MANAGER_STATUS2: status or a value Linux does not write (dw-hdmi-qp.c); not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80084 0xffffffff TIMER_BASE_STATUS0: status or a value Linux does not write (dw-hdmi-qp.c); not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde800b4 0xffffffff CMU_IPI_CLK_FREQ: status or a value Linux does not write (dw-hdmi-qp.c); not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde800c0 0xffffffff CMU_AUDQPCLK_FREQ: status or a value Linux does not write (dw-hdmi-qp.c); not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80814 0xffffffff VIDEO_INTERFACE_STATUS0: status or a value Linux does not write (dw-hdmi-qp.c); not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80970 0xffffffff TMDS_FIFO_CONFIG0: status or a value Linux does not write (dw-hdmi-qp.c); not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde800a0 0xffffffff CMU_CONFIG0: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde800a4 0xffffffff CMU_CONFIG1: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde800a8 0xffffffff CMU_CONFIG2: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde800ac 0xffffffff CMU_CONFIG3: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde800b0 0xffffffc0 CMU_STATUS above the clock monitor bits 5:0 (compared, 0x15 in both): not named by Linux; status
+0xfde80884 0xffffffff VIDEO_MONITOR_STATUS1: measurements of the running video (fields not named, design note U7); not modelled
+0xfde80888 0xffffffff VIDEO_MONITOR_STATUS2: measurements of the running video (fields not named, design note U7); not modelled
+0xfde8088c 0xffffffff VIDEO_MONITOR_STATUS3: measurements of the running video (fields not named, design note U7); not modelled
+0xfde80890 0xffffffff VIDEO_MONITOR_STATUS4: measurements of the running video (fields not named, design note U7); not modelled
+0xfde80894 0xffffffff VIDEO_MONITOR_STATUS5: measurements of the running video (fields not named, design note U7); not modelled
+0xfde80898 0xffffffff VIDEO_MONITOR_STATUS6: measurements of the running video (fields not named, design note U7); not modelled
+0xfde80a80 0xffffffff PKTSCHED_CONFIG0: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80a84 0xffffffff PKTSCHED_PRQUEUE0_CONFIG0: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80a88 0xffffffff PKTSCHED_PRQUEUE1_CONFIG0: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80a8c 0xffffffff PKTSCHED_PRQUEUE2_CONFIG0: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80a90 0xffffffff PKTSCHED_PRQUEUE2_CONFIG1: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80a94 0xffffffff PKTSCHED_PRQUEUE2_CONFIG2: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80a98 0xffffffff PKTSCHED_PKT_CONFIG0: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80aa0 0xffffffff PKTSCHED_PKT_CONFIG2: not written by Linux (dw-hdmi-qp.c); reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfde80a9c 0xffffffff PKTSCHED_PKT_CONFIG1: Linux changes it only with an InfoFrame (dw-hdmi-qp.c:749, :782), not in DVI; reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60000 0xffffffff PHY register 0x000: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60008 0xffffffff PHY register 0x002: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60010 0xffffffff PHY register 0x004: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60014 0xffffffff PHY register 0x005: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60148 0xffffffff PHY register 0x052: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6014c 0xffffffff PHY register 0x053: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60150 0xffffffff PHY register 0x054: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60158 0xffffffff PHY register 0x056: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6015c 0xffffffff PHY register 0x057: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60160 0xffffffff PHY register 0x058: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6016c 0xffffffff PHY register 0x05b: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60184 0xffffffff PHY register 0x061: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60188 0xffffffff PHY register 0x062: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6018c 0xffffffff PHY register 0x063: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60190 0x00000007 CMN_REG(0064) bits 2:0: the plan writes only the sign bit 3 (hdptx fact 8); the rest is the reset value, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read) (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60198 0xffffffff PHY register 0x066: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6019c 0xffffffff PHY register 0x067: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed601a0 0xffffffff PHY register 0x068: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed601a8 0xffffffff PHY register 0x06a: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed601b4 0xffffffff PHY register 0x06d: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed601b8 0xffffffff PHY register 0x06e: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed601bc 0xffffffff PHY register 0x06f: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed601c4 0xffffffff PHY register 0x071: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed601c8 0xffffffff PHY register 0x072: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60260 0xffffffff PHY register 0x098: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60270 0xffffffff PHY register 0x09c: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60284 0xffffffff PHY register 0x0a1: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60288 0xffffffff PHY register 0x0a2: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6028c 0xffffffff PHY register 0x0a3: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60290 0xffffffff PHY register 0x0a4: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60294 0xffffffff PHY register 0x0a5: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60298 0xffffffff PHY register 0x0a6: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6029c 0xffffffff PHY register 0x0a7: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60408 0xffffffff PHY register 0x102: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6040c 0xffffffff PHY register 0x103: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6043c 0xffffffff PHY register 0x10f: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60498 0xffffffff PHY register 0x126: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed604a0 0xffffffff PHY register 0x128: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60c04 0xffffffff PHY register 0x301: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60c54 0xffffffff PHY register 0x315: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60c84 0xffffffff PHY register 0x321: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60c9c 0xffffffff PHY register 0x327: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60ca0 0xffffffff PHY register 0x328: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60ca8 0xffffffff PHY register 0x32a: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed60cb4 0xffffffff PHY register 0x32d: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed61004 0xffffffff PHY register 0x401: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed61054 0xffffffff PHY register 0x415: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed61084 0xffffffff PHY register 0x421: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6109c 0xffffffff PHY register 0x427: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed610a0 0xffffffff PHY register 0x428: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed610a8 0xffffffff PHY register 0x42a: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed610b4 0xffffffff PHY register 0x42d: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed61404 0xffffffff PHY register 0x501: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed61454 0xffffffff PHY register 0x515: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed61484 0xffffffff PHY register 0x521: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6149c 0xffffffff PHY register 0x527: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed614a0 0xffffffff PHY register 0x528: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed614a8 0xffffffff PHY register 0x52a: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed614b4 0xffffffff PHY register 0x52d: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed61804 0xffffffff PHY register 0x601: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed61854 0xffffffff PHY register 0x615: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed61884 0xffffffff PHY register 0x621: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed6189c 0xffffffff PHY register 0x627: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed618a0 0xffffffff PHY register 0x628: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed618a8 0xffffffff PHY register 0x62a: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)
+0xfed618b4 0xffffffff PHY register 0x62d: not written by Linux's TMDS tables (hdptx.c:459-690) or this driver; reset value or status, not modelled (inference: Linux does not write it, so the dump is taken to hold the reset value; no cold dump was read)

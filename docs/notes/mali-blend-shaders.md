@@ -1,14 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# Mali Valhall: Mesa's blend shaders for gl_test cases 211 and 190 (#31 S6, #32)
+# Mali Valhall: Mesa's blend shaders (#33; gl_test cases 211 and 190, #31 S6, #32)
 
-A study, not an implementation (item `study-blend` of plan 153; the item
-`blendshaders` builds it). Mesa is 26.2.1 (`MESA_PAN_TREE`), the byte
-reference the drm-shim; `G/` is `src/gallium/drivers/panfrost/`, `L/`
-`src/panfrost/lib/`, `C/` `src/panfrost/compiler/`, `N/` `src/compiler/nir/`.
-What the frame does today for the constant colour's blend shader at 1x is in
-`docs/notes/mali-frame-refusals.md` section 3 and
-`src/shaderc/online/mali/blend.rs`; this note is what is new.
+Sections 1-5 are the study of gl_test cases 211 and 190 (item `study-blend`
+of plan 153); section 6 is how the blend shaders are built now, for every
+equation (dEQP-GLES2 `fragment_ops.blend`). Mesa is 26.2.1 (`MESA_PAN_TREE`);
+`G/` is `src/gallium/drivers/panfrost/`, `L/` `src/panfrost/lib/`, `C/`
+`src/panfrost/compiler/`, `N/` `src/compiler/nir/`.
 
 ## 1. When Mesa picks a blend shader
 
@@ -58,8 +56,7 @@ trace the blended draw's descriptor is `Mode: Shader`.
 
 The trace confirms it (`Mode: Fixed-Function` twice, `Mode: Shader` twice,
 descriptors in section 3). Columns 1 and 2 need nothing new; 3 and 4 are the
-two shaders below. The existing `shader_equation` returns None for both
-(`b.rgb != b.alpha`, and a MIN/`DST_ALPHA` factor).
+two shaders below (both built, section 6).
 
 ## 2. How the shader is built
 
@@ -249,81 +246,91 @@ python3 -I $T/blend_case190_211_words.py /tmp/blend211.trace $T/blend_case211
 It was run twice and the six files are identical. Shim:
 `$CONNECTED_DEPS_DIR/mesa-shim` (a `drm_shim_ref.sh build` of 26.2.1).
 
-## 6. What yakogl changes (for `blendshaders`; nothing here is implemented)
+## 6. How yakogl builds them: Mesa's NIR passes, then Mesa's selection
 
-`src/shaderc/online/mali/blend.rs` (the compiler):
+Sections 2 and 4 read the shim's words as shapes ("the factor made once", "a
+product fused into an FMA"); there are hundreds of such shapes over the GLES 2
+equations, and which one Mesa makes depends on the order its NIR passes meet
+the instructions in. `add src_color dst_color` alone ends as
+`ffma(s, s, fmul(d, d))` for one alpha equation and `ffma(d, d, fmul(s, s))`
+for another (`is_only_used_by_fadd` sees a vectorised product). So the blend
+shader is built as Mesa builds it:
 
-- `Equation` (`{src, dst}`, ADD both channels, constant-colour factors) grows
-  to the whole `nir_color_blend` input: per channel (`rgb`, `alpha`) a `Func`
-  (ADD, SUBTRACT, REVERSE_SUBTRACT, MIN, MAX) and src/dst `Factor` (ZERO, ONE,
-  SRC_ALPHA, DST_ALPHA, the inverts, the constant's), the colour mask, and the
-  target's sample count (1 or 4). It is also the cache key (Mesa's key minus
-  the constants).
-  `Factor::SrcAlpha`/`InvSrcAlpha`/`InvDstAlpha` and `Func::Min` are what 190
-  needs; SRC_COLOR/DST_COLOR/SATURATE and the rest of the table can stay
-  `BlendVariantNotLowered` until a reference asks.
-- `shader()`: after the existing prologue/`PIXEL_INDICES` code, take the
-  sample count: **at 4x emit the prologue of section 2** (`MOV r61` through
-  `bir::Op::MovI32` of `Idx::Reg(61)`, `RshiftAndI32`, two `MkvecV2i8` (an
-  op `select`/`opt` may lack: `lower_mkvec_swz`), then `LD_TILE` with that
-  word and the masked coverage), and keep the final `BLEND` + `BRANCHZI`.
-  The per-channel arithmetic generalises the existing `match (eq.src, eq.dst,
-  ..)`: `fsat` of the source (and of the constants when read), a factor
-  value computed **once per distinct factor** (`1 - As`: one `FADD.v2f16` of
-  the pair's `.h11` lanes feeds both channels: `Src`'s `.h11` selection),
-  `FMIN.v2f16`/`FMAX` of source and destination for MIN/MAX (no factors, the
-  destination unsaturated), a product fused into the sum as an `FMA.v2f16` with
-  the other term as addend (the existing fusion; a ZERO/ONE factor drops its
-  multiply). The words are the NIR vectorisation's (pairs of 16-bit lanes:
-  rg and ba), so mixed per-channel equations (column 3, 4: colour and alpha
-  differ) split into the pair that has the alpha channel and the pair that
-  does not, as `blend_case190_col*.txt` shows (`MKVEC.v2i16 r1, rA.h0, rB.h1`
-  joins the halves). Expect the ordering/register allocation
-  (`sched::pressure_schedule`, `ra::allocate_blend`) to need a pass over
-  each reference: the register numbers differ per equation.
-  Byte-equal tests against the three `.words` files, in `tests.rs`' blend
-  section (where the `blend_*.expect.json` run), loaded with `include_str!`
-  (the words are the u64s of the `words` field).
-- `ra.rs allocate_blend` and `flow.rs`: nothing known to change; the 4x
-  prologue reads r61 (preloaded) and r60.
+1. `src/shaderc/online/mali/blend_nir.rs`: the NIR
+   `pan_blend_create_shader` makes for the key (`build`, Mesa's builder calls
+   in Mesa's order, arguments right to left as Mesa's compiler evaluates
+   them), then the NIR passes that change a blend shader, each a
+   transcription of Mesa's on one block: `nir_lower_alu_width`,
+   `nir_opt_vectorize`, `nir_opt_copy_prop`, `nir_opt_dce`, `nir_opt_cse`,
+   `nir_opt_constant_folding`, `nir_opt_move`, `nir_opt_shrink_vectors`,
+   `nir_lower_load_const_to_scalar` and the three algebraic passes, in the
+   order of `bifrost_preprocess_nir`, `bifrost_postprocess_nir` and
+   `bi_optimize_late` (`optimize`). Each source records its place in its
+   value's use list, as NIR's lists keep it; the passes that walk uses walk
+   them in that order.
+2. The algebraic passes run Mesa's transforms (`blend_nir_rules.rs`,
+   generated from `nir_opt_algebraic.py` and `bifrost_nir_algebraic.py` by
+   `tools/mali/gen_blend_nir_rules.py`): `nir_search.c`'s matching (the
+   commutative source orders in bit order, a variable bound once), its
+   automaton (an instruction's state is the set of items it matches; a use
+   is visited again only when its state changes), its worklist (the last
+   instruction first) and its replacement (before the root, after a negated
+   value). A transform whose replacement builds an opcode this module does
+   not, or whose condition it does not evaluate, refuses the key
+   (`BlendVariantNotLowered`) when it would apply: never other bytes than
+   Mesa's. The fp class conditions are `nir_range_analysis.c`'s.
+3. `src/shaderc/online/mali/blend.rs`: the NIR selected in its order as
+   `bifrost_compile.c` does (`bi_alu_src_index`'s halves, `bi_make_vec_to`
+   for the colour, `bi_f32_to_f16_to` for one blend constant word, the
+   preloaded registers through MOVs put first), with the two early back-end
+   rewrites a blend shader meets: a swizzled `FCLAMP` source moved out to
+   its readers (`bi_lower_swizzle`) and constant halves folded into the
+   COLLECT. Then the existing passes (`finish`).
 
-`src/mali/blend.rs`:
+Not modelled, measured to leave the 16-bit code alone: the UBO load of the
+constants is kept whole (Mesa splits it, `nir_lower_mem_access_bit_sizes`,
+and joins it, `nir_opt_load_store_vectorize`; the back end reads the words as
+FAU words either way).
 
-- `shader_equation(&Blending) -> Option<blend::Equation>`: stop requiring `rgb
-  == alpha`, `Func::Add` and constant-only factors; map the rest of the
-  table to the new `Equation`; None for a combination `shader()` does not
-  build (the refusal stays by name). It also takes the colour mask and the
-  sample count (a `Target` argument) since they are part of the key.
-- `needs_shader` is already right for 190 (MIN and the unequal `DST_ALPHA`
-  pair are not `can_fixed_function`) and 211 (`constant()` is None).
+In the gate (README-pan_shc.md "Blend shaders"): the words equal
+`pan_shc --blend`'s for all 4103 keys of `blend_deqp.words` and
+`blend_random.sha` (1403 dEQP keys; 2100 random fp16 keys, 1500 at 1x and
+600 at 4x; 600 random fp32 keys), and the references, `pan_shc --blend`
+and `blend_nir_rules.rs` are made again from `MESA_PAN_TREE` by the pan_shc
+row; one key's final NIR is pinned (`blend_nir.rs` tests). Measured once,
+2026-11-12, with a harness outside the tree: the final NIR equals the NIR
+Mesa's passes print for the 1403 dEQP keys and the 600 4x ones (and a
+Python model of the passes for all 3503 fp16 keys, state by state);
+`pan_shc --blend` equals the shim driver on its 13 recorded shaders.
 
-`src/mali/backend.rs`:
+The colour's type is in the key (`colour_f32`, Mesa's `src0_type`): a highp
+ES 3.00 `out vec4` is fp32 in r0-r3 and converted in the blend shader
+(`V2F32_TO_V2F16`, the clamp fused). A `highp uvec4` colour into an RGBA8
+UNORM target is not a GL error, but the result is undefined (ES 3.0,
+shader outputs: values that do not match the buffer's format). It takes the
+fp32 key, and that is Mesa's shader for it too: `pan_blend_create_shader`
+loads 32 bits for a `nir_type_uint32` `src0_type` and converts them from
+float, the target's base type, not from the source type (pan_blend.c:837-862,
+"We assume the destination type here"), and `bi_emit_load_blend_input`
+reads only the type's size (bifrost_compile.c:924-946). In the gate:
+`blend_u32.words`, 100 uint32 keys made by `pan_shc --blend` with `u32`,
+equal our words of the same keys at fp32
+(`a_uint32_colour_s_blend_shaders_are_mesa_s`).
+Every other integer colour output (an `ivec4`, an `int`, `uint` or narrower
+vector, a `mediump` one, a `uvec4` highp only through `precision highp int`)
+has no reference and is refused at the fragment compile
+(`MaliError::IntColour`, `FsPrecision::of`), so it never reaches a blend
+shader. The record's `colour_f16`, which `shader_key` reads, comes from one
+rule, `FsPrecision::colour_f16`.
 
-- `draw_blend_shader` (`:560-577`): `built = mask == 0xf && target.samples == 1
-  && target.format == Rgba8888` is the gate: drop `target.samples == 1` (4x is
-  built), keep the mask rule until a masked blend shader has a reference
-  (`nir_color_mask` with a partial mask is not in the shim files here: a
-  mask 14 column with a MIN would be the case), pass `target.samples` in the
-  `Equation`.
-- `blend_shader` (`:524`): the cache compares `eq`; `BLEND_SHADER_WORDS` is 32
-  (the longest here is 22), `BLEND_SHADERS` 8 (190 needs 2). The key is the
-  new `Equation`.
-- the draw's `GlesDraw` already carries `color_mask`, `blend` and samples.
-
-`src/mali/frame.rs`:
-
-- the DCD0 (`:2927` area): **`evaluate_per_sample: t.samples > 1 &&
-  d.blend_shader.is_some()`** (the one frame-side change 211 needs; also
-  update the 4x test that pins DCD0's bytes);
-- `NOT_BUILT_BLEND_SHADER`'s text (`:184`) and its comment (the 4x and
-  separate colour/alpha now built).
-
-Tests to move with it: `src/mali/frame_blend_tests.rs:225-235` (the refusal
-row of MIN and of `const` stays only for what is still refused: its MIN is now
-built), `src/mali/backend_tests.rs:895-900` and the `NOT_BUILT_BLEND_SHADER`
-rows at `:1081`/`:1124`. The gl_test
-sweep: 211 and 190 turn from refused to PASS only on a T6 run; a Mesa
-reference for 190 on the board is the `mesarefs4` item.
+The frame side: `src/mali/blend.rs` `shader_key` maps a draw's equation,
+colour mask, sample count and colour type (the fragment record's
+`colour_f16`) to the key for an RGBA8 target at 1x or 4x, a MIN or MAX
+channel's factors as ONE, ONE (not read, so one shader);
+`src/mali/backend.rs` compiles it once per key (the 8 most recent kept) and
+the frame writes the descriptor in Shader mode (section 3), with
+`Evaluate per-sample` at 4x. Any other target (RGB565, XRGB8888, RGBA16F)
+stays `NOT_BUILT_BLEND_SHADER` / `NOT_BUILT_FLOAT_BLEND`.
 
 ## 7. Facts and open points, one line each
 
@@ -379,7 +386,7 @@ frame). The memory the writeback produces is the same halves either way.
 Still refused, `NOT_BUILT_FLOAT_BLEND`: an equation outside the float set
 into an RGBA16F target (a colour or destination-colour factor, the 2src
 form, a constant, min, max), which Mesa runs in a blend shader;
-`shader_equation` builds RGBA8888 keys only.
+`shader_key` builds RGBA8888 keys only.
 
 Open, for the board: no dump shows `Internal Format` RGBA16F on the T6 (the
 board's Mesa 25.0.7 has no `BFMT_FLOAT` and keeps RAW64 with a blend shader

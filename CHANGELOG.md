@@ -35,6 +35,12 @@ records at the tip.
   pass, twice with identical verdict lines, on main `1a22bd38e`
   (`ba200dda`); the previous record read 161 at `0decb5f7`
   (`98863975`).
+- `gl_test` on the NanoPC-T6 on Zephyr (started from the board's Linux
+  by kexec, a development result): the regression set passes 50 of 50
+  cases, drawn off-screen, on main `9ad07f55f`, with the GL back end
+  over our own kernel side and no panthor. The first run read 49: case
+  18 `image` failed on a `map_phys` window whose `impl` was null
+  (#6757, corrected by #6764).
 - glmark2-es2 on the NanoPC-T6 ran all 33 scenes on the board's own
   Armbian: the first record (main `da65355e`, `08ae7a8e`) and the second
   session (main `a57d8104`, `4bf0e7ab`) read the same 33 outcomes —

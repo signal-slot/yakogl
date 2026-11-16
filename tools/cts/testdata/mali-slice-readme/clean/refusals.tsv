@@ -1,0 +1,3 @@
+case	refusal
+dEQP-GLES2.a.one	online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet)
+dEQP-GLES2.b.two	online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet)

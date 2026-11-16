@@ -50,9 +50,12 @@ reports `max_varyings = V3D_MAX_FS_INPUTS / 4` = 16
   (`select.rs:2210-2216`). `FsProg` carries them at `chain.rs:138-140`
   (`flat_shade_flags`, `centroid_flags`; `noperspective_flags` beside
   them). The comparison JSON prints one word (`chain.rs:1322-1327`).
-- **VS output rows** (`select.rs:2560-2562`): `rows > 64` is
-  `VpmRowOutOfRange`. With 4 fixed rows, the point size and 64 varyings
-  that is 69. `vpm_fields` (`chain.rs:320-337`, Mesa
+- **VS output rows** (`select.rs:2560-2562`): `rows > 64` was
+  `VpmRowOutOfRange`, which refused 15 vec4 with `gl_PointSize` (65 rows).
+  With 4 fixed rows, the point size and 64 varyings that is 69, now
+  `select.rs` `VPM_MAX_OUTPUT_ROWS` (step 3 below, done; pinned by
+  `varyings_tests.rs` and `tests/es3_v3d_varyings.rs`
+  `fifteen_vec4_with_the_point_size_draw`). `vpm_fields` (`chain.rs:320-337`, Mesa
   `v3d_vs_set_prog_data`, `vir.c:896-937`) sizes the VPM output from
   `vpm_output_rows` in 8-row units and refuses a VPM that cannot hold two
   batches (`chain.rs:69-70`, `vir.c:936`); with 69 rows a batch is
@@ -106,6 +109,14 @@ asked. In either case the constants in `context.rs:193-194` stop being
 
 ## Changes of `v3d-varyings-compiler`
 
+Status: done. Items 1 and 2 landed with `v3d-varyings-raise` (6581f22b)
+in another form: the program data carries each set as two 32-bit halves
+(`*_flags` inputs 0..31, `*_flags_hi` 32..63) and `v3d_job.c` regroups
+them into the packet's 24-bit words. Item 3 landed with d17f4362
+(`select.rs` `VPM_MAX_OUTPUT_ROWS`), item 4 after it
+(`V3dError::TooManyFragmentInputs` in `chain.rs` and `chain71.rs`); both
+are pinned by `tests/v3d_varyings_compile.rs`.
+
 1. Flag sets become three 24-bit words as Mesa does (`vir.c:992-1003`):
    `chain.rs:138-140` and `419-445` (drop the "input past 31" refusals),
    `FsProg`, `ShcV3dFs`/`shc_v3d_fs`, the `abi_layout` pins and
@@ -146,11 +157,25 @@ asked. In either case the constants in `context.rs:193-194` stop being
 
 ## Open, no owner yet
 
+- A vertex shader of 16 computed vec4 varyings selects (69 rows) but
+  fails allocation, `NotYet("more live values than 2 threads have
+  registers (no spilling yet)")`: the 64 components are all live at the
+  end of the body, because the varyings are stored after it. 16 vec4s read
+  from uniforms, or 15 computed ones, compile. It needs spilling or VPM
+  writes as each output is produced (Mesa stores outputs where the shader
+  writes them). Pinned, ignored, by `tests/v3d_varyings_compile.rs`
+  `sixteen_computed_vec4_varyings_compile` (`varyings_tests.rs`
+  `a_vs_with_16_vec4_outputs_feeds_15` compiles: its fragment shader reads
+  15, so one output is dead).
+  Until the link check below exists, this gap is also what makes
+  `tests/es3_v3d_varyings.rs` `sixteen_varying_vectors_do_not_link` fail
+  to link; the link check has to come before the gap closes.
 - The ES 3.00 link does not check varying component counts
   (`reflect.rs:1068-1070`); with 64 inputs a shader past the limit should
   fail at link, as dEQP expects.
-- `tools/shaders/known-uncompilable-v3d.txt:38-40` needs a separate entry
-  per build once the limits differ.
+- `tools/shaders/known-uncompilable-v3d.txt` no longer lists
+  `es100/varyings15` (the V3D links 15 varying vectors); a build whose limit
+  differs needs its own entry.
 - A Pi 4 board check, a step for #320: 16 vec4 varyings plus
   `gl_PointCoord` (does `num_inputs` of the shader record, two implicit
   point varyings included, stay within what the hardware takes?), and

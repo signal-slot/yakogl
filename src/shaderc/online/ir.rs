@@ -349,6 +349,111 @@ impl AluOp {
     }
 }
 
+/// What a value is by its GLSL type, the thing [`Prec`]'s rule is stated
+/// by: an int value has no float width and records [`Prec::None`]; a
+/// float or a bool value has one, which Mesa decides
+/// (docs/notes/mali-precision.md).
+///
+/// The kind comes from the instruction ([`Op::value_kind`]), not from the
+/// opcode alone: `Iand`, `Ior` and `Ixor` serve int `&`, `|`, `^` and bool
+/// `&&`, `||`, `^^`, and `Bcsel` selects any kind.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ValueKind {
+    /// No value: a store or a discard.
+    Void,
+    /// An int or a uint, or bits an integer operation made (the pack
+    /// and unpack built-ins work a float's bits with integer operations).
+    Int,
+    Float,
+    Bool,
+}
+
+impl ValueKind {
+    /// The kind of a value whose components are `s`.
+    pub const fn of_scalar(s: ScalarType) -> ValueKind {
+        match s {
+            ScalarType::F32 => ValueKind::Float,
+            ScalarType::I32 | ScalarType::U32 => ValueKind::Int,
+            ScalarType::Bool => ValueKind::Bool,
+        }
+    }
+
+    /// The kind of a value the uniform block holds for the GL type `t`:
+    /// int, uint and their vectors are Int; so is a bool, which the GL
+    /// core stores as 0 or 1 and the lowering makes a bool with `I2b`
+    /// (lower.rs `bool_from_block`); anything else is a float.
+    pub const fn of_block_gl_type(t: u16) -> ValueKind {
+        match t {
+            0x1404 | 0x1405 | 0x8B53..=0x8B55 | 0x8DC6..=0x8DC8 | 0x8B56..=0x8B59 => ValueKind::Int,
+            _ => ValueKind::Float,
+        }
+    }
+
+    /// The kind of the shader input `slot`, `decl` its declaration (an
+    /// attribute's or a varying's, by its GL type).
+    pub fn of_input(slot: IoSlot, decl: Option<&IoDecl<'_>>) -> ValueKind {
+        match slot {
+            IoSlot::Attrib(_) | IoSlot::Varying(_) => match decl.map(|d| d.gl_type) {
+                Some(0x1404 | 0x1405 | 0x8B53..=0x8B55 | 0x8DC6..=0x8DC8) => ValueKind::Int,
+                _ => ValueKind::Float,
+            },
+            IoSlot::VertexId | IoSlot::InstanceId => ValueKind::Int,
+            IoSlot::FrontFacing => ValueKind::Bool,
+            IoSlot::FragCoord
+            | IoSlot::PointCoord
+            | IoSlot::Position
+            | IoSlot::PointSize
+            | IoSlot::FragColor(_)
+            | IoSlot::FragDepth => ValueKind::Float,
+        }
+    }
+}
+
+impl AluOp {
+    /// The kind of value this operation makes, `src` its sources' kinds
+    /// (those past [`AluOp::arity`] are not read).
+    ///
+    /// No wildcard arm: a new opcode does not compile until it is given a
+    /// kind here.
+    pub fn result_kind(self, src: [ValueKind; 3]) -> ValueKind {
+        use AluOp::*;
+        match self {
+            Fadd | Fmul | Ffma | Fmin | Fmax | Fneg | Fabs | Fsign | Frcp | Frsq | Fsqrt | Fexp2 | Flog2 | Fsin
+            | Fcos | Ffloor | Fceil | Ftrunc | Ffract | Fddx | Fddy | Fdot2 | Fdot3 | Fdot4 | B2f | I2f | U2f => {
+                ValueKind::Float
+            }
+            Flt | Fle | Feq | Fne | Ilt | Ile | Ieq | Ine | Ult | Ule | F2b | I2b | Bnot | Bany | Ball => {
+                ValueKind::Bool
+            }
+            Iadd | Imul | Idiv | Imod | Ineg | Ishl | Ishr | Udiv | Umod | Ushr | Imin | Imax | Umin | Umax | Inot
+            | B2i | F2i | F2u => ValueKind::Int,
+            /* `&&`, `||`, `^^` when both sides are bools; otherwise int
+             * bits (an int's, or a float's in the pack built-ins). The
+             * lowering never mixes a bool with a non-bool here (sema gives
+             * `&&` two bools, `&` two integers), so "both" and "either"
+             * agree on every module it makes; the corpus test asserts that
+             * (precision.rs `every_value_of_the_corpus_has_its_kind_s_class`) */
+            Iand | Ior | Ixor => {
+                if src[0] == ValueKind::Bool && src[1] == ValueKind::Bool {
+                    ValueKind::Bool
+                } else {
+                    ValueKind::Int
+                }
+            }
+            /* the sides' kind; sides of two kinds (unpackHalf2x16 selects
+             * a float or a float's bits made by integer operations) are
+             * bits: Int */
+            Bcsel => {
+                if src[1] == src[2] {
+                    src[1]
+                } else {
+                    ValueKind::Int
+                }
+            }
+        }
+    }
+}
+
 /// One instruction. Every arithmetic operation is component-wise.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Op {
@@ -465,6 +570,37 @@ pub enum Node {
 }
 
 impl Op {
+    /// The kind of value this instruction makes ([`ValueKind`]). `src`
+    /// gives an earlier value's kind, `local` a slot's, `input` an input's
+    /// and `uniform` the kind of the uniform-block dword it is given. The
+    /// one place the kind is decided, for the front end that records
+    /// [`Prec`] and for whatever checks it ([`Module::value_kind`]).
+    pub fn value_kind(
+        &self,
+        src: impl Fn(ValueId) -> ValueKind,
+        local: impl Fn(LocalId) -> ValueKind,
+        input: impl Fn(IoSlot) -> ValueKind,
+        uniform: impl Fn(u16) -> ValueKind,
+    ) -> ValueKind {
+        match *self {
+            Op::ConstF32(_) => ValueKind::Float,
+            Op::ConstI32(_) => ValueKind::Int,
+            Op::ConstBool(_) => ValueKind::Bool,
+            Op::Alu(a, s) => {
+                let n = a.arity();
+                let k = |i: usize| if i < n { src(s[i].val) } else { ValueKind::Void };
+                a.result_kind([k(0), k(1), k(2)])
+            }
+            Op::LoadUniform { dword_off, .. } => uniform(dword_off),
+            Op::LoadUniformIdx { base_dw, .. } => uniform(base_dw),
+            Op::LoadInput { slot, .. } => input(slot),
+            Op::LoadLocal { local: l, .. } => local(l),
+            Op::Tex { ret, .. } => ValueKind::of_scalar(ret),
+            Op::TexSize { .. } => ValueKind::Int,
+            Op::StoreOutput { .. } | Op::StoreLocal { .. } | Op::Discard => ValueKind::Void,
+        }
+    }
+
     /// The component count this instruction's own fields STATE, or `None`
     /// when they state none.
     ///
@@ -608,6 +744,12 @@ pub struct IoDecl<'a> {
     /// (`powervr/prepare.rs` `fusion_pairs`). Recorded on inputs as
     /// declared, where nothing reads it.
     pub invariant: bool,
+    /// The declared precision's class (docs/notes/mali-precision.md A.2):
+    /// Medium for a mediump or lowp float, High for a highp one, None for
+    /// an int. Recorded by the front end for the back end that lowers
+    /// precision (a bare read of a mediump varying records High, so the
+    /// read alone does not say it); [`Prec::None`] in a hand-built module.
+    pub prec: Prec,
 }
 
 impl IoDecl<'_> {
@@ -661,6 +803,30 @@ pub struct VarDecl<'a> {
     pub array_len: u16,
 }
 
+/// GLSL ES precision lowering's verdict for one value (Mesa 26.2.1
+/// `lower_precision.cpp`), recorded by the front end in [`Module::prec`]
+/// and [`Module::local_prec`]. Only a back end that lowers precision reads
+/// it (the Mali's, `docs/notes/mali-precision.md`); the instructions are
+/// the same whatever it says.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[repr(u8)]
+pub enum Prec {
+    /// Not recorded, or a value with no float or bool width (an int, a
+    /// store).
+    #[default]
+    None,
+    /// Computed, or stored, at full width.
+    High,
+    /// Inside a tree Mesa computes at 16 bits before NIR's folds (a
+    /// lowered tree, a lowered built-in's body); for a local, stored at 16
+    /// bits.
+    Medium,
+    /// No class is known: the module has no precision tables (a pass
+    /// rebuilt it, [`Module::prec`]), or the front end had no class for
+    /// the expression. A reader that lowers precision refuses it.
+    Unknown,
+}
+
 /// One stage's IR: what the front end hands the code generator.
 ///
 /// Every field borrows the scratch arena of the compile that built it.
@@ -683,6 +849,19 @@ pub struct Module<'a> {
     /// estimate. An empty table means an older or hand-built module; the
     /// accessor answers 4 there, which is what a back end assumed anyway.
     pub comps: &'a [u8],
+    /// The exact width of each value, by the same `ValueId`, or 0 where
+    /// the front end knows no exact width: what `comps` records, and also
+    /// the widths the front end learned for the back end that lowers
+    /// precision (docs/notes/mali-precision.md, D.1): every step of a
+    /// built-in's expansion (one lane after a reduction), an increment's
+    /// sum, a conversion. `comps` keeps 0 (unrecorded, read as 4) for
+    /// those, the width every other back end was built against, so their
+    /// code does not move. A step whose lanes all hold one scalar
+    /// (`refract`'s `k`, `smoothstep`'s scalar edges) records 0: its
+    /// width is neither the lanes it fills nor one. Read it through
+    /// [`Module::lanes_of`]; the rule for passes that rebuild a module is
+    /// [`Module::prec`]'s.
+    pub lanes: &'a [u8],
     /// Every node of every block, in one array; a [`Range`] indexes it.
     pub nodes: &'a [Node],
     /// `main`'s body.
@@ -699,6 +878,26 @@ pub struct Module<'a> {
     pub uniform_dwords: u16,
     pub uses_discard: bool,
     pub uses_front_facing: bool,
+    /// The [`Prec`] of each instruction, by the same `ValueId` as
+    /// [`Module::comps`]; for a `StoreOutput`, the output's declared
+    /// precision. Read it through [`Module::prec_of`].
+    ///
+    /// The rule for every pass after the front end: the two tables
+    /// describe `instrs` and `locals` exactly as the front end built them.
+    /// A pass that renumbers, adds, removes or rewrites instructions, nodes
+    /// or locals gives its module EMPTY tables (`prec: &[], local_prec:
+    /// &[]`), unless it carries them along entry for entry (lodkey.rs's
+    /// remap, lower.rs's `relocate` and `zero_varyings`, which replace one
+    /// instruction by one of the same meaning). A module whose tables are
+    /// not as long as `instrs` and `locals` has no precision
+    /// ([`Module::has_prec`]), and every answer of [`Module::prec_of`] and
+    /// [`Module::local_prec_of`] is then [`Prec::Unknown`]: a reader that
+    /// lowers precision refuses it, and never indexes a stale table.
+    pub prec: &'a [Prec],
+    /// Whether each local is stored at 16 bits ([`Prec::Medium`]) or at
+    /// full width, by [`LocalId`]. Read it through
+    /// [`Module::local_prec_of`].
+    pub local_prec: &'a [Prec],
 }
 
 impl<'a> Module<'a> {
@@ -708,6 +907,7 @@ impl<'a> Module<'a> {
             stage,
             instrs: &[],
             comps: &[],
+            lanes: &[],
             nodes: &[],
             body: Range::EMPTY,
             locals: &[],
@@ -717,7 +917,66 @@ impl<'a> Module<'a> {
             uniform_dwords: 0,
             uses_discard: false,
             uses_front_facing: false,
+            prec: &[],
+            local_prec: &[],
         }
+    }
+
+    /// The exact width of the value `id` ([`Module::lanes`]): 1 to 4.
+    /// `None` where the front end knows no exact width (the entry is 0, or
+    /// the table is not in step with the instructions): a reader that
+    /// needs one refuses, rather than take [`Module::comps_of`]'s
+    /// over-estimate for it.
+    pub fn lanes_of(&self, id: ValueId) -> Option<u8> {
+        if self.lanes.len() != self.instrs.len() {
+            return None;
+        }
+        self.lanes.get(id.0 as usize).copied().filter(|c| (1..=4).contains(c))
+    }
+
+    /// The module carries precision tables in step with its instructions
+    /// and locals (the rule at [`Module::prec`]).
+    pub fn has_prec(&self) -> bool {
+        self.prec.len() == self.instrs.len() && self.local_prec.len() == self.locals.len()
+    }
+
+    /// The [`Prec`] of the value `id`; [`Prec::Unknown`] when the module
+    /// has no precision ([`Module::has_prec`]) or no such value.
+    pub fn prec_of(&self, id: ValueId) -> Prec {
+        if !self.has_prec() {
+            return Prec::Unknown;
+        }
+        self.prec.get(id.0 as usize).copied().unwrap_or(Prec::Unknown)
+    }
+
+    /// The [`ValueKind`] of `instrs[id]`, `earlier` the kinds of the
+    /// values before it (each one this answered): [`Op::value_kind`] over
+    /// this module's locals, inputs and uniforms.
+    pub fn value_kind(&self, id: ValueId, earlier: &[ValueKind]) -> ValueKind {
+        let Some(op) = self.instrs.get(id.0 as usize) else { return ValueKind::Void };
+        op.value_kind(
+            |v| earlier.get(v.0 as usize).copied().unwrap_or(ValueKind::Void),
+            |l| self.locals.get(l.0 as usize).map_or(ValueKind::Void, |d| ValueKind::of_scalar(d.ty.scalar)),
+            |slot| ValueKind::of_input(slot, self.inputs.iter().find(|d| d.slot() == slot)),
+            |dw| {
+                self.uniforms
+                    .iter()
+                    .find(|u| {
+                        (u32::from(u.dword_off)..u32::from(u.dword_off) + u32::from(u.dwords.max(1)))
+                            .contains(&u32::from(dw))
+                    })
+                    .map_or(ValueKind::Float, |u| ValueKind::of_block_gl_type(u.gl_type))
+            },
+        )
+    }
+
+    /// The [`Prec`] of the local `l`'s storage; [`Prec::Unknown`] when the
+    /// module has no precision or no such local.
+    pub fn local_prec_of(&self, l: LocalId) -> Prec {
+        if !self.has_prec() {
+            return Prec::Unknown;
+        }
+        self.local_prec.get(l.0 as usize).copied().unwrap_or(Prec::Unknown)
     }
 
     /// The nodes of `r`, or `&[]` when it runs past the array.
@@ -1000,6 +1259,31 @@ mod tests {
     }
 
     #[test]
+    fn a_precision_is_unknown_where_the_module_has_no_tables_in_step() {
+        /* A hand-built module, or one a pass rebuilt (empty tables), or one
+         * whose tables do not match its instructions, answers Unknown: a
+         * refusal for a reader, never a guessed or a stale entry. */
+        let instrs = [Op::ConstF32([0; 4]), Op::ConstF32([0; 4])];
+        let locals = [VarDecl { name: "", ty: Type::new(ScalarType::F32, 1), array_len: 1 }];
+        let m = Module { instrs: &instrs, locals: &locals, ..Module::empty(SHC_STAGE_VERTEX) };
+        assert!(!m.has_prec());
+        assert_eq!(m.prec_of(ValueId(0)), Prec::Unknown);
+        assert_eq!(m.local_prec_of(LocalId(0)), Prec::Unknown);
+        let prec = [Prec::High, Prec::Medium];
+        let local_prec = [Prec::Medium];
+        let m = Module { prec: &prec, local_prec: &local_prec, ..m };
+        assert!(m.has_prec());
+        assert_eq!(m.prec_of(ValueId(1)), Prec::Medium);
+        assert_eq!(m.prec_of(ValueId(2)), Prec::Unknown, "past the table");
+        assert_eq!(m.local_prec_of(LocalId(0)), Prec::Medium);
+        assert_eq!(m.local_prec_of(LocalId(1)), Prec::Unknown, "past the table");
+        /* stale: one instruction more than the table */
+        let three = [Op::ConstF32([0; 4]); 3];
+        let m = Module { instrs: &three, ..m };
+        assert_eq!(m.prec_of(ValueId(0)), Prec::Unknown, "a table out of step is no table");
+    }
+
+    #[test]
     fn a_recorded_width_beats_the_instruction() {
         /* The table is the front end's answer and it is the better one: it
          * knows `a.xy + b.xy` is two lanes, which the instruction cannot
@@ -1075,6 +1359,7 @@ mod tests {
             interp: INTERP_FLAT,
             gl_type: 0,
             invariant: false,
+            prec: Prec::None,
         }];
         let m = Module { inputs: &flat, ..Module::empty(SHC_STAGE_FRAGMENT) };
         assert!(!m.needs_w_iterator(), "flat inputs alone need no w iterator");
@@ -1087,6 +1372,7 @@ mod tests {
             interp: INTERP_SMOOTH,
             gl_type: 0,
             invariant: false,
+            prec: Prec::None,
         }];
         let m = Module { inputs: &smooth, ..Module::empty(SHC_STAGE_FRAGMENT) };
         assert!(m.needs_w_iterator(), "one perspective input is enough");

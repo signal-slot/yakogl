@@ -71,6 +71,19 @@ with one board case, so nobody has to take it on trust.
 
 ## (b) Does `V3dSampler` grow?
 
+Landed another way (`333a19f7`, `455c3bb5`). `V3dSampler` stays 32 bytes and
+the C has a second entry point, `v3d_tex_pack_sampler_compare(out, s,
+compare_op)` (`src/v3d/texture.rs`: `pack_sampler`, `compare_op`,
+`compare_function`); `sampler_for` (`src/v3d/backend.rs`) packs through it and
+keys the job's sampler cache on the pair (`texture::sampler`,
+`texture::compare_function`): two bindings that differ only in the compare get
+two records, and compare off shares NEVER's record (V3D 4.2 has no enable bit;
+a look-up without TMUDREF does not compare). Pinned by
+`src/v3d/backend_tests.rs` (`a_sampler_record_carries_its_depth_compare_function`)
+and, through the GL core and the real packer, `tests/es3_etc2_v3d.rs` and
+`tests/es3_shadow_v3d_draw.rs`. The design below is the one considered first,
+kept for the record.
+
 Yes. `V3dSampler` (`src/v3d/ffi.rs:562-574`) is three `u32` wraps, four
 `bool`s, three `f32` and a `u32`: 12 + 4 + 12 + 4 = 32 bytes with no padding,
 and `ffi.rs:888-892` asserts the size 32 and the offsets of `min_nearest` (12),

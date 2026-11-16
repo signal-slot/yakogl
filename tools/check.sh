@@ -51,7 +51,10 @@
 #
 # --changed maps each changed path to the parts it can break (scope_of_path
 # below: a GPU back end, gl_test, the tools, the precompiled tables, the
-# drivers crate, the samples, or everything) and skips the rows of the other
+# drivers crate, the samples, `tests` -- a change confined to tests/, which
+# runs the test rows of the integration targets it reaches
+# (tools/check_tests_reach.py) and what every change reaches -- or
+# everything) and skips the rows of the other
 # parts, printing `skip` for each so the log says what was not run. A path
 # the map does not know, and every shared layer (src/gl, src/shaderc, the
 # OSALs, capi, Cargo.toml, this script), selects every row -- and --local then
@@ -175,15 +178,21 @@ BUILD_ONLY_CONFIGS=(
 # what the full run in CI exists to catch.
 scope_of_path() {
   case "$1" in
+  # Its section M holds the block tools/cts/mali-deqp-tally.py generates from
+  # the slices under tools/cts/log/; the row that compares the two (ctsdoc) is
+  # reached by an edit of the document alone, and no other tools row is.
+  docs/es2-cts-failures.md) echo "docs ctsdoc" ;;
   docs/* | */*.md | *.md | website/* | NOTICE | LICENSE* | .github/* | records/* | .gitignore | .ccfarm/*) echo docs ;;
-  tools/precompile/* | tools/shaders/* | tests/fixtures/precompile*) echo precompile ;;
+  tools/precompile/* | tools/shaders/*) echo precompile ;;
+  # a precompile fixture is read by the tables' rows and by the tests that name it
+  tests/fixtures/precompile*) echo "precompile tests" ;;
   # V3D 7.1 (Raspberry Pi 5): the v3d71 row (tools/v3d/check71.sh) is reached by
   # its own files (src/shaderc/online/v3d/*71*.rs, driver/src/v3d/generated/
   # v3d_packet_v71_pack.h, tools/v3d/check71.sh, check71.d/*, shim71/*, pi5/*,
   # *_71*) and by the shared V3D files 7.1 builds from; all of them are
   # under the three directories below, and the 4.2 rows are reached as before.
   src/shaderc/online/v3d/* | driver/src/v3d/* | tools/v3d/*) echo "v3d v3d71" ;;
-  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
+  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/es3_half_float_rt_v3d* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
   src/shaderc/online/mali/* | src/mali/* | tools/mali/*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
@@ -194,11 +203,16 @@ scope_of_path() {
   src/shaderc/online/powervr/* | src/pvr/* | driver/src/pvr/* | driver/src/pvr_* | driver/src/fw/* | driver/compat/* | tools/pvr/* | tools/pco_shc/* | tools/pco-isa/* | tools/isa-extract/* | tools/glsl2usc.sh | driver/tools/offsetof/* | tests/reference/* | driver/rust/src/soc/am62p/* | tools/ti-zephyr/* | tools/ti-trm/*) echo pvr ;;
   driver/tools/pvrlab/*) echo gltest ;;
   tools/yakogl-tools/*) echo toolscrate ;;
+  tools/release/redaction-scan.allow) echo tests ;;
   tools/mali/*) echo mali ;;
   tools/osal/*) echo osal ;;
   driver/samples/* | examples/* | tools/slint/* | tools/probes/* | tools/host-replay/*) echo samples ;;
   driver/rust/* | driver/*) echo drivers ;;
-  tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  # a path confined to tests/ (the GPU-named files above keep their GPU's
+  # scope): the `tests` scope, the test rows of the targets it reaches
+  # (tools/check_tests_reach.py)
+  tests/*) echo tests ;;
+  tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
 }
@@ -326,6 +340,8 @@ config_scopes() {
   echo "$out"
 }
 SCOPES=all
+TEST_TARGETS=
+TESTS_NARROW=0
 if [ -n "$CHANGED_BASE" ]; then
   # YAKOGL_CHECK_PATHS="<path> ..." stands in for the diff (the self-test).
   if [ -n "${YAKOGL_CHECK_PATHS-}" ]; then
@@ -336,13 +352,47 @@ if [ -n "$CHANGED_BASE" ]; then
   fi
   SCOPES=$(for cp in $changed_paths; do scope_of_path "$cp"; done | sort -u | tr '\n' ' ')
   case " $SCOPES " in *" all "*) SCOPES=all ;; esac
+  # `tests`: which integration test targets the paths confined to tests/ reach.
+  # ALL: cannot tell, every target of the test rows; WIDEN: a reader outside
+  # tests/ (a tool, a table proof) reads a changed file, so every row; else
+  # the targets, plus redaction_scan (it scans the whole tree, new test file
+  # included) and the library's test_rules (it reads tests/*.rs).
+  case " $SCOPES " in *" tests "*)
+    tests_paths=$(for cp in $changed_paths; do case " $(scope_of_path "$cp") " in *" tests "*) echo "$cp" ;; esac; done)
+    TEST_TARGETS=$(python3 -I tools/check_tests_reach.py $tests_paths 2>/dev/null) || TEST_TARGETS=ALL
+    case "$TEST_TARGETS" in
+    WIDEN) SCOPES=all; TEST_TARGETS= ;;
+    ALL | "") TEST_TARGETS=ALL ;;
+    *) TEST_TARGETS=$(printf '%s\n' $TEST_TARGETS redaction_scan | sort -u | tr '\n' ' '); TESTS_NARROW=1 ;;
+    esac ;;
+  esac
   echo "check.sh: --changed $CHANGED_BASE: $(printf '%s\n' "$changed_paths" | grep -c .) path(s), scopes: ${SCOPES:-none}"
   if [ "$SCOPES" = all ]; then
-    for cp in $changed_paths; do [ "$(scope_of_path "$cp")" = all ] && echo "      every row: $cp"; done
+    for cp in $changed_paths; do
+      case " $(scope_of_path "$cp") " in *" all "*) echo "      every row: $cp" ;; *" tests "*) echo "      every row: $cp (read outside tests/)" ;; esac
+    done
   fi
+  [ -n "$TEST_TARGETS" ] && echo "check.sh: tests scope: targets ${TEST_TARGETS% }"
 fi
 ROW_SCOPES=all
+ROW_TESTS=
 scope() { ROW_SCOPES="$*"; }
+# tests_row <target>...: the next row runs those root integration test
+# targets (tests/<target>.rs) from a function, so `step` cannot see a
+# `--test` in its arguments. A step also reads its own `--test <name>`.
+tests_row() { ROW_TESTS="$*"; }
+# 0 when the row under the current `scope` line is wanted only for the
+# `tests` scope with a narrowed target list: it runs just those targets.
+tests_narrow_row() {
+  local s
+  [ "$TESTS_NARROW" -eq 1 ] || return 1
+  for s in $ROW_SCOPES; do
+    [ "$s" = tests ] && continue
+    case "$s" in all | licence | local) return 1 ;; esac
+    case " $SCOPES " in *" $s "*) return 1 ;; esac
+  done
+  return 0
+}
 # 0 when the rows under the current `scope` line are selected.
 wanted() {
   local s
@@ -350,6 +400,11 @@ wanted() {
     [ "$LOCAL" -eq 0 ] && return 0
     for s in $ROW_SCOPES; do [ "$s" = local ] && return 0; done
     return 1
+  fi
+  # a row that runs target <t> of tests/ is wanted when the change reaches <t>
+  if [ -n "$ROW_TESTS" ] && [ -n "$TEST_TARGETS" ]; then
+    [ "$TEST_TARGETS" = ALL ] && return 0
+    for s in $ROW_TESTS; do case " $TEST_TARGETS " in *" $s "*) return 0 ;; esac; done
   fi
   for s in $ROW_SCOPES; do
     [ "$s" = all ] && return 0
@@ -552,7 +607,13 @@ step() {
   ROW_KEY=
   ROW_NEEDS=
   ROW_NEEDS_HOW=
-  if ! wanted; then skip "$label"; return 0; fi
+  local ta pt=
+  for ta in "$@"; do
+    [ "$pt" = --test ] && ROW_TESTS="$ROW_TESTS $ta"
+    pt=$ta
+  done
+  if ! wanted; then ROW_TESTS=; skip "$label"; return 0; fi
+  ROW_TESTS=
   if [ -n "${YAKOGL_CHECK_PLAN-}" ]; then queue_line "plan  $label"; oks=$((oks + 1)); return 0; fi
   # YAKOGL_CHECK_INPUT_KEYS=1: print each keyed row's key and run nothing
   # (tools/check_testcache_selftest.sh).
@@ -1499,23 +1560,38 @@ if ! ls "${DEQP_GLES3_TEST_DIR:-/nonexistent}"/*.test >/dev/null 2>&1; then
   fi
   unset DEQP_GLES3_TEST_DIR
 fi
+tests_lib_done=0
 for f in "${CONFIGS[@]}"; do
   tier=()
-  scope "$(config_scopes "$f")"
+  scope "$(config_scopes "$f") tests"
   case "$f" in host-test,gpu-powervr,shaderc-online | host-test,gpu-vivante,shaderc-online) scope "$ROW_SCOPES local" ;; esac
   case "$f" in
   *precompiled-shaders*gpu-vivante* | *gpu-vivante*precompiled-shaders*)
     tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-gc7000.rs") ;;
   *precompiled-shaders*) tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-powervr.rs") ;;
   esac
+  # A change confined to tests/ builds and runs the targets it reaches only
+  # (TEST_TARGETS, tools/check_tests_reach.py), and the library's test_rules
+  # once: they read tests/*.rs, which no other library test does.
+  pick=() clip=(--all-targets)
+  if tests_narrow_row; then
+    for t in $TEST_TARGETS; do pick+=(--test "$t"); done
+    clip=("${pick[@]}")
+  fi
   [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
-  step "clippy  $f" "${tier[@]}" cargo clippy --no-default-features --features "$f" --all-targets
+  step "clippy  $f" "${tier[@]}" cargo clippy --no-default-features --features "$f" "${clip[@]}"
   # --no-fail-fast: cargo otherwise stops at the first test BINARY that fails,
   # and every binary after it goes unrun. A red row then names one failure
   # and hides the rest: on 2026-09-23 a gate red on deqp_repro_shaders never
   # ran encoding_vocabulary, whose own failure surfaced a push later.
   [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
-  step "test    $f" cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f"
+  step "test    $f" cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f" ${pick[@]+"${pick[@]}"}
+  if [ "${#pick[@]}" -gt 0 ] && [ "$tests_lib_done" -eq 0 ]; then
+    tests_lib_done=1
+    [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
+    step "test    $f (--lib test_rules::, reads tests/*.rs)" \
+      cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f" --lib test_rules::
+  fi
 done
 
 # An image without the compiler: the precompiled shaders the whole back end
@@ -1607,13 +1683,24 @@ step "test    $KNOBS_CONFIG (--lib, ${#KNOBS_TESTS[@]} knob tests by name)" knob
 # them turns the row red, not green.
 knobs_file_tests() {
   local out
-  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test "$1" 2>&1) ||
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "${2:-$KNOBS_CONFIG}" --test "$1" 2>&1) ||
     { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
   printf '%s\n' "$out" | grep -E '^test result'
   printf '%s\n' "$out" | tests_as_declared "tests/$1.rs"
 }
+tests_row gc_kick_diff
 step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" knobs_file_tests gc_kick_diff
+tests_row gc_tiled_rt
 step "test    $KNOBS_CONFIG (tests/gc_tiled_rt.rs, every declared test)" knobs_file_tests gc_tiled_rt
+# glmark2's terrain, shadow and refract with `gc_tiled_rt` off and on
+# (tests/gc_scene_kicks_tiled_rt.rs, plan #355): the scene harness needs
+# report-es2, so no other row compiles the file. Linted and run here; every
+# #[test] of it must pass (tests_as_declared).
+KNOBS_ES2_CONFIG="$KNOBS_CONFIG,report-es2"
+step "clippy  $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs)" \
+  cargo clippy --no-default-features --features "$KNOBS_ES2_CONFIG" --test gc_scene_kicks_tiled_rt
+step "test    $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs, every declared test)" \
+  knobs_file_tests gc_scene_kicks_tiled_rt "$KNOBS_ES2_CONFIG"
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
@@ -1785,6 +1872,11 @@ step "test    $V3D_CONFIG (tests/es3_int_rt.rs)" \
 # report-es2 (no row below).
 step "test    $V3D_CONFIG (tests/es3_int_rt_v3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt_v3d
+# The V3D's 16F and R32F colour render targets as they are today (test-v3d-half):
+# the render target words, the clear words and the compiler's TLB writes of a
+# float, vec2 and vec4 output. Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_half_float_rt_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_half_float_rt_v3d
 # The V3D samples the ES 3.0 storage classes (formats-v3d): each class's
 # texture shader state record (packed by the real driver/src/v3d/v3d_tex.c)
 # and C table row against Mesa's format table, the 32-bit return classes,
@@ -1792,6 +1884,11 @@ step "test    $V3D_CONFIG (tests/es3_int_rt_v3d.rs)" \
 # to nothing under report-es2 (no row below).
 step "test    $V3D_CONFIG (tests/es3_formats_v3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_formats_v3d
+# The V3D's float colour targets (v3d-cbf-test-draft): what the 16F targets
+# clear, draw and read back today; the claimed GL_EXT_color_buffer_float path
+# is #[ignore = "v3d-arm"] until the V3D arm lands.
+step "test    $V3D_CONFIG (tests/es3_color_buffer_float_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_color_buffer_float_v3d
 # The V3D shader back end's GLSL ES 3.00 gaps the dEQP corpus found
 # (matrix vertex attributes, integer shifts, trunc), built and run on the
 # interpreter. Compiles to nothing under report-es2.
@@ -1823,6 +1920,11 @@ step "test    $V3D_CONFIG (tests/es3_float_target.rs)" \
 # RG32F, RGBA32F and R11F_G11F_B10F are not colour-renderable without GL_EXT_color_buffer_float, on the V3D build (the PowerVR and GC7000 rows run it with the rest of tests/). Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_float32_rt_off.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_float32_rt_off
+step "test    $V3D_CONFIG (tests/es3_color_buffer_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_color_buffer_float
+# glClear and glClearBuffer on the 16F colour targets (the PowerVR and GC7000 rows run it with the rest of tests/). Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_half_float_clearbuffer.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_half_float_clearbuffer
 # The EGL attribute lists of glmark2 and Slint on the Pi 4's
 # windows (the PowerVR and GC7000 rows above run it with the rest of tests/).
 step "test    $V3D_CONFIG (tests/egl_bench_configs.rs)" \
@@ -1848,6 +1950,12 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs)" \
 # slices with the switch off. Compiles to nothing under report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_3d
+# PowerVR textureSize (the 38 dEQP shaders.texture_functions.texturesize
+# cases): every sampler kind in both stages, with the TPU's own cube, array
+# and volume on and off, run in the byte model over the descriptor words the
+# draw's bind gets. Compiles to nothing under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_texsize.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_texsize
 # PowerVR gl_FragDepth (the dEQP fbo.depth clamp cases): the written depth
 # clamped by a saturating fadd, fed to the ISP by depthf, and the record's
 # writes_depth kept apart from its sampler flavours (native_cube). Compiles
@@ -1889,6 +1997,22 @@ step "test    $V3D_CONFIG (tests/es3_flatshade_guard.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_flatshade_guard
 step "test    host-test,gpu-vivante,shaderc-online (tests/es3_flatshade_guard.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_flatshade_guard
+# The V3D's 15 varying vectors and 64 vertex output components: the record's
+# input count and the flag words of inputs 24..63 (v3d_job.c), drawn through
+# the GL core and the real job builder. Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_v3d_varyings.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_varyings
+# The V3D compiler at the hardware's limits: 64 fragment inputs and their
+# flag words, 69 VPM output rows, 65 inputs refused by name, on SHC_ONLINE and
+# the QPU interpreter. Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/v3d_varyings_compile.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_varyings_compile
+# Uniform blocks of the size MAX_UNIFORM_BLOCK_SIZE reports, drawn through the
+# GL core and read by the V3D's compiled code (the 16384-byte cases are
+# ignored until the block moves out of the default-block budget). Compiles to
+# nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_ubo_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_ubo_v3d
 # The `msaa-fbo` feature (no effect yet) builds with each GPU's host
 # configuration, so a later item that reads it starts from a tree that
 # compiles.
@@ -1900,6 +2024,18 @@ msaa_fbo_builds() {
   done
 }
 step "check   msaa-fbo on the four GPUs' host configurations" msaa_fbo_builds
+# The `color-buffer-float` feature (no effect yet) builds with each GPU's host
+# configuration. The default-off contract of tests/es3_color_buffer_float.rs
+# runs on the V3D build here (the PowerVR and GC7000 rows run it with the
+# rest of tests/); its claimed-path half is not run until the claim lands.
+color_buffer_float_builds() {
+  local c
+  for c in "$V3D_CONFIG" host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
+    host-test,gpu-mali,shaderc-online,no-shader-table; do
+    cargo check --no-default-features --features "$c,color-buffer-float" --lib || return 1
+  done
+}
+step "check   color-buffer-float on the four GPUs' host configurations" color_buffer_float_builds
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
@@ -1935,6 +2071,11 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_refusals.rs)" \
 # report-es2 rows run it with the rest of tests/.
 step "test    $V3D_ES2_CONFIG (tests/es2_report_limits.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es2_report_limits
+# The report-es2 program binary answers the ES 3.0 program binary
+# (docs/notes/es3-program-binary.md, (f)) must keep; the file needs the
+# online compiler without the table, so only this row runs it.
+step "test    $V3D_ES2_CONFIG (tests/es2_program_binary_report.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es2_program_binary_report
 # The NanoPC-T6's Mali-G610 (`gpu-mali`): its backend builds each frame in
 # the OSAL's buffers and submits it through the Mali OSAL interface
 # (src/osal/mali.rs; on the host, a mock of it), and its shader back end
@@ -2587,7 +2728,30 @@ if command -v cc >/dev/null 2>&1; then
     done
     [ "$total" -eq 5 ] || { echo "pan_shc: $total regions compared, 5 planned"; return 1; }
     echo "pan_shc: 5 regions compared (planned 5), 0 differ"
+    # The blend shader references (README-pan_shc.md "Blend shaders"):
+    # pan_shc --blend on every key of blend_deqp.words, blend_random.sha,
+    # blend_u32.words and blend_min_f32.words gives their bytes again, and
+    # blend_nir_rules.rs is what gen_blend_nir_rules.py makes from this
+    # tree's NIR algebraic rules.
+    local shc=$MESA_PAN_TREE/build-pan/src/panfrost/pan_shc/pan_shc
+    python3 -I tools/mali/blend_deqp_ref.py list | "$shc" --blend >"$dir/blend_deqp.json" 2>/dev/null &&
+      python3 -I tools/mali/blend_deqp_ref.py words "$dir/blend_deqp.json" | cmp - tools/mali/testdata/blend_deqp.words ||
+      { echo "pan_shc --blend: not blend_deqp.words"; return 1; }
+    python3 -I tools/mali/blend_deqp_ref.py random | "$shc" --blend >"$dir/blend_random.json" 2>/dev/null &&
+      python3 -I tools/mali/blend_deqp_ref.py digest "$dir/blend_random.json" | cmp - tools/mali/testdata/blend_random.sha ||
+      { echo "pan_shc --blend: not blend_random.sha"; return 1; }
+    python3 -I tools/mali/blend_deqp_ref.py u32 | "$shc" --blend >"$dir/blend_u32.json" 2>/dev/null &&
+      python3 -I tools/mali/blend_deqp_ref.py u32words "$dir/blend_u32.json" | cmp - tools/mali/testdata/blend_u32.words ||
+      { echo "pan_shc --blend: not blend_u32.words"; return 1; }
+    python3 -I tools/mali/blend_deqp_ref.py min_f32 | "$shc" --blend >"$dir/blend_min_f32.json" 2>/dev/null &&
+      python3 -I tools/mali/blend_deqp_ref.py lines "$dir/blend_min_f32.json" | cmp - tools/mali/testdata/blend_min_f32.words ||
+      { echo "pan_shc --blend: not blend_min_f32.words"; return 1; }
+    echo "pan_shc --blend: blend_deqp.words, blend_random.sha, blend_u32.words and blend_min_f32.words made again, byte-equal"
     exec 8>&-
+    PYTHONDONTWRITEBYTECODE=1 python3 -I tools/mali/gen_blend_nir_rules.py "$MESA_PAN_TREE" |
+      cmp - src/shaderc/online/mali/blend_nir_rules.rs ||
+      { echo "blend_nir_rules.rs: not what gen_blend_nir_rules.py makes from MESA_PAN_TREE"; return 1; }
+    echo "blend_nir_rules.rs == gen_blend_nir_rules.py on MESA_PAN_TREE"
   }
   # pan_ref_diff.py and ref_cases.py without a Mesa tree: the committed
   # pan_shc outputs (testdata/pan_shc-out) against the committed expect.json
@@ -2608,12 +2772,22 @@ if command -v cc >/dev/null 2>&1; then
     printf '%s\n' "$out" | tail -4
     printf '%s\n' "$out" | grep -q '^Ran 25 tests in ' || { echo "sweep_passsets: not the 25 planned tests"; return 1; }
   }
+  # valhall_src_info.py (Mesa's valhall.c table as the facts the Mali
+  # test compares bir.rs with) on small tables written in the test: it reads
+  # the table's layout in full or fails naming the line; 7 planned tests.
+  valhall_src_info_selftest() {
+    local out
+    out=$(python3 -I tools/mali/test_valhall_src_info.py 2>&1) || { printf '%s\n' "$out" | tail -30; return 1; }
+    printf '%s\n' "$out" | tail -4
+    printf '%s\n' "$out" | grep -q '^Ran 7 tests in ' || { echo "valhall_src_info: not the 7 planned tests"; return 1; }
+  }
   step "run     mali pan_ref_diff and ref_cases self-test (no Mesa tree)" pan_ref_diff_selftest
   step "run     mali sweep_passsets self-test" sweep_passsets_selftest
+  step "run     mali valhall_src_info self-test" valhall_src_info_selftest
   if [ -n "${MESA_PAN_TREE:-}" ]; then
-    step "run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair (MESA_PAN_TREE)" pan_shc_check
+    step "run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair, the blend references, blend_nir_rules.rs (MESA_PAN_TREE)" pan_shc_check
   else
-    gap "mali pan_shc on the tri pair: no MESA_PAN_TREE (tools/mali/build_pan_shc.sh makes one)"
+    gap "mali pan_shc on the tri pair, the blend references and blend_nir_rules.rs: no MESA_PAN_TREE (tools/mali/build_pan_shc.sh makes one)"
   fi
   # The GL suite every board runs, compiled on the host for the PowerVR arm
   # (GL_TEST_HOST) and the GC7000 arm (GL_TEST_USER); the V3D arm is
@@ -2950,6 +3124,15 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # tools/cts/mali-kmsg.py, the panthor kernel message classifier the runner
   # logs per chunk (resets, job timeouts, MMU and CS faults), on its fixtures.
   step "tools   mali-kmsg-selftest.sh (panthor kernel message classifier)" bash tools/cts/mali-kmsg-selftest.sh
+  # The block of docs/es2-cts-failures.md that tools/cts/mali-deqp-tally.py
+  # generates (section M) against the slices its own "Slices:" line names
+  # under tools/cts/log/: a block edited by hand, a slice changed after it, or
+  # a tally whose output moved fails here. The document alone reaches this row
+  # (scope ctsdoc, scope_of_path), so a docs-only edit of it is checked too.
+  scope tools ctsdoc
+  step "tools   es2-cts-failures.md's Mali block equals the tally of its slices" \
+    python3 -I tools/cts/mali-deqp-tally.py --check-doc docs/es2-cts-failures.md --log tools/cts/log
+  scope tools
   # The Mali glmark2 build recipe (--dry-run on stubs), the tally of a run
   # directory and the symbol check of glmark2-es2 against the panthor-gles
   # pair, each on its own fixtures. Host only; a part that needs GLMARK2_SRC or
@@ -3505,7 +3688,7 @@ step "tools   board-stm32mp2.sh dry-run matrix, env edits and replays" tools/boa
 # the holder's pid and script, and nanopc-t6.sh sources it with LOCK_WAIT 0
 # (a jump never waits onto a later session); who_remote.sh, the runner's
 # check for remote sessions on the board, leaves out the ssh command it runs
-# in and names every other. The number of checks is pinned in the script.
+# in and names every other. Every check line of the script must run.
 scope tools drivers
 step "tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits" \
   driver/tools/kexec-zephyr/board_lock_selftest.sh
@@ -3719,6 +3902,21 @@ zephyr_werror_image() {
     echo "(the whole log: $log)"
     return 1
   fi
+  # EGL's display on Zephyr is the board layer's: the OSAL's present hook
+  # (src/osal/osal_internal.h, yakogl_zephyr_present) is in an image of the
+  # GL library with the board layer (CONFIG_YAKOGL_BOARD) and in no other. An
+  # image without the layer then has no present op and single-buffered
+  # window surfaces; a default that only refused at each swap left EGL
+  # double-buffering with no display.
+  local syms has=0 want=0
+  syms=$(nm --defined-only "$dir/zephyr/zephyr.elf") || { echo "nm could not read $dir/zephyr/zephyr.elf"; return 1; }
+  grep -q ' yakogl_zephyr_present$' <<<"$syms" && has=1
+  grep -q '^CONFIG_YAKOGL=y$' "$dir/zephyr/.config" &&
+    grep -q '^CONFIG_YAKOGL_BOARD=y$' "$dir/zephyr/.config" && want=1
+  [ "$has" = "$want" ] || {
+    echo "$dir: yakogl_zephyr_present defined: $has, the GL library with CONFIG_YAKOGL_BOARD: $want (they must agree)"
+    return 1
+  }
 }
 # Every Zephyr image under tools/probes/rpi_5/ (a directory with a
 # CMakeLists.txt and a prj.conf: rpi5_hello, rpi5_wdog, rpi5_dtb, rpi5_ident,
@@ -3804,39 +4002,63 @@ zephyr_direct_images() {
   }
 }
 # The NanoPC-T6 image (Z1): it builds, and its watchdog glue is in it: the
-# SYS_INIT entry of t6_wdt_arm is the FIRST PRE_KERNEL_1 hook (what runs
-# before it is the pre-arm window, driver/docs/nanopc-t6-mali.md, "Z1"), the
-# EARLY hook resets the GIC's EOI mode, and the image carries the marker
-# driver/tools/kexec-zephyr/nanopc-t6.sh requires.
+# EARLY hook resets the GIC's EOI mode, the report, the feeder, and the image
+# carries the marker driver/tools/kexec-zephyr/nanopc-t6.sh requires. That
+# WDT0 is armed before every init hook (from z_arm64_el1_plat_init, MMU off)
+# is checked after every nanopc_t6 image's link, this one's included:
+# driver/zephyr/lib/board/nanopc_t6/check_early_hooks.cmake.
 zephyr_nanopc_t6_image() {
-  local dir=build/zephyr-werror/nanopc_t6 syms first marker
+  local dir=build/zephyr-werror/nanopc_t6 syms marker
   zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_hello nanopc_t6 || return 1
   syms=$(nm "$dir/zephyr/zephyr.elf") || return 1
-  for s in __init_t6_wdt_arm __init_t6_gic_eoi_reset __init_t6_wdt_report __init_t6_wdt_feed_start; do
+  for s in yd_t6_early_arm __init_t6_gic_eoi_reset __init_t6_wdt_report __init_t6_wdt_feed_start; do
     grep -qE " $s\$" <<<"$syms" || { echo "zephyr.elf has no $s: the nanopc_t6 watchdog glue is not in the image"; return 1; }
   done
-  first=$(awk '$3 == "__init_PRE_KERNEL_1_start" { print $1 }' <<<"$syms")
-  [ -n "$first" ] && [ "$(awk '$3 == "__init_t6_wdt_arm" { print $1 }' <<<"$syms")" = "$first" ] || {
-    echo "__init_t6_wdt_arm is not the first PRE_KERNEL_1 hook (PRE_KERNEL_1 starts at ${first:-?}):"
-    grep -E ' __init_' <<<"$syms" | sort | head -20
-    return 1
-  }
   marker=$(strings -n 20 "$dir/zephyr/zephyr.bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
   [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
 }
-# Z3's probe (t6_fw) embeds the CSF firmware, driver/src/fw/mali_csffw_blob.h
-# (gitignored, never committed). With the board's file at <fw> the header is
+# Z3's probe (t6_fw) and Z4's (t6_submit) embed the CSF firmware,
+# driver/src/fw/mali_csffw_blob.h (gitignored, never committed); $2 names
+# the probe. With the board's file at <fw> the header is
 # made from it first (driver/tools/mkmalifw.sh), and replaced only when its
 # bytes differ, so a header from another file never builds the image; without
 # the file an existing header is used, as the AM62P rows use pvr_fw_blob.h.
+# The two rows may run at once (--jobs): each makes its own copy and renames
+# it into place, so neither build reads a header half written by the other.
+# zephyr_nanopc_t6_fw_image <fw> <name> [<sample> <dir>]: the probe
+# tools/probes/nanopc_t6/<name> by default; <name> also names the row's own
+# copy of the header.
 zephyr_nanopc_t6_fw_image() {
-  local f="$1" h=driver/src/fw/mali_csffw_blob.h t=build/zephyr-werror/mali_csffw_blob.h
+  local f="$1" probe="$2" h=driver/src/fw/mali_csffw_blob.h t="build/zephyr-werror/mali_csffw_blob.$2.h"
   if [ -f "$f" ]; then
     mkdir -p build/zephyr-werror
     bash driver/tools/mkmalifw.sh "$f" "$t" || return 1
-    cmp -s "$t" "$h" || { mkdir -p "${h%/*}" && cp "$t" "$h"; } || return 1
+    cmp -s "$t" "$h" || { mkdir -p "${h%/*}" && cp "$t" "$h.$probe.new" && mv "$h.$probe.new" "$h"; } || return 1
   fi
-  zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_fw nanopc_t6_fw
+  zephyr_werror_image nanopc_t6 "${3:-tools/probes/nanopc_t6/$probe}" "${4:-nanopc_$probe}"
+}
+# gl_test on the NanoPC-T6's Mali (driver/samples/zephyr/gl_test, boards/
+# nanopc_t6.conf): it builds with the firmware embedded (its link checks that
+# WDT0 is armed before every init hook, check_early_hooks.cmake), and
+# the image is one driver/tools/kexec-zephyr/nanopc-t6.sh would load: one
+# watchdog marker, the RAM footprint (the AArch64 header's image_size) inside
+# zephyr,sram (the window), and the file at most kexec_zephyr's 64 MiB
+# (IMG_MAX; the __nocache statics lie inside the file's span).
+zephyr_nanopc_t6_gltest_image() {
+  local dir=build/zephyr-werror/nanopc_t6-gl_test bin footprint size window marker
+  zephyr_nanopc_t6_fw_image "$1" gl_test gl_test nanopc_t6-gl_test || return 1
+  bin="$dir/zephyr/zephyr.bin"
+  marker=$(strings -n 20 "$bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
+  [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
+  footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
+  size=$(stat -c %s "$bin")
+  window=$(sed -n 's/^CONFIG_SRAM_SIZE=//p' "$dir/zephyr/.config")
+  [ -n "$window" ] && [ "$footprint" -le $((window * 1024)) ] || {
+    echo "the image needs $footprint bytes of RAM, zephyr,sram has ${window:-?} KiB"
+    return 1
+  }
+  [ "$size" -le $((64 << 20)) ] || { echo "zephyr.bin is $size bytes; kexec_zephyr reads at most 64 MiB"; return 1; }
+  grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
 }
 # No input key: an image's inputs include the west workspace and the Zephyr
 # SDK, thousands of files outside the checkout, and a module edited in place
@@ -3906,13 +4128,31 @@ if [ "$QUICK" -eq 0 ]; then
     # Z2's probe (AS0's page tables, the cache flush round trip) likewise.
     step "zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush), -Werror on our C files" \
       zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_mmu nanopc_t6_mmu
+    # D2's probe (the display adopt after a crash kexec) likewise.
+    step "zephyr  nanopc_t6 t6_display image (D2, the display adopt), -Werror on our C files" \
+      zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_display nanopc_t6_display
     # Z3's probe (the firmware boot): without the board's mali_csffw.bin and
     # without a header made from it the row is a gap naming the file.
-    if [ -f "$mali_csffw" ] || [ ! -f driver/src/fw/mali_csffw_blob.h ]; then
-      needs "$mali_csffw" "the board's CSF firmware, from which driver/tools/mkmalifw.sh makes driver/src/fw/mali_csffw_blob.h: tools/cts/deps-env.sh --build MALI_CSFFW fetches it, or name the board's file in MALI_CSFFW"
-    fi
+    needs_mali_csffw() {
+      if [ -f "$mali_csffw" ] || [ ! -f driver/src/fw/mali_csffw_blob.h ]; then
+        needs "$mali_csffw" "the board's CSF firmware, from which driver/tools/mkmalifw.sh makes driver/src/fw/mali_csffw_blob.h: tools/cts/deps-env.sh --build MALI_CSFFW fetches it, or name the board's file in MALI_CSFFW"
+      fi
+    }
+    needs_mali_csffw
     step "zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot), -Werror on our C files" \
-      zephyr_nanopc_t6_fw_image "$mali_csffw"
+      zephyr_nanopc_t6_fw_image "$mali_csffw" t6_fw
+    # Z4's probe (one frame submitted from our kernel side) embeds the same
+    # firmware: the same gap without it.
+    needs_mali_csffw
+    step "zephyr  nanopc_t6 t6_submit image (Z4), -Werror on our C files" \
+      zephyr_nanopc_t6_fw_image "$mali_csffw" t6_submit
+    # gl_test on the Mali (the GL core, the online compiler, the Mali backend,
+    # the OSAL over our own kernel side): the same firmware, the same gap.
+    scope mali gltest drivers samples
+    needs_mali_csffw
+    step "zephyr  nanopc_t6 gl_test image (Mali), -Werror on our C files, fits the kexec window" \
+      zephyr_nanopc_t6_gltest_image "$mali_csffw"
+    scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
   else
@@ -4126,6 +4366,7 @@ if [ "$QUICK" -eq 0 ]; then
     # It regenerates build/glmark2-host/shaders, which tests/glmark2_corpus.rs
     # in every test row reads, so it runs alone (w:tree).
     uses w:tree
+    tests_row glmark2_corpus
     step "test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs)" glmark2_corpus_tests
   else
     gap "glmark2 corpus: no glmark2 tree at GLMARK2_SRC='${GLMARK2_SRC-}' (set GLMARK2_SRC): the glmark2 shaders were NOT compiled"

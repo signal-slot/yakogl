@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # kexec_run.sh - copy a Zephyr image to the board and boot it from Linux.
 #
-#   BOARD_HOST=torizon@<board> ./kexec_run.sh build/zephyr/zephyr.bin [kexec_zephyr]
+#   BOARD_HOST=<user>@<board> ./kexec_run.sh build/zephyr/zephyr.bin [kexec_zephyr]
 #
 # Waits until the board's boot has settled (systemd "running"/"degraded"):
 # a kexec issued while Linux is still starting services sometimes produced a
@@ -34,7 +34,7 @@
 # (/usr/local/sbin/kexec-zephyr), the files are staged in the wrapper's fixed
 # directory and the jump is `sudo -n kexec-zephyr [addr] [--crash]`: no shell
 # runs as root, the wrapper unloads the four GPU modules itself, and
-# BOARD_GPU_MODULES is not consulted. This is how the i.MX8MP lab jumps.
+# BOARD_GPU_MODULES is not consulted. This is how the i.MX8MP jumps.
 set -eu
 : "${BOARD_HOST:?set BOARD_HOST=user@host}"
 IMG=${1:?zephyr.bin}
@@ -65,7 +65,7 @@ fi
 # Every jump is preceded by a sync in the same shell that jumps. Neither route
 # flushes anything itself -- the crash route runs no shutdown at all -- so
 # whatever the board wrote in the seconds before (a service's state, logs) is
-# otherwise lost: on 2026-09-23 a Tailscale login made just before a jump did
+# otherwise lost: on 2026-09-23 a VPN login made just before a jump did
 # not survive it. The sync after staging, above, is too early for that.
 # The scoped wrapper takes the jump when there is no password to type and the
 # board has it; the two files then have to sit where the wrapper looks.

@@ -38,8 +38,10 @@
 //! V3D 7.1 (the Raspberry Pi 5) has its own model and codec beside the 4.2
 //! ones, which are unchanged: [`isa71`] (raddr operands, no accumulators, the
 //! SFU as ALU operations), [`codec71`] (decode and encode, and the generation
-//! as a parameter), [`listing71`]. The gates are `roundtrip71` (the 7.1 corpus,
-//! `tools/v3d/qpu_corpus_71.txt`) and `golden71` (Mesa's ver 71 vectors).
+//! as a parameter), [`listing71`], and [`verify71`], the structural verifier
+//! of 7.1 programs (Mesa's `qpu_validate.c` at ver >= 71). The gates are
+//! `roundtrip71` (the 7.1 corpus, `tools/v3d/qpu_corpus_71.txt`) and
+//! `golden71` (Mesa's ver 71 vectors).
 //!
 //! Compiled only in a `gpu-v3d` build (and its C with it); the tests only in
 //! test builds.
@@ -71,12 +73,19 @@ pub mod sim71;
 // (`alloc`), scheduling (`sched`), the structural verifier (`verify`), and the
 // chain that runs them for a GL program (`chain`).
 pub mod alloc;
+pub mod alloc71;
 pub mod chain;
+pub mod chain71;
 pub mod order;
 pub mod prepare;
 pub mod sched;
+pub mod sched71;
+pub mod sched71_cf;
 pub mod select;
+pub mod select71;
 pub mod verify;
+pub mod verify71;
+pub mod vop71;
 
 #[cfg(test)]
 pub(crate) mod fields;

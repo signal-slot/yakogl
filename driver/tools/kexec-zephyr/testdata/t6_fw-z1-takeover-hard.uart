@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+[  812.402117] reboot: kexec_core: Starting new kernel
+[  812.405230] psci: CPU1 killed (polled 0 ms)
+T6:A EL2 HCR_EL2 0x000000048800003a -> 0x0000000080000002 SCTLR_EL2 0x0000000030400800 VBAR_EL2 0xffffcd30f6810800 -> 0x0000000010001000
+T6:A1 EL1 init done, MMU off
+T6:A2 EL1, MMU off: arming WDT0
+T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369
+T6:B console up (uart2 through the ns16550 driver)
+yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000
+t6: GICv3 CPU interface: ICC_CTLR_EL1 0x8402 had EOImode 1 (the kernel before us), now 0
+t6: WDT0 armed: CR 0x00000009 -> 0x00000009 (was running), TORR 0x0000000e -> 0x0000000d, CCVR 0x2a7f1c00, PARAM_1 0x12001f3a, version 0x3131302a, flags 0x1: period 22369 ms (TOP 13), fed until 60 s of uptime, alive window 5 s
+T6:C WDT0 armed, period 22369 ms
+board: watchdog armed
+t6_fw: build 2026-11-05 test
+t6_fw: WDT0 period 22369 ms, fed until 60000 ms of uptime
+t6_fw: image 262144 bytes, 7 loaded sections, sha256 abababababababababababababababababababababababababababababababab, magic 0xc3f13a6e
+t6_fw: section 0: VA 0x00400000, 64 KiB, backing 0x10040000 at PA 0x10040000
+t6_fw: section 1: VA 0x00410000, 64 KiB, backing 0x10050000 at PA 0x10050000
+t6_fw: section 2: VA 0x00000000, 64 KiB, backing 0x10060000 at PA 0x10060000
+t6_fw: section 3: VA 0x00800000, 128 KiB, backing 0x10070000 at PA 0x10070000
+t6_fw: section 4: VA 0x02000000, 256 KiB, backing 0x10090000 at PA 0x10090000
+t6_fw: section 5: VA 0x01000000, 256 KiB, backing 0x100d0000 at PA 0x100d0000
+t6_fw: section 6: VA 0x04000000, 64 KiB, backing 0x10110000 at PA 0x10110000
+t6_fw: pool 0x10027000 at PA 0x10027000 (16 pages)
+DDR V1.16 4bfdbd7 typ 24/01/09-11:49:58
+t6_fw: Z3: rc -5 step 3, 12 ms
+t6_fw: Z3: stop 14 refusal 11 detail 0x0000000000000000 acked 0x00000000
+t6_fw: PD_GPU at hand-over: PWR_GATE 0x0000fffe STATUS 0x2455ffff BUS_IDLE_REQ 0x000083ce ACK 0x000a9ffe ST 0x000a9ffe REPAIR_STATUS 0xfad50003: on
+t6_fw: CRU at hand-over: CLKSEL_CON(158) 0x00001f60 CLKSEL_CON(159) 0x00000000 CLKGATE_CON(66) 0x000000d6 MODE_CON0 0x00000545 PLL_CON 0x000001a9 0x00002083 0x00000000: clk_gpu_src 850000000 Hz
+t6_fw: SPI2 gates CLKGATE_CON(14) 0x00000000, opened 0x0
+t6_fw: SPI2 as found: CTRLR0 0x00002c01 CTRLR1 0x00000000 SSIENR 0x0 SER 0x0 BAUDR 0xc6 SR 0x0000000c RXFLR 0x0 VERSION 0x00110002
+t6_fw: RK806 at hand-over: POWER_EN0 0x0f POWER_SLP_EN0 0xe0 BUCK1_CONFIG 0xa4 BUCK1_ON_VSEL 0x30: vdd_gpu_s0 on, 800000 uV
+t6_fw: clock set: kept 1, CPLL 1500000000 Hz, wrote CLKSEL_CON(158) 0x00000000 (159) 0x00000000, now 0x00001f60 0x00000000: clk_gpu_src 850000000 Hz
+t6_fw: vdd_gpu_s0 enable: not sent; POWER_EN0 0x00 BUCK1_ON_VSEL 0x00 after, waited 0 us
+t6_fw: GPU PLL on: PLL_CON6 0x00004000 at hand-over, was on 1, waited 0 us, PLL_CON6 0x00004000
+t6_fw: PD_GPU on: gates opened 0x0, was on 1, waited 0/0/0 us
+t6_fw: PD_GPU after: PWR_GATE 0x0000fffe STATUS 0x2455ffff BUS_IDLE_REQ 0x000083ce ACK 0x000a9ffe ST 0x000a9ffe REPAIR_STATUS 0xfad50003: on
+t6_fw: take-over: found GPU_INT_MASK 0x00020103 JOB_INT_MASK 0xffffffff MMU_INT_MASK 0x0000ffff, RAWSTAT 0x00000000 0x80000000 0x00000001, MCU_STATUS 1
+t6_fw: take-over: masks 0, RAWSTAT after the clear 0x00000000 0x80000000 0x00000000
+t6_fw: take-over: MCU halt: MCU_STATUS 1 after 100001 polls of 1 us: not DISABLED in 100 ms, reset anyway
+t6_fw: Z1 stopped: stop 14 (the take-over of the GPU found powered refused), refusal 11, detail 0x0000000000000000
+t6_fw: FAIL: Z3 step 3 (Z1's power-on stopped)
+t6: t6_fw done: PSCI SYSTEM_RESET at 40 ms (0 feeds)

@@ -46,13 +46,20 @@
 #    (tools/probes/rpi_5): its verdict, a FAIL line failed.
 # 5. The NanoPC-T6 (kexec-dev through driver/tools/kexec-zephyr/nanopc-t6.sh)
 #    with a fake runner (T6_RUNNER) and an ssh that answers: what board.sh
-#    hands the runner (--go, the run directory as T6_RECORD_DIR, BOARD_UART as
-#    T6_UART, T6_HAND), the runner's record taken into the run directory and
+#    hands the runner (--go, and --crash after it only with T6_CRASH=1, the
+#    run directory as T6_RECORD_DIR, BOARD_UART as T6_UART, T6_HAND), the
+#    runner's record taken into the run directory and
 #    redacted, and the verdict of each way a run ends: back with a probe's
 #    record (t6-verdict.sh's PASS or FAIL, the testdata/ records), back with
-#    a gl_test set, Armbian not back, no jump, a refusal before any change.
-# Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and N is
-# the pinned count (a check that silently stops running fails the pin).
+#    a gl_test set, Armbian not back, no jump, a refusal before any change
+#    (kept in meta.txt and tallied as verdict=refused with its exit code, as
+#    the lease's refusals in 2 are).
+# Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and
+# every check written in this file ran: each "check" and "same" call notes the
+# line it was called from, and at the end every line of this file that starts
+# with such a call must be among them (a block that silently stops running
+# leaves its lines out and fails). An end before the last line fails too,
+# whatever its exit code. No count is kept by hand.
 set -uo pipefail
 # One locale for every check, whatever the host's: a LANG or LC_ALL that names
 # a locale the host has not installed (LC_ALL=ja_JP.UTF-8 without it) makes
@@ -63,12 +70,13 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=373
 
 S=$(mktemp -d)
-trap 'rm -rf "$S"' EXIT
+at_end=
+trap 'rc=$?; rm -rf "$S"; [ -n "$at_end" ] || { echo "board_selftest: ended before its last line (rc $rc)"; [ "$rc" != 0 ] || exit 1; }' EXIT
 n=0
 fails=0
+declare -A ran=() # the lines of this file a check or a same was called from
 # (the description is not called d: an eval'd check reads the caller's $d)
 # gold SECTION: the lines of one section of tools/testdata/old-runner-outputs.txt
 gold() { awk -v h="### $1" '$0 == h { on = 1; next } /^### / { on = 0 } on' "$TD/old-runner-outputs.txt"; }
@@ -76,11 +84,13 @@ check() { # check DESCRIPTION COMMAND...
     local what=$1
     shift
     n=$((n + 1))
+    ran[${BASH_LINENO[0]}]=1
     if "$@"; then echo "  PASS  $what"; else echo "  FAIL  $what"; fails=$((fails + 1)); fi
 }
 same() { # same DESCRIPTION FILE-A FILE-B: the files are equal (the diff printed when not)
     local what=$1
     n=$((n + 1))
+    ran[${BASH_LINENO[0]}]=1
     if [ -s "$2" ] && cmp -s "$2" "$3"; then
         echo "  PASS  $what"
     else
@@ -108,7 +118,7 @@ export YAKOGL_TOOLS=$td/debug/yakogl-tools
 unset BOARD_HOST BOARD_UART BOARD_BOOT PI4_HOST PI4_UART PI5_HOST PI5_UART UART_ADDR NETBOOT_SERVER NETBOOT_TFTP_ROOT \
     NETBOOT_TFTP_LOG NETBOOT_ROUTE NETBOOT_NO_WATCHDOG SEL TREE_IMAGE TREE_IMAGE_DIR TREE_TAG TREE_ROWS \
     TREE_PREV LOCK BOARD_LOCK RUN_BOUND RETURN_BOUND BOARD_END_RE PI4_END_RE PI4_HDMI_TIMINGS BOARD_HDMI_TIMINGS \
-    DEQP_CASELIST T6_UART T6_HAND T6_RUNNER T6_RECORD_DIR T6_POOL_PA T6_BACKING_PA
+    DEQP_CASELIST T6_UART T6_HAND T6_CRASH T6_RUNNER T6_RECORD_DIR T6_POOL_PA T6_BACKING_PA
 
 # ---- fake images: the AArch64 Image header, image_size, a marker ------------
 mkimg() { # mkimg FILE FOOTPRINT MARKER
@@ -246,12 +256,22 @@ rc=$?
 check "nanopc-t6 run: rc 0, kexec-dev the default, DEV, no sudo, the lease taken, the runner with --go, T6_HAND and the run directory" \
     eval '[ "$rc" = 0 ] && grep -q "boot kexec-dev (DEV)" <<<"$out" && ! grep -q "sudo" <<<"$out" &&
           grep -q "take /var/tmp/yakogl-board.lease" <<<"$out" &&
-          grep -qF "T6_HAND=selftest T6_RECORD_DIR=<rundir> bash driver/tools/kexec-zephyr/nanopc-t6.sh $S/img/nanopc-t6.bin --go" <<<"$out"'
+          grep -qF "T6_HAND=selftest T6_RECORD_DIR=<rundir> bash driver/tools/kexec-zephyr/nanopc-t6.sh $S/img/nanopc-t6.bin --go 2>&1" <<<"$out"'
 check "nanopc-t6 run: board.sh takes no board lock of its own (the runner's would refuse), the runner's waits 0 s; no UART path printed" \
     eval '! grep -q "^DRY host\$ \. driver/tools/kexec-zephyr/board_lock.sh" <<<"$out" && grep -q "board_lock.sh (LOCK_WAIT 0: refused while held)" <<<"$out" &&
           grep -q "T6_UART=<BOARD_UART>" <<<"$out" && ! grep -q "ttyFAKE9" <<<"$out"'
 out=$(dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
 check "nanopc-t6 run without T6_HAND: the dry run says the runner refuses" grep -qF "T6_HAND=<unset: the runner refuses>" <<<"$out"
+out=$(T6_HAND=selftest T6_CRASH=1 dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
+check "nanopc-t6 run with T6_CRASH=1: the runner with --go --crash (the crash route)" \
+    grep -qF "nanopc-t6.sh $S/img/nanopc-t6.bin --go --crash 2>&1" <<<"$out"
+out=$(T6_HAND=selftest T6_CRASH=0 dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
+check "nanopc-t6 run with T6_CRASH=0: the normal route, no --crash" \
+    eval 'grep -qF "nanopc-t6.sh $S/img/nanopc-t6.bin --go 2>&1" <<<"$out" && ! grep -q -- "--crash" <<<"$out"'
+out=$(T6_HAND=selftest T6_CRASH=yes dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
+rc=$?
+check "nanopc-t6 run with T6_CRASH neither 0 nor 1: rc 2, the value named, no board command" \
+    eval '[ "$rc" = 2 ] && grep -q "T6_CRASH=.yes." <<<"$out" && ! grep -q "^DRY" <<<"$out"'
 out=$(dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$REPO/.t6-selftest-logs" 2>&1)
 rc=$?
 check "nanopc-t6 run with the log directory inside a checkout: rc 3 (the runner's record rule), no board command, nothing made" \
@@ -500,6 +520,32 @@ check "pi5-fake, ssh refused: rc 3, ssh's own error printed with <board-host> an
           ! grep -q "pi5-fake\|100\.64\.7\.9\|tester@" "$S/fake-pi5.out"'
 check "pi4, ssh refused: rc 3, ssh's error as it was (pi4 output unchanged)" \
     eval 'grep -q "^rc=3$" "$S/fake-pi4.out" && grep -qF "connect to host pi5-fake.example (100.64.7.9) port 22" "$S/fake-pi4.out"'
+# the same two runs (#6838): the sentence is the lease's ssh, not another run's
+# lease; the refusal is in the run's meta.txt and the tally reads it
+for board in pi5 pi4; do
+    rd=$(ls -d "$S/logs-fake-$board"/*/ 2>/dev/null | head -1)
+    rd=${rd%/}
+    check "$board, ssh refused: 'did not answer the lease's ssh (rc 255)', never 'leased to another run'; meta.txt keeps rc 3 and the sentence without the host or its address" \
+        eval 'grep -qF "the board did not answer the lease'"'"'s ssh (rc 255) and LOCK_WAIT ran out: ssh: connect to host" "$S/fake-$board.out" &&
+              ! grep -q "leased to another run" "$S/fake-$board.out" && grep -qx "refused_rc=3" "$rd/meta.txt" &&
+              grep -q "^refused=the board did not answer the lease.s ssh (rc 255) and LOCK_WAIT ran out: ssh: connect to host <board-host> " "$rd/meta.txt" &&
+              grep -q "^ended=" "$rd/meta.txt" && ! grep -rq "pi5-fake\|100\.64\.7\.9\|tester@" "$rd"'
+    check "$board, ssh refused: the tally of its run says rc=3 verdict=refused (was rc=5 not_back), exit code 3" \
+        eval 'says "$board" "$rd" "rc=3 verdict=refused boot=tryboot row boot_verdict=refused result=none " && { "$B" "$board" tally "$rd" > /dev/null 2>&1; [ $? = 3 ]; }'
+done
+# a lease that another run holds (the board answers, exit code 3): that sentence, with the lease
+mkdir -p "$S/stub-held"
+printf '#!/bin/sh\nprintf "holder=other-host:4242\\nrow=TF\\nexpires=9999999999\\n"\nexit 3\n' > "$S/stub-held/ssh"
+chmod +x "$S/stub-held/ssh"
+LOCK="$S/held-pi4.lock" LOCK_WAIT=0 BOARD_HOST=tester@pi5-fake.example BOARD_UART=/dev/ttyFAKE5 PATH="$S/stub-held:$PATH" \
+    "$B" pi4 probe "$S/logs-held-pi4" > "$S/held-pi4.out" 2>&1
+echo "rc=$?" >> "$S/held-pi4.out"
+rd=$(ls -d "$S/logs-held-pi4"/*/ 2>/dev/null | head -1)
+rd=${rd%/}
+check "pi4, the lease held by another run: rc 3, 'the board is leased to another run' with the lease, kept in meta.txt, the tally rc=3 verdict=refused" \
+    eval 'grep -q "^rc=3$" "$S/held-pi4.out" && grep -q "the board is leased to another run and LOCK_WAIT ran out: holder=other-host:4242 row=TF expires=9999999999" "$S/held-pi4.out" &&
+          ! grep -q "did not answer" "$S/held-pi4.out" && grep -q "^refused=the board is leased to another run and LOCK_WAIT ran out: holder=other-host:4242 " "$rd/meta.txt" &&
+          says pi4 "$rd" "rc=3 verdict=refused "'
 # the record: finish's redact_run on a pi5 run directory (the console path,
 # the bridge, the host names, the addresses; INDEX.txt is written after it)
 eval "$(sed -n '/^redact_run() {/,/^}/p; /^redact_dir() {/,/^}/p; /^redact_words() {/,/^}/p; /^uart_is_bridge() /p' "$B")"
@@ -726,10 +772,10 @@ out=$(dry nanopc-t6 run "$S/img/x2.bin" "$S/logs" 2>&1)
 rc=$?
 check "nanopc-t6 run of an image without the T6 watchdog marker (an i.MX8MP one): rc 3, REFUSED, no board command" \
     eval '[ "$rc" = 3 ] && grep -q "REFUSED" <<<"$out" && ! grep -q "^DRY board" <<<"$out"'
-mkimg "$S/img/t6-big.bin" $((16 * 1024 * 1024 + 4096)) 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60'
+mkimg "$S/img/t6-big.bin" $((256 * 1024 * 1024 + 4096)) 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60'
 out=$(dry nanopc-t6 run "$S/img/t6-big.bin" "$S/logs" 2>&1)
 rc=$?
-check "nanopc-t6 run of an image past the 16 MiB window at 0x10000000: rc 3" eval '[ "$rc" = 3 ] && grep -q "does not fit" <<<"$out"'
+check "nanopc-t6 run of an image past the 256 MiB window at 0x10000000: rc 3" eval '[ "$rc" = 3 ] && grep -q "does not fit" <<<"$out"'
 out=$(dry x2 nodefault 2>&1)
 check "x2 nodefault: rc 2" [ $? = 2 ]
 out=$(TREE_IMAGE=$S/img/pi4.bin dry pi4 tree "$S/am.txt" "$S/tree" 2>&1)
@@ -848,6 +894,11 @@ cp "$S/img/am62p.bin" "$S/bd/zephyr/zephyr.bin"
 printf 'build x: phony\n  DEFINES = -DYAKOGL_SAMPLE_TREE=\\"71145c16\\" -DYAKOGL_SAMPLE_TABLE=\\"1449eb0f\\"\n' > "$S/bd/build.ninja"
 check "image_build: the ids of the build.ninja beside the image" \
     eval '[ "$(image_build "$S/bd/zephyr/zephyr.bin")" = "YAKOGL_SAMPLE_TABLE=1449eb0f YAKOGL_SAMPLE_TREE=71145c16" ]'
+mkdir -p "$S/bd-t6/zephyr"
+cp "$S/img/am62p.bin" "$S/bd-t6/zephyr/zephyr.bin"
+printf 'build x: phony\n  DEFINES = -DT6_DEQP_BUILD=\\"v0.1.0-7-g0123abcd\\" -DKERNEL\n  FLAGS = -DDEQP_BUILD=/w/build -DNOT_A_BUILD_ID=\\"x\\"\n' > "$S/bd-t6/build.ninja"
+check "image_build: a <NAME>_BUILD string define is the id (the NanoPC-T6's dEQP image), no other define" \
+    eval '[ "$(image_build "$S/bd-t6/zephyr/zephyr.bin")" = "T6_DEQP_BUILD=v0.1.0-7-g0123abcd" ]'
 check "image_build without a build.ninja: absent with the reason, never empty" \
     eval '[ "$(image_build "$S/img/am62p.bin")" = "absent (no build id in a build.ninja beside the image)" ]'
 check "boot_build: the line a real capture printed at boot" \
@@ -1001,6 +1052,20 @@ mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 back=1 up=40 t_reboot=100 t_
 check "x2 kexec-dev: the ping never lost (no jump) -> no_jump rc 4" says x2 "$d" "rc=4 verdict=no_jump"
 mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 lost=3 rc_cycle=5 t_reboot=100
 check "x2 kexec-dev: Linux not back -> not_back rc 5" says x2 "$d" "rc=5 verdict=not_back"
+# a run refused before its reboot (run_refused, #6838): its exit code and its
+# message, never "the board did not come back"; a run that rebooted is not one
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 refused_rc=3 "refused=the board is leased to another run and LOCK_WAIT ran out: holder=other:1"
+check "x2 kexec-dev: refused before the jump (refused_rc 3, no t_reboot) -> refused rc 3, the message on its own line, exit code 3" \
+    eval 'says x2 "$d" "rc=3 verdict=refused boot=kexec-dev DEV boot_verdict=refused result=none .*never a row" &&
+          says x2 "$d" "^  refused: the board is leased to another run and LOCK_WAIT ran out: holder=other:1$" &&
+          { "$B" x2 tally "$d" > /dev/null 2>&1; [ $? = 3 ]; }'
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 refused_rc=2 "refused=no image"
+check "x2 kexec-dev: refused with exit code 2 -> refused rc 2" says x2 "$d" "rc=2 verdict=refused "
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 lost=3 rc_cycle=5 t_reboot=100 refused_rc=3 "refused=a later refusal"
+check "x2 kexec-dev: a refusal in a run that jumped (t_reboot) is not read: Linux not back stays not_back rc 5" \
+    eval 'says x2 "$d" "rc=5 verdict=not_back" && ! says x2 "$d" "refused"'
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0
+check "x2 kexec-dev: meta.txt alone, no refusal kept -> not_back rc 5 (unchanged)" says x2 "$d" "rc=5 verdict=not_back"
 # the TFTP and boot verdicts the old netboot runner gave without a record (its step 9)
 d="$S/imx/x/20261003-1200-nr-0123abcd"
 mkrun "$d" board=imx8mp boot=uboot-tftp name=nr probe=0 back=1 up=40 "rec0=00000000 00000000 00000000 00000000"
@@ -1151,6 +1216,40 @@ check "the mustpass table has a lost column of 261 and calls none of them NoResu
     eval 'grep -q "fragment_ops *1662 *0 *0 *0 *0 *261 *0$" "$S/lossy-tally.txt" && ! grep -q "^NoResult dEQP" "$S/lossy-tally.txt" &&
           [ "$(grep -c "^Lost dEQP" "$S/lossy-tally.txt")" = 261 ]'
 check "a complete dEQP record keeps verdict=done (TF)" says pi4 "$S/pi4/full/20261003-1300-TF-0123abcd" "verdict=done "
+
+echo "== 3c3. a dEQP session that dEQP ended itself (complete=0): done_stopped, not done"
+# stopped_console COMPLETE: the console of a session of two cases, as
+# driver/samples/zephyr/deqp/src/main.cpp prints it; its "done" line says
+# whether dEQP went through its whole case list (1) or ended early (0).
+stopped_console() {
+    local c
+    for c in a b; do
+        printf '%s\r\n' "Test case 'dEQP-GLES2.info.$c'.." "deqp: Pass dEQP-GLES2.info.$c" '  Pass (Pass)'
+    done
+    printf '%s\r\n' "deqp: done: 2 passed, 0 failed, 0 not supported, 0 warnings, complete=$1" \
+        'deqp: summary: 2 cases begun, 2 with a result, 0 without'
+}
+for bb in pi4:tryboot nanopc-t6:kexec-dev; do
+    b=${bb%%:*}
+    for c in 0 1; do
+        d="$S/stopped/$b/20261116-0400-c$c-0123abcd"
+        mkrun "$d" "board=$b" "boot=${bb#*:}" "name=c$c" probe=0 back=1 t_reboot=100 t_back=130
+        stopped_console "$c" > "$d/console.txt"
+    done
+    check "$b: a session dEQP ended early (complete=0) is done_stopped rc 4, its summary line still the result" \
+        says "$b" "$S/stopped/$b/20261116-0400-c0-0123abcd" "rc=4 verdict=done_stopped .*result=legacy:deqp_summary "
+    check "$b: the same session with complete=1 is done rc 0" \
+        says "$b" "$S/stopped/$b/20261116-0400-c1-0123abcd" "rc=0 verdict=done .*result=legacy:deqp_summary "
+done
+# a stopped session of a lossy capture: the stop is named, the lost count stays on the line
+ds="$S/stopped/pi4/20261116-0400-lossy-0123abcd"
+mkrun "$ds" board=pi4 boot=tryboot name=lossy probe=0 back=1 t_reboot=100 t_back=130
+stopped_console 0 | sed 's/2 cases begun, 2 with a result/5 cases begun, 5 with a result/' > "$ds/console.txt"
+check "pi4: a stopped session whose capture also lost 3 result lines: done_stopped with lost=3 (not done_lossy)" \
+    says pi4 "$ds" "rc=4 verdict=done_stopped .* lost=3$"
+"$B" pi4 tally "$S/stopped/pi4" > "$S/stopped-tally.txt" 2>&1
+check "the tree tally names the stopped sessions STOPPED and the complete one not" \
+    eval '[ "$(grep -c "STOPPED: dEQP ended the session early (complete=0)" "$S/stopped-tally.txt")" = 2 ]'
 
 echo "== 3d. Pi 4 tree tally and diff against the old Pi 4 tree runner's (old-runner-outputs.txt)"
 "$B" pi4 tally "$S/pi4/full" > "$S/new-tally.txt" 2>&1
@@ -1368,6 +1467,8 @@ cat > "$S/fake-nanopc-t6.sh" <<'EOF'
 echo "runner" >> "${FAKE_T6_ARGS%/*}/ssh.log"
 printf 'argv=%s\nT6_RECORD_DIR=%s\nT6_UART=%s\nT6_HAND=%s\nBOARD_HOST=%s\n' "$*" "$T6_RECORD_DIR" "$T6_UART" "$T6_HAND" "$BOARD_HOST" > "$FAKE_T6_ARGS"
 if [ "$FAKE_T6" = refused ]; then echo "nanopc-t6.sh: REFUSED: under the lock: remote sessions on the board" >&2; exit 3; fi
+route=normal
+case " $* " in *" --crash "*) route=crash ;; esac
 r=$T6_RECORD_DIR/20261112-120000-t6
 mkdir "$r"
 rec() { printf '2026-11-12 12:%s %s\n' "$1" "$2" >> "$r/record.txt"; }
@@ -1377,16 +1478,16 @@ cp "$FAKE_T6_UART" "$r/uart.log"
 echo "[ 1.0] a line of the old Linux" > "$r/linux-before.dmesg-w"
 case $FAKE_T6 in
 back)
-    rec 00:05 "jumping (linux_wdt 1)"
+    rec 00:05 "jumping (linux_wdt 1, route $route)"
     rec 00:42 "back in Armbian 37 s after the jump (boot_id 1, up 20.1 s)"
     echo "[ 1.0] a line of the new Linux" > "$r/linux-after.dmesg"
     exit 0 ;;
 lost)
-    rec 00:05 "jumping (linux_wdt 1)"
+    rec 00:05 "jumping (linux_wdt 1, route $route)"
     rec 04:25 "no Armbian 260 s after the jump: the board needs $T6_HAND at its power switch"
     exit 1 ;;
 nojump)
-    rec 00:05 "jumping (linux_wdt 1)"
+    rec 00:05 "jumping (linux_wdt 1, route $route)"
     rec 00:06 "linux-wdt: REFUSED on the board, no jump: linux-wdt: WDT0 CR 0x00000000 TORR 0x00000000 after the open: WDT_EN is not 1"
     exit 1 ;;
 esac
@@ -1426,6 +1527,13 @@ check "nanopc-t6: the board lease taken before the runner and given back at the 
           [ "$(grep -n "^ssh .*yakogl-board.lease" "$S/t6/ssh.log" | head -1 | cut -d: -f1)" -lt "$(grep -n "^runner$" "$S/t6/ssh.log" | cut -d: -f1)" ]'
 check "nanopc-t6 tally of the run directory: the same verdict line" \
     says nanopc-t6 "$T6_RD" "rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_hello .*back_after=37s"
+check "nanopc-t6: the normal route's jump line in the record" grep -q " jumping (linux_wdt 1, route normal)$" "$T6_RD/record.txt"
+# (a copy under its own name: t6run names the log directory after the UART file)
+cp "$KT/t6_hello-pass.uart" "$S/t6/hello-crash.uart"
+t6run back "$S/t6/hello-crash.uart" T6_CRASH=1
+check "nanopc-t6 with T6_CRASH=1: the runner got --go --crash, the record's jump line names the crash route, the same verdict" \
+    eval 'grep -qx "argv=$S/img/nanopc-t6.bin --go --crash" "$S/t6/args" && grep -q " jumping (linux_wdt 1, route crash)$" "$T6_RD/record.txt" &&
+          [ "$T6_RC" = 0 ] && grep -q "rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_hello .*back_after=37s" <<<"$T6_OUT"'
 t6run back "$KT/t6_mmu-differs.uart"
 check "nanopc-t6 back with t6_mmu's differing record: failed rc 4, t6-verdict.sh's FAIL" \
     eval '[ "$T6_RC" = 4 ] && grep -q "rc=4 verdict=failed boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_mmu " <<<"$T6_OUT"'
@@ -1453,6 +1561,20 @@ t6run refused "$KT/t6_hello-pass.uart"
 check "nanopc-t6 runner refused before any change (rc 3, no record): rc 3, its line shown, no INDEX.txt, the lease given back" \
     eval '[ "$T6_RC" = 3 ] && grep -q "nanopc-t6.sh: REFUSED: under the lock" <<<"$T6_OUT" && grep -q "refused (rc 3) before it changed anything" <<<"$T6_OUT" &&
           [ ! -e "$T6_RD/INDEX.txt" ] && ! grep -rq "t6fake-host" "$T6_RD" && [ "$(tail -1 "$S/t6/ssh.log" | grep -c "rm -f /var/tmp/yakogl-board.lease")" = 1 ]'
+check "nanopc-t6 runner refused: meta.txt keeps rc 3 and the sentence, no t_reboot; the tally says rc=3 verdict=refused (was rc=5 not_back), exit code 3 (#6838)" \
+    eval 'grep -qx "refused_rc=3" "$T6_RD/meta.txt" && grep -q "^refused=nanopc-t6.sh refused (rc 3) before it changed anything on the board" "$T6_RD/meta.txt" &&
+          grep -q "^ended=" "$T6_RD/meta.txt" && ! grep -q "^t_reboot=" "$T6_RD/meta.txt" &&
+          says nanopc-t6 "$T6_RD" "rc=3 verdict=refused boot=kexec-dev DEV boot_verdict=refused result=none .*never a row" &&
+          { "$B" nanopc-t6 tally "$T6_RD" > /dev/null 2>&1; [ $? = 3 ]; }'
 
-echo "board_selftest: $n checks, $fails failed (pinned: $WANT_CHECKS)"
-[ "$fails" = 0 ] && [ "$n" = "$WANT_CHECKS" ]
+# every check written above ran (the header says why): the call lines of this
+# file against the lines noted by check and same
+at_end=1
+notrun=0
+while IFS=: read -r line _; do
+    [ -n "${ran[$line]:-}" ] && continue
+    echo "  FAIL  the check written at line $line did not run"
+    notrun=$((notrun + 1))
+done < <(grep -nE '^[[:space:]]*(check|same) ' "$0")
+echo "board_selftest: $n checks, $fails failed, $notrun written but not run"
+[ "$fails" = 0 ] && [ "$notrun" = 0 ]

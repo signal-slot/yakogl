@@ -44,6 +44,21 @@ Steps 1 to 3 of (e) are on main; step 4 (the TFU) is not.
   (`v3d_job.c`) from the GL level, because the file fakes `v3d_job_*`; it is
   covered by `src/v3d/state.rs` and the `tests/v3d_*` job rows only for the
   surfaces they build.
+- **The CPU colour blit** (host, `src/gl/blit.rs`): `glBlitFramebuffer` from
+  and into a `GL_RGB10_A2` renderbuffer or texture attachment copies
+  10/10/10/2 words: to and from RGBA8, an exact class-to-class copy, NEAREST
+  and LINEAR (the filter runs on the decoded floats). `18d83492` taught
+  `decode_float`/`encode_float` the word for a renderbuffer; `4082f91a` added
+  the `GLES_TEXFMT_RGB10A2` -> `GLES_SURF_RGB10_A2` arm of `attachment_image`
+  for a texture attachment; `019aa841` added the texture LINEAR test and pinned
+  the RGBA8 fallback. Tests: `gl::blit::tests::rgb10a2_*`
+  (`rgb10a2_renderbuffer_converts_as_ten_ten_ten_two`,
+  `rgb10a2_renderbuffer_filters_linear_after_decode`,
+  `rgb10a2_textures_copy_as_ten_ten_ten_two`,
+  `rgb10a2_texture_filters_linear_after_decode`,
+  `rgb10a2_texture_without_a_class_blits_as_rgba8`). Builds where the class
+  falls back to RGBA8 (PowerVR, GC7000UL, report-es2) are unchanged. The
+  Pi 4 dEQP run is pending.
 - **Not done**: step 4. `rt_texture` (`src/v3d/backend.rs`) still requires
   `GLES_TEXFMT_RGBA8`, the TFU has no 10/10/10/2 input type
   (`V3D_TFU_TTYPE_*` are R8, RG8, RGBA8, R16F, R32F), and the GL core offers

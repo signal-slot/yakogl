@@ -49,6 +49,7 @@ the plan item's letter) — the newest one and the model for what follows.
   verdict=done boot=uboot-mmc row boot_verdict=done result=... resets=absent
   record=... back_after=531s`. A clean row is `verdict=done` with `resets`
   absent or 0; `done_with_resets`, `done_lossy` (with `lost=<n>`),
+  `done_stopped` (dEQP ended the session early),
   `scan_failed`, `died_after=<stage>` and a row that took the 600 s RTI
   watchdog are named as such, with the rerun that replaced them.
 - **Resets**: per row and for the session — GPU recoveries (AM62P: from the
@@ -89,9 +90,8 @@ out.
 
 ## t6-gles2 slices: the NanoPC-T6 dEQP-GLES2 runs
 
-`<YYYY-MM-DD>-t6-gles2-<session>` (`<session>` is `smoke`, `S1` … `S4`, as the
-runner's `--session`; the NanoPC-T6 is not a `tools/board.sh` board, so the name
-carries no `sha8`: the commit is in `meta.txt`) is what
+`<YYYY-MM-DD>-t6-gles2-<session>-<sha8>` (`<session>` is `smoke`, `S1` … `S4`,
+as the runner's `--session`; `<sha8>` is the `commit` of `meta.txt`) is what
 `tools/cts/mali-deqp-run.sh --out` writes, redacted, from a run of
 `tools/cts/mali-gles2-tree.txt` rows over the board's Armbian
 (`tools/cts/README.md` section 6). It holds no README of its own kind of
@@ -119,8 +119,28 @@ commit message and the RESULTS.md row. Its files:
 - `results.tsv`: a header line, then `case status detail` per case of the rows:
   dEQP's status and its Result text, or `Lost` with `chunk-crash`,
   `chunk-hang`, `board-lost`, `not-run` or `wrong-lib` as the detail.
+- `refusals.tsv` (slices since 2026-11-15): a header line, then `case refusal`
+  for each case whose log holds one: the first shader or program info log in
+  which the library refuses, whitespace folded (dEQP logs an info log in two
+  forms, `<InfoLog>` and a `Section` named `Info Log`; both are read). The
+  tally takes a case's cause from it.
+- `refusals/<label>.txt` (optional): one chunk's stdout and stderr merged, in
+  the order the process wrote them: dEQP's `Test case '<case>'..` lines and
+  the backend's per-draw lines `yakogl-mali-refusal: <errno> <reason>`
+  (`<reason>` is the bare word `errno` when the cause was already logged
+  elsewhere). Only `mali-deqp-tally.py --tally --per-case` reads it: a
+  refusal belongs to the last `Test case` line before it, the case's first
+  line is its cause, and a case without one, or a chunk without the file,
+  keeps the default cause. The `yakogl: a draw was refused:` line (first
+  refusal of the process only) is not used. Caveat: dEQP's stdout buffering
+  into a file can reorder lines against the `Test case` lines, so check the
+  order in the raw `.out` before trusting a slice; the library's rate limit
+  also writes nothing for two consecutive cases that fail on their first
+  draw for one reason (`docs/notes/mali-frame-refusals.md`).
 - `kmsg/<label>.txt`: the kernel lines between that chunk's markers, to be
   classified with `tools/cts/mali-kmsg.py` (`docs/notes/mali-panthor-kmsg.md`).
+- `<file>.license` beside each of them (the runner writes it since
+  2026-11-15): the licence of our results.
 
 The raw `.qpa`, stdout and stderr and the whole `dmesg` capture stay in the
 runner's `RAW_DIR` and are never committed. A slice is checked for the

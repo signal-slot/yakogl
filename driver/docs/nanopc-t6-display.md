@@ -277,33 +277,116 @@ What Linux 6.18 leaves depends on the kexec route:
 So adoption needs the crash route. The smallest thing Zephyr must write to
 show its own buffer, in this order:
 
-1. Read VP0 `DSP_CTRL` (STANDBY clear), Esmart0 or the window Linux used
-   (the dump says which), and the mode from the VP timing registers; refuse
-   if they differ from the build's mode.
-2. Stop the IOMMU translating: for both `vop_mmu` register sets, `COMMAND` =
-   disable paging (or force reset) and check `STATUS` bit 0 clear. Until this
-   is done the VOP reads through tables Zephyr may overwrite.
-3. Point the window at Zephyr's buffer: `REGION0_YRGB_MST` (physical, below
-   4 GiB), `REGION0_VIR` (stride / 4), format ARGB8888 code 0 with R/B swap 0
-   for XRGB8888 memory order, AFBC off if Linux used a Cluster window with
-   AFBC (then switch to Esmart0: `OVL_LAYER_SEL`/`OVL_PORT_SEL` as well).
-4. `REG_CFG_DONE` = bit 15 | bit 0 | bit 16; the change lands at the next
+1. Read VP0 `DSP_CTRL` (STANDBY clear), the windows Linux enabled and the
+   mode from the VP timing registers; refuse if the mode differs from the
+   build's. Linux shows its picture on Cluster0 of VP0, and of VP1 for the
+   second HDMI output (board reading, 2026-11-12).
+2. Turn off Linux's windows (`ip::vop2::take_over`). It finds the running
+   ports itself (`DSP_CTRL` STANDBY clear), since whether Linux drives VP1
+   as well is not something the caller should have to know. It disables
+   every window except the one to keep, whatever its port, a Cluster window
+   with both its enable bits (`WIN0_EN` in `CLUSTER_WIN_CTRL0`,
+   `CLUSTER_ENABLE` in `CLUSTER_CTRL`; `rockchip_vop2_reg.c:283`, `:314`;
+   Linux does the same, `rockchip_drm_vop2.c:149-155`). It refuses a window
+   to keep that is already enabled (its address is Linux's). Then
+   `REG_CFG_DONE` for every running port and one frame start waited for on
+   each, so no window of Linux fetches any more.
+3. Stop the IOMMU translating (`ip::rk_iommu::paging_off`): for both
+   `vop_mmu` register sets Linux's order, stall, disable paging,
+   `INT_MASK` = 0 and `DTE_ADDR` = 0, stall off (`rockchip-iommu.c:911-925`),
+   then check `STATUS` bit 0 clear. Done after step 2, nothing reads a
+   Linux IOVA as a physical address; until it is done the VOP would read
+   through tables Zephyr may overwrite.
+4. Make Esmart0 the only layer of VP0 (`ip::vop2::overlay_single`:
+   `OVL_PORT_SEL` with its `REG_CFG_DONE` and the wait until it is in force,
+   then `OVL_LAYER_SEL`) and point it at Zephyr's buffer
+   (`ip::vop2::window_show`): `REGION0_YRGB_MST` (physical, below 4 GiB),
+   `REGION0_VIR` (stride / 4), format ARGB8888 code 0 with R/B swap 0 for
+   XRGB8888 memory order, enable last.
+5. `REG_CFG_DONE` = bit 15 | bit 0 | bit 16; the change lands at the next
    frame.
 
-Steps 2-4 are a handful of 32-bit writes. Doing step 3 before step 2 shows
-garbage for at most one frame, never a fault, because both take effect at
-the frame boundary only after `REG_CFG_DONE`; the design does 2 first anyway.
+The display is dark from step 2 to step 5, for a few frames. Step 4 before
+step 2 would leave Linux's Cluster0 enabled outside every port's layer
+range, and the source does not say whether such a window still fetches;
+step 3 before step 2 would let it read its IOVA as a physical address.
 
 What it needs: a `crashkernel=` reservation that holds the image window
-0x10000000-0x1fffffff on Armbian's command line (today the T6 has none: the
-window is free System RAM and `nanopc-t6.sh` uses the normal route), and
-`nanopc-t6.sh --crash`. What it proves: the VOP2 window programming, the
+0x10000000-0x1fffffff on Armbian's command line, and `nanopc-t6.sh --crash`.
+`driver/tools/kexec-zephyr/t6-crashkernel.sh set` adds
+`crashkernel=256M@0x10000000` to the `extraargs=` line of
+`/boot/armbianEnv.txt` (`undo` restores the file byte for byte; neither
+reboots, `status` reads the result after the reboot). The fixed base has no
+fallback: if anything already lies there at boot, Linux reserves nothing and
+logs "memory is in use" (`kernel/crash_reserve.c:401-421`). CMA
+(`cma=256M`) is placed before it but top-down below 4 GiB, far above the
+window (`arch/arm64/mm/init.c:327-333`, `mm/cma.c:394`, `:423`); the
+tool's header has the details. `nanopc-t6.sh --crash` refuses unless
+`/proc/iomem`'s "Crash kernel" range holds the window and the image plus the
+kernel's 4 KiB control page, and while a crash image is already loaded.
+Without `--crash` it takes the normal route, also while the reservation is
+set (the kernel limits only crash segments to the reservation,
+`kernel/kexec_core.c:200-210`), unless a crash image is loaded in it; with
+`--go` both routes read `kexec_crash_loaded` again under the board lock.
+
+The crash route has one more condition: no interrupt may be left on a
+chip whose bus lock sleeps. Before the jump, `machine_crash_shutdown`
+masks and shuts down every started interrupt, one after the other
+(`arch/arm64/kernel/machine_kexec.c:213-225`, `kernel/irq/kexec.c`), and
+for each it takes the chip's bus lock (`kernel/irq/manage.c:2689-2711`).
+The PMIC (RK806, on SPI) is a regmap-irq chip: its bus lock is a mutex,
+and its unlock writes the PMIC's mask and ack registers over SPI
+(`drivers/base/regmap/regmap-irq.c:76-80`, `:83-207`;
+`drivers/mfd/rk8xx-core.c:546-556`). An SPI transfer waits for the SPI
+controller's interrupt (`drivers/spi/spi-rockchip.c:382-404`), which the
+same loop shut down earlier, and only one CPU is left, with interrupts
+off. So the panic sleeps for ever, "Starting crashdump kernel..." is never
+printed, and Linux's watchdog resets the board. The PMIC's rows in
+`/proc/interrupts` (chip `rk806`) were the two of its power key (driver
+`rk805-pwrkey`). Measured on 2026-11-15 with `t6_hello`:
+with the driver bound the jump hung and WDT0 reset the board; with its one
+device unbound the `rk806` rows were gone, and the image ran and passed,
+twice. `kexec_zephyr --crash` therefore unbinds every device of
+`rk805-pwrkey` before CPUs 1-7 go offline (found by listing
+`/sys/bus/platform/drivers/rk805-pwrkey/`, since the device's number
+changes per boot), and, as its last step that can refuse, after the CPU
+check and before the links go down, reads `/proc/interrupts` and refuses while
+a row with a handler is on a chip other than the ones the crash route was
+measured with (GICv3, GICv3-23, ITS-PCI-MSI-\*, ITS-PCI-MSIX-\*,
+rockchip_gpio_irq). A program cannot ask a chip whether its bus lock
+sleeps, so an unknown chip is refused, not let through. A refusal binds
+the power key again, with the CPUs and the crash image put back as before
+(`crash_irq.h` beside the tool; `crash_irq_selftest.sh` tests it on the
+host). The PMIC's own interrupt line on a GPIO bank
+(`rockchip_gpio_irq ... rk806`) stays after the unbind and did no harm.
+
+The crash route itself ran on the board on 2026-11-15 with `t6_hello` only
+(above); the adoption has not run yet. What it proves: the VOP2 window programming, the
 frame buffer format and stride, the hand-over from a buffer to the screen.
 What it does not prove: power, clocks, the PHY, the controller, the mode.
 A risk of its own: the crash route also leaves panthor's GPU and its firmware
 running, which the Z1-Z4 power-on has never met (they all ran after a normal
 kexec). The adopt probe therefore draws with the CPU first; a Mali frame on
 the adopted display is a separate step.
+
+What an image must do first after a crash kexec (facts for D3 and the
+K steps; no image does this yet). The GPU is still powered, and its CSF
+firmware runs from Linux's memory through the GPU's MMU, so before the
+GPU's interrupt lines are enabled at the GIC and before the Z1 power-on
+(which has only met a powered-down GPU): mask and clear `GPU_IRQ_MASK`,
+`JOB_IRQ_MASK` and `MMU_IRQ_MASK`; halt the MCU (`MCU_CONTROL` disable,
+wait for `MCU_STATUS` disabled); `GPU_COMMAND` SOFT_RESET and wait for
+RESET_COMPLETED in `GPU_IRQ_RAWSTAT` (HARD_RESET when that times out),
+after which the address spaces are off and the GPU no longer walks
+Linux's page tables; only then the power-on, which must accept a domain
+that is already on and must not cut PD_GPU without the PMU idle request
+first. Interrupts the image did not ask for still arrive: the ITS stays
+on and a redistributor's EnableLPIs cannot be cleared, so LPIs (INTID
+8192 and up) from devices Linux left running can be signalled; the
+image's GIC code must acknowledge and end every INTID it does not know,
+or the running priority stays raised and the timer stops (the WDT then
+resets the board, and the run is lost). `kexec_zephyr --crash` takes
+every network link down before the panic to cut the largest source.
 
 ### (b) Adopt from U-Boot
 
@@ -332,6 +415,22 @@ reset and its domain off, as the X2 HDMI design does
 starting the image from the eMMC (`driver/tools/uboot-t6/t6-zephyr.cmd`),
 which is the same code with nothing left on.
 
+The chain's START refusals (`soc::rk3588_display_chain`, its module text has
+the full rules) and two notes on them:
+
+- Without `power-cycle` a VOP2 that is powered but cannot be read, a port it
+  clocks that has no clock now, and (without `force-cold`) a running port are
+  refused before any write; D8 and D9 therefore run with `power-cycle`.
+- With `power-cycle` but without `force-cold`, a running port is refused
+  with `FoundRunning` only after VOP2 was made readable: when PD_VOP was
+  idle-requested, `pd_on` has by then written the PMU and released the bus
+  of the picture before us.
+- For D9: `SRST_D_VOP1` (53/0), `SRST_D_VOP2` (53/1),
+  `SRST_D_VOP2HDMI_BRIDGE0` (52/14) and `SRST_P_VOPGRF` (53/3)
+  (`rst-rk3588.c:540`, `:541`, `:536`, `:543`) are neither checked nor
+  released by the chain; Linux drives none of them and the D0 dump reads
+  them released.
+
 ### Which first, which signs off, what is shared
 
 - First picture: **(a) by crash kexec** (two small steps), because it needs
@@ -350,8 +449,15 @@ A fixed mode first, in DVI mode (no InfoFrames), RGB 8 bit: then the TMDS
 character rate equals the pixel clock and the controller needs only
 `LINK_CONFIG0` and `HDCP2LOGIC_CONFIG0`. The mode is the one Linux shows on
 the display the lead plugs in, read from the dump, so every PHY value is
-measured on that very rate. The expected case is **1920x1080 at 60 Hz, 148.5
-MHz** (CEA-861 VIC 16), which Linux's PHY table has (`hdptx.c:427`).
+measured on that very rate. A sink with an EDID usually prefers
+**1920x1080 at 60 Hz, 148.5 MHz** (CEA-861 VIC 16), which Linux's PHY table
+has (`hdptx.c:427`); the T6's display has none (below).
+
+Measured (board, 2026-11-12): the T6's display gives no EDID, and Linux runs
+it at **1024x768 at 60 Hz, 65 MHz** (h 1024 1048 1184 1344, v 768 771 777
+806, both syncs negative), DVI. That is the build's fixed mode
+(`soc::rk3588_display_chain::MODE_1024X768_60`); the PHY runs Linux's table
+row for 65 MHz (`hdptx.c:445-446`), read back from the dump.
 
 What the PHY PLL needs (`hdptx.c:900-970`): the PLL output is 5x the TMDS
 character rate divided out of a VCO of 2.0-4.0 GHz, `VCO = 24 MHz x M`
@@ -383,14 +489,15 @@ back from the registers).
 The swap path on every board: `eglSwapBuffers` -> `swap_window_buffers`
 (`src/gl/egl.rs:2324-2340`) calls `osal::present(mem, width, height,
 stride_bytes, native_format)` (`src/osal/mod.rs:576-583`) -> the Zephyr OSAL's
-`yakogl_osal_zephyr_present` (`src/osal/zephyr_timing.c:123-130`) ->
-`yakogl_zephyr_present` (`driver/zephyr/lib/board/common/board.c:31-40`) ->
+`present` op, which is the board library's `yakogl_zephyr_present`
+(`driver/zephyr/lib/board/common/board.c`) ->
 the board's `board_show()` (AM62P `board_am62p.c:69-89`, i.MX8MP
-`board_imx8mp.c:358`, Pi 4 `board_rpi4.c:299`). The T6 board glue has no
-`board_show()` yet, and the Mali build has no Zephyr OSAL yet (milestone Z4);
-when it comes it fills `.present` with the same function, as `zephyr.c`,
-`zephyr_v3d.c` and `zephyr_gc.c` do. A `board_display_busy()` (as the AM62P's)
-lets EGL keep four buffers while the VOP may still scan one.
+`board_imx8mp.c:358`, Pi 4 `board_rpi4.c:299`). The Mali Zephyr OSAL
+(`src/osal/zephyr_mali.c`) fills `.present` with the same function, as
+`zephyr.c`, `zephyr_v3d.c` and `zephyr_gc.c` do. The T6's `board_show()` and
+`board_display_busy()` are step D3 (the end of this section); with a
+`board_display_busy()` (as the AM62P's) EGL keeps four buffers while the VOP
+may still scan one.
 
 The Mali render target for a window today (`src/mali/backend.rs:1451-1475`,
 `src/mali/frame.rs:928-1004`): **XRGB8888 linear**, bytes B, G, R, X in memory
@@ -424,6 +531,92 @@ Can Esmart0 scan it directly: **yes, with no copy.**
   memory once its fence has signalled, and the VOP reads memory. The CPU
   pattern of route (a) needs a cache clean before `REG_CFG_DONE`.
 
+### Step D3: `board_show()` and `board_display_busy()` on the T6
+
+The T6 takes the common board layer (`one-method.md`, section 2) as the
+other boards do, so `examples/triangle` and every other sample run on it
+unchanged. The step has two parts:
+
+- **D3a, host only.** The rules below in Rust, with their tests on the
+  register model: `board::nanopc_t6_display` (`Screen`, `show`, `busy`), the
+  reserved end of the carve-out in `board::nanopc_t6_osal`, and their C
+  entries in `yakogl_drivers.h` (`struct yd_t6_screen`, `yd_t6_screen_show`,
+  `yd_t6_screen_busy`, `yd_t6_osal_mem.carve_reserved`).
+- **D3b, the board library and the image.**
+  `driver/zephyr/lib/board/nanopc_t6/`: `board_window()`, `board_show()` and
+  `board_display_busy()` call those entries; the triangle image and its gate
+  row; then the board proof.
+
+**Where the window's memory is.** The Mali renders into the window, so the
+window must be memory the GPU's address space maps, and that is the OSAL's
+carve-out and nothing else. A sample asks for its window before EGL starts
+the OSAL. The OSAL therefore keeps the last `carve_reserved` bytes of the
+carve-out out of its allocator: they are mapped with the rest, no
+`yd_t6_osal_alloc` returns them, and a kick whose stream reaches into them
+is refused. `board_window()` hands that end out, once. `carve_reserved` is
+whole pages and less than the carve-out, or the OSAL does not come up
+(`YD_T6_SUBMIT_STEP_VM_MAP`, refusal `YD_T6_OSAL_VM_MAP_RESERVED`, before any
+register is written). The window needs no entry of its own in the GPU's
+address space: the OSAL's `window()` already resolves any range inside the
+carve-out. EGL's other three buffers are ordinary allocations.
+
+**The first show adopts.** The first `board_show()` is the adopt of route
+(a) with the GL window in place of the probe's CPU pattern: the same checks,
+the same order, the same record (`struct yd_t6_display_adopt`). The window
+sits at the screen's origin and is scanned in place; nothing is copied. An
+adopt that stops is final: that show and every later one return `-ENODEV`,
+and the display is not written again. It is in a state the adopt did not
+expect, and a second try per frame would write to it again without knowing
+more.
+
+**The geometry is the first show's.** A later show must have the first
+show's width, height and stride; another one is refused with `-ENOTSUP`
+before any register is read or written. The reason is tearing. A flip writes
+one register, the address, and the VOP takes a register whole at a frame
+start. A size change is several registers, and a frame start between two of
+the writes can take half of them when an earlier `REG_CFG_DONE` is still
+pending.
+
+**A flip never waits.** A show of another buffer writes the address, then
+`REG_CFG_DONE` for VP0, then clears VP0's frame start flag, and returns. A
+show of the buffer already shown does nothing.
+
+**Which buffers are busy.** Until a frame start takes the new address, the
+display scans an earlier buffer. `board_display_busy()` reports the last
+buffer shown and every buffer that was the last one at a flip since the
+display last caught up. The display has caught up when both hold: VP0's raw
+frame start flag is set (it was cleared after the last flip's
+`REG_CFG_DONE`), and VP0's bit of `REG_CFG_DONE` reads 0. Linux tests the
+same two things before it completes a page flip: `vop2_crtc_atomic_flush`
+ends with `vop2_cfg_done` (`rockchip_drm_vop2.c:1846-1866` in v6.18), and
+`vop2_isr` sends the flip event on a frame start interrupt only when the
+port's bit of `REG_CFG_DONE` is clear (`:2175-2188`). The screen remembers
+two earlier buffers. A third flip inside one frame makes every buffer busy
+until the display catches up: the answer may be too large for a frame and
+is never too small, which is `yakogl_board.h`'s contract. EGL then waits for
+a free buffer and says so once (`next_window_buffer`, `src/gl/egl.rs`).
+
+Whether VP0's bit of `REG_CFG_DONE` clears at the frame start is U8. Both
+answers are safe here. A bit that always reads 0 leaves the frame start flag
+to decide, and that is enough because the flag is cleared after the
+`REG_CFG_DONE` write. A bit that never clears keeps the buffers busy, and
+EGL's once-only line shows it on the UART.
+
+Before the first show no buffer is busy. After an adopt that stopped, the
+buffer of that show is busy (the adopt may have stopped after it pointed
+Esmart0 at the buffer) and no register is read.
+
+**Not in D3.** The Mali OSAL has no `wait_vblank`. EGL's wait for a free
+buffer is then its poll of up to 100 ms (`BUSY_WAIT_NS`), not a wait for
+vertical periods. A frame start interrupt for it is a later step.
+
+**What the triangle proves.** `examples/triangle` is single-buffered and
+shows the same window every frame, so its picture proves the first show: a
+Mali-rendered window adopted in place. It does not flip. The flip and the
+busy rule are first run on the board by a double-buffered image (gl_test,
+dEQP); the board library prints the screen's flip count at the end of a run
+so that the UART record says whether they ran.
+
 ## 5. Proof without a camera
 
 What can be read back (every one of these is a register Linux names; values
@@ -434,7 +627,7 @@ compared against the dump):
 | VP0 runs frames | VP0 `INT_RAW_STATUS` 0xAC bit 0 (FS, frame start); clear with `INT_CLR` 0xA4 = bit \| bit<<16, read again after more than one frame | the VP's timing generator runs on a pixel clock |
 | No underflow | the same register bit 4 (POST_BUF_EMPTY) stays 0 over many frames | the window's fetch keeps up: our buffer address is readable memory |
 | No bus error | `SYS0_INT_STATUS` 0x88 / `SYS1_INT_STATUS` 0x98 bit 1 | the AXI fetch completed |
-| Our buffer is the one shown | Esmart0 `REGION0_YRGB_MST` reads our address after `REG_CFG_DONE`, `REG_CFG_DONE` VP bit back to 0 | the shadow registers took the update |
+| Our buffer is the one shown | Esmart0 `REGION0_YRGB_MST` reads our address after `REG_CFG_DONE` | the window register holds our address. Whether the `REG_CFG_DONE` VP bit goes back to 0 once the update is taken is open (U8): it is logged, not used as a proof |
 | VOP clock rate | the frame-start interval measured against the arch timer (24 MHz) | pixel clock = htotal x vtotal x rate |
 | PHY PLL | hdptxphy0_grf STATUS 0xfd5e0080: PLL_LOCK_DONE bit 3, PHY_CLK_RDY bit 2, PHY_RDY bit 1 | the PLL locked and the lanes are ready |
 | Controller clocks | `CMU_STATUS` 0xb0 & 0x3f = 0x15 (`DISPLAY_CLK_LOCKED`), `CMU_VIDQPCLK_FREQ` 0xb8, `CMU_LINKQPCLK_FREQ` 0xbc (`dw-hdmi-qp.h:38-55`) | the controller sees its video and link clocks; the FREQ registers measure them (units unknown: compared with the dump) |
@@ -454,113 +647,114 @@ the full frame), and no flicker or sparkles (an analog margin of the PHY). The
 proof plan asks the person for one answer per run, chosen to be unambiguous:
 a pattern with four coloured quadrants and a white 1-pixel border.
 
-## 6. The dump list (for the lead)
+## 6. The dump of the running Linux
 
-Preconditions: Armbian, the display plugged into **HDMI0** (check:
-`readlink /sys/class/drm/card*-HDMI-A-*/device` names `fde80000.hdmi` for the
-connected one, and its `status` reads `connected`), a mode set and a picture
-on it (the console is enough), debugfs mounted. The reads below are only
-safe while the display is on: the VOP registers need PD_VOP and its bus
-clocks, the controller PD_VO1 and its clocks, the PHY its APB clock. A read of
-a block whose domain is off may hang the bus. If the display has blanked, wake
-it first (any key on the console) and check `status` again.
+The dump is made by `driver/tools/kexec-zephyr/t6-display-dump.sh`. Its read
+list is in the script (`--plan` prints it: 76 lines, 1120 words) and is the
+only copy; this section says what the list holds, what it must not hold, and
+what the dump of 2026-11-12 shows.
 
-Files to copy (as is, into the dump's header or beside it):
-
-```
-uname -a; cat /proc/cmdline; date -u
-cat /sys/class/drm/card*-HDMI-A-*/status /sys/class/drm/card*-HDMI-A-*/modes
-cat /sys/class/drm/card*-HDMI-A-1/edid | od -An -tx1          # the sink's EDID, binary as hex
-cat /sys/kernel/debug/dri/*/state                             # the mode, the plane, its fb, the CRTC
-cat /sys/kernel/debug/dri/*/vop2/summary                      # VP, window, format, address
-cat /sys/kernel/debug/dri/*/vop2/regs                         # Linux's own VOP2 dump (SYS, OVL, VP0-3, windows)
-cat /sys/kernel/debug/clk/clk_summary | grep -iE 'vop|hdmi|hdptx|hdcp1|vo1|v0pll|gpll|cpll'
-cat /sys/kernel/debug/pm_genpd/pm_genpd_summary
-cat /sys/kernel/debug/regmap/*fed60000*/registers             # the PHY0 register file through Linux's readable list
-dmesg | grep -iE 'hdmi|hdptx|vop|drm'
+```sh
+driver/tools/kexec-zephyr/t6-display-dump.sh --plan                    # the read list, no board
+BOARD_HOST=root@<t6> driver/tools/kexec-zephyr/t6-display-dump.sh      # dry run: the board's state, no register read
+BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> \
+  driver/tools/kexec-zephyr/t6-display-dump.sh --go                    # the reads
 ```
 
-`vop2/regs` reads only while the VOP is enabled and is Linux's own safe
-dump (`rockchip_drm_vop2.c:2008-2070`, regions from
-`rockchip_vop2_reg.c:1269-1370`). The PHY's regmap file reads only the
-ranges `hdptx.c:776-790` allows. The controller's regmap file must **not**
-be used: it has no readable list and would read every word up to 0x482c,
-including the I2C master's data registers.
+Preconditions, checked by the tool before the first read and again in the
+same command as every read: the connector of `fde80000.hdmi` (found through
+its `ddc` link, `card0-HDMI-A-1` on this board) reads `connected` and
+`enabled`, the power domains `vop` and `vo1` are on, and `hclk_vop`,
+`aclk_vop`, `pclk_hdmitx0` and `pclk_hdptx0` have users. A read of a block
+whose domain or bus clock is off may hang the bus, so the tool stops at the
+first check that does not hold. It takes the board lock and asks for
+`T6_HAND`.
 
-Register reads with the board's `mmio_rd` (the tool `nanopc-t6.sh` already
-stages; `mmio_rd ADDRESS COUNT`, 32-bit, one line per word), in this order,
-stopping at the first read that does not return:
+What the list reads, in this order:
 
-```
-# 1. PMU: domain status (read only)
-mmio_rd 0xfd8d8150 1; mmio_rd 0xfd8d8180 1; mmio_rd 0xfd8d8118 1; mmio_rd 0xfd8d8120 1; mmio_rd 0xfd8d8290 1
-# 2. CRU: CLKSEL 110-115, 128-136; GATE 52-53, 55, 59-61, 72-73; SOFTRST 52-53, 60-61, 72-73
-mmio_rd 0xfd7c04b8 6;  mmio_rd 0xfd7c0500 9
-mmio_rd 0xfd7c08d0 2;  mmio_rd 0xfd7c08dc 1;  mmio_rd 0xfd7c08ec 3;  mmio_rd 0xfd7c0920 2
-mmio_rd 0xfd7c0ad0 2;  mmio_rd 0xfd7c0af0 2;  mmio_rd 0xfd7c0b20 2
-# 3. GRFs
-mmio_rd 0xfd58c308 1; mmio_rd 0xfd58c31c 1; mmio_rd 0xfd58c384 1        # sys_grf SOC_CON2, SOC_CON7, SOC_STATUS1
-mmio_rd 0xfd5a4008 1                                                    # vop_grf GRF_VOP_CON2
-mmio_rd 0xfd5a8000 16                                                   # vo1_grf CON0..CON15 (0x00-0x3c)
-mmio_rd 0xfd5e0000 1; mmio_rd 0xfd5e0080 1                              # hdptxphy0_grf CON0, STATUS
-# 4. VOP2 (only if vop2/regs above did not cover it): SYS 0x000-0x0ff, OVL 0x600-0x6ff,
-#    VP0 0xc00-0xcff, Esmart0 0x1800-0x18ff, Cluster0 0x1000-0x10ff and 0x1100 (CLUSTER_CTRL)
-mmio_rd 0xfdd90000 64; mmio_rd 0xfdd90600 64; mmio_rd 0xfdd90c00 64; mmio_rd 0xfdd91800 64; mmio_rd 0xfdd91000 65
-# 5. vop_mmu: DTE_ADDR, STATUS, COMMAND (do not read FAULT/INT beyond 0x24)
-mmio_rd 0xfdd97e00 3; mmio_rd 0xfdd97f00 3
-# 6. HDMI QP TX0: ids, global, CMU, video interface and monitor, link, HDCP2 bypass, packet scheduler, interrupt status
-#    (not the request/pulse words 0x40, 0x974, 0xab0)
-mmio_rd 0xfde80000 8;  mmio_rd 0xfde80044 5;  mmio_rd 0xfde80080 2;  mmio_rd 0xfde800a0 10
-mmio_rd 0xfde80180 1;  mmio_rd 0xfde80800 4;  mmio_rd 0xfde80814 1;  mmio_rd 0xfde8081c 1
-mmio_rd 0xfde80880 8;  mmio_rd 0xfde808e0 1;  mmio_rd 0xfde80960 1;  mmio_rd 0xfde80968 1
-mmio_rd 0xfde80970 1;  mmio_rd 0xfde80a80 11; mmio_rd 0xfde80ab4 2       # PKTSCHED config, PKT_EN, status
-mmio_rd 0xfde80be0 8                                                    # PKT_AVI_CONTENTS0-7
-mmio_rd 0xfde83010 2;  mmio_rd 0xfde83020 2
-# 7. last, optional, one line at a time: PMU1 CRU (HDPTX ref clock and resets)
-mmio_rd 0xfd7f0338 1; mmio_rd 0xfd7f0810 1; mmio_rd 0xfd7f0a0c 2
-```
+- PMU: idle request, acknowledge and state, the power gate, the status, the
+  memory power, chain and memory status, the repair status (offsets of
+  `pm-domains.c`'s RK3588 table).
+- CRU: the V0PLL, CPLL and GPLL words and the mode word, the selects, gates
+  and resets of the VOP, VO1, the HDMI controller and the PHY.
+- The GRFs (sys_grf, vop_grf, vo1_grf, hdptxphy0_grf), through their regmap
+  files in debugfs, not by address.
+- VOP2: the system block, the overlay, VP0 and the `DSP_CTRL` of VP1-VP3,
+  Cluster0, Cluster1 and the four Esmart windows.
+- vop_mmu: `DTE_ADDR`, `STATUS` and `COMMAND` of both sets.
+- HDMI QP TX0: the registers that answered on the board (see below).
+- HDPTX PHY0: the ranges `hdptx.c:776-790` allows.
+- PMU1 CRU, last: the PHY's reference clock select and gate, its resets.
 
-The controller offsets are `dw-hdmi-qp.h`'s (`:13-55`, `:97-103`,
-`:147-156`, `:175-214`, `:275-286`, `:759-784`). Words that request an action
-(`GLOBAL_SWRESET_REQUEST` 0x40, `TMDS_FIFO_CONTROL0` 0x974,
-`PKTSCHED_PKT_SEND` 0xab0) are left out: Linux only writes them, and what a
-read of them does is not documented.
+Only the first HDMI output is read. The QoS words are not read.
+
+The record directory of a run holds `dump.txt` (the registers), `files.txt`
+(the connector status, `dri/0/state`, `vop2/summary`, `vop2/regs`,
+`pm_genpd_summary`, the PHY's regmap file, the display clocks of
+`clk_summary`, the display lines of `dmesg`) and `record.txt`. Only
+`dump.txt` goes into the tree. The kernel command line and the EDID are not
+copied: the first carries the root partition's id, the second the display's
+serial number.
 
 Must NOT be read:
 
-- the controller's I2C master data and control (0xe0-0x118) and the whole
-  regmap file: a read may advance or disturb a transfer (not documented);
+- the controller's I2C master data and control (0xe0-0x118) and the
+  controller's whole regmap file (it has no readable list and would read
+  every word up to 0x482c): a read may advance or disturb a transfer (not
+  documented);
+- the controller's words that request an action (`GLOBAL_SWRESET_REQUEST`
+  0x40, `TMDS_FIFO_CONTROL0` 0x974, `PKTSCHED_PKT_SEND` 0xab0): Linux only
+  writes them, and what a read of them does is not documented;
+- **a controller register that has not been read alone on the board.** A
+  register this controller does not have answers with a bus error. Measured
+  on 2026-11-12 for 0x10 (not in `dw-hdmi-qp.h`) and for 0x804 and 0x80c
+  (both in the header): the header is not proof that a register exists. The
+  reading program dies; the board and the picture stay up. The same holds for
+  the Zephyr driver: it reads only registers of the tool's list;
 - the VOP's gamma LUT RAM 0xfdd95000 and the HDR LUT region (0x2000+): LUT RAM
   accessed while the VP uses it (Linux switches `DSP_LUT_EN` off and polls
   before writing, `rockchip_drm_vop2.c:886-915`);
-- anything of a block whose domain or bus clock is off (hang), so not VP1-3
-  windows or the second HDMI/PHY instance unless they are on;
+- anything of a block whose domain or bus clock is off (hang), so not the
+  second HDMI/PHY instance unless it is on;
 - the PHY register file outside the ranges of `hdptx.c:776-790`;
-- the PMU's power, idle request and memory power **writes** (none above;
-  reading is what Z1 already does for PD_GPU).
+- the PMU's power, idle request and memory power **writes** (the tool reads
+  with a program that opens the memory read only).
 
-Interrupt status registers (VOP 0x88/0x98/0xA8/0xAC, controller 0x3010,
-0x3020) are read-only status and not cleared by a read; they are sampled, so
-they go in the allow list. The dump file is
-`driver/docs/nanopc-t6-display-dump-linux.txt` (`ADDRESS WIDTH VALUE`, as the
-X2's), and its allow list `driver/docs/nanopc-t6-display-allow.txt`
-(`ADDRESS MASK REASON`, as `x2-hdmi-allow.txt`), seeded with:
+The dump file is `driver/docs/nanopc-t6-display-dump-linux.txt`
+(`ADDRESS WIDTH VALUE`, as the X2's). Its allow list is
+`driver/docs/nanopc-t6-display-allow.txt` (`ADDRESS MASK REASON`, as
+`x2-hdmi-allow.txt`): the bits that may differ between the Zephyr cold path
+and the dump, each with its reason. Interrupt status registers (VOP
+0x88/0x98/0xA8/0xAC, controller 0x3010, 0x3020) are read-only status and not
+cleared by a read; they are sampled, so they are in the allow list.
 
-```
-0xfdd900a8 0xffffffff VP0_INT_STATUS: event flags, sampled at an arbitrary time
-0xfdd900ac 0xffffffff VP0_INT_RAW_STATUS: likewise
-0xfdd90088 0xffffffff SYS0_INT_STATUS: likewise
-0xfdd90098 0xffffffff SYS1_INT_STATUS: likewise
-0xfdd91814 0xffffffff Esmart0 REGION0_YRGB_MST: Linux's buffer against ours
-0xfdd97e00 0xffffffff vop_mmu DTE_ADDR: Linux uses the IOMMU, Zephyr does not
-0xfdd97e04 0x00000001 vop_mmu STATUS paging enabled: likewise
-0xfdd97f00 0xffffffff vop_mmu (second set) DTE_ADDR: likewise
-0xfdd97f04 0x00000001 vop_mmu (second set) STATUS paging enabled: likewise
-0xfde800b8 0xffffffff CMU_VIDQPCLK_FREQ: a measurement, varies by a count
-0xfde800bc 0xffffffff CMU_LINKQPCLK_FREQ: likewise
-0xfde83010 0xffffffff MAINUNIT_0_INT_STATUS: event flags
-0xfde83020 0xffffffff MAINUNIT_1_INT_STATUS: event flags
-```
+What the dump of 2026-11-12 shows (Linux 6.18.55, an LCD on the first HDMI
+output; two runs nine minutes apart, 1120 words each):
+
+- The sink gives no EDID (0 bytes), so Linux runs its default mode:
+  1024x768 at 60 Hz, 65 MHz, h 1024 1048 1184 1344, v 768 771 777 806, both
+  syncs negative. `dclk_vop0` is 65 MHz. That is the fixed mode of section 3.
+- Linux shows its picture in **Cluster0** of VP0, not in an Esmart window:
+  linear XRGB8888, pitch 4096, buffer address 0 through the IOMMU
+  (`vop2/summary`). Cluster0 `WIN_CTRL0` and `CLUSTER_CTRL` read 1, Esmart0
+  `CTRL0` reads 0. The design keeps Esmart0, so the window registers and the
+  overlay's layer and port selects differ from the dump by design.
+- VP0 `DSP_CTRL` reads 0x0000000f; VP1, VP2 and VP3 read 0x8000000f
+  (bit 31, STANDBY, set).
+- The PHY's 436 words read by address equal Linux's regmap file word for
+  word.
+- `CMU_VIDQPCLK_FREQ` reads 16250 and `CMU_LINKQPCLK_FREQ` 16249: the unit is
+  4 kHz (16250 x 4 kHz = 65 MHz). The video monitor words 0x884-0x898 hold
+  the mode's timing (sync 136 and 6, front porch 24 and 3, total 1344 and
+  806, active 1024 and 768).
+- `TIMER_BASE_CONFIG0` reads 428571429, and `clk_hdmitx0_ref` is
+  428571429 Hz in `clk_summary`.
+- Four words differ between the two runs: the PMU's chain and memory status
+  (bits of the video codec domains; the VOP's and VO1's bits did not move),
+  the word after the repair status, and the VOP's `SYS_STATUS0`. They are in
+  the allow list.
+- The picture stayed on the LCD through every run, and the kernel log gained
+  no display line.
 
 ## 7. The step plan
 
@@ -571,14 +765,15 @@ answers polls, takes injected failures and records the order.
 
 | Step | What | Host test | Board proof | Size | Display plugged |
 |---|---|---|---|---|---|
-| D0 | The dump: section 6 as a script under `driver/tools/kexec-zephyr/` (read only, like `nanopc-t6.sh`'s dry run), its output committed as the dump file and the allow file seeded | the script's dry run on the host prints the read list; the dump parses | the lead runs it (section 6) | script 100 lines | yes |
+| D0 | The dump: `driver/tools/kexec-zephyr/t6-display-dump.sh` (read only), its output committed as the dump file and the allow file seeded. Done on 2026-11-12 (section 6) | `t6-display-dump-selftest.sh`: the list check, the refusals and a whole run against a fake board | the run of section 6: 1120 words, the picture stayed on | script 490 lines, self-test 390 | yes |
 | D1 | `ip::vop2`: register map, Esmart window (format, address, stride, size, enable, AXI ids), overlay select, VP timing and dividers, `REG_CFG_DONE`, internal PD (`SYS_PD_CTRL`), STANDBY with DSP_HOLD wait, status read-back; `ip::rk_iommu`: paging off and check | layout = section 1; timing words for the dump's mode; a window refused above 4 GiB, unaligned, or with a stride over 16 bits; CFG_DONE after the window writes; standby waits for DSP_HOLD | none alone | 700 lines + tests | no |
 | D2 | Adopt (route a): `nanopc-t6.sh --crash` and the T6 crash reservation; a `t6_display` probe that adopts VP0, turns the IOMMU off, shows a CPU pattern in Esmart0, prints the section 5 read-backs | the adopt policy over the model loaded with the dump (mode match, mode mismatch refused, AFBC cluster replaced by Esmart0) | read-backs as in section 5, then the person confirms the pattern | 250 lines + script change | yes |
-| D3 | `board_show()` / `board_display_busy()` for the T6 over `ip::vop2` (flip by address at `REG_CFG_DONE`, busy until the next frame start) | the flip and busy logic on the model | with the Mali Zephyr OSAL (Z4): `gl_triangle` on screen by crash kexec | 200 lines | yes |
+| D3a | The T6's show, flip and busy rules over `ip::vop2` (section 4, step D3): `board::nanopc_t6_display` `show` / `busy`, the carve-out's reserved end, the C entries. Done, host only | the first show is the adopt with the GL window; a flip writes the address then `REG_CFG_DONE` and never waits; busy until the frame start that takes the flip; a stopped adopt is final; the reserved end is mapped and never allocated | none alone | 330 lines + tests | no |
+| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row | the image builds with `-Werror` (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
 | D4 | `soc::rk3588` display power and clocks: PD_VOP, PD_VO1 on/off (the PD_GPU code with a domain table), the gates, muxes and resets of section 1, the PMU1 CRU | the domain table = `pm-domains.c` lines cited; order: clocks, power, repair poll, idle release; reset assert/release words; off-then-on loses block state in the model | none alone | 400 lines + tests | no |
 | D5 | `ip::hdptx`: the TMDS bring-up order of section 1, the ROPLL plan (integer and SDM) and the register values from the dump, lock and ready polls, power-off | the plan for 25.2, 27, 74.25, 148.5 MHz; the write order inside the reset window; no lock = timeout; the dump's register file equals the model's image | none alone | 600 lines + tests | no |
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |
-| D7 | `soc::rk3588::display_chain`: the staged cold bring-up (power, clocks and resets, GRF, PHY, DCLK_VOP0 to the PHY clock, controller, VOP2, video check) with `stop-after`, `power-cycle`, `force-cold`, and the golden test against the dump | a cold bring-up in block order over the combined model; every `stop-after`; each injected failure names its stage; golden: every dumped register equals the model's image outside the allow list | none alone | 500 lines + tests | no |
+| D7 | `soc::rk3588_display_chain`: the staged cold bring-up (power, clocks and resets, GRF, PHY, DCLK_VOP0 to the PHY clock, controller, VOP2, video check) with `stop-after`, `power-cycle`, `force-cold`, and the golden test against the dump | a cold bring-up in block order over the combined model; every `stop-after`; each injected failure names its stage; golden: every dumped register equals the model's image outside the allow list | none alone | 500 lines + tests | no |
 | D8 | Cold run by normal kexec: the probe with `power-cycle`, bisected with `stop-after`, then the CPU pattern, then `gl_triangle` through D3 | as D7 | stage lines on the UART, the section 5 read-backs, the person confirms | runs | yes |
 | D9 | Sign-off: the same image started by U-Boot from the eMMC (`t6-zephyr.cmd`), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
 | D10 | EDID over the controller's I2C master; the preferred mode within the PHY plans; HDMI mode with an AVI InfoFrame for HDMI sinks | I2C transfers on the model (done, NACK, segment) | the EDID equals Linux's copy from D0 | 300 lines | yes |
@@ -589,8 +784,8 @@ new file (`ip/vop2.rs` with `ip/rk_iommu.rs`, `soc/rk3588/display_power.rs`
 or an extension of `soc/rk3588.rs`, `ip/hdptx.rs`, `ip/dw_hdmi_qp.rs`), each
 with its own register model in its tests; only the `mod.rs` lines and
 `Cargo.toml` features touch shared files, one line each. D5's values wait for
-the D0 dump; its structure does not. D2 needs D1; D3 needs D1 and the Mali
-Zephyr OSAL (Z4); D7 needs D1, D4, D5, D6 and owns the combined model
+the D0 dump; its structure does not. D2 needs D1; D3a needs D2; D3b needs
+D3a and the Mali Zephyr OSAL (Z4); D7 needs D1, D4, D5, D6 and owns the combined model
 (`model_rk3588_display.rs`, as `model_hdmi.rs` is for the X2); D8 needs D7;
 D9 needs D8 and the U-Boot boot of the image (the sign-off form of Z1-Z4);
 D10 needs D6 and D8.
@@ -604,19 +799,19 @@ variant of it.
 | # | Question | What answers it |
 |---|---|---|
 | U1 | May the PHY's 212 analog init values be taken from the board dump (measurement) rather than from Linux's tables, as the design proposes? | owner decision (source form) |
-| U2 | Which window and format does Linux use for VP0's primary plane: Esmart or Cluster, AFBC or linear? | D0: `vop2/summary`, `state` |
+| U2 | Which window and format does Linux use for VP0's primary plane: Esmart or Cluster, AFBC or linear? | answered by D0: Cluster0, linear XRGB8888 (section 6) |
 | U3 | Does Linux run the PHY at the mode's rate with exactly the table values (`hdptx.c:427` for 148.5 MHz), or with its calculator (`:900-970`)? | D0: PHY register file CMN 0x51-0x86 |
 | U4 | After a normal kexec, is the PHY PLL still locked (a power-domain clock reference may hold it), and is PD_VOP on? | a GRF STATUS and PMU 0x290 read in the first D8 run before any write |
 | U5 | Does a read of a block whose domain is off hang the bus or return zeros? | not to be tested by reading; the code reads status only after power-on and repair status, so the answer is not needed |
 | U6 | Are `SYS_PD_CTRL`'s internal domains on as soon as the bit is cleared, or is there a settle time (Linux polls nothing)? | D8: read `SYS_PD_CTRL` back, then a window read-back |
-| U7 | `CMU_*_FREQ` units and `VIDEO_MONITOR_STATUS` fields | D0 values against the known mode |
-| U8 | Is `REG_CFG_DONE`'s VP bit self-clearing at the frame boundary (usable as "update taken")? | D2: read it right after the write and after one frame |
+| U7 | `CMU_*_FREQ` units and `VIDEO_MONITOR_STATUS` fields | answered by D0: 4 kHz per count; the monitor words hold sync, porch, total and active (section 6) |
+| U8 | Is `REG_CFG_DONE`'s VP bit self-clearing at the frame boundary (usable as "update taken")? | D2: read it right after the write and after one frame. D3's busy rule is safe with either answer (section 4, step D3) |
 | U9 | Does the crash reservation fit the image window (0x10000000-0x1fffffff) on Armbian without moving anything else, and does the crash route leave panthor's GPU in a state Z1's power-on handles? | D2: `/proc/iomem` after reboot with `crashkernel=`; the probe draws with the CPU, the Mali case is D3 |
-| U10 | Which physical connector is HDMI0 on the T6? | D0: the `readlink` check in section 6 |
+| U10 | Which physical connector is HDMI0 on the T6? | answered by D0: the one the LCD is on is `card0-HDMI-A-1`, `fde80000.hdmi` |
 | U11 | The 1920x720 panel's pixel clock and whether it accepts DVI | D0 with that panel: `modes`, the EDID, the PHY registers |
 | U12 | A sink that is slow to answer DDC after power saving (seen with a 1920x720 panel on this board) | D10 retries; the fixed mode stays the fallback |
 | U13 | Are the TX resets SRST_HDMITX0_REF and SRST_HDMIHDP0 needed for a cold start (no Linux driver pulses them)? | D8: the cold run first without, then with a pulse if the controller does not respond |
-| U14 | `TIMER_BASE_CONFIG0` = 428571429: is it the reference clock rate on this board (CLK_HDMITX0_REF from aclk_hdcp1_root)? | D0: `clk_summary` |
+| U14 | `TIMER_BASE_CONFIG0` = 428571429: is it the reference clock rate on this board (CLK_HDMITX0_REF from aclk_hdcp1_root)? | answered by D0: yes, `clk_hdmitx0_ref` is 428571429 Hz |
 
 Risks: the PHY's fractional mode may need SDM values the dump gives but no
 formula checks (the integer fallback modes of section 3 remove that risk for a

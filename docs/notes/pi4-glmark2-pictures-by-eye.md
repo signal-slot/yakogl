@@ -57,11 +57,32 @@ issue #1196.
 | [terrain] <default> | right | The height-mapped landscape: grass and soil textures on the hills through their mipmap chain, no seams, holes, black or garbage tiles; the far hills blurred and the near ones sharp, so the render-to-texture passes (depth of field) are there; the cream sky. Animated, another pose than llvmpipe, so compared by content (its picture value is off the pi4 column by up to 23 levels for the same reason). | 7fa0abf8 | records/pi4/20261109-0237-gm23-terrain-53ad9f83 |
 | [shadow] <default> | right | The horse on the grey floor with its cast shadow under and behind it, in the same place and shape as llvmpipe's; no acne on the floor or the horse, neither all-shadow nor no-shadow (0.1% of pixels more than 24 levels off). Decoded from the console before the board layer's "board: record" replay, which reprints the dump's last rows cut short. | 7fa0abf8 | records/pi4/20261109-0225-gm24-shadow-99f45384 |
 | [refract] <default> | right | The glass bunny shows the lit environment refracted through its body, as on llvmpipe: not black, not a copy of the frame, the background black as in the reference. Animated by a step, compared by content (5.0% of pixels off, all inside the bunny). | 7fa0abf8 | records/pi4/20261109-0242-gm25-refract-d5d024b0 |
-| [conditionals] fragment-steps=0:vertex-steps=0 | pending | | | |
-| [conditionals] fragment-steps=5:vertex-steps=0 | pending | | | |
-| [conditionals] fragment-steps=0:vertex-steps=5 | pending | | | |
-| [function] fragment-complexity=low:fragment-steps=5 | pending | | | |
-| [function] fragment-complexity=medium:fragment-steps=5 | pending | | | |
-| [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | pending | | | |
-| [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | pending | | | |
-| [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | pending | | | |
+| [conditionals] fragment-steps=0:vertex-steps=0 | right | The waving grey grid with its black cell borders and the light-to-dark shading in concentric arcs from the lower left, as on llvmpipe; no missing cell, no black or NaN patch, no wrong band. Same pose as llvmpipe's, the difference only single pixels on the cell edges (0.5% of pixels more than 24 levels off, mean difference 0.7 level, every probe equal). Its probes are the AM62P's (checked by eye) exactly. | 7e6f0766 | records/pi4/20261114-1040-gm26-conditionals-fd591195 |
+| [conditionals] fragment-steps=5:vertex-steps=0 | right | The grid with the five fragment conditionals: each cell filled with the same fine noisy grey pattern and the same darker diagonal patches as llvmpipe; no flat or black cell (a branch not taken), no NaN patch, no colour. The difference is scattered pixels of the high-frequency pattern and the cell edges (2.2% of pixels more than 24 levels off, mean 4.3 levels, the probes within one level). Its probes are the AM62P's (checked by eye) exactly. | 7e6f0766 | records/pi4/20261114-1045-gm27-conditionals-525429ce |
+| [conditionals] fragment-steps=0:vertex-steps=5 | right | The grid with the five vertex conditionals: the same shaded arcs and cell borders as the steps=0 picture and as llvmpipe, the vertices where they belong; no torn or collapsed cells, no missing band. The difference is at the cell edges (1.5% of pixels more than 24 levels off, mean 2.1 levels); llvmpipe's top-right probe falls on a cell border one animation step away, the others are equal. Its probes are the AM62P's (checked by eye) exactly. | 7e6f0766 | records/pi4/20261114-1050-gm28-conditionals-171e9879 |
+| [function] fragment-complexity=low:fragment-steps=5 | right | The grid with each cell filled by the function's concentric grey rings and the moire they make, the same ring pattern per cell as llvmpipe; no black, flat or NaN cell, no missing step. Same pose; the difference is the aliasing of the fine rings (4.9% of pixels more than 24 levels off, mean 9.4 levels): the Pi 4's probes (tr 2c, bl 63, br 86) are the AM62P's and, at its colour depth, the i.MX8MP's; llvmpipe's (42, 5e, 9e) are the ones apart, on the near-Nyquist rings. | 7e6f0766 | records/pi4/20261114-1055-gm29-function-a204c955 |
+| [function] fragment-complexity=medium:fragment-steps=5 | right | The same ring-and-moire cells as the low-complexity picture; no black, flat or NaN cell, no wrong band. Animated: the mesh's wave stands in another pose than llvmpipe's, so compared by content (12.3% of pixels more than 24 levels off, all on the mesh). Its probes are the AM62P's (checked by eye) exactly. | 7e6f0766 | records/pi4/20261114-1059-gm30-function-22ff2c74 |
+| [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | right | The grid of ring-and-moire cells, the vertices displaced by the vertex loop into the same wave as llvmpipe's; no black, flat or NaN cell, no torn cell from a wrong loop count. Same pose this run; the difference is the aliasing of the fine rings (3.1% of pixels more than 24 levels off): the Pi 4's probes (tr 2c, bl 63, br 86) are the AM62P's and, at its colour depth, the i.MX8MP's; llvmpipe's (42, 5e, 9e) are the ones apart, on the near-Nyquist rings. | 7e6f0766 | records/pi4/20261114-1104-gm31-loop-2234b109 |
+| [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | right | The same ring-and-moire cells and waved grid with the loop bound a constant; no black, flat or NaN cell, no missing step. Animated: the mesh's wave stands in another pose than llvmpipe's, so compared by content (15.3% of pixels more than 24 levels off, all on the mesh). Its probes are the AM62P's (checked by eye) exactly. | 7e6f0766 | records/pi4/20261114-1108-gm32-loop-94835b9e |
+| [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | right | The same cells and waved grid with the loop bound a uniform: its picture value (crc16 7fb7, crc16q 7143) is that of the constant-bound picture, so the uniform bound is read; no black, flat or NaN cell. Close to llvmpipe's pose (4.3% of pixels more than 24 levels off, the ring aliasing): the Pi 4's probes (tr 2c, bl 63, br 86) are the AM62P's and, at its colour depth, the i.MX8MP's; llvmpipe's (42, 5e, 9e) are the ones apart, on the near-Nyquist rings. | 7e6f0766 | records/pi4/20261114-1113-gm33-loop-3adb075d |
+
+## Summary
+
+- 33 of 33 pictures judged: 33 right, 0 wrong. Terrain, refract, shadow and
+  texture-filter=mipmap, the four the check paid closest attention to, are right
+  (rows above say what was looked at).
+- Images were built from four origin/main commits: 86b4af69 (build, texture,
+  shading: 9 scenes), be13a5b9 (bump, effect2d, pulsar, desktop: 8), 7fa0abf8
+  (buffer, ideas, jellyfish, terrain, shadow, refract: 8) and 7e6f0766
+  (conditionals, function, loop: 8).
+- Method: each dump decoded with `tools/cts/glmark2-fb.py` (row crc16s, frame
+  crc32 and the scene's `glmark2-picture` line checked; a damaged dump was
+  rerun, pixels never patched); compared with `tools/cts/glmark2-picdiff.py`
+  against the Mesa llvmpipe references of `tools/cts/glmark2-host-ref.sh`;
+  animated scenes (buffer, jellyfish, terrain, refract, pulsar, desktop and
+  the mesh scenes of function and loop) by content only.
+- The records are on the session machines and gitignored; later sessions
+  reported that no record survived their task's end, so the record paths name
+  where each dump was kept, not files in the tree. One rerun of the 33 dumps
+  at one origin/main commit, copied somewhere that lasts, would give lasting
+  records.

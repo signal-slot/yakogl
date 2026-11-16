@@ -14,7 +14,7 @@ Status 2026-09-24, as written then: 43 corpus pairs compile (40 in a
 the `v3d_triangle` sample three ways: plain, with uniforms, and with an `if`
 (`docs/notes/pi4-v3d-bringup.md` has the result rows). The
 product path for this GPU is this compiler only (`driver/docs/rpi4-v3d.md`,
-"Shader compiler"); Mesa's compiler, built as `tools/v3d/v3d_shc`, is the
+"Shader compiler"); Mesa's compiler, built from `tools/v3d/v3d_shc.c` as `v3d_shc`, is the
 reference we are compared with, never a path into the product. Two dated
 sections, the M9 Bevy survey and the slow-job readings of the E runs, are the
 record `ab43a20c5:tools/cts/log/v3d-backend-diary-2026-09.md`.
@@ -1369,7 +1369,7 @@ the `gpu-v3d` feature and its gate rows, the V3D shader ABI (`ShcV3d`, compile p
 stage, the program at link), the job builder (`driver/src/v3d/v3d_job.c`, held to
 Mesa by `tools/v3d/cl_golden.c` and `job_check.c`), the backend (`src/v3d/`), the
 Zephyr OSAL (`src/osal/zephyr_v3d.c`) and the sample
-`driver/samples/zephyr/v3d_gl_triangle`. The aim: the GL core draws
+`v3d_gl_triangle` (removed from the tree). The aim: the GL core draws
 through the V3D, so that gl_test and later dEQP-GLES2 run on the Pi 4 as on the other
 two GPUs. Nothing in the GL core's structure changes; the V3D fits the seams the GC7000
 already uses (a `gpu-*` feature, a `ShcShader` extension, a backend table, an OSAL).
@@ -1763,7 +1763,7 @@ is drawn):
 
 ### gl_test for `rpi_4b`
 
-`driver/samples/zephyr/v3d_gl_test` compiles the same `driver/tools/pvrlab/gl_test.c`
+`v3d_gl_test` (now `driver/samples/zephyr/gl_test`) compiles the same `driver/tools/pvrlab/gl_test.c`
 that the AM62P and the i.MX8MP run. Built for `rpi_4b` with 0 warnings; the QEMU smoke
 run (`V3D_RPI_WDOG=OFF`) reaches the expected stop: the list is parsed ("5,58,59,66,67,102
 (6 cases)"), the OSAL's power-on fails with -19 (QEMU has no V3D), and the sample prints
@@ -2963,7 +2963,7 @@ boards: its check is this sample's classification, ported to Rust
 `examples/femtovg/src/programs.c`. The text
 below is the record of the V3D sample.
 
-`driver/samples/zephyr/v3d_gl_femtovg`: the board support of `v3d_gl_triangle`
+`v3d_gl_femtovg` (removed from the tree): the board support of `v3d_gl_triangle`
 (the mailbox framebuffer, the HDMI console in the top half, the watchdog), the EGL
 window in the bottom half (1280x360, RGBA8888, stencil 8), `gl_femtovg/rust` built
 here by path, and femtovg's own shader text embedded from `FVG_NOSTD_DIR` by CMake.
@@ -3008,7 +3008,7 @@ until all 30 programs link.
 
 ### The sample `v3d_gl_slint`
 
-`driver/samples/zephyr/v3d_gl_slint`: `gl_slint`'s Rust crate and UI by path, the
+`v3d_gl_slint` (removed from the tree): `gl_slint`'s Rust crate and UI by path, the
 no_std Slint workspace (`SLINT_NOSTD_DIR`) and the femtovg/glow forks
 (`NOSTD_PATCH_DIR`) recreated from `examples/nostd/README.md`, and the board support
 of `v3d_gl_triangle`. **Layout** (the lead, 2026-09-24): the platform repository has
@@ -3208,7 +3208,7 @@ reading their note):
 
 1. **The programs**: the same 30 as `v3d_gl_femtovg`, built from the femtovg tree
    the archive builds (`v3d_gl_femtovg/fvg_programs.cmake` and
-   `src/fvg_programs.c`, shared by both samples). Slint's renderer creates a
+   `fvg_programs.c` (now `examples/femtovg/src/programs.c`), shared by both samples). Slint's renderer creates a
    femtovg canvas and **unwraps** the result
    (`internal/renderers/femtovg/opengl.rs:118` of the no_std Slint tree), so on the
    V3D a program our compiler refuses is a Rust panic inside `slint_draw_frame`,
@@ -3354,7 +3354,7 @@ compiler in the image. Status 2026-09-24: on the board (images built at eddf6ab7
 `info` 6/6, `functional.prerequisite` 3/3 and `functional.color_clear` 19/19, with no
 refusal; each record was read from one photo (tools/cts/RESULTS.md).
 
-### The sample: `driver/samples/zephyr/v3d_deqp`
+### The sample: `v3d_deqp` (now `driver/samples/zephyr/deqp`)
 
 - **dEQP itself is the deqp sample's**, compiled from its directory by path and
   never edited: `main.cpp` (the `tcu::App` loop, `CONFIG_DEQP_CASE`, a

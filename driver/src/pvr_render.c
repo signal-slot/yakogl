@@ -94,6 +94,9 @@ static struct {
 	struct pvr_gpu_bo eot_tb4_k[PVR_RENDER_TILE_BUFFERS + 1];
 	uint64_t eot_doutu_tb4_k[PVR_RENDER_TILE_BUFFERS + 1];
 	struct pvr_gpu_bo tile_buf[PVR_RENDER_TILE_BUFFERS];
+	/* the PBE states the static end-of-tile PDS program moves
+	 * (pvr_render_eot_pds_pairs) and the info word that program runs with */
+	uint32_t eot_pds_pairs, eot_pds_info;
 } R;
 
 /* The firmware side's state (gpu::pvr::render). */
@@ -454,6 +457,16 @@ bool pvr_render_fl_ready_pages = PVR_FL_READY_PAGES_DEFAULT;
 #endif
 bool pvr_render_partial_render = PVR_PARTIAL_RENDER_DEFAULT;
 
+/* Four PBE states in the static end-of-tile PDS program (pvr_render.h).
+ * Off: the three-pair program and info word every render ran before, byte
+ * for byte (tests/pvr_render_rt4.rs). On: the four-pair ones, for every
+ * render, since the firmware runs one program at one offset. Read once, by
+ * pvr_render_init. Off until the four-target board run. */
+#ifndef PVR_RENDER_EOT_FOUR_RT_DEFAULT
+#define PVR_RENDER_EOT_FOUR_RT_DEFAULT 0
+#endif
+bool pvr_render_eot_four_rt = PVR_RENDER_EOT_FOUR_RT_DEFAULT;
+
 /* Ask the firmware to release the pair's two HWRTDatas before recycling the
  * pair, the DDK's sequence rather than an approximation of it. The freelists
  * are NOT part of it -- see the comment at the call site for why.
@@ -500,12 +513,13 @@ int pvr_render_static_get(struct pvr_render_static *out)
 	out->event_pixel_pds_info = pvr_cr_event_pixel_pds_info(1);
 	for (unsigned n = 1; n <= PVR_RENDER_EOT_MAX_RT; n++) {
 		out->eot_doutu_src0_n[n] = R.eot_doutu_n[n];
-		/* The PDS DATA is always the largest count's (the program at
-		 * the fixed offset moves all PVR_RENDER_MAX_RT pairs), and so
-		 * are the shared registers it fills. A four-target program
-		 * reads a fourth pair that program does not move yet: no draw
-		 * asks for one (PVR_RENDER_MAX_RT). */
-		out->event_pixel_pds_info_n[n] = pvr_cr_event_pixel_pds_info(PVR_RENDER_MAX_RT);
+		/* The PDS DATA is always the static program's shape (the
+		 * program at the fixed offset moves R.eot_pds_pairs pairs),
+		 * and so are the shared registers it fills. The four-target
+		 * program reads a fourth pair, which the program moves only
+		 * when the service was brought up with
+		 * pvr_render_eot_four_rt. */
+		out->event_pixel_pds_info_n[n] = R.eot_pds_info;
 		out->eot_doutu_src0_tb_n[n] = R.eot_doutu_tb_n[n];
 		out->event_pixel_pds_info_tb_n[n] = out->event_pixel_pds_info_n[n];
 	}
@@ -584,7 +598,10 @@ static void static_areas_init(void)
 	 * firmware runs for every render, so it is generated once for the largest
 	 * count -- it then moves all six words, and a program that emits fewer
 	 * simply does not read the rest. Which program runs is chosen per render
-	 * through the DOUTU in the PDS DATA segment. */
+	 * through the DOUTU in the PDS DATA segment. The largest count is
+	 * three pairs, six words, unless pvr_render_eot_four_rt asks for four
+	 * (pvr_render_eot_pds_pairs): the program then moves eight, and the
+	 * four-target program's fourth state reaches shared registers 6, 7. */
 	for (unsigned n = 1; n <= PVR_RENDER_EOT_MAX_RT; n++) {
 		uint32_t bytes = pvr_usc_eot_n_dwords[n] * 4;
 
@@ -621,7 +638,9 @@ static void static_areas_init(void)
 
 		memset(d, 0, sizeof(d));
 		memset(c, 0, sizeof(c));
-		pvr_pds_generate_pixel_event_tq(R.eot_doutu, emit, PVR_RENDER_MAX_RT, 0,
+		R.eot_pds_pairs = pvr_render_eot_pds_pairs(pvr_render_eot_four_rt);
+		R.eot_pds_info = pvr_cr_event_pixel_pds_info(R.eot_pds_pairs);
+		pvr_pds_generate_pixel_event_tq(R.eot_doutu, emit, R.eot_pds_pairs, 0,
 						d, c, &dsz, &csz);
 		memcpy(R.pds0.cpu + PVR_RENDER_EOT_PDS_CODE_OFF, c, csz * 4);
 	}
@@ -759,6 +778,9 @@ int pvr_render_init(void)
 	LOG_INF("render: init ok (PB@0x%llx border@0x%llx eot_usc_off=0x%x gen_b=0x%x pds_b=0x%x usc_b=0x%x)",
 		(unsigned long long)R.pbuf.gpu, (unsigned long long)R.border.gpu,
 		R.eot.heap_off, RR.gen_b, R.pds_b, R.usc_b);
+	if (R.eot_pds_pairs != PVR_RENDER_EOT_PDS_PAIRS)
+		LOG_INF("render: end-of-tile PDS program moves %u PBE states (pvr_render_eot_four_rt), info 0x%08x",
+			R.eot_pds_pairs, R.eot_pds_info);
 	return 0;
 }
 

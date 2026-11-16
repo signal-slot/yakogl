@@ -217,13 +217,13 @@ other one B.
 ### 2. Back up, write the inactive copy, flip
 
 ```sh
-# laptop (BOARD = how ssh reaches it: armadillo.local, or -P 2222 root@localhost via the tunnel)
-scp build/x2/flash-zephyr.bin root@BOARD:/tmp/
+# laptop (BOARD_HOST = the ssh destination of the board's root shell, user@host)
+scp build/x2/flash-zephyr.bin "$BOARD_HOST:/tmp/"
 # board
 dd if=/dev/mmcblk2boot0 of=/tmp/mmcblk2boot0.bak bs=1M
 dd if=/dev/mmcblk2boot1 of=/tmp/mmcblk2boot1.bak bs=1M
 # laptop: keep the backups (/tmp on the board is lost at power-off)
-scp 'root@BOARD:/tmp/mmcblk2boot*.bak' build/x2/
+scp "$BOARD_HOST:/tmp/mmcblk2boot*.bak" build/x2/
 # board, B = the inactive partition, e.g. boot1 when boot0 is active
 echo 0 > /sys/block/mmcblk2boot1/force_ro
 dd if=/tmp/flash-zephyr.bin of=/dev/mmcblk2boot1 bs=1M conv=fsync
@@ -236,16 +236,16 @@ poweroff                                     # then remove and restore power
 The write ends at 3.4 MB, so U-Boot's environment at 0x3FA000 and 0x3FE000 is
 untouched, and partition A still holds the untouched at30 image.
 
-### 3. What to look for on `/dev/ttyUSB0` (UART2, 115200 8N1)
+### 3. What to look for on the console (UART2, 115200 8N1, device in $BOARD_UART)
 
-The following prints each line with the seconds since the first byte, which is
+`BOARD_UART` holds the local character device of the USB serial adapter. The following prints each line with the seconds since the first byte, which is
 SPL's banner, so it does not include the Boot ROM's time:
 
 ```sh
-stty -F /dev/ttyUSB0 115200 raw -echo
+stty -F "$BOARD_UART" 115200 raw -echo
 python3 -u -c '
 import os, time
-fd = os.open("/dev/ttyUSB0", os.O_RDONLY); t0 = None; buf = b""
+fd = os.open(os.environ["BOARD_UART"], os.O_RDONLY); t0 = None; buf = b""
 while True:
     b = os.read(fd, 4096); now = time.monotonic(); t0 = t0 or now; buf += b
     *lines, buf = buf.split(b"\n")

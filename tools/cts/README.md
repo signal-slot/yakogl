@@ -37,7 +37,9 @@ tools/cts/
   imx8mp-full-tree.txt         the whole GLES2 tree for the i.MX8MP, 29 entries
   imx8mp-full-tree-29460f96.results.tsv  the committed reference tally of that tree (2026-10-03)
   imx8mp-gltest-build.sh       one gl_test image in the sweep configuration
-  pi4-deqp-images.sh           stage 2, Pi 4
+  deqp-tree-images.sh          stage 2 for a labelled tree table, one image per row (Pi 4, NanoPC-T6)
+  pi4-deqp-images.sh           stage 2, Pi 4 (deqp-tree-images.sh rpi_4b)
+  t6-deqp-images.sh            stage 2, NanoPC-T6 Zephyr (deqp-tree-images.sh nanopc_t6, mali-gles2-tree.txt)
   pi4-full-tree.txt            the whole GLES2 tree for the Pi 4, 29 images
   pi4-gles3-tree.txt           the whole GLES3 tree for the Pi 4, 91 images
   check-deqp-images.py         do the image recipes still build what conformance needs (2d)
@@ -598,6 +600,33 @@ directory, and `lib-cmake-args=` in `$OUT/commit`). Unset, the run is unchanged.
 Check the feature on cargo's line in `build/host-deqp/lib-*-build.log`. For
 example `GPU=powervr EXTRA_FEATURES=pvr-instance-divisor`.
 
+### The HOST-ONLY tip table and not-pass list: `host-gles3-tally.py`
+
+```sh
+python3 -I tools/cts/host-gles3-tally.py --part docs/es3/host-gles3-part-v3d.tsv <run dir>   # one GPU's run, as a text file
+python3 -I tools/cts/host-gles3-tally.py --merge <part> <part> <part> \
+    --owners docs/es3/host-gles3-owners.tsv \
+    --tip docs/es3/host-gles3-tip.tsv --notpass docs/es3/host-gles3-notpass.tsv
+python3 -I tools/cts/host-gles3-tally.py --apply-owners <not-pass list or part> docs/es3/host-gles3-owners.tsv --out <file>
+python3 -I tools/cts/host-gles3-tally.py --selftest
+```
+
+The script's docstring has the formats. The not-pass list holds the counting
+verdicts only (refusals, wrong GL errors, crashes, compile failures), and its
+last two columns, `rc` and `owner`, come from owner rules: `--owners RULES`
+(repeatable) fills them while merging, and `--apply-owners NOTPASS RULES...
+--out FILE` fills them in a list or part file already written (rc and owner
+are replaced, so a second triage needs no clean copy). The rules file
+`docs/es3/host-gles3-owners.tsv` begins with the header
+`# host-gles3-owners: gpu<TAB>case_re<TAB>message_re<TAB>rc<TAB>owner<TAB>note`;
+each rule is a gpu (`powervr`, `v3d`, `vivante` or `*`), two Python
+`re.search` patterns over the case and the message (empty: anything), the rc
+(`RC1`..`RC18` of `docs/es3-cts-failures.md`, `G7`, `new`, or `allowed` for a
+NotSupported row the ES 3.0 mustpass permits), the owning plan (`unowned`, or
+`none` with `allowed`) and a note. Lines starting with `#` are comments. The
+first matching rule wins, so the specific ones go first. A row that no rule
+matches is printed on stderr, and the run exits 1 without writing anything.
+
 ### The multisample groups, per `GPU=`, without and with `msaa-fbo`
 
 The three groups the multisample renderbuffer work moves
@@ -771,6 +800,14 @@ For all three, an image with no `deqp: summary` line, or fewer case lines than
 its summary counts, is a missing result, never a pass
 (`deqp-uart-tally.py`'s MISSING, INCOMPLETE and FATAL); rerun that image
 (`TREE_ROWS=<n>`; a finished run of the same image is skipped).
+
+So is an image dEQP ended early. dEQP stops a session itself after a case
+that ends in ResourceError, in a fatal error or with an error in its deinit
+(`tcuTestSessionExecutor.cpp`): the image then prints `deqp: done: ...,
+complete=0`, and the cases after that one never began. The tally names it
+`STOPPED` (exit 1) and `board.sh` gives the verdict `done_stopped` (rc 4).
+A rerun of the same image stops at the same case: fix what the case ran
+into, or split the image at that case, and run the new image.
 
 The tally tells a case the capture lost from a case that never ran. NoResult
 is a mustpass case in the records' case filters with no line, which the image
@@ -1001,10 +1038,10 @@ layout):
 
 ```sh
 export BOARD_HOST=<user>@<pi4>                 # key login, passwordless sudo (PI4_HOST is read too)
-# the Raspberry Pi Debug Probe; its ttyACM number changes when USB re-enumerates
-# (ttyACM0 on 2026-09-25, ttyACM2 on 2026-10-03), the by-id name does not
+# the Raspberry Pi Debug Probe; its tty number changes when USB re-enumerates,
+# the by-id name does not
 export BOARD_UART=/dev/serial/by-id/usb-Raspberry_Pi_Debug_Probe__CMSIS-DAP__<serial>-if01
-# or the probe behind a serial bridge (usb-serial-over-tailscale): its host:port
+# or the probe behind a serial bridge: its host:port
 # export BOARD_UART=<bridge>:<port>
 # the 1920x720 bar panel (17 fields, as the board's own tryboot.txt had them)
 export BOARD_HDMI_TIMINGS='1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1'
@@ -1016,6 +1053,17 @@ export DEQP_WORK=<stage 1: cts-build-zephyr.sh with BOARD=rpi_4b>
 tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/img
 TREE_IMAGE_DIR=build/img tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt records/pi4/<tree>
 tools/board.sh pi4 diff records/pi4/<earlier tree> records/pi4/<tree>
+```
+
+The NanoPC-T6's Zephyr tree is built the same way, by the same builder
+(`t6-deqp-images.sh` is `deqp-tree-images.sh nanopc_t6`: `-DYAKOGL_WERROR=ON`,
+and it refuses to start without `driver/src/fw/mali_csffw_blob.h`):
+
+```sh
+driver/tools/mkmalifw.sh <mali_csffw.bin>      # the header, never committed
+export DEQP_WORK=<stage 1: cts-build-zephyr.sh with BOARD=nanopc_t6>
+tools/cts/t6-deqp-images.sh tools/cts/mali-gles2-tree.txt build/t6-img
+TREE_IMAGE_DIR=build/t6-img tools/board.sh nanopc-t6 tree tools/cts/mali-gles2-tree.txt records/nanopc-t6/<tree>
 ```
 
 A dEQP image costs its lifetime (`CONFIG_V3D_DEQP_LIFETIME_S`, 240 s) plus
@@ -1093,7 +1141,8 @@ work; `driver/docs/nanopc-t6-mali.md` is the board note. The scripts:
 - `mali-deqp-tally.py --check-cover|--tally [--markdown]|--check-doc`: the
   slices -> the cover check, the tally by status and cause, and the
   `docs/es2-cts-failures.md` block (`docs/es2/board-recipe-mali.md` section
-  7). `mali-deqp-tally-selftest.sh` runs its `--self-test` on
+  7; `--check-doc DOC --log LOGDIR` reads the slices from the block's own
+  `Slices:` line). `mali-deqp-tally-selftest.sh` runs its `--self-test` on
   `testdata/mali-deqp/` (`cts-selftest.sh` check 40).
 - `mali-slice-readme.py [--write|--check] SLICEDIR`: the `README.md` of a
   committed `t6-gles2` slice, from its `meta.txt`, `chunks.tsv`, `results.tsv`
@@ -1137,9 +1186,12 @@ tools/cts/mali-rerun-tree-selftest.sh
 tools/cts/mali-deqp-e2e-selftest.sh
 ```
 
-Of these self-tests the gate runs one: `cts-selftest.sh` check 40
-(`mali-deqp-tally-selftest.sh`). `tools/check.sh` has no row for the others;
-run them by hand.
+The gate runs all of them: `tools/check.sh` has its own row for
+`mali-deqp-selftest.sh` and for `mali-kmsg-selftest.sh`, and
+`cts-selftest.sh` runs the others. One more `tools/check.sh` row checks the
+real document: `mali-deqp-tally.py --check-doc docs/es2-cts-failures.md
+--log tools/cts/log` (the block of section M equals the tally of the slices
+its `Slices:` line names).
 
 `--dry-run` makes no ssh call and writes nothing: it lists the rows and cases it
 would run, says whether the build's commit is on `origin/main`, and goes on

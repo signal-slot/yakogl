@@ -401,11 +401,13 @@ pub struct PvrPdsVertexStream {
     /// 1: one element per instance (GL divisor 1), indexed by the instance
     /// number (IR1) instead of the vertex index (IR0).
     pub per_instance: u32,
+    /// GL divisor of a per-instance stream (0 or 1: none).
+    pub divisor: u32,
 }
 
 impl PvrPdsVertexStream {
     pub const ZERO: PvrPdsVertexStream =
-        PvrPdsVertexStream { address: 0, stride: 0, dma_size: 0, dst_reg: 0, per_instance: 0 };
+        PvrPdsVertexStream { address: 0, stride: 0, dma_size: 0, dst_reg: 0, per_instance: 0, divisor: 0 };
 }
 
 /// `struct pvr_pds_coeff_varying`.
@@ -701,12 +703,13 @@ const _: () = assert!(offset_of!(PvrPdsRenderColorUploadInfo, data_size_dw) == 0
 const _: () = assert!(offset_of!(PvrPdsRenderColorUploadInfo, code_size_dw) == 4);
 const _: () = assert!(offset_of!(PvrPdsRenderColorUploadInfo, temps_used) == 8);
 
-const _: () = assert!(size_of::<PvrPdsVertexStream>() == 24);
+const _: () = assert!(size_of::<PvrPdsVertexStream>() == 32);
 const _: () = assert!(offset_of!(PvrPdsVertexStream, address) == 0);
 const _: () = assert!(offset_of!(PvrPdsVertexStream, stride) == 8);
 const _: () = assert!(offset_of!(PvrPdsVertexStream, dma_size) == 12);
 const _: () = assert!(offset_of!(PvrPdsVertexStream, dst_reg) == 16);
 const _: () = assert!(offset_of!(PvrPdsVertexStream, per_instance) == 20);
+const _: () = assert!(offset_of!(PvrPdsVertexStream, divisor) == 24);
 
 const _: () = assert!(size_of::<PvrPdsCoeffVarying>() == 12);
 const _: () = assert!(offset_of!(PvrPdsCoeffVarying, components) == 0);

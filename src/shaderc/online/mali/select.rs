@@ -130,8 +130,14 @@ pub struct VaryingAt {
 /// fragment shader that declares them in another order lays them out
 /// otherwise, and the link compiles it again with its reads in the vertex
 /// shader's order (link.rs `VaryingOrder`).
+///
+/// A matrix is declared once per column, and sorted by the components of
+/// the whole matrix (`glsl_without_array(var->type)`, :2697): a mat2 as a
+/// vec4, before a vec2 (the shim's mat2_v2b: `vec4(t.x, m[0].y, ..)` of a
+/// `vec2 t` declared first loads m[0] in lanes 0-1, t in 2-3); `decls`
+/// carry each declaration's GL type for it.
 pub fn generic_layout(
-    decls: impl Iterator<Item = (u8, u8)>,
+    decls: impl Iterator<Item = (u8, u8, u16)>,
     out: &mut [VaryingAt; MAX_VARYINGS],
 ) -> Result<usize, MaliError> {
     let rank = |comps: u8| match comps % 4 {
@@ -140,8 +146,9 @@ pub fn generic_layout(
         1 => 2,
         _ => 3,
     };
+    let mut ranks = [0u8; MAX_VARYINGS];
     let mut n = 0;
-    for (location, comps) in decls {
+    for (location, comps, gl_type) in decls {
         if n >= MAX_VARYINGS {
             return Err(MaliError::VaryingLocation);
         }
@@ -149,10 +156,13 @@ pub fn generic_layout(
             /* the front end's varyings are 1 to 4 components */
             return Err(MaliError::Defect(super::Defect::IrIndex));
         }
+        let r = rank(matrix_comps(gl_type).unwrap_or(comps));
         /* a stable insertion: after every one of the same or a lower rank */
-        let at = out[..n].iter().position(|v| rank(v.comps) > rank(comps)).unwrap_or(n);
+        let at = ranks[..n].iter().position(|&x| x > r).unwrap_or(n);
         out.copy_within(at..n, at + 1);
+        ranks.copy_within(at..n, at + 1);
         out[at] = VaryingAt { location, comps, offset: 0 };
+        ranks[at] = r;
         n += 1;
     }
     let mut component = 0u16;
@@ -161,6 +171,21 @@ pub fn generic_layout(
         component += v.comps as u16;
     }
     Ok(n)
+}
+
+/// The components of a float matrix type (`glsl_get_component_slots`);
+/// None for any other type.
+fn matrix_comps(gl_type: u16) -> Option<u8> {
+    use crate::gl::consts as gl;
+    Some(match gl_type as u32 {
+        gl::GL_FLOAT_MAT2 => 4,
+        gl::GL_FLOAT_MAT3 => 9,
+        gl::GL_FLOAT_MAT4 => 16,
+        gl::GL_FLOAT_MAT2x3 | gl::GL_FLOAT_MAT3x2 => 6,
+        gl::GL_FLOAT_MAT2x4 | gl::GL_FLOAT_MAT4x2 => 8,
+        gl::GL_FLOAT_MAT3x4 | gl::GL_FLOAT_MAT4x3 => 12,
+        _ => return None,
+    })
 }
 
 /// Emit `SPLIT v` into `n` scalars; returns them.
@@ -191,13 +216,13 @@ fn lea(p: &mut Prog<'_>, psiz: bool) -> Result<[u16; 2], MaliError> {
     Ok([s[0], s[1]])
 }
 
-/// `LD_ATTR_IMM` of attribute record `loc` (the GL location: tri_varying's
-/// `col` at location 1 is record 1, pan_shc's `attributes`), vertex and
-/// instance id in r60/r61, and its SPLIT.
-fn ld_attr(p: &mut Prog<'_>, loc: u8, n: u8) -> Result<[u16; 4], MaliError> {
+/// `LD_ATTR_IMM` of attribute record `record` ([`nir::Nir::attribute_record`]:
+/// vsattr_between's `b` at location 2 is record 1 when location 1 is not
+/// read), vertex and instance id in r60/r61, and its SPLIT.
+fn ld_attr(p: &mut Prog<'_>, record: u8, n: u8) -> Result<[u16; 4], MaliError> {
     let v = p.temp()?;
     p.push(Ins::new(
-        Op::LdAttrImm { index: loc, vecsize: n },
+        Op::LdAttrImm { index: record, vecsize: n },
         &[Dest::ssa(v)],
         &[Src::of(Idx::Reg(60)), Src::of(Idx::Reg(61))],
     ))?;
@@ -666,7 +691,7 @@ pub fn vs_variant(
         }
         match nd.kind {
             nir::Kind::Input { loc, comps } => {
-                let s = ld_attr(p, loc, comps)?;
+                let s = ld_attr(p, vs.attribute_record(loc)?, comps)?;
                 for c in 0..comps as usize {
                     lanes[id][c] = Src::ssa(s[c]);
                 }

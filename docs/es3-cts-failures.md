@@ -72,8 +72,8 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 |---|---|---|
 | Transform feedback | GL core on the CPU for the three GPUs: the vertex shader runs for every captured vertex, with its texture look-ups on 2D, cube, 3D and 2D-array samplers (`src/shaderc/online/eval.rs` `TexelSource`, `src/gl/tf_capture.rs` `GlTexels`). Host `transform_feedback` 882 / 882; board: AM62P rows pass, gl_test 203 on the AM62P and the Pi 4 | `docs/es3/transform-feedback.md` |
 | Uniform blocks | host `tests/es3_ubo.rs` (dEQP `functional.ubo`, 2,032 cases); the GC7000 reads user blocks from memory with `load` (the four former link refusals pass on the host; the i.MX8MP constant-offset `load` run is open) | `docs/notes/gc-ubo-const-limit.md` |
-| Sized internal formats | the 35 colour formats of ES 3.0 table 3.2, converted at upload; the PowerVR samples every class but `RGB10A2`, and the V3D samples every class (`cc1c6ede`; `RGB10A2` in its own class since `03f4bbd9`, its 10/10/10/2 render surface `735e24e8` and `089cf587`, `docs/notes/v3d-rgb10a2.md`; its GL-core read-back and CPU blit wait on an item of their own); the GC7000UL samples eight more classes (`dc83be67`, `541975a2`: R11G11B10F, RGB9E5, RGB10A2UI, RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I) and refuses or keeps in a fallback class RGBA32F/UI/I, R32I/UI and RG32I/UI (ETC2 RGB now samples as `EXT_NONE`); host only, no board has run the V3D or GC7000UL classes | `docs/es3/sized-formats.md`, `docs/es3/pvr-formats.md`, `docs/es3/gc-formats.md` |
-| ETC2/EAC compressed formats | all ten ES 3.0 formats are accepted on the PowerVR, GC7000UL and V3D: four as blocks (the V3D mask holds their classes since #354), six decoded at upload (`src/gl/etc2.rs`, decoded against Mesa's outputs); host only, no board has sampled a decoded class; native sampling of the six is a later item | `docs/notes/etc2-eac.md`, `docs/es3/sized-formats.md` |
+| Sized internal formats | the 35 colour formats of ES 3.0 table 3.2, converted at upload; the PowerVR samples every class but `RGB10A2`, and the V3D samples every class (`cc1c6ede`; `RGB10A2` in its own class since `03f4bbd9`, its 10/10/10/2 render surface `735e24e8` and `089cf587`, `docs/notes/v3d-rgb10a2.md`; its GL-core read-back and CPU blit wait on an item of their own); the GC7000UL samples eight more classes (`dc83be67`, `541975a2`: R11G11B10F, RGB9E5, RGB10A2UI, RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I) and refuses or keeps in a fallback class RGBA32F/UI/I (R32I/UI and RG32I/UI are their own classes `GLES_TEXFMT_R32UI`/`R32I`/`RG32UI`/`RG32I` in the GL core since `d7d7357a`, sampled as `EXT_R32I` and `EXT_G32R32I` since `b5e04b14` (`GC_SAMPLED_TEXFMTS`), with texture attachment rows since `6c5b004f`; `docs/es3/gc-formats.md`) (ETC2 RGB now samples as `EXT_NONE`); host only, no board has run the V3D or GC7000UL classes | `docs/es3/sized-formats.md`, `docs/es3/pvr-formats.md`, `docs/es3/gc-formats.md` |
+| ETC2/EAC compressed formats | all ten ES 3.0 formats are accepted on the PowerVR, GC7000UL and V3D: four as blocks (the V3D mask holds their classes since #354), six decoded at upload (`src/gl/etc2.rs`, decoded against Mesa's outputs); host only, no board has sampled a decoded class; native sampling of the six is a later item; host dEQP before/after at plan #354 (`docs/notes/etc2-eac.md` §7): the ETC2/EAC names that reach the GL calls go 2→10 on the V3D and 4→10 on the PowerVR and GC7000UL library, no case moves Pass→Fail, every picture verdict there is the host reading black | `docs/notes/etc2-eac.md`, `docs/es3/sized-formats.md` |
 | Occlusion queries | counted on the three back ends; board: AM62P passes, Pi 4 read 0 (gl_test 196) until `9b1ce2ff`, board rerun left | `docs/es3/occlusion-query.md` |
 | Integer colour render targets | PowerVR: all nineteen as a draw's one colour attachment (board: gl_test 200); V3D: all nineteen, the float ones and the ES 2.0 formats on any attachment, host only (`src/v3d/state.rs` `rt_format`, `tests/es3_int_rt_v3d.rs`); GC7000UL: 17 of the 19 (`0087345f`, `docs/es3/int-rt-gc.md`: RGBA16I/UI and RG32I/UI drawn through the 64-bit tiled shadow, RGBA32I/UI refused by name, no hardware format), host only | `docs/es3/pvr-formats.md` section 10, `docs/es3/int-rt-gc.md`, `docs/online-shaderc/v3d-backend.md` |
 | `glBlitFramebuffer` | colour on the CPU, shared by the three back ends; depth on the CPU into a depth texture from a depth texture or renderbuffer (host only, `tests/es3_blit_ds.rs`); depth into a renderbuffer or the window, depth from the window, and all stencil refused by name | `src/gl/blit.rs`, RC8 |
@@ -90,7 +90,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 | Typed current vertex value | `glVertexAttrib*` records float, int or uint beside the value, and the `GL_CURRENT_VERTEX_ATTRIB` getters convert as Mesa does (`bd114dcc`); host only, `tests/es3_current_attrib.rs`, host dEQP `state_query.shader` current and vertex-attrib queries 14 / 14 | Appendix A, T1 |
 | Vertex attribute divisors | GC7000UL: the array's own divisor in the vertex-stream state (`0x14680 + 4i`) with `max_instance_divisor` 0xffff, so a mixed-divisor draw is one `DRAW_INSTANCED` with `gl_InstanceID` 0..n-1 (`6c4759ea`, as Mesa etnaviv programs it); host only: the words pinned by `tests/gc_stream_divisor.rs` (`308dcf69`, `256ec05b`), a split draw that reads `gl_InstanceID` refused and counted (`7897e809`), and whether the front end takes a divisor above 1 not measured on a board (gl_test case 221, `bc2f3c34`, built not run) | Appendix A, T6 |
 | Multiple render targets | GL core: the draw-buffer count is the back end's `DRAW_TARGETS` (3 on every GPU); the framebuffer stores 4 colour points | RC14 |
-| PowerVR 2D-array and shadow sampling | built, host only: 2D arrays sampled by layer address (`e160bafb`, switch `pvr_native_array`, default off; the dEQP image flips it with `CONFIG_DEQP_PVR_NATIVE_ARRAY`, `1ddb0cf3`); every ES 3.00 shadow look-up form compiles and a LINEAR sampler over one level compares per texel (`d7b2cf8b`). Not done: mipmap and cube PCF, mirrored-repeat weights, ETC arrays | `docs/es3/pvr-2darray.md`, RC5, RC6 |
+| PowerVR 2D-array and shadow sampling | built, host only: 2D arrays sampled by layer address (`e160bafb`, switch `pvr_native_array`, default off; the dEQP image flips it with `CONFIG_DEQP_PVR_NATIVE_ARRAY`, `1ddb0cf3`); every ES 3.00 shadow look-up form compiles and a LINEAR sampler over one level compares per texel (`d7b2cf8b`); mipmap PCF on the 2D sampler and both 2D-array layouts, with mirrored-repeat weights from the unwrapped coordinate (`919db72b`, `tests/es3_pvr_pcf.rs`); ETC2 arrays pinned (`81bfac76`, `tests/es3_pvr_etc_array.rs`); cube PCF under the linear and mipmap filters, seamless over edges and corners, on the native and the stacked cube (`43af85d7`, `tests/es3_pvr_pcf_cube.rs`). Board pending: the `texture.shadow.{2d,2d_array,cube}` rows, and the TPU's first gather tap for a cube direction | `docs/es3/pvr-2darray.md`, RC5, RC6 |
 | Texture swizzle and wrap R | the GL core hands both to the back end (`GlesTextureBind::swizzle`, `::wrap_r`, `e4f58cbe`); the V3D fills both (`18027de1`), the PowerVR and GC7000UL do not yet | `docs/es3/texture-host-repro.md` |
 | ES 3.0 limits | `tests/es3_caps.rs` against the spec minimum and the hardware ceilings | `docs/es3/backend-caps.md` |
 
@@ -148,7 +148,7 @@ passes.
 | Layer | GL core (upload, storage, conversion), then each back end (sampling the format; isampler / usampler) |
 | Done | the 35 colour formats of ES 3.0 table 3.2 are converted at upload (`docs/es3/sized-formats.md`); the PowerVR samples every class but `RGB10A2` (`docs/es3/pvr-formats.md`); host test `tests/es3_sized_formats.rs` |
 | Done since | ETC2/EAC (plan #354): the V3D mask holds the four ETC2 block classes, and the six formats with no block class are decoded on the CPU at upload into R16F, RGBA16F, RGBA8 and SRGB8_ALPHA8 on all three back ends (`docs/notes/etc2-eac.md`, `docs/es3/sized-formats.md`; host only). V3D: every class (`cc1c6ede`; `RGB10A2` as its own class since `03f4bbd9` — its 10/10/10/2 render surface and TLB words `735e24e8`, the GL-core surface, bits and CPU mipmap chain `089cf587`, the job words and clamped-clear tests `6770479e`, field-wise CPU mipmaps, `docs/notes/v3d-rgb10a2.md`, `docs/es3/backend-caps.md`). GC7000UL: eight classes (`dc83be67`, `541975a2`); integer look-ups select as the float look-up (`docs/es3/gc-formats.md`). Both host only |
-| Left | PowerVR: the AM62P run of the integer cube, 3D and 2D-array samplers (they select since the stacked arms take the return type; host-tested only), and `RGB10A2` in its own class (it needs a 10/10/10/2 unorm render-target class first, then the framebuffer guard and `glGenerateMipmap` in the GL core). GC7000UL: RGBA32F/UI/I (Mesa's two-plane path: a second sampler slot and a per-draw shader key), R32I/UI and RG32I/UI (hardware formats, no GL-core class). V3D: the GL-core 10/10/10/2 decode for read-back and the CPU colour blit of the RGB10_A2 surface (`src/gl/framebuffer.rs` `read_pixels` hands its four bytes out as RGBA8, `src/gl/blit.rs` `attachment_image` has no image for a texture of the class; `docs/notes/v3d-rgb10a2.md`); the compiler's refusals of `texelFetch`, offsets, 2D-array/3D look-ups, `textureGrad`, vertex-stage look-ups of the 32-bit classes and shadow look-ups are all gone (host only: `tests/es3_grad_v3d.rs`, `tests/es3_vs_ret32_v3d.rs`, `tests/es3_shadow_v3d.rs`, the Mesa pins of `tests/fixtures/v3d_mesa_pins.txt`); the draw-time sampler compare state is wired: `sampler_for` packs with `v3d::texture::pack_sampler` and keys its cache on (sampler, compare function), so a shadow draw on the Pi 4 compares with the texture's function (host: `src/v3d/backend_tests.rs`, `tests/es3_etc2_v3d.rs`; the 432 `texture.shadow` cases are the board's to confirm) |
+| Left | PowerVR: the AM62P run of the integer cube, 3D and 2D-array samplers (they select since the stacked arms take the return type; host-tested only), and `RGB10A2` in its own class (it needs a 10/10/10/2 unorm render-target class first, then the framebuffer guard and `glGenerateMipmap` in the GL core). GC7000UL: RGBA32F/UI/I (Mesa's two-plane path: a second sampler slot and a per-draw shader key), R32I/UI and RG32I/UI are done on the host (own GL-core classes `d7d7357a`, in `GC_SAMPLED_TEXFMTS` `b5e04b14`, texture attachment rows `6c5b004f`, drawn through the pixel engine: `tests/es3_int32_rt_gc.rs`); the GC7000UL board run is pending. V3D: the GL-core 10/10/10/2 decode for read-back and the CPU colour blit of the RGB10_A2 surface (`src/gl/framebuffer.rs` `read_pixels` hands its four bytes out as RGBA8, `src/gl/blit.rs` `attachment_image` has no image for a texture of the class; `docs/notes/v3d-rgb10a2.md`); the compiler's refusals of `texelFetch`, offsets, 2D-array/3D look-ups, `textureGrad`, vertex-stage look-ups of the 32-bit classes and shadow look-ups are all gone (host only: `tests/es3_grad_v3d.rs`, `tests/es3_vs_ret32_v3d.rs`, `tests/es3_shadow_v3d.rs`, the Mesa pins of `tests/fixtures/v3d_mesa_pins.txt`); the V3D draw-time sampler compare is done on the host (`455c3bb5`, pinned by `84d8c388`): `sampler_for` packs with the binding's compare op through `v3d_tex_pack_sampler_compare` (`v3d::texture::pack_sampler`) and its sampler cache key holds the compare function, pinned in `src/v3d/backend_tests.rs` (`a_depth_sampler_record_holds_mesa_s_compare_words`, `equal_compare_bindings_share_a_sampler_record`); not done: the reference clamp to [0, 1] for a fixed-point depth texture (`compare_op` bit 3 is set by `src/gl/draw.rs`, nothing in the compiler reads it; `docs/notes/v3d-shadow.md` (d)); the Pi 4 run is pending: the shadow rows of `tools/cts/pi4-gles3-tree.txt` (36 draw cases under 42 names) rerun later; host dEQP `texture.shadow` (432) is Fail before and after on all three, HOST-ONLY (black read-back; the GC7000UL compiler still refuses the shadow look-up) |
 
 ### RC3. Transform feedback
 
@@ -170,7 +170,8 @@ in the re-run on `cd738b1a`; the refusal now names its step
 The online compiler takes the shadow, projective and 3D bias forms; the 2D
 and cube shadow cases pass or warn (180 QualityWarning). Since the AM62P run (`ad2b5ed`): every shadow look-up form compiles and a
 LINEAR sampler over one level compares per texel (`d7b2cf8b`, host). Left: the
-108 `texture.shadow.2d_array` failures (RC6) and mipmap and cube PCF.
+108 `texture.shadow.2d_array` failures (RC6) are host-done: mipmap PCF and mirrored-repeat weights (`919db72b`), cube PCF (`43af85d7`). The PowerVR host has no shadow gap left; the `texture.shadow.{2d,2d_array,cube}` rows are board pending (AM62P rerun).
+V3D: the draw-time sampler compare is done on the host (`455c3bb5`, pinned by `84d8c388`: `sampler_for` packs with the binding's compare op through `v3d_tex_pack_sampler_compare` and keys its cache on the compare function, `src/v3d/backend_tests.rs`); not done: the reference clamp for a fixed-point depth texture (`docs/notes/v3d-shadow.md` (d)); the Pi 4 run is pending: the shadow rows of `tools/cts/pi4-gles3-tree.txt` (36 draw cases under 42 names) rerun later. GC7000UL: its compiler still refuses the shadow look-up (`docs/notes/gc-shadow-compare.md`).
 
 ### RC6. 2D-array textures sampled as one tall image (PowerVR)
 
@@ -244,11 +245,35 @@ samplers), RC6 and RC15; no single item.
 `state_query` 25 and `implementation_limits` 11: ES 3.0 limits read as float
 or 64-bit integers, uniform-block and varying component limits below the ES
 3.0 minimum, the compressed-format list, `max_draw_buffers` and
-`max_color_attachments` 3 (RC14). The compressed-format list is closed on the
+`max_color_attachments` 3 (RC14). The float and 64-bit forms are not a
+second defect: `glGetFloatv` and `glGetInteger64v` answer what `glGetIntegerv`
+answers (`tests/es3_limits_v3d.rs`, `tests/es3_v3d_varyings.rs`), so a
+`*_getfloat` / `*_getinteger64` row fails exactly when the limit is below its
+minimum. The V3D's varying family is closed on the host (v3d-varyings-raise:
+`MAX_VARYING_VECTORS` 15, the components 60 / 60 / 64; `tests/es3_v3d_varyings.rs`;
+board rows to re-run). The V3D's uniform-block family is closed on the
+host too: `MAX_UNIFORM_BLOCK_SIZE` 16384 and the combined uniform components
+50688 (ES 3.0's formula over the default block and twelve blocks), a stage's
+blocks read through the uniform stream behind its default block
+(`gl/context.rs` `MAX_UNIFORM_BLOCK_SIZE`, `MAX_STAGE_UNIFORM_DWORDS`;
+`tests/es3_limits_v3d.rs`, `v3d/backend_tests.rs`
+`a_uniform_block_of_16384_bytes_reaches_the_stream_whole`; board rows to
+re-run). Host dEQP at `93bca01`, `753dedbf` against `7c39ee92`
+(`docs/notes/es3-interface-limits.md` section 6, HOST-ONLY): on the V3D 21
+cases of the two families move Fail to Pass (7 `implementation_limits`, 8
+`state_query.integers`, 6 `integers64`), the `_getfloat` / `_getinteger64`
+forms with their limit, and no `shaders.linkage` or `functional.ubo` case is
+refused at compile or link on any of the three GPUs. Left: the uniform-block size and the
+combined uniform components on the PowerVR and GC7000UL (6144 / 1536),
+`MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the same two (host dEQP: 4
+`implementation_limits` and 8 `state_query` rows on each), and RC14. The compressed-format list is closed on the
 host: `GL_NUM_COMPRESSED_TEXTURE_FORMATS` is 11 (ETC1 and the ten ETC2/EAC
 formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,
-`tests/gltest_case20_formats.rs`, `tests/vivante_imx8mp_limits.rs`); the board
+`tests/gltest_case20_formats.rs`, `tests/vivante_imx8mp_limits.rs`; host dEQP
+at `93bca01`: the two `implementation_limits.*compressed*` and the three
+`state_query.integers.compressed_texture_formats_*` cases move Fail to Pass on
+the three GPUs, `docs/es3/texture-host-repro.md` 7.1, HOST-ONLY); the board
 rows (the Pi 4's `implementation_limits.*compressed*` and
 `state_query.integers.compressed_texture_formats_*`) are to be re-run. Item
 `es3-caps` (the ES 3.0 limits test was reverted for review and is to be
@@ -300,7 +325,13 @@ board can judge.
 The board's `shaders.texture_functions` failures (297) are mostly code
 generator refusals outside that corpus: the PowerVR refuses `textureGrad`,
 `textureProjGrad`, their offset forms, `texelFetchOffset` and integer results
-from 2D-array, cube and 3D samplers. `texturesize` (38) reads a wrong size.
+from 2D-array, cube and 3D samplers. `texturesize` (38) read a wrong size:
+the compiler's stacked-array, cube, grid and native-copy sizes are fixed on the
+host (`tests/es3_pvr_texsize.rs`, the byte model over the draw's descriptor
+words), not yet run on a board; the three "with lod base" iterations of each
+case still need the bind to apply `GL_TEXTURE_BASE_LEVEL`, which no PowerVR
+bind does (`src/gl/draw.rs` `mip_levels_needed`), so the cases stay Fail on the
+board until that lands (`docs/es3/shader-host-repro.md` row 3).
 `builtin_functions.common.round` / `roundeven` (16) are fixed on the host
 (`tests/es3_shaderc_fold.rs`), not yet run on a board. `precision.{int,uint}`
 (24) did not link (fixed on the host, `3efd7b30`), `fragdepth` (15) did not

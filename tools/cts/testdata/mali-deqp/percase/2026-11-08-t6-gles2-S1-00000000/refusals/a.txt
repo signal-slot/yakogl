@@ -1,0 +1,12 @@
+Test case 'dEQP-GLES2.functional.a.one'..
+  Pass (Pass)
+Test case 'dEQP-GLES2.functional.a.two'..
+yakogl: a draw was refused: NOT_BUILT_DECOY: the first refused draw of the process (key 0x1); yakogl_draws_refused counts every one
+yakogl-mali-refusal: -95 NOT_BUILT_BLEND_SHADER: a blend shader other than a constant colour's is not built yet
+yakogl-mali-refusal: -95 NOT_BUILT_OTHER: second distinct reason, not the cause
+  Fail (Image comparison failed)
+Test case 'dEQP-GLES2.functional.a.three'..
+  NotSupported (not supported)
+Test case 'dEQP-GLES2.functional.a.six'..
+yakogl-mali-refusal: -12 errno
+  ResourceError (out of memory)

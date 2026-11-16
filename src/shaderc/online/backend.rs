@@ -2289,6 +2289,22 @@ pub fn wide128_planes(sense: u32, companion: &[Option<u8>]) -> wide128::Planes {
     })
 }
 
+/// [`wide128_planes`], each keyed unit `b` also reading the lane sources
+/// `sources[b]` (the GL texture swizzle composed onto the binding,
+/// [`wide128::Planes::swizzle`]). The sources of a unit that is not keyed
+/// are ignored.
+#[cfg(feature = "gpu-vivante")]
+pub fn wide128_planes_swizzled(
+    sense: u32,
+    companion: &[Option<u8>],
+    sources: &[[u8; 4]; wide128::UNITS],
+) -> wide128::Planes {
+    companion.iter().take(wide128::UNITS).enumerate().fold(wide128::Planes::NONE, |p, (b, c)| match *c {
+        Some(c) if sense & 1 << b != 0 => p.with_swizzle(b as u8, c, sources[b]),
+        _ => p,
+    })
+}
+
 /// Step 4 of [`wide128_sensitivity`]'s call contract: `sh` compiled again
 /// with its look-ups on the units of `planes` split into their two plane
 /// look-ups (`wide128::split_planes`) and for the sampler-state key `lod`
@@ -2334,9 +2350,10 @@ pub fn wide128_variant(
     let facts = Facts { lod_key: lod, ..Facts::of(&base) };
     /* the plane key, chained into the record key as `record_key` chains
      * its facts: only the units in the mask and their companions */
-    let mut key = [0u8; 4 + wide128::UNITS];
+    let mut key = [0u8; 8 + wide128::UNITS];
     key[..4].copy_from_slice(&planes.mask.to_le_bytes());
-    for (u, k) in key[4..].iter_mut().enumerate() {
+    key[4..8].copy_from_slice(&(planes.mask & planes.no_alpha).to_le_bytes());
+    for (u, k) in key[8..].iter_mut().enumerate() {
         *k = planes.companion_of(u as u8).unwrap_or(0);
     }
     let mut sha = record_key(base.source, &ZeroList::EMPTY, base.attrib_map, facts);
@@ -2346,6 +2363,24 @@ pub fn wide128_variant(
         both[32..].copy_from_slice(&sha256(extra));
         sha = sha256(&both);
     }
+    /* the lane sources, only for keyed units that are not the identity: a
+     * key with every unit the identity is the one it always was */
+    let mut sw = [0u8; 4 * wide128::UNITS];
+    let mut swizzled = false;
+    for u in 0..wide128::UNITS {
+        if planes.mask & 1 << u != 0 && planes.swizzle_of(u as u8) != wide128::IDENTITY {
+            sw[4 * u..4 * u + 4].copy_from_slice(&planes.swizzle_of(u as u8));
+            swizzled = true;
+        }
+    }
+    if swizzled {
+        for extra in [&b"wide128-swizzle"[..], &sw[..]] {
+            let mut both = [0u8; 64];
+            both[..32].copy_from_slice(&sha);
+            both[32..].copy_from_slice(&sha256(extra));
+            sha = sha256(&both);
+        }
+    }
     struct Restore(wide128::Planes);
     impl Drop for Restore {
         fn drop(&mut self) {
@@ -2353,6 +2388,69 @@ pub fn wide128_variant(
         }
     }
     let _restore = Restore(wide128::set_compile_planes(planes));
+    match variant_keyed(sha, base.stage, base.source, 0, base.attrib_map, facts, &mut log) {
+        Ok(v) => {
+            *out = v;
+            0
+        }
+        Err(rc) => rc,
+    }
+}
+
+/// `sh` compiled again with the colour outputs on the targets of `rt` split
+/// into their two plane stores (`wide128_rt::split_outputs`; docs/notes/
+/// gc-128bit-rt-shader.md), for the sampler-state key `lod`. Results as
+/// [`wide128_variant`]: 0 and `*out` filled, released by the caller, or < 0
+/// and a log. An empty `rt` is `sampler_variant(sh, lod)` exactly, record key
+/// and bytes (`lod` 0 copies the input), so no existing entry moves.
+///
+/// The key is set around the compile only and the previous one put back, panic
+/// or not. The record key is [`record_key`] chained with `"wide128-rt"` and
+/// the mask, so a plain compile of the same source never finds the keyed
+/// record, nor this one the plain, and two masks keep two records. A fragment
+/// variant of the plain shader only. Nothing in the GL core calls it yet, and
+/// the code generator does not read the key until `codegen.rs` wires it.
+#[cfg(feature = "gpu-vivante")]
+pub fn rt_planes_variant(
+    sh: &ShcShader,
+    rt: super::vivante::wide128_rt::RtPlanes,
+    lod: LodKey,
+    out: &mut ShcShader,
+    log: &mut [c_char],
+) -> i32 {
+    use super::vivante::wide128_rt as rtp;
+    if rt.is_empty() {
+        // SAFETY: a real shader and output, and a log of the size announced.
+        return unsafe { online_sampler_variant(sh, lod.bits(), out, log.as_mut_ptr(), log.len()) };
+    }
+    // SAFETY: a log valid for its length.
+    let mut log = unsafe { CStrWriter::new(log.as_mut_ptr(), log.len()) };
+    #[cfg(test)]
+    let _serial = store::test_lock();
+    let Some(base) = base_of(sh) else {
+        let _ =
+            log.write_str("online shaderc: a render-target plane variant of a shader this back end did not compile");
+        return -EINVAL;
+    };
+    if base.blend_key != 0 || base.stage != SHC_STAGE_FRAGMENT {
+        let _ = log.write_str("online shaderc: a render-target plane variant of a non-fragment or blend variant");
+        return -EINVAL;
+    }
+    let facts = Facts { lod_key: lod, ..Facts::of(&base) };
+    let mut sha = record_key(base.source, &ZeroList::EMPTY, base.attrib_map, facts);
+    for extra in [&b"wide128-rt"[..], &[rt.mask][..]] {
+        let mut both = [0u8; 64];
+        both[..32].copy_from_slice(&sha);
+        both[32..].copy_from_slice(&sha256(extra));
+        sha = sha256(&both);
+    }
+    struct Restore(rtp::RtPlanes);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            rtp::set_compile_rt_planes(self.0);
+        }
+    }
+    let _restore = Restore(rtp::set_compile_rt_planes(rt));
     match variant_keyed(sha, base.stage, base.source, 0, base.attrib_map, facts, &mut log) {
         Ok(v) => {
             *out = v;
@@ -3141,7 +3239,7 @@ void main (void)
     /// A default-block uniform whose name fills the field links: the pool
     /// holds its whole name, and the GL core reads `glGetActiveUniform`'s
     /// and `glGetUniformLocation`'s names from the pool
-    /// (`program::row_name`), not from the field.
+    /// (`shaderc::uniform_row_name`), not from the field.
     ///
     /// Revert check: let the link accept a full field only for a block
     /// member's row again and it refuses the stage with "64-byte name field".
@@ -4849,5 +4947,48 @@ mod wide128_tests {
         wide[31] = Some(1);
         wide[35] = Some(2);
         assert_eq!(wide128_planes(u32::MAX, &wide), wide128::Planes::NONE.with(31, 1), "units past 31 are not keyed");
+    }
+
+    /// The swizzled key keys the same units as the plain one and carries
+    /// the sources of the keyed ones only.
+    #[test]
+    fn the_swizzled_key_carries_the_sources_of_keyed_units() {
+        let mut src = [wide128::IDENTITY; wide128::UNITS];
+        src[0] = [2, 1, 0, 3];
+        src[1] = [3, 3, 3, 3];
+        let p = wide128_planes_swizzled(0b01, &[Some(3), Some(4)], &src);
+        assert_eq!(p, wide128::Planes::NONE.with_swizzle(0, 3, [2, 1, 0, 3]), "binding 1 is not sampled");
+        assert_eq!(p.swizzle_of(1), wide128::IDENTITY);
+        let ident = [wide128::IDENTITY; wide128::UNITS];
+        assert_eq!(wide128_planes_swizzled(0b11, &[Some(3), None], &ident), wide128_planes(0b11, &[Some(3), None]));
+    }
+
+    /// The render-target entry: an empty key is today's variant, two masks are
+    /// two records, and the keyed record is not the plain one.
+    #[test]
+    fn rt_planes_variant_keys_its_record_and_an_empty_key_is_todays() {
+        use super::super::vivante::wide128_rt::{compile_rt_planes, RtPlanes};
+        let _serial = store::test_lock();
+        let src = fs("uniform sampler2D s;", "o = texture(s, v_uv);");
+        let sh = compiled(SHC_STAGE_FRAGMENT, &src);
+        let mut log = [0 as c_char; 256];
+        let mut run = |rt: RtPlanes| {
+            let mut out = ShcShader::ZERO;
+            let rc = rt_planes_variant(&sh, rt, LodKey::NONE, &mut out, &mut log);
+            assert_eq!(rc, 0);
+            out
+        };
+        let empty = run(RtPlanes::NONE);
+        let (be, bs) = (base_of(&empty).unwrap(), base_of(&sh).unwrap());
+        assert_eq!(be.sha, bs.sha, "an empty key is the plain record key");
+        assert_eq!(empty.priv_, sh.priv_, "and the same record");
+        let a = run(RtPlanes::NONE.with(0));
+        let b = run(RtPlanes::NONE.with(1));
+        let (ba, bb) = (base_of(&a).unwrap(), base_of(&b).unwrap());
+        assert_ne!(ba.sha, bs.sha, "a keyed record is not the plain one");
+        assert_ne!(ba.sha, bb.sha, "two masks, two record keys");
+        assert_ne!(a.priv_, b.priv_, "two masks, two records");
+        assert_eq!(run(RtPlanes::NONE.with(0)).priv_, a.priv_, "the same key finds its record");
+        assert_eq!(compile_rt_planes(), RtPlanes::NONE, "key put back");
     }
 }

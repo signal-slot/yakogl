@@ -5,6 +5,7 @@
 
     drive.py --qemu QEMU --uboot U-BOOT.BIN --image STANDIN.BIN --work DIR
              --uboot-script tools/uboot_script.py --logs DIR
+             [--uboot-redund U-BOOT.BIN] [--only CASE]
 
 A case is: a boot script (.cmd), environment presets, N boots. For each case
 drive.py builds boot.scr.uimg (uboot_script.py), a GPT disk with a bootfs
@@ -22,6 +23,9 @@ environment and a Boot per boot (lines, environment) and returns the
 (no bad CRC, bootcmd and the other protected variables as the setup left them).
 Prints one line per assertion and "run.sh: N ok, M failed" last; exit 0 only
 when nothing failed. More cases: add a Case to cases() (qemu-run's job).
+The env_* cases run --uboot-redund (the environment in two copies on the
+disk, as on the DK), read both copies after each boot and break their CRCs
+between boots.
 """
 import argparse
 import importlib.util
@@ -71,17 +75,26 @@ class Qemu(BASE.Qemu):
 
 
 class Boot:
-    def __init__(self, n, lines, env):
-        self.n, self.lines, self.env = n, lines, env
+    """lines: the console up to the prompt; env: printenv; info: the output of
+    ENV_INFO; store: the two environment copies on the disk after the boot
+    (uboot_env.Copy), the last two for redund cases only."""
+    def __init__(self, n, lines, env, info=None, store=None):
+        self.n, self.lines, self.env, self.info, self.store = n, lines, env, info or [], store
 
 
 class Case:
     """files: {bootfs path: .cmd under cases/}, each built to a script image;
-    corrupt: the bootfs paths among them whose data CRC is then broken."""
-    def __init__(self, name, script, presets, boots, check, files=None, corrupt=()):
+    corrupt: the bootfs paths among them whose data CRC is then broken.
+    redund: run the redund U-Boot (the environment in two copies on the disk's
+    u-boot-env partition, as on the DK); between: {n: f(disk)} run on the disk
+    image after boot n, f returns assertions; bad_crc: the boots whose console
+    must say "bad CRC" (every other boot must not)."""
+    def __init__(self, name, script, presets, boots, check, files=None, corrupt=(),
+                 redund=False, between=None, bad_crc=()):
         self.name, self.script, self.presets = name, script, presets
         self.boots, self.check = boots, check
         self.files, self.corrupt = files or {}, corrupt
+        self.redund, self.between, self.bad_crc = redund, between or {}, bad_crc
 
 
 def demo_check(setup_env, boots):
@@ -194,6 +207,143 @@ def corrupt_check(setup_env, boots):
             absent(b, "TEST corrupt script ran"), absent(b, "/absent/")]
 
 
+# The env_* cases: the redund U-Boot (mp2-standalone-redund.config) keeps the
+# environment as the DK does, two 8 KiB copies at the top of the u-boot-env
+# partition (mkdisk.sh env): copy 1 at CONFIG_ENV_OFFSET, copy 2 at
+# CONFIG_ENV_OFFSET_REDUND. Each saveenv writes the copy not in use with the
+# flags one higher; a load takes the valid copy, of two the higher flags
+# (env/mmc.c, env/common.c env_check_redund). They are read and broken here
+# with tools/uboot_env.py's parser.
+UENV = load(os.path.join(HERE, "..", "..", "..", "..", "tools", "uboot_env.py"), "uboot_env")
+ENV_SIZE = 0x2000
+ENV_COPIES = (("copy 1", 0x1e7e000), ("copy 2", 0x1e7c000))
+# Typed at the prompt after each boot of an env_* case: which copy is in use,
+# and env_check's own test (default environment? can it be persisted?).
+ENV_INFO = ("env info", "env info -d -p")
+
+
+def env_store(disk):
+    out = []
+    with open(disk, "rb") as f:
+        for label, off in ENV_COPIES:
+            f.seek(off)
+            out.append(UENV.Copy(label, disk, off, f.read(ENV_SIZE), True))
+    return out
+
+
+def env_vars(copy):
+    return {UENV.name_of(e).decode(): UENV.value_of(e).decode() for e in copy.entries}
+
+
+def describe(copy):
+    if not copy.crc_ok:
+        return "%s bad CRC" % copy.label
+    return "%s flags %d mp2s_test=%s" % (copy.label, copy.flags, env_vars(copy).get("mp2s_test"))
+
+
+def break_crc(disk, copy):
+    """Flips the low byte of the copy's stored CRC, so its data no longer
+    matches it, as a write stopped half way by a power cut leaves it."""
+    with open(disk, "r+b") as f:
+        f.seek(copy.offset)
+        b = f.read(1)
+        f.seek(copy.offset)
+        f.write(bytes([b[0] ^ 0xff]))
+
+
+def cut_newer(disk):
+    """(a) A power cut during the last boot's saveenv: the copy it wrote, the
+    newer one, is torn; the older one is as the boot before left it."""
+    s = env_store(disk)
+    out = [("before the cut: both copies valid (%s)" % ", ".join(map(describe, s)),
+            all(c.crc_ok for c in s), "")]
+    if not out[0][1]:
+        return out
+    new = s[UENV.active_index(*s)]
+    break_crc(disk, new)
+    t = env_store(disk)
+    out.append(("cut: the newer %s now fails its CRC, the older one holds (%s)"
+                % (new.label, ", ".join(map(describe, t))),
+                [c.crc_ok for c in t] == [c is not new for c in s], ""))
+    return out
+
+
+def cut_both(disk):
+    """(b) Both copies bad."""
+    for c in env_store(disk):
+        break_crc(disk, c)
+    t = env_store(disk)
+    return [("both copies now fail their CRC (%s)" % ", ".join(map(describe, t)),
+             not any(c.crc_ok for c in t), "")]
+
+
+def counts(b):
+    return [ln for ln in b.lines if re.fullmatch(r"boots left \d+", ln)]
+
+
+def stored(b):
+    """The copy the next load takes, or None when both are bad."""
+    ok = [c for c in b.store if c.crc_ok]
+    if len(ok) == 2:
+        return b.store[UENV.active_index(*b.store)]
+    return ok[0] if ok else None
+
+
+def has(name, b, text, where=None):
+    lines = b.info if where == "info" else b.lines
+    return ("boot %d: %s" % (b.n, name), text in lines, "%s: %r" % (where or "console", lines[-12:]))
+
+
+def powercut_check(setup_env, boots):
+    """(a) The older copy loads, the count goes on: one extra boot at most."""
+    out = []
+    for b, want in zip(boots, (2, 2, 1, 0)):
+        out.append(("boot %d: console says boots left %d" % (b.n, want), counts(b) == ["boots left %d" % want],
+                    "got %r" % counts(b)))
+        s = stored(b)
+        out.append(("boot %d: the stored environment the next boot loads has mp2s_test=%d (%s)"
+                    % (b.n, want, ", ".join(map(describe, b.store))),
+                    s is not None and env_vars(s).get("mp2s_test") == str(want), ""))
+    b2 = boots[1]
+    out += [absent(b2, "Warning"),
+            has("the environment came from the card, not the defaults", b2,
+                "Environment was loaded from persistent storage", "info"),
+            ordered("the older copy's count, saved again", b2,
+                    ["Loading Environment from MMC... OK", "Saving Environment to MMC... Writing to",
+                     "boots left 2"]),
+            ("boot 2: its saveenv rewrote the torn copy: both valid again",
+             all(c.crc_ok for c in b2.store), ", ".join(map(describe, b2.store)))]
+    return out
+
+
+def both_bad_check(setup_env, boots):
+    """(b) Both copies bad: the defaults, env_check saves them, the next boot
+    loads them and env_check does nothing."""
+    b1, b2, b3 = boots
+    s2, s3 = stored(b2), stored(b3)
+    saving = [ln for ln in b2.lines if ln.startswith("Saving Environment to MMC...")]
+    return [("boot 1: console says boots left 2", counts(b1) == ["boots left 2"], "got %r" % counts(b1)),
+            ordered("bad CRC, the defaults, env_check saves them, then the scan", b2, [
+                "Loading Environment from MMC... *** Warning - bad CRC, using default environment",
+                "Hit any key to stop autoboot", "Saving Environment to MMC... Writing to",
+                "mp2s: mp2s_test is not set"]),
+            ("boot 2: env_check's save succeeded", len(saving) == 1 and saving[0].endswith("OK"),
+             "got %r" % saving),
+            has("env_check's test held: the defaults were in use", b2, "Default environment is used", "info"),
+            ("boot 2: mp2s_test is gone from the environment", "mp2s_test" not in b2.env,
+             "is %r" % b2.env.get("mp2s_test")),
+            ("boot 2: the saved copy is the default environment (env_check set, no mp2s_test; %s)"
+             % ", ".join(map(describe, b2.store)),
+             s2 is not None and "mp2s_test" not in env_vars(s2) and "env_check" in env_vars(s2), ""),
+            ordered("the saved defaults load, the scan runs", b3, [
+                "Loading Environment from MMC... OK", "mp2s: mp2s_test is not set"]),
+            absent(b3, "Saving Environment"),
+            has("the environment came from the card", b3,
+                "Environment was loaded from persistent storage", "info"),
+            ("boot 3: the stored environment is unchanged by boot 3",
+             s3 is not None and s2 is not None and s3.raw == s2.raw, "")]
+
+
 def cases(here):
     def c(f):
         return os.path.join(here, "cases", f)
@@ -209,7 +359,16 @@ def cases(here):
                  {YAKOGL: c("saveenv-probe.cmd"), STOCK: c("stock-marker.cmd")}),
             Case("loop_corrupt_script", None, loop_presets("/yakogl/standalone/ /absent/ /mmc0_"), 1,
                  corrupt_check, {YAKOGL: c("corrupt-first.cmd"), STOCK: c("stock-marker.cmd")},
-                 corrupt=(YAKOGL,))]
+                 corrupt=(YAKOGL,)),
+            # The setup saves three times from a blank partition: copy 1
+            # twice (no copy is in use yet, then copy 2 counts as in use),
+            # then copy 2, so both copies hold mp2s_test=3 before boot 1.
+            Case("env_powercut_saveenv", os.path.join(here, "demo-counter.cmd"),
+                 ["setenv mp2s_test 3", "saveenv", "saveenv"], 4, powercut_check,
+                 redund=True, between={1: cut_newer}),
+            Case("env_both_bad_default", os.path.join(here, "demo-counter.cmd"),
+                 ["setenv mp2s_test 3", "saveenv", "saveenv"], 3, both_bad_check,
+                 redund=True, between={1: cut_both}, bad_crc=(2,))]
 
 
 def printenv(q):
@@ -227,6 +386,7 @@ def main():
     for a in ("qemu", "uboot", "image", "work", "uboot-script", "logs"):
         ap.add_argument("--" + a, required=True)
     ap.add_argument("--only", help="run only the case of this name")
+    ap.add_argument("--uboot-redund", help="the redund U-Boot (build-uboot.sh redund), for env_* cases")
     a = ap.parse_args()
     us = load(a.uboot_script, "uboot_script")
     res = {"ok": 0, "failed": 0}
@@ -238,6 +398,9 @@ def main():
 
     for c in cases(HERE):
         if a.only and a.only != c.name:
+            continue
+        if c.redund and not a.uboot_redund:
+            print("skip %s: no --uboot-redund" % c.name, flush=True)
             continue
         w = os.path.join(a.work, c.name)
         stage = os.path.join(w, "bootfs")
@@ -256,12 +419,13 @@ def main():
         with open(a.image, "rb") as f, open(os.path.join(stage, "yakogl", "mp2z.bin"), "wb") as g:
             g.write(f.read())
         disk, flash = os.path.join(w, "sd.img"), os.path.join(w, "env.img")
-        subprocess.run(["bash", os.path.join(HERE, "mkdisk.sh"), disk, stage], check=True)
+        subprocess.run(["bash", os.path.join(HERE, "mkdisk.sh"), disk, stage] + (["env"] if c.redund else []),
+                       check=True)
         with open(flash, "wb") as f:            # QEMU virt's second pflash: U-Boot's ENV_ADDR
             f.truncate(64 << 20)
         argv = [a.qemu, "-machine", "virt", "-cpu", "cortex-a57", "-m", "2G",
                 "-display", "none", "-serial", "stdio", "-monitor", "none", "-no-reboot",
-                "-bios", a.uboot,
+                "-bios", a.uboot_redund if c.redund else a.uboot,
                 "-drive", "if=pflash,unit=1,format=raw,file=" + flash,
                 "-device", "sdhci-pci",
                 "-drive", "if=none,id=sd0,format=raw,file=" + disk,
@@ -292,16 +456,26 @@ def main():
             def body(q, n=n):
                 q.wait_prompt()
                 lines = q.lines()
-                return Boot(n, lines, printenv(q))
+                env = printenv(q)
+                info = [ln for i in (ENV_INFO if c.redund else ()) for ln in q.cmd(i)]
+                return Boot(n, lines, env, info)
             b = session("boot%d" % n, body)
             if b is None:
                 break
             boots.append(b)
-            check("%s: boot %d: stored environment read (no bad CRC)" % (c.name, n),
-                  not any("bad CRC" in ln for ln in b.lines))
+            bad = any("bad CRC" in ln for ln in b.lines)
+            if n in c.bad_crc:
+                check("%s: boot %d: bad CRC, the default environment (as the case wants)" % (c.name, n), bad)
+            else:
+                check("%s: boot %d: stored environment read (no bad CRC)" % (c.name, n), not bad)
             for k in PROTECTED:
                 check("%s: boot %d: %s unchanged" % (c.name, n, k), b.env.get(k) == setup_env.get(k),
                       "%r -> %r" % (setup_env.get(k), b.env.get(k)))
+            if c.redund:                        # QEMU has exited: the disk is as the boot left it
+                b.store = env_store(disk)
+            if n in c.between:
+                for name, ok, detail in c.between[n](disk):
+                    check("%s: after boot %d: %s" % (c.name, n, name), ok, detail)
         if len(boots) == c.boots:
             for name, ok, detail in c.check(setup_env, boots):
                 check("%s: %s" % (c.name, name), ok, detail)

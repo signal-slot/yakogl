@@ -168,6 +168,40 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
       nir_opt_move.c, nir_lower_viewport_transform.c and the fusion rules
       of nir_opt_algebraic.py, Copyright (C) 2014-2025 Intel Corporation,
       Valve Corporation, Collabora Ltd.; Apache-2.0 AND MIT.
+      src/shaderc/online/mali/blend_nir.rs: transcribed from src/compiler/nir/
+      nir_search.c, nir_opt_vectorize.c, nir_opt_copy_propagate.c,
+      nir_opt_dce.c, nir_opt_cse.c, nir_instr_set.c, nir_lower_alu_width.c,
+      nir_opt_constant_folding.c, nir_opt_move.c, nir_opt_shrink_vectors.c,
+      nir_lower_load_const_to_scalar.c, nir_range_analysis.c and .h,
+      nir_search_helpers.h, nir.c, nir_builder.c
+      (nir_def_rewrite_uses_with_alu_src), nir_algebraic.py's automaton and
+      nir_lower_blend.c, src/panfrost/lib/pan_blend.c, src/panfrost/compiler/
+      pan_nir.h and bifrost/bifrost_nir.c;
+      src/shaderc/online/mali/blend_nir_rules.rs: generated from
+      src/compiler/nir/nir_opt_algebraic.py and bifrost/
+      bifrost_nir_algebraic.py by our tools/mali/gen_blend_nir_rules.py;
+      src/shaderc/online/mali/blend.rs: transcribed from bifrost_compile.c's
+      selection, bi_lower_swizzle.c, bi_lower_mkvec_swz.c and gallium's
+      pan_blend_cso.c. Copyright (C) 2014, 2016, 2018 Intel Corporation
+      (nir_search.c, nir_opt_copy_propagate.c, nir_opt_dce.c, nir_opt_cse.c,
+      nir_opt_constant_folding.c, nir.c, nir_opt_move.c, nir_range_analysis.c,
+      nir_range_analysis.h, nir_algebraic.py, nir_opt_algebraic.py,
+      bifrost_nir_algebraic.py); Copyright (C) 2014-2015 Connor Abbott
+      (nir_instr_set.c, nir_opt_vectorize.c); Copyright (C) 2014-2015
+      Broadcom (nir_lower_alu_width.c, nir_lower_load_const_to_scalar.c,
+      nir_builder.c); Copyright (C) 2016 Red Hat (nir_search_helpers.h);
+      Copyright (C) 2019 Valve Corporation (nir_opt_move.c); Copyright (C)
+      2020, 2021, 2025 Google LLC (nir_opt_shrink_vectors.c, nir_builder.c,
+      nir_lower_blend.c); Copyright (C) 2018, 2019, 2022 Alyssa Rosenzweig
+      (pan_blend.c, pan_blend_cso.c, nir_lower_blend.c, bifrost_nir.c,
+      bifrost_compile.c); Copyright (C) 2019-2026 Collabora, Ltd.
+      (nir_lower_blend.c, pan_blend.c, pan_blend_cso.c, pan_nir.h,
+      bifrost_nir.c, bifrost_compile.c, bi_lower_swizzle.c,
+      bi_lower_mkvec_swz.c, bifrost_nir_algebraic.py); Copyright (C) 2025 Arm
+      Ltd. (bifrost_nir.c, bifrost_compile.c); Apache-2.0 AND MIT.
+      tools/mali/pan_shc.c's lower_blend_constants: pan_blend_cso.c,
+      Copyright (C) 2018 Alyssa Rosenzweig, Copyright (C) 2019-2025
+      Collabora, Ltd.
       src/shaderc/online/mali/glsl.rs: transcribed from src/compiler/glsl/
       opt_rebalance_tree.cpp (tree_to_vine, vine_to_tree, is_reduction) and
       opt_algebraic.cpp (reassociate_constant), Copyright (C) 2010-2014

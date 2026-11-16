@@ -32,7 +32,8 @@
 # driver/tools/kexec-zephyr/README.md).
 # nanopc-t6 is the NanoPC-T6 (RK3588, Mali-G610) under Armbian: it has
 # kexec-dev only, and its run is its own runner's,
-# driver/tools/kexec-zephyr/nanopc-t6.sh --go (kexec_t6, below), with every
+# driver/tools/kexec-zephyr/nanopc-t6.sh --go (kexec_t6, below; --go --crash,
+# the runner's crash route, with T6_CRASH=1), with every
 # rule of that runner as it is: the runner takes the board lock itself and
 # refuses at once while it is held (LOCK_WAIT 0; the board lease here waits
 # no longer), reads the board again under it, needs the person at the power
@@ -103,13 +104,19 @@
 # (`yakogl-tools record --line` status=pass|n/a), or, until the board layer
 # prints yk-record: on a board, the sample's own result line (dEQP's summary,
 # gl_test's "all:" or "RECORD end"). A result record with status=fail (APP,
-# PROBES, CASE, FAULT, GLMARK2) is verdict=failed; status=invalid is bad_record. A GPU
+# PROBES, CASE, FAULT, GLMARK2) is verdict=failed; status=invalid is bad_record. A dEQP
+# session that dEQP ended itself (its "deqp: done:" line says complete=0; dEQP
+# does that after a case's ResourceError or fatal error, and the cases after
+# that one never began) is done_stopped: the result is not the row's; the same
+# image stops at the same case, so the cause is fixed and the image rebuilt. A GPU
 # reset count other than 0 is never a clean done
 # (done_with_resets). A dEQP console whose capture lost result lines the image
 # counted (deqp-uart-tally.py --lost: its summary against the lines seen) is not
 # a complete result either: done_lossy, with lost=<n> at the end of the line;
 # rerun the row until the capture is whole. A breadcrumb gives died_after=<stage>. boot_verdict is
 # the backend's own word (the AM62P phase scan's, the i.MX8MP TFTP log's).
+# A run that ended with exit code 2 or 3 before its reboot is verdict=refused
+# with that code (run_refused): the board was not rebooted.
 #
 # Exit codes: 0 done (probe: passed); 2 usage; 3 refused before the board was
 # changed; 4 the verdict is not done; 5 the board did not come back, or an env
@@ -193,6 +200,11 @@
 #                      also read; redacted in the record)
 #   T6_HAND            nanopc-t6: the name of the person at the power switch for
 #                      this run (nanopc-t6.sh --go refuses without it)
+#   T6_CRASH           nanopc-t6: 1: the runner's crash route (--go --crash: no
+#                      device_shutdown, so the display and the GPU stay as
+#                      Linux left them; the runner refuses it without a
+#                      crashkernel= reservation that holds the image's
+#                      window); 0 or unset: the normal route
 #   T6_RUNNER          nanopc-t6: the runner (default driver/tools/kexec-zephyr/
 #                      nanopc-t6.sh; tools/board_selftest.sh puts a fake there)
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
@@ -367,8 +379,9 @@ nanopc-t6)
     # boot loader backend is not here yet (uboot-mmc, #4168).
     BOOTS="kexec-dev"
     NB_MMC=-
-    # nanopc_t6.dts zephyr,sram: 16 MiB at 0x10000000 (nanopc-t6.sh's window)
-    YAKO_ADDR=0x10000000; LOAD_END=0x11000000
+    # nanopc_t6.dts zephyr,sram: 256 MiB at 0x10000000 (nanopc-t6.sh's
+    # window; board_lock_selftest.sh fails when this differs from the dts)
+    YAKO_ADDR=0x10000000; LOAD_END=0x20000000
     # driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c, t6_marker; the runner
     # checks the whole marker and the board layer's line again
     MARKER='yakogl-wdt: nanopc_t6 WDT0 armed at boot'
@@ -432,10 +445,16 @@ scrub() {
 # uart_shown: BOARD_UART as the dry run and the messages print it
 uart_shown() { if [ "$BOARD" = pi5 ]; then echo '<BOARD_UART>'; else echo "$BOARD_UART"; fi; }
 UART_REAL=
+# die MESSAGE [RC]: the library's die (the pi5's message scrubbed, as note),
+# and a run's refusal kept in its record (run_refused)
+die() {
+    echo "$NB_TAG: $1" | scrub >&2
+    run_refused "$1" "${2:-3}"
+    exit "${2:-3}"
+}
 if [ "$BOARD" = pi5 ]; then
-    # the library's die, act and b, with what they print scrubbed: the
-    # messages, the dry run's host commands and ssh's own errors
-    die() { echo "$NB_TAG: $1" | scrub >&2; exit "${2:-3}"; }
+    # the library's act and b, with what they print scrubbed: the dry run's
+    # host commands and ssh's own errors
     act() {
         if [ "$DRY" = 1 ]; then echo "DRY host\$ $*" | scrub; return 0; fi
         "$@" 2> >(scrub >&2)
@@ -510,6 +529,8 @@ ytools() {
 
 # ---- the run directory -------------------------------------------------------
 RD=
+# RD_MADE: 1 once this run made RD (before that RD can name another run's record)
+RD_MADE=0
 # meta KEY VALUE: one measured fact of this run (meta.txt, key=value; the last wins)
 meta() {
     if [ "$DRY" = 1 ]; then return 0; fi
@@ -517,6 +538,25 @@ meta() {
 }
 # mget KEY [DIR]: a fact of a run, empty when absent
 mget() { sed -n "s/^$1=//p" "${2:-$RD}/meta.txt" 2>/dev/null | tail -1; }
+
+# run_refused MESSAGE RC: die's hook. A run that die ends with exit code 2 or 3
+# before its reboot is a refusal: meta.txt keeps the code and the message, and
+# verdict_line reads them as "rc=<RC> verdict=refused". Without them a tally
+# read the directory (meta.txt, no back=1) as "the board did not come back",
+# rc 5, the line that means "stop, never keep booting" (#6838). t_reboot is
+# written before every reboot and jump (the NanoPC-T6's from its runner's
+# "jumping" line); a run that has it is never a refusal.
+run_refused() {
+    local msg=$1 rc=$2
+    case "$rc" in 2 | 3) ;; *) return 0 ;; esac
+    # (RD_MADE unset: die before the run directory's section was read)
+    { [ "${RD_MADE:-0}" = 1 ] && [ -z "$(mget t_reboot)" ]; } || return 0
+    meta refused_rc "$rc"
+    meta refused "${msg//$'\n'/ }"
+    meta ended "$(date '+%F %T')"
+    # the message can hold ssh's own error, which names the board
+    redact_run "$RD"
+}
 
 # is_run_of NAME DIR [SHA8]: DIR's name is <YYYYMMDD-HHMM>-NAME-<sha8|probe>
 # (a glob would take "e01-p0"'s directory for "e01"'s)
@@ -590,6 +630,16 @@ redact_run() {
 # plain CONSOLE: the console's lines without their stamp ("HH:MM:SS ", or the
 # bridge capture's "<unix time> "), NULs and CRs
 plain() { sed -E 's/^([0-9:]{8}|[0-9]{9,}\.[0-9]+) //' "$1" | tr -d '\0\r'; }
+
+# deqp_stopped CONSOLE: dEQP ended the session itself: the console's last
+# "deqp: done:" line (driver/samples/zephyr/deqp/src/main.cpp) says complete=0.
+deqp_stopped() {
+    local l
+    [ -s "$1" ] || return 1
+    # all of plain is read (no early exit: end_seen's note on pipefail)
+    l=$(grep -a '^deqp: done: ' < <(plain "$1" 2>/dev/null) | tail -1)
+    [ "${l##*, }" = complete=0 ]
+}
 
 # end_seen CONSOLE: the image's end is in the console: the board's end line, or
 # a yk-record line whose class is a result (the board layer's last record).
@@ -727,16 +777,26 @@ single_case() {
 }
 
 # verdict_line DIR: the verdict of a run, from its files alone (run and tally
-# both call it). Sets V_LINE, V_RC, V_VERDICT, V_SCAN.
+# both call it). Sets V_LINE, V_RC, V_VERDICT, V_SCAN, and V_WHY (a refusal's
+# message, else empty).
 verdict_line() {
-    local dir=$1 name boot probe rcc bv="" verdict="" result=none resets=absent rec="" shown="" rec0 line cls kname unsup="" status t6p
+    local dir=$1 name boot probe rcc bv="" verdict="" result=none resets=absent rec="" shown="" rec0 line cls kname unsup="" status t6p route
     local console=$dir/console.txt scan="" lost=0 tftp=none tl up="" ba=? recf=absent sc
     # a capture whose console.txt was never derived (an imported bridge log)
     [ -f "$console" ] || [ ! -f "$dir/console.ts" ] || console=$dir/console.ts
     name=$(mget name "$dir"); boot=$(mget boot "$dir"); probe=$(mget probe "$dir"); rcc=$(mget rc_cycle "$dir")
     # shellcheck disable=SC2046  # the words of the cleared record
     rec0=$(rec_args $(mget rec0 "$dir"))
-    case "$boot" in
+    # a refusal (run_refused) is read before the backend's files: the board was
+    # not rebooted, so no back=1 is not "the board did not come back"
+    route=$boot
+    V_WHY=
+    if [ -n "$(mget refused_rc "$dir")" ] && [ -z "$(mget t_reboot "$dir")" ]; then
+        route=refused
+        V_WHY=$(mget refused "$dir")
+    fi
+    case "$route" in
+    refused) bv=refused; verdict=refused; rcc=$(mget refused_rc "$dir") ;;
     tryboot)
         if [ "$(mget back "$dir")" != 1 ]; then bv=not_back; rcc=${rcc:-5}
         elif end_seen "$console"; then bv=complete
@@ -876,6 +936,8 @@ verdict_line() {
     if [ "$resets" = absent ] && [ "$BOARD" = am62p ] && [ -f "$console" ]; then
         resets=$(pvr_resets "$console")
     fi
+    # first of the three "done, but": the line still carries resets= and lost=
+    if [ "$verdict" = done ] && deqp_stopped "$console"; then verdict=done_stopped; fi
     if [ "$verdict" = done ] && [ "$resets" != absent ] && [ "$resets" -gt 0 ]; then verdict=done_with_resets; fi
     # cases the image counted as run whose lines the console capture lost (a serial bridge
     # that stalls drops its backlog): the image's counters against the result lines seen
@@ -979,16 +1041,19 @@ check_image() {
 
 # image_build IMAGE: the build ids of the image's own build directory
 # (<build>/zephyr/zephyr.bin -> <build>/build.ninja; the samples' defines:
-# YAKOGL_SAMPLE_TREE/TABLE on the AM62P, V3D_BUILD on the Pi 4, GC_BUILD_STAMP on
-# the i.MX8MP; tools/cts/pi4-deqp-images.sh reads V3D_BUILD the same way). The image bytes
-# hold only the printf formats ("sample: build tree=%s ..."), so a scan of the
-# image cannot name the tree; without a build.ninja the value is absent.
+# YAKOGL_SAMPLE_TREE/TABLE on the AM62P, GC_BUILD_STAMP on the i.MX8MP, and
+# every string define named <NAME>_BUILD: V3D_BUILD on the Pi 4, T6_DEQP_BUILD
+# and T6_GL_TEST_BUILD on the NanoPC-T6, the probes' own;
+# tools/cts/deqp-tree-images.sh reads its board's define the same way). The
+# image bytes hold only the printf formats ("sample: build tree=%s ..."), so a
+# scan of the image cannot name the tree; without a build.ninja the value is
+# absent.
 image_build() {
     local ninja ids
     ninja=$(dirname "$(dirname "$(readlink -f "$1")")")/build.ninja
     if [ -f "$ninja" ]; then
-        ids=$(grep -oE '(YAKOGL_SAMPLE_TREE|YAKOGL_SAMPLE_TABLE|V3D_BUILD|GC_BUILD_STAMP)=\\"[^\\"]*' "$ninja" |
-            sed 's/\\"//' | sort -u | paste -sd' ' -)
+        ids=$(grep -oE -e '-D(YAKOGL_SAMPLE_TREE|YAKOGL_SAMPLE_TABLE|GC_BUILD_STAMP|[A-Z0-9_]+_BUILD)=\\"[^\\"]*' "$ninja" |
+            sed 's/^-D//; s/\\"//' | sort -u | paste -sd' ' -)
     fi
     echo "${ids:-absent (no build id in a build.ninja beside the image)}"
 }
@@ -1057,7 +1122,8 @@ LEASE_HELD=0
 LEASE_ME="$(hostname -s 2>/dev/null || echo host):$$"
 
 # lease_try: one attempt on the board. 0 taken (or renewed), 3 held by another
-# (the lease printed), anything else the board did not answer.
+# (the lease printed), 4 the board could not write it, anything else the board
+# did not answer (ssh's own exit code, its error printed).
 lease_try() {
     b "L=$LEASE; me='$LEASE_ME'; row='${NAME:-$VERB}'; hold=${HOLD_MAX:-900}
 now=\$(date +%s)
@@ -1081,7 +1147,7 @@ exit \$rc"
 }
 
 lease_take() {
-    local out rc deadline
+    local out rc deadline why
     if [ "$DRY" = 1 ]; then
         echo "DRY board\$ take $LEASE   # holder=<host>:<pid>, expires now + HOLD_MAX on the board's clock; wait while another holder's lease runs"
         return 0
@@ -1098,12 +1164,18 @@ lease_take() {
             [ -n "$out" ] && note "board lease: $out"
             return 0
         fi
-        [ "$(date +%s)" -lt "$deadline" ] ||
-            die "the board is leased to another run and LOCK_WAIT ran out: $(tr '\n' ' ' <<<"$out")"
+        # what failed, by lease_try's exit code: only 3 is another run's lease
+        # (the sentence said "leased to another run" for a failed ssh too, #6838)
+        case "$rc" in
+        3) why="the board is leased to another run" ;;
+        4) why="the board could not write the lease" ;;
+        *) why="the board did not answer the lease's ssh (rc $rc)" ;;
+        esac
+        [ "$(date +%s)" -lt "$deadline" ] || die "$why and LOCK_WAIT ran out: $(tr '\n' ' ' <<<"$out")"
         if [ "$rc" = 3 ]; then
             note "board lease held by another run, waiting: $(tr '\n' ' ' <<<"$out")" >&2
         else
-            note "board lease: the board did not answer (rc $rc), retrying" >&2
+            note "board lease: $why, retrying" >&2
         fi
         sleep 20
     done
@@ -1877,7 +1949,9 @@ t6_lifetime() {
     echo "${l##* }" | grep -E '^[0-9]+$' || echo 0
 }
 
-# kexec_t6: the jump through nanopc-t6.sh --go, then its record taken into the
+# kexec_t6: the jump through nanopc-t6.sh --go (--go --crash with T6_CRASH=1:
+# the route is the runner's, its checks and its "jumping (... route ...)"
+# record line too), then its record taken into the
 # run directory and read. Every check of the runner stays the runner's: the
 # image's marker and window, the board's identity, root and kexec state,
 # /proc/iomem and the GIC tables, the board lock (taken there, LOCK_WAIT 0),
@@ -1892,22 +1966,22 @@ t6_lifetime() {
 # board, no jump".
 kexec_t6() {
     local runner=${T6_RUNNER:-$REPO/driver/tools/kexec-zephyr/nanopc-t6.sh} rc rec recs jl back t0 n
+    local go=(--go)
+    [ "${T6_CRASH:-0}" != 1 ] || go+=(--crash)
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ BOARD_HOST=\$BOARD_HOST T6_UART=<BOARD_UART> T6_HAND=${T6_HAND:-<unset: the runner refuses>} T6_RECORD_DIR=<rundir> bash ${runner#"$REPO"/} $IMG --go 2>&1 | tee <rundir>/kexec.log"
+        echo "DRY host\$ BOARD_HOST=\$BOARD_HOST T6_UART=<BOARD_UART> T6_HAND=${T6_HAND:-<unset: the runner refuses>} T6_RECORD_DIR=<rundir> bash ${runner#"$REPO"/} $IMG ${go[*]} 2>&1 | tee <rundir>/kexec.log"
         echo "DRY host\$   # the runner: its board checks, board_lock.sh (LOCK_WAIT ${LOCK_WAIT}: refused while held), the board again under the lock, the record <rundir>/<date>-t6/, the jump, Armbian back (a new boot_id) within the image's bound + 180 s"
         echo "DRY host\$ move <rundir>/<date>-t6/* (uart.log, record.txt, linux-before.dmesg-w, linux-after.dmesg) into <rundir>; console.txt = uart.log"
         exit 0
     fi
     trap 'lease_release; rm -rf "$TMP"' EXIT
     BOARD_HOST=$BOARD_HOST T6_UART=${BOARD_UART:-} T6_HAND=${T6_HAND:-} T6_RECORD_DIR=$RD \
-        bash "$runner" "$IMG" --go < /dev/null 2>&1 | tee "$RD/kexec.log"
+        bash "$runner" "$IMG" "${go[@]}" < /dev/null 2>&1 | tee "$RD/kexec.log"
     rc=${PIPESTATUS[0]}
     meta runner_rc "$rc"
     recs=("$RD"/*-t6)
     if [ ! -d "${recs[0]}" ]; then
         # no record: the runner stopped before it changed anything on the board
-        meta ended "$(date '+%F %T')"
-        redact_run "$RD"
         # (rc 2: a usage error or a host failure, as the runner's die; else its refusal, rc 3)
         die "nanopc-t6.sh refused (rc $rc) before it changed anything on the board; its output: $RD/kexec.log" "$([ "$rc" = 2 ] && echo 2 || echo 3)"
     fi
@@ -2199,7 +2273,13 @@ cmd_run() {
         check_image "$IMG"
         sha8=${IMG_SHA:0:8}
         # the NanoPC-T6 runner's record goes into the run directory: its rule holds
-        if [ "$BOARD" = nanopc-t6 ]; then t6_outside_checkout "$LOGDIR"; fi
+        if [ "$BOARD" = nanopc-t6 ]; then
+            t6_outside_checkout "$LOGDIR"
+            case ${T6_CRASH:-0} in
+            0 | 1) ;;
+            *) die "T6_CRASH='$T6_CRASH': 1 (the crash route, nanopc-t6.sh --crash) or 0 (the normal route)" 2 ;;
+            esac
+        fi
     fi
     RD="$LOGDIR/$(date +%Y%m%d-%H%M)-$NAME-$sha8"
     if [ "$DRY" = 1 ]; then
@@ -2207,6 +2287,7 @@ cmd_run() {
     else
         [ -e "$RD" ] && die "$RD exists: a record is never overwritten"
         mkdir -p "$RD" || die "cannot create $RD"
+        RD_MADE=1
     fi
     meta board "$BOARD"
     meta boot "$BOOT"
@@ -2761,6 +2842,7 @@ cmd_tally() {
     if [ -f "$dir/meta.txt" ]; then
         verdict_line "$dir"
         echo "$V_LINE"
+        [ -z "$V_WHY" ] || echo "  refused: $V_WHY"
         if [ -f "$dir/INDEX.txt" ]; then
             if grep -qxF "verdict: $V_LINE" "$dir/INDEX.txt"; then echo "  (INDEX.txt says the same)"
             else echo "  DIFFERS from INDEX.txt: $(sed -n 's/^verdict: //p' "$dir/INDEX.txt")"; fi
@@ -2770,7 +2852,11 @@ cmd_tally() {
     mapfile -t runs < <(run_dirs "$dir")
     [ ${#runs[@]} -gt 0 ] || die "no runs in $dir (no */meta.txt)" 2
     echo "== per run (the verdict line, recomputed from each run's files)"
-    for d in "${runs[@]}"; do verdict_line "$d"; echo "$V_LINE"; done
+    for d in "${runs[@]}"; do
+        verdict_line "$d"
+        echo "$V_LINE"
+        [ -z "$V_WHY" ] || echo "  refused: $V_WHY"
+    done
     if [ -f "$dir/tree.txt" ] && [ "$(cut -f3 "$dir/tree.txt" | head -1)" != - ]; then
         echo "== results per row (the selector form)"
         results_tsv "$dir"

@@ -117,6 +117,10 @@ pub const MAX_CONSTS: usize = 16;
 /// ([`VaryingConsts::push_flat`]).
 const FLAT_LANE: u8 = 0x80;
 
+/// The component tag of a lane equal to another in [`VaryingConsts`]
+/// ([`VaryingConsts::push_equal`]).
+const EQUAL_LANE: u8 = 0x40;
+
 /// A vertex shader's varying lanes that are constants: Mesa's link
 /// propagates each into the fragment shader's read of it and removes the
 /// lane from the layout (nir_opt_varyings.c:2880-2900,
@@ -181,6 +185,31 @@ impl VaryingConsts {
     /// [`push_flat`]: VaryingConsts::push_flat
     pub fn flat(&self, location: u8, comp: u8) -> bool {
         self.as_slice().iter().any(|e| e.0 == location && e.1 == comp | FLAT_LANE)
+    }
+
+    /// Lane `comp` of varying `location` stores the value lane `of_comp`
+    /// of varying `of_location` stores, the first such lane of the vertex
+    /// shader: Mesa's link keeps one of equal lanes and reads the others
+    /// from it (`deduplicate_outputs`, nir_opt_varyings.c:3253-3420), so
+    /// the fragment shader lays them out as one ([`VaryingConsts::class`];
+    /// nir_fs.rs `layout`). Kept beside the constants, its component tagged
+    /// [`EQUAL_LANE`] and the other lane in the bits; past [`MAX_CONSTS`] it
+    /// is dropped, not refused: the lanes are then laid out apart and the
+    /// program's vertex shader refuses them by name (`VaryingDuplicate`).
+    pub fn push_equal(&mut self, location: u8, comp: u8, of_location: u8, of_comp: u8) {
+        if self.n < MAX_CONSTS {
+            self.push(location, comp | EQUAL_LANE, u32::from(of_location) << 8 | u32::from(of_comp));
+        }
+    }
+
+    /// The first lane of the vertex shader that stores the value lane `comp`
+    /// of varying `location` stores ([`push_equal`]): itself, unless an
+    /// earlier lane stores it too.
+    ///
+    /// [`push_equal`]: VaryingConsts::push_equal
+    pub fn class(&self, location: u8, comp: u8) -> (u8, u8) {
+        let e = self.as_slice().iter().find(|e| e.0 == location && e.1 == comp | EQUAL_LANE);
+        e.map_or((location, comp), |e| ((e.2 >> 8) as u8, e.2 as u8))
     }
 
     pub fn as_slice(&self) -> &[(u8, u8, u32)] {
@@ -367,10 +396,11 @@ mod tests {
     /// tri_varying.frag with `vcol` declared and not read.
     const UNUSED_FS: &str =
         "precision mediump float; varying vec3 vcol; void main(){ gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); }";
-    /// tri_varying.frag reading `vcol.y` only: Mesa's link keeps that
-    /// one component (at offset 0, nir_fs.rs `layout`).
+    /// tri_varying.frag reading `vcol.y` only, at highp: Mesa's link keeps
+    /// that one component (at offset 0, nir_fs.rs `layout`; a mediump one
+    /// is loaded whole, fsload_v3_one.expect.json).
     const PART_FS: &str =
-        "precision mediump float; varying vec3 vcol; void main(){ gl_FragColor = vec4(vcol.y, 0.5, 0.25, 1.0); }";
+        "precision highp float; varying vec3 vcol; void main(){ gl_FragColor = vec4(vcol.y, 0.5, 0.25, 1.0); }";
     /// tri.vert with `vcol` declared and not written.
     const UNWRITTEN_VS: &str =
         "attribute vec2 pos; varying vec3 vcol; void main(){ gl_Position = vec4(pos, 0.0, 1.0); }";

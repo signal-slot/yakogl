@@ -50,7 +50,7 @@ tools/shaders/es100/hello.frag: ok
 tools/shaders/es100/hello.vert: ok
 tools/shaders/es100/idiv.frag: ok
 tools/shaders/es100/ifelse_loop.frag: ok
-tools/shaders/es100/ifloop.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+tools/shaders/es100/ifloop.frag: ok
 tools/shaders/es100/ifoutput.frag: ok
 tools/shaders/es100/ifoutput2.frag: ok
 tools/shaders/es100/immneg.frag: ok
@@ -118,7 +118,7 @@ tools/shaders/es100/uniidx_f.vert: ok
 tools/shaders/es100/uniidx_g.frag: ok
 tools/shaders/es100/uniidx_h.frag: ok
 tools/shaders/es100/uniidx_i.frag: ok
-tools/shaders/es100/uniidx_j.frag: ok
+tools/shaders/es100/uniidx_j.frag: Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet
 tools/shaders/es100/utri.frag: ok
 tools/shaders/es100/utri.vert: ok
 tools/shaders/es100/va.frag: ok
@@ -276,7 +276,7 @@ tools/shaders/gltest/predlive_fs_coord.frag: ok
 tools/shaders/gltest/predlive_fs_uni.frag: ok
 tools/shaders/gltest/psizvpm_plain_vs.vert: ok
 tools/shaders/gltest/psizvpm_word_vs.vert: ok
-tools/shaders/gltest/texcube_fs.frag: Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet
+tools/shaders/gltest/texcube_fs.frag: ok
 tools/shaders/gltest/texcube_vs.vert: ok
 tools/shaders/gltest/texcubemip_vs.vert: ok
 tools/shaders/gltest/texcubenorm_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet

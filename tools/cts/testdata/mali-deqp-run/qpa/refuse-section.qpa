@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# One case whose vertex shader the library refuses, logged the way dEQP's
+# attribute-location tests do: each shader's info log is the <Text> of a
+# <Section Name="Info Log">, not an <InfoLog>. The other <Text> lines and the
+# fragment shader's empty info log are not the refusal.
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="@CASE@" CaseType="SelfValidate">
+ <Text>Create and attach shaders to program.</Text>
+ <Section Name="Vertex Shader Info" Description="Vertex Shader Info">
+  <KernelSource>void main() { gl_Position = vec4(0.0); }</KernelSource>
+  <Section Name="Info Log" Description="Info Log">
+   <Text>online shaderc: the code generator refused this vertex shader: Mali(Valhall: Mesa&apos;s link on board.invalid is not lowered yet)</Text>
+</Section>
+  <Text>Compilation result: Failed</Text>
+</Section>
+ <Section Name="Fragment Shader Info" Description="Fragment Shader Info">
+  <KernelSource>void main() { gl_FragColor = vec4(1.0); }</KernelSource>
+  <Section Name="Info Log" Description="Info Log">
+   <Text></Text>
+</Section>
+  <Text>Compilation result: Ok</Text>
+</Section>
+ <Text>Vertex shader compilation failed: &apos;vertexCompileOk&apos;</Text>
+ <Result StatusCode="Fail">Vertex shader compilation failed: &apos;vertexCompileOk&apos;</Result>
+</TestCaseResult>

@@ -19,6 +19,7 @@
 //!
 //! A score here says only that nothing these programs cover differs.
 
+use super::bir;
 use super::fau::FauWord;
 use super::isa;
 use super::{MaliError, MaliShader, Section, VaryingSlot};
@@ -116,6 +117,7 @@ pub(super) struct Info {
     pub moved: Vec<super::motion::Moved>,
     pub sampler: Option<u8>,
     pub samplers: Vec<u8>,
+    pub cube_samplers: u64,
     pub helper_threads: bool,
     pub can_discard: bool,
     pub ubo: Vec<super::UboRow>,
@@ -138,6 +140,7 @@ impl Info {
             moved: r.moved.to_vec(),
             sampler: r.sampler,
             samplers: r.samplers.to_vec(),
+            cube_samplers: r.cube_samplers,
             helper_threads: r.helper_threads,
             can_discard: r.can_discard,
             ubo: r.ubo.to_vec(),
@@ -162,6 +165,7 @@ impl Info {
             moved: &self.moved,
             sampler: self.sampler,
             samplers: &self.samplers,
+            cube_samplers: self.cube_samplers,
             helper_threads: self.helper_threads,
             can_discard: self.can_discard,
             ubo: &self.ubo,
@@ -215,6 +219,54 @@ fn vs_regions(s: &Stage) -> (Vec<u64>, Vec<u64>) {
         }
         None => (trim(&s.code), Vec::new()),
     }
+}
+
+/// The position programs of a vertex stage, each with its byte offset in
+/// the code. A shader that writes gl_PointSize has two: with the point size
+/// store at 0, which a point draw runs, and without it at `no_psiz_offset`,
+/// which every other draw runs. Any other shader has one.
+fn vs_positions(s: &Stage) -> Vec<(u32, Vec<u64>)> {
+    let end = s.info.secondary.map_or(s.code.len(), |sec| sec.offset as usize / 8);
+    match s.info.no_psiz_offset {
+        Some(at) => {
+            let cut = at as usize / 8;
+            vec![(0, trim(&s.code[..cut])), (at, trim(&s.code[cut..end]))]
+        }
+        None => vec![(0, trim(&s.code[..end]))],
+    }
+}
+
+/// The position program of `s` that the draw of the reference `json` ran:
+/// its byte offset and its words. An expect.json holds as `vs.position`
+/// only that one, and its `secondary_offset` is the distance from it to
+/// the varying program: the program with the store ran when that distance
+/// is ours from the start of the code (the caller checks the distance
+/// against the offset returned here). A reference without a varying
+/// program names no distance: there the program with the store ran when
+/// its words are the reference's, and a reference equal to neither is
+/// reported against the program without the store, the one gl_ref.py's
+/// default draw runs.
+fn vs_ran(s: &Stage, json: &str) -> (u32, Vec<u64>) {
+    let mut all = vs_positions(s);
+    let last = all.pop().expect("a position program");
+    let Some(with_store) = all.pop() else {
+        return last;
+    };
+    let with_store_ran = match (s.info.secondary, secondary_offset(json)) {
+        (Some(sec), Some(distance)) => sec.offset == distance,
+        _ => region(json, "vs.position").is_some_and(|r| r.words == with_store.1),
+    };
+    if with_store_ran {
+        with_store
+    } else {
+        last
+    }
+}
+
+/// The bytes a program of `words` 64-bit words takes in the code: up to the
+/// next 128 bytes past 16 more.
+fn padded_words(words: usize) -> usize {
+    (words * 8 + 16).div_ceil(128) * 16
 }
 
 fn text(w: u64) -> String {
@@ -424,7 +476,7 @@ fn check_fs_stage_capped(f: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, vp, &uv_f);
     /* the padding: up to the next 128 bytes past 16 more */
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+    assert_eq!(f.code.len(), padded_words(rf.words.len()));
 }
 
 /// The vertex stage of a program pair against an expect.json: both IDVS
@@ -438,7 +490,8 @@ fn check_vs_in(vs: &str, fs: &str, json: &str, vp: Viewport) -> Stage {
 
 /// [`check_vs_in`] of the compiled vertex stage `v`.
 fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
-    let (pos, var) = vs_regions(v);
+    let (ran_at, pos) = vs_ran(v, json);
+    let var = vs_regions(v).1;
     let names = uniform_names(vs, fs);
     let uv_v = |d: u16| uniform_value(&names, &v.uniforms, d);
     let rp = region(json, "vs.position").expect("vs.position");
@@ -449,7 +502,7 @@ fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
             assert_words("vs.varying", &var, &rv.words);
             let sec = v.info.secondary.expect("a varying program");
             assert_facts("vs.varying", &rv, sec.work_reg_count, sec.preload, &v.info.fau, vp, &uv_v);
-            assert_eq!(Some(sec.offset), secondary_offset(json), "secondary_offset");
+            assert_eq!(Some(sec.offset - ran_at), secondary_offset(json), "secondary_offset");
         }
         None => {
             assert!(var.is_empty() && v.info.secondary.is_none(), "no varying program in the reference");
@@ -458,8 +511,8 @@ fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
     }
     assert_eq!(
         v.code.len(),
-        (pos.len() * 8 + 16).div_ceil(128) * 16
-            + if var.is_empty() { 0 } else { (var.len() * 8 + 16).div_ceil(128) * 16 }
+        vs_positions(v).iter().map(|(_, words)| padded_words(words.len())).sum::<usize>()
+            + if var.is_empty() { 0 } else { padded_words(var.len()) }
     );
 }
 
@@ -469,28 +522,32 @@ fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
 /// (`compile_vs_for_reads`), as Mesa's link leaves the pair
 /// (nir_opt_varyings).
 fn compile_linked(vs: &str, fs: &str) -> (Stage, Stage) {
+    match try_compile_linked(vs, fs) {
+        Ok(p) => p,
+        Err(e) => panic!("the pair does not compile along the link: {e:?}"),
+    }
+}
+
+/// [`compile_linked`], a refusal of either stage returned, not a panic.
+fn try_compile_linked(vs: &str, fs: &str) -> Result<(Stage, Stage), CompileError> {
     let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
-        .expect("the scratch arena is free")
-        .expect("the vertex shader's constant lanes");
+    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s)).expect("the scratch arena is free")?;
     let f = store::with_scratch(|s| {
         super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
     })
-    .expect("the scratch arena is free")
-    .expect("the fragment shader compiles for the vertex shader");
-    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    .expect("the scratch arena is free")?;
+    let pr =
+        super::fragment_reads(&f.info.shader()).map_err(|e| CompileError::BackEnd(codegen::BackEndError::Mali(e)))?;
     /* at the vertex shader's own locations, paired by name (case 19's tex) */
     let pr = store::with_scratch(|s| super::reads_at_vertex_locations(&pr, fs.as_bytes(), vs.as_bytes(), s))
-        .expect("the scratch arena is free")
-        .expect("both stages lower")
+        .expect("the scratch arena is free")?
         .expect("every read is a vertex output");
     let v = store::with_scratch(|s| {
         super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep())
             .map(|(sh, _)| stage_of(&sh))
     })
-    .expect("the scratch arena is free")
-    .expect("the vertex shader compiles for the program");
-    (v, f)
+    .expect("the scratch arena is free")?;
+    Ok((v, f))
 }
 
 /// [`compile_linked`] checked against an expect.json, every region, and
@@ -610,7 +667,7 @@ fn a_pair_in_another_order_is_byte_equal_to_mesa_26_2_1() {
     let rf = region(JSON, "fs.fragment").expect("fs.fragment");
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+    assert_eq!(f.code.len(), padded_words(rf.words.len()));
     assert_ne!(trim(&alone.code), rf.words, "compiled alone, its own order");
     let v = stage_of(&vs);
     let generic = |s: &Stage, loc: u8| {
@@ -997,6 +1054,11 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
              front end refuses gl_FragData[n > 0] (the test pins its verdict), and a vertex shader writes none",
         ),
         E::Interpolation => Some("ES 1.00 has no interpolation qualifier: every varying is smooth"),
+        E::ConvertWiden => Some(
+            "no test or corpus shader gives U32_TO_F32 or S32_TO_F32 a constant source (the only way a narrowed \
+             source reaches them: the constant lowering's table byte or half)",
+        ),
+        E::IntColour => Some("ES 1.00 has no fragment output but gl_FragColor and gl_FragData, both vec4"),
         E::FauFull => Some(
             "the sysvals are at most 6 words (VS) and 4 (FS) of 128, pushed first; uniforms that do not fit are \
              UboFallback",
@@ -1035,6 +1097,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::TexKind
         | E::TexCount
         | E::TexCoord
+        | E::TexArrayElement
         | E::TexCoordShared
         | E::TexLanes
         | E::TexHighp
@@ -1055,6 +1118,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::NoColour
         | E::ColourForm
         | E::ColourPair
+        | E::FsVaryingLoad
         | E::ColourZeroHalf
         | E::Fp16Inexact
         | E::TooManyLocals
@@ -1062,6 +1126,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::CompareForm
         | E::AlgebraicForm
         | E::MovedTooLarge
+        | E::AttributeNumbering
         | E::FragCoordMediump => None,
         E::OutOfScratch | E::Defect(_) => Some("not a gap"),
     }
@@ -1083,6 +1148,14 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; attribute float q; void main(){ gl_Position = vec4(vec2(3.0) * (q * 0.75), 0.0, 1.0); }", MaliError::ArithConstant),
         /* fmul(fneg(a), fneg(b)) */
         (VS, "attribute vec2 p; attribute vec2 q; void main(){ gl_Position = vec4((-p) * (-q), 0.0, 1.0); }", MaliError::ArithConstant),
+        /* the same product after a fold the back end makes late: the code
+         * walk folds `d`'s lanes away, the numbering walk keeps them and
+         * meets `fmul(fneg(a), fneg(b))` (nir.rs `build`) */
+        (VS, "attribute vec4 p; attribute vec4 d; attribute vec4 b; varying vec4 v; void main(){ gl_Position = p; v = b + (-(d * vec4(0.0, -0.0, 0.0, 0.0))) * (-b); }", MaliError::AttributeNumbering),
+        /* a varying lane only that late fold makes a constant (dEQP
+         * 1405_0's shape): Mesa's link keeps it computed, ours would
+         * propagate it */
+        (VS, "attribute vec4 p; attribute float d; attribute float a; attribute float b; varying vec4 v; void main(){ gl_Position = p; v = vec4(0.5, d, 1.0, 1.0) * vec4(0.5, -0.0, b, a); }", MaliError::AttributeNumbering),
         (FS, "precision mediump float; varying vec2 a2; const float z = -0.0; void main() { if (z == a2.x) discard; gl_FragColor = vec4(1.0); }", MaliError::NegZeroShared),
         (VS, "uniform mat2 m; attribute vec2 p; void main(){ gl_Position = vec4(m * p, 0.0, 1.0); }", MaliError::UniformType),
         (VS, "uniform vec3 u[2]; void main(){ gl_Position = vec4(u[1], 1.0); }", MaliError::UniformArray),
@@ -1162,7 +1235,12 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "uniform sampler2D s; uniform vec4 w; attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = w.x * texture2DLod(s, p.xy, 0.0) + w.y * texture2DLod(s, p.xy, 0.0); }", MaliError::TexVertex),
         (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v, 1.0); }", MaliError::TexKind),
         (FS, "precision mediump float; uniform sampler2D s; varying vec3 v; void main(){ gl_FragColor = texture2DProj(s, v); }", MaliError::TexKind),
-        (FS, "precision mediump float; uniform samplerCube s; varying vec3 v; void main(){ gl_FragColor = textureCube(s, v); }", MaliError::TexKind),
+        /* a cube at the implicit level is lowered in a mediump shader
+         * (fstex_cube); a highp shader's has no reference */
+        (FS, "precision highp float; uniform samplerCube s; varying vec3 v; void main(){ gl_FragColor = textureCube(s, v); }", MaliError::TexKind),
+        /* an element of a cube sampler array past the first: Mesa numbers
+         * the array's elements together (fstex_cubeno_texarrayelement_*) */
+        (FS, "precision mediump float; uniform samplerCube s[2]; varying vec3 v; void main(){ gl_FragColor = textureCube(s[1], v); }", MaliError::TexArrayElement),
         /* a mediump computed coordinate (case 121's form) beside another
          * look-up: no reference draws it (texmore_2's two read a varying) */
         (FS, "precision mediump float; uniform sampler2D s; uniform sampler2D t; uniform vec4 u; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) + texture2D(t, vec2(u.w * 0.5)); }", MaliError::TexCount),
@@ -1200,6 +1278,13 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.xzyw; }", MaliError::ColourForm),
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.yxzw; }", MaliError::FsOperandForm),
         (FS, "precision mediump float; varying vec2 v; void main(){ gl_FragColor = vec4(1.0, v, 1.0); }", MaliError::ColourPair),
+        /* both lanes of an aligned pair converted apart: Mesa converts the
+         * pair once (fsload_mk_pair.expect.json) */
+        (
+            FS,
+            "precision mediump float; varying vec4 a; void main(){ gl_FragColor = vec4(a.z, 0.5, a.w, 0.75); }",
+            MaliError::FsVaryingLoad,
+        ),
         (FS, "precision mediump float; varying float v; void main(){ gl_FragColor = vec4(v, 0.0, 0.0, 1.0); }", MaliError::ColourZeroHalf),
         /* the S4 rows no reference draws: `!=` on floats and on integers;
          * the clamp forms Mesa's late rules make; a negated float(bool) in
@@ -1250,27 +1335,26 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
 }
 
 /// Every reachable gap is reached by its own ES 1.00 source, and the rest
-/// say why they cannot be (`unreachable_from_es100`). The counts are
-/// pinned: a new gap, or one that becomes reachable, fails here until it
-/// has a case.
+/// say why they cannot be (`unreachable_from_es100`). A new gap fails
+/// here until it has a case or a reason, a case for a gap that has a
+/// reason fails until the reason goes, and a case's gap is in `GAPS`.
 #[test]
 fn every_reachable_gap_is_reached_by_an_es100_source() {
     let mut reached = std::collections::BTreeSet::new();
     for (st, src, want) in gap_cases() {
         let got = gap(st, &src);
         assert_eq!(got, want, "{src}");
+        assert!(MaliError::GAPS.contains(&want), "{want:?} is not in MaliError::GAPS");
         reached.insert(want.message());
     }
     /* two gaps are reached through the entry points, not a source alone */
     reached.insert(a_blend_variant_is_refused_gap().message());
     reached.insert(a_linked_vertex_shader_is_refused_gap().message());
     let reachable: Vec<_> = MaliError::GAPS.iter().filter(|e| unreachable_from_es100(**e).is_none()).collect();
-    let unreachable = MaliError::GAPS.len() - reachable.len();
     for e in &reachable {
         assert!(reached.contains(e.message()), "no case reaches {e:?}");
     }
     assert_eq!(reached.len(), reachable.len(), "a case reaches a gap classified unreachable");
-    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (62, 57, 5), "gaps: all, reachable, unreachable");
 }
 
 /// The front end's verdict on gl_FragData[1] (the reason FragOutput is
@@ -1501,6 +1585,7 @@ fn a_freed_record_gives_no_mali_record_and_a_stale_handle_never_a_newer_one() {
         moved: &[],
         sampler: None,
         samplers: &[],
+        cube_samplers: 0,
         helper_threads: false,
         can_discard: false,
         ubo: &[],
@@ -1748,27 +1833,6 @@ fn compile_vs_for(vs: &str, fs: &str) -> Stage {
     .expect("the vertex shader compiles for the program")
 }
 
-/// The program's vertex shader of each compaction case against pan_shc's:
-/// only the components read stored, at their compacted offsets (the
-/// varying program's words, `generic_size_B` through the record).
-#[test]
-fn the_compacted_vertex_programs_are_byte_equal_to_mesa_26_2_1() {
-    let cases = [
-        (td!("cmp_vs4.vert"), td!("cmp_b.frag"), td!("pan_shc-out/cmp_b.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_xy.frag"), td!("pan_shc-out/cmp_xy.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_xz.frag"), td!("pan_shc-out/cmp_xz.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_w.frag"), td!("pan_shc-out/cmp_w.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_zw.frag"), td!("pan_shc-out/cmp_zw.json")),
-        (td!("cmp_vs4.vert"), td!("cmp_xyz.frag"), td!("pan_shc-out/cmp_xyz.json")),
-        (td!("cmp_vs2x4.vert"), td!("cmp_axby.frag"), td!("pan_shc-out/cmp_axby.json")),
-        (td!("cmp_vs2x4.vert"), td!("cmp_axybzw.frag"), td!("pan_shc-out/cmp_axybzw.json")),
-        (POINTS_VS, POINTCOORDVARY_FS, td!("pan_shc-out/pointcoordvary.json")),
-    ];
-    for (vs, fs, json) in cases {
-        check_vs_record_pan_shc(&compile_vs_for(vs, fs), json);
-    }
-}
-
 /// A vertex shader's multiply by a constant, as Mesa's algebraic rules
 /// leave it (pan_shc's references, tools/mali/testdata/cmul_*): the
 /// constant second, `* -1.0` an fneg folded into its user or stored as
@@ -1889,6 +1953,80 @@ fn the_point_size_programs_are_byte_equal_to_mesa_26_2_1() {
     check_vs_pan_shc(POINTS_VS, PSIZ_VARYING);
 }
 
+/* ---- gl_PointSize: the shim's triangle draw and point draw ------------ */
+
+/// Programs whose vertex shader writes gl_PointSize, each with two
+/// references of the shim (vertex, fragment, the triangle draw's reference,
+/// the point draw's): a constant and an attribute point size with a varying
+/// program, and one without a varying program.
+const PSIZ_COPIES: [(&str, &str, &str, &str); 3] = [
+    (
+        td!("psiz_copy_const.vert"),
+        td!("psiz_copy_const.frag"),
+        td!("psiz_copy_const.expect.json"),
+        td!("psiz_copy_const_points.expect.json"),
+    ),
+    (
+        td!("psiz_copy_attr.vert"),
+        td!("psiz_copy_attr.frag"),
+        td!("psiz_copy_attr.expect.json"),
+        td!("psiz_copy_attr_points.expect.json"),
+    ),
+    (
+        td!("psiz_copy_alone.vert"),
+        td!("psiz_copy_alone.frag"),
+        td!("psiz_copy_alone.expect.json"),
+        td!("psiz_copy_alone_points.expect.json"),
+    ),
+];
+
+/// Both position programs of a gl_PointSize vertex shader through the linked
+/// checks: the triangle draw's reference holds the one without the point
+/// size store, the point draw's the one with it.
+#[test]
+fn both_position_programs_of_a_point_size_shader_are_byte_equal_to_mesa_26_2_1() {
+    for (vs, fs, tri, points) in PSIZ_COPIES {
+        let (v, _) = check_linked(vs, fs, tri);
+        check_linked(vs, fs, points);
+        check_linked_for("psiz_copy", vs, fs, tri);
+        check_linked_for("psiz_copy", vs, fs, points);
+        let without_store = v.info.no_psiz_offset.expect("two position programs");
+        assert_eq!((vs_ran(&v, tri).0, vs_ran(&v, points).0), (without_store, 0), "each reference holds its own");
+    }
+}
+
+/// What the linked check refuses of a gl_PointSize vertex shader: a word
+/// changed in either position program fails against the reference that
+/// holds it and only against that one, and a reference whose varying
+/// program is at neither program's distance fails by name.
+#[test]
+fn the_linked_check_compares_the_position_program_the_reference_draw_ran() {
+    let fails = |v: &Stage, vs: &str, fs: &str, json: &str| {
+        std::panic::catch_unwind(|| check_vs_stage(v, vs, fs, json, VIEWPORT_64X64))
+            .err()
+            .map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default())
+    };
+    for (vs, fs, tri, points) in PSIZ_COPIES {
+        let (v, _) = compile_linked(vs, fs);
+        assert_eq!((fails(&v, vs, fs, tri), fails(&v, vs, fs, points)), (None, None));
+        for (at, _) in vs_positions(&v) {
+            let mut changed = Stage { code: v.code.clone(), info: v.info.clone(), uniforms: v.uniforms.clone() };
+            changed.code[at as usize / 8] ^= 1;
+            let (held, other) = if at == 0 { (points, tri) } else { (tri, points) };
+            let why = fails(&changed, vs, fs, held).expect("the reference that holds the program fails");
+            assert!(why.contains("vs.position"), "{why}");
+            assert_eq!(fails(&changed, vs, fs, other), None, "the other reference does not reach it");
+        }
+        if let Some(distance) = secondary_offset(tri) {
+            let key = format!("\"secondary_offset\": {distance}");
+            assert_eq!(tri.matches(&key).count(), 1);
+            let moved = tri.replace(&key, &format!("\"secondary_offset\": {}", distance + 128));
+            let why = fails(&v, vs, fs, &moved).expect("a distance of neither program fails");
+            assert!(why.contains("secondary_offset"), "{why}");
+        }
+    }
+}
+
 const POINTCOORD_FS: &str = include_str!("../../../../tools/shaders/es100/pointcoord.frag");
 const POINTCOORDVARY_FS: &str = include_str!("../../../../tools/shaders/es100/pointcoordvary.frag");
 
@@ -1899,26 +2037,406 @@ fn the_point_coord_program_is_byte_equal_to_mesa_26_2_1() {
     check_fs_pan_shc(POINTCOORD_FS, td!("pan_shc-out/pointcoord.json"));
 }
 
-/// The fragment shaders that read part of their varyings, after Mesa's
-/// link keeps only the components read (`compact_varyings`): case 105's
-/// (`v_color.b` beside gl_PointCoord) and the compaction controls (one vec4
-/// read as .b, .xy, .xz, .w, .zw, .xyz; two vec4s read as `v_a.x, v_b.y`
-/// and `v_a.xy, v_b.zw`, which share one slot), each with its vertex
-/// shader (tools/mali/testdata/cmp_*).
+/// The fragment shaders that read part of a mediump varying, each linked
+/// with its vertex shader: Mesa loads the varying at its declared width
+/// and the vertex shader stores every lane (GLSL's `lower_precision`
+/// converts the variable whole before the link, nir_fs.rs `layout`). Case
+/// 105's (`v_color.b` beside gl_PointCoord), the compaction controls (one
+/// vec4 read as .b, .xy, .xz, .w, .zw, .xyz; two vec4s read as `v_a.x,
+/// v_b.y` and `v_a.xy, v_b.zw`, tools/mali/testdata/cmp_*) and the width
+/// controls (fsload_*: one lane of a vec2, a vec3 and a vec4, a lane read
+/// twice, two lanes, lowp, a discard's compare, lanes of two varyings),
+/// against Mesa 26.2.1's driver on the drm-shim (`drm_shim_ref.sh run ...
+/// --uniform-values`, case 105 with `--prim points`). Each fsload case has
+/// its own vertex shader, which writes only the varyings it reads.
 #[test]
-fn the_compacted_fragment_programs_are_byte_equal_to_mesa_26_2_1() {
-    check_fs_pan_shc(POINTCOORDVARY_FS, td!("pan_shc-out/pointcoordvary.json"));
-    for (fs, json) in [
-        (td!("cmp_b.frag"), td!("pan_shc-out/cmp_b.json")),
-        (td!("cmp_xy.frag"), td!("pan_shc-out/cmp_xy.json")),
-        (td!("cmp_xz.frag"), td!("pan_shc-out/cmp_xz.json")),
-        (td!("cmp_w.frag"), td!("pan_shc-out/cmp_w.json")),
-        (td!("cmp_zw.frag"), td!("pan_shc-out/cmp_zw.json")),
-        (td!("cmp_xyz.frag"), td!("pan_shc-out/cmp_xyz.json")),
-        (td!("cmp_axby.frag"), td!("pan_shc-out/cmp_axby.json")),
-        (td!("cmp_axybzw.frag"), td!("pan_shc-out/cmp_axybzw.json")),
+fn a_mediump_varying_read_in_part_is_loaded_whole_as_mesa_26_2_1() {
+    let cmp = |m: &str| match m {
+        "axby" | "axybzw" => td!("cmp_vs2x4.vert"),
+        _ => td!("cmp_vs4.vert"),
+    };
+    let cases = [
+        ("cmp_b", cmp("b"), td!("cmp_b.frag"), td!("cmp_b.expect.json")),
+        ("cmp_xy", cmp("xy"), td!("cmp_xy.frag"), td!("cmp_xy.expect.json")),
+        ("cmp_xz", cmp("xz"), td!("cmp_xz.frag"), td!("cmp_xz.expect.json")),
+        ("cmp_w", cmp("w"), td!("cmp_w.frag"), td!("cmp_w.expect.json")),
+        ("cmp_zw", cmp("zw"), td!("cmp_zw.frag"), td!("cmp_zw.expect.json")),
+        ("cmp_xyz", cmp("xyz"), td!("cmp_xyz.frag"), td!("cmp_xyz.expect.json")),
+        ("cmp_axby", cmp("axby"), td!("cmp_axby.frag"), td!("cmp_axby.expect.json")),
+        ("cmp_axybzw", cmp("axybzw"), td!("cmp_axybzw.frag"), td!("cmp_axybzw.expect.json")),
+        ("fsload_v2_one", td!("fsload_v2_one.vert"), td!("fsload_v2_one.frag"), td!("fsload_v2_one.expect.json")),
+        (
+            "fsload_v2_twice",
+            td!("fsload_v2_twice.vert"),
+            td!("fsload_v2_twice.frag"),
+            td!("fsload_v2_twice.expect.json"),
+        ),
+        ("fsload_v3_one", td!("fsload_v3_one.vert"), td!("fsload_v3_one.frag"), td!("fsload_v3_one.expect.json")),
+        ("fsload_v4_one", td!("fsload_v4_one.vert"), td!("fsload_v4_one.frag"), td!("fsload_v4_one.expect.json")),
+        ("fsload_v4_two", td!("fsload_v4_two.vert"), td!("fsload_v4_two.frag"), td!("fsload_v4_two.expect.json")),
+        ("fsload_lowp", td!("fsload_lowp.vert"), td!("fsload_lowp.frag"), td!("fsload_lowp.expect.json")),
+        ("fsload_discard", td!("fsload_discard.vert"), td!("fsload_discard.frag"), td!("fsload_discard.expect.json")),
+        ("fsload_two", td!("fsload_two.vert"), td!("fsload_two.frag"), td!("fsload_two.expect.json")),
+        ("fsload_second", td!("fsload_second.vert"), td!("fsload_second.frag"), td!("fsload_second.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+    /* case 105: the fragment program and the varying program (the position
+     * program of a points draw is not this test's) */
+    let json = td!("pointcoordvary.expect.json");
+    let (v, f) = compile_linked(POINTS_VS, POINTCOORDVARY_FS);
+    check_fs_stage(&f, POINTS_VS, POINTCOORDVARY_FS, json, VIEWPORT_64X64);
+    assert_words(
+        "pointcoordvary vs.varying",
+        &vs_regions(&v).1,
+        &region(json, "vs.varying").expect("vs.varying").words,
+    );
+}
+
+/// A highp varying, and every varying of a highp shader, is loaded with
+/// the lanes read and stored by the vertex shader at its compacted offset
+/// (no `lower_precision` conversion: Mesa's link keeps the lanes read).
+#[test]
+fn a_highp_varying_read_in_part_is_compacted_as_mesa_26_2_1() {
+    let (vs, fs, json) = (td!("fsload_highp.vert"), td!("fsload_highp.frag"), td!("fsload_highp.expect.json"));
+    check_linked_for("fsload_highp", vs, fs, json);
+    let (vs, fs) = (td!("fsload_highp_varying.vert"), td!("fsload_highp_varying.frag"));
+    check_linked_for("fsload_highp_varying", vs, fs, td!("fsload_highp_varying.expect.json"));
+}
+
+/// Varyings that share a slot, and the layout and load rules of the link
+/// (nir_fs.rs `layout`, `kept_whole`, `conversion_order`), each linked
+/// with its vertex shader against Mesa 26.2.1's driver on the drm-shim
+/// (`drm_shim_ref.sh run ... --uniform-values`; fsload_pcv with `--prim
+/// points`): a slot is loaded when a lane of it is read, at the width the
+/// link left it, in the order of the slots' first reads (fsload_v3x_v3z,
+/// fsload_v3z_v3z: slot 1 first); a slot no one reads is stored and not
+/// loaded (fsload_v3x_v3x); a vec2 is laid before a vec3 (fsload_v3z_v2x)
+/// and a mat2 before a vec2 (fsload_mat2_v2); a matrix is kept per column
+/// (fsload_mat2, fsload_mat3) and, in a highp shader, per lane read
+/// (fsload_hp_mat2); a colour that holds a highp varying's lane keeps the
+/// lanes read (fsload_hp_var2); the colour's own lanes are converted in
+/// the colour's order (fsload_order, intloop_ifloop: the pair z,w first);
+/// gl_PointCoord is loaded `.v2` where x alone is read (fsload_pcv).
+#[test]
+fn varyings_sharing_a_slot_are_loaded_per_slot_as_mesa_26_2_1() {
+    let pair = |n: &'static str| match n {
+        "fsload_v3x_v3z" | "fsload_v3z_v3z" | "fsload_v3x_v3x" => td!("fsload_v3x_v3z.vert"),
+        "fsload_v3z_v2x" => td!("fsload_v3z_v2x.vert"),
+        "fsload_mat2" | "fsload_hp_mat2" => td!("fsload_mat2.vert"),
+        "fsload_mat3" => td!("fsload_mat3.vert"),
+        "fsload_mat2_v2" => td!("fsload_mat2_v2.vert"),
+        "fsload_hp_var2" => td!("fsload_hp_var2.vert"),
+        "fsload_order" => td!("fsload_order.vert"),
+        _ => td!("intloop_ifloop.vert"),
+    };
+    let cases = [
+        ("fsload_v3x_v3z", td!("fsload_v3x_v3z.frag"), td!("fsload_v3x_v3z.expect.json")),
+        ("fsload_v3z_v3z", td!("fsload_v3z_v3z.frag"), td!("fsload_v3z_v3z.expect.json")),
+        ("fsload_v3x_v3x", td!("fsload_v3x_v3x.frag"), td!("fsload_v3x_v3x.expect.json")),
+        ("fsload_v3z_v2x", td!("fsload_v3z_v2x.frag"), td!("fsload_v3z_v2x.expect.json")),
+        ("fsload_mat2", td!("fsload_mat2.frag"), td!("fsload_mat2.expect.json")),
+        ("fsload_hp_mat2", td!("fsload_hp_mat2.frag"), td!("fsload_hp_mat2.expect.json")),
+        ("fsload_mat3", td!("fsload_mat3.frag"), td!("fsload_mat3.expect.json")),
+        ("fsload_mat2_v2", td!("fsload_mat2_v2.frag"), td!("fsload_mat2_v2.expect.json")),
+        ("fsload_hp_var2", td!("fsload_hp_var2.frag"), td!("fsload_hp_var2.expect.json")),
+        ("fsload_order", td!("fsload_order.frag"), td!("fsload_order.expect.json")),
+        ("intloop_ifloop", td!("intloop_ifloop.frag"), td!("intloop_ifloop.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, pair(name), fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+    /* a points draw: the fragment program and the varying program (case
+     * 105's test) */
+    let (fs, json) = (td!("fsload_pcv.frag"), td!("fsload_pcv.expect.json"));
+    let (v, f) = compile_linked(POINTS_VS, fs);
+    check_fs_stage(&f, POINTS_VS, fs, json, VIEWPORT_64X64);
+    assert_words("fsload_pcv vs.varying", &vs_regions(&v).1, &region(json, "vs.varying").expect("vs.varying").words);
+}
+
+/// A mat2 varying built from ONE vector, `m = mat2(a_a)` with a `vec4 a_a`,
+/// is the vector's four components (GLSL ES 1.00 section 5.4.2): Mesa
+/// 26.2.1 makes the program of `mat2(a_a.x, a_a.y, a_a.z, a_a.w)` for it,
+/// byte for byte. The fragment shader reads both columns. With the vector
+/// taken for a scalar (`a_a.x` on the diagonal) the pair was refused: the
+/// colour then held zeros beside the varying's lanes.
+#[test]
+fn a_matrix_varying_from_one_vector_is_its_four_components_as_mesa_26_2_1() {
+    check_linked_for("matvec_mat2", td!("matvec_mat2.vert"), td!("matvec_mat2.frag"), td!("matvec_mat2.expect.json"));
+}
+
+/// Shapes whose load or conversions Mesa makes in a form the selection has
+/// no reference for, each refused by name; each reference holds the load:
+/// both lanes of an aligned pair beside constants (Mesa converts the pair
+/// once, `V2F32_TO_V2F16 r0, r2^, r3^`), a discard's compare of y and the
+/// colour's x (Mesa's pair with y low, `V2F32_TO_V2F16 r0, r1^, r0^`), a
+/// sum with zeros of both signs (no identity at the link by the source,
+/// nir_search.c:282-285, and no shape that tells its order), and
+/// dFdy of a vec2's second lane (Mesa converts that lane alone, `FADD.f32
+/// r0.h0, r1^`).
+#[test]
+fn a_load_or_conversion_with_no_reference_is_refused() {
+    let cases = [
+        (td!("fsload_mk_pair.frag"), td!("fsload_mk_pair.expect.json"), MaliError::FsVaryingLoad, ".v4"),
+        (td!("fsload_disc_col.frag"), td!("fsload_disc_col.expect.json"), MaliError::FsVaryingLoad, ".v4"),
+        (td!("fsload_zeros.frag"), td!("fsload_zeros.expect.json"), MaliError::FsVaryingLoad, ".v4"),
+        (td!("fsload_deriv2.frag"), td!("fsload_deriv2.expect.json"), MaliError::FsOperandForm, ".v2"),
+    ];
+    for (fs, json, want, width) in cases {
+        let r = region(json, "fs.fragment").expect("fs.fragment");
+        assert!(text(r.words[0]).starts_with(&format!("LD_VAR_BUF_IMM.f32.slot0{width}")), "{}", text(r.words[0]));
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), want, "{fs}");
+    }
+}
+
+/// The colour's own lanes are converted at the colour's store, after
+/// everything before it (a discard included), in the colour's lane order
+/// across the loads, and each load stands before its first conversion
+/// (nir_fs.rs `select`, `conversion_order`): drm-shim references of the
+/// second review's shapes. fsconv_cpq converts q.y, c.z, p.x (two loads);
+/// fsconv_slot loads slot 1 first (d.y); fsconv_disc2, fsconv_discw,
+/// fsconv_disch, fsconv_discv and fsconv_discpc convert the colour after
+/// the DISCARD; fsconv_alpha2, fsconv_alpha3 and fsconv_alpha4 take a lane
+/// alone as the alpha (`ATEST ... r2.h0`).
+#[test]
+fn colour_lanes_are_converted_at_the_store_as_mesa_26_2_1() {
+    let cases = [
+        ("fsconv_cpq", td!("fsconv_cpq.vert"), td!("fsconv_cpq.frag"), td!("fsconv_cpq.expect.json")),
+        ("fsconv_slot", td!("fsconv_slot.vert"), td!("fsconv_slot.frag"), td!("fsconv_slot.expect.json")),
+        ("fsconv_disc2", td!("fsconv_disc2.vert"), td!("fsconv_disc2.frag"), td!("fsconv_disc2.expect.json")),
+        ("fsconv_discw", td!("fsconv_discw.vert"), td!("fsconv_discw.frag"), td!("fsconv_discw.expect.json")),
+        ("fsconv_disch", td!("fsconv_disch.vert"), td!("fsconv_disch.frag"), td!("fsconv_disch.expect.json")),
+        ("fsconv_discv", td!("fsconv_discv.vert"), td!("fsconv_discv.frag"), td!("fsconv_discv.expect.json")),
+        ("fsconv_discpc", td!("fsconv_discpc.vert"), td!("fsconv_discpc.frag"), td!("fsconv_discpc.expect.json")),
+        ("fsconv_alpha2", td!("fsconv_alpha2.vert"), td!("fsconv_alpha2.frag"), td!("fsconv_alpha2.expect.json")),
+        ("fsconv_alpha3", td!("fsconv_alpha3.vert"), td!("fsconv_alpha3.frag"), td!("fsconv_alpha3.expect.json")),
+        ("fsconv_alpha4", td!("fsconv_alpha4.vert"), td!("fsconv_alpha4.frag"), td!("fsconv_alpha4.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
+/// An identity constant on every lane of an fp16 operation (`a.x * 1.0`,
+/// `p.x + 0.0`, `(p * 1.0).x`) is folded by the link's nir_opt_algebraic,
+/// so its operand is the colour's own lane, converted at the store in the
+/// colour's order (fsconv_fold1-3); an identity on some lanes only keeps the
+/// operation an fp16 one, whose operands the tree converts (fsconv_fold4:
+/// `a * vec4(2.0, 2.0, 1.0, 1.0)` converts z,w with x,y). nir_fs.rs
+/// [`Fs::folded`].
+#[test]
+fn an_identity_on_every_lane_is_the_colour_s_own_lane_as_mesa_26_2_1() {
+    let cases = [
+        ("fsconv_fold1", td!("fsconv_fold1.vert"), td!("fsconv_fold1.frag"), td!("fsconv_fold1.expect.json")),
+        ("fsconv_fold2", td!("fsconv_fold2.vert"), td!("fsconv_fold2.frag"), td!("fsconv_fold2.expect.json")),
+        ("fsconv_fold3", td!("fsconv_fold3.vert"), td!("fsconv_fold3.frag"), td!("fsconv_fold3.expect.json")),
+        ("fsconv_fold4", td!("fsconv_fold4.vert"), td!("fsconv_fold4.frag"), td!("fsconv_fold4.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
+/// A colour lane assigned to the colour itself (`gl_FragColor.xy =
+/// a.xy`) is in no tree lower_precision lowers, so the link keeps the
+/// lanes read; a constructor's lane is (nir_fs.rs `kept_whole`).
+/// fsload_bare1-3 keep the lanes read; fsload_bare4 keeps p whole (its
+/// constructor) and c.y alone.
+#[test]
+fn a_lane_assigned_to_the_colour_keeps_the_lanes_read_as_mesa_26_2_1() {
+    let cases = [
+        ("fsload_bare1", td!("fsload_bare1.vert"), td!("fsload_bare1.frag"), td!("fsload_bare1.expect.json")),
+        ("fsload_bare2", td!("fsload_bare2.vert"), td!("fsload_bare2.frag"), td!("fsload_bare2.expect.json")),
+        ("fsload_bare3", td!("fsload_bare3.vert"), td!("fsload_bare3.frag"), td!("fsload_bare3.expect.json")),
+        ("fsload_bare4", td!("fsload_bare4.vert"), td!("fsload_bare4.frag"), td!("fsload_bare4.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
+/// Equal lanes are merged within one interpolation qualifier only
+/// (`get_input_qualifier`'s tables, nir_opt_varyings.c:3042-3136,
+/// 3298-3305): two flat varyings of one value are one flat load
+/// (fsload_qual4); a smooth and a flat one stay apart in Mesa's program
+/// (each reference holds a `.src_flat32` load), a layout refused here
+/// (flat beside smooth), never q read from p's smooth slot.
+#[test]
+fn equal_lanes_of_two_qualifiers_are_not_merged() {
+    check_linked_for(
+        "fsload_qual4",
+        td!("fsload_qual4.vert"),
+        td!("fsload_qual4.frag"),
+        td!("fsload_qual4.expect.json"),
+    );
+    for (vs, fs, json) in [
+        (td!("fsload_qual1.vert"), td!("fsload_qual1.frag"), td!("fsload_qual1.expect.json")),
+        (td!("fsload_qual2.vert"), td!("fsload_qual2.frag"), td!("fsload_qual2.expect.json")),
+        (td!("fsload_qual3.vert"), td!("fsload_qual3.frag"), td!("fsload_qual3.expect.json")),
     ] {
-        check_fs_pan_shc(fs, json);
+        let r = region(json, "fs.fragment").expect("fs.fragment");
+        assert!(r.words.iter().any(|w| text(*w).contains(".src_flat32")), "{fs}");
+        let _k = store::test_keep();
+        let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
+            .expect("the scratch arena is free")
+            .expect("the vertex shader's constant lanes");
+        let f = store::with_scratch(|s| super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|_| ()))
+            .expect("the scratch arena is free");
+        match f {
+            Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => {
+                assert_eq!(e, MaliError::VaryingNotFromAttribute, "{fs}")
+            }
+            other => panic!("{fs}: not refused by name: {other:?}"),
+        }
+    }
+}
+
+/// A colour lane whose `f2fmp` the link undoes keeps the lanes read: a
+/// local read back bare, a whole identity, a dead tree; gl_nir_opts makes
+/// `f2f32(f2fmp(a))` `a` (nir_opt_algebraic.py:1991) after vars_to_ssa,
+/// the identity folds and DCE, before nir_opt_varyings (nir_fs.rs
+/// `kept_whole`). fsload_cancel1-9 are byte-equal on main; fsload_cancel10
+/// and 11 are a constructor of the varying's lanes alone (`.v2`).
+#[test]
+fn a_conversion_the_link_undoes_keeps_the_lanes_read_as_mesa_26_2_1() {
+    let cases = [
+        ("fsload_cancel1", td!("fsload_cancel1.vert"), td!("fsload_cancel1.frag"), td!("fsload_cancel1.expect.json")),
+        ("fsload_cancel2", td!("fsload_cancel2.vert"), td!("fsload_cancel2.frag"), td!("fsload_cancel2.expect.json")),
+        ("fsload_cancel3", td!("fsload_cancel3.vert"), td!("fsload_cancel3.frag"), td!("fsload_cancel3.expect.json")),
+        ("fsload_cancel4", td!("fsload_cancel4.vert"), td!("fsload_cancel4.frag"), td!("fsload_cancel4.expect.json")),
+        ("fsload_cancel5", td!("fsload_cancel5.vert"), td!("fsload_cancel5.frag"), td!("fsload_cancel5.expect.json")),
+        ("fsload_cancel6", td!("fsload_cancel6.vert"), td!("fsload_cancel6.frag"), td!("fsload_cancel6.expect.json")),
+        ("fsload_cancel7", td!("fsload_cancel7.vert"), td!("fsload_cancel7.frag"), td!("fsload_cancel7.expect.json")),
+        ("fsload_cancel8", td!("fsload_cancel8.vert"), td!("fsload_cancel8.frag"), td!("fsload_cancel8.expect.json")),
+        ("fsload_cancel9", td!("fsload_cancel9.vert"), td!("fsload_cancel9.frag"), td!("fsload_cancel9.expect.json")),
+        (
+            "fsload_cancel10",
+            td!("fsload_cancel10.vert"),
+            td!("fsload_cancel10.frag"),
+            td!("fsload_cancel10.expect.json"),
+        ),
+        (
+            "fsload_cancel11",
+            td!("fsload_cancel11.vert"),
+            td!("fsload_cancel11.frag"),
+            td!("fsload_cancel11.expect.json"),
+        ),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
+/// A colour store keeps a varying whole only when the lanes it writes
+/// hold the varying beside another value (a constant, another varying, an
+/// fp16 operation's lane): `f2f32` then reads a vector, not the `f2fmp`.
+/// Lanes of the varying alone, through a constructor, are one swizzle of
+/// its `f2fmp`, which the link cancels (nir_fs.rs `colour_keeps_whole`):
+/// fsload_ctor1 keeps the lanes read; fsload_ctor3 (the constructor
+/// stored whole), fsload_ctor4 (`t.xz`, a lane beside a constant) and
+/// fsload_ctor5 (two varyings) keep them whole.
+#[test]
+fn a_colour_store_keeps_a_varying_whole_by_the_lanes_it_writes_as_mesa_26_2_1() {
+    let cases = [
+        ("fsload_ctor1", td!("fsload_ctor1.vert"), td!("fsload_ctor1.frag"), td!("fsload_ctor1.expect.json")),
+        ("fsload_ctor3", td!("fsload_ctor3.vert"), td!("fsload_ctor3.frag"), td!("fsload_ctor3.expect.json")),
+        ("fsload_ctor4", td!("fsload_ctor4.vert"), td!("fsload_ctor4.frag"), td!("fsload_ctor4.expect.json")),
+        ("fsload_ctor5", td!("fsload_ctor5.vert"), td!("fsload_ctor5.frag"), td!("fsload_ctor5.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
+/// Two lanes of equal value: Mesa's link keeps the first in the layout's
+/// order and reads the other from it (`deduplicate_outputs`,
+/// nir_opt_varyings.c:3253-3420). fsload_dup's `a.z` is `a.x` (`.v2`, two
+/// stores); fsload_dup_swz's q is p swizzled, so q.x is read from p.y
+/// (`.v2`, one `V2F32_TO_V2F16`).
+#[test]
+fn equal_varying_lanes_are_merged_as_mesa_26_2_1() {
+    check_linked_for("fsload_dup", td!("fsload_dup.vert"), td!("fsload_dup.frag"), td!("fsload_dup.expect.json"));
+    let (vs, fs, json) = (td!("fsload_dup_swz.vert"), td!("fsload_dup_swz.frag"), td!("fsload_dup_swz.expect.json"));
+    check_linked_for("fsload_dup_swz", vs, fs, json);
+    /* equal on both sides of a vertex `if` (Mesa compares the stores
+     * block by block, nir_opt_varyings.c:3150-3160) */
+    let (vs, fs, json) = (td!("fsload_dup_if.vert"), td!("fsload_dup_if.frag"), td!("fsload_dup_if.expect.json"));
+    check_linked_for("fsload_dup_if", vs, fs, json);
+    /* a lane written before or after the `if`, equal to one it writes
+     * alike (the outputs are stored at the shader's end) */
+    for (name, vs, fs, json) in [
+        ("fsload_dup_if2", td!("fsload_dup_if2.vert"), td!("fsload_dup_if2.frag"), td!("fsload_dup_if2.expect.json")),
+        ("fsload_dup_if3", td!("fsload_dup_if3.vert"), td!("fsload_dup_if3.frag"), td!("fsload_dup_if3.expect.json")),
+        ("fsload_dup_if4", td!("fsload_dup_if4.vert"), td!("fsload_dup_if4.frag"), td!("fsload_dup_if4.expect.json")),
+    ] {
+        check_linked_for(name, vs, fs, json);
+    }
+    /* a join of two values in both: refused, not merged (its vertex
+     * words are not this back end's) */
+    let (vs, fs) = (td!("fsload_dup_phi.vert"), td!("fsload_dup_phi.frag"));
+    let _k = store::test_keep();
+    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
+        .expect("the scratch arena is free")
+        .expect("the vertex shader's constant lanes");
+    let f = store::with_scratch(|s| {
+        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
+    })
+    .expect("the scratch arena is free")
+    .expect("the fragment shader compiles for the vertex shader");
+    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    let r = store::with_scratch(|s| {
+        let pr = super::reads_at_vertex_locations(&pr, fs.as_bytes(), vs.as_bytes(), s)
+            .expect("both stages lower")
+            .expect("every read is a vertex output");
+        super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep()).map(|_| ())
+    })
+    .expect("the scratch arena is free");
+    match r {
+        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, MaliError::VaryingDuplicate),
+        other => panic!("fsload_dup_phi: the vertex shader is not refused by name: {other:?}"),
     }
 }
 
@@ -1990,7 +2508,7 @@ fn the_uniform_population_is_referenced() {
     for src in vs_reference_sources() {
         seen |= prods(src);
     }
-    /* the compaction cases, built for their programs (pan_shc's) */
+    /* the compaction controls, built for their programs (cmp_*.expect.json) */
     for (vs, fs) in [(td!("cmp_vs4.vert"), td!("cmp_b.frag")), (td!("cmp_vs2x4.vert"), td!("cmp_axby.frag"))] {
         let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
         let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
@@ -2553,6 +3071,381 @@ fn a_vertex_cube_look_up_at_a_constant_lane_is_byte_equal_to_mesa_26_2_1() {
     assert!(texts.iter().any(|t| t.starts_with("TEX_SINGLE") && t.contains(".cube.explicit")), "{texts:?}");
 }
 
+/* ---- the per-source table against Mesa's valhall.c (#4574) ---------- */
+
+/// The `valhall_opcodes[]` entry Mesa selects for `op` (`BI_OPCODE_<name>`
+/// in valhall.c), or None for a pseudo-op Mesa's table has no entry for
+/// (its `va_src_info` reads a zeroed entry; ours are lowered or fused before
+/// the passes that read [`bir::src_info`]). The match has no wildcard: a new
+/// op names its entry here, and [`ALL_OPS`] lists it.
+fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
+    use bir::Op as O;
+    Some(match op {
+        O::Nop => "NOP",
+        O::MovI32 => "MOV_I32",
+        O::IaddImmI32(_) => "IADD_IMM_I32",
+        O::FaddImmF32(_) => "FADD_IMM_F32",
+        O::FaddImmV2f16(_) => "FADD_IMM_V2F16",
+        O::FmaF32 => "FMA_F32",
+        O::FmaV2f16 => "FMA_V2F16",
+        O::FaddV2f16 => "FADD_V2F16",
+        O::FaddF32 => "FADD_F32",
+        O::FrcpF32 => "FRCP_F32",
+        O::FrcpF16 => "FRCP_F16",
+        O::FmaxF32 => "FMAX_F32",
+        O::FmaxV2f16 => "FMAX_V2F16",
+        O::FminF32 => "FMIN_F32",
+        O::FminV2f16 => "FMIN_V2F16",
+        O::FabsnegF32 | O::FabsnegV2f16 | O::FclampF32 | O::FclampV2f16 => return None,
+        O::FcmpOrF32 { .. } => "FCMP_OR_F32",
+        O::FcmpOrV2f16 { .. } => "FCMP_OR_V2F16",
+        O::IcmpOrS32 { .. } => "ICMP_OR_S32",
+        O::IcmpOrU32 { .. } => "ICMP_OR_U32",
+        O::IcmpOrV2u16 { .. } => "ICMP_OR_V2U16",
+        /* `BI_MUX_BIT` is a mode of MUX.i32 */
+        O::MuxI32 | O::MuxBitI32 => "MUX_I32",
+        O::Cubeface1 => "CUBEFACE1",
+        O::Cubeface2 => "CUBEFACE2_V9",
+        O::CubeSsel => "CUBE_SSEL",
+        O::CubeTsel => "CUBE_TSEL",
+        O::MuxV2i16 => "MUX_V2I16",
+        O::CselU32 => "CSEL_U32",
+        O::CselS32 { .. } => "CSEL_S32",
+        O::IabsS32 => "IABS_S32",
+        O::ImulI32 => "IMUL_I32",
+        O::IsubS32 => "ISUB_S32",
+        O::U32ToF32 => "U32_TO_F32",
+        O::F32ToU32 => "F32_TO_U32",
+        O::LshiftXorI32 => "LSHIFT_XOR_I32",
+        O::Clper => "CLPER_I32",
+        O::FroundF32 { .. } => "FROUND_F32",
+        O::FroundV2f16 { .. } => "FROUND_V2F16",
+        O::FrsqF32 => "FRSQ_F32",
+        O::FrsqF16 => "FRSQ_F16",
+        O::FsinTableU6 => "FSIN_TABLE_U6",
+        O::FcosTableU6 => "FCOS_TABLE_U6",
+        O::FmaRscaleF32 => "FMA_RSCALE_F32",
+        O::FrexpeF32 { .. } => "FREXPE_F32",
+        O::FaddLscaleF32 => "FADD_LSCALE_F32",
+        O::FlogdF32 => "FLOGD_F32",
+        O::FexpF32 => "FEXP_F32",
+        O::F32ToS32 => "F32_TO_S32",
+        O::S32ToF32 => "S32_TO_F32",
+        O::IaddS32 => "IADD_S32",
+        O::S16ToS32 => "S16_TO_S32",
+        O::U16ToU32 => "U16_TO_U32",
+        O::U16ToF32 => "U16_TO_F32",
+        O::F16ToF32 => "F16_TO_F32",
+        O::F16ToS32 => "F16_TO_S32",
+        O::U8ToF32 => "U8_TO_F32",
+        O::V2f32ToV2f16 => "V2F32_TO_V2F16",
+        O::MkvecV2i16 => "MKVEC_V2I16",
+        O::IaddV2u16 => "IADD_V2U16",
+        O::MkvecV2i8 => "MKVEC_V2I8",
+        O::ShaddxS64 => "SHADDX_S64",
+        O::LdAttrImm { .. } => "LD_ATTR_IMM",
+        O::LeaBufImm { .. } => "LEA_BUF_IMM",
+        O::StoreI32 { .. } => "STORE_I32",
+        O::StoreI16 { .. } => "STORE_I16",
+        O::LdVarBufImmF32 { .. } => "LD_VAR_BUF_IMM_F32",
+        O::LdVarSpecialF32 { .. } => "LD_VAR_SPECIAL",
+        O::LdVarImmF32 { .. } => "LD_VAR_IMM",
+        O::Atest => "ATEST",
+        O::ZsEmit { .. } => "ZS_EMIT",
+        O::Blend { .. } => "BLEND",
+        O::BranchzI { .. } => "BRANCHZI",
+        O::LshiftAndI32 => "LSHIFT_AND_I32",
+        O::LshiftOrI32 => "LSHIFT_OR_I32",
+        O::LshiftAndV2i16 => "LSHIFT_AND_V2I16",
+        O::LshiftOrV2i16 => "LSHIFT_OR_V2I16",
+        O::LshiftXorV2i16 => "LSHIFT_XOR_V2I16",
+        O::RshiftAndI32 => "RSHIFT_AND_I32",
+        O::RshiftOrI32 => "RSHIFT_OR_I32",
+        /* the compiler's ARSHIFT is RSHIFT with the arithmetic bit
+         * (valhall.c.py SKIP: "Disassembly aliases") */
+        O::ArshiftOrI32 => "RSHIFT_OR_I32",
+        O::LdPka { words: 1, half: true } => "LD_PKA_I16",
+        O::LdPka { words: 1, .. } => "LD_PKA_I32",
+        O::LdPka { words: 2, .. } => "LD_PKA_I64",
+        O::LdPka { words: 3, .. } => "LD_PKA_I96",
+        O::LdPka { .. } => "LD_PKA_I128",
+        O::LdTile { .. } => "LD_TILE",
+        O::Branchz { .. } => "BRANCHZ_I16",
+        O::Phi | O::Collect | O::Split | O::DiscardB32 => return None,
+        O::DiscardF32 { .. } => "DISCARD_F32",
+        O::TexSingle { .. } => "TEX_SINGLE",
+    })
+}
+
+/// Every op of [`bir::Op`], one value per variant (each width of LD_PKA);
+/// [`all_ops_holds_every_variant_of_op`] fails while a variant is missing.
+const ALL_OPS: [bir::Op; 97] = {
+    use bir::{Access, Cmpf, LodMode, Op as O, ResultType, Round, TexDim, VaryingName};
+    let (cmpf, result) = (Cmpf::Eq, ResultType::M1);
+    [
+        O::Nop,
+        O::MovI32,
+        O::IaddImmI32(0),
+        O::FaddImmF32(0),
+        O::FaddImmV2f16(0),
+        O::FmaF32,
+        O::FmaV2f16,
+        O::FaddV2f16,
+        O::FaddF32,
+        O::FrcpF32,
+        O::FrcpF16,
+        O::FmaxF32,
+        O::FmaxV2f16,
+        O::FminF32,
+        O::FminV2f16,
+        O::FabsnegF32,
+        O::FabsnegV2f16,
+        O::FclampF32,
+        O::FclampV2f16,
+        O::FcmpOrF32 { cmpf, result },
+        O::FcmpOrV2f16 { cmpf, result },
+        O::IcmpOrS32 { cmpf, result },
+        O::IcmpOrU32 { cmpf, result },
+        O::IcmpOrV2u16 { cmpf, result },
+        O::MuxI32,
+        O::MuxBitI32,
+        O::Cubeface1,
+        O::Cubeface2,
+        O::CubeSsel,
+        O::CubeTsel,
+        O::MuxV2i16,
+        O::CselU32,
+        O::CselS32 { cmpf },
+        O::IabsS32,
+        O::ImulI32,
+        O::IsubS32,
+        O::U32ToF32,
+        O::F32ToU32,
+        O::LshiftXorI32,
+        O::Clper,
+        O::FroundF32 { round: Round::Rtn },
+        O::FroundV2f16 { round: Round::Rtn },
+        O::FrsqF32,
+        O::FrsqF16,
+        O::FsinTableU6,
+        O::FcosTableU6,
+        O::FmaRscaleF32,
+        O::FrexpeF32 { log: false },
+        O::FaddLscaleF32,
+        O::FlogdF32,
+        O::FexpF32,
+        O::F32ToS32,
+        O::S32ToF32,
+        O::IaddS32,
+        O::S16ToS32,
+        O::U16ToU32,
+        O::U16ToF32,
+        O::F16ToF32,
+        O::F16ToS32,
+        O::U8ToF32,
+        O::V2f32ToV2f16,
+        O::MkvecV2i16,
+        O::IaddV2u16,
+        O::MkvecV2i8,
+        O::ShaddxS64,
+        O::LdAttrImm { index: 0, vecsize: 4 },
+        O::LeaBufImm { table: 0, index: 0 },
+        O::StoreI32 { access: Access::Istream },
+        O::StoreI16 { access: Access::Istream },
+        O::LdVarBufImmF32 { index: 0, vecsize: 4, flat: false },
+        O::LdVarSpecialF32 { name: VaryingName::Point, vecsize: 2 },
+        O::LdVarImmF32 { table: 0, index: 0, vecsize: 4 },
+        O::Atest,
+        O::ZsEmit { z: true, s: true },
+        O::Blend { sr_count: 4, f32: false, u32: false },
+        O::BranchzI { eq: true },
+        O::LshiftAndI32,
+        O::LshiftOrI32,
+        O::LshiftAndV2i16,
+        O::LshiftOrV2i16,
+        O::LshiftXorV2i16,
+        O::RshiftAndI32,
+        O::RshiftOrI32,
+        O::ArshiftOrI32,
+        O::LdPka { words: 1, half: true },
+        O::LdPka { words: 1, half: false },
+        O::LdPka { words: 2, half: false },
+        O::LdPka { words: 3, half: false },
+        O::LdPka { words: 4, half: false },
+        O::LdTile { vecsize: 4, f16: true },
+        O::Branchz { target: 0, eq: true },
+        O::Phi,
+        O::DiscardF32 { cmpf },
+        O::DiscardB32,
+        O::TexSingle {
+            sr_count: 2,
+            mask: 0xf,
+            f16: true,
+            skip: false,
+            lod: LodMode::Computed,
+            dim: TexDim::D2,
+            shadow: false,
+        },
+        O::Collect,
+        O::Split,
+    ]
+};
+
+/// The variant names of `pub enum Op` in bir.rs's own text: each line of
+/// the enum's body at its first indentation that starts with a capital
+/// letter (a field, a doc comment or a closing brace does not).
+fn op_variants_in_bir_rs() -> std::collections::BTreeSet<&'static str> {
+    let body = include_str!("bir.rs").split("\npub enum Op {\n").nth(1).expect("bir.rs declares `pub enum Op`");
+    let body = body.split("\n}\n").next().expect("the enum's closing brace");
+    body.lines()
+        .filter_map(|l| l.strip_prefix("    "))
+        .filter(|l| l.starts_with(|c: char| c.is_ascii_uppercase()))
+        .map(|l| l.split(|c: char| !c.is_ascii_alphanumeric()).next().unwrap_or(""))
+        .collect()
+}
+
+/// [`ALL_OPS`] holds every variant of [`bir::Op`] and nothing else, so
+/// [`the_source_table_equals_mesa_26_2_1_valhall_c`] compares every op: a
+/// variant added to bir.rs fails here until it is listed (and
+/// [`mesa_opcode`], whose match is exhaustive, does not compile until it
+/// names the variant's entry).
+#[test]
+fn all_ops_holds_every_variant_of_op() {
+    let listed: std::collections::BTreeSet<String> = ALL_OPS
+        .iter()
+        .map(|op| format!("{op:?}").split(|c: char| !c.is_ascii_alphanumeric()).next().unwrap_or("").to_string())
+        .collect();
+    let declared: std::collections::BTreeSet<String> =
+        op_variants_in_bir_rs().into_iter().map(str::to_string).collect();
+    assert!(declared.len() > 80, "the enum's text was not read: {declared:?}");
+    let missing: Vec<_> = declared.difference(&listed).collect();
+    let extra: Vec<_> = listed.difference(&declared).collect();
+    assert!(missing.is_empty() && extra.is_empty(), "not in ALL_OPS: {missing:?}; not an Op variant: {extra:?}");
+}
+
+/// `va_swap_12` (valhall.h): the ops whose BIR sources 1 and 2 are the
+/// entry's 2 and 1.
+fn va_swap_12(name: &str) -> bool {
+    name == "BLEND" || ["LSHIFT_", "RSHIFT_"].iter().any(|p| name.starts_with(p))
+}
+
+/// [`bir::src_info`], [`bir::nr_srcs`], [`bir::nr_staging_srcs`] and
+/// [`bir::is_signed`] of every op equal the facts of Mesa 26.2.1's
+/// generated valhall.c (tools/mali/testdata/valhall_src_info.txt, made by
+/// tools/mali/valhall_src_info.py): `va_src_info(op, s)` of each source,
+/// `va_swap_12` applied, every field this back end reads. A wrong flag
+/// picks another constant encoding in `va_lookup_constant` (fau.rs
+/// `lookup`): the cube ops' `swizzle` made 0.5 an fp16 half of the table
+/// where Mesa pushes the word (#4574).
+#[test]
+fn the_source_table_equals_mesa_26_2_1_valhall_c() {
+    let mesa: Vec<Vec<&str>> = include_str!("../../../../tools/mali/testdata/valhall_src_info.txt")
+        .lines()
+        .map(|l| l.split(' ').collect())
+        .collect();
+    let mut differ = Vec::new();
+    for op in ALL_OPS {
+        let Some(name) = mesa_opcode(op) else { continue };
+        let e = mesa.iter().find(|e| e[0] == name).unwrap_or_else(|| panic!("{name} is not in valhall.c"));
+        let (signed, staging, srcs) = (e[1] == "1", e[2].parse::<usize>().unwrap(), e[3].parse::<usize>().unwrap());
+        if bir::is_signed(op) != signed {
+            differ.push(format!("{op:?} ({name}): is_signed {} / Mesa {signed}", bir::is_signed(op)));
+        }
+        if bir::nr_staging_srcs(op) != staging || bir::nr_srcs(op) != srcs {
+            differ.push(format!(
+                "{op:?} ({name}): sources {}+{} / Mesa {staging}+{srcs}",
+                bir::nr_staging_srcs(op),
+                bir::nr_srcs(op)
+            ));
+        }
+        for s in 0..staging + srcs {
+            let k = if va_swap_12(name) && (s == 1 || s == 2) { 3 - s } else { s };
+            let (flags, bits) = e[4 + k].split_once('/').unwrap();
+            let flags: Vec<&str> = flags.split(',').collect();
+            let has = |f: &str| flags.contains(&f);
+            let m = bir::SrcInfo {
+                absneg: has("absneg"),
+                swizzle: has("swizzle"),
+                notted: has("notted"),
+                widen: has("widen"),
+                lanes: has("lanes"),
+                halfswizzle: has("halfswizzle"),
+                lane: has("lane"),
+                combine: has("combine"),
+                bits: bits.parse().unwrap(),
+            };
+            let ours = bir::src_info(op, s);
+            if ours != m {
+                differ.push(format!("{op:?} ({name}) source {s}:\n  ours {ours:?}\n  Mesa {m:?}"));
+            }
+        }
+    }
+    assert!(differ.is_empty(), "{} differences:\n{}", differ.len(), differ.join("\n"));
+}
+
+/* ---- a cube direction lane that is not in the ISA's table (#4574) ---- */
+
+/// A constant lane of a cube direction that the ISA's 32-bit table does not
+/// hold (0.5): the cube ops' sources have no swizzle (valhall.c CUBEFACE1,
+/// CUBEFACE2_V9, CUBE_SSEL, CUBE_TSEL: `.swizzle = 0`), so Mesa's
+/// `va_lookup_constant` does not demote it to an fp16 half of the table
+/// (`0x38000000.h1`) and `va_lower_constants` pushes the word 0x3F000000 as
+/// a FAU constant. `stage` names the program that holds the cube ops; every
+/// program of the pair is the shim's to the byte (`--uniform-values`).
+fn check_cube_direction_lane_from_fau(name: &str, vs: &str, fs: &str, json: &str, stage: u32) {
+    let (v, f) = check_linked(vs, fs, json);
+    let (s, code) = if stage == SHC_STAGE_VERTEX { (&v, vs_regions(&v).1) } else { (&f, trim(&f.code)) };
+    assert!(s.info.fau.contains(&FauWord::Constant(0x3f00_0000)), "{name}: 0.5 is a FAU word: {:?}", s.info.fau);
+    let texts: Vec<String> = code.iter().map(|w| text(*w)).collect();
+    assert!(!texts.iter().any(|t| t.starts_with("CUBE") && t.contains("0x38000000")), "{name}: {texts:?}");
+}
+
+/// `textureCube(s, vec3(1.0, b1, 0.5), u)` in a mediump fragment shader:
+/// the cube look-up with a bias. The four cube ops are Mesa's words (0.5
+/// the FAU word `u2.w1`) and the FAU the shim's; the program as a whole is
+/// not yet: the bias arm orders the cube ops and the bias's conversion
+/// otherwise and its texel registers differ (#4547).
+#[test]
+fn a_cube_direction_lane_of_one_half_with_a_bias_reads_mesa_26_2_1_fau_word() {
+    let (vs, fs, json) = (td!("cube_fau_bias.vert"), td!("cube_fau_bias.frag"), td!("cube_fau_bias.expect.json"));
+    let (_, f) = compile_linked(vs, fs);
+    let rf = region(json, "fs.fragment").expect("fs.fragment");
+    let cube = |words: &[u64]| -> Vec<u64> {
+        let mut c: Vec<u64> = words.iter().copied().filter(|w| text(*w).starts_with("CUBE")).collect();
+        c.sort_unstable();
+        c
+    };
+    let ours = cube(&trim(&f.code));
+    assert_eq!(ours.len(), 4, "{:?}", ours.iter().map(|w| text(*w)).collect::<Vec<_>>());
+    assert_eq!(ours, cube(&rf.words), "the cube ops' words");
+    let names = uniform_names(vs, fs);
+    let uv = |d: u16| uniform_value(&names, &f.uniforms, d);
+    assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &uv);
+}
+
+/// `textureLod(s, vec3(a2, 0.5), 0.0)` in a mediump ES 3.00 fragment shader.
+#[test]
+fn a_cube_direction_lane_of_one_half_at_mediump_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) = (td!("cube_fau_es3lod.vert"), td!("cube_fau_es3lod.frag"), td!("cube_fau_es3lod.expect.json"));
+    check_cube_direction_lane_from_fau("es3lod", vs, fs, json, SHC_STAGE_FRAGMENT);
+}
+
+/// `textureLod(s, vec3(1.0, b1, 0.5), 0.0)` in a highp ES 3.00 fragment
+/// shader.
+#[test]
+fn a_cube_direction_lane_of_one_half_at_highp_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("cube_fau_es3highp.vert"), td!("cube_fau_es3highp.frag"));
+    check_cube_direction_lane_from_fau("es3highp", vs, fs, td!("cube_fau_es3highp.expect.json"), SHC_STAGE_FRAGMENT);
+}
+
+/// `textureCubeLod(s, vec3(1.0, a_b.x, 0.5), 0.0)` in a vertex shader (its
+/// varying program).
+#[test]
+fn a_vertex_cube_direction_lane_of_one_half_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) = (td!("cube_fau_vslod.vert"), td!("cube_fau_vslod.frag"), td!("cube_fau_vslod.expect.json"));
+    check_cube_direction_lane_from_fau("vslod", vs, fs, json, SHC_STAGE_VERTEX);
+}
+
 /// gl_test case 41 (`es3cube`, tools/shaders/es300/cube.{vert,frag} as
 /// tools/mali/testdata/case41.*): `textureLod(cube, axis + vec3(v_xy, 0.0)
 /// * 0.8, 0.0)` in a mediump fragment shader. The direction is computed in
@@ -2571,15 +3464,273 @@ fn a_fragment_cube_look_up_is_byte_equal_to_mesa_26_2_1() {
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
     assert_eq!(texts.iter().filter(|t| t.starts_with("F16_TO_F32")).count(), 3, "{texts:?}");
     assert!(texts.iter().any(|t| t.starts_with("TEX_SINGLE") && t.contains(".16.cube.zero")), "{texts:?}");
-    /* the gaps beside it: an implicit level (`textureCube`'s computed LOD)
-     * and a mediump explicit level have no reference */
+    /* the gap beside it: a mediump explicit level has no reference */
     let fs = |lod: &str| {
         format!(
             "#version 300 es\nprecision mediump float; uniform samplerCube c; uniform float l; in vec2 v; out vec4 o; void main(){{ o = {lod}; }}"
         )
     };
-    assert_eq!(gap(SHC_STAGE_FRAGMENT, &fs("texture(c, vec3(v, 1.0))")), MaliError::TexKind);
     assert_eq!(gap(SHC_STAGE_FRAGMENT, &fs("textureLod(c, vec3(v, 1.0), l)")), MaliError::TexKind);
+}
+
+/// dEQP-GLES2's mediump `textureCube` (glsTextureTestUtil.cpp
+/// ProgramLibrary, PROGRAM_CUBE_FLOAT; tools/mali/testdata/fstex_cube.*):
+/// `textureCube(u_sampler, v_texCoord) * u_colorScale + u_colorBias`, the
+/// texture.{filtering,size,completeness,format} cube cases. The direction
+/// is the varying's three fp32 words (`src_f32`: read by the fp32 cube ops
+/// alone), `build_cube_desc`'s sequence, then `TEX_SINGLE.16.cube.computed`
+/// at two staging words: the level from the derivatives, so the helper
+/// invocations run to the look-up. Both programs the shim's to the byte
+/// (fstex_cube.expect.json, `--uniform-values`), and so are gl_test's
+/// texcube pair, whose colour is the texel whole (fstex_cube_whole).
+#[test]
+fn a_mediump_texture_cube_at_the_implicit_level_is_byte_equal_to_mesa_26_2_1() {
+    let (_, f) = check_linked(td!("fstex_cube.vert"), td!("fstex_cube.frag"), td!("fstex_cube.expect.json"));
+    assert_eq!(f.info.sampler, Some(0));
+    assert!(f.info.helper_threads, "a computed level needs the helper invocations");
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert!(!texts.iter().any(|t| t.starts_with("F16_TO_F32")), "{texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("TEX_SINGLE") && t.contains(".16.cube.computed.")), "{texts:?}");
+    /* the texel stored whole (gl_test 115, 133 and 134's texcube_fs.frag):
+     * gl_FragColor's store copies it after ATEST ([`nir_fs::Fs`]'s
+     * `fragcolor`), so RA writes the texels into r0:r1 at once and the
+     * copy's moves vanish (fstex_cube_whole.expect.json) */
+    let (vs, fs) = (td!("fstex_cube_whole.vert"), td!("fstex_cube_whole.frag"));
+    assert_eq!(include_str!("../../../../tools/shaders/gltest/texcube_vs.vert"), vs);
+    assert_eq!(include_str!("../../../../tools/shaders/gltest/texcube_fs.frag"), fs);
+    let (_, f) = check_linked(vs, fs, td!("fstex_cube_whole.expect.json"));
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert!(!texts.iter().any(|t| t.starts_with("MOV.i32") && t.contains(", r")), "{texts:?}");
+    /* the gap beside it: a highp shader's implicit level has no reference */
+    let highp = "precision highp float; uniform samplerCube s; varying vec3 d; void main(){ gl_FragColor = textureCube(s, d); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, highp), MaliError::TexKind);
+}
+
+/// dEQP-GLES2's texture.specification cube cases draw each face with
+/// TexCubeShader (tools/mali/testdata/fstex_cubeface*): a direction
+/// computed from `x = v_coord.x*2.0 - 1.0` and `y` in fp16, a constant
+/// lane +-1. Face 4's `vec3(-x, -y, -1)` is case 41's form at the computed
+/// level: the pair `FMA.v2f16` then `FADD.v2f16 .neg`, each lane
+/// `F16_TO_F32`, the constant `0x3F800000.neg` an operand of the cube ops,
+/// `TEX_SINGLE.16.cube.computed`; both programs the shim's to the byte. The
+/// other five are refused by name: faces 0-3 have the constant in x or y,
+/// no measured direction shape (TexCoord); face 5's pair has one half
+/// negated (`.neg.h11`), which the cube direction's pair does not take yet
+/// (ColourForm).
+#[test]
+fn deqp_cube_face_4_is_byte_equal_to_mesa_26_2_1() {
+    let vs = td!("fstex_cubeface.vert");
+    let (_, f) = check_linked(vs, td!("fstex_cubeface4.frag"), td!("fstex_cubeface4.expect.json"));
+    assert!(f.info.helper_threads, "a computed level needs the helper invocations");
+    for (fs, e) in [
+        (td!("fstex_cubeface0.frag"), MaliError::TexCoord),
+        (td!("fstex_cubeface1.frag"), MaliError::TexCoord),
+        (td!("fstex_cubeface2.frag"), MaliError::TexCoord),
+        (td!("fstex_cubeface3.frag"), MaliError::TexCoord),
+        (td!("fstex_cubeface5.frag"), MaliError::ColourForm),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), e, "{fs}");
+    }
+}
+
+/// A negated pair of a varying's lanes in the other order, `-a2.yx`: the
+/// swapped halves under the fneg (`FADD.v2f16 r0, r0^.neg.h10, 0x0.neg`
+/// in both). As the colour (tools/mali/testdata/fsneg_swapped) and as a
+/// cube direction's pair (fstex_cubedir_negyx), both programs the Mesa
+/// 26.2.1 drm-shim's to the byte.
+#[test]
+fn a_negated_swapped_varying_pair_is_byte_equal_to_mesa_26_2_1() {
+    check_linked(td!("fsneg_swapped.vert"), td!("fsneg_swapped.frag"), td!("fsneg_swapped.expect.json"));
+    let (vs, fs) = (td!("fstex_cubedir_negyx.vert"), td!("fstex_cubedir_negyx.frag"));
+    check_linked(vs, fs, td!("fstex_cubedir_negyx.expect.json"));
+}
+
+/// The references of tools/mali/testdata named `<prefix>*`
+/// (the directory read, so a reference added there is checked with no
+/// list to edit): each name with its sources and expect.json, sorted. A
+/// name with a .vert or a .frag but not all three files fails here.
+fn testdata_references(prefix: &str) -> Vec<(String, String, String, String)> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
+    let mut names: Vec<String> = std::fs::read_dir(&root)
+        .expect("a readable directory")
+        .flatten()
+        .filter_map(|e| {
+            let n = e.file_name().to_str()?.to_string();
+            n.strip_suffix(".frag").or_else(|| n.strip_suffix(".vert")).map(String::from)
+        })
+        .filter(|n| n.starts_with(prefix))
+        .collect();
+    names.sort();
+    names.dedup();
+    let read = |n: &str, ext: &str| {
+        std::fs::read_to_string(root.join(format!("{n}.{ext}")))
+            .unwrap_or_else(|e| panic!("{n}.{ext}: the reference's file: {e}"))
+    };
+    names
+        .into_iter()
+        .map(|n| (read(&n, "vert"), read(&n, "frag"), read(&n, "expect.json"), n))
+        .map(|(v, f, j, n)| (n, v, f, j))
+        .collect()
+}
+
+/// The direction shapes the cube arms take (`nir_fs::cube_dir_measured`),
+/// each drawn on the Mesa 26.2.1 drm-shim with `--uniform-values` (one
+/// attribute per varying; tools/mali/testdata/fstex_cubedir_*): raw lanes
+/// of whole varyings and constants fp16 holds, an fp16 pair beside a
+/// constant or uniform z, scaled, fused, negated, a uniform lane in the
+/// second word of a vec4 (Mesa pushes the uniform from its first word, as
+/// main does), a plain sampler after a sampler array and a sampler beside a
+/// non-sampler uniform array (neither an array element,
+/// `nir_fs::sampler_array_element`). Both programs the shim's to the byte
+/// along the draw's linked path.
+#[test]
+fn mediump_texture_cube_directions_of_the_measured_shapes_are_byte_equal_to_mesa_26_2_1() {
+    let refs = testdata_references("fstex_cubedir_");
+    assert!(!refs.is_empty());
+    for (name, vs, fs, json) in &refs {
+        let r = std::panic::catch_unwind(|| check_linked(vs, fs, json));
+        assert!(r.is_ok(), "{name}: not the shim's words");
+    }
+}
+
+/// The cube look-ups Mesa 26.2.1 compiles to other words than ours
+/// (tools/mali/testdata/fstex_cubeno_<refusal>_*, each with the drm-shim
+/// reference of Mesa's words): refused by the name the file names, alone
+/// and along the draw's linked path. Among them:
+/// - a raw lane of a varying read in part (`vec3(a2.x, 1.0, 1.0)`,
+///   `vec3(a3.xy, 1.0)`, `vec3(a2, b2.x)`, `vec3(a2.x, b2.y, 1.0)`, and
+///   with a bias): in these Mesa loads the varying's whole width (`.v2`
+///   for `a2.x`), ours the lanes read (docs/notes/mali-cube-textures.md
+///   (h), "The raw load's width");
+/// - an all-constant direction, a varying z beside the pair, a sum of two
+///   products one of which is `* 2.0` (which one Mesa fuses is not
+///   measured);
+/// - an element of a sampler array other than the first: Mesa numbers the
+///   array's elements together (`sa[1]` is index 1), ours by the elements
+///   read (index 0, the texture of `sa[0]`).
+#[test]
+fn cube_look_ups_mesa_compiles_otherwise_are_refused_by_the_name_of_their_reference() {
+    use MaliError as E;
+    let refs = testdata_references("fstex_cubeno_");
+    assert!(!refs.is_empty());
+    for (name, vs, fs, _) in &refs {
+        let want = match name.strip_prefix("fstex_cubeno_").and_then(|r| r.split('_').next()) {
+            Some("texcoord") => E::TexCoord,
+            Some("operandform") => E::FsOperandForm,
+            Some("texarrayelement") => E::TexArrayElement,
+            r => panic!("{name}: no refusal named {r:?}"),
+        };
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), want, "{name}");
+        match try_compile_linked(vs, fs) {
+            Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, want, "{name}: linked"),
+            Err(e) => panic!("{name}: linked: not a Mali refusal: {e:?}"),
+            Ok(_) => panic!("{name}: the linked program compiled"),
+        }
+    }
+}
+
+/// Directions Mesa 26.2.1 compiles to other words than the cube arm's
+/// (measured on its drm-shim): refused by name, not drawn with our words.
+/// - `vec3(a2, u)`: Mesa reads the varying fp32 (`src_f32`); a pair would
+///   narrow it to fp16 and back.
+/// - `vec3(a2 * 2.0, -1.0)`: Mesa's late rule makes the lone product
+///   `FADD.v2f16 r0, r0^, r0^`.
+/// - `vec3(gl_FragCoord.xy, 1.0)`, `vec3(gl_PointCoord, 1.0)`: Mesa reads
+///   them fp32.
+#[test]
+fn mediump_texture_cube_directions_mesa_compiles_otherwise_are_refused_by_name() {
+    let fs = |decl: &str, dir: &str| {
+        format!("precision mediump float; uniform samplerCube s; {decl} void main() {{ gl_FragColor = textureCube(s, {dir}); }}")
+    };
+    for src in [
+        fs("uniform float u; varying vec2 a2;", "vec3(a2, u)"),
+        fs("varying vec2 a2;", "vec3(a2 * 2.0, -1.0)"),
+        fs("", "vec3(gl_FragCoord.xy, 1.0)"),
+        fs("", "vec3(gl_PointCoord, 1.0)"),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::TexCoord, "{src}");
+    }
+}
+
+/// A matrix varying's column read in parts is refused (`TexCoord`): the
+/// raw arm's whole-varying test takes vector varyings only, and no matrix
+/// reference is committed (docs/notes/mali-cube-textures.md (h)). With
+/// that test widened to matrices, the drm-shim measured a mat2 column and
+/// mat3 columns 0 and 2 read whole in parts equal to Mesa 26.2.1, and a
+/// mat3 column 1 read alone not equal (the vertex program's attribute
+/// index of the unread columns' attribute): a widening needs a reference
+/// for each form it takes.
+#[test]
+fn a_matrix_varying_column_read_in_parts_is_refused_as_a_cube_direction() {
+    let fs = |ty: &str, dir: &str| {
+        format!(
+            "precision mediump float; uniform samplerCube s; varying mediump {ty} m; \
+             void main() {{ gl_FragColor = textureCube(s, {dir}); }}"
+        )
+    };
+    for src in [
+        fs("mat2", "vec3(m[0].x, m[0].y, 1.0)"),
+        fs("mat2", "vec3(m[1], 1.0)"),
+        fs("mat3", "vec3(m[1].x, m[1].y, m[1].z)"),
+        fs("mat3", "vec3(m[2].z, m[2].y, m[2].x)"),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::TexCoord, "{src}");
+    }
+}
+
+/// The direction's fp16 pair takes the colour's productions
+/// ([`nir_fs::ADMITTED`]): a form in a place no reference draws is
+/// refused as it is in the colour. `a2 * -3.0 + 0.25` is the fused
+/// `FMA.v2f16` with the constant first; Mesa 26.2.1 reads it as `u2.w0`
+/// (-3.0 in the FAU word), ours as `u2.w0.neg` (the review's probes s01,
+/// s11; tools/mali/testdata/fstex_cubeno_operandform_fmanegk.expect.json). The same
+/// sum as a colour is refused on main by this rule (FsOperandForm).
+#[test]
+fn a_cube_direction_pair_with_a_form_the_colour_refuses_is_refused_by_name() {
+    let fs = td!("fstex_cubeno_operandform_fmanegk.frag");
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::FsOperandForm, "{fs}");
+    let colour = "precision mediump float; varying mediump vec2 a2; \
+                  void main() { gl_FragColor = vec4(a2 * -3.0 + 0.25, 0.0, 1.0); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, colour), MaliError::FsOperandForm);
+    let src = "precision mediump float; uniform samplerCube s; varying mediump vec2 a2; \
+               void main() { gl_FragColor = textureCube(s, vec3(a2 * -3.0 - 1.0, -1.0)); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, src), MaliError::FsOperandForm);
+}
+
+/// A mediump `textureCube(s, v3, u)` with a uniform bias and a vec3
+/// varying (tools/mali/testdata/fstex_cubebias_uni, the review's probe
+/// c18b, drm-shim `--uniform-values`): Mesa widens the uniform before the
+/// cube descriptor, so the pressure scheduler's order is taken and
+/// `CUBEFACE2_V9` comes first. Both programs the shim's to the byte.
+#[test]
+fn a_mediump_texture_cube_with_a_uniform_bias_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("fstex_cubebias_uni.vert"), td!("fstex_cubebias_uni.frag"));
+    let (_, f) = check_linked(vs, fs, td!("fstex_cubebias_uni.expect.json"));
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert!(texts[1].starts_with("CUBEFACE2_V9"), "{texts:?}");
+}
+
+/// The bias arm takes the implicit arm's directions
+/// (`nir_fs::cube_dir_measured`): a direction Mesa 26.2.1 compiles to
+/// other words is refused by name with a bias too. `vec3(a2, w)` (raw
+/// lanes beside a uniform; tools/mali/testdata/fstex_cubeno_texcoord_biasunilane,
+/// the second review's b06), gl_FragCoord's lanes (b07) and a lone
+/// product with 2.0 (b11) each differ from the drm-shim's words.
+#[test]
+fn a_cube_bias_direction_mesa_compiles_otherwise_is_refused_by_name() {
+    let fs = |decl: &str, dir: &str| {
+        format!(
+            "precision mediump float; uniform samplerCube s; uniform float u; {decl} \
+             void main() {{ gl_FragColor = textureCube(s, {dir}, u); }}"
+        )
+    };
+    for src in [
+        td!("fstex_cubeno_texcoord_biasunilane.frag").to_string(),
+        fs("", "vec3(gl_FragCoord.xy, 1.0)"),
+        fs("varying vec2 a2;", "vec3(a2 * 2.0, -1.0)"),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::TexCoord, "{src}");
+    }
 }
 
 /// gl_test case 114's fragment stage (`cubelod`, prog[1]: tools/shaders/
@@ -3519,6 +4670,8 @@ fn the_fragment_productions_are_the_references() {
     /* a uniform's component first in a product, a look-up's word second in
      * a product and its fusion (case 166) */
     fs.extend(UNITYPE_166_POPULATION.iter().map(|c| c.1));
+    /* a varying's lanes swapped under an fneg (`-a2.yx`) */
+    fs.push(td!("fsneg_swapped.frag"));
     let mut seen = 0u128;
     for src in fs {
         let _k = store::test_keep();
@@ -3634,7 +4787,7 @@ fn case55_two_fragment_outputs_are_byte_equal_to_mesa_26_2_1() {
     let rf = region(json, "fs.fragment").expect("fs.fragment");
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+    assert_eq!(f.code.len(), padded_words(rf.words.len()));
     assert_eq!(f.info.colour_outputs, 0b11);
     assert!(!f.info.colour_f16);
 }
@@ -3797,104 +4950,205 @@ fn the_one_plane_zs_preloads_are_mesa_s() {
     }
 }
 
-/* ---- blend shaders (#33, 2026-10-23) ------------------------------------ */
+/* ---- blend shaders (#33) ------------------------------------------------- */
 
-/// The blend shaders (`super::blend::shader`) of every equation a constant
-/// colour makes a blend shader of (glBlendFunc with `CONSTANT_COLOR` or its
-/// inverse against ONE, ZERO or the other), into an RGBA8 target (memory
-/// format RGBA8_TB, RGBA: `0xED000`), against Mesa 26.2.1's on drm-shim:
-/// `gl_ref.py --blend-func S,D --blend-color 0.25,0.5,0.75,1.0` with
-/// gl_test's colour_uv pair, the shader the trace disassembles after the
-/// draw's blend descriptor, extracted by `pan_ref_diff.py extract <trace>
-/// blend=<va>` (0dce654a8:tools/mali/board-ref/2026-10-23-blendconst/README.md).
-/// `blend_c_ic` is gl_test case 8's fifth frame.
-#[test]
-fn the_blend_shaders_are_mesa_s() {
-    use super::blend::{Equation, Factor::*};
-    const RGBA8_TB_RGBA: u32 = 0xed000;
-    for (name, json, src, dst) in [
-        ("blend_c_ic", td!("blend_c_ic.expect.json"), Const, InvConst),
-        ("blend_ic_c", td!("blend_ic_c.expect.json"), InvConst, Const),
-        ("blend_c_zero", td!("blend_c_zero.expect.json"), Const, Zero),
-        ("blend_c_one", td!("blend_c_one.expect.json"), Const, One),
-        ("blend_one_c", td!("blend_one_c.expect.json"), One, Const),
-        ("blend_zero_c", td!("blend_zero_c.expect.json"), Zero, Const),
-        ("blend_ic_zero", td!("blend_ic_zero.expect.json"), InvConst, Zero),
-        ("blend_ic_one", td!("blend_ic_one.expect.json"), InvConst, One),
-        ("blend_one_ic", td!("blend_one_ic.expect.json"), One, InvConst),
-        ("blend_zero_ic", td!("blend_zero_ic.expect.json"), Zero, InvConst),
-    ] {
-        let mesa = after(json, "words").and_then(hex_array).expect("the blend shader's words");
-        let (words, wrc) = store::with_scratch(|sc| {
-            let mut out = vec![0u64; 64];
-            let b = super::blend::shader(&mut out, sc, Equation::both(src, dst), RGBA8_TB_RGBA)
-                .expect("the blend shader compiles");
-            (b.code.to_vec(), b.work_reg_count)
-        })
-        .expect("the scratch arena is free");
-        assert_words(name, &trim(&words), &mesa);
-        assert_eq!(wrc, 32, "{name}: the split file's count");
+/// A blend shader's key as `pan_shc --blend` reads it (tools/mali/
+/// README-pan_shc.md "Blend shaders"): `<rgb func> <rgb src> <rgb dst>
+/// <alpha func> <alpha src> <alpha dst> <mask> <samples> [f32]`, gallium's
+/// names, `f32` for an fp32 fragment colour.
+fn blend_key(text: &str) -> super::blend::Key {
+    use super::blend::{Base, Channel, Factor, Func, Key};
+    let w: Vec<&str> = text.split_whitespace().collect();
+    assert!(w.len() == 8 || (w.len() == 9 && matches!(w[8], "f32" | "u32")), "{text}");
+    let func = |s: &str| match s {
+        "add" => Func::Add,
+        "subtract" => Func::Subtract,
+        "reverse_subtract" => Func::ReverseSubtract,
+        "min" => Func::Min,
+        "max" => Func::Max,
+        _ => panic!("{s}"),
+    };
+    let factor = |s: &str| {
+        if s == "zero" {
+            return Factor { base: Base::One, invert: true };
+        }
+        let (invert, b) = match s.strip_prefix("inv_") {
+            Some(b) => (true, b),
+            None => (false, s),
+        };
+        let base = match b {
+            "one" => Base::One,
+            "src_color" => Base::SrcColor,
+            "src_alpha" => Base::SrcAlpha,
+            "dst_alpha" => Base::DstAlpha,
+            "dst_color" => Base::DstColor,
+            "src_alpha_saturate" => Base::SrcAlphaSaturate,
+            "const_color" => Base::ConstColor,
+            "const_alpha" => Base::ConstAlpha,
+            _ => panic!("{s}"),
+        };
+        Factor { base, invert }
+    };
+    let ch = |f: &str, s: &str, d: &str| Channel { func: func(f), src: factor(s), dst: factor(d) };
+    Key {
+        rgb: ch(w[0], w[1], w[2]),
+        alpha: ch(w[3], w[4], w[5]),
+        mask: w[6].parse().expect("a mask"),
+        samples: w[7].parse().expect("a sample count"),
+        /* a uint32 colour (a highp `out uvec4`) takes the fp32 key: the
+         * record's colour_f16 is false for both (FsPrecision::colour_f16) */
+        colour_f32: w.len() == 9,
     }
-    /* both factors the same constant term: NIR factors the sum, no
-     * reference is drawn; refused, never approximated */
-    let same = Equation::both(Const, Const);
-    assert!(!super::blend::builds(same));
 }
 
-/// The blend shaders of gl_test cases 211 and 190 (docs/notes/
-/// mali-blend-shaders.md sections 2 and 5), against Mesa 26.2.1's on
-/// drm-shim (tools/mali/testdata/blend_case*.words, one word a line; the
-/// `.txt` next to each is pandecode's disassembly): 211's `CONSTANT_COLOR,
-/// ONE_MINUS_CONSTANT_COLOR` at 4x (the tile read at the sample id of
-/// r61), 190's column 3 (GL_MIN colour, SRC_ALPHA, ONE_MINUS_SRC_ALPHA
-/// alpha) and column 4 (ONE_MINUS_DST_ALPHA, ONE_MINUS_SRC_ALPHA colour,
-/// ONE, ZERO alpha) at 1x, into RGBA8.
-#[test]
-fn case_211_and_190_s_blend_shaders_are_mesa_s() {
-    use super::blend::{builds, Channel, Equation, Factor::*};
+/// `key`'s blend shader into an RGBA8 target (memory format RGBA8_TB,
+/// RGBA: `0xED000`): its words and work register count.
+fn blend_words(key: super::blend::Key) -> Result<(Vec<u64>, u8), MaliError> {
     const RGBA8_TB_RGBA: u32 = 0xed000;
-    let words = |text: &str| -> Vec<u64> {
+    store::with_scratch(|sc| {
+        let mut out = vec![0u64; 64];
+        super::blend::shader(&mut out, sc, key, RGBA8_TB_RGBA).map(|b| (trim(b.code), b.work_reg_count))
+    })
+    .expect("the scratch arena is free")
+}
+
+/// The blend shaders the shim driver drew (Mesa 26.2.1's GL driver on
+/// drm-shim, `gl_ref.py --blend-func S,D --blend-color 0.25,0.5,0.75,1.0`
+/// with gl_test's colour_uv pair, extracted by `pan_ref_diff.py extract
+/// <trace> blend=<va>`, 0dce654a8:tools/mali/board-ref/2026-10-23-blendconst/
+/// README.md; and docs/notes/mali-blend-shaders.md section 5's
+/// blend_case*.words): every constant colour equation against ONE, ZERO or
+/// the other (`blend_c_ic` is gl_test case 8's fifth frame), case 211's at
+/// 4x, case 190's columns 3 (GL_MIN colour) and 4 (ONE_MINUS_DST_ALPHA,
+/// ONE_MINUS_SRC_ALPHA colour, ONE, ZERO alpha). The same words as pan_shc
+/// --blend's (README-pan_shc.md).
+#[test]
+fn the_shim_driver_s_blend_shaders_are_ours() {
+    let hex = |text: &str| -> Vec<u64> {
         text.lines().map(|l| u64::from_str_radix(l.trim(), 16).expect("a hex word")).collect()
     };
-    let case211 = Equation { samples: 4, ..Equation::both(Const, InvConst) };
-    let col3 = Equation { rgb: Channel::MIN, alpha: Channel::add(SrcAlpha, InvSrcAlpha), samples: 1 };
-    let col4 = Equation { rgb: Channel::add(InvDstAlpha, InvSrcAlpha), alpha: Channel::add(One, Zero), samples: 1 };
-    for (name, text, eq) in [
-        ("blend_case211", td!("blend_case211.words"), case211),
-        ("blend_case190_col3", td!("blend_case190_col3.words"), col3),
-        ("blend_case190_col4", td!("blend_case190_col4.words"), col4),
+    let json = |text: &str| after(text, "words").and_then(hex_array).expect("the blend shader's words");
+    for (name, mesa, key) in [
+        (
+            "blend_c_ic",
+            json(td!("blend_c_ic.expect.json")),
+            "add const_color inv_const_color add const_color inv_const_color 15 1",
+        ),
+        (
+            "blend_ic_c",
+            json(td!("blend_ic_c.expect.json")),
+            "add inv_const_color const_color add inv_const_color const_color 15 1",
+        ),
+        ("blend_c_zero", json(td!("blend_c_zero.expect.json")), "add const_color zero add const_color zero 15 1"),
+        ("blend_c_one", json(td!("blend_c_one.expect.json")), "add const_color one add const_color one 15 1"),
+        ("blend_one_c", json(td!("blend_one_c.expect.json")), "add one const_color add one const_color 15 1"),
+        ("blend_zero_c", json(td!("blend_zero_c.expect.json")), "add zero const_color add zero const_color 15 1"),
+        (
+            "blend_ic_zero",
+            json(td!("blend_ic_zero.expect.json")),
+            "add inv_const_color zero add inv_const_color zero 15 1",
+        ),
+        ("blend_ic_one", json(td!("blend_ic_one.expect.json")), "add inv_const_color one add inv_const_color one 15 1"),
+        ("blend_one_ic", json(td!("blend_one_ic.expect.json")), "add one inv_const_color add one inv_const_color 15 1"),
+        (
+            "blend_zero_ic",
+            json(td!("blend_zero_ic.expect.json")),
+            "add zero inv_const_color add zero inv_const_color 15 1",
+        ),
+        (
+            "blend_case211",
+            hex(td!("blend_case211.words")),
+            "add const_color inv_const_color add const_color inv_const_color 15 4",
+        ),
+        ("blend_case190_col3", hex(td!("blend_case190_col3.words")), "min one one add src_alpha inv_src_alpha 15 1"),
+        (
+            "blend_case190_col4",
+            hex(td!("blend_case190_col4.words")),
+            "add inv_dst_alpha inv_src_alpha add one zero 15 1",
+        ),
     ] {
-        let mesa = words(text);
-        let (ours, wrc) = store::with_scratch(|sc| {
-            let mut out = vec![0u64; 64];
-            let b = super::blend::shader(&mut out, sc, eq, RGBA8_TB_RGBA).expect("the blend shader compiles");
-            (b.code.to_vec(), b.work_reg_count)
-        })
-        .expect("the scratch arena is free");
-        assert_words(name, &trim(&ours), &mesa);
+        let (ours, wrc) = blend_words(blend_key(key)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        assert_words(name, &ours, &mesa);
         assert_eq!(wrc, 32, "{name}: the split file's count");
     }
-    /* the key: what no reference draws is refused, never approximated */
-    let refused = [
-        Equation { samples: 4, ..col3 },
-        Equation { samples: 4, ..col4 },
-        Equation { samples: 4, ..Equation::both(Const, Zero) },
-        Equation { samples: 2, ..case211 },
-        Equation { rgb: Channel { func: super::blend::Func::Min, ..Channel::add(One, One) }, ..col4 },
-        Equation { alpha: Channel::MIN, ..col3 },
-        Equation {
-            rgb: Channel::add(InvDstAlpha, InvSrcAlpha),
-            alpha: Channel::add(SrcAlpha, InvSrcAlpha),
-            samples: 1,
-        },
-        Equation::both(SrcAlpha, InvSrcAlpha),
-    ];
-    for eq in refused {
-        assert!(!builds(eq), "{eq:?}");
-        let r = store::with_scratch(|sc| super::blend::shader(&mut [0u64; 64], sc, eq, RGBA8_TB_RGBA).err())
-            .expect("the scratch arena is free");
-        assert_eq!(r, Some(MaliError::BlendVariantNotLowered), "{eq:?}");
+}
+
+/// The keys of a `blend_deqp_ref.py words`-made reference (`<key> :
+/// <words>` a line) whose blend shader is not Mesa 26.2.1's, word for word
+/// and with its work register count (32 for every key; `pan_shc --blend`
+/// prints it), and how many keys the file has.
+fn blend_words_differ(text: &str) -> (Vec<String>, usize) {
+    let mut differ = Vec::new();
+    let mut n = 0;
+    for line in text.lines() {
+        let (key, words) = line.split_once(" : ").expect("a key and its words");
+        let mesa: Vec<u64> =
+            words.split_whitespace().map(|w| u64::from_str_radix(w, 16).expect("a hex word")).collect();
+        n += 1;
+        match blend_words(blend_key(key)) {
+            Ok((ours, 32)) if ours == mesa => {}
+            Ok((ours, _)) => differ.push(format!("{key}: {} words ours, {} Mesa's", ours.len(), mesa.len())),
+            Err(e) => differ.push(format!("{key}: {e:?}")),
+        }
     }
+    (differ, n)
+}
+
+/// Every blend shader of dEQP-GLES2 functional.fragment_ops.blend (the
+/// blend states of es2fBlendTests.cpp that Mesa draws with a blend shader,
+/// 1403 keys, tools/mali/blend_deqp_ref.py) is Mesa 26.2.1's, word for word
+/// (tools/mali/testdata/blend_deqp.words, `pan_shc --blend`), and so is its
+/// work register count.
+#[test]
+fn every_deqp_gles2_blend_shader_is_mesa_s() {
+    let (differ, n) = blend_words_differ(td!("blend_deqp.words"));
+    assert_eq!(n, 1403, "the reference's keys");
+    assert!(differ.is_empty(), "{} of {n} differ:\n{}", differ.len(), differ.join("\n"));
+}
+
+/// A uint32 colour (a highp ES 3.00 `out uvec4`) is its own key in Mesa
+/// (`src0_type` nir_type_uint32, pan_context.c:210-216), but Mesa converts
+/// it from float, the target's base type (pan_blend.c:837-862), so its
+/// blend shader is the fp32 key's: the backend takes that key for it
+/// (`colour_f16` false), and our fp32 words equal Mesa's uint32 words for
+/// the 100 keys of tools/mali/testdata/blend_u32.words (`pan_shc --blend`
+/// with `u32`; the first 100 fp32 keys of `blend_deqp_ref.py random`).
+#[test]
+fn a_uint32_colour_s_blend_shaders_are_mesa_s() {
+    let (differ, n) = blend_words_differ(td!("blend_u32.words"));
+    assert_eq!(n, 100, "the reference's keys");
+    assert!(differ.is_empty(), "{} of {n} differ:\n{}", differ.len(), differ.join("\n"));
+}
+
+/// 2700 more blend shaders (tools/mali/blend_deqp_ref.py `random`: every
+/// function, factor and colour mask drawn at random, 1500 at 1x and 600 at
+/// 4x with case 211's with an fp16 colour, 600 with an fp32 one) are Mesa
+/// 26.2.1's, word for word: their SHA-256 is the one of `pan_shc
+/// --blend`'s words (tools/mali/testdata/blend_random.sha, the first 16 hex
+/// digits of the hash of the little-endian words). The work register count
+/// is Mesa's for every one of them: 32 (`pan_shc --blend` prints it).
+#[test]
+fn random_blend_shaders_are_mesa_s() {
+    let mut differ = Vec::new();
+    let mut n = 0;
+    for line in td!("blend_random.sha").lines() {
+        let (key, digest) = line.split_once(" : ").expect("a key and its digest");
+        n += 1;
+        match blend_words(blend_key(key)) {
+            Ok((_, wrc)) if wrc != 32 => differ.push(format!("{key}: {wrc} work registers, Mesa's 32")),
+            Ok((ours, _)) => {
+                let bytes: Vec<u8> = ours.iter().flat_map(|w| w.to_le_bytes()).collect();
+                let h = crate::shaderc::sha256::sha256(&bytes);
+                let hex: String = h[..8].iter().map(|b| format!("{b:02x}")).collect();
+                if hex != digest {
+                    differ.push(format!("{key}: {hex}, Mesa's {digest}"));
+                }
+            }
+            Err(e) => differ.push(format!("{key}: {e:?}")),
+        }
+    }
+    assert_eq!(n, 2700, "the reference's keys");
+    assert!(differ.is_empty(), "{} of {n} differ:\n{}", differ.len(), differ.join("\n"));
 }
 
 /* ---- highp fragment shaders (S2, 2026-10-21) ----------------------------- */
@@ -4117,7 +5371,8 @@ fn check_stages_capped(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: 
             v.uniforms.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
         (16.0 + (d - first) as f32).to_bits()
     };
-    let (pos, var) = vs_regions(v);
+    let (ran_at, pos) = vs_ran(v, json);
+    let var = vs_regions(v).1;
     let rp = region(json, "vs.position").expect("vs.position");
     assert_words(&format!("{name} vs.position"), &pos, &rp.words);
     assert_facts(&format!("{name} vs.position"), &rp, v.info.work_reg_count, v.info.preload, &v.info.fau, vp, &uv_v);
@@ -4128,7 +5383,7 @@ fn check_stages_capped(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: 
             assert_words(&format!("{name} vs.varying"), &var, &rv.words);
             let sec = v.info.secondary.expect("a varying program");
             assert_facts(&format!("{name} vs.varying"), &rv, sec.work_reg_count, sec.preload, &v.info.fau, vp, &uv_v);
-            assert_eq!(Some(sec.offset), secondary_offset(json), "{name}: secondary_offset");
+            assert_eq!(Some(sec.offset - ran_at), secondary_offset(json), "{name}: secondary_offset");
         }
         None => {
             assert!(var.is_empty() && v.info.secondary.is_none(), "{name}: a varying program the trace has not");
@@ -4138,7 +5393,7 @@ fn check_stages_capped(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: 
     let rf = capped(region(json, "fs.fragment").expect("fs.fragment"), edits);
     assert_words(&format!("{name} fs.fragment"), &trim(&f.code), &rf.words);
     assert_facts(&format!("{name} fs.fragment"), &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, vp, &|_| 0);
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16, "{name}: the padding");
+    assert_eq!(f.code.len(), padded_words(rf.words.len()), "{name}: the padding");
 }
 
 #[test]
@@ -4975,7 +6230,7 @@ fn the_frag_coord_programs_are_byte_equal_to_mesa_26_2_1() {
         let rf = region(json, "fs.fragment").expect("fs.fragment");
         assert_words(name, &trim(&f.code), &rf.words);
         assert_facts(name, &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
-        assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16, "{name}: padding");
+        assert_eq!(f.code.len(), padded_words(rf.words.len()), "{name}: padding");
     }
 }
 
@@ -5830,6 +7085,37 @@ fn intuni_intrt_is_byte_equal_to_mesa_26_2_1() {
     check_intbool("intrt");
 }
 
+/// An integer colour output other than one declared `highp uvec4` has no
+/// Mesa reference: it is refused by name (`IntColour`), never compiled as
+/// a float colour. Before, each of these compiled with `colour_f16` true:
+/// its integer words were converted to fp16 and stored `BLEND.v4.f16`,
+/// and a blended draw took the fp16 colour's blend shader, where Mesa
+/// stores `BLEND.v4.i32`/`.u32` and keys the blend shader on int32/uint32.
+/// The declared `highp uvec4` stays (intuni_intrt above, fbload_int).
+#[test]
+fn an_integer_colour_without_a_reference_is_refused_by_name() {
+    let fs = |decls: &str, value: &str| {
+        format!("#version 300 es\nprecision highp float;\n{decls}\nvoid main() {{ o = {value}; }}\n")
+    };
+    let u = "uvec4(1u, 2u, 3u, 4u)";
+    let i = "ivec4(1, 2, 3, 4)";
+    for src in [
+        fs("precision highp int;\nout uvec4 o;", u),
+        fs("out uvec4 o;", u),
+        fs("out mediump uvec4 o;", u),
+        fs("out highp ivec4 o;", i),
+        fs("out ivec4 o;", i),
+        fs("precision highp int;\nout ivec4 o;", i),
+        fs("out highp uint o;", "7u"),
+        fs("out highp int o;", "7"),
+        fs("out highp uvec2 o;", "uvec2(1u, 2u)"),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::IntColour, "{src}");
+    }
+    let f = compile(SHC_STAGE_FRAGMENT, &fs("out highp uvec4 o;", u)).expect("a declared highp uvec4 compiles");
+    assert!(!f.info.colour_f16, "its blend shader takes the 32-bit key");
+}
+
 #[test]
 fn intloop_int_compare_is_byte_equal_to_mesa_26_2_1() {
     check_intbool("int_compare");
@@ -6013,7 +7299,7 @@ fn builtin_45_is_mesa_26_2_1_with_the_loop_cap() {
     );
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+    assert_eq!(f.code.len(), padded_words(rf.words.len()));
 }
 
 /// Case 104 (divloop), its top half: bands.vert + divloop.frag through the
@@ -6818,6 +8104,161 @@ fn other_63_matattr_is_byte_equal_to_mesa_26_2_1() {
         v.info.attributes.iter().map(|&(_, rec)| ("RGBA32F RGBA".to_string(), u32::from(rec))).collect();
     assert_eq!(ours, attribute_records(json));
     assert_eq!(after(json, "attribute_buffers").expect("a buffer table").matches("\"size\"").count(), ours.len());
+}
+
+/// The attribute index of a vertex shader's loads is Mesa's
+/// (docs/notes/mali-builtin-inputs.md, "Attribute records"): the
+/// locations a load reads where Mesa numbers them (`nir_recompute_io_bases`,
+/// before the back end's late folds) are numbered in location order, and
+/// attribute record `i` is the `i`-th of them. tools/mali/testdata/vsattr_*,
+/// each drawn on the Mesa 26.2.1 drm-shim with `--uniform-values --attributes`
+/// (gl_ref.py binds every declared attribute in declaration order):
+/// - an unread attribute before (`_before`), between (`_between`) and
+///   after (`_after`) the read ones, and two of them (`_twoholes`);
+/// - an attribute read only by a local nothing uses (`_deadlocal`) and
+///   only on a comma's discarded side (`_comma`);
+/// - every attribute read (`_allread`);
+/// - a mat2 of which only column 1 is read (`_matcol`, `--mat-columns`:
+///   column 0's location is a hole);
+/// - ES 3.00 locations against the declaration order and with holes
+///   (`_es3_order`: `p` at 3 and `b` at 1 are records 1 and 0). gl_ref.py
+///   cannot bind ES 1.00 attributes in another order;
+/// - an attribute whose only use is a product by a vector of zeros of both
+///   signs (`_latefold*`): its load goes in the back end, after the
+///   numbering, so it keeps its record and its descriptor and the next
+///   attribute's index counts it. A product by one zero in every lane
+///   (`_earlyfold_negvec`, `vec4(-0.0)`) goes before the numbering: no
+///   record. `_latefold_negfactor`, `((-d) * vec4(0.0, -0.0, 0.0, 0.0)) *
+///   (-b)`: at the numbering the product is not an `fneg`, so the
+///   product by `-b` is no `fmul(fneg(a), fneg(b))`;
+/// - a constant times a vector of zeros of both signs (`_constfactor`):
+///   no late fold, a constant reads no location.
+///
+/// Each program is the shim's to the byte along the draw's linked path,
+/// and has as many attribute records as Mesa's draw has Attribute
+/// descriptors.
+#[test]
+fn vertex_attribute_indices_count_the_locations_mesa_numbers() {
+    let refs = testdata_references("vsattr_");
+    assert!(!refs.is_empty());
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in &refs {
+        if let Err(e) = try_compile_linked(vs, fs) {
+            failed.push(format!("{name}: refused, {e:?}"));
+            continue;
+        }
+        let Ok((v, _)) = std::panic::catch_unwind(|| check_linked(vs, fs, json)) else {
+            failed.push(format!("{name}: not the shim's words"));
+            continue;
+        };
+        let mut records = v.info.attributes.clone();
+        records.sort_unstable();
+        let want: Vec<u8> = (0..records.len() as u8).collect();
+        assert_eq!(records.iter().map(|&(_, rec)| rec).collect::<Vec<_>>(), want, "{name}: records by location");
+        assert_eq!(records.len(), attribute_records(json).len(), "{name}: Mesa's Attribute descriptors");
+    }
+    assert!(failed.is_empty(), "{failed:#?}");
+}
+
+/// A late fold (the `vsattr_latefold*` of
+/// [`vertex_attribute_indices_count_the_locations_mesa_numbers`]) that
+/// makes a varying lane a constant, a lane of uniforms or a lane equal to
+/// another, which our link then takes out of the vertex shader, is
+/// refused only where the attribute numbering depends on it: that lane of
+/// the walk without the late folds reads a location no output lane of the
+/// walk with them reads (nir.rs `build`; docs/notes/mali-builtin-inputs.md,
+/// "Attribute records").
+/// - Refused, `d` read only in such a lane: dEQP
+///   `random.basic_expression.vertex.96` (`vec4(.., d, ..) * vec4(0.5,
+///   -0.0, b, a)`, a constant), `u + d * vec4(0.0, -0.0, 0.0, 0.0)` (a lane
+///   of uniforms, which our link makes flat) and `w = b + d * ..` after
+///   `v = b` (equal to `v`, so our link reads `w` from `v`). Mesa keeps
+///   each lane a computed varying of its own and counts `d` (measured on
+///   its drm-shim).
+/// - The factor of the folded zero is a uniform (`vslate_uniform`;
+///   `vslate_v12`, the shape of dEQP `random.basic_expression.vertex.12`),
+///   or an attribute the shader also reads in another lane, in
+///   gl_Position or in gl_PointSize. No location depends on the fold, so
+///   the program is the one the first walk gives: compiled (alone and
+///   linked), with Mesa's
+///   attribute records (its fragment words are not Mesa's: the propagated
+///   lane), or refused for its fragment shader's colour pair
+///   (`ColourPair`).
+/// - `d`'s late fold beside a lane that a fold of two constants makes a
+///   constant (`vslate_constlane`'s `w`): `d` is counted, and `w`'s lanes
+///   refuse nothing, because no location depends on them.
+#[test]
+fn a_late_fold_is_refused_only_where_the_attribute_numbering_depends_on_it() {
+    let linked = |vs: &str, fs: &str| match try_compile_linked(vs, fs) {
+        Ok((v, _)) => Ok(v),
+        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => Err(e),
+        Err(e) => panic!("not a Mali refusal: {e:?}"),
+    };
+    let fs = "precision mediump float; varying mediump vec4 v; void main() { gl_FragColor = v; }";
+    let vertex_96 = "attribute vec4 p; const float e = -6.5 - float(7.0) * -1.0; attribute float d; \
+        float c = float(float(-7.625)) + float(float(7.5)); attribute float a; attribute float b; \
+        varying mediump vec4 v; void main() { gl_Position = p; \
+        v = vec4(float(e) * 2.0, (float(d)), c * 2.0, float(c)); v = (v) * (vec4(0.5, -0.0, b, a)); }";
+    assert_eq!(linked(vertex_96, fs).err(), Some(MaliError::AttributeNumbering), "vertex.96");
+    assert_eq!(gap(SHC_STAGE_VERTEX, vertex_96), MaliError::AttributeNumbering, "vertex.96 alone");
+    for (decl, body, fs) in [
+        ("uniform highp vec4 u;", "v = u + d * vec4(0.0, -0.0, 0.0, 0.0);", fs),
+        (
+            "attribute highp vec4 b; varying mediump vec4 w;",
+            "v = b; w = b + d * vec4(0.0, -0.0, 0.0, 0.0);",
+            "precision mediump float; varying vec4 v; varying vec4 w; void main(){ gl_FragColor = v + w; }",
+        ),
+    ] {
+        let vs = format!(
+            "attribute highp vec4 p; attribute highp vec4 d; varying mediump vec4 v; {decl} \
+             void main(){{ gl_Position = p; {body} }}"
+        );
+        assert_eq!(linked(&vs, fs).err(), Some(MaliError::AttributeNumbering), "{body}");
+    }
+    for read in [
+        "gl_Position = p; v = b * vec4(1.0, 1.0, 0.0, 1.0);",
+        "gl_Position = p + b; v = vec4(p.x, p.y, b.z, p.w) * vec4(1.0, 1.0, 0.0, 1.0);",
+        "gl_Position = p; gl_PointSize = b.z; v = vec4(p.x, p.y, b.z, p.w) * vec4(1.0, 1.0, 0.0, 1.0);",
+    ] {
+        let vs =
+            format!("attribute highp vec4 p; attribute highp vec4 b; varying mediump vec4 v; void main(){{ {read} }}");
+        assert_eq!(linked(&vs, fs).err(), Some(MaliError::ColourPair), "{read}");
+    }
+    let refs = testdata_references("vslate_");
+    assert!(!refs.is_empty());
+    for (name, vs, fs, json) in &refs {
+        /* the shader alone too, as `glCompileShader` builds it */
+        if let Err(e) = compile(SHC_STAGE_VERTEX, vs) {
+            panic!("{name}: alone: refused, {e:?}");
+        }
+        let v = linked(vs, fs).unwrap_or_else(|e| panic!("{name}: refused, {e:?}"));
+        let mut records = v.info.attributes.clone();
+        records.sort_unstable();
+        let want: Vec<u8> = (0..records.len() as u8).collect();
+        assert_eq!(records.iter().map(|&(_, rec)| rec).collect::<Vec<_>>(), want, "{name}: records by location");
+        assert_eq!(records.len(), attribute_records(json).len(), "{name}: Mesa's Attribute descriptors");
+    }
+}
+
+/// `Nir::attribute_record` counts locations, not loads: `Nir::load` keeps
+/// one node per location, but a second node of one location (pushed here
+/// by hand) is still one bit of Mesa's `inputs` (nir_recompute_io_bases.c
+/// sets a bit per location read), so the record above it stays 1.
+#[test]
+fn an_attribute_record_counts_each_location_read_once() {
+    use super::nir::{Kind, Nir, NirNode, Val};
+    let r = store::with_scratch(|s| {
+        let mut vs = Nir::new(s).expect("a graph");
+        let nd = NirNode { kind: Kind::Input { loc: 0, comps: 4 }, src: [Val::Undef; 3], bits: 32, width: 1 };
+        for _ in 0..2 {
+            vs.push_node(nd).expect("a node");
+        }
+        vs.load(Kind::Input { loc: 3, comps: 4 }).expect("the attribute");
+        vs.counted = vs.inputs_read().expect("the locations");
+        (vs.counted, vs.attribute_record(0), vs.attribute_record(3))
+    })
+    .expect("the scratch arena is free");
+    assert_eq!(r, (0b1001, Ok(0), Ok(1)));
 }
 
 /// The corpus sources the chain references draw are the references'

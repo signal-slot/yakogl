@@ -10,8 +10,9 @@ config YAKOGL_NANOPC_T6
 	help
 	  The early banner (raw T6:A/A1/A2/A3 lines on uart2 before the
 	  console, T6:X for an exception taken to EL2) and HCR_EL2 at entry;
-	  WDT0 (the DesignWare APB watchdog at 0xfeaf0000) armed at
-	  PRE_KERNEL_1 and fed from a timer for a bounded time; the GICv3 CPU
+	  WDT0 (the DesignWare APB watchdog at 0xfeaf0000) armed at the end
+	  of Zephyr's EL1 init, before every init hook, and fed from a timer
+	  for a bounded time; the GICv3 CPU
 	  interface put back into its reset EOI mode at EARLY; and
 	  t6_reset_to_linux() (nanopc_t6.h), the end of a run: PSCI
 	  SYSTEM_RESET, with WDT0 behind it. YAKOGL_DRV_DISPLAY_RUST is the switch

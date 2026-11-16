@@ -8,10 +8,13 @@
 //! Shared the way `deqp_style.rs` is: `#[path = "common/gc_scenes.rs"] mod
 //! gc_scenes;` in a test that carries the same `#![cfg(all(feature =
 //! "host-test", feature = "gpu-vivante", feature = "shaderc-online", feature
-//! = "report-es2"))]`. [`run_with`] takes [`Hooks`]: `after_init` runs once
+//! = "report-es2"))]`, or one that sets the knob (`gc_scene_kicks_tiled.rs`,
+//! `test-knobs` in place of `report-es2`). [`run_with`] takes [`Hooks`]: `after_init` runs once
 //! after `gc_init` and the context are made (before the scene's setup),
-//! `each_frame(n)` before each frame's canvas clear (n from 1), for a test
-//! that sets a back-end knob.
+//! `each_frame(n)` before each frame's canvas clear (n from 1) and
+//! `after_frame(n)` after its swap, for a test that sets a back-end knob.
+//! [`stream_tally`] counts the RS jobs and early-depth draws of the streams
+//! submitted (`gc_scene_kicks_tiled_rt.rs`).
 
 #![allow(dead_code)]
 
@@ -42,6 +45,11 @@ use yakogl::gl::vertex::{glDisableVertexAttribArray, glEnableVertexAttribArray, 
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
 use yakogl::vivante::backend::{gc_finishes, gc_init, gc_shutdown, yakogl_backend_vivante};
 use yakogl::vivante::kick::{GcKick, GC_KICK_MAGIC};
+use yakogl::vivante::regs::{
+    GC_OP_DRAW_INSTANCED, GC_OP_LOAD_STATE, GC_OP_STALL, GC_PE_DEPTH_CONFIG, GC_PE_DEPTH_EARLY_Z,
+    GC_PE_DEPTH_SUPER_TILED, GC_RS_CLEAR_CONTROL, GC_RS_CLEAR_CONTROL_MODE_ENABLED1, GC_RS_CONFIG, GC_RS_DEST_TILED,
+    GC_RS_KICKER, GC_RS_SOURCE_TILED,
+};
 
 /// One frame's counts (see the file's comment for what each one is).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -87,6 +95,95 @@ impl Counts {
     }
 }
 
+/// What the kicks' command streams hold, read by the stand-in's `submit`
+/// (`gc_scene_kicks_tiled.rs` pins them; `gc_scene_kicks.rs` ignores them).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StreamCounts {
+    /// RS kicks that write a TILED destination from a linear source: the
+    /// tiled-target tile-in and the RS tiled copies of vertex-stage maps.
+    pub rs_tile_in: u32,
+    /// RS kicks that read a TILED source into a linear destination: a tiled
+    /// shadow's copy back.
+    pub rs_copy_back: u32,
+    /// Every other RS kick: fills (`rs_clear.rs`) and linear copies.
+    pub rs_other: u32,
+    /// Draw commands.
+    pub draws: u32,
+    /// Draws whose PE depth config says SUPER_TILED: a draw into a tiled
+    /// shadow (a linear target keeps its depth linear).
+    pub draws_tiled_shadow: u32,
+    /// Draws whose PE depth config says EARLY_Z.
+    pub draws_early_z: u32,
+}
+
+impl StreamCounts {
+    fn minus(&self, o: &StreamCounts) -> StreamCounts {
+        StreamCounts {
+            rs_tile_in: self.rs_tile_in - o.rs_tile_in,
+            rs_copy_back: self.rs_copy_back - o.rs_copy_back,
+            rs_other: self.rs_other - o.rs_other,
+            draws: self.draws - o.draws,
+            draws_tiled_shadow: self.draws_tiled_shadow - o.draws_tiled_shadow,
+            draws_early_z: self.draws_early_z - o.draws_early_z,
+        }
+    }
+
+    /// The largest of each count over `frames`.
+    pub fn max_of(frames: &[StreamCounts]) -> StreamCounts {
+        frames.iter().fold(StreamCounts::default(), |m, f| StreamCounts {
+            rs_tile_in: m.rs_tile_in.max(f.rs_tile_in),
+            rs_copy_back: m.rs_copy_back.max(f.rs_copy_back),
+            rs_other: m.rs_other.max(f.rs_other),
+            draws: m.draws.max(f.draws),
+            draws_tiled_shadow: m.draws_tiled_shadow.max(f.draws_tiled_shadow),
+            draws_early_z: m.draws_early_z.max(f.draws_early_z),
+        })
+    }
+}
+
+/// Walk one kick's stream (the `LOAD_STATE` / draw / stall encoding of
+/// `cmd.rs`) and add what it holds to `c`.
+fn count_stream(words: &[u32], c: &mut StreamCounts) {
+    let (mut config, mut clear, mut depth) = (0u32, 0u32, 0u32);
+    let mut i = 0usize;
+    while i < words.len() {
+        let w = words[i];
+        match w & 0xf800_0000 {
+            GC_OP_LOAD_STATE => {
+                let count = ((w >> 16) & 0x3ff) as usize;
+                let base = (w & 0xffff) * 4;
+                for k in 0..count {
+                    let Some(&v) = words.get(i + 1 + k) else { break };
+                    match base + 4 * k as u32 {
+                        GC_RS_CONFIG => config = v,
+                        GC_RS_CLEAR_CONTROL => clear = v,
+                        GC_PE_DEPTH_CONFIG => depth = v,
+                        GC_RS_KICKER => {
+                            let fill = clear & GC_RS_CLEAR_CONTROL_MODE_ENABLED1 != 0;
+                            let (src, dst) = (config & GC_RS_SOURCE_TILED != 0, config & GC_RS_DEST_TILED != 0);
+                            match (fill, src, dst) {
+                                (false, false, true) => c.rs_tile_in += 1,
+                                (false, true, false) => c.rs_copy_back += 1,
+                                _ => c.rs_other += 1,
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                i += 1 + count;
+            }
+            GC_OP_DRAW_INSTANCED => {
+                c.draws += 1;
+                c.draws_tiled_shadow += u32::from(depth & GC_PE_DEPTH_SUPER_TILED != 0);
+                c.draws_early_z += u32::from(depth & GC_PE_DEPTH_EARLY_Z != 0);
+                i += 4;
+            }
+            GC_OP_STALL => i += 2,
+            _ => i += 1,
+        }
+    }
+}
+
 /// Frames drawn, and the first one counted: frame 1 allocates the targets'
 /// surfaces and copies, frame 2 is the first whose swap has a previous frame.
 pub const FRAMES: usize = 6;
@@ -118,11 +215,90 @@ pub struct Platform {
     waits_swap: u32,
     cpu_reads: u32,
     resolves: u32,
+    stream: StreamCounts,
     /// The test's step now, and what the stand-in saw in each one: `kick`
     /// and `wait` (outside the swap) by step, for the record.
     step: &'static str,
     events: Vec<String>,
     faults: Vec<String>,
+    /// What the submitted streams asked of the resolve engine and the pixel
+    /// engine ([`stream_tally`]), and the two registers it follows across
+    /// kicks (the GPU keeps its state from one kick to the next).
+    tally: StreamTally,
+    rs_config: u32,
+    pe_depth_config: u32,
+}
+
+/// The resolve-engine jobs and the draws of the submitted streams, read off
+/// their words at `submit` (`LOAD_STATE`, `DRAW_INSTANCED`): what a test of
+/// the tiled shadows (`gc_tiled_rt`) counts besides [`Counts`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StreamTally {
+    /// `RS_KICKER` writes.
+    pub rs_kicks: u32,
+    /// RS jobs whose source is TILED (`RS_CONFIG` `SOURCE_TILED`): a shadow's
+    /// copy back.
+    pub rs_from_tiled: u32,
+    /// RS jobs whose destination is TILED (`DEST_TILED`): a shadow's tile-in,
+    /// or a texture's RS tiled copy (`tiled_copy.rs`).
+    pub rs_to_tiled: u32,
+    /// Draws, and those with `PE_DEPTH_CONFIG` `EARLY_Z` set.
+    pub draws: u32,
+    pub early_z_draws: u32,
+}
+
+impl StreamTally {
+    /// `self - before`, count by count.
+    pub fn since(&self, before: &StreamTally) -> StreamTally {
+        StreamTally {
+            rs_kicks: self.rs_kicks - before.rs_kicks,
+            rs_from_tiled: self.rs_from_tiled - before.rs_from_tiled,
+            rs_to_tiled: self.rs_to_tiled - before.rs_to_tiled,
+            draws: self.draws - before.draws,
+            early_z_draws: self.early_z_draws - before.early_z_draws,
+        }
+    }
+}
+
+/// The tally of every stream submitted since the run began.
+pub fn stream_tally() -> StreamTally {
+    with_platform(|p| p.tally)
+}
+
+/// Walk one submitted stream into the tally (the register walk of
+/// `backend_tests.rs` `walk`).
+fn tally_stream(p: &mut Platform, words: &[u32]) {
+    use yakogl::vivante::regs::*;
+    let mut i = 0usize;
+    while i < words.len() {
+        let w = words[i];
+        match w & 0xf800_0000 {
+            GC_OP_LOAD_STATE => {
+                let count = ((w >> 16) & 0x3ff) as usize;
+                let base = (w & 0xffff) * 4;
+                for (k, &v) in words.iter().skip(i + 1).take(count).enumerate() {
+                    match base + 4 * k as u32 {
+                        GC_RS_CONFIG => p.rs_config = v,
+                        GC_PE_DEPTH_CONFIG => p.pe_depth_config = v,
+                        GC_RS_KICKER => {
+                            p.tally.rs_kicks += 1;
+                            p.tally.rs_from_tiled += u32::from(p.rs_config & GC_RS_SOURCE_TILED != 0);
+                            p.tally.rs_to_tiled += u32::from(p.rs_config & GC_RS_DEST_TILED != 0);
+                        }
+                        _ => {}
+                    }
+                }
+                i += 1 + count;
+            }
+            GC_OP_DRAW_INSTANCED => {
+                p.tally.draws += 1;
+                p.tally.early_z_draws += u32::from(p.pe_depth_config & GC_PE_DEPTH_EARLY_Z != 0);
+                i += 4;
+            }
+            GC_OP_STALL => i += 2,
+            _ => i += 1, /* NOP and the pad words */
+        }
+    }
 }
 
 pub static PLATFORM: Mutex<Option<Platform>> = Mutex::new(None);
@@ -192,8 +368,31 @@ unsafe extern "C" fn p_submit(kick: *const c_void, len: usize) -> i64 {
             p.faults.push(format!("submit with magic 0x{:x}", k.magic));
             return -22;
         }
+        let stream = p.allocs.range(..=k.stream_gpu).next_back().and_then(|(&base, a)| {
+            let (at, n) = ((k.stream_gpu - base) as usize, k.stream_bytes as usize);
+            // SAFETY: the stand-in's own allocation, read as u32 words inside
+            // its size (the back end's stream lies in one allocation).
+            (at + n <= a.len() * 8).then(|| unsafe {
+                core::slice::from_raw_parts((a.as_ptr() as *const u8).add(at) as *const u32, n / 4).to_vec()
+            })
+        });
+        match stream {
+            Some(words) => tally_stream(p, &words),
+            None => p.faults.push(format!("submit of a stream at 0x{:x} outside every allocation", k.stream_gpu)),
+        }
         p.kicks += 1;
         p.fence += 1;
+        if let Some((base, a)) = p.allocs.range(..=k.stream_gpu).next_back() {
+            let off = (k.stream_gpu - base) as usize;
+            // SAFETY: a boxed [u64], read as bytes.
+            let bytes = unsafe { core::slice::from_raw_parts(a.as_ptr() as *const u8, a.len() * 8) };
+            let end = (off + k.stream_bytes as usize).min(bytes.len());
+            let words: Vec<u32> =
+                bytes[off.min(end)..end].as_chunks::<4>().0.iter().map(|b| u32::from_ne_bytes(*b)).collect();
+            let mut s = p.stream;
+            count_stream(&words, &mut s);
+            p.stream = s;
+        }
         let e = format!("kick@{}", p.step);
         p.events.push(e);
         if p.gpu == Gpu::Done {
@@ -302,19 +501,26 @@ pub fn run(gpu: Gpu, scene: impl FnOnce() -> Box<dyn FnMut()>) -> (Vec<Counts>, 
 
 /// What a test may do around the frames: `after_init` once after `gc_init`
 /// and the context exist (before the scene's setup), `each_frame(n)` before
-/// frame `n`'s canvas clear (n from 1).
+/// frame `n`'s canvas clear (n from 1), `after_frame(n)` after its swap.
 #[derive(Default)]
 pub struct Hooks<'a> {
     pub after_init: Option<Box<dyn FnOnce() + 'a>>,
     pub each_frame: Option<Box<dyn FnMut(usize) + 'a>>,
+    pub after_frame: Option<Box<dyn FnMut(usize) + 'a>>,
 }
 
 /// [`run`] with [`Hooks`].
-pub fn run_with(
+pub fn run_with(gpu: Gpu, scene: impl FnOnce() -> Box<dyn FnMut()>, hooks: Hooks<'_>) -> (Vec<Counts>, Vec<String>) {
+    let (counts, events, _) = run_full(gpu, scene, hooks);
+    (counts, events)
+}
+
+/// [`run_with`] with the counted frames' [`StreamCounts`] as well.
+pub fn run_full(
     gpu: Gpu,
     scene: impl FnOnce() -> Box<dyn FnMut()>,
     mut hooks: Hooks<'_>,
-) -> (Vec<Counts>, Vec<String>) {
+) -> (Vec<Counts>, Vec<String>, Vec<StreamCounts>) {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     with_platform(|p| *p = Platform { gpu, ..Platform::default() });
     // SAFETY: SERIAL is held; the tables are statics or leaked.
@@ -342,18 +548,24 @@ pub fn run_with(
         let mut frame = scene();
         no_error("the scene's setup");
         let mut counted = Vec::new();
+        let mut streams = Vec::new();
         for n in 1..=FRAMES {
             if let Some(f) = hooks.each_frame.as_mut() {
                 f(n);
             }
             let before = snapshot();
+            let stream_before = with_platform(|p| p.stream);
             with_platform(|p| p.events.clear());
             canvas_clear();
             frame();
             swap();
             no_error(&format!("frame {n}"));
+            if let Some(f) = hooks.after_frame.as_mut() {
+                f(n);
+            }
             let after = snapshot();
             if n >= FIRST_COUNTED {
+                streams.push(with_platform(|p| p.stream).minus(&stream_before));
                 counted.push(Counts {
                     kicks: after.kicks - before.kicks,
                     waits_other: after.waits_other - before.waits_other,
@@ -364,7 +576,7 @@ pub fn run_with(
                 });
             }
         }
-        (counted, with_platform(|p| core::mem::take(&mut p.events)))
+        (counted, with_platform(|p| core::mem::take(&mut p.events)), streams)
     }));
     // SAFETY: the context made above.
     unsafe {
@@ -595,6 +807,18 @@ pub fn texture(w: u32, h: u32, min: GLenum, pixels: Option<&[u8]>) -> GLuint {
     tex
 }
 
+/// The depth textures' internal format. Under `report-es2` glmark2's own
+/// unsized `GL_DEPTH_COMPONENT`; under the ES 3.0 report (a build without
+/// `report-es2`) an unsized depth texture is no attachment
+/// (`GlTexture::unsized_depth`), so the sized 24-bit one stands in for it.
+fn depth_internalformat() -> GLenum {
+    if cfg!(feature = "report-es2") {
+        GL_DEPTH_COMPONENT
+    } else {
+        GL_DEPTH_COMPONENT24
+    }
+}
+
 /// A GL_DEPTH_COMPONENT / GL_UNSIGNED_INT texture (shadow's and refract's
 /// depth targets), nearest, clamped.
 pub fn depth_texture(w: u32, h: u32) -> GLuint {
@@ -610,7 +834,7 @@ pub fn depth_texture(w: u32, h: u32) -> GLuint {
         glTexImage2D(
             GL_TEXTURE_2D,
             0,
-            GL_DEPTH_COMPONENT as GLint,
+            depth_internalformat() as GLint,
             w as GLsizei,
             h as GLsizei,
             0,

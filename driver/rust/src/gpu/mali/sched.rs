@@ -17,8 +17,11 @@
 //!
 //! This file holds the design, the refusals, the constants, the bring-up
 //! ([`start`]), the submit ([`submit`]), the completion wait ([`wait`]),
-//! the stream's drain ([`drained`]) and the group's end ([`stop`], [`terminate`], [`clear_events`],
-//! [`stop_and_terminate`]); the instruction words panthor wraps a job in are [`job`]'s.
+//! the stream's drain ([`drained`]) and the group's end ([`stop`],
+//! [`terminate`], [`clear_events`], [`stop_and_terminate`]) and, for the
+//! Zephyr OSAL, its start again over the same memory ([`restart`]) and the
+//! tiler OOM handler ([`service_tiler_oom`]); the instruction words panthor
+//! wraps a job in are [`job`]'s.
 //!
 //! # The interface this uses
 //!
@@ -288,9 +291,13 @@
 //!   [`READ64_TRIES`] reads ([`SchedRefusal::Read64Unstable`]; ours);
 //! - `CS_FAULT` (panthor acknowledges it and lets the stream go on to its
 //!   `ERROR_BARRIER`), `CS_FATAL` (panthor acknowledges it and terminates
-//!   the group), `CS_TILER_OOM` (panthor grows the heap),
-//!   `CS_PROTM_PENDING`, and `CSG_PROGRESS_TIMER_EVENT` (panthor terminates
-//!   the group): each refused with its word, never acknowledged to go on;
+//!   the group), `CS_PROTM_PENDING`, and `CSG_PROGRESS_TIMER_EVENT`
+//!   (panthor terminates the group): each refused with its word, never
+//!   acknowledged to go on;
+//! - `CS_TILER_OOM` when the caller has no heap to grow ([`wait`], Z4's:
+//!   [`refuse_tiler_oom`]), or when its counts are ones panthor refuses
+//!   ([`SchedRefusal::TilerOomCounts`]), or the caller's heap refuses
+//!   ([`service_tiler_oom`]);
 //! - a sync object whose `status` is non-zero;
 //! - a job that would overrun what the stream has not consumed;
 //! - the 5 s timeout.
@@ -312,8 +319,11 @@
 //!   `panthor_sched_suspend`, :2688-2809): the group lives from the start to
 //!   the terminate; the suspend buffers are given because the interface
 //!   asks for them, not used.
-//! - No tiler heap growth (`group_process_tiler_oom`, :1448-1532): the L1
-//!   frame's heap is sized for it, and an OOM is refused.
+//! - No tiler heap growth in Z4's own [`wait`]: the L1 frame's heap is
+//!   sized for it, and an OOM is refused. [`wait_seqno`] and
+//!   [`poll_seqno`] take a `grow` and handle the event as
+//!   `group_process_tiler_oom` does (:1448-1532, [`service_tiler_oom`]):
+//!   the Zephyr OSAL's (board::nanopc_t6_osal) grows its heap there.
 //! - No protected mode (`CS_PROTM_PENDING`, the protected suspend buffer's
 //!   use): GL here renders no protected content.
 //! - No sync-wait evaluation of blocked streams (`sync_upd_work`,
@@ -546,7 +556,8 @@ pub enum SchedRefusal {
     /// `CS_FATAL` pending on CS 0 (the value: the `fatal` word;
     /// panthor_sched.c:1349-1393).
     CsFatal = 12,
-    /// `CS_TILER_OOM` pending on CS 0 (the value: the output's
+    /// `CS_TILER_OOM` pending on CS 0 and the caller's heap refused to
+    /// handle it ([`refuse_tiler_oom`], the value: the output's
     /// `heap_vt_start`): Z4 grows no heap.
     TilerOom = 13,
     /// `CS_PROTM_PENDING` pending on CS 0 (the value: the `ack` word): Z4
@@ -605,6 +616,29 @@ pub enum SchedRefusal {
     /// within [`CS_ACK_WAIT_US`] after the job was done (the value:
     /// `extract`'s low 32 bits). Ours: panthor never waits for it.
     DrainTimeout = 27,
+    /// A `CS_TILER_OOM` whose counts panthor refuses before it grows the
+    /// heap: `heap_frag_end > heap_vt_end` or `heap_vt_end >=
+    /// heap_vt_start` (`group_process_tiler_oom`, panthor_sched.c:1480,
+    /// `-EINVAL`, and the queue made fatal). The value: `heap_vt_end`.
+    TilerOomCounts = 28,
+    /// The heap refused to grow for a reason other than panthor's `-ENOMEM`
+    /// (which acknowledges with no chunk and lets the firmware wait): an
+    /// unknown heap, a short or misplaced chunk (panthor's other errors
+    /// make the queue fatal, panthor_sched.c:1448-1532). The value: the
+    /// caller's code for it (the OSAL's: `heap_error_code`'s number).
+    HeapGrow = 29,
+    /// Ours, the Zephyr OSAL's (board::nanopc_t6_osal): after a restart
+    /// its tiler heap could not be made again as it was (the value: the
+    /// OSAL's code for it).
+    HeapRemake = 30,
+    /// Ours, the Zephyr OSAL's: an error after its last allowed restart
+    /// (`RESTART_BUDGET`) ended the group instead of starting it again
+    /// (the value: the refusal that would have restarted it).
+    RestartBudget = 31,
+    /// Ours, the Zephyr OSAL's: the GPU's L2 and LSC clean and invalidate
+    /// after the group's end did not complete (the value: the
+    /// [`super::MaliRefusal`] number); its memory is then kept.
+    CacheFlush = 32,
 }
 
 /// The ring's size as panthor's queue creation accepts it
@@ -943,13 +977,18 @@ fn request_start(m: &impl Mmio, gpu: usize, iface: &Iface, csg: &Csg) {
 /// `fatal` word, the `fault` word, the tiler's `heap_vt_start`, the `ack`.
 /// Nothing is acknowledged.
 pub fn cs_events(m: &impl Mmio, cs: &Cs) -> Result<(), Refused> {
-    let req = m.read32(cs.input + offset_of!(CsInput, req));
-    cs_events_of(m, cs, req, m.read32(cs.output + offset_of!(CsOutput, ack)))
+    cs_events_in(m, cs, CS_EVT_MASK)
 }
 
-/// [`cs_events`] on `req` and `ack` words already read.
-fn cs_events_of(m: &impl Mmio, cs: &Cs, req: u32, ack: u32) -> Result<(), Refused> {
-    let events = (req ^ ack) & CS_EVT_MASK;
+/// [`cs_events`] for the events of `mask` only.
+fn cs_events_in(m: &impl Mmio, cs: &Cs, mask: u32) -> Result<(), Refused> {
+    let req = m.read32(cs.input + offset_of!(CsInput, req));
+    cs_events_of(m, cs, req, m.read32(cs.output + offset_of!(CsOutput, ack)), mask)
+}
+
+/// [`cs_events_in`] on `req` and `ack` words already read.
+fn cs_events_of(m: &impl Mmio, cs: &Cs, req: u32, ack: u32, mask: u32) -> Result<(), Refused> {
+    let events = (req ^ ack) & CS_EVT_MASK & mask;
     let out = |f: usize| m.read32(cs.output + f);
     if events & CS_FATAL != 0 {
         return Err((SchedRefusal::CsFatal, out(offset_of!(CsOutput, fatal))));
@@ -966,6 +1005,109 @@ fn cs_events_of(m: &impl Mmio, cs: &Cs, req: u32, ack: u32) -> Result<(), Refuse
     Ok(())
 }
 
+/// What CS 0's output says with a `CS_TILER_OOM` (`group_process_tiler_oom`,
+/// panthor_sched.c:1448-1532, reads the same four words): the heap context
+/// the stream's `HEAP_SET` named, and the tiler's counts of render passes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TilerOom {
+    pub heap_address: u64,
+    pub vt_start: u32,
+    pub vt_end: u32,
+    pub frag_end: u32,
+}
+
+impl TilerOom {
+    /// `heap_vt_start - heap_frag_end` (panthor_sched.c:1469):
+    /// [`super::heap::grow`]'s `renderpasses_in_flight`.
+    pub const fn renderpasses_in_flight(&self) -> u32 {
+        self.vt_start.wrapping_sub(self.frag_end)
+    }
+    /// `heap_vt_end - heap_frag_end` (panthor_sched.c:1470):
+    /// [`super::heap::grow`]'s `pending_frag_count`.
+    pub const fn pending_frag_count(&self) -> u32 {
+        self.vt_end.wrapping_sub(self.frag_end)
+    }
+}
+
+/// The `grow` of a caller with no heap to grow (Z4's probe): every
+/// `CS_TILER_OOM` refused as [`SchedRefusal::TilerOom`] with
+/// `heap_vt_start`, nothing written, as Z4 refused it before the handler
+/// existed.
+pub fn refuse_tiler_oom(e: &TilerOom) -> Result<u64, Refused> {
+    Err((SchedRefusal::TilerOom, e.vt_start))
+}
+
+/// CS 0's `CS_TILER_OOM`, when pending, handled as panthor's
+/// `group_process_tiler_oom` does (panthor_sched.c:1448-1532; heap.rs's
+/// follow-up note):
+///
+/// 1. the four words read ([`TilerOom`]);
+/// 2. `heap_frag_end > heap_vt_end` or `heap_vt_end >= heap_vt_start`
+///    refused ([`SchedRefusal::TilerOomCounts`]: panthor's `-EINVAL`, which
+///    makes the queue fatal);
+/// 3. `grow` asked for the chunk: the value [`super::heap::grow`] returns,
+///    or 0 for panthor's `-ENOMEM` (no chunk: the firmware waits for
+///    fragment work or runs its exception handler, :1491-1501); its
+///    refusal is returned as it is, with nothing written;
+/// 4. the value written to CS 0's `heap_start` and `heap_end`
+///    (:1512-1513), the event acknowledged by updating `req` to `ack` under
+///    `CS_TILER_OOM`, CS 0's bit of the group's `doorbell_req` toggled and
+///    the group rung (the toggle `cs_slot_process_irq_locked` returns for a
+///    tiler OOM, :1573-1601, and the ring of :1719-1722).
+///
+/// `Ok(None)` when no `CS_TILER_OOM` is pending; `Ok(Some)` with the event
+/// and the value written.
+pub fn service_tiler_oom(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    grow: &mut impl FnMut(&TilerOom) -> Result<u64, Refused>,
+) -> Result<Option<(TilerOom, u64)>, Refused> {
+    let (r, a) = (m.read32(cs.input + offset_of!(CsInput, req)), m.read32(cs.output + offset_of!(CsOutput, ack)));
+    service_tiler_oom_of(m, gpu, iface, csg, cs, r, a, grow)
+}
+
+/// [`service_tiler_oom`] on CS 0's `req` and `ack` words already read.
+#[allow(clippy::too_many_arguments)]
+fn service_tiler_oom_of(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    r: u32,
+    a: u32,
+    grow: &mut impl FnMut(&TilerOom) -> Result<u64, Refused>,
+) -> Result<Option<(TilerOom, u64)>, Refused> {
+    if (r ^ a) & CS_TILER_OOM == 0 {
+        return Ok(None);
+    }
+    let out = |f: usize| m.read32(cs.output + f);
+    let e = TilerOom {
+        heap_address: read64(m, cs.output + offset_of!(CsOutput, heap_address)),
+        vt_start: out(offset_of!(CsOutput, heap_vt_start)),
+        vt_end: out(offset_of!(CsOutput, heap_vt_end)),
+        frag_end: out(offset_of!(CsOutput, heap_frag_end)),
+    };
+    if e.frag_end > e.vt_end || e.vt_end >= e.vt_start {
+        return Err((SchedRefusal::TilerOomCounts, e.vt_end));
+    }
+    let chunk = grow(&e)?;
+    write64(m, cs.input + offset_of!(CsInput, heap_start), chunk);
+    write64(m, cs.input + offset_of!(CsInput, heap_end), chunk);
+    csf::update_reqs(m, cs.input + offset_of!(CsInput, req), a, CS_TILER_OOM);
+    csf::toggle_reqs(
+        m,
+        csg.input + offset_of!(CsgInput, doorbell_req),
+        csg.output + offset_of!(CsgOutput, doorbell_ack),
+        1 << CS_SLOT,
+    );
+    csf::ring_csg_doorbells(m, gpu, iface, 1 << CSG_SLOT);
+    Ok(Some((e, chunk)))
+}
+
 /// The start's acknowledges: CSG 0's within [`CSG_ACK_WAIT_US`]
 /// (`panthor_fw_csg_wait_acks(..., 100)`, panthor_sched.c:1867;
 /// panthor_fw.c:1270-1294, whose state field counts only when all its bits
@@ -978,7 +1120,7 @@ fn wait_started(m: &impl Mmio, csg: &Csg, cs: &Cs, delay_us: &mut impl FnMut(u32
     let (req, ack) = (cs.input + offset_of!(CsInput, req), cs.output + offset_of!(CsOutput, ack));
     for t in 0..=CS_ACK_WAIT_US {
         let (r, a) = (m.read32(req), m.read32(ack));
-        cs_events_of(m, cs, r, a)?;
+        cs_events_of(m, cs, r, a, CS_EVT_MASK)?;
         if (r ^ a) & CS_STATE_MASK == 0 {
             return Ok((csg_us, t));
         }
@@ -1028,9 +1170,70 @@ pub fn start(
     delay_us: &mut impl FnMut(u32),
 ) -> Result<Started, Refused> {
     let p = place(m, mem, vm, id, csg, group, queue)?;
-    zero_queue_mem(m, &p);
-    prog_cs(m, cs, queue, &p);
-    prog_csg(m, csg, group, &p);
+    start_placed(m, gpu, iface, csg, cs, group, queue, &p, delay_us)
+}
+
+/// The group started again in the same slot over the same memory, after
+/// [`stop_and_terminate`]: `s` is what [`start`] answered for `group` and
+/// `queue`, so the memory lookups and the checks of `group` and `queue`
+/// are not repeated; CSG 0 must be free (its state `CSG_STATE_TERMINATE`,
+/// [`SchedRefusal::CsgSlotBusy`] otherwise, a state none of the four
+/// [`SchedRefusal::CsgStateUnknown`]). Then steps 2 to 5 of [`start`]: the
+/// sync object and the user pages zeroed (`seqno` 0, `insert` and
+/// `extract` 0: the ring starts empty), CS 0 and CSG 0 programmed, the
+/// start requested and acknowledged.
+///
+/// panthor never starts a terminated group again: a group with a fatal
+/// queue or a timeout cannot run (`group_can_run`, panthor_sched.c:
+/// 1925-1931), its in-flight jobs are signalled with an error
+/// (`group_term_post_processing`, :2071-2118) and user space makes a new
+/// group (Mesa's context). Ours: one group per module, so the module's
+/// group is made again here, in the same slot, VM and memory, as a new
+/// group would be.
+#[allow(clippy::too_many_arguments)]
+pub fn restart(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    group: &Group,
+    queue: &Queue,
+    s: &Started,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Started, Refused> {
+    let ack = m.read32(csg.output + offset_of!(CsgOutput, ack));
+    check_csg_state(ack)?;
+    if ack & CSG_STATE_MASK != CSG_STATE_TERMINATE {
+        return Err((SchedRefusal::CsgSlotBusy, ack));
+    }
+    let p = Placed {
+        ring_cpu: s.ring_cpu,
+        input_cpu: s.input_cpu,
+        output_cpu: s.output_cpu,
+        syncobj_cpu: s.syncobj_cpu,
+        suspend_buf: s.suspend_buf,
+        protm_suspend_buf: s.protm_suspend_buf,
+    };
+    start_placed(m, gpu, iface, csg, cs, group, queue, &p, delay_us)
+}
+
+/// [`start`]'s steps 2 to 5 over `p`.
+#[allow(clippy::too_many_arguments)]
+fn start_placed(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    group: &Group,
+    queue: &Queue,
+    p: &Placed,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Started, Refused> {
+    zero_queue_mem(m, p);
+    prog_cs(m, cs, queue, p);
+    prog_csg(m, csg, group, p);
     request_start(m, gpu, iface, csg);
     let (csg_ack_us, cs_ack_us) = wait_started(m, csg, cs, delay_us)?;
     let (ci, co, gi, go) = (cs.input, cs.output, csg.input, csg.output);
@@ -1155,8 +1358,10 @@ fn job_params(cs: &Cs, queue: &Queue, j: &Job) -> Result<job::JobParams, Refused
 /// One job on the started stream, as `queue_run_job` puts it there
 /// (panthor_sched.c:3133-3231):
 ///
-/// 1. checks before any write: a pending stream event ([`cs_events`]), the
-///    job's words ([`job_params`]; `seqno` above the sync object's), the
+/// 1. checks before any write: a pending stream error ([`cs_events`]
+///    without `CS_TILER_OOM`: an OOM is the stream waiting for memory, not
+///    an error, and panthor's `queue_run_job` reads no event; the wait's
+///    look services or refuses it, [`poll_job`]), the job's words ([`job_params`]; `seqno` above the sync object's), the
 ///    ring's room: its size less `in_flight`, the bytes of the jobs the
 ///    caller has not yet seen complete ([`job::check_ring_fit`] from
 ///    `insert - in_flight`: [`SchedRefusal::RingOverflow`] with the free
@@ -1199,7 +1404,9 @@ pub fn submit(
     seqno: u64,
     in_flight: u64,
 ) -> Result<Submitted, Refused> {
-    cs_events(m, cs)?;
+    // an OOM raised after the caller's last look must not refuse the job:
+    // it is the wait's to service (the OSAL grows its heap there)
+    cs_events_in(m, cs, CS_EVT_MASK & !CS_TILER_OOM)?;
     let p = job_params(cs, queue, j)?;
     if seqno <= read64_stable(m, s.syncobj_cpu + offset_of!(SyncObj64, seqno))? {
         return Err((SchedRefusal::JobParams, 5));
@@ -1316,9 +1523,11 @@ struct Acks {
 ///
 /// 1. `CSG_PROGRESS_TIMER_EVENT` in the group's `req ^ ack` (:1703-1704):
 ///    refused, not acknowledged;
-/// 2. CS 0's events ([`cs_events`], :1573-1601): refused, not
-///    acknowledged; then, when CS 0's bit of `cs_irq_req ^ cs_irq_ack`
-///    is set, `cs_irq_ack` set to `cs_irq_req` (:1687-1693);
+/// 2. CS 0's events in panthor's order (:1584-1593): `CS_FATAL` and
+///    `CS_FAULT` refused, not acknowledged; `CS_TILER_OOM` handled with
+///    `grow` ([`service_tiler_oom`]); `CS_PROTM_PENDING` refused; then,
+///    when CS 0's bit of `cs_irq_req ^ cs_irq_ack` is set, `cs_irq_ack` set
+///    to `cs_irq_req` (:1687-1693);
 /// 3. `CSG_SYNC_UPDATE` and `CSG_IDLE` acknowledged by updating `req` to
 ///    `ack` under them (:1695-1698; the sync update is
 ///    `csg_slot_sync_update_locked`'s, :1629-1641), and, when anything was
@@ -1339,6 +1548,7 @@ fn poll_job(
     s: &Started,
     target: u64,
     acks: &mut Acks,
+    grow: &mut impl FnMut(&TilerOom) -> Result<u64, Refused>,
 ) -> Result<Poll, Refused> {
     let (req, ack) = (csg.input + offset_of!(CsgInput, req), csg.output + offset_of!(CsgOutput, ack));
     let (r, a) = (m.read32(req), m.read32(ack));
@@ -1347,7 +1557,10 @@ fn poll_job(
     if events & csf::CSG_PROGRESS_TIMER_EVENT != 0 {
         return Err((SchedRefusal::CsgProgressTimeout, a));
     }
-    cs_events(m, cs)?;
+    let (cr, ca) = (m.read32(cs.input + offset_of!(CsInput, req)), m.read32(cs.output + offset_of!(CsOutput, ack)));
+    cs_events_of(m, cs, cr, ca, CS_FATAL | CS_FAULT)?;
+    service_tiler_oom_of(m, gpu, iface, csg, cs, cr, ca, grow)?;
+    cs_events_of(m, cs, cr, ca, CS_PROTM_PENDING)?;
     let mut rung = false;
     let irq_ack = csg.input + offset_of!(CsgInput, cs_irq_ack);
     let irq_req = m.read32(csg.output + offset_of!(CsgOutput, cs_irq_req));
@@ -1384,8 +1597,9 @@ fn poll_job(
 /// :3233-3267) and [`SchedRefusal::JobTimeout`] carries the sync object's
 /// `seqno` (low 32 bits), with both ends' results in the record
 /// ([`WaitRefused::ended`]). Any other refusal leaves the group running,
-/// `ended` `None`. Call it
-/// right after [`submit`]: the budget counts from the call.
+/// `ended` `None`. A `CS_TILER_OOM` is refused ([`refuse_tiler_oom`]): Z4
+/// grows no heap. Call it right after [`submit`]: the budget counts from
+/// the call.
 #[allow(clippy::too_many_arguments)]
 pub fn wait(
     m: &impl Mmio,
@@ -1397,12 +1611,13 @@ pub fn wait(
     sub: &Submitted,
     delay_us: &mut impl FnMut(u32),
 ) -> Result<Waited, WaitRefused> {
-    wait_seqno(m, gpu, iface, csg, cs, s, sub.seqno, delay_us)
+    wait_seqno(m, gpu, iface, csg, cs, s, sub.seqno, delay_us, &mut refuse_tiler_oom)
 }
 
 /// [`wait`] for the sync object to reach `target`, the [`Submitted::seqno`]
 /// of a job submitted earlier: the same looks, the same 5 s budget counted
-/// from this call, the same stop and terminate on its timeout. An OSAL that
+/// from this call, the same stop and terminate on its timeout, a
+/// `CS_TILER_OOM` handled with `grow` ([`service_tiler_oom`]). An OSAL that
 /// keeps jobs in flight waits for an older job's number this way.
 #[allow(clippy::too_many_arguments)]
 pub fn wait_seqno(
@@ -1414,8 +1629,9 @@ pub fn wait_seqno(
     s: &Started,
     target: u64,
     delay_us: &mut impl FnMut(u32),
+    grow: &mut impl FnMut(&TilerOom) -> Result<u64, Refused>,
 ) -> Result<Waited, WaitRefused> {
-    match poll_for(m, gpu, iface, csg, cs, s, target, JOB_TIMEOUT_US, delay_us)? {
+    match poll_for(m, gpu, iface, csg, cs, s, target, JOB_TIMEOUT_US, delay_us, grow)? {
         Ok(w) => Ok(w),
         Err(t) => {
             // the record's words as the timeout found them, before the ends move them
@@ -1443,9 +1659,10 @@ pub fn poll_seqno(
     target: u64,
     budget_us: u32,
     delay_us: &mut impl FnMut(u32),
+    grow: &mut impl FnMut(&TilerOom) -> Result<u64, Refused>,
 ) -> Result<Option<Waited>, WaitRefused> {
     let budget = budget_us.min(JOB_TIMEOUT_US).next_multiple_of(JOB_POLL_US);
-    Ok(poll_for(m, gpu, iface, csg, cs, s, target, budget, delay_us)?.ok())
+    Ok(poll_for(m, gpu, iface, csg, cs, s, target, budget, delay_us, grow)?.ok())
 }
 
 /// The sync object's `seqno` now, with no wait and no event acknowledged:
@@ -1458,6 +1675,21 @@ pub fn completed_seqno(m: &impl Mmio, s: &Started) -> Result<u64, Refused> {
         return Err((SchedRefusal::SyncObjError, status));
     }
     read64_stable(m, s.syncobj_cpu + offset_of!(SyncObj64, seqno))
+}
+
+/// The errors [`poll_job`] refuses, looked at once with nothing written
+/// and no wait: a group state none of the four, `CSG_PROGRESS_TIMER_EVENT`,
+/// CS 0's `CS_FATAL`, `CS_FAULT` and `CS_PROTM_PENDING` (not
+/// `CS_TILER_OOM`: [`service_tiler_oom`]'s). What an OSAL's `completed`
+/// looks at besides [`completed_seqno`], so that a job that failed while
+/// nobody waited is seen.
+pub fn group_errors(m: &impl Mmio, csg: &Csg, cs: &Cs) -> Result<(), Refused> {
+    let (r, a) = (m.read32(csg.input + offset_of!(CsgInput, req)), m.read32(csg.output + offset_of!(CsgOutput, ack)));
+    check_csg_state(a)?;
+    if (r ^ a) & csf::CSG_PROGRESS_TIMER_EVENT != 0 {
+        return Err((SchedRefusal::CsgProgressTimeout, a));
+    }
+    cs_events_in(m, cs, CS_EVT_MASK & !CS_TILER_OOM)
 }
 
 /// The [`WaitRefused`] of `refused` after `us` microseconds, the words read
@@ -1499,11 +1731,12 @@ fn poll_for(
     target: u64,
     budget_us: u32,
     delay_us: &mut impl FnMut(u32),
+    grow: &mut impl FnMut(&TilerOom) -> Result<u64, Refused>,
 ) -> Result<Result<Waited, u32>, WaitRefused> {
     let mut acks = Acks::default();
     let mut t = 0;
     loop {
-        match poll_job(m, gpu, iface, csg, cs, s, target, &mut acks) {
+        match poll_job(m, gpu, iface, csg, cs, s, target, &mut acks, grow) {
             Ok(Poll::Done(seqno)) => return Ok(Ok(Waited { seqno, us: t, sync_updates: acks.sync_updates })),
             Ok(Poll::Pending) => {}
             Err(r) => return Err(refused_at(m, cs, s, r, t)),
@@ -1582,7 +1815,7 @@ pub fn drained(
         let look = read64_stable(m, s.output_cpu + offset_of!(RingbufOutput, extract)).and_then(|extract| {
             d.extract = extract;
             let insert = read64(m, s.input_cpu + offset_of!(RingbufInput, insert));
-            let polled = poll_job(m, gpu, iface, csg, cs, s, 0, &mut acks);
+            let polled = poll_job(m, gpu, iface, csg, cs, s, 0, &mut acks, &mut refuse_tiler_oom);
             (d.sync_updates, d.cs_irq_acks, d.idle_acks) = (acks.sync_updates, acks.cs_irqs, acks.idles);
             polled?;
             Ok(extract == insert)
@@ -1734,7 +1967,7 @@ pub fn stop_and_terminate(
 mod tests {
     use super::*;
 
-    const ALL: [SchedRefusal; 27] = [
+    const ALL: [SchedRefusal; 32] = [
         SchedRefusal::RingSize,
         SchedRefusal::RingUnmapped,
         SchedRefusal::UserPagesUnmapped,
@@ -1762,6 +1995,11 @@ mod tests {
         SchedRefusal::RingInsert,
         SchedRefusal::Read64Unstable,
         SchedRefusal::DrainTimeout,
+        SchedRefusal::TilerOomCounts,
+        SchedRefusal::HeapGrow,
+        SchedRefusal::HeapRemake,
+        SchedRefusal::RestartBudget,
+        SchedRefusal::CacheFlush,
     ];
 
     #[test]
@@ -1769,6 +2007,25 @@ mod tests {
         let v = ALL.map(|r| r as u32);
         for (i, n) in v.iter().enumerate() {
             assert_eq!(*n, i as u32 + 1, "{:?}", ALL[i]);
+        }
+    }
+
+    /// The numbers the UART prints bare (zephyr_mali.c's restart and stop
+    /// lines, t6_submit's record): one meaning each, the Z4 record's 27
+    /// first, the Zephyr OSAL's after it.
+    #[test]
+    fn the_numbers_a_board_line_prints_keep_their_meaning() {
+        let pinned = [
+            (SchedRefusal::RingOverflow, 16),
+            (SchedRefusal::DrainTimeout, 27),
+            (SchedRefusal::TilerOomCounts, 28),
+            (SchedRefusal::HeapGrow, 29),
+            (SchedRefusal::HeapRemake, 30),
+            (SchedRefusal::RestartBudget, 31),
+            (SchedRefusal::CacheFlush, 32),
+        ];
+        for (r, n) in pinned {
+            assert_eq!(r as u32, n, "{r:?}");
         }
     }
 
@@ -2225,6 +2482,10 @@ mod tests {
             (ci + offset_of!(CsInput, ringbuf_input) + 4, "cs.ringbuf_input.hi"),
             (ci + offset_of!(CsInput, ringbuf_output), "cs.ringbuf_output"),
             (ci + offset_of!(CsInput, ringbuf_output) + 4, "cs.ringbuf_output.hi"),
+            (ci + offset_of!(CsInput, heap_start), "cs.heap_start"),
+            (ci + offset_of!(CsInput, heap_start) + 4, "cs.heap_start.hi"),
+            (ci + offset_of!(CsInput, heap_end), "cs.heap_end"),
+            (ci + offset_of!(CsInput, heap_end) + 4, "cs.heap_end.hi"),
             (gi + offset_of!(CsgInput, req), "csg.req"),
             (gi + offset_of!(CsgInput, cs_irq_ack), "csg.cs_irq_ack"),
             (gi + offset_of!(CsgInput, ack_irq_mask), "csg.ack_irq_mask"),
@@ -3017,6 +3278,83 @@ mod tests {
         mcu.put(irq, mcu.word(irq) ^ 1 << CS_SLOT);
     }
 
+    /// The four words of a `CS_TILER_OOM` and the event raised.
+    fn raise_oom(mcu: &Mcu, vt_start: u32, vt_end: u32, frag_end: u32) {
+        let o = |f: usize| at(CS_OUT) + f;
+        mcu.put(o(offset_of!(CsOutput, heap_address)), 0x0001_5000);
+        mcu.put(o(offset_of!(CsOutput, heap_address)) + 4, 0x8000);
+        mcu.put(o(offset_of!(CsOutput, heap_vt_start)), vt_start);
+        mcu.put(o(offset_of!(CsOutput, heap_vt_end)), vt_end);
+        mcu.put(o(offset_of!(CsOutput, heap_frag_end)), frag_end);
+        raise_event(mcu, CS_TILER_OOM);
+    }
+
+    #[test]
+    fn a_tiler_oom_is_answered_with_the_chunk_and_acknowledged_as_panthor_does() {
+        // group_process_tiler_oom (panthor_sched.c:1448-1532): the chunk to
+        // heap_start and heap_end, the event acknowledged, the stream's
+        // doorbell bit toggled, the group rung
+        let mcu = Mcu { never_complete: true, ..Mcu::new() };
+        let s = started(&mcu);
+        do_submit(&mcu, &s, 1).unwrap();
+        raise_oom(&mcu, 5, 3, 1);
+        mcu.log.borrow_mut().clear();
+        let seen = core::cell::Cell::new(None);
+        let mut grow = |e: &TilerOom| {
+            seen.set(Some(*e));
+            Ok(0x8000_0040_0200)
+        };
+        let r = service_tiler_oom(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut grow);
+        let e = TilerOom { heap_address: 0x8000_0001_5000, vt_start: 5, vt_end: 3, frag_end: 1 };
+        assert_eq!(r, Ok(Some((e, 0x8000_0040_0200))));
+        assert_eq!(seen.get(), Some(e));
+        assert_eq!((e.renderpasses_in_flight(), e.pending_frag_count()), (4, 2));
+        assert_eq!(
+            named(&mcu.log()),
+            [
+                ("cs.heap_start", 0x0040_0200),
+                ("cs.heap_start.hi", 0x8000),
+                ("cs.heap_end", 0x0040_0200),
+                ("cs.heap_end.hi", 0x8000),
+                ("cs.req", 0x0511 | CS_TILER_OOM),
+                ("csg.doorbell_req", 0),
+                ("glb.doorbell_req", 0),
+                ("doorbell 0", 1),
+            ]
+        );
+        let w = |a: usize| mcu.word(a);
+        assert_eq!((w(at(CS_IN)) ^ w(at(CS_OUT))) & CS_EVT_MASK, 0);
+        // nothing pending now: nothing asked, nothing written
+        mcu.log.borrow_mut().clear();
+        assert_eq!(service_tiler_oom(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut grow), Ok(None));
+        assert_eq!(mcu.log(), vec![]);
+    }
+
+    #[test]
+    fn a_tiler_oom_panthor_refuses_or_the_heap_refuses_writes_nothing() {
+        // :1480: frag_end above vt_end, or vt_end at or above vt_start
+        for (vt_start, vt_end, frag_end) in [(5, 3, 4), (3, 3, 0), (2, 3, 0)] {
+            let mcu = Mcu { never_complete: true, ..Mcu::new() };
+            started(&mcu);
+            raise_oom(&mcu, vt_start, vt_end, frag_end);
+            mcu.log.borrow_mut().clear();
+            let mut grow = |_: &TilerOom| -> Result<u64, Refused> { panic!("not asked") };
+            let r = service_tiler_oom(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut grow);
+            assert_eq!(r, Err((SchedRefusal::TilerOomCounts, vt_end)));
+            assert_eq!(mcu.log(), vec![]);
+        }
+        // the caller's refusal comes back as it is
+        let mcu = Mcu { never_complete: true, ..Mcu::new() };
+        started(&mcu);
+        raise_oom(&mcu, 2, 1, 0);
+        mcu.log.borrow_mut().clear();
+        let r = service_tiler_oom(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut refuse_tiler_oom);
+        assert_eq!(r, Err((SchedRefusal::TilerOom, 2)));
+        let r = service_tiler_oom(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut |_| Err((SchedRefusal::HeapGrow, 14)));
+        assert_eq!(r, Err((SchedRefusal::HeapGrow, 14)));
+        assert_eq!(mcu.log(), vec![]);
+    }
+
     #[test]
     fn tiler_oom_is_refused_by_name_and_cleared_with_the_doorbell_toggled() {
         // panthor_sched.c:1584-1593 reads the three events from
@@ -3036,9 +3374,9 @@ mod tests {
         let e = r.unwrap_err();
         assert_eq!((e.refused, e.us, slept, e.ended), ((SchedRefusal::TilerOom, 0x77), 0, 0, None));
         assert_eq!(mcu.log(), vec![]);
-        // a submit meets it first, before any write
-        assert_eq!(do_submit(&mcu, &s, 2), Err((SchedRefusal::TilerOom, 0x77)));
-        assert_eq!(mcu.log(), vec![]);
+        // a submit is not refused by it (panthor's queue_run_job reads no
+        // event): the job goes on the ring behind the waiting one
+        assert_eq!(do_submit(&mcu, &s, 2).map(|sub| sub.seqno), Ok(2));
 
         // the group's end: the event acknowledged on CS 0's req, the
         // stream's bit of doorbell_req toggled and the group rung

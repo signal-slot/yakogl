@@ -150,3 +150,67 @@ only, the GL core draws instance by instance and `gl_InstanceID` reads 0 in each
 draw: the GC refuses the draw (V0, a GL error or a MISMATCH on every instance but
 0), or a back end that does not refuse draws wrong. Case 141 (`es3instdiv`) is
 the divisor-2 case on its own.
+
+## Case 244 (`w128tex`): two-plane RGBA32 textures on the GC7000UL
+
+The board check of `docs/notes/gc-128bit-swizzle.md` section 6, for the session
+that first draws a two-plane texture on the i.MX8MP (code, values and the
+check numbering in `gl_test_es3_w128tex.inc`, included by `gl_test.c` like
+instmix). Four 4x4 NEAREST textures with a distinct value in every lane of
+every texel are drawn over the 64x64 target and compared bit for bit in the
+shader: RGBA32F through a `sampler2D`, RGBA32UI through a `usampler2D` and
+RGBA32I through an `isampler2D` (values above 2^24, negatives), and GL_RGB32F
+whose sampled alpha must be 1.0. Each texel must read 0xffffffff; a byte 00
+names the lane that read a wrong value. Then the RGBA32UI texture with
+`GL_TEXTURE_SWIZZLE_R`/`_B` swapped is drawn: the interim guard refuses it by
+name until the swizzle key lands, so no pixel changes and `glGetError` is
+`GL_NO_ERROR`. One verdict line per sub-check:
+
+```
+gl_test: w128tex: rgba32f sampler2D: PASS (16 of 16 texels)
+gl_test: w128tex: rgba32ui usampler2D: PASS (16 of 16 texels)
+gl_test: w128tex: rgba32i isampler2D: PASS (16 of 16 texels)
+gl_test: w128tex: rgb32f sampler2D, alpha 1.0: PASS (16 of 16 texels)
+gl_test: w128tex: swizzle refused: PASS (0 of 4096 pixels changed, GL_NO_ERROR 0x0)
+gl_test: w128tex: 5 of 5 sub-checks pass
+```
+
+On the board with no console the CASE record carries the first bad check:
+1-16 rgba32f, 17-32 rgba32ui, 33-48 rgba32i, 49-64 rgb32f (texel ty * 4 + tx
+is check base + that), 65 the swizzle draw's GL error, 66 the pixels it
+changed. It needs the image with item gc-w128-flip (RGBA32F/UI/I in
+`GC_SAMPLED_TEXFMTS`): before it the first four sub-checks fail and the
+swizzle one passes only because the class itself is refused. When the swizzle
+key lands, sub-check 5 must turn into a drawn check. GC7000 only, SKIP by name
+on the other GPUs and in an ES 2.0 library. Opt-in, by number:
+
+```sh
+tools/cts/imx8mp-gltest-build.sh w128tex-<sha> 244
+SEL=0 BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run $IMX8MP_IMG_OUT/w128tex-<sha>/zephyr/zephyr.bin <logdir> w128tex
+```
+
+## Case 245 (`mrt4`): the fourth colour target on the V3D and the PowerVR
+
+The board check of `docs/notes/mrt4-v3d-pvr.md` section 4 (plan #368, RC14; code
+in `gl_test_es3_mrt4.inc`, included by `gl_test.c` like divmix). Four 64x64
+`GL_RGBA8` texture attachments, `glDrawBuffers(4, ATT0..ATT3)`: part 1 clears
+each draw buffer with `glClearBufferfv` (grey, light red, light green, light
+blue), part 2 draws one quad of a four-output fragment shader (red, green, blue,
+yellow; attachment 3 yellow is the proof of the fourth target); each is read back
+at the centre. The one recorded check is the fail mask (bits 0-3 the clear, 4-7
+the draw, bit n attachment n). The `GL_NONE`-slot parts of the note are not in
+the body yet. Lines to read:
+
+```
+gl_test:   mrt4 clear attachment N = 0x........ want 0x........
+gl_test:   mrt4 draw attachment N = 0x........ want 0x........
+gl_test:   mrt4 fail mask (...)  = 0  want 0  ok  [check N]
+gl_test: case 245 mrt4: PASS
+```
+
+The harness prints the PASS/FAIL line. Where `GL_MAX_DRAW_BUFFERS` or
+`GL_MAX_COLOR_ATTACHMENTS` is below 4 (every image without the draw-target
+knob) it prints `gl_test: case 245 mrt4: SKIP (GL_MAX_DRAW_BUFFERS N < 4)` and
+the Pi 4 image's verdict line reads `v3d_gl_test: case 245 SKIP`. Opt-in, by
+number (`CONFIG_V3D_GL_TEST_CASE=245` on the Pi 4, `CONFIG_GL_TEST_CASE=245` on
+the AM62P).

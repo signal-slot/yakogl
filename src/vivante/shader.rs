@@ -14,13 +14,13 @@
 //! constant register file as command-stream words.
 
 use crate::backend::{
-    gles_surf_int_layout, gles_surf_is_integer, gles_surf_rt_class, GlesTextureBind, GLES_SURF_R32F,
+    gles_surf_int_layout, gles_surf_is_integer, gles_surf_rt_class, GlesDraw, GlesTextureBind, GLES_SURF_R32F,
     GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D,
 };
 use crate::shaderc::{
-    ShcShader, SHC_RT_RGBA8, SHC_VIV_CONST_LITERAL, SHC_VIV_CONST_SAMPLER_LOD_MAX, SHC_VIV_CONST_TEXRECT_SCALE_X,
-    SHC_VIV_CONST_TEXRECT_SCALE_Y, SHC_VIV_CONST_TEXTURE_DEPTH, SHC_VIV_CONST_TEXTURE_HEIGHT,
-    SHC_VIV_CONST_TEXTURE_WIDTH, SHC_VIV_CONST_UNIFORM, SHC_VIV_NO_REG,
+    ShcShader, ShcViv, SHC_RT_RGBA8, SHC_VIV_CONST_LITERAL, SHC_VIV_CONST_SAMPLER_LOD_MAX,
+    SHC_VIV_CONST_TEXRECT_SCALE_X, SHC_VIV_CONST_TEXRECT_SCALE_Y, SHC_VIV_CONST_TEXTURE_DEPTH,
+    SHC_VIV_CONST_TEXTURE_HEIGHT, SHC_VIV_CONST_TEXTURE_WIDTH, SHC_VIV_CONST_UNIFORM, SHC_VIV_NO_REG,
 };
 
 use super::cmd::GcCmd;
@@ -158,6 +158,75 @@ pub fn ps_color_output_mode(target_format: u8) -> u32 {
             (false, _) => GC_PS_OUTPUT_MODE_U16,
         },
     }
+}
+
+/// The fragment stage's render-target words of a draw: PS_OUTPUT_REG and
+/// PS_OUTPUT_REG2 (each hardware target's output register, a byte each),
+/// PS_CONTROL (RT_COUNT and the unorm saturates) and PS_CONTROL_EXT (each
+/// target's output mode), from the draw's hardware target list
+/// ([`super::backend::hw_target_list`]), and how many targets there are.
+/// `output_reg[1]` is written only past four targets, which only a 128-bit
+/// attachment's planes reach.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PsTargetWords {
+    pub output_reg: [u32; 2],
+    pub control: u32,
+    pub control_ext: u32,
+    pub targets: usize,
+}
+
+/// [`PsTargetWords`] of draw `gl` with fragment shader `fs`.
+pub fn ps_target_words(gl: &GlesDraw, fs: &ShcViv) -> PsTargetWords {
+    /* Which fragment register feeds each render target, a byte each. RT0 is
+     * ps_color_out_reg; RT n the output row at FRAG_RESULT_DATA0 + n, which
+     * a shader writing more than one colour lists (select). A target with no
+     * row -- the clear shader, a shader that does not write output n -- takes
+     * RT0's register: GL leaves an unwritten output undefined, and the clear
+     * quad's one colour is what every target of a clear must get. */
+    let rt0 = if fs.ps_color_out_reg == SHC_VIV_NO_REG { 0 } else { fs.ps_color_out_reg as u32 };
+    /* hardware target rt draws GL slot hw.t[rt].slot: a slot with no target
+     * is skipped (backend::hw_target_list), so its output goes nowhere. The
+     * fragment output is the slot plus the draw buffers the GL core's list
+     * dropped in front (glDrawBuffers({GL_NONE, ATT1}) draws output 1 into
+     * target 0); a 128-bit attachment's B,A plane takes output 4 + k
+     * (`HwTargets::output`), which the shift does not move. */
+    let hw = super::backend::hw_target_list(gl);
+    let shift = gl.targets[0].out_shift as usize;
+    let mut output_reg = [rt0, 0];
+    for rt in 0..hw.n {
+        if rt == 0 && shift == 0 {
+            continue; /* output 0 is ps_color_out_reg */
+        }
+        let want = 4 + hw.output(rt, shift);
+        let row = fs.out[..(fs.num_out as usize).min(fs.out.len())].iter().find(|o| o.slot as usize == want);
+        let reg = row.map_or(rt0, |o| o.reg as u32);
+        let (w, b) = (rt / 4, rt % 4);
+        output_reg[w] = (output_reg[w] & !(0xff << (8 * b))) | reg << (8 * b);
+    }
+    /* The render targets, each one's output saturated for the unorm formats
+     * and in its own output mode (etnaviv_state.c:364-392). RT_COUNT(0) is
+     * one target, and what disables the rest (etnaviv_state.c:405-406); a
+     * plane is a target (etnaviv_state.c:389-391). */
+    let mut control = ps_control_rt_count(hw.n as u32 - 1);
+    let mut control_ext = 0;
+    for (rt, t) in hw.list().iter().enumerate() {
+        let format = super::backend::attachment_format(gl, t.slot);
+        /* not an integer target: its class is RGBA8 too (no float variant),
+         * but it is not unorm, and saturating would clamp the integers to
+         * 0..1 (etnaviv saturates `util_format_is_unorm` only) */
+        if (gles_surf_rt_class(format) == SHC_RT_RGBA8 && !gles_surf_is_integer(format))
+            || crate::backend::gles_surf_is_srgb(format)
+        {
+            if rt < 4 {
+                control |= ps_control_saturate_rt(rt as u32);
+            } else {
+                output_reg[1] |= GC_PS_OUTPUT_REG2_SATURATE_RT4 << (8 * (rt - 4));
+            }
+        }
+        /* a 128-bit attachment's two planes: its format's mode, UIF32 */
+        control_ext |= ps_output_mode(rt as u32, ps_color_output_mode(format));
+    }
+    PsTargetWords { output_reg, control, control_ext, targets: hw.n }
 }
 
 /// Emit the per-stage shader state. Returns **false** when the draw must be
@@ -310,55 +379,19 @@ pub fn emit_shader_state(c: &mut GcCmd, d: &GcDraw) -> bool {
     c.state(GC_PA_VS_OUTPUT_COUNT, vs_output_count);
 
     /* the fragment stage: one input per varying plus position */
-    /* Which fragment register feeds each render target, a byte each. RT0 is
-     * ps_color_out_reg; RT n the output row at FRAG_RESULT_DATA0 + n, which
-     * a shader writing more than one colour lists (select). A target with no
-     * row -- the clear shader, a shader that does not write output n -- takes
-     * RT0's register: GL leaves an unwritten output undefined, and the clear
-     * quad's one colour is what every target of a clear must get. */
-    let rt0 = if fs.ps_color_out_reg == SHC_VIV_NO_REG { 0 } else { fs.ps_color_out_reg as u32 };
-    /* hardware target rt draws GL slot slots[rt]: a slot with no target
-     * is skipped (backend::hw_targets), so its output goes nowhere. The
-     * fragment output is the slot plus the draw buffers the GL core's list
-     * dropped in front (glDrawBuffers({GL_NONE, ATT1}) draws output 1 into
-     * target 0). */
-    let (slots, targets) = super::backend::hw_targets(d.gl);
-    let shift = d.gl.targets[0].out_shift as usize;
-    let mut ps_output_reg = rt0;
-    for (rt, &slot) in slots[..targets].iter().enumerate() {
-        if rt == 0 && shift == 0 {
-            continue; /* output 0 is ps_color_out_reg */
-        }
-        let want = 4 + shift + slot as usize;
-        let row = fs.out[..(fs.num_out as usize).min(fs.out.len())].iter().find(|o| o.slot as usize == want);
-        let reg = row.map_or(rt0, |o| o.reg as u32);
-        ps_output_reg = (ps_output_reg & !(0xff << (8 * rt))) | reg << (8 * rt);
+    let words = ps_target_words(d.gl, fs);
+    c.state(GC_PS_OUTPUT_REG, words.output_reg[0]);
+    if words.targets > 4 {
+        /* RT4..7: only a 128-bit attachment's planes get there (refused) */
+        c.state(GC_PS_OUTPUT_REG2, words.output_reg[1]);
     }
-    c.state(GC_PS_OUTPUT_REG, ps_output_reg);
     c.state(
         GC_PS_INPUT_COUNT,
         ps_input_count_count(varyings as u32 + 1 + ms_extra) | ps_input_count_unk8(fs.input_count_unk8 as u32),
     );
     c.state(GC_PS_TEMP_REGISTER_CONTROL, temp_register_num(fs_temps));
-    /* The render targets, each one's output saturated for the unorm formats
-     * and in its own output mode (etnaviv_state.c:364-392). RT_COUNT(0) is
-     * one target, and what disables the rest (etnaviv_state.c:405-406). */
-    let mut ps_control = ps_control_rt_count(targets as u32 - 1);
-    let mut ps_control_ext = 0;
-    for (rt, &slot) in slots[..targets].iter().enumerate() {
-        let format = if rt == 0 { d.gl.target_format } else { d.gl.targets[slot as usize].format };
-        /* not an integer target: its class is RGBA8 too (no float variant),
-         * but it is not unorm, and saturating would clamp the integers to
-         * 0..1 (etnaviv saturates `util_format_is_unorm` only) */
-        if (gles_surf_rt_class(format) == SHC_RT_RGBA8 && !gles_surf_is_integer(format))
-            || crate::backend::gles_surf_is_srgb(format)
-        {
-            ps_control |= ps_control_saturate_rt(rt as u32);
-        }
-        ps_control_ext |= ps_output_mode(rt as u32, ps_color_output_mode(format));
-    }
-    c.state(GC_PS_CONTROL, ps_control);
-    c.state(GC_PS_CONTROL_EXT, ps_control_ext);
+    c.state(GC_PS_CONTROL, words.control);
+    c.state(GC_PS_CONTROL_EXT, words.control_ext);
     c.state_multi(ps_varying_num_components(0), &num_components);
 
     c.state(GC_GL_VARYING_TOTAL_COMPONENTS, (total_components as u32 + 1) & !1);

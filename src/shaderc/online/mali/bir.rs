@@ -788,24 +788,30 @@ pub const fn props(op: Op) -> Props {
     }
 }
 
-/// `va_src_info(op, s)`'s fields this back end reads (valhall.h:56-66),
-/// per the op's Valhall sources: the staging sources that are read, then
-/// the sources (valhall.c.py:117-130).
+/// `va_src_info(op, s)` (valhall.h:56-66), per the op's Valhall sources:
+/// the staging sources that are read, then the sources (valhall.c.py:
+/// 117-130). tests.rs `the_source_table_equals_mesa_26_2_1_valhall_c`
+/// compares every field with Mesa's generated table.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SrcInfo {
     pub absneg: bool,
     pub swizzle: bool,
+    /// The source's negate is its `not` bit (va_pack.c: `src_info.notted`).
+    pub notted: bool,
     pub widen: bool,
     pub lanes: bool,
     pub halfswizzle: bool,
     pub lane: bool,
+    /// The 32-bit source's half is the branch's lane combine (va_pack.c:
+    /// `src_info.combine`, packed as a widen at bit 37).
+    pub combine: bool,
     /// The source's size in bits: 8, 16, 32 or 64 (`VA_SIZE_*`); 8 for a
     /// pseudo-op, whose zeroed entry reads as `VA_SIZE_8`.
     pub bits: u8,
 }
 
 const fn info(absneg: bool, swizzle: bool, widen: bool, lane: bool, bits: u8) -> SrcInfo {
-    SrcInfo { absneg, swizzle, widen, lanes: false, halfswizzle: false, lane, bits }
+    SrcInfo { absneg, swizzle, notted: false, widen, lanes: false, halfswizzle: false, lane, combine: false, bits }
 }
 
 /// A pseudo-op's (`COLLECT`, `SPLIT`) or a missing source's entry: all
@@ -843,18 +849,22 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         /* FMA_RSCALE has absneg but no widen; the scale is a plain integer */
         (Op::FmaRscaleF32, 0..=2) => info(true, false, false, false, 32),
         (Op::FmaRscaleF32, 3) => info(false, false, false, false, 32),
-        (Op::FaddLscaleF32, 0..=1) => info(true, true, false, false, 32),
+        /* FADD_LSCALE and FEXP's float: absneg, no swizzle (valhall.c) */
+        (Op::FaddLscaleF32, 0..=1) => info(true, false, false, false, 32),
         /* FEXP: the fixed-point integer, then the float */
         (Op::FexpF32, 0) => info(false, false, false, false, 32),
-        (Op::FexpF32, 1) => info(true, true, false, false, 32),
+        (Op::FexpF32, 1) => info(true, false, false, false, 32),
         /* a pseudo-op (IR_pseudo.xml:139-147: a plain source) */
         (Op::FclampF32, 0) => info(false, false, false, false, 32),
         (Op::FclampV2f16, 0) => info(false, false, false, false, 16),
         (Op::FcmpOrF32 { .. }, 0..=1) => info(true, true, false, false, 32),
         (Op::FcmpOrV2f16 { .. }, 0..=1) => info(true, true, false, false, 16),
-        (Op::FcmpOrV2f16 { .. }, 2) => info(false, false, false, false, 32),
-        (Op::IcmpOrV2u16 { .. }, 0..=1) => info(false, true, false, false, 16),
-        (Op::IcmpOrV2u16 { .. }, 2) => info(false, false, false, false, 32),
+        /* the third source of a v2f16 or v2u16 compare is 16-bit; the
+         * integer pair widens, it does not swizzle (valhall.c FCMP_OR.v2f16,
+         * ICMP_OR.v2u16) */
+        (Op::FcmpOrV2f16 { .. }, 2) => info(false, false, false, false, 16),
+        (Op::IcmpOrV2u16 { .. }, 0..=1) => info(false, false, true, false, 16),
+        (Op::IcmpOrV2u16 { .. }, 2) => info(false, false, false, false, 16),
         /* DISCARD.f32: both sources float (absneg, widen), valhall.c */
         (Op::DiscardF32 { .. }, 0..=1) => info(true, true, false, false, 32),
         /* a pseudo-op: its one source is the mask word */
@@ -867,21 +877,24 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::MuxI32 | Op::MuxBitI32 | Op::CselU32 | Op::CselS32 { .. }, 0..=3) => info(false, false, false, false, 32),
         /* IABS.s32 and IMUL.i32: integer sources that widen (valhall.c) */
         (Op::IabsS32, 0) | (Op::ImulI32, 0..=1) => info(false, false, true, false, 32),
-        /* ISUB.s32 widens its sources as IADD.s32; U32_TO_F32 and
-         * F32_TO_U32 read a plain word, F32_TO_U32's float with abs and
-         * neg as F32_TO_S32's (valhall.c) */
+        /* ISUB.s32 widens its sources as IADD.s32, and so do U32_TO_F32
+         * and S32_TO_F32 (Arm's description fixes their widen to none on
+         * v9-10: pack.rs refuses a narrowed source by name, ConvertWiden);
+         * F32_TO_U32 reads its float with abs and neg as F32_TO_S32
+         * (valhall.c) */
         (Op::IsubS32, 0..=1) => info(false, false, true, false, 32),
-        (Op::U32ToF32, 0) => info(false, false, false, false, 32),
+        (Op::U32ToF32, 0) => info(false, false, true, false, 32),
         (Op::F32ToU32, 0) => info(true, false, false, false, 32),
-        /* the coordinates: absneg and widen, as FMA.f32's (valhall.c
-         * CUBEFACE1, CUBEFACE2_V9, CUBE_SSEL, CUBE_TSEL); the face index a
-         * plain word */
-        (Op::Cubeface1 | Op::Cubeface2, 0..=2) => info(true, true, false, false, 32),
-        (Op::CubeSsel | Op::CubeTsel, 0..=1) => info(true, true, false, false, 32),
+        /* the coordinates: absneg only, no swizzle (valhall.c CUBEFACE1,
+         * CUBEFACE2_V9, CUBE_SSEL, CUBE_TSEL: `.swizzle = 0`), so a constant
+         * is never demoted to an fp16 half of the table (#4574); the face
+         * index a plain word */
+        (Op::Cubeface1 | Op::Cubeface2, 0..=2) => info(true, false, false, false, 32),
+        (Op::CubeSsel | Op::CubeTsel, 0..=1) => info(true, false, false, false, 32),
         (Op::CubeSsel | Op::CubeTsel, 2) => info(false, false, false, false, 32),
         (Op::MuxV2i16, 0..=2) => info(false, true, false, false, 16),
         (Op::F32ToS32, 0) => info(true, false, false, false, 32),
-        (Op::S32ToF32, 0) => info(false, false, false, false, 32),
+        (Op::S32ToF32, 0) => info(false, false, true, false, 32),
         (Op::U16ToU32 | Op::S16ToS32, 0) => info(false, false, false, true, 16),
         (Op::U16ToF32, 0) => info(false, false, false, true, 16),
         (Op::F16ToF32 | Op::F16ToS32, 0) => info(true, false, false, true, 16),
@@ -889,10 +902,12 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::MovI32 | Op::IaddImmI32(_), 0) => info(false, false, false, false, 32),
         (Op::V2f32ToV2f16, 0..=1) => info(true, false, false, false, 16),
         (Op::MkvecV2i16, 0..=1) => info(false, false, false, true, 16),
-        (Op::IaddV2u16, 0..=1) => info(false, true, false, false, 16),
-        /* the two byte lanes, then the 16-bit half read whole */
+        /* the 16-bit pair widens, it does not swizzle (valhall.c) */
+        (Op::IaddV2u16, 0..=1) => info(false, false, true, false, 16),
+        /* the two byte lanes, then the third source, a plain entry of
+         * `VA_SIZE_8` (valhall.c MKVEC.v2i8) */
         (Op::MkvecV2i8, 0..=1) => info(false, false, false, true, 8),
-        (Op::MkvecV2i8, 2) => info(false, false, false, false, 16),
+        (Op::MkvecV2i8, 2) => info(false, false, false, false, 8),
         (Op::ShaddxS64, 0) => info(false, false, false, false, 64),
         (Op::ShaddxS64, 1) => info(false, false, true, false, 64),
         (Op::LdAttrImm { .. }, 0..=1) => info(false, false, false, false, 32),
@@ -907,10 +922,12 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::ZsEmit { .. }, 0..=2) => info(false, false, false, false, 32),
         (Op::Blend { .. }, 0) | (Op::Blend { .. }, 2) => info(false, false, false, false, 32),
         (Op::Blend { .. }, 1) => info(false, false, false, false, 64),
-        (Op::BranchzI { .. }, 0..=1) => info(false, false, false, false, 32),
+        /* the condition's lane combine, then the target */
+        (Op::BranchzI { .. }, 0) => SrcInfo { combine: true, ..info(false, false, false, false, 32) },
+        (Op::BranchzI { .. }, 1) => info(false, false, false, false, 32),
         /* LSHIFT_AND.i32: the value (widen), then, swapped by va_swap_12,
-         * BIR's mask is Valhall's third source (32 bits, notted) and BIR's
-         * shift its second (an 8-bit `lanes` source) */
+         * BIR's mask is Valhall's third source (32 bits, `notted`) and
+         * BIR's shift its second (an 8-bit `lanes` source) */
         (
             Op::LshiftAndI32
             | Op::LshiftOrI32
@@ -928,7 +945,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
             | Op::RshiftOrI32
             | Op::ArshiftOrI32,
             1,
-        ) => info(false, false, false, false, 32),
+        ) => SrcInfo { notted: true, ..info(false, false, false, false, 32) },
         (
             Op::LshiftAndI32
             | Op::LshiftOrI32
@@ -939,10 +956,12 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
             2,
         ) => SrcInfo { lanes: true, ..info(false, false, false, false, 8) },
         /* LSHIFT_AND.v2i16: the value a 16-bit widen (any half swizzle),
-         * the mask or or-value a plain word, the shift an 8-bit `lanes`
+         * the mask or or-value a `notted` word, the shift an 8-bit `lanes`
          * source (valhall.c) */
         (Op::LshiftAndV2i16 | Op::LshiftOrV2i16 | Op::LshiftXorV2i16, 0) => info(false, false, true, false, 16),
-        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16 | Op::LshiftXorV2i16, 1) => info(false, false, false, false, 16),
+        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16 | Op::LshiftXorV2i16, 1) => {
+            SrcInfo { notted: true, ..info(false, false, false, false, 16) }
+        }
         (Op::LshiftAndV2i16 | Op::LshiftOrV2i16 | Op::LshiftXorV2i16, 2) => {
             SrcInfo { lanes: true, ..info(false, false, false, false, 8) }
         }
@@ -956,7 +975,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         /* `<src combine="true">`: a 32-bit word whose half the branch reads
          * is its swizzle (va_pack.c:680-684, packed as a widen); the
          * constant zero of a jump is read whole (`0x0`, the table's entry) */
-        (Op::Branchz { .. }, 0) => info(false, false, false, false, 32),
+        (Op::Branchz { .. }, 0) => SrcInfo { combine: true, ..info(false, false, false, false, 32) },
         (Op::TexSingle { .. }, 0) => info(false, false, false, false, 32),
         (Op::TexSingle { .. }, 1) => info(false, false, false, false, 64),
         _ => NO_INFO,
@@ -1052,18 +1071,10 @@ pub const fn nr_srcs(op: Op) -> usize {
 }
 
 /// `valhall_opcodes[op].is_signed` (valhall.py:198: the name's type, after
-/// its dot, has an `s`; `ICMP_OR.u32` has none).
+/// its dot, has an `s`; `ICMP_OR.u32` has none, and neither has a
+/// conversion such as `S16_TO_S32`, whose name has no dot).
 pub const fn is_signed(op: Op) -> bool {
-    matches!(
-        op,
-        Op::ShaddxS64
-            | Op::IaddS32
-            | Op::IsubS32
-            | Op::IcmpOrS32 { .. }
-            | Op::CselS32 { .. }
-            | Op::IabsS32
-            | Op::S16ToS32
-    )
+    matches!(op, Op::ShaddxS64 | Op::IaddS32 | Op::IsubS32 | Op::IcmpOrS32 { .. } | Op::CselS32 { .. } | Op::IabsS32)
 }
 
 /// One instruction (`bi_instr`).

@@ -1044,6 +1044,12 @@ unsafe extern "C" fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) ->
     unsafe { v3d_tex_pack_sampler_compare(out, s, texture::COMPARE_OFF) }
 }
 
+thread_local! {
+    /// On: the fake of v3d_tex_pack_sampler_compare writes Mesa's record
+    /// words instead of its debugging layout (a test sets and clears it).
+    static MESA_SAMPLER_WORDS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
 /// The fake of v3d_tex_pack_sampler_compare: the filter flags in the third
 /// word as before, and the `compare_op` it was given whole in the fourth, so
 /// a test reads which compare a record was packed with.
@@ -1055,7 +1061,19 @@ unsafe extern "C" fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSam
         let flags =
             s.mag_nearest as u32 | (s.min_nearest as u32) << 1 | (s.mip_nearest as u32) << 2 | (s.mip_none as u32) << 3;
         let compare = if compare_op == texture::COMPARE_OFF { 0 } else { compare_op | 0x100 };
-        let words = [s.wrap_s, s.wrap_t, flags, compare, 0, FAKE_SAMPLER_MARK];
+        let mut words = [s.wrap_s, s.wrap_t, flags, compare, 0, FAKE_SAMPLER_MARK];
+        if MESA_SAMPLER_WORDS.with(|m| m.get()) {
+            /* Mesa's rule (docs/notes/v3d-shadow.md, compare-words), for a
+             * one-level sampler with every wrap CLAMP_TO_EDGE: tools/v3d/
+             * tex_check.c holds the real C packer to the same bytes */
+            assert!(
+                s.wrap_s == V3D_WRAP_MODE_CLAMP && s.wrap_t == V3D_WRAP_MODE_CLAMP && s.wrap_r == V3D_WRAP_MODE_CLAMP
+            );
+            assert!(s.mip_none, "the table is for an unmipmapped sampler");
+            let func = if compare_op & texture::COMPARE_OFF != 0 { 0 } else { compare_op & 7 };
+            let base = if s.min_nearest && s.mag_nearest { 0x0010_0007 } else { 0x0010_0004 };
+            words = [base | func << 4, 0x0049_0000, 0, 0, 0, 0];
+        }
         core::ptr::copy_nonoverlapping(words.as_ptr() as *const u8, out, V3D_SAMPLER_STATE_BYTES);
     }
     true
@@ -1847,6 +1865,138 @@ fn a_sampler_record_carries_its_depth_compare_function() {
      * the depth binding with no compare already holds */
     let plain = GlesTextureBind { compare_op: 1, ..t };
     assert_eq!(sampler_for(g(), &plain).ok().unwrap(), rec_off);
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// A one-level, wrap-clamped binding of `format` with the filter and compare
+/// given.
+fn shadow_binding(t: GlesTextureBind, format: u8, linear: u8, compare_op: u8) -> GlesTextureBind {
+    GlesTextureBind {
+        format,
+        linear_filter: linear,
+        min_linear: linear,
+        compare_op,
+        wrap_s: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        wrap_t: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        wrap_r: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        ..t
+    }
+}
+
+/// The sampler record of `b` as Mesa's v3dx_state.c packs it (the fake in
+/// Mesa-words mode), its six words.
+fn mesa_record(rig: &Rig, b: &GlesTextureBind) -> Vec<u32> {
+    MESA_SAMPLER_WORDS.with(|m| m.set(true));
+    let rec = sampler_for(g(), b).ok().unwrap();
+    words(rig, rec, 6)
+}
+
+/// The draw-time compare words, pinned as literals (docs/notes/v3d-shadow.md,
+/// compare-words): word 0 is 0x00100007 | fn << 4 for a NEAREST sampler and
+/// 0x00100004 | fn << 4 for a LINEAR one, word 1 0x00490000, words 2-5 zero,
+/// for a one-level texture with CLAMP_TO_EDGE on every axis; compare off and
+/// a non-depth format give fn 0. Revert check: packing with the compare-off
+/// packer gives 0x00100007/0x00100004 for every function.
+#[test]
+fn a_depth_sampler_record_holds_mesa_s_compare_words() {
+    let rig = Rig::new();
+    rig.init();
+    let t = texture(0, 16, 16, 1);
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    let off = texture::COMPARE_OFF as u8;
+    let expect = |nearest: bool, cmp: u8, w0: u32| {
+        let b = shadow_binding(t, GLES_TEXFMT_R32F, !nearest as u8, cmp);
+        assert_eq!(mesa_record(&rig, &b), [w0, 0x0049_0000, 0, 0, 0, 0], "nearest {nearest} compare_op {cmp}");
+    };
+    /* (a) compare off */
+    expect(true, off, 0x0010_0007);
+    expect(false, off, 0x0010_0004);
+    /* (b) the eight GL functions: NEVER LESS EQUAL LEQUAL GREATER NOTEQUAL
+     * GEQUAL ALWAYS */
+    let nearest =
+        [0x0010_0007, 0x0010_0017, 0x0010_0027, 0x0010_0037, 0x0010_0047, 0x0010_0057, 0x0010_0067, 0x0010_0077];
+    let linear =
+        [0x0010_0004, 0x0010_0014, 0x0010_0024, 0x0010_0034, 0x0010_0044, 0x0010_0054, 0x0010_0064, 0x0010_0074];
+    for f in 0..8u8 {
+        expect(true, f, nearest[f as usize]);
+        expect(false, f, linear[f as usize]);
+    }
+    /* (c) a non-depth format with the compare on bypasses to the compare-off
+     * record */
+    for f in [1u8, 3, 7] {
+        let b = shadow_binding(t, GLES_TEXFMT_RGBA8, 0, f);
+        assert_eq!(mesa_record(&rig, &b), [0x0010_0007, 0x0049_0000, 0, 0, 0, 0]);
+        let b = shadow_binding(t, GLES_TEXFMT_RGBA8, 1, f);
+        assert_eq!(mesa_record(&rig, &b), [0x0010_0004, 0x0049_0000, 0, 0, 0, 0]);
+    }
+    MESA_SAMPLER_WORDS.with(|m| m.set(false));
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// The per-job sampler cache is keyed by the sampler state and the compare
+/// function: compare off and LESS with the same filter and wraps are two
+/// records, two equal LESS bindings share one.
+#[test]
+fn equal_compare_bindings_share_a_sampler_record() {
+    let rig = Rig::new();
+    rig.init();
+    let t = texture(0, 16, 16, 1);
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    let bind = |cmp: u8| shadow_binding(t, GLES_TEXFMT_R32F, 0, cmp);
+    let off = texture::COMPARE_OFF as u8;
+    let rec = |cmp: u8| sampler_for(g(), &bind(cmp)).ok().unwrap();
+    let (r_off, r_less, r_less2, r_never) = (rec(off), rec(1), rec(1), rec(0));
+    assert_ne!(r_off, r_less, "compare off and LESS are two records");
+    assert_eq!(r_less, r_less2, "two equal LESS bindings share a record");
+    /* compare off and NEVER have one key (compare_function is 0 for both)
+     * and Mesa packs the same words for them (compare off is the NEVER
+     * function), so sharing the record is correct */
+    assert_eq!(r_off, r_never);
+    assert_eq!(v3d_finish(), 0);
+}
+
+/// A depth texture (R32F, ES 3.0.6 3.8.15) on unit 0 with GL's compare
+/// `compare_op` (`GlesTextureBind::compare_op`: bits 0-2 the function, bit 4
+/// compare off).
+fn shadow_texture(compare_op: u8) -> GlesTextureBind {
+    GlesTextureBind { format: GLES_TEXFMT_R32F, compare_op, ..texture(0, 16, 16, 1) }
+}
+
+/// The draws' side of the cache key: eight depth draws of one job, one per
+/// GL_TEXTURE_COMPARE_FUNC, share a `V3dSampler` but hold eight records, and
+/// the same function is found again. Bit 3 of `compare_op` (a fixed-point
+/// depth) is not in the record, and compare off, with or without another
+/// function's bits, is NEVER's record: V3D 4.2 has no enable bit, and a
+/// look-up without TMUDREF does not compare (`texture::compare_function`).
+/// Revert check: keying on `texture::sampler` alone gives every draw after
+/// the first the first draw's record, NEVER where LESS or GREATER was asked,
+/// and (1, 7) counts.
+#[test]
+fn the_sampler_cache_is_not_shared_across_compare_functions() {
+    let rig = Rig::new();
+    rig.init();
+    let p = ret32_program();
+    let shadow_draw = |t: GlesTextureBind| {
+        let mut d = sampling(&rig, t);
+        d.fs = &p;
+        d
+    };
+    for op in 0..8u8 {
+        assert_eq!(draw(&shadow_draw(shadow_texture(op))), 0, "compare {op}: {:?}", rig.gl.logs());
+    }
+    assert_eq!(texture::sampler(&shadow_texture(1)), texture::sampler(&shadow_texture(4)), "one V3dSampler");
+    let recs: Vec<u32> = rig.draws().iter().map(|d| d.tmu[0].sampler).collect();
+    for (i, a) in recs.iter().enumerate() {
+        for (k, b) in recs.iter().enumerate().skip(i + 1) {
+            assert_ne!(a, b, "compare {i} and {k} share a record");
+        }
+    }
+    assert_eq!(sampler_counters(), (8, 0));
+    for (op, of) in [(4u8, 4usize), (4 | 8, 4), (16, 0), (16 | 5, 0)] {
+        assert_eq!(draw(&shadow_draw(shadow_texture(op))), 0);
+        assert_eq!(rig.draws().last().unwrap().tmu[0].sampler, recs[of], "compare {op}");
+    }
+    assert_eq!(sampler_counters(), (8, 4));
     assert_eq!(v3d_finish(), 0);
 }
 
@@ -9863,4 +10013,81 @@ fn a_depth_quad_a_stencil_quad_then_a_full_clear_are_quad_quad_then_the_tlb_clea
     assert_eq!(c.rgba8, 0xffff_0000, "blue, R in the low byte");
     assert_eq!((c.z, c.stencil), (0.75, 0x44), "and the depth and stencil of the full clear");
     assert_eq!(rig.kicks().len(), 2);
+}
+
+/* ---- ES 3.0 uniform blocks of GL_MAX_UNIFORM_BLOCK_SIZE (plan #359) ------- */
+
+/// A uniform block of the 16384 bytes GL_MAX_UNIFORM_BLOCK_SIZE reports
+/// (gl/context.rs MAX_UNIFORM_BLOCK_SIZE), through the GL core onto the job
+/// builder: 16 members of `vec4[64]`, read by constant index at the first
+/// and the last dword and by a uniform index in the last member, filled
+/// from a bound buffer whose dword k holds k + 0.5. Every
+/// QUNIFORM_UNIFORM word of the stream names a dword of the stage's
+/// storage (the job builder refuses one past it, v3d_job.c
+/// `write_uniforms`) and reads the buffer's dword: the last one, 4095, is
+/// past the 1536-dword default block the GL core capped a stage at before.
+#[test]
+#[cfg(not(feature = "report-es2"))]
+fn a_uniform_block_of_16384_bytes_reaches_the_stream_whole() {
+    use crate::gl::buffer::*;
+    use crate::gl::consts::*;
+    use crate::gl::es3::glBindBufferBase;
+    use crate::gl::framebuffer::*;
+    use crate::gl::program::*;
+    use std::ffi::CString;
+    const VS: &str = "#version 300 es\nin highp vec4 a_position;\nvoid main() { gl_Position = a_position; }\n";
+    let members: String = (0..16).map(|m| format!("highp vec4 m{m}[64]; ")).collect();
+    let fs = format!(
+        "#version 300 es\nuniform Big {{ {members}}};\nuniform highp int u_i;\n\
+         layout(location = 0) out highp vec4 o;\n\
+         void main() {{ o = vec4(m0[0].x, m15[63].w, m15[u_i].y, 1.0); }}\n"
+    );
+    let rig = gl_rig();
+    let rb = gl_renderbuffer(GL_RGBA8, 4, 4);
+    let data: Vec<f32> = (0..4096).map(|k| k as f32 + 0.5).collect();
+    let mut buf = 0;
+    // SAFETY: plain GL calls on live names; `data` is 16384 bytes.
+    unsafe {
+        glBindFramebuffer(GL_FRAMEBUFFER, 1);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        crate::gl::state::glViewport(0, 0, 4, 4);
+        glGenBuffers(1, &mut buf);
+        glBindBuffer(GL_UNIFORM_BUFFER, buf);
+        glBufferData(GL_UNIFORM_BUFFER, 16384, data.as_ptr() as *const c_void, GL_STATIC_DRAW);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, buf);
+    }
+    let (p, _) = gl_program_of(VS, &fs, true);
+    // SAFETY: a live program and names; plain GL calls.
+    unsafe {
+        let big = CString::new("Big").unwrap();
+        let b = glGetUniformBlockIndex(p, big.as_ptr());
+        assert_ne!(b, GL_INVALID_INDEX);
+        glUniformBlockBinding(p, b, 0);
+        let u_i = CString::new("u_i").unwrap();
+        glUniform1i(glGetUniformLocation(p, u_i.as_ptr()), 63);
+    }
+    let before = rig.draws().len();
+    gl_quad([-1.0, -1.0, 0.0], [1.0, 1.0, 0.0]);
+    // SAFETY: plain GL calls.
+    unsafe {
+        crate::gl::state::glFinish();
+        assert_eq!(crate::gl::state::glGetError(), GL_NO_ERROR, "{:?}", rig.gl.logs());
+    }
+    let draws = rig.draws();
+    assert_eq!(draws.len(), before + 1, "the quad is drawn, not refused: {:?}", rig.gl.logs());
+    let d = draws.last().expect("the quad");
+    assert!(d.fs_storage.len() > 4096, "the stage's storage holds the block whole: {}", d.fs_storage.len());
+    let read: Vec<u32> = d
+        .fs_uniforms
+        .iter()
+        .filter(|u| u.contents == V3D_QUNIFORM_UNIFORM)
+        .map(|u| d.fs_storage[u.data as usize])
+        .collect();
+    for (k, why) in [(0, "m0[0].x"), (4095, "m15[63].w, the block's last dword"), (64 * 4 * 15 + 1, "m15[0].y")] {
+        assert!(read.contains(&data[k].to_bits()), "{why}: dword {k} is not in the stream");
+    }
+    // SAFETY: a live name.
+    unsafe { glDeleteBuffers(1, &buf) };
+    gl_release(p, &[1], &[rb]);
 }

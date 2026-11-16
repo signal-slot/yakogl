@@ -747,6 +747,27 @@ pub struct Nir<'s> {
     /// one `load_ubo` in NIR, however many lane nodes the walk makes of
     /// them (nir_fs.rs; [`Nir::load_read_above`]).
     pub(super) uniform_load: &'s mut [u16],
+    /// The vertex walk models Mesa's IR where it numbers the attribute
+    /// locations ([`build`]): a lane's fold that only the back end's
+    /// scalarisation lets NIR make ([`vs_fmul`]) is not made.
+    numbering_walk: bool,
+    /// The walk made such a fold ([`vs_fmul`]).
+    late_fold: bool,
+    /// The attribute locations Mesa numbers, one bit each
+    /// ([`Nir::attribute_record`]); set by [`build`].
+    pub counted: u64,
+    /// The attribute locations the values of the shader's output lanes
+    /// read, every lane as if the fragment shader read it, one bit each;
+    /// set by the walk that makes the late folds ([`build`]).
+    output_inputs: u64,
+    /// The attribute locations the value of each varying lane reads (lane
+    /// `c` of location `l` at `4 * l + c`), one bit each; set by the
+    /// numbering walk ([`build`]).
+    lane_inputs: [u64; 4 * MAX_VARYINGS],
+    /// The reads a shader alone is built for when it stores a constant
+    /// lane: its lanes less the constant ones ([`walk`]). The numbering
+    /// walk stores the same lanes ([`build`]).
+    own_reads: Option<([(u8, u8); MAX_VARYINGS], usize)>,
 }
 
 const F32_ZERO: u32 = 0;
@@ -1109,6 +1130,12 @@ impl<'s> Nir<'s> {
             nonuniform_const: false,
             nonuniform: scratch.alloc_filled(MAX_NODES, false).map_err(oom)?,
             uniform_load: scratch.alloc_filled(MAX_NODES, u16::MAX).map_err(oom)?,
+            numbering_walk: false,
+            late_fold: false,
+            counted: 0,
+            output_inputs: 0,
+            lane_inputs: [0; 4 * MAX_VARYINGS],
+            own_reads: None,
         })
     }
 
@@ -1772,6 +1799,71 @@ impl<'s> Nir<'s> {
         })
     }
 
+    /// The descriptor indices of the live cube look-ups ([`Kind::VsTex`]
+    /// with `cube`), in program order ([`super::MaliShader::cube_samplers`]).
+    pub fn cube_samplers(&self) -> impl Iterator<Item = u8> + '_ {
+        self.order[..self.len].iter().filter_map(|&id| match self.nodes[id as usize].kind {
+            Kind::VsTex { cube: true, index, .. } => Some(index),
+            _ => None,
+        })
+    }
+
+    /// The attribute record of location `loc`, which is its `LD_ATTR`
+    /// index: how many of the locations Mesa numbers ([`Nir::counted`])
+    /// are below `loc` (docs/notes/mali-builtin-inputs.md, "Attribute
+    /// records").
+    pub fn attribute_record(&self, loc: u8) -> Result<u8, MaliError> {
+        let below = 1u64.checked_shl(u32::from(loc)).ok_or(MaliError::Defect(Defect::IrIndex))? - 1;
+        Ok((self.counted & below).count_ones() as u8)
+    }
+
+    /// The attribute locations a load in the order reads, one bit each.
+    pub(super) fn inputs_read(&self) -> Result<u64, MaliError> {
+        let mut read = 0u64;
+        for &id in &self.order[..self.len] {
+            if let Kind::Input { loc, .. } = self.nodes[id as usize].kind {
+                read |= 1u64.checked_shl(u32::from(loc)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            }
+        }
+        Ok(read)
+    }
+
+    /// The attribute locations the values `roots` read, themselves or
+    /// through their sources, one bit each.
+    fn inputs_of(&self, roots: &[Val]) -> Result<u64, MaliError> {
+        let mut seen = [0u64; MAX_NODES.div_ceil(64)];
+        let mut stack = [0u16; MAX_NODES];
+        let mut sp = 0;
+        let mut read = 0u64;
+        /* a node is marked when pushed, so each is pushed once: the stack
+         * holds them all */
+        let push = |v: Val, seen: &mut [u64], stack: &mut [u16], sp: &mut usize| {
+            if let Val::Lane(y, _) | Val::Pair(y, _) = v {
+                let y = y as usize;
+                if seen[y / 64] & (1 << (y % 64)) == 0 {
+                    seen[y / 64] |= 1 << (y % 64);
+                    *stack.get_mut(*sp).ok_or(MaliError::Defect(Defect::IrIndex))? = y as u16;
+                    *sp += 1;
+                }
+            }
+            Ok::<(), MaliError>(())
+        };
+        for &v in roots {
+            push(v, &mut seen, &mut stack, &mut sp)?;
+        }
+        while sp > 0 {
+            sp -= 1;
+            let nd = self.nodes[stack[sp] as usize];
+            if let Kind::Input { loc, .. } = nd.kind {
+                read |= 1u64.checked_shl(u32::from(loc)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            }
+            for v in nd.src {
+                push(v, &mut seen, &mut stack, &mut sp)?;
+            }
+        }
+        Ok(read)
+    }
+
     fn push(&mut self, kind: Kind, src: [Val; 3]) -> Result<u16, MaliError> {
         self.push_sized(kind, src, 32)
     }
@@ -2291,6 +2383,39 @@ fn vs_fadd(vs: &mut Nir<'_>, m: &Module<'_>, srcs: &[ir::Src; 3], x: Val, y: Val
     }
 }
 
+/// Each source of an IR operation of `width` lanes that NIR's rules on one
+/// value cannot match while the operation is a vector: a source with a
+/// constant lane that is not the same constant in every lane read
+/// (nir_search.c `match_value` needs a `load_const` and compares each
+/// lane, the sign of a zero too). `d * vec4(0.0, -0.0, 0.0, 0.0)` is
+/// neither `fmul(a, 0.0)` nor `fmul(a, -0.0)` until the back end
+/// scalarises it.
+fn split_const(w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> [bool; 2] {
+    [0, 1].map(|k| {
+        let first = lane(w, s[k], 0);
+        let lanes = || (0..width).map(|i| lane(w, s[k], i));
+        lanes().any(|v| matches!(v, Val::Const(_))) && !lanes().all(|v| v == first && matches!(v, Val::Const(_)))
+    })
+}
+
+/// One lane of an IR `fmul`. A zero of a `split` source ([`split_const`])
+/// folds the lane only in the back end (`bi_optimize_loop`'s
+/// `nir_lower_alu_width`, then `nir_opt_algebraic`'s `fmul(a, 0.0)` and
+/// `fmul(a, -0.0)`), after Mesa numbers the attribute locations: the walk
+/// folds it as the back end does, and notes it ([`build`]); the numbering
+/// walk keeps the other factor read, in a node nothing folds.
+fn vs_fmul(vs: &mut Nir<'_>, split: [bool; 2], a: Val, b: Val) -> Result<Val, MaliError> {
+    let ab = [a, b];
+    let late = (0..2).find(|&k| split[k] && is_zero(ab[k]) && !matches!(ab[1 - k], Val::Const(_)));
+    if let Some(k) = late {
+        if vs.numbering_walk {
+            return Ok(Val::Lane(vs.push(Kind::Alu(Alu::Mov), [ab[1 - k], Val::Undef, Val::Undef])?, 0));
+        }
+        vs.late_fold = true;
+    }
+    vs.alu(Alu::Fmul, a, b, Val::Undef)
+}
+
 /// `is_fmul` (nir_search_helpers.h:402-416): a product, or the `fneg` of
 /// one.
 fn vs_is_fmul(vs: &Nir<'_>, v: Val) -> bool {
@@ -2650,6 +2775,77 @@ pub fn build<'s>(
     moved: &[super::motion::Moved],
     fp16: &dyn Fn(&str) -> bool,
 ) -> Result<Nir<'s>, MaliError> {
+    let mut vs = walk(m, scratch, reads, moved, fp16, false)?;
+    vs.counted = vs.inputs_read()?;
+    /* Mesa numbers the attribute locations a load still reads where its
+     * IR is vectors (`nir_recompute_io_bases` at the end of
+     * `nir_lower_io_passes` and of `nir_opt_varyings_bulk`); the back end
+     * scalarises later (`bi_optimize_loop`'s `nir_lower_alu_width`) and
+     * its `nir_opt_algebraic` may then remove a load, whose location stays
+     * counted. The walk is per lane, so when it made such a fold
+     * ([`vs_fmul`]) the locations are those of a second walk without it,
+     * whose loads are a superset of the first's (it keeps a node where the
+     * first folds one). A second walk that refuses is a form not
+     * modelled. So is a varying lane such a fold makes a constant (or a
+     * lane of uniforms, or equal to another) where the numbering depends
+     * on the fold: Mesa's link (`nir_opt_varyings`, on the vectors) keeps
+     * the lane computed and its location read, where our link would
+     * propagate the constant into the fragment shader ([`Nir::consts`])
+     * and leave the location unread (dEQP 1405_0's `vec4(.., d, ..) *
+     * vec4(.., -0.0, b, a)`, `d`). The numbering depends on it when such a
+     * lane of the second walk reads a location no output lane of the
+     * first reads, each lane as if the fragment shader read it
+     * ([`Nir::lane_inputs`], [`Nir::output_inputs`]: the link's constant
+     * pass reads none). Where it does not, the first walk stands as it is,
+     * as without the second (the factor a uniform, dEQP
+     * basic_expression.vertex.12's `d`, or an attribute read in another
+     * lane) */
+    if vs.late_fold {
+        /* a shader alone stores the lanes the first walk does not make
+         * constant, whatever the second makes of them */
+        let own = vs.own_reads;
+        let reads = match (reads, &own) {
+            (None, Some((own, n))) => Some(&own[..*n]),
+            _ => reads,
+        };
+        let numbered = walk(m, scratch, reads, moved, fp16, true).map_err(|e| match e {
+            MaliError::OutOfScratch => e,
+            _ => MaliError::AttributeNumbering,
+        })?;
+        let counted = numbered.inputs_read()?;
+        if vs.counted & !counted != 0 {
+            return Err(MaliError::Defect(Defect::IrIndex));
+        }
+        let mut depends = 0u64;
+        for o in m.outputs.iter().filter(|o| o.kind == IoKind::Varying) {
+            for c in 0..o.components.min(4) {
+                let link = |k: &super::link::VaryingConsts| {
+                    (k.get(o.location, c), k.flat(o.location, c), k.class(o.location, c))
+                };
+                if link(&vs.consts) != link(&numbered.consts) {
+                    depends |=
+                        numbered.lane_inputs.get(usize::from(o.location) * 4 + usize::from(c)).copied().unwrap_or(0);
+                }
+            }
+        }
+        if depends & !vs.output_inputs != 0 {
+            return Err(MaliError::AttributeNumbering);
+        }
+        vs.counted = counted;
+    }
+    Ok(vs)
+}
+
+/// The vertex walk of [`build`]; `numbering` models Mesa's IR where it
+/// numbers the attribute locations ([`Nir::numbering_walk`]).
+fn walk<'s>(
+    m: &Module<'_>,
+    scratch: &Arena<'s>,
+    reads: Option<&[(u8, u8)]>,
+    moved: &[super::motion::Moved],
+    fp16: &dyn Fn(&str) -> bool,
+    numbering: bool,
+) -> Result<Nir<'s>, MaliError> {
     if m.instrs.len() > MAX_VALUES {
         return Err(MaliError::TooManyValues);
     }
@@ -2657,6 +2853,7 @@ pub fn build<'s>(
         return Err(MaliError::TooManyLocals);
     }
     let mut vs = Nir::new(scratch)?;
+    vs.numbering_walk = numbering;
     let vals = scratch.alloc_filled(MAX_VALUES, [Val::Undef; 4]).map_err(|_| MaliError::OutOfScratch)?;
     let w = &mut Walk { vals, locals: [[Val::Undef; 4]; MAX_LOCALS] };
     let mut position: Option<[Val; 4]> = None;
@@ -2806,6 +3003,7 @@ pub fn build<'s>(
             IrOp::Alu(a, s) => {
                 /* lanes an arm makes for every lane at once, at lane 0 */
                 let mut held = [Val::Undef; 4];
+                let split = if a == AluOp::Fmul { split_const(w, &s, width) } else { [false; 2] };
                 for (l, o) in out.iter_mut().enumerate().take(width) {
                     let x = |k: usize| lane(w, s[k], l);
                     *o = match a {
@@ -2817,7 +3015,7 @@ pub fn build<'s>(
                          * `normalize`'s product of a vec3 and its `rsq` four
                          * lanes (builtin_call.rs), the last undefined */
                         AluOp::Fmul if x(0) == Val::Undef || x(1) == Val::Undef => Val::Undef,
-                        AluOp::Fmul => vs.alu(Alu::Fmul, x(0), x(1), Val::Undef)?,
+                        AluOp::Fmul => vs_fmul(&mut vs, split, x(0), x(1))?,
                         /* a matrix product's last term by a `w` of 1.0
                          * (`M * vec4(p, 1.0)`): `fmul(c3, 1.0)` is `c3`
                          * (nir_opt_algebraic.py:292) and the term `fadd(acc,
@@ -3113,6 +3311,25 @@ pub fn build<'s>(
     if m.outputs.iter().any(|o| o.invariant) {
         return Err(MaliError::Invariant);
     }
+    /* the locations the output lanes read, whichever the fragment shader
+     * reads ([`build`]) */
+    if numbering {
+        for (l, lanes) in varyings.iter().enumerate() {
+            for (c, &v) in lanes.iter().flatten().enumerate() {
+                let read = vs.inputs_of(&[v])?;
+                if let Some(x) = vs.lane_inputs.get_mut(4 * l + c) {
+                    *x = read;
+                }
+            }
+        }
+    } else if vs.late_fold {
+        let mut roots = [Val::Undef; 4 * MAX_VARYINGS + 5];
+        let lanes = varyings.iter().flatten().flatten().chain(position.iter().flatten()).chain(point_size.iter());
+        for (r, &v) in roots.iter_mut().zip(lanes) {
+            *r = v;
+        }
+        vs.output_inputs = vs.inputs_of(&roots)?;
+    }
     /* the constant lanes of the shader's own stores, which Mesa's link
      * propagates into the fragment shader before it moves code
      * (nir_opt_varyings.c:2880-2900, `propagate_uniform_expressions`: a
@@ -3133,6 +3350,49 @@ pub fn build<'s>(
             }
         }
     }
+    /* the interpolated lanes equal to an earlier one, which Mesa's link
+     * merges (`deduplicate_outputs`): [`super::link::VaryingConsts::push_equal`] */
+    let decls: [Option<&ir::IoDecl<'_>>; MAX_VARYINGS] =
+        core::array::from_fn(|i| m.outputs.iter().filter(|o| o.kind == IoKind::Varying).nth(i));
+    /* a lane's value: the vertex shader's outputs are temporaries stored
+     * at its end (`nir_lower_io_passes`, nir_lower_io.c:1434-1453), so
+     * deduplicate_outputs compares the values the lanes hold there,
+     * wherever a vertex `if` wrote them (b15: equal on both sides; v01,
+     * v15, v19: one lane before or after the `if`). A join of two values
+     * (a select or a phi) Mesa merges too (b13 stores two lanes), but its
+     * vertex words for the join are not this back end's (the third
+     * review's b14): those lanes stay apart and the program is refused
+     * (`VaryingDuplicate`). The interpolation qualifier is the fragment
+     * shader's ([`super::link::VaryingConsts::class`]'s reader, nir_fs.rs
+     * `layout`) */
+    let lane_at = |o: &ir::IoDecl<'_>, c: usize| {
+        let l = varyings.get(o.location as usize).copied().flatten()?;
+        let phi = phis & (1 << (o.location as usize * 4 + c)) != 0;
+        match l[c & 3] {
+            Val::Lane(n, _) if phi && matches!(vs.nodes[n as usize].kind, Kind::Phi | Kind::Alu(Alu::Bcsel)) => None,
+            Val::Lane(n, _) if vs.nodes[n as usize].kind == Kind::Phi => None,
+            Val::Lane(n, _) if !vs.convergent(n) => Some(l[c & 3]),
+            _ => None,
+        }
+    };
+    let mut equal = [(0u8, 0u8, 0u8, 0u8); 4 * MAX_VARYINGS];
+    let mut nequal = 0;
+    for (i, o) in decls.iter().enumerate().filter_map(|(i, o)| o.map(|o| (i, o))) {
+        for c in 0..(o.components as usize).min(4) {
+            let Some(v) = lane_at(o, c) else { continue };
+            let earlier = decls[..=i].iter().flatten().find_map(|e| {
+                let last = if e.location == o.location { c } else { e.components as usize };
+                (0..last.min(4)).find(|&d| lane_at(e, d) == Some(v)).map(|d| (e.location, d as u8))
+            });
+            if let (Some((l, d)), Some(x)) = (earlier, equal.get_mut(nequal)) {
+                *x = (o.location, c as u8, l, d);
+                nequal += 1;
+            }
+        }
+    }
+    for &(l, c, of_l, of_c) in &equal[..nequal] {
+        vs.consts.push_equal(l, c, of_l, of_c);
+    }
     /* the fragment shader's moved expressions, cloned at the end of the
      * shader's own code (nir_opt_varyings.c:4398-4401) */
     super::motion::apply(&mut vs, &mut varyings, moved)?;
@@ -3148,7 +3408,7 @@ pub fn build<'s>(
      * below) and merges two lanes of equal value (sel_v_duplicate, refused:
      * the layout would not be this stage's alone) */
     let decls = m.outputs.iter().filter(|o| o.kind == IoKind::Varying);
-    vs.nvar = generic_layout(decls.clone().map(|o| (o.location, o.components)), &mut vs.varyings)?;
+    vs.nvar = generic_layout(decls.clone().map(|o| (o.location, o.components, o.gl_type)), &mut vs.varyings)?;
     /* a shader alone that stores a constant lane is built for its own lanes
      * less its constant ones, the layout the link's fragment shader reads
      * once they are folded into it (codegen.rs `compile_vs_without_consts`,
@@ -3169,6 +3429,7 @@ pub fn build<'s>(
                 *own.get_mut(nown).ok_or(MaliError::VaryingLocation)? = (o.location, mask);
                 nown += 1;
             }
+            vs.own_reads = Some((own, nown));
             Some(&own[..nown])
         }
         r => r,

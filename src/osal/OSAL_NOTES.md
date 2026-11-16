@@ -171,10 +171,11 @@ side assumes (2026-10-04, main 8b53557f):
    - The three Zephyr OSALs return Zephyr's numbers. They do not agree, and
      this is live: `zephyr.c`'s default `yakogl_zephyr_wait_vblank` returns
   `present` (2026-10-16): the display's "show this buffer", the OSAL's
-  counterpart of a sample's `board_show()`. On Zephyr `zephyr_timing.c`
-  (compiled into every Zephyr OSAL) forwards to the weak
+  counterpart of a sample's `board_show()`. On Zephyr the op is
   `yakogl_zephyr_present()`, which the board library defines over
-  `board_show()`; the Linux and bare-metal OSALs have none. With it EGL
+  `board_show()`. The OSALs declare it weak (`osal_internal.h`), so an image
+  without the board library has no `present`; the Linux and bare-metal OSALs
+  have none. With it EGL
   double-buffers its window surfaces (`src/gl/egl.rs`, `EglSurface::bufs`):
   the swap shows the previous frame's buffer and the next frame goes into one
   the display gave up two presents ago, so no application has to show

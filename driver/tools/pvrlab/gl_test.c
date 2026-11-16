@@ -493,7 +493,35 @@
  *               241 es3_precision_int, 242 es3_precision_uint (shaders.precision
  *               fragment int ALU). No ES 2.0 skip in the bodies: in an ES 2.0
  *               library the #version 300 es programs fail to link (FAIL).
+ * 243 divmix    instanced draw with three per-instance float attributes of
+ *               divisors 2, 3 and 4 beside a per-vertex position, 12
+ *               instances as glDrawArraysInstanced and as
+ *               glDrawElementsInstanced, each instance one cell of a 4 x 3
+ *               grid coloured from the three sources (P3, PowerVR hardware
+ *               instance divisors; header and expected pixels in
+ *               gl_test_es3_divmix.inc). Needs a back end that takes the
+ *               divisors; the PowerVR before P3 fails all 24 checks (every
+ *               instance lands in cell 0). All GPUs. Opt-in, by number
  *               All GPUs. Opt-in, by number
+ * 244 w128tex   the GC7000UL's two-plane RGBA32 sampling (board check of
+ *               docs/notes/gc-128bit-swizzle.md section 6): 4x4 NEAREST
+ *               textures of distinct per-lane values, RGBA32F via sampler2D,
+ *               RGBA32UI via usampler2D and RGBA32I via isampler2D (values
+ *               above 2^24, negatives), GL_RGB32F with a sampled alpha of
+ *               1.0, each compared bit for bit in the shader; then the
+ *               RGBA32UI texture with SWIZZLE_R/B swapped, whose draw the
+ *               guard refuses (no pixel changes, GL_NO_ERROR). One verdict
+ *               line per sub-check (code, values and lines in
+ *               gl_test_es3_w128tex.inc). Needs gc-w128-flip: before it all
+ *               but the swizzle sub-check FAIL. GC7000 only, SKIP by name
+ *               elsewhere and in an ES 2.0 library. Opt-in, by number
+ * 245 mrt4      the fourth colour target (RC14, plan #368): four 64x64 RGBA8
+ *               attachments with glDrawBuffers(4, ...), each cleared with
+ *               glClearBufferfv to its own colour, then one four-output
+ *               fragment shader draw (red, green, blue, yellow); read back
+ *               at the centre. SKIP by name when GL_MAX_DRAW_BUFFERS or
+ *               GL_MAX_COLOR_ATTACHMENTS is below 4 (every image without the
+ *               draw-target knob). V3D and PowerVR. Opt-in, by number
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -888,9 +916,10 @@ static const EGLint s_window_single_buffer[] = { EGL_RENDER_BUFFER, EGL_SINGLE_B
  * it YAKOGL_GPU_VIVANTE (CMakeLists.txt). One GPU, two build systems.
  *
  * Four GPUs: GL_TEST_VIVANTE, GL_TEST_V3D (the Raspberry Pi 4, Zephyr only,
- * driver/samples/zephyr/gl_test on rpi_4b), GL_TEST_MALI (the NanoPC-T6 under
- * Armbian: tools/mali/panthor panthor-gltest, driver/docs/nanopc-t6-mali.md
- * "L3: gl_test under Armbian") and GL_TEST_PVR. A site that calls the
+ * driver/samples/zephyr/gl_test on rpi_4b), GL_TEST_MALI (the NanoPC-T6:
+ * under Armbian, tools/mali/panthor panthor-gltest, driver/docs/nanopc-t6-mali.md
+ * "L3: gl_test under Armbian"; on Zephyr, driver/samples/zephyr/gl_test on
+ * nanopc_t6) and GL_TEST_PVR. A site that calls the
  * PowerVR's knobs or counters is `#ifdef GL_TEST_PVR`; a site that leaves out
  * what one GPU lacks names that GPU. */
 #if defined(CONFIG_YAKOGL_GPU_VIVANTE) || defined(YAKOGL_GPU_VIVANTE)
@@ -900,7 +929,7 @@ static const EGLint s_window_single_buffer[] = { EGL_RENDER_BUFFER, EGL_SINGLE_B
 /* The OSAL's init argument (struct osal_zephyr_v3d_init: the V3D's clock
  * switch through the firmware mailbox), which only the board's sample has. */
 void *gl_test_v3d_osal_arg(void);
-#elif defined(YAKOGL_GPU_MALI)
+#elif defined(CONFIG_YAKOGL_GPU_MALI) || defined(YAKOGL_GPU_MALI)
 #define GL_TEST_MALI 1
 #else
 #define GL_TEST_PVR 1
@@ -3940,33 +3969,42 @@ static int case_etc(void)
 	static uint8_t etc2a[4 * 16];
 	static const uint8_t alphas[4] = { 255, 128, 64, 0 };
 	GLuint prog, tex;
-	GLint n = 0, fmts[8] = { 0 };
+	GLint n = 0, fmts[16] = { 0 };
 	bool ok = true;
 	const char *ver = (const char *)glGetString(GL_VERSION);
 	int es2 = ver && strncmp(ver, "OpenGL ES 2.", 12) == 0;
-	int n_etc1 = 0, srgb = 0, other = 0;
+	int n_etc1 = 0, srgb = 0, dec = 0, other = 0;
 
 	/* The core promises the list, not its order or length: ETC1, RGB8_ETC2
-	 * and RGBA8_ETC2_EAC always (3), and under an ES 3.0 report the sRGB
-	 * ETC2 pair when the back end samples both (5; tests/es3_caps.rs
-	 * known_gaps, tests/gltest_case20_formats.rs). The pair is both or
-	 * neither, so the count is 3 + 2 * pair, taken from the list. */
+	 * and RGBA8_ETC2_EAC always (3); under an ES 3.0 report also the sRGB
+	 * ETC2 pair when the back end samples both, and the decoded formats it
+	 * samples (R11/RG11 EAC, signed and not, and the two punchthrough-alpha
+	 * ETC2), which tests/gltest_case20_formats.rs expected_count() counts
+	 * per class. So the count is 3 + srgb + decoded, taken from the list. */
 	glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, &n);
-	glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, fmts);
-	for (int i = 0; i < n && i < 8; i++) {
+	ok &= expect_int("compressed format count fits the 16-entry buffer", n <= 16, 1);
+	if (n <= 16)
+		glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, fmts);
+	for (int i = 0; i < n && i < 16; i++) {
 		if (fmts[i] == GL_ETC1_RGB8_OES)
 			n_etc1++;
 		else if (fmts[i] == 0x9275 /* GL_COMPRESSED_SRGB8_ETC2 (gl3.h) */ ||
 			 fmts[i] == 0x9279 /* GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC (gl3.h) */)
 			srgb++;
+		else if ((fmts[i] >= 0x9270 && fmts[i] <= 0x9273) /* (SIGNED_)R11/RG11_EAC */ ||
+			 fmts[i] == 0x9276 /* RGB8_PUNCHTHROUGH_ALPHA1_ETC2 */ ||
+			 fmts[i] == 0x9277 /* SRGB8_PUNCHTHROUGH_ALPHA1_ETC2 */)
+			dec++;
 		else if (fmts[i] != 0x9274 /* GL_COMPRESSED_RGB8_ETC2 */ &&
 			 fmts[i] != 0x9278 /* GL_COMPRESSED_RGBA8_ETC2_EAC */)
 			other++;
 	}
-	pr_info("gl_test: case 20 etc: %s, %d compressed formats, sRGB ETC2 x%d\n",
-		es2 ? "ES 2.0 report" : "ES 3.0 report", (int)n, srgb);
-	ok &= expect_int("compressed format count is 3, or 5 with the sRGB pair (3 under ES 2.0)",
-			 n == 3 + srgb && (srgb == 0 || (srgb == 2 && !es2)), 1);
+	pr_info("gl_test: case 20 etc: %s, %d compressed formats, sRGB ETC2 x%d, decoded x%d\n",
+		es2 ? "ES 2.0 report" : "ES 3.0 report", (int)n, srgb, dec);
+	ok &= expect_int("compressed format count is 3 + sRGB pair + decoded", n == 3 + srgb + dec, 1);
+	ok &= expect_int("sRGB ETC2 pair is both or neither", srgb == 0 || srgb == 2, 1);
+	ok &= expect_int("no sRGB pair or decoded format under an ES 2.0 report",
+			 !es2 || (srgb == 0 && dec == 0), 1);
 	ok &= expect_int("ETC1 listed", n_etc1, 1);
 	ok &= expect_int("no other compressed format listed", other, 0);
 	ok &= expect_int("GL_OES_compressed_ETC1_RGB8_texture advertised",
@@ -8618,7 +8656,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint", [243] = "divmix", [244] = "w128tex", [245] = "mrt4",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -20784,6 +20822,9 @@ out:
 #include "gl_test_es3_flat.inc"
 #include "gl_test_es3_drawrandom.inc"
 #include "gl_test_es3_precision.inc"
+#include "gl_test_es3_divmix.inc"
+#include "gl_test_es3_mrt4.inc"
+#include "gl_test_es3_w128tex.inc"
 
 /* ---- case 222: the texture unit samples the D24S8 depth surface (dtpu) -----
  *
@@ -24098,6 +24139,17 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		break;
 	case 220: rc = case_lodtime(); break;
 	case 221: rc = case_instmix(); break;
+	case 243: rc = case_divmix(); break;
+	case 245:
+		rc = case_es3mrt4();
+		if (rc == -3)
+			return -3; /* skipped by name: GL_MAX_DRAW_BUFFERS or GL_MAX_COLOR_ATTACHMENTS < 4 */
+		break;
+	case 244:
+		rc = case_w128tex();
+		if (rc == -3)
+			return -3; /* skipped by name: not the GC7000, or an ES 2.0 library */
+		break;
 	case 222:
 		rc = case_dtpu();
 		if (rc == -3)
@@ -24583,8 +24635,9 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 	(void)ppp_ctrl; (void)no_coalesce; (void)debug; (void)pretransform;
 	rc = g_osal->init(gl_test_v3d_osal_arg());
 #elif defined(GL_TEST_MALI)
-	/* No backend options; the OSAL (panthor-gltest installs it) opens the
-	 * render node itself. */
+	/* No backend options. Under Armbian the OSAL (panthor-gltest installs
+	 * it) opens the render node itself; on Zephyr NULL takes the image's
+	 * osal_zephyr_mali_default_platform() (the CSF firmware). */
 	(void)ppp_ctrl; (void)no_coalesce; (void)debug; (void)pretransform;
 	rc = g_osal->init(NULL);
 #else

@@ -1,0 +1,831 @@
+# cubebias bias.linear_linear: cube 64x64, 7 levels, RGBA; min LINEAR_MIPMAP_LINEAR, mag NEAREST, wrap s CLAMP_TO_EDGE, wrap t CLAMP_TO_EDGE; u_sampler=0;u_bias=1.0;u_colorScale=1,1,1,1;u_colorBias=0,0,0,0
+Position resource table @7fffffe75780
+  Entry 3:
+  Address: 0x7fffffe751e0
+  Contains descriptors: true
+  Size: 0x20
+    Sampler @7fffffe751e0:
+      Type: Sampler
+      Reduction mode: Average
+      Wrap Mode R: Clamp to Edge
+      Wrap Mode T: Clamp to Edge
+      Wrap Mode S: Clamp to Edge
+      Round to nearest even: true
+      sRGB override: false
+      Seamless Cube Map: true
+      Clamp integer coordinates: false
+      Normalized Coordinates: true
+      Clamp integer array indices: true
+      Minify nearest: false
+      Magnify nearest: false
+      Magnify cutoff: false
+      Mipmap Mode: Nearest
+      Minimum LOD: 0.000000
+      Compare Function: Never
+      Maximum LOD: 0.000000
+      LOD bias: 0.000000
+      Maximum anisotropy: 1
+      LOD algorithm: Isotropic
+      Border Color R: 0x0 (0.000000)
+      Border Color G: 0x0 (0.000000)
+      Border Color B: 0x0 (0.000000)
+      Border Color A: 0x0 (0.000000)
+Varying resource table @7fffffe75780
+  Entry 3:
+  Address: 0x7fffffe751e0
+  Contains descriptors: true
+  Size: 0x20
+    Sampler @7fffffe751e0:
+      Type: Sampler
+      Reduction mode: Average
+      Wrap Mode R: Clamp to Edge
+      Wrap Mode T: Clamp to Edge
+      Wrap Mode S: Clamp to Edge
+      Round to nearest even: true
+      sRGB override: false
+      Seamless Cube Map: true
+      Clamp integer coordinates: false
+      Normalized Coordinates: true
+      Clamp integer array indices: true
+      Minify nearest: false
+      Magnify nearest: false
+      Magnify cutoff: false
+      Mipmap Mode: Nearest
+      Minimum LOD: 0.000000
+      Compare Function: Never
+      Maximum LOD: 0.000000
+      LOD bias: 0.000000
+      Maximum anisotropy: 1
+      LOD algorithm: Isotropic
+      Border Color R: 0x0 (0.000000)
+      Border Color G: 0x0 (0.000000)
+      Border Color B: 0x0 (0.000000)
+      Border Color A: 0x0 (0.000000)
+Fragment resource table @7fffffe75800
+  Entry 3:
+  Address: 0x7fffffe752c0
+  Contains descriptors: true
+  Size: 0x20
+    Sampler @7fffffe752c0:
+      Type: Sampler
+      Reduction mode: Average
+      Wrap Mode R: Clamp to Edge
+      Wrap Mode T: Clamp to Edge
+      Wrap Mode S: Clamp to Edge
+      Round to nearest even: true
+      sRGB override: false
+      Seamless Cube Map: true
+      Clamp integer coordinates: false
+      Normalized Coordinates: true
+      Clamp integer array indices: true
+      Minify nearest: false
+      Magnify nearest: true
+      Magnify cutoff: false
+      Mipmap Mode: Trilinear
+      Minimum LOD: 0.000000
+      Compare Function: Never
+      Maximum LOD: 31.996094
+      LOD bias: 0.000000
+      Maximum anisotropy: 1
+      LOD algorithm: Isotropic
+      Border Color R: 0x0 (0.000000)
+      Border Color G: 0x0 (0.000000)
+      Border Color B: 0x0 (0.000000)
+      Border Color A: 0x0 (0.000000)
+  Entry 4:
+  Address: 0x7fffffe752a0
+  Contains descriptors: true
+  Size: 0x20
+    Texture @7fffffe752a0
+    Texture:
+      Type: Texture
+      Dimension: Cube
+      Sample corner position: false
+      Normalize coordinates: false
+      Format (v7): RGBA8 UNORM RGBA
+      Width: 64
+      Height: 64
+      Swizzle: 1672 (RGBA)
+      Texel interleave: true
+      Levels: 7
+      Minimum level: 0
+      Minimum LOD: 0.000000
+      Sample count: 1
+      Maximum LOD: 6.000000
+      Surfaces: 0x7ffffffe6200
+      Array size: 1
+      Depth: 1
+      Plane 0:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x4100
+        Pointer: 0x7fffffe46000
+        Header row stride: 0x40
+        Header slice size: 0x100
+        Header slice stride: 0x0
+        Width: 64
+        Height: 64
+      Plane 1:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x1080
+        Pointer: 0x7fffffe4a100
+        Header row stride: 0x20
+        Header slice size: 0x40
+        Header slice stride: 0x0
+        Width: 32
+        Height: 32
+      Plane 2:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe4b180
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 16
+        Height: 16
+      Plane 3:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe4b600
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 8
+        Height: 8
+      Plane 4:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe4ba80
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 4
+        Height: 4
+      Plane 5:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe4bf00
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 2
+        Height: 2
+      Plane 6:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe4c380
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 1
+        Height: 1
+      Plane 7:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x4100
+        Pointer: 0x7fffffe4c800
+        Header row stride: 0x40
+        Header slice size: 0x100
+        Header slice stride: 0x0
+        Width: 64
+        Height: 64
+      Plane 8:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x1080
+        Pointer: 0x7fffffe50900
+        Header row stride: 0x20
+        Header slice size: 0x40
+        Header slice stride: 0x0
+        Width: 32
+        Height: 32
+      Plane 9:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe51980
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 16
+        Height: 16
+      Plane 10:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe51e00
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 8
+        Height: 8
+      Plane 11:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe52280
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 4
+        Height: 4
+      Plane 12:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe52700
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 2
+        Height: 2
+      Plane 13:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe52b80
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 1
+        Height: 1
+      Plane 14:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x4100
+        Pointer: 0x7fffffe53000
+        Header row stride: 0x40
+        Header slice size: 0x100
+        Header slice stride: 0x0
+        Width: 64
+        Height: 64
+      Plane 15:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x1080
+        Pointer: 0x7fffffe57100
+        Header row stride: 0x20
+        Header slice size: 0x40
+        Header slice stride: 0x0
+        Width: 32
+        Height: 32
+      Plane 16:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe58180
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 16
+        Height: 16
+      Plane 17:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe58600
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 8
+        Height: 8
+      Plane 18:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe58a80
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 4
+        Height: 4
+      Plane 19:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe58f00
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 2
+        Height: 2
+      Plane 20:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe59380
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 1
+        Height: 1
+      Plane 21:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x4100
+        Pointer: 0x7fffffe59800
+        Header row stride: 0x40
+        Header slice size: 0x100
+        Header slice stride: 0x0
+        Width: 64
+        Height: 64
+      Plane 22:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x1080
+        Pointer: 0x7fffffe5d900
+        Header row stride: 0x20
+        Header slice size: 0x40
+        Header slice stride: 0x0
+        Width: 32
+        Height: 32
+      Plane 23:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe5e980
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 16
+        Height: 16
+      Plane 24:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe5ee00
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 8
+        Height: 8
+      Plane 25:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe5f280
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 4
+        Height: 4
+      Plane 26:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe5f700
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 2
+        Height: 2
+      Plane 27:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe5fb80
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 1
+        Height: 1
+      Plane 28:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x4100
+        Pointer: 0x7fffffe60000
+        Header row stride: 0x40
+        Header slice size: 0x100
+        Header slice stride: 0x0
+        Width: 64
+        Height: 64
+      Plane 29:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x1080
+        Pointer: 0x7fffffe64100
+        Header row stride: 0x20
+        Header slice size: 0x40
+        Header slice stride: 0x0
+        Width: 32
+        Height: 32
+      Plane 30:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe65180
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 16
+        Height: 16
+      Plane 31:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe65600
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 8
+        Height: 8
+      Plane 32:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe65a80
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 4
+        Height: 4
+      Plane 33:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe65f00
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 2
+        Height: 2
+      Plane 34:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe66380
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 1
+        Height: 1
+      Plane 35:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x4100
+        Pointer: 0x7fffffe66800
+        Header row stride: 0x40
+        Header slice size: 0x100
+        Header slice stride: 0x0
+        Width: 64
+        Height: 64
+      Plane 36:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x1080
+        Pointer: 0x7fffffe6a900
+        Header row stride: 0x20
+        Header slice size: 0x40
+        Header slice stride: 0x0
+        Width: 32
+        Height: 32
+      Plane 37:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe6b980
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 16
+        Height: 16
+      Plane 38:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe6be00
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 8
+        Height: 8
+      Plane 39:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe6c280
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 4
+        Height: 4
+      Plane 40:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe6c700
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 2
+        Height: 2
+      Plane 41:
+        Type: Plane
+        Plane type: AFBC
+        Superblock size: 16x16
+        YTR: true
+        Split block: false
+        Alpha hint: false
+        Tiled header: false
+        Prefetch: true
+        Compression mode: R8G8B8A8
+        Size: 0x480
+        Pointer: 0x7fffffe6cb80
+        Header row stride: 0x10
+        Header slice size: 0x10
+        Header slice stride: 0x0
+        Width: 1
+        Height: 1

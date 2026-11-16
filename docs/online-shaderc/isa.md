@@ -220,7 +220,7 @@ tempting move was to treat the table as wrong.
   `pco_map.py`. Until then the decoder reports the first source and leaves the
   rest as bytes.
 - A cross-check against Mesa's disassembler has been done for **one** program,
-  the clear FS, against the disassembly recorded in `src/pvr/blobs.rs` (now
+  the clear FS, against the disassembly recorded in `blobs.rs` (removed from the tree) (now
   `tests/reference/pvr_internal.rs`) when the
   blob was captured (see "Operands" below). Running `pco_shc` over a table blob
   and diffing a full disassembly is still outstanding, and remains the widest
@@ -260,7 +260,7 @@ encoder knows its op) or M3.
 
 ### Verified against the recorded disassembly
 
-The clear-attach block of `src/pvr/blobs.rs` (now `tests/reference/pvr_internal.rs`,
+The clear-attach block of `blobs.rs` (removed from the tree) (now `tests/reference/pvr_internal.rs`,
 "PCO final IR") records the clear FS's final IR, printed by Mesa's
 own disassembler at the time the blob was captured:
 
@@ -512,7 +512,7 @@ encoding. Unverified here.
 
 ## The codec in Rust and how it is measured (M1)
 
-Folded from `docs/online-shaderc/design.md` (2026-09), whose M1 measurement
+Folded from `design.md` (folded in here, removed from the tree) (2026-09), whose M1 measurement
 this is. The counts are of the corpus of that day, the offline table now under
 `tests/reference/blobs.rs`; the test names are current. The code generator's
 input is the IR of `ir.md` (agreed); a generator builds a `Group` and

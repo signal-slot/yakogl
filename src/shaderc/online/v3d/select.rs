@@ -392,6 +392,10 @@ impl VOp {
     }
 }
 
+/// The vertex shader's VPM output rows at most: x, y, z, 1/w, the point
+/// size and 64 varyings (Mesa's V3D_MAX_FS_INPUTS).
+pub const VPM_MAX_OUTPUT_ROWS: u32 = 4 + 1 + 64;
+
 /// Why selection stopped.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SelectError {
@@ -399,8 +403,8 @@ pub enum SelectError {
     VaryingNotAnInput,
     /// An attribute the program reads is not in the record list it was given.
     AttributeWithoutRecord,
-    /// A VPM row past what this cut writes (16 attribute records, 64 output
-    /// rows).
+    /// A VPM row past what this cut writes (16 attribute records,
+    /// [`VPM_MAX_OUTPUT_ROWS`] output rows).
     VpmRowOutOfRange,
     /// A VPM output was written before every attribute was read: the input
     /// and output segments are shared, so the write could overwrite an input
@@ -1862,9 +1866,9 @@ pub fn tlb_config_f16(rt: u32, components: u32) -> u32 {
 /// internal type (8I, 16UI, 32F, ...) says what they are. The words are the
 /// shader's 32-bit values as they are; the tile buffer narrows them to the
 /// target's internal type. Never the TLB's default, so the first word
-/// always goes through TLBU. A float output to a 32F target would take the
-/// same config; the V3D program is not keyed by the target's class, so a
-/// float output always writes f16 pairs.
+/// always goes through TLBU. A float output to a 32F target takes the same
+/// config when the compile's `rt_f32` key names the target
+/// (`Prepared::rt_f32`); without it a float output writes f16 pairs.
 pub fn tlb_config_32b(rt: u32, components: u32) -> u32 {
     const TLB_TYPE_F32_COLOR: u32 = 0 << 6;
     const TLB_RENDER_TARGET_SHIFT: u32 = 3;
@@ -2210,8 +2214,8 @@ fn merge_exits<'a>(a: &Arena<'a>, ops: &mut AVec<'a, VOp>) -> Result<(), SelectE
 pub fn select_fragment<'a>(
     p: &Prepared<'_>,
     inputs: &[(u8, u8)],
-    flat: u32,
-    centroid: u32,
+    flat: u64,
+    centroid: u64,
     pressure: Pressure,
     a: &Arena<'a>,
 ) -> Result<Selected<'a>, SelectError> {
@@ -2283,10 +2287,10 @@ pub fn select_fragment<'a>(
     for (i, &(loc, comp)) in inputs.iter().enumerate() {
         let raw = s.v();
         s.push(a, VOp::Ldvary { dst: raw })?;
-        let value = if i < 32 && flat & (1 << i) != 0 {
+        let value = if flat & (1 << i) != 0 {
             s.mul(a, MulOp::Mov, Operand::R5, Operand::None)?
         } else {
-            let w = if i < 32 && centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
+            let w = if centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
             let scaled = s.mul(a, MulOp::Fmul, Operand::V(raw), w)?;
             s.add(a, AddOp::Fadd, scaled, Operand::R5)?
         };
@@ -2379,12 +2383,15 @@ pub fn select_fragment<'a>(
      * `uvec2`, `int`, ...) one 32-bit word per declared component as it is,
      * MOVed to TLBU then TLB with the 32-bit config (vir_emit_tlb_color_write's
      * 32-bit branch, nir_to_vir.c:2005-2021: vir_MOV_dest of each colour
-     * channel to tlbu / tlb; the hardware narrows to the target's type). */
+     * channel to tlbu / tlb; the hardware narrows to the target's type).
+     * A float output to a 32-bit float target (`Prepared::rt_f32`, Mesa's
+     * `f32_color_rb`) takes the same 32-bit write, its words the floats as
+     * they are (nir_to_vir.c:1974-1977, 2005-2021). */
     for (rt, colour) in p.color.iter().enumerate() {
         if p.rt_mask & (1 << rt) == 0 {
             continue;
         }
-        if p.rt_int & (1 << rt) != 0 {
+        if (p.rt_int | p.rt_f32) & (1 << rt) != 0 {
             let n = usize::from(p.rt_comps[rt].clamp(1, 4));
             let conf = tlb_config_32b(rt as u32, n as u32);
             for (i, &x) in colour.iter().enumerate().take(n) {
@@ -2557,7 +2564,10 @@ pub fn select_vertex<'a>(
     } else {
         (0, 4 + skip + p.varyings.len() as u32)
     };
-    if rows > 64 {
+    /* Mesa's largest vertex output: the four fixed-function rows, the point
+     * size and V3D_MAX_FS_INPUTS (64) varyings (v3d_nir_lower_io.c:410-431,
+     * v3d_limits.h); vpm_fields (chain.rs) sizes the segment from it */
+    if rows > VPM_MAX_OUTPUT_ROWS {
         return Err(SelectError::VpmRowOutOfRange);
     }
     /* v3d_nir_emit_ff_vpm_outputs */

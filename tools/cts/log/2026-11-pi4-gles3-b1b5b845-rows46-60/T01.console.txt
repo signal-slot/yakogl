@@ -1,0 +1,1741 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-15, image T01: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.14 [sdcard] pieeprom.upd not found
+  4.15 [sdcard] recover4.elf not found
+  4.15 [sdcard] recovery.elf not found
+  4.79 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.85 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.87 0x00d03114 0x00000000 0x00001fff
+  4.90 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.27 Starting start4.elf @ 0xfec00200 partition 1
+  4.32 XHCI-STOP
+  4.33 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.33 USBSTS 18
+  4.34 PCI0 reset
+  4.35 +
+
+MESS:00:00:04.361637:0: arasan: arasan_emmc_open
+MESS:00:00:04.363295:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.483523:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.496392:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.530671:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.532084:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.536467:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.701909:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.704713:0: brfs: File read: 70 bytes
+MESS:00:00:04.797649:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.802150:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.819050:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.285072:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.290632:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.299663:0: *** Restart logging
+MESS:00:00:05.301435:0: brfs: File read: 70 bytes
+MESS:00:00:05.380106:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.385138:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.396374:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.406356:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.411058:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.418935:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.424406:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.446657:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.462957:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.466244:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.507379:0: brfs: File read: 56249 bytes
+MESS:00:00:05.527757:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.592620:0: brfs: File read: 5971 bytes
+MESS:00:00:05.599405:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.640502:0: brfs: File read: 70 bytes
+MESS:00:00:05.644624:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.647573:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.653424:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.809902:0: brfs: File read: 145 bytes
+MESS:00:00:07.222146:0: brfs: File read: /mfs/sd/yakogl-T01.bin
+MESS:00:00:07.224961:0: Loaded 'yakogl-T01.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:07.231486:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.240276:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.246793:0: uart: Baud rate change done...
+MESS:00:00:07.248811:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.compressed.*'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x10
+v3d_deqp: case #0 N 120ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x10_srgb
+v3d_deqp: case #1 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x5
+v3d_deqp: case #2 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x5_srgb
+v3d_deqp: case #3 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x6
+v3d_deqp: case #4 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x6_srgb
+v3d_deqp: case #5 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x8
+v3d_deqp: case #6 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x8_srgb
+v3d_deqp: case #7 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x10
+v3d_deqp: case #8 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x10_srgb
+v3d_deqp: case #9 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x12
+v3d_deqp: case #10 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x12_srgb
+v3d_deqp: case #11 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.4x4
+v3d_deqp: case #12 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.4x4_srgb
+v3d_deqp: case #13 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x4
+v3d_deqp: case #14 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x4_srgb
+v3d_deqp: case #15 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x5
+v3d_deqp: case #16 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x5_srgb
+v3d_deqp: case #17 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x5
+v3d_deqp: case #18 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x5_srgb
+v3d_deqp: case #19 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x6
+v3d_deqp: case #20 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x6_srgb
+v3d_deqp: case #21 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x5
+v3d_deqp: case #22 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x5_srgb
+v3d_deqp: case #23 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x6
+v3d_deqp: case #24 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x6_srgb
+v3d_deqp: case #25 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x8
+v3d_deqp: case #26 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x8_srgb
+v3d_deqp: case #27 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.8x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x10
+v3d_deqp: case #28 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x10_srgb
+v3d_deqp: case #29 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x5
+v3d_deqp: case #30 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x5_srgb
+v3d_deqp: case #31 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x6
+v3d_deqp: case #32 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x6_srgb
+v3d_deqp: case #33 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x8
+v3d_deqp: case #34 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x8_srgb
+v3d_deqp: case #35 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x10
+v3d_deqp: case #36 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x10_srgb
+v3d_deqp: case #37 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x12
+v3d_deqp: case #38 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x12_srgb
+v3d_deqp: case #39 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.4x4
+v3d_deqp: case #40 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.4x4_srgb
+v3d_deqp: case #41 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x4
+v3d_deqp: case #42 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x4_srgb
+v3d_deqp: case #43 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x5
+v3d_deqp: case #44 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x5_srgb
+v3d_deqp: case #45 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x5
+v3d_deqp: case #46 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x5_srgb
+v3d_deqp: case #47 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x6
+v3d_deqp: case #48 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x6_srgb
+v3d_deqp: case #49 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x5
+v3d_deqp: case #50 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x5_srgb
+v3d_deqp: case #51 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x6
+v3d_deqp: case #52 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x6_srgb
+v3d_deqp: case #53 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x8
+v3d_deqp: case #54 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x8_srgb
+v3d_deqp: case #55 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_component_selector.8x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x10
+v3d_deqp: case #56 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x10_srgb
+v3d_deqp: case #57 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x5
+v3d_deqp: case #58 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x5_srgb
+v3d_deqp: case #59 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x6
+v3d_deqp: case #60 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x6_srgb
+v3d_deqp: case #61 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x8
+v3d_deqp: case #62 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x8_srgb
+v3d_deqp: case #63 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x10
+v3d_deqp: case #64 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x10_srgb
+v3d_deqp: case #65 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x12
+v3d_deqp: case #66 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x12_srgb
+v3d_deqp: case #67 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.4x4
+v3d_deqp: case #68 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.4x4_srgb
+v3d_deqp: case #69 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x4
+v3d_deqp: case #70 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x4_srgb
+v3d_deqp: case #71 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x5
+v3d_deqp: case #72 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x5_srgb
+v3d_deqp: case #73 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x5
+v3d_deqp: case #74 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x5_srgb
+v3d_deqp: case #75 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x6
+v3d_deqp: case #76 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x6_srgb
+v3d_deqp: case #77 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x5
+v3d_deqp: case #78 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x5_srgb
+v3d_deqp: case #79 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x6
+v3d_deqp: case #80 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x6_srgb
+v3d_deqp: case #81 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x8
+v3d_deqp: case #82 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x8_srgb
+v3d_deqp: case #83 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x10
+v3d_deqp: case #84 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x10_srgb
+v3d_deqp: case #85 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x5
+v3d_deqp: case #86 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x5_srgb
+v3d_deqp: case #87 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x6
+v3d_deqp: case #88 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x6_srgb
+v3d_deqp: case #89 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x8
+v3d_deqp: case #90 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x8_srgb
+v3d_deqp: case #91 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x10
+v3d_deqp: case #92 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x10_srgb
+v3d_deqp: case #93 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x12
+v3d_deqp: case #94 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x12_srgb
+v3d_deqp: case #95 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.4x4
+v3d_deqp: case #96 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.4x4_srgb
+v3d_deqp: case #97 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x4
+v3d_deqp: case #98 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x4_srgb
+v3d_deqp: case #99 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x5
+v3d_deqp: case #100 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x5_srgb
+v3d_deqp: case #101 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x5
+v3d_deqp: case #102 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x5_srgb
+v3d_deqp: case #103 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x6
+v3d_deqp: case #104 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x6_srgb
+v3d_deqp: case #105 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x5
+v3d_deqp: case #106 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x5_srgb
+v3d_deqp: case #107 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x6
+v3d_deqp: case #108 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x6_srgb
+v3d_deqp: case #109 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x8
+v3d_deqp: case #110 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x8_srgb
+v3d_deqp: case #111 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_ise.8x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x10
+v3d_deqp: case #112 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x5
+v3d_deqp: case #113 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x6
+v3d_deqp: case #114 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x8
+v3d_deqp: case #115 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.12x10
+v3d_deqp: case #116 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.12x12
+v3d_deqp: case #117 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.4x4
+v3d_deqp: case #118 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.5x4
+v3d_deqp: case #119 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.5x5
+v3d_deqp: case #120 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.6x5
+v3d_deqp: case #121 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.6x6
+v3d_deqp: case #122 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.8x5
+v3d_deqp: case #123 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.8x6
+v3d_deqp: case #124 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.8x8
+v3d_deqp: case #125 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_15.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x10
+v3d_deqp: case #126 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x5
+v3d_deqp: case #127 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x6
+v3d_deqp: case #128 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x8
+v3d_deqp: case #129 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.12x10
+v3d_deqp: case #130 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.12x12
+v3d_deqp: case #131 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.4x4
+v3d_deqp: case #132 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.5x4
+v3d_deqp: case #133 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.5x5
+v3d_deqp: case #134 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.6x5
+v3d_deqp: case #135 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.6x6
+v3d_deqp: case #136 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.8x5
+v3d_deqp: case #137 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.8x6
+v3d_deqp: case #138 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.8x8
+v3d_deqp: case #139 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_not_15.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x10
+v3d_deqp: case #140 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x10_srgb
+v3d_deqp: case #141 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x5
+v3d_deqp: case #142 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x5_srgb
+v3d_deqp: case #143 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x6
+v3d_deqp: case #144 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x6_srgb
+v3d_deqp: case #145 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x8
+v3d_deqp: case #146 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x8_srgb
+v3d_deqp: case #147 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x10
+v3d_deqp: case #148 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x10_srgb
+v3d_deqp: case #149 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x12
+v3d_deqp: case #150 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x12_srgb
+v3d_deqp: case #151 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.4x4
+v3d_deqp: case #152 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.4x4_srgb
+v3d_deqp: case #153 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x4
+v3d_deqp: case #154 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x4_srgb
+v3d_deqp: case #155 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x5
+v3d_deqp: case #156 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x5_srgb
+v3d_deqp: case #157 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x5
+v3d_deqp: case #158 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x5_srgb
+v3d_deqp: case #159 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x6
+v3d_deqp: case #160 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x6_srgb
+v3d_deqp: case #161 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x5
+v3d_deqp: case #162 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x5_srgb
+v3d_deqp: case #163 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x6
+v3d_deqp: case #164 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x6_srgb
+v3d_deqp: case #165 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x8
+v3d_deqp: case #166 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x8_srgb
+v3d_deqp: case #167 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_ldr.8x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x10
+v3d_deqp: case #168 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x10_srgb
+v3d_deqp: case #169 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x5
+v3d_deqp: case #170 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x5_srgb
+v3d_deqp: case #171 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x6
+v3d_deqp: case #172 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x6_srgb
+v3d_deqp: case #173 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x8
+v3d_deqp: case #174 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x8_srgb
+v3d_deqp: case #175 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x10
+v3d_deqp: case #176 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x10_srgb
+v3d_deqp: case #177 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x12
+v3d_deqp: case #178 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x12_srgb
+v3d_deqp: case #179 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.4x4
+v3d_deqp: case #180 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.4x4_srgb
+v3d_deqp: case #181 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x4
+v3d_deqp: case #182 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x4_srgb
+v3d_deqp: case #183 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x5
+v3d_deqp: case #184 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x5_srgb
+v3d_deqp: case #185 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x5
+v3d_deqp: case #186 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x5_srgb
+v3d_deqp: case #187 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x6
+v3d_deqp: case #188 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x6_srgb
+v3d_deqp: case #189 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x5
+v3d_deqp: case #190 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x5_srgb
+v3d_deqp: case #191 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x6
+v3d_deqp: case #192 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x6_srgb
+v3d_deqp: case #193 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x8
+v3d_deqp: case #194 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x8_srgb
+v3d_deqp: case #195 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.partition_pattern_index.8x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.10x10
+v3d_deqp: case #196 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.10x10_srgb
+v3d_deqp: case #197 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.10x5
+v3d_deqp: case #198 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.10x5_srgb
+v3d_deqp: case #199 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.10x6
+v3d_deqp: case #200 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.10x6_srgb
+v3d_deqp: case #201 N 26ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.10x8
+v3d_deqp: case #202 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.10x8_srgb
+v3d_deqp: case #203 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.12x10
+v3d_deqp: case #204 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.12x10_srgb
+v3d_deqp: case #205 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.12x12
+v3d_deqp: case #206 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.12x12_srgb
+v3d_deqp: case #207 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.4x4
+v3d_deqp: case #208 N 26ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.4x4_srgb
+v3d_deqp: case #209 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.5x4
+v3d_deqp: case #210 N 26ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.5x4_srgb
+v3d_deqp: case #211 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.5x5
+v3d_deqp: case #212 N 26ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.5x5_srgb
+v3d_deqp: case #213 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.6x5
+v3d_deqp: case #214 N 26ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.6x5_srgb
+v3d_deqp: case #215 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.6x6
+v3d_deqp: case #216 N 26ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.6x6_srgb
+v3d_deqp: case #217 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.8x5
+v3d_deqp: case #218 N 26ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.8x5_srgb
+v3d_deqp: case #219 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.8x6
+v3d_deqp: case #220 N 26ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.8x6_srgb
+v3d_deqp: case #221 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.8x8
+v3d_deqp: case #222 N 26ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.random.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.random.8x8_srgb
+v3d_deqp: case #223 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.random.8x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x10
+v3d_deqp: case #224 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x5
+v3d_deqp: case #225 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x6
+v3d_deqp: case #226 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x8
+v3d_deqp: case #227 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.12x10
+v3d_deqp: case #228 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.12x12
+v3d_deqp: case #229 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.4x4
+v3d_deqp: case #230 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.5x4
+v3d_deqp: case #231 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.5x5
+v3d_deqp: case #232 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.6x5
+v3d_deqp: case #233 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.6x6
+v3d_deqp: case #234 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.8x5
+v3d_deqp: case #235 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.8x6
+v3d_deqp: case #236 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.8x8
+v3d_deqp: case #237 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x10
+v3d_deqp: case #238 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x10_srgb
+v3d_deqp: case #239 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x5
+v3d_deqp: case #240 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x5_srgb
+v3d_deqp: case #241 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x6
+v3d_deqp: case #242 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x6_srgb
+v3d_deqp: case #243 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x8
+v3d_deqp: case #244 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x8_srgb
+v3d_deqp: case #245 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x10
+v3d_deqp: case #246 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x10_srgb
+v3d_deqp: case #247 N 30ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x12
+v3d_deqp: case #248 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x12_srgb
+v3d_deqp: case #249 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.4x4
+v3d_deqp: case #250 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.4x4_srgb
+v3d_deqp: case #251 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x4
+v3d_deqp: case #252 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x4_srgb
+v3d_deqp: case #253 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x5
+v3d_deqp: case #254 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x5_srgb
+v3d_deqp: case #255 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x5
+v3d_deqp: case #256 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x5_srgb
+v3d_deqp: case #257 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x6
+v3d_deqp: case #258 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x6_srgb
+v3d_deqp: case #259 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x5
+v3d_deqp: case #260 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x5_srgb
+v3d_deqp: case #261 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x6
+v3d_deqp: case #262 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x6_srgb
+v3d_deqp: case #263 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x8
+v3d_deqp: case #264 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x8_srgb
+v3d_deqp: case #265 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x10
+v3d_deqp: case #266 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x10_srgb
+v3d_deqp: case #267 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x5
+v3d_deqp: case #268 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x5_srgb
+v3d_deqp: case #269 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x6
+v3d_deqp: case #270 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x6_srgb
+v3d_deqp: case #271 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x8
+v3d_deqp: case #272 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x8_srgb
+v3d_deqp: case #273 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x10
+v3d_deqp: case #274 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x10_srgb
+v3d_deqp: case #275 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x12
+v3d_deqp: case #276 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x12_srgb
+v3d_deqp: case #277 N 29ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.4x4
+v3d_deqp: case #278 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.4x4_srgb
+v3d_deqp: case #279 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x4
+v3d_deqp: case #280 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x4_srgb
+v3d_deqp: case #281 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x5
+v3d_deqp: case #282 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x5_srgb
+v3d_deqp: case #283 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x5
+v3d_deqp: case #284 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x5_srgb
+v3d_deqp: case #285 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x6
+v3d_deqp: case #286 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x6_srgb
+v3d_deqp: case #287 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x5
+v3d_deqp: case #288 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x5_srgb
+v3d_deqp: case #289 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x6
+v3d_deqp: case #290 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x6_srgb
+v3d_deqp: case #291 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x8
+v3d_deqp: case #292 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x8_srgb
+v3d_deqp: case #293 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_grid.8x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x10
+v3d_deqp: case #294 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x10_srgb
+v3d_deqp: case #295 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x5
+v3d_deqp: case #296 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x5_srgb
+v3d_deqp: case #297 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x6
+v3d_deqp: case #298 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x6_srgb
+v3d_deqp: case #299 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x8
+v3d_deqp: case #300 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x8_srgb
+v3d_deqp: case #301 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.10x8_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x10'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x10
+v3d_deqp: case #302 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x10
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x10_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x10_srgb
+v3d_deqp: case #303 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x10_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x12'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x12
+v3d_deqp: case #304 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x12
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x12_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x12_srgb
+v3d_deqp: case #305 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.12x12_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.4x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.4x4
+v3d_deqp: case #306 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.4x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.4x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.4x4_srgb
+v3d_deqp: case #307 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.4x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x4'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x4
+v3d_deqp: case #308 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x4
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x4_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x4_srgb
+v3d_deqp: case #309 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x4_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x5
+v3d_deqp: case #310 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x5_srgb
+v3d_deqp: case #311 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.5x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x5
+v3d_deqp: case #312 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x5_srgb
+v3d_deqp: case #313 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x6
+v3d_deqp: case #314 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x6_srgb
+v3d_deqp: case #315 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.6x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x5'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x5
+v3d_deqp: case #316 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x5
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x5_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x5_srgb
+v3d_deqp: case #317 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x5_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x6'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x6
+v3d_deqp: case #318 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x6
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x6_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x6_srgb
+v3d_deqp: case #319 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x6_srgb
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x8'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x8
+v3d_deqp: case #320 N 27ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x8
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x8_srgb'..
+deqp: NotSupported dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x8_srgb
+v3d_deqp: case #321 N 28ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.compressed.astc.weight_ise.8x8_srgb
+  NotSupported (ASTC not supported)
+
+DONE!
+
+Test run totals:
+  Passed:        0/322 (0.0%)
+  Failed:        0/322 (0.0%)
+  Not supported: 322/322 (100.0%)
+  Warnings:      0/322 (0.0%)
+  Waived:        0/322 (0.0%)
+deqp: done: 0 passed, 0 failed, 322 not supported, 0 warnings, complete=1
+deqp: summary: 322 cases begun, 322 with a result, 0 without
+v3d_deqp DONE, none failed: build b1b5b845, filter 'dEQP-GLES3.functional.texture.compressed.*'
+  322 cases in 9550 ms, record at 9 s after boot, reset at ~250 s
+  totals: N 322  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 0 passed, 0 failed, 322 not supported, 0 warnings, complete=1
+  summary: 322 cases begun, 322 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 6, before #0 (first not passed) 0; slowest #0 120 ms
+  carve-out (KiB, of 48636): after #0 15272, last 15272, high-water 15272
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE: none (no job completed)
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 0 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15376896 bytes used now, 15639040 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 17 calls, 3811 map reads (224 a call, at most 1153 in one); free runs 1, longest 34426368 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 0 jobs ended; emitted 0, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout (letters stop before the last cases)
+    0 NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 4 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  astc.block_size_remainder                                  28 N28                    28x ASTC not supported
+  astc.color_component_selector                              28 N28                    28x ASTC not supported
+  astc.color_endpoint_modes                                  28 N28                    28x ASTC not supported
+  astc.endpoint_ise                                          28 N28                    28x ASTC not supported
+  astc.endpoint_value_hdr_cem_15                             14 N14                    14x ASTC not supported
+  astc.endpoint_value_hdr_cem_not_15                         14 N14                    14x ASTC not supported
+  astc.endpoint_value_ldr                                    28 N28                    28x ASTC not supported
+  astc.partition_pattern_index                               28 N28                    28x ASTC not supported
+  astc.random                                                28 N28                    28x ASTC not supported
+  astc.void_extent_hdr                                       14 N14                    14x ASTC not supported
+  astc.void_extent_ldr                                       28 N28                    28x ASTC not supported
+  astc.weight_grid                                           28 N28                    28x ASTC not supported
+  astc.weight_ise                                            28 N28                    28x ASTC not supported
+    0 N astc.block_size_remainder.10x10                  120ms k2/6 c15272/15272         ASTC not supported
+  ... 321 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 DONE, none failed: 322 cases, P 0 F 0 R 0 N 322 other 0

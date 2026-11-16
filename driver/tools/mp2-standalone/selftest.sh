@@ -316,7 +316,9 @@ elif command -v mkimage > /dev/null; then
 fi
 if [ -n "$have_mk" ]; then
 	expect_ok "build.sh (mkimage) runs" bash "$here/build.sh" "$T/mk"
-	expect_ok "build.sh used mkimage" grep -q '(via mkimage)$' "$T/out"
+	# expect_ok truncates $T/out for the next command: keep build.sh's output.
+	cp "$T/out" "$T/mk.out"
+	expect_ok "build.sh used mkimage" grep -q '(via mkimage)$' "$T/mk.out"
 	expect_ok "mkimage -l reads it as an AArch64 script" \
 		bash -c 'mkimage -l "$1" | grep -q "AArch64 Linux Script"' _ "$T/mk/boot.scr.uimg"
 	expect_ok "mkimage and uboot_script.py give identical bytes" cmp "$T/mk/boot.scr.uimg" "$T/py/boot.scr.uimg"

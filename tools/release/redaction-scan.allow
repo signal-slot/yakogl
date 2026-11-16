@@ -18,6 +18,10 @@ drop | * | * | <(user|login)@(host|board)> | placeholder
 # The RFC 1918 fixtures that the console redaction self-test rewrites.
 drop | private-ipv4 | tools/board_selftest.sh | \b(10\.11\.12\.(1|13)|172\.16\.0\.9)\b | redact_dir fixture input (RFC 1918)
 drop | private-ipv4 | tools/cts/pr-session-selftest.sh | secret-user@10\.9\.8\.7\b | fixture of the self-test's BOARD_HOST refusal
+drop | private-ipv4 | tools/cts/imx8mp-gles3-acceptance-selftest.sh | \bhost 192\.168\.1\.5:22\b | fixture of the acceptance check c8 (an address in an es2 log)
+drop | email | tools/cts/imx8mp-gles3-acceptance.sh | \buser@host\.domain\b | the acceptance check c8's description of what it refuses
+# ST's compiled-in U-Boot default environment (a vendor value, not ours).
+drop | private-ipv4 | driver/tools/mp2-standalone/st-env/stm32mp25-dk-initial-env.txt | ^serverip=192\.168\.1\.1$ | ST's default serverip in the stm32mp25 initial env
 # The preflight selftest's fake BOARD_UART canary (a look-alike, never a real value).
 drop | password | tools/cts/imx8mp-gles3-preflight-selftest.sh | SECRET\=ttyUSB | selftest fixture: the fake UART string the test asserts the preflight never prints
 # Product defaults and keywords.
@@ -82,3 +86,12 @@ drop | tailnet-dns | tools/cts/mali-slice-redact.py | \bboard-1\.example\.ts\.ne
 drop | email | tools/cts/mali-slice-redact.py | serial-getty[@]ttyS2\.service\b | systemd unit instance in the tool's help, not an address
 drop | private-ipv4 | driver/tools/uboot-mp2/qemu/* | \b10\.0\.2\.2\b | QEMU user networking's fixed host address (its built-in TFTP server), the same on every machine
 drop | private-ipv4 | tools/cts/x2-scene-table-selftest.sh | \b10\.137\.22\.9\b | private-range input of a redaction test: a fake console and verdict line the table must not carry
+drop | private-ipv4 | tools/mp2_uboot_record_check.py | \b10\.1\.2\.3\b | private-range input of the record check's redaction self-test: a dirty console line the check must not echo
+drop | private-ipv4 | tools/mp2_uboot_record_check.py | \b10\.9\.8\.7\b | private-range input of the record check's redaction self-test: an address in console.raw behind a NUL
+drop | ipv6-local | tools/mp2_uboot_record_check.py | \bfe80::1ff:fe23:4567:890a\b | link-local input of the record check's redaction self-test (RFC 4291's example interface identifier)
+drop | tailnet-dns | tools/mp2_uboot_record_check.py | \bdk1\.tail1234\.ts\.net\b | fake tailnet host name input of the record check's redaction self-test
+# The Pi 5 display verdict self-test: inputs its redaction check must never print.
+drop | private-ipv4 | tools/probes/rpi5_display/verdicts_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a console line the verdict tool must not print
+drop | ipv6-local | tools/probes/rpi5_display/verdicts_selftest.sh | \bfe80::1\b | link-local input of the same redaction test
+drop | email | tools/probes/rpi5_display/verdicts_selftest.sh | \bserial-getty@ttyS2\.service\b | systemd unit name in the same console line
+drop | email | driver/tools/uboot-t6/prompt-reads.sh | serial-getty[@]ttyS2\.service\b | systemd unit instance the tool asks the board about, not an address

@@ -269,9 +269,10 @@ const HEAP_WINDOW: u64 = 0x4000_0000;
 /// resources each, about 5 MiB): the most a build can ask for, and the
 /// default ([`pvr_backend_set_frame_arenas`] may ask for fewer).
 const PVR_BACKEND_FRAME_SETS: usize = 4;
-/// Colour attachments one kick may write; the driver's end-of-tile programs
-/// cover this many (`PVR_RENDER_MAX_RT`).
-const PVR_BACKEND_MAX_RT: u32 = PVR_RENDER_MAX_RT as u32;
+/// Colour attachments one kick may write: three, the driver's default
+/// end-of-tile PDS program (`PVR_RENDER_EOT_PDS_PAIRS`), until the pvr-backend
+/// item takes four (`PVR_RENDER_MAX_RT`).
+const PVR_BACKEND_MAX_RT: u32 = PVR_RENDER_EOT_PDS_PAIRS as u32;
 /// Primitives one kick may tile. The parameter buffer the firmware fills while
 /// tiling is finite (the driver grows it out of the GPU carveout, tens of
 /// MiB); a Quick 3D scene like simplefog draws 2000 instances of a sphere,
@@ -1714,7 +1715,7 @@ struct Backend {
     /// Colour attachments beyond the first (a G-buffer pass writes three):
     /// `[0]` mirrors `target_gpu`/`w`/`h`/`format`, and `num_targets` 0 means
     /// one.
-    targets: [GlesDrawTarget; PVR_RENDER_MAX_RT],
+    targets: [GlesDrawTarget; PVR_BACKEND_MAX_RT as usize],
     num_targets: u8,
     /// The frame's target sample count.
     samples: u32,
@@ -9550,6 +9551,7 @@ fn add_stream(streams: &mut [PvrPdsVertexStream], n: usize, a: &GlesAttrib, base
         dma_size: a.components as u32 * 4,
         dst_reg: a.vi_reg as u32,
         per_instance: (a.per_instance != 0) as u32,
+        divisor: 0,
     };
     n + 1
 }

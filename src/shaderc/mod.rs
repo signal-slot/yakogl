@@ -896,6 +896,28 @@ pub fn uniform_blocks(sh: &ShcShader) -> ShcBlocks {
     }
 }
 
+/// Row `k` of `sh`'s uniform table as the source names it, whatever its
+/// length: the 64-byte [`ShcUniform::name`] field holds 63 characters, and
+/// the online compiler's record keeps the whole name of a row the field cut
+/// (its name pool, `online::backend::uniform_name`). Every other row -- and
+/// every row of a table shader, or of a build without the online compiler
+/// -- is the field's bytes, which are the whole name of every row the link
+/// accepts without a pool (`link::reject_truncated_names`). Empty for a `k`
+/// the table has no row at.
+///
+/// The GL core names, matches and reports uniform rows through this, never
+/// through the field (docs/notes/reflection-long-names.md).
+pub fn uniform_row_name(sh: &ShcShader, k: usize) -> &[u8] {
+    #[cfg(feature = "shaderc-online")]
+    {
+        online::backend::uniform_name(sh, k)
+    }
+    #[cfg(not(feature = "shaderc-online"))]
+    {
+        sh.uniform_table().get(k).map_or(&[], |u| crate::util::name_bytes(&u.name))
+    }
+}
+
 /// Whether the in-process (online) compiler made `sh`. Its uniform rows are
 /// one per array, element by element (`s[1].b[0].b`, the member's own
 /// array), never the offline table's per-member flattening of an array of
@@ -1154,6 +1176,10 @@ pub struct ShcV3dFs {
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
+    /// Bit i: input 32 + i (an FS has up to 64 inputs, V3D_MAX_FS_INPUTS).
+    pub flat_shade_flags_hi: u32,
+    pub noperspective_flags_hi: u32,
+    pub centroid_flags_hi: u32,
     pub threads: u8,
     pub single_seg: u8,
     pub writes_z: u8,
@@ -1223,6 +1249,9 @@ impl ShcV3dFs {
         flat_shade_flags: 0,
         noperspective_flags: 0,
         centroid_flags: 0,
+        flat_shade_flags_hi: 0,
+        noperspective_flags_hi: 0,
+        centroid_flags_hi: 0,
         threads: 0,
         single_seg: 0,
         writes_z: 0,
@@ -1644,6 +1673,20 @@ pub fn wide128_variant(
     log: &mut [c_char],
 ) -> i32 {
     online::backend::wide128_variant(sh, planes, lod, out, log)
+}
+
+/// `sh` compiled with the colour outputs on the targets of `rt` split into
+/// their two plane stores ([`online::backend::rt_planes_variant`]). An empty
+/// key is `sampler_variant(sh, lod)` exactly. Nothing calls it yet.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+pub fn rt_planes_variant(
+    sh: &ShcShader,
+    rt: online::vivante::wide128_rt::RtPlanes,
+    lod: LodKey,
+    out: &mut ShcShader,
+    log: &mut [c_char],
+) -> i32 {
+    online::backend::rt_planes_variant(sh, rt, lod, out, log)
 }
 
 /* ---- the offline table's row types (blobs.rs is generated) ---------------- */

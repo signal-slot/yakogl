@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# Paths that tools/release/make-snapshot.py leaves out of the public
+# snapshot commit (docs/release/snapshot.md, "The cleaned tree").
+#
+# Format: '#' comment lines and blank lines are ignored; every other line is
+# one literal path relative to the repository root, no globs; a line ending
+# in '/' excludes that directory and everything below it. A path is listed
+# only when a recorded owner decision, cited in a comment above the line,
+# says it leaves the public tree.
+#
+# Nothing is decided beyond what has already left the tree: the scope cut of
+# decision 3 of #1606 (tools/mali/board-ref/, docs/board-sessions/) was
+# applied to the tree itself (docs/release/redaction-audit.md, Part 3), and
+# records/* is gitignored, so no tree holds either. The list is therefore
+# empty. Each candidate that is not decided is an owner question under
+# "Undecided" in docs/release/snapshot.md; do not add one here without a
+# recorded decision.

@@ -380,6 +380,45 @@ is from the two-row set.
   42, 33 ran, 0 failed, **0 GL errors**, in both runs; GT 48 of 49 (case 44, #6) then 49 of 49. The glmark2 cell above is
   now a run from main (`bebce725`, GL errors raised 0 in all three arms).
 
+## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), dEQP-GLES2 (stage 5)
+
+The whole tree at origin/main `37305608`, 2026-11-15, in one boot:
+`tools/cts/mali-deqp-run.sh` over the 76 rows of
+`tools/cts/mali-gles2-tree.txt`, on the board's own Armbian (kernel
+6.18.55-current-rockchip64, panthor) with the `tools/mali/panthor-gles` pair
+(issue #20). The same build ran the tree three times that day with the same
+status for every case; the slices are the third run. Causes:
+`docs/es2-cts-failures.md` section M.
+
+| Slice (`tools/cts/log/`) | Main | Rows | Cases | Pass | Fail | NotSupported | ResourceError | QualityWarning | Lost | Kernel lines / resets |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `2026-11-15-t6-gles2-S1-37305608` | `37305608` | 1-24 | 5,141 | 2,856 | 2,248 | 34 | 0 | 3 | 0 | 0 / 0 |
+| `2026-11-15-t6-gles2-S2-37305608` | `37305608` | 25-38 | 4,872 | 1,243 | 3,628 | 0 | 1 | 0 | 0 | 0 / 0 |
+| `2026-11-15-t6-gles2-S3-37305608` | `37305608` | 39-68 | 4,477 | 370 | 3,181 | 896 | 30 | 0 | 0 | 0 / 0 |
+| `2026-11-15-t6-gles2-S4-37305608` | `37305608` | 69-76 | 2,675 | 987 | 1,643 | 43 | 2 | 0 | 0 | 0 / 0 |
+| **whole list** | | 1-76 | **17,165** | **5,456** | **10,700** | **973** | **33** | **3** | **0** | **0 / 0** |
+
+- All 76 chunks ended `done`: no crash, hang or GPU fault, ssh answered after
+  every chunk, and the boot id is the same before and after every slice.
+  `mali-deqp-tally.py --check-cover` exits 0.
+- Not Pass, 11,709: 10,583 cases have a compile or link refusal of the online
+  compiler in their own log (Fail 9,644, NotSupported 939; plan #309), listed
+  by refusal text in section M's block. Of the 1,126 without one: blend
+  shader refused at the draw 828; `fragment_ops.random` in chunks with
+  refused draws 100; a depth or stencil object refused at the draw 35; draws
+  that fail with `GL_OUT_OF_MEMORY` 33 (ResourceError); wrong pixels of
+  `texture.vertex.cube` with no refusal 16; an incomplete cube map refused at
+  the draw 16; `GL_INVALID_OPERATION` at a draw 23; `negative_api` 20;
+  `state_query` 7; wrong pixels of `texture.mipmap.cube` 6; 5 others; the
+  accepted 34 NotSupported and 3 QualityWarning of
+  `docs/es2-cts-failures.md` section C.
+- Against the first tree (2026-11-12/13, seven slices from four commits,
+  5,260 Pass): 224 cases now pass and 28 that passed are refused now
+  (section M.2).
+- The hang-risk loops (`docs/notes/mali-gles2-forecast.md` section 3, row
+  `T6S3R08`) were all refused at compile or link (`draws=0`), so none ran on
+  the GPU.
+
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 
 `panthor-gltest --sweep` on the board's own Linux (panthor, not Zephyr), the
@@ -525,7 +564,8 @@ record (`driver/tools/kexec-zephyr/t6-verdict.sh`). A development result: the
 sign-off form (U-Boot starting the image) has not run. The steps Z1 to Z4,
 their predicted records and the result of Z1's first half (`t6_hello`,
 2026-10-19) are in `driver/docs/nanopc-t6-mali.md`; a step gets its row
-here when it has run.
+here when it has run. The last row is gl_test, run by `tools/board.sh
+nanopc-t6 run` and judged by gl_test's own summary line.
 
 | Step | Image | Result | Build | Run | Record |
 |---|---|---|---|---|---|
@@ -533,6 +573,7 @@ here when it has run.
 | Z2: AS0 and a cache flush | `t6_mmu` | **PASS**, `VERDICT t6_mmu PASS`: `t6_mmu: PASS: AS0 on TRANSTAB 0x0000000010023000, three cache flush round trips, 13 ms` | `v0.1.0-913-g1f19113a3` (main `1f19113a3`) | 2026-11-11 21:01 JST | `records/nanopc-t6/20261111-210127-t6` |
 | Z3: the firmware boots | `t6_fw` | **PASS**, `VERDICT t6_fw PASS`: `t6_fw: Z3: rc 0 step 0, 4 ms`, `t6_fw: PASS` | `v0.1.0-986-g988639752` (main `988639752`) | 2026-11-12 11:41 JST | `records/nanopc-t6/20261112-114132-t6` |
 | Z4: one frame submitted from our kernel side | `t6_submit` | **PASS**, `VERDICT t6_submit PASS`: `t6_submit: Z4h: target red 2048 blue 2048 fill 0 other 0 of 4096 pixels`, `t6_submit: PASS` | `v0.1.0-1045-gef86672bf` (main `ef86672bf`) | 2026-11-12 16:42 JST | `records/nanopc-t6/20261112-1642-t6_submit-9dabc1c7` |
+| gl_test, the regression set, on the GL back end over our kernel side | `gl_test` | **50 of 50 cases pass**: `gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; ...)` | `v0.1.0-1780-g9ad07f55f` (main `9ad07f55f`) | 2026-11-16 02:54 JST | `records/nanopc-t6/20261116-0254-gl_test-6e41d680` |
 
 - Z2: every line of the predicted record was seen: Z1's power-on (`GPU_ID`
   0xa8670005, L2 ready), the cache flush round trip (2 polls of 1 µs), AS0's
@@ -621,9 +662,30 @@ here when it has run.
   request's idle bits) and `extract` at the wait's end (0, published
   later). The model, the record and the verdict were corrected from that
   run, and the drain was added to measure the publish, before this run.
-- Next: the GL back end's kernel side on Zephyr (the driver Z4 ran,
-  behind `src/mali` in place of panthor's ioctls), then the `gl_test`
-  image.
+- gl_test: the image (`driver/samples/zephyr/gl_test`,
+  `main_nanopc_t6.c`) is the library as a product has it: the GL core,
+  the in-process shader compiler and the Mali back end on the Zephyr
+  OSAL over our own kernel side (the driver Z4 ran, no panthor), with
+  the board's firmware file embedded (282624 bytes, sha256
+  `a27847ea…a2405b`). It ran gl_test's regression set, 50 cases, and
+  every case passed (`gl_test: all: 0 of 50 cases failed`, 0 timed out,
+  0 skipped; 379 compiler runs, no precompiled shader). The OSAL came
+  up with `gpu_id` 0xa8670005, a 32 MiB carve-out and five 2 MiB tiler
+  heap chunks.
+- gl_test: the image reset through PSCI 4226 ms after its start, and
+  the board was back in Armbian 30 s after the jump.
+- gl_test, not shown by this run: the suite draws into its own surfaces
+  and reads them back, because the board has no display on Zephyr yet.
+  On-screen output, the sign-off form (U-Boot starting the image) and
+  dEQP have not run on Zephyr.
+- The same day a first gl_test run (the image of main `46f66b884`,
+  record `records/nanopc-t6/20261116-0025-gl_test-cd738a18`) passed 49
+  of 50: case 18 (`image`) ended with `GL_INVALID_OPERATION` in
+  `glEGLImageTargetTexture2DOES`. The board's OSAL answered a
+  `map_phys` window with a null `impl`, which the GL library reads as
+  "no memory" (issue #6757). That was corrected (#6764) before this
+  run.
+- Next: the dEQP-GLES2 image on Zephyr, then the display.
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 

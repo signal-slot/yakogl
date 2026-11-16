@@ -10,9 +10,10 @@
 //!   nodes (the mediump lowering), the algebraic rules applied to a 16-bit
 //!   lane pair (`bi_vectorize_filter` splits a mediump op into vec2s,
 //!   bifrost_nir.c:1088, before the algebraic passes) ([`walk`]);
-//! * the varyings: the components read, compacted from VAR0 in layout
-//!   order (`compact_varyings`), loaded where their first read stands
-//!   ([`layout`]);
+//! * the varyings: the lanes Mesa's link keeps (those read, or every
+//!   lane of one a lowered tree converts, [`kept_whole`]), compacted from
+//!   VAR0 in layout order (`compact_varyings`), each slot read loaded at
+//!   its width where its first read stands ([`layout`]);
 //! * the pairs: lanes `2p` and `2p + 1` of the colour as one two-lane node
 //!   per operation (`nir_opt_vectorize` at the 16-bit width of two), the
 //!   late fusion where the fadd stands, `fmul(a, 2.0)` as `fadd(a, a)`
@@ -184,7 +185,10 @@ impl TexLookup {
     /// `COMPUTED_BIAS`; `bi_instr_uses_helpers`): neither a fetch, nor a
     /// level given.
     pub fn computed(&self) -> bool {
-        (self.cube.is_none() && !self.fetch && !self.zero) || self.bias != Val::Undef
+        match self.cube {
+            Some(Cube { lod }) => lod == CubeLod::Computed,
+            None => !self.fetch && !self.zero,
+        }
     }
 }
 
@@ -223,15 +227,27 @@ pub const MAX_LOOK_UPS: usize = 64;
 /// look-up node's sources are `build_cube_desc`'s S and T and, at an
 /// explicit level, its 8.8 word ([`nir::Nir::cube_desc`],
 /// [`nir::Nir::sfixed_8_8`]), fp32 nodes of the graph; in a mediump one
-/// they are the direction's three fp16 lanes, converted at the look-up
-/// (`F16_TO_F32` each, the cube ops being fp32 only) and the descriptor
-/// built there ([`select`]; case41.expect.json).
+/// they are the direction's three lanes, fp16 ones converted at the
+/// look-up (`F16_TO_F32` each, the cube ops being fp32 only) and the
+/// descriptor built there ([`select`]; case41.expect.json).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Cube {
-    /// The level is not the constant 0 (`nir_scalar_is_zero`): the LOD
-    /// mode `EXPLICIT` and a third staging word; else `ZERO_LOD`
-    /// (pan_nir_lower_tex.c:927-937).
-    pub explicit: bool,
+    /// The level mode (pan_nir_lower_tex.c:927-946).
+    pub lod: CubeLod,
+}
+
+/// A cube look-up's level ([`Cube::lod`]), as `va_lower_tex` picks it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CubeLod {
+    /// `textureLod` at the constant 0 (`nir_scalar_is_zero`): `ZERO_LOD`,
+    /// two staging words.
+    Zero,
+    /// `textureLod` at another level: `EXPLICIT`, a third staging word.
+    Explicit,
+    /// `textureCube` with no level, or with a bias ([`TexLookup::bias`]):
+    /// the level from the derivatives, `COMPUTED_LOD` (fstex_cube.expect
+    /// .json's `.cube.computed`), or `COMPUTED_BIAS` with the bias word.
+    Computed,
 }
 
 /// The texture and sampler index of a shader's first sampler. Mesa
@@ -686,6 +702,8 @@ pub const ADMITTED: u128 = {
         | prod(Op, Output)
         | prod(Const, AddA)
         | prod(HalfSwapped, AddB)
+        /* `-a2.yx` (fsneg_swapped, fstex_cubedir_negyx) */
+        | prod(HalfSwapped, NegSrc)
         | prod(Half, NegSrc)
         | prod(Op, NegSrc)
         | prod(Neg, AddB)
@@ -740,8 +758,9 @@ pub struct FsVarying {
     /// Loaded flat (`.src_flat32`): the vertex shader computes its lanes
     /// from uniforms alone ([`super::link::VaryingConsts::flat`]).
     pub flat: bool,
-    /// Holds a varying the link keeps whole, of which the colour may read
-    /// some lanes only ([`layout`]'s packed matrix).
+    /// Holds lanes the program does not read: of a varying the link keeps
+    /// whole ([`kept_whole`], a dot product's), loaded at the slot's width
+    /// ([`layout`]).
     pub whole: bool,
 }
 
@@ -813,12 +832,28 @@ pub struct Fs<'s> {
     /// docs/notes/mali-fragment-outputs.md). Only in straight-line code
     /// ([`walk`]).
     pub(super) targets: [Option<[Val; 4]>; MAX_TARGETS - 1],
+    /// The shader writes gl_FragColor: Mesa lowers it to all eight targets
+    /// (`nir_lower_fragcolor(.., 8)`, pan_shader.c:556-561) and drops the
+    /// stores past the first (`panfrost_nir_remove_fragcolor_stores`), but
+    /// `outputs_written` keeps them, so `blend_pan` copies its colour into
+    /// a new vector at the store (bifrost_compile.c:1683-1688, "explicit
+    /// copy since BLEND inputs are precoloured"): its moves after ATEST.
+    fragcolor: bool,
     /// The expressions Mesa's link moves into the program's vertex shader
     /// (motion.rs), in the order they were found.
     pub moved: [Moved; MAX_MOVED],
     pub nmoved: usize,
     /// Each varying location's first read (`u32::MAX`: not read).
     var_key: [u32; MAX_VARYINGS],
+    /// Each varying location's lanes an fp16 `fmul` or `fadd` read and the
+    /// walk folded away (`x * 1.0`, `x + 0.0` of a lane pair) where the
+    /// identity holds on some lanes of the operation only: at the link
+    /// the operation is still an fp16 one, so its operands are converted
+    /// with the tree's `f2fmp`, not at the colour's store (sel_v_color_uv:
+    /// `v_color * vec4(v_uv, 1.0, 1.0)` converts z,w right after x,y).
+    /// An identity on every lane is folded at the link (the walk's `Fmul`
+    /// and `Fadd` arm), so its operand is the colour's own lane.
+    folded: [u8; MAX_VARYINGS],
     pcoord_key: u32,
     /// gl_FragCoord's first read in a highp shader ([`FRAG_Z`]).
     fz_key: u32,
@@ -998,6 +1033,17 @@ impl<'s> Fs<'s> {
         Ok(Val::Lane(id, 0))
     }
 
+    /// Operand `v` of an fp16 operation the walk folds away: a varying's
+    /// lane is marked [`Fs::folded`].
+    fn fold(&mut self, v: Val) -> Val {
+        if let Some((loc, c)) = self.input_lane(v) {
+            if let Some(m) = self.folded.get_mut(loc as usize) {
+                *m |= 1 << (c & 3);
+            }
+        }
+        v
+    }
+
     /// One lane of `fmul` or `fadd` under the pair's `rule`.
     fn op(&mut self, a: AluOp, x: Val, y: Val, at: usize, rule: Rule) -> Result<Val, MaliError> {
         if x == Val::Undef || y == Val::Undef {
@@ -1006,8 +1052,8 @@ impl<'s> Fs<'s> {
         let (cx, cy) = (matches!(x, Val::Const(_)), matches!(y, Val::Const(_)));
         let neg = |s: &Self, v: Val| matches!(s.alu_of(v), Some((Alu::Fneg, _)));
         match (a, rule) {
-            (AluOp::Fmul, Rule::IdentitySecond) => Ok(x),
-            (AluOp::Fmul, Rule::IdentityFirst) => Ok(y),
+            (AluOp::Fmul | AluOp::Fadd, Rule::IdentitySecond) => Ok(x),
+            (AluOp::Fmul | AluOp::Fadd, Rule::IdentityFirst) => Ok(y),
             /* `fmul(a, 0.0)` is 0.0 (nir_opt_algebraic.py's inexact rule, in
              * force without `precise`): case 122's `t.w * 0.0` (uniidx_i,
              * no FMA in Mesa's program). Like the others it holds for a
@@ -1048,8 +1094,6 @@ impl<'s> Fs<'s> {
                 }
             }
             (AluOp::Fmul, _) => self.node(Alu::Fmul, [x, y, Val::Undef], at),
-            (AluOp::Fadd, Rule::IdentitySecond) => Ok(x),
-            (AluOp::Fadd, Rule::IdentityFirst) => Ok(y),
             (AluOp::Fadd, _) if cx && cy => Err(MaliError::ConstantFold),
             /* `fadd(fmul(a, b), fmul(a, c))` is `fmul(a, fadd(b, c))`
              * (nir_opt_algebraic.py's factoring), the constants' sum
@@ -1910,10 +1954,11 @@ impl<'s> Fs<'s> {
                 };
             }
         }
-        /* the front end records no width here (`comps_of` answers 4) and
-         * pads a swizzle with its last lane: a lane whose operands are the
-         * lane before's is the same scalar operation, one node (`nir_opt_cse`
-         * after `nir_lower_alu_width`) */
+        /* the width is the front end's (a built-in records its call's,
+         * lower.rs `Sink`), and a swizzle of a narrower value pads it with
+         * its last lane: a lane whose operands are the lane before's is the
+         * same scalar operation, one node (`nir_opt_cse` after
+         * `nir_lower_alu_width`) */
         let same = |i: usize| (0..ir_arity(a)).all(|k| x[k][i] == x[k][i - 1]);
         let d = (1..w).find(|&i| same(i)).unwrap_or(w);
         if (d..w).any(|i| !same(i)) {
@@ -2732,9 +2777,10 @@ impl<'s> Fs<'s> {
             }
             return Ok(out);
         }
-        /* the front end records no width for a conversion or a compare
-         * (`comps_of` answers 4): the value has the lanes its sources
-         * have, so a lane past the sources' ends is not one of its */
+        /* the recorded width can pass the lanes the sources have (a
+         * module with no width table answers 4, and a source may be read
+         * through a narrower value's swizzle): a lane past the sources'
+         * ends is not one of the value's */
         let arity = ir_arity(a);
         for (i, o) in out.iter_mut().enumerate().take(w) {
             let s = [lane(0, i), lane(1, i), lane(2, i)];
@@ -3007,9 +3053,11 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         keys: scratch.alloc_filled(MAX_VALUES, u32::MAX).map_err(oom)?,
         colour: None,
         targets: [None; MAX_TARGETS - 1],
+        fragcolor: m.outputs.iter().any(|d| matches!(d.kind, IoKind::Colour) && d.name == "gl_FragColor"),
         moved: [Moved::NONE; MAX_MOVED],
         nmoved: 0,
         var_key: [u32::MAX; MAX_VARYINGS],
+        folded: [0; MAX_VARYINGS],
         pcoord_key: u32::MAX,
         fz_key: u32::MAX,
         inputs: [None; MAX_VARYINGS],
@@ -4482,6 +4530,25 @@ fn walk_nodes(
                 /* the rules run on 16-bit lane pairs: a rule holds for a
                  * pair when both its lanes' constants make it */
                 let ident: &[u32] = if a == AluOp::Fmul { &[F32_ONE] } else { &[0, F32_NEG_ZERO] };
+                /* an identity constant on every lane of the operation:
+                 * nir_opt_algebraic folds it at the link already (`fmul(a,
+                 * 1.0)`, `fadd(a, 0.0)`, nir_opt_algebraic.py:292, :236-237,
+                 * in gl_nir_opts, gl_nir_linker.c:102; a constant source
+                 * matches when every lane it reads is the constant, the
+                 * sign of zero checked per lane, nir_search.c:260-286 and
+                 * :282-285, so `+ vec2(0.0, -0.0)` is no identity there):
+                 * f07's `a.x * 1.0` is the colour's own lane, converted at
+                 * the store */
+                let whole =
+                    (0..2).any(|k| ident.iter().any(|&b| (0..w).all(|i| f.is_const(lane(vals, s[k], i), &[b]))));
+                /* zeros of both signs on every lane (`+ vec2(0.0, -0.0)`):
+                 * no fold at the link by the source, and no measured shape
+                 * tells the tree's conversions from the colour's (n20's
+                 * order is both): refused */
+                let mixed = (0..2).any(|k| (0..w).all(|i| f.is_const(lane(vals, s[k], i), ident)));
+                if a == AluOp::Fadd && mixed && !whole {
+                    return Err(MaliError::FsVaryingLoad);
+                }
                 for pair in (0..w).step_by(2) {
                     let lanes = pair..w.min(pair + 2);
                     let all = |k: usize, bits: &[u32]| lanes.clone().all(|i| f.is_const(lane(vals, s[k], i), bits));
@@ -4499,6 +4566,13 @@ fn walk_nodes(
                     for i in lanes.clone() {
                         let (x, y) = (f.fp16_operand(lane(vals, s[0], i)), f.fp16_operand(lane(vals, s[1], i)));
                         out[i] = f.op(a, x, y, at, rule)?;
+                        /* an identity on some lanes of the operation only:
+                         * at the link the operation is still an fp16 one
+                         * whose operand the tree's `f2fmp` converts
+                         * ([`Fs::folded`]) */
+                        if matches!(rule, Rule::IdentitySecond | Rule::IdentityFirst) && !whole {
+                            f.fold(out[i]);
+                        }
                     }
                 }
             }
@@ -4860,7 +4934,7 @@ fn walk_nodes(
              * either stage (pan_nir_lower_tex.c:825-829), its lanes any
              * value, a constant one an operand (case114_f.expect.json's
              * `CUBEFACE1.discard r2, 0x3F800000, r0, r1`). An implicit
-             * level (`textureCube`'s `COMPUTED_LOD`) has no reference */
+             * level is the arm after the bias's */
             ir::Op::Tex {
                 dim: ir::TexDim::Cube,
                 shadow: false,
@@ -4901,7 +4975,7 @@ fn walk_nodes(
                 let bits = if prec.highp && prec.highp_samplers >> (sampler & 31) & 1 != 0 { 32 } else { 16 };
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits, width: 1 })?;
                 f.origin[n as usize] = at as u16;
-                let cube = Some(Cube { explicit });
+                let cube = Some(Cube { lod: if explicit { CubeLod::Explicit } else { CubeLod::Zero } });
                 f.push_look_up(TexLookup::new(sampler, TexCoord::Computed, cube, false, at, n))?;
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
@@ -4914,8 +4988,9 @@ fn walk_nodes(
              * widened (pan_nir_lower_tex.c:144-149, :938-940: `F16_TO_F32
              * r2, u2.w0.h0` then the 8.8 chain, [`select`]); the direction's
              * lanes as a cube's at level 0, raw varying lanes and the
-             * link's constant among them. A bias that is no uniform lane, or
-             * a highp shader's: no reference */
+             * link's constant among them, of the shapes the implicit arm
+             * takes ([`cube_dir_measured`]; fstex_cubebias_uni). A bias
+             * that is no uniform lane, or a highp shader's: no reference */
             ir::Op::Tex {
                 dim: ir::TexDim::Cube,
                 shadow: false,
@@ -4928,17 +5003,53 @@ fn walk_nodes(
             } if !prec.highp => {
                 let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
                 let bias = lane(vals, bias, 0);
-                if dir.contains(&Val::Undef) || dir.iter().all(|v| matches!(v, Val::Const(_))) {
+                if !cube_dir_measured(f, m, coord, dir) {
                     return Err(MaliError::TexCoord);
+                }
+                if sampler_array_element(m, sampler) {
+                    return Err(MaliError::TexArrayElement);
                 }
                 if f.uniform_dword(bias).is_none() {
                     return Err(MaliError::TexKind);
                 }
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: dir, bits: 16, width: 1 })?;
                 f.origin[n as usize] = at as u16;
-                let mut t = TexLookup::new(sampler, TexCoord::Computed, Some(Cube { explicit: false }), false, at, n);
+                let mut t =
+                    TexLookup::new(sampler, TexCoord::Computed, Some(Cube { lod: CubeLod::Computed }), false, at, n);
                 t.bias = bias;
                 f.push_look_up(t)?;
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = Val::Lane(n, c as u8);
+                }
+            }
+            /* `textureCube(s, dir)` in a mediump shader (dEQP-GLES2's
+             * texture cube cases, fstex_cube.expect.json): the look-up at
+             * `COMPUTED_LOD` (pan_nir_lower_tex.c:944-945), two staging
+             * words, `build_cube_desc`'s of the direction's lanes as case
+             * 41's arm takes them ([`select`]), for the direction shapes
+             * measured against Mesa ([`cube_dir_measured`]). Any other
+             * direction, or a highp shader's look-up: no reference */
+            ir::Op::Tex {
+                dim: ir::TexDim::Cube,
+                shadow: false,
+                proj: false,
+                ret: ir::ScalarType::F32,
+                sampler,
+                coord,
+                lod: ir::TexLod::Implicit,
+                offset: None,
+            } if !prec.highp => {
+                let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
+                if !cube_dir_measured(f, m, coord, dir) {
+                    return Err(MaliError::TexCoord);
+                }
+                if sampler_array_element(m, sampler) {
+                    return Err(MaliError::TexArrayElement);
+                }
+                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: dir, bits: 16, width: 1 })?;
+                f.origin[n as usize] = at as u16;
+                let cube = Some(Cube { lod: CubeLod::Computed });
+                f.push_look_up(TexLookup::new(sampler, TexCoord::Computed, cube, false, at, n))?;
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
                 }
@@ -5149,6 +5260,100 @@ fn walk_nodes(
         vals[id.0 as usize] = out;
     }
     Ok(Flow::Next)
+}
+
+/// The direction of a mediump `textureCube` at the implicit level or with
+/// a bias is one of the shapes measured byte-equal to Mesa 26.2.1's
+/// drm-shim (fstex_cube*):
+///
+/// - raw: each lane a varying's lane or a constant fp16 holds exactly,
+///   one varying lane at least, each varying read whole unless it is the
+///   coordinate itself (fstex_cube, fstex_cubedir_twovary, _constneg,
+///   _rawhalf, _v4part). The cube ops read the load's fp32 words
+///   (`src_f32`) and the constant as an operand: +-1.0 the table's
+///   `0x3F800000`, 0.5 an FAU word (their sources have no swizzle,
+///   valhall.c CUBEFACE1).
+/// - pair: x and y fp16 trees of `+`, `*` and negation over varying
+///   lanes, constants and uniforms, vectorised as one pair (the colour's
+///   forms, [`ADMITTED`], checked in [`select`]); z a constant or a
+///   uniform (fstex_cubeface4, fstex_cubedir_face4uni, _uniscale, _fmak,
+///   _pairhalf). Each lane is `F16_TO_F32`'d at the look-up, a constant z
+///   rounded to fp16 first ([`cube_lane`]).
+///
+/// Measured otherwise, and so refused:
+/// - a raw constant fp16 does not hold (`vec3(a2, 0.1)`,
+///   fstex_cubeno_texcoord_rawtenth): Mesa rounds it to fp16 and reads the
+///   widened value from an FAU word; the raw lanes here keep the fp32
+///   constant;
+/// - raw lanes beside a uniform (`vec3(a2, u)`): Mesa keeps the varying
+///   fp32, the pair path narrows it;
+/// - gl_FragCoord or gl_PointCoord: Mesa keeps them fp32;
+/// - a product with 2.0 left alone (`a2 * 2.0`): Mesa's late rule makes it
+///   `FADD.v2f16 r0, r0^, r0^` (bifrost_nir_algebraic.py:31), which the
+///   pair here does not. Under an add it is the fused `FMA` (dEQP's
+///   `v.x*2.0 - 1.0`), measured equal.
+fn cube_dir_measured(f: &Fs<'_>, m: &Module<'_>, coord: ir::Src, dir: [Val; 3]) -> bool {
+    /* a varying's lane; gl_PointCoord's ([`POINT_COORD`]) is none */
+    let varying = |v: Val| f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS);
+    /* ours loads the lanes read. Mesa's load of a direction built of
+     * parts is the varying's whole width in the forms measured so
+     * (fstex_cubeno_texcoord_partialx: `a2.x` loads `.v2`), and the lanes
+     * read in others (a vec4's `.x, .y, .z` loads `.v3`); no rule found
+     * gives the width for every form (docs/notes/mali-cube-textures.md
+     * (h), "The raw load's width"). So the raw lanes must read every
+     * component of each float vector varying, where both loads are its
+     * width. A varying that is the coordinate itself (`a4.xyz`) is a
+     * texture argument, which lower_precision leaves as it is
+     * (`visit_enter(ir_texture *)`, lower_precision.cpp:785-790): the
+     * lanes read (fstex_cubedir_v4part) */
+    let direct = matches!(m.def(coord.val), Some(ir::Op::LoadInput { .. }));
+    let whole = |loc: u8| {
+        let lanes = dir.iter().filter_map(|&v| f.input_lane(v)).filter(|&(l, _)| l == loc);
+        let read = lanes.fold(0u8, |r, (_, c)| r | 1 << c);
+        m.inputs.iter().any(|d| {
+            d.kind == IoKind::Varying
+                && d.location == loc
+                && is_float_varying(d.gl_type)
+                && !is_matrix(d.gl_type)
+                && u32::from(read) + 1 == 1 << d.components
+        })
+    };
+    let uniform = |v: Val| f.alu_of(v).is_none() && f.uniform_dword(v).is_some();
+    /* an fp16 tree; `fused`: an fadd takes it into its FMA (the fadd's
+     * one product; with two, which one fuses is not measured) */
+    fn tree(f: &Fs<'_>, v: Val, fused: bool, leaf: &dyn Fn(Val) -> bool) -> bool {
+        let Some((op, s)) = f.alu_of(v) else { return leaf(v) };
+        let fmul = |v: Val| matches!(f.alu_of(v), Some((Alu::Fmul, _)));
+        match op {
+            Alu::Fneg => tree(f, s[0], false, leaf),
+            Alu::Fadd => {
+                let one = fmul(s[0]) != fmul(s[1]);
+                tree(f, s[0], one, leaf) && tree(f, s[1], one, leaf)
+            }
+            Alu::Fmul if !fused && (s[0] == Val::Const(F32_TWO) || s[1] == Val::Const(F32_TWO)) => false,
+            Alu::Fmul => tree(f, s[0], false, leaf) && tree(f, s[1], false, leaf),
+            _ => false,
+        }
+    }
+    let exact = |v: Val| matches!(v, Val::Const(c) if f16_exact(c).is_some());
+    let raw = dir.iter().all(|&v| varying(v) || exact(v))
+        && dir.iter().any(|&v| varying(v))
+        && (direct || dir.iter().filter_map(|&v| f.input_lane(v)).all(|(loc, _)| whole(loc)));
+    let leaf = |v: Val| varying(v) || uniform(v) || matches!(v, Val::Const(_));
+    let pair = dir[..2].iter().all(|&v| f.alu_of(v).is_some() && tree(f, v, false, &leaf))
+        && (matches!(dir[2], Val::Const(_)) || uniform(dir[2]));
+    raw || pair
+}
+
+/// Sampler binding `b` is an element of a sampler array other than its
+/// first. Mesa numbers an array's elements together, so `sa[1]` read alone
+/// is descriptor index 1 (fstex_cubeno_texarrayelement_implicit: the
+/// handle `0x20011801`); [`layout`] counts the samplers read and gives it
+/// 0, `sa[0]`'s texture. Refused until the index counts the array.
+fn sampler_array_element(m: &Module<'_>, b: u8) -> bool {
+    m.uniforms
+        .iter()
+        .any(|u| u.dword_off == crate::shaderc::SHC_UNIFORM_NO_BLOCK && b > u.binding && b - u.binding < u.array_len)
 }
 
 /// The sources `t` and `x` of atan's `fabs(t) * fsign(x)`, `t` the
@@ -5753,11 +5958,328 @@ fn reaches(f: &Fs<'_>, root: Val, e: Val) -> bool {
     false
 }
 
+/// Mesa's link keeps every lane of varying `loc` (its input node `node`),
+/// not only the lanes the program reads (`roots`): true when GLSL's
+/// `lower_precision` converts it in a tree it lowers. The pass converts
+/// the whole variable at each dereference (`f2fmp` of the deref, before
+/// the swizzle: lower_precision.cpp:724-733), and the link
+/// (`nir_opt_varyings_bulk`, gl_nir_linker.c:1524) runs while that vector
+/// conversion still reads every lane of the loads; the lanes no one reads
+/// are dropped only when the fragment shader is compiled after it
+/// (`nir_lower_alu_width`, then `nir_opt_dce`). Measured with Mesa
+/// 26.2.1's driver on the drm-shim: a mediump float varying of a mediump
+/// shader that an fp16 operation reads (fsvec_*, the discards of
+/// discard_81_branchquad, the integers of intloop_*), or that a lowered
+/// colour takes as it is (cmp_*, fsload_*), is stored and loaded whole.
+/// A highp shader, a highp varying and an integer one (`caps->int16` is
+/// false, pan_screen.c:591) are not converted, and neither is a colour
+/// that holds an fp32 value (case 89's `float(v_idx) / 4.0`,
+/// intbool_89_flatlast; a highp varying's lane, hp_var2; a highp
+/// uniform's, hp_uni; a highp sampler's texel, hp_tex): those keep the
+/// lanes read. A highp ES 3.00 output is a lowered tree converted back
+/// (es3_hpout loads `.v4`). A colour lane of a form not measured either
+/// way is refused ([`MaliError::FsVaryingLoad`]).
+fn kept_whole(
+    f: &Fs<'_>,
+    m: &Module<'_>,
+    loc: u8,
+    node: u16,
+    roots: &[Val],
+    all_read: bool,
+) -> Result<bool, MaliError> {
+    let mediump = |l: u8| {
+        !f.prec.highp
+            && (l as usize) < MAX_VARYINGS
+            && f.prec.other >> (l & 31) & 1 == 0
+            && m.inputs.iter().any(|d| d.kind == IoKind::Varying && d.location == l && is_float_varying(d.gl_type))
+    };
+    /* a highp shader (fsload_highp), a highp varying (fsload_hp_var2), an
+     * integer one (intbool_89_flatlast's v_idx): no `f2fmp`, the lanes
+     * read */
+    if !mediump(loc) {
+        return Ok(false);
+    }
+    let reads = |src: &[Val]| src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n == node));
+    let reached =
+        |id: u16, width: u8| (0..width.max(1)).any(|k| roots.iter().any(|&r| reaches(f, r, Val::Lane(id, k))));
+    let order = &f.nir.order[..f.nir.len];
+    /* an fp16 operation reads a lane: arithmetic, a phi or a compare of
+     * the lowered tree (fsvec_fract_mediump.expect.json loads `.v4` where
+     * `fract(v.x)` reads one lane; discard_81_branchquad's compares read
+     * y and w) */
+    let fp16_op = order.iter().any(|&id| {
+        let nd = f.nir.nodes[id as usize];
+        let arity = match nd.kind {
+            Kind::Alu(op) => op.arity(),
+            Kind::Phi => 2,
+            _ => 0,
+        };
+        nd.bits == 16 && reads(&nd.src[..arity]) && reached(id, nd.width)
+    });
+    /* an integer made of fp16 lanes (intloop_int_compare.expect.json and
+     * intloop_tri_int.expect.json load `.v4` where the colour reads two
+     * and three lanes) */
+    let int_of = order.iter().any(|&id| {
+        let nd = f.nir.nodes[id as usize];
+        let from_lane = |v: Val| match f.alu_of(v) {
+            Some((op, s)) if !op.is_int() => reads(&s[..op.arity()]),
+            _ => false,
+        };
+        nd.kind == Kind::Alu(Alu::F2i32) && from_lane(nd.src[0]) && reached(id, 1)
+    });
+    if fp16_op || int_of {
+        return Ok(true);
+    }
+    /* the colour takes a lane as it is: converted with the colour's tree
+     * when lower_precision lowers that tree, which it does when every lane
+     * is mediump */
+    let colour = f.colour.ok_or(MaliError::NoColour)?;
+    if !reads(&colour) {
+        /* no fp16 operation and no colour lane reads it: a cube look-up's
+         * direction, read raw at fp32 (varyconst_101_cubebias: the lanes
+         * read, `.v2`); any other reader has no reference */
+        let other = order.iter().any(|&id| {
+            let nd = f.nir.nodes[id as usize];
+            let (arity, src) = f.srcs_of(Val::Lane(id, 0)).unwrap_or((0, nd.src));
+            nd.kind != Kind::Tex && reads(&src[..arity]) && reached(id, nd.width)
+        });
+        return if other { Err(MaliError::FsVaryingLoad) } else { Ok(false) };
+    }
+    let (mut fp32, mut unknown) = (false, false);
+    for v in colour {
+        let n = match v {
+            Val::Const(_) => continue,
+            Val::Lane(n, _) => n,
+            _ => {
+                unknown = true;
+                continue;
+            }
+        };
+        let nd = f.nir.nodes[n as usize];
+        match nd.kind {
+            /* gl_PointCoord, mediump in ES 1.00 (pointcoordvary.expect.json:
+             * `v_color.b` beside it loads `.v4`) */
+            Kind::Input { .. } if Some(n) == f.pcoord => {}
+            Kind::Input { .. } if Some(n) == f.fz => unknown = true,
+            Kind::Input { .. } => match f.inputs.iter().position(|&x| x == Some(n)) {
+                Some(l) if mediump(l as u8) => {}
+                /* hp_var2: `vec4(a.x, b.y, ..)`, b highp, keeps a.x alone */
+                Some(_) => fp32 = true,
+                None => unknown = true,
+            },
+            Kind::Alu(_) | Kind::Phi if nd.bits == 16 => {}
+            /* a mediump uniform's component, read at a constant or a
+             * run-time index (uni_m, uni_mf; uniidx_j's `fcols[fidx].ba`
+             * beside `v_color.rg`: `.v4`); a highp one is fp32 (hp_uni:
+             * `vec4(a.x, u.y, ..)` keeps a.x alone) */
+            Kind::Uniform { .. } | Kind::UniformIdx { .. } if nd.bits == 16 => {}
+            Kind::Uniform { .. } | Kind::UniformIdx { .. } if nd.bits == 32 => fp32 = true,
+            /* case 89 */
+            Kind::Alu(_) | Kind::Phi if nd.bits == 32 => fp32 = true,
+            /* a texel of an fp16 look-up (tex_col: `vec4(texture2D(s,
+             * a.xy).x, a.z, ..)` loads `.v4`) */
+            Kind::Tex if nd.bits == 16 => {}
+            /* a highp sampler's texel is fp32 (hp_tex: `vec4(a.x,
+             * texture2D(s, t).x, ..)` keeps a.x and t) */
+            Kind::Tex if nd.bits == 32 => fp32 = true,
+            _ => unknown = true,
+        }
+    }
+    match (unknown, fp32) {
+        (true, _) => Err(MaliError::FsVaryingLoad),
+        (false, true) => Ok(false),
+        /* a lowered colour: the lane keeps its varying whole through a
+         * value whose `f2fmp` the link keeps, not through ones it undoes
+         * ([`colour_keeps_whole`]) */
+        (false, false) => colour_keeps_whole(m, loc, all_read),
+    }
+}
+
+/// The colour keeps a varying's `f2fmp` through the link (true), or takes
+/// its lanes only through values whose conversion the link undoes
+/// (false). gl_nir_opts runs before `nir_opt_varyings_bulk`
+/// (gl_nir_linker.c:1441, :1524): `nir_lower_vars_to_ssa` makes a local
+/// what was stored, the whole-identity folds remove `* 1.0` and `+ 0.0`
+/// (nir_opt_algebraic.py:236-237, :292), copy propagation makes a vector
+/// of one value's lanes a swizzle of it, `f2f32(f2fmp(a))` is `a` (:1991)
+/// and DCE drops a dead tree. Each colour store is judged by the lanes it
+/// writes, each followed through locals stored once in that lane,
+/// swizzles and whole identities ([`ir_colour_lane`]); every answer is a
+/// measured form (drm-shim references), anything else is refused
+/// ([`MaliError::FsVaryingLoad`]) unless the colour reads every lane of
+/// the varying (`all_read`: kept or not, the layout is the same):
+/// - every lane written is this varying's: one swizzle of its `f2fmp`,
+///   cancelled, the lanes read (fsload_bare1-4, fsload_cancel1-8,
+///   fsload_cancel10-11, fsload_ctor1: `t.xy` of `vec4(a.xy, 0.5, 1.0)`);
+/// - a lane of it beside a constant, another varying's lane or
+///   gl_PointCoord: `f2f32` reads a vector, the `f2fmp` survives, whole
+///   (fsload_v4_one, fsload_ctor3-5, cmp_axby, case 105's pointcoordvary);
+/// - a lane that is unknown but reaches the varying beside a constant
+///   (a local stored on several paths, `intloop_ifloop`'s `vec4(res.rgb,
+///   1.0)`): the constant makes a vector all the same, whole.
+///
+/// A store that writes no lane of it is not followed, so a dead tree reads
+/// nothing (fsload_cancel9).
+fn colour_keeps_whole(m: &Module<'_>, loc: u8, all_read: bool) -> Result<bool, MaliError> {
+    use ir::Op;
+    let (mut whole, mut unsure) = (false, false);
+    for op in m.instrs {
+        let (src, mask) = match *op {
+            Op::StoreOutput { slot: IoSlot::FragColor(_), src } => (src, 0xf),
+            Op::StoreLocal { local, index: None, src, write_mask } if ir_colour_local(m, local) => (src, write_mask),
+            _ => continue,
+        };
+        /* the colour's own local, stored by its parts above */
+        if matches!(m.def(src.val), Some(&Op::LoadLocal { local, .. }) if ir_colour_local(m, local)) {
+            continue;
+        }
+        let (mut mine, mut beside, mut reaching, mut other) = (false, false, false, false);
+        for i in (0..4).filter(|&i| mask & 1 << i != 0) {
+            match ir_colour_lane(m, src.val, src.swizzle[i] & 3, 0) {
+                ColourLane::Varying(l) if l == loc => mine = true,
+                ColourLane::Varying(_) | ColourLane::Const | ColourLane::PointCoord => beside = true,
+                ColourLane::Unknown(reach) if reach & 1 << (loc & 31) != 0 => reaching = true,
+                ColourLane::Unknown(_) => other = true,
+            }
+        }
+        if !mine && !reaching {
+            continue;
+        }
+        if beside {
+            whole = true;
+        } else if mine && !reaching && !other {
+            /* the varying's lanes alone: cancelled at the link */
+        } else {
+            /* beside a value of no measured kind (an operation, a uniform,
+             * a texel: uniidx_j), or an unknown lane of it alone */
+            unsure = true;
+        }
+    }
+    if whole {
+        Ok(true)
+    } else if unsure && !all_read {
+        Err(MaliError::FsVaryingLoad)
+    } else {
+        Ok(false)
+    }
+}
+
+/// What one lane of a colour store holds ([`ir_colour_lane`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ColourLane {
+    /// A lane of the varying at this location.
+    Varying(u8),
+    Const,
+    PointCoord,
+    /// Another value: the varying locations it may read (all of them when
+    /// not known).
+    Unknown(u32),
+}
+
+/// Lane `c` of value `v`, followed through locals with one store of that
+/// lane, swizzles and whole identities ([`ir_whole_identity`]). A value of
+/// a kind no reference names is [`ColourLane::Unknown`] with the varyings
+/// it reads.
+fn ir_colour_lane(m: &Module<'_>, v: ir::ValueId, c: u8, depth: u8) -> ColourLane {
+    if depth > 32 {
+        return ColourLane::Unknown(u32::MAX);
+    }
+    match m.def(v) {
+        Some(&ir::Op::LoadInput { slot: IoSlot::Varying(l), .. }) => ColourLane::Varying(l),
+        Some(&ir::Op::LoadInput { slot: IoSlot::PointCoord, .. }) => ColourLane::PointCoord,
+        Some(&ir::Op::ConstF32(_)) => ColourLane::Const,
+        Some(&ir::Op::LoadLocal { local, index: None, .. }) if !ir_colour_local(m, local) => {
+            let mut stores = m.instrs.iter().filter_map(|op| match *op {
+                ir::Op::StoreLocal { local: l, index: None, src, write_mask }
+                    if l == local && write_mask & 1 << c != 0 =>
+                {
+                    Some(src)
+                }
+                _ => None,
+            });
+            match (stores.next(), stores.next()) {
+                (Some(s), None) => ir_colour_lane(m, s.val, s.swizzle[c as usize & 3] & 3, depth + 1),
+                _ => ColourLane::Unknown(ir_reach(m, v, &mut 0, 0)),
+            }
+        }
+        Some(&ir::Op::Alu(a, s)) => match ir_whole_identity(m, a, &s, m.comps_of(v) as usize) {
+            Some(o) => ir_colour_lane(m, o.val, o.swizzle[c as usize & 3] & 3, depth + 1),
+            None => ColourLane::Unknown(ir_reach(m, v, &mut 0, 0)),
+        },
+        _ => ColourLane::Unknown(ir_reach(m, v, &mut 0, 0)),
+    }
+}
+
+/// The varying locations value `v` reads, through every store of a local.
+fn ir_reach(m: &Module<'_>, v: ir::ValueId, seen: &mut u64, depth: u8) -> u32 {
+    if depth > 32 {
+        return u32::MAX;
+    }
+    match m.def(v) {
+        Some(&ir::Op::LoadInput { slot: IoSlot::Varying(l), .. }) => 1 << (l & 31),
+        Some(&ir::Op::LoadLocal { local, .. }) => {
+            if *seen >> (local.0 & 63) & 1 != 0 {
+                return 0;
+            }
+            *seen |= 1 << (local.0 & 63);
+            let mut r = 0;
+            for op in m.instrs {
+                if let ir::Op::StoreLocal { local: l, src, .. } = *op {
+                    if l == local {
+                        r |= ir_reach(m, src.val, seen, depth + 1);
+                    }
+                }
+            }
+            r
+        }
+        Some(&ir::Op::Alu(a, s)) => s[..a.arity()].iter().fold(0, |r, x| r | ir_reach(m, x.val, seen, depth + 1)),
+        _ => 0,
+    }
+}
+
+/// Local `l` is the colour's own (`gl_FragColor` written by parts, an ES
+/// 3.00 output): its stores are the colour's ([`colour_keeps_whole`]).
+fn ir_colour_local(m: &Module<'_>, l: ir::LocalId) -> bool {
+    m.locals.get(l.0 as usize).is_some_and(|d| {
+        d.name == "gl_FragColor" || m.outputs.iter().any(|o| o.kind == IoKind::Colour && o.name == d.name)
+    })
+}
+
+/// The operand a whole identity leaves of `a` over `s` (`w` lanes): the
+/// other source of a `* 1.0`, or of a `+ 0.0` or `+ -0.0` with one sign of
+/// zero on every lane (nir_opt_algebraic.py:236-237, :292; nir_search.c
+/// :260-286, the sign of zero checked per lane, :282-285).
+fn ir_whole_identity(m: &Module<'_>, a: AluOp, s: &[ir::Src; 3], w: usize) -> Option<ir::Src> {
+    let bits: &[u32] = match a {
+        AluOp::Fmul => &[F32_ONE],
+        AluOp::Fadd => &[0, F32_NEG_ZERO],
+        _ => return None,
+    };
+    let konst = |v: ir::ValueId, swz: &[u8], b: u32| match m.def(v) {
+        Some(ir::Op::ConstF32(c)) => swz.iter().all(|&i| c.get(i as usize & 3) == Some(&b)),
+        _ => false,
+    };
+    (0..2).find_map(|k| {
+        let c = &s[k].swizzle[..w.clamp(1, 4)];
+        bits.iter().any(|&b| konst(s[k].val, c, b)).then_some(s[1 - k])
+    })
+}
+
+/// `gl_type` names a float varying: a scalar, a vector or a matrix's
+/// column (an integer one is not lowered, [`kept_whole`]).
+fn is_float_varying(gl_type: u16) -> bool {
+    use crate::gl::consts as gl;
+    let t = gl_type as u32;
+    matches!(t, gl::GL_FLOAT | gl::GL_FLOAT_VEC2 | gl::GL_FLOAT_VEC3 | gl::GL_FLOAT_VEC4) || is_matrix(gl_type)
+}
+
 /// The varyings the colour reads, laid out and compacted as Mesa's link
-/// does, in the order of their first reads. The layout takes them in
-/// declaration order, or in the program's vertex shader's order when the
-/// link compiled this shader for it (`order`, link.rs `VaryingOrder`:
-/// Mesa's fragment shader has the vertex shader's layout).
+/// does, the slots read loaded in the order of their first reads
+/// (docs/notes/mali-partial-varyings.md, "The lanes the link keeps"). The
+/// layout takes them in declaration order, or in the program's vertex
+/// shader's order when the link compiled this shader for it (`order`,
+/// link.rs `VaryingOrder`: Mesa's fragment shader has the vertex shader's
+/// layout).
 pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::VaryingOrder>) -> Result<(), MaliError> {
     /* colour outputs, one a render target; those past location 0 a
      * `vec4` as output 0 is ([`Fs::targets`]) */
@@ -5843,72 +6365,11 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
                     && nd.src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n == node))
                     && c.iter().any(|&root| reaches(f, root, Val::Lane(id, 0)))
             });
-            /* so is one a mediump shader makes an integer of, through its
-             * fp16 lanes (measured: intloop_int_compare.expect.json and
-             * intloop_tri_int.expect.json load `.v4` and their vertex
-             * programs store four lanes of `v_color`, of which the colour
-             * reads two and three; the cmp_* shaders, which read lanes as
-             * floats, are compacted) */
-            whole[loc as usize] |= !f.prec.highp
-                && order.iter().any(|&id| {
-                    let nd = f.nir.nodes[id as usize];
-                    let from_lane = |v: Val| match f.alu_of(v) {
-                        Some((op, s)) if !op.is_int() => {
-                            s[..op.arity()].iter().any(|x| matches!(*x, Val::Lane(n, _) if n == node))
-                        }
-                        _ => false,
-                    };
-                    nd.kind == Kind::Alu(Alu::F2i32)
-                        && from_lane(nd.src[0])
-                        && c.iter().any(|&root| reaches(f, root, Val::Lane(id, 0)))
-                });
-            /* and one a mediump shader's fp16 arithmetic reads a lane of:
-             * lower_precision converts the variable the expression reads
-             * (`f2fmp(v)`, then its swizzle), a vector operation the link
-             * sees whole (measured: fsvec_fract_mediump.expect.json loads
-             * `.v4` and its vertex program stores four lanes of `v`, of
-             * which `fract(v.x)` reads one; the cmp_* shaders, whose colour
-             * lanes are the varying's own with no arithmetic, are compacted) */
-            whole[loc as usize] |= !f.prec.highp
-                && order.iter().any(|&id| {
-                    let nd = f.nir.nodes[id as usize];
-                    matches!(nd.kind, Kind::Alu(_))
-                        && nd.bits == 16
-                        && nd.src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n == node))
-                        && c.iter().any(|&root| reaches(f, root, Val::Lane(id, 0)))
-                });
-            /* and one a mediump shader's discard compares a lane of
-             * (measured: discard_81_branchquad.expect.json loads `.v4` and
-             * its vertex program stores four lanes of `v_color`, of which
-             * the two discards read y and w) */
-            whole[loc as usize] |= !f.prec.highp
-                && f.nir.discards().any(|id| match f.nir.nodes[id as usize].src[0] {
-                    Val::Lane(cn, _) => {
-                        let cmp = f.nir.nodes[cn as usize];
-                        matches!(cmp.kind, Kind::Alu(Alu::Fcmp(_)))
-                            && cmp.src[..2].iter().any(|x| matches!(*x, Val::Lane(n, _) if n == node))
-                    }
-                    _ => false,
-                });
-        }
-    }
-    /* a matrix varying of columns narrower than a vec4 is read whole, every
-     * column, when any lane of it is read: the GLSL linker packs its
-     * columns into one slot (`packed:v_m[0],v_m[1]`), which the link then
-     * sees as read whole (measured: varyconst_78_matvary.expect.json, a
-     * mat2 of which the colour reads v_m[0].x and v_m[1].y, stores and
-     * loads all four lanes) */
-    fn root<'a>(d: &ir::IoDecl<'a>) -> &'a str {
-        d.name.split('[').next().unwrap_or(d.name)
-    }
-    let packed = |d: &&ir::IoDecl<'_>| d.kind == IoKind::Varying && is_matrix(d.gl_type) && d.components < 4;
-    for d in m.inputs.iter().filter(packed) {
-        let any =
-            m.inputs.iter().filter(packed).any(|e| root(e) == root(d) && read.get(e.location as usize) > Some(&0));
-        if any {
-            let loc = d.location as usize;
-            *read.get_mut(loc).ok_or(MaliError::VaryingLocation)? |= (1 << d.components) - 1;
-            whole[loc] = true;
+            /* and one GLSL's `lower_precision` converts whole before the
+             * link ([`kept_whole`]) */
+            let comps = m.inputs.iter().find(|d| d.kind == IoKind::Varying && d.location == loc).map(|d| d.components);
+            let all_read = comps.is_some_and(|n| read[loc as usize] == (1u8 << n.min(4)) - 1);
+            whole[loc as usize] |= kept_whole(f, m, loc, node, c, all_read)?;
         }
     }
     /* the texels the colour reads of each look-up; one it reads reads its
@@ -5950,7 +6411,7 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         }
     }
     /* (rank, location, components): a stable insertion by the vertex rank */
-    let mut by = [(0u8, 0u8, 0u8); MAX_VARYINGS];
+    let mut by = [(0u8, 0u8, 0u8, 0u16); MAX_VARYINGS];
     let mut nd = 0;
     for d in decls {
         let rank = order.map_or(0, |o| o.rank(d.location));
@@ -5959,28 +6420,62 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         }
         let at = by[..nd].iter().position(|x| x.0 > rank).unwrap_or(nd);
         by.copy_within(at..nd, at + 1);
-        by[at] = (rank, d.location, d.components);
+        by[at] = (rank, d.location, d.components, d.gl_type);
         nd += 1;
     }
     let mut lay = [VaryingAt { location: 0, comps: 0, offset: 0 }; MAX_VARYINGS];
-    let n = generic_layout(by[..nd].iter().map(|&(_, l, c)| (l, c)), &mut lay)?;
-    let mut slots = [FsVarying::NONE; MAX_VARYINGS];
-    /* `compact_varyings`: every component read, in layout order, takes the
-     * next scalar slot from VAR0 */
+    let n = generic_layout(by[..nd].iter().map(|&(_, l, c, t)| (l, c, t)), &mut lay)?;
+    /* `compact_varyings` (nir_opt_varyings.c:5491-5560, `fs_assign_slots`
+     * in scalar slot order): every lane the link keeps, in layout order,
+     * takes the next scalar slot from VAR0; a vertex shader's constant
+     * lane is not one, the link propagates it into this shader */
     let mut s = 0u16;
-    /* (a flat lane read, an interpolated lane read): the link packs flat
+    /* each 16-byte slot's lanes, and those of them the program reads */
+    let (mut held, mut used) = ([0u8; MAX_VARYINGS], [0u8; MAX_VARYINGS]);
+    /* each slot's first read: the first read of a varying with a lane read
+     * there (`nir_opt_move` puts a load before its first use,
+     * bifrost_nir.c:381; v3x_v3z_p3 loads q.yz before p.xyz,q.x, whose
+     * q.x no one reads), the earlier slot first where they are equal (the
+     * conversions of a vector, in lane order, nir_lower_alu_width) */
+    let mut first_read = [u32::MAX; MAX_VARYINGS];
+    /* (a flat lane kept, an interpolated lane kept): the link packs flat
      * lanes in slots of their own, a layout no reference draws beside
      * interpolated ones (nir.rs refuses the pair's vertex shader too) */
     let (mut flat, mut smooth) = (false, false);
-    let mut kept = [false; MAX_VARYINGS];
+    /* the lanes laid out, by the first vertex lane of their value
+     * (`deduplicate_outputs`, nir_opt_varyings.c:3253-3420, in scalar slot
+     * order: the first kept, the others read from it; fsload_dup_swz's
+     * q.x is p.y): (that lane, slot, lane) */
+    let mut placed = [(((0u8, 0u8), 0u8), 0u8, 0u8); 4 * MAX_VARYINGS];
+    let mut nplaced = 0;
     for at in &lay[..n] {
         let loc = at.location as usize & 15;
         let first = s;
-        if whole[loc] {
-            read[loc] = (1 << at.comps) - 1;
-        }
+        let full = (1u8 << at.comps) - 1;
+        let mut keep = if whole[loc] {
+            let konst = |c: u8| f.prec.consts.get(at.location, c).is_some();
+            (0..at.comps).filter(|&c| !konst(c)).fold(read[loc], |m, c| m | 1 << c)
+        } else {
+            read[loc]
+        };
         for comp in 0..at.comps {
-            if read[loc] & (1 << comp) == 0 {
+            if keep & (1 << comp) == 0 {
+                continue;
+            }
+            /* within one interpolation qualifier (`get_input_qualifier`'s
+             * tables, nir_opt_varyings.c:3042-3136, 3298-3305: b12's flat q
+             * beside the smooth p, both a_a.xy, stays apart) */
+            let interp = m.inputs.iter().find(|d| d.kind == IoKind::Varying && d.location == at.location);
+            let interp = interp.map_or(ir::INTERP_SMOOTH, |d| d.interp);
+            let class = (f.prec.consts.class(at.location, comp), interp);
+            if let Some(&(_, slot, lane)) = placed[..nplaced].iter().find(|x| x.0 == class) {
+                /* a lane equal to one laid out: read from it, not stored */
+                keep &= !(1 << comp);
+                if read[loc] & (1 << comp) != 0 {
+                    used[slot as usize] |= 1 << lane;
+                    first_read[slot as usize] = first_read[slot as usize].min(f.var_key[loc]);
+                    f.lane_of[loc][comp as usize] = Some((slot, lane));
+                }
                 continue;
             }
             let declared = m
@@ -5993,28 +6488,46 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
                 smooth = true;
             }
             let (slot, lane) = ((s / 4) as usize, (s % 4) as u8);
-            let x = slots.get_mut(slot).ok_or(MaliError::VaryingLocation)?;
-            let key = if lane == 0 { f.var_key[loc] } else { x.key().min(f.var_key[loc]) };
-            *x = FsVarying::new(slot as u8, lane + 1, 16 * slot as u16, key);
-            f.lane_of[loc][comp as usize] = Some((slot as u8, lane));
-            kept[slot] |= whole[loc];
+            *held.get_mut(slot).ok_or(MaliError::VaryingLocation)? |= 1 << lane;
+            *placed.get_mut(nplaced).ok_or(MaliError::VaryingLocation)? = (class, slot as u8, lane);
+            nplaced += 1;
+            if read[loc] & (1 << comp) != 0 {
+                used[slot] |= 1 << lane;
+                first_read[slot] = first_read[slot].min(f.var_key[loc]);
+                f.lane_of[loc][comp as usize] = Some((slot as u8, lane));
+            }
             s += 1;
         }
-        f.compacted |= read[loc] != (1 << at.comps) - 1;
-        f.reads[f.nreads] = FsRead { location: at.location, mask: read[loc], offset: 4 * first };
+        f.compacted |= keep != full;
+        f.reads[f.nreads] = FsRead { location: at.location, mask: keep, offset: 4 * first };
         f.nreads += 1;
     }
     if flat && smooth {
         return Err(MaliError::VaryingNotFromAttribute);
     }
-    let nslots = s.div_ceil(4) as usize;
-    for x in &mut slots[..nslots] {
-        x.flat = flat;
+    /* a slot is loaded when the program reads a lane of it, at the width
+     * the link left it (`nir_unlower_io_to_vars` makes one variable of the
+     * slot's lanes, loaded whole; `pan_nir_lower_fs_inputs` loads
+     * `component + num_components`, pan_nir_lower_fs_inputs.c:52-69, and no
+     * pass shrinks it before: v3x_v3z_p3's `.v4` of which p.x alone is
+     * read); a slot no one reads is not loaded (`nir_opt_dce`), though the
+     * vertex shader stores it (v3x_v3x_p1) */
+    let mut slots = [FsVarying::NONE; MAX_VARYINGS];
+    let mut nslots = 0;
+    for slot in 0..s.div_ceil(4) as usize {
+        if used[slot] == 0 {
+            continue;
+        }
+        let mut v = FsVarying::new(slot as u8, held[slot].count_ones() as u8, 16 * slot as u16, first_read[slot]);
+        v.flat = flat;
+        v.whole = used[slot] != held[slot];
+        slots[nslots] = v;
+        nslots += 1;
     }
-    for (x, k) in slots[..nslots].iter_mut().zip(kept) {
-        x.whole = k;
-    }
-    let pc = FsVarying::new(POINT_COORD, 2, 0, f.pcoord_key);
+    /* gl_PointCoord is loaded as its two lanes, of which the colour may
+     * read one (pcv_c: `LD_VAR_SPECIAL.v2` for `gl_PointCoord.x`) */
+    let mut pc = FsVarying::new(POINT_COORD, 2, 0, f.pcoord_key);
+    pc.whole = true;
     let z = FsVarying::new(FRAG_Z, 1, 0, f.fz_key);
     for v in slots[..nslots].iter().copied().chain(pcoord.then_some(pc)).chain(fz.then_some(z)) {
         if f.nvar >= MAX_VARYINGS {
@@ -6408,6 +6921,161 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
         },
     };
     pr.push(p, place)
+}
+
+/// Where the loads' fp16 conversions stand, in Mesa's order
+/// ([`Conversions`]): an aligned pair that [`Leaf::Half`] reads is one
+/// conversion (`V2F32_TO_V2F16`, the even lane low), every other lane is
+/// alone (`FADD.f32 .h0`). Mesa converts the lanes its fp16 trees read
+/// where the varying's `f2fmp` stands, in lane order (`nir_lower_alu_width`
+/// splits the vector conversion): at the load here. The colour's own lanes
+/// lose their conversion at the link (`f2f32(f2fmp(a))` is `a`,
+/// nir_opt_algebraic.py:1991, the colour being stored at fp32 then), and
+/// `nir_lower_mediump_io` converts the stored colour right before its
+/// store (bifrost_nir.c:914, nir_lower_mediump.c:102-104): after
+/// everything else, a discard included, in the colour's lane order across
+/// the loads (fsconv_cpq, fsconv_discw). `nir_opt_vectorize` makes the two
+/// lanes of an aligned pair of one load one conversion at the first one's
+/// place, that lane low (nir_opt_vectorize.c:166-171 and 559;
+/// intloop_ifloop.expect.json's `(v.z, v.w, v.x, 1.0)`: the pair z,w
+/// first, then x). A pair Mesa makes of lanes converted apart here
+/// (fsload_mk_pair, fsload_disc_col: the compare's y, then the colour's
+/// x), or with its odd lane low (swap_yx's `V2F32_TO_V2F16 r0, r1^,
+/// r0^`), or a load whose fp16 trees read lanes of two varyings (each its
+/// own `f2fmp`, at its own place), has no reference here.
+fn conversion_order(
+    f: &Fs<'_>,
+    pr: &Pairs,
+    roots: [u8; 2],
+    conv_form: &[[Option<bool>; 4]; MAX_VARYINGS],
+) -> Result<Conversions, MaliError> {
+    let mut out = Conversions { at_load: [[NO_LANE; 4]; MAX_VARYINGS], at_store: [(0, NO_LANE); 8], n: 0 };
+    let lanes_of = |x: &P| -> [Option<(u8, u8)>; 2] {
+        match *x {
+            P::Leaf(Leaf::Half { k, h, swz: Swz::H10 }) => [Some((k, 2 * h + 1)), Some((k, 2 * h))],
+            P::Leaf(Leaf::Half { k, h, .. }) => [Some((k, 2 * h)), Some((k, 2 * h + 1))],
+            P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, .. }) => [Some((k, c)), None],
+            P::Leaf(Leaf::Lanes { k, c, e, d }) => [Some((k, c)), Some((e, d))],
+            _ => [None, None],
+        }
+    };
+    /* the lanes the fp16 trees convert: every leaf but the colour's own,
+     * and the lanes an operation read that the walk folded ([`Fs::folded`]) */
+    let mut tree = [0u8; MAX_VARYINGS];
+    for (i, x) in pr.nodes[..pr.n].iter().enumerate() {
+        if roots.contains(&(i as u8)) {
+            continue;
+        }
+        for (k, c) in lanes_of(x).into_iter().flatten() {
+            tree[k as usize] |= 1 << c;
+        }
+    }
+    for (loc, &m) in f.folded.iter().enumerate() {
+        for c in (0..4u8).filter(|&c| m & 1 << c != 0) {
+            if let Some((slot, lane)) = f.lane_of[loc][c as usize] {
+                if let Some(k) = f.varyings[..f.nvar].iter().position(|v| v.location == slot) {
+                    tree[k] |= 1 << lane;
+                }
+            }
+        }
+    }
+    for k in 0..f.nvar {
+        let slot = f.varyings[k].location;
+        /* the varyings whose lanes the trees convert here */
+        let owners = (0..MAX_VARYINGS)
+            .filter(|&l| f.lane_of[l].iter().flatten().any(|&(s, lane)| s == slot && tree[k] & 1 << lane != 0));
+        if owners.count() > 1 {
+            return Err(MaliError::FsVaryingLoad);
+        }
+        /* Mesa's order of the conversions */
+        let mut order = [0u8; 4];
+        let mut n = 0;
+        let mut push = |c: u8, order: &mut [u8; 4]| {
+            if !order[..n].contains(&c) && n < 4 {
+                order[n] = c;
+                n += 1;
+            }
+        };
+        for c in (0..4).filter(|&c| tree[k] & 1 << c != 0) {
+            push(c, &mut order);
+        }
+        for r in roots {
+            for (j, c) in lanes_of(&pr.nodes[r as usize]).into_iter().flatten() {
+                if j as usize == k {
+                    push(c, &mut order);
+                }
+            }
+        }
+        /* its instructions: (first lane, second lane of a pair) */
+        let mut mesa = [(0u8, None::<u8>); 4];
+        let mut nm = 0;
+        for &c in &order[..n] {
+            match mesa[..nm].iter_mut().find(|g| g.0 == c ^ 1 && g.1.is_none()) {
+                Some(g) => g.1 = Some(c),
+                None => {
+                    mesa[nm] = (c, None);
+                    nm += 1;
+                }
+            }
+        }
+        /* [`convert`]'s */
+        let mut ours = [(0u8, None::<u8>); 4];
+        let mut no = 0;
+        let mut c = 0u8;
+        while c < 4 {
+            match conv_form[k][c as usize] {
+                Some(true) => {
+                    ours[no] = (c, Some(c + 1));
+                    no += 1;
+                    c += 2;
+                }
+                Some(false) => {
+                    ours[no] = (c, None);
+                    no += 1;
+                    c += 1;
+                }
+                None => c += 1,
+            }
+        }
+        /* the same conversions (a pair Mesa makes with its odd lane low has
+         * no reference here); a tree's at the load, in Mesa's order */
+        let same = nm == no && mesa[..nm].iter().all(|g| ours[..no].contains(g));
+        if !same {
+            return Err(MaliError::FsVaryingLoad);
+        }
+        let at_tree = mesa[..nm].iter().filter(|g| tree[k] & 1 << g.0 != 0);
+        for (o, g) in out.at_load[k].iter_mut().zip(at_tree) {
+            *o = g.0;
+        }
+    }
+    /* the colour's own conversions, at the store, in the colour's order
+     * across the loads (fsconv_cpq: q.y of slot 0, c.z of slot 1, then p.x
+     * of slot 0) */
+    for r in roots {
+        for (k, c) in lanes_of(&pr.nodes[r as usize]).into_iter().flatten() {
+            /* the conversion's first lane: a pair's even one (the pairs
+             * Mesa makes with the odd lane first are refused above) */
+            let form = conv_form.get(k as usize).and_then(|x| x.get(c as usize)).copied().flatten();
+            let Some(pair) = form else { return Err(MaliError::Defect(Defect::IrIndex)) };
+            let c = if pair { c & !1 } else { c };
+            let tree_lane = tree.get(k as usize).is_some_and(|t| t & 1 << c != 0);
+            if !tree_lane && !out.at_store[..out.n].contains(&(k, c)) {
+                *out.at_store.get_mut(out.n).ok_or(MaliError::Defect(Defect::IrIndex))? = (k, c);
+                out.n += 1;
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Where the fp16 conversions of the loads stand ([`conversion_order`]):
+/// those of the fp16 trees at their load (each load's first lanes, in
+/// order, padded with [`NO_LANE`]), the colour's own at its store, in the
+/// colour's order ((load, first lane), `n` of them).
+struct Conversions {
+    at_load: [[u8; 4]; MAX_VARYINGS],
+    at_store: [(u8, u8); 8],
+    n: usize,
 }
 
 /// `op` is `sin`, `cos` or `log2` ([`transc_rows`]).
@@ -7080,6 +7748,15 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                 (Some(x), Some(y), Some(z)) => Some(CubeDir::Raw([x, y, z])),
                 _ => {
                     let xy = vectorise(f, &mut pr, nd.src[0], nd.src[1], 0, ubo)?;
+                    /* the pair's productions are the colour's
+                     * ([`ADMITTED`]): a form in a place no reference
+                     * draws is refused here as it is there (`a2 * -3.0 +
+                     * 0.25`: Mesa's FMA reads -3.0 as a FAU word,
+                     * ours its negation, fstex_cubeno_operandform_fmanegk) */
+                    pr.note(xy, Place::Output, &mut f.prods);
+                    if f.prods & !ADMITTED != 0 {
+                        return Err(MaliError::FsOperandForm);
+                    }
                     let z = cube_lane(f, &mut pr, nd.src[2], ubo)?;
                     Some(CubeDir::Pair(xy, z))
                 }
@@ -7130,6 +7807,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             *cf = Some(pair);
         }
     }
+    let conv_order = conversion_order(f, &pr, roots, &conv_form)?;
     /* a coordinate is read as fp32, not converted (one load may be the
      * coordinate of several look-ups: texmore_2's `@r0:r1`) */
     if f.live_look_ups().any(|(_, t)| t.load.is_some_and(|k| used[k as usize] != 0)) {
@@ -7151,13 +7829,18 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             used[k as usize] |= 1 << lane;
         }
     }
-    /* a load holds the lanes read, and those alone but where the link
-     * keeps a varying whole ([`layout`]'s packed matrix: 78's v4 load, of
-     * which lanes 0 and 3 are read) */
+    /* a load holds the lanes read, and beside them only lanes the link
+     * keeps ([`FsVarying::whole`]: 78's v4 load, of which lanes 0 and 3
+     * are read). A lane past the load is this back end's defect; a lane
+     * read through a form these leaves do not name, a form no reference
+     * draws */
     for (k, v) in f.varyings[..f.nvar].iter().enumerate() {
         let full = (1u8 << v.comps) - 1;
-        if used[k] == 0 || used[k] & !full != 0 || (used[k] != full && !v.whole) {
+        if used[k] & !full != 0 {
             return Err(MaliError::Defect(Defect::IrIndex));
+        }
+        if used[k] == 0 || (used[k] != full && !v.whole) {
+            return Err(MaliError::FsVaryingLoad);
         }
     }
     let mut live = [false; MAX_PAIRS];
@@ -7190,7 +7873,22 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         events[ne] = (d.0, 0, DISCARD, k as u8);
         ne += 1;
     }
+    /* a load only the colour's own conversions read stands before the
+     * first of them, at the store ([`conversion_order`]; `nir_opt_move`
+     * sinks it there, fsconv_slot: d.y's slot 1 first); any other where
+     * its first read stands */
+    let raw_read = |k: usize| {
+        f.live_look_ups().any(|(_, t)| t.load == Some(k as u8))
+            || matches!(cube, Some(CubeDir::Raw(lanes)) if lanes.iter().any(|l| match *l {
+                RawLane::Input(loc, c) => index(f, loc, c).is_ok_and(|(j, _)| j as usize == k),
+                RawLane::F32(_) => false,
+            }))
+    };
     for (k, v) in f.varyings[..f.nvar].iter().enumerate() {
+        let at_store = conv_order.at_store[..conv_order.n].iter().any(|s| s.0 as usize == k);
+        if conv_order.at_load[k][0] == NO_LANE && at_store && !raw_read(k) {
+            continue;
+        }
         events[ne] = (v.key(), 0, LOAD, k as u8);
         ne += 1;
     }
@@ -7211,7 +7909,13 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     /* the indexed vec4 element the colour reads (its lanes in a live pair),
      * where its IR instruction stands */
     let vec4 = f.nubo == 1 && f.ubo_comps(f.ubo_idx[0]) == 4;
-    if vec4 && pr.nodes[..pr.n].iter().any(|x| matches!(x, P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_)))) {
+    let ubo_leaf = |i: usize| matches!(pr.nodes[i], P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_)));
+    /* one only the colour's words read is sunk to the store, after the
+     * colour's conversions (`nir_opt_move` of `load_ubo`, bifrost_nir.c
+     * :380-381; uniidx_j: `V2F32_TO_V2F16` of `v_color.rg`, then the
+     * element's address and load) */
+    let ubo_at_store = vec4 && (0..pr.n).filter(|&i| ubo_leaf(i)).all(|i| roots.contains(&(i as u8)));
+    if vec4 && !ubo_at_store && (0..pr.n).any(ubo_leaf) {
         events[ne] = (key_of(f.origin[f.ubo_idx[0] as usize])?, 0, UBO, 0);
         ne += 1;
     }
@@ -7269,7 +7973,12 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let mut texel = None;
     for &(_, _, what, x) in events.iter() {
         match what {
-            LOAD => convert(p, f, x as usize, &conv_form, &mut lv, &mut rows)?,
+            LOAD => {
+                load(p, f, x as usize, &mut lv)?;
+                for &c in conv_order.at_load[x as usize].iter().take_while(|&&c| c != NO_LANE) {
+                    conversion(p, f, x as usize, c, &conv_form, &mut lv, &mut rows)?;
+                }
+            }
             TEX => {
                 /* the coordinate's lane converted (`F16_TO_F32 r2, r2^.h0`),
                  * the one value both staging words */
@@ -7315,19 +8024,35 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                                 d
                             }
                         };
-                        let st = cube_rows(p, &mut rows, d)?;
-                        staging[..2].copy_from_slice(&st);
-                        /* the bias word after the descriptor
-                         * ([`TexLookup::bias`]): the uniform's half widened,
-                         * then `build_sfixed_8_8` as rows (`FMA.f32
-                         * .clamp_m1_1` by 1/16, `FMA.f32` by 4096,
-                         * `F32_TO_S32.rtz`, `U16_TO_U32 .h0`) */
+                        /* a bias's uniform widened before the descriptor:
+                         * the bias argument's `f2f32` is an instruction
+                         * before the look-up, while `va_lower_tex` builds
+                         * the descriptor and the 8.8 chain at the look-up
+                         * (pan_nir_lower_tex.c:805, :827, :936-937). Its
+                         * fp32 word, live across the cube ops, makes the
+                         * order's peak pressure 7 against the scheduler's 6,
+                         * so `bi_pressure_schedule` keeps its own order,
+                         * `CUBEFACE2_V9` first (fstex_cubebias_uni.expect
+                         * .json; the place is read from these bytes, not
+                         * from a Mesa IR dump). varyconst_101_cubebias's
+                         * order is the scheduler's either way */
                         let t = f.look_ups().get(x as usize).copied().ok_or(MaliError::Defect(Defect::IrIndex))?;
-                        if t.bias != Val::Undef {
+                        let bias = if t.bias != Val::Undef {
                             let d = f.uniform_dword(t.bias).ok_or(MaliError::Defect(Defect::IrIndex))?;
                             let (w, half, base) = ubo.half(d).ok_or(MaliError::FsUniform)?;
                             let swz = if half == 0 { Swz::H00 } else { Swz::H11 };
-                            let b = f2f32(p, &mut rows, Src::of(Idx::Ubo { base, comp: (w - base) as u8 }).swz(swz))?;
+                            Some(f2f32(p, &mut rows, Src::of(Idx::Ubo { base, comp: (w - base) as u8 }).swz(swz))?)
+                        } else {
+                            None
+                        };
+                        let st = cube_rows(p, &mut rows, d)?;
+                        staging[..2].copy_from_slice(&st);
+                        /* the bias word after the descriptor
+                         * ([`TexLookup::bias`]): the uniform's half widened
+                         * (above), then `build_sfixed_8_8` as rows (`FMA.f32
+                         * .clamp_m1_1` by 1/16, `FMA.f32` by 4096,
+                         * `F32_TO_S32.rtz`, `U16_TO_U32 .h0`) */
+                        if let Some(b) = bias {
                             let mut r = |op: Alu, bits: u8, s: &[Src]| -> Result<Src, MaliError> {
                                 Ok(Src::ssa(row(p, &mut rows, Row { op, bits, width: 1 }, s)?))
                             };
@@ -7348,8 +8073,12 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                  * collects the split words into the look-up's value right
                  * after it (bifrost_compile.c), so its moves stand before
                  * ATEST (case41.expect.json: `MOV.i32 r0, r2^`, `MOV.i32
-                 * r1, r3`, then `ATEST ... r3^.h1`) */
-                if roots.map(|r| pr.nodes[r as usize]) == [P::Leaf(Leaf::Tex(x, 0)), P::Leaf(Leaf::Tex(x, 1))] {
+                 * r1, r3`, then `ATEST ... r3^.h1`). gl_FragColor's store
+                 * copies the colour itself ([`Fs::fragcolor`]): the moves
+                 * the words' own, after ATEST (fstex_cube_whole: `ATEST`
+                 * then `BLEND` of the look-up's `@r0:r1`, the moves gone) */
+                let whole = [P::Leaf(Leaf::Tex(x, 0)), P::Leaf(Leaf::Tex(x, 1))];
+                if !f.fragcolor && roots.map(|r| pr.nodes[r as usize]) == whole {
                     let mut w = [Src::NULL; 2];
                     for (k, x) in w.iter_mut().enumerate() {
                         *x = Src::ssa(alu(p, Op::MovI32, &[operand(&pr, roots[k], &lv, &val)?])?);
@@ -7381,9 +8110,21 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             _ => op(p, &pr, x, &lv, &mut val, &mut rows)?,
         }
     }
+    /* the colour's own lanes, converted at its store
+     * (`nir_lower_mediump_io`'s `f2fmp` before the 32-bit store,
+     * nir_lower_mediump.c:102-104), after every event above, a discard
+     * included (fsconv_discw), each load made before its first */
+    for &(k, c) in &conv_order.at_store[..conv_order.n] {
+        conversion(p, f, k as usize, c, &conv_form, &mut lv, &mut rows)?;
+    }
+    if ubo_at_store && (0..pr.n).any(ubo_leaf) {
+        ubo_load(p, f, &mut lv, &mut rows)?;
+    }
     /* ATEST on the alpha: the constant's half, or the high half of the
-     * second pair's word (a uniform word's own half when it is a splat) */
+     * second pair's word (a uniform word's own half when it is a splat;
+     * a lane alone's own conversion, fsconv_alpha3's `ATEST .. r2.h0`) */
     let at = match (alpha, pr.nodes[roots[1] as usize]) {
+        (None, P::Leaf(Leaf::Lanes { e, d, .. })) => Src::ssa(conv_of(&lv, e, d)?).swz(Swz::H00),
         (Some(h), _) => Src::of(Idx::Const(h as u32)).swz(Swz::H00),
         (None, P::Leaf(Leaf::Uniform { base, comp, swz })) => {
             Src::of(Idx::Ubo { base, comp }).swz(if swz == Swz::H00 { Swz::H00 } else { Swz::H11 })
@@ -8719,7 +9460,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
             p.cur = block;
         }
         match what {
-            LOAD | TAIL_LOAD => convert(p, f, x as usize, &none, &mut lv, &mut rows)?,
+            LOAD | TAIL_LOAD => convert(p, f, x as usize, &none, None, &mut lv, &mut rows)?,
             TEX => tex_highp(p, f, x as usize, &mut lv, val, &mut rows)?,
             /* a float array read's offset, held in its node's value until
              * its load ([`select::ubo_offset`], [`select::ubo_fetch`]) */
@@ -8908,7 +9649,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
             if let Some((false, k, _)) = load_lane(f, v)? {
                 if deferred[k as usize] {
                     deferred[k as usize] = false;
-                    convert(p, f, k as usize, &none, lv, rows)?;
+                    convert(p, f, k as usize, &none, None, lv, rows)?;
                 }
             }
             Ok(())
@@ -8986,7 +9727,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
         if let Some((false, k, _)) = load_lane(f, x)? {
             if deferred[k as usize] {
                 deferred[k as usize] = false;
-                convert(p, f, k as usize, &none, lv, rows)?;
+                convert(p, f, k as usize, &none, None, lv, rows)?;
             }
         }
         Ok(())
@@ -9138,7 +9879,7 @@ fn tex_highp(
     let nd = f.nir.nodes[t.node as usize];
     let mut staging = [Src::NULL; 3];
     let n = match t {
-        TexLookup { cube: Some(Cube { explicit: true }), .. }
+        TexLookup { cube: Some(Cube { lod: CubeLod::Explicit }), .. }
         | TexLookup { array: true, .. }
         | TexLookup { d3: true, .. }
         | TexLookup { shadow: true, .. } => 3,
@@ -9487,9 +10228,40 @@ fn convert(
     f: &Fs<'_>,
     k: usize,
     form: &[[Option<bool>; 4]; MAX_VARYINGS],
+    order: Option<&[u8; 4]>,
     lv: &mut Leaves,
     rows: &mut u128,
 ) -> Result<(), MaliError> {
+    load(p, f, k, lv)?;
+    /* in `order` ([`conversion_order`]), else in lane order */
+    let mut starts = [NO_LANE; 4];
+    match order {
+        Some(o) => starts = *o,
+        None => {
+            let (mut c, mut n) = (0, 0);
+            while c < f.varyings[k].comps as usize {
+                if let Some(pair) = form[k][c] {
+                    starts[n] = c as u8;
+                    n += 1;
+                    c += if pair { 2 } else { 1 };
+                } else {
+                    c += 1;
+                }
+            }
+        }
+    }
+    for &c in starts.iter().take_while(|&&c| c != NO_LANE) {
+        conversion(p, f, k, c, form, lv, rows)?;
+    }
+    Ok(())
+}
+
+/// Load `k` (`LD_VAR_BUF_IMM`, or `LD_VAR_SPECIAL` for gl_PointCoord and
+/// gl_FragCoord.z) and its lanes split, once.
+fn load(p: &mut Prog<'_>, f: &Fs<'_>, k: usize, lv: &mut Leaves) -> Result<(), MaliError> {
+    if lv.raw[k][0].is_some() {
+        return Ok(());
+    }
     let v = f.varyings[k];
     let ld = p.temp()?;
     let op = match v.location {
@@ -9505,23 +10277,41 @@ fn convert(
     for c in 0..v.comps as usize {
         lv.raw[k][c] = Some(lanes[c]);
     }
-    let mut c = 0;
-    while c < v.comps as usize {
-        match form[k][c] {
-            Some(true) => {
-                let s = [Src::ssa(lanes[c]), Src::ssa(lanes[c + 1])];
-                lv.conv[k][c] = Some(row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 2 }, &s)?);
-                c += 2;
-            }
-            Some(false) => {
-                lv.conv[k][c] = Some(row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &[Src::ssa(lanes[c])])?);
-                c += 1;
-            }
-            None => c += 1,
+    Ok(())
+}
+
+/// The fp16 conversion of load `k` whose first lane is `c`: the aligned
+/// pair `c`, `c + 1` as one (`V2F32_TO_V2F16`) when `form` says so, else
+/// lane `c` alone (`FADD.f32 .h0`); the load made first if it is not yet.
+fn conversion(
+    p: &mut Prog<'_>,
+    f: &Fs<'_>,
+    k: usize,
+    c: u8,
+    form: &[[Option<bool>; 4]; MAX_VARYINGS],
+    lv: &mut Leaves,
+    rows: &mut u128,
+) -> Result<(), MaliError> {
+    load(p, f, k, lv)?;
+    let c = c as usize;
+    let comps = f.varyings[k].comps as usize;
+    let lane = |c: usize| lv.raw[k].get(c).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex));
+    match form[k].get(c).copied().flatten() {
+        Some(true) if c + 1 < comps => {
+            let s = [Src::ssa(lane(c)?), Src::ssa(lane(c + 1)?)];
+            lv.conv[k][c] = Some(row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 2 }, &s)?);
         }
+        Some(false) => {
+            let s = [Src::ssa(lane(c)?)];
+            lv.conv[k][c] = Some(row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &s)?);
+        }
+        _ => return Err(MaliError::Defect(Defect::IrIndex)),
     }
     Ok(())
 }
+
+/// No lane: the end of a load's conversion order ([`convert`]).
+const NO_LANE: u8 = u8::MAX;
 
 /// Look-up `j` (`bi_emit_tex_valhall`): the coordinate's two fp32 lanes
 /// collected as the staging words, the handle's two words (its descriptor
@@ -9572,8 +10362,9 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
         None if t.fetch => (super::bir::LodMode::Fetch, plain),
         None if t.zero => (super::bir::LodMode::Zero, plain),
         Some(_) if t.bias != Val::Undef => (super::bir::LodMode::ComputedBias, super::bir::TexDim::Cube),
-        Some(Cube { explicit: true }) => (super::bir::LodMode::Explicit, super::bir::TexDim::Cube),
-        Some(Cube { explicit: false }) => (super::bir::LodMode::Zero, super::bir::TexDim::Cube),
+        Some(Cube { lod: CubeLod::Explicit }) => (super::bir::LodMode::Explicit, super::bir::TexDim::Cube),
+        Some(Cube { lod: CubeLod::Zero }) => (super::bir::LodMode::Zero, super::bir::TexDim::Cube),
+        Some(Cube { lod: CubeLod::Computed }) => (super::bir::LodMode::Computed, super::bir::TexDim::Cube),
         None => (super::bir::LodMode::Computed, plain),
     };
     let tail = (1u8 << (8 - t.lanes.leading_zeros())) - 1;

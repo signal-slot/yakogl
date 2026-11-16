@@ -467,7 +467,7 @@ they are not marginal in the way the numbers suggest.
 **Measured 2026-09-22, and it is the largest quality defect this file has
 had.** dEQP's `hsl_to_rgb_vertex` -- the shader that hangs the GC7000 (task
 #52g) -- compiled to **222 instructions in 60 temps** where the reference
-compiler needs 50 in 10. Broken down by opcode through `tests/gltest_diff.rs`:
+compiler needs 50 in 10. Broken down by opcode through `gltest_diff.rs` (removed from the tree):
 
 | | instructions | `mov` | `select` | branch | real work |
 |---|---|---|---|---|---|

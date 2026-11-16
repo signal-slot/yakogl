@@ -1,20 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 /* ---- case 243: instanced draw, divisors 2, 3 and 4 together (divmix) ---------
- * The case number is PROVISIONAL: it is the highest case number of gl_test.c on
- * origin/main (242) plus one, taken when this file was written. Item gltest-wire
- * takes the number that is free then. Not wired in, built and not run.
- *
- * Wiring (gl_test.c, item gltest-wire): after the last include of the .inc files
- * (`#include "gl_test_es3_precision.inc"` on origin/main when this was written)
- *
- *   #include "gl_test_es3_divmix.inc"
- *
- * and in the dispatch switch (next to `case 221: rc = case_instmix(); break;`)
- *
- *   case 243: rc = case_divmix(); break;
- *
- * and one line for it in the case list of gl_test.c's header comment. The file
+ * Wired into gl_test.c as case 243 (include after gl_test_es3_precision.inc,
+ * `case 243: rc = case_divmix();` in the dispatch, a row in the header list and
+ * in case_names). Built, not run on a board. The file
  * uses that file's static helpers (link_program, read_topdown, expect_px,
  * check_gl_error, free_all_objects, TW, TH) and the online shader path like
  * instmix (gl_test_es300_vcolor_fs_src); no gl_test_shaders.h change.
@@ -63,7 +52,7 @@
  * (8,53) shows instance 11's colour), for arrays and for elements. A back end
  * with a wrong multiplier/shift places every cell but gives a wrong channel in
  * some: a divisor 3 stream stepping like divisor 2 gives g wrong from
- * instance 3 on, a divisor 4 stream stepping like divisor 2 reads b past its
+ * instance 2 on (element 1 where 0 is wanted), a divisor 4 stream stepping like divisor 2 reads b past its
  * three elements from instance 6 on. */
 static const char divmix_vs_src[] =
 	"#version 300 es\n"

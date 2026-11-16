@@ -712,6 +712,17 @@ type IndexList = (u32, u64, u32, u32);
 struct Rig {
     prev_osal: *const OsalOps,
     gl: TestGl,
+    /// The in-process compiler's test lock, for the rig's whole life: the
+    /// rig puts every option back to 0, `PVR_BACKEND_OPT_IF_LOWERING`
+    /// included, and that option is the compiler's `if` lowering switch
+    /// (`shaderc::set_if_lowering`), which a compile test sets and reads
+    /// across a sequence of compiles under this lock. A rig without it reset
+    /// the switch in the middle of such a sequence
+    /// (`a_rig_waits_for_a_compile_sequence_that_set_the_if_lowering_switch`).
+    /// Taken after TestGl, the order every other test uses (the V3D rig
+    /// holds it the same way).
+    #[cfg(feature = "shaderc-online")]
+    _compiler: crate::shaderc::online::store::Serial,
     fvs: Box<ShcShader>,
     ffs: Box<ShcShader>,
 }
@@ -719,6 +730,8 @@ struct Rig {
 impl Rig {
     fn new() -> Rig {
         let gl = TestGl::new(4, 4);
+        #[cfg(feature = "shaderc-online")]
+        let compiler = crate::shaderc::online::store::test_lock();
         *PLATFORM.lock().unwrap_or_else(|e| e.into_inner()) = Some(Platform::default());
         *GEN.lock().unwrap_or_else(|e| e.into_inner()) = Some(GenLog::default());
         // SAFETY: tests are serialised by the TestGl guard.
@@ -749,7 +762,14 @@ impl Rig {
         fs.meta_off = SHC_NO_META;
         fs.num_outputs = 1;
         fs.temps = 3;
-        let rig = Rig { prev_osal, gl, fvs: Box::new(vs), ffs: Box::new(fs) };
+        let rig = Rig {
+            prev_osal,
+            gl,
+            #[cfg(feature = "shaderc-online")]
+            _compiler: compiler,
+            fvs: Box::new(vs),
+            ffs: Box::new(fs),
+        };
         rig.reset_records();
         rig
     }
@@ -2717,6 +2737,43 @@ fn the_if_lowering_option_sets_the_compilers_switch() {
         pvr_backend_set_option(PVR_BACKEND_OPT_IF_LOWERING, v);
         assert_eq!(if_lowering(), want, "value {v}");
     }
+}
+
+/// The `if` lowering switch is the compiler's state: a compile reads it
+/// under the compiler's lock (`store::test_lock`), and a test that sets it
+/// and then compiles holds that lock across the sequence
+/// (`the_if_lowering_switch_keys_the_record_and_its_variants_keep_it`).
+/// A rig puts every option, the switch included, back to 0, so a rig
+/// started on another thread must wait for such a sequence to end. It
+/// did not: the rig held only the GL lock (`TestGl`), reset the switch
+/// between two compiles of that test, and the second compile came back
+/// with the default record ("the same switch, the same record", once in a
+/// whole gate run). Here the window is held open on purpose: with the
+/// compiler's lock held and the switch on `Branch`, a rig on another
+/// thread must not get through `Rig::new` while we wait for it.
+///
+/// Revert check: a rig without the compiler's lock finishes at once, and
+/// the switch reads `Default`.
+#[test]
+#[cfg(feature = "shaderc-online")]
+fn a_rig_waits_for_a_compile_sequence_that_set_the_if_lowering_switch() {
+    use crate::shaderc::online::store;
+    use crate::shaderc::{if_lowering, set_if_lowering, IfLowering};
+    let serial = store::test_lock();
+    set_if_lowering(IfLowering::Branch.as_u32());
+    let (tx, rx) = std::sync::mpsc::channel();
+    let rig = std::thread::spawn(move || {
+        let _rig = Rig::new();
+        tx.send(()).unwrap();
+    });
+    /* a rig that does not wait finishes in milliseconds when it runs alone */
+    let got_through = rx.recv_timeout(std::time::Duration::from_millis(500)).is_ok();
+    let seen = if_lowering();
+    set_if_lowering(IfLowering::Default.as_u32());
+    drop(serial);
+    rig.join().unwrap();
+    assert_eq!(seen, IfLowering::Branch, "a rig on another thread reset the switch under the sequence");
+    assert!(!got_through, "a rig got through while a compile sequence held the compiler's lock");
 }
 
 /// PVR_BACKEND_OPT_FS_TEMPS_MIN raises the temporaries the fragment kick

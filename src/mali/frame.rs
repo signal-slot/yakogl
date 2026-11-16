@@ -42,7 +42,10 @@
 //! caller gives an attachment only to a frame whose depth and stencil start
 //! from known values. A draw writes colour through a colour mask; a draw
 //! that writes no colour runs no fragment shader, as in Mesa's frame
-//! (`panfrost_fs_required`), and writes only depth and stencil.
+//! (`panfrost_fs_required`), and writes only depth and stencil. A frame
+//! with no colour surface at all (a depth-only framebuffer, glmark2's
+//! shadow pass: [`begin_frame_depth_only`]) has Mesa's one dummy render
+//! target, which stores nothing (docs/notes/mali-depth-only.md).
 //!
 //! What the builder does not build, each refused by name ([`FrameError`]):
 //! a frame without a colour clear (that needs the preload of the old image),
@@ -199,12 +202,12 @@ pub const INVALID_OQ_ALIGN: &str = "mali frame: an occlusion counter not 8-byte 
 /// `pan_blend_can_fixed_function`; or constants that differ between the
 /// channels read, `pan_blend_is_homogenous_constant`, `panfrost_get_blend`)
 /// drawn without one ([`DrawCall::blend_shader`]): the backend builds the
-/// constant colour's blend shaders into a single-sampled RGBA8 target
-/// written whole, case 211's 4x constant colour and case 190's GL_MIN and
-/// ONE_MINUS_DST_ALPHA columns (src/mali/blend.rs `shader_equation`); no
-/// other.
+/// blend shader of any equation and colour mask into an RGBA8 target at 1x
+/// or 4x (src/mali/blend.rs `shader_key`) unless its compile refuses it
+/// (src/shaderc/online/mali/blend_nir.rs: a transform or condition of
+/// Mesa's it does not build); no other target.
 pub const NOT_BUILT_BLEND_SHADER: &str =
-    "mali frame: a blend shader other than a constant colour's (min/max, SRC_ALPHA_SATURATE, unmatched factors, separate colour and alpha, a masked, 4x or non-RGBA8 target) is not built yet";
+    "mali frame: a blend shader into a target other than RGBA8 at 1x or 4x, or one the blend shader compiler refuses, is not built yet";
 /// [`DrawCall::blend_shader`] not on 16 bytes, outside the fragment
 /// program's 4 GiB window (the descriptor holds its low 32 bits, Mesa
 /// 26.2.1 pan_cmdstream.c:365-377), or given for a draw whose blend the
@@ -217,8 +220,8 @@ pub const NOT_BUILT_SAMPLES: &str = "mali frame: a target of other than 1 or 4 s
 /// does not run on floats (`blend::can_fixed_function_float`: a factor
 /// other than ZERO, ONE, SRC_ALPHA and ONE_MINUS_SRC_ALPHA, min or max):
 /// Mesa 26.2.1 runs it in a blend shader (`panfrost_get_blend`,
-/// pan_context.c:170-200), which `blend::shader_equation` builds for
-/// RGBA8888 only. The float equations and colour masks are built, with
+/// pan_context.c:170-200), which `blend::shader_key` builds for RGBA8888
+/// only. The float equations and colour masks are built, with
 /// the frame's tile buffer in RGBA16F ([`OpenFrame::float_blend`]).
 pub const NOT_BUILT_FLOAT_BLEND: &str =
     "mali frame: a blend into an RGBA16F target that needs a blend shader (a factor other than ZERO, ONE, SRC_ALPHA or ONE_MINUS_SRC_ALPHA, min or max) is not built yet";
@@ -255,6 +258,11 @@ const END_FRAME_WORDS: usize = 24;
 const RESOLVE_WORDS: usize = 2 + END_FRAME_WORDS;
 /// An [`OpenFrame`] not made by [`begin_frame`]: a caller defect.
 pub const INVALID_OPEN_FRAME: &str = "mali frame: an open frame without its framebuffer descriptor or local storage";
+/// A frame with no colour surface ([`begin_frame_depth_only`]) given what
+/// only a colour surface has: a colour preload, a sample store or colour
+/// targets 1..; the caller's defect (there is no image to load or keep).
+pub const INVALID_DEPTH_ONLY: &str =
+    "mali frame: a frame with no colour surface given a colour preload, a sample store or more colour targets";
 
 /// `TILER_FEATURES` max_levels of the one board measured (0x809).
 const MEASURED_TILER_LEVELS: u32 = 8;
@@ -1703,6 +1711,13 @@ pub struct OpenFrame {
     /// pan_desc.c:678-714), not the RAW64 of the board's Mesa 25.0.7 that
     /// an opaque frame keeps. The writeback's memory is the same halves.
     pub float_blend: bool,
+    /// The frame has no colour surface ([`begin_frame_depth_only`]): the
+    /// `t` every call takes gives its size and sample count only. Its one
+    /// render target is Mesa's dummy, which stores nothing (`pan_emit_rt`
+    /// for `!rt`, Mesa 26.2.1 pan_desc.c:984-1001); every draw's target is
+    /// "unbacked": blend off, no fragment shader unless it has side
+    /// effects, render target mask 0 ([`emit_draw`]).
+    pub no_colour: bool,
 }
 
 impl OpenFrame {
@@ -1735,6 +1750,17 @@ impl OpenFrame {
             && self.colour_preload.is_none()
             && self.zs_preload.is_none();
         require(plain, NOT_BUILT_MRT)
+    }
+
+    /// What a frame with no colour surface must not have
+    /// ([`INVALID_DEPTH_ONLY`]).
+    fn check_depth_only(&self) -> Result<(), FrameError> {
+        let has_colour_state =
+            self.colour_preload.is_some() || self.sample_store.is_some() || self.more_targets[0].is_some();
+        if self.no_colour && has_colour_state {
+            return Err(FrameError::Invalid(INVALID_DEPTH_ONLY));
+        }
+        Ok(())
     }
 }
 
@@ -2018,7 +2044,39 @@ pub fn begin_frame_targets(desc: &mut Arena, cs: &mut Stream, more: &[Target]) -
         sample_store: None,
         more_targets,
         float_blend: false,
+        no_colour: false,
     })
+}
+
+/// [`begin_frame`] for a framebuffer with no colour attachment, only depth
+/// and/or stencil (glmark2's shadow pass): the same blocks (the
+/// framebuffer descriptor's room holds one render target, as Mesa's
+/// `alloc_fbd` of `MAX2(rt_count, 1)`, pan_csf.c:120-126), and the frame
+/// marked [`OpenFrame::no_colour`]. Its target `t` names the size (the
+/// depth/stencil attachment's) and the samples; its address, row stride
+/// and format are not read.
+pub fn begin_frame_depth_only(desc: &mut Arena, cs: &mut Stream) -> Result<OpenFrame, FrameError> {
+    let mut f = begin_frame_targets(desc, cs, &[])?;
+    f.no_colour = true;
+    Ok(f)
+}
+
+/// Mesa's render target for a frame slot with no surface (`pan_emit_rt`,
+/// Mesa 26.2.1 src/panfrost/lib/pan_desc.c:984-1001, `!rt`): clean tile
+/// write off (`pan_get_clean_tile_info`, :1270-1279, runs over
+/// `fb->rt_count`, 0 here), internal buffer offset 0, no clear
+/// (`rt_clear` of a slot not cleared, :964-976), dithering on, the tile
+/// buffer R8G8B8A8, writeback block format Tiled U-Interleaved (v7+), and
+/// every other field its zero: Write Enable off, so nothing is stored.
+fn dummy_render_target() -> RgbRenderTarget {
+    RgbRenderTarget {
+        writeback_mode: WritebackMode::COMPAT,
+        internal_buffer_offset: 0,
+        internal_format: ColorBufferInternalFormat::R8G8B8A8,
+        dithering_enable: true,
+        writeback_block_format: BlockFormat::TILED_U_INTERLEAVED,
+        ..Default::default()
+    }
 }
 
 /// Add one draw to an open frame. `has_zs`: the frame will be ended with a
@@ -2042,6 +2100,7 @@ pub fn add_draw(
 ) -> Result<(), FrameError> {
     check_target(t)?;
     open.check_targets(t)?;
+    open.check_depth_only()?;
     check_draw(d, ctx, t, &open.more_targets, has_zs)?;
     /* a draw whose scissor is empty draws nothing (pan_cmdstream.c:3186-3191
      * and `panfrost_batch_skip_rasterization`) */
@@ -2095,6 +2154,7 @@ pub fn end_frame(
 ) -> Result<Frame, FrameError> {
     check_target(t)?;
     open.check_targets(t)?;
+    open.check_depth_only()?;
     if open.uses_zs && zs.is_none() {
         return Err(FrameError::Invalid(INVALID_NO_ZS));
     }
@@ -2130,7 +2190,12 @@ pub fn end_frame(
     /* GENX(csf_emit_fbds) / pan_emit_fbd (Mesa 26.2.1 pan_desc.c:1380-1460):
      * the framebuffer parameters, the ZS/CRC extension when there is a
      * depth/stencil attachment, the render target after them */
-    let (tile, cbuf_allocation) = tile_size_of(open.colour_targets(t));
+    /* a frame with no colour surface sizes its tile for the dummy target,
+     * RGBA8 at the frame's samples ("dummy/non-existent render-targets use
+     * RGBA8 UNORM", `pan_cbuf_bytes_per_pixel`, pan_desc.c:569-592) */
+    let dummy = Target { format: TargetFormat::Rgba8888, ..*t };
+    let (tile, cbuf_allocation) =
+        if open.no_colour { tile_size_of(core::iter::once(&dummy)) } else { tile_size_of(open.colour_targets(t)) };
     let rt_count = open.target_count();
     let mut params = FramebufferParameters {
         pre_frame_0: PrePostFrameShaderMode::NEVER,
@@ -2245,7 +2310,10 @@ pub fn end_frame(
      * RGBA8 targets, 8192 for fsout_106_mrt3's third). Targets 1.. are
      * single-sampled without a store ([`OpenFrame::check_targets`]) */
     let mut internal_buffer_offset = 0;
-    for (i, ti) in open.colour_targets(t).enumerate() {
+    if open.no_colour {
+        desc.write(fbd, rt_at, &dummy_render_target().pack()?)?;
+    }
+    for (i, ti) in open.colour_targets(t).enumerate().filter(|_| !open.no_colour) {
         let (internal_format, writeback_format) = ti.format.formats();
         let (writeback_msaa, writeback_buffer) = if i == 0 {
             (writeback_msaa, writeback_buffer)
@@ -3089,7 +3157,11 @@ fn emit_draw(
      * 38; `check_draw` refused every other side effect), and the target's
      * blend off either way (`panfrost_emit_blend`, pan_cmdstream.c:298-307:
      * a target no channel of which is written is not enabled) */
-    let writes_colour = mask != 0;
+    /* a frame with no colour surface has no target the draw writes: the
+     * loop over `nr_cbufs` (0) finds none (pan_cmdstream.h:226-230) and the
+     * dummy target's blend is off ("Disable blending for unbacked render
+     * targets", pan_cmdstream.c:298-307: `rt_count == 0`) */
+    let writes_colour = mask != 0 && !open.no_colour;
     let fs_required = writes_colour || d.alpha_to_coverage || fs.meta.can_discard;
     let blending = d.blend.filter(|_| writes_colour);
     let load_dest = (mask != 0xf && writes_colour) || blending.is_some_and(|b| super::blend::reads_dest(&b));
@@ -3518,7 +3590,11 @@ fn emit_draw(
     /* the targets the shader writes, none without one: `outputs_written`
      * cut by `fb_rt_mask` (pan_csf.c:1641-1648; 0x3 in fsout_55_es3mrt,
      * 0x7 in fsout_106_mrt3) */
-    let rt_mask = if fs_required { fs.meta.colour_outputs & ((1 << rt_count) - 1) } else { 0 };
+    /* `ctx->fb_rt_mask` is 0 with no colour buffer (pan_context.c:457-462),
+     * so a depth-only frame's draw writes no target even when its shader
+     * runs (it discards) */
+    let fb_rt_mask = if open.no_colour { 0 } else { (1 << rt_count) - 1 };
+    let rt_mask = if fs_required { fs.meta.colour_outputs & fb_rt_mask } else { 0 };
     /* `rast->multisample ? ctx->sample_mask : 0xFFFF` (pan_csf.c:1639).
      * st/mesa's mask is all ones cut by glSampleCoverage, its invert over
      * all 16 bits (the board's Mesa: coverage off 0xFFFF, 0.5 0x0003, 0.5

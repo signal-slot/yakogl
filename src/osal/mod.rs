@@ -19,6 +19,9 @@ pub mod render;
 
 /// A chunk of GPU-visible memory (`struct osal_gpu_mem`). `cpu` may be null
 /// if the platform cannot CPU-map it (then use `gpu_write`/`gpu_read`).
+/// `impl_` is the platform's handle: non-null in every descriptor that names
+/// memory (an allocation's and a `map_phys` window's alike), because the
+/// library takes a null one for no memory (include/gles_osal.h).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct OsalGpuMem {

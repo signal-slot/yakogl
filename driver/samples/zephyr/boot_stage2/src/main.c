@@ -9,12 +9,14 @@
  * compressed payload is linked into this image at build time) or from a raw
  * sector range of the eMMC user area (BOOT_STAGE2_SOURCE_EMMC), checks it,
  * puts it at its load address and jumps to it with the MMU and caches off,
- * at EL1.
+ * at EL1. A header of version 1 or 2 describes one image; version 3 a table
+ * of segments, each at its own load address (loader/src/lib.rs).
  *
  * This file is the Zephyr side only: the payload's source (the eMMC through
  * Zephyr's SD stack and the TI AM654 SDHCI driver, or the linked bytes), the
- * log, quiescing the controller and the cache maintenance. The header check,
- * the CRC-32s, the inflate and the jump are Rust (loader/, include/boot_stage2.h).
+ * log, clearing the zero ranges, quiescing the controller and the cache
+ * maintenance. The header check, the CRC-32s, the decoders and the jump are
+ * Rust (loader/, include/boot_stage2.h).
  */
 
 #include <zephyr/kernel.h>
@@ -28,12 +30,18 @@
 #include <zephyr/drivers/sdhc.h>
 #include <zephyr/storage/disk_access.h>
 #endif
+#ifdef CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST
+#include <zephyr/drivers/pm_cpu_ops.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/sd/sd_spec.h>
+#endif
 
 #include "boot_stage2.h"
 
 /* The success-path log (BOOT_STAGE2_PROGRESS_LOG): the console is polled,
  * so each line holds the boot for its length at the UART's rate. Errors
- * always print (printk). Off, the arguments are still type-checked. */
+ * always print (printk). Off, the arguments are still type-checked, and a
+ * good boot prints nothing, or one short line (BOOT_STAGE2_SUMMARY_LINE). */
 #define progress(...)                                                                              \
 	do {                                                                                       \
 		if (IS_ENABLED(CONFIG_BOOT_STAGE2_PROGRESS_LOG)) {                                 \
@@ -43,7 +51,8 @@
 
 /*
  * The loader's own timeline, for the image after it to report: the system
- * counter (CNTPCT_EL0, started by SPL) at the loader's stages, written into
+ * counter (CNTPCT_EL0, started by SPL) at the loader's stages, written
+ * (BOOT_STAGE2_STAMP_PAGE: the i.MX8MP) into
  * a page of this loader's RAM that nothing else uses -- the middle of its
  * 32 MiB, well past the loader and the devicetree SPL appends to it, and
  * below the top of the region, where Zephyr places device mappings. The
@@ -51,7 +60,9 @@
  * stamps and clears the magic. Layout, also in the image's board_route3.c:
  * magic, count, then u64 t[8]: entry, main, payload in memory, unpacked
  * (both CRCs checked), jump, stored CRC checked (BS2_MARK_STORED_CHECKED),
- * decoded (BS2_MARK_DECODED), zero range cleared.
+ * decoded (BS2_MARK_DECODED), zero range cleared. With a version-3 header
+ * each segment stamps "in memory", "stored CRC checked" and "decoded", so
+ * what stays is the last segment's: every segment in memory, checked, decoded.
  */
 #define BS2_STAMP_ADDR  0x41000000u
 #define BS2_STAMP_MAGIC 0x54325342u /* 'BS2T' */
@@ -177,11 +188,24 @@ static int bs2_stamp_entry(void)
 }
 SYS_INIT(bs2_stamp_entry, PRE_KERNEL_1, 0);
 
+#ifdef CONFIG_BOOT_STAGE2_STAMP_PAGE
+BUILD_ASSERT(BS2_STAMP_ADDR >= CONFIG_SRAM_BASE_ADDRESS &&
+	     BS2_STAMP_ADDR + CONFIG_MMU_PAGE_SIZE <= CONFIG_SRAM_BASE_ADDRESS + CONFIG_SRAM_SIZE * 1024ull,
+	     "the stamp page lies in the loader's own RAM");
+#endif
+
 /* Map the page and write the record; the magic last. Called just before the
- * jump, after the last stamp. */
+ * jump, after the last stamp. Not without BOOT_STAGE2_STAMP_PAGE: the
+ * address is this loader's RAM on the i.MX8MP only (the AM62P's DDR begins
+ * at 0x80000000); elsewhere the stamps stay in .bss, where the summary line
+ * reads the one it prints. */
 static void bs2_stamps_publish(void)
 {
 	uint8_t *va = NULL;
+
+	if (!IS_ENABLED(CONFIG_BOOT_STAGE2_STAMP_PAGE)) {
+		return;
+	}
 
 	k_mem_map_phys_bare(&va, BS2_STAMP_ADDR, CONFIG_MMU_PAGE_SIZE,
 			    K_MEM_CACHE_WB | K_MEM_PERM_RW);
@@ -261,20 +285,319 @@ static int read_sectors(uint8_t *buf, uint32_t first, uint32_t count)
 	}
 	return 0;
 }
+
+/* An uncompressed image or segment straight to its load address: the whole
+ * sectors, then the last partial one through the header buffer (the header
+ * is parsed by now), so nothing past its image bytes is written: what
+ * follows them may be a zero range, which the zero thread is clearing, or
+ * another segment. */
+static int read_in_place(uint8_t *dst, uint32_t first, uint64_t bytes)
+{
+	uint32_t whole = (uint32_t)(bytes / SECTOR_BYTES);
+	size_t tail = (size_t)(bytes % SECTOR_BYTES);
+
+	if (read_sectors(dst, first, whole)) {
+		return -1;
+	}
+	if (tail) {
+		if (read_sectors(hdr, first + whole, 1)) {
+			return -1;
+		}
+		memcpy(dst + (size_t)whole * SECTOR_BYTES, hdr, tail);
+	}
+	return 0;
+}
 #endif
+
+/*
+ * The zero ranges, cleared on a thread of their own: a version-2 header's
+ * one range (the .bss of an image that skips its own clear) and each
+ * segment's zero bytes of a version-3 one (the zero runs the payload does not
+ * store, and the .bss). The loader runs with the MMU and the caches on,
+ * where a clear is fast (the image's reset path would clear its .bss with
+ * them off), and main() sleeps while the eMMC's DMA runs: this thread has
+ * the lowest application priority, so it gets exactly that time, and main(),
+ * woken by the SDHC interrupt, always runs first. With the payload linked in
+ * there is no such wait; the thread then runs when main() waits for it,
+ * after the unpack, which is where main() cleared the range itself before.
+ *
+ * The clear is the C library's memset: in this speed-optimised build that is
+ * the toolchain's aarch64 routine, which zeroes a long range with DC ZVA, one
+ * 64-byte block an instruction without reading it from memory first (it
+ * reads DCZID_EL0 and stores pairs when the core forbids the instruction).
+ * On the AM62P a loop of the same instruction cleared the showcase's 57 MB
+ * in 8 ms of this thread's time while the eMMC read ran, and main() waited
+ * 0 ms for it (2026-11-13, a loader built for size, whose memset stored
+ * bytes).
+ *
+ * No lock: the header check (loader/src/lib.rs) guarantees that a zero range
+ * shares no byte with the image bytes of the image or of any segment, with
+ * another zero range or with the staging buffer, and the reads below write
+ * nothing past the bytes they are for, so nothing main() reads, copies or
+ * decodes lands in a range this thread writes. The whole-cache flush before
+ * the jump comes after main() has taken zero_done.
+ */
+#define ZERO_PRIORITY K_LOWEST_APPLICATION_THREAD_PRIO
+BUILD_ASSERT(ZERO_PRIORITY > CONFIG_MAIN_THREAD_PRIORITY, "the clear runs under main()");
+
+static struct {
+	uint8_t *at;
+	size_t bytes;
+} zero_ranges[1 + BS2_MAX_SEGMENTS];
+static uint32_t zero_count;
+/* From the thread's first instruction to its last, the times main()
+ * preempted it included. Read by main() after zero_done. */
+static int64_t zero_thread_ms;
+/* In .bss, not K_SEM_DEFINE's initialised data: the range
+ * BOOT_STAGE2_RESTART copies stays what it was. */
+static struct k_sem zero_done;
+static K_THREAD_STACK_DEFINE(zero_stack, 4096);
+static struct k_thread zero_thread;
+
+static void zero_entry(void *p1, void *p2, void *p3)
+{
+	int64_t t = k_uptime_get();
+
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+	for (uint32_t i = 0; i < zero_count; i++) {
+		memset(zero_ranges[i].at, 0, zero_ranges[i].bytes);
+	}
+	zero_thread_ms = k_uptime_get() - t;
+	k_sem_give(&zero_done);
+}
+
+/* Start the clear of every zero range of the header, in table order. The
+ * number of bytes; 0: nothing to clear, no thread. */
+static uint64_t zero_start(const struct bs2_info *info)
+{
+	uint64_t total = 0;
+
+	if (info->zero_bytes != 0u) {
+		zero_ranges[zero_count].at = (uint8_t *)(LOAD + (uintptr_t)info->zero_offset);
+		zero_ranges[zero_count].bytes = (size_t)info->zero_bytes;
+		zero_count++;
+		total += info->zero_bytes;
+	}
+	for (uint32_t i = 0; i < info->count; i++) {
+		const struct bs2_segment *s = &info->segments[i];
+
+		if (s->zero_bytes != 0u) {
+			zero_ranges[zero_count].at = (uint8_t *)(uintptr_t)(s->load + s->image_bytes);
+			zero_ranges[zero_count].bytes = s->zero_bytes;
+			zero_count++;
+			total += s->zero_bytes;
+		}
+	}
+	if (zero_count) {
+		k_sem_init(&zero_done, 0, 1);
+		k_thread_create(&zero_thread, zero_stack, K_THREAD_STACK_SIZEOF(zero_stack), zero_entry,
+				NULL, NULL, NULL, ZERO_PRIORITY, 0, K_NO_WAIT);
+	}
+	return total;
+}
+
+/* Wait until the clear is done. The milliseconds main() waited. */
+static int64_t zero_wait(void)
+{
+	int64_t t = k_uptime_get();
+
+	if (zero_count) {
+		(void)k_sem_take(&zero_done, K_FOREVER);
+	}
+	return k_uptime_get() - t;
+}
+
+#ifdef CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST
+/*
+ * The way back to the other boot chain without a button (the Verdin AM62P:
+ * Toradex's chain in boot0, this one in boot1). BOOT_STAGE2_BOOT0_WORD on the
+ * console while the loader runs makes it point the eMMC's boot operation at
+ * boot partition 1 again and reset the SoC, so the ROM's next read is the
+ * other chain. The request was a single 'T' at first; a serial adapter
+ * plugged into a PC brought the board up in the other chain by itself on
+ * 2026-11-12 (a modem prober's "AT" is enough), hence a word nobody sends by
+ * accident.
+ *
+ * One byte of the EXT_CSD is written, PARTITION_CONFIG (179), with CMD6
+ * SWITCH in its write-byte mode, and nothing else ever: no boot write
+ * protection, no RST_n function, no other field. 0x48 is BOOT_ACK kept,
+ * BOOT_PARTITION_ENABLE = 1 (boot0), PARTITION_ACCESS = 0 (user area); the
+ * value this chain runs under is 0x50 (enable = 2, boot1). Coming back is
+ * `mmc bootpart enable 2 1 /dev/mmcblk0` in Linux.
+ */
+#define EXT_CSD_PARTITION_CONFIG 179u
+#define PARTITION_CONFIG_BOOT0   0x48u
+#define MMC_SWITCH_WRITE_BYTE    3u
+#define MMC_STATUS_SWITCH_ERROR  BIT(7)
+#define MMC_STATUS_READY         BIT(8)
+#define MMC_STATUS_STATE(s)      (((s) >> 9) & 0xfu)
+#define MMC_STATE_TRAN           4u
+
+static uint8_t ext_csd[512] __aligned(64);
+
+/* Whether the word has arrived on the console. Never waits: it takes what
+ * the UART's receiver holds now and returns. The match carries over from one
+ * look to the next. The word's first character occurs in it once (the rule
+ * in the option's help; the default keeps it), so a mismatch only has to be
+ * tried as a new start. */
+static bool boot0_requested(void)
+{
+	static const char word[] = CONFIG_BOOT_STAGE2_BOOT0_WORD;
+	static size_t matched;
+	static bool seen;
+	const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	unsigned char c;
+
+	if (!device_is_ready(uart)) {
+		return false;
+	}
+	for (int i = 0; i < 256 && uart_poll_in(uart, &c) == 0; i++) {
+		if (c != (unsigned char)word[matched]) {
+			matched = 0;
+		}
+		if (c == (unsigned char)word[matched] && ++matched == sizeof(word) - 1) {
+			seen = true;
+			matched = 0;
+		}
+	}
+	return seen;
+}
+BUILD_ASSERT(sizeof(CONFIG_BOOT_STAGE2_BOOT0_WORD) - 1 >= 8, "a request word of at least 8 characters");
+
+static int ext_csd_read(const struct device *sdhc)
+{
+	struct sdhc_command cmd = {
+		.opcode = MMC_SEND_EXT_CSD,
+		.response_type = SD_RSP_TYPE_R1,
+		.timeout_ms = CONFIG_SD_CMD_TIMEOUT,
+	};
+	struct sdhc_data data = {
+		.block_size = sizeof(ext_csd),
+		.blocks = 1,
+		.data = ext_csd,
+		.timeout_ms = CONFIG_SD_DATA_TIMEOUT,
+	};
+
+	return sdhc_request(sdhc, &cmd, &data);
+}
+
+/* PARTITION_CONFIG = boot0, checked by reading it back. 0 when the card
+ * holds the new value. */
+static int boot0_select(const struct device *sdhc)
+{
+	struct sdhc_command sw = {
+		.opcode = SD_SWITCH,
+		.arg = (MMC_SWITCH_WRITE_BYTE << 24) | (EXT_CSD_PARTITION_CONFIG << 16) |
+		       (PARTITION_CONFIG_BOOT0 << 8),
+		.response_type = SD_RSP_TYPE_R1b,
+		.timeout_ms = 1000,
+	};
+	struct sdhc_command st = {
+		.opcode = SD_SEND_STATUS,
+		.arg = (uint32_t)CONFIG_MMC_RCA << 16,
+		.response_type = SD_RSP_TYPE_R1,
+		.timeout_ms = CONFIG_SD_CMD_TIMEOUT,
+	};
+	uint8_t before;
+	int ret;
+
+	ret = ext_csd_read(sdhc);
+	if (ret) {
+		printk("boot_stage2: boot0 request: EXT_CSD read failed: %d\n", ret);
+		return ret;
+	}
+	before = ext_csd[EXT_CSD_PARTITION_CONFIG];
+	ret = sdhc_request(sdhc, &sw, NULL);
+	if (ret) {
+		printk("boot_stage2: boot0 request: CMD6 failed: %d\n", ret);
+		return ret;
+	}
+	/* The card holds DAT0 low while it programs the byte, then says in its
+	 * status whether it took it. */
+	for (int ms = 0;; ms++) {
+		if (ms == 2000) {
+			printk("boot_stage2: boot0 request: the card stayed busy after CMD6\n");
+			return -ETIMEDOUT;
+		}
+		if (sdhc_card_busy(sdhc) == 0) {
+			st.response[0] = 0;
+			ret = sdhc_request(sdhc, &st, NULL);
+			if (ret == 0 && (st.response[0] & MMC_STATUS_READY) &&
+			    MMC_STATUS_STATE(st.response[0]) == MMC_STATE_TRAN) {
+				break;
+			}
+		}
+		k_busy_wait(1000);
+	}
+	if (st.response[0] & MMC_STATUS_SWITCH_ERROR) {
+		printk("boot_stage2: boot0 request: the card refused the switch (status 0x%08x)\n",
+		       st.response[0]);
+		return -EIO;
+	}
+	memset(ext_csd, 0, sizeof(ext_csd));
+	ret = ext_csd_read(sdhc);
+	if (ret) {
+		printk("boot_stage2: boot0 request: EXT_CSD read-back failed: %d\n", ret);
+		return ret;
+	}
+	printk("boot_stage2: boot0 request: PARTITION_CONFIG 0x%02x -> 0x%02x (wanted 0x%02x)\n", before,
+	       ext_csd[EXT_CSD_PARTITION_CONFIG], PARTITION_CONFIG_BOOT0);
+	return ext_csd[EXT_CSD_PARTITION_CONFIG] == PARTITION_CONFIG_BOOT0 ? 0 : -EIO;
+}
+
+/* Called where the eMMC is up and no transfer is under way. Returns when the
+ * word has not come or the switch failed (the boot then goes on as usual). */
+static void boot0_on_request(void)
+{
+	if (!boot0_requested()) {
+		return;
+	}
+	printk("boot_stage2: \"%s\" on the console: eMMC boot partition 1 (boot0) for the next start\n",
+	       CONFIG_BOOT_STAGE2_BOOT0_WORD);
+	if (boot0_select(DEVICE_DT_GET(SDHC_NODE)) != 0) {
+		printk("boot_stage2: boot0 request failed; booting this chain as usual\n");
+		return;
+	}
+	printk("boot_stage2: resetting the SoC (PSCI SYSTEM_RESET)\n");
+	k_busy_wait(20000); /* the line, out of the UART */
+	(void)pm_system_reset(SYS_COLD_RESET);
+	printk("boot_stage2: the reset did not happen; power-cycle to start from boot0\n");
+	halt();
+}
+#else
+static inline void boot0_on_request(void)
+{
+}
+#endif
+
+static const char *compression_name(uint32_t compression)
+{
+	return compression == BS2_COMPRESSION_DEFLATE ? "deflate"
+	       : compression == BS2_COMPRESSION_LZ4   ? "lz4"
+						      : "uncompressed";
+}
 
 int main(void)
 {
 	bs2_stamp(1);
 	struct bs2_info info;
 	int64_t t0 = k_uptime_get();
+	int64_t t_ready = 0;
 	int ret;
 
 #ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
+	/* A compressed segment of a version-3 payload is read to STAGING + its
+	 * stored offset: the whole range is the staging buffer, and no segment
+	 * may overlap it. */
 	const struct bs2_limits limits = {
 		.load = LOAD,
 		.max_stored = MAX_STORED,
 		.max_image = STAGING - LOAD,
+		.region_end = REGION_END,
+		.staging = STAGING,
+		.staging_bytes = MAX_STORED,
 	};
 	uint32_t disk_sectors = 0;
 
@@ -292,8 +615,9 @@ int main(void)
 		       ret, END_SECTOR);
 		halt();
 	}
-	progress("boot_stage2: eMMC user area %u sectors, ready after %lld ms\n", disk_sectors,
-	       k_uptime_get() - t0);
+	t_ready = k_uptime_get() - t0;
+	progress("boot_stage2: eMMC user area %u sectors, ready after %lld ms\n", disk_sectors, t_ready);
+	boot0_on_request();
 
 	if (read_sectors(hdr, HDR_SECTOR, 1)) {
 		halt();
@@ -305,10 +629,15 @@ int main(void)
 	}
 #else
 	const size_t payload_bytes = (size_t)(bs2_payload_end - bs2_payload_start);
+	/* Nothing is staged: the stored bytes are read from this image's
+	 * .rodata, so a version-3 payload's segments may use the staging range. */
 	const struct bs2_limits limits = {
 		.load = LOAD,
 		.max_stored = payload_bytes > SECTOR_BYTES ? payload_bytes - SECTOR_BYTES : 0,
 		.max_image = STAGING - LOAD,
+		.region_end = REGION_END,
+		.staging = STAGING,
+		.staging_bytes = 0,
 	};
 
 	progress("boot_stage2: image carried in this loader (%zu bytes at %p), load 0x%lx\n", payload_bytes,
@@ -323,13 +652,25 @@ int main(void)
 		halt();
 	}
 #endif
-	progress("boot_stage2: \"%s\": %llu bytes stored (%s), %llu bytes image, entry 0x%llx, "
-	       "%llu bytes zeroed at +0x%llx\n",
-	       info.name, info.stored_bytes,
-	       info.compression == BS2_COMPRESSION_DEFLATE ? "deflate"
-	       : info.compression == BS2_COMPRESSION_LZ4   ? "lz4"
-							   : "uncompressed",
-	       info.image_bytes, info.entry, info.zero_bytes, info.zero_offset);
+	const bool segmented = info.version >= BS2_VERSION_SEGMENTS;
+
+	if (segmented) {
+		progress("boot_stage2: \"%s\": header version %u, %u segment(s), %llu bytes stored, "
+			 "entry 0x%llx\n", info.name, info.version, info.count, info.stored_bytes, info.entry);
+		for (uint32_t i = 0; i < info.count; i++) {
+			const struct bs2_segment *s = &info.segments[i];
+
+			progress("boot_stage2:   [%u] 0x%llx..0x%llx: %llu bytes image (%s, %llu stored at "
+				 "+0x%llx), then %u zero bytes, footprint %llu\n", i, s->load,
+				 s->load + s->image_bytes, s->image_bytes, compression_name(s->compression),
+				 s->stored_bytes, s->stored_offset, s->zero_bytes, s->footprint);
+		}
+	} else {
+		progress("boot_stage2: \"%s\": %llu bytes stored (%s), %llu bytes image, entry 0x%llx, "
+			 "%llu bytes zeroed at +0x%llx\n",
+			 info.name, info.stored_bytes, compression_name(info.compression),
+			 info.image_bytes, info.entry, info.zero_bytes, info.zero_offset);
+	}
 
 	/* What the read and the inflate run on: the MMU and both caches
 	 * (SCTLR_EL1 M, C, I), and the copy bandwidth into the payload region,
@@ -346,45 +687,119 @@ int main(void)
 		       (unsigned)(sctlr & 1), (unsigned)((sctlr >> 2) & 1), (unsigned)((sctlr >> 12) & 1),
 		       (unsigned)(((uint64_t)(c1 - c0) * 1000000u) / sys_clock_hw_cycles_per_sec()));
 	}
-	int64_t t1 = k_uptime_get();
-#ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
-	/* Uncompressed: straight to the load address. Compressed: to the
-	 * staging copy above the image, then decoded down to the load address. */
-	uint8_t *stored = (uint8_t *)(info.compression != BS2_COMPRESSION_NONE ? STAGING : LOAD);
-	uint32_t nsec = (uint32_t)((info.stored_bytes + SECTOR_BYTES - 1) / SECTOR_BYTES);
-
-	if (read_sectors(stored, HDR_SECTOR + 1, nsec)) {
-		halt();
-	}
-#else
-	/* The stored bytes follow the header inside this image; bs2_unpack
-	 * copies or inflates them to the load address. */
-	const uint8_t *stored = bs2_payload_start + SECTOR_BYTES;
+	int64_t t_read = 0, t_unpack = 0;
 	uint32_t nsec = 0;
-#endif
-	int64_t t2 = k_uptime_get();
-	bs2_stamp(2);
+	/* After the probe above, which writes the first MiB at LOAD: a zero
+	 * range may begin there. */
+	const uint64_t zero_total = zero_start(&info);
 
-	ret = bs2_unpack(&info, (uint8_t *)stored, (uint8_t *)LOAD, STAGING - LOAD);
-	if (ret) {
-		printk("boot_stage2: \"%s\" refused: %s\n", info.name, bs2_strerror(ret));
-		halt();
+	if (segmented) {
+		for (uint32_t i = 0; i < info.count; i++) {
+			const struct bs2_segment *s = &info.segments[i];
+			int64_t t1 = k_uptime_get();
+#ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
+			/* Uncompressed: straight to the load address. Compressed:
+			 * to the staging buffer at the segment's stored offset (no
+			 * segment overlaps it: the header check), then decoded to
+			 * the load address. */
+			const uint32_t first = HDR_SECTOR + 1 + (uint32_t)(s->stored_offset / SECTOR_BYTES);
+			const uint32_t n = (uint32_t)((s->stored_bytes + SECTOR_BYTES - 1) / SECTOR_BYTES);
+			uint8_t *stored;
+
+			if (s->compression != BS2_COMPRESSION_NONE) {
+				stored = (uint8_t *)(STAGING + (uintptr_t)s->stored_offset);
+				if (read_sectors(stored, first, n)) {
+					halt();
+				}
+			} else {
+				stored = (uint8_t *)(uintptr_t)s->load;
+				if (read_in_place(stored, first, s->stored_bytes)) {
+					halt();
+				}
+			}
+			nsec += n;
+#else
+			/* The stored bytes follow the header inside this image;
+			 * bs2_segment_unpack copies or decodes them to the load
+			 * address. */
+			const uint8_t *stored = bs2_payload_start + SECTOR_BYTES + (size_t)s->stored_offset;
+#endif
+			int64_t t2 = k_uptime_get();
+			bs2_stamp(2);
+
+			ret = bs2_segment_unpack(&info, i, stored);
+			if (ret) {
+				printk("boot_stage2: \"%s\" segment %u refused: %s\n", info.name, i,
+				       bs2_strerror(ret));
+				halt();
+			}
+			t_read += t2 - t1;
+			t_unpack += k_uptime_get() - t2;
+		}
+	} else {
+		int64_t t1 = k_uptime_get();
+#ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
+		/* Uncompressed: straight to the load address (not a byte past
+		 * the image: a version-2 zero range may begin there, and it is
+		 * being cleared). Compressed: to the staging copy above the
+		 * image, then decoded down to the load address. */
+		uint8_t *stored;
+
+		nsec = (uint32_t)((info.stored_bytes + SECTOR_BYTES - 1) / SECTOR_BYTES);
+		if (info.compression != BS2_COMPRESSION_NONE) {
+			stored = (uint8_t *)STAGING;
+			ret = read_sectors(stored, HDR_SECTOR + 1, nsec);
+		} else {
+			stored = (uint8_t *)LOAD;
+			ret = read_in_place(stored, HDR_SECTOR + 1, info.stored_bytes);
+		}
+		if (ret) {
+			halt();
+		}
+#else
+		/* The stored bytes follow the header inside this image; bs2_unpack
+		 * copies or decodes them to the load address. */
+		const uint8_t *stored = bs2_payload_start + SECTOR_BYTES;
+#endif
+		int64_t t2 = k_uptime_get();
+		bs2_stamp(2);
+
+		ret = bs2_unpack(&info, (uint8_t *)stored, (uint8_t *)LOAD, STAGING - LOAD);
+		if (ret) {
+			printk("boot_stage2: \"%s\" refused: %s\n", info.name, bs2_strerror(ret));
+			halt();
+		}
+		t_read = t2 - t1;
+		t_unpack = k_uptime_get() - t2;
 	}
-	int64_t t3 = k_uptime_get();
 	bs2_stamp(3);
 
-	/* The image's .bss, for an image that skips its own clear (header
-	 * version 2; bs2_header_parse checked the range is past the image and
-	 * inside the region). Here the caches are on; the image's reset path
-	 * would clear it with them off. */
-	if (info.zero_bytes != 0u) {
-		memset((void *)(LOAD + (uintptr_t)info.zero_offset), 0, (size_t)info.zero_bytes);
-	}
+	/* Every image byte is in place; the zero ranges are once this returns. */
+	const int64_t t_zero_wait = zero_wait();
 	bs2_stamp(7);
 
-	progress("boot_stage2: \"%s\" ok (CRC-32 %08x): read %u sectors in %lld ms, unpacked in %lld ms; "
-	       "jumping to 0x%llx at %lld ms\n", info.name, info.image_crc32, nsec, t2 - t1, t3 - t2,
-	       info.entry, k_uptime_get() - t0);
+	/* Once more, with everything read: the last moment the eMMC is up. */
+	boot0_on_request();
+
+	progress("boot_stage2: \"%s\" ok (CRC-32 %08x): read %u sectors in %lld ms, unpacked in %lld ms, "
+		 "cleared %llu bytes in %lld ms on the zero thread (main waited %lld ms for it); "
+		 "jumping to 0x%llx at %lld ms\n", info.name,
+		 segmented ? info.segments[0].image_crc32 : info.image_crc32, nsec, t_read, t_unpack,
+		 zero_total, zero_thread_ms, t_zero_wait, info.entry, k_uptime_get() - t0);
+
+	if (IS_ENABLED(CONFIG_BOOT_STAGE2_SUMMARY_LINE)) {
+		/* The one line of a boot without the progress log: the
+		 * milliseconds until the source was ready, of the reads and of
+		 * the unpack, the zero thread's from its start to its end /
+		 * those main() then waited for it, and the system counter at
+		 * main() in microseconds (the "main" stamp: the clock the
+		 * stages before and after the loader use). The polled console
+		 * has waited for every character but the last, and the image
+		 * starts its UART milliseconds from here: no drain wait. */
+		printk("bs2: %lld %lld %lld %lld/%lld ms @%llu us\n", t_ready, t_read, t_unpack,
+		       zero_thread_ms, t_zero_wait,
+		       (unsigned long long)((bs2_t[1] * 1000000u) / sys_clock_hw_cycles_per_sec()));
+	}
 
 	/* Let the UART drain the last line: the image re-initialises it. */
 	if (IS_ENABLED(CONFIG_BOOT_STAGE2_PROGRESS_LOG)) {

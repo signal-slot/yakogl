@@ -198,6 +198,54 @@ cp -r "$R" "$WORK/badrow"
 sed -i '2s/^build:use-vbo=false/nosuch:scene/' "$WORK/badrow/scenes.tsv"
 check "runner-dir: an unknown scene exits 1" rc_is 1 tally "$WORK/badrow"
 
+# --baseline: the per-scene move from a baseline run, --forward-only the exit status
+check "baseline: default output is unchanged without it" \
+  same "$T/faults.table.expected" table "$T/faults"
+check "baseline: faults -> clean, every failed scene moved forward, exit 0 with --forward-only" \
+  rc_is 0 tally --baseline "$T/faults" --forward-only "$T/clean"
+check "baseline: summary 33 clean (was 25), 8 forward, 0 back" \
+  grep -q '^delta: 33 clean (was 25), 8 moved forward, 0 moved back$' "$WORK/out"
+check "baseline: a missing scene becomes clean" \
+  grep -q '^delta \[loop\] .*: missing -> clean$' "$WORK/out"
+check "baseline: a crash becomes clean" \
+  grep -q '^delta \[jellyfish\] <default>: crash -> clean$' "$WORK/out"
+check "baseline: a refusal becomes clean" \
+  grep -q '^delta \[conditionals\] .*: refused -> clean$' "$WORK/out"
+check "baseline: the table is printed first" \
+  sh -c "head -1 '$WORK/out' | grep -q '^glmark2-mali-tally: build ' && sed -n 2p '$WORK/out' | grep -q '^run clean'"
+check "baseline: clean -> faults moved back, plain exit 0" \
+  rc_is 0 tally --baseline "$T/clean" "$T/faults"
+check "baseline: summary 25 clean (was 33), 0 forward, 8 back" \
+  grep -q '^delta: 25 clean (was 33), 0 moved forward, 8 moved back$' "$WORK/out"
+check "baseline: clean -> not-run is back, named missing" \
+  grep -q '^delta \[loop\] .*: clean -> missing$' "$WORK/out"
+check "baseline: --forward-only exits 4 when a scene moved back" \
+  rc_is 4 tally --baseline "$T/clean" --forward-only "$T/faults"
+check "baseline: the table is still printed on exit 4" grep -q '^scenes run ' "$WORK/out"
+check "baseline: the same run moves nothing, exit 0" \
+  rc_is 0 tally --baseline "$T/clean" --forward-only "$T/clean"
+check "baseline: ... summary 33 clean (was 33), 0 forward, 0 back" \
+  grep -q '^delta: 33 clean (was 33), 0 moved forward, 0 moved back$' "$WORK/out"
+check "baseline: a scene's frame time change on both runs is shown" \
+  sh -c "! grep -q '^delta .*ms ' '$WORK/out'"
+cp -r "$T/clean" "$WORK/slower"
+sed -i 's/FrameTime: [0-9.]* ms/FrameTime: 9.99 ms/' "$WORK/slower/01-build-use-vbo-false.log"
+check "baseline: a frame time change without a move is a delta line, exit 0" \
+  rc_is 0 tally --baseline "$T/clean" --forward-only "$WORK/slower"
+check "baseline: ... 'ms A -> B'" grep -Eq '^delta \[build\] use-vbo=false: clean -> clean; ms [0-9.]+ -> 9.99$' "$WORK/out"
+cp -r "$T/clean" "$WORK/gone"
+rm -f "$WORK"/gone/33-*
+check "baseline: a scene without files is missing; clean -> missing is back, exit 4" \
+  rc_is 4 tally --baseline "$T/clean" --forward-only "$WORK/gone"
+check "baseline: ... named" grep -q '^delta \[loop\] .*: clean -> missing$' "$WORK/out"
+check "baseline: a runner directory is a baseline too" \
+  rc_is 0 tally --baseline "$T/runner-dir" --forward-only "$T/clean"
+check "baseline: another output mode keeps its stdout, the delta on stderr" \
+  sh -c "python3 -I '$TALLY' --table '$TABLE' --baseline '$T/faults' --picture-lines '$T/clean' 2>'$WORK/derr' | cmp -s - '$T/clean.picture-lines.expected' && grep -q '^delta: 33 clean (was 25)' '$WORK/derr'"
+check "baseline: --forward-only without --baseline is usage, exit 2" rc_is 2 tally --forward-only "$T/clean"
+check "baseline: a missing baseline directory exits 1" rc_is 1 tally --baseline "$T/nope" "$T/clean"
+check "baseline: --baseline needs a value" rc_is 2 tally --baseline
+
 # malformed input exits 1, usage 2
 for m in log status kmsg; do
   check "malformed-$m exits 1" rc_is 1 tally "$T/malformed-$m"

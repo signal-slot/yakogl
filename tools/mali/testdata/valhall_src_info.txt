@@ -1,0 +1,220 @@
+NOP 0 0 0
+BRANCHZ_I16 0 0 1 combine/32
+DISCARD_F32 0 0 2 absneg,swizzle/32 absneg,swizzle/32
+BRANCHZI 0 0 2 combine/32 -/32
+BARRIER 0 0 0
+CSEL_F32 0 0 4 -/32 -/32 -/32 -/32
+CSEL_V2F16 0 0 4 -/16 -/16 -/16 -/16
+CSEL_U32 0 0 4 -/32 -/32 -/32 -/32
+CSEL_V2U16 0 0 4 -/16 -/16 -/16 -/16
+CSEL_S32 1 0 4 -/32 -/32 -/32 -/32
+CSEL_V2S16 1 0 4 -/16 -/16 -/16 -/16
+LD_VAR_SPECIAL 0 0 1 -/32
+LD_VAR_BUF_FLAT_IMM 0 0 0
+LD_VAR_BUF_FLAT 0 0 1 -/32
+LD_VAR_BUF_IMM_F32 0 0 1 -/32
+LD_VAR_BUF_IMM_F16 0 0 1 -/16
+LD_VAR_BUF_F32 0 0 2 -/32 -/32
+LD_VAR_BUF_F16 0 0 2 -/16 -/16
+LD_VAR 0 0 2 -/32 -/32
+LD_VAR_IMM 0 0 1 -/32
+LD_VAR_FLAT 0 0 1 -/32
+LD_VAR_FLAT_IMM 0 0 0
+LD_ATTR_IMM 0 0 2 -/32 -/32
+LD_ATTR 0 0 3 -/32 -/32 -/32
+LD_GCLK_U64 0 0 0
+LD_TEX_IMM 0 0 2 -/32 -/32
+LD_TEX 0 0 3 -/32 -/32 -/32
+LEA_ATTR_IMM 0 0 2 -/32 -/32
+LEA_ATTR 0 0 3 -/32 -/32 -/32
+LEA_TEX_IMM 0 0 2 -/32 -/32
+LEA_TEX 0 0 3 -/16 -/32 -/32
+LD_PKA_I8 0 0 2 -/32 -/32
+LD_PKA_I16 0 0 2 -/32 -/32
+LD_PKA_I24 0 0 2 -/32 -/32
+LD_PKA_I32 0 0 2 -/32 -/32
+LD_PKA_I48 0 0 2 -/32 -/32
+LD_PKA_I64 0 0 2 -/32 -/32
+LD_PKA_I96 0 0 2 -/32 -/32
+LD_PKA_I128 0 0 2 -/32 -/32
+LEA_BUF 0 0 2 -/32 -/32
+LEA_BUF_IMM 0 0 1 -/32
+LOAD_I8 0 0 1 -/64
+LOAD_I16 0 0 1 -/64
+LOAD_I24 0 0 1 -/64
+LOAD_I32 0 0 1 -/64
+LOAD_I48 0 0 1 -/64
+LOAD_I64 0 0 1 -/64
+LOAD_I96 0 0 1 -/64
+LOAD_I128 0 0 1 -/64
+STORE_I8 0 1 1 -/32 -/64
+STORE_I16 0 1 1 -/32 -/64
+STORE_I24 0 1 1 -/32 -/64
+STORE_I32 0 1 1 -/32 -/64
+STORE_I48 0 1 1 -/32 -/64
+STORE_I64 0 1 1 -/32 -/64
+STORE_I96 0 1 1 -/32 -/64
+STORE_I128 0 1 1 -/32 -/64
+LEA_PKA 0 0 2 -/32 -/32
+LD_CVT 0 0 2 -/64 -/32
+ST_CVT 0 1 2 -/32 -/64 -/32
+LD_TILE 0 0 3 -/32 -/32 -/32
+ST_TILE 0 1 3 -/32 -/32 -/32 -/32
+BLEND 0 1 2 -/32 -/64 -/32
+ATEST 0 0 3 -/32 swizzle/32 -/32
+ZS_EMIT 0 0 3 -/32 -/32 -/32
+V2S16_TO_V2F16 0 0 1 widen/16
+S32_TO_F32 0 0 1 widen/32
+V2U16_TO_V2F16 0 0 1 widen/16
+U32_TO_F32 0 0 1 widen/32
+S16_TO_S32 0 0 1 lane/16
+S16_TO_F32 0 0 1 lane/16
+U16_TO_U32 0 0 1 lane/16
+U16_TO_F32 0 0 1 lane/16
+F32_TO_S32 0 0 1 absneg/32
+F32_TO_U32 0 0 1 absneg/32
+V2F16_TO_V2S16 0 0 1 absneg,swizzle/16
+V2F16_TO_V2U16 0 0 1 absneg,swizzle/16
+F16_TO_S32 0 0 1 absneg,lane/16
+F16_TO_U32 0 0 1 absneg,lane/16
+F16_TO_F32 0 0 1 absneg,lane/16
+S8_TO_S32 0 0 1 lane/8
+S8_TO_F32 0 0 1 lane/8
+U8_TO_U32 0 0 1 lane/8
+U8_TO_F32 0 0 1 lane/8
+V2S8_TO_V2S16 0 0 1 halfswizzle/8
+V2S8_TO_V2F16 0 0 1 halfswizzle/8
+V2U8_TO_V2U16 0 0 1 halfswizzle/8
+V2U8_TO_V2F16 0 0 1 halfswizzle/8
+FROUND_F32 0 0 1 absneg,swizzle/32
+FROUND_V2F16 0 0 1 absneg,swizzle/16
+MOV_I32 0 0 1 -/32
+CLZ_U32 0 0 1 -/32
+CLZ_V2U16 0 0 1 swizzle/16
+CLZ_V4U8 0 0 1 -/8
+IABS_S32 1 0 1 widen/32
+IABS_V2S16 1 0 1 widen/16
+IABS_V4S8 1 0 1 -/8
+POPCOUNT_I32 0 0 1 -/32
+BITREV_I32 0 0 1 -/32
+WMASK 0 0 1 -/32
+FLUSH_F32 0 0 1 absneg,swizzle/32
+FLUSH_V2F16 0 0 1 absneg,swizzle/16
+FREXPM_F32 0 0 1 swizzle/32
+FREXPM_V2F16 0 0 1 swizzle/16
+FREXPE_F32 0 0 1 swizzle/32
+FREXPE_V2F16 0 0 1 swizzle/16
+FRCP_F32 0 0 1 absneg,swizzle/32
+FRCP_F16 0 0 1 absneg,swizzle/16
+FRSQ_F32 0 0 1 absneg,swizzle/32
+FRSQ_F16 0 0 1 absneg,swizzle/16
+FLOGD_F32 0 0 1 absneg,swizzle/32
+FPCLASS_F32 0 0 1 absneg,swizzle/32
+FPCLASS_F16 0 0 1 absneg,swizzle/16
+FLOG_TABLE_F32 0 0 1 absneg,swizzle/32
+FRCP_APPROX_F32 0 0 1 absneg,swizzle/32
+FRSQ_APPROX_F32 0 0 1 absneg,swizzle/32
+FSIN_TABLE_U6 0 0 1 -/32
+FCOS_TABLE_U6 0 0 1 -/32
+FSINCOS_OFFSET_U6 0 0 1 -/32
+FEXP_TABLE_U4 0 0 1 -/32
+FADD_F32 0 0 2 absneg,swizzle/32 absneg,swizzle/32
+FADD_V2F16 0 0 2 absneg,swizzle/16 absneg,swizzle/16
+FMIN_F32 0 0 2 absneg,swizzle/32 absneg,swizzle/32
+FMIN_V2F16 0 0 2 absneg,swizzle/16 absneg,swizzle/16
+FMAX_F32 0 0 2 absneg,swizzle/32 absneg,swizzle/32
+FMAX_V2F16 0 0 2 absneg,swizzle/16 absneg,swizzle/16
+V2F32_TO_V2F16 0 0 2 absneg/16 absneg/16
+LDEXP_F32 0 0 2 absneg/32 -/32
+LDEXP_V2F16 0 0 2 absneg/16 -/16
+FEXP_F32 0 0 2 -/32 absneg/32
+FADD_LSCALE_F32 0 0 2 absneg/32 absneg/32
+IADD_U32 0 0 2 widen/32 widen/32
+IADD_V2U16 0 0 2 widen/16 widen/16
+IADD_V4U8 0 0 2 widen/8 widen/8
+IADD_S32 1 0 2 widen/32 widen/32
+IADD_V2S16 1 0 2 widen/16 widen/16
+IADD_V4S8 1 0 2 widen/8 widen/8
+MKVEC_V2I16 0 0 2 lane/16 lane/16
+ISUB_U32 0 0 2 widen/32 widen/32
+ISUB_V2U16 0 0 2 widen/16 widen/16
+ISUB_V4U8 0 0 2 widen/8 widen/8
+ISUB_S32 1 0 2 widen/32 widen/32
+ISUB_V2S16 1 0 2 widen/16 widen/16
+ISUB_V4S8 1 0 2 widen/8 widen/8
+SHADDX_U64 0 0 2 -/64 widen/64
+SHADDX_S64 1 0 2 -/64 widen/64
+IMUL_I32 0 0 2 widen/32 widen/32
+IMUL_V2I16 0 0 2 widen/16 widen/16
+IMUL_V4I8 0 0 2 widen/8 widen/8
+HADD_U32 0 0 2 widen/32 widen/32
+HADD_V2U16 0 0 2 widen/16 widen/16
+HADD_V4U8 0 0 2 widen/8 widen/8
+HADD_S32 1 0 2 widen/32 widen/32
+HADD_V2S16 1 0 2 widen/16 widen/16
+HADD_V4S8 1 0 2 widen/8 widen/8
+CLPER_I32 0 0 2 -/32 lanes/8
+FMA_F32 0 0 3 absneg,swizzle/32 absneg,swizzle/32 absneg,swizzle/32
+FMA_V2F16 0 0 3 absneg,swizzle/16 absneg,swizzle/16 absneg,swizzle/16
+LSHIFT_AND_I32 0 0 3 widen/32 lanes/8 notted/32
+LSHIFT_AND_V2I16 0 0 3 widen/16 lanes/8 notted/16
+LSHIFT_AND_V4I8 0 0 3 widen/8 lanes/8 notted/8
+RSHIFT_AND_I32 0 0 3 widen/32 lanes/8 notted/32
+RSHIFT_AND_V2I16 0 0 3 widen/16 lanes/8 notted/16
+RSHIFT_AND_V4I8 0 0 3 widen/8 lanes/8 notted/8
+LSHIFT_OR_I32 0 0 3 widen/32 lanes/8 notted/32
+LSHIFT_OR_V2I16 0 0 3 widen/16 lanes/8 notted/16
+LSHIFT_OR_V4I8 0 0 3 widen/8 lanes/8 notted/8
+RSHIFT_OR_I32 0 0 3 widen/32 lanes/8 notted/32
+RSHIFT_OR_V2I16 0 0 3 widen/16 lanes/8 notted/16
+RSHIFT_OR_V4I8 0 0 3 widen/8 lanes/8 notted/8
+LSHIFT_XOR_I32 0 0 3 widen/32 lanes/8 notted/32
+LSHIFT_XOR_V2I16 0 0 3 widen/16 lanes/8 notted/16
+LSHIFT_XOR_V4I8 0 0 3 widen/8 lanes/8 notted/8
+RSHIFT_XOR_I32 0 0 3 widen/32 lanes/8 notted/32
+RSHIFT_XOR_V2I16 0 0 3 widen/16 lanes/8 notted/16
+RSHIFT_XOR_V4I8 0 0 3 widen/8 lanes/8 notted/8
+MUX_I32 0 0 3 -/32 -/32 -/32
+MUX_V2I16 0 0 3 swizzle/16 swizzle/16 swizzle/16
+MUX_V4I8 0 0 3 -/8 -/8 -/8
+CUBE_SSEL 0 0 3 absneg/32 absneg/32 -/32
+CUBE_TSEL 0 0 3 absneg/32 absneg/32 -/32
+MKVEC_V2I8 0 0 3 lane/8 lane/8 -/8
+CUBEFACE1 0 0 3 absneg/32 absneg/32 absneg/32
+CUBEFACE2_V9 0 0 3 absneg/32 absneg/32 absneg/32
+IDPADD_V4S8 1 0 3 -/8 -/8 -/8
+IDPADD_V4U8 0 0 3 -/8 -/8 -/8
+ICMP_OR_U32 0 0 3 widen/32 widen/32 -/32
+ICMP_OR_V2U16 0 0 3 widen/16 widen/16 -/16
+ICMP_OR_V4U8 0 0 3 widen/8 widen/8 -/8
+ICMP_AND_U32 0 0 3 widen/32 widen/32 -/32
+ICMP_AND_V2U16 0 0 3 widen/16 widen/16 -/16
+ICMP_AND_V4U8 0 0 3 widen/8 widen/8 -/8
+FCMP_OR_F32 0 0 3 absneg,swizzle/32 absneg,swizzle/32 -/32
+FCMP_OR_V2F16 0 0 3 absneg,swizzle/16 absneg,swizzle/16 -/16
+FCMP_AND_F32 0 0 3 absneg,swizzle/32 absneg,swizzle/32 -/32
+FCMP_AND_V2F16 0 0 3 absneg,swizzle/16 absneg,swizzle/16 -/16
+ICMP_OR_S32 1 0 3 widen/32 widen/32 -/32
+ICMP_OR_V2S16 1 0 3 widen/16 widen/16 -/16
+ICMP_OR_V4S8 1 0 3 widen/8 widen/8 -/8
+ICMP_AND_S32 1 0 3 widen/32 widen/32 -/32
+ICMP_AND_V2S16 1 0 3 widen/16 widen/16 -/16
+ICMP_AND_V4S8 1 0 3 widen/8 widen/8 -/8
+ICMP_MULTI_U32 0 0 3 widen/32 widen/32 -/32
+ICMP_MULTI_S32 1 0 3 widen/32 widen/32 -/32
+IADD_IMM_I32 0 0 1 -/32
+IADD_IMM_V2I16 0 0 1 -/16
+IADD_IMM_V4I8 0 0 1 -/8
+FADD_IMM_F32 0 0 1 -/32
+FADD_IMM_V2F16 0 0 1 -/16
+ATOM1_RETURN_I32 0 0 1 -/64
+ATOM1_RETURN_I64 0 0 1 -/64
+ATOM_I32 0 1 1 -/32 -/64
+ATOM_I64 0 1 1 -/32 -/64
+ATOM_RETURN_I32 0 1 1 -/32 -/64
+ATOM_RETURN_I64 0 1 1 -/32 -/64
+TEX_FETCH 0 1 1 -/32 -/64
+TEX_SINGLE 0 1 1 -/32 -/64
+TEX_GATHER 0 1 1 -/32 -/64
+TEX_GRADIENT 0 1 1 -/32 -/64
+FMA_RSCALE_F32 0 0 4 absneg/32 absneg/32 absneg/32 -/32

@@ -11,6 +11,13 @@
 #   tools/mali/corpus-verdicts.sh            print the verdicts
 #   tools/mali/corpus-verdicts.sh --tally    the verdicts counted, largest first
 #   tools/mali/corpus-verdicts.sh --write    write tools/mali/corpus-verdicts.txt
+#   tools/mali/corpus-verdicts.sh --check    the verdicts compared with the pinned file
+#                                            (tools/mali/corpus_forward.py --compare):
+#                                            0 when each verdict is unchanged or moved
+#                                            forward (a refusal became ok, a path was
+#                                            added), 1 naming each regressed path (ok
+#                                            became a refusal or went missing), 2 on a
+#                                            malformed file. --check never writes.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 out=$(YAKOGL_CORPUS_PRINT=1 cargo test -q --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table \
@@ -19,6 +26,7 @@ out=$(YAKOGL_CORPUS_PRINT=1 cargo test -q --no-default-features --features host-
 [ -n "$out" ] || { echo "corpus-verdicts.sh: the test printed no verdict" >&2; exit 1; }
 case "${1-}" in
   --tally) printf '%s\n' "$out" | sed 's/^[^:]*: //' | sort | uniq -c | sort -rn ;;
+  --check) printf '%s\n' "$out" | python3 -I tools/mali/corpus_forward.py --compare - ;;
   --write)
     {
       echo "# SPDX-License-Identifier: Apache-2.0"
@@ -29,5 +37,5 @@ case "${1-}" in
     } > tools/mali/corpus-verdicts.txt
     echo "tools/mali/corpus-verdicts.txt: $(printf '%s\n' "$out" | wc -l) verdicts" ;;
   "") printf '%s\n' "$out" ;;
-  *) echo "usage: $0 [--tally|--write]" >&2; exit 2 ;;
+  *) echo "usage: $0 [--tally|--check|--write]" >&2; exit 2 ;;
 esac

@@ -56,17 +56,23 @@ img() { # NAME IMGSZ
 }
 img ok 0x2000
 img bigimg 0x10000001
-img long 0xc000000
+img long 0xff00000
 cp "$run/img/ok.bin" "$run/img/big.bin"
 truncate -s $((0x10000001)) "$run/img/big.bin"   # sparse: 256 MiB + 1
 truncate -s 4096 "$run/img/nomagic.bin"
-truncate -s $((192 * 1024 * 1024)) "$run/img/long.bin"   # sparse: the power-cut cases load it
+# sparse, made here at run time (never in the tree): 255 MiB, the most the
+# 256 MiB window takes; the power-cut cases load it
+truncate -s $((255 * 1024 * 1024)) "$run/img/long.bin"
 
 cp "$run/scr/mp2-mmc.scr" "$stage/mp2-mmc.scr"
 cp "$run/img/ok.bin" "$stage/mp2z.bin"
 cp "$run/img/bigimg.bin" "$run/img/nomagic.bin" "$stage/"
 cp --sparse=always "$run/img/big.bin" "$stage/big.bin"
-cp --sparse=always "$run/img/long.bin" "$stage/long.bin"
+# On the card long.bin is 32 MiB of real data, not holes (mke2fs -d skips zero
+# blocks too), with the header's image_size still 255 MiB: ext4load then reads
+# the card, which drive.py throttles, so the load window has a floor.
+{ head -c 4096 "$run/img/long.bin"
+  head -c $((32 * 1024 * 1024 - 4096)) /dev/zero | tr '\0' 'x'; } > "$stage/long.bin"
 cp "$run/scr/mp2-net.scr" "$tftp/mp2-net.scr"
 cp "$run/img/ok.bin" "$tftp/mp2z.bin"
 cp "$run/img/bigimg.bin" "$tftp/bigimg.bin"
@@ -76,10 +82,10 @@ if [ "${MP2_QEMU_BIG_TFTP:-1}" = 1 ]; then cp --sparse=always "$run/img/big.bin"
 # The SD card: GPT, partition 1 a placeholder, partition 2 the ext4 "bootfs"
 # with /yakogl/ (the DK stages under /boot/yakogl/, i.e. /yakogl/ inside it).
 disk=$run/sd.img
-truncate -s 32M "$disk"
-printf 'label: gpt\nstart=2048, size=2048, name=fsbl\nstart=4096, size=57344, name=bootfs\n' |
+truncate -s 64M "$disk"   # sparse; an SD card size is a power of 2
+printf 'label: gpt\nstart=2048, size=2048, name=fsbl\nstart=4096, size=126000, name=bootfs\n' |
 	sfdisk -q "$disk"
-mke2fs -q -F -t ext4 -L bootfs -d "$run/stage" -E offset=$((4096 * 512)) "$disk" 28672k
+mke2fs -q -F -t ext4 -L bootfs -d "$run/stage" -E offset=$((4096 * 512)) "$disk" 63000k
 
 # The environment's flash (QEMU virt's second pflash, U-Boot's ENV_ADDR).
 truncate -s 64M "$run/env.img"

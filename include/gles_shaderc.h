@@ -251,7 +251,8 @@ struct shc_v3d_fs {
 	const struct shc_v3d_uniform *uniforms;
 	uint32_t num_uniforms;
 	uint32_t num_inputs;
-	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;
+	uint32_t flat_shade_flags, noperspective_flags, centroid_flags;  /* bit i: input i, i < 32 */
+	uint32_t flat_shade_flags_hi, noperspective_flags_hi, centroid_flags_hi;  /* bit i: input 32 + i */
 	uint8_t  threads, single_seg, writes_z, disable_ez, uses_center_w;
 	uint8_t  lock_scoreboard_on_first_thrsw, uses_implicit_point_line_varyings, uses_pid;
 	uint8_t  rt_mask;       /* bit n: the program writes colour to render target n (0..3) */

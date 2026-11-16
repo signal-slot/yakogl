@@ -297,6 +297,37 @@ def self_test():
     expect("png size", struct.unpack(">II", data[16:24]), (w, h))
     raw = zlib.decompress(data[data.index(b"IDAT") + 4:data.index(b"IEND") - 8])
     expect("png pixels", raw[1:1 + w * 3], rows[0])
+    # serial-observation logs: CRLF, a prefix column, console lines between rows
+    # and a NUL at a reconnect decode to the same picture; a cut row never does
+    def png_of(ls):
+        put(ls)
+        rc = run(log, png)
+        with open(png, "rb") as f:
+            return rc, f.read()
+
+    want = png_of(lines)
+    expect("crlf log", png_of([x + "\r" for x in lines]), want)
+    pre = "[2026-11-15 10:00:00.123] "
+    expect("prefixed log", png_of([pre + x for x in lines]), want)
+    mixed = []
+    for i, x in enumerate(lines):
+        mixed.append(x)
+        if i % 7 == 3:
+            mixed.append("\x00\x00uart:~$ heartbeat %d\r" % i)
+    mixed.insert(len(lines) // 2, "\x00" + pre + "[00:00:01.000,000] <inf> gpu: stray")
+    expect("interleaved log", png_of([x + "\r" for x in mixed]), want)
+    nul = list(lines)
+    nul[5] = "\x00\x00" + pre + nul[5]
+    expect("nul at reconnect", png_of(nul), want)
+    cut = [pre + x + "\r" for x in lines]
+    cut[12] = cut[12][:-8]  # one row cut short
+    rc, _ = png_of(cut)
+    expect("truncated row exits 1", rc, 1)
+    r = decode("\n".join(cut))
+    expect("truncated row is damaged", [y for y, x in enumerate(r[3]) if x is None], [10])
+    cut = [x + "\r" for x in lines]
+    cut[12] = cut[12][:30]  # cut inside the base64 text
+    expect("row cut mid-line exits 1", png_of(cut)[0], 1)
     bad = list(lines)
     del bad[10]  # row 8 lost
     bad[20] = bad[20][:30] + "A" + bad[20][31:]  # row 19 garbled

@@ -183,6 +183,23 @@ int yd_rpi4_window_is_view(const struct yd_rpi4_fb *fb, uint32_t w, uint32_t h);
 int yd_rpi4_pan_row(const struct yd_rpi4_fb *fb, uint64_t win_phys, uint32_t w, uint32_t h,
 		    uint32_t stride, uint32_t *row);
 
+/* The same decisions with the board as a parameter (src/board/rpi_fb.rs):
+ * board 4 or 5. The Pi 5 (BCM2712) shares struct yd_rpi4_fb. */
+#define YD_RPI_SCANOUT_FMT_RGBX 0 /* R, G, B, X in memory */
+#define YD_RPI_SCANOUT_FMT_BGRX 1 /* B, G, R, X in memory */
+/* The ARM physical address of the mailbox's framebuffer address (the Pi 4
+ * clears 0xc0000000, the Pi 5 keeps it); 0: no framebuffer. */
+uint64_t yd_rpi_fb_phys(uint32_t board, uint32_t bus);
+/* 1: a FRAMEBUFFER_ALLOCATE answer holds rows rows of width 32 bpp pixels. */
+int yd_rpi_allocate_ok(uint32_t width, uint32_t rows, uint32_t pitch, uint32_t size);
+/* 1 and *fb: the answer is a usable framebuffer (all checks above). */
+int yd_rpi_fb_from_answer(uint32_t board, uint32_t bus, uint32_t width, uint32_t height,
+			  uint32_t rows, uint32_t pitch, uint32_t size, struct yd_rpi4_fb *fb);
+/* 1, *fb and the window format (GLES_NATIVE_FORMAT_*): the firmware's running
+ * scanout plane can be adopted; fmt is YD_RPI_SCANOUT_FMT_*. */
+int yd_rpi_adopt_scanout(uint64_t phys, uint32_t pitch, uint32_t width, uint32_t height,
+			 uint32_t fmt, struct yd_rpi4_fb *fb, uint32_t *format);
+
 /* ---- i.MX WDOG self-arm (ip::imx_wdog; gc_board gc_wdog_arm.c) ----------
  * One call at PRE_KERNEL_1: the WDOG clock root and gate on, then WDOG1 armed
  * for timeout_ms (whole 0.5 s steps, 0.5 s .. 128 s) from whatever state it
@@ -214,10 +231,10 @@ int yd_imx_wdog_arm(uintptr_t wdog_base, uintptr_t ccm_base, uint32_t timeout_ms
 		    uint32_t ext_reset, struct yd_imx_wdog_arm *out);
 
 /* ---- RK3588 board glue (ip::dw_wdt, soc::rk3588, aarch64; nanopc_t6.c) ----
- * yd_dw_wdt_arm: one call at PRE_KERNEL_1: WDT0's two CRU gates opened
- * (CLKGATE_CON(15) bits 0, 1), then the DW_apb_wdt armed for the period of
- * `top` (2^(16 + top) cycles of 24 MHz, top 0..15) to reset the system on its
- * first timeout, restarted and read back. 0, -EIO when it refused (refusal
+ * yd_dw_wdt_arm: WDT0's two CRU gates opened (CLKGATE_CON(15) bits 0, 1),
+ * then the DW_apb_wdt armed for the period of `top` (2^(16 + top) cycles of
+ * 24 MHz, top 0..15) to reset the system on its first timeout, restarted and
+ * read back. 0, -EIO when it refused (refusal
  * says why), -EINVAL for a bad argument. yd_dw_wdt_feed restarts it.
  * yd_gic_eoi_mode_reset: ICC_CTLR_EL1.EOImode back to 0 on this CPU; the
  * value found when it changed it, 0 when nothing was written.
@@ -300,27 +317,41 @@ int yd_mp2_psci_system_reset(void);
  * points VBAR_EL2 at a reporter that prints T6:X for any later exception
  * taken to EL2 and halts, and with YD_T6_EARLY_VHE_EXIT writes HCR_EL2 :=
  * RW only before Zephyr's z_arm64_el2_init reads it (aarch64.rs says why).
- * yd_t6_early_el1: T6:A1, from z_arm64_el1_plat_init (MMU off).
- * yd_t6_banner_a2 / _a3: T6:A2 / T6:A3 through a device_map() of uart2. */
+ * yd_t6_early_arm: from z_arm64_el1_plat_init (MMU off, before z_prep_c):
+ * T6:A1, T6:A2, yd_dw_wdt_arm with the physical bases of WDT0 and the CRU,
+ * T6:A3 with its result, which it returns. `out` must not be in .bss
+ * (z_prep_c zeroes it afterwards). */
 #define YD_T6_EARLY_VHE_EXIT 1 /* x0 of yd_t6_early_entry: HCR_EL2 := RW only */
 
-void yd_t6_early_el1(void);
-void yd_t6_banner_a2(uintptr_t uart);
-void yd_t6_banner_a3(uintptr_t uart, int32_t rc, uint32_t cr_now, uint32_t period_ms);
+int yd_t6_early_arm(uintptr_t wdt_phys, uintptr_t cru_phys, uint32_t top, struct yd_dw_wdt_arm *out);
 
 /* The GPU power-on, Z1's second half (board::nanopc_t6_gpu over
  * soc::rk3588, ip::rockchip_spi, ip::rk806, gpu::mali; feature mali):
  * read PD_GPU, the CRU's GPU clock and the RK806 (vdd_gpu_s0, read only),
  * stop when the supply is off or below the OPP table's voltage for the
  * clock, power the clock's PLL on when Linux left it powered down, power
- * PD_GPU on, read the GPU's identity, soft reset, L2 on.
+ * PD_GPU on (a domain found on is left as it is), take over a GPU found
+ * powered (interrupt masks 0 and cleared, MCU halted, soft reset, hard reset
+ * when that times out; an MCU that does not halt is recorded and reset
+ * anyway), read the GPU's identity, soft reset, L2 on.
  * on_handover is called once with what was read before the first write to
  * the PMU or the GPU (the hand-over state, the supply and the PLL's
  * power-on), so it can be printed before a step that could fault. 0 when
  * every step ran, -EIO when one stopped (stop says which), -EINVAL for a
- * null argument. The bases: CRU 0xfd7c0000, PMU 0xfd8d8000,
- * SPI2 0xfeb20000, qos_gpu_m0 0xfdf35000 (0x800), GPU 0xfb000000, each
- * mapped at least 0x1000. A 64-bit value is two words, lo first. */
+ * null argument or a gpu_len below YD_T6_GPU_MAP_MIN (nothing touched).
+ * The bases: CRU 0xfd7c0000, PMU 0xfd8d8000,
+ * SPI2 0xfeb20000, qos_gpu_m0 0xfdf35000 (0x800), each mapped at least
+ * 0x1000, and GPU 0xfb000000 mapped for gpu_len bytes, at least
+ * YD_T6_GPU_MAP_MIN (the take-over reaches the MMU interrupt block at
+ * 0x2000..0x200b; a smaller map would make it write whatever the next
+ * virtual page maps). yd_t6_fw_up, yd_t6_submit and yd_t6_osal_up take
+ * gpu_len and refuse a short one the same way. A 64-bit value is two words,
+ * lo first. */
+#define YD_T6_GPU_MAP_MIN 0x3000 /* board::nanopc_t6_gpu::GPU_MAP_MIN; rk3588.rs pins it */
+/* take_over_steps (gpu::mali::takeover::STEP_*) */
+#define YD_T6_TAKE_OVER_MASKED      1 /* the masks read back 0 and the raw status was cleared */
+#define YD_T6_TAKE_OVER_HALT_WAITED 2 /* the MCU halt was waited for (done or timed out) */
+#define YD_T6_TAKE_OVER_RESET       3 /* a reset completed */
 #define YD_T6_GPU_STOP_NONE        0 /* GPU_ID read, reset done, L2 ready */
 #define YD_T6_GPU_STOP_SPI_GATE    1 /* an SPI2 CRU gate stays closed (refusal: its bit) */
 #define YD_T6_GPU_STOP_RK806_READ  2 /* an RK806 read failed (detail hi: the register) */
@@ -351,6 +382,16 @@ void yd_t6_banner_a3(uintptr_t uart, int32_t rc, uint32_t cr_now, uint32_t perio
 #define YD_T6_GPU_STOP_RK806_WRITE 13 /* the DCDC1-enable frame could not be sent (refusal: the
 				      * SpiRefusal, as YD_T6_GPU_STOP_RK806_READ); whether it reached
 				      * the PMIC is unknown */
+#define YD_T6_GPU_STOP_TAKE_OVER 14 /* the take-over of a GPU found powered refused (refusal:
+				      * YD_MALI_*, below); no QoS word, no later reset and no L2
+				      * power-on was written */
+
+/* refusal of YD_T6_GPU_STOP_TAKE_OVER (gpu::mali::MaliRefusal) */
+#define YD_MALI_RESET_BIT_STUCK  5 /* RESET_COMPLETED reads set after its clear (detail: RAWSTAT) */
+#define YD_MALI_IRQ_MASK_STUCK   9 /* a *_INT_MASK read back not 0 (detail hi: its offset, lo:
+				    * the word); nothing written after the masks */
+#define YD_MALI_HARD_RESET_TIMEOUT 11 /* the soft reset and then the hard reset did not complete
+				       * in 100 ms each (detail: GPU_INT_RAWSTAT) */
 
 #define YD_T6_GPU_CLOCK_PLL_NO_LOCK 1
 #define YD_T6_GPU_SUPPLY_OFF_DOMAIN_POWERED 1
@@ -401,7 +442,25 @@ struct yd_t6_gpu_up {
 	uint32_t qos_policy;    /* YD_T6_QOS_* applied after the power-on, 0 when the run stopped
 				 * before it */
 	uint32_t qos_words[3];  /* qos_gpu_m0 QOS_MODE, QOS_BANDWIDTH, QOS_SATURATION read back */
+	/* appended: the take-over of a GPU found powered (gpu::mali::takeover; the words above
+	 * are unmoved) */
+	uint32_t take_over_ran; /* 1: PD_GPU read powered at hand-over and the step ran */
+	uint32_t take_over_steps; /* 1 masked and cleared, 2 the MCU halt waited for, 3 a reset
+				   * completed; the words of a step not reached are 0 */
+	uint32_t take_over_masks[3]; /* GPU_INT_MASK, JOB_INT_MASK, MMU_INT_MASK as found */
+	uint32_t take_over_raw[3]; /* the three *_INT_RAWSTAT as found */
+	uint32_t take_over_raw_cleared[3]; /* and after the clear */
+	uint32_t take_over_mcu[4]; /* MCU_STATUS as found; polls of 1 us until it read DISABLED
+				    * (100001: it did not); 1 when it did not in 100 ms (the reset
+				    * ran anyway); MCU_STATUS at the end of the wait */
+	uint32_t take_over_hard; /* 1: the soft reset timed out and the hard reset ran */
+	uint32_t take_over_reset[3]; /* that reset: GPU_INT_RAWSTAT before the clear, after it;
+				      * polls of 1 us */
+	uint32_t take_over_after[4]; /* the three masks and MCU_STATUS after the reset */
 };
+_Static_assert(sizeof(struct yd_t6_gpu_up) == 608, "driver/rust/src/ffi/rk3588.rs pins it");
+_Static_assert(offsetof(struct yd_t6_gpu_up, take_over_ran) == 516, "rk3588.rs pins it");
+_Static_assert(offsetof(struct yd_t6_gpu_up, take_over_after) == 592, "rk3588.rs pins it");
 
 #define YD_T6_QOS_RESET      1 /* MODE 3, BANDWIDTH 0x12d, SATURATION 0x40: the reset values */
 #define YD_T6_QOS_LINUX_ZERO 2 /* all three 0, what Linux reads with the GPU active (default) */
@@ -412,7 +471,7 @@ struct yd_t6_gpu_up {
 int yd_t6_gpu_qos_policy(uint32_t id);
 
 int yd_t6_gpu_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
-		 void (*delay_us)(uint32_t us),
+		 size_t gpu_len, void (*delay_us)(uint32_t us),
 		 void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *out);
 
 /* Z2, after yd_t6_gpu_up returned 0 (board::nanopc_t6_mmu over
@@ -490,14 +549,14 @@ int yd_t6_mmu_up(uintptr_t gpu, uint32_t mmu_features, void *pool, uint32_t pool
  * address the CPU reaches the memory at pa by, the shared section's
  * uncached. pool is pool_pages 4 KiB pages at physical tables_pa (9 of
  * them for the board's file), 4 KiB aligned. gpu maps 0xfb000000 for
- * 0x280000 bytes (the doorbells). timer_hz is CNTFRQ_EL0 (24000000).
+ * gpu_len = 0x280000 bytes (the doorbells). timer_hz is CNTFRQ_EL0 (24000000).
  * clean() cleans the data cache over a range, 0 on success. on_handover as
  * yd_t6_gpu_up's; *z1 receives Z1's whole record as yd_t6_gpu_up writes its
  * out (all zero when the run stopped before Z1), so a stop at
  * YD_T6_FW_STEP_GPU can be explained. 0 when every step ran (out->step
  * YD_T6_FW_STEP_NONE), -EIO when one stopped (out->step says which),
- * -EINVAL for a null or misaligned argument. A 64-bit value is two words,
- * lo first. */
+ * -EINVAL for a null or misaligned argument or a gpu_len below
+ * YD_T6_GPU_MAP_MIN. A 64-bit value is two words, lo first. */
 #define YD_T6_FW_STEP_NONE    0 /* every step ran: GLB version = the image's, PING acknowledged */
 #define YD_T6_FW_STEP_PARSE   1 /* the image was refused (refusal: its error, detail: its value) */
 #define YD_T6_FW_STEP_PLACE   2 /* the backings do not fit the sections (refusal: why, detail: the section) */
@@ -560,8 +619,9 @@ struct yd_t6_fw_up {
 };
 
 int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
-		const void *blob, size_t blob_len, const struct yd_t6_fw_backing *backings,
-		uint32_t n_backings, void *pool, uint32_t pool_pages, uint64_t tables_pa,
+		size_t gpu_len, const void *blob, size_t blob_len,
+		const struct yd_t6_fw_backing *backings, uint32_t n_backings, void *pool,
+		uint32_t pool_pages, uint64_t tables_pa,
 		uint32_t timer_hz, int (*clean)(uintptr_t addr, size_t len),
 		void (*delay_us)(uint32_t us),
 		void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
@@ -595,7 +655,7 @@ int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uin
 #define YD_T6_SUBMIT_STEP_AS0_MAP    6 /* adding the queue memory to AS0 refused (refusal: YD_MALI_PT_*, detail: the MCU VA) */
 #define YD_T6_SUBMIT_STEP_CLEAN      7 /* a clean() of table pages failed (refusal 1 AS0, 2 the group VM; detail: rc) */
 #define YD_T6_SUBMIT_STEP_AS0_FLUSH  8 /* AS0's FLUSH_PT stopped (refusal: YD_MALI_FLUSH_*) */
-#define YD_T6_SUBMIT_STEP_VM_MAP     9 /* the group VM's tables refused (refusal: YD_MALI_PT_*, detail: the VA) */
+#define YD_T6_SUBMIT_STEP_VM_MAP     9 /* the group VM's tables refused (refusal: YD_MALI_PT_*, detail: the VA), or a region's size (refusal 0 or YD_T6_OSAL_VM_MAP_RESERVED, detail: the size) */
 #define YD_T6_SUBMIT_STEP_VM_ENABLE 10 /* address space 1's enable stopped (refusal: YD_MALI_*) */
 #define YD_T6_SUBMIT_STEP_HEAP      11 /* the tiler heap refused (refusal: HeapError 1-17 in heap.rs's order, 8 = the pool, 9 = the chunk not inside its region) */
 #define YD_T6_SUBMIT_STEP_START     12 /* sched::start refused (refusal: SchedRefusal) */
@@ -709,8 +769,9 @@ struct yd_t6_submit_up {
 };
 
 int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
-		 const void *blob, size_t blob_len, const struct yd_t6_fw_backing *backings,
-		 uint32_t n_backings, void *pool, uint32_t pool_pages, uint64_t tables_pa,
+		 size_t gpu_len, const void *blob, size_t blob_len,
+		 const struct yd_t6_fw_backing *backings, uint32_t n_backings, void *pool,
+		 uint32_t pool_pages, uint64_t tables_pa,
 		 uint32_t timer_hz, const struct yd_t6_submit_mem *mem,
 		 int (*clean)(uintptr_t addr, size_t len), void (*delay_us)(uint32_t us),
 		 void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
@@ -721,9 +782,15 @@ int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, ui
  * yd_t6_osal_up, then the OSAL ops of src/osal/mali.rs. The group VM's four
  * regions, each backed by one struct yd_t6_fw_backing of mem (uncached for
  * the CPU): the ring and the sync object's page, the heap's pool (its first
- * slot is HEAP_SET's operand), its chunks (whole 2 MiB chunks, all made at
- * the start), and the carve-out every gpu_alloc comes from (whole pages, at
- * most YD_T6_OSAL_CARVE_MAX bytes), mapped whole at YD_T6_OSAL_CARVE_VA. */
+ * slot is HEAP_SET's operand), its chunks (whole 2 MiB chunks,
+ * heap_initial_chunks made at the start, the others on a tiler OOM), and
+ * the carve-out every gpu_alloc comes from (whole pages, at
+ * most YD_T6_OSAL_CARVE_MAX bytes), mapped whole at YD_T6_OSAL_CARVE_VA.
+ * Its last carve_reserved bytes are no gpu_alloc's: the board's window
+ * buffer, which the GPU reaches through yd_t6_osal_map_phys. A
+ * carve_reserved that is not whole 4 KiB pages, or leaves no page to hand
+ * out, stops yd_t6_osal_up at YD_T6_SUBMIT_STEP_VM_MAP with the refusal
+ * YD_T6_OSAL_VM_MAP_RESERVED (detail: the value). */
 #define YD_T6_OSAL_QUEUE_VA       0x100800000ull
 #define YD_T6_OSAL_QUEUE_SIZE     0x2000u
 #define YD_T6_OSAL_HEAP_POOL_VA   0x800000015000ull
@@ -732,6 +799,7 @@ int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, ui
 #define YD_T6_OSAL_HEAP_CHUNK     0x200000u
 #define YD_T6_OSAL_CARVE_VA       0x4000000000ull
 #define YD_T6_OSAL_CARVE_MAX      0x10000000u
+#define YD_T6_OSAL_VM_MAP_RESERVED 16
 
 struct yd_t6_osal_mem {
 	struct yd_t6_fw_backing fw;    /* the firmware's sections are placed here */
@@ -746,6 +814,8 @@ struct yd_t6_osal_mem {
 	void *vm_pool;                 /* the group VM's tables: vm_pool_pages at vm_tables_pa */
 	uint32_t vm_pool_pages;
 	uint64_t vm_tables_pa;
+	uint32_t heap_initial_chunks;  /* 1 to the chunks heap_chunks holds (at most 64) */
+	uint32_t carve_reserved;       /* bytes at carve's end no yd_t6_osal_alloc gets */
 };
 
 struct yd_t6_osal_counts {
@@ -757,6 +827,16 @@ struct yd_t6_osal_counts {
 	uint32_t refused_frees;
 	uint32_t dead_refusal;   /* the sched refusal that stopped the OSAL, 0: none */
 	uint32_t dead_value;
+	uint32_t restarts;       /* the group's restarts, and the refusal that caused the last */
+	uint32_t last_refusal;
+	uint32_t last_value;
+	uint32_t oom_chunks;     /* tiler OOMs answered with a chunk, and with none */
+	uint32_t oom_no_chunk;
+	uint32_t heap_chunks;    /* the tiler heap's chunks now */
+	uint32_t unended;        /* 1: the group is not known ended; it may still run */
+	uint32_t down;           /* 1: yd_t6_osal_shutdown ended the group */
+	uint32_t memory_kept;    /* 1: frees stay held, allocs refused (unended, or a refused cache clean) */
+	uint32_t stops_refused;  /* CS 0 stops not acknowledged at a group's end */
 };
 
 struct osal_gpu_mem;   /* include/gles_osal.h */
@@ -771,7 +851,7 @@ struct osal_mali_heap;
  * other calls are the OSAL ops (one thread, after yd_t6_osal_up): their
  * results are those src/osal/mali.rs and include/gles_osal.h give. */
 int yd_t6_osal_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
-		  const void *blob, size_t blob_len, uint32_t timer_hz,
+		  size_t gpu_len, const void *blob, size_t blob_len, uint32_t timer_hz,
 		  const struct yd_t6_osal_mem *mem, int (*clean)(uintptr_t addr, size_t len),
 		  void (*delay_us)(uint32_t us), void (*on_handover)(const struct yd_t6_gpu_up *h),
 		  struct yd_t6_gpu_up *z1, struct yd_t6_submit_up *out);
@@ -781,9 +861,157 @@ int yd_t6_osal_map_phys(uint64_t phys, size_t size, struct osal_gpu_mem *out);
 int64_t yd_t6_osal_submit(uint64_t stream_gpu, uint32_t stream_bytes);
 int yd_t6_osal_wait(int64_t fence, int64_t timeout_us);
 int64_t yd_t6_osal_completed(void);
+int yd_t6_osal_shutdown(void);
 int yd_t6_osal_gpu(struct osal_mali_gpu *out);
 int yd_t6_osal_heap(struct osal_mali_heap *out);
 int yd_t6_osal_counts(struct yd_t6_osal_counts *out);
+
+/* D2, the display a crash kexec left running, adopted (board::nanopc_t6_display
+ * over ip::vop2 and ip::rk_iommu; feature rk3588): read what Linux left
+ * (PD_VOP usable, its CRU gates open, VERSION_INFO, VP0 running in
+ * 1024x768@60 with DSP_CTRL 0xf, HDMI0 fed by VP0, the Esmart power on),
+ * then turn every window but Esmart0 off and wait a frame, turn both vop_mmu
+ * sets' paging off, make Esmart0 VP0's only layer, show the buffer at
+ * physical fb_pa (1024x768 XRGB8888, stride 4096, below 4 GiB) and wait a
+ * frame. 0 when Esmart0 shows it, -EIO when a step stopped (stop names
+ * it; the steps up to _ESMART_POWER write nothing), -EINVAL for a null
+ * argument. The bases are mappings: the VOP (0xfdd90000, 0x2000 bytes),
+ * the two vop_mmu sets (0xfdd97e00, 0xfdd97f00), the PMU (0xfd8d8000), the
+ * CRU (0xfd7c0000; CLKGATE_CON(52) and (60) are read), sys_grf
+ * (0xfd58c000), the HDPTX PHY0 GRF (0xfd5e0000) and the HDMI QP TX0
+ * (0xfde80000), a page each. */
+#define YD_T6_DISPLAY_STOP_NONE         0 /* Esmart0 shows the buffer */
+#define YD_T6_DISPLAY_STOP_VOP_DOMAIN   1 /* PD_VOP not powered or idle (detail: PMU REPAIR) */
+#define YD_T6_DISPLAY_STOP_VOP_CLOCK    2 /* a PD_VOP clock or HCLK_VOP gated (index: bit, detail: CLKGATE_CON(52)) */
+#define YD_T6_DISPLAY_STOP_VERSION      3 /* VERSION_INFO is not 0x40176786 (detail) */
+#define YD_T6_DISPLAY_STOP_STANDBY      4 /* VP0 in STANDBY (detail: DSP_CTRL) */
+#define YD_T6_DISPLAY_STOP_VP_STATE     5 /* VP0 DSP_CTRL not 0xf (detail) */
+#define YD_T6_DISPLAY_STOP_MODE         6 /* VP0 timing word index differs (detail: read) */
+#define YD_T6_DISPLAY_STOP_ROUTE        7 /* HDMI0 not enabled on VP0 (detail: DSP_IF_EN) */
+#define YD_T6_DISPLAY_STOP_ESMART_POWER 8 /* SYS_PD_CTRL bit 7 set (detail) */
+#define YD_T6_DISPLAY_STOP_TAKE_OVER    9 /* vop2 take_over (refusal: vop2 Refusal, detail) */
+#define YD_T6_DISPLAY_STOP_IOMMU        10 /* a vop_mmu set keeps paging (refusal, index: set, detail: STATUS) */
+#define YD_T6_DISPLAY_STOP_OVERLAY      11 /* vop2 overlay_single (refusal, detail) */
+#define YD_T6_DISPLAY_STOP_WINDOW       12 /* vop2 window_show refused the buffer (refusal) */
+#define YD_T6_DISPLAY_STOP_FRAME        13 /* no frame start after the window (refusal, detail) */
+#define YD_T6_DISPLAY_STOP_SHOWN        14 /* read-back index 0 YRGB_MST, 1 enable, 2 PORT_SEL, 3 LAYER_SEL (detail) */
+
+struct yd_t6_display_bases {
+	uintptr_t vop;
+	uintptr_t vop_mmu[2];
+	uintptr_t pmu;
+	uintptr_t cru;
+	uintptr_t sys_grf;
+	uintptr_t phy_grf;
+	uintptr_t hdmi;
+};
+
+struct yd_t6_display_adopt {
+	uint32_t stop;          /* YD_T6_DISPLAY_STOP_* */
+	uint32_t refusal;
+	uint32_t index;
+	uint32_t detail;
+	/* as found */
+	uint32_t pd_vop[6];     /* PD_VOP's PWR, STATUS, IDLE_REQ, IDLE_ACK, IDLE_ST, REPAIR */
+	uint32_t cru_gate52;    /* CLKGATE_CON(52) */
+	uint32_t version;
+	uint32_t dsp_ctrl[4];   /* VP0..VP3 */
+	uint32_t timing[4];     /* VP0 HTOTAL_HS_END, HACT_ST_END, VTOTAL_VS_END, VACT_ST_END */
+	uint32_t dsp_if_en;
+	uint32_t pd_ctrl;       /* SYS_PD_CTRL */
+	uint32_t layer_sel;     /* OVL_LAYER_SEL */
+	uint32_t port_sel;      /* OVL_PORT_SEL */
+	uint32_t cluster0[2];   /* Cluster0 WIN_CTRL0, CLUSTER_CTRL */
+	uint32_t esmart0_ctrl;  /* Esmart0 REGION0_CTRL */
+	uint32_t mmu_status[2]; /* vop_mmu STATUS, DTE_ADDR of each set */
+	uint32_t mmu_dte[2];
+	/* what it did */
+	uint32_t running;       /* ports found running, bit n = VPn */
+	uint32_t off;           /* windows turned off: bit n Cluster n, bit 4 + n Esmart n */
+	uint32_t mmu_status_now[2];
+	uint32_t mmu_timeout;   /* a stall time-out with paging off all the same, 0 none */
+	uint32_t ovl_layer_sel; /* written */
+	uint32_t ovl_port_sel;
+	uint32_t ovl_waited_us;
+	uint32_t fb;            /* the buffer's physical address */
+	uint32_t stride;
+	uint32_t cfg_done_written; /* REG_CFG_DONE right after the window's write */
+	uint32_t cfg_done_after;   /* and after the next frame start */
+	uint32_t frame_waited_us;
+	uint32_t shown[4];      /* after it: YRGB_MST, REGION0_CTRL, OVL_PORT_SEL, OVL_LAYER_SEL */
+};
+
+/* Section 5's read-backs of driver/docs/nanopc-t6-display.md. */
+struct yd_t6_display_status {
+	uint32_t refusal;       /* a frame wait's or the check's vop2 Refusal, 0 none */
+	uint32_t detail;
+	uint32_t frame_start;   /* over the check's wait: 1 = seen */
+	uint32_t underflow;     /* POST_BUF_EMPTY */
+	uint32_t bus_error[2];  /* SYS0, SYS1 */
+	uint32_t raw;           /* VP0 INT_RAW_STATUS */
+	uint32_t frames;        /* frame starts timed */
+	uint32_t frames_us;     /* between the first and the last */
+	uint32_t vop[15];       /* VERSION, SYS_PD_CTRL, REG_CFG_DONE, DSP_IF_EN, DSP_CTRL,
+				 * HTOTAL_HS_END, VTOTAL_VS_END, OVL_PORT_SEL, OVL_LAYER_SEL,
+				 * REGION0_CTRL, YRGB_MST, REGION0_VIR, INT_RAW_STATUS,
+				 * SYS0_INT_STATUS, SYS1_INT_STATUS */
+	uint32_t soc_status1;   /* sys_grf SOC_STATUS1: HDMI0 HPD in bit 16 */
+	uint32_t phy_status;    /* HDPTX PHY0 GRF STATUS: PLL_LOCK_DONE 3, PHY_CLK_RDY 2, PHY_RDY 1 */
+	uint32_t vo1_usable;    /* PD_VO1 usable and PCLK_HDMITX0 open: the words below are read
+				 * only when 1 */
+	uint32_t cmu[3];        /* CMU_STATUS, CMU_VIDQPCLK_FREQ, CMU_LINKQPCLK_FREQ */
+	uint32_t monitor[7];    /* VIDEO_MONITOR_STATUS0..6 */
+	uint32_t cru_gate60;    /* CLKGATE_CON(60), read when PD_VO1 is usable (PCLK_HDMITX0 bit 11) */
+};
+
+/* The pattern of section 5 into fb (height rows of stride_bytes, width pixels):
+ * red, green / blue, yellow quadrants, a white 1-pixel border. 0 or -EINVAL. */
+int yd_t6_display_pattern(uint32_t *fb, uint32_t width, uint32_t height, uint32_t stride_bytes);
+
+int yd_t6_display_adopt(const struct yd_t6_display_bases *b, uint64_t fb_pa,
+			void (*delay_us)(uint32_t us), struct yd_t6_display_adopt *out);
+
+/* After a successful adopt: the frame check over wait_us, frames frame starts timed
+ * with now_us() (microseconds), then the reads. 0, -EIO (out->refusal), -EINVAL. */
+int yd_t6_display_status(const struct yd_t6_display_bases *b, uint32_t wait_us, uint32_t frames,
+			 uint64_t (*now_us)(void), void (*delay_us)(uint32_t us),
+			 struct yd_t6_display_status *out);
+
+/* Step D3, the screen a window surface is shown on: what yd_t6_screen_show and
+ * yd_t6_screen_busy keep between calls. All zero before the first show, then
+ * only theirs; one thread calls both. */
+#define YD_T6_SCREEN_NEW     0 /* no show yet */
+#define YD_T6_SCREEN_SHOWN   1 /* the first show's adopt ran to its end */
+#define YD_T6_SCREEN_STOPPED 2 /* the first show's adopt stopped: final */
+
+struct yd_t6_screen {
+	uint64_t last;    /* the buffer of the last show that reached the VOP */
+	uint64_t held[2]; /* shown before it, maybe still scanned: the first n_held */
+	uint32_t state;   /* YD_T6_SCREEN_* */
+	uint32_t n_held;  /* 3: more than held[] keeps; every buffer counts as busy */
+	uint32_t width;   /* the first show's size and stride in bytes */
+	uint32_t height;
+	uint32_t stride;
+	uint32_t flips;   /* shows that changed the address since the first (wraps) */
+};
+
+/* Show the width x height XRGB8888 buffer at physical phys (rows stride_bytes
+ * apart, top row first) at the screen's origin. The first call is the adopt
+ * with this buffer (record in *adopt); a later call with another address is a
+ * flip, which never waits and leaves *adopt alone. 0; -ENOTSUP for a window the
+ * VOP cannot scan or one that is not the first show's size and stride (nothing
+ * read or written); -ENODEV when the adopt stopped, now or at the first show (a
+ * stopped screen is not tried again); -EINVAL for a null argument. */
+int yd_t6_screen_show(const struct yd_t6_display_bases *b, struct yd_t6_screen *s, uint64_t phys,
+		      uint32_t width, uint32_t height, uint32_t stride_bytes,
+		      void (*delay_us)(uint32_t us), struct yd_t6_display_adopt *adopt);
+
+/* Which of the n buffers at phys[] the screen may still scan: bit k for
+ * phys[k], of the first 32. Too large is possible (a buffer is freed up to one
+ * frame late), too small never. Never waits, writes no register. Every bit for
+ * a null argument with n not 0. */
+uint32_t yd_t6_screen_busy(const struct yd_t6_display_bases *b, struct yd_t6_screen *s,
+			   const uint64_t *phys, size_t n);
 
 /* ---- TI SN65DSI83/84 (ip::sn65dsi8x; yakogl,sn65dsi8x) ------------------
  * I2C bus 0 of the env is the bridge; GPIO line 0 its EN pin, line 1 the
@@ -1864,7 +2092,7 @@ _Static_assert(offsetof(struct yd_t6_submit_up, drain_sync_updates) == 432, "yd_
 _Static_assert(offsetof(struct yd_t6_submit_up, drain_cs_ack) == 436, "yd_t6_submit_up.drain_cs_ack");
 _Static_assert(offsetof(struct yd_t6_submit_up, drain_cs_irq_acks) == 440, "yd_t6_submit_up.drain_cs_irq_acks");
 _Static_assert(offsetof(struct yd_t6_submit_up, drain_idle_acks) == 444, "yd_t6_submit_up.drain_idle_acks");
-_Static_assert(sizeof(struct yd_t6_osal_mem) == 192, "struct yd_t6_osal_mem");
+_Static_assert(sizeof(struct yd_t6_osal_mem) == 200, "struct yd_t6_osal_mem");
 _Static_assert(offsetof(struct yd_t6_osal_mem, fw) == 0, "yd_t6_osal_mem.fw");
 _Static_assert(offsetof(struct yd_t6_osal_mem, pool) == 24, "yd_t6_osal_mem.pool");
 _Static_assert(offsetof(struct yd_t6_osal_mem, pool_pages) == 32, "yd_t6_osal_mem.pool_pages");
@@ -1877,7 +2105,9 @@ _Static_assert(offsetof(struct yd_t6_osal_mem, carve) == 144, "yd_t6_osal_mem.ca
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_pool) == 168, "yd_t6_osal_mem.vm_pool");
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_pool_pages) == 176, "yd_t6_osal_mem.vm_pool_pages");
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_tables_pa) == 184, "yd_t6_osal_mem.vm_tables_pa");
-_Static_assert(sizeof(struct yd_t6_osal_counts) == 40, "struct yd_t6_osal_counts");
+_Static_assert(offsetof(struct yd_t6_osal_mem, heap_initial_chunks) == 192, "yd_t6_osal_mem.heap_initial_chunks");
+_Static_assert(offsetof(struct yd_t6_osal_mem, carve_reserved) == 196, "yd_t6_osal_mem.carve_reserved");
+_Static_assert(sizeof(struct yd_t6_osal_counts) == 80, "struct yd_t6_osal_counts");
 _Static_assert(offsetof(struct yd_t6_osal_counts, submitted) == 0, "yd_t6_osal_counts.submitted");
 _Static_assert(offsetof(struct yd_t6_osal_counts, completed) == 8, "yd_t6_osal_counts.completed");
 _Static_assert(offsetof(struct yd_t6_osal_counts, live_pages) == 16, "yd_t6_osal_counts.live_pages");
@@ -1886,6 +2116,44 @@ _Static_assert(offsetof(struct yd_t6_osal_counts, held) == 24, "yd_t6_osal_count
 _Static_assert(offsetof(struct yd_t6_osal_counts, refused_frees) == 28, "yd_t6_osal_counts.refused_frees");
 _Static_assert(offsetof(struct yd_t6_osal_counts, dead_refusal) == 32, "yd_t6_osal_counts.dead_refusal");
 _Static_assert(offsetof(struct yd_t6_osal_counts, dead_value) == 36, "yd_t6_osal_counts.dead_value");
+_Static_assert(offsetof(struct yd_t6_osal_counts, restarts) == 40, "yd_t6_osal_counts.restarts");
+_Static_assert(offsetof(struct yd_t6_osal_counts, last_refusal) == 44, "yd_t6_osal_counts.last_refusal");
+_Static_assert(offsetof(struct yd_t6_osal_counts, last_value) == 48, "yd_t6_osal_counts.last_value");
+_Static_assert(offsetof(struct yd_t6_osal_counts, oom_chunks) == 52, "yd_t6_osal_counts.oom_chunks");
+_Static_assert(offsetof(struct yd_t6_osal_counts, oom_no_chunk) == 56, "yd_t6_osal_counts.oom_no_chunk");
+_Static_assert(offsetof(struct yd_t6_osal_counts, heap_chunks) == 60, "yd_t6_osal_counts.heap_chunks");
+_Static_assert(offsetof(struct yd_t6_osal_counts, unended) == 64, "yd_t6_osal_counts.unended");
+_Static_assert(offsetof(struct yd_t6_osal_counts, down) == 68, "yd_t6_osal_counts.down");
+_Static_assert(offsetof(struct yd_t6_osal_counts, memory_kept) == 72, "yd_t6_osal_counts.memory_kept");
+_Static_assert(offsetof(struct yd_t6_osal_counts, stops_refused) == 76, "yd_t6_osal_counts.stops_refused");
+_Static_assert(sizeof(struct yd_t6_display_bases) == 64, "struct yd_t6_display_bases");
+_Static_assert(offsetof(struct yd_t6_display_bases, vop_mmu) == 8, "yd_t6_display_bases.vop_mmu");
+_Static_assert(offsetof(struct yd_t6_display_bases, hdmi) == 56, "yd_t6_display_bases.hdmi");
+_Static_assert(sizeof(struct yd_t6_display_adopt) == 192, "struct yd_t6_display_adopt");
+_Static_assert(offsetof(struct yd_t6_display_adopt, pd_vop) == 16, "yd_t6_display_adopt.pd_vop");
+_Static_assert(offsetof(struct yd_t6_display_adopt, version) == 44, "yd_t6_display_adopt.version");
+_Static_assert(offsetof(struct yd_t6_display_adopt, timing) == 64, "yd_t6_display_adopt.timing");
+_Static_assert(offsetof(struct yd_t6_display_adopt, mmu_status) == 108, "yd_t6_display_adopt.mmu_status");
+_Static_assert(offsetof(struct yd_t6_display_adopt, running) == 124, "yd_t6_display_adopt.running");
+_Static_assert(offsetof(struct yd_t6_display_adopt, ovl_layer_sel) == 144, "yd_t6_display_adopt.ovl_layer_sel");
+_Static_assert(offsetof(struct yd_t6_display_adopt, fb) == 156, "yd_t6_display_adopt.fb");
+_Static_assert(offsetof(struct yd_t6_display_adopt, shown) == 176, "yd_t6_display_adopt.shown");
+_Static_assert(sizeof(struct yd_t6_display_status) == 152, "struct yd_t6_display_status");
+_Static_assert(offsetof(struct yd_t6_display_status, frames) == 28, "yd_t6_display_status.frames");
+_Static_assert(offsetof(struct yd_t6_display_status, vop) == 36, "yd_t6_display_status.vop");
+_Static_assert(offsetof(struct yd_t6_display_status, soc_status1) == 96, "yd_t6_display_status.soc_status1");
+_Static_assert(offsetof(struct yd_t6_display_status, vo1_usable) == 104, "yd_t6_display_status.vo1_usable");
+_Static_assert(offsetof(struct yd_t6_display_status, monitor) == 120, "yd_t6_display_status.monitor");
+_Static_assert(offsetof(struct yd_t6_display_status, cru_gate60) == 148, "yd_t6_display_status.cru_gate60");
+_Static_assert(sizeof(struct yd_t6_screen) == 48, "struct yd_t6_screen");
+_Static_assert(offsetof(struct yd_t6_screen, last) == 0, "yd_t6_screen.last");
+_Static_assert(offsetof(struct yd_t6_screen, held) == 8, "yd_t6_screen.held");
+_Static_assert(offsetof(struct yd_t6_screen, state) == 24, "yd_t6_screen.state");
+_Static_assert(offsetof(struct yd_t6_screen, n_held) == 28, "yd_t6_screen.n_held");
+_Static_assert(offsetof(struct yd_t6_screen, width) == 32, "yd_t6_screen.width");
+_Static_assert(offsetof(struct yd_t6_screen, height) == 36, "yd_t6_screen.height");
+_Static_assert(offsetof(struct yd_t6_screen, stride) == 40, "yd_t6_screen.stride");
+_Static_assert(offsetof(struct yd_t6_screen, flips) == 44, "yd_t6_screen.flips");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");

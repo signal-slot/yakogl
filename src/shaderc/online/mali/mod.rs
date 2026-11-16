@@ -48,6 +48,8 @@ pub const MAT_TIMES_VEC_ORDER: super::ir::MatOrder = super::ir::MatOrder::MesaGl
 
 pub mod bir;
 pub mod blend;
+pub mod blend_nir;
+mod blend_nir_rules;
 pub mod emit;
 pub mod fau;
 pub mod flow;
@@ -194,6 +196,10 @@ pub enum MaliError {
     TexCount,
     /// A coordinate other than a vec2 varying read whole or two constants.
     TexCoord,
+    /// A cube look-up through an element of a sampler array other than
+    /// the first: Mesa numbers the array's elements together, the
+    /// descriptor index here counts the samplers read.
+    TexArrayElement,
     /// A varying read both as a coordinate and in the colour's arithmetic.
     TexCoordShared,
     /// The look-up's lanes other than in its own pairs, in order.
@@ -250,11 +256,20 @@ pub enum MaliError {
     /// (nir_fs.rs `ADMITTED`).
     FsOperandForm,
     FragOutput,
+    /// An integer colour output other than a `uvec4` declared `highp`, the
+    /// one a Mesa reference draws (`FsPrecision::of`).
+    IntColour,
     /// A fragment shader that writes no colour.
     NoColour,
     Interpolation,
     ColourForm,
     ColourPair,
+    /// A fragment shader's varying load of a form no reference draws: a
+    /// mediump varying beside a colour lane whose precision decides the
+    /// load and is not measured, the lanes of an aligned pair converted
+    /// apart, or conversions out of the order Mesa makes them (nir_fs.rs
+    /// `kept_whole`, `select`).
+    FsVaryingLoad,
     /// A pair of a varying lane and the constant 0.0, which Mesa selects as
     /// `U16_TO_U32` (bi_lower_mkvec_swz.c:256-257), an op not transcribed.
     ColourZeroHalf,
@@ -290,17 +305,31 @@ pub enum MaliError {
     /// draws: `max(x, 0.0)` (`fclamp_pos`), `clamp(x, -1.0, 1.0)`
     /// (`fsat_signed`), a negated `float(bool)` in a product.
     AlgebraicForm,
+    /// An integer constant that the ISA's table holds only as a byte or a
+    /// half, read by U32_TO_F32 or S32_TO_F32: Mesa packs the source's
+    /// widen (valhall.c gives these sources one), which Arm's description
+    /// fixes to none on v9-10 (isa-v9-v14.xml:17105, :20334, `widen0`
+    /// `exact="none"`), so the packer cannot write Mesa's word.
+    ConvertWiden,
     /// More expressions than the record holds, or one larger, moved by
     /// Mesa's link into the vertex shader (motion.rs).
     MovedTooLarge,
+    /// A vertex shader whose attribute numbering the walk cannot model:
+    /// a lane's fold that Mesa's back end makes after it numbers the
+    /// attribute locations (nir.rs `build`, docs/notes/mali-builtin-inputs.md
+    /// "Attribute records"), where the walk without that fold refuses, or
+    /// where the fold makes a varying lane a constant that Mesa's link
+    /// keeps computed and the attribute numbering depends on the fold.
+    AttributeNumbering,
     /// The scratch arena ran out (reported as capacity, not as a gap).
     OutOfScratch,
     Defect(Defect),
 }
 
 impl MaliError {
-    /// Every gap, for the tests that check the messages are distinct.
-    pub const GAPS: [MaliError; 62] = [
+    /// Every gap, for the tests that check the messages are distinct. A
+    /// slice, so that a new gap adds its own line and no count.
+    pub const GAPS: &'static [MaliError] = &[
         MaliError::LinkedVertexNotLowered,
         MaliError::BlendVariantNotLowered,
         MaliError::ControlFlow,
@@ -325,6 +354,7 @@ impl MaliError {
         MaliError::TexKind,
         MaliError::TexCount,
         MaliError::TexCoord,
+        MaliError::TexArrayElement,
         MaliError::TexCoordShared,
         MaliError::TexLanes,
         MaliError::TexHighp,
@@ -344,10 +374,12 @@ impl MaliError {
         MaliError::FragmentTooLarge,
         MaliError::FsOperandForm,
         MaliError::FragOutput,
+        MaliError::IntColour,
         MaliError::NoColour,
         MaliError::Interpolation,
         MaliError::ColourForm,
         MaliError::ColourPair,
+        MaliError::FsVaryingLoad,
         MaliError::ColourZeroHalf,
         MaliError::Fp16Inexact,
         MaliError::FauPage,
@@ -362,7 +394,9 @@ impl MaliError {
         MaliError::IfForm,
         MaliError::CompareForm,
         MaliError::AlgebraicForm,
+        MaliError::ConvertWiden,
         MaliError::MovedTooLarge,
+        MaliError::AttributeNumbering,
     ];
 
     /// The log text of each gap.
@@ -432,6 +466,9 @@ impl MaliError {
             MaliError::TexCoord => {
                 "Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet"
             }
+            MaliError::TexArrayElement => {
+                "Valhall: a cube map look-up through a sampler array element other than the first is not lowered yet"
+            }
             MaliError::TexCoordShared => {
                 "Valhall: a varying read both as a texture coordinate and in the colour's arithmetic is not lowered yet"
             }
@@ -475,12 +512,18 @@ impl MaliError {
                 "Valhall: a fragment colour of more than 255 vectorised operations and operands is not lowered yet"
             }
             MaliError::FragOutput => "Valhall: a fragment output other than gl_FragColor is not lowered yet",
+            MaliError::IntColour => {
+                "Valhall: an integer colour output other than one declared `highp uvec4` (an ivec4, int or uint, fewer lanes, or a uvec4 mediump or highp only by `precision highp int`) is not lowered yet"
+            }
             MaliError::NoColour => "Valhall: a fragment shader that leaves gl_FragColor unwritten is not lowered yet",
             MaliError::Interpolation => "Valhall: a flat, centroid or noperspective varying is not lowered yet",
             MaliError::ColourForm => {
                 "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet"
             }
             MaliError::ColourPair => "Valhall: a colour pair of a constant then a varying lane is not lowered yet",
+            MaliError::FsVaryingLoad => {
+                "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet"
+            }
             MaliError::ColourZeroHalf => {
                 "Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) is not lowered yet"
             }
@@ -517,8 +560,14 @@ impl MaliError {
             MaliError::AlgebraicForm => {
                 "Valhall: a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product) is not lowered yet"
             }
+            MaliError::ConvertWiden => {
+                "Valhall: an integer-to-float conversion of a constant the ISA's table holds only as a byte or a half is not lowered yet"
+            }
             MaliError::MovedTooLarge => {
                 "Valhall: more than 4 fragment expressions, or one of more than 8 operations, that Mesa's link moves into the vertex shader is not lowered yet"
+            }
+            MaliError::AttributeNumbering => {
+                "Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not lowered yet"
             }
             MaliError::OutOfScratch => "Valhall: the scratch arena ran out",
             MaliError::Defect(_) => "Valhall back end defect: an invariant of the pipeline did not hold",
@@ -648,6 +697,12 @@ pub struct MaliShader<'k> {
     /// `u_s0` .. `u_s15` of a vertex shader; each look-up's handle names
     /// its index, [`nir_fs::tex_handle`]).
     pub samplers: &'k [u8],
+    /// Bit i: the look-up at descriptor index i ([`MaliShader::samplers`]
+    /// `[i]`) is a cube map's (`TEX_SINGLE ... .cube`), whose texture
+    /// descriptor must be a cube's: the draw refuses a unit with no
+    /// complete cube map for it, in either stage (src/mali/backend.rs
+    /// `stage_texture`).
+    pub cube_samplers: u64,
     /// Fragment: the uniform block the program loads from memory (an
     /// `LD_PKA` of a uniform array element at a run-time index), in Mesa's
     /// packed layout ([`select::UboLayout`]'s rows), which the frame uploads
@@ -984,6 +1039,14 @@ pub struct FsPrecision {
 }
 
 impl FsPrecision {
+    /// Colour output 0 is stored as fp16 (`MaliShader::colour_f16`, Mesa's
+    /// `blend[0].type` = `nir_type_float16`): neither a highp float nor an
+    /// integer output. The one rule the record, and through it the blend
+    /// shader's key (src/mali/blend.rs `shader_key`), takes the type from.
+    pub fn colour_f16(&self) -> bool {
+        !self.colour_f32 && !self.colour_u32
+    }
+
     /// The precision of fragment shader `src`, whose IR is `m`.
     pub fn of<'s>(m: &ir_mod::Module<'_>, src: &'s str, scratch: &Arena<'s>) -> Result<FsPrecision, MaliError> {
         use super::ast::{BaseType, Decl, DeclId, Precision, StorageQualifier};
@@ -992,6 +1055,8 @@ impl FsPrecision {
         let ast = super::parser::parse(scratch, pre.tokens).map_err(defect)?;
         let ast = super::parser::resolve_io(scratch, ast, super::sema::Stage::Fragment).map_err(defect)?;
         let float = |b: &BaseType<'_>| matches!(b, BaseType::Float | BaseType::Vec(_) | BaseType::Mat(..));
+        let integer =
+            |b: &BaseType<'_>| matches!(b, BaseType::Int | BaseType::IVec(_) | BaseType::Uint | BaseType::UVec(_));
         /* the default in force at each function's definition; main's picks */
         let mut dflt = Precision::Default;
         let mut at_main = None;
@@ -1018,12 +1083,20 @@ impl FsPrecision {
                     let p = if ty.precision == Precision::Default { dflt } else { ty.precision };
                     f.colour_f32 |= p == Precision::High;
                 }
-                /* an unsigned integer output (fbload_int.frag's `highp uvec4
-                 * o_color`): Mesa stores its words as computed,
-                 * `BLEND.v4.u32` (fbload_fbload_int.expect.json) */
-                Decl::Var { storage: StorageQualifier::FragOut, ty, .. }
-                    if matches!(ty.base, BaseType::UVec(4)) && ty.precision == Precision::High =>
-                {
+                /* an integer output. The one a Mesa reference draws is a
+                 * `uvec4` declared `highp` (fbload_int.frag's `o_color`,
+                 * intuni_intrt.frag's `o_v`): Mesa stores its words as
+                 * computed, `BLEND.v4.u32` (fbload_fbload_int.expect.json).
+                 * Any other has no reference and is refused by name, never
+                 * taken for a float colour: an `ivec4` (`BLEND.v4.i32`), an
+                 * `int`, `uint` or narrower vector, a `mediump` or `lowp`
+                 * one, and a `uvec4` that is highp only through `precision
+                 * highp int` (the same type, but no reference shows Mesa's
+                 * words for it) */
+                Decl::Var { storage: StorageQualifier::FragOut, ty, .. } if integer(&ty.base) => {
+                    if ty.base != BaseType::UVec(4) || ty.precision != Precision::High {
+                        return Err(MaliError::IntColour);
+                    }
                     f.colour_u32 = true;
                 }
                 Decl::Var { storage: StorageQualifier::Varying, ty, name, .. } if float(&ty.base) => {
@@ -1182,6 +1255,7 @@ fn compile_stage<'s>(
         moved: &[],
         sampler: None,
         samplers: &[],
+        cube_samplers: 0,
         helper_threads: false,
         can_discard: false,
         ubo: &[],
@@ -1262,6 +1336,9 @@ fn compile_stage<'s>(
             sc.nsamplers = sc.nsamplers.max(i + 1);
         }
         sc.info.sampler = sc.samplers[..sc.nsamplers].first().copied();
+        for index in vs.cube_samplers() {
+            sc.info.cube_samplers |= 1u64.checked_shl(u32::from(index)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+        }
         if var.words > 0 {
             sc.info.secondary = Some(Secondary {
                 offset: (pos_words * 8) as u32,
@@ -1269,19 +1346,20 @@ fn compile_stage<'s>(
                 work_reg_count: var.work_reg_count,
             });
         }
-        /* the attribute records: one per location read, record = location
-         * (pan_shc's `attributes`); a matrix takes one location per column,
-         * each its own record (other_63_matattr: mat4 `a_xf` at 1 is
-         * records 1..4) */
+        /* the attribute records: one per location Mesa numbers, in
+         * location order (`nir::Nir::counted`: the locations read, and one
+         * whose load only the back end's late fold removes, vsattr_latefold's
+         * `d`, which keeps its record and its descriptor with no load;
+         * `nir::Nir::attribute_record`); a matrix takes one location per
+         * column, each its own record (other_63_matattr: mat4 `a_xf` at 1
+         * is records 1..4; vsattr_matcol: a mat2's unread column 0 takes
+         * none) */
         for d in m.inputs.iter() {
             let ir_mod::IoSlot::Attrib(base) = d.slot() else { continue };
             for loc in (0..glsl::columns(d.gl_type)).filter_map(|c| base.checked_add(c)) {
-                let read = vs.order[..vs.len]
-                    .iter()
-                    .any(|&id| matches!(vs.nodes[id as usize].kind, nir::Kind::Input { loc: l, .. } if l == loc));
-                if read {
+                if vs.counted & 1u64.checked_shl(u32::from(loc)).unwrap_or(0) != 0 {
                     let slot = sc.attributes.get_mut(sc.nattr).ok_or(MaliError::Defect(Defect::IrIndex))?;
-                    *slot = (loc, loc);
+                    *slot = (loc, vs.attribute_record(loc)?);
                     sc.nattr += 1;
                 }
             }
@@ -1326,7 +1404,7 @@ fn compile_stage<'s>(
                 let c = finish(&mut p, &mut layout, true, &g.ubo, scratch, out, marks)?;
                 sc.info.preload = c.preload;
                 sc.info.work_reg_count = c.work_reg_count;
-                sc.info.colour_f16 = true;
+                sc.info.colour_f16 = fs.colour_f16();
                 sc.info.colour_outputs = 1;
                 sc.rows = rows;
                 sc.code = &out[..c.words];
@@ -1409,7 +1487,7 @@ fn compile_stage<'s>(
         let c = finish(&mut p, &mut layout, true, &ubo, scratch, out, marks)?;
         sc.info.preload = c.preload;
         sc.info.work_reg_count = c.work_reg_count;
-        sc.info.colour_f16 = !fs.colour_f32 && !fs.colour_u32;
+        sc.info.colour_f16 = fs.colour_f16();
         sc.info.colour_outputs = f.colour_outputs();
         sc.info.compacted = f.compacted;
         /* the bindings by descriptor index ([`nir_fs::layout`] numbers them:
@@ -1421,6 +1499,9 @@ fn compile_stage<'s>(
             sc.nsamplers = sc.nsamplers.max(i + 1);
         }
         sc.info.sampler = sc.samplers[..sc.nsamplers].first().copied();
+        for (_, t) in f.live_look_ups().filter(|(_, t)| t.cube.is_some()) {
+            sc.info.cube_samplers |= 1u64.checked_shl(u32::from(t.index)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+        }
         /* a program with an `LD_PKA` reads the block from memory: the frame
          * uploads it in this layout (Mesa's `ubo_mask` bit 0) */
         if f.nubo > 0 {

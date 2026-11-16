@@ -1415,6 +1415,15 @@ fn current_blend_key(c: &GlContext) -> u32 {
     let n = framebuffer::frame_attachment(c);
     let fmt = framebuffer::fb_target_format_n(c, n);
 
+    /* integer and other-class targets in one draw: the mixed key of the
+     * per-target list, which carries neither blend nor colour mask (the back
+     * end refuses a draw that has either, by name) */
+    if several_targets(c) {
+        if let Some(k) = super::target_keys::draw_mixed_key(c) {
+            return k;
+        }
+    }
+
     /* an integer target: the variant that packs the integer output for its
      * layout (never blended, ES 3.0 4.1.7), with the mask of the channels it
      * has (a channel it lacks is never written, masked or not; an R or RG
@@ -2311,13 +2320,26 @@ fn upload_prog_gpu(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader) -> i32 {
     }
     /* Uniform blocks: the VS block then the FS block, 16-byte aligned
      * (reused every draw). */
-    let bytes = MAX_UNIFORM_DWORDS * 4 * 2 + 16;
+    let bytes = staging_stage_dwords(rvs, rfs) * 4 * 2 + 16;
     if osal::gpu_alloc(backend::heap_base(GLES_HEAP_DATA), bytes, OSAL_MEM_DATA, &mut pg.uniforms) != 0 {
         return -1;
     }
 
     pg.valid = true;
     0
+}
+
+/// Dwords each stage's half of a program's uniform staging buffer holds
+/// (`ProgGpu::uniforms`, `2 * this * 4 + 16` bytes): a stage's default
+/// block, or more where the program's stages lay out more and the GPU reads
+/// a stage's uniform blocks past its default block (the V3D,
+/// [`context::MAX_STAGE_UNIFORM_DWORDS`]). A blend variant's FS block is the
+/// shader's plus the blend constants. The draw uploads at most this a stage.
+fn staging_stage_dwords(rvs: &ShcShader, rfs: &ShcShader) -> usize {
+    MAX_UNIFORM_DWORDS
+        .max(rvs.uniform_dwords as usize)
+        .max(rfs.uniform_dwords as usize + context::BLEND_CONSTS_DWORDS)
+        .min(context::MAX_STAGE_UNIFORM_DWORDS)
 }
 
 /* --------------------------------------------------------------------------- */
@@ -3247,7 +3269,7 @@ fn fill_stage_layer_uniforms(
 ) {
     let table = sh.uniform_table();
 
-    for su in table {
+    for (i, su) in table.iter().enumerate() {
         if su.dword_off != SHC_UNIFORM_NO_BLOCK || su.binding as usize >= CAP_SAMPLERS {
             continue;
         }
@@ -3258,16 +3280,15 @@ fn fill_stage_layer_uniforms(
         };
         let h = bound[units[su.binding as usize] as usize];
         let t = (h != 0 && (h as usize) < MAX_TEXTURES && textures[h as usize].used).then(|| &textures[h as usize]);
-        /* snprintf(lname, SHC_UNIFORM_NAME_MAX + 16, "pvr_layers_%s", name):
-         * the bytes as they are, truncated to the buffer */
+        /* the row "pvr_layers_<sampler>", both names whole however long
+         * (`shaderc::uniform_row_name`): the 64-byte field cuts a sampler
+         * name at 63 characters, and the hidden row's 11 characters sooner */
         const PREFIX: &[u8] = b"pvr_layers_";
-        let mut lname = [0u8; SHC_UNIFORM_NAME_MAX + 16];
-        let name = util::name_bytes(&su.name);
-        let len = (PREFIX.len() + name.len()).min(lname.len() - 1);
-        lname[..PREFIX.len()].copy_from_slice(PREFIX);
-        lname[PREFIX.len()..len].copy_from_slice(&name[..len - PREFIX.len()]);
-        for k in table {
-            if k.dword_off != SHC_UNIFORM_NO_BLOCK && util::name_bytes(&k.name) == &lname[..len] {
+        let name = shaderc::uniform_row_name(sh, i);
+        for (j, k) in table.iter().enumerate() {
+            if k.dword_off != SHC_UNIFORM_NO_BLOCK
+                && shaderc::uniform_row_name(sh, j).strip_prefix(PREFIX) == Some(name)
+            {
                 let layers = match t {
                     Some(t) if t.layers != 0 => t.layers as u32,
                     _ => 1,
@@ -3900,20 +3921,14 @@ fn build_common(
     }
     let p = &c.objs_ref().programs[obj_index(program)];
     {
-        let mut vs_dw = p.rvs.uniform_dwords;
-        let mut fs_dw = fs_uniform_dwords;
-        let mut fs_app_dw = p.rfs.uniform_dwords;
+        /* each stage at most its half of the staging buffer (default block
+         * and, on the V3D, uniform blocks: staging_stage_dwords); the FS
+         * half starts behind the VS block as uploaded */
+        let room = staging_stage_dwords(&p.rvs, &p.rfs) as u16;
+        let vs_dw = p.rvs.uniform_dwords.min(room);
+        let fs_dw = fs_uniform_dwords.min(room);
+        let fs_app_dw = p.rfs.uniform_dwords.min(fs_dw);
         let fs_off = (vs_dw as usize * 4 + 15) & !15usize;
-
-        if vs_dw as usize > MAX_UNIFORM_DWORDS {
-            vs_dw = MAX_UNIFORM_DWORDS as u16;
-        }
-        if fs_dw as usize > MAX_UNIFORM_DWORDS {
-            fs_dw = MAX_UNIFORM_DWORDS as u16;
-        }
-        if fs_app_dw > fs_dw {
-            fs_app_dw = fs_dw;
-        }
         /* a back end that reads the host arrays only (the V3D) never reads the
          * staging copy: no reserve, no put (the fields below are set as ever) */
         let host_only = backend::uniforms_host_only();
@@ -3929,7 +3944,7 @@ fn build_common(
         /* a failing upload leaves the previous draw's values: the draw is refused */
         let mut rc = 0;
         if vs_dw != 0 {
-            /* the block holds min(uniform_dwords, MAX_UNIFORM_DWORDS) = vs_dw dwords */
+            /* the block holds min(uniform_dwords, room) = vs_dw dwords */
             let blk = p.vs_block();
             if !host_only {
                 rc |= put(&mut pg.uniforms, 0, dword_bytes(&blk[..(vs_dw as usize).min(blk.len())]));
@@ -3973,7 +3988,7 @@ fn build_common(
                 core::ptr::null()
             } else {
                 // SAFETY: fs_off is inside the uniforms allocation
-                // (2 * MAX_UNIFORM_DWORDS * 4 + 16 bytes).
+                // (2 * room * 4 + 16 bytes, vs_dw and fs_dw at most room).
                 unsafe { (pg.uniforms.cpu as *const u8).add(fs_off) as *const c_void }
             };
         }
@@ -4431,6 +4446,23 @@ fn build_common(
                 (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = s;
             }
             (tb.linear_filter, tb.min_linear, tb.mip_filter, tb.mip_levels) = sampling_fields(t);
+            /* The Mali's 3D texture: its back end copies every level of the
+             * grid the GL core holds after level 0 (`volume_of`,
+             * `grid_level_at`; docs/notes/mali-3d-levels.md section 4), so it
+             * is given the levels a mipmap filter walks, which the GL core
+             * does not count for a grid (its `levels` stays 1). `bytes`
+             * stays level 0's. Here, after the sampler object's filters are
+             * in force. The PowerVR's grid keeps one level. */
+            #[cfg(feature = "gpu-mali")]
+            if tb.type_ == GLES_TEXTYPE_3D && t.grid_cols != 0 {
+                let levels = super::native_vol::sampled_levels(t);
+                tb.mip_levels = levels as u8;
+                tb.mip_filter = match t.min_filter {
+                    _ if levels < 2 => 0,
+                    GL_NEAREST_MIPMAP_LINEAR | GL_LINEAR_MIPMAP_LINEAR => 2,
+                    _ => 1,
+                };
+            }
             /* The PowerVR's native 3D texture (gl::native_vol,
              * pvr_native_3d; docs/notes/pvr-3d-native.md), by the same rules
              * as the 2D array's: the program alone decides (the record's bit
@@ -5379,6 +5411,8 @@ pub(crate) fn reset_for_tests(also_programs: bool) {
 mod tests {
     use super::*;
     use crate::gl::{buffer::*, framebuffer::*, program::*, state::*, texture::*, vertex::*};
+    #[cfg(not(feature = "report-es2"))]
+    use crate::target_key::{gles_surf_target_key, shc_blend_key_is_mixed, shc_blend_key_mixed};
     use crate::testutil::{CacheOp, MemEvent, RecordedDraw, TestGl, FILL, HEAP_DATA, HEAP_SHADER};
     use std::vec::Vec;
 
@@ -13034,6 +13068,125 @@ mod tests {
         let key = current_blend_key(gl.ctx());
         assert_eq!(key, SHC_BLEND_KEY_REPLACE | shc_blend_key_rt(SHC_RT_F16));
         assert_eq!(shc_blend_key_class(key), SHC_RT_F16);
+    }
+
+    /// Bind a framebuffer with one renderbuffer per internal format on
+    /// attachment 0.. (0 skips the attachment) and select the draw buffers.
+    #[cfg(not(feature = "report-es2"))]
+    fn mixed_fbo(gl: &Gl, fmts: &[GLenum], bufs: &[GLenum]) {
+        let mut fbo: GLuint = 0;
+        // SAFETY: plain GL calls.
+        unsafe {
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        }
+        for (i, f) in fmts.iter().enumerate() {
+            if *f == 0 {
+                continue;
+            }
+            let mut rb: GLuint = 0;
+            // SAFETY: plain GL calls.
+            unsafe {
+                glGenRenderbuffers(1, &mut rb);
+                glBindRenderbuffer(GL_RENDERBUFFER, rb);
+                glRenderbufferStorage(GL_RENDERBUFFER, *f, 8, 8);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i as GLenum, GL_RENDERBUFFER, rb);
+            }
+        }
+        // SAFETY: `bufs` draw buffers.
+        unsafe { glDrawBuffers(bufs.len() as i32, bufs.as_ptr()) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
+    /// An integer attachment beside another class keys the mixed key of the
+    /// per-target list, before the integer branch. It carries neither blend
+    /// nor colour mask (the back end refuses a draw that has either).
+    #[test]
+    #[cfg(not(feature = "report-es2"))] /* glDrawBuffers and integer targets are ES 3.0 */
+    fn mixed_integer_draw_buffers_key_the_mixed_key() {
+        let rgba8 = gles_surf_target_key(GLES_SURF_RGBA8888).unwrap();
+        let u32k = gles_surf_target_key(GLES_SURF_R32UI).unwrap();
+        let i32k = gles_surf_target_key(GLES_SURF_R32I).unwrap();
+        let r16f = gles_surf_target_key(GLES_SURF_R16F).unwrap();
+        let a01 = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1];
+
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_RGBA8, GL_R32UI], &a01);
+        let mixed = shc_blend_key_mixed(&[rgba8, u32k]).unwrap();
+        assert_eq!(current_blend_key(gl.ctx()), mixed);
+        assert!(shc_blend_key_is_mixed(mixed));
+        // SAFETY: plain GL calls.
+        unsafe {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glColorMask(GL_FALSE_B, GL_TRUE_B, GL_TRUE_B, GL_TRUE_B);
+        }
+        assert_eq!(current_blend_key(gl.ctx()), mixed, "blend and mask are the back end's to refuse");
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_RGBA8], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_mixed(&[u32k, rgba8]).unwrap());
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_R32I], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_mixed(&[u32k, i32k]).unwrap());
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        let a012 = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2];
+        mixed_fbo(&gl, &[GL_RGBA8, GL_R32UI, GL_R16F], &a012);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_mixed(&[rgba8, u32k, r16f]).unwrap());
+
+        /* a list that starts at attachment 1 is keyed by the dense list */
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        let bufs = [GL_NONE, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2];
+        mixed_fbo(&gl, &[0, GL_RGBA8, GL_R32UI], &bufs);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_mixed(&[rgba8, u32k]).unwrap());
+    }
+
+    /// A list that is not a mix, or that the mixed key cannot carry (an sRGB
+    /// slot, a `GL_NONE` gap), keeps the key it had.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] /* glDrawBuffers and integer targets are ES 3.0 */
+    fn non_mixed_draw_buffers_keep_their_keys() {
+        let a01 = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1];
+        let rt = ShcIntRt { channels: 1, bits: 32, signed: false };
+
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_R32UI], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "one layout: the integer key");
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_RGBA8, GL_RGBA8], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), 0);
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_SRGB8_ALPHA8, GL_R32UI], &a01);
+        assert!(!shc_blend_key_is_mixed(current_blend_key(gl.ctx())), "an sRGB slot");
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_SRGB8_ALPHA8], &a01);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "an sRGB slot");
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        let gap = [GL_COLOR_ATTACHMENT0, GL_NONE, GL_COLOR_ATTACHMENT2];
+        mixed_fbo(&gl, &[GL_RGBA8, 0, GL_R32UI], &gap);
+        assert_eq!(current_blend_key(gl.ctx()), 0, "a gap: attachment 0's key as before");
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_RGBA8, GL_R32UI], &a01[..1]);
+        assert_eq!(current_blend_key(gl.ctx()), 0, "one target");
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_R32UI, GL_RGBA8], &a01[..1]);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "one target");
     }
 
     /// A draw buffer list that starts at attachment 1 (`out_shift` 1): the
