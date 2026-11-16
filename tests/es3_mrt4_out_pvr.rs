@@ -7,11 +7,13 @@
 //! target past the fourth register refused by name).
 //!
 //! The compiler is given the variant a draw of that layout compiles under
-//! (key 0 for RGBA8 attachments) and the bytes run through the host byte
-//! model (tests/usc_exec). Pixel output n is special register 32 + n, so a
+//! (key 0 for RGBA8 attachments; the per-target list, `TargetPack`, for
+//! attachments of different classes) and the bytes run through the host
+//! byte model (tests/usc_exec). Pixel output n is special register 32 + n, so a
 //! shader that writes output register r writes 32 + r. The cases: four
 //! RGBA8 outputs (o0-o3), a shader that writes only location 3, RGBA8 x2 +
-//! RGBA16F (a pair), and a layout that does not fit (refused by the layout
+//! RGBA16F (a pair), four targets of different classes, and a layout that
+//! does not fit (refused by the layout
 //! and by the compiler, never packed past register 3). HOST-ONLY.
 //!
 //! ```text
@@ -19,13 +21,13 @@
 //! ```
 #![cfg(all(feature = "shaderc-online", feature = "gpu-powervr", not(feature = "report-es2")))]
 use yakogl::pvr::mrt_layout::{register_layout, LayoutError};
-use yakogl::shaderc::online::powervr::chain::compile_fragment_for;
+use yakogl::shaderc::online::powervr::chain::{compile_fragment_for, compile_fragment_targets, TargetPack};
 use yakogl::shaderc::online::powervr::decode::decode_group;
 use yakogl::shaderc::online::powervr::isa::ops_for;
 use yakogl::shaderc::online::powervr::operands::dsts;
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::{lower, store};
-use yakogl::shaderc::{shc_blend_key_rt, SHC_RT_F16X4};
+use yakogl::shaderc::{ShcIntRt, SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8};
 
 mod usc_exec;
 
@@ -40,12 +42,26 @@ struct Rec {
 /// One fragment shader through the chain under the variant `key`, or the
 /// refusal.
 fn compile_for(src: &str, key: u32) -> Result<Rec, String> {
+    compile_with(src, Err(key))
+}
+
+/// One fragment shader through the chain for the per-target list `targets`
+/// (draw buffer i written from location i, each packed for its own target).
+fn compile_targets(src: &str, targets: &[TargetPack]) -> Result<Rec, String> {
+    compile_with(src, Ok(targets))
+}
+
+fn compile_with(src: &str, variant: Result<&[TargetPack], u32>) -> Result<Rec, String> {
     let _g = COMPILING.lock().unwrap_or_else(|e| e.into_inner());
     store::with_scratch(|a| {
         let _keep = store::begin_keep().expect("keep");
         let text = a.alloc_str(src).unwrap();
         let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| format!("front end: {}", e.msg))?;
-        let rec = compile_fragment_for(&l.module, &l.reflection, a, key).map_err(|e| format!("chain: {e:?}"))?;
+        let rec = match variant {
+            Ok(t) => compile_fragment_targets(&l.module, &l.reflection, a, t),
+            Err(key) => compile_fragment_for(&l.module, &l.reflection, a, key),
+        }
+        .map_err(|e| format!("chain: {e:?}"))?;
         // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
         let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
         Ok(Rec { num_outputs: rec.num_outputs, image: code.iter().flat_map(|w| w.to_le_bytes()).collect() })
@@ -135,16 +151,62 @@ fn only_location_3_writes_register_3() {
 }
 
 /// RGBA8 x2 + RGBA16F: layout [1,1,2] gives registers 0, 1, 2 (a pair at
-/// 2..4); the variant is the F16X4 key of the pair target.
+/// 2..4). One target key names one class for every output, so the variant
+/// that packs only the third output as halves is the per-target list.
 #[test]
-#[ignore = "pvr-shout4: no variant packs one of several outputs as RGBA16F; the F16X4 key is read as a blend (blend.rs:85 via chain.rs:714)"]
 fn rgba8_x2_and_rgba16f_pair_land_in_0_1_2() {
     let src = fragment(&[(0, VEC4), (1, VEC4), (2, VEC4)]);
     let want = want_starts(&[1, 1, 2]);
     assert_eq!(want, [0, 1, 2]);
-    let rec = compile_for(&src, shc_blend_key_rt(SHC_RT_F16X4)).unwrap_or_else(|e| panic!("{e}"));
+    let t = [TargetPack::Class(SHC_RT_RGBA8), TargetPack::Class(SHC_RT_RGBA8), TargetPack::Class(SHC_RT_F16X4)];
+    let rec = compile_targets(&src, &t).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(rec.num_outputs, 4, "two RGBA8 dwords and a pair");
-    assert_eq!(&out_regs(&rec.image)[..3], &[0, 1, 2][..]);
+    assert_eq!(out_regs(&rec.image), [0, 1, 2, 3], "o2's halves in the pair 2, 3");
+    let out = usc_exec::run_binary(&rec.image, &usc_exec::sentinel_inputs(1.0e30), true).expect("runs");
+    /* o2 = vec4(0.3): four equal halves, two to a dword */
+    let h = u32::from(half_bits(0.3));
+    assert_eq!(out.get(&2), Some(&(h | h << 16)), "{out:x?}");
+    assert_eq!(out.get(&3), Some(&(h | h << 16)), "{out:x?}");
+}
+
+/// Four targets of different classes, one dword each (RGBA8, R32UI, R32F,
+/// RGBA8): layout [1,1,1,1], o0-o3 in registers 0..3.
+#[test]
+fn four_targets_of_different_classes_land_in_0_to_3() {
+    let src = "#version 300 es\nprecision highp float;\n\
+               layout(location = 0) out vec4 o0;\nlayout(location = 1) out highp uint o1;\n\
+               layout(location = 2) out float o2;\nlayout(location = 3) out vec4 o3;\n\
+               void main() { o0 = vec4(0.1); o1 = 7u; o2 = 0.5; o3 = vec4(0.4); }\n";
+    let r32ui = ShcIntRt { channels: 1, bits: 32, signed: false };
+    let t = [
+        TargetPack::Class(SHC_RT_RGBA8),
+        TargetPack::Int(r32ui),
+        TargetPack::Class(SHC_RT_F32),
+        TargetPack::Class(SHC_RT_RGBA8),
+    ];
+    let want = want_starts(&[1, 1, 1, 1]);
+    let rec = compile_targets(src, &t).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(rec.num_outputs, 4);
+    assert_eq!(out_regs(&rec.image), want);
+    let out = usc_exec::run_binary(&rec.image, &usc_exec::sentinel_inputs(1.0e30), true).expect("runs");
+    assert_eq!(out.get(&1), Some(&7), "R32UI as it is: {out:x?}");
+    assert_eq!(out.get(&2), Some(&0.5f32.to_bits()), "R32F as it is: {out:x?}");
+    assert_ne!(out.get(&0), out.get(&3), "o0 and o3 their own colours: {out:x?}");
+}
+
+/// IEEE half of a value exact enough for the test's constants (normal, no
+/// rounding past the tie).
+fn half_bits(x: f32) -> u16 {
+    let b = x.to_bits();
+    let sign = (b >> 16) & 0x8000;
+    let exp = ((b >> 23) & 0xff) as i32 - 127 + 15;
+    let man = b & 0x7f_ffff;
+    let mut h = (exp as u32) << 10 | man >> 13;
+    let rest = man & 0x1fff;
+    if rest > 0x1000 || (rest == 0x1000 && h & 1 != 0) {
+        h += 1;
+    }
+    (sign | h) as u16
 }
 
 /// What does hold today for [1,1,2]: under key 0 the three outputs are
