@@ -70,8 +70,8 @@ upload refusals 200 -> 64 (compile 0, image 434); `texture.specification`
 1,163 cases, 6 pass / 1,157 fail, upload refusals 448 -> 141 (compile 0,
 image 1,013, framebuffer incomplete 3). `docs/es3/gc-formats.md` section 5.
 
-**i.MX8MP**: 48 of the 133 entries of `tools/cts/imx8mp-gles3-tree.txt`, in three slices of one campaign
-commit `9bc82915` (2026-11-14 and 11-15, plan #316; `tools/cts/log/2026-11-imx8mp-gles3-9bc82915-rows01-13/`,
+**i.MX8MP**: the first GC7000UL board run, 48 of the 133 entries of `tools/cts/imx8mp-gles3-tree.txt`,
+in three slices of one campaign commit `9bc82915` (2026-11-14 and 11-15, plan #316; `tools/cts/log/2026-11-imx8mp-gles3-9bc82915-rows01-13/`,
 `-rows17-34/`, `-rows35-51/`, recipe `docs/es3/board-recipe-imx8mp.md`): 28,459 mustpass cases, 29,594 begun,
 **27,201 pass / 1,851 fail / 530 NotSupported / 12 other / 123 without a result**, 0 resets, no entry out of
 its 600 s window (longest 338 s). Of the 1,851 fails 873 are named — the CRC pages name at most 240 cases of a
@@ -79,7 +79,8 @@ row, and e25 (364 fails), e26 (277) and e29 (328) were left with counts only —
 NotSupported and 12 other cases have no names, because the board's A53 console delivered no text in any of the
 three sessions (recipe, "What the three sessions measured"). e26 stops at its first `precision.reflect` case
 with an `other` status and never begins the 123 cases after it, the same record on a rerun: not a watchdog end.
-Entries 13-15 and 51-132 (14,351 mustpass cases) have not run.
+Entries 13-15 and 51-132 (14,351 mustpass cases) have not run. Per cause: "GC7000UL (i.MX8MP) failures
+by group" below; per case against the host: `docs/es3/imx8mp-gles3-compare-9bc82915.tsv`.
 
 ## Feature state
 
@@ -145,6 +146,100 @@ cases did not start (RC15).
 **QualityWarning 185**: `texture.shadow` 180 (compare after filter on the 2D
 and cube LINEAR / mipmap cases) and `rasterization` 5. dEQP counts them as
 passes.
+
+## GC7000UL (i.MX8MP) failures by group, 48 of 133 entries at `9bc82915`
+
+The first board numbers for this GPU ("Current state" above; the three
+slice READMEs under `tools/cts/log/` carry the per-entry tables and the
+verdict lines). Counts are the SNVS records' (they include the cases outside
+the mustpass list that an entry's wildcards also begin). Failing names come
+from the CRC pages (`results.tsv` of each slice), which `board.sh` reads for
+at most 40 pages (240 names) of a row: entries 25, 26 and 29 have more
+fails than that and were not paged, so 969 of the 1,851 fails have no name.
+
+| Group (entries) | Fail | NotSupported | Where the named fails are | Causes |
+|---|---:|---:|---|---|
+| shaders (25-50) | 1,152 | 0 | e27 `builtin_functions.precision` 152 (`sinh`, `sqrt`, `step`, `sub`, `tan`, `tanh`, `transpose`, `trunc`, `smoothstep`), e47 `random.texture` 22, e45 `random` 8, e43 `precision.int.highp_div_fragment` 1; unnamed: e25 364 (`arrays`, `builtin_functions.common`, `pack_unpack`, `precision.abs` .. `precision.cos`), e26 277 (`precision.dot` .. `precision.radians`, then the stop), e29 328 (`conversions.vector_to_vector`, `declarations`, `derivate`, `discard`, `fragdata`, `fragdepth`, `function`, `functions`) | RC1 (dEQP's shader executor draws into 32-bit integer targets, which the GC7000UL refuses by name: the host reads `GL_INVALID_OPERATION` on the draw for `builtin_functions.common` and `precision`), RC13 (`random.texture`: the compiler refuses the shader on the host too); the rest is unnamed |
+| fbo (4-9) | 400 | 255 | `color` 116, `render` 80, `blit` 94 (`conversion` 48, `default_framebuffer` 30, `depth_stencil` 16), `invalidate` 29, `completeness` 34, `msaa` 34, `depth` 10, 3 CRCs of e8 outside the list | RC1 (RGBA32I/UI targets 36 + 16 + 12 + 8), R and RG integer texture attachments (below), RC7 (sRGB targets), 16F targets, RC8 (`msaa`, `depth_stencil`, blits from the window), `depth` clamp |
+| fragment_out (18-20) | 215 | 115 | `array.int`/`uint` 72, `basic.int`/`uint` 24 (RC1, host-predicted: 48 of them are the RGBA32I/UI outputs), `array.fixed` 12 and `basic.fixed` 13 (`srgb8_alpha8`, `r8_highp_float`), `array.float` 24 (`rg16f` 12, `rgba16f` 12) and `basic.float` 3 (`rg16f_*_vec4`), `random` 60; e20 also holds the 8 `implementation_limits` fails | RC1, RC7, 16F targets, RC14 (`random`: a fourth attachment is `GL_INVALID_ENUM` on the host, 26 of the 54 predicted) |
+| primitive_restart .. shader_api (24) | 26 (+7 other) | 26 | `read_pixels` 24 (every `rgba_int` and `rgba_uint` `alignment`, `rowlength` and `skip` case; host-predicted, RC1), `rasterization` lines 7 (`interpolation.basic.lines`, `line_strip`, `projected.lines`, `fbo.*.interpolation.lines`, `rbo_multisample_max.*.lines_wide`) | RC1, RC8, line rasterization |
+| clipping .. dither (2) | 24 | 0 | `default_vertex_attrib` non-square matrices: `mat2x3`, `mat2x4`, `mat3x2`, `mat3x4`, `mat4x2`, `mat4x3` x `1f`, `1fv`, `4f`, `4fv` (every square type passes) | Appendix A (a picture verdict, board only) |
+| multisample .. pbo (23) | 17 | 58 | `negative_api` 7 (`buffer.blit_framebuffer_multisample`, `clear_bufferiv`/`uiv`, `read_pixels_fbo_format_mismatch`, `shader.uniformui{,v}_incompatible_type`, `texture.texsubimage2d`/`3d`), `pbo.renderbuffer.rgba32{i,ui}_{clears,triangles}` 4, `multisample.fbo_max_samples` 4 | RC1, RC8, RC10 |
+| draw, draw_buffers_indexed (3) | 7 | 76 | `draw.random` 14, 72, 141, 162, 179, 200, 209 | not classified (picture verdicts); the 76 NotSupported are `draw_buffers_indexed` (RC14, host-predicted) |
+| instanced (21) | 6 | 0 | `draw_arrays_instanced.mixed.*`, `draw_elements_instanced.mixed.*` (2, 4, 20 instances) | Appendix A, T6: the GC7000UL board check of the hardware divisor, failed |
+| fragment_ops (10-12, 16, 17) | 2 | 0 | `blend.fbo_srgb.equation_src_func_dst_func.max` and `.min` (e12); the other 1,991 cases these five entries began pass | RC7 (`max`/`min` on an sRGB target); entries 13-15 (the rest of `fbo_srgb`) not run |
+| lifetime (22) | 2 | 0 | `attach.deleted_output.buffer_transform_feedback` (RC3's known case) and one case outside the list | RC3 |
+| implementation_limits (in 20) | 8 | 0 | `compressed_texture_formats`, `num_compressed_texture_formats`, `max_color_attachments`, `max_draw_buffers`, `max_combined_{fragment,vertex}_uniform_components`, `max_uniform_block_size`, `max_vertex_output_components` | RC10, RC14 (the host tip at `26d1c4a2` fails 8 of the 49 `implementation_limits` cases as well, value verdicts the counting list does not carry; the limits moved after the campaign commit, plan #359) |
+| attribute_location, buffer, fence_sync, primitive_restart, rasterizer_discard, samplers, occlusion_query, shaders e28, e30-e42, e44, e46, e48-e50 | 0 | 0 | | pass in full |
+| **total** | **1,851** | **530** | | |
+
+**Board against the host (HOST-ONLY GC7000UL column).** The 873 named
+fails were compared case by case with the host's counting not-pass list
+(`tools/cts/imx8mp-gles3-compare.py`, causes `tools/cts/imx8mp-gles3-causes.tsv`;
+host rows: the `vivante` rows of `docs/es3/host-gles3-notpass.tsv` at
+`26d1c4a2`, 4,171 cases): **473 host-predicted, 400 board-only**,
+0 with another outcome; the per-case verdicts are
+`docs/es3/imx8mp-gles3-compare-9bc82915.tsv`. The host predicted: the 32-bit
+integer targets (148: `fbo.blit.conversion` 36, `fragment_out` int/uint 48,
+`read_pixels` 24, `fbo.color` 16, `fbo.completeness` 12, `fbo.render` 8,
+`pbo` 4), the other int/uint `fragment_out` outputs (48, `GL_INVALID_OPERATION`
+on the draw), `builtin_functions.precision` (138, the executor's integer
+targets), `fragment_out.random` (54), `fbo.msaa` and the multisample cases
+(35), `fbo.blit.depth_stencil` (16), `random.texture` and three `random`
+compile refusals (25), `fbo.invalidate.*.unbind_blit_*` (6), `negative_api`
+(3). Board-only, by cause (the host renders nothing, so every one is a
+picture or read-back verdict the host could not see):
+
+| Cause (board-only) | Cases | Entries | What fails |
+|---|---:|---|---|
+| R and RG integer texture colour attachments (`r8i` .. `rg32ui`, 12 formats) | 135 | e6, e7, e8, e9 | `fbo.color.{tex2d,tex2darray,tex3d,texcube}` 48, `fbo.color.repeated_clear` 24, `fbo.render.{recreate_color,resize}` 24, `fbo.invalidate.format` 12, `fbo.completeness.renderable.texture.color0` 12 and `.depth`/`.stencil` of the 32-bit ones 8, `fbo.completeness.renderable.{texture,renderbuffer}.color0.r32f` 2 (also `rgba8i`/`ui`, `rgba16i`/`ui`, `rgb10_a2ui` in `repeated_clear.blit.tex2d`, 5). The RGBA integer formats pass in `fbo.color.tex2d` |
+| sRGB8_ALPHA8 colour targets (RC7, board checks B1 and B4) | 60 | e5, e6, e8, e9, e12, e18, e19 | `fragment_out.{array,basic}.fixed.srgb8_alpha8_*` 24, `fbo.blit.conversion.srgb8_alpha8_to_*` 12, `fbo.render.*` 12, `fbo.color.*` 9, `fbo.invalidate.format` 1, `fragment_ops.blend.fbo_srgb.{max,min}` 2 (the six `fbo.blit.default_framebuffer.srgb8_alpha8_*` cases are counted with the blits below) |
+| 16F colour targets (`rg16f`, `rgb16f`, `rgba16f`) | 51 | e6, e9, e18, e19 | `fragment_out.array.float.{rg16f,rgba16f}_*` 24 and `basic.float.rg16f_*_vec4` 3 (`rgba16f` and `r16f` pass as a single target), `fbo.render.*` 16 (`rg16f`, `rgb16f`), `fbo.color.*` 8 (`rgb16f` everywhere, `rg16f` blend) |
+| `glBlitFramebuffer` from the default framebuffer (RC8) | 30 | e5 | every `fbo.blit.default_framebuffer.*_{linear_out_of_bounds,linear_scale,nearest_scale}_blit_from_default` (all 9 formats x 3 = 27) and the three `srgb8_alpha8_*_blit_to_default`; the `*_basic_blit_*` cases pass |
+| R8, RG8, RGB8, RGB565 colour targets after a clear, a blend or sharing | 27 | e6, e9, e19 | `fbo.render.shared_colorbuffer{,_clear}` 16, `fbo.render.recreate_color.rbo_*` 4, `fbo.color.blend.*_src_over` 4, `fbo.color.repeated_clear.blit.tex2d.{r8,rg8}` 2, `fragment_out.basic.fixed.r8_highp_float` 1 (`fbo.color.tex2d.r8`/`rg8` pass) |
+| `default_vertex_attrib` non-square matrices | 25 | e2 | the 24 above; the 25th line is the CRC pair `mat4.vertex_attrib_4f`,`mat4x2.vertex_attrib_4fv`, which the slice README resolves to the `mat4x2` case (the square type passes) |
+| multisample (RC8) | 14 | e8, e23, e24 | `fbo.invalidate.{sub,whole}.unbind_blit_msaa_*` 8, `multisample.fbo_max_samples` 4, `rasterization.fbo.rbo_multisample_max.*.lines_wide` 2 |
+| `fbo.depth.depth_{test,write}_clamp.*` | 10 | e8 | all five depth formats, both tests |
+| `implementation_limits` (RC10, RC14) | 8 | e20 | above |
+| `draw.random` | 7 | e3 | above |
+| `fragment_out.random` beyond the host's 54 | 6 | e20 | `random.1`, `.44`, `.61`, `.64`, `.65`, `.69` |
+| `instanced.*.mixed.*` (T6) | 6 | e21 | above |
+| `rasterization` lines | 5 | e24 | `interpolation.basic.{lines,line_strip}`, `interpolation.projected.lines`, `fbo.rbo_singlesample.interpolation.lines`, `fbo.texture_2d.interpolation.lines` |
+| shaders, single cases | 9 | e27, e43, e45, e47 | `precision.tanh.highp_{fragment,vertex}.{scalar,vec2}` 4, `precision.int.highp_div_fragment`, `random.basic_expression.fragment.38`, `random.scalar_conversion.combined.87` (a CRC pair with `random.texture.fragment.143`; the slice README resolves it to the texture case), `constant_expressions.builtin_functions.common.max_vec4_vertex` and `conversions.matrix_combine.bvec2_bvec2_to_mat2_fragment` (CRC pairs of e27) |
+| `negative_api` | 4 | e23 | `shader.uniformui{,v}_incompatible_type`, `texture.texsubimage2d`, `texture.texsubimage3d` |
+| RGBA32I/UI `fbo.invalidate.format` (RC1) | 2 | e8 | the host has no row for these two |
+| `lifetime.attach.deleted_output.buffer_transform_feedback` (RC3) | 1 | e22 | |
+| **total** | **400** | | |
+
+**Not named: entries 25, 26 and 29 (969 fails).** Each has more fails than
+40 pages hold. e25 (`shaders.arrays`, `builtin_functions.common`,
+`pack_unpack`, `precision.abs` .. `precision.cos`; 1,000 mustpass cases,
+1,080 begun) 364 fails; e29 (`conversions.vector_to_vector`, `declarations`,
+`derivate`, `discard`, `fragdata`, `fragdepth`, `function`, `functions`; 882
+mustpass, 1,224 begun) 328 fails. The host at `26d1c4a2` reads
+`GL_INVALID_OPERATION` on the executor's draw for 190 `builtin_functions.common`
+cases and the 88 `derivate.*.fbo_float` cases (RC1: the executor's 32-bit
+integer targets) and lists 114 `precision.abs` .. `precision.cross` cases, so
+most of e25 and part of e29 are predicted; the rest needs a console or a
+higher page limit to name.
+**e26 stops.** `precision.dot` .. `precision.radians` (499 cases) run; case
+500, the first `precision.reflect` case, ends with a status other than Pass,
+Fail or NotSupported (the record's `other` is 1) and dEQP does not go on:
+`reflect` 11, `refract` 24, `round` 24, `roundeven` 24, `sign` 24 and `sin` 16
+never begin (123). The rerun gave the same record word for word at the same
+338 s; it is not a watchdog end. Which status it was (Crash, InternalError,
+ResourceError) needs a console.
+
+**NotSupported 530**: `fbo` 255, `fragment_out` 115, `draw_buffers_indexed`
+76, `multisample` and `negative_api` 58, `rasterization` and
+`shader_api` 26. The host's NotSupported count for the same groups at
+`26d1c4a2` (`docs/es3/host-gles3-tip.tsv`: `fbo` 255, `fragment_out` 115,
+`draw_buffers_indexed` 76, `multisample` 48, `negative_api` 4, `pbo` 6,
+`rasterization` 12, `shader_api` 14) is also 530 (RC2 formats refused by name, RC8 "no multisample
+buffers", RC14 `GL_EXT_draw_buffers_indexed`, `program_binary`), so these are
+read as the host's; the record names none of them. **Other 12**: e24 7
+(`rasterization` interpolation, QualityWarning on the Pi 4 for the same
+cases), e27 4, e26 1 (the stop).
 
 ## Root causes
 
@@ -545,6 +640,11 @@ refuses `GL_HALF_FLOAT` and the packed types, and the getters refuse
   draw's instance, then P3, hardware divisors) and the GC7000UL board check.
   The V3D takes any divisor and is expected to pass.
 - **T7, the i.MX8MP and Pi 4 columns**: their first whole dEQP-GLES3 trees.
+  The i.MX8MP's is 48 of 133 entries at `9bc82915` ("GC7000UL (i.MX8MP)
+  failures by group"): `attribute_location` 298 / 298 pass (T4 closed on
+  the board), `default_vertex_attrib` fails the 24 non-square matrix cases,
+  `instanced.*.mixed.*` fails all 6 (T6's board check), `vertex_arrays` not
+  run yet (entry 132).
 
 These verdicts are API-level for `attribute_location` and reproduce on the
 host (`tools/cts/host-deqp-run.sh`, `tools/cts/README.md` section 2b);
