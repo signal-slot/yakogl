@@ -1,6 +1,14 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # dEQP-GLES3 shaders: the AM62P failures reproduced on the host
 
+**Per-GPU host numbers (§1 and §1b) come from the three part files
+`docs/es3/host-gles3-part-{v3d,powervr,vivante}.tsv` at commit `26d1c4a2`**
+(merged into `docs/es3/host-gles3-tip.tsv` and `host-gles3-notpass.tsv`,
+HOST-ONLY; owner rules `docs/es3/host-gles3-owners.tsv`). There was no new
+host run for this file. The `70142d35` figures in §3 to §5 are the history
+of the PowerVR classification of the board's rows and are kept as they were;
+where they differ from §1, §1 is current.
+
 ES 3.0 plan, item `pvr-shadow`. The follow-up to `docs/es3/shader-failure-map.md`,
 whose §3 left **645** of the AM62P's 2,231 `shaders.*` failures (main
 `396d667a`, 2026-09-26) tied to no cause. Every failing case of the group is
@@ -13,8 +21,8 @@ Sources, each a file in the repository or a run on this host:
   build `ad2b5ed` (run 2026-10-13/14): every mustpass case whose result is
   not Pass, with dEQP's first message line. For `shaders.*` it holds 1,397
   names: 410 `Fail` and 987 `NoResult`.
-- **host**: `MODULE=gles3 GPU=powervr tools/cts/host-deqp-run.sh
-  dEQP-GLES3.functional.shaders.` at `70142d35` (2026-10-22), VK-GL-CTS
+- **host**: `MODULE=gles3 tools/cts/host-deqp-run.sh
+  dEQP-GLES3.functional.shaders.` for `GPU=powervr` at `70142d35` (2026-10-22, §2-§5) and the whole mustpass for all three GPUs at `26d1c4a2` (§1, §1b, from the part files), VK-GL-CTS
   `93bca01`: all 20,616 mustpass cases of the group began and ended
   (no aborted chunk). HOST-ONLY: the library keeps the command stream, so
   every pixel reads black and a render verdict means nothing. What is real
@@ -27,16 +35,46 @@ Sources, each a file in the repository or a run on this host:
 
 ## 1. What the host run says about the group as a whole
 
-| host verdict (PowerVR back end, `70142d35`) | cases |
-|---|---:|
-| Pass | 2,496 |
-| QualityWarning (dEQP's "low-quality shader precision" on the 955 `builtin_functions.precision` executor programs: a pass) | 955 |
-| Fail, a black pixel (meaningless here: "Fail" 10,975, "Image comparison failed" 5,428, "Result comparison failed" 360, "Got unexpected texture size" 38) | 16,801 |
-| Fail, a compile refusal by the **back end** (the four buckets of §3) | 265 |
-| Fail, a link refusal (64-byte reflection name, §3 row 11; fixed since, `06840143`, `83644bb2`) | 2 |
-| Fail, a GL API verdict (framebuffer set-up, §3 rows 8 and 13) | 69 |
-| Fail, "Invalid builtin constant value": `builtin_variable.max_*` render the constant and read it back, black here; all 22 passed on the board | 22 |
-| Fail, "Quick check fails on recipient" (`metamorphic`, a pixel check) | 6 |
+`functional.shaders.*` is 20,616 mustpass cases on each GPU, all of which
+began and ended. HOST-ONLY: the library keeps the command stream and every
+pixel reads black, so a "Fail" with an image message is no verdict. The
+columns are the tip table's (`host-gles3-tip.tsv`, 26d1c4a2):
+
+| GPU | Pass | Fail | NotSupported | Crash | other (QualityWarning, ResourceError, ...) |
+|---|---:|---:|---:|---:|---:|
+| powervr | 2,498 | 17,163 | 0 | 0 | 955 |
+| v3d | 2,384 | 18,196 | 0 | 0 | 36 |
+| vivante | 2,351 | 17,828 | 0 | 0 | 437 |
+
+The `Fail` column is almost all black-pixel verdicts. The rows that count
+(API errors and compile refusals, `host-gles3-notpass.tsv`) are 54 on
+powervr, 1,122 on v3d and 1,242 on vivante.
+
+## 1b. The counting rows of `functional.shaders.*`, by class, RC and owner
+
+From `host-gles3-notpass.tsv` (kind `gl-error` is a wrong GL error in dEQP's
+set-up or draw, `compile` a compile refusal; owner per
+`host-gles3-owners.tsv`):
+
+| GPU | subgroup | cases | kind | RC | owner | cause |
+|---|---|---:|---|---|---|---|
+| powervr | builtin_functions | 54 | gl-error | RC14 | unowned | mat4/mat4x2/mat4x3 outputs attach `GL_COLOR_ATTACHMENT3` (row 13 below) |
+| v3d | builtin_functions.precision | 1,034 | gl-error | RC10 | unowned | "Error in draw: GL_INVALID_OPERATION": a target over 2048 wide refused while `GL_MAX_RENDERBUFFER_SIZE` is 4096 |
+| v3d | builtin_functions | 53 | gl-error | RC14 | unowned | the same fourth attachment (DRAW_TARGETS 3) |
+| v3d | builtin_functions | 2 | gl-error | new | unowned | GPU memory exhausted (`ResourceError`) |
+| v3d | texture_functions | 32 | gl-error | RC2 | unowned | the draw of a gradient look-up on a 3D sampler is refused |
+| v3d | metamorphic | 1 | compile | RC13 | unowned | `Program(Select(OutOfScratch))` |
+| vivante | builtin_functions | 770 | gl-error | RC1 | #335/#355 | executor draws into 128-bit/float targets refused |
+| vivante | builtin_functions | 54 | gl-error | RC14 | unowned | the fourth attachment, as on powervr |
+| vivante | derivate | 88 | gl-error | RC1 | #335/#355 | draws into float targets refused |
+| vivante | texture_functions | 304 | compile | RC13 | unowned | GC7000UL refuses grad, offset, proj and texelFetchOffset look-ups ("Failed to compile shader program") |
+| vivante | random | 26 | compile | RC13 | unowned | "Failed to compile shader": texture look-ups in random programs |
+
+Everything outside these rows in `functional.shaders.*` passes, or fails
+only a black-pixel verdict, on the host. The powervr row 1 refusals of §3
+(226 texture_functions compile refusals at `70142d35`) do not appear in the
+26d1c4a2 part: the PowerVR back end builds those programs now, and its
+`functional.shaders` counting rows are only the 54 above.
 
 **No front-end refusal on any case that should build.** `tools/cts/cts-refusals.py`
 counts 2,298 compile refusals in 146 reasons over the run: 2,031 in 140
