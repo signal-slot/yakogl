@@ -622,11 +622,12 @@ fn draw_buffers_indexed_is_not_advertised_and_its_indexed_state_is_invalid_enum(
     }
 }
 
-/* ---- the ES 3.0 expectations, ignored until the fixes land ---------------- */
+/* ---- the ES 3.0 expectations (ignored where the fix has not landed) ------- */
 
 /* One ignored test per gap family: what dEQP needs, and who owns it. The
  * planner's issue texts (`v3d-es3-docs`) cite these names. Run with
- * `cargo test ... -- --ignored` — they fail today on purpose. */
+ * `cargo test ... -- --ignored` — those still ignored fail today on purpose;
+ * the uniform-block family and the compressed list run since the raises. */
 
 /// ES 3.0's four draw buffers and colour attachments:
 /// implementation_limits.max_draw_buffers, .max_color_attachments and their
