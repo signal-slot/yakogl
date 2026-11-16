@@ -20,6 +20,18 @@ vertex-stream state, and the GL core splits a GC draw only for a divisor above
 is not measured: the board run did not happen (no person declared at the X2),
 so no result of a V1 image is recorded in the tree.
 
+**Update (2026-11-16): P1 and P1b are wired in the PowerVR back end.** The
+generator's entry `pvr_pds_render_vertex_program_ids_base` (instance_id_modifier)
+builds the vertex fetch with `GlesDraw::instance_id` as the base, so
+`pvr_backend_draw` no longer refuses instances 1.. of a program that reads
+`gl_InstanceID`, and `draw_sized` splits such a draw with each chunk's first
+instance as the base (its per-instance streams are not advanced: the PDS adds
+the base before the per-instance DMAs). Host tests:
+`tests/es3_pvr_instanceid.rs`, `tests/es3_pvr_chunk_fetch.rs` and the two rig
+tests in `src/pvr/backend_tests.rs`. The AM62P picture of the six cases is not
+measured yet. Sections 1 and 4 below describe the code before this change. P3
+is still open.
+
 ## Summary
 
 The six dEQP-GLES3 cases
