@@ -31,11 +31,14 @@
 //! checked for planes until the core stores it. From the flip on the
 //! assertions run for real.
 //!
+//! Not in a `report-es2` build: the ES 2.0 surface has no 128-bit formats
+//! (glTexImage2D refuses them as GL_INVALID_ENUM) and no GLSL ES 3.00.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_wide128_multidraw_gc
 //! ```
 
-#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void};
 use std::collections::BTreeMap;

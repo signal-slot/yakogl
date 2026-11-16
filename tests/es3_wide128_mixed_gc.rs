@@ -17,12 +17,14 @@
 //! - the RGBA8 unit's descriptor is byte-identical to the one the same draw
 //!   writes without the wide units (but for the level address).
 //!
-//! The sampled mask hook that opens the classes (`backend::TEST_EXTRA_SAMPLED`)
-//! is `#[cfg(test)]`, so no integration test can add them. Which state
-//! applies is read from the draw: a companion descriptor in slot 4 means the
-//! planes are reached. Until then the test pins the closed state (no companion
-//! slot, no unit stored as a G32R32 plane), says so on stderr, and checks the
-//! RGBA8 unit as above; it needs no edit for the flip.
+//! GC_SAMPLED_TEXFMTS holds the three classes since gc-wide128-flip. Which
+//! units are planes is read from the draw, each unit's descriptor: the GL
+//! core holds GL_RGBA32F as halves (src/gl/texture.rs `sized_format`)
+//! whatever the mask says, so the float unit is one RGBA16F plane, said on
+//! stderr, and the companions follow the integer units alone (slots 4 and
+//! 5). With no unit of two planes (the classes closed) the test pins the
+//! closed state (no companion slot, no unit stored as a G32R32 plane), says
+//! so on stderr, and checks the RGBA8 unit as above.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_wide128_mixed_gc
@@ -484,11 +486,14 @@ fn rgba8_alone() -> (Vec<u32>, Vec<Option<u32>>) {
     out.unwrap()
 }
 
-/// Is the GL core storing the wide classes as planes in this draw? Read from
-/// the descriptor of unit 0 (RGBA16F otherwise), not from the mask.
-fn planes_reached(stream: &[(u32, u32)]) -> bool {
-    let d = descriptor(stream, 0).expect("slot 0");
-    d[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f == rnndb(WIDE[0].3)
+/// Which wide units the GL core stored as planes in this draw, in UNITS
+/// order? Read from each unit's descriptor, not from the mask: the GL core
+/// holds GL_RGBA32F as halves (src/gl/texture.rs `sized_format`) whatever
+/// the mask says.
+fn planes_reached(stream: &[(u32, u32)]) -> [bool; 3] {
+    UNITS.map(|(k, unit, _)| {
+        descriptor(stream, unit).is_some_and(|d| d[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f == rnndb(WIDE[k].3))
+    })
 }
 
 #[test]
@@ -508,12 +513,19 @@ fn one_draw_of_float_uint_int_and_rgba8_units() {
         assert_eq!(sampler_words(&s, RGBA8_UNIT), alone_samp, "RGBA8: sampler words");
 
         let reached = planes_reached(&s);
-        assert_eq!(
-            reached,
-            WIDE.iter().all(|c| open(c.1)),
-            "the planes are reached exactly when the mask holds the classes"
-        );
-        if !reached {
+        for (rank, (k, _, _)) in UNITS.iter().enumerate() {
+            let class = &WIDE[*k];
+            if class.1 == GLES_TEXFMT_RGBA32F {
+                /* GL_RGBA32F is held as halves (sized_format) whatever the mask says */
+                assert!(!reached[rank] || open(class.1), "{}: planes only when the mask holds the class", class.0);
+                if open(class.1) && !reached[rank] {
+                    eprintln!("{}: the GL core does not store GL_RGBA32F as planes (texture.rs sized_format)", class.0);
+                }
+            } else {
+                assert_eq!(reached[rank], open(class.1), "{}: planes exactly when the mask holds the class", class.0);
+            }
+        }
+        if !reached.contains(&true) {
             eprintln!(
                 "RGBA32F/UI/I: not in GC_SAMPLED_TEXFMTS; the mixed two-plane draw is not exercised (gc-w128-flip): closed state"
             );
@@ -539,13 +551,16 @@ fn one_draw_of_float_uint_int_and_rgba8_units() {
         }
 
         assert_eq!(errors, [GL_NO_ERROR; 3], "open: the three uploads are stored");
-        /* open: three companions after the four units, in unit order */
-        let companions = [FS_UNITS, FS_UNITS + 1, FS_UNITS + 2];
-        for (rank, (k, unit, name)) in UNITS.iter().enumerate() {
+        /* open: one companion per unit stored as planes, after the four
+         * units, in unit order */
+        let wide_units = UNITS.iter().zip(reached).filter(|(_, r)| *r).map(|(u, _)| u);
+        let mut companions = 0;
+        for (rank, (k, unit, name)) in wide_units.enumerate() {
             let what = format!("{} on unit {unit} ({name:?})", WIDE[*k].0);
+            let companion = FS_UNITS + rank as u32;
+            companions += 1;
             let d0 = descriptor(&s, *unit).unwrap_or_else(|| panic!("{what}: no descriptor"));
-            let d1 = descriptor(&s, companions[rank])
-                .unwrap_or_else(|| panic!("{what}: no companion in slot {}", companions[rank]));
+            let d1 = descriptor(&s, companion).unwrap_or_else(|| panic!("{what}: no companion in slot {companion}"));
             for (p, d) in [&d0, &d1].into_iter().enumerate() {
                 assert_eq!(
                     d[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f,
@@ -567,15 +582,14 @@ fn one_draw_of_float_uint_int_and_rgba8_units() {
             let want = value_of(*k);
             assert_eq!(words_at(u64::from(a0), 2), want[..2], "{what}: R,G in plane 0");
             assert_eq!(words_at(u64::from(a1), 2), want[2..], "{what}: B,A in plane 1");
-            assert_eq!(
-                sampler_words(&s, *unit),
-                sampler_words(&s, companions[rank]),
-                "{what}: sampler words of both slots"
-            );
+            assert_eq!(sampler_words(&s, *unit), sampler_words(&s, companion), "{what}: sampler words of both slots");
         }
         /* the two integer units share the integer plane word, the float unit has its own */
         assert_ne!(rnndb(WIDE[0].3), rnndb(WIDE[1].3));
         assert_eq!(rnndb(WIDE[1].3), rnndb(WIDE[2].3));
-        assert!(descriptor(&s, FS_UNITS + 3).is_none(), "three wide units, three companions");
+        assert!(
+            descriptor(&s, FS_UNITS + companions).is_none(),
+            "{companions} units of two planes, as many companions"
+        );
     });
 }

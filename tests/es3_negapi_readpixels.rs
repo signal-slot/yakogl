@@ -6,8 +6,10 @@
 //! buffer's class does not take is GL_INVALID_OPERATION (RGBA8, RGBA32I and
 //! RGBA32UI read as `GL_RGBA`/`GL_FLOAT`), and so is any read from a complete
 //! framebuffer whose GL_SAMPLE_BUFFERS is 1. The two integer cases follow the
-//! back end's sampled classes: where RGBA32I/RGBA32UI are not stored (the
-//! GC7000UL today) the texture's refusal is checked instead.
+//! back end: where RGBA32I/RGBA32UI are not stored the texture's refusal is
+//! checked instead, and where they are stored but not rendered into (the
+//! GC7000UL samples them as two planes, gc-wide128-flip, and refuses them as
+//! a target, `GC_INT_RT_128BPP`) the incomplete framebuffer is.
 //!
 //! dEQP's last step makes its sample buffers with
 //! `glRenderbufferStorageMultisample(.., 4, GL_RGBA8, 32, 32)`. That needs a
@@ -38,8 +40,8 @@
 use core::ffi::{c_char, c_void};
 use std::sync::{Mutex, MutexGuard, Once};
 use yakogl::backend::{
-    self, gles_texfmt_bit, sampled_texfmts, GlesDraw, GlesHeap, YakoglBackend, GLES_TEXFMT_RGBA32I,
-    GLES_TEXFMT_RGBA32UI,
+    self, gles_texfmt_bit, rt_format_drawable, sampled_texfmts, GlesDraw, GlesHeap, YakoglBackend, GLES_SURF_RGBA32I,
+    GLES_SURF_RGBA32UI, GLES_TEXFMT_RGBA32I, GLES_TEXFMT_RGBA32UI,
 };
 use yakogl::gl::consts::*;
 use yakogl::gl::context;
@@ -261,10 +263,13 @@ fn rgba8_read_as_float_is_invalid_operation() {
 }
 
 /// The 32-bit integer case of dEQP for `internalformat`, stored in texel
-/// class `class`. A back end that does not sample the class gets no texture
-/// (glTexImage2D GL_INVALID_OPERATION; the GC7000UL until its 128-bit classes
-/// open, docs/notes/gc-128bit-texture-sampling.md), which is checked instead.
-fn int32_read_as_float(internalformat: GLenum, class: u8, type_: GLenum) {
+/// class `class` and rendered as surface `surf`. A back end that does not
+/// sample the class gets no texture (glTexImage2D GL_INVALID_OPERATION),
+/// which is checked instead; one that samples it but cannot render into the
+/// surface (the GC7000UL, `GC_INT_RT_128BPP`) gets an incomplete framebuffer:
+/// dEQP's read is still GL_INVALID_OPERATION and the class's own pair is
+/// refused too (no pixels read from an incomplete framebuffer).
+fn int32_read_as_float(internalformat: GLenum, class: u8, surf: u8, type_: GLenum) {
     let _g = context();
     let mut f = Fbo::new();
     let e = f.texture(internalformat, GL_RGBA_INTEGER, type_);
@@ -274,6 +279,13 @@ fn int32_read_as_float(internalformat: GLenum, class: u8, type_: GLenum) {
         return;
     }
     assert_eq!(e, GL_NO_ERROR, "texture {internalformat:#x}");
+    if !rt_format_drawable(surf) {
+        assert_eq!(f.status(), GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "texture {internalformat:#x}: not a target");
+        assert_eq!(read(GL_RGBA, GL_FLOAT), GL_INVALID_OPERATION, "the pair dEQP reads, refused");
+        assert_ne!(read(GL_RGBA_INTEGER, type_), GL_NO_ERROR, "the class's own pair: incomplete, not read");
+        eprintln!("texture {internalformat:#x}: surface {surf} not rendered by this back end, the incomplete framebuffer checked");
+        return;
+    }
     assert_eq!(f.status(), GL_FRAMEBUFFER_COMPLETE);
     assert_eq!(read(GL_RGBA, GL_FLOAT), GL_INVALID_OPERATION);
     assert_eq!(read(GL_RGBA_INTEGER, type_), GL_NO_ERROR);
@@ -281,12 +293,12 @@ fn int32_read_as_float(internalformat: GLenum, class: u8, type_: GLenum) {
 
 #[test]
 fn rgba32i_read_as_float_is_invalid_operation() {
-    int32_read_as_float(GL_RGBA32I, GLES_TEXFMT_RGBA32I, GL_INT);
+    int32_read_as_float(GL_RGBA32I, GLES_TEXFMT_RGBA32I, GLES_SURF_RGBA32I, GL_INT);
 }
 
 #[test]
 fn rgba32ui_read_as_float_is_invalid_operation() {
-    int32_read_as_float(GL_RGBA32UI, GLES_TEXFMT_RGBA32UI, GL_UNSIGNED_INT);
+    int32_read_as_float(GL_RGBA32UI, GLES_TEXFMT_RGBA32UI, GLES_SURF_RGBA32UI, GL_UNSIGNED_INT);
 }
 
 /* ---- a framebuffer with sample buffers ------------------------------------ */

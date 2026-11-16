@@ -2651,23 +2651,6 @@ fn a_render_into_an_rgba16f_texture_reaches_the_draw_that_samples_it() {
 
 /* ---- 128-bit textures: two G32R32 planes and a companion slot ----------- */
 
-/// Adds texel formats to the sampled mask for one test, as a back end whose
-/// GC_SAMPLED_TEXFMTS held them would (the mask itself holds no 128-bit
-/// class until the compiler joins the two look-ups).
-struct ExtraSampled;
-impl ExtraSampled {
-    fn add(formats: &[u8]) -> ExtraSampled {
-        let mask = formats.iter().fold(0, |m, f| m | crate::backend::gles_texfmt_bit(*f));
-        crate::backend::TEST_EXTRA_SAMPLED.store(mask, core::sync::atomic::Ordering::Relaxed);
-        ExtraSampled
-    }
-}
-impl Drop for ExtraSampled {
-    fn drop(&mut self) {
-        crate::backend::TEST_EXTRA_SAMPLED.store(0, core::sync::atomic::Ordering::Relaxed);
-    }
-}
-
 /// An 8x8 texture of 128-bit texels: texel (x, y) holds the words
 /// (x, y, salt, 0x3f80_0000 + x).
 fn wide128_texture(gpu: u64, format: u8, salt: u32) -> (Vec<u32>, GlesTextureBind) {
@@ -2699,14 +2682,20 @@ fn sampler_regs(s: &Stream, slot: u32) -> [u32; 7] {
     ]
 }
 
-/// With the mask closed (GC_SAMPLED_TEXFMTS as it is), a 128-bit binding is
-/// sampled as the black texel, by name, and takes no companion: the slots
-/// are the ones a draw of an RGBA8 texture takes.
+/// GC_SAMPLED_TEXFMTS holds the three 128-bit classes (gc-wide128-flip), so
+/// a binding of each, with no test hook, builds a descriptor pair: plane 0 at
+/// the unit's slot, plane 1 at the companion right after the fragment
+/// stage's slots, both the G32R32 format of the class, the second half-way
+/// into the level; the vertex stage after the companion.
 #[test]
-fn a_128_bit_texture_outside_the_mask_is_black_and_takes_no_companion() {
+fn a_128_bit_texture_in_the_mask_builds_a_descriptor_pair_with_a_companion() {
     let rig = Rig::new();
-    for format in [GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA32I] {
-        assert_eq!(GC_SAMPLED_TEXFMTS & crate::backend::gles_texfmt_bit(format), 0, "{format}: not sampled");
+    for (format, ext) in [
+        (GLES_TEXFMT_RGBA32F, GC_TEX_FORMAT_EXT_G32R32F),
+        (GLES_TEXFMT_RGBA32UI, GC_TEX_FORMAT_EXT_G32R32I),
+        (GLES_TEXFMT_RGBA32I, GC_TEX_FORMAT_EXT_G32R32I),
+    ] {
+        assert_ne!(GC_SAMPLED_TEXFMTS & crate::backend::gles_texfmt_bit(format), 0, "{format}: sampled");
         let (_mem, t) = wide128_texture(GC_HEAP_DATA + 0x80_0040, format, 3);
         let mut d = rig.draw(3);
         d.num_textures = 1;
@@ -2714,17 +2703,21 @@ fn a_128_bit_texture_outside_the_mask_is_black_and_takes_no_companion() {
         d.num_vs_textures = 1;
         d.vs_textures[0] = bind(rig.vbo.gpu, 2, 2, 1);
         let s = rig.submit(&d);
-        assert_eq!(s.reg(GC_VS_SAMPLER_BASE), 1, "{format}: no companion before the vertex stage");
-        let desc = s.descriptor(0);
-        assert_eq!(desc[texdesc_lod_addr(0) as usize / 4] as u64, black_texel_gpu(), "{format}: the black texel");
-        assert_eq!(desc[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f, 0, "{format}: not a G32R32 plane");
-        assert_eq!(s.descriptor(1)[GC_TEXDESC_SIZE as usize / 4], texdesc_size_width(2) | texdesc_size_height(2));
-        assert_eq!(s.writes(nte_descriptor_addr(2)).1, 0, "{format}: nothing past the vertex sampler");
+        assert_eq!(s.reg(GC_VS_SAMPLER_BASE), 2, "{format}: one fragment slot and its companion");
+        let (p0, p1) = (s.descriptor(0), s.descriptor(1));
+        let lod = |p: &[u32]| p[texdesc_lod_addr(0) as usize / 4] as u64;
+        assert_ne!(lod(&p0), black_texel_gpu(), "{format}: not the black texel");
+        for p in [&p0, &p1] {
+            assert_eq!(p[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f, ext, "{format}: a G32R32 plane");
+        }
+        assert_eq!(lod(&p1), lod(&p0) + 8 * 8 * 8, "{format}: the companion is plane 1");
+        assert_eq!(s.descriptor(2)[GC_TEXDESC_SIZE as usize / 4], texdesc_size_width(2) | texdesc_size_height(2));
+        assert_eq!(s.writes(nte_descriptor_addr(3)).1, 0, "{format}: nothing past the vertex sampler");
     }
     assert!(rig.faults().is_empty(), "{:?}", rig.faults());
 }
 
-/// Through the test hook, an RGBA32F binding is Mesa's pair
+/// An RGBA32F binding is Mesa's pair
 /// (etnaviv_texture_desc.c:404-415, 499-513): plane 0 at the unit's slot,
 /// plane 1 at the companion right after the stage's slots, both
 /// TEXTURE_FORMAT_EXT_G32R32F, TILED, every descriptor word the same but the
@@ -2735,7 +2728,6 @@ fn a_128_bit_texture_outside_the_mask_is_black_and_takes_no_companion() {
 fn a_sampled_rgba32f_texture_is_two_g32r32_planes_at_a_slot_and_its_companion() {
     let rig = Rig::new();
     with_platform(|p| p.off_page = true);
-    let _x = ExtraSampled::add(&[GLES_TEXFMT_RGBA32F]);
     let (mem, mut t) = wide128_texture(GC_HEAP_DATA + 0x80_0040, GLES_TEXFMT_RGBA32F, 7);
     t.linear_filter = 1;
     t.wrap_s = GLES_WRAP_MIRRORED_REPEAT;
@@ -2797,7 +2789,6 @@ fn a_sampled_rgba32f_texture_is_two_g32r32_planes_at_a_slot_and_its_companion() 
 #[test]
 fn integer_pairs_take_g32r32i_and_companions_follow_each_stages_own_slots() {
     let rig = Rig::new();
-    let _x = ExtraSampled::add(&[GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA32I]);
     let (_m0, mut a) = wide128_texture(GC_HEAP_DATA + 0x80_0000, GLES_TEXFMT_RGBA32I, 1);
     let (_m1, mut b) = wide128_texture(GC_HEAP_DATA + 0x90_0000, GLES_TEXFMT_RGBA32UI, 2);
     let (_m2, mut v) = wide128_texture(GC_HEAP_DATA + 0xa0_0000, GLES_TEXFMT_RGBA32UI, 3);

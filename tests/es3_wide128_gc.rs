@@ -408,6 +408,7 @@ mod draw {
     use yakogl::shaderc::Wide128Planes;
     use yakogl::vivante::kick::{GcKick, GC_KICK_MAGIC};
     use yakogl::vivante::regs::*;
+    use yakogl::vivante::texture::is_wide128;
 
     /* the stand-in OSAL: plain memory, every kick completes at once */
 
@@ -703,8 +704,9 @@ mod draw {
      *
      * SAMP_CTRL0's W field is GL_TEXTURE_WRAP_R on a 3D texture, its U and V
      * fields S and T; the companion slot of a two-plane binding is written
-     * with the same SAMP_CTRL0 as its binding's. Closed (before wide128-flip)
-     * the GL core stores the texture as RGBA16F: the slot's fields are
+     * with the same SAMP_CTRL0 as its binding's. Where the GL core stores
+     * the texture as RGBA16F (`sized_format` holds GL_RGBA32F as halves
+     * whatever the mask says, src/gl/texture.rs) the slot's fields are
      * checked and no companion is written. */
 
     const FS_3D: &str = concat!(
@@ -754,8 +756,9 @@ mod draw {
     }
 
     /// A 2x2x2 RGBA32F 3D texture on unit 0, NEAREST, with the three wrap
-    /// modes given; the error of its glTexImage3D.
-    fn texture_3d(s: GLenum, t: GLenum, r: GLenum) -> GLenum {
+    /// modes given; the error of its glTexImage3D and the class the GL core
+    /// stored it in.
+    fn texture_3d(s: GLenum, t: GLenum, r: GLenum) -> (GLenum, u8) {
         let texels = [1.0f32; 32];
         // SAFETY: plain GL calls; `texels` holds 2x2x2 RGBA32F texels.
         unsafe {
@@ -784,8 +787,9 @@ mod draw {
                 GL_FLOAT,
                 texels.as_ptr() as *const c_void,
             );
+            let c = yakogl::gl::context::current().expect("context");
+            (error(), c.objs().textures[tex as usize].texfmt)
         }
-        error()
     }
 
     /// One quad on unit 0 with `p`: the register writes of the last kick.
@@ -831,15 +835,16 @@ mod draw {
                 GL_MIRRORED_REPEAT => GC_TEX_WRAP_MIRROR_REPEAT,
                 _ => GC_TEX_WRAP_REPEAT,
             };
-            let two_planes = open(GLES_TEXFMT_RGBA32F);
-            if !two_planes {
-                eprintln!(
-                    "RGBA32F is not in GC_SAMPLED_TEXFMTS (wide128-flip): checking the slot of the stored \
-                     texture; the companion is checked from the flip on"
-                );
-            }
             for (s, t, r) in modes {
-                assert_eq!(texture_3d(s, t, r), GL_NO_ERROR, "glTexImage3D");
+                let (err, texfmt) = texture_3d(s, t, r);
+                assert_eq!(err, GL_NO_ERROR, "glTexImage3D");
+                let two_planes = is_wide128(texfmt) && open(texfmt);
+                if !two_planes {
+                    eprintln!(
+                        "GL_RGBA32F is stored in class {texfmt}, not two planes (texture.rs sized_format): checking \
+                         the slot of the stored texture; no companion"
+                    );
+                }
                 let stream = draw_stream(p);
                 let ctrl0 = last(&stream, nte_descriptor_samp_ctrl0(0)).expect("the unit's sampler is written");
                 let field = |k: u32| (ctrl0 >> (3 * k)) & 7;

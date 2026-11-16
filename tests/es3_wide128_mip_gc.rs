@@ -22,11 +22,14 @@
 //! stderr says so; the INVALID_OPERATION and the unchanged counters are pinned
 //! either way. From the flip on the storage is asserted to be 16-byte texels.
 //!
+//! Not in a `report-es2` build: the ES 2.0 surface has no 128-bit formats
+//! (glTexImage2D refuses them as GL_INVALID_ENUM) and no GLSL ES 3.00.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_wide128_mip_gc
 //! ```
 
-#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online", not(feature = "report-es2")))]
 
 use core::ffi::c_void;
 use std::collections::BTreeMap;

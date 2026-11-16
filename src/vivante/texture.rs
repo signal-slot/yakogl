@@ -213,10 +213,10 @@ pub fn wide128_plane_format(format: u8) -> Option<GcTexfmt> {
 }
 
 /// Is `t` sampled as two G32R32 planes? A 128-bit class, complete, that the
-/// sampled mask holds. GC_SAMPLED_TEXFMTS holds none of them until the
-/// compiler joins the two look-ups (docs/notes/gc-128bit-texture-sampling.md),
-/// so outside a host test that adds them (`TEST_EXTRA_SAMPLED`) this is
-/// false and such a binding samples the black texel, by name, as before.
+/// sampled mask holds. GC_SAMPLED_TEXFMTS holds all three (gc-wide128-flip;
+/// the compiler joins the two look-ups, docs/notes/gc-128bit-texture-sampling.md);
+/// a host test that hides them (`TEST_HIDDEN_SAMPLED`) makes this false, and
+/// such a binding samples the black texel, by name.
 pub fn wide128_sampled(t: &GlesTextureBind) -> bool {
     t.incomplete == 0 && is_wide128(t.format) && crate::backend::sampled_texfmts() & gles_texfmt_bit(t.format) != 0
 }
@@ -570,14 +570,14 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind, companion: Option<
      * (0,0,0,1) everywhere, whatever its texels hold. The GL core decides
      * which those are; here the binding becomes the backend's own 1x1 opaque
      * black texel instead. */
-    /* A class the descriptor has no format for (the 128-bit ones,
-     * docs/es3/gc-formats.md section 3) is never in GC_SAMPLED_TEXFMTS, so
-     * the GL core does not store one; should a binding of one arrive anyway
-     * it samples the black texel, said by name, rather than texels read as
-     * another format. A 128-bit class the mask does hold ([`wide128_sampled`],
-     * a host test's alone today) is sampled as Mesa samples it: two G32R32
-     * planes of the tiled copy, the second at its companion slot -- or, with
-     * no companion slot or no copy, the black texel in both, by name. */
+    /* A class the descriptor has no format for is never in
+     * GC_SAMPLED_TEXFMTS, so the GL core does not store one; should a binding
+     * of one arrive anyway it samples the black texel, said by name, rather
+     * than texels read as another format. A 128-bit class (docs/es3/
+     * gc-formats.md section 3; in the mask, [`wide128_sampled`]) is sampled
+     * as Mesa samples it: two G32R32 planes of the tiled copy, the second at
+     * its companion slot -- or, with no companion slot or no copy, the black
+     * texel in both, by name. */
     let wide = wide128_sampled(t);
     let planes = wide && companion.is_some() && super::tiled_copy::lookup(t, super::backend::gc_kick_id()).is_some();
     let undecoded = t.incomplete == 0 && !gc_texfmt(t.format).decoded && !planes;
@@ -793,8 +793,7 @@ fn emit_textures_inner(f: &mut GcFrame, d: &GcDraw) -> i32 {
      * its stage's own, and the vertex stage starts after the fragment
      * stage's companions too (Mesa's unified packing, etnaviv_texture.c:
      * 301-322 and 434-438; docs/notes/gc-128bit-texture-sampling.md). With
-     * no such binding -- every draw outside a host test, GC_SAMPLED_TEXFMTS
-     * holding no 128-bit class -- this is the layout it always was. */
+     * no such binding this is the layout it always was. */
     let fs_wide = d.textures.iter().take(GC_MAX_SAMPLERS).filter(|t| wide128_sampled(t)).count() as u32;
     let vs_base = fs_count + fs_wide;
     let vs_count = stage_count(d.vs_textures, d.vs);
