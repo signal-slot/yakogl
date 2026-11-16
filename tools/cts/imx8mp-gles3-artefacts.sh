@@ -21,4 +21,5 @@ done
 for k in CONFIG_DEQP_REPORT_ES2 CONFIG_YAKOGL_REPORT_ES2; do
 	grep -E "^(# )?$k[= ]" "$IMX8MP_OUT/$img/zephyr/.config" || echo "$k: not in .config"
 done
-grep -E '^(Memory region|RAM:|FLASH:)' "$IMX8MP_OUT/$img.log" 2>/dev/null || true
+# the linker right-aligns the region names: its line is "             RAM:     233912 KB ..."
+grep -E '^[[:space:]]*(Memory region|RAM:|FLASH:)' "$IMX8MP_OUT/$img.log" 2>/dev/null || true

@@ -171,9 +171,11 @@ Built three times at `9bc82915` on three workers, the same figures every time: `
 `16443032 f9c80e52…4cfc`, `es3-9bc82915.table.conf` `38164 5b7a6123…b82f`, footprint 227909632. The bin is
 byte-identical across hosts; only `zephyr.elf` differs per host (its debug paths: 41,869,168, 41,868,592
 and 41,869,040 bytes, three different shas). So the elf's sha is that session's, not a campaign constant,
-and a slice README quotes its own. One host printed the linker's `Memory region` header with no `RAM:` row
-(`imx8mp-gles3-artefacts.sh` reports what the build wrote): the footprint there is unchanged, and
-`board.sh --dry-run` prints `footprint 227909632` whatever the linker printed.
+and a slice README quotes its own. One host printed the linker's `Memory region` header with no `RAM:` row:
+the linker right-aligns the region names (`             RAM:     233912 KB …`) and the artefacts script's grep
+was anchored at the line start, so the indented rows went unmatched; it now allows the indentation, and a
+slice README that quoted the header alone quotes the RAM row from the same log. The footprint there is
+unchanged, and `board.sh --dry-run` prints `footprint 227909632` whatever the linker printed.
 
 The footprint `board.sh` checks is the AArch64 header's `image_size` (`nb_check_image` in
 `tools/uboot-netboot-lib.sh`): Zephyr writes `_flash_used` there, the distance from `0x60000000` to the
@@ -503,8 +505,10 @@ Rules that hold for every step:
    go into the slice README. Measured across the three slices and a fourth build at `e6e68ff7`: the stage 1
    shas are the same on every host and on every commit that keeps the VK-GL-CTS pin (`2fff5184…`, `7b842c95…`);
    `zephyr.bin` and `es3-<hash8>.table.conf` are byte-identical across hosts for one commit; `zephyr.elf` is not
-   (its debug paths), so a README quotes the elf sha of its own build. One host printed the `Memory region`
-   header with no `RAM:` row: take the footprint from the dry run's `footprint <bytes>` line when that happens.
+   (its debug paths), so a README quotes the elf sha of its own build. `imx8mp-gles3-artefacts.sh` matches the
+   linker's indented `Memory region`/`RAM:`/`FLASH:` rows (the linker right-aligns the region names; earlier
+   versions anchored the grep at the line start and printed the header with no `RAM:` row, seen in slice
+   rows17-34). The dry run's `footprint <bytes>` line is the fallback when the build log is absent.
 
 6. **Plan the slices** (host only):
    ```sh
