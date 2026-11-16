@@ -2,13 +2,14 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # dEQP-GLES3 on the Verdin i.MX8M Plus (GC7000UL): board recipe
 
-The i.MX8MP has never run dEQP-GLES3. This is the recipe for the first run. **The gles3 stage 1 and the
-133-row table image were built once (host only; the figures are quoted below); nothing has run on the
-board yet.** Board results are recorded under `tools/cts/log/<date>-imx8mp-gles3-<slice>/`; open work is
-issue #2 of signal-slot/yakogl. The commands are
-the existing gles2 ones plus the gles3 switch. The expected lines have the shape of real gles2 lines from
-the i.MX8MP gles2 runs, which went through the same `board.sh` code path. The first board session
-replaces them with what it sees.
+This is the recipe of the i.MX8MP's first dEQP-GLES3 campaign, which is under way at campaign commit
+`9bc82915` (issue #24; the ES 3.0 record is issue #2). **Run so far: three slices, entries 0-12
+(`tools/cts/log/2026-11-imx8mp-gles3-9bc82915-rows01-13/`, 2026-11-14), 16-33 (`-rows17-34/`) and 34-50
+(`-rows35-51/`, both 2026-11-15); every row `verdict=done`, `resets=absent`, no watchdog end.** Entries
+13-15 and 51-132 are left. Board results are recorded under `tools/cts/log/<date>-imx8mp-gles3-<slice>/`;
+the per-cause reading is `docs/es3-cts-failures.md`, "GC7000UL (i.MX8MP) failures by group". The commands
+are the existing gles2 ones plus the gles3 switch. The verdict lines and the figures below are the first
+sessions' own, where they were seen; what no session has seen yet is still marked **unverified**.
 
 For a board session read "Running a GLES3 slice session" (after section 4): one ordered procedure over the
 sections below.
@@ -196,8 +197,12 @@ A row's tally is `passed,failed,notsup,other,begun`. "No usable record" means th
 were not a DEQP record.
 
 When a row has a failure, another status or a case without a result, `board.sh` boots it again as
-`e<i>-p<page>` with selector `0x8000 | page << 8 | i`. Each of these boots reads six failing-case CRC-16s.
-`NAMES=0` turns this off.
+`e<i>-p<page>` with selector `0x8000 | page << 8 | i`. Each of these boots reads six failing-case CRC-16s,
+and `board.sh` reads at most 40 pages (240 names) of a row. `NAMES=0` turns this off. A page boot runs the
+whole entry again, so a row with many fails costs many boots: in the first sessions e09 took 19 pages and
+e27 26, and the rows with more than 240 fails (e25 364, e26 277, e29 328) were left unpaged, counts
+without names. Run a slice with `NAMES=0` first (the records of every row, one boot each), then the same
+command without it for the pages.
 
 **Failing names.** `board.sh` maps each CRC to a name with `yakogl-tools record crc <c>`. Its case list
 is `tools/cts/gles2-mustpass.txt` and `tools/cts/gles3-mustpass.txt` together and it matches a check
@@ -238,29 +243,50 @@ into a file or a commit). What the code does:
   boot of the same table image per page of six CRCs). The tally still comes from the SNVS record. Lost
   console lines make a log incomplete (`board.sh` then says `done_lossy`, the tally script INCOMPLETE/MISSING);
   keep CRC paging for any row whose console log is not complete.
-- **Unverified until a board session:** that the console prints at all with the image used, that the
-  capture is complete for a 600 s row, and that the capture does not disturb the run.
+- **What the first sessions saw.** The image was built with `IMX8MP_CONSOLE=1` (`.config` had
+  `CONFIG_UART_CONSOLE=y`, `CONFIG_STDOUT_CONSOLE=y`, `CONFIG_PRINTK=y`), `BOARD_UART` named a local feed
+  bridge of the farm's leased console, and every boot's capture held **one NUL byte at the board reset and
+  nothing else** (89, 78 and 24 bytes for the three sessions' boots). A marker line written to the board's
+  UART3 device from Linux did not arrive either, and an Enter sent to the console got no login prompt
+  although a getty was active on it. So whether the image prints at all, and whether the capture is complete
+  for a 600 s row, is still **unverified**: the console scan saw 0 rows, GPU recoveries were not observable
+  and the NotSupported cases of those sessions have counts without names. The capture did not disturb the
+  run (every row `verdict=done`). Until the bridge delivers text, plan every slice with the CRC pages above.
+  The farm registers that console as its own resource (`target:imx8mp-console`, one client at a time, leased
+  with the board): take it for live verdicts when it delivers text, and keep the SNVS record as the authority
+  for every tally, as "How records are read" says.
 
 ### Expected verdict lines
 
-Each boot prints the following. This is the format of imx8mp-plan1.md §1, where the same path ran the
-gles2 table:
+Each boot prints the following. These are the lines of the first session (slice rows01-13, `e00`:
+`attribute_location`, 298 cases begun and passed, 51 s from reboot to ssh; `e02` with 24 fails and its
+first page):
 
 ```
 === e00 (zephyr.bin, selector 0) <YYYY-MM-DD HH:MM:SS>
-board.sh imx8mp e00 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:DEQP resets=absent record=594b08xx,<w1>,<w2>,<w3> back_after=<n>s uptime=<n>s
+board.sh imx8mp e00 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:DEQP resets=absent record=594b0814,0000012a,00000000,ffff012a back_after=51s uptime=25s
 === e00 rc=0 <YYYY-MM-DD HH:MM:SS>
+board.sh imx8mp e02 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:DEQP resets=absent record=594b087a,001802c5,00000000,6bd902dd back_after=104s uptime=29s
+board.sh imx8mp e02-p0 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:DEQP_FAILS resets=absent ...
 ```
 
 A DEQP record carries no pass/fail of its own (`status=n/a`), so `verdict=done` means the boot completed
 and left a record. It is also `done` for a row with failing cases, so judge a row by its tally, not by this
-word. A healthy boot has `boot_verdict=cycled` and `rc=0`. Other outcomes:
+word. A healthy boot has `boot_verdict=cycled` and `rc=0`. Measured in the first sessions: `back_after`
+45-105 s for most entries (Linux's own boot, `uptime` 19-38 s, inside it), 194-338 s for the three large
+`shaders.builtin_functions.precision` entries (e25 273 s, e26 338 s, e27 194 s); no entry came near the
+600 s window, so nothing was re-split. Other outcomes:
 
 | line | meaning |
 |---|---|
 | `verdict=no_record` | the boot came back without a DEQP record (the image died before its first case) |
 | `back_after` near 600 s plus boot, and w3's low half below the entry's mustpass count | a watchdog end: split that entry |
+| `verdict=done`, `back_after` well under 600 s, w3's low half below the entry's mustpass count | dEQP stopped at one case (e26 of the first campaign: `begun` 500 of 623, `other` 1, the same record on a rerun); a split does not help, the case goes to the triage |
 | `rc=5` | the board did not come back, and the chain stops |
+
+`RUN_BOUND`: the imx8mp U-Boot default is 600 s, the WDOG1 window itself, so a row that ran out its window
+would read rc 5 before the board is back. The first sessions ran with `RUN_BOUND=800` (600 + 60 + boot,
+the AM62P dEQP rule); do the same.
 
 ## 4. Tally
 
@@ -293,8 +319,10 @@ How to read it:
 
 One ordered procedure for a board session that runs a row range of the 133-entry table and commits it as a
 slice. Every command below exists in the tree with the flags shown, and the output described is what its script
-prints (read from the script). Nothing here has run on the board yet, so what the board prints is marked
-**unverified** where it matters.
+prints (read from the script). Three slices of the `9bc82915` campaign have run this way (rows01-13, rows17-34,
+rows35-51, 2026-11-14/15); what they saw is written in, and what no session has seen yet is marked
+**unverified**. The campaign commit stays `9bc82915` for the entries left (13-15, 51-132): build its image
+from a detached worktree of that commit, as the three slices did.
 
 Rules that hold for every step:
 - **One commit.** All slices of a campaign come from the same `origin/main` commit, and the image is named after
@@ -356,7 +384,10 @@ Rules that hold for every step:
    exit status is the build's; a usage error exits 2. The log is `$IMX8MP_OUT/es3-$HEAD8.log`. Check that the
    console took:
    `grep -E '^CONFIG_(UART_CONSOLE|PRINTK|STDOUT_CONSOLE)=y' $IMX8MP_OUT/es3-$HEAD8/zephyr/.config` should print
-   three lines (**unverified**: the first real build is the check; if one is missing, stop and report).
+   three lines (it did for `es3-9bc82915`; if one is missing, stop and report). `zephyr.bin` of one commit is
+   byte-identical across build hosts (sha256 `f9c80e52…8c4cfc` for `es3-9bc82915` on four workers, as are the
+   table fragment and both stage 1 libraries); only
+   `zephyr.elf` differs (embedded build paths).
 
 5. **Artefacts for the session note:**
    ```sh
@@ -378,7 +409,9 @@ Rules that hold for every step:
    start end entries cases est_seconds risky_entries`: contiguous inclusive ranges of entries counted from 0,
    which is what `TREE_ROWS` takes. `risk` is `RISK` when the estimate passes 0.8 x 600 s (`--margin`,
    `--window`, `--scale` change it). The rates are the Pi 4 record's where measured and otherwise assumed from
-   the table header; the GC7000UL/V3D ratio is unmeasured, so the figures order the work, they are not limits.
+   the table header; the figures order the work, they are not limits. Measured on the GC7000UL (entries 0-12,
+   16-50): 45-105 s from reboot to ssh for every entry but the three large `precision` ones (194-338 s), where
+   the estimate was 106-298 s; no hang and no watchdog end among them.
    Exit 1 with `WARNING:` on stderr when the table and the mustpass list disagree. The host pre-triage expects
    hangs on entries 13-15, 57, 95 and 122-127 and watchdog ends on 58-60: keep those out of the first slices
    and run them last, in small ranges.
@@ -442,7 +475,10 @@ Rules that hold for every step:
     `!! NO FINISH row <n> (hang | watchdog end | reset)` with the last case that printed a result. Exit 0: every
     row finished; 1: a row did not; 2: bad input. A row is clean with a `finish` line, `recoveries 0` and an
     elapsed time well under 600 s. A capture without `deqp:` lines means the image was built without
-    `IMX8MP_CONSOLE=1` or the bridge missed the run (**unverified** on this board).
+    `IMX8MP_CONSOLE=1` or the bridge missed the run: the three first slices saw only one NUL per boot
+    ("Capturing the console"), so expect that until the bridge is shown to deliver text, and run the pages.
+    Run the slice as the first sessions did: `RUN_BOUND=800 NAMES=0 ... tree "$OUT"` for the rows, then the
+    same command without `NAMES=0` for the pages (`TREE_ROWS` may then name only the rows with fails).
 
 11. **Read the slice's verdicts** (no board):
     ```sh
@@ -453,8 +489,11 @@ Rules that hold for every step:
     `verdict=no_record` (died before the first case), `done_lossy` (the capture dropped result lines: rerun),
     `done_stopped` (dEQP ended the session early, `complete=0`: the cases after the last one never began),
     `done_with_resets`, `died_after=<stage>`, or `back_after` near 600 s plus boot with `begun` below the entry's
-    mustpass count (a watchdog end: step 16). Rerun a row that is not clean once; if it repeats, record it as it is
-    and treat it in step 16 or the triage. Note each row's `back_after` and scan elapsed time.
+    mustpass count (a watchdog end: step 16). A row that is `done` well inside the window with `begun` below
+    its mustpass count and `other` 1 is dEQP stopping at one case (e26 of the `9bc82915` campaign: the first
+    `precision.reflect` case, 123 cases after it never began, the same record on the rerun); it is recorded as
+    it is and goes to the triage, not to step 16. Rerun a row that is not clean once; if it repeats, record it
+    as it is and treat it in step 16 or the triage. Note each row's `back_after` and scan elapsed time.
 
 12. **Commit the slice** as `tools/cts/log/<YYYY-MM-DD>-imx8mp-gles3-<hash8>-rowsAA-BB/` (`tools/cts/log/README.md`:
     the board clock's day; `rowsAA-BB` counts table lines from 1, so `TREE_ROWS=0-9` is `rows01-10`). Contents:
