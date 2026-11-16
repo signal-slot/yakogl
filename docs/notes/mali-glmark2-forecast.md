@@ -159,14 +159,26 @@ What the 31 do on the board, from the harness's logs:
   draw, `current_drawable_program`), not a GL-core defect. The refused draws
   are not submitted. 17-19 draw nothing but the clear (3 draws over 3
   frames, all refused); 15 draws its windows without the blur.
-- **terrain crashes** (signal 11 on the host) in glmark2's
-  `Mesh::render_vbo`, from `TerrainRenderer::render`, using an unlinked
-  program's -1 attribute locations as an index, after 8 of its shaders
-  were refused. A crash of the glmark2 process, not of YakoGL. On the board
-  (main `da65355e`, RESULTS.md) the same cause ends as SIGABRT, rc 134:
-  Debian trixie's g++ 14 enables libstdc++'s `std::vector<int>::operator[]`
-  assertion, which fires in `Mesh::render_vbo` on the -1 index before the
-  read that gives signal 11 on the host.
+- **terrain aborts** in glmark2 itself, not in YakoGL: signal 11 (rc 139)
+  on the host, SIGABRT (rc 134) on the board (main `da65355e`,
+  RESULTS.md). In `TerrainRenderer::init_program()`
+  (`src/scene-terrain/terrain-renderer.cpp`), `if
+  (!Scene::load_shaders_from_strings(...)) return;` returns when the
+  compile or link fails and goes on with the unlinked program.
+  `TerrainRenderer::render` then reaches `Mesh::render_vbo` with -1
+  attribute locations as an index. On the board Debian trixie's g++ 14
+  enables libstdc++'s `std::vector::operator[]` assertion, which fires on
+  the -1 index (SIGABRT); on the host the out-of-range read gives signal
+  11. The -1 locations are the symptom; the refused program is the cause.
+  `init_program()` loads `terrain.vert` and `terrain.frag`; that this is
+  program `18bc+4d26` is inferred from the table (row 22: the only
+  terrain program whose vertex shader is not `8b69`, refused at both
+  stages), not checked by hash (the corpus text was not at hand). Its two blockers now are VS
+  `18bc` at `FAU_PAGE` (a push word past FAU page 0, no lowering yet:
+  section 2) and FS `4d26` at `FRAGCOLOR_LANE`. `terrain.vert` does two
+  `texture2D` look-ups (checked in the source), so `TEX_VERTEX` is
+  forecast to follow `FAU_PAGE` for `18bc` (section 3); it has not been
+  measured.
 
 ## 2. The causes
 
