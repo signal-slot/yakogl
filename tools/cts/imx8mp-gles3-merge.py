@@ -98,6 +98,27 @@ def parse_int(s):
     return int(s) if re.fullmatch(r'\d+', s) else None
 
 
+def collision_names(field):
+    """Failing names of a results.tsv cell. `a,b` is one CRC the pages could not tell apart (board.sh prints the
+    candidates comma-joined). When the same k-name group is listed k times in the cell, every candidate failed
+    once (one page per case): the group counts once. Fewer repeats leave it ambiguous and a longer run is a
+    real duplicate; both are left as listed."""
+    parts = [[n for n in part.split(',') if n] for part in field.split(';')]
+    groups = {}
+    for g in parts:
+        if len(g) > 1:
+            groups[tuple(g)] = groups.get(tuple(g), 0) + 1
+    names, kept = [], set()
+    for g in parts:
+        t = tuple(g)
+        if len(g) > 1 and groups[t] == len(g):
+            if t in kept:
+                continue
+            kept.add(t)
+        names.extend(g)
+    return names
+
+
 def read_rows(path):
     """[(index, filter, [begun, passed, failed, notsup, other, noresult] or None, [names])]"""
     rows = []
@@ -117,7 +138,7 @@ def read_rows(path):
         tally = None if any(n is None for n in nums[1:5]) else [n or 0 for n in nums]
         if tally is not None and nums[0] is None:
             tally[0] = sum(tally[1:6])
-        names = [] if f[8] in ('-', '') else [n for part in f[8].split(';') for n in part.split(',') if n]
+        names = [] if f[8] in ("-", "") else collision_names(f[8])
         rows.append((idx, f[1], tally, names, f[2:8]))
     return rows
 
@@ -466,6 +487,25 @@ def selftest():
         expect('check flags a duplicate entry', rc == 1 and 'entry 1 is in both' in out)
         rc, out, _ = call(*base_args, '--check', '--partial', A, X)
         expect('check flags mixed commits', rc == 1 and 'different commits' in out)
+
+        b0, b1 = 'dEQP-GLES3.b.0', 'dEQP-GLES3.b.1'
+
+        def collide(name, field):
+            return slice_(name, c1, [(1, entries[1], 4, 1, 3, 0, 0, 0, field)])
+        CP = collide('crc-pair', '%s,%s;%s,%s' % (b0, b1, b0, b1))      # one CRC on two pages: both cases fail
+        rc, out, _ = call(*base_args, '--check', '--partial', CP)
+        expect('check accepts a k-name CRC collision group listed k times', rc == 0 and 'listed twice' not in out)
+        rc, out, _ = call(*base_args, '--notpass', '--partial', CP)
+        expect('a repeated collision group names each case once', out.count('e1:Fail %s' % b0) == 1)
+        CT = collide('crc-triple', ';'.join(['%s,%s' % (b0, b1)] * 3))
+        rc, out, _ = call(*base_args, '--check', '--partial', CT)
+        expect('check still flags a collision group listed more than k times', rc == 1 and 'case listed twice' in out)
+        CD = collide('crc-dup', '%s;%s;%s' % (b0, b1, b0))
+        rc, out, _ = call(*base_args, '--check', '--partial', CD)
+        expect('check still flags a plain name listed twice', rc == 1 and 'case listed twice: %s' % b0 in out)
+        CM = collide('crc-mixed', '%s,%s;%s' % (b0, b1, b0))
+        rc, out, _ = call(*base_args, '--check', '--partial', CM)
+        expect('check still flags a collision candidate also named alone', rc == 1 and 'case listed twice' in out)
 
         rc, out, _ = call(*base_args, '--notpass', A, B)
         lines = [l for l in out.splitlines() if not l.startswith('#')]
