@@ -2405,12 +2405,16 @@ pub fn select_fragment<'a>(
         for (o, &x) in c.iter_mut().zip(colour) {
             *o = s.val(a, x)?;
         }
-        let conf = tlb_config_f16(rt as u32, 4);
+        let n = u32::from(p.rt_comps[rt].clamp(1, 4));
+        let conf = tlb_config_f16(rt as u32, n);
         let first = if conf != !0 { Dst::Tlbu(Uniform::constant(conf)) } else { Dst::Tlb };
         let (r, g) = s.pair(a, c[0], c[1])?;
-        let (b, al) = s.pair(a, c[2], c[3])?;
         s.push(a, VOp::Add { op: AddOp::Vfpack, dst: first, a: r, b: g })?;
-        s.push(a, VOp::Add { op: AddOp::Vfpack, dst: Dst::Tlb, a: b, b: al })?;
+        /* The second pair only for 3 or 4 components (nir_to_vir.c:2031). */
+        if n >= 3 {
+            let (b, al) = s.pair(a, c[2], c[3])?;
+            s.push(a, VOp::Add { op: AddOp::Vfpack, dst: Dst::Tlb, a: b, b: al })?;
+        }
     }
     fold_unpacks(a, &mut s.ops, s.next)?;
     merge_exits(a, &mut s.ops)?;

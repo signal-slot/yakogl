@@ -123,19 +123,20 @@ const SHADERS: [(&str, &str, &str); 10] = [
 ];
 
 /// Each shader's [`fingerprint`] with `compile_program_keyed` at 069dd17b,
-/// before the key existed.
+/// before the key existed; vec2, float, mrt4 and fragcolor re-pinned 2026-11-16
+/// (v3d-shout4: a narrow float output writes its own size and one word).
 const PINNED: [(&str, u64); 10] = [
     /* vec3 is the same program as vec4: a float output writes all four lanes, the one not
      * declared as 0 (prepare_fragment_with) */
     ("vec4", 0x2b14369d47d323d0),
     ("vec3", 0x2b14369d47d323d0),
-    ("vec2", 0x37c9653e8a4deb83),
-    ("float", 0x69f126a18fc4485b),
+    ("vec2", 0xeffb3bfae578c8f0),
+    ("float", 0xe336083b13223698),
     ("varying", 0x4e8b560d01a8220e),
     ("discard", 0xf2943629a8d2e17d),
-    ("mrt4", 0x08a2e5074b329ee1),
+    ("mrt4", 0x8dacdf077e127f28),
     ("int+float", 0x91a14c17643402ee),
-    ("fragcolor", 0xcecf7c5ee58accf6),
+    ("fragcolor", 0x5f612d68a9b23c11),
     ("fragdata", 0x395d136e1c5adc7d),
 ];
 

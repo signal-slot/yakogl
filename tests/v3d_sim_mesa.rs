@@ -4132,11 +4132,11 @@ const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
 /// 2D-array and 3D look-ups and their textureSize: es300/array.frag,
 /// texsize.frag and vol.frag compile, and the fixture carries the two
 /// EXTRA_REAL pairs es300/cube.vert + texfetch.frag and texoffset.frag
-/// (sim_fixture.py): 198 programs [11079, 5631, 4635], the five pairs' own
+/// (sim_fixture.py): 198 programs [11063, 5631, 4635], the five pairs' own
 /// words (fs 29 + 16 + 29 + 21 + 45, vs 94, cs 105; ES 3 build only); no
 /// other program moves (chain.rs compiled_corpus_words_are_pinned).
-const OURS_TOTALS: (usize, [usize; 3]) = (198, [11079, 5631, 4635]);
-const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9823, 4840, 4039]);
+const OURS_TOTALS: (usize, [usize; 3]) = (198, [11063, 5631, 4635]);
+const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9807, 4840, 4039]);
 
 // ---------------------------------------------------------------------------
 // Four colour targets (RC14).
