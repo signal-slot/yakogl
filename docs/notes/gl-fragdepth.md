@@ -15,9 +15,8 @@ compiles and which state it sets, and what is still open.
 (`src/shaderc/online/lower.rs`, the `(Stage::Fragment, "gl_FragDepth")`
 entry; the IR slot is `IoSlot::FragDepth`, `ir.rs`). The eight dEQP writers
 are pinned as such by `tests/es3_shaderc_repro.rs`
-`fragdepth_writes_lower_to_a_depth_output`. Its doc comment still says the
-three back ends refuse the output; that is stale since the commits below
-(plan #338 holds the file).
+`fragdepth_writes_lower_to_a_depth_output`. Its doc comment says the
+PowerVR, GC7000UL and V3D back ends compile that depth output (`78fd5716`).
 
 ## 2. GC7000UL (`70a2050a`, `5fa91ff6`)
 
@@ -155,11 +154,6 @@ program's depth only replaces the interpolated value that is tested.
 
 ## Pending, in one list
 
-- A gate row for the fragdepth tests: `tools/check.sh` has one only for
-  `tests/es3_pvr_fragdepth.rs`; `es3_fragdepth_gc`, `es3_fragdepth_v3d`,
-  `es3_fragdepth_v3d_state`, `es3_fragdepth_v3d_sim` and
-  `es3_fragdepth_cases` are not in it (items `gc-fragdepth-row`,
-  `v3d-fragdepth-row`).
 - GC7000UL on a tiled colour target: the back end renders to linear targets
   only, so the writer's early-Z-off words are pinned through the rule, not
   through a draw.
