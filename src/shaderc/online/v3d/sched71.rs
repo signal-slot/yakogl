@@ -81,7 +81,7 @@ use super::alloc71::{Allocation71, Rf};
 use super::codec71::{decode71, encode71};
 use super::encode::EncodeError;
 use super::isa71::{
-    add_op_args, mul_op_args, AddAlu71, Alu71, Cond, Flags, MulAlu71, Operand, OutPack, ARG_D, WADDR_NOP,
+    add_op_args, mul_op_args, AddAlu71, Alu71, Branch, Cond, Flags, MulAlu71, Operand, OutPack, ARG_D, WADDR_NOP,
 };
 use super::verify71::{is_sfu_op, peripherals_compatible71};
 use super::vop71::{AddOp71, Dst71, FlagOp71, Instr71, MulOp71, Op71, Src71, Uniform, Unpack71, V};
@@ -107,7 +107,10 @@ fn ends_tmu_sequence(waddr: u8) -> bool {
 pub enum Sched71Error {
     /// Not scheduled at 7.1 yet, by name.
     NotYet(&'static str),
-    /// Operation `.0` is control flow, which [`pack71`] does not take.
+    /// Operation `.0` is control flow, which [`pack71`] does not take, or
+    /// which [`super::sched71_cf::schedule71`] could not place (a back edge
+    /// with no open loop head, a loop head never closed, a label defined
+    /// twice or never).
     ControlFlow(usize),
     /// Operation `.0` does not encode even alone in a word.
     NotEncodable(usize, EncodeError),
@@ -186,19 +189,23 @@ fn reads_rf(alu: &Alu71, r: u8) -> bool {
 #[derive(Clone, Copy, Debug)]
 pub struct Word71 {
     pub(super) alu: Alu71,
-    /// The uniform the word consumes (`ldunif`, `ldunifrf`, `wrtmuc`, TLBU).
+    /// The uniform the word consumes (`ldunif`, `ldunifrf`, `wrtmuc`, TLBU;
+    /// a branch's stream offset).
     pub(super) uniform: Option<Uniform>,
+    /// A branch ([`super::sched71_cf`]): this word is the branch, `alu` is a
+    /// NOP and nothing merges into it.
+    pub(super) branch: Option<Branch>,
     add_used: bool,
     mul_used: bool,
     sig_addr_used: bool,
     /// A TLB write is in this word (one TLB access per instruction).
-    tlb: bool,
+    pub(super) tlb: bool,
     /// A TMU register write is in this word (one per instruction:
     /// qpu_schedule.c:944-962 counts the TMU write once per operation).
-    tmu_write: bool,
+    pub(super) tmu_write: bool,
     /// This word pushes a flag / has a conditional write. The two never
     /// share a word, as in sched.rs.
-    flags_push: bool,
+    pub(super) flags_push: bool,
     flags_read: bool,
 }
 
@@ -248,6 +255,7 @@ impl Word71 {
         Word71 {
             alu: Alu71::nop(),
             uniform: None,
+            branch: None,
             add_used: false,
             mul_used: false,
             sig_addr_used: false,
@@ -353,6 +361,9 @@ impl Word71 {
 
 /// `w` with `op` added, or why not.
 fn merge(w: &Word71, al: &[Rf], op: &Op71) -> Result<Word71, Refused> {
+    if w.branch.is_some() {
+        return Err(Refused::Full);
+    }
     let mut w = *w;
     match *op {
         Op71::Add { op, dst, a, b } => w.put_add(al, op, dst, a, b)?,
@@ -552,6 +563,10 @@ fn window_ok(words: &[Word71], over: Option<(usize, &Word71)>, t: usize, from: u
     (0..3).all(|slot| {
         let Some(w) = get(t + slot) else { return true };
         let a = &w.alu;
+        /* no branch in a THRSW or its delay slots (qpu_validate.c:157-164) */
+        if w.branch.is_some() {
+            return false;
+        }
         if slot > 0 && is_sfu_op(a.add.op) {
             return false;
         }
@@ -648,15 +663,89 @@ impl<'a, 'r> Packer71<'a, 'r> {
         self.prev_was_thrsw = false;
     }
 
+    /// A control-flow boundary (a loop head, a label): [`Packer71::fence`],
+    /// with the words padded up to it, and its index: the word the next
+    /// operation (or the program end) starts there, which the branches to
+    /// it target. sched.rs's LoopHead / Label placement.
+    pub(super) fn boundary(&mut self, a: &Arena<'a>) -> Result<usize, Sched71Error> {
+        self.fence();
+        self.pad_to(self.fence, a)?;
+        Ok(self.fence)
+    }
+
+    /// The first word the next operation may go in.
+    pub(super) fn floor(&self) -> usize {
+        self.floor
+    }
+
+    /// The word of the last flag push, if any.
+    pub(super) fn last_flags(&self) -> Option<usize> {
+        self.last_flags
+    }
+
+    /// The word of the last THRSW that opened a delay window, if any.
+    pub(super) fn last_thrsw(&self) -> Option<usize> {
+        self.last_thrsw
+    }
+
+    /// The word of the last `ldvary`, if any.
+    pub(super) fn last_ldvary(&self) -> Option<usize> {
+        self.last_ldvary
+    }
+
+    /// Uniforms consumed by the words before `at` (a branch's own stream
+    /// word among them when it is before `at`).
+    pub(super) fn uniforms_before(&self, at: usize) -> usize {
+        self.words.as_slice()[..at.min(self.words.len())].iter().filter(|w| w.uniform.is_some()).count()
+    }
+
     /// Where a THRSW, or the program end, may go at the earliest.
     fn barrier(&self) -> usize {
         self.last_thrsw.map_or(0, |t| t + 3).max(self.fence)
     }
 
-    fn pad_to(&mut self, at: usize, a: &Arena<'a>) -> Result<(), Sched71Error> {
+    /// NOP words up to `at`.
+    pub(super) fn pad_to(&mut self, at: usize, a: &Arena<'a>) -> Result<(), Sched71Error> {
         while self.words.len() < at {
             self.words.push(a, Word71::empty())?;
         }
+        Ok(())
+    }
+
+    /// Branch word `br` inserted at `at` (at most the words placed so far):
+    /// the words from `at` on move one later and are its delay slots, with
+    /// NOPs for the slots they do not fill, so `at + 4` is the first word
+    /// after it (sched.rs `place_branch`). The caller chose `at` so that the
+    /// moved words may run in a branch's slots and nothing the packer keeps
+    /// an index of moves (`sched71_cf::branch_back`). Then a fence at
+    /// `at + 4`: nothing later merges into the slots, and no THRSW moves back
+    /// into them. The stream offset is set by [`Packer71::set_branch`] once
+    /// the target is known; until then the word holds a placeholder uniform,
+    /// counted like any other.
+    pub(super) fn insert_branch(&mut self, at: usize, br: Branch, a: &Arena<'a>) -> Result<(), Sched71Error> {
+        if at > self.words.len() {
+            return Err(Sched71Error::NotPlaceable(at));
+        }
+        let mut w = Word71::empty();
+        w.branch = Some(br);
+        w.uniform = Some(Uniform::constant(0));
+        self.words.push(a, w)?;
+        self.words.as_mut_slice()[at..].rotate_right(1);
+        self.pad_to(at + 4, a)?;
+        self.fence = at + 4;
+        self.floor = at + 4;
+        self.prev_was_thrsw = false;
+        Ok(())
+    }
+
+    /// The branch at `at` with its offset and stream word resolved.
+    pub(super) fn set_branch(&mut self, at: usize, br: Branch, stream: Uniform) -> Result<(), Sched71Error> {
+        let w = self.words.as_mut_slice().get_mut(at).ok_or(Sched71Error::NotPlaceable(at))?;
+        if w.branch.is_none() {
+            return Err(Sched71Error::NotPlaceable(at));
+        }
+        w.branch = Some(br);
+        w.uniform = Some(stream);
         Ok(())
     }
 
@@ -675,7 +764,7 @@ impl<'a, 'r> Packer71<'a, 'r> {
         let with_thrsw = |w: &Word71| {
             let mut t = *w;
             t.alu.sig.thrsw = true;
-            encode71(&Instr71::Alu(t.alu)).is_ok().then_some(t)
+            (w.branch.is_none() && encode71(&Instr71::Alu(t.alu)).is_ok()).then_some(t)
         };
         (n.saturating_sub(3).max(self.barrier())..n).find(|&k| {
             let Some(first) = with_thrsw(&words[k]) else { return false };
@@ -698,6 +787,9 @@ impl<'a, 'r> Packer71<'a, 'r> {
         self.pad_to(at, a)?;
         if at < self.words.len() {
             let w = &mut self.words.as_mut_slice()[at];
+            if w.branch.is_some() {
+                return Err(Sched71Error::NotPlaceable(i));
+            }
             w.alu.sig.thrsw = true;
             if encode71(&Instr71::Alu(w.alu)).is_err() {
                 return Err(Sched71Error::NotPlaceable(i));
@@ -892,7 +984,8 @@ impl<'a, 'r> Packer71<'a, 'r> {
         while k < n {
             let mut first = self.words.as_slice()[k];
             first.alu.sig.thrsw = true;
-            if encode71(&Instr71::Alu(first.alu)).is_ok()
+            if first.branch.is_none()
+                && encode71(&Instr71::Alu(first.alu)).is_ok()
                 && window_ok(self.words.as_slice(), Some((k, &first)), k, from, true)
             {
                 self.words.as_mut_slice()[k] = first;
@@ -922,7 +1015,11 @@ impl<'a, 'r> Packer71<'a, 'r> {
         for (k, w) in words.iter().enumerate() {
             /* the instruction as its word decodes: codec71's canonical form,
              * FADD/FMIN's operands in the order that says which it is */
-            let word = encode71(&Instr71::Alu(w.alu)).map_err(|e| Sched71Error::NotEncodable(k, e))?;
+            let instr = match w.branch {
+                Some(br) => Instr71::Branch(br),
+                None => Instr71::Alu(w.alu),
+            };
+            let word = encode71(&instr).map_err(|e| Sched71Error::NotEncodable(k, e))?;
             let instr = decode71(word).map_err(|e| Sched71Error::NotEncodable(k, EncodeError::DoesNotDecode(e)))?;
             instrs.push(a, instr)?;
             if let Some(u) = w.uniform {
