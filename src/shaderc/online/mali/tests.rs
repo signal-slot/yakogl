@@ -1222,7 +1222,10 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         /* a lane of uniforms alone (flat) beside lanes of an attribute
          * (interpolated): a layout no reference draws */
         (VS, "attribute vec4 p; attribute vec2 c; uniform float u; varying vec4 v; void main(){ gl_Position = p; v = vec4(c, u, 1.0); }", MaliError::VaryingNotFromAttribute),
-        (VS, "attribute vec4 p; varying vec2 v; void main(){ gl_Position = p; v = p.xx; }", MaliError::VaryingDuplicate),
+        /* equal lanes of a join (a phi), which the link keeps apart; equal
+         * lanes of one value (`v = p.xx`) the shader alone leaves out, as
+         * its constant lanes (gm2_arithconst_3) */
+        (VS, "attribute vec4 p; attribute vec4 a; attribute vec4 b; varying vec2 v; varying vec2 w; void main(){ gl_Position = p; if (p.x > 0.0) { v = a.xy; w = a.xy; } else { v = b.xy; w = b.xy; } }", MaliError::VaryingDuplicate),
         (FS, "precision mediump float; varying float f; varying vec4 v; void main(){ gl_FragColor = f + v; }", MaliError::FsOperandForm),
         (
             FS,
@@ -2799,13 +2802,11 @@ fn a_vertex_matrix_times_matrix_times_vector_is_byte_equal_to_mesa_26_2_1() {
 }
 
 /// The matrix terms by 1.0 or -1.0 no reference of this walk draws stay
-/// refused: `vec4(p.xy, 0.0, 1.0)` (S2, column 3 moved into the first
-/// term: vsfold_xy also stores a uniform varying, refused first), a `w`
-/// of -1.0, a `z` of 1.0.
+/// refused: a `w` of -1.0, a `z` of 1.0. (`vec4(p.xy, 0.0, 1.0)`, S2, is
+/// tests/mali_arith_const.rs's gm2_arithconst_1 and _2.)
 #[test]
 fn vertex_matrix_terms_no_reference_draws_are_refused() {
     for src in [
-        "attribute vec2 p; uniform mat4 m; void main(){ gl_Position = m * vec4(p, 0.0, 1.0); }",
         "attribute vec3 p; uniform mat4 m; void main(){ gl_Position = m * vec4(p, -1.0); }",
         "attribute vec2 p; uniform mat4 m; void main(){ gl_Position = m * vec4(p, 0.0, -1.0); }",
         "attribute vec2 p; attribute float q; uniform mat4 m; void main(){ gl_Position = m * vec4(p, 1.0, q); }",
@@ -4607,7 +4608,11 @@ fn varyings_mesa_s_link_moves_or_merges() {
     assert_eq!(stores(td!("sel_v_duplicate.expect.json")), 4);
     let fs = region(td!("sel_v_duplicate.expect.json"), "fs.fragment").expect("fs.fragment");
     assert_eq!(fs.words.iter().filter(|w| text(**w).starts_with("LD_VAR")).count(), 1);
-    assert_eq!(gap(SHC_STAGE_VERTEX, td!("sel_v_duplicate.vert")), MaliError::VaryingDuplicate);
+    /* the vertex shader alone is built without the equal lanes, as without
+     * its constant ones: one varying's four stores */
+    let alone = compile(SHC_STAGE_VERTEX, td!("sel_v_duplicate.vert")).expect("sel_v_duplicate.vert compiles alone");
+    let (_, var) = vs_regions(&alone);
+    assert_eq!(var.iter().filter(|w| text(**w).starts_with("STORE")).count(), 4);
 }
 
 /// The ISA ops the varying populations add to the corpus's and the
@@ -4672,13 +4677,21 @@ fn the_fragment_productions_are_the_references() {
     fs.extend(UNITYPE_166_POPULATION.iter().map(|c| c.1));
     /* a varying's lanes swapped under an fneg (`-a2.yx`) */
     fs.push(td!("fsneg_swapped.frag"));
+    /* built for their vertex shaders' link constants and equal lanes: one
+     * lane in both halves of an output word (gm2_arithconst_3's three
+     * equal colour lanes) */
+    let linked = [(td!("gm2_arithconst_3.vert"), td!("gm2_arithconst_3.frag"))];
     let mut seen = 0u128;
-    for src in fs {
+    for (vs, src) in fs.iter().map(|f| (None, *f)).chain(linked.iter().map(|(v, f)| (Some(*v), *f))) {
         let _k = store::test_keep();
         seen |= store::with_scratch(|s| {
+            let consts = vs.map_or(super::link::VaryingConsts::NONE, |v| {
+                super::vs_constants(v.as_bytes(), s).expect("the vertex shader's link constants")
+            });
             let l = codegen::lower_source(SHC_STAGE_FRAGMENT, src.as_bytes(), &[], s).expect("the front end takes it");
             let text = s.alloc_str(src).expect("room");
-            let prec = super::FsPrecision::of(&l.module, text, s).expect("the precision");
+            let prec =
+                super::FsPrecision { consts, ..super::FsPrecision::of(&l.module, text, s).expect("the precision") };
             assert!(!prec.highp, "the vectoriser's populations are mediump");
             let mut f = super::nir_fs::walk(&l.module, s, prec).expect("the walk");
             let st = crate::shaderc::online::sema::Stage::Fragment;
@@ -8181,9 +8194,11 @@ fn vertex_attribute_indices_count_the_locations_mesa_numbers() {
 ///   gl_Position or in gl_PointSize. No location depends on the fold, so
 ///   the program is the one the first walk gives: compiled (alone and
 ///   linked), with Mesa's
-///   attribute records (its fragment words are not Mesa's: the propagated
-///   lane), or refused for its fragment shader's colour pair
-///   (`ColourPair`).
+///   attribute records. A lane the fold makes a constant from an
+///   attribute's lane is no constant to the link: stored computed and
+///   loaded, as Mesa (gm2_arithconst_4; the zero lane of `b * vec4(1.0,
+///   1.0, 0.0, 1.0)` below). Of a uniform's lane the fragment words are
+///   not Mesa's (the propagated lane).
 /// - `d`'s late fold beside a lane that a fold of two constants makes a
 ///   constant (`vslate_constlane`'s `w`): `d` is counted, and `w`'s lanes
 ///   refuse nothing, because no location depends on them.
@@ -8222,7 +8237,9 @@ fn a_late_fold_is_refused_only_where_the_attribute_numbering_depends_on_it() {
     ] {
         let vs =
             format!("attribute highp vec4 p; attribute highp vec4 b; varying mediump vec4 v; void main(){{ {read} }}");
-        assert_eq!(linked(&vs, fs).err(), Some(MaliError::ColourPair), "{read}");
+        let v = linked(&vs, fs).unwrap_or_else(|e| panic!("{read}: refused, {e:?}"));
+        let (_, var) = vs_regions(&v);
+        assert_eq!(var.iter().filter(|w| text(**w).starts_with("STORE")).count(), 4, "{read}: the zero lane stored");
     }
     let refs = testdata_references("vslate_");
     assert!(!refs.is_empty());

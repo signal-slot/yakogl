@@ -49,6 +49,7 @@ use crate::gl::consts::{
     GL_INT_VEC4, GL_UNSIGNED_INT, GL_UNSIGNED_INT_VEC2, GL_UNSIGNED_INT_VEC3, GL_UNSIGNED_INT_VEC4,
 };
 use crate::shaderc::online::arena::Arena;
+use crate::shaderc::online::fold;
 use crate::shaderc::online::ir::{
     self, AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, ScalarType, TexDim, TexLod, ValueId,
 };
@@ -2005,10 +2006,17 @@ impl<'s> Nir<'s> {
                 Alu::Frcp => 1.0 / f(0),
                 Alu::Fmax => f(0).max(f(1)),
                 Alu::Fmin => f(0).min(f(1)),
+                /* `1.0F / sqrtf(x)`, the GLSL front end's `rsq`
+                 * (ir_expression_operation.py:453) and NIR's (:267), with
+                 * the correctly rounded root: `normalize` of a constant
+                 * (gm2_arithconst_3/4, [`const_dot`]) */
+                Alu::Frsq => match fold::fold_float(AluOp::Frsq, consts[0].unwrap_or(0), 0, 0) {
+                    Some(r) => f32::from_bits(r),
+                    None => return Err(MaliError::ConstantFold),
+                },
                 /* the front end folds a constant expression: a constant
                  * operand here comes from a shape no reference draws */
                 Alu::Fclamp(_)
-                | Alu::Frsq
                 | Alu::Ffloor
                 | Alu::Fceil
                 | Alu::Ftrunc
@@ -2446,18 +2454,120 @@ pub(super) fn is_mat_term(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
 /// 1.0 into it (S2 of docs/notes/mali-vs-constant-products.md:
 /// `fadd(fadd(fmul, fmul), c3)` is `fadd(fmul(c1, y), fadd(fmul(c0, x),
 /// c3))`, nir_opt_algebraic.py:4358-4360, then `ffma(c0, x, c3)` for every
-/// lane before `ffma(c1, y, ..)`, vsfold_xy.expect.json).
-fn vs_two_term_sum(vs: &Nir<'_>, acc: Val) -> bool {
+/// lane before `ffma(c1, y, ..)`, gm2_arithconst_1.expect.json). Some:
+/// the two terms `[c0, x, c1, y]`.
+fn vs_two_terms(vs: &Nir<'_>, acc: Val) -> Option<[Val; 4]> {
     let users = |v: Val| match v {
         Val::Lane(n, 0) => vs.uses(n).count(),
         _ => usize::MAX,
     };
-    match vs_alu_of(vs, acc) {
-        Some((Alu::Ffma, [_, _, f])) => {
-            users(acc) == 0 && users(f) == 1 && matches!(vs_alu_of(vs, f), Some((Alu::Fmul, _)))
+    let (Alu::Ffma, [c0, x, f]) = vs_alu_of(vs, acc)? else { return None };
+    let (Alu::Fmul, [c1, y, _]) = vs_alu_of(vs, f)? else { return None };
+    (users(acc) == 0 && users(f) == 1).then_some([c0, x, c1, y])
+}
+
+/// A dot product of `n` lanes of two constants, as Mesa's GLSL front end
+/// folds the built-in call on constant expressions (ast_function.cpp:657-664,
+/// `dot_f`, ir_constant_expression.cpp:45-54): `result += a[c] * b[c]` from
+/// lane 0, each product and sum rounded on its own. NIR's `fdot3` folds the
+/// same sum in the same order (nir_constant_expressions). `normalize` of a
+/// constant (`normalize(LightDir.xyz)` of glmark2's `const vec4`,
+/// gm2_arithconst_3/4) is this dot, then [`Nir::alu`]'s `frsq` and products
+/// on constants. None: a lane is not a constant; a lane or the result that
+/// is not a zero or a normal float is refused as the other folds are.
+fn const_dot(n: usize, a: impl Fn(usize) -> Val, b: impl Fn(usize) -> Val) -> Result<Option<Val>, MaliError> {
+    let mut sum = 0.0f32;
+    for c in 0..n {
+        let (Val::Const(x), Val::Const(y)) = (a(c), b(c)) else { return Ok(None) };
+        if !plain(x) || !plain(y) {
+            return Err(MaliError::ConstantFold);
         }
-        _ => false,
+        sum += f32::from_bits(x) * f32::from_bits(y);
     }
+    if !plain(sum.to_bits()) {
+        return Err(MaliError::ConstantFold);
+    }
+    Ok(Some(Val::Const(sum.to_bits())))
+}
+
+/// IR value `v` is read once in the stage: by one instruction, or, a load
+/// of a local, the only load of it (copy propagation hands Mesa's
+/// `is_used_once` the value the local holds).
+fn ir_once(m: &Module<'_>, v: ir::ValueId) -> bool {
+    match m.def(v) {
+        Some(IrOp::LoadLocal { local, .. }) => {
+            let local = *local;
+            super::nir_fs::ir_uses(m, v) == 1
+                && m.instrs.iter().filter(|op| matches!(op, IrOp::LoadLocal { local: l, .. } if *l == local)).count()
+                    == 1
+        }
+        _ => super::nir_fs::ir_uses(m, v) == 1,
+    }
+}
+
+/// A dot product of a vector `v * r` (`r` one value for every lane, as
+/// `normalize`'s reciprocal square root) and a constant vector `L`
+/// (gm2_arithconst_3/4: `dot(normalize(..), normalize(LightDir.xyz))` of
+/// a `const` light): Mesa scalarises the dot into `fadd(fadd(fmul(N.z,
+/// L.z), fmul(N.y, L.y)), fmul(N.x, L.x))` (nir_lower_alu_width.c
+/// `lower_reduction`, the reverse order of an imprecise dot; the zero lanes
+/// of `L` gone first, nir_opt_algebraic.py:559-581), turns each
+/// `fmul(fmul(v, r), #L)` of a product read once into `fmul(fmul(v, L), r)`
+/// (:2394) and takes `r` out of the sums (:246, `fmul(r, fadd(..))`), which
+/// the late fusion makes `FMA v.z, L.z, -0.0`, `FMA v.y, L.y, ..`, `FMA
+/// v.x, L.x, ..` and one product by `r` (gm2_arithconst_3.expect.json's
+/// varying program). None: not that shape.
+fn vs_dot_factored(
+    vs: &mut Nir<'_>,
+    m: &Module<'_>,
+    w: &Walk<'_>,
+    s: &[ir::Src; 3],
+    n: usize,
+) -> Result<Option<Val>, MaliError> {
+    for k in 0..2 {
+        let (pv, cv) = (|i| lane(w, s[k], i), |i| lane(w, s[1 - k], i));
+        let mut lanes = [0usize; 4];
+        let mut nl = 0;
+        for i in 0..n {
+            match cv(i) {
+                Val::Const(c) if !plain(c) => return Ok(None),
+                Val::Const(c) if c & !F32_NEG_ZERO == 0 => {}
+                Val::Const(_) => {
+                    lanes[nl] = i;
+                    nl += 1;
+                }
+                _ => return Ok(None),
+            }
+        }
+        if nl == 0 || !ir_once(m, s[k].val) {
+            continue;
+        }
+        let mut terms = [(Val::Undef, Val::Undef); 4];
+        let mut r = Val::Undef;
+        for (t, &i) in terms.iter_mut().zip(&lanes[..nl]) {
+            let p = pv(i);
+            let Val::Lane(id, 0) = p else { return Ok(None) };
+            let Some((Alu::Fmul, [x, y, _])) = vs_alu_of(vs, p) else { return Ok(None) };
+            if vs.uses(id).count() != 0 || matches!(x, Val::Const(_)) || matches!(y, Val::Const(_)) {
+                return Ok(None);
+            }
+            if r != Val::Undef && r != y {
+                return Ok(None);
+            }
+            r = y;
+            *t = (x, cv(i));
+        }
+        let (x, c) = terms[nl - 1];
+        let mut acc = vs.alu(Alu::Fmul, x, c, Val::Undef)?;
+        if nl == 1 {
+            return vs.alu(Alu::Fmul, acc, r, Val::Undef).map(Some);
+        }
+        for &(x, c) in terms[..nl - 1].iter().rev() {
+            acc = vs.alu(Alu::Ffma, x, c, acc)?;
+        }
+        return vs.alu(Alu::Fmul, r, acc, Val::Undef).map(Some);
+    }
+    Ok(None)
 }
 
 /// The column of the mat4 a matrix product's term ([`is_mat_term`]) reads,
@@ -2832,6 +2942,19 @@ pub fn build<'s>(
             return Err(MaliError::AttributeNumbering);
         }
         vs.counted = counted;
+        /* a lane the fold makes a constant is no constant to the link
+         * (it runs before the back end's fold): Mesa stores it computed,
+         * and the fragment shader loads it (gm2_arithconst_4's `diffuse *
+         * Albedo.rgb` of `Albedo = vec4(0.0, 0.0, 1.0, 1.0)`: `IADD_IMM.i32
+         * r1, 0x0, #0x0` stored into lanes 0 and 1, the `.v3` load) */
+        for o in m.outputs.iter().filter(|o| o.kind == IoKind::Varying) {
+            for c in 0..o.components.min(4) {
+                let (l, k) = (o.location, &numbered.consts);
+                if vs.consts.get(l, c).is_some() && k.get(l, c).is_none() && !k.flat(l, c) {
+                    vs.consts.remove(l, c);
+                }
+            }
+        }
     }
     Ok(vs)
 }
@@ -3023,18 +3146,35 @@ fn walk<'s>(
                          * (S1 of docs/notes/mali-vs-constant-products.md,
                          * vsfold_one.expect.json's `FADD.f32 r1, r1^,
                          * u9.w0`). A sum of two terms is S2, which moves the
-                         * column into the first term: its reference
-                         * (vsfold_xy) also stores a uniform varying, which
-                         * this walk refuses, so it is not drawn here
-                         * ([`vs_two_term_sum`]) */
+                         * column into the first term, every lane's
+                         * `ffma(c0, x, c3)` first, then every lane's
+                         * `ffma(c1, y, ..)` (made at lane 0, `held`;
+                         * gm2_arithconst_1's `vec4(position, 0.0, 1.0)`,
+                         * [`vs_two_terms`]) */
                         AluOp::Ffma
                             if is_mat_term(m, &s) && mat_column(m, &s) == Some(3) && x(1) == Val::Const(F32_ONE) =>
                         {
-                            if vs_two_term_sum(&vs, x(2)) {
-                                return Err(MaliError::ArithConstant);
-                            }
                             vs.note(Prod::MatProduct);
-                            vs.alu(Alu::Fadd, x(2), x(0), Val::Undef)?
+                            if l == 0 && vs_two_terms(&vs, x(2)).is_some() {
+                                let mut terms = [[Val::Undef; 4]; 4];
+                                for (i, t) in terms.iter_mut().enumerate().take(width) {
+                                    *t = vs_two_terms(&vs, lane(w, s[2], i)).ok_or(MaliError::ArithConstant)?;
+                                }
+                                let mut first = [Val::Undef; 4];
+                                for (i, f) in first.iter_mut().enumerate().take(width) {
+                                    *f = vs.alu(Alu::Ffma, terms[i][0], terms[i][1], lane(w, s[0], i))?;
+                                }
+                                for (i, h) in held.iter_mut().enumerate().take(width) {
+                                    *h = vs.alu(Alu::Ffma, terms[i][2], terms[i][3], first[i])?;
+                                }
+                            }
+                            match held[l] {
+                                Val::Undef if vs_two_terms(&vs, x(2)).is_some() => {
+                                    return Err(MaliError::ArithConstant)
+                                }
+                                Val::Undef => vs.alu(Alu::Fadd, x(2), x(0), Val::Undef)?,
+                                h => h,
+                            }
                         }
                         /* any other term by 1.0 or -1.0 (a `w` of -1.0, a
                          * `z` of 1.0): NIR's rules
@@ -3069,11 +3209,18 @@ fn walk<'s>(
                                 _ => 4,
                             };
                             let (va, vb) = (|i| lane(w, s[0], i), |i| lane(w, s[1], i));
-                            let mut acc = vs.alu(Alu::Fmul, va(n - 1), vb(n - 1), Val::Undef)?;
-                            for i in (0..n - 1).rev() {
-                                acc = vs.alu(Alu::Ffma, va(i), vb(i), acc)?;
+                            if let Some(c) = const_dot(n, va, vb)? {
+                                vs.note_user(Prod::Folded);
+                                c
+                            } else if let Some(d) = vs_dot_factored(&mut vs, m, w, &s, n)? {
+                                d
+                            } else {
+                                let mut acc = vs.alu(Alu::Fmul, va(n - 1), vb(n - 1), Val::Undef)?;
+                                for i in (0..n - 1).rev() {
+                                    acc = vs.alu(Alu::Ffma, va(i), vb(i), acc)?;
+                                }
+                                acc
                             }
-                            acc
                         }
                         AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 => Val::Undef,
                         /* `imod(a, 2^k)` is `iand(a, 2^k - 1)`
@@ -3419,10 +3566,14 @@ fn walk<'s>(
         varyings.get(o.location as usize).copied().flatten().is_some_and(|l| matches!(l[c as usize & 3], Val::Const(_)))
             && phis & (1 << (o.location as usize * 4 + (c as usize & 3))) == 0
     };
+    /* a lane equal to an earlier one, which the link's fragment shader reads
+     * from that one: a shader alone is built without it too (the three
+     * equal colour lanes of gm2_arithconst_3's `diffuse * Albedo.rgb`) */
+    let dup = |o: &&ir::IoDecl<'_>, c: u8| equal[..nequal].iter().any(|e| (e.0, e.1) == (o.location, c));
     let reads = match reads {
-        None if decls.clone().any(|o| (0..o.components).any(|c| konst(&o, c))) => {
+        None if decls.clone().any(|o| (0..o.components).any(|c| konst(&o, c) || dup(&o, c))) => {
             for o in decls {
-                let mask = (0..o.components).filter(|&c| !konst(&o, c)).fold(0u8, |m, c| m | 1 << c);
+                let mask = (0..o.components).filter(|&c| !konst(&o, c) && !dup(&o, c)).fold(0u8, |m, c| m | 1 << c);
                 if mask == 0 {
                     continue;
                 }
@@ -3465,6 +3616,15 @@ fn walk<'s>(
             match l {
                 Val::Undef => return Err(MaliError::VaryingForm),
                 Val::Const(_) if phis & (1 << (v.location as usize * 4 + c)) != 0 => flat = true,
+                /* a lane the back end's fold made a constant, which the
+                 * link saw computed ([`build`]) and the fragment shader
+                 * reads: stored as it is, each store its own constant
+                 * (gm2_arithconst_4), equal or not to another */
+                Val::Const(_) if vs.late_fold => {
+                    smooth = true;
+                    vs.prods |= 1 << Prod::VaryingComputed as u32;
+                    continue;
+                }
                 Val::Const(_) => return Err(MaliError::VaryingNotFromAttribute),
                 /* a convergent lane (`nir_vertex_divergence_analysis`: no
                  * attribute behind it) is promoted to flat, its store

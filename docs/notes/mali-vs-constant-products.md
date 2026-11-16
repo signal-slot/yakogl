@@ -2,8 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali: the vertex "constant product", a matrix product with a constant `w` (glmark2's largest refusal family)
 
-**Design, implementation in a later vs-fold item** (plan #336, issue #33).
-Nothing here changes the compiler. This is the vertex twin of
+**Design** (plan #336, issue #33); S1 was implemented by 7810e44a, and S2
+with the rest of glmark2's ARITH_CONST shapes by plan #367 (section 5).
+Sections 1-4 are the design as written. This is the vertex twin of
 mali-constant-products.md (case 70, fragment). Mesa is 26.2.1
 (`MESA_PAN_TREE`, `$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`; line numbers are
 that tree's); the references below were drawn on its drm-shim (`GPU_ID
@@ -295,3 +296,84 @@ the same commit.
 * Whether the 4 `conditionals`/`function`/`loop` vertex shaders are S1 behind
   another refusal (section 1) is checked only by their next compile after
   the vertex compare/clamp item (vs-cmp-clamp) and the `Frsq` item.
+
+## 5. Plan #367: S2 and the rest of glmark2's ARITH_CONST (implemented)
+
+The references are `tools/mali/testdata/gm2_arithconst_1..4` (6beeba85),
+drawn on the 26.2.1 drm-shim **without** `--uniform-values` (every uniform
+FAU word 0). `tests/mali_arith_const.rs` builds each pair as glCompileShader
+and glLinkProgram do (`tests/mali_ref/mod.rs`) and compares every region
+byte for byte, the FAU words with the uniforms 0. All four are byte-equal.
+`tools/mali/testdata/cases.txt` holds pan_shc's verdicts on them (its
+SPIR-V path differs in the vertex stage: `mat-order`, and for case 2 the
+matrix product taken as written).
+
+| Case | Shape (glmark2 shader) | What it needed |
+|---|---|---|
+| 1 | `LightMatrix * pos4`, `MVP * pos4`, `pos4 = vec4(xy, 0.0, 1.0)`, a `const` colour (shadow b9d1) | S2 |
+| 2 | `proj * view * vec4(xy, 0.0, 1.0)` (ideas a09e) | S2 inside vsfma_chain's `view * p` first |
+| 3 | `normalize(LightDir.xyz)` of a `const vec4`, `max(dot(N, L), 0.0)`, a white albedo (shadow 6964, shading 83cd, build ace2) | the fold, the factored dot, three equal colour lanes |
+| 4 | as 3, `Albedo = (0, 0, 1, 1)`, `LightDir = (0, 3, 2)` | as 3, a zero lane of `L`, two colour lanes `diffuse * 0.0` |
+
+**S2** (`nir.rs`, the `AluOp::Ffma` arm of a column-3 term by 1.0): when
+every lane's sum is `ffma(c0, x, fmul(c1, y))` read once
+(`vs_two_terms`), lane 0 makes every lane's `ffma(c0, x, c3)`, then every
+lane's `ffma(c1, y, ..)` (the arm's `held` lanes), term-major as section 2
+predicted. The S2 rule is confirmed by the words: gm2_arithconst_1's
+position program is section 3's shadowb, and its varying program the same
+with `MOV.i32 r2, u12.w0` where `c0.x` and `c3.x` fall in two FAU pairs.
+
+**The constant fold** (`nir.rs` `const_dot` and `Nir::alu_sized`'s
+`Frsq`). `normalize(c)` of a constant reaches the walk as the front end's
+`fdot3(c, c)`, `frsq`, `fmul(c, rsq)`. Mesa folds the built-in call in the
+GLSL front end (ast_function.cpp:657-664): `dot_f`
+(ir_constant_expression.cpp:45-54, `result += a[c] * b[c]` from lane 0,
+unfused), `rsq` `1.0F / sqrtf` (ir_expression_operation.py:453), then the
+products. NIR's own fold of `fdot3` and `frsq` is the same arithmetic in the
+same order, so the walk folds a dot of two constant vectors there (no
+`ffma` of constants is made, which the walk refuses: no_std has no fused
+fold) and `frsq` of a constant with `fold::fold_float` (the correctly
+rounded root). Measured: `normalize(vec3(20, 20, 10))` is `(0x3f2aaaab,
+0x3f2aaaab, 0x3eaaaaab)` and `normalize(vec3(0, 3, 2))` `(0, 0x3f550140,
+0x3f0e00d5)`, the references' FAU constants. An operand or result that is
+not a zero or a normal float still refuses (`normalize(vec3(0.0))`).
+
+**The factored dot** (`nir.rs` `vs_dot_factored`): `dot(N, L)` with `N =
+v * rsq` read once (a local read once: `ir_once`) and `L` constant. Mesa
+scalarises the dot (`lower_reduction`, reversed for an imprecise dot,
+nir_lower_alu_width.c:100-125; a zero lane of `L` gone first,
+nir_opt_algebraic.py:559-581), then `fmul(fmul(v, r), #L)` is
+`fmul(fmul(v, L), r)` (:2394) and `fadd(fmul(a, r), fmul(b, r))` is
+`fmul(r, fadd(a, b))` (:246). After the late fusion: `FMA v.z, L.z, -0.0`,
+`FMA v.y, L.y, ..`, `FMA v.x, L.x, ..`, then `FMA.clamp_0_inf rsq, sum,
+-0.0` (the `max(.., 0.0)` on it). The `N` products are left unread and go
+with `dce`. One lane of `L` alone is `fmul(fmul(v, L), r)` (no reference).
+
+**The link** (`nir.rs` `walk` and `build`, `link.rs`, `nir_fs.rs`):
+
+* Case 3's colour is `(d, d, d, 1.0)`. The link merges the equal lanes
+  (ef8d3d8f), but the vertex shader alone (glCompileShader) refused them
+  (`VaryingDuplicate`). It is now built without them, as without its
+  constant lanes (`own_reads`). The fragment word of one lane in both
+  halves is `MKVEC.v2i16 x.h0, x.h0`, which `lower_mkvec_swz` makes
+  `IADD.v2u16 r1, r0.h00, 0x0` (`ADMITTED` gains `(Splat, Output)`).
+  Equal lanes of a join (an `if`'s phi) still refuse.
+* Case 4's `diffuse * vec3(0.0, 0.0, 1.0)`: the zero lanes are folded by
+  the back end (`vs_fmul`'s late fold), after the link, which sees them
+  computed. Mesa stores them (`IADD_IMM.i32 r1, 0x0, #0x0` per store) and
+  the fragment shader loads the `.v3`. `build` takes such a lane (a constant
+  of the walk, none of the numbering walk's, and not flat there) out of the
+  link's constants (`VaryingConsts::remove`), and the walk stores a
+  constant lane when it made a late fold. The vslate_* references show
+  Mesa does the same where the factor is a uniform or the fold is of two
+  constants (`vslate_uniform`'s `IADD_IMM .. #0x3F800000`); those still
+  propagate here (not this item's).
+
+**What it moves.** glmark2 (tests/mali_glmark2_corpus.rs, host): compile-clean
+scenes 2 -> 5 (`build` x2 and `shading:gouraud` join `pulsar` and
+`desktop:shadow`); shadow `b9d1` and `6964` and build `ace2` compile.
+`texture:*` now stop at the link (fragment `425b`'s texture coordinate,
+TEX_COORD). ideas `a09e` moves to equal lanes of a uniform-only `if`
+(`vec4(c, c, c, 1.0)`, a join: not this family). `tools/mali/corpus-verdicts.txt`:
+`es100/discard_dynloop.vert` ok, `es100/xlink.vert` to the uniform-varying
+refusal.

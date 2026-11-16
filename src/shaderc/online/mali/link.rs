@@ -215,6 +215,15 @@ impl VaryingConsts {
     pub fn as_slice(&self) -> &[(u8, u8, u32)] {
         &self.at[..self.n]
     }
+
+    /// Lane `comp` of varying `location` is no constant after all
+    /// ([`VaryingConsts::push`] undone; its flat or equal tags stay).
+    pub fn remove(&mut self, location: u8, comp: u8) {
+        if let Some(i) = self.as_slice().iter().position(|e| e.0 == location && e.1 == comp) {
+            self.at.copy_within(i + 1..self.n, i);
+            self.n -= 1;
+        }
+    }
 }
 
 /// The Mali's `struct shc_backend.link` table rule: the null and name checks
