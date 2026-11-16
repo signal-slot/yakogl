@@ -24,6 +24,7 @@
 //! | [`pe_overwrite`] | the PE colour COMPONENTS mask and OVERWRITE bit of a draw |
 //! | [`dedup`] | the state groups as the open stream last wrote them: a draw writes only the ones that differ |
 //! | [`depth_format`] | the depth surface format, size and clear word per GL depth attachment (not yet used) |
+//! | [`depth_dump`] | case 244's depth-layout override plan and the dump pages of a readback, as pure functions (no knob) |
 //! | [`early_z`] | the early-depth rule: whether a draw may use it and the PE_DEPTH_CONFIG and RA_EARLY_DEPTH words for it (a draw into a tiled shadow, `gc_tiled_rt`; every other draw keeps "never") |
 //! | [`shader`] | the register wiring of the two stages, the instruction cache, the uniforms |
 //! | [`texture`] | texture descriptors and sampler state |
@@ -42,6 +43,7 @@
 pub mod backend;
 pub mod cmd;
 pub mod dedup;
+pub mod depth_dump;
 pub mod depth_format;
 pub mod depth_sample;
 pub mod ds_cache;
