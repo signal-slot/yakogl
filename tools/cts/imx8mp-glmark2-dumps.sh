@@ -31,8 +31,11 @@
 #            Console: the sample's Verdin conf draws the console on the panel
 #            (UART_CONSOLE=n), so a dump over the UART needs the board's UART3
 #            console: IMX8MP_DUMP_CONSOLE=uart (default) adds
-#            -DCONFIG_UART_CONSOLE=y -DCONFIG_GC_COMMON_PANEL_CONSOLE=n (as the
-#            X2's conf has them); IMX8MP_DUMP_CONSOLE=panel leaves the sample's
+#            -DEXTRA_CONF_FILE=tools/cts/imx8mp-console.conf (CONFIG_SERIAL,
+#            CONSOLE, UART_CONSOLE, PRINTK, STDOUT_CONSOLE: UART_CONSOLE
+#            depends on SERIAL and CONSOLE, which the sample's prj.conf does
+#            not set, so a bare -DCONFIG_UART_CONSOLE=y may be dropped by
+#            Kconfig with a warning) and -DCONFIG_GC_COMMON_PANEL_CONSOLE=n; IMX8MP_DUMP_CONSOLE=panel leaves the sample's
 #            conf (a camera photograph of the panel, no UART value). A
 #            directory that exists is refused, never reused. Environment as
 #            tools/cts/common-images.sh and imx8mp-env.sh: ZEPHYR_WS,
@@ -121,7 +124,7 @@ selected() {
 build_args() {
     local a=${2//;/\\;} console=()
     case "${IMX8MP_DUMP_CONSOLE:-uart}" in
-    uart) console=(-DCONFIG_UART_CONSOLE=y -DCONFIG_GC_COMMON_PANEL_CONSOLE=n) ;;
+    uart) console=("-DEXTRA_CONF_FILE=$HERE/imx8mp-console.conf" -DCONFIG_GC_COMMON_PANEL_CONSOLE=n) ;;
     panel) ;;
     *) die "IMX8MP_DUMP_CONSOLE must be uart or panel" ;;
     esac
@@ -287,6 +290,9 @@ self_test() {
     esac
     out=$(DRY=1 cmd_build /nonexistent-dir terrain)
     case $out in *'-DCONFIG_GLMARK2_ARGS="-b terrain"'*) ;; *) echo "self-test: terrain build line: $out" >&2; return 1 ;; esac
+    case $out in *"-DEXTRA_CONF_FILE=$HERE/imx8mp-console.conf"*"-DCONFIG_GC_COMMON_PANEL_CONSOLE=n"*) ;; *) echo "self-test: uart console flags: $out" >&2; return 1 ;; esac
+    out=$(IMX8MP_DUMP_CONSOLE=panel DRY=1 cmd_build /nonexistent-dir terrain)
+    case $out in *EXTRA_CONF_FILE*) echo "self-test: panel mode adds the uart console: $out" >&2; return 1 ;; esac
     out=$(DRY=1 cmd_build /nonexistent-dir "$(grep -m1 'effect2d' <<< "$all" | cut -d' ' -f1)")
     case $out in *'kernel=0,1,0\;1,-4,1\;0,1,0\;'*) ;; *) echo "self-test: effect2d kernel not escaped: $out" >&2; return 1 ;; esac
     out=$(DRY=1 cmd_run /img /rec 5)
