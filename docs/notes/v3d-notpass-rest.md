@@ -111,7 +111,11 @@ cause as `draw_buffers_indexed`), `state_query.integers.*` 17 and
   shader record carries one flag word per 32 inputs (`v3dx_emit.c`, likewise not vendored). The
   limit is raised with the two-word flags in the ABI, the record emission,
   the VPM output size for 64 vertex output components, and a board run of
-  es100/varyings15; not before.
+  es100/varyings15; not before. Done on the host since (`6581f22b`,
+  `218c90ec`, `d17f4362`; the uniform-block limits `cb52fae8`): host dEQP
+  moves the V3D's 21 varying and uniform-block rows of this group to Pass
+  (`docs/notes/es3-interface-limits.md` section 6, HOST-ONLY); the board run is
+  left.
 - **Cross-effect**: raising `DRAW_TARGETS` to 4 for the V3D also changes
   `fragment_out.*` and `draw_buffers_indexed.*` and the V3D MRT clear; coordinate
   with the notes for those.
