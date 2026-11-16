@@ -223,6 +223,11 @@ A product that must never boot Linux removes ST's `mmc0_extlinux/` from its
 own card. That is a product-image decision, never a step on the shared
 board.
 
+`tools/mp2s_product_card.py` builds the card's files on the host: the
+two environment images (ST's environment with only the four variables above
+changed) and the `yakogl/standalone/` tree. It writes into a new directory
+and never a device; its selftest is `tools/mp2s_product_card_selftest.sh`.
+
 ### Rejected alternatives
 
 | alternative | why not |
