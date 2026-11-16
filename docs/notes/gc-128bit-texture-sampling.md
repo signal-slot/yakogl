@@ -7,13 +7,15 @@ read from Mesa 26.2.1 etnaviv (`third_party/mesa-26.2.1/UPSTREAM`; the
 etnaviv sources are not vendored. Citations are to the release tarball,
 `src/gallium/drivers/etnaviv/` unless a path says otherwise). Three parts:
 the back end (planes, descriptor pair, companion slot), the compiler (two
-look-ups joined) and the mask flip. The first two are in the tree: the back
-end (`67b27e26`) and the compiler join (`f455cc1c`, `8c8fc3b6`, `2091d22d`,
-`1f37cd60`). The path stays unreachable: `GC_SAMPLED_TEXFMTS` holds no
-128-bit class, so the GL core never stores one for this back end, and
-`emit_slot` (`src/vivante/texture.rs`) still samples the black texel, by
-name, for a binding of one. What is left is the flip: gc-wide128-flip adds
-RGBA32F/UI/I to `GC_SAMPLED_TEXFMTS`.
+look-ups joined) and the mask flip. All three are in the tree: the back end
+(`67b27e26`), the compiler join (`f455cc1c`, `8c8fc3b6`, `2091d22d`,
+`1f37cd60`) and the flip (`8f019dae`, gc-wide128-flip). The path is live:
+`GC_SAMPLED_TEXFMTS` holds RGBA32F, RGBA32UI and RGBA32I, so the GL core
+stores those classes for this back end, and `emit_slot`
+(`src/vivante/texture.rs`) samples a complete binding of one as its two
+G32R32 planes. It falls back to the black texel, by name, only for a
+binding with no companion slot or no plane copy (below). Host only: the
+board has not sampled them.
 
 ## Mesa's design
 
@@ -71,13 +73,12 @@ each look-up of a 128-bit sampler onto the companion. It joins the results
 as `vec4(a.x, a.y, b.x, b.y)`. A gather (`tg4`) becomes two 16-bit-half
 gathers of one plane, joined with `(hi << 16) | lo` (`:115-151`).
 
-## What this back end does (the inert half)
+## What this back end does
 
 - **The gate.** `vivante::texture::wide128_sampled(t)` is true for a
   complete binding of a 128-bit class (`is_wide128`) when the class is in
-  `backend::sampled_texfmts()`. `GC_SAMPLED_TEXFMTS` holds none, so this is
-  false outside a host test that adds the classes through
-  `TEST_EXTRA_SAMPLED`. Everything below happens only when it is true.
+  `backend::sampled_texfmts()`. `GC_SAMPLED_TEXFMTS` holds all three since
+  the flip (`8f019dae`). Everything below happens only when it is true.
   Otherwise the binding samples the black texel with the log line
   "has no texture descriptor format", as before. No slot moves.
 - **The planes: a tiled copy at a page.** The GL core keeps the texels
@@ -132,8 +133,8 @@ gathers of one plane, joined with `(hi << 16) | lo` (`:115-151`).
 ## What is left
 
 1. **Done since the back end: the compiler join and the per-draw key**
-   (wide128-shader). All of it is inert: `GC_SAMPLED_TEXFMTS` still holds no
-   128-bit class, so the key is always empty on a shipped draw.
+   (wide128-shader). Live since the flip (item 2): a draw that samples a
+   128-bit binding gets the key.
    - `f455cc1c`, the compiler half: `wide128::split_planes`
      (`src/shaderc/online/vivante/wide128.rs`) turns each look-up on a keyed
      unit into two, the second at the companion slot, joined as
@@ -155,9 +156,11 @@ gathers of one plane, joined with `(hi << 16) | lo` (`:115-151`).
    - Host test `tests/es3_wide128_gc.rs`.
    Left of the join: a gather (it needs Mesa's 16-bit halves; no
    `textureGather` split exists) and the no-alpha 1 on the draw side (item 3).
-2. **The flip** (gc-wide128-flip, still left): the three classes into
-   `GC_SAMPLED_TEXFMTS`, the gc-formats.md rows (`none` becomes the plane
-   format) and the host dEQP measurement.
+2. **Done: the flip** (gc-wide128-flip, `8f019dae`): the three classes are
+   in `GC_SAMPLED_TEXFMTS`, and the gc-formats.md rows name the plane
+   format. GL_RGBA32F itself is still stored as RGBA16F halves
+   (`src/gl/texture.rs` `sized_format`); GL_RGB32F, RG32F and the RGB32 and
+   RGBA32 integer formats take the 128-bit classes.
 3. **Caveats for those items.**
    - A binding with `no_alpha` (an RGB32F texture stored as RGBA32F) gets
      swizzle A = ONE in both descriptors. The join reads channel 1 of
