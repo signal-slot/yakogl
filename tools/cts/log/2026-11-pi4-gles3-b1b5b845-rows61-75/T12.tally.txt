@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image T12: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt T12.console.txt
+T12.console.txt: deqp: done: 126 passed, 120 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 246 cases begun, 246 with a result, 0 without
+mustpass cases with a result: 197 (of 246 seen)
+group                                       pass   fail    n/s  other
+texture                                      119     78      0      0
+TOTAL                                        119     78      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  T12: deqp: summary 246 cases begun, 246 with a result; deqp: done 126 passed, 120 failed, 0 not supported, 0 warnings; b1b5b845 DONE: 246 cases, P 126 F 120 R 0 N 0 other 0; 246 result lines seen
+Fail dEQP-GLES3.functional.texture.specification.texstorage2d.format.rgba32f_2d
+Fail dEQP-GLES3.functional.texture.specification.texstorage2d.format.rgba32f_cube
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.depth32f_stencil8_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r11f_g11f_b10f_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r11f_g11f_b10f_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r16f_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r16f_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r16i_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r16i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r16ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r32f_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r32i_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r32i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r32ui_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r32ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r8_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r8_snorm_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r8_snorm_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r8i_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r8i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.r8ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg16f_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg16i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg16ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg32f_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg32i_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg32i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg32ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg8_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg8_snorm_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg8_snorm_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg8i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg8ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb10_a2_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb10_a2_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb10_a2ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb16f_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb16i_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb16i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb16ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb32i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb32ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb565_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb5_a1_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb8_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb8i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb8ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb9_e5_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba16f_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba16i_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba16i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba16ui_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba16ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba32f_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba32i_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba32ui_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba4_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba4_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba8_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba8_snorm_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba8i_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba8ui_2d_array
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgba8ui_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.srgb8_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.format.srgb8_alpha8_3d
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.2d_array_1x1x1_1_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.2d_array_2x2x2_2_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.2d_array_32x64x3_4_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.2d_array_57x63x5_1_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.2d_array_57x63x5_2_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.2d_array_64x32x3_7_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.3d_1x1x1_1_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.3d_2x2x2_2_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.3d_32x16x64_4_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.3d_32x64x16_4_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.3d_57x63x11_1_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.3d_57x63x11_2_levels
+Fail dEQP-GLES3.functional.texture.specification.texstorage3d.size.3d_64x32x16_7_levels

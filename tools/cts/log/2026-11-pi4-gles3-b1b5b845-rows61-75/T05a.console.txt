@@ -1,0 +1,1361 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-15, image T05a: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.05 [sdcard] pieeprom.upd not found
+  5.06 [sdcard] recover4.elf not found
+  5.06 [sdcard] recovery.elf not found
+  5.92 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.98 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.99 0x00d03114 0x00000000 0x00001fff
+  5.03 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.39 Starting start4.elf @ 0xfec00200 partition 1
+  5.24 XHCI-STOP
+  5.24 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.24 USBSTS 18
+  5.25 PCI0 reset
+  5.26 +
+
+MESS:00:00:05.274067:0: arasan: arasan_emmc_open
+MESS:00:00:05.275726:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.395956:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.408826:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.443104:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.444517:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.448901:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.613333:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.616155:0: brfs: File read: 166 bytes
+MESS:00:00:05.708827:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.713335:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.729771:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.195811:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.201357:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.210389:0: *** Restart logging
+MESS:00:00:06.212166:0: brfs: File read: 166 bytes
+MESS:00:00:06.290567:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.295599:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.308807:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.317951:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.321771:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.330530:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.336021:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.358050:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.373384:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.376675:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.417572:0: brfs: File read: 56249 bytes
+MESS:00:00:06.437091:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.501945:0: brfs: File read: 5971 bytes
+MESS:00:00:06.508554:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.549689:0: brfs: File read: 166 bytes
+MESS:00:00:06.553748:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.556848:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.562699:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.719299:0: brfs: File read: 145 bytes
+MESS:00:00:08.113091:0: brfs: File read: /mfs/sd/yakogl-T05a.bin
+MESS:00:00:08.115998:0: Loaded 'yakogl-T05a.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:08.122610:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.131390:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.137912:0: uart: Baud rate change done...
+MESS:00:00:08.139934:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.format.compressed.eac_*,dEQP-GLES3.functional.texture.format.compressed.etc1_*,dEQP-GLES3.functional.texture.format.unsized.*,dEQP-GLES3.functional.texture.format.sized.2d.*'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_r11_2d_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_r11_2d_npot
+v3d_deqp: case #0 N 132ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_r11_2d_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_r11_2d_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_r11_2d_pot
+v3d_deqp: case #1 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_r11_2d_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_r11_cube_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_r11_cube_npot
+v3d_deqp: case #2 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_r11_cube_npot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_r11_cube_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_r11_cube_pot
+v3d_deqp: case #3 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_r11_cube_pot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_rg11_2d_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_rg11_2d_npot
+v3d_deqp: case #4 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_rg11_2d_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_rg11_2d_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_rg11_2d_pot
+v3d_deqp: case #5 N 31ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_rg11_2d_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_rg11_cube_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_rg11_cube_npot
+v3d_deqp: case #6 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_rg11_cube_npot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_rg11_cube_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_rg11_cube_pot
+v3d_deqp: case #7 N 32ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_rg11_cube_pot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_2d_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_2d_npot
+v3d_deqp: case #8 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_2d_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_2d_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_2d_pot
+v3d_deqp: case #9 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_2d_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_cube_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_cube_npot
+v3d_deqp: case #10 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_cube_npot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_cube_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_cube_pot
+v3d_deqp: case #11 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_signed_r11_cube_pot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_2d_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_2d_npot
+v3d_deqp: case #12 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_2d_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_2d_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_2d_pot
+v3d_deqp: case #13 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_2d_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_cube_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_cube_npot
+v3d_deqp: case #14 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_cube_npot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_cube_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_cube_pot
+v3d_deqp: case #15 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.eac_signed_rg11_cube_pot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc1_2d_npot'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.texture.format.compressed.etc1_2d_npot
+v3d_deqp: case #16 P 54ms k2/9 c15533/15637 r0 dEQP-GLES3.functional.texture.format.compressed.etc1_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc1_2d_pot'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.texture.format.compressed.etc1_2d_pot
+v3d_deqp: case #17 P 46ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.format.compressed.etc1_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc1_cube_npot'..
+  cube-bind: 0x10bb000 unit 0 kick 3 (draw)
+  cube(draw) @0x10bb000 61x61 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 4 (draw)
+  cube(draw) @0x10bb000 61x61 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 5 (draw)
+  cube(draw) @0x10bb000 61x61 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 6 (draw)
+  cube(draw) @0x10bb000 61x61 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 7 (draw)
+  cube(draw) @0x10bb000 61x61 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 8 (draw)
+  cube(draw) @0x10bb000 61x61 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.compressed.etc1_cube_npot
+v3d_deqp: case #18 P 93ms k2/9 c15533/15735 r0 dEQP-GLES3.functional.texture.format.compressed.etc1_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc1_cube_pot'..
+  cube-bind: 0x10bb000 unit 0 kick 9 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 10 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 11 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 12 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 13 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 14 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.compressed.etc1_cube_pot
+v3d_deqp: case #19 P 94ms k2/9 c15533/15774 r0 dEQP-GLES3.functional.texture.format.compressed.etc1_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth24_stencil8_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth24_stencil8_npot
+v3d_deqp: case #20 P 32ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth24_stencil8_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth24_stencil8_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth24_stencil8_pot
+v3d_deqp: case #21 P 36ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth24_stencil8_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth32f_stencil8_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth32f_stencil8_npot
+v3d_deqp: case #22 P 33ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth32f_stencil8_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth32f_stencil8_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth32f_stencil8_pot
+v3d_deqp: case #23 P 35ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth32f_stencil8_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth_component16_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth_component16_npot
+v3d_deqp: case #24 P 33ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth_component16_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth_component16_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth_component16_pot
+v3d_deqp: case #25 P 35ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth_component16_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth_component24_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth_component24_npot
+v3d_deqp: case #26 P 32ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth_component24_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth_component24_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth_component24_pot
+v3d_deqp: case #27 P 36ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth_component24_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth_component32f_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth_component32f_npot
+v3d_deqp: case #28 P 32ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth_component32f_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.depth_component32f_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.depth_component32f_pot
+v3d_deqp: case #29 P 35ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.depth_component32f_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r11f_g11f_b10f_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r11f_g11f_b10f_npot
+v3d_deqp: case #30 P 31ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.r11f_g11f_b10f_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r11f_g11f_b10f_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r11f_g11f_b10f_pot
+v3d_deqp: case #31 P 34ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.r11f_g11f_b10f_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r16f_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r16f_npot
+v3d_deqp: case #32 P 28ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.r16f_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r16f_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r16f_pot
+v3d_deqp: case #33 P 30ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.r16f_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r16i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r16i_npot
+v3d_deqp: case #34 P 28ms k2/15 c15533/15774 r0 dEQP-GLES3.functional.texture.format.sized.2d.r16i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r16i_pot'..
+yakogl/v3d: tiled copies high-water 135168 of 16777216 bytes
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r16i_pot
+v3d_deqp: case #35 P 36ms k2/15 c15533/15849 r0 dEQP-GLES3.functional.texture.format.sized.2d.r16i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r16ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r16ui_npot
+v3d_deqp: case #36 P 28ms k2/15 c15533/15849 r0 dEQP-GLES3.functional.texture.format.sized.2d.r16ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r16ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r16ui_pot
+v3d_deqp: case #37 P 31ms k2/15 c15533/15849 r0 dEQP-GLES3.functional.texture.format.sized.2d.r16ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r32f_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r32f_npot
+v3d_deqp: case #38 P 29ms k2/15 c15533/15849 r0 dEQP-GLES3.functional.texture.format.sized.2d.r32f_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r32f_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r32f_pot
+v3d_deqp: case #39 P 31ms k2/15 c15533/15849 r0 dEQP-GLES3.functional.texture.format.sized.2d.r32f_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r32i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r32i_npot
+v3d_deqp: case #40 P 31ms k2/15 c15533/15849 r0 dEQP-GLES3.functional.texture.format.sized.2d.r32i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r32i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r32i_pot
+v3d_deqp: case #41 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r32i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r32ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r32ui_npot
+v3d_deqp: case #42 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r32ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r32ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r32ui_pot
+v3d_deqp: case #43 P 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r32ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r8_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r8_npot
+v3d_deqp: case #44 P 27ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r8_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r8_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r8_pot
+v3d_deqp: case #45 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r8_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r8_snorm_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r8_snorm_npot
+v3d_deqp: case #46 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r8_snorm_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r8_snorm_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r8_snorm_pot
+v3d_deqp: case #47 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r8_snorm_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r8i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r8i_npot
+v3d_deqp: case #48 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r8i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r8i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r8i_pot
+v3d_deqp: case #49 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r8i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r8ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r8ui_npot
+v3d_deqp: case #50 P 27ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r8ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.r8ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.r8ui_pot
+v3d_deqp: case #51 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.r8ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg16f_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg16f_npot
+v3d_deqp: case #52 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg16f_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg16f_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg16f_pot
+v3d_deqp: case #53 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg16f_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg16i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg16i_npot
+v3d_deqp: case #54 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg16i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg16i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg16i_pot
+v3d_deqp: case #55 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg16i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg16ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg16ui_npot
+v3d_deqp: case #56 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg16ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg16ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg16ui_pot
+v3d_deqp: case #57 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg16ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg32f_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg32f_npot
+v3d_deqp: case #58 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg32f_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg32f_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg32f_pot
+v3d_deqp: case #59 P 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg32f_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg32i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg32i_npot
+v3d_deqp: case #60 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg32i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg32i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg32i_pot
+v3d_deqp: case #61 P 35ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg32i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg32ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg32ui_npot
+v3d_deqp: case #62 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg32ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg32ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg32ui_pot
+v3d_deqp: case #63 P 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg32ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg8_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg8_npot
+v3d_deqp: case #64 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg8_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg8_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg8_pot
+v3d_deqp: case #65 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg8_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg8_snorm_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg8_snorm_npot
+v3d_deqp: case #66 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg8_snorm_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg8_snorm_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg8_snorm_pot
+v3d_deqp: case #67 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg8_snorm_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg8i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg8i_npot
+v3d_deqp: case #68 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg8i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg8i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg8i_pot
+v3d_deqp: case #69 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg8i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg8ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg8ui_npot
+v3d_deqp: case #70 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg8ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rg8ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rg8ui_pot
+v3d_deqp: case #71 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rg8ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2_npot
+v3d_deqp: case #72 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2_pot
+v3d_deqp: case #73 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2ui_npot
+v3d_deqp: case #74 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2ui_pot
+v3d_deqp: case #75 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb10_a2ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb16f_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb16f_npot
+v3d_deqp: case #76 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb16f_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb16f_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb16f_pot
+v3d_deqp: case #77 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb16f_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb16i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb16i_npot
+v3d_deqp: case #78 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb16i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb16i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb16i_pot
+v3d_deqp: case #79 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb16i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb16ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb16ui_npot
+v3d_deqp: case #80 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb16ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb16ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb16ui_pot
+v3d_deqp: case #81 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb16ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb32f_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb32f_npot
+v3d_deqp: case #82 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb32f_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb32f_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb32f_pot
+v3d_deqp: case #83 P 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb32f_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb32i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb32i_npot
+v3d_deqp: case #84 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb32i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb32i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb32i_pot
+v3d_deqp: case #85 P 35ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb32i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb32ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb32ui_npot
+v3d_deqp: case #86 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb32ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb32ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb32ui_pot
+v3d_deqp: case #87 P 35ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb32ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb565_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb565_npot
+v3d_deqp: case #88 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb565_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb565_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb565_pot
+v3d_deqp: case #89 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb565_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb5_a1_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb5_a1_npot
+v3d_deqp: case #90 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb5_a1_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb5_a1_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb5_a1_pot
+v3d_deqp: case #91 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb5_a1_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb8_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb8_npot
+v3d_deqp: case #92 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb8_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb8_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb8_pot
+v3d_deqp: case #93 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb8_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb8_snorm_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb8_snorm_npot
+v3d_deqp: case #94 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb8_snorm_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb8_snorm_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb8_snorm_pot
+v3d_deqp: case #95 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb8_snorm_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb8i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb8i_npot
+v3d_deqp: case #96 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb8i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb8i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb8i_pot
+v3d_deqp: case #97 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb8i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb8ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb8ui_npot
+v3d_deqp: case #98 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb8ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb8ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb8ui_pot
+v3d_deqp: case #99 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb8ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb9_e5_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb9_e5_npot
+v3d_deqp: case #100 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb9_e5_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgb9_e5_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgb9_e5_pot
+v3d_deqp: case #101 P 41ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgb9_e5_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_npot
+v3d_deqp: case #102 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_pot
+v3d_deqp: case #103 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba16i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba16i_npot
+v3d_deqp: case #104 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba16i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba16i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba16i_pot
+v3d_deqp: case #105 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba16i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba16ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba16ui_npot
+v3d_deqp: case #106 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba16ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba16ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba16ui_pot
+v3d_deqp: case #107 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba16ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba32f_npot'..
+deqp: Fail dEQP-GLES3.functional.texture.format.sized.2d.rgba32f_npot
+v3d_deqp: case #108 F 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba32f_npot
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba32f_pot'..
+deqp: Fail dEQP-GLES3.functional.texture.format.sized.2d.rgba32f_pot
+v3d_deqp: case #109 F 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba32f_pot
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba32i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba32i_npot
+v3d_deqp: case #110 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba32i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba32i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba32i_pot
+v3d_deqp: case #111 P 36ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba32i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba32ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba32ui_npot
+v3d_deqp: case #112 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba32ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba32ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba32ui_pot
+v3d_deqp: case #113 P 36ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba32ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba4_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba4_npot
+v3d_deqp: case #114 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba4_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba4_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba4_pot
+v3d_deqp: case #115 P 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba4_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba8_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8_npot
+v3d_deqp: case #116 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba8_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba8_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8_pot
+v3d_deqp: case #117 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba8_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba8_snorm_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8_snorm_npot
+v3d_deqp: case #118 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba8_snorm_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba8_snorm_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8_snorm_pot
+v3d_deqp: case #119 P 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba8_snorm_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba8i_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8i_npot
+v3d_deqp: case #120 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba8i_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba8i_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8i_pot
+v3d_deqp: case #121 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba8i_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba8ui_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8ui_npot
+v3d_deqp: case #122 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba8ui_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.rgba8ui_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8ui_pot
+v3d_deqp: case #123 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba8ui_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.srgb8_alpha8_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.srgb8_alpha8_npot
+v3d_deqp: case #124 P 29ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.srgb8_alpha8_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.srgb8_alpha8_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.srgb8_alpha8_pot
+v3d_deqp: case #125 P 33ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.srgb8_alpha8_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.srgb8_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.srgb8_npot
+v3d_deqp: case #126 P 28ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.srgb8_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.srgb8_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.srgb8_pot
+v3d_deqp: case #127 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.srgb8_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.srgb_r8_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.sized.2d.srgb_r8_npot
+v3d_deqp: case #128 N 25ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.srgb_r8_npot
+  NotSupported (GL_EXT_texture_sRGB_R8 is not supported. at es3fTextureFormatTests.cpp:75)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.srgb_r8_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.sized.2d.srgb_r8_pot
+v3d_deqp: case #129 N 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.srgb_r8_pot
+  NotSupported (GL_EXT_texture_sRGB_R8 is not supported. at es3fTextureFormatTests.cpp:75)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.srgb_rg8_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.sized.2d.srgb_rg8_npot
+v3d_deqp: case #130 N 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.srgb_rg8_npot
+  NotSupported (GL_EXT_texture_sRGB_RG8 is not supported. at es3fTextureFormatTests.cpp:78)
+
+Test case 'dEQP-GLES3.functional.texture.format.sized.2d.srgb_rg8_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.sized.2d.srgb_rg8_pot
+v3d_deqp: case #131 N 31ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.sized.2d.srgb_rg8_pot
+  NotSupported (GL_EXT_texture_sRGB_RG8 is not supported. at es3fTextureFormatTests.cpp:78)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.alpha_2d_array_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.alpha_2d_array_npot
+v3d_deqp: case #132 F 46ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.alpha_2d_array_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.alpha_2d_array_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.alpha_2d_array_pot
+v3d_deqp: case #133 F 45ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.alpha_2d_array_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.alpha_2d_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.alpha_2d_npot
+v3d_deqp: case #134 P 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.alpha_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.alpha_2d_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.alpha_2d_pot
+v3d_deqp: case #135 P 30ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.alpha_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.alpha_3d_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.alpha_3d_npot
+v3d_deqp: case #136 F 37ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.alpha_3d_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.alpha_3d_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.alpha_3d_pot
+v3d_deqp: case #137 F 41ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.alpha_3d_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.alpha_cube_npot'..
+  cube-bind: 0x106c000 unit 0 kick 125 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 126 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 127 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 128 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 129 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 130 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 9, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.alpha_cube_npot
+v3d_deqp: case #138 P 97ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.alpha_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.alpha_cube_pot'..
+  cube-bind: 0x106c000 unit 0 kick 131 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 132 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 133 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 134 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 135 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 9, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 136 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 9, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.alpha_cube_pot
+v3d_deqp: case #139 P 94ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.alpha_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_2d_array_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.luminance_2d_array_npot
+v3d_deqp: case #140 F 40ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_2d_array_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_2d_array_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.luminance_2d_array_pot
+v3d_deqp: case #141 F 45ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_2d_array_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_2d_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.luminance_2d_npot
+v3d_deqp: case #142 P 35ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_2d_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.luminance_2d_pot
+v3d_deqp: case #143 P 32ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_3d_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.luminance_3d_npot
+v3d_deqp: case #144 F 37ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_3d_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_3d_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.luminance_3d_pot
+v3d_deqp: case #145 F 43ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_3d_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_array_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_array_npot
+v3d_deqp: case #146 F 46ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_array_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_array_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_array_pot
+v3d_deqp: case #147 F 48ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_array_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_npot
+v3d_deqp: case #148 P 36ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_pot
+v3d_deqp: case #149 P 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_3d_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_3d_npot
+v3d_deqp: case #150 F 39ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_3d_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_3d_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_3d_pot
+v3d_deqp: case #151 F 45ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_3d_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_cube_npot'..
+  cube-bind: 0x106c000 unit 0 kick 141 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 10, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 142 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 10, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 143 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 10, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 144 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 10, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 145 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 10, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 146 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 10, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_cube_npot
+v3d_deqp: case #152 P 101ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_cube_pot'..
+  cube-bind: 0x10bb000 unit 0 kick 147 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 10, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 148 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 10, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 149 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 10, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 150 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 10, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 151 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 10, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 152 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 10, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_cube_pot
+v3d_deqp: case #153 P 98ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_cube_npot'..
+  cube-bind: 0x106c000 unit 0 kick 153 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 154 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 155 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 156 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 157 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 158 (draw)
+  cube(draw) @0x106c000 57x57 x6: fmt 8, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.luminance_cube_npot
+v3d_deqp: case #154 P 93ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.luminance_cube_pot'..
+  cube-bind: 0x106c000 unit 0 kick 159 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 160 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 161 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 162 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 163 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 164 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.luminance_cube_pot
+v3d_deqp: case #155 P 95ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.luminance_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_array_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_array_npot
+v3d_deqp: case #156 F 42ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_array_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_array_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_array_pot
+v3d_deqp: case #157 F 47ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_array_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_npot
+v3d_deqp: case #158 P 37ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_pot
+v3d_deqp: case #159 P 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_3d_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_3d_npot
+v3d_deqp: case #160 F 40ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_3d_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_3d_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_3d_pot
+v3d_deqp: case #161 F 44ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_3d_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_cube_npot'..
+  cube-bind: 0x10bb000 unit 0 kick 167 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 168 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 169 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 170 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 171 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 172 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_cube_npot
+v3d_deqp: case #162 P 101ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_cube_pot'..
+  cube-bind: 0x10bb000 unit 0 kick 173 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 174 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 175 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 176 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 177 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 178 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_cube_pot
+v3d_deqp: case #163 P 97ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_array_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_array_npot
+v3d_deqp: case #164 F 45ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_array_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_array_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_array_pot
+v3d_deqp: case #165 F 50ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_array_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_npot
+v3d_deqp: case #166 P 39ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_pot
+v3d_deqp: case #167 P 37ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_3d_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_3d_npot
+v3d_deqp: case #168 F 42ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_3d_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_3d_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_3d_pot
+v3d_deqp: case #169 F 46ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_3d_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_cube_npot'..
+  cube-bind: 0x10bb000 unit 0 kick 181 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 182 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 183 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 184 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 185 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 186 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_cube_npot
+v3d_deqp: case #170 P 104ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_cube_pot'..
+  cube-bind: 0x10bb000 unit 0 kick 187 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 188 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 189 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 190 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 191 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 192 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_cube_pot
+v3d_deqp: case #171 P 100ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_array_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_array_npot
+v3d_deqp: case #172 F 43ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_array_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_array_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_array_pot
+v3d_deqp: case #173 F 48ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_array_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_npot
+v3d_deqp: case #174 P 37ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_pot
+v3d_deqp: case #175 P 34ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_3d_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_3d_npot
+v3d_deqp: case #176 F 40ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_3d_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_3d_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_3d_pot
+v3d_deqp: case #177 F 45ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_3d_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_cube_npot'..
+  cube-bind: 0x10bb000 unit 0 kick 195 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 196 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 197 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 198 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 199 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 200 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_cube_npot
+v3d_deqp: case #178 P 101ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_cube_pot'..
+  cube-bind: 0x10bb000 unit 0 kick 201 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 202 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 203 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 204 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 205 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 206 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_cube_pot
+v3d_deqp: case #179 P 98ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_array_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_array_npot
+v3d_deqp: case #180 F 45ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_array_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_array_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_array_pot
+v3d_deqp: case #181 F 52ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_array_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_npot
+v3d_deqp: case #182 P 40ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_pot
+v3d_deqp: case #183 P 38ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_3d_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_3d_npot
+v3d_deqp: case #184 F 42ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_3d_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_3d_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_3d_pot
+v3d_deqp: case #185 F 48ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_3d_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_cube_npot'..
+  cube-bind: 0x10bb000 unit 0 kick 209 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 210 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 211 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 212 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 213 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 214 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_cube_npot
+v3d_deqp: case #186 P 104ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_cube_pot'..
+  cube-bind: 0x10bb000 unit 0 kick 215 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 216 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 217 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 218 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 219 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 220 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_cube_pot
+v3d_deqp: case #187 P 102ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_array_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_array_npot
+v3d_deqp: case #188 F 46ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_array_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_array_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_array_pot
+v3d_deqp: case #189 F 52ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_array_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_npot
+v3d_deqp: case #190 P 39ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_pot
+v3d_deqp: case #191 P 38ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_3d_npot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_3d_npot
+v3d_deqp: case #192 F 42ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_3d_npot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_3d_pot'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_3d_pot
+v3d_deqp: case #193 F 48ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_3d_pot
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_cube_npot'..
+  cube-bind: 0x10bb000 unit 0 kick 223 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 224 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 225 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 226 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 227 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 228 (draw)
+  cube(draw) @0x10bb000 57x57 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_cube_npot
+v3d_deqp: case #194 P 104ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_cube_pot'..
+  cube-bind: 0x10bb000 unit 0 kick 229 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 230 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 231 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 232 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 233 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+  cube-bind: 0x10bb000 unit 0 kick 234 (draw)
+  cube(draw) @0x10bb000 64x64 x6: fmt 0, cpu 0x1e1ba000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_cube_pot
+v3d_deqp: case #195 P 101ms k2/15 c15533/16148 r0 dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_cube_pot
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        142/196 (72.4%)
+  Failed:        34/196 (17.3%)
+  Not supported: 20/196 (10.2%)
+  Warnings:      0/196 (0.0%)
+  Waived:        0/196 (0.0%)
+deqp: done: 142 passed, 34 failed, 20 not supported, 0 warnings, complete=1
+deqp: summary: 196 cases begun, 196 with a result, 0 without
+v3d_deqp DONE: build b1b5b845, filter 'dEQP-GLES3.functional.texture.format.compressed.eac_*,dEQP-GLES3.functional.texture.format.compressed.etc1_*,dEQP-GLE...
+  196 cases in 7979 ms, record at 8 s after boot, reset at ~250 s
+  totals: P 142 F 34 N 20  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 142 passed, 34 failed, 20 not supported, 0 warnings, complete=1
+  summary: 196 cases begun, 196 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 15, before #0 (first not passed) 0; slowest #0 132 ms
+  carve-out (KiB, of 48636): after #0 15272, last 15533, high-water 16148
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 234 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15377664 bytes used now, 16535808 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 662 calls, 36294 map reads (54 a call, at most 1153 in one); free runs 2, longest 34425344 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 234 jobs ended; emitted 4914, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 NNNNNNNNNNNNNNNNPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPFFPPPPPPPPPPPPPPPPPP
+  128 NNNNFFPPFFPPFFPPFFFFPPFFPPPPFFPPFFPPFFPPFFPPFFPPFFPPFFPPFFPPFFPPFFPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 39 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  compressed                                                 16 N16                     8x Compressed texture format not supported at gluTexture.cpp:142
+                                                                                        8x Compressed texture format not supported: '' at gluTexture.cpp:345
+  sized.2d                                                    6 F2 N4                   2x Image comparison failed
+                                                                                        2x ~_texture_sRGB_R8 is not supported. at es3fTextureFormatTests.cpp:75
+                                                                                        2x ~texture_sRGB_RG8 is not supported. at es3fTextureFormatTests.cpp:78
+  unsized                                                    32 F32                    32x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+    0 N compressed.eac_r11_2d_npot                       132ms k2/6 c15272/15272         Compressed texture format not supported at gluTexture.cpp:142
+    1 N compressed.eac_r11_2d_pot                        31ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+    2 N compressed.eac_r11_cube_npot                     32ms k2/6 c15272/15272          Compressed texture format not supported: '' at gluTexture.cpp:345
+    3 N compressed.eac_r11_cube_pot                      32ms k2/6 c15272/15272          Compressed texture format not supported: '' at gluTexture.cpp:345
+    4 N compressed.eac_rg11_2d_npot                      32ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+    5 N compressed.eac_rg11_2d_pot                       31ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+  ... 48 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 DONE: 196 cases, P 142 F 34 R 0 N 20 other 0

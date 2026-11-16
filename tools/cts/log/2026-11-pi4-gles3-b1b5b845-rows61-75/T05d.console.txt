@@ -1,0 +1,165 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-15, image T05d: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.12 [sdcard] pieeprom.upd not found
+  4.12 [sdcard] recover4.elf not found
+  4.13 [sdcard] recovery.elf not found
+  4.56 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.62 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.64 0x00d03114 0x00000000 0x00001fff
+  4.67 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.04 Starting start4.elf @ 0xfec00200 partition 1
+  4.30 XHCI-STOP
+  4.30 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.31 USBSTS 18
+  4.31 PCI0 reset
+  4.32 +
+
+MESS:00:00:04.338619:0: arasan: arasan_emmc_open
+MESS:00:00:04.340278:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.460506:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.473376:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.507649:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.509062:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.513446:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.678116:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.680940:0: brfs: File read: 166 bytes
+MESS:00:00:04.773769:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.778277:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.794704:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.260749:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.266295:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.275336:0: *** Restart logging
+MESS:00:00:05.277103:0: brfs: File read: 166 bytes
+MESS:00:00:05.355647:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.360679:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.373352:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.383068:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.386892:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.395647:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.401138:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.423050:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.438558:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.441848:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.482996:0: brfs: File read: 56249 bytes
+MESS:00:00:05.503099:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.567972:0: brfs: File read: 5971 bytes
+MESS:00:00:05.574481:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.615595:0: brfs: File read: 166 bytes
+MESS:00:00:05.619649:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.622754:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.628604:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.785189:0: brfs: File read: 145 bytes
+MESS:00:00:07.179879:0: brfs: File read: /mfs/sd/yakogl-T05d.bin
+MESS:00:00:07.182786:0: Loaded 'yakogl-T05d.bin' to 0x200000 size 0xfc7dc0
+MESS:00:00:07.189400:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.198176:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.204699:0: uart: Baud rate change done...
+MESS:00:00:07.206722:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_pot,dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_pot,dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_pot,dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_pot'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f0a000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_npot
+v3d_deqp: case #0 N 174ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_npot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_pot
+v3d_deqp: case #1 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_pot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_npot
+v3d_deqp: case #2 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_npot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_pot
+v3d_deqp: case #3 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_pot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_npot
+v3d_deqp: case #4 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_npot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_pot
+v3d_deqp: case #5 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_pot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_npot
+v3d_deqp: case #6 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_npot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+Test case 'dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_pot
+v3d_deqp: case #7 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_pot
+  NotSupported (Compressed texture format not supported: '' at gluTexture.cpp:345)
+
+DONE!
+
+Test run totals:
+  Passed:        0/8 (0.0%)
+  Failed:        0/8 (0.0%)
+  Not supported: 8/8 (100.0%)
+  Warnings:      0/8 (0.0%)
+  Waived:        0/8 (0.0%)
+deqp: done: 0 passed, 0 failed, 8 not supported, 0 warnings, complete=1
+deqp: summary: 8 cases begun, 8 with a result, 0 without
+v3d_deqp DONE, none failed: build b1b5b845, filter 'dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_npot,dEQP-GLES3.functional.te...
+  8 cases in 427 ms, record at 0 s after boot, reset at ~250 s
+  totals: N 8  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 0 passed, 0 failed, 8 not supported, 0 warnings, complete=1
+  summary: 8 cases begun, 8 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 6, before #0 (first not passed) 0; slowest #0 174 ms
+  carve-out (KiB, of 48636): after #0 15272, last 15272, high-water 15272
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE: none (no job completed)
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 0 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15376896 bytes used now, 15639040 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 17 calls, 3811 map reads (224 a call, at most 1153 in one); free runs 1, longest 34426368 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 0 jobs ended; emitted 0, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 NNNNNNNN
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f0a000, GPU VA 0x181000..0x3100000
+driver: ... 4 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  compressed                                                  8 N8                      8x Compressed texture format not supported: '' at gluTexture.cpp:345
+    0 N etc2_eac_srgb8_alpha8_cube_npot                  174ms k2/6 c15272/15272         Compressed texture format not supported: '' at gluTexture.cpp:345
+    1 N etc2_eac_srgb8_alpha8_cube_pot                   36ms k2/6 c15272/15272          Compressed texture format not supported: '' at gluTexture.cpp:345
+    2 N etc2_rgb8_punchthrough_alpha1_cube_npot          37ms k2/6 c15272/15272          Compressed texture format not supported: '' at gluTexture.cpp:345
+    3 N etc2_rgb8_punchthrough_alpha1_cube_pot           38ms k2/6 c15272/15272          Compressed texture format not supported: '' at gluTexture.cpp:345
+    4 N etc2_srgb8_cube_npot                             34ms k2/6 c15272/15272          Compressed texture format not supported: '' at gluTexture.cpp:345
+    5 N etc2_srgb8_cube_pot                              33ms k2/6 c15272/15272          Compressed texture format not supported: '' at gluTexture.cpp:345
+    6 N etc2_srgb8_punchthrough_alpha1_cube_npot         37ms k2/6 c15272/15272          Compressed texture format not supported: '' at gluTexture.cpp:345
+    7 N etc2_srgb8_punchthrough_alpha1_cube_pot          38ms k2/6 c15272/15272          Compressed texture format not supported: '' at gluTexture.cpp:345
+v3d_deqp: build b1b5b845 DONE, none failed: 8 cases, P 0 F 0 R 0 N 8 other 0

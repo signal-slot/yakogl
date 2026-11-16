@@ -1,0 +1,1941 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-15, image T09: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.12 [sdcard] pieeprom.upd not found
+  4.12 [sdcard] recover4.elf not found
+  4.12 [sdcard] recovery.elf not found
+  4.53 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.59 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.61 0x00d03114 0x00000000 0x00001fff
+  4.65 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.01 Starting start4.elf @ 0xfec00200 partition 1
+  4.30 XHCI-STOP
+  4.30 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.31 USBSTS 18
+  4.31 PCI0 reset
+  4.32 +
+
+MESS:00:00:04.335750:0: arasan: arasan_emmc_open
+MESS:00:00:04.337410:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.457638:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.470508:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.504786:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.506198:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.510582:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.675046:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.677866:0: brfs: File read: 164 bytes
+MESS:00:00:04.770529:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.775036:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.791410:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.257439:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.262986:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.272022:0: *** Restart logging
+MESS:00:00:05.273794:0: brfs: File read: 164 bytes
+MESS:00:00:05.352199:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.357231:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.370488:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.379619:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.383438:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.392197:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.397688:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.419714:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.435050:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.438340:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.479491:0: brfs: File read: 56249 bytes
+MESS:00:00:05.499084:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.563967:0: brfs: File read: 5971 bytes
+MESS:00:00:05.570558:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.611668:0: brfs: File read: 164 bytes
+MESS:00:00:05.615724:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.618827:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.624677:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.781247:0: brfs: File read: 145 bytes
+MESS:00:00:07.176357:0: brfs: File read: /mfs/sd/yakogl-T09.bin
+MESS:00:00:07.179177:0: Loaded 'yakogl-T09.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:07.185703:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.194488:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.201006:0: uart: Baud rate change done...
+MESS:00:00:07.203029:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.shadow.cube.*,dEQP-GLES3.functional.texture.size.*'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth24_stencil8
+v3d_deqp: case #0 F 135ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth_component16
+v3d_deqp: case #1 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth_component32f
+v3d_deqp: case #2 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.equal_depth24_stencil8
+v3d_deqp: case #3 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.equal_depth_component16
+v3d_deqp: case #4 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.equal_depth_component32f
+v3d_deqp: case #5 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.greater_depth24_stencil8
+v3d_deqp: case #6 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.greater_depth_component16
+v3d_deqp: case #7 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.greater_depth_component32f
+v3d_deqp: case #8 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.greater_or_equal_depth24_stencil8
+v3d_deqp: case #9 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.greater_or_equal_depth_component16
+v3d_deqp: case #10 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.greater_or_equal_depth_component32f
+v3d_deqp: case #11 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.less_depth24_stencil8
+v3d_deqp: case #12 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.less_depth_component16
+v3d_deqp: case #13 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.less_depth_component32f
+v3d_deqp: case #14 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.less_or_equal_depth24_stencil8
+v3d_deqp: case #15 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.less_or_equal_depth_component16
+v3d_deqp: case #16 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.less_or_equal_depth_component32f
+v3d_deqp: case #17 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.never_depth24_stencil8
+v3d_deqp: case #18 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.never_depth_component16
+v3d_deqp: case #19 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.never_depth_component32f
+v3d_deqp: case #20 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.not_equal_depth24_stencil8
+v3d_deqp: case #21 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.not_equal_depth_component16
+v3d_deqp: case #22 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear.not_equal_depth_component32f
+v3d_deqp: case #23 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth24_stencil8
+v3d_deqp: case #24 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth_component16
+v3d_deqp: case #25 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth_component32f
+v3d_deqp: case #26 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.equal_depth24_stencil8
+v3d_deqp: case #27 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.equal_depth_component16
+v3d_deqp: case #28 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.equal_depth_component32f
+v3d_deqp: case #29 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_depth24_stencil8
+v3d_deqp: case #30 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_depth_component16
+v3d_deqp: case #31 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_depth_component32f
+v3d_deqp: case #32 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_or_equal_depth24_stencil8
+v3d_deqp: case #33 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_or_equal_depth_component16
+v3d_deqp: case #34 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_or_equal_depth_component32f
+v3d_deqp: case #35 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_depth24_stencil8
+v3d_deqp: case #36 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_depth_component16
+v3d_deqp: case #37 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_depth_component32f
+v3d_deqp: case #38 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_or_equal_depth24_stencil8
+v3d_deqp: case #39 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_or_equal_depth_component16
+v3d_deqp: case #40 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_or_equal_depth_component32f
+v3d_deqp: case #41 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.never_depth24_stencil8
+v3d_deqp: case #42 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.never_depth_component16
+v3d_deqp: case #43 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.never_depth_component32f
+v3d_deqp: case #44 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.not_equal_depth24_stencil8
+v3d_deqp: case #45 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.not_equal_depth_component16
+v3d_deqp: case #46 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.not_equal_depth_component32f
+v3d_deqp: case #47 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.always_depth24_stencil8
+v3d_deqp: case #48 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.always_depth_component16
+v3d_deqp: case #49 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.always_depth_component32f
+v3d_deqp: case #50 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.equal_depth24_stencil8
+v3d_deqp: case #51 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.equal_depth_component16
+v3d_deqp: case #52 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.equal_depth_component32f
+v3d_deqp: case #53 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth24_stencil8
+v3d_deqp: case #54 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth_component16
+v3d_deqp: case #55 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth_component32f
+v3d_deqp: case #56 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_or_equal_depth24_stencil8
+v3d_deqp: case #57 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_or_equal_depth_component16
+v3d_deqp: case #58 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_or_equal_depth_component32f
+v3d_deqp: case #59 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_depth24_stencil8
+v3d_deqp: case #60 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_depth_component16
+v3d_deqp: case #61 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_depth_component32f
+v3d_deqp: case #62 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_or_equal_depth24_stencil8
+v3d_deqp: case #63 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_or_equal_depth_component16
+v3d_deqp: case #64 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_or_equal_depth_component32f
+v3d_deqp: case #65 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.never_depth24_stencil8
+v3d_deqp: case #66 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.never_depth_component16
+v3d_deqp: case #67 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.never_depth_component32f
+v3d_deqp: case #68 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.not_equal_depth24_stencil8
+v3d_deqp: case #69 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.not_equal_depth_component16
+v3d_deqp: case #70 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.not_equal_depth_component32f
+v3d_deqp: case #71 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.always_depth24_stencil8
+v3d_deqp: case #72 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.always_depth_component16
+v3d_deqp: case #73 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.always_depth_component32f
+v3d_deqp: case #74 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.equal_depth24_stencil8
+v3d_deqp: case #75 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.equal_depth_component16
+v3d_deqp: case #76 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.equal_depth_component32f
+v3d_deqp: case #77 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_depth24_stencil8
+v3d_deqp: case #78 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_depth_component16
+v3d_deqp: case #79 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_depth_component32f
+v3d_deqp: case #80 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_or_equal_depth24_stencil8
+v3d_deqp: case #81 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_or_equal_depth_component16
+v3d_deqp: case #82 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_or_equal_depth_component32f
+v3d_deqp: case #83 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.less_depth24_stencil8
+v3d_deqp: case #84 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.less_depth_component16
+v3d_deqp: case #85 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.less_depth_component32f
+v3d_deqp: case #86 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.less_or_equal_depth24_stencil8
+v3d_deqp: case #87 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.less_or_equal_depth_component16
+v3d_deqp: case #88 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.less_or_equal_depth_component32f
+v3d_deqp: case #89 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.never_depth24_stencil8
+v3d_deqp: case #90 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.never_depth_component16
+v3d_deqp: case #91 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.never_depth_component32f
+v3d_deqp: case #92 F 44ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.not_equal_depth24_stencil8
+v3d_deqp: case #93 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.not_equal_depth_component16
+v3d_deqp: case #94 F 45ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest.not_equal_depth_component32f
+v3d_deqp: case #95 F 46ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.always_depth24_stencil8
+v3d_deqp: case #96 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.always_depth_component16
+v3d_deqp: case #97 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.always_depth_component32f
+v3d_deqp: case #98 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.equal_depth24_stencil8
+v3d_deqp: case #99 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.equal_depth_component16
+v3d_deqp: case #100 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.equal_depth_component32f
+v3d_deqp: case #101 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_depth24_stencil8
+v3d_deqp: case #102 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_depth_component16
+v3d_deqp: case #103 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_depth_component32f
+v3d_deqp: case #104 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_or_equal_depth24_stencil8
+v3d_deqp: case #105 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_or_equal_depth_component16
+v3d_deqp: case #106 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_or_equal_depth_component32f
+v3d_deqp: case #107 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_depth24_stencil8
+v3d_deqp: case #108 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_depth_component16
+v3d_deqp: case #109 F 47ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_depth_component32f
+v3d_deqp: case #110 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_or_equal_depth24_stencil8
+v3d_deqp: case #111 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_or_equal_depth_component16
+v3d_deqp: case #112 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_or_equal_depth_component32f
+v3d_deqp: case #113 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.never_depth24_stencil8
+v3d_deqp: case #114 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.never_depth_component16
+v3d_deqp: case #115 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.never_depth_component32f
+v3d_deqp: case #116 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.not_equal_depth24_stencil8
+v3d_deqp: case #117 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.not_equal_depth_component16
+v3d_deqp: case #118 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.not_equal_depth_component32f
+v3d_deqp: case #119 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_linear.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth24_stencil8
+v3d_deqp: case #120 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth_component16
+v3d_deqp: case #121 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth_component32f
+v3d_deqp: case #122 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.equal_depth24_stencil8
+v3d_deqp: case #123 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.equal_depth_component16
+v3d_deqp: case #124 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.equal_depth_component32f
+v3d_deqp: case #125 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_depth24_stencil8
+v3d_deqp: case #126 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_depth_component16
+v3d_deqp: case #127 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_depth_component32f
+v3d_deqp: case #128 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_or_equal_depth24_stencil8
+v3d_deqp: case #129 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_or_equal_depth_component16
+v3d_deqp: case #130 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_or_equal_depth_component32f
+v3d_deqp: case #131 F 52ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.greater_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_depth24_stencil8
+v3d_deqp: case #132 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_depth_component16
+v3d_deqp: case #133 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_depth_component32f
+v3d_deqp: case #134 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_or_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_or_equal_depth24_stencil8
+v3d_deqp: case #135 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_or_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_or_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_or_equal_depth_component16
+v3d_deqp: case #136 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_or_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_or_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_or_equal_depth_component32f
+v3d_deqp: case #137 F 51ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.less_or_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.never_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.never_depth24_stencil8
+v3d_deqp: case #138 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.never_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.never_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.never_depth_component16
+v3d_deqp: case #139 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.never_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.never_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.never_depth_component32f
+v3d_deqp: case #140 F 48ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.never_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.not_equal_depth24_stencil8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.not_equal_depth24_stencil8
+v3d_deqp: case #141 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.not_equal_depth24_stencil8
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.not_equal_depth_component16'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.not_equal_depth_component16
+v3d_deqp: case #142 F 49ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.not_equal_depth_component16
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.not_equal_depth_component32f'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+deqp: Fail dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.not_equal_depth_component32f
+v3d_deqp: case #143 F 50ms k2/6 c15272/15336 r0 dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.not_equal_depth_component32f
+  Fail (Failed to compile shader program at glsTextureTestUtil.cpp:411)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.1024x1024_l8'..
+yakogl/v3d: tiled copies high-water 1052672 of 16777216 bytes
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.1024x1024_l8
+v3d_deqp: case #144 P 121ms k2/9 c15533/17939 r0 dEQP-GLES3.functional.texture.size.2d.1024x1024_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.1024x1024_l8_mipmap'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.1024x1024_l8_mipmap
+v3d_deqp: case #145 P 122ms k2/9 c15533/18283 r0 dEQP-GLES3.functional.texture.size.2d.1024x1024_l8_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.1024x1024_rgb888'..
+yakogl/v3d: tiled copies high-water 4198400 of 16777216 bytes
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.1024x1024_rgb888
+v3d_deqp: case #146 P 103ms k2/9 c15533/25107 r0 dEQP-GLES3.functional.texture.size.2d.1024x1024_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.1024x1024_rgb888_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.1024x1024_rgb888_mipmap
+v3d_deqp: case #147 P 118ms k2/9 c15533/26475 r0 dEQP-GLES3.functional.texture.size.2d.1024x1024_rgb888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba4444'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba4444
+v3d_deqp: case #148 P 136ms k2/9 c15533/26475 r0 dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba4444_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba4444_mipmap
+v3d_deqp: case #149 P 166ms k2/9 c15533/26475 r0 dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba4444_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba8888'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba8888
+v3d_deqp: case #150 P 93ms k2/9 c15533/26475 r0 dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba8888_mipmap'..
+yakogl/v3d: a stale tiled copy of 4198400 bytes given back before the job opened (the first; later ones are counted)
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba8888_mipmap
+v3d_deqp: case #151 P 135ms k2/9 c15533/26475 r0 dEQP-GLES3.functional.texture.size.2d.1024x1024_rgba8888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.2048x2048_l8'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.2048x2048_l8
+v3d_deqp: case #152 P 266ms k2/9 c15533/26475 r0 dEQP-GLES3.functional.texture.size.2d.2048x2048_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.2048x2048_l8_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.2048x2048_l8_mipmap
+v3d_deqp: case #153 P 340ms k2/9 c15533/26475 r0 dEQP-GLES3.functional.texture.size.2d.2048x2048_l8_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.2048x2048_rgb888'..
+yakogl/v3d: draw refused: a texture larger than the tiled-copy budget (CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES) and the texture arena (8 MiB tiled)
+yakogl: glDrawElements was not recorded (-22); the frame is missing it
+GL error 0x505 in glDrawElements
+deqp: Fail dEQP-GLES3.functional.texture.size.2d.2048x2048_rgb888
+v3d_deqp: case #154 R 261ms k2/9 c15533/37391 r1 dEQP-GLES3.functional.texture.size.2d.2048x2048_rgb888
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.2048x2048_rgb888_mipmap'..
+yakogl: glDrawElements was not recorded (-22); the frame is missing it
+GL error 0x505 in glDrawElements
+deqp: Fail dEQP-GLES3.functional.texture.size.2d.2048x2048_rgb888_mipmap
+v3d_deqp: case #155 R 314ms k2/9 c15533/37391 r1 dEQP-GLES3.functional.texture.size.2d.2048x2048_rgb888_mipmap
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba4444'..
+yakogl: glDrawElements was not recorded (-22); the frame is missing it
+GL error 0x505 in glDrawElements
+deqp: Fail dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba4444
+v3d_deqp: case #156 R 388ms k2/9 c15533/37391 r1 dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba4444
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba4444_mipmap'..
+yakogl: glDrawElements was not recorded (-22); the frame is missing it
+GL error 0x505 in glDrawElements
+deqp: Fail dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba4444_mipmap
+v3d_deqp: case #157 R 498ms k2/9 c15533/37391 r1 dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba4444_mipmap
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba8888'..
+yakogl: glDrawElements was not recorded (-22); the frame is missing it
+GL error 0x505 in glDrawElements
+deqp: Fail dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba8888
+v3d_deqp: case #158 R 268ms k2/9 c15533/37391 r1 dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba8888
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba8888_mipmap'..
+yakogl: glDrawElements was not recorded (-22); the frame is missing it
+GL error 0x505 in glDrawElements
+deqp: Fail dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba8888_mipmap
+v3d_deqp: case #159 R 337ms k2/9 c15533/37391 r1 dEQP-GLES3.functional.texture.size.2d.2048x2048_rgba8888_mipmap
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.512x512_l8'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.512x512_l8
+v3d_deqp: case #160 P 49ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.512x512_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.512x512_l8_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.512x512_l8_mipmap
+v3d_deqp: case #161 P 48ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.512x512_l8_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.512x512_rgb888'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.512x512_rgb888
+v3d_deqp: case #162 P 48ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.512x512_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.512x512_rgb888_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.512x512_rgb888_mipmap
+v3d_deqp: case #163 P 52ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.512x512_rgb888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.512x512_rgba4444'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.512x512_rgba4444
+v3d_deqp: case #164 P 60ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.512x512_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.512x512_rgba4444_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.512x512_rgba4444_mipmap
+v3d_deqp: case #165 P 65ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.512x512_rgba4444_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.512x512_rgba8888'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.512x512_rgba8888
+v3d_deqp: case #166 P 48ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.512x512_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.512x512_rgba8888_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.512x512_rgba8888_mipmap
+v3d_deqp: case #167 P 54ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.512x512_rgba8888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.64x64_l8'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.64x64_l8
+v3d_deqp: case #168 P 29ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.64x64_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.64x64_l8_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.64x64_l8_mipmap
+v3d_deqp: case #169 P 28ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.64x64_l8_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.64x64_rgb888'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.64x64_rgb888
+v3d_deqp: case #170 P 28ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.64x64_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.64x64_rgb888_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.64x64_rgb888_mipmap
+v3d_deqp: case #171 P 29ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.64x64_rgb888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.64x64_rgba4444'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.64x64_rgba4444
+v3d_deqp: case #172 P 29ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.64x64_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.64x64_rgba4444_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.64x64_rgba4444_mipmap
+v3d_deqp: case #173 P 31ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.64x64_rgba4444_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.64x64_rgba8888'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.64x64_rgba8888
+v3d_deqp: case #174 P 29ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.64x64_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.64x64_rgba8888_mipmap'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.64x64_rgba8888_mipmap
+v3d_deqp: case #175 P 30ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.64x64_rgba8888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.65x63_l8'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.65x63_l8
+v3d_deqp: case #176 P 28ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.65x63_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.65x63_rgb888'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.65x63_rgb888
+v3d_deqp: case #177 P 27ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.65x63_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.65x63_rgba4444'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.65x63_rgba4444
+v3d_deqp: case #178 P 29ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.65x63_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.2d.65x63_rgba8888'..
+deqp: Pass dEQP-GLES3.functional.texture.size.2d.65x63_rgba8888
+v3d_deqp: case #179 P 29ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.2d.65x63_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.128x128_l8'..
+  cube-bind: 0x106c000 unit 0 kick 37 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 38 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 39 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 40 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 41 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 42 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.128x128_l8
+v3d_deqp: case #180 P 121ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.128x128_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.128x128_l8_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 43 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 44 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 45 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 46 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 47 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 48 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 8, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.128x128_l8_mipmap
+v3d_deqp: case #181 P 125ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.128x128_l8_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.128x128_rgb888'..
+  cube-bind: 0x106c000 unit 0 kick 49 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 50 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 51 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 52 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 53 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 54 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.128x128_rgb888
+v3d_deqp: case #182 P 123ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.128x128_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.128x128_rgb888_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 55 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 56 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 57 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 58 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 59 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 60 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.128x128_rgb888_mipmap
+v3d_deqp: case #183 P 126ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.128x128_rgb888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.128x128_rgba4444'..
+  cube-bind: 0x106c000 unit 0 kick 61 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 62 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 63 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 64 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 65 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 66 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.128x128_rgba4444
+v3d_deqp: case #184 P 131ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.128x128_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.128x128_rgba4444_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 67 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 68 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 69 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 70 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 71 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 72 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.128x128_rgba4444_mipmap
+v3d_deqp: case #185 P 134ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.128x128_rgba4444_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.128x128_rgba8888'..
+  cube-bind: 0x106c000 unit 0 kick 73 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 74 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 75 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 76 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 77 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 78 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.128x128_rgba8888
+v3d_deqp: case #186 P 125ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.128x128_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.128x128_rgba8888_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 79 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 80 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 81 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 82 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 83 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 84 (draw)
+  cube(draw) @0x106c000 128x128 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.128x128_rgba8888_mipmap
+v3d_deqp: case #187 P 129ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.128x128_rgba8888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.15x15_l8'..
+  cube-bind: 0x102b600 unit 0 kick 85 (draw)
+  cube(draw) @0x102b600 15x15 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 86 (draw)
+  cube(draw) @0x102b600 15x15 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 87 (draw)
+  cube(draw) @0x102b600 15x15 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 88 (draw)
+  cube(draw) @0x102b600 15x15 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 89 (draw)
+  cube(draw) @0x102b600 15x15 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 90 (draw)
+  cube(draw) @0x102b600 15x15 x6: fmt 8, cpu 0x1e12a600 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.15x15_l8
+v3d_deqp: case #188 P 120ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.15x15_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.15x15_rgb888'..
+  cube-bind: 0x106c000 unit 0 kick 91 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 92 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 93 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 94 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 95 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 96 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.15x15_rgb888
+v3d_deqp: case #189 P 120ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.15x15_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.15x15_rgba4444'..
+  cube-bind: 0x106c000 unit 0 kick 97 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 98 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 99 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 100 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 101 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 102 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.15x15_rgba4444
+v3d_deqp: case #190 P 123ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.15x15_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.15x15_rgba8888'..
+  cube-bind: 0x106c000 unit 0 kick 103 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 104 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 105 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 106 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 107 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 108 (draw)
+  cube(draw) @0x106c000 15x15 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.15x15_rgba8888
+v3d_deqp: case #191 P 121ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.15x15_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.16x16_l8'..
+  cube-bind: 0x102b600 unit 0 kick 109 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 110 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 111 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 112 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 113 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 114 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.16x16_l8
+v3d_deqp: case #192 P 116ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.16x16_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.16x16_l8_mipmap'..
+  cube-bind: 0x102b600 unit 0 kick 115 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 116 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 117 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 118 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 119 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+  cube-bind: 0x102b600 unit 0 kick 120 (draw)
+  cube(draw) @0x102b600 16x16 x6: fmt 8, cpu 0x1e12a600 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.16x16_l8_mipmap
+v3d_deqp: case #193 P 117ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.16x16_l8_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.16x16_rgb888'..
+  cube-bind: 0x106c000 unit 0 kick 121 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 122 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 123 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 124 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 125 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 126 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.16x16_rgb888
+v3d_deqp: case #194 P 116ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.16x16_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.16x16_rgb888_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 127 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 128 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 129 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 130 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 131 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 132 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.16x16_rgb888_mipmap
+v3d_deqp: case #195 P 118ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.16x16_rgb888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.16x16_rgba4444'..
+  cube-bind: 0x106c000 unit 0 kick 133 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 134 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 135 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 136 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 137 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 138 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.16x16_rgba4444
+v3d_deqp: case #196 P 119ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.16x16_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.16x16_rgba4444_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 139 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 140 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 141 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 142 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 143 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 144 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.16x16_rgba4444_mipmap
+v3d_deqp: case #197 P 121ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.16x16_rgba4444_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.16x16_rgba8888'..
+  cube-bind: 0x106c000 unit 0 kick 145 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 146 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 147 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 148 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 149 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 150 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.16x16_rgba8888
+v3d_deqp: case #198 P 118ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.16x16_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.16x16_rgba8888_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 151 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 152 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 153 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 154 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 155 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 156 (draw)
+  cube(draw) @0x106c000 16x16 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.16x16_rgba8888_mipmap
+v3d_deqp: case #199 P 118ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.16x16_rgba8888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.256x256_l8'..
+  cube-bind: 0x106c000 unit 0 kick 157 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 158 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 159 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 160 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 161 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 162 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.256x256_l8
+v3d_deqp: case #200 P 171ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.256x256_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.256x256_l8_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 163 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 164 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 165 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 166 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 167 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 168 (draw)
+  cube(draw) @0x106c000 256x256 x6: fmt 8, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.256x256_l8_mipmap
+v3d_deqp: case #201 P 148ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.256x256_l8_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.256x256_rgb888'..
+  cube-bind: 0x1207000 unit 0 kick 169 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 170 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 171 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 172 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 173 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 174 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.256x256_rgb888
+v3d_deqp: case #202 P 173ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.256x256_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.256x256_rgb888_mipmap'..
+  cube-bind: 0x1207000 unit 0 kick 175 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 176 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 177 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 178 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 179 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 180 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.256x256_rgb888_mipmap
+v3d_deqp: case #203 P 153ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.256x256_rgb888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.256x256_rgba4444'..
+  cube-bind: 0x1207000 unit 0 kick 181 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 182 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 183 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 184 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 185 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 186 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.256x256_rgba4444
+v3d_deqp: case #204 P 198ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.256x256_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.256x256_rgba4444_mipmap'..
+  cube-bind: 0x1207000 unit 0 kick 187 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 188 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 189 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 190 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 191 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 192 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.256x256_rgba4444_mipmap
+v3d_deqp: case #205 P 175ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.256x256_rgba4444_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.256x256_rgba8888'..
+  cube-bind: 0x1207000 unit 0 kick 193 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 194 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 195 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 196 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 197 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 198 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.256x256_rgba8888
+v3d_deqp: case #206 P 176ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.256x256_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.256x256_rgba8888_mipmap'..
+  cube-bind: 0x1207000 unit 0 kick 199 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 200 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 201 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 202 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 203 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 204 (draw)
+  cube(draw) @0x1207000 256x256 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.256x256_rgba8888_mipmap
+v3d_deqp: case #207 P 156ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.256x256_rgba8888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.512x512_l8'..
+  cube-bind: 0x1207000 unit 0 kick 205 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 206 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 207 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 208 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 209 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 210 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.512x512_l8
+v3d_deqp: case #208 P 238ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.512x512_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.512x512_l8_mipmap'..
+  cube-bind: 0x1207000 unit 0 kick 211 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 212 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 213 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 214 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 215 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 216 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 8, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.512x512_l8_mipmap
+v3d_deqp: case #209 P 235ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.512x512_l8_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.512x512_rgb888'..
+  cube-bind: 0x1207000 unit 0 kick 217 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 218 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 219 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 220 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 221 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 222 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.512x512_rgb888
+v3d_deqp: case #210 P 248ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.512x512_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.512x512_rgb888_mipmap'..
+  cube-bind: 0x1207000 unit 0 kick 223 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+yakogl/v3d: tiled copies high-water 8409088 of 16777216 bytes
+  cube-bind: 0x1207000 unit 0 kick 224 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 225 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 226 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 227 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 228 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.512x512_rgb888_mipmap
+v3d_deqp: case #211 P 256ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.512x512_rgb888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.512x512_rgba4444'..
+  cube-bind: 0x1207000 unit 0 kick 229 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 230 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 231 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 232 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 233 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 234 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.512x512_rgba4444
+v3d_deqp: case #212 P 312ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.512x512_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.512x512_rgba4444_mipmap'..
+  cube-bind: 0x1207000 unit 0 kick 235 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 236 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 237 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 238 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 239 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 240 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.512x512_rgba4444_mipmap
+v3d_deqp: case #213 P 328ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.512x512_rgba4444_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.512x512_rgba8888'..
+  cube-bind: 0x1207000 unit 0 kick 241 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 242 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 243 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 244 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 245 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 246 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.512x512_rgba8888
+v3d_deqp: case #214 P 256ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.512x512_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.512x512_rgba8888_mipmap'..
+  cube-bind: 0x1207000 unit 0 kick 247 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 248 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 249 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 250 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 251 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+  cube-bind: 0x1207000 unit 0 kick 252 (draw)
+  cube(draw) @0x1207000 512x512 x6: fmt 0, cpu 0x1e306000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.512x512_rgba8888_mipmap
+v3d_deqp: case #215 P 261ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.512x512_rgba8888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.64x64_l8'..
+  cube-bind: 0x106c000 unit 0 kick 253 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 254 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 255 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 256 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 257 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 258 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.64x64_l8
+v3d_deqp: case #216 P 118ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.64x64_l8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.64x64_l8_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 259 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 260 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 261 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 262 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 263 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 264 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 8, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.64x64_l8_mipmap
+v3d_deqp: case #217 P 119ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.64x64_l8_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.64x64_rgb888'..
+  cube-bind: 0x106c000 unit 0 kick 265 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 266 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 267 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 268 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 269 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 270 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.64x64_rgb888
+v3d_deqp: case #218 P 117ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.64x64_rgb888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.64x64_rgb888_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 271 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 272 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 273 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 274 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 275 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 276 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.64x64_rgb888_mipmap
+v3d_deqp: case #219 P 120ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.64x64_rgb888_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.64x64_rgba4444'..
+  cube-bind: 0x106c000 unit 0 kick 277 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 278 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 279 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 280 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 281 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 282 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.64x64_rgba4444
+v3d_deqp: case #220 P 122ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.64x64_rgba4444
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.64x64_rgba4444_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 283 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 284 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 285 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 286 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 287 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 288 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.64x64_rgba4444_mipmap
+v3d_deqp: case #221 P 124ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.64x64_rgba4444_mipmap
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.64x64_rgba8888'..
+  cube-bind: 0x106c000 unit 0 kick 289 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 290 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 291 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 292 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 293 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 294 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.64x64_rgba8888
+v3d_deqp: case #222 P 120ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.64x64_rgba8888
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.size.cube.64x64_rgba8888_mipmap'..
+  cube-bind: 0x106c000 unit 0 kick 295 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 296 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 297 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 298 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 299 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+  cube-bind: 0x106c000 unit 0 kick 300 (draw)
+  cube(draw) @0x106c000 64x64 x6: fmt 0, cpu 0x1e16b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.size.cube.64x64_rgba8888_mipmap
+v3d_deqp: case #223 P 121ms k2/9 c15533/37391 r0 dEQP-GLES3.functional.texture.size.cube.64x64_rgba8888_mipmap
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        74/224 (33.0%)
+  Failed:        150/224 (67.0%)
+  Not supported: 0/224 (0.0%)
+  Warnings:      0/224 (0.0%)
+  Waived:        0/224 (0.0%)
+deqp: done: 74 passed, 150 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 224 cases begun, 224 with a result, 0 without
+v3d_deqp DONE: build b1b5b845, filter 'dEQP-GLES3.functional.texture.shadow.cube.*,dEQP-GLES3.functional.texture.size.*'
+  224 cases in 18294 ms, record at 18 s after boot, reset at ~250 s
+  totals: P 74 F 144 R 6  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 74 passed, 150 failed, 0 not supported, 0 warnings, complete=1
+  summary: 224 cases begun, 224 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 9, before #0 (first not passed) 0; slowest #157 498 ms
+  carve-out (KiB, of 48636): after #0 15272, last 15533, high-water 37391
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 300 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15377664 bytes used now, 38288896 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 627 calls, 101058 map reads (161 a call, at most 2974 in one); free runs 2, longest 34425344 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 300 jobs ended; emitted 6174, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+  128 FFFFFFFFFFFFFFFFPPPPPPPPPPRRRRRRPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+refusals: 6 draws refused by the V3D backend (v3d_refused_draws), causes:
+  r0 (first #154) a texture larger than the tiled-copy budget (CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES) and the texture arena (8 MiB tiled)
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 154 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  shadow.cube.linear                                         24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  shadow.cube.linear_mipmap_linear                           24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  shadow.cube.linear_mipmap_nearest                          24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  shadow.cube.nearest                                        24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  shadow.cube.nearest_mipmap_linear                          24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  shadow.cube.nearest_mipmap_nearest                         24 F24                    24x ~is program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  size.2d                                                     6 R6                      6x Image comparison failed
+    0 F shadow.cube.linear.always_depth24_stencil8       135ms k2/6 c15272/15336         ~this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+    1 F shadow.cube.linear.always_depth_component16      44ms k2/6 c15272/15336          ~this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+    2 F shadow.cube.linear.always_depth_component32f     45ms k2/6 c15272/15336          ~this program (vertex + fragment): Program(NotYet("a shadow look-up"))
+  ... 147 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 DONE: 224 cases, P 74 F 144 R 6 N 0 other 0
