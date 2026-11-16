@@ -14,12 +14,16 @@
 //! - the queries: `UNIFORM_OFFSET`, `UNIFORM_MATRIX_STRIDE` (16) and
 //!   `UNIFORM_IS_ROW_MAJOR` of each member by `glGetActiveUniformsiv`;
 //! - the sim: a fragment shader reads `m[0][0]` and `m[C-1][R-1]` of each
-//!   matrix as `gl_FragDepth`, run by the QPU interpreter on a stream built
-//!   from a block whose dword k holds k + 0.5. Column-major: element `m[c][r]`
-//!   at byte `c * 16 + r * 4` of the matrix; row-major: at `r * 16 + c * 4`.
-//!   The V3D compiler reads a row_major member as column-major (the defect
-//!   `tests/v3d_ubo_std140_edge.rs` pins), so the row-major reads are pinned
-//!   as they come out today and the std140 expectation is `#[ignore]`d.
+//!   matrix as `gl_FragDepth`. The block's data goes through the GL path:
+//!   `glBufferData` of a buffer whose dword k holds k + 0.5, `glBindBufferBase`,
+//!   a draw on a mock back end that keeps the fragment block the GL core
+//!   hands over (`fill_uniform_blocks` / `copy_block_member` in
+//!   src/gl/program.rs, the std140 copy into the default block), and the QPU
+//!   interpreter running the compiled shader on a uniform stream built from
+//!   that block. (A harness that maps buffer dwords to default-block dwords
+//!   at the compiler level skips that copy and reads the matrices wrong.)
+//!   Column-major: element `m[c][r]` at byte `c * 16 + r * 4` of the matrix;
+//!   row-major: at `r * 16 + c * 4`.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d_ubo_matrix_layouts
@@ -29,11 +33,16 @@
 use core::ffi::{c_char, c_void};
 use std::ffi::CString;
 use std::sync::{Mutex, MutexGuard, Once};
-use yakogl::backend::{GlesHeap, YakoglBackend};
+use yakogl::backend::{GlesDraw, GlesHeap, YakoglBackend};
+use yakogl::gl::buffer::*;
 use yakogl::gl::consts::*;
+use yakogl::gl::draw::*;
+use yakogl::gl::es3::*;
 use yakogl::gl::program::*;
 use yakogl::gl::shader::*;
+use yakogl::gl::state::*;
 use yakogl::gl::types::*;
+use yakogl::gl::vertex::*;
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::v3d::chain::{compile_program, Prim, Target};
@@ -58,6 +67,23 @@ unsafe extern "C" fn b_init() -> i32 {
 }
 unsafe extern "C" fn b_heap_base(_heap: GlesHeap) -> u64 {
     0x1000_0000
+}
+unsafe extern "C" fn b_ok() -> i32 {
+    0
+}
+
+/// The fragment stage's block of the last draw, as handed to the back end.
+static DRAWN: Mutex<Option<Vec<u32>>> = Mutex::new(None);
+
+unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
+    let d = &*d;
+    let block = if d.fs_uniform_cpu.is_null() {
+        Vec::new()
+    } else {
+        core::slice::from_raw_parts(d.fs_uniform_cpu as *const u32, usize::from(d.fs_uniform_dwords)).to_vec()
+    };
+    *DRAWN.lock().unwrap_or_else(|e| e.into_inner()) = Some(block);
+    0
 }
 
 static OSAL: OsalOps = OsalOps {
@@ -97,9 +123,9 @@ static BACKEND: YakoglBackend = YakoglBackend {
     etc1_decoded_at_upload: false,
     init: Some(b_init),
     shutdown: None,
-    draw: None,
-    flush: None,
-    finish: None,
+    draw: Some(b_draw),
+    flush: Some(b_ok),
+    finish: Some(b_ok),
     finish_previous: None,
     kick_id: None,
     kick_pending: None,
@@ -119,7 +145,8 @@ static BACKEND: YakoglBackend = YakoglBackend {
     generate_mipmap: None,
     return_mipmap_chain: None,
     linear_row_align: 0,
-    uniforms_host_only: false,
+    /* as the V3D's table: the GL core hands over the host array */
+    uniforms_host_only: true,
     ds_write: None,
     stencil_resolve: None,
 };
@@ -137,7 +164,7 @@ fn context() -> MutexGuard<'static, ()> {
             osal_set_ops(&OSAL);
             yakogl::backend::g_backend = &BACKEND;
             yakogl::shaderc::g_shaderc = &yakogl::shaderc::online::SHC_ONLINE;
-            assert!(!yakogl::gl::context::gl_context_create(8, 8).is_null());
+            assert!(!yakogl::gl::context::gl_context_create(64, 64).is_null());
         }
     });
     guard
@@ -145,7 +172,7 @@ fn context() -> MutexGuard<'static, ()> {
 
 /* ---- the block --------------------------------------------------------- */
 
-const VS: &str = "#version 300 es\nin highp vec4 a_position;\nin highp vec2 a_coord;\nout highp vec2 v_coord;\nvoid main (void)\n{\n    gl_Position = a_position;\n    v_coord = a_coord;\n}\n";
+const VS: &str = "#version 300 es\nin highp vec4 a_position;\nvoid main (void)\n{\n    gl_Position = a_position;\n}\n";
 
 /// Entries of the filler members h0..h3: 970 vec4 = 15520 bytes.
 const HEAD: [usize; 4] = [250, 250, 250, 220];
@@ -205,7 +232,7 @@ fn block() -> String {
 /// A fragment shader writing `expr` as the depth.
 fn fs(expr: &str) -> String {
     format!(
-        "#version 300 es\n{}in highp vec2 v_coord;\nlayout(location = 0) out mediump vec4 o_color;\nvoid main (void)\n{{\n    o_color = vec4(1.0);\n    gl_FragDepth = {expr};\n}}\n",
+        "#version 300 es\n{}layout(location = 0) out mediump vec4 o_color;\nvoid main (void)\n{{\n    o_color = vec4(1.0);\n    gl_FragDepth = {expr};\n}}\n",
         block()
     )
 }
@@ -215,9 +242,9 @@ fn value(k: usize) -> f32 {
     k as f32 + 0.5
 }
 
-/// The depth lane 0 writes for `fs`.
-fn run(fs: &str) -> Result<f32, String> {
-    let _g = context();
+/// The depth lane 0 writes for `fs` when the QPU reads `block`, the fragment
+/// block of a draw.
+fn sim_depth(fs: &str, block: &[u32]) -> Result<f32, String> {
     let mut mem = vec![0u8; 64 << 20];
     let a = Arena::new(&mut mem);
     let vs = a.alloc_str(VS).expect("arena");
@@ -227,12 +254,15 @@ fn run(fs: &str) -> Result<f32, String> {
     let target = Target { vpm_size: 65536 };
     let p =
         compile_program(&v.module, &f.module, Prim::Triangles, target, &a).map_err(|e| format!("compile: {e:?}"))?;
-    let block: Vec<u32> = (0..usize::from(f.reflection.uniform_dwords)).map(|k| value(k).to_bits()).collect();
     let mut stream = Vec::new();
     for u in p.fs.code.uniforms.iter() {
         stream.push(match u.contents {
             0 => u.data,
-            1 => *block.get(u.data as usize).ok_or(format!("stream dword {} past the block", u.data))?,
+            1 => *block.get(u.data as usize).ok_or(format!(
+                "stream dword {} past the draw's block of {}",
+                u.data,
+                block.len()
+            ))?,
             c => return Err(format!("uniform contents {c} (UNIFA / UBO address) not modelled by this test")),
         });
     }
@@ -247,9 +277,48 @@ fn run(fs: &str) -> Result<f32, String> {
     Ok(f32::from_bits(w.value[0].ok_or("undefined depth")?))
 }
 
+/// The depth lane 0 writes for `expr` of the block: a GL draw of a program
+/// whose block `Big` is bound to a buffer of `value(k)` dwords, then the sim
+/// on the fragment block the draw handed over.
 fn read(expr: &str) -> f32 {
     let src = fs(expr);
-    run(&src).unwrap_or_else(|why| panic!("{expr}: {why}\n{src}"))
+    let _g = context();
+    // SAFETY: plain GL calls on handles this function owns.
+    let block = unsafe {
+        let (p, ok) = link_src(&src).unwrap_or_else(|| panic!("{expr}: the shaders compile\n{src}"));
+        assert!(ok, "{expr}: link\n{src}");
+        glUseProgram(p);
+        let data: Vec<u32> = (0..16384 / 4).map(|k| value(k).to_bits()).collect();
+        let mut buf = 0;
+        glGenBuffers(1, &mut buf);
+        glBindBuffer(GL_UNIFORM_BUFFER, buf);
+        glBufferData(GL_UNIFORM_BUFFER, 16384, data.as_ptr() as *const c_void, GL_STATIC_DRAW);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, buf);
+        assert_eq!(glGetError(), GL_NO_ERROR, "{expr}: the buffer");
+        let block = draw(p);
+        glUseProgram(0);
+        glDeleteProgram(p);
+        glDeleteBuffers(1, &buf);
+        block
+    };
+    sim_depth(&src, &block).unwrap_or_else(|why| panic!("{expr}: {why}\n{src}"))
+}
+
+/// One draw of the current program; the fragment block it handed over.
+///
+/// # Safety
+/// Plain GL calls on the current context.
+unsafe fn draw(p: GLuint) -> Vec<u32> {
+    static POS: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, -1.0, 1.0, 0.0, 1.0, 1.0, -1.0, 0.0, 1.0];
+    let loc = glGetAttribLocation(p, c"a_position".as_ptr());
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glVertexAttribPointer(loc as u32, 4, GL_FLOAT, 0, 0, POS.as_ptr() as *const c_void);
+    glEnableVertexAttribArray(loc as u32);
+    *DRAWN.lock().unwrap() = None;
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDisableVertexAttribArray(loc as u32);
+    assert_eq!(glGetError(), GL_NO_ERROR, "the draw");
+    DRAWN.lock().unwrap().take().expect("the draw reached the back end")
 }
 
 /* ---- GL ------------------------------------------------------------------ */
@@ -276,8 +345,13 @@ fn compiled(s: GLuint) -> bool {
 /// Compile and link the block: the program and its link status, or `None`
 /// where a shader did not compile.
 fn link() -> Option<(GLuint, bool)> {
+    link_src(&fs("cm22[0][0]"))
+}
+
+/// The same for the fragment source `src`.
+fn link_src(src: &str) -> Option<(GLuint, bool)> {
     let v = shader(GL_VERTEX_SHADER, VS);
-    let f = shader(GL_FRAGMENT_SHADER, &fs("cm22[0][0]"));
+    let f = shader(GL_FRAGMENT_SHADER, src);
     if !compiled(v) || !compiled(f) {
         return None;
     }
@@ -344,43 +418,8 @@ fn std140_dword(m: &Member, c: usize, r: usize) -> usize {
     m.at / 4 + if m.row_major { r * 4 + c } else { c * 4 + r }
 }
 
-/// The dword the V3D compiler reads `m[c][r]` from today (the first matrix,
-/// `cm22`, is the only one in its std140 place). It lays each matrix out as
-/// column-major, row-major ones too, with columns of R dwords strided 2 for
-/// R = 2 (vec2 columns packed, not rounded up to 4) and 4 otherwise, matrices
-/// aligned to 4 dwords. The shapes with R = 2 shrink, and every later member
-/// moves down.
-fn compiler_dwords() -> Vec<(usize, usize)> {
-    let mut d = HEAD_BYTES / 4;
-    members()
-        .0
-        .iter()
-        .map(|m| {
-            d = d.next_multiple_of(4);
-            let stride = if m.rows == 2 { 2 } else { 4 };
-            let at = d;
-            d += m.cols * stride;
-            (at, stride)
-        })
-        .collect()
-}
-
-/// Defect, pinned: first and last element of all 18 matrices, read where the
-/// compiler puts them today (see `compiler_dwords`).
-#[test]
-fn sim_reads_each_matrix_where_the_compiler_puts_it_today() {
-    let (ms, _) = members();
-    for (m, (at, stride)) in ms.iter().zip(compiler_dwords()) {
-        for (c, r) in probes(m) {
-            let k = at + c * stride + r;
-            assert_eq!(read(&format!("{}[{c}][{r}]", m.name)), value(k), "{}[{c}][{r}] at dword {k}", m.name);
-        }
-    }
-}
-
 /// The std140 expectation, first and last element of each matrix.
 #[test]
-#[ignore = "defect: the V3D compiler packs vec2 matrix columns (mat2, mat3x2, mat4x2) at 8 bytes and reads row_major members as column-major in a std140 block (see sim_reads_each_matrix_where_the_compiler_puts_it_today)"]
 fn sim_reads_each_matrix_as_std140_says() {
     let (ms, _) = members();
     for m in &ms {
