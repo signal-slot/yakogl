@@ -495,14 +495,18 @@ value; the FAU word is the uniform the driver fills.
 **Sources.** "verbatim" is the `tools/mali/testdata/deqp_shapes/misc_*` pair
 (the `.qpa` of `deqp-host-measure.sh`, VK-GL-CTS `93bca01`). "rebuilt" is that
 pair edited as `modules/gles2/functional/es2fShaderMatrixTests.cpp` at
-`93bca01` generates the named case (read on GitHub; the file is cited by
-function, not line). The edits:
-- the case's precision on its inputs and `res` (`ShaderMatrixCase::init`,
-  `getPrecisionName`);
-- the mat4 constant `s_constInMat4[0]` = `tcu::translationMatrix(Vec3(0.2,
-  -0.3, 0.15))`, written column by column by `writeMatrixConstructor<4, 4>`
-  with `de::floatToString(x, 1)`, so `0.15f` prints `0.2`;
-- `genGLSLMatToVec3Reduction`'s mat4 colour.
+`93bca01` generates the named case (`git show 93bca01:<file>` of a blobless
+clone in `$CONNECTED_DEPS_DIR/vk-gl-cts`). The edits:
+- the case's precision on its inputs (`:946`, `:952`, `:973-974`: the
+  attribute `a_coords` and the varying `v_coords` take the input's precision;
+  `:983` the uniforms) and on `res` (input 0's precision, `:899`, `:1079-1080`);
+- the mat4 constant `s_constInMat4[0]` = `tcu::translationMatrix(Vec3(0.2f,
+  -0.3f, 0.15f))` (`:86`). `writeMatrixConstructor<4, 4>` (`:988`, `:1012`)
+  writes it column by column, `", "` between values, each with
+  `de::floatToString(x, 1)` (`:831-848`), so `0.15f` prints `0.2`. The
+  declaration order (the `const` from input 0, then input 1's `varying`, a
+  blank line, `void main (void)`) is `:943-1031`;
+- the mat4 colour of `genGLSLMatToVec3Reduction` (`:1190`; mat2 `:1184`).
 
 The rebuilt texts are dEQP's generator output by reading, not a captured
 `.qpa`; `measure`'s pairs confirm them only for the verbatim ones.
