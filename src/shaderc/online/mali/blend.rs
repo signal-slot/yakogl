@@ -54,6 +54,10 @@ const SAMPLE_ID_MASK: u32 = 0x1f;
 /// `bi_f32_to_f16_to`'s `FADD`.
 const NEG_ZERO: Src = Src { neg: true, ..Src::of(Idx::Const(0)) };
 
+#[cfg(test)]
+#[path = "blend_tests.rs"]
+mod blend_tests;
+
 /// The blend shader's words (padded as every program is) and its work
 /// register count.
 pub struct BlendShader<'s> {
