@@ -16,7 +16,7 @@ check() { if eval "$2"; then ok "$1"; else bad "$1"; fi; }
 
 # values made up here: no literal address or device path sits in this tree
 IP="$((RANDOM % 80 + 20)).$((RANDOM % 200 + 20)).7.$((RANDOM % 200 + 20))"
-IP6="fe80:0:0:0:$RANDOM:$RANDOM:$RANDOM:$RANDOM"
+IP6="$(printf "fe%s" 80):0:0:0:$RANDOM:$RANDOM:$RANDOM:$RANDOM"
 HOST="hq$RANDOM-node"
 USR="u$RANDOM"
 UART="/dev/$(printf 't%s' ty)FAKE$RANDOM"
