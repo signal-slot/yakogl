@@ -18,9 +18,11 @@
  *                  started over a group VM of four regions (the ring, the
  *                  heap's pool and chunks, the carve-out); Z4's record is
  *                  printed when a step stops
- *   gpu_alloc   -> yd_t6_osal_alloc: whole pages of the carve-out, first fit
- *   gpu_free    -> yd_t6_osal_free: held until the kick being recorded
- *                  completes
+ *   gpu_alloc   -> yd_t6_osal_alloc: whole pages of the carve-out, first fit;
+ *                  a refused one takes back what the submitted kicks hold
+ *   gpu_free    -> yd_t6_osal_free: held until the last kick that may read
+ *                  it completes: the one being recorded while the backend
+ *                  records a frame, else the last submitted
  *   map_phys    -> yd_t6_osal_map_phys: a range inside the carve-out, where
  *                  it is; -ENOTSUP for any other
  *   submit      -> yd_t6_osal_submit: the struct osal_mali_kick's stream as
@@ -33,7 +35,8 @@
  *                  note_restart below)
  *   shutdown    -> yd_t6_osal_shutdown: the last kick waited for, CS 0
  *                  stopped and CSG 0 terminated; then the counts
- *   query       -> OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP; the
+ *   query       -> OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP,
+ *                  OSAL_QUERY_MALI_FRAME_OPEN (yd_t6_osal_frame_open); the
  *                  clock and draw stats of zephyr_timing.c
  *   cache_*     -> nothing: the CPU's mapping of the GPU's memory is
  *                  uncached, and each job's FLUSH_CACHE2 cleans the GPU's
@@ -432,6 +435,11 @@ static int z_query(uint32_t what, void *out, size_t out_sz)
 		if (out_sz != sizeof(struct osal_mali_heap))
 			return -EINVAL;
 		return yd_t6_osal_heap(out);
+	case OSAL_QUERY_MALI_FRAME_OPEN:
+		if (out_sz != sizeof(uint32_t))
+			return -EINVAL;
+		yd_t6_osal_frame_open(*(const uint32_t *)out != 0);
+		return 0;
 	case OSAL_QUERY_CLOCK_NS:
 	case OSAL_QUERY_DRAW_STATS:
 		return osal_zephyr_timing_query(what, out, out_sz);

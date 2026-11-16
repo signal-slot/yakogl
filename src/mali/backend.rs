@@ -88,7 +88,10 @@ use super::genxml::v10::{ClumpFormat, Format, Func, MipmapMode, RgbComponentOrde
 use super::program::{self, StageMeta};
 use crate::backend::{self, gles_attribf_bit, GlesAttrib, GlesDraw, YakoglBackend, GLES_ATTRIBF_FLOAT32};
 use crate::ds_retention::{self, Plane};
-use crate::osal::mali::{OsalMaliGpu, OsalMaliHeap, OsalMaliKick, OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP};
+use crate::osal::mali::{
+    OsalMaliGpu, OsalMaliHeap, OsalMaliKick, OSAL_QUERY_MALI_FRAME_OPEN, OSAL_QUERY_MALI_GPU,
+    OSAL_QUERY_MALI_TILER_HEAP,
+};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA, OSAL_MEM_GPU_EXEC};
 use crate::shaderc::online::mali::MaliShader;
 use crate::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
@@ -324,6 +327,7 @@ pub extern "C" fn mali_init() -> i32 {
     match bring_up(g) {
         Ok(()) => {
             g.up = true;
+            frame_open_to_osal(false);
             0
         }
         Err(rc) => {
@@ -1033,6 +1037,22 @@ unsafe fn bytes_of<'a>(m: &OsalGpuMem) -> &'a mut [u8] {
 unsafe fn words_of<'a>(m: &OsalGpuMem) -> &'a mut [u64] {
     // SAFETY: the caller's contract; 8-byte aligned (checked by `alloc`).
     unsafe { core::slice::from_raw_parts_mut(m.cpu.cast::<u64>(), m.size / 8) }
+}
+
+/// Tell the OSAL whether a frame that may read GPU memory is being recorded
+/// (`OSAL_QUERY_MALI_FRAME_OPEN`), as the GC7000's frame_open_to_osal and
+/// the V3D's job_open_to_osal do: without one it holds a free only for the
+/// last submitted kick instead of the next one, which does not exist until
+/// something draws (dEQP texture.size on the NanoPC-T6: the 33.5 MB of one
+/// case's 2048x2048 mip chain were still held when the next case uploaded
+/// its own, in a carve-out of 64 MiB). An OSAL without the query keeps
+/// holding for the next kick.
+fn frame_open_to_osal(open: bool) {
+    if let Some(q) = osal::ops().and_then(|o| o.query) {
+        let mut v = open as u32;
+        // SAFETY: a u32 in-parameter of the size passed.
+        let _ = unsafe { q(OSAL_QUERY_MALI_FRAME_OPEN, (&mut v as *mut u32).cast::<c_void>(), 4) };
+    }
 }
 
 fn submit(stream_gpu: u64, words: usize) -> Result<i64, i32> {
@@ -2923,12 +2943,24 @@ fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: O
     };
     g.open =
         Some(OpenFrame { slot: i, tops: a.tops(), cs_len: cs.words().len(), frame: f, key, target, clear, zs, kept });
+    frame_open_to_osal(true);
     Ok(())
 }
 
 /// End the open frame, if any, and submit it. A frame that cannot be ended
 /// or submitted loses its draws (counted, [`FRAME_LOST`]).
 fn end_open(g: &mut MaliState) -> i32 {
+    if g.open.is_none() {
+        return 0;
+    }
+    let rc = submit_open(g);
+    // submitted or lost: no kick being recorded reads what is freed from now
+    frame_open_to_osal(false);
+    rc
+}
+
+/// [`end_open`]'s work on the open frame.
+fn submit_open(g: &mut MaliState) -> i32 {
     let Some(o) = g.open.take() else {
         return 0;
     };

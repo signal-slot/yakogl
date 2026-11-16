@@ -128,6 +128,12 @@ struct osal_v3d_cpu_of {
  * side is src/osal/mali.rs; abi_layout_check.c pins both. */
 #define OSAL_QUERY_MALI_GPU 15u
 #define OSAL_QUERY_MALI_TILER_HEAP 16u
+/* in = uint32_t (out pointer, 4 bytes): nonzero while the Mali backend
+ * records a frame, whose kick may read GPU memory freed meanwhile. As
+ * OSAL_QUERY_GC_FRAME_OPEN: with no frame open the OSAL holds a free only
+ * for the last submitted kick. -ENOTSUP from an OSAL that holds every free
+ * for the next kick. */
+#define OSAL_QUERY_MALI_FRAME_OPEN 19u
 /* in/out = struct osal_v3d_tfu_queue: run one TFU job after the job of fence
  * `after` (0: none) without the caller waiting for that job, as Mesa's v3d
  * queues its TFU ioctl with an in-sync on the render's out-sync. The OSAL

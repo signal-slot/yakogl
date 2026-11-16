@@ -1413,7 +1413,7 @@ fn fill_mem(out: &mut OsalGpuMem, a: &crate::board::nanopc_t6_osal::Alloc) {
     };
 }
 
-/// `gpu_alloc` ([`crate::board::nanopc_t6_osal::Osal::alloc`]): 0 and
+/// `gpu_alloc` ([`crate::board::nanopc_t6_osal::Osal::alloc_reclaiming`]): 0 and
 /// `*out`, or a negative errno.
 ///
 /// # Safety
@@ -1424,13 +1424,27 @@ pub unsafe extern "C" fn yd_t6_osal_alloc(size: usize, out: *mut OsalGpuMem) -> 
     // SAFETY: the caller's contract.
     let (s, out) = unsafe { (osal(), out.as_mut()) };
     let Some(out) = out else { return -EINVAL };
-    match s.0.alloc(size) {
+    let Some(delay) = s.1 else { return -EINVAL };
+    match s.0.alloc_reclaiming(&osal_hw(), size, &mut |us| delay(us)) {
         Ok(a) => {
             fill_mem(out, &a);
             0
         }
         Err(e) => e,
     }
+}
+
+/// `OSAL_QUERY_MALI_FRAME_OPEN`
+/// ([`crate::board::nanopc_t6_osal::Osal::frame_open`]): whether the
+/// backend records a frame.
+///
+/// # Safety
+/// After [`yd_t6_osal_up`], one thread only.
+#[cfg(feature = "mali")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_osal_frame_open(open: bool) {
+    // SAFETY: the caller's contract.
+    unsafe { osal() }.0.frame_open(open);
 }
 
 /// `gpu_free` ([`crate::board::nanopc_t6_osal::Osal::free`]): `*mem`
