@@ -2623,6 +2623,81 @@ static void part_occlusion(void)
 	free(text);
 }
 
+/* ---- 21. varying flag words 1 and 2 (inputs 24..63) ---------------------- */
+
+/* One draw of `fs` alone in a job, decoded; *ok is whether the draw went in. */
+static char *flags_job(struct lists *l, const struct v3d_fs_prog *fs, bool *ok)
+{
+	struct v3d_vs_prog vs = vs_prog(0x00201000u, vs_u, 5), cs = vs_prog(0x00202000u, cs_u, 3);
+	struct v3d_vertex_attr attrs[2] = { { 0x00300000u, 32, 4 }, { 0x00300010u, 32, 4 } };
+	struct v3d_uniform_storage vst = { vs_words, 4 }, fst = { fs_words, 2 };
+	struct v3d_job_state st = m5_state();
+	struct v3d_job_draw d = {
+		.st = &st, .fs = fs, .vs = &vs, .cs = &cs, .vs_storage = vst, .fs_storage = fst,
+		.attrs = attrs, .num_attrs = 2, .prim = V3D_PRIM_TRIANGLES, .count = 3,
+	};
+	struct v3d_job_target t = { W, H, TARGET, W * 4, TILE_ALLOC, false };
+	struct v3d_job_clear c = { .load_rt0 = true, .z = 1.0f };
+	lists_init(l, RCL_OFF - BCL_OFF);
+	struct v3d_job j;
+	*ok = v3d_job_begin(&j, &t, &l->bcl, &l->rcl, &l->ind) &&
+	      v3d_job_draw(&j, &d, NULL) == V3D_JOB_OK && v3d_job_end(&j, &c, NULL, NULL);
+	return *ok ? decode(l) : NULL;
+}
+
+/* v3dx_emit.c emit_varying_flags through Mesa's decoder: a 64-input FS with
+ * flat inputs 2, 30 and 60 (one per 24-input word), a non-perspective input
+ * 40 (word 1 only) and no centroid input. Flat: three packets, words 0, 1,
+ * 2, the first zeroing the words above it; non-perspective: one packet for
+ * word 1 zeroing the words on both sides; centroid: ZERO_ALL. 65 inputs is
+ * past V3D_MAX_FS_INPUTS and refused. */
+static void part_flag_words(void)
+{
+	static struct lists l;
+	struct v3d_fs_prog fs = fs_prog();
+	fs.num_inputs = 64;
+	fs.flat_shade_flags = 1u << 2 | 1u << 30;
+	fs.flat_shade_flags_hi = 1u << (60 - 32);
+	fs.noperspective_flags_hi = 1u << (40 - 32);
+	bool ok;
+	char *text = flags_job(&l, &fs, &ok);
+	check(ok && text, "flag words: the 64-input draw builds");
+	if (getenv("JOB_CHECK_DUMP") && text)
+		fputs(text, stdout);
+	check(text && !strstr(text, "Failed") && !strstr(text, "nknown"),
+	      "flag words: the decoder reported no error");
+	const char *fl = "FLATSHADE_FLAGS", *np = "NOPERSPECTIVE_FLAGS";
+	const char *ffl = "Flat Shade Flags for varyings V0*24", *fnp = "Non-perspective Flags for varyings V0*24";
+	check(text && census(text, fl) == 3 && census(text, "ZERO_ALL_FLATSHADE_FLAGS") == 0,
+	      "flag words: three flat packets, no ZERO_ALL");
+	check(text && field(text, fl, 0, "Varying offset V0") == 0 && field(text, fl, 0, ffl) == 0x4 &&
+		      field(text, fl, 1, "Varying offset V0") == 1 && field(text, fl, 1, ffl) == 0x40 &&
+		      field(text, fl, 2, "Varying offset V0") == 2 && field(text, fl, 2, ffl) == 0x1000,
+	      "flag words: flat words 0, 1, 2 hold inputs 2, 30 (bit 6), 60 (bit 12)");
+	check(text &&
+		      field_has(text, fl, 0, "Action for Flat Shade Flags of lower numbered varyings", "unchanged") &&
+		      field_has(text, fl, 0, "Action for Flat Shade Flags of higher numbered varyings", "zeroed") &&
+		      field_has(text, fl, 1, "Action for Flat Shade Flags of lower numbered varyings", "unchanged") &&
+		      field_has(text, fl, 1, "Action for Flat Shade Flags of higher numbered varyings", "unchanged") &&
+		      field_has(text, fl, 2, "Action for Flat Shade Flags of lower numbered varyings", "unchanged") &&
+		      field_has(text, fl, 2, "Action for Flat Shade Flags of higher numbered varyings", "unchanged"),
+	      "flag words: the first flat packet zeroes the words above it, the later ones keep all");
+	check(text && census(text, np) == 1 && census(text, "ZERO_ALL_NOPERSPECTIVE_FLAGS") == 0 &&
+		      field(text, np, 0, "Varying offset V0") == 1 && field(text, np, 0, fnp) == 0x10000 &&
+		      field_has(text, np, 0, "Action for Non-perspective Flags of lower numbered varyings", "zeroed") &&
+		      field_has(text, np, 0, "Action for Non-perspective Flags of higher numbered varyings", "zeroed"),
+	      "flag words: one non-perspective packet, word 1 bit 16, zeroing words 0 and 2");
+	check(text && census(text, "ZERO_ALL_CENTROID_FLAGS") == 1,
+	      "flag words: no centroid input, ZERO_ALL_CENTROID_FLAGS");
+	check(text && field(text, "@format shadrec_gl_main", 0, "Number of varyings in Fragment Shader") == 64,
+	      "flag words: the shader record counts 64 varyings");
+	free(text);
+	fs.num_inputs = 65;
+	text = flags_job(&l, &fs, &ok);
+	check(!ok, "flag words: 65 inputs refused");
+	free(text);
+}
+
 int main(void)
 {
 	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields;
@@ -2642,9 +2717,10 @@ int main(void)
 	 * part 17 (a view's stride): 2 builds + 1 decode + 3 strides;
 	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal;
 	 * part 19 (occlusion queries): 2 builds + 4;
-	 * part 20 (the render image): 1 build + 5 + 3 refusals */
+	 * part 20 (the render image): 1 build + 5 + 3 refusals;
+	 * part 21 (varying flag words 1 and 2): 1 build + 7 + 1 refusal */
 	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
-			    28 + 8 + 6 + 10 + 6 + 9;
+			    28 + 8 + 6 + 10 + 6 + 9 + 9;
 	part_identity();
 	part_rollback();
 	part_decode();
@@ -2665,6 +2741,7 @@ int main(void)
 	part_rt_image();
 	part_pack_skip();
 	part_occlusion();
+	part_flag_words();
 	printf("job_check: %d checks run (planned %d), %d failed\n", checks, planned, failures);
 	return (failures == 0 && checks == planned) ? 0 : 1;
 }
