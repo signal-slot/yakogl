@@ -31,6 +31,31 @@
 # --check` when a tool is, so a gap never looks like a pass. Another project
 # uses the same runners with its own workflow and its own deps directory. No
 # value in this file is secret.
+#
+# Pull requests from a fork (the public repository, #1606 step 9 / D7; plan
+# #363's workflow-readiness finding named this as the open question). The
+# runners are lab machines: they share their hosts with the farm's agents and
+# hold the firmware blob and the dependency layout. A pull request's run
+# executes the code it checks (build.rs, the tests, check.sh), so a pull
+# request whose head repository is not this one never gets the `check` job:
+# its `if` runs the job only for the schedule, a dispatch and a pull request
+# from a branch of this repository (a head repository that no longer exists
+# counts as a fork). Such a pull request gets the `outside` job instead, on
+# a GitHub-hosted runner, with no token and no checkout, which says that a
+# maintainer pushes the branch to this repository and the gate runs on that
+# pull request. It fails on purpose: a skipped required check counts as a
+# pass, and a green on a pull request nothing checked would be a lie.
+#
+# That `if` is not a security boundary. A `pull_request` run uses the
+# workflow file of the pull request's merge commit, so a fork can edit this
+# file and remove the `if`; GitHub's default approval covers only a first-time
+# contributor's workflows. Before the repository is public the owner sets one
+# of these (D7, a requirement, not an option): "Require approval for all
+# outside collaborators" (Settings > Actions > General, fork pull request
+# workflows), or a runner group for the yakogl-gate runners that does not
+# allow public repositories. No `pull_request_target` (it runs the base's
+# workflow with a write token; a checkout of the head there is the classic
+# hole) and no `workflow_run` here, now or later.
 name: gate
 
 on:
@@ -54,7 +79,36 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A pull request from a fork (header, "Pull requests from a fork"): no
+  # self-hosted runner, no token, no checkout, no code of the pull request
+  # run. The two values it prints are the pull request's number and its head
+  # repository's name (GitHub restricts that name to letters, digits, `-`,
+  # `_` and `.`), both through the environment, never in the script's text.
+  # It fails so that the pull request is not green without a gate.
+  outside:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 5
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+    steps:
+      - name: the gate does not run on a pull request from a fork
+        run: |
+          echo "pull request #$PR comes from ${HEAD_REPO:-a repository that no longer exists}, not from $GITHUB_REPOSITORY."
+          echo "The gate (tools/check.sh) runs on this project's own runners and executes the code it checks,"
+          echo "so it does not run on a pull request from a fork."
+          echo "A maintainer who takes the change pushes the branch to $GITHUB_REPOSITORY and opens a pull"
+          echo "request from it; that pull request gets the gate (CONTRIBUTING.md, 'How a change reaches main')."
+          echo "This check stays red on purpose: nothing checked this pull request."
+          exit 1
   check:
+    # Only the schedule, a dispatch and a pull request from a branch of this
+    # repository (header, "Pull requests from a fork"). A fork's pull request
+    # gets `outside` above; its head.repo is null when the fork is gone, and
+    # null is not this repository either.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # Any runner with the label yakogl-gate (runners A, B and C), so the
     # gate never waits on one machine: on 2026-10-13 runner C, the only runner
     # then, hung out of memory and every pull request queued for hours behind
