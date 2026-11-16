@@ -481,7 +481,7 @@ const NOT_ALLOCATED: usize = 1;
 const FRONT_STOPS: usize = 5;
 /// Values in rf0, summed over the allocations made (a stage that fails at
 /// a pressure level and is retried counts at each).
-const RF0: usize = 254;
+const RF0: usize = 256;
 
 /// The stage no pressure level fits in 2 threads (varyings15 reads 15 vec4).
 const REFUSED: [&str; 1] = ["es100/varyings15 fragment: alloc71 DoesNotFit at 2 threads"];
