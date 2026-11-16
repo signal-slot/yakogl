@@ -221,6 +221,54 @@ fn vs_regions(s: &Stage) -> (Vec<u64>, Vec<u64>) {
     }
 }
 
+/// The position programs of a vertex stage, each with its byte offset in
+/// the code. A shader that writes gl_PointSize has two: with the point size
+/// store at 0, which a point draw runs, and without it at `no_psiz_offset`,
+/// which every other draw runs. Any other shader has one.
+fn vs_positions(s: &Stage) -> Vec<(u32, Vec<u64>)> {
+    let end = s.info.secondary.map_or(s.code.len(), |sec| sec.offset as usize / 8);
+    match s.info.no_psiz_offset {
+        Some(at) => {
+            let cut = at as usize / 8;
+            vec![(0, trim(&s.code[..cut])), (at, trim(&s.code[cut..end]))]
+        }
+        None => vec![(0, trim(&s.code[..end]))],
+    }
+}
+
+/// The position program of `s` that the draw of the reference `json` ran:
+/// its byte offset and its words. An expect.json holds as `vs.position`
+/// only that one, and its `secondary_offset` is the distance from it to
+/// the varying program: the program with the store ran when that distance
+/// is ours from the start of the code (the caller checks the distance
+/// against the offset returned here). A reference without a varying
+/// program names no distance: there the program with the store ran when
+/// its words are the reference's, and a reference equal to neither is
+/// reported against the program without the store, the one gl_ref.py's
+/// default draw runs.
+fn vs_ran(s: &Stage, json: &str) -> (u32, Vec<u64>) {
+    let mut all = vs_positions(s);
+    let last = all.pop().expect("a position program");
+    let Some(with_store) = all.pop() else {
+        return last;
+    };
+    let with_store_ran = match (s.info.secondary, secondary_offset(json)) {
+        (Some(sec), Some(distance)) => sec.offset == distance,
+        _ => region(json, "vs.position").is_some_and(|r| r.words == with_store.1),
+    };
+    if with_store_ran {
+        with_store
+    } else {
+        last
+    }
+}
+
+/// The bytes a program of `words` 64-bit words takes in the code: up to the
+/// next 128 bytes past 16 more.
+fn padded_words(words: usize) -> usize {
+    (words * 8 + 16).div_ceil(128) * 16
+}
+
 fn text(w: u64) -> String {
     let mut s = String::new();
     match isa::describe_word(w, &mut s) {
@@ -428,7 +476,7 @@ fn check_fs_stage_capped(f: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, vp, &uv_f);
     /* the padding: up to the next 128 bytes past 16 more */
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+    assert_eq!(f.code.len(), padded_words(rf.words.len()));
 }
 
 /// The vertex stage of a program pair against an expect.json: both IDVS
@@ -442,7 +490,8 @@ fn check_vs_in(vs: &str, fs: &str, json: &str, vp: Viewport) -> Stage {
 
 /// [`check_vs_in`] of the compiled vertex stage `v`.
 fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
-    let (pos, var) = vs_regions(v);
+    let (ran_at, pos) = vs_ran(v, json);
+    let var = vs_regions(v).1;
     let names = uniform_names(vs, fs);
     let uv_v = |d: u16| uniform_value(&names, &v.uniforms, d);
     let rp = region(json, "vs.position").expect("vs.position");
@@ -453,7 +502,7 @@ fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
             assert_words("vs.varying", &var, &rv.words);
             let sec = v.info.secondary.expect("a varying program");
             assert_facts("vs.varying", &rv, sec.work_reg_count, sec.preload, &v.info.fau, vp, &uv_v);
-            assert_eq!(Some(sec.offset), secondary_offset(json), "secondary_offset");
+            assert_eq!(Some(sec.offset - ran_at), secondary_offset(json), "secondary_offset");
         }
         None => {
             assert!(var.is_empty() && v.info.secondary.is_none(), "no varying program in the reference");
@@ -462,8 +511,8 @@ fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
     }
     assert_eq!(
         v.code.len(),
-        (pos.len() * 8 + 16).div_ceil(128) * 16
-            + if var.is_empty() { 0 } else { (var.len() * 8 + 16).div_ceil(128) * 16 }
+        vs_positions(v).iter().map(|(_, words)| padded_words(words.len())).sum::<usize>()
+            + if var.is_empty() { 0 } else { padded_words(var.len()) }
     );
 }
 
@@ -618,7 +667,7 @@ fn a_pair_in_another_order_is_byte_equal_to_mesa_26_2_1() {
     let rf = region(JSON, "fs.fragment").expect("fs.fragment");
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+    assert_eq!(f.code.len(), padded_words(rf.words.len()));
     assert_ne!(trim(&alone.code), rf.words, "compiled alone, its own order");
     let v = stage_of(&vs);
     let generic = |s: &Stage, loc: u8| {
@@ -1902,6 +1951,80 @@ fn the_point_size_programs_are_byte_equal_to_mesa_26_2_1() {
     check_vs_pan_shc(td!("ctl_psiz.vert"), PSIZ_POINTS);
     check_vs_pan_shc(td!("ctl_psiz_const.vert"), PSIZ_CONST);
     check_vs_pan_shc(POINTS_VS, PSIZ_VARYING);
+}
+
+/* ---- gl_PointSize: the shim's triangle draw and point draw ------------ */
+
+/// Programs whose vertex shader writes gl_PointSize, each with two
+/// references of the shim (vertex, fragment, the triangle draw's reference,
+/// the point draw's): a constant and an attribute point size with a varying
+/// program, and one without a varying program.
+const PSIZ_COPIES: [(&str, &str, &str, &str); 3] = [
+    (
+        td!("psiz_copy_const.vert"),
+        td!("psiz_copy_const.frag"),
+        td!("psiz_copy_const.expect.json"),
+        td!("psiz_copy_const_points.expect.json"),
+    ),
+    (
+        td!("psiz_copy_attr.vert"),
+        td!("psiz_copy_attr.frag"),
+        td!("psiz_copy_attr.expect.json"),
+        td!("psiz_copy_attr_points.expect.json"),
+    ),
+    (
+        td!("psiz_copy_alone.vert"),
+        td!("psiz_copy_alone.frag"),
+        td!("psiz_copy_alone.expect.json"),
+        td!("psiz_copy_alone_points.expect.json"),
+    ),
+];
+
+/// Both position programs of a gl_PointSize vertex shader through the linked
+/// checks: the triangle draw's reference holds the one without the point
+/// size store, the point draw's the one with it.
+#[test]
+fn both_position_programs_of_a_point_size_shader_are_byte_equal_to_mesa_26_2_1() {
+    for (vs, fs, tri, points) in PSIZ_COPIES {
+        let (v, _) = check_linked(vs, fs, tri);
+        check_linked(vs, fs, points);
+        check_linked_for("psiz_copy", vs, fs, tri);
+        check_linked_for("psiz_copy", vs, fs, points);
+        let without_store = v.info.no_psiz_offset.expect("two position programs");
+        assert_eq!((vs_ran(&v, tri).0, vs_ran(&v, points).0), (without_store, 0), "each reference holds its own");
+    }
+}
+
+/// What the linked check refuses of a gl_PointSize vertex shader: a word
+/// changed in either position program fails against the reference that
+/// holds it and only against that one, and a reference whose varying
+/// program is at neither program's distance fails by name.
+#[test]
+fn the_linked_check_compares_the_position_program_the_reference_draw_ran() {
+    let fails = |v: &Stage, vs: &str, fs: &str, json: &str| {
+        std::panic::catch_unwind(|| check_vs_stage(v, vs, fs, json, VIEWPORT_64X64))
+            .err()
+            .map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default())
+    };
+    for (vs, fs, tri, points) in PSIZ_COPIES {
+        let (v, _) = compile_linked(vs, fs);
+        assert_eq!((fails(&v, vs, fs, tri), fails(&v, vs, fs, points)), (None, None));
+        for (at, _) in vs_positions(&v) {
+            let mut changed = Stage { code: v.code.clone(), info: v.info.clone(), uniforms: v.uniforms.clone() };
+            changed.code[at as usize / 8] ^= 1;
+            let (held, other) = if at == 0 { (points, tri) } else { (tri, points) };
+            let why = fails(&changed, vs, fs, held).expect("the reference that holds the program fails");
+            assert!(why.contains("vs.position"), "{why}");
+            assert_eq!(fails(&changed, vs, fs, other), None, "the other reference does not reach it");
+        }
+        if let Some(distance) = secondary_offset(tri) {
+            let key = format!("\"secondary_offset\": {distance}");
+            assert_eq!(tri.matches(&key).count(), 1);
+            let moved = tri.replace(&key, &format!("\"secondary_offset\": {}", distance + 128));
+            let why = fails(&v, vs, fs, &moved).expect("a distance of neither program fails");
+            assert!(why.contains("secondary_offset"), "{why}");
+        }
+    }
 }
 
 const POINTCOORD_FS: &str = include_str!("../../../../tools/shaders/es100/pointcoord.frag");
@@ -4653,7 +4776,7 @@ fn case55_two_fragment_outputs_are_byte_equal_to_mesa_26_2_1() {
     let rf = region(json, "fs.fragment").expect("fs.fragment");
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+    assert_eq!(f.code.len(), padded_words(rf.words.len()));
     assert_eq!(f.info.colour_outputs, 0b11);
     assert!(!f.info.colour_f16);
 }
@@ -5237,7 +5360,8 @@ fn check_stages_capped(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: 
             v.uniforms.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
         (16.0 + (d - first) as f32).to_bits()
     };
-    let (pos, var) = vs_regions(v);
+    let (ran_at, pos) = vs_ran(v, json);
+    let var = vs_regions(v).1;
     let rp = region(json, "vs.position").expect("vs.position");
     assert_words(&format!("{name} vs.position"), &pos, &rp.words);
     assert_facts(&format!("{name} vs.position"), &rp, v.info.work_reg_count, v.info.preload, &v.info.fau, vp, &uv_v);
@@ -5248,7 +5372,7 @@ fn check_stages_capped(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: 
             assert_words(&format!("{name} vs.varying"), &var, &rv.words);
             let sec = v.info.secondary.expect("a varying program");
             assert_facts(&format!("{name} vs.varying"), &rv, sec.work_reg_count, sec.preload, &v.info.fau, vp, &uv_v);
-            assert_eq!(Some(sec.offset), secondary_offset(json), "{name}: secondary_offset");
+            assert_eq!(Some(sec.offset - ran_at), secondary_offset(json), "{name}: secondary_offset");
         }
         None => {
             assert!(var.is_empty() && v.info.secondary.is_none(), "{name}: a varying program the trace has not");
@@ -5258,7 +5382,7 @@ fn check_stages_capped(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: 
     let rf = capped(region(json, "fs.fragment").expect("fs.fragment"), edits);
     assert_words(&format!("{name} fs.fragment"), &trim(&f.code), &rf.words);
     assert_facts(&format!("{name} fs.fragment"), &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, vp, &|_| 0);
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16, "{name}: the padding");
+    assert_eq!(f.code.len(), padded_words(rf.words.len()), "{name}: the padding");
 }
 
 #[test]
@@ -6095,7 +6219,7 @@ fn the_frag_coord_programs_are_byte_equal_to_mesa_26_2_1() {
         let rf = region(json, "fs.fragment").expect("fs.fragment");
         assert_words(name, &trim(&f.code), &rf.words);
         assert_facts(name, &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
-        assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16, "{name}: padding");
+        assert_eq!(f.code.len(), padded_words(rf.words.len()), "{name}: padding");
     }
 }
 
@@ -7164,7 +7288,7 @@ fn builtin_45_is_mesa_26_2_1_with_the_loop_cap() {
     );
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
-    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+    assert_eq!(f.code.len(), padded_words(rf.words.len()));
 }
 
 /// Case 104 (divloop), its top half: bands.vert + divloop.frag through the
