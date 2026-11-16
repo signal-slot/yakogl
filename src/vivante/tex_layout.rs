@@ -6,10 +6,10 @@
 //! gc-slow-terrain-stream-diff.md, rank 7). **Not wired**: nothing in the
 //! backend calls it yet.
 //!
-//! Self-contained on purpose: `core` only, no crate imports, so a host test
-//! can include it with `#[path]` (tests/gc_tex_layout.rs, as tests/gc_layout.rs
-//! does for the address maps). The register values below are numeric copies;
-//! the test file checks each one against `src/vivante/regs.rs`.
+//! A module of the lib: the layout enum, the paddings and the alignment come
+//! from [`crate::vivante::layout`] (tests/gc_tex_layout.rs takes this file as
+//! `yakogl::vivante::tex_layout`). The register values below are numeric
+//! copies; the test file checks each one against `src/vivante/regs.rs`.
 //!
 //! # Sources
 //!
@@ -90,17 +90,8 @@ pub const LOD_ALIGN: u64 = 64;
 /// Descriptor LOD address slots (`texdesc_lod_addr`: 16 of them).
 pub const MAX_LEVELS: usize = 16;
 
-/// Pixels along one side of a 4x4 tile (etnaviv_tiling.h).
-pub const TILE: u32 = 4;
-/// Pixels along one side of a super-tile (etnaviv_tiling.h).
-pub const SUPER_TILE: u32 = 64;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Layout {
-    Linear,
-    Tiled,
-    SuperTiled,
-}
+use crate::vivante::layout as lay;
+pub use crate::vivante::layout::{Layout, SUPER_TILE, TILE};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ts {
@@ -178,10 +169,6 @@ pub struct Words {
     pub ts_clear_value: u32,
 }
 
-const fn align_up(v: u32, to: u32) -> u32 {
-    v.div_ceil(to) * to
-}
-
 const fn minify(v: u32, l: u32) -> u32 {
     let s = v >> l;
     if s == 0 {
@@ -194,11 +181,11 @@ const fn minify(v: u32, l: u32) -> u32 {
 /// What `layout` needs (`etna_layout_multiple`, `etnaviv_resource.c:380-393`).
 /// Linear takes the GL core's pitch and pads nothing (see the module doc).
 pub const fn alignment(layout: Layout, rs_align: bool) -> Alignment {
-    match layout {
-        Layout::Linear => Alignment { width: 1, height: 1, base: LOD_ALIGN },
-        Layout::Tiled => Alignment { width: if rs_align { 16 } else { TILE }, height: TILE, base: LOD_ALIGN },
-        Layout::SuperTiled => Alignment { width: SUPER_TILE, height: SUPER_TILE, base: LOD_ALIGN },
+    if matches!(layout, Layout::Linear) {
+        return Alignment { width: 1, height: 1, base: LOD_ALIGN };
     }
+    let (width, height) = lay::padding(layout, rs_align);
+    Alignment { width, height, base: LOD_ALIGN }
 }
 
 /// The descriptor words and level placement for `i`.
@@ -214,7 +201,7 @@ pub const fn tex_words(i: &Input) -> Result<Words, Error> {
         return Err(Error::Base);
     }
     let linear = matches!(i.layout, Layout::Linear);
-    let pad_w = align_up(i.width, a.width);
+    let pad_w = lay::align_up(i.width, a.width);
     if linear {
         if i.stride_texels == 0 {
             return Err(Error::Empty);
@@ -263,20 +250,77 @@ pub const fn tex_words(i: &Input) -> Result<Words, Error> {
             let s = i.stride_texels * i.bpp;
             (s, s as u64 * lh as u64)
         } else {
-            let pw =
-                if l == 0 && i.stride_texels != 0 { i.stride_texels } else { align_up(minify(i.width, l), a.width) };
+            let pw = if l == 0 && i.stride_texels != 0 {
+                i.stride_texels
+            } else {
+                lay::align_up(minify(i.width, l), a.width)
+            };
             let s = pw * i.bpp;
-            (s, s as u64 * align_up(lh, a.height) as u64)
+            (s, s as u64 * lay::align_up(lh, a.height) as u64)
         };
         w.level_offset[l as usize] = at;
         w.level_stride[l as usize] = stride;
         if l == 0 {
             w.linear_stride = stride;
-            w.slice = if linear { stride * i.height } else { stride * align_up(i.height, a.height) };
+            w.slice = if linear { stride * i.height } else { stride * lay::align_up(i.height, a.height) };
         }
         at += bytes;
         l += 1;
     }
     w.size = at;
     Ok(w)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TILED: [Layout; 2] = [Layout::Tiled, Layout::SuperTiled];
+
+    fn chain(w: u32, h: u32, levels: u32, layout: Layout, rs_align: bool) -> Input {
+        Input { width: w, height: h, levels, bpp: 4, layout, ts: Ts::None, rs_align, stride_texels: 0, base: 0 }
+    }
+
+    #[test]
+    fn alignment_is_layout_rs_padding() {
+        for l in TILED {
+            for rs in [false, true] {
+                let a = alignment(l, rs);
+                assert_eq!((a.width, a.height), lay::padding(l, rs), "{l:?} {rs}");
+                assert_eq!(a.base, LOD_ALIGN);
+            }
+        }
+        let l = alignment(Layout::Linear, true);
+        assert_eq!((l.width, l.height), (1, 1));
+    }
+
+    #[test]
+    fn tiled_level_zero_is_layout_rs_stride_and_size() {
+        for l in TILED {
+            for rs in [false, true] {
+                let w = tex_words(&chain(100, 30, 1, l, rs)).unwrap();
+                assert_eq!(w.linear_stride, lay::stride(l, 100, 4, rs));
+                assert_eq!(w.size, lay::size(l, 100, 30, 4, rs) as u64);
+            }
+        }
+    }
+
+    #[test]
+    fn tiled_chain_levels_are_layout_rs_sizes_on_64_bytes() {
+        let w = tex_words(&chain(200, 150, 8, Layout::Tiled, true)).unwrap();
+        let mut at = 0u64;
+        for l in 0..8u32 {
+            let (lw, lh) = ((200u32 >> l).max(1), (150u32 >> l).max(1));
+            at = at.next_multiple_of(LOD_ALIGN);
+            assert_eq!(w.level_offset[l as usize], at, "level {l}");
+            assert_eq!(w.level_stride[l as usize], lay::stride(Layout::Tiled, lw, 4, true));
+            at += lay::size(Layout::Tiled, lw, lh, 4, true) as u64;
+        }
+        assert_eq!(w.size, at);
+    }
+
+    #[test]
+    fn tile_constants_are_layout_rs() {
+        assert_eq!((TILE, SUPER_TILE), (4, 64));
+    }
 }
