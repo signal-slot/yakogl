@@ -14,6 +14,12 @@ Reconciled on 2026-11-16 at tip `372e5184` (plan #378 item `note-reconcile`).
 the compiler/back-end interface against the three later studies. Where §3,
 §6 or §7 say otherwise, §8 wins.
 
+Kick budget and §8.3 alignment re-counted against the code on 2026-11-16 at
+tip `8f019dae` (plan #378 item `note-kicks`): 6 fragment kicks today, 7 with
+the pair, 1 spare of 8; 2 vertex kicks today, 3 with the pair.
+`src/pvr/backend.rs` and `src/pvr/ffi.rs` are unchanged from §8's tip, so
+§8's line numbers hold there too.
+
 The goal is that the PowerVR (AM62P, BXS-4-64) reports
 `MAX_UNIFORM_BLOCK_SIZE` 16384 and combined uniform components 50688 under ES
 3.0 (`docs/notes/ubo-limits.md` §1, §4). That is honest only if the USC reads
@@ -230,8 +236,8 @@ it.
 - This needs **no PDS-generator change** (`driver/src/pvr_pds_render_gen.*`):
   it is one more DMA kick of a few dwords.
 - The kick count per program stays within `PVR_PDS_DMA_MAX_KICKS` = 8
-  (`src/pvr/ffi.rs:116`): at most 7 in the fragment program and 3 in the
-  vertex program, counted in §8.1.
+  (`src/pvr/ffi.rs:116`): 6 fragment kicks today, 7 with the pair, 1 spare
+  of 8; 2 vertex kicks today, 3 with the pair, 5 spare. Counted in §8.1.
 - A PDS constant (DOUTW from the data segment, the way Vulkan writes literal
   constants) would save the 8 bytes of arena. It is not needed for
   correctness, and it would touch the generator that #350 holds.
@@ -494,12 +500,18 @@ The claims checked:
   "the table" is two words and the kick is the one §3 already describes.
   Study A's mechanism and §3 are the same thing.
 - *Kick budget.* The fragment common-store program pushes at most these
-  kicks: descriptors (`:7771-7777`), the uniforms (`:7803-7809`), meta
-  (`:7844-7850`), front face (`:7877`), the `gl_FragCoord` pair (`:7901`)
-  and the tile buffers (`:7923`). That is 6, so the address pair makes 7 of
-  `PVR_PDS_DMA_MAX_KICKS` = 8 (`src/pvr/ffi.rs:116`). The vertex program
-  pushes descriptors and uniforms (`:8377`, `:8402`), so the pair makes 3.
-  `dma_push` already refuses a ninth kick (`:2417-2426`, `dma_kicks_full`).
+  6 kicks today, each behind its own condition: descriptors
+  (`:7771-7777`), the uniforms (`:7803-7809`), meta (`:7844-7850`), front
+  face (`:7877`), the `gl_FragCoord` pair (`:7901`) and the tile buffers
+  (`:7923`). The address pair makes 7 of `PVR_PDS_DMA_MAX_KICKS` = 8
+  (`src/pvr/ffi.rs:116`), so **1 spare kick remains** in the fragment
+  program, and every future per-draw shared-register write must be budgeted
+  against that spare. `dma_push` already refuses a ninth kick
+  (`:2417-2426`, `dma_kicks_full` `:2377`). The vertex program pushes 2
+  kicks today, descriptors and uniforms (`:8377`, `:8402`), so the pair
+  makes 3 of 8, 5 spare. Those two are direct `vk[nvk] = ..` writes — no
+  `dma_push` guards the vertex array — so `ubo-backend` keeps the vertex
+  kick count in range itself.
 - *Why not one pair per block.* With per-block pairs the kick count stays
   the same (one table), but the shared-register cost is 2 per block, up to
   24 for 12 blocks. The addresses would also all point into the same
@@ -597,12 +609,14 @@ The evidence [M by reading Mesa; silicon unconfirmed until §7 step 9]:
 **Effect on GL.** None. We report `UNIFORM_BUFFER_OFFSET_ALIGNMENT` 4
 (`src/gl/state.rs:1269`, pinned at `:3220`; checked in
 `glBindBufferRange`, `src/gl/es3.rs:1287`), which equals Mesa's. Under §8.2
-the binding offset does not reach `ld` at all: the snapshot is placed at
-16 bytes (`arena_put(.., 16, ..)`, `backend.rs:7797`, `:8395`), and a
-member's byte offset is `4 * dword_off`. So every `ld` address is a
-multiple of 4 by construction. The value would still be correct for a later
-in-place read (Study C). `ubo-backend` asserts `gpu & 3 == 0` on the pair it
-writes.
+the reported 4 never reaches the hardware at all: the binding offset is
+checked on the CPU (`es3.rs:1287-1291`) and no offset travels to the GPU;
+the snapshot is placed at 16 bytes (`arena_put(.., 16, ..)`,
+`backend.rs:7797`, `:8395`), and a member's byte offset is
+`4 * dword_off`. So every `ld` address is a multiple of 4 — a consequence
+of the staging, not a use of the reported value. The value would still be
+correct for a later in-place read (Study C). `ubo-backend` asserts
+`gpu & 3 == 0` on the pair it writes.
 
 **The pair's own register** stays even (§3). This is a conservative choice,
 not a known rule. The two 32-bit reads of the `gl_FragCoord` pair need no
