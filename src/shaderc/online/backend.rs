@@ -2408,8 +2408,10 @@ pub fn wide128_variant(
 /// or not. The record key is [`record_key`] chained with `"wide128-rt"` and
 /// the mask, so a plain compile of the same source never finds the keyed
 /// record, nor this one the plain, and two masks keep two records. A fragment
-/// variant of the plain shader only. Nothing in the GL core calls it yet, and
-/// the code generator does not read the key until `codegen.rs` wires it.
+/// variant of the plain shader only. Nothing in the GL core calls it yet. The
+/// code generator reads the key (`wide128_rt::split_outputs`): a keyed output
+/// that the shader stores is refused (-ENOTSUP) until its second plane has a
+/// register.
 #[cfg(feature = "gpu-vivante")]
 pub fn rt_planes_variant(
     sh: &ShcShader,
@@ -4982,13 +4984,20 @@ mod wide128_tests {
         let (be, bs) = (base_of(&empty).unwrap(), base_of(&sh).unwrap());
         assert_eq!(be.sha, bs.sha, "an empty key is the plain record key");
         assert_eq!(empty.priv_, sh.priv_, "and the same record");
-        let a = run(RtPlanes::NONE.with(0));
-        let b = run(RtPlanes::NONE.with(1));
+        let a = run(RtPlanes::NONE.with(1));
+        let b = run(RtPlanes::NONE.with(2));
         let (ba, bb) = (base_of(&a).unwrap(), base_of(&b).unwrap());
         assert_ne!(ba.sha, bs.sha, "a keyed record is not the plain one");
         assert_ne!(ba.sha, bb.sha, "two masks, two record keys");
         assert_ne!(a.priv_, b.priv_, "two masks, two records");
-        assert_eq!(run(RtPlanes::NONE.with(0)).priv_, a.priv_, "the same key finds its record");
+        assert_eq!(run(RtPlanes::NONE.with(1)).priv_, a.priv_, "the same key finds its record");
+        // the output the shader stores: the code generator reads the key
+        let mut out = ShcShader::ZERO;
+        let rc = rt_planes_variant(&sh, RtPlanes::NONE.with(0), LodKey::NONE, &mut out, &mut log);
+        // SAFETY: the entry point ends the log it wrote with a NUL.
+        let text = String::from_utf8_lossy(unsafe { cstr_bytes(log.as_ptr()) }).into_owned();
+        assert_eq!(rc, -ENOTSUP, "{text}");
+        assert!(text.contains("a colour output past the fourth draw buffer"), "{text}");
         assert_eq!(compile_rt_planes(), RtPlanes::NONE, "key put back");
     }
 }
