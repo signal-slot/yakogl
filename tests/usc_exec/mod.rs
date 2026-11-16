@@ -50,6 +50,10 @@ pub struct Inputs {
     /// reads that texel, so a fetch at a texel's corner -- pco's integer
     /// coordinate -- is no longer the ambiguity [`texel_coord`] refuses.
     pub nearest: bool,
+    /// Device memory as `ld` sees it: regions of dwords, each at its byte
+    /// address. A read outside every region is an error, not a zero, so a
+    /// wrong address shows. Empty unless a caller places something.
+    pub mem: Vec<(u64, Vec<u32>)>,
 }
 
 impl Inputs {
@@ -75,6 +79,7 @@ impl Inputs {
             pixout: 0,
             pixout1: 0,
             nearest: false,
+            mem: Vec::new(),
         }
     }
 
@@ -133,7 +138,24 @@ impl Inputs {
             pixout: 0,
             pixout1: 0,
             nearest: false,
+            mem: Vec::new(),
         }
+    }
+
+    /// The dword `ld` reads at byte address `addr`: 4-byte aligned (the
+    /// rule of `docs/notes/pvr-ubo-memory-load.md` §8.3) and inside one of
+    /// [`Inputs::mem`]'s regions.
+    pub fn mem_word(&self, addr: u64) -> Result<u32, String> {
+        if !addr.is_multiple_of(4) {
+            return Err(format!("an ld of {addr:#x}, which is not 4-byte aligned"));
+        }
+        self.mem
+            .iter()
+            .find_map(|(base, words)| {
+                let k = addr.checked_sub(*base)? / 4;
+                words.get(usize::try_from(k).ok()?).copied()
+            })
+            .ok_or(format!("an ld of {addr:#x}, outside every region of the memory map"))
     }
 
     fn from_set(seed: u32, set: &[f32]) -> Inputs {
@@ -156,6 +178,7 @@ impl Inputs {
             pixout: 0,
             pixout1: 0,
             nearest: false,
+            mem: Vec::new(),
         }
     }
 }
@@ -330,7 +353,16 @@ fn run_binary_decoded(
     /* Index register 0 (`Bank::Idx0`): set by a write of index 5, read
      * through by `3 | offset << 3` (the shared file at idx0 + offset). */
     let idx0 = std::cell::Cell::new(None::<u32>);
+    /* The temporaries an `ld` has written and no `wdf` on its data-return
+     * channel has waited for yet, with that channel: the data is still on
+     * its way, so a read of one is the missing wait the model reports. */
+    let pending = std::cell::RefCell::new(BTreeMap::<u32, u32>::new());
     let read = |o: Operand, temp: &BTreeMap<u32, u32>, vtx: &Vec<u32>| -> Result<u32, String> {
+        if regbank.name_of(o.bank) == Some("temp") {
+            if let Some(drc) = pending.borrow().get(&o.index) {
+                return Err(format!("a read of temp {} before the wdf on drc{drc} that its ld needs", o.index));
+            }
+        }
         match regbank.name_of(o.bank) {
             Some("idx0") if o.index & 7 == 3 => {
                 let base = idx0.get().ok_or("a read through idx0 before anything set it")?;
@@ -676,10 +708,49 @@ fn run_binary_decoded(
                     temp.insert(dest + k, v);
                 }
             }
-            /* A fence's parts and the data fence change no register this
-             * model holds; the branches must go to the next group, or the
-             * program is not the straight line this interpreter walks. */
-            "wdf" => {}
+            /* The data fence: every `ld` on its data-return channel (the
+             * header's `miscctl`, pco_map.py's wdf group) has returned, so
+             * its destinations may be read. It changes no register. */
+            "wdf" => {
+                let drc = g.hdr.get("miscctl").unwrap_or(0);
+                pending.borrow_mut().retain(|_, d| *d != drc);
+            }
+            /* `ld` with an immediate burst length (pco's `I_LD_IMMBL`,
+             * `docs/notes/pvr-ubo-memory-load.md` §1): `burstlen` dwords from
+             * the 64-bit byte address in the register pair `srcseladd`
+             * selects (low dword first, then the next register: pco's
+             * `pco_ref_new_ssa_addr`) into consecutive temporaries from the
+             * group's s3. The data is pending until a `wdf` on `drc`. The
+             * cache mode changes nothing here. */
+            "ld" => {
+                if r.variant().name != "ld_immbl" {
+                    return Err(format!("an ld of form {}, which this model does not run", r.variant().name));
+                }
+                if g.hdr.get("rpt").unwrap_or(1) != 1 {
+                    return Err("a repeated ld".into());
+                }
+                let up = g.upper.as_ref().map(srcs).unwrap_or([None; 6]);
+                let all = [s[0], s[1], s[2], up[3], up[4], up[5]];
+                let sel = r.get("srcseladd").ok_or("ld with no srcseladd")? as usize;
+                let a = all.get(sel).copied().flatten().ok_or(format!("ld whose address slot s{sel} is empty"))?;
+                if !matches!(regbank.name_of(a.bank), Some("temp" | "shared")) {
+                    return Err("an ld whose address is not a temp or shared register pair".into());
+                }
+                let lo = read(a, &temp, &vtx)?;
+                let hi = read(Operand { bank: a.bank, index: a.index + 1 }, &temp, &vtx)?;
+                let addr = u64::from(hi) << 32 | u64::from(lo);
+                let d = up[3].ok_or("ld with no destination in s3")?;
+                if regbank.name_of(d.bank) != Some("temp") {
+                    return Err("an ld writing other than temporaries".into());
+                }
+                let n = r.get("burstlen").ok_or("ld with no burstlen")?;
+                let drc = r.get("drc").unwrap_or(0);
+                for k in 0..n {
+                    let at = addr.checked_add(4 * u64::from(k)).ok_or("an ld past the end of the address space")?;
+                    temp.insert(d.index + k, inp.mem_word(at)?);
+                    pending.borrow_mut().insert(d.index + k, drc);
+                }
+            }
             /* A `nop` does nothing; the one that ends a program is seen by
              * `ends_program` below. */
             "nop" => {}
@@ -1261,6 +1332,7 @@ pub fn sentinel_inputs(sentinel: f32) -> Inputs {
         pixout: 0,
         pixout1: 0,
         nearest: false,
+        mem: Vec::new(),
     }
 }
 
