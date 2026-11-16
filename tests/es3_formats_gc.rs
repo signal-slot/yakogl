@@ -16,9 +16,9 @@
 //!   look-up of its shape, the integers left unconverted, as Mesa's etnaviv
 //!   emits it; the shapes the float path refuses are still refused.
 //!
-//! What it cannot see: the GPU. The eight decoded classes and the two
-//! compressed sRGB ETC2 classes are in `GC_SAMPLED_TEXFMTS` (src/backend.rs;
-//! the doc's `in mask` column).
+//! What it cannot see: the GPU. The eight decoded classes, the two
+//! compressed sRGB ETC2 classes and the three 128-bit classes (two planes)
+//! are in `GC_SAMPLED_TEXFMTS` (src/backend.rs; the doc's `in mask` column).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante --test es3_formats_gc
@@ -29,7 +29,7 @@
 
 use yakogl::backend::*;
 use yakogl::vivante::regs::*;
-use yakogl::vivante::texture::{format_words, gc_texfmt};
+use yakogl::vivante::texture::{format_words, gc_texfmt, is_wide128, wide128_plane_format};
 
 /* Compiled in, so the test binary (and the check's test cache, keyed on it)
  * changes with each of them. */
@@ -176,12 +176,13 @@ fn every_storage_class_has_one_row_with_a_mesa_citation() {
 }
 
 /// Each row's TE format, swizzle, CONFIG2 and INT_FILTER are the descriptor
-/// words the back end builds, by the rnndb header's values.
+/// words the back end builds, by the rnndb header's values; a 128-bit class's
+/// row is the words of either of its two G32R32 planes (section 3).
 #[test]
 fn every_row_is_the_descriptor_the_back_end_builds() {
     for r in rows() {
         let id = id_of(&r.class);
-        let f = gc_texfmt(id);
+        let f = if is_wide128(id) { wide128_plane_format(id).expect("a plane format") } else { gc_texfmt(id) };
         let name = &r.class;
         if r.te == "none" {
             assert!(!f.decoded, "{name}: no TE format, not decoded");
@@ -194,7 +195,7 @@ fn every_row_is_the_descriptor_the_back_end_builds() {
         } else {
             assert_eq!((f.format, f.format_ext), (v, 0), "{name}: CONFIG0 FORMAT {}", r.te);
         }
-        let tiled = f.compressed;
+        let tiled = f.compressed || is_wide128(id);
         let [c0, c1, c2] = format_words(&bind(id), tiled);
         assert_eq!((c0 >> 13) & 0x1f, f.format, "{name}: CONFIG0 FORMAT field");
         assert_eq!(c1 & 0x3f, f.format_ext, "{name}: CONFIG1 FORMAT_EXT field");
@@ -210,7 +211,7 @@ fn every_row_is_the_descriptor_the_back_end_builds() {
 }
 
 /// The `in mask` column is GC_SAMPLED_TEXFMTS, and the mask holds no class
-/// the descriptor cannot decode.
+/// the descriptor cannot decode but the 128-bit ones, sampled as two planes.
 #[test]
 fn the_mask_column_is_gc_sampled_texfmts() {
     for r in rows() {
@@ -218,7 +219,7 @@ fn the_mask_column_is_gc_sampled_texfmts() {
         let in_mask = GC_SAMPLED_TEXFMTS & gles_texfmt_bit(id) != 0;
         assert_eq!(in_mask, r.in_mask == "yes", "{}: in GC_SAMPLED_TEXFMTS", r.class);
         if in_mask {
-            assert!(gc_texfmt(id).decoded, "{}: sampled, so decoded", r.class);
+            assert!(gc_texfmt(id).decoded || is_wide128(id), "{}: sampled, so decoded or two planes", r.class);
         }
     }
 }
@@ -269,7 +270,12 @@ fn the_r32_and_rg32_integer_classes_are_in_the_gc_mask_only() {
         }
         assert_ne!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(native), 0, "{}: GC7000UL has class {native}", e.name);
         assert_eq!(e.storage_in(GC_SAMPLED_TEXFMTS), Some(native), "{}: GC7000UL, its own class", e.name);
-        assert_eq!(e.storage_in(GC_SAMPLED_TEXFMTS & !gles_texfmt_bit(native)), None, "{}: no RGBA32 class", e.name);
+        assert_eq!(
+            e.storage_in(GC_SAMPLED_TEXFMTS & !gles_texfmt_bit(native)),
+            Some(wide),
+            "{}: without its own class, the RGBA32 class (two planes, gc-wide128-flip)",
+            e.name
+        );
         assert_eq!(e.storage_in(PVR_SAMPLED_TEXFMTS), Some(wide), "{}: PowerVR", e.name);
         assert_eq!(e.storage_in(V3D_SAMPLED_TEXFMTS), Some(wide), "{}: V3D", e.name);
         assert_eq!(e.storage_in(0), None, "{}: Mali (mask 0)", e.name);
@@ -380,7 +386,7 @@ fn the_binding_bits_apply_to_every_class() {
     }
 }
 
-/* ---- 128-bit classes: two G32R32 planes, kept inert ------------------------- */
+/* ---- 128-bit classes: two G32R32 planes ------------------------------------- */
 
 /// The back-end half of gc-formats.md section 3
 /// (docs/notes/gc-128bit-texture-sampling.md): each 128-bit class has a
@@ -389,11 +395,10 @@ fn the_binding_bits_apply_to_every_class() {
 /// etnaviv_format.c:229-233), and the descriptor words of either plane are
 /// those: no CONFIG0 format, the extended one in CONFIG1, TILED, the
 /// binding's swizzle, no sign bit and no INT_FILTER. The class itself stays
-/// undecoded and out of GC_SAMPLED_TEXFMTS (its doc row says `none`) until
-/// the compiler joins the two look-ups.
+/// undecoded (no single descriptor reads it) and is in GC_SAMPLED_TEXFMTS
+/// since gc-wide128-flip (its doc row names the plane format).
 #[test]
-fn a_128_bit_class_is_a_pair_of_g32r32_plane_descriptors_behind_the_closed_mask() {
-    use yakogl::vivante::texture::{is_wide128, wide128_plane_format};
+fn a_128_bit_class_is_a_pair_of_g32r32_plane_descriptors_in_the_mask() {
     assert_eq!(GC_TEX_FORMAT_EXT_G32R32F, rnndb("TEXTURE_FORMAT_EXT_G32R32F"));
     assert_eq!(GC_TEX_FORMAT_EXT_G32R32I, rnndb("TEXTURE_FORMAT_EXT_G32R32I"));
     for (name, id) in CLASSES {
@@ -404,7 +409,7 @@ fn a_128_bit_class_is_a_pair_of_g32r32_plane_descriptors_behind_the_closed_mask(
             continue;
         }
         assert!(!gc_texfmt(id).decoded, "{name}: the class itself is still not decoded");
-        assert_eq!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(id), 0, "{name}: and not sampled");
+        assert_ne!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(id), 0, "{name}: sampled, as two planes");
         let plane = wide128_plane_format(id).unwrap();
         let want =
             rnndb(if id == GLES_TEXFMT_RGBA32F { "TEXTURE_FORMAT_EXT_G32R32F" } else { "TEXTURE_FORMAT_EXT_G32R32I" });

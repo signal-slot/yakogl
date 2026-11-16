@@ -159,8 +159,9 @@ const RGBA16F: (GLenum, GLenum, GLenum) = (GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
 const RGBA8: (GLenum, GLenum, GLenum) = (GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
 
 /// The eight-bit integer format of the same signedness, for a back end that
-/// samples no 32-bit integer texels (the GC7000's `GC_SAMPLED_TEXFMTS`): the
-/// GL core copies neither (`attachment_image`), so the blit's checks see
+/// samples no 32-bit integer texels or renders into none (the GC7000 samples
+/// RGBA32I/UI as two planes but refuses them as a target, `GC_INT_RT_128BPP`):
+/// the GL core copies neither (`attachment_image`), so the blit's checks see
 /// the same case.
 fn narrow(fmt: (GLenum, GLenum, GLenum)) -> (GLenum, GLenum, GLenum) {
     match fmt.0 {
@@ -171,8 +172,9 @@ fn narrow(fmt: (GLenum, GLenum, GLenum)) -> (GLenum, GLenum, GLenum) {
 }
 
 /// An 8 x 8 texture of `fmt` (internal format, format, type; an integer
-/// one the build does not sample [`narrow`]ed) at GL_COLOR_ATTACHMENT0 of a
-/// new framebuffer, checked complete: (framebuffer, texture).
+/// one the build does not sample or render into [`narrow`]ed) at
+/// GL_COLOR_ATTACHMENT0 of a new framebuffer, checked complete:
+/// (framebuffer, texture).
 fn colour_fbo(fmt: (GLenum, GLenum, GLenum)) -> (GLuint, GLuint) {
     let (mut fb, mut tex) = (0, 0);
     // SAFETY: room for one name each; no pixels; plain GL calls.
@@ -188,6 +190,11 @@ fn colour_fbo(fmt: (GLenum, GLenum, GLenum)) -> (GLuint, GLuint) {
         glGenFramebuffers(1, &mut fb);
         glBindFramebuffer(GL_FRAMEBUFFER, fb);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+        if glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE && narrow(fmt) != fmt {
+            let n = narrow(fmt);
+            glTexImage2D(GL_TEXTURE_2D, 0, n.0 as GLint, 8, 8, 0, n.1, n.2, core::ptr::null());
+            assert_eq!(err(), GL_NO_ERROR, "a {:#x} texture", n.0);
+        }
         assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "a {:#x} framebuffer", fmt.0);
     }
     (fb, tex)

@@ -20,7 +20,9 @@
 //!   integration test can set it (as tests/es3_wide128_planes_gc.rs): until
 //!   GC_SAMPLED_TEXFMTS holds the classes (item gc-w128-flip) the plane
 //!   checks are skipped with a note on stderr and the completeness checks run
-//!   alone; from the flip on they all run.
+//!   alone; from the flip on they all run (GC_SAMPLED_TEXFMTS holds them
+//!   since gc-wide128-flip). The float class is reached through GL_RGB32F,
+//!   since GL_RGBA32F itself is still stored as halves.
 //! - An isampler/usampler draw runs no shader here (the stand-in OSAL
 //!   executes nothing), so the integer (0,0,0,1) result is not read: the
 //!   integer classes are pinned by the incomplete flag and the descriptors.
@@ -61,8 +63,11 @@ fn rnndb(name: &str) -> u32 {
     u32::from_str_radix(v.trim_start_matches("0x"), 16).expect("hex")
 }
 
+/// The float row is a GL_RGB32F texture: the GL core stores it in the
+/// RGBA32F class (two planes, alpha 1), while GL_RGBA32F itself is still
+/// held as halves (src/gl/texture.rs `sized_format`), a filterable class.
 const WIDE: [(&str, u8, u32, &str); 3] = [
-    ("RGBA32F", GLES_TEXFMT_RGBA32F, GL_RGBA32F, "TEXTURE_FORMAT_EXT_G32R32F"),
+    ("RGBA32F", GLES_TEXFMT_RGBA32F, GL_RGB32F, "TEXTURE_FORMAT_EXT_G32R32F"),
     ("RGBA32UI", GLES_TEXFMT_RGBA32UI, GL_RGBA32UI, "TEXTURE_FORMAT_EXT_G32R32I"),
     ("RGBA32I", GLES_TEXFMT_RGBA32I, GL_RGBA32I, "TEXTURE_FORMAT_EXT_G32R32I"),
 ];
@@ -363,7 +368,7 @@ fn sampler_of(class: u8) -> &'static str {
 /// given.
 fn texture(class: &(&str, u8, u32, &str), min: GLenum, mag: GLenum) {
     let (ty, fmt) = match class.1 {
-        GLES_TEXFMT_RGBA32F => (GL_FLOAT, GL_RGBA),
+        GLES_TEXFMT_RGBA32F => (GL_FLOAT, GL_RGB),
         GLES_TEXFMT_RGBA32I => (GL_INT, GL_RGBA_INTEGER),
         _ => (GL_UNSIGNED_INT, GL_RGBA_INTEGER),
     };
@@ -403,7 +408,7 @@ fn probe(class: &(&str, u8, u32, &str), p: GLuint) -> Seen {
     Seen { incomplete, planes, companion: descriptor(&s, 1).is_some() }
 }
 
-/// Can the GL core store the class here? RGBA32F always (as halves while
+/// Can the GL core store the class here? RGB32F always (as halves while
 /// closed), the integer pair only once open.
 fn usable(class: &(&str, u8, u32, &str)) -> bool {
     if open(class.1) {
@@ -413,8 +418,8 @@ fn usable(class: &(&str, u8, u32, &str)) -> bool {
     class.1 == GLES_TEXFMT_RGBA32F
 }
 
-/// While RGBA32F is not in GC_SAMPLED_TEXFMTS the GL core stores it as
-/// RGBA16F, a filterable format, so incomplete_reason() cannot see the
+/// While RGBA32F is not in GC_SAMPLED_TEXFMTS the GL core stores GL_RGB32F
+/// as RGBA16F, a filterable format, so incomplete_reason() cannot see the
 /// non-filterable class and the RGBA32F completeness checks are skipped
 /// with a note (item gc-w128-flip); from the flip on they all run.
 fn float_filter_visible() -> bool {
