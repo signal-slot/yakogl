@@ -940,6 +940,35 @@ malicheck 50 mali-fail-triage-selftest.sh 11
 # 51: mali-deqp-build.sh's dry run and its symbol-floor checks on fake tools.
 malicheck 51 mali-deqp-build-selftest.sh 29
 
+# 52-53: the Pi 4 GLES3 shell self-tests (hermetic, TMPDIR in the scratch dir),
+# judged by exit status; 54-56: the Pi 4 Python tools' own --self-test (the
+# --pi4 session-directory mode of gles3-notpass.py is part of check 31).
+pi4sh() {
+    local out
+    echo
+    echo "== $1. $2"
+    if out=$(cd "$gl3tmp" && TMPDIR="$gl3tmp" bash "$ROOT/tools/cts/$2" 2>&1); then
+        ok "$2: $(printf '%s\n' "$out" | grep -c '^ *ok') checks passed"
+    else
+        bad "$2 failed: $(printf '%s\n' "$out" | grep FAIL | head -3 | paste -sd';' -)"
+    fi
+}
+pi4py() {
+    local out
+    echo
+    echo "== $1. $2 --self-test"
+    if out=$(python3 -I "$HERE/$2" --self-test 2>&1); then
+        ok "$2 --self-test: $(printf '%s\n' "$out" | tail -1)"
+    else
+        bad "$2 --self-test failed: $(printf '%s\n' "$out" | grep -i FAIL | head -3 | paste -sd';' -)"
+    fi
+}
+pi4sh 52 pi4-session-tally-selftest.sh
+pi4sh 53 pi4-gles3-preflight-selftest.sh
+pi4py 54 pi4-console-scan.py
+pi4py 55 pi4-gles3-report.py
+pi4py 56 pi4-session-readme.py
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else

@@ -74,8 +74,8 @@ mk "$W/h"; echo "A1 rc=0 sha256=$SUM build=unknown" > "$W/h/img/A1.built"
 run "$W/h" "$UARTVAL" gles3 --commit "$SHA" --rows 0-2
 expect "commit not recorded" 1 "FAIL commit not recorded for: A1"
 
-run "$W/a" "$UARTVAL" gles3 --commit "$SHA" --rows 80-95
-expect "rows past the table end" 1 "FAIL rows 80-95 reach past the table end"
+run "$W/a" "$UARTVAL" gles3 --commit "$SHA" --rows 200-210
+expect "rows past the table end" 1 "FAIL rows 200-210 reach past the table end"
 
 mk "$W/e"
 run "$W/e" "" gles3 --commit "$SHA" --rows 0-2
