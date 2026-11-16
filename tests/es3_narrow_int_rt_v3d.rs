@@ -578,16 +578,16 @@ fn a_draw_is_refused_by_the_gl_core_today() {
     }
 }
 
-/// glClearBufferiv / uiv on the incomplete framebuffer: no error at all (the
-/// call is dropped, where ES 3.0 4.2.3 asks for INVALID_FRAMEBUFFER_OPERATION)
-/// and no clear reaches the back end.
+/// glClearBufferiv / uiv on the incomplete framebuffer:
+/// GL_INVALID_FRAMEBUFFER_OPERATION (ES 3.0 4.4.4.4; until 2026-11-16 the
+/// call was dropped with no error) and no clear reaches the back end.
 #[test]
 fn a_clear_buffer_is_refused_by_the_gl_core_today() {
     let _g = context();
     for r in rows() {
         let _f = tex_fbo(r.internalformat);
         let (seen, e) = clear_buffer(r.signed);
-        assert_eq!(e, GL_NO_ERROR, "{}", r.name);
+        assert_eq!(e, GL_INVALID_FRAMEBUFFER_OPERATION, "{}", r.name);
         assert!(seen.is_none(), "{}: the back end saw a clear", r.name);
     }
 }

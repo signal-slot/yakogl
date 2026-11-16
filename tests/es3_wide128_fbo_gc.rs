@@ -21,15 +21,13 @@
 //!   (src/gl/framebuffer.rs) finds no colour-renderable storage, since
 //!   `rt_format_drawable` refuses `GLES_SURF_RGBA32I/UI` on this back end and
 //!   no 16-byte class is in its list of float render classes;
-//! - glDrawArrays raises GL_INVALID_FRAMEBUFFER_OPERATION. glClear and
-//!   glClearBufferfv (which goes through it) raise nothing at the call and
-//!   GL_INVALID_FRAMEBUFFER_OPERATION at the glFinish that would emit the
-//!   pending clear. glClearBufferiv / glClearBufferuiv raise nothing at all
-//!   and clear nothing (`clear_image_kind` finds no image; ES 3.0 4.4.4.4
-//!   asks for GL_INVALID_FRAMEBUFFER_OPERATION). glReadPixels raises
-//!   GL_INVALID_FRAMEBUFFER_OPERATION for RGBA32F, and GL_INVALID_OPERATION
-//!   for GL_RGBA_INTEGER from the integer classes (the format check comes
-//!   before the status in `read_pixels`). Not one kick is submitted for any
+//! - glDrawArrays, glClear and glClearBuffer{f,i,ui}v raise
+//!   GL_INVALID_FRAMEBUFFER_OPERATION at the call (ES 3.0 4.4.4.4) and the
+//!   glFinish after them raises nothing (until 2026-11-16 glClear and
+//!   glClearBufferfv raised it only at that glFinish, and the integer forms
+//!   not at all). glReadPixels raises GL_INVALID_FRAMEBUFFER_OPERATION for
+//!   every class (ES 3.0 4.3.1: the incomplete read framebuffer is checked
+//!   before the format and type). Not one kick is submitted for any
 //!   of them, the texture's storage (both planes once the class is stored)
 //!   is byte for byte what was uploaded, and the read-back buffer is not
 //!   written;
@@ -749,15 +747,10 @@ fn check(c: &Wide, a: Attach) {
     let [draw, clear, clear_buffer, read] = refused_calls(c, a, &what);
     const IFO: GLenum = GL_INVALID_FRAMEBUFFER_OPERATION;
     assert_eq!(draw, (IFO, GL_NO_ERROR), "{what}: glDrawArrays, then glFinish");
-    /* glClear records a pending clear whatever the status (state.rs); the
-     * glFinish that would emit it finds no target (`emit_pending_clear`) and
-     * raises the error then */
-    assert_eq!(clear, (GL_NO_ERROR, IFO), "{what}: glClear, then glFinish");
-    /* glClearBufferfv goes through glClear; the integer forms find no image
-     * of the draw buffer (`clear_image_kind`, src/gl/es3.rs) and return
-     * without an error (ES 3.0 4.4.4.4 asks for one) */
-    let want = if c.float() { (GL_NO_ERROR, IFO) } else { (GL_NO_ERROR, GL_NO_ERROR) };
-    assert_eq!(clear_buffer, want, "{what}: glClearBuffer, then glFinish");
+    /* glClear and every glClearBuffer* check completeness at the call (ES 3.0
+     * 4.4.4.4) and record nothing for the glFinish to emit */
+    assert_eq!(clear, (IFO, GL_NO_ERROR), "{what}: glClear, then glFinish");
+    assert_eq!(clear_buffer, (IFO, GL_NO_ERROR), "{what}: glClearBuffer, then glFinish");
     /* ES 3.0 4.3.1: the incomplete read framebuffer comes before the pair */
     let want = (IFO, GL_NO_ERROR);
     assert_eq!(read, want, "{what}: glReadPixels, then glFinish");
