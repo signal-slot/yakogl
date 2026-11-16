@@ -37,18 +37,82 @@ Our own code is cited as `src/...:line` at `origin/main` db5701fb. Mesa
 
 ## Where each refusal is raised today
 
-| Refusal | Raised at | Line |
-| --- | --- | --- |
-| occlusion query | `NOT_BUILT_QUERY`, `check()` | `src/mali/backend.rs:166`, `:1100` |
-| alpha-to-coverage | `NOT_BUILT_ALPHA_TO_COVERAGE`, `check()` | `backend.rs:167`, `:1101` |
-| blend shader of a target or sample count with none built (not RGBA8 at 1x/4x, e.g. RGB565, 2x; or a key the blend compiler refuses) | `NOT_BUILT_BLEND_SHADER`, `check_draw()` | `src/mali/frame.rs:209`, `:2563-2565` (RGBA16F outside the float set: `NOT_BUILT_FLOAT_BLEND`, `:226`, `:2561`) |
-| 4x with depth/stencil | `NOT_BUILT_SAMPLES`, `check_target()` | `frame.rs:182`, `:1417-1420` |
-| preload of a 4x target | `NOT_BUILT_PRELOAD_SAMPLES`, `open_frame()` | `frame.rs:146`, `backend.rs:1865-1867` |
-| varyings in different orders | `MALI_LAYOUTS_DIFFER`, `link_shaders_mali()` | `src/shaderc/online/mali/link.rs:33`, `:211` |
+One row per `NOT_BUILT_*` constant in `src/mali` (checked with `grep -rn
+NOT_BUILT_ src/mali` at origin/main ef80645a), plus the link-time refusal of
+the sixth case below; the lines are those of that commit. A refusal reaches the
+GL core as an error with the constant's text in the library's exit log. The
+`INVALID_*` constants (the caller's or the GL core's defect, not a gap) are not
+listed.
 
-`check()` runs before any frame state is touched (`backend.rs:1081-1107`), so
-a case meets the first of these it contains. `query_begin`, `query_end` and
-`query_result` are `None` in the backend table (`backend.rs:2366-2368`).
+| Refusal | Constant | Defined | Raised at |
+| --- | --- | --- | --- |
+| a frame built without a colour clear (`build_frame`; the backend preloads instead) | `NOT_BUILT_NO_CLEAR` | `src/mali/frame.rs:135` | `src/mali/frame.rs:2034` |
+| no vertex attribute, more than 16, or not 1 to 4 float32 | `NOT_BUILT_ATTRIBUTES` | `src/mali/frame.rs:150` | `src/mali/frame.rs:2523`, `src/mali/backend.rs:2535` |
+| fragment shader writes depth, stencil, coverage or memory | `NOT_BUILT_FS_EFFECTS` | `src/mali/frame.rs:156` | `src/mali/frame.rs:2532` |
+| preload of a target whose rows are not a multiple of 64 bytes | `NOT_BUILT_PRELOAD_STRIDE` | `src/mali/frame.rs:158` | `src/mali/frame.rs:2642`, `src/mali/backend.rs:2895` |
+| texture larger than 65536 texels a side, more levels than the builder takes, or a row stride narrower than its rows | `NOT_BUILT_TEXTURE_SIZE` | `src/mali/frame.rs:162` | `src/mali/frame.rs:2541`, `src/mali/frame.rs:2555`, `src/mali/frame.rs:2564`, `src/mali/backend.rs:2197`, `src/mali/backend.rs:2308`, `src/mali/backend.rs:2317`, `src/mali/backend.rs:2442` |
+| fragment shader without colour output 0 or writing one past the targets | `NOT_BUILT_FS_OUTPUTS` | `src/mali/frame.rs:172` | `src/mali/frame.rs:2535` |
+| a program given for the wrong stage | `NOT_BUILT_STAGE` | `src/mali/frame.rs:174` | `src/mali/frame.rs:2511` |
+| push word names a sysval the shader's block does not hold | `NOT_BUILT_PUSH` | `src/mali/frame.rs:175` | `src/mali/frame.rs:2599` |
+| push word names a uniform dword the draw does not hold | `NOT_BUILT_PUSH_UNIFORM` | `src/mali/frame.rs:178` | `src/mali/frame.rs:2605` |
+| more push words than the FAU holds | `NOT_BUILT_PUSH_COUNT` | `src/mali/frame.rs:180` | `src/mali/frame.rs:2606` |
+| uniform block names dwords the draw's storage does not hold | `NOT_BUILT_UBO_BLOCK` | `src/mali/frame.rs:184` | `src/mali/frame.rs:2612` |
+| more sysval slots than the builder takes | `NOT_BUILT_SYSVALS` | `src/mali/frame.rs:186` | `src/mali/frame.rs:2607` |
+| tiler with other than 8 hierarchy levels | `NOT_BUILT_TILER_LEVELS` | `src/mali/frame.rs:189` | `src/mali/frame.rs:2620` |
+| blend shader of a target or sample count with none built (not RGBA8 at 1x/4x, e.g. RGB565, 2x; or a key the blend compiler refuses) | `NOT_BUILT_BLEND_SHADER` | `src/mali/frame.rs:209` | `src/mali/frame.rs:2586` |
+| target of other than 1 or 4 samples (`check_target()`) | `NOT_BUILT_SAMPLES` | `src/mali/frame.rs:218` | `src/mali/frame.rs:1952` |
+| blend into RGBA16F that needs a blend shader | `NOT_BUILT_FLOAT_BLEND` | `src/mali/frame.rs:226` | `src/mali/frame.rs:2582` |
+| target with no pixels (`check_target()`) | `NOT_BUILT_EMPTY_TARGET` | `src/mali/frame.rs:228` | `src/mali/frame.rs:1951` |
+| several colour targets with more than 8, 4 samples, a sample store, a preload or a blend shader | `NOT_BUILT_MRT` | `src/mali/frame.rs:239` | `src/mali/frame.rs:1796`, `src/mali/frame.rs:2062`, `src/mali/frame.rs:2537`, `src/mali/backend.rs:1515` |
+| draw that does not fit the open frame (`no_room()` makes the backend open a second frame) | `NOT_BUILT_FRAME_ROOM` | `src/mali/frame.rs:252` | `src/mali/frame.rs:2179`, `src/mali/backend.rs:3236` |
+| several colour targets of different sizes (`check_targets()`) | `NOT_BUILT_TARGET_SIZES` | `src/mali/backend.rs:187` | `src/mali/backend.rs:1505` |
+| a GL_NONE draw buffer between colour targets | `NOT_BUILT_TARGET_GAP` | `src/mali/backend.rs:190` | `src/mali/backend.rs:1502` |
+| several targets, the first not at the linear pitch of its width | `NOT_BUILT_TARGETS_PITCH` | `src/mali/backend.rs:196` | `src/mali/backend.rs:1512` |
+| several targets in a frame that does not start from a whole clear (`open_frame()`) | `NOT_BUILT_TARGETS_PRELOAD` | `src/mali/backend.rs:200` | `src/mali/backend.rs:2888` |
+| colour clear of several targets that is not one whole clear before any draw | `NOT_BUILT_TARGETS_CLEAR` | `src/mali/backend.rs:205` | `src/mali/backend.rs:1521`, `src/mali/backend.rs:3347` |
+| first draw buffer is GL_NONE (`check()`) | `NOT_BUILT_OUTPUT_SHIFT` | `src/mali/backend.rs:208` | `src/mali/backend.rs:1460` |
+| colour target other than RGBA8888, XRGB8888, RGB565 or RGBA16F (`surface_format()`) | `NOT_BUILT_TARGET_FORMAT` | `src/mali/backend.rs:209` | `src/mali/backend.rs:1547` |
+| depth/stencil attachment smaller than the colour target (`check()`) | `NOT_BUILT_ZS_SIZE` | `src/mali/backend.rs:233` | `src/mali/backend.rs:1469` |
+| Z/S drawn by an earlier frame and not cleared, and no Z/S preload program (`add_to_open()`) | `NOT_BUILT_ZS_PRELOAD` | `src/mali/backend.rs:237` | `src/mali/backend.rs:3114` |
+| a depth or stencil object drawn in another framebuffer's pair whose buffer no longer holds it (`take_plane()`) | `NOT_BUILT_ZS_ELSEWHERE` | `src/mali/backend.rs:244` | `src/mali/backend.rs:2754` |
+| clear that needs the quad, whose program did not build at init (`record_in()`) | `NOT_BUILT_CLEAR_PROGRAM` | `src/mali/backend.rs:248` | `src/mali/backend.rs:3365` |
+| vertex attribute other than float32 data (`vertex_attributes()`) | `NOT_BUILT_ATTRIBUTE` | `src/mali/backend.rs:250` | `src/mali/backend.rs:2546`, `src/mali/backend.rs:2559` |
+| attribute in a buffer object of 4 GiB or more | `NOT_BUILT_ATTRIBUTE_BUFFER_SIZE` | `src/mali/backend.rs:253` | `src/mali/backend.rs:2556` |
+| attribute records not 0..n of the draw's attributes | `NOT_BUILT_ATTRIBUTE_RECORDS` | `src/mali/backend.rs:258` | `src/mali/backend.rs:2542`, `src/mali/backend.rs:2544` |
+| texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 (`stage_texture()`) | `NOT_BUILT_TEXTURE_FORMAT` | `src/mali/backend.rs:261` | `src/mali/backend.rs:2299`, `src/mali/backend.rs:2306`, `src/mali/backend.rs:2316` |
+| texture type other than 2D, cube, 2D array or 3D | `NOT_BUILT_TEXTURE_TYPE` | `src/mali/backend.rs:263` | `src/mali/backend.rs:2305` |
+| mip chain of a non-power-of-two texture | `NOT_BUILT_TEXTURE_NPOT_CHAIN` | `src/mali/backend.rs:268` | `src/mali/backend.rs:2307` |
+| draw samples the texture its own frame renders into (`texture_ready_one()`) | `NOT_BUILT_TEXTURE_FEEDBACK` | `src/mali/backend.rs:275` | `src/mali/backend.rs:2167` |
+| cube look-up whose unit has no complete cube map | `NOT_BUILT_CUBE_INCOMPLETE` | `src/mali/backend.rs:286` | `src/mali/backend.rs:2234` |
+| vertex shader that reads more than one texture (`sampled_texture()`) | `NOT_BUILT_VERTEX_TEXTURES` | `src/mali/backend.rs:288` | `src/mali/backend.rs:2212` |
+| frame without a colour clear and no preload program (`open_frame()`) | `NOT_BUILT_PRELOAD_PROGRAM` | `src/mali/backend.rs:291` | `src/mali/backend.rs:2891` |
+| varyings in different orders (outside `src/mali`) | `MALI_LAYOUTS_DIFFER` | `src/shaderc/online/mali/link.rs:35` | `src/shaderc/online/mali/link.rs:352` |
+
+Four of the cases this note was written for are built, and their constants are
+gone from `src/mali`:
+
+- Occlusion queries (`NOT_BUILT_QUERY`): built. `query_begin` and
+  `query_result` are filled in the backend table (`src/mali/backend.rs:3707`,
+  `:3713`); `query_end` is `None` on purpose, as Mesa's end puts nothing in the
+  stream.
+- Alpha to coverage (`NOT_BUILT_ALPHA_TO_COVERAGE`): built.
+  `DrawCall::alpha_to_coverage` is set from the GL draw
+  (`src/mali/backend.rs:1845`) and `fs_required` takes it
+  (`src/mali/frame.rs:3209`).
+- Preload of a 4x target (`NOT_BUILT_PRELOAD_SAMPLES`): built. A split 4x frame
+  keeps its samples and reloads them (`913474c1`, `ea3424fc`, case 214).
+- 4x with depth/stencil: built; `NOT_BUILT_SAMPLES` now only refuses a target
+  of other than 1 or 4 samples (`src/mali/frame.rs:1952`).
+
+The three retired names are in no commit of this history's `src/mali`: the
+history starts at `381b0f09` (the YakoGL 0.1.0 import, 2026-10-27), which
+already has all three built and names them only in this note and in a
+`gl_test.c` comment. The commit that removed them is in the history that import
+replaced and cannot be found from here; `381b0f09` is the earliest commit that
+shows them built.
+
+`check()` (`src/mali/backend.rs:1452`) runs before any frame state is touched,
+so a case meets the first of its refusals in code order.
 
 ## What the draw registers and DCD flags are (common ground)
 
@@ -127,8 +191,8 @@ or resource tables.
   (`pan_csf.c:1494-1506`) and sets `occlusion_query` in `dcd0` (`frame.rs:2626`).
   A new `DrawCall` field means every literal changes: `grep -rl 'DrawCall {'
   src tests` (CLAUDE.md, the 2026-10-14 failure).
-- `src/mali/backend.rs`: drop `(d.occlusion_query != 0, NOT_BUILT_QUERY)`
-  (`:1100`); fill `query_begin`/`query_end`/`query_result` (`:2366-2368`).
+- `src/mali/backend.rs` (done; the plan as written): drop the
+  `(d.occlusion_query != 0, NOT_BUILT_QUERY)` row of `check()`; fill `query_begin`/`query_end`/`query_result` (`:2366-2368`).
   `begin` zeroes a per-handle block of persistent GPU memory (64 handles,
   `GLES_QUERY_HANDLES`), `result` sums the block (the contract wants the
   samples, or any non-zero value). `OsalMaliGpu` (`src/osal/mali.rs:35-44`) has
@@ -250,8 +314,8 @@ SKIPs without a 4x config; the 4x config is offered (cases 16 and 145 pass).
 
 The case also does `glClear(GL_DEPTH_BUFFER_BIT)` first (`gl_test.c:17360`),
 on the 4x pbuffer whose D24S8 no draw then uses: if the Mali backend opens a
-ZS attachment for that clear, `NOT_BUILT_SAMPLES` (section 4) refuses the
-frame before a2c is reached. The frame builder lets a 4x frame carry an
+ZS attachment for that clear, a 4x frame with depth/stencil would have been
+refused (before it was built, section 4) before a2c was reached. The frame builder lets a 4x frame carry an
 attachment no draw uses (`frame.rs:1417-1420`, `uses_zs`), so it should not;
 **pin** it with the first run.
 
@@ -278,11 +342,12 @@ pictures, the pictures equal):
   `Has ZS CRC Extension: false` (611749; also 767 for the frame before it): the
   `glClear(GL_DEPTH_BUFFER_BIT)` opens no ZS attachment for a frame whose draws
   do not use depth, and `Pre Frame 0/1: Never` (611716-611717). Ours must also open none (see above); the
-  first board run of ours will show whether `NOT_BUILT_SAMPLES` is reached.
+  first board run of ours showed whether a 4x frame with a ZS attachment was opened (4x with
+  depth/stencil is built now; the table above).
 - 1024 draws in one frame: **settled for Mesa, open for ours.** Each picture
   is one frame of 1024 `RUN_IDVS` between two `RUN_FRAGMENT` (lines 727 and
   611709; 653902 and 1272847): Mesa never splits it. Whether our frame has room
-  for 1024 draws (`NOT_BUILT_FRAME_ROOM`, `frame.rs:192`; if not,
+  for 1024 draws (`NOT_BUILT_FRAME_ROOM`, `src/mali/frame.rs:252`; if not,
   `backend.rs:2053-2062` opens a second frame from a **4x preload**, section 5,
   where the PVR lost its samples, `gl_test.c:17260-17265`) is ours to measure:
   `panthor-gltest 198` on the first build, the verdict line or
@@ -525,7 +590,7 @@ view, as `frame.rs:1648-1650` already assumes).
 **Program bytes.** None.
 
 **Lands in.** `frame.rs`: `check_target` accepts `samples == 4` with ZS
-(`:1417-1420`; `NOT_BUILT_SAMPLES` text, `:178-183`); `tile_size()` takes the
+(done: `NOT_BUILT_SAMPLES` is now the 1 or 4 samples check only, `:1952`); `tile_size()` takes the
 depth into account (it is called from the FBD and from `tiler_context`'s rule
 at `:2721`); the `ZsTarget` at `:1664` takes `msaa` from the target. The
 preload of such a frame is section 5. `backend.rs`: nothing at `check()`; the
@@ -604,11 +669,11 @@ refusing.
 **Program bytes.** None: the existing colour and Z/S preload programs
 (`src/shaderc/online/mali/preload.rs`, `backend.rs:1845-1853`).
 
-**Lands in.** Drop `backend.rs:1865-1867` and `frame::NOT_BUILT_PRELOAD_SAMPLES`
-(`frame.rs:146`); `colour_preload_dcd` keeps
-`sample_count: 1` in the texture. For depth/stencil see section 4. The ZS
-preload of a 4x frame has no check of its own: it is the `NOT_BUILT_SAMPLES`
-of section 4.
+**Lands in.** (Done: the `open_frame()` check and
+`frame::NOT_BUILT_PRELOAD_SAMPLES` are gone from `src/mali`.)
+`colour_preload_dcd` keeps `sample_count: 1` in the texture. For
+depth/stencil see section 4. The ZS preload of a 4x frame has no check of its
+own.
 
 **Checked by.** `backend_tests.rs:880` (the "no clear on a 4x target" row)
 and a split 4x frame: case **198** when its 1024 draws overflow one frame
@@ -621,13 +686,13 @@ depth or stencil used), a cleared frame with case 16's red lower-right
 triangle, `glFinish`, then a frame with no clear drawing a green lower-left
 triangle (x + y < 0) over it; both frames are read back. Its first frame is
 case 16's (PASS on the T6); its second draw opens a frame with no clear on a
-4-sample target, which `open_frame` refuses after the stride check
-(`backend.rs:1902-1912`), so today it prints
+4-sample target, which `open_frame` refused after the stride check, so
+before the fix it printed
 
     panthor-gltest: verdict case 208 msaapre: REFUSED draw: mali frame: a preload of a multisampled target is not built yet
 
-(`frame.rs:146`; the mock's "no clear on a 4x target" row,
-`backend_tests.rs:894`). After the fix it reads `PASS` exactly when the
+(the refusal's text, now retired; the mock's "no clear on a 4x target" row
+was `backend_tests.rs:894`). With the fix it reads `PASS` exactly when the
 reloaded pixel lands in all four samples: the first frame's red (56, 12),
 its half-red diagonal (40, 40, `0xff000080`) and black (12, 56) kept, the
 green's edge half over red (40, 23, `0xff008080`) and half over black (23,
