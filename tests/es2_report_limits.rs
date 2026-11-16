@@ -3,7 +3,9 @@
 //! The varying and uniform limits a `report-es2` build answers, pinned on
 //! every GPU build (plan #359, item es2-limits-guard).
 //!
-//! Plan #359 raises the ES 3.0 limits (MAX_VARYING_VECTORS on the V3D,
+//! Plan #359 raised the ES 3.0 limits (6581f22b: the V3D's varyings 15/60/60/64;
+//! cb52fae8: its uniform block 16384 and combined components 50688;
+//! MAX_VARYING_VECTORS on the V3D,
 //! MAX_VERTEX_OUTPUT/FRAGMENT_INPUT_COMPONENTS, MAX_UNIFORM_BLOCK_SIZE, the
 //! combined uniform components). Under `report-es2` none of that may show:
 //! the ES 2.0 vector limits keep their answers, the ES 3.0-only pnames stay
