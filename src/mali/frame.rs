@@ -1349,6 +1349,17 @@ pub fn flip_compare(f: Func) -> Func {
 /// hold, so the clamp is made here.
 const SAMPLER_MAX_LOD: f32 = 8191.0 / 256.0;
 
+/// Seamless cube-map filtering in this build's context. Mesa 26.2.1 turns
+/// it on in a GLES 3 context only ("OpenGL ES 2.0 specified that a single
+/// cube map face be selected and used for filtering", main/version.c:682-690,
+/// `CubeMapSeamless = _mesa_is_gles3(ctx)`), and st/mesa hands the flag to
+/// every sampler (st_atom_sampler.c:71), which panfrost writes as `Seamless
+/// Cube Map` (pan_cmdstream.c:231); here a cube map's sampler takes it
+/// ([`SampledTexture::sampler_with`]). An ES 2.0 build (`report-es2`) is
+/// dEQP-GLES2's non-seamless context (es2fVertexTextureTests.cpp:1154,
+/// `seamlessCubeMap = m_isES3Capable`); docs/notes/mali-cube-textures.md (i).
+pub const SEAMLESS_CUBE_MAP: bool = !crate::REPORT_ES2;
+
 /// `pan_translate_swizzle_4` (Mesa 26.2.1 src/panfrost/lib/pan_format.h):
 /// three bits a channel, R in the low three; a source channel X, Y, Z, W is
 /// 0..3, the constant 0 is 4 and 1 is 5.
@@ -1413,18 +1424,30 @@ impl SampledTexture {
         ((self.width >> l).max(1), (self.height >> l).max(1))
     }
 
+    /// The sampler of this build's context: seamless cube maps in an ES 3.0
+    /// build, not in an ES 2.0 one ([`SEAMLESS_CUBE_MAP`]).
+    pub fn sampler(&self) -> Sampler {
+        self.sampler_with(SEAMLESS_CUBE_MAP)
+    }
+
     /// The sampler (`panfrost_create_sampler_state`, Mesa 26.2.1
     /// pan_cmdstream.c:200-260, from st/mesa's state for a GLES 2 texture:
     /// GL_TEXTURE_WRAP_R repeat, LOD bias 0, minimum LOD 0, a zero border,
-    /// seamless cube maps; the compare function NEVER under GL_NONE, else
-    /// GL's flipped ([`flip_compare`]); nearest minification and
-    /// magnification clear round-to-nearest-even, :243-245). A cube map's
-    /// three wrap modes are clamp-to-edge whatever GL's are: st/mesa
-    /// normalises a seamless cube map's CSO so (st_atom_sampler.c:80-95;
-    /// the board's cubemap dump, `Wrap Mode R: Clamp to Edge` with GL's
-    /// default REPEAT on R).
-    pub fn sampler(&self) -> Sampler {
-        let cube = self.is_cube();
+    /// a cube map's `Seamless Cube Map` as the context's `seamless`; the
+    /// compare function NEVER under GL_NONE, else GL's flipped
+    /// ([`flip_compare`]); nearest minification and magnification clear
+    /// round-to-nearest-even, :243-245). With `seamless`, a cube map's three
+    /// wrap modes are clamp-to-edge whatever GL's are: st/mesa normalises a
+    /// seamless cube map's CSO so (st_atom_sampler.c:84-94; the board's
+    /// cubemap dump, `Wrap Mode R: Clamp to Edge` with GL's default REPEAT on
+    /// R). Without it, GL's wrap modes stay and apply within the face the
+    /// coordinate selects (ES 2.0 3.7.5). Any other texture keeps the bit
+    /// set whatever `seamless` is: it filters nothing there, and the board's
+    /// and the shim's ES 3 dumps hold it set (Mesa's ES 2.0 context clears
+    /// it on every sampler).
+    pub fn sampler_with(&self, seamless: bool) -> Sampler {
+        let seamless = seamless || !self.is_cube();
+        let cube = self.is_cube() && seamless;
         Sampler {
             magnify_nearest: self.mag_nearest,
             minify_nearest: self.min_nearest,
@@ -1437,7 +1460,7 @@ impl SampledTexture {
             wrap_mode_r: if cube { WrapMode::CLAMP_TO_EDGE } else { self.wrap_r },
             mipmap_mode: self.mipmap,
             compare_function: self.compare.map_or(Func::NEVER, flip_compare),
-            seamless_cube_map: true,
+            seamless_cube_map: seamless,
             round_to_nearest_even: !(self.mag_nearest && self.min_nearest),
             ..Default::default()
         }

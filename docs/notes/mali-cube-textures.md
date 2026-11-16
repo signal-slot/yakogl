@@ -108,8 +108,10 @@ R, T and S, round-to-nearest-even, **`Seamless Cube Map: true`** (word 0 bit
 23, `M:panfrost/genxml/v10.xml:1136`), normalized coordinates, minify and
 magnify nearest, mipmap mode nearest, maximum LOD 31.996094. Mesa sets the bit
 from the GL state, `cfg.seamless_cube_map = cso->seamless_cube_map`
-(`M:gallium/drivers/panfrost/pan_cmdstream.c:231`), true for ES 2 and 3
-(`M:gallium/drivers/panfrost/pan_screen.c:824-825`).
+(`M:gallium/drivers/panfrost/pan_cmdstream.c:231`). The driver supports it
+(`M:gallium/drivers/panfrost/pan_screen.c:824-825`), but the context turns it
+on for ES 3 only. The dump's context is ES 3. An ES 2.0 context clears the bit
+and keeps GL's wrap modes, see (i).
 
 ### How Mesa fills it
 
@@ -859,3 +861,84 @@ Measured otherwise, and so refused:
     0 and its own `array_len`).
 
 A highp shader's implicit level has no reference (`TexKind`).
+
+## (i) The cube sampler in an ES 2.0 context (dEQP-GLES2 texture.vertex.cube)
+
+Plan #373, cause 7 of `docs/es2-cts-failures.md` M.1: 16 cases of
+`dEQP-GLES2.functional.texture.vertex.cube` drew wrong pixels with no
+refusal (row `T6S1R17`). Ten of them were `wrap.{clamp,mirror}_*` (6) and
+`filtering.linear_mipmap_linear_{linear,nearest}_{clamp,mirror}` (4). The
+other six were `filtering.nearest_mipmap_{nearest,linear}_linear_*`.
+
+**What Mesa does.** In Mesa 26.2.1, seamless cube filtering is a property of
+the context, not of the driver:
+
+- It is on in a GLES 3 context only: `ctx->Texture.CubeMapSeamless =
+  _mesa_is_gles3(ctx)`, quoting ES 3.0 appendix F.2, "OpenGL ES 2.0 specified
+  that a single cube map face be selected and used for filtering"
+  (`M:mesa/main/version.c:682-690`).
+- st/mesa passes the flag to every sampler
+  (`M:mesa/state_tracker/st_atom_sampler.c:71`, `:206`), and panfrost writes
+  it as `Seamless Cube Map` (`M:gallium/drivers/panfrost/pan_cmdstream.c:231`).
+- st/mesa clamps a cube's S, T and R to the edge only when the cube is
+  seamless (`M:mesa/state_tracker/st_atom_sampler.c:84-94`). Otherwise GL's
+  wrap modes reach the sampler (`M:gallium/drivers/panfrost/pan_cmdstream.c:223-225`)
+  and apply inside the face the coordinate selects.
+
+So for these cases, Mesa's ES 2.0 sampler has the bit clear and keeps GL's
+`MIRRORED_REPEAT`, `REPEAT` and `CLAMP_TO_EDGE` on S and T, and GL's default
+`REPEAT` on R. dEQP-GLES2 compares against the same rule. A context that does
+not answer `GL_MAJOR_VERSION`, as our `report-es2` build does not, takes the
+non-seamless reference (`es2fVertexTextureTests.cpp:1154`, `seamlessCubeMap =
+m_isES3Capable`, VK-GL-CTS main).
+
+**What we did.** Before this item, `SampledTexture::sampler` always set
+`Seamless Cube Map` and clamped every wrap mode of a cube, which is Mesa's ES 3
+sampler. The fix is in `src/mali/frame.rs`:
+
+- `SEAMLESS_CUBE_MAP` is `!crate::REPORT_ES2`.
+- `sampler()` is `sampler_with(SEAMLESS_CUBE_MAP)`.
+- Without seamless, a cube's sampler has the bit clear and GL's three wrap
+  modes. Every other field is unchanged.
+
+The bytes change only in a `report-es2` build, which is the board's
+dEQP-GLES2 library. The gate's Mali rows have no `report-es2`, so their
+byte comparisons do not move. A sampler that is not a cube's keeps the bit set
+in both builds. Mesa's ES 2.0 context clears it there too, but the bit filters
+nothing for a 2D, array or 3D texture, and the board's and the shim's ES 3
+dumps that our 2D tests compare against hold it set.
+
+**The reference.** tex-refs' `tools/mali/testdata/pan_tex_ref/vcube.*.desc`
+(`tools/mali/pan_tex_ref.sh`) covers all 42 vertex cube cases, but its draws
+ran in an ES 3 context: every sampler has the bit set and the wrap modes
+clamped. `src/mali/frame_tex_tests.rs` `vertex_cube_samplers_are_mesa_s` checks
+two things for every case:
+
+- `sampler_with(true)` packs to the Varying and Position tables' sampler
+  words.
+- `sampler_with(false)` packs to those words with `Seamless Cube Map` clear
+  and GL's S, T and R. That is the rule above applied to Mesa's words.
+
+No ES 2.0 drm-shim trace was made: the shim build is gone from the dependency
+cache. `MESA_GLES_VERSION_OVERRIDE=2.0` on `pan_tex_ref.sh`'s draws should
+make one, and the second check would then compare against its words
+directly. In a `report-es2` build, `a_cube_map_s_texture_is_the_board_s` names
+the same difference against the board's ES 3 dump.
+
+**The shader words do not change.** Mesa's vertex program for these cases
+(`vcube.pan_shc.disasm`, `vs varying`) is the cube sequence of (b): `CUBEFACE1`,
+`CUBEFACE2_V9`, `CUBE_SSEL`, `CUBE_TSEL`, `FRCP`, three `FMA`, `MUX`, then
+`TEX_SINGLE.cube.explicit` with the LOD clamped and scaled to 8.8 fixed point.
+It is the same with and without seamless filtering, because the sampler
+decides that.
+
+**Not covered by this fix.** The six `filtering.nearest_mipmap_*_linear_*`
+cases need no descriptor change, and Mesa's ES 2.0 driver fails them too
+(`M:panfrost/ci/panfrost-t720-fails.txt:7-12`). The hardware switches to magnification at
+λ <= 0, and the ES 2.0 reference switches at 0.5 (`tcuTexture.cpp` of VK-GL-CTS). The
+repository's remap, `lodkey::remap_mag_switch` (`lod <= 0.5 ? -1.0 : lod` for
+mag `LINEAR` with min `NEAREST_MIPMAP_*`), is requested by the Mali back end in
+an ES 2.0 build, but the Mali compile entry points never apply it (inv-vcube's
+finding). Applying it is a change in `src/shaderc/online/mali/`, which this item
+does not make. The 138 fragment-stage cube cases are compile refusals today.
+Once compiled, they take the same sampler.
