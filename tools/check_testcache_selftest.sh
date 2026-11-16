@@ -308,7 +308,8 @@ tprobe() {
 }
 tprobe driver/zephyr/.testcache-selftest-probe "a driver file no test reads" same same
 tprobe tools/cts/.testcache-selftest-probe "a tool no test reads" same same
-tprobe src/gl/.testcache-selftest-probe "a library source" same differ
+tprobe src/shaderc/.testcache-selftest-probe "a library source" same differ
+tprobe src/gl/.testcache-selftest-probe "the GL core's sources a test reads" differ differ
 tprobe src/osal/.testcache-selftest-probe "an OSAL header a test compiles" differ differ
 tprobe driver/src/v3d/.testcache-selftest-probe "a V3D source a test compiles" differ differ
 tprobe tests/fixtures/.testcache-selftest-probe "a fixture" differ differ

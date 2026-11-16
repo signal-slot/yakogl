@@ -1067,6 +1067,11 @@ TEST_TREE_PATHS=(
   tools/v3d/tri-shaders     # the V3D chain tests (library)
   driver/src/v3d src/osal third_party/mesa-26.2.1 # tests/v3d_glmark2_mem.rs compiles C with cc
   tools/mali                                     # src/mali/genxml/mesa_tests.rs: gen_pack_rs.py, pack_ref.c
+  src/gl                                         # tests/es3_mrt4_indexed.rs reads the GL core's sources
+  # tests/v3d71_verify_corpus.rs runs glsl2v3d.py when V3D_SHC is set; the
+  # script imports the two Vivante modules and reads gen_gl_test_shaders.py
+  tools/v3d/glsl2v3d.py tools/vivante/glsl2vivante.py tools/vivante/es100.py
+  driver/tools/pvrlab/gen_gl_test_shaders.py
 )
 # The hash of those files (their blob ids; a file changed or added in the
 # working tree by its content). The library's own unit tests (src/lib.rs)
