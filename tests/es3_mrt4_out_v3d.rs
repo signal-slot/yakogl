@@ -391,13 +391,11 @@ fn the_number_of_writes_per_rt() {
 /// packs (emit_frag_end), so RT 3's `vec2` has the 4-wide size and a word too
 /// many.
 #[test]
-#[ignore = "v3d-shout4: a vec2 float output writes the vec4 f16 config and two words, select.rs emit_frag_end (tlb_config_f16(rt, 4)); Mesa nir_to_vir.c:1979-1983 and :2028-2032 give VEC_SIZE_2_F16 and one vfpack"]
 fn rt_3_vec2_float_is_one_f16_word() {
     check([F4, F4, F4, Some(Kind::F(2))], &[0, 1, 2, 3], &[0, 1, 2, 3]);
 }
 
 #[test]
-#[ignore = "v3d-shout4: a float output writes the vec4 f16 config and two words, select.rs emit_frag_end (tlb_config_f16(rt, 4)); Mesa nir_to_vir.c:1979-1983 and :2028-2032 give VEC_SIZE_2_F16 and one vfpack"]
 fn rt_3_scalar_float_is_one_f16_word() {
     check([F4, F4, F4, Some(Kind::F(1))], &[0, 1, 2, 3], &[0, 1, 2, 3]);
 }
@@ -405,18 +403,16 @@ fn rt_3_scalar_float_is_one_f16_word() {
 /// The same at RT 0, where Mesa's config is no longer `~0`: TLBU carries
 /// `0xfffffffe`.
 #[test]
-#[ignore = "v3d-shout4: a vec2 float output writes the vec4 f16 config and two words, select.rs emit_frag_end (tlb_config_f16(rt, 4)); Mesa nir_to_vir.c:1979-1983 (RT 0's conf is then not ~0, :2023)"]
 fn a_vec2_float_output_at_rt_0_carries_its_config() {
     check([Some(Kind::F(2)), None, None, None], &[0], &[0]);
 }
 
-/// What the compiler writes today for the shapes above, so the fix item sees
-/// the delta: the vec4 config and two words.
+/// A narrow float output is written with its own size and one word.
 #[test]
-fn today_a_narrow_float_output_is_written_as_a_vec4() {
+fn a_narrow_float_output_is_written_with_its_own_size() {
     let (_, w) = run_fs(&shader([F4, F4, F4, Some(Kind::F(2))], &[0, 1, 2, 3], &[0, 1, 2, 3]));
     let g = groups(&w);
     assert_eq!(g.len(), 4);
-    assert_eq!(g[3].1, Some(tlb_config_f16(3, 4)));
-    assert_eq!(g[3].2.len(), 2);
+    assert_eq!(g[3].1, Some(tlb_config_f16(3, 2)));
+    assert_eq!(g[3].2.len(), 1);
 }
