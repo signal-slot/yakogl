@@ -44,7 +44,7 @@ It needs `python3` and `sha256sum`, nothing else. It checks:
   CRCs, linux/arm64/script/no compression, the length table, the script bytes
   equal the source). With `mkimage` present (on `PATH`, or `MKIMAGE=/path`),
   `mkimage -l` must also read it and mkimage's build must equal
-  `uboot_script.py`'s; without it that is reported as skipped, and
+  `tools/uboot_script.py`'s; without it that is reported as skipped, and
   `MP2_REQUIRE_MKIMAGE=1` makes it a failure;
 - section 7's lint: the commands `echo setenv test itest setexpr size load
   saveenv dcache icache go exit` only; `setenv` of `mp2s_*` and

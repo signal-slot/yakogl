@@ -6,8 +6,9 @@ A host-only, optional run of the merged product script `../mp2-standalone.cmd`
 (built by `../build.sh` into `boot.scr.uimg`, the bytes the runner stages) in
 real U-Boot v2023.10 on QEMU's `virt` machine, through **ST's distro loop**
 (the st-env fixture's `bootcmd=run bootcmd_stm32mp` and the loop variables, byte for
-byte). No board, no network. It reuses `../qemu` (`build-uboot.sh`,
-`image.S`, `mkdisk.sh`, `drive.py`) without changing it.
+byte). No board, no network. It reuses `../qemu/build-uboot.sh`,
+`../qemu/image.S`, `../qemu/mkdisk.sh` and `../qemu/drive.py` without
+changing them.
 
 | file | job |
 | --- | --- |

@@ -17,18 +17,16 @@ bytes, `RGXFWIF_FWCOMMONCONTEXT` 456 against 336), and the firmware reads the
 tag encodings and the BIF fault-status fields the render service decodes)
 with the value the board runs. `ddk_abi_check.c` turns each line into a
 `_Static_assert` against the vendored headers, and compares the boot
-alignment-check table with `RGXFW_ALIGN_CHECKS_INIT_KM` at run time.
-`ddk_abi_fork_check.c` checks the driver's own copies of the same numbers
-(`driver/src/pvr_ddk_abi.h`, the `PVR_DDK_FW` parts of `pvr_fwif.h`) against
-the pinned values, for as long as those copies exist. A `MISMATCH` line
-records a place where the driver's copy differs from the DDK, with both values
+alignment-check table with `RGXFW_ALIGN_CHECKS_INIT_KM` at run time. Until
+the switch to the vendored headers (`docs/source-form.md` step 2) the driver
+carried its own copies of these numbers; a fork check compared them with the
+pinned values before they were deleted. A `MISMATCH` line records a place
+where the driver deliberately does not use the DDK's number, with both values
 asserted and the reason.
 
 ```sh
 cc -std=gnu11 -Wall -Wextra -Werror $(driver/tools/offsetof/ddk-cflags.sh) \
    driver/tools/offsetof/ddk_abi_check.c -o ddk_abi_check && ./ddk_abi_check
-cc -std=gnu11 -Wall -Wextra -Werror -DPVR_DDK_FW -Idriver/src -Idriver/tools/offsetof \
-   driver/tools/offsetof/ddk_abi_fork_check.c -o ddk_abi_fork_check && ./ddk_abi_fork_check
 ```
 
 ## dumpcc
