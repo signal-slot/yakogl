@@ -27,6 +27,28 @@
 # --check` when a tool is, so a gap never looks like a pass. Another project
 # uses the same runners with its own workflow and its own deps directory. No
 # value in this file is secret.
+#
+# A pull request from another repository (a fork) is routed away from those
+# runners: job `check` runs only for a pull request whose head is in this
+# repository (and for the nightly and a run by hand), and job `outside`, on
+# a GitHub-hosted runner with no checkout and no token, fails with a message
+# that the gate does not run on it. A maintainer who has read the change
+# pushes the branch to this repository and opens a pull request from it
+# (docs/ci.md, "Pull requests from forks"). `outside` fails rather than
+# skips because a skipped job counts as passing for a required status check.
+# A pull request whose fork was deleted has no head repository (null): it
+# matches neither repository, so `check` skips and `outside` fails.
+#
+# The `if` is routing, not a security boundary. For `pull_request` GitHub
+# runs this file as it is in the pull request's merge commit, so a fork can
+# edit it in its own pull request (drop the `if` on `check`, or add a job
+# with `runs-on` the yakogl-gate label) and run its code on these runners.
+# What keeps a fork's code off them is a repository or organisation setting,
+# required before this repository is public: "Require approval for all
+# outside collaborators" (or all external contributors) for fork pull
+# request workflows, and/or the yakogl-gate runners in a runner group that
+# public repositories cannot use, or one limited to selected workflows from
+# main.
 name: gate
 
 on:
@@ -50,7 +72,30 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A pull request from a fork (or from a deleted one): the gate does not run
+  # on it, and this job says so and fails (a skipped job would count as a
+  # pass). It reads only the pull request's number, never a branch name,
+  # title or body, and has no checkout and no token. This routes an honest
+  # fork pull request; it is not what keeps a fork's code off the
+  # self-hosted runners, since a fork can edit this file in its pull
+  # request. That is the repository setting in the header.
+  outside:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 5
+    steps:
+      - name: the gate does not run on a pull request from another repository
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          echo "::error::pull request #$PR comes from another repository: the gate does not run on it"
+          echo "The gate runs only on branches of this repository. A maintainer who has"
+          echo "read the change pushes the branch to this repository and opens a pull"
+          echo "request from it; the gate runs on that one."
+          exit 1
   check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # Any runner with the label yakogl-gate (runners A, B and C), so the
     # gate never waits on one machine: on 2026-10-13 runner C, the only runner
     # then, hung out of memory and every pull request queued for hours behind

@@ -30,6 +30,19 @@ CI, a review, then the merge. Never push main by hand.
 3. The review reads the commit; it runs no check.
 4. Merge when the CI is green and the review approves.
 
+The gate runs only on branches of this repository. On a pull request from
+a fork, job `outside` fails with "pull request #N comes from another
+repository: the gate does not run on it", and the gate does not run. A
+maintainer who has read the change pushes the branch to this repository
+and opens a pull request from it; the gate runs there. The job's condition
+only routes such a pull request: a fork can edit `gate.yml` in its own pull
+request. So a public repository requires, before it is made public, the
+setting that keeps fork code off the self-hosted runners: "Require approval
+for all outside collaborators" (or all external contributors) for fork pull
+request workflows, and/or the gate's runners in a runner group that public
+repositories cannot use or that is limited to selected workflows from main
+(`docs/ci.md`, section 6).
+
 ## The gate: `tools/check.sh`
 
 This section describes what the CI runs, how to read its log, and what a

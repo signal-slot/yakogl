@@ -426,3 +426,53 @@ run that writes the caches, so the next day's pull requests start from it.
 
 Every step is measured on the same commit on runner A before and after (the row
 times in the gate log) and the numbers go into this file's section 1.
+
+## 6. Pull requests from forks
+
+The gate runs only on branches of this repository. `gate.yml` has two
+jobs: `check`, the gate on runners A, B and C (label `yakogl-gate`), runs
+for the nightly, a run by hand and a pull request whose head branch is in
+this repository; `outside` runs for any other pull request.
+
+| event | `check` | `outside` |
+|---|---|---|
+| pull request from a branch of this repository | runs the gate | skipped |
+| pull request from a fork | skipped | fails |
+| pull request whose fork was deleted (no head repository) | skipped | fails |
+| nightly (`schedule`) | runs every row | skipped |
+| by hand (`workflow_dispatch`) | runs every row | skipped |
+
+**What an outside contributor sees.** On a pull request from a fork, job
+`outside` fails with "pull request #N comes from another repository: the
+gate does not run on it", and the gate does not run. The job runs on a
+GitHub-hosted runner with no checkout and no token, and reads only the pull
+request's number. It fails rather than skips because a skipped job counts
+as passing for a required status check.
+
+**What a maintainer does.** Reads the change, pushes the branch to this
+repository, and opens a pull request from that branch. The gate runs on
+that pull request as on any other.
+
+**Required for a public repository.** The `if` of the two jobs only routes
+an honest fork pull request. It is not a security boundary: for a pull
+request GitHub runs the workflow file of the pull request's merge commit,
+so a fork can edit `gate.yml` in its own pull request (drop the `if` on
+`check`, or add a job on the `yakogl-gate` label) and run its code on the
+self-hosted runners, which share their hosts with farm agents and hold the
+firmware and the toolchains of the dependency layout. The boundary is a
+repository or organisation setting, and it must be in place before the
+repository is made public:
+
+- Settings > Actions > General, the approval of fork pull request
+  workflows: "Require approval for all outside collaborators" (or for all
+  external contributors), and/or
+- the `yakogl-gate` runners in a runner group that public repositories
+  cannot use, or one limited to selected workflows from main.
+
+The other ways a workflow starts: `workflow_dispatch` needs write access to
+the repository, and `schedule` runs the file of the default branch. Neither
+workflow uses `pull_request_target` or `workflow_run`. `gate.yml`'s token is
+read-only (contents, actions, pull requests) and `outside` has none.
+`pages.yml` runs on a push to main that touches `website/**` (or the file
+itself) and by hand, on a GitHub-hosted runner, only when the repository
+variable `PAGES_ENABLED` is `true`; no fork event starts it.
