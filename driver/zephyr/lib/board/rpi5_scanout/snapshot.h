@@ -10,11 +10,15 @@
  *
  * Header-only C11. Facts only; no Linux code is copied. A table entry's
  * `cite` is "rpi:<file>:<line>" (the Raspberry Pi Linux tree, as cited by
- * hvs6_dlist.h), "facts:<section>" (driver/docs/rpi5-v3d71-facts.md), or
- * "unverified" (from memory, not confirmed against a tree or the board).
+ * hvs6_dlist.h), optionally with the caveat that follows in parentheses.
  * The facts file (section 10) gives the HVS, pixel valve and HDMI base
- * addresses but no register offsets, so the offsets come from vc4_regs.h
- * as already cited in hvs6_dlist.h, or are unverified.
+ * addresses but no register offsets, so every offset here is cited to
+ * vc4_regs.h (HVS, pixel valve), to the BCM2712 tables of vc4_hdmi_regs.h
+ * (the 'hd' region, whose hdmi0 and hdmi1 variants share one block) or to
+ * the HVS channel blocks hvs6_dlist.h cites. What stays unverified is the
+ * pixel valve: those offsets are the vc4 layout, and that BCM2712's pixel
+ * valve uses it is said on each entry (the same caveat pv_hdmi.h and
+ * fw_stop.h carry). No entry is "from memory" any more.
  *
  * Offsets are relative to the block's base; the base is the reader's
  * business (the injected reader maps block + offset to an address), so no
@@ -61,42 +65,64 @@ struct snap_reg {
 #define SNAP_END_WORD_BIT31 0x80000000u
 
 #define SNAP_R(b, o, n, c) { (b), (o), 32, (n), (c) }
-#define SNAP_HVS_CH(g, p, c0, lp, st, dl, ch, cc)                                  \
-	SNAP_R(SNAP_HVS, (c0) + (ch) * (p), g "_disp" #ch "_ctrl0", cc),           \
-	SNAP_R(SNAP_HVS, (lp) + (ch) * (p), g "_disp" #ch "_lptrs", cc),           \
-	SNAP_R(SNAP_HVS, (st) + (ch) * (p), g "_disp" #ch "_status", cc),          \
+#define SNAP_HVS_CH(g, p, c0, c1, bg, lp, cb, st, dl, ch, cc)                       \
+	SNAP_R(SNAP_HVS, (c0) + (ch) * (p), g "_disp" #ch "_ctrl0", cc),            \
+	SNAP_R(SNAP_HVS, (c1) + (ch) * (p), g "_disp" #ch "_ctrl1", cc),            \
+	SNAP_R(SNAP_HVS, (bg) + (ch) * (p), g "_disp" #ch "_bgnd", cc),             \
+	SNAP_R(SNAP_HVS, (lp) + (ch) * (p), g "_disp" #ch "_lptrs", cc),            \
+	SNAP_R(SNAP_HVS, (cb) + (ch) * (p), g "_disp" #ch "_cob", cc),              \
+	SNAP_R(SNAP_HVS, (st) + (ch) * (p), g "_disp" #ch "_status", cc),           \
 	SNAP_R(SNAP_HVS, (dl) + (ch) * (p), g "_disp" #ch "_dl", cc)
-#define SNAP_HVS_C(ch) SNAP_HVS_CH("c", 0x20, 0x30, 0x3c, 0x44, 0x48, ch, \
-	"rpi:vc4_regs.h:564,587,600,614 (stride :622)")
-#define SNAP_HVS_D(ch) SNAP_HVS_CH("d", 0x40, 0x100, 0x110, 0x118, 0x11c, ch, \
-	"rpi:vc4_regs.h:707,711,713,714 (stride :718)")
+#define SNAP_HVS_C(ch) SNAP_HVS_CH("c", 0x20, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44, 0x48, ch, \
+	"rpi:vc4_regs.h:564,575,582,587,593,600,614 (stride :622)")
+/* Linux lists the D group twice (rpi:vc4_regs.h:701-706 and :707-714), the second
+ * listing naming 0x108 BGND0 and adding 0x10c BGND1; the values are the same. */
+#define SNAP_HVS_D(ch) SNAP_HVS_CH("d", 0x40, 0x100, 0x104, 0x108, 0x110, 0x114, 0x118, 0x11c, ch, \
+	"rpi:vc4_regs.h:701,702,703,704,705,706,714 (BGND as BGND0 at :709, listed again at " \
+	":707-714; stride :718)")
 
 /* Generation C and D channel blocks are both listed (the generation is in
  * the version word): on the other generation the offsets read other
  * registers, so a decoder picks by the version word. */
 static const struct snap_reg snap_table[] = {
+	/* The HVS's own identity words. VERSION names the stepping (which channel
+	 * block the offsets below are for), CXM_SIZE the shared line buffer, and
+	 * CONTROL the HVS enable: the offset is 0x20 in both groups, so one entry
+	 * covers both (SCALER6_CONTROL rpi:vc4_regs.h:553, HVS_EN bit 31 at :554;
+	 * SCALER6D_CONTROL :682). */
 	SNAP_R(SNAP_HVS, 0x0000, "version", "rpi:vc4_regs.h:543,676"),
 	SNAP_R(SNAP_HVS, 0x0004, "cxm_size", "rpi:vc4_regs.h:547,677"),
+	SNAP_R(SNAP_HVS, 0x0020, "control", "rpi:vc4_regs.h:553,682"),
 	SNAP_HVS_C(0), SNAP_HVS_C(1), SNAP_HVS_C(2),
 	SNAP_HVS_D(0), SNAP_HVS_D(1), SNAP_HVS_D(2),
-	/* Pixel valve (facts:10: pixelvalve0/1 at bcm2712.dtsi:292-302; no
-	 * register offsets in the facts file). These are the vc4 pixel valve
-	 * layout from memory; that BCM2712's is the same is not confirmed. */
-	SNAP_R(SNAP_PV, 0x00, "pv_control", "unverified"),
-	SNAP_R(SNAP_PV, 0x04, "pv_v_control", "unverified"),
-	SNAP_R(SNAP_PV, 0x0c, "pv_horza", "unverified"),
-	SNAP_R(SNAP_PV, 0x10, "pv_horzb", "unverified"),
-	SNAP_R(SNAP_PV, 0x14, "pv_verta", "unverified"),
-	SNAP_R(SNAP_PV, 0x18, "pv_vertb", "unverified"),
-	SNAP_R(SNAP_PV, 0x24, "pv_inten", "unverified"),
-	SNAP_R(SNAP_PV, 0x28, "pv_intstat", "unverified"),
-	SNAP_R(SNAP_PV, 0x2c, "pv_stat", "unverified"),
-	/* HDMI0 'hd' region (facts:10: HDMI_VID_CTL bit 31 is
-	 * VC4_HD_VID_CTL_ENABLE, vc4_hdmi.c:3391-3399, vc4_regs.h:1007). The
-	 * offsets within the region are not in the facts file. */
-	SNAP_R(SNAP_HDMI0, 0x038, "hdmi_vid_ctl", "unverified (offset; bit 31 ENABLE: facts:10)"),
-	SNAP_R(SNAP_HDMI0, 0x00c, "hdmi_m_ctl", "unverified"),
-	SNAP_R(SNAP_HDMI0, 0x0e8, "hdmi_frame_count", "unverified"),
+	/* Pixel valve (facts:10: pixelvalve0/1 at bcm2712.dtsi:292-302). The
+	 * offsets are the vc4 pixel valve layout as vc4_regs.h defines it; that
+	 * BCM2712's pixel valve uses it is unverified (the same caveat as
+	 * pv_hdmi.h and fw_stop.h carry), so the values are read as the words
+	 * they are and no field of them decides a route on its own. */
+	SNAP_R(SNAP_PV, 0x00, "pv_control", "rpi:vc4_regs.h:145 (BCM2712 use unverified)"),
+	SNAP_R(SNAP_PV, 0x04, "pv_v_control", "rpi:vc4_regs.h:171 (BCM2712 use unverified)"),
+	SNAP_R(SNAP_PV, 0x0c, "pv_horza", "rpi:vc4_regs.h:184 (BCM2712 use unverified)"),
+	SNAP_R(SNAP_PV, 0x10, "pv_horzb", "rpi:vc4_regs.h:190 (BCM2712 use unverified)"),
+	SNAP_R(SNAP_PV, 0x14, "pv_verta", "rpi:vc4_regs.h:196 (BCM2712 use unverified)"),
+	SNAP_R(SNAP_PV, 0x18, "pv_vertb", "rpi:vc4_regs.h:202 (BCM2712 use unverified)"),
+	SNAP_R(SNAP_PV, 0x24, "pv_inten", "rpi:vc4_regs.h:211 (BCM2712 use unverified)"),
+	SNAP_R(SNAP_PV, 0x28, "pv_intstat", "rpi:vc4_regs.h:212 (BCM2712 use unverified)"),
+	SNAP_R(SNAP_PV, 0x2c, "pv_stat", "rpi:vc4_regs.h:224 (BCM2712 use unverified)"),
+	SNAP_R(SNAP_PV, 0x30, "pv_hact_act", "rpi:vc4_regs.h:226 (BCM2712 use unverified)"),
+	/* The HDMI0 'hd' region (facts:10: HDMI_VID_CTL bit 31 is
+	 * VC4_HD_VID_CTL_ENABLE, vc4_hdmi.c:3391-3399, vc4_regs.h:1007), whose
+	 * offsets are the BCM2712 table's: vc6_hdmi_hdmi0_fields
+	 * (rpi:vc4_hdmi_regs.h:431-439). hdmi1's ninth reg entry is the same
+	 * block (rpi:bcm2712.dtsi:399-409, 0x7c720000 0x100, as hdmi0's at
+	 * :380) with its own table vc6_hdmi_hdmi1_fields (:531-539), so both
+	 * connectors' status words are read from one mapping and the two
+	 * VID_CTL words say which HDMI the firmware left running. */
+	SNAP_R(SNAP_HDMI0, 0x000, "hdmi_dvp_ctl", "rpi:vc4_hdmi_regs.h:432 (vc6_hdmi_hdmi0_fields)"),
+	SNAP_R(SNAP_HDMI0, 0x044, "hdmi_vid_ctl", "rpi:vc4_hdmi_regs.h:438 (bit 31 ENABLE: facts:10)"),
+	SNAP_R(SNAP_HDMI0, 0x060, "hdmi_frame_count", "rpi:vc4_hdmi_regs.h:439"),
+	SNAP_R(SNAP_HDMI0, 0x048, "hdmi1_vid_ctl", "rpi:vc4_hdmi_regs.h:538 (vc6_hdmi_hdmi1_fields)"),
+	SNAP_R(SNAP_HDMI0, 0x064, "hdmi1_frame_count", "rpi:vc4_hdmi_regs.h:539"),
 };
 #define SNAP_COUNT (sizeof(snap_table) / sizeof(snap_table[0]))
 

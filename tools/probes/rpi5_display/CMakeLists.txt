@@ -5,7 +5,10 @@
 # hand out a framebuffer. See README.md. Not under tools/probes/rpi_5/ until
 # plan #321 releases that tree; then it moves there as rpi5_display.
 #
-#   west build -p always -b rpi_5 -d build/rpi5_display yakogl/tools/probes/rpi5_display
+#   west build -p always -b rpi_5 -d build/rpi5_display/west \
+#     yakogl/tools/probes/rpi5_display -- -DYAKOGL_WERROR=ON
+# (-d build/rpi5_display/west: src/plane_match_selftest.sh builds into
+#  build/rpi5_display/plane_match/, so the west tree keeps its own directory.)
 cmake_minimum_required(VERSION 3.20.0)
 
 # driver/ is a Zephyr module (the board layer: the watchdog and the mailbox).
@@ -26,7 +29,11 @@ target_compile_definitions(app PRIVATE RPI5_DISPLAY_BUILD="${RPI5_DISPLAY_BUILD}
 message(STATUS "rpi5_display build: ${RPI5_DISPLAY_BUILD}")
 
 # The Pi 4's console (fbcon.c, font in board/common) and the Pi 5's screen
-# calls (rpi5_screen.c) over the mailbox the board layer owns.
+# calls (rpi5_screen.c) over the mailbox the board layer owns. The U3 decisions
+# are the header-only rpi5_scanout library (scanout_alive.h, hvs6_dlist.h,
+# adopt.h, bus_addr.h, pv_hdmi.h, snapshot.h, throttled.h, fw_clk.h, hvs6_fmt.h,
+# pattern.h) plus this probe's own plane_match.h: no .c files of theirs are
+# compiled, the same headers the host tests build.
 target_sources(app PRIVATE
   src/main.c
   ${PVR_REPO}/zephyr/lib/board/rpi5/rpi5_screen.c
@@ -34,6 +41,7 @@ target_sources(app PRIVATE
 target_include_directories(app PRIVATE
   ${PVR_REPO}/zephyr/lib/board/rpi4
   ${PVR_REPO}/zephyr/lib/board/rpi5
+  ${PVR_REPO}/zephyr/lib/board/rpi5_scanout
   ${PVR_REPO}/zephyr/lib/board/common)
 
 # Zero warnings in our C files (-DYAKOGL_WERROR=ON).
