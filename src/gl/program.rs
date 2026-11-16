@@ -1085,7 +1085,6 @@ fn check_sampler_counts_against(
                 log,
                 format_args!("link error: {who} {used} active samplers; this implementation exposes {max} ({cap})"),
             );
-            glog!("yakogl: {}", Bytes(log_text(log)));
             return Err(());
         }
     }
@@ -1152,7 +1151,6 @@ fn check_uniform_packing(vs: &ShcShader, fs: &ShcShader, log: &mut [u8; INFO_LOG
     for (stage, budget) in [(vs, packing::Budget::VertexUniforms), (fs, packing::Budget::FragmentUniforms)] {
         if let Err(unfit) = packing::check(budget, uniform_vars(stage)) {
             write_log(log, format_args!("link error: {unfit}"));
-            glog!("yakogl: {}", Bytes(log_text(log)));
             return Err(());
         }
     }
@@ -1367,7 +1365,6 @@ fn attribs_unfit(log: &mut [u8; INFO_LOG_SIZE], detail: core::fmt::Arguments<'_>
             context::MAX_VERTEX_ATTRIBS
         ),
     );
-    glog!("yakogl: {}", Bytes(log_text(log)));
 }
 
 /// The vertex inputs a vertex shader gives `layout(location = N)`, by name.
@@ -1906,16 +1903,22 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
-    match link_inputs(c, program, vs, fs) {
-        Ok(inputs) => {
-            link_with(c, program, &inputs);
-        }
+    let linked = match link_inputs(c, program, vs, fs) {
+        Ok(inputs) => link_with(c, program, &inputs),
         Err(why) => {
             /* the old link is gone all the same */
             link_reset(c, program);
             // SAFETY: single-threaded by contract; link_reset holds no reference.
             write_log(&mut STATE.get().log[c.group as usize][obj_index(program)], format_args!("{why}"));
+            false
         }
+    };
+    /* A link that failed says why on the console, as a compile that failed
+     * does (shader.rs): an application may never read the info log. */
+    if !linked && crate::osal::ops().and_then(|o| o.log).is_some() {
+        // SAFETY: single-threaded by contract; the link holds no reference.
+        let log = &STATE.get().log[c.group as usize][obj_index(program)];
+        glog!("glLinkProgram({}): {}", program, Bytes(log_text(log)));
     }
 }
 
@@ -2089,7 +2092,6 @@ pub(super) unsafe fn link_with(c: &mut GlContext, program: GLuint, inputs: &Link
         // INFO_LOG_SIZE bytes.
         let rc = link(&p.rvs, &mut p.rfs, log.as_mut_ptr() as *mut c_char, INFO_LOG_SIZE);
         if rc != 0 {
-            glog!("yakogl: {}", Bytes(log_text(log)));
             return false;
         }
     }
@@ -6335,6 +6337,44 @@ mod tests {
         assert_eq!(get_iv(p, GL_ACTIVE_UNIFORMS), 0);
         assert_eq!(get_iv(p, GL_ACTIVE_ATTRIBUTES), 0);
         assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
+    /// A link that fails says why on the console, once: the line is the
+    /// program's info log, as glCompileShader's is the shader's. A link
+    /// that works prints nothing, and a call that is a GL error only the
+    /// error's own line.
+    #[test]
+    fn a_failed_link_prints_its_info_log_on_the_console() {
+        let gl = fresh();
+        /* nothing attached */
+        // SAFETY: plain GL call.
+        let empty = unsafe { glCreateProgram() };
+        /* the vertex shader does not write the fragment shader's varying */
+        let (unpaired, _, _) = attached(&gl, "passthrough.vert", "texture.frag");
+        let (good, _, _) = attached(&gl, "passthrough.vert", "uniform_color.frag");
+        let _ = gl.logs();
+        for p in [empty, unpaired] {
+            // SAFETY: plain GL call.
+            unsafe { glLinkProgram(p) };
+            assert_eq!(get_iv(p, GL_LINK_STATUS), 0);
+            let lines = gl.logs();
+            let [line] = lines.as_slice() else {
+                panic!("one line for program {p}: {lines:?}");
+            };
+            let said = line.strip_prefix(&format!("glLinkProgram({p}): ")).unwrap_or_else(|| panic!("{line}"));
+            let log = info_log(p);
+            /* a line holds OSAL_LOG_LINE_MAX - 1 bytes: a longer log is cut there */
+            assert!(!said.is_empty() && log.starts_with(said), "{line} / {log}");
+            assert!(said == log || line.len() == crate::osal::OSAL_LOG_LINE_MAX - 1, "{line} / {log}");
+        }
+        // SAFETY: plain GL call.
+        unsafe { glLinkProgram(good) };
+        assert_eq!(get_iv(good, GL_LINK_STATUS), 1);
+        assert_eq!(gl.logs(), Vec::<String>::new());
+        // SAFETY: plain GL call.
+        unsafe { glLinkProgram(good + 100) };
+        assert_eq!(gl.error(), GL_INVALID_VALUE);
+        assert_eq!(gl.logs(), ["GL error 0x501 in glLinkProgram"]);
     }
 
     #[test]
