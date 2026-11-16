@@ -1,0 +1,5 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+A u-boot-env image built by regen.sh (README.md) from
+driver/tools/mp2-standalone/st-env/stm32mp25-dk-initial-env.txt with
+tools/uboot_env.py: values and CRCs, no code.
