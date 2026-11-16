@@ -50,12 +50,20 @@ NotSupported, `fbo_max_samples` 4 Fail), the two stopped images 103
 NoResult, 2 NotSupported, 2 ResourceError), `state_query` 35,
 `attribute_location.mixed_max_attributes` 20 (the compiler refuses the
 vertex shader), `rasterization` 18, `shader_api.program_binary` 14
-(NotSupported), `samplers` 14 (3D, Fail), `negative_api` 11,
+(NotSupported), `samplers` 14 (3D, Fail; host `functional.samplers` 42 / 42 pass on the three GPUs at `26d1c4a2`, HOST-ONLY), `negative_api` 11,
 `implementation_limits` 11 and `lifetime.attach` 1. Rows 21-90 of the tree,
 the ES2 regression rows and the gles2 stage 1 have not run.
 
 **Host (HOST-ONLY: API and compile verdicts, never pictures)**: per group on
-the three GPUs at `70142d35`: `docs/es3/host-gles3-tip.tsv`. Since then the
+the three GPUs at `26d1c4a2` (42,810 cases each): `docs/es3/host-gles3-tip.tsv`;
+the counting rows (refusals by name, wrong GL errors, compile failures) with
+their RC and owner: `docs/es3/host-gles3-notpass.tsv` (10,081 rows, 2,144
+unowned; the GC7000UL compiler's 766 rows, RC5 / RC13 / RC4, are the largest
+unowned class), rules in `docs/es3/host-gles3-owners.tsv`. Fixed on the host
+since the `70142d35` table, HOST-ONLY: `negative_api` (G8; table below),
+`attribute_location.mixed_max_attributes` (G4) and the V3D 3D look-up (G6):
+`functional.samplers` 42 pass / 0 fail on all three. The numbers in the rest
+of this paragraph are from the earlier table. Since `70142d35` the
 GC7000UL library samples eight more texture classes (`541975a2`). Measured at
 `541975a2`, HOST-ONLY: `texture.format` 546 cases, 498 fail / 48 NotSupported,
 upload refusals 200 -> 64 (compile 0, image 434); `texture.specification`
@@ -102,13 +110,13 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 | fragment_out | 583 | basic and array `int` / `uint` 456, array `float` 36, array `fixed` 12, random 79 ("Image comparison failed") | RC1 (integer targets beside another, partial masks), RC14 |
 | shaders | 410 | texture_functions 297 (compile refusals: `textureGrad`, `textureProjGrad`, offsets, `texelFetchOffset`; 38 `texturesize` "Got unexpected texture size"), builtin_functions 40 (`common.round` / `roundeven` 16, `modf` 24), precision 24 (`int` / `uint`: the program linked-failed before `3efd7b30`, builds now; host read-back is black), derivate 23 (15 are `texture.msaa4`, RC8), fragdepth 15 (compile), qualification_order 7, uniform_block 2, metamorphic 2 | RC13, RC8, RC16 |
 | fbo | 367 | color 147, render 68, completeness 56, msaa 34, invalidate 33, blit 19 (16 `blit.depth_stencil`), depth 10. 146 are `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` | RC1, RC8, RC17 |
-| attribute_location | 48 | `mixed.*` and `mixed_time.*` 28, `mixed_max_attributes.*` 20 (all fixed on the host in `381b0f09`, 9 unit tests pass; host dEQP `mixed_max_attributes.*` 24 / 24 pass at `e320630d`, no board run) | Appendix A, task T4 |
+| attribute_location | 48 | `mixed.*` and `mixed_time.*` 28, `mixed_max_attributes.*` 20 (all fixed on the host in `381b0f09`, 9 unit tests pass; host dEQP `mixed_max_attributes.*` 24 / 24 pass at `e320630d`; whole `attribute_location` 274 pass / 0 fail / 0 NotSupported on `GPU=powervr`, `v3d` and `vivante` at `26d1c4a2`, HOST-ONLY; no board run) | Appendix A, task T4 |
 | vertex_arrays | 41 | packed `int2_10_10_10` in a buffer 20, `components{2,3}_{i,u}vec4` 21 | Appendix A, tasks T2 and T3 |
 | state_query | 25 | 64-bit and float reads of ES 3.0 limits, `rbo` component size, `program_binary` | RC10 |
 | draw | 14 | `random.*` image comparison | not classified |
 | implementation_limits | 11 | limits below the ES 3.0 minimum (`max_draw_buffers`, `max_color_attachments`, varying and uniform components, compressed formats) | RC10, RC14 |
 | rasterization | 11 | `flatshading.*` 9, `fbo.rbo_multisample_max` 2 | not classified; RC8 |
-| negative_api | 7 | `texsubimage{2d,3d}`, `uniformui{,v}_incompatible_type`, `read_pixels_fbo_format_mismatch`, `blit_framebuffer{,_multisample}` | RC8, not classified |
+| negative_api | 7 | `texsubimage{2d,3d}`, `uniformui{,v}_incompatible_type`, `read_pixels_fbo_format_mismatch`, `blit_framebuffer{,_multisample}` (the board count). Host at `26d1c4a2`, HOST-ONLY: `GPU=powervr` and `GPU=v3d` 306 pass / 2 fail / 4 NotSupported, `GPU=vivante` 304 pass / 4 fail / 4 NotSupported. The `texsubimage` and `uniformui` rows are fixed (G8: `bc200f21`, `aad36fee`, `tests/es3_negapi_{uniform,texsub,readpixels}.rs`, `tests/es3_blit_int_err.rs`). Still failing: `read_pixels_fbo_format_mismatch` (RC8 / #339 on `GPU=vivante`; `host-gles3-notpass.tsv` classes it new / #364 on `GPU=powervr` and `GPU=v3d`) and `blit_framebuffer_multisample` (RC8 / #339), each on all three GPUs; `clear_bufferiv` and `clear_bufferuiv` (RC17 / #335 / #355) on `GPU=vivante` only. The 4 NotSupported are the `GL_EXT_draw_buffers_indexed` rows `fragment.blend_{equation,equation_separate,func,func_separate}i`, allowed for ES 3.0 | RC8, RC17 |
 | instanced | 6 | `{draw_arrays,draw_elements}_instanced.mixed.{2,4,20}_instances` | Appendix A, task T6 |
 | multisample | 4 | `fbo_max_samples.*` coverage cases | RC8 |
 | uniform_api | 1 | `random.83` (compile) | RC13 |
@@ -171,7 +179,7 @@ The online compiler takes the shadow, projective and 3D bias forms; the 2D
 and cube shadow cases pass or warn (180 QualityWarning). Since the AM62P run (`ad2b5ed`): every shadow look-up form compiles and a
 LINEAR sampler over one level compares per texel (`d7b2cf8b`, host). Left: the
 108 `texture.shadow.2d_array` failures (RC6) are host-done: mipmap PCF and mirrored-repeat weights (`919db72b`), cube PCF (`43af85d7`). The PowerVR host has no shadow gap left; the `texture.shadow.{2d,2d_array,cube}` rows are board pending (AM62P rerun).
-V3D: the draw-time sampler compare is done on the host (`455c3bb5`, pinned by `84d8c388`: `sampler_for` packs with the binding's compare op through `v3d_tex_pack_sampler_compare` and keys its cache on the compare function, `src/v3d/backend_tests.rs`); not done: the reference clamp for a fixed-point depth texture (`docs/notes/v3d-shadow.md` (d)); the Pi 4 run is pending: the shadow rows of `tools/cts/pi4-gles3-tree.txt` (36 draw cases under 42 names) rerun later. GC7000UL: its compiler still refuses the shadow look-up (`docs/notes/gc-shadow-compare.md`).
+V3D: the draw-time sampler compare is done on the host (`455c3bb5`, pinned by `84d8c388`: `sampler_for` packs with the binding's compare op through `v3d_tex_pack_sampler_compare` and keys its cache on the compare function, `src/v3d/backend_tests.rs`); not done: the reference clamp for a fixed-point depth texture (`docs/notes/v3d-shadow.md` (d)); the Pi 4 run is pending: the shadow rows of `tools/cts/pi4-gles3-tree.txt` (36 draw cases under 42 names) rerun later. GC7000UL: its compiler still refuses the shadow look-up (`docs/notes/gc-shadow-compare.md`); host dEQP at `26d1c4a2`, HOST-ONLY: all 432 `texture.shadow` cases on `GPU=vivante` answer "Failed to compile shader program" (`docs/es3/host-gles3-notpass.tsv`, RC5, unowned).
 
 ### RC6. 2D-array textures sampled as one tall image (PowerVR)
 
@@ -297,6 +305,15 @@ Over dEQP's 5,596 `data/gles3/shaders/*.test` programs
 (`docs/es3/shaderc-coverage.md`, `tests/es3_shaderc_corpus.rs`), the PowerVR,
 GC7000UL and V3D each build 3,459 of the 3,461 that must build. Left on each:
 2 `constant_expressions.other.complex_*` (`gl_MaxDrawBuffers`, RC14). The
+corpus builds the programs; the GC7000UL library of the host dEQP run still
+refuses 332 RC13 programs at `26d1c4a2`, HOST-ONLY (`host-gles3-notpass.tsv`,
+unowned): 304 `shaders.texture_functions` ("Failed to compile shader
+program": `textureGrad`, `textureProj*`, offsets, `texelFetchOffset`,
+`textureLod*`), 26 `shaders.random.{texture,all_features}` and
+`uniform_api.random.{21,83}`; 2 `transform_feedback.random_full_array_capture`
+rows are RC4. The V3D and PowerVR libraries refuse one or two programs each
+(`uniform_api.random.83`, V3D `shaders.metamorphic.synthetic.variant_3`: a
+code-generator refusal, `Select(OutOfScratch)`). The
 reflection names of 63 characters or more are fixed (block members by
 `06840143`, default-block uniforms by `83644bb2`; `docs/notes/reflection-long-names.md`).
 
@@ -435,8 +452,10 @@ with `GlesTextureBind::swizzle` into the texture shader state, and
 `sampler().wrap_r` is `wrap(b.wrap_r)`; unit tests in `src/v3d/texture.rs`.
 Left, each a back-end site: PowerVR `build_tex_desc` (`swiz0..3`,
 `addrmode_w`; 3D itself is RC15), GC7000UL `texdesc_swizzle_*` and
-`samp_wwrap`, plus V3D 3D sampling (a `wrap_r` needs a 3D look-up, still
-refused). On the V3D host library `texture.filtering` still refuses 227
+`samp_wwrap`, plus V3D 3D sampling (the 3D look-up is fixed on the host, G6:
+`functional.samplers` 42 / 42 pass at `26d1c4a2`, HOST-ONLY; 32 V3D draws of
+`shaders.texture_functions.texture{,proj}grad{,offset}.*sampler3d_*` still answer
+`GL_INVALID_OPERATION`, RC2, unowned). On the V3D host library `texture.filtering` refused 227
 look-ups (2D-array and 3D programs) and 72 uploads at `70142d35`, before
 `cc1c6ede` (`docs/es3/texture-host-repro.md` section 1).
 
