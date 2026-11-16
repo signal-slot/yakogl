@@ -284,6 +284,11 @@ for an entry that now meets its minimum.
 | MAX_VARYING_VECTORS / _COMPONENTS / FRAGMENT_INPUT | 15 / 60 / 60 | ok (15 / 60 / 60) | ok (15 / 60 / 60) | 15 / 60 / 60 (Mali 8 / 32 / 32) | V3D done (v3d-varyings-raise); V3D board run |
 | MAX_VERTEX_OUTPUT_COMPONENTS | 64 | 60 | 60 | 64 (Mali 32) | PowerVR and GC7000: [U] whether 64 is reachable (GC7000: 15 x 4; one of 16 output rows is the position) |
 
+Host dEQP-GLES3 at `93bca01` (HOST-ONLY, `docs/notes/es3-interface-limits.md`
+section 6) agrees with this table on all three GPUs at `7c39ee92`: the
+`implementation_limits` and `state_query.integers*` cases that fail are those of
+the rows above that are not ok, in all their query forms, and no others.
+
 The three transform feedback limits are **not** gaps: 64 / 4 / 64 meet ES
 3.0's 64 / 4 / 4 on every GPU (§2).
 

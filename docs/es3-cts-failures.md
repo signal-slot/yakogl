@@ -258,9 +258,15 @@ blocks read through the uniform stream behind its default block
 (`gl/context.rs` `MAX_UNIFORM_BLOCK_SIZE`, `MAX_STAGE_UNIFORM_DWORDS`;
 `tests/es3_limits_v3d.rs`, `v3d/backend_tests.rs`
 `a_uniform_block_of_16384_bytes_reaches_the_stream_whole`; board rows to
-re-run, host dEQP not yet run). Left: the uniform-block size and the
+re-run). Host dEQP at `93bca01`, `753dedbf` against `7c39ee92`
+(`docs/notes/es3-interface-limits.md` section 6, HOST-ONLY): on the V3D 21
+cases of the two families move Fail to Pass (7 `implementation_limits`, 8
+`state_query.integers`, 6 `integers64`), the `_getfloat` / `_getinteger64`
+forms with their limit, and no `shaders.linkage` or `functional.ubo` case is
+refused at compile or link on any of the three GPUs. Left: the uniform-block size and the
 combined uniform components on the PowerVR and GC7000UL (6144 / 1536),
-`MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the same two, and RC14. The compressed-format list is closed on the
+`MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the same two (host dEQP: 4
+`implementation_limits` and 8 `state_query` rows on each), and RC14. The compressed-format list is closed on the
 host: `GL_NUM_COMPRESSED_TEXTURE_FORMATS` is 11 (ETC1 and the ten ETC2/EAC
 formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,

@@ -110,5 +110,55 @@ defect.
    64" (waits for `src/vivante/**`), "Mali: varying limits" (stays as the Mali
    plans have it).
 
-Most of this waits for the holders of `src/gl/context.rs` and `src/gl/state.rs`
-(plans #354 and #339), which is why this change is the note only.
+Status at `7c39ee92`: steps 1 to 3 are on main (`6581f22b`, `218c90ec` and
+`d17f4362` for the V3D varyings, `tests/es3_query_forms.rs` for step 2,
+`cb52fae8` for the V3D's uniform blocks). Step 4 is the issue drafts of the
+plan's report; the PowerVR and GC7000UL rows of section 6 are what they
+would close.
+
+## 6. Host dEQP before and after (HOST-ONLY)
+
+`MODULE=gles3 tools/cts/host-deqp-run.sh <filter>` (tools/cts/README.md 2b)
+for `GPU=v3d`, `powervr` and `vivante`, VK-GL-CTS at `93bca01` with
+`tools/cts/cts-yakogl-target.patch`, one host deqp-gles3 build for both sides.
+Before: the library of `753dedbf` (the tip plan #359 started from; a
+`git archive` of it, so its runs' `commit` file names the enclosing checkout,
+`7c39ee92`, while the library is built from the archive). After: `7c39ee92`.
+Old and new compared with `--compare-only`. Only the API verdicts are quoted:
+the limit and query cases read state and draw nothing.
+
+| filter | cases | V3D Fail before → after | PowerVR | GC7000UL |
+|---|---|---|---|---|
+| `implementation_limits` | 49 | 11 → 2 | 8 → 6 | 8 → 6 |
+| `state_query.integers` (with `integers64`) | 532 | 23 → 6 | 17 → 14 | 17 → 14 |
+| `shaders.linkage` | 114 | 85 → 85 | 85 → 85 | 85 → 85 |
+| `functional.ubo.` | 2355 | 2355 → 2355 | 2355 → 2355 | 2355 → 2355 |
+
+- **V3D, 26 cases Fail → Pass.** 21 are this plan's: `implementation_limits`
+  `max_varying_vectors`, `max_varying_components`,
+  `max_fragment_input_components`, `max_vertex_output_components`,
+  `max_uniform_block_size`, `max_combined_{vertex,fragment}_uniform_components`,
+  and the `_getfloat` / `_getinteger64` forms of the same four varying limits
+  in `state_query.integers` and the `_getfloat` / `_getinteger` forms of the
+  three uniform-block limits in `state_query.integers64`. The other 5 are the
+  compressed-format list (plan #354). Left on the V3D: `max_color_attachments`
+  and `max_draw_buffers` in every form (RC14, mrt4) and `max_samples_getfloat`
+  / `_getinteger64` (`GL_MAX_SAMPLES` 1, plan #339).
+- **PowerVR and GC7000UL, 5 cases Fail → Pass each**, all the
+  compressed-format list (plan #354): nothing of this plan moved on them, as
+  expected. Left, the same on both: `max_uniform_block_size` and
+  `max_combined_{vertex,fragment}_uniform_components` (6144 / 1536, three
+  `implementation_limits` and six `integers64` rows),
+  `max_vertex_output_components` (60, one `implementation_limits` and two
+  `integers` rows), and RC14 and `max_samples` as on the V3D.
+- **The float and 64-bit forms (section 4).** In every run a `_getfloat` or
+  `_getinteger64` row fails exactly when the limit's value is below its
+  minimum, and passes with it on the V3D; no form fails alone. That is
+  `tests/es3_query_forms.rs`'s claim, seen in dEQP.
+- **`shaders.linkage` and `functional.ubo`.** Unchanged, and every case began.
+  The 29 linkage passes are negative cases whose refusal is correct
+  (`cts-refusals.py`: 29 correct refusals, none on a failed case); the 85
+  linkage and 2355 ubo Fails are all "Image compare failed": the shaders
+  compiled and linked and the draw ran, and the linux OSAL reads back black,
+  so these Fails are not verdicts. No ubo case was refused at compile or link
+  on any GPU, before or after. Their render verdicts are the boards'.
