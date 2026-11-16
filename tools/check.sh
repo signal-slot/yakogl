@@ -2046,12 +2046,38 @@ step "test    $V3D_CONFIG (tests/es3_v3d_varyings.rs)" \
 # the QPU interpreter. Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/v3d_varyings_compile.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_varyings_compile
+# The V3D's ES 3.0 limits (plan #359): the spec minimums with the V3D's own
+# values (16384-byte uniform blocks, 50688 combined components, 15 varying
+# vectors), the G3 rows of the Pi 4 tsv, the float and 64-bit query forms
+# against the integer one, and the compiler reading a 16384-byte block past
+# dword 1536 on the QPU interpreter. The CONFIGS rows run these files on the
+# PowerVR and the GC7000UL only.
+step "test    $V3D_CONFIG (tests/es3_caps.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_caps
+step "test    $V3D_CONFIG (tests/es3_limits_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_limits_v3d
+step "test    $V3D_CONFIG (tests/es3_query_forms.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_query_forms
+step "test    $V3D_CONFIG (tests/v3d_ubo_large_sim.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_ubo_large_sim
 # Uniform blocks of the size MAX_UNIFORM_BLOCK_SIZE reports, drawn through the
 # GL core and read by the V3D's compiled code (the 16384-byte cases are
 # ignored until the block moves out of the default-block budget). Compiles to
 # nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_ubo_v3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_ubo_v3d
+# The rest of the V3D's 16384-byte blocks (plan #359): a vertex stage reading
+# its first and last dword, links of a 16384-byte block and of 12 blocks, the
+# block and member queries, and the negative API of uniform buffers and
+# blocks. V3D-only files; compile to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/v3d_ubo_large_vs.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_ubo_large_vs
+step "test    $V3D_CONFIG (tests/es3_ubo_v3d_link_limits.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_ubo_v3d_link_limits
+step "test    $V3D_CONFIG (tests/es3_ubo_v3d_queries.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_ubo_v3d_queries
+step "test    $V3D_CONFIG (tests/es3_ubo_v3d_negative.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_ubo_v3d_negative
 # The `msaa-fbo` feature (no effect yet) builds with each GPU's host
 # configuration, so a later item that reads it starts from a tree that
 # compiles.
