@@ -53,6 +53,7 @@ west build -p always -b rpi_5 -d build/rpi5_display/west yakogl/tools/probes/rpi
 | `throttled.sh`, `throttled_selftest.sh` | `get_throttled` decoded, from a record |
 | `dump2png.py`, `dump2png_selftest.sh` | scanout readback bytes to a PNG |
 | `linux_ref.sh`, `linux_ref.md`, `linux_ref_selftest.sh` | the read-only Linux dump to run first, over ssh (C0), its facts file, and the self-test of that script against a fake root |
+| `mboxdump/mboxdump.py`, `mboxdump/selftest.sh` | host decoder of recorded property-mailbox buffers (does the BCM2712 answer FRAMEBUFFER_ALLOCATE 0x40001?); the self-test checks it on the fixtures under `mboxdump/fixtures/` |
 | `screen_mock.sh` | host test of `driver/zephyr/lib/board/rpi5/rpi5_screen.c` (`test/rpi5_screen_mock.c`) |
 | `fwfb/` | the simple-framebuffer DTB node a `kernel=` image receives, with its self-test |
 | `boards/rpi_5.overlay` | the sram0 every Pi 5 image uses (32 MiB from 0x200000, below 4 GiB, so the mailbox's message buffer address fits its 32-bit word); Zephyr's own mailbox driver stays off, the board layer's `rpi_mbox.c` owns the mailbox |
