@@ -50,6 +50,7 @@ west build -p always -b rpi_5 -d build/rpi5_display/west yakogl/tools/probes/rpi
 | `verdicts.sh`, `verdicts_selftest.sh` | the log reader: the nine lines above, the route it names, and the comparison with `linux_ref.md`'s plane facts |
 | `report_texts.sh`, `report_texts_selftest.sh` | the U3 report texts, from the verdict lines |
 | `route_choice.sh`, `route_choice_selftest.sh` | the host rule that picks the route the board takes, from the verdict lines (`driver/docs/rpi5-display.md` section 8) |
+| `offsets_lint.sh`, `offsets_lint_selftest.sh` | host lint: register offsets and bits agree across the `driver/zephyr/lib/board/rpi5_scanout` headers (a name shared by two headers carries one value; an offset shared by two names sits in one block); last line `offsets_lint: 29 headers, 31 shared names, 0 conflicts`, its self-test 13 checks on fixture headers |
 | `throttled.sh`, `throttled_selftest.sh` | `get_throttled` decoded, from a record |
 | `dump2png.py`, `dump2png_selftest.sh` | scanout readback bytes to a PNG |
 | `linux_ref.sh`, `linux_ref.md`, `linux_ref_selftest.sh` | the read-only Linux dump to run first, over ssh (C0), its facts file, and the self-test of that script against a fake root |
