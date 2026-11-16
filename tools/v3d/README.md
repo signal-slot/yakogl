@@ -508,6 +508,30 @@ every program for fs, vs and cs, so the 7.1 count sits beside the 4.2 one.
 The devices differ per program: `color_uv` is fs 12, vs 31, cs 22 at 4.2
 and fs 12, vs 26, cs 15 at 7.1.
 
+**`hazards71`, Mesa's `qpu_validate` verdicts at 7.1 (an oracle table).**
+`hazards71.c` feeds hand-chosen short 7.1 instruction sequences through Mesa
+26.2.1's own `qpu_validate()` (`src/broadcom/compiler/qpu_validate.c`,
+`#include`d unchanged, with only the container types it walks declared) at
+devinfo ver 71, after Mesa's `v3d_qpu_instr_pack` and unpack at 71.
+`hazards71.tsv` has a `#` header (its SPDX lines, as `sched71_oracle.tsv`
+carries them, and the column names) and then one line per case: the words,
+Mesa's verdict (`ok`, or `ip <n>: <message>` of the first failing rule) and the
+case name. The header of `hazards71.c` has the format and cites the
+`qpu_validate.c` line of each case.
+The table has at least one `ok` and one rejected row for every `ver >= 71`
+branch (small immediates, ldvary in the second thrsw delay slot, the 7.1
+reserved magic waddrs, the RF2-3 and RF-write-at-THREND rules, and the 4.2-only
+rules that must not apply at 7.1), and rows for ldvary/ldunif, thrsw and branch
+delay slots, TMU/TLB exclusivity, rtop and the last-thrsw rules. The rf0
+implicit writes, the raddr ports and the SFU latency are not validator rules at
+7.1 (only `qpu_schedule.c` knows rf0; 7.1 has one raddr per operand; the
+validator counts only 4.2 magic SFU writes), so those rows read `ok` on purpose.
+`tools/v3d/hazards71.sh` rebuilds the driver against the tree `MESA_V3D_TREE`
+names (`--tree` and `--build` instead; exit 77 without one) and rewrites the
+table; `--check` compares instead and exits 1 on any byte of difference.
+`tests/v3d71_verify_oracle.rs` holds `verify71` to the table with no Mesa
+input: every row agrees or is pinned there by name with its reason.
+
 **H3, Mesa's GL driver on the drm-shim.** Same method as
 `tools/mali/drm_shim_ref.sh`: Mesa 26.2.1 with `-Dgallium-drivers=v3d` and
 `-Dtools=drm-shim`, the shim reporting the GPU named by `V3D_GPU_ID`.

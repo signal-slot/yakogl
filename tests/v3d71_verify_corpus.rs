@@ -16,8 +16,9 @@
 //! 3. mutations: an accepted program with one rule broken is rejected, with
 //!    that rule's message.
 //!
-//! `tests/v3d71_ref/**` and `tools/v3d/hazards71.tsv` are not on this tree
-//! yet; their cases join when they land.
+//! `tools/v3d/hazards71.tsv` (Mesa's verdicts on hand-chosen sequences) is
+//! `tests/v3d71_verify_oracle.rs`'s; `tests/v3d71_ref/**`'s cases are not
+//! here yet.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d71_verify_corpus -- --nocapture
