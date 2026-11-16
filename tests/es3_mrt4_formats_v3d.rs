@@ -1043,13 +1043,14 @@ fn rg16f_on_rt3_is_rgba16f() {
 /// glReadBuffer(GL_COLOR_ATTACHMENT3) + glReadPixels reads RT 3's own
 /// memory, at its address and stride, whatever the format: with the memory
 /// seeded after the clear (this job builder draws nothing), the bytes of an
-/// RGBA8-held, sRGB and RGB10_A2 target come back as they are.
+/// RGBA8-held and sRGB target come back as they are.
 #[test]
 fn readback_of_attachment_3_reads_rt3s_memory_as_bytes() {
     let _g = rig();
-    for fm in accepted().iter().filter(|fm| {
-        matches!(fm.name, "RGBA8" | "SRGB8_ALPHA8" | "RGB565" | "RGBA4" | "RGB5_A1" | "RGB10_A2" | "R8" | "RG8")
-    }) {
+    for fm in accepted()
+        .iter()
+        .filter(|fm| matches!(fm.name, "RGBA8" | "SRGB8_ALPHA8" | "RGB565" | "RGBA4" | "RGB5_A1" | "R8" | "RG8"))
+    {
         let r = run(fm.gl, fm.class);
         assert_eq!(r.read_error, GL_NO_ERROR, "{}", fm.name);
         assert_eq!(r.read[..r.seeded.len()], r.seeded[..], "{}: the bytes of RT 3", fm.name);
@@ -1084,6 +1085,22 @@ fn readback_of_attachment_3_float_formats() {
                 assert_eq!(px[1..], [0, 0, 255], "{}", fm.name);
             }
         }
+    }
+}
+
+/// RGB10_A2 read as RGBA/UNSIGNED_BYTE returns each field scaled to a byte
+/// (ES 3.0 4.3.1), not the packed word.
+#[test]
+fn readback_of_attachment_3_rgb10_a2_converts_the_fields() {
+    let _g = rig();
+    let fm = accepted().into_iter().find(|fm| fm.name == "RGB10_A2").unwrap();
+    let r = run(fm.gl, fm.class);
+    assert_eq!(r.read_error, GL_NO_ERROR);
+    let f = |v: u32, max: u32| ((v * 255 + max / 2) / max) as u8;
+    for (p, px) in r.read[..(W * H) as usize * 4].chunks(4).enumerate() {
+        let w = u32::from_le_bytes(r.seeded[p * 4..p * 4 + 4].try_into().unwrap());
+        let want = [f(w & 0x3ff, 1023), f((w >> 10) & 0x3ff, 1023), f((w >> 20) & 0x3ff, 1023), f(w >> 30, 3)];
+        assert_eq!(px, want, "pixel {p}");
     }
 }
 
