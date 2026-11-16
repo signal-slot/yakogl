@@ -758,9 +758,8 @@ fn check(c: &Wide, a: Attach) {
      * without an error (ES 3.0 4.4.4.4 asks for one) */
     let want = if c.float() { (GL_NO_ERROR, IFO) } else { (GL_NO_ERROR, GL_NO_ERROR) };
     assert_eq!(clear_buffer, want, "{what}: glClearBuffer, then glFinish");
-    /* GL_RGBA_INTEGER is refused (GL_INVALID_OPERATION) before the status
-     * is looked at: the read buffer has no integer image */
-    let want = if c.float() { (IFO, GL_NO_ERROR) } else { (GL_INVALID_OPERATION, GL_NO_ERROR) };
+    /* ES 3.0 4.3.1: the incomplete read framebuffer comes before the pair */
+    let want = (IFO, GL_NO_ERROR);
     assert_eq!(read, want, "{what}: glReadPixels, then glFinish");
     assert!(before == storage(tex), "{what}: the texture's storage (both planes) changed");
 

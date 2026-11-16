@@ -909,15 +909,10 @@ fn half_formats() -> [Fmt; 4] {
     [FLOATS[0], FLOATS[1], FLOATS[2], RGB16F]
 }
 
-/// What RGBA / FLOAT reads of a cleared 16F buffer today: `Fmt::expect`,
-/// except that RG16F's blue is the storage's (the clear's), not 0
-/// (tests/es3_readback_v3d.rs `rg16f_reads_its_missing_blue_as_0`).
+/// What RGBA / FLOAT reads of a cleared 16F buffer: `Fmt::expect`; a lacking
+/// channel reads 0 (RG16F's blue too, ES 3.0 4.3.1).
 fn read_today(f: &Fmt) -> [f32; 4] {
-    let mut want = f.expect();
-    if f.gl == GL_RG16F {
-        want[2] = f.clear_color()[2];
-    }
-    want
+    f.expect()
 }
 
 /// A scissored clear into `f`'s bound buffer: a quad draw, not a whole-target clear.

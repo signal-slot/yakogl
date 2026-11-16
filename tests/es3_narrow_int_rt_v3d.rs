@@ -592,14 +592,14 @@ fn a_clear_buffer_is_refused_by_the_gl_core_today() {
     }
 }
 
-/// glReadPixels from the incomplete framebuffer: GL_INVALID_OPERATION (the
-/// read framebuffer is not complete, or the format has no read surface).
+/// glReadPixels from the incomplete framebuffer: GL_INVALID_FRAMEBUFFER_OPERATION
+/// (ES 3.0 4.3.1: the completeness check comes before the format pair).
 #[test]
 fn a_read_back_is_refused_by_the_gl_core_today() {
     let _g = context();
     for r in rows() {
         let _f = tex_fbo(r.internalformat);
-        assert_eq!(read_pixel(&r), GL_INVALID_OPERATION, "{}", r.name);
+        assert_eq!(read_pixel(&r), GL_INVALID_FRAMEBUFFER_OPERATION, "{}", r.name);
     }
 }
 
