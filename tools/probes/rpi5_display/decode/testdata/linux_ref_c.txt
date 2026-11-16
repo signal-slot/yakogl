@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# A synthetic report in the shape linux_ref.sh prints (see linux_ref.md beside
+# it): a Linux-side read of a generation-C Pi 5, carrying its dt and fb facts,
+# 10 HVS words, 7 pixelvalve0 words and one hd word. The HVS words are the
+# ctrl0/status forms of driver/zephyr/lib/board/test/hvs6_dlist_mock.c for a
+# running 1920x1080 channel (and a second, idle one), and the valve words are
+# pv_timing_mock.c's 1080p60. linux_ref.sh reads 64 HVS words and 16 valve and
+# hd words; only words with a fact to show are spelled out here, and the
+# display-list memory and both VID_CTL words fall past what it reads, which is
+# what the decoder is expected to report. The dt/fb/skip lines name absolute
+# addresses but carry no register words: the decoder ignores them and never
+# echoes them. The dt fact is spelled without the device-tree unit addresses
+# (a real report names the node soc@107c000000/hvs@7c580000; a literal
+# name@<unit>.status line reads as an e-mail address to tools/release/
+# redaction-scan.py, which is why linux_ref_selftest.sh builds such names
+# from an AT=@ variable instead of writing them out).
+
+get_throttled: throttled=0x0
+dt.soc/hvs.status: okay (no status property)
+dt.soc/hvs.reg: 0x00000000 0x7c580000 0x00000000 0x0001a000
+fb.fb0.name: simple-framebuffer
+fb.fb0.virtual_size: 1920,1080
+skip: debugfs dri not mounted or not readable
+mem.hvs[0x0]: 0x00000053
+mem.hvs[0x4]: 0x00004000
+mem.hvs[0x30]: 0x87800438
+mem.hvs[0x3c]: 0x00000003
+mem.hvs[0x44]: 0x0005407b
+mem.hvs[0x48]: 0x00000003
+mem.hvs[0x50]: 0x00000000
+mem.hvs[0x5c]: 0x00000000
+mem.hvs[0x64]: 0x00400000
+mem.hvs[0x68]: 0x00000000
+mem.pixelvalve0[0x0]: 0x00080005
+mem.pixelvalve0[0x4]: 0x00000003
+mem.pixelvalve0[0x8]: 0x00000000
+mem.pixelvalve0[0xc]: 0x0094002c
+mem.pixelvalve0[0x10]: 0x00580780
+mem.pixelvalve0[0x14]: 0x00240005
+mem.pixelvalve0[0x18]: 0x00040438
+mem.hdmi0_hd[0x0]: 0x00000000
+linux_ref: done (21 facts, 1 skipped)
