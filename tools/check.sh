@@ -3891,6 +3891,21 @@ zephyr_werror_image() {
     echo "(the whole log: $log)"
     return 1
   fi
+  # EGL's display on Zephyr is the board layer's: the OSAL's present hook
+  # (src/osal/osal_internal.h, yakogl_zephyr_present) is in an image of the
+  # GL library with the board layer (CONFIG_YAKOGL_BOARD) and in no other. An
+  # image without the layer then has no present op and single-buffered
+  # window surfaces; a default that only refused at each swap left EGL
+  # double-buffering with no display.
+  local syms has=0 want=0
+  syms=$(nm --defined-only "$dir/zephyr/zephyr.elf") || { echo "nm could not read $dir/zephyr/zephyr.elf"; return 1; }
+  grep -q ' yakogl_zephyr_present$' <<<"$syms" && has=1
+  grep -q '^CONFIG_YAKOGL=y$' "$dir/zephyr/.config" &&
+    grep -q '^CONFIG_YAKOGL_BOARD=y$' "$dir/zephyr/.config" && want=1
+  [ "$has" = "$want" ] || {
+    echo "$dir: yakogl_zephyr_present defined: $has, the GL library with CONFIG_YAKOGL_BOARD: $want (they must agree)"
+    return 1
+  }
 }
 # Every Zephyr image under tools/probes/rpi_5/ (a directory with a
 # CMakeLists.txt and a prj.conf: rpi5_hello, rpi5_wdog, rpi5_dtb, rpi5_ident,
