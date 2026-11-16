@@ -31,6 +31,10 @@
 # mali-slice-readme-selftest.sh, 48 mali-rerun-tree-selftest.sh, 49
 # mali-rerun-e2e-selftest.sh, 50 mali-fail-triage-selftest.sh, 51
 # mali-deqp-build-selftest.sh.
+# Checks 52-56 gate the Pi 4 dEQP-GLES3 session tools: 52
+# pi4-gles3-preflight-selftest.sh, 53 pi4-session-tally-selftest.sh, 54
+# pi4-session-readme.py --self-test, 55 pi4-console-scan.py --self-test, and
+# 56 docs/es3/pi4-gles3-fails.tsv regenerated from its session records.
 set -u
 
 HERE=$(dirname "$0")
@@ -939,6 +943,58 @@ malicheck 49 mali-rerun-e2e-selftest.sh 16
 malicheck 50 mali-fail-triage-selftest.sh 11
 # 51: mali-deqp-build.sh's dry run and its symbol-floor checks on fake tools.
 malicheck 51 mali-deqp-build-selftest.sh 29
+
+# 52-55: the Pi 4 dEQP-GLES3 session tools' own selftests, judged by exit
+# status like checks 32-39 (python3 -I for the two Python ones).
+# 52: pi4-gles3-preflight.sh on a fake layout (env -i, BOARD_UART's value
+# never printed, a row range past the end of the real table, read-only).
+gl3check 52 pi4-gles3-preflight-selftest.sh "the session preflight on a fake layout, refusals named, read-only"
+# 53: pi4-session-tally.sh on scratch copies of testdata consoles.
+gl3check 53 pi4-session-tally-selftest.sh "a tally per console, relative paths, an unknown label refused"
+# 54, 55: pi4-session-readme.py (a session README with its 'commit: <sha>'
+# line, checked by check-pi4-gles3-log.py) and pi4-console-scan.py (the
+# console scanner on testdata/pi4-console-scan/).
+pi4py() { # number, script, ok text
+    local out
+    echo
+    echo "== $1. $2 --self-test"
+    if out=$(cd "$gl3tmp" && python3 -I "$ROOT/tools/cts/$2" --self-test 2>&1); then
+        ok "$2: $3"
+    else
+        bad "$2 --self-test failed"
+        printf '%s\n' "$out" | grep FAIL | head -3 | sed 's/^/        | /'
+        printf '%s\n' "$out" | tail -3 | sed 's/^/        | /'
+    fi
+}
+pi4py 54 pi4-session-readme.py "a session README written and accepted by the record checker"
+pi4py 55 pi4-console-scan.py "the console scanner on its fixtures"
+
+# 56: docs/es3/pi4-gles3-fails.tsv is what gles3-notpass.py --pi4 writes
+# from the session directories of the commit its first line names
+# (tools/cts/log/*-pi4-gles3-<sha8>-rows*/), byte for byte: a hand edit, a
+# session record changed after it, or a writer whose output moved fails.
+echo
+echo "== 56. docs/es3/pi4-gles3-fails.tsv equals gles3-notpass.py --pi4 over its sessions"
+pf_tsv=$ROOT/docs/es3/pi4-gles3-fails.tsv
+pf_sha=$(head -1 "$pf_tsv" | sed -n 's/^# Pi 4 dEQP-GLES3 at \([0-9a-f]\{40\}\):.*/\1/p')
+pf_dirs=()
+if [ -n "$pf_sha" ]; then
+    for d in "$ROOT"/tools/cts/log/*-pi4-gles3-"${pf_sha:0:8}"-rows*/; do
+        [ -d "$d" ] && pf_dirs+=("$d")
+    done
+fi
+if [ -z "$pf_sha" ]; then
+    bad "pi4-gles3-fails.tsv: the first line names no full commit"
+elif [ ${#pf_dirs[@]} -eq 0 ]; then
+    bad "pi4-gles3-fails.tsv: no tools/cts/log/*-pi4-gles3-${pf_sha:0:8}-rows*/ directory"
+elif python3 -I "$ROOT/tools/cts/gles3-notpass.py" --pi4 -o "$gl3tmp/pi4-gles3-fails.tsv" "${pf_dirs[@]}" > "$gl3tmp/pf.err" 2>&1 \
+     && cmp -s "$gl3tmp/pi4-gles3-fails.tsv" "$pf_tsv"; then
+    ok "pi4-gles3-fails.tsv: reproduced from ${#pf_dirs[@]} session(s) at ${pf_sha:0:8} ($(tail -1 "$gl3tmp/pf.err"))"
+else
+    bad "pi4-gles3-fails.tsv differs from gles3-notpass.py --pi4 over ${#pf_dirs[@]} session(s) at ${pf_sha:0:8}"
+    tail -3 "$gl3tmp/pf.err" | sed 's/^/        | /'
+    [ -f "$gl3tmp/pi4-gles3-fails.tsv" ] && diff "$pf_tsv" "$gl3tmp/pi4-gles3-fails.tsv" | head -5 | sed 's/^/        | /'
+fi
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"

@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 dEQP-GLES3 images T13-VA2 (rows 76-90) at b1b5b845
 
-commit b1b5b8456ec69247c64d1bd07e42461266dc5136
+commit: b1b5b8456ec69247c64d1bd07e42461266dc5136
 
 Run 2026-11-06 22:35-23:55 UTC on the Raspberry Pi 4 (V3D 4.2, Zephyr
 af17c0c8, tryboot), item pi4-s6 of plan #320 (issue #1261), session 6 of
