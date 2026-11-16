@@ -403,6 +403,102 @@ and `.multiple_attributes` set `gl_PointSize = 1.0`, and the draw tests
 draw points among other primitives. Pass the point-size output through as
 the existing references do.
 
+## References (item ref-varylink, 2026-11-16)
+
+Seven triples `tools/mali/testdata/deqp_varylink_<shape>.{vert,frag,expect.json}`,
+one for each row of the table above. The `measure` item had no
+`tools/mali/testdata/deqp_shapes/` pair for any of them at the time, so
+each pair was rebuilt from VK-GL-CTS 93bca01861b0e3ef3c387027a9791e6d065f900c
+(`git fetch --depth 1` of that commit; the files below were read with
+`git show`). Each text is the generator's ES 1.00 output, whitespace
+included, plus a header comment naming the case and the generator lines.
+In `swz_xx.frag` the comment comes after `#version 100`. All seven cases
+are rows of `refusals.tsv` in the 37305608 tree, each with its shape's
+refusal.
+
+| reference | case (dEQP-GLES2.functional.) | source (rebuilt) | shape |
+|---|---|---|---|
+| `swz_xx` | `shaders.swizzles.vector_swizzles.mediump_vec2_xx_vertex` | `data/gles2/shaders/swizzles.test:27-46` through `glsShaderLibraryCase.cpp:285-356` (VS) and `:233-282` (FS), `gluShaderLibrary.cpp:473-557` (indent removal), `:1912-1991` (`isOk`) | E1 |
+| `discard` | `shaders.discard.basic_dynamic` | `es2fShaderDiscardTests.cpp:83-92` (VS), `:218-227` with `:392-393` (FS) | E1 |
+| `draw_single` | `draw.draw_arrays.triangles.single_attribute` | `glsDrawTest.cpp:1698-1807`, `:1809-1823`, ES 1.00 arm `:1837-1846`; array of `es2fDrawTests.cpp:164-173` | E2 |
+| `va_multi3` | `vertex_arrays.multiple_attributes.attribute_count.3` | `glsVertexArrayTests.cpp:843-974`, `:976-1018`; arrays of `es2fVertexArrayTest.cpp:507-528` | C |
+| `draw_multi` | `draw.draw_arrays.triangles.multiple_attributes` | `glsDrawTest.cpp:1698-1823`; arrays of `es2fDrawTests.cpp:200-220` | C |
+| `op_abs_vec2` | `shaders.operator.common_functions.abs.mediump_vec2_vertex` | `es2fShaderOperatorTests.cpp:590-745`, op `:1987-2081`, `abs` at `:1778`, swizzle `:501` | P |
+| `unwritten` | `shaders.linkage.varying_4` | `data/gles2/shaders/linkage.test:63-86` through `glsShaderLibraryCase.cpp:441-478` | U |
+
+`discard` is `basic_dynamic`, not the table's `basic_uniform`.
+`basic_uniform`'s fragment shader reads only `v_color`, so Mesa's link
+drops `v_coords` and no lanes of the two varyings are merged. All 25
+discard rows share the vertex shader, and `basic_dynamic` reads
+`v_coords.xy`, so it is the case that shows the merge across the two
+varyings.
+
+Commands, for each `<s>`. The shim install is `$CONNECTED_DEPS_DIR/mesa-shim`,
+built from `$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1` with the meson options
+of `drm_shim_ref.sh build`, because the tarball download was not available
+on this host. That build draws `varymerge_equal` byte-equal to its
+committed `expect.json` in all three regions. Only the FAU uniform words
+differ, because that reference was drawn without `--uniform-values`.
+
+```sh
+tools/mali/drm_shim_ref.sh run $CONNECTED_DEPS_DIR/mesa-shim \
+    tools/mali/testdata/deqp_varylink_<s>.vert tools/mali/testdata/deqp_varylink_<s>.frag \
+    <out>/deqp_varylink_<s> --uniform-values          # unwritten: without --uniform-values
+python3 -I tools/mali/pan_ref_diff.py extract <out>/deqp_varylink_<s>.trace --draw \
+    > tools/mali/testdata/deqp_varylink_<s>.expect.json
+PAN_SHC=<pan_shc> tools/mali/glsl2pan.py <vert> <frag> > <out>/<s>.json 2> <out>/<s>.disasm
+python3 -I tools/mali/pan_ref_diff.py diff <out>/<s>.json <out>/<s>.disasm <out>/deqp_varylink_<s>.trace --draw
+```
+
+`unwritten` is drawn without `--uniform-values`, because gl_ref.py does not
+set a bool uniform (`u_false`). Its value stays 0, which is false, the
+case's value. Every draw is of triangles: for `draw_*` and `va_multi3`,
+`vs.position` is the `no_psiz` program the draw runs.
+
+What each pins. The layout below is from the shim driver's program: the
+NIR `decl_var`s in the `.stderr`, the stores of `vs.varying`, the
+fragment shader's `LD_VAR`, and the varying buffer descriptor ("Vertex
+packet") in the `.trace`. It is compared with pan_shc's
+`vs.varying_layout` and `fs.varying_formats`:
+
+| reference | regions (instructions) | Mesa's varying layout | pan_shc |
+|---|---|---|---|
+| `swz_xx` | position 24, varying 3, fragment 15 | one smooth lane, `VAR0.x`, 4 B, `R32F`. The varying program stores `in0.x` once (`LD_ATTR_IMM.f32 index:1`, one `STORE.i32`). The FS loads one `.f32` lane and uses it for both of `out0`'s lanes | layout equal (`ncomps` 1, 4 B); `vs.varying` byte-equal; FS differs (the `mediump` gap) |
+| `discard` | position 24, varying 15, fragment 9 | `v_color` is gone: its `xyz` are `v_coords.xyz` and its `w` is the propagated 1.0. `v_coords` stays whole: `VAR0.xyzw`, smooth, 16 B, `RGBA32F`, four stores of `a_coords.xyzw`, one `.v4` load | 3 lanes, 12 B: the SPIR-V path drops `w`. `vs.varying` 7 of 15 differ, FS 3 of 9. **The shim's 4 lanes are the reference** |
+| `draw_single` | position 25, varying 17, fragment 7 | **no merge**: `VAR0.xyzw` **flat**, 16 B, **`RGBA32UI`**. The store is `ffma(u, 0.5, 0.5)`, then `ffma(x, 0.0, x)`, stored 3 times, then 1.0 stored (`IADD_IMM 0x3F800000`). The FS has one `LD_VAR_BUF_IMM.v4.src_flat32` | layout equal, FS format `alu_type` 0x24 (uint32); `vs.varying` and FS byte-equal |
+| `va_multi3` | position 25, varying 17, fragment 8 | `VAR0.xyz` smooth, 12 B, `RGB32F`. `z` is a plain `MOV` of `u_colorScale`, with no `ffma(x, 0.0, x)`. `w` = 1.0 is propagated. The FS has one `.v3` smooth load | layout equal; `vs.varying` 2 of 17 differ (FMA operand order); FS byte-equal |
+| `draw_multi` | position 25, varying 21, fragment 7 | `VAR0.xyzw` smooth, 16 B, `RGBA32F`. `z` = `u * 0.5 + 0.5` is stored plain (`FADD_IMM`) in the interpolated vec4, and `w` = 1.0 is **stored**, not propagated | layout equal (4 lanes); `vs.varying` 17 of 21 differ; FS byte-equal |
+| `op_abs_vec2` | position 24, varying 27, fragment 7 | `VAR0.xyzw` smooth, 16 B, `RGBA32F`. Four stores: `x` = 0.0 * 0.5 + 0.5 and `w` = 1.0 * 0.5 + 0.5 are **stored**, computed in fp16 (`FMA.v2f16`, `F16_TO_F32`). Only `abs` of the two defined lanes is computed; no undefined lane reaches an op | layout equal; `vs.varying` differs (`mediump`) |
+| `unwritten` | position 24, fragment 7; no `vs.varying`, no `secondary_offset` | no varying slot. The FS's `if (u_false) vec4(var)` folds to `vec4(1.0)`: `ATEST`, two `MOV`s of the fp16 pair 1.0, `BLEND` | none: glsl2pan's link refuses (`FS input 'var' has no VS output of that name`) |
+
+What this changes for lower-varylink:
+
+- **E2 merges only lanes that resolve to one scalar.** `varymerge_equal`
+  merges because `vec4(u * vec3(1.0), 1.0)` folds to `vec4(u, u, u, 1.0)`,
+  whose lanes resolve to the scalar `u` and a constant.
+  - The draw arm's `vec4(u * color, 1.0) * 0.5 + vec4(0.5)` is one vec4
+    `ffma`. Its lanes are components 0-3 of that def. They are distinct
+    keys for `deduplicate_outputs` and not constants for step 3, so Mesa
+    keeps all four lanes. (Reading of `nir_scalar_resolved`; the link
+    NIR itself was not printed.)
+  - So the lowering must not merge equal values that come from distinct
+    components of one vector op, and must not propagate a constant lane
+    of such an op. `draw_single` pins four flat lanes and
+    `varymerge_equal` pins one.
+  - The same rule makes `draw_multi` and `op_abs_vec2` store their
+    constant lanes.
+- **C, as the study says, where a lane is a uniform alone**: `va_multi3`'s
+  `z` and `draw_multi`'s `z` go into the interpolated vec4 as plain
+  stores. No `ffma(x, 0.0, x)` appears in either.
+- **E1 across two varyings** (`discard`): the merged varying keeps the
+  surviving varying's declared lanes, including `v_coords.w`, which the FS
+  never reads.
+- **Flat descriptor**: `draw_single`'s varying buffer descriptor is
+  `RGBA32UI` where a smooth one is `RGBA32F`. This is the integer format
+  the last item of "Left open" names. Only this table records it: the
+  `.expect.json` holds no descriptors, and the `.trace` is not committed
+  (rerun the first command to get it).
+
 ## Left open
 
 - The exact source of P's extra width (step 4's first action).
