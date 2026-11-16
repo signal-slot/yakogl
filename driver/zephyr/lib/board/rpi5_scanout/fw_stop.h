@@ -37,9 +37,12 @@
  *    field names.
  *
  * "unverified" marks a fact not confirmed for BCM2712: an offset or bit that
- * is the Pi 4 layout, or one not read (the HD VID_CTL offset). The
- * vc4_regs.h lines were checked against the file at rpi-6.12.y 5bd564aa;
- * the board's register dump must confirm the rest before route 3 relies on it.
+ * is the Pi 4 layout (the HD VID_CTL offset, which the note at
+ * FW_STOP_HD_VID_CTL now names against the BCM2712 tables, and the pixel valve
+ * layout, the same caveat pv_hdmi.h and snapshot.h carry). The vc4_regs.h and
+ * vc4_hdmi_regs.h lines were checked against the file at rpi-6.12.y 5bd564aa;
+ * the board's register dump must confirm the effect of the writes before route
+ * 3 relies on them.
  *
  * Idempotent: the plan for a snapshot taken after the plan was applied is
  * empty, and each write touches only a bit that is set in the snapshot.
@@ -57,12 +60,26 @@ enum fw_stop_block {
 	FW_STOP_HVS,         /* HVS registers and display-list memory */
 };
 
-/* VID_CTL offset in the hd region: unverified (Pi 4 layout, not read). */
+/* VID_CTL in the hd region, the value this header stops with. It is the Pi 4's
+ * offset, and the Pi 5's is known now and is not this: the hd block is one
+ * 0x100 region both connectors share (rpi:bcm2712.dtsi:380 for hdmi0, :409 for
+ * hdmi1: both <0x7c720000 0x100>), and in it VID_CTL is 0x044 in hdmi0's table
+ * and 0x048 in hdmi1's (rpi:vc4_hdmi_regs.h:438, :538), while 0x038 is hdmi1's
+ * MAI_FMT (:535). 0x38 is VID_CTL only in the legacy BCM2835 table
+ * (rpi:vc4_hdmi_regs.h:182-197: M_CTL 0x0c, VID_CTL 0x38, FRAME_COUNT 0x68).
+ * So a write at 0x038 on a Pi 5 clears hdmi1's audio format register and leaves
+ * the video enable bit untouched, on either connector. pv_hdmi.h names the
+ * verified offsets (HD_VID_CTL 0x44, pinned by test/pv_hdmi_mock.c).
+ * The value stays the legacy one until route 3 says which connector it stops
+ * and a board reading confirms the register's effect: this header's rule is
+ * that an offset named "unverified" is named, never used (its plan is a plan
+ * the caller performs, and no caller runs on a Pi 5 yet). */
 #define FW_STOP_HD_VID_CTL 0x038u
 /* ENABLE, bit 31: rpi:vc4_regs.h:1007 (facts section 10). */
 #define FW_STOP_HD_VID_CTL_ENABLE (1u << 31)
 
-/* PV_CONTROL offset 0 (rpi:vc4_regs.h:145), EN bit 0 (:169): the Pi 4 PV layout; that BCM2712 uses it is unverified. */
+/* PV_CONTROL offset 0 (rpi:vc4_regs.h:145), EN bit 0 (:169): the Pi 4 PV layout; that
+ * BCM2712 uses it is unverified. */
 #define FW_STOP_PV_CONTROL 0x00u
 #define FW_STOP_PV_CONTROL_EN (1u << 0)
 /* PV_V_CONTROL offset 4 (rpi:vc4_regs.h:171), VIDEN bit 0 (:180): same caveat. */
