@@ -218,3 +218,65 @@ pub fn clear_mrt_source(rts: &[ClearClass]) -> Result<ClearMrt, ClearMrtError> {
     w.put(b" }\n\0");
     Ok(ClearMrt { src: w.buf, len: w.len, uniforms, cleared })
 }
+
+/// The clear-colour words of a float render target in the render list
+/// (plan #360 v3d-clear-words): what Mesa 26.2.1's `v3d_tlb_clear`
+/// (v3dx_draw.c:1706-1769) puts in `job->clear_color[rt]` for a full-tile
+/// clear, and `v3dx_rcl.c:833-860` emits as `TILE_RENDERING_MODE_CFG`'s
+/// clear-colour parts: PART1 the low 32 bits and the next 24, PART2 from
+/// 64 bpp, PART3 at 128 bpp. `internal_type` and `internal_bpp` are
+/// `ffi::V3D_INTERNAL_TYPE_*` and `ffi::V3D_INTERNAL_BPP_*` (the target's
+/// `state::rt_format` row); `rgba` is the glClear / glClearBufferfv colour,
+/// not clamped (the clear colour bypasses the TLB's clamp, Mesa's comment
+/// at v3dx_draw.c:1702-1712).
+///
+/// Mesa copies `internal_size = 4 << internal_bpp` bytes
+/// (v3dx_draw.c:1704; docs/notes/v3d-msaa-es3.md), so one word reaches a
+/// 32-bpp target, two a 64-bpp one, four a 128-bpp one, and the words past
+/// them stay 0 (the job is zeroed).
+///
+/// - `V3D_INTERNAL_TYPE_16F`: `util_pack_color(color,
+///   PIPE_FORMAT_R16G16B16A16_FLOAT)` (v3dx_draw.c:1739-1743), each channel
+///   a half (`_mesa_float_to_half`, [`super::state::f32_to_f16`]: nearest
+///   even, 65504 the largest, overflow to infinity, the sign kept), two a
+///   word, r in the low half. Every 16F target is 64 bpp in Mesa: RGBA16F
+///   (v3dx_format_table.c:100, :254-260), R16F and RG16F (:90, :95,
+///   :263-269, 64 bpp so the TLB keeps alpha), and R11F_G11F_B10F:
+///   PIPE_FORMAT_R11G11B10_FLOAT has the output format R11F_G11F_B10F
+///   (:146), whose tile buffer is 16F at 64 bpp (:253, :259-260) like
+///   RGBA16F. Its clear is four halves, alpha included; the narrowing to
+///   11/11/10 bits is the TLB store's, not the clear's.
+/// - `V3D_INTERNAL_TYPE_32F`: the colour's f32 bits as they are (the 32-bit
+///   types' `memcpy(job->clear_color[rt], color->ui, internal_size)` in
+///   v3dx_draw.c:1706-1769): R32F (v3dx_format_table.c:91, :327-329,
+///   32 bpp) word 0, RG32F (:96, :323-325, 64 bpp) words 0 and 1, RGBA32F
+///   (:101, :319-321, 128 bpp) all four.
+///
+/// Any other internal type is not a float target: `[0; 4]`. No float
+/// format's swizzle puts blue first (SWIZ_X001, SWIZ_XY01, SWIZ_XYZ1 and
+/// SWIZ_XYZW, v3dx_format_table.c:90-101, :146), so Mesa's red/blue swap
+/// of the clear (`job->swap_color_rb`) never applies here.
+///
+/// Today's back end packs the clear in `state::clear_words` (by surface
+/// class, called from `backend.rs`'s clear path): for 16F (R16F, RGBA16F)
+/// it gives these words; for R32F word 0 is the same but words 1..3 carry
+/// the other channels' bits, which Mesa leaves 0 (and which PART1's next
+/// 24 bits then carry for a 32-bpp target). It has no RG32F, RGBA32F or
+/// R11F_G11F_B10F row.
+pub fn clear_color_words(internal_type: u32, internal_bpp: u32, rgba: [f32; 4]) -> [u32; 4] {
+    use super::ffi::{V3D_INTERNAL_TYPE_16F, V3D_INTERNAL_TYPE_32F};
+    let mut out = match internal_type {
+        V3D_INTERNAL_TYPE_16F => {
+            let h = rgba.map(|x| u32::from(super::state::f32_to_f16(x)));
+            [h[0] | h[1] << 16, h[2] | h[3] << 16, 0, 0]
+        }
+        V3D_INTERNAL_TYPE_32F => rgba.map(f32::to_bits),
+        _ => return [0; 4],
+    };
+    /* internal_size = 4 << bpp bytes: 1, 2 or 4 words */
+    let words = 1usize << internal_bpp.min(2);
+    for w in out.iter_mut().skip(words) {
+        *w = 0;
+    }
+    out
+}
