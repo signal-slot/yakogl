@@ -721,6 +721,28 @@ pub enum IoKind {
     Depth,
 }
 
+/// How a declared input or output is `invariant` (GLSL ES 1.00 section
+/// 4.6.1).
+///
+/// The two ways are kept apart because Mesa 26.2.1 does not treat them
+/// alike: it applies `#pragma STDGL invariant(all)` where it applies a
+/// declaration's qualifiers (ast_to_hir.cpp:4415-4418), which a built-in
+/// variable never passes, so `gl_Position` and `gl_FragColor` are not
+/// invariant there under the pragma alone. A back end that gives Mesa's
+/// bytes reads the difference; one that follows the specification reads
+/// [`IoDecl::is_invariant`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Invariance {
+    /// Not invariant.
+    No,
+    /// The shader names the variable: `invariant gl_Position;`,
+    /// `invariant varying ...`, `invariant v;` after `varying v;`.
+    Declared,
+    /// Only through `#pragma STDGL invariant(all)`, which section 4.6.1
+    /// gives to every output.
+    Pragma,
+}
+
 /// One declared shader input or output: the reflection beside the IR.
 #[derive(Clone, Copy, Debug)]
 pub struct IoDecl<'a> {
@@ -734,16 +756,15 @@ pub struct IoDecl<'a> {
     pub interp: u8,
     /// The GL enum (`GL_FLOAT_VEC4`, ...), as `ShcAttrib::gl_type` holds it.
     pub gl_type: u16,
-    /// Declared `invariant` (GLSL ES 1.00 section 4.6.1: `invariant
-    /// gl_Position;`, `invariant varying ...`, or every output under
-    /// `#pragma STDGL invariant(all)`). On an output it asks every program
+    /// Whether the variable is `invariant` (GLSL ES 1.00 section 4.6.1),
+    /// and by which of the two ways. On an output it asks every program
     /// that computes the value by the same expression from the same inputs
     /// for the same bits, so a back end must not let what ELSE the program
     /// computes change how it evaluates the value: no contraction of a
     /// product and its sum into one fused operation on the way to it
     /// (`powervr/prepare.rs` `fusion_pairs`). Recorded on inputs as
     /// declared, where nothing reads it.
-    pub invariant: bool,
+    pub invariant: Invariance,
     /// The declared precision's class (docs/notes/mali-precision.md A.2):
     /// Medium for a mediump or lowp float, High for a highp one, None for
     /// an int. Recorded by the front end for the back end that lowers
@@ -753,6 +774,11 @@ pub struct IoDecl<'a> {
 }
 
 impl IoDecl<'_> {
+    /// Whether section 4.6.1 makes the variable invariant, by either way.
+    pub fn is_invariant(&self) -> bool {
+        self.invariant != Invariance::No
+    }
+
     /// The slot the IR's loads or stores of this declaration name.
     pub fn slot(&self) -> IoSlot {
         match self.kind {
@@ -1358,7 +1384,7 @@ mod tests {
             components: 1,
             interp: INTERP_FLAT,
             gl_type: 0,
-            invariant: false,
+            invariant: Invariance::No,
             prec: Prec::None,
         }];
         let m = Module { inputs: &flat, ..Module::empty(SHC_STAGE_FRAGMENT) };
@@ -1371,7 +1397,7 @@ mod tests {
             components: 2,
             interp: INTERP_SMOOTH,
             gl_type: 0,
-            invariant: false,
+            invariant: Invariance::No,
             prec: Prec::None,
         }];
         let m = Module { inputs: &smooth, ..Module::empty(SHC_STAGE_FRAGMENT) };

@@ -833,7 +833,7 @@ fn invariant_copies(m: &Module<'_>) -> bool {
         }
     }
     m.instrs.iter().all(|op| match op {
-        IrOp::StoreOutput { slot, src } if m.outputs.iter().any(|o| o.invariant && o.slot() == *slot) => {
+        IrOp::StoreOutput { slot, src } if m.outputs.iter().any(|o| o.is_invariant() && o.slot() == *slot) => {
             copy(m, src.val, 0)
         }
         _ => true,
@@ -5294,8 +5294,12 @@ fn walk<'s>(
      * arithmetic to keep exact. Measured: deqp_misc_invariant_position,
      * `invariant gl_Position; gl_Position = a_pos;`, whose position
      * program is the non-invariant one's, the viewport transform fused
-     * (`FMA.f32 r0, r0^, u0.w0, u0.w1`) */
-    if m.outputs.iter().any(|o| o.invariant) && !invariant_copies(m) {
+     * (`FMA.f32 r0, r0^, u0.w0, u0.w1`). The test is the specification's,
+     * wider than Mesa's ([`super::mesa_invariant`]): a shader under
+     * `#pragma STDGL invariant(all)` with no declared output is refused
+     * too (unless its outputs are copies), though Mesa compiles it as
+     * without the pragma */
+    if m.outputs.iter().any(|o| o.is_invariant()) && !invariant_copies(m) {
         return Err(MaliError::Invariant);
     }
     /* the locations the output lanes read, whichever the fragment shader

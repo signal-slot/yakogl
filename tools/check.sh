@@ -2433,6 +2433,15 @@ mali_lib_tests() {
 scope mali local
 step "clippy  $MALI_CONFIG" cargo clippy --no-default-features --features "$MALI_CONFIG" --all-targets
 step "test    $MALI_CONFIG (--lib mali::, every declared test: packers and ISA vs Mesa and the board)" mali_lib_tests
+# tools/mali/route.sh measure over the reference directory: the tool runs
+# and gives one row per pair (it compares the two counts itself). The rows
+# are not judged here: the landing rules are `compare` of two trees.
+mali_route_measure() {
+  local out
+  out=$(tools/mali/route.sh measure tools/mali/testdata) || return 1
+  printf '%s\n' "$out" | cut -f2 | LC_ALL=C sort | uniq -c
+}
+step "run     mali route.sh measure on tools/mali/testdata (one row per pair)" mali_route_measure
 # ES 3.0 multisample renderbuffers on the Mali: the pins of today's one-sample
 # behaviour and the ignored tests of the 4x result (not run).
 step "test    $MALI_CONFIG (tests/es3_msaa_mali.rs)" \
@@ -3114,7 +3123,17 @@ if command -v cc >/dev/null 2>&1; then
     printf '%s\n' "$out" | tail -4
     printf '%s\n' "$out" | grep -q '^Ran 7 tests in ' || { echo "valhall_src_info: not the 7 planned tests"; return 1; }
   }
+  # route_cells.py (tools/mali/route.sh compare: the two landing rules of
+  # the product route, main -> tip) on synthetic rows; 8 planned tests.
+  route_cells_selftest() {
+    local out
+    out=$(PYTHONDONTWRITEBYTECODE=1 python3 -I tools/mali/test_route_cells.py 2>&1) ||
+      { printf '%s\n' "$out" | tail -30; return 1; }
+    printf '%s\n' "$out" | tail -4
+    printf '%s\n' "$out" | grep -q '^Ran 8 tests in ' || { echo "route_cells: not the 8 planned tests"; return 1; }
+  }
   step "run     mali pan_ref_diff and ref_cases self-test (no Mesa tree)" pan_ref_diff_selftest
+  step "run     mali route_cells self-test" route_cells_selftest
   step "run     mali sweep_passsets self-test" sweep_passsets_selftest
   step "run     mali valhall_src_info self-test" valhall_src_info_selftest
   if [ -n "${MESA_PAN_TREE:-}" ]; then

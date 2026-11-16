@@ -41,10 +41,10 @@ pub const MALI_LAYOUTS_DIFFER: &str =
 /// for a vertex shader that was not built for the program's fragment shader.
 pub const MALI_PARTIAL_READ: &str =
     "a Mali link whose fragment shader reads part of a varying (the link keeps only those components) is not lowered yet";
-/// The vertex output a fragment input reads is listed by the vertex record
-/// but has no slot in its layout. The back end lays out every output it
-/// lists (it refuses a varying it does not write at compile time), so this
-/// is its defect, not the shader's.
+/// A fragment input the fragment record loads has no slot in the vertex
+/// record's layout. The program's vertex shader is built for what the
+/// fragment record loads, so this is the back end's defect, not the
+/// shader's.
 pub const MALI_NO_VERTEX_SLOT: &str =
     "Mali link: a vertex output the record lists has no slot in the record's layout (a back-end defect)";
 /// The fragment shader has code Mesa's link moves into the vertex shader
@@ -436,10 +436,13 @@ fn pair(vs: &ShcShader, fs: &ShcShader, log: &mut CStrWriter, who: &str) -> Pair
             );
             return Pairing::Refused(-EINVAL);
         };
+        /* a slot of no component holds nothing (a fragment shader compiled
+         * with the vertex shader's lanes lists a varying it reads from an
+         * equal lane, or folded, with mask 0) */
         let slot = |r: &MaliShader, loc: u8| {
             r.varyings
                 .iter()
-                .find(|s| s.section == Section::Generic && s.varying == Some(loc))
+                .find(|s| s.section == Section::Generic && s.varying == Some(loc) && s.mask != 0)
                 .map(|s| (s.offset, s.mask))
         };
         /* the record lists what the shader statically uses; an input no

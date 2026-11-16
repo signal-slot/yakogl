@@ -6783,7 +6783,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                 components: 1,
                 interp: ir::INTERP_SMOOTH,
                 gl_type: 0,
-                invariant: false,
+                invariant: ir::Invariance::No,
                 prec: ir::Prec::None,
             }],
             ..vs(&instrs, &nodes)
@@ -6900,7 +6900,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                 components: 2,
                 interp: 0,
                 gl_type: 0,
-                invariant: false,
+                invariant: ir::Invariance::No,
                 prec: ir::Prec::None,
             },
             ir::IoDecl {
@@ -6910,7 +6910,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                 components: 4,
                 interp: 0,
                 gl_type: 0,
-                invariant: false,
+                invariant: ir::Invariance::No,
                 prec: ir::Prec::None,
             },
         ];

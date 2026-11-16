@@ -5273,7 +5273,7 @@ mod tests {
             components: 4,
             interp: ir::INTERP_SMOOTH,
             gl_type: 0,
-            invariant: false,
+            invariant: ir::Invariance::No,
             prec: ir::Prec::None,
         }
     }
@@ -6208,7 +6208,7 @@ mod tests {
                 interp: 0,
                 gl_type: 0,
                 name: "v_color",
-                invariant: false,
+                invariant: ir::Invariance::No,
                 prec: ir::Prec::None,
             },
             ir::IoDecl {
@@ -6218,7 +6218,7 @@ mod tests {
                 interp: 0,
                 gl_type: 0,
                 name: "v_uv",
-                invariant: false,
+                invariant: ir::Invariance::No,
                 prec: ir::Prec::None,
             },
         ];
@@ -6267,7 +6267,7 @@ mod tests {
                 interp: 0,
                 gl_type: 0,
                 name: "a",
-                invariant: false,
+                invariant: ir::Invariance::No,
                 prec: ir::Prec::None,
             },
             ir::IoDecl {
@@ -6277,7 +6277,7 @@ mod tests {
                 interp: 0,
                 gl_type: 0,
                 name: "b",
-                invariant: false,
+                invariant: ir::Invariance::No,
                 prec: ir::Prec::None,
             },
         ];

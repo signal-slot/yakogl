@@ -591,11 +591,13 @@ pub(crate) fn compile_to_ir_ordered<'a>(
     if pre.all_invariant {
         /* Section 4.6.1: "To force all output variables to be invariant,
          * use the pragma `#pragma STDGL invariant(all)`". Every output,
-         * the built-ins included, as Mesa's ast_to_hir marks each shader
-         * output under `all_invariant`. */
+         * the built-ins included. One the shader also names stays
+         * `Declared`: Mesa's ast_to_hir does not give the pragma to a
+         * built-in, and a back end with Mesa's bytes reads which way it
+         * was (`ir::Invariance`). */
         let outputs = a.alloc_copy(module.outputs)?;
-        for o in outputs.iter_mut() {
-            o.invariant = true;
+        for o in outputs.iter_mut().filter(|o| !o.is_invariant()) {
+            o.invariant = ir::Invariance::Pragma;
         }
         module.outputs = outputs;
     }
@@ -1342,7 +1344,7 @@ impl<'a> Lower<'_, 'a> {
                     components: at.components,
                     interp: ir::INTERP_SMOOTH,
                     gl_type: at.gl_type,
-                    invariant: false,
+                    invariant: ir::Invariance::No,
                     prec: self.precs.global_path(self.ast, at.name),
                 },
             )?;
@@ -1407,12 +1409,17 @@ impl<'a> Lower<'_, 'a> {
     /// own (`invariant gl_Position;`, `invariant v;` after `varying v;`).
     /// `#pragma STDGL invariant(all)` is applied by [`compile_to_ir`], which
     /// has the preprocessor's word for it.
-    fn declared_invariant(&self, name: &str) -> bool {
-        self.ast.top_level().any(|d| match d {
+    fn declared_invariant(&self, name: &str) -> ir::Invariance {
+        let declared = self.ast.top_level().any(|d| match d {
             Decl::Invariant { name: n, .. } => *n == name,
             Decl::Var { invariant, name: n, .. } => *invariant && *n == name,
             _ => false,
-        })
+        });
+        if declared {
+            ir::Invariance::Declared
+        } else {
+            ir::Invariance::No
+        }
     }
 
     /// How many locations the varying `name` occupies: its element count
@@ -9433,36 +9440,42 @@ mod tests {
     /// every output -- only in live code, and only that pragma.
     #[test]
     fn an_output_declared_invariant_is_marked_in_the_declarations() {
-        fn marked(src: &str, stage: Stage) -> std::vec::Vec<(std::string::String, bool)> {
+        use ir::Invariance::{Declared, No, Pragma};
+        fn marked(src: &str, stage: Stage) -> std::vec::Vec<(std::string::String, ir::Invariance)> {
             let mut buf = std::vec![0u8; 1 << 18];
             let l = lowered(&mut buf, src, stage);
             l.module.outputs.iter().map(|o| (o.name.into(), o.invariant)).collect()
         }
-        let pair = |n: &str, i: bool| (std::string::String::from(n), i);
+        let pair = |n: &str, i: ir::Invariance| (std::string::String::from(n), i);
         let body = "attribute vec4 p;\nvarying vec4 v;\nvarying vec4 w;\n";
         let main = "void main() { v = p; w = p; gl_Position = p; }";
         let vs = |head: &str| marked(&format!("{head}{body}{main}"), Stage::Vertex);
-        assert_eq!(vs(""), [pair("v", false), pair("w", false), pair("gl_Position", false)]);
+        assert_eq!(vs(""), [pair("v", No), pair("w", No), pair("gl_Position", No)]);
         assert_eq!(
             marked(&format!("{body}invariant gl_Position;\n{main}"), Stage::Vertex),
-            [pair("v", false), pair("w", false), pair("gl_Position", true)]
+            [pair("v", No), pair("w", No), pair("gl_Position", Declared)]
         );
         assert_eq!(
             marked(&format!("attribute vec4 p;\ninvariant varying vec4 v;\nvarying vec4 w;\n{main}"), Stage::Vertex),
-            [pair("v", true), pair("w", false), pair("gl_Position", false)]
+            [pair("v", Declared), pair("w", No), pair("gl_Position", No)]
         );
         assert_eq!(
             marked(&format!("{body}invariant w;\n{main}"), Stage::Vertex),
-            [pair("v", false), pair("w", true), pair("gl_Position", false)]
+            [pair("v", No), pair("w", Declared), pair("gl_Position", No)]
         );
-        let all = [pair("v", true), pair("w", true), pair("gl_Position", true)];
+        let all = [pair("v", Pragma), pair("w", Pragma), pair("gl_Position", Pragma)];
         assert_eq!(vs("#pragma STDGL invariant(all)\n"), all);
         assert_eq!(vs("#pragma STDGL  invariant ( all )\n"), all, "white space between the tokens");
         assert_eq!(vs("#if 0\n#pragma STDGL invariant(all)\n#endif\n"), vs(""), "a dead group's pragma");
         assert_eq!(vs("#pragma STDGL invariant(none)\n"), vs(""), "another pragma");
         assert_eq!(vs("#pragma invariant(all)\n"), vs(""), "STDGL is part of it");
         let fs = marked("#pragma STDGL invariant(all)\nvoid main() { gl_FragColor = vec4(1.0); }", Stage::Fragment);
-        assert_eq!(fs, [pair("gl_FragColor", true)], "a fragment shader's outputs");
+        assert_eq!(fs, [pair("gl_FragColor", Pragma)], "a fragment shader's outputs");
+        assert_eq!(
+            marked(&format!("#pragma STDGL invariant(all)\n{body}invariant gl_Position;\n{main}"), Stage::Vertex),
+            [pair("v", Pragma), pair("w", Pragma), pair("gl_Position", Declared)],
+            "an output the shader also names is declared"
+        );
     }
 
     /// A varying is an output of one stage and an input of the other, from

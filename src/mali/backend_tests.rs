@@ -5046,6 +5046,99 @@ mod gl {
             }
         }
     }
+
+    /// The draw of a program whose only varying is a constant (issue #6521;
+    /// tools/mali/testdata/route_const_only, the shape of dEQP
+    /// `shaders.matrix.add.const_highp_mat2_mat2_vertex`). glLinkProgram
+    /// builds the program's vertex shader for a fragment shader that loads
+    /// nothing after the link moved the constant into it, so the draw is in
+    /// the frame, with no varying program (no VARY_SPD) and no GL error.
+    /// Before, the vertex record listed the varying with no component, the
+    /// frame builder counted it as a varying written with no varying
+    /// program, and the draw was GL_OUT_OF_MEMORY.
+    #[test]
+    fn a_gl_draw_whose_only_varying_is_a_constant_has_no_varying_program() {
+        const VS: &str = include_str!("../../tools/mali/testdata/route_const_only.vert");
+        const FS: &str = include_str!("../../tools/mali/testdata/route_const_only.frag");
+        run_with(Some((VS, FS)), &mut |_| {}, |frames, e| {
+            assert_eq!(e, GL_NO_ERROR, "the draw");
+            assert_eq!(frames.len(), 1, "one frame: the clear fused into the draw");
+            let w = &frames[0];
+            assert!(w.iter().any(|&i| matches!(Instr::decode(i), Ok(Instr::RunIdvs(_)))), "the draw is in the frame");
+            assert_eq!(reg_at_idvs(w, 18), None, "no varying program");
+        });
+    }
+
+    /// glLinkProgram builds each program's own vertex shader for what its
+    /// fragment shader reads (docs/notes/mali-product-route.md). One vertex
+    /// shader object (tri_varying.vert, which stores `vcol`) is attached to
+    /// two programs: with tri_varying.frag, which reads `vcol`, the draw has
+    /// a varying program; with tri.frag, which reads nothing, it has none;
+    /// and the first program is unchanged by the second's link. A program
+    /// linked again after its fragment shader's source changed follows the
+    /// new source. No GL error in any draw.
+    #[test]
+    fn each_program_s_vertex_shader_is_built_for_its_own_fragment_shader() {
+        use crate::gl::buffer::{glBindBuffer, glBufferData, glGenBuffers};
+        use crate::gl::state::glFinish;
+        let _rig = Rig::new(true);
+        assert_eq!(backend::init(), 0);
+        // SAFETY: the rig serialises the library; plain GL calls.
+        unsafe {
+            let ctx = context::gl_context_create(64, 64);
+            assert!(!ctx.is_null());
+            glViewport(0, 0, 64, 64);
+            let vs = shader(GL_VERTEX_SHADER, TV_VS);
+            let (reads, plain) = (shader(GL_FRAGMENT_SHADER, TV_FS), shader(GL_FRAGMENT_SHADER, TRI_FS));
+            let link = |p: GLuint| {
+                glLinkProgram(p);
+                let mut ok: GLint = 0;
+                glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+                assert_eq!(ok, 1, "the program links");
+            };
+            let program = |fs: GLuint| {
+                let p = glCreateProgram();
+                glAttachShader(p, vs);
+                glAttachShader(p, fs);
+                link(p);
+                p
+            };
+            let (with_varying, without) = (program(reads), program(plain));
+            /* `pos` and `col` from buffer objects, 6 vertices each */
+            let mut bufs = [0u32; 2];
+            glGenBuffers(2, bufs.as_mut_ptr());
+            for ((i, b), comps) in (0u32..).zip(bufs).zip([2, 3]) {
+                let data = vec![0u8; 6 * 4 * comps as usize];
+                glBindBuffer(GL_ARRAY_BUFFER, b);
+                glBufferData(GL_ARRAY_BUFFER, data.len() as GLsizeiptr, data.as_ptr().cast(), GL_STATIC_DRAW);
+                glEnableVertexAttribArray(i);
+                glVertexAttribPointer(i, comps, GL_FLOAT, 0, 0, core::ptr::null());
+            }
+            /* the varying program of one draw with `p`, if it has one */
+            let draw = |p: GLuint| {
+                glUseProgram(p);
+                let before = with(|m| m.submits.len());
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                glFinish();
+                assert_eq!(glGetError(), GL_NO_ERROR, "the draw");
+                let frames: Vec<Vec<u64>> = with(|m| m.submits[before..].iter().map(|s| s.1.clone()).collect());
+                assert_eq!(frames.len(), 1, "one frame");
+                reg_at_idvs(&frames[0], 18)
+            };
+            assert!(draw(with_varying).is_some(), "tri_varying.frag reads vcol");
+            assert_eq!(draw(without), None, "tri.frag reads nothing");
+            assert!(draw(with_varying).is_some(), "the first program keeps its own vertex shader");
+            /* the first program's fragment shader now reads nothing */
+            let text = CString::new(TRI_FS).unwrap();
+            let lines = [text.as_ptr()];
+            glShaderSource(reads, 1, lines.as_ptr(), core::ptr::null());
+            glCompileShader(reads);
+            assert!(draw(with_varying).is_some(), "a linked program does not follow its shader's new source");
+            link(with_varying);
+            assert_eq!(draw(with_varying), None, "linked again: built for the new fragment shader");
+            context::gl_context_destroy(ctx);
+        }
+    }
 }
 
 /// Each RUN_IDVS's index buffer (d54), in stream order.

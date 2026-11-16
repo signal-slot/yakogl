@@ -596,7 +596,7 @@ fn the_es3_integer_operations_compute_what_the_ir_says() {
             components: 4,
             interp: ir::INTERP_FLAT,
             gl_type: 0,
-            invariant: false,
+            invariant: ir::Invariance::No,
             prec: ir::Prec::None,
         };
         let inputs =
@@ -686,7 +686,7 @@ fn the_unsigned_divide_is_exact_at_the_edges() {
                 components: 4,
                 interp: ir::INTERP_SMOOTH,
                 gl_type: 0,
-                invariant: false,
+                invariant: ir::Invariance::No,
                 prec: ir::Prec::None,
             };
             let inputs = [decl("p", ir::IoKind::Attribute, 0)];
@@ -766,7 +766,7 @@ fn a_long_straight_line_program_computes_what_the_ir_says() {
             components: 4,
             interp: ir::INTERP_SMOOTH,
             gl_type: 0,
-            invariant: false,
+            invariant: ir::Invariance::No,
             prec: ir::Prec::None,
         };
         let inputs = [decl("p", ir::IoKind::Attribute, 0)];

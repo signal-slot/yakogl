@@ -173,7 +173,12 @@ impl Info {
     }
 }
 
-pub(super) fn compile(stage: u32, src: &str) -> Result<Stage, CompileError> {
+/// One stage compiled alone, by the code generator itself: no back-end
+/// entry point, no cache, no link. A program's words are what
+/// [`compile_linked`] returns; this is for a test of one stage (a gap, a
+/// stage-alone pan_shc reference, the corpus verdicts), and its name says
+/// so at every call.
+pub(super) fn compile_alone(stage: u32, src: &str) -> Result<Stage, CompileError> {
     let _k = store::test_keep();
     store::with_scratch(|s| {
         codegen::compile_linked_blocks(stage, src.as_bytes(), 0, &[], s, store::keep()).map(|(sh, _)| stage_of(&sh))
@@ -414,6 +419,14 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
             rest = rest[a..].find("*/").map_or("", |b| &rest[a + b + 2..]);
         }
         t.push_str(rest);
+        /* the preprocessor's lines and `//` comments are no declaration
+         * (femtovg's `#define`s before its `uniform vec2 viewSize`) */
+        let t: String = t
+            .lines()
+            .filter(|l| !l.trim_start().starts_with('#'))
+            .map(|l| l.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
         for stmt in t.split([';', '{', '}']) {
             let w: Vec<&str> = stmt.split_whitespace().collect();
             if w.first() != Some(&"uniform") {
@@ -449,14 +462,15 @@ fn uniform_value(names: &[String], rows: &[(String, u16, u16)], d: u16) -> u32 {
 }
 
 /// One program pair against an expect.json (26.2.1) of gl_ref.py's default
-/// draw.
+/// draw, linked as the product links it ([`compile_linked`]).
 fn check_program(vs: &str, fs: &str, json: &str) -> (Stage, Stage) {
     check_program_in(vs, fs, json, VIEWPORT_64X64)
 }
 
+/// [`check_program`] against a draw of viewport `vp`.
 fn check_program_in(vs: &str, fs: &str, json: &str, vp: Viewport) -> (Stage, Stage) {
-    let v = check_vs_in(vs, fs, json, vp);
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let (v, f) = compile_linked(vs, fs);
+    check_vs_stage(&v, vs, fs, json, vp);
     check_fs_stage(&f, vs, fs, json, vp);
     (v, f)
 }
@@ -471,37 +485,47 @@ fn check_fs_stage(f: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
 /// `edits` applied ([`capped`]).
 fn check_fs_stage_capped(f: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport, edits: &[CapEdit]) {
     let names = uniform_names(vs, fs);
-    let uv_f = |d: u16| uniform_value(&names, &f.uniforms, d);
+    check_fs_stage_with(f, json, vp, edits, &|d| uniform_value(&names, &f.uniforms, d));
+}
+
+/// [`check_fs_stage_capped`] with the uniform words of the reference's
+/// draw given by `uv` (a dword of the stage's uniforms to its fp32 bits).
+fn check_fs_stage_with(f: &Stage, json: &str, vp: Viewport, edits: &[CapEdit], uv: &dyn Fn(u16) -> u32) {
     let rf = capped(region(json, "fs.fragment").expect("fs.fragment"), edits);
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
-    assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, vp, &uv_f);
+    assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, vp, uv);
     /* the padding: up to the next 128 bytes past 16 more */
     assert_eq!(f.code.len(), padded_words(rf.words.len()));
 }
 
-/// The vertex stage of a program pair against an expect.json: both IDVS
-/// programs, their facts and the secondary offset (`fs` names the
-/// uniforms gl_ref.py set).
+/// The vertex stage of a program pair, linked as the product links it
+/// ([`compile_linked`]), against an expect.json: both IDVS programs, their
+/// facts and the secondary offset (`fs` names the uniforms gl_ref.py set).
 fn check_vs_in(vs: &str, fs: &str, json: &str, vp: Viewport) -> Stage {
-    let v = compile(SHC_STAGE_VERTEX, vs).expect("the vertex shader compiles");
+    let (v, _) = compile_linked(vs, fs);
     check_vs_stage(&v, vs, fs, json, vp);
     v
 }
 
 /// [`check_vs_in`] of the compiled vertex stage `v`.
 fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
+    let names = uniform_names(vs, fs);
+    check_vs_stage_with(v, json, vp, &|d| uniform_value(&names, &v.uniforms, d));
+}
+
+/// [`check_vs_stage`] with the uniform words of the reference's draw given
+/// by `uv_v`.
+fn check_vs_stage_with(v: &Stage, json: &str, vp: Viewport, uv_v: &dyn Fn(u16) -> u32) {
     let (ran_at, pos) = vs_ran(v, json);
     let var = vs_regions(v).1;
-    let names = uniform_names(vs, fs);
-    let uv_v = |d: u16| uniform_value(&names, &v.uniforms, d);
     let rp = region(json, "vs.position").expect("vs.position");
     assert_words("vs.position", &pos, &rp.words);
-    assert_facts("vs.position", &rp, v.info.work_reg_count, v.info.preload, &v.info.fau, vp, &uv_v);
+    assert_facts("vs.position", &rp, v.info.work_reg_count, v.info.preload, &v.info.fau, vp, uv_v);
     match region(json, "vs.varying") {
         Some(rv) => {
             assert_words("vs.varying", &var, &rv.words);
             let sec = v.info.secondary.expect("a varying program");
-            assert_facts("vs.varying", &rv, sec.work_reg_count, sec.preload, &v.info.fau, vp, &uv_v);
+            assert_facts("vs.varying", &rv, sec.work_reg_count, sec.preload, &v.info.fau, vp, uv_v);
             assert_eq!(Some(sec.offset - ran_at), secondary_offset(json), "secondary_offset");
         }
         None => {
@@ -516,41 +540,19 @@ fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
     );
 }
 
-/// A program pair through the Mali's link step: the vertex shader's
-/// constant lanes at the fragment shader's locations (`fs_constants`), the
-/// fragment shader compiled with them (`compile_fs_for_vs`), the vertex
-/// shader built for its reads
-/// (`compile_vs_for_reads`), as Mesa's link leaves the pair
-/// (nir_opt_varyings).
+/// A program pair as the product links it: the program's two stages
+/// through the back end's entry points in the GL core's order
+/// ([`link_stages`], [`link_records`]). Panics when the route refuses it.
 fn compile_linked(vs: &str, fs: &str) -> (Stage, Stage) {
-    match try_compile_linked(vs, fs) {
+    match link_stages(vs, fs) {
         Ok(p) => p,
-        Err(e) => panic!("the pair does not compile along the link: {e:?}"),
+        Err(r) => panic!("the pair does not link through the entry points: {r:?}"),
     }
 }
 
-/// [`compile_linked`], a refusal of either stage returned, not a panic.
-fn try_compile_linked(vs: &str, fs: &str) -> Result<(Stage, Stage), CompileError> {
-    let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
-        .expect("the scratch arena is free")?
-        .unwrap_or_default();
-    let f = store::with_scratch(|s| {
-        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
-    })
-    .expect("the scratch arena is free")?;
-    let pr =
-        super::fragment_reads(&f.info.shader()).map_err(|e| CompileError::BackEnd(codegen::BackEndError::Mali(e)))?;
-    /* at the vertex shader's own locations, paired by name (case 19's tex) */
-    let pr = store::with_scratch(|s| super::reads_at_vertex_locations(&pr, fs.as_bytes(), vs.as_bytes(), s))
-        .expect("the scratch arena is free")?
-        .expect("every read is a vertex output");
-    let v = store::with_scratch(|s| {
-        super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep())
-            .map(|(sh, _)| stage_of(&sh))
-    })
-    .expect("the scratch arena is free")?;
-    Ok((v, f))
+/// [`compile_linked`], a refusal returned, not a panic.
+fn try_compile_linked(vs: &str, fs: &str) -> Result<(Stage, Stage), Refused> {
+    link_stages(vs, fs)
 }
 
 /// The vertex shader's location of the varying at the fragment shader's
@@ -658,36 +660,19 @@ fn tri_varying_is_byte_equal_to_mesa_26_2_1() {
 /// it is in its own order and is not Mesa's.
 #[test]
 fn a_pair_in_another_order_is_byte_equal_to_mesa_26_2_1() {
-    use crate::shaderc::online::backend::{release, SHC_ONLINE};
-    use crate::shaderc::ShcShader;
     const VS: &str = include_str!("../../../../tools/mali/testdata/varyorder.vert");
     const FWD: &str = include_str!("../../../../tools/mali/testdata/varyorder.frag");
     const REV: &str = include_str!("../../../../tools/mali/testdata/varyorder_rev.frag");
     const JSON: &str = include_str!("../../../../tools/mali/testdata/varyorder_rev.expect.json");
     /* the vertex shader's order: the stage alone is Mesa's */
     check_program(VS, FWD, JSON);
-    let _serial = store::test_lock();
-    let compile = |stage: u32, src: &str| {
-        let text = format!("{src}\0");
-        let mut sh = ShcShader::ZERO;
-        // SAFETY: a NUL-terminated source, a real output, no log.
-        let rc =
-            unsafe { (SHC_ONLINE.compile.unwrap())(stage, text.as_ptr().cast(), &mut sh, core::ptr::null_mut(), 0) };
-        assert_eq!(rc, 0, "compiles");
-        sh
-    };
-    let (vs, plain) = (compile(SHC_STAGE_VERTEX, VS), compile(SHC_STAGE_FRAGMENT, REV));
-    let mut fs = plain;
-    crate::shaderc::online::backend::retain(&plain);
-    // SAFETY: two shaders of this back end, no log.
-    assert_eq!(unsafe { (SHC_ONLINE.link.unwrap())(&vs, &mut fs, core::ptr::null_mut(), 0) }, 0);
-    let (f, alone) = (stage_of(&fs), stage_of(&plain));
+    let (v, f) = compile_linked(VS, REV);
+    let alone = compile_alone(SHC_STAGE_FRAGMENT, REV).expect("compiles alone");
     let rf = region(JSON, "fs.fragment").expect("fs.fragment");
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
     assert_eq!(f.code.len(), padded_words(rf.words.len()));
     assert_ne!(trim(&alone.code), rf.words, "compiled alone, its own order");
-    let v = stage_of(&vs);
     let generic = |s: &Stage, loc: u8| {
         s.info.varyings.iter().find(|x| x.section == Section::Generic && x.varying == Some(loc)).map(|x| x.offset)
     };
@@ -720,9 +705,6 @@ fn a_pair_in_another_order_is_byte_equal_to_mesa_26_2_1() {
     let board_fs = region(BOARD, "fs.fragment").expect("the board region");
     assert_eq!((f.info.work_reg_count, f.info.preload), (board_fs.work_reg_count, board_fs.preload));
     assert_eq!(trim(&f.code)[..3], board_fs.words[..3], "the three loads");
-    for sh in [&fs, &plain, &vs] {
-        release(sh);
-    }
 }
 
 /// The triangle sample's vertex FAU, by name (the value check of a 64x64
@@ -905,7 +887,7 @@ fn the_board_s_25_0_7_programs_differ_by_the_four_named_causes() {
     ];
     for (name, src, json, reg, n, d) in pin {
         let stage = if reg.starts_with("vs") { SHC_STAGE_VERTEX } else { SHC_STAGE_FRAGMENT };
-        let s = compile(stage, src).expect("compiles");
+        let s = compile_alone(stage, src).expect("compiles");
         let ours = match reg {
             "vs.position" => vs_regions(&s).0,
             "vs.varying" => vs_regions(&s).1,
@@ -917,7 +899,7 @@ fn the_board_s_25_0_7_programs_differ_by_the_four_named_causes() {
         let r = region(json, reg).unwrap();
         assert_eq!((s.info.work_reg_count, s.info.preload), (r.work_reg_count, r.preload), "{name}");
     }
-    let v = compile(SHC_STAGE_VERTEX, TV_VS).unwrap();
+    let v = compile_alone(SHC_STAGE_VERTEX, TV_VS).unwrap();
     assert_eq!((v.info.secondary.unwrap().offset, secondary_offset(TV_25)), (256, Some(128)));
 }
 
@@ -938,7 +920,7 @@ fn the_ops_the_generator_uses_are_pinned() {
         (SHC_STAGE_VERTEX, SAMPLE_VS),
         (SHC_STAGE_FRAGMENT, SAMPLE_FS),
     ] {
-        let s = compile(st, src).unwrap();
+        let s = compile_alone(st, src).unwrap();
         for &w in s.code.iter().filter(|w| **w != 0) {
             ops.insert(isa::decode(w).expect("our word decodes").op.info().mnemonic);
             words += 1;
@@ -956,7 +938,7 @@ fn the_ops_the_uniform_population_adds_are_pinned() {
     let mut ops = std::collections::BTreeSet::new();
     for (_, vs, fs, _) in UNIFORM_POPULATION {
         for (st, src) in [(SHC_STAGE_VERTEX, vs), (SHC_STAGE_FRAGMENT, fs)] {
-            for &w in compile(st, src).unwrap().code.iter().filter(|w| **w != 0) {
+            for &w in compile_alone(st, src).unwrap().code.iter().filter(|w| **w != 0) {
                 ops.insert(isa::decode(w).expect("our word decodes").op.info().mnemonic);
             }
         }
@@ -966,7 +948,7 @@ fn the_ops_the_uniform_population_adds_are_pinned() {
         .into_iter()
         .chain([(SHC_STAGE_FRAGMENT, TV_FS), (SHC_STAGE_VERTEX, SAMPLE_VS), (SHC_STAGE_FRAGMENT, SAMPLE_FS)])
     {
-        for &w in compile(st, src).unwrap().code.iter().filter(|w| **w != 0) {
+        for &w in compile_alone(st, src).unwrap().code.iter().filter(|w| **w != 0) {
             corpus.insert(isa::decode(w).expect("our word decodes").op.info().mnemonic);
         }
     }
@@ -977,7 +959,7 @@ fn the_ops_the_uniform_population_adds_are_pinned() {
 /* ---- the gaps ------------------------------------------------------- */
 
 fn gap(stage: u32, src: &str) -> MaliError {
-    match compile(stage, src) {
+    match compile_alone(stage, src) {
         Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => e,
         Err(e) => panic!("{src}: not a Mali gap: {e:?}"),
         Ok(_) => panic!("{src}: compiled"),
@@ -1006,7 +988,7 @@ fn corpus_verdict_lines() -> Vec<String> {
     for f in files {
         let Ok(src) = std::fs::read_to_string(&f) else { continue };
         let stage = if f.extension().is_some_and(|x| x == "vert") { SHC_STAGE_VERTEX } else { SHC_STAGE_FRAGMENT };
-        let verdict = match compile(stage, &src) {
+        let verdict = match compile_alone(stage, &src) {
             Ok(_) => "ok".to_string(),
             Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => e.message().to_string(),
             Err(e) => format!("front end: {e:?}"),
@@ -1199,6 +1181,13 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         /* an invariant output with arithmetic (a copy compiles:
          * deqp_misc_invariant_position) */
         (VS, "invariant gl_Position; attribute vec4 p; void main(){ gl_Position = p * p; }", MaliError::Invariant),
+        /* the pragma alone: refused as the specification reads it, wider
+         * than Mesa, which gives the pragma to no built-in (nir.rs `build`) */
+        (
+            VS,
+            "#pragma STDGL invariant(all)\nattribute vec4 p; void main(){ gl_Position = p * p; }",
+            MaliError::Invariant,
+        ),
         (VS, "attribute vec2 p; void main(){ gl_Position.xy = p; }", MaliError::PositionLane),
         (FS, "precision mediump float; uniform vec4 u; void main(){ gl_FragColor = u.yxzw; }", MaliError::FsUniform),
         /* a highp uniform's lanes paired other than in order (in order is
@@ -1400,7 +1389,7 @@ fn every_reachable_gap_is_reached_by_an_es100_source() {
 /// unreachable from ES 1.00 source).
 #[test]
 fn gl_frag_data_past_0_is_the_front_end_s_verdict() {
-    let e = compile(SHC_STAGE_FRAGMENT, "precision mediump float; void main(){ gl_FragData[1] = vec4(1.0); }");
+    let e = compile_alone(SHC_STAGE_FRAGMENT, "precision mediump float; void main(){ gl_FragData[1] = vec4(1.0); }");
     match e {
         Err(CompileError::Rejected { msg, .. }) => {
             assert_eq!(msg, "OpenGL ES 2.0 has one draw buffer, so only gl_FragData[0] exists")
@@ -1423,7 +1412,7 @@ fn a_varying_lane_paired_with_zero_is_mesa_s_u16_to_u32() {
     let ops: Vec<_> = fs.words.iter().map(|w| isa::decode(*w).expect("decodes").op.info().mnemonic).collect();
     assert!(ops.contains(&"U16_TO_U32") && !ops.contains(&"MKVEC.v2i16"), "{ops:?}");
     check_linked(VS_SRC, FS_SRC, JSON);
-    let v = compile(SHC_STAGE_VERTEX, VS_SRC).expect("the vertex shader compiles");
+    let v = compile_alone(SHC_STAGE_VERTEX, VS_SRC).expect("the vertex shader compiles");
     let (pos, var) = vs_regions(&v);
     assert_words("sel_vc_zero vs.position", &pos, &region(JSON, "vs.position").unwrap().words);
     assert_words("sel_vc_zero vs.varying", &var, &region(JSON, "vs.varying").unwrap().words);
@@ -1452,7 +1441,7 @@ fn the_slice_s_programs_are_far_from_the_back_end_s_tables() {
     srcs.extend(FRAGMENT_VARYING_POPULATION.iter().map(|c| (SHC_STAGE_FRAGMENT, c.2)));
     let (mut longest, mut fau) = ([0usize; 2], [0usize; 2]);
     for (st, src) in srcs {
-        let s = compile(st, src).expect("compiles");
+        let s = compile_alone(st, src).expect("compiles");
         let k = (st == SHC_STAGE_FRAGMENT) as usize;
         let (a, b) = if k == 0 { vs_regions(&s) } else { (trim(&s.code), Vec::new()) };
         longest[k] = longest[k].max(a.len()).max(b.len());
@@ -1465,7 +1454,7 @@ fn the_slice_s_programs_are_far_from_the_back_end_s_tables() {
 /// An invalid shader gets the front end's verdict, not a gap.
 #[test]
 fn an_invalid_shader_gets_the_front_end_s_verdict() {
-    let e = compile(SHC_STAGE_VERTEX, "void main() { gl_Position = undeclared; }\n");
+    let e = compile_alone(SHC_STAGE_VERTEX, "void main() { gl_Position = undeclared; }\n");
     assert!(matches!(e, Err(CompileError::Rejected { .. })), "{:?}", e.err());
 }
 
@@ -1524,8 +1513,8 @@ fn the_record_meets_the_frame_builder_s_meta() {
     use crate::mali::frame::{PushWord, SecondaryProgram, Sysval};
     use crate::mali::genxml::v10::{ShaderRegisterAllocation, ShaderStage};
     use crate::mali::program::StageMeta;
-    let v = compile(SHC_STAGE_VERTEX, TRI_VS).unwrap();
-    let f = compile(SHC_STAGE_FRAGMENT, TRI_FS).unwrap();
+    let v = compile_alone(SHC_STAGE_VERTEX, TRI_VS).unwrap();
+    let f = compile_alone(SHC_STAGE_FRAGMENT, TRI_FS).unwrap();
     let (vm, fm) = (StageMeta::of(&v.info.shader()).unwrap(), StageMeta::of(&f.info.shader()).unwrap());
     let (vm, fm) = (vm.meta(), fm.meta());
     assert_eq!((vm.stage, fm.stage), (ShaderStage::VERTEX, ShaderStage::FRAGMENT));
@@ -1553,8 +1542,8 @@ fn the_record_meets_the_frame_builder_s_meta() {
     assert_eq!((vm.varyings, vm.varying_bytes, vm.secondary, fm.varyings), (0, 0, None, 0));
     assert_eq!(fm.colour_outputs, 1);
 
-    let v = compile(SHC_STAGE_VERTEX, TV_VS).unwrap();
-    let f = compile(SHC_STAGE_FRAGMENT, TV_FS).unwrap();
+    let v = compile_alone(SHC_STAGE_VERTEX, TV_VS).unwrap();
+    let f = compile_alone(SHC_STAGE_FRAGMENT, TV_FS).unwrap();
     let (vm, fm) = (StageMeta::of(&v.info.shader()).unwrap(), StageMeta::of(&f.info.shader()).unwrap());
     let (vm, fm) = (vm.meta(), fm.meta());
     assert_eq!(
@@ -1674,7 +1663,7 @@ fn record_values(s: &Stage) -> (Vec<FauWord>, Vec<(u8, u8)>, Vec<VaryingSlot>) {
 #[test]
 fn a_stage_s_record_survives_the_next_compiles() {
     let _serial = store::test_lock();
-    let a = compile(SHC_STAGE_VERTEX, SAMPLE_VS).expect("the sample's vertex shader compiles");
+    let a = compile_alone(SHC_STAGE_VERTEX, SAMPLE_VS).expect("the sample's vertex shader compiles");
     let want = record_values(&a);
     assert_sample_vs_fau(&want.0);
     for (stage, src) in [
@@ -1683,7 +1672,7 @@ fn a_stage_s_record_survives_the_next_compiles() {
         (SHC_STAGE_VERTEX, TV_VS),
         (SHC_STAGE_FRAGMENT, SAMPLE_FS),
     ] {
-        compile(stage, src).expect("compiles");
+        compile_alone(stage, src).expect("compiles");
     }
     assert_eq!(record_values(&a), want, "the record after four more compiles");
 }
@@ -1699,13 +1688,13 @@ fn a_stage_s_record_survives_the_next_compiles() {
 #[test]
 fn a_stage_s_record_is_its_own_while_another_thread_compiles() {
     use std::sync::mpsc::channel;
-    let want = record_values(&compile(SHC_STAGE_VERTEX, SAMPLE_VS).expect("compiles"));
+    let want = record_values(&compile_alone(SHC_STAGE_VERTEX, SAMPLE_VS).expect("compiles"));
     let (go, go_rx) = channel::<(u32, &'static str)>();
     let (done_tx, done) = channel::<()>();
     let other = std::thread::spawn(move || {
         let mut n = 0u32;
         for (stage, src) in go_rx {
-            compile(stage, src).expect("compiles");
+            compile_alone(stage, src).expect("compiles");
             n += 1;
             done_tx.send(()).expect("the reader waits");
         }
@@ -1714,7 +1703,7 @@ fn a_stage_s_record_is_its_own_while_another_thread_compiles() {
     let srcs = [(SHC_STAGE_VERTEX, TRI_VS), (SHC_STAGE_FRAGMENT, TV_FS), (SHC_STAGE_VERTEX, TV_VS)];
     let mut wrong = 0;
     for round in 0..20 {
-        let s = compile(SHC_STAGE_VERTEX, SAMPLE_VS).expect("compiles");
+        let s = compile_alone(SHC_STAGE_VERTEX, SAMPLE_VS).expect("compiles");
         go.send(srcs[round % srcs.len()]).expect("the other thread runs");
         done.recv().expect("the other thread compiled");
         if record_values(&s) != want {
@@ -1796,7 +1785,7 @@ fn our_fau(f: &[FauWord]) -> Vec<String> {
 /// no_psiz copy and the varying program, each padded), the offsets, the
 /// register counts, the preloads and the FAU words.
 fn check_vs_pan_shc(vs: &str, json: &str) {
-    check_vs_record_pan_shc(&compile(SHC_STAGE_VERTEX, vs).expect("the vertex shader compiles"), json);
+    check_vs_record_pan_shc(&compile_alone(SHC_STAGE_VERTEX, vs).expect("the vertex shader compiles"), json);
 }
 
 /// [`check_vs_pan_shc`] of a compiled stage, and the generic varyings'
@@ -1840,7 +1829,7 @@ fn check_program_pan_shc(vs: &str, fs: &str, json: &str) {
 /// A fragment shader against pan_shc's record of it: the code, the
 /// register count, the preload and the FAU words.
 fn check_fs_pan_shc(fs: &str, json: &str) {
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     let r = pan_shc_stage(json, "fs");
     let code: Vec<u64> = after(r, "code")
         .and_then(|t| t.find(']').map(|e| &t[1..e]))
@@ -1858,20 +1847,6 @@ const PSIZ_POINTS: &str = td!("pan_shc-out/psiz_points.json");
 const PSIZ_CONST: &str = td!("pan_shc-out/psiz_const.json");
 const PSIZ_VARYING: &str = td!("pan_shc-out/psiz_varying.json");
 const POINTS_VS: &str = include_str!("../../../../tools/shaders/gl_test_es100/points.vert");
-
-/// A vertex shader built for the program of `fs`: the fragment shader's
-/// record's reads.
-fn compile_vs_for(vs: &str, fs: &str) -> Stage {
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
-    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
-    let _k = store::test_keep();
-    store::with_scratch(|s| {
-        super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep())
-            .map(|(sh, _)| stage_of(&sh))
-    })
-    .expect("the scratch arena is free")
-    .expect("the vertex shader compiles for the program")
-}
 
 /// A vertex shader's multiply by a constant, as Mesa's algebraic rules
 /// leave it (pan_shc's references, tools/mali/testdata/cmul_*): the
@@ -1916,7 +1891,7 @@ fn the_constant_products_are_byte_equal_to_mesa_26_2_1() {
 fn the_divisions_are_byte_equal_to_mesa_26_2_1() {
     check_vs_pan_shc(td!("cdiv_d1.vert"), td!("pan_shc-out/cdiv_d1.json"));
     check_vs_pan_shc(td!("cdiv_d2.vert"), td!("pan_shc-out/cdiv_d2.json"));
-    compile(SHC_STAGE_VERTEX, include_str!("../../../../tools/shaders/femtovg/main.vert")).expect("compiles");
+    compile_alone(SHC_STAGE_VERTEX, include_str!("../../../../tools/shaders/femtovg/main.vert")).expect("compiles");
 }
 
 /// Two vec2 varyings in one slot: the second at byte 8, the fragment
@@ -1958,7 +1933,7 @@ fn femtovg_s_program_moves_fragment_code_into_the_vertex_shader() {
 #[test]
 fn a_constant_first_product_keeps_the_glsl_order() {
     let json = td!("pan_shc-out/cmul_c075x.json");
-    let v = compile(SHC_STAGE_VERTEX, td!("cmul_c075x.vert")).expect("compiles");
+    let v = compile_alone(SHC_STAGE_VERTEX, td!("cmul_c075x.vert")).expect("compiles");
     let r = pan_shc_stage(json, "vs");
     let code: Vec<u64> = after(r, "code")
         .and_then(|t| t.find(']').map(|e| &t[1..e]))
@@ -2348,18 +2323,9 @@ fn equal_lanes_of_two_qualifiers_are_not_merged() {
     ] {
         let r = region(json, "fs.fragment").expect("fs.fragment");
         assert!(r.words.iter().any(|w| text(*w).contains(".src_flat32")), "{fs}");
-        let _k = store::test_keep();
-        let consts = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
-            .expect("the scratch arena is free")
-            .expect("the vertex shader's constant lanes")
-            .unwrap_or_default();
-        let f = store::with_scratch(|s| super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|_| ()))
-            .expect("the scratch arena is free");
-        match f {
-            Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => {
-                assert_eq!(e, MaliError::VaryingNotFromAttribute, "{fs}")
-            }
-            other => panic!("{fs}: not refused by name: {other:?}"),
+        match try_compile_linked(vs, fs) {
+            Err(r) => assert!(r.is(MaliError::VaryingNotFromAttribute), "{fs}: {r:?}"),
+            Ok(_) => panic!("{fs}: the program links"),
         }
     }
 }
@@ -2459,27 +2425,9 @@ fn equal_varying_lanes_are_merged_as_mesa_26_2_1() {
     /* a join of two values in both: refused, not merged (its vertex
      * words are not this back end's) */
     let (vs, fs) = (td!("fsload_dup_phi.vert"), td!("fsload_dup_phi.frag"));
-    let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
-        .expect("the scratch arena is free")
-        .expect("the vertex shader's constant lanes")
-        .unwrap_or_default();
-    let f = store::with_scratch(|s| {
-        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
-    })
-    .expect("the scratch arena is free")
-    .expect("the fragment shader compiles for the vertex shader");
-    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
-    let r = store::with_scratch(|s| {
-        let pr = super::reads_at_vertex_locations(&pr, fs.as_bytes(), vs.as_bytes(), s)
-            .expect("both stages lower")
-            .expect("every read is a vertex output");
-        super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep()).map(|_| ())
-    })
-    .expect("the scratch arena is free");
-    match r {
-        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, MaliError::VaryingDuplicate),
-        other => panic!("fsload_dup_phi: the vertex shader is not refused by name: {other:?}"),
+    match try_compile_linked(vs, fs) {
+        Err(r) => assert!(r.is(MaliError::VaryingDuplicate), "fsload_dup_phi: {r:?}"),
+        Ok(_) => panic!("fsload_dup_phi: the program links"),
     }
 }
 
@@ -2588,7 +2536,7 @@ fn the_uniform_population_is_referenced() {
     }
     /* the compaction controls, built for their programs (cmp_*.expect.json) */
     for (vs, fs) in [(td!("cmp_vs4.vert"), td!("cmp_b.frag")), (td!("cmp_vs2x4.vert"), td!("cmp_axby.frag"))] {
-        let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+        let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
         let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
         seen |= module_facts_for(SHC_STAGE_VERTEX, vs, Some(pr.reads())).0;
     }
@@ -2837,15 +2785,14 @@ fn case_221_instmix_is_byte_equal_to_mesa_26_2_1() {
 /// S1: `M * vec4(p, 1.0)`'s last term is `fadd(acc, c3)`, the sum first
 /// and the column second, four `FADD.f32 r, r^, u.w` (vsfold_one,
 /// glmark2's bump-51d0), in the varying program too (vsfold_normal's
-/// `vec3(NormalMatrix * vec4(normal, 1.0))`; its fragment shader's
-/// `Normal * 0.5 + 0.5` is refused, so the vertex stage is compiled
-/// alone), and through a struct of matrices (vsfold_mvstruct, the
-/// corpus's es100/mvstruct.vert, traced with every uniform 0).
+/// `vec3(NormalMatrix * vec4(normal, 1.0))`), and through a struct of
+/// matrices (vsfold_mvstruct, the corpus's es100/mvstruct.vert, traced
+/// with every uniform 0).
 #[test]
 fn a_vertex_matrix_product_with_a_w_of_one_is_byte_equal_to_mesa_26_2_1() {
     check_linked(td!("vsfold_one.vert"), td!("vsfold_one.frag"), td!("vsfold_one.expect.json"));
     let (vs, fs) = (td!("vsfold_normal.vert"), td!("vsfold_normal.frag"));
-    check_vs_in(vs, fs, td!("vsfold_normal.expect.json"), VIEWPORT_64X64);
+    check_linked(vs, fs, td!("vsfold_normal.expect.json"));
     let (vs, fs) = (td!("vsfold_mvstruct.vert"), td!("vsfold_mvstruct.frag"));
     check_linked_for("mvstruct", vs, fs, td!("vsfold_mvstruct.expect.json"));
 }
@@ -3114,7 +3061,7 @@ fn a_vertex_cube_look_up_is_byte_equal_to_mesa_26_2_1() {
     assert!(var.iter().any(|w| text(*w).starts_with("TEX_SINGLE") && text(*w).contains(".cube.explicit")));
     assert_eq!(var.iter().filter(|w| text(**w).starts_with("FMA.f32 r") && text(**w).contains(", 0x0, r")).count(), 4);
     /* the fragment program: the flat load alone */
-    let f = compile(SHC_STAGE_FRAGMENT, FS).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, FS).expect("the fragment shader compiles");
     let rf = region(JSON, "fs.fragment").expect("fs.fragment");
     let ours = trim(&f.code);
     assert_eq!(ours.len(), rf.words.len(), "the fragment program's length");
@@ -3143,7 +3090,7 @@ fn a_vertex_cube_look_up_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn a_cube_direction_from_an_attribute_is_divergent() {
     let src = "uniform samplerCube s; attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = textureCubeLod(s, p.xyz, 0.0); }";
-    let v = compile(SHC_STAGE_VERTEX, src).expect("compiles");
+    let v = compile_alone(SHC_STAGE_VERTEX, src).expect("compiles");
     let (_, var) = vs_regions(&v);
     let texts: Vec<String> = var.iter().map(|w| text(*w)).collect();
     assert!(texts.iter().any(|t| t.starts_with("TEX_SINGLE") && t.contains(".cube.zero")), "{texts:?}");
@@ -3732,8 +3679,7 @@ fn cube_look_ups_mesa_compiles_otherwise_are_refused_by_the_name_of_their_refere
         };
         assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), want, "{name}");
         match try_compile_linked(vs, fs) {
-            Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, want, "{name}: linked"),
-            Err(e) => panic!("{name}: linked: not a Mali refusal: {e:?}"),
+            Err(r) => assert!(r.is(want), "{name}: linked: not refused by {want:?}: {r:?}"),
             Ok(_) => panic!("{name}: the linked program compiled"),
         }
     }
@@ -3873,9 +3819,9 @@ fn a_highp_fragment_cube_look_up_is_byte_equal_to_mesa_26_2_1() {
     /* the shader alone: the vertex shader is built without its constant
      * lane, the layout the link's fragment shader reads (its two lanes at
      * offset 0); the fragment shader reads the three lanes */
-    let va = compile(SHC_STAGE_VERTEX, vs).expect("case114_f.vert compiles alone");
+    let va = compile_alone(SHC_STAGE_VERTEX, vs).expect("case114_f.vert compiles alone");
     assert!(va.info.varyings.iter().any(|x| x.offset == 0 && x.mask == 0b110), "{:?}", va.info.varyings);
-    let alone = compile(SHC_STAGE_FRAGMENT, fs).expect("case114_f.frag compiles alone");
+    let alone = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("case114_f.frag compiles alone");
     assert!(alone.info.varyings.iter().any(|x| x.mask == 0b111), "{:?}", alone.info.varyings);
 }
 
@@ -3892,7 +3838,8 @@ fn a_constant_varying_lane_is_propagated_into_the_fragment_shader() {
     /* a vertex shader with no constant lane: the link step changes nothing */
     let (vs, fs) = (td!("tri_varying.vert"), td!("tri_varying.frag"));
     let (lv, lf) = compile_linked(vs, fs);
-    let (av, af) = (compile(SHC_STAGE_VERTEX, vs).expect("vs"), compile(SHC_STAGE_FRAGMENT, fs).expect("fs"));
+    let (av, af) =
+        (compile_alone(SHC_STAGE_VERTEX, vs).expect("vs"), compile_alone(SHC_STAGE_FRAGMENT, fs).expect("fs"));
     assert_eq!((lv.code, lf.code), (av.code, af.code));
 }
 
@@ -3944,7 +3891,7 @@ fn case_197_s_fragment_shader_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn a_vec4_array_read_at_a_run_time_index_is_byte_equal_to_mesa_26_2_1() {
     check_program_for("uniidx_d", td!("uniidx_i.vert"), td!("uniidx_d.frag"), td!("uniidx_d.expect.json"), false);
-    let f = compile(SHC_STAGE_FRAGMENT, td!("uniidx_d.frag")).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("uniidx_d.frag")).expect("compiles");
     assert_eq!(&f.info.fau[4..], [FauWord::Uniform { dword: 16 }]);
     assert_eq!(f.info.ubo, ubo_rows_of_fcols_and_fidx());
     assert!(f.info.sampler.is_none() && !f.info.helper_threads);
@@ -3962,7 +3909,7 @@ fn a_vec4_array_read_at_a_run_time_index_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn a_mediump_computed_texture_coordinate_is_byte_equal_to_mesa_26_2_1() {
     check_program_for("case121", td!("case121.vert"), td!("case121.frag"), td!("case121.expect.json"), false);
-    let f = compile(SHC_STAGE_FRAGMENT, td!("case121.frag")).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("case121.frag")).expect("compiles");
     assert_eq!(f.info.ubo, ubo_rows_of_fcols_and_fidx());
     assert!(f.info.sampler == Some(0) && f.info.helper_threads);
 }
@@ -4033,14 +3980,7 @@ fn the_uniform_array_population_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn a_vertex_float_array_read_at_an_int_uniform_is_byte_equal_to_mesa_26_2_1() {
     let (vs, fs, json) = (td!("uniarray_vs.vert"), td!("uniarray_vs.frag"), td!("uniarray_vs.expect.json"));
-    let alone = compile(SHC_STAGE_FRAGMENT, fs).expect("uniarray_vs.frag compiles alone");
-    let loc = alone.info.varyings.iter().find_map(|x| x.varying).expect("v_color");
-    let _k = store::test_keep();
-    let v = store::with_scratch(|s| {
-        super::compile_vs_for_reads(vs.as_bytes(), &[(loc, 0b0001)], &[], s, store::keep()).map(|(sh, _)| stage_of(&sh))
-    })
-    .expect("the scratch arena is free")
-    .expect("the vertex shader compiles for the program's read");
+    let (v, f) = compile_linked(vs, fs);
     let (pos, var) = vs_regions(&v);
     let vp = VIEWPORT_64X64;
     let rp = region(json, "vs.position").expect("vs.position");
@@ -4062,16 +4002,7 @@ fn a_vertex_float_array_read_at_an_int_uniform_is_byte_equal_to_mesa_26_2_1() {
         ]
     );
     assert_eq!(v.info.fau[11], FauWord::Uniform { dword: idx });
-    /* the linked fragment shader's own gap */
-    let consts = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
-        .expect("the scratch arena is free")
-        .expect("the vertex shader's constant lanes")
-        .unwrap_or_default();
-    let f = store::with_scratch(|s| {
-        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
-    })
-    .expect("the scratch arena is free")
-    .expect("the linked fragment shader compiles");
+    /* the program's fragment shader */
     assert_words("fs.fragment", &trim(&f.code), &region(json, "fs.fragment").expect("fs.fragment").words);
 }
 
@@ -4089,7 +4020,7 @@ fn a_vertex_float_array_read_at_an_int_uniform_is_byte_equal_to_mesa_26_2_1() {
 fn a_highp_float_array_read_at_int_uniforms_is_byte_equal_to_mesa_26_2_1() {
     let (vs, fs) = (td!("case108_uniidx.vert"), td!("uniarray_highp.frag"));
     check_program_for("uniarray_highp", vs, fs, td!("uniarray_highp.expect.json"), false);
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("compiles");
     let mut rows: Vec<super::UboRow> =
         (0..4).map(|e| super::UboRow { dword: e, word: e, comps: 1, halves: false }).collect();
     rows.push(super::UboRow { dword: 4, word: 4, comps: 4, halves: false });
@@ -4108,7 +4039,7 @@ fn an_int_uniform_outside_an_array_index_is_a_raw_word() {
     assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::UniformType);
     let fs = "precision highp float; uniform highp int i; uniform highp float a[4];
               void main(){ gl_FragColor = vec4(a[i] + float(i)); }";
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("compiles");
     assert!(trim(&f.code).iter().any(|w| text(*w).starts_with("S32_TO_F32")));
 }
 
@@ -4118,7 +4049,7 @@ fn an_int_uniform_outside_an_array_index_is_a_raw_word() {
 /// FAU the blend constants, then the four ints.
 #[test]
 fn case_108_a_s_block_holds_the_ints_then_the_array_a_word_an_element() {
-    let f = compile(SHC_STAGE_FRAGMENT, td!("case108_uniidx.frag")).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("case108_uniidx.frag")).expect("compiles");
     let mut rows: Vec<super::UboRow> =
         (0..4).map(|e| super::UboRow { dword: e, word: e, comps: 1, halves: false }).collect();
     rows.extend((0..4).map(|e| super::UboRow { dword: 4 + e, word: 4 + e, comps: 1, halves: true }));
@@ -4146,7 +4077,7 @@ fn ubo_rows_of_fcols_and_fidx() -> Vec<super::UboRow> {
 #[test]
 fn case_122_s_fragment_shader_is_byte_equal_to_mesa_26_2_1() {
     check_program_for("uniidx_i", td!("uniidx_i.vert"), td!("uniidx_i.frag"), td!("uniidx_i.expect.json"), false);
-    let f = compile(SHC_STAGE_FRAGMENT, td!("uniidx_i.frag")).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("uniidx_i.frag")).expect("compiles");
     assert_eq!(
         &f.info.fau[4..],
         [FauWord::Uniform { dword: 16 }, FauWord::Constant(0x3f00_0000), FauWord::Constant(super::nir_fs::TEX_HANDLE)]
@@ -4253,7 +4184,7 @@ fn a_push_word_past_page_0_is_mesa_s_page_1() {
     let (v, _) = check_program(SEL_U_FAU65, TRI_FS, json);
     assert_eq!(v.info.fau.len(), 65, "sel_u_fau65 pushes one word on page 1");
     /* one word less is byte-equal (the population above) and fills page 0 */
-    let v = compile(SHC_STAGE_VERTEX, td!("sel_u_fau64.vert")).expect("compiles");
+    let v = compile_alone(SHC_STAGE_VERTEX, td!("sel_u_fau64.vert")).expect("compiles");
     assert_eq!(v.info.fau.len(), 64, "sel_u_fau64 fills FAU page 0");
 }
 
@@ -4711,7 +4642,7 @@ fn varyings_mesa_s_link_moves_or_merges() {
     /* vec4(a_t, 0.0, 1.0): the two constant lanes are not stored, by the
      * vertex shader alone either (built without them) */
     assert_eq!(stores(td!("sel_v_const.expect.json")), 2);
-    let alone = compile(SHC_STAGE_VERTEX, td!("sel_v_const.vert")).expect("sel_v_const.vert compiles alone");
+    let alone = compile_alone(SHC_STAGE_VERTEX, td!("sel_v_const.vert")).expect("sel_v_const.vert compiles alone");
     let (_, var) = vs_regions(&alone);
     assert_eq!(var.iter().filter(|w| text(**w).starts_with("STORE")).count(), 2);
     /* a uniform alone: an exact ffma(u, 0, u) per lane, the fragment
@@ -4726,7 +4657,8 @@ fn varyings_mesa_s_link_moves_or_merges() {
     assert_eq!(fs.words.iter().filter(|w| text(**w).starts_with("LD_VAR")).count(), 1);
     /* the vertex shader alone is built without the equal lanes, as without
      * its constant ones: one varying's four stores */
-    let alone = compile(SHC_STAGE_VERTEX, td!("sel_v_duplicate.vert")).expect("sel_v_duplicate.vert compiles alone");
+    let alone =
+        compile_alone(SHC_STAGE_VERTEX, td!("sel_v_duplicate.vert")).expect("sel_v_duplicate.vert compiles alone");
     let (_, var) = vs_regions(&alone);
     assert_eq!(var.iter().filter(|w| text(**w).starts_with("STORE")).count(), 4);
 }
@@ -4739,7 +4671,7 @@ fn the_ops_the_varying_populations_add_are_pinned() {
     let ops_of = |srcs: &[(u32, &str)]| {
         let mut ops = std::collections::BTreeSet::new();
         for (st, src) in srcs {
-            for &w in compile(*st, src).unwrap().code.iter().filter(|w| **w != 0) {
+            for &w in compile_alone(*st, src).unwrap().code.iter().filter(|w| **w != 0) {
                 ops.insert(isa::decode(w).expect("our word decodes").op.info().mnemonic);
             }
         }
@@ -4928,7 +4860,7 @@ fn case91_hdrscale_is_byte_equal_to_mesa_26_2_1() {
 fn case55_two_fragment_outputs_are_byte_equal_to_mesa_26_2_1() {
     const FS: &str = include_str!("../../../../tools/shaders/es300/mrt2.frag");
     let json = td!("fsout_55_es3mrt.expect.json");
-    let f = compile(SHC_STAGE_FRAGMENT, FS).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, FS).expect("the fragment shader compiles");
     let rf = region(json, "fs.fragment").expect("fs.fragment");
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
@@ -4946,7 +4878,7 @@ fn case55_two_fragment_outputs_are_byte_equal_to_mesa_26_2_1() {
 fn case106_three_constant_outputs_are_byte_equal_to_mesa_26_2_1() {
     const FS: &str = include_str!("../../../../tools/shaders/es300/mrt3.frag");
     let json = td!("fsout_106_mrt3.expect.json");
-    let f = compile(SHC_STAGE_FRAGMENT, FS).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, FS).expect("the fragment shader compiles");
     let rf = region(json, "fs.fragment").expect("fs.fragment");
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
@@ -4978,17 +4910,17 @@ fn look_ups_take_the_descriptor_index_of_their_sampler() {
         void main(){ gl_FragColor = texture2D(s, v) * 0.5 + texture2D(s, vec2(0.5)) * 0.25; }";
     const SECOND_FIRST: &str = "precision mediump float; uniform sampler2D a; uniform sampler2D b; varying vec2 v; \
         void main(){ gl_FragColor = texture2D(b, v) * 0.5 + texture2D(a, v) * 0.25; }";
-    let f = compile(SHC_STAGE_FRAGMENT, ONE_TWICE).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, ONE_TWICE).expect("compiles");
     assert_eq!((f.info.sampler, &f.info.samplers[..]), (Some(0), &[0][..]));
     let handle = |w: &&FauWord| matches!(w, FauWord::Constant(c) if c >> 27 == 4);
     assert_eq!(f.info.fau.iter().filter(handle).collect::<Vec<_>>(), [&FauWord::Constant(super::nir_fs::TEX_HANDLE)]);
-    let f = compile(SHC_STAGE_FRAGMENT, SECOND_FIRST).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, SECOND_FIRST).expect("compiles");
     assert_eq!(&f.info.samplers[..], [0, 1]);
     assert_eq!(
         f.info.fau.iter().filter(handle).collect::<Vec<_>>(),
         [&FauWord::Constant(super::nir_fs::tex_handle(1)), &FauWord::Constant(super::nir_fs::tex_handle(0))]
     );
-    let f = compile(SHC_STAGE_FRAGMENT, td!("sel_t_second.frag")).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("sel_t_second.frag")).expect("compiles");
     assert_eq!((f.info.sampler, &f.info.samplers[..]), (Some(1), &[1][..]));
 }
 
@@ -4999,7 +4931,7 @@ fn the_ops_the_texture_population_adds_are_pinned() {
     let ops_of = |srcs: &[&str]| {
         let mut ops = std::collections::BTreeSet::new();
         for src in srcs {
-            for &w in compile(SHC_STAGE_FRAGMENT, src).unwrap().code.iter().filter(|w| **w != 0) {
+            for &w in compile_alone(SHC_STAGE_FRAGMENT, src).unwrap().code.iter().filter(|w| **w != 0) {
                 ops.insert(isa::decode(w).expect("our word decodes").op.info().mnemonic);
             }
         }
@@ -5324,7 +5256,7 @@ const HIGHP_POPULATION: [(&str, &str, &str, &str, bool); 3] = [
 #[test]
 fn the_highp_fragment_programs_are_byte_equal_to_mesa_26_2_1() {
     for (name, vs, fs, json, values) in HIGHP_POPULATION {
-        let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+        let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
         let rf = region(json, "fs.fragment").expect("fs.fragment");
         assert_words(&format!("{name} fs.fragment"), &trim(&f.code), &rf.words);
         let names = uniform_names(vs, fs);
@@ -5476,21 +5408,18 @@ const S4_POPULATION: [(&str, &str, &str, &str, bool); 34] = [
     ),
 ];
 
-/// One program pair against its expect.json, the vertex shader built for
-/// the fragment shader's record (its reads and moved code, as the link
-/// builds it): both IDVS programs, the fragment program, every fact. The
-/// fragment shader's uniform words are the trace's zeros (the draw's
-/// values do not reach the FAU dump of the fragment stage, as for
-/// fvgtest_inner); the vertex shader's are gl_ref.py's when `vs_values`.
+/// One program pair, linked as the product links it ([`compile_linked`]),
+/// against its expect.json: both IDVS programs, the fragment program,
+/// every fact. The fragment shader's uniform words are the trace's zeros
+/// (the draw's values do not reach the FAU dump of the fragment stage, as
+/// for fvgtest_inner); the vertex shader's are gl_ref.py's when
+/// `vs_values`.
 fn check_program_for(name: &str, vs: &str, fs: &str, json: &str, vs_values: bool) {
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
-    let v = compile_vs_for(vs, fs);
+    let (v, f) = compile_linked(vs, fs);
     check_stages_for(name, &v, &f, json, vs_values);
 }
 
-/// [`check_program_for`] of a pair compiled through the link
-/// ([`compile_linked`]: the fragment shader built with the vertex shader's
-/// constant and flat lanes), every uniform word unset.
+/// [`check_program_for`] with every uniform word unset.
 fn check_linked_for(name: &str, vs: &str, fs: &str, json: &str) {
     let (v, f) = compile_linked(vs, fs);
     check_stages_for(name, &v, &f, json, false);
@@ -5672,10 +5601,10 @@ fn the_s6_population_is_byte_equal_to_mesa_26_2_1() {
     /* the record says so: the frame runs a discarding program with no
      * colour written and marks its coverage modified */
     for (name, _, fs, _, _) in S6_POPULATION {
-        let f = compile(SHC_STAGE_FRAGMENT, fs).expect("compiles");
+        let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("compiles");
         assert!(f.info.can_discard, "{name}: can_discard");
     }
-    let plain = compile(SHC_STAGE_FRAGMENT, td!("fvg_fill_color_nodiscard.frag")).expect("compiles");
+    let plain = compile_alone(SHC_STAGE_FRAGMENT, td!("fvg_fill_color_nodiscard.frag")).expect("compiles");
     assert!(!plain.info.can_discard);
 }
 
@@ -5695,7 +5624,7 @@ fn case87_databreak_is_byte_equal_to_mesa_26_2_1() {
         td!("case87_databreak.expect.json"),
         false,
     );
-    let f = compile(SHC_STAGE_FRAGMENT, td!("case87_databreak.frag")).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("case87_databreak.frag")).expect("compiles");
     assert!(!f.info.can_discard);
 }
 
@@ -5877,7 +5806,7 @@ fn the_femtovg_programs_byte_equal_to_the_shim_are_counted() {
                     failed.push(format!("{name}: {m}"));
                 }
             }
-        } else if compile(SHC_STAGE_FRAGMENT, &fs).is_ok() {
+        } else if compile_alone(SHC_STAGE_FRAGMENT, &fs).is_ok() {
             failed.push(format!("{name}: compiles, but is not counted (byte-equal, or not yet?)"));
         }
     }
@@ -5932,7 +5861,7 @@ fn the_if_forms_are_byte_equal_to_pan_shc() {
     ];
     for (name, fs, json, branches) in cases {
         check_fs_pan_shc(fs, json);
-        let f = compile(SHC_STAGE_FRAGMENT, fs).expect("compiles");
+        let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("compiles");
         let n = trim(&f.code).iter().filter(|w| text(**w).starts_with("BRANCHZ.")).count();
         assert_eq!(n, branches, "{name}: relative branches");
     }
@@ -5949,7 +5878,7 @@ fn fill_color_s_stroke_term_is_moved_into_the_vertex_shader() {
     use super::motion::{self, Moved, Node};
     let fs_src = td!("fvg_fill_color_nodiscard_noscissor.frag");
     let vs_src = td!("fvg_fill_color_nodiscard_noscissor.vert");
-    let f = compile(SHC_STAGE_FRAGMENT, fs_src).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs_src).expect("compiles");
     assert_eq!(f.info.moved.len(), 1);
     let m = f.info.moved[0];
     assert_eq!((m.location, m.comp, m.n), (0, 0, 5), "{m:?}");
@@ -5967,14 +5896,15 @@ fn fill_color_s_stroke_term_is_moved_into_the_vertex_shader() {
             .iter()
             .any(|w| text(*w).starts_with("FMA.f32") && text(*w).contains("0x40000000, 0x3F800000.neg"))
     };
-    let built = compile_vs_for(vs_src, fs_src);
+    let (built, _) = compile_linked(vs_src, fs_src);
     assert!(fma(&built), "the program's vertex shader computes the term");
     assert_eq!(built.info.moved, f.info.moved);
-    let alone = compile(SHC_STAGE_VERTEX, vs_src).expect("compiles");
+    let alone = compile_alone(SHC_STAGE_VERTEX, vs_src).expect("compiles");
     assert!(!fma(&alone) && alone.info.moved.is_empty(), "the vertex shader alone is the plain copy");
     /* fill_color itself (S6) carries the same move */
-    let with_discard = compile(SHC_STAGE_FRAGMENT, include_str!("../../../../tools/shaders/femtovg/fill_color.frag"))
-        .expect("compiles");
+    let with_discard =
+        compile_alone(SHC_STAGE_FRAGMENT, include_str!("../../../../tools/shaders/femtovg/fill_color.frag"))
+            .expect("compiles");
     assert_eq!(with_discard.info.moved, f.info.moved);
 }
 
@@ -5988,15 +5918,15 @@ fn fill_color_s_stroke_term_is_moved_into_the_vertex_shader() {
 #[test]
 fn a_dot_product_is_not_moved_and_keeps_its_fma_by_pan_shc() {
     let (vs, fs, json) = (td!("s4_motion_dot.vert"), td!("s4_motion_dot.frag"), td!("pan_shc-out/s4_motion_dot.json"));
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     assert!(f.info.moved.is_empty(), "{:?}", f.info.moved);
     assert!(!f.info.compacted);
     let pr = super::fragment_reads(&f.info.shader()).expect("encodes");
     assert_eq!((pr.reads(), pr.moved()), (&[(0u8, 0xfu8)][..], &[][..]));
     check_fs_pan_shc(fs, json);
-    let built = compile_vs_for(vs, fs);
+    let (built, _) = compile_linked(vs, fs);
     check_vs_record_pan_shc(&built, json);
-    let alone = compile(SHC_STAGE_VERTEX, vs).expect("compiles");
+    let alone = compile_alone(SHC_STAGE_VERTEX, vs).expect("compiles");
     assert_eq!(built.code, alone.code, "the program's vertex shader is the shader's own");
 }
 
@@ -6010,7 +5940,7 @@ fn a_sum_of_two_lanes_is_moved_once_by_pan_shc() {
     use super::motion::Node;
     use super::nir::Alu;
     let (vs, fs, json) = (td!("s4_motion_sum.vert"), td!("s4_motion_sum.frag"), td!("pan_shc-out/s4_motion_sum.json"));
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     assert_eq!(f.info.moved.len(), 1, "{:?}", f.info.moved);
     let m = f.info.moved[0];
     assert_eq!((m.location, m.comp), (0, 0));
@@ -6026,7 +5956,7 @@ fn a_sum_of_two_lanes_is_moved_once_by_pan_shc() {
     let pr = super::fragment_reads(&f.info.shader()).expect("encodes");
     assert_eq!(pr.reads(), &[(0u8, 0b101u8)][..]);
     check_fs_pan_shc(fs, json);
-    let built = compile_vs_for(vs, fs);
+    let (built, _) = compile_linked(vs, fs);
     check_vs_record_pan_shc(&built, json);
     assert_eq!(built.info.moved, f.info.moved);
 }
@@ -6133,7 +6063,7 @@ fn the_alu_population_is_byte_equal_to_mesa_26_2_1() {
     for (name, vs, fs, json) in ALU_POPULATION {
         check_program_for(name, vs, fs, json, false);
     }
-    let f = compile(SHC_STAGE_FRAGMENT, td!("alu_branchlane.frag")).expect("alu_branchlane.frag compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("alu_branchlane.frag")).expect("alu_branchlane.frag compiles");
     assert!(f.info.can_discard);
 }
 
@@ -6258,7 +6188,7 @@ fn the_derivative_population_is_byte_equal_to_mesa_26_2_1() {
         check_program_for(name, vs, fs, json, false);
     }
     /* a program with derivatives needs the helper lanes */
-    let f = compile(SHC_STAGE_FRAGMENT, td!("fsarith_138_deriv.frag")).expect("fsarith_138_deriv.frag compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("fsarith_138_deriv.frag")).expect("fsarith_138_deriv.frag compiles");
     assert!(f.info.helper_threads, "the derivative's CLPER reads the quad's other lanes");
 }
 
@@ -6347,7 +6277,7 @@ fn a_mediump_discard_of_a_varying_lane_is_byte_equal_to_mesa_26_2_1() {
         td!("alu_branchquad.expect.json"),
         false,
     );
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("discard_81_branchquad.frag compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("discard_81_branchquad.frag compiles");
     assert!(f.info.can_discard);
     assert!(!f.info.compacted, "v_color is read whole");
     assert_eq!(
@@ -6390,7 +6320,7 @@ const FRAG_COORD_POPULATION: [(&str, &str, &str); 9] = [
 #[test]
 fn the_frag_coord_programs_are_byte_equal_to_mesa_26_2_1() {
     for (name, fs, json) in FRAG_COORD_POPULATION {
-        let f = compile(SHC_STAGE_FRAGMENT, fs).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        let f = compile_alone(SHC_STAGE_FRAGMENT, fs).unwrap_or_else(|e| panic!("{name}: {e:?}"));
         let rf = region(json, "fs.fragment").expect("fs.fragment");
         assert_words(name, &trim(&f.code), &rf.words);
         assert_facts(name, &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
@@ -6411,7 +6341,7 @@ fn the_internal_frag_coord_shaders_are_the_references() {
     ];
     for (tree, reference, helpers) in srcs {
         assert_eq!(tree, reference);
-        let f = compile(SHC_STAGE_FRAGMENT, tree).expect("compiles");
+        let f = compile_alone(SHC_STAGE_FRAGMENT, tree).expect("compiles");
         assert_eq!(f.info.helper_threads, helpers);
         assert!(!f.info.colour_f16);
     }
@@ -6448,7 +6378,7 @@ fn the_case_192_programs_are_byte_equal_to_mesa_26_2_1() {
         (td!("algfold_192_coord.vert"), td!("algfold_192_coord.frag"), td!("algfold_192_coord.expect.json")),
     ];
     for (vs, fs, json) in cases {
-        let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+        let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
         check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
     }
 }
@@ -6461,7 +6391,7 @@ fn the_case_192_programs_are_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn a_mediump_constant_is_rounded_to_nearest_even() {
     let (vs, fs, json) = (td!("mixprec_hello.vert"), td!("mixprec_hello.frag"), td!("mixprec_hello.expect.json"));
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
 }
 
@@ -6484,7 +6414,7 @@ fn the_mixed_precision_hdrsample_is_byte_equal_to_mesa_26_2_1() {
         let (v, f) = compile_linked(vs, fs);
         check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
         check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
-        let alone = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles alone");
+        let alone = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles alone");
         check_fs_stage(&alone, vs, fs, json, VIEWPORT_64X64);
     }
 }
@@ -6519,51 +6449,17 @@ fn the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1() {
 }
 
 /// Case 19's tex pair (#33) through the back end's entry points in the GL
-/// core's order (glCompileShader of each stage, `compile_vs_linked` with no
-/// map, the link), as the board's sweep runs it: the vertex shader is built
-/// for the fragment shader's reads at its own locations, paired by name
-/// (`Tint` is fragment location 0 and vertex location 1, `TexCoord` 1 and
-/// 0), so it stores `Tint` and `TexCoord` and not the unread `Unused`, and
+/// core's order ([`compile_linked`]), as the board's sweep runs it: the
+/// vertex shader is built for the fragment shader's reads at its own
+/// locations, paired by name (`Tint` is fragment location 0 and vertex
+/// location 1, `TexCoord` 1 and 0), so it stores `Tint` and `TexCoord` and
+/// not the unread `Unused`, which has no slot (Mesa's link removes it), and
 /// both stages, their facts and each read's slot are Mesa's
 /// (docs/notes/mali-partial-varyings.md).
 #[test]
 fn case_19_s_program_through_the_entry_points_is_byte_equal_to_mesa_26_2_1() {
-    use crate::shaderc::online::backend::{release, SHC_ONLINE};
-    use crate::shaderc::ShcShader;
     let (_, vs, fs, json) = VSFP16_POPULATION[2];
-    let _serial = store::test_lock();
-    let mut log = [0 as core::ffi::c_char; 512];
-    let text = |log: &[core::ffi::c_char; 512]| {
-        // SAFETY: the writer NUL-terminated the log.
-        String::from_utf8_lossy(unsafe { crate::util::cstr_bytes(log.as_ptr()) }).into_owned()
-    };
-    let (vsrc, fsrc) = (format!("{vs}\0"), format!("{fs}\0"));
-    let mut compile = |stage: u32, src: &str| {
-        let mut sh = ShcShader::ZERO;
-        // SAFETY: a NUL-terminated source, a real output, a log of the announced size.
-        let rc = unsafe { (SHC_ONLINE.compile.unwrap())(stage, src.as_ptr().cast(), &mut sh, log.as_mut_ptr(), 512) };
-        assert_eq!(rc, 0, "compiles: {}", text(&log));
-        sh
-    };
-    let (own, mut f) = (compile(SHC_STAGE_VERTEX, &vsrc), compile(SHC_STAGE_FRAGMENT, &fsrc));
-    let mut v = ShcShader::ZERO;
-    // SAFETY: a NUL-terminated source, the program's fragment shader, a real
-    // output and a log of the announced size.
-    let rc = unsafe {
-        (SHC_ONLINE.compile_vs_linked.unwrap())(
-            vsrc.as_ptr().cast(),
-            core::ptr::null(),
-            &f,
-            &mut v,
-            log.as_mut_ptr(),
-            512,
-        )
-    };
-    assert_eq!(rc, 0, "the program's vertex shader is built for the reads: {}", text(&log));
-    // SAFETY: two shaders of this back end and a log of the announced size.
-    let rc = unsafe { (SHC_ONLINE.link.unwrap())(&v, &mut f, log.as_mut_ptr(), 512) };
-    assert_eq!(rc, 0, "the program links: {}", text(&log));
-    let (vst, fst) = (stage_of(&v), stage_of(&f));
+    let (vst, fst) = compile_linked(vs, fs);
     check_vs_stage(&vst, vs, fs, json, VIEWPORT_64X64);
     check_fs_stage(&fst, vs, fs, json, VIEWPORT_64X64);
     let generic = |s: &Stage| {
@@ -6577,17 +6473,14 @@ fn case_19_s_program_through_the_entry_points_is_byte_equal_to_mesa_26_2_1() {
         g.sort_by_key(|x| x.1);
         g
     };
-    /* Tint at 0, TexCoord's two lanes at 16, Unused (vertex location 2)
-     * kept in the record with no component (mask 0, no store) */
-    assert_eq!(generic(&vst), [(Some(1), 0, 0xf), (Some(0), 16, 0x3), (Some(2), 24, 0)], "the vertex layout");
+    /* Tint at 0, TexCoord's two lanes at 16; Unused (vertex location 2)
+     * has no slot */
+    assert_eq!(generic(&vst), [(Some(1), 0, 0xf), (Some(0), 16, 0x3)], "the vertex layout");
     assert_eq!(generic(&fst), [(Some(0), 0, 0xf), (Some(1), 16, 0x3)], "the fragment layout");
     /* a vertex's generic varyings are the six stored words (pan_csf.c
-     * `generic_size_B`, the frame's VARY_SIZE): Unused adds none */
+     * `generic_size_B`, the frame's VARY_SIZE) */
     let meta = crate::mali::program::StageMeta::of(&vst.info.shader()).expect("the frame builder takes the record");
     assert_eq!(meta.meta().varying_bytes, 24, "VARY_SIZE");
-    for sh in [&f, &v, &own] {
-        release(sh);
-    }
 }
 
 /// Case 199's vertex shader (es3trunc_vsc.vert, #33): `trunc` is
@@ -6624,10 +6517,10 @@ fn case_89_flatlast_is_byte_equal_to_mesa_26_2_1() {
     assert_eq!(vs, include_str!("../../../../tools/shaders/es300/flatlast.vert"));
     assert_eq!(fs, include_str!("../../../../tools/shaders/es300/flatlast.frag"));
     /* the shader alone stores the uint */
-    compile(SHC_STAGE_VERTEX, vs).expect("flatlast.vert compiles");
+    compile_alone(SHC_STAGE_VERTEX, vs).expect("flatlast.vert compiles");
     /* the record the link makes: the reads of `v_flat.rgb` and `v_idx`, and
      * the moved `fmul(u2f32(v_idx), 0.25)` in lane 0 of `v_idx` */
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("flatlast.frag compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("flatlast.frag compiles");
     let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
     let mut out = [super::motion::Moved::NONE; super::motion::MAX_MOVED];
     let n = super::motion::decode(pr.moved(), &mut out).expect("the record's bytes decode");
@@ -6708,22 +6601,16 @@ fn case_199_fragment_trunc_is_byte_equal_to_mesa_26_2_1() {
      * fragment's own, not the link's) */
     let attr = "#version 300 es\nin vec4 a_color;\nin vec4 a_pos;\nout vec4 v;\n\
                 void main() { gl_Position = a_pos; v = a_color; }\n";
-    let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::fs_constants(attr.as_bytes(), fs.as_bytes(), s))
-        .expect("the scratch arena is free")
-        .expect("the vertex shader's constant lanes")
-        .unwrap_or_default();
-    let f = store::with_scratch(|s| {
-        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
-    })
-    .expect("the scratch arena is free");
-    match f {
-        Ok(f) => {
-            let pr = super::fragment_reads(&f.info.shader()).expect("the record encodes");
-            assert!(pr.moved().is_empty(), "an interpolated lane moved: {:?}", pr.moved());
+    match try_compile_linked(attr, fs) {
+        Ok((v, f)) => {
+            assert!(
+                f.info.moved.is_empty() && v.info.moved.is_empty(),
+                "an interpolated lane moved: {:?}",
+                f.info.moved
+            );
             assert!(f.code.iter().any(|w| text(*w).starts_with("F32_TO_S32")), "f2i left the fragment shader");
         }
-        Err(e) => panic!("the attribute-fed control: {e:?}"),
+        Err(r) => panic!("the attribute-fed control: {r:?}"),
     }
 }
 
@@ -6770,10 +6657,10 @@ fn the_motion_guard_pair_is_byte_equal_to_mesa_26_2_1() {
 /// (r60 and r61 only).
 #[test]
 fn the_unreferenced_frag_coord_programs_follow_the_rules() {
-    let tri = compile(SHC_STAGE_FRAGMENT, include_str!("../../../../tools/shaders/es100/tri_fragcoord.frag"))
+    let tri = compile_alone(SHC_STAGE_FRAGMENT, include_str!("../../../../tools/shaders/es100/tri_fragcoord.frag"))
         .expect("tri_fragcoord compiles");
     assert!(tri.info.fau.contains(&FauWord::Constant(0x1800_1266)), "{:?}", tri.info.fau);
-    let z = compile(SHC_STAGE_FRAGMENT, include_str!("../../../../tools/shaders/es100/fragz.frag"))
+    let z = compile_alone(SHC_STAGE_FRAGMENT, include_str!("../../../../tools/shaders/es100/fragz.frag"))
         .expect("fragz compiles");
     let first = text(z.code[0]);
     assert!(first.starts_with("LD_VAR_SPECIAL.f32.center") && first.ends_with("index:0x3"), "{first}");
@@ -7045,7 +6932,7 @@ fn a_varying_lane_of_uniforms_alone_is_loaded_flat() {
     assert!(ld.contains(".src_flat32.") && ld.contains(", 0x0, index:0x0"), "{ld}");
     let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s)).expect("free").expect("the lanes");
     assert!((0..4).all(|c| consts.flat(0, c) && consts.get(0, c).is_none()), "{consts:?}");
-    let alone = compile(SHC_STAGE_FRAGMENT, fs).expect("compiles alone");
+    let alone = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("compiles alone");
     assert!(text(trim(&alone.code)[0]).contains(".src_f32."));
     /* a flat lane beside an interpolated one: no reference draws the
      * layout, refused in the vertex shader */
@@ -7069,7 +6956,7 @@ fn case78_a_packed_matrix_varying_is_read_whole() {
     /* alone (the shader object's record, which the link replaces) it reads
      * `v_after.z` too, so the matrix's lanes fall in two loads: compiled,
      * for glCompileShader (the link reads both records) */
-    let alone = compile(SHC_STAGE_FRAGMENT, td!("varyconst_78_matvary.frag")).expect("compiles alone");
+    let alone = compile_alone(SHC_STAGE_FRAGMENT, td!("varyconst_78_matvary.frag")).expect("compiles alone");
     assert_eq!(alone.info.varyings.iter().filter(|x| x.section == Section::Generic).count(), 3);
 }
 
@@ -7080,7 +6967,7 @@ fn case78_a_packed_matrix_varying_is_read_whole() {
 /// as `MKVEC.v2i16`.
 #[test]
 fn case185_a_lane_twice_in_a_word_is_a_swizzle() {
-    let f = compile(SHC_STAGE_FRAGMENT, td!("varyconst_185_kindcost_fmul.frag")).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("varyconst_185_kindcost_fmul.frag")).expect("compiles");
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
     assert_eq!(texts.iter().filter(|t| t.starts_with("FADD.f32") && t.contains(".h0, r")).count(), 1, "{texts:?}");
     assert!(texts.iter().any(|t| t == "IADD.v2u16 r1, r0.h00, 0x0"), "{texts:?}");
@@ -7094,7 +6981,7 @@ fn case185_a_lane_twice_in_a_word_is_a_swizzle() {
 /// u2.w1.neg.h00`), then `MKVEC.v2i16 r1, r1^.h0, u3.w0.h0`.
 #[test]
 fn case75_a_uniform_lane_beside_a_constant_is_a_lane_alone() {
-    let f = compile(SHC_STAGE_FRAGMENT, td!("varyconst_75_immneg.frag")).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("varyconst_75_immneg.frag")).expect("compiles");
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
     assert!(texts.iter().any(|t| t.starts_with("FADD_IMM.v2f16") && t.ends_with("u2.w0, #0xBC00B800")), "{texts:?}");
     assert!(texts.iter().any(|t| t.ends_with("r1, 0x3C000000.h11, u2.w1.neg.h00")), "{texts:?}");
@@ -7155,14 +7042,7 @@ fn cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1() {
         (td!("builtin_45.vert"), td!("builtin_45.frag"), td!("builtin_45.expect.json")),
         (td!("builtin_98.vert"), td!("builtin_98.frag"), td!("builtin_98.expect.json")),
     ] {
-        let v = {
-            let _k = store::test_keep();
-            store::with_scratch(|s| {
-                super::compile_vs_for_reads(vs.as_bytes(), &[], &[], s, store::keep()).map(|(sh, _)| stage_of(&sh))
-            })
-            .expect("the scratch arena is free")
-            .expect("the vertex shader compiles for a program that reads no varying")
-        };
+        let (v, _) = compile_linked(vs, fs);
         check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
     }
 }
@@ -7207,7 +7087,7 @@ fn an_or_of_two_compares_is_one_compare() {
 /// `MUX`es of its low half (builtin_49.expect.json).
 #[test]
 fn front_facing_is_the_primitive_flags_compared_with_zero() {
-    let f = compile(SHC_STAGE_FRAGMENT, td!("builtin_49.frag")).expect("compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("builtin_49.frag")).expect("compiles");
     assert_eq!(f.info.preload, 0x34 << 56);
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
     assert_eq!(texts[0], "ICMP_OR.u32.eq.m1.discard r0, r58^, 0x0, 0x0");
@@ -7375,7 +7255,7 @@ fn an_integer_colour_without_a_reference_is_refused_by_name() {
     ] {
         assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::IntColour, "{src}");
     }
-    let f = compile(SHC_STAGE_FRAGMENT, &fs("out highp uvec4 o;", u)).expect("a declared highp uvec4 compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, &fs("out highp uvec4 o;", u)).expect("a declared highp uvec4 compiles");
     assert!(!f.info.colour_f16, "its blend shader takes the 32-bit key");
 }
 
@@ -7423,8 +7303,7 @@ const LOOP_POPULATION: [(&str, &str, &str, &str); 2] = [
 /// cap's `edits` ([`capped`]).
 fn check_loop(name: &str, edits: &[CapEdit]) {
     let (_, vs, fs, json) = LOOP_POPULATION.iter().find(|c| c.0 == name).expect("a member");
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
-    let v = compile_vs_for(vs, fs);
+    let (v, f) = compile_linked(vs, fs);
     check_stages_capped(name, &v, &f, json, false, edits);
 }
 
@@ -7491,16 +7370,8 @@ fn intloop_divnest_is_mesa_26_2_1_with_the_loop_cap() {
 /// and the fragment program, against the reference drawn with
 /// `--uniform-values` ([`uniform_value`]).
 fn check_builtin_loop(vs: &str, fs: &str, json: &str, edits: &[CapEdit]) {
-    let v = {
-        let _k = store::test_keep();
-        store::with_scratch(|s| {
-            super::compile_vs_for_reads(vs.as_bytes(), &[], &[], s, store::keep()).map(|(sh, _)| stage_of(&sh))
-        })
-        .expect("the scratch arena is free")
-        .expect("the vertex shader compiles for a program that reads no varying")
-    };
+    let (v, f) = compile_linked(vs, fs);
     check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     check_fs_stage_capped(&f, vs, fs, json, VIEWPORT_64X64, edits);
 }
 
@@ -7544,7 +7415,7 @@ fn builtin_98_is_mesa_26_2_1_with_the_loop_cap() {
 #[test]
 fn builtin_45_is_mesa_26_2_1_with_the_loop_cap() {
     let (fs, json) = (td!("builtin_45.frag"), td!("builtin_45.expect.json"));
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     let rf = capped(
         region(json, "fs.fragment").expect("fs.fragment"),
         &[
@@ -7660,7 +7531,7 @@ const UNITYPE_166_POPULATION: [(&str, &str, &str); 3] = [
 fn check_unitype_166(name: &str) {
     let (_, fs, json) = UNITYPE_166_POPULATION.iter().find(|c| c.0 == name).expect("a member");
     check_program_for(name, td!("unitype_166.vert"), fs, json, false);
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     assert!(f.info.ubo.is_empty(), "{name}: a loaded block");
 }
 
@@ -8086,7 +7957,7 @@ fn a_mediump_fragment_matrix_uniform_is_laid_out_one_row_a_column() {
         let src = format!(
             "precision mediump float; uniform {t} m; varying vec2 a2; void main() {{ gl_FragColor = vec4(a2 + m[1].xy, 0.0, 1.0); }}"
         );
-        assert!(compile(SHC_STAGE_FRAGMENT, &src).is_ok(), "{t}");
+        assert!(compile_alone(SHC_STAGE_FRAGMENT, &src).is_ok(), "{t}");
     }
 }
 
@@ -8462,17 +8333,17 @@ fn vertex_attribute_indices_count_the_locations_mesa_numbers() {
 ///   refuse nothing, because no location depends on them.
 #[test]
 fn a_late_fold_is_refused_only_where_the_attribute_numbering_depends_on_it() {
-    let linked = |vs: &str, fs: &str| match try_compile_linked(vs, fs) {
-        Ok((v, _)) => Ok(v),
-        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => Err(e),
-        Err(e) => panic!("not a Mali refusal: {e:?}"),
+    let linked = |vs: &str, fs: &str| try_compile_linked(vs, fs).map(|(v, _)| v);
+    let refused = |vs: &str, fs: &str, e: MaliError, what: &str| match linked(vs, fs) {
+        Err(r) => assert!(r.is(e), "{what}: {r:?}"),
+        Ok(_) => panic!("{what}: the program links"),
     };
     let fs = "precision mediump float; varying mediump vec4 v; void main() { gl_FragColor = v; }";
     let vertex_96 = "attribute vec4 p; const float e = -6.5 - float(7.0) * -1.0; attribute float d; \
         float c = float(float(-7.625)) + float(float(7.5)); attribute float a; attribute float b; \
         varying mediump vec4 v; void main() { gl_Position = p; \
         v = vec4(float(e) * 2.0, (float(d)), c * 2.0, float(c)); v = (v) * (vec4(0.5, -0.0, b, a)); }";
-    assert_eq!(linked(vertex_96, fs).err(), Some(MaliError::AttributeNumbering), "vertex.96");
+    refused(vertex_96, fs, MaliError::AttributeNumbering, "vertex.96");
     assert_eq!(gap(SHC_STAGE_VERTEX, vertex_96), MaliError::AttributeNumbering, "vertex.96 alone");
     for (decl, body, fs) in [
         ("uniform highp vec4 u;", "v = u + d * vec4(0.0, -0.0, 0.0, 0.0);", fs),
@@ -8486,7 +8357,7 @@ fn a_late_fold_is_refused_only_where_the_attribute_numbering_depends_on_it() {
             "attribute highp vec4 p; attribute highp vec4 d; varying mediump vec4 v; {decl} \
              void main(){{ gl_Position = p; {body} }}"
         );
-        assert_eq!(linked(&vs, fs).err(), Some(MaliError::AttributeNumbering), "{body}");
+        refused(&vs, fs, MaliError::AttributeNumbering, body);
     }
     for read in [
         "gl_Position = p; v = b * vec4(1.0, 1.0, 0.0, 1.0);",
@@ -8503,7 +8374,7 @@ fn a_late_fold_is_refused_only_where_the_attribute_numbering_depends_on_it() {
     assert!(!refs.is_empty());
     for (name, vs, fs, json) in &refs {
         /* the shader alone too, as `glCompileShader` builds it */
-        if let Err(e) = compile(SHC_STAGE_VERTEX, vs) {
+        if let Err(e) = compile_alone(SHC_STAGE_VERTEX, vs) {
             panic!("{name}: alone: refused, {e:?}");
         }
         let v = linked(vs, fs).unwrap_or_else(|e| panic!("{name}: refused, {e:?}"));
@@ -8695,7 +8566,7 @@ fn glsl_leaves_a_chain_of_matrix_local_columns_in_order() {
 /// uniload_fs_chain80.expect.json in [`UNILOAD_POPULATION`].)
 #[test]
 fn the_matrix_local_chain_compiles_in_the_source_order() {
-    let f = compile(SHC_STAGE_FRAGMENT, CHAIN_80).expect("the chain compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, CHAIN_80).expect("the chain compiles");
     let code = trim(&f.code);
     let ops: Vec<String> = code.iter().take(7).map(|&w| text(w)).collect();
     assert_eq!(
@@ -8752,7 +8623,7 @@ fn the_indexed_local_population_is_byte_equal_to_mesa_26_2_1() {
 /// `.not` source, `LSHIFT_OR.i32 r5, 0x0, 0x0.b00, r4.not` (word 9).
 #[test]
 fn the_constant_read_tree_takes_the_product_and_the_shared_inot_stays() {
-    let f = compile(SHC_STAGE_FRAGMENT, td!("indexlocal_array.frag")).expect("the array part compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, td!("indexlocal_array.frag")).expect("the array part compiles");
     let ops: Vec<String> = trim(&f.code).iter().map(|&w| text(w)).collect();
     assert!(ops.iter().all(|o| !o.starts_with("FMA")), "{ops:#?}");
     assert!(ops.iter().any(|o| o == "LSHIFT_OR.i32 r5, 0x0, 0x0.b00, r4.not"), "{ops:#?}");
@@ -8856,9 +8727,8 @@ fn the_flattened_ifs_are_byte_equal_to_mesa_26_2_1() {
     let mut failed = Vec::new();
     for (name, vs, fs, json) in CFLOW_FLATTEN {
         let r = std::panic::catch_unwind(|| {
-            let v = compile_vs_for(vs, fs);
+            let (v, f) = compile_linked(vs, fs);
             check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
-            let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
             check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
             assert!(!f.info.can_discard, "{name}: no discard");
         });
@@ -8915,9 +8785,8 @@ fn the_kept_branches_are_byte_equal_to_mesa_26_2_1() {
     let mut failed = Vec::new();
     for (name, vs, fs, json, values) in CFLOW_BRANCH {
         let r = std::panic::catch_unwind(|| {
-            let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+            let (v, f) = compile_linked(vs, fs);
             if values {
-                let v = compile_vs_for(vs, fs);
                 check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
                 check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
             } else {
@@ -8976,7 +8845,7 @@ fn the_fp16_constant_products_fold_as_mesa_s() {
     let with =
         |a: &str, b: &str| base.replace("acc * 2.0;", &format!("acc {a};")).replace("t * 0.5;", &format!("t {b};"));
     let ops = |src: &str| -> Vec<&'static str> {
-        let f = compile(SHC_STAGE_FRAGMENT, src).expect("compiles");
+        let f = compile_alone(SHC_STAGE_FRAGMENT, src).expect("compiles");
         trim(&f.code).iter().map(|w| isa::decode(*w).expect("decodes").op.info().mnemonic).collect()
     };
     let fma = |v: &[&str]| v.iter().filter(|m| m.starts_with("FMA")).count();
@@ -9038,7 +8907,7 @@ fn case_218_shadowcmp_is_byte_equal_to_mesa_26_2_1() {
         td!("fsarith_218_shadowcmp.expect.json"),
     );
     check_linked_for("218", vs, fs, json);
-    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     assert!(f.info.helper_threads, "the look-ups' level needs helpers");
     let shadow = trim(&f.code).iter().filter(|w| text(**w).contains(".shadow.")).count();
     assert_eq!(shadow, 2, "two shadow look-ups");
@@ -9141,7 +9010,7 @@ fn vcube_code(mag_switch: u32) -> Vec<String> {
     let vs = include_str!("../../../../tools/mali/testdata/pan_tex_ref/vcube.vert");
     let key = crate::shaderc::LodKey { mag_switch, ..crate::shaderc::LodKey::NONE };
     let old = crate::shaderc::set_compile_lod_key(key);
-    let s = compile(SHC_STAGE_VERTEX, vs);
+    let s = compile_alone(SHC_STAGE_VERTEX, vs);
     crate::shaderc::set_compile_lod_key(old);
     trim(&s.expect("vcube.vert compiles").code).iter().map(|w| text(*w)).collect()
 }
@@ -9179,8 +9048,745 @@ fn the_compare_chain_shader_objects_compile() {
         td!("deqp_mixprec_cmptex.frag"),
     ];
     for fs in cases {
-        if let Err(e) = compile(SHC_STAGE_FRAGMENT, fs) {
+        if let Err(e) = compile_alone(SHC_STAGE_FRAGMENT, fs) {
             panic!("{fs}: {e:?}");
         }
     }
+}
+
+/* ---- the product route ------------------------------------------------ */
+
+/// The entry point of the product route that refused a program
+/// ([`link_records`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RouteStep {
+    /// glCompileShader of the vertex shader (`compile`).
+    Vertex,
+    /// glCompileShader of the fragment shader (`compile`).
+    Fragment,
+    /// glLinkProgram's vertex shader for the fragment shader
+    /// (`compile_vs_linked` with no map).
+    VsLinked,
+    /// glLinkProgram's `link` (with `link_shaders_mali`).
+    Link,
+}
+
+impl RouteStep {
+    /// The step's name in the route's TSV (tools/mali/route.sh).
+    fn name(self) -> &'static str {
+        match self {
+            RouteStep::Vertex => "vs",
+            RouteStep::Fragment => "fs",
+            RouteStep::VsLinked => "vs_linked",
+            RouteStep::Link => "link",
+        }
+    }
+}
+
+/// A program the product route refused: the step, its return code and the
+/// log the entry point wrote.
+#[derive(Clone, Debug)]
+pub(crate) struct Refused {
+    pub step: RouteStep,
+    pub rc: i32,
+    pub log: String,
+}
+
+impl Refused {
+    /// Refused by the Mali code generator with `e`: the log carries the
+    /// error's own message (backend.rs `report`).
+    pub(crate) fn is(&self, e: MaliError) -> bool {
+        self.log.contains(e.message())
+    }
+}
+
+/// The program of `vs` and `fs` through the back end's entry points, in the
+/// order the GL core calls them (src/gl/shader.rs glCompileShader, then
+/// src/gl/program.rs glLinkProgram: `link_vs_for_fs`, then `link`):
+/// `compile` of the vertex shader, `compile` of the fragment shader,
+/// `compile_vs_linked` with no attribute map (1 keeps the vertex shader's
+/// own record), then `link`, which may replace the fragment record. What it
+/// returns is what the product draws.
+///
+/// Ok: the program's vertex record, its fragment record, and the fragment
+/// shader object's own record (the link may have replaced it); the caller
+/// releases all three (`backend::release`).
+pub(crate) fn link_records(vs: &str, fs: &str) -> Result<[crate::shaderc::ShcShader; 3], Refused> {
+    use crate::shaderc::online::backend::{release, retain, SHC_ONLINE};
+    use crate::shaderc::ShcShader;
+    /* one program at a time, as the GL core links (each entry takes the
+     * same lock again, nested) */
+    let _serial = store::test_lock();
+    let (vsrc, fsrc) = (format!("{vs}\0"), format!("{fs}\0"));
+    let mut log = [0 as core::ffi::c_char; 512];
+    let refused = |step, rc, log: &[core::ffi::c_char; 512]| {
+        let b: Vec<u8> = log.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
+        Refused { step, rc, log: String::from_utf8_lossy(&b).into_owned() }
+    };
+    let (compile, vs_linked, link) = (
+        SHC_ONLINE.compile.expect("the back end compiles"),
+        SHC_ONLINE.compile_vs_linked.expect("the back end builds the program's vertex shader"),
+        SHC_ONLINE.link.expect("the back end links"),
+    );
+    let (mut v, mut f) = (ShcShader::ZERO, ShcShader::ZERO);
+    // SAFETY: NUL-terminated sources, real outputs, a log of the announced size.
+    let rc = unsafe { compile(SHC_STAGE_VERTEX, vsrc.as_ptr().cast(), &mut v, log.as_mut_ptr(), log.len()) };
+    if rc != 0 {
+        return Err(refused(RouteStep::Vertex, rc, &log));
+    }
+    // SAFETY: as above.
+    let rc = unsafe { compile(SHC_STAGE_FRAGMENT, fsrc.as_ptr().cast(), &mut f, log.as_mut_ptr(), log.len()) };
+    if rc != 0 {
+        release(&v);
+        return Err(refused(RouteStep::Fragment, rc, &log));
+    }
+    /* the shader object keeps its record; the program holds its own copy,
+     * which the link may replace (glLinkProgram retains both stages) */
+    let object = f;
+    retain(&object);
+    let mut pv = ShcShader::ZERO;
+    // SAFETY: a NUL-terminated source, the program's fragment shader, a
+    // real output and a log of the announced size.
+    let rc = unsafe { vs_linked(vsrc.as_ptr().cast(), core::ptr::null(), &f, &mut pv, log.as_mut_ptr(), log.len()) };
+    match rc {
+        0 => {
+            release(&v);
+            v = pv;
+        }
+        1 => {}
+        _ => {
+            for sh in [&v, &f, &object] {
+                release(sh);
+            }
+            return Err(refused(RouteStep::VsLinked, rc, &log));
+        }
+    }
+    // SAFETY: two distinct valid shaders and a log of the announced size.
+    let rc = unsafe { link(&v, &mut f, log.as_mut_ptr(), log.len()) };
+    if rc != 0 {
+        for sh in [&v, &f, &object] {
+            release(sh);
+        }
+        return Err(refused(RouteStep::Link, rc, &log));
+    }
+    Ok([v, f, object])
+}
+
+/// [`link_records`] as the tests read it: the program's vertex and
+/// fragment stages, copied out, every record released.
+fn link_stages(vs: &str, fs: &str) -> Result<(Stage, Stage), Refused> {
+    let [v, f, object] = link_records(vs, fs)?;
+    let out = (stage_of(&v), stage_of(&f));
+    for sh in [&v, &f, &object] {
+        crate::shaderc::online::backend::release(sh);
+    }
+    Ok(out)
+}
+
+/* ---- the product route, measured (tools/mali/route.sh) ---------------- */
+
+/// A program's verdict on the product route ([`link_stages`]) against its
+/// drm-shim reference.
+#[derive(Debug)]
+enum RouteVerdict {
+    /// Both stages are the reference's: words, facts and FAU words.
+    Equal,
+    /// Compiled, not the reference's: the first difference.
+    Differ(String),
+    /// Refused by name on the route.
+    Refused(Refused),
+    /// Compiled, and there is no reference to compare it with.
+    NoRef,
+}
+
+/// The FNV-1a hash of `bytes`: a digest that is the same in every build
+/// (std's hasher is not), so two TSVs of two trees compare.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
+}
+
+/// The digest of what the reference compares of a program: each stage's
+/// words, work registers, preload, FAU words and varying program.
+fn route_digest(v: &Stage, f: &Stage) -> String {
+    let facts =
+        |s: &Stage| format!("{:?}", (&s.code, s.info.work_reg_count, s.info.preload, &s.info.fau, s.info.secondary));
+    format!("{:016x}", fnv1a(format!("{}|{}", facts(v), facts(f)).as_bytes()))
+}
+
+/// The first line of a panic's message.
+fn panic_line(e: &(dyn std::any::Any + Send)) -> String {
+    let m = e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()));
+    m.unwrap_or_default().lines().next().unwrap_or("").to_string()
+}
+
+/// Program `v`, `f` (of `vs`, `fs`) against the reference `json`: None when
+/// both stages are its own, else the first difference. The uniform words
+/// of a reference are its draw's, which tools/mali/drm_shim_ref.sh makes
+/// either with `--uniform-values` ([`uniform_value`]) or with every uniform
+/// 0 (the older references): each stage is compared both ways and passes
+/// when one matches. The words, the facts and the FAU layout are the same
+/// under both; only the uniform words' values differ.
+fn route_differs(v: &Stage, f: &Stage, vs: &str, fs: &str, json: &str) -> Option<String> {
+    let names = uniform_names(vs, fs);
+    let uv_v = |d: u16| uniform_value(&names, &v.uniforms, d);
+    let uv_f = |d: u16| uniform_value(&names, &f.uniforms, d);
+    let zero = |_: u16| 0;
+    let vp = VIEWPORT_64X64;
+    let either = |a: &dyn Fn(), b: &dyn Fn()| -> Option<String> {
+        let first = std::panic::catch_unwind(std::panic::AssertUnwindSafe(a)).err()?;
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(b)).err().map(|_| panic_line(&*first))
+    };
+    let vs_d = either(&|| check_vs_stage_with(v, json, vp, &uv_v), &|| check_vs_stage_with(v, json, vp, &zero));
+    let fs_d =
+        either(&|| check_fs_stage_with(f, json, vp, &[], &uv_f), &|| check_fs_stage_with(f, json, vp, &[], &zero));
+    /* each fragment read at its vertex output's offset is the link's own
+     * rule (link_shaders_mali pairs the stages by name, or refuses) */
+    vs_d.map(|d| format!("vs: {d}")).or(fs_d.map(|d| format!("fs: {d}")))
+}
+
+/// The product route's verdict on program `vs`, `fs` against `json` (None:
+/// no reference), and the digest of what it compiled.
+fn route_verdict(vs: &str, fs: &str, json: Option<&str>) -> (RouteVerdict, Option<String>) {
+    match link_stages(vs, fs) {
+        Err(r) => (RouteVerdict::Refused(r), None),
+        Ok((v, f)) => {
+            let digest = Some(route_digest(&v, &f));
+            let verdict = match json.map(|j| route_differs(&v, &f, vs, fs, j)) {
+                None => RouteVerdict::NoRef,
+                Some(None) => RouteVerdict::Equal,
+                Some(Some(d)) => RouteVerdict::Differ(d),
+            };
+            (verdict, digest)
+        }
+    }
+}
+
+/// One TSV row of tools/mali/route.sh: the name, EQUAL / DIFFER / REFUSED
+/// / NOREF, the digest of the compiled program (`-` when refused), and the
+/// detail: the first difference, or the refusing step, its return code
+/// and its log.
+fn route_row(name: &str, verdict: &RouteVerdict, digest: Option<&str>) -> String {
+    let flat = |s: &str| s.replace(['\t', '\n', '\r'], " ");
+    let (word, detail) = match verdict {
+        RouteVerdict::Equal => ("EQUAL", "-".to_string()),
+        RouteVerdict::Differ(d) => ("DIFFER", flat(d)),
+        RouteVerdict::Refused(r) => ("REFUSED", format!("{} ({}): {}", r.step.name(), r.rc, flat(&r.log))),
+        RouteVerdict::NoRef => ("NOREF", "-".to_string()),
+    };
+    format!("{name}\t{word}\t{}\t{detail}", digest.unwrap_or("-"))
+}
+
+/// The program pairs of directory `dir`: each `<name>.vert` beside a
+/// `<name>.frag`, sorted by name.
+fn route_names(dir: &std::path::Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .expect("a readable directory")
+        .flatten()
+        .filter_map(|e| e.file_name().to_str().and_then(|n| n.strip_suffix(".vert")).map(String::from))
+        .filter(|n| dir.join(format!("{n}.frag")).is_file())
+        .collect();
+    names.sort();
+    names
+}
+
+/// The row of pair `name` of `dir`, against `<name>.expect.json` when the
+/// directory has it.
+fn route_dir_row(dir: &std::path::Path, name: &str) -> String {
+    let read = |ext: &str| std::fs::read_to_string(dir.join(format!("{name}.{ext}")));
+    let (vs, fs) = (read("vert").expect("the vertex shader"), read("frag").expect("the fragment shader"));
+    let json = read("expect.json").ok();
+    let (verdict, digest) = route_verdict(&vs, &fs, json.as_deref());
+    route_row(name, &verdict, digest.as_deref())
+}
+
+/// The measure of tools/mali/route.sh: with YAKOGL_MALI_ROUTE_DIR set,
+/// every pair of that directory through the product route, one row each
+/// (`route\t<row>`, [`route_row`]); YAKOGL_MALI_ROUTE_SHARD=k/n takes the
+/// k-th of n shares of the sorted names (the script runs the shares at
+/// once). Without it, the self-test: a program equal to its reference, the
+/// same program against another's reference, one with none, one the
+/// route refuses at the fragment compile, each with its verdict, and the
+/// directory read.
+#[test]
+fn the_product_route_is_measured_against_the_references() {
+    if let Some(dir) = std::env::var_os("YAKOGL_MALI_ROUTE_DIR") {
+        let dir = std::path::PathBuf::from(dir);
+        let (k, n) = std::env::var("YAKOGL_MALI_ROUTE_SHARD")
+            .ok()
+            .and_then(|s| s.split_once('/').and_then(|(k, n)| Some((k.parse::<usize>().ok()?, n.parse().ok()?))))
+            .unwrap_or((0, 1));
+        for name in route_names(&dir).iter().skip(k).step_by(n.max(1)) {
+            println!("route\t{}", route_dir_row(&dir, name));
+        }
+        return;
+    }
+    let (equal, digest) = route_verdict(TV_VS, TV_FS, Some(TV_26));
+    assert!(matches!(equal, RouteVerdict::Equal), "{equal:?}");
+    let (other, other_digest) = route_verdict(TV_VS, TV_FS, Some(TRI_26));
+    assert!(matches!(other, RouteVerdict::Differ(ref d) if d.starts_with("vs: ")), "{other:?}");
+    assert_eq!(digest, other_digest, "one program, one digest");
+    let (noref, tri) = route_verdict(TRI_VS, TRI_FS, None);
+    assert!(matches!(noref, RouteVerdict::NoRef), "{noref:?}");
+    assert_ne!(tri, digest, "two programs, two digests");
+    let (vs, fs, json) = (
+        td!("fstex_cubeno_texcoord_allconst.vert"),
+        td!("fstex_cubeno_texcoord_allconst.frag"),
+        td!("fstex_cubeno_texcoord_allconst.expect.json"),
+    );
+    let (refused, none) = route_verdict(vs, fs, Some(json));
+    match &refused {
+        RouteVerdict::Refused(r) => {
+            assert_eq!(r.step, RouteStep::Fragment);
+            assert!(r.is(MaliError::TexCoord), "{r:?}");
+        }
+        v => panic!("not refused: {v:?}"),
+    }
+    assert_eq!(none, None);
+    let row = route_row("x", &refused, None);
+    assert!(row.starts_with("x\tREFUSED\t-\tfs (-95): online shaderc: "), "{row}");
+    assert_eq!(row.matches('\t').count(), 3, "four fields: {row}");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
+    let names = route_names(&dir);
+    assert!(names.iter().any(|n| n == "tri") && names.iter().any(|n| n == "tri_varying"), "{names:?}");
+    let row = route_dir_row(&dir, "tri_varying");
+    assert_eq!(row, format!("tri_varying\tEQUAL\t{}\t-", digest.expect("a digest")));
+}
+
+/* ---- the program's vertex shader stores what its fragment shader reads -- */
+
+/// A program's vertex shader stores only the varyings its fragment shader
+/// reads, as Mesa's link leaves it (nir_opt_varyings.c
+/// `remove_dead_varyings`; docs/notes/mali-product-route.md), through the
+/// back end's entry points: a varying the fragment shader does not declare
+/// (route_unread_last, issue #6509's pair), one it declares and does not
+/// read (route_declared_unread), one of two it reads in part
+/// (route_unread_part), none read at all, so no varying program
+/// (route_none_read), and a varying the fragment shader reads in `e * 0.0`,
+/// which our back end folds away and Mesa's link keeps (route_folded_read:
+/// its store stays). What Mesa's pre-link optimisations make dead is
+/// removed too: a varying read only into a local nothing reads
+/// (route_dead_local, `program_reads`' liveness) and one multiplied by a
+/// constant that is one zero in every lane (route_zero_product, 0.0;
+/// route_zero_negative, -0.0: nir_opt_algebraic.py:277-278). A constant
+/// with zeros of both signs is no such product, so the varying stays
+/// (route_zero_mixed_pairs, route_zero_mixed_swizzle). Each program is the
+/// drm-shim's to the byte.
+#[test]
+fn a_program_s_vertex_shader_stores_only_what_its_fragment_shader_reads_as_mesa_26_2_1() {
+    let cases = [
+        (
+            "route_unread_last",
+            td!("route_unread_last.vert"),
+            td!("route_unread_last.frag"),
+            td!("route_unread_last.expect.json"),
+        ),
+        (
+            "route_declared_unread",
+            td!("route_declared_unread.vert"),
+            td!("route_declared_unread.frag"),
+            td!("route_declared_unread.expect.json"),
+        ),
+        (
+            "route_unread_part",
+            td!("route_unread_part.vert"),
+            td!("route_unread_part.frag"),
+            td!("route_unread_part.expect.json"),
+        ),
+        (
+            "route_none_read",
+            td!("route_none_read.vert"),
+            td!("route_none_read.frag"),
+            td!("route_none_read.expect.json"),
+        ),
+        (
+            "route_folded_read",
+            td!("route_folded_read.vert"),
+            td!("route_folded_read.frag"),
+            td!("route_folded_read.expect.json"),
+        ),
+        (
+            "route_dead_local",
+            td!("route_dead_local.vert"),
+            td!("route_dead_local.frag"),
+            td!("route_dead_local.expect.json"),
+        ),
+        (
+            "route_zero_product",
+            td!("route_zero_product.vert"),
+            td!("route_zero_product.frag"),
+            td!("route_zero_product.expect.json"),
+        ),
+        (
+            "route_zero_negative",
+            td!("route_zero_negative.vert"),
+            td!("route_zero_negative.frag"),
+            td!("route_zero_negative.expect.json"),
+        ),
+        (
+            "route_zero_mixed_pairs",
+            td!("route_zero_mixed_pairs.vert"),
+            td!("route_zero_mixed_pairs.frag"),
+            td!("route_zero_mixed_pairs.expect.json"),
+        ),
+        (
+            "route_zero_mixed_swizzle",
+            td!("route_zero_mixed_swizzle.vert"),
+            td!("route_zero_mixed_swizzle.frag"),
+            td!("route_zero_mixed_swizzle.expect.json"),
+        ),
+    ];
+    for (name, vs, fs, json) in cases {
+        let (v, f) = link_stages(vs, fs).unwrap_or_else(|r| panic!("{name}: refused: {r:?}"));
+        check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+        check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+        /* the layout lists what is stored, and only that */
+        let generic: Vec<_> = v.info.varyings.iter().filter(|s| s.section == Section::Generic).collect();
+        assert!(generic.iter().all(|s| s.mask != 0 && s.comps != 0), "{name}: {generic:?}");
+    }
+    /* none read: no varying program, no varying in the layout, and the
+     * frame builder takes the record (it refuses varyings without one) */
+    let (v, _) = link_stages(td!("route_none_read.vert"), td!("route_none_read.frag")).expect("links");
+    assert!(v.info.secondary.is_none());
+    let meta = crate::mali::program::StageMeta::of(&v.info.shader()).expect("the frame builder takes the record");
+    assert_eq!((meta.meta().varyings, meta.meta().varying_bytes), (0, 0));
+}
+
+/// A vertex shader alone is built without a lane equal to an earlier one
+/// and without its constant lanes: the link's fragment shader reads
+/// neither (`nir::build`). When what is left is refused, that refusal is
+/// the shader's, the form in the way once the lanes are not. In
+/// `d = vec4(1.0, n, m, m)` the lanes `d.z` and `d.w` are equal; without
+/// `d.w` and the constant `d.x`, the lane `d.y` is a uniform alone (the
+/// shape of dEQP `random.basic_expression.combined.86`). `vec4(m, m, e, n)`
+/// is the same with no constant lane. The code generator ([`gap`]) and the
+/// program's vertex step both name the uniform lane.
+#[test]
+fn a_vertex_shader_refused_without_its_equal_lanes_reports_that_refusal() {
+    let fs = "precision mediump float; varying mediump vec4 d; void main() { gl_FragColor = d; }";
+    for body in ["d = vec4(1.0, n, m, m);", "d = vec4(m, m, e, n);"] {
+        let vs = format!(
+            "attribute vec4 p; attribute float m; attribute float e; uniform mediump float n; \
+             varying mediump vec4 d; void main() {{ gl_Position = p; {body} }}"
+        );
+        assert_eq!(gap(SHC_STAGE_VERTEX, &vs), MaliError::VaryingNotFromAttribute, "{body}: the code generator");
+        match link_records(&vs, fs) {
+            Err(r) => {
+                assert!(r.step == RouteStep::Vertex && r.is(MaliError::VaryingNotFromAttribute), "{body}: {r:?}")
+            }
+            Ok(_) => panic!("{body}: the program links"),
+        }
+    }
+}
+
+/// A fragment shader that reads a varying the vertex shader does not
+/// declare. There is no vertex shader to build for that read
+/// ([`super::reads_at_vertex_locations`] gives none and the shader's own
+/// record is kept), and the link refuses the pair by GLSL ES 1.00 section
+/// 4.3.5: where the read's fragment location is one of the vertex shader's
+/// varyings', where it is beyond them, and where the vertex shader has no
+/// varying.
+#[test]
+fn a_fragment_varying_the_vertex_shader_does_not_declare_is_the_link_s_refusal() {
+    for (vs, fs) in [
+        (
+            "varying vec4 v; varying vec4 w; void main() { gl_Position = p; v = b; w = d; }",
+            "varying vec4 u; void main() { gl_FragColor = u; }",
+        ),
+        (
+            "varying vec4 v; varying vec4 w; void main() { gl_Position = p; v = b; w = d; }",
+            "varying vec4 w; varying vec4 u; void main() { gl_FragColor = u + w; }",
+        ),
+        (
+            "varying vec4 v; void main() { gl_Position = p; v = b; }",
+            "varying vec4 v; varying vec4 x; varying vec4 y; varying vec4 u; void main() { gl_FragColor = u; }",
+        ),
+        ("void main() { gl_Position = p + b + d; }", "varying vec4 u; void main() { gl_FragColor = u; }"),
+    ] {
+        let vs = format!("attribute vec4 p; attribute vec4 b; attribute vec4 d; {vs}");
+        let fs = format!("precision mediump float; {fs}");
+        match link_records(&vs, &fs) {
+            Err(r) => assert!(
+                r.step == RouteStep::Link
+                    && r.log.contains("fragment varying 'u' is not declared in the vertex shader"),
+                "{fs}: {r:?}"
+            ),
+            Ok(_) => panic!("{fs}: the program links"),
+        }
+    }
+}
+
+/// [`super::mesa_invariant`] on the front end's outputs. Under `#pragma
+/// STDGL invariant(all)` alone a declared output (a vertex shader's
+/// varying) is invariant in Mesa and a built-in is not; an `invariant`
+/// statement makes either one invariant; with neither, none is. No program
+/// shows the declared output under the pragma today: a fragment shader of
+/// GLSL ES 1.00 declares no output, and a vertex shader under the pragma
+/// is refused whole (nir.rs `build`, by the specification's meaning). So
+/// the rule is pinned here, on the declarations.
+#[test]
+fn the_invariant_all_pragma_makes_a_declared_output_invariant_and_no_built_in() {
+    const MAIN: &str = "void main() { gl_Position = p; v = b; }";
+    let _k = store::test_keep();
+    let invariant = |src: &str, name: &str| {
+        store::with_scratch(|s| {
+            let v = codegen::lower_source(SHC_STAGE_VERTEX, src.as_bytes(), &[], s).expect("the shader lowers");
+            let d = v.module.outputs.iter().find(|d| d.name == name).unwrap_or_else(|| panic!("no output {name}"));
+            super::mesa_invariant(d)
+        })
+        .expect("the scratch arena is free")
+    };
+    let plain = format!("attribute vec4 p; attribute vec4 b; varying vec4 v; {MAIN}");
+    let pragma = format!("#pragma STDGL invariant(all)\n{plain}");
+    let declared =
+        format!("attribute vec4 p; attribute vec4 b; invariant gl_Position; invariant varying vec4 v; {MAIN}");
+    for (what, src, position, varying) in
+        [("neither", &plain, false, false), ("the pragma", &pragma, false, true), ("declared", &declared, true, true)]
+    {
+        assert_eq!(invariant(src, "gl_Position"), position, "{what}: gl_Position");
+        assert_eq!(invariant(src, "v"), varying, "{what}: v");
+    }
+}
+
+/// One vertex shader in programs that are alive at once, as GL programs
+/// that share a vertex shader object: each program's vertex record is
+/// built for its own fragment shader's reads, whatever was linked before
+/// it and is still held. The record key holds the count of the reads and
+/// each read's location and lanes (backend.rs `FsReads::key`). The
+/// fragment shaders read, of fsload_hp_var2's vertex shader (`a` and `b`),
+/// `a` whole, `b` whole, the lane `a.y` and the lane `a.x` (highp, so
+/// Mesa's link keeps the lane alone: fsload_highp, fsload_highp_varying),
+/// and nothing: every two differ in the location, the lanes or the count
+/// only. Each program linked while another is held is the program linked
+/// alone, and no two of them have the same vertex shader.
+#[test]
+fn a_vertex_shader_in_two_live_programs_is_built_for_each_program_s_reads() {
+    const VS: &str = td!("fsload_hp_var2.vert");
+    const A_WHOLE: &str = "precision mediump float;
+varying vec4 a;
+void main() {
+    gl_FragColor = a;
+}
+";
+    const B_WHOLE: &str = "precision mediump float;
+varying vec4 b;
+void main() {
+    gl_FragColor = b;
+}
+";
+    each_live_program_has_its_own_vertex_shader(
+        VS,
+        &[
+            ("a whole", A_WHOLE),
+            ("b whole", B_WHOLE),
+            ("a.y", td!("fsload_highp.frag")),
+            ("a.x", td!("fsload_highp_varying.frag")),
+            ("nothing", td!("route_none_read.frag")),
+        ],
+    );
+}
+
+/// The same for the expressions Mesa's link moves into the vertex shader
+/// (motion.rs), which the record key chains after the reads. s4_motion_sum
+/// reads `(v.x + v.y) * v.z`: the sum is moved into `v.x`'s lane, so the
+/// fragment record reads the lanes x and z. A fragment shader that reads
+/// `v.x * v.z` reads the same lanes of the same varying with nothing
+/// moved: the two programs differ in the moved expressions only.
+#[test]
+fn a_vertex_shader_in_two_live_programs_is_built_for_each_program_s_moved_expressions() {
+    const PRODUCT: &str = "precision highp float; varying vec4 v; \
+        void main(){ gl_FragColor = vec4(v.x * v.z, 0.0, 0.0, 1.0); }";
+    let reads = |fs: &str| {
+        let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+        let pr = super::fragment_reads(&f.info.shader()).expect("encodes");
+        (pr.reads().to_vec(), f.info.moved.len())
+    };
+    assert_eq!(reads(td!("s4_motion_sum.frag")), (vec![(0u8, 0b101u8)], 1));
+    assert_eq!(reads(PRODUCT), (vec![(0u8, 0b101u8)], 0));
+    each_live_program_has_its_own_vertex_shader(
+        td!("s4_motion_sum.vert"),
+        &[("the sum moved", td!("s4_motion_sum.frag")), ("nothing moved", PRODUCT)],
+    );
+}
+
+/// Each of `programs` (a name and a fragment shader) linked with `vs`
+/// while another of them is held is the program linked alone, and no two
+/// of them have the same vertex shader (its words and its whole record).
+fn each_live_program_has_its_own_vertex_shader(vs: &str, programs: &[(&str, &str)]) {
+    let vertex = |fs: &str| {
+        let (v, _) = link_stages(vs, fs).unwrap_or_else(|r| panic!("refused: {r:?}"));
+        format!("{:?}", (&v.code, &v.info))
+    };
+    let alone: Vec<String> = programs.iter().map(|(_, fs)| vertex(fs)).collect();
+    for (i, a) in alone.iter().enumerate() {
+        for (j, b) in alone.iter().enumerate().skip(i + 1) {
+            assert_ne!(a, b, "{} and {} have their own vertex shaders", programs[i].0, programs[j].0);
+        }
+    }
+    for (held_name, held) in programs {
+        let records = link_records(vs, held).unwrap_or_else(|r| panic!("{held_name}: refused: {r:?}"));
+        for ((name, fs), want) in programs.iter().zip(&alone) {
+            assert_eq!(&vertex(fs), want, "{name}, linked while {held_name} is held");
+        }
+        for sh in &records {
+            crate::shaderc::online::backend::release(sh);
+        }
+    }
+}
+
+/// A vertex shader whose only varying is a constant (route_const_only: `v =
+/// vec4(0.25, 0.5, 0.75, 1.0)`, `gl_FragColor = v`; the shape of dEQP
+/// `shaders.matrix.add.const_highp_mat2_mat2_vertex`, issue #6521). Mesa's
+/// link moves the constant into the fragment shader, which then loads
+/// nothing, so the vertex shader stores no varying and has no varying
+/// program: both stages are the drm-shim's to the byte. Neither record
+/// lists a varying. The frame builder counts the listed ones and refuses a
+/// draw whose stages list varyings without a varying program
+/// (`frame::INVALID_VARYINGS`); the vertex record listed `v` with no
+/// component before, and the draw was GL_OUT_OF_MEMORY.
+#[test]
+fn a_varying_of_constants_only_is_in_neither_record_as_mesa_26_2_1() {
+    use crate::mali::program::StageMeta;
+    let (vs, fs, json) =
+        (td!("route_const_only.vert"), td!("route_const_only.frag"), td!("route_const_only.expect.json"));
+    let (v, f) = link_stages(vs, fs).expect("links");
+    check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+    check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+    let (vm, fm) = (StageMeta::of(&v.info.shader()).unwrap(), StageMeta::of(&f.info.shader()).unwrap());
+    let (vm, fm) = (vm.meta(), fm.meta());
+    assert_eq!((vm.varyings, vm.varying_bytes, vm.secondary, fm.varyings), (0, 0, None, 0));
+}
+
+/// A product with 0.0 that an invariant output is computed from is exact
+/// in Mesa (glsl_to_nir.cpp:1899-1902, propagate_invariance.cpp) and not
+/// folded, so the varying it reads stays stored: the vertex shader of
+/// route_zero_invariant (`invariant gl_FragColor; gl_FragColor = v + w *
+/// 0.0;`) is the drm-shim's to the byte, with both varyings. Its fragment
+/// shader is not checked here: the fragment compiler ignores `invariant`
+/// (issue #6586).
+#[test]
+fn a_zero_product_an_invariant_output_reads_keeps_its_varying_as_mesa_26_2_1() {
+    let (vs, fs, json) =
+        (td!("route_zero_invariant.vert"), td!("route_zero_invariant.frag"), td!("route_zero_invariant.expect.json"));
+    let (v, _) = link_stages(vs, fs).expect("links");
+    check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+    let generic: Vec<_> = v.info.varyings.iter().filter(|s| s.section == Section::Generic).collect();
+    assert_eq!(generic.len(), 2, "{generic:?}");
+}
+
+/// A varying that only an `if` condition reads is live at Mesa's link, also
+/// where the back end decides the condition later. In route_if_condition
+/// (`if ((vec4(w.x, 2.0, 1.0, 1.0) * vec4(2.0, 3.0, 1.0, 1.0)).y > 6.5)
+/// discard;`) the product is no constant before the vectors are split, so
+/// Mesa's vertex shader stores `w`, and its fragment program loads `v`
+/// alone. The fragment compiler refuses the shader today
+/// ([`MaliError::DiscardForm`], a mediump shader's discard), so no linked program reaches the
+/// condition's seed of [`super::live_varying_loads`]: the liveness is read
+/// here, and the vertex shader built for what it keeps is the drm-shim's
+/// to the byte.
+#[test]
+fn a_varying_only_an_if_condition_reads_is_stored_as_mesa_26_2_1() {
+    let (vs, fs, json) =
+        (td!("route_if_condition.vert"), td!("route_if_condition.frag"), td!("route_if_condition.expect.json"));
+    match try_compile_linked(vs, fs) {
+        Err(r) => assert!(r.step == RouteStep::Fragment && r.is(MaliError::DiscardForm), "{r:?}"),
+        Ok(_) => panic!("route_if_condition: the program links, check it with the linked programs"),
+    }
+    let _k = store::test_keep();
+    let v = store::with_scratch(|s| {
+        let f = codegen::lower_source(SHC_STAGE_FRAGMENT, fs.as_bytes(), &[], s)?;
+        let live = super::live_varying_loads(&f.module, s)?;
+        /* `v` by the colour store, `w` by the condition */
+        assert_eq!(live[..2], [0b1111, 0b1111]);
+        assert!(live[2..].iter().all(|m| *m == 0), "{live:?}");
+        let reads = [(0, live[0]), (1, live[1])];
+        super::compile_vs_for_reads(vs.as_bytes(), &reads, &[], s, store::keep()).map(|(sh, _)| stage_of(&sh))
+    })
+    .expect("the scratch arena is free")
+    .expect("the vertex shader compiles for the live varyings");
+    check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+}
+
+/// `#pragma STDGL invariant(all)` makes no built-in output invariant in
+/// Mesa: it is given to a variable where the declaration's qualifiers are
+/// applied (ast_to_hir.cpp:4415-4418), and a built-in is made without one
+/// ([`super::mesa_invariant`]). Under the pragma alone `gl_FragColor = v +
+/// w * 0.0;` is folded as without it, so `w` is not stored
+/// (route_zero_pragma), and the two GLSL passes that skip an invariant
+/// assignment run: `reassociate_constant` on `(u_b * 1.0) * u_q * 8.0`
+/// (route_pragma_reassoc) and the rebalance on `(a + b + c + d) * 0.25`
+/// (route_pragma_rebalance). Each program is the drm-shim's to the byte.
+#[test]
+fn the_invariant_all_pragma_leaves_a_built_in_output_as_mesa_26_2_1() {
+    let cases = [
+        (
+            "route_zero_pragma",
+            td!("route_zero_pragma.vert"),
+            td!("route_zero_pragma.frag"),
+            td!("route_zero_pragma.expect.json"),
+        ),
+        (
+            "route_pragma_reassoc",
+            td!("route_pragma_reassoc.vert"),
+            td!("route_pragma_reassoc.frag"),
+            td!("route_pragma_reassoc.expect.json"),
+        ),
+        (
+            "route_pragma_rebalance",
+            td!("route_pragma_rebalance.vert"),
+            td!("route_pragma_rebalance.frag"),
+            td!("route_pragma_rebalance.expect.json"),
+        ),
+    ];
+    for (name, vs, fs, json) in cases {
+        let (v, f) = link_stages(vs, fs).unwrap_or_else(|r| panic!("{name}: refused: {r:?}"));
+        check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+        check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+    }
+    /* the zero product is folded: v alone is stored */
+    let (v, _) = link_stages(td!("route_zero_pragma.vert"), td!("route_zero_pragma.frag")).expect("links");
+    let generic: Vec<_> = v.info.varyings.iter().filter(|s| s.section == Section::Generic).collect();
+    assert_eq!(generic.len(), 1, "{generic:?}");
+}
+
+/// A program whose vertex shader, built for its fragment shader's reads,
+/// no longer reads an attribute below one it reads (route_attr_gap: `a_w`
+/// fed only the unread `w`, `a_v` is location 2): Mesa numbers the
+/// attributes it reads 0..n in location order (`a_v` is `LD_ATTR` index 1
+/// in route_attr_gap.expect.json), and so does the program's vertex
+/// shader (issue #6470; nir.rs `build`, `Nir::attribute_record`): the
+/// program links with Mesa's words and two attribute records, `a_v`'s the
+/// second. The shader alone stores `w` too and reads `a_v` as record 2.
+#[test]
+fn a_program_whose_vertex_shader_reads_fewer_attributes_numbers_them_as_mesa_26_2_1() {
+    let (vs, fs, json) = (td!("route_attr_gap.vert"), td!("route_attr_gap.frag"), td!("route_attr_gap.expect.json"));
+    let index = |w: &u64| text(*w).starts_with("LD_ATTR_IMM.v2.f32").then(|| text(*w).contains("index:0x1"));
+    let words = region(json, "vs.varying").expect("vs.varying").words;
+    assert_eq!(words.iter().filter_map(index).collect::<Vec<_>>(), [true], "Mesa reads a_v as attribute 1");
+    let (v, _) = check_program(vs, fs, json);
+    let mut records = v.info.attributes.clone();
+    records.sort_unstable();
+    assert_eq!(records, [(0, 0), (2, 1)], "location, record: a_w is not read");
+    assert_eq!(records.len(), attribute_records(json).len(), "Mesa's Attribute descriptors");
+    let alone = compile_alone(SHC_STAGE_VERTEX, vs).expect("the vertex shader alone");
+    let mut records = alone.info.attributes.clone();
+    records.sort_unstable();
+    assert_eq!(records, [(0, 0), (1, 1), (2, 2)], "alone, w is stored");
+    assert!(compile_alone(SHC_STAGE_FRAGMENT, fs).is_ok());
+}
+
+/// Two equal lanes merged by the link (fsload_dup_swz: `q = p.yx`, so q
+/// is read from p) through the back end's entry points: the fragment
+/// shader compiled with the vertex shader's lanes lists `q` with no
+/// component (it reads p), the program's vertex shader stores p alone, and
+/// `link_shaders_mali` pairs what each record keeps: a varying neither
+/// keeps a slot for is not a missing slot. Both programs are the
+/// drm-shim's (fsload_dup_swz.expect.json).
+#[test]
+fn equal_lanes_merged_at_link_pair_through_the_entry_points() {
+    let (vs, fs, json) = (td!("fsload_dup_swz.vert"), td!("fsload_dup_swz.frag"), td!("fsload_dup_swz.expect.json"));
+    let (v, f) = link_stages(vs, fs).unwrap_or_else(|r| panic!("refused: {r:?}"));
+    check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+    check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+    let generic = |s: &Stage| s.info.varyings.iter().filter(|x| x.section == Section::Generic).count();
+    assert_eq!(generic(&v), 1, "p alone: {:?}", v.info.varyings);
 }

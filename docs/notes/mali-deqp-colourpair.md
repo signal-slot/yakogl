@@ -308,8 +308,12 @@ only (fp16, as before), 5 are refused.
 |---|---|---|
 | `rnd_fs_ck_madd`, `rnd_fs_ck_product`, `rnd_fs_zk_tree` | `a colour pair of a constant then a varying lane` | the pair is an **operand** of an operation. Mesa computes the lane alone and joins the halves afterwards (`rnd_fs_zk_tree`: `FADD.v2f16 r1, r2^.neg.h00`, then `MKVEC.v2i16 r1, 0x0.h0, r1^.h0`), and folds a lane's `0 * x`. Building the pair as `MKVEC` and running the two-lane operation gives a right program with other words, so the operand form is refused at the same site (`vectorise` checks that the pair is one of the colour's two words) |
 | `rnd_fs_uniform_tz_ck` | `a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32)` | a **computed** lane and 0.0 (`lane_word`, the other site), which only `vec_tree` draws |
-| `rnd_vs_vecop_kept` | the partial-varying link (not the code generator's text) | #367's link rule; its colour pair comes after |
 | `ck_lane_mediump`, `rnd_vs_mediump_kept` | compile; the vertex program differs | mixprec's vertex side (fp16 sums) |
+
+`rnd_vs_vecop_kept` was refused at the partial-varying link (#367's link
+rule, not the code generator's text). It is byte-equal since the program's
+vertex shader is built for what its fragment shader reads
+(`mali-product-route.md`, issue #6509): 13 byte-equal, 4 refused.
 
 A lane and 0.0, or a constant then a lane, as an operand of an operation
 keeps its refusal text, so section M's rows for those shapes do not move

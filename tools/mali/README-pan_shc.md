@@ -156,6 +156,51 @@ of two Mesa versions differs (`^r0` / `r0^`, `u1` / `u0.w1`), so only the words
 count. `pan_ref_diff.py diff-ref A B` compares two traces or `expect.json` files
 with each other, for example a board trace with the 25.0.7 shim's.
 
+## The product route (route.sh)
+
+The rule of the Mali compiler is: a program's words equal Mesa 26.2.1's, or
+the program is refused by name. It is measured on the route the product
+takes: each stage through `compile`, then `compile_vs_linked` with no
+attribute map and `link`, the back end's entry points in the order the GL
+core calls them (glCompileShader, glLinkProgram). A helper that calls the
+compiler's inner functions can build another program than the product does
+(issue #6509), so every measurement and every linked unit test goes through
+the entry points (`link_records` in src/shaderc/online/mali/tests.rs).
+
+```sh
+tools/mali/route.sh measure <dir> [--jobs N] > main.tsv   # in main's tree
+tools/mali/route.sh measure <dir> [--jobs N] > tip.tsv    # in the tip's tree
+tools/mali/route.sh compare main.tsv tip.tsv
+```
+
+`measure` takes every `<name>.vert` beside a `<name>.frag` in `<dir>` and its
+`<name>.expect.json` (`drm_shim_ref.sh run ... --uniform-values`, then
+`pan_ref_diff.py extract --draw`), and prints one TSV row per pair, sorted:
+the name, `EQUAL` (both stages are the reference's: words, work registers,
+preload, FAU words and the secondary offset; the link itself pairs each
+fragment read with its vertex slot by name, or refuses), `DIFFER` (compiled,
+not the reference's; also a reference that does not parse), `REFUSED` (with
+the step, its return code and the log that names the refusal) or `NOREF`
+(compiled, no reference), a digest of the compiled words and facts, and the
+detail. A directory with no pair, a pair with no row and a share that fails
+end the measure with exit 1. A reference drawn without `--uniform-values`
+has every uniform 0; a stage passes when it matches either draw. The words
+are compared as they are: an attribute index other than Mesa's (`LD_ATTR` of
+an inactive attribute's neighbour) is a difference. It runs the Mali test
+`the_product_route_is_measured_against_the_references` with
+`YAKOGL_MALI_ROUTE_DIR` set, in N processes (default 8,
+`YAKOGL_MALI_ROUTE_SHARD`); without that variable the test is the tool's
+self-test in the Mali test row. A row of the gate runs `measure` over
+`testdata`, so the command itself is run on every Mali change.
+
+`compare` (`route_cells.py`) prints the cells main -> tip and the two landing
+rules: rule 1, a program main compiles equal to Mesa is refused or different
+on the tip; rule 2, a program main refuses compiles on the tip with words that
+are not Mesa's; and a program that moved with no reference on the tip. It
+prints the count of programs compiled with words that are not Mesa's on each
+side, and exits 1 when a rule is broken. Its self-test is
+`test_route_cells.py` (a row of the gate).
+
 ## Results (2026-10-18)
 
 The board reference is the board's two programs (`testdata/tri*.vert/.frag`,
@@ -381,7 +426,7 @@ python3 -I tools/mali/gen_blend_nir_rules.py $MESA_PAN_TREE > src/shaderc/online
 ## Gate
 
 `tools/check.sh` (scope `mali`, `tools/mali/*` and `tools/vivante/es100.py`) has
-two rows:
+these rows besides the Mali tests:
 
 - **Without a Mesa tree**: `test_pan_ref_diff.py` (11 tests, asserted by
   count). It runs `pan_ref_diff.py` on the committed recorded pan_shc outputs
@@ -390,6 +435,10 @@ two rows:
   `secondary_offset`, a missing region: exit 1), on the board's traces
   (`board-25.0.7/`, the first draw only) and the 25.0.7 shim's
   (`shim-25.0.7/`), and parses `ref_cases.py --lint` over the case list.
+- **The route's compare**: `test_route_cells.py` (8 tests, asserted by
+  count): `route_cells.py` on synthetic rows, each cell and rule.
+- **The route's measure**: `route.sh measure testdata` runs and gives one row
+  per pair; the rows are not judged.
 - **With `MESA_PAN_TREE`** set to a tree from `build_pan_shc.sh`: it rebuilds
   pan_shc from the checkout, requires no compiler warning in pan_shc's sources
   and the build line `pan_shc: build <git describe --always --dirty of this

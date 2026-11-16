@@ -82,6 +82,8 @@ want tools/v3d/job_check.c "v3d v3d71"
 want tools/mali/pan_shc.c mali
 want tools/mali/gate.env mali
 want tools/mali/check.sh mali
+want tools/mali/route.sh mali
+want tools/mali/route_cells.py mali
 # glsl2pan.py and gl_ref.py import es100.py: both rows
 want tools/vivante/es100.py "vivante mali"
 want tests/v3d_cube_noseamless.rs v3d
@@ -260,6 +262,8 @@ expect "hostharness: not every row" '^check.sh: .*\(--changed HEAD, scopes: tool
 out=$(plan tools/mali/pan_shc.c)
 expect "mali: the pan_shc row, a gap without MESA_PAN_TREE" '^gap   mali pan_shc on the tri pair, the blend references and blend_nir_rules.rs: no MESA_PAN_TREE' "$out"
 expect "mali: the pan_ref_diff self-test needs no Mesa tree" '^plan  run     mali pan_ref_diff and ref_cases self-test' "$out"
+expect "mali: the route_cells self-test" '^plan  run     mali route_cells self-test$' "$out"
+expect "mali: route.sh measure runs" '^plan  run     mali route.sh measure on tools/mali/testdata' "$out"
 expect "mali: not every row" '^check.sh: .*\(--changed HEAD, scopes: mali \)' "$out"
 out=$(plan driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c)
 expect "nanopc_t6 glue: its image" '^plan  zephyr  nanopc_t6 t6_hello image' "$out"
