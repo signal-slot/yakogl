@@ -37,6 +37,8 @@ use super::types::*;
 use crate::backend::{self, *};
 use crate::draw_steps::{self, Step};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+use crate::shaderc::online::vivante::wide128_rt::RtPlanes;
 use crate::shaderc::{self, *};
 use crate::util::{self, Bytes, FmtBuf, Global};
 
@@ -205,6 +207,17 @@ struct ProgGpu {
     /// its own shaders), for the host tests.
     #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
     w128_last: [shaderc::Wide128Planes; 2],
+    /// The render-target plane key of the program's last draw ([vertex,
+    /// fragment]; the vertex key is always empty), for the host tests.
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    rt_last: [RtPlanes; 2],
+    /// A draw asked for the render-target key since the link.
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    rt_known: bool,
+    /// Plane variants dropped for another key (the least recently used slot
+    /// taken), for the host tests.
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    w128_evicted: u32,
 }
 
 /// 128-bit plane-join variants a program keeps (GC7000): one covers a
@@ -213,16 +226,20 @@ struct ProgGpu {
 #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
 const PROG_MAX_W128_VARIANTS: usize = 2;
 
-/// One 128-bit plane-join variant (`shaderc::wide128_variant`): each stage
-/// whose plane key is not empty compiled again under it and the draw's
-/// sampler-state key, its USC uploaded once; a fragment variant linked to
-/// the draw's vertex shader. A stage whose key is empty is not held here
-/// (the draw keeps the shader it had).
+/// One 128-bit plane variant: each stage whose plane key is not empty
+/// compiled again under it and the draw's sampler-state key
+/// (`shaderc::wide128_variant`; a fragment stage with a render-target key
+/// `shaderc::rt_planes_variant`), its USC uploaded once; a fragment variant
+/// linked to the draw's vertex shader. A stage whose keys are empty is not
+/// held here (the draw keeps the shader it had).
 #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
 struct ProgW128Variant {
     used: bool,
-    /// [vertex, fragment] plane keys; never both empty in a used slot.
+    /// [vertex, fragment] sampler plane keys; with `rt`, never all empty in
+    /// a used slot.
     planes: [shaderc::Wide128Planes; 2],
+    /// The fragment stage's render-target plane key ([`rt_planes_key`]).
+    rt: RtPlanes,
     /// The sampler-state key ([`ProgLodVariant::key`]) it was compiled for.
     lod: [u64; 2],
     /// Asked for and not available: its draws are refused.
@@ -2133,16 +2150,58 @@ fn wide128_swizzle_refusal(
     None
 }
 
-/// Point draw `d` at the plane-join variant its bound textures need, once
-/// they are bound (`d.textures`, `d.vs_textures`): the program's
-/// sensitivity is asked the first time (after a link, the cache is new),
-/// and a program whose stages answer 0 costs one compare. `lod` is the
-/// sampler-state key of the shaders the draw has (0: the program's own),
-/// `base_vs` its vertex shader before the key, `fs_blend` whether its
-/// fragment shader is a blend variant (the GC7000's front-facing twin).
+/// Host tests: the draw targets (bit `k`: `d.targets[k]`) the render-target
+/// key counts as 128-bit whatever their format ([`set_rt_planes_test_targets`]).
+#[cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+static RT_PLANES_TEST_TARGETS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+/// Host tests: count the draw targets of `mask` (bit `k`: the draw's target
+/// `k`, after the leading draw buffers it dropped) as 128-bit attachments in
+/// the render-target plane key of the draws that follow; 0 puts the formats
+/// back in charge. The key alone: the targets keep their format, the back
+/// end draws them as it would, and a real RGBA32I/UI attachment is still
+/// refused before the key is asked (`refuse_undrawable_targets`).
+#[cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+pub fn set_rt_planes_test_targets(mask: u8) {
+    RT_PLANES_TEST_TARGETS.store(mask, Ordering::Relaxed);
+}
+
+/// The fragment stage's render-target plane key of draw `d`: bit `n` for
+/// each colour output `n` whose target is an RGBA32I/UI attachment (the
+/// GC7000 draws it as two G32R32 planes, docs/notes/gc-128bit-rt-shader.md
+/// section 2). Target `k` takes output `k + out_shift` (`GlesDrawTarget`); a
+/// target with no surface is no key. Empty for every draw today:
+/// `refuse_undrawable_targets` refuses such a target before the draw asks.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+fn rt_planes_key(d: &GlesDraw) -> RtPlanes {
+    #[cfg(feature = "host-test")]
+    let forced = RT_PLANES_TEST_TARGETS.load(Ordering::Relaxed);
+    #[cfg(not(feature = "host-test"))]
+    let forced = 0u8;
+    let shift = d.targets[0].out_shift;
+    let n = (d.num_targets as usize).min(d.targets.len());
+    let mut rt = RtPlanes::NONE;
+    for (k, t) in d.targets[..n].iter().enumerate() {
+        let wide = matches!(t.format, GLES_SURF_RGBA32I | GLES_SURF_RGBA32UI) || forced & (1 << k) != 0;
+        if t.gpu != 0 && wide {
+            rt = rt.with(k as u8 + shift);
+        }
+    }
+    rt
+}
+
+/// Point draw `d` at the plane variant its bound textures and colour targets
+/// need, once they are bound (`d.textures`, `d.vs_textures`, `d.targets`):
+/// the program's sensitivity is asked the first time (after a link, the
+/// cache is new), and a program whose stages answer 0 drawn into no 128-bit
+/// target costs two compares. `lod` is the sampler-state key of the shaders
+/// the draw has (0: the program's own), `base_vs` its vertex shader before
+/// the key, `fs_blend` whether its fragment shader is a blend variant (the
+/// GC7000's front-facing twin).
 ///
 /// Err: the draw needs a plane variant it cannot have, and is refused --
-/// drawn with the plain shader it would read the B,A plane as R,G.
+/// drawn with the plain shader it would read the B,A plane as R,G, or store
+/// only the R,G half of a 128-bit target.
 #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
 fn wide128_select(
     pg: &mut ProgGpu,
@@ -2158,9 +2217,48 @@ fn wide128_select(
         pg.w128_sense = [sense(&p.rvs), sense(&p.rfs)];
         pg.w128_sense_known = true;
     }
-    if pg.w128_sense == [0, 0] {
+    /* render targets are fragment outputs: the vertex stage has no key */
+    let rt = rt_planes_key(d);
+    pg.rt_last = [RtPlanes::NONE, rt];
+    pg.rt_known = true;
+    if pg.w128_sense == [0, 0] && rt.is_empty() {
         return Ok(());
     }
+    let planes = if pg.w128_sense == [0, 0] { [shaderc::Wide128Planes::NONE; 2] } else { wide128_planes_of(pg, p, d)? };
+    if planes[0].is_empty() && planes[1].is_empty() && rt.is_empty() {
+        return Ok(());
+    }
+    /* a blend variant is compiled from the source and the facts alone: it
+     * would drop the split (shaderc::online::backend::wide128_variant,
+     * rt_planes_variant) */
+    if fs_blend && !planes[1].is_empty() {
+        return Err("its fragment shader needs a front-facing twin and a 128-bit plane key at once");
+    }
+    if fs_blend && !rt.is_empty() {
+        return Err("its fragment shader needs a front-facing twin and a 128-bit render-target key at once");
+    }
+    let i = w128_variant_for(pg, &p.rvs, &p.rfs, base_vs, planes, rt, lod)?;
+    let v = &pg.w128_var[i];
+    if !planes[0].is_empty() {
+        d.vs = &v.vs;
+        d.vs_usc_gpu = v.vs_usc.gpu;
+    }
+    if !planes[1].is_empty() || !rt.is_empty() {
+        d.fs = &v.fs;
+        d.fs_usc_gpu = v.fs_usc.gpu;
+    }
+    Ok(())
+}
+
+/// The sampler plane keys ([vertex, fragment]) of draw `d` for a program
+/// whose stages are sensitive to one ([`wide128_select`]), kept as the last
+/// draw's; Err when a keyed binding's swizzle cannot be joined.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+fn wide128_planes_of(
+    pg: &mut ProgGpu,
+    p: &GlProgram,
+    d: &GlesDraw,
+) -> Result<[shaderc::Wide128Planes; 2], &'static str> {
     let companion = wide128_companions(
         &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())],
         &p.rvs,
@@ -2181,25 +2279,7 @@ fn wide128_select(
         shaderc::wide128_planes(pg.w128_sense[1], &companion[1]),
     ];
     pg.w128_last = planes;
-    if planes[0].is_empty() && planes[1].is_empty() {
-        return Ok(());
-    }
-    /* a blend variant is compiled from the source and the facts alone: it
-     * would drop the split (shaderc::online::backend::wide128_variant) */
-    if fs_blend && !planes[1].is_empty() {
-        return Err("its fragment shader needs a front-facing twin and a 128-bit plane key at once");
-    }
-    let i = w128_variant_for(pg, &p.rvs, &p.rfs, base_vs, planes, lod)?;
-    let v = &pg.w128_var[i];
-    if !planes[0].is_empty() {
-        d.vs = &v.vs;
-        d.vs_usc_gpu = v.vs_usc.gpu;
-    }
-    if !planes[1].is_empty() {
-        d.fs = &v.fs;
-        d.fs_usc_gpu = v.fs_usc.gpu;
-    }
-    Ok(())
+    Ok(planes)
 }
 
 /// Host tests: of `program` in the current context, the 128-bit plane
@@ -2216,15 +2296,70 @@ pub fn wide128_draw_state(program: GLuint) -> Option<([u32; 2], [shaderc::Wide12
     pg.w128_sense_known.then_some((pg.w128_sense, pg.w128_last))
 }
 
-/// The plane variant slot for `planes` and the sampler-state key `lod`:
-/// found, or compiled into a free or the least recently used slot. A stage
-/// is compiled from the program's own shader (`rvs`, `rfs`) when its key is
+/// One plane variant slot of a program, as [`rt_planes_draw_state`] reads it.
+#[cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct W128SlotState {
+    /// The [vertex, fragment] sampler plane keys it was asked for.
+    pub planes: [shaderc::Wide128Planes; 2],
+    /// The fragment stage's render-target plane key it was asked for.
+    pub rt: RtPlanes,
+    /// Asked for and not available: its draws are refused.
+    pub missing: bool,
+    /// Where its fragment shader's USC is (0: none, the stage not keyed or
+    /// the slot missing), to compare with a draw's `fs_usc_gpu`.
+    pub fs_usc_gpu: u64,
+}
+
+/// What [`rt_planes_draw_state`] reports of a program.
+#[cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct RtPlanesDrawState {
+    /// The render-target plane key of its last draw ([vertex, fragment]).
+    pub last: [RtPlanes; 2],
+    /// Its plane variant slots in use, in slot order.
+    pub slots: [Option<W128SlotState>; PROG_MAX_W128_VARIANTS],
+    /// Variants dropped for another key since the link.
+    pub evicted: u32,
+    /// Where its own fragment shader's USC is.
+    pub own_fs_usc_gpu: u64,
+}
+
+/// Host tests: of `program` in the current context, the render-target plane
+/// key of its last draw, its plane variant slots and their evictions; `None`
+/// before a draw asked (or after a link).
+#[cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+pub fn rt_planes_draw_state(program: GLuint) -> Option<RtPlanesDrawState> {
+    let c = context::current()?;
+    if obj_index(program) >= MAX_PROGRAMS {
+        return None;
+    }
+    // SAFETY: single-threaded by contract; read between draws.
+    let pg = unsafe { &STATE.get().pg[c.group as usize][obj_index(program)] };
+    if !pg.rt_known {
+        return None;
+    }
+    let mut slots = [None; PROG_MAX_W128_VARIANTS];
+    for (o, v) in slots.iter_mut().zip(pg.w128_var.iter()) {
+        if v.used {
+            *o = Some(W128SlotState { planes: v.planes, rt: v.rt, missing: v.missing, fs_usc_gpu: v.fs_usc.gpu });
+        }
+    }
+    Some(RtPlanesDrawState { last: pg.rt_last, slots, evicted: pg.w128_evicted, own_fs_usc_gpu: pg.fs_usc.gpu })
+}
+
+/// The plane variant slot for `planes`, the render-target key `rt` and the
+/// sampler-state key `lod`: found, or compiled into a free or the least
+/// recently used slot (counted in [`ProgGpu::w128_evicted`]). A stage is
+/// compiled from the program's own shader (`rvs`, `rfs`) when its key is
 /// not empty; a fragment variant is linked to the vertex shader the draw
 /// takes (the variant's, or `base_vs`). Err when it cannot be had: a compile
 /// the split refuses (an offset or gradient look-up, a companion the shader
-/// samples itself), a link that compiled the fragment shader again (and so
-/// without the split: the link does not know the key), or an upload that
-/// failed. A failure is remembered in the slot, except a compile refused for
+/// samples itself, a stored output of a 128-bit target while its second
+/// plane has no register), a fragment stage keyed by both a sampler plane
+/// key and a render-target key (no compiler entry joins the two), a link
+/// that compiled the fragment shader again (and so without the split: the
+/// link does not know the key), or an upload that failed. A failure is remembered in the slot, except a compile refused for
 /// want of room ([`VARIANT_NO_ROOM`]) and out of memory, which free it.
 #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
 fn w128_variant_for(
@@ -2233,48 +2368,68 @@ fn w128_variant_for(
     rfs: &ShcShader,
     base_vs: &ShcShader,
     planes: [shaderc::Wide128Planes; 2],
+    rt: RtPlanes,
     lod: [u64; 2],
 ) -> Result<usize, &'static str> {
     pg.w128_clock = pg.w128_clock.wrapping_add(1);
     let now = pg.w128_clock;
-    if let Some(i) = pg.w128_var.iter().position(|v| v.used && v.planes == planes && v.lod == lod) {
+    if let Some(i) = pg.w128_var.iter().position(|v| v.used && v.planes == planes && v.rt == rt && v.lod == lod) {
         pg.w128_var[i].stamp = now;
         return if pg.w128_var[i].missing { Err("no 128-bit plane variant of its shaders") } else { Ok(i) };
     }
     let slot = pg.w128_var.iter().position(|v| !v.used).unwrap_or_else(|| {
+        pg.w128_evicted = pg.w128_evicted.wrapping_add(1);
         (0..PROG_MAX_W128_VARIANTS).max_by_key(|&i| now.wrapping_sub(pg.w128_var[i].stamp)).unwrap_or(0)
     });
     let v = &mut pg.w128_var[slot];
     free_w128_variant(v);
     v.used = true;
     v.planes = planes;
+    v.rt = rt;
     v.lod = lod;
     v.stamp = now;
     let mut log = [0 as core::ffi::c_char; 192];
     let fail = |v: &mut ProgW128Variant, why: &'static str, log: &[core::ffi::c_char], rc: i32| {
         if !W128_VARIANT_LOGGED.swap(true, Ordering::Relaxed) {
             glog!(
-                "yakogl: no 128-bit plane variant for units {:#x}/{:#x} ({}: {}); its draws are refused",
+                "yakogl: no 128-bit plane variant for units {:#x}/{:#x}, targets {:#x} ({}: {}); its draws are refused",
                 v.planes[0].mask,
                 v.planes[1].mask,
+                v.rt.mask,
                 why,
                 log_text(log)
             );
         }
-        let (planes, lod, stamp) = (v.planes, v.lod, v.stamp);
+        let (planes, rt, lod, stamp) = (v.planes, v.rt, v.lod, v.stamp);
         free_w128_variant(v);
         if rc != VARIANT_NO_ROOM && rc != -util::ENOMEM {
             /* a property of the key: remembered, not compiled again */
-            (v.used, v.planes, v.lod, v.stamp, v.missing) = (true, planes, lod, stamp, true);
+            (v.used, v.planes, v.rt, v.lod, v.stamp, v.missing) = (true, planes, rt, lod, stamp, true);
         }
         Err(why)
     };
+    /* the fragment stage is keyed by its sampler planes or its targets */
+    let keyed = [!planes[0].is_empty(), !planes[1].is_empty() || !rt.is_empty()];
+    if !planes[1].is_empty() && !rt.is_empty() {
+        /* rt_planes_variant compiles the plain shader only */
+        return fail(
+            v,
+            "no compiler entry joins its 128-bit plane key and its 128-bit render-target key",
+            &[0],
+            -util::ENOTSUP,
+        );
+    }
     for stage in 0..2 {
-        if planes[stage].is_empty() {
+        if !keyed[stage] {
             continue;
         }
         let (src, out) = if stage == 0 { (rvs, &mut v.vs) } else { (rfs, &mut v.fs) };
-        let rc = shaderc::wide128_variant(src, planes[stage], shaderc::LodKey::from_bits(lod[stage]), out, &mut log);
+        let key = shaderc::LodKey::from_bits(lod[stage]);
+        let rc = if stage == 1 && !rt.is_empty() {
+            shaderc::rt_planes_variant(src, rt, key, out, &mut log)
+        } else {
+            shaderc::wide128_variant(src, planes[stage], key, out, &mut log)
+        };
         if rc != 0 {
             let why =
                 if stage == 0 { "the vertex shader does not compile" } else { "the fragment shader does not compile" };
@@ -2286,7 +2441,7 @@ fn w128_variant_for(
      * program's (fs_variant_for, the same reason). A link that has to
      * compile it again (a varying the vertex stage declares and never
      * writes, read as 0) would compile it without the key: refused. */
-    if !planes[1].is_empty() {
+    if keyed[1] {
         if let Some(link) = shaderc::backend().and_then(|b| b.link) {
             let split = v.fs.usc;
             let vs: *const ShcShader = if planes[0].is_empty() { base_vs } else { &v.vs };
@@ -2302,7 +2457,7 @@ fn w128_variant_for(
     }
     for stage in 0..2 {
         let (sh, m) = if stage == 0 { (&v.vs, &mut v.vs_usc) } else { (&v.fs, &mut v.fs_usc) };
-        if planes[stage].is_empty() || sh.usc_dw == 0 || sh.usc.is_null() {
+        if !keyed[stage] || sh.usc_dw == 0 || sh.usc.is_null() {
             continue;
         }
         if osal::gpu_alloc(backend::heap_base(GLES_HEAP_SHADER), sh.usc_dw as usize * 4, OSAL_MEM_DATA, m) != 0
