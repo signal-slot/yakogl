@@ -4,17 +4,15 @@
 //! sections (b) and (d)): the token, the 80-byte header, the serializer of
 //! the link inputs and the bounds-safe parser that the load uses.
 //!
-//! Plan #364. The module is pure `no_std` code (no `alloc`, no `std`, no
-//! `crate::` or `super::` imports) and is **not yet in the module tree**: it
-//! is pulled into `tests/es3_program_binary_format.rs` with `#[path]`. The
-//! g7-impl item adds it to `src/gl/mod.rs`; its `src/gl/program_binary.rs`
-//! (the per-program store, `capture`, `forget`, `length`, `get`, `load`)
-//! uses this file for the bytes and holds everything that touches GL state.
+//! Plan #364. The module is pure `no_std` code (no `alloc`, no `std`; the
+//! only crate import is the SHA-256). `src/gl/program_binary.rs` (the
+//! per-program store, `capture`, `forget`, `length`, `get`, `load`) uses
+//! this file for the bytes and holds everything that touches GL state.
+//! `tests/es3_program_binary_format.rs` tests it on its own.
 //!
 //! The caller passes the 32-byte build identity and the 4-byte GPU tag in;
-//! this file computes no build identity. It does hash the payload, with the
-//! self-contained `src/shaderc/sha256.rs` included by path (the same code
-//! as `crate::shaderc::sha256`).
+//! this file computes no build identity. It does hash the payload, with
+//! `crate::shaderc::sha256`.
 //!
 //! Layout, all little-endian:
 //!
@@ -46,9 +44,7 @@
 //! (link status FALSE, no GL error). The hashes are not a security boundary;
 //! the parser is bounds-safe on any bytes.
 
-#[path = "../shaderc/sha256.rs"]
-#[allow(dead_code)]
-pub mod sha256;
+pub use crate::shaderc::sha256;
 
 /// `GL_PROGRAM_BINARY_FORMATS`' one value. 0x6B47 lies in the Khronos range
 /// reserved for temporary use (0x6000-0x7FFF); a vendor block replaces it
