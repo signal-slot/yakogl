@@ -113,6 +113,8 @@ want tools/host-replay/common.sh samples
 want driver/rust/src/lib.rs drivers
 want driver/CMakeLists.txt drivers
 want tools/cts/deqp-uart-tally.py tools
+want tools/check_selftests.py tools
+want tools/check_selftests_selftest.sh tools
 want tools/board.sh tools
 want tools/board-stm32mp2.sh tools
 want tools/board_stm32mp2_selftest.sh tools

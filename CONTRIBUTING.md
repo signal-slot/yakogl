@@ -51,6 +51,11 @@ pull request (step 1 above).
   tree and 49 minutes on another host, `docs/release/readme-walkthrough.md`;
   76 minutes on 4 cores with two compiler slots, after a `--quick` in the
   same clone of `e3e8d777`, 2026-11-08).
+- A self-test (a tracked file named `*selftest.sh` or `*selftest.py`) needs
+  no row of its own: the gate gives one to each that no row names
+  (`tools/check_selftests.py` lists them), under the scope of its path. The
+  row runs it with no argument and a `TMPDIR` of its own. A self-test that
+  takes an argument needs a row that names it.
 - It is green only at "N ok, 0 failed, 0 gap(s)". A step that could not run
   is a **gap**, and a gap makes the gate red. These need setup: `ZEPHYR_WS`,
   `HAL_NXP_DIR`, `PCO_SHC` (with `GLSLANG`, `GLSL2USC_CACHE`), the PowerVR
