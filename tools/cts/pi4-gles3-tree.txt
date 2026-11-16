@@ -1,5 +1,5 @@
 # The whole dEQP-GLES3 mustpass for the Raspberry Pi 4 (driver/samples/zephyr/deqp
-# built with DEQP_MODULE=gles3) in 94 images, one CONFIG_DEQP_CASE per line, the format
+# built with DEQP_MODULE=gles3) in 97 images, one CONFIG_DEQP_CASE per line, the format
 # of pi4-full-tree.txt: each line is preceded by "# image <LABEL>: <mustpass names it
 # selects>", the label tools/board.sh pi4 tree names the record by; blank lines and '#'
 # lines are skipped. Every one of the 42,810 names of gles3-mustpass.txt is selected by
@@ -167,8 +167,14 @@ dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_r8_linear_mipmap_linear,
 dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_linear
 # image F3S2: 13 (sizes 14-26)
 dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.63x63x63_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.63x63x63_nearest
-# image T05: 220
-dEQP-GLES3.functional.texture.format.compressed.*,dEQP-GLES3.functional.texture.format.unsized.*,dEQP-GLES3.functional.texture.format.sized.2d.*
+# image T05a: 196 (texture.format compressed eac and etc1, unsized, sized.2d)
+dEQP-GLES3.functional.texture.format.compressed.eac_*,dEQP-GLES3.functional.texture.format.compressed.etc1_*,dEQP-GLES3.functional.texture.format.unsized.*,dEQP-GLES3.functional.texture.format.sized.2d.*
+# image T05b: 12 (texture.format.compressed ETC2 2d: dEQP stopped at b1b5b845 in the ETC2 cases, a refused draw)
+dEQP-GLES3.functional.texture.format.compressed.etc2_*_2d_*
+# image T05c: 4 (texture.format.compressed ETC2 cube, rgba8 and rgb8: dEQP stopped at etc2_eac_rgba8_cube_npot at b1b5b845, a refused draw)
+dEQP-GLES3.functional.texture.format.compressed.etc2_eac_rgba8_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_eac_rgba8_cube_pot,dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_cube_pot
+# image T05d: 8 (texture.format.compressed ETC2 cube, the other formats: not advertised on the 2D side, behind the refusing cases of T05c)
+dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_eac_srgb8_alpha8_cube_pot,dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_punchthrough_alpha1_cube_pot,dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_cube_pot,dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_npot,dEQP-GLES3.functional.texture.format.compressed.etc2_srgb8_punchthrough_alpha1_cube_pot
 # image T06: 326
 dEQP-GLES3.functional.texture.format.sized.2d_array.*,dEQP-GLES3.functional.texture.format.sized.3d.*,dEQP-GLES3.functional.texture.format.sized.cube.*
 # image T07: 224

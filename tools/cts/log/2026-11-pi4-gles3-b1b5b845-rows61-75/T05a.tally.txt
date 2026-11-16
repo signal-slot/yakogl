@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image T05a: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt T05a.console.txt
+T05a.console.txt: deqp: done: 142 passed, 34 failed, 20 not supported, 0 warnings, complete=1 | deqp: summary: 196 cases begun, 196 with a result, 0 without
+mustpass cases with a result: 196 (of 196 seen)
+group                                       pass   fail    n/s  other
+texture                                      142     34     20      0
+TOTAL                                        142     34     20      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  T05a: deqp: summary 196 cases begun, 196 with a result; deqp: done 142 passed, 34 failed, 20 not supported, 0 warnings; b1b5b845 DONE: 196 cases, P 142 F 34 R 0 N 20 other 0; 196 result lines seen
+Fail dEQP-GLES3.functional.texture.format.sized.2d.rgba32f_npot
+Fail dEQP-GLES3.functional.texture.format.sized.2d.rgba32f_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.alpha_2d_array_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.alpha_2d_array_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.alpha_3d_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.alpha_3d_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.luminance_2d_array_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.luminance_2d_array_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.luminance_3d_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.luminance_3d_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_array_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_array_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_3d_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_3d_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_array_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_2d_array_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_3d_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_byte_3d_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_array_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_2d_array_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_3d_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgb_unsigned_short_5_6_5_3d_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_array_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_2d_array_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_3d_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_byte_3d_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_array_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_2d_array_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_3d_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_4_4_4_4_3d_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_array_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_2d_array_pot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_3d_npot
+Fail dEQP-GLES3.functional.texture.format.unsized.rgba_unsigned_short_5_5_5_1_3d_pot
