@@ -260,40 +260,85 @@ pub struct Scheduled71<'a> {
 pub fn schedule71<'a>(sel: &Selected71<'_>, al: &Allocation71<'_>, a: &Arena<'a>) -> Result<Scheduled71<'a>, Sched71Error>;
 
 /// The word being filled, and the packer sched71_cf works on (crate-private;
-/// sched71 may add to it, sched71_cf uses only what is listed).
-pub(super) struct Word71 { pub alu: Alu71, pub uniform: Option<Uniform>, pub add_used: bool, pub mul_used: bool, pub sig_addr_used: bool }
-pub(super) struct Packer71<'a> { /* words, branches, scoreboard */ }
-impl<'a> Packer71<'a> {
-    /// Instructions placed so far.
-    pub(super) fn len(&self) -> usize;
-    /// The next operation starts a new word; nothing merges across.
-    pub(super) fn fence(&mut self);
-    /// Append a branch word; its index.
-    pub(super) fn push_branch(&mut self, br: Branch) -> usize;
-    pub(super) fn set_branch(&mut self, at: usize, br: Branch);
-    /// The ALU word at `at` (`None` for a branch), for the delay-slot checks.
-    pub(super) fn word(&self, at: usize) -> Option<&Word71>;
-    /// Uniforms consumed by instructions `from..to` (a branch's `ub` delta).
-    pub(super) fn uniforms_between(&self, from: usize, to: usize) -> u32;
+/// sched71 may add to it, sched71_cf uses only what is listed). As landed
+/// (sched71, sched71-cf): a branch is a word of its own (`branch` set, its
+/// ALU a NOP, nothing merges into it, no THRSW is put on it or into its
+/// slots).
+pub struct Word71 { pub(super) alu: Alu71, pub(super) uniform: Option<Uniform>, pub(super) branch: Option<Branch>, pub(super) tlb: bool, pub(super) tmu_write: bool, pub(super) flags_push: bool, /* add_used, mul_used, sig_addr_used, flags_read */ }
+pub struct Packer71<'a, 'r> { /* words, ready, floor, fence, the last ldvary / flags / THRSW / TMU words, rf0 */ }
+impl<'a, 'r> Packer71<'a, 'r> {
+    pub fn new(al: &Allocation71<'r>, a: &Arena<'a>) -> Result<Packer71<'a, 'r>, Sched71Error>;
+    pub fn len(&self) -> usize;
+    pub fn word(&self, at: usize) -> Option<&Word71>;
+    /// The next operation starts a new word; nothing merges across, no THRSW moves back across.
+    pub fn fence(&mut self);
+    /// One straight-line operation (`next`: the one after it, for the last-thread-switch pair).
+    pub fn place(&mut self, i: usize, op: &Op71, next: Option<&Op71>, a: &Arena<'a>) -> Result<(), Sched71Error>;
+    pub fn thread_end(&mut self, a: &Arena<'a>) -> Result<(), Sched71Error>;
+    pub fn finish(self, a: &Arena<'a>) -> Result<Packed71<'a>, Sched71Error>;
+    /// sched71-cf's hooks: a loop head or label (a fence with the words padded up to it; its index is the branch target),
+    /// the packer's bookkeeping a branch must not move over, and the branch word itself.
+    pub(super) fn boundary(&mut self, a: &Arena<'a>) -> Result<usize, Sched71Error>;
+    pub(super) fn floor(&self) -> usize;
+    pub(super) fn last_flags(&self) -> Option<usize>;
+    pub(super) fn last_thrsw(&self) -> Option<usize>;
+    pub(super) fn last_ldvary(&self) -> Option<usize>;
+    pub(super) fn pad_to(&mut self, at: usize, a: &Arena<'a>) -> Result<(), Sched71Error>;
+    /// Branch `br` inserted at `at` (<= len): the words from `at` on become its delay slots (NOPs for the rest), then a fence at `at + 4`.
+    pub(super) fn insert_branch(&mut self, at: usize, br: Branch, a: &Arena<'a>) -> Result<(), Sched71Error>;
+    /// The offset and stream word of the branch at `at`, once the target is known.
+    pub(super) fn set_branch(&mut self, at: usize, br: Branch, stream: Uniform) -> Result<(), Sched71Error>;
+    /// Uniforms consumed by the words before `at` (a branch's own stream word among them).
+    pub(super) fn uniforms_before(&self, at: usize) -> usize;
 }
 ```
 
-**`sched71_cf.rs`** (sched71-cf): branches, counted loops and their delay
-slots.
+**`sched71_cf.rs`** (sched71-cf, landed): branches, counted loops and their
+delay slots. `schedule71` is the whole program: it drives one `Packer71` over
+the operations in order (`place` for every straight-line one, so a program
+with no control flow gives exactly `pack71`'s words and uniforms), and places
+the control flow as sched.rs's `schedule` does at 4.2, construct for
+construct: `LoopHead` and `Label` are `boundary` words; `BackEdge` and
+`FwdBranch` are REL branch words with `ub` (`bdu` REL) after every word
+before them, after the flag push a conditional one reads (`emit_branch`,
+`qpu_schedule.c:2479-2485`) and outside a THRSW's delay slots, moved back
+by `branch_back` over up to three words that may run in their slots
+(sched.rs's `ok_in_branch_slot` rule at 7.1: no signal, uniform, TLB, TMU,
+VPM or SFU access, no magic write but NOP, no MULTOP/UMUL24, no flag push
+for a conditional branch), never before a THRSW's slots, another branch's,
+the last head or label word, or an `ldvary`'s three words. The 4.x
+`is_safe_msf_branch` (`:2430-2438`) is `ver < 71` only, so `msf_safe` has
+no counterpart (row 20 of (e)). After `thread_end`, every branch's offset
+and stream word are resolved as `qpu_set_branch_targets` does
+(`:2916-2983`). A back edge with no open head, a head left open, a label
+defined twice or never, or a label before a branch's slots is
+`Sched71Error::ControlFlow(i)`, never a program.
 
 ```rust
-pub(super) fn place_cf(p: &mut Packer71<'_>, i: usize, op: &VOp71) -> Result<(), Sched71Error>;
-/// Resolve every branch's offset and uniform delta; (back_edges, fwd_branches).
-pub(super) fn finish_cf<'a>(p: &mut Packer71<'_>, a: &Arena<'a>) -> Result<(&'a [(u32, u32)], &'a [(u32, u32)]), Sched71Error>;
+pub fn schedule71<'a>(sel: &Selected71<'_>, al: &Allocation71<'_>, a: &Arena<'a>) -> Result<Scheduled71<'a>, Sched71Error>;
 /// verify.rs `branches_are_structured` over Instr71, the same rules
 /// (CLAUDE.md: the compiler never emits a program that does not terminate).
 pub fn branches_are_structured71(prog: &[Instr71], back_edges: &[(u32, u32)], fwd: &[(u32, u32)]) -> Result<(), VerifyError>;
 ```
 
-The scaffold's `place_cf` returns `Err(Sched71Error::ControlFlow(i))`, so the
-straight-line shapes (pass-through, uniform, texture) do not wait for
-sched71-cf. Only the `if` shape needs it, unless if-conversion selected it as
-straight-line code (`v3d-backend.md`, "Control flow, step 1").
+`schedule71`'s result passes `branches_are_structured71` by construction;
+`build71` still refuses a program with an edge by name until the chain71
+item runs the check after `verify71`. The straight-line shapes
+(pass-through, uniform, texture) never needed sched71-cf; the P8 `if` shape
+is if-converted by our select (a varying condition), so it is straight-line
+code too, and only a uniform `if` with an arm past `BRANCH_LIMIT` or a
+counted loop reaches the branch placement (`v3d-backend.md`, "Control flow,
+step 1"). sched71_cf's unit tests cover both, through the shared front half
+(the unroller, prepare, the 4.2 selection, select71, allocate71) and in
+sim71 on both paths of each branch: the P8 `if` shape (straight-line, both
+colours per lane), a uniform `if` with a 13-step polynomial arm (two forward
+branches and two labels, both arms right), loopcarry.frag's shape (a counted
+loop with a flag-carried break, three passes and two passes), a hand-built
+counted loop (the stream word of the back edge is -4, read on every pass)
+and a hand-built forward branch (the FADD after the push runs in the first
+delay slot). The hooks in `sched71.rs` are the `branch` field of `Word71`
+and the eight `pub(super)` methods above; `pack71`'s words are unchanged
+(`a_branch_free_program_is_pack71s_words`).
 
 **`verify71.rs`** (merged): `verify71(prog: &[Instr71], single_seg: bool)`,
 `registers_fit_threads71(prog: &[Instr71], threads: u32)`. Nothing new.
@@ -607,7 +652,7 @@ produce a word that breaks it, and `build71` runs `verify71` on every program.
 | 23 | Reserved magic write addresses 0..4, 10, 14..15, 19..31, 47..63 | `qpu_validate.c:104-115`, `:309-314` | codec71 (`magic_waddr_name`), verify71 |
 | 24 | The 4.2 accumulator rules (R4 after SFU, r5 after `ldvary`, mux deps) do not exist | `qpu_schedule.c:157-174`, `:601-620`, `:699-711`; `qpu_validate.c:316-328` | (nothing) |
 
-sched71 owns rows 1-19 and 22. sched71-cf owns rows 20-21. Its `place_cf`
+sched71 owns rows 1-19 and 22. sched71-cf owns rows 20-21. Its `schedule71`
 also keeps `sched.rs`'s structural rules (`LoopHead`/`Label` as word
 boundaries, REL branches with `ub` moving the uniform stream,
 `v3d-backend.md` "Branch delay slots").
