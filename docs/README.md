@@ -34,8 +34,10 @@ to their code (`src/*_NOTES.md`, `src/*/*_NOTES.md`, `tools/*/README.md`).
 
 Board-session records, investigations and diaries that only recorded past
 runs were removed on 2026-10-16 (`docs/board-sessions/`,
-`docs/investigations/`, `tools/cts/log/`, and the old measurement log in
-`tools/cts/RESULTS.md`). Comments that still name one write it as
+`docs/investigations/`, the old per-session logs in `tools/cts/log/`, and
+the old measurement log in `tools/cts/RESULTS.md`). `tools/cts/log/` has
+held files again since e839242b (2026-10-27): the slices that RESULTS.md
+rows cite, as `tools/cts/log/README.md` defines them. Comments that still name one write it as
 `ab43a20c5:<path>`. The Mali board captures (`tools/mali/board-ref/`) and
 the last two session records were removed on 2026-10-26; comments name
 them as `0dce654a8:<path>`. The excerpts the tests read are kept in
