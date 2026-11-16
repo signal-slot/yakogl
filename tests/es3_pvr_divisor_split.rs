@@ -29,9 +29,10 @@
 //! through stand-ins for the C generators that record their inputs (as
 //! tests/es3_pvr_flatshade_lines.rs does): the VDM index lists' instance
 //! counts and the PDS vertex streams, whose data is read back from the
-//! arena. The program does not read gl_InstanceID: the back end refuses an
-//! instance drawn on its own whose program does (`pvr_backend_draw`). What
-//! the GPU draws is the AM62P board check.
+//! arena. The program does not read gl_InstanceID: an instance drawn on its
+//! own whose program does gets its instance as the vertex fetch's base
+//! (tests/es3_pvr_instanceid.rs). What the GPU draws is the AM62P board
+//! check.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_divisor_split
@@ -437,7 +438,7 @@ unsafe extern "C" fn pvr_pds_render_color_upload_program(
 /// Records the draw's vertex streams, each with its first element read back
 /// from the arena (up to four words).
 #[no_mangle]
-unsafe extern "C" fn pvr_pds_render_vertex_program_ids(
+unsafe extern "C" fn pvr_pds_render_vertex_program_ids_base(
     _vs_usc_exec_offset: u64,
     _vs_temps: u32,
     streams: *const PvrPdsVertexStream,
@@ -445,6 +446,7 @@ unsafe extern "C" fn pvr_pds_render_vertex_program_ids(
     _has_slc_mcu_cache_controls: i32,
     _vertex_id_reg: u32,
     _instance_id_reg: u32,
+    _instance_id_base: u32,
     data_out: *mut u32,
     code_out: *mut u32,
     info: *mut PvrPdsRenderVertexInfo,

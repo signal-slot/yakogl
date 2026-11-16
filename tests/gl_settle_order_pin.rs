@@ -492,7 +492,7 @@ mod pvr {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn pvr_pds_render_vertex_program_ids(
+    unsafe extern "C" fn pvr_pds_render_vertex_program_ids_base(
         _vs_usc_exec_offset: u64,
         _vs_temps: u32,
         streams: *const PvrPdsVertexStream,
@@ -500,6 +500,7 @@ mod pvr {
         _has_slc_mcu_cache_controls: i32,
         _vertex_id_reg: u32,
         _instance_id_reg: u32,
+        _instance_id_base: u32,
         data_out: *mut u32,
         code_out: *mut u32,
         info: *mut PvrPdsRenderVertexInfo,
