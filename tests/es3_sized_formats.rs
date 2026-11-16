@@ -264,10 +264,11 @@ fn storage_per_gpu_and_the_refusals() {
         assert_ne!(gc & gles_texfmt_bit(c), 0, "GC7000UL: class {c}");
         assert!(FORMATS.iter().all(|e| !e.storage.contains(&c)), "class {c}: compressed only");
     }
-    /* and keeps the fallbacks of the classes it does not: RGBA32*, R32/RG32 integers */
-    assert_eq!(fmt(GL_RG32F).storage_in(gc), Some(GLES_TEXFMT_RGBA16F));
+    /* the 128-bit classes as two planes (gc-wide128-flip); RGB10A2 keeps its fallback */
+    assert_eq!(fmt(GL_RG32F).storage_in(gc), Some(GLES_TEXFMT_RGBA32F));
     assert_eq!(fmt(GL_RGB10_A2).storage_in(gc), Some(GLES_TEXFMT_RGBA8));
-    assert_eq!(fmt(GL_RGBA32UI).storage_in(gc), None);
+    assert_eq!(fmt(GL_RGBA32UI).storage_in(gc), Some(GLES_TEXFMT_RGBA32UI));
+    assert_eq!(fmt(GL_RGBA32I).storage_in(gc), Some(GLES_TEXFMT_RGBA32I));
     /* the GC7000UL holds the R32/RG32 integer classes (gc-r32-flip), which
      * neither the PowerVR's nor the V3D's mask does: their formats fall to
      * the RGBA32 class there. No mask holds the other classes yet. */
@@ -287,7 +288,11 @@ fn storage_per_gpu_and_the_refusals() {
         assert_eq!(fmt(name).storage_in(pvr), Some(want), "PowerVR 0x{name:x}");
         assert_eq!(fmt(name).storage_in(V3D_SAMPLED_TEXFMTS), Some(want), "V3D 0x{name:x}");
         assert_eq!(fmt(name).storage_in(gc), Some(fmt(name).storage[0]), "GC7000UL 0x{name:x}: its own class");
-        assert_eq!(fmt(name).storage_in(gc & !gles_texfmt_bit(fmt(name).storage[0])), None, "GC7000UL 0x{name:x}");
+        assert_eq!(
+            fmt(name).storage_in(gc & !gles_texfmt_bit(fmt(name).storage[0])),
+            Some(want),
+            "GC7000UL 0x{name:x}"
+        );
         assert_eq!(fmt(name).storage_in(0), None, "Mali 0x{name:x}");
         assert_eq!(fmt(name).storage_in(all_classes()), Some(fmt(name).storage[0]), "0x{name:x}");
     }
@@ -659,10 +664,10 @@ fn every_format_converts_into_every_class_it_may_be_stored_in() {
 
 /// The upload refusals per back end: the formats of ES 3.0 table 3.2 whose
 /// storage classes the back end samples none of, which glTexImage2D refuses
-/// by name (GL_INVALID_OPERATION). The PowerVR and the V3D refuse none; the
-/// GC7000UL refuses the four of three or four 32-bit channels (RGB32UI/I,
-/// RGBA32UI/I: the two-plane path, `docs/es3/gc-formats.md` section 3); R32UI/I
-/// and RG32UI/I are stored in their own classes since gc-r32-flip.
+/// by name (GL_INVALID_OPERATION). No back end with a mask refuses one: the
+/// GC7000UL stores R32UI/I and RG32UI/I in their own classes since
+/// gc-r32-flip, and RGB32UI/I and RGBA32UI/I in the 128-bit classes it samples
+/// as two planes since gc-wide128-flip (`docs/es3/gc-formats.md` section 3).
 #[test]
 fn the_formats_a_back_end_refuses_to_upload_are_listed() {
     if cfg!(feature = "report-es2") {
@@ -673,5 +678,5 @@ fn the_formats_a_back_end_refuses_to_upload_are_listed() {
     };
     assert_eq!(refused(PVR_SAMPLED_TEXFMTS), Vec::<&str>::new(), "PowerVR");
     assert_eq!(refused(V3D_SAMPLED_TEXFMTS), Vec::<&str>::new(), "V3D 4.2");
-    assert_eq!(refused(GC_SAMPLED_TEXFMTS), ["GL_RGB32UI", "GL_RGB32I", "GL_RGBA32UI", "GL_RGBA32I"], "GC7000UL");
+    assert_eq!(refused(GC_SAMPLED_TEXFMTS), Vec::<&str>::new(), "GC7000UL");
 }

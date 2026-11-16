@@ -30,11 +30,14 @@
 //!   they run for real. Before the flip they were run with the classes added
 //!   to GC_SAMPLED_TEXFMTS locally.
 //!
+//! Not in a `report-es2` build: the ES 2.0 surface has no 128-bit formats
+//! (glTexImage2D refuses them as GL_INVALID_ENUM) and no GLSL ES 3.00.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_wide128_layers_gc
 //! ```
 
-#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void};
 use std::collections::BTreeMap;

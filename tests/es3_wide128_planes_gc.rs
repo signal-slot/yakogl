@@ -21,20 +21,18 @@
 //!   tile-aligned, and mip levels 1 and up; then a `glTexSubImage2D` of
 //!   level 0 and of level 1 against the model.
 //!
-//! The upload tests need the three classes in the sampled mask. The mask
-//! hook of the in-crate tests (`backend::TEST_EXTRA_SAMPLED`) is
-//! `#[cfg(test)]`, so no integration test can add them: until
-//! GC_SAMPLED_TEXFMTS holds them (item wide128-flip) the upload tests find
-//! the classes closed, say so on stderr and check the closed state instead
-//! (the GL core stores no 128-bit class for this back end). From the flip on
-//! they run for real. Before the flip they were run with the three classes
-//! added to GC_SAMPLED_TEXFMTS locally.
+//! The upload tests need the three classes in the sampled mask:
+//! GC_SAMPLED_TEXFMTS holds them (item wide128-flip), and the tests assert
+//! that it does.
+//!
+//! Not in a `report-es2` build: the ES 2.0 surface has no 128-bit formats
+//! (glTexImage2D refuses them as GL_INVALID_ENUM) and no GLSL ES 3.00.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_wide128_planes_gc
 //! ```
 
-#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+#![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void};
 use std::collections::BTreeMap;
@@ -609,19 +607,11 @@ fn levels_of(w: u32, h: u32) -> u32 {
 
 /// RGBA32F, RGBA32UI and RGBA32I uploads write plane 0 = (R,G) and plane 1 =
 /// (B,A) in the tiled layout the descriptors address, for every size and
-/// level. While the classes are closed, the GL core stores no 128-bit class
-/// for this back end, which this checks instead.
+/// level.
 #[test]
 fn an_uploaded_128_bit_texture_is_two_tiled_planes() {
     for class in &WIDE {
-        if !open(class.1) {
-            eprintln!("{}: not in GC_SAMPLED_TEXFMTS; the plane upload is not exercised (wide128-flip)", class.0);
-            assert!(!yakogl::vivante::texture::wide128_sampled(&GlesTextureBind {
-                format: class.1,
-                ..Default::default()
-            }));
-            continue;
-        }
+        assert!(open(class.1), "{}: in GC_SAMPLED_TEXFMTS (wide128-flip)", class.0);
         let sampler = match class.1 {
             GLES_TEXFMT_RGBA32F => "sampler2D",
             GLES_TEXFMT_RGBA32I => "isampler2D",
@@ -646,10 +636,7 @@ fn an_uploaded_128_bit_texture_is_two_tiled_planes() {
 #[test]
 fn a_sub_image_update_touches_only_its_texels_in_both_planes() {
     for class in &WIDE {
-        if !open(class.1) {
-            eprintln!("{}: not in GC_SAMPLED_TEXFMTS; the sub-image update is not exercised (wide128-flip)", class.0);
-            continue;
-        }
+        assert!(open(class.1), "{}: in GC_SAMPLED_TEXFMTS (wide128-flip)", class.0);
         let sampler = match class.1 {
             GLES_TEXFMT_RGBA32F => "sampler2D",
             GLES_TEXFMT_RGBA32I => "isampler2D",
