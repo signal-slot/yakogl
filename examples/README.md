@@ -27,6 +27,12 @@ west build -p always -b rpi_4b yakogl/examples/triangle
 The other examples build the same way, with their own directory in place of
 `triangle`.
 
+The NanoPC-T6 (Mali; work in progress, the top `README.md`) builds
+`triangle` with `-b nanopc_t6`. Its image embeds the board's GPU firmware:
+make `driver/src/fw/mali_csffw_blob.h` from the board's `mali_csffw.bin`
+with `driver/tools/mkmalifw.sh` first. The image is not yet run on the
+board (`driver/docs/nanopc-t6-display.md`, step D3).
+
 `slint` also needs the no_std Slint tree and the patched femtovg and glow,
 which live outside this repository: `nostd/README.md` says how to make them,
 and the build takes them as `-DSLINT_NOSTD_DIR=<slint tree>

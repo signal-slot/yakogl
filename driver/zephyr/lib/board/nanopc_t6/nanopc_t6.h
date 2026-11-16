@@ -15,7 +15,8 @@
 #include <zephyr/toolchain.h>
 
 /* "Still making progress." Once called, the feeding continues only while the
- * calls come at most CONFIG_YAKOGL_NANOPC_T6_ALIVE_S apart. Any context. */
+ * calls come at most CONFIG_YAKOGL_NANOPC_T6_ALIVE_S apart. Any context.
+ * With the board layer (CONFIG_YAKOGL_BOARD) it is board_watchdog_feed(). */
 void t6_watchdog_feed(void);
 
 /* Uptime in ms after which nothing feeds WDT0. */
@@ -29,5 +30,13 @@ uint32_t t6_watchdog_period_ms(void);
  * period. With CONFIG_YAKOGL_NANOPC_T6_WDT_PROOF it waits for WDT0 instead.
  * Thread context. */
 FUNC_NORETURN void t6_reset_to_linux(const char *why);
+
+/* Print the record of a display adopt (yd_t6_display_adopt, or the first
+ * yd_t6_screen_show) and its return value `rc`: what it found, what it did
+ * up to its stop, then one line with the stop's name. Every line starts with
+ * "<tag>: " (driver/tools/kexec-zephyr/t6-verdict.sh reads the t6_display
+ * probe's). */
+struct yd_t6_display_adopt;
+void t6_display_print_adopt(const char *tag, int rc, const struct yd_t6_display_adopt *a);
 
 #endif /* YAKOGL_NANOPC_T6_H */

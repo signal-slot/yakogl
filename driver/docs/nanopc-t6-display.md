@@ -547,9 +547,15 @@ unchanged. The step has two parts:
   entries in `yakogl_drivers.h` (`struct yd_t6_screen`, `yd_t6_screen_show`,
   `yd_t6_screen_busy`, `yd_t6_osal_mem.carve_reserved`).
 - **D3b, the board library and the image.**
-  `driver/zephyr/lib/board/nanopc_t6/`: `board_window()`, `board_show()` and
-  `board_display_busy()` call those entries; the triangle image and its gate
-  row; then the board proof.
+  `driver/zephyr/lib/board/nanopc_t6/board_nanopc_t6.c`: `board_window()`,
+  `board_show()` and `board_display_busy()` call those entries; the triangle
+  image (`west build -b nanopc_t6 examples/triangle`) and its gate row; then
+  the board proof. The first `board_show()` prints the adopt's record with
+  the lines of the `t6_display` probe under the tag `board`
+  (`t6_display_record.c`), so a stopped adopt reads the same in both. The
+  image has one "still making progress" for the watchdog: with the board
+  layer `t6_watchdog_feed()` is `board_watchdog_feed()`, and WDT0's feeder
+  asks the layer's `board_wdog_alive()`.
 
 **Where the window's memory is.** The Mali renders into the window, so the
 window must be memory the GPU's address space maps, and that is the OSAL's
@@ -773,7 +779,7 @@ answers polls, takes injected failures and records the order.
 | D1 | `ip::vop2`: register map, Esmart window (format, address, stride, size, enable, AXI ids), overlay select, VP timing and dividers, `REG_CFG_DONE`, internal PD (`SYS_PD_CTRL`), STANDBY with DSP_HOLD wait, status read-back; `ip::rk_iommu`: paging off and check | layout = section 1; timing words for the dump's mode; a window refused above 4 GiB, unaligned, or with a stride over 16 bits; CFG_DONE after the window writes; standby waits for DSP_HOLD | none alone | 700 lines + tests | no |
 | D2 | Adopt (route a): `nanopc-t6.sh --crash` and the T6 crash reservation; a `t6_display` probe that adopts VP0, turns the IOMMU off, shows a CPU pattern in Esmart0, prints the section 5 read-backs | the adopt policy over the model loaded with the dump (mode match, mode mismatch refused, AFBC cluster replaced by Esmart0) | read-backs as in section 5, then the person confirms the pattern | 250 lines + script change | yes |
 | D3a | The T6's show, flip and busy rules over `ip::vop2` (section 4, step D3): `board::nanopc_t6_display` `show` / `busy`, the carve-out's reserved end, the C entries. Done, host only | the first show is the adopt with the GL window; a flip writes the address then `REG_CFG_DONE` and never waits; busy until the frame start that takes the flip; a stopped adopt is final; the reserved end is mapped and never allocated | none alone | 330 lines + tests | no |
-| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row | the image builds with `-Werror` (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
+| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row. Done, the board proof open | the image builds with `-Werror` and fits the kexec window (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
 | D4 | `soc::rk3588` display power and clocks: PD_VOP, PD_VO1 on/off (the PD_GPU code with a domain table), the gates, muxes and resets of section 1, the PMU1 CRU | the domain table = `pm-domains.c` lines cited; order: clocks, power, repair poll, idle release; reset assert/release words; off-then-on loses block state in the model | none alone | 400 lines + tests | no |
 | D5 | `ip::hdptx`: the TMDS bring-up order of section 1, the ROPLL plan (integer and SDM) and the register values from the dump, lock and ready polls, power-off | the plan for 25.2, 27, 74.25, 148.5 MHz; the write order inside the reset window; no lock = timeout; the dump's register file equals the model's image | none alone | 600 lines + tests | no |
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |

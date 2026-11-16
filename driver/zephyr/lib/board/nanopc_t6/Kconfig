@@ -19,6 +19,20 @@ config YAKOGL_NANOPC_T6
 	  that builds the yakogl-drivers crate (driver/zephyr/CMakeLists.txt,
 	  feature rk3588).
 
+config YAKOGL_BOARD_NANOPC_T6
+	def_bool YAKOGL_BOARD && YAKOGL_NANOPC_T6
+	depends on YAKOGL_GPU_MALI
+	select YAKOGL_BOARD_DISPLAY_BUSY
+	help
+	  The board layer on the NanoPC-T6 (board_nanopc_t6.c). Window: the
+	  last pages of the Mali OSAL's carve-out, so board_window() comes
+	  before eglInitialize(); screen: VP0 of the VOP on HDMI0 as Linux
+	  left it, adopted at the first board_show()
+	  (driver/docs/nanopc-t6-display.md, step D3); record: the UART line;
+	  watchdog: WDT0 below, fed for YAKOGL_BOARD_LIFETIME_S while
+	  board_watchdog_feed() or the OSAL's waits come within
+	  YAKOGL_BOARD_ALIVE_S; reset: t6_reset_to_linux().
+
 if YAKOGL_NANOPC_T6
 
 config YAKOGL_NANOPC_T6_VHE_EXIT
@@ -46,20 +60,25 @@ config YAKOGL_NANOPC_T6_WDT_TOP
 
 config YAKOGL_NANOPC_T6_LIFETIME_S
 	int "Seconds of uptime the watchdog is fed at most"
+	default YAKOGL_BOARD_LIFETIME_S if YAKOGL_BOARD
 	default 60
 	range 10 3600
 	help
 	  After this nothing feeds WDT0 and the board resets within one
 	  period, also when the image hangs or faults. The run must end
-	  before it (t6_reset_to_linux()).
+	  before it (t6_reset_to_linux()). An image with the board layer
+	  sets YAKOGL_BOARD_LIFETIME_S, not this.
 
 config YAKOGL_NANOPC_T6_ALIVE_S
 	int "Seconds between two t6_watchdog_feed() calls at most"
+	default YAKOGL_BOARD_ALIVE_S if YAKOGL_BOARD
 	default 5
 	range 1 600
 	help
 	  Once the sample has called t6_watchdog_feed(), a longer gap stops
 	  the feeding, so a stuck sample is reset long before the lifetime.
+	  An image with the board layer sets YAKOGL_BOARD_ALIVE_S, not this:
+	  there t6_watchdog_feed() is board_watchdog_feed().
 
 config YAKOGL_NANOPC_T6_WDT_PROOF
 	bool "Proof: arm WDT0 and never feed it"

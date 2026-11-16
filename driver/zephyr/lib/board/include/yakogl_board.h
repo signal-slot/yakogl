@@ -4,17 +4,19 @@
  * yakogl_board.h -- the board layer: everything a sample needs besides EGL
  * and GL (driver/docs/one-method.md, section 2).
  *
- * The Raspberry Pi 4 (V3D), the Verdin AM62P (PowerVR) and the Verdin
- * iMX8M Plus (GC7000) run a sample the same way. Only five things differ per
- * board: the boot method, the display bring-up, the result sink, the
- * watchdog and the GPU backend. The first four live behind this header, one
- * implementation per board under driver/zephyr/lib/board/<board>/; the GPU
- * backend is YakoGL's. A sample that includes this header and EGL/GL builds
- * for all three boards without an #ifdef.
+ * The Raspberry Pi 4 (V3D), the Verdin AM62P (PowerVR), the Verdin iMX8M
+ * Plus (GC7000) and the NanoPC-T6 (Mali) run a sample the same way. Only
+ * five things differ per board: the boot method, the display bring-up, the
+ * result sink, the watchdog and the GPU backend. The first four live behind
+ * this header, one implementation per board under
+ * driver/zephyr/lib/board/<board>/; the GPU backend is YakoGL's. A sample
+ * that includes this header and EGL/GL builds for all four boards without
+ * an #ifdef.
  *
  * Kconfig (driver/zephyr/lib/board/Kconfig):
  *   CONFIG_YAKOGL_BOARD             this layer; the board is chosen by the
- *                                   SoC (YAKOGL_BOARD_AM62P, _IMX8MP, _RPI4)
+ *                                   SoC (YAKOGL_BOARD_AM62P, _IMX8MP, _RPI4,
+ *                                   _NANOPC_T6)
  *   CONFIG_YAKOGL_BOARD_LIFETIME_S  the watchdog bound: the board resets at
  *                                   most this long (plus one watchdog period)
  *                                   after boot, whatever the sample does
@@ -42,6 +44,7 @@
  *   i.MX8MP  the SNVS LPGPR0..3 (survives the SoC reset) + the line
  *   AM62P    the line only (UART)
  *   Pi 4     the line (UART), and the last line of the record screen
+ *   T6       the line only (UART)
  *
  * Contexts: "main" means a thread (main() or one it started). "any" means
  * also a SYS_INIT at PRE_KERNEL_1 or later, an ISR or the fatal handler.
@@ -80,10 +83,12 @@ extern "C" {
  *             i.MX8MP  the carve-out's NC mapping (gc_render.c)
  *             Pi 4     an NC alias of the static buffer, or the
  *                      framebuffer's NC mapping for a view (rpi_mbox.c)
+ *             T6       the carve-out's NC mapping (src/osal/zephyr_mali.c)
  *   format  the pixel layout the screen shows (copy it into
  *           gles_native_window.format as is): GLES_NATIVE_FORMAT_XRGB8888
- *           on the Verdins; on the Pi 4 the firmware framebuffer's pixel
- *           order as the firmware answered it (RGB: RGBA8888, BGR:
+ *           on the Verdins and the T6; on the Pi 4 the firmware
+ *           framebuffer's pixel order as the firmware answered it (RGB:
+ *           RGBA8888, BGR:
  *           XRGB8888; printed at boot); plus GLES_NATIVE_WINDOW_BOTTOM_UP
  *           when this board's display scans the rows bottom first (then GL
  *           draws y-up, as into an FBO); plus GLES_NATIVE_WINDOW_SCANOUT
@@ -145,9 +150,13 @@ struct board_window {
  *   Pi 4     a view into the firmware framebuffer when the window fits it
  *            as CONFIG_YAKOGL_BOARD_SCANOUT_VIEW says; any other window is
  *            a static buffer in the image, which board_show() copies
+ *   T6       the last pages of the Mali carve-out, which the GPU's
+ *            allocations then leave alone. The carve-out's layout is fixed
+ *            when EGL starts the GPU, so call this before eglInitialize()
  * Returns 0 and fills *out; -EINVAL for a zero size or one larger than the
  * board can give; -ENOMEM when the memory is taken (a second call);
- * -ENODEV when the GPU carve-out is not up. On error *out is zeroed.
+ * -ENODEV when the GPU carve-out is not up; -EBUSY on the T6 after
+ * eglInitialize(). On error *out is zeroed.
  */
 int board_window(uint32_t w, uint32_t h, struct board_window *out);
 
@@ -163,9 +172,15 @@ int board_window(uint32_t w, uint32_t h, struct board_window *out);
  * the screen keeps what it had (the console); the first copy prints
  * "board: board_show copies ..." once, and board_show_copies() counts them
  * (board_finish's APP record then carries YK_RECORD_APP_SHOWN_BY_COPY).
+ * On the T6 the first show takes the screen over as the boot left it
+ * (1024x768 on HDMI0; the take-over's record is printed) and fixes the
+ * window's size: a later show of another buffer of that size is a flip,
+ * nothing is copied, and a window larger than the screen is not shown.
  * Returns 0; -ENOTSUP when the board has no screen or cannot show this
  * window (a bottom-up window on a display that cannot flip, a window larger
- * than the screen); -ENODEV when the display did not come up; -EIO when
+ * than the screen, on the T6 another size than the first show's); -ENODEV
+ * when the display did not come up (on the T6: the take-over stopped, for
+ * the rest of the run); -EIO when
  * the pan or flip was not taken; another negative errno from the display
  * driver. A check reads the window, not the screen, so a sample goes on
  * after an error here.
@@ -187,7 +202,8 @@ static inline void board_first_frame(void) {}
  * Which of the n buffers at phys[] (n <= 32) the display may still scan:
  * bit k for phys[k]. On a board whose board_show() does not wait for the
  * display to take the buffer (the AM62P: the DSS takes a new address at its
- * next frame end, and a later show replaces one not taken yet), the buffer
+ * next frame end, and a later show replaces one not taken yet; the T6's VOP
+ * likewise at its next frame start), the buffer
  * scanned and the one waiting are busy; one replaced before it was taken is
  * not. Too large is possible, too small never. Never waits. Context: the
  * thread that calls board_show(). Only on a board with
@@ -235,8 +251,9 @@ void board_progress_hook(uint32_t where);
 /*
  * The index the runner asked this run for, read before the first record is
  * stored: the i.MX8MP SNVS selector (w0 = 0, w1 = 0x5345 << 16 | index).
- * -1 when none was written, and always -1 on the AM62P and the Pi 4 (a run
- * is chosen by its image there). Context: main (valid from PRE_KERNEL_1 on).
+ * -1 when none was written, and always -1 on the AM62P, the Pi 4 and the T6
+ * (a run is chosen by its image there). Context: main (valid from
+ * PRE_KERNEL_1 on).
  */
 int board_selector(void);
 
@@ -271,7 +288,9 @@ uint32_t board_gpu_resets(void);
  *  3. Hold CONFIG_YAKOGL_BOARD_HOLD_S (pass) or _HOLD_FAIL_S (fail),
  *     feeding the watchdog, so the screen can be read and photographed.
  *  4. Reset the board: sys_reboot on both Verdins; on the Pi 4 the record
- *     screen is frozen and the feeding stops, so the PM watchdog resets it.
+ *     screen is frozen and the feeding stops, so the PM watchdog resets it;
+ *     on the T6 the screen's state and flip count are printed, then PSCI
+ *     SYSTEM_RESET.
  * Does not return.
  */
 FUNC_NORETURN void board_finish(const char *name, int rc);
