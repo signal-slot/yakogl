@@ -381,11 +381,121 @@ or the measure item's pair:
 | `mat3sub_vs` | H1 | `matrix.sub.const_mediump_mat3_mat3_vertex` as a pair (the relink) |
 | `cf_inf_fs`, `cf_denorm_fs` | `nir.rs:2062` | optional: Mesa's bits for an infinite and a denormal fold (float controls 0) |
 
+### References made (item ref-constop, 2026-11-16)
+
+All 28 of the table (the optional two included) are made. The integration tip
+has no `tools/mali/testdata/deqp_shapes/` pair for any of them, so each
+dEQP text was rebuilt from VK-GL-CTS `93bca01861b0` (`G2` below is
+`modules/gles2/functional/`, `GS` `modules/glshared/`). The `nz_*` and `cf_*`
+pairs are reductions: N1's dEQP cases are random or long
+(`functions.test:2006-2047`), so these take section 3's probe forms in the
+style of `negzero_local` and `negzero_vs_select`. Every reference is the pair as
+committed, drawn once by Mesa 26.2.1's panfrost on the drm-shim and extracted:
+
+```sh
+tools/mali/drm_shim_ref.sh run $SHIM tools/mali/testdata/deqp_constop_<name>.vert \
+    tools/mali/testdata/deqp_constop_<name>.frag <out>/deqp_constop_<name> --uniform-values
+python3 -I tools/mali/pan_ref_diff.py extract <out>/deqp_constop_<name>.trace --draw \
+    > tools/mali/testdata/deqp_constop_<name>.expect.json
+```
+
+`matrix_preinc_mediump_mat3_fs` adds `--mat-columns`, because dEQP enables every column
+of `a_mat3`. `$SHIM` is the `drm_shim_ref.sh build` layout (`inst/`). It is
+configured with that script's meson options in a second build directory of the
+`build_pan_shc.sh` tree (`$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`, extracted
+from the tarball that `third_party/mesa-26.2.1/UPSTREAM` checks). This build
+reproduces `gm2_constfold_1.expect.json` byte for byte.
+
+| Reference | dEQP case (`dEQP-GLES2.functional.shaders.`) | Source (rebuilt) |
+|---|---|---|
+| `ce_floor_fs` | `constant_expressions.builtin_functions.common.floor_float_fragment` | `G2/es2fShaderConstExprTests.cpp:112`; template `GS/glsShaderConstExprTests.cpp:102-111,132-187`; `GS/glsShaderLibraryCase.cpp:141-191` (VS), `:359-427` (FS), `:1061-1072`; `framework/opengl/gluShaderLibrary.cpp:1981-1982` |
+| `ce_inversesqrt_vec4_fs` | `...exponential.inversesqrt_vec4_fragment` | `es2fShaderConstExprTests.cpp:102`, the same template (`.w`, `:138`) |
+| `ce_mod_vec2_float_fs` | `...common.mod_vec2_float_fragment` | `:115`, the `${MT}` scalar variant (`glsShaderConstExprTests.cpp:191-198`) |
+| `ce_smoothstep_fs` | `...common.smoothstep_float_fragment` | `:121` |
+| `ce_sign_vec3_fs` | `...common.sign_vec3_fragment` | `:111` |
+| `ce_fract_vec2_fs` | `...common.fract_vec2_fragment` | `:114` |
+| `ce_ceil_fs` | `...common.ceil_float_fragment` | `:113` |
+| `ce_atan_separate_fs` | `...trigonometry.atan_separate_float_fragment` | `:86` |
+| `ce_asin_fs` | `...trigonometry.asin_float_fragment` | `:84` |
+| `ce_normalize_vec3_fs` | `...geometric.normalize_vec3_fragment` | `:150` |
+| `ce_dot_vec3_fs` | `...geometric.dot_vec3_fragment` | `:145` |
+| `ce_floor_vs` | `...common.floor_float_vertex` | `:112`; `glsShaderLibraryCase.cpp:285-356` (VS), `:233-282` (FS) |
+| `struct_param_out_vs` | `struct.local.parameter_out_highp_vertex` | `G2/es2fShaderStructTests.cpp:163-209,607-644`; `GS/glsShaderRenderCase.hpp:71-79` |
+| `op_add_assign_effect_mediump_vec3_fs` | `operator.binary_operator.add_assign_effect.mediump_vec3_fragment` | `G2/es2fShaderOperatorTests.cpp:501-505,590-742,1622,1965-2089` |
+| `op_minus_lowp_float_fs` | `operator.unary_operator.minus.lowp_float_fragment` | idem, `:1525` |
+| `op_abs_mediump_float_fs`, `op_abs_highp_float_fs` | `operator.common_functions.abs.{mediump,highp}_float_fragment` | idem, `:1778` |
+| `op_degrees_mediump_float_fs` | `operator.angle_and_trigonometry.degrees.mediump_float_fragment` | idem, `:1733` |
+| `matrix_preinc_mediump_mat3_fs` | `matrix.pre_increment.dynamic_mediump_mat3_fragment` | `G2/es2fShaderMatrixTests.cpp:888-1118,1165-1198,1271,1296-1376` |
+| `mat3sub_vs` | `matrix.sub.const_mediump_mat3_mat3_vertex` | idem, `:80-85,831-850,1265,1356-1362` |
+| `loops_for_basic_mediump_float_fs` | `loops.for_constant_iterations.basic_mediump_float_fragment` | `G2/es2fShaderLoopTests.cpp:284-472,1301,1323` |
+| `loops_while_basic_highp_float_fs` | `loops.while_constant_iterations.basic_highp_float_fragment` | idem |
+| `nz_local_cmp_vs`, `nz_local_cmp_fs`, `nz_prod_vs`, `nz_shared_vs` | N1 (section 3) | reductions of section 3's probes; `nz_shared_vs` writes `z` to `gl_Position.x` so that a `-0.0` reader stays besides the compare |
+| `cf_inf_fs`, `cf_denorm_fs` | `nir.rs:2062` | reductions: `3.0e38 * 10.0`, `1.0e-30 * 1.0e-15` through a local |
+
+Corrections to section 6 found while rebuilding:
+
+- The operator, matrix, loop and struct shaders have no `#version` and no
+  `precision` statement; every variable carries its own qualifier.
+- The bias is printed `0.50` (`floatToString(x, 2)`), not `0.5`. The in1
+  swizzle of a vec3 is `yzx` (`:502`).
+- The second constant mat3 is `mat3(1.2, 0.1, 0.2, 0.1, 0.9, -0.1, -0.1, 0.2, 0.7)`.
+  `s_constInMat31` is read row-major (`tcuMatrix.hpp:336-341`) and written
+  column-major (`:831-850`), so the text is the transpose of the array.
+- A float loop counter of the constant count declares an unused
+  `uniform <prec> float uf_one;` (`es2fShaderLoopTests.cpp:329-330`). The increment is
+  `ndx += 0.333333`.
+
+What the references show (Mesa's words; nothing of ours was run):
+
+- **S1** folds at fp32 into one FAU word, as section 4 says. Examples: `floor` `0x42140000`
+  (37.0), `ceil` `0x42a60000`, `fract` `0x3f400000`, `dot` `0x40400000`,
+  `atan` `0xc016cbe4`, and `inversesqrt` `0x3ea1e89b` (`1 / sqrtf`, two roundings).
+  `mod` gives `0x40233340` (2.5500031). That is `x - round(y * floor(x / y))`, the true division
+  and unfused; a fused one would give `0x40233335`. `normalize` gives
+  `0x3f13cd3a`. `sign`, `smoothstep` and `asin` become inline constants
+  (`-1.0`, fp16 `0.5`, `0.0`). `ce_floor_vs` has no varying program: the link
+  moves the constant out0 into the FS as fp16 `0x50a0`.
+- **S2a**: Mesa folds a constant colour lane only where its v2f16 pair is all
+  constant (`op_degrees`: lanes z, w are the FAU word `0x38523800`, 0.5 and
+  RTNE(1.0 * 0.04 + 0.5) = `0x3852`; ATEST reads `0x3f0a4000`). A constant
+  lane paired with a computed one stays an ALU lane. `add_assign_effect`'s
+  w is `MKVEC(x, 1.0)` then `FMA.v2f16 * 0.25 + 0.5`, and `minus`'s y is the
+  zero lane of the same FMA. `matrix_preinc`'s w (`1.0 + 0.0`) is a run-time
+  `FADD.v2f16` as well. The lower item's step 2 has to follow this pairing,
+  not fold every lane.
+- **S2b is not folded by Mesa.** `op_degrees` keeps `FMA.v2f16 x * 57.28125`
+  (`0x5329`) and then `FMA.v2f16 * 0.04 + 0.5` (`0x291f`). There is no `a * c` constant,
+  so step 3 (section 7) should emit both multiplies rather than fold.
+- **S3**: both loops unroll and vanish. `res` is `coords.wxyz`, with no counter
+  constant left.
+- **S5** (`struct_param_out_vs`) folds to a constant colour that the link
+  moves into the FS (`0x3c003c00`). The VS is only the position.
+- **N1**: in `nz_local_cmp_vs/fs` and `nz_prod_vs` the compare reads the inline `0x0`
+  (`FCMP_OR.f32.lt ..., 0x0`), and no `-0.0` remains. `nz_shared_vs` has both:
+  the compare's inline `0x0` and the FAU word `0x80000000` for the output
+  lane, as `:771-776` predicts.
+- **cf**: float controls 0 keep both. `cf_inf_fs` pushes `0x7f800000` and
+  `cf_denorm_fs` pushes `0x00000001` (the denormal 1e-45, not flushed).
+
+Open points of section 9 that these settle:
+
+- **H1** (Mesa's side): `mat3sub_vs` folds the whole mediump colour at fp16
+  and the link moves it into the FS as the FAU words `0xb8009000`,
+  `0x3c003265` (x = -2^-11 `0x9000`, y = -0.5, z = `0x3265`, w = 1.0). The
+  exact result 0 is not what fp16 gives here. So the relink's constant is the moved varying
+  lane's (the `nir_fs.rs:6748` kind of site), computed at fp16. Which of our
+  `f16_rtne` sites refuses is still to be checked on our side (lower-constop).
+- **op_abs_highp mixed precision**: yes. The highp FS loads fp32, takes `abs` at
+  fp32 inside the conversion (`FADD.f32 r0.h0, r0.abs`), and does the colour
+  at fp16 (`FMA.v2f16`). The mediump FS converts first and takes `abs` at fp16.
+  The highp program is the mixed one (mixprec handoff).
+
 ## 9. Left open
 
 - S4 (195 `ConstantFold`, 113 `NegZeroShared` in `random.*`): attribute to
   S1-S3/N1 from the measure item's `deqp_shapes` pairs before the board
   session. The rest (transcendentals on constants, inf/denormal folds) gets a
   later item.
-- The H1 site is unconfirmed (section 3).
+- The H1 site is unconfirmed on our side (section 3). Mesa's side is in
+  section 8, "References made".
 - The VS S1 cases need `IntValue` in the compare fragment shader (intval).
