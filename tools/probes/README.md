@@ -52,6 +52,13 @@ Gate rows (`tools/check.sh`, reached by a change under `tools/probes/` or
 - `zephyr  rpi_5 probe images`: every directory of `rpi_5/` with a
   `CMakeLists.txt` and a `prj.conf`, `west build -b rpi_5` with
   `-DYAKOGL_WERROR=ON`. Without `ZEPHYR_WS` it is the one gap naming it.
+- `zephyr  stm32mp257f_dk probe images`: every directory of
+  `stm32mp257f_dk/` with a `CMakeLists.txt` and a `prj.conf`, `west build -b
+  stm32mp257f_dk/stm32mp257fxx/a35` with `-DYAKOGL_WERROR=ON`. The board
+  layer's `gc_wdog_arm: armed OP-TEE arm,smc-wdt` marker must be in
+  `mp2_identify`'s `zephyr.bin` once and in `mp2_hello`'s not at all (it arms
+  no watchdog). Scope `vivante drivers samples`. Without `ZEPHYR_WS` it is
+  the one gap naming it.
 - `zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot), -Werror on our C
   files`: builds `nanopc_t6/t6_fw`. It is a gap without `ZEPHYR_WS` or the
   CSF firmware header (made from the board's file first when one is given).
