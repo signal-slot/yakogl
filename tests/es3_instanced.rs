@@ -12,9 +12,10 @@
 //! back end then (each instance's value of each divisor array as a constant,
 //! and `GlesDraw::instance_id`), and what it hands a back end that takes any
 //! divisor (one draw, `instance_count` instances, the divisor per array). The
-//! back ends' refusal of an instance-by-instance draw that reads
-//! `gl_InstanceID` (`pvr/backend.rs`, `vivante/backend.rs`) is not part of
-//! the GL core and is not tested here.
+//! GC7000UL's refusal of an instance-by-instance draw that reads
+//! `gl_InstanceID` (`vivante/backend.rs`) and the PowerVR's per-draw base
+//! instance (`tests/es3_pvr_instanceid.rs`) are not part of the GL core and
+//! are not tested here.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_instanced
