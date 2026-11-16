@@ -878,23 +878,41 @@ fn a_cube_map_s_texture_is_the_board_s() {
     assert_eq!(o_texture.address, b.layout.vs_texture.expect("a texture descriptor").gpu);
     assert_eq!(o_planes.len, PLANES * GenericPlane::LENGTH, "a plane a face and level");
     let s = trace::bytes(&m, m_sampler.address, Sampler::LENGTH);
-    let mut diffs = vec![
-        Difference {
-            block: "Texture",
-            at: 0x10,
-            dump: m_tex.surfaces.to_le_bytes().to_vec(),
-            ours: o_planes.gpu.to_le_bytes().to_vec(),
-            cause: "the planes' address: Mesa keeps them in the sampler view's own buffer, ours are in the draw's",
-        },
-        Difference {
+    let mut diffs = vec![Difference {
+        block: "Texture",
+        at: 0x10,
+        dump: m_tex.surfaces.to_le_bytes().to_vec(),
+        ours: o_planes.gpu.to_le_bytes().to_vec(),
+        cause: "the planes' address: Mesa keeps them in the sampler view's own buffer, ours are in the draw's",
+    }];
+    if crate::REPORT_ES2 {
+        /* the dump's context is ES 3; an ES 2.0 context's cube is not
+         * seamless and keeps GL's wrap modes (frame.rs SEAMLESS_CUBE_MAP) */
+        let es2 = Sampler {
+            seamless_cube_map: false,
+            wrap_mode_r: WrapMode::REPEAT,
+            round_to_nearest_even: false,
+            ..Sampler::unpack(s[..].try_into().unwrap()).unwrap()
+        };
+        diffs.push(Difference {
+            block: "Sampler",
+            at: 0,
+            dump: s.clone(),
+            ours: es2.pack().unwrap().to_vec(),
+            cause: "an ES 2.0 context's cube sampler: Seamless Cube Map clear and GL's REPEAT on R (Mesa 26.2.1 \
+                    main/version.c:682-690, st_atom_sampler.c:84-94), and round to nearest even clear, as 26.2.1 \
+                    does for a nearest sampler (pan_cmdstream.c:243-245)",
+        });
+    } else {
+        diffs.push(Difference {
             block: "Sampler",
             at: 0x02,
             dump: vec![s[2]],
             ours: vec![s[2] & !0x20],
             cause: "Round to nearest even: Mesa 25.0.7 keeps it for a nearest sampler; 26.2.1 clears it when \
                     minification and magnification are nearest (pan_cmdstream.c:243-245)",
-        },
-    ];
+        });
+    }
     let slice = u32::from_le_bytes(m_planes[0x18..0x1c].try_into().unwrap());
     assert_eq!(slice, FACE_STRIDE as u32, "25.0.7's slice stride is the layer stride");
     for k in 0..PLANES {
@@ -2227,4 +2245,122 @@ fn float_storage_the_shim_does_not_draw_is_refused() {
         Err(FrameError::NotBuilt(super::backend::NOT_BUILT_TEXTURE_TYPE)),
         "a 3D RGBA16F texture"
     );
+}
+
+/// tex-refs' vertex cube cases (tools/mali/pan_tex_ref.sh): each case's
+/// name and its `.desc`, the samplers and textures Mesa 26.2.1's draw of
+/// `textureCubeLod` in the vertex shader binds (dEQP-GLES2
+/// texture.vertex.cube.{filtering,wrap}.*).
+const VCUBE: [(&str, &str); 42] = {
+    macro_rules! cases {
+        ($($c:literal)*) => {
+            [$(($c, include_str!(concat!("../../tools/mali/testdata/pan_tex_ref/vcube.", $c, ".desc"))),)*]
+        };
+    }
+    cases!(
+        "filtering.linear_linear_clamp" "filtering.linear_linear_mirror" "filtering.linear_linear_repeat"
+        "filtering.linear_mipmap_linear_linear_clamp" "filtering.linear_mipmap_linear_linear_mirror"
+        "filtering.linear_mipmap_linear_linear_repeat" "filtering.linear_mipmap_linear_nearest_clamp"
+        "filtering.linear_mipmap_linear_nearest_mirror" "filtering.linear_mipmap_linear_nearest_repeat"
+        "filtering.linear_mipmap_nearest_linear_clamp" "filtering.linear_mipmap_nearest_linear_mirror"
+        "filtering.linear_mipmap_nearest_linear_repeat" "filtering.linear_mipmap_nearest_nearest_clamp"
+        "filtering.linear_mipmap_nearest_nearest_mirror" "filtering.linear_mipmap_nearest_nearest_repeat"
+        "filtering.linear_nearest_clamp" "filtering.linear_nearest_mirror" "filtering.linear_nearest_repeat"
+        "filtering.nearest_linear_clamp" "filtering.nearest_linear_mirror" "filtering.nearest_linear_repeat"
+        "filtering.nearest_mipmap_linear_linear_clamp" "filtering.nearest_mipmap_linear_linear_mirror"
+        "filtering.nearest_mipmap_linear_linear_repeat" "filtering.nearest_mipmap_linear_nearest_clamp"
+        "filtering.nearest_mipmap_linear_nearest_mirror" "filtering.nearest_mipmap_linear_nearest_repeat"
+        "filtering.nearest_mipmap_nearest_linear_clamp" "filtering.nearest_mipmap_nearest_linear_mirror"
+        "filtering.nearest_mipmap_nearest_linear_repeat" "filtering.nearest_mipmap_nearest_nearest_clamp"
+        "filtering.nearest_mipmap_nearest_nearest_mirror" "filtering.nearest_mipmap_nearest_nearest_repeat"
+        "filtering.nearest_nearest_clamp" "filtering.nearest_nearest_mirror" "filtering.nearest_nearest_repeat"
+        "wrap.clamp_clamp" "wrap.clamp_mirror" "wrap.clamp_repeat"
+        "wrap.mirror_clamp" "wrap.mirror_mirror" "wrap.mirror_repeat"
+    )
+};
+
+/// The decoded fields of the first sampler of `table` ("Varying" or
+/// "Position") in a `.desc`.
+fn desc_sampler(desc: &str, table: &str) -> Fields {
+    let lines: Vec<&str> = desc.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.starts_with(&format!("{table} resource table @")))
+        .unwrap_or_else(|| panic!("a {table} table"));
+    let s = at + lines[at..].iter().position(|l| l.trim_start().starts_with("Sampler @")).expect("a sampler");
+    let base = indent(lines[s]);
+    let mut f = Fields::new();
+    for l in lines[s + 1..].iter().take_while(|l| indent(l) > base) {
+        let (k, v) = l.trim().split_once(": ").expect("a decoded field");
+        assert!(f.insert(k.to_string(), v.to_string()).is_none(), "{k} twice");
+    }
+    f
+}
+
+/// The case's GL state from the `.desc`'s first line ("min M, mag M, wrap
+/// s W, wrap t W"): a 32x32 cube of 6 levels, wrap R GL's default REPEAT
+/// (the case does not set it), as the back end describes it.
+fn vcube_texture(desc: &str) -> SampledTexture {
+    let head = desc.lines().next().expect("a header");
+    let field = |k: &str| {
+        head.split([';', ',']).map(str::trim).find_map(|p| p.strip_prefix(k)).unwrap_or_else(|| panic!("{k} in {head}"))
+    };
+    let wrap = |v: &str| match v {
+        "REPEAT" => WrapMode::REPEAT,
+        "MIRRORED_REPEAT" => WrapMode::MIRRORED_REPEAT,
+        "CLAMP_TO_EDGE" => WrapMode::CLAMP_TO_EDGE,
+        _ => panic!("wrap {v}"),
+    };
+    let min = field("min ");
+    let mipmap = match min.split_once("_MIPMAP_").map(|(_, m)| m) {
+        None => MipmapMode::NONE,
+        Some("NEAREST") => MipmapMode::NEAREST,
+        Some("LINEAR") => MipmapMode::TRILINEAR,
+        Some(m) => panic!("mip filter {m}"),
+    };
+    SampledTexture {
+        width: 32,
+        height: 32,
+        levels: 6,
+        faces: 6,
+        min_nearest: min.starts_with("NEAREST"),
+        mag_nearest: field("mag ") == "NEAREST",
+        mipmap,
+        wrap_s: wrap(field("wrap s ")),
+        wrap_t: wrap(field("wrap t ")),
+        wrap_r: WrapMode::REPEAT,
+        ..texture_of("nearest_clamp")
+    }
+}
+
+/// The vertex-stage cube sampler of all 42 texture.vertex.cube cases
+/// against Mesa 26.2.1's. tex-refs' draws ran in an ES 3 context (seamless
+/// on, every wrap clamped to the edge): `sampler_with(true)` packs to Mesa's
+/// words, the Varying and Position tables' alike. An ES 2.0 context, the
+/// dEQP-GLES2 build's (`report-es2`), has no seamless filtering in Mesa
+/// (main/version.c:682-690) and keeps GL's wrap modes (st_atom_sampler.c:
+/// 84-94 normalises only a seamless cube): `sampler_with(false)` is Mesa's
+/// words with `Seamless Cube Map` clear and GL's S, T and R, every other
+/// field equal. `sampler()` is the one of this build's context.
+#[test]
+fn vertex_cube_samplers_are_mesa_s() {
+    for (case, desc) in VCUBE {
+        let tex = vcube_texture(desc);
+        assert!(tex.is_cube(), "{case}");
+        let mesa = shim_sampler(desc_sampler(desc, "Varying"));
+        assert_eq!(mesa, shim_sampler(desc_sampler(desc, "Position")), "{case}: the two vertex tables");
+        assert!(mesa.seamless_cube_map, "{case}: tex-refs' context is ES 3");
+        assert_eq!(tex.sampler_with(true).pack().unwrap(), mesa.pack().unwrap(), "{case}: ES 3 context");
+        let es2 = Sampler {
+            seamless_cube_map: false,
+            wrap_mode_s: tex.wrap_s,
+            wrap_mode_t: tex.wrap_t,
+            wrap_mode_r: WrapMode::REPEAT,
+            ..mesa
+        };
+        assert_eq!(tex.sampler_with(false).pack().unwrap(), es2.pack().unwrap(), "{case}: ES 2.0 context");
+        assert_eq!(tex.sampler(), tex.sampler_with(SEAMLESS_CUBE_MAP), "{case}");
+    }
+    assert_eq!(SEAMLESS_CUBE_MAP, !crate::REPORT_ES2);
+    eprintln!("mali vertex cube samplers vs pan_tex_ref: {} cases", VCUBE.len());
 }
