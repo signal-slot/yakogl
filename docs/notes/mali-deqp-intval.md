@@ -286,3 +286,107 @@ What the two steps leave: the run-time loops and indices (NotSupported 41,
 #367 / loops / uniarray), and any case whose next refusal is another family's
 (equal varying lanes, uniform type). The measure's "next refusal" column
 says how many Fail cases each step actually turns into Pass.
+
+## 5. References (item ref-intval)
+
+25 Mesa 26.2.1 references, `tools/mali/testdata/deqp_intval_<name>.{vert,frag,expect.json}`,
+made 2026-11-16. Each is one real dEQP-GLES2 case of the 37305608 tree whose
+`refusals.tsv` row is this refusal. Each pair, compiled through
+`tests/mali_ref` (`compile_pair`) at 0728f44d, refuses with
+`Valhall: an integer or boolean value is not lowered yet`, so the rebuilt
+text reaches the same refusal as the board.
+
+**Shader text.** The integration tip has no `tools/mali/testdata/deqp_shapes/`,
+so every pair was **rebuilt** from VK-GL-CTS 93bca01861b0 (the revision
+`tools/cts/README.md` and RESULTS.md use). The source was a blobless sparse
+clone in `$CONNECTED_DEPS_DIR/VK-GL-CTS-sparse`. Each generator was
+transcribed as a scratch script (not committed), following the source:
+
+- **R** (shader library): the case's `values` and `both` source in
+  `data/gles2/shaders/<file>.test`, parsed as `gluShaderLibrary.cpp`
+  `parseShaderSource` (:518) and `removeExtraIndentation` (:473) do. They are
+  then specialized by `modules/glshared/glsShaderLibraryCase.cpp`. A
+  `_fragment` case uses `genVertexShader` (:141) and
+  `specializeFragmentShader` (:359). A `_vertex` case uses
+  `specializeVertexShader` (:285) and `genFragmentShader` (:233). Both use
+  `genCompareOp` (:193) and `gluShaderLibrary.cpp` `genCompareFunctions`
+  (:1912).
+- **A, C, L** (`shaders.operator.*`): `ShaderOperatorCase::ShaderOperatorCase`
+  (`modules/gles2/functional/es2fShaderOperatorTests.cpp:590`-`745`), with
+  the operator string, input types, scale and bias of the case's table row
+  (cited per reference below). The case name is built at `:1915`-`2090`.
+  `de::floatToString(x, 2)` is `std::fixed`, two digits
+  (`framework/delibs/decpp/deStringUtil.cpp:119`).
+- **G** (`shaders.random.*`): the generator itself. VK-GL-CTS's
+  `framework/randomshaders/rsg*.cpp` was built on the host (without
+  `rsgProgramExecutor.cpp` and `rsgTest.cpp`) with a small main that sets
+  the group's `rsg::ProgramParameters` as
+  `es2fRandomShaderTests.cpp` (`createRandomShaderCase` :38, the groups
+  :84 and :175) does. The main prints `rsg::Shader::getSource()` of
+  both stages, as `glsRandomShaderCase.cpp:142`/`:514` uses them.
+- **U** (`uniform_api.*`): `UniformCase::writeUniformDefinitions`,
+  `generateVertexSource` and `generateFragmentSource`
+  (`es2fUniformApiTests.cpp:1135`, `:1237`, `:1263`) for
+  `UniformCollection::basic(TYPE_BOOL)` (`:345`). The `value.assigned`
+  value is the case's first `de::Random::getBool()`, seeded
+  `deStringHash("bool_vertex") ^ 0` (`:1899`, the default
+  `--deqp-base-seed` of 0), which gives `true`. `value.initial` compares
+  with `false` (`FEATURE_UNIFORMVALUE_ZERO`, `:2103`).
+
+**Command** (the same for all 25; a Mesa 26.2.1 build from
+`tools/mali/drm_shim_ref.sh build` of the tarball checked against
+`third_party/mesa-26.2.1/UPSTREAM`, in `$CONNECTED_DEPS_DIR/mesa-shim`):
+
+```sh
+tools/mali/drm_shim_ref.sh run $CONNECTED_DEPS_DIR/mesa-shim \
+    tools/mali/testdata/deqp_intval_<name>.vert tools/mali/testdata/deqp_intval_<name>.frag out/deqp_intval_<name>
+tools/mali/pan_ref_diff.py extract out/deqp_intval_<name>.trace --draw > tools/mali/testdata/deqp_intval_<name>.expect.json
+```
+
+gl_ref.py's default draw: 64x64, triangles, no `--uniform-values`. gl_ref.py
+sets no `bool` uniform, and a uniform's value does not change the program.
+The 25 were drawn twice and the two sets of `expect.json` are byte-identical.
+
+| reference | dEQP-GLES2 case (`functional.`) | source | what it pins |
+|---|---|---|---|
+| `reslib_float_fs` | `shaders.swizzles.vector_swizzles.mediump_vec3_xyyx_fragment` | `swizzles.test:678`, rebuilt | step 1 (R): the float-only `isOk` chain, all 16-bit: `FCMP_OR.v2f16.ge.m1` per check, `LSHIFT_AND.v2i16` for `all()` and `&&`, `MUX.v2i16` for `vec4(RES, RES, RES, 1.0)`. The study's `mediump_vec3_xyz_fragment` does not refuse with this text in the tree. |
+| `reslib_int_fs` | `shaders.conversions.scalar_to_scalar.float_to_int_fragment` | `conversions.test:28`, rebuilt | step 1 (R): an int `isOk`, `F32_TO_S32.rtz` of the fp32 load (it stays f32), `ICMP_OR.u32.eq.m1` against the `ref_out0` FAU word, the 32-bit mask straight into `MUX.v2i16 ... r0.h00` |
+| `reslib_bvec_fs` | `shaders.swizzles.vector_swizzles.mediump_bvec3_xyz_fragment` | `swizzles.test:5067`, rebuilt | step 1 (R): `bool(v)` is `FCMP_OR.v2f16.ne.m1`, `bvec3 == bvec3` is `ICMP_OR.v2u16.eq.m1` of 16-bit masks, then `LSHIFT_AND.v2i16`. 108 bvec swizzle FS cases. |
+| `reslib_mixed_fs` | `shaders.conversions.vector_combine.bool_float_int_to_ivec3_fragment` | `conversions.test:4642`, rebuilt | step 1 (`mask_op`): a 16-bit mask (`FCMP_OR.v2f16.ne.m1`) widened (`IADD.v2u16 .h00`) into `CSEL.u32.eq` for `ivec3(bool)`, `F16_TO_S32` of `v_in2 * 1.0025`, `ICMP_AND.u32.eq.m1` and `LSHIFT_AND.i32` of 32-bit masks, then `MUX.v2i16` |
+| `reslib_int_vs` | `shaders.conversions.scalar_to_scalar.float_to_int_vertex` | `conversions.test:28`, rebuilt | step 2 (R, VS): `float(int(x))` folds to `FROUND.f32.rtz` (no int op is left in the VS); the FS is the float `isOk(float, int)` of `genFragmentShader` |
+| `opfs_add_int_mediump` | `shaders.operator.binary_operator.add.mediump_int_fragment` | `es2fShaderOperatorTests.cpp:1574`, rebuilt | step 1 (A): `F32_TO_S32.rtz` of each f32 lane, `IADD.s32`, `S32_TO_F32`, then the fp16 scale and bias (`FMA.v2f16`) |
+| `opfs_mul_ivec4_highp` | `shaders.operator.binary_operator.mul.highp_ivec4_fragment` | `:1598`, rebuilt | step 1 (A): `IMUL.i32` per lane, 2 varying slots |
+| `opfs_sub_assign_ivec2_lowp` | `shaders.operator.binary_operator.sub_assign_effect.lowp_ivec2_fragment` | `:1632`, rebuilt | step 1 (A): `ISUB.s32`, lowp ints with mediump interpolators |
+| `opfs_div_int_mediump` | `shaders.operator.binary_operator.div.mediump_int_fragment` | `:1610`, rebuilt | step 1 (A): the 32-bit `nir_lower_idiv` sequence (`IABS`, `F32_TO_U32`, `FRCP.f32`, `IMUL`, `ICMP_OR.u32.ge`, `LSHIFT_XOR`, 67 words) |
+| `opfs_cmp_ivec3` | `shaders.operator.int_compare.lessThan.mediump_ivec3_fragment` | `:1862`, rebuilt | step 1 (C): `ICMP_OR.s32.lt.m1` per lane, `MUX.v2i16` for `vec3(bvec3)` |
+| `opfs_equal_bvec2` | `shaders.operator.binary_operator.equal.bvec2_fragment` | `:1712`, rebuilt | step 1 (C): `greaterThan` is `FCMP_OR.v2f16.lt.m1`, `bvec2 == bvec2` is `ICMP_OR.v2u16.eq.m1` and `LSHIFT_AND.v2i16` |
+| `opfs_logical_xor` | `shaders.operator.binary_operator.logical_xor.bool_fragment` | `:1726`, rebuilt | step 1 (L): `LSHIFT_XOR.v2i16` of two fp16 masks |
+| `opfs_not` | `shaders.operator.unary_operator.not.bool_fragment` | `:1529`, rebuilt | step 1 (L): no integer op is left. `float(!(x > 0.0))` is one `FCMP_OR.v2f16.ge.f1` (a compare with a 1.0/0.0 result). |
+| `opvs_add_int_highp` | `shaders.operator.binary_operator.add.highp_int_vertex` | `:1574`, rebuilt | step 2 (A): `IADD.s32` in the varying program; the colour's fp16 `FMA.v2f16` then `F16_TO_F32` |
+| `opvs_mul_ivec3_mediump` | `shaders.operator.binary_operator.mul.mediump_ivec3_vertex` | `:1598`, rebuilt | step 2 (A): `IMUL.i32` per lane |
+| `opvs_div_ivec2_highp` | `shaders.operator.binary_operator.div.highp_ivec2_vertex` | `:1610`, rebuilt | step 2 (A): the idiv sequence twice (144 words of varying program) |
+| `opvs_post_increment_int` | `shaders.operator.unary_operator.post_increment_effect.highp_int_vertex` | `:1543`, rebuilt | step 2 (A): `res++` is `IADD_IMM.i32` |
+| `opvs_less_ivec4` | `shaders.operator.int_compare.lessThan.highp_ivec4_vertex` | `:1862`, rebuilt | step 2 (C): `ICMP_OR.s32.lt.m1` and `CSEL.u32.eq` to 1.0/0.0 per lane. `binary_operator.less` has only scalar cases; this is the study's `less_ivec4`. |
+| `opvs_not_equal_bvec3` | `shaders.operator.binary_operator.not_equal.bvec3_vertex` | `:1718`, rebuilt | step 2 (C): the VS's mediump compare is fp16 too (`FCMP_OR.v2f16.lt.m1`), `ICMP_OR.v2u16.ne.m1`, `LSHIFT_OR.v2i16` for `any`, `S16_TO_S32` then `CSEL.u32.eq` |
+| `opvs_logical_and` | `shaders.operator.binary_operator.logical_and.bool_vertex` | `:1722`, rebuilt | step 2 (L): `(a > 0.0) && (b > 0.0)` is rewritten to `min(a, b) > 0.0`: `FMIN.v2f16` and one `FCMP_OR.v2f16.lt.m1`, with no `iand` |
+| `rsg_constbool_vs` | `shaders.random.conditionals.vertex.11` | rsg, seed 11, rebuilt | step 2 item 1 (`ConstBool`): `vec4(true, 1, 1.0, true)` folds. `v_color` is a constant, so Mesa's link drops the varying program and the FS stores the constant from the FAU. The study-varylink constant-lane rule applies too. |
+| `rsg_conv_vs` | `shaders.random.scalar_conversion.vertex.2` | rsg, seed 2, rebuilt | step 2 item 1: bool and int literals, `int(bool(1))`, `float(true)` and the int globals all fold. Only `FMA.f32`/`FADD.f32` of the attributes are left. |
+| `rsg_cond_fs` | `shaders.random.conditionals.fragment.18` | rsg, seed 18, rebuilt | step 1 (G, FS): mediump `int` uniforms, `vec4(int)` is `S32_TO_F32` of the FAU word, the bool constants fold. The VS's varyings are dead and dropped. |
+| `uniapi_bool_vs` | `uniform_api.value.assigned.by_value.render.basic.bool_vertex` | `es2fUniformApiTests.cpp:1135`/`:1237`, rebuilt (value `true`) | step 2 (U): `compare_bool(u_var, true)` is one `CSEL.u32.eq` on the bool FAU word. The FS reads `v_vtxOut` as `src_flat32`. |
+| `uniapi_bool_initial_vs` | `uniform_api.value.initial.render.basic.bool_vertex` | as above, value `false` | step 2 (U): the same program with the `CSEL` sources swapped |
+
+What the references do not cover, and why:
+
+- **`uniapi_ivec_vs`** (study section 4) was not made. No `int`/`ivec`
+  `uniform_api` case has this refusal in the tree. All 72 `uniform_api.value.*`
+  rows with it are `bool` or `bvec4` (the `basic`, `basic_struct`,
+  `array_in_struct`, `struct_in_array` and `nested_structs_arrays`
+  collections). The struct ones (`bool_bvec4_*`) are for after
+  study-uniarray's struct uniforms.
+- **`rsg_constbool_vs` and `rsg_cond_fs`** get their result from Mesa's link:
+  the constant varying is moved into the FS, or the dead varyings are
+  removed. `tests/mali_ref` does not reach our constant-lane path
+  (`vs_constants`, see its module comment). lower-intval-2 may need the unit
+  tests of `src/shaderc/online/mali/tests.rs` for the first.
+- Only a sample of the rsg groups (G) and of `fragment_ops.interaction` was
+  taken. The measure's per-shape counts say whether more are needed.
