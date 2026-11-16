@@ -305,6 +305,9 @@ through a shifted swizzle) is measured there too.
 
 ### 3.3 The indexing loops (F10): what the source says, to be measured
 
+(Measured since, in section 7, "What the references settle": the
+`tmp_array` loops are gone, but a `vector_subscript` loop is kept.)
+
 For `for (int i = 0; i < ui_four; i++) arr[i] = T(coords); coords *= 0.5;`
 over `arr[4]`: the bound is not constant, so there is no limiting
 terminator; `guess_loop_limit` gives 4 from the deref; `partial_unroll`
@@ -527,7 +530,9 @@ leftover loop dead), then the subscripts are study-uniarray's static
 forms. If it has one: F1's kept loop with an `IndexedLocal` select ladder
 inside (`stored_lanes` lifted for a local whose index is the counter).
 The ES 1.00 cases set `ui_four = 4`, equal to the array length, so either
-output draws the same picture.
+output draws the same picture. Measured (section 7): the `tmp_array`
+references have no loop and no read of `ui_four`, but the
+`vector_subscript` one keeps both loops.
 
 References for step 2:
 
@@ -585,4 +590,142 @@ checked against its reference in the same commit).
   points of `mali-vs-loops.md` section 6, still open.
 - The do-while test-before-body rotation is measured in the vertex stage
   only; the fragment stage's form (`deqp_loops_fs_dowhile_uni`) is assumed
-  the same NIR rewrite.
+  the same NIR rewrite. (Measured since, in section 7: it is.)
+
+## 7. References (item ref-loops, made 2026-11-16)
+
+Each reference is `tools/mali/testdata/deqp_loops_<name>.{vert,frag,expect.json}`.
+The shaders are dEQP-GLES2's text (Khronos, Apache-2.0), and each has a
+`.license` sidecar that names the case and the generator lines. There are 26
+references for the 27 names of section 5. `deqp_loops_vs_position` was not
+made, as section 5 allows: #367's `gm2_cf_loop_uni_vs` is that shape. It is
+a vertex loop with an int-uniform bound that feeds `gl_Position`, and its
+loop is in the **position** program (51 instructions, 1 loop; the varying
+program is empty). It was made again with this build and came out byte-identical.
+
+**Source.** The tip's `tools/mali/testdata/deqp_shapes/` has no pair for any
+of the 26 cases. Every pair was therefore **rebuilt** from VK-GL-CTS
+`5bb4c7e8` (main, 2026-11-16), substituting the templates the way
+`StringTemplate` does:
+
+- `L` = `modules/gles2/functional/es2fShaderLoopTests.cpp`:
+  `createGenericLoopCase` `:284-492` for the `basic_*` cases;
+  `createSpecialLoopCase` `:495-1273` for the rest, with the bodies at the
+  lines in the table.
+- `I` = `modules/gles2/functional/es2fShaderIndexingTests.cpp`:
+  `createTmpArrayCase` `:523-708` and `createVectorSubscriptCase` `:738-931`.
+- The uniform names are from `getIntUniformName` /
+  `getFloatFractionUniformName` (`modules/glshared/glsShaderRenderCase.cpp:872-950`).
+
+The rebuild was checked against the measure's verbatim `.qpa` text. All
+seven `deqp_shapes/loops_*` pairs that come from these two generators
+(`loops_fs_kept_while`, `loops_fs_kept_do_while`, `loops_fs_past_limits`,
+`loops_fs_unrolled_break`, `loops_vs_for_dynamic`, `loops_vs_while`,
+`loops_vs_do_while`; 14 files) came out byte-identical. That covers the
+generic and the special generators and all three loop types. The tab
+characters dEQP writes (`\t` before a `while`/`do` counter) are kept.
+
+**Command** (the same for all 26):
+
+```sh
+LLVM_DIR=/usr/lib/llvm-21 tools/mali/drm_shim_ref.sh build \
+    $CONNECTED_DEPS_DIR/downloads/mesa-26.2.1.tar.xz $CONNECTED_DEPS_DIR/mesa-shim   # once
+tools/mali/drm_shim_ref.sh run $CONNECTED_DEPS_DIR/mesa-shim \
+    tools/mali/testdata/deqp_loops_<name>.vert tools/mali/testdata/deqp_loops_<name>.frag <out>/deqp_loops_<name>
+python3 -I tools/mali/pan_ref_diff.py extract <out>/deqp_loops_<name>.trace --draw \
+    > tools/mali/testdata/deqp_loops_<name>.expect.json
+```
+
+The tarball's sha256 matches `third_party/mesa-26.2.1/UPSTREAM`. The draw
+is gl_ref.py's default: 64x64, triangles, **no `--uniform-values`**. That is
+how `gm2_intloop_*` were made: the build gives `gm2_intloop_uniform_fs` and
+`gm2_intloop_const_vs` again byte for byte, apart from the uniforms' FAU
+words when `--uniform-values` is passed. gl_ref.py does not set a `bool`
+uniform (`ub_true`), and a uniform's value does not change the program, so
+every uniform FAU word in these references is 0. The build was checked
+first: `gm2_cf_loop_uni_vs` and `gm2_cf_ifelse_fs`, made with
+`--uniform-values` as they were, are byte-identical. All 26 references were
+made twice, and the two sets of `expect.json` are byte-identical.
+`deqp_ref.sh` was not used, because it always passes `--uniform-values`.
+
+**Comparing.** A kept loop (`loops` 1 or 2 below) carries the pass counter
+the walk adds (`mali-loop-board-failures.md`), which these words do not
+have. Such a reference is compared in `src/shaderc/online/mali/tests.rs`
+with `CapEdit`, not through `tests/mali_ref/mod.rs` (section 5). The others
+are plain byte compares. `mod.rs` computes the FAU words for
+`--uniform-values`, so a test with these references must expect 0 for
+every uniform word.
+
+### Step 1 (lower-loops-1)
+
+`instrs/loops` are the shaderdb counts of the program the shape is about
+(`vary` = the vertex varying program, `frag` = the fragment program). The
+position program of every reference is the same 24-word pass-through. The
+"`I`" lines in the source column are the case's own lines in the generator.
+
+| reference | dEQP-GLES2 case (`functional.shaders.`) | source (rebuilt) | instrs/loops | what it pins |
+|---|---|---|---|---|
+| `vs_for_const` | `loops.for_constant_iterations.basic_mediump_int_vertex` | `L:284-492` (for `:418-424`) | vary 11/0 | (a) the vertex unroll. Three `yzwx` rotations fold into the store order: no fp16 conversion is left, and the three lanes of the fp32 attribute are stored as `.wxy` |
+| `vs_while_const` | `loops.while_constant_iterations.single_statement_vertex` | `L:796-798`, `WHILE_LOOP` `:965-967` | vary 11/0 | (a) `while(i++ < 3)`: the same words as `vs_for_const` |
+| `vs_dowhile_const` | `loops.do_while_constant_iterations.post_increment_vertex` | `L:1069-1073` | vary 11/0 | (a) the test after the body, 4 passes (`i++ < 3`) |
+| `vs_nested_const` | `loops.for_constant_iterations.nested_sequence_vertex` | `L:702-711` | vary 11/0 | (a) nested and sequenced constant loops, 9 passes |
+| `vs_idx_static` | `indexing.tmp_array.vec4_static_loop_write_static_loop_read_vertex` | `I:523-708` (`:602-609`, `:636-640`) | vary 30/0 | (a) F11: an unrolled array write and read, constant subscripts, fp16 round trips (`V2F32_TO_V2F16`, `F16_TO_F32`) |
+| `fs_for_uni` | `loops.for_uniform_iterations.basic_mediump_int_fragment` | `L:284-492` | frag 17/1 | (b) the mediump kept loop: `MOV.i32` of the carried pair, `ICMP_OR.s32.ge.m1` against `u2.w0`, `BRANCHZ` exit, two `MKVEC.v2i16` for `yzwx`, `IADD_IMM` counter, the back edge |
+| `fs_while_uni` | `loops.while_uniform_iterations.basic_mediump_int_fragment` | `L:284-492` (while `:425-433`) | frag 17/1 | (b) the same words as `fs_for_uni` |
+| `fs_dowhile_uni` | `loops.do_while_uniform_iterations.basic_mediump_int_fragment` | `L:284-492` (do `:434-442`) | frag 18/1 | (b) the do-while rotation in the fragment stage: the counter's `IADD_IMM` comes before the compare, and the exit takes the pre-rotation pair (a third `MKVEC.v2i16` after the loop) |
+| `fs_float_uni` | `loops.for_uniform_iterations.basic_mediump_float_fragment` | `L:284-492` | frag 17/1 | (b) F7: an fp16 float counter (`FADD.v2f16`, `FCMP_OR`) against `uf_one` |
+| `fs_101` | `loops.for_constant_iterations.101_iterations_fragment` | `L:680-683` | frag 18/1 | (b) F4: kept. The constant 101 is a FAU word (`u2.w0` = `0x65`), and the program has the words of `fs_dowhile_uni` (Mesa's first pass is unconditional, so the `for` rotates). It is not unrolled to 101 |
+| `fs_dowhile_if` | `loops.do_while_uniform_iterations.conditional_body_fragment` | `L:1151-1154` | frag 22/1 | (b) F5: a do-while with an `if` in its body is kept. The `if` is `MUX.v2i16` selects, not a branch |
+| `fs_uncond_break` | `loops.for_uniform_iterations.unconditional_break_fragment` | `L:656-659` | frag 13/0 | (b) F6: no loop (`wrapper_unroll`), one `ICMP_OR` on `ui_three` and three `MUX.v2i16` |
+| `fs_select` | `loops.for_uniform_iterations.select_iteration_count_fragment` | `L:628-630` | frag 19/1 | (b) F3: kept. The bound is `CSEL.u32.eq` of the bool uniform's word (`u2.w0`) between `ui_three` (`u2.w1`) and 0, computed in the loop header |
+
+### Step 2 (lower-loops-2)
+
+| reference | dEQP-GLES2 case (`functional.shaders.`) | source (rebuilt) | instrs/loops | what it pins |
+|---|---|---|---|---|
+| `vs_for_uni` | `loops.for_uniform_iterations.basic_mediump_int_vertex` | `L:284-492` | vary 24/1 | (a) a kept vertex loop in the varying program: `V2F32_TO_V2F16` pairs, the same loop as `fs_for_uni` against `u5.w1`, `F16_TO_F32` per stored lane |
+| `vs_dowhile_uni` | `loops.do_while_uniform_iterations.basic_mediump_int_vertex` | `L:284-492` | vary 24/1 | (a) the vertex do-while rotation (`loop_uniform.dowhile.vert`'s shape, now with words) |
+| `vs_float_uni` | `loops.for_uniform_iterations.basic_highp_float_vertex` | `L:284-492` | vary 24/1 | (a) F7, vertex: a highp float counter (`FCMP_OR` against `uf_one`) |
+| `vs_select` | `loops.for_uniform_iterations.select_iteration_count_vertex` | `L:628-630` | vary 26/1 | (a) F3, vertex: the `CSEL` bound of `ub_true` |
+| `vs_vector` | `loops.for_uniform_iterations.vector_counter_vertex` | `L:675-678` | vary 24/1 | (a) F8: the `ivec4` counter is one scalar phi. The words are the same as `vs_for_uni` |
+| `fs_cond_break` | `loops.for_uniform_iterations.conditional_break_fragment` | `L:651-654` | frag 19/1 | (b) F2: there is no second exit edge. The break folds into the head's exit test: `ICMP_OR.u32.eq.m1` of the counter and `ui_two` (two run-time ints), `LSHIFT_OR.i32` with the bound's mask, one `BRANCHZ` |
+| `fs_cond_continue` | `loops.for_uniform_iterations.conditional_continue_fragment` | `L:632-635` | frag 21/1 | (b) F2: the `continue` becomes `MUX.v2i16` selects, with no branch |
+| `fs_double_continue` | `loops.for_uniform_iterations.double_continue_fragment` | `L:646-649` | frag 21/1 | (b) the same words as `fs_cond_continue` |
+| `fs_mixed` | `loops.for_uniform_iterations.mixed_break_continue_fragment` | `L:669-673` | frag 23/1 | (b) `if (i == 0) continue; else if (i == 3) break;`. The break folds into the exit test (`ICMP_AND.u32.eq` against a byte-lane 3, gated by `i != 0`, then `LSHIFT_OR` with the bound's mask). The continue becomes four `MUX.v2i16` on `i != 0` |
+| `fs_inf_break` | `loops.for_uniform_iterations.infinite_with_conditional_break_fragment` | `L:594-598` | frag 18/1 | (b) F5: the head `if (i == ui_one) break;` |
+| `fs_idx_dyn` | `indexing.tmp_array.float_dynamic_loop_write_static_read_fragment` | `I:523-708` (`:612-618`, `:622-628`) | frag 11/0 | (c) F10, a `tmp_array`: **no loop and no read of `ui_four`**. The program is the static sum (`FMA.v2f16` by 0.5, 0.25, and the `0x30003000` FAU constant) |
+| `vs_idx_dyn` | `indexing.tmp_array.float_dynamic_loop_write_static_read_vertex` | `I:523-708` | vary 23/0 | (c) F10, vertex: the same, with no loop |
+| `fs_vec_dyn` | `indexing.vector_subscript.vec4_dynamic_loop_subscript_write_dynamic_loop_subscript_read_fragment` | `I:738-931` (`:836-842`, `:885-888`) | frag 44/2 | (c) F10, a vector subscript: **both loops kept**. The write is an `ICMP_OR.u32.eq` ladder against byte-lane constants into `MUX.v2i16`, and the read is an `ICMP_OR.s32.lt` ladder |
+
+### What the references settle
+
+- **F10 is two shapes.** For an *array* subscripted by the counter
+  (`tmp_array`, and by the same rule `matrix_subscript`, `uniform_array`,
+  `varying_array`), the first measured case leaves no loop: the
+  `guess_loop_limit`/`partial_unroll` copies are left. The copies'
+  guards on `ui_four` also go, because a guarded-off element is undefined.
+  What remains is the `static_loop` program (step 2c: a transcription, no
+  kept loop). A *vector* subscript keeps its loops (`fs_vec_dyn`), with the
+  index ladders inside: F1 plus `IndexedLocal` in a kept loop. Only the
+  `tmp_array` case was drawn; the matrix, uniform-array and varying-array
+  `dynamic_loop` cases are expected to follow the array rule, and the
+  measure's `loops_fs_kept_for_index` / `loops_vs_for_index` pairs
+  (`matrix_subscript`) are the ones to draw to confirm it.
+- **F2 has no second exit edge in dEQP's forms.** In `fs_cond_break` and
+  `fs_mixed`, the `break` behind `i == N` is OR-ed into the loop's single
+  exit test, and a `continue` becomes `MUX.v2i16` selects. Step 2b's
+  "second exit edge with phi copies" is therefore not needed for these
+  cases. What they need is the 32-bit `ICMP_OR`/`ICMP_AND` of the counter
+  and `LSHIFT_OR` into the exit mask.
+- **The fragment do-while** rotates as the vertex one does
+  (`fs_dowhile_uni`). `fs_101` is the same program, because a `for` whose
+  first test is known to pass gets the same rotation.
+- **Same words from different forms:** `for`/`while` (`fs_for_uni` =
+  `fs_while_uni`, `vs_for_const` = `vs_while_const`), the `ivec4` counter
+  (`vs_vector` = `vs_for_uni`), and one or two `continue`s
+  (`fs_cond_continue` = `fs_double_continue`). They are kept as separate
+  references because each pins a different front-end path to the same
+  words.
+- **The constant vertex loops** need no fp16 at all: the rotations of a
+  mediump copy of a highp attribute fold into the store order
+  (`vs_for_const`, 11 words).
