@@ -35,8 +35,8 @@
 #            CONSOLE, UART_CONSOLE, PRINTK, STDOUT_CONSOLE: UART_CONSOLE
 #            depends on SERIAL and CONSOLE, which the sample's prj.conf does
 #            not set, so a bare -DCONFIG_UART_CONSOLE=y may be dropped by
-#            Kconfig with a warning) and -DCONFIG_GC_COMMON_PANEL_CONSOLE=n; IMX8MP_DUMP_CONSOLE=panel leaves the sample's
-#            conf (a camera photograph of the panel, no UART value). A
+#            Kconfig with a warning) and -DCONFIG_GC_COMMON_PANEL_CONSOLE=n;
+#            IMX8MP_DUMP_CONSOLE=panel leaves the sample's conf (a camera photograph of the panel, no UART value). A
 #            directory that exists is refused, never reused. Environment as
 #            tools/cts/common-images.sh and imx8mp-env.sh: ZEPHYR_WS,
 #            GLMARK2_SRC, WEST_VENV (or ZEPHYR_VENV), ZEPHYR_SDK_INSTALL_DIR,
