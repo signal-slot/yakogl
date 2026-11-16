@@ -216,6 +216,15 @@ impl VaryingConsts {
         &self.at[..self.n]
     }
 
+    /// Lane `comp` of varying `location` is no constant after all
+    /// ([`VaryingConsts::push`] undone; its flat or equal tags stay).
+    pub fn remove(&mut self, location: u8, comp: u8) {
+        if let Some(i) = self.as_slice().iter().position(|e| e.0 == location && e.1 == comp) {
+            self.at.copy_within(i + 1..self.n, i);
+            self.n -= 1;
+        }
+    }
+
     /// These lanes at the varying locations of the program's fragment
     /// shader: `at` gives the fragment location of the varying at a vertex
     /// location, paired by name as Mesa's link pairs the stages, None when
