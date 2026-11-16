@@ -796,7 +796,7 @@ FREE=$(ssh "df -B1 --output=avail /boot | tail -n 1")
 python3 -I tools/mp2s_image_check.py "$IMG" --free-bytes "$FREE"
 python3 -I tools/efi_varfile.py --fwu "$LOG/ubootefi.var"    # must print: fwu-trial: absent
 tools/fwu_metadata.py (pending)                              # the booted bank is accepted
-tools/mp2s_bootfs_check.py (pending)                         # /boot is the microSD's bootfs
+python3 -I tools/mp2s_bootfs_check.py --findmnt F --lsblk F --blkid F --disk-type F   # /boot is the microSD's bootfs
 tools/mp2s_fwenv_check.py (pending)                          # fw_env.config reaches the microSD
 tools/mp2s_boot_manifest.py record (pending)                 # sha256 of every file under /boot
 ```
