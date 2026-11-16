@@ -160,7 +160,7 @@ fn check_cnd(meant: &SelGroup, m: MachineOp, g: &Group) -> Result<usize, Mismatc
         MachineOp::CndInit => ("cndst", 1, "always"),
         MachineOp::CndEnter => ("cndst", 2, "always"),
         MachineOp::CndLeave => ("cndsm", 0, "p0_false"),
-        MachineOp::CndIf => ("cndst", 1, "p0_false"),
+        MachineOp::CndIf | MachineOp::CndIfMasked => ("cndst", 1, "p0_false"),
         MachineOp::CndElse => ("cndef", 1, "always"),
         MachineOp::CndIfEnd => ("cndend", 1, "always"),
         _ => ("cndlt", 2, "always"),

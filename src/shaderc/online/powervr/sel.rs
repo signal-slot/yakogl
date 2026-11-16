@@ -558,6 +558,11 @@ pub enum MachineOp {
     /// clear -- the condition held, the then arm's -- stay active
     /// (`pcnd p0_false`).
     CndIf,
+    /// [`MachineOp::CndIf`] for an `if` whose arms cannot be predicated (a
+    /// nested `if`, a look-up, a varying read, a derivative...): the same
+    /// `cndst 1 p0_false`, but `choose_if_lowering` never takes its mask
+    /// out, since the predicated form is not one such arms have.
+    CndIfMasked,
     /// The branched `if`'s other arm (`cndef 1`): the active instances and
     /// the inactive ones of this level change places.
     CndElse,
@@ -578,6 +583,7 @@ impl MachineOp {
                 | MachineOp::CndLeave
                 | MachineOp::CndLoopEnd
                 | MachineOp::CndIf
+                | MachineOp::CndIfMasked
                 | MachineOp::CndElse
                 | MachineOp::CndIfEnd
         )
@@ -621,6 +627,7 @@ impl SelOp {
                 | MachineOp::CndLeave
                 | MachineOp::CndLoopEnd
                 | MachineOp::CndIf
+                | MachineOp::CndIfMasked
                 | MachineOp::CndElse
                 | MachineOp::CndIfEnd,
             ) => 1,

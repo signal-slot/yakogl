@@ -348,7 +348,7 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
                 MachineOp::CndLeave => cnd(Cnd::Sm, 0, "p0_false", &[src, special(0), special(2)], emc),
                 MachineOp::CndLoopEnd => cnd(Cnd::Lt, 2, "always", &[src], emc),
                 /* a branched `if` (pco_cf.c lower_if_cond_exec), each by 1 */
-                MachineOp::CndIf => cnd(Cnd::St, 1, "p0_false", &[src], emc),
+                MachineOp::CndIf | MachineOp::CndIfMasked => cnd(Cnd::St, 1, "p0_false", &[src], emc),
                 MachineOp::CndElse => cnd(Cnd::Ef, 1, "always", &[src], emc),
                 MachineOp::CndIfEnd => cnd(Cnd::End, 1, "always", &[src], emc),
                 _ => Err(BuildError::Unsupported("an execution-mask operation the builder does not know")),
@@ -1281,6 +1281,112 @@ pub fn pad_group(g: &mut Group, pad: usize) -> Result<(), BuildError> {
     Ok(())
 }
 
+/// `if`s nested deeper than this are refused by the assembler.
+const MAX_ARMS: usize = 16;
+
+/// One arithmetic group as [`Arithmetic`] places it in `arm` (the innermost
+/// open arm and whether its `if` is branched): a predicated arm's groups
+/// take its condition, and a read of the pixel waits for the output lock.
+fn build_in_arm(g: &super::sel::SelGroup, arm: Option<(super::sel::PredArm, bool)>) -> Result<Group, BuildError> {
+    use super::sel::PredArm;
+    let mut built = build_group(g)?;
+    /* a read of the pixel (an integer target's masked channels,
+     * `chain::pack_int_output`) waits for the output lock, as every pixel
+     * output reference of pco's does (`ref_needs_olchk`) */
+    if reads_pixout(g) {
+        built.hdr.set("olchk", 1).map_err(|_| BuildError::Unsupported("no olchk in the header"))?;
+    }
+    if let Some((arm, false)) = arm {
+        /* the then arm runs where the condition held: p0, set by the tstz
+         * where it is zero, is clear there */
+        let cc = match arm {
+            PredArm::Then => "if(!p0)",
+            _ => "if(p0)",
+        };
+        let v = super::shapes::value(super::isa::BitSetId::IgrpHdr, "cc", cc)?;
+        built
+            .hdr
+            .set("cc", v)
+            .map_err(|_| BuildError::Unsupported("a group whose header takes no execution condition"))?;
+    }
+    Ok(built)
+}
+
+/// Does the arm that starts at group `from` hold a group, up to the next
+/// marker of its own `if`? Markers build nothing; every other group of an
+/// arm builds one (a loop edge, the one that builds none, is refused in an
+/// arm), so this is "the arm builds bytes".
+fn arm_has_groups(groups: &[super::sel::SelGroup], from: usize) -> bool {
+    use super::sel::{PredArm, SelOp};
+    let mut depth = 0usize;
+    for g in groups.iter().skip(from) {
+        match g.op {
+            SelOp::Pred(PredArm::Then) => depth += 1,
+            SelOp::Pred(PredArm::End) if depth > 0 => depth -= 1,
+            SelOp::Pred(_) if depth == 0 => return false,
+            SelOp::Pred(_) => {}
+            _ => return true,
+        }
+    }
+    false
+}
+
+/// The bytes of the arm that starts at group `from` as [`Arithmetic`]
+/// places it, up to the next marker of its own `if`: each group as
+/// [`build_in_arm`] builds it, the `cndef` built with an else marker, and a
+/// branch past each nested branched arm that holds a group. One pass, with
+/// no recursion: an earlier form assembled the arm again, and each level of
+/// nesting stacked another assembler (459,704 bytes of stack for 30 nested
+/// `if`s, stack_survey.rs). A group's length does not depend on where it is
+/// placed (no loop edge in an arm), nor a branch's on its offset (a fixed
+/// field, checked by [`Arithmetic::skip_arm`]).
+fn arm_bytes(groups: &[super::sel::SelGroup], from: usize) -> Result<usize, BuildError> {
+    use super::sel::{MachineOp, PredArm, SelOp};
+    let br_len = super::cf::branch_none_active(0x40)?.total;
+    /* the `if`s opened inside the arm, innermost last; the arm itself is
+     * branched (only a branched arm is measured) */
+    let mut arms = [(PredArm::Then, true); MAX_ARMS];
+    let mut depth = 0usize;
+    let mut after_cnd_if = false;
+    let mut bytes = 0usize;
+    let mut k = from;
+    while let Some(g) = groups.get(k) {
+        k += 1;
+        let cnd_if = matches!(g.op, SelOp::Machine(MachineOp::CndIf | MachineOp::CndIfMasked));
+        match g.op {
+            SelOp::Pred(PredArm::Else | PredArm::End) if depth == 0 => break,
+            SelOp::Pred(PredArm::Then) => {
+                let slot = arms.get_mut(depth).ok_or(BuildError::Unsupported("`if`s nested too deeply"))?;
+                *slot = (PredArm::Then, after_cnd_if);
+                depth += 1;
+                if after_cnd_if && arm_has_groups(groups, k) {
+                    bytes += br_len;
+                }
+            }
+            SelOp::Pred(PredArm::Else) => {
+                let branched = arms[depth - 1].1;
+                arms[depth - 1] = (PredArm::Else, branched);
+                if branched {
+                    if groups.get(k).map(|x| x.op) == Some(SelOp::Machine(MachineOp::CndElse)) {
+                        bytes += build_group(&groups[k])?.total;
+                        k += 1;
+                    }
+                    if arm_has_groups(groups, k) {
+                        bytes += br_len;
+                    }
+                }
+            }
+            SelOp::Pred(PredArm::End) => depth -= 1,
+            _ => {
+                let arm = depth.checked_sub(1).map(|d| arms[d]).unwrap_or((PredArm::Then, true));
+                bytes += build_in_arm(g, Some(arm))?.total;
+            }
+        }
+        after_cnd_if = cnd_if;
+    }
+    Ok(bytes)
+}
+
 /// The arithmetic of a program, group by group, with its loops placed: a
 /// [`SelOp::LoopBegin`](super::sel::SelOp::LoopBegin) is the address of the
 /// group after it and emits nothing; a
@@ -1303,10 +1409,12 @@ struct Arithmetic<'s> {
     after_test: bool,
     /// The group just built entered a branched `if` (`CndIf`).
     after_cnd_if: bool,
-    /// Inside an `if` arm ([`SelOp::Pred`](super::sel::SelOp::Pred)): the
-    /// arm, and whether the `if` is branched. A predicated arm's groups take
-    /// its `cc` until the next marker; a branched arm's take none.
-    arm: Option<(super::sel::PredArm, bool)>,
+    /// The open `if` arms ([`SelOp::Pred`](super::sel::SelOp::Pred)),
+    /// innermost last: each arm, and whether its `if` is branched. A
+    /// predicated arm's groups take its `cc` until the next marker; a
+    /// branched arm's take none. Only branched arms hold `if`s.
+    arms: [(super::sel::PredArm, bool); MAX_ARMS],
+    arm_depth: usize,
     /// A group built ahead of its turn: the branch past the else arm, after
     /// the `cndef` that switched the mask to it.
     pending: Option<Group>,
@@ -1321,29 +1429,35 @@ impl<'s> Arithmetic<'s> {
             depth: 0,
             after_test: false,
             after_cnd_if: false,
-            arm: None,
+            arms: [(super::sel::PredArm::Then, false); MAX_ARMS],
+            arm_depth: 0,
             pending: None,
         }
+    }
+
+    /// The innermost open arm.
+    fn arm(&self) -> Option<(super::sel::PredArm, bool)> {
+        self.arm_depth.checked_sub(1).map(|d| self.arms[d])
+    }
+
+    /// Every open arm is branched: no group depends on p0 to know which arm
+    /// it is in, so an `if` nested in them may set p0 and the mask.
+    fn all_arms_branched(&self) -> bool {
+        self.arms[..self.arm_depth].iter().all(|(_, b)| *b)
     }
 
     /// The branch past the arm that starts at group `from`, when it has
     /// groups: `br` taken when no instance is active
     /// ([`super::cf::branch_none_active`]), landing on the group after the
-    /// arm's last, the arm's own groups measured by building them here
-    /// (each is built again in its turn; an arm holds no marker, so neither
-    /// build depends on where it lands).
+    /// arm's last. The arm runs to the next marker of its own `if` (an `if`
+    /// nested in it is part of it); its bytes are measured by assembling it
+    /// here, nested branches included (each group is built again in its
+    /// turn; no build depends on where the branch lands).
     fn skip_arm(&self, from: usize) -> Result<Option<Group>, BuildError> {
-        use super::sel::SelOp;
-        let mut bytes = 0usize;
-        for g in &self.groups[from..] {
-            if matches!(g.op, SelOp::Pred(_)) {
-                break;
-            }
-            bytes += build_group(g)?.total;
-        }
-        if bytes == 0 {
+        if !arm_has_groups(self.groups, from) {
             return Ok(None);
         }
+        let bytes = arm_bytes(self.groups, from)?;
         /* The branch's own length does not depend on the offset's value
          * (a fixed field): built once to measure, then with the offset. */
         let probe = super::cf::branch_none_active(bytes as i64)?;
@@ -1374,14 +1488,25 @@ impl<'s> Arithmetic<'s> {
                  * arm's after the `cndef` right after its marker, and the
                  * `cndend` right after the end. */
                 SelOp::Pred(m) => {
-                    let branched = match (self.arm, m) {
-                        (None, PredArm::Then) if self.after_test => false,
-                        (None, PredArm::Then) if self.after_cnd_if => true,
-                        (Some((PredArm::Then, b)), PredArm::Else) => b,
-                        (Some((PredArm::Then | PredArm::Else, b)), PredArm::End) => b,
+                    let branched = match (m, self.arm()) {
+                        (PredArm::Then, _) if self.after_test && self.all_arms_branched() => false,
+                        (PredArm::Then, _) if self.after_cnd_if && self.all_arms_branched() => true,
+                        (PredArm::Else, Some((PredArm::Then, b))) => b,
+                        (PredArm::End, Some((PredArm::Then | PredArm::Else, b))) => b,
                         _ => return Err(BuildError::Unsupported("an `if` arm marker out of order")),
                     };
-                    self.arm = (m != PredArm::End).then_some((m, branched));
+                    match m {
+                        PredArm::Then => {
+                            let slot = self
+                                .arms
+                                .get_mut(self.arm_depth)
+                                .ok_or(BuildError::Unsupported("`if`s nested too deeply"))?;
+                            *slot = (m, branched);
+                            self.arm_depth += 1;
+                        }
+                        PredArm::Else => self.arms[self.arm_depth - 1] = (m, branched),
+                        PredArm::End => self.arm_depth -= 1,
+                    }
                     self.after_test = false;
                     self.after_cnd_if = false;
                     if !branched {
@@ -1416,15 +1541,28 @@ impl<'s> Arithmetic<'s> {
                         }
                     }
                 }
-                SelOp::LoopBegin
-                | SelOp::LoopEnd
-                | SelOp::Machine(MachineOp::LoopTest | MachineOp::Fsinc(_) | MachineOp::PselTrig)
-                    if self.arm.is_some() =>
-                {
-                    return Err(BuildError::Unsupported("a loop edge or a p0 user inside an `if` arm"));
+                SelOp::LoopBegin | SelOp::LoopEnd if self.arm_depth > 0 => {
+                    return Err(BuildError::Unsupported("a loop edge inside an `if` arm"));
                 }
-                SelOp::Machine(m) if m.is_cnd() && self.arm.is_some() => {
-                    return Err(BuildError::Unsupported("an execution-mask operation inside an `if` arm"));
+                SelOp::Machine(MachineOp::LoopTest | MachineOp::Fsinc(_) | MachineOp::PselTrig)
+                    if self.arm_depth > 0 && !self.all_arms_branched() =>
+                {
+                    return Err(BuildError::Unsupported("a p0 user inside a predicated `if` arm"));
+                }
+                SelOp::Machine(
+                    MachineOp::CndIf | MachineOp::CndIfMasked | MachineOp::CndElse | MachineOp::CndIfEnd,
+                ) if self.arm_depth > 0 && !self.all_arms_branched() => {
+                    return Err(BuildError::Unsupported("an execution-mask operation inside a predicated `if` arm"));
+                }
+                SelOp::Machine(m)
+                    if m.is_cnd()
+                        && self.arm_depth > 0
+                        && !matches!(
+                            m,
+                            MachineOp::CndIf | MachineOp::CndIfMasked | MachineOp::CndElse | MachineOp::CndIfEnd
+                        ) =>
+                {
+                    return Err(BuildError::Unsupported("a loop's execution-mask operation inside an `if` arm"));
                 }
                 SelOp::LoopBegin => {
                     let slot =
@@ -1442,7 +1580,18 @@ impl<'s> Arithmetic<'s> {
                     self.after_test = false;
                     return super::fragment::branch_back(self.open[self.depth] as i64 - at as i64).map(Some);
                 }
-                SelOp::Machine(MachineOp::CndIf)
+                /* At any depth: a `cndef` is built with its else marker (the
+                 * marker's arm above), so one met here is out of shape, and
+                 * a `cndend` comes right after its end marker. */
+                SelOp::Machine(MachineOp::CndElse) => {
+                    return Err(BuildError::Unsupported("a `cndef` that does not follow an else marker"));
+                }
+                SelOp::Machine(MachineOp::CndIfEnd)
+                    if self.next < 2 || self.groups[self.next - 2].op != SelOp::Pred(PredArm::End) =>
+                {
+                    return Err(BuildError::Unsupported("a `cndend` that does not follow an end marker"));
+                }
+                SelOp::Machine(MachineOp::CndIf | MachineOp::CndIfMasked)
                     if self.groups.get(self.next).map(|x| x.op) != Some(SelOp::Pred(PredArm::Then)) =>
                 {
                     return Err(BuildError::Unsupported("a branched `if`'s mask with no arm after it"));
@@ -1451,35 +1600,15 @@ impl<'s> Arithmetic<'s> {
                     /* The p0 the back edge reads: the loop's test, or under
                      * the execution mask the loop's end (`cndlt`). */
                     self.after_test = matches!(g.op, SelOp::Machine(MachineOp::LoopTest | MachineOp::CndLoopEnd));
-                    self.after_cnd_if = matches!(g.op, SelOp::Machine(MachineOp::CndIf));
-                    let mut built = build_group(g)?;
-                    /* a read of the pixel (an integer target's masked
-                     * channels, `chain::pack_int_output`) waits for the
-                     * output lock, as every pixel output reference of pco's
-                     * does (`ref_needs_olchk`) */
-                    if reads_pixout(g) {
-                        built.hdr.set("olchk", 1).map_err(|_| BuildError::Unsupported("no olchk in the header"))?;
-                    }
-                    if let Some((arm, false)) = self.arm {
-                        /* the then arm runs where the condition held: p0, set
-                         * by the tstz where it is zero, is clear there */
-                        let cc = match arm {
-                            PredArm::Then => "if(!p0)",
-                            _ => "if(p0)",
-                        };
-                        let v = super::shapes::value(super::isa::BitSetId::IgrpHdr, "cc", cc)?;
-                        built.hdr.set("cc", v).map_err(|_| {
-                            BuildError::Unsupported("a group whose header takes no execution condition")
-                        })?;
-                    }
-                    return Ok(Some(built));
+                    self.after_cnd_if = matches!(g.op, SelOp::Machine(MachineOp::CndIf | MachineOp::CndIfMasked));
+                    return build_in_arm(g, self.arm()).map(Some);
                 }
             }
         }
         if self.depth != 0 {
             return Err(BuildError::Unsupported("a loop with no back edge"));
         }
-        if self.arm.is_some() {
+        if self.arm_depth != 0 {
             return Err(BuildError::Unsupported("a predicated `if` arm with no end"));
         }
         Ok(None)

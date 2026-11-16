@@ -812,15 +812,15 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
             }
         }
     };
-    /* The `if` arm open here. Predicated, every group in it must carry
-     * its condition (the then arm if(!p0), the else arm if(p0)); branched
-     * (after a `cndst` of `MachineOp::CndIf`), none, and a `br` taken when
-     * no instance is active goes past each arm with groups -- after the
-     * then arm's marker, after the else arm's `cndef` (or its marker when
-     * it has none), landing on the group after the arm. */
-    let mut arm: Option<PredArm> = None;
-    let mut branched = false;
-    let mut land: Option<usize> = None;
+    /* The `if` arms open here, innermost last: the arm, whether its `if` is
+     * branched, and where the branch past the arm lands. Predicated, every
+     * group in it must carry its condition (the then arm if(!p0), the else
+     * arm if(p0)); branched (after a `cndst` of `MachineOp::CndIf` or
+     * `CndIfMasked`), none, and a `br` taken when no instance is active goes
+     * past each arm with groups -- after the then arm's marker, after the
+     * else arm's `cndef` (or its marker when it has none), landing on the
+     * group after the arm, which may hold `if`s of its own. */
+    let mut arms: Vec<(PredArm, bool, Option<usize>)> = Vec::new();
     let skip_here = |off: &mut usize, g: &mut Gate, land: &mut Option<usize>| -> bool {
         g.groups += 1;
         let Ok(d) = decode_group(&image[*off..], 0) else { return false };
@@ -850,22 +850,40 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
         match sg.op {
             SelOp::Pred(m) => {
                 if m == PredArm::Then {
-                    branched = i > 0 && matches!(b.groups[i - 1].op, SelOp::Machine(MachineOp::CndIf));
+                    let branched = i > 0
+                        && matches!(b.groups[i - 1].op, SelOp::Machine(MachineOp::CndIf | MachineOp::CndIfMasked));
+                    arms.push((m, branched, None));
                 }
-                arm = if m == PredArm::End { None } else { Some(m) };
+                let Some(top) = arms.last_mut() else {
+                    g.mismatches.push(format!("group {}: an `if` marker with no `if`", g.groups));
+                    return g;
+                };
+                top.0 = m;
+                let branched = top.1;
+                if branched {
+                    if let Some(t) = top.2.take() {
+                        if t != off {
+                            g.mismatches.push(format!("a branch past an `if` arm lands at {t}, the arm ends at {off}"));
+                            return g;
+                        }
+                    }
+                }
+                if m == PredArm::End {
+                    arms.pop();
+                }
                 if !branched {
                     continue;
                 }
-                if let Some(t) = land.take() {
-                    if t != off {
-                        g.mismatches.push(format!("a branch past an `if` arm lands at {t}, the arm ends at {off}"));
+                let cndef_follows = next_op == Some(SelOp::Machine(MachineOp::CndElse));
+                if m != PredArm::End && arm_follows && !cndef_follows {
+                    let mut land = None;
+                    if !skip_here(&mut off, &mut g, &mut land) {
+                        g.mismatches.push(format!("group {}: no branch past the `if` arm", g.groups - 1));
                         return g;
                     }
-                }
-                let cndef_follows = next_op == Some(SelOp::Machine(MachineOp::CndElse));
-                if m != PredArm::End && arm_follows && !cndef_follows && !skip_here(&mut off, &mut g, &mut land) {
-                    g.mismatches.push(format!("group {}: no branch past the `if` arm", g.groups - 1));
-                    return g;
+                    if let Some(top) = arms.last_mut() {
+                        top.2 = land;
+                    }
                 }
                 continue;
             }
@@ -918,10 +936,10 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
                     let e = yakogl::shaderc::online::powervr::isa_tables::ENUMS.iter().find(|e| e.name == "cc")?;
                     e.name_of(d.hdr.get("cc")?).map(str::to_string)
                 });
-                let want_cc = match arm {
+                let want_cc = match arms.last() {
                     _ if matches!(sg.op, SelOp::Machine(m) if m.is_cnd()) => "(ignorepe)",
-                    Some(_) if branched => "e1_zx",
-                    Some(PredArm::Then) => "if(!p0)",
+                    Some((_, true, _)) => "e1_zx",
+                    Some((PredArm::Then, false, _)) => "if(!p0)",
                     Some(_) => "if(p0)",
                     None => "e1_zx",
                 };
@@ -933,10 +951,15 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
                 skel(&image[off..], want, &mut g);
                 off += n;
                 /* the branch past the else arm, after the `cndef` */
-                if sg.op == SelOp::Machine(MachineOp::CndElse) && arm_follows && !skip_here(&mut off, &mut g, &mut land)
-                {
-                    g.mismatches.push(format!("group {}: no branch past the else arm", g.groups - 1));
-                    return g;
+                if sg.op == SelOp::Machine(MachineOp::CndElse) && arm_follows {
+                    let mut land = None;
+                    if !skip_here(&mut off, &mut g, &mut land) {
+                        g.mismatches.push(format!("group {}: no branch past the else arm", g.groups - 1));
+                        return g;
+                    }
+                    if let Some(top) = arms.last_mut() {
+                        top.2 = land;
+                    }
                 }
             }
             Err(e) => {
@@ -1054,7 +1077,15 @@ fn run_selected_from(
         Some(apply_mods(raw, m.neg, m.abs, m.flr))
     };
     let mut p0 = false;
-    let mut arm: Option<PredArm> = None;
+    /* The open `if` arms, innermost last: the arm, and whether its `if` is
+     * branched (entered by a `cndst`: its arms run where the execution
+     * mask counter is 0, and may hold `if`s that set p0 again) or
+     * predicated (its arms run where p0 says). */
+    let mut arms: Vec<(PredArm, bool)> = Vec::new();
+    let mut last_op: Option<SelOp> = None;
+    /* The execution mask counter as the last `cnd*` left it: an instance
+     * runs a group only while it is 0. */
+    let mut emc = 0u32;
     /* A loop kept as a loop: where each open one's body starts, and a step
      * budget so a program that never ends fails rather than hangs. */
     let mut tops: Vec<usize> = Vec::new();
@@ -1066,20 +1097,42 @@ fn run_selected_from(
         if steps > 1 << 22 {
             return None;
         }
-        /* Inside a predicated `if` arm, as the machine runs it: the then
-         * arm where p0 is clear, the else arm where it is set; a group of
-         * the arm that does not run writes nothing (a value it would have
+        /* Inside an `if` arm, as the machine runs it: a predicated arm
+         * where p0 says (the then arm where it is clear, the else arm where
+         * it is set), a branched one where the execution mask counter is 0;
+         * a group that does not run writes nothing (a value it would have
          * written reads as never written, and a register both arms write
          * keeps the running arm's value). */
         if let SelOp::Pred(m) = g.op {
-            arm = if m == PredArm::End { None } else { Some(m) };
+            match m {
+                PredArm::Then => {
+                    let branched = matches!(last_op, Some(SelOp::Machine(MachineOp::CndIf | MachineOp::CndIfMasked)));
+                    arms.push((m, branched));
+                }
+                PredArm::Else => {
+                    let top = arms.last_mut()?;
+                    top.0 = m;
+                }
+                PredArm::End => {
+                    arms.pop()?;
+                }
+            }
+            last_op = Some(g.op);
             continue;
         }
-        /* (a branched `if`'s `cndef`, right after the else marker, runs in
-         * every instance) */
+        last_op = Some(g.op);
+        /* (the `cnd*` groups run in every instance; the loop edges are
+         * control) */
         let mask = matches!(g.op, SelOp::Machine(m) if m.is_cnd());
-        if !mask && matches!((arm, p0), (Some(PredArm::Then), true) | (Some(PredArm::Else), false)) {
-            continue;
+        let control = matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd);
+        if !mask && !control {
+            if emc != 0 {
+                continue;
+            }
+            if matches!((arms.last(), p0), (Some((PredArm::Then, false)), true) | (Some((PredArm::Else, false)), false))
+            {
+                continue;
+            }
         }
         match g.op {
             SelOp::LoopBegin => {
@@ -1110,7 +1163,7 @@ fn run_selected_from(
                 let c = read(g.srcs[0].as_ref()?, &v)?;
                 let next = match op {
                     MachineOp::CndInit => 0,
-                    MachineOp::CndIf => {
+                    MachineOp::CndIf | MachineOp::CndIfMasked => {
                         if c != 0 {
                             c + 1
                         } else if !p0 {
@@ -1146,6 +1199,7 @@ fn run_selected_from(
                 };
                 let SelDst::Virtual(d) = g.dst? else { return None };
                 v.insert(d.0, next);
+                emc = next;
                 continue;
             }
             _ => {}
@@ -1235,6 +1289,7 @@ fn run_selected_from(
                 | MachineOp::CndLeave
                 | MachineOp::CndLoopEnd
                 | MachineOp::CndIf
+                | MachineOp::CndIfMasked
                 | MachineOp::CndElse
                 | MachineOp::CndIfEnd,
             ) => return None,
@@ -2589,8 +2644,15 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
     let mut br_failures: Vec<String> = Vec::new();
     /* the default's choice per program: (name, arm sizes, which branch) */
     let mut br_default: Vec<(String, IfChoices)> = Vec::new();
+    let (mut masked_programs, mut masked_ifs) = (0usize, 0usize);
     let mut branched = |name: &str, stage: Stage, r: Option<Result<Branched, String>>| match r {
         None => {}
+        Some(Ok(b)) if b.masked > 0 => {
+            masked_programs += 1;
+            masked_ifs += b.masked;
+            br_taken += b.taken;
+            br_not += b.not_taken;
+        }
         Some(Ok(b)) => {
             br_programs += 1;
             br_vertex += usize::from(stage == Stage::Vertex);
@@ -2762,6 +2824,10 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
          {br_ifs} ifs, the survey's verdict unchanged; the byte model's branches past an arm: {br_taken} taken, \
          {br_not} not"
     );
+    println!(
+        "  under the execution mask (arms that cannot be predicated): {masked_programs} programs with {masked_ifs} \
+         ifs, the survey's verdict unchanged against the flattened form"
+    );
     for f in &br_failures {
         println!("    BRANCHED {f}");
     }
@@ -2788,12 +2854,21 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
      * arms pass it from N = 16, 49 groups, but their else arm is 23). */
     assert_eq!(default_branches, 0, "the default now branches {default_branches} ifs");
     assert!(largest_both < 49, "an `if` with both arms past the crossover: {largest_both}");
-    /* (a report-es2 build refuses the ES 3.00 sources) */
-    let (want_programs, want_ifs) = if cfg!(feature = "report-es2") { (44, 60) } else { (45, 61) };
+    /* (a report-es2 build refuses the ES 3.00 sources) 2026-11-16: three
+     * programs moved from this population to the masked one when `if`s
+     * whose arms cannot be predicated went under the execution mask (45
+     * programs with 61 ifs before; 48 programs in the two together). */
+    let (want_programs, want_ifs) = if cfg!(feature = "report-es2") { (41, 57) } else { (42, 58) };
+    let (want_masked_programs, want_masked_ifs) = if cfg!(feature = "report-es2") { (4, 10) } else { (6, 15) };
     assert!(
         br_programs >= want_programs && br_ifs >= want_ifs && br_taken > 0 && br_not > 0,
         "the branched population: {br_programs} programs (it was {want_programs}), {br_ifs} ifs ({want_ifs}), \
          {br_taken}/{br_not} branches"
+    );
+    assert!(
+        masked_programs >= want_masked_programs && masked_ifs >= want_masked_ifs,
+        "the masked population: {masked_programs} programs (it was {want_masked_programs}), {masked_ifs} ifs \
+         ({want_masked_ifs})"
     );
     println!("=== what the USC path asks of the machine ===");
     println!("  sources {total}, through the whole chain {ok}");
@@ -5194,10 +5269,48 @@ fn branched_verdict(
         })
         .flatten()
     };
+    let _ = yakogl::shaderc::online::powervr::select::take_masked_ifs();
     let pred = image_of(IfLowering::Predicate)?;
+    if yakogl::shaderc::online::powervr::select::take_masked_ifs() != 0 {
+        return Some(Err("an `if` under the execution mask with IfLowering::Predicate".into()));
+    }
     let (Some(branch), Some(dflt)) = (image_of(IfLowering::Branch), image_of(IfLowering::Default)) else {
         return Some(Err("refused branched or by default, built predicated".into()));
     };
+    /* `if`s whose arms cannot be predicated (a nested `if`, a look-up...)
+     * run under the execution mask in both, flattened with
+     * IfLowering::Predicate: such a program is not the predicated one plus
+     * control groups. What must hold is the survey's own verdict -- ours
+     * against selection's program, the IR and pco's -- in both lowerings. */
+    let masked = {
+        let _ = yakogl::shaderc::online::powervr::select::take_masked_ifs();
+        let _ = image_of(IfLowering::Branch);
+        yakogl::shaderc::online::powervr::select::take_masked_ifs() as usize
+    };
+    if masked > 0 {
+        let _ = usc_exec::take_skips();
+        for l in [IfLowering::Branch, IfLowering::Default] {
+            let _l = IfLoweringFor::set(l);
+            let got = match stage {
+                Stage::Fragment => run_fragment(text, corpus).map(|(d, f)| fs_verdict(&d, &f)),
+                _ => run_one(text, stage, corpus).map(|(_, g)| vs_verdict(&g)),
+            };
+            if got.as_deref() != Ok(want) {
+                return Some(Err(format!(
+                    "the survey's verdict changed under the mask ({l:?})\n      flattened {want}\n      masked    {got:?}"
+                )));
+            }
+        }
+        let skips = usc_exec::take_skips();
+        let taken = skips.iter().filter(|s| s.1).count();
+        return Some(Ok(Branched {
+            arms: Vec::new(),
+            pays: Vec::new(),
+            masked,
+            taken,
+            not_taken: skips.len() - taken,
+        }));
+    }
     if branch == pred {
         return (dflt != pred).then(|| Err("the default differs, with no `if` to branch".into()));
     }
@@ -5237,7 +5350,7 @@ fn branched_verdict(
     if got.as_deref() != Ok(want) {
         return Some(Err(format!("the survey's verdict changed\n      predicated {want}\n      branched   {got:?}")));
     }
-    Some(Ok(Branched { arms, pays, taken, not_taken: skips.len() - taken }))
+    Some(Ok(Branched { arms, pays, masked: 0, taken, not_taken: skips.len() - taken }))
 }
 
 /// Each `if` of a program: its then and else arm sizes, and whether the
@@ -5250,6 +5363,9 @@ struct Branched {
     arms: Vec<(usize, usize)>,
     /// Which the default branches (`select::branch_pays`).
     pays: Vec<bool>,
+    /// The `if`s whose arms cannot be predicated, under the execution mask
+    /// in both lowerings (`arms` and `pays` are then empty).
+    masked: usize,
     /// The byte model's branches past an arm, taken and not.
     taken: usize,
     not_taken: usize,
@@ -7095,13 +7211,18 @@ void main() {
         // SAFETY: the record's code lives in `keep`.
         let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
         let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        /* backward branches only: an `if` in the body under the execution
+         * mask branches forward past its arms */
         let mut off = 0usize;
         let mut branches = 0;
         while off < image.len() {
             let g = decode_group(&image, off).expect("decodes");
             branches += g
                 .instrs()
-                .filter(|(_, ph, r)| yakogl::shaderc::online::powervr::isa::ops_for(r, *ph).any(|o| o.name == "br"))
+                .filter(|(_, ph, r)| {
+                    yakogl::shaderc::online::powervr::isa::ops_for(r, *ph).any(|o| o.name == "br")
+                        && (r.get("offset").unwrap_or(0) as i32) < 0
+                })
                 .count();
             off += g.total;
         }
@@ -7902,6 +8023,120 @@ void main()
     v_color = res.rgb;
 }
 "#;
+
+/// An `if` whose arms cannot be predicated -- an `if` inside it, a look-up
+/// in it -- runs under the execution mask, nested, instead of running both
+/// arms (Qt Quick 3D's PrincipledMaterial: each light's block is such an
+/// `if`, and flattened every block ran whatever the light count). Three
+/// levels of `if` with a look-up at the innermost compile with one `cndst`
+/// a level and equal the IR on every path; the same arithmetic without the
+/// look-up gives the predicated (flattened) program's pixel on every path,
+/// and where the outer condition fails the masked program runs a fraction
+/// of the flattened one's groups.
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+#[test]
+fn ifs_that_cannot_be_predicated_run_under_the_execution_mask_nested() {
+    use yakogl::shaderc::IfLowering;
+    let name = tall_sampler(64);
+    let tex = "#version 300 es
+precision highp float;
+uniform highp sampler2D t;
+in vec2 uv;
+out vec4 colour;
+void main() {
+    vec4 c = vec4(0.25, 0.5, 0.75, 1.0);
+    if (uv.x > 0.3) {
+        c.xy = c.yx * uv.y + 0.125;
+        if (uv.y > 0.4) {
+            c.z = c.z * c.x - uv.x;
+            if (uv.x > 0.7) {
+                c += texture(t, uv * 0.5);
+            }
+            c.w = fract(c.x + c.y + c.z);
+        }
+        c.y = fract(c.y * 3.0 + c.w);
+    } else {
+        c = c.wzyx * uv.x;
+    }
+    colour = fract(c);
+}
+"
+    .replace("(t,", &format!("({name},"))
+    .replace(" t;", &format!(" {name};"));
+    let cases: Vec<BoxedInput> = [(0.1f32, 0.9f32), (0.5, 0.2), (0.5, 0.6), (0.8, 0.3), (0.8, 0.8)]
+        .into_iter()
+        .map(|(u, v)| -> BoxedInput {
+            Box::new(move |n: &str, c: u32| if n == "uv" { [u, v][c as usize].to_bits() } else { 0 })
+        })
+        .collect();
+    let refs: Vec<&InputFn<'_>> = cases.iter().map(|b| b.as_ref()).collect();
+    let px = stacked_against_ir(&name, &tex, &refs);
+    let distinct: std::collections::BTreeSet<u32> = px.iter().copied().collect();
+    assert_eq!(distinct.len(), px.len(), "two paths read the same pixel: {px:08x?}");
+
+    let src = "#version 300 es
+precision highp float;
+in float n;
+out vec4 colour;
+void main() {
+    vec4 c = vec4(0.25, 0.5, 0.75, 1.0);
+    if (n > 0.5) {
+        c.xy = c.yx * n + 0.125;
+        c.z = sin(c.x * n) + cos(c.y);
+        if (n > 2.0) {
+            c.z = c.z * c.x - n;
+            c.w = fract(exp2(c.z) + log2(n));
+            c.x = sqrt(c.w + n);
+        }
+        c.y = fract(c.y * 3.0 + c.w);
+        c.w = fract(sin(c.y) * 7.0 + c.x);
+    }
+    colour = fract(c);
+}
+";
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        let image_of = |lw: IfLowering| -> Vec<u8> {
+            let _l = IfLoweringFor::set(lw);
+            let rec = compile_fragment(&l.module, &l.reflection, a).unwrap_or_else(|e| panic!("{lw:?}: {e:?}"));
+            // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            code.iter().flat_map(|w| w.to_le_bytes()).collect()
+        };
+        let (flat, masked) = (image_of(IfLowering::Predicate), image_of(IfLowering::Default));
+        let cndst = |im: &[u8]| op_names(im).iter().filter(|o| **o == "cndst").count();
+        assert_eq!(cndst(&flat), 0, "the predicated program has no mask");
+        assert!(cndst(&masked) >= 2, "{} cndst: not one a level", cndst(&masked));
+        let run = |im: &[u8], x: f32| -> (BTreeMap<u32, u32>, usize) {
+            let mut inp = sentinel_inputs(1.0e30);
+            inp.coeff[4] = x.to_bits();
+            inp.coeff[6] = x.to_bits();
+            let out = run_binary(im, &inp, true).expect("runs");
+            (out, usc_exec::last_steps())
+        };
+        let mut steps = Vec::new();
+        let mut outs = std::collections::BTreeSet::new();
+        for x in [0.25f32, 1.5, 3.0] {
+            let ((fo, fs), (mo, ms)) = (run(&flat, x), run(&masked, x));
+            assert!(!fo.is_empty(), "n = {x}: no output");
+            assert_eq!(fo, mo, "n = {x}: the masked program's output differs from the flattened one's");
+            outs.insert(format!("{fo:?}"));
+            steps.push((x, fs, ms));
+        }
+        assert_eq!(outs.len(), 3, "two paths gave the same output");
+        println!("  groups executed (n, flattened, masked): {steps:?}");
+        /* where the outer `if` fails, the mask passes over its whole arm
+         * (the flattened program runs it); where every level runs, the mask
+         * costs its control groups (`MASK_MIN_INSTRS` keeps that from
+         * losing on short arms) */
+        let (_, fs, ms) = steps[0];
+        assert!(ms * 3 < fs * 2, "n = 0.25: the masked program ran {ms} groups, the flattened {fs}");
+    })
+    .unwrap();
+}
 
 /// A loop kept as a loop inside another (step 4 of the loops design): each
 /// has its own counter, flags and -- under the execution mask -- its own

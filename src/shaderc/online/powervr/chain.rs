@@ -1677,6 +1677,14 @@ fn expand_samples<'a>(
     let temp = |r: u16| SelSrc::Fixed { bank: Bank::Temp, reg: r, mods: Mods::default() };
     /* Which words of the data block hold zero at this point of the program. */
     let mut zeroed = [false; 16];
+    /* Per open `if` (its markers, `if_convert`): the words zero before it,
+     * and those zero at the end of its then arm. An arm runs in some
+     * instances only (under the execution mask, `if_convert`'s masked
+     * form, an arm may sample): the else arm starts from what held before
+     * the `if`, and after the `if` a word is zero only if both arms left it
+     * so. An `if` without a sample changes nothing here. */
+    let mut if_states: [([bool; 16], [bool; 16]); 16] = [([false; 16], [false; 16]); 16];
+    let mut if_depth = 0usize;
     let mut vregs = sel.vregs;
     /* a cube sample's third coordinate (SelOp::SampleZ, right before it) */
     let mut cube_z: Option<SelSrc> = None;
@@ -1691,6 +1699,30 @@ fn expand_samples<'a>(
         let mut g = *g;
         for s in g.srcs.iter_mut().flatten() {
             *s = shift(*s);
+        }
+        if let SelOp::Pred(m) = g.op {
+            match m {
+                super::sel::PredArm::Then => {
+                    let slot = if_states.get_mut(if_depth).ok_or(ChainError::FragmentInputsNotBuilt)?;
+                    slot.0 = zeroed;
+                    if_depth += 1;
+                }
+                super::sel::PredArm::Else => {
+                    let slot = if_depth
+                        .checked_sub(1)
+                        .and_then(|d| if_states.get_mut(d))
+                        .ok_or(ChainError::FragmentInputsNotBuilt)?;
+                    slot.1 = zeroed;
+                    zeroed = slot.0;
+                }
+                super::sel::PredArm::End => {
+                    if_depth = if_depth.checked_sub(1).ok_or(ChainError::FragmentInputsNotBuilt)?;
+                    let (_, then_end) = if_states[if_depth];
+                    for (z, t) in zeroed.iter_mut().zip(then_end) {
+                        *z = *z && t;
+                    }
+                }
+            }
         }
         if matches!(g.op, SelOp::SampleZ { .. }) {
             cube_z = g.srcs[0];
