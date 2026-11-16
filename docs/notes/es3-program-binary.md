@@ -2,7 +2,13 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # ES 3.0 program binaries (G7)
 
-Design only; no code yet. G7 of `docs/notes/v3d-notpass-rest.md`:
+The code is `src/gl/program_binary_format.rs` (the bytes) and
+`src/gl/program_binary.rs` (capture, forget, get, load), with the entry
+points in `src/gl/es3.rs`. The `program.rs` and `state.rs` parts of (e)
+(the capture and forget calls, `GL_PROGRAM_BINARY_LENGTH`, the format
+list) are still to come; until then a rejected load's reason reaches the
+info log through a transform feedback link error (`program_binary.rs`,
+`reject`). G7 of `docs/notes/v3d-notpass-rest.md`:
 `glGetProgramBinary` answers `GL_INVALID_OPERATION` and
 `GL_NUM_PROGRAM_BINARY_FORMATS` is 0 (`src/gl/es3.rs` `glGetProgramBinary`,
 `glProgramBinary`; `src/gl/state.rs` `get_integerv`). That is a legal ES 3.0
@@ -58,9 +64,10 @@ program becomes non-zero, and the case does not care about the value.
 **The hint (decision).** §2.12.4 says the hint "will not be in effect until
 the next time LinkProgram or ProgramBinary has been called successfully".
 §6.1.12 says `GetProgramiv` returns the properties "currently in effect".
-Mesa (`shaderapi.c`, `get_programiv`, `GL_PROGRAM_BINARY_RETRIEVABLE_HINT`) returns the value as set, at once, and
-so do we today. dEQP links before it reads, so it passes under either
-reading. We keep today's behaviour, and the binary does not carry the hint:
+Mesa keeps the value as pending (`shaderapi.c`, `program_parameteri`) and
+copies it to the value `get_programiv` returns only at link; its
+`ProgramBinary` does not copy it. We return the value as set, at once.
+dEQP links before it reads, so it passes under either reading. We keep today's behaviour, and the binary does not carry the hint:
 every linked program is retrievable whatever the hint says, so it changes
 nothing.
 

@@ -1631,6 +1631,8 @@ unsafe fn reset_library_statics() {
         crate::gl::buffer::reset_for_tests(); /* bind history, out-of-names latch, retired storages */
         crate::gl::shader::reset_for_tests(); /* info logs, dump counter */
         crate::gl::program::reset_for_tests(); /* location tables, info logs */
+        #[cfg(not(feature = "report-es2"))]
+        crate::gl::program_binary::reset_for_tests(); /* kept program binaries */
         crate::gl::state::reset_for_tests(); /* glPixelStorei latch */
         crate::gl::texture::reset_for_tests(); /* ES 3.0 log budget */
         crate::gl::framebuffer::reset_for_tests(); /* multisample / blit latches */
