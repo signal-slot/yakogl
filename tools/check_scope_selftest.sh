@@ -179,6 +179,7 @@ out=$(plan tools/cts/log/2026-11-15-t6-gles2-S1-37305608/results.tsv)
 expect "a slice file: the block check" "^plan  tools   es2-cts-failures.md's Mali block equals the tally of its slices\$" "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
+expect "vivante: the DK probe images" '^plan  zephyr  stm32mp257f_dk probe images' "$(plan driver/src/vivante/mod.rs)"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
 expect "v3d: the Mesa reference" '^plan  run     v3d job_check' "$out"
 expect "v3d: no PowerVR row" '^skip  clippy  host-test,gpu-powervr$' "$out"
