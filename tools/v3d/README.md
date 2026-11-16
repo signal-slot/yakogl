@@ -508,6 +508,24 @@ every program for fs, vs and cs, so the 7.1 count sits beside the 4.2 one.
 The devices differ per program: `color_uv` is fs 12, vs 31, cs 22 at 4.2
 and fs 12, vs 26, cs 15 at 7.1.
 
+`qpu_corpus_71_sources.tsv` gives each stage of every 7.1 program its
+own row with the source it is compiled from. The fs comes from the fragment
+shader. The vs and the cs (the coordinate shader) come from the vertex
+shader. Each row also has the source's GLSL dialect, as `glsl2v3d.py`'s
+`translate()` reads it, and Mesa's instruction count from `qpu_counts_71.tsv`.
+This is the table the 7.1 back end's corpus comparison reads. It is derived,
+with no Mesa build, from `qpu_counts_71.tsv` and `tools/shaders`, so it is
+rewritten after every `qpu_corpus.py --device 71`:
+
+```sh
+tools/v3d/qpu_corpus_71_sources.py           # writes qpu_corpus_71_sources.tsv
+tools/v3d/qpu_corpus_71_sources.py --check   # exit 1 when the table is stale
+```
+
+Measured 2026-11-16: all 1090 programs have their sources in the tree. That
+is 308 files (98 vertex and 210 fragment shaders; es100 240, es300 50,
+gl 18) and 3270 rows. `check71.d/sources71.sh` pins it.
+
 **H3, Mesa's GL driver on the drm-shim.** Same method as
 `tools/mali/drm_shim_ref.sh`: Mesa 26.2.1 with `-Dgallium-drivers=v3d` and
 `-Dtools=drm-shim`, the shim reporting the GPU named by `V3D_GPU_ID`.
@@ -555,7 +573,9 @@ described here.
   `qpu_corpus_71.txt` (the words) and `qpu_counts_71.tsv` (fs/vs/cs counts per
   program); `--device 42` writes `qpu_corpus.txt` and `qpu_counts_42.tsv`.
   `--out <copy>` writes a scratch copy instead. `V3D_SHC` names the binary
-  `drm_shim_ref.sh build` made.
+  `drm_shim_ref.sh build` made. `qpu_corpus_71_sources.py` then writes
+  `qpu_corpus_71_sources.tsv` (the source and stage of each 7.1 program),
+  pinned by `check71.d/sources71.sh`.
 - **`tools/v3d/shim71/`**: `clear.clif` and `triangle.clif` are the control lists
   Mesa 26.2.1's v3d driver writes with `V3D_DEBUG=clif` for a clear and for one
   triangle, taken on the drm-shim with `V3D_GPU_ID=71` (`drm_shim_ref.sh run
