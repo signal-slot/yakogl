@@ -73,7 +73,7 @@ unsafe extern "C" fn b_ok() -> i32 {
 /// (name, dword offset, dwords, elements) and the block's dwords.
 #[derive(Clone, Default)]
 struct Stage {
-    rows: Vec<(String, u16, u16, u8)>,
+    rows: Vec<(String, u16, u16, u16)>,
     block: Vec<u32>,
 }
 

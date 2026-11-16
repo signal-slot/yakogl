@@ -145,7 +145,7 @@ struct shc_uniform {
 	uint16_t dword_off;   /* offset in the stage's uniform block, or NO_BLOCK */
 	uint16_t dwords;      /* size (arrays: whole array) */
 	uint16_t gl_type;     /* GL_FLOAT_VEC4, GL_FLOAT_MAT4, GL_SAMPLER_2D, ... */
-	uint16_t array_len;  /* 1 for non-arrays */
+	uint16_t array_len;   /* 1 for non-arrays */
 	uint8_t  binding;     /* samplers: descriptor binding (texture unit) */
 	uint8_t  inner;       /* elements per outer index of a flattened array-of-structs member
 	                       * ("A.B[0].C": B[k].C is element k*inner; 1 for a plain array, 0 = 1) */

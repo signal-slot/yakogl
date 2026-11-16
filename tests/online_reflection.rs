@@ -125,7 +125,7 @@ fn basename(name: &str) -> &str {
 }
 
 /// One uniform row as the fields that must match.
-type Row = (String, u16, u16, u16, u8, u8, u8);
+type Row = (String, u16, u16, u16, u16, u8, u8);
 
 /// Every element of `want` appears in `got`, in the same order and equal in
 /// every field.
