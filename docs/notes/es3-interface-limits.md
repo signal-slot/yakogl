@@ -114,6 +114,17 @@ Issue drafts for what is left (each waits for its owner of
   16-vector vertex compile (16 output rows, one the position) and the VDM
   output size / SHC io rows to carry it; reports 60 until then.
 - "Mali: varying limits": stays with the Mali plans (8 / 32 / 32).
+- "Uniform-block arrays of 256 or more elements": `UniformRow::array_len`
+  and `struct shc_uniform.array_len` are `u8` (`reflect.rs` `fit_u8`), so a
+  `vec4[1024]` in a 16384-byte block is refused by the front end, and the
+  V3D's compare-select path indexes 64 vec4 per array only
+  (`docs/notes/v3d-ubo-path.md`). Widening the field to `u16` is an ABI
+  change (the struct stays 74 bytes with `binding` and `inner` at 72 and
+  73): it must move `include/gles_shaderc.h`, `src/abi_layout*.{rs,c}`,
+  every reader in `src/shaderc`, `src/gl`, `src/vivante`, and also
+  `tools/precompile`, `tools/yakogl-tools` and
+  `tools/vivante/gen_shader_table.py`, regenerating the tables in one
+  commit. A first attempt that left the tools out failed the gate.
 
 ## 6. Host dEQP before and after (HOST-ONLY)
 
