@@ -2,13 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # dEQP-GLES3 on the Verdin i.MX8M Plus (GC7000UL): board recipe
 
-The i.MX8MP has never run dEQP-GLES3. This is the recipe for the first run. **The gles3 stage 1 and the
-133-row table image were built once (host only; the figures are quoted below); nothing has run on the
-board yet.** Board results are recorded under `tools/cts/log/<date>-imx8mp-gles3-<slice>/`; open work is
-issue #2 of signal-slot/yakogl. The commands are
-the existing gles2 ones plus the gles3 switch. The expected lines have the shape of real gles2 lines from
-the i.MX8MP gles2 runs, which went through the same `board.sh` code path. The first board session
-replaces them with what it sees.
+This is the recipe for the i.MX8MP's dEQP-GLES3 run. **The first campaign, table image `es3-9bc82915`, has
+run entries 0-12 and 16-50 of the 133** (slices `tools/cts/log/2026-11-imx8mp-gles3-9bc82915-rows01-13`,
+`-rows17-34` and `-rows35-51`, 2026-11-14 and 15); entries 13-15 and 51-132 have no record yet. Board
+results are recorded under `tools/cts/log/<date>-imx8mp-gles3-<slice>/`; open work is issues #2 and #24
+of signal-slot/yakogl. The commands are the existing gles2 ones plus the gles3 switch. The expected lines
+below are the first sessions' own; a part that no session has seen yet is marked **unverified**.
 
 For a board session read "Running a GLES3 slice session" (after section 4): one ordered procedure over the
 sections below.
@@ -97,7 +96,10 @@ tools/cts/imx8mp-deqp-stage1.sh gles3     # = DEQP_MODULE=gles3 DEQP_STAGE1=<out
 
 The `gles3` argument uses `$DEQP_STAGE1_GLES3` if set, else `$IMX8MP_OUT/deqp-stage1-gles3`. The script also
 exports `ZEPHYR_SDK` (from `ZEPHYR_SDK_INSTALL_DIR`) and `-O2` flags, which `cts-build-zephyr.sh` needs.
-Measured: 453 ninja steps, about 15 minutes on a 12-thread worker, 2.0 GB.
+Measured: 453 ninja steps, about 15 minutes on a 12-thread worker, 2.0 GB; on 2026-11-16, 350 s on a
+4-core worker, 2,078,513,101 bytes. The two stage 1 libraries came out byte-identical to the 9bc82915
+campaign's (`libdeqp-gles3-package.a` 132,944 bytes, sha256 `2fff5184…bb2e8`; `libdeqp-gles3-functional.a`
+12,732,236 bytes, sha256 `7b842c95…85cc`).
 
 This exports `MODULE=gles3` to `tools/cts/cts-build-zephyr.sh` (the VK-GL-CTS pin above, with the same
 patches as gles2). The log goes to `$IMX8MP_OUT/deqp-stage1.log`, the same file as for gles2.
@@ -153,6 +155,13 @@ end of `.last_section`, which this image links right after `.last_ram_section`. 
 (222,568 KB, the linker's `RAM` line), 84.9 % of the 256 MiB `a53_ddr_section`; `board.sh` refuses an
 image whose `image_size` passes `0x70000000`, and on the `kexec-dev` route one larger than the crash
 window. `CONFIG_KERNEL_VM_SIZE=0x20000000` (512 MiB) is twice the region, so it covers the image.
+
+The image grows with `main`. The same table image built from `79ba61fc` (2026-11-16, `IMX8MP_CONSOLE=1`):
+`zephyr.bin` 16,642,712 bytes; text 11,653,120, rodata 3,529,187, data 58,429, bss 54,019,975, noinit
+168,858,272 (unchanged); `image_size` 239,525,888 bytes (233,912 KB, 89.2 % of the region, 28.9 MB left).
+bss is 11.4 MB larger than at `6ddba20c`; its largest objects are the GL core's static state
+(`gl::draw::STATE` 32,378,880 bytes, `gl::context::GROUPS` 9,194,496, `gl::program::STATE` 4,536,328). `board.sh --dry-run` still accepts it (`footprint 239525888`). Check the `RAM:` line
+for every new campaign commit.
 
 ## 3. Run the tree on the board
 
@@ -238,19 +247,32 @@ into a file or a commit). What the code does:
   boot of the same table image per page of six CRCs). The tally still comes from the SNVS record. Lost
   console lines make a log incomplete (`board.sh` then says `done_lossy`, the tally script INCOMPLETE/MISSING);
   keep CRC paging for any row whose console log is not complete.
-- **Unverified until a board session:** that the console prints at all with the image used, that the
-  capture is complete for a 600 s row, and that the capture does not disturb the run.
+- **What the first sessions saw (9bc82915, three slices, 2026-11-14 and 15):** the image builds with the
+  fragment (the three `.config` lines are there), but the leased console delivered no text in any boot:
+  one NUL byte at each board reset and nothing else. A marker line written to the board's UART3 from Linux
+  did not arrive either, so the fault is between the UART and the bridge (wiring, or another client of
+  the bridge), not in the image. With no console text, `imx8mp-console-scan.py` sees 0 rows and **GPU
+  recoveries are not observable**, the NotSupported and other cases have counts but no names, and the
+  failing names must come from the CRC pages (keep `NAMES` on). Still **unverified**: that the capture is
+  complete for a 600 s row and does not disturb the run.
 
 ### Expected verdict lines
 
-Each boot prints the following. This is the format of imx8mp-plan1.md §1, where the same path ran the
-gles2 table:
+Each boot prints three lines. The verdict lines below are real ones of the 9bc82915 campaign (e00 and e02
+of slice rows01-13; a page boot `e02-p0` reads `result=record:DEQP_FAILS`):
 
 ```
 === e00 (zephyr.bin, selector 0) <YYYY-MM-DD HH:MM:SS>
-board.sh imx8mp e00 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:DEQP resets=absent record=594b08xx,<w1>,<w2>,<w3> back_after=<n>s uptime=<n>s
+board.sh imx8mp e00 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:DEQP resets=absent record=594b0814,0000012a,00000000,ffff012a back_after=51s uptime=25s
 === e00 rc=0 <YYYY-MM-DD HH:MM:SS>
+board.sh imx8mp e02 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:DEQP resets=absent record=594b087a,001802c5,00000000,6bd902dd back_after=104s uptime=29s
 ```
+
+The first 48 rows came back 45-338 s after the reboot (`back_after`, Linux's own boot of 19-38 s
+included); none came near the 600 s window, and no row was refused, retried or ended rc 5. e26 is the
+one row that ends early with `verdict=done`: it stops at its first `precision.reflect` case (record
+`other` 1, 123 mustpass cases never begun), the same on a rerun, so it is not a watchdog end and a split
+would not run those cases.
 
 A DEQP record carries no pass/fail of its own (`status=n/a`), so `verdict=done` means the boot completed
 and left a record. It is also `done` for a row with failing cases, so judge a row by its tally, not by this
@@ -293,8 +315,8 @@ How to read it:
 
 One ordered procedure for a board session that runs a row range of the 133-entry table and commits it as a
 slice. Every command below exists in the tree with the flags shown, and the output described is what its script
-prints (read from the script). Nothing here has run on the board yet, so what the board prints is marked
-**unverified** where it matters.
+prints (read from the script). Steps 1-13 ran for the three 9bc82915 slices; what no session has seen yet
+is marked **unverified**.
 
 Rules that hold for every step:
 - **One commit.** All slices of a campaign come from the same `origin/main` commit, and the image is named after
@@ -356,7 +378,7 @@ Rules that hold for every step:
    exit status is the build's; a usage error exits 2. The log is `$IMX8MP_OUT/es3-$HEAD8.log`. Check that the
    console took:
    `grep -E '^CONFIG_(UART_CONSOLE|PRINTK|STDOUT_CONSOLE)=y' $IMX8MP_OUT/es3-$HEAD8/zephyr/.config` should print
-   three lines (**unverified**: the first real build is the check; if one is missing, stop and report).
+   three lines (seen in every build so far, 9bc82915 and 79ba61fc; if one is missing, stop and report).
 
 5. **Artefacts for the session note:**
    ```sh
@@ -365,8 +387,10 @@ Rules that hold for every step:
    Prints `<bytes> <sha256> <path>` for `zephyr.bin`, `zephyr.elf`, `es3-$HEAD8.table.conf`,
    `libdeqp-gles3-package.a` and `libdeqp-gles3-functional.a`, then the two `.config` lines for
    `CONFIG_DEQP_REPORT_ES2` and `CONFIG_YAKOGL_REPORT_ES2` (`# ... is not set` expected; `... not in .config` if
-   absent) and the linker's `Memory region`/`RAM:` lines. It exits non-zero when a file is missing. These lines
-   go into the slice README.
+   absent) and the linker's `Memory region`/`FLASH:`/`RAM:` lines (the linker indents the region names; before
+   2026-11-16 the script missed the indented `RAM:` line). It exits non-zero when a file is missing. These lines
+   go into the slice README. `zephyr.bin` of one commit is byte-identical across build hosts; `zephyr.elf`
+   is not (embedded build paths).
 
 6. **Plan the slices** (host only):
    ```sh
@@ -381,7 +405,8 @@ Rules that hold for every step:
    the table header; the GC7000UL/V3D ratio is unmeasured, so the figures order the work, they are not limits.
    Exit 1 with `WARNING:` on stderr when the table and the mustpass list disagree. The host pre-triage expects
    hangs on entries 13-15, 57, 95 and 122-127 and watchdog ends on 58-60: keep those out of the first slices
-   and run them last, in small ranges.
+   and run them last, in small ranges. Measured on the board for entries 0-12 and 16-50: no row passed 338 s
+   from reboot to ssh, and the sessions planned here (a few hours each) took 0.8-4.6 h with the page boots.
 
 7. **Preflight** (read-only; no network, no board):
    ```sh
@@ -392,8 +417,8 @@ Rules that hold for every step:
    check-imx8mp-gles3-tree.py`, `table image exists (es3-<hash8> ...)`, `image es3-<hash8> is commit <hash8>`.
    The last line is `preflight: all ok` (exit 0) or `preflight: <n> check(s) FAILED` (exit 1); a bad option exits
    2. `--commit` defaults to `git rev-parse origin/main`, so pass the campaign commit once main has moved. Run
-   it before every slice. Its selftest covers stub files only: the stage 1 and image checks run for real here
-   for the first time.
+   it before every slice. Its selftest covers stub files only. On real builds it printed `preflight: all ok`
+   (9bc82915) and, on a build host without a console, `ok` for every check but `BOARD_UART is set` (79ba61fc).
 
 8. **Dry run** the slice (touches no board):
    ```sh
@@ -417,9 +442,15 @@ Rules that hold for every step:
 10. **Run the slice, then scan the console.**
     ```sh
     OUT=records/imx8mp/es3-$HEAD8-rows01-10
-    TREE_ROWS=0-9 TREE_IMAGE=$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin \
+    TREE_ROWS=0-9 TREE_IMAGE=$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin RUN_BOUND=800 \
       tools/cts/imx8mp-gles3-board.sh tree "$OUT" 2>&1 | tee "$OUT.log"
     ```
+    `RUN_BOUND=800`: `board.sh`'s imx8mp default is 600 s from the reboot, the WDOG1 window itself, so a row that
+    ran out its window would read as rc 5 before the board was back; 800 is the AM62P dEQP rule (600 + 60 +
+    boot). The 9bc82915 slices ran with it, and with `NAMES=0` for a first pass over the rows and the name
+    pages in a second pass over the same directory: a page boot runs the whole entry again and reads six
+    CRCs, at most 40 pages (240 names) a row; e25 (364 fails), e26 (277) and e29 (328) pass that, were not
+    paged and have counts without names. A working console names them.
     Wait for `TREE-EXIT`. Per row it prints the three lines of "Expected verdict lines" (`=== e00 ...`,
     `board.sh imx8mp e00 rc=0 verdict=done ... resets=absent record=594b08xx,... back_after=<n>s uptime=<n>s`,
     `=== e00 rc=0 ...`). A row with failures, other statuses or cases without a result then boots again as
@@ -442,7 +473,8 @@ Rules that hold for every step:
     `!! NO FINISH row <n> (hang | watchdog end | reset)` with the last case that printed a result. Exit 0: every
     row finished; 1: a row did not; 2: bad input. A row is clean with a `finish` line, `recoveries 0` and an
     elapsed time well under 600 s. A capture without `deqp:` lines means the image was built without
-    `IMX8MP_CONSOLE=1` or the bridge missed the run (**unverified** on this board).
+    `IMX8MP_CONSOLE=1` or the bridge missed the run: every 9bc82915 slice so far had the second ("Capturing the
+    console"), so its README says that recoveries were not observable instead of claiming `recoveries 0`.
 
 11. **Read the slice's verdicts** (no board):
     ```sh
@@ -479,7 +511,10 @@ Rules that hold for every step:
     (exit 1). It fails on an entry in two slices, different commits, a row that does not fit the table, a case
     listed twice, a slice without verdict lines, an entry whose verdict is not `done` with rc 0 and resets
     absent or 0, and (without `--partial`) entries with no record: `no record: <n> of 133 entries (<span>), <k>
-    mustpass cases`. `--table` and `--mustpass` default to the committed files.
+    mustpass cases`. `--table` and `--mustpass` default to the committed files. A CRC-16 collision between two
+    failing cases of one row is a `case listed twice` too: slice rows01-13 has one (CRC `ec9b`, e9, recorded by
+    two pages; its README says which name is which), so `--check` over the 9bc82915 slices prints `FAILED` on
+    those two lines alone; the slice README is where such a pair is resolved.
 
 14. **Not-pass list, totals and triage** (after step 13 passes without `--partial`):
     ```sh
