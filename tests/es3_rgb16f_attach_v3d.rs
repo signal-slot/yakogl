@@ -1099,14 +1099,15 @@ fn texture_is_incomplete_today_on_every_target() {
 }
 
 /// An incomplete framebuffer takes no draw and no clear and the back end sees
-/// nothing. The draw and glClearBufferfv raise GL_INVALID_FRAMEBUFFER_OPERATION
-/// (ES 3.0 4.4.4); glClear raises nothing today (a deviation, pinned as it is).
+/// nothing. The draw, glClear and glClearBufferfv raise
+/// GL_INVALID_FRAMEBUFFER_OPERATION (ES 3.0 4.4.4; glClear raised nothing
+/// until 2026-11-16).
 #[test]
 fn texture_draw_and_clear_reach_no_job_today() {
     let inv = GL_INVALID_FRAMEBUFFER_OPERATION;
     for att in TEXTURES {
         assert_eq!(draw_case(att), (inv, vec![]), "{att:?} draw");
-        assert_eq!(clear_case(att), (GL_NO_ERROR, inv, vec![]), "{att:?} clear");
+        assert_eq!(clear_case(att), (inv, inv, vec![]), "{att:?} clear");
     }
 }
 
@@ -1124,10 +1125,7 @@ fn texture_shared_colorbuffer_is_incomplete_today() {
     let (u, f) = (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, GL_INVALID_FRAMEBUFFER_OPERATION);
     for att in TEXTURES {
         for clear_first in [false, true] {
-            /* glClear on an incomplete framebuffer raises nothing today (the
-             * spec says GL_INVALID_FRAMEBUFFER_OPERATION; glClearBuffer* does) */
-            let ea = if clear_first { GL_NO_ERROR } else { f };
-            assert_eq!(shared_case(att, clear_first), (u, u, ea, f, vec![]), "{att:?} clear_first {clear_first}");
+            assert_eq!(shared_case(att, clear_first), (u, u, f, f, vec![]), "{att:?} clear_first {clear_first}");
         }
     }
 }

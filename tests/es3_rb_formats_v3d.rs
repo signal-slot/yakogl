@@ -892,25 +892,15 @@ mod trampolines {
         }
     }
 
-    /// Today a clear of an incomplete framebuffer raises nothing at the call
-    /// (the GL core records it as pending and the draw after it reports the
-    /// incompleteness). Pinned; the next test is the rule.
+    /// ES 3.0 4.4.4.4: glClear on a framebuffer that is not complete is
+    /// GL_INVALID_FRAMEBUFFER_OPERATION at the call. Until 2026-11-16 the GL
+    /// core (src/gl/state.rs glClear) recorded it as pending and raised
+    /// nothing; the draw after it reported the incompleteness.
     #[test]
-    fn pinned_clear_of_an_incomplete_framebuffer_raises_nothing() {
-        let _g = rig();
-        let p = probe(GL_RGBA8, Kind::Float, 64, 64, 4);
-        assert_eq!(p.status, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT);
-        assert_eq!(p.clear, GL_NO_ERROR);
-    }
-
-    /// ES 3.0 4.2.3: glClear on a framebuffer that is not complete is
-    /// GL_INVALID_FRAMEBUFFER_OPERATION. Cause: the GL core (src/gl/state.rs
-    /// glClear) checks nothing; not the V3D's.
-    #[test]
-    #[ignore = "gl-clear-incomplete-fb: glClear records the clear without checking completeness"]
     fn clear_of_an_incomplete_framebuffer_is_invalid_framebuffer_operation() {
         let _g = rig();
         let p = probe(GL_RGBA8, Kind::Float, 64, 64, 4);
+        assert_eq!(p.status, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT);
         assert_eq!(p.clear, GL_INVALID_FRAMEBUFFER_OPERATION);
     }
 

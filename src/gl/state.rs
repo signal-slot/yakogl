@@ -405,6 +405,16 @@ pub unsafe extern "C" fn glClearStencil(s: GLint) {
     c.clear_stencil = s;
 }
 
+/// The bound draw framebuffer is complete: glCheckFramebufferStatus's answer
+/// (`framebuffer::check_status`; the default framebuffer always is). Only
+/// completeness: a complete framebuffer whose draw buffer has no image is no
+/// error here (ES 3.0 4.2.3: nothing is cleared there).
+pub(super) fn draw_framebuffer_complete(c: &GlContext) -> bool {
+    c.bound_framebuffer == 0
+        || c.framebuffer_ref(c.bound_framebuffer)
+            .is_some_and(|fb| super::framebuffer::check_status(c, fb) == GL_FRAMEBUFFER_COMPLETE)
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn glClear(mask: GLbitfield) {
     gl_trace!(glClear);
@@ -412,6 +422,14 @@ pub unsafe extern "C" fn glClear(mask: GLbitfield) {
     if mask & !(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT) != 0 {
         /* GL ES 3.0 4.2.3: any other bit is an error and the call has no effect */
         c.set_error(GL_INVALID_VALUE, "glClear");
+        return;
+    }
+    /* ES 2.0 4.4.5, ES 3.0 4.4.4.4: clearing a framebuffer that is not
+     * complete is GL_INVALID_FRAMEBUFFER_OPERATION and clears nothing. Until
+     * 2026-11-16 the clear was recorded and the error raised, if at all, when
+     * it went out with the next draw. */
+    if !draw_framebuffer_complete(c) {
+        c.set_error(GL_INVALID_FRAMEBUFFER_OPERATION, "glClear");
         return;
     }
     /* ES 3.0 4.2.3: with GL_RASTERIZER_DISCARD enabled clears have no effect

@@ -15,11 +15,14 @@
 //!
 //! The contents cannot be observed: the stand-in back end draws nothing, and a
 //! read from an incomplete framebuffer is an error itself. "Changes nothing"
-//! is therefore checked only as far as the error code goes.
+//! is checked as the error code and as no draw reaching the back end: the
+//! stand-in counts its draws, and a glFinish after the call, on the incomplete
+//! framebuffer and then on the default one, would send a recorded clear.
 //!
-//! The cases that fail on today's code are `#[ignore]`d for the plan item
-//! `fix-clear-incomplete` (src/gl/state.rs glClear, src/gl/es3.rs): run them
-//! with `-- --ignored` to see them fail.
+//! The missing-level cases stay `#[ignore]`d: glCheckFramebufferStatus
+//! answers COMPLETE for level 1 of a texture that has only level 0
+//! (src/gl/framebuffer.rs check_status, a separate cause), so the setup's own
+//! status assertion fails. Run them with `-- --ignored` to see it.
 //!
 //! Not in a `report-es2` build: glClearBuffer* is ES 3.0 only.
 //!
@@ -32,13 +35,14 @@
 #![cfg(all(feature = "host-test", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void};
+use core::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard, Once};
 use yakogl::backend::{self, GlesDraw, GlesHeap, YakoglBackend};
 use yakogl::gl::consts::*;
 use yakogl::gl::context;
 use yakogl::gl::es3::*;
 use yakogl::gl::framebuffer::*;
-use yakogl::gl::state::{glClear, glGetError};
+use yakogl::gl::state::{glClear, glFinish, glGetError};
 use yakogl::gl::texture::{glBindTexture, glDeleteTextures, glGenTextures, glTexImage2D};
 use yakogl::gl::types::*;
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
@@ -64,7 +68,11 @@ unsafe extern "C" fn b_heap_base(_heap: GlesHeap) -> u64 {
 unsafe extern "C" fn b_ok() -> i32 {
     0
 }
+/// The draws (clears included) that reached the back end.
+static DRAWS: AtomicU32 = AtomicU32::new(0);
+
 unsafe extern "C" fn b_draw(_d: *const GlesDraw) -> i32 {
+    DRAWS.fetch_add(1, Ordering::Relaxed);
     0
 }
 
@@ -146,9 +154,25 @@ fn context() -> MutexGuard<'static, ()> {
             assert!(!context::gl_context_create(16, 16).is_null());
         });
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        /* a clear an earlier test left pending goes out now, not in this one */
+        glFinish();
         while glGetError() != GL_NO_ERROR {}
     }
+    DRAWS.store(0, Ordering::Relaxed);
     g
+}
+
+/// The draws that reached the back end since [`context`], after sending
+/// whatever is pending on the bound framebuffer and on the default one.
+fn draws_sent() -> u32 {
+    // SAFETY: plain GL calls.
+    unsafe {
+        glFinish();
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glFinish();
+        while glGetError() != GL_NO_ERROR {}
+    }
+    DRAWS.load(Ordering::Relaxed)
 }
 
 fn err() -> GLenum {
@@ -262,42 +286,46 @@ fn unrenderable_format() -> Fbo {
     f
 }
 
-/// One ignored test per (case, call): the call must leave
-/// GL_INVALID_FRAMEBUFFER_OPERATION on the framebuffer `$setup` builds.
+/// One test per (case, call): the call must leave
+/// GL_INVALID_FRAMEBUFFER_OPERATION on the framebuffer `$setup` builds, and
+/// send nothing to the back end.
 macro_rules! incomplete_cases {
     ($setup:ident, $reason:literal: $( $name:ident => $call:ident ),+ $(,)?) => {
-        $(
-            #[test]
-            #[ignore = $reason]
-            fn $name() {
-                let _g = context();
-                let _f = $setup();
-                assert_eq!($call(), GL_INVALID_FRAMEBUFFER_OPERATION);
-            }
-        )+
+        $( incomplete_cases!(@case [ignore = $reason] $setup $name $call); )+
+    };
+    ($setup:ident: $( $name:ident => $call:ident ),+ $(,)?) => {
+        $( incomplete_cases!(@case [] $setup $name $call); )+
+    };
+    (@case [$($attr:meta)?] $setup:ident $name:ident $call:ident) => {
+        #[test]
+        $(#[$attr])?
+        fn $name() {
+            let _g = context();
+            let _f = $setup();
+            assert_eq!($call(), GL_INVALID_FRAMEBUFFER_OPERATION);
+            assert_eq!(draws_sent(), 0, "no clear reaches the back end");
+        }
     };
 }
 
-/* A few of these pass in a whole-file `--ignored` run (a pending clear left by
- * an earlier case answers for them) but fail alone: none is a control. */
-incomplete_cases!(missing_attachment, "fix-clear-incomplete: ES 3.0 4.4.4 wants GL_INVALID_FRAMEBUFFER_OPERATION":
+incomplete_cases!(missing_attachment:
     missing_attachment_clear => call_clear,
     missing_attachment_clear_buffer_iv => call_iv,
     missing_attachment_clear_buffer_uiv => call_uiv,
     missing_attachment_clear_buffer_fv => call_fv,
     missing_attachment_clear_buffer_fi => call_fi,
 );
-/* These also fail earlier: glCheckFramebufferStatus answers COMPLETE for
- * level 1 of a texture that has only level 0 (a separate cause, see the
- * report of this item). */
-incomplete_cases!(missing_level, "fix-clear-incomplete: level 1 of a level-0-only texture reads as complete; ES 3.0 4.4.4 wants GL_INVALID_FRAMEBUFFER_OPERATION":
+/* glCheckFramebufferStatus answers COMPLETE for level 1 of a texture that has
+ * only level 0 (src/gl/framebuffer.rs check_status, a separate cause): the
+ * setup fails before the call. */
+incomplete_cases!(missing_level, "check_status: level 1 of a level-0-only texture reads as complete":
     missing_level_clear => call_clear,
     missing_level_clear_buffer_iv => call_iv,
     missing_level_clear_buffer_uiv => call_uiv,
     missing_level_clear_buffer_fv => call_fv,
     missing_level_clear_buffer_fi => call_fi,
 );
-incomplete_cases!(unrenderable_format, "fix-clear-incomplete: ES 3.0 4.4.4 wants GL_INVALID_FRAMEBUFFER_OPERATION":
+incomplete_cases!(unrenderable_format:
     unrenderable_format_clear => call_clear,
     unrenderable_format_clear_buffer_iv => call_iv,
     unrenderable_format_clear_buffer_uiv => call_uiv,
@@ -318,6 +346,7 @@ fn complete_framebuffer_clears_without_error() {
     assert_eq!(f.status(), GL_FRAMEBUFFER_COMPLETE);
     assert_eq!(call_clear(), GL_NO_ERROR);
     assert_eq!(call_fv(), GL_NO_ERROR);
+    assert!(draws_sent() > 0, "the clears reach the back end");
 }
 
 /// The default framebuffer is complete.
@@ -327,4 +356,5 @@ fn default_framebuffer_clears_without_error() {
     assert_eq!(call_clear(), GL_NO_ERROR);
     assert_eq!(call_fv(), GL_NO_ERROR);
     assert_eq!(call_fi(), GL_NO_ERROR);
+    assert!(draws_sent() > 0, "the clears reach the back end");
 }
