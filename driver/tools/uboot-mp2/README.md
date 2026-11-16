@@ -102,7 +102,7 @@ selftest compares them when `mkimage` is on `PATH` (or named by
 `MKIMAGE=/path/to/mkimage`). Otherwise the summary counts the skip
 (`..., 1 skipped (mkimage not on PATH)`, exit 0), and `MP2_REQUIRE_MKIMAGE=1`
 turns the skip into a failure. The selftest also builds both scripts, reads them back with
-`uboot_script.py check`/`extract`, lints them (allowed commands only; no
+`tools/uboot_script.py check`/`extract`, lints them (allowed commands only; no
 `saveenv`, `env save|write|erase`, `mmc write`, `ext4write`, `fatwrite`, `gpt`,
 `setenv` outside `mp2z_*`/`autoload`, no `bootcmd` in a command except the undo echo; the undo
 first, `mp2z: go` last), compares `mp2z_load`/`mp2z_window` with

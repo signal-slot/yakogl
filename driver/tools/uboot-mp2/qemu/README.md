@@ -69,7 +69,7 @@ hold in `.config`. The `.scr` files are built by `../build.sh` with the
   `mp2z_load` and `mp2z_window` run unchanged. That RAM size is the override;
   U-Boot relocates itself to the top of RAM, above the window. With less
   than 2 GiB the window runs into U-Boot or past the end of RAM.
-- **The medium.** `mp2-mmc.cmd` names `mmc`, so the disk image is an SD card on
+- **The medium.** `../mp2-mmc.cmd` names `mmc`, so the disk image is an SD card on
   QEMU's `sdhci-pci` (U-Boot's `pci_mmc`), `mmc 0`. It is a 64 MiB GPT image:
   partition 1 a placeholder, partition 2 an ext4 "bootfs" holding
   `/yakogl/mp2-mmc.scr` and the images (the DK stages under `/boot/yakogl/`,

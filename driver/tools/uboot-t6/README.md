@@ -97,7 +97,8 @@ have them.
 No script file, no `mkimage`, no `source`: the checks are the runner's, on
 the host, where they can be tested without a board.
 
-Link address and window: `nanopc_t6.dts`'s `zephyr,sram`, 256 MiB at
+Link address and window:
+`driver/boards/friendlyarm/nanopc_t6/nanopc_t6.dts`'s `zephyr,sram`, 256 MiB at
 0x10000000 (0x10000000-0x1fffffff); `driver/tools/kexec-zephyr/nanopc-t6.sh`'s
 WINDOW_BASE and WINDOW_SIZE and the draft's `t6z_load`, `t6z_entry` and
 `t6z_window` hold the same values, and
@@ -190,8 +191,8 @@ has none of the three ("What the prompt answered"). The other commands it
 uses the build has: `load`, `source`, `test`, `itest`, `setenv`, `echo`,
 `exit`, `ext4size`, `ext4load` and `go` (`help` at the prompt, 2026-11-12).
 The route above does the same checks from the host. The draft stays until the
-runner of issue #4627 replaces it, because `board_lock_selftest.sh` compares
-its window with the device tree's.
+runner of issue #4627 replaces it, because `../kexec-zephyr/board_lock_selftest.sh`
+compares its window with the device tree's.
 
 The reads the draft's first run was to begin with (`mmc list`, the partition
 of `0:1`, `scriptaddr`, `bdinfo`) were made by `prompt-reads.sh` on
