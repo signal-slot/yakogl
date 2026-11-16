@@ -168,8 +168,9 @@ Outside the blend descriptor, **at 4x with a blend shader**:
   (min_samples > 1 || valhall_has_blend_shader)`, set per draw by
   `panfrost_emit_blend_valhall`, `pan_cmdstream.c:921-932`). At 1x it is
   not set (the multisample term). The trace of the 211 blended draw has
-  `Evaluate per-sample: true`, `Multisample Enable: true`. **Not yet written
-  by `src/mali/frame.rs`** (no `evaluate_per_sample` outside the genxml).
+  `Evaluate per-sample: true`, `Multisample Enable: true`. Written by
+  `src/mali/frame.rs` now (`evaluate_per_sample`, DCD0 bit 11; pinned by
+  `frame_blend_tests.rs`).
 - The fragment shader's preload needs r60 (coverage) and **r61 (the sample
   word)**: Valhall fragment programs preload both always
   (`C/bifrost/bifrost_compile.c:4690-4701`; ours, `flow.rs:564`, `tests.rs:2818`
@@ -329,14 +330,36 @@ colour mask, sample count and colour type (the fragment record's
 channel's factors as ONE, ONE (not read, so one shader);
 `src/mali/backend.rs` compiles it once per key (the 8 most recent kept) and
 the frame writes the descriptor in Shader mode (section 3), with
-`Evaluate per-sample` at 4x. Any other target (RGB565, XRGB8888, RGBA16F)
-stays `NOT_BUILT_BLEND_SHADER` / `NOT_BUILT_FLOAT_BLEND`.
+`Evaluate per-sample` at 4x (DCD0 bit 11). The frame requires the address
+exactly when `needs_shader` holds for a draw that writes a channel
+(`check_draw`, `NOT_BUILT_BLEND_SHADER` without it, `INVALID_BLEND_SHADER`
+for an address given where none is needed). Any other target (RGB565,
+XRGB8888, RGBA16F) or a 2x one has no key, so the backend gives the frame no
+address and the draw stays `NOT_BUILT_BLEND_SHADER` / `NOT_BUILT_FLOAT_BLEND`.
+
+The Mesa 26.2.1 sources it follows (`MESA_PAN_TREE`): `pan_blend.c`
+(`pan_blend_can_fixed_function`, `can_fixed_function_equation`,
+`pan_blend_is_homogenous_constant`, `pan_blend_create_shader`), the choice in
+`pan_context.c` `panfrost_get_blend`, `bifrost_compile.c` (the selection of
+the blend NIR: `load_blend_input`, `load_tile_pan`, `blend_pan`,
+`blend_return_pan`, the preloaded r60/r61) and `nir_opt_algebraic.py` with
+`bifrost_nir_algebraic.py` (the transforms `blend_nir_rules.rs` is generated
+from).
+
+## 6a. The tests it rests on
+
+| Test | What it pins |
+|---|---|
+| `src/mali/blend_choice_tests.rs` | `needs_shader` / `can_fixed_function` against a transcription of Mesa's rule over every GLES2 state (all fifteen factors, five equations, separate colour and alpha, homogeneous or not constants); RGBA8 and RGB565 the same path, RGBA16F the float one |
+| `src/mali/frame_blend_tests.rs` | the frame: fixed-function descriptors byte for byte against the board (ten modes) and the drm-shim (case 91); the `Shader`-mode descriptor of case 8 and case 190 against the board; every shader-needing equation builds into an RGBA8 target at 1x and 4x given an address (descriptor `01 02 00 00`, no equation, address in word 3; DCD0 per-sample at 4x only); every fixed-function equation keeps the fixed-function descriptor and refuses a shader; no channel written needs none; what stays refused by name (an unbuilt target or sample count: no key, no address, `NOT_BUILT_BLEND_SHADER`; RGBA16F outside the float set: `NOT_BUILT_FLOAT_BLEND`) |
+| `tests/mali_blend_states.rs` | every `fragment_ops.blend` state (the three families) through the GL core on the Mali mock: none refused |
+| `src/shaderc/online/mali/blend_tests.rs`, `tests.rs` | the words: every dEQP state of the drm-shim reference (`pan_blend_ref.py`, RGBA8, 1x, fp16 colour) equals the builder's; `blend_random.sha` and `blend_u32.words` cover 4x and fp32 colours |
 
 ## 7. Facts and open points, one line each
 
 - 211's blend shader choice is the non-homogeneous constant, not the 4x.
-- 4x adds: the sample-id prologue (r61), `DCD0.Evaluate per-sample`, the cache
-  key's sample count. The descriptor words are the 1x shape (mode Shader, pc).
+- 4x adds: the sample-id prologue (r61), `DCD0.Evaluate per-sample` (written
+  by `frame.rs` for a 4x draw with a blend shader), the cache key's sample count. The descriptor words are the 1x shape (mode Shader, pc).
 - 190 needs two shaders (columns 3 and 4); columns 1 and 2 are fixed function.
 - No constant is inlined in 26.2.1; the board's 25.0.7 inlines them and, at 4x,
   ends in `ST_TILE` instead of `BLEND`: to be settled by the board run
