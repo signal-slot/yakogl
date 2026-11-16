@@ -1,0 +1,16 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=100
+# section tip
+vivante	functional.rasterization	34	54	12	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad_reverse	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_full	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_partly	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.projected	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines_wide	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.triangles	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines_wide	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.points	NotSupported	refusal	Test requires 4x msaa rbo		
+vivante	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.triangles	NotSupported	refusal	Test requires 4x msaa rbo		

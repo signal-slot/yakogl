@@ -1,0 +1,5 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=2181
+# section tip
+vivante	functional.uniform_api	1605	576	0	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.uniform_api.random.83	Fail	compile	Compile failed		

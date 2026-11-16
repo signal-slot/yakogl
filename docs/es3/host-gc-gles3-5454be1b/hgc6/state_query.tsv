@@ -1,0 +1,14 @@
+# host-gles3-part commit=5454be1b gpu=vivante module=gles3 cases=946
+# section tip
+vivante	functional.state_query	921	16	9	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.state_query.fbo.framebuffer_attachment_component_type	Fail	gl-error	Got invalid error		
+vivante	dEQP-GLES3.functional.state_query.indexed.blend_equation_advanced_getinteger64i_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
+vivante	dEQP-GLES3.functional.state_query.indexed.blend_equation_advanced_getintegeri_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
+vivante	dEQP-GLES3.functional.state_query.indexed.blend_equation_getinteger64i_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
+vivante	dEQP-GLES3.functional.state_query.indexed.blend_equation_getintegeri_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
+vivante	dEQP-GLES3.functional.state_query.indexed.blend_func_getinteger64i_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
+vivante	dEQP-GLES3.functional.state_query.indexed.blend_func_getintegeri_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
+vivante	dEQP-GLES3.functional.state_query.indexed.blend_isenabledi	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
+vivante	dEQP-GLES3.functional.state_query.indexed.color_mask_getinteger64i_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
+vivante	dEQP-GLES3.functional.state_query.indexed.color_mask_getintegeri_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
