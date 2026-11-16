@@ -598,3 +598,19 @@ described here.
   interrupts, clocks, power domains, MMU, each with a file-and-line citation)
   and `docs/notes/pre-study-rpi5.md` (the plan: what can be done before the
   board, what needs it, the open questions U1 to U12).
+
+### hazards71: Mesa's qpu_validate at 7.1 as an oracle table
+
+`tools/v3d/hazards71.c` compiles Mesa 26.2.1's own `compiler/qpu_validate.c`
+(copied byte for byte by `tools/v3d/hazards71.sh`, with
+`hazards71/v3d_compiler.h` standing in for the part of Mesa's header it uses)
+and runs 64 small 7.1 programs through it: each is packed with Mesa's packer,
+unpacked, validated at ver 71. The answer (ok, or Mesa's first message and its
+instruction index) is `hazards71/oracle.tsv`; `hazards71.sh` rebuilds it and
+compares byte for byte (`--update` rewrites it), and the driver fails when
+Mesa's answer is not the one its author read off the source. `--stdin` gives
+the verdicts for programs given as hex words (`prog NAME [last]` lines).
+Needs `MESA_V3D_TREE` (a full tree with `build-v3d`, `MESA_V3D_BUILD` names
+another build directory), else exit 77 `gap: MESA_V3D_TREE`.
+`tests/v3d71_hazards_oracle.rs` checks `verify71` against the table with no
+Mesa input; its six known differences are named there with their reasons.
