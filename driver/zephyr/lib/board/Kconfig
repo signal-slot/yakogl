@@ -31,6 +31,45 @@ config YAKOGL_RPI5_MBOX
 	  rpi_mbox_init() maps the mailbox; rpi_clock_*() ask the firmware. The
 	  message buffer is in the image and below 4 GiB.
 
+# The Raspberry Pi 5's screen (rpi5/board_rpi5.c): the framebuffer from the
+# firmware's property mailbox, route 2 of driver/docs/rpi5-display.md. The
+# Pi 4's screen path (rpi4/fbcon.c, rpi4/rpi_mbox.c with the SoC as its
+# parameter) with the Pi 5's decisions (board 5 of src/board/rpi_fb.rs).
+config YAKOGL_BOARD_RPI5
+	bool "Raspberry Pi 5: the screen from the mailbox framebuffer (console, window view)"
+	depends on SOC_BCM2712 && ARM64
+	select YAKOGL_RPI5_MBOX
+	help
+	  The firmware is asked for a 32 bpp framebuffer at init; the size,
+	  pitch and pixel order are the granted ones, and an answer that is
+	  not 32 bpp or does not hold its rows is refused with a named line.
+	  rpi5_window() hands out a view into it (rpi5/board_rpi5.h). The
+	  screen is not the whole board layer: no GPU platform, record screen
+	  or watchdog (YAKOGL_RPI5_WDOG is the probes' own).
+
+config YAKOGL_BOARD_RPI5_FB_WIDTH
+	int "Pi 5: framebuffer width asked of the firmware"
+	default 1920
+	depends on YAKOGL_BOARD_RPI5
+	help
+	  What the firmware grants decides (the sink's preferred mode, about
+	  32 MiB at 3840x2160 and 32 bpp); the asked size is logged next to it.
+
+config YAKOGL_BOARD_RPI5_FB_HEIGHT
+	int "Pi 5: framebuffer height asked of the firmware"
+	default 1080
+	depends on YAKOGL_BOARD_RPI5
+
+config YAKOGL_BOARD_RPI5_FB_VIRTUAL_HEIGHT
+	int "Pi 5: the framebuffer's rows in memory (0: the screen's)"
+	default 0
+	depends on YAKOGL_BOARD_RPI5
+	help
+	  Above YAKOGL_BOARD_RPI5_FB_HEIGHT, the firmware is asked for a
+	  framebuffer that tall (two screens for a double buffer); a window
+	  may then be a view of up to the granted rows and rpi5_show() of the
+	  half at row y pans the screen to y.
+
 menuconfig YAKOGL_BOARD
 	bool "YakoGL board layer (yakogl_board.h)"
 	depends on SOC_SERIES_AM62PX_A53 || SOC_MIMX8ML8_A53 || SOC_BCM2711 || \
@@ -278,7 +317,7 @@ endif # YAKOGL_BOARD
 
 config YAKOGL_BOARD_RECORD_RUST
 	bool
-	default y if YAKOGL_BOARD || YAKOGL_GC_BOARD
+	default y if YAKOGL_BOARD || YAKOGL_GC_BOARD || YAKOGL_BOARD_RPI5
 	help
 	  The record writer's rules come from the yakogl-drivers crate
 	  (driver/rust/src/board/record.rs): the crate is built and linked.

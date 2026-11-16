@@ -81,6 +81,22 @@ if(CONFIG_YAKOGL_RPI5_MBOX)
   endif()
 endif()
 
+# The Raspberry Pi 5's screen (rpi5/board_rpi5.c over the Pi 4's rpi4/rpi_mbox.c
+# and rpi4/fbcon.c, the SoC a parameter; the decisions from the yakogl-drivers
+# crate). YAKOGL_BOARD_RPI5 selects YAKOGL_RPI5_MBOX, whose library carries
+# rpi_mbox.c: this one carries the screen and fbcon.
+if(CONFIG_YAKOGL_BOARD_RPI5)
+  zephyr_library_named(yakogl_board_rpi5)
+  zephyr_library_sources(rpi5/board_rpi5.c rpi4/fbcon.c)
+  zephyr_library_include_directories(rpi5 rpi4)
+  if(TARGET yakogl_drivers_rust)
+    add_dependencies(yakogl_board_rpi5 yakogl_drivers_rust)
+  endif()
+  if(YAKOGL_WERROR)
+    zephyr_library_compile_options(-Werror)
+  endif()
+endif()
+
 # The record writer (common/record.c over the Rust rules): for the board
 # layer, and for the i.MX8MP's gc_result.c, which is its sink.
 if(CONFIG_YAKOGL_BOARD OR CONFIG_GC_COMMON_RESULT_SNVS)
