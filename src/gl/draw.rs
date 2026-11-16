@@ -2107,6 +2107,32 @@ fn free_w128_variant(v: &mut ProgW128Variant) {
     unsafe { core::ptr::write_bytes(v as *mut ProgW128Variant, 0, 1) };
 }
 
+/// Why a keyed 128-bit binding's GL texture swizzle cannot be joined, or
+/// `None` when every binding that `wide` calls two-plane and `keyed` covers
+/// (its unit's companion entry is `Some`) reads (R, G, B, A), or (R, G, B, 1)
+/// for a texture with no alpha. The planes hold (R,G) and (B,A): a swizzle
+/// that moves a channel across them or puts ZERO/ONE on a lane is not
+/// expressed by the join (docs/notes/gc-128bit-swizzle.md section 4).
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+fn wide128_swizzle_refusal(
+    bound: &[GlesTextureBind],
+    keyed: &[Option<u8>; shaderc::online::vivante::wide128::UNITS],
+    wide: impl Fn(&GlesTextureBind) -> bool,
+) -> Option<&'static str> {
+    for t in bound.iter().filter(|t| wide(t)) {
+        if keyed.get(t.unit as usize).copied().flatten().is_none() {
+            continue;
+        }
+        let no_alpha = t.no_alpha != 0;
+        let lanes = backend::wide128_lane_sources(t.swizzle, no_alpha);
+        if lanes == [0, 1, 2, 3] || (no_alpha && lanes == [0, 1, 2, 5]) {
+            continue;
+        }
+        return Some("its texture swizzle is not joined by the 128-bit planes");
+    }
+    None
+}
+
 /// Point draw `d` at the plane-join variant its bound textures need, once
 /// they are bound (`d.textures`, `d.vs_textures`): the program's
 /// sensitivity is asked the first time (after a link, the cache is new),
@@ -2142,6 +2168,14 @@ fn wide128_select(
         &p.rfs,
         crate::vivante::texture::wide128_sampled,
     );
+    let vs_bound = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
+    let fs_bound = &d.textures[..(d.num_textures as usize).min(d.textures.len())];
+    let wide = crate::vivante::texture::wide128_sampled;
+    if let Some(why) = wide128_swizzle_refusal(vs_bound, &companion[0], wide)
+        .or_else(|| wide128_swizzle_refusal(fs_bound, &companion[1], wide))
+    {
+        return Err(why);
+    }
     let planes = [
         shaderc::wide128_planes(pg.w128_sense[0], &companion[0]),
         shaderc::wide128_planes(pg.w128_sense[1], &companion[1]),
@@ -5415,6 +5449,65 @@ mod tests {
     use crate::target_key::{gles_surf_target_key, shc_blend_key_is_mixed, shc_blend_key_mixed};
     use crate::testutil::{CacheOp, MemEvent, RecordedDraw, TestGl, FILL, HEAP_DATA, HEAP_SHADER};
     use std::vec::Vec;
+
+    /* ---- the 128-bit swizzle guard (wide128_swizzle_refusal) ---- */
+
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    mod w128_swizzle {
+        use super::*;
+
+        const R: backend::GlesSwizzle = GLES_SWIZZLE_RED;
+        const G: backend::GlesSwizzle = GLES_SWIZZLE_GREEN;
+        const B: backend::GlesSwizzle = GLES_SWIZZLE_BLUE;
+        const A: backend::GlesSwizzle = GLES_SWIZZLE_ALPHA;
+
+        fn bind(swizzle: [backend::GlesSwizzle; 4], no_alpha: bool) -> GlesTextureBind {
+            let mut t = GlesTextureBind::ZERO;
+            t.swizzle = swizzle;
+            t.no_alpha = no_alpha as _;
+            t
+        }
+
+        fn refusal(t: GlesTextureBind, keyed: bool, wide: bool) -> Option<&'static str> {
+            let mut k = [None; shaderc::online::vivante::wide128::UNITS];
+            k[t.unit as usize] = keyed.then_some(1);
+            wide128_swizzle_refusal(&[t], &k, |_| wide)
+        }
+
+        #[test]
+        fn identity_passes() {
+            assert_eq!(refusal(bind([GLES_SWIZZLE_SAME; 4], false), true, true), None);
+            assert_eq!(refusal(bind([R, G, B, A], false), true, true), None);
+            assert_eq!(refusal(bind([GLES_SWIZZLE_SAME; 4], true), true, true), None);
+            assert_eq!(refusal(bind([R, G, B, A], true), true, true), None);
+            assert_eq!(refusal(bind([R, G, B, GLES_SWIZZLE_ONE], true), true, true), None);
+        }
+
+        #[test]
+        fn unjoinable_is_refused_by_name() {
+            let why = refusal(bind([B, G, R, A], false), true, true).expect("BGRA crosses the planes");
+            assert!(why.contains("texture swizzle is not joined"), "{why}");
+            for lane in 0..4 {
+                for c in [GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE] {
+                    let mut s = [R, G, B, A];
+                    s[lane] = c;
+                    assert!(refusal(bind(s, false), true, true).is_some(), "lane {lane} on {c}");
+                    /* a texture with no alpha: only ONE on alpha is the identity */
+                    let joined = lane == 3 && c == GLES_SWIZZLE_ONE;
+                    assert_eq!(refusal(bind(s, true), true, true).is_none(), joined, "no_alpha lane {lane} on {c}");
+                }
+            }
+            assert!(refusal(bind([R, G, B, GLES_SWIZZLE_ZERO], true), true, true).is_some());
+            assert!(refusal(bind([A, G, B, A], true), true, true).is_some());
+        }
+
+        #[test]
+        fn unkeyed_or_narrow_is_never_refused() {
+            let bgra = bind([B, G, R, A], false);
+            assert_eq!(refusal(bgra, false, true), None, "no companion slot");
+            assert_eq!(refusal(bgra, true, false), None, "not a 128-bit binding");
+        }
+    }
 
     /* ---- fixtures ---------------------------------------------------------- */
 
