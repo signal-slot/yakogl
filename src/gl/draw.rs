@@ -12295,20 +12295,21 @@ mod tests {
         assert_eq!(gl.error(), GL_NO_ERROR);
         assert!(gl.draws().is_empty());
         assert!(!pending_clear().color);
-        /* a clear of an incomplete framebuffer is still reported when the
-         * application moves on (as it was when the clear was fused into the
-         * next draw) */
+        /* a clear of an incomplete framebuffer is refused at the call
+         * (ES 2.0 4.4.5, ES 3.0 4.4.4.4) and nothing is recorded for it;
+         * until 2026-11-16 it was recorded and reported when the
+         * application moved on */
         let mut empty: GLuint = 0;
         // SAFETY: valid out pointer, plain GL calls.
         unsafe {
             glGenFramebuffers(1, &mut empty);
             glBindFramebuffer(GL_FRAMEBUFFER, empty); /* no attachments */
             glClear(GL_COLOR_BUFFER_BIT);
-            assert_eq!(gl.error(), GL_NO_ERROR, "the clear is only recorded");
+            assert_eq!(gl.error(), GL_INVALID_FRAMEBUFFER_OPERATION, "refused at the call");
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glClear(GL_COLOR_BUFFER_BIT);
         }
-        assert_eq!(gl.error(), GL_INVALID_FRAMEBUFFER_OPERATION);
+        assert_eq!(gl.error(), GL_NO_ERROR);
         assert!(gl.draws().is_empty());
         assert!(pending_clear().color, "the window's clear is pending");
     }
