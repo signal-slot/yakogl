@@ -62,7 +62,7 @@ The constant file is 320 vec4 = 1280 dwords, shared by both stages
 3. **Default-block uniforms stay in the file.** They are bounded by the
    384-row Appendix A budget (`MAX_UNIFORM_DWORDS`, stays 1536) but the
    GC's file is 320 registers for two stages: the existing
-   `constant_files_fit` refusal (`shader.rs:531`) keeps applying, and is
+   `constant_files_fit` refusal (`shader.rs:644`) keeps applying, and is
    unrelated to the block size. Do not change it.
 4. **Literals** are placed after the remaining uniform registers
    (`first_literal`, `select.rs:1852`) and now cost nothing extra for
