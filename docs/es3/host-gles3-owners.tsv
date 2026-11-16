@@ -28,6 +28,21 @@ v3d	\.texture\.(wrap|format\.compressed)\.etc2_	Set texturing state: .*GL_INVALI
 # --- float targets (#360)
 v3d		^Format not supported|requires GL_EXT_color_buffer_float|Unsupported attachment format|Renderbuffer format not supported	RC1	#360	32-bit float and R11F_G11F_B10F targets want GL_EXT_color_buffer_float (V3D, feature color-buffer-float)
 #
+# --- vivante (GC7000UL) rows: the tally item. Above the generic rules where they must win.
+vivante	\.negative_api\.buffer\.clear_buffer(u?iv)$		RC17	#335/#355	clearBuffer{iv,uiv} on a 128-bit target answers the wrong error
+vivante	\.state_query\.fbo\.framebuffer_attachment_component_type$		RC1	#335/#355	128-bit attachment refused by name, so the component-type query errors
+vivante	\.negative_api\.buffer\.(read_pixels_fbo_format_mismatch|blit_framebuffer_multisample)$		RC8	#339	multisample and read-buffer format pairs (GL_MAX_SAMPLES 1)
+vivante	\.uniform_api\.random\.(21|83)$	Compile failed	RC13	unowned	GC7000UL compiler refuses the program (RC10 limits or RC13 GLSL; reason not in the part file)
+vivante	\.transform_feedback\.random_full_array_capture\.	Compile failed	RC4	unowned	empty info log (RC4); GC7000UL compiler
+vivante	\.texture\.shadow\.	Failed to compile shader	RC5	unowned	shadow-sampler look-up refused by the GC7000UL compiler
+vivante	\.shaders\.(texture_functions|random)\.	Failed to compile shader	RC13	unowned	look-up (grad, offset, proj, texelFetchOffset, textureSize) refused by the GC7000UL compiler
+vivante	\.(fbo|fragment_out|pbo)\..*	(Format not supported|Unsupported attachment format|Renderbuffer format not supported)	RC1	#335/#355	float and 128-bit formats refused by name in src/vivante
+vivante	\.(fragment_out\.(basic|array|random)|fbo\.(blit\.conversion|color|completeness\.renderable|render)|pbo\.renderbuffer|read_pixels\.(skip|rowlength|alignment))\.		RC1	#335/#355	integer 64/128-bit target or draw refused (GL_INVALID_OPERATION; docs/notes/gc-int64-mixed-targets.md, gc-128bit-render-targets.md)
+vivante	\.shaders\.(builtin_functions|derivate)\.	GL_INVALID_OPERATION	RC1	#335/#355	executor/derivate draw into 128-bit or float targets refused
+vivante	\.texture\.format\.sized\.	Texture upload failed	RC2	#354	32-bit integer and float texture upload (rgb32i etc.)
+vivante	\.fbo\.blit\.depth_stencil\.	GL_INVALID_OPERATION	RC8	unowned	depth/stencil blit refused on the GC7000UL (as the V3D, docs/notes/blit-depth-window.md)
+vivante	\.texture\.units\.	Set .* image data: .*GL_INVALID_OPERATION	new	unowned	texture upload answers GL_INVALID_OPERATION in a 2/4/8-unit combination; cause not read
+#
 # --- multisample (#339): GL_MAX_SAMPLES 1 at 26d1c4a2
 *	\.(multisample|fbo\.msaa|fbo\.completeness\.samples|rasterization\.fbo\.rbo_multisample_4)\.		RC8	#339	4 samples (fbo.msaa 'Got GL_INVALID_OPERATION' at es3fFboTestCase.cpp:154 included)
 *	\.negative_api\.buffer\.blit_framebuffer_multisample$		RC8	#339	multisample blit errors
