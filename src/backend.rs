@@ -300,12 +300,12 @@ pub const fn gles_texfmt_return_32(f: u8) -> bool {
 
 /// Test hook: texel formats a host test adds to the mask, to exercise the
 /// native storage classes before any backend samples them.
-#[cfg(test)]
+#[cfg(any(test, feature = "host-test"))]
 pub static TEST_EXTRA_SAMPLED: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 /// Test hook: texel formats a host test takes out of the mask, to stand in
 /// for a back end that samples fewer classes than this build's.
-#[cfg(test)]
+#[cfg(any(test, feature = "host-test"))]
 pub static TEST_HIDDEN_SAMPLED: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 /// The texel formats (a mask of [`gles_texfmt_bit`]) this build's backend
@@ -323,7 +323,7 @@ pub fn sampled_texfmts() -> u64 {
     let m = V3D_SAMPLED_TEXFMTS;
     #[cfg(feature = "gpu-mali")]
     let m = crate::mali::backend::SAMPLED_TEXFMTS as u64;
-    #[cfg(test)]
+    #[cfg(any(test, feature = "host-test"))]
     let m = (m & !TEST_HIDDEN_SAMPLED.load(core::sync::atomic::Ordering::Relaxed))
         | TEST_EXTRA_SAMPLED.load(core::sync::atomic::Ordering::Relaxed);
     m
