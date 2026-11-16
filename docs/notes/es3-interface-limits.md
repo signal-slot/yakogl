@@ -98,23 +98,22 @@ defect.
 
 ## 5. Order of work and issue drafts
 
-1. V3D: `MAX_VARYING_VECTORS` 15 and a vertex-output constant 64 under
-   `!report-es2`; `tests/es3_v3d_varyings.rs` draws and compiles with 15
-   varyings and 64 output components (flat, centroid, and the point coordinate
-   in front); update `tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`
-   `known_gaps()` and `tests/es2_report_guard.rs` (the report-es2 answer stays 8).
-2. Float/int64: the host test of section 4, no code change expected.
-3. Uniform blocks: per `docs/notes/ubo-limits.md`, V3D first.
-4. Issue drafts: "PowerVR: MAX_VERTEX_OUTPUT_COMPONENTS 64" (needs a 16-vector
-   vertex compile; waits for `src/pvr/**`), "GC7000UL: MAX_VERTEX_OUTPUT_COMPONENTS
-   64" (waits for `src/vivante/**`), "Mali: varying limits" (stays as the Mali
-   plans have it).
-
 Status at `7c39ee92`: steps 1 to 3 are on main (`6581f22b`, `218c90ec` and
 `d17f4362` for the V3D varyings, `tests/es3_query_forms.rs` for step 2,
 `cb52fae8` for the V3D's uniform blocks). Step 4 is the issue drafts of the
 plan's report; the PowerVR and GC7000UL rows of section 6 are what they
 would close.
+
+Issue drafts for what is left (each waits for its owner of
+`src/pvr/**` or `src/vivante/**`):
+- "PowerVR: MAX_UNIFORM_BLOCK_SIZE 16384 and the combined uniform
+  components 50176 / 50048": the user blocks must be read from memory
+  (or behind the constant file); report 6144 / 1536 until then.
+- "GC7000UL: the same", design in `docs/notes/gc-ubo-const-limit.md` (`load`).
+- "PowerVR and GC7000UL: MAX_VERTEX_OUTPUT_COMPONENTS 64": needs a
+  16-vector vertex compile (16 output rows, one the position) and the VDM
+  output size / SHC io rows to carry it; reports 60 until then.
+- "Mali: varying limits": stays with the Mali plans (8 / 32 / 32).
 
 ## 6. Host dEQP before and after (HOST-ONLY)
 
