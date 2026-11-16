@@ -207,7 +207,7 @@ assignment.
 | `ARITH_CONSTANT` (`ArithConstant`) | `Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet` | `src/shaderc/online/mali/glsl.rs`, `nir.rs`, `nir_fs.rs` | 0 | 92 | plan #309 |
 | `MIXED_PRECISION` (`MixedPrecision`) | `Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` | 0 | 28 | plan #309 (#4496) |
 | `COLOUR_ZERO_HALF` (`ColourZeroHalf`) | `Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) is not lowered yet` | `src/shaderc/online/mali/nir_fs.rs` | 0 | 24 | plan #309 |
-| `ZS_ELSEWHERE` | `mali: a depth or stencil object drawn in another framebuffer's depth/stencil pair is not built yet` (`NOT_BUILT_ZS_ELSEWHERE`) | `src/mali/backend.rs` | 0 | 35 | plan #309 |
+| `ZS_ELSEWHERE` | `mali: a depth or stencil object drawn in another framebuffer's depth/stencil pair whose buffer no longer holds it is not built yet` (`NOT_BUILT_ZS_ELSEWHERE`; the measured 35 were refused with the earlier text, `...pair is not built yet`; since ce1fa529 the 35 `fbo.render.{shared_depthbuffer,recreate_depthbuffer,recreate_stencilbuffer}.*_depth_component16_stencil_index8` cases are drawn, expected Pass, not yet confirmed on the board; only a plane whose buffer is gone is still refused, see `docs/notes/mali-zs-sharing.md`) | `src/mali/backend.rs` | 0 | 35 | plan #309 |
 | **refusals** | | | **10947** | **11651** | |
 
 The refusal cases sum to 10947: the sixteen `MaliError` rows are 10102,
