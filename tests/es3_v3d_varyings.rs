@@ -686,6 +686,41 @@ mod v3d {
         assert_eq!(d.flat_zeroed, 1);
     }
 
+    /// All fifteen vec4 with the three interpolations mixed (flat, centroid,
+    /// smooth in turn): the packets and the draw's words say the same.
+    /// Flat vec4s are v00, v03, v06, v09, v12 (inputs 0, 12, 24, 36, 48),
+    /// centroid ones v01, v04, v07, v10, v13 (inputs 4, 16, 28, 40, 52).
+    #[test]
+    fn fifteen_vec4_with_flat_centroid_and_smooth_mixed() {
+        let _g = rig();
+        let (vs, fs) = sources(15, 15, &|i| ["flat", "centroid", ""][i % 3]);
+        let d = draw(&vs, &fs);
+        assert_eq!(d.seen.len(), 1);
+        assert_eq!(d.seen[0].num_inputs, 60);
+        assert_eq!(
+            d.flat,
+            vec![
+                Flags { word: 0, lower: 0, higher: 1, bits: 0xf00f },
+                Flags { word: 1, lower: 0, higher: 0, bits: 0xf00f },
+                Flags { word: 2, lower: 0, higher: 0, bits: 0xf },
+            ],
+            "{d:?}"
+        );
+        assert_eq!(
+            d.centroid,
+            vec![
+                Flags { word: 0, lower: 0, higher: 1, bits: 0xf00f0 },
+                Flags { word: 1, lower: 0, higher: 0, bits: 0xf00f0 },
+                Flags { word: 2, lower: 0, higher: 0, bits: 0xf0 },
+            ],
+            "{d:?}"
+        );
+        assert_eq!((d.flat_zeroed, d.centroid_zeroed), (0, 0));
+        let s = &d.seen[0];
+        assert_eq!((s.flat_shade_flags, s.flat_shade_flags_hi), (0x0f00_f00f, 0xf_00f0), "flat words");
+        assert_eq!(s.centroid_flags_hi, 0xf0_0f00, "centroid high word");
+    }
+
     /// One vector past the limit is a link error, not a draw.
     #[test]
     fn sixteen_varying_vectors_do_not_link() {
