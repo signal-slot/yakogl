@@ -3,9 +3,10 @@
 # STM32MP257F-DK: boot Zephyr from ST's U-Boot (design, 2026-11-13)
 
 Status: **design, written on the host from ST's source. Nothing here has run on
-the board.** Every fact that only the board can give is marked
-`TODO(board-env-read)` (a read-only look at the board) or `TODO(board-run)`
-(something the first run records), with one line saying what to read. The empty
+the board.** The facts that only the board can give were read
+read-only on 2026-11-16 (each cited "board read 2026-11-16, <command>"); what
+only a run at the U-Boot prompt can give is marked `TODO(board-run)`, with one
+line saying what to record. The empty
 "Board run" section at the end is for the run record.
 
 Goal (plan #357, ROADMAP stage 5, issues #7 and #1281; item P10 of
@@ -49,9 +50,10 @@ may differ: each place where that matters is marked):
   (`ST/include/autoboot.h:36-40`, `ST/common/autoboot.c:418`) and the single-key
   loop above is the one compiled in; the keyed path, which reads
   `bootdelaykey` and `bootstopkey` (`autoboot.c:240-241`), is not used, and no
-  such variable is set in the stock environment's source
-  (`TODO(board-env-read)`: the live `bootdelay`,
-  `bootdelaykey`, `stopkey` from `fw_printenv`).
+  such variable is set in the stock environment's source. The stored
+  environment agrees: `bootdelay=1`, and no `bootdelaykey`, `bootstopkey` or
+  `stopkey` is set (board read 2026-11-16, the decoded copy 0 of the
+  `u-boot-env` partition, `dd` + `tools/uboot_env.py print`).
 - **Console line length.** `CONFIG_SYS_CBSIZE` has no ST override
   (`grep` of `ST/configs/stm32mp25_defconfig` and `ST/include/configs/stm32mp25*.h`
   finds none), so it is Kconfig's default **1024** (`ST/cmd/Kconfig:78-85`,
@@ -76,10 +78,19 @@ may differ: each place where that matters is marked):
   where the board read found the CRC, a flag byte and the strings (pre-study,
   section 1). The layout of a copy is `crc32` (4 bytes, over the data), `flags`
   (1 byte, the redundancy flag) and the data (`ST/include/env_internal.h:59-64`,
-  `:80-86`). `TODO(board-env-read)`: both copies' CRCs and flag bytes, and the
-  partition size, read with `dd` from Linux (read-only); the runner's
-  `tools/board-stm32mp2.sh` already assumes these offsets and refuses when a
-  CRC fails.
+  `:80-86`). **Read on the board** (board read 2026-11-16, `lsblk -o
+  NAME,SIZE,TYPE,PARTLABEL,MOUNTPOINT` and `dd if=<u-boot-env partition>
+  bs=64k status=none` into a host file): the microSD is `mmcblk0` (59.5 GiB)
+  and `u-boot-env` is its partition 7, **512 KiB**, so the offsets above
+  hold. **Copy 0 (0x7e000) is valid**: CRC 0x7e7016c1, flag byte 0x02,
+  73 variables, 5489 of 8187 data bytes used. **Copy 1 (0x7c000) is all
+  zeros: stored CRC 0x00000000, which does not match its data, so it is
+  invalid** (never written, or erased). Flag 0x02 against an invalid other
+  copy means U-Boot uses copy 0 and a later `env save` writes copy 1 with
+  flag 0x03. `tools/uboot_env.py ... check` therefore exits 2 ("1 bad
+  copy(ies): copy 2") on this image although the board's U-Boot reads it
+  fine (see "Contradictions" in section 11). The eMMC (`mmcblk1`, 7.3 GiB)
+  carries its own `u-boot-env` (1 MiB) and `bootfs`; it was not read.
   **The layout, in one table** (ST's tree, tag `v2023.10-stm32mp-r3.1`;
   `uboot_env.py` numbers the copies 1 and 2, U-Boot's `env/mmc.c` 0 and 1):
 
@@ -105,7 +116,20 @@ may differ: each place where that matters is marked):
   ```
 
   (`env-layout-check` found this reads the DK's environment byte for byte as
-  ST's own tools do; `TODO(board-env-read)` still confirms it on the DK.)
+  ST's own tools do; the board read of 2026-11-16 confirms the offsets and
+  the CRC of copy 0 on the DK. Because copy 1 is zeros, `check` and `print`
+  refuse the whole image; to print copy 0 alone, copy 0's bytes over copy 1's
+  in a host-side copy of the image first, as the read did.)
+
+  **Linux's `fw_printenv` does not run as shipped** (board read 2026-11-16,
+  `fw_printenv` prints "Cannot initialize environment"; `cat /etc/fw_env.config`:
+  no such file; `ls /etc/fw_env.config*`: `.mmc`, `.nand`, `.nor` only).
+  `/etc/fw_env.config.mmc` names `/dev/disk/by-partlabel/u-boot-env` twice,
+  both `-0x2000 0x2000`, i.e. the **same** copy for both entries, and
+  `fw_printenv -c /etc/fw_env.config.mmc` prints "Cannot read environment,
+  using default". There is no `fw_setenv` (`/usr/sbin/fw_*` absent;
+  `/usr/bin/fw_printenv` is the only one). So the stored environment is read
+  by `dd` of the partition and `tools/uboot_env.py`, as above.
 - **`bootcmd` and `env_check`.** The compiled-in `bootcmd_stm32mp` prints
   "Boot over ...", runs `env_check`, sets `boot_targets` to `mmc${boot_instance}`
   when it booted from mmc, and runs `distro_bootcmd`
@@ -129,19 +153,51 @@ may differ: each place where that matters is marked):
   `:530-539` (the two `run` lines are `:534-535`). A successful extlinux boot does not return, so a script is reached
   only after extlinux has failed. The pre-study found `mmc0_extlinux/` and
   `mmc1_extlinux/` on the board's bootfs, not the source's `extlinux/`:
-  `TODO(board-env-read)`: the live `boot_syslinux_conf`, `boot_prefixes`,
-  `boot_scripts`, and the listing of `/boot` (names, sizes, sha256), which the
-  runner needs for the undo.
+  **The board's values differ from the source's here** (board read
+  2026-11-16, the stored environment's copy 0): `boot_targets=mmc0`,
+  `boot_device=mmc`, `boot_instance=0`, `boot_prefixes=/mmc0_` (not `/ /boot/`),
+  `boot_syslinux_conf=extlinux/extlinux.conf`, `boot_scripts=boot.scr.uimg
+  boot.scr`, `bootfstype=ext4`, `devplist=8`. With the prefix `/mmc0_` the
+  loop looks for `/mmc0_extlinux/extlinux.conf` (present, 302 bytes) and then
+  `/mmc0_boot.scr.uimg` (absent); the stock `/boot.scr.uimg` (4237 bytes) is
+  **not** reached by the loop. `bootcmd=run bootcmd_stm32mp` and
+  `altbootcmd=run bootcmd_stm32mp`; `bootcmd_stm32mp` is the compiled-in text
+  quoted above (`env_check`, then `boot_targets` narrowed to
+  `mmc${boot_instance}`, then `distro_bootcmd`). `scan_dev_for_boot_part`
+  lists the bootable partitions of the device (`part list ... -bootable`) and
+  the bootfs is partition 8 (`devplist=8`; `/boot` is `/dev/mmcblk0p8`, 64 MiB,
+  34500 KiB free of 60033 KiB, board read 2026-11-16, `df -P /boot`). The
+  stored environment also holds `fileaddr=90100000` and `filesize=108d`
+  (4237 bytes, the size of the stock `boot.scr.uimg`): an earlier boot loaded
+  that script to `scriptaddr` and the environment was saved afterwards.
+  `/boot` (board read 2026-11-16, `ls -lR /boot`; sha256 from `sha256sum`):
+  `Image.gz` -> `Image.gz-6.6.129` (11221833 bytes, sha256 2e7f9a88...ca87),
+  `boot.scr.uimg` (4237, 2aa6e59e...2c70), the DTBs (`stm32mp257f-dk.dtb`
+  119375 bytes, sha256 dc0a182d...0232, among 15 others),
+  `st-image-resize-initrd` (8647706), two splash bitmaps, `devicetree/`
+  (one `.dtbo`), `mmc0_extlinux/` (`extlinux.conf` 302 bytes, sha256
+  814f707a...25e7, and three board variants) and `mmc1_extlinux/`
+  (`extlinux.conf` 302 bytes, sha256 3e412763...bf2a, and one variant).
+  The `mmc0_` file boots `/Image.gz` with `FDTDIR /` and the initrd, its
+  `APPEND` naming the SD card's rootfs by PARTUUID. The `mmc1_` file differs
+  only in that PARTUUID (the eMMC's rootfs). There is no `yakogl/` directory
+  at the time of the read. The full 64-hex sha256 of every file is in the
+  `env_read` probe's output (`tools/probes/stm32mp257f_dk/env_read`), the
+  tool the undo and the c5 comparison use.
 - **Memory layout variables** (`stm32mp25_common.h:101-118`): `kernel_addr_r`
   0x8a000000, `fdt_addr_r` 0x90000000, **`scriptaddr` 0x90100000**,
   `pxefile_addr_r` 0x90200000, `fdtoverlay_addr_r` 0x90300000,
   `ramdisk_addr_r` 0x90400000, `kernel_comp_addr_r` 0x84000000 (size
   0x4000000). `CONFIG_SYS_LOAD_ADDR=0x84000000` (`defconfig:15`), the stack
   before relocation `CONFIG_CUSTOM_SYS_INIT_SP_ADDR=0x90000000` (`:5`).
-  `TODO(board-env-read)`: `fw_printenv scriptaddr kernel_addr_r fdt_addr_r
-  ramdisk_addr_r boot_targets boot_device boot_instance bootcmd` on the live
-  board; the stored environment may carry other values than the compiled-in
-  defaults, which is why the scripts never hard-code `scriptaddr` (section 3).
+  Board read 2026-11-16 (the stored environment's copy 0, decoded):
+  `kernel_addr_r=0x8a000000`, `fdt_addr_r=0x90000000`,
+  `scriptaddr=0x90100000`, `ramdisk_addr_r=0x90400000`,
+  `pxefile_addr_r=0x90200000`, `fdtoverlay_addr_r=0x90300000`,
+  `kernel_comp_addr_r=0x84000000`, `kernel_comp_size=0x04000000`,
+  `loadaddr=0x84000000`: **all equal the compiled-in defaults** and none
+  overlaps 0xa0000000..0xb0000000. The scripts still never hard-code
+  `scriptaddr` (section 3).
 - **Net.** `CONFIG_SYS_DISABLE_AUTOLOAD=y` (`defconfig:54`; `ST/cmd/Kconfig:1893`):
   `dhcp` does not fetch the DHCP bootfile by itself. The scripts set
   `autoload no` anyway and put it back. The ethernet is the DWC QoS MAC
@@ -212,7 +268,7 @@ bit 0 into the address, is built only for `CONFIG_CPU_V7M`
 | what | address | why |
 | --- | --- | --- |
 | the image | **0xa0000000**, `go 0xa0000000` | the link address: `zephyr,sram` of `driver/boards/st/stm32mp257f_dk` (a 256 MiB `memory@a0000000`), `YAKO_ADDR` of `tools/board-stm32mp2.sh`, `mp2z_load` of the scripts. The image runs only there, so it is loaded in place, never `booti`'d (which moves it: `ST/cmd/booti.c:77-86`, `ST/arch/arm/lib/image.c:70-75`) |
-| the script | **`${scriptaddr}`**, read from the live environment | the compiled-in value is 0x90100000 (`stm32mp25_common.h:105`, `:113`), but the stored environment is the board's; the typed line uses `${scriptaddr}` and nothing hard-codes it. `TODO(board-env-read)`: the live `scriptaddr` |
+| the script | **`${scriptaddr}`**, read from the live environment | the compiled-in value is 0x90100000 (`stm32mp25_common.h:105`, `:113`), but the stored environment is the board's, and it holds 0x90100000 too (board read 2026-11-16, the stored environment's copy 0, `dd` + `tools/uboot_env.py print`); the typed line uses `${scriptaddr}` and nothing hard-codes it |
 | the window | 0xa0000000 .. 0xb0000000 | `mp2z_window` = 0x10000000; `LOAD_END` in the runner |
 | the size guard | the file and the header's `image_size` stay below **255 MiB** | see below |
 
@@ -234,9 +290,13 @@ bit 0 into the address, is built only for `CONFIG_CPU_V7M`
   above the window; the copy of U-Boot's own relocation, the `fdt_blob`, the
   `bd` and the malloc area are in that same block (`bdinfo` prints
   `relocaddr`, `sp start` and `fdt_blob`, `ST/cmd/bdinfo.c:153-158`,
-  `ST/arch/arm/lib/bdinfo.c:47`). `TODO(board-env-read)`: `bdinfo` at the
-  prompt, once, to confirm `relocaddr` is far above 0xb0000000. The source
-  reading says so; this is a source reading, not a measurement.
+  `ST/arch/arm/lib/bdinfo.c:47`). `TODO(board-run)`: `bdinfo` at the
+  prompt, once, to confirm `relocaddr` is far above 0xb0000000 (it needs the
+  U-Boot console; Linux cannot read it). The source reading says so; this is
+  a source reading, not a measurement. The stored `fdtcontroladdr=f80048b0`
+  and `api_address=f80747f0` (board read 2026-11-16, the stored environment)
+  are U-Boot's own device-tree and API addresses of an earlier boot, far
+  above 0xb0000000, which agrees with the reading.
 - U-Boot's working addresses are all below the window: stack before
   relocation 0x90000000, `kernel_comp` 0x84000000-0x88000000, `kernel_addr_r`
   0x8a000000, `fdt_addr_r`, `scriptaddr`, `pxefile`, overlay and ramdisk at
@@ -263,7 +323,7 @@ handoff's rules that this note takes over: load the image to 0xa0000000 and the
 script to `${scriptaddr}`; read the addresses from the live environment; keep
 the image's load size under 255 MiB; and the one point resting on the source
 alone is U-Boot's relocation address, which `bdinfo` confirms
-(`TODO(board-env-read)`, above). The 255 MiB guard is one MiB tighter than the
+(`TODO(board-run)`, above). The 255 MiB guard is one MiB tighter than the
 committed scripts, which compare against the full 256 MiB window
 (`mp2z_window` = 0x10000000): an image between 255 and 256 MiB passes the
 scripts and fails the handoff's rule. Images are megabytes; a planner may want
@@ -367,10 +427,16 @@ ST's `stm32mp25_defconfig` does not set `CONFIG_TFTP_PORT` (the option is
 `WELL_KNOWN_PORT`, UDP port 69 (`tftp.c:26`, `:933`): the TFTP server must
 listen on port 69, and setting `tftpdstp` changes nothing.
 
-`TODO(board-env-read)`: that the DK's U-Boot has a link and a DHCP lease on
-the lab network (`dhcp` at the prompt, then `printenv serverip ipaddr`;
-read-only; never recorded with its addresses), and that the TFTP server is
-reachable from it. The compiled-in defaults include a fixed `serverip`
+What Linux shows of the network (board read 2026-11-16, `ip -o link show`,
+`ip route`, `systemctl is-active`): the board's Ethernet is `end0` (the DWC
+QoS MAC) and it has a default route under `systemd-networkd`, so the lab
+network has a DHCP server and the cable is in. The stored environment has
+`autoload=0` and no `ipaddr`, `serverip` or `ethaddr` variable, so U-Boot
+takes all of them from `dhcp` (the board's MAC comes from the device tree
+or the fuses, not the environment). What Linux cannot show, and the first run
+records, is `TODO(board-run)`: that U-Boot's own link and DHCP lease come up
+(`dhcp` at the prompt, then `printenv serverip ipaddr`; read-only; never
+recorded with its addresses), and that the TFTP server is reachable from it. The compiled-in defaults include a fixed `serverip`
 (`defconfig:78-79`); the scripts do not use it.
 
 ## 6. The runner's whole cycle
@@ -508,7 +574,9 @@ sentence and is why the bound has two cases:
   `CONFIG_CYCLIC=y`, `CONFIG_WATCHDOG_TIMEOUT_MSECS=60000`,
   `# CONFIG_WATCHDOG_AUTOSTART is not set`, `CONFIG_ENV_SIZE=0x2000` and
   `CONFIG_SYS_CBSIZE=1024`. That is the source's configuration; the board's
-  binary may differ (`TODO(board-env-read)`, below).
+  binary may differ (`TODO(board-run)`, below). The stored environment's
+  `ver=U-Boot 2023.10-stm32mp-r3.1 (Oct 02 2023 - 14:39:59 +0000)` (board read
+  2026-11-16, the stored environment) is the tag the citations use.
 - At init `initr_watchdog` probes every watchdog and `init_watchdog_dev` starts
   those flagged to autostart (`ST/drivers/watchdog/wdt-uclass.c:70-95`,
   `:96-118`). `WATCHDOG_AUTOSTART` itself defaults to n for STM32MP
@@ -543,7 +611,7 @@ The consequence for the runner: it must not rely on the watchdog to end a
 prompt it left. It sends nothing after a missed echo or a missed prompt
 (`mp2_uboot_console.py`: "nothing is typed after a miss"), so the **runner's own bounds** (its `KEY_BOUND`, `MISS_WINDOW`, `NEXT_BOUND`) end the run, and
 the verdict says where it stopped; a prompt left behind is a "NEEDS A PERSON"
-case, with the undo of section 8. `TODO(board-env-read)`: whether the IWDG or
+case, with the undo of section 8. `TODO(board-run)`: whether the IWDG or
 the SMC watchdog is counting at the prompt: read an existing console capture
 of a boot for the `WDT:   Started` line, then at the prompt `wdt list` (if the
 command exists: `help wdt`), then watch whether the prompt resets about 32 s
@@ -603,17 +671,40 @@ command that could break them:
 
 | marker | what to read or record |
 | --- | --- |
-| `TODO(board-env-read)` | `fw_printenv`: `scriptaddr`, `kernel_addr_r`, `fdt_addr_r`, `ramdisk_addr_r`, `boot_targets`, `boot_device`, `boot_instance`, `boot_prefixes`, `boot_scripts`, `boot_syslinux_conf`, `bootdelay`, `bootdelaykey`, `bootcmd` (section 1) |
-| `TODO(board-env-read)` | the `u-boot-env` partition, read-only `dd`: both copies' CRC, the flag bytes, the partition size (section 1) |
-| `TODO(board-env-read)` | `bdinfo` at the prompt once: `relocaddr`, `sp start`, `fdt_blob` far above 0xb0000000 (section 3) |
-| `TODO(board-env-read)` | whether the watchdog is serviced at the prompt: the `WDT:   Started` line in a console capture, `wdt list` (section 9) |
-| `TODO(board-env-read)` | the listing of `/boot`: names, sizes, `sha256sum`, free space; the partition number of bootfs (sections 1, 8) |
-| `TODO(board-env-read)` | link and DHCP in U-Boot, the TFTP server's reachability (section 5) |
+| done 2026-11-16 | the stored environment's variables: section 1 (distro loop, memory layout), section 3 |
+| done 2026-11-16 | the `u-boot-env` partition: both copies' CRC and flag, the size (section 1) |
+| `TODO(board-run)` | `bdinfo` at the prompt once: `relocaddr`, `sp start`, `fdt_blob` far above 0xb0000000 (section 3) |
+| `TODO(board-run)` | whether the watchdog is serviced at the prompt: the `WDT:   Started` line in a console capture, `wdt list` (section 9) |
+| done 2026-11-16 | the listing of `/boot`: names, sizes, `sha256sum`, free space; the partition number of bootfs (section 1) |
+| `TODO(board-run)` | link and DHCP in U-Boot, the TFTP server's reachability (section 5) |
 | `TODO(board-run)` | the `mp2-handover:` line: `el`, `sctlr`, `m`, `c`, `i`, `x0`..`x3` (sections 2, 4) |
 | `TODO(board-run)` | the prompt text as printed; the TFTP rate; the verdict (sections 5, 6) |
 | `TODO(board-run)` | the `fw_printenv` diff before and after, expected empty (section 7) |
 | `TODO(board-run)` | the `/boot` sha256 comparison, expected identical but for `yakogl/` (section 8) |
 | `TODO(board-run)` | the watchdog's behaviour from U-Boot's `go` (section 9) |
+
+### Contradictions the board read found
+
+Board read 2026-11-16 against the design above:
+
+1. **`boot_prefixes=/mmc0_`**, not `/ /boot/`: the loop never reaches the
+   stock `/boot.scr.uimg`; the one-shot is typed, so the design does not
+   depend on it.
+2. **Linux's `fw_printenv` is unusable as shipped** (no `/etc/fw_env.config`;
+   the `.mmc` sample lists the same offset twice). A runner or the `env_read`
+   probe that calls `fw_printenv` on this card fails; they must read the
+   partition with `dd` and decode it with `tools/uboot_env.py`.
+3. **Copy 1 (0x7c000) is zeros**, so `tools/uboot_env.py check` refuses the
+   image today, and a `check` that requires both copies valid will fail
+   before any run. The c5 comparison must compare copy 0 and the `dd` image's
+   sha256, and treat copy 1 as "invalid before and after" unless a run saves
+   the environment.
+4. The stored environment carries `fileaddr=90100000`, `filesize=108d`: values
+   a one-shot's own `load` changes in RAM only; the stored ones must come out
+   identical after the run.
+5. Nothing contradicts the 0xa0000000..0xb0000000 window: `scriptaddr`,
+   `kernel_addr_r`, `fdt_addr_r`, `ramdisk_addr_r` are the compiled-in
+   defaults, all below it.
 
 ## Board run
 
