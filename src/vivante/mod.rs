@@ -69,6 +69,7 @@ pub mod rs_interp;
 pub mod shader;
 pub mod state;
 pub mod texture;
+pub mod tex_layout;
 pub mod tiled_copy;
 pub mod tiled_rt;
 pub mod ts;

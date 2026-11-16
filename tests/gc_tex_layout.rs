@@ -16,13 +16,9 @@
 
 #![cfg(all(feature = "host-test", feature = "gpu-vivante"))]
 
-#[path = "../src/vivante/tex_layout.rs"]
-#[allow(dead_code)]
-mod tex_layout;
-
-use tex_layout::*;
 use yakogl::backend::{GlesTextureBind, GLES_TEXFMT_RGBA8};
 use yakogl::vivante::regs;
+use yakogl::vivante::tex_layout::*;
 use yakogl::vivante::texture::format_words;
 
 fn input(w: u32, h: u32, levels: u32, layout: Layout, stride_texels: u32) -> Input {
