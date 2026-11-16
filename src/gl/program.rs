@@ -22,7 +22,7 @@ use core::fmt::Write as _;
 use super::consts::*;
 use super::context::{
     self, gl_trace, obj_index, obj_name, GlContext, GlProgram, CAP_COMBINED_TEXTURE_UNITS, CAP_SAMPLERS,
-    CAP_TEXTURE_UNITS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_VERTEX_ATTRIBS, OBJ_PROGRAM,
+    CAP_TEXTURE_UNITS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_UNIFORM_DWORDS, MAX_VERTEX_ATTRIBS, OBJ_PROGRAM,
 };
 use super::draw;
 use super::shader::{self, copy_out_text, log_text, INFO_LOG_SIZE};
@@ -33,9 +33,27 @@ use crate::shaderc::{
 };
 use crate::util::{self, Bytes, CStrWriter, Global};
 
-/// The location index byte; Qt Quick 3D lit materials link 100+ after
-/// flattening their light arrays.
-const PROG_MAX_UNIFORMS: usize = 255;
+/// The most default-block locations one program can have: each takes at
+/// least one dword of a stage's uniform block (`MAX_UNIFORM_DWORDS` each) or
+/// is a sampler, so a program whose uniforms fit the blocks always fits
+/// here. GL ES counts uniforms by storage, not by name: Qt Quick 3D's
+/// PrincipledMaterial has 453 (its light arrays of structs, one location
+/// per element member, #7106), past the byte this used to be.
+const PROG_MAX_UNIFORMS: usize = 2 * MAX_UNIFORM_DWORDS + 2 * CAP_SAMPLERS;
+
+/// The locations a context's programs hold between them: as many as 255
+/// for each of `MAX_PROGRAMS`, the fixed per-program table this pool
+/// replaced (the same memory), shared so that one program may hold far
+/// more than 255.
+const LOC_POOL: usize = MAX_PROGRAMS * 255;
+
+/// A uniform location is `index | element << LOC_ELEM_SHIFT`: the index of
+/// the program's location entry in the low 16 bits (`PROG_MAX_UNIFORMS`
+/// fits), the array element above (an array has at most 255 elements,
+/// `ShcUniform::array_len`), so a location is never negative.
+const LOC_ELEM_SHIFT: u32 = 16;
+const LOC_INDEX_MASK: u32 = (1 << LOC_ELEM_SHIFT) - 1;
+const _: () = assert!(PROG_MAX_UNIFORMS <= LOC_INDEX_MASK as usize + 1);
 
 /// One uniform location: where the value lives in each stage's block.
 #[derive(Clone, Copy)]
@@ -43,7 +61,7 @@ struct ProgLocation {
     /// The reflection entry of the uniform: `uniforms[ref_index]` of the
     /// program's VS copy (`ref_stage` 0, when the VS declares it) or FS copy (1).
     ref_stage: u8,
-    ref_index: u8,
+    ref_index: u16,
     /// Dword offsets, -1 = not in that stage.
     vs_off: i32,
     fs_off: i32,
@@ -59,9 +77,27 @@ struct ProgLocation {
     flattened: bool,
 }
 
+/// The table a link builds (`build_locations`), one per context: committed
+/// into the context's [`LocPool`] when the link succeeds.
 struct ProgLocTable {
     u: [ProgLocation; PROG_MAX_UNIFORMS],
-    count: u8,
+    count: u16,
+}
+
+/// Where a linked program's locations are in its context's [`LocPool`].
+#[derive(Clone, Copy)]
+struct LocRange {
+    start: u32,
+    count: u16,
+}
+
+/// The locations of every program of a context, each program's a
+/// contiguous range (`LocRange`), packed from the start: a program that
+/// relinks or goes away gives its range back and the ranges after it move
+/// down (`loc_release`). Links are rare; reads index a slice.
+struct LocPool {
+    u: [ProgLocation; LOC_POOL],
+    used: u32,
 }
 
 /// Uniform blocks a program may have, both stages together: ES 3.0's
@@ -85,7 +121,11 @@ pub(super) struct ProgBlocks {
 
 /// File-static state of this module, per context and program.
 struct ProgState {
-    loc: [[ProgLocTable; MAX_PROGRAMS]; MAX_CONTEXTS],
+    /// Each program's range of its context's location pool.
+    loc: [[LocRange; MAX_PROGRAMS]; MAX_CONTEXTS],
+    pool: [LocPool; MAX_CONTEXTS],
+    /// The table the link in progress builds.
+    building: [ProgLocTable; MAX_CONTEXTS],
     /// The active uniform blocks of each program (glLinkProgram).
     blocks: [[ProgBlocks; MAX_PROGRAMS]; MAX_CONTEXTS],
     log: [[[u8; INFO_LOG_SIZE]; MAX_PROGRAMS]; MAX_CONTEXTS],
@@ -130,6 +170,48 @@ struct ProgState {
 }
 
 static STATE: Global<ProgState> = Global::zeroed();
+
+impl ProgState {
+    /// The locations of `program` (index `h`) in context `ctx`.
+    fn locs(&self, ctx: usize, h: usize) -> &[ProgLocation] {
+        let r = self.loc[ctx][h];
+        let start = r.start as usize;
+        self.pool[ctx].u.get(start..start + r.count as usize).unwrap_or(&[])
+    }
+
+    /// Give program `h`'s range back: the ranges after it move down.
+    fn loc_release(&mut self, ctx: usize, h: usize) {
+        let LocRange { start, count } = self.loc[ctx][h];
+        self.loc[ctx][h] = LocRange { start: 0, count: 0 };
+        if count == 0 {
+            return;
+        }
+        let pool = &mut self.pool[ctx];
+        let (s, n, used) = (start as usize, count as usize, pool.used as usize);
+        pool.u.copy_within(s + n..used, s);
+        pool.used -= u32::from(count);
+        for r in self.loc[ctx].iter_mut() {
+            if r.count != 0 && r.start > start {
+                r.start -= u32::from(count);
+            }
+        }
+    }
+
+    /// Commit context `ctx`'s built table as program `h`'s locations (its
+    /// old range already given back). False when the pool cannot take it.
+    fn loc_commit(&mut self, ctx: usize, h: usize) -> bool {
+        let n = self.building[ctx].count as usize;
+        let at = self.pool[ctx].used as usize;
+        if at + n > LOC_POOL {
+            return false;
+        }
+        let (pool, building) = (&mut self.pool[ctx], &self.building[ctx]);
+        pool.u[at..at + n].copy_from_slice(&building.u[..n]);
+        pool.used += n as u32;
+        self.loc[ctx][h] = LocRange { start: at as u32, count: n as u16 };
+        true
+    }
+}
 
 /// The error for a name that is not a program object (GL ES 3.0 2.5):
 /// GL_INVALID_OPERATION when it names a shader, else GL_INVALID_VALUE. The
@@ -262,9 +344,9 @@ fn entry_active_count(p: &GlProgram, l: &ProgLocation) -> u32 {
 
 /// `(entry, outer index)` of the `index`-th active uniform, walking the table
 /// in order and counting what each entry stands for.
-fn active_uniform_nth<'a>(p: &GlProgram, tab: &'a ProgLocTable, index: u32) -> Option<(&'a ProgLocation, u32)> {
+fn active_uniform_nth<'a>(p: &GlProgram, tab: &'a [ProgLocation], index: u32) -> Option<(&'a ProgLocation, u32)> {
     let mut seen = 0u32;
-    for l in &tab.u[..tab.count as usize] {
+    for l in tab {
         let n = entry_active_count(p, l);
         if index < seen + n {
             return Some((l, index - seen));
@@ -276,8 +358,8 @@ fn active_uniform_nth<'a>(p: &GlProgram, tab: &'a ProgLocTable, index: u32) -> O
 
 /// Every active uniform of the program outside its uniform blocks, as GL
 /// counts them.
-fn active_uniform_total(p: &GlProgram, tab: &ProgLocTable) -> u32 {
-    tab.u[..tab.count as usize].iter().map(|l| entry_active_count(p, l)).sum()
+fn active_uniform_total(p: &GlProgram, tab: &[ProgLocation]) -> u32 {
+    tab.iter().map(|l| entry_active_count(p, l)).sum()
 }
 
 /* ---- uniform blocks (ES 3.0 2.12.6) ----------------------------------------
@@ -406,7 +488,7 @@ enum Active<'a> {
     Member(usize, shaderc::ShcBlockMember),
 }
 
-fn active_nth<'a>(p: &'a GlProgram, tab: &'a ProgLocTable, bl: &'a ProgBlocks, index: u32) -> Option<Active<'a>> {
+fn active_nth<'a>(p: &'a GlProgram, tab: &'a [ProgLocation], bl: &'a ProgBlocks, index: u32) -> Option<Active<'a>> {
     if let Some((l, k)) = active_uniform_nth(p, tab, index) {
         return Some(Active::Default(l, k));
     }
@@ -414,7 +496,7 @@ fn active_nth<'a>(p: &'a GlProgram, tab: &'a ProgLocTable, bl: &'a ProgBlocks, i
     block_members(p, bl).nth(j as usize).map(|(b, m)| Active::Member(b, m))
 }
 
-fn active_total(p: &GlProgram, tab: &ProgLocTable, bl: &ProgBlocks) -> u32 {
+fn active_total(p: &GlProgram, tab: &[ProgLocation], bl: &ProgBlocks) -> u32 {
     active_uniform_total(p, tab) + block_members(p, bl).count() as u32
 }
 
@@ -434,11 +516,11 @@ fn active_describe<'a>(p: &'a GlProgram, a: &Active<'_>) -> (GlName<'a>, GLint, 
 
 /// The program's blocks and the location and block tables of `program` in
 /// the current context, for the entry points below.
-fn prog_tables(c: &GlContext, program: GLuint) -> (&'static ProgLocTable, &'static ProgBlocks) {
+fn prog_tables(c: &GlContext, program: GLuint) -> (&'static [ProgLocation], &'static ProgBlocks) {
     // SAFETY: single-threaded by contract; read-only views of this module's
     // state, taken once per entry point.
     let st = unsafe { STATE.get() };
-    (&st.loc[c.group as usize][obj_index(program)], &st.blocks[c.group as usize][obj_index(program)])
+    (st.locs(c.group as usize, obj_index(program)), &st.blocks[c.group as usize][obj_index(program)])
 }
 
 /// glTransformFeedbackVaryings: remember how many varyings the next link of
@@ -929,7 +1011,7 @@ pub unsafe extern "C" fn glCreateProgram() -> GLuint {
             p.used = true;
             // SAFETY: single-threaded by contract; taken once in this entry point.
             let st = STATE.get();
-            st.loc[c.group as usize][h].count = 0;
+            st.loc_release(c.group as usize, h);
             st.blocks[c.group as usize][h].count = 0;
             st.log[c.group as usize][h][0] = 0;
             st.delete_pending[c.group as usize][h] = false;
@@ -1205,7 +1287,7 @@ fn build_locations(p: &mut GlProgram, tab: &mut ProgLocTable, log: &mut [u8; INF
                     l.vs_binding1 = 0;
                     l.flattened = row_is_flattened(stage, name);
                     l.ref_stage = st;
-                    l.ref_index = i as u8;
+                    l.ref_index = i as u16;
                     l.vs_off = -1;
                     l.fs_off = -1;
                     k
@@ -1251,7 +1333,7 @@ fn build_locations(p: &mut GlProgram, tab: &mut ProgLocTable, log: &mut [u8; INF
                 l.fs_sampler = true;
                 /* the FS entry carries the binding */
                 l.ref_stage = st;
-                l.ref_index = i as u8;
+                l.ref_index = i as u16;
             }
         }
     }
@@ -1982,7 +2064,7 @@ unsafe fn link_reset(c: &mut GlContext, program: GLuint) {
         p.free_uniforms();
     }
     st.log[ctx][obj_index(program)][0] = 0;
-    st.loc[ctx][obj_index(program)].count = 0;
+    st.loc_release(ctx, obj_index(program));
     st.blocks[ctx][obj_index(program)].count = 0;
     draw::invalidate_program(c, program);
 }
@@ -1999,7 +2081,7 @@ pub(super) unsafe fn link_with(c: &mut GlContext, program: GLuint, inputs: &Link
     link_reset(c, program);
     // SAFETY: single-threaded by contract; taken once here.
     let st = STATE.get();
-    let tab = &mut st.loc[ctx][obj_index(program)];
+    let tab = &mut st.building[ctx];
     let log = &mut st.log[ctx][obj_index(program)];
     let blocks = &mut st.blocks[ctx][obj_index(program)];
     let (rvs, rfs) = (inputs.rvs, inputs.rfs);
@@ -2114,6 +2196,17 @@ pub(super) unsafe fn link_with(c: &mut GlContext, program: GLuint, inputs: &Link
     if build_attrib_indices(p, &explicit, log) != 0 {
         return false;
     }
+    /* the built table becomes the program's range of the context's pool */
+    if !st.loc_commit(ctx, obj_index(program)) {
+        write_log(
+            &mut st.log[ctx][obj_index(program)],
+            format_args!(
+                "link error: this context's programs hold more than {} uniform locations between them",
+                LOC_POOL
+            ),
+        );
+        return false;
+    }
     p.linked = true;
     true
 }
@@ -2125,7 +2218,7 @@ unsafe fn destroy_program(c: &mut GlContext, program: GLuint) {
     super::program_binary::forget(c.group, program);
     // SAFETY: single-threaded by contract; the callers hold no other reference to STATE.
     let st = STATE.get();
-    st.loc[c.group as usize][obj_index(program)].count = 0;
+    st.loc_release(c.group as usize, obj_index(program));
     st.blocks[c.group as usize][obj_index(program)].count = 0;
     st.delete_pending[c.group as usize][obj_index(program)] = false;
     st.validated[c.group as usize][obj_index(program)] = false;
@@ -2288,7 +2381,7 @@ pub unsafe extern "C" fn glGetUniformLocation(program: GLuint, name: *const GLch
 
     let p = &c.objs_ref().programs[obj_index(program)];
     // SAFETY: single-threaded by contract; taken once in this entry point.
-    let tab = &STATE.get().loc[c.group as usize][obj_index(program)];
+    let tab = STATE.get().locs(c.group as usize, obj_index(program));
     // SAFETY: name is a NUL-terminated string (GL contract).
     let name = util::cstr_bytes(name);
     /* "If name starts with the reserved prefix "gl_", a value of -1 is
@@ -2297,11 +2390,11 @@ pub unsafe extern "C" fn glGetUniformLocation(program: GLuint, name: *const GLch
     if name.starts_with(b"gl_") {
         return -1;
     }
-    match find_location(p, &tab.u[..tab.count as usize], name) {
-        /* the element rides in the bits above the index byte */
-        Some((i, elem)) => i as GLint | (elem << 8) as GLint,
+    match find_location(p, tab, name) {
+        /* the element rides in the bits above the 16-bit index */
+        Some((i, elem)) => i as GLint | (elem << LOC_ELEM_SHIFT) as GLint,
         None => {
-            log_missing_uniform(p, &tab.u[..tab.count as usize], program, name);
+            log_missing_uniform(p, tab, program, name);
             -1 /* not an active uniform: no error (GL) */
         }
     }
@@ -2479,15 +2572,14 @@ fn uniform_entry(c: &mut GlContext, st: &ProgState, program: GLuint, location: G
         return None;
     }
 
-    let tab = &st.loc[c.group as usize][obj_index(program)];
-    let index = (location & 0xff) as usize;
-    let elem = location as u32 >> 8; /* the array element (glGetUniformLocation) */
+    let tab = st.locs(c.group as usize, obj_index(program));
+    let index = (location as u32 & LOC_INDEX_MASK) as usize;
+    let elem = location as u32 >> LOC_ELEM_SHIFT; /* the array element (glGetUniformLocation) */
 
-    if index >= tab.count as usize {
+    let Some(l) = tab.get(index) else {
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return None;
-    }
-    let l = &tab.u[index];
+    };
     let prog = &c.objs_ref().programs[obj_index(program)];
     let r = location_ref(prog, l);
     let declared = declared_array(prog, l);
@@ -3092,7 +3184,7 @@ pub unsafe extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: 
         GL_PROGRAM_BINARY_LENGTH => binary_length,
         GL_PROGRAM_BINARY_RETRIEVABLE_HINT => st.binary_retrievable[ctx][h] as GLint,
         GL_ATTACHED_SHADERS => (p.vs != 0) as GLint + (p.fs != 0) as GLint,
-        GL_ACTIVE_UNIFORMS => active_total(p, &st.loc[ctx][h], &st.blocks[ctx][h]) as GLint,
+        GL_ACTIVE_UNIFORMS => active_total(p, st.locs(ctx, h), &st.blocks[ctx][h]) as GLint,
         GL_ACTIVE_UNIFORM_BLOCKS => GLint::from(st.blocks[ctx][h].count),
         GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH => {
             let bl = &st.blocks[ctx][h];
@@ -3132,7 +3224,7 @@ pub unsafe extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: 
             /* the names glGetActiveUniform HANDS OUT, which are not the
              * reflection's: an array's carries "[0]" and a struct array's
              * carries its element index, and both are longer */
-            let (tab, bl) = (&st.loc[ctx][h], &st.blocks[ctx][h]);
+            let (tab, bl) = (st.locs(ctx, h), &st.blocks[ctx][h]);
             let longest = (0..active_total(p, tab, bl))
                 .filter_map(|i| active_nth(p, tab, bl, i))
                 .map(|a| active_describe(p, &a).0.len())
@@ -4911,7 +5003,7 @@ mod tests {
     fn set_table(stage: &mut crate::shaderc::ShcShader, table: Vec<ShcUniform>) {
         let table: &'static [ShcUniform] = Box::leak(table.into_boxed_slice());
         stage.uniforms = table.as_ptr();
-        stage.num_uniforms = table.len() as u8;
+        stage.num_uniforms = table.len() as u16;
     }
 
     /// A linked, current program whose uniform reflection is replaced by hand-built tables: the offline table has
@@ -4933,7 +5025,10 @@ mod tests {
         // SAFETY: TestGl serialises the tests; no other reference to STATE is live.
         let st = unsafe { STATE.get() };
         let mut log = [0u8; INFO_LOG_SIZE];
-        assert_eq!(build_locations(p, &mut st.loc[c.group as usize][obj_index(prog)], &mut log), 0);
+        let ctx = c.group as usize;
+        assert_eq!(build_locations(p, &mut st.building[ctx], &mut log), 0);
+        st.loc_release(ctx, obj_index(prog));
+        assert!(st.loc_commit(ctx, obj_index(prog)), "the pool takes the hand-built table");
         /* the hand-built layouts reach further than the linked shaders' blocks */
         p.free_uniforms();
         // SAFETY: C heap blocks the program owns from here (freed with it).
@@ -5330,21 +5425,25 @@ mod tests {
         assert!(!log_text(&log).is_empty());
     }
 
+    /// The table takes every uniform two full stage blocks can hold: one
+    /// location per dword is the most a program can need (#7106: the byte it
+    /// used to be refused Qt Quick 3D's PrincipledMaterial at 453).
     #[test]
-    fn build_locations_limits_the_table_to_255_names() {
+    fn build_locations_takes_one_location_per_dword_of_both_blocks() {
         let (mut p, mut tab, mut log) = blank();
         let names = |prefix: &str, n: usize| -> Vec<ShcUniform> {
             (0..n).map(|i| uni(&std::format!("{prefix}{i}"), i as u16, 1, GL_FLOAT, 1)).collect()
         };
-        set_table(&mut p.rvs, names("v", 200));
-        set_table(&mut p.rfs, names("f", 55));
+        set_table(&mut p.rvs, names("v", 300));
+        set_table(&mut p.rfs, names("f", 453));
         assert_eq!(build_locations(&mut p, &mut tab, &mut log), 0);
-        assert_eq!(tab.count, 255);
+        assert_eq!(tab.count, 753);
+        assert_eq!(location_ref(&p, &tab.u[752]).dword_off, 452, "the last FS row, past index 255");
 
-        set_table(&mut p.rfs, names("f", 56));
-        assert_eq!(build_locations(&mut p, &mut tab, &mut log), -1);
-        let text = String::from_utf8(log_text(&log).to_vec()).unwrap();
-        assert!(text.contains("more than 255 uniforms"), "{text}");
+        set_table(&mut p.rvs, names("v", MAX_UNIFORM_DWORDS));
+        set_table(&mut p.rfs, names("f", MAX_UNIFORM_DWORDS));
+        assert_eq!(build_locations(&mut p, &mut tab, &mut log), 0, "{}", Bytes(log_text(&log)));
+        assert_eq!(tab.count as usize, 2 * MAX_UNIFORM_DWORDS);
     }
 
     #[test]
@@ -6736,9 +6835,9 @@ mod tests {
         let gl = fresh();
         let p = lit_program(&gl);
         let base = loc(p, "u_spots.spot[0].position");
-        assert!((0..256).contains(&base));
-        assert_eq!(loc(p, "u_spots.spot[3].position"), base | (3 << 8));
-        assert_eq!(loc(p, "u_spots.spot[15].position"), base | (15 << 8));
+        assert!((0..1 << LOC_ELEM_SHIFT).contains(&base));
+        assert_eq!(loc(p, "u_spots.spot[3].position"), base | (3 << LOC_ELEM_SHIFT));
+        assert_eq!(loc(p, "u_spots.spot[15].position"), base | (15 << LOC_ELEM_SHIFT));
         assert_eq!(loc(p, "u_spots.spot[16].position"), -1, "beyond the array");
         assert_eq!(loc(p, "u_spots.spot[3].nothing"), -1);
         assert_eq!(loc(p, "u_spots.nope[3].position"), -1);
@@ -6752,8 +6851,8 @@ mod tests {
         let base = loc(p, "u_suns.sun[0].matrices");
         assert!(base >= 0);
         /* each light holds 4 matrices: light 1 starts at element 4 */
-        assert_eq!(loc(p, "u_suns.sun[1].matrices"), base | (4 << 8));
-        assert_eq!(loc(p, "u_suns.sun[3].matrices"), base | (12 << 8));
+        assert_eq!(loc(p, "u_suns.sun[1].matrices"), base | (4 << LOC_ELEM_SHIFT));
+        assert_eq!(loc(p, "u_suns.sun[3].matrices"), base | (12 << LOC_ELEM_SHIFT));
         assert_eq!(loc(p, "u_suns.sun[4].matrices"), -1);
     }
 
@@ -6847,10 +6946,10 @@ mod tests {
         let gl = fresh();
         let p = lit_program(&gl);
         let base = loc(p, "u_suns.sun[0].matrices");
-        assert_eq!(loc(p, "u_suns.sun[1].matrices[2]"), base | (6 << 8));
-        assert_eq!(loc(p, "u_suns.sun[0].matrices[3]"), base | (3 << 8));
+        assert_eq!(loc(p, "u_suns.sun[1].matrices[2]"), base | (6 << LOC_ELEM_SHIFT));
+        assert_eq!(loc(p, "u_suns.sun[0].matrices[3]"), base | (3 << LOC_ELEM_SHIFT));
         assert_eq!(loc(p, "u_suns.sun[0].matrices[4]"), -1, "past the inner array");
-        assert_eq!(loc(p, "u_suns.sun[3].matrices[3]"), base | (15 << 8));
+        assert_eq!(loc(p, "u_suns.sun[3].matrices[3]"), base | (15 << LOC_ELEM_SHIFT));
         assert_eq!(loc(p, "u_spots.spot[2].position[1]"), -1, "position is not an array");
         assert_eq!(loc(p, "u_spots.spot[2].position[0]"), loc(p, "u_spots.spot[2].position"));
         let big = std::format!("u_suns.sun[{}].matrices", u64::MAX / 2);
@@ -6867,7 +6966,7 @@ mod tests {
     fn element_bits_beyond_the_array_write_nothing() {
         let gl = fresh();
         let p = lit_program(&gl);
-        let l = loc(p, "u_suns.sun[0].shadowBias") | (4 << 8);
+        let l = loc(p, "u_suns.sun[0].shadowBias") | (4 << LOC_ELEM_SHIFT);
         // SAFETY: plain GL call.
         unsafe { glUniform1f(l, 9.0) };
         assert_eq!(fs_bits(&gl, p, 436, 8), [SENTINEL; 8]);
@@ -8028,10 +8127,10 @@ mod tests {
         let gl = fresh();
         let p = setter_program(&gl);
         let l = loc(p, "v3a[2]");
-        assert_eq!(l, loc(p, "v3a") | (2 << 8));
+        assert_eq!(l, loc(p, "v3a") | (2 << LOC_ELEM_SHIFT));
         assert_eq!(loc(p, "v3a[3]"), -1, "past the array");
-        assert_eq!(loc(p, "v2a[1]"), loc(p, "v2a") | (1 << 8));
-        assert_eq!(loc(p, "m3a[1]"), loc(p, "m3a") | (1 << 8));
+        assert_eq!(loc(p, "v2a[1]"), loc(p, "v2a") | (1 << LOC_ELEM_SHIFT));
+        assert_eq!(loc(p, "m3a[1]"), loc(p, "m3a") | (1 << LOC_ELEM_SHIFT));
         // SAFETY: plain GL calls.
         unsafe {
             glUniform3f(l, 7.0, 8.0, 9.0);

@@ -251,7 +251,8 @@ pub fn materialize(row: &ShcPrecompiledRow) -> ShcShader {
         uniform_dwords: row.uniform_dwords,
         uniform_sh_dwords: r.uniform_sh_dwords,
         uniforms: ptr(r.uniforms),
-        num_uniforms: r.uniforms.len() as u8,
+        /* the compile that made the row refused past 16 bits (#7106) */
+        num_uniforms: r.uniforms.len() as u16,
         blend_key: row.shader_blend_key,
         uses_fbfetch: row.uses_fbfetch,
         blend_consts_off: row.blend_consts_off,

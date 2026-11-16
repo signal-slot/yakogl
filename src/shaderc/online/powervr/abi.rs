@@ -543,7 +543,7 @@ pub fn assemble(p: &UscProgram<'_>) -> Result<ShcShader, UscAbiError> {
         let u: &'static [ShcUniform] =
             keep.alloc_copy(p.uniforms).map_err(|_| UscAbiError::OutOfMemory { left: store::keep().left() })?;
         sh.uniforms = u.as_ptr();
-        sh.num_uniforms = u8::try_from(u.len()).map_err(|_| UscAbiError::TooManyUniforms { got: u.len() })?;
+        sh.num_uniforms = u16::try_from(u.len()).map_err(|_| UscAbiError::TooManyUniforms { got: u.len() })?;
     }
     sh.uniform_dwords = p.uniform_dwords;
     /* 0: the whole block reaches the shared registers. */

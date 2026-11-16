@@ -340,7 +340,7 @@ struct shc_shader {
 	 * 0 = the whole block. */
 	uint16_t uniform_sh_dwords;
 	const struct shc_uniform *uniforms;   /* name reflection (block members + samplers) */
-	uint8_t  num_uniforms;
+	uint16_t num_uniforms;                /* rows in uniforms (16 bits: #7106) */
 
 	/* fragment: the blend state this binary was compiled for (0 = none) and
 	 * whether it reads the pixel output (needs the TRANSLUCENT pass type) */

@@ -190,7 +190,7 @@ pub fn stage_shader(
 
     let rows: &[ShcUniform] = reflect::uniform_rows(r, scratch)?;
     if !rows.is_empty() {
-        let n = u8::try_from(rows.len()).map_err(|_| V3dAbiError::TooManyUniforms { got: rows.len() })?;
+        let n = u16::try_from(rows.len()).map_err(|_| V3dAbiError::TooManyUniforms { got: rows.len() })?;
         let kept = keep.alloc_copy(rows).map_err(|_| V3dAbiError::OutOfKeep)?;
         sh.uniforms = kept.as_ptr();
         sh.num_uniforms = n;

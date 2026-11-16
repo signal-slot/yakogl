@@ -332,6 +332,8 @@ pub enum AbiError {
     CodeEmpty,
     /// More inputs or outputs than [`SHC_VIV_MAX_IO`].
     TooManyIo { got: usize, max: usize },
+    /// More uniform rows than the record's 16-bit count (#7106).
+    TooManyUniforms { got: usize },
     /// A fragment shader's varyings are not registers `1..=N` in order.
     ///
     /// `gc7000-abi.md`: the fragment shader reads its varyings from registers
@@ -608,7 +610,7 @@ pub fn assemble(p: &VivProgram<'_>, uniforms: &[ShcUniform], uniform_dwords: u16
     sh.usc_dw = code.len() as u32;
     sh.temps = p.temps;
     sh.uniforms = if uni.is_empty() { core::ptr::null() } else { uni.as_ptr() };
-    sh.num_uniforms = uni.len() as u8;
+    sh.num_uniforms = u16::try_from(uni.len()).map_err(|_| AbiError::TooManyUniforms { got: uni.len() })?;
     sh.uniform_dwords = uniform_dwords;
     /* Zero on this GPU, both stages. Measured: all 307 blobs in the offline
      * table carry 0, fragment and vertex alike. This used to be 1 for a

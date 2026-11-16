@@ -1416,7 +1416,10 @@ pub struct ShcShader {
     /// only this much has to reach the shared registers. 0 = the whole block.
     pub uniform_sh_dwords: u16,
     pub uniforms: *const ShcUniform,
-    pub num_uniforms: u8,
+    /// Rows in `uniforms`. Sixteen bits: GL ES limits uniforms by storage,
+    /// not by name, and an array of structs is one active uniform per
+    /// element member (Qt Quick 3D's PrincipledMaterial: 453, #7106).
+    pub num_uniforms: u16,
     pub blend_key: u32,
     pub uses_fbfetch: u8,
     pub blend_consts_off: u8,
