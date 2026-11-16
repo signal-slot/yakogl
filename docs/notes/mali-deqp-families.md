@@ -396,3 +396,31 @@ reference items should pick a case of the group they need from
 - The run needs about 4 minutes; the two builds (deqp-gles2 713 steps, the
   library) about 40 minutes on 4 cores the first time and are reused from
   `build/host-deqp-mali/`.
+
+## 16. The board's first refusal per family: `tools/cts/mali-family-tree.py`
+
+Sections 4 to 12 count the host's first refusal per shader pair. The board's
+own count, by the first refusal in each slice's `refusals.tsv` of
+`tools/cts/log/2026-11-15-t6-gles2-S{1..4}-37305608/`, is:
+
+    python3 -I tools/cts/mali-family-tree.py tools/cts/log/2026-11-15-t6-gles2-S{1,2,3,4}-37305608
+
+It prints a tree table (the form of `mali-gles2-tree.txt`) of rows `T6RF001..`,
+one family each, for reruns of one family.
+`tools/cts/mali-family-refusals.txt` maps refusal texts to families (it leaves
+out what plan #367 holds through glmark2: `ARITH_CONST`, `ARITH`,
+`FRAGCOLOR_LANE`, `FS_OPERAND`, `TEX_COORD`, `FMA`, `LOCALS`, the rebalance,
+control flow and varying load texts) and
+`tools/cts/mali-family-tree-selftest.sh` checks the tool. The table passes
+`check-gles3-tree.py --mustpass tools/cts/gles2-mustpass.txt --max 400`: 27
+rows, 7,313 cases matched once. Cases per family, NotSupported included:
+
+| Family | Cases | Family | Cases |
+|---|---|---|---|
+| `intval` | 3,223 | `varyuniform` | 256 |
+| `varylink` | 656 | `mixprec` | 192 |
+| `unitype` | 820 | `posunwritten` | 155 |
+| `uniarray` | 272 | `negzero` | 117 |
+| `constop` | 621 | `invariant` | 12 |
+| `colourpair` | 171 | `misc` | 44 |
+| `vsloop` + `fsloop` | 497 + 277 | | |

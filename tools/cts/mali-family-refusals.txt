@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The compile refusals of the NanoPC-T6 dEQP-GLES2 run (37305608) that plan
+# #377 takes, one line each: <family><TAB><text>. A case belongs to the first
+# line whose text its refusals.tsv line contains (the MaliError texts of
+# src/shaderc/online/mali/mod.rs). tools/cts/mali-family-tree.py reads it.
+#
+# Left out on purpose: the refusals plan #367 holds through its glmark2
+# families (docs/notes/mali-glmark2-forecast.md section 2): ARITH_CONST ("a
+# constant product in a shape Mesa's algebraic rules move or fold"), ARITH,
+# FRAGCOLOR_LANE, FRAGCOORD_FP16, FS_OPERAND, FMA, TEX_COORD, LOCALS, FAU_PAGE,
+# the control-flow and rebalance texts and the fragment varying load or
+# conversion forms. A case refused by one of them is not in this file's tree.
+#
+# Kept although a glmark2 family has the same code (the task takes only the
+# dEQP shapes #367's notes leave): the integer, loop, link-rule and constant
+# operation texts (mali-int-loops.md, mali-varying-constants.md and the
+# algebraic-folds notes cover glmark2's shapes only); TEX_LANES, a glmark2
+# family the exclusion list does not name; and "a shape Mesa's algebraic rules
+# rewrite without a reference" (max(x, 0.0), clamp, a negated float(bool)),
+# which is not ARITH_CONST: that family's text is the "move or fold" one.
+intval	an integer or boolean value
+varylink	two varying lanes of equal value
+unitype	a uniform other than a float, vec2, vec3, vec4 or mat4
+unitype	a mediump fragment shader uniform other than
+unitype	a vertex shader uniform that is not highp
+uniarray	a uniform array
+uniarray	a uniform read at a run-time index
+constop	a constant operation on or to a value that is not a finite normal float
+constop	a constant fp16 does not hold
+colourpair	a colour pair of a constant then a varying lane
+colourpair	a colour pair of a varying lane and 0.0
+vsloop	a loop in a vertex shader
+fsloop	a loop Mesa keeps (a run-time bound) in a mediump fragment shader
+fsloop	a break or continue behind a run-time condition
+fsloop	a loop past Mesa's unroll limits
+varyuniform	a varying lane computed from no attribute
+varyuniform	a varying lane left unwritten
+mixprec	a fragment shader that mixes highp and mediump or lowp
+posunwritten	a gl_Position lane left unwritten
+negzero	a -0.0 that a comparison reads through a variable
+invariant	an invariant output
+misc	a program needing more than the split file's 32 work registers
+misc	a shader of more than 2048 IR values
+misc	a comparison other than
+misc	a built-in input
+misc	a texture look-up other than texture2D
+misc	a texture result's lanes
+misc	a shape Mesa's algebraic rules rewrite without a reference
