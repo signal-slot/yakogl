@@ -667,11 +667,13 @@ What is not in the skeleton yet, and is the payload's: the board lock and the
 state file (`board-stm32mp2.sh:82-93`), `dev_guard` before each environment
 write, the install record and the pristine environment image, the staged
 script, the environment write with its read-back, and the `/boot` comparison.
-The one-shot runners (`board-stm32mp2.sh run`, `board-stm32mp2-uboot.sh`) must
+The one-shot runners (`board-stm32mp2.sh run`, `driver/tools/uboot-mp2/oneshot.sh`) must
 refuse while `mp2s_left` is set: the boot after their image would not be
 Linux. The guard that section 3 calls with `--for standalone` has a `--for oneshot`
-mode for exactly that (exit 3 on a refusal, 2 on an unreadable environment); wiring it into those runners belongs to plans
-#357 and #349, so that is new work, reported, not done here.
+mode for exactly that (exit 3 on a refusal, 2 on an unreadable environment).
+`oneshot.sh` (plan #357) calls it on its `fw_printenv` before it stages
+anything; wiring it into `board-stm32mp2.sh run` belongs to plan #349, so that
+is new work, reported, not done here.
 
 ### Where the skeleton differs from this note
 

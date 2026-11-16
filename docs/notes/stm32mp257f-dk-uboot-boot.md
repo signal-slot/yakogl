@@ -25,7 +25,7 @@ What exists (merged) and what this note decides:
 | the two U-Boot scripts, `mkimage` step, host selftest | `driver/tools/uboot-mp2/` | merged; never run on a board |
 | the typed one-shot and the phase scan of the console | `tools/mp2_uboot_console.py` | merged |
 | the DK's Linux-side runner (a hook in the saved environment) | `tools/board-stm32mp2.sh`, `docs/notes/stm32mp257f-dk-bringup.md` | the current run method; **not** a bootloader sign-off route (below) |
-| the runner of this note's routes | `tools/board-stm32mp2-uboot.sh` | another item (plan #357, `mp2-backend`) |
+| the runner of this note's routes | `driver/tools/uboot-mp2/oneshot.sh`, `oneshot_selftest.sh` | merged with a host selftest (plan #357, `mp2-backend`); never run on a board |
 | the `stm32mp257f-dk` board in `tools/board.sh` | `BOARD_BOOT=uboot-tftp` / `uboot-mmc` | another item (`board-sh-dk`, after plan #349) |
 
 "ST/" below is ST's U-Boot, tag `v2023.10-stm32mp-r3.1`
