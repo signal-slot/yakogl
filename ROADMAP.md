@@ -9,8 +9,9 @@ each stage is read from what is committed: the `README.md` "Status" tables,
 `docs/es2-cts-failures.md`, `docs/es3-cts-failures.md`, the board results in
 `tools/cts/RESULTS.md`, `docs/release/checklist.md` and `CHANGELOG.md`.
 Every number carries the date of its record. Known defects are tracked as
-GitHub Issues. The states below were read on 2026-11-05, at main
-`08163414`.
+GitHub Issues. The states of stages 3 and 5 were read on 2026-11-16, at main
+`e6e68ff7`; those of stages 1, 2 and 4 were read on 2026-11-05, at main
+`08163414`, and have not been re-read since.
 
 The order is a priority, not a schedule. Board time and review go to the
 lowest-numbered stage that is not done. Stage 4 runs on the host in parallel
@@ -96,27 +97,45 @@ the website consistent with the status sources, this roadmap, and a green
 `tools/check.sh` on the tree to publish. A first version is tagged with its
 own `CHANGELOG.md` section.
 
-**State.** Not public yet. On 2026-10-21 the owner decided how
-(issue #1606): a new public repository whose history starts with one fresh
-commit of the cleaned tree, and the order of the work. Stage 1, which this
-stage follows, is met. `CHANGELOG.md` has its `0.1.0` section (dated
-2026-10-27, commit `625f82ce`); no version is tagged. `CONTRIBUTING.md`,
-`SECURITY.md`, `DESIGN.md`, this roadmap and the release building guide are
-in the tree. The state of each checklist line is in
+**State.** Not public yet (read 2026-11-16, main `e6e68ff7`). On 2026-10-21
+the owner decided how (issue #1606): a new public repository whose history
+starts with one fresh commit of the cleaned tree, and the order of the work.
+Stage 1, which this stage follows, is met. `CHANGELOG.md` has its `0.1.0`
+section (dated 2026-10-27, commit `625f82ce`); no version is tagged.
+`CONTRIBUTING.md`, `SECURITY.md`, `DESIGN.md`, this roadmap and the release
+building guide are in the tree. A rehearsal of the snapshot commit ran on
+2026-11-15 (`docs/release/snapshot.md`, source `cc2cc536`, one commit, no
+remote). The state of each checklist line is in
 `docs/release/checklist.md`. Still open:
 
-- The licence audit is clean with 0 findings (checklist line 7), but
-  `undecided` is not yet a `--fail-on` class of `tools/license_audit.py`.
-- The redaction scan: the tree has one finding, a farm worker's home path in
-  `tools/cts/log/2026-10-31-pi4-gles3-a/*.tally.txt` (`f3ec9117`,
-  `docs/release/redaction-audit.md` Part 4); the snapshot commit does not
-  exist yet, so it has not passed `tools/release/redaction-scan.py`.
-- The website: `tools/website-check.sh` exits 0, but `website/data.js` still
-  says it was checked against `381b0f09` (2026-10-27), before the newer
-  dEQP and glmark2 figures.
-- The README glmark2 table from one commit (#1196).
-- A green full `tools/check.sh` on the snapshot: the nightly
-  `rust_eh_personality` link failure (`fce3e6aa`) is being fixed.
+- The licence audit is clean with 0 findings (checklist line 7), and
+  `undecided` is now a `--fail-on` class of check 25 of
+  `tools/cts/cts-selftest.sh`; the rehearsal's run on the snapshot exits 0
+  with it (`docs/release/snapshot.md`, 2026-11-15).
+- The redaction scan (line 8): the Pi 4 home-path finding is fixed; the run
+  of `ed76d276` (`76143e93`, 2026-11-11) and the re-run on `fb51ce43`
+  (`da99b2d7`, 2026-11-12, `docs/release/redaction-audit.md` Part 4) read
+  0 H/M findings. The public run exits 3 (the private classes not run: not a
+  pass) and the private run, with a partial value set, exits 0. The
+  snapshot rehearsal's public run is exit 3 as well, with 7 `lab-host`
+  hits in `docs/notes/x2-glmark2-slow-scenes.md` from an earlier private run
+  still open. The real snapshot has not passed with the owner's private
+  file.
+- The website: `bash tools/website-check.sh` exits 0 at this tip (5 pages, 19
+  figures), but `website/data.js` says it was checked against `6d360a03`
+  (2026-11-10); the glmark2 figures wait for #1196 (line 9).
+- The README glmark2 table from one commit (#1196): it still mixes the
+  2026-10-20 run with the AM62P's `86d0b482` (2026-10-28).
+- The `CONTRIBUTING.md` walk (line 3): met on 2026-11-12, fresh clone of
+  `570cd8c6`, `--quick` 181 ok, 0 failed, 0 gap(s).
+- A green full `tools/check.sh` on the snapshot (line 12): the nightly
+  `rust_eh_personality` link failure is fixed (`fce3e6aa`, `2e949ed5`), and
+  the last green full run is `c66bea9f` (2026-11-11, 222 ok, 0 failed,
+  0 gap(s), recorded in `4946e879`); that holds for that commit only. The
+  full run on `760aad3d` (2026-11-14, `cde1db8d`) failed 9 rows on
+  `tests/redaction_scan.rs` (fixture values of
+  `tools/mp2_uboot_record_check.py`, fixed in `31608f8e`) and was cut by a
+  full disk, so the gate is re-run on the snapshot.
 
 ## 4. OpenGL ES 3.0
 
@@ -159,11 +178,29 @@ three do: a GPU back end selected by one Cargo feature, a standalone boot
 from its own storage (`docs/standalone-boot.md`), one whole dEQP-GLES2 tree
 with 0 Fail, and the three benchmarks running, each recorded the same way.
 
-**State.** No board has joined. A port to the FriendlyElec NanoPC-T6
-(Rockchip RK3588, Arm Mali-G610) runs outside the five stages (issue #7,
-`driver/docs/nanopc-t6-mali.md`). Its back end (`gpu-mali`) runs on the
-board's own Linux through the panthor kernel driver: the newest `gl_test`
-sweep (`tools/cts/log/2026-11-01-final3/`, main `0ff58329`, 2026-11-01) reads
-132 of 256 cases PASS, 3 FAIL, 1 FAULT, 27 refused by name, 84 with no case
-and 9 skipped (`tools/cts/RESULTS.md`, "Mali"). Booting it under
-Zephyr is milestones Z1 to Z4 (#26).
+**State.** No board has joined (read 2026-11-16, main `e6e68ff7`). A port
+to the FriendlyElec NanoPC-T6 (Rockchip RK3588, Arm Mali-G610) runs outside
+the five stages (issue #7, `driver/docs/nanopc-t6-mali.md`). Its back end
+(`gpu-mali`) runs on the board's own Linux through the panthor kernel
+driver. Per `tools/cts/RESULTS.md`, "Mali":
+
+- dEQP-GLES2: the whole 17,165-case list at main `37305608` (2026-11-15, one
+  boot, 76 rows, `1db8fd3d`) reads 5,456 Pass, 10,700 Fail, 973
+  NotSupported, 33 ResourceError and 3 QualityWarning, with no crash, hang or
+  kernel line; 10,583 of the non-Pass cases are refusals of the online
+  compiler (plan #309, `docs/es2-cts-failures.md` section M). Stage 5
+  needs 0 Fail.
+- `gl_test` sweep (`tools/cts/log/2026-11-t6-sweep-1a22bd38/`, main
+  `1a22bd38e`, 2026-11-12): 165 of 256 cases PASS twice, 6 refused, 73 with
+  no case, 9 skipped, 3 FAIL, 0 FAULT.
+- glmark2-es2 (`08ae7a8e`, main `da65355e`, 2026-11-10; `4bf0e7ab`, main
+  `a57d8104`, 2026-11-11, the same 33 outcomes): no score, 1 of 33 scenes
+  clean (desktop shadow, picture match), 31 refused at `glCompileShader`
+  (#33).
+- Under Zephyr (by kexec from Armbian, a development result; U-Boot
+  starting the image has not run): Z1 to Z4 PASS (2026-11-11/12) and
+  `gl_test`'s regression set 50 of 50 at main `9ad07f55f`, 2026-11-16 02:54
+  JST (`c8b6f065`).
+
+The other candidate boards (#321, #322, #327, #332, #336, #341) are issues
+only; the tree holds no board record for them.
