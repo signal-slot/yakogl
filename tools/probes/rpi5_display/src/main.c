@@ -13,6 +13,27 @@
  * lines (the `u3 reg` and `u3 dlist` words of rpi5_scanout/snapshot.h, and the
  * rpi5_display: lines) are printed where they were read.
  *
+ * The item's six steps map onto the design note's Z-steps as follows; each
+ * begins with a `rpi5_display: step <n> <name> at <ms> ms since boot` line:
+ *   1 dt-fb            the DTB in x0 (rpi_5/common/boot keeps it) through
+ *                      fwfb/fw_fb_dt.c: `u3 dt-fb: <fmt> <w>x<h> stride <n>
+ *                      status <okay|disabled> <addr-set|addr-0>`, `u3 dt-fb:
+ *                      none (...)` or `u3 dt-fb: skip (<reason>)`
+ *   2 scanout          Z0 and Z1's sampling: `u3 scanout:` and `u3 plane:`
+ *   4 adopt-readback   Z1's adopt read-back: `u3 adopt-readback:`
+ *   3 mailbox          Z2: `u3 fb-query: <present|absent|unknown|malformed>
+ *                      (...)` (fb_query.h), `u3 fb-alloc: <granted|...> (...)`
+ *                      and `u3 mailbox-fb:`
+ *   4 mailbox-readback Z3: `u3 mailbox-readback:`, `u3 scanout-follows-mailbox:`
+ *   5 split-screen     Z4: `u3 split-screen: drawn (...)|not drawn (...)`
+ *   6 summary          `rpi5_display: PASS|FAIL (...)`, `measured:` and the
+ *                      watchdog line
+ * Step 4 runs twice because verdicts.sh's order puts the adopt read-back before
+ * the mailbox. The eight lines verdicts.sh reads never say `skip`: a skipped
+ * line makes its log incomplete, so a step that could not run prints FAIL (or
+ * stopped, or no) with the reason. The record-only lines (dt-fb, fb-query,
+ * fb-alloc) say `skip (<reason>)`.
+ *
  *   Z0  get_throttled; the firmware clocks 4 (core), 16 (disp), 13 (hdmi/HSM),
  *       14 (bvb) and 5 (v3d); iommu4's control words; the whole register table
  *       of rpi5_scanout/snapshot.h read once and printed, so the HVS6 VERSION,
@@ -52,7 +73,8 @@
  *       pass-through window it may be an IOVA. The list is re-read after the
  *       drawing: the drawing cannot change the list, and reading it last keeps
  *       the two readings as far apart as this image can make them.
- *   Z4  the Pi 4's split screen on that buffer (pattern.h's layout): the console
+ *   Z4  the Pi 4's split screen on that buffer, or on the adopted plane when no
+ *       grant read back and the adopted one did (pattern.h's layout): the console
  *       on top (fbcon, the hook chain the Pi 4's board layer uses) and the
  *       pattern below it. Both bands are read back against the pattern: the text
  *       band must have lost pattern pixels (the console drew there) and the
@@ -69,13 +91,14 @@
  * tryboot brings Linux back (tools/board.sh pi5).
  *
  * The terminal line is PASS when this image's own memory path held: a granted
- * framebuffer, its pattern read back byte-equal twice, and the split screen
- * drawn with both bands read back. That is this image's claim, not the panel's:
+ * framebuffer (or, without one, the adopted plane), its pattern read back
+ * byte-equal twice, and the split screen drawn with both bands read back. That is this image's claim, not the panel's:
  * section 7's proof is the registers and the bytes, and a capture frame or a
  * person at the monitor confirms, never proves. Which route the board takes is
  * the host's decision, from the u3 lines (verdicts.sh, route_choice.sh); a route
  * A or B result is named by those lines passing or not, never by this line.
  */
+#include <zephyr/cache.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/device_mmio.h>
 #include <zephyr/sys/printk.h>
@@ -93,8 +116,13 @@
 #include "rpi_wdog.h"
 #include "rpi5_screen.h"
 
+#include "fdt_walk.h"
+#include "fw_fb_dt.h"
+#include "rpi5_boot.h"
+
 #include "adopt.h"
 #include "bus_addr.h"
+#include "fb_query.h"
 #include "fw_clk.h"
 #include "hvs6_dlist.h"
 #include "hvs6_fmt.h"
@@ -111,6 +139,8 @@
 #define FB_VIRT       (FB_H * 2u) /* the flip window: the buffer is twice as tall as the screen */
 #define SAMPLE_GAP_MS 100u       /* two samples span a frame at 60 Hz; Z3 reads twice too */
 #define ALL_ONES      0xffffffffu
+#define PAGE_SIZE_4K  0x1000ull
+#define DTB_MAX       (4ull * 1024ull * 1024ull) /* the Pi 5's DTB is some 60 KiB (rpi_5/rpi5_dtb) */
 
 /* Bases and sizes as driver/docs/rpi5-display.md section 2 lists them. The pixel
  * valves and the `hd` region come from pv_hdmi.h, which cites the device tree. */
@@ -128,6 +158,15 @@
 #define IO_BYPASS_START 0x1cu
 #define IO_BYPASS_END   0x20u
 #define IO_DEBUG_INFO   0x38u
+
+/* The buffer step 5 draws the split screen into: the mailbox's grant when its
+ * read-back passed, else the adopted firmware plane when its read-back passed
+ * (32 bpp only: fbcon.c draws 32 bpp). `cpu` NULL: none. */
+struct screen {
+	uint8_t *cpu;
+	uint32_t width, height, pitch, order;
+	const char *what;
+};
 
 static mm_reg_t va_hvs, va_pv0, va_pv1, va_hd, va_iommu;
 static bool hvs_on, pv_on, pv1_on, hd_on, iommu_on;
@@ -277,6 +316,153 @@ static uint8_t *map_plane(uint64_t pa, uint64_t len)
 	       (unsigned long long)va, (unsigned long long)(va + span), (unsigned long long)pa,
 	       (unsigned long long)(pa + len), RPI_FB_MAPPING);
 	return (uint8_t *)va + off;
+}
+
+/* Every step starts with this line, so a record says when each step began and a
+ * hang names the step it happened in. */
+static void step_at(const char *step)
+{
+	printk("rpi5_display: step %s at %lld ms since boot\n", step, (long long)k_uptime_get());
+}
+
+/* The CPU's bytes cleaned to the point of coherency before anything is read
+ * back or shown. The buffers here are mapped Normal non-cacheable, so the clean
+ * finds nothing to write; it is made anyway, so a later cacheable mapping keeps
+ * the same order (rpi5_scanout/fb_flush.h's rule: the HVS reads memory, not
+ * the A76's caches). */
+static int clean_range(void *p, uint64_t len)
+{
+	return sys_cache_data_flush_range(p, (size_t)len);
+}
+
+/* ---- step 1: the firmware's DTB ------------------------------------------------- */
+
+static uint32_t dtb_be32(const uint8_t *p)
+{
+	return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
+}
+
+/* A DTB page range mapped cacheable (the walker may read unaligned, which
+ * device memory forbids: the rpi_5/rpi5_dtb probe's mapping). */
+static const uint8_t *map_dtb(uint64_t pa, uint64_t len)
+{
+	uint64_t base = pa & ~(PAGE_SIZE_4K - 1ull);
+	uint64_t off = pa - base;
+	mm_reg_t va = 0;
+
+	device_map(&va, (uintptr_t)base, (size_t)ROUND_UP(off + len, PAGE_SIZE_4K), K_MEM_CACHE_WB);
+	return va == 0 ? NULL : (const uint8_t *)va + off;
+}
+
+/* The `u3 dt-fb:` line: the simple-framebuffer node of the DTB in x0, through
+ * fwfb/fw_fb_dt.c (the token is fw_fb_dt_verdict's without its "dt-fb " word,
+ * then fw_fb_dt_addr_token's). The address and the covering reserved region go
+ * into a record line only. Nothing in this step decides a route: it says what
+ * the firmware told a kernel= image, next to what the registers say. */
+static void step_dtfb(const uint64_t sram_last)
+{
+	static struct fw_fb_dt r; /* four nodes of paths: not on the stack */
+	const volatile struct rpi5_boot_state *s;
+	const struct fw_fb_dt_node *n;
+	const uint8_t *hdr, *blob;
+	uint64_t dtb;
+	uint32_t total;
+	char tok[96];
+	unsigned int i;
+	int rc;
+
+	step_at("1 dt-fb");
+	if (!rpi5_boot_valid()) {
+		printk("u3 dt-fb: skip (no boot record: x0 was not kept by boot_x0.S)\n");
+		return;
+	}
+	s = rpi5_boot_state();
+	dtb = s->x[0];
+	printk("rpi5_display: x0 0x%llx, EL%llu, entry 0x%llx\n", (unsigned long long)dtb,
+	       (unsigned long long)(s->current_el >> 2), (unsigned long long)s->entry_pc);
+	if (dtb == 0 || (dtb & 7ull) != 0) {
+		printk("u3 dt-fb: skip (x0 0x%llx is not a DTB address)\n", (unsigned long long)dtb);
+		return;
+	}
+	if (dtb >= CONFIG_SRAM_BASE_ADDRESS && dtb <= sram_last) {
+		printk("rpi5_display: the DTB address lies inside this image's RAM, so Zephyr may have "
+		       "written over it; the walker below refuses a blob that no longer holds together\n");
+	}
+	hdr = map_dtb(dtb, 40u);
+	if (hdr == NULL) {
+		printk("u3 dt-fb: skip (the DTB header page at 0x%llx is not mapped)\n",
+		       (unsigned long long)dtb);
+		return;
+	}
+	if (dtb_be32(hdr) != 0xd00dfeedu) {
+		printk("u3 dt-fb: skip (no FDT magic at x0: 0x%08x)\n", dtb_be32(hdr));
+		return;
+	}
+	total = dtb_be32(hdr + 4);
+	if (total < 40u || total > DTB_MAX) {
+		printk("u3 dt-fb: skip (FDT totalsize %u is refused)\n", total);
+		return;
+	}
+	blob = map_dtb(dtb, total);
+	if (blob == NULL) {
+		printk("u3 dt-fb: skip (the %u-byte DTB at 0x%llx is not mapped)\n", total,
+		       (unsigned long long)dtb);
+		return;
+	}
+	(void)memset(&r, 0, sizeof(r));
+	rc = fw_fb_dt_parse(blob, total, &r);
+	printk("rpi5_display: DTB at 0x%llx, %u bytes: parse rc %d, %u simple-framebuffer node(s), %u "
+	       "reserved-memory region(s)\n", (unsigned long long)dtb, total, rc, r.count, r.nresv);
+	for (i = 0; i < r.count && i < FW_FB_DT_MAX_NODES; i++) {
+		n = &r.node[i];
+		printk("rpi5_display: dt-fb node %s: status %s, reg %s 0x%llx size 0x%llx, %ux%u stride %u "
+		       "format %s, %s\n", n->path, n->status_okay ? "okay" : "disabled",
+		       n->have_reg ? "set" : "missing", (unsigned long long)n->addr,
+		       (unsigned long long)n->size, n->width, n->height, n->stride,
+		       n->have_format ? n->format : "none",
+		       n->in_reserved ? "inside a /reserved-memory region" : "in no /reserved-memory region");
+		if (n->in_reserved) {
+			printk("rpi5_display: dt-fb node %u's reserved region 0x%llx size 0x%llx\n", i,
+			       (unsigned long long)n->resv_addr, (unsigned long long)n->resv_size);
+		}
+	}
+	if (rc != FDT_OK) {
+		printk("u3 dt-fb: none (the blob is refused by the walker: %d)\n", rc);
+		return;
+	}
+	fw_fb_dt_verdict(&r, tok, sizeof(tok));
+	n = fw_fb_dt_pick(&r);
+	printk("u3 dt-fb: %s%s%s\n", strncmp(tok, "dt-fb ", 6) == 0 ? tok + 6 : tok, n ? " " : "",
+	       n ? fw_fb_dt_addr_token(n) : "");
+}
+
+/* ---- step 3: fb_query's question, before the allocation ------------------------ */
+
+/* The six GET tags sent as fb_query.h builds them and classified by its parser:
+ * the `u3 fb-query:` line. rpi_mbox_request_timed() adds the header and the
+ * end tag and returns the buffer's status as its rc, so the header word is
+ * put back from the rc before fbq_parse reads the answer. */
+static void step_fbquery(void)
+{
+	uint32_t w[FBQ_QUERY_WORDS];
+	uint32_t n = fbq_build_query(w);
+	struct rpi_mbox_timing tm;
+	struct fbq_result r;
+	int rc;
+
+	(void)memset(&tm, 0, sizeof(tm));
+	rc = rpi_mbox_request_timed(&w[2], n - 3u, &tm);
+	if (rc != 0 && rc != -EIO) {
+		printk("u3 fb-query: skip (the query was not answered: %d)\n", rc);
+		return;
+	}
+	w[1] = rc == 0 ? FBQ_STATUS_SUCCESS : FBQ_STATUS_SUCCESS | 1u;
+	r = fbq_parse(w, n);
+	printk("rpi5_display: fb-query rc %d, seen 0x%02x answered 0x%02x, %llu cycles waiting\n", rc,
+	       r.seen, r.answered, (unsigned long long)tm.poll);
+	printk("u3 fb-query: %s (phys %ux%u virt %ux%u depth %u order %u pitch %u offset %u,%u)\n",
+	       fbq_class_name(r.cls), r.phys_w, r.phys_h, r.virt_w, r.virt_h, r.depth, r.order, r.pitch,
+	       r.voff_x, r.voff_y);
 }
 
 /* ---- Z0 -------------------------------------------------------------------- */
@@ -545,6 +731,35 @@ static bool read_plane(unsigned int ch, uint32_t start, struct hvs6_plane *out)
 	return true;
 }
 
+/* Channel ch's list read again and its first plane compared with `was`, the
+ * plane the adopt read-back wrote into: the words for the adopt verdict's
+ * "list ..." clause. The new list words are printed as `u3 dlist` lines like
+ * every other read. */
+static const char *adopt_list_still_names(unsigned int ch, int d0, const struct hvs6_plane *was)
+{
+	static char txt[96];
+	struct chan_words w;
+	struct hvs6_plane p;
+	uint32_t head;
+
+	chan_words_read(ch, d0, &w);
+	head = chan_head(ch, &w);
+	if (head == 0) {
+		return "named by no list any more (DL.LACT and LPTRS.HEADE are 0)";
+	}
+	printk("rpi5_display: ch%u's list read again after the adopt read-back, from word %u\n", ch,
+	       head);
+	if (!read_plane(ch, head, &p)) {
+		return "not decodable when read again";
+	}
+	if (p.addr == was->addr && p.pitch == was->pitch) {
+		return "still names it";
+	}
+	(void)snprintf(txt, sizeof(txt), "names another plane now (0x%llx pitch %u)",
+		       (unsigned long long)p.addr, p.pitch);
+	return txt;
+}
+
 /* The plane's format as hvs6_fmt.h names it (the DRM-style name, so both sides of
  * a comparison are named in the same words), or the code alone when the table
  * does not list that order. */
@@ -669,7 +884,8 @@ int main(void)
 	struct pm_mmu mmu;
 	struct rpi5_fw_fb q;
 	struct rpi_fb fb;
-	struct pattern_layout layout = split_layout(FB_W, FB_H);
+	struct screen adopt_scr = { NULL, 0, 0, 0, 0, NULL };
+	struct screen scr = { NULL, 0, 0, 0, 0, NULL };
 	uint32_t got[4] = { 0, 0, 0, 0 };
 	bool disp_zero = false, hsm_zero = false, hsm_live = false;
 	bool mailbox_ok = false, fb_readback = false, split_ok = false;
@@ -683,6 +899,7 @@ int main(void)
 	unsigned int plane_ch = 0; /* the channel `u3 plane:` names */
 	int d0 = 0;
 	int mbox_rc;
+	int mbox_init_rc; /* rpi_mbox_init()'s: mbox_rc is the allocation's from step 3 on */
 	const uint64_t sram_last = CONFIG_SRAM_BASE_ADDRESS + (uint64_t)CONFIG_SRAM_SIZE * 1024 - 1;
 	char line[256];
 	char plane_txt[160];
@@ -710,8 +927,14 @@ int main(void)
 	       (unsigned long long)BCM2712_DRAM_BASE,
 	       (unsigned long long)(BCM2712_DRAM_BASE + BCM2712_DRAM_SIZE - 1ull));
 
+	/* ---- step 1: what the firmware's DTB says about a framebuffer ---- */
+	step_dtfb(sram_last);
+
+	/* ---- step 2: the running scanout, read-only (Z0, Z1) ---- */
+	step_at("2 scanout");
 	mbox_rc = rpi_mbox_init();
 	printk("rpi5_display: mailbox init %d\n", mbox_rc);
+	mbox_init_rc = mbox_rc;
 
 	/* ---- Z0 ---- */
 	if (mbox_rc == 0) {
@@ -912,6 +1135,7 @@ int main(void)
 	printk("u3 plane: %s\n", plane_txt);
 
 	/* Z1's adopt decision, and the plane's own read-back. */
+	step_at("4 adopt-readback");
 	if (plane_found) {
 		struct rpi5_adopt_plane ap;
 		struct rpi5_adopt_env env;
@@ -919,7 +1143,7 @@ int main(void)
 		struct rpi5_adopt_result adopt_res;
 		/* static: the verdict line below names the reason these buffers hold, and it is printed
 		 * after this block ends. */
-		static char ad_buf[192];
+		static char ad_buf[256];
 
 		printk("rpi5_display: the plane adopt and the read-back below work on is ch%u's list%s\n",
 		       plane_ch,
@@ -965,40 +1189,57 @@ int main(void)
 				} else {
 					struct pattern_report r1, r2;
 					enum pattern_fmt pf = fmt_of_order(out.order);
-					int filled, checked;
+					const char *still;
+					int filled, checked, cleaned;
 
 					(void)memset(&r1, 0, sizeof(r1));
 					(void)memset(&r2, 0, sizeof(r2));
 					/* out.bpp is bytes per pixel (adopt.h:77); pattern.h's bpp is in bits. */
 					filled = pattern_fill(plane_buf, out.width, out.height, out.pitch,
 								out.bpp * 8u, pf);
+					cleaned = clean_range(plane_buf, out.size);
 					checked = pattern_check(plane_buf, out.width, out.height, out.pitch,
 								out.bpp * 8u, pf, 1u, &r1);
 					k_msleep(SAMPLE_GAP_MS);
 					(void)pattern_check(plane_buf, out.width, out.height, out.pitch,
 								out.bpp * 8u, pf, 1u, &r2);
-					printk("rpi5_display: plane pattern %s fill %d, check %d: checksum "
+					printk("rpi5_display: plane pattern %s fill %d, clean %d, check %d: checksum "
 					       "0x%08x then 0x%08x over %u pixels, %u then %u differing\n",
-					       pattern_fmt_name(pf), filled, checked, r1.checksum, r2.checksum,
-					       (unsigned int)r2.checked, r1.mismatches, r2.mismatches);
+					       pattern_fmt_name(pf), filled, cleaned, checked, r1.checksum,
+					       r2.checksum, (unsigned int)r2.checked, r1.mismatches,
+					       r2.mismatches);
 					if (r2.first_x != 0 || r2.first_y != 0) {
 						printk("rpi5_display: the second read differs first at %u,%u: "
 						       "written 0x%08x, read 0x%08x\n", r2.first_x, r2.first_y,
 						       r2.expected, r2.got);
 					}
+					/* The list is read again after the bytes: does the scanout still
+					 * fetch from the buffer the pattern went into? */
+					still = adopt_list_still_names(plane_ch, d0, &plane);
 					if (filled == 0 && checked == 0 && r1.mismatches == 0 &&
 					    r2.mismatches == 0) {
 						ad_state = "PASS";
+						if (out.bpp == 4u) { /* fbcon.c draws 32 bpp only */
+							adopt_scr.cpu = plane_buf;
+							adopt_scr.width = out.width;
+							adopt_scr.height = out.height;
+							adopt_scr.pitch = out.pitch;
+							adopt_scr.order = out.order;
+							adopt_scr.what = "the adopted firmware plane";
+						}
 						(void)snprintf(ad_buf, sizeof(ad_buf),
-							       "%u x %u read back byte-equal twice, %u ms apart",
-							       out.width, out.height, SAMPLE_GAP_MS);
+							       "%u x %u read back byte-equal twice, %u ms apart, "
+							       "0 mismatches, checksum 0x%08x, list %s",
+							       out.width, out.height, SAMPLE_GAP_MS, r2.checksum,
+							       still);
 						ad_why = ad_buf;
 					} else {
 						(void)snprintf(ad_buf, sizeof(ad_buf),
 							       "%u of %u pixels differ on the first read and %u "
-							       "on the second (checksum 0x%08x then 0x%08x)",
+							       "on the second (checksum 0x%08x then 0x%08x), "
+							       "list %s",
 							       r1.mismatches, (unsigned int)r1.checked,
-							       r2.mismatches, r1.checksum, r2.checksum);
+							       r2.mismatches, r1.checksum, r2.checksum, still);
 						ad_why = ad_buf;
 					}
 				}
@@ -1015,6 +1256,11 @@ int main(void)
 	printk("u3 adopt-readback: %s (%s)\n", ad_state, ad_why);
 
 	/* ---- Z2: the firmware's own framebuffer ---- */
+	step_at("3 mailbox");
+	if (mbox_rc != 0) {
+		printk("u3 fb-query: skip (the mailbox did not answer: %d)\n", mbox_rc);
+		printk("u3 fb-alloc: skip (the mailbox did not answer: %d)\n", mbox_rc);
+	}
 	if (mbox_rc == 0) {
 		static const char *const names[RPI5_GET_COUNT] = { "physical", "virtual", "depth", "order",
 								   "pitch", "offset" };
@@ -1028,10 +1274,31 @@ int main(void)
 		printk("rpi5_display: %d of %u framebuffer tags answered; the firmware reports a "
 		       "framebuffer: %s\n", answered, (unsigned int)RPI5_GET_COUNT,
 		       rpi5_screen_query_has_fb(&q) ? "yes" : "no");
+		step_fbquery();
 
 		mbox_rc = rpi_fb_alloc_virtual(FB_W, FB_H, FB_VIRT, &fb, got);
 		printk("rpi5_display: FRAMEBUFFER_ALLOCATE physical %ux%u virtual %ux%u depth 32 order RGB "
 		       "offset 0,0 allocate 4096 then GET_PITCH: rc %d\n", FB_W, FB_H, FB_W, FB_VIRT, mbox_rc);
+		/* The allocation's class in fb_query.h's tokens. rpi_fb_alloc_virtual checks every
+		 * answer itself and returns one rc, so -EIO stands for both of fb_query's "refused"
+		 * (base or size 0) and "unknown" (a tag not answered): the record above says which
+		 * tags were answered before it. */
+		if (mbox_rc == 0) {
+			printk("u3 fb-alloc: %s (%ux%u pitch %u %s size %u)\n",
+			       fbq_class_name(FBQ_ALLOC_GRANTED), fb.width, fb.height, fb.pitch,
+			       fb_fmt_name(fb.order), fb.size);
+		} else if (mbox_rc == -ERANGE) {
+			printk("u3 fb-alloc: %s another window (physical %ux%u virtual %ux%u)\n",
+			       fbq_class_name(FBQ_ALLOC_GRANTED), got[0], got[1], got[2], got[3]);
+		} else if (mbox_rc == -EIO) {
+			printk("u3 fb-alloc: %s or %s (rc %d)\n", fbq_class_name(FBQ_ALLOC_REFUSED),
+			       fbq_class_name(FBQ_TAG_UNKNOWN), mbox_rc);
+		} else if (mbox_rc == -ENOMEM) {
+			printk("u3 fb-alloc: %s but not mapped (rc %d)\n", fbq_class_name(FBQ_ALLOC_GRANTED),
+			       mbox_rc);
+		} else {
+			printk("u3 fb-alloc: skip (the allocation was not answered: %d)\n", mbox_rc);
+		}
 		if (mbox_rc == 0) {
 			static char fb_buf[96]; /* static: printed after this block, in the verdict line */
 
@@ -1069,12 +1336,13 @@ int main(void)
 	printk("u3 mailbox-fb: %s (%s)\n", fb_state, fb_why);
 
 	/* ---- Z3: the pattern in the granted buffer, then the list again ---- */
+	step_at("4 mailbox-readback");
 	if (mailbox_ok) {
 		enum pattern_fmt pf = fmt_of_order(fb.order);
 		struct pattern_report r1, r2;
 		static char rb_buf[192]; /* static: printed after this block, in the verdict line */
 		const uint32_t bpp = 32u; /* the depth the allocation asked for; pattern.h's bpp is in bits */
-		int filled, checked;
+		int filled, checked, cleaned;
 
 		(void)memset(&r1, 0, sizeof(r1));
 		(void)memset(&r2, 0, sizeof(r2));
@@ -1088,25 +1356,28 @@ int main(void)
 			rb_why = rb_buf;
 		} else {
 			filled = pattern_fill(fb.cpu, fb.width, fb.height, fb.pitch, bpp, pf);
+			cleaned = clean_range(fb.cpu, (uint64_t)fb.pitch * fb.height);
 			checked = pattern_check(fb.cpu, fb.width, fb.height, fb.pitch, bpp, pf, 1u, &r1);
 			k_msleep(SAMPLE_GAP_MS);
 			(void)pattern_check(fb.cpu, fb.width, fb.height, fb.pitch, bpp, pf, 1u, &r2);
-			printk("rpi5_display: mailbox buffer pattern %s fill %d, check %d: checksum 0x%08x "
-			       "then 0x%08x over %u pixels, %u then %u differing\n", pattern_fmt_name(pf),
-			       filled, checked, r1.checksum, r2.checksum, (unsigned int)r2.checked,
+			printk("rpi5_display: mailbox buffer pattern %s fill %d, clean %d, check %d: checksum "
+			       "0x%08x then 0x%08x over %u pixels, %u then %u differing\n", pattern_fmt_name(pf),
+			       filled, cleaned, checked, r1.checksum, r2.checksum, (unsigned int)r2.checked,
 			       r1.mismatches, r2.mismatches);
 			if (filled == 0 && checked == 0 && r1.mismatches == 0 && r2.mismatches == 0) {
 				fb_readback = true;
 				rb_state = "PASS";
 				(void)snprintf(rb_buf, sizeof(rb_buf), "%s pattern at 0x%08x read back "
-							       "byte-equal twice, %u ms apart", pattern_fmt_name(pf),
-					       fb.phys, SAMPLE_GAP_MS);
+							       "byte-equal twice, %u ms apart, 0 mismatches, "
+							       "checksum 0x%08x", pattern_fmt_name(pf),
+					       fb.phys, SAMPLE_GAP_MS, r2.checksum);
 				rb_why = rb_buf;
 			} else {
 				(void)snprintf(rb_buf, sizeof(rb_buf),
 					       "%u of %u pixels differ (first at %u,%u: written 0x%08x, read "
-					       "0x%08x)", r1.mismatches, (unsigned int)r1.checked, r1.first_x,
-					       r1.first_y, r1.expected, r1.got);
+					       "0x%08x), checksum 0x%08x then 0x%08x", r1.mismatches,
+					       (unsigned int)r1.checked, r1.first_x, r1.first_y, r1.expected,
+					       r1.got, r1.checksum, r2.checksum);
 				rb_why = rb_buf;
 			}
 		}
@@ -1232,65 +1503,92 @@ int main(void)
 	}
 
 	/* ---- Z4: the Pi 4's split screen ---- */
+	step_at("5 split-screen");
 	if (mailbox_ok && fb_readback) {
+		scr.cpu = fb.cpu;
+		scr.width = fb.width;
+		scr.height = fb.height;
+		scr.pitch = fb.pitch;
+		scr.order = fb.order;
+		scr.what = "the mailbox buffer";
+	} else if (adopt_scr.cpu != NULL) {
+		scr = adopt_scr;
+		printk("rpi5_display: no mailbox buffer read back, so the split screen goes into the adopted "
+		       "firmware plane, whose read-back passed\n");
+	}
+	if (scr.cpu != NULL) {
+		struct pattern_layout layout = split_layout(scr.width, scr.height);
 		struct pattern_report text, band;
-		enum pattern_fmt pf = fmt_of_order(fb.order);
+		enum pattern_fmt pf = fmt_of_order(scr.order);
 		static char split_buf[192]; /* static: printed after this block, in the verdict line */
-		const uint32_t bpp = 32u; /* the depth the allocation asked for; pattern.h's bpp is in bits */
+		const uint32_t bpp = 32u; /* both sources are 32 bpp; pattern.h's bpp is in bits */
 		uint32_t pixels = layout.text.w * layout.text.h;
 		uint32_t first_blank = 0, first_drawn = 0;
 		uint32_t blank_diff, drawn_diff;
+		int cleaned;
 
 		(void)memset(&text, 0, sizeof(text));
 		(void)memset(&band, 0, sizeof(band));
-		/* The whole buffer holds the pattern (Z3 filled it and read it back); the band below is
-		 * filled again so the expected values check_rect compares are fresh. */
-		(void)pattern_fill_rect(fb.cpu, fb.width, fb.height, fb.pitch, bpp, pf, layout.pattern);
+		/* The whole buffer holds the pattern (step 4 filled it and read it back); the band below
+		 * is filled again so the expected values check_rect compares are fresh. */
+		(void)pattern_fill_rect(scr.cpu, scr.width, scr.height, scr.pitch, bpp, pf, layout.pattern);
 		uart_out = __printk_get_hook();
-		fbcon_attach(fb.cpu, fb.width, fb.pitch, layout.text.h, 2);
+		fbcon_attach(scr.cpu, scr.width, scr.pitch, layout.text.h, 2);
 		fb_out = __printk_get_hook();
 		__printk_hook_install(console_out);
 		/* The text band is counted twice, once before the text and once after it, because
 		 * fbcon_attach() clears the rows it was given and that blank clear alone changes every
 		 * pixel of a band that held the pattern. Flat after the attach and not flat after the
 		 * text is the measurement that says a character was drawn (rect_changed_from_first). */
-		blank_diff = rect_changed_from_first(fb.cpu, fb.width, fb.height, fb.pitch, bpp, layout.text,
-						     &first_blank);
-		(void)pattern_check_rect(fb.cpu, fb.width, fb.height, fb.pitch, bpp, pf, layout.pattern, 1u,
-					 &band);
-		printk("rpi5_display: console rows 0..%u, pattern rows %u..%u of %ux%u (%s, pattern.h's split): "
-		       "the text band reads as %s (%u of %u pixels differ from its first pixel 0x%08x) and the "
-		       "pattern band holds what was written (%u of %u pixels differ)\n", layout.text.h - 1u,
-		       layout.pattern.y, fb.height - 1u, fb.width, fb.height, pattern_fmt_name(pf),
+		blank_diff = rect_changed_from_first(scr.cpu, scr.width, scr.height, scr.pitch, bpp,
+						     layout.text, &first_blank);
+		(void)pattern_check_rect(scr.cpu, scr.width, scr.height, scr.pitch, bpp, pf, layout.pattern,
+					 1u, &band);
+		printk("rpi5_display: split screen in %s: console rows 0..%u, pattern rows %u..%u of %ux%u "
+		       "(%s, pattern.h's split): the text band reads as %s (%u of %u pixels differ from its "
+		       "first pixel 0x%08x) and the pattern band holds what was written (%u of %u pixels "
+		       "differ)\n", scr.what, layout.text.h - 1u, layout.pattern.y, scr.height - 1u, scr.width,
+		       scr.height, pattern_fmt_name(pf),
 		       blank_diff == 0u ? "one flat colour, the console's own clear" : "not one flat colour",
 		       blank_diff, pixels, first_blank, band.mismatches, (unsigned int)band.checked);
 		printk("rpi5_display: these two lines go through the printk hook fbcon.c installed, so their "
 		       "glyphs are pixels of the text band above\n");
-		drawn_diff = rect_changed_from_first(fb.cpu, fb.width, fb.height, fb.pitch, bpp, layout.text,
-						     &first_drawn);
-		(void)pattern_check_rect(fb.cpu, fb.width, fb.height, fb.pitch, bpp, pf, layout.text, 1u, &text);
-		printk("rpi5_display: after the text: %u of %u text-band pixels differ from its first pixel "
-		       "0x%08x, and %u of %u text-band pixels are no longer the pattern\n", drawn_diff, pixels,
-		       first_drawn, text.mismatches, (unsigned int)text.checked);
+		cleaned = clean_range(scr.cpu, (uint64_t)scr.pitch * scr.height);
+		drawn_diff = rect_changed_from_first(scr.cpu, scr.width, scr.height, scr.pitch, bpp,
+						     layout.text, &first_drawn);
+		(void)pattern_check_rect(scr.cpu, scr.width, scr.height, scr.pitch, bpp, pf, layout.text, 1u,
+					 &text);
+		printk("rpi5_display: after the text (clean %d): %u of %u text-band pixels differ from its "
+		       "first pixel 0x%08x, and %u of %u text-band pixels are no longer the pattern; pattern "
+		       "band checksum 0x%08x\n", cleaned, drawn_diff, pixels, first_drawn, text.mismatches,
+		       (unsigned int)text.checked, band.checksum);
 		if (band.mismatches == 0u && blank_diff == 0u && drawn_diff > 0u && text.mismatches > 0u) {
 			split_ok = true;
-			split_state = "drawn (text on top, pattern below)";
+			(void)snprintf(split_buf, sizeof(split_buf),
+				       "drawn (text on top, pattern below, in %s; pattern band 0 mismatches, "
+				       "checksum 0x%08x)", scr.what, band.checksum);
 		} else {
 			(void)snprintf(split_buf, sizeof(split_buf),
-				       "blank %u of %u text pixels, drawn %u of %u after the text, pattern band "
-				       "%u of %u differing", blank_diff, pixels, drawn_diff, pixels,
-				       band.mismatches, (unsigned int)band.checked);
-			split_state = split_buf;
+				       "not drawn (in %s: blank %u of %u text pixels, drawn %u of %u after the "
+				       "text, pattern band %u of %u differing)", scr.what, blank_diff, pixels,
+				       drawn_diff, pixels, band.mismatches, (unsigned int)band.checked);
 		}
+		split_state = split_buf;
+	} else {
+		split_state = "not drawn (no buffer read back: neither the mailbox grant nor an adopted "
+			      "32 bpp plane)";
 	}
 	printk("u3 split-screen: %s\n", split_state);
 
 	/* ---- the terminal lines ---- */
-	if (mbox_rc != 0) {
+	step_at("6 summary");
+	if (mbox_init_rc != 0 && !split_ok) {
 		printk("rpi5_display: FAIL (the mailbox did not answer: %d, so nothing was asked or "
-		       "granted)\n", mbox_rc);
+		       "granted)\n", mbox_init_rc);
 	} else if (mailbox_ok && fb_readback && split_ok) {
 		printk("rpi5_display: PASS (framebuffer %s, %s, %s)\n", fb_why, rb_why, split_state);
+	} else if (split_ok) {
+		printk("rpi5_display: PASS (adopted plane: %s; %s)\n", ad_why, split_state);
 	} else {
 		printk("rpi5_display: FAIL (mailbox-fb %s: %s; mailbox-readback %s: %s; split-screen %s)\n",
 		       fb_state, fb_why, rb_state, rb_why, split_state);
