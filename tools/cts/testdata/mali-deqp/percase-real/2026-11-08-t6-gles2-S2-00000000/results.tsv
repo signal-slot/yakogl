@@ -1,0 +1,4 @@
+case	status	detail
+dEQP-GLES2.functional.c.blend	Fail	Image comparison failed
+dEQP-GLES2.functional.c.invalid	ResourceError	out of memory
+dEQP-GLES2.functional.c.long	Fail	Image comparison failed

@@ -676,6 +676,20 @@ def self_test():
     chk("per-case: --markdown takes it too", rc == 0 and "errno:-12" in o)
     chk("per-case: --check-doc is unchanged", run("--check-doc",
         os.path.join(FIXTURES, "doc-current.md"), *good)[0] == 0)
+    # lines made from the back end's format string, "yakogl-mali-refusal:
+    # {errno} {why}" (src/mali/backend.rs refusal_line): a refusal, the OSAL's
+    # own "yakogl: " in front, a -EINVAL non-refusal named by its message, a
+    # long reason cut at OSAL_LOG_LINE_MAX
+    pr = os.path.join(FIXTURES, "percase-real", "2026-11-08-t6-gles2-S2-00000000")
+    rc, o, _e = run("--tally", "--per-case", "--no-git", pr)
+    chk("per-case, backend format: a refusal line with a negative errno",
+        rc == 0 and re.search(r"Fail +1 +refused:NOT_BUILT_BLEND_SHADER", o)
+        is not None)
+    chk("per-case, backend format: -EINVAL named by its message, OSAL prefix",
+        re.search(r"ResourceError +1 +refused:mali frame: a u# index buffer",
+                  o) is not None)
+    chk("per-case, backend format: an ENOMEM message cut short is kept",
+        re.search(r"Fail +1 +refused:mali arena: out of memory", o) is not None)
     # ancestor rule, in a throwaway repository
     with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as t:
         def git(*a):

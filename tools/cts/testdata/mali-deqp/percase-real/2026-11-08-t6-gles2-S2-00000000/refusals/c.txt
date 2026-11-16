@@ -1,0 +1,9 @@
+Test case 'dEQP-GLES2.functional.c.blend'..
+yakogl-mali-refusal: -95 NOT_BUILT_BLEND_SHADER: a blend shader other than a constant colour's is not built yet
+  Fail (Image comparison failed)
+Test case 'dEQP-GLES2.functional.c.invalid'..
+yakogl: yakogl-mali-refusal: -22 mali frame: a u16 index buffer at an odd address
+  ResourceError (out of memory)
+Test case 'dEQP-GLES2.functional.c.long'..
+yakogl-mali-refusal: -12 mali arena: out of memory while building a draw of xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  Fail (Image comparison failed)
