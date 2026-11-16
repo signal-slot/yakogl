@@ -72,8 +72,12 @@
  *   POST_KERNEL 0: a 1 s timer feeds WDT0 while yd_t6_feed_verdict() says
  *     so: before CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S of uptime, and while the
  *     sample's t6_watchdog_feed() calls come at most
- *     CONFIG_YAKOGL_NANOPC_T6_ALIVE_S apart. After that WDT0 resets the SoC within one period, also when the
- *     image hangs or a fatal error halts it (the timer stops with it).
+ *     CONFIG_YAKOGL_NANOPC_T6_ALIVE_S apart. After that WDT0 resets the SoC
+ *     within one period, also when the image hangs or a fatal error halts
+ *     it (the timer stops with it). In an image with the board layer
+ *     (CONFIG_YAKOGL_BOARD) t6_watchdog_feed() is board_watchdog_feed(), and
+ *     the timer asks the layer's board_wdog_alive() as every board's feeder
+ *     does: one "still making progress" for the sample and the OSAL's waits.
  *
  * The marker (t6_marker, printed at boot) is what
  * driver/tools/kexec-zephyr/nanopc-t6.sh requires in an image before it
@@ -93,6 +97,9 @@
 
 #include "board_internal.h"
 #include "nanopc_t6.h"
+#ifdef CONFIG_YAKOGL_BOARD
+#include "yakogl_board.h"
+#endif
 
 #define WDT0_NODE DT_NODELABEL(wdt0)
 #define WDT0_PHYS 0xfeaf0000u /* Linux rk3588-base.dtsi:2463 */
@@ -118,6 +125,11 @@ BUILD_ASSERT(DT_SAME_NODE(DT_CHOSEN(zephyr_console), UART2_NODE),
 	     "T6:B goes through the console, uart2 like the raw lines");
 BUILD_ASSERT(CONFIG_YAKOGL_NANOPC_T6_ALIVE_S < CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S,
 	     "the alive window is inside the lifetime");
+#ifdef CONFIG_YAKOGL_BOARD
+BUILD_ASSERT(CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S == CONFIG_YAKOGL_BOARD_LIFETIME_S &&
+		     CONFIG_YAKOGL_NANOPC_T6_ALIVE_S == CONFIG_YAKOGL_BOARD_ALIVE_S,
+	     "a board-layer image sets the watchdog with CONFIG_YAKOGL_BOARD_LIFETIME_S and _ALIVE_S");
+#endif
 BUILD_ASSERT(CONFIG_MP_MAX_NUM_CPUS == 1,
 	     "z_arm64_el1_plat_init runs on every CPU that boots; WDT0 is armed there once");
 /* k_mem_map's (and so device_map's) free virtual range runs from the
@@ -208,7 +220,11 @@ static volatile uint32_t s_feeds;
 
 void t6_watchdog_feed(void)
 {
+#ifdef CONFIG_YAKOGL_BOARD
+	board_watchdog_feed();
+#else
 	s_alive_ms = k_uptime_get();
+#endif
 }
 
 uint32_t t6_watchdog_deadline_ms(void)
@@ -379,6 +395,11 @@ static void feed_tick(struct k_timer *t)
 	uint32_t v = yd_t6_feed_verdict(now, s_alive_ms, s_released, t6_watchdog_deadline_ms(),
 					CONFIG_YAKOGL_NANOPC_T6_ALIVE_S * MSEC_PER_SEC);
 
+	/* With the board layer the alive time is the layer's (s_alive_ms stays
+	 * -1 then); without it this is always true. */
+	if (v == YD_T6_FEED_YES && !board_wdog_alive()) {
+		v = YD_T6_FEED_NO_PROGRESS;
+	}
 	if (v != YD_T6_FEED_YES) {
 		k_timer_stop(t);
 		printk("t6: feeding stopped at %lld ms after %u feeds (%s): WDT0 resets the SoC "

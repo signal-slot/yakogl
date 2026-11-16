@@ -41,12 +41,16 @@
  *   cache_*     -> nothing: the CPU's mapping of the GPU's memory is
  *                  uncached, and each job's FLUSH_CACHE2 cleans the GPU's
  *                  caches
+ *   present, display_busy
+ *               -> the board layer's screen (osal_internal.h,
+ *                  yakogl_zephyr_present; osal_mali_board_window below is
+ *                  its window)
  *
- * Absent: mmu_map, gpu_read/write, reg_*, wait_vblank, present (the board
- * has no display on Zephyr yet). A tiler out-of-memory event grows the
- * heap, up to CONFIG_YAKOGL_MALI_HEAP_CHUNKS; a GPU fault, fatal or the
- * job timeout loses the kicks in flight and restarts the group; what needs
- * a GPU reset stops the OSAL (board::nanopc_t6_osal, "Recovery").
+ * Absent: mmu_map, gpu_read/write, reg_*, wait_vblank (the board's show
+ * never waits). A tiler out-of-memory event grows the heap, up to
+ * CONFIG_YAKOGL_MALI_HEAP_CHUNKS; a GPU fault, fatal or the job timeout
+ * loses the kicks in flight and restarts the group; what needs a GPU reset
+ * stops the OSAL (board::nanopc_t6_osal, "Recovery").
  *
  * Memory: one .noinit block of the image, whose mapping init makes uncached
  * ("The GPU's memory" below).
@@ -145,6 +149,7 @@ static uint8_t mali_mem[MALI_MEM_BYTES] __noinit __aligned(MALI_BLOCK);
 static struct {
 	bool inited;
 	bool uncached;     /* mem_uncache changed mali_mem's mapping */
+	uint32_t window;   /* the carve-out's last bytes, osal_mali_board_window's */
 	uint32_t restarts; /* the last count note_restart printed */
 	bool stopped;      /* note_restart printed the stop */
 } s;
@@ -181,6 +186,35 @@ static struct yd_t6_fw_backing backing(size_t off, size_t size)
 		.cpu = (uintptr_t)(mali_mem + off),
 		.size = size,
 	};
+}
+
+/* The board's window (osal_internal.h): the carve-out's last pages, which
+ * init then keeps from every gpu_alloc (struct yd_t6_osal_mem,
+ * carve_reserved), so the GPU reaches the window through map_phys as it
+ * does on the other boards. The block is made uncached here when init has
+ * not run yet: it is zeroed only once, so what the caller writes into the
+ * window before init stays. The size is kept for a later init (shutdown
+ * leaves the memory the image's). */
+int osal_mali_board_window(size_t bytes, uint64_t *phys, void **cpu)
+{
+	size_t reserved = ROUND_UP(bytes, PAGE);
+	uint8_t *at;
+	int rc;
+
+	if (!phys || !cpu || bytes == 0 || reserved < bytes || reserved >= MALI_CARVE)
+		return -EINVAL;
+	if (s.inited)
+		return -EBUSY;
+	if (s.window != 0)
+		return -ENOMEM;
+	rc = mem_uncache();
+	if (rc)
+		return rc;
+	s.window = (uint32_t)reserved;
+	at = mali_mem + OFF_CARVE + MALI_CARVE - reserved;
+	*phys = k_mem_phys_addr(at);
+	*cpu = at;
+	return 0;
 }
 
 /* The Rust waits poll through this (Z3's bring-up, the 5 s job timeout):
@@ -259,6 +293,7 @@ static int z_init(void *platform_arg)
 	mem.vm_pool_pages = MALI_VM_POOL_PAGES;
 	mem.vm_tables_pa = k_mem_phys_addr(mali_mem + OFF_VM_POOL);
 	mem.heap_initial_chunks = MALI_CHUNKS_INITIAL;
+	mem.carve_reserved = s.window;
 
 	t6_watchdog_feed();
 	rc = yd_t6_osal_up(cru, pmu, spi2, qos, gpu, T6_GPU_MAP, arg->fw, arg->fw_len, T6_TIMER_HZ,
@@ -277,10 +312,10 @@ static int z_init(void *platform_arg)
 	}
 	s.inited = true;
 	printk("osal(mali): ready: gpu_id 0x%08x, heap ctx 0x%llx, %u of %u chunk(s) of 0x%x, "
-	       "carve-out %u KiB at 0x%llx, csg ack %u us\n",
+	       "carve-out %u KiB at 0x%llx (%u KiB of it the board window), csg ack %u us\n",
 	       o.fw.gpu_id, (unsigned long long)o.heap_ctx, (unsigned int)MALI_CHUNKS_INITIAL,
 	       (unsigned int)MALI_CHUNKS, o.heap_chunk_size, (unsigned int)(MALI_CARVE / 1024),
-	       (unsigned long long)YD_T6_OSAL_CARVE_VA, o.csg_ack_us);
+	       (unsigned long long)YD_T6_OSAL_CARVE_VA, s.window / 1024u, o.csg_ack_us);
 	return 0;
 }
 
@@ -462,6 +497,14 @@ static void z_log(const char *fmt, ...)
 	printk("%s\n", text);
 }
 
+/* Which window buffers the display may still scan (gles_osal.h,
+ * display_busy): the board layer's, as in zephyr.c
+ * (driver/zephyr/lib/board/common/board.c, CONFIG_YAKOGL_BOARD_DISPLAY_BUSY).
+ * Declared weak and defined nowhere here, so on an image without the board
+ * layer the symbol is 0, the op is NULL, and EGL keeps its ring of three
+ * buffers. */
+extern uint32_t yakogl_zephyr_display_busy(const uint64_t *phys, size_t n) __attribute__((weak));
+
 /* thread_id (gles_osal.h, "threads"): the running thread's k_thread address
  * folded to 32 bits, as zephyr_v3d.c's. */
 static uint32_t z_thread_id(void)
@@ -494,6 +537,7 @@ const struct osal_ops osal_zephyr_ops = {
 	.log         = z_log,
 	.thread_id   = z_thread_id,
 	.present     = yakogl_zephyr_present,
+	.display_busy = yakogl_zephyr_display_busy,
 };
 
 void osal_zephyr_register(void)

@@ -22,7 +22,7 @@ endif()
 # feature rk3588): every image for the board (nanopc_t6/Kconfig).
 if(CONFIG_YAKOGL_NANOPC_T6)
   zephyr_library_named(yakogl_board_nanopc_t6)
-  zephyr_library_sources(nanopc_t6/nanopc_t6.c)
+  zephyr_library_sources(nanopc_t6/nanopc_t6.c nanopc_t6/t6_display_record.c)
   zephyr_include_directories(nanopc_t6)
   add_dependencies(yakogl_board_nanopc_t6 yakogl_drivers_rust)
   # A GL image (the Mali OSAL in it) embeds the CSF firmware and hands it to
@@ -31,6 +31,9 @@ if(CONFIG_YAKOGL_NANOPC_T6)
   if(CONFIG_YAKOGL_GPU_MALI)
     get_filename_component(_t6_repo "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
     zephyr_library_sources(nanopc_t6/nanopc_t6_mali.c)
+    # The board layer's part (nanopc_t6/Kconfig, YAKOGL_BOARD_NANOPC_T6): its
+    # window is the Mali OSAL's (osal_internal.h).
+    zephyr_library_sources_ifdef(CONFIG_YAKOGL_BOARD_NANOPC_T6 nanopc_t6/board_nanopc_t6.c)
     zephyr_library_include_directories("${_t6_repo}/src/osal" "${_t6_repo}/driver/src")
   endif()
   # The early banner's reset.S hooks and the WDT0 arming must be ours in

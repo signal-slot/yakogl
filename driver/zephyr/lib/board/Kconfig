@@ -74,19 +74,31 @@ config YAKOGL_BOARD_RPI5_FB_VIRTUAL_HEIGHT
 menuconfig YAKOGL_BOARD
 	bool "YakoGL board layer (yakogl_board.h)"
 	depends on SOC_SERIES_AM62PX_A53 || SOC_MIMX8ML8_A53 || SOC_BCM2711 || \
-		   SOC_SERIES_STM32MP2X_A35
+		   SOC_SERIES_STM32MP2X_A35 || SOC_RK3588
 	depends on ARM64
 	help
 	  The window, the screen, the result record, the watchdog and the end
-	  of a run, the same calls on the Verdin AM62P, the Verdin iMX8M Plus
-	  and the Raspberry Pi 4. A sample includes yakogl_board.h and EGL/GL,
-	  nothing else from the board.
+	  of a run, the same calls on the Verdin AM62P, the Verdin iMX8M Plus,
+	  the Raspberry Pi 4 and the NanoPC-T6. A sample includes
+	  yakogl_board.h and EGL/GL, nothing else from the board.
 
 if YAKOGL_BOARD
+
+config YAKOGL_BOARD_DISPLAY_BUSY
+	bool
+	help
+	  The board layer answers the OSAL's display_busy (gles_osal.h):
+	  board_display_busy() says which window buffers the display may
+	  still scan, so EGL keeps four buffers and never draws into one the
+	  screen scans. Selected by a board whose show does not wait for the
+	  display (the AM62P's DSS application plane,
+	  docs/notes/am62p-flip-latch.md; the NanoPC-T6's VOP); nothing to
+	  choose.
 
 config YAKOGL_BOARD_AM62P
 	def_bool SOC_SERIES_AM62PX_A53
 	select REBOOT
+	select YAKOGL_BOARD_DISPLAY_BUSY if YAKOGL_SAMPLE_SHOW_ON_DSS
 	imply YAKOGL_AM62P_RTI_SELF_ARM
 	help
 	  Window: a static buffer in the image; screen: the DSS
@@ -332,8 +344,8 @@ config YAKOGL_BOARD_RECORD_RUST
 rsource "am62p/Kconfig"
 rsource "imx8mp/Kconfig"
 
-# The NanoPC-T6 (RK3588) glue: on every image built for the board, outside the
-# board layer above (Z1 has no screen or record yet; nanopc_t6/Kconfig).
+# The NanoPC-T6 (RK3588) glue, on every image built for the board, and its
+# part of the board layer above (nanopc_t6/Kconfig).
 rsource "nanopc_t6/Kconfig"
 
 # The STM32MP257F-DK (A35) board layer core, outside the board layer above
