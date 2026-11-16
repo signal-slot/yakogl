@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vertex shader of dEQP-GLES2.functional.shaders.indexing.uniform_array.vec3_dynamic_read_fragment as dEQP-GLES2 writes it, rebuilt from VK-GL-CTS 5bb4c7e8 modules/gles2/functional/es2fShaderIndexingTests.cpp:410-521 (createUniformArrayCase; the case list at :1180-1202).

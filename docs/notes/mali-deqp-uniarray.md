@@ -2,7 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): dEQP-GLES2 uniform array refusals, study
 
-Plan #377 item `study-uniarray` (phase 1, study only: no code, no reference).
+Plan #377 item `study-uniarray` (phase 1, study only: no code, no reference);
+section 7 and the settled points of sections 3, 4 and "Open" are the item
+`ref-uniarray`'s references.
 Tip `38ad30eb`. Companion of `docs/notes/mali-uniform-arrays.md` (float array
 at a run-time index, lowered for case 108 and the fp32 forms),
 `mali-uniform-index.md` (vec4 array, `LD_PKA`) and `mali-ubo-rows.md` (the
@@ -107,6 +109,17 @@ front-end dword order (`select.rs:278` `UboLayout` mirrors it; `uniform_extent`
   elements are fp16 pairs held at a 8-byte stride (`mali-uniform-index.md`
   section 2). **vec3 and vec2 arrays have no reference**; the strides above are
   from the packed-storage rule and must be **pinned on the shim first**.
+  **Pinned by `ref-uniarray` (section 7): the strides above hold only for a
+  struct member.** A plain `mediump` array (every dEQP array outside a struct
+  is `mediump`) is held as **fp16** in UBO 0 and read with 16-bit
+  `load_ubo`s, each element rounded up to whole dwords: float 4 bytes (one
+  fp16 in a dword), vec2 4 bytes (one fp16 pair), vec3 8 bytes, vec4 8 bytes
+  (`deqp_uniarray_*_const_*`: `16` at 0/4/8/12, `32x4` at 0 (range 16),
+  `16x3` at 0/8/16/24, `32x4` at 0 and 16 (range 32)), in the VS as in the FS.
+  A struct's members stay **fp32**, one dword per component, packed with no
+  vec4 alignment (`struct_member`: `s.a` 0, `s.b[0..2]` 4-12, `s.c` 16, range
+  20; `struct`: m0 0, m1 4-16, m2 20-28, m3 32-76, range 80, `32x4` loads).
+  `mediump int` index uniforms stay 32-bit words.
 - A uniform's base is the next free dword; ints and floats before the array
   shift its byte base (`IADD_IMM #base` after the shift;
   `mali-uniform-arrays.md` "What differs", `nir_fs.rs:10190-10210`).
@@ -146,6 +159,14 @@ front-end dword order (`select.rs:278` `UboLayout` mirrors it; `uniform_extent`
   mediump vec4's, a different decl but the same load); dEQP's index (a
   `uniform int` or a counter of a loop that Mesa unrolls) decides whether the
   read stays a `load_ubo` at all.
+  **Pinned (section 7), and both inferences above are wrong for dEQP's
+  mediump arrays:** the stride is a power of two in every case (fp16
+  storage, section 3), so there is no `IMUL`: each read is `LSHIFT_OR.i32
+  idx, 2` (vec2) or `3` (vec3, vec4), the shift count a byte lane (`.b22`,
+  `.b33`) of one `MOV.i32 r0, 0x3020100` at the program's start, then `IADD_IMM #0x10` (the array follows the
+  four index ints), then `LD_PKA.i32` (vec2), `LD_PKA.i48` (vec3) or
+  `LD_PKA.i64` (vec4), the same in the VS and the FS (`dyn_*`). A vec2 element
+  is an `.i32`, not an `.i64`.
 
 ## 5. Plan for `lower-uniarray` (one session)
 
@@ -156,7 +177,8 @@ so in the commit.
 1. **Constant index first (about 80 % of the cases).** Replace the `array_len
    > 1` branch of `nir.rs:1004-1012` and `nir_fs.rs:5866-5890` by an
    `(element type, stride dwords, count)` table: float 1/1, vec2 2, vec3 3,
-   vec4 4 (existing); int/bool 1 (admitted with unitype). Drop the refusals at
+   vec4 4 (existing); int/bool 1 (admitted with unitype). (These are the fp32
+   struct-member strides; a plain mediump array is fp16, see section 7.) Drop the refusals at
    `nir_fs.rs:4875-4878` and `5900-5903` for a constant index, emitting the
    lanes as FAU pushes at `dword_off + i * stride` (as `uniform_lane`). Byte
    test against the references of `ref-uniarray` for float, vec2, vec3, vec4
@@ -203,13 +225,96 @@ without `--uniform-values` (int uniforms are refused by `gl_ref.py`), from the
 7. If `unitype`/`intval` references contain `int u[N]`/`bvec4 u[N]` they are
    theirs; add only the array part here (`deqp_uniarray_int_const`).
 
+## 7. References (`ref-uniarray`, made 2026-11-16)
+
+Each reference is `tools/mali/testdata/deqp_uniarray_<name>.{vert,frag,
+expect.json}`; the shader files are dEQP's text (Khronos, Apache-2.0: each
+has a `.license` sidecar naming the case and the source). Every
+`expect.json` was made with the method of `gm2_*`
+(`README-pan_shc.md`, "The shim driver"), with no `--uniform-values`:
+
+```sh
+tools/mali/drm_shim_ref.sh run <shim> tools/mali/testdata/deqp_uniarray_<name>.vert \
+    tools/mali/testdata/deqp_uniarray_<name>.frag <out>/deqp_uniarray_<name>
+python3 -I tools/mali/pan_ref_diff.py extract <out>/deqp_uniarray_<name>.trace --draw --attributes \
+    > tools/mali/testdata/deqp_uniarray_<name>.expect.json
+```
+
+`<shim>` is Mesa 26.2.1 built with `drm_shim_ref.sh build`'s meson options
+and installed into `<shim>/inst`. It was configured from the tree that
+`build_pan_shc.sh` extracted from the 26.2.1 tarball, which carries only
+`mesa-pan_shc.patch` (one `subdir('pan_shc')` line in
+`src/panfrost/meson.build`, no compiler or driver code). The shim's bytes were
+checked first: `gm2_arithconst_1` made again this way is byte-identical to
+the committed `gm2_arithconst_1.expect.json`. All 23 references were made a
+second time and came out identical. `deqp_ref.sh` (the `ref-tool` item) was not
+on the tip, and the tip had no `deqp_shapes/` pairs.
+
+Sources. "rebuilt" means the text was re-made from VK-GL-CTS `5bb4c7e8`
+(main, 2026-11-16), substituting the template the way `StringTemplate` does:
+
+- **IDX**: `modules/gles2/functional/es2fShaderIndexingTests.cpp:410-521`
+  (`createUniformArrayCase`, `PRECISION` mediump at :493, `ARRAY_LEN` 4), with
+  the case list at :1180-1202.
+- **STR**: `modules/gles2/functional/es2fShaderStructTests.cpp:163-209`
+  (`createStructCase`, the default VS/FS and the specialisation), with
+  `array_member` at :1346-1373 and `LineStream` (`glsShaderRenderCase.hpp:71-79`,
+  one `\n` per line).
+- **QPA**: verbatim from the `measure` item's
+  `tools/mali/testdata/deqp_shapes/<pair>` at its commit `3b926d42`, which was
+  not yet on the tip. That text is the .qpa of a dEQP run (VK-GL-CTS `93bca01`).
+  `uniform_api`'s values come from a seeded random generator, so they are taken
+  from the log rather than rebuilt.
+
+| reference | dEQP-GLES2.functional. case | source | today's first refusal (37305608) | what it pins for `lower-uniarray` |
+|---|---|---|---|---|
+| `float_const_vs`, `float_const_fs` | `shaders.indexing.uniform_array.float_static_read_{vertex,fragment}` | IDX, rebuilt | `a uniform array` (both) | fp16 element, 4-byte stride: four 16-bit FAU halves (`u2.w0.h00` ...), `FADD.v2f16`; FS 9, VS varying 23 instructions |
+| `vec2_const_vs`, `vec2_const_fs` | `vec2_static_read_*` | IDX, rebuilt | VS `a uniform array`; FS `a mediump fragment shader uniform other than ...` | one fp16 pair per element, one 32-bit FAU word each |
+| `vec3_const_vs`, `vec3_const_fs` | `vec3_static_read_*` | IDX, rebuilt | VS `a uniform array`; FS `a mediump fragment shader uniform ...` | 8-byte stride: an xy word and a z half per element; the FS's colour w is the promoted fp16 pair `0x3c003c00` (FAU word 12) |
+| `vec4_const_vs`, `vec4_const_fs` | `vec4_static_read_*` | IDX, rebuilt | VS `a vertex shader uniform that is not highp`; FS `a fragment shader operand of a form ... (a uniform first)` | two fp16 pairs per element, 8-byte stride; FS `ATEST` takes alpha from `r1.h1` |
+| `loop_{float,vec2,vec3,vec4}_fs`, `loop_float_vs` | `{float,vec2,vec3,vec4}_static_loop_read_fragment`, `float_static_loop_read_vertex` | IDX, rebuilt | FS float, vec4 `a uniform read at a run-time index other than ...`; vec2, vec3 `a uniform array`; VS `a loop in a vertex shader` | Mesa unrolls the loop: each is **byte-identical** to its `*_const_*` (`pan_ref_diff.py diff-ref`: 0 differ, the FAU words too) |
+| `dyn_vec2_vs`, `dyn_vec2_fs`, `dyn_vec3_vs`, `dyn_vec3_fs`, `dyn_vec4_vs`, `dyn_vec4_fs` | `{vec2,vec3,vec4}_dynamic_read_{vertex,fragment}` | IDX, rebuilt | vec2, vec3 `a uniform array`; `vec4_dynamic_read_vertex` `a vertex shader uniform that is not highp`; `vec4_dynamic_read_fragment` `a uniform read at a run-time index other than ...` (read four times, the array not first in the block); dEQP reports all six as NotSupported | the index ints at dwords 0-3 (one `32x4` push), the array at byte 16: `LSHIFT_OR` by 2 or 3, `IADD_IMM #0x10`, `LD_PKA.i32` / `.i48` / `.i64` (section 4) |
+| `struct_member_vs`, `struct_member_fs` | `shaders.struct.uniform.array_member_{vertex,fragment}` | STR, rebuilt | `a uniform array` (both) | fp32 struct leaves `s.a`, `s.b[3]`, `s.c` at dwords 0, 1-3, 4; `s.c` is `S32_TO_F32` of an int word (`intval`/`unitype`) |
+| `struct` | `uniform_api.value.assigned.basic_array_assign_full.array_in_struct.float_vec4_both` | QPA (`uniarray_array_in_struct`) | VS `a uniform array` | the flattened fp32 struct `m0, m1, m2[3], m3[3]` = 20 dwords, `32x4` loads at 0-64, read in both stages; the compare functions (`abs`, `?:`) are other families' |
+| `api_float` | `uniform_api.value.assigned.basic_array_assign_full.basic_array.float_both` | QPA (`uniarray_float_array`) | VS `a uniform array` | the bulk shape A: `mediump float u_var[3]`, fp16 at 0/4/8 in both stages; also needs the `compare_float` arithmetic |
+
+Dropped from section 6:
+
+- **highp arrays** (1, 3): no refused dEQP case declares one. Every
+  `uniform_api` collection and `random` type is mediump unless it is a bool
+  (`es2fUniformApiTests.cpp:215-216, 348, 356, 366-367`), and `indexing` uses
+  mediump (:493). A highp array would be a reduction, not a dEQP shape, so
+  there is no highp reference.
+- **`deqp_uniarray_int_const`** (7): the int and bool arrays are `uniform_api`
+  shapes whose text is the .qpa's (`deqp_shapes/uniarray_{int,bool}_array`).
+  They need the int words and values first (`unitype`, `intval`), so they are
+  left to those references.
+
+Added beyond section 6: `dyn_vec4_fs` (the third `UniformIndexed` case of
+section 1), `struct_member` (F, whose text can be rebuilt) and `api_float`
+(A's float group).
+
+For `lower-uniarray`, this changes section 5 step 1. The `(element type,
+stride)` table is **fp16 for a plain mediump array**: float 1 dword, vec2 1,
+vec3 2, vec4 2, read as 16-bit halves. A struct member's array is fp32 at
+1/2/3/4 dwords. The `UboLayout` of both, and the frame's upload of a mediump
+array as fp16 (`src/mali/`, plan #373), must follow the same rule. In step 3,
+`ubo_load`'s 8-byte element (`words == 2`) becomes a 4-byte `.i32` (vec2), a
+6-byte `.i48` at an 8-byte stride (vec3) and the 8-byte `.i64` (vec4). Each
+index is shifted, and the array is not first in the block (`#0x10`).
+
 ## Open
 
-- The exact generated GLSL of A-F is **not read**: this note takes shapes from
-  the case names. The count of float-only cases, and whether the uniform_api
-  shaders sum every element (and so pull in `intval` for `int`/`bool`), come
-  from the `measure` item.
-- vec3 array stride, vec2 array load width and the dynamic form of vec3 are
-  **inferences from packed storage**, unpinned on the shim.
+- ~~The exact generated GLSL of A-F is not read~~. The `indexing` and
+  `struct.uniform` text is rebuilt and the `uniform_api` text is the .qpa's
+  (section 7). The case counts per shape are still the `measure` item's.
+- ~~vec3 array stride, vec2 array load width and the dynamic form of vec3~~
+  are pinned (sections 3, 4, 7).
+- ~~Whether `static_loop_read` unrolls~~: it does, and its bytes equal the
+  static read's (section 7).
+- The FAU slot that holds each UBO word is fixed by the instruction words, but
+  no value pins it, because `gl_ref.py --uniform-values` does not set an array
+  (it looks up the location of `u_arr[4]`, which is -1). A value-pinned
+  layout needs that tool to set arrays element by element.
 - A `_both` case's fragment shader is not counted; its fragment refusal may
   differ from the vertex's.
