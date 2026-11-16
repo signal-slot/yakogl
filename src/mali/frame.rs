@@ -1057,6 +1057,27 @@ impl TargetFormat {
     fn has_alpha(self) -> bool {
         matches!(self, TargetFormat::Rgba8888 | TargetFormat::Rgba16f)
     }
+
+    /// The channels a draw writes into this layout: GL's mask (bit 0 R ..
+    /// 3 A) without alpha when the GL format has no alpha (`alpha_bits` 0,
+    /// `GlesDraw::target_alpha_bits`) but the layout stores one. The GL
+    /// core keeps a `GL_RGB565` (or `GL_RGB8`, `GL_RGB`) colour buffer in
+    /// RGBA8 storage, and such a buffer reads alpha 1 (ES 2.0 4.3.1): the
+    /// clear stores 1 (the GL core quantises the clear's alpha to 0 bits)
+    /// and no draw may overwrite it. Mesa draws `GL_RGB565` into an
+    /// R5G6B5 target that holds no alpha (zs-refs'
+    /// `stencil_clear__rbo_rgb565_*.txt`: `Internal Format: R5G6B5A0`,
+    /// `Writeback Format: R5G6B5`), so its alpha reads 1 the same; the V3D
+    /// back end masks it so (src/v3d/state.rs). A layout without alpha
+    /// (XRGB8888, RGB565) keeps GL's mask, as Mesa's blend descriptors do.
+    pub fn draw_mask(self, gl_mask: u8, alpha_bits: u8) -> u8 {
+        let mask = gl_mask & 0xf;
+        if self.has_alpha() && alpha_bits == 0 {
+            mask & 0x7
+        } else {
+            mask
+        }
+    }
 }
 
 /// The GL viewport and depth range of the draw, the target bottom-up (an

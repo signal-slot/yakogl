@@ -80,6 +80,18 @@ fn meta(stage: ShaderStage) -> ShaderMeta<'static> {
 /// the whole target); the descriptor arena's bytes, the RUN_IDVS registers
 /// and the frame.
 fn build(target: Target) -> (Vec<u8>, BTreeMap<u32, u32>, Frame) {
+    build_with(target, [0.0, 0.0, 1.0, 1.0], None, DepthStencilState::OFF, 0xf)
+}
+
+/// [`build`]'s frame with the clear colour `clear`, the depth/stencil
+/// attachment `zs`, the draw's depth/stencil state and colour mask.
+fn build_with(
+    target: Target,
+    clear: [f32; 4],
+    zs: Option<ZsAttachment>,
+    zs_state: DepthStencilState,
+    colour_mask: u8,
+) -> (Vec<u8>, BTreeMap<u32, u32>, Frame) {
     let (mut desc_m, mut code_m, mut spd_m, mut ctx_m) =
         (vec![0u8; 0x4000], vec![0u8; 0x800], vec![0u8; 0x100], vec![0u8; 0x200]);
     let mut words = vec![0u64; 512];
@@ -108,12 +120,12 @@ fn build(target: Target) -> (Vec<u8>, BTreeMap<u32, u32>, Frame) {
             instance_divisor: 0,
         }];
         let input = FrameInput {
-            zs: None,
+            zs,
             target,
-            clear_rgba: Some([0.0, 0.0, 1.0, 1.0]),
+            clear_rgba: Some(clear),
             draw: Some(DrawCall {
-                zs: DepthStencilState::OFF,
-                colour_mask: 0xf,
+                zs: zs_state,
+                colour_mask,
                 front_cw: false,
                 cull: Cull::None,
                 vs: &vs,
@@ -245,4 +257,160 @@ fn an_rgba16f_target_is_the_board_s() {
     assert_eq!(at(0x7fff_fff1_00b0, 16), [0, 0, 0, 0, 0, 0x3c, 0, 0x3c, 0, 0, 0, 0, 0, 0x3c, 0, 0x3c]);
     assert_eq!(at(0x7fff_fff1_014c, 4), (0xdfu32 << 12).to_le_bytes());
     assert_eq!(at(0x7fff_fff1_002c, 4), 0x0800_1480u32.to_le_bytes());
+}
+
+/// zs-refs' Mesa 26.2.1 trace of dEQP-GLES2
+/// fbo.render.stencil_clear.rbo_rgb565_stencil_index8
+/// (tools/mali/pan_zs_ref.sh). Its sibling
+/// `rbo_rgb565_depth_component16_stencil_index8` has no frame there: Mesa's
+/// context is ES 3, which calls separate depth and stencil renderbuffers
+/// GL_FRAMEBUFFER_UNSUPPORTED (the trace's `Frames: 0`), where our
+/// `report-es2` build draws it. Its draws are the same (no depth test), so
+/// they take this trace's descriptors.
+const STENCIL_CLEAR_565: &str =
+    include_str!("../../tools/mali/testdata/pan_zs_ref/stencil_clear__rbo_rgb565_stencil_index8.txt");
+const STENCIL_CLEAR_565_D16: &str =
+    include_str!("../../tools/mali/testdata/pan_zs_ref/stencil_clear__rbo_rgb565_depth_component16_stencil_index8.txt");
+
+/// pandecode's field `key` in block `block` of a zs-refs trace (`## <block>
+/// lines a-b` headed).
+fn ref_field<'a>(trace: &'a str, block: &str, key: &str) -> &'a str {
+    let mut inside = false;
+    for line in trace.lines() {
+        if let Some(h) = line.strip_prefix("## ") {
+            inside = h.starts_with(&format!("{block} lines "));
+            continue;
+        }
+        if let Some(v) = line.trim().strip_prefix(key).and_then(|r| r.strip_prefix(": ")).filter(|_| inside) {
+            return v;
+        }
+    }
+    panic!("{block}: no field {key}")
+}
+
+/// The Depth/stencil descriptor pandecode printed in `block`, as ours
+/// unpacks (the fields Mesa's frames of these cases set).
+fn ref_depth_stencil(trace: &str, block: &str) -> DepthStencil {
+    let f = |k: &str| ref_field(trace, block, k);
+    let func = |k: &str| match f(k) {
+        "Never" => Func::NEVER,
+        "Equal" => Func::EQUAL,
+        "Always" => Func::ALWAYS,
+        v => panic!("{block}: {k} {v}"),
+    };
+    let op = |k: &str| match f(k) {
+        "Keep" => StencilOp::KEEP,
+        "Replace" => StencilOp::REPLACE,
+        v => panic!("{block}: {k} {v}"),
+    };
+    let hex = |k: &str| u32::from_str_radix(f(k).trim_start_matches("0x"), 16).unwrap();
+    let flag = |k: &str| f(k) == "true";
+    assert_eq!(
+        (f("Depth clamp mode"), f("Depth source"), f("Depth units"), f("Depth factor"), f("Depth bias clamp")),
+        ("[0, 1]", "Fixed function", "0.000000", "0.000000", "0.000000"),
+        "{block}"
+    );
+    DepthStencil {
+        front_compare_function: func("Front compare function"),
+        front_stencil_fail: op("Front stencil fail"),
+        front_depth_fail: op("Front depth fail"),
+        front_depth_pass: op("Front depth pass"),
+        back_compare_function: func("Back compare function"),
+        back_stencil_fail: op("Back stencil fail"),
+        back_depth_fail: op("Back depth fail"),
+        back_depth_pass: op("Back depth pass"),
+        stencil_from_shader: flag("Stencil from shader"),
+        stencil_test_enable: flag("Stencil test enable"),
+        front_write_mask: hex("Front write mask"),
+        back_write_mask: hex("Back write mask"),
+        front_value_mask: hex("Front value mask"),
+        back_value_mask: hex("Back value mask"),
+        front_reference_value: hex("Front reference value"),
+        back_reference_value: hex("Back reference value"),
+        shader_read_only_z_s: flag("Shader read only Z/S"),
+        depth_cull_enable: flag("Depth cull enable"),
+        depth_clamp_mode: DepthClampMode::_0_1,
+        depth_source: DepthSource::FIXED_FUNCTION,
+        depth_write_enable: flag("Depth write enable"),
+        depth_bias_enable: flag("Depth bias enable"),
+        depth_function: func("Depth function"),
+        ..Default::default()
+    }
+}
+
+/// fbo.render.stencil_clear.rbo_rgb565_* (plan #373 cause 8, inv-misc8):
+/// the GL core keeps a `GL_RGB565` renderbuffer in RGBA8 storage
+/// (`GLES_SURF_RGBA8888`, `target_alpha_bits` 0), and the case's textures
+/// carry an alpha other than 1, which the draws wrote: dEQP's fuzzy compare
+/// reads alpha 1 for a buffer without alpha (ES 2.0 4.3.1) and failed.
+/// Mesa draws the case into an R5G6B5 target that stores no alpha
+/// (`Internal Format: R5G6B5A0`, `Writeback Format: R5G6B5`); ours stores
+/// RGBA8 and writes R, G and B only ([`TargetFormat::draw_mask`]), so the
+/// clear's alpha 1 stays. An XRGB8888 or RGB565 layout keeps GL's mask.
+///
+/// The case's four draws (Mesa's two scissored stencil clears, ALWAYS and
+/// REPLACE with references 1 and 2 and no colour, then the two textured
+/// quads, EQUAL with references 1 and 2) pack the Depth/stencil
+/// descriptor Mesa's frame holds, field for field, into the case's 128x128
+/// target with a D24S8 plane.
+#[test]
+fn an_rgb565_renderbuffer_s_stencil_clear_is_mesa_s() {
+    assert_eq!(TargetFormat::Rgba8888.draw_mask(0xf, 0), 0x7, "RGBA8 storage of a format without alpha");
+    assert_eq!(TargetFormat::Rgba8888.draw_mask(0x9, 0), 0x1);
+    for bits in [1, 4, 8] {
+        assert_eq!(TargetFormat::Rgba8888.draw_mask(0xf, bits), 0xf, "{bits} alpha bits");
+    }
+    assert_eq!(TargetFormat::Rgba16f.draw_mask(0xf, 0), 0x7, "RGBA16F storage of GL_RGB16F");
+    for f in [TargetFormat::Xrgb8888, TargetFormat::Rgb565] {
+        assert_eq!(f.draw_mask(0xf, 0), 0xf, "{f:?}: no alpha stored, GL's mask as Mesa's");
+    }
+
+    let target = Target {
+        gpu: 0x7fff_fffb_c000,
+        width: 128,
+        height: 128,
+        row_stride: 128 * 4,
+        format: TargetFormat::Rgba8888,
+        samples: 1,
+    };
+    let zs = ZsAttachment { gpu: 0x7fff_fffa_c000, row_stride: 128 * 4, clear_depth: 0.0, clear_stencil: 0 };
+    let face = |func, op, reference| StencilFace {
+        func,
+        fail: op,
+        depth_fail: op,
+        depth_pass: op,
+        value_mask: 0xff,
+        write_mask: 0xff,
+        reference,
+    };
+    assert!(
+        STENCIL_CLEAR_565_D16.contains("GL_FRAMEBUFFER_UNSUPPORTED") && STENCIL_CLEAR_565_D16.contains("# Frames: 0")
+    );
+    let (case, trace) = ("rbo_rgb565_stencil_index8", STENCIL_CLEAR_565);
+    assert_eq!(ref_field(trace, "frame1-fbd", "Internal Format"), "R5G6B5A0", "{case}: Mesa stores no alpha");
+    assert_eq!(ref_field(trace, "frame1-fbd", "Writeback Format"), "R5G6B5", "{case}");
+    for (block, func, op, reference, mask) in [
+        ("frame1-draw1", Func::ALWAYS, StencilOp::REPLACE, 1, 0),
+        ("frame1-draw2", Func::ALWAYS, StencilOp::REPLACE, 2, 0),
+        ("frame1-draw3", Func::EQUAL, StencilOp::KEEP, 1, 0xf),
+        ("frame1-draw4", Func::EQUAL, StencilOp::KEEP, 2, 0xf),
+    ] {
+        let state = DepthStencilState {
+            depth_func: Func::ALWAYS,
+            depth_write: false,
+            stencil_test: true,
+            faces: [face(func, op, reference); 2],
+        };
+        let colour_mask = target.format.draw_mask(mask, 0);
+        let (desc, _, frame) = build_with(target, [0.0, 0.0, 0.0, 1.0], Some(zs), state, colour_mask);
+        let at = frame.layout.depth_stencil.expect("a depth/stencil descriptor").offset;
+        let ours = DepthStencil::unpack(&desc[at..at + DepthStencil::LENGTH].try_into().unwrap()).unwrap();
+        assert_eq!(ours, ref_depth_stencil(trace, block), "{case} {block}: the Depth/stencil descriptor");
+        if mask != 0 {
+            let at = frame.layout.blend.expect("a blend descriptor").offset;
+            /* the Blend's `Equation`, bits 32..=63 */
+            let equation = BlendEquation::unpack(&desc[at + 4..at + 8].try_into().unwrap()).unwrap();
+            assert_eq!(equation.color_mask, 0x7, "{case} {block}: no alpha written");
+        }
+    }
 }
