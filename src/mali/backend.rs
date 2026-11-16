@@ -759,7 +759,8 @@ fn draw_blend_shader(
     target: &frame::Target,
     colour_f16: bool,
 ) -> Result<Option<DrawBlendShader>, FrameError> {
-    let mask = if d.color_write { d.color_mask & 0xf } else { 0 };
+    /* the mask `add_gl_draw` gives the frame */
+    let mask = if d.color_write { target.format.draw_mask(d.color_mask, d.target_alpha_bits) } else { 0 };
     if !d.blend || mask == 0 || depth_only(d) {
         return Ok(None);
     }
@@ -1826,8 +1827,13 @@ fn add_gl_draw(
         fs_uniforms: uniform_words(d.fs_uniform_cpu, d.fs_uniform_dwords),
         zs: depth_stencil_state(d),
         /* a frame with no colour surface writes no colour, whatever the
-         * mask (the GL core already sends 0) */
-        colour_mask: if d.color_write && !open.no_colour { d.color_mask & 0xf } else { 0 },
+         * mask (the GL core already sends 0); a GL format without alpha
+         * in RGBA storage keeps its stored 1 (`TargetFormat::draw_mask`) */
+        colour_mask: if d.color_write && !open.no_colour {
+            target.format.draw_mask(d.color_mask, d.target_alpha_bits)
+        } else {
+            0
+        },
         front_cw: d.front_cw,
         cull: cull(d.cull)?,
         textures: fs_tex.as_ref().map_or(&[], |(t, n)| &t[..*n]),

@@ -2364,3 +2364,52 @@ fn vertex_cube_samplers_are_mesa_s() {
     assert_eq!(SEAMLESS_CUBE_MAP, !crate::REPORT_ES2);
     eprintln!("mali vertex cube samplers vs pan_tex_ref: {} cases", VCUBE.len());
 }
+
+/// tex-refs' fragment cube cases (dEQP-GLES2 texture.mipmap.cube.bias.*):
+/// each case's name and its `.desc`.
+const CUBEBIAS: [(&str, &str); 2] = [
+    ("bias.linear_linear", include_str!("../../tools/mali/testdata/pan_tex_ref/cubebias.bias.linear_linear.desc")),
+    ("bias.linear_nearest", include_str!("../../tools/mali/testdata/pan_tex_ref/cubebias.bias.linear_nearest.desc")),
+];
+
+/// The fragment-stage cube sampler of texture.mipmap.cube.bias.linear_*
+/// against Mesa 26.2.1's (plan #373 cause 8; inv-mipcube). The draws ran in
+/// an ES 3 context: `sampler_with(true)` packs to the Fragment table's
+/// sampler, seamless on and every wrap clamped to the edge. dEQP-GLES2 judges
+/// the cube against its non-seamless reference with GL's wraps, and Mesa's
+/// ES 2.0 context has no seamless filtering (main/version.c:682-690,
+/// `CubeMapSeamless = _mesa_is_gles3(ctx)`), passes the flag on
+/// (st_atom_sampler.c:71) and clamps the wraps only of a seamless cube
+/// (:84-94), and panfrost writes both as given (pan_cmdstream.c:223-231):
+/// `sampler_with(false)` is the shim's words with `Seamless Cube Map` clear
+/// and GL's S, T and R. No ES 2.0 shim trace was made (no drm-shim build in
+/// the dependency cache), so the ES 2.0 words are that rule applied to the
+/// shim's. texture.mipmap.cube.{basic,projected}.linear_* bind the same
+/// cube state (CLAMP_TO_EDGE, mag NEAREST, the same min filters) and take
+/// the same sampler. `sampler()` is the sampler of this build's context, the
+/// ES 2.0 one in the board's `report-es2` library.
+#[test]
+fn fragment_cube_samplers_follow_the_context() {
+    for (case, desc) in CUBEBIAS {
+        let tex = vcube_texture(desc);
+        assert!(tex.is_cube(), "{case}");
+        let mesa = shim_sampler(desc_sampler(desc, "Fragment"));
+        assert!(mesa.seamless_cube_map, "{case}: tex-refs' context is ES 3");
+        assert_eq!(tex.sampler_with(true).pack().unwrap(), mesa.pack().unwrap(), "{case}: ES 3 context");
+        let es2 = Sampler {
+            seamless_cube_map: false,
+            wrap_mode_s: tex.wrap_s,
+            wrap_mode_t: tex.wrap_t,
+            wrap_mode_r: WrapMode::REPEAT,
+            ..mesa
+        };
+        let got = tex.sampler_with(false);
+        assert_eq!(got.pack().unwrap(), es2.pack().unwrap(), "{case}: ES 2.0 context");
+        assert!(!got.seamless_cube_map, "{case}: one face filtered alone");
+        assert_eq!(got.wrap_mode_r, WrapMode::REPEAT, "{case}: GL's R wrap, not the seamless clamp");
+        assert_eq!(tex.sampler(), tex.sampler_with(SEAMLESS_CUBE_MAP), "{case}");
+        if crate::REPORT_ES2 {
+            assert_eq!(tex.sampler(), got, "{case}: the report-es2 build is the ES 2.0 context");
+        }
+    }
+}
