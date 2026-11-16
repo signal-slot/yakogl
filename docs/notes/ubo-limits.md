@@ -284,8 +284,24 @@ sections 4 and 5 stay the plan for them. The Mali is unchanged.
 (`docs/es3/host-gles3-part-v3d.tsv`, HOST-ONLY) [M], which predates
 `cb52fae8`: `functional.ubo` 0 pass / 2355 fail, `functional.implementation_limits`
 38 pass / 11 fail, `functional.state_query` 914 pass / 23 fail / 9 not
-supported. That is the baseline, not a verdict on the raise. The result of
-the post-raise host run (plan #375 item `ubo-host-deqp`) is not recorded here
-[U]; `ldunifa` is not started and becomes its own item only if that run
-names run-time-index cases failing on the 256-value refusal.
+supported. That is the baseline, not a verdict on the raise.
 
+**Verdict after the raise (host dEQP `functional.ubo`, HOST-ONLY).** The
+raise is in `cb52fae8`; the host run that follows it is the one of
+`docs/notes/es3-interface-limits.md` section 6, library of `7c39ee92`
+(VK-GL-CTS `93bca01`, `MODULE=gles3 tools/cts/host-deqp-run.sh`). Its
+`functional.ubo.` result is 2355 cases, 2355 Fail, 0 Pass, unchanged from the
+run before the raise. Every Fail is "Image compare failed" (the shaders
+compiled and linked and the draw ran; the linux OSAL reads back black), and
+**no case was refused at compile or link, so none hit the `no ldunifa yet`
+refusal**: there are no refusal shapes to list. Verdict: `ldunifa` is **not
+shown to be needed** by `functional.ubo`; the run cannot show the opposite
+either, because the black read-back hides a wrong run-time index. So the
+`ldunifa-study` design stays unstarted and becomes its own item only when a
+board `functional.ubo` run (plan #347's boards, `#320`) names run-time-index
+cases failing on the 256-value refusal or on a wrong value. The separate
+post-raise rerun report (`ubo-deqp-rerun`, per-group pass, fail and
+not-supported counts) was not available to this note, so no per-group counts
+beyond the above are written here. The full-stage claim itself is pinned by
+`tests/v3d_ubo_full_stage.rs` and the 256-value threshold by
+`tests/v3d_ubo_dynamic_index_limit.rs`.
