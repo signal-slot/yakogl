@@ -33,11 +33,13 @@
 //! reference is v3d-sim4's, silicon the board's). The C `rt_internal` table
 //! (`driver/src/v3d/v3d_job.c`) is not reached; the Rust row it mirrors is.
 //!
+//! R32F is a colour target only with GL_EXT_color_buffer_float (ES 3.0
+//! table 3.13), which the build does not list; `rig` stands in for a build
+//! that does (`framebuffer::HOST_R32F_RT`) so the V3D's R32F row is still
+//! pinned, and puts it back when it drops.
+//!
 //! The defects found are `#[ignore]`d with their owner:
 //!
-//! - GL core: GL_RG16F (and GL_RGB16F) on attachments 1-3 is held as RGBA8
-//!   (`src/gl/framebuffer.rs`, the format match for extra attachments),
-//!   where attachment 0 holds it as RGBA16F;
 //! - GL core and V3D state: RGBA32F, RG32F and R11F_G11F_B10F are refused and
 //!   `state::rt_format` has no row for them.
 //!
@@ -443,15 +445,17 @@ fn rig() -> Rig {
     }
     seen(|s| *s = Seen::default());
     yakogl::backend::HOST_DRAW_TARGETS.store(4, Ordering::Relaxed);
+    yakogl::gl::framebuffer::HOST_R32F_RT.store(true, Ordering::Relaxed);
     Rig(g)
 }
 
-/// The rig's lock; the four-target stand-in goes back to 0 when it drops.
+/// The rig's lock; the four-target and R32F stand-ins go back when it drops.
 struct Rig(#[allow(dead_code)] MutexGuard<'static, ()>);
 
 impl Drop for Rig {
     fn drop(&mut self) {
         yakogl::backend::HOST_DRAW_TARGETS.store(0, Ordering::Relaxed);
+        yakogl::gl::framebuffer::HOST_R32F_RT.store(false, Ordering::Relaxed);
     }
 }
 
@@ -715,8 +719,8 @@ fn formats() -> Vec<Fmt> {
             (V3D_INTERNAL_TYPE_16F, 1, NONE),
             CLEAR_16F,
         ),
-        /* the GL core holds RG16F as RGBA16F (`renderbuffer_surf_format`):
-         * on attachment 3 it does not today, see `rg16f_on_rt3_is_held_as_rgba8_today` */
+        /* the GL core holds RG16F as RGBA16F (`renderbuffer_surf_format`),
+         * on attachment 3 as on attachment 0 */
         f(
             "RG16F",
             GL_RG16F,
@@ -875,11 +879,6 @@ fn accepted() -> Vec<Fmt> {
     formats().into_iter().filter(|fm| fm.surf.is_some()).collect()
 }
 
-/// RG16F is held as RGBA8 on attachments 1-3 (see its own tests).
-fn is_rg16f(fm: &Fmt) -> bool {
-    fm.gl == GL_RG16F
-}
-
 /// The pixels `glReadPixels` must give for a signed or unsigned integer
 /// format whose memory holds `mem` (little-endian components, `n` of them,
 /// `cs` bytes each), read as RGBA_INTEGER: missing channels 0, alpha 1.
@@ -990,7 +989,7 @@ fn assert_rt3_words(fm: &Fmt, r: &Run) {
 #[test]
 fn rt3_words_of_every_format() {
     let _g = rig();
-    for fm in accepted().iter().filter(|fm| !is_rg16f(fm)) {
+    for fm in &accepted() {
         assert_rt3_words(fm, &run(fm.gl, fm.class));
     }
 }
@@ -1001,41 +1000,16 @@ fn rt3_words_of_every_format() {
 fn rt3_alone_sets_the_tile_bpp() {
     let _g = rig();
     let want = |name: &str| match name {
-        "SRGB8_ALPHA8" | "RGB10_A2" | "RGB10_A2UI" | "RGBA16I" | "RGBA16UI" | "RG32I" | "RG32UI" | "R16F"
+        "SRGB8_ALPHA8" | "RGB10_A2" | "RGB10_A2UI" | "RGBA16I" | "RGBA16UI" | "RG32I" | "RG32UI" | "R16F" | "RG16F"
         | "RGBA16F" => 1,
         "RGBA32I" | "RGBA32UI" => 2,
         _ => 0,
     };
-    for fm in accepted().iter().filter(|fm| !is_rg16f(fm)) {
+    for fm in &accepted() {
         let r = run(fm.gl, fm.class);
         let bpp = r.seen.tilings.last().map(|t| t.2);
         assert_eq!(bpp, Some(want(fm.name)), "{}", fm.name);
     }
-}
-
-/// RG16F on attachment 3 is held as RGBA8 today: an untyped job, RGBA8's
-/// raster row and clear word, 32 bpp. (Attachment 0 holds it as RGBA16F.)
-#[test]
-fn rg16f_on_rt3_is_held_as_rgba8_today() {
-    let _g = rig();
-    let r = run(GL_RG16F, Class::Float);
-    let s = &r.seen;
-    assert_eq!((r.status, r.error), (GL_FRAMEBUFFER_COMPLETE, GL_NO_ERROR), "{:?}", s.log);
-    assert!(!s.jobs[0].typed);
-    assert_eq!(s.jobs[0].rt[2].stride, 4 * W as u32);
-    assert_eq!(s.clears[0].clear_rt[3], CLEAR_RGBA8);
-    assert!(s.tilings.iter().all(|&t| t == (4, false, 0)), "{:?}", s.tilings);
-}
-
-/// GL_RG16F keeps four half-float channels like GL_RGBA16F
-/// (`renderbuffer_surf_format`): on attachment 3 it should be RGBA16F, typed,
-/// 64 bpp, with halves for the clear and an 8-byte pixel.
-#[test]
-#[ignore = "gl-core: src/gl/framebuffer.rs extra-attachment format match (the `format = match st.internalformat` before `Some((mem.gpu + st.offset ...`) lacks GL_RG16F and GL_RGB16F, so attachments 1-3 are RGBA8888 where attachment 0 is RGBA16F"]
-fn rg16f_on_rt3_is_rgba16f() {
-    let _g = rig();
-    let fm = formats().into_iter().find(is_rg16f).unwrap();
-    assert_rt3_words(&fm, &run(fm.gl, fm.class));
 }
 
 /* ---- the read-back of attachment 3 ------------------------------------------ */
@@ -1149,7 +1123,7 @@ fn without_the_stand_in_attachment_3_is_refused() {
 
 /// GL_EXT_color_buffer_float is not listed, which is what makes those three
 /// refusals ES 3.0's (core ES 3.0 renders no 32-bit float and no packed
-/// float format; GL_R32F is accepted regardless).
+/// float format; GL_R32F is accepted here only through `rig`'s stand-in).
 #[test]
 fn the_float_extension_is_not_listed_today() {
     let _g = rig();

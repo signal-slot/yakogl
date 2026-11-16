@@ -34,6 +34,10 @@
 //! (renderbuffer and texture), for the formats that render today; and that
 //! the 32-bit RG/RGBA names are not drawn (not in the set).
 //!
+//! R32F is a colour target only with GL_EXT_color_buffer_float (ES 3.0 table
+//! 3.13), which the build does not list: `rig` stands in for a build that
+//! does (`framebuffer::HOST_R32F_RT`), so the R32F words stay pinned.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_half_float_rt_pvr
 //! ```
@@ -558,6 +562,7 @@ fn rig() -> MutexGuard<'static, ()> {
             assert_eq!(yakogl::backend::init(), 0, "{:?}", logs());
             CTX = context::gl_context_create(CANVAS as u32, CANVAS as u32);
             assert!(!CTX.is_null(), "{:?}", logs());
+            yakogl::gl::framebuffer::HOST_R32F_RT.store(true, core::sync::atomic::Ordering::Relaxed);
             let (v, f) = (shader(GL_VERTEX_SHADER, VS), shader(GL_FRAGMENT_SHADER, FS));
             let p = glCreateProgram();
             glAttachShader(p, v);
@@ -723,20 +728,14 @@ fn renderbuffer_words() {
     }
 }
 
-/// The same for a texture attachment (all but GL_RGB16F, which is incomplete).
+/// The same for a texture attachment (GL_RGB16F included: four halves, as
+/// GL_EXT_color_buffer_half_float makes it a colour attachment).
 #[test]
 fn texture_words() {
     let _g = rig();
     for (internal, name, surf, bpp, packmode) in ROWS {
         let (fb, tex, status) = target(Kind::Texture, internal);
         assert_eq!(err(), GL_NO_ERROR, "{name}: glTexStorage2D");
-        /* a GL_RGB16F texture is not a colour attachment today (the
-         * renderbuffer is); the other four are */
-        if internal == GL_RGB16F {
-            assert_eq!(status, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{name}: texture status");
-            release(Kind::Texture, fb, tex);
-            continue;
-        }
         assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "{name}: texture status");
         assert_eq!(surface(), surf, "{name}: surface");
         assert_eq!(backend::gles_surf_bytes_per_pixel(surf), bpp, "{name}: bytes a pixel");

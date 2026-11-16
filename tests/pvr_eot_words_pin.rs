@@ -527,6 +527,8 @@ fn rig(targets: u8) -> Rig {
             assert_eq!(backend::init(), 0, "{:?}", logs());
             CTX = context::gl_context_create(8, 8);
             assert!(!CTX.is_null(), "{:?}", logs());
+            /* R32F as GL_EXT_color_buffer_float makes it (unlisted in the build) */
+            yakogl::gl::framebuffer::HOST_R32F_RT.store(true, core::sync::atomic::Ordering::Relaxed);
         }
     });
     // SAFETY: plain GL calls.
