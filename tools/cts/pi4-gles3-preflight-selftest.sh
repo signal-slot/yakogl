@@ -74,8 +74,12 @@ mk "$W/h"; echo "A1 rc=0 sha256=$SUM build=unknown" > "$W/h/img/A1.built"
 run "$W/h" "$UARTVAL" gles3 --commit "$SHA" --rows 0-2
 expect "commit not recorded" 1 "FAIL commit not recorded for: A1"
 
-run "$W/a" "$UARTVAL" gles3 --commit "$SHA" --rows 80-95
-expect "rows past the table end" 1 "FAIL rows 80-95 reach past the table end"
+# the first row past the table's end, from the image count the all-good run printed ("rows 0-2: 3 image(s) of <n>")
+run "$W/a" "$UARTVAL" gles3 --commit "$SHA" --rows 0-2
+N=$(sed -E -e '/image\(s\) of [0-9]+$/!d' -e 's/.* of ([0-9]+)$/\1/' "$W/log")
+case $N in ''|*[!0-9]*) echo "no image count in the preflight's output" >&2; exit 2 ;; esac
+run "$W/a" "$UARTVAL" gles3 --commit "$SHA" --rows "$((N - 1))-$N"
+expect "rows past the table end" 1 "FAIL rows $((N - 1))-$N reach past the table end (rows 0-$((N - 1)))"
 
 mk "$W/e"
 run "$W/e" "" gles3 --commit "$SHA" --rows 0-2
