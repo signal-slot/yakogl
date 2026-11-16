@@ -24,10 +24,33 @@
 //! - wrap R of a 3D RGBA32F binding is the W field of the slot's SAMP_CTRL0
 //!   (and the companion's, once the class is sampled), S and T their own.
 //!
-//! The in-crate mask hook `backend::TEST_EXTRA_SAMPLED` is `#[cfg(test)]`, so
-//! no test here can open the class: the draw cases check the closed state
-//! (and say so on stderr) until GC_SAMPLED_TEXFMTS holds it, and the
-//! companion half of the wrap R case runs for real from the flip on.
+//! The section 5.1 pins of docs/notes/gc-128bit-swizzle.md, through the GL
+//! core and the Vivante back end on a stand-in OSAL (item gc-w128-tests),
+//! now that GC_SAMPLED_TEXFMTS holds RGBA32F/UI/I (8f019dae):
+//!
+//! - flip pins: the mask holds the three classes, and a GL_RGBA32UI,
+//!   GL_RGBA32I and GL_RGB32F texture drawn through a sampling shader gets
+//!   the descriptor pair (own slot and companion slot 1, both G32R32, level 0
+//!   of plane 1 one plane of 8-byte texels after plane 0's);
+//! - the guard (b6d7a4d1): a two-plane binding whose GL texture swizzle the
+//!   planes cannot join (R<->B, R<->G, ZERO or ONE on a lane, alpha moved)
+//!   is refused -- no kick, GL_NO_ERROR, the text 'texture swizzle is not
+//!   joined' (read in a child process: only a process's first refusal is
+//!   logged) -- and the explicit (RED, GREEN, BLUE, ALPHA) draws;
+//! - no_alpha: GL_RGB32F/I/UI store alpha 1 (1.0f or 1), draw as two planes
+//!   with A = ONE in both descriptors, also under a swizzle that leaves alpha
+//!   alone, and are refused with alpha ZERO; whether the draw's key carries
+//!   `no_alpha` is said on stderr (today it does not: `.w` is the stored 1);
+//! - both planes' descriptor words of a 2D RGBA32I binding (CONFIG0/1/2,
+//!   size, stride, slice, levels, the tiled plane texels, SAMP_CTRL0/1);
+//! - wrap R on a 3D RGBA32UI/I binding: the W field of both slots' SAMP_CTRL0;
+//! - isampler2D / usampler2D draws of RGBA32I / RGBA32UI (texture with
+//!   integer arithmetic, texelFetch): drawn, both planes bound.
+//!
+//! GL_RGBA32F is still held as RGBA16F halves by `sized_format`
+//! (src/gl/texture.rs) until gc-w128-flip: which binding is two planes is
+//! read from the class the GL core stored, and an RGBA32F row that is not
+//! two planes says so on stderr and checks the one-plane state.
 //!
 //! What it cannot see: the GPU.
 //!
@@ -380,14 +403,10 @@ fn a_gl_swizzle_leaves_both_plane_descriptors_at_the_identity() {
  * tests/es3_wide128_planes_gc.rs) and read the key the draw chose
  * (`gl::draw::wide128_draw_state`).
  *
- * RGBA32UI stays out of GC_SAMPLED_TEXFMTS until wide128-flip, and the mask
- * hook of the in-crate tests is `#[cfg(test)]`, so here the RGBA32UI case
- * finds the class closed, says so on stderr and checks the closed state:
- * the GL core stores no RGBA32UI texture, and the draw keeps the program's
- * shaders. From the flip on it checks the variant for real. The open case
- * runs today in the in-crate test
- * `gl::draw::tests::an_rgba32ui_texture_draws_the_plane_joined_variant`,
- * which opens the class through that hook. */
+ * RGBA32UI is in GC_SAMPLED_TEXFMTS since 8f019dae, so the RGBA32UI case
+ * checks the variant for real; its closed branch (the class out of the
+ * mask: no RGBA32UI texture stored, the program's shaders kept) is kept for
+ * a tree without the classes. */
 
 mod draw {
     use super::serial;
@@ -408,7 +427,7 @@ mod draw {
     use yakogl::shaderc::Wide128Planes;
     use yakogl::vivante::kick::{GcKick, GC_KICK_MAGIC};
     use yakogl::vivante::regs::*;
-    use yakogl::vivante::texture::is_wide128;
+    use yakogl::vivante::texture::{is_wide128, wide128_plane_format};
 
     /* the stand-in OSAL: plain memory, every kick completes at once */
 
@@ -499,6 +518,24 @@ mod draw {
         -22
     }
 
+    type LogFn = unsafe extern "C" fn(*const c_char, ...);
+
+    /// The OSAL log lines, in order (the refusal text of the swizzle guard).
+    static LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+    /// The OSAL's log hook: the library only ever calls it with ("%s", line)
+    /// (`osal::log_str`), so a two-argument function stands in for the
+    /// variadic (as tests/es3_wide128_refusals_gc.rs).
+    unsafe extern "C" fn p_log(_fmt: *const c_char, line: *const c_char) {
+        // SAFETY: `line` is the NUL-terminated string `log_str` passes.
+        let s = unsafe { std::ffi::CStr::from_ptr(line) }.to_string_lossy().into_owned();
+        LOG.lock().unwrap_or_else(|e| e.into_inner()).push(s);
+    }
+
+    // SAFETY: see p_log: the library only ever calls it with ("%s", line).
+    const LOG_HOOK: LogFn =
+        unsafe { core::mem::transmute::<unsafe extern "C" fn(*const c_char, *const c_char), LogFn>(p_log) };
+
     static OSAL: OsalOps = OsalOps {
         init: None,
         shutdown: None,
@@ -516,7 +553,7 @@ mod draw {
         reg_read: None,
         reg_write: None,
         query: Some(p_query),
-        log: None,
+        log: Some(LOG_HOOK),
         wait_vblank: None,
         present: None,
         lock: None,
@@ -857,5 +894,662 @@ mod draw {
                 }
             }
         });
+    }
+
+    /* ---- section 5.1 of docs/notes/gc-128bit-swizzle.md, through the GL ----
+     *
+     * With RGBA32F/UI/I in GC_SAMPLED_TEXFMTS (8f019dae) the GL core stores
+     * RGBA32UI/I and RGB32F/I/UI in the 128-bit classes on this back end, and
+     * a draw that samples one is keyed and drawn as two G32R32 planes. Which
+     * binding is two planes is read from the class the core stored:
+     * GL_RGBA32F is held as RGBA16F halves by `sized_format`
+     * (src/gl/texture.rs) until gc-w128-flip, and its rows say so on stderr
+     * and check the one-plane state instead. */
+
+    /// A program whose fragment stage writes `o = <expr>`, `s` a `<sampler>`
+    /// the expression reads.
+    fn program_fs(sampler: &str, expr: &str) -> GLuint {
+        let fs = format!(
+            "#version 300 es\nprecision highp float;\nuniform highp {sampler} s;\nin vec2 uv;\n{}",
+            format_args!("out vec4 o;\nvoid main() {{ o = {expr}; }}\n")
+        );
+        // SAFETY: plain GL calls.
+        unsafe {
+            let p = glCreateProgram();
+            glAttachShader(p, shader(GL_VERTEX_SHADER, VS));
+            glAttachShader(p, shader(GL_FRAGMENT_SHADER, &fs));
+            glBindAttribLocation(p, 0, c"p".as_ptr());
+            glLinkProgram(p);
+            let mut ok: GLint = 0;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+            assert_eq!(ok, 1, "link failed: {fs}");
+            p
+        }
+    }
+
+    /// One 32-bit-per-channel format and the sampler and expression that read it.
+    struct Fmt {
+        name: &'static str,
+        internal: GLenum,
+        format: GLenum,
+        type_: GLenum,
+        sampler: &'static str,
+        expr: &'static str,
+        /// The class it takes where the mask has the 128-bit classes.
+        class: u8,
+        /// The texture has an alpha channel (RGBA, not RGB).
+        alpha: bool,
+        /// Alpha 1 as a stored word (1.0f or integer 1).
+        one: u32,
+    }
+
+    const RGBA32UI: Fmt = Fmt {
+        name: "GL_RGBA32UI",
+        internal: GL_RGBA32UI,
+        format: GL_RGBA_INTEGER,
+        type_: GL_UNSIGNED_INT,
+        sampler: "usampler2D",
+        expr: "vec4(texture(s, uv)) / 255.0",
+        class: GLES_TEXFMT_RGBA32UI,
+        alpha: true,
+        one: 1,
+    };
+    const RGBA32I: Fmt = Fmt {
+        name: "GL_RGBA32I",
+        internal: GL_RGBA32I,
+        format: GL_RGBA_INTEGER,
+        type_: GL_INT,
+        sampler: "isampler2D",
+        expr: "vec4(texture(s, uv)) / 255.0",
+        class: GLES_TEXFMT_RGBA32I,
+        alpha: true,
+        one: 1,
+    };
+    const RGBA32F: Fmt = Fmt {
+        name: "GL_RGBA32F",
+        internal: GL_RGBA32F,
+        format: GL_RGBA,
+        type_: GL_FLOAT,
+        sampler: "sampler2D",
+        expr: "texture(s, uv)",
+        class: GLES_TEXFMT_RGBA32F,
+        alpha: true,
+        one: 0x3f80_0000,
+    };
+    const RGB32F: Fmt = Fmt {
+        name: "GL_RGB32F",
+        internal: GL_RGB32F,
+        format: GL_RGB,
+        type_: GL_FLOAT,
+        sampler: "sampler2D",
+        expr: "texture(s, uv)",
+        class: GLES_TEXFMT_RGBA32F,
+        alpha: false,
+        one: 0x3f80_0000,
+    };
+    const RGB32I: Fmt = Fmt {
+        name: "GL_RGB32I",
+        internal: GL_RGB32I,
+        format: GL_RGB_INTEGER,
+        type_: GL_INT,
+        sampler: "isampler2D",
+        expr: "vec4(texture(s, uv)) / 255.0",
+        class: GLES_TEXFMT_RGBA32I,
+        alpha: false,
+        one: 1,
+    };
+    const RGB32UI: Fmt = Fmt {
+        name: "GL_RGB32UI",
+        internal: GL_RGB32UI,
+        format: GL_RGB_INTEGER,
+        type_: GL_UNSIGNED_INT,
+        sampler: "usampler2D",
+        expr: "vec4(texture(s, uv)) / 255.0",
+        class: GLES_TEXFMT_RGBA32UI,
+        alpha: false,
+        one: 1,
+    };
+
+    /// The texel words of `f` at (x, y): distinct per texel and channel,
+    /// floats exact as halves and as full words.
+    fn texel(f: &Fmt, x: u32, y: u32) -> Vec<u32> {
+        let n = if f.alpha { 4 } else { 3 };
+        (0..n)
+            .map(|c| {
+                let v = 1 + c + 4 * x + 32 * y;
+                if f.type_ == GL_FLOAT {
+                    (v as f32).to_bits()
+                } else {
+                    0x1000_0000 * (c + 1) + v
+                }
+            })
+            .collect()
+    }
+
+    /// A `w` x `h` texture of `f` on unit 0, NEAREST, every texel
+    /// [`texel`]; its name and the error of its glTexImage2D.
+    fn texture_2d(f: &Fmt, w: u32, h: u32) -> (GLuint, GLenum) {
+        let texels: Vec<u32> = (0..h).flat_map(|y| (0..w).flat_map(move |x| texel(f, x, y))).collect();
+        // SAFETY: plain GL calls; `texels` holds w x h texels of `f`.
+        unsafe {
+            let mut t: GLuint = 0;
+            glActiveTexture(GL_TEXTURE0);
+            glGenTextures(1, &mut t);
+            glBindTexture(GL_TEXTURE_2D, t);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                f.internal as GLint,
+                w as GLsizei,
+                h as GLsizei,
+                0,
+                f.format,
+                f.type_,
+                texels.as_ptr() as *const c_void,
+            );
+            (t, error())
+        }
+    }
+
+    /// The class the core stored texture `name` in, and texel (0, 0) of
+    /// level 0 as 32-bit words (a half of RGBA16F widened to its float's bits).
+    fn stored(name: GLuint) -> (u8, Vec<u32>) {
+        let c = yakogl::gl::context::current().expect("context");
+        let t = &c.objs().textures[name as usize];
+        assert!(!t.mem.cpu.is_null(), "texture {name} has storage with a CPU view");
+        let bpp = t.bpp as usize;
+        // SAFETY: texel (0, 0) of level 0 lies inside the storage the core laid out.
+        let b = unsafe { core::slice::from_raw_parts((t.mem.cpu as *const u8).add(t.level_off[0] as usize), bpp) };
+        let words = if t.texfmt == GLES_TEXFMT_RGBA16F {
+            b.chunks(2)
+                .map(|h| yakogl::gl::es3_formats::half_to_f32(u16::from_ne_bytes([h[0], h[1]])).to_bits())
+                .collect()
+        } else {
+            b.chunks(4).map(|w| u32::from_ne_bytes([w[0], w[1], w[2], w[3]])).collect()
+        };
+        (t.texfmt, words)
+    }
+
+    /// Does the draw sample a texture stored in `texfmt` as two planes?
+    fn planes(texfmt: u8) -> bool {
+        is_wide128(texfmt) && open(texfmt)
+    }
+
+    /// What one quad on unit 0 did: the GL error after the draw call, the
+    /// draws refused and the kicks submitted meanwhile, the sensitivity and
+    /// key the draw worked out and the last kick's register writes.
+    struct Quad {
+        error: GLenum,
+        refused: u32,
+        kicks: usize,
+        state: Option<([u32; 2], [Wide128Planes; 2])>,
+        stream: Vec<(u32, u32)>,
+    }
+
+    fn quad(p: GLuint) -> Quad {
+        let (k0, r0) = (with_platform(|p| p.kicks.len()), draws_refused());
+        // SAFETY: plain GL calls; QUAD is a static.
+        let err = unsafe {
+            glViewport(0, 0, 64, 64);
+            glUseProgram(p);
+            glUniform1i(glGetUniformLocation(p, c"s".as_ptr()), 0);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, QUAD.as_ptr() as *const c_void);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+            glGetError()
+        };
+        let state = wide128_draw_state(p);
+        // SAFETY: plain GL call.
+        unsafe { glFinish() };
+        assert_eq!(error(), GL_NO_ERROR, "glFinish");
+        let (kicks, stream) = with_platform(|p| (p.kicks.len() - k0, p.kicks.last().cloned().unwrap_or_default()));
+        Quad { error: err, refused: draws_refused().wrapping_sub(r0), kicks, state, stream: writes(&stream) }
+    }
+
+    /// The quad was drawn: no error, not refused, a kick.
+    fn drawn(what: &str, q: &Quad) {
+        assert_eq!(q.error, GL_NO_ERROR, "{what}: GL error 0x{:x}", q.error);
+        assert_eq!(q.refused, 0, "{what}: refused");
+        assert!(q.kicks >= 1, "{what}: no kick");
+    }
+
+    /// The quad was refused: no GL error, counted once, nothing submitted.
+    fn refused(what: &str, q: &Quad) {
+        assert_eq!(q.error, GL_NO_ERROR, "{what}: a refused draw is no GL error (0x{:x})", q.error);
+        assert_eq!(q.refused, 1, "{what}: counted once");
+        assert_eq!(q.kicks, 0, "{what}: no draw reaches the stream");
+    }
+
+    /// `n` words of the stand-in's memory at GPU address `gpu`.
+    fn words_at(gpu: u64, n: usize) -> Vec<u32> {
+        with_platform(|p| {
+            let (base, a) = p.allocs.range(..=gpu).next_back().unwrap_or_else(|| panic!("no allocation at 0x{gpu:x}"));
+            let off = (gpu - base) as usize;
+            assert!(off + n * 4 <= a.len() * 8, "0x{gpu:x}+{} runs off the allocation at 0x{base:x}", n * 4);
+            // SAFETY: inside the allocation (checked just above).
+            unsafe { core::slice::from_raw_parts((a.as_ptr() as *const u8).add(off) as *const u32, n) }.to_vec()
+        })
+    }
+
+    /// The words of slot `slot`'s descriptor in the stream, if it wrote one.
+    fn descriptor(stream: &[(u32, u32)], slot: u32) -> Option<Vec<u32>> {
+        let a = last(stream, nte_descriptor_addr(slot))?;
+        (a != 0).then(|| words_at(u64::from(a), GC_TEXDESC_BYTES / 4))
+    }
+
+    fn align4(v: u32) -> u32 {
+        v.next_multiple_of(4)
+    }
+
+    /// A drawn quad of a `w` x `h` texture stored as two planes: the
+    /// fragment stage keyed on binding 0 with its B,A plane on slot 1, and
+    /// slots 0 and 1 the descriptor pair: both the G32R32 plane format, the
+    /// companion a copy but for the level addresses, its level 0 one plane
+    /// (`align4(w) * align4(h)` texels of 8 bytes) after slot 0's. Returns
+    /// the pair.
+    fn check_pair(what: &str, class: u8, (w, h): (u32, u32), q: &Quad) -> (Vec<u32>, Vec<u32>) {
+        let (sense, key) = q.state.unwrap_or_else(|| panic!("{what}: the draw asked the sensitivity"));
+        assert_eq!(sense, [0, 1], "{what}: the fragment stage samples binding 0");
+        assert_eq!(key[0], Wide128Planes::NONE, "{what}: the vertex stage samples nothing");
+        assert_eq!(key[1].mask, 1, "{what}: binding 0 alone is keyed");
+        assert_eq!(key[1].companion_of(0), Some(1), "{what}: B,A on slot 1");
+        let d0 = descriptor(&q.stream, 0).unwrap_or_else(|| panic!("{what}: no descriptor in slot 0"));
+        let d1 = descriptor(&q.stream, 1).unwrap_or_else(|| panic!("{what}: no companion descriptor in slot 1"));
+        let ext = wide128_plane_format(class).expect("a plane format").format_ext;
+        for (p, d) in [&d0, &d1].into_iter().enumerate() {
+            let c1 = d[GC_TEXDESC_CONFIG1 as usize / 4];
+            assert_eq!(c1 & texdesc_format_ext(!0), texdesc_format_ext(ext), "{what}: plane {p}: G32R32");
+        }
+        for i in 16..d0.len() {
+            assert_eq!(d0[i], d1[i], "{what}: descriptor word {i}: the companion is a copy");
+        }
+        let (a0, a1) = (d0[texdesc_lod_addr(0) as usize / 4], d1[texdesc_lod_addr(0) as usize / 4]);
+        assert_eq!(a1, a0 + align4(w) * align4(h) * 8, "{what}: plane 1 one plane of 8-byte texels after plane 0");
+        (d0, d1)
+    }
+
+    /// The flip pins: GC_SAMPLED_TEXFMTS holds the three 128-bit classes,
+    /// and a GL_RGBA32UI, GL_RGBA32I and GL_RGB32F texture drawn through a
+    /// sampling shader gets the descriptor pair -- own slot and companion,
+    /// both G32R32, the planes 8 bytes a texel apart. GL_RGBA32F the same
+    /// where the core stores it in the 128-bit class; else (halves) one
+    /// descriptor and no key, said on stderr.
+    #[test]
+    fn the_flip_samples_the_128_bit_classes_as_two_planes() {
+        for class in [GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA32I] {
+            assert_ne!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(class), 0, "class {class} in GC_SAMPLED_TEXFMTS");
+            assert!(open(class), "class {class} in the mask the GL core reads");
+        }
+        for f in [&RGBA32UI, &RGBA32I, &RGB32F, &RGBA32F] {
+            on_gc7000(|| {
+                let p = program_fs(f.sampler, f.expr);
+                let (w, h) = (5, 3);
+                let (name, err) = texture_2d(f, w, h);
+                assert_eq!(err, GL_NO_ERROR, "{}: stored", f.name);
+                let (class, _) = stored(name);
+                let q = quad(p);
+                drawn(f.name, &q);
+                if !planes(class) {
+                    assert_eq!(f.internal, GL_RGBA32F, "{}: held in class {class}, not two planes", f.name);
+                    eprintln!(
+                        "{}: stored in class {class}, not the 128-bit class (texture.rs sized_format, gc-w128-flip): \
+                         the GL_RGBA32F row is not checked as two planes; checking one descriptor and no key",
+                        f.name
+                    );
+                    assert_eq!(q.state.map(|s| s.1), Some([Wide128Planes::NONE; 2]), "{}: no key", f.name);
+                    assert!(descriptor(&q.stream, 0).is_some(), "{}: its own slot", f.name);
+                    assert!(descriptor(&q.stream, 1).is_none(), "{}: no companion slot", f.name);
+                    return;
+                }
+                assert_eq!(class, f.class, "{}: the 128-bit class", f.name);
+                check_pair(f.name, class, (w, h), &q);
+            });
+        }
+    }
+
+    /// The text `note_draw_refused` logged for the process's first refusal.
+    fn first_refusal_text() -> String {
+        let lines = LOG.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let l = lines
+            .iter()
+            .find(|l| l.contains("a draw was refused: "))
+            .unwrap_or_else(|| panic!("no refusal logged: {lines:?}"));
+        let rest = l.split("a draw was refused: ").nth(1).unwrap();
+        rest.split(" (key 0x").next().unwrap().to_string()
+    }
+
+    /// `note_draw_refused` logs the text of a process's first refusal only,
+    /// so a case that reads it runs alone in a child process of this binary
+    /// (as tests/es3_wide128_refusals_gc.rs): true in the child (run the
+    /// body); in the parent this runs the child, checks it passed, and
+    /// returns false.
+    fn in_child(name: &str) -> bool {
+        const VAR: &str = "YAKOGL_W128_GC_CHILD";
+        if std::env::var(VAR).as_deref() == Ok(name) {
+            return true;
+        }
+        let out = std::process::Command::new(std::env::current_exe().expect("the test binary"))
+            .args(["--exact", name, "--test-threads=1", "--nocapture"])
+            .env(VAR, name)
+            .output()
+            .expect("the child runs");
+        let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        assert!(out.status.success(), "{name} in a fresh process failed:\n{text}");
+        assert!(text.contains("1 passed"), "{name} did not run in the child:\n{text}");
+        false
+    }
+
+    /// Set the four GL_TEXTURE_SWIZZLE_* parameters of unit 0's 2D texture.
+    fn swizzle(s: [GLenum; 4]) {
+        // SAFETY: plain GL calls on the bound texture.
+        unsafe {
+            for (name, v) in [GL_TEXTURE_SWIZZLE_R, GL_TEXTURE_SWIZZLE_G, GL_TEXTURE_SWIZZLE_B, GL_TEXTURE_SWIZZLE_A]
+                .into_iter()
+                .zip(s)
+            {
+                glTexParameteri(GL_TEXTURE_2D, name, v as GLint);
+            }
+        }
+        assert_eq!(error(), GL_NO_ERROR, "glTexParameteri swizzle {s:x?}");
+    }
+
+    const IDENTITY: [GLenum; 4] = [GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA];
+
+    /// The interim guard (b6d7a4d1, `wide128_select`): a two-plane binding
+    /// whose GL texture swizzle moves a channel across the planes, swaps a
+    /// plane's pair, moves alpha or puts ZERO/ONE on a lane is refused by
+    /// name -- no kick, GL_NO_ERROR, the text 'texture swizzle is not
+    /// joined' -- and the identity set back explicitly draws. Runs alone in a
+    /// child process (the text is logged for the first refusal only).
+    #[test]
+    fn a_swizzle_the_planes_cannot_join_is_refused_by_name() {
+        if !in_child("draw::a_swizzle_the_planes_cannot_join_is_refused_by_name") {
+            return;
+        }
+        LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        on_gc7000(|| {
+            for f in [&RGBA32UI, &RGBA32I] {
+                let p = program_fs(f.sampler, f.expr);
+                let (name, err) = texture_2d(f, 2, 2);
+                assert_eq!(err, GL_NO_ERROR, "{}", f.name);
+                assert!(planes(stored(name).0), "{}: two planes", f.name);
+                let q = quad(p);
+                drawn(&format!("{}: the default swizzle", f.name), &q);
+                check_pair(f.name, f.class, (2, 2), &q);
+                for s in [
+                    [GL_BLUE, GL_GREEN, GL_RED, GL_ALPHA],
+                    [GL_GREEN, GL_RED, GL_BLUE, GL_ALPHA],
+                    [GL_RED, GL_GREEN, GL_BLUE, GL_ONE],
+                    [GL_ZERO; 4],
+                    [GL_RED, GL_ZERO, GL_BLUE, GL_ALPHA],
+                    [GL_ONE, GL_GREEN, GL_BLUE, GL_ALPHA],
+                    [GL_RED, GL_GREEN, GL_BLUE, GL_RED],
+                    [GL_RED, GL_GREEN, GL_ALPHA, GL_BLUE],
+                ] {
+                    swizzle(s);
+                    let what = format!("{}: swizzle {s:x?}", f.name);
+                    refused(&what, &quad(p));
+                    assert_eq!(error(), GL_NO_ERROR, "{what}");
+                    let why = first_refusal_text();
+                    assert!(why.contains("texture swizzle is not joined"), "{what}: {why}");
+                }
+                /* the explicit (RED, GREEN, BLUE, ALPHA) is the identity */
+                swizzle(IDENTITY);
+                let q = quad(p);
+                drawn(&format!("{}: the explicit identity", f.name), &q);
+                check_pair(f.name, f.class, (2, 2), &q);
+            }
+            /* a swizzle on a one-plane texture on the same kind of program is no refusal */
+            let p = program_fs(RGBA32UI.sampler, RGBA32UI.expr);
+            assert_eq!(uint_texture(GL_RGBA8UI), GL_NO_ERROR);
+            swizzle([GL_BLUE, GL_GREEN, GL_RED, GL_ZERO]);
+            let q = quad(p);
+            drawn("GL_RGBA8UI with a swizzle", &q);
+            assert_eq!(q.state.map(|s| s.1), Some([Wide128Planes::NONE; 2]), "one plane, no key");
+        });
+    }
+
+    /// no_alpha: GL_RGB32F, GL_RGB32I and GL_RGB32UI are stored with alpha 1
+    /// (1.0f or integer 1) and drawn as two planes keyed like RGBA32 (the
+    /// guard takes lanes [0,1,2,5], alpha the constant one, as the identity
+    /// of a texture with no alpha), both descriptors A = ONE; a swizzle that
+    /// leaves alpha alone -- explicit (RED, GREEN, BLUE, ALPHA), or (RED,
+    /// GREEN, BLUE, ONE) -- is not refused, alpha ZERO is. Whether the
+    /// draw's key carries `no_alpha` is said on stderr: `.w` reads 1 either
+    /// way, the join's constant or the stored alpha.
+    #[test]
+    fn rgb32_bindings_draw_with_alpha_one() {
+        for f in [&RGB32F, &RGB32I, &RGB32UI] {
+            on_gc7000(|| {
+                let p = program_fs(f.sampler, f.expr);
+                let (w, h) = (3, 2);
+                let (name, err) = texture_2d(f, w, h);
+                assert_eq!(err, GL_NO_ERROR, "{}: stored", f.name);
+                let (class, texel0) = stored(name);
+                assert_eq!(class, f.class, "{}: the 128-bit class", f.name);
+                assert_eq!(texel0[..3], texel(f, 0, 0)[..], "{}: the colour as given", f.name);
+                assert_eq!(texel0.get(3), Some(&f.one), "{}: the missing alpha stored as 1", f.name);
+                for s in [None, Some(IDENTITY), Some([GL_RED, GL_GREEN, GL_BLUE, GL_ONE])] {
+                    if let Some(s) = s {
+                        swizzle(s);
+                    }
+                    let what = format!("{}: swizzle {s:x?}", f.name);
+                    let q = quad(p);
+                    drawn(&what, &q);
+                    let (d0, d1) = check_pair(&what, class, (w, h), &q);
+                    for d in [&d0, &d1] {
+                        let c1 = d[GC_TEXDESC_CONFIG1 as usize / 4];
+                        assert_eq!(c1 & texdesc_swizzle_a(7), texdesc_swizzle_a(GC_SWIZZLE_1), "{what}: A = ONE");
+                    }
+                    if q.state.unwrap().1[1].lacks_alpha(0) {
+                        eprintln!("{what}: the key carries no_alpha: the join writes 0x{:x} to w", f.one);
+                    } else {
+                        eprintln!(
+                            "{what}: the key does not carry no_alpha (the GL core does not set it): w is plane 1's \
+                             stored alpha 0x{:x}",
+                            f.one
+                        );
+                    }
+                }
+                swizzle([GL_RED, GL_GREEN, GL_BLUE, GL_ZERO]);
+                refused(&format!("{}: alpha ZERO", f.name), &quad(p));
+            });
+        }
+    }
+
+    /// Both planes' descriptor words of a 6x5 2D RGBA32I binding with S
+    /// clamped and T mirrored: CONFIG0 2D, TILED, no CONFIG0 format; CONFIG1
+    /// EXT_G32R32I with the identity swizzle; CONFIG2 no sign bit; SIZE 6x5;
+    /// a row of 8 G32R32 texels; one plane per slice; one level, depth 1;
+    /// plane 1's level 0 one plane after plane 0's, each plane holding its
+    /// two words of every texel in the 4x4-tiled layout; and both slots'
+    /// SAMP_CTRL0/1.
+    #[test]
+    fn both_planes_descriptor_words_of_a_2d_binding() {
+        on_gc7000(|| {
+            let f = &RGBA32I;
+            let p = program_fs(f.sampler, f.expr);
+            let (w, h) = (6, 5);
+            let (name, err) = texture_2d(f, w, h);
+            assert_eq!(err, GL_NO_ERROR);
+            // SAFETY: plain GL calls on the bound texture.
+            unsafe {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT as GLint);
+            }
+            assert_eq!(stored(name).0, GLES_TEXFMT_RGBA32I);
+            let q = quad(p);
+            drawn(f.name, &q);
+            let (d0, d1) = check_pair(f.name, f.class, (w, h), &q);
+            let plane = align4(w) * align4(h) * 8;
+            for (k, d) in [&d0, &d1].into_iter().enumerate() {
+                let word = |r: u32| d[r as usize / 4];
+                let c0 = word(GC_TEXDESC_CONFIG0);
+                assert_eq!(c0 & texdesc_type(!0), texdesc_type(GC_TEX_TYPE_2D), "plane {k}: 2D");
+                assert_eq!(c0 & texdesc_format(!0), 0, "plane {k}: no CONFIG0 format");
+                assert_eq!(
+                    c0 & texdesc_addressing_mode(!0),
+                    texdesc_addressing_mode(GC_TEX_ADDRESSING_TILED),
+                    "plane {k}: TILED"
+                );
+                assert_eq!(
+                    word(GC_TEXDESC_CONFIG1)
+                        & (texdesc_format_ext(!0)
+                            | texdesc_swizzle_r(7)
+                            | texdesc_swizzle_g(7)
+                            | texdesc_swizzle_b(7)
+                            | texdesc_swizzle_a(7)),
+                    texdesc_format_ext(GC_TEX_FORMAT_EXT_G32R32I)
+                        | texdesc_swizzle_r(GC_SWIZZLE_R)
+                        | texdesc_swizzle_g(GC_SWIZZLE_G)
+                        | texdesc_swizzle_b(GC_SWIZZLE_B)
+                        | texdesc_swizzle_a(GC_SWIZZLE_A),
+                    "plane {k}: CONFIG1"
+                );
+                assert_eq!(word(GC_TEXDESC_CONFIG2), GC_TEXDESC_CONFIG2_BASE, "plane {k}: no sign bit");
+                assert_eq!(word(GC_TEXDESC_SIZE), texdesc_size_width(w) | texdesc_size_height(h), "plane {k}");
+                assert_eq!(word(GC_TEXDESC_LINEAR_STRIDE), align4(w) * 8, "plane {k}: a row of G32R32");
+                assert_eq!(word(GC_TEXDESC_SLICE), plane, "plane {k}: one plane's layer");
+                assert_eq!(
+                    word(GC_TEXDESC_BASELOD),
+                    texdesc_baselod_base(0) | texdesc_baselod_max(0),
+                    "plane {k}: one level"
+                );
+                assert_eq!(word(GC_TEXDESC_3D_CONFIG), texdesc_3d_depth(1), "plane {k}: depth 1");
+            }
+            let (a0, a1) = (d0[texdesc_lod_addr(0) as usize / 4], d1[texdesc_lod_addr(0) as usize / 4]);
+            let (p0, p1) = (words_at(u64::from(a0), plane as usize / 4), words_at(u64::from(a1), plane as usize / 4));
+            for y in 0..h {
+                for x in 0..w {
+                    let tile = (y / 4) * (align4(w) / 4) + x / 4;
+                    let at = (tile * 16 + (y % 4) * 4 + x % 4) as usize * 2;
+                    let want = texel(f, x, y);
+                    assert_eq!([p0[at], p0[at + 1]], want[..2], "R,G of ({x}, {y}) in plane 0");
+                    assert_eq!([p1[at], p1[at + 1]], want[2..], "B,A of ({x}, {y}) in plane 1");
+                }
+            }
+            let ctrl0 = samp_uwrap(GC_TEX_WRAP_CLAMP_TO_EDGE)
+                | samp_vwrap(GC_TEX_WRAP_MIRROR_REPEAT)
+                | samp_wwrap(GC_TEX_WRAP_CLAMP_TO_EDGE)
+                | samp_min(GC_TEX_FILTER_NEAREST)
+                | samp_mip(GC_TEX_FILTER_NONE)
+                | samp_mag(GC_TEX_FILTER_NEAREST)
+                | GC_SAMP_CTRL0_UNK21;
+            for slot in [0, 1] {
+                assert_eq!(last(&q.stream, nte_descriptor_samp_ctrl0(slot)), Some(ctrl0), "slot {slot}: SAMP_CTRL0");
+                assert_eq!(
+                    last(&q.stream, nte_descriptor_samp_ctrl1(slot)),
+                    Some(GC_SAMP_CTRL1_UNK1),
+                    "slot {slot}: SAMP_CTRL1"
+                );
+            }
+        });
+    }
+
+    /// Wrap R on a 3D binding stored as two planes (RGBA32UI and RGBA32I on
+    /// a `usampler3D` / `isampler3D`): both descriptors 3D, the W field of
+    /// both slots' SAMP_CTRL0 the R mode, U and V the S and T modes. (The
+    /// GL_RGBA32F row is
+    /// [`wrap_r_reaches_the_slot_and_its_companion_on_a_3d_binding`].)
+    #[test]
+    fn wrap_r_reaches_both_slots_of_a_two_plane_3d_binding() {
+        let hw = |m: GLenum| match m {
+            GL_CLAMP_TO_EDGE => GC_TEX_WRAP_CLAMP_TO_EDGE,
+            GL_MIRRORED_REPEAT => GC_TEX_WRAP_MIRROR_REPEAT,
+            _ => GC_TEX_WRAP_REPEAT,
+        };
+        for (internal, ty, sampler) in
+            [(GL_RGBA32UI, GL_UNSIGNED_INT, "usampler3D"), (GL_RGBA32I, GL_INT, "isampler3D")]
+        {
+            on_gc7000(|| {
+                let p = program_fs(sampler, "vec4(texture(s, vec3(uv, 0.5))) / 255.0");
+                for (s, t, r) in [
+                    (GL_CLAMP_TO_EDGE, GL_MIRRORED_REPEAT, GL_REPEAT),
+                    (GL_REPEAT, GL_CLAMP_TO_EDGE, GL_MIRRORED_REPEAT),
+                    (GL_MIRRORED_REPEAT, GL_REPEAT, GL_CLAMP_TO_EDGE),
+                ] {
+                    let what = format!("{sampler}: S 0x{s:x} T 0x{t:x} R 0x{r:x}");
+                    let texels = [7u32; 32];
+                    // SAFETY: plain GL calls; `texels` holds 2x2x2 RGBA32 texels.
+                    let tex = unsafe {
+                        let mut tex: GLuint = 0;
+                        glActiveTexture(GL_TEXTURE0);
+                        glGenTextures(1, &mut tex);
+                        glBindTexture(GL_TEXTURE_3D, tex);
+                        for (name, v) in [
+                            (GL_TEXTURE_MIN_FILTER, GL_NEAREST),
+                            (GL_TEXTURE_MAG_FILTER, GL_NEAREST),
+                            (GL_TEXTURE_WRAP_S, s),
+                            (GL_TEXTURE_WRAP_T, t),
+                            (GL_TEXTURE_WRAP_R, r),
+                        ] {
+                            glTexParameteri(GL_TEXTURE_3D, name, v as GLint);
+                        }
+                        glTexImage3D(
+                            GL_TEXTURE_3D,
+                            0,
+                            internal as GLint,
+                            2,
+                            2,
+                            2,
+                            0,
+                            GL_RGBA_INTEGER,
+                            ty,
+                            texels.as_ptr() as *const c_void,
+                        );
+                        tex
+                    };
+                    assert_eq!(error(), GL_NO_ERROR, "{what}: glTexImage3D");
+                    assert!(planes(stored(tex).0), "{what}: two planes");
+                    let q = quad(p);
+                    drawn(&what, &q);
+                    let key = q.state.unwrap().1;
+                    assert_eq!(key, [Wide128Planes::NONE, Wide128Planes::NONE.with(0, 1)], "{what}: B,A on slot 1");
+                    for slot in [0, 1] {
+                        let d = descriptor(&q.stream, slot).unwrap_or_else(|| panic!("{what}: slot {slot}"));
+                        let c0 = d[GC_TEXDESC_CONFIG0 as usize / 4];
+                        assert_eq!(c0 & texdesc_type(!0), texdesc_type(GC_TEX_TYPE_3D), "{what}: slot {slot}: 3D");
+                        let ctrl0 = last(&q.stream, nte_descriptor_samp_ctrl0(slot))
+                            .unwrap_or_else(|| panic!("{what}: slot {slot}'s sampler is written"));
+                        assert_eq!(ctrl0 & samp_wwrap(7), samp_wwrap(hw(r)), "{what}: slot {slot}: W is wrap R");
+                        assert_eq!(
+                            ctrl0 & (samp_uwrap(7) | samp_vwrap(7)),
+                            samp_uwrap(hw(s)) | samp_vwrap(hw(t)),
+                            "{what}: slot {slot}: U, V are S, T"
+                        );
+                    }
+                }
+            });
+        }
+    }
+
+    /// isampler2D over RGBA32I and usampler2D over RGBA32UI, by `texture`
+    /// with integer arithmetic on the result and by `texelFetch`: drawn,
+    /// keyed on binding 0 with both planes bound (slot 0 and its companion
+    /// slot 1, EXT_G32R32I).
+    #[test]
+    fn integer_samplers_draw_with_both_planes_bound() {
+        for (f, expr) in [
+            (&RGBA32I, "vec4(texture(s, uv) + ivec4(1)) / 255.0"),
+            (&RGBA32UI, "vec4(texture(s, uv) >> 1u) / 255.0"),
+            (&RGBA32I, "vec4(texelFetch(s, ivec2(uv), 0)) / 255.0"),
+            (&RGBA32UI, "vec4(texelFetch(s, ivec2(uv), 0)) / 255.0"),
+        ] {
+            on_gc7000(|| {
+                let what = format!("{} {}: {expr}", f.name, f.sampler);
+                let p = program_fs(f.sampler, expr);
+                let (name, err) = texture_2d(f, 4, 4);
+                assert_eq!(err, GL_NO_ERROR, "{what}");
+                assert!(planes(stored(name).0), "{what}: two planes");
+                let q = quad(p);
+                drawn(&what, &q);
+                let key = q.state.unwrap().1;
+                assert_eq!(key, [Wide128Planes::NONE, Wide128Planes::NONE.with(0, 1)], "{what}: B,A on slot 1");
+                check_pair(&what, f.class, (4, 4), &q);
+            });
+        }
     }
 }
