@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# A synthetic report in the linux_ref mem.* shape, a deeper read than
+# linux_ref.sh's: 28 HVS words - six identity/channel words and the 22 words
+# of ch0's display list at +0x4000 - plus 7 pixelvalve1 words (this dump does
+# not read pixelvalve0) and the two hd status words at +0x40 and +0x44.
+# Generation C; the list is the two-plane 1280x720 form of
+# driver/zephyr/lib/board/test/hvs6_dlist_mock.c (planes 1280x256 then
+# 1280x464 at pitch 5120, closed by an end word), and the valve words are
+# pv_timing_mock.c's 1080p60. The plane addresses in the list are buffer
+# addresses; the decoder prints them only as offsets from the first plane's
+# address, so the decoded output names no absolute address.
+
+mem.hvs[0x0]: 0x00000053
+mem.hvs[0x4]: 0x00004000
+mem.hvs[0x30]: 0x850002d0
+mem.hvs[0x3c]: 0x00000003
+mem.hvs[0x44]: 0x00014000
+mem.hvs[0x48]: 0x00000003
+mem.hvs[0x4000]: 0x00000000
+mem.hvs[0x4004]: 0x00000000
+mem.hvs[0x4008]: 0x00000000
+mem.hvs[0x400c]: 0x4900c007
+mem.hvs[0x4010]: 0x00000000
+mem.hvs[0x4014]: 0x0000fff0
+mem.hvs[0x4018]: 0x00ff04ff
+mem.hvs[0x401c]: 0xc0c0c0c0
+mem.hvs[0x4020]: 0x00000000
+mem.hvs[0x4024]: 0x3e000000
+mem.hvs[0x4028]: 0x00001400
+mem.hvs[0x402c]: 0x80000000
+mem.hvs[0x4030]: 0x4900c007
+mem.hvs[0x4034]: 0x01000000
+mem.hvs[0x4038]: 0x0000fff0
+mem.hvs[0x403c]: 0x01cf04ff
+mem.hvs[0x4040]: 0xc0c0c0c0
+mem.hvs[0x4044]: 0x00000000
+mem.hvs[0x4048]: 0x3e140000
+mem.hvs[0x404c]: 0x00001400
+mem.hvs[0x4050]: 0x80000000
+mem.hvs[0x4054]: 0x80000000
+mem.pixelvalve1[0x0]: 0x00080005
+mem.pixelvalve1[0x4]: 0x00000003
+mem.pixelvalve1[0x8]: 0x00000000
+mem.pixelvalve1[0xc]: 0x0094002c
+mem.pixelvalve1[0x10]: 0x00580780
+mem.pixelvalve1[0x14]: 0x00240005
+mem.pixelvalve1[0x18]: 0x00040438
+mem.hdmi0_hd[0x40]: 0x00000000
+mem.hdmi0_hd[0x44]: 0x80000000

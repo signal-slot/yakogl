@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# A synthetic console dump of a Pi 5 where the probe could read the HVS but
+# not two other blocks: pixelvalve0 and pixelvalve1 were not mapped, and the
+# HDMI's HSM clock was answered 0, so the hd region was not read. Their table
+# words are 0xffffffff - main.c's rule, and its own NOT mapped / NOT read
+# lines name each block. The HVS's own words are read and its channels are
+# idle (no list installed, no valve judged running).
+
+rpi5_display: build test
+rpi5_display: mailbox init 0
+rpi5_display: the hdmi0 hd region is NOT read: the hdmi clock (HSM, clock id 13) it was answered 0, and an HDMI register read with that clock at 0 or unknown is the documented silent CPU stall (rpi:vc4_hdmi.c:3251-3262)
+rpi5_display: mapping pixelvalve0 at 0x107c410000, 256 bytes
+rpi5_display: pixelvalve0 NOT mapped; every one of its words below reads 0xffffffff
+rpi5_display: mapping pixelvalve1 at 0x107c411000, 256 bytes
+rpi5_display: pixelvalve1 NOT mapped; every one of its words below reads 0xffffffff
+u3 reg hvs version +0x0000=0x00000054
+u3 reg hvs cxm_size +0x0004=0x00004000
+u3 reg hvs control +0x0020=0x00000000
+u3 reg hvs c_disp0_ctrl0 +0x0030=0x00000000
+u3 reg hvs c_disp0_ctrl1 +0x0034=0x00000000
+u3 reg hvs c_disp0_bgnd +0x0038=0x00000000
+u3 reg hvs c_disp0_lptrs +0x003c=0x00000000
+u3 reg hvs c_disp0_cob +0x0040=0x00000000
+u3 reg hvs c_disp0_status +0x0044=0x00000000
+u3 reg hvs c_disp0_dl +0x0048=0x00000000
+u3 reg hvs c_disp1_ctrl0 +0x0050=0x00000000
+u3 reg hvs c_disp1_ctrl1 +0x0054=0x00000000
+u3 reg hvs c_disp1_bgnd +0x0058=0x00000000
+u3 reg hvs c_disp1_lptrs +0x005c=0x00000000
+u3 reg hvs c_disp1_cob +0x0060=0x00000000
+u3 reg hvs c_disp1_status +0x0064=0x00000000
+u3 reg hvs c_disp1_dl +0x0068=0x00000000
+u3 reg hvs c_disp2_ctrl0 +0x0070=0x00000000
+u3 reg hvs c_disp2_ctrl1 +0x0074=0x00000000
+u3 reg hvs c_disp2_bgnd +0x0078=0x00000000
+u3 reg hvs c_disp2_lptrs +0x007c=0x00000000
+u3 reg hvs c_disp2_cob +0x0080=0x00000000
+u3 reg hvs c_disp2_status +0x0084=0x00000000
+u3 reg hvs c_disp2_dl +0x0088=0x00000000
+u3 reg hvs d_disp0_ctrl0 +0x0100=0x00000000
+u3 reg hvs d_disp0_ctrl1 +0x0104=0x00000000
+u3 reg hvs d_disp0_bgnd +0x0108=0x00000000
+u3 reg hvs d_disp0_lptrs +0x0110=0x00000000
+u3 reg hvs d_disp0_cob +0x0114=0x00000000
+u3 reg hvs d_disp0_status +0x0118=0x00000000
+u3 reg hvs d_disp0_dl +0x011c=0x00000000
+u3 reg hvs d_disp1_ctrl0 +0x0140=0x00000000
+u3 reg hvs d_disp1_ctrl1 +0x0144=0x00000000
+u3 reg hvs d_disp1_bgnd +0x0148=0x00000000
+u3 reg hvs d_disp1_lptrs +0x0150=0x00000000
+u3 reg hvs d_disp1_cob +0x0154=0x00000000
+u3 reg hvs d_disp1_status +0x0158=0x00000000
+u3 reg hvs d_disp1_dl +0x015c=0x00000000
+u3 reg hvs d_disp2_ctrl0 +0x0180=0x00000000
+u3 reg hvs d_disp2_ctrl1 +0x0184=0x00000000
+u3 reg hvs d_disp2_bgnd +0x0188=0x00000000
+u3 reg hvs d_disp2_lptrs +0x0190=0x00000000
+u3 reg hvs d_disp2_cob +0x0194=0x00000000
+u3 reg hvs d_disp2_status +0x0198=0x00000000
+u3 reg hvs d_disp2_dl +0x019c=0x00000000
+u3 reg pv pv_control +0x0000=0xffffffff
+u3 reg pv pv_v_control +0x0004=0xffffffff
+u3 reg pv pv_horza +0x000c=0xffffffff
+u3 reg pv pv_horzb +0x0010=0xffffffff
+u3 reg pv pv_verta +0x0014=0xffffffff
+u3 reg pv pv_vertb +0x0018=0xffffffff
+u3 reg pv pv_inten +0x0024=0xffffffff
+u3 reg pv pv_intstat +0x0028=0xffffffff
+u3 reg pv pv_stat +0x002c=0xffffffff
+u3 reg pv pv_hact_act +0x0030=0xffffffff
+u3 reg hdmi0 hdmi_dvp_ctl +0x0000=0xffffffff
+u3 reg hdmi0 hdmi_vid_ctl +0x0044=0xffffffff
+u3 reg hdmi0 hdmi_frame_count +0x0060=0xffffffff
+u3 reg hdmi0 hdmi1_vid_ctl +0x0048=0xffffffff
+u3 reg hdmi0 hdmi1_frame_count +0x0064=0xffffffff
+rpi5_display: u3 scanout: stopped not measured (neither pixel valve was mapped, so no valve's EN and VIDEN are known and scanout_alive.h's rule has nothing to judge)
+u3 plane: none
