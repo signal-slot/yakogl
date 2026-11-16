@@ -58,7 +58,7 @@ neither can be the guard's doing:
 
 * the **arch timer** (`arm_arch_timer.c`), so a dead system tick is not this;
 * the **Vivante GPU** (`gc_irq_connect` in `driver/drivers/gpu/gpu_vivante_gc_rust.c`;
-  `src/vivante/gc_hw.c` when this was checked), which uses
+  an earlier C driver did the same when this was checked), which uses
   `IRQ_CONNECT` and then calls `irq_enable` itself, so a GPU init that waits
   forever for an interrupt is not this either. Checked 2026-09-22 against every image then in the tree
 -- `gc_slint`, its route-3 variants and the `gc_gl_test` builds all had
