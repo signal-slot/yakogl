@@ -47,11 +47,6 @@ pub const MALI_PARTIAL_READ: &str =
 /// is its defect, not the shader's.
 pub const MALI_NO_VERTEX_SLOT: &str =
     "Mali link: a vertex output the record lists has no slot in the record's layout (a back-end defect)";
-/// A fragment input the record lists has no slot in the fragment record's
-/// own layout. The back end lists only the inputs it laid out, so this is
-/// its defect, not the shader's.
-pub const MALI_NO_FRAGMENT_SLOT: &str =
-    "Mali link: a fragment input the record lists has no slot in the record's layout (a back-end defect)";
 /// The fragment shader has code Mesa's link moves into the vertex shader
 /// (motion.rs) and the vertex shader was not built for it (the program's
 /// vertex shader is built for the fragment shader's record at
@@ -315,13 +310,15 @@ impl FsConsts {
 
 /// The Mali's `struct shc_backend.link` table rule: the null and name checks
 /// of [`link_shaders`](crate::shaderc::link::link_shaders), every fragment input fed by the vertex output of its
-/// name and at least as wide, both stages Valhall records, and each input's
-/// slot at the vertex shader's offset; where only the offsets differ, the
+/// name and at least as wide, both stages Valhall records, and each input
+/// the fragment code reads at the vertex shader's offset (an input the
+/// record lists and no code reads has no slot: nothing to place); where
+/// only the offsets differ, the
 /// fragment shader compiled for the vertex shader's order
 /// ([`VaryingOrder`]) replaces `*fs` (the old copy released). 0, -EINVAL (a
 /// link error) or -ENOTSUP ([`MALI_NO_VERTEX_SLOT`],
-/// [`MALI_NO_FRAGMENT_SLOT`], [`MALI_LAYOUTS_DIFFER`], each with its own
-/// line), or the compile's own code and line.
+/// [`MALI_LAYOUTS_DIFFER`], each with its own line), or the compile's own
+/// code and line.
 ///
 /// # Safety
 /// As [`link_shaders`](crate::shaderc::link::link_shaders).
@@ -445,13 +442,16 @@ fn pair(vs: &ShcShader, fs: &ShcShader, log: &mut CStrWriter, who: &str) -> Pair
                 .find(|s| s.section == Section::Generic && s.varying == Some(loc))
                 .map(|s| (s.offset, s.mask))
         };
-        let (a, b) = (slot(vr, o.location), slot(fr, v.location));
-        let why = match (a, b) {
-            (Some(a), Some(b)) if a == b => None,
-            (None, _) => Some(MALI_NO_VERTEX_SLOT),
-            (_, None) => Some(MALI_NO_FRAGMENT_SLOT),
-            (Some((_, a)), Some((_, b))) if a != b => Some(MALI_PARTIAL_READ),
-            (Some(_), Some(_)) => {
+        /* the record lists what the shader statically uses; an input no
+         * code reads (under `if (false)`, or a constant the link folded)
+         * has no slot and nothing to place */
+        let Some(b) = slot(fr, v.location) else { continue };
+        let a = slot(vr, o.location);
+        let why = match a {
+            Some(a) if a == b => None,
+            None => Some(MALI_NO_VERTEX_SLOT),
+            Some((_, a)) if a != b.1 => Some(MALI_PARTIAL_READ),
+            Some(_) => {
                 differ.get_or_insert(i);
                 None
             }
@@ -610,7 +610,9 @@ mod tests {
         let part_fs = stage(SHC_STAGE_FRAGMENT, PART_FS);
         /* a vertex shader that declares a varying and does not write it
          * is refused at compile time: no real record lists an output
-         * without a slot, so the two slotless layouts are made by hand */
+         * without a slot, so the slotless vertex layout is made by hand;
+         * a fragment record lists an input no code reads (statically used
+         * under `if (false)`) and has no slot for it: that layout too */
         assert!(store::with_scratch(|s| {
             codegen::compile_linked_blocks(SHC_STAGE_VERTEX, UNWRITTEN_VS.as_bytes(), 0, &[], s, store::keep()).is_err()
         })
@@ -623,10 +625,10 @@ mod tests {
         let slotless_fs = with_layout(&tv_fs, &[]);
         let slotless_vs = with_layout(&tv_vs, &POSITION_ONLY);
 
-        /* a declared-but-unused fragment input is not one the link pairs:
-         * the record does not list it, and the link holds whether the
-         * vertex shader writes it or not */
-        assert_eq!(unused_fs.num_varyings, 0, "the record lists no unread input");
+        /* a fragment input the shader declares and does not use is not one
+         * the link pairs: the record does not list it, and the link holds
+         * whether the vertex shader writes it or not */
+        assert_eq!(unused_fs.num_varyings, 0, "the record lists no unused input");
         assert_eq!(link(&tri_vs, &unused_fs), (0, String::new()));
         assert_eq!(link(&tv_vs, &unused_fs), (0, String::new()));
         /* the pair that matches */
@@ -641,7 +643,7 @@ mod tests {
                 "t: fragment varying 'vcol' is not written by the vertex shader",
             ),
             ("no vertex slot", link(&slotless_vs, &tv_fs), enotsup, &*format!("t: {MALI_NO_VERTEX_SLOT} ('vcol')")),
-            ("no fragment slot", link(&tv_vs, &slotless_fs), enotsup, &*format!("t: {MALI_NO_FRAGMENT_SLOT} ('vcol')")),
+            ("no fragment slot: nothing to place", link(&tv_vs, &slotless_fs), 0, ""),
             ("different offsets", link(&tv_vs, &moved_fs), enotsup, &*format!("t: {MALI_LAYOUTS_DIFFER} ('vcol')")),
             /* the same offset 0, but the vertex shader stores x there */
             ("a part read", link(&tv_vs, &part_fs), enotsup, &*format!("t: {MALI_PARTIAL_READ} ('vcol')")),

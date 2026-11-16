@@ -1565,15 +1565,23 @@ fn record(
     sh.meta_off = crate::shaderc::SHC_NO_META;
     sh.vs_psize_off = crate::shaderc::SHC_NO_PSIZE;
     sh.blend_consts_off = crate::shaderc::SHC_NO_BLEND_CONSTS;
-    /* the varyings, by name, as the link pairs them */
+    /* The varyings, by name, as the link pairs and checks them. A fragment
+     * shader lists the ones it statically uses (a load anywhere in its IR,
+     * taken or not: v3d_abi.rs has the rule and its source), not the ones
+     * its code reads: the link checks the type of a varying read only under
+     * `if (false)` (dEQP shaders.linkage.varying_type_mismatch_1). The
+     * program's vertex shader is built for the reads of the code
+     * (`fragment_reads`), never from this list. */
+    let listed = |io: &&ir_mod::IoDecl<'_>| {
+        io.kind == ir_mod::IoKind::Varying
+            && (stage == SHC_STAGE_VERTEX
+                || m.instrs.iter().any(
+                    |op| matches!(op, ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Varying(l), .. } if *l == io.location),
+                ))
+    };
     let ios = if stage == SHC_STAGE_VERTEX { m.outputs } else { m.inputs };
     let mut n = 0usize;
-    for io in ios.iter().filter(|io| io.kind == ir_mod::IoKind::Varying) {
-        if stage == SHC_STAGE_FRAGMENT
-            && !sc.info.varyings.iter().chain(&sc.varyings[..sc.nvar]).any(|v| v.varying == Some(io.location))
-        {
-            continue;
-        }
+    for io in ios.iter().filter(listed) {
         /* at most 16: a location of 16 or above is refused (VaryingLocation) */
         let dst = sh.varyings.get_mut(n).ok_or(refused(MaliError::Defect(Defect::IrIndex)))?;
         crate::util::set_name(&mut dst.name, io.name.as_bytes());

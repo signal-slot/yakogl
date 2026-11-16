@@ -4446,6 +4446,22 @@ void main (void)
         release(&fs);
     }
 
+    /// The same with the fragment shader compiled by this back end: its
+    /// record lists the varying although no code reads it. dEQP
+    /// `linkage.varying_type_mismatch_1`'s pair linked on the NanoPC-T6 on
+    /// 2026-11-17 (the Mali record listed the varyings its code reads).
+    #[test]
+    fn a_varying_of_another_type_is_refused_when_no_code_reads_it() {
+        let _serial = test_lock();
+        let (rc, log) = link_sources(
+            "attribute vec4 p; varying mediump float var; void main(){ var = 2.0; gl_Position = p; }",
+            "varying mediump vec2 var; \
+             void main(){ if (false) { gl_FragColor = vec4(var.y); } else { gl_FragColor = vec4(1.0); } }",
+        );
+        assert_eq!(rc, -EINVAL, "{log}");
+        assert!(log.contains("'var'") && log.contains("another type") && log.contains("4.3.5"), "{log}");
+    }
+
     /// Sections 4.3.4 and 4.5.3 for a struct uniform: its type is the whole
     /// declaration, so a member only one stage has, or a member precision
     /// that differs, refuses the link although no row the GL core sees
