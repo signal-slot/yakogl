@@ -1,0 +1,20 @@
+attribute highp vec4 a_position;
+varying mediump float v_vtxOut;
+
+struct structType
+{
+	mediump float m0;
+	mediump vec4 m1;
+};
+uniform structType u_var;
+
+mediump float compare_float    (mediump float a, mediump float b)  { return abs(a - b) < 0.05 ? 1.0 : 0.0; }
+mediump float compare_vec4     (mediump vec4 a, mediump vec4 b)    { return compare_float(a.x, b.x)*compare_float(a.y, b.y)*compare_float(a.z, b.z)*compare_float(a.w, b.w); }
+
+void main (void)
+{
+    gl_Position = a_position;
+    v_vtxOut = 1.0;
+	v_vtxOut *= compare_float(u_var.m0, 0.00);
+	v_vtxOut *= compare_vec4(u_var.m1, vec4(0.00, 0.00, 0.00, 0.00));
+}
