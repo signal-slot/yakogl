@@ -552,23 +552,6 @@ mod trampolines {
         }
     }
 
-    fn program(vs: &str, fs: &str) -> GLuint {
-        let (v, f) = (shader(GL_VERTEX_SHADER, vs), shader(GL_FRAGMENT_SHADER, fs));
-        let name = CString::new("a_position").unwrap();
-        // SAFETY: plain GL calls on valid handles.
-        unsafe {
-            let p = glCreateProgram();
-            glAttachShader(p, v);
-            glAttachShader(p, f);
-            glBindAttribLocation(p, 0, name.as_ptr());
-            glLinkProgram(p);
-            let mut ok: GLint = 0;
-            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
-            assert_eq!(ok, 1, "link failed: {:?}", logs());
-            p
-        }
-    }
-
     /* a quad over the whole target at z = 0, (x, y, z) per vertex */
     static QUAD: [f32; 18] = [
         -1.0, -1.0, 0.0, 1.0, -1.0, 0.0, -1.0, 1.0, 0.0, //
