@@ -26,11 +26,11 @@
 # self-test (mali-deqp-tally-selftest.sh, its own pinned count), 43 the e2e
 # self-test (mali-deqp-e2e-selftest.sh, count pinned, no FAIL or XFAIL), 44
 # the mali-gles2-tree.txt coverage of gles2-mustpass.txt (each case once).
-# Checks 46-51 run the rest of its self-tests, each with its count pinned and
+# Checks 46-52 run the rest of its self-tests, each with its count pinned and
 # no FAIL or XFAIL: 46 mali-slice-redact-selftest.sh, 47
 # mali-slice-readme-selftest.sh, 48 mali-rerun-tree-selftest.sh, 49
 # mali-rerun-e2e-selftest.sh, 50 mali-fail-triage-selftest.sh, 51
-# mali-deqp-build-selftest.sh.
+# mali-deqp-build-selftest.sh, 52 mali-family-tree-selftest.sh.
 set -u
 
 HERE=$(dirname "$0")
@@ -939,6 +939,8 @@ malicheck 49 mali-rerun-e2e-selftest.sh 16
 malicheck 50 mali-fail-triage-selftest.sh 11
 # 51: mali-deqp-build.sh's dry run and its symbol-floor checks on fake tools.
 malicheck 51 mali-deqp-build-selftest.sh 29
+# 52: mali-family-tree.py builds the tree table of the compile-refused cases by family.
+malicheck 52 mali-family-tree-selftest.sh 16
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"

@@ -547,3 +547,35 @@ What this means for `lower-colourpair`:
 
   `fs_ck_product`, `fs_zk_tree` and `fs_ck_madd` show that the constant-first
   pair also occurs as an ALU **operand**, not only as a colour word.
+
+## 17. The board's first refusal per family: `tools/cts/mali-family-tree.py`
+
+Sections 4 to 12 count the host's first refusal per shader pair. The board's
+own count, by the first refusal in each slice's `refusals.tsv` of
+`tools/cts/log/2026-11-15-t6-gles2-S{1..4}-37305608/`, is:
+
+    python3 -I tools/cts/mali-family-tree.py tools/cts/log/2026-11-15-t6-gles2-S{1,2,3,4}-37305608
+
+It prints a tree table (the form of `mali-gles2-tree.txt`, labels
+`T6RF001..`) of rows, one family each, for reruns of one family: families in
+the order of `tools/cts/mali-family-refusals.txt` (which maps refusal texts
+to families and leaves out what plan #367 holds through glmark2:
+`ARITH_CONST`, `ARITH`, `FRAGCOLOR_LANE`, `FS_OPERAND`, `TEX_COORD`, `FMA`,
+`LOCALS`, the rebalance, control flow and varying load texts), each family's
+cases in mustpass order, at most 400 per row.
+`tools/cts/mali-family-tree-selftest.sh` checks the tool
+(`cts-selftest.sh` check 52). `check-gles3-tree.py --mustpass
+gles2-mustpass.txt --max 400` sees 27 rows, 7,313 cases matched once, 0
+matched more than once and 0 empty rows; its exit is 1 because the table is a
+partial rerun table, not whole-tree coverage (9,852 mustpass cases are
+uncovered). Cases per family, NotSupported included:
+
+| Family | Cases | Family | Cases |
+|---|---|---|---|
+| `intval` | 3,223 | `varyuniform` | 256 |
+| `varylink` | 656 | `mixprec` | 192 |
+| `unitype` | 820 | `posunwritten` | 155 |
+| `uniarray` | 272 | `negzero` | 117 |
+| `constop` | 621 | `invariant` | 12 |
+| `colourpair` | 171 | `misc` | 44 |
+| `vsloop` + `fsloop` | 497 + 277 | | |

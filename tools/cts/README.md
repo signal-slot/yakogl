@@ -1164,6 +1164,13 @@ work; `driver/docs/nanopc-t6-mali.md` is the board note. The scripts:
   runner's default session (`adhoc`) or `smoke`.
   `mali-rerun-tree-selftest.sh` compares its table with
   `testdata/mali-rerun-tree/expected.txt`.
+- `python3 -I mali-family-tree.py [--mustpass FILE] [--families FILE] [--max N]
+  [--refusal TEXT]... SLICE... > rows.txt`: a tree table (labels `T6RF001`...)
+  of the cases whose first refusal in the slices' `refusals.tsv` is a
+  compile refusal, one family per row group (`mali-family-refusals.txt` maps
+  refusal texts to families), for reruns of one family;
+  `docs/notes/mali-deqp-families.md` section 17 counts them.
+  `mali-family-tree-selftest.sh` checks it (`cts-selftest.sh` check 52).
 - `mali-deqp-e2e-selftest.sh`: the runner's slices on its fake board (three
   runs over a 7-case tree in `testdata/mali-deqp-e2e/`: clean with a dEQP
   Fail, a hang, a crash) through `mali-deqp-tally.py`: `--check-cover` passes
