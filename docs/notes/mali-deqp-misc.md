@@ -13,7 +13,7 @@ Mesa paths are relative to `src/` of the 26.2.1 tree (`$MESA_PAN_TREE`).
 | refusal (`MaliError`) | cases (Fail) | verdict |
 |---|---|---|
 | an invariant output (`Invariant`) | 12 | later: every case refuses again in another family |
-| more than the split file's 32 work registers (`Spill`) | 2 | **lower now**: the full file |
+| more than the split file's 32 work registers (`Spill`) | 2 | **lower now**, once the reference shows whether the fix is the full file or where the widenings go |
 | more than 2048 IR values (`TooManyValues`) | 3 (VS 2, FS 1) | later |
 | a comparison other than `<`, `<=`, `>`, `>=`, `==` (`CompareForm`) | 3 | **lower now**: highp `!=` |
 | a texture result's lanes other than its own pairs (`TexLanes`) | 2 | later: waits on #367's TEX_COORD |
@@ -38,9 +38,16 @@ Mesa paths are relative to `src/` of the 26.2.1 tree (`$MESA_PAN_TREE`).
   nothing was committed. The pairs were rebuilt from the C++ generators: they
   are close to dEQP's but not dEQP's bytes. The `measure` item's
   `tools/mali/testdata/deqp_shapes/` pairs are the real ones.
-* No Mesa program was drawn for this note. Running pan_shc was not possible
-  in this session. Every claim about Mesa's words is marked **inferred** and
-  is left to `ref-misc`.
+* **"pan_shc"** below means Mesa 26.2.1's compiler run through
+  `tools/mali/glsl2pan.py` (`$MESA_PAN_TREE/build-pan`) on the rebuilt pairs.
+  That is the SPIR-V path (glslang, `310 es`), not the GL path that
+  `drm_shim_ref.sh` draws. The two differ on mediump: in the SPIR-V runs
+  below, `gl_FragCoord` and the vertex shader's mediump uniforms stay fp32,
+  whereas the GL path narrows them (`mali-fragcoord-mediump.md` section 3,
+  `nir.rs:1032-1044`). So these runs show the shape of Mesa's rewrites, but
+  are not references. No drm-shim build was on this host, so no GL-path
+  word was recorded. Claims about the GL path's words are marked
+  **inferred** and are left to `ref-misc`.
 
 ## 1. `Invariant`: "an invariant output (Mesa keeps its arithmetic exact, unfused)"
 
@@ -82,9 +89,13 @@ refuse earlier, in another family).
   an `FMUL` then an `FADD`, not an `FMA`.
 * Whether the viewport transform that `nir_lower_viewport_transform` adds
   (`compiler/nir/nir_lower_viewport_transform.c:73-96`) stays unfused for an
-  invariant `gl_Position` is **not established**. The comment at
-  `nir.rs:3309` says it does; the builder that pass uses takes its own
-  float controls. A reference must show it.
+  invariant `gl_Position` is **not established** for the GL path. The
+  comment at `nir.rs:3309` says it does. pan_shc's SPIR-V path for
+  `invariant gl_Position; … gl_Position = a_position;` shows the transform
+  **fused**, word for word as without `invariant`: `FMA.f32 r0, r0^, u0.w0,
+  u0.w1` after the `FRCP`/`FMAX`/`FMIN` clamp. The SPIR-V front end does not
+  set the GLSL front end's exact flag, so a GL-path reference must settle
+  it.
 
 **Measured: what comes after.** With the check skipped, no case compiles:
 
@@ -156,14 +167,29 @@ driver side, `src/mali/program.rs:27` (`register_allocation`) already maps a
 count above 32 to the half-thread allocation, for the varying program too
 (`program.rs:164`).
 
-**Verdict: lower now.** When the split solve fails, solve again with the
-whole file (default affinity `!0`, `make_affinity(.., false)`), and return
-64 from `allocate_in`. Keep `Spill` when the whole file fails too: we do not
-model the SSA pre-spill or `bi_spill_register`. It is small, local to
-`ra.rs`, and the highp twin shows that the rest of the program already
-compiles. **Inferred:** Mesa's varying program for these two cases is the
-full-file one (`secondary_work_reg_count` 64), and its position program
-stays 32. The reference shows it. Corpus check: no
+**pan_shc (SPIR-V path), mediump case.** `work_reg_count` 32 and
+`secondary_work_reg_count` 32. The varying program reads the uniforms
+straight from the FAU as fp32 (`FMA.f32 r1, u17.w1, r0, 0x0.neg`, 64
+`FMA`s, highest register r12). The SPIR-V path keeps the vertex shader's
+mediump uniforms 32-bit, so this run does not show the GL path's fp16
+block. It does show that Mesa reaches this program inside the split file
+when it does not widen.
+
+**Verdict: lower now, but only after its GL-path reference.** The open
+question is whether Mesa's GL path, with its 32 `F16_TO_F32` widenings,
+needs the whole file or stays at 32.
+* If the drm-shim reference has `secondary_work_reg_count` 64, the
+  lowering is the whole-file retry: when the split solve fails, solve again
+  with default affinity `!0` and `make_affinity(.., false)`, and return 64
+  from `allocate_in`. Keep `Spill` when the whole file fails too: we do not
+  model the SSA pre-spill or `bi_spill_register`.
+* If it has 32, the gap is where we put the widenings. Ours are all live at
+  once; Mesa's would sit next to their uses (scheduling or sinking, to be
+  read off the words). The whole-file retry would then compile, but with
+  words that are not Mesa's.
+
+Either way the work is small, and the highp twin shows that the rest of
+the program already compiles. Corpus check: no
 `tools/mali/corpus-verdicts.txt` or `tests/fixtures/mali_glmark2_verdicts.txt`
 line refuses `Spill` today, so no pinned verdict moves.
 
@@ -303,6 +329,14 @@ x and y in a mediump shader are already lowered (`prec_84`,
   `LD_VAR_SPECIAL` (32-bit), then `F32_TO_F16`, then the product with
   `u_scale.z` (an fp16 uniform half), paired with the constant `1.0`.
 
+**pan_shc (SPIR-V path, so fp32 throughout).** x and y are
+`U16_TO_F32` of `r59.h0`/`.h1` plus 0.5, with the y flip by `FMA`. z is
+`LD_VAR_SPECIAL.f32.center … index:0x3` (`frag_z`), then
+`FMA.f32 r2, r2^, u4.w0, 0x0.neg`, then a conversion (`FADD.f32 r2.h0`).
+The second colour word is `MKVEC.v2i16 r1, r2^.h0, u4.w1.h0`: z with the
+pushed constant 1.0. In the GL path the shader is mediump, so x, y and z are
+converted at the read and the product is fp16 (**inferred**, as above).
+
 **Verdict: lower now.** One case and one reference. The highp `frag_z` load
 exists, the x/y pair exists, and the new part is the conversion of z and its
 place in the second colour word. `w` (`load_frag_coord_w`) stays refused; no
@@ -344,20 +378,29 @@ refuse `FsOperandForm` (another family), so they are not counted here.
   `fadd(a, a)` → `fmul(a, 2.0)` (`:274`), and panfrost's late
   `fmul(a, 2.0)` → `fadd(a, a)`
   (`panfrost/compiler/bifrost/bifrost_nir_algebraic.py:31`).
-* **Inferred:** mat2's z becomes `FMUL v, -0.6` (fp16 or fp32 by
-  precision). mat4's lanes become `fadd(v, v)`-style forms after the late
-  rule. The order in which `:246`, `:296` and `:274` meet the vector
-  `fmul(v, vec2(0.6, -1.0))` is what the references must show.
+* **pan_shc (SPIR-V path; the arithmetic here is fp32, then converted).**
+  Every colour lane is **one** product of `v` with a folded constant:
+  * mat2: `FMA.f32 r1, u2.w0, r0, 0x0.neg`, the same for `u2.w1` and `u3.w0`
+    (three pushed constants: 0.6, 0.7, and the z lane's -1.0 + 0.4).
+  * mat4: x is `FMA.f32 r1, r0, 0x44000000.h1, 0x0.neg`. That is
+    `v * 4.0` (fp16 0x4400 widened from the table): the four 1.0 products
+    factored into one sum. y and z are `v * u2.w0`, `v * u2.w1`.
+
+  Then `FADD.f32 rN.h0` conversions, and `MKVEC.v2i16` pairs the colour,
+  the last pair with the pushed 1.0. So the factoring of `:246` with the
+  sum folded is what Mesa does to these lanes. No `fadd(v, v)` survives:
+  the 2.0 never stands alone. The GL path's mediump form (fp16 products,
+  sums folded in fp16) is **inferred** and is what `ref-misc` records.
 
 **Verdict: lower now, in two steps.** These six cases consist entirely of
 this shape. Step A: mat2. Generalise `nir_fs.rs:1103-1108` to any sum
 whose result is exact in the shader's precision (`f16_exact` in a mediump
 shader, as `:1083-1094` does for products), built as one `fmul(a, k)` and
 then run through the existing constant-product rules (`k` = 1.0 → `a`,
--1.0 → `fneg`). Step B: mat4. It depends on how Mesa's late
-`fmul(a, 2.0)` → `fadd(a, a)` shows in the words. If the references show
-that form, it is the `nir_fs.rs:7422` / `:7530` refusal ("a product with
-2.0 … no reference"), and step B lowers it with the same references. lowp
+-1.0 → `fneg`). Step B: mat4. The SPIR-V run folds a four-term sum (rebalanced by GLSL)
+into one `v * 4.0`. So step B extends the factoring to a chain of more than
+two products of the same `a`, and must check that no intermediate
+`fmul(a, 2.0)` reaches the `nir_fs.rs:7422` / `:7530` refusal. lowp
 is mediump in Mesa (both fp16), so one mediump and one highp reference per
 matrix size are enough.
 
@@ -380,9 +423,13 @@ Order by cost, each step its own commit with its test.
 2. **`lower-misc`**, steps in this order:
    1. `CompareForm`: the highp `Fne`/`Ine` arm (`nir_fs.rs:2511`) and its
       emit rows. Rewrite `corpus-verdicts.txt` (`sharedint.frag` moves).
-   2. `Spill`: the whole-file retry in `ra.rs` (`allocate_in`), returning
-      64. Keep `tests.rs:4081`'s refusal pin for a program that fails the
-      whole file too, or change its shader so it still refuses.
+   2. `Spill`: read `secondary_work_reg_count` of the
+      `deqp_misc_spill_*` references first.
+      * At 64: the whole-file retry in `ra.rs` (`allocate_in`), returning 64.
+      * At 32: place the `F16_TO_F32` widenings as Mesa's words do.
+
+      Keep `tests.rs:4081`'s refusal pin for a program that fails the whole
+      file too, or change its shader so it still refuses.
    3. `SpecialInput`: the mediump z (`nir_fs.rs:6327-6333`), with
       `F32_TO_F16` of the `frag_z` load.
    4. `AlgebraicForm` step A (mat2), then step B (mat4) if the references
