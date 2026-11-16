@@ -348,6 +348,11 @@ pub const GC_RA_HDEPTH_CONTROL: u32 = 0x00000e20;
 // ---- fragment shader ----------------------------------------------------
 
 pub const GC_PS_OUTPUT_REG: u32 = 0x00001004;
+/// Render targets 4..7's output registers, a byte each as
+/// [`GC_PS_OUTPUT_REG`], each one's unorm saturate in bit 7 of its byte
+/// (`VIVS_PS_OUTPUT_REG2`, state_3d.xml.h:677-693).
+pub const GC_PS_OUTPUT_REG2: u32 = 0x0000102c;
+pub const GC_PS_OUTPUT_REG2_SATURATE_RT4: u32 = 0x00000080;
 pub const GC_PS_INPUT_COUNT: u32 = 0x00001008;
 pub const fn ps_input_count_count(x: u32) -> u32 {
     x & 0x1f
