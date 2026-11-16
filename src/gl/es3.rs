@@ -14,8 +14,9 @@
 //! about the difference between the two kinds of entry point:
 //!
 //!  - Calls that this library can answer correctly are answered here:
-//!    glClearBuffer*, glGetUniformuiv, the program-binary calls (there are no
-//!    binary formats, so refusing is the conformant answer), and object-name
+//!    glClearBuffer*, glGetUniformuiv, the program-binary calls (their
+//!    error checks here, the binaries in `program_binary`; a `report-es2`
+//!    build has no binary formats and refuses them), and object-name
 //!    management for queries, samplers and transform feedback objects, which
 //!    is pure bookkeeping and behaves exactly as the specification describes.
 //!    (glCopyBufferSubData and glGetBufferPointerv live in [`super::buffer`],
@@ -1507,11 +1508,32 @@ pub unsafe extern "C" fn glGetFragDataLocation(program: GLuint, _name: *const GL
     0
 }
 
+/// The name check of the program-binary calls (ES 3.0 2.12.1): true for a
+/// program; otherwise the error is recorded, GL_INVALID_OPERATION for a
+/// shader's name and GL_INVALID_VALUE for a name that is neither. A
+/// `report-es2` build keeps [`program_exists`] (GL_INVALID_OPERATION for
+/// every name).
+fn binary_call_program(program: GLuint, func: &str) -> bool {
+    if crate::REPORT_ES2 {
+        return program_exists(program, func);
+    }
+    let Some(c) = context::current() else {
+        context::set_error_no_ctx(GL_INVALID_OPERATION, func);
+        return false;
+    };
+    if c.program_ref(program).is_some() {
+        return true;
+    }
+    let e = super::program::not_a_program(c, program);
+    c.set_error(e, func);
+    false
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn glProgramParameteri(program: GLuint, pname: GLenum, value: GLint) {
     gl_trace!(glProgramParameteri);
     const FUNC: &str = "glProgramParameteri";
-    if !program_exists(program, FUNC) {
+    if !binary_call_program(program, FUNC) {
         return;
     }
     if pname != GL_PROGRAM_BINARY_RETRIEVABLE_HINT {
@@ -1523,7 +1545,8 @@ pub unsafe extern "C" fn glProgramParameteri(program: GLuint, pname: GLenum, val
         return;
     }
     /* stored for glGetProgramiv (dEQP state_query.shader.program_binary);
-     * it changes nothing else: there are no binary formats to retrieve into */
+     * it changes nothing else: every linked program keeps its binary
+     * whatever the hint (docs/notes/es3-program-binary.md (a)) */
     if let Some(c) = context::current() {
         super::program::set_binary_retrievable_hint(c.group, program, value == GL_TRUE as GLint);
     }
@@ -1534,41 +1557,87 @@ pub unsafe extern "C" fn glGetProgramBinary(
     program: GLuint,
     bufSize: GLsizei,
     length: *mut GLsizei,
-    _binaryFormat: *mut GLenum,
-    _binary: *mut GLvoid,
+    binaryFormat: *mut GLenum,
+    binary: *mut GLvoid,
 ) {
     gl_trace!(glGetProgramBinary);
     const FUNC: &str = "glGetProgramBinary";
-    if !program_exists(program, FUNC) {
+    if !binary_call_program(program, FUNC) {
+        if !crate::REPORT_ES2 {
+            // SAFETY: length is null or valid for one GLsizei (GL contract).
+            util::app_put(length, 0);
+        }
         return;
     }
-    /* GL_NUM_PROGRAM_BINARY_FORMATS is zero: there is no binary to hand out
-     * whatever the buffer, so this is the answer for every bufSize (dEQP
-     * negative_api.shader.get_program_binary asks with 0, length - 1 and
-     * on an unlinked program, and expects it each time). */
-    let _ = bufSize;
-    // SAFETY: length is null or valid for one GLsizei (GL contract).
-    util::app_put(length, 0);
-    context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC);
+    #[cfg(not(feature = "report-es2"))]
+    if let Some(c) = context::current() {
+        // SAFETY: the application's pointers, as the GL contract gives them.
+        super::program_binary::get(c, program, bufSize, length, binaryFormat, binary);
+    }
+    #[cfg(feature = "report-es2")]
+    {
+        /* ES 2.0 has no binary formats: there is no binary to hand out
+         * whatever the buffer, so this is the answer for every bufSize (dEQP
+         * negative_api.shader.get_program_binary asks with 0, length - 1 and
+         * on an unlinked program, and expects it each time). */
+        let _ = (bufSize, binaryFormat, binary);
+        // SAFETY: length is null or valid for one GLsizei (GL contract).
+        util::app_put(length, 0);
+        context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC);
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glProgramBinary(
     program: GLuint,
-    _binaryFormat: GLenum,
-    _binary: *const GLvoid,
+    binaryFormat: GLenum,
+    binary: *const GLvoid,
     length: GLsizei,
 ) {
     gl_trace!(glProgramBinary);
     const FUNC: &str = "glProgramBinary";
-    if !program_exists(program, FUNC) {
+    if !binary_call_program(program, FUNC) {
         return;
     }
     if length < 0 {
         context::set_error_no_ctx(GL_INVALID_VALUE, FUNC);
         return;
     }
-    context::set_error_no_ctx(GL_INVALID_ENUM, FUNC); /* no format is accepted */
+    #[cfg(feature = "report-es2")]
+    {
+        let _ = (binaryFormat, binary);
+        context::set_error_no_ctx(GL_INVALID_ENUM, FUNC); /* no format is accepted */
+    }
+    #[cfg(not(feature = "report-es2"))]
+    {
+        let Some(c) = context::current() else {
+            return;
+        };
+        /* An unknown format changes nothing (ES 3.0 2.5: a command that
+         * raises an error has no other effect), so a linked program stays
+         * linked. Mesa's _mesa_ProgramBinary drops the link before this
+         * check; we deliberately do not (docs/notes/es3-program-binary.md
+         * (d) 3). */
+        if binaryFormat != super::program_binary::GL_PROGRAM_BINARY_FORMAT_YAKOGL {
+            c.set_error(GL_INVALID_ENUM, FUNC);
+            return;
+        }
+        /* ES 3.0 2.15.2: not the program of an active transform feedback
+         * object, paused or not */
+        if super::tf::program_in_use(c, program) {
+            c.set_error(GL_INVALID_OPERATION, FUNC);
+            return;
+        }
+        let bytes: &[u8] = if binary.is_null() {
+            &[]
+        } else {
+            // SAFETY: the application's binary of `length` bytes (GL contract).
+            core::slice::from_raw_parts(binary.cast::<u8>(), length as usize)
+        };
+        /* 2.12.4: a binary that does not load sets LINK_STATUS to FALSE and
+         * an info log, and raises no error */
+        let _ = super::program_binary::load(c, program, bytes);
+    }
 }
 
 /// Unit tests: empty the object pools and the sync table (process-global, like
@@ -3074,7 +3143,43 @@ mod tests {
 
     /* ---- programs ---- */
 
+    /// ES 3.0 (2.12.1, 2.12.4): the name rule of the binary calls, an
+    /// unlinked program's refusal, and the format check. The loads and the
+    /// binaries themselves are `program_binary`'s tests.
     #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn the_program_binary_calls_check_names_links_and_formats() {
+        let gl = fresh();
+        // SAFETY: plain GL call.
+        let p = unsafe { glCreateProgram() };
+        let mut len: GLsizei;
+        // SAFETY: len is one GLsizei; the rest is null.
+        unsafe {
+            for size in [0, -1, 1 << 20] {
+                len = 7;
+                glGetProgramBinary(p, size, &mut len, core::ptr::null_mut(), core::ptr::null_mut());
+                assert_eq!((gl.error(), len), (GL_INVALID_OPERATION, 0), "unlinked, bufSize {size}");
+            }
+            len = 7;
+            glGetProgramBinary(p + 1, 0, &mut len, core::ptr::null_mut(), core::ptr::null_mut());
+            assert_eq!((gl.error(), len), (GL_INVALID_VALUE, 0), "no object");
+            glGetProgramBinary(0, 0, &mut len, core::ptr::null_mut(), core::ptr::null_mut());
+            assert_eq!(gl.error(), GL_INVALID_VALUE, "name 0");
+
+            glProgramBinary(p, 0, core::ptr::null(), 0);
+            assert_eq!(gl.error(), GL_INVALID_ENUM, "format 0");
+            glProgramBinary(p, 0, core::ptr::null(), -1);
+            assert_eq!(gl.error(), GL_INVALID_VALUE);
+            glProgramBinary(p + 1, 0, core::ptr::null(), 0);
+            assert_eq!(gl.error(), GL_INVALID_VALUE, "no object");
+            /* the format's own token with no bytes: a failed load, no error */
+            glProgramBinary(p, crate::gl::program_binary::GL_PROGRAM_BINARY_FORMAT_YAKOGL, core::ptr::null(), 0);
+            assert_eq!(gl.error(), GL_NO_ERROR);
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "report-es2")]
     fn the_program_binary_calls_refuse_because_there_are_no_formats() {
         let gl = fresh();
         // SAFETY: plain GL call.
@@ -3117,7 +3222,10 @@ mod tests {
             glProgramParameteri(p, GL_TEXTURE_WRAP_S, GL_TRUE as GLint);
             assert_eq!(gl.error(), GL_INVALID_ENUM);
             glProgramParameteri(p + 1, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE as GLint);
-            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+            /* ES 3.0 2.12.1: a name that is no object; report-es2 keeps
+             * GL_INVALID_OPERATION for every name */
+            let want = if crate::REPORT_ES2 { GL_INVALID_OPERATION } else { GL_INVALID_VALUE };
+            assert_eq!(gl.error(), want);
         }
     }
 

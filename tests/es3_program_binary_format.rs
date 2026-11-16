@@ -9,13 +9,8 @@
 //! Feature set: the file needs none, but the package must build, so any one
 //! host GPU set works:
 //! `cargo test --no-default-features --features host-test,gpu-powervr --test es3_program_binary_format`.
-//! The file under test is not in the module tree yet, so it is included by path.
 
-#[path = "../src/gl/program_binary_format.rs"]
-#[allow(dead_code)]
-mod program_binary_format;
-
-use program_binary_format::*;
+use yakogl::gl::program_binary_format::{self, *};
 
 const ID: [u8; 32] = [0x5a; 32];
 const TAG: [u8; 4] = *b"PVRB";

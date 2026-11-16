@@ -35,6 +35,10 @@ pub mod native_array;
 pub mod native_cube;
 pub mod native_vol;
 pub mod program;
+/// ES 3.0 program binaries (G7): the kept binary, its copy and its load.
+#[cfg(not(feature = "report-es2"))]
+pub(crate) mod program_binary;
+pub mod program_binary_format;
 pub mod shader;
 pub mod srgb;
 pub mod state;
