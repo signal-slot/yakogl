@@ -1,17 +1,17 @@
 # tests/mali_glmark2_corpus.rs: the Mali compiler's first refusal per glmark2 scene and shader
 # (glmark2 22c527cb). Regenerate with MALI_GLMARK2_WRITE=1 (the test's header).
 0 build:use-vbo=false fs 4748: ok
-0 build:use-vbo=false vs ace2: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+0 build:use-vbo=false vs ace2: ok
 1 build:use-vbo=true fs 4748: ok
-1 build:use-vbo=true vs ace2: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
-2 texture:texture-filter=nearest fs 425b: ok
-2 texture:texture-filter=nearest vs ace2: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
-3 texture:texture-filter=linear fs 425b: ok
-3 texture:texture-filter=linear vs ace2: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
-4 texture:texture-filter=mipmap fs 425b: ok
-4 texture:texture-filter=mipmap vs ace2: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+1 build:use-vbo=true vs ace2: ok
+2 texture:texture-filter=nearest fs 425b: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+2 texture:texture-filter=nearest vs ace2: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+3 texture:texture-filter=linear fs 425b: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+3 texture:texture-filter=linear vs ace2: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+4 texture:texture-filter=mipmap fs 425b: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+4 texture:texture-filter=mipmap vs ace2: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
 5 shading:shading=gouraud fs 4748: ok
-5 shading:shading=gouraud vs 83cd: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+5 shading:shading=gouraud vs 83cd: ok
 6 shading:shading=blinn-phong-inf fs 994f: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
 6 shading:shading=blinn-phong-inf vs 78e3: ok
 7 shading:shading=phong fs 8a64: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
@@ -50,7 +50,7 @@
 20 ideas:speed=duration vs 038e: ok
 20 ideas:speed=duration vs 4f27: ok
 20 ideas:speed=duration vs 51b2: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
-20 ideas:speed=duration vs a09e: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
+20 ideas:speed=duration vs a09e: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet
 20 ideas:speed=duration vs bf4b: Valhall: an integer or boolean value is not lowered yet
 20 ideas:speed=duration vs c236: ok
 20 ideas:speed=duration vs c265: Valhall: an integer or boolean value is not lowered yet
@@ -73,8 +73,8 @@
 23 shadow fs 928e: ok
 23 shadow fs cf4b: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 23 shadow vs 37f4: ok
-23 shadow vs 6964: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
-23 shadow vs b9d1: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
+23 shadow vs 6964: ok
+23 shadow vs b9d1: ok
 24 refract fs 3fae: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 24 refract fs 928e: ok
 24 refract vs 37f4: ok
