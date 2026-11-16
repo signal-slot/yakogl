@@ -649,8 +649,14 @@ mod tests {
         }
     }
 
+    /// An empty fragment selection runs every 7.1 stage (none is a stub any
+    /// more) and is refused by verify71, never returned: its program is the
+    /// thread end alone (sched71_cf, as sched.rs's thrend), with no
+    /// last-thread-switch pair before it, which a fragment shader
+    /// (`single_seg` false) must have. A real selection always has the pair
+    /// (select.rs puts it before the TLB writes).
     #[test]
-    fn a_stage_is_refused_by_name() {
+    fn an_empty_fragment_selection_is_refused_by_verify71() {
         let mut buf = std::vec![0u8; 4096];
         let a = Arena::new(&mut buf);
         /* A fragment shader: an empty vertex shader has no viewport x/y
@@ -658,8 +664,9 @@ mod tests {
          * not as an unfinished stage. */
         let sel = super::super::vop71::empty_selected(true);
         match compile_stage71(&sel, &a) {
-            Ok(s) => check71("empty", &s.code, s.threads, s.single_seg),
+            Err(V3d71Error::Verify(e)) => assert_eq!(e.rule, "No program-end THRSW found", "{e:?}"),
             Err(e) => assert!(is_stage_refusal(&e), "{e:?}"),
+            Ok(s) => panic!("an empty fragment shader compiled: {} words", s.code.words.len()),
         }
     }
 }
