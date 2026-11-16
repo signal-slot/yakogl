@@ -273,7 +273,7 @@ formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `tests/gltest_case20_formats.rs`, `tests/vivante_imx8mp_limits.rs`; host dEQP
 at `93bca01`: the two `implementation_limits.*compressed*` and the three
 `state_query.integers.compressed_texture_formats_*` cases move Fail to Pass on
-the three GPUs, `docs/es3/texture-host-repro.md` 7.1, HOST-ONLY); the board
+the three GPUs, `docs/es3/texture-host-repro.md` 8.1, HOST-ONLY); the board
 rows (the Pi 4's `implementation_limits.*compressed*` and
 `state_query.integers.compressed_texture_formats_*`) are to be re-run. Item
 `es3-caps` (the ES 3.0 limits test was reverted for review and is to be

@@ -369,7 +369,7 @@ GitHub issue under the ES 3.0 umbrellas #147 and #748 (duplicates checked
 first; RC2 and RC9 carry their facts meanwhile). This session had no GitHub
 access, so neither issue is cited by a number here.
 
-## 7. ETC2/EAC and V3D shadow compare (plan #354)
+## 8. ETC2/EAC and V3D shadow compare (plan #354)
 
 What the host can show for these changes, and what it cannot. The Linux OSAL
 keeps the command stream, so every read-back is black: the `texture.wrap` and
@@ -386,7 +386,7 @@ own check through the real packer (`tests/es3_shadow_v3d_draw.rs`: every 2D
 form under each of the eight functions, the record's function run on the
 interpreter, a sampler object, a fixed-point depth).
 
-### 7.1 Host dEQP before and after (2026-11-14, HOST-ONLY)
+### 8.1 Host dEQP before and after (2026-11-14, HOST-ONLY)
 
 `tools/cts/host-deqp-run.sh` with `MODULE=gles3` and `GPU=v3d`, `powervr`,
 `vivante`, VK-GL-CTS `93bca01` with the yakogl target, `deqp-gles3` built on
