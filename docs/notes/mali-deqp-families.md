@@ -396,3 +396,154 @@ reference items should pick a case of the group they need from
 - The run needs about 4 minutes; the two builds (deqp-gles2 713 steps, the
   library) about 40 minutes on 4 cores the first time and are reused from
   `build/host-deqp-mali/`.
+
+## 16. Colourpair: random and tmp_array references
+
+Plan #377 item `ref-colourpair-rnd`. These are the 24 cases that
+`docs/notes/mali-deqp-colourpair.md` left without a reference: the 23
+`shaders.random.*` cases whose board refusal (slices `37305608`) is a colour
+pair (17 constant then lane, 6 lane and 0.0), plus
+`shaders.indexing.tmp_array.float_static_write_static_read_vertex` (lane and
+0.0). Their shader text is dEQP's generated text, taken verbatim from the
+`.qpa` of a host run at `8820607a` (HOST-ONLY; VK-GL-CTS `93bca01` with
+`cts-yakogl-target.patch`). `--filter` takes a single fixed string, so the
+cases were measured in two runs:
+
+```sh
+tools/mali/deqp-host-measure.sh --cts "$CONNECTED_DEPS_DIR/VK-GL-CTS" --stage run \
+    --out <dir>/m-random --filter functional.shaders.random.     # 1,767 cases
+tools/mali/deqp-host-measure.sh --cts "$CONNECTED_DEPS_DIR/VK-GL-CTS" --stage run \
+    --out <dir>/m-tmparray --filter indexing.tmp_array.float_static_write_static_read_vertex
+# then --stage extract on each; the pairs are <out>/src/<case>.vert|.frag
+```
+
+The references are Mesa 26.2.1 drm-shim draws made by the `gm2_*` method,
+the same way as the other `deqp_colourpair_*` references:
+
+```sh
+tools/mali/drm_shim_ref.sh run <work> $T/deqp_colourpair_rnd_<name>.vert \
+    $T/deqp_colourpair_rnd_<name>.frag <out>/deqp_colourpair_rnd_<name> --uniform-values
+tools/mali/pan_ref_diff.py extract <out>/deqp_colourpair_rnd_<name>.trace --draw --attributes \
+    > $T/deqp_colourpair_rnd_<name>.expect.json      # T=tools/mali/testdata
+```
+
+`<work>` is `drm_shim_ref.sh build` of the 26.2.1 tarball, whose sha256
+matches `third_party/mesa-26.2.1/UPSTREAM`. The draw is 64x64 with every float
+uniform set (`--uniform-values`); none of these pairs has an int uniform.
+Checks:
+- The same build reproduces `deqp_colourpair_default_attrib.expect.json` byte
+  for byte, except for the `trace` name.
+- A second draw of each of the 14 references is identical.
+- `tools/mali/deqp_ref.sh --instrument shim` draws the same `regions` for all
+  24 pairs.
+
+Each `.vert` and `.frag` has a `.license` sidecar that names its case.
+
+### Grouping
+
+All 24 cases were drawn. They give 13 distinct Mesa fragment programs (words
+and FAU):
+- **Identical pairs.** `texture.fragment.25` and `trigonometric.fragment.25`
+  are the same pair, and draw the same.
+- **Same fragment shader.** `basic_expression.fragment.68` and `.combined.68`
+  have the same fragment shader, and its colour reads no varying. The two
+  programs have the same words; only the uniform FAU words differ (`r` of the
+  combined vertex shader moves the uniform layout).
+- **Same bytes from both stages.** `basic_expression.vertex.60` computes
+  `vec4(0.75, c, b, 0.0 * a)` in the vertex shader, and `.fragment.60`
+  computes it in the fragment shader. Both produce the same bytes in every
+  region. Mesa's link drops the vertex shader's constant lanes x and w and
+  compacts the varying to `v2`. Each case has its own reference, because our
+  compiler reaches the pair by two different paths: the linked fragment shader
+  and the fragment shader's own `vectorise`.
+- **Plain four-lane load.** Ten vertex cases draw the plain four-lane
+  fragment program. It is byte-equal to `deqp_colourpair_ck_lane`'s
+  (`LD_VAR_BUF_IMM.f32...v4`, two `V2F32_TO_V2F16`, `BLEND`), so it has **no
+  colour pair**. Mesa keeps the vertex shader's constant lanes as varyings. By
+  the source, these split into two shapes:
+  - `vecop`: a highp **vector** ALU result whose lane becomes constant only
+    through a fold inside the op, for example `0 * a.z` in
+    `vec4(d, c, 0, b) * a`. The varying shader of `rnd_vs_vecop_kept` stores
+    that lane as `IADD_IMM #0x0`.
+  - `mediump`: the colour is a **mediump** expression. Examples:
+    `vec4(res, 0.0, 0.0, 1.0)` with `res` mediump, a sum that reads the mediump
+    `v_color` back, or a product with a mediump uniform. This is the operator
+    harness's `mediump vec4 color` case (`ck_lane`). The varying shader stores
+    the constant lanes (`IADD_IMM #0x0`, `#0x3F800000`) after an fp16
+    computation.
+
+  For both shapes, the reason is inferred from the sources and the bytes. It
+  is not checked in Mesa's source.
+
+This gives 14 references for the 24 cases:
+
+| Reference `deqp_colourpair_rnd_<name>` | Case it was made from | Mesa's fragment program (instrs) | Pins for lower-colourpair |
+|---|---|---|---|
+| `vs_vecop_kept` | `random.conditionals.vertex.73` | plain v4 load (7) | **link rule**, not an MKVEC: a lane that is constant only through a fold inside a highp vector op stays a stored varying lane |
+| `vs_mediump_kept` | `indexing.tmp_array.float_static_write_static_read_vertex` | plain v4 load (7) | **link rule**: the constant lanes of a mediump colour stay varyings (the `ck_lane` rule of `mali-deqp-colourpair.md`) |
+| `vs_vecop_fs_uniform` | `random.basic_expression.combined.35` | v4 load, two `FMA.v2f16` by the uniform (9) | the vecop link rule under a fragment shader that is not a plain forward (`b * a`) |
+| `vs_uniform_flat` | `random.basic_expression.vertex.20` | `LD_VAR_BUF_IMM.f32...v4.src_flat32` (7) | **link rule**: when every lane is a constant or a uniform (`c + vec4(1.5, b, b, a)`), Mesa keeps all four lanes and loads them **flat**; it removes none |
+| `vs_ck_lz` | `random.basic_expression.vertex.60` | `v2` load, `MKVEC.v2i16 r1, u2.w0.h0, r0.h0` (FAU 0.75), `U16_TO_U32 r2, r0^.h1` (10) | constant-first **MKVEC with a FAU constant** as src0, then the lane-zero `U16_TO_U32` of the converted pair's `.h1`; the link drops x and w |
+| `vs_zk_lz` | `random.conditionals.vertex.46` | `v2` load, `MKVEC.v2i16 r1, 0x0.h0, r0.h0`, `U16_TO_U32 r2, r0^.h1` (10) | constant-first MKVEC with the **inline** `0x0.h0` (as `ck_lane_highpcolour`), then lane-zero `U16_TO_U32` |
+| `fs_ck_lz` | `random.basic_expression.fragment.60` | byte-equal to `vs_ck_lz` in all three regions | the same two forms, reached through the fragment shader's `vectorise` (the `nir_fs.rs` sites `mali-deqp-colourpair.md` lists) |
+| `fs_ck_dup` | `random.basic_expression.fragment.94` | one-lane load, `FADD.f32 r0.h0`, `MKVEC.v2i16 r1, u2.w0.h0, r0.h0` (FAU 0.5), `IADD.v2u16 r2, r0^.h00, 0x0` (10) | constant-first MKVEC (FAU), and the (lane, lane) word as `IADD.v2u16 .h00` (`lower_mkvec_swz`) |
+| `fs_ck_product` | `random.basic_expression.fragment.84` | `MKVEC.v2i16 r3, u2.w0.h0, r0.h0` and `MKVEC.v2i16 r0, u2.w1.h0, r0^.h0` as **FMA operands** (16) | constant-first MKVEC of an **operand** `vec4(0.25, a, b, a)`, not of the colour: the classifier edit must cover `vectorise` operands too |
+| `fs_zk_tree` | `random.conditionals.fragment.73` | `MKVEC.v2i16 r0, u2.w0.h0, r0^.h0` (FMA operand), `FADD.v2f16 r1, r2^.neg.h00`, `MKVEC.v2i16 r1, 0x0.h0, r1^.h0` (13) | constant-first MKVEC of an operand (FAU), and a colour word (0.0, a computed tree `-a.w`) with inline `0x0.h0` |
+| `fs_zword_zk` | `random.conditionals.fragment.77` | `MKVEC.v2i16 r1, 0x0.h0, r0^.h0`, `MOV.i32 r0, 0x0` (8) | an all-zero word as `MOV.i32 0x0` and constant-first MKVEC (inline zero); the swizzles `.wxyz.arbg` fold away |
+| `fs_kword_ck` | `random.texture.fragment.35` | `MKVEC.v2i16 r1, u2.w0.h0, r0^.h0` (FAU 1.0), `MOV.i32 r0, u2.w1` (FAU word `0x00003c00`, (1.0, 0.0)) (8) | constant-first MKVEC (FAU) and a constant word as **FAU `MOV`** (not an immediate as in `default_attrib`) |
+| `fs_ck_madd` | `random.texture.fragment.25` | `MKVEC.v2i16 r0, u3.w0.h0, r0^.h0` (FAU -3.0) as the FMA addend, `IADD_IMM` packed constants, `MKVEC.v2i16 r1, r2^.h0, r1^.h0` (13) | constant-first MKVEC of an **addend** `vec4(-3, c, 0, -1.5) + b * ...`; the colour's second word is two computed halves |
+| `fs_uniform_tz_ck` | `random.basic_expression.fragment.68` | no varying: `FADD.v2f16`, `U16_TO_U32 r0, r0^.h0`, `MKVEC.v2i16 r1, u3.w1.h0, r1^.h0` (10) | lane-zero `U16_TO_U32` of a **uniform tree** (`b + 4.5`, `a * 0.0` folded to 0), and a constant-first MKVEC of (1.0, uniform `a`) |
+
+### The 24 cases
+
+The first refusal is the host's at `8820607a`. For every case it is also the
+board's text at `37305608`, except `vertex.49`. CP stands for "a colour pair
+of a constant then a varying lane", and LZ for "a colour pair of a varying
+lane and 0.0 (Mesa's U16_TO_U32)"; both are fragment shader refusals, at the
+link when the case is a vertex case.
+
+| Case (`dEQP-GLES2.functional.shaders.`) | First refusal | Group | Reference | What it pins |
+|---|---|---|---|---|
+| `indexing.tmp_array.float_static_write_static_read_vertex` | LZ | mediump | `rnd_vs_mediump_kept` | link rule: the lanes stay varyings |
+| `random.basic_expression.combined.35` | CP | vecop, fragment `b * a` | `rnd_vs_vecop_fs_uniform` | link rule |
+| `random.basic_expression.combined.68` | LZ | uniform tree and 0.0 | `rnd_fs_uniform_tz_ck` (same words; the FAU uniform layout differs) | lane-zero form and constant-first MKVEC |
+| `random.basic_expression.fragment.60` | CP | constant, lane, then lane, 0.0 | `rnd_fs_ck_lz` | constant-first MKVEC (FAU) and lane-zero form |
+| `random.basic_expression.fragment.68` | LZ | uniform tree and 0.0 | `rnd_fs_uniform_tz_ck` | lane-zero form and constant-first MKVEC |
+| `random.basic_expression.fragment.84` | CP | constant-first operand | `rnd_fs_ck_product` | constant-first MKVEC (FAU) |
+| `random.basic_expression.fragment.94` | CP | constant, lane, then lane, lane | `rnd_fs_ck_dup` | constant-first MKVEC (FAU) |
+| `random.basic_expression.vertex.1` | CP | mediump (reads `v_color` back) | `rnd_vs_mediump_kept` | link rule |
+| `random.basic_expression.vertex.5` | CP | vecop | `rnd_vs_vecop_kept` | link rule |
+| `random.basic_expression.vertex.20` | CP | uniform and constant lanes | `rnd_vs_uniform_flat` | link rule: flat, keep all lanes |
+| `random.basic_expression.vertex.30` | LZ | mediump (reads `v_color` back) | `rnd_vs_mediump_kept` | link rule |
+| `random.basic_expression.vertex.49` | **other**: "a vertex shader whose attribute numbering waits for a fold Mesa's back end makes ..." (the board's at `37305608` was CP; section 13) | vecop | `rnd_vs_vecop_kept` (same fragment bytes) | nothing for lower-colourpair until the attribute-numbering refusal is lowered, which is a different family |
+| `random.basic_expression.vertex.60` | CP | constant, lane, then lane, 0.0, from the vertex shader | `rnd_vs_ck_lz` | link drops x and w; constant-first MKVEC (FAU) and lane-zero form |
+| `random.basic_expression.vertex.63` | LZ | vecop | `rnd_vs_vecop_kept` | link rule |
+| `random.basic_expression.vertex.70` | LZ | vecop | `rnd_vs_vecop_kept` | link rule |
+| `random.basic_expression.vertex.73` | CP | mediump (reads `v_color` back) | `rnd_vs_mediump_kept` | link rule |
+| `random.basic_expression.vertex.97` | LZ | mediump (mediump uniform `d`) | `rnd_vs_mediump_kept` | link rule |
+| `random.conditionals.fragment.73` | CP | constant-first operand, 0.0 and a tree | `rnd_fs_zk_tree` | constant-first MKVEC (FAU, inline zero) |
+| `random.conditionals.fragment.77` | CP | zero word, then 0.0 and a lane | `rnd_fs_zword_zk` | constant-first MKVEC (inline zero) |
+| `random.conditionals.vertex.46` | CP | 0.0, lane, then lane, 0.0, from the vertex shader | `rnd_vs_zk_lz` | link drops x and w; constant-first MKVEC (inline zero) and lane-zero form |
+| `random.conditionals.vertex.73` | CP | vecop | `rnd_vs_vecop_kept` | link rule |
+| `random.texture.fragment.25` | CP | constant-first addend | `rnd_fs_ck_madd` | constant-first MKVEC (FAU) |
+| `random.texture.fragment.35` | CP | constant word, then constant, lane | `rnd_fs_kword_ck` | constant-first MKVEC (FAU) and a FAU word |
+| `random.trigonometric.fragment.25` | CP | constant-first addend | `rnd_fs_ck_madd` (identical pair) | constant-first MKVEC (FAU) |
+
+What this means for `lower-colourpair`:
+- **Link rule cases.** Ten of the 24 cases (`vecop` and `mediump`, with
+  `vertex.49` counted among them) and `combined.35` and `vertex.20` need no
+  MKVEC. Mesa keeps their constant lanes as varyings, so the work is in our
+  link (`mali-varying-constants.md` rule 1), as for the operator cases:
+  - a lane that is constant only after a fold inside a vector op stays a
+    varying;
+  - a lane of a mediump colour stays a varying;
+  - a varying with only uniform and constant lanes stays whole and is loaded
+    flat.
+- **MKVEC cases.** The other 12 need the step 2 edits of
+  `mali-deqp-colourpair.md`:
+  - constant-first `MKVEC.v2i16`, with the constant as src0, either an inline
+    `0x0.h0` or a FAU half;
+  - lane-zero `U16_TO_U32` of a load half, a `.h1` half or a uniform tree.
+
+  `fs_ck_product`, `fs_zk_tree` and `fs_ck_madd` show that the constant-first
+  pair also occurs as an ALU **operand**, not only as a colour word.
