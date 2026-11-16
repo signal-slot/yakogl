@@ -8,7 +8,7 @@
 //! it, the same registers); `exp2` (`F32_TO_S32` with no rounding mode, word
 //! 33; docs/notes/mali-fs-arith.md) makes the whole program Mesa's.
 
-use super::tests::{compile, region};
+use super::tests::{compile_alone, region};
 use super::MaliError;
 use crate::shaderc::online::codegen::{self, CompileError};
 use crate::shaderc::SHC_STAGE_FRAGMENT;
@@ -29,7 +29,7 @@ const TRANSC_COS_W: &str = "precision mediump float; uniform vec4 u_a; void main
 
 /// The Mali gap a fragment shader meets first, None if it compiles.
 fn verdict(src: &str) -> Option<MaliError> {
-    match compile(SHC_STAGE_FRAGMENT, src) {
+    match compile_alone(SHC_STAGE_FRAGMENT, src) {
         Ok(_) => None,
         Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => Some(e),
         Err(e) => panic!("{src}: not a Mali gap: {e:?}"),
@@ -39,7 +39,7 @@ fn verdict(src: &str) -> Option<MaliError> {
 /// The compiled fragment words of `fs` without the zero padding (a program
 /// never ends in an all-zero word).
 fn fs_words(fs: &str) -> Vec<u64> {
-    let mut w = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles").code;
+    let mut w = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles").code;
     while w.last() == Some(&0) {
         w.pop();
     }

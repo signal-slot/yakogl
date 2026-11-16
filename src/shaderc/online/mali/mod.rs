@@ -1423,8 +1423,14 @@ fn compile_stage<'s>(
         }
         sc.varyings[0] = VaryingSlot { varying: None, comps: 4, section: Section::Position, offset: 0, mask: 0xf };
         sc.nvar = 1;
-        for v in &vs.varyings[..vs.nvar] {
-            let mask = vs.masks[sc.nvar - 1];
+        for (v, &mask) in vs.varyings[..vs.nvar].iter().zip(&vs.masks) {
+            /* an output the program's fragment shader does not read is not
+             * in the layout: Mesa's link removes it (nir_opt_varyings.c
+             * `remove_dead_varyings`), and the frame counts what is listed
+             * as the varyings written */
+            if mask == 0 {
+                continue;
+            }
             sc.varyings[sc.nvar] = VaryingSlot {
                 varying: Some(v.location),
                 comps: mask.count_ones() as u8,
@@ -1940,16 +1946,6 @@ impl ProgramReads {
     }
 }
 
-/// The reads a program's vertex shader is built for, when the fragment
-/// shader `fs` (a record of this back end) reads a varying in part or has
-/// code the link moves into the vertex shader; None otherwise (the vertex
-/// shader's own layout is the program's). `Some(Err)`: the record's moved
-/// expressions do not encode (a defect, never a plain vertex shader).
-pub fn partial_reads(fs: &ShcShader) -> Option<Result<ProgramReads, MaliError>> {
-    let r = MaliShader::of(fs)?;
-    (r.stage == SHC_STAGE_FRAGMENT && (r.compacted || !r.moved.is_empty())).then(|| fragment_reads(r))
-}
-
 /// The generic varyings a fragment shader's record reads and its moved
 /// expressions, as [`compile_vs_for_reads`] takes them.
 pub fn fragment_reads(r: &MaliShader<'_>) -> Result<ProgramReads, MaliError> {
@@ -1963,6 +1959,188 @@ pub fn fragment_reads(r: &MaliShader<'_>) -> Result<ProgramReads, MaliError> {
     }
     out.nmoved = motion::encode(r.moved, &mut out.moved)?;
     Ok(out)
+}
+
+/// The reads a program's vertex shader is built for when its fragment
+/// shader `r` (of source `fs_glsl`) reads no vertex constant: the record's
+/// reads ([`fragment_reads`]), and every other varying the fragment shader
+/// still loads at link, whole.
+///
+/// Mesa's link removes an output the fragment shader does not load at that
+/// point (nir_opt_varyings.c `remove_dead_varyings`), after the pre-link
+/// optimisations (`gl_nir_opts`): dead code is gone (`nir_opt_dce`) and a
+/// product with a constant zero is folded (nir_opt_algebraic.py:277-278),
+/// but only where the constant operand is one zero in every lane. The
+/// record's reads are those of the finished program, where the back end may
+/// have folded a live load away (dEQP scalar_conversion.fragment_69:
+/// `vec4(e, a, c, 0) * vec4(d, c, b, a)` is no product with a constant at
+/// link, so the lane `e * 0.0` reads `e` there and Mesa's vertex shader
+/// stores it; the back end folds the lane later). So a varying a live value
+/// of the front end's IR loads ([`live_varying_loads`]) keeps its store; one
+/// only dead code loads, or none, is removed.
+pub fn program_reads(r: &MaliShader<'_>, fs_glsl: &[u8], scratch: &Arena<'_>) -> Result<ProgramReads, CompileError> {
+    let mut out = fragment_reads(r).map_err(refused)?;
+    let f = lower_source(SHC_STAGE_FRAGMENT, fs_glsl, &[], scratch)?;
+    let live = live_varying_loads(&f.module, scratch)?;
+    for (loc, &mask) in live.iter().enumerate().filter(|(_, m)| **m != 0) {
+        let loc = loc as u8;
+        /* a varying the record reads keeps the record's lanes (Mesa
+         * compacts what the fragment shader reads of it) */
+        if out.reads().iter().any(|&(l, _)| l == loc) {
+            continue;
+        }
+        let slot = out.reads.get_mut(out.n).ok_or(refused(MaliError::VaryingLocation))?;
+        *slot = (loc, mask);
+        out.n += 1;
+    }
+    Ok(out)
+}
+
+/// The lanes of each varying location that a live value of module `m`
+/// loads: a value is live when an output store, an `if` condition (a
+/// discard's among them) or another live value reads it, or a local that a
+/// live value loads stores it. A product Mesa folds to zero before its link
+/// reads neither operand ([`zero_product`], and not an exact one,
+/// [`exact_values`]). The liveness is flow-insensitive (a store overwritten
+/// later, or an `if` of a constant condition, keeps what it reads), so it
+/// keeps at least what Mesa's pre-link DCE keeps; a local nothing live
+/// loads, and what only it reads, is dead (femtovg's `scissor` in the
+/// stencil program).
+fn live_varying_loads(m: &ir_mod::Module<'_>, scratch: &Arena<'_>) -> Result<[u8; select::MAX_VARYINGS], CompileError> {
+    let oom = |_| CompileError::OutOfMemory { which: Which::Scratch, left: 0 };
+    let exact = exact_values(m, scratch)?;
+    let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
+    let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
+    for (l, op) in live.iter_mut().zip(m.instrs) {
+        *l = matches!(op, ir_mod::Op::StoreOutput { .. });
+    }
+    for n in m.nodes {
+        if let ir_mod::Node::If { cond, .. } = n {
+            if let Some(l) = live.get_mut(cond.val.0 as usize) {
+                *l = true;
+            }
+        }
+    }
+    mark_reads(m, live, live_local, |i| exact.get(i) == Some(&false) && zero_product(m, ir_mod::ValueId(i as u32)));
+    let mut out = [0u8; select::MAX_VARYINGS];
+    for (op, _) in m.instrs.iter().zip(live.iter()).filter(|(_, l)| **l) {
+        if let ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Varying(loc), comps } = *op {
+            let d = out.get_mut(loc as usize).ok_or(refused(MaliError::VaryingLocation))?;
+            *d |= ((1u16 << comps.min(4)) - 1) as u8;
+        }
+    }
+    Ok(out)
+}
+
+/// Whether Mesa 26.2.1 holds the output `d` invariant: the shader names
+/// it, or it is a declared variable under `#pragma STDGL invariant(all)`.
+/// Mesa gives the pragma to a variable where it applies the declaration's
+/// qualifiers (ast_to_hir.cpp:4415-4418, `apply_type_qualifier_to_variable`),
+/// and a built-in is made without one (builtin_variables.cpp reads no
+/// `all_invariant`): under the pragma alone `gl_Position`, `gl_PointSize`,
+/// `gl_FragColor` and `gl_FragData` stay as they are. A built-in is known
+/// by its name, whose `gl_` no declared variable may have (section 3.7).
+pub(crate) fn mesa_invariant(d: &ir_mod::IoDecl<'_>) -> bool {
+    match d.invariant {
+        ir_mod::Invariance::No => false,
+        ir_mod::Invariance::Declared => true,
+        ir_mod::Invariance::Pragma => !d.name.starts_with("gl_"),
+    }
+}
+
+/// The values of module `m` Mesa computes exactly: those an invariant
+/// output's store is computed from, through values and locals. An
+/// assignment to an invariant variable is exact and keeps NaN
+/// (glsl_to_nir.cpp:1899-1902), and every variable such an assignment
+/// reads becomes invariant itself (propagate_invariance.cpp), so the
+/// assignments to it are exact too. An `if` condition is no part of an
+/// assignment and makes nothing exact.
+fn exact_values<'s>(m: &ir_mod::Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], CompileError> {
+    let oom = |_| CompileError::OutOfMemory { which: Which::Scratch, left: 0 };
+    let exact = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
+    let exact_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
+    for (e, op) in exact.iter_mut().zip(m.instrs) {
+        *e = matches!(*op, ir_mod::Op::StoreOutput { slot, .. }
+            if m.outputs.iter().any(|d| d.slot() == slot && mesa_invariant(d)));
+    }
+    mark_reads(m, exact, exact_local, |_| false);
+    Ok(exact)
+}
+
+/// Marks, to a fixed point, what the marked values of module `m` are
+/// computed from: the sources of a marked value, and the stores to a local
+/// (`local`) that a marked value loads. A marked value that `folded` is
+/// true of reads none of its sources.
+fn mark_reads(m: &ir_mod::Module<'_>, marked: &mut [bool], local: &mut [bool], folded: impl Fn(usize) -> bool) {
+    /* each round walks every instruction once */
+    loop {
+        let mut grew = false;
+        for (i, op) in m.instrs.iter().enumerate() {
+            if let ir_mod::Op::StoreLocal { local: l, .. } = *op {
+                if marked.get(i) == Some(&false) && local.get(l.0 as usize) == Some(&true) {
+                    marked[i] = true;
+                    grew = true;
+                }
+            }
+            if marked.get(i) != Some(&true) {
+                continue;
+            }
+            if let ir_mod::Op::LoadLocal { local: l, .. } = *op {
+                if let Some(l) = local.get_mut(l.0 as usize).filter(|l| !**l) {
+                    *l = true;
+                    grew = true;
+                }
+            }
+            if folded(i) {
+                continue;
+            }
+            op.for_each_src(|s| {
+                if let Some(d) = marked.get_mut(s.val.0 as usize).filter(|d| !**d) {
+                    *d = true;
+                    grew = true;
+                }
+            });
+        }
+        if !grew {
+            break;
+        }
+    }
+}
+
+/// Value `v` of fragment module `m` is a product Mesa folds to zero before
+/// its link when it is not exact, so it reads neither operand there: a
+/// float product with a constant operand that is `+0.0` in every lane or
+/// `-0.0` in every lane (nir_opt_algebraic.py:277-278, `fmul(nsz,nnan)`
+/// with `0.0` and with `-0.0`; uniarray_c's `c.y * 0.0`,
+/// negmul_mediump_zero's `a2 * -0.0`). A constant of both signs matches
+/// neither rule: the product reads its other operand at link, and the back
+/// end folds its lanes later (route_zero_mixed_pairs). An exact product
+/// keeps NaN, which `nnan` excludes (route_zero_invariant).
+fn zero_product(m: &ir_mod::Module<'_>, v: ir_mod::ValueId) -> bool {
+    let Some(&ir_mod::Op::Alu(ir_mod::AluOp::Fmul, [a, b, ..])) = m.instrs.get(v.0 as usize) else {
+        return false;
+    };
+    let comps = m.comps_of(v).min(4) as usize;
+    zero_sign(m, a, comps).is_some() || zero_sign(m, b, comps).is_some()
+}
+
+/// The sign bit of the constant zero that every one of the first `comps`
+/// lanes `s` reads in module `m`, `None` when a lane is no constant zero or
+/// two lanes differ in sign: a constant, or its negation (`-0.0` is the
+/// front end's `fneg(0.0)`).
+fn zero_sign(m: &ir_mod::Module<'_>, s: ir_mod::Src, comps: usize) -> Option<bool> {
+    match m.instrs.get(s.val.0 as usize) {
+        Some(ir_mod::Op::ConstF32(c)) => {
+            let lane = |k: &u8| c.get(usize::from(*k)).copied();
+            let first = s.swizzle.first().and_then(lane).filter(|b| b & 0x7fff_ffff == 0)?;
+            s.swizzle.get(..comps)?.iter().all(|k| lane(k) == Some(first)).then_some(first != 0)
+        }
+        Some(&ir_mod::Op::Alu(ir_mod::AluOp::Fneg, [n, ..])) => {
+            let swizzle = s.swizzle.map(|k| n.swizzle.get(usize::from(k)).copied().unwrap_or(k));
+            zero_sign(m, ir_mod::Src { val: n.val, swizzle }, comps).map(|neg| !neg)
+        }
+        _ => None,
+    }
 }
 
 /// `pr`, a fragment record's reads and moved expressions at fragment shader
@@ -2029,10 +2207,14 @@ mod fs_transc_tests;
 mod mixprec_tests;
 #[cfg(test)]
 mod tests;
-/// The expect.json reader the tests share (the triangle sample's test too).
+/// The expect.json reader the tests share (the triangle sample's test too),
+/// and the tests' linked route.
 #[cfg(test)]
 pub(crate) mod tests_ref {
     pub fn region_words(json: &str, name: &str) -> Vec<u64> {
         super::tests::region(json, name).expect("the region").words
     }
+    /// The one linked route of the tests (the back end's entry points in
+    /// the GL core's order), for the back end's own tests.
+    pub(crate) use super::tests::link_records;
 }

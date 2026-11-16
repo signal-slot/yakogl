@@ -86,12 +86,17 @@ The layout order needs no change. `compact_layout` walks the vertex
 shader's layout and only looks each output's mask up in the reads, so the
 order of the reads does not matter.
 
-`Unused` keeps its record slot with mask 0 and no components (offset 24).
-`src/mali/program.rs` sizes a vertex's varyings as the largest
-`offset + 4 * comps`, and `comps` is the mask's popcount (mod.rs, the vertex
-`VaryingSlot`). So the frame writes 24, Mesa's size. Generic slots are only
-counted to check that a varying program exists (frame.rs). `src/mali` did
-not change.
+`Unused` has no slot in the vertex record: the record lists only the
+varyings the vertex shader stores (mod.rs, the vertex `VaryingSlot`s;
+docs/notes/mali-product-route.md "Our build"). `src/mali/program.rs` sizes a
+vertex's varyings as the largest `offset + 4 * comps` of the listed slots,
+and `comps` is the mask's popcount. So the frame writes 24, Mesa's size.
+The frame builder counts the listed slots as the varyings written and
+refuses a draw that has varyings and no varying program (frame.rs
+`INVALID_VARYINGS`). A slot with mask 0 counted as a varying: a vertex
+shader whose only varying was removed listed one and had no varying
+program, and its draw was GL_OUT_OF_MEMORY (issue #6521,
+route_const_only).
 
 ## The lanes the link keeps, and how the fragment shader loads them
 

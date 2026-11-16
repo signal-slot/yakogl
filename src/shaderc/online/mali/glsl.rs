@@ -1210,7 +1210,7 @@ impl Tree<'_, '_> {
                 Use::Alu(u) => v = ValueId(u),
                 Use::Store(u) => {
                     return matches!(self.op(ValueId(u)), Some(IrOp::StoreOutput { slot, .. })
-                        if self.m.outputs.iter().any(|d| d.slot() == slot && d.invariant));
+                        if self.m.outputs.iter().any(|d| d.slot() == slot && super::mesa_invariant(d)));
                 }
                 _ => return false,
             }

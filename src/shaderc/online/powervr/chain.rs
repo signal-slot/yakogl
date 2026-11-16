@@ -253,9 +253,9 @@ fn build_vertex_in<'a>(
 /// The output slots `m` declares invariant (section 4.6.1), which
 /// [`prepare_fused`] computes without contraction.
 fn invariant_slots<'a>(m: &ir::Module<'_>, a: &'a Arena<'a>) -> Result<&'a [ir::IoSlot], ChainError> {
-    let n = m.outputs.iter().filter(|o| o.invariant).count();
+    let n = m.outputs.iter().filter(|o| o.is_invariant()).count();
     let out = a.alloc_filled(n, ir::IoSlot::Position).map_err(|_| ChainError::OutOfScratch)?;
-    for (o, d) in out.iter_mut().zip(m.outputs.iter().filter(|o| o.invariant)) {
+    for (o, d) in out.iter_mut().zip(m.outputs.iter().filter(|o| o.is_invariant())) {
         *o = d.slot();
     }
     Ok(out)

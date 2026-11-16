@@ -1798,11 +1798,11 @@ fn link_attrib_layout(
 
 /// The program's vertex shader for its fragment shader: `compile_vs_linked`
 /// with no map. A back end that builds one from the fragment shader's facts
-/// (the Mali, when the fragment shader reads part of a varying: Mesa's link
-/// keeps only those components) hands it over, and it becomes the
-/// program's, as the attribute relink's does (released when the program is
-/// linked again or deleted). Ok when it builds none (1), or has no such
-/// path; Err after writing the link error.
+/// (the Mali: Mesa's link keeps only the varyings and components the
+/// fragment shader reads) hands it over, and it becomes the program's, as
+/// the attribute relink's does (released when the program is linked again
+/// or deleted). Ok when it builds none (1), or has no such path; Err after
+/// writing the link error.
 fn link_vs_for_fs(p: &mut GlProgram, vs_src: *const c_char, log: &mut [u8; INFO_LOG_SIZE]) -> Result<(), ()> {
     let Some(relink) = shaderc::backend().and_then(|b| b.compile_vs_linked) else {
         return Ok(());

@@ -442,10 +442,9 @@ impl LinkConsts {
 }
 
 /// The varyings a program's fragment shader reads, which its vertex shader
-/// is built for (the Mali's varying compaction: `mali::partial_reads`, or
-/// `mali::fragment_reads` when the link removes a varying of constant
-/// lanes that the fragment shader does not declare): a location and a
-/// component mask each, and the fragment shader's
+/// is built for (the Mali's link, [`vs_for_fragment`]: Mesa's
+/// nir_opt_varyings stores only what the fragment shader reads): a
+/// location and a component mask each, and the fragment shader's
 /// expressions the link moves into the vertex shader, as the bytes the
 /// back end encodes them in (`mali::motion`): a slice, empty for every
 /// other compile, so a record of any other GPU carries no room for them.
@@ -466,6 +465,11 @@ struct FsReads<'a> {
 /// The varyings a fragment shader may read (the compilers keep 16 varying
 /// locations).
 const MAX_FS_READS: usize = 16;
+
+/* `vs_for_fragment` copies a program's reads into the vertex record's key:
+ * every varying the Mali compiler keeps has a place */
+#[cfg(feature = "gpu-mali")]
+const _: () = assert!(MAX_FS_READS >= super::mali::select::MAX_VARYINGS);
 
 impl FsReads<'_> {
     const NONE: FsReads<'static> = FsReads { program: false, at: [(0, 0); MAX_FS_READS], n: 0, moved: &[] };
@@ -1215,11 +1219,16 @@ fn constant_lanes_refused() -> CompileError {
 }
 
 /// A vertex shader's own compile, `compiled`, on the Mali: refused for the
-/// constant lanes it stores, it is built without them instead
-/// (`codegen::compile_vs_without_consts`), which the link's fragment shader
-/// reads once they are folded into it (`link_by_sources`). The refusal
-/// stands when the shader has no constant lane, or is refused without them
-/// too. Every other compile is `compiled` itself.
+/// constant lanes it stores, or for two lanes of equal value, it is built
+/// without them instead (`codegen::compile_vs_without_consts`), the layout
+/// the link's fragment shader reads once they are folded into it
+/// (`link_by_sources`; Mesa's link keeps the first of equal lanes,
+/// `deduplicate_outputs`). The record only answers glCompileShader: the
+/// program's vertex shader is built at link for the fragment shader's
+/// reads ([`vs_for_fragment`]). The refusal stands when the shader has no
+/// such lane; a shader refused without them too is refused by that name,
+/// the form that is in the way once the lanes are not. Every other compile
+/// is `compiled` itself.
 #[cfg(feature = "gpu-mali")]
 fn or_without_consts<'s>(
     stage: u32,
@@ -1227,14 +1236,17 @@ fn or_without_consts<'s>(
     compiled: Result<(ShcShader, codegen::Blocks<'s>), CompileError>,
     scratch: &super::arena::Arena<'s>,
 ) -> Result<(ShcShader, codegen::Blocks<'s>), CompileError> {
-    if stage != SHC_STAGE_VERTEX || !matches!(compiled, Err(ref e) if *e == constant_lanes_refused()) {
+    let link_lanes = |e: &CompileError| {
+        *e == constant_lanes_refused()
+            || *e == CompileError::BackEnd(codegen::BackEndError::Mali(super::mali::MaliError::VaryingDuplicate))
+    };
+    if stage != SHC_STAGE_VERTEX || !matches!(compiled, Err(ref e) if link_lanes(e)) {
         return compiled;
     }
     match codegen::vs_constants(glsl, scratch) {
-        Ok(c) if !c.as_slice().is_empty() => {
-            codegen::compile_vs_without_consts(glsl, c, scratch, store::keep()).or(compiled)
-        }
-        _ => compiled,
+        Ok(c) if !c.as_slice().is_empty() => codegen::compile_vs_without_consts(glsl, c, scratch, store::keep()),
+        Ok(_) => compiled,
+        Err(e) => Err(e),
     }
 }
 
@@ -2058,10 +2070,10 @@ pub fn v3d_f32_rt_variant(
 /// glLinkProgram is linking. With a `map`, at the attribute locations the
 /// link decided (SHADERC_NOTES.md, "Attribute registers decided at link");
 /// `fs` is not read then. With no map, for the program's fragment shader
-/// `fs`: on the Mali, when it reads a varying in part, the vertex shader
-/// storing only those components (`mali::partial_reads`, Mesa's varying
-/// compaction); 1, and `*out` untouched, when there is nothing to build (the
-/// shader's own vertex code is the program's, on every other GPU always).
+/// `fs`: on the Mali, the vertex shader storing only the components `fs`
+/// reads ([`vs_for_fragment`], Mesa's nir_opt_varyings); 1, and `*out`
+/// untouched, when there is nothing to build (the shader's own vertex code
+/// is the program's, on every other GPU always).
 /// A program's copy, so at the program's end of the keep region, and cached
 /// under the source and the map or the reads.
 unsafe extern "C" fn online_compile_vs_linked(
@@ -2111,6 +2123,17 @@ unsafe extern "C" fn online_compile_vs_linked(
 /// [`online_compile_vs_linked`] with no map: the vertex shader for the
 /// program's fragment shader `fs`, or 1 when its own code is the program's.
 ///
+/// On the Mali the program's vertex shader is always built for what `fs`
+/// reads (`mali::fragment_reads`), as Mesa's link leaves it: gl_nir_link_
+/// varyings runs gl_nir_lower_optimize_varyings, whose nir_opt_varyings
+/// removes every output the fragment shader does not load
+/// (`remove_dead_varyings`, nir_opt_varyings.c) and compacts the rest. A
+/// varying `fs` does not read, or does not read whole, is not stored; when
+/// `fs` reads none, the program has no varying program. The shader's own
+/// compile stores every output it writes, so it is never the program's
+/// (docs/notes/mali-product-route.md). 1 only when `fs` is not this back
+/// end's record.
+///
 /// On the Mali, a vertex shader that stores constant lanes is built for the
 /// fragment shader the link makes of `fs`, with those lanes folded in
 /// ([`link_by_sources`]): the GL core asks for the program's vertex shader
@@ -2120,13 +2143,10 @@ unsafe extern "C" fn online_compile_vs_linked(
 /// the fold leaves no read, as Mesa's link then keeps no varying program.
 fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut CStrWriter) -> i32 {
     #[cfg(feature = "gpu-mali")]
-    let linked = base_of(fs).and_then(|fr| Some((link_consts_of(text, fr.source)?, fr)));
+    let linked = base_of(fs).map(|fr| (link_consts_of(text, fr.source).filter(|c| !c.is_none()), fr));
     #[cfg(feature = "gpu-mali")]
     let reads = match linked {
-        /* no lane reaches `fs`: its own record is the program's, and the
-         * link still removes the varyings that hold the lanes */
-        Some((consts, _)) if consts.is_none() => super::mali::MaliShader::of(fs).map(super::mali::fragment_reads),
-        Some((consts, fr)) => {
+        Some((Some(consts), fr)) => {
             let facts = Facts { consts, ..Facts::of(&fr) };
             let linked = match compile_and_publish_linked(
                 SHC_STAGE_FRAGMENT,
@@ -2141,19 +2161,28 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
                 Ok(sh) => sh,
                 Err(rc) => return rc,
             };
-            let pr = super::mali::MaliShader::of(&linked).map(super::mali::fragment_reads);
+            let mali = |e| CompileError::BackEnd(codegen::BackEndError::Mali(e));
+            let pr = super::mali::MaliShader::of(&linked).map(|r| super::mali::fragment_reads(r).map_err(mali));
             release(&linked);
             pr
         }
-        None => super::mali::partial_reads(fs),
+        /* no lane reaches `fs` (the vertex shader stores no constant lane,
+         * or `fs` declares none of the varyings that hold one): its own
+         * record is the program's, and the link still removes the varyings
+         * `fs` does not load */
+        Some((None, fr)) => super::mali::MaliShader::of(fs).filter(|r| r.stage == SHC_STAGE_FRAGMENT).map(|r| {
+            store::with_scratch(|a| super::mali::program_reads(r, fr.source, a)).unwrap_or(Err(CompileError::Reentered))
+        }),
+        None => None,
     };
     #[cfg(feature = "gpu-mali")]
     if let Some(pr) = reads {
         let pr = match pr {
             Ok(pr) => pr,
-            /* the record's moved expressions do not encode: the back end's
-             * defect, reported as one, never the plain vertex shader */
-            Err(e) => return report(log, SHC_STAGE_VERTEX, CompileError::BackEnd(codegen::BackEndError::Mali(e))),
+            /* the record's moved expressions do not encode (the back end's
+             * defect), or its source does not lower again: reported, never
+             * the plain vertex shader */
+            Err(e) => return report(log, SHC_STAGE_VERTEX, e),
         };
         /* the record's reads are at the fragment shader's varying
          * locations; the vertex shader is built at its own, paired by name
@@ -2165,7 +2194,10 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
             /* a read the vertex shader does not write: the link refuses it */
             Some(Ok(None)) => return 1,
             Some(Err(e)) => return report(log, SHC_STAGE_VERTEX, e),
-            None => pr,
+            /* another compile took the scratch arena since the reads were
+             * made: reported, never a vertex shader built at the fragment
+             * shader's locations */
+            None => return report(log, SHC_STAGE_VERTEX, CompileError::Reentered),
         };
         /* the moved bytes are borrowed from `pr` for the compile; the record
          * gets its own copy (`publish_as`) */
@@ -4839,55 +4871,16 @@ void main (void)
     mod mali {
         use super::*;
 
-        /// A program through the entry points in the GL core's order
-        /// (glCompileShader of each stage, `compile_vs_linked` with no map for the
-        /// program's vertex shader, then the link): the program's two stages, the
-        /// fragment shader as the link left it, and the shader object's fragment
-        /// record the link started from (released by the caller with the rest).
+        /// A program through the entry points in the GL core's order: the
+        /// tests' one linked route (`mali::tests_ref::link_records`): the
+        /// program's two stages, the fragment shader as the link left it, and
+        /// the shader object's fragment record the link started from (released
+        /// by the caller with the rest).
         fn link_through_the_entry_points(vs: &str, fs: &str) -> (ShcShader, ShcShader, ShcShader) {
-            let (vsrc, fsrc) = (std::format!("{vs}\0"), std::format!("{fs}\0"));
-            let mut log = [0 as c_char; 512];
-            let text = |log: &[c_char; 512]| {
-                // SAFETY: the writer NUL-terminated the log.
-                String::from_utf8_lossy(unsafe { cstr_bytes(log.as_ptr()) }).into_owned()
-            };
-            let (mut v, mut f) = (ShcShader::ZERO, ShcShader::ZERO);
-            // SAFETY: NUL-terminated sources, real outputs, a log of the announced size.
-            let rc =
-                unsafe { online_compile(SHC_STAGE_VERTEX, vsrc.as_ptr().cast(), &mut v, log.as_mut_ptr(), log.len()) };
-            assert_eq!(rc, 0, "the vertex shader compiles: {}", text(&log));
-            // SAFETY: as above.
-            let rc = unsafe {
-                online_compile(SHC_STAGE_FRAGMENT, fsrc.as_ptr().cast(), &mut f, log.as_mut_ptr(), log.len())
-            };
-            assert_eq!(rc, 0, "the fragment shader compiles: {}", text(&log));
-            let object = f;
-            retain(&object);
-            let mut pv = ShcShader::ZERO;
-            // SAFETY: a NUL-terminated source, the program's fragment shader, a
-            // real output and a log of the announced size.
-            let rc = unsafe {
-                online_compile_vs_linked(
-                    vsrc.as_ptr().cast(),
-                    core::ptr::null(),
-                    &f,
-                    &mut pv,
-                    log.as_mut_ptr(),
-                    log.len(),
-                )
-            };
-            match rc {
-                0 => {
-                    release(&v);
-                    v = pv;
-                }
-                1 => {}
-                _ => panic!("the program's vertex shader: {rc} {}", text(&log)),
+            match crate::shaderc::online::mali::tests_ref::link_records(vs, fs) {
+                Ok([v, f, object]) => (v, f, object),
+                Err(r) => panic!("the program does not link through the entry points: {r:?}"),
             }
-            // SAFETY: two distinct valid shaders and a log of the announced size.
-            let rc = unsafe { online_link(&v, &mut f, log.as_mut_ptr(), log.len()) };
-            assert_eq!(rc, 0, "the program links: {}", text(&log));
-            (v, f, object)
         }
 
         /// A program's words without the zero padding: `[from, to)` of its

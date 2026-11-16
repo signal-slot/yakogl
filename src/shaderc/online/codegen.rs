@@ -692,11 +692,12 @@ pub fn compile_fs_for_vs<'s>(
 }
 
 /// A vertex shader alone whose varyings hold the constant lanes `consts`
-/// ([`vs_constants`]): built for its own varyings less those lanes
-/// ([`compile_vs_for_reads`]), the layout the link's fragment shader reads
-/// once the lanes are folded into it. The shader object's record, so that
-/// glCompileShader succeeds; the program's vertex shader is built again at
-/// link for the fragment shader's reads.
+/// ([`vs_constants`]), or lanes equal to an earlier one: built for its own
+/// varyings less those lanes ([`compile_vs_for_reads`]), the layout the
+/// link's fragment shader reads once the constants are folded into it and
+/// the equal lanes read from the first (`VaryingConsts::class`). The shader
+/// object's record, so that glCompileShader succeeds; the program's vertex
+/// shader is built again at link for the fragment shader's reads.
 #[cfg(feature = "gpu-mali")]
 pub fn compile_vs_without_consts<'s>(
     glsl: &[u8],
@@ -709,7 +710,8 @@ pub fn compile_vs_without_consts<'s>(
     let mut n = 0;
     for o in l.module.outputs.iter().filter(|o| o.kind == super::ir::IoKind::Varying) {
         let full = (1u8 << o.components) - 1;
-        let mask = (0..o.components).filter(|&c| consts.get(o.location, c).is_some()).fold(full, |m, c| m & !(1 << c));
+        let folded = |c: u8| consts.get(o.location, c).is_some() || consts.class(o.location, c) != (o.location, c);
+        let mask = (0..o.components).filter(|&c| folded(c)).fold(full, |m, c| m & !(1 << c));
         if mask == 0 {
             continue;
         }
@@ -1265,7 +1267,7 @@ mod chain_tests {
             components: 4,
             interp: ir::INTERP_SMOOTH,
             gl_type: 0,
-            invariant: false,
+            invariant: ir::Invariance::No,
             prec: ir::Prec::None,
         }
     }

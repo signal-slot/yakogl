@@ -5,14 +5,14 @@
 //! turns a float uniform not declared highp into an fp16 one; an int, uint or bool
 //! uniform stays one 32-bit word at any precision (case 80's `ICMP_OR.s32 .., u4.w1`).
 
-use super::tests::compile;
+use super::tests::compile_alone;
 use super::MaliError;
 use crate::shaderc::online::codegen::{self, CompileError};
 use crate::shaderc::SHC_STAGE_FRAGMENT;
 
 /// The Mali gap a fragment shader meets first, None if it compiles.
 fn verdict(src: &str) -> Option<MaliError> {
-    match compile(SHC_STAGE_FRAGMENT, src) {
+    match compile_alone(SHC_STAGE_FRAGMENT, src) {
         Ok(_) => None,
         Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => Some(e),
         Err(e) => panic!("{src}: not a Mali gap: {e:?}"),

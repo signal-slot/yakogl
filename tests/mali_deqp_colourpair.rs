@@ -27,9 +27,12 @@
 //!
 //! Every other reference is refused, so its test is `#[ignore]`d with its
 //! reference's pinned first refusal: the pair as an operand of an
-//! operation (`rnd_fs_ck_madd`, `rnd_fs_ck_product`, `rnd_fs_zk_tree`), a
-//! computed lane and 0.0 (`rnd_fs_uniform_tz_ck`) and the partial-varying
-//! link (`rnd_vs_vecop_kept`). `refusals_pinned` asserts each ignored
+//! operation (`rnd_fs_ck_madd`, `rnd_fs_ck_product`, `rnd_fs_zk_tree`) and a
+//! computed lane and 0.0 (`rnd_fs_uniform_tz_ck`). `rnd_vs_vecop_kept` was
+//! refused at the partial-varying link until the program's vertex shader
+//! was built for what its fragment shader reads
+//! (`docs/notes/mali-product-route.md`): byte-equal since.
+//! `refusals_pinned` asserts each ignored
 //! reference's exact refusal text today — `MaliError::message` without its
 //! `Valhall: ` prefix and its ` is not lowered yet` suffix — so a refusal
 //! that moves breaks its pin. An ignored test that would compile now fails
@@ -55,11 +58,6 @@ mod mali_ref;
 const CP: &str = "a colour pair of a constant then a varying lane";
 const LZ: &str = "a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32)";
 
-/// The whole refusal of a link whose fragment shader reads part of a varying
-/// (the partial-varying link rule, which `rnd_vs_vecop_kept` meets before its
-/// colour pair); it is not the code generator's `Valhall: ` form.
-const PV: &str = "online shaderc: a Mali link whose fragment shader reads part of a varying (the link keeps only those components) is not lowered yet ('v_color')";
-
 /// Every reference and its pinned first refusal at this tip, the table
 /// behind [`refusals_pinned`]. Each ignored test's `#[ignore]` reason names
 /// the same text.
@@ -68,7 +66,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_colourpair_rnd_fs_ck_product", CP),
     ("deqp_colourpair_rnd_fs_uniform_tz_ck", LZ),
     ("deqp_colourpair_rnd_fs_zk_tree", CP),
-    ("deqp_colourpair_rnd_vs_vecop_kept", PV),
 ];
 
 /// The references that compile with other words than Mesa's, in the vertex
@@ -186,7 +183,6 @@ fn rnd_vs_vecop_fs_uniform() {
 }
 
 #[test]
-#[ignore = "refused: a link whose fragment shader reads part of a varying, then a colour pair (lower-colourpair)"]
 fn rnd_vs_vecop_kept() {
     mali_ref::assert_matches("deqp_colourpair_rnd_vs_vecop_kept");
 }
