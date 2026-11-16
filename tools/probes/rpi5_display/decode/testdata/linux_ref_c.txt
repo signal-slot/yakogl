@@ -1,0 +1,25 @@
+get_throttled: throttled=0x0
+dt.soc@107c000000/hvs@7c580000.status: okay (no status property)
+dt.soc@107c000000/hvs@7c580000.reg: 0x00000000 0x7c580000 0x00000000 0x0001a000
+fb.fb0.name: simple-framebuffer
+fb.fb0.virtual_size: 1920,1080
+skip: debugfs dri not mounted or not readable
+mem.hvs[0x0]: 0x00000053
+mem.hvs[0x4]: 0x00004000
+mem.hvs[0x30]: 0x87800438
+mem.hvs[0x3c]: 0x00000003
+mem.hvs[0x44]: 0x0005407b
+mem.hvs[0x48]: 0x00000003
+mem.hvs[0x50]: 0x00000000
+mem.hvs[0x5c]: 0x00000000
+mem.hvs[0x64]: 0x00400000
+mem.hvs[0x68]: 0x00000000
+mem.pixelvalve0[0x0]: 0x00080005
+mem.pixelvalve0[0x4]: 0x00000003
+mem.pixelvalve0[0x8]: 0x00000000
+mem.pixelvalve0[0xc]: 0x0094002c
+mem.pixelvalve0[0x10]: 0x00580780
+mem.pixelvalve0[0x14]: 0x00240005
+mem.pixelvalve0[0x18]: 0x00040438
+mem.hdmi0_hd[0x0]: 0x00000000
+linux_ref: done (21 facts, 1 skipped)

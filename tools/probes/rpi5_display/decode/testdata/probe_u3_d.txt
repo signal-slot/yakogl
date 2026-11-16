@@ -1,0 +1,24 @@
+rpi5_display: build test
+rpi5_display: mailbox init 0
+rpi5_display: u3 reg hvs version +0x0000=0x00000054
+rpi5_display: u3 reg hvs cxm_size +0x0004=0x00004000
+rpi5_display: u3 reg hvs d_disp0_ctrl0 +0x0100=0x87800438
+rpi5_display: u3 reg hvs d_disp0_lptrs +0x0110=0x00000000
+rpi5_display: u3 reg hvs d_disp0_status +0x0118=0x0005407b
+rpi5_display: u3 reg hvs d_disp0_dl +0x011c=0x00000000
+rpi5_display: u3 reg pv pv_control +0x0000=0x00080005
+rpi5_display: u3 reg pv pv_v_control +0x0004=0x00000003
+rpi5_display: u3 reg pv pv_horza +0x000c=0x0094002c
+rpi5_display: u3 reg pv pv_horzb +0x0010=0x00580780
+rpi5_display: u3 reg pv pv_verta +0x0014=0x00240005
+rpi5_display: u3 reg pv pv_vertb +0x0018=0x00040438
+rpi5_display: u3 reg hdmi0 hdmi_vid_ctl +0x0038=0x80000000
+rpi5_display: u3 dlist 0 [0]=0x4900c007
+rpi5_display: u3 dlist 0 [1]=0x00000000
+rpi5_display: u3 dlist 0 [2]=0x0000fff0
+rpi5_display: u3 dlist 0 [3]=0x0437077f
+rpi5_display: u3 dlist 0 [4]=0xc0c0c0c0
+rpi5_display: u3 dlist 0 [5]=0x00000000
+rpi5_display: u3 dlist 0 [6]=0x3e000000
+rpi5_display: u3 dlist 0 [7]=0x00001e00
+rpi5_display: u3 dlist 0 [8]=0x80000000
