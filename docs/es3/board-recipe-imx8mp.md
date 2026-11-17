@@ -743,6 +743,15 @@ Rules that hold for every step:
       `tools/cts/log/README.md`) or a `cases.tsv`, and the scan output as `console-scan.txt`.
     `console.raw` and `console.ts` stay out. `board.sh` redacts the copies in `$OUT`; read every file again.
 
+    `tools/cts/imx8mp-gles3-slice.py` drafts the README from the captured `board.sh` stdout: `--commit <40-hex>
+    --rows AA-BB --date <YYYY-MM-DD> --lines <stdout> --results $OUT/results.tsv --records <run dirs> --out
+    <slice dir>`. It writes the commit line, the verdict lines (one per entry, verbatim, in a fenced block), the
+    per-entry table and the not-pass list, and refuses (exit 2) a short hash, an entry of the range without a
+    line, two different lines for one entry (pass only the rerun that counts), an entry outside the range, a
+    missing run directory and a `results.tsv` without the entry; a draft that `imx8mp-gles3-redact.py --check`
+    flags is not written (exit 1). The artefact lines, the commands, the session window and the "Resets and
+    reboots outside the rows" and "Console" sections are still added by hand.
+
     What the three slices on `origin/main` look like: `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34`,
     `-rows35-51` — `<YYYY-MM>`, the name shape the Pi 4 gles3 slices of the same shape use, while
     `tools/cts/log/README.md`'s rule asks for the run day. Each holds `README.md`, `results.tsv` and `rows.md`
