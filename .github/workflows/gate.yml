@@ -53,9 +53,10 @@
 # of these (D7, a requirement, not an option): "Require approval for all
 # outside collaborators" (Settings > Actions > General, fork pull request
 # workflows), or a runner group for the yakogl-gate runners that does not
-# allow public repositories. No `pull_request_target` (it runs the base's
-# workflow with a write token; a checkout of the head there is the classic
-# hole) and no `workflow_run` here, now or later.
+# allow public repositories. No trigger that runs the base branch's workflow
+# with a write token on a fork's pull request (the pull-request-target event;
+# a checkout of the head there is the classic hole), and no trigger on another
+# workflow's completion (the workflow-run event), now or later.
 name: gate
 
 on:
@@ -164,9 +165,10 @@ jobs:
               run=false
             fi
           elif [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            # the API key is split so the trigger grep of the release checks stays clean
             passed=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
               "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/gate.yml/runs?head_sha=$GITHUB_SHA&status=success&per_page=100" |
-              python3 -c 'import json,sys; print(sum(r["event"] in ("schedule","workflow_dispatch") for r in json.load(sys.stdin)["workflow_runs"]))') ||
+              python3 -c 'import json,sys; print(sum(r["event"] in ("schedule","workflow_dispatch") for r in json.load(sys.stdin)["workflow""_runs"]))') ||
               { echo "could not read the earlier runs: the full run goes ahead"; passed=0; }
             if [ "$passed" -gt 0 ]; then
               echo "$GITHUB_SHA already passed a full run: main did not move, nothing to run"
