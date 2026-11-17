@@ -9,6 +9,13 @@ the status comment for GitHub issue #2. It edits no file. When --check fails (mi
 verdicts, several commits) the drafts are still printed, marked PARTIAL, the problems are named, and the
 exit status is 1.
 
+"begun" in the drafts counts each mustpass case at most once, with merge's record rule (one record per
+entry: the first input whose row is real; an entry in two inputs is a --check problem). A record's begun
+can exceed its entry's mustpass cases (cases a wildcard selects outside the mustpass list, cases begun
+twice), so a campaign's raw begun total can exceed mustpass; the drafts count it per case, capped per
+entry at its mustpass cases, and a raw begun above mustpass is named as a problem (PARTIAL, exit 1),
+never printed silently.
+
   imx8mp-gles3-report.py [--table T] [--mustpass M] [--date YYYY-MM-DD] [--root R] [--apply R] <slice dir>...
 
 After the drafts a block "anchors" names, for RESULTS.md, STATUS.md and ROADMAP.md of the tree R (default:
@@ -66,14 +73,17 @@ def expand(c):
 
 def parse_totals(text):
     tot = miss = None
+    rows = []  # per-entry totals: [mustpass, begun, pass, fail, n.s., other, none]
     for line in text.splitlines():
         f = line.split()
         if f and f[0] == 'total' and len(f) == 8:
             tot = [int(x) for x in f[1:]]
+        elif len(f) == 8 and re.fullmatch(r'e\d+', f[0]):
+            rows.append([int(x) for x in f[1:]])
         m = re.match(r'no record: (\d+) of (\d+) entries \(([^)]*)\), (\d+) mustpass cases', line)
         if m:
             miss = (int(m.group(1)), int(m.group(2)), m.group(3), int(m.group(4)))
-    return tot, miss
+    return tot, miss, rows
 
 
 def rel(d):
@@ -128,12 +138,26 @@ def main():
     problems = [l[5:].strip() for l in out_c.splitlines() if l.startswith('FAIL:')]
     if rc_c not in (0, 1):
         problems.append('merge --check could not run: %s' % (err_c.strip() or out_c.strip() or 'exit %d' % rc_c))
-    tot, miss = parse_totals(out_t)
+    tot, miss, rows = parse_totals(out_t)
     if rc_t != 0 or tot is None:
         problems.append('merge --totals gave no total row: %s' % (err_t.strip() or 'exit %d' % rc_t))
-        tot = [0] * 7
+        tot, rows = [0] * 7, []
     if miss is None:
         miss = (0, 0, 'none', 0)
+    mp, begun, npass, nfail, nns, nother, nnone = tot
+    # begun counts each mustpass case at most once: merge --totals sums one row per entry, one record per
+    # entry (the first input whose row is real; an entry in two inputs is a --check problem named above),
+    # and a record cannot begin more mustpass cases of its entry than the entry has. begun > mustpass is
+    # then overcounting (an entry run twice summed, a case begun twice, wildcards beyond the mustpass
+    # list): the drafts count it once per case, capped per entry, and the raw total is named, not printed.
+    begun_once = sum(min(m_i, b_i) for m_i, b_i, *_ in rows)
+    capped = begun - begun_once if begun > begun_once else 0
+    if begun > mp:
+        problems.append('begun %s exceeds mustpass %s: records begin more cases than their entries have '
+                        'mustpass cases (an entry in two records, a case begun twice, wildcards beyond the '
+                        'mustpass list); the drafts count each case once (%s), the raw total is an '
+                        'inconsistency to fix in the records' % (n(begun), n(mp), n(begun_once)))
+    begun = begun_once
     ok = rc_c == 0 and not problems
 
     commits = []
@@ -145,7 +169,6 @@ def main():
     commit_txt = ' and '.join('`%s`' % c for c in full) or 'an unnamed commit'
     short_txt = ' and '.join('`%s`' % c[:8] for c in full) or 'an unnamed commit'
 
-    mp, begun, npass, nfail, nns, nother, nnone = tot
     n_entries = miss[1] or 133
     run_n = n_entries - miss[0]
     if miss[0]:
@@ -161,9 +184,13 @@ def main():
 
     print('=== imx8mp-gles3-report: i.MX8MP dEQP-GLES3 drafts (%s) ===' % args.date)
     if not ok:
-        print('*** PARTIAL: merge --check failed (exit %d); these drafts are not final ***' % rc_c)
+        reason = 'merge --check failed (exit %d)' % rc_c if rc_c else 'the merge totals are inconsistent'
+        print('*** PARTIAL: %s; these drafts are not final ***' % reason)
         for p in problems:
             print('  problem: %s' % p)
+    if capped:
+        print('note: begun counts each mustpass case once: %s cases the records begin outside the mustpass '
+              'list or twice (wildcards, reruns) are not counted' % n(capped))
     print()
     print('--- RESULTS.md (ES 3.0 section, replaces "**i.MX8MP**: not run on the board") ---')
     results_txt = ('%s**i.MX8MP, whole tree** on %s (tools/cts/imx8mp-gles3-tree.txt, %d entries; recipe\n'
@@ -171,6 +198,9 @@ def main():
                        partial, commit_txt, n_entries, args.date, entries_txt, n(mp), n(begun)))
     results_txt += '\n\n| Pass | Fail | NotSupported | Other | No result |\n|---:|---:|---:|---:|---:|\n'
     results_txt += '| %s | %s | %s | %s | %s |\n' % five
+    if capped:
+        results_txt += ('\n- begun counts each mustpass case once: %s cases the records begin outside the '
+                        'mustpass list or twice (wildcards, reruns) are not counted.' % n(capped))
     results_txt += '\n- Records: %s; %s.\n' % (dirs_txt, reset_txt)
     results_txt += '- Every case that is not Pass: `docs/es3/imx8mp-gles3-notpass.tsv`.'
     for p in problems:
