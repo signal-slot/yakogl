@@ -5657,6 +5657,159 @@ fn a_frame_into_an_integer_target_loads_its_bits_back_raw() {
     }
 }
 
+/// The program a frame load bound at `gpu`, `row`'s length ([`FBLOAD_ROWS`]),
+/// read back from the platform's memory.
+fn load_program(rig: &Rig, gpu: u64, row: usize) -> Vec<u32> {
+    let n = internal(FBLOAD_ROWS[row]).usc_dw as u64;
+    (0..n).map(|k| rig.gpu_u32(gpu + 4 * k)).collect()
+}
+
+/// The pixel output registers `words` writes, in order, as the online
+/// compiler's decoder reads them: the destinations in the bank the
+/// program's last group writes (it ends on its last output write), at
+/// index 32 + register. Also checks that the groups end on the last byte.
+#[cfg(feature = "shaderc-online")]
+fn decoded_pixel_outputs(words: &[u32]) -> Vec<(usize, u32)> {
+    use crate::shaderc::online::powervr::decode::decode_group;
+    use crate::shaderc::online::powervr::operands::dsts;
+    let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let mut dst = Vec::new();
+    let mut off = 0;
+    while off < bytes.len() {
+        let g = decode_group(&bytes, off).unwrap_or_else(|e| panic!("the group at {off} does not decode: {e:?}"));
+        dst.push((off, g.dst.as_ref().and_then(|d| dsts(d)[0]).map(|o| (o.bank, o.index))));
+        off += g.total;
+    }
+    assert_eq!(off, bytes.len(), "the groups end on the last byte");
+    let (_, Some((bank, _))) = *dst.last().expect("a program") else { panic!("ends without a destination") };
+    dst.iter().filter_map(|&(off, d)| d.filter(|&(b, i)| b == bank && i >= 32).map(|(_, i)| (off, i - 32))).collect()
+}
+
+/// [`pixel_output_bytes`] finds exactly the pixel output writes the decoder
+/// reads in every frame load program, outputs 0.. in order, and a copy with
+/// them moved up by `reg` ([`fbload_program_at`]) decodes to the same
+/// program writing outputs `reg`.. instead.
+#[cfg(feature = "shaderc-online")]
+#[test]
+fn the_frame_load_programs_pixel_output_writes_are_found_and_moved() {
+    for (row, &r) in FBLOAD_ROWS.iter().enumerate() {
+        let words = internal_words(internal(r));
+        let (at, n) = pixel_output_bytes(words).unwrap_or_else(|| panic!("row {row}: its output writes"));
+        assert_eq!(n as u32, surf_dwords_of_row(row), "row {row}: one write per output dword");
+        let want: Vec<(usize, u32)> = (0..n).map(|k| (at[k] - 7, k as u32)).collect();
+        assert_eq!(decoded_pixel_outputs(words), want, "row {row}");
+        for reg in 1..=PVR_BACKEND_MAX_OUT_REGS - n as u32 {
+            let mut moved = words.to_vec();
+            for &i in &at[..n] {
+                moved[i / 4] += reg << (i % 4 * 8);
+            }
+            let want: Vec<(usize, u32)> = (0..n).map(|k| (at[k] - 7, k as u32 + reg)).collect();
+            assert_eq!(decoded_pixel_outputs(&moved), want, "row {row} moved to register {reg}");
+        }
+    }
+}
+
+/// Two integer attachments of one layout (dEQP's shader executor, drawn by
+/// `several_int_targets_drawn`, which never clears, so every such frame
+/// loads): the frame load restores each attachment, not attachment 0 alone.
+/// One load object per attachment, each reading its own attachment raw
+/// through the R32UI layout's load program, and attachment 1's program
+/// writing pixel output 1 -- the register the end-of-tile emit stores
+/// attachment 1 from -- and nothing else.
+#[test]
+fn a_frame_into_several_integer_targets_loads_each_back_raw() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.do_clear = false;
+    int_target(&mut d, GLES_SURF_R32UI);
+    d.num_targets = 2;
+    d.targets[1] =
+        GlesDrawTarget { gpu: d.target_gpu + 0x10_0000, w: 64, h: 64, format: GLES_SURF_R32UI, out_shift: 0 };
+    let mut fs = ShcShader::ZERO;
+    fs.meta_off = SHC_NO_META;
+    fs.temps = 3;
+    fs.num_outputs = 2;
+    fs.blend_key = shaderc::shc_blend_key_int_rt(shaderc::ShcIntRt { channels: 1, bits: 32, signed: false });
+    d.fs = &fs;
+    assert!(several_int_targets_drawn(&d, Some(&fs)));
+    assert_eq!(draw(&d), 0);
+    let (b, fl) = (rig.b(), rig.fbload());
+    assert_eq!(b.frame_quads, 2, "one load per attachment");
+    let row = fbload_row(GLES_SURF_R32UI);
+    assert_eq!(FBLOAD_ROWS[row], PVR_INTERNAL_FBLOAD_U32);
+    for i in 0..2 {
+        let l = fl.loads[i];
+        assert_eq!(l.tex.base_gpu, d.targets[i].gpu, "attachment {i}: its own texture");
+        assert_eq!((l.tex.width, l.tex.height, l.tex.mip_levels), (64, 64, 1), "attachment {i}");
+        assert_eq!(l.tex.format, PVR_TEXFMT_RAW32, "attachment {i}: read raw");
+        assert_eq!((l.row, l.out_reg), (row, i as u32), "attachment {i}: the R32UI load at output {i}");
+    }
+    assert_eq!(fl.loads[0].fs_usc_gpu, b.fbload_fs_int[0].gpu);
+    assert_eq!(fl.loads[1].fs_usc_gpu, b.fbload_fs_at[row][0].gpu);
+    assert!(core::ptr::eq(fl.load_draw.fs, &fl.fs_int_sh[0]), "the R32UI program's descriptor");
+    assert!(!fl.load_draw.depth_test && !fl.load_draw.stencil && fl.load_draw.color_write);
+    /* in submission order: neither load hides the other */
+    assert_eq!(with_gen(|g| g.passtypes[..2].to_vec()), [PVR_PPP_PASSTYPE_TRANSLUCENT; 2]);
+    /* attachment 1's program is the R32UI row with its one output write
+     * moved from register 0 to 1 */
+    let words = internal_words(internal(PVR_INTERNAL_FBLOAD_U32));
+    let moved = load_program(&rig, fl.loads[1].fs_usc_gpu, row);
+    let (at, n) = pixel_output_bytes(words).expect("the row's output write");
+    assert_eq!(n, 1);
+    let diff: Vec<usize> = (0..words.len() * 4)
+        .filter(|&k| moved[k / 4] >> (k % 4 * 8) & 0xff != words[k / 4] >> (k % 4 * 8) & 0xff)
+        .collect();
+    assert_eq!(diff, [at[0]], "only the output write's destination differs");
+    assert_eq!(moved[at[0] / 4] >> (at[0] % 4 * 8) & 0xff, 0x21, "special 33: pixel output 1");
+    #[cfg(feature = "shaderc-online")]
+    assert_eq!(decoded_pixel_outputs(&moved).iter().map(|&(_, r)| r).collect::<Vec<_>>(), [1]);
+    /* the emit stores attachment 1 from that register */
+    assert_eq!(pvr_backend_flush(), 0);
+    let emits = rig.eot_emits();
+    let e = emits.last().expect("an end-of-tile program");
+    assert_eq!(((e[1] >> 14) & 3, (e[3] >> 14) & 3), (0, 1), "source_pos of attachments 0 and 1");
+}
+
+/// Float attachments go through the same load: two RGBA8 attachments load
+/// as two RGBA8 objects, the second writing output 1; RGBA8 beside RGBA16F
+/// loads the second through the RGBA16F program, writing its two halves to
+/// the even pair 2, 3 the emit reads it from.
+#[test]
+fn a_frame_into_several_float_targets_loads_each_back() {
+    for (second, row, reg) in [(GLES_SURF_RGBA8888, 0usize, 1u32), (GLES_SURF_RGBA16F, 1, 2)] {
+        let rig = Rig::new();
+        let mut d = rig.draw(3);
+        d.do_clear = false;
+        d.target_format = GLES_SURF_RGBA8888;
+        d.num_targets = 2;
+        d.targets[0] = GlesDrawTarget { gpu: d.target_gpu, w: 64, h: 64, format: GLES_SURF_RGBA8888, out_shift: 0 };
+        d.targets[1] = GlesDrawTarget { gpu: d.target_gpu + 0x10_0000, w: 32, h: 32, format: second, out_shift: 0 };
+        assert_eq!(draw(&d), 0, "{}", gles_surf_name(second));
+        let (b, fl) = (rig.b(), rig.fbload());
+        assert_eq!(b.frame_quads, 2, "{}: one load per attachment", gles_surf_name(second));
+        let (l0, l1) = (fl.loads[0], fl.loads[1]);
+        assert_eq!((l0.tex.base_gpu, l0.row, l0.out_reg, l0.fs_usc_gpu), (d.target_gpu, 0, 0, b.fbload_fs.gpu));
+        assert_eq!(
+            (l1.tex.base_gpu, l1.tex.width, l1.tex.stride_texels, l1.tex.format),
+            (d.targets[1].gpu, 32, 32, gles_surf_texfmt(second)),
+            "{}: its own texture",
+            gles_surf_name(second)
+        );
+        assert_eq!((l1.row, l1.out_reg), (row, reg), "{}", gles_surf_name(second));
+        assert_eq!(l1.fs_usc_gpu, b.fbload_fs_at[row][reg as usize - 1].gpu, "{}", gles_surf_name(second));
+        let moved = load_program(&rig, l1.fs_usc_gpu, row);
+        let (at, n) = pixel_output_bytes(internal_words(internal(FBLOAD_ROWS[row]))).expect("its output writes");
+        let regs: Vec<u32> = at[..n].iter().map(|&i| (moved[i / 4] >> (i % 4 * 8) & 0xff) - 0x20).collect();
+        let want: Vec<u32> = (reg..reg + surf_out_dwords(second)).collect();
+        assert_eq!(regs, want, "{}: the registers it writes", gles_surf_name(second));
+        #[cfg(feature = "shaderc-online")]
+        assert_eq!(decoded_pixel_outputs(&moved).iter().map(|&(_, r)| r).collect::<Vec<_>>(), want);
+        assert_eq!(pvr_backend_flush(), 0);
+        let e = rig.eot_emits().last().expect("an end-of-tile program").clone();
+        assert_eq!((e[3] >> 14) & 3, reg, "{}: the emit's source_pos", gles_surf_name(second));
+    }
+}
+
 /// What the PowerVR cannot do with an integer target is refused by name:
 /// a clear whose colour mask keeps some of its channels, and an integer
 /// attachment beside another one.
