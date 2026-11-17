@@ -437,6 +437,23 @@ pub const GLES_SURF_SRGB8_A8: u8 = 25;
  * [`gles_surf_is_integer`] is false for it, as for the sRGB surface. */
 pub const GLES_SURF_RGB10_A2: u8 = 26;
 
+/* The ES 3.0 colour surfaces GL_EXT_color_buffer_float adds beyond R16F,
+ * RGBA16F and R32F: RG32F (8 bytes a pixel), RGBA32F (16) and the packed
+ * R11F_G11F_B10F word (4). A back end that can draw and read them back sets
+ * the bit `format - GLES_SURF_FLOAT_FIRST` in [`FLOAT_RT_FORMATS`]; no back
+ * end does yet, so [`rt_format_drawable`] is false for all three and the GL
+ * core does not produce them (plan #360). */
+pub const GLES_SURF_RG32F: u8 = 27;
+pub const GLES_SURF_RGBA32F: u8 = 28;
+pub const GLES_SURF_R11F_G11F_B10F: u8 = 29;
+pub const GLES_SURF_FLOAT_FIRST: u8 = GLES_SURF_RG32F;
+pub const GLES_SURF_FLOAT_LAST: u8 = GLES_SURF_R11F_G11F_B10F;
+
+/// Is this one of the three extension float surfaces above?
+pub const fn gles_surf_is_ext_float(format: u8) -> bool {
+    format >= GLES_SURF_FLOAT_FIRST && format <= GLES_SURF_FLOAT_LAST
+}
+
 /// Is this the sRGB colour surface?
 pub const fn gles_surf_is_srgb(format: u8) -> bool {
     format == GLES_SURF_SRGB8_A8
@@ -518,6 +535,9 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
         GLES_SURF_RGB10_A2UI => "RGB10_A2UI",
         GLES_SURF_SRGB8_A8 => "SRGB8_ALPHA8",
         GLES_SURF_RGB10_A2 => "RGB10_A2",
+        GLES_SURF_RG32F => "RG32F",
+        GLES_SURF_RGBA32F => "RGBA32F",
+        GLES_SURF_R11F_G11F_B10F => "R11F_G11F_B10F",
         _ => "unknown",
     }
 }
@@ -558,6 +578,16 @@ pub const INTEGER_RT_FORMATS: u32 = {
 #[cfg(feature = "host-test")]
 pub static HOST_INTEGER_RT_FORMATS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
+/// The extension float surfaces ([`GLES_SURF_RG32F`], [`GLES_SURF_RGBA32F`],
+/// [`GLES_SURF_R11F_G11F_B10F`]) this build's back end can render into and
+/// read back: bit `format - GLES_SURF_FLOAT_FIRST`. Zero for every GPU today.
+pub const FLOAT_RT_FORMATS: u32 = 0;
+
+/// Host tests only: extension float surfaces a test back end claims to
+/// render, ORed into [`FLOAT_RT_FORMATS`] (the host back ends draw nothing).
+#[cfg(feature = "host-test")]
+pub static HOST_FLOAT_RT_FORMATS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
 /// Can this build's back end render into [`GLES_SURF_SRGB8_A8`], encoding
 /// what it writes and blending in linear space? The PowerVR does (the PBE's
 /// gamma over the F16 accumulation, the fragment shader's sRGB class), the
@@ -590,6 +620,15 @@ pub fn rt_format_drawable(format: u8) -> bool {
     if format == GLES_SURF_RGB10_A2 {
         return sampled_texfmts() & gles_texfmt_bit(GLES_TEXFMT_RGB10A2) != 0;
     }
+    if gles_surf_is_ext_float(format) {
+        #[allow(unused_mut)]
+        let mut mask = FLOAT_RT_FORMATS;
+        #[cfg(feature = "host-test")]
+        {
+            mask |= HOST_FLOAT_RT_FORMATS.load(core::sync::atomic::Ordering::Relaxed);
+        }
+        return (mask >> (format - GLES_SURF_FLOAT_FIRST)) & 1 != 0;
+    }
     if !gles_surf_is_integer(format) {
         return true;
     }
@@ -603,6 +642,12 @@ pub fn rt_format_drawable(format: u8) -> bool {
 }
 
 pub const fn gles_surf_bytes_per_pixel(format: u8) -> u32 {
+    if format == GLES_SURF_RGBA32F {
+        return 16;
+    }
+    if format == GLES_SURF_RG32F {
+        return 8;
+    }
     if let Some(l) = gles_surf_int_layout(format) {
         return if l.bits == 10 { 4 } else { l.channels as u32 * (l.bits as u32 / 8) };
     }
@@ -645,6 +690,8 @@ pub const fn gles_surf_texfmt(format: u8) -> u8 {
          * the accumulation the PBE encodes again on store */
         GLES_SURF_SRGB8_A8 => GLES_TEXFMT_SRGB8_A8,
         GLES_SURF_RGB10_A2 => GLES_TEXFMT_RGB10A2,
+        GLES_SURF_RGBA32F => GLES_TEXFMT_RGBA32F,
+        GLES_SURF_R11F_G11F_B10F => GLES_TEXFMT_R11G11B10F,
         _ => GLES_TEXFMT_RGBA8,
     }
 }
