@@ -390,3 +390,170 @@ What the references do not cover, and why:
   tests of `src/shaderc/online/mali/tests.rs` for the first.
 - Only a sample of the rsg groups (G) and of `fragment_ops.interaction` was
   taken. The measure's per-shape counts say whether more are needed.
+
+## 6. Lowering map (at 008306cb)
+
+Plan #377, item map-intval. Docs only: nothing was built or run. Every
+`file:line` is of commit `008306cb31fe` (the integration tip) and **replaces
+the line numbers of section 1**, which were read at an older tree (its
+`nir.rs:2910/3087/3211/3236` are now `3033/3234/3358/3383`; the `nir_fs.rs`
+ones did not move). `emit.rs` already holds most integer rows the references
+use: 32-bit `Iadd`, `Imul`, `Isub`, `Ineg`, `Ixor`, `Iand`, `Ior`, `Inot`,
+`Imin`, `Imax`, `Iabs`, `B2i`, `Icmp(Lt/Ge/Eq/Ne)` (`emit.rs:65`-`:152`,
+`:280`-`:327`) and 16-bit `Icmp(Eq/Ne)`, `Ior`, `Iand` (`:163`-`:190`); `bir.rs`
+has `IaddS32`, `IaddImmI32`, `IsubS32`, `ImulI32`, `IaddV2u16`. The walks, not
+the emitter, refuse.
+
+### (a) Every place `IntValue` is raised
+
+The variant: `mod.rs:126`, in `GAPS` at `mod.rs:337`, text at `mod.rs:413`.
+Raised at six sites (the `tests.rs` hits are expectations):
+
+| # | file:function (line) | condition |
+|---|---|---|
+| 1 | `nir.rs`, vertex walk `build` (`nir.rs:3033`) | `IrOp::ConstBool(_)`: any boolean literal in the vertex walk. `ConstI32` (`:3031`) is taken as its bits. The FS walk folds the same op to 0 / `u32::MAX` at `nir_fs.rs:4238`. |
+| 2 | `nir.rs`, `build`, `AluOp::Imod` arm (`nir.rs:3234`) | `imod` whose divisor is not a positive power-of-two constant (`:3230`-`:3235`). ES 1.00 has no `%`. |
+| 3 | `nir.rs`, `build`, the `F2i..Iadd` arm, `iadd` match (`nir.rs:3358`) | `iadd(p, q)` with no `ineg` source (the `isub` rewrite, `:3350`-`:3357`) that `fold_int` (`nir.rs:816`) did not fold: every `a + b`, `i++`, `+=` of ints. |
+| 4 | `nir.rs`, `build`, the arm ending `AluOp::Inot => return Err(IntValue)` (`nir.rs:3383`) | `Imul, Idiv, Iand, Ixor, Ilt, Ile, Ine, B2i, I2b, Udiv, Umod, Ult, Ule, Imin, Imax, Umin, Umax, Inot` (`:3361`-`:3383`). Taken before it: `Ieq`, `Ior`, `Bcsel`, `Bany/Ball` (`vs_reduce`, `nir.rs:2657`), `Ftrunc F2i F2u I2f U2f Ishl Ishr Ushr Ineg`, `isub`. |
+| 5 | `nir_fs.rs`, `Fs::mask_op` (`nir_fs.rs:1532`, raise `:1538`) | `ior`/`iand` of two booleans that are not two constants, not both `bool32`, not both `mask16`. Called from the any/all accumulation (`nir_fs.rs:4699`) only. |
+| 6 | `nir_fs.rs`, `Fs::int_lane` (`nir_fs.rs:1564`, last arm `:1629`) | any op not taken by the arms above it: `F2i` of a lane that is not fp16, uniform or fp32; `I2b` of a non-bool-uniform; `Bnot/Inot` of a non-`mask_lane`; `Ieq/Ine` of a mask and a constant other than 0 / ~0; **`Ine` of two run-time ints**, `Imul`, `Ineg`, `Isub`, `B2i`, `Imin`, `Imax`, `Ixor`, `Iand`, `Ior`; `Iadd/I2f/U2f/Idiv` with a `mask_lane` source. |
+
+Sites 5 and 6 are the only FS sites. `int_lane` is called from the `int_op(a)`
+arm of the FS instruction walk (`nir_fs.rs:4709`-`:4724`; `int_op` at
+`nir_fs.rs:10016`), twice recursively (`:1602`, `:1606`) and at `nir_fs.rs:3451`.
+The highp walk uses the same arm.
+
+### (b) What to change and emit
+
+**lower-intval-1, the fragment walk** (`nir_fs.rs`; a row in `emit.rs`/`bir.rs`
+only if missing). Integers stay 32-bit in a mediump shader; a boolean takes its
+compare's width.
+
+1. `Fs::mask_op` (`:1532`): replace the `Err` at `:1538` with
+   `pan_nir_lower_bool_to_bitsize`'s mix rule. `reslib_mixed_fs` shows it: the
+   16-bit mask (`FCMP_OR.v2f16.ne.m1`) widened by `IADD.v2u16 .h00` into the
+   32-bit side, then `LSHIFT_AND.i32`. `reslib_int_fs` (32-bit
+   `ICMP_OR.u32.eq.m1` straight into `MUX.v2i16`) and `reslib_bvec_fs`
+   (`ICMP_OR.v2u16.eq.m1` of 16-bit masks) pin the pure cases. `mask16`
+   (`:1512`) matches only `Fcmp|Ior|Iand` nodes at 16 bits; it must also take
+   the 16-bit `Icmp(Eq/Ne)` node a `bvec == bvec` makes (`emit.rs:163`,
+   `:167`), or `opfs_equal_bvec2` and `reslib_bvec_fs` stop earlier. The
+   widening needs a node/row of its own (none in `emit.rs`).
+2. `Fs::int_lane` (`:1564`), new arms before `:1629`: `Ine` of two run-time
+   ints as `Icmp(Ne)` (`ICMP_OR.u32.ne.m1`, `emit.rs:280`); `Imul` (`IMUL.i32`),
+   `Isub` (`ISUB.s32`), `Ineg` (`ISUB.s32 0, a`), each guarded by
+   `!mask_lane` like the `Iadd` arm (`:1618`); `Iadd` with a constant must
+   fuse to `IADD_IMM.i32` (`opt.rs:409`-`:421` does); `Ixor` of masks as
+   `LSHIFT_XOR` at 32 bits and at 16 bits (`opfs_logical_xor`:
+   `LSHIFT_XOR.v2i16`; `emit.rs:189`-`:190` have no 16-bit `Ixor`, so add the
+   row and a `bir` op); `B2i` (`MUX.i32`, `emit.rs:157`); `Imin/Imax`
+   (`CSEL.s32`, `emit.rs:114`-`:115`); `Inot` of a non-mask (`emit.rs:324`).
+   `Idiv` exists (`Fs::idiv`, `:1700`); check `opfs_div_int_mediump` first
+   before adding anything.
+3. The colour `vec4(RES, RES, RES, 1.0)` / `vec4(bvec)` is `b2f` of a mask,
+   folded into the store's `MUX.v2i16` by the `mask_colour`/`select32` path
+   (`nir_fs.rs:1502`); only the byte compare proves it. `opfs_not` has no
+   integer op in Mesa (`FCMP_OR.v2f16.ge.f1`): the `inot` must fold into the
+   compare (the `Bnot` arm, `:1594`), not be emitted.
+4. `intloop_tri_int` and `tools/shaders/es100/tri_int.frag` are the same work
+   (mali-int-and-size.md item 3): an extra byte-equal check.
+
+**lower-intval-2, the vertex walk** (`nir.rs` `build`; `opt.rs`/`motion.rs` only
+if the link needs it). A mediump VS compare is still fp16
+(`opvs_not_equal_bvec3`: `FCMP_OR.v2f16.lt.m1`, then `ICMP_OR.v2u16.ne.m1`), so
+the VS meets the same width mix.
+
+1. Site 1 (`nir.rs:3033`): `Val::Const(if b { u32::MAX } else { 0 })` per lane,
+   as `nir_fs.rs:4238`. `nir.rs:897` already counts `ConstBool` as constant.
+   This alone is `rsg_conv_vs`.
+2. Site 3 (`nir.rs:3358`): a general `iadd` as `(Alu::Iadd, p, q)`; `opt.rs:409`
+   gives `IADD_IMM.i32` (`opvs_add_int_highp`, `opvs_post_increment_int`).
+3. Site 4 (`nir.rs:3361`-`:3383`): split the arm. `Imul` -> `Alu::Imul`;
+   `Ilt` -> `Icmp(Lt)`, `Ile` -> `Icmp(Ge)` with swapped sources (as
+   `nir_fs.rs:1614`-`:1617`), `Ine` -> `Icmp(Ne)`; `Iand`, `Ixor`, `Inot`,
+   `B2i`, `Imin`, `Imax` -> the 32-bit rows; `I2b` of a uniform word -> the
+   word (`uniapi_bool_vs`: one `CSEL.u32.eq` on the FAU word; `_initial_` swaps
+   its sources; the uniform-type gate of study-unitype is met first for
+   `bvec4`); `Idiv` -> `Fs::idiv` is a method of `Fs` over `self.nir`, so lift
+   it to `Nir` (or a free function) first (`opvs_div_ivec2_highp`, the
+   sequence twice, 144 words). `Udiv/Umod/Umin/Umax/Ult/Ule` stay refused (no
+   reference).
+4. Site 2 (`nir.rs:3234`): leave refused.
+5. `opvs_logical_and` has no integer op in Mesa (`FMIN.v2f16` and one
+   `FCMP_OR`): it needs an algebraic rewrite of the `iand` of two compares,
+   not an op. It may land last.
+6. `vec4(bvec)` (`Bcsel(c, 1.0, 0.0)` -> `B2f`) and `vec4(int)` (`I2f`) are
+   already taken in `build`.
+
+### (c) Tests each step un-ignores, in order
+
+Remove each test's `#[ignore]` and its `PINNED` entry (`refusals_pinned`,
+`tests/mali_deqp_intval.rs:211`) in the same commit.
+
+**lower-intval-1** (12 tests): `opfs_not`; `reslib_float_fs`; `reslib_int_fs`;
+`opfs_add_int_mediump`; `opfs_mul_ivec4_highp`; `opfs_sub_assign_ivec2_lowp`;
+`opfs_cmp_ivec3`; `reslib_bvec_fs` and `opfs_equal_bvec2`; `opfs_logical_xor`;
+`reslib_mixed_fs`; `opfs_div_int_mediump`. (The file marks `rsg_cond_fs`
+step 1 too; it stays ignored, see (e).)
+
+**lower-intval-2** (11 tests): `rsg_conv_vs`; `reslib_int_vs`;
+`opvs_add_int_highp` and `opvs_post_increment_int`; `opvs_mul_ivec3_mediump`;
+`opvs_less_ivec4`; `opvs_not_equal_bvec3`; `uniapi_bool_vs` and
+`uniapi_bool_initial_vs`; `opvs_div_ivec2_highp`; `opvs_logical_and`. (And
+`rsg_constbool_vs`, which stays ignored.)
+
+That is 12 + 11 = 23 of the 25; the other 2 stay ignored.
+The order only sequences within a step. A test can fail on a different
+refusal (study-varylink's equal-lane merge on a constant lane, for the `opvs_*`
+varyings): that is not a gap of the step; keep the test ignored and update
+its pin text, do not delete it.
+
+### (d) glmark2 verdicts the steps may move
+
+Rows of `tools/mali/corpus-verdicts.txt` refused with this text (6):
+`tools/shaders/es100/tri_int.frag`, `cond_complex.frag`, `loop_full.frag`,
+`tri_discard.frag`, `varyings15.frag` (all FS: step 1; `loop_full` may refuse
+next on a loop, #367) and `ret_nested.vert` (VS: step 2). Rows of
+`tests/fixtures/mali_glmark2_verdicts.txt` (3, all `20 ideas:speed=duration`):
+`fs c565` (step 1), `vs bf4b` and `vs c265` (step 2). A row that moves, to `ok`
+or to the next refusal, is regenerated in the lowering commit
+(`MALI_GLMARK2_WRITE=1`, the test's header; `corpus-verdicts.sh --write`).
+Every other row (`ok` and other refusals) can also move through a wrong width
+rule, since `intbool_*`, `intbig_*`, `intloop_*` and `facing.frag` reach the
+same FS arms: their byte compares must stay unchanged. `tests.rs` expects
+`IntValue` at `:1235` (VS `gl_Position = p * float(int(p.x) * 3)`, the `imul`:
+step 2), `:1251` and `:7096`; they are not byte-compares and move in the same
+commit.
+
+### (e) Risks, and what cannot be compared
+
+- **`rsg_cond_fs` and `rsg_constbool_vs` cannot be byte-compared.** Mesa's link
+  removes the dead varyings (`rsg_cond_fs`) or moves the constant varying into
+  the FS (`rsg_constbool_vs`). `tests/mali_ref` compiles through
+  `compile_pair` and does not reach our link-time constant-lane path
+  (`vs_constants`; its module comment). They stay `#[ignore]`d with that reason
+  after both steps; the unit tests of `src/shaderc/online/mali/tests.rs` hold
+  them. Their shader bodies (mediump int uniform `S32_TO_F32` of the FAU word;
+  folded `vec4(true, 1, 1.0, true)`) are exercised by `reslib_int_fs` and
+  `rsg_conv_vs`.
+- **#367 overlap.** `int_lane` and `int32` are where #367's INT_VALUE and loop
+  items add arms (`mali-int-loops.md`); lower-loops-1 and lower-intval-1 both
+  edit `nir_fs.rs`. Re-read `int_lane` on the latest main before editing and
+  put each arm next to its neighbour so a conflict is mechanical.
+- **The width rule.** A wrong widening in `mask_op` changes the 16-bit
+  any/all of existing mediump shaders. Keep the `bool32` and `mask16` cases
+  first and the mix last.
+- **Folding hides Mesa's program.** `rsg_*` and `reslib_*` mostly fold in Mesa.
+  `fold_int` (`nir.rs:816`) covers the compares and some arithmetic
+  (`:835`-`:839`); add a case with each new arm (`Imul`, `Iand`, `Ixor`,
+  `Imin`, `Imax`, `B2i`), or a literal folds in Mesa and not here.
+- **`opfs_not` and `opvs_logical_and`** are algebraic rewrites, not integer
+  ops: a faithful `inot` or `iand` is a byte mismatch.
+- **Division.** `Fs::idiv` numbers its nodes "node for node in the order of
+  case 79's NIR"; the VS's CSE and scheduling may not give the same order, so
+  `opvs_div_ivec2_highp` may need its own session.
+- **Next refusal.** How many of the 3,178 Fail become Pass is not known from
+  this map; the measure (`mali-deqp-families.md`) gives the refusal after this
+  one. The 88 `uniform_api` VS cases also need lower-unitype, and the `random.*`
+  VS cases lower-varylink.
+- Not measured: no build or test was run; sites and lines were read.
