@@ -27,7 +27,9 @@ trace's FAU table names each pushed uniform word by its value: uniform k of
 the declaration list (the vertex shader's, then the fragment shader's not
 already declared, `uniforms()`) gets component c (column-major for a matrix)
 = 16 * (k + 1) + c, an integer fp16 holds exactly. Without it every uniform
-is 0 and a uniform word cannot be told from a zero pad.
+is 0 and a uniform word cannot be told from a zero pad. An `int` / `ivecN`
+uniform gets the same values as integers, a `bool` / `bvecN` one true where
+c is even and false where it is odd (`uniform_components()`).
 
 `--second-frame` draws again after the glFlush, without a clear, and flushes:
 the second frame starts from the first one's image, which Mesa reloads
@@ -90,8 +92,8 @@ program without that first line takes the ES 2.0 path above unchanged.
 `sampler2DShadow` gl_test case 218's 4x4 DEPTH_COMPONENT32F texture under
 GL_COMPARE_REF_TO_TEXTURE, as the case sets it: the first such sampler
 GL_LESS and GL_NEAREST, the next ones GL_GEQUAL and GL_LINEAR, and
-`--uniform-values` sets `int` / `ivecN` uniforms with glUniform*iv (the same
-16*(k+1)+c values, as integers).
+`--uniform-values` sets `int` / `ivecN` and `bool` / `bvecN` uniforms with
+glUniform*iv.
 
 `--instances N` draws with glDrawArraysInstanced(…, 0, 6, N) instead of
 glDrawArrays. `--divisors D0,D1,...` (ES 3 path, one value per `in` of the
@@ -231,6 +233,7 @@ def attribute_columns(text):
 
 
 INT_UNIFORM_COMPONENTS = {"int": 1, "ivec2": 2, "ivec3": 3, "ivec4": 4}
+BOOL_UNIFORM_COMPONENTS = {"bool": 1, "bvec2": 2, "bvec3": 3, "bvec4": 4}
 UNIFORM_COMPONENTS = {"float": 1, "vec2": 2, "vec3": 3, "vec4": 4, "mat2": 4, "mat3": 9, "mat4": 16}
 
 
@@ -252,6 +255,20 @@ def uniforms(*texts):
 def uniform_value(k, c):
     """Component c of uniform k under --uniform-values."""
     return float(16 * (k + 1) + c)
+
+
+def uniform_components(k, ty):
+    """What --uniform-values gives uniform k of type ty: (True, floats) for
+    a float, vector or matrix, (False, integers) for an int, ivecN, bool or
+    bvecN (a bool is true where its component is even, so a bvecN has both
+    values), None for a type it does not set."""
+    if ty in UNIFORM_COMPONENTS:
+        return True, [uniform_value(k, c) for c in range(UNIFORM_COMPONENTS[ty])]
+    if ty in INT_UNIFORM_COMPONENTS:
+        return False, [int(uniform_value(k, c)) for c in range(INT_UNIFORM_COMPONENTS[ty])]
+    if ty in BOOL_UNIFORM_COMPONENTS:
+        return False, [1 - c % 2 for c in range(BOOL_UNIFORM_COMPONENTS[ty])]
+    return None
 
 
 def option(args, name, default, parse):
@@ -512,18 +529,18 @@ def main():
         for k, (name, ty) in enumerate(uniforms(open(vs_path).read(), open(fs_path).read())):
             if ty in SAMPLERS:
                 continue
-            n = UNIFORM_COMPONENTS.get(ty)
-            if n is None and ty in INT_UNIFORM_COMPONENTS:
-                n = INT_UNIFORM_COMPONENTS[ty]
-                loc = gl.glGetUniformLocation(prog, name.encode())
-                vals = (C.c_int * n)(*[int(uniform_value(k, c)) for c in range(n)])
+            given = uniform_components(k, ty)
+            if given is None:
+                raise SystemExit("gl_ref: --uniform-values does not set a %s uniform (%s)" % (ty, name))
+            floats, values = given
+            n = len(values)
+            loc = gl.glGetUniformLocation(prog, name.encode())
+            if not floats:
+                vals = (C.c_int * n)(*values)
                 getattr(gl, "glUniform%div" % n)(loc, 1, vals)
                 print("gl_ref: uniform %s %s at %d = %s" % (ty, name, loc, " ".join("%d" % v for v in vals)))
                 continue
-            if n is None:
-                raise SystemExit("gl_ref: --uniform-values does not set a %s uniform (%s)" % (ty, name))
-            loc = gl.glGetUniformLocation(prog, name.encode())
-            vals = (C.c_float * n)(*[uniform_value(k, c) for c in range(n)])
+            vals = (C.c_float * n)(*values)
             if ty.startswith("mat"):
                 getattr(gl, "glUniformMatrix%dfv" % {4: 2, 9: 3, 16: 4}[n])(loc, 1, 0, vals)
             else:

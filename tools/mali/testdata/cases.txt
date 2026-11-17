@@ -132,7 +132,7 @@ gm2_texswz_4                                     gm2_texswz_4.vert gm2_texswz_4.
 gm2_texswz_5                                     gm2_texswz_5.vert gm2_texswz_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:29:c28df276edb3
 gm2_texswz_6                                     gm2_texswz_6.vert gm2_texswz_6.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:13:7d1d03e963f7
 # #377 lower-intval-1: the dEQP-GLES2 "integer or boolean value" fragment shapes (docs/notes/mali-deqp-intval.md section 7),
-# drawn without --uniform-values (gl_ref.py sets no bool uniform). Our compiler is byte-equal to each reference
+# drawn with --uniform-values. Our compiler is byte-equal to each reference
 # (tests/mali_deqp_intval.rs). pan_shc's SPIR-V path has no lower_precision, so every mediump fragment program and the
 # passthrough vertex stage's mediump varyings differ (`mediump`). deqp_intval_reslib_mixed_fs and deqp_intval_opfs_logical_xor
 # are not listed: pan_shc's vertex position program has the reference's words but other facts, a result the list has no form for.

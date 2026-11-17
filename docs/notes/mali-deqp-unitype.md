@@ -378,14 +378,13 @@ verbatim.
 
 Caveats for the references:
 
-1. `tools/mali/gl_ref.py --uniform-values` sets float, int and ivec
-   uniforms and matrices (`gl_ref.py:229-234`, `:513-530`). It exits on a
-   `bool`/`bvec` and on a struct uniform. Leave the flag out for those (the
-   values do not change the instructions, `mali-uniform-types.md` section
-   6), except as in caveat 2.
-2. For `deqp_unitype_vsbvec3`, also make one run with true values (a small
-   `gl_ref.py` change belongs to the ref item, not this one). It shows
-   whether a raw `~0` reaches an instruction as a mask (section 3.3).
+1. `tools/mali/gl_ref.py --uniform-values` sets float, int, ivec, bool and
+   bvec uniforms and matrices (`uniform_components()`). It exits on a
+   struct uniform. Leave the flag out for that one (the values do not
+   change the instructions, `mali-uniform-types.md` section 6).
+2. `deqp_unitype_vsbvec3` is drawn with true values (a `bvecN` is true
+   where its component is even). It shows whether a raw `~0` reaches an
+   instruction as a mask (section 3.3).
 3. The matrix cases put `attribute highp vec4 a_position` and a
    `v_color`/`v_coords` varying around the operation. The `dynamic_*`
    variants add matrix attributes and varyings. Take the `uniform_*`
@@ -481,9 +480,10 @@ The three questions section 5 left to the references:
 3. **The scissor fragment shader's narrowing** (`fshighp_color`): two
    `V2F32_TO_V2F16` straight from the FAU words, no move.
 
-`vsbvec3` with true values (section 5, caveat 2) was not made. It needs a
-`gl_ref.py` change, and this item changes no `tools/mali` script. It is not
-needed for the mask question: `vsbvec3` and `fsmulti` only OR the raw bvec
+`vsbvec3` and `fsmulti` are drawn with true values (section 5, caveat 2):
+gl_ref.py sets a `bvecN` true where its component is even, and Mesa
+uploads a true as the word `ffffffff`. The words are the same as with
+every value false: `vsbvec3` and `fsmulti` only OR the raw bvec
 words and test the result against 0 (`LSHIFT_OR`, then `CSEL.u32.eq` or
 `.not`), and that is the same for a true of `1` and of `~0`. The bytes do
 not depend on the values; with `--uniform-values` only the printed FAU
@@ -900,7 +900,9 @@ P4, F7) and the nested member of `uniform_precision`; `lower-mixprec` for F2
 
 Plan #377 item `lower-unitype`. 11 of the 20 references are byte-equal to
 Mesa 26.2.1 (`tests/mali_deqp_unitype.rs`, `MATCHED`; 13 tests pass, 9 are
-ignored with their pin). The doc-m spike's patch (205547fa) was already on
+ignored with their pin). Since the references are drawn with
+`--uniform-values` it is 10 of 20 (12 pass, 10 ignored): `vsbvec3` has
+Mesa's program words but not its FAU order, below. The doc-m spike's patch (205547fa) was already on
 the tip when the item started: it took M3 (`gl_DepthRange` highp, a highp or
 struct-member uniform read at 32 bits and narrowed in a mediump fragment
 shader, `FsPrecision::fp32_uniforms`), M2 (fp32 `mat2`/`mat3` rows per
@@ -921,9 +923,15 @@ This item adds four, all in `src/shaderc/online/mali/`:
   `inot(ior(ior(b.y, b.x), b.z))`: `LSHIFT_OR.i32` twice, then the
   `bcsel(inot(a), ..)` arm's `CSEL.u32.eq r0, r0^, 0x0, 0x3F800000, 0x0`.
   The y-before-x order of the first OR is measured; other widths have no
-  reference and stay refused. The reference was drawn with its bool uniform
-  unset, so the test is `assert_matches_unset` (every uniform word 0; a true
-  of 1 or `~0` gives the same words).
+  reference and stay refused. The program words are
+  Mesa's. The FAU is not: the reference, drawn with `--uniform-values`
+  (the bvec3 true, false, true), holds the three uniform words as 0,
+  `ffffffff`, `ffffffff`, that is y first, the order Mesa's program reads
+  them; ours holds x, y, z, so the ORs take the words in another order
+  (the same result for this shape). The reference drawn with the
+  uniform unset could not show it. The test is ignored as `differs`
+  (`DIFFERS` of `tests/mali_deqp_unitype.rs`) until the FAU follows
+  Mesa's order.
 - `vsmat2_mediump`, `vsmat3_mediump` (M4): the vertex walk computes a
   mediump `fadd` / `fmul` / `ffma` / `fneg` over fp16 uniforms at 16 bits,
   as lower_precision does with `fp16_const_buffers` (`vs_uniform16`,

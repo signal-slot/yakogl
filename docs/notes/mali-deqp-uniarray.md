@@ -207,7 +207,7 @@ so in the commit.
 ## 6. References to make (`ref-uniarray`, `tools/mali/testdata/deqp_uniarray_*`)
 
 Each pair via the `pan_shc`/drm-shim method of `tools/mali/testdata/gm2_*`,
-without `--uniform-values` (int uniforms are refused by `gl_ref.py`), from the
+with `--uniform-values` where `gl_ref.py` sets the uniforms, from the
 `measure` item's representative pair of each shape:
 
 1. `deqp_uniarray_float_const` : `uniform float u[4]` read at constants 0..3,
@@ -231,11 +231,15 @@ Each reference is `tools/mali/testdata/deqp_uniarray_<name>.{vert,frag,
 expect.json}`; the shader files are dEQP's text (Khronos, Apache-2.0: each
 has a `.license` sidecar naming the case and the source). Every
 `expect.json` was made with the method of `gm2_*`
-(`README-pan_shc.md`, "The shim driver"), with no `--uniform-values`:
+(`README-pan_shc.md`, "The shim driver"), with `--uniform-values`. gl_ref.py
+gives the `int` index uniforms of `dyn_*` their values; an array
+declarator's location lookup is -1, so an array's words stay 0. It refuses
+a struct uniform, so `struct` and `struct_member_*` are drawn without the
+flag:
 
 ```sh
 tools/mali/drm_shim_ref.sh run <shim> tools/mali/testdata/deqp_uniarray_<name>.vert \
-    tools/mali/testdata/deqp_uniarray_<name>.frag <out>/deqp_uniarray_<name>
+    tools/mali/testdata/deqp_uniarray_<name>.frag <out>/deqp_uniarray_<name> --uniform-values
 python3 -I tools/mali/pan_ref_diff.py extract <out>/deqp_uniarray_<name>.trace --draw --attributes \
     > tools/mali/testdata/deqp_uniarray_<name>.expect.json
 ```
@@ -305,8 +309,8 @@ index is shifted, and the array is not first in the block (`#0x10`).
 
 ## 8. Lowering (`lower-uniarray` spike, on `af043255`)
 
-Byte-equal (`tests/mali_deqp_uniarray.rs`, `assert_matches_unset`: every
-reference was drawn without `--uniform-values`): `float_const_{vs,fs}`,
+Byte-equal (`tests/mali_deqp_uniarray.rs`, `assert_matches`: the
+references are drawn with `--uniform-values`, section 7): `float_const_{vs,fs}`,
 `vec2_const_{vs,fs}`, `vec3_const_{vs,fs}`, `vec4_const_{vs,fs}`,
 `loop_{float,vec2,vec3,vec4}_fs`, `dyn_vec{2,3,4}_fs` (15 of 23).
 
