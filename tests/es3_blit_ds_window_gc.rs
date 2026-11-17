@@ -466,11 +466,14 @@ fn model(
     out
 }
 
+/// One blit: the source rectangle, the destination rectangle, the scissor.
+type Blit = ([i32; 4], [i32; 4], Option<[i32; 4]>);
+
 /// The blits between a `sw` x `sh` image and the window: whole, scaled and
 /// cut by the window's edge, flipped under a scissor box, and a
 /// sub-rectangle. Every sample point of the destination rectangle cut to its
 /// image is inside the source.
-fn cases(sw: i32, sh: i32) -> Vec<([i32; 4], [i32; 4], Option<[i32; 4]>)> {
+fn cases(sw: i32, sh: i32) -> Vec<Blit> {
     vec![
         ([0, 0, sw, sh], [0, 0, WIN, WIN], None),
         ([0, 0, sw, sh], [WIN - 6, WIN - 10, 12, 20], None),
