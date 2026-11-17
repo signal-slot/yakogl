@@ -1657,6 +1657,11 @@ struct Backend {
     /// fbload FS variants for an integer target ([`FBLOAD_INT`]): the
     /// pixel's bits read raw and written back as 1, 2 or 4 dwords.
     fbload_fs_int: [OsalGpuMem; 3],
+    /// The frame load's programs ([`FBLOAD_ROWS`]) with their pixel output
+    /// writes moved up by 1, 2 or 3 registers ([`pixel_output_bytes`]), for
+    /// an attachment past the first of a frame that loads several
+    /// ([`record_attachment_loads`]). Uploaded when a frame first needs one.
+    fbload_fs_at: [[OsalGpuMem; 3]; FBLOAD_ROWS.len()],
     /// The masked clear FS variants ([`CLEAR_MASKED`]), in its order.
     clear_mask_fs: [OsalGpuMem; CLEAR_MASKED_N],
     /// This frame begins with a colour clear.
@@ -1896,6 +1901,10 @@ struct FbLoad {
     /// compiler applies and the fetch reads the pixel's own memory row.
     load_flip: [f32; 2],
     load_draw: GlesDraw,
+    /// What the frame's load bound for each colour attachment it restored,
+    /// by attachment slot (`gpu` 0 for one it did not load): attachment 0's
+    /// is the quad above, the others' [`record_attachment_loads`]'.
+    loads: [AttachmentLoad; PVR_BACKEND_MAX_RT as usize],
     /// The GPU mipmap quad's fragment program as our compiler recorded it
     /// (`mipgen.frag`: one texture, the uniform block `u_scale`) and the
     /// block's two floats, 1 / the level's width and height
@@ -2124,6 +2133,146 @@ const fn fbload_int_index(dwords: u32) -> usize {
         1 => 0,
         2 => 1,
         _ => 2,
+    }
+}
+
+/// Every program of the frame load, by [`fbload_row`]: RGBA8's, the float
+/// classes' ([`FBLOAD_RT`]) and the integer layouts' ([`FBLOAD_INT`]).
+const FBLOAD_ROWS: [usize; 7] = [
+    PVR_INTERNAL_FBLOAD,
+    PVR_INTERNAL_FBLOAD_F16X4,
+    PVR_INTERNAL_FBLOAD_F16,
+    PVR_INTERNAL_FBLOAD_F32,
+    PVR_INTERNAL_FBLOAD_U32,
+    PVR_INTERNAL_FBLOAD_U32X2,
+    PVR_INTERNAL_FBLOAD_U32X4,
+];
+
+/// The [`FBLOAD_ROWS`] index of the program that loads a `fmt` attachment,
+/// as [`record_frame_quad`] picks it for attachment 0: an integer target's
+/// layout, else its float class (0 for the RGBA8 one).
+fn fbload_row(fmt: u8) -> usize {
+    if gles_surf_is_integer(fmt) {
+        4 + fbload_int_index(surf_out_dwords(fmt))
+    } else {
+        pixel_class(fmt) as usize
+    }
+}
+
+/// What the frame's load bound for one colour attachment
+/// ([`FbLoad::loads`]): its program (the [`FBLOAD_ROWS`] index and the
+/// code's address), the attachment as the texture it read, and the first
+/// pixel output register it wrote.
+#[derive(Clone, Copy)]
+struct AttachmentLoad {
+    row: usize,
+    fs_usc_gpu: u64,
+    tex: GlesTextureBind,
+    out_reg: u32,
+}
+
+/// The byte offsets of the pixel output writes of one of the frame load's
+/// programs ([`FBLOAD_ROWS`]), output register 0 first, and how many there
+/// are. Each is the destination byte of a move into the special bank at
+/// index 32 + k (pixel output k): a one-instruction main group (`da` 3, the
+/// single-source `byp`, upper source and ISS zero) whose eighth byte is the
+/// `1_1b6i` destination, 0x20 | k. The groups are walked by their headers'
+/// lengths (words in the low nibble, 0 for 16). None when the walk does not
+/// end on the last byte or the writes are not outputs 0, 1, ... in order:
+/// a program laid out otherwise is not moved. The host tests decode every
+/// row and check these are exactly its output writes.
+fn pixel_output_bytes(words: &[u32]) -> Option<([usize; 4], usize)> {
+    let byte = |i: usize| (words[i / 4] >> (i % 4 * 8)) as u8;
+    let end = words.len() * 4;
+    let (mut at, mut n, mut off) = ([0usize; 4], 0usize, 0usize);
+    while off + 2 <= end {
+        let len = match byte(off) & 0xf {
+            0 => 32,
+            w => 2 * w as usize,
+        };
+        if off + len > end {
+            return None;
+        }
+        if len >= 8
+            && byte(off) >> 4 == 3
+            && byte(off + 3) == 0x87
+            && byte(off + 5) == 0
+            && byte(off + 6) == 0
+            && byte(off + 7) & 0xfc == 0x20
+        {
+            if n == at.len() || usize::from(byte(off + 7) & 3) != n {
+                return None;
+            }
+            at[n] = off + 7;
+            n += 1;
+        }
+        off += len;
+    }
+    (off == end && n != 0).then_some((at, n))
+}
+
+/// The first pixel output register attachment `i` of the frame takes: the
+/// end-of-tile emit's walk ([`flush`]'s emit loop), each attachment after
+/// the one before, one of two or more dwords on an even register. None when
+/// it runs past the pixel's four registers (not emitted from them).
+fn attachment_out_reg(b: &Backend, i: usize) -> Option<u32> {
+    let mut out = 0u32;
+    for j in 0..=i {
+        let fmt = if j != 0 { b.targets[j].format } else { b.target_format };
+        let regs = surf_out_dwords(fmt);
+        let spos = if regs >= 2 && out & 1 != 0 { out + 1 } else { out };
+        if spos + regs > PVR_BACKEND_MAX_OUT_REGS {
+            return None;
+        }
+        if j == i {
+            return Some(spos);
+        }
+        out = spos + regs;
+    }
+    None
+}
+
+/// The GPU address of load program `row` ([`FBLOAD_ROWS`]) writing its
+/// pixel outputs from register `reg` on: the uploaded row for 0, else its
+/// copy with the output writes moved ([`pixel_output_bytes`]), uploaded the
+/// first time a frame asks for it. None when the row's writes cannot be
+/// moved there or the upload fails.
+fn fbload_program_at(b: &mut Backend, row: usize, reg: u32) -> Option<u64> {
+    let base = match row {
+        0 => &b.fbload_fs,
+        1..=3 => &b.fbload_fs_rt[row - 1],
+        _ => &b.fbload_fs_int[row - 4],
+    };
+    if reg == 0 {
+        return Some(base.gpu);
+    }
+    let mem = &mut b.fbload_fs_at[row][reg as usize - 1];
+    if mem.gpu != 0 {
+        return Some(mem.gpu);
+    }
+    let sh = internal(FBLOAD_ROWS[row]);
+    let words = internal_words(sh);
+    let (at, n) = pixel_output_bytes(words)?;
+    if n as u32 != surf_dwords_of_row(row) || n as u32 + reg > PVR_BACKEND_MAX_OUT_REGS {
+        return None;
+    }
+    if upload_words(mem, words) != 0 {
+        return None;
+    }
+    for &i in &at[..n] {
+        let moved = (words[i / 4] >> (i % 4 * 8)) as u8 + reg as u8;
+        mem_write(mem, i as u32, &[moved]);
+    }
+    cache_flush(mem, 0, (words.len() * 4) as u32);
+    Some(mem.gpu)
+}
+
+/// The pixel output dwords load program `row` ([`FBLOAD_ROWS`]) writes.
+const fn surf_dwords_of_row(row: usize) -> u32 {
+    match row {
+        1 | 5 => 2,
+        6 => 4,
+        _ => 1,
     }
 }
 
@@ -3485,6 +3634,9 @@ pub extern "C" fn pvr_backend_shutdown() {
     for m in b.fbload_fs_rt.iter_mut().chain(b.fbload_fs_int.iter_mut()).chain(b.clear_mask_fs.iter_mut()) {
         osal::gpu_free(m);
     }
+    for m in b.fbload_fs_at.iter_mut().flatten() {
+        osal::gpu_free(m);
+    }
     for s in b.ds.iter_mut() {
         osal::gpu_free(&mut s.mem);
         *s = DsBuf::ZERO;
@@ -4008,6 +4160,100 @@ fn record_frame_quad(
         return -1;
     }
     b.frame_quads += 1;
+    fl.loads = [AttachmentLoad::ZERO; PVR_BACKEND_MAX_RT as usize];
+    if load_color {
+        let ld = &fl.load_draw;
+        let row = fbload_row(d.target_format);
+        fl.loads[0] = AttachmentLoad { row, fs_usc_gpu: ld.fs_usc_gpu, tex: ld.textures[0], out_reg: 0 };
+        if b.num_targets > 1 {
+            return record_attachment_loads(p);
+        }
+    }
+    0
+}
+
+impl AttachmentLoad {
+    const ZERO: AttachmentLoad = AttachmentLoad { row: 0, fs_usc_gpu: 0, tex: GlesTextureBind::ZERO, out_reg: 0 };
+}
+
+/// The rest of a frame load of several colour attachments: the quad
+/// [`record_frame_quad`] just recorded restored attachment 0 (from pixel
+/// output register 0, where the end-of-tile emit reads it), so each later
+/// attachment gets an object of its own, recorded after it -- the same
+/// full-screen quad with that attachment's own program ([`fbload_row`]:
+/// its integer layout read raw, or its float class), the attachment bound
+/// as its texture, and the program's pixel output writes moved to the
+/// registers the emit stores that attachment from ([`attachment_out_reg`],
+/// [`fbload_program_at`]). It writes those registers alone, so what the
+/// objects before it left in the others stays. Colour only: the depth and
+/// stencil initialisation was the first quad's, and with the depth test
+/// off each object is TRANSLUCENT, kept in submission order behind it.
+/// An attachment with no target (a GL_NONE slot) is skipped, as the emit
+/// skips it; one past the pixel's four registers, or whose program cannot
+/// be moved, is not loaded, by name.
+fn record_attachment_loads(p: &mut Pvr) -> i32 {
+    let b = &mut p.b;
+    let fl = &mut p.fbload;
+    for i in 1..(b.num_targets as usize).min(b.targets.len()) {
+        let t = b.targets[i];
+        if t.gpu == 0 {
+            continue;
+        }
+        let row = fbload_row(t.format);
+        let Some((reg, gpu)) = attachment_out_reg(b, i).and_then(|reg| Some((reg, fbload_program_at(b, row, reg)?)))
+        else {
+            glog_once!(
+                "yakogl/pvr: frame load: colour attachment {} ({}) is not restored (no output registers for it)",
+                i,
+                gles_surf_name(t.format)
+            );
+            continue;
+        };
+        let int = gles_surf_is_integer(t.format);
+        let sh: *const ShcShader = match row {
+            0 => &fl.fs_sh,
+            1..=3 => &fl.fs_rt_sh[row - 1],
+            _ => &fl.fs_int_sh[row - 4],
+        };
+        let ld = &mut fl.load_draw;
+        ld.fs = sh;
+        ld.fs_usc_gpu = gpu;
+        ld.textures[0].base_gpu = t.gpu;
+        ld.textures[0].width = t.w;
+        ld.textures[0].height = t.h;
+        /* the emit's pitch for an attachment past the first */
+        ld.textures[0].stride_texels = t.w.wrapping_add(1) & !1;
+        ld.textures[0].format = if int { int_load_texfmt(t.format) } else { gles_surf_texfmt(t.format) };
+        ld.textures[0].bgra = if t.format == GLES_SURF_XRGB8888 { 1 } else { 0 };
+        ld.color_write = true;
+        ld.depth_test = false;
+        ld.depth_write = false;
+        ld.depth_range = [0.0, 1.0];
+        ld.stencil = false;
+        if record_draw_txn(b, &mut p.scratch, &fl.load_draw, 0, 6, None) != 0 {
+            if !b.warned_load {
+                glog!("pvr_backend: could not record the frame's load of colour attachment {}", i);
+            }
+            b.warned_load = true;
+            return -1;
+        }
+        b.frame_quads += 1;
+        let ld = &fl.load_draw;
+        fl.loads[i] = AttachmentLoad { row, fs_usc_gpu: ld.fs_usc_gpu, tex: ld.textures[0], out_reg: reg };
+    }
+    if b.opt(PVR_BACKEND_OPT_DEBUG) != 0 && b.dbg_draws_left != 0 {
+        for (i, l) in fl.loads.iter().enumerate().filter(|(_, l)| l.tex.base_gpu != 0) {
+            glog!(
+                "pvr_backend: frame load: attachment {} from 0x{:x} (texfmt 0x{:x}), load row {} at 0x{:x}, output register {}",
+                i,
+                l.tex.base_gpu,
+                l.tex.format,
+                l.row,
+                l.fs_usc_gpu,
+                l.out_reg
+            );
+        }
+    }
     0
 }
 
@@ -9431,6 +9677,9 @@ pub extern "C" fn pvr_backend_pool_owners() -> u64 {
         statics.add(m);
     }
     for m in b.fbload_fs_rt.iter().chain(b.fbload_fs_int.iter()).chain(b.clear_mask_fs.iter()) {
+        statics.add(m);
+    }
+    for m in b.fbload_fs_at.iter().flatten() {
         statics.add(m);
     }
     let mut ds = OwnerTally::default();
