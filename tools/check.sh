@@ -488,6 +488,37 @@ gate_t0=$SECONDS
 #                   (the no-table and no-knob rows)
 #   rgx-target      build/pvr-check/rgx-target
 #   v3d-mesa        build/v3d-check/mesa and build/v3d-check/tmp
+# Disk. A full walk writes about as much as the host's disk holds (84 GB
+# measured on 2026-11-16 was not enough on a 193 GB host with 148 GB used), so
+# a build directory only one row family reads is removed after the last row
+# that reads it (prune_dirs; YAKOGL_CHECK_KEEP_BUILD=1 keeps them all), no
+# incremental cache is kept for a gate that builds each unit once
+# (CARGO_INCREMENTAL=0, unless the caller set it), and a row that starts with
+# less than YAKOGL_CHECK_MIN_FREE_GB (default 8) free on the checkout's disk
+# fails by name (disk_full_row) instead of dying in a linker or in cc.
+export CARGO_INCREMENTAL=${CARGO_INCREMENTAL:-0}
+MIN_FREE_GB=${YAKOGL_CHECK_MIN_FREE_GB:-8}
+[[ $MIN_FREE_GB =~ ^[0-9]+$ ]] || { echo "check.sh: YAKOGL_CHECK_MIN_FREE_GB '$MIN_FREE_GB' is not a count"; exit 2; }
+# free_gb: whole GB free on the disk of the working directory (blank if df fails)
+free_gb() { df -Pk . 2>/dev/null | awk 'NR == 2 { print int($4 / 1048576) }'; }
+disk_low() {
+  local f
+  f=$(free_gb)
+  [ -n "$f" ] && [ "$f" -lt "$MIN_FREE_GB" ]
+}
+# disk_full_row: the command of a row that was not started because the disk is
+# nearly full; the row is FAIL, named so, and nothing it needed is half built.
+disk_full_row() {
+  echo "check.sh: DISK FULL: $(free_gb) GB free on $(df -P . | awk 'NR == 2 { print $1 }') (need $MIN_FREE_GB, YAKOGL_CHECK_MIN_FREE_GB); the row was not started"
+  echo "(du -sh target build: $(du -sh target build 2>/dev/null | tr '\n' ' '))"
+  return 1
+}
+# prune_dirs <dir>...: remove build directories no later row reads. Call it
+# from the row that reads them last, never from one that an earlier or later
+# row may still need; a failed row's directories are kept for its diagnosis.
+prune_dirs() {
+  [ "${YAKOGL_CHECK_KEEP_BUILD-}" = 1 ] || rm -rf -- "$@"
+}
 JOBS=${YAKOGL_CHECK_JOBS:-1}
 [[ $JOBS =~ ^[1-9][0-9]*$ ]] || { echo "check.sh: --jobs/YAKOGL_CHECK_JOBS '$JOBS' is not a count"; exit 2; }
 
@@ -664,6 +695,8 @@ step() {
     gap "$label: $row_needs is missing ($row_needs_how): not built"
     return 0
   fi
+  # A full disk is one named failure per row, not a linker error in the next.
+  if disk_low; then set -- disk_full_row; row_key=; fi
   entries=$((entries + 1))
   n=$entries
   printf '%s\n' "$label" > "$ROWS/$n.label"
@@ -2449,7 +2482,7 @@ if command -v cc >/dev/null 2>&1; then
   # records.sha256: the records of the C it replaced (record_c.sh, cut out of
   # origin/main 674ea1cf), and fwinit-step7 for the DDK sizes
   # (fwinit-step7.diff). tools/pvr/km/README.md explains each.
-  pvr_km_check() {
+  pvr_km_check_body() {
     local out d=build/pvr-check/km s a=build/pvr-check/rgx-target/debug/libyakogl_drivers.a
     mkdir -p "$d" || return 1
     cargo build -q -p yakogl-drivers --features pvr --target-dir build/pvr-check/rgx-target || return 1
@@ -2481,6 +2514,12 @@ if command -v cc >/dev/null 2>&1; then
       echo "a kernel-side record moved: tools/pvr/km/README.md says how to diff it against the C"
       return 1
     }
+  }
+  # The second and last reader of rgx-target (31 MB at 280374bb; disk-map saw
+  # more with an incremental cache).
+  pvr_km_check() {
+    pvr_km_check_body || return 1
+    prune_dirs build/pvr-check/rgx-target
   }
   uses w:rgx-target
   step "run     pvr km_check (the Rust kernel side = the C it replaced; layouts = the DDK headers)" pvr_km_check
@@ -3543,6 +3582,8 @@ check_no_mesa_reference() {
     artefact_worker "$k" "$jobs" "$dir" "$out" "${entries[@]}" &
   done
   wait
+  # The archives are built and counted; no later row reads <target>/check-artefact.
+  prune_dirs "$dir"
   # Judged in the list's order, every entry: a result missing is a failure.
   local -A result=()
   while read -r i n; do result[$i]=$n; done < "$out"
@@ -3967,6 +4008,9 @@ zephyr_werror_image() {
     echo "$dir: yakogl_zephyr_present defined: $has, the GL library with CONFIG_YAKOGL_BOARD: $want (they must agree)"
     return 1
   }
+  # Only the row reads its image. A row that reads it after this function
+  # (the wrappers below) names it in ZEPHYR_KEEP and prunes it itself.
+  case " ${ZEPHYR_KEEP-} " in *" $dir "*) ;; *) prune_dirs "$dir" ;; esac
 }
 # Every Zephyr image under tools/probes/rpi_5/ (a directory with a
 # CMakeLists.txt and a prj.conf: rpi5_hello, rpi5_wdog, rpi5_dtb, rpi5_ident,
@@ -3999,7 +4043,7 @@ fdt_walk_test() {
 # Rust one. The kernel's weak main() (kernel/main_weak.c) also links, so an
 # image whose link lost the Rust main would build and boot an empty main.
 zephyr_triangle_rust_image() {
-  local elf="build/zephyr-werror/$2/zephyr/zephyr.elf" syms
+  local elf="build/zephyr-werror/$2/zephyr/zephyr.elf" syms ZEPHYR_KEEP="build/zephyr-werror/$2"
   zephyr_werror_image "$1" examples/triangle-rust "$2" || return 1
   syms=$(nm "$elf") || return 1
   grep -qE '^[0-9a-f]+ T main$' <<<"$syms" && grep -qE '^[0-9a-f]+ T triangle_rust_main$' <<<"$syms" || {
@@ -4007,12 +4051,13 @@ zephyr_triangle_rust_image() {
     echo "^ main() is not the Rust one (examples/triangle-rust/CMakeLists.txt)"
     return 1
   }
+  prune_dirs "$ZEPHYR_KEEP"
 }
 # The image without a compiler (the precompiled shaders of gl_test's ES 1.00
 # set its whole back end): it builds, and neither the compiler nor the
 # scratch region the OSAL lends it (zephyr_shaderc_scratch.c) is in it.
 zephyr_precompiled_only_image() {
-  local elf=build/zephyr-werror/am62p-precompiled-only/zephyr/zephyr.elf syms
+  local elf=build/zephyr-werror/am62p-precompiled-only/zephyr/zephyr.elf syms ZEPHYR_KEEP=build/zephyr-werror/am62p-precompiled-only
   zephyr_werror_image verdin_am62p/am62p54/a53 gl_test am62p-precompiled-only \
     -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n \
     -DCONFIG_YAKOGL_SHADERC_PRECOMPILED_ONLY=y '-DCONFIG_YAKOGL_PRECOMPILED_APPS="gl_test_es100"' || return 1
@@ -4025,6 +4070,7 @@ zephyr_precompiled_only_image() {
     echo "^ the compiler or its scratch region is in the image without a compiler"
     return 1
   fi
+  prune_dirs "$ZEPHYR_KEEP"
 }
 # The direct-boot images (docs/notes/am62p-direct-boot.md,
 # docs/notes/imx8mp-direct-boot.md): examples/triangle for each board's direct
@@ -4037,7 +4083,7 @@ zephyr_direct_images() {
   # (yakogl_add_rust_archive): a nightly, as the aarch64 cargo rows above use.
   local RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-nightly}"
   export RUSTUP_TOOLCHAIN
-  local v="$PWD/build/stage2-check-images"
+  local v="$PWD/build/stage2-check-images" ZEPHYR_KEEP=build/zephyr-werror/am62p-boot-stage2
   rm -rf "$v"
   python3 tools/am62p-mkboot.py stage2-vectors "$v" > /dev/null || return 1
   zephyr_werror_image verdin_am62p/am62p54/a53/direct examples/triangle am62p-direct-triangle || return 1
@@ -4050,6 +4096,7 @@ zephyr_direct_images() {
     echo "the AM62P loader has no linked payload"
     return 1
   }
+  prune_dirs "$ZEPHYR_KEEP" "$v"
 }
 # The NanoPC-T6 image (Z1): it builds, and its watchdog glue is in it: the
 # EARLY hook resets the GIC's EOI mode, the report, the feeder, and the image
@@ -4058,7 +4105,7 @@ zephyr_direct_images() {
 # is checked after every nanopc_t6 image's link, this one's included:
 # driver/zephyr/lib/board/nanopc_t6/check_early_hooks.cmake.
 zephyr_nanopc_t6_image() {
-  local dir=build/zephyr-werror/nanopc_t6 syms marker
+  local dir=build/zephyr-werror/nanopc_t6 syms marker ZEPHYR_KEEP=build/zephyr-werror/nanopc_t6
   zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_hello nanopc_t6 || return 1
   syms=$(nm "$dir/zephyr/zephyr.elf") || return 1
   for s in yd_t6_early_arm __init_t6_gic_eoi_reset __init_t6_wdt_report __init_t6_wdt_feed_start; do
@@ -4066,6 +4113,7 @@ zephyr_nanopc_t6_image() {
   done
   marker=$(strings -n 20 "$dir/zephyr/zephyr.bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
   [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
+  prune_dirs "$dir"
 }
 # Z3's probe (t6_fw) and Z4's (t6_submit) embed the CSF firmware,
 # driver/src/fw/mali_csffw_blob.h (gitignored, never committed); $2 names
@@ -4095,7 +4143,7 @@ zephyr_nanopc_t6_fw_image() {
 # zephyr,sram (the window), and the file at most kexec_zephyr's 64 MiB
 # (IMG_MAX; the __nocache statics lie inside the file's span).
 zephyr_nanopc_t6_gltest_image() {
-  local dir=build/zephyr-werror/nanopc_t6-gl_test bin footprint size window marker
+  local dir=build/zephyr-werror/nanopc_t6-gl_test bin footprint size window marker ZEPHYR_KEEP=build/zephyr-werror/nanopc_t6-gl_test
   zephyr_nanopc_t6_fw_image "$1" gl_test gl_test nanopc_t6-gl_test || return 1
   bin="$dir/zephyr/zephyr.bin"
   marker=$(strings -n 20 "$bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
@@ -4109,6 +4157,7 @@ zephyr_nanopc_t6_gltest_image() {
   }
   [ "$size" -le $((64 << 20)) ] || { echo "zephyr.bin is $size bytes; kexec_zephyr reads at most 64 MiB"; return 1; }
   grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
+  prune_dirs "$dir"
 }
 # No input key: an image's inputs include the west workspace and the Zephyr
 # SDK, thousands of files outside the checkout, and a module edited in place
