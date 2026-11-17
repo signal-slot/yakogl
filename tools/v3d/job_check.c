@@ -654,7 +654,8 @@ static void part_decode(void)
 		{ "CFG_BITS", 0, "Enable Depth Offset", 1 },
 		{ "CFG_BITS", 0, "Stencil enable", 1 },
 		{ "CFG_BITS", 0, "Blend enable", 1 },
-		{ "BLEND_ENABLES", 0, "Mask", 1 },
+		/* every RT blends with RT 0's state (v3dx_state.c:148-156) */
+		{ "BLEND_ENABLES", 0, "Mask", 0xf },
 		{ "BLEND_CFG", 0, "Color blend src factor", V3D_BLEND_FACTOR_SRC_ALPHA },
 		{ "BLEND_CFG", 0, "Color blend dst factor", V3D_BLEND_FACTOR_INV_SRC_ALPHA },
 		{ "BLEND_CFG", 0, "Alpha blend src factor", V3D_BLEND_FACTOR_ONE },
@@ -2351,7 +2352,10 @@ static void part_pack_skip(void)
 	 * (git archive into a scratch directory, a 20-line program that calls
 	 * pack_seq_build on a 0x4000/0x4000/0x18000 BCL/RCL/indirect split and
 	 * prints the three lists' FNV-1a 64 in that order): 0x986c4c5405743e7a,
-	 * BCL 5985 bytes. The same split here. */
+	 * BCL 5985 bytes. The same split here. v3d-frame4 (plan #368) then
+	 * moved each blending draw's BLEND_ENABLES mask from 1 to 0xf
+	 * (v3dx_state.c:148-156) and nothing else: 0x4868619ffcc39b6a, the
+	 * old value again with that mask put back to 1. */
 	v3d_job_pack_skip = false;
 	check(!v3d_job_pack_skip, "the knob is off (set explicitly for this arm)");
 	struct v3d_cl bcl, rcl, ind;
@@ -2361,8 +2365,8 @@ static void part_pack_skip(void)
 	v3d_cl_init(&ind, off.bo + 0x8000, BO_GPU + 0x8000, 0x18000);
 	check(pack_seq_build(&j, &t, &bcl, &rcl, &ind), "knob off: the 48-draw sequence builds");
 	uint64_t h = pack_seq_fnv(&ind, pack_seq_fnv(&rcl, pack_seq_fnv(&bcl, 0xcbf29ce484222325ull)));
-	check(h == 0x986c4c5405743e7aull && bcl.used == 5985,
-	      "knob off: the lists are origin/main 6ee82953's, byte for byte (pinned hash)");
+	check(h == 0x4868619ffcc39b6aull && bcl.used == 5985,
+	      "knob off: the lists are origin/main 6ee82953's with v3d-frame4's blend mask, byte for byte (pinned hash)");
 	struct v3d_job_pack_counts c_off = j.pack.n;
 	struct walk w_off;
 	walk(&bcl, &w_off);

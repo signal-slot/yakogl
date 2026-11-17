@@ -18,12 +18,14 @@
 //!   at 128) for RT 3, the 128-bit clear colour split as Mesa splits it;
 //! - the LOAD_TILE_BUFFER_GENERAL of RT 3 when it is not cleared, and none when
 //!   it is, or when it has no buffer (GL_NONE);
-//! - the STORE_TILE_BUFFER_GENERAL of RT 3 at the end of each tile, after RT 0-2.
+//! - the STORE_TILE_BUFFER_GENERAL of RT 3 at the end of each tile, after RT 0-2;
+//! - a draw's BLEND_ENABLES and BLEND_CFG, which name RT 3 with RT 0-2 (Mesa's
+//!   blend_enables is (1 << max_rts) - 1 when RT 0 blends without independent
+//!   blend, v3dx_state.c:148-156, emitted by v3dx_emit.c:525-568).
 //!
-//! Formats on RT 3: RGBA8 (32 bpp), RGBA16F (64), RGBA32UI (128) and RGBA32F
-//! (128). RGBA32F is `#[ignore]`d: v3d_job.c's `rt_internal` has no row for
-//! output image format 9 (rgba32f), so `v3d_job_begin` breaks the job; item
-//! v3d-frame4 adds the row and removes the ignore.
+//! Formats on RT 3: RGBA8 (32 bpp), RGBA16F (64), RG32F (64), RGBA32UI (128)
+//! and RGBA32F (128); the two 32F rows of v3d_job.c's `rt_internal` are
+//! v3d-frame4's (v3dx_format_table.c:319-326).
 //!
 //! Where the expected values come from. Packet layouts are read at run time
 //! from Mesa's own `v3d_packet.xml` (third_party/mesa-26.2.1/src/broadcom/cle/,
@@ -303,9 +305,10 @@ fn build(t: &V3dJobTarget, c: &V3dJobClear) -> Option<Lists> {
 
 /* ---- the cases ---- */
 
-/// `V3D_OUTPUT_IMAGE_FORMAT_RGBA32F` (v3d_packet.xml:231 "rgba32f" = 9); the
-/// ffi has no constant for it, as the C table has no row.
+/// `V3D_OUTPUT_IMAGE_FORMAT_RGBA32F` (v3d_packet.xml:236 "rgba32f" = 9) and
+/// `RG32F` (:237 "rg32f" = 10); src/v3d/ffi.rs has no constant for them.
 const FMT_RGBA32F: u32 = 9;
+const FMT_RG32F: u32 = 10;
 
 /// A format on RT 3 and what Mesa makes of it: type and bpp from
 /// v3dx_format_table.c, the clamp from v3dx_rcl.c:396-407 (INT for a pure
@@ -344,6 +347,14 @@ const RGBA32UI: Fmt = Fmt {
     bpp: V3D_INTERNAL_BPP_128,
     clamp: V3D_RENDER_TARGET_CLAMP_INT,
     mesa: "v3dx_format_table.c:306-309",
+};
+const RG32F: Fmt = Fmt {
+    name: "RG32F",
+    image: FMT_RG32F,
+    ty: V3D_INTERNAL_TYPE_32F,
+    bpp: V3D_INTERNAL_BPP_64,
+    clamp: V3D_RENDER_TARGET_CLAMP_NONE,
+    mesa: "v3dx_format_table.c:323-326",
 };
 const RGBA32F: Fmt = Fmt {
     name: "RGBA32F",
@@ -647,8 +658,7 @@ fn check_store(f: Fmt, l: &Lists) {
     assert_eq!(l.tile.last().unwrap().name, "Return from sub-list", "{}: the tile list returns", f.name);
 }
 
-/* One test per format for each of the three groups; a format the job builder
- * refuses is the ignored case. */
+/* One test per format for each of the three groups. */
 macro_rules! rt3_tests {
     ($($(#[$m:meta])* $fmt:ident: $cfg:ident, $clear:ident, $loadstore:ident;)*) => {$(
         $(#[$m])* #[test] fn $cfg() { check_color_cfg($fmt); }
@@ -660,8 +670,8 @@ macro_rules! rt3_tests {
 rt3_tests! {
     RGBA8: rt3_cfg_rgba8, rt3_clear_rgba8, rt3_load_store_rgba8;
     RGBA16F: rt3_cfg_rgba16f, rt3_clear_rgba16f, rt3_load_store_rgba16f;
+    RG32F: rt3_cfg_rg32f, rt3_clear_rg32f, rt3_load_store_rg32f;
     RGBA32UI: rt3_cfg_rgba32ui, rt3_clear_rgba32ui, rt3_load_store_rgba32ui;
-    #[ignore = "v3d-frame4: rt_internal (driver/src/v3d/v3d_job.c:151-251) has no row for V3D_OUTPUT_IMAGE_FORMAT_RGBA32F (9), only R32F (:248), so v3d_job_begin breaks a typed job with it (:342-347); Mesa maps it to 32F at 128 bpp (v3dx_format_table.c:319-322)"]
     RGBA32F: rt3_cfg_rgba32f, rt3_clear_rgba32f, rt3_load_store_rgba32f;
 }
 
@@ -759,4 +769,141 @@ fn four_stores_and_no_none_store() {
     let clear = l.tile_named("Clear Tile Buffers");
     assert_eq!(clear.len(), 1, "CLEAR_TILE_BUFFERS once, after the stores (v3dx_rcl.c:330-337)");
     assert_eq!(clear[0].get("Clear all Render Targets"), 1, "all RTs, RT 3 included (v3d_packet.xml:482)");
+}
+
+/* ---- 5. a draw's blend state reaches RT 3 ---- */
+
+type DrawFn = unsafe extern "C" fn(*mut V3dJob, *const V3dJobDraw, *mut c_void) -> i32;
+
+/// The binning list of a four-RGBA8-RT job after one triangle drawn with `st`.
+fn draw_bcl(st: &V3dJobState) -> Vec<Dec> {
+    let mut bcl_buf = vec![0u8; LIST_BYTES];
+    let mut rcl_buf = vec![0u8; LIST_BYTES];
+    let mut ind_buf = vec![0u8; LIST_BYTES];
+    let cl = |buf: &mut Vec<u8>, gpu: u32| V3dCl {
+        buf: buf.as_mut_ptr(),
+        gpu,
+        size: LIST_BYTES as u32,
+        used: 0,
+        overflow: false,
+        bad_field: false,
+    };
+    let (mut bcl, mut rcl, mut ind) = (cl(&mut bcl_buf, BCL_GPU), cl(&mut rcl_buf, RCL_GPU), cl(&mut ind_buf, IND_GPU));
+    let fs = V3dFsProg {
+        code: 0x0020_0000,
+        threads: 4,
+        single_seg: false,
+        num_inputs: 0,
+        flat_shade_flags: 0,
+        noperspective_flags: 0,
+        centroid_flags: 0,
+        flat_shade_flags_hi: 0,
+        noperspective_flags_hi: 0,
+        centroid_flags_hi: 0,
+        writes_z: false,
+        disable_ez: false,
+        uses_center_w: false,
+        lock_scoreboard_on_first_thrsw: false,
+        uses_implicit_point_line_varyings: false,
+        uses_pid: false,
+        uniforms: core::ptr::null(),
+        num_uniforms: 0,
+    };
+    let vs_prog = |code: u32| V3dVsProg {
+        code,
+        threads: 4,
+        single_seg: true,
+        vpm_input_size: 0,
+        vpm_output_size: 2,
+        separate_segments: false,
+        vcm_cache_size: 4,
+        uses_vid: false,
+        uses_iid: false,
+        uses_biid: false,
+        vattr_sizes: [0; 16],
+        uniforms: core::ptr::null(),
+        num_uniforms: 0,
+    };
+    let (vs, cs) = (vs_prog(0x0020_1000), vs_prog(0x0020_2000));
+    let d = V3dJobDraw {
+        st,
+        fs: &fs,
+        vs: &vs,
+        cs: &cs,
+        vs_storage: V3dUniformStorage::NONE,
+        fs_storage: V3dUniformStorage::NONE,
+        attrs: core::ptr::null(),
+        num_attrs: 0,
+        prim: V3D_PRIM_TRIANGLES,
+        count: 3,
+        first: 0,
+        indexed: false,
+        index_type: 0,
+        index_buffer: 0,
+        index_buffer_bytes: 0,
+        index_offset: 0,
+        tmu: core::ptr::null(),
+        num_tmu: 0,
+        vs_tmu: core::ptr::null(),
+        num_vs_tmu: 0,
+        vs_writes_psiz: false,
+        instances: 0,
+    };
+    let t = target(V3D_OUTPUT_IMAGE_FORMAT_RGBA8);
+    let mut job = V3dJob::ZERO;
+    // SAFETY: the C signatures of v3d_job.h; the lists, the programs and the
+    // state are live for the calls.
+    let r = unsafe {
+        let begin: BeginFn = std::mem::transmute(sym("v3d_job_begin"));
+        let draw: DrawFn = std::mem::transmute(sym("v3d_job_draw"));
+        assert!(begin(&mut job, &t, &mut bcl, &mut rcl, &mut ind), "a four-RT job begins");
+        draw(&mut job, &d, core::ptr::null_mut())
+    };
+    assert_eq!(r, V3D_JOB_OK, "the draw goes in");
+    decode(&bcl_buf[..bcl.used as usize])
+}
+
+/// The draw state: a 64x64 viewport, colour mask RGBA, blending as `blend`.
+fn blend_state(blend: bool) -> V3dJobState {
+    V3dJobState {
+        vp: V3dViewport { scale: [32.0, -32.0, 0.5], translate: [32.0, 32.0, 0.5] },
+        line_width: 1.0,
+        blend_enabled: blend,
+        rgb_src: V3D_BLEND_FACTOR_SRC_ALPHA,
+        rgb_dst: V3D_BLEND_FACTOR_INV_SRC_ALPHA,
+        alpha_src: V3D_BLEND_FACTOR_ONE,
+        alpha_dst: V3D_BLEND_FACTOR_INV_SRC_ALPHA,
+        colormask: 0xf,
+        ..Default::default()
+    }
+}
+
+/// glEnable(GL_BLEND) blends every draw buffer, RT 3 included: without
+/// independent blend Mesa's blend_enables is (1 << max_rts) - 1, max_rts 4
+/// (v3dx_state.c:148-156), emitted as BLEND_ENABLES's mask (v3dx_emit.c:529-531),
+/// and the one BLEND_CFG names every RT (:559-562). v3d_job.c wrote mask 1 (RT 0
+/// alone) before v3d-frame4.
+#[test]
+fn blend_enables_names_rt3() {
+    let bcl = draw_bcl(&blend_state(true));
+    let en: Vec<&Dec> = bcl.iter().filter(|d| d.name == "Blend Enables").collect();
+    assert_eq!(en.len(), 1, "one BLEND_ENABLES (v3d_packet.xml:773)");
+    assert_eq!(en[0].get("Mask"), 0xf, "RT 0-3 blend (v3dx_state.c:154-155)");
+    let cfg: Vec<&Dec> = bcl.iter().filter(|d| d.name == "Blend Cfg").collect();
+    assert_eq!(cfg.len(), 1, "one BLEND_CFG without independent blend (v3dx_emit.c:559-562)");
+    assert_eq!(cfg[0].get("Render Target Mask"), 0xf, "BLEND_CFG for RT 0-3 (v3d_packet.xml:778)");
+    assert_eq!(cfg[0].get("Color blend src factor"), V3D_BLEND_FACTOR_SRC_ALPHA as u64);
+    assert_eq!(cfg[0].get("Color blend dst factor"), V3D_BLEND_FACTOR_INV_SRC_ALPHA as u64);
+    assert_eq!(cfg[0].get("Alpha blend src factor"), V3D_BLEND_FACTOR_ONE as u64);
+}
+
+/// Without blending, BLEND_ENABLES is 0 and there is no BLEND_CFG
+/// (v3dx_emit.c:564-567).
+#[test]
+fn blend_off_names_no_rt() {
+    let bcl = draw_bcl(&blend_state(false));
+    let en: Vec<&Dec> = bcl.iter().filter(|d| d.name == "Blend Enables").collect();
+    assert_eq!(en.len(), 1, "one BLEND_ENABLES (v3d_packet.xml:773)");
+    assert_eq!(en[0].get("Mask"), 0, "no RT blends");
+    assert!(bcl.iter().all(|d| d.name != "Blend Cfg"), "no BLEND_CFG");
 }

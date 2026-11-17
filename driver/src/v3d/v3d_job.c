@@ -146,8 +146,8 @@ static uint32_t job_rts(const struct v3d_job_target *t)
  * 16I/16UI :272-291, 32I/32UI :293-317, 32F :319-330) and
  * clamp_for_format_and_type (v3dx_rcl.c:396-407, V3D 4.2: NORM for an sRGB
  * format, INT for a pure integer one, NONE otherwise). False for a format
- * the table has no row for here (R11F_G11F_B10F, the 2- and 3-channel
- * float rows, the depth formats). */
+ * the table has no row for here (R11F_G11F_B10F, RG16F, the depth
+ * formats). */
 static bool rt_internal(uint32_t fmt, uint32_t *type, uint32_t *bpp, uint32_t *clamp)
 {
 	*clamp = V3D_RENDER_TARGET_CLAMP_NONE;
@@ -244,6 +244,14 @@ static bool rt_internal(uint32_t fmt, uint32_t *type, uint32_t *bpp, uint32_t *c
 		*type = V3D_INTERNAL_TYPE_32UI;
 		*bpp = V3D_INTERNAL_BPP_32;
 		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RGBA32F:
+		*type = V3D_INTERNAL_TYPE_32F;
+		*bpp = V3D_INTERNAL_BPP_128;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RG32F:
+		*type = V3D_INTERNAL_TYPE_32F;
+		*bpp = V3D_INTERNAL_BPP_64;
 		return true;
 	case V3D_OUTPUT_IMAGE_FORMAT_R32F:
 		*type = V3D_INTERNAL_TYPE_32F;
@@ -657,9 +665,11 @@ static bool emit_viewport(struct v3d_cl *bcl, const struct v3d_viewport *vp)
 	return true;
 }
 
-/* BLEND_ENABLES and BLEND_CFG (v3dx_emit.c:525-568): one render target, no
+/* BLEND_ENABLES and BLEND_CFG (v3dx_emit.c:525-568): RT 0's blend state, no
  * independent blend, so Mesa's single emit_rt_blend with rt_mask
- * (1 << max_rts) - 1, max_rts 4; and blend_enables = RT0 */
+ * (1 << max_rts) - 1, max_rts 4; and blend_enables the same (1 << max_rts)
+ * - 1 (v3d_create_blend_state, v3dx_state.c:148-156: every RT blends when
+ * rt[0] does) */
 static void emit_blend(struct v3d_cl *bcl, const struct v3d_job_state *st)
 {
 	if (!st->blend_enabled) {
@@ -667,7 +677,7 @@ static void emit_blend(struct v3d_cl *bcl, const struct v3d_job_state *st)
 		return;
 	}
 	v3d_cl_emit(bcl, BLEND_ENABLES, on) {
-		on.mask = 1;
+		on.mask = 0xf;
 	}
 	v3d_cl_emit(bcl, BLEND_CFG, b) {
 		b.render_target_mask = 0xf;
