@@ -23,12 +23,7 @@
 //! GL_RGBA/GL_UNSIGNED_INT_2_10_10_10_REV, the pair Mesa answers for a
 //! normalized fixed-point 10/10/10/2 buffer and ES 3.0 6.1.7 allows, and
 //! glReadPixels with the answered pair returns the words unchanged.
-//! `implementation_color_read` (src/gl/framebuffer.rs) still answers
-//! GL_RGBA/GL_UNSIGNED_BYTE for RGB10_A2 on this tip, so the two rows
-//! `renderbuffer_read_pair_is_the_word_pair` and
-//! `texture_read_pair_is_the_word_pair` are #[ignore]d ("needs readback:
-//! implementation read pair for RGB10_A2") until the src change lands;
-//! the other rows run.
+//! `implementation_color_read` (src/gl/framebuffer.rs) answers that pair.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_rgb10a2_readback_v3d
@@ -376,7 +371,6 @@ fn check_pair(b: &Buf, words: &[u32]) {
 }
 
 #[test]
-#[ignore = "needs readback: implementation read pair for RGB10_A2"]
 fn renderbuffer_read_pair_is_the_word_pair() {
     let _g = context();
     let w = edge_words();
@@ -385,7 +379,6 @@ fn renderbuffer_read_pair_is_the_word_pair() {
 }
 
 #[test]
-#[ignore = "needs readback: implementation read pair for RGB10_A2"]
 fn texture_read_pair_is_the_word_pair() {
     let _g = context();
     let w = edge_words();
