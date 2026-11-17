@@ -5,7 +5,7 @@
 
 Usage:
   tools/cts/check-pi4-gles3-log.py --commit <full sha> \
-      [--tree tools/cts/pi4-gles3-tree.txt] [session-dir ...]
+      [--tree tools/cts/pi4-gles3-tree.txt] [--rerun] [session-dir ...]
   tools/cts/check-pi4-gles3-log.py --self-test
 
 The session directories (default: the glob
@@ -22,6 +22,25 @@ tools/cts/log/<YYYY-MM>-pi4-gles3-<sha8>-rowsAA-BB/. Exit 1 when:
      address, a .ts.net name or a /dev/tty path.
 On success prints '<N> images, <N> with a tally, 0 missing, 0 duplicated,
 commit <sha8>'.
+
+--rerun checks a partial session (plan #380 reruns only part of the tree,
+into one directory tools/cts/log/<date>-pi4-gles3-<sha8>-rerun/). Each session
+README.md lists every image it does not rerun, one per line, at the start of
+the line:
+
+  not rerun: <LABEL> no change expected
+  not rerun: <LABEL> plan #376
+
+(<LABEL> as in '# image <LABEL>:'; the reason is one of the two forms above,
+case-insensitive, nothing after it.) With --rerun a label is accepted only if
+it has exactly one tally or exactly one 'not rerun' line, never both. Each of
+these is an error (exit 1): a label with neither (missing); a label with both;
+a 'not rerun' label that is not in the tree; a label named by two 'not rerun'
+lines or tallied in two directories (duplicated); a 'not rerun' line with
+another reason. The other checks (c, d, e) stay. On success it prints
+'<N> images, <R> rerun, <M> not rerun (<a> no change expected, <b> plan #376),
+0 missing, 0 duplicated, commit <sha8>'. Without --rerun 'not rerun' lines
+are ignored and the output is as above.
 """
 import argparse
 import contextlib
@@ -38,6 +57,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 COMMIT_LINE = re.compile(r"^commit:?[ \t]+([0-9a-f]{7,40})\b", re.M | re.I)
 REDACT = re.compile(
     r"/home/|/Users/|(?<![\w.-])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])|\.ts\.net|/dev/tty")
+NOT_RERUN = re.compile(r"^not rerun:[ \t]+(\S+)(?:[ \t]+(.*?))?[ \t]*$", re.M | re.I)
+REASONS = {"no change expected": "no change expected", "plan #376": "plan #376"}
 SUMMARY = re.compile(
     r"deqp: summary: (\d+) cases begun, (\d+) with a result, (\d+) without")
 
@@ -61,7 +82,7 @@ def complete(path):
     return bool(m) and m.group(3) == "0" and m.group(1) == m.group(2)
 
 
-def check(sha, tree, dirs):
+def check(sha, tree, dirs, rerun=False):
     """Check the record; print the verdict, return the exit status."""
     dirs = [d for d in dirs if os.path.isdir(d)]
     problems = []
@@ -72,6 +93,7 @@ def check(sha, tree, dirs):
     if not labels:
         problems.append("%s: no '# image <LABEL>:' lines" % tree)
     where = {}
+    skipped = {}  # label -> [(readme, reason)]
     for d in dirs:
         for p in sorted(glob.glob(os.path.join(d, "*.tally.txt"))):
             lab = os.path.basename(p)[: -len(".tally.txt")]
@@ -82,7 +104,18 @@ def check(sha, tree, dirs):
             problems.append("%s: no README.md (no commit line)" % d)
         else:
             with open(readme, encoding="utf-8", errors="replace") as f:
-                shas = COMMIT_LINE.findall(f.read())
+                text = f.read()
+            shas = COMMIT_LINE.findall(text)
+            if rerun:
+                for m in NOT_RERUN.finditer(text):
+                    reason = " ".join((m.group(2) or "").lower().split())
+                    if reason not in REASONS:
+                        problems.append("%s: 'not rerun: %s' has reason %r, want one of: %s"
+                                        % (readme, m.group(1), reason,
+                                           ", ".join(REASONS)))
+                        continue
+                    skipped.setdefault(m.group(1), []).append(
+                        (readme, REASONS[reason]))
             if not shas:
                 problems.append("%s: README.md has no 'commit: <sha>' line" % readme)
             for s in shas:
@@ -103,8 +136,20 @@ def check(sha, tree, dirs):
                         break
 
     missing, aborted, dup = [], [], []
+    kept = {}  # label -> reason, the labels accepted as not rerun
     for lab in labels:
         ps = where.get(lab, [])
+        sk = skipped.get(lab, [])
+        if rerun and ps and sk:
+            problems.append("%s: has a tally (%s) and a 'not rerun' line (%s)"
+                            % (lab, ps[0], sk[0][0]))
+        if rerun and len(sk) > 1:
+            dup.append(lab)
+            problems.append("%s: %d 'not rerun' lines: %s"
+                            % (lab, len(sk), ", ".join(r for r, _ in sk)))
+        if rerun and sk and not ps:
+            kept[lab] = sk[0][1]
+            continue
         if not ps:
             missing.append(lab)
             continue
@@ -121,16 +166,25 @@ def check(sha, tree, dirs):
     extra = sorted(set(where) - set(labels))
     if extra:
         problems.append("tallies not in the tree: %s" % " ".join(extra))
+    extra = sorted(set(skipped) - set(labels))
+    if extra:
+        problems.append("'not rerun' labels not in the tree: %s" % " ".join(extra))
 
-    have = len(labels) - len(missing)
+    have = len(labels) - len(missing) - len(kept)
+    if rerun:
+        nc = sum(1 for r in kept.values() if r == "no change expected")
+        summary = ("%d images, %d rerun, %d not rerun (%d no change expected, "
+                   "%d plan #376)" % (len(labels), have, len(kept), nc,
+                                      len(kept) - nc))
+    else:
+        summary = "%d images, %d with a tally" % (len(labels), have)
     if problems:
         for p in problems:
             print("FAIL:", p)
-        print("%d images, %d with a tally, %d missing, %d duplicated, %d aborted, commit %s"
-              % (len(labels), have, len(missing), len(dup), len(aborted), sha[:8]))
+        print("%s, %d missing, %d duplicated, %d aborted, commit %s"
+              % (summary, len(missing), len(dup), len(aborted), sha[:8]))
         return 1
-    print("%d images, %d with a tally, 0 missing, 0 duplicated, commit %s"
-          % (len(labels), have, sha[:8]))
+    print("%s, 0 missing, 0 duplicated, commit %s" % (summary, sha[:8]))
     return 0
 
 
@@ -144,10 +198,10 @@ def self_test():
     fails = []
     cases = []
 
-    def run(tree, dirs):
+    def run(tree, dirs, rerun=False):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            rc = check(good, tree, dirs)
+            rc = check(good, tree, dirs, rerun)
         return rc, buf.getvalue()
 
     def expect(name, ok):
@@ -204,6 +258,59 @@ def self_test():
                     "both", "fixed in commit %s\ncommit: %s\n" % (other, good),
                     True)
 
+        # --rerun: A1 tallied, B2 and C3 not rerun.
+        def rr(tag, labels, readme):
+            return session("rr-" + tag, good, labels,
+                           "commit: %s\n%s" % (good, readme))
+
+        nr = "not rerun: B2 no change expected\nnot rerun: C3 plan #376\n"
+        d = rr("ok", ["A1"], nr)
+        rc, out = run(tree, [d], True)
+        expect("rerun: tally or not-rerun line per label passes",
+               rc == 0 and "3 images, 1 rerun, 2 not rerun "
+               "(1 no change expected, 1 plan #376), 0 missing, 0 duplicated" in out)
+        rc, out = run(tree, [d])
+        expect("without --rerun the not-rerun lines are ignored",
+               rc == 1 and "missing (2): B2 C3" in out)
+        d = rr("none", ["A1"], "not rerun: B2 no change expected\n")
+        rc, out = run(tree, [d], True)
+        expect("rerun: label with neither fails as missing",
+               rc == 1 and "missing (1): C3" in out)
+        d = rr("both", ["A1", "B2"], nr)
+        rc, out = run(tree, [d], True)
+        expect("rerun: label with a tally and a not-rerun line fails",
+               rc == 1 and "B2: has a tally" in out)
+        d = rr("ghost", ["A1"], nr + "not rerun: Z9 plan #376\n")
+        rc, out = run(tree, [d], True)
+        expect("rerun: not-rerun label outside the tree fails",
+               rc == 1 and "not in the tree: Z9" in out)
+        d = rr("dupline", ["A1"], nr + "not rerun: B2 plan #376\n")
+        rc, out = run(tree, [d], True)
+        expect("rerun: label in two not-rerun lines is a duplicate",
+               rc == 1 and "B2: 2 'not rerun' lines" in out
+               and "1 duplicated" in out)
+        d = rr("dupdir", ["A1"], nr)
+        d2 = session("rr-dupdir2", good, [], "commit: %s\nnot rerun: C3 plan #376\n" % good)
+        rc, out = run(tree, [d, d2], True)
+        expect("rerun: not-rerun lines in two directories are a duplicate",
+               rc == 1 and "C3: 2 'not rerun' lines" in out)
+        d2 = session("rr-duptally", good, ["A1"])
+        rc, out = run(tree, [rr("dt", ["A1"], nr), d2], True)
+        expect("rerun: duplicated tally fails",
+               rc == 1 and "A1: tallies in 2 directories" in out)
+        d = rr("reason", ["A1"], nr + "not rerun: Z9 because\n")
+        rc, out = run(tree, [d], True)
+        expect("rerun: unknown reason fails", rc == 1 and "has reason 'because'" in out)
+        d = rr("redact", ["A1"], nr + "see 10.0.0.1\n")
+        rc, out = run(tree, [d], True)
+        expect("rerun: redaction check stays", rc == 1 and "private detail" in out)
+        d = rr("abort", [], nr + "not rerun: A1 no change expected\n")
+        with open(os.path.join(d, "A1.tally.txt"), "w", encoding="utf-8") as f:
+            f.write("deqp: complete=0\n")
+        rc, out = run(tree, [d], True)
+        expect("rerun: both a tally and a line fails; aborted tally is named",
+               rc == 1 and "aborted" in out)
+
     print("check-pi4-gles3-log self-test: %d of %d cases ok"
           % (len(cases) - len(fails), len(cases)))
     return 1 if fails else 0
@@ -214,6 +321,8 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tree", default=os.path.join(HERE, "pi4-gles3-tree.txt"))
     ap.add_argument("--commit", help="full sha of the record")
+    ap.add_argument("--rerun", action="store_true",
+                    help="accept labels the READMEs list as 'not rerun: <LABEL> <reason>'")
     ap.add_argument("--self-test", action="store_true",
                     help="check the checker on a synthetic record")
     ap.add_argument("dirs", nargs="*", help="session directories")
@@ -227,7 +336,7 @@ def main():
         ap.error("--commit needs a full 40-digit sha")
     dirs = a.dirs or sorted(
         glob.glob(os.path.join(HERE, "log", "*-pi4-gles3-%s-*" % sha[:8])))
-    return check(sha, a.tree, dirs)
+    return check(sha, a.tree, dirs, a.rerun)
 
 
 if __name__ == "__main__":
