@@ -128,12 +128,35 @@ The first option was taken: the tile memory is sized for 4096 a side
   (`src/gl` is unchanged). `MAX_JOB_TILES` (line 446) follows it: 128 x 128 =
   16,384 tiles, the 32x32 tiles of four 32-bpp RTs over 4096 square.
 - At init the binner's tile pool and the tile state are sized from that
-  tiling (line 5915): tile alloc 2,105,344 bytes (was 532,480 at 2048: 64 x
-  64 x 128 + 8,192), tile state 4,194,304 (was 1,048,576), about 4.5 MiB more
-  of the carve-out, allocated once. A kick names and zeroes only the tile
-  state of its own tiles (`a_kick_zeroes_the_tile_state_of_its_own_tiles`),
+  tiling (`src/v3d/backend.rs` lines 6197-6210, `v3d_frame_alloc_sizes`,
+  `driver/src/v3d/v3d_frame.c` lines 117-127). The tile alloc is the sum of
+  three parts: 128 x 128 tiles x 128 bytes = 2,097,152, plus 8,192, plus the
+  pool, `tiles x 128 x draws / 2` capped at 512 KiB (524,288; at 1,024
+  draws the cap is reached). That is **2,629,632 bytes**, which the console
+  prints at init as `binner tile pool 2629632 bytes` (an earlier figure of
+  2,105,344 left the 512 KiB pool out). At 2048 the same rule gave 1,056,768.
+  The tile state is 4,194,304 (was 1,048,576), so the carve-out holds about
+  5 MiB more than at 2048, allocated once. A kick names and zeroes only the
+  tile state of its own tiles (`a_kick_zeroes_the_tile_state_of_its_own_tiles`),
   so a small target costs per job what it did; the board cost is not
   measured.
+- Overflow: a job that bins more than the pool holds gets the OSAL's overflow
+  blocks. `CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS` (default 2, 256 KiB each,
+  `zephyr/Kconfig`; taken once at init, `src/osal/zephyr_v3d.c` line 269) are
+  fed by the interrupt handler on each out-of-memory interrupt, so one job
+  can use at most 2 blocks (the count restarts at 0 for every job). When the
+  blocks are used up the handler fails the job with `-ENOMEM`
+  (`src/osal/zephyr_v3d.c` lines 1020-1029). The sizing assumes
+  `CONFIG_YAKOGL_V3D_DRAWS_PER_JOB=1024` (the default); keep it there. The
+  console reads, after job 1, `overflow blocks 0 of 2` (`src/v3d/backend.rs`
+  line 707). What a failed bin looks like (`src/osal/zephyr_v3d.c` lines
+  1184-1216): `bin did not end (-12` is the overflow running dry (`-ENOMEM`);
+  `-110` (timeout) or `-14` (MMU fault) is a hang, not an overflow.
+- Known limit, not a fix made here: `v3d_frame_alloc_sizes` multiplies
+  `tiles_size * draws` in 32 bits (`v3d_frame.c` line 123). At the 4096
+  tiling, `tiles_size` is 2^21, so it wraps from `draws` = 2048 up. The
+  Kconfig range (64..8192) and the Linux environment variable allow that;
+  the default 1,024 does not reach it (2^31 fits).
 - The draw path names each cause (lines 6294, 6297): "an empty target (0
   pixels on a side)" (`refuse`, `-EINVAL`, a malformed draw) and "a target
   larger than the tile memory is sized for (4096x4096)"
