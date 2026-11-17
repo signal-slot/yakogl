@@ -940,7 +940,7 @@ repository's remap, `lodkey::remap_mag_switch` (`lod <= 0.5 ? -1.0 : lod` for
 mag `LINEAR` with min `NEAREST_MIPMAP_*`), is requested by the Mali back end in
 an ES 2.0 build, but the Mali compile entry points never apply it (inv-vcube's
 finding). Applying it is a change in `src/shaderc/online/mali/`, which this item
-does not make. The 138 fragment-stage cube cases are compile refusals today.
+does not make; `attrgap-fix` made it (section (k)). The 138 fragment-stage cube cases are compile refusals today.
 Once compiled, they take the same sampler.
 
 ## (j) A cube look-up without a complete cube map: Mesa's fallback cube
@@ -982,3 +982,71 @@ Tests:
 No drm-shim descriptor of Mesa's fallback cube was compared: `MESA_PAN_TREE`
 was not set on the machine that made this change. The descriptor fields are
 those already compared for a complete cube (sections (a) and (e)).
+
+## (k) The ES 2.0 magnification switch of a vertex look-up (`attrgap-fix`)
+
+The six `texture.vertex.cube.filtering.nearest_mipmap_{nearest,linear}_linear_{clamp,mirror,repeat}`
+cases that section (i) left open are now handled by the shader.
+
+**The rule.** GL ES 2.0 section 3.7.8 (Texture Magnification): the texture
+is magnified when λ <= c and minified otherwise, with c = 0.5 when
+`TEXTURE_MAG_FILTER` is `LINEAR` and `TEXTURE_MIN_FILTER` is
+`NEAREST_MIPMAP_NEAREST` or `NEAREST_MIPMAP_LINEAR`, and c = 0 in every
+other state. dEQP's reference sampler (`framework/common/tcuTexture.cpp` of
+VK-GL-CTS: a look-up magnifies when its level is at or below the sampler's
+threshold, and the GLES2 vertex texture cases build their reference sampler
+with the 0.5 threshold for these two filter pairs) follows it. The Valhall
+texture unit has no threshold: it magnifies at λ <= 0, so for 0 < λ <= 0.5 it
+applies the minification filter where the reference applies `LINEAR`
+magnification. Mesa's ES 2.0 driver has the same difference
+(`M:panfrost/ci/panfrost-t720-fails.txt:7-12`). The VK-GL-CTS source was not
+on the machine that made this change, so no line of it is cited here.
+
+**The remap.** A vertex look-up's level is explicit (`textureCubeLod`,
+`texture2DLod`), so the shader can move the switch itself, as
+`lodkey::remap_mag_switch` already does for the PowerVR, the GC7000 and the
+V3D: `lod' = lod <= 0.5 ? -1.0 : lod` (src/shaderc/online/lodkey.rs, module
+doc). In (0, 0.5] the level becomes negative, and the hardware magnifies.
+Above 0.5 the level is unchanged and both filters minify with the same λ.
+At or below 0 nothing changes. The Mali compile entry points now go through
+a local `lower_source` (src/shaderc/online/mali/mod.rs): the front end, then
+the remap of the bindings in the compile's `LodKey::mag_switch`. The key is
+set only around a sampler-state variant's compile (`online_sampler_variant`).
+The GL core asks for that variant when the draw's unit has mag `LINEAR` and
+min `NEAREST_MIPMAP_*` (`gl/draw.rs`, `stage_lod_key`), and the shader's
+sensitivity reports `mag_switch` only in a `report-es2` build
+(`online::backend::sensitivity_of`). Every other compile gets the front
+end's module unchanged, so the program a non-variant draw takes, and #367's
+corpus verdicts, do not move.
+
+**What the vertex stage gets.** For `vcube.vert` (level `u_lod`, a
+uniform), the keyed program adds, before the cube sequence of (b):
+
+```text
+FCMP_OR.f32.ge.m1 r0, 0x38000000.h1, u4.w0, r0^    0.5 >= u_lod
+CSEL.u32.eq r0, r0^, 0x0, u4.w0, r1^               u_lod if not, else -1.0
+```
+
+The level then goes through the `clamp_m1_1` and 8.8 scaling of the
+explicit-level sequence as before. A level of -1.0 is below the sampler's
+minimum level of 0, and λ <= 0 magnifies whichever of the two the hardware
+compares first (**pin on the board**: the board rerun of the six cases).
+No new compiler refusal was needed: the Valhall vertex stage takes the
+compare and the select.
+
+**Only in an ES 2.0 build.** An ES 3 context is judged against a reference
+whose switch is at 0 (ES 3.0 3.8.11), the hardware's, so a build without
+`report-es2` never asks for the key, as on the other back ends.
+
+Tests:
+
+- `shaderc::online::mali::tests::a_keyed_vertex_cube_look_up_switches_to_magnification_at_one_half`
+  (src/shaderc/online/mali/tests.rs): `vcube.vert` compiled with the key has
+  the compare and the select, and without the key, or with a key for
+  another binding, it has neither.
+- `tests/mali_vcube_magswitch.rs` (GL core on the Mali mock):
+  `nearest_mipmap_{linear,nearest}_with_mag_linear_remaps_the_lod` and
+  `both_nearest_mipmap_filters_get_the_same_remap` run in the `report-es2`
+  build, where the two states get the remapped program and every other
+  state gets the plain one. Without `report-es2`,
+  `no_remap_outside_an_es2_build` checks that they keep the plain program.

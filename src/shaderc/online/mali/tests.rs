@@ -9019,3 +9019,35 @@ fn attribute_rows_cover_the_matrix_columns_read() {
         }
     }
 }
+
+/* ---- the ES 2.0 magnification switch of a vertex look-up --------------- */
+
+/// The reference's vertex cube look-up (dEQP-GLES2 texture.vertex.cube,
+/// tools/mali/testdata/pan_tex_ref/vcube.vert) compiled with the given
+/// `mag_switch` key, as a sampler-state variant is
+/// (`online_sampler_variant`): the program's instructions, as text.
+fn vcube_code(mag_switch: u32) -> Vec<String> {
+    let vs = include_str!("../../../../tools/mali/testdata/pan_tex_ref/vcube.vert");
+    let key = crate::shaderc::LodKey { mag_switch, ..crate::shaderc::LodKey::NONE };
+    let old = crate::shaderc::set_compile_lod_key(key);
+    let s = compile(SHC_STAGE_VERTEX, vs);
+    crate::shaderc::set_compile_lod_key(old);
+    trim(&s.expect("vcube.vert compiles").code).iter().map(|w| text(*w)).collect()
+}
+
+/// ES 2.0 3.7.8 (docs/notes/mali-cube-textures.md, section (k)): with the
+/// key, the explicit level `u_lod` reaches the look-up through the remap
+/// `lod <= 0.5 ? -1.0 : lod`, a compare and a select the vertex stage
+/// takes; without it the program is the front end's, no compare. The key
+/// of a binding the look-up does not use changes nothing.
+#[test]
+fn a_keyed_vertex_cube_look_up_switches_to_magnification_at_one_half() {
+    let _serial = store::test_lock();
+    let plain = vcube_code(0);
+    let keyed = vcube_code(1);
+    assert_eq!(vcube_code(1 << 3), plain, "a key of another binding");
+    assert_ne!(keyed, plain, "the remap is missing");
+    let has = |code: &[String], what: &str| code.iter().any(|t| t.contains(what));
+    assert!(!has(&plain, "CMP") && !has(&plain, "CSEL"), "{plain:#?}");
+    assert!(has(&keyed, "CMP") || has(&keyed, "CSEL"), "no compare or select for c = 0.5:\n{keyed:#?}");
+}
