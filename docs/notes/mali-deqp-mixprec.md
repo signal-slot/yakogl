@@ -696,3 +696,60 @@ there (7.1's shapes). Leave them to a later reference.
   `tests/mali_deqp_mixprec.rs` (`PINNED` and the `#[ignore]`s; item
   `map-misc` re-pins the eight family tests, so read the file at the
   latest main).
+
+## 8. What `lower-mixprec` did
+
+Item `lower-mixprec` (plan #377), 2026-11-17, on main 080240bc (after
+`lower-intval-1`, ab9cde96). Host only; the board is not run.
+
+- **Byte-equal to Mesa 26.2.1** (`tests/mali_deqp_mixprec.rs`, `MATCHED`):
+  `cmpf`, `cmpv2`, `rot1`, `rot3`. **Compile, words differ** (`DIFFERS`, each
+  `#[ignore]` names the difference; `differences_pinned` asserts they still
+  differ): `cmpv3` (the last `FMAX`'s operand order), `cmpv4` and `cmptex`
+  (the product chain not rebalanced, and the `FMAX` order; `cmptex` also
+  leaves the texel differences unpaired), `cmpmat2` (column 0's `FADD_IMM`
+  and `FMAX` come first in Mesa). All eight compile, so none refuses any
+  more.
+- **Step 0.** Step 0 was not needed: `mali_ref::compile_pair` compiles the
+  `cmp*` pairs with the vertex shader's constant `v_vtxOut` folded, which is
+  the reference's program. The shader objects with `v_vtxOut` still a
+  varying (glCompileShader's view) compile:
+  `the_compare_chain_shader_objects_compile` in `tests.rs`.
+- **Step 1 (V1).** In `conversion_order`, an aligned pair of colour lanes
+  that no tree reads is one `V2F32_TO_V2F16`. The even lane is low, and the
+  odd lane is read as `.h1` of the pair's register (`Leaves::conv_hi`,
+  `conv_lane`). A pair whose first lane is odd, or that a tree reads, is
+  still refused. This makes `fsload_mk_pair` byte-equal, so it moves from
+  the refusal list to the colour-conversion test in `tests.rs`, and
+  `fsload_disc_col` remains the `FsVaryingLoad` probe. In
+  `tests/mali_deqp_constop.rs`, `loops_for_basic_mediump_float_fs` becomes
+  byte-equal. `loops_while_basic_highp_float_fs` moves on to the
+  `MixedPrecision` refusal, which is a real mix.
+- **Steps 2 and 3 (M1).** These are in `walk_nodes`, `Fs::cmp_select` and
+  `Fs::and_masks`. `fmul(b2f(a), b2f(b))` becomes `b2f(iand(a, b))`, and
+  `iand(flt(x, c), flt(y, c))` becomes `flt(fmax(x, y), c)`. A product with
+  another mediump value becomes the fp16 `fmul` of a `b2f16`; with the
+  standalone varying, it becomes `bcsel(a, v, 0.0)`. In the pair graph,
+  `lane_tree` and `lone_tree` take the `b2f16` of one compare, its select of
+  a lane and 0.0, and `fabs`. `mates` pairs two consecutive dwords of an
+  fp16 uniform. A constant-`v_vtxOut` program whose colour is all `b2f`
+  lanes or constants is sent by `lower-intval-1`'s `bool_colour` to
+  `select_highp` instead (seen for `cmpv2`: `vectorize16` pairs the
+  differences and their `fabs`).
+- **Step 4** (the 16-bit `.f1` fold in `opt::mod_prop_backward`) landed
+  with `lower-intval-1` and is used as is.
+- **emit.rs.** A one-lane fp16 `FMAX` now keeps a source's high half
+  (`lone`, as `FADD` and `FMIN` already do). Before this change the row
+  forced `.h00`. Through `bool_colour`, `cmpv2`'s `FMAX` reads the two
+  halves of the paired difference (`r0.abs.h00, r0.abs.h11`), and before
+  this change it read the low half twice.
+- **Step 5** (a separate text for M1) is not done: no M1 reference reaches
+  the `MixedPrecision` site now.
+- `tools/mali/corpus-verdicts.txt` did not move (`uniidx_j.frag` keeps its
+  `FsVaryingLoad` text). No glmark2 verdict moves:
+  `tests/mali_glmark2_corpus.rs` over a corpus that `run.sh` made from
+  glmark2 22c527cb reports the same 21 stale rows with and without this
+  change. Those rows are main's own fixture lag, so the fixture is not
+  regenerated here. The dEQP cases this
+  unblocks were not measured here; the next whole-tree or host measure
+  counts them.

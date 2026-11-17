@@ -1302,11 +1302,12 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.xzyw; }", MaliError::ColourForm),
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.yxzw; }", MaliError::FsOperandForm),
         (FS, "precision mediump float; varying vec2 v; void main(){ gl_FragColor = vec4(1.0, v, 1.0); }", MaliError::ColourPair),
-        /* both lanes of an aligned pair converted apart: Mesa converts the
-         * pair once (fsload_mk_pair.expect.json) */
+        /* a pair Mesa makes of a discard's lane and a colour lane, y low
+         * (fsload_disc_col.expect.json) */
         (
             FS,
-            "precision mediump float; varying vec4 a; void main(){ gl_FragColor = vec4(a.z, 0.5, a.w, 0.75); }",
+            "precision mediump float; varying vec4 a; \
+             void main(){ if (a.y > 0.5) discard; gl_FragColor = vec4(a.x, 0.5, 0.0, 1.0); }",
             MaliError::FsVaryingLoad,
         ),
         (FS, "precision mediump float; varying float v; void main(){ gl_FragColor = vec4(v, 0.0, 0.0, 1.0); }", MaliError::ColourZeroHalf),
@@ -2204,17 +2205,15 @@ fn a_matrix_varying_from_one_vector_is_its_four_components_as_mesa_26_2_1() {
 
 /// Shapes whose load or conversions Mesa makes in a form the selection has
 /// no reference for, each refused by name; each reference holds the load:
-/// both lanes of an aligned pair beside constants (Mesa converts the pair
-/// once, `V2F32_TO_V2F16 r0, r2^, r3^`), a discard's compare of y and the
-/// colour's x (Mesa's pair with y low, `V2F32_TO_V2F16 r0, r1^, r0^`), a
-/// sum with zeros of both signs (no identity at the link by the source,
-/// nir_search.c:282-285, and no shape that tells its order), and
+/// a discard's compare of y and the colour's x (Mesa's pair with y low,
+/// `V2F32_TO_V2F16 r0, r1^, r0^`), a sum with zeros of both signs (no
+/// identity at the link by the source, nir_search.c:282-285, and no shape
+/// that tells its order), and
 /// dFdy of a vec2's second lane (Mesa converts that lane alone, `FADD.f32
 /// r0.h0, r1^`).
 #[test]
 fn a_load_or_conversion_with_no_reference_is_refused() {
     let cases = [
-        (td!("fsload_mk_pair.frag"), td!("fsload_mk_pair.expect.json"), MaliError::FsVaryingLoad, ".v4"),
         (td!("fsload_disc_col.frag"), td!("fsload_disc_col.expect.json"), MaliError::FsVaryingLoad, ".v4"),
         (td!("fsload_zeros.frag"), td!("fsload_zeros.expect.json"), MaliError::FsVaryingLoad, ".v4"),
         (td!("fsload_deriv2.frag"), td!("fsload_deriv2.expect.json"), MaliError::FsOperandForm, ".v2"),
@@ -2234,7 +2233,9 @@ fn a_load_or_conversion_with_no_reference_is_refused() {
 /// fsconv_slot loads slot 1 first (d.y); fsconv_disc2, fsconv_discw,
 /// fsconv_disch, fsconv_discv and fsconv_discpc convert the colour after
 /// the DISCARD; fsconv_alpha2, fsconv_alpha3 and fsconv_alpha4 take a lane
-/// alone as the alpha (`ATEST ... r2.h0`).
+/// alone as the alpha (`ATEST ... r2.h0`); fsload_mk_pair converts the
+/// colour's aligned pair (z, w) once, beside constants (`V2F32_TO_V2F16 r0,
+/// r2^, r3^`, then `MKVEC r0.h1, 0.75h`).
 #[test]
 fn colour_lanes_are_converted_at_the_store_as_mesa_26_2_1() {
     let cases = [
@@ -2248,6 +2249,7 @@ fn colour_lanes_are_converted_at_the_store_as_mesa_26_2_1() {
         ("fsconv_alpha2", td!("fsconv_alpha2.vert"), td!("fsconv_alpha2.frag"), td!("fsconv_alpha2.expect.json")),
         ("fsconv_alpha3", td!("fsconv_alpha3.vert"), td!("fsconv_alpha3.frag"), td!("fsconv_alpha3.expect.json")),
         ("fsconv_alpha4", td!("fsconv_alpha4.vert"), td!("fsconv_alpha4.frag"), td!("fsconv_alpha4.expect.json")),
+        ("fsload_mk_pair", td!("fsload_mk_pair.vert"), td!("fsload_mk_pair.frag"), td!("fsload_mk_pair.expect.json")),
     ];
     let failed: Vec<String> = cases
         .iter()
@@ -9080,4 +9082,26 @@ fn a_keyed_vertex_cube_look_up_switches_to_magnification_at_one_half() {
     let has = |code: &[String], what: &str| code.iter().any(|t| t.contains(what));
     assert!(!has(&plain, "CMP") && !has(&plain, "CSEL"), "{plain:#?}");
     assert!(has(&keyed, "CMP") || has(&keyed, "CSEL"), "no compare or select for c = 0.5:\n{keyed:#?}");
+}
+
+/// The dEQP `uniform_api` compare chain's shader objects (glCompileShader:
+/// `v_vtxOut` still a varying, `v_vtxOut * compare_vecN(..)` the select of
+/// the varying's lane, nir_fs.rs `lane_tree`) compile; the program's
+/// fragment shader, compiled for its vertex shader's constant `v_vtxOut`,
+/// is compared in tests/mali_deqp_mixprec.rs.
+#[test]
+fn the_compare_chain_shader_objects_compile() {
+    let cases = [
+        td!("deqp_mixprec_cmpf.frag"),
+        td!("deqp_mixprec_cmpv2.frag"),
+        td!("deqp_mixprec_cmpv3.frag"),
+        td!("deqp_mixprec_cmpv4.frag"),
+        td!("deqp_mixprec_cmpmat2.frag"),
+        td!("deqp_mixprec_cmptex.frag"),
+    ];
+    for fs in cases {
+        if let Err(e) = compile(SHC_STAGE_FRAGMENT, fs) {
+            panic!("{fs}: {e:?}");
+        }
+    }
 }
