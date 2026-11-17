@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# one row per image of the tree (rerun-map.py): b1b5b845 board counts, host counts, verdict
+image	mustpass	b_pass	b_fail	b_ns	b_other	b_never	h_began	h_never	h_refused	h_api	fixed	ns_changed	verdict	board_classes	host_classes
+A1	472	461	11	0	0	0	472	0	0	2	9	0	rerun	api: Requirement not satisfied x11	api: Requirement not satisfied x2
+B1	695	695	0	0	0	0	695	0	0	0	0	0	no change expected	-	-
+C1	602	602	0	0	0	0	602	0	0	0	0	0	no change expected	-	-
+D1	443	367	0	76	0	0	443	0	0	0	0	0	no change expected	-	-
+FB1	580	559	14	7	0	0	580	0	0	14	0	0	no change expected	api: Framebuffer checked is incomplete, expected complete x12; api: Framebuffer checked as complete, expected incomplete x2	api: Framebuffer checked is incomplete, expected complete x12; api: Framebuffer checked as complete, expected incomplete x2
+FB2	610	445	19	146	0	0	610	0	0	16	0	0	no change expected	api: GL_INVALID_OPERATION at es3fFboTestCase.cpp:N x16; render: Image comparison failed x3	api: GL_INVALID_OPERATION at es3fFboTestCase.cpp:N x16
+FB3	329	157	136	36	0	0	329	0	0	78	48	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x64; api: Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:N x52; render: Image comparison failed x10; refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("gl_FragDepth")) x10	api: Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:N x78
+FB4	509	108	335	66	0	0	509	0	0	90	0	0	no change expected	render: Image comparison failed x245; api: Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:N x34; api: Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:N x30; api: Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:N x20; api: GL_INVALID_OPERATION at es3fFboTestCase.cpp:N x6	api: Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:N x34; api: Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:N x30; api: Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:N x20; api: GL_INVALID_OPERATION at es3fFboTestCase.cpp:N x6
+FO1	677	677	0	0	0	0	677	0	0	0	0	0	no change expected	-	-
+FO2	475	475	0	0	0	0	475	0	0	0	0	0	no change expected	-	-
+FO3	227	227	0	0	0	0	227	0	0	0	0	0	no change expected	-	-
+FO4	450	450	0	0	0	0	450	0	0	0	0	0	no change expected	-	-
+FO5	475	475	0	0	0	0	475	0	0	0	0	0	no change expected	-	-
+FO6	866	866	0	0	0	0	866	0	0	0	0	0	no change expected	-	-
+FR1	420	360	12	48	0	0	420	0	0	0	0	0	no change expected	render: Image comparison failed x12	-
+FR2	520	422	31	67	0	0	520	0	0	26	0	0	no change expected	api: After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:N x26; render: Image comparison failed x5	api: After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:N x26
+LT	56	55	1	0	0	0	56	0	0	0	0	0	no change expected	render: Writing to container with deleted attachment modified a new object. x1	-
+M1	507	438	11	58	0	0	507	0	0	2	5	0	rerun	api: Got invalid error x7; render: Failed x4	api: Got invalid error x2
+PR	504	504	0	0	0	0	504	0	0	0	0	0	no change expected	-	-
+R1	303	257	16	26	4	0	303	0	0	0	14	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x14; render: Interpolation was calculated using projected coordinateds x4; render: Found invalid pixel values x1; render: Incorrect rasterization x1	-
+SQ	946	911	26	9	0	0	946	0	0	6	20	0	rerun	api: Got invalid integer value x12; api: Got invalid float value x11; api: got invalid value x2; refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler")) x1	api: Got invalid float value x3; api: Got invalid integer value x3
+S01	861	861	0	0	0	0	861	0	0	0	0	0	no change expected	-	-
+S02	392	392	0	0	0	0	392	0	0	0	0	0	no change expected	-	-
+S03	192	0	0	0	1	191	192	0	18	160	14	0	plan #376	never began x191; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x1	api: Error in draw: glGetError() returned GL_INVALID_OPERATION at glsShaderExecUtil.cpp:N x160; refusal: glDrawArrays was not recorded (N); the frame is missing it x15; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x3
+S04	201	0	0	0	1	200	201	0	17	174	10	0	plan #376	never began x200; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x1	api: Error in draw: glGetError() returned GL_INVALID_OPERATION at glsShaderExecUtil.cpp:N x174; refusal: glDrawArrays was not recorded (N); the frame is missing it x15; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x2
+S05	202	0	0	0	1	201	202	0	26	166	10	0	plan #376	never began x201; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x1	api: Error in draw: glGetError() returned GL_INVALID_OPERATION at glsShaderExecUtil.cpp:N x148; refusal: glDrawArrays was not recorded (N); the frame is missing it x23; api: Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:N x17; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x3; api: Failed to set up framebuffer object: glGetError() returned GL_OUT_OF_MEMORY at glsShaderExecUtil.cpp:N x1
+S06	204	0	0	0	1	203	204	0	27	171	6	0	plan #376	never began x203; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x1	api: Error in draw: glGetError() returned GL_INVALID_OPERATION at glsShaderExecUtil.cpp:N x152; refusal: glDrawArrays was not recorded (N); the frame is missing it x24; api: Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:N x18; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x3; api: Failed to set up framebuffer object: glGetError() returned GL_OUT_OF_MEMORY at glsShaderExecUtil.cpp:N x1
+S07	206	0	0	0	0	206	206	0	16	178	12	0	plan #376	never began x206	api: Error in draw: glGetError() returned GL_INVALID_OPERATION at glsShaderExecUtil.cpp:N x178; refusal: glDrawArrays was not recorded (N); the frame is missing it x14; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x2
+S08	142	0	0	0	1	141	142	0	8	128	6	0	plan #376	never began x141; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x1	api: Error in draw: glGetError() returned GL_INVALID_OPERATION at glsShaderExecUtil.cpp:N x110; api: Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:N x18; refusal: glDrawArrays was not recorded (N); the frame is missing it x7; refusal: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty x1
+S09	1156	1156	0	0	0	0	1156	0	0	0	0	0	no change expected	-	-
+S10	690	605	85	0	0	0	690	0	0	15	15	0	rerun	render: Fail x55; api: Runtime check failed: 'gl.checkFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE' at es3fShaderDerivateTests.cpp:N x15; refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("gl_FragDepth")) x15	api: Runtime check failed: 'gl.checkFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE' at es3fShaderDerivateTests.cpp:N x15
+S11	756	756	0	0	0	0	756	0	0	0	0	0	no change expected	-	-
+S12	1216	1216	0	0	0	0	1216	0	0	0	0	0	no change expected	-	-
+S13	957	957	0	0	0	0	957	0	0	0	0	0	no change expected	-	-
+S14	594	594	0	0	0	0	594	0	0	0	0	0	no change expected	-	-
+S15	972	972	0	0	0	0	972	0	0	0	0	0	no change expected	-	-
+S16	720	719	1	0	0	0	720	0	0	1	0	0	no change expected	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(Select(OutOfScratch)) x1	api: Compile failed x1
+S17	716	716	0	0	0	0	716	0	0	0	0	0	no change expected	-	-
+S18	864	864	0	0	0	0	864	0	0	0	0	0	no change expected	-	-
+S19	716	716	0	0	0	0	716	0	0	0	0	0	no change expected	-	-
+S20	666	666	0	0	0	0	666	0	0	0	0	0	no change expected	-	-
+S21	680	680	0	0	0	0	680	0	0	0	0	0	no change expected	-	-
+S22	768	768	0	0	0	0	768	0	0	0	0	0	no change expected	-	-
+S23	866	866	0	0	0	0	866	0	0	0	0	0	no change expected	-	-
+S24	1126	1126	0	0	0	0	1126	0	0	0	0	0	no change expected	-	-
+S25	689	689	0	0	0	0	689	0	0	0	0	0	no change expected	-	-
+S26	700	700	0	0	0	0	700	0	0	0	0	0	no change expected	-	-
+S27	987	987	0	0	0	0	987	0	0	0	0	0	no change expected	-	-
+S5f	66	66	0	0	0	0	66	0	0	0	0	0	no change expected	-	-
+S5v	70	70	0	0	0	0	70	0	0	0	0	0	no change expected	-	-
+S30	915	915	0	0	0	0	915	0	0	0	0	0	no change expected	-	-
+S31	648	648	0	0	0	0	648	0	0	0	0	0	no change expected	-	-
+S32a	522	262	260	0	0	0	522	0	32	0	228	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x174; refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up with gradients")) x55; refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up")) x31	refusal: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write) x32
+S32b	34	0	34	0	0	0	34	0	18	0	0	0	no change expected	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("textureSize of a 3D or array sampler")) x18; render: Got unexpected texture size x16	refusal: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write) x16; refusal: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output x2
+S32c1	1	0	0	0	1	0	1	0	1	0	0	0	no change expected	refusal: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output x1	refusal: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output x1
+S32c2	1	0	0	0	0	1	1	0	1	0	0	0	no change expected	never began x1	refusal: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output x1
+S32c3	1	0	0	0	0	1	1	0	1	0	0	0	no change expected	never began x1	refusal: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output x1
+S32c4	1	0	0	0	0	1	1	0	1	0	0	0	no change expected	never began x1	refusal: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output x1
+S32d	118	116	2	0	0	0	118	0	0	0	2	0	rerun	refusal: online shaderc: the fragment uniform named 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' is as long as the reflection's 64-byte name field stores, so it may have been truncated -- and a truncated name is reported, matched and P x1; refusal: online shaderc: the vertex uniform named 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' is as long as the reflection's 64-byte name field stores, so it may have been truncated -- and a truncated name is reported, matched and PAI x1	-
+T01	266	0	0	266	0	0	266	0	0	0	0	0	no change expected	-	-
+T02	129	117	0	12	0	0	129	0	0	0	0	0	no change expected	-	-
+T03	134	0	122	12	0	0	134	0	0	0	122	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x122	-
+T04	124	112	0	12	0	0	124	0	0	0	0	0	no change expected	-	-
+F3C1	14	0	14	0	0	0	14	0	0	0	14	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x14	-
+F3C2	14	0	14	0	0	0	14	0	0	0	14	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x14	-
+F3C3	14	0	14	0	0	0	14	0	0	0	14	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x14	-
+F3C4	14	0	14	0	0	0	14	0	0	0	14	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x14	-
+F3F1	15	0	15	0	0	0	15	0	0	0	15	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x15	-
+F3F2	15	0	15	0	0	0	15	0	0	0	15	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x15	-
+F3F3	15	0	15	0	0	0	15	0	0	0	15	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x15	-
+F3F4	15	0	14	1	0	0	15	0	0	0	14	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x14	-
+F3F5	11	0	0	11	0	0	11	0	0	0	0	0	no change expected	-	-
+F3S1	13	0	13	0	0	0	13	0	0	0	13	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x13	-
+F3S2	13	0	13	0	0	0	13	0	0	0	13	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x13	-
+T05a	196	142	34	20	0	0	196	0	0	0	32	16	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x32; render: Image comparison failed x2	-
+T05b	12	0	4	8	0	0	12	0	0	0	4	8	rerun	refusal: glDrawElements was not recorded (N); the frame is missing it x3; refusal: draw refused: a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) x1	-
+T05c	4	0	0	0	1	3	4	0	0	0	4	0	rerun	never began x3; refusal: draw refused: a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) x1	-
+T05d	8	0	0	8	0	0	8	0	0	0	0	8	rerun	-	-
+T06	326	106	208	12	0	0	326	0	0	0	206	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x206; render: Image comparison failed x2	-
+T07	224	140	84	0	0	0	224	0	0	0	64	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x64; render: Image verification failed x20	-
+T08	288	0	288	0	0	0	288	0	0	0	288	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up")) x144; refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x144	-
+T09	222	72	150	0	0	0	222	0	6	0	144	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a shadow look-up")) x144; refusal: glDrawElements was not recorded (N); the frame is missing it x5; refusal: draw refused: a texture larger than the tiled-copy budget (CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES) and the texture arena (8 MiB tiled) x1	refusal: draw refused: a texture larger than the tiled-copy budget (CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES) and the texture arena (8 MiB tiled) x6
+T10	334	212	122	0	0	0	334	0	0	0	118	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x118; render: Image comparison failed x4	-
+T11	320	184	136	0	0	0	320	0	0	0	135	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x135; render: Image comparison failed x1	-
+T12	197	119	78	0	0	0	197	0	0	0	76	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x76; render: Image comparison failed x2	-
+T13	312	180	132	0	0	0	312	0	0	0	129	0	rerun	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x129; render: Image comparison failed x3	-
+T14	416	136	88	0	1	191	416	0	8	3	267	0	plan #376	never began x191; refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube")) x86; render: Image comparison failed x2; refusal: no GPU memory for a kept tiled copy with a job open (0 draws in it): the job runs first, and the draw is tried in a new one (retry 1) x1	refusal: no GPU memory for a tiled copy of N bytes (N of N bytes of copies live, a job open) x6; api: Set cube map image data: glGetError() returned GL_OUT_OF_MEMORY at es3fTextureUnitTests.cpp:N x3; refusal: a draw does not fit an empty job (6 indices) x1; refusal: no GPU memory for a tiled copy of N bytes (0 of N bytes of copies live, a job open) x1
+T15	432	0	0	432	0	0	432	0	0	0	0	0	no change expected	-	-
+T16	504	0	0	504	0	0	504	0	0	0	0	0	no change expected	-	-
+T17	504	36	0	216	1	251	504	0	0	0	252	144	rerun	never began x251; refusal: draw refused: a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) x1	-
+TF1	444	4	0	0	1	439	444	0	0	0	440	0	plan #376	never began x439; refusal: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write) x1	-
+TF2	438	11	0	0	1	426	438	0	0	0	427	0	plan #376	never began x426; refusal: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write) x1	-
+UB1	968	968	0	0	0	0	968	0	0	0	0	0	no change expected	-	-
+UB2	755	754	1	0	0	0	755	0	0	0	1	0	rerun	refusal: online shaderc: this fragment shader does not fit the scratch arena (0 bytes left); raise shaderc::online::store::SCRATCH_BYTES x1	-
+UB3	632	628	4	0	0	0	632	0	0	0	4	0	rerun	refusal: online shaderc: this fragment shader does not fit the scratch arena (0 bytes left); raise shaderc::online::store::SCRATCH_BYTES x4	-
+UA1	759	758	1	0	0	0	759	0	0	1	0	0	no change expected	refusal: online shaderc: the code generator refused this program (vertex + fragment): Program(Select(OutOfScratch)) x1	api: Compile failed x1
+UA2	1014	1014	0	0	0	0	1014	0	0	0	0	0	no change expected	-	-
+UA3	408	408	0	0	0	0	408	0	0	0	0	0	no change expected	-	-
+VA1	203	203	0	0	0	0	203	0	0	0	0	0	no change expected	-	-
+VA2	802	802	0	0	0	0	802	0	0	0	0	0	no change expected	-	-

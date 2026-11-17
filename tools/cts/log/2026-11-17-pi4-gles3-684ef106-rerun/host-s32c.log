@@ -1,0 +1,366 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# percase.sh at 684ef106 (one deqp-gles3 process per case, GPU=v3d, gles3): the case line, the
+# library's refusal lines and the result of every S32a / S32b / S32c1-4 case the host still refuses. HOST-ONLY.
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_fixed_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_fixed_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_float_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_float_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_fixed_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_fixed_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_float_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_float_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_fixed_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_fixed_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_float_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_float_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_fixed_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_fixed_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawElements was not recorded (-95); the frame is missing it
+  Fail (draw: glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment'..
+yakogl/v3d: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex'..
+yakogl/v3d: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_fragment'..
+yakogl/v3d: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_vertex'..
+yakogl/v3d: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercubeshadow_fragment'..
+yakogl/v3d: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercubeshadow_vertex'..
+yakogl/v3d: draw refused: a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+yakogl: glDrawArrays was not recorded (-95); the frame is missing it
+  Fail (Got unexpected texture size)
