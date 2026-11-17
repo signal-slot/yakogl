@@ -19,8 +19,8 @@
 #   c2  imx8mp-gles3-merge.py --notpass over them equals
 #       docs/es3/imx8mp-gles3-notpass.tsv without its '# SPDX' lines.
 #   c3  imx8mp-gles3-report.py --date <day> over them exits 0, no PARTIAL.
-#   c4  docs/es3-cts-failures.md has 'GC7000UL board run' and an 8-hex sha
-#       on that line or the next.
+#   c4  docs/es3-cts-failures.md has 'GC7000UL board run' and the first 8-hex
+#       sha after it (that line or the next) is the slices' commit.
 #   c5  docs/es3/board-recipe-imx8mp.md no longer says 'nothing has run on
 #       the board yet' and names 'rows01-13'.
 #   c6  the tools/cts/log/*-imx8mp-es2-*/README.md files hold at least 29
@@ -140,14 +140,16 @@ if [ ${#dirs[@]} -eq 0 ]; then
 elif [ -z "$DATE" ]; then
 	res 3 FAIL "no campaign day: pass --date or name the rows01-13 directory <YYYY-MM-DD>-imx8mp-gles3-..."
 else
-	out=$(tool imx8mp-gles3-report.py --date "$DATE" "${dirs[@]}" 2>&1)
+	out=$(tool imx8mp-gles3-report.py --date "$DATE" "${dirs[@]}" 2>/dev/null)
 	rc=$?
+	# Exit code and stdout only: stderr noise is not a report line, and the
+	# marker is looked for on every line, not the last.
 	if [ $rc -ne 0 ]; then
-		res 3 FAIL "report exit $rc: $(printf '%s\n' "$out" | tail -1)"
+		res 3 FAIL "report exit $rc"
 	elif printf '%s\n' "$out" | grep -q PARTIAL; then
 		res 3 FAIL "report says PARTIAL"
 	else
-		res 3 ok "report for $DATE: no PARTIAL"
+		res 3 ok "report for $DATE: exit 0, no PARTIAL"
 	fi
 fi
 
@@ -157,13 +159,22 @@ f="$ROOT/docs/es3-cts-failures.md"
 # work), and 'the GC7000UL board run is pending' is the state before the run.
 c4_tail=
 [ -f "$f" ] && c4_tail=$(grep -A1 'GC7000UL board run' "$f" | sed 's/.*GC7000UL board run//')
-if printf '%s\n' "$c4_tail" | grep -v '^ is pending' |
-	grep -Eq '(^|[^0-9a-zA-Z])[0-9a-f]{8}([^0-9a-zA-Z]|$)'; then
-	res 4 ok "docs/es3-cts-failures.md: 'GC7000UL board run' with an 8-hex sha"
-elif [ -n "$c4_tail" ]; then
-	res 4 FAIL "'GC7000UL board run' is pending or has no 8-hex sha on its line or the next"
-else
+# The commit of the committed slices: the <sha8> of '<day>-imx8mp-gles3-<sha8>-rows...'.
+c4_commit=$(for d in "${dirs[@]}"; do basename "$d" | sed -n 's/.*-imx8mp-gles3-\([0-9a-f]\{8\}\)-rows.*/\1/p'; done | sort -u)
+c4_doc=$(printf '%s\n' "$c4_tail" | grep -v '^ is pending' |
+	grep -Eo '(^|[^0-9a-zA-Z])[0-9a-f]{8}([^0-9a-zA-Z]|$)' | head -1 | tr -dc '0-9a-f')
+if [ -z "$c4_tail" ]; then
 	res 4 FAIL "docs/es3-cts-failures.md has no 'GC7000UL board run'"
+elif [ -z "$c4_doc" ]; then
+	res 4 FAIL "'GC7000UL board run' is pending or has no 8-hex sha on its line or the next"
+elif [ ${#dirs[@]} -eq 0 ]; then
+	res 4 ok "docs/es3-cts-failures.md: 'GC7000UL board run' at $c4_doc (no slices to compare, c1 fails)"
+elif [ "$(printf '%s\n' "$c4_commit" | wc -l)" -ne 1 ] || [ -z "$c4_commit" ]; then
+	res 4 FAIL "the slice directories name no single 8-hex commit (${c4_commit:-none})"
+elif [ "$c4_doc" != "$c4_commit" ]; then
+	res 4 FAIL "'GC7000UL board run' names $c4_doc, the committed slices are at $c4_commit"
+else
+	res 4 ok "docs/es3-cts-failures.md: 'GC7000UL board run' at $c4_commit, the slices' commit"
 fi
 
 # c5

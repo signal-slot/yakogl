@@ -374,7 +374,7 @@ def run(argv, out=None):
                 len(missing), len(table), span(missing), sum(len(m.per[i]) for i in missing)))
         for p in m.problems:
             print('FAIL:', p)
-        print('checked %d inputs, %d entries with a record: %s' % (len(a.dirs), len(m.rec), 'FAILED' if m.problems else 'OK'))
+        print('checked %d inputs, %d entries with a record: %s' % (len(a.dirs), len(table) - len(missing), 'FAILED' if m.problems else 'OK'))
         return 1 if m.problems else 0
     for p in m.problems:
         print('warning:', p, file=sys.stderr)
@@ -471,6 +471,11 @@ def selftest():
         rc, out, _ = call(*base_args, '--check', BA)
         expect('a dash row is a missing entry when no input has a real row',
                rc == 1 and 'no record: 2 of 4 entries (2-3)' in out)
+        rc, out, _ = call(*base_args, '--check', '--partial', BA)
+        expect('a dash row is no record: --partial counts only the 2 real entries',
+               rc == 0 and '2 entries with a record: OK' in out)
+        rc, out, _ = call(*base_args, '--check', '--partial', BB)
+        expect('dash rows beside real rows: only the real ones count', rc == 0 and '2 entries with a record: OK' in out)
         rc, out, _ = call(*base_args, '--notpass', BA)
         expect('notpass: a dash-only entry is NoResult', 'e3:NoResult dEQP-GLES3.e.0' in out)
         rc, out, _ = call(*base_args, '--check', R0, B, F)
