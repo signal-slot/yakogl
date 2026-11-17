@@ -22,8 +22,23 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// The whole `MaliError` message every reference below is refused with.
+/// The whole `MaliError` message every reference below is refused with,
+/// unless [`MOVED`] names another.
 const REFUSED: &str = "Valhall: an integer or boolean value is not lowered yet";
+
+/// References a lowering of another family moved past `REFUSED` to a later
+/// refusal. `opfs_not`'s `!(v.z > 0.0)` is the mediump `fge` that plan #367's
+/// lower-fs-arith takes from `inot(flt)` (gm2_fsmisc_8's `step`), and
+/// `reslib_float_fs`'s `lessThanEqual` of mediump values passes its 16-bit
+/// compares too; the boolean each writes to a `gl_FragColor` lane is refused
+/// next.
+const MOVED: &[(&str, &str)] = &[
+    ("opfs_not", "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet"),
+    (
+        "reslib_float_fs",
+        "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet",
+    ),
+];
 
 /// Every ignored reference below, without the `deqp_intval_` prefix.
 const PINNED: &[&str] = &[
@@ -204,7 +219,7 @@ fn uniapi_bool_vs() {
     mali_ref::assert_matches("deqp_intval_uniapi_bool_vs");
 }
 
-/// Each ignored reference is refused with exactly `REFUSED` (the whole
+/// Each ignored reference is refused with exactly `REFUSED` or its `MOVED` message (the whole
 /// `MaliError` message, not a substring), and the list covers every
 /// `deqp_intval_*` reference on disk.
 #[test]
@@ -216,11 +231,18 @@ fn refusals_pinned() {
         .collect();
     on_disk.sort();
     assert_eq!(on_disk, PINNED, "a deqp_intval_* reference has no test here");
+    let mut changed = Vec::new();
     for name in PINNED {
         let r = mali_ref::Reference::load(&format!("deqp_intval_{name}"));
         match mali_ref::compile_pair(&r.vs, &r.fs) {
-            Ok(_) => panic!("{name}: now compiles; remove its #[ignore] and its pin"),
-            Err(e) => assert_eq!(e, REFUSED, "{name}: the refusal changed"),
+            Ok(_) => changed.push(format!("{name}: now compiles; remove its #[ignore] and its pin")),
+            Err(e) => {
+                let want = MOVED.iter().find(|(n, _)| n == name).map_or(REFUSED, |(_, w)| w);
+                if e != want {
+                    changed.push(format!("{name}: the refusal changed to {e:?}"));
+                }
+            }
         }
     }
+    assert!(changed.is_empty(), "{}", changed.join("\n"));
 }

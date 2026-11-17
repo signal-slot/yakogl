@@ -463,11 +463,11 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("widen1", widen(x.swz)?)?.put("neg1", x.neg as u32)?.put("abs1", x.abs as u32)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
-        Op::F32ToS32 => {
+        Op::F32ToS32 | Op::F32ToS32Rte => {
             f = Fill::new(IsaOp::F32ToS32);
             f.put("src0", src_byte(&i.src[0])?)?;
             f.put("neg0", i.src[0].neg as u32)?.put("abs0", i.src[0].abs as u32)?;
-            f.put("round", super::bir::Round::Rtz as u32)?;
+            f.put("round", if i.op == Op::F32ToS32 { super::bir::Round::Rtz } else { super::bir::Round::Rte } as u32)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
         /* as U32_TO_F32 */
@@ -569,16 +569,19 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             alu_dest(&mut f, i, "dest_width")?;
         }
         /* the fp16 forms read one lane of the source (`lane0`, no widen).
-         * Only the low half: Mesa packs a high half as the 2-bit swizzle
-         * h11 (fsarith_77_vtransc's `FRSQ.f16 r2, u2.w1.h11`, bits 28-29
-         * set), which the table's 1-bit `lane0` cannot write */
+         * Mesa packs a high half as the 2-bit swizzle h11 (fsarith_77_
+         * vtransc's `FRSQ.f16 r2, u2.w1.h11`, gm2_fsmisc_1's `FRSQ.f16 r0,
+         * r0^.h11`: bits 28-29 set): the table's 1-bit `lane0` is bit 28,
+         * bit 29 is set after the encoding ([`H11_HIGH_BIT`]) */
         Op::FrcpF16 | Op::FrsqF16 => {
             f = Fill::new(if i.op == Op::FrcpF16 { IsaOp::FrcpF16 } else { IsaOp::FrsqF16 });
             let x = &i.src[0];
-            if x.swz != Swz::H00 {
-                return Err(MaliError::Defect(Defect::Operand));
-            }
-            f.put("src0", src_byte(x)?)?.put("lane0", 0)?;
+            let lane = match x.swz {
+                Swz::H00 => 0,
+                Swz::H11 => 1,
+                _ => return Err(MaliError::Defect(Defect::Operand)),
+            };
+            f.put("src0", src_byte(x)?)?.put("lane0", lane)?;
             f.put("neg0", x.neg as u32)?.put("abs0", x.abs as u32)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
@@ -908,9 +911,15 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
     let w = f.done()?;
     Ok(match i.op {
         Op::LdVarBufImmF32 { flat: true, .. } => w & !LD_VAR_BUF_SOURCE_FORMAT,
+        Op::FrcpF16 | Op::FrsqF16 if i.src[0].swz == Swz::H11 => w | H11_HIGH_BIT,
         _ => w,
     })
 }
+
+/// The high bit of the `FRCP.f16` / `FRSQ.f16` source's 2-bit swizzle
+/// (bit 29; `lane0`, bit 28, is the low one): `h11` sets both (va_pack.c's
+/// `va_pack_alu` of a 16-bit source swizzle).
+const H11_HIGH_BIT: u64 = 1 << 29;
 
 /// `LD_VAR_BUF_IMM`'s `source_format` field (bits 24-25; `src_flat32` is 0).
 const LD_VAR_BUF_SOURCE_FORMAT: u64 = 3 << 24;
