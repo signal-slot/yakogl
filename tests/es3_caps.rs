@@ -259,11 +259,15 @@ fn limits() -> Vec<Limit> {
 /// list true: it is the limit half of the gap list in docs/es3/backend-caps.md.
 /// An entry is by name and holds for every GPU build unless it says otherwise.
 fn known_gaps() -> Vec<(&'static str, &'static str)> {
-    let mut v: Vec<(&'static str, &'static str)> = vec![
-        ("MAX_COLOR_ATTACHMENTS", "3, not 4: gl/context.rs CAP_COLOR_ATTACHMENTS; the mrt4 item"),
-        ("MAX_DRAW_BUFFERS", "3, not 4: gl/context.rs MAX_DRAW_BUFFERS = CAP_COLOR_ATTACHMENTS; the mrt4 item"),
-        ("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)"),
-    ];
+    let mut v: Vec<(&'static str, &'static str)> =
+        vec![("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)")];
+    if !cfg!(feature = "gpu-mali") {
+        // the Mali reports 4 (gl/context.rs CAP_COLOR_ATTACHMENTS)
+        v.extend_from_slice(&[
+            ("MAX_COLOR_ATTACHMENTS", "3, not 4: gl/context.rs CAP_COLOR_ATTACHMENTS; the mrt4 item"),
+            ("MAX_DRAW_BUFFERS", "3, not 4: gl/context.rs MAX_DRAW_BUFFERS = CAP_COLOR_ATTACHMENTS; the mrt4 item"),
+        ]);
+    }
     if !cfg!(feature = "gpu-v3d") {
         // the V3D reads a stage's uniform blocks past its default block (gl/context.rs
         // MAX_UNIFORM_BLOCK_SIZE, MAX_STAGE_UNIFORM_DWORDS); the other back ends upload the
@@ -622,8 +626,14 @@ fn print_the_format_support_this_build_reports() {
     for (i, n) in names.iter().enumerate() {
         println!("{GPU}: texel class {n:<12} sampled: {}", (sampled >> i) & 1 != 0);
     }
-    // the classes every GPU samples today: RGBA8 is the base of everything
-    assert_ne!(sampled & gles_texfmt_bit(GLES_TEXFMT_RGBA8), 0);
+    // the classes every GPU that samples texel classes samples: RGBA8 is the base of everything. The
+    // Mali samples none (gl/texture.rs stored_compressed_formats; see the NUM_COMPRESSED_TEXTURE_FORMATS
+    // gap), so the mask is empty there
+    if cfg!(feature = "gpu-mali") {
+        assert_eq!(sampled, 0);
+    } else {
+        assert_ne!(sampled & gles_texfmt_bit(GLES_TEXFMT_RGBA8), 0);
+    }
     for f in GLES_SURF_INT_FIRST..=GLES_SURF_INT_LAST {
         println!("{GPU}: integer render target {:<10} drawable: {}", gles_surf_name(f), rt_format_drawable(f));
     }
