@@ -15,6 +15,17 @@ R32F texels. Three source cases still answer `GL_INVALID_OPERATION`
 
 Writing into the window is refused for the same reason as (1) (`REFUSED_DEPTH_DST`).
 
+**Status (item gl-ds-window):** the window path of the design below is
+implemented in `src/gl/blit.rs` (`DepthSource::Window`, `PlaneDst::Window`,
+the rows mirrored when `!default_y_up`; host tests
+`tests/es3_blit_ds_window.rs`, none ignored), so (1) and the window
+destination are lifted on a back end with the entries. Still refused: the
+window to the window (4.3.3), a multisampled window as a source, window depth
+without `depth_resolve` or into the window without `ds_write`, window stencil
+without `stencil_resolve` (the PowerVR alone has all three today), and (2), (3)
+and stencil into or out of a texture (gl-ds-layers). The row order is still
+read from the code, not measured (the board checks below).
+
 ## What the code says: window orientation per back end (read from the code, not measured)
 
 Every line below was read from the source at `b5f882ea`. Nothing was run, on a

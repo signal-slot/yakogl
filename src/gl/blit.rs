@@ -832,17 +832,35 @@ enum DepthSource {
     /// A depth renderbuffer: the depth the back end keeps for it
     /// (`backend::depth_resolve`, under its `GlesDraw::depth_id`).
     Renderbuffer { id: u32 },
+    /// The window's own depth/stencil, read like a renderbuffer's under the
+    /// window's id ([`window_ds_id`]), stored top-down unless
+    /// `GlContext::default_y_up` (docs/notes/blit-depth-window.md).
+    Window { id: u32 },
 }
 
-/// The source of a depth blit from `r`, when the GL core can read it. The
-/// window's own depth is not read: which way up a back end keeps it is not
-/// measured.
+/// The id the back ends keep the window's D24S8 under: the formula of
+/// `resolve_ds_storage` (gl/draw.rs), `0x8000_0000 | (target_gpu >> 12)`,
+/// one object for both planes. None for a multisampled window, whose plane
+/// no back end reads single-sampled.
+fn window_ds_id(c: &GlContext) -> Option<u32> {
+    (c.default_samples <= 1).then_some(0x8000_0000 | (c.default_surface.gpu >> 12) as u32)
+}
+
+/// Whether the back end has the `depth_resolve` entry: without it the
+/// window's depth cannot be read (src/backend.rs has no accessor for it).
+fn can_depth_resolve() -> bool {
+    // SAFETY: g_backend is null or points at a static table.
+    unsafe { backend::g_backend.as_ref() }.is_some_and(|t| t.depth_resolve.is_some())
+}
+
+/// The source of a depth blit from `r`, when the GL core can read it.
 fn depth_source(c: &GlContext, r: &DsImage) -> Option<DepthSource> {
     match r.att.type_ {
         GL_TEXTURE => depth_texels(c, &r.att).map(DepthSource::Texels),
         GL_RENDERBUFFER => {
             c.renderbuffer_ref(r.att.name).map(|rb| DepthSource::Renderbuffer { id: ds_object_id(rb.serial, false) })
         }
+        GL_NONE if can_depth_resolve() => window_ds_id(c).map(|id| DepthSource::Window { id }),
         _ => None,
     }
 }
@@ -855,6 +873,10 @@ enum PlaneDst {
     /// A renderbuffer's plane, written through `backend::ds_write` (`w` x
     /// `h` pixels).
     Renderbuffer { id: u32, w: u32, h: u32 },
+    /// The window's plane (`w` x `h` = the target), written through
+    /// `backend::ds_write` at its memory rows (top-down unless
+    /// `GlContext::default_y_up`).
+    Window { id: u32, w: u32, h: u32 },
 }
 
 /// A depth or stencil plane copy the call makes: from `src` (`w` x `h`)
@@ -895,18 +917,21 @@ fn refuse_ds(c: &mut GlContext, cause: u8) {
         *warned |= cause;
         let why = match cause {
             REFUSED_STENCIL => {
-                "a stencil blit other than between renderbuffers of a back end with the ds_write and \
-                 stencil_resolve entries"
+                "a stencil blit other than between renderbuffers and a single-sampled window of a back end with \
+                 the ds_write and stencil_resolve entries"
             }
             REFUSED_DEPTH_DST => {
                 "a depth blit into the window or into a renderbuffer of a back end without the ds_write entry, \
                  or into a depth texture that is not a 2D texture"
             }
             REFUSED_DS_UNHELD => {
-                "a depth or stencil blit into a renderbuffer the back end holds no buffer for (no frame has drawn \
-                 into it, or its buffer went to another target)"
+                "a depth or stencil blit into a renderbuffer or the window the back end holds no buffer for (no \
+                 frame has drawn into it, or its buffer went to another target)"
             }
-            _ => "a depth blit from the window or from a depth texture that is not a 2D texture",
+            _ => {
+                "a depth blit from a multisampled window, from the window of a back end without the depth_resolve \
+                 entry, or from a depth texture that is not a 2D texture"
+            }
         };
         glog!("glBlitFramebuffer: {} is not implemented (GL_INVALID_OPERATION)", why);
     }
@@ -940,14 +965,28 @@ fn read_plane(plane: u32, id: u32, m: &OsalGpuMem, w: u32, h: u32) -> i32 {
     }
 }
 
+/// Reverse the `h` rows of `w` elements of `esz` bytes in `m`: the window's
+/// memory order (top-down) to GL's and back.
+fn mirror_rows(m: &OsalGpuMem, w: u32, h: u32, esz: usize) {
+    let row = w as usize * esz;
+    // SAFETY: `m` holds `h` rows of `row` bytes (scratch_zeroed's size).
+    let all = unsafe { core::slice::from_raw_parts_mut(m.cpu as *mut u8, row * h as usize) };
+    let h = h as usize;
+    for r in 0..h / 2 {
+        let (top, bottom) = all.split_at_mut((h - 1 - r) * row);
+        top[r * row..(r + 1) * row].swap_with_slice(&mut bottom[..row]);
+    }
+}
+
 /// Whether the back end can write the destination plane of `job` now: a
-/// texture's texels always; a renderbuffer's plane when `backend::ds_write`
-/// answers 0 to an empty rectangle (it holds a buffer to write into). A write
-/// that cannot be made is refused up front, never answered as done.
+/// texture's texels always; a renderbuffer's or the window's plane when
+/// `backend::ds_write` answers 0 to an empty rectangle (it holds a buffer to
+/// write into). A write that cannot be made is refused up front, never
+/// answered as done.
 fn dst_writable(job: &DepthCopy) -> bool {
     match job.dst {
         PlaneDst::Texels(_) => true,
-        PlaneDst::Renderbuffer { id, .. } => {
+        PlaneDst::Renderbuffer { id, .. } | PlaneDst::Window { id, .. } => {
             let probe = 0u32;
             // SAFETY: an empty rectangle reads no element of `src`.
             unsafe { backend::ds_write(id, job.plane, &probe as *const u32 as *const c_void, 0, 0, 0, 0, 0) == 0 }
@@ -970,8 +1009,11 @@ fn copy_depth(
     let esz: usize = if job.plane == backend::DS_PLANE_STENCIL { 1 } else { 4 };
     let (dw, dh) = match job.dst {
         PlaneDst::Texels(d) => (d.w, d.h),
-        PlaneDst::Renderbuffer { w, h, .. } => (w, h),
+        PlaneDst::Renderbuffer { w, h, .. } | PlaneDst::Window { w, h, .. } => (w, h),
     };
+    /* the window's planes are kept top-down: mirrored to GL's row order for
+     * the copy (and the destination's back) */
+    let flip = !c.default_y_up;
     let src_cut = src_rect.cut(Rect { x: 0, y: 0, w: job.w as i64, h: job.h as i64 });
     let mut dst_cut = dst_rect.cut(Rect { x: 0, y: 0, w: dw as i64, h: dh as i64 });
     if let Some(s) = scissor {
@@ -993,7 +1035,7 @@ fn copy_depth(
             let t = &c.objs_ref().textures[s.ti];
             ((t.mem.cpu as *const u8).wrapping_add(s.off), s.pitch)
         }
-        DepthSource::Renderbuffer { id } => {
+        DepthSource::Renderbuffer { id } | DepthSource::Window { id } => {
             let Some(m) = scratch_zeroed(job.w as usize * job.h as usize * esz) else { return false };
             scratch = m;
             let rc = read_plane(job.plane, id, &scratch, job.w, job.h);
@@ -1002,6 +1044,9 @@ fn copy_depth(
                 /* 1: the back end holds nothing for it, so the source is
                  * undefined and the destination may stay as it is */
                 return rc == 1;
+            }
+            if flip && matches!(job.src, DepthSource::Window { .. }) {
+                mirror_rows(&scratch, job.w, job.h, esz);
             }
             (scratch.cpu as *const u8, job.w as usize)
         }
@@ -1012,7 +1057,7 @@ fn copy_depth(
     let mut dst_mem = OsalGpuMem::default();
     let (to, to_pitch): (*mut u8, usize) = match job.dst {
         PlaneDst::Texels(d) => ((c.objs_ref().textures[d.ti].mem.cpu as *mut u8).wrapping_add(d.off), d.pitch),
-        PlaneDst::Renderbuffer { id, w, h } => {
+        PlaneDst::Renderbuffer { id, w, h } | PlaneDst::Window { id, w, h } => {
             let Some(m) = scratch_zeroed(w as usize * h as usize * esz) else {
                 osal::gpu_free(&mut scratch);
                 return false;
@@ -1023,6 +1068,9 @@ fn copy_depth(
                 osal::gpu_free(&mut scratch);
                 osal::gpu_free(&mut dst_mem);
                 return false;
+            }
+            if flip && matches!(job.dst, PlaneDst::Window { .. }) {
+                mirror_rows(&dst_mem, w, h, esz);
             }
             (dst_mem.cpu as *mut u8, w as usize)
         }
@@ -1061,8 +1109,15 @@ fn copy_depth(
             unsafe { osal::cache_flush(to as *mut c_void, bytes) };
             super::texture::note_blit_written(c, d.ti, d.level);
         }
-        PlaneDst::Renderbuffer { id, .. } => {
-            let off = (dst_cut.y as usize * to_pitch + dst_cut.x as usize) * esz;
+        PlaneDst::Renderbuffer { id, h, .. } | PlaneDst::Window { id, h, .. } => {
+            /* the cut rectangle's first memory row: GL rows y .. y + h of a
+             * top-down window are its memory rows h - (y + h) .. h - y */
+            let mut y = dst_cut.y as u32;
+            if flip && matches!(job.dst, PlaneDst::Window { .. }) {
+                mirror_rows(&dst_mem, dw, h, esz);
+                y = h - (y + dst_cut.h as u32);
+            }
+            let off = (y as usize * to_pitch + dst_cut.x as usize) * esz;
             // SAFETY: the rectangle lies inside the plane copy, whose rows
             // are `to_pitch` elements.
             let rc = unsafe {
@@ -1071,7 +1126,7 @@ fn copy_depth(
                     job.plane,
                     to.add(off) as *const c_void,
                     dst_cut.x as u32,
-                    dst_cut.y as u32,
+                    y,
                     dst_cut.w as u32,
                     dst_cut.h as u32,
                     to_pitch as u32,
@@ -1184,27 +1239,29 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
             c.set_error(GL_INVALID_OPERATION, FN);
             return;
         }
-        /* a renderbuffer's plane is read and written through the back end */
-        let rb_src = |c: &GlContext| {
-            (r.att.type_ == GL_RENDERBUFFER)
-                .then(|| c.renderbuffer_ref(r.att.name).map(|rb| ds_object_id(rb.serial, false)))
-                .flatten()
+        /* a renderbuffer's or the window's plane is read and written through
+         * the back end */
+        let rb_src = |c: &GlContext| match r.att.type_ {
+            GL_RENDERBUFFER => c
+                .renderbuffer_ref(r.att.name)
+                .map(|rb| DepthSource::Renderbuffer { id: ds_object_id(rb.serial, false) }),
+            GL_NONE => window_ds_id(c).map(|id| DepthSource::Window { id }),
+            _ => None,
         };
-        let rb_dst = |c: &GlContext| {
-            (d.att.type_ == GL_RENDERBUFFER && backend::can_ds_write())
-                .then(|| c.renderbuffer_ref(d.att.name).map(|rb| ds_object_id(rb.serial, false)))
-                .flatten()
+        let rb_dst = |c: &GlContext| match d.att.type_ {
+            _ if !backend::can_ds_write() => None,
+            GL_RENDERBUFFER => c.renderbuffer_ref(d.att.name).map(|rb| PlaneDst::Renderbuffer {
+                id: ds_object_id(rb.serial, false),
+                w: d.w,
+                h: d.h,
+            }),
+            GL_NONE => window_ds_id(c).map(|id| PlaneDst::Window { id, w: d.w, h: d.h }),
+            _ => None,
         };
         if stencil {
             match (rb_src(c), rb_dst(c)) {
-                (Some(sid), Some(did)) if backend::can_stencil_resolve() => {
-                    copies[1] = Some(DepthCopy {
-                        plane: backend::DS_PLANE_STENCIL,
-                        src: DepthSource::Renderbuffer { id: sid },
-                        w: r.w,
-                        h: r.h,
-                        dst: PlaneDst::Renderbuffer { id: did, w: d.w, h: d.h },
-                    });
+                (Some(src), Some(dst)) if backend::can_stencil_resolve() => {
+                    copies[1] = Some(DepthCopy { plane: backend::DS_PLANE_STENCIL, src, w: r.w, h: r.h, dst });
                 }
                 _ => refused |= REFUSED_STENCIL,
             }
@@ -1220,7 +1277,7 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
         }
         let dst = match depth_texels(c, &d.att) {
             Some(t) => Some(PlaneDst::Texels(t)),
-            None => rb_dst(c).map(|id| PlaneDst::Renderbuffer { id, w: d.w, h: d.h }),
+            None => rb_dst(c),
         };
         match (depth_source(c, &r), dst) {
             (_, None) => refused |= REFUSED_DEPTH_DST,
