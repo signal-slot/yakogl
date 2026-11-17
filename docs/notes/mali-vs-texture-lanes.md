@@ -152,7 +152,7 @@ constant lane, case 149 step A (#33)`):
   (`MaliError::TexVertexConstant`) is gone. A coordinate of two constants was
   already lowered (the `unitype_100` reference), so the 2D look-up now takes
   any mix of constant and computed lanes. The cube refusal (a direction of
-  three constants, `es100/cubelod.vert`) stays: no reference draws it.
+  three constants, `tools/shaders/es100/cubelod.vert`) stays: no reference draws it.
 * Nothing else changed: `select.rs` (`Kind::VsTex`) already moved each
   constant staging word into its register with `MOV.i32` in the order s, t,
   handle, `0x0`, and the FAU order (0.5, handle) followed from it.

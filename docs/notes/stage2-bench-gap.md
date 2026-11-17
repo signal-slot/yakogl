@@ -60,18 +60,18 @@ same picture on every board and a frame rate for each; see the status above.)
 - `README.md` and ROADMAP.md say so: "no picture of either [terrain, refract]
   has been checked yet". The Pi 4 session note lists "terrain not black" as
   "not shown by the record ... nobody looked at the panel"
-  (`ab43a20c5:docs/board-sessions/pi4-common-int.md`, "The expected lines").
+  (the Pi 4 common-int board-session note, since retired, "The expected lines").
 - The i.MX8MP has no console capture: its glmark2 evidence is the SNVS record
   (counts only), so not even the log-line check or an fps line exists
-  (`ab43a20c5:docs/board-sessions/imx8mp-common-int.md`, "glmark2 (GM)").
+  (the i.MX8MP common-int board-session note, since retired, "glmark2 (GM)").
 
 ## Records the table rests on (newest per board)
 
 | Board | Record | Commit | Notes |
 |---|---|---|---|
-| am62p | `ab43a20c5:docs/board-sessions/am62p-common-int.md` (2026-10-14; `records/am62p/common-cd738b1a`) | `cd738b1a` (+ docs commit `d5cb878`) | GM, SO, CL, GT ran; **SV returned 0 console bytes**. Per-scene fps present (console). Earlier GM: `tools/cts/RESULTS.md` "AM62P: glmark2 (GM image) on `f2a13877`" (score 465, 33 scenes). Commit 504d4fae (256 MiB carve-out) has not been run on a board. |
-| pi4 | `ab43a20c5:docs/board-sessions/pi4-common-int.md` (2026-10-14; `d64e995b`, the code of `79c73ea2`) | `79c73ea2` | all five rows done, resets 0. The note quotes fps for terrain, refract and shadow only; the other per-scene lines are in the gitignored console. |
-| imx8mp | `ab43a20c5:docs/board-sessions/imx8mp-common-int.md` (`b568940`) and `tools/cts/RESULTS.md` "i.MX8MP: common set on main a63fcc5b" (2026-10-14) | `a63fcc5b` | no console: counts and probes only; score 43. |
+| am62p | the retired AM62P common-int board-session note (2026-10-14; `records/am62p/common-cd738b1a`) | `cd738b1a` (+ docs commit `d5cb878`) | GM, SO, CL, GT ran; **SV returned 0 console bytes**. Per-scene fps present (console). Earlier GM: `tools/cts/RESULTS.md` "AM62P: glmark2 (GM image) on `f2a13877`" (score 465, 33 scenes). Commit 504d4fae (256 MiB carve-out) has not been run on a board. |
+| pi4 | the retired Pi 4 common-int board-session note (2026-10-14; `d64e995b`, the code of `79c73ea2`) | `79c73ea2` | all five rows done, resets 0. The note quotes fps for terrain, refract and shadow only; the other per-scene lines are in the gitignored console. |
+| imx8mp | the retired i.MX8MP common-int board-session note (`b568940`) and `tools/cts/RESULTS.md` "i.MX8MP: common set on main a63fcc5b" (2026-10-14) | `a63fcc5b` | no console: counts and probes only; score 43. |
 
 ## Board x benchmark table
 
@@ -91,9 +91,9 @@ times:
   was compared across boards. Pictures known wrong earlier: terrain (black
   texture, all boards) and refract (AM62P, Pi 4); both fixed on the host,
   unverified on a board.
-- *Rests on*: AM62P `ab43a20c5:docs/board-sessions/am62p-common-int.md` (`cd738b1a`);
-  Pi 4 `ab43a20c5:docs/board-sessions/pi4-common-int.md` (`79c73ea2`); i.MX8MP
-  `ab43a20c5:docs/board-sessions/imx8mp-common-int.md` and `tools/cts/RESULTS.md`
+- *Rests on*: AM62P the retired AM62P board-session note (`cd738b1a`);
+  Pi 4 the retired Pi 4 board-session note (`79c73ea2`); i.MX8MP
+  the retired i.MX8MP board-session note and `tools/cts/RESULTS.md`
   (`a63fcc5b`).
 
 | # | scene (options) | am62p | pi4 | imx8mp |
@@ -273,10 +273,10 @@ for Slint on none.
    resolution-independent reference; implement in `common-tally.py` and the
    cluster sample's PROBES (`driver/samples/zephyr/cluster/`).
    Status: done in code; run on two boards, open on the AM62P. Design
-   `794f3fc3` (`docs/notes/cluster-same-picture.md`); probes at
+   `794f3fc3` (a design note, no longer in the tree); probes at
    panel-independent positions `7a891e22` (`driver/samples/zephyr/cluster/`);
    `3db3e7cb` judges the PROBES record points against
-   `tools/cts/cluster-picture.txt` in `tools/cts/common-tally.py`. Picture
+   a picture reference list (not kept in the tree) in `tools/cts/common-tally.py`. Picture
    match on the i.MX8MP (crc16 0406, `a8fdc9f0`, `c94891d5`) and on the Pi 4
    (crc16 cc47, `33a0f264`, `a8fdc9f0`; `tools/cts/RESULTS.md`). The AM62P
    row is `1d54a4eb`, before the new probes: not run with them. Withdrawn on

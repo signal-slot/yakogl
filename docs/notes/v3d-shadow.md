@@ -10,7 +10,7 @@ The hardware needs two things, and they are independent: a compare function in
 the sampler record, and one extra TMU write (the reference) in the look-up.
 This note gives the words, the size question, the operands, the formats that
 may be compared and the tests. The TMU words of the other ES 3.0 look-ups are in
-`docs/notes/v3d-tmu-es3.md` and the memory layouts in
+the Pi 4 ES 3.0 notes and the memory layouts in
 `docs/notes/v3d-tex-layout-es3.md`; neither is repeated here.
 
 Sources. `third_party/mesa-26.2.1` holds only the packet XML and the format
@@ -146,7 +146,7 @@ fields in 4.2 are the op, the offsets, the gather and coefficient modes,
 sample number, autolod disable and LOD query (`v3d_packet.xml:1560-1573`), and
 a regular shadow look-up leaves P2 at its default, so it needs no P2 word
 unless it also has an offset, a gradient or a fixed level (the cases in
-`docs/notes/v3d-tmu-es3.md`). Order: the coordinate writes T, R, I, then each
+the Pi 4 ES 3.0 notes). Order: the coordinate writes T, R, I, then each
 other source in the order NIR lists them, S last because S retires the
 look-up (`v3d_tex.c:100-130`, `:370-380` (tree)); the DREF write is an ordinary
 one among the earlier writes, so the order against bias or level does not

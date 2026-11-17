@@ -271,7 +271,7 @@ highp machinery already has. All in `nir_fs.rs` unless named:
    * `Bnot`/`Inot` of a compare used once is the inverse compare
      (`inverse_compare`): `step`'s `!(x < e)` is `fge`. This arm is not
      gated on the shader's precision: it is what the highp
-     es300/layersunused.frag (`tint * step(bias, v_xy.x)`) needed, now
+     tools/shaders/es300/layersunused.frag (`tint * step(bias, v_xy.x)`) needed, now
      byte-equal to `fsarith_layersunused.expect.json` (tests.rs
      `es300_layersunused_step_is_byte_equal_to_mesa_26_2_1`; the corpus
      verdict moved from `Arithmetic` to `ok`).
@@ -343,7 +343,7 @@ read two FAU slots).
   `es300_layersunused_step_is_byte_equal_to_mesa_26_2_1` pins the side
   effect of the `Bnot` arm.
 * `tools/mali/corpus-verdicts.txt`: one line moved forward
-  (`es300/layersunused.frag: ok`); no other verdict changed. The ES 1.00
+  (`tools/shaders/es300/layersunused.frag: ok`); no other verdict changed. The ES 1.00
   mediump programs that read gl_FragCoord (prec_84, tri_fragcoord,
   fragcoord.frag) keep their words: `fc32` is off when the built-in is
   mediump.

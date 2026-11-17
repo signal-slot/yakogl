@@ -108,7 +108,7 @@ general lowering (approved 2026-10-19)".
   mediump `vec4`:** Mesa 25.0.7 made one `LD_BUFFER.i64` (opcode byte `0x6a`,
   the same as `LD_PKA`; the older pandecode names it `LD_BUFFER`) of the
   run-time indexed `fcols[fidx]`, not two `i32`
-  (`0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/mesa/mesa-uniidxi.pandecode:460`).
+  (`board-ref record 2026-10-20-mesa-refs/mesa/mesa-uniidxi.pandecode:460`).
   So the 8-byte, element-stride-8 load survives an index whose alignment the
   UBO pass recorded as 4. Whether 26.2.1 and an fp32 `vec4` (one `i128` or four
   `i32`) agree is **pin on the shim** (`sel_ui_vec4`, `sel_ui_mediump_vec4`);
@@ -459,7 +459,7 @@ fp32 array). `link-move` has landed. The item changes the Mali compiler in
    Mesa gives it), the pull request's CI gate green.
 6. **The board.** gl_test cases 108, 120, 121, 122 and 128 (and 100's fragment
    stage, with the vertex stage's own refusals aside) PASS on the NanoPC-T6 and
-   their rows in `tools/cts/RESULTS.md`/`tools/mali/RESULTS.md` replace the
+   their rows in `tools/cts/RESULTS.md` replace the
    REFUSED ones; the issue comment names the commit. *Acceptance:* case 122's
    picture is `(0.1, 0.2, 0.3, 1.0)` as its comment states
    (`driver/tools/pvrlab/gl_test.c:13254-13255`); Mesa's own read-back at
@@ -477,7 +477,7 @@ fp32 array). `link-move` has landed. The item changes the Mali compiler in
   generic in the width.
 - **Out of range.** *Open.* Case 122 reads index 2 of 4: no read past `Size` is
   recorded. The run that would settle it: a Mesa board recording (the
-  `mref-local.sh` harness of `0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/`) of a
+  `mref-local.sh` harness of `board-ref record 2026-10-20-mesa-refs/`) of a
   variant of `uniidx_i.frag` with `fidx` = 4 or more, reading the picture. It
   needs the board.
 - **A pushed and an indexed copy of one word.** If Mesa's `bi_opt_cse` or copy
@@ -495,9 +495,9 @@ fp32 array). `link-move` has landed. The item changes the Mali compiler in
 
 ## 6. What the Mesa board recording of case 122 shows
 
-Records: `0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/mesa/mesa-uniidxi.pandecode`
+Records: `board-ref record 2026-10-20-mesa-refs/mesa/mesa-uniidxi.pandecode`
 (P below), `mesa-uniidxi.stdout`, `mesa-uniidxi-rb01.pam`, the case source
-`0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/cases.c:790-847` and its
+`board-ref record 2026-10-20-mesa-refs/cases.c:790-847` and its
 `README.md:62`, `:84-85`. The driver is **Mesa 25.0.7** on the Mali-G610
 (`mesa-uniidxi.stdout:3`), not the 26.2.1 of the rest of this note; where that
 could matter it is said. The shader is `tools/shaders/es100/uniidx_i.frag`

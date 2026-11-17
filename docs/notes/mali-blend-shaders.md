@@ -181,7 +181,7 @@ Outside the blend descriptor, **at 4x with a blend shader**:
 
 ## 4. The words against the existing disassembly (2026-10-21-mesa-refs3)
 
-`0dce654a8:tools/mali/board-ref/2026-10-21-mesa-refs3/blend-shaders.disasm.txt` is the
+`board-ref record 2026-10-21-mesa-refs3/blend-shaders.disasm.txt` is the
 **board's Mesa 25.0.7** (case 8's 1x shader, 19 words, and case 211's 4x
 one, 19 words). It is not the shim's Mesa 26.2.1, and the two differ; the
 byte reference of this project is the shim's (the 1x

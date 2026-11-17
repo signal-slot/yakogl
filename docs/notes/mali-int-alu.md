@@ -21,7 +21,7 @@ The Mesa source citations are the 26.2.1 tarball's (`src/compiler/nir/`,
 `src/compiler/glsl/glsl_to_nir.cpp`, `src/panfrost/compiler/bifrost/`);
 `third_party/mesa-26.2.1/` vendors only `valhall/`, so these files are not in the
 tree. No shim was built for this note (none on this host), hence the one source
-without a same-source reference (`es100/int_div.frag`) is *inferred*, section 2.1.
+without a same-source reference (`tools/shaders/es100/int_div.frag`) is *inferred*, section 2.1.
 
 ## 1. The first refusal of each source on the tip
 
@@ -34,13 +34,13 @@ source text* for ops past the first).
 
 | Source | First refusal | Op | Path | What the source asks for there |
 |---|---|---|---|---|
-| `es100/int_div.frag` | `nir_fs.rs:2373` | `Idiv` | highp `alu32_lanes`, the power-of-two arm's `_ =>` | `int(v_color.r * 2000000.0) - 1000000` passes; `i / j` has a run-time divisor: the arm (:2366-2374) takes only a constant `2^k` |
-| `es300/int_div.frag` | `nir_fs.rs:2142` | `Ineg` | highp `alu32_lanes`, last arm | `4294967295u - uint(..)`: the front end's `a - b` is `iadd(a, ineg(b))` |
-| `es300/uops.frag` | `nir_fs.rs:2142` | `Udiv` | same | `u.x / u.y` |
-| `es300/gcops.frag` | `nir_fs.rs:2142` | `Ineg` | same | `abs(i.x)`: builtin_call.rs:791-795 spells `abs(int)` as `imax(x, ineg(x))` |
-| `es300/ifelse_uint.frag` | `nir_fs.rs:2142` | `Ult` | same | `u.x < u.y` (the `if` condition) |
-| `es100/f2b.frag` | `nir_fs.rs:4216` | `Ffloor` | mediump `walk_nodes` catch-all `ir::Op::Alu(..)` | the scalar `floor(2.0 * v_color.r)` (the pair form `if w == 2` at :1792 does not cover a scalar) |
-| `gltest/f1_fs.frag` | `nir_fs.rs:4216` | `Flog2` | same | `log2(16.0)` of constants, in the initialiser of `e`, a variable only a dead statement reads |
+| `tools/shaders/es100/int_div.frag` | `nir_fs.rs:2373` | `Idiv` | highp `alu32_lanes`, the power-of-two arm's `_ =>` | `int(v_color.r * 2000000.0) - 1000000` passes; `i / j` has a run-time divisor: the arm (:2366-2374) takes only a constant `2^k` |
+| `tools/shaders/es300/int_div.frag` | `nir_fs.rs:2142` | `Ineg` | highp `alu32_lanes`, last arm | `4294967295u - uint(..)`: the front end's `a - b` is `iadd(a, ineg(b))` |
+| `tools/shaders/es300/uops.frag` | `nir_fs.rs:2142` | `Udiv` | same | `u.x / u.y` |
+| `tools/shaders/es300/gcops.frag` | `nir_fs.rs:2142` | `Ineg` | same | `abs(i.x)`: builtin_call.rs:791-795 spells `abs(int)` as `imax(x, ineg(x))` |
+| `tools/shaders/es300/ifelse_uint.frag` | `nir_fs.rs:2142` | `Ult` | same | `u.x < u.y` (the `if` condition) |
+| `tools/shaders/es100/f2b.frag` | `nir_fs.rs:4216` | `Ffloor` | mediump `walk_nodes` catch-all `ir::Op::Alu(..)` | the scalar `floor(2.0 * v_color.r)` (the pair form `if w == 2` at :1792 does not cover a scalar) |
+| `tools/shaders/gltest/f1_fs.frag` | `nir_fs.rs:4216` | `Flog2` | same | `log2(16.0)` of constants, in the initialiser of `e`, a variable only a dead statement reads |
 
 (`nir_fs.rs:2142` is the last arm of the single-lane `alu32` dispatch whose
 neighbours are listed in section 2; `:4216` is `ir::Op::Alu(..) => return
@@ -58,7 +58,7 @@ meets `IntValue` there, and `Fne` / `F2b` in the highp path meet `CompareForm`
 (`:2141`) / `Arithmetic` (`:2142`). The vertex walk (`nir.rs:2681-2815`) lowers
 `Imod` by a power of two and returns `IntValue` for `Idiv Udiv Umod Ult Ule Imin
 Imax Umin Umax Inot Iand Ixor ...`; none of the seven sources is a vertex shader
-(`es300/int_div.vert` is a pass-through, verdict `ok`).
+(`tools/shaders/es300/int_div.vert` is a pass-through, verdict `ok`).
 
 ## 2. The op table
 
@@ -99,11 +99,11 @@ words, `intuni_ifelse_uint` 55, `intuni_gcops` 23, `fsarith_f2b` 23,
 `fsarith_int_div_es300` 180, `intloop_idiv` 181, `intloop_f1_fs` 9. All have
 their `.frag`/`.vert` in `tools/mali/testdata/`; the first four, the fifth and the
 last are byte-equal copies of the corpus sources (`diff` empty); `intloop_idiv.frag`
-is **not** `es100/int_div.frag` (it is gl_test case 79's `idiv.frag`, mediump).
+is **not** `tools/shaders/es100/int_div.frag` (it is gl_test case 79's `idiv.frag`, mediump).
 
 ### 2.1 What is not measured
 
-- **`es100/int_div.frag`** (highp `idiv`, `i / j`, `i / (-j)`, `k / 3`, `i - q1 * j`)
+- **`tools/shaders/es100/int_div.frag`** (highp `idiv`, `i / j`, `i / (-j)`, `k / 3`, `i - q1 * j`)
   has no reference of its own. Its `idiv` by a variable follows `intloop_idiv`
   word for word *except* where the operands come from: highp `int(v_color.r *
   2000000.0)` is `F32_TO_S32.rtz` of an fp32 product, not `F16_TO_S32.rtz` of an
@@ -137,12 +137,12 @@ same commit as the verdict moves.
 
 | # | Item | Files | Host tests | Moves |
 |---|---|---|---|---|
-| 0 | **ref-intdiv** (testdata only): draw `es100/int_div.frag` highp on the Mesa 26.2.1 shim (`tools/mali/drm_shim_ref.sh run <shim> V F target/<name>`, `pan_ref_diff.py extract --draw`) as `tools/mali/testdata/fsarith_int_div_es100.*`, and record the `i / (-j)` and `k / 3` words in `mali-int-and-size.md` | `tools/mali/testdata/fsarith_int_div_es100.*` | none (no test reads a file that is not in the population) | turns the 2.1 *inferred* rows into *measured* |
-| 1 | **int-ops** (the single-instruction group, no sequences): highp `alu32` / `alu32_lanes` arms for `Ineg Isub Imul Ior Ixor Ishl Ushr Inot Imin Imax Umin Umax Ult Ule U2f` and the folds `imax(x, ineg x)` -> `Iabs`, `&255u` + `U2f` -> `U8f32(k)`; route `Imin..Umax` and `F2u` through `int_op` / `int_lane` for mediump; **new bir `CselU32{cmpf}`** (+ `pack.rs:310`, `bir.rs` info tables, `emit.rs` rows `Umin`/`Umax`); the `.not` source modifier (`Src.not`) for `inot` | `nir_fs.rs` (`alu32`, `int_lane`, `int_op`, :1439, :2142, :8344), `nir.rs` (`Alu::Umin/Umax`), `bir.rs`, `pack.rs`, `emit.rs` | `gcops` byte-equal to `intuni_gcops` (23 words); the `emit.rs` row table entries for the new rows (`emit.rs:40-188`), `pack` encoding of `CSEL.u32.lt/gt` and `LSHIFT_OR.i32 .., x.not` against `va_disasm_ref.sh` text | `es300/gcops.frag` (if the dot of `vec3(0.5)` passes: 2.1); the shifts and the min/max of `uops` |
-| 2 | **int-f2b**: scalar fp16 `Ffloor` as the pair op with `.h00`, `F2b`/`Fne` -> `Fcmp(Cmpf::Ne)` (16-bit M1, the `b2f` fold to `.f1`, mask to `S16_TO_S32` + `CSEL.u32.eq`), the `z * 0.0` fold; fp32 `Fcmp(Ne)` (inferred) | `nir_fs.rs` (:1792 arm, :2141, `int_lane`), `emit.rs` (`Ffloor`/16/1), `opt.rs` if the `.f1` fold needs the 16-bit compare | `es100/f2b.frag` byte-equal to `fsarith_f2b` (23 words) | `es100/f2b.frag` |
-| 3 | **int-udiv**: highp `Udiv`/`Umod`/`Imod` by a variable (`Fs::idiv`'s `umul_high` / refinement shared: `emit_udiv(modulo)` merges with the quotient by CSE, so one routine builds `(q, rem)`); `Imod` is `umod` of the bits (glsl_to_nir.cpp:2431), no `IABS`/sign; the highp divide arm calls `Fs::idiv` (the mediump `int_lane` and the highp walk use the same `int32`/`op32` nodes) | `nir_fs.rs` (:1575 `idiv`, :2366 arm, `int_op`, `int_lane`) | `uops` byte-equal to `intuni_uops` (93 words, with items 1-2 done); `es300/int_div.frag` equals `fsarith_int_div_es300` once item 4 is in; `case_79` and `intloop_idiv` unchanged (no regression) | `es300/uops.frag`; `es100/int_div.frag` once step 0 has its reference |
-| 4 | **int-divconst**: `nir_opt_idiv_const`'s `build_udiv` / `build_umod` / `build_idiv` / `build_irem` (nir_opt_idiv_const.c:28-130) and Mesa's `util_compute_fast_udiv_info` / `_sdiv_info` (src/util/fast_idiv_by_const.c: 64-bit integer arithmetic only, no libm: portable to the no_std crate), `umul_high` with a constant operand folded to the two products (`Fs::umul_high` already folds the halves of a constant, :1546), **new `IADD.u32.saturate`** (bir `IaddU32Saturate`, `pack.rs:339` sets the `saturate` field; emit row `Alu::IaddSat`), the pow2 unsigned rules (`iand`/`ushr`) | `nir_fs.rs`, `bir.rs`, `pack.rs`, `emit.rs` (a new module file for the constant tables is cleaner: `src/shaderc/online/mali/idiv.rs`) | `ifelse_uint` byte-equal to `intuni_ifelse_uint` (55 words, needs item 1's `Ult` and `U2f`); `es300/int_div.frag` byte-equal to `fsarith_int_div_es300` (180 words); a unit test of the magic numbers against the words (`0x7060504.b3` = 7, the FAU halves) | `es300/ifelse_uint.frag`, `es300/int_div.frag`, `es100/int_div.frag`'s `k / 3` |
-| 5 | **int-f1fold**: call `fold::fold_float` in the Mali walk for constant operands (the walk's integer folding is `nir::fold_int`, nir.rs:771), skip a dead op (an IR value with no use), and decide `atan(-1.0) < 4.0` without libm (a bound: |atan| < pi/2, not an evaluation) | `nir_fs.rs` (walk entry, :4216 catch-all), `fold.rs` only if a new exact case is added (it is shared with v3d and powervr: keep it minimal) | `gltest/f1_fs.frag` byte-equal to `intloop_f1_fs` (9 words) | `gltest/f1_fs.frag` |
+| 0 | **ref-intdiv** (testdata only): draw `tools/shaders/es100/int_div.frag` highp on the Mesa 26.2.1 shim (`tools/mali/drm_shim_ref.sh run <shim> V F target/<name>`, `pan_ref_diff.py extract --draw`) as `tools/mali/testdata/fsarith_int_div_es100.*`, and record the `i / (-j)` and `k / 3` words in `mali-int-and-size.md` | `tools/mali/testdata/fsarith_int_div_es100.*` | none (no test reads a file that is not in the population) | turns the 2.1 *inferred* rows into *measured* |
+| 1 | **int-ops** (the single-instruction group, no sequences): highp `alu32` / `alu32_lanes` arms for `Ineg Isub Imul Ior Ixor Ishl Ushr Inot Imin Imax Umin Umax Ult Ule U2f` and the folds `imax(x, ineg x)` -> `Iabs`, `&255u` + `U2f` -> `U8f32(k)`; route `Imin..Umax` and `F2u` through `int_op` / `int_lane` for mediump; **new bir `CselU32{cmpf}`** (+ `pack.rs:310`, `bir.rs` info tables, `emit.rs` rows `Umin`/`Umax`); the `.not` source modifier (`Src.not`) for `inot` | `nir_fs.rs` (`alu32`, `int_lane`, `int_op`, :1439, :2142, :8344), `nir.rs` (`Alu::Umin/Umax`), `bir.rs`, `pack.rs`, `emit.rs` | `gcops` byte-equal to `intuni_gcops` (23 words); the `emit.rs` row table entries for the new rows (`emit.rs:40-188`), `pack` encoding of `CSEL.u32.lt/gt` and `LSHIFT_OR.i32 .., x.not` against `va_disasm_ref.sh` text | `tools/shaders/es300/gcops.frag` (if the dot of `vec3(0.5)` passes: 2.1); the shifts and the min/max of `uops` |
+| 2 | **int-f2b**: scalar fp16 `Ffloor` as the pair op with `.h00`, `F2b`/`Fne` -> `Fcmp(Cmpf::Ne)` (16-bit M1, the `b2f` fold to `.f1`, mask to `S16_TO_S32` + `CSEL.u32.eq`), the `z * 0.0` fold; fp32 `Fcmp(Ne)` (inferred) | `nir_fs.rs` (:1792 arm, :2141, `int_lane`), `emit.rs` (`Ffloor`/16/1), `opt.rs` if the `.f1` fold needs the 16-bit compare | `tools/shaders/es100/f2b.frag` byte-equal to `fsarith_f2b` (23 words) | `tools/shaders/es100/f2b.frag` |
+| 3 | **int-udiv**: highp `Udiv`/`Umod`/`Imod` by a variable (`Fs::idiv`'s `umul_high` / refinement shared: `emit_udiv(modulo)` merges with the quotient by CSE, so one routine builds `(q, rem)`); `Imod` is `umod` of the bits (glsl_to_nir.cpp:2431), no `IABS`/sign; the highp divide arm calls `Fs::idiv` (the mediump `int_lane` and the highp walk use the same `int32`/`op32` nodes) | `nir_fs.rs` (:1575 `idiv`, :2366 arm, `int_op`, `int_lane`) | `uops` byte-equal to `intuni_uops` (93 words, with items 1-2 done); `tools/shaders/es300/int_div.frag` equals `fsarith_int_div_es300` once item 4 is in; `case_79` and `intloop_idiv` unchanged (no regression) | `tools/shaders/es300/uops.frag`; `tools/shaders/es100/int_div.frag` once step 0 has its reference |
+| 4 | **int-divconst**: `nir_opt_idiv_const`'s `build_udiv` / `build_umod` / `build_idiv` / `build_irem` (nir_opt_idiv_const.c:28-130) and Mesa's `util_compute_fast_udiv_info` / `_sdiv_info` (src/util/fast_idiv_by_const.c: 64-bit integer arithmetic only, no libm: portable to the no_std crate), `umul_high` with a constant operand folded to the two products (`Fs::umul_high` already folds the halves of a constant, :1546), **new `IADD.u32.saturate`** (bir `IaddU32Saturate`, `pack.rs:339` sets the `saturate` field; emit row `Alu::IaddSat`), the pow2 unsigned rules (`iand`/`ushr`) | `nir_fs.rs`, `bir.rs`, `pack.rs`, `emit.rs` (a new module file for the constant tables is cleaner: a new `idiv.rs` beside them) | `ifelse_uint` byte-equal to `intuni_ifelse_uint` (55 words, needs item 1's `Ult` and `U2f`); `tools/shaders/es300/int_div.frag` byte-equal to `fsarith_int_div_es300` (180 words); a unit test of the magic numbers against the words (`0x7060504.b3` = 7, the FAU halves) | `tools/shaders/es300/ifelse_uint.frag`, `tools/shaders/es300/int_div.frag`, `tools/shaders/es100/int_div.frag`'s `k / 3` |
+| 5 | **int-f1fold**: call `fold::fold_float` in the Mali walk for constant operands (the walk's integer folding is `nir::fold_int`, nir.rs:771), skip a dead op (an IR value with no use), and decide `atan(-1.0) < 4.0` without libm (a bound: |atan| < pi/2, not an evaluation) | `nir_fs.rs` (walk entry, :4216 catch-all), `fold.rs` only if a new exact case is added (it is shared with v3d and powervr: keep it minimal) | `tools/shaders/gltest/f1_fs.frag` byte-equal to `intloop_f1_fs` (9 words) | `tools/shaders/gltest/f1_fs.frag` |
 
 Dependencies: 1 before 2 and 3; 3 and 4 share `idiv`; 0 can run now (it is a
 draw), alone, on a host that can build the shim (`drm_shim_ref.sh build`,
@@ -156,11 +156,11 @@ integer case the sweep has is 79, `idiv.frag`, already done): **no gl_test case
 is known to move**, so the plan's `c3` count
 (PASS > 147) does not change by this note's items. What they move:
 
-- `es300/gcops.frag`, `es100/f2b.frag`: items 1, 2.
-- `es300/uops.frag`: items 1, 2 (none), 3 (variable divide).
-- `es300/ifelse_uint.frag`: items 1 (`Ult`, `U2f`), 4.
-- `es300/int_div.frag`, `es100/int_div.frag`: items 3, 4 and step 0.
-- `gltest/f1_fs.frag`: item 5.
+- `tools/shaders/es300/gcops.frag`, `tools/shaders/es100/f2b.frag`: items 1, 2.
+- `tools/shaders/es300/uops.frag`: items 1, 2 (none), 3 (variable divide).
+- `tools/shaders/es300/ifelse_uint.frag`: items 1 (`Ult`, `U2f`), 4.
+- `tools/shaders/es300/int_div.frag`, `tools/shaders/es100/int_div.frag`: items 3, 4 and step 0.
+- `tools/shaders/gltest/f1_fs.frag`: item 5.
 
 The dEQP-GLES2 effect is not measured here: the shader texts of the dEQP cases
 are not in the tree (`docs/notes/mali-gles2-forecast.md` section 2 counts 3963

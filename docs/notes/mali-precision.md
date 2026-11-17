@@ -242,7 +242,7 @@ list. Every width decision is derived again, from the source or per shader:
 
 | Where | What it decides | How |
 |---|---|---|
-| `mali/mod.rs:943-1052` `FsPrecision`, `of` | the fragment shader's width | re-parses the source; `highp` = the default float precision at `main`, one width for the whole shader |
+| `src/shaderc/online/mali/mod.rs:943-1052` `FsPrecision`, `of` | the fragment shader's width | re-parses the source; `highp` = the default float precision at `main`, one width for the whole shader |
 | `FsPrecision::mixed` (`:948`) | a declaration of the other width anywhere | refusal `MixedPrecision` (`mod.rs:1303-1305`, `:1395-1397`; `nir_fs.rs:2786`, `:4356`, `:4444`) |
 | `FsPrecision::other` (`:951`) | the varyings of the other width | `nir_fs.rs:2743`, `:4179` |
 | `FsPrecision::highp_samplers` (`:955`) | a highp sampler's look-up is 32-bit | set from `reflect` (`mod.rs:1296-1299`), read `nir_fs.rs:4826` |
@@ -258,7 +258,7 @@ On the unlanded branches (read with `git show <branch>:<path>`):
 
 | Branch | Addition | What it guesses |
 |---|---|---|
-| `mali-vs-int` | `mali/vs_precision.rs` (new), `MaliError::VertexMediump`, called at `mod.rs:1582`, `:1659` | re-implements A.3 on the source and refuses every vertex shader with a Medium operation; reads a `const` variable as having no precision (`vs_precision.rs:87-96`), which probes p1 and p1c show is not Mesa's rule |
+| `mali-vs-int` | `vs_precision.rs` (new), `MaliError::VertexMediump`, called at `mod.rs:1582`, `:1659` | re-implements A.3 on the source and refuses every vertex shader with a Medium operation; reads a `const` variable as having no precision (`vs_precision.rs:87-96`), which probes p1 and p1c show is not Mesa's rule |
 | `mali-uniforms` | `nir::mediump_operation` (`nir.rs:1096-`), `MaliError::VsFp16Operation` (`mod.rs:1287`), `FsPrecision::vertex` (`mod.rs:1005-`) | refuses a Medium operation on fp16 uniforms or struct members, except the scalar `fadd`/`fmul` of two members that the late rule puts back at 32 bits; refuses (`UniformPrecision`, `mod.rs:1284`, `:1313`) a mediump member in a shader that declares any mediump value |
 | `mali-fs-int` | `FsPrecision::float_returns` (`mod.rs:979`, read `nir_fs.rs:4533-4537`) | a function returning a float hides where Mesa narrows an int's fp32 conversion |
 | `mali-vs-varyings` | `FsPrecision::colour_int` (`mod.rs:969`) | an integer colour output (a type, not a precision) |
@@ -328,7 +328,7 @@ In `lower.rs`:
 6. `relocate` (`lower.rs:631-`) moves the two new slices like the others.
 
 **The Mali back end turns classes into widths** in one new pass,
-`mali/width.rs`, run once before either walk. It is A.6 and A.7 on the IR:
+`width.rs` (new), run once before either walk. It is A.6 and A.7 on the IR:
 for each value a width (16 or 32), and for each use a conversion
 (`F2f16`, `F2f32` or none). It models `f2fmp`/`f2f32` at the roots, the
 storage conversions of `local_prec`, the folds of A.6 in NIR's order, the
@@ -409,8 +409,8 @@ Mali back end, not in the shared front end.
 ## Part D. The order of work
 
 Counts are dEQP-GLES2 cases whose **first** refusal is the family, from the
-host forecast (`tools/mali/gles2-forecast.sh` on the `mali-forecast`
-branch, run at `ada67285d`, file `cases.tsv`). A lowered family moves its
+host forecast (the forecast script on the `mali-forecast`
+branch, not in this tree, run at `ada67285d`, file `cases.tsv`). A lowered family moves its
 cases to their next refusal, so a count is the most a step can gain. None
 is a board result.
 
@@ -418,7 +418,7 @@ is a board result.
 |---|---|---|---|
 | D.1 result width | `lower.rs`: `push_sized` with the result type's width in `builtin_call`'s `Sink::emit` and in `step_by_one`; a front-end test that `comps_of` is 2 for `abs(vec2)` and for `--` on a `vec2` | the root of `906f36822`'s pass-through | 271 cases left `ColourForm` with `906f36822` (measured on `mali-fs-colour`); no new case by itself |
 | D.2 the tables | `ir.rs` `Prec`, `prec`, `local_prec`; `lower.rs` C.1 items 1-6; front-end tests that assert the class of each form of A.3 (the A.9 shaders and the `vsmp_*` forms) | nothing (no reader); the whole gate, every back end byte-identical | 0 |
-| D.3 `mali/width.rs` | the pass and its tests: for each probe of A.9 (committed as `tools/mali/testdata/precrule_*` with their `.expect.json`) the width of each value and each conversion, read from the probe's NIR | nothing (no walk reads it yet) | 0 |
+| D.3 `width.rs` | the pass and its tests: for each probe of A.9 (committed as `tools/mali/testdata/precrule_*` with their `.expect.json`) the width of each value and each conversion, read from the probe's NIR | nothing (no walk reads it yet) | 0 |
 | D.4 vertex walk on widths | `nir.rs` `build` builds 16-bit nodes and `F2f16`/`F2f32` from `width.rs`; `select.rs` `vs_variant` gains the `v2f16` rows the fragment side has; `vs_precision.rs` and `mediump_operation` go | `VertexMediump`, `VsFp16Operation`, `UniformPrecision` | 3,613 `VertexMediump` (measured on `mali-vs-int`, of which 691 came from `IntValue`); 79 `UniformPrecision`; `VsFp16Operation` not measured as a family (101 stages moved on `mali-uniforms`: 80 `UniformPrecision`, 21 `VsFp16Operation`) |
 | D.5 fragment walk on widths | `nir_fs.rs` chooses per node from `width.rs`; `FsPrecision` keeps `consts` and the type flags | `MixedPrecision`; then `LoopMediump` with 16-bit phis | 304 `MixedPrecision` (all fragment: 112 `texture.mipmap.*`, 186 `uniform_api.*`, 6 `shaders.*`); 96 `LoopMediump` |
 
@@ -437,7 +437,7 @@ References each step needs (shader text, Mesa 26.2.1 drm-shim):
   in_float, missing_returns, vec3_highpu, if_else_highp); `vsstruct_*` and
   `vsneg_*` of `mali-uniforms`; dEQP
   `operator.binary_operator.add.mediump_vec4_vertex` (the late rule);
-  `es100/attrib_hole_float.vert` (`V2F32_TO_V2F16` + `FADD.v2f16`); p2,
+  `tools/shaders/es100/attrib_hole_float.vert` (`V2F32_TO_V2F16` + `FADD.v2f16`); p2,
   p3b, p4, p6b.
 - D.5: the `mixprec_*` references (`docs/notes/mali-mixed-precision.md`);
   `prec_82`, `prec_84`; the fragment shaders of gl_test cases 226 and 227
@@ -488,7 +488,7 @@ Each with the probe that settles it (the A.9 command).
    `(b > 0.5) ? b : m` (highp first) and `vec2(2.0, m)`.
 5. **Front-end constant folding of a lowered tree.** p1 shows Mesa folds
    `c * c` of a mediump `const` at fp16 (`0x3ec2`). If `lower.rs` (or
-   `mali/glsl.rs`) folds such a tree at fp32 before the back end sees it,
+   `src/shaderc/online/mali/glsl.rs`) folds such a tree at fp32 before the back end sees it,
    the folded constant has the wrong value and no operation is left to
    class. Check: our front end's IR for p1 (whether `v` is a `ConstF32`
    and which bits); if so, D.2 must record that the constant came from a
@@ -653,7 +653,7 @@ Steps 1-3 are done; the board (step 4) is not. Byte-equal, both stages and
 every fact, to `tools/mali/testdata/vsfp16_19_{hello,mixed,tex,vec4}.expect.json`
 (drm-shim, `--uniform-values`): `tests.rs`
 `the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1`, `VSFP16_POPULATION`.
-`hello` is the corpus's `es100/hello.vert` (prec_19), `tex` its
+`hello` is the corpus's `tools/shaders/es100/hello.vert` (prec_19), `tex` its
 `textured.vert`, `mixed` a mediump vec4 before a highp vec4, and `vec4`
 a mediump vec4 alone.
 
@@ -690,7 +690,7 @@ shader's locations (Mesa's link matches them by name); the link does this
 itself since case 19's link was lowered (`mod.rs`
 `reads_at_vertex_locations`, `mali-partial-varyings.md`).
 
-`es100/texfill.vert` (`uniform Fill u_fill`, a struct with default highp
+`tools/shaders/es100/texfill.vert` (`uniform Fill u_fill`, a struct with default highp
 members) was refused with the same text only because the precision lookup
 found no row for `u_fill.matrix`. `mod.rs` `uniform_precision` now reads a
 member's precision from the struct's spelling (`reflect.rs`

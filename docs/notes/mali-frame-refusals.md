@@ -9,9 +9,9 @@ today, where the change lands in our tree, and the `gl_test` case that checks
 it. The items `frame-query`, `frame-a2c`, `frame-blendconst`, `frame-msaa-zs`,
 `frame-msaa-preload` and `link-varying-order` follow it. It is a reading of
 Mesa's source; the **pin on the board** blocks were filled in on 2026-10-21 from
-the committed Mesa 25.0.7 recordings (`0dce654a8:tools/mali/board-ref/2026-10-20-*`),
+the committed Mesa 25.0.7 recordings (`board-ref record 2026-10-20-*`),
 and on 2026-10-23 from gl_test cases 208-211 under the same Mesa
-(`0dce654a8:tools/mali/board-ref/2026-10-21-mesa-refs3/`); they say where a fact is
+(`board-ref record 2026-10-21-mesa-refs3/`); they say where a fact is
 still open. A fact that needs the board
 is marked **pin on the board**; the method is the project's usual one (Mesa
 on the board first through `tools/mali/mesa-board-ref.sh`, our descriptors
@@ -201,7 +201,7 @@ or resource tables.
   not touch stays zero.
 - Tests: `src/mali/backend_tests.rs:870` (the refusal row) turns into a pass
   row; a frame test pins `r46`, `r57` to a Mesa dump taken with
-  `0dce654a8:tools/mali/board-ref/2026-10-19-msaa/msaa.c`'s method (a new
+  `board-ref record 2026-10-19-msaa/msaa.c`'s method (a new
   board record).
 
 **Checked by.** gl_test case **196** `occl` (`gl_test.c:17142-17248`): five
@@ -210,7 +210,7 @@ queries, q0 hidden, q1 visible, q2 conservative and empty, q3 one query over a
 picture is checked too. The case first needs the depth path it already has.
 
 **Pin on the board.** Settled by the record
-`0dce654a8:tools/mali/board-ref/2026-10-20-query/` (Mesa 25.0.7 on the T6, `mesa/mesa-occl.pandecode`,
+`board-ref record 2026-10-20-query/` (Mesa 25.0.7 on the T6, `mesa/mesa-occl.pandecode`,
 `README.md`, and its excerpt `tools/mali/board-dump/query-2026-10-20.txt` in this tree; the dump's `Occlusion` fields are the OQ
 register):
 
@@ -226,7 +226,7 @@ register):
   predicate value is recorded: ES 3.0 has no counter, so the COUNTER value
   (3) stays the source's (`X:422-426`) until a desktop-GL run.
 - Accumulation across jobs: **settled for PREDICATE** by gl_test case 210
-  `occlacc` under Mesa (`0dce654a8:tools/mali/board-ref/2026-10-21-mesa-refs3/`,
+  `occlacc` under Mesa (`board-ref record 2026-10-21-mesa-refs3/`,
   `mesa/mesa-occlacc.pandecode`, four kicks, one dump file each, the query
   buffers dumped after each). q0 (pass, `glFlush`, pass) is counted in both
   kicks (`MOVE d46, #0x7FFFFFFC7000` at 716 and again at 2437, `r57`
@@ -293,7 +293,7 @@ register):
 (bit 0) 1 to 0; `ZS Update Operation` (bits 4-5) WEAK_EARLY(2) or FORCE_EARLY(0)
 to FORCE_LATE(3, `X:370-374`); `Shader Modifies Coverage` (20) and `Alpha To
 Coverage` (22) set. Nothing else: the FBD is the 4x one that exists
-(`0dce654a8:tools/mali/board-ref/2026-10-19-msaa`). Derived prediction for a 4x draw with the depth
+(`board-ref record 2026-10-19-msaa`). Derived prediction for a 4x draw with the depth
 test off and a colour mask of RGB: the same draw's r57 with bit 0 clear (it
 already is: the mask reads the destination), bits 4-5 = 3, bits 20 and 22 set.
 
@@ -320,7 +320,7 @@ attachment no draw uses (`frame.rs:1417-1420`, `uses_zs`), so it should not;
 **pin** it with the first run.
 
 **Pin on the board.** The record is
-`0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/` (`mesa/mesa-a2cconst.pandecode.xz`,
+`board-ref record 2026-10-20-mesa-refs/` (`mesa/mesa-a2cconst.pandecode.xz`,
 decompressed here; line numbers are the uncompressed file's;
 `mesa/mesa-a2cconst.stdout`, verdict PASS, 0 green pixels in both
 pictures, the pictures equal):
@@ -357,7 +357,7 @@ pictures, the pictures equal):
 
 ## 3. Blend constants that need a blend shader (case 8)
 
-Case 8 `blend` (`0dce654a8:tools/mali/board-ref/2026-10-19-blend/README.md`): frames 1-4
+Case 8 `blend` (`board-ref record 2026-10-19-blend/README.md`): frames 1-4
 pass (over, add, premul, replace); the fifth sets `glBlendColor(0.25, 0.5,
 0.75, 1.0)` with `CONSTANT_COLOR`, three different constants, which the fixed
 function cannot hold. The same path serves MIN/MAX and `SRC_ALPHA_SATURATE`
@@ -456,9 +456,9 @@ programs do not change.
   pin; `backend_tests.rs:864`.
 
 **Checked by.** gl_test case **8** `blend`, frame 5, and the board reference
-`0dce654a8:tools/mali/board-ref/2026-10-19-blend/blend.c` with a `const-distinct` mode added.
+`board-ref record 2026-10-19-blend/blend.c` with a `const-distinct` mode added.
 
-**Pin on the board.** The record is `0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/mesa/`
+**Pin on the board.** The record is `board-ref record 2026-10-20-mesa-refs/mesa/`
 (`mesa-blend.pandecode`, `mesa-blend.stdout`: 7 frames, verdict PASS, frame 5
 `constant colour: inside (32,40) = 0x800080bf` ok; `mesa-blend-rb05.pam`). The
 fifth frame is the dump's fifth shader pair (`Shader ... 7fffffffc000` at
@@ -525,7 +525,7 @@ fifth frame is the dump's fifth shader pair (`Shader ... 7fffffffc000` at
   record places a blend shader in another window, so the rule stays "allocate it
   in the draw's code window"; no run was made to break it.
 - The blend shader at 4x and the sample id: **settled** by gl_test case 211
-  `msaablend` under Mesa (`0dce654a8:tools/mali/board-ref/2026-10-21-mesa-refs3/`, mode
+  `msaablend` under Mesa (`board-ref record 2026-10-21-mesa-refs3/`, mode
   `msaablend`: an RGBA8 texture behind a 4x view, the backend's 4x target;
   `mesa/mesa-msaablend.pandecode`). The blended draw's descriptor is `Mode:
   Shader`, `PC: 4294750208` (0xFFFCB000, lines 1267-1269; raw row `0007B0` at
@@ -606,7 +606,7 @@ overlapping triangles at different depths, on the 4x pbuffer, which also needs
 a Mesa reference in the board-ref method (`msaa.c` with a depth attachment
 under `glFramebufferTexture2DMultisampleEXT`).
 
-**Pin on the board.** Settled by the record `0dce654a8:tools/mali/board-ref/2026-10-20-msaa-zs/`
+**Pin on the board.** Settled by the record `board-ref record 2026-10-20-msaa-zs/`
 (`README.md`, "Mesa's reference"; `mesa/mesa-msrtt.pandecode` the depth frame,
 `mesa/mesa-msrtts.pandecode` the stencil frame; Mesa 25.0.7 on the T6):
 
@@ -712,7 +712,7 @@ edges; Mesa has the same property.
 
 **Settled: the hardware writes the single-sampled preload into all four
 samples.** gl_test case 208 `msaapre` under Mesa
-(`0dce654a8:tools/mali/board-ref/2026-10-21-mesa-refs3/`, mode `msaapre`: an RGBA8
+(`board-ref record 2026-10-21-mesa-refs3/`, mode `msaapre`: an RGBA8
 texture behind a 4x view, the backend's 4x target;
 `mesa/mesa-msaapre.pandecode`, two frames). The second frame's FBD reads `Pre
 Frame 0: Intersect`, `Pre Frame 1: Never` (2276-2277), `Frame Shader DCDs:
@@ -733,7 +733,7 @@ a per-sample DCD and a 4-sample texture
 (`mesa/mesa-msaapre-pb4.pandecode:7764-7842`): the two routes draw the same
 picture. So the 4x preload needs no deviation from Mesa: the 1x preload DCDs
 on the 4x FBD. The Z/S part (a 4x depth view reloaded) is not a gl_test case;
-`0dce654a8:tools/mali/board-ref/2026-10-23-msaa-preload/` (mode `msrttz`) holds Mesa's
+`board-ref record 2026-10-23-msaa-preload/` (mode `msrttz`) holds Mesa's
 descriptors for it.
 
 ---
@@ -764,7 +764,7 @@ output list** and the fragment shader follows it.
 - The draw: `VARY_SIZE` is the vertex layout's `generic_size_B`
   (`pan_csf.c:1506-1507`). Nothing else in the descriptors depends on the order.
 
-The board confirms the producer decides: `0dce654a8:tools/mali/board-ref/2026-10-19-packed-varyings/`
+The board confirms the producer decides: `board-ref record 2026-10-19-packed-varyings/`
 `mesa/` (`pack.c`, modes `fwd` and `rev`): a `STORE` writes `(a_t.xy, a_pos.zw)`
 or its halves swapped with the vertex declaration order, and both draw the
 same pixel.
@@ -800,7 +800,7 @@ vertex shader's slot order, power-of-two alignment (`pan_nir_collect_varyings.c:
 
 **Checked by.** No gl_test case today pairs the stages in different orders;
 the reference is the `pack.c` `rev` mode above, which `panthor-gl` can draw
-(`--varying`-style mode) and `0dce654a8:tools/mali/board-ref/2026-10-19-packed-varyings/README.md`
+(`--varying`-style mode) and `board-ref record 2026-10-19-packed-varyings/README.md`
 says is "refused by name at the link (MALI_LAYOUTS_DIFFER)". The item needs a
 `panthor-gl` mode or a gl_test case for it; none exists to name.
 
@@ -825,7 +825,7 @@ fix (the fragment shader compiled for the vertex layout) it reads `PASS`,
 both halves the same pixel.
 
 **Pin on the board.** The varying layout of case 209 under Mesa: **settled**
-(`0dce654a8:tools/mali/board-ref/2026-10-21-mesa-refs3/`, mode `varyorder`,
+(`board-ref record 2026-10-21-mesa-refs3/`, mode `varyorder`,
 `mesa/mesa-varyorder.pandecode`, one frame, both programs). The vertex
 shader's varying variant stores at offsets 0 and 16 (two `STORE.i128`) and 32
 (`STORE.i64`) in both programs (525-533 and 1233-1241), `Varying allocation:
@@ -838,7 +838,7 @@ program. The two vec4s come first and the vec2 last, so the packing-class sort
 applies on this screen (panfrost does not disable varying packing). Both
 halves read `0xffbfbf40` (`mesa/mesa-varyorder.stdout:8-10`, PASS). Ours
 reads PASS too since `link-varying-order`
-(`0dce654a8:tools/mali/board-ref/2026-10-23-varying-order/README.md:104`).
+(`board-ref record 2026-10-23-varying-order/README.md:104`).
 
 ## 7. A frame's data past its first chunk (cases 197 and 56, #32 (b))
 
@@ -846,7 +846,7 @@ reads PASS too since `link-varying-order`
 indices, texel row copies) was one fixed 256 KiB region of the slot
 (`DATA_BYTES`). Case 197 (vtxgrid) stages 516,128 bytes for one draw, so the
 draw was `-ENOMEM` ("mali arena 'data' is full: 516128 bytes aligned to 16 do
-not fit in the 262144 left", `0dce654a8:tools/mali/board-ref/2026-10-23-tex-coord/`);
+not fit in the 262144 left", `board-ref record 2026-10-23-tex-coord/`);
 splitting the frame cannot help a draw larger than an empty one.
 
 **Mesa.** User vertex arrays go to the stream uploader, 1 MiB buffers that
@@ -854,7 +854,7 @@ grow to `align(MAX2(default_size, min_size), 4096)`
 (`src/gallium/auxiliary/util/u_upload_mgr.c:93-95`, `:181`); the batch pool
 takes a new BO of `ALIGN_POT(MAX2(slab_size, sz), 4096)` when a block does
 not fit (`G/pan_mempool.c:162-164`). Nothing is flushed. In the board dump
-(`0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/mesa/mesa-vtxgrid.pandecode.xz`,
+(`board-ref record 2026-10-20-mesa-refs/mesa/mesa-vtxgrid.pandecode.xz`,
 lines 134-149) the draw's two attribute Buffers are at `0x7fffffec6000` and
 `0x7ffffff44020` of one 1 MiB BO, apart from the batch's descriptor BO.
 
@@ -873,7 +873,7 @@ other arenas.
 ## 8. Case 141 instanced divisors (es3instdiv)
 
 Case 141 (`case_es3instdiv`, `driver/tools/pvrlab/gl_test.c:7104-7180`) draws
-es300/inst.vert and vcolor.frag with 4 instances: `pos` (location 0, vec4)
+tools/shaders/es300/inst.vert and vcolor.frag with 4 instances: `pos` (location 0, vec4)
 per vertex from its own buffer at stride 16, `offs` (1, vec2) and `icol`
 (2, vec4) from one 48-byte buffer of two 24-byte records at offsets 0 and 8,
 `glVertexAttribDivisor(1, 2)` and `(2, 2)`, first as
@@ -1071,7 +1071,7 @@ refuses a 3D binding of more than one level by name.
 ## Facts I could not settle from source alone
 
 Collected from the **pin on the board** lines, now against the committed
-records (`0dce654a8:tools/mali/board-ref/2026-10-20-query/`, `-mesa-refs/mesa/`,
+records (`board-ref record 2026-10-20-query/`, `-mesa-refs/mesa/`,
 `-msaa-zs/`, and `2026-10-21-mesa-refs3/` (`R3/` below: gl_test cases 208-211
 under Mesa); citations in each section's pin block):
 

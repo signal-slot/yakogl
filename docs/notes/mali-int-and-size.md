@@ -3,7 +3,7 @@
 # Mali: integer and boolean values, and shaders over the 256-value cap
 
 Plan #153, item study-intbig. Eight cases of the sweep
-`0dce654a8:tools/mali/board-ref/2026-10-23-s6-discard/ours/03-panthor-gltest--sweep-1.log`
+`board-ref record 2026-10-23-s6-discard/ours/03-panthor-gltest--sweep-1.log`
 are refused by the Valhall back end for two reasons that have nothing to do
 with each other: four (42, 72, 79, 112) by an integer or boolean value, four
 (184, 193, 194, 195) by the size of the shader.
@@ -152,7 +152,7 @@ The case bodies are `case_es3array` (`driver/tools/pvrlab/gl_test.c:6425`),
 `case_affectand` (`:14333`), `case_depchain` (`:16027`), `case_offarm`
 (`:16806`), 194 and 195 (`:16847`); the shader names are bound in
 `driver/tools/pvrlab/gen_gl_test_shaders.py` (`gl_test_dep_vs_src` is
-`gltest/position_only2.vert`, line 256). The sweep's own words per case are
+`tools/shaders/gltest/position_only2.vert`, line 256). The sweep's own words per case are
 in the log at the `verdict case N` lines (3147, 4763, 5001, 6104, 8821, 9196,
 9305, 9364).
 
@@ -178,7 +178,7 @@ for n in 24 256; do tools/mali/drm_shim_ref.sh run $W $S/femtovg/main.vert $S/of
 
 (195 uses 193's programs: its reference is 193's.) The commands above are
 the ones that produced the files (the case 72/79/112 lines with the ES 1.00
-`gl_test_es100/passthrough.vert`). Each gives `.trace` (pandecode: the
+`tools/shaders/gl_test_es100/passthrough.vert`). Each gives `.trace` (pandecode: the
 program's bytes), `.stdout` and `.stderr` (`BIFROST_MESA_DEBUG=shaders,shaderdb`:
 NIR, BIR and final disassembly, and shaderdb's line). `gl_ref.py` bound case
 42's `sampler2DArray` (a 2D texture; the program compiled). `u_false` of case
@@ -450,13 +450,13 @@ is now reached by 27 matrix products, the instruction table by 21.
 ## Case 195 (`ifbranch`): what it refuses and its reference
 
 Plan #153 item `study-matdyn-ifbranch`, issue #33. Case 195 draws 193's four
-programs (offarm0, 8, 32, 128) with `femtovg/main.vert`, each once compiled for
+programs (offarm0, 8, 32, 128) with `tools/shaders/femtovg/main.vert`, each once compiled for
 PowerVR as predicated and once as branched (`PVR_BACKEND_OPT_IF_LOWERING`; a
 PowerVR option Mesa does not have, so the Mali back end sees the same four
 sources twice). In the newest sweep
-(`0dce654a8:tools/mali/board-ref/2026-10-24-refusals/ours/15-panthor-gltest--sweep-1.log`,
+(`board-ref record 2026-10-24-refusals/ours/15-panthor-gltest--sweep-1.log`,
 lines 9882-9907) offarm0 and offarm8 compile and draw, and the third,
-`offarm/fill_color.nodiscard.offarm32.frag`, is refused (`does not compile`,
+`tools/shaders/offarm/fill_color.nodiscard.offarm32.frag`, is refused (`does not compile`,
 then the `TooManyValues` message). So 195's blocker is the first program over
 the cap, offarm32, exactly where `corpus-verdicts.txt` puts it (offarm16 ok,
 offarm24 refused).
@@ -515,15 +515,15 @@ mali-varying-constants.md.
 
 | Source (case) | Stage | First refused op | Construct |
 |---|---|---|---|
-| es100/boolany.frag (76) | fs | `i2b` | `uniform bool` / `bvec3` words as bools, `any`/`all` of them and of `greaterThan` lanes as `ior`/`iand` chains |
-| es100/cond_complex.frag | fs | `iand` of two compare masks | `a && b` of mediump float compares (a mask AND, `.v2i16` in Mesa) |
-| es100/loop_full.frag | fs | `iand` | `break` on `r > 0.9 && float(i) > g * 8.0`: bool AND of a compare and an `i2f` of the loop counter in a kept loop (also needs mali-loop-break.md) |
-| es100/tri_discard.frag | fs | `iand` of two compares | `if (g > .25 && b < .25) discard;`: mask AND feeding a discard (also needs the general discard, case 81) |
-| es100/tri_int.frag | fs | `ineg` | `int(r*4.0)` (`f2i`), `-i * 3 + 7`, `i == 1`, `i != 2`, `b2f`, `i2f`: fp16 operands into fp32 integer arithmetic |
-| es100/ret_nested.vert | vs | `ConstBool` | `return` inside nested counted loops: Mesa's unrolled return flags are bool constants / selects in the vertex walk |
-| es300/flatlast.vert (89) | vs | `f2u` | `uint(col.a * 4.0 + 0.5)` into a `flat out uint` |
-| es300/flatlast.frag (89) | fs | arithmetic, not an int refusal | `float(v_idx) / 4.0`: `u2f`, then a constant division |
-| gltest/es3trunc_vsc.vert (199) | vs | `f2i` | `int(u_q)`, `uint(u_a)`, `>>`, `<<`, `-`, `i2f`/`u2f`, `trunc` |
+| tools/shaders/es100/boolany.frag (76) | fs | `i2b` | `uniform bool` / `bvec3` words as bools, `any`/`all` of them and of `greaterThan` lanes as `ior`/`iand` chains |
+| tools/shaders/es100/cond_complex.frag | fs | `iand` of two compare masks | `a && b` of mediump float compares (a mask AND, `.v2i16` in Mesa) |
+| tools/shaders/es100/loop_full.frag | fs | `iand` | `break` on `r > 0.9 && float(i) > g * 8.0`: bool AND of a compare and an `i2f` of the loop counter in a kept loop (also needs mali-loop-break.md) |
+| tools/shaders/es100/tri_discard.frag | fs | `iand` of two compares | `if (g > .25 && b < .25) discard;`: mask AND feeding a discard (also needs the general discard, case 81) |
+| tools/shaders/es100/tri_int.frag | fs | `ineg` | `int(r*4.0)` (`f2i`), `-i * 3 + 7`, `i == 1`, `i != 2`, `b2f`, `i2f`: fp16 operands into fp32 integer arithmetic |
+| tools/shaders/es100/ret_nested.vert | vs | `ConstBool` | `return` inside nested counted loops: Mesa's unrolled return flags are bool constants / selects in the vertex walk |
+| tools/shaders/es300/flatlast.vert (89) | vs | `f2u` | `uint(col.a * 4.0 + 0.5)` into a `flat out uint` |
+| tools/shaders/es300/flatlast.frag (89) | fs | arithmetic, not an int refusal | `float(v_idx) / 4.0`: `u2f`, then a constant division |
+| tools/shaders/gltest/es3trunc_vsc.vert (199) | vs | `f2i` | `int(u_q)`, `uint(u_a)`, `>>`, `<<`, `-`, `i2f`/`u2f`, `trunc` |
 
 The first op is only the first: later ones (`ishr`, `ishl`, `isub`, `u2f`,
 `ushr`, `ftrunc`, `ior`) refuse in turn.
@@ -568,7 +568,7 @@ The first op is only the first: later ones (`ishr`, `ishl`, `isub`, `u2f`,
 - **ret_nested.vert** (intbool_retnested, 21 varying words; the position
   program is the plain 24-word one). Made with `drm_shim_ref.sh run` and
   `pan_ref_diff.py extract --draw`. The draw pairs the vertex shader with
-  `es100/va.frag` (a flat `v_color` read, 7 words: `LD_VAR_BUF_IMM`, two
+  `tools/shaders/es100/va.frag` (a flat `v_color` read, 7 words: `LD_VAR_BUF_IMM`, two
   `V2F32_TO_V2F16`, `ATEST`, `BLEND`): `ret_nested.frag` reads `v_coords`,
   which the vertex shader does not write, and would not link. Mesa folds the
   whole function: `nir_opt_loop_unroll` unrolls both counted loops (6 x 4),
@@ -622,12 +622,12 @@ this stage. A constant shift count of `ishr` is the byte lane
   that record yet (item 4, flat-uint-motion). `motion.rs` `OPS` has no
   `U2f`, so the test calls `compile_module_for` directly instead of
   `compile_vs_for_reads`.
-- `corpus-verdicts.txt`: `es300/flatlast.vert` and
-  `gltest/es3trunc_vsc.vert` are now `ok`.
+- `corpus-verdicts.txt`: `tools/shaders/es300/flatlast.vert` and
+  `tools/shaders/gltest/es3trunc_vsc.vert` are now `ok`.
 
 ### Since plan #309 item bool-mask-ops: case 76
 
-Case 76 (`es100/boolany.frag`) is byte-equal to `intbool_76_boolany`
+Case 76 (`tools/shaders/es100/boolany.frag`) is byte-equal to `intbool_76_boolany`
 (`case_76_boolany_is_byte_equal_to_mesa_26_2_1`, a member of tests.rs
 `INTBOOL_POPULATION`). What it took (nir_fs.rs unless named):
 
@@ -662,7 +662,7 @@ The open points of the study: the pushed uniform words needed no change
 (fau.rs already pairs them as Mesa does: `u2` = `u_bv.y`, `.z`, `u3` =
 `u_b`, `u_bv.x`); each fp16 compare pair stands just before its first use
 (`move_compares`); `r` stays fp32 without touching the colour-select fold.
-Corpus: `es100/boolany.frag` is `ok`; `es100/varyings15.frag` now refuses
+Corpus: `tools/shaders/es100/boolany.frag` is `ok`; `tools/shaders/es100/varyings15.frag` now refuses
 one step later, on the `inot` of a 16-bit mask (`!near(..)` of
 `all(lessThan(..))`), an integer or boolean value instead of arithmetic.
 
@@ -676,7 +676,7 @@ shader now makes): the fragment walk takes `u2f32` of a 32-bit integer
 vertex shader (docs/notes/mali-varying-constants.md, "Flat values"). The
 fragment shader is the flat `.v4` load of `v_flat.rgb` and the moved lane,
 `.src_flat32` (`layout` now takes a varying declared `flat`). Corpus:
-`es300/flatlast.frag` is `ok`.
+`tools/shaders/es300/flatlast.frag` is `ok`.
 
 ### Proposed lowering items (one agent session each)
 

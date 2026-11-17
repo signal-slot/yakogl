@@ -442,7 +442,7 @@ and corrected in place: `fau.rs::lut8` :369, `opt.rs::lower_mkvec_swz` :347,
 `flow.rs` `insert_nops` :317 and `merge_discard` :476 (the note had `:372`),
 `emit.rs` `ROWS` :39 and `emit` :205, `bir.rs` `src_info` :776 and `nr_srcs`
 :914 (the note had "`props`" and a "destination-count list"),
-`tools/shaders/es100/deriv.frag` and `es300/derivs.frag` (the `gltest/` path
+`tools/shaders/es100/deriv.frag` and `tools/shaders/es300/derivs.frag` (the `gltest/` path
 did not exist), `frame.rs` is `src/mali/frame.rs`. Names that held:
 `Alu`, `Fceil`, `frag_coord`, `frag_coord16`, `Fs::node`, `alu16`, `alu32`,
 `walk_nodes`, `select`, `late_rules`, `order_keys`, `repair_fau`, `can_cse`,

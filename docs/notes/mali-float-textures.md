@@ -442,7 +442,7 @@ frame_tex_tests.rs and this note); the refusal and copy cases are in
 
 The plan as written before the change:
 
-- `tools/mali/testdata/frame_rgba16f_tex.trace` (and `_r16f`, `_1x1`): the
+- `frame_rgba16f_tex.trace` (and `_r16f`, `_1x1`; not committed): the
   `nocrc` traces of section 2, from `DRM_SHIM_REF_PAN_DEBUG=trace,linear,nocrc,dump
   tools/mali/drm_shim_ref.sh run <work> hdr.vert hdr.frag <out> --tex-format
   RGBA16F --tex-size 8` (and `R16F 8`, `RGBA16F 1`), with the two changes of

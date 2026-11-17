@@ -16,7 +16,7 @@ flattening that `vs_steps`/`vs_join` implement).
 
 "Measured" is a run in this session of Mesa 26.2.1 on the drm-shim
 (`tools/mali/drm_shim_ref.sh run`, `BIFROST_MESA_DEBUG=shaders,shaderdb`,
-GPU id 0xa867), each vertex source paired with `es100/va.frag`. The
+GPU id 0xa867), each vertex source paired with `tools/shaders/es100/va.frag`. The
 `loop_nested.vert` run matches the committed reference
 `tools/mali/testdata/intloop_loop_nested_vs.*` (53 instructions in the
 VARYING program, 4 loops, 10 registers, 7 uniforms; the committed testdata
@@ -301,8 +301,8 @@ independent structures, and the back-end passes -- `sched.rs`, `ra.rs`, `flow.rs
 
 ## 5. What it moves
 
-- **Corpus sources:** `es100/loop_nested.vert` (step 1-4) and
-  `es100/loop_uniform.dowhile.vert` (step 5). Their verdicts become the next
+- **Corpus sources:** `tools/shaders/es100/loop_nested.vert` (step 1-4) and
+  `tools/shaders/es100/loop_uniform.dowhile.vert` (step 5). Their verdicts become the next
   refusal or a pass; the nested one is a pass if the byte test passes.
 - **gl_test:** none; the sweep has no vertex loop (the sweep's `LoopVertex`
   count is 0, the 15 REFUSED of #309 are other families).

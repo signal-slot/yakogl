@@ -105,7 +105,7 @@ The compiler turns every uniform read into a `ldunif` of a stream word:
 `Op::LoadUniform` -> `SOp::Uniform(dw)` (`src/shaderc/online/v3d/prepare.rs:1385-1395`),
 selected as `Uniform { contents: QUNIFORM_UNIFORM, data: dw }`
 (`select.rs:2104`). At draw the stream is built from the array by
-`data` = dword index (`chain.rs:1874-1878`, `shaderc/mod.rs:1156-1157`). So a block
+`data` = dword index (`chain.rs:1874-1878`, `src/shaderc/mod.rs:1156-1157`). So a block
 dword costs **one stream word per read in the shader**, not a register, and the
 only bound is `dw < m.uniform_dwords` (`prepare.rs:1390`), i.e. the block the GL
 core fills. There is no 1536 in the V3D compiler or back end; the cap is the GL
@@ -124,7 +124,7 @@ offsets needs none of that; an array of 4096 dwords indexed at run time (dEQP
 **What the V3D can honestly report.** `MAX_UNIFORM_BLOCK_SIZE` 16384 is
 reachable with the existing constant-offset path, limited by (a) the GL core
 cap, (b) the draw's uniform stream size in the job's data arena [U, not read:
-`ubo-v3d` checks `src/v3d/job` against one stream word per read], (c) shader
+`ubo-v3d` checks the V3D job against one stream word per read], (c) shader
 size. Mesa's v3d reports `max_const_buffer0_size = 16 * 1024 * sizeof(float)`
 = 64 KiB and 16 constant buffers (`v3d_screen.c:164-165`), so the silicon is
 not the limit. Combined components: 50688 by the formula, with the block
@@ -233,7 +233,7 @@ follow `MAX_STAGE_UNIFORM_DWORDS`. The comment at `context.rs:104-108`
    1536, and the ES 2.0 report must not change
    (`tests/es2_report_guard.rs`). The same commit fixes the stale comment,
    pins the GC rows in `tests/es3_limits_ubo_unchanged.rs` and adds
-   `tests/es3_limits_gc_ubo.rs`.
+   a new test file for the GC UBO rows.
 
 The arm must not land before step 1 passes. Then `tests/es3_caps.rs`
 `known_gaps()`, `docs/es3-cts-failures.md` RC10 and `tools/cts/RESULTS.md`
@@ -291,7 +291,7 @@ Order matters: each step keeps the tree green.
    `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` stay 1536.
 5. **Done.** `cb52fae8`: `tests/es3_limits_v3d.rs` (16384 / 50688),
    `tests/es3_caps.rs` `known_gaps()` lists the family for the other GPUs
-   only, `v3d/backend_tests.rs` `a_uniform_block_of_16384_bytes_reaches_the_stream_whole`
+   only, `src/v3d/backend_tests.rs` `a_uniform_block_of_16384_bytes_reaches_the_stream_whole`
    (host compile and sim read), the per-GPU pin in the `state.rs` unit test.
    Since: `tests/v3d_ubo_large_vs.rs` (`06e4b56e`, a vertex stage reads the
    first and last dword) and `tests/v3d_ubo_full_stage.rs` (`cb2f0ffb`, the

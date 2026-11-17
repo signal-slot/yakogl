@@ -64,7 +64,7 @@ scenes (`index.txt`), all raised at `nir.rs:2334` (checked with a temporary
 
 Two repo sources are the same family (`tools/mali/corpus-verdicts.txt:80,134`):
 `tools/shaders/es100/mvstruct.vert` (`ubuf.mvp * vec4(attr_pos, 1.0)`, twice;
-a struct uniform) and `es100/xlink.vert` (`u_fade.matrix * vec4(a_pos, 0.0,
+a struct uniform) and `tools/shaders/es100/xlink.vert` (`u_fade.matrix * vec4(a_pos, 0.0,
 1.0)`).
 
 The count the tally gave, **18 of 55**, I get as 13 here plus 5 vertex shaders
@@ -256,8 +256,8 @@ refusal: 4 compile (`bump-51d0`, `pulsar-9d75`, `shadow-37f4`,
 `vsfold_one` (S1, vec3 attribute, as bump51), `vsfold_normal` (S1 in the
 varying program, a `vec3(M * vec4(n, 1.0))` varying, the pattern `sh37`
 and `shade` already show), `vsfold_xy` (S2, as shadowb). The corpus
-sources `es100/mvstruct.vert` (S1, and a second matrix in the varying
-program) and `es100/xlink.vert` (S2) have struct uniforms, which
+sources `tools/shaders/es100/mvstruct.vert` (S1, and a second matrix in the varying
+program) and `tools/shaders/es100/xlink.vert` (S2) have struct uniforms, which
 `--uniform-values` cannot set (`gl_ref: --uniform-values does not set a Fade
 uniform`): draw them without it, as case 70 was, and compare with
 `check_linked_for`. Sentinels that must not move: the 25/52
@@ -376,5 +376,5 @@ scenes 2 -> 5 (`build` x2 and `shading:gouraud` join `pulsar` and
 TEX_COORD). ideas `a09e` moves to equal lanes of a uniform-only `if`
 (`vec4(c, c, c, 1.0)`, a join: not this family); the test's fixture
 `tests/fixtures/mali_glmark2_verdicts.txt` holds these verdicts. `tools/mali/corpus-verdicts.txt`:
-`es100/discard_dynloop.vert` ok, `es100/xlink.vert` to the uniform-varying
+`tools/shaders/es100/discard_dynloop.vert` ok, `tools/shaders/es100/xlink.vert` to the uniform-varying
 refusal.

@@ -459,7 +459,7 @@ transform sits behind), inside S4 after the rows it shares (`fadd`, `ffma`).
      `:928`; `resolved`, `:824`, turns a `Default` into it), and
      `Interface { reflection, uniforms, ast }` (`reflect.rs:978-982`, built at
      `:1057`) is
-     what reaches the back end: the fragment side is `mali/mod.rs:1034`
+     what reaches the back end: the fragment side is `src/shaderc/online/mali/mod.rs:1034`
      (`compile_module(&l.module, decls.uniforms, scratch)`), its vertex twin
      `:1055`; `:749-788` take `precision: &[UniformDecl]`.
      **S2 adds the final `float` of `uniform_decls` (and a `mixed` flag, next
@@ -477,7 +477,7 @@ transform sits behind), inside S4 after the rows it shares (`fadd`, `ffma`).
      default on a declaration other than a uniform (a `highp` varying or local
      under `mediump`, a `mediump` one under `highp`; `Low` and `Medium` count as
      the same) has `mixed = true`. `mixed` alone changes nothing: a *copy* of
-     such a value is exact either way (`es100/light_amount.frag`,
+     such a value is exact either way (`tools/shaders/es100/light_amount.frag`,
      `varying highp vec3` under mediump, is `ok` today and its words are the
      `sel_whole_vec3_loc1` pattern (the `tests.rs:539-543` entry of `POPULATION`, `:489-549`), an fp32 load narrowed at the colour
      store, which is also what Mesa does). `mixed` **and** an arithmetic
@@ -510,12 +510,12 @@ transform sits behind), inside S4 after the rows it shares (`fadd`, `ffma`).
      |---|---|---|---|
      | `fvgtest_green.frag` | `precision highp float`, constant colour | `NOP, ATEST, MOV.i32 x2, BLEND` | `fvgtest_green.expect.json`, `cases.txt:83` `equal` |
      | `fvgtest_ftcoord.frag` | default, varying copy | `LD_VAR_BUF_IMM.f32, V2F32_TO_V2F16, ATEST, MOV.i32, BLEND` | `fvgtest_ftcoord.expect.json`, `cases.txt:82` `equal` |
-     | `es300/cubelodv.frag` | default, vec4 varying copy | `LD_VAR_BUF_IMM.f32 (v3), V2F32_TO_V2F16 x2, ATEST, BLEND` | none; same words as `sel_whole_vec4_same` pattern |
-     | `gltest/es3trunc_vary_fs.frag` | default, vec4 varying copy | as `cubelodv` | none; same |
+     | `tools/shaders/es300/cubelodv.frag` | default, vec4 varying copy | `LD_VAR_BUF_IMM.f32 (v3), V2F32_TO_V2F16 x2, ATEST, BLEND` | none; same words as `sel_whole_vec4_same` pattern |
+     | `tools/shaders/gltest/es3trunc_vary_fs.frag` | default, vec4 varying copy | as `cubelodv` | none; same |
      | `qt/smoothcolor.frag` (Qt; left the tree, #1509) | default, vec4 varying copy | as `cubelodv` | none; same |
      | `qt3d/debugobject.frag` (Qt; left the tree, #1509) | default, `vec4(vec3 varying, 1.0)` | `LD_VAR_BUF_IMM.f32 (v2), V2F32_TO_V2F16, FADD.f32 .h0, ATEST, MKVEC.v2i16, BLEND` | none; the `sel_whole_vec3_loc1` pattern |
      | `qt3d/clearshadowmap_300.frag` (Qt; left the tree, #1509) | default, constant `vec4(1.0)` | `NOP, ATEST, MOV.i32 x2, BLEND` | none; the `fvgtest_green` pattern |
-     | `es100/light_amount.frag` | `varying highp vec3` under mediump | as `debugobject` | none; same pattern |
+     | `tools/shaders/es100/light_amount.frag` | `varying highp vec3` under mediump | as `debugobject` | none; same pattern |
 
      In all 8 the only 16-bit operations are the colour-store conversions
      (`V2F32_TO_V2F16`, `FADD.f32 ... .h0`, `MKVEC.v2i16`) and 32-bit-lane
@@ -577,7 +577,7 @@ transform sits behind), inside S4 after the rows it shares (`fadd`, `ffma`).
      `fvgtest_ftcoord`, `:5134`), dispatch `:21622-21623`; both
      `PASS` on the board at the integration tip (`gl_test: case 28 fvgvs:
      PASS`, `case 29 fvgft: PASS` in all 6 `--sweep` logs of
-     `0dce654a8:tools/mali/board-ref/2026-10-20-query/`: `baseline/` 2, `ours/` 2,
+     `board-ref record 2026-10-20-query/`: `baseline/` 2, `ours/` 2,
      `tip/ours/` 2), so they are
      regression guards, not goals. Case 30 (`fvgin`, `fvgtest_inner`) is S3's
      (`REFUSED` in every log, with the `FsUniform` message). **Missing:** (1) a Rust test of our
@@ -595,7 +595,7 @@ transform sits behind), inside S4 after the rows it shares (`fadd`, `ffma`).
      mediump default with `varying highp` read by arithmetic, to pin the
      refusal against Mesa's fp32; (4) a gl_test case for highp arithmetic on
      the board: only the femtovg cases (28-33, 195, ...) and
-     `gltest/kc_*`, `gltest/varyfma_fs.frag` (case 191) are highp and all are
+     `gltest/kc_*`, `tools/shaders/gltest/varyfma_fs.frag` (case 191) are highp and all are
      refused today for the other rows. (2) and (3) are `tools/mali/**`
      (`drm_shim_ref.sh`, `cases.txt`), the S2 item's to add.
 3. **The y-transform value on the board: answered, the path has the flip; it

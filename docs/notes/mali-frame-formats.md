@@ -200,7 +200,7 @@ for this format (the `_ =>` arm packs 8-bit). `backend.rs:1239-1245` maps
 as `RGBA16F` is a texture-format matter and is not part of this case (no
 read-back).
 
-**Pinned by.** `frame_formats_tests.rs` (it reads `board-dump/formats-2026-10-19.txt`
+**Pinned by.** `frame_formats_tests.rs` (it reads `tools/mali/board-dump/formats-2026-10-19.txt`
 for XRGB8888 and RGB565): an `f16rt` section with the render target, blend and
 framebuffer words from the section 5 dump; until then `frame_rt_rgba16f.expect.txt`
 is the derived expectation. `backend_tests.rs:881` (`("RGBA16F", ..., not_built(NOT_BUILT_TARGET_FORMAT))`)
@@ -243,7 +243,7 @@ the three tests above read, and the three `expect.txt` files are replaced by
 ## 6. Settled by the board dumps (2026-10-24-mesa-refs5)
 
 Mesa 25.0.7 on the NanoPC-T6, two runs per mode, rc 0, no kernel messages;
-`0dce654a8:tools/mali/board-ref/2026-10-24-mesa-refs5/` (README: every prediction, met or
+`board-ref record 2026-10-24-mesa-refs5/` (README: every prediction, met or
 not) and the cuts `tools/mali/board-dump/{cull,instsplit,f16rt}-2026-10-24.txt`.
 Compared with `tools/mali/testdata/frame_{cull,attr_instance,rt_rgba16f}.expect.txt`:
 

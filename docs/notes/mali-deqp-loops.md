@@ -476,7 +476,7 @@ stages drawn as the pair dEQP links):
   `do_while_constant_iterations.post_increment_vertex` (the test's place).
 - `deqp_loops_vs_nested_const`: `for_constant_iterations.nested_sequence_vertex`.
 - `deqp_loops_vs_idx_static`: `indexing.tmp_array.vec4_static_loop_write_static_loop_read_vertex` (F11, with study-uniarray's static subscripts).
-- `deqp_loops_fs_for_uni`: `for_uniform_iterations.basic_mediump_int_fragment` (= `es100/loop_uniform.frag`; `intloop_loop_nested` is the nested twin and is already in the tree).
+- `deqp_loops_fs_for_uni`: `for_uniform_iterations.basic_mediump_int_fragment` (= `tools/shaders/es100/loop_uniform.frag`; `intloop_loop_nested` is the nested twin and is already in the tree).
 - `deqp_loops_fs_while_uni`, `deqp_loops_fs_dowhile_uni`:
   `while_uniform_iterations.basic_mediump_int_fragment`,
   `do_while_uniform_iterations.basic_mediump_int_fragment` (the do-while's
@@ -537,14 +537,14 @@ references have no loop and no read of `ui_four`, but the
 References for step 2:
 
 - `deqp_loops_vs_for_uni`: `for_uniform_iterations.basic_mediump_int_vertex` (one kept loop, one carried fp16 vector; `intloop_loop_nested_vs` is the nested one).
-- `deqp_loops_vs_dowhile_uni`: `do_while_uniform_iterations.basic_mediump_int_vertex` (= `es100/loop_uniform.dowhile.vert`, no `expect.json` yet).
+- `deqp_loops_vs_dowhile_uni`: `do_while_uniform_iterations.basic_mediump_int_vertex` (= `tools/shaders/es100/loop_uniform.dowhile.vert`, no `expect.json` yet).
 - `deqp_loops_vs_float_uni`: `for_uniform_iterations.basic_highp_float_vertex` (F7 at fp32 in the vertex stage).
 - `deqp_loops_vs_position`: a loop whose result reaches `gl_Position` (not a dEQP case: `gm2_cf_loop_uni_vs`'s shape; if #367 has drawn it, reuse theirs).
 - `deqp_loops_vs_select`, `deqp_loops_vs_vector`: `select_iteration_count_vertex`, `vector_counter_vertex` (F3, F8).
 - `deqp_loops_fs_cond_break`, `deqp_loops_fs_cond_continue`, `deqp_loops_fs_double_continue`, `deqp_loops_fs_mixed`: the four `for_uniform_iterations.*_fragment` bodies of F2 (`intloop_contloops` holds the `while` form).
 - `deqp_loops_fs_inf_break`: `for_uniform_iterations.infinite_with_conditional_break_fragment` (F5's `if (c) break;` head).
 - `deqp_loops_fs_idx_dyn`, `deqp_loops_vs_idx_dyn`: `indexing.tmp_array.float_dynamic_loop_write_static_read_{fragment,vertex}` (3.3: drawn first, `shaderdb`'s `loops` read before anything else of (c) is planned).
-- `deqp_loops_fs_vec_dyn`: `indexing.vector_subscript.vec4_dynamic_loop_subscript_write_dynamic_loop_subscript_read_fragment` (= `es100/dynidx_loop.frag`'s family).
+- `deqp_loops_fs_vec_dyn`: `indexing.vector_subscript.vec4_dynamic_loop_subscript_write_dynamic_loop_subscript_read_fragment` (= `tools/shaders/es100/dynidx_loop.frag`'s family).
 
 Expected after step 2: VS NS 392 -> the `UniformType`/`IntValue` of
 dynamic bounds and `select_iteration_count`'s bool (about 90, study-intval
@@ -880,7 +880,7 @@ compile there and is byte-compared in `tests.rs`):
 refusal; row 32 `vs 3cb0` (int-uniform bound) stays; row 32 `fs 3678` (the
 mediump kept loop, (b)) goes to `ok`; rows 30 and 31 `fs e016`/`c7ea` are
 the gl_FragCoord refusal of another family and stay. In
-`tools/mali/corpus-verdicts.txt`: `es100/loop_uniform.frag`,
+`tools/mali/corpus-verdicts.txt`: `tools/shaders/es100/loop_uniform.frag`,
 `loop_nested.frag`, `loop_nested.while.frag`, `loop_nested.dowhile.frag`,
 `discard_dynloop.frag`, `ret_dynloop_never.frag` leave `LoopMediump`
 (`ret_dynloop_never` to the return flag's refusal); `dynidx_loop.frag`

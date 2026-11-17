@@ -4,9 +4,9 @@
 
 Plan #153, item `study-texfetch`. It covers the five shapes the online compiler
 still refuses and `texmore` (`docs/notes/mali-texture-lookups.md`) did not
-record: `es300/texoffset.frag`, `es300/texfetch.frag`, `gltest/usamp.frag`
-(`usampler2D`), `gltest/isamp.frag` (`isampler2D`, mediump-looking
-`gl_FragCoord` in a highp shader) and `es300/layers2.frag` (a
+record: `tools/shaders/es300/texoffset.frag`, `tools/shaders/es300/texfetch.frag`, `tools/shaders/gltest/usamp.frag`
+(`usampler2D`), `tools/shaders/gltest/isamp.frag` (`isampler2D`, mediump-looking
+`gl_FragCoord` in a highp shader) and `tools/shaders/es300/layers2.frag` (a
 `sampler2DArray` and a `sampler2D` in one shader). Nothing was run on the
 board and no Rust changed. Citations `M:<path>:<line>` are Mesa 26.2.1,
 `src/panfrost/compiler/` (`MESA_PAN_TREE`); `<path>:<line>` is our tree.

@@ -38,26 +38,26 @@ the existing note that carries the family's design; "—" is none.
 | # | family (variant) | n | sources | note |
 |---|---|---|---|---|
 | 1 | arithmetic other than `+ - *` (`Arithmetic`) | 16 | see A below | `mali-alu-ops`, `mali-transcendentals`, `mali-derivatives`, `mali-trunc`, `mali-vs-alu-ops`, `mali-vs-fma`, `mali-int-and-size` |
-| 2 | integer or boolean value (`IntValue`) | 6 | `es100/cond_complex.frag`, `loop_full.frag`, `ret_nested.vert`, `tri_discard.frag`, `tri_int.frag`, `varyings15.frag` | `mali-int-and-size`, `mali-int-loops` |
-| 3 | kept run-time loop, mediump fragment (`LoopMediump`) | 6 | `es100/discard_dynloop.frag`, `loop_nested.dowhile.frag`, `loop_nested.frag`, `loop_nested.while.frag`, `loop_uniform.frag`, `ret_dynloop_never.frag` | `mali-int-loops`, `mali-loop-break`, `mali-loop-board-failures`, `mali-remaining-families` F7 |
-| 4 | control flow (`ControlFlow`) | 4 | `es100/frontfacing.frag`, `partial_varying.vert`, `psiz_if.vert`, `gltest/predif_vs_uni.vert` | `mali-control-flow`, `mali-vs-abs-if` |
-| 5 | look-up other than `texture2D(sampler2D, c)` (`TexKind`) | 4 | `es300/layers2.frag`, `texfetch.frag`, `gltest/texcube_fs.frag`, `usamp.frag` | `mali-texture-lookups`, `mali-texel-fetch`, `mali-cube-textures`, `mali-texture-refusals` |
-| 6 | indexed local variable (`IndexedLocal`) | 3 | `es100/dynidx.frag`, `dynidx_loop.frag`, `matdyn.frag` | `mali-indexed-locals` |
-| 7 | uniform at a run-time index (`UniformIndexed`) | 3 | `es100/dynvec4.frag`, `uniform_idx.frag`, `es300/uniidx.frag` | `mali-uniform-index`, `mali-uniform-arrays` |
-| 8 | uniform other than float/vec/mat4 (`UniformType`) | 3 | `es100/light_amount_0_16.vert`, `light_amount_2_2.vert`, `sharedint.vert` | `mali-uniform-types`, `mali-int-uniforms` |
-| 9 | `gl_FragColor` lane (`ColourForm`) | 3 | `es100/ifloop.frag`, `tri_if.frag`, `gltest/texcubenorm_fs.frag` | `mali-varying-constants` (shapes), `mali-remaining-families` F8 |
-| 10 | constant product (`ArithConstant`) | 3 | `es100/loopcarry.frag`, `mvstruct.vert`, `xlink.vert` | `mali-constant-products`, `mali-vs-constant-products`, `mali-algebraic-folds` |
-| 11 | two varying lanes of equal value (`VaryingDuplicate`) | 2 | `es100/discard_dynloop.vert`, `va_vec2.vert` | `mali-varying-constants` |
-| 12 | varying lane from no attribute (`VaryingNotFromAttribute`) | 2 | `es100/vtex_struct_sampler.vert`, `vtex_struct_sampler_array.vert` | `mali-varying-constants`, `mali-vs-lookups` |
-| 13 | more than 32 locals (`TooManyLocals`) | 2 | `es100/tmparr_const.frag`, `tmparr_const.vert` | — (only the `mali-remaining-families` F4 row) |
-| 14 | loop in a vertex shader (`LoopVertex`) | 2 | `es100/loop_nested.vert`, `loop_uniform.dowhile.vert` | — (F6 row of `mali-remaining-families`; `mali-loop-board-failures` names it) |
-| 15 | chain of 3+ adds/muls (`Rebalance`) | 1 | `es300/texoffset.frag` | `mali-rebalance`, `mali-remaining-families` F1 |
-| 16 | vertex look-up with a constant lane (`TexVertexConstant`) | 1 | `es100/cubelod.vert` | `mali-vs-lookups` |
-| 17 | texture coordinate not a whole vec2 varying (`TexCoord`) | 1 | `es100/xlink.frag` | — (F9 row only; `mali-texture-refusals` names the variant) |
-| 18 | mixed highp and mediump (`MixedPrecision`) | 1 | `es100/ifelse_loop.frag` | `mali-mixed-precision` |
-| 19 | operand form no reference draws (`FsOperandForm`) | 1 | `es100/cond_sequence.frag` | `mali-alu-ops`, `mali-remaining-families` |
-| 20 | comparison other than `< <= > >= ==` (`CompareForm`) | 1 | `es100/sharedint.frag` | — (F11 row only) |
-| 21 | `break`/`continue` behind a run-time condition in an unrolled mediump loop (`GuardMediump`) | 1 | `es100/contloops.frag` | `mali-loop-break` |
+| 2 | integer or boolean value (`IntValue`) | 6 | `tools/shaders/es100/cond_complex.frag`, `loop_full.frag`, `ret_nested.vert`, `tri_discard.frag`, `tri_int.frag`, `varyings15.frag` | `mali-int-and-size`, `mali-int-loops` |
+| 3 | kept run-time loop, mediump fragment (`LoopMediump`) | 6 | `tools/shaders/es100/discard_dynloop.frag`, `loop_nested.dowhile.frag`, `loop_nested.frag`, `loop_nested.while.frag`, `loop_uniform.frag`, `ret_dynloop_never.frag` | `mali-int-loops`, `mali-loop-break`, `mali-loop-board-failures`, `mali-remaining-families` F7 |
+| 4 | control flow (`ControlFlow`) | 4 | `tools/shaders/es100/frontfacing.frag`, `partial_varying.vert`, `psiz_if.vert`, `tools/shaders/gltest/predif_vs_uni.vert` | `mali-control-flow`, `mali-vs-abs-if` |
+| 5 | look-up other than `texture2D(sampler2D, c)` (`TexKind`) | 4 | `tools/shaders/es300/layers2.frag`, `texfetch.frag`, `tools/shaders/gltest/texcube_fs.frag`, `usamp.frag` | `mali-texture-lookups`, `mali-texel-fetch`, `mali-cube-textures`, `mali-texture-refusals` |
+| 6 | indexed local variable (`IndexedLocal`) | 3 | `tools/shaders/es100/dynidx.frag`, `dynidx_loop.frag`, `matdyn.frag` | `mali-indexed-locals` |
+| 7 | uniform at a run-time index (`UniformIndexed`) | 3 | `tools/shaders/es100/dynvec4.frag`, `uniform_idx.frag`, `tools/shaders/es300/uniidx.frag` | `mali-uniform-index`, `mali-uniform-arrays` |
+| 8 | uniform other than float/vec/mat4 (`UniformType`) | 3 | `tools/shaders/es100/light_amount_0_16.vert`, `light_amount_2_2.vert`, `sharedint.vert` | `mali-uniform-types`, `mali-int-uniforms` |
+| 9 | `gl_FragColor` lane (`ColourForm`) | 3 | `tools/shaders/es100/ifloop.frag`, `tri_if.frag`, `tools/shaders/gltest/texcubenorm_fs.frag` | `mali-varying-constants` (shapes), `mali-remaining-families` F8 |
+| 10 | constant product (`ArithConstant`) | 3 | `tools/shaders/es100/loopcarry.frag`, `mvstruct.vert`, `xlink.vert` | `mali-constant-products`, `mali-vs-constant-products`, `mali-algebraic-folds` |
+| 11 | two varying lanes of equal value (`VaryingDuplicate`) | 2 | `tools/shaders/es100/discard_dynloop.vert`, `va_vec2.vert` | `mali-varying-constants` |
+| 12 | varying lane from no attribute (`VaryingNotFromAttribute`) | 2 | `tools/shaders/es100/vtex_struct_sampler.vert`, `vtex_struct_sampler_array.vert` | `mali-varying-constants`, `mali-vs-lookups` |
+| 13 | more than 32 locals (`TooManyLocals`) | 2 | `tools/shaders/es100/tmparr_const.frag`, `tmparr_const.vert` | — (only the `mali-remaining-families` F4 row) |
+| 14 | loop in a vertex shader (`LoopVertex`) | 2 | `tools/shaders/es100/loop_nested.vert`, `loop_uniform.dowhile.vert` | — (F6 row of `mali-remaining-families`; `mali-loop-board-failures` names it) |
+| 15 | chain of 3+ adds/muls (`Rebalance`) | 1 | `tools/shaders/es300/texoffset.frag` | `mali-rebalance`, `mali-remaining-families` F1 |
+| 16 | vertex look-up with a constant lane (`TexVertexConstant`) | 1 | `tools/shaders/es100/cubelod.vert` | `mali-vs-lookups` |
+| 17 | texture coordinate not a whole vec2 varying (`TexCoord`) | 1 | `tools/shaders/es100/xlink.frag` | — (F9 row only; `mali-texture-refusals` names the variant) |
+| 18 | mixed highp and mediump (`MixedPrecision`) | 1 | `tools/shaders/es100/ifelse_loop.frag` | `mali-mixed-precision` |
+| 19 | operand form no reference draws (`FsOperandForm`) | 1 | `tools/shaders/es100/cond_sequence.frag` | `mali-alu-ops`, `mali-remaining-families` |
+| 20 | comparison other than `< <= > >= ==` (`CompareForm`) | 1 | `tools/shaders/es100/sharedint.frag` | — (F11 row only) |
+| 21 | `break`/`continue` behind a run-time condition in an unrolled mediump loop (`GuardMediump`) | 1 | `tools/shaders/es100/contloops.frag` | `mali-loop-break` |
 
 16+6+6+4+4+3+3+3+3+3+2+2+2+2+1+1+1+1+1+1+1 = 66, and 66 + 18 = 84.
 
@@ -70,13 +70,13 @@ sources the plan's text lumped into "others".
 
 | operation | n | sources | note |
 |---|---|---|---|
-| `sin cos exp2 log2 inversesqrt` in a fragment shader | 3 | `es100/transc.frag`, `vtransc.frag`, `fmods.frag` | `mali-transcendentals` (case 77 is `transc`) |
-| `rcp`, `inversesqrt` in a vertex shader | 1 | `es100/vrcp.vert` | `mali-vs-alu-ops`, `mali-transcendentals` |
-| `dFdx dFdy` | 2 | `es100/deriv.frag`, `es300/derivs.frag` | `mali-derivatives` (case 138) |
-| `trunc` family in a fragment shader | 1 | `gltest/es3trunc_fs.frag` | `mali-trunc` (case 199) |
-| integer ALU: `/ % >> ^ ~ min max`, `int()` and `uint()` conversions, `bool()` of a float | 7 | `es100/int_div.frag`, `es300/int_div.frag`, `es300/uops.frag`, `es300/gcops.frag`, `es300/ifelse_uint.frag`, `es100/f2b.frag`, `gltest/f1_fs.frag` | `mali-int-and-size`, `mali-alu-ops` |
-| `step` | 1 | `es300/layersunused.frag` | `mali-alu-ops` |
-| vertex `ffma` shape (`floor(a*b*4.0)`, `u - abs(a*b)`) | 1 | `gltest/fma_vs_ctrl.vert` | `mali-vs-fma` |
+| `sin cos exp2 log2 inversesqrt` in a fragment shader | 3 | `tools/shaders/es100/transc.frag`, `vtransc.frag`, `fmods.frag` | `mali-transcendentals` (case 77 is `transc`) |
+| `rcp`, `inversesqrt` in a vertex shader | 1 | `tools/shaders/es100/vrcp.vert` | `mali-vs-alu-ops`, `mali-transcendentals` |
+| `dFdx dFdy` | 2 | `tools/shaders/es100/deriv.frag`, `tools/shaders/es300/derivs.frag` | `mali-derivatives` (case 138) |
+| `trunc` family in a fragment shader | 1 | `tools/shaders/gltest/es3trunc_fs.frag` | `mali-trunc` (case 199) |
+| integer ALU: `/ % >> ^ ~ min max`, `int()` and `uint()` conversions, `bool()` of a float | 7 | `tools/shaders/es100/int_div.frag`, `tools/shaders/es300/int_div.frag`, `tools/shaders/es300/uops.frag`, `tools/shaders/es300/gcops.frag`, `tools/shaders/es300/ifelse_uint.frag`, `tools/shaders/es100/f2b.frag`, `tools/shaders/gltest/f1_fs.frag` | `mali-int-and-size`, `mali-alu-ops` |
+| `step` | 1 | `tools/shaders/es300/layersunused.frag` | `mali-alu-ops` |
+| vertex `ffma` shape (`floor(a*b*4.0)`, `u - abs(a*b)`) | 1 | `tools/shaders/gltest/fma_vs_ctrl.vert` | `mali-vs-fma` |
 
 3+1+2+1+7+1+1 = 16. Which `Arithmetic` site each reaches is not run. The
 variant has the catch-all arms `nir_fs.rs:4216` (every fragment ALU op the
@@ -141,7 +141,7 @@ compiled for this note beyond what the pinned verdict says.
   `nir_fs.rs:2661` in the fragment walk, against `MAX_LOCALS = 32`
   (`nir.rs:65`). The check counts front-end locals before any array is
   split, so it does not look at what Mesa would keep.
-- **Smallest example.** `es100/tmparr_const.vert`: a `vec4 arr[40]` written
+- **Smallest example.** `tools/shaders/es100/tmparr_const.vert`: a `vec4 arr[40]` written
   with 40 constants, read at four int-uniform indices and summed (62 lines);
   `tmparr_const.frag` is the same on the fragment side (dEQP
   `indexing.tmp_array.vec4_const_write_dynamic_read`).
@@ -168,7 +168,7 @@ compiled for this note beyond what the pinned verdict says.
 
 - **Site.** `nir.rs:2340`, the `IrNode::Loop` arm of the vertex walk, comment
   "intloop_loop_nested_vs: Mesa keeps the loops as blocks".
-- **Smallest example.** `es100/loop_uniform.dowhile.vert` (17 lines):
+- **Smallest example.** `tools/shaders/es100/loop_uniform.dowhile.vert` (17 lines):
   `do { res = res.yzwx; } while (++i < ui_three);` with a mediump int
   uniform bound. `loop_nested.vert` is two nested loops.
 - **Mesa.** `bifrost_nir.c:268` runs `nir_opt_loop_unroll` in the
@@ -192,7 +192,7 @@ compiled for this note beyond what the pinned verdict says.
   `4453` (`let Val::Lane(n, _) = v else { return Err(MaliError::TexCoord) }`)
   and its neighbours, which accept a vec2 varying read whole or two
   constants.
-- **Smallest example.** `es100/xlink.frag`: two look-ups at
+- **Smallest example.** `tools/shaders/es100/xlink.frag`: two look-ups at
   `v_uv2.xy` and `v_uv2.zw` of one vec4 varying (second look-up on the
   upper half), result `mix(a, b, v_mix) * u_fade.opacity` with a struct
   uniform.
@@ -214,7 +214,7 @@ compiled for this note beyond what the pinned verdict says.
 
 - **Site.** `nir_fs.rs:2141`: `AluOp::Fne | AluOp::Ine => Err(CompareForm)`,
   with the comment that no reference that compiles draws it.
-- **Smallest example.** `es100/sharedint.frag`: `if (u_p.mode != 0)
+- **Smallest example.** `tools/shaders/es100/sharedint.frag`: `if (u_p.mode != 0)
   c.rgb *= 0.5 + 0.5 * sin(v_xy.x + v_xy.y);` (an int struct member
   uniform, so `Ine`). The shader also needs `sin` (row 1) and an `if`
   around it, and its vertex half `sharedint.vert` stops at `UniformType`

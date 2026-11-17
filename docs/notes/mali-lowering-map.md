@@ -294,7 +294,7 @@ variants: `Fsat Fmin..` (exists), `Ffloor`, `Frsq`, `Fcmp(cmpf)`, `Icmp(cmpf, si
   constant source) and allocates with the interference of each block from
   its live-out, `flow.rs` walks the blocks in layout order for the
   scoreboard, `RECONVERGE`, `END` and the last-use marks. The board
-  record `0dce654a8:tools/mali/board-ref/2026-10-22-s5-if/` shows the first 40 words
+  record `board-ref record 2026-10-22-s5-if/` shows the first 40 words
   of `fill_color.nodiscard` byte-equal to the board's Mesa 25.0.7 (branches
   and offsets included) once the FAU operands are moved past the blend
   constants.
@@ -344,11 +344,11 @@ variants: `Fsat Fmin..` (exists), `Ffloor`, `Frsq`, `Fcmp(cmpf)`, `Icmp(cmpf, si
 
 ## Part 2. femtovg and fvgtest programs
 
-42 programs: 35 `femtovg/*.frag`, `femtovg/main.vert`, six
+42 programs: 35 `femtovg/*.frag`, `tools/shaders/femtovg/main.vert`, six
 `tools/shaders/fvgtest_*.frag`. All 41 fragment programs declare
 `precision highp float`; the femtovg ones are one source
 (`fill_color.nodiscard.noscissor.frag` and its siblings are the same file
-under different `#define`s, `femtovg/PROVENANCE.md`).
+under different `#define`s, `tools/shaders/femtovg/PROVENANCE.md`).
 
 **How the features were counted.** By reading the shared source and its
 `#define` combinations (`SELECT_SHADER`, `ENABLE_GLYPH_TEXTURE`,

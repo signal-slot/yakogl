@@ -386,7 +386,7 @@ Part 1's guard ladder, stop at `walk_if`'s `!prec.highp` and at the
 mediump `Fceil` in `walk_nodes`: they are the control-flow item's (cases
 70/71), not this one's.)
 
-## loop_exit (`es300/loop_exit.frag`, highp, 23 words)
+## loop_exit (`tools/shaders/es300/loop_exit.frag`, highp, 23 words)
 
 ```
 b0  0  LD_VAR_BUF_IMM.f32.v3 @r0:r1:r2               ; r, g, b
@@ -413,7 +413,7 @@ they were carried in). `float(n)` is not `S32_TO_F32` of the counter bound:
 `i2f(f2i(a))` is `ftrunc(a)` (`nir_opt_algebraic.py:1250`), so the float
 product of word 2 stays live across the loop.
 
-## builtin_98 (`es300/uniloop.frag`, highp, the loop words 0-10)
+## builtin_98 (`tools/shaders/es300/uniloop.frag`, highp, the loop words 0-10)
 
 ```
 b0  0  IADD_IMM.i32.discard r0, 0x0, #0x0            ; n = 0.0
@@ -437,7 +437,7 @@ last + 1`, `ICMP_OR.u32.eq.m1`, three `CSEL.u32.eq ..., 0x3F800000, x`.
 FAU: `u2.w0` the uniform `count`, `u2.w1` 1/16, `u3.w0` -16.0, `u3.w1`
 16/255. Three carried values; `last` is a phi whose latch source is `i`.
 
-## builtin_45 (`es300/dynidx.frag`, highp, 21 words)
+## builtin_45 (`tools/shaders/es300/dynidx.frag`, highp, 21 words)
 
 ```
 b0  0..3  IADD_IMM.i32 r0..r3, 0x0, #0x0 (word 0 .discard)  ; c = vec4(0)
@@ -460,7 +460,7 @@ Four carried lanes plus the counter. The `LD_PKA` waits in place
 (`.wait0` on itself, the load's slot 0) because its result is read by the
 next instruction.
 
-## divnest (`es300/divnest.frag`, highp, 57 words)
+## divnest (`tools/shaders/es300/divnest.frag`, highp, 57 words)
 
 The vertex shader computes `v_s * 8.0` (the motion of Part 1's step 0:
 `FMA.f32 r0, r0^, 0x48000000.h1, 0x0.neg` in `vs.varying`), so `b` is
@@ -506,7 +506,7 @@ What the words show that the others do not:
 - `j != 1` and `i != 2` are `ICMP_OR.u32.ne.m1` (`Ine`, which `Fs::lane32`
   refuses today as `CompareForm`).
 
-## loop_nested (`es100/loop_nested.frag`, mediump, 90 words)
+## loop_nested (`tools/shaders/es100/loop_nested.frag`, mediump, 90 words)
 
 Nine loops, each the shape of builtin_45's without the body's load: the
 preheader ends in `IADD_IMM.i32.reconverge rC, 0x0, #0x0`, the header is
@@ -529,7 +529,7 @@ the FAU words `ui_one` `u2.w0`, `ui_two` `u2.w1`, `ui_three` `u3.w0`;
 Carried values are 16-bit pairs in 32-bit registers, copied whole by
 `MOV.i32` at headers and latches; nothing is unrolled, nothing hoisted.
 
-## loop_nested_vs (`es100/loop_nested.vert`, the varying program, 53 words)
+## loop_nested_vs (`tools/shaders/es100/loop_nested.vert`, the varying program, 53 words)
 
 The same two nests in the **vertex** stage: words 1-2 `V2F32_TO_V2F16`
 (`coords`, no `.discard`), 3-18 the `nested` nest (outer header 6 -> 19 on
@@ -541,7 +541,7 @@ res.zw)`). The uniform words follow the vertex program's own FAU words
 words) and the fragment (`va.frag`, 7 words) are the usual ones and compile
 today.
 
-## contloops (`es100/contloops.frag`, mediump, 72 words)
+## contloops (`tools/shaders/es100/contloops.frag`, mediump, 72 words)
 
 Three loop forms in one program:
 
@@ -691,9 +691,9 @@ then, split this step off rather than grow loops-rt. Test:
 `intloop_contloops_is_byte_equal_to_mesa_26_2_1`.
 
 **Corpus lines expected to move** (each to `ok` or to a later gap, never
-back): `es300/loop_exit.frag`, `es300/divnest.frag`, `es300/uniloop.frag`,
-`es300/dynidx.frag`, `es100/loop_nested.frag`, `es100/loop_nested.vert`,
-`es100/contloops.frag`, and with them the same-shape sources
+back): `tools/shaders/es300/loop_exit.frag`, `tools/shaders/es300/divnest.frag`, `tools/shaders/es300/uniloop.frag`,
+`tools/shaders/es300/dynidx.frag`, `tools/shaders/es100/loop_nested.frag`, `tools/shaders/es100/loop_nested.vert`,
+`tools/shaders/es100/contloops.frag`, and with them the same-shape sources
 `es100/loop_nested.{while,dowhile}.frag`, `loop_uniform*`, `loop_full.frag`
 (`mali-int-loops.md`, "Not recorded"), whose verdicts are to be read, not
 assumed.

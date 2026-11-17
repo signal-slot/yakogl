@@ -63,7 +63,7 @@ rules it had for `f2i` (nir_opt_algebraic.py:1955, :1957), so
 `uint(gl_FragCoord.x)` is the pixel's own x, `U16_TO_U32 r3, r59^.h0`.
 The `uvec4` output itself (`FsPrecision::colour_u32`, `BLEND.v4.u32`, the
 `ATEST` of 1.0) was already lowered for `fbload_int`. The corpus line
-`gltest/intrt.frag` is `ok`; `es300/uops.frag` and `es300/ifelse_uint.frag`
+`tools/shaders/gltest/intrt.frag` is `ok`; `tools/shaders/es300/uops.frag` and `tools/shaders/es300/ifelse_uint.frag`
 moved from `UniformType` to the next refusal, `Arithmetic`.
 
 What the Mali frame (`src/mali/**`) must still allow before case 200 can
@@ -233,15 +233,15 @@ refusal (the corpus lines `sharedint.vert`, `sharedint.frag`).
 
 | shader | after `UniformType` is lowered | also needed |
 |---|---|---|
-| `es300/ishr.frag` | `IntValue`: the shift, compare, `&`, `/ 255.0` of ints | nothing else; ARSHIFT/ICMP/CSEL/`U8_TO_F32` (2.2, 2.3) |
-| `es300/uops.frag` | `IntValue`, then `Arithmetic` for `/`, `%`, `min`, `max`, `~`, `^`, shifts | integer divide (2.1), the rest of 2.2 and 2.3 |
-| `es300/gcops.frag` | `IntValue`, `Arithmetic` for `abs`, `^` | `IABS`, `LSHIFT_XOR`, `floor`, `sqrt`, `dot` already float ops |
-| `es300/ifelse_uint.frag` | `IntValue`, `Arithmetic` for `%`, `/` | constant divide (2.1), compare, per-component `CSEL` |
-| `gltest/intrt.frag` | `IntValue` (the `uvec4` output) | an integer colour output and `BLEND.v4.u32` (2.5), `gl_FragCoord` as int; the frame must also allow an integer target |
+| `tools/shaders/es300/ishr.frag` | `IntValue`: the shift, compare, `&`, `/ 255.0` of ints | nothing else; ARSHIFT/ICMP/CSEL/`U8_TO_F32` (2.2, 2.3) |
+| `tools/shaders/es300/uops.frag` | `IntValue`, then `Arithmetic` for `/`, `%`, `min`, `max`, `~`, `^`, shifts | integer divide (2.1), the rest of 2.2 and 2.3 |
+| `tools/shaders/es300/gcops.frag` | `IntValue`, `Arithmetic` for `abs`, `^` | `IABS`, `LSHIFT_XOR`, `floor`, `sqrt`, `dot` already float ops |
+| `tools/shaders/es300/ifelse_uint.frag` | `IntValue`, `Arithmetic` for `%`, `/` | constant divide (2.1), compare, per-component `CSEL` |
+| `tools/shaders/gltest/intrt.frag` | `IntValue` (the `uvec4` output) | an integer colour output and `BLEND.v4.u32` (2.5), `gl_FragCoord` as int; the frame must also allow an integer target |
 | `es300/idxtex.{vert,frag}` | `UniformArray` (the vertex stage), then the texture look-up refusals | a run-time index (2.6, `mali-uniform-index.md`) |
 | `es100/sharedint.{vert,frag}` | `IntValue` in `mode != 0`, nothing else | `ICMP_OR.ne` + `CSEL` (2.3); the fragment's `sin` is the existing float lowering |
-| `es100/uniidx_e.vert` | `UniformArray` then the index word | as `idxtex` (2.6) |
-| `es100/ifelse_loop.frag`, `es100/light_amount_2_2.vert`, `es300/dynidx.frag`, `es300/tmpidx.frag`, `es300/uniidx.frag`, `es300/texfetch.frag` | not recorded here | loops with an `int` counter, arrays of structs, `mat3`, `texelFetch` are other studies' (`acceptcheck`, `study-texfetch`) |
+| `tools/shaders/es100/uniidx_e.vert` | `UniformArray` then the index word | as `idxtex` (2.6) |
+| `tools/shaders/es100/ifelse_loop.frag`, `tools/shaders/es100/light_amount_2_2.vert`, `tools/shaders/es300/dynidx.frag`, `tools/shaders/es300/tmpidx.frag`, `tools/shaders/es300/uniidx.frag`, `tools/shaders/es300/texfetch.frag` | not recorded here | loops with an `int` counter, arrays of structs, `mat3`, `texelFetch` are other studies' (`acceptcheck`, `study-texfetch`) |
 
 Reading the list: the **type refusal itself is a one-line gate** in
 `uniform_of` and `uniform_extent` (it hides 17 rows), but only `sharedint`

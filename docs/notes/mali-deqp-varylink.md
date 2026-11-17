@@ -135,7 +135,7 @@ writes `gl_Position` whole.
 ### Host probes (how the sites were confirmed)
 
 Hand-made copies of each generator's output were placed under a scratch
-`tools/shaders/zz_varylink_probe/`. They were compiled through
+directory of `tools/shaders/` (not kept). They were compiled through
 `tools/mali/corpus-verdicts.sh`, which is the alone compile
 (`host-test,gpu-mali,shaderc-online,no-shader-table`), and the directory
 was removed afterwards. Verdicts at 38ad30eb:
@@ -306,7 +306,7 @@ In the order of rows per risk:
    as a guard. No new words: the program link already rebuilds the shader
    for the fragment shader's reads, because `vs_consts_of` is non-empty
    once an equal entry exists (`backend.rs:2000-2003`). Check:
-   - The alone record of `es100/va_vec2.vert` and of the swizzle
+   - The alone record of `tools/shaders/es100/va_vec2.vert` and of the swizzle
      `in0.xx` shader compiles.
    - `fsload_dup*` stays byte-equal.
    - The new `deqp_varylink_swz_xx` and `deqp_varylink_discard`

@@ -312,7 +312,7 @@ flattening of the `if` into `CSEL` is also already right (`ineif_hp`).
   refusal if step 4 reuses it.
 - `tools/mali/corpus-verdicts.sh --write`: `sharedint.frag` moves from
   `CompareForm` to `Arithmetic` (its `sin`), then to `ok` with `fs-transc`;
-  `es100/f2b.frag` is `Arithmetic` before its compare (the `Ffloor`, mediump
+  `tools/shaders/es100/f2b.frag` is `Arithmetic` before its compare (the `Ffloor`, mediump
   arm) and is unchanged by this step.
 - Cases moved: corpus `sharedint.frag` (with `sin`). No gl_test case and no
   dEQP-GLES2 or glmark2 shader is attributed to `CompareForm` by the corpus

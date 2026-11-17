@@ -11,7 +11,7 @@ Its fp16 vertex uniforms were already byte-equal (561bad55,
 
 ## The pair
 
-The program is the corpus's `es100/textured.vert` and `es100/textured.frag`
+The program is the corpus's `tools/shaders/es100/textured.vert` and `tools/shaders/es100/textured.frag`
 (`driver/tools/pvrlab/gl_test_shaders_es100.h`, the same text as
 `tools/mali/testdata/vsfp16_19_tex.{vert,frag}`):
 
@@ -43,7 +43,7 @@ shader's order sets the layout:
 
 glLinkProgram builds the program's vertex shader for the fragment shader's
 reads (`compile_vs_linked` with no map, backend.rs `vs_for_fragment`, then
-mali/mod.rs `compile_vs_for_reads`). The reads come from the fragment
+`src/shaderc/online/mali/mod.rs` `compile_vs_for_reads`). The reads come from the fragment
 record (`fragment_reads`) as (location, component mask) pairs, at the
 **fragment** shader's locations: `[(0, 0xf), (1, 0x3)]`. `compact_layout`
 (nir.rs) looks each vertex output up by its **own** location. So `TexCoord`
@@ -60,7 +60,7 @@ worked around it by passing the reads by hand at the vertex locations,
 
 ## The lowering
 
-`mali/mod.rs` `reads_at_vertex_locations` maps a `ProgramReads` to the
+`src/shaderc/online/mali/mod.rs` `reads_at_vertex_locations` maps a `ProgramReads` to the
 vertex shader's locations by name, as Mesa's linker pairs varyings. It
 lowers both sources (`lower_source`) and finds, for each fragment location,
 the fragment input at that location, then the vertex output of the same
@@ -259,5 +259,5 @@ for a vertex shader that was not built for the program's fragment shader.
   NanoPC-T6. Only the host has run it so far (the plan's board sweep x2).
 - A varying read in part in a pair declared in two orders has no reference
   of its own. The mapping is the same code path, but the bytes are pinned
-  only for a pair in one order (link.rs, gl/program.rs `vcol.y`) and for
+  only for a pair in one order (link.rs, `src/gl/program.rs` `vcol.y`) and for
   case 19's.

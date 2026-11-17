@@ -19,9 +19,9 @@ The three refusals (`tools/mali/corpus-verdicts.txt`, `mod.rs` `MaliError`):
 
 | Program | Refusal | Raised at |
 |---|---|---|
-| `es300/hdrsample.frag` | `MixedPrecision` | `mod.rs:1149` (a highp output of a mediump shader), `:1194` (`f.mixed`), `nir_fs.rs:3188` |
-| `es100/hello.frag` | `Fp16Inexact` | `nir_fs.rs:2460, 2620, 2653, 2788, 3127, 3573`, `nir.rs:1223` |
-| `es100/varyings15.frag` | `ConstantFold` | `nir_fs.rs:544, 559`, `nir.rs:1241-1282` |
+| `tools/shaders/es300/hdrsample.frag` | `MixedPrecision` | `mod.rs:1149` (a highp output of a mediump shader), `:1194` (`f.mixed`), `nir_fs.rs:3188` |
+| `tools/shaders/es100/hello.frag` | `Fp16Inexact` | `nir_fs.rs:2460, 2620, 2653, 2788, 3127, 3573`, `nir.rs:1223` |
+| `tools/shaders/es100/varyings15.frag` | `ConstantFold` | `nir_fs.rs:544, 559`, `nir.rs:1241-1282` |
 
 ## Recording
 
@@ -36,8 +36,8 @@ python3 -I tools/mali/pan_ref_diff.py extract tools/mali/testdata/mixprec_<n>.tr
 ```
 
 `hdrsample` is `#version 300 es`, so `gl_ref.py` selects its ES 3 mode by
-itself; its vertex shader is `es300/cube.vert` (what `gl_test.c` links with it:
-`v_xy = pos`). `hello.vert` is `es100/hello.vert`, the PowerVR SDK matrix
+itself; its vertex shader is `tools/shaders/es300/cube.vert` (what `gl_test.c` links with it:
+`v_xy = pos`). `hello.vert` is `tools/shaders/es100/hello.vert`, the PowerVR SDK matrix
 shader (mediump `transformationMatrix`, as `prec_19`), so the vertex words of
 `mixprec_hello` equal `prec_19`'s; the reference of interest is the fragment
 shader. `varyings15.vert` is the case's own vertex shader (fifteen constant
@@ -333,10 +333,10 @@ Date 2026-11-01. Issue #33.
 
 ### What the two cases refuse on
 
-Both refuse in `es300/hdrsample.frag`, the same program as section 1:
+Both refuse in `tools/shaders/es300/hdrsample.frag`, the same program as section 1:
 
-- case 44 `es3hdr` draws `hdrsample.frag` with `es300/cube.vert`;
-- case 49 `es3facing` first draws `es300/facing.frag` (corpus verdict `ok`: a
+- case 44 `es3hdr` draws `hdrsample.frag` with `tools/shaders/es300/cube.vert`;
+- case 49 `es3facing` first draws `tools/shaders/es300/facing.frag` (corpus verdict `ok`: a
   mediump `gl_FrontFacing ? vec4(0,1,0,1) : vec4(1,0,0,1)`, all fp16 constants,
   no mixing) into the window and an 8x8 texture FBO, then reads the FBO back
   into the window at x0.25 with `hdrsample.frag` and `cube_vs_src`
@@ -345,7 +345,7 @@ Both refuse in `es300/hdrsample.frag`, the same program as section 1:
   not refused. The control flow the brief expects in 49 is **not in the shader
   sources**: `facing.frag` has a `?:` on a bool, a `bcsel` of two constants (no
   branch; the ifs Mesa keeps are in `mali-control-flow.md`), so 49 needs
-  nothing from the control-flow items. `es100/ifelse_loop.frag` (verdict line
+  nothing from the control-flow items. `tools/shaders/es100/ifelse_loop.frag` (verdict line
   52, also mixed precision) is a different corpus program, not a source of
   case 49: highp arithmetic with a `for`/`break`/`if` that stores to
   `gl_FragColor` (a mediump output).
@@ -421,7 +421,7 @@ in `nir_fs.rs` (two changes to the same structure would conflict).
 
 ### Lowered (item `mixed-hdr-44-49`, plan #309)
 
-Date 2026-11-05. `es300/hdrsample.frag` compiles byte-equal to
+Date 2026-11-05. `tools/shaders/es300/hdrsample.frag` compiles byte-equal to
 `mixed_44_hdrsample` and `mixed_49_hdrsample`, both stages, linked and alone
 (tests.rs `the_mixed_precision_hdrsample_is_byte_equal_to_mesa_26_2_1`).
 How the four steps landed in `nir_fs.rs`:
@@ -467,14 +467,14 @@ fp16 operation on texels.
 
 ### Proposed items and #33 text
 
-- `mixed-hdr-44-49`: steps 1-4; moves `es300/hdrsample.frag` to `ok` in
+- `mixed-hdr-44-49`: steps 1-4; moves `tools/shaders/es300/hdrsample.frag` to `ok` in
   `corpus-verdicts.txt`, checked with `tools/mali/check.sh`. Touches
   `nir_fs.rs`, `select.rs`, `mod.rs`, `tests.rs`: serialise with the other
   compiler lowerings.
 - `mixed-ifelse-loop-ref`: done (item `ref-ifelse-loop`):
   `mixed_ifelse_loop.*`, decoded below; lower it after `cflow-branch`.
 - #33 comment: "Cases 44 es3hdr and 49 es3facing refuse on one program,
-  es300/hdrsample.frag (lowp sampler under highp: fp32 coordinate, fp16
+  tools/shaders/es300/hdrsample.frag (lowp sampler under highp: fp32 coordinate, fp16
   look-up and multiply, fp32 output). Mesa's only conversions are four
   F16_TO_F32 at the highp output; no f2f16. Nothing in 49 needs control flow
   (facing.frag is a bcsel and is already ok). References:
@@ -485,7 +485,7 @@ fp16 operation on texels.
 ### ifelse_loop: Mesa's program (`mixed_ifelse_loop`, item `ref-ifelse-loop`)
 
 Reference `tools/mali/testdata/mixed_ifelse_loop.{vert,frag,expect.json,stderr}`:
-`es100/ifelse_loop.frag` with `gltest/position_only.vert`, Mesa 26.2.1 on
+`tools/shaders/es100/ifelse_loop.frag` with `tools/shaders/gltest/position_only.vert`, Mesa 26.2.1 on
 drm-shim, drawn with `--uniform-values` (`u_a` = 16..19, `u_b` = 32..35,
 `u_n` = 48, which `gl_ref.py` sets; Mesa compiles the same program for any
 value):
@@ -551,7 +551,7 @@ python3 -I tools/mali/pan_ref_diff.py extract <scratch>/mixed_ifelse_loop.trace 
    compiler must unroll the bounded loop (see `mali-loop-break.md`) to meet
    these bytes.
 
-#33 comment text: "es100/ifelse_loop.frag (corpus, mixed precision plus
+#33 comment text: "tools/shaders/es100/ifelse_loop.frag (corpus, mixed precision plus
 control flow) now has a Mesa 26.2.1 drm-shim reference:
 tools/mali/testdata/mixed_ifelse_loop.* (decoded in
 docs/notes/mali-mixed-precision.md section 4, last subsection). Mesa fully

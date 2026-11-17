@@ -118,8 +118,8 @@ elements, a struct's leaves are one local each, consecutive, under one name):
 
 `glsl.rs` `indexed_read` (`glsl.rs:~150`) refuses the component form only, as
 `MaliError::IndexedLocal`; the array and column forms compile today as an
-`ieq` ladder (`ICMP_OR.u32.eq` / `CSEL`), which is why `es300/tmpidx.frag` and
-`es300/dynidx.frag` are `ok` in `tools/mali/corpus-verdicts.txt` (verdicts only
+`ieq` ladder (`ICMP_OR.u32.eq` / `CSEL`), which is why `tools/shaders/es300/tmpidx.frag` and
+`tools/shaders/es300/dynidx.frag` are `ok` in `tools/mali/corpus-verdicts.txt` (verdicts only
 move forward; they have no reference). The fragment walk handles an
 `index: None` `LoadLocal` / `StoreLocal` only (`nir_fs.rs:3900-3968`; `nir.rs:2283-2299`
 for the vertex), the front end never emits an indexed one for these locals, so
@@ -208,7 +208,7 @@ the places, in the order the compiler meets them:
    the fragment default `mediump`, and Mesa reads it as a 32-bit word
    (`ICMP_OR.s32 .., u4.w1`; `LowerPrecisionFloat16Uniforms` touches float
    uniforms only). Counting only float uniforms lets case 80 through but also
-   `es100/ifelse_loop.frag` (same single refusal), which is **not** Mesa's yet
+   `tools/shaders/es100/ifelse_loop.frag` (same single refusal), which is **not** Mesa's yet
    (159 words against `mixed_ifelse_loop`'s 143). The item decides: count
    float uniforms only and move `ifelse_loop` forward in `corpus-verdicts.txt`
    if it compiles, or narrow the test to "an int uniform used as an index or
@@ -266,9 +266,9 @@ Host tests, in `src/shaderc/online/mali/tests.rs` unless said:
    `(name, vert, frag, expect.json, false)` rows); do not add it before it is
    byte-equal. The `MaliError::IndexedLocal` row in `gap_cases` (`tests.rs:~1241`,
    the `v[i]` of a `u * u` vector) changes with it.
-5. `tools/mali/corpus-verdicts.txt`: `es100/matdyn.frag`, `dynidx.frag`,
+5. `tools/mali/corpus-verdicts.txt`: `tools/shaders/es100/matdyn.frag`, `dynidx.frag`,
    `dynidx_loop.frag` leave "an indexed local variable" (they may land at the
-   next gap or `ok`, never back); `es300/tmpidx.frag` and `es300/dynidx.frag`
+   next gap or `ok`, never back); `tools/shaders/es300/tmpidx.frag` and `tools/shaders/es300/dynidx.frag`
    stay `ok`. `tools/mali/sweep_passsets.py --delta tools/cts/log` must exit 0
    (case 80 is a REFUSED -> PASS move, no PASS case leaves).
 6. A `fmul(bcsel(c, k1, k2), k3)` fold test if 3.4 shows the fold absent.
@@ -326,7 +326,7 @@ shader (`precision highp float`), so they go through the highp path `lane32`
   `bir.rs:~866-872` gives that source `absneg = false` (a `Src::neg` is
   refused), and `pack.rs:655` (and `:667`, the 16-bit form) put `not2` to a
   literal 0. The only other `.not` word is `intuni_uops.expect.json` (`~u.x`);
-  no host test in `mali/tests.rs` names that reference.
+  no host test in `src/shaderc/online/mali/tests.rs` names that reference.
 - **vertex** (`nir.rs`): case 80's vertex shader is a passthrough and compiles
   (64 words in the scratch run), with no index tree in it. The vertex walk
   takes `Ior` (`nir.rs:2369`) but refuses `Iand` (except as `imod` by a power
@@ -480,9 +480,9 @@ Tests (`src/shaderc/online/mali/tests.rs`):
 `the_constant_read_tree_takes_the_product_and_the_shared_inot_stays` (item
 6, and 7.3's `inot` pin); `the_corpus_matdyn_source_is_the_reference`;
 `case_80_is_refused_at_its_indexed_local_reads` and the `gap_cases` row are
-gone. Corpus (item 5): `es100/matdyn.frag` is `ok`, `dynidx.frag` moves to
-`Arithmetic`, `dynidx_loop.frag` to the mediump kept loop; `es300/tmpidx.frag`
-and `es300/dynidx.frag` stay `ok`.
+gone. Corpus (item 5): `tools/shaders/es100/matdyn.frag` is `ok`, `dynidx.frag` moves to
+`Arithmetic`, `dynidx_loop.frag` to the mediump kept loop; `tools/shaders/es300/tmpidx.frag`
+and `tools/shaders/es300/dynidx.frag` stay `ok`.
 
 The references were made with Mesa 26.2.1 configured with `drm_shim_ref.sh
 build`'s options from the source tree in the deps cache, then

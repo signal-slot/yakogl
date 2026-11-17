@@ -262,7 +262,7 @@ After the `ffma` the next refusals of the same shaders are other families:
   `if (v1.w == 0.0 && v2.w == 0.0) ...`, i.e. `Feq`, `Bcsel` or an `if` and a
   `normalize` (`Fdot3`, `Frsq`). The NIR above already shows it: `feq`,
   `frcp`, `bcsel`, `fdot3`, `frsq` on `vertex_position`. `Frsq` and `Feq` are
-  refused in the vertex walk today (`mali-vs-alu-ops.md`, `es100/vrcp.vert`,
+  refused in the vertex walk today (`mali-vs-alu-ops.md`, `tools/shaders/es100/vrcp.vert`,
   `anyall.vert`): items `vs-cmp-clamp`, `vs-abs-if`.
 - `ideas-paper`, `ideas-table`, `ideas-text`: an `if` on a uniform
   (`currentTime`) and `max`, `normalize`: `Fmax` and the vertex `if`.

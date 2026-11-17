@@ -118,7 +118,7 @@ Related sites:
      * instance: the FE starts the instance ID at 0 for every draw, so a
      * program that reads gl_InstanceID is refused (counted by gc_draw). The
      * online compiler names such programs in vs_instance_id_reg1
-     * (shaderc/online/abi.rs, docs/notes/instanceid-per-draw.md V0); before
+     * (src/shaderc/online/abi.rs, docs/notes/instanceid-per-draw.md V0); before
      * that it left the field 0 and these draws went through with
      * gl_InstanceID reading 0 in every instance. */
     if gl.instance_id != 0 && !gl.vs.is_null() && unsafe { (*gl.vs).vs_instance_id_reg1 } != 0 {
