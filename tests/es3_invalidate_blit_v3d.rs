@@ -1,37 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! glInvalidateFramebuffer / glInvalidateSubFramebuffer of an FBO's depth and
-//! stencil, then glBlitFramebuffer of that depth/stencil into the window,
-//! through the GL API over the V3D host back end (plan item
-//! invalidate-blit-test-v3d; docs/notes/blit-depth-window.md "Design").
+//! glInvalidateFramebuffer / glInvalidateSubFramebuffer on an FBO's depth and
+//! stencil attachments, then glBlitFramebuffer of that FBO's depth/stencil
+//! into the window, through the GL API over the V3D host back end (plan item
+//! invalidate-blit-test-v3d). This is the sequence of the six dEQP-GLES3 cases
+//! fbo.invalidate.{whole,sub}.unbind_blit_{depth,stencil,depth_stencil}
+//! (HOST-ONLY: an API verdict, never a picture). dEQP's EGL surface is a
+//! pbuffer, so the window is stored bottom-up: `default_y_up` is true.
 //!
-//! This is the sequence of the six dEQP-GLES3 cases
-//! `fbo.invalidate.(whole|sub).unbind_blit_(depth|stencil|depth_stencil)`:
-//! render into an FBO with a depth/stencil attachment, invalidate it (whole,
-//! or a sub-rectangle), bind framebuffer 0 for drawing and blit the
-//! depth/stencil from the FBO into the window with GL_NEAREST. dEQP's EGL
-//! surface is a pbuffer, so `default_y_up` is true (set here too).
+//! The rig is tests/es3_blit_ds_window_v3d.rs's, copied: the real GL core and
+//! the real V3D entries, the job builder faked. Both planes of the window and
+//! of a D24S8 renderbuffer are set through the back end's own `ds_write` to a
+//! distinct value per pixel and read back through the resolves.
 //! tests/es3_blit_ds_window_v3d.rs pins the window blit without the
-//! invalidation; tests/es3_invalidate_v3d.rs the invalidation without the
-//! blit. The rig is that of tests/es3_blit_ds_window_v3d.rs, copied: the real
-//! GL core and the real V3D `ds_write` / `depth_resolve` / `stencil_resolve`,
-//! the job builder faked.
+//! invalidation, tests/es3_invalidate_v3d.rs the invalidation without the blit.
 //!
-//! Today (the window path of src/gl/blit.rs is refused): the invalidations
-//! raise no error, and the blit raises GL_INVALID_OPERATION for depth,
-//! stencil and depth|stencil, whole and sub; the window's planes stay as they
-//! were. These tests pass. The twins `#[ignore = "needs gl-ds-window"]` state
-//! what the lift must deliver: GL_NO_ERROR; for the whole case only that
-//! (the contents are undefined after a whole invalidation, ES 3.0.6 4.5.1);
-//! for the sub case the window pixels outside the invalidated rectangle take
-//! the source values with no vertical mirror (`default_y_up`). Pixels inside
-//! the rectangle are never asserted.
+//! Pinned today (not ignored): the invalidation raises no error, whole or as
+//! a sub-rectangle, for GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT and
+//! GL_DEPTH_STENCIL_ATTACHMENT, and the blit into the window that follows is
+//! GL_INVALID_OPERATION for depth, stencil and depth|stencil, with the window's
+//! planes unchanged (src/gl/blit.rs refuses the window until gl-ds-window).
 //!
-//! HOST-ONLY: API verdicts on a faked job builder; nothing ran on a Pi 4.
+//! Twins `#[ignore = "needs gl-ds-window"]` state what the lift must deliver:
+//! the blit is GL_NO_ERROR. After a whole invalidation the contents are
+//! undefined (ES 3.0.6 4.5.1), so only the error is asserted. After a
+//! sub-rectangle invalidation the pixels outside the rectangle reach the
+//! window with the source values (no vertical mirror: `default_y_up`); the
+//! pixels inside it are not asserted, and a plane the mask does not name is
+//! unchanged.
+//!
+//! Left open: the renderbuffer is D24S8 and the window single-sampled; the
+//! GL core ignores the invalidation (tests/es3_invalidate_v3d.rs), so the
+//! "undefined" contents are not exercised. Nothing here ran on a Pi 4.
 //!
 //! Run: `cargo test --no-default-features --features
 //! host-test,gpu-v3d,shaderc-online,no-shader-table --test
-//! es3_invalidate_blit_v3d`, and the ignored cases with `-- --ignored`.
+//! es3_invalidate_blit_v3d`, and the ignored twins with `-- --ignored`.
 
 #![cfg(all(
     feature = "host-test",
@@ -557,8 +561,9 @@ fn logs() -> Vec<String> {
     with_platform(|p| p.log.clone())
 }
 
-/* ---- the window, the planes ------------------------------------------------ */
+/* ---- the window, the planes, the model ------------------------------------- */
 
+/// The window's size (`CANVAS`).
 const WW: u32 = CANVAS.0 as u32;
 const WH: u32 = CANVAS.1 as u32;
 const D: u32 = yakogl::backend::DS_PLANE_DEPTH;
@@ -573,6 +578,7 @@ fn err() -> GLenum {
     unsafe { glGetError() }
 }
 
+/// Store the window bottom-up (`true`) or top-down (`false`).
 fn window_y_up(up: bool) {
     let c = context::current().expect("a current context");
     assert_eq!((c.target_w, c.target_h), (WW, WH));
@@ -594,7 +600,8 @@ fn ds_id(rb: GLuint) -> u32 {
     context::ds_object_id(c.renderbuffer_object(slot).expect("a renderbuffer").serial, false)
 }
 
-/// Make the window's depth/stencil buffer exist: clear both on framebuffer 0.
+/// Make the window's depth/stencil buffer exist: clear both through the GL
+/// API on framebuffer 0 (as a renderbuffer's is made by its first clear).
 fn make_window_ds() {
     // SAFETY: plain GL calls.
     unsafe {
@@ -643,48 +650,49 @@ fn plane<T>(w: u32, h: u32, f: impl Fn(u32, u32) -> T) -> Vec<T> {
     (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| f(x, y)).collect()
 }
 
-fn write_depth(id: u32, v: &[f32]) {
-    // SAFETY: `WH` rows of `WW` floats.
-    let r = unsafe { v3d_ds_write(id, D, v.as_ptr() as *const c_void, 0, 0, WW, WH, WW) };
+/// Write a whole plane through the table's `ds_write` of object `id`.
+fn write_depth(id: u32, w: u32, h: u32, v: &[f32]) {
+    // SAFETY: `h` rows of `w` floats.
+    let r = unsafe { v3d_ds_write(id, D, v.as_ptr() as *const c_void, 0, 0, w, h, w) };
     assert_eq!(r, 0, "ds_write of the depth of 0x{id:x}: {:?}", logs());
 }
-fn write_stencil(id: u32, v: &[u8]) {
-    // SAFETY: `WH` rows of `WW` bytes.
-    let r = unsafe { v3d_ds_write(id, S, v.as_ptr() as *const c_void, 0, 0, WW, WH, WW) };
+fn write_stencil(id: u32, w: u32, h: u32, v: &[u8]) {
+    // SAFETY: `h` rows of `w` bytes.
+    let r = unsafe { v3d_ds_write(id, S, v.as_ptr() as *const c_void, 0, 0, w, h, w) };
     assert_eq!(r, 0, "ds_write of the stencil of 0x{id:x}: {:?}", logs());
 }
 
 /// The planes as the back end resolves them (memory order, row 0 first).
-fn read_depth(id: u32) -> Vec<f32> {
-    let mut v = vec![-1.0f32; (WW * WH) as usize];
-    // SAFETY: `WH` rows of `WW` floats.
-    let r = unsafe { v3d_depth_resolve(id, v.as_mut_ptr(), WW, WH, WW) };
+fn read_depth(id: u32, w: u32, h: u32) -> Vec<f32> {
+    let mut v = vec![-1.0f32; (w * h) as usize];
+    // SAFETY: `h` rows of `w` floats.
+    let r = unsafe { v3d_depth_resolve(id, v.as_mut_ptr(), w, h, w) };
     assert_eq!(r, 0, "depth_resolve of 0x{id:x}: {:?}", logs());
     v
 }
-fn read_stencil(id: u32) -> Vec<u8> {
+fn read_stencil(id: u32, w: u32, h: u32) -> Vec<u8> {
     let f = yakogl_backend_v3d.stencil_resolve.expect("the V3D table has a stencil_resolve entry");
-    let mut v = vec![0xffu8; (WW * WH) as usize];
-    // SAFETY: `WH` rows of `WW` bytes.
-    let r = unsafe { f(id, v.as_mut_ptr(), WW, WH, WW) };
+    let mut v = vec![0xffu8; (w * h) as usize];
+    // SAFETY: `h` rows of `w` bytes.
+    let r = unsafe { f(id, v.as_mut_ptr(), w, h, w) };
     assert_eq!(r, 0, "stencil_resolve of 0x{id:x}: {:?}", logs());
     v
 }
 
 /* Patterns: a distinct value per pixel, exact in 24 bits (depth) and a byte
- * that is never 0 (stencil). `win_*` at the window's memory (x, row); `rb_*`
- * at the renderbuffer's (x, y). */
+ * that is never 0 (stencil). `win_*` at the window's MEMORY (x, row); `rb_*`
+ * at a renderbuffer's (x, y); `dst_*` what a renderbuffer destination held. */
 fn win_depth(x: u32, r: u32) -> f32 {
     ((r * WW + x + 1) * 997) as f32 / UNORM
 }
-fn win_stencil(x: u32, r: u32) -> u8 {
-    (1 + (r * WW + x) % 250) as u8
+fn win_stencil(x: u32, r: u32) -> f32 {
+    (1 + (r * WW + x) % 250) as f32
 }
 fn rb_depth(x: u32, y: u32) -> f32 {
     ((y * WW + x + 1) * 1009 + 500_000) as f32 / UNORM
 }
-fn rb_stencil(x: u32, y: u32) -> u8 {
-    (2 + (y * 7 + x * 3) % 250) as u8
+fn rb_stencil(x: u32, y: u32) -> f32 {
+    (2 + (y * 7 + x * 3) % 250) as f32
 }
 
 fn assert_close(got: &[f32], want: &[f32], what: &str) {
@@ -699,17 +707,15 @@ fn assert_close(got: &[f32], want: &[f32], what: &str) {
     }
 }
 
-/// How the FBO is invalidated.
-#[derive(Clone, Copy, Debug)]
-enum Inval {
-    Whole,
-    /// x, y, w, h of the invalidated rectangle.
-    Sub([i32; 4]),
+/// The sub-rectangle the sub cases invalidate: x, y, width, height.
+const SUB: [i32; 4] = [8, 6, 16, 12];
+
+fn inside_sub(x: u32, y: u32) -> bool {
+    let [sx, sy, sw, sh] = SUB.map(|v| v as u32);
+    (sx..sx + sw).contains(&x) && (sy..sy + sh).contains(&y)
 }
 
-/// The sub-rectangle of the sub cases (inside the `WW` x `WH` FBO).
-const SUB: [i32; 4] = [10, 8, 12, 10];
-
+/// The attachments a blit of `mask` would have an application invalidate.
 fn attachments(mask: GLbitfield) -> Vec<GLenum> {
     match mask {
         DEPTH => vec![GL_DEPTH_ATTACHMENT],
@@ -718,146 +724,160 @@ fn attachments(mask: GLbitfield) -> Vec<GLenum> {
     }
 }
 
-/// Both planes of the window (y up: memory row = GL row) and of the
-/// renderbuffer set to their patterns, the FBO's attachments named by `mask`
-/// invalidated, the FBO read, the window drawn, and a whole-size blit of
-/// `mask` issued: the errors of the invalidation and of the blit.
-fn invalidate_then_blit(mask: GLbitfield, inval: Inval) -> (GLenum, GLenum) {
+/// What one dEQP-shaped run left: the blit's error and the window's planes
+/// (memory order, which is GL order as the window is y-up).
+struct Run {
+    blit_err: GLenum,
+    win_depth: Vec<f32>,
+    win_stencil: Vec<u8>,
+}
+
+/// The sequence of fbo.invalidate.*.unbind_blit_*: both planes of the window
+/// and of the renderbuffer set to their patterns, the FBO's `mask` attachments
+/// invalidated (whole, or `SUB` when `sub`; no error), framebuffer 0 bound for
+/// drawing, the FBO read, and the whole-surface GL_NEAREST blit of `mask`.
+fn run(mask: GLbitfield, sub: bool) -> Run {
+    let _g = rig();
     make_window_ds();
-    window_y_up(true);
     let (fb, rb) = rb_fbo(WW, WH);
+    window_y_up(true);
     let (wid, rid) = (window_id(), ds_id(rb));
-    write_depth(wid, &plane(WW, WH, win_depth));
-    write_stencil(wid, &plane(WW, WH, win_stencil));
-    write_depth(rid, &plane(WW, WH, rb_depth));
-    write_stencil(rid, &plane(WW, WH, rb_stencil));
+    write_depth(wid, WW, WH, &plane(WW, WH, win_depth));
+    write_stencil(wid, WW, WH, &plane(WW, WH, |x, r| win_stencil(x, r) as u8));
+    write_depth(rid, WW, WH, &plane(WW, WH, rb_depth));
+    write_stencil(rid, WW, WH, &plane(WW, WH, |x, y| rb_stencil(x, y) as u8));
     let atts = attachments(mask);
-    // SAFETY: plain GL calls on live names; `atts` outlives them.
-    let (inv_err, blit_err) = unsafe {
+    // SAFETY: the slice is live for the call; plain GL calls on live names.
+    unsafe {
         glBindFramebuffer(GL_FRAMEBUFFER, fb);
-        while glGetError() != GL_NO_ERROR {}
-        match inval {
-            Inval::Whole => glInvalidateFramebuffer(GL_FRAMEBUFFER, atts.len() as GLsizei, atts.as_ptr()),
-            Inval::Sub([x, y, w, h]) => {
-                glInvalidateSubFramebuffer(GL_FRAMEBUFFER, atts.len() as GLsizei, atts.as_ptr(), x, y, w, h)
-            }
+        if sub {
+            glInvalidateSubFramebuffer(
+                GL_FRAMEBUFFER,
+                atts.len() as GLsizei,
+                atts.as_ptr(),
+                SUB[0],
+                SUB[1],
+                SUB[2],
+                SUB[3],
+            );
+        } else {
+            glInvalidateFramebuffer(GL_FRAMEBUFFER, atts.len() as GLsizei, atts.as_ptr());
         }
-        let inv_err = glGetError();
+    }
+    assert_eq!(err(), GL_NO_ERROR, "the invalidation of {atts:x?} (sub {sub}): {:?}", logs());
+    // SAFETY: plain GL calls on live names.
+    unsafe {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, fb);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-        let (w, h) = (WW as i32, WH as i32);
-        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, mask, GL_NEAREST);
-        (inv_err, glGetError())
-    };
+        glBlitFramebuffer(0, 0, WW as i32, WH as i32, 0, 0, WW as i32, WH as i32, mask, GL_NEAREST);
+    }
+    let blit_err = err();
+    let out = Run { blit_err, win_depth: read_depth(wid, WW, WH), win_stencil: read_stencil(wid, WW, WH) };
     release(&[fb], &[rb]);
-    (inv_err, blit_err)
+    out
 }
 
-/// Today: the invalidation is accepted, the blit is GL_INVALID_OPERATION and
-/// the window's planes are as they were.
-fn refused_today(mask: GLbitfield, inval: Inval) {
-    let _g = rig();
-    let (inv_err, blit_err) = invalidate_then_blit(mask, inval);
-    assert_eq!(inv_err, GL_NO_ERROR, "{inval:?} mask {mask:#x}: the invalidation");
-    assert_eq!(blit_err, GL_INVALID_OPERATION, "{inval:?} mask {mask:#x}: the blit: {:?}", logs());
-    let wid = window_id();
-    assert_close(&read_depth(wid), &plane(WW, WH, win_depth), "the window's depth");
-    assert_eq!(read_stencil(wid), plane(WW, WH, win_stencil), "the window's stencil");
+/// Refused today: GL_INVALID_OPERATION, and the window's planes as they were.
+fn refused(mask: GLbitfield, sub: bool) {
+    let r = run(mask, sub);
+    let what = format!("mask {mask:#x}, sub {sub}");
+    assert_eq!(r.blit_err, GL_INVALID_OPERATION, "{what}");
+    assert_close(&r.win_depth, &plane(WW, WH, win_depth), &format!("{what}: the window's depth"));
+    assert_eq!(r.win_stencil, plane(WW, WH, |x, r| win_stencil(x, r) as u8), "{what}: the window's stencil");
 }
 
-/// After the lift: the blit raises no error; after a sub invalidation the
-/// window pixels outside the rectangle (GL rows, y up: memory rows) hold the
-/// source values of the planes `mask` names and the other plane is as it was.
-/// Inside the rectangle and after a whole invalidation nothing is asserted.
-fn delivered(mask: GLbitfield, inval: Inval) {
-    let _g = rig();
-    let (inv_err, blit_err) = invalidate_then_blit(mask, inval);
-    assert_eq!(inv_err, GL_NO_ERROR, "{inval:?} mask {mask:#x}: the invalidation");
-    assert_eq!(blit_err, GL_NO_ERROR, "{inval:?} mask {mask:#x}: the blit: {:?}", logs());
-    let Inval::Sub([sx, sy, sw, sh]) = inval else { return };
-    let wid = window_id();
-    let (gd, gs) = (read_depth(wid), read_stencil(wid));
-    for r in 0..WH {
+/// After the lift: no error; a whole invalidation leaves undefined contents,
+/// so nothing else is asserted; after a sub one the window's pixels outside
+/// `SUB` take the source values of the named planes (and the plane the mask
+/// does not name is unchanged).
+fn lifted(mask: GLbitfield, sub: bool) {
+    let r = run(mask, sub);
+    let what = format!("mask {mask:#x}, sub {sub}");
+    assert_eq!(r.blit_err, GL_NO_ERROR, "{what}: {:?}", logs());
+    if !sub {
+        return;
+    }
+    let depth_want = |x: u32, y: u32| if mask & DEPTH != 0 { rb_depth(x, y) } else { win_depth(x, y) };
+    let stencil_want = |x: u32, y: u32| if mask & STENCIL != 0 { rb_stencil(x, y) } else { win_stencil(x, y) };
+    for y in 0..WH {
         for x in 0..WW {
-            let (xi, ri) = (x as i32, r as i32);
-            if xi >= sx && xi < sx + sw && ri >= sy && ri < sy + sh {
-                continue;
+            let i = (y * WW + x) as usize;
+            if !inside_sub(x, y) || mask & DEPTH == 0 {
+                assert!((r.win_depth[i] - depth_want(x, y)).abs() <= 0.5 / UNORM, "{what}: depth at ({x}, {y})");
             }
-            let i = (r * WW + x) as usize;
-            let want_d = if mask & DEPTH != 0 { rb_depth(x, r) } else { win_depth(x, r) };
-            let want_s = if mask & STENCIL != 0 { rb_stencil(x, r) } else { win_stencil(x, r) };
-            assert!((gd[i] - want_d).abs() <= 0.5 / UNORM, "depth at (x {x}, row {r}): {} want {want_d}", gd[i]);
-            assert_eq!(gs[i], want_s, "stencil at (x {x}, row {r})");
+            if !inside_sub(x, y) || mask & STENCIL == 0 {
+                assert_eq!(f32::from(r.win_stencil[i]), stencil_want(x, y), "{what}: stencil at ({x}, {y})");
+            }
         }
     }
 }
 
-/* ---- today: refused, and the window is untouched --------------------------- */
+/* ---- today: the invalidation is legal, the blit into the window is refused ---- */
 
 #[test]
-fn whole_invalidate_then_depth_blit_into_the_window_is_refused() {
-    refused_today(DEPTH, Inval::Whole);
+fn whole_invalidate_then_depth_blit_is_refused() {
+    refused(DEPTH, false);
 }
 
 #[test]
-fn whole_invalidate_then_stencil_blit_into_the_window_is_refused() {
-    refused_today(STENCIL, Inval::Whole);
+fn whole_invalidate_then_stencil_blit_is_refused() {
+    refused(STENCIL, false);
 }
 
 #[test]
-fn whole_invalidate_then_depth_stencil_blit_into_the_window_is_refused() {
-    refused_today(DEPTH | STENCIL, Inval::Whole);
+fn whole_invalidate_then_depth_stencil_blit_is_refused() {
+    refused(DEPTH | STENCIL, false);
 }
 
 #[test]
-fn sub_invalidate_then_depth_blit_into_the_window_is_refused() {
-    refused_today(DEPTH, Inval::Sub(SUB));
+fn sub_invalidate_then_depth_blit_is_refused() {
+    refused(DEPTH, true);
 }
 
 #[test]
-fn sub_invalidate_then_stencil_blit_into_the_window_is_refused() {
-    refused_today(STENCIL, Inval::Sub(SUB));
+fn sub_invalidate_then_stencil_blit_is_refused() {
+    refused(STENCIL, true);
 }
 
 #[test]
-fn sub_invalidate_then_depth_stencil_blit_into_the_window_is_refused() {
-    refused_today(DEPTH | STENCIL, Inval::Sub(SUB));
+fn sub_invalidate_then_depth_stencil_blit_is_refused() {
+    refused(DEPTH | STENCIL, true);
 }
 
-/* ---- twins: what the gl-ds-window lift must deliver ------------------------ */
+/* ---- after the lift ------------------------------------------------------------ */
 
 #[test]
 #[ignore = "needs gl-ds-window"]
-fn whole_invalidate_then_depth_blit_into_the_window_is_no_error() {
-    delivered(DEPTH, Inval::Whole);
-}
-
-#[test]
-#[ignore = "needs gl-ds-window"]
-fn whole_invalidate_then_stencil_blit_into_the_window_is_no_error() {
-    delivered(STENCIL, Inval::Whole);
+fn whole_invalidate_then_depth_blit_is_no_error() {
+    lifted(DEPTH, false);
 }
 
 #[test]
 #[ignore = "needs gl-ds-window"]
-fn whole_invalidate_then_depth_stencil_blit_into_the_window_is_no_error() {
-    delivered(DEPTH | STENCIL, Inval::Whole);
+fn whole_invalidate_then_stencil_blit_is_no_error() {
+    lifted(STENCIL, false);
 }
 
 #[test]
 #[ignore = "needs gl-ds-window"]
-fn sub_invalidate_then_depth_blit_keeps_the_pixels_outside_the_rectangle() {
-    delivered(DEPTH, Inval::Sub(SUB));
+fn whole_invalidate_then_depth_stencil_blit_is_no_error() {
+    lifted(DEPTH | STENCIL, false);
 }
 
 #[test]
 #[ignore = "needs gl-ds-window"]
-fn sub_invalidate_then_stencil_blit_keeps_the_pixels_outside_the_rectangle() {
-    delivered(STENCIL, Inval::Sub(SUB));
+fn sub_invalidate_then_depth_blit_reaches_the_window_outside_the_rectangle() {
+    lifted(DEPTH, true);
 }
 
 #[test]
 #[ignore = "needs gl-ds-window"]
-fn sub_invalidate_then_depth_stencil_blit_keeps_the_pixels_outside_the_rectangle() {
-    delivered(DEPTH | STENCIL, Inval::Sub(SUB));
+fn sub_invalidate_then_stencil_blit_reaches_the_window_outside_the_rectangle() {
+    lifted(STENCIL, true);
+}
+
+#[test]
+#[ignore = "needs gl-ds-window"]
+fn sub_invalidate_then_depth_stencil_blit_reaches_the_window_outside_the_rectangle() {
+    lifted(DEPTH | STENCIL, true);
 }
