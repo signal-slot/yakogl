@@ -17,7 +17,8 @@ Classes (severity H or M is a finding, L is information):
 
   home-path      M  /home/<name>, /Users/<name>
   private-ipv4   H  10/8, 172.16/12, 192.168/16, 100.64/10 (tailnet), 169.254/16,
-                    as whole addresses (not section numbers such as 13.10.3.1.2)
+                    as whole addresses (not section numbers such as 13.10.3.1.2,
+                    nor a dEQP release such as vulkan-cts-1.4.6.2-555-g<hex>)
   ipv6-local     H  IPv6 link-local (fe80::/10) and ULA (fc00::/7)
   som-serial     M  verdin-(am62p|imx8mp)-<8 hex> host names
   bridge-port    H  serial-bridge ports 3593x (x one digit)
@@ -112,9 +113,25 @@ def _octets(m):
     return [int(m.group(i)) for i in range(1, 5)]
 
 
+# A dEQP release in a console's banner is a dotted quad too:
+# 'dEQP Core vulkan-cts-1.4.6.2-555-g93bca018...'. It is a version when
+# 'vulkan-cts-' comes right before it, or when the line names dEQP and a
+# git-describe tail '-<n>-g<hex>' follows it.
+DEQP_VERSION_BEFORE = re.compile(r"vulkan-cts-$", re.I)
+DEQP_VERSION_AFTER = re.compile(r"-\d+-g[0-9a-f]{7,40}(?![0-9A-Za-z])")
+DEQP_LINE = re.compile(r"dEQP|vulkan-cts", re.I)
+
+
+def deqp_version(m):
+    line = m.string
+    if DEQP_VERSION_BEFORE.search(line, 0, m.start()):
+        return True
+    return bool(DEQP_LINE.search(line) and DEQP_VERSION_AFTER.match(line, m.end()))
+
+
 def private_ipv4(m):
     a, b, c, d = _octets(m)
-    if max(a, b, c, d) > 255:
+    if max(a, b, c, d) > 255 or deqp_version(m):
         return False
     return (a == 10 or (a == 172 and 16 <= b <= 31) or (a == 192 and b == 168)
             or (a == 100 and 64 <= b <= 127) or (a == 169 and b == 254))
@@ -548,6 +565,9 @@ def self_test():
         "docs/release/redaction-audit.md": "excluded " + priv4 + "\n",
         "bin.dat": "binary\0" + priv4 + "\n",
     }
+    with open(os.path.join(HERE, "testdata", "redaction-scan", "deqp-version.txt"),
+              encoding="utf-8") as f:
+        fixtures["src/deqp.txt"] = f.read().replace("@PRIVATE_IPV4@", priv4)
     allow = "\n".join([
         "# fixture allow file",
         "drop | * | * | <[A-Za-z0-9_.-]+> | placeholders",
@@ -639,7 +659,8 @@ def self_test():
               "3 class(es) not run" in out)
         expect = {
             "home-path": ["src/a.txt:6  /***[13]", "src/a.txt:6  /***[12]"],
-            "private-ipv4": ["src/a.txt:3  1***[8]", "src/a.txt:4  1***[10]"],
+            "private-ipv4": ["src/a.txt:3  1***[8]", "src/a.txt:4  1***[10]",
+                             "src/deqp.txt:7  1***[8]"],
             "ipv6-local": ["src/a.txt:5  f***[7]", "src/a.txt:5  f***[17]"],
             "som-serial": ["src/a.txt:8  v***[21]"],
             "bridge-port": [names["runner"] + ".log:1  3***[5]",
@@ -657,7 +678,12 @@ def self_test():
         check("drop rules: 3 look-alikes dropped (zeroed serial, NOPASSWD, "
               ".invalid)", "3 look-alike(s) dropped:" in out)
         check("RFC 5737 and section numbers are not private IPv4",
-              len(lines_of(out, "private-ipv4")) == 2)
+              len([ln for ln in lines_of(out, "private-ipv4")
+                   if ln.startswith("src/a.txt:")]) == 2)
+        check("a dEQP release (after vulkan-cts-, before -<n>-g<hex>) is not "
+              "an address, the real one beside it is",
+              [ln for ln in lines_of(out, "private-ipv4")
+               if ln.startswith("src/deqp.txt:")] == ["src/deqp.txt:7  1***[8]"])
         check("third_party/, the audit and binary files are excluded",
               not any(("third_party/" in ln or "redaction-audit.md:" in ln
                        or "bin.dat" in ln) for ln in out.splitlines()
