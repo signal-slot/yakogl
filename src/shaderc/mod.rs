@@ -559,7 +559,11 @@ pub fn compile_if_lowering() -> IfLowering {
 /// bits 16..31 (bindings 0..15 each: the GL core keys bindings below
 /// `CAP_SAMPLERS`, 16, and no other), `mag_switch` in bits 32..47 (the same
 /// bindings), `cube_noseam` in bits 48..62 (bindings 0..14), `sample_kill`
-/// in bit 63.
+/// in bit 63. A V3D build carries `fixed_depth` in bits 0..15 in place of
+/// `mip_free`: the word is full, the two are never keyed by one build (exactly
+/// one GPU is in a build, Cargo.toml; `mip_free` is the PowerVR's, and the
+/// V3D refuses a variant that asks for it), and [`LodKey::bits`] of the other
+/// field of the pair is 0 in that build.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct LodKey {
     /// PowerVR, fragment: the binding's sampler has no mipmap filter (or one
@@ -605,17 +609,34 @@ pub struct LodKey {
     /// modes apply inside the face (docs/v3d-noseamless-cube.md). Bindings
     /// 0..14: binding 15 of a stage stays seamless.
     pub cube_noseam: u32,
+    /// V3D: the binding's texture is a fixed-point depth
+    /// (DEPTH_COMPONENT16, DEPTH_COMPONENT24, DEPTH24_STENCIL8; not
+    /// DEPTH_COMPONENT32F or DEPTH32F_STENCIL8), so a shadow look-up of it
+    /// clamps its reference to [0, 1] before TMUDREF: "If the texture's
+    /// internal format indicates a fixed-point depth texture, then Dt and
+    /// Dref are clamped to the range [0, 1]; otherwise no clamping is
+    /// performed" (ES 3.0.6 3.8.15.1). The TMU compares the reference as
+    /// written (Mesa writes the comparator as it is), so the compiler clamps
+    /// (`online::v3d::select`; docs/notes/v3d-shadow.md (d), (f)). Bindings
+    /// 0..15, in bits 0..15 of a V3D build's [`Self::bits`].
+    pub fixed_depth: u32,
 }
+
+/// Does [`LodKey::bits`] carry [`LodKey::fixed_depth`] in bits 0..15 (a V3D
+/// build), rather than [`LodKey::mip_free`]?
+const LOD_KEY_LOW_IS_FIXED_DEPTH: bool = cfg!(feature = "gpu-v3d");
 
 /// [`LodKey::sample_kill`]'s bit in [`LodKey::bits`].
 pub const LOD_KEY_SAMPLE_KILL: u64 = 1 << 63;
 
 impl LodKey {
-    pub const NONE: LodKey = LodKey { mip_free: 0, mag_switch: 0, sample_kill: false, ret32: 0, cube_noseam: 0 };
+    pub const NONE: LodKey =
+        LodKey { mip_free: 0, mag_switch: 0, sample_kill: false, ret32: 0, cube_noseam: 0, fixed_depth: 0 };
 
     /// The C ABI's `uint64_t`.
     pub const fn bits(self) -> u64 {
-        (self.mip_free & 0xffff) as u64
+        let low = if LOD_KEY_LOW_IS_FIXED_DEPTH { self.fixed_depth } else { self.mip_free };
+        (low & 0xffff) as u64
             | ((self.ret32 & 0xffff) as u64) << 16
             | ((self.mag_switch & 0xffff) as u64) << 32
             | ((self.cube_noseam & 0x7fff) as u64) << 48
@@ -624,17 +645,24 @@ impl LodKey {
 
     /// [`Self::bits`] read back.
     pub const fn from_bits(b: u64) -> LodKey {
+        let low = b as u32 & 0xffff;
         LodKey {
-            mip_free: b as u32 & 0xffff,
+            mip_free: if LOD_KEY_LOW_IS_FIXED_DEPTH { 0 } else { low },
             ret32: (b >> 16) as u32 & 0xffff,
             mag_switch: (b >> 32) as u32 & 0xffff,
             cube_noseam: (b >> 48) as u32 & 0x7fff,
             sample_kill: b & LOD_KEY_SAMPLE_KILL != 0,
+            fixed_depth: if LOD_KEY_LOW_IS_FIXED_DEPTH { low } else { 0 },
         }
     }
 
     pub const fn is_none(self) -> bool {
-        self.mip_free == 0 && self.mag_switch == 0 && !self.sample_kill && self.ret32 == 0 && self.cube_noseam == 0
+        self.mip_free == 0
+            && self.mag_switch == 0
+            && !self.sample_kill
+            && self.ret32 == 0
+            && self.cube_noseam == 0
+            && self.fixed_depth == 0
     }
 }
 
@@ -684,6 +712,7 @@ static COMPILE_MAG_SWITCH: core::sync::atomic::AtomicU32 = core::sync::atomic::A
 static COMPILE_SAMPLE_KILL: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 static COMPILE_RET32: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 static COMPILE_CUBE_NOSEAM: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+static COMPILE_FIXED_DEPTH: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 /// Set the compile's [`LodKey`]; returns the old one for the caller to put
 /// back.
@@ -695,6 +724,7 @@ pub fn set_compile_lod_key(k: LodKey) -> LodKey {
         sample_kill: COMPILE_SAMPLE_KILL.swap(k.sample_kill, Relaxed),
         ret32: COMPILE_RET32.swap(k.ret32, Relaxed),
         cube_noseam: COMPILE_CUBE_NOSEAM.swap(k.cube_noseam, Relaxed),
+        fixed_depth: COMPILE_FIXED_DEPTH.swap(k.fixed_depth, Relaxed),
     }
 }
 
@@ -707,6 +737,7 @@ pub fn compile_lod_key() -> LodKey {
         sample_kill: COMPILE_SAMPLE_KILL.load(Relaxed),
         ret32: COMPILE_RET32.load(Relaxed),
         cube_noseam: COMPILE_CUBE_NOSEAM.load(Relaxed),
+        fixed_depth: COMPILE_FIXED_DEPTH.load(Relaxed),
     }
 }
 
