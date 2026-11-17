@@ -1904,7 +1904,14 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
         return;
     }
     let linked = match link_inputs(c, program, vs, fs) {
-        Ok(inputs) => link_with(c, program, &inputs),
+        Ok(inputs) => {
+            let ok = link_with(c, program, &inputs);
+            #[cfg(not(feature = "report-es2"))]
+            if ok {
+                super::program_binary::capture(c, program, &inputs);
+            }
+            ok
+        }
         Err(why) => {
             /* the old link is gone all the same */
             link_reset(c, program);
@@ -1929,7 +1936,6 @@ pub(super) struct LinkInputs<'a> {
     /// The vertex shader's NUL-terminated source, or null.
     pub(super) vs_src: *const c_char,
     /// The fragment shader's NUL-terminated source, or null.
-    #[allow(dead_code)] /* read by the program binary's capture (G7) */
     pub(super) fs_src: *const c_char,
     pub(super) rvs: ShcShader,
     pub(super) rfs: ShcShader,
@@ -1964,6 +1970,8 @@ unsafe fn link_reset(c: &mut GlContext, program: GLuint) {
     // SAFETY: single-threaded by contract; the callers hold no other reference to STATE.
     let st = STATE.get();
     st.validated[ctx][obj_index(program)] = false; /* GL: a link resets it */
+    #[cfg(not(feature = "report-es2"))]
+    super::program_binary::forget(c.group, program);
     if !crate::REPORT_ES2 {
         super::tf::link_begin(c.group, program);
     }
@@ -2111,6 +2119,8 @@ pub(super) unsafe fn link_with(c: &mut GlContext, program: GLuint, inputs: &Link
 /// Destroy a program object: its GPU state, location table and blocks.
 unsafe fn destroy_program(c: &mut GlContext, program: GLuint) {
     draw::release_program(c, program);
+    #[cfg(not(feature = "report-es2"))]
+    super::program_binary::forget(c.group, program);
     // SAFETY: single-threaded by contract; the callers hold no other reference to STATE.
     let st = STATE.get();
     st.loc[c.group as usize][obj_index(program)].count = 0;
@@ -3047,6 +3057,10 @@ pub unsafe extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: 
         return;
     };
     let (ctx, h) = (c.group as usize, obj_index(program));
+    #[cfg(not(feature = "report-es2"))]
+    let binary_length = super::program_binary::length(c, program);
+    #[cfg(feature = "report-es2")]
+    let binary_length = 0;
     let Some(p) = program_or_error(c, program, FUNC) else {
         return;
     };
@@ -3073,7 +3087,7 @@ pub unsafe extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: 
             c.set_error(GL_INVALID_ENUM, FUNC);
             return;
         }
-        GL_PROGRAM_BINARY_LENGTH => 0,
+        GL_PROGRAM_BINARY_LENGTH => binary_length,
         GL_PROGRAM_BINARY_RETRIEVABLE_HINT => st.binary_retrievable[ctx][h] as GLint,
         GL_ATTACHED_SHADERS => (p.vs != 0) as GLint + (p.fs != 0) as GLint,
         GL_ACTIVE_UNIFORMS => active_total(p, &st.loc[ctx][h], &st.blocks[ctx][h]) as GLint,
