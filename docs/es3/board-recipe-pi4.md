@@ -10,18 +10,21 @@ the board printed them, from three GLES3 session records in the tree —
 `tools/cts/log/2026-11-pi4-gles3-b/` (16, rows 21-36, `8990a5cc`) and
 `tools/cts/log/2026-11-pi4-gles3-c/` (26, rows 37-52 and 81-90, `009f62a5`)
 — 54 of the 91 images on three commits. The first nine (`A1`-`FO1`) had run
-at `925dbca9` before them (RESULTS.md "Pi 4, first nine images"); rows 53-80,
-the `texture` T images, have run on no commit. What is still written as
-"expected" is the line form the tools print at tip, taken from their sources;
-no board session has run the whole 91-image tree from one commit, and nothing
-here quotes the result of one.
+at `925dbca9` before them (RESULTS.md "Pi 4, first nine images"). Since then
+six sessions ran the tree from one commit, `b1b5b845`
+(`tools/cts/log/2026-11-pi4-gles3-b1b5b845-rows00-15/` ... `-rows76-90/`,
+2026-11-06 to 2026-11-16): 96 of the table's 100 images (it was re-split
+from 91 by the runs, section 6) plus S32c, which ran before its re-split into
+S32c1-S32c4; those four have not run. Where a line below quotes the
+`b1b5b845` record, it says so. What is still written as "expected" is the
+line form the tools print at tip, taken from their sources.
 
 The pieces:
 
 | piece | what |
 |---|---|
-| `tools/cts/pi4-gles3-tree.txt` | the table: 91 images, every one of the 42,810 cases of `tools/cts/gles3-mustpass.txt` selected by exactly one `CONFIG_DEQP_CASE` line |
-| `tools/cts/check-gles3-tree.py` | proves that (`91 images, 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images`) and pins each `# image <LABEL>: <count>`; `check-deqp-images.py` (repo rule 6) and `cts-selftest.sh` check 19 run it on the three GLES3 tables (AM62P, Pi 4, i.MX8MP), so `tools/board_selftest.sh` and the gate see a broken table |
+| `tools/cts/pi4-gles3-tree.txt` | the table: 100 images, every one of the 42,810 cases of `tools/cts/gles3-mustpass.txt` selected by exactly one `CONFIG_DEQP_CASE` line |
+| `tools/cts/check-gles3-tree.py` | proves that (`100 images, 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images`) and pins each `# image <LABEL>: <count>`; `check-deqp-images.py` (repo rule 6) and `cts-selftest.sh` check 19 run it on the three GLES3 tables (AM62P, Pi 4, i.MX8MP), so `tools/board_selftest.sh` and the gate see a broken table |
 | `tools/cts/pi4-deqp-images.sh` with `DEQP_MODULE=gles3` | builds the images (`-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n`), checks each resolved `.config` with `check-deqp-images.py --config --gles3`; `--dry-run` lists the images and their arguments without any environment. `tools/cts/images-selftest.sh` section 7 (run by `cts-selftest.sh` check 20, in the gate) pins both paths against a fake cmake/ninja: the gles2 dry run and build exactly as before (no module argument, the ES 2.0 check), the gles3 path's three arguments and `--gles3`, and the stage 1 check |
 | `driver/samples/zephyr/deqp` | takes `-DDEQP_MODULE=gles2|gles3` (default gles2, as before): the gles3 package, `tes3TestPackageEntry.cpp`, the gles3 test data; refuses a gles3 build whose configuration still reports ES 2.0 |
 | `tools/board.sh pi4 tree` | runs the table, one tryboot per image, resumable; `BOARD_MUSTPASS=<abs path>/tools/cts/gles3-mustpass.txt` makes its tally and diff read the GLES3 list (new in this item; unset, the GLES2 list as before) |
@@ -160,7 +163,7 @@ B1 rc=0 sha256=<64 hex> build=<git describe>
 VA2 rc=0 sha256=<64 hex> build=<git describe>
 ```
 
-91 `rc=0` lines. Each `<LABEL>.log` ends with the memory report and the
+100 `rc=0` lines, one per image of the table. Each `<LABEL>.log` ends with the memory report and the
 conformance verdict:
 
 ```
@@ -187,7 +190,7 @@ the three records linked at 161,836 KB (`0ff58329`) or 161,844-161,848 KB
 `tools/board.sh pi4`'s window check (`LOAD_END`) on the way to the board.
 That is 2.4 points over the gles2 image D (59 %, "Notes from the gles2 stage
 1"); the margin is what a larger build would cut, so still read the `RAM:`
-line of the first image before building the other 90 (`... A1` builds that
+line of the first image before building the other 99 (`... A1` builds that
 one alone).
 
 The tree can start as soon as `A1.built` exists; `board.sh` waits for each
@@ -238,10 +241,13 @@ board.sh pi4 S17 rc=0 verdict=done boot=tryboot row boot_verdict=complete result
 / `DONE, dEQP threw` / `DONE` / `STOPPED EARLY by dEQP (complete=0; later
 cases never began)` / `INCOMPLETE (the photo deadline came first)` /
 `FATAL (reason <n>, pc <hex> lr <hex> far <hex>)` (v3d_board.c), and the
-filter is printed truncated with `...`. The verdict line's form was checked
-on a synthetic record through `tools/board.sh pi4 tally` at tip; the three
-records ran `board.sh`'s steps by hand (see "On the farm"), so they hold no
-verdict line. The end line the verdict rule matches (`END_RE`) is the last
+filter is printed truncated with `...`. The board printed this verdict line
+for all sixteen rows 0-15 of the `b1b5b845` record, which ran through
+`board.sh` itself: `rc=0 verdict=done boot=tryboot row
+boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent`,
+with `back_after=` 296-327 s; the three earlier records and the other five
+`b1b5b845` sessions ran `board.sh`'s steps by hand (see "On the farm"), so
+they hold no verdict line. The end line the verdict rule matches (`END_RE`) is the last
 of `deqp: summary: `, `v3d_deqp: build <sha8> (DONE|INCOMPLETE|STOPPED)...`
 or `v3d_gl_test RECORD end`, and it accepts all three deqp endings — DONE,
 INCOMPLETE and an aborted STOPPED all read `boot_verdict=complete`; DONE
@@ -260,12 +266,15 @@ The fields that matter: `rc=0 verdict=done` and `resets=0` — and
 `done`; a run dEQP aborted does not (the abort bullet below). Times
 measured over the three records: a run's cases finish in 0.2-55.7 s (longest
 `DONE` run: S12's 55.1 s at `8990a5cc`, then S24's 54.9 s at `009f62a5`);
+over the 97 runs of the `b1b5b845` record in 0.2-64.6 s (longest: T04's
+64.6 s, then FO6's 58.2 s and S12's 55.1 s);
 the PM watchdog ends the Zephyr side at ~250 s; Linux answers again
 296-302 s after the reboot (`0ff58329`), 297-304 s (`8990a5cc`), 301-345 s
-(`009f62a5`) — inside `board.sh`'s bounds (capture `RUN_BOUND` 420 s, then
-`RETURN_BOUND` 300 s of ssh margin; rc 5 only past both). A row costs about
-5.3-5.5 min end to end (12 rows in 66 min, 16 in 83, 26 in 137), so the 91
-images are about 8 h; the tree is resumable (`TREE_ROWS=<a>-<b>`, rows
+(`009f62a5`), 295-343 s (`b1b5b845`) — inside `board.sh`'s bounds (capture
+`RUN_BOUND` 420 s, then `RETURN_BOUND` 300 s of ssh margin; rc 5 only past
+both). A row costs about 5.3-5.6 min end to end (12 rows in 66 min, 16 in
+83, 26 in 137; rows 0-15 at `b1b5b845` in 90), so the 100 images are about
+9 h; the tree is resumable (`TREE_ROWS=<a>-<b>`, rows
 counted from 0 in table order; a finished run of the same image is skipped),
 and a session that cannot stay that long runs it in ranges. A session names
 its rows as a closed range, `TREE_ROWS=0-15`, then `16-30`, ... (or a list
@@ -294,7 +303,8 @@ What a row can say instead, and what to do:
   (`TREE_ROWS=<its index>`).
 - `verdict=done_with_resets` (`resets=<n>` from the OSAL's
   `GPU reset (recovery` lines): a result, never a clean pass; name the row in
-  the report. 0 recoveries in all 54 board runs so far.
+  the report. 0 recoveries in all 54 board runs of the three records and in
+  the 97 of `b1b5b845`.
 - **A run dEQP aborted reads `rc=4 verdict=done_stopped`.** A refused draw ends
   the whole run long inside the window. The back end prints
   `yakogl/v3d: draw refused: ...`, the GL core reports `GL_OUT_OF_MEMORY`
@@ -320,7 +330,14 @@ What a row can say instead, and what to do:
   "On the farm").
   Aborted so far, with their 0-based rows of the 91-image table: FO6 (13)
   and M1 (17) at `0ff58329`, S03-S08 (23-28) at `8990a5cc`, S32 (52),
-  TF1 (81) and TF2 (82) at `009f62a5`. Not everything big is an abort:
+  TF1 (81) and TF2 (82) at `009f62a5`. At `b1b5b845` FO6 and M1 ran to the
+  end and twelve runs aborted, with their rows of today's 100-image table:
+  S03-S08 (23-28) on their first case again, S32c (now S32c1-S32c4, 54-57)
+  at `texturesize.sampler2dshadow_fragment`, T05c (76) at
+  `texture.format.compressed.etc2_eac_rgba8_cube_npot`, T14 (86) at
+  `texture.units.8_units.only_cube.1`, T17 (89) at
+  `texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_npot`, TF1 (90) and TF2
+  (91) at the cases of `009f62a5`. Not everything big is an abort:
   S24 (44), S26 (46) and VA2 (90) ran `DONE, all passed` at `009f62a5`,
   and LT (16) ran `DONE` at `0ff58329` (next bullet). Section 6 splits
   an aborted row *at the refusing case*.
@@ -397,7 +414,9 @@ and again at `e4f9c78f` (dry runs, `check-gles3-tree.py` on the table,
 `tools/board_selftest.sh`, `cts-selftest.sh`); the console, tally and time
 lines quoted in sections 3-6 are from board runs since.
 
-All three records ran `board.sh`'s steps **by hand**, in `board.sh`'s order:
+The three earlier records and the `b1b5b845` sessions of rows 16-90 ran
+`board.sh`'s steps **by hand** (rows 0-15 of `b1b5b845` ran the chain above,
+the bridge taking `board.sh`'s own capture), in `board.sh`'s order:
 the Pi 4's UART bridge takes one client at a time and the leased serial
 console (an MCP server connected forwards) held it, so `board.sh`'s own
 capture was not available. Their "Method" sections list the steps — the
@@ -429,8 +448,13 @@ no time stamps) and `<LABEL>.tally.txt` (section 5's per-log command, run
 with relative paths), plus `table.txt` (the `--table` view over all
 consoles) and `cycles.txt` (per image: the image sha256, the Linux boot id
 before the reboot, the reboot time, the seconds until Linux was back, the
-clean-up read-back, the `cases in` line and the end line). The three
-records above predate this contract: plain `-a`, `-b`, `-c` directory names,
+clean-up read-back, the `cases in` line and the end line). A console's
+dEQP banner reads `dEQP Core vulkan-cts-1.4.6.2-555-g93bca018...`; in the
+copies `board.sh` makes, its address redaction (`redact_dir`) takes the
+`1.4.6.2` for an IPv4 address and writes `vulkan-cts-192.0.2.1-...` (rows
+0-15 of `b1b5b845`, the only rows run through `board.sh`), so read the
+release from the rows run by hand. The three records above predate this
+contract: plain `-a`, `-b`, `-c` directory names,
 and a `commit:` line only in `-c`'s README.
 
 ## 5. The tally
@@ -488,11 +512,16 @@ path into the tally files (`tools/release/redaction-scan.py` and the record
 checker flag it). A tally labels each log after the directory the tally runs
 in — the `009f62a5` tallies, run from a scratch `out/` directory, print
 `out: deqp: summary ...` — so a `<LABEL>.tally.txt` is written with the name
-given:
+given. For a session record, `tools/cts/pi4-session-tally.sh` writes every
+`<LABEL>.tally.txt` of the directory that way (the `b1b5b845` tallies:
+their header reads `deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt
+--label T14 T14.console.txt`):
 
 ```sh
-python3 tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt \
-    --label S32 S32.console.txt          # --label takes exactly one log
+tools/cts/pi4-session-tally.sh tools/cts/log/<date>-pi4-gles3-<sha8>-rowsAA-BB
+# per image, from inside the session directory (--label takes exactly one log):
+(cd tools/cts/log/<session> && python3 ../../deqp-uart-tally.py \
+    --mustpass ../../gles3-mustpass.txt --label S32 S32.console.txt)
 ```
 
 prints one line per log (`<path>: deqp: done: ... | deqp: summary: ...`,
@@ -506,7 +535,8 @@ result: <r> (of <l> seen)`, the group table (`group pass fail n/s other`;
 with `--table`, `pass fail n.s. QW other none`), every non-passing case by
 name, and the per-image "the image's own counters" line. Its exit status is
 1 only for a MISSING, STOPPED, INCOMPLETE or FATAL log: of the 54 consoles
-of the three records, the eleven aborted ones. Over a whole record the
+of the three records, the eleven aborted ones; of the 97 of `b1b5b845`, the
+twelve aborted ones (section 4). Over a whole record the
 abort is also caught by `check-pi4-gles3-log.py` (section 4).
 
 For RESULTS.md the numbers to carry are the TOTAL row, the per-group rows and,
@@ -545,8 +575,9 @@ grep -h 'cases in' tools/cts/log/2026-11-pi4-gles3-c/*.console.txt        # a se
 ```
 
 Measured over all 54 board runs: 0.2-55.7 s per image (`record at 1 s` ...
-`record at 55 s`) — nowhere near the 210 s record line; no run has reached
-the deadline yet, and `2026-11-pi4-gles3-c/README.md` writes its 54.9 s run
+`record at 55 s`), and over the 97 of `b1b5b845` 0.2-64.6 s (T04's
+`record at 64 s` the latest) — nowhere near the 210 s record line; no run
+has reached the deadline yet, and `2026-11-pi4-gles3-c/README.md` writes its 54.9 s run
 as "well inside the 200 s window, so no image needs splitting for time".
 
 Splitting answers two different faults, and they split two different ways.
@@ -589,7 +620,7 @@ python3 tools/cts/check-gles3-tree.py tools/cts/pi4-gles3-tree.txt
 
 must end with `check-gles3-tree: tools/cts/pi4-gles3-tree.txt: <N> images,
 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images`
-(N the new image count; the header comment's "91" follows it), and
+(N the new image count; the header comment's image count, now "100", follows it), and
 `tools/cts/cts-selftest.sh` check 19 and `check-deqp-images.py` say the same.
 
 ## 7. Reading the first run against the AM62P's
