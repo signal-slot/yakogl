@@ -10,8 +10,13 @@
 # families (docs/notes/mali-glmark2-forecast.md section 2): ARITH_CONST ("a
 # constant product in a shape Mesa's algebraic rules move or fold"), ARITH,
 # FRAGCOLOR_LANE, FRAGCOORD_FP16, FS_OPERAND, FMA, TEX_COORD, LOCALS, FAU_PAGE,
-# the control-flow and rebalance texts and the fragment varying load or
-# conversion forms. A case refused by one of them is not in this file's tree.
+# the control-flow and rebalance texts; and likewise the texture look-up text
+# "a texture look-up other than texture2D": the measure table
+# (tools/mali/deqp-host-measure.sh) keeps it out of this plan as its
+# 367:TEX_VERTEX entry (layers2, texfetch and usamp in
+# tools/mali/corpus-verdicts.txt are still refused on it) and no deqp_misc_*
+# reference pins a look-up shape. A case refused by one of them is not in
+# this file's tree.
 #
 # Kept although a glmark2 family has the same code (the task takes only the
 # dEQP shapes #367's notes leave): the integer, loop, link-rule and constant
@@ -38,6 +43,7 @@ fsloop	a loop past Mesa's unroll limits
 varyuniform	a varying lane computed from no attribute
 varyuniform	a varying lane left unwritten
 mixprec	a fragment shader that mixes highp and mediump or lowp
+mixprec	a fragment varying load or conversion of a form no reference draws
 posunwritten	a gl_Position lane left unwritten
 negzero	a -0.0 that a comparison reads through a variable
 invariant	an invariant output
@@ -45,6 +51,5 @@ misc	a program needing more than the split file's 32 work registers
 misc	a shader of more than 2048 IR values
 misc	a comparison other than
 misc	a built-in input
-misc	a texture look-up other than texture2D
 misc	a texture result's lanes
 misc	a shape Mesa's algebraic rules rewrite without a reference

@@ -561,21 +561,36 @@ It prints a tree table (the form of `mali-gles2-tree.txt`, labels
 the order of `tools/cts/mali-family-refusals.txt` (which maps refusal texts
 to families and leaves out what plan #367 holds through glmark2:
 `ARITH_CONST`, `ARITH`, `FRAGCOLOR_LANE`, `FS_OPERAND`, `TEX_COORD`, `FMA`,
-`LOCALS`, the rebalance, control flow and varying load texts), each family's
-cases in mustpass order, at most 400 per row.
+`LOCALS`, the rebalance and control flow texts, and the texture look-up text
+(the measure table's `367:TEX_VERTEX` entry,
+`tools/mali/deqp-host-measure.sh`)), each family's cases in mustpass order,
+at most 400 per row.
 `tools/cts/mali-family-tree-selftest.sh` checks the tool
 (`cts-selftest.sh` check 52). `check-gles3-tree.py --mustpass
-gles2-mustpass.txt --max 400` sees 27 rows, 7,313 cases matched once, 0
+gles2-mustpass.txt --max 400` sees 27 rows, 7,345 cases matched once, 0
 matched more than once and 0 empty rows; its exit is 1 because the table is a
-partial rerun table, not whole-tree coverage (9,852 mustpass cases are
+partial rerun table, not whole-tree coverage (9,820 mustpass cases are
 uncovered). Cases per family, NotSupported included:
 
 | Family | Cases | Family | Cases |
 |---|---|---|---|
 | `intval` | 3,223 | `varyuniform` | 256 |
-| `varylink` | 656 | `mixprec` | 192 |
+| `varylink` | 656 | `mixprec` | 251 |
 | `unitype` | 820 | `posunwritten` | 155 |
 | `uniarray` | 272 | `negzero` | 117 |
 | `constop` | 621 | `invariant` | 12 |
-| `colourpair` | 171 | `misc` | 44 |
+| `colourpair` | 171 | `misc` | 17 |
 | `vsloop` + `fsloop` | 497 + 277 | | |
+
+The file took two line changes before the reruns went to the board:
+`mixprec` gained "a fragment varying load or conversion of a form no
+reference draws" — the section 9 family already counts 251 cases host-side
+(192 + the 59 varying-load cases of `mali-deqp-mixprec.md`, with the
+`deqp_mixprec_rot1`/`rot3` references pinning the form) — and the `misc`
+line for "a texture look-up other than texture2D" was dropped: the measure
+table keeps that text out of the plan (its `367:TEX_VERTEX` entry),
+`layers2`, `texfetch` and `usamp` are still refused on it in
+`tools/mali/corpus-verdicts.txt`, and no `deqp_misc_*` reference pins a
+look-up shape (the `gm2_texvert_*` references pin the *vertex* look-up text
+`TexVertex`, not this one), so the 27 look-up cases leave the tree (`misc`
+44 → 17).
