@@ -68,7 +68,7 @@ pub mod select;
 pub mod vec16;
 
 use super::arena::Arena;
-use super::codegen::{lower_source, Blocks, CompileError, Which};
+use super::codegen::{Blocks, CompileError, Token, Which};
 use crate::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use bir::{Ins, Prog};
 pub use select::UboRow;
@@ -1635,6 +1635,25 @@ fn record(
      * this pointer beside its own record when it publishes the shader) */
     sh.priv_ = super::backend::codegen_priv(rec.as_ptr() as *const core::ffi::c_void);
     Ok(sh)
+}
+
+/// The front end (`codegen::lower_source`), then the c = 0.5 remap of a
+/// sampler-state variant (`lodkey::remap_mag_switch`, `lod <= 0.5 ? -1.0 :
+/// lod` on the explicit levels of the key's bindings): the ES 2.0
+/// magnification switch the hardware, switching at 0, does not make
+/// (docs/notes/mali-cube-textures.md, section (k)). The key is set by the
+/// online back end around a variant's compile only (`online_sampler_variant`)
+/// and asked for only in a build that reports ES 2.0 (`sensitivity_of`), so
+/// every other compile is the front end's module unchanged.
+fn lower_source<'a>(
+    stage: u32,
+    glsl: &[u8],
+    zero: &[&str],
+    scratch: &Arena<'a>,
+) -> Result<super::lower::Lowered<'a>, CompileError> {
+    let l = super::codegen::lower_source(stage, glsl, zero, scratch)?;
+    super::lodkey::remap_mag_switch(scratch, l, crate::shaderc::compile_lod_key().mag_switch)
+        .map_err(|e| CompileError::Rejected { line: e.line, tok: Token::new(e.tok), msg: e.msg })
 }
 
 /// One stage: the front end's verdict, then the Valhall pipeline.

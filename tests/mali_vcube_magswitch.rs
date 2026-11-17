@@ -32,7 +32,7 @@
 //! gives: the instruction words themselves, not a descriptor. A level
 //! remap adds the compare and the select for 0.5 to the code, so
 //!
-//! - fix cases (ignored): the code of mag LINEAR with min NEAREST_MIPMAP_
+//! - fix cases (run in a `report-es2` build): the code of mag LINEAR with min NEAREST_MIPMAP_
 //!   NEAREST (case 2), and with min NEAREST_MIPMAP_LINEAR (case 1), differs
 //!   from the code of a state that needs no remap, and the two are the same
 //!   remap;
@@ -47,15 +47,20 @@
 //! refuses a constant look-up level in this vertex shader today (a compiler
 //! refusal of the M.2 kind, not this test's).
 //!
-//! Caveat for vcube-magswitch: the GL core asks the back end for the key
-//! only where `online::backend::sensitivity_of` reports a sensitivity, and
-//! it does so only in a `report-es2` build (the dEQP board library); in the
-//! build of this file's header, without it, the fix cases cannot pass unless
-//! the item also lets the Mali ask in every build. The file's cfg does not
-//! exclude `report-es2`, so the cases can be run there too.
+//! The key is asked for only in a build that reports ES 2.0: the GL core
+//! asks the back end for it where `online::backend::sensitivity_of` reports
+//! a sensitivity, and that reports `mag_switch` only in a `report-es2` build
+//! (the dEQP-GLES2 board library), since an ES 3 context is judged against
+//! a reference whose switch is at 0, the hardware's (`attrgap-fix`,
+//! docs/notes/mali-cube-textures.md, section (k)). So the three fix cases
+//! run in the `report-es2` build and are ignored in the other, where
+//! `no_remap_outside_an_es2_build` pins that the program stays the plain
+//! one. The compile itself is pinned in the Mali compiler's lib tests
+//! (`a_keyed_vertex_cube_look_up_switches_to_magnification_at_one_half`).
 //!
 //! ```text
 //! cargo test --test mali_vcube_magswitch --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table
+//! cargo test --test mali_vcube_magswitch --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table,report-es2
 //! ```
 
 #![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-mali"))]
@@ -447,13 +452,13 @@ fn assert_remapped(min: GLenum) {
 }
 
 #[test]
-#[ignore = "needs vcube-magswitch (ES 2.0 magnification switch at lod 0.5)"]
+#[cfg_attr(not(feature = "report-es2"), ignore = "the remap is keyed in a build that reports ES 2.0 only")]
 fn nearest_mipmap_linear_with_mag_linear_remaps_the_lod() {
     assert_remapped(NL);
 }
 
 #[test]
-#[ignore = "needs vcube-magswitch (ES 2.0 magnification switch at lod 0.5)"]
+#[cfg_attr(not(feature = "report-es2"), ignore = "the remap is keyed in a build that reports ES 2.0 only")]
 fn nearest_mipmap_nearest_with_mag_linear_remaps_the_lod() {
     assert_remapped(NN);
 }
@@ -461,9 +466,21 @@ fn nearest_mipmap_nearest_with_mag_linear_remaps_the_lod() {
 /// The two keyed states differ from each other in sampler words only (the
 /// descriptor), not in the program: both carry the same remap.
 #[test]
-#[ignore = "needs vcube-magswitch (ES 2.0 magnification switch at lod 0.5)"]
+#[cfg_attr(not(feature = "report-es2"), ignore = "the remap is keyed in a build that reports ES 2.0 only")]
 fn both_nearest_mipmap_filters_get_the_same_remap() {
     let _g = fixture();
     assert!(state_changes_code((GL_NEAREST, GL_LINEAR), (NN, GL_LINEAR)), "the remap is missing");
     assert!(!state_changes_code((NN, GL_LINEAR), (NL, GL_LINEAR)));
+}
+
+/// Outside a build that reports ES 2.0 no key is asked for: the two
+/// NEAREST_MIPMAP_* states with mag LINEAR get the plain program, the
+/// hardware's switch at 0 (ES 3.0's).
+#[test]
+#[cfg(not(feature = "report-es2"))]
+fn no_remap_outside_an_es2_build() {
+    let _g = fixture();
+    for min in [NN, NL] {
+        assert!(!state_changes_code(PLAIN[0], (min, GL_LINEAR)), "min {min:#x} mag LINEAR remapped");
+    }
 }
