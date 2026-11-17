@@ -198,6 +198,40 @@ def knob_calls(text):
     return out
 
 
+def probe_symbol(sym, dq_text, block_of):
+    """Is SYM a probe symbol of the deqp sample's Kconfig: defined in that file
+    (its text DQ_TEXT), `default n` and depending on DEQP_TEST_KNOBS in its
+    Kconfig block BLOCK_OF(SYM)? A test knob called only under such a symbol
+    compiles out of every image the sample builds as-is; knob_verdicts still
+    refuses it when a conformance configuration turns the symbol on."""
+    b = block_of(sym) or ''
+    return (re.search(r'default n', b) is not None
+            and re.search(r'depends on [^\n]*\bDEQP_TEST_KNOBS\b', b) is not None
+            and re.search(r'^config\s+%s\s*$' % sym, dq_text, re.M) is not None)
+
+
+def knob_verdicts(text, rel, dq_text, block_of, confs):
+    """Test-knob calls of one source file TEXT (path REL in the tree) ->
+    (problems, accepted [(knob, guard symbol)], each listed once).
+    A call is accepted when one of its guard symbols X is a probe symbol of the
+    deqp Kconfig (probe_symbol) and no configuration in CONFS (name -> merged
+    CONFIG_ dict) sets CONFIG_X=y; anything else stays refused with the
+    message of the old blanket grep, or names the configuration that opens it."""
+    bad, good = [], []
+    for guards, knob in knob_calls(text):
+        probe = [g for g in guards if probe_symbol(g, dq_text, block_of)]
+        n = len(bad)
+        if not probe:
+            bad.append('%s calls the test knob %s (a conformance image sets none)' % (rel, knob))
+        for g in probe:
+            for name, c in confs.items():
+                if c.get(g) == 'y':
+                    bad.append('%s: %s=y turns on the test knob %s (%s)' % (name, g, knob, rel))
+        if probe and len(bad) == n:
+            good += [(knob, g) for g in probe]
+    return sorted(set(bad), key=bad.index), sorted(set(good))
+
+
 def check_repo():
     bad, notes = [], []
     syms = kconfig_symbols()
@@ -259,24 +293,24 @@ def check_repo():
         notes.append('deqp/Kconfig: DEQP_TEST_KNOBS no longer selects YAKOGL_TEST_KNOBS (fine only if no knob is called)')
     # the sample sets none of the knobs: no call of a test-knob entry point,
     # except under a probe symbol of deqp/Kconfig (default n, depends on
-    # DEQP_TEST_KNOBS) that no board's conformance configuration turns on
-    def probe_symbol(s):
-        return has(s, r'default n') and has(s, r'depends on [^\n]*\bDEQP_TEST_KNOBS\b') \
-            and re.search(r'^config\s+%s\s*$' % s, dq, re.M) is not None
-    for d in (DEQP,):
-        for dp, _, fn in os.walk(os.path.join(d, 'src')):
-            for f in fn:
-                rel = os.path.relpath(os.path.join(dp, f), REPO)
-                found = []
-                for guards, knob in knob_calls(read(os.path.join(dp, f))):
-                    probe = [g for g in guards if probe_symbol(g)]
-                    if not probe:
-                        found.append('%s calls the test knob %s (a conformance image sets none)' % (rel, knob))
-                    for g in probe:
-                        for name, c in boards.items():
-                            if c.get(g) == 'y':
-                                found.append('%s: %s=y turns on the test knob %s (%s)' % (name, g, knob, rel))
-                bad += sorted(set(found), key=found.index)
+    # DEQP_TEST_KNOBS) that no conformance configuration turns on; every
+    # accepted call is a note naming its guard
+    # (the six boards above already merge these board files)
+    guard_confs = dict(boards)
+    merged = {'verdin_am62p_am62p54_a53.conf', 'verdin_imx8mp_mimx8ml8_a53.conf',
+              'armadillo_x2_mimx8ml8_a53.conf', 'rpi_4b.conf', 'nanopc_t6.conf'}
+    for f in sorted(os.listdir(bd)):
+        if f.endswith('.conf') and f not in merged:
+            guard_confs[f] = dict(base, **parse_conf(os.path.join(bd, f)))
+    for dp, _, fn in os.walk(os.path.join(DEQP, 'src')):
+        for f in fn:
+            rel = os.path.relpath(os.path.join(dp, f), REPO)
+            kb, kg = knob_verdicts(read(os.path.join(dp, f)), rel, dq, kconfig_block, guard_confs)
+            bad += kb
+            for knob, g in kg:
+                notes.append('%s calls the test knob %s only under CONFIG_%s '
+                             '(default n, depends on DEQP_TEST_KNOBS, no conformance configuration sets it)'
+                             % (rel, knob, g))
     # PowerVR switches the sample passes: their Kconfig defaults must be the library's
     for s, want in (('DEQP_PVR_NATIVE_CUBE', 'default -1'), ('DEQP_PVR_NATIVE_ARRAY', 'default -1'),
                     ('DEQP_PVR_NATIVE_3D', 'default -1')):
@@ -413,6 +447,29 @@ def self_test():
     ok(knob_calls(src) == [(['A_MRT4'], 'v3d_debug_set_x'), (['B'], 'pvr_debug_set_y'), ([], 'gc_debug_set_z'),
                            ([], 'v3d_debug_set_w'), ([], 'pvr_debug_set_v')],
        'a knob call is guarded by its #if defined / #ifdef symbols only, not by #else, #ifndef or a bare call')
+    # acceptance (probe_symbol, knob_verdicts) on a synthetic deqp Kconfig and
+    # merged configurations: K_N is the probe pattern, K_Y defaults y, K_ND
+    # lacks the DEQP_TEST_KNOBS dependency
+    dqt = 'config K_N\nconfig K_Y\nconfig K_ND\n'
+    dqb = {'K_N': 'config K_N\n\tbool\n\tdefault n\n\tdepends on DEQP_TEST_KNOBS',
+           'K_Y': 'config K_Y\n\tbool\n\tdefault y\n\tdepends on DEQP_TEST_KNOBS',
+           'K_ND': 'config K_ND\n\tbool\n\tdefault n'}.get
+    ksrc = ('#if defined(CONFIG_K_N)\nextern "C" int v3d_debug_set_draw_targets(int n);\n'
+            'v3d_debug_set_draw_targets(4);\n#endif\n')
+    two = {'Pi 4': {'YAKOGL_GPU_V3D': 'y'}, 'AM62P': {}}
+    kb, kg = knob_verdicts(ksrc, 's.cpp', dqt, dqb, two)
+    ok(kb == [] and kg == [('v3d_debug_set_draw_targets', 'K_N')],
+       'a knob call guarded by a default n DEQP_TEST_KNOBS symbol no configuration sets is accepted, once')
+    kb, kg = knob_verdicts('v3d_debug_set_draw_targets(4);\n', 's.cpp', dqt, dqb, two)
+    ok(kb == ['s.cpp calls the test knob v3d_debug_set_draw_targets (a conformance image sets none)'] and kg == [],
+       'an unguarded knob call is refused with the conformance message')
+    ok(knob_verdicts(ksrc.replace('K_N', 'K_Y'), 's.cpp', dqt, dqb, two)[0]
+       and knob_verdicts(ksrc.replace('K_N', 'K_ND'), 's.cpp', dqt, dqb, two)[0]
+       and knob_verdicts(ksrc.replace('K_N', 'K_UNK'), 's.cpp', dqt, dqb, two)[0],
+       'a knob call guarded by a default y symbol, one without DEQP_TEST_KNOBS or an unknown symbol is refused')
+    kb, kg = knob_verdicts(ksrc, 's.cpp', dqt, dqb, {'Pi 4': {'K_N': 'y'}, 'AM62P': {}})
+    ok(kb == ['Pi 4: K_N=y turns on the test knob v3d_debug_set_draw_targets (s.cpp)'] and kg == [],
+       'a knob call guarded by a symbol a conformance configuration sets =y is refused')
     print('check-deqp-images self-test: %d checks failed' % fails)
     return fails
 
