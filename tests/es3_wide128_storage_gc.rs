@@ -18,10 +18,11 @@
 //!
 //! What it cannot see: the sampling itself (the texel fetch is the
 //! compiler's, tests/es3_wide128_gc.rs), the stored bytes of the padding of
-//! a partial tile, and the board. The classes are not in GC_SAMPLED_TEXFMTS
-//! yet (item gc-w128-flip); each test ORs them in through
-//! `backend::TEST_EXTRA_SAMPLED` (available under `host-test`) for its
-//! duration.
+//! a partial tile, and the board. GC_SAMPLED_TEXFMTS holds the classes
+//! (8f019dae) and GL_RGBA32F is stored in its own class there
+//! (`rgba32f_own_class`, src/gl/texture.rs); each test still ORs them in
+//! through `backend::TEST_EXTRA_SAMPLED` (available under `host-test`) for its
+//! duration, which is the mask itself now.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_wide128_storage_gc
@@ -694,43 +695,13 @@ macro_rules! format_tests {
 }
 
 format_tests! {
+    rgba32f: 0;
     rgb32f: 1;
     rg32f: 2;
     rgba32ui: 3;
     rgba32i: 4;
     rgb32ui: 5;
     rgb32i: 6;
-}
-
-/// GL_RGBA32F is still stored as RGBA16F whatever the sampled mask says:
-/// `sized_format` (src/gl/texture.rs) hard-codes GL_RGBA32F =>
-/// GLES_TEXFMT_RGBA16F. Pinned as it is so that gc-w128-flip changes this
-/// test (to the 16-byte checks of the other formats, FORMATS[0]) with the
-/// code.
-#[test]
-fn rgba32f_is_still_stored_as_rgba16f() {
-    on_gc7000(|| {
-        let data = [0u8; 2 * 2 * 16];
-        // SAFETY: plain GL calls; 2x2 RGBA floats.
-        unsafe {
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            let mut t: GLuint = 0;
-            glGenTextures(1, &mut t);
-            glBindTexture(GL_TEXTURE_2D, t);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F as GLint, 2, 2, 0, GL_RGBA, GL_FLOAT, data.as_ptr().cast());
-        }
-        no_error("glTexImage2D RGBA32F");
-        let s = draw(program("sampler2D", false));
-        let d = descriptor(&s, 0).expect("a descriptor in slot 0");
-        assert_ne!(
-            d[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f,
-            rnndb("TEXTURE_FORMAT_EXT_G32R32F"),
-            "RGBA32F is stored as halves until gc-w128-flip"
-        );
-        assert!(descriptor(&s, 1).is_none(), "no companion descriptor for a one-plane class");
-    });
 }
 
 /// GL_R32F is no 128-bit class: the core keeps its own 4-byte class for it,

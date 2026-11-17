@@ -12,14 +12,13 @@
 //! glTexImage2D, glTexStorage2D + glTexSubImage2D, glTexImage3D and
 //! glTexSubImage3D on a 2D array, and glTexImage2D from a pixel unpack
 //! buffer. GL_RGBA32UI/I must keep the alpha they were given, and so must
-//! GL_RGBA32F, which every back end stores as RGBA16F today (`sized_format`;
-//! pinned, the GC flip may move it). GL_RGB32F is stored in the 128-bit class
-//! where the mask has it (gpu-powervr, gpu-v3d) and as RGBA16F where it has
-//! not (gpu-vivante until the flip): the alpha is read in the class the core
-//! chose, a half widened to its float, and must be 1.0 either way. The
-//! integer formats are 128-bit classes; where the mask has none (gpu-vivante
-//! until the flip) they are refused by name and the rows skip, with the
-//! refusal pinned.
+//! GL_RGBA32F, which the GC7000UL stores in the 128-bit class and every other
+//! back end as RGBA16F (`sized_format`, `rgba32f_own_class`; pinned).
+//! GL_RGB32F is stored in the 128-bit class where the mask has it and as
+//! RGBA16F where it has not: the alpha is read in the class the core chose, a
+//! half widened to its float, and must be 1.0 either way. The integer formats
+//! are 128-bit classes; where the mask has none they are refused by name and
+//! the rows skip, with the refusal pinned.
 //!
 //! Feature sets (a GPU is needed for the mask):
 //!   cargo test --test es3_rgb32_alpha --features host-test,gpu-powervr
@@ -318,11 +317,12 @@ fn check_rgb(f: &Fmt, s: &Stored, rgb: &[[u32; 3]], what: &str) {
 }
 
 /// An RGBA32* format stores the alpha it was given. GL_RGBA32F is the one
-/// sized name of the original tables that no back end stores in its 128-bit
-/// class (`sized_format` holds it as RGBA16F: pinned here, and what the GC
-/// flip has to change if it wants the class); the integer ones are 128-bit.
+/// sized name of the original tables that only the GC7000UL stores in its
+/// 128-bit class (`sized_format` / `rgba32f_own_class`); every other back end
+/// holds it as RGBA16F (pinned here). The integer ones are 128-bit.
 fn check_rgba(f: &Fmt, s: &Stored, rgb: &[[u32; 3]], alpha: u32, what: &str) {
-    let want = if f.rgba == GL_RGBA32F { backend::GLES_TEXFMT_RGBA16F } else { class_of(f) };
+    let halves = f.rgba == GL_RGBA32F && !cfg!(feature = "gpu-vivante");
+    let want = if halves { backend::GLES_TEXFMT_RGBA16F } else { class_of(f) };
     assert_eq!(s.texfmt, want, "{} {what}: storage class", f.rgba);
     assert_eq!(s.texels.len(), rgb.len(), "{} {what}", f.name);
     for (i, t) in s.texels.iter().enumerate() {

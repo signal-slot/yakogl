@@ -324,110 +324,17 @@ fn check(only: &[&str]) {
     }
 }
 
-/// RGB32F: 32-bit float is not texture-filterable (3.8.14), so
-/// no chain, NPOT and 1-wide sizes included.
+/// RGBA32F and RGB32F: 32-bit float is not texture-filterable (3.8.14), so
+/// no chain, NPOT and 1-wide sizes included. GL_RGBA32F is in its 16-byte
+/// class on this back end (`sized_format` / `rgba32f_own_class`,
+/// src/gl/texture.rs), not the RGBA16F halves the CPU filter used to average.
 #[test]
 fn float_32_has_no_generated_chain() {
-    on_gc7000(|| check(&["RGB32F"]));
+    on_gc7000(|| check(&["RGBA32F", "RGB32F"]));
 }
 
 /// RGBA32UI and RGBA32I: an integer format is never filterable.
 #[test]
 fn integer_32_has_no_generated_chain() {
     on_gc7000(|| check(&["RGBA32UI", "RGBA32I"]));
-}
-
-/// The float box average of the 2x2 (or 1-wide / 1-high) source block: the
-/// inputs are multiples of 1/4 below 2^10, so every sum and the quotient are
-/// exact and the order of the additions does not matter.
-fn float_box(src: &[u8], off: usize, pitch: usize, (x, y): (usize, usize), (sx, sy): (usize, usize), ch: usize) -> f32 {
-    let mut sum = 0.0f32;
-    for j in 0..sy {
-        for i in 0..sx {
-            let o = off + ((y * sy + j) * pitch + x * sx + i) * 16 + ch * 4;
-            sum += f32::from_le_bytes(src[o..o + 4].try_into().unwrap());
-        }
-    }
-    sum / (sx * sy) as f32
-}
-
-/// GL_RGBA32F with only level 0 given, on the sizes the CPU filter has odd
-/// cases for: no GPU chain (`gc_backend_mip_chains` made and the fallback gpu count stay;
-/// the refused count may move by one, `chain_gpu` refusing what is not RGBA8), the CPU filter runs once and its
-/// levels 1.. are the float box averages in 16-byte texels, as a 2D RGBA8
-/// texture's are bytes.
-///
-/// Held out until RGBA32F is stored as RGBA32F: `sized_format` maps GL_RGBA32F
-/// to RGBA16F ("stored as halves") whatever the GC sampled mask holds (checked
-/// with the three classes added to GC_SAMPLED_TEXFMTS), and the filter averages halves. The flip item
-/// (gc-w128-flip) has to make both the mask and `sized_format` agree; drop the
-/// `#[ignore]` with it. (ES 3.0 3.8.14 would make a sized GL_RGBA32F texture
-/// GL_INVALID_OPERATION here, as RGB32F's is, `float_32_has_no_generated_chain`.)
-#[test]
-#[ignore = "GL_RGBA32F is stored as RGBA16F even with the three 128-bit classes in the GC mask (sized_format, texture.rs:6236): the CPU filter averages halves"]
-fn rgba32f_chain_is_filtered_by_the_cpu_in_16_byte_texels() {
-    on_gc7000(|| {
-        assert!(open(GLES_TEXFMT_RGBA32F), "RGBA32F is in the GC sampled mask");
-        for (w, h) in [(8u32, 8u32), (13, 6), (5, 9), (1, 7), (7, 1), (3, 3)] {
-            let img: Vec<f32> = (0..w * h * 4).map(|i| ((i.wrapping_mul(2654435761) >> 22) as f32) * 0.25).collect();
-            let mut name = 0;
-            // SAFETY: plain GL calls; `img` holds w*h RGBA float texels.
-            unsafe {
-                while glGetError() != GL_NO_ERROR {}
-                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-                glGenTextures(1, &mut name);
-                glBindTexture(GL_TEXTURE_2D, name);
-                glTexImage2D(
-                    GL_TEXTURE_2D,
-                    0,
-                    GL_RGBA32F as GLint,
-                    w as GLsizei,
-                    h as GLsizei,
-                    0,
-                    GL_RGBA,
-                    GL_FLOAT,
-                    img.as_ptr().cast(),
-                );
-                assert_eq!(glGetError(), GL_NO_ERROR, "{w}x{h} upload");
-            }
-            let k0 = counters();
-            // SAFETY: plain GL call.
-            unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
-            // SAFETY: plain GL call.
-            assert_eq!(unsafe { glGetError() }, GL_NO_ERROR, "{w}x{h} glGenerateMipmap");
-            let k1 = counters();
-            assert_eq!(k1.0 .0, k0.0 .0, "{w}x{h}: no GPU chain made");
-            assert!(k1.0 .1 <= k0.0 .1 + 1, "{w}x{h}: the GPU path refused it at most once");
-            assert_eq!(k1.2 .0, k0.2 .0, "{w}x{h}: no GPU chain in the fallback stats");
-            assert_eq!(k1.1 .2, k0.1 .2 + 1, "{w}x{h}: the CPU filter ran once");
-
-            let ctx = yakogl::gl::context::current().expect("a current context");
-            let slot = names::slot_of(ctx, Kind::Texture, name).expect("a texture name");
-            let t = ctx.texture_object(slot).expect("a texture object");
-            assert_eq!(t.texfmt, GLES_TEXFMT_RGBA32F, "{w}x{h}: 16-byte texels");
-            // SAFETY: the texture's own CPU mapping.
-            let mem = unsafe { core::slice::from_raw_parts(t.mem.cpu as *const u8, t.mem.size) };
-            assert!(t.chain_levels >= 2, "{w}x{h}: a chain");
-            let (mut lw, mut lh) = (w as usize, h as usize);
-            for l in 1..t.chain_levels as usize {
-                let (sx, sy) = (if lw > 1 { 2 } else { 1 }, if lh > 1 { 2 } else { 1 });
-                let (dw, dh) = ((lw / 2).max(1), (lh / 2).max(1));
-                let (sp, dp) = (t.level_pitch_at(l as u32 - 1) as usize, t.level_pitch_at(l as u32) as usize);
-                let (so, dof) = (t.level_off[l - 1] as usize, t.level_off[l] as usize);
-                for y in 0..dh {
-                    for x in 0..dw {
-                        for ch in 0..4 {
-                            let want = float_box(mem, so, sp, (x, y), (sx, sy), ch);
-                            let o = dof + (y * dp + x) * 16 + ch * 4;
-                            let got = f32::from_le_bytes(mem[o..o + 4].try_into().unwrap());
-                            assert_eq!(got, want, "{w}x{h} level {l} ({x},{y}) channel {ch}");
-                        }
-                    }
-                }
-                (lw, lh) = (dw, dh);
-            }
-            // SAFETY: a name made above.
-            unsafe { glDeleteTextures(1, &name) };
-        }
-    });
 }
