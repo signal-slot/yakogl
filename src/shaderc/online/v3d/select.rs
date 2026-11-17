@@ -497,6 +497,10 @@ struct Sel<'a> {
     /// compile's key, the vertex stage's from the program's vertex key,
     /// [`select_vertex`]; the two stages number their bindings apart).
     ret32: u32,
+    /// The bindings whose shadow look-ups clamp the reference to [0, 1]
+    /// before TMUDREF (`LodKey::fixed_depth`: a fixed-point depth texture),
+    /// taken from the stage's key as [`Sel::ret32`] is.
+    fixed_depth: u32,
     /// Look-ups share a switch ([`Pressure::Serial`] turns it off).
     pipelined: bool,
     /// The counted loops open at this point, innermost last.
@@ -945,6 +949,26 @@ impl<'a> Sel<'a> {
                     if queued + words.count_ones() > TMU_OUTPUT_WORDS || self.pending.len() >= MAX_TMU_QUEUE {
                         self.flush_tmu(a)?;
                     }
+                    /* a shadow look-up of a fixed-point depth texture
+                     * (`LodKey::fixed_depth`): its reference clamped to
+                     * [0, 1], fmin(fmax(ref, 0), 1), before the TMU writes
+                     * (ES 3.0.6 3.8.15.1; the TMU compares the reference as
+                     * written, docs/notes/v3d-shadow.md (d), (f)). A float
+                     * depth's is compared as it is. */
+                    let dref = if shadow {
+                        let d =
+                            self.val(a, srcs[super::prepare::tex_operands(cube || layer || vol, bias || lod, false)])?;
+                        if sampler < 16 && self.fixed_depth & (1 << sampler) != 0 {
+                            let zero = self.constant(a, 0, small_imms)?;
+                            let one = self.constant(a, 1f32.to_bits(), small_imms)?;
+                            let d = self.add(a, AddOp::Fmax, d, zero)?;
+                            Some(self.add(a, AddOp::Fmin, d, one)?)
+                        } else {
+                            Some(d)
+                        }
+                    } else {
+                        None
+                    };
                     let unit = u32::from(sampler) << 24;
                     self.push(a, VOp::Wrtmuc { u: Uniform { contents: QUNIFORM_TMU_CONFIG_P0, data: unit | words } })?;
                     /* P1: per-pixel mask enable (bit 2), as Mesa's fragment
@@ -997,9 +1021,7 @@ impl<'a> Sel<'a> {
                      * does the compare (docs/notes/v3d-shadow.md (c)). It
                      * counts toward the TMU input FIFO like the others
                      * (`tmu_input_writes`). */
-                    if shadow {
-                        let d =
-                            self.val(a, srcs[super::prepare::tex_operands(cube || layer || vol, bias || lod, false)])?;
+                    if let Some(d) = dref {
                         self.push(
                             a,
                             VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUDREF), a: d, b: Operand::None },
@@ -2233,6 +2255,7 @@ pub fn select_fragment<'a>(
         tex_words: AVec::new(),
         pending: AVec::new(),
         ret32: crate::shaderc::compile_lod_key().ret32,
+        fixed_depth: crate::shaderc::compile_lod_key().fixed_depth,
         pipelined: pressure < Pressure::Serial,
         attr_rows: &mut [],
         loop_counters: AVec::new(),
@@ -2472,6 +2495,21 @@ pub fn select_vertex<'a>(
     pressure: Pressure,
     a: &Arena<'a>,
 ) -> Result<Selected<'a>, SelectError> {
+    let key = crate::shaderc::LodKey { ret32, ..crate::shaderc::LodKey::NONE };
+    select_vertex_keyed(p, records, coord, key, pressure, a)
+}
+
+/// [`select_vertex`] with the whole vertex key: its `ret32`, and its
+/// `fixed_depth` (the bindings whose shadow look-ups clamp the reference,
+/// as a fragment look-up's do from the compile key, [`Sel::fixed_depth`]).
+pub fn select_vertex_keyed<'a>(
+    p: &Prepared<'_>,
+    records: &[u8],
+    coord: bool,
+    key: crate::shaderc::LodKey,
+    pressure: Pressure,
+    a: &Arena<'a>,
+) -> Result<Selected<'a>, SelectError> {
     let sizes = vattr_sizes(p, records)?;
     /* The VPM input rows (Mesa ntq_setup_vs_inputs, nir_to_vir.c:2402-2421,
      * and the attribute index, :2890-2922): the builtins the stage reads
@@ -2507,7 +2545,8 @@ pub fn select_vertex<'a>(
         of: a.alloc_filled(p.ops.len(), Operand::None)?,
         tex_words: AVec::new(),
         pending: AVec::new(),
-        ret32,
+        ret32: key.ret32,
+        fixed_depth: key.fixed_depth,
         pipelined: pressure < Pressure::Serial,
         attr_rows: &mut [],
         loop_counters: AVec::new(),

@@ -26,7 +26,7 @@ use super::encode::{encode_program, ProgramEncodeError};
 use super::isa::Instr;
 use super::prepare::{fragment_inputs, prepare_fragment_with, prepare_vertex_with, PrepError, SOp};
 use super::sched::{schedule, SchedError};
-use super::select::{select_fragment, select_vertex, Pressure, SelectError, Selected, Uniform, VOp};
+use super::select::{select_fragment, select_vertex_keyed, Pressure, SelectError, Selected, Uniform, VOp};
 use super::verify::{branches_are_structured, registers_fit_threads, verify, VerifyError};
 use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
 use crate::shaderc::online::ir::{self, IoKind};
@@ -274,16 +274,16 @@ fn under_pressure<'a>(
     Err(V3dError::NotYet(DOES_NOT_FIT))
 }
 
-/// A vertex or coordinate shader all the way to its words; `ret32` is the
-/// vertex key's (`LodKey::ret32`, [`select_vertex`]).
+/// A vertex or coordinate shader all the way to its words; `key` is the
+/// vertex key (its `ret32` and `fixed_depth`, [`select_vertex_keyed`]).
 fn vertex<'a>(
     p: &super::prepare::Prepared<'_>,
     records: &[u8],
     coord: bool,
-    ret32: u32,
+    key: crate::shaderc::LodKey,
     a: &Arena<'a>,
 ) -> Result<(Selected<'a>, (Code<'a>, u32)), V3dError> {
-    under_pressure(&PRESSURES, |pr| select_vertex(p, records, coord, ret32, pr, a), true, a)
+    under_pressure(&PRESSURES, |pr| select_vertex_keyed(p, records, coord, key, pr, a), true, a)
 }
 
 /// A program all the way to its words, and the thread count it runs at: 4
@@ -540,10 +540,10 @@ pub fn compile_program_rt<'a>(
         false,
         a,
     )?;
-    /* both with the vertex key's ret32: the driver loads one set of
+    /* both with the vertex key (ret32, fixed_depth): the driver loads one set of
      * texture records for the vertex and the coordinate shader */
-    let (vsel, vs_code) = vertex(&vsp, records, false, vs_key.ret32, a)?;
-    let (csel, cs_code) = vertex(&csp, records, true, vs_key.ret32, a)?;
+    let (vsel, vs_code) = vertex(&vsp, records, false, vs_key, a)?;
+    let (csel, cs_code) = vertex(&csp, records, true, vs_key, a)?;
 
     let slots = a.alloc_filled(inputs.len(), (0u8, 0u8))?;
     for (s, &(loc, comp)) in slots.iter_mut().zip(inputs) {
