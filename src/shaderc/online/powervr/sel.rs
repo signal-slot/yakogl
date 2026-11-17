@@ -418,8 +418,27 @@ pub enum SelOp {
     /// sit; the chain (`chain::build_fragment_for`) turns it into a
     /// [`SelOp::Copy`] from the coefficient register.
     PlaneCoeff { term: u8 },
-    /// Wait for data-return channel 0: `wdf`, after a sample.
+    /// Wait for data-return channel 0: `wdf`, after a sample or a
+    /// [`SelOp::Ld`]. An `ld`'s destination counts as written HERE, not at
+    /// the `ld`: nothing reads or writes it, or the `ld`'s address pair, in
+    /// between (`verify::check_ld_waits`).
     WaitData,
+    /// A uniform-block member read from memory (pco's `ld`, form
+    /// `ld_immbl`, DRC 0, cache mode normal; `docs/notes/pvr-ubo-memory-load.md`
+    /// §1, §2): `burst` dwords (1..=4, one IR load of at most a vec4) from
+    /// the 64-bit byte address in the pair `srcs[0]`, `srcs[0] + 1` (low
+    /// dword first) into the run `dst`, `dst + 1`, ..., `dst + burst - 1`
+    /// ([`SelOp::dst_width`]). `srcs[0]` names the pair's first register: a
+    /// temporary pair an [`SelOp::Add64`] wrote. The data arrives at the
+    /// next [`SelOp::WaitData`].
+    Ld { burst: u8 },
+    /// The 64-bit address add, pco's `add64_32` with `.s` and no carry-in:
+    /// `{dst, dst + 1} = {srcs[0], srcs[1]} + srcs[2]`, the low and high
+    /// dwords of the block address in `srcs[0]` and `srcs[1]` (the shared
+    /// pair `sh[ubo_addr_off1 - 1]`, `sh[ubo_addr_off1]`) and a 32-bit byte
+    /// offset in `srcs[2]`: an immediate (`4 * dword_off`) or a run-time
+    /// value. Writes a pair ([`SelOp::dst_width`] 2).
+    Add64,
     /// Word `word` of sampler `binding`'s image state (`textureSize` reads
     /// its fields, as pco's usclib_tex_state_size does). Selection does not
     /// know where the descriptors sit; the chain (`chain::expand_samples`)
@@ -584,8 +603,9 @@ impl SelOp {
             | SelOp::TexWord { .. }
             | SelOp::Pred(_)
             | SelOp::NativeSize(_) => 0,
-            SelOp::SampleZ { .. } | SelOp::PlaneCoeff { .. } => 1,
+            SelOp::SampleZ { .. } | SelOp::PlaneCoeff { .. } | SelOp::Ld { .. } => 1,
             SelOp::SampleGrad | SelOp::SampleAddr => 2,
+            SelOp::Add64 => 3,
             SelOp::Alu(op) => SelGroup::arity(op),
             SelOp::Machine(MachineOp::Ubfe) => 3,
             SelOp::Machine(MachineOp::PckCov | MachineOp::LoopTest | MachineOp::Tstz | MachineOp::MovS1) => 1,
@@ -617,6 +637,8 @@ impl SelOp {
             | SelOp::LoopBegin
             | SelOp::LoopEnd
             | SelOp::Pred(_) => true,
+            SelOp::Ld { burst } => (1..=MAX_LD_BURST).contains(&burst),
+            SelOp::Add64 => true,
             SelOp::Alu(op) => SelGroup::is_buildable(op),
             SelOp::TexWord { .. }
             | SelOp::SampleZ { .. }
@@ -626,7 +648,34 @@ impl SelOp {
             | SelOp::PlaneCoeff { .. } => false,
         }
     }
+
+    /// How many consecutive registers a group carrying this writes from its
+    /// `dst`: the run the allocator places as one block of temporaries
+    /// (`alloc::allocate`). 1 for every operation but [`SelOp::Ld`] (its
+    /// burst) and [`SelOp::Add64`] (a pair). A [`SelOp::Sample`] also writes
+    /// four, but only as the chain resolves it, into fixed temporaries
+    /// (`chain::expand_samples`), so it never reaches the allocator as a run.
+    pub fn dst_width(self) -> u32 {
+        match self {
+            SelOp::Ld { burst } => u32::from(burst.max(1)),
+            SelOp::Add64 => 2,
+            _ => 1,
+        }
+    }
+
+    /// How many consecutive registers operand `slot` names from the one it
+    /// carries: 2 for an [`SelOp::Ld`]'s address pair, 1 otherwise.
+    pub fn src_width(self, slot: usize) -> u32 {
+        match (self, slot) {
+            (SelOp::Ld { .. }, 0) => 2,
+            _ => 1,
+        }
+    }
 }
+
+/// The largest burst a [`SelOp::Ld`] carries: one IR load reads at most a
+/// vec4 (`ir.rs` `comps`), and the immediate form reaches 16.
+pub const MAX_LD_BURST: u8 = 4;
 
 /// One instruction group, as selection describes it.
 ///
@@ -796,6 +845,40 @@ mod tests {
         for op in ALL {
             assert_ne!(SelOp::Copy, SelOp::Alu(*op), "the copy collides with {op:?}");
         }
+    }
+
+    /// The uniform-block load's operations: `ld` writes its burst and reads
+    /// a pair, `add64_32` writes a pair from three operands, and every other
+    /// operation one register (a sample's block of four is the chain's, in
+    /// fixed temporaries).
+    #[test]
+    fn the_load_ops_name_their_runs() {
+        for burst in 1..=MAX_LD_BURST {
+            let op = SelOp::Ld { burst };
+            assert!(op.is_buildable());
+            assert_eq!((op.arity(), op.dst_width(), op.src_width(0), op.src_width(1)), (1, u32::from(burst), 2, 1));
+        }
+        assert!(!SelOp::Ld { burst: 0 }.is_buildable());
+        assert!(!SelOp::Ld { burst: MAX_LD_BURST + 1 }.is_buildable());
+        assert!(SelOp::Add64.is_buildable());
+        assert_eq!((SelOp::Add64.arity(), SelOp::Add64.dst_width()), (3, 2));
+        assert!((0..3).all(|s| SelOp::Add64.src_width(s) == 1));
+        for op in [SelOp::Copy, SelOp::WaitData, SelOp::Alu(AluOp::Fadd), SelOp::Machine(MachineOp::Ubfe)] {
+            assert_eq!(op.dst_width(), 1, "{op:?}");
+            assert!((0..3).all(|s| op.src_width(s) == 1), "{op:?}");
+        }
+        let s = SelOp::Sample {
+            binding: 0,
+            proj: false,
+            lod: SmpLod::Implicit,
+            fetch: false,
+            offset: None,
+            cube: false,
+            layer: false,
+            gather: false,
+            ms: false,
+        };
+        assert_eq!(s.dst_width(), 1);
     }
 
     /// `SelOp`'s two questions must agree with `SelGroup`'s for every kernel

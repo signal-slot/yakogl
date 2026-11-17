@@ -258,7 +258,9 @@ fn single_op(g: &SelGroup) -> Option<&'static str> {
         | SelOp::Machine(_)
         | SelOp::LoopBegin
         | SelOp::LoopEnd
-        | SelOp::Pred(_) => None,
+        | SelOp::Pred(_)
+        | SelOp::Ld { .. }
+        | SelOp::Add64 => None,
         SelOp::Alu(a) => match shape(a) {
             Shape::Group(steps) if steps.len() == 1 && steps[0].phase == PH_0 => Some(steps[0].op),
             _ => None,
@@ -514,11 +516,13 @@ fn prepare_with<'a>(
     let mut note = |v: VReg| next = next.max(v.0 + 1);
     for g in sel.groups {
         if let Some(SelDst::Virtual(v)) = g.dst {
-            note(v);
+            /* the last register of a run an `ld` or `add64_32` writes */
+            note(VReg(v.0 + g.op.dst_width() - 1));
         }
-        for s in g.srcs.iter().flatten() {
-            if let SelSrc::Virtual { v, .. } = s {
-                note(*v);
+        for (slot, s) in g.srcs.iter().enumerate() {
+            if let Some(SelSrc::Virtual { v, .. }) = s {
+                /* and of the pair an `ld` reads */
+                note(VReg(v.0 + g.op.src_width(slot) - 1));
             }
         }
     }
@@ -620,6 +624,39 @@ fn prepare_one(p: &mut Prep<'_>, g: SelGroup) -> Result<(), PrepareError> {
             p.stats.bool_rewrites += 1;
             return prepare_one(p, SelGroup { op: SelOp::Alu(op), srcs, ..g });
         }
+    }
+    /* A uniform-block load (`docs/notes/pvr-ubo-memory-load.md` §2): each
+     * operand a plain register in a file the slot encodes
+     * (`legalise::mem_src_banks`). An immediate offset becomes its constant
+     * or a move; the shared pair's high dword, which `add64_32`'s s1 cannot
+     * name, and anything with a modifier are moved. An `ld` address is the
+     * pair an `add64_32` wrote and is never moved: a move would split it. */
+    if matches!(g.op, SelOp::Ld { .. } | SelOp::Add64) {
+        use super::legalise::{check_mem_op, mem_src_banks};
+        let mut g = g;
+        for slot in 0..g.op.arity() {
+            let s = g.srcs[slot].ok_or(PrepareError::Unsupported("a uniform-block load operand that is missing"))?;
+            let s = match s {
+                SelSrc::Imm(v) => p.imm(v)?,
+                other => other,
+            };
+            let plain = match s {
+                SelSrc::Virtual { mods, .. } => mods == Mods::default(),
+                SelSrc::Fixed { bank, mods, .. } => {
+                    mods == Mods::default() && mem_src_banks(g.op, slot).contains(&bank)
+                }
+                SelSrc::Imm(_) => false,
+            };
+            g.srcs[slot] = Some(match (plain, g.op) {
+                (true, _) => s,
+                (false, SelOp::Ld { .. }) => {
+                    return Err(PrepareError::Unsupported("an ld address that is not a temporary pair"))
+                }
+                (false, _) => p.copy(s)?,
+            });
+        }
+        check_mem_op(&g).map_err(|_| PrepareError::Unsupported("a uniform-block load the builder cannot take"))?;
+        return p.emit(g);
     }
     {
         /* A template's operands are plain registers in the temporaries or
@@ -879,11 +916,11 @@ pub fn share_common<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<Sele
     for g in sel.groups {
         if let Some(SelDst::Virtual(v)) = g.dst {
             bump(v, defs);
-            /* A sample writes a block of four from its first. */
-            if matches!(g.op, SelOp::Sample { .. }) {
-                for k in 1..4 {
-                    bump(VReg(v.0 + k), defs);
-                }
+            /* A sample writes a block of four from its first, an `ld` or
+             * `add64_32` its run (`SelOp::dst_width`). */
+            let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { g.op.dst_width() };
+            for k in 1..width {
+                bump(VReg(v.0 + k), defs);
             }
         }
     }
@@ -1371,6 +1408,10 @@ pub fn index_high_shared<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result
             let slot_ok = match g.op {
                 SelOp::Copy => slot == 0,
                 SelOp::Sample { .. } => slot != 1,
+                /* the address pair's low dword and a shared offset: s0 and
+                 * s2 take an idx0 operand (`legalise::mem_src_banks`); the
+                 * high dword was moved by `prepare` */
+                SelOp::Add64 => slot != 1,
                 _ => false,
             };
             if !slot_ok {
@@ -1486,7 +1527,9 @@ mod tests {
                 | SelOp::Machine(_)
                 | SelOp::LoopBegin
                 | SelOp::LoopEnd
-                | SelOp::Pred(_)) => {
+                | SelOp::Pred(_)
+                | SelOp::Ld { .. }
+                | SelOp::Add64) => {
                     panic!("{o:?} is not in this evaluator")
                 }
             };

@@ -21,7 +21,7 @@
 //!   file does not know what the USC state declares, and a number invented
 //!   here would be the same defect with a different constant.
 
-use super::sel::{Bank, SelDst, SelGroup, SelSrc, VReg};
+use super::sel::{Bank, SelDst, SelGroup, SelOp, SelSrc, VReg};
 use super::select::Selected;
 use crate::shaderc::online::arena::{Arena, ArenaError};
 
@@ -272,11 +272,12 @@ pub fn fresh_above(groups: &[SelGroup]) -> FreshVRegs {
     let mut note = |v: VReg| next = next.max(v.0 + 1);
     for g in groups {
         if let Some(SelDst::Virtual(v)) = g.dst {
-            note(v);
+            /* the last register of a run (`SelOp::dst_width`) */
+            note(VReg(v.0 + g.op.dst_width() - 1));
         }
-        for s in g.srcs.iter().flatten() {
-            if let SelSrc::Virtual { v, .. } = s {
-                note(*v);
+        for (slot, s) in g.srcs.iter().enumerate() {
+            if let Some(SelSrc::Virtual { v, .. }) = s {
+                note(VReg(v.0 + g.op.src_width(slot) - 1));
             }
         }
     }
@@ -399,6 +400,11 @@ pub fn allocate<'a>(
         mark(ranges, *v, groups.len());
     }
 
+    /* The runs: an `ld`'s destination and an `add64_32`'s pair are
+     * consecutive temporaries (`SelOp::dst_width`). Nothing to do, and
+     * nothing allocated, for a program without them. */
+    let runs = if groups.iter().any(|g| g.op.dst_width() > 1) { Some(mark_runs(groups, ranges, a)?) } else { None };
+
     /* A loop's body runs again from its top (`SelOp::LoopBegin` ..
      * `SelOp::LoopEnd`, the back edge): a value live INTO the loop is read
      * by every iteration, so it is live to the back edge wherever its last
@@ -441,13 +447,33 @@ pub fn allocate<'a>(
     for &vi in order[..n_used].iter() {
         let v = vi as usize;
         let r = ranges[v];
+        /* A run's later registers are placed with its first. */
+        let width = match runs {
+            Some(runs) if runs[v] == FOLLOWER => continue,
+            Some(runs) => usize::from(runs[v].max(1)),
+            None => 1,
+        };
         let mut placed = None;
-        for reg in 0..temps {
-            if reserved[reg] || busy[reg] >= r.first as i64 {
+        for reg in 0..temps.saturating_sub(width - 1) {
+            if (reg..reg + width).any(|t| reserved[t] || busy[t] >= r.first as i64) {
                 continue;
             }
             placed = Some(reg);
             break;
+        }
+        if width > 1 {
+            let Some(reg) = placed else {
+                return Err(AllocError::OutOfRegisters {
+                    file: RegFile::Temp,
+                    needed: peak_demand(ranges, groups.len(), reserved),
+                });
+            };
+            for k in 0..width {
+                busy[reg + k] = r.last as i64;
+                phys[v + k] = (reg + k) as u16;
+            }
+            high.temps = high.temps.max((reg + width) as u16);
+            continue;
         }
         let Some(reg) = placed else {
             /* The requirement, not the first miss: how many temporaries are
@@ -493,6 +519,88 @@ struct Counts {
     shared: u16,
     vtx_in: u16,
     coeff: u16,
+}
+
+/// What [`mark_runs`] writes for a value that is a later register of a run.
+/// The first register of a run holds the run's width, any other value 0.
+const FOLLOWER: u8 = u8::MAX;
+
+/// The runs of consecutive temporaries a program writes and reads
+/// (`docs/notes/pvr-ubo-memory-load.md` §2, §4): the destination of a
+/// [`SelOp::Ld`] (its burst) and the pair an [`SelOp::Add64`] writes, which
+/// an `ld` then reads as its address ([`SelOp::src_width`]).
+///
+/// Marks every register of a run live where the group names the run, makes
+/// the registers of one run live over the union of their ranges (they are
+/// placed together, so each holds its register as long as any does), and
+/// keeps an `ld`'s destination and its address pair live to the
+/// [`SelOp::WaitData`] after it: the data lands there, not at the `ld`, so
+/// nothing else may be given those temporaries in between. Returns, per
+/// value, the run's width for its first register, [`FOLLOWER`] for the
+/// others and 0 for a value outside every run.
+fn mark_runs<'a>(groups: &[SelGroup], ranges: &mut [Range], a: &Arena<'a>) -> Result<&'a [u8], AllocError> {
+    let runs = a.alloc_filled(ranges.len(), 0u8).map_err(AllocError::Scratch)?;
+    let twice = AllocError::Unsupported("a register of one run written as part of another");
+    for (i, g) in groups.iter().enumerate() {
+        let width = g.op.dst_width();
+        if let (Some(SelDst::Virtual(v)), true) = (g.dst, width > 1) {
+            let head = v.0 as usize;
+            match runs.get(head) {
+                Some(0) => runs[head] = width as u8,
+                Some(w) if *w as u32 == width => {}
+                _ => return Err(twice),
+            }
+            for k in 1..width {
+                let f = VReg(v.0 + k);
+                match runs.get_mut(f.0 as usize) {
+                    Some(r) if *r == 0 || *r == FOLLOWER => *r = FOLLOWER,
+                    _ => return Err(twice),
+                }
+                mark(ranges, f, i);
+            }
+        }
+        for (slot, s) in g.srcs.iter().enumerate() {
+            if let Some(SelSrc::Virtual { v, .. }) = s {
+                for k in 1..g.op.src_width(slot) {
+                    mark(ranges, VReg(v.0 + k), i);
+                }
+            }
+        }
+        if let SelOp::Ld { .. } = g.op {
+            let wait = groups[i + 1..].iter().position(|w| w.op == SelOp::WaitData).map_or(i, |k| i + 1 + k);
+            if let Some(SelDst::Virtual(v)) = g.dst {
+                for k in 0..width {
+                    mark(ranges, VReg(v.0 + k), wait);
+                }
+            }
+            if let Some(SelSrc::Virtual { v, .. }) = g.srcs[0] {
+                for k in 0..g.op.src_width(0) {
+                    mark(ranges, VReg(v.0 + k), wait);
+                }
+            }
+        }
+    }
+    /* One range per run, over all its registers. */
+    let mut v = 0usize;
+    while v < runs.len() {
+        let w = usize::from(runs[v]);
+        if w <= 1 || runs[v] == FOLLOWER {
+            v += 1;
+            continue;
+        }
+        let end = (v + w).min(ranges.len());
+        let mut u = Range { first: u32::MAX, last: 0, used: false };
+        for r in &ranges[v..end] {
+            if r.used {
+                u = Range { first: u.first.min(r.first), last: u.last.max(r.last), used: true };
+            }
+        }
+        for r in &mut ranges[v..end] {
+            *r = u;
+        }
+        v = end;
+    }
+    Ok(runs)
 }
 
 fn mark(ranges: &mut [Range], v: VReg, i: usize) {
@@ -613,6 +721,94 @@ mod tests {
         a: &Arena<'a>,
     ) -> Result<Allocated<'a>, AllocError> {
         allocate(g, LIMITS, pinned.iter().copied(), boundary, a)
+    }
+
+    /* ---- runs: an ld's destination and an add64_32's pair ------------- */
+
+    fn add64(d: u32) -> SelGroup {
+        let sh = |r| Some(SelSrc::Fixed { bank: Bank::Shared, reg: r, mods: Mods::default() });
+        SelGroup {
+            op: SelOp::Add64,
+            ty: OpType::U32,
+            dst: Some(SelDst::Virtual(VReg(d))),
+            srcs: [sh(8), Some(v(1)), sh(2)],
+        }
+    }
+    fn ld(d: u32, burst: u8, addr: u32) -> SelGroup {
+        SelGroup {
+            op: SelOp::Ld { burst },
+            ty: OpType::U32,
+            dst: Some(SelDst::Virtual(VReg(d))),
+            srcs: [Some(v(addr)), None, None],
+        }
+    }
+    fn wdf() -> SelGroup {
+        SelGroup { op: SelOp::WaitData, ty: OpType::U32, dst: None, srcs: [None; 3] }
+    }
+
+    /// An `ld`'s burst and an `add64_32`'s pair are each placed on
+    /// consecutive temporaries, apart from a value live across them.
+    #[test]
+    fn a_run_is_placed_on_consecutive_temporaries() {
+        /* v1 (the pair's high dword) and v0 live across the read */
+        let sel = [def(0), def(1), add64(10), ld(20, 3, 10), wdf(), use2(30, 20, 21), use2(31, 22, 0)];
+        let mut buf = [0u8; TEST_SCRATCH];
+        let arena = Arena::new(&mut buf);
+        let a = run(&sel, &[], &arena).expect("allocates");
+        let m = a.assignment;
+        assert_eq!(m[11], m[10] + 1, "the pair is not consecutive: {m:?}");
+        assert_eq!([m[21], m[22]], [m[20] + 1, m[20] + 2], "the run is not consecutive: {m:?}");
+        let run = m[20]..m[20] + 3;
+        assert!(!run.contains(&m[0]), "the run took v0's register, still live: {m:?}");
+        let Some(SelDst::Fixed { reg, .. }) = a.groups[3].dst else { panic!("no destination") };
+        assert_eq!(reg, m[20], "the ld's destination is the run's first register");
+        assert_eq!(a.groups[3].srcs[0], Some(SelSrc::Fixed { bank: Bank::Temp, reg: m[10], mods: Mods::default() }));
+        assert!(a.temps >= 3 + 2);
+        assert_eq!(fresh_above(&sel).take(), VReg(32));
+    }
+
+    /// The `ld`'s data lands at the `wdf`, and its address pair is the
+    /// `ld`'s until then: a value defined in between is not given either.
+    /// Without the rule, v5 below took the pair's first register (it is
+    /// read for the last time by the `ld`).
+    #[test]
+    fn the_ld_holds_its_registers_to_the_wait() {
+        let sel = [def(1), add64(10), ld(20, 1, 10), def(5), wdf(), use2(6, 20, 5)];
+        let mut buf = [0u8; TEST_SCRATCH];
+        let arena = Arena::new(&mut buf);
+        let m = run(&sel, &[], &arena).expect("allocates").assignment;
+        for held in [m[10], m[11], m[20]] {
+            assert_ne!(m[5], held, "v5 took a register the ld holds to its wait: {m:?}");
+        }
+        /* the control: with the wait right after the ld, v5 may reuse the
+         * pair, which nothing reads after the wait */
+        let sel = [def(1), add64(10), ld(20, 1, 10), wdf(), def(5), use2(6, 20, 5)];
+        let m = run(&sel, &[], &arena).expect("allocates").assignment;
+        assert!(m[5] == m[10] || m[5] == m[11], "the control should reuse the pair: {m:?}");
+    }
+
+    /// A register named as part of two different runs is refused: the two
+    /// placements could not both hold.
+    #[test]
+    fn a_register_in_two_runs_is_refused() {
+        let sel = [def(1), add64(10), ld(11, 2, 10), wdf()];
+        let mut buf = [0u8; TEST_SCRATCH];
+        let arena = Arena::new(&mut buf);
+        assert!(matches!(run(&sel, &[], &arena), Err(AllocError::Unsupported(_))));
+    }
+
+    /// A run that no stretch of free temporaries holds is a refusal naming
+    /// the temporary file.
+    #[test]
+    fn a_run_past_the_file_is_refused() {
+        let small = Limits { temps: 3, ..LIMITS };
+        let sel = [def(1), add64(10), ld(20, 4, 10), wdf(), use2(30, 20, 23)];
+        let mut buf = [0u8; TEST_SCRATCH];
+        let arena = Arena::new(&mut buf);
+        match allocate(&sel, small, [], Boundary::NONE, &arena) {
+            Err(AllocError::OutOfRegisters { file: RegFile::Temp, .. }) => {}
+            other => panic!("a four-register run in three temporaries: {other:?}"),
+        }
     }
 
     /// A value live into a loop keeps its register to the back edge: the

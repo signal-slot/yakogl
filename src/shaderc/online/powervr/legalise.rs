@@ -21,6 +21,7 @@
 
 use super::isa::{bit_set, BitSetId, Region};
 use super::operands::{dst_capability, src_capability, Operand, SLOT_BANK, SLOT_IDX};
+use super::sel::{Bank, Mods, SelDst, SelGroup, SelOp, SelSrc};
 
 /// Why no source section can hold these operands.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -179,4 +180,152 @@ pub fn fill_dsts(r: &mut Region, ops: &[Option<Operand>; 2]) -> Result<(), NoFit
         return Err(NoFit::Slot { slot, op });
     }
     Ok(())
+}
+
+/// The files a uniform-block load's operand may name, by slot
+/// (`docs/notes/pvr-ubo-memory-load.md` §2): what [`choose_src_variant`]
+/// encodes for `add64_32` with `is0 = s0` (the mux
+/// [`super::assemble::build_add64_32`] sets), narrowed to what the load
+/// needs.
+///
+/// - [`SelOp::Add64`] `srcs[0]`, the address's low dword: a temporary, the
+///   shared pair's low register, that register read through `idx0` past
+///   sh255 (`prepare::index_high_shared`), or a constant register.
+/// - `srcs[1]`, the high dword: a temporary or a constant register only.
+///   Slot `s1` has no shared or `idx0` form in any source section, so the
+///   shared pair's high register is moved to a temporary first (pco
+///   legalises the same source with a move; `tests/usc_exec_ubo_seq.rs`).
+/// - `srcs[2]`, the 32-bit byte offset: any of the files `srcs[0]` takes.
+///   An immediate is made a constant register or a move first, as for any
+///   operand.
+/// - [`SelOp::Ld`] `srcs[0]`, the address pair: a temporary pair only. pco
+///   always adds into temporaries before an `ld` (§2: whether the silicon
+///   takes a shared pair as the address is not known), so this does too.
+///
+/// Empty for any other operation or slot.
+pub fn mem_src_banks(op: SelOp, slot: usize) -> &'static [Bank] {
+    match (op, slot) {
+        (SelOp::Add64, 0 | 2) => &[Bank::Temp, Bank::Shared, Bank::Idx0, Bank::Special],
+        (SelOp::Add64, 1) => &[Bank::Temp, Bank::Special],
+        (SelOp::Ld { .. }, 0) => &[Bank::Temp],
+        _ => &[],
+    }
+}
+
+/// Why a uniform-block load group is not one the builder takes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MemRule {
+    /// Operand `slot` is missing, carries a modifier, is an immediate, names
+    /// a file [`mem_src_banks`] does not allow there, or is one the
+    /// operation does not read.
+    Operand { slot: usize },
+    /// The destination is missing or not a temporary.
+    Destination,
+    /// An `ld` burst outside 1..=[`super::sel::MAX_LD_BURST`].
+    Burst,
+    /// The group is not an [`SelOp::Ld`] or an [`SelOp::Add64`].
+    NotAMemOp,
+}
+
+/// Is `g`, a uniform-block load group, legal as it stands: every operand a
+/// plain register in a file [`mem_src_banks`] allows (a virtual one will be
+/// a temporary), and the destination a temporary run? `prepare` makes it so;
+/// `assemble::build_group` refuses what is not.
+pub fn check_mem_op(g: &SelGroup) -> Result<(), MemRule> {
+    let n = match g.op {
+        SelOp::Ld { burst } if (1..=super::sel::MAX_LD_BURST).contains(&burst) => 1,
+        SelOp::Ld { .. } => return Err(MemRule::Burst),
+        SelOp::Add64 => 3,
+        _ => return Err(MemRule::NotAMemOp),
+    };
+    for (slot, s) in g.srcs.iter().enumerate() {
+        let ok = match *s {
+            _ if slot >= n => s.is_none(),
+            Some(SelSrc::Virtual { mods, .. }) => mods == Mods::default(),
+            Some(SelSrc::Fixed { bank, mods, .. }) => {
+                mods == Mods::default() && mem_src_banks(g.op, slot).contains(&bank)
+            }
+            Some(SelSrc::Imm(_)) | None => false,
+        };
+        if !ok {
+            return Err(MemRule::Operand { slot });
+        }
+    }
+    match g.dst {
+        Some(SelDst::Virtual(_)) | Some(SelDst::Fixed { bank: Bank::Temp, .. }) => Ok(()),
+        _ => Err(MemRule::Destination),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::sel::{OpType, VReg};
+    use super::*;
+
+    fn is0_s0() -> u32 {
+        super::super::isa_tables::ENUMS
+            .iter()
+            .find(|e| e.name == "is0_sel")
+            .and_then(|e| e.elems.iter().find(|(_, n)| *n == "s0"))
+            .map(|(v, _)| *v)
+            .expect("is0_sel s0")
+    }
+
+    /// [`mem_src_banks`] for `add64_32` is what the source sections encode:
+    /// each allowed file fits slot k with temporaries in the other two, and
+    /// the shared and `idx0` files fit slot 1 in no form, which is why the
+    /// high dword is moved.
+    #[test]
+    fn the_add64_banks_are_the_ones_the_source_forms_hold() {
+        let t = |i| Some(Operand { bank: Bank::Temp.hw(), index: i });
+        for slot in 0..3 {
+            for bank in [Bank::Temp, Bank::Shared, Bank::Idx0, Bank::Special, Bank::VtxIn, Bank::Coeff] {
+                let mut ops = [t(0), t(1), t(2), None, None, None];
+                ops[slot] = Some(Operand { bank: bank.hw(), index: 200 });
+                let fits = choose_src_variant(&ops, is0_s0()).is_ok();
+                let allowed = mem_src_banks(SelOp::Add64, slot).contains(&bank);
+                /* the rule may be narrower than the encoding, never wider */
+                assert!(!allowed || fits, "slot {slot} {bank:?} is allowed and does not fit");
+                if matches!(bank, Bank::Shared | Bank::Idx0) {
+                    assert_eq!(fits, slot != 1, "slot {slot} {bank:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_mem_op_with_a_shared_high_dword_or_a_shared_address_is_refused() {
+        let v = |n| Some(SelSrc::Virtual { v: VReg(n), mods: Mods::default() });
+        let sh = |r| Some(SelSrc::Fixed { bank: Bank::Shared, reg: r, mods: Mods::default() });
+        let add = SelGroup {
+            op: SelOp::Add64,
+            ty: OpType::U32,
+            dst: Some(SelDst::Virtual(VReg(9))),
+            srcs: [sh(8), v(1), v(2)],
+        };
+        assert_eq!(check_mem_op(&add), Ok(()));
+        assert_eq!(check_mem_op(&SelGroup { srcs: [sh(8), sh(9), v(2)], ..add }), Err(MemRule::Operand { slot: 1 }));
+        assert_eq!(
+            check_mem_op(&SelGroup { srcs: [sh(8), v(1), Some(SelSrc::Imm(4))], ..add }),
+            Err(MemRule::Operand { slot: 2 })
+        );
+        let neg = Some(SelSrc::Virtual { v: VReg(2), mods: Mods { neg: true, ..Mods::default() } });
+        assert_eq!(check_mem_op(&SelGroup { srcs: [sh(8), v(1), neg], ..add }), Err(MemRule::Operand { slot: 2 }));
+        assert_eq!(
+            check_mem_op(&SelGroup { dst: Some(SelDst::Fixed { bank: Bank::Shared, reg: 0 }), ..add }),
+            Err(MemRule::Destination)
+        );
+        let ld = SelGroup {
+            op: SelOp::Ld { burst: 4 },
+            ty: OpType::U32,
+            dst: Some(SelDst::Virtual(VReg(20))),
+            srcs: [v(9), None, None],
+        };
+        assert_eq!(check_mem_op(&ld), Ok(()));
+        assert_eq!(check_mem_op(&SelGroup { srcs: [sh(8), None, None], ..ld }), Err(MemRule::Operand { slot: 0 }));
+        assert_eq!(check_mem_op(&SelGroup { srcs: [v(9), v(1), None], ..ld }), Err(MemRule::Operand { slot: 1 }));
+        assert_eq!(check_mem_op(&SelGroup { op: SelOp::Ld { burst: 5 }, ..ld }), Err(MemRule::Burst));
+        assert_eq!(check_mem_op(&SelGroup { op: SelOp::Ld { burst: 0 }, ..ld }), Err(MemRule::Burst));
+        assert_eq!(check_mem_op(&SelGroup { op: SelOp::Copy, ..ld }), Err(MemRule::NotAMemOp));
+    }
 }

@@ -115,6 +115,15 @@ index undefined, and reading elsewhere in the shared registers — where another
 shader's uniforms or a sampler descriptor sit — is not an acceptable
 "undefined".
 
+On the PowerVR, uniform-block members are read from memory, not from shared
+registers, once the compile option `powervr::ubo_rows::MemberLoads` is on: a
+`LoadUniform` or `LoadUniformIdx` whose dwords are a block member's becomes
+`add64_32` of the stage's address pair and the member's byte offset
+(`4 * dword_off`, or the clamped index's), an `ld`, and a `wdf`
+(`docs/notes/pvr-ubo-memory-load.md` §2). The clamp stays: it keeps the `ld`
+inside the stage's uniform snapshot. The option is off by default and nothing
+turns it on yet; off, every uniform dword is a shared-register read as above.
+
 ### `StoreLocal`'s write mask: destination lane *i* takes `src.swizzle[i]`
 
 **Decided, and measured rather than agreed.** `write_mask` says WHICH

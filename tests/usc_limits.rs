@@ -897,6 +897,8 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
             SelOp::Copy => "mbyp",
             SelOp::Sample { .. } => "smp",
             SelOp::WaitData => "wdf",
+            SelOp::Ld { .. } => "ld",
+            SelOp::Add64 => "add64_32",
             SelOp::TexWord { .. } => "<a state word the chain did not resolve>",
             SelOp::SampleZ { .. } => "<a cube coordinate the chain did not consume>",
             SelOp::NativeSize(_) => "<a native-size marker the chain did not consume>",
@@ -1221,6 +1223,8 @@ fn run_selected_from(
             | SelOp::SampleAddr
             | SelOp::PlaneCoeff { .. }
             | SelOp::WaitData
+            | SelOp::Ld { .. }
+            | SelOp::Add64
             | SelOp::LoopBegin
             | SelOp::LoopEnd
             | SelOp::Pred(_)
