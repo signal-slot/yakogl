@@ -88,7 +88,11 @@ default-uniform list). `tests/v3d_ubo_full_stage.rs` (`cb2f0ffb`) links 384
 default vec4 next to a 16384-byte block in the fragment and the vertex stage,
 and a 385th default vec4 does not link. The same test draws a stage with the
 full default block and 12 blocks of 16384 bytes: 50688 dwords reach the draw,
-each block at its 4096-dword slot, first and last dword read.
+each block at its 4096-dword slot, first and last dword read. Blocks sit
+behind the default block's actually used rows, not always at dword 1536:
+`tests/v3d_ubo_default_sweep.rs` (`bdbb8b12`) pins the placement for default
+blocks of 0, 1, 255 and 384 vec4; the slots above hold because that draw's
+default block is full.
 
 ## 3. V3D (Raspberry Pi 4)
 
@@ -221,8 +225,10 @@ block size is not raised here.
 4. A field added to `YakoglBackend` means every literal of it in `tests/` and
    `src/` gets it (`grep -rl 'YakoglBackend {' tests src`; CLAUDE.md, the
    2026-10-14 main breakage).
-5. Block-member rows are in the same flat array as default uniforms, so a
-   stage with 12 full blocks has `1536 + 49152 = 50688` dwords, under the
+5. Block-member rows are in the same flat array as default uniforms and
+   follow the default block's actual size (section 2,
+   `tests/v3d_ubo_default_sweep.rs`), so a stage with 12 full blocks and a
+   full default block fills at most `1536 + 49152 = 50688` dwords, under the
    `u16` of `vs_uniform_dwords`/`V3dUniformStorage` (65535). No wider field
    is needed for the V3D.
 
@@ -251,7 +257,10 @@ Order matters: each step keeps the tree green.
    Since: `tests/v3d_ubo_large_vs.rs` (`06e4b56e`, a vertex stage reads the
    first and last dword) and `tests/v3d_ubo_full_stage.rs` (`cb2f0ffb`, the
    full-stage host draw).
-6. **Undecided [U]** (`ldunifa`, `prepare.rs:1396`): see section 9.
+6. **Decided: not shown to be needed on the host** (`ldunifa`,
+   `prepare.rs:1396`): section 9's verdict — no host `functional.ubo` case
+   after the raise hit the refusal, and the board run that could show a need
+   (step 7, `#320`) is pending.
 7. **Pending**: the Pi 4 board step (#320): a draw with a 16384-byte block
    read at the first and last dword, and `functional.ubo` and
    `implementation_limits` of the dEQP tree. The boards are held by plan #347.
@@ -278,6 +287,20 @@ disagree. The cost: a build carries one GPU's limits, as the rest of
 `context.rs` already does. **Raising the PowerVR or GC7000UL later means
 editing the cfg arms of these two consts** (and the back end's own bounds);
 sections 4 and 5 stay the plan for them. The Mali is unchanged.
+
+**Matrix layout in a block: implemented, no compiler defect** [M]. A study
+traced the earlier claim that the V3D compiler or the host sim reads
+uniform-block matrices with the wrong layout (a `mat2` column stride of 2
+dwords, `row_major` read as `column_major`) to the old test harness: it
+mapped buffer dwords to default-block dwords at the compiler level and so
+bypassed the GL core's std140 copy (`fill_uniform_blocks` /
+`copy_block_member`, `program.rs:736,778`), the copy that makes the read
+right. `tests/v3d_ubo_matrix_layouts.rs` (`4863d8ae`) puts every std140
+matrix shape, `column_major` and `row_major`, in a 16384-byte block read
+through the GL draw path (that copy, then the sim on the stream the draw
+builds) and un-ignores `sim_reads_each_matrix_as_std140_says`: it passes for
+every matrix shape in both majors. Nothing in the compiler or the sim needs
+a matrix-layout fix.
 
 **`ldunifa` (step 6).** `LoadUniformIdx` still refuses an array over
 `MAX_SELECTED` = 256 values. Host dEQP-GLES3 at `26d1c4a2`
