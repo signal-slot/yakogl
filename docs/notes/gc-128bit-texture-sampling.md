@@ -158,9 +158,10 @@ gathers of one plane, joined with `(hi << 16) | lo` (`:115-151`).
    `textureGather` split exists) and the no-alpha 1 on the draw side (item 3).
 2. **Done: the flip** (gc-wide128-flip, `8f019dae`): the three classes are
    in `GC_SAMPLED_TEXFMTS`, and the gc-formats.md rows name the plane
-   format. GL_RGBA32F itself is still stored as RGBA16F halves
-   (`src/gl/texture.rs` `sized_format`); GL_RGB32F, RG32F and the RGB32 and
-   RGBA32 integer formats take the 128-bit classes.
+   format. GL_RGBA32F, GL_RGB32F, RG32F and the RGB32 and RGBA32 integer
+   formats take the 128-bit classes (GL_RGBA32F through
+   `src/gl/texture.rs` `sized_format`'s `rgba32f_own_class`, item
+   gc-w128-guard-helper; before it, RGBA16F halves).
 3. **Caveats for those items.**
    - A binding with `no_alpha` (an RGB32F texture stored as RGBA32F) gets
      swizzle A = ONE in both descriptors. The join reads channel 1 of

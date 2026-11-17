@@ -47,10 +47,9 @@
 //! - isampler2D / usampler2D draws of RGBA32I / RGBA32UI (texture with
 //!   integer arithmetic, texelFetch): drawn, both planes bound.
 //!
-//! GL_RGBA32F is still held as RGBA16F halves by `sized_format`
-//! (src/gl/texture.rs) until gc-w128-flip: which binding is two planes is
-//! read from the class the GL core stored, and an RGBA32F row that is not
-//! two planes says so on stderr and checks the one-plane state.
+//! GL_RGBA32F is stored in the 128-bit class on this back end
+//! (`sized_format` / `rgba32f_own_class`, src/gl/texture.rs), so its rows
+//! are two planes as the other formats' are.
 //!
 //! What it cannot see: the GPU.
 //!
@@ -741,10 +740,9 @@ mod draw {
      *
      * SAMP_CTRL0's W field is GL_TEXTURE_WRAP_R on a 3D texture, its U and V
      * fields S and T; the companion slot of a two-plane binding is written
-     * with the same SAMP_CTRL0 as its binding's. Where the GL core stores
-     * the texture as RGBA16F (`sized_format` holds GL_RGBA32F as halves
-     * whatever the mask says, src/gl/texture.rs) the slot's fields are
-     * checked and no companion is written. */
+     * with the same SAMP_CTRL0 as its binding's. The GL core stores
+     * GL_RGBA32F in the 128-bit class on this back end (`sized_format`,
+     * src/gl/texture.rs). */
 
     const FS_3D: &str = concat!(
         "#version 300 es\nprecision highp float;\nuniform highp sampler3D s;\nin vec2 uv;\n",
@@ -875,23 +873,13 @@ mod draw {
             for (s, t, r) in modes {
                 let (err, texfmt) = texture_3d(s, t, r);
                 assert_eq!(err, GL_NO_ERROR, "glTexImage3D");
-                let two_planes = is_wide128(texfmt) && open(texfmt);
-                if !two_planes {
-                    eprintln!(
-                        "GL_RGBA32F is stored in class {texfmt}, not two planes (texture.rs sized_format): checking \
-                         the slot of the stored texture; no companion"
-                    );
-                }
+                assert!(is_wide128(texfmt) && open(texfmt), "GL_RGBA32F stored in class {texfmt}, not two planes");
                 let stream = draw_stream(p);
                 let ctrl0 = last(&stream, nte_descriptor_samp_ctrl0(0)).expect("the unit's sampler is written");
                 let field = |k: u32| (ctrl0 >> (3 * k)) & 7;
                 assert_eq!([field(0), field(1), field(2)], [hw(s), hw(t), hw(r)], "S 0x{s:x} T 0x{t:x} R 0x{r:x}");
                 let companion = last(&stream, nte_descriptor_samp_ctrl0(1));
-                if two_planes {
-                    assert_eq!(companion, Some(ctrl0), "the companion slot takes the slot's sampler state");
-                } else {
-                    assert_eq!(companion, None, "one plane: no companion slot");
-                }
+                assert_eq!(companion, Some(ctrl0), "the companion slot takes the slot's sampler state");
             }
         });
     }
@@ -901,10 +889,9 @@ mod draw {
      * With RGBA32F/UI/I in GC_SAMPLED_TEXFMTS (8f019dae) the GL core stores
      * RGBA32UI/I and RGB32F/I/UI in the 128-bit classes on this back end, and
      * a draw that samples one is keyed and drawn as two G32R32 planes. Which
-     * binding is two planes is read from the class the core stored:
-     * GL_RGBA32F is held as RGBA16F halves by `sized_format`
-     * (src/gl/texture.rs) until gc-w128-flip, and its rows say so on stderr
-     * and check the one-plane state instead. */
+     * binding is two planes is read from the class the core stored;
+     * GL_RGBA32F is stored in the 128-bit class too (`sized_format`,
+     * src/gl/texture.rs). */
 
     /// A program whose fragment stage writes `o = <expr>`, `s` a `<sampler>`
     /// the expression reads.
@@ -1174,9 +1161,8 @@ mod draw {
     /// The flip pins: GC_SAMPLED_TEXFMTS holds the three 128-bit classes,
     /// and a GL_RGBA32UI, GL_RGBA32I and GL_RGB32F texture drawn through a
     /// sampling shader gets the descriptor pair -- own slot and companion,
-    /// both G32R32, the planes 8 bytes a texel apart. GL_RGBA32F the same
-    /// where the core stores it in the 128-bit class; else (halves) one
-    /// descriptor and no key, said on stderr.
+    /// both G32R32, the planes 8 bytes a texel apart. GL_RGBA32F the same:
+    /// the core stores it in the 128-bit class on this back end.
     #[test]
     fn the_flip_samples_the_128_bit_classes_as_two_planes() {
         for class in [GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA32I] {
@@ -1192,18 +1178,7 @@ mod draw {
                 let (class, _) = stored(name);
                 let q = quad(p);
                 drawn(f.name, &q);
-                if !planes(class) {
-                    assert_eq!(f.internal, GL_RGBA32F, "{}: held in class {class}, not two planes", f.name);
-                    eprintln!(
-                        "{}: stored in class {class}, not the 128-bit class (texture.rs sized_format, gc-w128-flip): \
-                         the GL_RGBA32F row is not checked as two planes; checking one descriptor and no key",
-                        f.name
-                    );
-                    assert_eq!(q.state.map(|s| s.1), Some([Wide128Planes::NONE; 2]), "{}: no key", f.name);
-                    assert!(descriptor(&q.stream, 0).is_some(), "{}: its own slot", f.name);
-                    assert!(descriptor(&q.stream, 1).is_none(), "{}: no companion slot", f.name);
-                    return;
-                }
+                assert!(planes(class), "{}: held in class {class}, not two planes", f.name);
                 assert_eq!(class, f.class, "{}: the 128-bit class", f.name);
                 check_pair(f.name, class, (w, h), &q);
             });
