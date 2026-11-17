@@ -414,6 +414,8 @@ fn rig() -> MutexGuard<'static, ()> {
             yakogl::backend::g_backend = &yakogl_backend_v3d;
             assert_eq!(yakogl::backend::init(), 0, "{:?}", seen(|s| s.log.clone()));
             assert!(!context::gl_context_create(32, 32).is_null(), "{:?}", seen(|s| s.log.clone()));
+            /* R32F as GL_EXT_color_buffer_float makes it (unlisted in the build) */
+            yakogl::gl::framebuffer::HOST_R32F_RT.store(true, core::sync::atomic::Ordering::Relaxed);
         }
     });
     // SAFETY: plain GL calls.

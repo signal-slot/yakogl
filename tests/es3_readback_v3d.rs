@@ -19,11 +19,11 @@
 //! the pixel format and type enums (GL_INVALID_OPERATION for a known pair the
 //! buffer does not take, GL_INVALID_ENUM for a name that is none). The same
 //! formats as texture attachments: the ones the GL core takes (the
-//! four-channel integer classes, R16F, RG16F, RGBA16F, and R32F under the
-//! same gate as the renderbuffer rows) read the same;
-//! the narrow integer textures and RGB16F are incomplete attachments today
-//! (pinned with their expected results in tests/es3_narrow_int_rt_v3d.rs and
-//! tests/es3_rgb16f_attach_v3d.rs), so no readback of them begins.
+//! four-channel integer classes, R16F, RG16F, RGB16F, RGBA16F, and R32F
+//! under the same gate as the renderbuffer rows) read the same;
+//! the narrow integer textures are incomplete attachments today (pinned
+//! with their expected results in tests/es3_narrow_int_rt_v3d.rs), so no
+//! readback of them begins.
 //!
 //! The rig is tests/es3_pbo_rb_clears_v3d.rs' `gl_rig`: the job builder and
 //! the GPU stood in for. The stand-in GPU applies a job's whole-target clear
@@ -1321,22 +1321,18 @@ fn release_texture_fb(tex: GLuint, fbo: GLuint) {
 }
 
 /// A texture attachment reads its clear as the renderbuffer does: the
-/// four-channel integer formats, RGB10_A2UI, R16F, RG16F, RGBA16F and — while `floats(true)` makes it one —
-/// R32F, through the class's pair and the implementation's.
+/// four-channel integer formats, RGB10_A2UI, R16F, RG16F, RGB16F, RGBA16F and — while `floats(true)` makes
+/// it one — R32F, through the class's pair and the implementation's.
 #[test]
 fn texture_attachments_read_their_clear_the_same() {
     let _g = gl_rig::rig();
     let float_tex = floats(true);
-    let complete: Vec<Fmt> = INTS
-        .iter()
-        .filter(|f| f.channels == 4)
-        .copied()
-        .chain(float_tex.iter().filter(|f| f.channels != 3).copied())
-        .collect();
-    // the seven four-channel integer classes and the float textures of three
-    // channels or more: R32F among them while it is a colour target (11),
-    // once the core gates it on GL_EXT_color_buffer_float it is not (10).
-    assert_eq!(complete.len(), if float_tex.len() == FLOATS.len() { 11 } else { 10 });
+    let complete: Vec<Fmt> =
+        INTS.iter().filter(|f| f.channels == 4).copied().chain(float_tex.iter().copied()).collect();
+    // the seven four-channel integer classes and the float textures: R32F
+    // among them only where it is a colour target (12), without
+    // GL_EXT_color_buffer_float it is not (11).
+    assert_eq!(complete.len(), if float_tex.len() == FLOATS.len() { 12 } else { 11 });
     for f in &complete {
         let (tex, fbo) = texture_fb(f);
         // SAFETY: a plain GL call.
@@ -1357,19 +1353,18 @@ fn texture_attachments_read_their_clear_the_same() {
     }
 }
 
-/// The one- and two-channel integer textures and the RGB16F texture are
+/// The one- and two-channel integer textures are
 /// GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT today (the GL core admits only the
-/// four-channel integer classes and not GL_RGB16F as a texture attachment:
-/// pinned, with the expected results, in tests/es3_narrow_int_rt_v3d.rs and
-/// tests/es3_rgb16f_attach_v3d.rs), so no readback of them begins: the read
-/// is refused (the pair check or completeness, see
-/// `an_incomplete_framebuffer_is_refused`) and writes nothing.
+/// four-channel integer classes on the V3D: pinned, with the expected
+/// results, in tests/es3_narrow_int_rt_v3d.rs), so no readback of them
+/// begins: the read is refused (the pair check or completeness, see
+/// `an_incomplete_framebuffer_is_refused`) and writes nothing. (The RGB16F
+/// texture is a colour attachment, `texture_attachments_read_their_clear_the_same`.)
 #[test]
-fn narrow_integer_and_rgb16f_textures_are_incomplete_today() {
+fn narrow_integer_textures_are_incomplete_today() {
     let _g = gl_rig::rig();
-    let incomplete: Vec<&Fmt> =
-        INTS.iter().filter(|f| f.channels < 4).chain(FLOATS.iter().filter(|f| f.channels == 3)).collect();
-    assert_eq!(incomplete.len(), 13);
+    let incomplete: Vec<&Fmt> = INTS.iter().filter(|f| f.channels < 4).collect();
+    assert_eq!(incomplete.len(), 12);
     for f in incomplete {
         let (tex, fbo) = texture_fb(f);
         // SAFETY: a plain GL call.
