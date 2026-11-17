@@ -58,6 +58,53 @@ grep -q '^| unclassified | 0 | 0 | 1 | 1 | 1 |$' "$tmp/o.md" || fail "summary ro
 grep -q '^| \*\*total\*\* | 3 | 1 | 1 | 2 | 5 |$' "$tmp/o.md" || fail "summary total"
 grep -qF "$P.weird.e (Fail, -)" "$tmp/o.md" || fail "example line"
 
+# the same host list case-first, as docs/es3/host-gc-gles3-5454be1b/host-gc-gles3-notpass.tsv
+# (column row, gpu column) and without the gpu column: the same output
+{
+  printf '# header\n'
+  printf 'gpu\tcase\tstatus\tkind\tmessage\trc\towner\n'
+  printf 'vivante\t%s\tFail\tgl-error\tmsg\t\t\n' "$P.transform_feedback.a"
+  printf 'vivante\t%s\tNotSupported\trefusal\tmsg\t\t\n' "$P.state_query.b"
+  printf 'vivante\t%s\tNotSupported\trefusal\t\t\t\n' "$P.fbo.blit.c"
+  printf 'vivante\t%s\tTimeout\t\t\t\t\n' "$P.texture.shadow.d"
+  printf 'vivante\t%s\tFail\tcompile\t\t\t\n' "$P.transform_feedback.hostonly"
+  printf 'vivante\t%s\tFail\tcompile\t\t\t\n' "$P.nocause.hostonly"
+} >"$tmp/host-cf.tsv"
+grep -v -e '^gpu' "$tmp/host-cf.tsv" | sed "s/^vivante$t//" >"$tmp/host-cf2.tsv"
+for h in host-cf host-cf2; do
+  python3 -I "$cmp" "$tmp/board.txt" "$tmp/$h.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" --tsv >"$tmp/$h.o.tsv"
+  cmp -s "$tmp/o.tsv" "$tmp/$h.o.tsv" || fail "$h: case-first host list reads differently (tsv)"
+  python3 -I "$cmp" "$tmp/board.txt" "$tmp/$h.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" --examples 1 >"$tmp/$h.o.md"
+  cmp -s "$tmp/o.md" "$tmp/$h.o.md" || fail "$h: case-first host list reads differently (markdown)"
+done
+
+# a host list mixing both layouts line by line reads each line by its own layout
+{
+  printf 'Fail\t%s\n' "$P.transform_feedback.a"
+  printf 'vivante\t%s\tNotSupported\trefusal\n' "$P.state_query.b"
+  printf '%s\tNotSupported\n' "$P.fbo.blit.c"
+} >"$tmp/mixed.tsv"
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/mixed.tsv" --tsv >"$tmp/mixed.o.tsv"
+grep -qx "host-predicted${t}unclassified${t}-${t}Fail${t}$P.transform_feedback.a" "$tmp/mixed.o.tsv" || fail "mixed: outcome-first line"
+grep -qx "host-other${t}unclassified${t}-${t}Fail${t}$P.state_query.b" "$tmp/mixed.o.tsv" || fail "mixed: case-first line with gpu"
+grep -qx "host-predicted${t}unclassified${t}-${t}NotSupported${t}$P.fbo.blit.c" "$tmp/mixed.o.tsv" || fail "mixed: case-first line"
+grep -q '^Board not-pass cases: 5; host not-pass cases: 3$' \
+  <(python3 -I "$cmp" "$tmp/board.txt" "$tmp/mixed.tsv") || fail "mixed: host count"
+
+# a line that fits neither layout is refused, naming the file and line
+printf 'Fail\t%s\n' "$P.transform_feedback.a" >"$tmp/bad0.tsv"
+printf 'Fail\tnot-a-case\n' >>"$tmp/bad0.tsv"                       # no dEQP-GLES3. case
+printf '%s\tMaybe\n' "$P.x" >"$tmp/bad1.tsv"                        # no status word
+printf 'vivante\t%s\n' "$P.x" >"$tmp/bad2.tsv"                       # no outcome at all
+printf 'gpu\tcase\tkind\n' >"$tmp/bad3.tsv"                         # not the column row
+printf 'Fail\tdEQP-GLES2.functional.x\n' >"$tmp/bad4.tsv"             # another module
+for b in bad0:2 bad1:1 bad2:1 bad3:1 bad4:1; do
+  f=${b%:*}
+  if python3 -I "$cmp" "$tmp/board.txt" "$tmp/$f.tsv" >"$tmp/bad.out" 2>"$tmp/bad.err"; then fail "$f: accepted"; fi
+  grep -q "$f.tsv:${b#*:}: neither" "$tmp/bad.err" || fail "$f: no file:line error ($(cat "$tmp/bad.err"))"
+  [ ! -s "$tmp/bad.out" ] || fail "$f: output on a refused list"
+done
+
 # the record-prefixed shape on both sides
 python3 -I "$cmp" "$tmp/board.txt" "$tmp/board.txt" --tsv >"$tmp/self.tsv"
 [ "$(cut -f1 "$tmp/self.tsv" | sort -u)" = host-predicted ] || fail "self compare"
