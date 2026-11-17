@@ -891,6 +891,38 @@ fn run_binary_decoded(
                 let d = ds.into_iter().flatten().next().ok_or("umul_high with no destination")?;
                 temp.insert(d.index, hi);
             }
+            /* `add64_32` (pco `O_ADD64_32`, `docs/notes/pvr-ubo-memory-load.md`
+             * §2): the 64-bit value s1:s0 (high:low) plus the 32-bit s2,
+             * unsigned, the carry out of the low word added to the high
+             * word; the low and high sums go to w0 and w1. The carry-in
+             * (s3) must be the null zero: the model does not run one. The
+             * `s` flag (pco's `.s`) says the addend is signed; an addend
+             * with bit 31 set under it is refused, since this model does
+             * not know what the hardware does there. */
+            "add64_32" => {
+                let up = g.upper.as_ref().map(srcs).unwrap_or([None; 6]);
+                let v =
+                    |o: Option<Operand>, what: &str| read(o.ok_or(format!("add64_32 with no {what}"))?, &temp, &vtx);
+                let (lo, hi, add) = (v(s[0], "s0")?, v(s[1], "s1")?, v(s[2], "s2")?);
+                if v(up[3], "s3")? != 0 {
+                    return Err("an add64_32 with a carry-in".into());
+                }
+                if m("s") && add >> 31 != 0 {
+                    return Err("an add64_32 with a signed addend that has bit 31 set".into());
+                }
+                if g.hdr.get("w0p") != Some(1) || g.hdr.get("w1p") != Some(1) {
+                    return Err("an add64_32 not writing both w0 and w1".into());
+                }
+                let sum = (u64::from(hi) << 32 | u64::from(lo)).wrapping_add(u64::from(add));
+                let ds = g.dst.as_ref().map(dsts).unwrap_or([None; 2]);
+                for (d, x) in ds.into_iter().zip([sum as u32, (sum >> 32) as u32]) {
+                    let d = d.ok_or("add64_32 with a missing destination")?;
+                    if regbank.name_of(d.bank) != Some("temp") {
+                        return Err("an add64_32 writing other than temporaries".into());
+                    }
+                    temp.insert(d.index, x);
+                }
+            }
             "imadd32" => {
                 /* Only flush_p0: no destination, a tst after it. */
                 if g.dst.is_some() || names != ["imadd32", "tst"] {
