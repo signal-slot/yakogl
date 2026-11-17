@@ -455,14 +455,16 @@ fork). This is the CI side of #1606 step 9 (D7, "promote and make public");
 plan #363's workflow-readiness finding named fork pull requests on the
 self-hosted runners as the one blocking question.
 
-What an outside contributor sees: their pull request gets one check,
-`outside`, on a GitHub-hosted runner with no token and no checkout. It prints
+What an outside contributor sees: `check` is skipped and their pull request
+gets one check, `outside`, on a GitHub-hosted runner with no token and no checkout. It prints
 that the gate runs on the project's own runners and does not run on a pull
 request from a fork, and it fails on purpose: a skipped required check counts
 as a pass, and a green on a pull request nothing checked would mislead. What
-a maintainer does: reads the change, fetches the fork's branch, pushes it as
-a branch of this repository and opens a pull request from it. That pull
-request gets the gate as any other. Same-repository pull requests, the
+a maintainer does: reviews the diff, fetches the fork's branch, pushes it as
+a branch of this repository (for example `work/<topic>`) and opens a pull
+request from it, or retargets an existing one. That pull request gets the
+gate on runners A, B and C as any other and lands as CONTRIBUTING.md
+describes. Same-repository pull requests, the
 nightly and `workflow_dispatch` are unchanged.
 
 The `if` is not a security boundary. A `pull_request` run uses the workflow
