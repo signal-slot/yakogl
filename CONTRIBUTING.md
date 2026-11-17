@@ -35,11 +35,13 @@ CI, a review, then the merge. Never push main by hand.
    A pull request from a fork gets no gate: the runners are the project's
    own machines and a run executes the code it checks, so `gate.yml` runs
    the gate only for a pull request from a branch of this repository. A
-   fork's pull request gets one check instead, `outside`, on a GitHub-hosted
-   runner, which says so and fails on purpose (nothing checked the pull
-   request). A maintainer who takes such a change reads it, pushes the
-   branch to this repository and opens a pull request from it; that pull
-   request gets the gate (docs/ci.md, section 3.5).
+   fork's pull request shows `check` skipped and one check instead, `outside`,
+   on a GitHub-hosted runner, which says so and fails on purpose (nothing
+   checked the pull request). A maintainer who takes such a change reviews
+   the diff, pushes the contributor's branch to this repository (for
+   example as `work/<topic>`) and opens a pull request from it, or retargets
+   an existing one; that pull request gets the gate on runners A, B and C
+   and lands as described here (docs/ci.md, section 3.5).
 3. The review reads the commit; it runs no check.
 4. Merge when the CI is green and the review approves.
 
