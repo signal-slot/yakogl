@@ -87,6 +87,47 @@ per-level record, capped by `GL_TEXTURE_MAX_LEVEL`, and the draw sets the
 binding's `mip_levels` / `mip_filter` from it (after a sampler object's
 filters are in force).
 
+## Base level, MAX_LEVEL, MIN_LOD and MAX_LOD
+
+An AM62P run with native 3D on had `texture.mipmap.3d` affine, basic and
+bias right, and base_level, min_lod, max_lod, three max_level and five
+projected cases wrong. The copy started at level 0 whatever
+`GL_TEXTURE_BASE_LEVEL` said, the sampler's LOD range was always 0 to the
+last level, and dEQP draws a cell per parameter value in one frame, so a
+copy written again for the next cell (another level count) changed what the
+cells before it read. Now (`native_vol::view`, `copy`, `bound_view`; the
+`GLES_TEXTYPE_3D_TWIDDLED` arm of `pvr::backend::build_tex_desc`):
+
+- The copy is the volume from the base level, as a Vulkan image whose level
+  0 is that level: the chain over the base level's extent, level k of the
+  copy GL level base + k (both extents are floors of the same halvings).
+  The descriptor's width, height and depth are the base level's, baselevel
+  0. ES 3.0 3.8.10 computes the LOD over level_base's size, which is what
+  the TPU then does. Without a mipmap filter the copy is the base level
+  alone (3.8.9).
+- The levels the copy holds are the defined run from the base level to the
+  end of the chain; `GL_TEXTURE_MAX_LEVEL` caps only the descriptor's level
+  count (`max_level - base + 1`), so cells that change only MAX_LEVEL share
+  one copy.
+- `GL_TEXTURE_MIN_LOD` and `GL_TEXTURE_MAX_LOD` go into SAMPLER_WORD0's
+  `minlod` and `maxlod` (u4.6), inside the levels' range: negative is 0, a
+  minimum past the maximum is the maximum. The TPU chooses between the min
+  and mag filters on the clamped LOD, as GL does. A sampler object's LOD
+  range is still not applied (the draw does not pass it, for any target).
+- Copies are kept per base level and held-level count (16 of them). A copy
+  handed to a draw in kick k may be read by k and by k + 1 (the draw lands
+  there when the back end ends the open frame for it), and is not written
+  again until both are done: a stale copy leaves the lookup instead, and
+  when all 16 are in flight the open frame is submitted and waited for
+  first.
+- The descriptor reads the view the last `copy` of that address recorded.
+  The draw builds its descriptors while it is recorded, after its copies
+  (`build_desc_block`), so the view is that draw's.
+
+The projected cases may be the same cause (their LOD is the TPU's too); no
+board has run this yet. `tests/es3_pvr_3d_lod.rs` pins the views, the
+copies from each base level, the descriptor fields and the in-flight rules.
+
 ## The shader forms
 
 With `pvr_native_3d` on: `texture`, `texture` with bias, `textureLod`,

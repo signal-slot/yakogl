@@ -5835,7 +5835,28 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
          * a one-level draw gets a one-level copy. `alpha_msb` is the
          * format's, as in its STRIDE word: clear for R11G11B10F and RGB9E5,
          * whose alpha is the constant 1 (the cube's and the array's words
-         * keep the `true` they were verified with). */
+         * keep the `true` they were verified with).
+         *
+         * The copy is the volume as from GL_TEXTURE_BASE_LEVEL
+         * (gl::native_vol::View, recorded by the copy the draw just made):
+         * its level 0 is the base level, so the size is the base level's,
+         * the levels are counted from it and capped by MAX_LEVEL, and the
+         * sampler clamps the LOD to MIN_LOD and MAX_LOD -- what a Vulkan
+         * view of an image whose level 0 is that level, with a sampler of
+         * that minLod and maxLod, packs (baselevel 0). A bind no copy has
+         * recorded (a test's) is described as the bind says. */
+        let view = crate::gl::native_vol::bound_view(t.base_gpu);
+        let mut vt = *t;
+        let mut lod = None;
+        if let Some(v) = view {
+            (vt.width, vt.height, vt.layers) = (v.extent.0, v.extent.1, v.extent.2.min(u32::from(u16::MAX)) as u16);
+            /* a format that walks no chain (`levels` 1 above) stays one */
+            let single_format = levels == 1 && t.mip_filter != 0 && t.mip_levels > 1;
+            (vt.mip_filter, vt.mip_levels) = if single_format { (0, 1) } else { (v.mip_filter, v.levels as u8) };
+            levels = if vt.mip_filter != 0 && vt.mip_levels > 1 { u32::from(vt.mip_levels) } else { 1 };
+            lod = Some((v.min_lod, v.max_lod));
+        }
+        let t = &vt;
         let iw0 = tex_image_word0(fmt, csb::ROGUE_TEXSTATE_TEXTYPE_3D, t.width, t.height);
         let depth = u32::from(t.layers).max(1);
         let iw1 = tex_twiddled_image_word1_msb(
@@ -5849,7 +5870,7 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
         w[0..2].copy_from_slice(&iw0);
         w[2..4].copy_from_slice(&iw1);
         w[4] = t.bytes;
-        tex_desc_sampler(w, t, levels);
+        tex_desc_sampler_lod(w, t, levels, lod);
         return;
     }
     let iw0 = tex_image_word0(fmt, fmt.textype, t.width, t.height);
@@ -5872,6 +5893,27 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
 /// compare a shadow look-up reads when it runs (Mesa's
 /// PCO_SAMPLER_META_COMPARE_OP; the online compiler's shadow_compare).
 fn tex_desc_sampler(w: &mut [u32], t: &GlesTextureBind, levels: u32) {
+    tex_desc_sampler_lod(w, t, levels, None);
+}
+
+/// A LOD in the sampler's u4.6 CLAMP (texstate.xml): 64 per level, at
+/// least 0 (a NaN too), at most CLAMP MAX.
+fn tex_lod_clamp(lod: f32) -> u32 {
+    if lod > 0.0 {
+        ((lod.min(15.0) * 64.0) as u32).min(TEX_SAMPLER_MAXLOD_MAX)
+    } else {
+        0
+    }
+}
+
+/// [`tex_desc_sampler`] with GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD
+/// (`lod`, the native 3D texture's alone): the LOD the TPU computes is
+/// clamped to them as GL clamps it (ES 3.0 3.8.10, before the choice
+/// between the min and mag filters and of the level), inside the range
+/// the levels allow. A negative bound is LOD 0, which GL's choice reads
+/// the same way (a LOD at most 0 magnifies). Mesa packs a Vulkan
+/// sampler's minLod and maxLod into the same two fields.
+fn tex_desc_sampler_lod(w: &mut [u32], t: &GlesTextureBind, levels: u32, lod: Option<(f32, f32)>) {
     w[12] = t.compare_op as u32;
     w[13] = shadow_filter_word(t, levels);
     let filter =
@@ -5894,13 +5936,18 @@ fn tex_desc_sampler(w: &mut [u32], t: &GlesTextureBind, levels: u32) {
          * has one level, so the texel still comes from level 0. */
         maxlod = 64;
     }
+    let mut minlod = csb::ROGUE_TEXSTATE_CLAMP_MIN;
+    if let Some((lo, hi)) = lod {
+        maxlod = maxlod.min(tex_lod_clamp(hi));
+        minlod = tex_lod_clamp(lo).min(maxlod);
+    }
     let w0 = csb_pack!(
         ROGUE_TEXSTATE_SAMPLER_WORD0_pack,
         2,
         csb::ROGUE_TEXSTATE_SAMPLER_WORD0 {
-            /* LOD bias 0, minlod 0 */
+            /* LOD bias 0, minlod 0 but for a native volume's MIN_LOD */
             dadjust: csb::ROGUE_TEXSTATE_DADJUST_ZERO_UINT,
-            minlod: csb::ROGUE_TEXSTATE_CLAMP_MIN,
+            minlod,
             maxlod,
             addrmode_u: tpu_addrmode(t.wrap_s),
             addrmode_v: tpu_addrmode(t.wrap_t),
