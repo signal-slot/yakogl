@@ -1,0 +1,269 @@
+# host-gles3-part commit=5454be1b6b gpu=vivante module=gles3 cases=940
+# section tip
+vivante	functional.fragment_out	0	825	115	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_highp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_highp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_highp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_highp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_lowp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_lowp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_lowp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_lowp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_mediump_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_mediump_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_mediump_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r11f_g11f_b10f_mediump_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_highp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_highp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_highp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_highp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_lowp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_lowp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_lowp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_lowp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_mediump_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_mediump_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_mediump_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.r32f_mediump_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_highp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_highp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_highp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_highp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_lowp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_lowp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_lowp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_lowp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_mediump_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_mediump_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_mediump_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rg32f_mediump_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_highp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_highp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_highp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_highp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_lowp_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_lowp_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_lowp_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_lowp_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_mediump_float	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_mediump_vec2	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_mediump_vec3	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_mediump_vec4	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_highp_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_highp_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_highp_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_highp_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_lowp_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_lowp_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_lowp_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_lowp_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_mediump_int	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_mediump_ivec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_mediump_ivec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.int.rgba32i_mediump_ivec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_highp_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_highp_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_highp_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_highp_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_lowp_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_lowp_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_lowp_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_lowp_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_mediump_uint	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_mediump_uvec2	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_mediump_uvec3	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.basic.uint.rgba32ui_mediump_uvec4	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.0	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.11	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.12	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.15	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.17	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.18	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.19	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.21	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.24	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.25	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.26	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.27	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.28	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.29	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.31	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.32	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.33	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.37	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.39	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.40	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.41	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.42	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.43	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.45	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.46	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.48	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.5	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.50	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.51	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.52	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.53	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.55	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.56	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.57	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.59	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.6	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.60	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.62	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.63	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.66	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.67	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.68	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.7	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.70	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.71	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.72	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.73	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.74	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.75	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.76	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.78	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.79	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.8	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.80	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.81	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.82	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.83	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.84	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.85	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.86	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.87	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.88	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.89	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.9	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.90	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.92	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.93	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.94	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.95	NotSupported	refusal	Unsupported attachment format		
+vivante	dEQP-GLES3.functional.fragment_out.random.96	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+vivante	dEQP-GLES3.functional.fragment_out.random.97	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.98	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+vivante	dEQP-GLES3.functional.fragment_out.random.99	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
