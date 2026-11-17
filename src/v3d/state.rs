@@ -63,10 +63,16 @@ pub fn unsupported(d: &GlesDraw) -> Option<Refusal> {
         return Some("alpha-to-coverage is not implemented");
     }
     /* glDrawBuffers({GL_NONE, GL_COLOR_ATTACHMENT1}) (ES 3.0 4.2.1): the
-     * list starts at attachment 1, but the shader's output 1 would reach RT
-     * 0 as output 0. The remap of the fragment outputs is not built here;
-     * refused rather than drawn with the wrong output (review R-09). */
-    if d.targets[0].out_shift != 0 {
+     * list starts at attachment 1 (`out_shift`), and the job's RT k is
+     * `targets[k]`. A clear has no fragment outputs: the TLB clear and the
+     * clear quad (`clear_mrt`, one output per RT of the job) both address
+     * the RTs in that order, so a shifted clear reaches the right
+     * attachments. A draw's shader writes output i to RT i (Mesa's mapping,
+     * draw buffer i is RT i), so its output 1 would reach RT 0. Remapping
+     * the job's RTs back to draw-buffer order is the back end's
+     * (`extra_targets`, `Target`); until then the draw is refused rather
+     * than drawn with the wrong output (review R-09). */
+    if d.targets[0].out_shift != 0 && d.index_count != 0 {
         return Some("draw buffer 0 is GL_NONE while a later draw buffer is written");
     }
     /* the GL core's second index list of one draw (`index_count2`): not
@@ -981,24 +987,29 @@ mod tests {
         assert_eq!(refusal(&d), None);
     }
 
-    /// Alpha-to-coverage is legal GL state the backend cannot render yet:
-    /// it is refused by [`unsupported`] (the backend returns -ENOTSUP), not
-    /// by [`refusal`] (-EINVAL, a malformed draw or a core bug). Its reason
-    /// is its own string, apart from every [`refusal`] reason.
     /// glDrawBuffers({GL_NONE, GL_COLOR_ATTACHMENT1}) (review R-09): the GL
     /// core's list starts at attachment 1 (`out_shift` 1), and the job reads
-    /// output 0 into RT 0, so the draw is refused; no shift is not.
+    /// output 0 into RT 0, so the draw is refused; no shift is not. A clear
+    /// of the same list (no index count, no fragment outputs) is not
+    /// refused: its RTs are the list's targets in order.
     #[test]
     fn a_draw_whose_draw_buffer_0_is_none_is_unsupported() {
         let mut d = GlesDraw::ZERO;
         d.target_gpu = 0x2000;
         d.num_targets = 1;
+        d.index_count = 3;
         d.targets[0] = GlesDrawTarget { gpu: 0x2000, w: 8, h: 8, format: GLES_SURF_RGBA8888, out_shift: 1 };
         assert_eq!(unsupported(&d), Some("draw buffer 0 is GL_NONE while a later draw buffer is written"));
         d.targets[0].out_shift = 0;
         assert_eq!(unsupported(&d), None);
+        (d.targets[0].out_shift, d.index_count, d.do_clear) = (1, 0, true);
+        assert_eq!(unsupported(&d), None, "a shifted clear is drawn");
     }
 
+    /// Alpha-to-coverage is legal GL state the backend cannot render yet:
+    /// it is refused by [`unsupported`] (the backend returns -ENOTSUP), not
+    /// by [`refusal`] (-EINVAL, a malformed draw or a core bug). Its reason
+    /// is its own string, apart from every [`refusal`] reason.
     #[test]
     fn alpha_to_coverage_is_a_gap_not_a_malformed_draw() {
         assert_eq!(unsupported(&draw()), None, "the plain draw is drawn");
