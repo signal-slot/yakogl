@@ -36,9 +36,9 @@ ci:
   path: ["$HOME/.cargo/bin"]
   refresh: main
   # A CI job's machine. The size stays 12 GB because the hosts' real memory is
-  # the limit: on 2026-11-14, 39 CI machines filled every host (thinkcentre
-  # 0 GB free, system76 3 GB, n5max 7 GB, hx90-2 14 GB). A bigger machine adds
-  # no cores to the farm, it only lowers how many run at once; nuc and hx90
-  # (15 GB hosts) cannot hold a 28 GB machine at all.
+  # the limit: on 2026-11-14, 39 CI machines filled every host (four hosts
+  # with 0, 3, 7 and 14 GB free). A bigger machine adds no cores to the farm,
+  # it only lowers how many run at once; the two 15 GB hosts cannot hold a
+  # 28 GB machine at all.
   vcpus: 8
   memory-gb: 12
