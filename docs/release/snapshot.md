@@ -77,12 +77,13 @@ leaves the public tree. Each is a question for the owner. Counts are at
 `f7a525e6`.
 
 1. **`tools/cts/log/**`** (356 tracked files in 23 slice directories plus
-   `README.md`). `docs/README.md` ("Removed records") says the directory was
-   removed on 2026-10-16, but board slices have been committed there since
-   (its `README.md` defines a slice as the evidence of a `RESULTS.md` row).
-   Part 2 T3/T5 list lab names in files there under "owner decision" or
-   "rename and mask with the owner's other log moves". Keep, exclude whole,
-   or keep only the slices the public tables cite?
+   `README.md`). `docs/README.md` ("Removed records") records the 2026-10-16
+   removal of the directory's old per-session logs, and files committed
+   there again since `e839242b` (2026-10-27): the slices RESULTS.md rows
+   cite, which its `README.md` defines as the evidence of a `RESULTS.md`
+   row. Part 2 T3/T5 list lab names in files there under "owner decision"
+   or "rename and mask with the owner's other log moves". Keep, exclude
+   whole, or keep only the slices the public tables cite?
 2. **Farm and lab-description docs.** Part 2 T5 asks, for
    `docs/farm/devices.md`, "drop the file from the release or keep it
    internal"; the file is no longer tracked. Still named in the same rows as
