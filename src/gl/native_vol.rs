@@ -28,16 +28,25 @@
 //! content_gen`) or a kick rendered into the texture (`framebuffer::
 //! texture_target_use`). Both are compared where the draw builds its sampler
 //! state (`gl::draw`), not only at bind.
+//!
+//! The copy starts at GL_TEXTURE_BASE_LEVEL and stops at
+//! GL_TEXTURE_MAX_LEVEL ([`level_range`]): its level 0 is the base level,
+//! described to the TPU with that level's extent, so the TPU's LOD 0 is GL's
+//! level_base and textureSize and texelFetch count from it. The texture's
+//! GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD reach the PowerVR backend
+//! through [`view`], which clamps the sampler's LOD range with them.
 
 use super::context::{heap_data, GlTexture};
 use super::texture::{chain_levels_3d, depth_at, level_held, level_size, texel_offset_3d};
-use crate::backend::gles_texfmt_bytes;
+use crate::backend::{self, gles_texfmt_bytes};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
 
 /// How many volume copies are kept. A draw binds at most a few, and a copy
-/// that was pushed out is only made again.
-const ENTRIES: usize = 8;
+/// that was pushed out is only made again; a frame that binds one volume
+/// with every base or maximum level of its chain (dEQP mipmap.3d) keeps a
+/// copy per level in flight.
+const ENTRIES: usize = 12;
 
 /// The physical extent of a volume of `w x h x d`: each axis rounded up to
 /// a power of two on its own (`pvr_image.c:83-92`).
@@ -149,8 +158,65 @@ pub fn sampled_levels(t: &GlTexture) -> u32 {
     n.max(1)
 }
 
-/// One kept copy: whose texels (the storage's address and size), how fresh
-/// (the texels' stamp and the last kick that rendered into them), and where.
+/// The levels of `t` the copy holds, as (base, count): GL_TEXTURE_BASE_LEVEL
+/// and the run of defined levels from it that GL_TEXTURE_MAX_LEVEL allows
+/// (ES 3.0.6 3.8.10 and 3.8.14: level_base to q = min(p, level_max)), or the
+/// base level alone when `levels` (the draw's [`sampled_levels`]) is 1, a
+/// draw without a mipmap filter (3.8.11: the minification and the
+/// magnification of such a draw read level_base). An immutable texture's
+/// base is clamped to its last level and its maximum to [base, last level]
+/// (3.8.10). The copy is the volume from the base level down: its level 0 is
+/// the GL base level, so the TPU's LOD 0 is level_base, as GL's lambda is.
+pub fn level_range(t: &GlTexture, levels: u32) -> (u32, u32) {
+    let chain = chain_levels_3d(t.width, t.height, u32::from(t.layers)).max(1);
+    let mut base = u32::try_from(t.base_level).unwrap_or(0).min(15);
+    let mut max = u32::from(t.max_level);
+    if t.immutable && t.immutable_levels > 0 {
+        let last = u32::from(t.immutable_levels) - 1;
+        base = base.min(last);
+        max = max.clamp(base, last);
+    }
+    if levels <= 1 {
+        return (base, 1);
+    }
+    let cap = chain.min(max + 1).min(16);
+    let mut n = 0;
+    while base + n < cap && {
+        let l = base + n;
+        t.level_defined & (1u16 << l) != 0 && t.level_bad & (1u16 << l) == 0 && level_held(t, l)
+    } {
+        n += 1;
+    }
+    (base, n.max(1))
+}
+
+/// The API extent of the volume a copy from level `base` of `t` holds:
+/// level `base`'s width, height and depth.
+fn base_extent(t: &GlTexture, base: u32) -> (u32, u32, u32) {
+    let (w, h) = level_size(t, base);
+    (w, h, depth_at(t, base))
+}
+
+/// What the TPU is told of a copy ([`view`]): the volume it holds, from the
+/// GL base level, and the LOD range the draw that bound it asked for.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VolView {
+    /// The copy's level 0, the GL base level: its API width, height, depth.
+    pub extent: (u32, u32, u32),
+    /// The GL level the copy's level 0 is (GL_TEXTURE_BASE_LEVEL).
+    pub base: u32,
+    /// The levels the copy holds from it ([`level_range`]).
+    pub levels: u32,
+    /// GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD of the texture, as the GL
+    /// core keeps them (relative to the base level, as the copy's LOD is).
+    pub min_lod: f32,
+    pub max_lod: f32,
+}
+
+/// One kept copy: whose texels (the storage's address and size), which
+/// levels (from `base`, `levels` of them), how fresh (the texels' stamp and
+/// the last kick that rendered into them), where, and the kick that last
+/// bound it.
 #[derive(Clone, Copy)]
 struct Entry {
     src_gpu: u64,
@@ -159,13 +225,39 @@ struct Entry {
     target_kick: u32,
     mem: OsalGpuMem,
     bytes: u32,
-    /// The levels copied ([`copy`]'s `levels`).
+    /// The GL level copied to the copy's level 0 ([`level_range`]).
+    base: u32,
+    /// The levels copied ([`level_range`]'s count).
     levels: u32,
+    /// What the backend is told ([`view`]); the LOD range is the last
+    /// binding's.
+    view: VolView,
+    /// The kick being recorded when a draw last bound this copy
+    /// (`backend::kick_id`): while that kick is open or pending the copy is
+    /// not written again nor freed.
+    kick: u32,
+    /// Stale, and kept only for the draw that still reads it: no binding
+    /// finds it any more ([`copy`]); its source's release frees it.
+    superseded: bool,
     used: u32,
 }
 
-const EMPTY: Entry =
-    Entry { src_gpu: 0, src_size: 0, stamp: 0, target_kick: 0, mem: OsalGpuMem::ZERO, bytes: 0, levels: 0, used: 0 };
+const NO_VIEW: VolView = VolView { extent: (0, 0, 0), base: 0, levels: 0, min_lod: 0.0, max_lod: 0.0 };
+
+const EMPTY: Entry = Entry {
+    src_gpu: 0,
+    src_size: 0,
+    stamp: 0,
+    target_kick: 0,
+    mem: OsalGpuMem::ZERO,
+    bytes: 0,
+    base: 0,
+    levels: 0,
+    view: NO_VIEW,
+    kick: 0,
+    superseded: false,
+    used: 0,
+};
 
 static CACHE: Global<[Entry; ENTRIES]> = Global::new([EMPTY; ENTRIES]);
 static TICK: Global<u32> = Global::new(0);
@@ -195,47 +287,99 @@ pub fn copy_bytes(phys: (u32, u32, u32), bpp: u32, levels: u32) -> u32 {
     level_texel_off(phys, n) * bpp
 }
 
-/// The twiddled copy of 3D texture `t` with its first `levels` levels, as
-/// (gpu address, bytes): the kept one when neither its texels' stamp nor the
-/// last kick that rendered into them moved, else made again. `target_kick`
-/// is `framebuffer::texture_target_use` for `t`; the caller has waited for
-/// it. None when the texture cannot be described (no CPU view, not a grid)
-/// or there is no memory for the copy; the caller then keeps the grid.
+/// Is a kept copy bound by a draw the GPU has still to run: the kick being
+/// recorded (a draw of it may already hold the copy's address, or the draw
+/// being built does) or a submitted one that has not completed. Such a copy
+/// is neither written again nor freed: the draw reads it when the kick
+/// runs, not when it was recorded.
+fn in_flight(e: &Entry) -> bool {
+    /* the kick after it too: a draw that ended the open frame went into the
+     * next kick (`YakoglBackend::kick_id`) */
+    let open = backend::kick_id();
+    e.kick != 0
+        && !e.mem.impl_.is_null()
+        && (e.kick == open || e.kick.wrapping_add(1) == open || backend::kick_pending(e.kick))
+}
+
+/// What the backend is told of the copy at `gpu` ([`VolView`]), or None for
+/// an address that is no kept copy's (every binding but a native 3D one).
+/// The PowerVR backend reads it where it builds a GLES_TEXTYPE_3D_TWIDDLED
+/// descriptor, in the draw [`copy`] was called for.
+pub fn view(gpu: u64) -> Option<VolView> {
+    // SAFETY: single-threaded by contract; no other reference is live.
+    let cache = unsafe { CACHE.get() };
+    cache.iter().find(|e| gpu != 0 && e.mem.gpu == gpu && !e.mem.impl_.is_null()).map(|e| e.view)
+}
+
+/// The twiddled copy of 3D texture `t` from its base level ([`level_range`]
+/// with `levels`, the draw's [`sampled_levels`]), as (gpu address, bytes):
+/// the kept one when neither its texels' stamp nor the last kick that
+/// rendered into them moved, else made again. Each (base, levels) is a copy
+/// of its own, so draws of one frame that bind the volume with another base
+/// or maximum level (dEQP's mipmap.3d base_level and max_level grids, a
+/// cell per draw) each keep theirs; a copy a recorded or pending draw binds
+/// is never written again ([`in_flight`]). The texture's min and max LOD go
+/// to [`view`] at every call. `target_kick` is
+/// `framebuffer::texture_target_use` for `t`; the caller has waited for it.
+/// None when the texture cannot be described (no CPU view, not a grid) or
+/// there is no memory for the copy; the caller then keeps the grid.
 pub fn copy(t: &GlTexture, target_kick: u32, levels: u32) -> Option<(u64, u32)> {
     if !copyable(t) {
         return None;
     }
-    let (w, h, d) = (t.width, t.height, u32::from(t.layers));
+    let (base, levels) = level_range(t, levels);
+    let (w, h, d) = base_extent(t, base);
     let bpp = gles_texfmt_bytes(t.texfmt);
-    let levels = levels.max(1);
     let phys = physical_extent(w, h, d);
     let bytes = copy_bytes(phys, bpp, levels);
+    let view = VolView { extent: (w, h, d), base, levels, min_lod: t.min_lod, max_lod: t.max_lod };
     // SAFETY: single-threaded by contract; no other reference is live.
     let (cache, tick) = unsafe { (CACHE.get(), TICK.get()) };
     *tick = tick.wrapping_add(1);
+    let kick = backend::kick_id();
 
-    let hit = cache.iter().position(|e| e.src_gpu == t.mem.gpu && e.src_size == t.mem.size && !e.mem.impl_.is_null());
+    let hit = cache.iter().position(|e| {
+        e.src_gpu == t.mem.gpu
+            && e.src_size == t.mem.size
+            && e.base == base
+            && e.levels == levels
+            && !e.superseded
+            && !e.mem.impl_.is_null()
+    });
     if let Some(i) = hit {
         let e = &mut cache[i];
         e.used = *tick;
         /* a stamp of 0 is storage an EGLImage shares: never trusted */
-        if t.content_gen != 0
-            && e.stamp == t.content_gen
-            && e.target_kick == target_kick
-            && e.bytes == bytes
-            && e.levels == levels
-        {
+        if t.content_gen != 0 && e.stamp == t.content_gen && e.target_kick == target_kick && e.bytes == bytes {
+            e.view = view;
+            e.kick = kick;
             return Some((e.mem.gpu, bytes));
         }
     }
-    let i = hit.unwrap_or_else(|| {
-        /* an empty slot, else the least recently used */
-        cache
-            .iter()
-            .enumerate()
-            .min_by_key(|(_, e)| if e.mem.impl_.is_null() { 0 } else { e.used.max(1) })
-            .map_or(0, |(i, _)| i)
-    });
+    /* the stale copy itself when no draw still reads it, else an empty
+     * slot, else the least recently used one no draw reads; all of them
+     * read: the GPU is let finish first */
+    let free = |cache: &[Entry; ENTRIES]| {
+        hit.filter(|&i| !in_flight(&cache[i])).or_else(|| {
+            cache
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| !in_flight(e))
+                .min_by_key(|(_, e)| if e.mem.impl_.is_null() { 0 } else { e.used.max(1) })
+                .map(|(i, _)| i)
+        })
+    };
+    let i = match free(cache) {
+        Some(i) => i,
+        None => {
+            backend::finish();
+            free(cache).unwrap_or(0)
+        }
+    };
+    if let Some(old) = hit.filter(|&h| h != i) {
+        /* the stale copy a draw still reads: kept for it, found no more */
+        cache[old].superseded = true;
+    }
     let e = &mut cache[i];
     if e.mem.size < bytes as usize || e.mem.impl_.is_null() {
         if !e.mem.impl_.is_null() {
@@ -259,19 +403,20 @@ pub fn copy(t: &GlTexture, target_kick: u32, levels: u32) -> Option<(u64, u32)> 
         let src = t.mem.cpu as *const u8;
         let dst = e.mem.cpu as *mut u8;
         core::ptr::write_bytes(dst, 0, bytes as usize);
-        for l in 0..levels {
+        for k in 0..levels {
+            let l = base + k;
             if t.level_defined & (1u16 << l) == 0 || t.level_bad & (1u16 << l) != 0 || !level_held(t, l) {
                 continue;
             }
             let (lw, lh) = level_size(t, l);
             let ld = depth_at(t, l);
-            let ext = twiddle_extent(w, h, d, l);
-            let base = level_texel_off(phys, l);
+            let ext = twiddle_extent(w, h, d, k);
+            let at = level_texel_off(phys, k);
             for z in 0..ld {
                 for y in 0..lh {
                     for x in 0..lw {
                         let s = texel_offset_3d(t, l, x, y, z);
-                        let o = (base + twiddle3d(x, y, z, ext)) * bpp;
+                        let o = (at + twiddle3d(x, y, z, ext)) * bpp;
                         core::ptr::copy_nonoverlapping(src.add(s), dst.add(o as usize), bpp as usize);
                     }
                 }
@@ -284,7 +429,11 @@ pub fn copy(t: &GlTexture, target_kick: u32, levels: u32) -> Option<(u64, u32)> 
     e.stamp = t.content_gen;
     e.target_kick = target_kick;
     e.bytes = bytes;
+    e.base = base;
     e.levels = levels;
+    e.view = view;
+    e.kick = kick;
+    e.superseded = false;
     e.used = *tick;
     // SAFETY: single-threaded by contract.
     unsafe { *COPIES.get() = COPIES.get().wrapping_add(1) };
@@ -538,7 +687,7 @@ mod tests {
     #[test]
     fn a_copy_is_kept_until_its_texels_change_or_a_kick_renders_into_it() {
         let gl = TestGl::new(4, 4);
-        let name = volume(&gl, 4, 4, 4, 1, GL_NEAREST);
+        let name = volume(&gl, 4, 4, 4, 3, GL_NEAREST);
         let t = &gl.ctx().objs_ref().textures[name as usize];
         let n0 = copies();
         let (a, _) = copy(t, 0, 1).expect("a copy");
