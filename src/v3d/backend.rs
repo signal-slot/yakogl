@@ -3342,6 +3342,18 @@ fn submit_job(g: &mut V3dState) -> i32 {
         osal::cache_flush(g.arenas.data.cpu, j.data_used);
         osal::cache_flush(g.arenas.tex.cpu, j.tex_used);
     }
+    /* the job's own tile state fits the pool: draw() refuses a side past
+     * MAX_TARGET and a typed job over MAX_JOB_TILES (begin_job), and the pool
+     * (init) is sized for MAX_TARGET square at 4 RTs, the smallest tiles; an
+     * untyped job has at most 4 RTs (4x only with one), so its tiles are no
+     * smaller. Bound by checks, not clamped: a short buffer would be a
+     * binner overrun on the GPU. */
+    let tile_state = job_tile_state_bytes(&j.job.t, j.max_bpp);
+    debug_assert!(
+        tile_state <= g.tile_state_size,
+        "tile state {tile_state} bytes exceeds the pool ({} bytes)",
+        g.tile_state_size
+    );
     let kick = V3dKick {
         magic: V3D_KICK_MAGIC,
         bcl_start: j.bcl.gpu,
@@ -3351,7 +3363,7 @@ fn submit_job(g: &mut V3dState) -> i32 {
         tile_alloc: g.tile_alloc.gpu as u32,
         tile_alloc_size: g.tile_alloc_size,
         tile_state: g.tile_state.gpu as u32,
-        tile_state_size: job_tile_state_bytes(&j.job.t, j.max_bpp).min(g.tile_state_size),
+        tile_state_size: tile_state,
         pad: 0,
     };
 
