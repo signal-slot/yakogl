@@ -20,7 +20,7 @@ board was run, and nothing under `src/` or `driver/` changed. Two parts:
 boots.** The path is: library knob (`src/vivante/kick.rs` `diff`,
 `src/gl/framebuffer.rs` `gc_kick_diff_arm_target`) → harness
 (`driver/tools/pvrlab/gl_test.c`, the block above `read_topdown`) → selector
-and record (`driver/samples/zephyr/gc_gl_test/src/main.c` `kick_diff_tag`,
+and record (`driver/samples/zephyr/gl_test/src/main_imx8mp.c` `kick_diff_tag`,
 `report_result`) → decoder (`tools/yakogl-tools/src/kickdiffrec.rs`). Each
 link was read, and the two host test sets that cover it pass at this tip:
 

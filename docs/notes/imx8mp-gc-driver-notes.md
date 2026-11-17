@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The Vivante GC7000UL driver: what is written, where each number came from,
 
-Status: finished record, moved here from `driver/src/vivante/NOTES.md` on 2026-10-11. The C kernel side and the gclab Linux harness it describes were deleted on 2026-10-03. The hardware findings that still hold are driver/docs/vivante-kernel-rust.md, Hardware findings that still hold.
+Status: finished record, moved here from the driver docs on 2026-10-11. The C kernel side and the gclab Linux harness it describes were deleted on 2026-10-03. The hardware findings that still hold are driver/docs/vivante-kernel-rust.md, Hardware findings that still hold.
 # and what only the hardware can answer
 
 Status 2026-09-22: milestones 1 to 5 of `imx8mp-gc-bringup.md` **run on
@@ -288,7 +288,7 @@ theory everyone including me found most plausible.
 **Two decoded fields do the work.** Both were in the capture from the start;
 neither was readable as printed.
 
-`IDLE_STATE 0x7ffffff2`, against `hw/state_hi.xml.h`, where a SET bit means
+`IDLE_STATE 0x7ffffff2`, against `driver/src/vivante/hw/state_hi.xml.h`, where a SET bit means
 idle:
 
 | busy | idle |
@@ -512,7 +512,8 @@ rather than survivable — is not answered here and is worth knowing before
 
 ### The temporary-register count: six bits, both stages, and what that does and does not explain
 
-From rnndb (`hw/state_3d.xml.h`), the complete set — there is no HALTI5
+From the rnndb header we vendor (`driver/src/vivante/hw/state_3d.xml.h`), the
+complete set — there is no HALTI5
 variant, these are the only temp-control definitions in the header:
 
 | | address | field | width |
@@ -659,7 +660,7 @@ and it is the next thing worth a board slot.
 After the per-draw audit came back with the wedge in none of it, the init path
 was audited the same way: every PM/HI/MC register the hardware has, against
 every one this driver writes. The register set comes from the rnndb header we
-vendor (`hw/state_hi.xml.h`, MIT), the write set from this driver, so the
+vendor (`driver/src/vivante/hw/state_hi.xml.h`, MIT), the write set from this driver, so the
 comparison needs no reference driver at all.
 
 **Six of the 84 PM/HI/MC registers are written**, and all six are deliberate:

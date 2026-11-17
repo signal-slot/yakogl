@@ -36,7 +36,7 @@ their code:
 
 | board | show (`present` -> `board_show`) | EGL vertical sync (`wait_vblank`) |
 |---|---|---|
-| AM62P | DSS plane flip by address, latched at the next vsync, no wait (`soc/am62p/dss.rs` `set_app_buffer`) | none (weak `yakogl_zephyr_wait_vblank` in `src/osal/zephyr.c`) |
+| AM62P | DSS plane flip by address, latched at the next vsync, no wait (`driver/rust/src/soc/am62p/dss.rs` `set_app_buffer`) | none (weak `yakogl_zephyr_wait_vblank` in `src/osal/zephyr.c`) |
 | Pi 4 (GM image) | copy into the firmware framebuffer (no `SCANOUT_VIEW`), no wait | none (`src/osal/zephyr_v3d.c` has no `.wait_vblank`) |
 | i.MX8MP | waits for the LCDIF latch (`SCREEN_BUFFERS` 1) | none yet (`zephyr_gc.c`, #737) |
 

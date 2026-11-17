@@ -100,8 +100,8 @@ board shows the wide lines failing, there is no register fallback in Mesa.
 That becomes a new item (wide lines as triangles in the back end,
 `src/pvr/backend.rs`, #325).
 
-**Host test** (an addition to `tests/es3_pvr_flatshade.rs` under #325, or a
-new `tests/es3_flatshade_pvr.rs` if #325 prefers). It checks what that file
+**Host test** (an addition to `tests/es3_pvr_flatshade.rs` under #325).
+It checks what that file
 does not check today:
 
 1. `GL_LINE_LOOP` gives topology `PVR_VDM_TOPOLOGY_LINE_LOOP` with PPP and
@@ -150,8 +150,8 @@ and none is in `docs/es3/pi4-gles3-fails.tsv`.
 **Fix.** None. Item `fix-flat-v3d` reduces to a regression guard, a host
 test only.
 
-**Host test** (new `tests/es3_flatshade_v3d.rs`. `tests/es3_*_v3d.rs` is
-held by #330, so it waits for #330 or is written under it). For each of the
+**Host test** (new `tests/es3_flatshade_guard.rs`, the realized V3D and
+GC7000UL guard; `tests/es3_*_v3d.rs` was held by #330). For each of the
 seven modes, a `flat out vec4` program drawn through the real V3D back end
 on the host rig must give:
 
@@ -226,7 +226,8 @@ GL-core loop-as-`GL_LINES` rewrite as in section 2 (`src/gl/draw.rs`, #335).
 If it fails wide lines, the fallback is the triangle path Mesa uses on
 `WIDELINE_TRIANGLE_EMU` parts (`src/vivante/**`, #333/#328/#335).
 
-**Host test** (new `tests/es3_flatshade_gc.rs`; the GC tests and
+**Host test** (new `tests/es3_flatshade_guard.rs`, the realized V3D and
+GC7000UL guard; the GC tests and
 `src/vivante/**` are held by #333/#328/#335). Today
 `a_flat_varying_selects_the_flat_shade_model` and
 `the_provoking_vertex_is_the_last_one` (`src/vivante/backend_tests.rs:1615`,
@@ -263,10 +264,10 @@ vertex 0's colour. That belongs to the plan's `gltest-cases` item.
 
 | change | path | holder |
 |---|---|---|
-| PowerVR loop/wide host test | `tests/es3_pvr_flatshade.rs` or new `tests/es3_flatshade_pvr.rs` | #325 |
+| PowerVR loop/wide host test | `tests/es3_pvr_flatshade.rs` | #325 |
 | PowerVR wide-line fallback (only if the board fails) | `src/pvr/backend.rs` | #325 |
-| V3D regression guard | new `tests/es3_flatshade_v3d.rs` | #330 (`tests/es3_*_v3d.rs`) |
-| GC regression guard | new `tests/es3_flatshade_gc.rs` | #333/#328/#335 (GC tests) |
+| V3D regression guard | `tests/es3_flatshade_guard.rs` | #330 (`tests/es3_*_v3d.rs`) |
+| GC regression guard | `tests/es3_flatshade_guard.rs` | #333/#328/#335 (GC tests) |
 | GC wide-line fallback (only if the board fails) | `src/vivante/backend.rs` | #333/#328/#335 |
 | Line-loop-as-lines fallback, any back end (only if the board fails) | `src/gl/draw.rs` | #335, #339 |
 | inventory row (`flatshading.*` 9: "PowerVR VERTEX_0, fixed `7b39917c`; V3D pass; GC board") | `docs/es3-cts-failures.md` | #330 (draft in the plan's `drafts` item) |

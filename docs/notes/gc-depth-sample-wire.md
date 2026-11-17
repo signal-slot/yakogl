@@ -64,7 +64,7 @@ does not apply until check 3 passes.
    `:1848-1850`). So `depth_for_draw` calls `resolve_depth`
    (`texture.rs:698`): `flush` and `finish` (`:709`, every slot,
    `src/vivante/backend.rs:3197-3209`), `backend::depth_resolve` (`:729`) ->
-   `gc_depth_resolve` (`vivante/backend.rs:2995`) -> `ds_cache::resolve_depth`
+   `gc_depth_resolve` (`src/vivante/backend.rs:2995`) -> `ds_cache::resolve_depth`
    (`src/vivante/ds_cache.rs:562`): `cache_invd` of the whole surface
    (`:598`), the byte-load loop (`:604-613`), then `cache_flush` of the texels
    (`texture.rs:732`).
@@ -88,7 +88,7 @@ id into the binding. Every CPU reader resolves first through
 `settle_texture` (`texture.rs:900-933`) or `resolve_depth`: glReadPixels of
 the depth, the copies, the blits, glGenerateMipmap and sub-image writes. The
 CPU resolve therefore stays in every outcome, for the CPU readers, and
-`depth_resolve: Some(gc_depth_resolve)` (`vivante/backend.rs:3385`) stays in
+`depth_resolve: Some(gc_depth_resolve)` (`src/vivante/backend.rs:3385`) stays in
 the table. **No outcome changes `src/gl/texture.rs` or `src/gl/draw.rs` in
 logic.** Outcome (a) changes two doc comments (`texture.rs:679-684`,
 `backend.rs:1848-1850`).
@@ -96,12 +96,12 @@ logic.** Outcome (a) changes two doc comments (`texture.rs:679-684`,
 Texture completeness: a one-level NEAREST depth texture is complete
 (`incomplete_reason`, `src/gl/draw.rs:2772`). An incomplete one never
 reaches the depth path: its binding is the black texel before any descriptor
-(`vivante/texture.rs:505-523`). The depth path must keep that order (below).
+(`src/vivante/texture.rs:505-523`). The depth path must keep that order (below).
 
 ### Files, and who owns them now
 
 depth-sample-gc's brief names `src/backend.rs`, `src/vivante/depth_sample.rs`
-and `tests/gc_depth_sample_path.rs`. Outcome (a) also needs small edits in
+and a new host test for the sample path (never committed). Outcome (a) also needs small edits in
 four more files. Each has an owner today:
 
 | file | edit | owner at this tip |
@@ -169,9 +169,9 @@ pub fn note_sampled(id: u32, kick: u32);
 - `DepthView { gpu: e.mem.gpu + guard, stride: e.stride, rows: e.rows }`.
   `Surface::stride`/`rows` are 64-aligned (`:83-85`). The allocation is
   `guard + stride * rows + guard` (`alloc`, `:626-629`), so the LOD 0 address
-  is `mem.gpu + GC_DEPTH_GUARD_BYTES` (`vivante/backend.rs:89-92`, 0 outside
+  is `mem.gpu + GC_DEPTH_GUARD_BYTES` (`src/vivante/backend.rs:89-92`, 0 outside
   the `vivante-depth-guard` build). This is the address the PE writes
-  (`pe_pipe_depth_addr`, `vivante/backend.rs:1730-1731`).
+  (`pe_pipe_depth_addr`, `src/vivante/backend.rs:1730-1731`).
 - `note_sampled` sets `used_by = kick` on that surface. This is required.
   `used_by` is today only the last kick that **rendered** into the surface
   (`select`, `:384`). `gone` (`:410-433`) frees a surface whose planes are
@@ -207,7 +207,7 @@ pub fn stats() -> (u32, u32);
 ```
 
 - `enabled()`: the product answer is on, unless a `test-knobs` build set the
-  knob to 0 (the pattern of `narrow_la_on`, `vivante/backend.rs:446-459`).
+  knob to 0 (the pattern of `narrow_la_on`, `src/vivante/backend.rs:446-459`).
   Knob 1 is the product path. Knob 2 (the raw 8888 view) stays a gl_test
   arm only.
 - `binding` returns `GlesTextureBind { format: GC_TEXFMT_DEPTH_VIEW,
@@ -224,7 +224,7 @@ pub fn stats() -> (u32, u32);
   it: one level, 2D, 4-byte (`wanted_vs`, `tiled_copy.rs:498-501`).
 - The first sample logs one line (`a WxH depth texture is sampled from its
   depth surface (D24X8, stride S): no CPU resolve`). A refusal logs once and
-  counts. The words follow the PowerVR's (`pvr/backend.rs:4854-4872`).
+  counts. The words follow the PowerVR's (`src/pvr/backend.rs:4854-4872`).
 
 **(a).4 `src/backend.rs:1858-1872`: the GC arm.**
 
@@ -243,7 +243,7 @@ and the answer stays no there (the doc's point at `:1853-1857`).
 
 `defers_depth_storage` (`:1883-1896`) gets **no** GC arm in the first
 commit. With an arm, glmark2's 7.68 MB R32F store would never be allocated
-(`gl/texture.rs:760-768`). But one refused sample would then fall back to
+(`src/gl/texture.rs:760-768`). But one refused sample would then fall back to
 texels that do not exist, and the GL core allocates them only on a CPU access
 (`ensure_storage`, `:785`). Add the arm in a second commit, with its own test
 (a refused binding samples black and allocates nothing), once (a) has run on
@@ -296,10 +296,10 @@ let t = if t.depth_id != 0 && t.incomplete == 0 {
 ```
 
 Refuse to black, not to the stale R32F texels. The GL core left them stale
-because of the answer (`gl/texture.rs:813-818`). The PowerVR samples black
-for the same reason (`pvr/backend.rs:4851-4861`). The answer and the
+because of the answer (`src/gl/texture.rs:813-818`). The PowerVR samples black
+for the same reason (`src/pvr/backend.rs:4851-4861`). The answer and the
 binding read the same state, and nothing runs between them but the
-draw's own `ds_cache::select` (`vivante/backend.rs:2826`). So a refusal here
+draw's own `ds_cache::select` (`src/vivante/backend.rs:2826`). So a refusal here
 is a defect to count, not a path.
 
 **(a).8 The sampler word.** `samp_ctrl0` (`texture.rs:578-585`) is
@@ -333,7 +333,7 @@ is a real depth value (`D:324-328` restricts only the mip filter), and
   for dEQP's `texture.shadow` exactness. Do not gate the path on it.
 - *Check 7 fails (stale texture cache).* Every draw already starts with
   `FLUSH COLOR|DEPTH|TEXTURE|SHADER_L1`, `TEXTUREVS`, a RA-PE stall and a TS
-  flush (`emit_flushes`, `vivante/backend.rs:1790-1795`). The descriptor
+  flush (`emit_flushes`, `src/vivante/backend.rs:1790-1795`). The descriptor
   cache is flushed at each frame's start (`emit_context_init`, `:2213-2214`),
   and each slot is invalidated after its address write (`texture.rs:636-657`).
   If that still serves old depth, the fix is in `depth_sample`, with its own
@@ -346,11 +346,11 @@ is a real depth value (`D:324-328` restricts only the mip filter), and
 readers and for every binding the answer refuses: a whole clear (`fill`),
 a parked clear, scale 2, or a texture with levels. On glmark2's frame it is
 no longer called. Its `cache_invd` (`:598`) and the GL core's `cache_flush`
-(`gl/texture.rs:732`) go with it. The two new functions of (a).2 are the
+(`src/gl/texture.rs:732`) go with it. The two new functions of (a).2 are the
 only edit. `victim` (`:642-658`) needs nothing: a Live plane is never given
 away (`may_go`, `:647`), and a sampled plane is Live.
 
-### (a) Host test: `tests/gc_depth_sample_path.rs`
+### (a) Host test: a new test file for the sample path (never committed)
 
 The real GL core, the real Vivante back end and the in-process compiler over
 a stand-in OSAL. The harness is `tests/gc_npot_repeat.rs`'s: `on_gc7000`
@@ -446,13 +446,13 @@ Steps (a).1, (a).4, (a).5, (a).7 and (a).8 hold as written. These change:
   surface (`ds_cache.rs:83-85`; a supertile is 64x64, `R:389-392`). It is
   keyed by (id, surface gen), freed on `attachment_gone`, and stamped with
   the kick that last read it. `depth_sample::prepare(gl)` runs in `draw_one`
-  beside `tiled_copy::prepare` (`vivante/backend.rs:2873`). For each binding
+  beside `tiled_copy::prepare` (`src/vivante/backend.rs:2873`). For each binding
   with `depth_id != 0`, it records into the open frame **before the draw**
   one RS copy: source = the surface (`ds_cache::depth_view`), LINEAR, stride
   `S`; destination = the buffer, `GC_RS_DEST_TILED`
   (`regs.rs:1043`), `RS_DEST_STRIDE = (S << 2) | TILING | SUPER_TILED_NEW`.
   That is the destination form of `emit_resolve`'s source
-  (`vivante/backend.rs:1015-1017`; `state_3d.xml.h:1384`, `:1386` name the
+  (`src/vivante/backend.rs:1015-1017`; `state_3d.xml.h:1384`, `:1386` name the
   two bits, and `regs.rs` needs `GC_RS_DEST_STRIDE_TILING` and
   `_SUPER_TILED_NEW`). The format is `GC_RS_FORMAT_A8R8G8B8` both sides,
   Mesa's 4-byte "compatible" format (`etna_compatible_rs_format`,
@@ -461,7 +461,7 @@ Steps (a).1, (a).4, (a).5, (a).7 and (a).8 hold as written. These change:
   copies raw words when not downsampling). The window is `S/4 x rows`, a
   multiple of 16 wide (`regs.rs:1028`'s rule), with flushes, stall,
   dither off, `SINGLE_BUFFER` around the kick: `emit_rs_copy`'s sequence
-  (`vivante/backend.rs:938-960`) with the tiling bits. tiled-copy-rs is
+  (`src/vivante/backend.rs:938-960`) with the tiling bits. tiled-copy-rs is
   adding an RS tiling helper for terrain's vertex-stage maps
   (`tiled_copy.rs`, not on this tip). Use that helper rather than a third
   copy of the sequence. The copy is recorded inside `record_all`
@@ -488,7 +488,7 @@ Steps (a).1, (a).4, (a).5, (a).7 and (a).8 hold as written. These change:
 
 A related variant has no copy: render depth SUPER_TILED
 (`GC_PE_DEPTH_SUPER_TILED`, `regs.rs:423`, at `emit_pe_state`,
-`vivante/backend.rs:1513-1521`) and sample in place. It is Mesa's layout, but
+`src/vivante/backend.rs:1513-1521`) and sample in place. It is Mesa's layout, but
 it moves every CPU reader of the surface (`resolve_depth`, `copy_plane`,
 `seed_depth`) onto a supertile map (gc-layout's `layout.rs`), and the PE's
 behaviour under SINGLE_BUFFER(1) with that bit is unmeasured
@@ -507,7 +507,7 @@ writes R32F into the texture's own storage.
 - **Mechanism.** The GPU mipmap's (`src/vivante/mipmap.rs`:
   `record_level` `:129-206` through `backend::draw_one`, a linear target at
   the storage's address, a hand-made `GlesDraw`). The target format is
-  `GLES_SURF_R32F` (`pe_color_format`, `vivante/backend.rs:313`:
+  `GLES_SURF_R32F` (`pe_color_format`, `src/vivante/backend.rs:313`:
   `GC_PE_FORMAT_R32F`, an ES 3.0 render format of this back end), the
   storage pitch is `stride_texels * 4`, and the source binding is
   `{ format: GLES_TEXFMT_RGBA8, base_gpu: view.gpu, stride_texels: S / 4,
@@ -519,7 +519,7 @@ writes R32F into the texture's own storage.
   CLAUDE.md "Generated files"). Its body is the decode of
   `gc-depth-sample.md`'s case, highp, the result in `.r`.
 - **The hook.** `depth_sample::prepare` in `gc_draw`
-  (`vivante/backend.rs:2715`), before `draw_one(draw)`, for each binding
+  (`src/vivante/backend.rs:2715`), before `draw_one(draw)`, for each binding
   with `depth_id != 0`. It records the pass (its own kick, as a mipmap
   level is), then clears `depth_id` in the binding it hands on: the draw
   samples the R32F texels, now current on the GPU. The GL core still holds
@@ -540,7 +540,7 @@ R32F texels, so a compare there meets `gc-shadow-compare.md`'s open "TE
 compare on EXT_R32F" question, as today. glmark2 needs no compare either
 way.
 
-### (b) Host test: `tests/gc_depth_sample_path.rs`, the same file
+### (b) Host test: the same new test file
 
 Cases 1, 3, 4, 5, 6 and 7 of (a), with these changes:
 
@@ -581,8 +581,8 @@ depth-sample-gc's files except `ds_cache.rs`, which belongs to resolve-wide.
 with three `ldrb` on `aarch64-unknown-none` (`+strict-align`;
 `gc-slow-shadow-refract.md` "The loop's code"). The fix reads aligned
 `u32` (or 16-byte) words of the 64-byte-aligned surface. Host tests:
-`tests/gc_depth_resolve.rs` stays bit-exact, and
-`tests/gc_depth_resolve_loads.rs` (resolve-wide's) checks the target's code.
+`tests/gc_depth_resolve.rs` stays bit-exact, and resolve-wide's loads test
+(never committed) checks the target's code.
 The same `as_chunks` form is in `copy_plane` (`:474`) and `seed_depth`
 (`:533`), which are not per frame.
 
@@ -602,7 +602,7 @@ The same `as_chunks` form is in `copy_plane` (`:474`) and `seed_depth`
   (`gc-slow-shadow-refract.md` cause 3). Shadow gains nothing (K1 and K2 are
   the only kicks).
 - Host test: in `src/vivante/backend_tests.rs`, or a new
-  `tests/gc_wait_kick.rs`, a stand-in whose fences complete on demand. Record
+  `tests/gc_resolve_wait_kick.rs`, a stand-in whose fences complete on demand. Record
   a depth kick and three later kicks, call the GL core's `resolve_depth`
   path, and assert that `wait` was called for the depth kick's fence only.
   Also `gc_wait_kick` of the open kick after `flush`, and of a retired kick
@@ -611,7 +611,7 @@ The same `as_chunks` form is in `copy_plane` (`:474`) and `seed_depth`
 ### (c).3 gc-cache-skip: no DC maintenance on the non-cacheable carve-out
 
 - The two ranges of the frame: `ds_cache.rs:598` (`cache_invd`, the whole
-  surface allocation) and `gl/texture.rs:732` (`cache_flush`, the texels).
+  surface allocation) and `src/gl/texture.rs:732` (`cache_flush`, the texels).
 - The fix is in the OSAL, where the mapping is known. `z_cache_flush` and
   `z_cache_invd` (`src/osal/zephyr_gc.c:359-369`) return at once for a range
   inside the carve-out, which is Normal non-cacheable for every user
@@ -629,8 +629,8 @@ The same `as_chunks` form is in `copy_plane` (`:474`) and `seed_depth`
 
 `ds_cache.rs` keeps today's design. No `depth_view` and no `note_sampled`
 are added, because nothing samples the surface. `src/backend.rs`,
-`vivante/texture.rs` and `regs.rs` are unchanged. `samples_rendered_depth`'s doc
-(`backend.rs:1848-1850`) and `gl/texture.rs:679-684` name the record that
+`src/vivante/texture.rs` and `regs.rs` are unchanged. `samples_rendered_depth`'s doc
+(`backend.rs:1848-1850`) and `src/gl/texture.rs:679-684` name the record that
 answered no.
 
 Even with all three fixes, shadow and refract keep a 1.92 M-texel CPU pass

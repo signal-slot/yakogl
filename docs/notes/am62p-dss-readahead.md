@@ -71,8 +71,9 @@ ends relative to the latch; the board check below measures it.**
   is the figure for the panel-sized plane and 12.8 the upper bound.
   (Computed here; the TRM's FIFO width and the `BUFSIZE` of this silicon
   are read at the board, below.)
-- Time: the panel is 1349 x 645 total at 51.2 MHz (`dss/tests.rs:19`,
-  `board_cfg`): one line 26.35 us, the frame 16.99 ms (58.85 Hz), 45 blank
+- Time: the panel is 1349 x 645 total at 51.2 MHz
+  (`driver/rust/src/soc/am62p/dss/tests.rs:19`, `board_cfg`): one line
+  26.35 us, the frame 16.99 ms (58.85 Hz), 45 blank
   lines (1.19 ms). So 10 lines = **263 us**, 12.8 lines = 337 us.
 - Where this matters. The fetch of the old frame is ahead of the output
   by at most the FIFO. If the latch is at the frame end (after the last
@@ -166,8 +167,9 @@ reads, or one `wait_vblank`).
 
 ## A host test that would pin the release order (proposal, not added)
 
-A new file next to `driver/rust/src/soc/am62p/dss/tests.rs` (for example
-`dss/release_order.rs`, `#[cfg(test)] mod` in `dss.rs` beside `mod tests`),
+A new file next to `driver/rust/src/soc/am62p/dss/tests.rs` (for example a
+`release_order` test module, or a `#[cfg(test)] mod` in `dss.rs` beside
+`mod tests`),
 on `Am62pModel`, public functions only (`dss_init`, `output_enable`,
 `set_app_buffer`, `app_busy`, `Am62pModel::vsync`):
 

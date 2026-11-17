@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # YakoGL on the i.MX8MP (Vivante GC7000UL): backend plan
 
-Status: finished record, moved here from `driver/docs/imx8mp-backend-plan.md` on 2026-10-11. M1 to M5 ran on the board on 2026-09-20 and the back end draws since. The C kernel side and the gclab harness it names are deleted. The kernel side is driver/docs/vivante-kernel-rust.md; the back end is src/vivante/VIVANTE_NOTES.md.
+Status: finished record, moved here from the driver docs on 2026-10-11. M1 to M5 ran on the board on 2026-09-20 and the back end draws since. The C kernel side and the gclab harness it names are deleted. The kernel side is driver/docs/vivante-kernel-rust.md; the back end is src/vivante/VIVANTE_NOTES.md.
 
 Note 2026-10-03: the C kernel side named below (`gc_bringup.c`, `gc_hw.c`,
 `gc_mmu.c`, `gc_cmdbuf.c`) is deleted; the kernel side is Rust
@@ -90,7 +90,7 @@ has fewer planes: the safety layer may have to be composited by the A53 instead.
 ## Order of work
 
 1. *(done 2026-09-16)* `struct yakogl_backend` and the generic draw struct
-   (`yakogl/src/backend.h`, `gl_backend.c`); the PowerVR backend is the only table;
+   (`src/backend.h`; the C build's table file went with the C build); the PowerVR backend is the only table;
    case 7 24/24 on the board.
 2. *(done 2026-09-16)* Shader tool on the host against Mesa (no hardware needed):
    `yakogl/tools/vivante/` (`etna_shc.c` built inside a Mesa 26.2.1 tree with
@@ -98,7 +98,7 @@ has fewer planes: the safety layer may have to be composited by the A53 instead.
    All 40 shaders under `yakogl/tools/shaders` compile and disassemble; the output is
    JSON (code, temps, inputs/outputs, the constant register file with its uniform
    mapping, `vs_pos_out_reg`, `ps_color_out_reg`, `input_count_unk8`, discard).
-   Not done yet: a table generator (the `shader_blobs.c` equivalent) waits for the
+   Not done yet: a table generator for the shader tables waits for the
    backend's shader ABI (step 3/4 decide how uniforms and samplers are bound).
 3. *(written 2026-09-16, not run)* The Zephyr board and milestone 1. Zephyr ships
    `verdin_imx8mp` for its Cortex-M7 only and rejects a second board of the same
@@ -177,7 +177,7 @@ report) failed on this board:
 | DDR (a `no-map` region at 0xc0000000 added by a Torizon device-tree overlay, readable via `/dev/mem`) | the SoC reset is a PMIC power cycle: a marker written before the reboot comes back as noise |
 | M7 TCM / OCRAM_S | an access from Linux hung the board (domain off); do not touch |
 
-`tools/kexec-zephyr/mmio_rd.c` (freestanding, mmap on `/dev/mem`) is the tool
+`driver/tools/kexec-zephyr/mmio_rd.c` (freestanding, mmap on `/dev/mem`) is the tool
 those measurements were made with; the overlay `zephyr-mailbox_overlay.dtbo`
 is still installed on the board and does no harm.
 
@@ -199,7 +199,7 @@ on the `vivante-gl` branch is that instrument):
    minute a kexec'd image takes an interrupt no driver connected
    (`K_ERR_SPURIOUS_IRQ`; the line read back as GIC 38/39, still to be
    confirmed) and halts; WDOG1 then resets the SoC (128 s on the normal route,
-   sooner on the crash route). `zephyr/lib/gc_board/gc_irq_guard.c`
+   sooner on the crash route). `driver/zephyr/lib/board/imx8mp/gc_irq_guard.c`
    connects every unregistered line at PRE_KERNEL_1 and disables it on its
    first hit. The GIC EOI-mode fix that the AM62P needed is in the platform's
    board extension too (`board_a53.c`).
@@ -421,7 +421,7 @@ report of this as a deterministic reproducer was wrong and was withdrawn.
 is the 1x1 opaque black texel the backend keeps for **GL's incomplete texture**
 (`black_texel_gpu()`, used by `texture.rs` when `t.incomplete != 0`). So the
 texture is being judged incomplete, or the binding is being pointed at that
-texel. `texture_is_complete()` in `gl/draw.rs` fails a texture whose uploaded
+texel. `texture_is_complete()` in `src/gl/draw.rs` fails a texture whose uploaded
 levels are fewer than its mip chain needs, which is the shape to look at next.
 
 **Ruled out, each for its own reason:**

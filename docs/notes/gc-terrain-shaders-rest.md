@@ -153,8 +153,8 @@ the same set-up (28), the lighting (37), the epilogue (7).
   step): the 6 `branch`es, the counter and `i` set-up, `cmp.ge.s32` and
   `add.s32`s, instructions 35 to 45 and 132 to 134. The GC7000 selection never unrolls (`rg unroll` finds
   nothing in `select.rs` or `vivante/`); the shared unroller
-  `powervr/unroll.rs:218` `unroll` is used by the PowerVR and the V3D only
-  (`MAX_ITERATIONS` 256 at `powervr/unroll.rs:82`, the exact count from
+  `src/shaderc/online/powervr/unroll.rs:218` `unroll` is used by the PowerVR and the V3D only
+  (`MAX_ITERATIONS` 256 at `src/shaderc/online/powervr/unroll.rs:82`, the exact count from
   `loop_count.rs:46` `constant_loop_entries`, which `loop_convert` already
   calls for the guard's limit). Etnaviv runs `nir_opt_loop_unroll`
   (`etnaviv_compiler_nir.c:193`, `max_unroll_iterations = 32` at
@@ -209,7 +209,7 @@ Both have the same 16 + 2 texture-and-matrix core; the 17 extra are:
   (4: listing 0 to 3, 5 to 8): the `1.0` constant propagates into the
   `fmul`, `nir_opt_algebraic` turns `a * 1.0` into `a`, `nir_opt_constant_folding`
   does the rest. The GC7000 selection has no `fold_float` call (`fold.rs:24`
-  is called from `powervr/select.rs:3865` and `v3d/prepare.rs:729`, not
+  is called from `src/shaderc/online/powervr/select.rs:3865` and `src/shaderc/online/v3d/prepare.rs:729`, not
   from `select.rs`), so a constant lane stays a lane.
 - **Copies and negation (9).** ours 17 `mov`, etnaviv's 6:
   `mov t1, t7` and `mov t2, t6` (ours 25, 29, 33, 34), the three
@@ -281,10 +281,10 @@ not (41.9 ms with the 0.6 ms that is in none).
 
 | rank | change | removes | ms a frame (terrain) |
 |---:|---|---|---:|
-| 1 | **Unroll constant-count loops on the GC7000 and resolve the constant-index uniform arrays** (`select.rs:2943` `loop_convert`; the shared `powervr/unroll.rs:218`; `select.rs:2455-2530`) | terrain.frag 54 (14 loop control + 40 array reads) | **15.6** (12.4 to 18.7 over cover 0.8 to 1.2) |
+| 1 | **Unroll constant-count loops on the GC7000 and resolve the constant-index uniform arrays** (`select.rs:2943` `loop_convert`; the shared `src/shaderc/online/powervr/unroll.rs:218`; `select.rs:2455-2530`) | terrain.frag 54 (14 loop control + 40 array reads) | **15.6** (12.4 to 18.7 over cover 0.8 to 1.2) |
 | 2 | **Copy propagation for partial write masks, a coalescer that works past a branch, direct writes to the output registers** (`select.rs:3422-3436`, `alloc.rs:5595-5607`, `alloc.rs` `build_one`) | terrain.frag 12, terrain.vert 9, tilt_v 8, bloom 11 + normalmap 3 | **8.4** |
 | 3 | **`mul` + `add` -> `mad` fusion** in the selection (nothing today beyond `lower.rs:6140`) | tilt 8 + 8, terrain.frag 4, terrain.vert 2, bloom 8 | **6.6** |
-| 4 | **Float constant folding in the GC7000 selection** (`fold.rs:24` `fold_float`, used by `powervr/select.rs:3865` and `v3d/prepare.rs:729`, not by `select.rs`): `mat * vec4(v, 1.0)`, `abs(1.0 - TiltShift)`, `x * 2.0 - 1.0` | terrain.vert 8, tilt 5 + 5, bloom 10, terrain.frag 4 | **6.4** |
+| 4 | **Float constant folding in the GC7000 selection** (`fold.rs:24` `fold_float`, used by `src/shaderc/online/powervr/select.rs:3865` and `src/shaderc/online/v3d/prepare.rs:729`, not by `select.rs`): `mat * vec4(v, 1.0)`, `abs(1.0 - TiltShift)`, `x * 2.0 - 1.0` | terrain.vert 8, tilt 5 + 5, bloom 10, terrain.frag 4 | **6.4** |
 | 5 | **Vector packing of the blur's per-tap offsets** (one vec4 `mul` for four scalar taps) | tilt 7 + 7, bloom 6 | **4.2** |
 | | all five (2 more instructions of terrain.frag are in none: 0.6) | | **41.2** (37 at cover 0.8) |
 
@@ -319,7 +319,7 @@ How sure each is:
 Plan #328, item terrain-compiler-fix, at main `abfac1ed`. The item could
 edit only `src/shaderc/online/vivante/`, not the shared compiler files
 (`select.rs`, `lower.rs`, `fold.rs`, `codegen.rs`, `loop_count.rs`,
-`powervr/unroll.rs`) or `tests/fixtures/` and `tests/reference/`, and had to
+`src/shaderc/online/powervr/unroll.rs`) or `tests/fixtures/` and `tests/reference/`, and had to
 stop if a pinned fixture moved. **No compiler code was committed**, for two
 reasons that hold for every rank:
 
@@ -369,7 +369,7 @@ What landing the terrain part needs, in this order:
    `gc_terrain_shader_count.rs` pins to the "patch" comments): the 10.6 ms
    above, by one item allowed to move the fixture. Landed by item
    x2-tiled-probe-run ("Landed" below).
-2. Rank 1 in `select.rs`: call the shared unroller (`powervr/unroll.rs`
+2. Rank 1 in `select.rs`: call the shared unroller (`src/shaderc/online/powervr/unroll.rs`
    `unroll`, the count from `loop_count.rs` `constant_loop_entries`, limit 32
    as etnaviv's) on the GC path before `loop_convert`, so the array index is
    a constant and `lower.rs`'s constant-index path reads the constant file.
@@ -386,7 +386,7 @@ What landing the terrain part needs, in this order:
 
 Plan #328, item x2-tiled-probe-run, at main `4c19d79f`, in two commits.
 
-**Step 1, the sr patch** (`vivante/peephole.rs`, from
+**Step 1, the sr patch** (`src/shaderc/online/vivante/peephole.rs`, from
 `gc-shadow-refract-shaders.md`, applied as is). The "sr patch" column of the
 table reproduced exactly on this host: the ten from 475 to **428**
 (terrain.vert 56 to 48, terrain.frag 148 to 127 with temporaries 19 to 16,
@@ -412,7 +412,7 @@ rank 2, not a read-through; item pe-wire has the analysis.
 has a constant `for` loop of 1 to 32 passes (`UNROLL_PASSES_MAX`, etnaviv's
 `max_unroll_iterations`; the count from `loop_count.rs`
 `constant_loop_entries`), the shared unroller runs under its new
-`Rules::Counted { max: 32 }` (`powervr/unroll.rs` `unroll_with`). That rule
+`Rules::Counted { max: 32 }` (`src/shaderc/online/powervr/unroll.rs` `unroll_with`). That rule
 expands only such a loop, and only one whose single way out is its head
 test (no other `break`, no `continue` or `return`). Every other loop is
 copied as it is, `break`s and `continue`s included, for `loop_convert`. A

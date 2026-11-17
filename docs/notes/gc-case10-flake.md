@@ -82,7 +82,7 @@ recorded). Where no line was recorded, the Mesa function is named and marked
   16384 bytes, 256-byte pitch (src/gl/context.rs:1561-1580).
 - gc_gl_test initialises the render service and then calls `gl_test_run` with
   the selected case or list. Nothing allocates from the pool in between
-  (driver/samples/zephyr/gc_gl_test/src/main.c:392, 405-437).
+  (driver/samples/zephyr/gl_test/src/main_imx8mp.c:392, 405-437).
 
 So the single-case run (`SEL=10`) and the list run (`SEL=512`) make the same
 allocations up to the default surface.

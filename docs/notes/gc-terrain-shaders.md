@@ -225,7 +225,7 @@ asks. So `mod(x, 289.0)` costs a run-time reciprocal and `x / 289.0` does not.
 **Negate: `a - b`, `-x`, and the `mod`'s `-floor`.** 66 `mov`s that only
 negate; 16 of them are in the `mod`s above, the other 50 are `a - b`
 (`lower.rs:5712-5717`: `Fneg` then `Fadd`, with the comment "the back end folds
-the negate into it") and `-step(...)`, `1.0 - x`. `vivante/builtins.rs:20-33,
+the negate into it") and `-step(...)`, `1.0 - x`. `src/shaderc/online/vivante/builtins.rs:20-33,
 222-231` says it plainly: a negate "costs exactly one `mov` when the IR asks for
 the value itself"; the fold into the consumer's `SRC_NEG` bit is what is
 missing for these. Mesa has one such `mov`.
@@ -236,7 +236,7 @@ where Mesa has one (`mad t10, t9, u2.zzzz, u2.yyyy`). Our `mad` appears only
 inside built-in expansions (`mod`, `mix`, `exp`). The IR says why there is no
 contraction: `ir.rs:601-608` (`invariant` outputs must not be contracted),
 and the PowerVR does contract where the output is not invariant
-(`powervr/prepare.rs` `fusion_pairs`). The GC path has no such pass. The
+(`src/shaderc/online/powervr/prepare.rs` `fusion_pairs`). The GC path has no such pass. The
 noise shader's output is not `invariant`.
 
 **vec4 packing and swizzles.** 151 partial-mask `mov`s against 85 and 45 whole
@@ -269,7 +269,7 @@ each array element through a run-time index: two `cmp.lt.s32` bounds tests, a
 (`cmp.lt.s32` 11, `select.nz.u32` 11, `add.s32` 7, `imullo0.s32` 5,
 `load.u32` 5, branches 6, against none of them in Mesa). Mesa unrolls a
 one-pass loop and the index is constant. The unroller that does this exists
-(`powervr/unroll.rs`, used by the PowerVR and the V3D); the GC7000 instead
+(`src/shaderc/online/powervr/unroll.rs`, used by the PowerVR and the V3D); the GC7000 instead
 gives a recognised loop its exact count as the guard (`loop_count.rs:1-14`,
 `select.rs` `loop_convert`). The rest is the same classes as above (`mul`
 +5, `add` +8, `mov` +21, `mad` -4).
@@ -299,9 +299,9 @@ change owns.
 
 | rank | change | where | noise | terrain.frag | tilt (v + h) | terrain.vert | ms a frame at 0.6 / 0.8 ns |
 |---:|---|---|---:|---:|---:|---:|---|
-| 1 | Contract `a*b + c` into `mad` when no `invariant` output reads it, and fold every `Fneg` and `a - b` into the consumer's `SRC_NEG` (no `mov`) | a GC pass after lowering, like `powervr/prepare.rs` `fusion_pairs`; `vivante/builtins.rs:228-231`, `lower.rs:5712-5717` | about 138 | about 20 | 40 | about 8 | **about 25 / 33** |
-| 2 | One-pass (small constant trip count) loops unrolled and constant-index uniform-array reads become plain constant-file reads | `select.rs` `loop_convert`, the shared `powervr/unroll.rs` | 0 | about 45 | 0 | 0 | **about 13 / 17** |
-| 3 | vec4 packing and copy propagation: fill two lanes of a constant vector with one `mov`, read swizzles through the source, no whole-register copies | `vivante/alloc.rs` (coalescing of `mov`s, near `:1380`), `lower.rs` constructors | about 90 | about 10 | 9 | about 6 | **about 8 / 11** |
+| 1 | Contract `a*b + c` into `mad` when no `invariant` output reads it, and fold every `Fneg` and `a - b` into the consumer's `SRC_NEG` (no `mov`) | a GC pass after lowering, like `src/shaderc/online/powervr/prepare.rs` `fusion_pairs`; `src/shaderc/online/vivante/builtins.rs:228-231`, `lower.rs:5712-5717` | about 138 | about 20 | 40 | about 8 | **about 25 / 33** |
+| 2 | One-pass (small constant trip count) loops unrolled and constant-index uniform-array reads become plain constant-file reads | `select.rs` `loop_convert`, the shared `src/shaderc/online/powervr/unroll.rs` | 0 | about 45 | 0 | 0 | **about 13 / 17** |
+| 3 | vec4 packing and copy propagation: fill two lanes of a constant vector with one `mov`, read swizzles through the source, no whole-register copies | `src/shaderc/online/vivante/alloc.rs` (coalescing of `mov`s, near `:1380`), `lower.rs` constructors | about 90 | about 10 | 9 | about 6 | **about 8 / 11** |
 | 4 | Divide and `mod` by a constant: fold `1/c` at compile time, put it in the constant file, no `rcp`, no `mov` of the constant per lane | `builtin_call.rs:1013-1023` (`mod`), `lower.rs:5457-5474` | **132** | 0 | 1 | 0 | **about 5.5 / 7** |
 | 5 | `step(a, b)` as `set.lt` | `builtin_call.rs` `step` | 16 | 0 | 0 | 0 | about 0.6 / 0.8 |
 
@@ -381,7 +381,7 @@ lives in the IR's io declarations. The GC code generator's passes only see
 the selected instructions (`SelInstr`), where an output is a `Fixed`
 register with no flag. `codegen.rs` `assemble_from_ir_blocks` (or
 `select.rs`) must hand the pass the output registers whose declaration is
-`invariant`, as `powervr/prepare.rs` `fusion_pairs` receives its
+`invariant`, as `src/shaderc/online/powervr/prepare.rs` `fusion_pairs` receives its
 `invariant: &[IoSlot]`. Then the pass itself (pairing a single-use `mul`
 with its `add`, through `alloc.rs`'s lane rules) can live in `vivante/`.
 Whether the GC7000's `mad` rounds once or twice is not known. If it rounds

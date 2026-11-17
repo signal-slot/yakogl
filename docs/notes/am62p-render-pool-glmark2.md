@@ -3,8 +3,8 @@
 # AM62P: glmark2 terrain and refract and the PowerVR render pool
 
 Plan item baseline3-am62p, 2026-10-17, written at main `c854e0ae`. Host
-investigation only: no code changed. Moved from `docs/investigations/` to
-`docs/notes/` by plan item pvr-pool-npot (2026-10-17), which built the host
+investigation only: no code changed. Moved from the investigations directory
+to `docs/notes/` by plan item pvr-pool-npot (2026-10-17), which built the host
 test the last section designs; that section now describes the test as
 built (`driver/rust/src/gpu/pvr/pool/tests/replay/carveout.rs`).
 
@@ -42,7 +42,7 @@ built (`driver/rust/src/gpu/pvr/pool/tests/replay/carveout.rs`).
   (`$CCFARM_DEPS_DIR/glmark2-src`).
 - A **scratch replay** through the real pool code
   (`driver/rust/src/gpu/pvr/pool.rs`, `mem.rs`). It is the existing
-  `pool/tests/replay.rs` sequence with three changes: the freelists sized
+  `driver/rust/src/gpu/pvr/pool/tests/replay.rs` sequence with three changes: the freelists sized
   by carve-out as `driver/src/pvr_render.c:632-675` sizes them, terrain's
   two 800x600 targets grown to their POT-extent chains after its first
   draw, and refract's colour texture grown to its chain after its depth
@@ -259,7 +259,7 @@ in place.
 ## Host test (pvr-pool-npot)
 
 `driver/rust/src/gpu/pvr/pool/tests/replay/carveout.rs`, a child module of
-`pool/tests/replay.rs` (it uses the replay's private `Replay`, `Rig`,
+`driver/rust/src/gpu/pvr/pool/tests/replay.rs` (it uses the replay's private `Replay`, `Rig`,
 `before_jellyfish`, `TERRAIN`, `SHADOW`, `REFRACT_SETUP`). It runs in the
 `tools/check.sh` row `test    pvr render pool (Rust; the C pool's golden
 trace replayed, 38 tests)`, which asserts the count, and in the

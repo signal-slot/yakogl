@@ -54,7 +54,8 @@ Code read: `driver/rust/src/soc/am62p/dss.rs`,
   comes from `am62p_dss_plane_cfg.seq`; `plane_init` in `sample_glue.c`
   never sets it (always 0), and nothing in the board layer reads
   `am62p_dss_app_seq_shown`. The driver keeps no "scanned address".
-- Panel: 1024x600 at about 58.8 Hz (`dss/tests.rs` `board_cfg`: pixel clock
+- Panel: 1024x600 at about 58.8 Hz
+  (`driver/rust/src/soc/am62p/dss/tests.rs` `board_cfg`: pixel clock
   51.2 MHz, 1349 x 645 total). One XRGB8888 buffer of the panel size is
   2400 KiB. glmark2 windows are 800x600 by default (1875 KiB) and up to
   1920x1080 (8100 KiB, `CONFIG_YAKOGL_BOARD_WINDOW_MAX_KB`).
@@ -188,13 +189,14 @@ of those that are busy: equal to `app_addr_shown`, `app_addr_unsure` or
      `app_addr_unsure = app_addr_pending`.
    - New `app_addr_busy(d, addrs: &[u64]) -> u32`: the mask above. It reads
      atomics only, so the GL thread can call it without a lock.
-   - `ffi/am62p.rs`: `yd_am62p_dss_app_busy`.
+   - `driver/rust/src/ffi/am62p.rs`: `yd_am62p_dss_app_busy`.
      `driver/drivers/display/display_am62p_dss_rust.c` and
      `driver/include/yakogl_drv/am62p_dss.h`: `am62p_dss_app_busy(dev,
      const uint64_t *pa, size_t n)`.
 2. **Board layer**: a `board_display_busy(const uint64_t *phys, size_t n)` in
    `driver/zephyr/lib/board/am62p/board_am62p.c` over `am62p_dss_app_busy`
-   (declared in the board header `yakogl_board.h`); `common/board.c` gets
+   (declared in the board header `yakogl_board.h`);
+   `driver/zephyr/lib/board/common/board.c` gets
    `yakogl_zephyr_display_busy`, next to `yakogl_zephyr_present`, which calls
    it. A board that does not define the hook gets a weak default, and the
    OSAL then reports "no query".
@@ -267,7 +269,8 @@ Option C, as the steps above, except:
   `go_armed` left set by the previous commit lets the interrupt settle on
   an address whose registers are not written yet, and an interrupt that
   runs after the thread's next commit misses the address it latched. Both
-  make the report too small. `set_app_buffer` (`soc/am62p/dss.rs`) instead
+  make the report too small. `set_app_buffer`
+  (`driver/rust/src/soc/am62p/dss.rs`) instead
   reads the GO bit itself before it writes, and `commit` counts every GO
   write of every writer (`go_enter`, `go_exit`). A frame end latches only
   when it finds GO set and clears it; only a GO write sets it again. So,
@@ -292,7 +295,8 @@ Option C, as the steps above, except:
   frame end settles it.
 - **The op's wiring.** `src/osal/zephyr.c` puts the weak, undefined symbol
   `yakogl_zephyr_display_busy` in its table: NULL unless the board library
-  defines it. `common/board.c` defines it over `board_display_busy` only
+  defines it. `driver/zephyr/lib/board/common/board.c` defines it over
+  `board_display_busy` only
   with `CONFIG_YAKOGL_BOARD_DISPLAY_BUSY` (set by the AM62P board with
   `YAKOGL_SAMPLE_SHOW_ON_DSS`); `board_am62p.c` answers through
   `sample_glue.c` `pvr_sample_window_busy` -> `am62p_dss_app_busy`.
@@ -303,7 +307,8 @@ Host tests: `tests/egl_swap_latch.rs` (the plan above, items 1 to 4: the
 blind ring of three draws into a held buffer at 3 and 10 swaps a period;
 with the op, 5000 swaps at 0.5 to 100 swaps a period, three vsync offsets,
 no violation, no vertical-period wait, no wait for the frame's own end),
-and `soc/am62p/dss/tests.rs` (item 5: a frame end, a late interrupt or the
+and `driver/rust/src/soc/am62p/dss/tests.rs` (item 5: a frame end, a late
+interrupt or the
 safety layer's GO before every register access of an EGL-like run; the
 scanned buffer is never reported free and never one being drawn; two
 commits on one GO drop the first; `go_stuck`).
@@ -542,7 +547,7 @@ What each image asks for, from the code:
   script sets it). glad loads `eglSwapInterval` because the EGL version is
   1.5 (`src/gl/egl.rs:829`), and the sample's `dlsym` resolves it through
   `eglGetProcAddress` (`driver/samples/zephyr/glmark2/src/platform.c`).
-  The sample's own `GLStateTimed` (`src/main.cpp:512`) does not call it.
+  The sample's own `GLStateTimed` (`driver/samples/zephyr/glmark2/src/main.cpp:512`) does not call it.
   So, wired or not, glmark2's swaps make no `wait_vblank` call; the 461-462
   score would not move.
 - **gl_test: the default, 1, and it swaps.** `driver/tools/pvrlab/gl_test.c`

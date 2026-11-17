@@ -125,8 +125,9 @@ back end.
 
 On main, with a test:
 
-- The chain clamps the depth (`clamp_depth_output`, `powervr/chain.rs`: an
-  `fadd` with `sat`) and `assemble.rs` emits `depthf` from the result, after
+- The chain clamps the depth (`clamp_depth_output`,
+  `src/shaderc/online/powervr/chain.rs`: an `fadd` with `sat`) and
+  `src/shaderc/online/powervr/assemble.rs` emits `depthf` from the result, after
   the kill test when the shader discards. `BuiltFragment::depth_out` becomes
   `ShcShader::writes_depth`.
 - `src/pvr/backend.rs`: a program with `writes_depth` gets pass type

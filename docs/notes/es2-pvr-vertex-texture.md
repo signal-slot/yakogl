@@ -58,7 +58,7 @@ does not run it.
 - **Why the last clean tree passed:** at `d60b9d76` (2026-10-02, section A
   of `docs/es2-cts-failures.md`) the GENERAL arena was 4096 KiB. The
   2026-10-04 A/B that cut it to 1024 KiB ran only `vertex_arrays`, `draw`,
-  `buffer` and `fragment_ops` (`driver/docs/pvr-render-pool.md:562-579`), so
+  `buffer` and `fragment_ops` (`docs/notes/pvr-render-pool.md:562-579`), so
   it did not see `texture.vertex`.
 - **The suspect `cc78859` is not the cause.** It changed the layout of
   non-power-of-two chains only. This test's textures are 128x128. Its

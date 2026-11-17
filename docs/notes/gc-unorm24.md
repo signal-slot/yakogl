@@ -84,7 +84,7 @@ resolve on the board before and after, since the host cannot show a gain.
 `ds_retention::unorm24_depth` now multiplies by the f64 constant
 `1.0 / 16_777_215.0` (commit "ds_retention: unorm24_depth multiplies by the
 f64 reciprocal"; same signature, same bits, so `ds_cache::resolve_depth` and
-`pvr/backend.rs` output is unchanged). `tests/gc_unorm24_exhaustive.rs` keeps
+`src/pvr/backend.rs` output is unchanged). `tests/gc_unorm24_exhaustive.rs` keeps
 its own divide as the reference and still asserts the crate function equals it
 for every input; it passes after the change.
 

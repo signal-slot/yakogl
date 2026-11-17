@@ -344,7 +344,8 @@ not chosen: making room means shrinking Torizon's root filesystem offline.
   already did. This is the one difference from the one-stage route.
 
 The header (one 512-byte sector, little-endian; the layouts are tables in
-`loader/src/lib.rs`) has three versions, and the loader reads all of them.
+`driver/samples/zephyr/boot_stage2/loader/src/lib.rs`) has three versions,
+and the loader reads all of them.
 
 **Versions 1 and 2, one image.** Magic `YKSTAGE2`, the version, header size
 512, compression (0 none, 1 raw deflate, and in version 2 also 2, one LZ4
@@ -425,7 +426,8 @@ eMMC's DMA runs, so the loader is the place to clear both.
 A zero range therefore shares no byte with anything that is read or decoded
 or with another zero range, and the C side clears the ranges without a lock,
 on a thread of the lowest application priority that it starts once the
-header is parsed (`zero_start` in `src/main.c`; none when the header has no
+header is parsed (`zero_start` in
+`driver/samples/zephyr/boot_stage2/src/main.c`; none when the header has no
 zero range). A version-2 header's one zero range goes the same way. The main
 thread, woken by the SDHC interrupt, always runs first; the clear gets the
 time main would have slept. Main takes the thread's semaphore after the last

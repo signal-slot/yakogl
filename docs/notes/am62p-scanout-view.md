@@ -37,8 +37,8 @@ The code and the design say no copy happens:
 - `driver/docs/one-method.md:188-189`: the same.
 - `driver/zephyr/lib/board/am62p/board_am62p.c:69-87`: `board_show()` only
   calls `pvr_sample_show_window` / `pvr_sample_flip_window`. It never calls
-  `board_show_copied()`. Only the Pi 4 (`rpi4/board_rpi4.c:312`) and the
-  i.MX8MP (`imx8mp/board_imx8mp.c:145`) call it.
+  `board_show_copied()`. Only the Pi 4 (`driver/zephyr/lib/board/rpi4/board_rpi4.c:312`) and the
+  i.MX8MP (`driver/zephyr/lib/board/imx8mp/board_imx8mp.c:145`) call it.
 
 So the Slint frame rate on the AM62P (703 frames in 10 s) is the GPU and CPU
 rendering time, not a copy. The Pi 4 went from 659 to 1523 because its copy
@@ -49,19 +49,19 @@ cost about 8.6 ms of a 15 ms frame. The AM62P has no such cost to remove.
 | step | what happens | where |
 |---|---|---|
 | Kconfig | `YAKOGL_BOARD_SCANOUT_VIEW`, default n; for the Pi 4 and the i.MX8MP only | `driver/zephyr/lib/board/Kconfig:101-116` |
-| two screens | `YAKOGL_BOARD_RPI4_FB_VIRTUAL_HEIGHT` asks the firmware for a taller framebuffer (the cluster's double buffer) | `Kconfig:88-99`, `rpi4/board_rpi4.c:136-153` |
-| window | with the knob, when the window fits: `phys`/`cpu` = the firmware framebuffer, `stride` = its pitch (5120 for 1280 wide); prints "the WxH window is a view into the framebuffer, pitch P (no copy)" | `rpi4/board_rpi4.c:228-250` |
-| else | a static buffer in the image, packed rows | `rpi4/board_rpi4.c:251-271` |
+| two screens | `YAKOGL_BOARD_RPI4_FB_VIRTUAL_HEIGHT` asks the firmware for a taller framebuffer (the cluster's double buffer) | `Kconfig:88-99`, `driver/zephyr/lib/board/rpi4/board_rpi4.c:136-153` |
+| window | with the knob, when the window fits: `phys`/`cpu` = the firmware framebuffer, `stride` = its pitch (5120 for 1280 wide); prints "the WxH window is a view into the framebuffer, pitch P (no copy)" | `driver/zephyr/lib/board/rpi4/board_rpi4.c:228-250` |
+| else | a static buffer in the image, packed rows | `driver/zephyr/lib/board/rpi4/board_rpi4.c:251-271` |
 | EGL | takes a window pitch wider than the packed pitch: whole pixels, even, at least `tex_pitch(w)`, at most 16384 | `src/gl/egl.rs:447-473` (`native_window_pitch`) |
 | surface | maps the window's pages at a new GPU VA, no pool memory; stores the wide pitch per surface (0 = packed) | `src/gl/egl.rs:1279-1285`, `:1310` |
-| show | a part of the view: pan to its row (`SET_VIRTUAL_OFFSET`), no copy; anything else: `board_show_copied()` and a row-by-row `memcpy` | `rpi4/board_rpi4.c:279-319` (copy at `:312-317`) |
-| count | the first copy prints "board: board_show copies the WxH window ..."; `board_show_copies()` counts | `common/board.c:48-61` |
-| APP bit 16 | `board_finish()` writes kind APP with `YK_RECORD_APP_SHOWN_BY_COPY` (0x10000) only when the run stored no result record of its own | `common/board.c:171-179`, `driver/rust/src/board/record.rs:97-102`, `:306` |
+| show | a part of the view: pan to its row (`SET_VIRTUAL_OFFSET`), no copy; anything else: `board_show_copied()` and a row-by-row `memcpy` | `driver/zephyr/lib/board/rpi4/board_rpi4.c:279-319` (copy at `:312-317`) |
+| count | the first copy prints "board: board_show copies the WxH window ..."; `board_show_copies()` counts | `driver/zephyr/lib/board/common/board.c:48-61` |
+| APP bit 16 | `board_finish()` writes kind APP with `YK_RECORD_APP_SHOWN_BY_COPY` (0x10000) only when the run stored no result record of its own | `driver/zephyr/lib/board/common/board.c:171-179`, `driver/rust/src/board/record.rs:97-102`, `:306` |
 | Slint | hands `stride` to EGL as is; the check walks rows at `stride` | `examples/slint/src/main.c:172-214`, `:242` |
 | cluster | the knob is on in `prj.conf`; the cluster writes its own APP record with `board_show_copies() != 0` | `driver/samples/zephyr/cluster/prj.conf:18-23`, `cluster/src/main.c:1024`, `cluster/rust/src/board.rs:289-324` |
 
 Note on bit 16: Slint stores PROBES as its result, so `board_finish()` writes
-no APP record for Slint (`common/board.c:174`). For Slint, the proof of "no
+no APP record for Slint (`driver/zephyr/lib/board/common/board.c:174`). For Slint, the proof of "no
 copy" is the console: the "board: board_show copies" line is absent. Only the
 cluster carries bit 16 in a record.
 
@@ -71,16 +71,16 @@ cluster carries bit 16 in a record.
 |---|---|---|
 | panel | 1024x600, 51.2 MHz pixel clock, totals 1349 x 645, so 58.8 Hz (17.0 ms a frame) | `driver/boards/toradex/verdin_am62p/verdin_am62p_am62p54_a53.dts:182-220` |
 | route | DSS1 VP2 -> DSI -> SN65DSI83 -> LVDS; layer 0 = VID (the application), layer 1 = VIDL1 (safety, ARGB8888) | `driver/rust/src/soc/am62p/dss.rs:3-31`, `:185-222` |
-| window memory | `s_win`, a static `__noinit` buffer, 4096-aligned, `CONFIG_YAKOGL_BOARD_WINDOW_MAX_KB` (4800 KiB) large, in `zephyr,sram` (DDR 0x82000000 + 344 MiB), outside the 64 MiB GPU carve-out at 0x97800000 | `am62p/board_am62p.c:30`, dts `:55-78`, `Kconfig:51-60` |
-| CPU view | a Normal non-cacheable alias, so no cache work | `am62p/board_am62p.c:47-54` |
-| stride and format | `w * 4`, `GLES_NATIVE_FORMAT_XRGB8888`; no bottom-up flag (the DSS header has no `AM62P_DSS_PLANE_VFLIP`, so `YAKOGL_SAMPLE_CAN_VFLIP` is 0) | `am62p/board_am62p.c:56-65`, `common/sample_glue.c:63-67`, `driver/include/yakogl_drv/am62p_dss.h:27-34` |
-| first show | `am62p_dss_set_app_buffer` + enable the plane + enable the port | `common/sample_glue.c:85-118` |
-| later shows | `am62p_dss_set_app_buffer` only: new BA_0/BA_1, PICTURE_SIZE, ROW_INC; GO; latched at the next vsync | `common/sample_glue.c:161-195`, `driver/rust/src/soc/am62p/dss.rs:245-261` |
+| window memory | `s_win`, a static `__noinit` buffer, 4096-aligned, `CONFIG_YAKOGL_BOARD_WINDOW_MAX_KB` (4800 KiB) large, in `zephyr,sram` (DDR 0x82000000 + 344 MiB), outside the 64 MiB GPU carve-out at 0x97800000 | `driver/zephyr/lib/board/am62p/board_am62p.c:30`, dts `:55-78`, `Kconfig:51-60` |
+| CPU view | a Normal non-cacheable alias, so no cache work | `driver/zephyr/lib/board/am62p/board_am62p.c:47-54` |
+| stride and format | `w * 4`, `GLES_NATIVE_FORMAT_XRGB8888`; no bottom-up flag (the DSS header has no `AM62P_DSS_PLANE_VFLIP`, so `YAKOGL_SAMPLE_CAN_VFLIP` is 0) | `driver/zephyr/lib/board/am62p/board_am62p.c:56-65`, `driver/zephyr/lib/board/common/sample_glue.c:63-67`, `driver/include/yakogl_drv/am62p_dss.h:27-34` |
+| first show | `am62p_dss_set_app_buffer` + enable the plane + enable the port | `driver/zephyr/lib/board/common/sample_glue.c:85-118` |
+| later shows | `am62p_dss_set_app_buffer` only: new BA_0/BA_1, PICTURE_SIZE, ROW_INC; GO; latched at the next vsync | `driver/zephyr/lib/board/common/sample_glue.c:161-195`, `driver/rust/src/soc/am62p/dss.rs:245-261` |
 | plane rules | width and height 1..4096; address not 0, below 2^48, a multiple of the pixel size; stride at least `w * bpp`; any stride (ROW_INC = 1 + stride - line) | `driver/rust/src/ip/ti_dss7.rs:277-294` |
-| copy | none: `board_show_copied()` is never called | `am62p/board_am62p.c:69-87` |
+| copy | none: `board_show_copied()` is never called | `driver/zephyr/lib/board/am62p/board_am62p.c:69-87` |
 
 Every window the three benchmarks ask for fits the plane as it is: Slint
-1024x600 (`slint/src/main.c:45-46`), the cluster's two 1024x600 halves
+1024x600 (`examples/slint/src/main.c:45-46`), the cluster's two 1024x600 halves
 (`cluster/boards/verdin_am62p_am62p54_a53.conf:17-21`), glmark2 800x600 (a
 plane smaller than the screen, at (0,0)).
 
@@ -90,7 +90,7 @@ plane smaller than the screen, at (0,0)).
 |---|---|---|---|
 | layout | linear: the PBE writes `ROGUE_PBESTATE_MEMLAYOUT_LINEAR` unless the twiddle option is set for a power-of-two target | linear only | yes (`src/pvr/backend.rs:800-834`, `pbe_reg_words`) |
 | pitch | even pixels, at least `tex_pitch(w)`, at most 16384 (PBE linestride counts pixel pairs) | any pitch of at least `w * 4` | yes (`src/gl/egl.rs:447-473`) |
-| format | XRGB8888 (PBE packmode U8U8U8U8) | `AM62P_DSS_FMT_XRGB8888` (0x27) | yes (`src/pvr/backend.rs:926-933`, `pbe_emit_words`; `common/sample_glue.c:75`) |
+| format | XRGB8888 (PBE packmode U8U8U8U8) | `AM62P_DSS_FMT_XRGB8888` (0x27) | yes (`src/pvr/backend.rs:926-933`, `pbe_emit_words`; `driver/zephyr/lib/board/common/sample_glue.c:75`) |
 | address | `pvr_render_map_phys` refuses a `phys` that is not 4 KiB aligned; maps any DDR page through the GPU MMU | 4-byte aligned, 48-bit bus address; the A53 maps DDR 1:1 | yes (`driver/src/pvr_render.c:120-136`; `dss.rs:106`) |
 | contiguity | none needed (page by page through the GPU MMU) | one contiguous range | `s_win` is one static array: yes |
 | pool | the window uses a fresh GPU VA, **no render-pool pages** | - | `src/gl/egl.rs:1279-1285`, `src/osal/zephyr.c:448-473` |
@@ -114,7 +114,7 @@ These are correctness and smoothness gaps of the present path. None of them
 is a copy.
 
 1. **Slint draws into the buffer the DSS is scanning.** Slint has one window
-   (`slint/src/main.c:172-214`). `eglSwapBuffers` submits frame N and waits
+   (`examples/slint/src/main.c:172-214`). `eglSwapBuffers` submits frame N and waits
    only for frame N-1 (`src/gl/egl.rs:2111-2119`), so frame N+1 renders
    into the same buffer during scan-out. A frame can show part old, part
    new. The Pi 4 view has the same single buffer.
@@ -122,7 +122,7 @@ is a copy.
    cluster submits N+1 into the other half right after `board_show(N)`. The
    flip only latches at the next vsync (`cluster/src/main.c:40-51` says so;
    `dss.rs:243-261`, `:326-335`). `plane_init` always sends `seq = 0`
-   (`common/sample_glue.c:70-82`), so `am62p_dss_app_seq_shown()` cannot tell
+   (`driver/zephyr/lib/board/common/sample_glue.c:70-82`), so `am62p_dss_app_seq_shown()` cannot tell
    when a flip has latched.
 3. **The swap interval is ignored.** `yakogl_zephyr_wait_vblank` is a weak
    function that returns -ENOTSUP, and no board defines it
@@ -194,9 +194,9 @@ missing line. Add one line that is there:
 
 It needs a decision first, because it changes the frame counts.
 
-1. `common/sample_glue.c` `plane_init()` / `flip_app_buffer()`: take a
+1. `driver/zephyr/lib/board/common/sample_glue.c` `plane_init()` / `flip_app_buffer()`: take a
    `seq` argument and set `am62p_dss_plane_cfg.seq` (today always 0).
-2. `am62p/board_am62p.c` `board_show()`: keep a counter. When the address
+2. `driver/zephyr/lib/board/am62p/board_am62p.c` `board_show()`: keep a counter. When the address
    changes (a flip), return only after `am62p_dss_app_seq_shown(dss) == seq`.
    Wait with `am62p_dss_wait_vsync(dss, K_MSEC(20))`, at most 3 times. On a
    timeout return -EIO (`yakogl_board.h:155-160` allows it). A re-commit of
@@ -207,7 +207,7 @@ It needs a decision first, because it changes the frame counts.
    `cluster/boards/verdin_am62p_am62p54_a53.conf`, plus a third surface in
    `cluster/src/main.c`) removes the wait. That changes the shared sample, so
    it needs a Pi 4 and an i.MX8MP run too.
-3. Slint: no tearing needs two buffers in `slint/src/main.c`, as the cluster
+3. Slint: no tearing needs two buffers in `examples/slint/src/main.c`, as the cluster
    does. 1024 x (2 x 600 + 8 guard rows) x 4 = 4,947,968 B, more than
    4800 KiB, so set `CONFIG_YAKOGL_BOARD_WINDOW_MAX_KB=4864` in
    `slint/boards/verdin_am62p_am62p54_a53.conf`. The second half starts at

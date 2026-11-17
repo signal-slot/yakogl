@@ -353,9 +353,10 @@ run by `cargo test -p yakogl-drivers` (the gate's drivers rows). New tests:
    until `yakogl_record.h` is regenerated in the same commit.
 6. `recordcmd.rs`: `--gm-page` output for the three page forms; `--line`
    reads `status=n/a` for GM_PAGE and `status=pass` / `fail` for RATE.
-7. `tools/cts/cts-selftest.sh` and `tools/cts/testdata/gm-pages/`: a fixture
-   outdir of run directories (`meta.txt` and `snvs.txt`, built as the
-   i.MX8MP fixtures of `common-tally.py --self-test` are) with an F page,
+7. `tools/cts/cts-selftest.sh` and a gm-page fixture directory (planned, never
+   committed): a fixture outdir of run directories (`meta.txt` and `snvs.txt`,
+   built as the i.MX8MP fixtures of `common-tally.py --self-test` are) with an
+   F page,
    a P0 + P1 pair, a P1 whose P0 is missing, a failed-scene code and a
    `cl-rate` RATE; the expected `glmark2-pages.txt`; checks that every line
    parses by `GM_RESULT_RE`, `GM_FRAME_RE` and `GM_PICTURE_RE`, that
