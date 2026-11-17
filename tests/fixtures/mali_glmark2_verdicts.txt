@@ -49,7 +49,7 @@
 20 ideas:speed=duration fs e6a9: ok
 20 ideas:speed=duration vs 038e: ok
 20 ideas:speed=duration vs 4f27: ok
-20 ideas:speed=duration vs 51b2: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+20 ideas:speed=duration vs 51b2: Valhall: an integer or boolean value is not lowered yet
 20 ideas:speed=duration vs a09e: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet
 20 ideas:speed=duration vs bf4b: Valhall: an integer or boolean value is not lowered yet
 20 ideas:speed=duration vs c236: ok
@@ -61,12 +61,12 @@
 22 terrain fs 1637: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet
 22 terrain fs 4d26: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet
 22 terrain fs 895a: ok
-22 terrain fs 8c86: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
-22 terrain fs bbba: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
-22 terrain fs bdfd: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+22 terrain fs 8c86: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
+22 terrain fs bbba: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
+22 terrain fs bdfd: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 22 terrain fs c549: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 22 terrain fs d697: ok
-22 terrain fs e043: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+22 terrain fs e043: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 22 terrain vs 18bc: Valhall: a push word past FAU page 0 is not lowered yet
 22 terrain vs 8b69: ok
 23 shadow fs 4748: ok
