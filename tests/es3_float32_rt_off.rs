@@ -14,8 +14,8 @@
 //!   `GL_INVALID_FRAMEBUFFER_OPERATION` (4.4.4). `glClear` only records a
 //!   pending clear today and raises the error later, so it is not asserted.
 //!
-//! R32F is not covered: it is complete today (src/gl/framebuffer.rs
-//! `is_color_format`) and plan #325's board-mrt owns it.
+//! R32F follows the same rule; tests/es3_float_target.rs and
+//! tests/es3_pvr_fbo_float.rs hold it (plan #325's board-mrt).
 //!
 //! Feature sets (the rule is GL core, the same on every GPU):
 //!

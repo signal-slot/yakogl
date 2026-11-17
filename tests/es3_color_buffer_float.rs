@@ -12,11 +12,10 @@
 //! Rules (docs/notes/es3-float-targets.md; ES 3.0.6 table 3.13, 4.3.2, 4.4.2,
 //! 4.4.4.1; EXT_color_buffer_float):
 //!
-//! - Without the extension RG32F, RGBA32F and R11F_G11F_B10F are not
+//! - Without the extension R32F, RG32F, RGBA32F and R11F_G11F_B10F are not
 //!   colour-renderable: a texture attachment is
 //!   `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`, `glRenderbufferStorage` is
-//!   `GL_INVALID_ENUM`. R32F should follow; it is complete today (recorded
-//!   as it is, not asserted incomplete until core-claim changes the GL core).
+//!   `GL_INVALID_ENUM` (R32F was complete until plan #325's board-mrt).
 //! - With it, all seven formats (R16F, RG16F, RGBA16F, R32F, RG32F, RGBA32F,
 //!   R11F_G11F_B10F) are complete, and `glReadPixels` takes RGBA/FLOAT.
 //! - `GL_EXT_color_buffer_half_float` is claimed today; the 16F answers of
@@ -290,10 +289,10 @@ fn half_float_extension_today() {
 /* ---- (b) the 32-bit formats are incomplete without the extension -------- */
 
 #[test]
-fn rg32f_rgba32f_r11g11b10_incomplete() {
+fn r32f_rg32f_rgba32f_r11g11b10_incomplete() {
     let _g = context();
     #[cfg(not(feature = "color-buffer-float"))]
-    for f in [SEVEN[4], SEVEN[5], SEVEN[6]] {
+    for f in [SEVEN[3], SEVEN[4], SEVEN[5], SEVEN[6]] {
         assert_eq!(
             texture_target_status(f),
             GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
@@ -309,14 +308,14 @@ fn rg32f_rgba32f_r11g11b10_incomplete() {
     }
 }
 
-/* ---- (c) R16F, RG16F, RGBA16F and R32F as the tip has them -------------- */
+/* ---- (c) R16F, RG16F and RGBA16F, which the half-float extension gives -- */
 
-/// Recorded as it is: the three 16F formats are complete as texture and as
-/// renderbuffer, and so is R32F (the mismatch of the note's section 3).
+/// The three 16F formats are complete as texture and as renderbuffer
+/// (`GL_EXT_color_buffer_half_float`).
 #[test]
-fn r16f_rg16f_rgba16f_r32f_complete_today() {
+fn r16f_rg16f_rgba16f_complete() {
     let _g = context();
-    for f in [SEVEN[0], SEVEN[1], SEVEN[2], SEVEN[3]] {
+    for f in [SEVEN[0], SEVEN[1], SEVEN[2]] {
         assert_eq!(texture_target_status(f), GL_FRAMEBUFFER_COMPLETE, "{GPU}: {} texture", f.3);
         assert_eq!(renderbuffer_target(f.0), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE), "{GPU}: {} renderbuffer", f.3);
     }
