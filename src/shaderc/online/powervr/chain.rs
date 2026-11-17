@@ -348,6 +348,10 @@ pub struct BuiltFragment<'a> {
     /// An integer render target's variant (`ShcIntRt`): the pixel output
     /// dwords its packed colour takes (the record's `num_outputs`).
     pub int_dwords: Option<u8>,
+    /// Targets stored to tile buffers, and the shared register of the first
+    /// buffer's address pair (the record's `num_tile_buffers` and
+    /// `tile_buffer_sh`), when a per-target list spills.
+    pub tile_buffers: Option<(u8, u16)>,
 }
 
 /// A fragment shader that writes one `gl_FragColor` and reads smooth
@@ -407,10 +411,15 @@ pub fn mixed_key_targets(blend_key: u32) -> Option<([TargetPack; MAX_PACK_TARGET
 /// target ([`pack_target_outputs`]) and written to the pixel output
 /// registers the end-of-tile emit reads that attachment from
 /// ([`target_out_regs`]); `output_regs` is the registers they span (the
-/// record's `num_outputs`). No blend applies and none is decoded here.
+/// record's `num_outputs`). A target [`target_layout`] spills is stored to
+/// its tile buffer, whose address the driver puts in the shared registers
+/// the record names (`tile_buffer_sh`, two per buffer). A written
+/// gl_FragDepth is fed back before the writes, and a discard's kill test and
+/// feedback come before them, as for one output (output 0's alpha keeps the
+/// control word's alpha-to-one select, which ES 3.0 never turns on). No
+/// blend applies and none is decoded here.
 ///
-/// Refused by name, besides [`pack_target_outputs`]'s refusals: a written
-/// gl_FragDepth and alpha-to-one.
+/// Refused by name: [`pack_target_outputs`]'s refusals.
 pub fn build_fragment_targets<'a>(
     m: &'a ir::Module<'a>,
     limits: Limits,
@@ -442,22 +451,14 @@ fn build_fragment_with<'a>(
     }
     let sel = select(m, a).map_err(ChainError::Select)?;
     /* Attachments of different classes: each integer target's output packed
-     * here, the float and normalised ones at the tail; no depth, as for an
-     * integer target. */
+     * here, the float and normalised ones at the tail; a written depth is
+     * clamped below and fed back before the writes, as for one target. A
+     * shader that discards carries alpha-to-one's pair; output 0's alpha
+     * already has the control word's select applied (`select.rs`), and only
+     * a blend variant, which a per-target list never is, reads the pair, so
+     * it is dropped here. */
     let sel = match targets {
-        Some(t) => {
-            if sel.outputs.iter().any(|(slot, _)| *slot == ir::IoSlot::FragDepth) {
-                return Err(ChainError::Build(BuildError::Unsupported(
-                    "gl_FragDepth with colour attachments of different classes",
-                )));
-            }
-            if sel.alpha_to_one.is_some() {
-                return Err(ChainError::Build(BuildError::Unsupported(
-                    "alpha-to-one with colour attachments of different classes",
-                )));
-            }
-            pack_target_outputs(sel, t, a)?
-        }
+        Some(t) => pack_target_outputs(Selected { alpha_to_one: None, ..sel }, t, a)?,
         None => sel,
     };
     /* An integer render target: the output packed for its layout here, and
@@ -701,6 +702,7 @@ fn build_fragment_with<'a>(
             blend_consts: None,
             output_regs: None,
             int_dwords: None,
+            tile_buffers: None,
         });
     }
     /* One gl_FragColor, or several outputs (`layout(location = n) out`,
@@ -811,15 +813,42 @@ fn build_fragment_with<'a>(
         a2one_flag = Some(flag);
     }
     let mut output_regs = None;
+    let mut tile_buffers = None;
     let (len, temps) = if let Some(t) = targets {
         /* Attachments of different classes: output i at target i's
-         * registers, packed for it (`pack_target_outputs` packed the
-         * integer ones already). */
-        use super::assemble::TargetOut;
-        let regs = target_out_regs(t).ok_or(ChainError::FragmentOutputsNotBuilt)?;
-        let mut outs = [(0u16, TargetOut::Packed { dwords: [(Bank::Temp, 0); 4], n: 1 }); MAX_PACK_TARGETS];
+         * registers or tile buffer, packed for it (`pack_target_outputs`
+         * packed the integer ones already). */
+        use super::assemble::{TargetOut, TargetPlace};
+        let lay = target_layout(t).ok_or(ChainError::FragmentOutputsNotBuilt)?;
+        /* The tile buffers' address pairs: after everything else the
+         * program reads from the shared file (pco_shc's
+         * `data.common.shareds`), so the driver appends them to the block it
+         * DMAs; the stores name them directly. */
+        let sh = if lay.tile_buffers != 0 {
+            let end = [
+                u32::from(base) + u32::from(m.uniform_dwords),
+                u32::from(al.shared),
+                meta_off.map_or(0, |o| u32::from(o) + 1),
+                ff_off.map_or(0, |o| u32::from(o) + 1),
+                ytf_off.map_or(0, |o| u32::from(o) + 2),
+            ]
+            .into_iter()
+            .max()
+            .unwrap_or(0);
+            if end + 2 * u32::from(lay.tile_buffers) > u32::from(super::prepare::SHARED_DIRECT_LIMIT) {
+                return Err(ChainError::Build(BuildError::Unsupported(
+                    "tile-buffer addresses past sh255 (the store names them directly)",
+                )));
+            }
+            tile_buffers = Some((lay.tile_buffers, end as u16));
+            end as u16
+        } else {
+            0
+        };
+        let mut outs =
+            [(TargetPlace::Register(0), TargetOut::Packed { dwords: [(Bank::Temp, 0); 4], n: 1 }); MAX_PACK_TARGETS];
         let mut placed = 0;
-        for (i, (target, &(start, n))) in t.iter().zip(regs.iter()).enumerate() {
+        for (i, (target, &(slot, n))) in t.iter().zip(lay.place.iter()).enumerate() {
             let Some((_, comps)) = sel.outputs.iter().find(|(slot, _)| *slot == ir::IoSlot::FragColor(i as u8)) else {
                 continue;
             };
@@ -827,14 +856,18 @@ fn build_fragment_with<'a>(
                 TargetPack::Int(_) => TargetOut::Packed { dwords: resolve(comps)?, n },
                 TargetPack::Class(class) => TargetOut::Colour { class, colour: resolve(comps)? },
             };
-            outs[placed] = (u16::from(start), out);
+            let place = match slot {
+                TargetSlot::Register { first } => TargetPlace::Register(u16::from(first)),
+                TargetSlot::TileBuffer { index } => TargetPlace::TileBuffer { sh: sh + 2 * u16::from(index) },
+            };
+            outs[placed] = (place, out);
             placed += 1;
         }
         if placed == 0 {
             return Err(ChainError::FragmentOutputsNotBuilt);
         }
-        output_regs = regs.iter().map(|&(s, n)| s + n).max();
-        super::assemble::build_fragment_shader_targets(iterated, al.groups, &outs[..placed], discard, free, buf)
+        output_regs = Some(lay.output_regs);
+        super::assemble::build_fragment_shader_targets(iterated, al.groups, &outs[..placed], discard, depth, free, buf)
             .map_err(ChainError::Build)?
     } else if let Some(n) = int_dwords {
         /* the packed dwords, written as they are (`pack_int_output`) */
@@ -955,6 +988,7 @@ fn build_fragment_with<'a>(
         blend_consts,
         output_regs,
         int_dwords,
+        tile_buffers,
     })
 }
 
@@ -1202,6 +1236,63 @@ pub fn target_out_regs(targets: &[TargetPack]) -> Option<[(u8, u8); MAX_PACK_TAR
     Some(regs)
 }
 
+/// Where one target of a per-target list goes ([`target_layout`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetSlot {
+    /// Pixel output registers `first..first + dwords`.
+    Register { first: u8 },
+    /// Tile buffer `index` (the index-th spilled target), from dword 0.
+    TileBuffer { index: u8 },
+}
+
+/// The placement of a per-target list's colour targets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TargetLayout {
+    /// Each target's place and dwords (`targets` of them are meaningful).
+    pub place: [(TargetSlot, u8); MAX_PACK_TARGETS],
+    pub targets: u8,
+    /// Output registers the register targets span (the record's
+    /// `num_outputs`).
+    pub output_regs: u8,
+    /// Spilled targets: the last `tile_buffers` (the record's
+    /// `num_tile_buffers`).
+    pub tile_buffers: u8,
+}
+
+/// Where each target of `targets` takes its dwords: `src/pvr/mrt_layout.rs`
+/// `layout` ("layout B", the rule the end-of-tile programs and the back end
+/// read; the copy here is the compiler's, built without the back end, and
+/// `tests/es3_pvr_mrt4.rs` holds it to `layout` for every list). The targets
+/// in order, each at the next free output register, one of two dwords or
+/// more on an even one, never back-filled; the first that does not fit and
+/// every one after it spilled to tile buffers 0, 1, 2. `None` for an empty
+/// list, one longer than [`MAX_PACK_TARGETS`], and the two spills no
+/// end-of-tile program was captured for (two targets with the second
+/// spilled, three with the last two).
+pub fn target_layout(targets: &[TargetPack]) -> Option<TargetLayout> {
+    if targets.is_empty() || targets.len() > MAX_PACK_TARGETS {
+        return None;
+    }
+    let mut place = [(TargetSlot::Register { first: 0 }, 0u8); MAX_PACK_TARGETS];
+    let (mut next, mut spilled) = (0u32, 0u8);
+    for (p, t) in place.iter_mut().zip(targets) {
+        let d = t.dwords();
+        let first = if d >= 2 { (next + 1) & !1 } else { next };
+        *p = if spilled == 0 && first + d <= 4 {
+            next = first + d;
+            (TargetSlot::Register { first: first as u8 }, d as u8)
+        } else {
+            spilled += 1;
+            (TargetSlot::TileBuffer { index: spilled - 1 }, d as u8)
+        };
+    }
+    let n = targets.len() as u8;
+    if matches!((n, spilled), (2, 1) | (3, 2)) {
+        return None;
+    }
+    Some(TargetLayout { place, targets: n, output_regs: next as u8, tile_buffers: spilled })
+}
+
 /// The colour outputs of a fragment shader drawn into the per-target list
 /// `targets`: output location `i` is target `i`'s, and each output for an
 /// integer target ([`TargetPack::Int`]) becomes its packed dwords (the
@@ -1211,9 +1302,11 @@ pub fn target_out_regs(targets: &[TargetPack]) -> Option<[(u8, u8); MAX_PACK_TAR
 /// [`super::assemble::build_fragment_shader_targets`] packs. A target the
 /// shader writes no output for gets none.
 ///
+/// A written gl_FragDepth passes through untouched.
+///
 /// Refused by name: a class outside RGBA8, F16X4, F16 and F32, a list that
-/// [`target_out_regs`] cannot lay out, and an output that is not a colour
-/// at a location the list has.
+/// [`target_layout`] cannot lay out, and an output that is neither the depth
+/// nor a colour at a location the list has.
 fn pack_target_outputs<'a>(
     sel: Selected<'a>,
     targets: &[TargetPack],
@@ -1229,14 +1322,13 @@ fn pack_target_outputs<'a>(
     ) {
         return Err(unsupported("a per-target class other than RGBA8, F16X4, F16 or F32"));
     }
-    if target_out_regs(targets).is_none() {
-        return Err(unsupported("attachments of different classes past the pixel's four output registers"));
+    if target_layout(targets).is_none() {
+        return Err(unsupported("attachments of different classes with no end-of-tile program for their layout"));
     }
-    if sel
-        .outputs
-        .iter()
-        .any(|(slot, _)| !matches!(*slot, ir::IoSlot::FragColor(loc) if usize::from(loc) < targets.len()))
-    {
+    if sel.outputs.iter().any(|(slot, _)| {
+        !matches!(*slot, ir::IoSlot::FragColor(loc) if usize::from(loc) < targets.len())
+            && *slot != ir::IoSlot::FragDepth
+    }) {
         return Err(unsupported(
             "a fragment output with no attachment in a draw into attachments of different classes",
         ));
@@ -1752,6 +1844,7 @@ fn compile_fragment_with<'a>(
         blend_consts,
         output_regs,
         int_dwords,
+        tile_buffers,
     } = build_fragment_with(m, LIMITS, a, image, blend_key, targets)?;
     let words = a.alloc_filled(len / 4, 0u32).map_err(|_| ChainError::OutOfScratch)?;
     for (w, c) in words.iter_mut().zip(image[..len].as_chunks::<4>().0) {
@@ -1813,6 +1906,13 @@ fn compile_fragment_with<'a>(
         }
         if let Some(r) = output_regs {
             sh.num_outputs = r;
+        }
+        /* spilled targets: the stores read their buffers' addresses from
+         * sh[tile_buffer_sh..], two dwords each, which the driver DMAs
+         * (src/pvr/backend.rs) */
+        if let Some((n, at)) = tile_buffers {
+            sh.num_tile_buffers = n;
+            sh.tile_buffer_sh = at;
         }
         /* an integer target's variant: its key, and the dwords it writes;
          * under a colour mask it reads the pixel (`pack_int_output`) */
@@ -2431,8 +2531,10 @@ mod tests {
         assert_eq!(pcks(&ops), 3, "{ops:?}");
     }
 
-    /// Refused by name: a list the pixel's registers cannot hold, and a
-    /// written gl_FragDepth.
+    /// Refused by name: a list whose layout no end-of-tile program emits
+    /// (RGBA8 + RGBA32UI: the second spills, and no two-target program
+    /// reads a tile buffer). A written gl_FragDepth is not refused: it is fed
+    /// back before the writes (tests/es3_pvr_mrt4.rs).
     #[test]
     #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
     fn target_lists_refused_by_name() {
@@ -2441,12 +2543,14 @@ mod tests {
                    layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out highp uvec4 o1;\n\
                    void main() { o0 = c; o1 = v; }\n";
         let e = compile_targets(src, &[TargetPack::Class(SHC_RT_RGBA8), TargetPack::Int(RGBA32UI)]).unwrap_err();
-        assert!(e.contains("past the pixel's four output registers"), "{e}");
+        assert!(e.contains("no end-of-tile program for their layout"), "{e}");
         let src = "#version 300 es\nin mediump vec4 c;\nflat in highp uint v;\n\
                    layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out highp uint o1;\n\
                    void main() { o0 = c; o1 = v; gl_FragDepth = c.x; }\n";
-        let e = compile_targets(src, &[TargetPack::Class(SHC_RT_RGBA8), TargetPack::Int(R32UI)]).unwrap_err();
-        assert!(e.contains("gl_FragDepth"), "{e}");
+        let (num_outputs, ops) =
+            compile_targets(src, &[TargetPack::Class(SHC_RT_RGBA8), TargetPack::Int(R32UI)]).expect("compiles");
+        assert_eq!(num_outputs, 2);
+        assert_eq!(pixel_writes(&ops), [32, 33], "{ops:?}");
     }
 
     /// GLSL ES 1.00 section 4.6.1: an `invariant` output computed by the
