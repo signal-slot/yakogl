@@ -147,14 +147,11 @@ refused by their own names); `src/v3d/backend_tests.rs`
 `a_4096_target_is_accepted`, no longer `#[ignore]`d.
 
 Host run (HOST-ONLY: every pixel reads black, so a render verdict means
-nothing), from the first version of this fix (`6d5e59d6`, closed unmerged:
-the same 4096 side, with the pools kept at 2048 square and limited by tile
-count; the executor's targets bin 64 to 256 tiles under both):
-`MODULE=gles3 GPU=v3d tools/cts/host-deqp-run.sh
-dEQP-GLES3.functional.shaders.builtin_functions.precision.`, VK-GL-CTS
-93bca01. All 1,147 cases of S03-S08 began and ended, no chunk stopped, and
-the back end refused no draw. The executor's targets were 4096 x 2, 4, 5 or
-6 at 1 to 3 colour targets, single-sampled (1,035 draws). Per image
+nothing): `MODULE=gles3 GPU=v3d tools/cts/host-deqp-run.sh
+dEQP-GLES3.functional.shaders.builtin_functions.precision.` at `4cc135c1`
+(the code of `6d2e7d0d`), VK-GL-CTS 93bca01. All 1,147 cases of S03-S08
+began and ended, no chunk stopped, no `ResourceError`, and the back end
+refused no draw (no `draw refused` line in any chunk). Per image
 (QualityWarning is the black-pixel precision verdict):
 
 | image | cases | Pass | QualityWarning | Fail |
@@ -167,7 +164,11 @@ the back end refused no draw. The executor's targets were 4096 x 2, 4, 5 or
 | S08 | 142 | 16 | 108 | 18 |
 
 The 54 Fail are one message, "Failed to set up framebuffer object:
-glGetError() returned GL_INVALID_ENUM" (glFramebufferRenderbuffer, `GL error
-0x500`): the matrix-output cases' fourth colour attachment, not the target
-size. The run has not been repeated at `6d2e7d0d`'s pool sizing; the board
-session after the fix (plan #376 item 3) is the check.
+glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670"
+(glFramebufferRenderbuffer, `GL error 0x500`): the matrix-output cases'
+fourth colour attachment, not the target size. The first version of this fix
+(`6d5e59d6`, closed unmerged: the same 4096 side with the pools kept at 2048
+square and limited by tile count) gave the same counts in every image; a
+temporary log in that run showed the executor's targets, 4096 x 2, 4, 5 or 6
+at 1 to 3 colour targets, single-sampled (1,035 draws). The board session
+after the fix (plan #376 item 3) is the check on the Pi 4.
