@@ -511,3 +511,248 @@ What this changes for lower-varylink:
   `mali-varying-constants.md`; only E2 adds flat slots. Whether
   `LD_VAR_BUF_IMM .src_flat32` reads the format at all is the board
   session's to show.
+
+## Lowering map (at 008306cb)
+
+Item map-varylink of plan #377, for lower-varylink. Read at 008306cb, the
+tip with the references `deqp_varylink_*`, `tests/mali_deqp_varylink.rs`
+and #367's glmark2 link work. Every `file:line` is at that commit. Nothing
+was built or run for this map. A statement that is a reading of the code
+and not a measurement says so, and names the check the lowering starts with.
+
+### What moved since the study (38ad30eb)
+
+- **E1's alone-compile step is in.** The "own reads" block drops every lane
+  `push_equal` recorded (`dup`, `nir.rs:3572`; `reads`, `nir.rs:3573-3585`).
+  `discard_dynloop.vert` is `ok` at `tools/mali/corpus-verdicts.txt:33`.
+  This is the study's plan step 1, done by 420ea31e for
+  `gm2_arithconst_3`.
+- **#367 holds no shape of these four refusals**, as the study found.
+  `gm2_varylink_*` (`const_*`, `constw_*`, `dup_attr`, `dup_scaled`,
+  `dup_uniform`, `pack_*`, `partial_*`, `texlane`, `unread_after`,
+  `dummy_unread`), `varyconst_*`, `fsload_dup*` and `fsload_qual*` exist
+  and pass. None of the four texts is in
+  `tests/fixtures/mali_glmark2_verdicts.txt`. They are the guards of (e).
+- The study's `nir.rs` line numbers moved by about +80; the table below
+  replaces them.
+
+### (a) The raise sites
+
+Each is a `MaliError` variant of `mod.rs:242-251`, its text at
+`mod.rs:499-507`; the variant list the tests match is `mod.rs:369-373` and
+`tests.rs:1129-1133`.
+
+| variant (dEQP rows) | site: file:function, condition | reached by |
+|---|---|---|
+| `VaryingDuplicate` (E1, E2: 651 + 5 NS) | `nir.rs:build:3647-3648`: a stored lane has the same `Val` as one stored before (`seen`, `:3592-3593`). `Val` is node and lane, and `Nir` does `nir_opt_cse` (header `nir.rs:24`), so equal ALU results are one node | the alone compile (`reads == None`, `compile_lowered`, `mod.rs:1648`) and the program's vertex shader (`reads == Some`, `compile_vs_for_reads`, `mod.rs:1773`, from `backend.rs:vs_for_fragment:2013`) |
+| `VaryingNotFromAttribute` (C: 252) | `nir.rs:build:3661-3662`: `flat && smooth`. `flat` is set by a lane of uniforms alone (`vs.uniform_only`, `:3640`; `:1741`) or a phi constant (`:3620`); `smooth` by any other lane (`:3644`) | the same two paths |
+| `VaryingNotFromAttribute` (other sites) | `nir.rs:build:3628`, a constant lane stored when not `late_fold`; `:3641-3643`, a lane reading no attribute, texture or indexed uniform (a phi of uniforms); `mod.rs:lowered_vs_constants:1709-1710`, `consts.full()` (past `MAX_CONSTS` = 16, `link.rs:114`); `nir_fs.rs:layout:6510-6511`, `flat && smooth` seen from the fragment side (`:6485-6491`) | `vs_constants` / `fs_constants` (`mod.rs:1735`), the fragment compile |
+| `PositionLane` (P: 155) | `nir.rs:Nir::alu_sized:1966-1969`: an operand of an ALU op is `Val::Undef`. **The name is wrong**: it is no `gl_Position` lane | `walk`'s lane loop (`nir.rs:3130`): its arms (`Fabs` `:3254`, `Fadd`, `Ffloor`, ...) call `vs.alu` with `lane(w, s[k], l)` (`:2306`) for every `l < width`, past the operand's width. Only `Fmul` guards it (`:3140`) |
+| `PositionLane` (the real one) | `nir.rs:build:3547-3549`: `gl_Position` has an `Undef` lane after the walk. None of the 155 meets it. Pinned by `tests.rs:1193` (`gl_Position.xy = p`) | `build` |
+| `VaryingForm` (U: 3 + 1) | `nir.rs:build:3601`: a laid-out varying (`generic_layout`, `select.rs:139`, built from the declarations at `nir.rs:3556`) has no entry in `varyings`, the walk never stored it. `:3617`: a stored lane is `Undef`. `motion.rs:216`, `:225`: a moved expression reads a varying with no lanes | `build`, both paths. Pins `tests.rs:1239`, `:2856` |
+
+The fragment side (`nir_fs.rs:layout`, `:6288`) never raises
+`VaryingDuplicate`. It places equal lanes once per **(class, interpolation
+qualifier)** (`:6458-6469`, `FsConsts::class`) and loads a lane flat when
+the fragment shader declares it `flat` or `consts.flat(loc, c)` says the
+vertex lane is uniform alone (`:6477`).
+
+### (b) The rules as the references show them, and what to change
+
+One reading drives E1, E2 and C. **A lane's identity is where Mesa's scalar
+slot resolves, not its value.** `deduplicate_outputs` keys on
+`nir_scalar_resolved` of each store (`nir_opt_varyings.c:3334-3359`), which
+looks through `mov` and `vec` to the producing `(def, component)`:
+
+| reference | lanes | Mesa |
+|---|---|---|
+| `varymerge_equal` | `vec4(u * vec3(1.0), 1.0)` folds to `(u, u, u, 1.0)` | merged: one flat lane, `w` propagated |
+| `deqp_varylink_swz_xx` | `in0.xx` | merged: one smooth lane (`R32F`, 4 B) |
+| `deqp_varylink_discard` | `v_color = vec4(a.xyz, 1.0)`, `v_coords = a` | `v_color` gone, `v_coords` whole (`RGBA32F`, 16 B, 4 stores) |
+| `deqp_varylink_draw_single` | `vec4(u * c, 1.0) * 0.5 + 0.5`, one vec4 `ffma` | **not merged**: four flat lanes (`RGBA32UI`), `ffma(u, 0.5, 0.5)` then `ffma(x, 0.0, x)` stored 3 times, 1.0 stored (`IADD_IMM`) |
+
+The last row is the new fact. Our three lane-wise `ffma`s are **one node
+after CSE**, so their `Val`s are equal and `seen` (`nir.rs:3647`) refuses
+them. In Mesa they are components 0-2 of one vector def: distinct keys. The
+`w` lane is component 3 of the same def, not a constant, so it is stored and
+not propagated. This is a **reading of `nir_scalar_resolved`**; the link
+NIR was not printed. The check to start with: print the shim's link NIR of
+`draw_single` and `varymerge_equal` (`NIR_DEBUG=print` in
+`drm_shim_ref.sh run`) and confirm that the four stores of the first are
+`(ssa_n, 0..3)` of one `ffma` and the three of the second are `(u, 0)`.
+
+If it holds, the key is **`(IR value, component)` after swizzles and
+`vec`/`mov`**, not `Val`. `walk` (`nir.rs:2964`) has the pieces: each IR
+value has four lanes `w.vals[id]`, and `lane` (`nir.rs:2306`) follows a
+swizzle. Carry a tag per varying lane (`origin`, beside `VsState::varyings`)
+and compare tags in `lane_at` (`nir.rs:3515`) and in `seen` (`:3647`).
+
+**E1 (`swz_xx`, `discard`): attribute lanes of one origin merge.**
+- Rule: smooth lanes of one origin merge across components and across
+  varyings; the survivor is the first in scalar-slot order. `discard` does it
+  across two varyings, with `v_color.w = 1.0` propagated.
+- The alone path already drops them (`nir.rs:3572-3585`), and `fsload_dup*`
+  and `gm2_arithconst_3` pass. Yet the pins say these pairs still reach
+  `VaryingDuplicate`, so the site is **not** the alone path the study named.
+  It is `nir.rs:3648` with `reads == Some`, the program's vertex shader.
+  **Not determined without a run**: the mask that arrives for `swz_xx`.
+  First action: print `(reads, equal[..nequal])` at `nir.rs:3573` for both
+  pairs. The candidates are that the fragment record's read mask
+  (`fragment_reads`, `mod.rs:1826`; `FsRead.mask` is `keep`, `nir_fs.rs:6495`)
+  still names the merged lane, or that `reads_at_vertex_locations`
+  (`mod.rs:1850`) returns it. `swz_xx.frag` reads `out0` whole (`isOk(out0,
+  ...)`), which is the case that differs from `fsload_dup*`.
+- Change: `nir.rs:build` (`lane_at`, `dup`, the `reads` block) and the
+  read-mask functions above. A lane of the vertex shader that `reads` names
+  but whose origin equals a stored lane's is skipped by `seen`, not
+  refused. Keep the refusal for the join case (`fsload_dup_phi`,
+  `tests.rs:2440-2462`).
+
+**E2 (`draw_single`): equal values of different components stay apart.**
+- Rule: convergent lanes merge only when their origin is one scalar
+  (`varymerge_equal`). Lanes that are components of one vec op are kept,
+  all promoted to flat. A constant component of such an op is stored, not
+  propagated (`draw_single`'s `w`, `draw_multi`'s `w`, `op_abs_vec2`'s `x`
+  and `w`).
+- Change: `lane_at` (`nir.rs:3515-3524`): drop the `!vs.convergent(n)`
+  guard for lanes whose origins are equal, so `varymerge_equal` merges and
+  `va_vec2.vert` leaves `corpus-verdicts.txt:125`; `seen` (`:3647`) compares
+  origins, so `draw_single`'s three stores pass; in the constant pass
+  (`nir.rs:3484-3498`) a `Val::Const` that is a component of a non-constant
+  vec op is not `consts.push`ed. The last is the existing `late_fold` arm
+  (`nir.rs:3623-3627`, "stored as it is", `gm2_arithconst_4`), which sets
+  `smooth`. In a flat vec4 it must set `flat`.
+- Descriptor: the reference's `RGBA32UI` and `LD_VAR_BUF_IMM.v4.src_flat32`.
+  The word `src_flat32` comes from `nir_fs.rs:6477`. The record's
+  `varyings` (`mod.rs:1569-1580`) carry no flat flag and `src/mali/program.rs`
+  has no integer varying format, so the format is not produced; the
+  byte-compare reads words and layout, not the descriptor, so
+  `draw_single` can turn green with the descriptor still float. That is a
+  board risk, (e).
+
+**C (`va_multi3`, `draw_multi`): a convergent lane fills an interpolated vec4.**
+- Rule: with interpolated lanes present, a convergent lane takes an unused
+  component of an interpolated vec4 as an interpolated lane (plain store, no
+  `ffma(x, 0.0, x)`); only the leftovers form flat vec4s (study step 6,
+  `nir_opt_varyings.c:5389-5396`). `va_multi3`: `VAR0.xyz` smooth `RGB32F`,
+  `z` a `MOV` of the uniform. `draw_multi`: `VAR0.xyzw` smooth, `z` =
+  `u*0.5+0.5` (`FADD_IMM`), `w = 1.0` stored.
+- Change: decide flat or smooth **per slot after the lanes are counted**,
+  not per lane in the walk. `flat` and `smooth` (`nir.rs:3592`, set at
+  `:3620`, `:3640`, `:3644`) become a per-varying decision, and the two
+  `flat && smooth` raises (`nir.rs:3661`, `nir_fs.rs:6510`) go. A convergent
+  lane that lands in a smooth vec4 must not be `push_flat`ed
+  (`nir.rs:3495`), or the fragment side loads it `.src_flat32`
+  (`FsConsts::flat`, `link.rs:299`). So the placement is one function in
+  `link.rs` (which owns `VaryingConsts`) that both `build` and
+  `nir_fs.rs:layout` call; two copies of the fact are what raise today.
+
+**P (`op_abs_vec2`): an undefined operand lane gives an undefined lane.**
+- Rule: Mesa's ALU width is the operand's, so nothing is emitted for a lane
+  past it (the `abs` of a `vec2` is two lanes).
+- Change at the one site, the `nir.rs:3130` loop: before the `match a`, an
+  op whose operand lane is `Val::Undef` gives `Val::Undef`, as `Fmul` does
+  at `:3140`. `alu_sized` keeps its guard under its own variant (for
+  example `MaliError::UndefOperand`; `mod.rs:242`, `:369`, `:499` and
+  `tests.rs:1129` change with it). The refusal then moves to where an
+  undefined lane is stored (`nir.rs:3617`, `:3547`).
+- Not known: where the wider IR comes from (`builtin_call.rs`
+  `componentwise` or `sema.rs:1610`, the study's open item). If `width` is
+  wrong in the IR, the fix is at `m.comps_of` (`nir.rs:3121`); the guard is
+  right either way.
+- The reference computes `x` and `w` in fp16 (`FMA.v2f16`, `F16_TO_F32`):
+  a mediump vertex shader. The next refusal after P may be that arithmetic,
+  so `op_abs_vec2` may stay ignored with a new pin. Then P is a unit test
+  and the pin moves.
+
+**U (`unwritten`): no store, no slot.**
+- Rule: a declared varying the shader never writes has no `vs.varying` and
+  no slot; the fragment read folds (to 1.0 in the reference).
+- Change: `nir.rs:3601` and `:3617` stop refusing and clear the varying's
+  mask (`compact_layout`, `nir.rs:3794`), as `nir_opt_undef` drops the
+  store. The fragment side has no "undefined" lane (`FsConsts` names
+  constants and flat lanes, `link.rs:299`), so it needs one, or a constant
+  as Mesa's fold gave. Whether our fragment compile folds
+  `if (u_false) vec4(var)` as Mesa does is **not known**; `unwritten` is
+  the only reference. The study's advice (hand it to lower-misc if the
+  session runs long) holds.
+- `tests.rs:1239` (`v.xy = p.xy` into a `vec4`) is a partly written
+  varying, which no reference covers. Keep that pin.
+
+### (c) Tests each rule un-ignores (`tests/mali_deqp_varylink.rs`)
+
+| rule | tests | `refusals_pinned` (`:60`) |
+|---|---|---|
+| E1 | `swz_xx` (`:18`), `discard` (`:24`) | the two `EQUAL` pins leave |
+| E2 | `draw_single` (`:30`) | its `EQUAL` pin leaves |
+| C | `va_multi3` (`:36`), `draw_multi` (`:42`) | both `NO_ATTRIBUTE` pins leave |
+| P | `op_abs_vec2` (`:48`) | the `POSITION` pin leaves, or moves to the next refusal |
+| U | `unwritten` (`:54`) | the `VARYING` pin leaves |
+
+`refusals_pinned` is edited with each rule: an entry stays only while its
+reference stays refused. E1 and E2 share the `seen` change and land
+together. `swz_xx` may still differ in the fragment words (the study: pan_shc's
+fragment differs in "the mediump gap", the `isOk` compare), so it may move
+to another pin instead of turning green. `draw_single` is the cleanest: the
+study's table says the pan_shc words are byte-equal and only the format
+differs.
+
+### (d) What else moves
+
+- `tools/mali/corpus-verdicts.txt`: `va_vec2.vert` (`:125`, E2);
+  `vtex_struct_sampler{,_array}.vert` (`:130-131`, C, to their next refusal,
+  the struct sampler's vertex look-up). `discard_dynloop.vert` (`:33`) is
+  already `ok`.
+- `tools/mali/testdata/cases.txt`: each reference that turns byte-equal,
+  and `varymerge_equal` and `varymerge_structsampler` (E2 and C targets).
+- **glmark2 verdicts** (`tests/fixtures/mali_glmark2_verdicts.txt`): none of
+  the four texts is in it, so a correct lowering moves nothing. The
+  passing programs at risk if `lane_at` or `seen` is too loose or too
+  tight: `gm2_arithconst_3` (three equal colour lanes), `gm2_arithconst_4`
+  (late-folded constants, each stored), `gm2_varylink_dup_*`,
+  `gm2_varylink_const*` and `varyconst_*` (flat lanes of uniforms).
+- **Colourpair** (`docs/notes/mali-deqp-colourpair.md:226-246`): for the
+  operator harness (`ck_lane`, `ck_lane_mediump`, `lane_zero_load`: 141 and
+  part of 29 rows) Mesa **keeps a vertex constant lane as a varying when
+  the vertex shader's local is `mediump vec4`** (`ck_lane_highpcolour`
+  drops it). That is a rule about which constant lanes `build` pushes
+  (`nir.rs:3484-3498`, `consts.push`), the loop E2 and C edit. Both
+  rules say "this constant is not propagated": E2 when it is a component
+  of a non-constant vec op, colourpair when it was written through a
+  mediump value. Put them in one predicate in `nir.rs`, owned by whichever
+  lowering lands first, tested with the other's references (`ck_lane` and
+  `draw_single`). They are not the same condition (`draw_single`'s `w` is
+  `ffma(1.0, 0.5, 0.5)` of a vec op, folded to `Const` by our walk), so
+  check both before merging. The colourpair note's mechanism is
+  unverified in Mesa's source.
+
+### (e) Risks
+
+1. **The `Val` to origin change is the whole risk.** `seen`, `lane_at`,
+   `own` and the fragment `class` all compare lanes. Changing one and not
+   the others lets the stages disagree on the slot count, which shows as a
+   wrong varying offset on the board, not as a failure of one case. Guards
+   that must stay byte-equal: `fsload_dup`, `fsload_dup_if{,2,3,4}`,
+   `fsload_dup_phi` (still refused), `fsload_dup_swz`, `fsload_qual1-4`,
+   `gm2_varylink_dup_*`, `gm2_arithconst_3`, `varymerge_equal`.
+2. **The `nir_scalar_resolved` reading is unverified.** If Mesa keeps
+   `draw_single`'s lanes apart for another reason (the `ffma(x, 0.0, x)` of
+   `build_convert_inf_to_nan`, `nir_opt_varyings.c:4963-5003`, or
+   mediump), the origin key is wrong for other shapes. Print the link NIR
+   before changing the key.
+3. **`PositionLane` is a name section M of `docs/es2-cts-failures.md`
+   and the corpus carry.** A new variant moves 155 rows to a new text;
+   doc-m reads it. `mod.rs:369`, `tests.rs:1129` and any
+   `corpus-verdicts.txt` line with the old text move in the same commit.
+4. **Flat-slot descriptors** (see E2): more flat vec4s are right on the
+   host and wrong on the board until the frame writes an integer format for
+   them. The board session should draw `draw_single` and report.
+5. **The layout is computed twice** (`nir.rs`, `nir_fs.rs:layout`, with a
+   vertex half in `link.rs`), and every rule is a change to both. A unit
+   test that lays one vertex shader out both ways and compares slot counts
+   would catch a disagreement the references catch only for their own
+   shapes.
+6. **C and colourpair share a loop** (see (d)).
+7. **Sizing.** E1, E2 and C are one change (origin tag plus one placement
+   function) and one session. P is independent and can be its own commit.
+   U is small and may go to lower-misc.
