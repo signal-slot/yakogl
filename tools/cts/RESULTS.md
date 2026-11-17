@@ -564,8 +564,8 @@ record (`driver/tools/kexec-zephyr/t6-verdict.sh`). A development result: the
 sign-off form (U-Boot starting the image) has not run. The steps Z1 to Z4,
 their predicted records and the result of Z1's first half (`t6_hello`,
 2026-10-19) are in `driver/docs/nanopc-t6-mali.md`; a step gets its row
-here when it has run. The last row is gl_test, run by `tools/board.sh
-nanopc-t6 run` and judged by gl_test's own summary line.
+here when it has run. The last two rows are gl_test and the dEQP-GLES2 tree,
+run by `tools/board.sh nanopc-t6 run` and judged by their own summary lines.
 
 | Step | Image | Result | Build | Run | Record |
 |---|---|---|---|---|---|
@@ -574,6 +574,7 @@ nanopc-t6 run` and judged by gl_test's own summary line.
 | Z3: the firmware boots | `t6_fw` | **PASS**, `VERDICT t6_fw PASS`: `t6_fw: Z3: rc 0 step 0, 4 ms`, `t6_fw: PASS` | `v0.1.0-986-g988639752` (main `988639752`) | 2026-11-12 11:41 JST | `records/nanopc-t6/20261112-114132-t6` |
 | Z4: one frame submitted from our kernel side | `t6_submit` | **PASS**, `VERDICT t6_submit PASS`: `t6_submit: Z4h: target red 2048 blue 2048 fill 0 other 0 of 4096 pixels`, `t6_submit: PASS` | `v0.1.0-1045-gef86672bf` (main `ef86672bf`) | 2026-11-12 16:42 JST | `records/nanopc-t6/20261112-1642-t6_submit-9dabc1c7` |
 | gl_test, the regression set, on the GL back end over our kernel side | `gl_test` | **50 of 50 cases pass**: `gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; ...)` | `v0.1.0-1780-g9ad07f55f` (main `9ad07f55f`) | 2026-11-16 02:54 JST | `records/nanopc-t6/20261116-0254-gl_test-6e41d680` |
+| dEQP-GLES2, the whole tree: the 76 rows of `tools/cts/mali-gles2-tree.txt`, one image per row (`tools/cts/t6-deqp-images.sh`) | `t6_deqp` | **76 of 76 images reached their `deqp: done` line**; of the must-pass list's 17,165 cases 6,644 pass, 9,545 fail, 973 are not supported, 3 end in a quality warning | `v0.1.0-2217-gde2f2c103` (main `de2f2c103`) | 2026-11-17 21:11 to 22:36 JST | `records/nanopc-t6/20261117-2111-T6S1R01-5660b27f` to `records/nanopc-t6/20261117-2235-T6S4R08-636f18f5`, one per row |
 
 - Z2: every line of the predicted record was seen: Z1's power-on (`GPU_ID`
   0xa8670005, L2 ready), the cache flush round trip (2 polls of 1 µs), AS0's
@@ -686,6 +687,25 @@ nanopc-t6 run` and judged by gl_test's own summary line.
   "no memory" (issue #6757). That was corrected (#6764) before this
   run.
 - Next: the dEQP-GLES2 image on Zephyr, then the display.
+- dEQP-GLES2: every image ran its row's cases to the `deqp: done` line and
+  the board came back to Armbian after each. The rows' filters also select
+  203 cases that are not in the must-pass list (184 pass, 19 fail), so the
+  images ran 17,368 cases.
+- dEQP-GLES2 against the tree on Armbian above (main `37305608`): 6,644 of
+  the must-pass cases pass (5,456 there), 9,545 fail (10,700 there) and none
+  ends in ResourceError (33 there). Not supported and quality warning are
+  the same counts.
+- dEQP-GLES2, the 9,564 failures (the 19 outside the must-pass list
+  included) by their result text: 9,482 are a shader compile or a program
+  link that failed, the online compiler's refusals by name (10,489 refused
+  compiles of 40 texts; the two most frequent are "an integer or boolean
+  value", 3,023, and "a `gl_FragColor` lane other than the varying's own lane
+  or a constant", 1,768). The other 82: `GL_INVALID_OPERATION` at the end of
+  `LightAmountTest` 18, "Got invalid error" 14, "Image comparison failed" 13,
+  an error at `glDrawElements` 11, "Failed to retrieve uniform location" 10,
+  `GL_INVALID_OPERATION` at a draw 8, "got invalid value" 4, "expected
+  GL_TRUE" 3, 1 without a text. The picture on the screen was not checked:
+  the images draw to their own surface and read it back.
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
