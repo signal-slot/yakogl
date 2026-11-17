@@ -534,7 +534,7 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
          * normalize(light)` and `float d = max(..)`) */
         let comps = match m.locals.get(l).map(|d| d.ty.comps) {
             Some(c @ 1..=4) if write_mask == (1u8 << c) - 1 => c as usize,
-            _ => m.comps_of(src.val) as usize,
+            _ => width_of(m, src.val),
         };
         let whole = write_mask == (1u8 << comps) - 1 && (0..comps).all(|c| src.swizzle[c] as usize == c);
         let texel = write_mask.count_ones() == 1
@@ -2859,7 +2859,7 @@ impl<'s> Fs<'s> {
         vals: &[[Val; 4]],
         id: usize,
     ) -> Result<[Val; 4], MaliError> {
-        let w = m.comps_of(ir::ValueId(id as u32)) as usize;
+        let w = width_of(m, ir::ValueId(id as u32));
         /* a matrix times a constant vector: Mesa's sums of the scalar
          * terms, as its rules leave them ([`MatSum`]) */
         if matches!(a, AluOp::Fmul | AluOp::Ffma) {
@@ -2886,7 +2886,7 @@ impl<'s> Fs<'s> {
          * the front end the other way round. The `fneg` is made here, and
          * found again (CSE) where its IR instruction stands */
         if let Some((neg, arc)) = atan2_fneg(m, a, id) {
-            let wn = m.comps_of(neg) as usize;
+            let wn = width_of(m, neg);
             for i in 0..wn.min(4) {
                 let v = vals.get(arc.val.0 as usize).map_or(Val::Undef, |v| v[arc.swizzle[i] as usize & 3]);
                 self.op32(Alu::Fneg, [v, Val::Undef, Val::Undef], id)?;
@@ -3509,10 +3509,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     }
     order_keys(m, f.keys);
     for (i, c) in f.ir_comps.iter_mut().enumerate().take(m.instrs.len()) {
-        /* the exact width where the front end records it (a built-in's
-         * steps: `smoothstep` of a float is 1 lane, its `comps` 4) */
-        let id = ir::ValueId(i as u32);
-        *c = m.lanes_of(id).unwrap_or_else(|| m.comps_of(id));
+        *c = width_of(m, ir::ValueId(i as u32)) as u8;
     }
     /* a 2D array look-up's coordinate conversion CSE'd with one a later
      * statement made first (`nir_opt_cse` keeps the first in program
@@ -4779,7 +4776,7 @@ fn walk_nodes(
                     *x = !prec.frag_coord_highp
                         && matches!(m.def(s[k].val), Some(ir::Op::LoadInput { slot: IoSlot::FragCoord, .. }));
                 }
-                let w = (m.comps_of(ir::ValueId(id.0)) as usize).min(4);
+                let w = width_of(m, ir::ValueId(id.0));
                 let mut src = [[Val::Undef; 4]; 3];
                 for (k, l) in src.iter_mut().enumerate().take(arity) {
                     for (i, v) in l.iter_mut().enumerate().take(w) {
@@ -4821,7 +4818,7 @@ fn walk_nodes(
                         f.is_f16(v) || f.texel16(v)
                     }) =>
             {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (c, y, z) = (lane(vals, s[0], i), lane(vals, s[1], i), lane(vals, s[2], i));
                     if c == Val::Undef || y == Val::Undef || z == Val::Undef {
@@ -4859,7 +4856,7 @@ fn walk_nodes(
                         })
                     }) =>
             {
-                let w = (m.comps_of(ir::ValueId(id.0)) as usize).min(4);
+                let w = width_of(m, ir::ValueId(id.0));
                 let mut src = [[Val::Undef; 4]; 3];
                 for (k, l) in src.iter_mut().enumerate().take(ir_arity(a)) {
                     for (i, v) in l.iter_mut().enumerate().take(w) {
@@ -4874,13 +4871,13 @@ fn walk_nodes(
              * builds (intbig_case79.stderr: `fmul %124, 0.25` at 32 bits,
              * narrowed at the store) */
             ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
-                if (0..m.comps_of(ir::ValueId(id.0)) as usize).any(|i| {
+                if (0..width_of(m, ir::ValueId(id.0))).any(|i| {
                     let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
                     f.fp32_lane(x) || f.fp32_lane(y) || (f.select32(x) && f.select32(y))
                 }) =>
             {
                 let op = if a == AluOp::Fmul { Alu::Fmul } else { Alu::Fadd };
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 /* an fp16 operand is widened (lower_precision's `f162f` at
                  * the edge of the lowered tree: case 42's `uv.x *
                  * float(sz.x)`, `F16_TO_F32` then `FMA.f32`) */
@@ -4899,10 +4896,10 @@ fn walk_nodes(
              * and the result rounded (gm2_fsmisc_6's `mix(FILL, LINE, I)`,
              * `1.0 - 0.8` the `0x3268` of `u3.w0`: 0.8 is `0x3A66` first) */
             ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
-                if (0..m.comps_of(ir::ValueId(id.0)) as usize)
+                if (0..width_of(m, ir::ValueId(id.0)))
                     .all(|i| matches!((lane(vals, s[0], i), lane(vals, s[1], i)), (Val::Const(_), Val::Const(_)))) =>
             {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (Val::Const(p), Val::Const(q)) = (lane(vals, s[0], i), lane(vals, s[1], i)) else {
                         return Err(MaliError::Defect(Defect::IrIndex));
@@ -4920,7 +4917,7 @@ fn walk_nodes(
              * a placed one (gm2_fsmisc_6: `FADD.v2f16 r1, r0.h00, r0.h00`,
              * the late `fadd(d, d)`, then the product and `FADD.v2f16 r0,
              * r0^.neg.h00, 0x0.neg`) */
-            ir::Op::Alu(AluOp::Fmul, s) if m.comps_of(ir::ValueId(id.0)) == 1 && neg_literal(m, &s).is_some() => {
+            ir::Op::Alu(AluOp::Fmul, s) if width_of(m, ir::ValueId(id.0)) == 1 && neg_literal(m, &s).is_some() => {
                 let k = neg_literal(m, &s).ok_or(MaliError::Defect(Defect::IrIndex))?;
                 let (c, v) = (lane(vals, s[k], 0), f.fp16_operand(lane(vals, s[1 - k], 0)));
                 let (Val::Const(c), Val::Lane(..)) = (c, v) else { return Err(MaliError::ArithConstant) };
@@ -4933,10 +4930,10 @@ fn walk_nodes(
              * r1, r0.h00, r1^.h00, 0x0.neg`, then `FMA.v2f16 r0, r0^.h00,
              * r1^.h00, 0x0.neg`) */
             ir::Op::Alu(AluOp::Fmul, s)
-                if (0..m.comps_of(ir::ValueId(id.0)) as usize)
+                if (0..width_of(m, ir::ValueId(id.0)))
                     .all(|i| f.smoothstep_tail(lane(vals, s[0], i), lane(vals, s[1], i)).is_some()) =>
             {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
                     let t = f.smoothstep_tail(x, y).ok_or(MaliError::Defect(Defect::IrIndex))?;
@@ -4948,7 +4945,7 @@ fn walk_nodes(
                 /* the lanes the operands have: the front end's 4-wide
                  * operation on a vec3 (`normalize(light)` of a `vec3`
                  * uniform, gm2_fsarith_1) leaves the fourth undefined */
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 let defined =
                     (0..w).take_while(|&i| lane(vals, s[0], i) != Val::Undef && lane(vals, s[1], i) != Val::Undef);
                 let w = match defined.count() {
@@ -5008,7 +5005,7 @@ fn walk_nodes(
              * GLSL's `<=` swapped, `feq`; the mask a discard tests,
              * [`Fs::discard`]) */
             ir::Op::Alu(a @ (AluOp::Flt | AluOp::Fle | AluOp::Feq), s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (x, y) = (f.fp16_operand(lane(vals, s[0], i)), f.fp16_operand(lane(vals, s[1], i)));
                     if x == Val::Undef || y == Val::Undef {
@@ -5032,7 +5029,7 @@ fn walk_nodes(
                 }
             }
             ir::Op::Alu(a @ (AluOp::Fneg | AluOp::Fabs), s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = f.fp16_operand(lane(vals, s[0], i));
                     *o = if a == AluOp::Fneg { f.neg(x, at)? } else { f.abs(x, at)? };
@@ -5042,7 +5039,7 @@ fn walk_nodes(
              * fceil %3.x`, `FROUND.v2f16.rtp r1, r0.h00`); of a constant the
              * front end folds, of anything else no reference */
             ir::Op::Alu(AluOp::Fceil, s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = f.fp16_operand(lane(vals, s[0], i));
                     if f.alu_of(x).is_none() {
@@ -5069,7 +5066,7 @@ fn walk_nodes(
              * ([`Fs::alu32`]); the operand's form is the pair graph's
              * ([`deriv_operand`]) */
             ir::Op::Alu(a @ (AluOp::Fddx | AluOp::Fddy), s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 let first = lane(vals, s[0], 0);
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let mut x = f.fp16_operand(lane(vals, s[0], i));
@@ -5097,7 +5094,7 @@ fn walk_nodes(
              * `FADD.v2f16 r2, r2^, r0.neg` then `FMA.v2f16 r0, u2.w0.h00,
              * r2^, r0^` (tools/mali/testdata/vtl_fs.expect.json) */
             ir::Op::Alu(AluOp::Ffma, s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = [0, 1, 2].map(|k| f.fp16_operand(lane(vals, s[k], i)));
                     if x.contains(&Val::Undef) {
@@ -5122,7 +5119,7 @@ fn walk_nodes(
              * program), exact in fp16 or refused; of anything else no
              * reference */
             ir::Op::Alu(AluOp::Frcp, s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let Val::Const(c) = lane(vals, s[0], i) else { return Err(MaliError::Arithmetic) };
                     let r = (1.0 / f32::from_bits(c)).to_bits();
@@ -5140,7 +5137,7 @@ fn walk_nodes(
              * producer (gm2_fsmisc_4's `FADD.v2f16.clamp_0_1`). Two computed
              * operands, or two constants (no fold here), have no reference */
             ir::Op::Alu(a @ (AluOp::Fmax | AluOp::Fmin), s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (x, y) = (f.fp16_operand(lane(vals, s[0], i)), f.fp16_operand(lane(vals, s[1], i)));
                     if x == Val::Undef || y == Val::Undef {
@@ -5200,7 +5197,7 @@ fn walk_nodes(
              * program has neither an F32_TO_S32 nor an IADD, uniidx_i), else
              * the compares and conversions the references draw */
             ir::Op::Alu(a, s) if int_op(a) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 let k = ir_arity(a);
                 for i in 0..w.min(4) {
                     let x = [lane(vals, s[0], i), lane(vals, s[1], i), lane(vals, s[2], i)];
@@ -5224,7 +5221,7 @@ fn walk_nodes(
              * `!b && .. ? green : red`, two `MUX.v2i16` on the bool
              * uniform's word, intbig_case112.expect.json) */
             ir::Op::Alu(AluOp::Bcsel, s) if f.bool32(lane(vals, s[0], 0)) || f.mask16(lane(vals, s[0], 0)) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (mut c, mut y, mut z) = (lane(vals, s[0], i), lane(vals, s[1], i), lane(vals, s[2], i));
                     if let Some((Alu::Inot, [a, ..])) = f.alu_of(c) {
@@ -5258,7 +5255,7 @@ fn walk_nodes(
                     AluOp::Fcos => Alu::Fcos,
                     _ => Alu::Flog2,
                 };
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = lane(vals, s[0], i);
                     /* `log2` of a computed fp16 lane too (`pow`'s, gm2_fsarith_1:
@@ -5282,7 +5279,7 @@ fn walk_nodes(
              * [`transc_rows`]). Of a constant there is no reference (no
              * fold here) */
             ir::Op::Alu(AluOp::Fexp2, s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = f.fp16_operand(lane(vals, s[0], i));
                     /* `fexp2(fmul(flog2(a), b))` is `fpow(a, b)`
@@ -5342,7 +5339,7 @@ fn walk_nodes(
              * walk did not compute (a varying's, a uniform's) there is no
              * reference; nor of `frcp` alone (`1.0 / x`) */
             ir::Op::Alu(a @ (AluOp::Frsq | AluOp::Fsqrt), s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = f.fp16_operand(lane(vals, s[0], i));
                     if x == Val::Undef {
@@ -5368,7 +5365,7 @@ fn walk_nodes(
              * `FADD.v2f16 r0, r0^.h00, r1^.neg.h00`). Of a constant there
              * is no reference */
             ir::Op::Alu(AluOp::Ffract, s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = f.fp16_operand(lane(vals, s[0], i));
                     match x {
@@ -6767,7 +6764,7 @@ fn ir_colour_lane(m: &Module<'_>, v: ir::ValueId, c: u8, depth: u8) -> ColourLan
                 _ => ColourLane::Unknown(ir_reach(m, v, &mut 0, 0)),
             }
         }
-        Some(&ir::Op::Alu(a, s)) => match ir_whole_identity(m, a, &s, m.comps_of(v) as usize) {
+        Some(&ir::Op::Alu(a, s)) => match ir_whole_identity(m, a, &s, width_of(m, v)) {
             Some(o) => ir_colour_lane(m, o.val, o.swizzle[c as usize & 3] & 3, depth + 1),
             None => ColourLane::Unknown(ir_reach(m, v, &mut 0, 0)),
         },
@@ -6808,6 +6805,15 @@ fn ir_colour_local(m: &Module<'_>, l: ir::LocalId) -> bool {
     m.locals.get(l.0 as usize).is_some_and(|d| {
         d.name == "gl_FragColor" || m.outputs.iter().any(|o| o.kind == IoKind::Colour && o.name == d.name)
     })
+}
+
+/// The lanes of the IR value `id`: the exact width where the front end
+/// records one ([`ir::Module::lanes_of`]: a built-in's steps, an increment's
+/// sum, a conversion, whose `comps` is the blanket four: `smoothstep` of a
+/// float is 1 lane, `abs` of a `vec3` 3), `comps` elsewhere. Every width
+/// the walk reads is this one, 1 to 4: a lane past it has no value.
+fn width_of(m: &Module<'_>, id: ir::ValueId) -> usize {
+    usize::from(m.lanes_of(id).unwrap_or_else(|| m.comps_of(id)))
 }
 
 /// The operand a whole identity leaves of `a` over `s` (`w` lanes): the
