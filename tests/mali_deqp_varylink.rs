@@ -14,13 +14,13 @@
 mod mali_ref;
 
 #[test]
-#[ignore = "refused: two varying lanes of equal value (Mesa's link merges them), lowered by lower-varylink"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant, lowered by lower-varylink"]
 fn swz_xx() {
     mali_ref::assert_matches("deqp_varylink_swz_xx");
 }
 
 #[test]
-#[ignore = "refused: two varying lanes of equal value (Mesa's link merges them), lowered by lower-varylink"]
+#[ignore = "refused: a discard other than a highp fragment shader's `if (a < b) discard;` with no else, lowered by lower-varylink"]
 fn discard() {
     mali_ref::assert_matches("deqp_varylink_discard");
 }
@@ -60,11 +60,14 @@ fn unwritten() {
 fn refusals_pinned() {
     const EQUAL: &str = "Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet";
     const NO_ATTRIBUTE: &str = "Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet";
+    const FRAGCOLOR: &str =
+        "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
+    const DISCARD: &str = "Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet";
     const POSITION: &str = "Valhall: a gl_Position lane left unwritten is not lowered yet";
     const VARYING: &str = "Valhall: a varying lane left unwritten is not lowered yet";
     let pins = [
-        ("swz_xx", EQUAL),
-        ("discard", EQUAL),
+        ("swz_xx", FRAGCOLOR),
+        ("discard", DISCARD),
         ("draw_single", EQUAL),
         ("va_multi3", NO_ATTRIBUTE),
         ("draw_multi", NO_ATTRIBUTE),
