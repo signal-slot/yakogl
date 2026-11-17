@@ -107,6 +107,37 @@ def kconfig_block(sym):
     return '\n'.join(out)
 
 
+KNOB_CALL = re.compile(r'\b(gc_debug_set_\w+|v3d_debug_\w+|gc_debug_\w+|pvr_debug_\w+)\s*\(')
+
+
+def knob_calls(text, block_of, confs):
+    """Test-knob calls of one source file -> (unaccepted names, accepted [(name, symbol)]).
+    A call is accepted only inside `#if defined(CONFIG_X)` / `#ifdef CONFIG_X` where
+    X is `default n` and depends on DEQP_TEST_KNOBS in its Kconfig block (block_of(X))
+    and no conformance conf in confs sets CONFIG_X=y."""
+    bad, good, stack = [], [], []
+    for l in text.splitlines():
+        m = re.match(r'\s*#\s*(if|ifdef|ifndef|endif)\b(.*)', l)
+        if m:
+            if m.group(1) == 'endif':
+                if stack:
+                    stack.pop()
+            else:
+                g = re.match(r'\s*(?:defined\s*\(\s*)?CONFIG_([A-Z0-9_]+)\s*\)?\s*$', m.group(2))
+                stack.append(g.group(1) if g and m.group(1) != 'ifndef' else None)
+            continue
+        for k in KNOB_CALL.finditer(l):
+            for x in reversed([x for x in stack if x]):
+                b = block_of(x) or ''
+                if (re.search(r'^\s*default n\b', b, re.M) and re.search(r'^\s*depends on\b.*\bDEQP_TEST_KNOBS\b', b, re.M)
+                        and not any(c.get(x) == 'y' for c in confs)):
+                    good.append((k.group(1), x))
+                    break
+            else:
+                bad.append(k.group(1))
+    return bad, good
+
+
 def conformance_rules(c, name, gles3=False, ms4=None):
     """Rules on one resolved configuration C (dict) -> list of problems."""
     bad = []
@@ -227,14 +258,17 @@ def check_repo():
             bad.append('zephyr/Kconfig: %s is on by default' % s)
     if not has('DEQP_TEST_KNOBS', r'select YAKOGL_TEST_KNOBS'):
         notes.append('deqp/Kconfig: DEQP_TEST_KNOBS no longer selects YAKOGL_TEST_KNOBS (fine only if no knob is called)')
-    # the sample sets none of the knobs: no call of a test-knob entry point
-    for d in (DEQP,):
-        for dp, _, fn in os.walk(os.path.join(d, 'src')):
-            for f in fn:
-                t = read(os.path.join(dp, f))
-                for m in re.finditer(r'\b(gc_debug_set_\w+|v3d_debug_\w+|gc_debug_\w+|pvr_debug_\w+)\s*\(', t):
-                    bad.append('%s calls the test knob %s (a conformance image sets none)'
-                               % (os.path.relpath(os.path.join(dp, f), REPO), m.group(1)))
+    # the sample sets none of the knobs: a call of a test-knob entry point is
+    # accepted only behind a default-n DEQP_TEST_KNOBS symbol no conformance conf sets
+    for dp, _, fn in os.walk(os.path.join(DEQP, 'src')):
+        for f in fn:
+            rel = os.path.relpath(os.path.join(dp, f), REPO)
+            kb, kg = knob_calls(read(os.path.join(dp, f)), kconfig_block, list(boards.values()))
+            for n in kb:
+                bad.append('%s calls the test knob %s (a conformance image sets none)' % (rel, n))
+            for n, x in sorted(set(kg)):
+                notes.append('%s calls the test knob %s only under CONFIG_%s (default n, needs DEQP_TEST_KNOBS, no conformance conf sets it)'
+                             % (rel, n, x))
     # PowerVR switches the sample passes: their Kconfig defaults must be the library's
     for s, want in (('DEQP_PVR_NATIVE_CUBE', 'default -1'), ('DEQP_PVR_NATIVE_ARRAY', 'default -1'),
                     ('DEQP_PVR_NATIVE_3D', 'default -1')):
@@ -361,6 +395,19 @@ def self_test():
                         ('bad-ms4-name-missing.config', True, 'DEQP_GL_CONFIG_NAME')):
         bad = check_dotconfig(os.path.join(fixtures, f), ms4)
         ok(any(sym in b for b in bad), 'fixture %s: refused, the message names %s' % (f, sym))
+    # test-knob calls: only behind a default-n DEQP_TEST_KNOBS symbol no conformance conf sets
+    kb = {'K_N': 'config K_N\n\tbool\n\tdefault n\n\tdepends on DEQP_TEST_KNOBS',
+          'K_Y': 'config K_Y\n\tbool\n\tdefault y\n\tdepends on DEQP_TEST_KNOBS',
+          'K_ND': 'config K_ND\n\tbool\n\tdefault n'}.get
+    call = 'extern "C" int v3d_debug_set_draw_targets(int n);\n'
+    guarded = '#if defined(CONFIG_K_N)\n' + call + '#endif\n'
+    ok(knob_calls(guarded, kb, [{}]) == ([], [('v3d_debug_set_draw_targets', 'K_N')]),
+       'a test-knob call guarded by a default-n DEQP_TEST_KNOBS symbol is accepted')
+    ok(knob_calls(call, kb, [{}])[0] == ['v3d_debug_set_draw_targets'], 'an unguarded test-knob call is refused')
+    ok(knob_calls(guarded.replace('K_N', 'K_Y'), kb, [{}])[0] and knob_calls(guarded.replace('K_N', 'K_ND'), kb, [{}])[0],
+       'a test-knob call guarded by a default-y symbol or one without DEQP_TEST_KNOBS is refused')
+    ok(knob_calls(guarded, kb, [{}, {'K_N': 'y'}])[0] == ['v3d_debug_set_draw_targets'],
+       'a test-knob call guarded by a symbol a conformance conf sets =y is refused')
     rows = table_lines(os.path.join(HERE, 'am62p-ms4-tree.txt'))
     ok(rows == [('MS4', ' multisample.* (with DEQP_GL_CONFIG_NAME=rgba8888d24s8ms4)', 'dEQP-GLES2.functional.multisample.*')],
        'the ms4 table is one labelled row with its render config')
