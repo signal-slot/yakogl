@@ -1989,6 +1989,12 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs)" \
 # slices with the switch off. Compiles to nothing under report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_3d
+# The native 3D texture's level and LOD parameters (texture.mipmap.3d
+# base_level, max_level, min_lod, max_lod): the copy from the base level, the
+# descriptor's size, levels and LOD clamps, and the copies a kick may still
+# read. Compiles to nothing under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d_lod.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_3d_lod
 # PowerVR textureSize (the 38 dEQP shaders.texture_functions.texturesize
 # cases): every sampler kind in both stages, with the TPU's own cube, array
 # and volume on and off, run in the byte model over the descriptor words the
