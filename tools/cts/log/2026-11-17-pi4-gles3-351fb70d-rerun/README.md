@@ -48,6 +48,27 @@ cases of `precision.{matrixcompmult,outerproduct,transpose}`, with
 `Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM`
 (`glsShaderExecUtil.cpp`). That is for plan #376 to place.
 
+### Since 351fb70d: FB2 is a rerun image too (main `dc740b98`)
+
+Four commits in 351fb70d..dc740b98 change code the Pi 4 image links. Only one
+of them moves a case:
+
+- 582b201c (`ds_write` and `stencil_resolve` on the V3D): FB2's 16
+  `fbo.blit.depth_stencil` Fails at b1b5b845 were `GL_INVALID_OPERATION at
+  es3fFboTestCase.cpp:90`, the blit refusal (REFUSED_DEPTH_DST,
+  REFUSED_STENCIL). On the host at dc740b98 they blit, with no refusal and no
+  GL error, and read black ("Image comparison failed", HOST-ONLY). The 12
+  NotSupported (`Separate depth and stencil buffers not supported`) and the 3
+  `default_framebuffer.r8_*` render verdicts stay.
+- bf80c82a turns the tile-state clamp into a `debug_assert` (no release
+  change); de2f2c10 is the Mali record; a1b8a613 is V3D 7.1 (Pi 5) only.
+
+Host check: `tools/cts/host-deqp-run.sh --gpu=v3d --module=gles3
+dEQP-GLES3.functional.fbo.blit.` at dc740b98: 610 of 610 began, 0 compile
+refusals, no `yakogl` refusal line and no `GL_INVALID_*` in the logs. So
+**35 images to rerun** (9,107 mustpass cases), FB2 added with 16 fixed and 0
+still. The FB2 row below is the 351fb70d one.
+
 ### Two causes the host still refuses (issue drafts in `drafts.md`)
 
 1. **The job builder writes no QUNIFORM_TEXTURE_DEPTH (46) or
@@ -102,8 +123,9 @@ list for its 5 `negative_api` cases (bc200f21, bece11ec).
 Not run. This worker had no `target:rpi4` lease (no `BOARD_UART`, no
 `target:rpi4-console`), so none of the following were made: stage `deqp-tree-pi4`,
 `board-stage.sh pi4 deqp`, the ES 2.0 regression rows (stage `board-common-pi4`),
-and the per-image `cycles.txt`, `table.txt`, consoles and tallies. The rerun is the
-34 images above, all built from one origin/main commit with
+and the per-image `cycles.txt`, `table.txt`, consoles and tallies. The same was true
+of the worker that checked dc740b98 (no `target:rpi4` resource on it). The rerun is
+the 34 images above plus FB2, all built from one origin/main commit with
 `DEQP_MODULE=gles3 tools/cts/pi4-deqp-images.sh` and run with `tools/board.sh pi4`,
 as the b1b5b845 session READMEs describe. Expect S32a's 32 cases to stay Fail until
 cause 1 is fixed. The board session's README replaces this one, or sits beside it as

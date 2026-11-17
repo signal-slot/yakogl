@@ -21,6 +21,7 @@ belong to other plans: RESULTS.md, STATUS.md and ROADMAP.md (plan #321),
 | implementation_limits / state_query values (varyings, combined uniform components, block size, compressed formats) | 6581f22b, cb52fae8, 31127ec8, 455c3bb5 |
 | negative_api `Got invalid error` (uniformui, texsubimage) | bc200f21, bece11ec |
 | `this fragment shader does not fit the scratch arena` (UB2 1, UB3 4) | not isolated: the host builds them at 351fb70d, and `SCRATCH_BYTES` is unchanged since b1b5b845 |
+| a depth or stencil `glBlitFramebuffer` into a renderbuffer, `GL_INVALID_OPERATION` (FB2 16) | 582b201c (after 351fb70d, host-checked at dc740b98) |
 | (plan #376) `a target larger than the tile memory is sized for (2048x2048)`, S03-S08 | 6d2e7d0d, host only |
 
 ## #1261 comment
@@ -33,7 +34,7 @@ belong to other plans: RESULTS.md, STATUS.md and ROADMAP.md (plan #321),
 > began. The 2,763 board non-Pass cases outside #376 were run again, one process
 > per case.
 >
-> Rerun (34 images, 8,497 cases): A1 FB3 M1 R1 SQ S10 S32a S32d T03 F3C1-4 F3F1-4
+> Rerun (35 images, 9,107 cases): A1 FB2 FB3 M1 R1 SQ S10 S32a S32d T03 F3C1-4 F3F1-4
 > F3S1-2 T05a-d T06-T13 T17 UB2 UB3. Before (b1b5b845) and on the host now:
 >
 > | image | b1b5b845 non-Pass | fixed on the host | still |
@@ -45,9 +46,10 @@ belong to other plans: RESULTS.md, STATUS.md and ROADMAP.md (plan #321),
 > | T07, R1, FB3, S10 | 321 F, 4 QualityWarning | 141 | 93 (FB incomplete, derivate FBO) |
 > | A1, SQ, M1 | 48 F | 34 | 10 |
 > | S32d, UB2, UB3 | 7 F | 7 | 0 |
-> | total | | 2,061 + 176 NotSupported | 141 |
+> | FB2 (582b201c, host at dc740b98) | 16 F (depth/stencil blit, GL_INVALID_OPERATION) | 16 | 0 |
+> | total | | 2,077 + 176 NotSupported | 141 |
 >
-> No change expected: 57 images. FB1 FB2 FB4 FR1 FR2 LT S16 UA1 fail on the host as
+> No change expected: 56 images. FB1 FB4 FR1 FR2 LT S16 UA1 fail on the host as
 > they did on the board. S32b and S32c1-4 are still refused (the two issues below).
 > The map is the one made at b1e4c0f5 (closed #7872) and 684ef106 (closed #7704),
 > case for case, except in #376's images. There, 6d2e7d0d's 4096 tile memory makes
@@ -112,16 +114,16 @@ belong to other plans: RESULTS.md, STATUS.md and ROADMAP.md (plan #321),
 Made by the command in `method.md` ("The replacement block"): every image from its
 b1b5b845 console, 7,110 rows. It replaces the 0ff58329, 8990a5cc and 009f62a5 rows
 the file still has, M1's 62 NoResult rows of the 0ff58329 abort among them. Its
-four header lines replace the file's four comment lines. The rows of the 34 rerun
-images change again with the board rerun.
+four header lines replace the file's four comment lines. The rows of the 35 rerun
+images (FB2's 16 depth/stencil Fails among them) change again with the board rerun.
 
 ## RESULTS.md (Pi 4 GLES3 paragraph, an added sentence)
 
-> Host map at `351fb70d` (plan #380,
-> `tools/cts/log/2026-11-17-pi4-gles3-351fb70d-rerun/`): 34 of the b1b5b845 images
-> (8,497 cases) carry 2,061 non-Pass cases that main has fixed on the host (3D and
+> Host map at `351fb70d`, FB2 added at `dc740b98` (plan #380,
+> `tools/cts/log/2026-11-17-pi4-gles3-351fb70d-rerun/`): 35 of the b1b5b845 images
+> (9,107 cases) carry 2,077 non-Pass cases that main has fixed on the host (3D and
 > 2D-array look-ups, shadow look-ups, textureGrad, gl_FragDepth, ETC2/EAC, long
-> names), plus 176 ETC2 cases that are no longer NotSupported; they are the next
+> names, depth/stencil blits), plus 176 ETC2 cases that are no longer NotSupported; they are the next
 > board rerun. 48 cases of S32a/S32b are still refused at the draw (texture depth
 > and layer-count uniforms), and 6 shadow textureSize cases are refused by
 > RET16_OF_32. HOST-ONLY; the board figures above are unchanged.
@@ -130,17 +132,17 @@ images change again with the board rerun.
 
 > Pi 4 の GLES3: b1b5b845 のボード結果を main 351fb70d のホスト実行と照合した（計画 #380、
 > tools/cts/log/2026-11-17-pi4-gles3-351fb70d-rerun/）。ボードで再実行が必要なのは
-> 34 画像（必須 8,497 件）。そのうちボードで不合格だった 2,061 件は、ホストでは拒否も
+> 35 画像（必須 9,107 件、FB2 は dc740b98 で追加）。そのうちボードで不合格だった 2,077 件は、ホストでは拒否も
 > API エラーも出なくなった（3D・2D 配列のサンプル、シャドウ、textureGrad、
-> gl_FragDepth、ETC2/EAC、長い名前）。ETC2 の未対応 176 件も実行されるようになった。
+> gl_FragDepth、ETC2/EAC、長い名前、深度・ステンシルのブリット）。ETC2 の未対応 176 件も実行されるようになった。
 > 残る拒否は 2 つ。3D・2D 配列の textureSize と 3D の textureGrad の描画 48 件は、
 > ジョブビルダー（v3d_job.c）が uniform 46/47 を書かないため拒否される。シャドウの
 > textureSize 6 件は RET16_OF_32 で拒否される。ボードでの再実行はまだ行っていない。
 
 ## ROADMAP.md stage 4 (the Pi 4 bullet, an added sentence)
 
-> The b1b5b845 images checked against main `351fb70d` on the host (plan #380): 34
-> images need a board rerun, and 2,061 board non-Pass cases are fixed on the host.
+> The b1b5b845 images checked against main `351fb70d` on the host (plan #380, FB2 added at `dc740b98`): 35
+> images need a board rerun, and 2,077 board non-Pass cases are fixed on the host.
 > Two causes are left: the job builder writes no texture depth / layer-count
 > uniforms (48 cases), and RET16_OF_32 refuses shadow textureSize (6 cases).
 
