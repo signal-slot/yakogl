@@ -573,6 +573,30 @@ Left, each a back-end site: PowerVR `build_tex_desc` (`swiz0..3`,
 look-ups (2D-array and 3D programs) and 72 uploads at `70142d35`, before
 `cc1c6ede` (`docs/es3/texture-host-repro.md` section 1).
 
+### G7. Program binaries
+
+`glGetProgramBinary` answered `GL_INVALID_OPERATION` and
+`GL_NUM_PROGRAM_BINARY_FORMATS` was 0, so `shader_api.program_binary.*` (14)
+were NotSupported and `state_query.shader.program_binary` Failed on every board
+(Pi 4 and AM62P tallies). Done on the host: `24098647` (the format, a
+serializer and a bounds-safe parser), `ab8b7cbf` (`src/gl/program_binary.rs`:
+capture at link, forget, load; `glGetProgramBinary`, `glProgramBinary`),
+`5e94999a` (`glLinkProgram` captures, one format `GL_PROGRAM_BINARY_FORMAT_YAKOGL`
+listed, `GL_NUM_PROGRAM_BINARY_FORMATS` 1), pinned by
+`tests/es3_program_binary.rs` (`80d2827a`). The `report-es2` build answers as
+before (`tests/es2_program_binary_report.rs`). Host dEQP at `5e94999a`
+(HOST-ONLY: only API verdicts count), `MODULE=gles3 GPU=<gpu>
+tools/cts/host-deqp-run.sh program_binary`: v3d, powervr and vivante each Pass
+22 of 22 cases, so 14 `shader_api.program_binary.*` and
+`state_query.shader.program_binary` Pass, as do
+`implementation_limits.num_program_binary_formats`, the four
+`state_query.integers.program_binary_formats_*` and the two
+`negative_api.shader.{get_,}program_binary`. No board run yet (#313, #320,
+#316). Left: the program-binary store is not cleared when the last context of
+a group is released (`group_release_with`, `src/gl/context.rs`), one heap block
+per program slot, harmless; the info log of a rejected binary goes through the
+transform feedback stopgap in `program_binary::reject`.
+
 ## Appendix A: the vertex groups
 
 A *current value* is what a vertex input reads while its array is disabled
