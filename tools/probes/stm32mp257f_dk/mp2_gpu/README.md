@@ -29,7 +29,7 @@ at once.
 
 The work is the yakogl-drivers crate's
 (`driver/rust/src/soc/stm32mp2/gpu_ffi.rs` over `power.rs`, `rcc.rs` and
-`firmware/optee`; C declarations in
+`driver/rust/src/firmware/optee`; C declarations in
 `driver/zephyr/lib/board/stm32mp2/include/stm32mp2_gpu.h`), built with the
 features `stm32mp2` and `vivante` by the board layer's
 `CONFIG_YAKOGL_STM32MP2_GPU` (`prj.conf`; the archive `gc_fence` and

@@ -29,7 +29,7 @@ It needs nightly cargo (`-Z build-std`, so the `rust-src` component), cmake,
 cc and python3. The logs are
 `<out-dir>/<gpu>.log`, the summary `<out-dir>/report.md`; the exit status is 0
 when no GPU found anything. The window is 1024x600 (`main.c`'s); the layout is
-`cluster/ui/1024x600`. Selftest of the shared glue:
+`driver/samples/zephyr/cluster/ui/1024x600`. Selftest of the shared glue:
 `../../host-replay/selftest/selftest.sh <out>`.
 
 What a run reports, per frame and in the summary: the GL errors (each with

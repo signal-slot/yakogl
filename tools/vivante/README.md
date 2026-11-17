@@ -22,7 +22,7 @@ ninja -C build-etnaviv src/gallium/drivers/etnaviv/etna_shc
 
 Then `ETNA_SHC=<mesa>/build-etnaviv/src/gallium/drivers/etnaviv/etna_shc python3 glsl2vivante.py`.
 Measured 2026-09-16, when the directory held 40 shaders (not re-measured on
-today's larger set): all 40 shaders under `yakogl/tools/shaders` compile
+today's larger set): all 40 shaders under `tools/shaders` compile
 (`40/40 compiled`); the matrix vertex shader is 4 instructions, FemtoVG's gradient
 fragment shader 59, its image filter 369. The tool runs the GL state tracker's
 preparation that the driver compiler expects but does not do itself: system
@@ -196,7 +196,7 @@ that rewrites the offsets.
 The table is the corpus of several host tests, so their population pins
 moved with it (`alloc_clobber`, `backend_differential`,
 `lane_move_equivalence`, `undefined_lanes`, `operand_banks`,
-`online/vivante/roundtrip.rs`, `es100_twins`, `source_use_bits`). When the
+`src/shaderc/online/vivante/roundtrip.rs`, `es100_twins`, `source_use_bits`). When the
 table changes again, take the new numbers from the failing tests' messages.
 
 Measured again on main `5466c8dc` (2026-10-13), the same SHA-256 comparison:

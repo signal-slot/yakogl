@@ -132,7 +132,7 @@ header carries the toolchain mark, which says which compiler made it:
 // toolchain: yakogl=<crate version> commit=<git sha>[+dirty] gpu=<powervr|gc7000> es2=<0|1>
 ```
 
-The internal shaders (`internal/`: fbload, clear; GLSL 450 that the back ends carry
+The internal shaders (`tools/shaders/internal/`: fbload, clear; GLSL 450 that the back ends carry
 themselves) are out of its scope for now and skipped by count. `tools/check.sh`
 lints and tests it per build, and `tools/precompile/prove.sh FEATURES` runs its
 proofs: the table made twice is the same bytes, `--verify`, the counts of the whole
@@ -256,7 +256,7 @@ silently bring the `textureSize()` bug back.
 `glsl2usc` compiles GLSL shaders to PowerVR **USC** machine code + the driver
 wiring metadata, and emits the Rust table (`tests/reference/blobs.rs`) the *offline*
 shader backend (`src/shaderc/offline.rs`) looks shaders up in by source hash. This is the
-offline half of the shader strategy in `yakogl/DESIGN.md` (§ Shaders): on
+offline half of the shader strategy in `DESIGN.md` (§ Shaders): on
 Zephyr / bare-metal the PCO+glslang toolchain is too big to run on-target, so app
 shaders are precompiled here and embedded.
 

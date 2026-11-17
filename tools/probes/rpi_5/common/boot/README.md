@@ -48,4 +48,4 @@ did not run. The DTB must be read while the memory it sits in is still mapped
 (Zephyr's rpi_5 map is 40-bit; see the pre-study note).
 
 Do not add a probe directory for this unit: the generic rpi_5 gate row builds
-every `tools/probes/rpi_5/<name>/`, and `common/` is not a probe.
+every `tools/probes/rpi_5/<name>/`, and `tools/probes/rpi_5/common/` is not a probe.
