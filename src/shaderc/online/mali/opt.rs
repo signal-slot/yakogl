@@ -251,10 +251,11 @@ fn is_const(s: &Src, v: u32) -> bool {
 ///   producer (`|=`: the clamps are bit fields) and takes its destination;
 /// * `bi_optimizer_result_type` (:324-369): a `MUX.i32` between 0 and 1.0
 ///   on the instruction's result (`bi_is_fixed_mux`: a `b2f`'s `bcsel`)
-///   folds into an `FCMP.f32`'s `.f1` result type. Mesa does the same for
-///   a 16-bit compare and `MUX.v2i16` (with a swizzled mask composed into
-///   the compare's sources); this port's compares are 32-bit only
-///   (`FcmpOrF32`), so only the 32-bit pair is matched here.
+///   folds into an `FCMP.f32`'s `.f1` result type; a `MUX.v2i16` between 0
+///   and the fp16 1.0 on an `FCMP.v2f16`'s mask the same, the mask's
+///   swizzle composed into the compare's sources (:350-368;
+///   deqp_intval_opfs_not's `float(!(x > 0.0))`: `FCMP_OR.v2f16.ge.f1 r0,
+///   0x0, r0^.h00, 0x0`).
 ///
 /// The use is removed in both cases.
 pub fn mod_prop_backward(p: &mut Prog<'_>) {
@@ -287,6 +288,25 @@ pub fn mod_prop_backward(p: &mut Prog<'_>) {
             }
             if let Op::FcmpOrF32 { cmpf, .. } = p.ins[k].op {
                 p.ins[k].op = Op::FcmpOrF32 { cmpf, result: ResultType::F1 };
+            }
+            true
+        } else if use_.op == Op::MuxV2i16
+            && sz == 16
+            && is_const(&use_.src[0], 0)
+            && is_const(&use_.src[1], 0x3c00)
+            && matches!(i.op, Op::FcmpOrV2f16 { .. })
+        {
+            /* the mask's swizzle (`.h00` of a one-lane compare's result)
+             * composes into the compare's two sources (:350-368) */
+            let swz = use_.src[2].swz;
+            if swz != Swz::H01 {
+                for s in 0..2 {
+                    let old = Src { swz, ..Src::of(Idx::Const(0)) };
+                    p.ins[k].src[s] = compose(old, p.ins[k].src[s]);
+                }
+            }
+            if let Op::FcmpOrV2f16 { cmpf, .. } = p.ins[k].op {
+                p.ins[k].op = Op::FcmpOrV2f16 { cmpf, result: ResultType::F1 };
             }
             true
         } else if use_.op == Op::MuxI32
@@ -446,24 +466,28 @@ pub fn fuse_add_imm(p: &mut Prog<'_>) {
 
 /// The compare family of a 32-bit compare and its result type
 /// (`va_cmp_opcode_to_cmp_type`, va_optimize.c:191-215): 0 float, 1
-/// signed, 2 unsigned.
+/// signed, 2 unsigned. The `_AND` forms have a family (they match the
+/// other side) but are not fused again (`va_cmp_can_fuse`: OR forms only).
 fn cmp_family(op: Op) -> Option<(u8, ResultType)> {
     match op {
         Op::FcmpOrF32 { result, .. } => Some((0, result)),
-        Op::IcmpOrS32 { result, .. } => Some((1, result)),
-        Op::IcmpOrU32 { result, .. } => Some((2, result)),
+        Op::IcmpOrS32 { result, .. } | Op::IcmpAndS32 { result, .. } => Some((1, result)),
+        Op::IcmpOrU32 { result, .. } | Op::IcmpAndU32 { result, .. } => Some((2, result)),
         _ => None,
     }
 }
 
 /// `va_fuse_cmp` (va_optimize.c:217-291, run to a fixed point by
-/// `va_optimize_forward`, :349-385) for the 32-bit OR: `LSHIFT_OR.i32 x, y,
-/// 0` of two compares of one family and result type is the compare `x`
-/// (when it has this use alone and a zero third source) with `y` as its
-/// third source, at the LSHIFT_OR's place; else `y` with `x`.
+/// `va_optimize_forward`, :349-385) for the 32-bit forms: `LSHIFT_OR.i32 x,
+/// y, 0` of two compares of one family and result type is the compare `x`
+/// (when it is an OR form with this use alone and a zero third source) with
+/// `y` as its third source, at the LSHIFT_OR's place; else `y` with `x`.
 /// builtin_43.expect.json's `i == 0 || i == 3`: `ICMP_OR.u32.eq.m1 r2, r0,
-/// 0x0, r1`. `LSHIFT_AND` would be the `_AND` compares, which no reference
-/// draws.
+/// 0x0, r1`. `LSHIFT_AND.i32 x, y, 0` the same for `x` alone (the swapped
+/// try is the OR's, :265-271), the compare in its `_AND` form
+/// (deqp_intval_reslib_mixed_fs: `ICMP_AND.u32.eq.m1 r1, r2^, u3.w0, r1^` of
+/// `all(ivec3 == ivec3)`'s inner `iand`; its outer `iand` reads that `_AND`
+/// first and stays `LSHIFT_AND.i32`). The float `_AND` has no reference.
 pub fn fuse_cmp(p: &mut Prog<'_>) {
     let def = |p: &Prog<'_>, s: &Src| -> Option<usize> {
         let v = s.ssa_value()?;
@@ -478,7 +502,8 @@ pub fn fuse_cmp(p: &mut Prog<'_>) {
         progress = false;
         for k in 0..p.n {
             let i = p.ins[k];
-            if i.op != Op::LshiftOrI32 || i.ns != 3 || !is_const(&i.src[2], 0) {
+            let and = i.op == Op::LshiftAndI32;
+            if (i.op != Op::LshiftOrI32 && !and) || i.ns != 3 || !is_const(&i.src[2], 0) {
                 continue;
             }
             if i.src[..2].iter().any(|s| s.ssa_value().is_none() || s.swz != Swz::H01) {
@@ -492,17 +517,29 @@ pub fn fuse_cmp(p: &mut Prog<'_>) {
             if fa != fb {
                 continue;
             }
-            let fusable = |p: &Prog<'_>, j: usize| uses(p, j) == 1 && is_const(&p.ins[j].src[2], 0);
+            /* `va_cmp_can_fuse`: an OR form with this use alone and a zero
+             * third source */
+            let or_form = |op: Op| matches!(op, Op::FcmpOrF32 { .. } | Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. });
+            let fusable =
+                |p: &Prog<'_>, j: usize| or_form(p.ins[j].op) && uses(p, j) == 1 && is_const(&p.ins[j].src[2], 0);
             let (old, other) = if fusable(p, a) {
                 (a, i.src[1])
-            } else if fusable(p, b) {
+            } else if !and && fusable(p, b) {
                 (b, i.src[0])
             } else {
                 continue;
             };
             let o = p.ins[old];
+            /* `va_remap_logical_to_logical_cmp`: the LSHIFT's logic on the
+             * compare; the float AND form is not drawn */
+            let op = match (and, o.op) {
+                (false, op) => op,
+                (true, Op::IcmpOrS32 { cmpf, result }) => Op::IcmpAndS32 { cmpf, result },
+                (true, Op::IcmpOrU32 { cmpf, result }) => Op::IcmpAndU32 { cmpf, result },
+                (true, _) => continue,
+            };
             let srcs = [o.src[0], o.src[1], Src { swz: Swz::H01, ..other }];
-            p.ins[k] = Ins { flow: i.flow, slot: i.slot, ..Ins::new(o.op, i.dests(), &srcs) };
+            p.ins[k] = Ins { flow: i.flow, slot: i.slot, ..Ins::new(op, i.dests(), &srcs) };
             p.ins[k].block = i.block;
             p.remove(old);
             progress = true;

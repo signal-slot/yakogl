@@ -738,6 +738,11 @@ and a struct is never lowered (section 3.2).
 
 (d) Un-ignores, in order: `vsstruct_partial`, `vsstruct_rip`,
 `vsstruct_add`, `vsapi_struct`. (`depthrange_vs` is taken by M3.)
+Status: with the struct members as fp32 rows (205547fa) and lower-intval-1's
+`bool_colour` (the `isOk` result in the colour) together, `vsstruct_partial`
+and `vsstruct_rip` are byte-equal and un-ignored; `vsstruct_add` compiles
+and is pinned as `differs` for risk (2) below (the reference VS has no
+varying program, ours has one).
 
 (e) glmark2: the one struct uniform of the corpus, `texfill.vert`'s
 `u_fill` (`mod.rs:1286-1289`), is highp-qualified and takes the `High` arm

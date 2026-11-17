@@ -484,15 +484,14 @@ impl UboLayout {
             }
             let (comps, halves) = match u.gl_type as u32 {
                 GL_INT | GL_BOOL if u.array_len <= 1 => (1, false),
-                /* a bvec's lanes are 32-bit words, as a bool's (intbool_76_boolany) */
-                GL_BOOL_VEC2 if u.array_len <= 1 => (2, false),
-                GL_BOOL_VEC3 if u.array_len <= 1 => (3, false),
-                GL_BOOL_VEC4 if u.array_len <= 1 => (4, false),
-                /* an ivec's lanes too: int16 is off, an int uniform is not
-                 * lowered (fsivec4's `u2.w0`, `u2.w1`) */
-                GL_INT_VEC2 if u.array_len <= 1 => (2, false),
-                GL_INT_VEC3 if u.array_len <= 1 => (3, false),
-                GL_INT_VEC4 if u.array_len <= 1 => (4, false),
+                /* a bvec's lanes are 32-bit words, as a bool's (intbool_76_boolany);
+                 * an ivec's too (`caps->int16` is false, pan_screen.c:591:
+                 * lower_precision narrows no integer; fsivec4's `u2.w0`,
+                 * `u2.w1`; deqp_intval_reslib_mixed_fs's `uniform ivec3
+                 * ref_out0`, `ICMP_OR.u32.eq.m1 r1, r1^, u2.w1, 0x0`) */
+                GL_BOOL_VEC2 | GL_INT_VEC2 if u.array_len <= 1 => (2, false),
+                GL_BOOL_VEC3 | GL_INT_VEC3 if u.array_len <= 1 => (3, false),
+                GL_BOOL_VEC4 | GL_INT_VEC4 if u.array_len <= 1 => (4, false),
                 GL_FLOAT => (1, true),
                 GL_FLOAT_VEC2 if u.array_len <= 1 => (2, true),
                 GL_FLOAT_VEC3 if u.array_len <= 1 => (3, true),
