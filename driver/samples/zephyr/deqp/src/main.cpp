@@ -108,6 +108,20 @@ static const char *case_argument(void)
 }
 #endif
 
+/*
+ * The four-draw-target probe (docs/notes/mrt4-v3d-pvr.md section 3, cases:
+ * docs/notes/mrt4-deqp-cases.md): the library's test-knob setters, defined
+ * with CONFIG_YAKOGL_TEST_KNOBS (DEQP_TEST_KNOBS selects it). Both symbols
+ * default n, so a default image compiles out the declaration and the call
+ * and never references the setters.
+ */
+#if defined(CONFIG_V3D_DEQP_MRT4)
+extern "C" int v3d_debug_set_draw_targets(int n);
+#endif
+#if defined(CONFIG_PVR_DEQP_MRT4)
+extern "C" int pvr_debug_set_draw_targets(int n);
+#endif
+
 extern "C" int main(void)
 {
 #ifdef CONFIG_GC_COMMON_RESULT_SNVS
@@ -159,6 +173,17 @@ extern "C" int main(void)
         pvr_set_native_3d(CONFIG_DEQP_PVR_NATIVE_3D);
     printk("deqp: pvr_native_3d=%d (CONFIG_DEQP_PVR_NATIVE_3D=%d%s)\n", pvr_native_3d,
            CONFIG_DEQP_PVR_NATIVE_3D, CONFIG_DEQP_PVR_NATIVE_3D >= 0 ? "" : ": the library's default");
+#endif
+#if defined(CONFIG_V3D_DEQP_MRT4)
+    /* four draw targets before the first context, so GL_MAX_DRAW_BUFFERS and
+     * GL_MAX_COLOR_ATTACHMENTS answer 4 (docs/notes/mrt4-deqp-cases.md); the
+     * setter returns the previous count */
+    printk("deqp: v3d_debug_set_draw_targets(4) -> %d (CONFIG_V3D_DEQP_MRT4=y)\n",
+           v3d_debug_set_draw_targets(4));
+#endif
+#if defined(CONFIG_PVR_DEQP_MRT4)
+    printk("deqp: pvr_debug_set_draw_targets(4) -> %d (CONFIG_PVR_DEQP_MRT4=y)\n",
+           pvr_debug_set_draw_targets(4));
 #endif
     try
     {

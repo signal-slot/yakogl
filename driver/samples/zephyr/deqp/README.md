@@ -58,13 +58,43 @@ Configuration that matters:
 ## Four draw targets
 
 `CONFIG_V3D_DEQP_MRT4=y` (Pi 4, V3D) and `CONFIG_PVR_DEQP_MRT4=y` (AM62P,
-PowerVR) make the image ask for four draw targets before the first context
-(`v3d_debug_set_draw_targets(4)` / `pvr_debug_set_draw_targets(4)`; the call is
-wired by a later change). Both default to n and need `DEQP_TEST_KNOBS`, which
-the image always selects. A board session adds the symbol to the stage 2
-command, for example `-DCONFIG_V3D_DEQP_MRT4=y` for the Pi 4 or
-`-DCONFIG_PVR_DEQP_MRT4=y` for the AM62P, with a dEQP-GLES3 case filter. The
-cases to run are in `docs/notes/mrt4-deqp-cases.md`. A product never sets it.
+PowerVR) make `src/main.cpp` call `v3d_debug_set_draw_targets(4)` /
+`pvr_debug_set_draw_targets(4)` before the first context, so
+`GL_MAX_DRAW_BUFFERS` and `GL_MAX_COLOR_ATTACHMENTS` answer 4 instead of 3;
+the start-up line `deqp: <setter>(4) -> <previous count>` names the knob and
+its return value. Both default to n and need `DEQP_TEST_KNOBS`, which the
+image always selects; the setters are the library's test knobs, defined with
+`CONFIG_YAKOGL_TEST_KNOBS`, so the image links against a library built with
+that config (the deqp sample always selects it). A product never sets it.
+
+The probe image is a dEQP-GLES3 stage 2 build (`DEQP_MODULE=gles3`,
+`tools/cts/README.md`) with the symbol added to the `west build` command:
+
+```sh
+# Pi 4 (V3D): board rpi_4b; AM62P (PowerVR): verdin_am62p/am62p54/a53
+west build -p always -b rpi_4b -d build/pi4-deqp-mrt4 driver/samples/zephyr/deqp -- \
+    -DZEPHYR_MODULES="$ZEPHYR_MODULES" -DDEQP_MODULE=gles3 \
+    -DDEQP_SRC=$PWD/build/deqp-zephyr/cts -DDEQP_BUILD=$PWD/build/deqp-zephyr/build \
+    -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n \
+    -DCONFIG_V3D_DEQP_MRT4=y \
+    -DCONFIG_DEQP_CASE='"dEQP-GLES3.functional.implementation_limits.*"'
+```
+
+(the other arguments as in the stage 2 example at the top; the AM62P arm is
+`am62p-deqp-images.sh`'s, with `-DCONFIG_PVR_DEQP_MRT4=y`; tree images build
+through `pi4-deqp-images.sh` / `am62p-deqp-images.sh` and their tables,
+where a board session can add the symbol the same way).
+
+The probe is meant for the three case groups of
+`docs/notes/mrt4-deqp-cases.md`, whose verdict lines are in that note's
+"Check lines for a board session's tally":
+`functional.implementation_limits.*` (the two count cases; Pi 4 image A1 of
+`tools/cts/pi4-gles3-tree.txt`), `functional.draw_buffers_indexed.*` (image
+D1; the count alone changes none of the 76 rows), and
+`functional.fragment_out.*` (image FR2; the `random.*` cases that today fail
+with `GL_INVALID_ENUM` at `es3fFragmentOutputTests.cpp:286`). Re-take the
+same groups on the baseline image (the symbol off) first: the note's
+expected-flip list is measured against the same build.
 
 ## STM32MP257F-DK (A35)
 
