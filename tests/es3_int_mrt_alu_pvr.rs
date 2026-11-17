@@ -172,3 +172,27 @@ fn int_alu_next_to_float_lands() {
         assert_eq!(i, want, "{src}: the integer output");
     }
 }
+
+/// RC1's case: attachment 0 RGBA8 and attachment 1 RGBA8UI. Under the mixed
+/// key output 1 is packed as four unsigned bytes, red lowest, with no
+/// conversion; under attachment 0's class alone (key 0) it was packed as
+/// unorm8 like the float output (RC1 in docs/es3-cts-failures.md).
+#[test]
+fn rgba8ui_beside_rgba8_packs_output_1_as_integer() {
+    let src = "#version 300 es\nprecision highp float;\nflat in highp uint v;\n\
+               layout(location = 0) out vec4 o_f;\n\
+               layout(location = 1) out highp uvec4 o_i;\n\
+               void main() { o_f = vec4(0.25, 0.5, 0.75, 1.0); \
+               o_i = uvec4(v, v + 1u, v + 2u, 200u); }\n";
+    let rgba8ui = ShcIntRt { channels: 4, bits: 8, signed: false };
+    let key = shc_blend_key_mixed(&[shc_blend_key_rt(SHC_RT_RGBA8), shc_blend_key_int_rt(rgba8ui)]).unwrap();
+    assert_eq!(key, 0x0201_C000);
+    let rec = compile_for(src, key).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(rec.num_outputs, 2, "a dword an output");
+    assert_eq!(pixel_outputs(&rec.image), [32, 33], "pixel outputs 0 and 1, once each");
+    let mut inp = usc_exec::sentinel_inputs(1.0e30);
+    inp.coeff.fill(7);
+    let out = usc_exec::run_binary(&rec.image, &inp, true).unwrap_or_else(|e| panic!("byte model: {e}"));
+    assert_eq!(out.get(&0), Some(&PACKED_F), "RGBA8 bytes: {out:x?}");
+    assert_eq!(out.get(&1), Some(&0xC809_0807), "RGBA8UI bytes as they are: {out:x?}");
+}

@@ -8079,6 +8079,39 @@ mod tests {
         assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "every channel off: the ISP's");
     }
 
+    /// RC1's case: attachment 0 RGBA8 and attachment 1 RGBA8UI key each
+    /// output's own layout (the mixed key, `crate::target_key`), not
+    /// attachment 0's class for both; either attachment drawn alone keeps
+    /// its one-target key.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] /* glDrawBuffers and integer targets are ES 3.0 */
+    fn an_integer_target_beside_rgba8_keys_each_layout() {
+        use crate::target_key::{shc_blend_key_mixed_targets, shc_mixed_out_layout};
+        let rgba8ui = ShcIntRt { channels: 4, bits: 8, signed: false };
+        let a01 = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1];
+
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_RGBA8, GL_RGBA8UI], &a01);
+        let key = current_blend_key(gl.ctx());
+        /* tag [25], slot 0 RGBA8 (code 0x10) [10:14], slot 1 four 8-bit
+         * unsigned channels (code 3) [15:19] */
+        assert_eq!(key, 0x0201_C000);
+        let (t, n) = shc_blend_key_mixed_targets(key).unwrap();
+        assert_eq!(&t[..n], &[shc_blend_key_rt(SHC_RT_RGBA8), shc_blend_key_int_rt(rgba8ui)]);
+        assert_eq!(ShcIntRt::of_key(t[1]), Some(rgba8ui), "output 1 is the integer layout");
+        assert_eq!(shc_mixed_out_layout(&t[..n]), Some(([0, 1, 0], 2)), "one register each");
+
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_RGBA8, GL_RGBA8UI], &a01[..1]);
+        assert_eq!(current_blend_key(gl.ctx()), 0, "RGBA8 alone");
+        drop(gl);
+        let gl = Gl::new(8, 8);
+        mixed_fbo(&gl, &[GL_RGBA8UI, GL_RGBA8], &a01[..1]);
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rgba8ui), "RGBA8UI alone");
+        assert_eq!(shc_blend_key_int_rt(rgba8ui), 0x60, "the one-target key as before");
+    }
+
     #[test]
     fn blend_key_of_one_zero_is_a_plain_replace() {
         let gl = Gl::new(8, 8);
