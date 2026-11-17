@@ -393,10 +393,12 @@ mod es3 {
             GL_UNSIGNED_NORMALIZED
         );
         assert_eq!(fb_param(GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE), want[3]);
-        /* read back as any normalised buffer is */
+        /* read back as any normalised buffer is, the packed word where the
+         * 10/10/10/2 surface is held (Mesa's pair, ES 3.0 6.1.7) */
+        let pair = if ten { GL_UNSIGNED_INT_2_10_10_10_REV } else { GL_UNSIGNED_BYTE };
         assert_eq!(
             (geti(GL_IMPLEMENTATION_COLOR_READ_FORMAT) as GLenum, geti(GL_IMPLEMENTATION_COLOR_READ_TYPE) as GLenum),
-            (GL_RGBA, GL_UNSIGNED_BYTE)
+            (GL_RGBA, pair)
         );
         assert_eq!(err(), GL_NO_ERROR);
         release(fb, &[rb]);

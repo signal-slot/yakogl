@@ -111,7 +111,8 @@ change; the tests state the expectation per mask.
   unchanged) and decodes the word for `RGBA`/`UNSIGNED_BYTE`: each field is
   `(v*255 + max/2)/max`, `max` 1023 for R/G/B and 3 for A (`read_pixels`,
   `framebuffer.rs`; `8428875e`). `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`_TYPE`
-  still answer `RGBA`/`UNSIGNED_BYTE`, and `glCopyTexImage2D`/
+  answer `RGBA`/`UNSIGNED_INT_2_10_10_10_REV` for such a read buffer, as Mesa
+  does (`implementation_color_read`), and `glCopyTexImage2D`/
   `glCopyTexSubImage2D` do not decode the surface yet. Builds that hold the
   format as `RGBA8` are unchanged. The Pi 4 dEQP run is pending.
 

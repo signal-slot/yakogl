@@ -65,8 +65,11 @@ Steps 1 to 3 of (e) are on main; step 4 (the TFU) is not.
   and returns the little-endian word unchanged (ES 3.0 table 3.2). For
   `GL_RGBA`/`GL_UNSIGNED_BYTE` it decodes the word: each field becomes
   `(v*255 + max/2)/max`, with `max` 1023 for R, G, B and 3 for A. Builds
-  where the class falls back to RGBA8 are unchanged. Still `RGBA`/
-  `UNSIGNED_BYTE`: `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`_TYPE`. Not
+  where the class falls back to RGBA8 are unchanged. 
+  `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`_TYPE` answer `GL_RGBA`/
+  `GL_UNSIGNED_INT_2_10_10_10_REV` for such a read buffer (Mesa's pair,
+  ES 3.0 6.1.7; `implementation_color_read`), `RGBA`/`UNSIGNED_BYTE` where
+  the class falls back. Not
   decoded yet: `glCopyTexImage2D`/`glCopyTexSubImage2D` from the surface.
   Later items change both. The Pi 4 dEQP run is pending.
 - **Not done**: step 4. `rt_texture` (`src/v3d/backend.rs`) still requires

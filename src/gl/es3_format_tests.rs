@@ -16,9 +16,10 @@ use super::consts::*;
 use super::draw::texture_bind_2d;
 use super::es3_formats::{self, FORMATS};
 use super::framebuffer::{
-    fb_target_format, glBindFramebuffer, glBindRenderbuffer, glCheckFramebufferStatus, glFramebufferTexture2D,
-    glGenFramebuffers, glGenRenderbuffers, glGetFramebufferAttachmentParameteriv, glGetRenderbufferParameteriv,
-    glRenderbufferStorage, renderbuffer_surf_format,
+    fb_target_format, glBindFramebuffer, glBindRenderbuffer, glCheckFramebufferStatus, glFramebufferRenderbuffer,
+    glFramebufferTexture2D, glGenFramebuffers, glGenRenderbuffers, glGetFramebufferAttachmentParameteriv,
+    glGetRenderbufferParameteriv, glReadPixels, glRenderbufferStorage, implementation_color_read,
+    renderbuffer_surf_format,
 };
 use super::texture::*;
 use super::types::*;
@@ -647,4 +648,122 @@ fn narrow_formats_upload_into_their_own_class() {
     tex_image_2d(GL_R16I, 1, 1, GL_RED_INTEGER, GL_SHORT, &(-5i16).to_ne_bytes());
     assert_eq!(gl.error(), GL_NO_ERROR);
     assert_eq!(first_row(&gl, name, 1), ((-5i16).to_ne_bytes().to_vec(), GLES_TEXFMT_R16I));
+}
+
+/// The implementation read pair of the read buffer (what glGetIntegerv answers).
+fn read_pair(gl: &TestGl) -> (GLenum, GLenum) {
+    implementation_color_read(gl.ctx())
+}
+
+/// A GL_RGB10_A2 renderbuffer read buffer answers RGBA/UNSIGNED_INT_2_10_10_10_REV
+/// where the class is stored (Mesa's pair for the format, ES 3.0 6.1.7), the
+/// RGBA8 pair where it falls back.
+#[test]
+fn rgb10a2_read_pair_of_a_renderbuffer() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(4, 4);
+    let mut fb: GLuint = 0;
+    let mut rb: GLuint = 0;
+    // SAFETY: room for one name each; plain GL calls.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+    }
+    for (on, want) in [(true, (GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV)), (false, (GL_RGBA, GL_UNSIGNED_BYTE))] {
+        let _s = if on { Sampled::also(RGB10A2) } else { Sampled::none_new() };
+        // SAFETY: plain GL calls.
+        unsafe {
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB10_A2, 4, 4);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(read_pair(&gl), want, "class on {on}");
+    }
+}
+
+/// The same for a GL_RGB10_A2 texture attachment.
+#[test]
+fn rgb10a2_read_pair_of_a_texture() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(4, 4);
+    let bytes = [0u8; 64];
+    let mut fb: GLuint = 0;
+    // SAFETY: room for one name; plain GL calls.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+    }
+    for (on, want) in [(true, (GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV)), (false, (GL_RGBA, GL_UNSIGNED_BYTE))] {
+        let _s = if on { Sampled::also(RGB10A2) } else { Sampled::none_new() };
+        let name = new_tex(GL_TEXTURE_2D);
+        tex_image_2d(GL_RGB10_A2, 4, 4, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, &bytes);
+        // SAFETY: plain GL call.
+        unsafe { glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, name, 0) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(read_pair(&gl), want, "class on {on}");
+    }
+}
+
+/// An RGBA8 attachment keeps RGBA/UNSIGNED_BYTE whatever the class bit says.
+#[test]
+fn rgb10a2_read_pair_leaves_an_rgba8_attachment_alone() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(4, 4);
+    let _s = Sampled::also(RGB10A2);
+    let bytes = [0u8; 64];
+    let mut fb: GLuint = 0;
+    // SAFETY: room for one name; plain GL calls.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+    }
+    let name = new_tex(GL_TEXTURE_2D);
+    tex_image_2d(GL_RGBA8, 4, 4, GL_RGBA, GL_UNSIGNED_BYTE, &bytes);
+    // SAFETY: plain GL call.
+    unsafe { glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, name, 0) };
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(read_pair(&gl), (GL_RGBA, GL_UNSIGNED_BYTE));
+}
+
+/// glReadPixels of an RGB10_A2 texture: the word unchanged for the packed
+/// pair, each field scaled to a byte (R/G/B over 1023, A over 3) for bytes.
+#[test]
+fn rgb10a2_read_decodes_the_word_and_returns_it_for_the_packed_pair() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(1, 1);
+    let _s = Sampled::also(RGB10A2);
+    let word: u32 = 1023 | (512 << 10) | (2 << 30);
+    let bytes = word.to_le_bytes();
+    let mut fb: GLuint = 0;
+    // SAFETY: room for one name; plain GL calls.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+    }
+    let name = new_tex(GL_TEXTURE_2D);
+    tex_image_2d(GL_RGB10_A2, 1, 1, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, &bytes);
+    // SAFETY: plain GL call.
+    unsafe { glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, name, 0) };
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    let mut out = [0u8; 4];
+    // SAFETY: `out` holds one RGBA/UNSIGNED_BYTE pixel.
+    unsafe { glReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, out.as_mut_ptr() as *mut c_void) };
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    /* (v * 255 + max / 2) / max */
+    assert_eq!(out, [255, ((512 * 255 + 511) / 1023) as u8, 0, ((2 * 255 + 1) / 3) as u8]);
+    let mut w = [0u8; 4];
+    // SAFETY: `w` holds one packed pixel.
+    unsafe { glReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, w.as_mut_ptr() as *mut c_void) };
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(u32::from_le_bytes(w), word);
 }
