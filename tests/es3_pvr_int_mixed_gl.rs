@@ -552,6 +552,9 @@ fn shader(type_: GLenum, src: &CStr) -> GLuint {
 /// Three draw buffers are on for the whole file.
 fn rig() -> MutexGuard<'static, ()> {
     let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    /* a refusal another test of the file logged first through glog_once!
+     * logs again */
+    yakogl::osal::new_log_epoch();
     ONCE.call_once(|| {
         // SAFETY: statics; the lock serialises every GL call of the file.
         unsafe {
