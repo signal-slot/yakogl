@@ -21,10 +21,6 @@ const OTHER_TYPE: &str = "a uniform other than a float, vec2, vec3, vec4 or mat4
 const VS_NOT_HIGHP: &str = "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member";
 /// A mediump fragment shader uniform of a type outside the supported list.
 const FS_MEDIUMP: &str = "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp";
-/// A gl_FragColor lane written from something else: where `fsmat4_mediump`
-/// is refused since plan #367's lower-fs-arith lowered the arithmetic in front
-/// of it.
-const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
 /// An integer value the fragment walk does not take yet: where `fsivec4` is
 /// refused since plan #377's lower-intval-1 let the fp16 block hold an ivec
 /// uniform (its `vec4(fTest).xy` is `i2f32` of the words, read into a colour
@@ -51,10 +47,14 @@ const REFUSED: &[(&str, &str)] = &[
     ("depthrange_fs", FS_MEDIUMP),
     ("fsmat2_mediump", FS_MEDIUMP),
     ("fsmat3_mediump", FS_MEDIUMP),
-    ("fsmat4_mediump", FRAGCOLOR_LANE),
     ("fsivec4", INT_VALUE),
     ("fsmulti", FS_MEDIUMP),
 ];
+
+/// Every reference that compiles byte-equal (its test not ignored):
+/// `fsmat4_mediump` since plan #377's constop spike, its `vec4(.., 1.0)`
+/// lane beside a computed one.
+const MATCHED: &[&str] = &["fsmat4_mediump"];
 
 #[test]
 fn refusals_pinned() {
@@ -67,7 +67,8 @@ fn refusals_pinned() {
         })
         .collect();
     on_disk.sort();
-    let mut listed: Vec<String> = REFUSED.iter().map(|(n, _)| n.to_string()).collect();
+    let mut listed: Vec<String> =
+        REFUSED.iter().map(|(n, _)| n.to_string()).chain(MATCHED.iter().map(|n| n.to_string())).collect();
     listed.sort();
     assert_eq!(on_disk, listed, "every deqp_unitype_* reference has a test and a pin");
     let changed: Vec<String> = REFUSED
@@ -180,7 +181,6 @@ fn fsmat3_mediump() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (past its mat4 uniform since plan #367's lower-fs-arith), lowered by lower-unitype"]
 fn fsmat4_mediump() {
     mali_ref::assert_matches("deqp_unitype_fsmat4_mediump");
 }
