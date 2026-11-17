@@ -25,6 +25,12 @@ Zephyr merges them), the Kconfig files and the tables, and fails when
     MiB for image T5; i.MX8MP: 160 MiB heap; AM62P: 256 MiB GPU carve-out),
     or the T6's is under 64 MiB (no passing sweep yet: the size the 2048x2048
     textures need, as image T5);
+  - the sample calls a test-knob entry point where a conformance image
+    compiles it in: every call of a `*_debug_*` setter sits under an
+    `#if defined(CONFIG_X)` / `#ifdef CONFIG_X` guard whose symbol the Kconfig
+    says `default n` and no recipe of this checkout enables (a call with no
+    such guard, or one whose guard is enabled by a recipe, fails; the
+    builder's --config form still refuses a built image with any knob on);
   - a table no longer selects every case of gles2-mustpass.txt, or the AM62P
     multisample table is not the rgba8888d24s8ms4 image;
   - a dEQP-GLES3 table (am62p-gles3-tree.txt, pi4-gles3-tree.txt) does not
@@ -105,6 +111,58 @@ def kconfig_block(sym):
             if on:
                 out.append(l)
     return '\n'.join(out)
+
+
+def defined_terms(cond):
+    """The symbols of an `#if` condition that is a pure conjunction of
+    `defined(SYM)` terms, or None for anything else (an `||`, a `!`, an
+    arithmetic test): those branches are not creditable to a default-n
+    guard."""
+    syms = []
+    for part in cond.split('&&'):
+        m = re.fullmatch(r'defined\s*\(\s*(CONFIG_)?([A-Z][A-Z0-9_]*)\s*\)', part.strip())
+        if not m:
+            return None
+        syms.append(m.group(2))
+    return syms or None
+
+
+def knob_call_problems(text, rel, off_sym):
+    """(problems, guarded_calls) for one source file.
+
+    A test-knob entry point may be called only where a conformance image
+    compiles the call out: inside an `#if defined(CONFIG_X)` (or `#ifdef
+    CONFIG_X`) whose X off_sym(X) accepts. `#else`, `#elif` and `#ifndef`
+    branches are not creditable to an enclosing guard; neither is a
+    condition we cannot parse. rel only names the file in the messages.
+    """
+    bad, guarded = [], 0
+    stack = []
+    for i, line in enumerate(text.splitlines(), 1):
+        g = re.match(r'\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)$', line)
+        if g:
+            kind, cond = g.group(1), g.group(2).strip()
+            if kind == 'if':
+                terms = defined_terms(cond)
+                stack.append(bool(terms) and any(off_sym(s) for s in terms))
+            elif kind == 'ifdef':
+                m = re.fullmatch(r'(CONFIG_)?([A-Z][A-Z0-9_]*)', cond)
+                stack.append(bool(m) and off_sym(m.group(2)))
+            elif kind == 'ifndef':
+                stack.append(False)
+            elif kind in ('else', 'elif'):
+                if stack:
+                    stack[-1] = False
+            elif kind == 'endif' and stack:
+                stack.pop()
+            continue
+        for m in re.finditer(r'\b(gc_debug_set_\w+|v3d_debug_\w+|gc_debug_\w+|pvr_debug_\w+)\s*\(', line):
+            if any(stack):
+                guarded += 1
+            else:
+                bad.append('%s:%d calls the test knob %s (a conformance image sets none)'
+                           % (rel, i, m.group(1)))
+    return bad, guarded
 
 
 def conformance_rules(c, name, gles3=False, ms4=None):
@@ -227,14 +285,36 @@ def check_repo():
             bad.append('zephyr/Kconfig: %s is on by default' % s)
     if not has('DEQP_TEST_KNOBS', r'select YAKOGL_TEST_KNOBS'):
         notes.append('deqp/Kconfig: DEQP_TEST_KNOBS no longer selects YAKOGL_TEST_KNOBS (fine only if no knob is called)')
-    # the sample sets none of the knobs: no call of a test-knob entry point
-    for d in (DEQP,):
-        for dp, _, fn in os.walk(os.path.join(d, 'src')):
-            for f in fn:
-                t = read(os.path.join(dp, f))
-                for m in re.finditer(r'\b(gc_debug_set_\w+|v3d_debug_\w+|gc_debug_\w+|pvr_debug_\w+)\s*\(', t):
-                    bad.append('%s calls the test knob %s (a conformance image sets none)'
-                               % (os.path.relpath(os.path.join(dp, f), REPO), m.group(1)))
+    # the sample compiles none of the knobs into a conformance image: a call
+    # of a test-knob entry point is allowed only under an #if/#ifdef guard
+    # whose symbol the Kconfig cannot default on, no recipe of this checkout
+    # enables and no Kconfig selects (the draw-target probe of dede8650 calls
+    # its setter under CONFIG_V3D_DEQP_MRT4 / CONFIG_PVR_DEQP_MRT4, both
+    # default n: a default image compiles the declaration and the call out)
+    on = {s: 'y' for c in [base] + list(boards.values()) for s, v in c.items() if v == 'y'}
+    selected = set()
+    for dp, dn, fn in os.walk(REPO):
+        dn[:] = [x for x in dn if x not in ('.git', 'target', 'build', 'node_modules')]
+        for f in fn:
+            if f.startswith('Kconfig'):
+                selected |= set(re.findall(r'\bselect\s+([A-Z][A-Z0-9_]*)', read(os.path.join(dp, f))))
+    def off_sym(sym):
+        if sym in selected or on.get(sym) == 'y':
+            return False
+        for l in kconfig_block(sym).splitlines():
+            m = re.match(r'\s*default\s+(.*)', l)
+            if m and not re.match(r'n\b', m.group(1)):
+                return False
+        return True
+    guarded = 0
+    for dp, _, fn in os.walk(os.path.join(DEQP, 'src')):
+        for f in sorted(fn):
+            p = os.path.join(dp, f)
+            b, g = knob_call_problems(read(p), os.path.relpath(p, REPO), off_sym)
+            bad += b
+            guarded += g
+    if guarded:
+        notes.append('%d test-knob calls, every one under a default-n guard no recipe enables' % guarded)
     # PowerVR switches the sample passes: their Kconfig defaults must be the library's
     for s, want in (('DEQP_PVR_NATIVE_CUBE', 'default -1'), ('DEQP_PVR_NATIVE_ARRAY', 'default -1'),
                     ('DEQP_PVR_NATIVE_3D', 'default -1')):
@@ -365,6 +445,38 @@ def self_test():
     ok(rows == [('MS4', ' multisample.* (with DEQP_GL_CONFIG_NAME=rgba8888d24s8ms4)', 'dEQP-GLES2.functional.multisample.*')],
        'the ms4 table is one labelled row with its render config')
     ok(selects('a.b.*,c.d.*', 'c.d.e') and not selects('a.b.*', 'a.c.d'), 'filters select like dEQP patterns')
+    # the test-knob rule: a call is a defect unless a conformance image
+    # compiles it out (the draw-target probe guards, dede8650). off is the
+    # stand-in for the Kconfig/recipe predicate the repo form builds.
+    def off(sym):
+        return sym == 'OFF_SYM'
+    def kp(text):
+        return knob_call_problems(text, 'a.cpp', off)[0]
+    ok(kp('v3d_debug_set_draw_targets(4);\n'), 'an unguarded test-knob call is refused')
+    ok(kp('#if defined(CONFIG_OFF_SYM)\nv3d_debug_set_draw_targets(4);\n#endif\n') == [],
+       'a call under an #if defined guard of an off symbol passes')
+    ok(kp('#ifdef OFF_SYM\ngc_debug_set_x(1);\n#endif\n') == [],
+       'a call under an #ifdef of an off symbol passes')
+    ok(kp('#if defined(OFF_SYM)\nextern "C" int pvr_debug_set_draw_targets(int n);\n#endif\n') == [],
+       'a guarded declaration passes too')
+    ok(kp('#if defined(CONFIG_ON_SYM)\npvr_debug_set_draw_targets(4);\n#endif\n'),
+       'a guard whose symbol is not off is refused')
+    ok(kp('#if defined(ON_SYM) && defined(OFF_SYM)\ngc_debug_set_x(1);\n#endif\n') == [],
+       'a conjunction with one off term is compiled out')
+    ok(kp('#if defined(ON_SYM) || defined(OFF_SYM)\ngc_debug_set_x(1);\n#endif\n'),
+       'an || guard is refused (one off term does not keep the block out)')
+    ok(kp('#if !defined(ON_SYM) && defined(OFF_SYM)\ngc_debug_set_x(1);\n#endif\n'),
+       'a negated term is refused')
+    ok(kp('#ifndef OFF_SYM\ngc_debug_set_x(1);\n#endif\n'),
+       'an #ifndef branch is compiled in and refused')
+    ok(kp('#if defined(OFF_SYM)\n#else\ngc_debug_set_x(1);\n#endif\n'),
+       'the #else branch of a guard is compiled in and refused')
+    ok(kp('#if defined(OFF_SYM)\n#endif\ngc_debug_set_x(1);\n'),
+       'a call after the #endif is refused again')
+    ok(kp('#if defined(OFF_SYM)\n#if defined(ON_SYM)\nv3d_debug_set_x(1);\n#endif\n#endif\n') == [],
+       'a call nested in an off block passes, the outer guard decides')
+    ok(knob_call_problems('#if defined(OFF_SYM)\nv3d_debug_set_x(1);\n#endif\n', 'a.cpp', off)[1] == 1,
+       'the guarded call is counted (the repo note reports it)')
     print('check-deqp-images self-test: %d checks failed' % fails)
     return fails
 
