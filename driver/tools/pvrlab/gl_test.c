@@ -502,7 +502,6 @@
  *               gl_test_es3_divmix.inc). Needs a back end that takes the
  *               divisors; the PowerVR before P3 fails all 24 checks (every
  *               instance lands in cell 0). All GPUs. Opt-in, by number
- *               All GPUs. Opt-in, by number
  * 244 w128tex   the GC7000UL's two-plane RGBA32 sampling (board check of
  *               docs/notes/gc-128bit-swizzle.md section 6): 4x4 NEAREST
  *               textures of distinct per-lane values, RGBA32F via sampler2D,
