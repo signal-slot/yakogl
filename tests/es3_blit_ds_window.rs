@@ -533,10 +533,13 @@ fn to_memory(pic: &[f32], y_up: bool) -> Vec<f32> {
         .collect()
 }
 
+/// One blit: the source rectangle, the destination rectangle, the scissor.
+type WindowCase = ([i32; 4], [i32; 4], Option<[i32; 4]>);
+
 /// The blits of the window: whole, scaled and flipped past the edge, and cut
 /// by the scissor. Every sample point of the destination rectangle (cut to the
 /// window) is inside the source (a `sw` x `sh` image).
-fn window_cases(sw: i32, sh: i32) -> Vec<([i32; 4], [i32; 4], Option<[i32; 4]>)> {
+fn window_cases(sw: i32, sh: i32) -> Vec<WindowCase> {
     vec![
         ([0, 0, sw, sh], [0, 0, WIN as i32, WIN as i32], None),
         ([0, 0, sw, sh], [20, 14, 4, 6], None),
