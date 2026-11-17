@@ -278,7 +278,8 @@ stand-in. Like `es3_blit_ds.rs`, it runs in every non-es2 host-test row of
 12. Without `ds_write` (the `BACKEND` stand-in), stencil to a texture is
     still refused, and depth from a face still works.
 
-`tests/es3_blit_ds.rs` `the_window_and_stencil_textures_stay_refused_with_the_entries`
-(`:747-769`) asserts that stencil into and out of a texture is refused. The
-gl-ds-layers item must reduce it to the window cases (or to a texture not
-drawn, per test 9) in the same commit.
+`tests/es3_blit_ds.rs` `stencil_in_a_texture_stays_refused_with_the_entries`
+(`:746-769`) asserts that stencil into and out of a texture is refused (its
+window cases moved to `tests/es3_blit_ds_window.rs` with gl-ds-window). The
+gl-ds-layers item must reduce it to a texture not drawn (per test 9) or
+remove it in the same commit.

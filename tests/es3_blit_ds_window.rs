@@ -30,10 +30,10 @@
 //! the window and the scissor box (the cases chosen keep every sample point
 //! inside the source), written with the pitch `WIN`.
 //!
-//! The tests that need the window path (`DepthSource::Window`,
-//! `PlaneDst::Window`) are `#[ignore]`d for the gl-ds-layers item: today the
-//! window is GL_INVALID_OPERATION on both sides. The tests that pass today
-//! (refusals that must stay) are not.
+//! The window path is `DepthSource::Window` / `PlaneDst::Window` of
+//! gl/blit.rs (item gl-ds-window). The refusals that stay (the window to the
+//! window, a back end without an entry, an unheld window plane) are pinned
+//! beside it.
 //!
 //! Feature sets (as tests/es3_blit_ds.rs, with one GPU feature): `cargo test
 //! --features host-test,gpu-powervr --test es3_blit_ds_window`, and the same
@@ -555,7 +555,6 @@ fn window_cases(sw: i32, sh: i32) -> Vec<WindowCase> {
 /// order, and the rest of its plane stays. One ds_write per blit carries the
 /// cut rectangle of the renderbuffer (a renderbuffer is never mirrored).
 #[test]
-#[ignore = "gl-ds-layers: window depth/stencil blit (docs/notes/blit-depth-window.md)"]
 fn depth_from_the_window_into_a_renderbuffer() {
     let _g = context_rw();
     let (dfb, drb) = renderbuffer_fbo(WIN as i32, WIN as i32);
@@ -594,7 +593,6 @@ fn depth_from_the_window_into_a_renderbuffer() {
 /// end that cannot write a plane (`depth_resolve` only): the window is read
 /// whole under its id, once per blit, with the mirror applied by the core.
 #[test]
-#[ignore = "gl-ds-layers: window depth/stencil blit (docs/notes/blit-depth-window.md)"]
 fn depth_from_the_window_into_a_texture() {
     let _g = context_on(&BACKEND_READ_ONLY);
     let (dfb, tex) = texture_fbo(WIN, WIN, dst_depth);
@@ -703,13 +701,11 @@ fn check_depth_into_window(source: Source) {
 }
 
 #[test]
-#[ignore = "gl-ds-layers: window depth/stencil blit (docs/notes/blit-depth-window.md)"]
 fn depth_from_a_renderbuffer_into_the_window() {
     check_depth_into_window(Source::Renderbuffer);
 }
 
 #[test]
-#[ignore = "gl-ds-layers: window depth/stencil blit (docs/notes/blit-depth-window.md)"]
 fn depth_from_a_texture_into_the_window() {
     check_depth_into_window(Source::Texture);
 }
@@ -720,7 +716,6 @@ fn depth_from_a_texture_into_the_window() {
 /// `ds_write` of the renderbuffer): the stencil plane takes the model's
 /// values of the window in GL row order, the depth plane is not touched.
 #[test]
-#[ignore = "gl-ds-layers: window depth/stencil blit (docs/notes/blit-depth-window.md)"]
 fn stencil_from_the_window() {
     let _g = context_rw();
     let (dfb, drb) = renderbuffer_fbo(WIN as i32, WIN as i32);
@@ -760,7 +755,6 @@ fn stencil_from_the_window() {
 /// stencil plane is read whole, mirrored, copied into, mirrored back, and the
 /// cut rectangle written at its memory rows; the window's depth plane stays.
 #[test]
-#[ignore = "gl-ds-layers: window depth/stencil blit (docs/notes/blit-depth-window.md)"]
 fn stencil_into_the_window() {
     let _g = context_rw();
     let (sfb, srb) = renderbuffer_fbo(8, 8);
@@ -800,7 +794,6 @@ fn stencil_into_the_window() {
 /// Depth and stencil in one call into the window: both planes, each with its
 /// own ds_write at the same memory rows.
 #[test]
-#[ignore = "gl-ds-layers: window depth/stencil blit (docs/notes/blit-depth-window.md)"]
 fn depth_and_stencil_into_the_window_together() {
     let _g = context_rw();
     let (sfb, srb) = renderbuffer_fbo(8, 8);
@@ -945,8 +938,7 @@ fn without_stencil_resolve_no_stencil_reaches_the_window() {
 /// The destination plane being unheld (the probe `ds_write` of an empty
 /// rectangle answers 1) cannot be written: GL_INVALID_OPERATION before any
 /// copy, nothing written (REFUSED_DS_UNHELD, as for a renderbuffer in
-/// tests/es3_blit_ds.rs). Today it is refused as a window; after gl-ds-layers
-/// it is refused as unheld: either way this stays an error.
+/// tests/es3_blit_ds.rs).
 #[test]
 fn a_window_destination_the_back_end_holds_nothing_for_is_an_error() {
     let _g = context_rw();
@@ -971,7 +963,6 @@ fn a_window_destination_the_back_end_holds_nothing_for_is_an_error() {
 /// depth is undefined, so the blit is not an error and the destination stays as
 /// it was, nothing written. Into a renderbuffer and into a texture.
 #[test]
-#[ignore = "gl-ds-layers: window depth/stencil blit (docs/notes/blit-depth-window.md)"]
 fn a_window_depth_that_holds_nothing_leaves_the_destination() {
     let _g = context_rw();
     let (dfb, drb) = renderbuffer_fbo(WIN as i32, WIN as i32);
@@ -996,7 +987,6 @@ fn a_window_depth_that_holds_nothing_leaves_the_destination() {
 
 /// The same for the window's stencil.
 #[test]
-#[ignore = "gl-ds-layers: window depth/stencil blit (docs/notes/blit-depth-window.md)"]
 fn a_window_stencil_that_holds_nothing_leaves_the_destination() {
     let _g = context_rw();
     let (dfb, drb) = renderbuffer_fbo(WIN as i32, WIN as i32);

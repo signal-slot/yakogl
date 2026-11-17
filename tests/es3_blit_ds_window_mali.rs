@@ -22,11 +22,9 @@
 //!     of the renderbuffer (a renderbuffer is written through the back end
 //!     only): refused;
 //!   - depth from the window into a depth TEXTURE needs only `depth_resolve`
-//!     (the GL core holds the texels): it works once the GL core's window
-//!     path lands (plan item gl-ds-window), Mali entries or not. At this
-//!     base the window is refused on both sides in every case, so that case
-//!     is an `#[ignore]`d twin gated on gl-ds-window, not on #152, and is
-//!     not in the passing set.
+//!     (the GL core holds the texels): it works through the GL core's window
+//!     path (plan item gl-ds-window), Mali entries or not, and is pinned
+//!     unignored on the Mali's own table (`depth_from_the_window_into_a_texture`).
 //!
 //! Window -> window is GL_INVALID_OPERATION whatever the table (ES 3.0.6
 //! 4.3.3: the same buffer read and written). A blit whose mask is only
@@ -43,7 +41,7 @@
 //!
 //! The twins run on `BACKEND_LIFTED`: the same table with a stand-in
 //! `ds_write` and `stencil_resolve` that keep planes in memory. To lift
-//! (plan #152 gives the Mali the entries, gl-ds-window has landed): remove
+//! (plan #152 gives the Mali the entries; gl-ds-window has landed): remove
 //! the `#[ignore]`s and replace `BACKEND_LIFTED`'s two entries with
 //! `yakogl_backend_mali`'s on a Mali OSAL rig that reads the planes back
 //! through them; the seeded `depth_resolve` stands until then.
@@ -779,11 +777,10 @@ fn depth_from_the_window_into_a_renderbuffer() {
 }
 
 /// Depth from the window into a depth texture, which the GL core holds
-/// itself: the Mali's table as it is (`depth_resolve` only) is enough, so this
-/// twin waits for the GL core's window path (gl-ds-window) and not for #152.
-/// The window is read whole under its id, once per blit, mirrored by the core.
+/// itself: the Mali's table as it is (`depth_resolve` only) is enough
+/// through the GL core's window path (gl-ds-window), without #152. The
+/// window is read whole under its id, once per blit, mirrored by the core.
 #[test]
-#[ignore = "needs the GL core's window path (gl-ds-window), not the Mali entries"]
 fn depth_from_the_window_into_a_texture() {
     let _g = context_mali();
     let (dfb, tex) = texture_fbo(WIN, WIN, dst_depth);
