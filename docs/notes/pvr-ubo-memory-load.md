@@ -7,7 +7,10 @@ docs only: no code was changed and nothing was run (no `PCO_SHC`, no board).
 Mesa is the 26.2.1 tree (`$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`, MIT; the
 note quotes facts from it, not code). Mesa paths are relative to
 `src/imagination/`. `[M]` = measured by reading, `[U]` = unknown, not
-measured.
+measured. The `[U]` items of the first version were settled from the Mesa
+source on 2026-11-17 (plan #378 item `note-verdicts`); each verdict is marked
+`[M]` with its Mesa cite. Cites are at 26.2.1. Only items Mesa cannot decide
+keep `[U]`, each with the reason.
 
 Reconciled on 2026-11-16 at tip `372e5184` (plan #378 item `note-reconcile`).
 §8 settles the address layout, the block-byte source, the `ld` alignment and
@@ -175,14 +178,26 @@ wdf       drc0
 ```
 
 The clamp is today's (`select.rs:1950-1970`): `ilt`/`bcsel` twice. It keeps
-the read inside the array, so `ld` never runs past the snapshot (§6). The
+the read inside the array, so `ld` never runs past the snapshot (§6). It is
+ours, not pco's [M]: `trans_load_buffer` adds the offset source unchecked
+(`pco/pco_trans_nir.c:1190-1246`, offset is `src[1]`, `:2191-2194`). pco
+bounds a run-time UBO offset only when the Vulkan device enables
+`robustBufferAccess`, and then in NIR before translation
+(`nir_lower_robust_access` over `load_ubo`/`load_ssbo`,
+`pco/pco_nir.c:795-810,904-905`; the flag is set at
+`vulkan/pvr_arch_pipeline.c:2457`). Without it pco emits no clamp, so
+keeping ours is a decision for GL, not a copy of Mesa. The
 existing default-uniform path writes `idx0` and reads `shared[idx0]`. The
 `ld` path does not touch `idx0`, so a block read can sit between two
 `idx0` reads (`prepare.rs:1339`).
 
 A 64-bit address with no offset could in principle go straight from the
 shared pair into `s0`. pco never does that; it always adds into temps. We
-do the same [U whether a backend `s0` may name a shared pair].
+do the same. The `ld` encode map does not forbid a shared source for `SRC(2)`
+(`op_ref_maps` allows any of s0..s5, `pco/pco_map.py:1352-1363`), so the
+encoder would accept it. [U] whether the silicon takes a shared pair as the
+`ld` address: Mesa never emits it, so the source cannot decide it, and the
+`add64_32` into temps costs one instruction.
 
 ## 3. The address source: a shared-register pair
 
@@ -213,15 +228,27 @@ descriptors and the default-uniform prefix. This is the same convention as
 `meta_off` (`src/shaderc/online/powervr/abi.rs:105-110`;
 `src/pvr/backend.rs:7831-7855` uses it as `dest_offset` verbatim) and
 `fs_front_face_off1` (`src/shaderc/mod.rs:1341`; `chain.rs:1731` writes
-`f + 1`). We choose an even register [U whether the hardware requires 64-bit
-alignment for an `add64_32` source pair; even costs at most one register].
+`f + 1`). The pair may sit on **any** register [M]. `add64_32` takes the two halves as
+separate 32-bit sources, `add64_32 dst_lo, dst_hi, src0, src1, src2, cin`
+(`pco/pco_ops.py:385`; group `s[0]`, `s[1]`, `s[2]` hold `SRC(0)`, `SRC(1)`,
+`SRC(2)`, `pco/pco_map.py:2282-2300`), and `pco_ref_hwreg_addr_comps` builds
+them as `index` and `index + 1` of the shared class with no alignment
+(`pco/pco_internal.h:2496-2502`). Mesa's own shared pairs are unaligned: the
+spill base `{start, start + 1}` (`pco/pco_ra.c:355-360`) sits at
+`shareds` after a 3-dword block with no alignment
+(`vulkan/pvr_arch_pipeline.c:2643-2650`), and a buffer descriptor is read
+at `sh_index`, `sh_index + 1` (`pco/pco_trans_nir.c:1212-1216`). The
+temp pair for the sum (`t0`, `t1`) needs none either: the register
+allocator's classes are contiguous runs of any start
+(`ra_alloc_contig_reg_class`, `pco/pco_ra.c:591-627`). So we place the pair
+at the next free register and save the padding register.
 
 *How the compiler names it* (§8.4 gives the field's exact place).
 - A new record field `ubo_addr_off1: u16` on `ShcShader` (`src/shaderc/mod.rs`,
   0 = the stage reads no block member). The
   `UscProgram` mirror `ubo_addr_off: Option<u16>` goes in `abi.rs`.
 - The chain computes it like `meta_off` (`chain.rs:758`:
-  `base + meta_dword`). It is the first even register past the
+  `base + meta_dword`). It is the first register past the
   default-uniform prefix and before `meta_off`. The front-face and meta
   registers move up by two when it is present.
 - `src/shaderc/mod.rs` is held by plan #366. The field waits for it, or is
@@ -244,10 +271,21 @@ it.
 
 *Shared registers at or above 256.* A pair at sh256 or above is read through
 `idx0` by `index_high_shared` (`prepare.rs:1311-1330`,
-`SHARED_DIRECT_LIMIT`), as for any shared source [U: that a 64-bit
-`add64_32` source pair read through `idx0` reads both halves. The
-`ubo-select` item tests a pair above 256]. A default prefix of up to 1536
-dwords puts the pair there.
+`SHARED_DIRECT_LIMIT`), as for any shared source. Whether an
+`idx0`-indexed read of a 64-bit `add64_32` source pair reads both halves is
+**settled [M]:** there is no pair read. Mesa's legalizer rewrites every shared operand
+at index 256 or more of one instruction separately: it emits one
+`movi32 idx0, min_offset` and rebases each such operand to `idx0 + (reg -
+min)` (`pco/pco_legalize.c:462-522`, the `< 256` test at `:473,:484`).
+`add64_32`'s lo and hi are two operands, each read through `idx0` as a
+32-bit source, and both get the one `idx0`. The only limits are that the
+operands of one instruction span less than 256 registers and are of one
+class (asserts in the same function); `lo`, `lo + 1` satisfy both. So
+`SHARED_DIRECT_LIMIT` reaches 256 as for any shared source, and
+`index_high_shared` rewrites the two halves of the `add64_32` as two ordinary
+operands. The `ubo-select` unit test of a pair above 256 stays, as a check of
+our rewrite, not of the hardware. A default prefix of up to 1536 dwords puts
+the pair there.
 
 ## 4. The wait on the result
 
@@ -309,7 +347,8 @@ later optimisation pco does not make either.
     (`select.rs:1950` ff.).
 - A load that straddles a member and a default row is refused by name
   (`NotYet`). Reflection gives each member its own row, so this should not
-  occur [U].
+  occur [U: a property of our `reflect.rs`, not of Mesa; the `ubo-chain`
+  test checks it on real shaders].
 
 **The shared prefix.**
 - The shared registers then hold only the dwords read through shared
@@ -324,7 +363,9 @@ later optimisation pco does not make either.
   dword 64 of 100). The new count is computed from the reads, so a read past
   it is impossible by construction.
 
-[U] Is every member row placed after every default row in the flat array?
+[U: a property of our reflection layout, not of Mesa; the `ubo-chain` test
+settles it.] Is every member row placed after every default row in the flat
+array?
 If a member row came first, it would sit inside the shared prefix. That
 wastes registers but is still correct. The `ubo-chain` item asserts the
 order on a mixed shader. If the order is wrong, the prefix is still bounded
@@ -381,8 +422,11 @@ shows the copy.
    existing full-frame retry instead (§8.2).
 5. **The snapshot must be readable by the USC's `ld`.** It must be mapped in
    the USC's heap and cached coherently [U: the GENERAL arena is already
-   read by the PDS DMA; that the same BO is visible to a USC global load is
-   checked by the planned 16 KiB UBO draw test on the host and on the board].
+   read by the PDS DMA; whether the same BO is visible to a USC global load
+   is a silicon and kernel-mapping fact that Mesa source cannot settle. Mesa
+   only shows the same path in use: the Vulkan driver's user UBOs are plain
+   device memory read by the same `ld` (`pco/pco_trans_nir.c:1190-1246`).
+   The planned 16 KiB UBO draw test on the host and on the board decides it].
 
 **What replaces the GENERAL-arena staging of blocks.** Nothing else is
 staged. The same snapshot stops being *copied into the shared registers*
@@ -398,8 +442,9 @@ The `u16` dword counts hold it (`context.rs:134`). The
 `draw.rs` staging buffer (`fs_uniform_gpu`, `draw.rs:3978`) is only for
 back ends that do not read the host arrays. The PowerVR reads
 `*_uniform_cpu` when it is set (`backend.rs:7795`) [U: whether the PowerVR
-ever takes the `*_uniform_gpu` path with a null cpu pointer. If it does, that
-buffer must grow too].
+ever takes the `*_uniform_gpu` path with a null cpu pointer; a fact of our
+`draw.rs`, not of Mesa. §8.2 settles that path: it reads `pg.uniforms`, sized
+from the same `room`].
 
 ## 7. Ordered change list and tests
 
@@ -474,7 +519,7 @@ for that plan.
    RC10 in `docs/es3-cts-failures.md` (after #375, #361, #366).
 9. **Board** (AM62P, after #347): `functional.ubo`, `implementation_limits`,
    and the 16384-byte draw at its first and last dword. This is the first
-   silicon read of a USC `ld` from the GENERAL arena (§6 item 5 [U]).
+   silicon read of a USC `ld` from the GENERAL arena (§6 item 5, still [U]).
 
 ## 8. Reconciled decisions (address layout, block bytes, alignment, interface)
 
@@ -618,12 +663,11 @@ of the staging, not a use of the reported value. The value would still be
 correct for a later in-place read (Study C). `ubo-backend` asserts
 `gpu & 3 == 0` on the pair it writes.
 
-**The pair's own register** stays even (§3). This is a conservative choice,
-not a known rule. The two 32-bit reads of the `gl_FragCoord` pair need no
-evenness: it sits at `base + uniform_dwords`, whatever its parity
-(`src/shaderc/online/powervr/select.rs:220-222`, `chain.rs:759`). Whether a
-64-bit `add64_32` source pair needs it is [U], and even costs at most one
-register.
+**The pair's own register** needs no alignment (§3, [M]). The first version
+chose an even one as a hedge; Mesa shows `add64_32` takes the halves as two
+32-bit sources, so nothing needs it. Like the `gl_FragCoord` pair, it sits
+wherever the layout puts it
+(`src/shaderc/online/powervr/select.rs:220-222`, `chain.rs:759`).
 
 ### 8.4 The compiler-to-back-end interface
 
@@ -707,7 +751,7 @@ meta and front face are placed after the **whole** flat array:
 `ubo-select`/`ubo-chain` rebase all three on the shared prefix:
 - `base = TEX_DESC_DWORDS * samplers`;
 - the prefix occupies `[base, base + uniform_sh_dwords)`;
-- `ubo_addr_off1 - 1 = align2(base + uniform_sh_dwords)`;
+- `ubo_addr_off1 - 1 = base + uniform_sh_dwords` (no alignment, §3);
 - the `gl_FragCoord` pair, meta and front face follow, in that order.
 
 The blend-constant guard (`chain.rs:776-780`) then tests the prefix, not
