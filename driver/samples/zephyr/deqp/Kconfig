@@ -142,8 +142,10 @@ config PVR_DEQP_MRT4
 	  Makes the image call pvr_debug_set_draw_targets(4) before the first
 	  context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS answer
 	  4 instead of 3 for the dEQP-GLES3 fragment_out and
-	  implementation_limits cases (docs/notes/mrt4-deqp-cases.md). The
-	  call is wired by a later change; until then the symbol does nothing.
+	  implementation_limits cases (docs/notes/mrt4-deqp-cases.md). main.cpp
+	  makes the call and prints the setter's return value (the previous
+	  count) at start-up. The setter is the library's test knob, defined
+	  with CONFIG_YAKOGL_TEST_KNOBS (DEQP_TEST_KNOBS selects it).
 	  A test knob for a board session: a product never sets it.
 	  The V3D image's twin is CONFIG_V3D_DEQP_MRT4.
 endmenu
@@ -184,8 +186,10 @@ config V3D_DEQP_MRT4
 	  Makes the image call v3d_debug_set_draw_targets(4) before the first
 	  context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS answer
 	  4 instead of 3 for the dEQP-GLES3 fragment_out and
-	  implementation_limits cases (docs/notes/mrt4-deqp-cases.md). The
-	  call is wired by a later change; until then the symbol does nothing.
+	  implementation_limits cases (docs/notes/mrt4-deqp-cases.md). main.cpp
+	  makes the call and prints the setter's return value (the previous
+	  count) at start-up. The setter is the library's test knob, defined
+	  with CONFIG_YAKOGL_TEST_KNOBS (DEQP_TEST_KNOBS selects it).
 	  A test knob for a board session: a product never sets it.
 	  The PowerVR image's twin is CONFIG_PVR_DEQP_MRT4.
 endmenu
