@@ -73,6 +73,10 @@ rc1-int-color-rt	dEQP-GLES3.functional.pbo.renderbuffer.rgba32*	RC1 integer colo
 rc1-int-color-rt	dEQP-GLES3.functional.shaders.builtin_functions.common.*	RC1 integer colour render targets
 rc7-srgb	dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.*	RC7 sRGB
 rc5-shadow	dEQP-GLES3.functional.texture.shadow.*	RC5 shadow samplers
+# The srgb_r8 / srgb_rg8 names are refused by dEQP's own extension check, not by a format or a wrap R defect, so this
+# line goes before the RC18 and RC2 lines that hold the rest of texture.filtering.3d and texture.format.
+ext-srgb-r8-rg8	dEQP-GLES3.functional.texture.*.srgb_r8_*	GL_EXT_texture_sRGB_R8 / RG8 not claimed: NotSupported, not a failure (docs/es3/srgb.md, docs/notes/gc-texture-swizzle-wrap.md)
+ext-srgb-r8-rg8	dEQP-GLES3.functional.texture.*.srgb_rg8_*	GL_EXT_texture_sRGB_R8 / RG8 not claimed: NotSupported, not a failure (docs/es3/srgb.md, docs/notes/gc-texture-swizzle-wrap.md)
 rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.swizzle.*	RC18 texture swizzle and wrap R
 rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.filtering.3d.*	RC18 texture swizzle and wrap R
 rc2-sized-formats	dEQP-GLES3.functional.texture.format.*	RC2 sized texture formats
@@ -118,11 +122,28 @@ ext-draw-buffers-indexed	dEQP-GLES3.functional.negative_api.fragment.blend_*i*	G
 t6-instanced-mixed	dEQP-GLES3.functional.instanced.*.mixed.*	T6 instancing with a divisor and gl_InstanceID (docs/es3-cts-failures.md Appendix A, T6: GC7000UL board check open)
 astc-not-supported	dEQP-GLES3.functional.texture.compressed.astc.*	ASTC refused by name: NotSupported, not a failure (docs/es3/texture-failure-map.md section 3, hgc4 README)
 astc-not-supported	dEQP-GLES3.functional.texture.wrap.astc*	ASTC refused by name: NotSupported, not a failure (docs/es3/texture-failure-map.md section 3, hgc4 README)
+# Groups of the final HOST-ONLY list (docs/es3/host-gc-gles3-5454be1b/host-gc-gles3-notpass.tsv) that only an
+# 'unexplained' line below held. The texture.units lines name exactly the 33 cases whose texture upload answers
+# GL_INVALID_OPERATION on the host, so a board picture verdict of another units case stays unexplained.
+ext-multiview	dEQP-GLES3.functional.fbo.multiview.*	GL_OVR_multiview not offered: 'Multiview is not supported' (es3fMultiviewTests.cpp:158), NotSupported, not a failure
+rc13-shader-compiler	dEQP-GLES3.functional.uniform_api.random.83	RC13 shader compiler refusals (docs/es3-cts-failures.md RC13 and uniform_api row: random.83 compile)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.2_units.mixed.2	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.2_units.only_2d.3	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.2_units.only_2d_array.3	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.2_units.only_3d.3	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.4_units.mixed.[27]	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.4_units.only_2d.[36]	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.4_units.only_2d_array.[36]	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.4_units.only_3d.[36]	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.8_units.mixed.[27]	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.8_units.only_2d.[23468]	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.8_units.only_2d_array.[23468]	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.8_units.only_3d.[23468]	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.8_units.only_cube.[1456]	RC2 sized texture formats (texture.units upload GL_INVALID_OPERATION; docs/es3/texture-failure-map.md: units under sized-formats-gl and formats-gc)
 unexplained-fbo-color-format	dEQP-GLES3.functional.fbo.color.*	unexplained: fbo.color non-integer rows (blend, sampled repeated_clear, rgb16f, rgb565, r8, rg8): no doc names them
 unexplained-fbo-color-format	dEQP-GLES3.functional.fbo.render.*	unexplained: fbo.render recreate_color / resize rows of rbo and texture formats (rgb16f, rgb565, r8, rg8, rgb8): no doc names them
 unexplained-fbo-color-format	dEQP-GLES3.functional.fbo.invalidate.*	unexplained: fbo.invalidate format rows: no doc names them
 unexplained-fbo-depth-clamp	dEQP-GLES3.functional.fbo.depth.*	unexplained: fbo.depth depth_test_clamp / depth_write_clamp on the GC7000UL (docs/es3-cts-failures.md closes them for the PowerVR only)
-unexplained-fbo-multiview	dEQP-GLES3.functional.fbo.multiview.*	unexplained: fbo.multiview NotSupported (docs/es3-cts-failures.md lists 3, names no cause)
 unexplained-default-vertex-attrib-mat	dEQP-GLES3.functional.default_vertex_attrib.mat*	unexplained: default_vertex_attrib matrix current values (RC12 says closed, 0 failures; the board shows 25 Fail)
 unexplained-draw-random	dEQP-GLES3.functional.draw.random.*	unexplained: draw.random board Fail (7 cases, no doc names them)
 unexplained-negative-api	dEQP-GLES3.functional.negative_api.shader.*	unexplained: negative_api uniformui / texsubimage board Fail (docs/es3-cts-failures.md says fixed in G8 on the host)
