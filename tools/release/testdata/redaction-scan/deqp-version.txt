@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# redaction-scan.py --self-test: a dEQP release in a console banner is no address, a real one beside it is (the last line's placeholder is filled in at run time).
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+dEQP Core vulkan-cts-10.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+dEQP Core 10.4.6.2-555-g93bca018 (0x93bca018) starting..
+board console at @PRIVATE_IPV4@ beside vulkan-cts-10.4.6.2-555-g93bca018
