@@ -15,6 +15,18 @@ R32F texels. Three source cases still answer `GL_INVALID_OPERATION`
 
 Writing into the window is refused for the same reason as (1) (`REFUSED_DEPTH_DST`).
 
+**Status (item gl-ds-window):** the window path of the design below is
+implemented in `src/gl/blit.rs` (`DepthSource::Window`, `PlaneDst::Window`,
+the rows mirrored when `!default_y_up`; host tests
+`tests/es3_blit_ds_window.rs`, none ignored), so (1) and the window
+destination are lifted on a back end with the entries. Still refused: the
+window to the window (4.3.3), a multisampled window as a source, window depth
+without `depth_resolve` or into the window without `ds_write`, window stencil
+without `stencil_resolve` (the PowerVR and, since `582b201c`, the V3D have all
+three; the GC7000UL and the Mali have `depth_resolve` only), and (2), (3) and
+stencil into or out of a texture (gl-ds-layers). The row order is still read
+from the code, not measured (the board checks below).
+
 ## What the code says: window orientation per back end (read from the code, not measured)
 
 Every line below was read from the source at `b5f882ea`. Nothing was run, on a
@@ -61,8 +73,8 @@ of its plane is GL row `target_h - 1 - r`. Two caveats, also from the code:
 | Need | Window | Today |
 | --- | --- | --- |
 | read depth | `backend::depth_resolve(id, ..)` with `id = 0x8000_0000 \| (default_surface.gpu >> 12) as u32` (the formula of `draw.rs:2707`), `w = target_w`, `h = target_h` | all four accept an id of that form: PowerVR (`b.ds` by `owners[DEPTH] == id`), V3D (`owners[0] == id`, but only while the buffer is `Stored` and not 4x: `ZsKnown::Stored if !b.msaa`), Mali (`planes` by id), GC7000UL (`mine(key.plane(DEPTH))`, scale 1). A multisampled window (`default_samples > 1`) answers 1 on the PowerVR and V3D, so its blit stays refused until #339's resolve covers it. |
-| read stencil | `backend::stencil_resolve(id, ..)`, same id (one object for both planes) | the PowerVR only |
-| write depth or stencil | `backend::ds_write(id, plane, src, x, y, w, h, pitch)`, same id | the PowerVR only; `pvr_backend_ds_write` finds the window's buffer by the same `owners` lookup |
+| read stencil | `backend::stencil_resolve(id, ..)`, same id (one object for both planes) | the PowerVR and the V3D (`v3d_stencil_resolve`, `582b201c`) |
+| write depth or stencil | `backend::ds_write(id, plane, src, x, y, w, h, pitch)`, same id | the PowerVR and the V3D; `pvr_backend_ds_write` finds the window's buffer by the same `owners` lookup, `v3d_ds_write` by `zs_plane_buf` (the same `owners`; -ENOTSUP for a 4x buffer, so a multisampled window stays refused as unheld) |
 
 No new handle is needed: the GL core builds the id itself. A helper beside
 `resolve_ds_storage` that both call keeps the two from drifting (that is
