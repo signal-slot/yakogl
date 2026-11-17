@@ -563,10 +563,14 @@ fn two_blocks_past_16384_bytes_in_one_program_vertex() {
     two_blocks(Stage::Vertex);
 }
 
-/// The block the dEQP cases use: one `vec4 v[1024]`. Refused by the front
-/// end today (`array_len: u8`, reflect.rs `fit_u8`), whatever the limit.
+/// The block the dEQP cases use: one `vec4 v[1024]`, read at a run-time
+/// index. The front end refuses it while `UniformRow::array_len` is u8
+/// (reflect.rs `fit_u8`; 005f5803 widens it); past that the V3D code
+/// generator refuses the run-time index into an array this long
+/// (src/shaderc/online/v3d/prepare.rs:1407, "no ldunifa yet"), the same
+/// defect as the 128-vec4 test below.
 #[test]
-#[ignore = "waits on UniformRow::array_len wider than u8 (tests/v3d_ubo_array_len_limit.rs pins it): vec4[1024] is refused, 'v' : too many of this kind of declaration"]
+#[ignore = "needs ldunifa: a run-time index into vec4[1024] is refused by v3d/prepare.rs:1407 (and by array_len: u8 until 005f5803 merges)"]
 fn a_single_vec4_array_of_1024_elements_compiles() {
     let decl = "layout(std140) uniform Data0 { highp vec4 v[1024]; };\nuniform int u_idx;\n";
     let fs = fs_picking(decl, "v[u_idx]");
