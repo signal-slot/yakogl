@@ -10,14 +10,18 @@
 //! 30..31. The blit is the GL core's CPU copy (`src/gl/blit.rs`): a source of
 //! the class decodes R, G, B over 1023 and A over 3, a destination encodes
 //! round(clamp(v) * (2^b - 1)), class to class keeps the words, and LINEAR
-//! filters the decoded values (c26917e3; the lib tests
-//! `gl::blit::tests::rgb10a2_*` hold the same through the internals). The
+//! filters the decoded values (18d83492 the renderbuffer arm, 4082f91a the
+//! texture arm, 019aa841 the LINEAR and fallback lib tests
+//! `gl::blit::tests::rgb10a2_*`, which hold the same through the internals). The
 //! back end is the smallest stand-in that makes a context (nothing is drawn).
 //!
 //! An RGBA8 destination is read with glReadPixels. An RGB10_A2 destination
-//! is never read with glReadPixels (its read-back is a separate item): it is
-//! looked at in its storage (the host's "GPU memory" is CPU memory, rows of
-//! W texels) and by blitting it back into RGBA8.
+//! is read with glReadPixels(GL_RGBA, GL_UNSIGNED_BYTE) too, which since
+//! 8428875e decodes the word as round(R * 255 / 1023), round(G * 255 / 1023),
+//! round(B * 255 / 1023), round(A * 255 / 3), and is also looked at in its
+//! storage (the host's "GPU memory" is CPU memory, rows of W texels) and by
+//! blitting it back into RGBA8. The read pair and
+//! GL_UNSIGNED_INT_2_10_10_10_REV are not used here.
 //!
 //! Covered: an RGB10_A2 texture into an RGBA8 texture, RGBA8 into RGB10_A2,
 //! RGB10_A2 into RGB10_A2 word for word (and mirrored), and a LINEAR 2:1
@@ -272,6 +276,11 @@ fn read8(a: &Att) -> Vec<[u8; 4]> {
     px.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]).collect()
 }
 
+/// What glReadPixels(GL_RGBA, GL_UNSIGNED_BYTE) hands out for RGB10_A2 words.
+fn read_bytes_of(w: &[u32]) -> Vec<[u8; 4]> {
+    w.iter().map(|&x| to_rgba8(decode(x))).collect()
+}
+
 fn blit(src: &Att, s: [GLint; 4], dst: &Att, d: [GLint; 4], filter: GLenum) {
     // SAFETY: plain GL calls.
     unsafe {
@@ -343,6 +352,7 @@ fn rgba8_texture_into_rgb10a2_texture() {
     blit(&s, whole(&s), &d, whole(&d), GL_NEAREST);
     let want: Vec<u32> = px.iter().map(|p| to_a2(p.map(|v| v as f64 / 255.0))).collect();
     assert_eq!(words(&d), want, "the encoded words");
+    assert_eq!(read8(&d), read_bytes_of(&want), "glReadPixels of the destination");
     /* alpha keeps two bits: byte v comes back as round(round(v / 255 * 3) / 3 * 255) */
     let a = |v: u8| ((v as f64 / 255.0 * 3.0).round() * 85.0) as u8;
     let back: Vec<[u8; 4]> = px.iter().map(|p| [p[0], p[1], p[2], a(p[3])]).collect();
@@ -360,6 +370,7 @@ fn rgb10a2_round_trip_is_exact() {
     let d = tex10(W, H, None);
     blit(&s, whole(&s), &d, whole(&d), GL_NEAREST);
     assert_eq!(words(&d), w, "class to class keeps the words");
+    assert_eq!(read8(&d), read_bytes_of(&w), "glReadPixels of the destination");
     assert_eq!(via_rgba8(&d), via_rgba8(&s), "and reads as the source does");
 
     let m = tex10(W, H, None);
@@ -371,6 +382,7 @@ fn rgb10a2_round_trip_is_exact() {
         })
         .collect();
     assert_eq!(words(&m), want, "mirrored in x");
+    assert_eq!(read8(&m), read_bytes_of(&want), "glReadPixels of the mirrored destination");
 }
 
 /// GL_LINEAR filters the decoded values, then the destination encodes: a
@@ -401,7 +413,9 @@ fn linear_reduction_filters_after_decode() {
 
     let d = tex10(dw, dh, None);
     blit(&s, whole(&s), &d, whole(&d), GL_LINEAR);
-    assert_eq!(words(&d), means.iter().map(|&m| to_a2(m)).collect::<Vec<_>>(), "into RGB10_A2");
+    let mw: Vec<u32> = means.iter().map(|&m| to_a2(m)).collect();
+    assert_eq!(words(&d), mw, "into RGB10_A2");
+    assert_eq!(read8(&d), read_bytes_of(&mw), "glReadPixels of the RGB10_A2 destination");
 
     /* the two-texel pair of the lib test: (0, 0, 1023, 0) and
      * (1023, 0, 1023, 3) average to 0.5, 0, 1, 0.5 */
@@ -412,4 +426,5 @@ fn linear_reduction_filters_after_decode() {
     let d1 = tex10(1, 1, None);
     blit(&p, whole(&p), &d1, whole(&d1), GL_LINEAR);
     assert_eq!(words(&d1), vec![a2(512, 0, 1023, 2)]);
+    assert_eq!(read8(&d1), vec![[128, 0, 255, 170]]);
 }
