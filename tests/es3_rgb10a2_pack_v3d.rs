@@ -345,7 +345,7 @@ fn expected(words: &[u32], r: &Rd, len: usize) -> Vec<u8> {
     for j in 0..r.h {
         for i in 0..r.w {
             let (sx, sy) = (r.x + i, r.y + j);
-            if sx < 0 || sx >= W || sy < 0 || sy >= H {
+            if !(0..W).contains(&sx) || !(0..H).contains(&sy) {
                 continue;
             }
             let word = words[(sy * W + sx) as usize];
@@ -378,7 +378,7 @@ fn read_client(b: &Buf, r: &Rd) -> Vec<u8> {
 /// glReadPixels of `r` into a pixel pack buffer of LEN bytes of FILL at
 /// `offset`, mapped back whole.
 fn read_pbo(b: &Buf, r: &Rd, offset: usize) -> Vec<u8> {
-    let fill = vec![FILL; LEN];
+    let fill = [FILL; LEN];
     let mut pbo = 0;
     set_pack(r);
     // SAFETY: plain GL calls; the buffer holds LEN bytes.
