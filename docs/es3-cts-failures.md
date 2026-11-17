@@ -361,24 +361,34 @@ or 64-bit integers, uniform-block and varying component limits below the ES
 second defect: `glGetFloatv` and `glGetInteger64v` answer what `glGetIntegerv`
 answers (`tests/es3_limits_v3d.rs`, `tests/es3_v3d_varyings.rs`), so a
 `*_getfloat` / `*_getinteger64` row fails exactly when the limit is below its
-minimum. The V3D's varying family is closed on the host (v3d-varyings-raise:
-`MAX_VARYING_VECTORS` 15, the components 60 / 60 / 64; `tests/es3_v3d_varyings.rs`;
-board rows to re-run). The V3D's uniform-block family is closed on the
+minimum. **Fixed on the V3D (host, ES 3.0 report):** the varying family
+(`6581f22b`, `d17f4362`, `201e03be`): `MAX_VARYING_VECTORS` 15,
+`MAX_VARYING_COMPONENTS` 60, `MAX_FRAGMENT_INPUT_COMPONENTS` 60,
+`MAX_VERTEX_OUTPUT_COMPONENTS` 64 (15 / 60 / 60 / 64; `gl/context.rs:204,251`;
+`tests/es3_v3d_varyings.rs`; the job builder writes three varying flag words);
+the V3D's varying family is closed on the host (board rows to re-run, a Pi 4
+step for #320). The V3D's uniform-block family is closed on the
 host too: `MAX_UNIFORM_BLOCK_SIZE` 16384 and the combined uniform components
 50688 (ES 3.0's formula over the default block and twelve blocks), a stage's
 blocks read through the uniform stream behind its default block
 (`gl/context.rs` `MAX_UNIFORM_BLOCK_SIZE`, `MAX_STAGE_UNIFORM_DWORDS`;
 `tests/es3_limits_v3d.rs`, `v3d/backend_tests.rs`
-`a_uniform_block_of_16384_bytes_reaches_the_stream_whole`; board rows to
-re-run). Host dEQP at `93bca01`, `753dedbf` against `7c39ee92`
+`a_uniform_block_of_16384_bytes_reaches_the_stream_whole`; the 16384-byte
+cases of `tests/es3_ubo_v3d.rs` run (`773be1b1`), `UniformRow::array_len` is
+`u16` (`005f5803`); board rows to re-run). Host dEQP at `93bca01`, `753dedbf` against `7c39ee92`
 (`docs/notes/es3-interface-limits.md` section 6, HOST-ONLY): on the V3D 21
 cases of the two families move Fail to Pass (7 `implementation_limits`, 8
 `state_query.integers`, 6 `integers64`), the `_getfloat` / `_getinteger64`
 forms with their limit, and no `shaders.linkage` or `functional.ubo` case is
 refused at compile or link on any of the three GPUs. Left: the uniform-block size and the
-combined uniform components on the PowerVR and GC7000UL (6144 / 1536),
-`MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the same two (host dEQP: 4
-`implementation_limits` and 8 `state_query` rows on each), and RC14. The compressed-format list is closed on the
+combined uniform components on the PowerVR and GC7000UL (6144 / 1536, `gl/context.rs:112,131`:
+the blocks must be read from memory, plan #378 and `docs/notes/ubo-limits.md`),
+`MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the same two (`gl/context.rs:253`; 64 is
+reachable on paper, issue open; host dEQP: 4 `implementation_limits` and 8
+`state_query` rows on each), the V3D's run-time index into a uniform array
+past 64 vec4 (`ldunifa`, `shaderc/online/v3d/prepare.rs:1407`; two ignored
+tests of `tests/es3_ubo_v3d.rs`), and RC14 (`MAX_DRAW_BUFFERS` and
+`MAX_COLOR_ATTACHMENTS` 3 on all three) and `MAX_SAMPLES` 1 (#339). The compressed-format list is closed on the
 host: `GL_NUM_COMPRESSED_TEXTURE_FORMATS` is 11 (ETC1 and the ten ETC2/EAC
 formats) on the PowerVR, the GC7000UL and the V3D under ES 3.0 and 3 under
 `report-es2` (`tests/es3_limits_v3d.rs`, `tests/es3_caps.rs`,
