@@ -295,7 +295,12 @@ What the three slices measured, against what this section expected:
   `fbo.render.*`): the position in the list says which case it is, both cases fail. A row whose names
   exceed its fail count is made of these pairs, not of invented cases (e9: 114 names for 114 fails, 112
   single names plus the pair twice).
-- **`merge.py --check` calls such a pair `case listed twice`** and fails the campaign over it (step 13).
+- **`merge.py --check` counts a collision group once per candidate** (step 13): in a `failing names` cell a
+  comma-joined group of k names listed k times — one page per case — is read as those k cases, each named
+  once, so e9's pair passes the check (the `case listed twice` failure over it is what merge did before
+  `0dbcf131`). What merge still calls `case listed twice`: a plain name listed twice on its own, a collision
+  group listed more than once per candidate, a collision candidate also named alone, and a case named in two
+  entries. A group listed fewer than k times is left as listed: both candidates count, the ambiguity stands.
   The list is left as `board.sh tally` wrote it; the page positions in the slice README resolve the pair.
 - e2's 24 fails show how a collision is settled from the pattern: they are exactly the six non-square
   matrix types of `default_vertex_attrib` in all four variants (6 x 4), so the pair is
@@ -719,6 +724,42 @@ Rules that hold for every step:
     end of the session against the last boot's `t_back` minus its `uptime`), and a "Console" section saying what
     the capture held.
 
+    What the campaign tools enforce on a committed slice (read from `merge.py`, `imx8mp-gles3-acceptance.sh`
+    and `imx8mp-gles3-redact.py` as they are on `main`; the acceptance script is the campaign's c1-c8 run
+    for issue #24, read-only):
+
+    - **Verdict lines, one per entry.** merge reads `board.sh <board> e<NN> rc=<n> verdict=<v> ...
+      resets=<r>` lines out of the slice's README (and out of `INDEX`-named files; a `verdicts.txt` is not
+      read), taking the last line for each entry. Every entry with a tally needs one; a clean entry reads
+      `rc=0`, `verdict=done`, `resets=absent` or `0`, and a README without any such line fails the check
+      (`no verdict lines`). Page lines (`e09-p1`) are not verdict-checked. For the ES 2.0 directories the
+      acceptance check c6 wants at least 29 `board.sh imx8mp e<N> rc=` lines in their `README.md` files.
+    - **The commit.** The 40-hex `origin/main` commit must be in the README: merge takes the first 40-hex
+      string there (else a hash following `main` or `commit` in its text, else the 8-40-hex tail of the
+      directory name — a `...-rowsAA-BB` slice name does not end in one, so the README has to carry it).
+      Two slices agree when the shorter hash is a prefix of the longer, at least 8 characters; a slice with
+      no commit anywhere fails with `names no commit`.
+    - **results.tsv.** The index column is the table line number and the filter column equals that line. In
+      the failing names cell every case is named once: "Failing names" says what merge reads as a collision
+      group and what it calls `case listed twice` (a repeated name, a collision group listed more than once
+      per candidate, a candidate also named alone, a case named in two entries).
+    - **What a dash row means.** `board.sh tally` writes a row for every entry of the table, `-` in every
+      count cell for the rows a `TREE_ROWS` slice did not run. merge never reads a dash row as a record: an
+      entry whose only row is a dash is a no-record entry (`--check`: it is in the `no record:` line;
+      `--notpass`: `NoResult` per mustpass case; `--totals`: zeros), and it claims nothing where another
+      slice has a real row for that entry. A `-` in `passed`..`other` is unknown, never a zero. The
+      `--check` summary counts these placeholders among "entries with a record"; the `no record:` line is
+      what names the unrun entries.
+    - **The acceptance globs.** c1-c3 run merge `--check`, merge `--notpass` (its output must equal
+      `docs/es3/imx8mp-gles3-notpass.tsv` without that file's `# SPDX` lines) and the report over
+      `tools/cts/log/*-imx8mp-gles3-*-rows*`; c3 takes the campaign day from a `*-imx8mp-gles3-*-rows01-13`
+      directory named `<YYYY-MM-DD>-...` (else give `--date`). c5 reads this recipe: it must name
+      `rows01-13` and must not carry the script's not-yet-run phrase. c8 scans every text file under
+      `tools/cts/log/*-imx8mp-gles3-*` and `tools/cts/log/*-imx8mp-es2-*` for a `/dev/tty(USB|ACM)` path, a
+      dotted-quad address (with `:port`), and a `user@…` login (user, `@`, host, dot, domain word) — the
+      same three patterns as `imx8mp-gles3-redact.py --check`, which a session runs over its records before
+      committing.
+
 13. **Merge check** of one slice, then of all of them:
     ```sh
     python3 -I tools/cts/imx8mp-gles3-merge.py --check --partial tools/cts/log/<slice dir>
@@ -730,32 +771,39 @@ Rules that hold for every step:
     absent or 0, and (without `--partial`) entries with no record: `no record: <n> of 133 entries (<span>), <k>
     mustpass cases`. `--table` and `--mustpass` default to the committed files.
 
-    Measured on the three committed slices: `--check --partial` is OK on `rows17-34` and `rows35-51`, and
-    `rows01-13` fails even with `--partial`:
+    Measured on the three committed slices, rechecked at the time of this edit against merge.py as it is since
+    `0dbcf131` (the collision reading of "Failing names"): `--check --partial` is OK on every slice —
+    `rows01-13` included — and the full `--check` over the three reports only the entries that have not run:
 
     ```
-    FAIL: case listed twice: dEQP-GLES3.functional.fbo.msaa.2_samples.rgb5_a1 (e9)
-    FAIL: case listed twice: dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8ui_depth_stencil_rbo_depth24_stencil8 (e9)
     FAIL: no record: 85 of 133 entries (13-15,51-132), 14351 mustpass cases
     checked 3 inputs, 133 entries with a record: FAILED
     ```
 
-    The `no record` line is what a campaign looks like mid-way and is expected until every entry has run. The
-    `case listed twice` pair is e9's CRC-16 collision ("Failing names"): the merge reads a name as a case, so a
-    name printed twice for one case fails the check, and no run of the campaign passes while that
-    `results.tsv` stands. `rows01-13`'s README carries the resolution (the page positions, the 114 names for 114
-    fails); a tool that resolved a repeated name by its page would let the campaign close. Until then, run the
-    check per slice, quote the `FAIL` line in the report, and do not rewrite `results.tsv` to make it pass.
+    The `no record` line is what a campaign looks like mid-way and is expected until every entry has run. e9's
+    CRC-16 collision ("Failing names") no longer blocks the check: the group listed twice counts as the two
+    cases named once each, and the campaign can close with that `results.tsv` as it is. `case listed twice`
+    still fires on a real duplicate — a plain name repeated, a collision group listed more than once per
+    candidate, a candidate named alone, a case named in two entries — and `rows01-13`'s README (the page
+    positions, the 114 names for 114 fails) stays the evidence for reading the collision. Quote the remaining
+    `FAIL` lines in the report; do not rewrite `results.tsv` to change what the record says.
 
-14. **Not-pass list, totals and triage** (the check of step 13 read as the campaign's state: its `no record` line
-    while entries are unrun, its `case listed twice` line while a collision stands):
+14. **Not-pass list, totals, triage and the board-vs-host comparison** (the check of step 13 read as the
+    campaign's state: its `no record` line while entries are unrun):
     ```sh
     D=$(ls -d tools/cts/log/*-imx8mp-gles3-<hash8>-rows*)
     python3 -I tools/cts/imx8mp-gles3-merge.py --totals $D
     (printf '# SPDX-License-Identifier: Apache-2.0\n# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.\n'
      python3 -I tools/cts/imx8mp-gles3-merge.py --notpass $D) > docs/es3/imx8mp-gles3-notpass.tsv
-    python3 -I tools/cts/gles3-triage.py docs/es3/imx8mp-gles3-notpass.tsv \
+    # Neither the triage nor the comparison treats NoResult specially: it rides into their counts as just
+    # another outcome. Filter it out first — NoResult rows are written for exactly the entries with no
+    # usable record, so this is also the filter to the entries that have one (the '#' header and comment
+    # lines may stay; the readers ignore them).
+    grep -v ':NoResult ' docs/es3/imx8mp-gles3-notpass.tsv > notpass-run.tsv
+    python3 -I tools/cts/gles3-triage.py notpass-run.tsv \
       --host docs/es3/host-gles3-tip.tsv --table tools/cts/imx8mp-gles3-tree.txt > issue-drafts.md
+    python3 -I tools/cts/imx8mp-gles3-compare.py notpass-run.tsv docs/es3/host-gles3-notpass.tsv \
+      --causes tools/cts/imx8mp-gles3-causes.tsv --table tools/cts/imx8mp-gles3-tree.txt > board-vs-host.md
     ```
     `--totals` prints a per-entry table (`mustpass begun pass fail n.s. other none`), the `total` row and
     `no record: ...`. `--notpass` prints `#` header lines (commit, entries run) and one `e<i>:<Status> <case>`
@@ -767,16 +815,28 @@ Rules that hold for every step:
     markdown issue drafts to stdout: cases grouped by their path cut at `--depth` (4) levels, with the host
     verdict of the group (`host-also-fails`, `board-only`, `host-mixed`, `host-notsupported`, `host-unknown`;
     `--gpu` defaults to `vivante`, `--examples` is 5) and the table entry `eNN`. Only the host's non-render groups
-    are a firm guide. Agents never run `gh`: the drafts go into the report. Keep `issue-drafts.md` out of the
-    commit.
+    are a firm guide. `imx8mp-gles3-compare.py` compares the two not-pass lists per case: `host-predicted`
+    (the host lists the case with the same outcome, or both outcomes are fail-like), `host-other` (the host
+    lists it with another outcome), `board-only` (the host list lacks the case); cases the host lists and the
+    board list does not are counted per cause. `--causes` groups by the first matching glob of the cause map
+    (`tools/cts/imx8mp-gles3-causes.tsv`), `--table` names each case's entry, `--tsv` prints one row per
+    case. It does not filter the board list either: it reads `NoResult` as an outcome like any other, so
+    unfiltered the unrun entries' `NoResult` rows ride into the `board-only` and `host-other` counts on top
+    of the board's real cases (the `grep` in the block above is the filter). Agents never run `gh`: the
+    drafts go into the report. Keep `issue-drafts.md`, `notpass-run.tsv` and `board-vs-host.md` out of the
+    commit; the results item places the final comparison table in `docs/es3/` (the earlier campaign's is
+    `docs/es3/imx8mp-gles3-compare-9bc82915.tsv`).
 
     Two things measured on the campaign (`9bc82915`, three slices):
 
-    - **Filter the not-pass list to the entries that have a record before triaging.** `--notpass` writes
-      `NoResult` for every case of every entry without one, and `--notpass` over a subset of slices still counts
-      the whole 133-entry table: 15,333 rows for the three committed slices, of which 14,351 are the 85 unrun
-      entries' `NoResult`. Triaged as it is, that buries the board's own verdicts. Keep the `e<i>:Fail` (and other
-      status) rows whose *i* has a record and drop the rest: 873 named failing cases, 187 groups.
+    - **Filter the not-pass list to the entries that have a record before triaging and before comparing.**
+      `--notpass` writes `NoResult` for every case of every entry without one, and `--notpass` over a subset
+      of slices still counts the whole 133-entry table: 15,333 rows for the three committed slices, of which
+      14,351 are the 85 unrun entries' `NoResult`. Triage and comparison read those rows as verdicts, and
+      triaged as it is, that buries the board's own verdicts. The `grep -v ':NoResult '` in the block above
+      is the exact filter: `NoResult` rows exist only for entries without a usable record, so it keeps
+      exactly the `e<i>:Fail` (and other status) rows whose *i* has a record: 873 named failing cases, 187
+      groups.
     - **A slice with no console text names only its Fails.** Measured: of the 1,851 board fails 873 are named; the
       530 NotSupported and 12 other cases have counts only, and 25 CRCs stay unresolved (3 + 18 + 4 in the three
       `results.tsv` files, printed as `# e<i>: unresolved …` comments) because they belong to cases outside the
@@ -874,10 +934,22 @@ the board session, not in the commit that adds this section.
 ## ES 2.0 regression rows
 
 These are separate and unchanged. Build with the gles2 stage 1 and no `DEQP_MODULE`, then run
-`tools/cts/imx8mp-full-tree.txt` (29 rows) as described in `tools/cts/README.md`. Expect 0 failures and rows as
-in `tools/cts/imx8mp-full-tree-29460f96.results.tsv`.
+`tools/cts/imx8mp-full-tree.txt` (29 rows) as described in `tools/cts/README.md`. What the run must show is
+not "0 failures": it is **no entry worse than the stage-1 baseline**
+`tools/cts/imx8mp-full-tree-29460f96.results.tsv`, which is itself not warning-free — 29 entries, 17,318
+pass, 0 fail, 34 NotSupported and 19 other cases (the i.MX8MP row of `tools/cts/RESULTS.md`, "ES 2.0":
+17,371 cases begun: the list plus 206 outside it). `tools/cts/imx8mp-es2-regress.py` compares a session
+with that baseline per entry: `same` (same passed, same failed+other+noresult), `better` (more passed or
+fewer bad cases, none worse), `WORSE` (fewer passed, more failed/other/noresult, or a row that is not
+clean — `rc=0`, `verdict=done`, `resets` absent or 0), `missing` (no verdict line or no usable record for
+the entry; pages are ignored, the last line of an entry wins). It prints one line per entry and the summary
+`es2 regress: <n>/29 entries, <w> worse, <m> missing`, and exits 0 only when all 29 entries are present
+with none worse. A pass is therefore `es2 regress: 29/29 entries, 0 worse, 0 missing` — the baseline's 34
+NotSupported and 19 other cases stay expected, as does its 0 fail.
 
 ```sh
 DEQP_STAGE1=<gles2 stage 1> tools/cts/imx8mp-deqp-build.sh wt-$HEAD8 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt
 TREE_IMAGE=$IMX8MP_OUT/wt-$HEAD8/zephyr/zephyr.bin tools/board.sh imx8mp tree tools/cts/imx8mp-full-tree.txt records/imx8mp/es2-$HEAD8
+# after the run (it reads the directory's results.tsv) or after the commit (a README's or verdicts.txt's verdict lines):
+python3 -I tools/cts/imx8mp-es2-regress.py records/imx8mp/es2-$HEAD8
 ```
