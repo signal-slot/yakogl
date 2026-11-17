@@ -7,5 +7,7 @@
 //! `src/v3d`, `src/vivante`) because other plans hold them; each `*-msaa-fbo`
 //! item wires its module from its back end
 //! (docs/notes/es3-msaa-renderbuffers.md (c), (f), (f5)). Nothing calls it yet.
+//! `gc` holds the GC7000UL's 4x scratch, RS resolve and arm-19 state words.
 
+pub mod gc;
 pub mod mali;
