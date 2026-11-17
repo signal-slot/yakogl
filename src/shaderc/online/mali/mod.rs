@@ -1458,6 +1458,23 @@ fn compile_stage<'s>(
             nir_fs::vectorise_int_sources(&mut f)
                 .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
+        } else if nir_fs::bool_colour(&f) {
+            /* a mediump shader's colour of booleans with fp16 compares on
+             * varying lanes (dEQP's `isOk` chains, deqp_intval_reslib_*): the
+             * lanes converted as `nir_lower_mediump_io` does, then a highp
+             * shader's program with the fp16 lanes paired */
+            let highp = |name: &str| matches!(prec(name), Some(Precision::High));
+            nir_fs::convert_inputs16(&mut f)
+                .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
+                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
+        } else if nir_fs::int_colour16(&f) {
+            /* a mediump shader's colour of integers' floats, narrowed where
+             * they are stored and paired by the colour's arithmetic (dEQP's
+             * operator suite, deqp_intval_opfs_add_int_mediump): a highp
+             * shader's program */
+            let highp = |name: &str| matches!(prec(name), Some(Precision::High));
+            select::UboLayout::fs16(m, &f.nir, &highp)
+                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
         } else if nir_fs::guarded16(&f) || nir_fs::kept16(&f) || nir_fs::frag32(&f) {
             /* a mediump shader's unrolled loop with run-time guards: the
              * graph's regions flattened as a highp shader's, its fp16 nodes

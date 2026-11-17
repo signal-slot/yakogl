@@ -25,6 +25,11 @@ const FS_MEDIUMP: &str = "a mediump fragment shader uniform other than a float, 
 /// is refused since plan #367's lower-fs-arith lowered the arithmetic in front
 /// of it.
 const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
+/// An integer value the fragment walk does not take yet: where `fsivec4` is
+/// refused since plan #377's lower-intval-1 let the fp16 block hold an ivec
+/// uniform (its `vec4(fTest).xy` is `i2f32` of the words, read into a colour
+/// pair beside a texel: no step-1 shape).
+const INT_VALUE: &str = "an integer or boolean value";
 
 /// Every reference with its refusal at the tip, without the `Valhall: `
 /// prefix and the ` is not lowered yet` suffix.
@@ -47,7 +52,7 @@ const REFUSED: &[(&str, &str)] = &[
     ("fsmat2_mediump", FS_MEDIUMP),
     ("fsmat3_mediump", FS_MEDIUMP),
     ("fsmat4_mediump", FRAGCOLOR_LANE),
-    ("fsivec4", FS_MEDIUMP),
+    ("fsivec4", INT_VALUE),
     ("fsmulti", FS_MEDIUMP),
 ];
 

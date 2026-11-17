@@ -17,8 +17,9 @@
 //!   `link`), as `tests/mali_glmark2_corpus.rs` does.
 //! * [`assert_matches`] compares per region: the words (a differing word is
 //!   listed with both disassemblies), the facts, the FAU words (computed
-//!   for gl_ref.py's draw, a 64x64 target, and its `--uniform-values`),
-//!   the secondary offset and the zero padding.
+//!   for gl_ref.py's draw, a 64x64 target, and its `--uniform-values`;
+//!   [`assert_matches_unset`] for a reference drawn without that option,
+//!   every uniform word 0), the secondary offset and the zero padding.
 //! * [`assert_refused`] / [`assert_refused_ref`]: the pair still refuses,
 //!   with the code generator's `MaliError` text containing a given text.
 //!
@@ -56,6 +57,12 @@ pub struct Reference {
     pub vs: String,
     pub fs: String,
     pub json: String,
+    /// The draw set the uniforms (gl_ref.py's `--uniform-values`, the
+    /// default of `tools/mali/deqp_ref.sh`): each FAU word of a uniform is
+    /// compared against that value. False for a reference drawn without it
+    /// (`drm_shim_ref.sh run` as the `deqp_intval_*` references were, whose
+    /// `bool` uniforms the option cannot set): every uniform word is 0.
+    pub uniform_values: bool,
 }
 
 impl Reference {
@@ -65,7 +72,18 @@ impl Reference {
             let p = dir.join(format!("{name}.{ext}"));
             std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
         };
-        Reference { name: name.to_string(), vs: read("vert"), fs: read("frag"), json: read("expect.json") }
+        Reference {
+            name: name.to_string(),
+            vs: read("vert"),
+            fs: read("frag"),
+            json: read("expect.json"),
+            uniform_values: true,
+        }
+    }
+
+    /// [`Reference::load`] of a reference drawn without `--uniform-values`.
+    pub fn load_unset(name: &str) -> Reference {
+        Reference { uniform_values: false, ..Reference::load(name) }
     }
 }
 
@@ -355,8 +373,9 @@ fn padded(words: usize) -> usize {
 pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
     let mut d = Vec::new();
     let names = uniform_names(&r.vs, &r.fs);
-    let uv_v = |x: u16| uniform_value(&names, &pair.vs.uniforms, x);
-    let uv_f = |x: u16| uniform_value(&names, &pair.fs.uniforms, x);
+    let set = r.uniform_values;
+    let uv_v = |x: u16| if set { uniform_value(&names, &pair.vs.uniforms, x) } else { 0 };
+    let uv_f = |x: u16| if set { uniform_value(&names, &pair.fs.uniforms, x) } else { 0 };
 
     /* the vertex stage: position, then varying (empty when none) */
     let (pos, var) = match pair.vs.secondary {
@@ -410,9 +429,19 @@ pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
 /// The reference's pair compiles and is byte-equal to its expect.json in
 /// every region; the panic text lists each difference.
 pub fn assert_matches(name: &str) {
-    let r = Reference::load(name);
+    assert_matches_ref(&Reference::load(name));
+}
+
+/// [`assert_matches`] of a reference drawn without `--uniform-values`
+/// ([`Reference::load_unset`]).
+pub fn assert_matches_unset(name: &str) {
+    assert_matches_ref(&Reference::load_unset(name));
+}
+
+fn assert_matches_ref(r: &Reference) {
+    let name = &r.name;
     let pair = compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: the pair is refused: {e}"));
-    let d = differences(&r, &pair);
+    let d = differences(r, &pair);
     assert!(d.is_empty(), "{name}: differs from its reference:\n{}", d.join("\n"));
 }
 

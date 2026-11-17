@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 98] = [
+pub const ROWS: [(Row, &str); 99] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -188,6 +188,9 @@ pub const ROWS: [(Row, &str); 98] = [
      * r2^.h00, 0x0.b00, r4^` with `IADD.v2u16 r4, r1.h11, 0x0`) */
     (row(Alu::Ior, 16, 1), "nir_op_ior of one 16-bit lane: LSHIFT_OR.v2i16 a.hN, b, #0"),
     (row(Alu::Iand, 16, 1), "nir_op_iand of one 16-bit lane: LSHIFT_AND.v2i16 a.hN, b, #0"),
+    /* `^^` of two mediump compares (tools/mali/testdata/deqp_intval_opfs_logical_xor:
+     * `LSHIFT_XOR.v2i16 r0, r0^.h00, 0x0.b00, r1^`) */
+    (row(Alu::Ixor, 16, 1), "nir_op_ixor of one 16-bit lane: LSHIFT_XOR.v2i16 a.hN, b, #0"),
     /* a mediump `dFdx` / `dFdy` of one lane (case 138 deriv, tools/mali/
      * testdata/fsarith_138_deriv: `CLPER.i32.subgroup4.xor r4, r0,
      * 0x1000000.b33`, `FADD.v2f16 r0, r4^, r0^.neg`, `LSHIFT_XOR.v2i16 r0,
@@ -422,8 +425,11 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         (Alu::Fabs, 16, 1) => ins(p, Op::FabsnegV2f16, &[Src { abs: true, ..lone(s[0]) }])?,
         /* `bi_icmp_to(nir_type_uint16, ..)`, an equality's `ICMP.v2u16`
          * made `ICMP_OR` by va_lower_isel (bir.rs) */
+        /* the first source's lane in both halves (a pair's high lane as
+         * `.h11`: deqp_intval_reslib_bvec_fs's `ICMP_OR.v2u16.eq.m1 r2,
+         * r0.h11, u2.w1.h00, 0x0` of `bvec3(v_in0).y == ref.y`) */
         (Alu::Icmp(cmpf @ (Cmpf::Eq | Cmpf::Ne)), 16, 1) => {
-            ins(p, Op::IcmpOrV2u16 { cmpf, result: ResultType::M1 }, &[s[0].swz(Swz::H00), s[1], ZERO])?
+            ins(p, Op::IcmpOrV2u16 { cmpf, result: ResultType::M1 }, &[lone(s[0]), s[1], ZERO])?
         }
         /* `bi_make_vec_to` of one 16-bit component (bifrost_compile.c:
          * 836-848): the lane's half (the caller's swizzle) and `bi_imm_u16(0)`,
@@ -435,12 +441,16 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
          * swizzle, so its low half is read whole (the result is a scalar:
          * its high half is not read) and its high half is moved to both
          * first (`IADD.v2u16 x.h11, 0`, CSE'd) */
-        (op @ (Alu::Ior | Alu::Iand), 16, 1) => {
+        (op @ (Alu::Ior | Alu::Iand | Alu::Ixor), 16, 1) => {
             let b = match lone(s[1]) {
                 x if x.swz == Swz::H11 => Src::ssa(ins(p, Op::IaddV2u16, &[x, ZERO])?),
                 x => x.swz(Swz::H01),
             };
-            let o = if op == Alu::Ior { Op::LshiftOrV2i16 } else { Op::LshiftAndV2i16 };
+            let o = match op {
+                Alu::Ior => Op::LshiftOrV2i16,
+                Alu::Iand => Op::LshiftAndV2i16,
+                _ => Op::LshiftXorV2i16,
+            };
             ins(p, o, &[lone(s[0]), b, ZERO])?
         }
         /* `bi_emit_derivative` of a 16-bit lane, the fine form: the operand

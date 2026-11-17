@@ -381,6 +381,21 @@ pub enum Op {
         cmpf: Cmpf,
         result: ResultType,
     },
+    /// `ICMP_AND.s32` / `ICMP_AND.u32`: the compare's mask ANDed with the
+    /// third source (`va_fuse_cmp`, va_optimize.c:217-291: `LSHIFT_AND.i32`
+    /// of an `ICMP_OR` with a zero third source and another compare of the
+    /// same family and result type is the compare with the other as its
+    /// third source; deqp_intval_reslib_mixed_fs's `all(ivec3 == ivec3)`,
+    /// `ICMP_AND.u32.eq.m1 r1, r2^, u3.w0, r1^`). Not fused again
+    /// (`va_cmp_can_fuse`: the OR forms only).
+    IcmpAndS32 {
+        cmpf: Cmpf,
+        result: ResultType,
+    },
+    IcmpAndU32 {
+        cmpf: Cmpf,
+        result: ResultType,
+    },
     /// `ICMP_OR.v2u16`, the same per 16-bit lane (an equality of 16-bit
     /// integers, `ieq_pan` at 16 bits: the texture descriptor's first
     /// half-word against 0, `pan_nir_load_va_tex_size`'s null test;
@@ -873,11 +888,21 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::DiscardF32 { .. }, 0..=1) => info(true, true, false, false, 32),
         /* a pseudo-op: its one source is the mask word */
         (Op::DiscardB32, 0) => info(false, false, false, false, 32),
-        (Op::FcmpOrF32 { .. } | Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. }, 2) => info(false, false, false, false, 32),
+        (
+            Op::FcmpOrF32 { .. }
+            | Op::IcmpOrS32 { .. }
+            | Op::IcmpOrU32 { .. }
+            | Op::IcmpAndS32 { .. }
+            | Op::IcmpAndU32 { .. },
+            2,
+        ) => info(false, false, false, false, 32),
         /* an integer source widens (a half or a byte, zero- or sign-extended:
          * `widen = 1`, valhall.c ICMP_OR.u32/.s32 and IADD.s32); it does
          * not swizzle */
-        (Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::IaddS32, 0..=1) => info(false, false, true, false, 32),
+        (
+            Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::IcmpAndS32 { .. } | Op::IcmpAndU32 { .. } | Op::IaddS32,
+            0..=1,
+        ) => info(false, false, true, false, 32),
         (Op::MuxI32 | Op::MuxBitI32 | Op::CselU32 | Op::CselS32 { .. }, 0..=3) => info(false, false, false, false, 32),
         /* IABS.s32 and IMUL.i32: integer sources that widen (valhall.c) */
         (Op::IabsS32, 0) | (Op::ImulI32, 0..=1) => info(false, false, true, false, 32),
@@ -1069,6 +1094,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         Op::FmaRscaleF32 => 4,
         Op::FmaF32 | Op::FmaV2f16 | Op::Atest | Op::ZsEmit { .. } => 3,
         Op::FcmpOrF32 { .. } | Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::MuxI32 | Op::MuxV2i16 => 3,
+        Op::IcmpAndS32 { .. } | Op::IcmpAndU32 { .. } => 3,
         Op::FcmpOrV2f16 { .. } | Op::IcmpOrV2u16 { .. } => 3,
         Op::MuxBitI32 | Op::Cubeface1 | Op::Cubeface2 | Op::CubeSsel | Op::CubeTsel => 3,
         Op::CselU32 | Op::CselS32 { .. } => 4,
@@ -1079,7 +1105,16 @@ pub const fn nr_srcs(op: Op) -> usize {
 /// its dot, has an `s`; `ICMP_OR.u32` has none, and neither has a
 /// conversion such as `S16_TO_S32`, whose name has no dot).
 pub const fn is_signed(op: Op) -> bool {
-    matches!(op, Op::ShaddxS64 | Op::IaddS32 | Op::IsubS32 | Op::IcmpOrS32 { .. } | Op::CselS32 { .. } | Op::IabsS32)
+    matches!(
+        op,
+        Op::ShaddxS64
+            | Op::IaddS32
+            | Op::IsubS32
+            | Op::IcmpOrS32 { .. }
+            | Op::IcmpAndS32 { .. }
+            | Op::CselS32 { .. }
+            | Op::IabsS32
+    )
 }
 
 /// One instruction (`bi_instr`).

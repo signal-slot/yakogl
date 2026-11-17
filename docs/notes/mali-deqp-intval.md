@@ -557,3 +557,171 @@ commit.
   one. The 88 `uniform_api` VS cases also need lower-unitype, and the `random.*`
   VS cases lower-varylink.
 - Not measured: no build or test was run; sites and lines were read.
+
+## 7. Step 1 (lower-intval-1): the fragment walk, done
+
+Plan #377, item lower-intval-1. The twelve step-1 references of section 5
+compile and are byte-equal to Mesa 26.2.1 (`tests/mali_deqp_intval.rs`, the
+words, facts, FAU words and padding of every region through `tests/mali_ref`):
+`reslib_float_fs`, `reslib_int_fs`, `reslib_bvec_fs`, `reslib_mixed_fs`,
+`opfs_add_int_mediump`, `opfs_mul_ivec4_highp`, `opfs_sub_assign_ivec2_lowp`,
+`opfs_div_int_mediump` (the 67-word `nir_lower_idiv` sequence through
+`Fs::idiv` as it was), `opfs_cmp_ivec3`, `opfs_equal_bvec2`, `opfs_logical_xor`
+and `opfs_not`. The thirteen step-2 references stay refused with the same
+text and ignored; `rsg_cond_fs` is refused by its vertex shader's literals
+(`ConstBool`, step 2 item 1), not by its fragment shader.
+
+The references were drawn without `--uniform-values` (gl_ref.py cannot set a
+`bool` uniform), so their FAU holds 0 in every uniform word; `tests/mali_ref`
+got `Reference::load_unset` / `assert_matches_unset` for that (the uniform
+words compared as 0), beside the existing compare for references drawn with
+the option. `tools/mali/testdata/cases.txt` lists ten of the twelve as
+pan_shc-against-shim cases (every mediump fragment program and the passthrough
+vertex stage's mediump varyings `differs:mediump`, as the gm2_* rows);
+`reslib_mixed_fs` and `opfs_logical_xor` are left out: pan_shc's vertex
+position program has the reference's words but other facts, a result the
+list has no form for (as gm2_fsmisc_2).
+
+### What was lowered, and where (all in `src/shaderc/online/mali/`)
+
+The fragment walk (`nir_fs.rs`, `Fs::int_lane` and its callers) takes, as
+32-bit values of a mediump shader:
+
+- `f2i32` of a varying's lane as loaded (`F32_TO_S32.rtz` of the fp32 word:
+  `f2i32(f2fmp(a))` is `f2i32(a)`, nir_opt_algebraic.py:2002); `iadd`,
+  `imul`, `isub` (the front end's `iadd(a, ineg(b))`) and `ineg` of
+  non-masks; `b2f` of a 32-bit boolean (the colour's `MUX.v2i16` at the
+  store, as the `bcsel(b, 1.0, 0.0)` arm); `b2i32` of a 16-bit mask (the
+  `MUX.i32 0, 1, b` reading the mask replicated into a word, `IADD.v2u16
+  r0, r0^.h00, 0x0`: `bi_lower_swizzle`); `f2b` of a mediump lane or an
+  fp16 value as `FCMP_OR.v2f16.ne.m1` against 0; `ieq`/`ine` of two 16-bit
+  masks, or of a mask and a bool uniform's word read through its low half
+  (`ICMP_OR.v2u16.eq.m1 a.h00, u.w0.h00`), as a 16-bit node; `ixor` of
+  masks at 16 bits (`LSHIFT_XOR.v2i16`, a new row of `emit.rs`) and at 32.
+  `Fs::mask16` counts the 16-bit `ieq`/`ine`/`ixor` as masks.
+- An `ivec2`/`ivec3`/`ivec4` uniform's lanes as 32-bit words, in the walk's
+  load and in the fp16 block's layout (`select.rs` `UboLayout::fs16`,
+  beside `GL_BOOL_VEC*`): `caps->int16` is false, no integer narrows.
+- `kept_whole` (the link's whole-varying rule): a scalar `int(v.z)` leaves
+  the lanes read (opfs_add's `.v2` load of two varyings' lanes), a vector
+  `ivec3(v.zxy)` keeps the varying whole (opfs_cmp_ivec3's two `.v4`
+  loads). Measured; which link pass keeps the vector's `f2fmp` alive is not
+  read from Mesa.
+- An integer's float (`i2f32`, `u2f32`) stored to a declared mediump
+  variable is narrowed there (`Fs::narrow_stored`), the `f2f16` right after
+  the conversion in the order (GLSL's `f2fmp(i2f32(a))` is one `i2fmp`,
+  nir_opt_algebraic.py:1322, lowered in place: opfs_mul's `S32_TO_F32 r1`
+  then `FADD.f32 r1.h0` lane by lane). `Fs::narrowed` counts such a lane,
+  so `color * 0.10 + 0.50` on it goes through `Fs::alu16` as a highp
+  shader's fp16 island does: `Fs::vec16_of` now takes a lane and a constant
+  half as a pair (`vec2(x, 0.0)` is `U16_TO_U32`, `vec2(0.0, x)` and
+  `vec2(x, 1.0)` `MKVEC.v2i16`), and `alu16`'s `fmul`/`fadd` of pairs folds
+  a pair of constants at fp16 (`fold16`: opfs_add's lanes z and w, 0x3800
+  and 0x38cd) and lets a vector's merely coinciding lanes stay the vector.
+
+Two new routes to `select_highp` (`mod.rs`, after `mask_colour`):
+
+- `bool_colour`: every colour lane a constant or the `b2f` of a boolean,
+  the graph integer and fp16 operations over inputs, uniforms and
+  constants. `convert_inputs16` first makes `nir_lower_mediump_io`'s
+  conversions explicit, right after each load in the order: an aligned pair
+  both read is one two-lane `f2f16` (`V2F32_TO_V2F16`), a lane read alone
+  its own (`FADD.f32 .h0`); the fp16 compares then pair by `vectorize16`'s
+  lane keys (equal_bvec2: `v_in1.xy` paired and read `.h10`, `v_in0`'s y
+  and w alone).
+- `int_colour16`: every colour lane a constant or a lane of a two-lane fp16
+  operation over narrowed integers' floats and constants, no fp16 operation
+  on a varying's lane (the pair graph's shape stays `select`'s).
+
+`select_highp` itself: on a colour of booleans a 16-bit compare reading a
+32-bit word reads its low half (`make_sources_canonical`'s `i2i16`); a
+32-bit `b2i32` of a 16-bit mask gets the replicate first; `b2i32` and, on
+`int_colour16`, a `vec2` are copies that `nir_opt_move` moves to their
+first user (`key_of` follows a moved user to its new place); the pressure
+scheduler then reorders nothing in these programs.
+
+`opt.rs`: `va_fuse_cmp` for `LSHIFT_AND.i32` of two compares (the OR form
+first, the swapped try is the OR's) into the new `ICMP_AND.s32`/`.u32`
+(`bir.rs`, `pack.rs`; reslib_mixed's `ICMP_AND.u32.eq.m1 r1, r2^, u3.w0,
+r1^`), and `bi_optimizer_result_type` for a `MUX.v2i16` between 0 and the
+fp16 1.0 on an `FCMP.v2f16` (`.f1`, the mask's swizzle composed into the
+compare's sources: opfs_not's `FCMP_OR.v2f16.ge.f1 r0, 0x0, r0^.h00, 0x0`).
+
+### The order of compares: measured on Mesa's per-pass NIR
+
+`tools/mali/drm_shim_ref.sh run` with `NIR_DEBUG=print_fs` in the
+environment prints the NIR after each pass to the `.stdout`. For
+`opfs_logical_xor`, `opfs_equal_bvec2` and `reslib_bvec_fs` (2026-11-17,
+Mesa 26.2.1 built by `drm_shim_ref.sh build` into `$CONNECTED_DEPS_DIR/mesa-shim`):
+
+- `pan_nir_lower_bool_to_bitsize` (bifrost_nir.c:350) runs before
+  `nir_opt_sink`/`nir_opt_move` (:380-381), and `nir_alu_instr_is_comparison`
+  takes the `_pan` compares (nir.c:3286-3289, `CASE_ALL_SIZES` lists
+  `op##_pan`): the compares are moved to their first user, as
+  `nir_fs.rs`'s `key_of` had it.
+- `nir_opt_move` runs twice on a fragment shader: at the link
+  (bifrost_nir.c:889-890) and at the compile (:380-381). Two compares that
+  share a first user swap at each run (nir_opt_move.c:91-92: the one already
+  in place keeps its index and the earlier lands between it and the user),
+  so the final order is the program order (xor: the compare of in0, then
+  in1, then `LSHIFT_XOR`). `nir.rs` `move_compares` keeps the pass's rule
+  and `select_highp` calls it twice.
+- `all(a == b)` / `any(a != b)` is one GLSL IR operation (`ball_iequal`),
+  which `lower_reduction` (nir_lower_alu_width.c:96-126) scalarises from the
+  last lane with each lane's compare right before the merge that reads it
+  (`ieq.z`, `ieq.y`, `iand`, `ieq.x`, `iand`); the walk's Bany/Ball arm puts
+  the front end's lane-order compares in that order (`reduction_order`).
+  `all(lessThanEqual(..))` is a separate vector compare in lane order
+  (reslib_float_fs, unchanged).
+- `b2i32` and `vec` are copies to the pass (nir_opt_sink.c:72,
+  `nir_move_copies`): reslib_mixed's `CSEL.u32.eq` and its `FCMP` follow
+  the `ieq` that reads them, past the `ICMP_AND`.
+
+### What moved with it
+
+- `tests/mali_deqp_unitype.rs`: `fsivec4` is refused by the walk's integer
+  ops now (`an integer or boolean value`), no longer by the fp16 block's
+  layout; its pin moved. Its `vec4(fTest).xy` beside a texel is no step-1
+  shape (lower-unitype).
+- `src/shaderc/online/mali/tests.rs`: the IntValue probe of
+  `every_reachable_gap_is_reached_by_an_es100_source` is `i != j` of two
+  run-time ints (`vec4(float(int(v.x)))` compiles now); `ALL_OPS` and
+  `mesa_opcode` list the two `ICMP_AND` ops; `fs_reference_sources` draws
+  the new rows from `deqp_intval_opfs_logical_xor` and `reslib_mixed_fs`.
+- `tools/mali/corpus-verdicts.txt`: no verdict moved (`corpus-verdicts.sh
+  --check`: 254 ok to 254 ok). Section (d)'s `tri_int.frag`, `cond_complex.frag`,
+  `loop_full.frag`, `tri_discard.frag` and `varyings15.frag` still refuse
+  with this text: each meets a shape step 1 did not take first (`i != 2`
+  of a run-time int in tri_int, `&&` of a constant `false` in cond_complex,
+  the discard's `&&` of two masks, a loop, a run-time index).
+- `tools/mali/test_pan_ref_diff.py`: `test_ref_cases_lint` pins the case
+  list's size, 104 cases and 300 regions with the ten rows above (94 and 270
+  before). The gate's `mali pan_ref_diff and ref_cases self-test` row runs
+  it: the first pull request of this step (#8117) was red there, the rows
+  added without the pin.
+- `tests/fixtures/mali_glmark2_verdicts.txt`: no glmark2 verdict moves with
+  this change (the tree at 0e1f90e3 and this one give the same 69 verdicts).
+  The file was regenerated (`MALI_GLMARK2_WRITE=1`) all the same: at
+  0e1f90e3 it was stale, 24 rows behind the merged lowerings of plan #367
+  (buffer fs 9fe6 and terrain fs d697 to `ok`, the other 20 to a later
+  refusal), and the test fails against a corpus until it is. No gate row
+  builds `tests/mali_glmark2_corpus.rs` with the Mali feature set (the
+  glmark2 corpus row runs the three other GPUs' `glmark2_corpus`), which is
+  how the file fell behind.
+
+### Left to step 2 and later
+
+- The vertex walk (section 4, step 2) untouched: all step-2 references still
+  refuse at `nir.rs`'s four sites.
+- `Fs::mask_op`'s mix of a 16-bit and a 32-bit boolean still refuses: no
+  reference of this family draws it (reslib_mixed's `iand`s are all 32-bit).
+  `imin`/`imax`, `inot` of a non-mask and `ine` of two run-time ints are not
+  added either (no reference); `ine` of two ints is the gap probe.
+- `Fs::alu16` refuses the shapes it does not take with `FragCoordMediump`'s
+  text, which names gl_FragCoord; a narrowed integer's float that meets it
+  (a product by a varying's lane, no pair) gets that text too. Split the
+  text when such a shape is lowered.
+- `Fs::narrowed` takes only `i2f32`/`u2f32` as the integer's float, not
+  fp32 arithmetic on one: an early try with every fp32 lane caught the
+  mediump gl_FragCoord's narrowed lanes (`fadd(u2f32(px), 0.5)`) and sent
+  prec_84, deriv and tri_fragcoord through `alu16`.
