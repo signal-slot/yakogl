@@ -14,7 +14,6 @@
 mod mali_ref;
 
 #[test]
-#[ignore = "differs: Mesa narrows the merged lane once (FADD.f32 into h0, read .h00), ours narrows it twice (V2F32_TO_V2F16 r0, r0), lowered by lower-varylink"]
 fn swz_xx() {
     mali_ref::assert_matches("deqp_varylink_swz_xx");
 }
@@ -74,15 +73,4 @@ fn refusals_pinned() {
     for (name, text) in pins {
         mali_ref::assert_refused_ref(&format!("deqp_varylink_{name}"), text);
     }
-}
-
-/// `swz_xx` compiles since the integer and boolean step of plan #377
-/// (ab9cde96) takes its `vec4(RES, RES, RES, 1.0)` colour, with other words
-/// than Mesa's: the `xx` varying's lane, which Mesa's link merges into one,
-/// is narrowed to fp16 twice instead of once.
-#[test]
-fn differences_pinned() {
-    let r = mali_ref::Reference::load("deqp_varylink_swz_xx");
-    let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("swz_xx: refused: {e}"));
-    assert!(!mali_ref::differences(&r, &pair).is_empty(), "swz_xx: now byte-equal; remove its ignore and this pin");
 }

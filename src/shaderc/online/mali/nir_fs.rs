@@ -10761,6 +10761,14 @@ fn fold16(a: AluOp, p: Val, q: Val) -> Result<u32, MaliError> {
 /// and y paired). The fp16 readers then read the conversion's lanes, which
 /// [`vectorize16`] pairs by ([`lane_key`]). An integer's conversion of a
 /// lane (`f2i32`, [`Fs::int_lane`]) keeps reading the word as loaded.
+///
+/// Lanes the link laid out as one ([`layout`]: Mesa's `deduplicate_outputs`
+/// makes the fragment shader read the first of equal lanes) are one load,
+/// so their conversions are one (`nir_opt_cse`): a varying whose lanes read
+/// are all that one lane has one conversion of it alone, which every reader
+/// reads (deqp_varylink_swz_xx: `out0 = in0.xx`, then `FADD.f32 r0.h0, r0^,
+/// 0x0.neg` and the subtraction's `r0^.h00`). Equal lanes beside another
+/// lane read, or of two varyings, have no reference: refused by name.
 pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
     let defect = MaliError::Defect(Defect::IrIndex);
     f.inputs16 = true;
@@ -10781,10 +10789,34 @@ pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
             }
         }
     }
+    /* the lanes read, as laid out: (slot, lane), the input node */
+    let mut places = [((0u8, 0u8), 0usize); 4 * MAX_VARYINGS];
+    let mut nplaces = 0;
     for n in 0..f.nir.n {
         if read[n] == 0 {
             continue;
         }
+        let Kind::Input { loc, .. } = f.nir.nodes[n].kind else { return Err(defect) };
+        let of = *f.lane_of.get(loc as usize).ok_or(defect)?;
+        /* the lanes read that the link laid out as an earlier lane read */
+        let mut merged = 0u8;
+        for c in (0..4).filter(|&c| read[n] & 1 << c != 0) {
+            let Some(at) = of[c] else { continue };
+            match places[..nplaces].iter().find(|x| x.0 == at) {
+                Some(&(_, m)) if m == n => merged |= 1 << c,
+                Some(_) => return Err(MaliError::VaryingDuplicate),
+                None => {
+                    *places.get_mut(nplaces).ok_or(defect)? = (at, n);
+                    nplaces += 1;
+                }
+            }
+        }
+        let first = read[n].trailing_zeros() as usize;
+        if merged != 0 && read[n] != merged | 1 << first {
+            return Err(MaliError::VaryingDuplicate);
+        }
+        /* the one lane converted, and read in place of the merged ones */
+        let lanes = if merged != 0 { 1 << first } else { read[n] };
         let at = f.origin[n];
         /* in the order right after the load, lane by lane: a node's place
          * among those of one key is its place in the order */
@@ -10792,8 +10824,8 @@ pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
         let mut conv = [Val::Undef; 4];
         let mut c = 0;
         while c < 4 {
-            let pair = c % 2 == 0 && read[n] & 3 << c == 3 << c;
-            if read[n] & 1 << c == 0 {
+            let pair = c % 2 == 0 && lanes & 3 << c == 3 << c;
+            if lanes & 1 << c == 0 {
                 c += 1;
                 continue;
             }
@@ -10820,6 +10852,9 @@ pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
             } else {
                 c += 1;
             }
+        }
+        for c in (0..4).filter(|&c| merged & 1 << c != 0) {
+            conv[c] = conv[first];
         }
         for id in 0..f.nir.n {
             let nd = f.nir.nodes[id];
