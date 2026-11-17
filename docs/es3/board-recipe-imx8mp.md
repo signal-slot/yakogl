@@ -2,6 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # dEQP-GLES3 on the Verdin i.MX8M Plus (GC7000UL): board recipe
 
+**The campaign commit is `05769bf2`** (`05769bf2c24a00a8c69c608c2310c0edab3f807c`). The next slices are named
+`2026-11-16-imx8mp-gles3-05769bf2-rowsAA-BB` and each README fixes that commit. The three `9bc82915` slices
+below stay on `main` until they are retired; they are measured history and evidence for this recipe, not part of
+the new campaign (`merge.py --check` fails when two slices name different commits, so they are never merged with
+it). Where this file quotes `9bc82915` figures, they are what that campaign measured.
+
 This recipe has run on the board. Three slices of it (plan #316 items s01, s03, s04) came from the one
 campaign commit `9bc82915e06367b46e3a62b644dbf2bb659d72ad` and are recorded as
 `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51` under `tools/cts/log/`: table
@@ -86,8 +92,16 @@ The same as for gles2 (`tools/cts/imx8mp-env.sh`): `ZEPHYR_WS`, `ZEPHYR_VENV`,
 because the gles2 directory holds the gles2 libraries and stage 2 links what it finds there. On the board
 side, set `BOARD_HOST=<user@host>` from the environment (never write it into a file) and
 `BOARD_BOOT=uboot-mmc`. `HAL_NXP_DIR` (the hal_nxp checkout) is not read by the build scripts; the
-preflight and `tools/check.sh` check it. `BOARD_UART` (the console) is optional for `board.sh` and required
-by the preflight; see "Capturing the console".
+preflight and `tools/check.sh` check it. `BOARD_UART` (the console) is optional for `board.sh`. Sessions run
+with it **unset**; the preflight reports that as `FAIL BOARD_UART is unset`, which is expected then and is not a
+reason to stop. See "Capturing the console".
+
+**What the read-only probe of 2026-11-15 found.** The board answers over ssh (key login, `sudo -n`), and
+images are staged under `/var/yakogl` on the eMMC's user-area filesystem (`STAGE_DIR` in `board.sh`; U-Boot
+loads from it, see "Before a session: boot route check"). The farm now lists a console resource for the board,
+but in that probe it delivered no output. So `BOARD_UART` stays unset, nothing is captured, and the SNVS record
+("How records are read") is the authority for every verdict. `BOARD_UART` is set only after a person confirms
+that the console delivers text.
 
 ## 1. Stage 1 (once per VK-GL-CTS revision, about 1.9 GB)
 
@@ -291,7 +305,10 @@ What the three slices measured, against what this section expected:
 
 The Mallow carrier has an A53 console: Verdin UART_3 (i.MX8MP UART3, Linux `ttymxc2`), reached through a
 serial bridge or a local device whose address comes from the environment (`BOARD_UART`; it is never written
-into a file or a commit). What the code does:
+into a file or a commit). **Sessions run with `BOARD_UART` unset.** The farm's console resource gave no output in
+the read-only probe of 2026-11-15 (and no text in the three `9bc82915` sessions, below); `BOARD_UART` is set
+only after a person confirms that the console delivers text. The commands in this recipe that show
+`BOARD_UART=<local feed bridge>` are for that case only. What the code does:
 
 - **What the sample prints.** When a console is attached, the deqp sample (`deqp_log.c`) prints
   `deqp: <Status> <case name>` per case, `deqp: selector <n>`, `deqp: done: ...` and
@@ -321,7 +338,7 @@ into a file or a commit). What the code does:
   boot of the same table image per page of six CRCs). The tally still comes from the SNVS record. Lost
   console lines make a log incomplete (`board.sh` then says `done_lossy`, the tally script INCOMPLETE/MISSING);
   keep CRC paging for any row whose console log is not complete.
-**What the three sessions measured.** Each was built with `IMX8MP_CONSOLE=1`, each had the three `.config`
+**What the three `9bc82915` sessions measured.** Each was built with `IMX8MP_CONSOLE=1`, each had the three `.config`
 lines above, and `board.sh` captured `BOARD_UART` for every boot (`console.raw`, `console.ts`,
 `console.txt` in each run directory): the leased console returned **no text at all**. One NUL byte
 (`\x00`) at each board reset and nothing else — 89 bytes for the 89 boots of rows01-13, 78 for the first 78
@@ -405,14 +422,61 @@ How to read it:
 - To compare two trees, add `TREE_PREV=records/imx8mp/<earlier>` to the `tree` command, or run
   `tools/board.sh imx8mp diff <a> <b>`.
 
+## Before a session: boot route check
+
+All of this is read-only. From 2026-11-16 the board was held for an owner demo and kept on a fast-boot image in
+eMMC boot1 (`PARTITION_CONFIG` 0x50, boot partition 2, where the stock Toradex setup boots from boot0). A session
+after such a hold first confirms that the board still takes the route `board.sh`'s `uboot-mmc` path expects: the
+U-Boot of `docs/notes/imx8mp-netboot.md` reads its environment from boot0 (`bootcmd` = `run yako_hook; run
+cm_boot; run distro_bootcmd`, `yako_bootcmd_prev` = `run cm_boot; run distro_bootcmd`), the distro boot finds
+Torizon on eMMC partition 1 (U-Boot's `mmc 2:1`, Linux's `mmcblk2p1`), and the staged image lives in
+`/var/yakogl` on that partition. `BOARD_HOST` and `BOARD_BOOT=uboot-mmc` are set, `BOARD_UART` is not.
+
+```sh
+tools/board.sh imx8mp status        # BOARD_BOOT=uboot-mmc
+```
+
+`status` runs, on the board: `cat /var/tmp/yakogl-board.lease`; `sudo -n fw_printenv bootcmd bootdelay yako_hook
+yako_dflt yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default yako_default_left
+yako_bootcmd_prev` and the install check (`install: ok`); `ls -l /var/yakogl`; `findmnt -n -v -o
+SOURCE,TARGET,FSROOT -T /var`. Besides, these single read-only commands on the board (the `findmnt`, `df` and
+`fw_printenv` forms are the ones `board.sh` runs before it stages an image):
+
+```sh
+sudo -n fw_printenv ver                         # U-Boot as the record: 2024.07-7.7.0+git... (Toradex BSP 7.7)
+findmnt -n -v -o SOURCE,TARGET,FSROOT -T /var/yakogl   # source /dev/mmcblk2p1, FSROOT below /ostree/deploy/torizon/var
+df -B1 --output=avail /var/yakogl | tail -1     # at least twice the image
+ls -l /boot /var/yakogl                         # the stock /boot files, and no once-*.bin left over
+cat /proc/cmdline                               # the stock Torizon command line (tdxargs with crashkernel=)
+cat /sys/kernel/kexec_loaded /sys/kernel/kexec_crash_loaded   # both 0
+sudo -n fw_printenv -n yako_once; sudo -n fw_printenv -n yako_default   # both print nothing
+```
+
+If the `mmc-utils` package is on the board, `sudo -n mmc extcsd read /dev/mmcblk2` reads `PARTITION_CONFIG`
+(`0x08` is boot0; `0x50` is the fast-boot image's boot1). That command is not in `board.sh`; it reads the
+register and writes nothing. The check passes only when all of these hold: `ver`, `bootcmd` and
+`yako_bootcmd_prev` are as the record of `docs/notes/imx8mp-netboot.md` (with `install: ok` and every other
+`yako_*` variable empty), `/var/yakogl` is on `mmcblk2p1`, `/boot` holds the stock Torizon files the record
+lists, and no one-shot or default is pending. Any difference (another U-Boot, a `bootcmd` not as recorded,
+`/var/yakogl` elsewhere, a `PARTITION_CONFIG` that is not the stock one, files in `/boot` the record does not
+know) **stops the session**: nothing is staged, nothing is run, and the report says that a person must restore
+the route. Do not repair it from the session.
+
+Never, in any step of a session:
+- write the eMMC by hand (the one write `board.sh` makes is the staged image and `yako_once` under its own
+  checks; no `dd`, `mmc`, `fw_setenv` or `force_ro` write of boot0 or boot1, no `PARTITION_CONFIG` change);
+- write the microSD partitions `fsbla1`, `fsbla2`, `metadata1`, `metadata2`, `fip-a` or `fip-b`;
+- repartition any disk;
+- load or unload kernel modules (`modprobe`, `insmod`, `rmmod`).
+
 ## Running a GLES3 slice session
 
 One ordered procedure for a board session that runs a row range of the 133-entry table and commits it as a
 slice. Every command below exists in the tree with the flags shown, and the output described is what its script
 prints (read from the script). Steps 1-13 have been run three times on the board, from the one commit
-`9bc82915`, as `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51`: what the board
+`9bc82915` (the earlier campaign; the current one is `05769bf2`), as `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51`: what the board
 prints is what those runs recorded. The open board-side unknown is the console's **content** (the bridge
-delivered no text in all three sessions), not the verdict lines, the records or the tallies.
+delivered no text in all three sessions, nor in the probe of 2026-11-15), not the verdict lines, the records or the tallies.
 
 Rules that hold for every step:
 - **One commit.** All slices of a campaign come from the same `origin/main` commit, and the image is named after
@@ -437,6 +501,8 @@ Rules that hold for every step:
   record with counts that fit the entry, and `meta.txt`'s boot boundaries (`uptime` below the time since the
   reboot, the board's uptime matching the last return).
 - **Board times.** Record each row's time: `back_after=<n>s` of its verdict line and the scan's elapsed time.
+- **Before the first slice of a session, the boot route check** (previous section, read-only). After a hold of
+  the board it comes before step 9 and before anything is staged.
 - **No addresses in files.** `BOARD_HOST` and `BOARD_UART` come from the environment only. Name them in a
   README, never their values. Before committing, read every file for `@` logins, dotted-quad numbers, `:port`
   and `/dev/`.
@@ -453,8 +519,8 @@ Rules that hold for every step:
 
 2. **Environment** (names only; the values come from the shell environment): `IMX8MP_OUT`, `DEQP_STAGE1`
    (the gles3 stage 1 directory; `$IMX8MP_OUT/deqp-stage1-gles3` is the default of the `gles3` arguments),
-   `ZEPHYR_WS`, `ZEPHYR_VENV`, `ZEPHYR_SDK_INSTALL_DIR`, `HAL_NXP_DIR`, `BOARD_HOST`, `BOARD_BOOT=uboot-mmc` and
-   `BOARD_UART`. `DEQP_STAGE1` has to name the **gles3** stage 1 in the shell too: `imx8mp-deqp-build.sh
+   `ZEPHYR_WS`, `ZEPHYR_VENV`, `ZEPHYR_SDK_INSTALL_DIR`, `HAL_NXP_DIR`, `BOARD_HOST` and `BOARD_BOOT=uboot-mmc`.
+   `BOARD_UART` stays **unset** unless a person has confirmed that the console delivers text. `DEQP_STAGE1` has to name the **gles3** stage 1 in the shell too: `imx8mp-deqp-build.sh
    --gles3` and `imx8mp-deqp-stage1.sh gles3` set what they build from (`$DEQP_STAGE1_GLES3`, default
    `$IMX8MP_OUT/deqp-stage1-gles3`), but the preflight (step 7) and step 3 read `DEQP_STAGE1` and look in it
    for `build/modules/gles3/libdeqp-gles3-package.a` — with `DEQP_STAGE1` naming a gles2 stage 1 the preflight
@@ -471,7 +537,8 @@ Rules that hold for every step:
    Prints `rc=<n>` and the last 5 log lines (log: `$IMX8MP_OUT/deqp-stage1.log`); on a failure it also prints the
    first `FAILED:` block. The exit status is the build's (2 for a bad `DEQP_MODULE`). Expected: `rc=0`.
 
-4. **Table image**, console on:
+4. **Table image**, console on (the fragment does no harm with `BOARD_UART` unset and a later session with a
+   working console needs it; the SNVS record is unchanged by it):
    ```sh
    IMX8MP_CONSOLE=1 tools/cts/imx8mp-deqp-build.sh --gles3 es3-$HEAD8 'dEQP-GLES3.info.*' \
        --table tools/cts/imx8mp-gles3-tree.txt
@@ -534,7 +601,9 @@ Rules that hold for every step:
    tools/cts/imx8mp-gles3-preflight.sh --commit "$COMMIT" --out "$IMX8MP_OUT"      # also: --table <file>
    ```
    One line per check, `  ok   <text>` or `  FAIL <text>`: `IMX8MP_OUT`, `DEQP_STAGE1`, `ZEPHYR_WS` and
-   `HAL_NXP_DIR` set and existing, `BOARD_UART is set`, the stage 1 package, `table passes
+   `HAL_NXP_DIR` set and existing, `BOARD_UART is set` (with `BOARD_UART` unset it prints `FAIL BOARD_UART is
+   unset` and ends `preflight: 1 check(s) FAILED`: expected in a session without a console, every other line must
+   be `ok`), the stage 1 package, `table passes
    check-imx8mp-gles3-tree.py`, `table image exists (es3-<hash8> ...)`, `image es3-<hash8> is commit <hash8>`.
    The last line is `preflight: all ok` (exit 0) or `preflight: <n> check(s) FAILED` (exit 1); a bad option exits
    2. `--commit` defaults to `git rev-parse origin/main`, so pass the campaign commit once main has moved. Run
@@ -557,7 +626,7 @@ Rules that hold for every step:
    another commit's image. The wrapper only fills in the image and `tools/cts/imx8mp-gles3-tree.txt`; its one
    option is `--dry-run`, its verbs are `tree` and `tally`, and anything else exits 2.
 
-9. **Board state** (reads the board; `BOARD_HOST` and `BOARD_BOOT=uboot-mmc` set):
+9. **Board state** (after the boot route check; reads the board; `BOARD_HOST` and `BOARD_BOOT=uboot-mmc` set):
    ```sh
    tools/board.sh imx8mp status
    ```
@@ -565,14 +634,16 @@ Rules that hold for every step:
    means stop. If the real run is refused because the U-Boot hook is not installed, `tools/board.sh imx8mp
    install` is the one-time fix, by whoever owns the board; do not improvise.
 
-10. **Run the slice, then scan the console.**
+10. **Run the slice, then scan the console** (the scan only when `BOARD_UART` was set; without it there is
+    no console file and the SNVS record is what the verdicts rest on).
     ```sh
     OUT=records/imx8mp/es3-$HEAD8-rows01-10
+    # BOARD_UART unset (add BOARD_UART=<local feed bridge> only once a person has confirmed the console delivers text)
     TREE_ROWS=0-9 TREE_IMAGE=$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin BOARD_BOOT=uboot-mmc \
-      BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt RUN_BOUND=800 BOARD_UART=<local feed bridge> \
+      BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt RUN_BOUND=800 \
       NAMES=0 tools/cts/imx8mp-gles3-board.sh tree "$OUT" 2>&1 | tee "$OUT.log"      # pass 1: the rows
     TREE_ROWS=0-9 TREE_IMAGE=$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin BOARD_BOOT=uboot-mmc \
-      BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt RUN_BOUND=800 BOARD_UART=<local feed bridge> \
+      BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt RUN_BOUND=800 \
       tools/cts/imx8mp-gles3-board.sh tree "$OUT" 2>&1 | tee -a "$OUT.log"           # pass 2: the name pages
     ```
     The two passes are what the three slices did: `NAMES=0` keeps the pages out of the first pass (a page is a
