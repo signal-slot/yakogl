@@ -529,7 +529,13 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
          * of a 2D array's or 3D texture's look-up (`float a =
          * textureLod(vol, p, 0.0).r`, texmore_48: an `ir_swizzle` of the
          * `ir_texture`, one rvalue, grafted as the look-up itself is) */
-        let comps = m.comps_of(src.val) as usize;
+        /* whole: every lane of the local (its own width; the value's may be
+         * the front end's blanket four, gm2_fsarith_1's `vec3 L =
+         * normalize(light)` and `float d = max(..)`) */
+        let comps = match m.locals.get(l).map(|d| d.ty.comps) {
+            Some(c @ 1..=4) if write_mask == (1u8 << c) - 1 => c as usize,
+            _ => m.comps_of(src.val) as usize,
+        };
         let whole = write_mask == (1u8 << comps) - 1 && (0..comps).all(|c| src.swizzle[c] as usize == c);
         let texel = write_mask.count_ones() == 1
             && matches!(
@@ -594,6 +600,22 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
         }
     }
     out
+}
+
+/// The operand of product `s` that is the `fneg` of a literal (GLSL's
+/// `-2.0`, which the front end keeps as an `fneg`), when the other is not
+/// a constant.
+fn neg_literal(m: &Module<'_>, s: &[ir::Src; 3]) -> Option<usize> {
+    let lit = |k: usize| match m.def(s[k].val) {
+        Some(ir::Op::Alu(AluOp::Fneg, [c, ..])) => matches!(m.def(c.val), Some(ir::Op::ConstF32(_))),
+        _ => false,
+    };
+    let konst = |k: usize| matches!(m.def(s[k].val), Some(ir::Op::ConstF32(_)));
+    match (lit(0), lit(1)) {
+        (true, false) if !konst(1) => Some(0),
+        (false, true) if !konst(0) => Some(1),
+        _ => None,
+    }
 }
 
 /// IR instruction `i` is a `?:` whose condition is no constant: GLSL's
@@ -748,6 +770,17 @@ pub const ADMITTED: u128 = {
          * merged into one, the first output word that lane in both
          * halves, `IADD.v2u16 r1, r0.h00, 0x0` */
         | prod(Splat, Output)
+        /* glmark2's lit `vec3(0.1) + vec3(0.8 * d)` (gm2_fsarith_1): the
+         * constant pair first in the fused product, `FMA.v2f16 r1, u8.w0,
+         * r1^.h00, 0x2E660000.h11` */
+        | prod(Const, FmaA)
+        /* `mix(a, b, t)` of a float varying `t` (gm2_fsmisc_7): `t`
+         * converted alone, first in the `ffma`, `FMA.v2f16 r0, r4.h00, r2^,
+         * r0^` */
+        | prod(Splat, FmaA)
+        /* `mix(FILL, LINE, I)` of a computed scalar `I` (gm2_fsmisc_6): `I`
+         * first in the `ffma`, `FMA.v2f16 r1, r0.h00, u2.w1, 0x38000000` */
+        | prod(Op, FmaA)
 };
 
 /// One load of the fragment shader: a 16-byte slot of the compacted
@@ -829,6 +862,16 @@ pub struct Fs<'s> {
     origin: &'s mut [u16],
     /// Each IR instruction's place in NIR's order.
     keys: &'s mut [u32],
+    /// Each IR instruction's width (`Module::lanes_of`): a node whose
+    /// instruction is a vector stands for lanes `nir_lower_alu_width`
+    /// splits two by two, though they CSE'd into one node here
+    /// ([`Fs::wide`]).
+    ir_comps: &'s mut [u8],
+    /// Each IR instruction's lanes as the walk left them ([`Fs::pair_lane`];
+    /// empty until the walk ends).
+    ir_vals: &'s [[Val; 4]],
+    /// Bit `n % 64` of word `n / 64`: node `n` is read ([`Fs::mark_live`]).
+    live: [u64; MAX_NODES / 64],
     /// The colour's lanes, once the shader stores it.
     pub(super) colour: Option<[Val; 4]>,
     /// The lanes of the outputs at locations 1.. (`layout(location = n)
@@ -1066,6 +1109,18 @@ impl<'s> Fs<'s> {
              * `u_p[58].y * vec4(1.0, 0.0, ..)` keeps its x and y lanes as
              * `ffma %6.yy, (1.0, 0.0), %4` (unitype_166a.stderr) */
             (AluOp::Fmul, Rule::Zero) => Ok(Val::Const(0)),
+            /* `fmul(b2f(a), b)` is `bcsel(a, b, 0.0)` (nir_opt_algebraic.py:1695;
+             * gm2_fsmisc_8's `step(0.5, x) * y`, `MUX.v2i16 r0, 0x0, r2^, r0^`) */
+            (AluOp::Fmul, _) if self.b2f16(x).is_some() || self.b2f16(y).is_some() => {
+                let (m, b) = match self.b2f16(x) {
+                    Some(m) => (m, y),
+                    None => (self.b2f16(y).ok_or(MaliError::Defect(Defect::IrIndex))?, x),
+                };
+                if matches!(b, Val::Const(_)) || self.b2f16(b).is_some() {
+                    return Err(MaliError::IntValue);
+                }
+                self.node(Alu::Bcsel, [m, b, Val::Const(0)], at)
+            }
             /* two constants: the front end folds them */
             (AluOp::Fmul, _) if cx && cy => Err(MaliError::ConstantFold),
             /* `* -1.0` is an fneg (nir_opt_algebraic.py:296) */
@@ -1121,6 +1176,15 @@ impl<'s> Fs<'s> {
         }
     }
 
+    /// `v` is the 16-bit `b2f` of a mediump compare's mask: Some(the mask).
+    fn b2f16(&self, v: Val) -> Option<Val> {
+        let Val::Lane(n, _) = v else { return None };
+        match self.nir.nodes[n as usize] {
+            NirNode { kind: Kind::Alu(Alu::B2f), bits: 16, src: [m, ..], .. } => Some(m),
+            _ => None,
+        }
+    }
+
     /// `x` and `y` are products of one 16-bit value `a` with the constants
     /// `b` and `c` ([`Fs::op`]'s factoring).
     fn factor(&self, x: Val, y: Val) -> Option<(Val, u32, u32)> {
@@ -1130,6 +1194,188 @@ impl<'s> Fs<'s> {
         };
         let ((a, b), (a2, c)) = (prod(x)?, prod(y)?);
         (a == a2 && !matches!(a, Val::Const(_))).then_some((a, b, c))
+    }
+
+    /// Lane `v` is a node of a vector IR operation (its lanes CSE'd into
+    /// one): Mesa pairs it as an operation of two lanes reading its
+    /// operands' halves (gm2_fsarith_1's `vec3(0.1) + vec3(0.8 * d) + ..`,
+    /// `FMA.v2f16 r1, u8.w0, r1^.h00, 0x2E660000.h11`), where a scalar's is
+    /// one lane, packed (gm2_fsmisc_4's `vec4(smoothstep(..))`).
+    fn wide(&self, v: Val) -> bool {
+        match v {
+            Val::Lane(n, _) => self.ir_comps.get(self.origin[n as usize] as usize).is_some_and(|&c| c > 1),
+            _ => false,
+        }
+    }
+
+    /// Lane `v` is lane `i` of a vector IR operation that `nir_opt_vectorize`
+    /// pairs (an `fadd`, `fmul` or `ffma` of 16-bit lanes): Some((the
+    /// operation's lanes, `i`, its width)). A lane the walk's last pass of
+    /// a loop no longer holds is none.
+    fn pair_lane(&self, v: Val, hint: Option<usize>) -> Option<([Val; 4], usize, usize)> {
+        let Val::Lane(n, _) = v else { return None };
+        if self.nir.nodes[n as usize].bits != 16 || !self.wide(v) {
+            return None;
+        }
+        if !matches!(self.alu_of(v), Some((Alu::Fadd | Alu::Fmul | Alu::Ffma, _))) {
+            return None;
+        }
+        let o = self.origin[n as usize] as usize;
+        let mut w = usize::from(*self.ir_comps.get(o)?).min(4);
+        let lanes = *self.ir_vals.get(o)?;
+        /* the lanes past the last one read are gone (`nir_opt_shrink_vectors`:
+         * `vec3(nm * vec4(n, 1.0))`'s `w`, so `z` is an operation of its own) */
+        while w > 1 && !self.read(lanes[w - 1]) {
+            w -= 1;
+        }
+        /* a value in several lanes (CSE'd) is the lane the reader names, when
+         * it names one ([`Pairs::hint`]): the colour's `z` of `vec3(0.1) +
+         * ..` is the operation of one lane, not a half of the `(x, y)` pair */
+        let i = match hint {
+            Some(h) if h < w && lanes[h] == v => h,
+            _ => lanes[..w].iter().position(|&x| x == v)?,
+        };
+        Some((lanes, i, w))
+    }
+
+    /// Lane `v` has one reader among the live nodes and the colour's lanes
+    /// (`is_used_once`: the late `ffma` fusion takes only such a product,
+    /// nir_opt_algebraic.py `('fmul(is_used_once)', a, b)`; gm2_fsmisc_2's
+    /// `3.0 * x.x`, read by `fract`'s floor and its sum, stays a product).
+    fn used_once(&self, v: Val) -> bool {
+        let Val::Lane(n, _) = v else { return false };
+        let mut uses = self.colour.map_or(0, |c| usize::from(c.contains(&v)));
+        for (k, nd) in self.nir.nodes[..self.nir.n].iter().enumerate() {
+            if self.live[k / 64] >> (k % 64) & 1 == 0 {
+                continue;
+            }
+            if nd.src[..nd.arity().min(3)].iter().any(|s| matches!(*s, Val::Lane(x, _) if x == n)) {
+                uses += 1;
+            }
+        }
+        uses == 1
+    }
+
+    /// Lane `v` is live ([`Fs::live`]).
+    fn read(&self, v: Val) -> bool {
+        match v {
+            Val::Lane(n, _) => self.live[n as usize / 64] >> (n % 64) & 1 != 0,
+            _ => true,
+        }
+    }
+
+    /// The nodes the program reads ([`Fs::live`]): the colour's, the other
+    /// targets', the discards and what they read, the way `nir_opt_dce`
+    /// leaves them.
+    fn mark_live(&mut self) {
+        let mut stack = [0u16; MAX_NODES];
+        let mut n = 0;
+        let push = |live: &mut [u64], stack: &mut [u16], n: &mut usize, v: Val| {
+            if let Val::Lane(x, _) | Val::Pair(x, _) = v {
+                if live[x as usize / 64] >> (x % 64) & 1 == 0 && *n < stack.len() {
+                    live[x as usize / 64] |= 1 << (x % 64);
+                    stack[*n] = x;
+                    *n += 1;
+                }
+            }
+        };
+        let roots = self.colour.into_iter().chain(self.targets.iter().flatten().copied()).flatten();
+        for v in roots {
+            push(&mut self.live, &mut stack, &mut n, v);
+        }
+        for k in 0..self.nir.n {
+            if self.nir.nodes[k].kind == Kind::Discard {
+                push(&mut self.live, &mut stack, &mut n, Val::Lane(k as u16, 0));
+            }
+        }
+        while n > 0 {
+            n -= 1;
+            let nd = self.nir.nodes[stack[n] as usize];
+            for &s in &nd.src[..nd.arity().min(3)] {
+                push(&mut self.live, &mut stack, &mut n, s);
+            }
+        }
+    }
+
+    /// `a` and `b` are lanes of one vector IR operation ([`Fs::wide`]).
+    fn same_op(&self, a: Val, b: Val) -> bool {
+        match (a, b) {
+            (Val::Lane(x, _), Val::Lane(y, _)) => self.wide(a) && self.origin[x as usize] == self.origin[y as usize],
+            _ => false,
+        }
+    }
+
+    /// `ffma(a, 1.0, acc)` of a mediump lane, `acc` a chain of `ffma`s down
+    /// to an `fmul` (the front end's `M * vec4(v, 1.0)`: `fmul(c1, v.y)`,
+    /// `ffma(c0, v.x, ..)`, `ffma(c2, v.z, ..)`, then `ffma(c3, 1.0, ..)`):
+    /// `fadd(acc, a)`, which `reassoc_fma_optimizations` (nir_opt_algebraic.py:
+    /// 4353-4360) makes `fadd(c2 v.z, fadd(c0 v.x, fadd(c1 v.y, a)))`, then
+    /// fused: `a` the addend of the first product (gm2_fsarith_1: `FMA.v2f16
+    /// r2, u2.w0, r0.h11, u2.w1`, `.. u6.w0, r0.h00, r2^`, `.. u7.w0, r1.h00,
+    /// r2^`). None for any other `acc`.
+    fn reassoc_last(&mut self, a: Val, acc: Val, at: usize) -> Result<Option<Val>, MaliError> {
+        /* two terms (`mat3 * vec3(p, 1.0)`) are `ffma(m1, y, ffma(m0, x,
+         * m2))` at fp32 ([`Fs::alu32_lanes`]); at fp16 no reference draws
+         * them, nor four */
+        let mut terms = [(Val::Undef, Val::Undef); 4];
+        let mut n = 0;
+        let mut v = acc;
+        loop {
+            match self.alu_of(v) {
+                Some((Alu::Ffma, [p, q, r])) if n < 3 => {
+                    terms[n] = (p, q);
+                    n += 1;
+                    v = r;
+                }
+                Some((Alu::Fmul, [p, q, _])) => {
+                    terms[n] = (p, q);
+                    n += 1;
+                    break;
+                }
+                _ => return Ok(None),
+            }
+        }
+        if n != 3 {
+            return Ok(None);
+        }
+        let mut m = a;
+        for &(p, q) in terms[..n].iter().rev() {
+            m = self.node(Alu::Ffma, [p, q, m], at)?;
+        }
+        Ok(Some(m))
+    }
+
+    /// `v` is the 16-bit `fmul(flog2(a), #b)` (either order): Some((a, b)),
+    /// the operands of the `fpow` an `exp2` of it is ([`walk_nodes`]).
+    fn pow_of(&self, v: Val) -> Option<(Val, u32)> {
+        let Val::Lane(n, _) = v else { return None };
+        if self.nir.nodes[n as usize].bits != 16 {
+            return None;
+        }
+        let (Alu::Fmul, [p, q, _]) = self.alu_of(v)? else { return None };
+        let (l, b) = match (p, q) {
+            (l, Val::Const(b)) | (Val::Const(b), l) => (l, b),
+            _ => return None,
+        };
+        match self.alu_of(l)? {
+            (Alu::Flog2, [a, ..]) => Some((a, b)),
+            _ => None,
+        }
+    }
+
+    /// `x * y` is `smoothstep`'s last product as the front end writes it
+    /// (builtin_call.rs): `x` the 16-bit `t * t` and `y` `ffma(-2.0, t,
+    /// 3.0)` of the same `t`, a saturate. Some(`t`).
+    fn smoothstep_tail(&self, x: Val, y: Val) -> Option<Val> {
+        const F32_THREE: u32 = 0x4040_0000;
+        let Val::Lane(n, _) = x else { return None };
+        if self.nir.nodes[n as usize].bits != 16 {
+            return None;
+        }
+        let (Alu::Fmul, [t, t2, _]) = self.alu_of(x)? else { return None };
+        let (Alu::Ffma, [Val::Const(F32_MINUS_TWO), t3, Val::Const(F32_THREE)]) = self.alu_of(y)? else { return None };
+        let sat = matches!(self.alu_of(t), Some((Alu::Fclamp(clamp::ZERO_ONE), _)));
+        (t == t2 && t == t3 && sat).then_some(t)
     }
 
     /// One of `x` and `y` is a constant `c2` and the other a 16-bit product
@@ -1589,6 +1835,18 @@ impl<'s> Fs<'s> {
              * `F32_TO_S32.rtz`) */
             AluOp::F2i if self.fp32_lane(p) => self.int32(Alu::F2i, [p, u, u], at),
             AluOp::I2b if bool_uniform(0) => Ok(p),
+            /* `inot(flt(a, b))` is `fge(a, b)` and the reverse
+             * (nir_opt_algebraic.py), a mediump compare's 16-bit mask
+             * (gm2_fsmisc_8's `step(0.5, x)`, `!(x < 0.5)`: `FCMP_OR.v2f16.ge.m1
+             * r0, r0^, 0x38000000.h11, 0x0`) */
+            AluOp::Bnot | AluOp::Inot if self.mask16(p) => match self.alu_of(p) {
+                Some((Alu::Fcmp(Cmpf::Lt), [a, b, _])) => self.node(Alu::Fcmp(Cmpf::Ge), [a, b, u], at),
+                Some((Alu::Fcmp(Cmpf::Ge), [a, b, _])) => self.node(Alu::Fcmp(Cmpf::Lt), [a, b, u], at),
+                _ => Err(MaliError::IntValue),
+            },
+            /* `b2f` of such a mask: one 16-bit node, which a product makes a
+             * select ([`Fs::op`]); any other reader has no reference */
+            AluOp::B2f if self.mask16(p) => self.node(Alu::B2f, [p, u, u], at),
             AluOp::Bnot | AluOp::Inot if self.mask_lane(p) => match not(self, p) {
                 Some(inner) => Ok(inner),
                 None => self.int32(Alu::Inot, [p, u, u], at),
@@ -2525,7 +2783,36 @@ impl<'s> Fs<'s> {
              * leaves (other_80_matdyn.expect.json words 8-12) */
             AluOp::Inot => self.op32(Alu::Inot, [x, u, u], at),
             AluOp::Ior => self.op32(Alu::Ior, [x, y, u], at),
+            /* `pow(a, #b)`, the front end's `exp2(b * log2(a))`
+             * (nir_opt_algebraic.py:1872's `fpow`, `bi_fpow_32`; gm2_fsarith_2:
+             * `FREXPE.f32.log` .. `FMA_RSCALE.f32 r0, u11.w1, r0^, 0x0.neg,
+             * r2^`): the `log2` a node the `pow` reads, left to the dead
+             * code; `log2` and `exp2` alone have no highp reference */
+            AluOp::Flog2 => self.op32(Alu::Flog2, [x, u, u], at),
+            AluOp::Fexp2 => match self.pow32_of(x) {
+                Some((a, b)) if !matches!(f32::from_bits(b), 1.0 | 2.0 | 3.0 | 4.0) => {
+                    self.op32(Alu::Fpow, [a, Val::Const(b), u], at)
+                }
+                _ => Err(MaliError::Arithmetic),
+            },
             _ => Err(MaliError::Arithmetic),
+        }
+    }
+
+    /// `v` is the fp32 `fmul(flog2(a), #b)` (either order): Some((a, b))
+    /// ([`Fs::pow_of`]'s at fp32).
+    fn pow32_of(&self, v: Val) -> Option<(Val, u32)> {
+        let Val::Lane(n, _) = v else { return None };
+        let nd = self.nir.nodes[n as usize];
+        let (Kind::Alu(Alu::Fmul), 32) = (nd.kind, nd.bits) else { return None };
+        let (l, b) = match (nd.src[0], nd.src[1]) {
+            (l, Val::Const(b)) | (Val::Const(b), l) => (l, b),
+            _ => return None,
+        };
+        let Val::Lane(m, _) = l else { return None };
+        match self.nir.nodes[m as usize] {
+            NirNode { kind: Kind::Alu(Alu::Flog2), bits: 32, src: [a, ..], .. } => Some((a, b)),
+            _ => None,
         }
     }
 
@@ -2694,6 +2981,42 @@ impl<'s> Fs<'s> {
          * fmul(m1, y)))`; any other shape under a constant scale has no
          * reference ([`MaliError::ArithConstant`] by `Nir::alu`). */
         if a == AluOp::Ffma && is_mat_term_fs(m, srcs) && lane(1, 0) == Val::Const(F32_ONE) {
+            /* `mat4 * vec4(v, 1.0)`: `fadd(fadd(fadd(fmul(m0, x), fmul(m1,
+             * y)), fmul(m2, z)), m3)`, which `reassoc_fma_optimizations`
+             * (nir_opt_algebraic.py:4355-4356) makes `fadd(m2 z, fadd(m0 x,
+             * fadd(m1 y, m3)))`, fused: `ffma(m2, z, ffma(m0, x, ffma(m1, y,
+             * m3)))` (gm2_fsarith_2: `FMA.f32 r3, u2.w0, r1, u2.w1`, then
+             * `u8.w0, r0, r3^` and `u9.w1, r2, r3^`; gm2_fsarith_1 the same
+             * at fp16). The front end's chain is `ffma(m3, 1.0, ffma(m2, z,
+             * ffma(m0, x, fmul(m1, y))))` */
+            let three = |f: &Self, v: Val| match f.alu_of(v) {
+                Some((Alu::Ffma, [c2, z2, acc])) => match f.alu_of(acc) {
+                    Some((Alu::Ffma, [c0, x0, acc])) => match f.alu_of(acc) {
+                        Some((Alu::Fmul, [c1, y1, _])) => Some([(c1, y1), (c0, x0), (c2, z2)]),
+                        _ => None,
+                    },
+                    _ => None,
+                },
+                _ => None,
+            };
+            if (0..w).all(|i| three(self, lane(2, i)).is_some()) {
+                let mut terms = [[(Val::Undef, Val::Undef); 3]; 4];
+                for (i, t) in terms.iter_mut().enumerate().take(w) {
+                    *t = three(self, lane(2, i)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                }
+                let mut acc = [Val::Undef; 4];
+                for (i, a) in acc.iter_mut().enumerate().take(w) {
+                    *a = lane(0, i);
+                }
+                /* each lane's chain whole, x first (the order Mesa's program
+                 * has; the scheduler keeps it) */
+                for i in 0..w {
+                    for t in terms[i] {
+                        acc[i] = self.op32(Alu::Ffma, [t.0, t.1, acc[i]], id)?;
+                    }
+                }
+                return Ok(acc);
+            }
             let mut inner = [Val::Undef; 4];
             let mut outer = [(Val::Undef, Val::Undef); 4];
             for i in 0..w {
@@ -3056,6 +3379,9 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         mixed: prec.mixed,
         origin: scratch.alloc_filled(MAX_NODES, 0u16).map_err(oom)?,
         keys: scratch.alloc_filled(MAX_VALUES, u32::MAX).map_err(oom)?,
+        ir_comps: scratch.alloc_filled(MAX_VALUES, 0u8).map_err(oom)?,
+        ir_vals: &[],
+        live: [0; MAX_NODES / 64],
         colour: None,
         targets: [None; MAX_TARGETS - 1],
         fragcolor: m.outputs.iter().any(|d| matches!(d.kind, IoKind::Colour) && d.name == "gl_FragColor"),
@@ -3108,6 +3434,17 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     if walk_nodes(&mut f, m, m.nodes_of(m.body), vals, &mut locals, prec, true, end, None)? != Flow::Next {
         return Err(MaliError::ControlFlow);
     }
+    f.ir_vals = vals;
+    f.mark_live();
+    /* a highp `log2` read by anything but a `pow` ([`Fs::lane32`]'s
+     * `Flog2`, made for the `pow` that reads it): no reference */
+    let lone_log = (0..f.nir.n).any(|k| {
+        f.live[k / 64] >> (k % 64) & 1 != 0
+            && matches!(f.nir.nodes[k], NirNode { kind: Kind::Alu(Alu::Flog2), bits: 32, .. })
+    });
+    if lone_log {
+        return Err(MaliError::Arithmetic);
+    }
     /* an output past location 0 is stored where its value is the last
      * store's: the joins and the loops carry the colour alone */
     let branches = f.nir.nifs != 0 || f.nir.nloops != 0 || f.discards != 0 || f.nlook != 0;
@@ -3132,6 +3469,12 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         }
     }
     order_keys(m, f.keys);
+    for (i, c) in f.ir_comps.iter_mut().enumerate().take(m.instrs.len()) {
+        /* the exact width where the front end records it (a built-in's
+         * steps: `smoothstep` of a float is 1 lane, its `comps` 4) */
+        let id = ir::ValueId(i as u32);
+        *c = m.lanes_of(id).unwrap_or_else(|| m.comps_of(id));
+    }
     /* a 2D array look-up's coordinate conversion CSE'd with one a later
      * statement made first (`nir_opt_cse` keeps the first in program
      * order): it stands at its first reader (case 42's `F16_TO_F32` of
@@ -4510,9 +4853,10 @@ fn walk_nodes(
                 }
             }
             /* a sum or product of constants (an unrolled loop's `r +=
-             * 0.25`, case 72): `nir_opt_constant_folding` at fp16, which
-             * equals the fp32 result when that is exact in fp16; another
-             * has no reference */
+             * 0.25`, case 72): `nir_opt_constant_folding` at fp16, each
+             * operand rounded to fp16 first (lower_precision's constants)
+             * and the result rounded (gm2_fsmisc_6's `mix(FILL, LINE, I)`,
+             * `1.0 - 0.8` the `0x3268` of `u3.w0`: 0.8 is `0x3A66` first) */
             ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
                 if (0..m.comps_of(ir::ValueId(id.0)) as usize)
                     .all(|i| matches!((lane(vals, s[0], i), lane(vals, s[1], i)), (Val::Const(_), Val::Const(_)))) =>
@@ -4522,16 +4866,54 @@ fn walk_nodes(
                     let (Val::Const(p), Val::Const(q)) = (lane(vals, s[0], i), lane(vals, s[1], i)) else {
                         return Err(MaliError::Defect(Defect::IrIndex));
                     };
-                    let (p, q) = (f32::from_bits(p), f32::from_bits(q));
+                    let h = |b: u32| f16_rtne(b).map(|h| f32::from_bits(super::select::f16_bits(h)));
+                    let (Some(p), Some(q)) = (h(p), h(q)) else { return Err(MaliError::ConstantFold) };
                     let r = if a == AluOp::Fadd { p + q } else { p * q }.to_bits();
-                    if [p.to_bits(), q.to_bits(), r].iter().any(|b| f16_exact(*b).is_none()) {
-                        return Err(MaliError::ConstantFold);
-                    }
-                    *o = Val::Const(r);
+                    let r = f16_rtne(r).ok_or(MaliError::ConstantFold)?;
+                    *o = Val::Const(super::select::f16_bits(r));
+                }
+            }
+            /* a one-lane product of a negated literal the GLSL passes left
+             * (glsl.rs `neg_products`: the literal first, `-2.0 * d`):
+             * `fneg(fmul(2.0, d))`, the constant first, as that pass rewrites
+             * a placed one (gm2_fsmisc_6: `FADD.v2f16 r1, r0.h00, r0.h00`,
+             * the late `fadd(d, d)`, then the product and `FADD.v2f16 r0,
+             * r0^.neg.h00, 0x0.neg`) */
+            ir::Op::Alu(AluOp::Fmul, s) if m.comps_of(ir::ValueId(id.0)) == 1 && neg_literal(m, &s).is_some() => {
+                let k = neg_literal(m, &s).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                let (c, v) = (lane(vals, s[k], 0), f.fp16_operand(lane(vals, s[1 - k], 0)));
+                let (Val::Const(c), Val::Lane(..)) = (c, v) else { return Err(MaliError::ArithConstant) };
+                let p = f.node(Alu::Fmul, [Val::Const(c ^ F32_NEG_ZERO), v, Val::Undef], at)?;
+                out[0] = f.neg(p, at)?;
+            }
+            /* `smoothstep`'s last product: the front end's `(t * t) * (3.0 -
+             * 2.0 * t)` is Mesa's `t * (t * (3.0 - 2.0 * t))`
+             * (builtin_functions.cpp `_smoothstep`; gm2_fsmisc_4: `FMA.v2f16
+             * r1, r0.h00, r1^.h00, 0x0.neg`, then `FMA.v2f16 r0, r0^.h00,
+             * r1^.h00, 0x0.neg`) */
+            ir::Op::Alu(AluOp::Fmul, s)
+                if (0..m.comps_of(ir::ValueId(id.0)) as usize)
+                    .all(|i| f.smoothstep_tail(lane(vals, s[0], i), lane(vals, s[1], i)).is_some()) =>
+            {
+                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
+                    let t = f.smoothstep_tail(x, y).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                    let ti = f.node(Alu::Fmul, [t, y, Val::Undef], at)?;
+                    *o = f.node(Alu::Fmul, [t, ti, Val::Undef], at)?;
                 }
             }
             ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s) => {
+                /* the lanes the operands have: the front end's 4-wide
+                 * operation on a vec3 (`normalize(light)` of a `vec3`
+                 * uniform, gm2_fsarith_1) leaves the fourth undefined */
                 let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let defined =
+                    (0..w).take_while(|&i| lane(vals, s[0], i) != Val::Undef && lane(vals, s[1], i) != Val::Undef);
+                let w = match defined.count() {
+                    0 => w,
+                    n => n,
+                };
                 /* the rules run on 16-bit lane pairs: a rule holds for a
                  * pair when both its lanes' constants make it */
                 let ident: &[u32] = if a == AluOp::Fmul { &[F32_ONE] } else { &[0, F32_NEG_ZERO] };
@@ -4678,9 +5060,76 @@ fn walk_nodes(
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = [0, 1, 2].map(|k| f.fp16_operand(lane(vals, s[k], i)));
                     if x.contains(&Val::Undef) {
+                        /* a vec3's undefined fourth lane ([`Fs::op`]'s arm) */
+                        if i > 0 {
+                            break;
+                        }
                         return Err(MaliError::ColourForm);
                     }
+                    if x[1] == Val::Const(F32_ONE) {
+                        if let Some(r) = f.reassoc_last(x[0], x[2], at)? {
+                            *o = r;
+                            continue;
+                        }
+                    }
                     *o = f.node(Alu::Ffma, x, at)?;
+                }
+            }
+            /* `1.0 / c` of a constant: the GLSL front end folds a quotient
+             * of constants (gm2_fsmisc_4's `smoothstep(0.25, 0.75, x)`, whose
+             * `(x - e0) / (e1 - e0)` is `(x - 0.25) * 2.0` in Mesa's
+             * program), exact in fp16 or refused; of anything else no
+             * reference */
+            ir::Op::Alu(AluOp::Frcp, s) => {
+                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let Val::Const(c) = lane(vals, s[0], i) else { return Err(MaliError::Arithmetic) };
+                    let r = (1.0 / f32::from_bits(c)).to_bits();
+                    if f16_exact(c).is_none() || f16_exact(r).is_none() {
+                        return Err(MaliError::ConstantFold);
+                    }
+                    *o = Val::Const(r);
+                }
+            }
+            /* `max` and `min` of a mediump lane and a constant (`clamp(x, lo,
+             * hi)` is the front end's `fmin(fmax(x, lo), hi)`; gm2_fsmisc_3:
+             * `FMAX.v2f16 r0, r0^, 0x34000000.h11`, then `FMIN.v2f16 r0,
+             * r0^, u2.w0`): one 16-bit node a lane. `fmin(fmax(a, 0.0),
+             * 1.0)` is `fsat(a)` (nir_opt_algebraic.py:1088), folded into its
+             * producer (gm2_fsmisc_4's `FADD.v2f16.clamp_0_1`). Two computed
+             * operands, or two constants (no fold here), have no reference */
+            ir::Op::Alu(a @ (AluOp::Fmax | AluOp::Fmin), s) => {
+                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let (x, y) = (f.fp16_operand(lane(vals, s[0], i)), f.fp16_operand(lane(vals, s[1], i)));
+                    if x == Val::Undef || y == Val::Undef {
+                        return Err(MaliError::ColourForm);
+                    }
+                    /* both commute: the constant second (`max(0.0, dot(..))`,
+                     * gm2_fsarith_3) */
+                    let (x, y) = if matches!(x, Val::Const(_)) { (y, x) } else { (x, y) };
+                    let u = Val::Undef;
+                    /* of two computed lanes (gm2_fsmisc_6's `min(x * w, min(y
+                     * * w, z * w))`: `FMIN.v2f16 r1, r0.h11, r1^.h00`) */
+                    if f.is_f16(x) && f.is_f16(y) {
+                        *o = f.node(if a == AluOp::Fmax { Alu::Fmax } else { Alu::Fmin }, [x, y, u], at)?;
+                        continue;
+                    }
+                    let Val::Const(k) = y else { return Err(MaliError::Arithmetic) };
+                    if matches!(x, Val::Const(_)) {
+                        return Err(MaliError::Arithmetic);
+                    }
+                    *o = match (a, f.alu_of(x)) {
+                        /* `fmax(a, 0.0)` is `fclamp_pos(a)` (bifrost_nir_algebraic.py:34),
+                         * folded into its producer (gm2_fsarith_1's `max(dot(N, L),
+                         * 0.0)`, `FMA.v2f16.clamp_0_inf`) */
+                        (AluOp::Fmax, _) if k == 0 => f.node(Alu::Fclamp(clamp::ZERO_INF), [x, u, u], at)?,
+                        (AluOp::Fmin, Some((Alu::Fclamp(clamp::ZERO_INF), [b, ..]))) if k == F32_ONE => {
+                            f.node(Alu::Fclamp(clamp::ZERO_ONE), [b, u, u], at)?
+                        }
+                        (AluOp::Fmax, _) => f.node(Alu::Fmax, [x, y, u], at)?,
+                        _ => f.node(Alu::Fmin, [x, y, u], at)?,
+                    };
                 }
             }
             /* `any` and `all` of a bvec: `nir_lower_alu_width`'s reduction
@@ -4761,9 +5210,7 @@ fn walk_nodes(
              * `FMA.v2f16` after the narrowing, fsarith_77_transc.expect.json).
              * Another operand (a constant the front end left, gltest's
              * f1_fs `log2(16.0)` in a global's initialiser) has no
-             * reference. `exp2` stays refused: `bi_fexp_32`'s `F32_TO_S32`
-             * has no rounding mode (word 33, `0090c400000c0003`), which
-             * bir.rs's `.rtz`-only op cannot write */
+             * reference. `exp2` is the next arm */
             ir::Op::Alu(a @ (AluOp::Fsin | AluOp::Fcos | AluOp::Flog2), s) => {
                 let op = match a {
                     AluOp::Fsin => Alu::Fsin,
@@ -4773,10 +5220,52 @@ fn walk_nodes(
                 let w = m.comps_of(ir::ValueId(id.0)) as usize;
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = lane(vals, s[0], i);
-                    if f.alu_of(x).is_some() || f.uniform_dword(x).is_none() {
+                    /* `log2` of a computed fp16 lane too (`pow`'s, gm2_fsarith_1:
+                     * `F16_TO_F32 r0, r0^.h0`, then `FREXPE.f32.log`) */
+                    let computed = op == Alu::Flog2 && f.is_f16(x);
+                    if !computed && (f.alu_of(x).is_some() || f.uniform_dword(x).is_none()) {
                         return Err(MaliError::Arithmetic);
                     }
                     *o = f.node(op, [x, Val::Undef, Val::Undef], at)?;
+                }
+            }
+            /* `exp2` of a mediump lane, evaluated at fp32 (`bi_lower_bit_size`,
+             * `bi_fexp_32`; [`exp2_rows`]): of a varying's lane, the load's
+             * fp32 word itself, its `f2fmp` gone at the link (`f2f32(f2fmp(
+             * a))` is `a`), the results narrowed in pairs (gm2_fsmisc_5:
+             * `FMA_RSCALE.f32 r3, r3^, 0x3F800000, 0x0.neg, r4` of the
+             * load's words, then `V2F32_TO_V2F16 r2, r2^, r3^`,
+             * [`vectorise`]); of a uniform's component or a computed fp16
+             * lane, widened and narrowed as `sin`'s is (gm2_fsmisc_6's
+             * `F16_TO_F32 r0, r0^.h0` .. `FADD.f32 r0.h0, r0^, 0x0.neg`,
+             * [`transc_rows`]). Of a constant there is no reference (no
+             * fold here) */
+            ir::Op::Alu(AluOp::Fexp2, s) => {
+                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let x = f.fp16_operand(lane(vals, s[0], i));
+                    /* `fexp2(fmul(flog2(a), b))` is `fpow(a, b)`
+                     * (nir_opt_algebraic.py:1872; the front end's `pow`),
+                     * `bi_fpow_32`: `log2(a)`, then `bi_fexp_32` with `b` as
+                     * the scaled value and the log as the base (gm2_fsarith_1:
+                     * `FMA_RSCALE.f32 r0, u8.w1, r0^, 0x0.neg, r2^` of 100.0).
+                     * A constant `b` only, other than the exponents :1882-1886
+                     * rewrite (1.0 to 4.0) */
+                    if let Some((a, b)) = f.pow_of(x) {
+                        if matches!(f32::from_bits(b), 1.0 | 2.0 | 3.0 | 4.0) {
+                            return Err(MaliError::AlgebraicForm);
+                        }
+                        *o = f.node(Alu::Fpow, [a, Val::Const(b), Val::Undef], at)?;
+                        continue;
+                    }
+                    let varying = f.input_lane(x).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS);
+                    match x {
+                        Val::Undef => return Err(MaliError::ColourForm),
+                        Val::Const(_) => return Err(MaliError::Arithmetic),
+                        _ if varying || f.uniform_dword(x).is_some() || f.is_f16(x) => {}
+                        _ => return Err(MaliError::Arithmetic),
+                    }
+                    *o = f.node(Alu::Fexp2, [x, Val::Undef, Val::Undef], at)?;
                 }
             }
             /* a mediump dot product (`dot`, and `normalize` and `length`'s
@@ -4818,11 +5307,18 @@ fn walk_nodes(
                     if x == Val::Undef {
                         return Err(MaliError::ColourForm);
                     }
-                    if f.alu_of(x).is_none() {
+                    if f.alu_of(x).is_none() && f.input_lane(x).is_none() {
                         return Err(MaliError::Arithmetic);
                     }
-                    let r = f.node(Alu::Frsq, [x, Val::Undef, Val::Undef], at)?;
-                    *o = if a == AluOp::Fsqrt { f.node(Alu::Frcp, [r, Val::Undef, Val::Undef], at)? } else { r };
+                    *o = f.node(Alu::Frsq, [x, Val::Undef, Val::Undef], at)?;
+                }
+                /* `lower_fsqrt` runs on the vector before the lanes are
+                 * split: every lane's `frsq`, then every lane's `frcp`
+                 * (gm2_fsmisc_1's four `FRSQ.f16`, then four `FRCP.f16`) */
+                if a == AluOp::Fsqrt {
+                    for o in out.iter_mut().take(w) {
+                        *o = f.node(Alu::Frcp, [*o, Val::Undef, Val::Undef], at)?;
+                    }
                 }
             }
             /* `fract` of a mediump lane: `lower_ffract` (nir_opt_algebraic.py:
@@ -6659,6 +7155,20 @@ enum Leaf {
         x: u8,
         y: u8,
     },
+    /// Lanes `2h` and `2h + 1` of load `k` as the load's fp32 words, not
+    /// converted: the operand of a two-lane `exp2` ([`exp2_rows`], whose
+    /// two results one `V2F32_TO_V2F16` narrows; gm2_fsmisc_5).
+    Raw {
+        k: u8,
+        h: u8,
+    },
+    /// Half `h` of node `x`, an operation of two lanes, read by an operation
+    /// of one ([`lane_tree`]; gm2_fsarith_1's `r2.h11` of the matrix
+    /// product's x and y pair in the dot product).
+    Part {
+        x: u8,
+        h: u8,
+    },
 }
 
 /// The pair nodes: an operation of two lanes, or a leaf.
@@ -6677,6 +7187,16 @@ struct Pairs {
     /// (`.h00`, `bi_emit_alu` of a one-component 16-bit op).
     scalar: [bool; MAX_PAIRS],
     n: usize,
+    /// The pairs of vector operations' lanes [`lane_tree`] made (`nir_opt_cse`
+    /// of the pair): (low lane, high lane, node).
+    cache: [(Val, Val, u8); 16],
+    ncache: usize,
+    /// The colour lane the next [`lane_tree`] call stands for (taken by
+    /// it): the lane of a vector operation it is ([`Fs::pair_lane`]).
+    hint: Option<usize>,
+    /// Per node, the pair of scalar operations `nir_opt_vectorize` makes it
+    /// one of, (low, high) ([`mates`]).
+    mate: [Option<(u16, u16)>; MAX_NODES],
 }
 
 /// The pair graph's nodes ([`MAX_PAIR_NODES`]).
@@ -6708,6 +7228,9 @@ impl Pairs {
             /* `MKVEC.v2i16 x, y` of the position's two halves, or one of
              * them alone */
             P::Leaf(Leaf::Frag | Leaf::FragLane(_)) => Form::Mk,
+            /* read by its `exp2` alone, whose sources are not noted */
+            P::Leaf(Leaf::Raw { .. }) => Form::Half,
+            P::Leaf(Leaf::Part { .. }) => Form::Half,
             P::Leaf(Leaf::Const(_)) => Form::Const,
             P::Op(Alu::Fneg, _) => Form::Neg,
             P::Op(Alu::Fabs, _) => Form::Abs,
@@ -6732,7 +7255,7 @@ impl Pairs {
                 /* a select's sources are the forms [`vectorise`] admits */
                 Alu::Bcsel | Alu::Fcmp(_) => &[],
                 /* read at fp32 by its expansion ([`transc_rows`]) */
-                Alu::Fsin | Alu::Fcos | Alu::Flog2 => &[],
+                Alu::Fsin | Alu::Fcos | Alu::Flog2 | Alu::Fexp2 | Alu::Fpow => &[],
                 /* a derivative's operand and the narrowing of the y-flip's
                  * lane take the forms [`deriv_operand`] builds, no other */
                 Alu::Fddx | Alu::Fddy | Alu::F2f16 => &[],
@@ -6748,7 +7271,7 @@ impl Pairs {
 /// `nir_opt_vectorize` of lanes `a` and `b` (one pair's low and high
 /// lane): the two trees match operation for operation, their leaves pair
 /// up as [`Leaf`] names them; the late fusion where an fadd stands.
-fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayout) -> Result<u8, MaliError> {
+fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayout) -> Result<u8, MaliError> {
     /* a mediump tree's constant is rounded to fp16 ([`f16_rtne`]) */
     let f16 = |bits: u32| f16_rtne(bits).ok_or(MaliError::Fp16Inexact);
     let place = (f.key(a), pair);
@@ -6767,7 +7290,29 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
          * derivative: Mesa pairs `dFdx` with `dFdy` no more than two
          * distinct definitions (`alu_srcs_equal`), fsarith_138_deriv's two
          * scalar `FMA.v2f16` then `MKVEC.v2i16 r0, r0^.h0, r2^.h0` */
-        _ if f.alu_of(a).is_some() && f.alu_of(b).is_some() && (has_lane_op(f, a, 0) || has_lane_op(f, b, 0)) => {
+        /* `exp2` of a varying's two lanes: at fp32 on the load's words of
+         * one aligned pair, in order, the two results narrowed together
+         * (gm2_fsmisc_5: `V2F32_TO_V2F16 r0, r0^, r1^` of x and y's `FEXP`);
+         * another pairing of the lanes has no reference */
+        (Some((Alu::Fexp2, [x, ..])), Some((Alu::Fexp2, [y, ..])))
+            if f.input_lane(x).is_some() || f.input_lane(y).is_some() =>
+        {
+            let (Some((v, i)), Some((w, j))) = (f.input_lane(x), f.input_lane(y)) else {
+                return Err(MaliError::FsOperandForm);
+            };
+            let ((k, i), (e, j)) = (index(f, v, i)?, index(f, w, j)?);
+            if k != e || i % 2 != 0 || j != i + 1 {
+                return Err(MaliError::FsOperandForm);
+            }
+            let raw = pr.push(P::Leaf(Leaf::Raw { k, h: i / 2 }), place)?;
+            P::Op(Alu::Fexp2, [raw, 0, 0])
+        }
+        _ if a != b
+            && f.alu_of(a).is_some()
+            && f.alu_of(b).is_some()
+            && !f.same_op(a, b)
+            && (has_lane_op(f, a, 0) || has_lane_op(f, b, 0)) =>
+        {
             let x = lane_tree(f, pr, a, pair, ubo)?;
             let y = lane_tree(f, pr, b, pair, ubo)?;
             P::Leaf(Leaf::Pack { x, y })
@@ -6778,8 +7323,38 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
          * fsvec_reflect_mediump's `FMA.v2f16 r0, r2.neg.h00, u2.w0, r0^`):
          * the one-lane tree itself, read through its low half by the pair's
          * operation ([`op`]) */
-        _ if a == b && f.alu_of(a).is_some() && vec_tree(f, a) => {
+        /* the same of a scalar operation's value (`0.8 * d` under
+         * gm2_fsarith_1's `vec3(0.1) + vec3(0.8 * d)`); a vector operation's
+         * lanes CSE'd into one are paired as an operation of two lanes, by
+         * the arms below ([`Fs::wide`]) */
+        _ if a == b && f.alu_of(a).is_some() && (vec_tree(f, a) || !f.wide(a)) => {
             return lane_tree(f, pr, a, pair, ubo);
+        }
+        /* a computed lane then a varying's lane (gm2_fsmisc_2's `vec4(d,
+         * x.yzw)`): the lane alone and the varying's half of its pair
+         * converted at the load ([`pair_read`]), packed, `MKVEC.v2i16 r0,
+         * r1^.h0, r0^.h1`; alone, its own conversion's low half */
+        _ if mixed_word(f, a, b).is_some() => {
+            let (_, (loc, c)) = mixed_word(f, a, b).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            let x = lane_tree(f, pr, a, pair, ubo)?;
+            let (k, c) = index(f, loc, c)?;
+            let leaf = if pair_read(f, k, c) {
+                Leaf::Half { k, h: c / 2, swz: if c % 2 == 0 { Swz::H00 } else { Swz::H11 } }
+            } else {
+                Leaf::Splat { k, c }
+            };
+            let y = lone_node(pr, P::Leaf(leaf), place)?;
+            P::Leaf(Leaf::Pack { x, y })
+        }
+        /* `sqrt` and `inversesqrt` of two lanes: `FRSQ.f16` and `FRCP.f16`
+         * are of one lane (`bi_emit_alu` of a 16-bit op with no `.v2f16`
+         * form), so each lane alone and the word packed (gm2_fsmisc_1:
+         * `FRSQ.f16 r2, r0.h00`, `FRSQ.f16 r0, r0^.h11`, .., then
+         * `MKVEC.v2i16 r0, r2^.h0, r0^.h0`) */
+        (Some((Alu::Frsq | Alu::Frcp, _)), Some((Alu::Frsq | Alu::Frcp, _))) if a != b => {
+            let x = lane_tree(f, pr, a, pair, ubo)?;
+            let y = lane_tree(f, pr, b, pair, ubo)?;
+            P::Leaf(Leaf::Pack { x, y })
         }
         /* a flattened `if`'s selects ([`walk_if16`]) of one compare: of a
          * uniform's aligned pairs, one `bcsel_pan` of two lanes
@@ -6803,6 +7378,25 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
                 P::Op(Alu::Bcsel, [c, t, e])
             }
         }
+        /* selects on each lane's own compare (gm2_fsmisc_8's `step(0.5, x)
+         * * y`): the two compares one of two lanes, its mask read whole by
+         * the select, `FCMP_OR.v2f16.ge.m1 r0, r0^, 0x38000000.h11, 0x0`
+         * then `MUX.v2i16 r0, 0x0, r2^, r0^`; the compares' operands and the
+         * sides are pairs ([`vectorise`] of each) */
+        (Some((Alu::Bcsel, sa)), Some((Alu::Bcsel, sb))) => {
+            let (Some((c @ Alu::Fcmp(_), ca)), Some((d, cb))) = (f.alu_of(sa[0]), f.alu_of(sb[0])) else {
+                return Err(MaliError::FsOperandForm);
+            };
+            if c != d {
+                return Err(MaliError::FsOperandForm);
+            }
+            let x = vectorise(f, pr, ca[0], cb[0], pair, ubo)?;
+            let y = vectorise(f, pr, ca[1], cb[1], pair, ubo)?;
+            let mask = pr.push(P::Op(c, [x, y, 0]), place)?;
+            let t = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;
+            let e = vectorise(f, pr, sa[2], sb[2], pair, ubo)?;
+            P::Op(Alu::Bcsel, [mask, t, e])
+        }
         (Some((Alu::Fadd, sa)), Some((Alu::Fadd, sb))) => {
             let x = vectorise(f, pr, sa[0], sb[0], pair, ubo)?;
             let y = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;
@@ -6816,9 +7410,26 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
                 },
                 _ => None,
             };
+            /* a scalar's product fused into the pair's sum is the vector
+             * `ffma` NIR fuses (`fadd(c, fmul(a, b).xx)`): its constant a
+             * pair of the constant (gm2_fsarith_1's `vec3(0.1) + vec3(0.8
+             * * d)`, `FMA.v2f16 r1, u8.w0, r1^.h00, 0x2E660000.h11`) */
+            let wide = |pr: &mut Pairs, m: u8, n: u8| -> Result<u8, MaliError> {
+                match pr.nodes[m as usize] {
+                    P::Leaf(Leaf::Const(c)) if pr.scalar[m as usize] && pr.scalar[n as usize] => {
+                        pr.push(P::Leaf(Leaf::Const(c & 0xffff | c << 16)), place)
+                    }
+                    _ => Ok(m),
+                }
+            };
+            let once = |k: usize| f.used_once(sa[k]) && f.used_once(sb[k]);
             match (pr.nodes[x as usize], pr.nodes[y as usize]) {
-                (P::Op(Alu::Fmul, [m0, m1, _]), _) => P::Op(Alu::Ffma, [m0, m1, y]),
-                (_, P::Op(Alu::Fmul, [m0, m1, _])) => P::Op(Alu::Ffma, [m0, m1, x]),
+                (P::Op(Alu::Fmul, [m0, m1, _]), _) if once(0) => {
+                    P::Op(Alu::Ffma, [wide(pr, m0, x)?, wide(pr, m1, x)?, y])
+                }
+                (_, P::Op(Alu::Fmul, [m0, m1, _])) if once(1) => {
+                    P::Op(Alu::Ffma, [wide(pr, m0, y)?, wide(pr, m1, y)?, x])
+                }
                 _ => match (neg_mul(x), neg_mul(y)) {
                     (Some((m0, m1)), _) => P::Op(Alu::Ffma, [pr.push(P::Op(Alu::Fneg, [m0, 0, 0]), place)?, m1, y]),
                     (_, Some((m0, m1))) => P::Op(Alu::Ffma, [pr.push(P::Op(Alu::Fneg, [m0, 0, 0]), place)?, m1, x]),
@@ -6830,6 +7441,19 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
             let x = vectorise(f, pr, sa[0], sb[0], pair, ubo)?;
             let y = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;
             P::Op(Alu::Fmul, [x, y, 0])
+        }
+        /* `max` / `min` of a pair and a constant pair (gm2_fsmisc_3); the
+         * bound is the walk's constant ([`walk_nodes`]) */
+        (Some((op @ (Alu::Fmax | Alu::Fmin), sa)), Some((o2, sb))) if o2 == op => {
+            let x = vectorise(f, pr, sa[0], sb[0], pair, ubo)?;
+            let y = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;
+            if pr.form(y) != Form::Const {
+                return Err(MaliError::FsOperandForm);
+            }
+            P::Op(op, [x, y, 0])
+        }
+        (Some((op @ Alu::Fclamp(clamp::ZERO_ONE), sa)), Some((o2, sb))) if o2 == op => {
+            P::Op(op, [vectorise(f, pr, sa[0], sb[0], pair, ubo)?, 0, 0])
         }
         /* the front end's `ffma` (`mix`): its three sources in order */
         (Some((Alu::Ffma, sa)), Some((Alu::Ffma, sb))) => {
@@ -6866,7 +7490,14 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
                     P::Leaf(Leaf::Half { k, h: i / 2, swz: Swz::H01 })
                 } else if j % 2 == 0 && i == j + 1 {
                     P::Leaf(Leaf::Half { k, h: j / 2, swz: Swz::H10 })
-                } else if i == j && comps == 1 {
+                } else if i == j && comps > 1 && pair_read(f, k, i) {
+                    /* one lane in both of a pair the trees convert whole:
+                     * its half (gm2_fsarith_1's `n.y` of `nm * vec4(n,
+                     * 1.0)`, `FMA.v2f16 r2, u2.w0, r0.h11, u2.w1`) */
+                    P::Leaf(Leaf::Half { k, h: i / 2, swz: if i % 2 == 0 { Swz::H00 } else { Swz::H11 } })
+                } else if i == j {
+                    /* converted alone (`n.z`: `FADD.f32 r1.h0, r2^, 0x0.neg`,
+                     * then `.. u7.w0, r1.h00, r2^`) */
                     P::Leaf(Leaf::Splat { k, c: i })
                 } else if i / 2 != j / 2 && f.varyings[k as usize].whole {
                     /* two lanes of a load the link keeps whole (78's packed
@@ -7083,9 +7714,9 @@ struct Conversions {
     n: usize,
 }
 
-/// `op` is `sin`, `cos` or `log2` ([`transc_rows`]).
+/// `op` is `sin`, `cos`, `log2`, `exp2` or `pow` ([`transc_rows`]).
 const fn is_transc(op: Alu) -> bool {
-    matches!(op, Alu::Fsin | Alu::Fcos | Alu::Flog2)
+    matches!(op, Alu::Fsin | Alu::Fcos | Alu::Flog2 | Alu::Fexp2 | Alu::Fpow)
 }
 
 /// `op` is `ddx` or `ddy` ([`Alu::Fddx`]).
@@ -7101,6 +7732,18 @@ fn has_lane_op(f: &Fs<'_>, v: Val, depth: u8) -> bool {
         Some((op, _)) if is_transc(op) || is_deriv(op) => true,
         Some((Alu::Fadd | Alu::Fmul | Alu::Fneg, s)) if depth < 8 => {
             s[..2].iter().any(|&x| x != Val::Undef && has_lane_op(f, x, depth + 1))
+        }
+        _ => false,
+    }
+}
+
+/// Lane `v` is a `pow`, or sums, products and `ffma`s with one among them
+/// ([`lone_tree`]).
+fn has_pow(f: &Fs<'_>, v: Val, depth: u8) -> bool {
+    match f.alu_of(v) {
+        Some((Alu::Fpow, _)) => true,
+        Some((op @ (Alu::Fadd | Alu::Fmul | Alu::Ffma), s)) if depth < 8 => {
+            s[..op.arity()].iter().any(|&x| has_pow(f, x, depth + 1))
         }
         _ => false,
     }
@@ -7231,6 +7874,7 @@ fn lane_word(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
     if half == 0 && !vec_tree(f, a) {
         return Err(MaliError::ColourZeroHalf);
     }
+    pr.hint = Some(2 * pair as usize);
     let x = lane_tree(f, pr, a, pair, ubo)?;
     let leaf = if half == 0 { Leaf::Zext(x) } else { Leaf::Lane { x, half } };
     pr.push(P::Leaf(leaf), (f.key(a), pair)).map(Some)
@@ -7271,7 +7915,11 @@ fn lone_tree(f: &Fs<'_>, v: Val) -> bool {
         Some((true, false, false)) => true,
         Some((false, true, false)) => uniform_form(f, v),
         Some((false, false, true)) => true,
-        _ => vec_tree(f, v),
+        /* a tree with a `pow` among its operations: gm2_fsarith_1's blue,
+         * `0.1 + 0.8 * d + 0.2 * pow(..)` beside the alpha 1.0, `FMA.v2f16
+         * r0, u9.w1, r0^.h00, r1^.h00` then `MKVEC.v2i16 r2, r0^.h0,
+         * u10.w0.h0`; another of [`is_transc`]'s has no reference */
+        _ => vec_tree(f, v) || has_pow(f, v, 0),
     }
 }
 
@@ -7357,7 +8005,30 @@ fn pair_read(f: &Fs<'_>, k: u8, c: u8) -> bool {
             }
         }
     }
+    /* a varying's lane beside a computed lane in an output word is
+     * converted at the load too ([`mixed_word`]; gm2_fsmisc_2's `x.y`
+     * beside `d`, one `V2F32_TO_V2F16 r0, r0^, r1^` with `x.x`) */
+    for w in 0..2 {
+        if let Some((_, (loc, l))) = mixed_word(f, colour[2 * w], colour[2 * w + 1]) {
+            if let Ok((j, l)) = index(f, loc, l) {
+                if j == k {
+                    read |= 1 << l;
+                }
+            }
+        }
+    }
     read & 1 << c != 0 && read & 1 << (c ^ 1) != 0
+}
+
+/// Output word `(a, b)` is a computed lane and a varying's lane, in
+/// either order: Some((the computed lane, the varying's (location,
+/// lane))), the computed one first in the word when it is `a`.
+fn mixed_word(f: &Fs<'_>, a: Val, b: Val) -> Option<(Val, (u8, u8))> {
+    let varying = |v: Val| f.input_lane(v).filter(|&(loc, _)| (loc as usize) < MAX_VARYINGS);
+    match (f.alu_of(a), varying(b)) {
+        (Some(_), Some(l)) => Some((a, l)),
+        _ => None,
+    }
 }
 
 /// Lane `v` of the colour alone ([`lane_word`]) as nodes of one lane: the
@@ -7367,6 +8038,49 @@ fn pair_read(f: &Fs<'_>, k: u8, c: u8) -> bool {
 /// then `FMA.v2f16 %27^.h00, u269.h11, %9^.h00`).
 fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> Result<u8, MaliError> {
     let place = (f.key(v), pair);
+    /* a lane of a vector operation ([`Fs::pair_lane`]): `nir_lower_alu_width`
+     * keeps its lanes in pairs, so the lane is a half of its pair's
+     * operation (gm2_fsarith_1's `nm * vec4(n, 1.0)`, x and y one
+     * `FMA.v2f16` that the dot product reads as `r2.h11` and `r2.h00`); the
+     * last lane of an odd width is an operation of its own, below */
+    let hint = pr.hint.take();
+    if let Some((lanes, i, w)) = f.pair_lane(v, hint) {
+        let h = i / 2;
+        if 2 * h + 1 < w {
+            let (a, b) = (lanes[2 * h], lanes[2 * h + 1]);
+            let x = match (0..pr.ncache).find(|&k| pr.cache[k].0 == a && pr.cache[k].1 == b) {
+                Some(k) => pr.cache[k].2,
+                None => {
+                    let x = vectorise(f, pr, a, b, h as u8, ubo)?;
+                    if pr.ncache < pr.cache.len() {
+                        pr.cache[pr.ncache] = (a, b, x);
+                        pr.ncache += 1;
+                    }
+                    x
+                }
+            };
+            return lone_node(pr, P::Leaf(Leaf::Part { x, h: (i % 2) as u8 }), place);
+        }
+    }
+    /* a scalar operation `nir_opt_vectorize` paired with another of the
+     * same sources ([`mates`]): a half of the pair's operation */
+    if let Val::Lane(n, _) = v {
+        if let Some((lo, hi)) = pr.mate.get(n as usize).copied().flatten() {
+            let (a, b) = (Val::Lane(lo, 0), Val::Lane(hi, 0));
+            let x = match (0..pr.ncache).find(|&k| pr.cache[k].0 == a && pr.cache[k].1 == b) {
+                Some(k) => pr.cache[k].2,
+                None => {
+                    let x = vectorise(f, pr, a, b, pair, ubo)?;
+                    if pr.ncache < pr.cache.len() {
+                        pr.cache[pr.ncache] = (a, b, x);
+                        pr.ncache += 1;
+                    }
+                    x
+                }
+            };
+            return lone_node(pr, P::Leaf(Leaf::Part { x, h: u8::from(n == hi) }), place);
+        }
+    }
     let p = match (f.alu_of(v), f.texel(v), v) {
         /* `reflect`'s `d * -2.0` is `fneg(fadd(d, d))`, the fneg a source
          * modifier of its reader (fsvec_reflect_mediump: `FADD.v2f16 r2,
@@ -7380,11 +8094,32 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
             let y = lane_tree(f, pr, s[1], pair, ubo)?;
             P::Op(Alu::Fmul, [x, y, 0])
         }
+        /* `min` / `max` of one lane (gm2_fsmisc_6) */
+        (Some((op @ (Alu::Fmin | Alu::Fmax), s)), ..) => {
+            let x = lane_tree(f, pr, s[0], pair, ubo)?;
+            let y = lane_tree(f, pr, s[1], pair, ubo)?;
+            P::Op(op, [x, y, 0])
+        }
+        /* a saturate (`clamp(x, 0.0, 1.0)`, smoothstep's) or `max(x, 0.0)`,
+         * folded into its producer by opt.rs (gm2_fsmisc_4, gm2_fsarith_1) */
+        (Some((op @ Alu::Fclamp(clamp::ZERO_ONE | clamp::ZERO_INF), s)), ..) => {
+            P::Op(op, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0])
+        }
         /* an fneg of a uniform's component, a source modifier of its
          * reader (75: `FADD.v2f16 r1, 0x3C000000.h11, u2.w1.neg.h00`) */
         (Some((Alu::Fneg, s)), ..) => P::Op(Alu::Fneg, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0]),
         /* `sin`, `cos`, `log2` of a uniform's component, its 32-bit
          * expansion and narrowing ([`transc_rows`]) */
+        /* `exp2` of a varying's lane alone (its fp32 word, narrowed alone)
+         * has no reference */
+        (Some((Alu::Fexp2, s)), ..) if f.input_lane(s[0]).is_some() => return Err(MaliError::FsOperandForm),
+        /* `pow(a, #b)`: `b` the fp32 constant `bi_fexp_32` scales
+         * ([`transc_rows`]), a leaf of its own */
+        (Some((Alu::Fpow, [a, Val::Const(b), _])), ..) => {
+            let x = lane_tree(f, pr, a, pair, ubo)?;
+            let k = lone_node(pr, P::Leaf(Leaf::Const(b)), place)?;
+            P::Op(Alu::Fpow, [x, k, 0])
+        }
         (Some((op, s)), ..) if is_transc(op) => P::Op(op, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0]),
         /* `dFdx`, `dFdy` of a varying's lane or the narrowed position's,
          * scaled for Y ([`deriv_operand`]): the rows `(Fddx, 16, 1)`,
@@ -7394,8 +8129,8 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
             let x = lane_tree(f, pr, s[0], pair, ubo)?;
             let y = lane_tree(f, pr, s[1], pair, ubo)?;
             match (pr.nodes[x as usize], pr.nodes[y as usize]) {
-                (P::Op(Alu::Fmul, [m0, m1, _]), _) => P::Op(Alu::Ffma, [m0, m1, y]),
-                (_, P::Op(Alu::Fmul, [m0, m1, _])) => P::Op(Alu::Ffma, [m0, m1, x]),
+                (P::Op(Alu::Fmul, [m0, m1, _]), _) if f.used_once(s[0]) => P::Op(Alu::Ffma, [m0, m1, y]),
+                (_, P::Op(Alu::Fmul, [m0, m1, _])) if f.used_once(s[1]) => P::Op(Alu::Ffma, [m0, m1, x]),
                 _ => P::Op(Alu::Fadd, [x, y, 0]),
             }
         }
@@ -7406,6 +8141,16 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
             let y = lane_tree(f, pr, s[1], pair, ubo)?;
             let z = lane_tree(f, pr, s[2], pair, ubo)?;
             P::Op(Alu::Ffma, [x, y, z])
+        }
+        /* `sqrt`'s `frcp(frsq(a))` of one IR instruction: every lane's
+         * `frsq` stands before every lane's `frcp` (the walk's
+         * `lower_fsqrt` of the vector, gm2_fsmisc_1), so the `frcp`s are
+         * placed after both pairs */
+        (Some((Alu::Frcp, s)), ..)
+            if f.alu_of(s[0]).is_some_and(|(o, _)| o == Alu::Frsq) && f.key(s[0]) == f.key(v) =>
+        {
+            let x = lane_tree(f, pr, s[0], pair, ubo)?;
+            return lone_node(pr, P::Op(Alu::Frcp, [x, 0, 0]), (place.0, place.1 + 2));
         }
         (Some((op @ (Alu::Frsq | Alu::Frcp | Alu::Ffloor), s)), ..) => {
             P::Op(op, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0])
@@ -7423,8 +8168,10 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
                 P::Leaf(Leaf::Splat { k, c })
             }
         }
-        /* a product with 2.0 is the late rules' `fadd(a, a)`: no reference */
-        (None, None, Val::Const(F32_TWO)) => return Err(MaliError::AlgebraicForm),
+        /* a product with 2.0 is the late rules' `fadd(a, a)` unless the
+         * fusion took it ([`late_rules`]; gm2_fsmisc_4's `FADD.v2f16.
+         * clamp_0_1 r0, r0^.h00, r0^.h00`, gm2_fsarith_6's `FMA.v2f16 r1,
+         * r1^.h00, 0x40000000.h11, 0x3C000000.neg.h11`) */
         (None, None, Val::Const(c)) => P::Leaf(Leaf::Const(u32::from(f16_rtne(c).ok_or(MaliError::Fp16Inexact)?))),
         /* a uniform's component: its half of the fp16 block's word */
         (None, None, _) if f.uniform_dword(v).is_some() => {
@@ -7436,6 +8183,59 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
         _ => return Err(MaliError::ColourForm),
     };
     lone_node(pr, p, place)
+}
+
+/// `nir_opt_vectorize` (nir_opt_vectorize.c) on the scalar 16-bit
+/// operations of the colour's trees that no vector IR operation made
+/// ([`Fs::pair_lane`] keeps those paired): in program order, each `fadd`,
+/// `fmul`, `ffma`, `fmin` or `fmax` joins the first earlier one of its
+/// operation still alone whose sources it can share, each source pair the
+/// same value, two lanes of one varying's load or two constants; two make
+/// a pair, which takes no third (`bi_vectorize_filter`'s width 2).
+/// Measured: gm2_fsmisc_6's `dist.x * dist.w` and `dist.y * dist.w` one
+/// `FMA.v2f16 r0, r0^, r1.h11, 0x0.neg`, `dist.z * dist.w` alone.
+fn mates(f: &Fs<'_>, mate: &mut [Option<(u16, u16)>; MAX_NODES]) {
+    let candidate = |n: usize| {
+        let nd = f.nir.nodes[n];
+        f.live[n / 64] >> (n % 64) & 1 != 0
+            && nd.bits == 16
+            && nd.width == 1
+            && matches!(nd.kind, Kind::Alu(Alu::Fadd | Alu::Fmul | Alu::Ffma | Alu::Fmin | Alu::Fmax))
+            && f.pair_lane(Val::Lane(n as u16, 0), None).is_none()
+    };
+    let shared = |a: Val, b: Val| match (a, b) {
+        (Val::Const(_), Val::Const(_)) => true,
+        _ if a == b => true,
+        _ => match (f.input_lane(a), f.input_lane(b)) {
+            (Some((v, i)), Some((w, j))) => {
+                matches!((index(f, v, i), index(f, w, j)), (Ok((k, _)), Ok((e, _))) if k == e)
+            }
+            _ => false,
+        },
+    };
+    let mut order = [0u16; MAX_NODES];
+    let mut n = 0;
+    for k in (0..f.nir.n).filter(|&k| candidate(k)) {
+        order[n] = k as u16;
+        n += 1;
+    }
+    order[..n].sort_unstable_by_key(|&k| (f.key(Val::Lane(k, 0)), k));
+    for i in 0..n {
+        let v = order[i] as usize;
+        let nv = f.nir.nodes[v];
+        let Kind::Alu(op) = nv.kind else { continue };
+        let found = order[..i].iter().copied().find(|&u| {
+            let nu = f.nir.nodes[u as usize];
+            mate[u as usize].is_none()
+                && nu.kind == nv.kind
+                && (0..op.arity()).all(|s| shared(nu.src[s], nv.src[s]))
+                && (0..op.arity()).any(|s| nu.src[s] != nv.src[s])
+        });
+        if let Some(u) = found {
+            mate[u as usize] = Some((u, v as u16));
+            mate[v] = Some((u, v as u16));
+        }
+    }
 }
 
 /// Node `p` of one lane ([`lane_tree`]), one node for one value
@@ -7629,7 +8429,12 @@ fn late_rules(pr: &mut Pairs, roots: [u8; 2]) {
             continue;
         }
         if let P::Op(Alu::Fmul, [a, b, _]) = pr.nodes[i] {
-            let two = |x: u8| pr.nodes[x as usize] == P::Leaf(Leaf::Const(F16X2_TWO));
+            /* a pair's 2.0 in both halves, a lane alone's in its low one
+             * ([`lane_tree`]) */
+            let two = |x: u8| {
+                let k = if pr.scalar[x as usize] { F16X2_TWO & 0xffff } else { F16X2_TWO };
+                pr.nodes[x as usize] == P::Leaf(Leaf::Const(k))
+            };
             if two(b) {
                 pr.nodes[i] = P::Op(Alu::Fadd, [a, a, 0]);
             } else if two(a) {
@@ -7651,7 +8456,7 @@ fn mark(pr: &Pairs, x: u8, live: &mut [bool; MAX_PAIRS]) {
                 mark(pr, *y, live);
             }
         }
-        P::Leaf(Leaf::Zext(y) | Leaf::Lane { x: y, .. }) => mark(pr, y, live),
+        P::Leaf(Leaf::Zext(y) | Leaf::Lane { x: y, .. } | Leaf::Part { x: y, .. }) => mark(pr, y, live),
         P::Leaf(Leaf::Pack { x, y }) => {
             mark(pr, x, live);
             mark(pr, y, live);
@@ -7672,7 +8477,12 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         place: [(0, 0); MAX_PAIRS],
         scalar: [false; MAX_PAIRS],
         n: 0,
+        cache: [(Val::Undef, Val::Undef, 0); 16],
+        ncache: 0,
+        hint: None,
+        mate: [None; MAX_NODES],
     };
+    mates(f, &mut pr.mate);
     let mut roots = [0u8; 2];
     let c = f.colour.ok_or(MaliError::NoColour)?;
     /* each further target's two fp16 words: constants only (fsout_106_mrt3:
@@ -7690,9 +8500,24 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         nmore += 1;
     }
     for (k, r) in roots.iter_mut().enumerate() {
-        *r = match lane_word(f, &mut pr, c[2 * k], c[2 * k + 1], k as u8, ubo)? {
+        let (a, b) = (c[2 * k], c[2 * k + 1]);
+        /* one scalar operation's value in both lanes of the word
+         * (`vec4(smoothstep(..))`, gm2_fsmisc_4): the one-lane tree once,
+         * the word `MKVEC.v2i16 x.h0, x.h0`, which opt.rs makes
+         * `IADD.v2u16 r0, r0^.h00, 0x0`, the other word of the same value
+         * its copy (`MOV.i32 r1, r0`, below) */
+        if a == b && f.alu_of(a).is_some() && !f.wide(a) && !vec_tree(f, a) {
+            let x = lane_tree(f, &mut pr, a, k as u8, ubo)?;
+            let p = P::Leaf(Leaf::Pack { x, y: x });
+            *r = match (0..pr.n).find(|&i| pr.nodes[i] == p) {
+                Some(i) => i as u8,
+                None => pr.push(p, (f.key(a), k as u8))?,
+            };
+            continue;
+        }
+        *r = match lane_word(f, &mut pr, a, b, k as u8, ubo)? {
             Some(x) => x,
-            None => vectorise(f, &mut pr, c[2 * k], c[2 * k + 1], k as u8, ubo)?,
+            None => vectorise(f, &mut pr, a, b, k as u8, ubo)?,
         };
     }
     f.npairs = pr.n;
@@ -7797,6 +8622,11 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let mut used = [0u8; MAX_VARYINGS];
     let mut conv_form = [[None::<bool>; 4]; MAX_VARYINGS];
     for x in &pr.nodes[..pr.n] {
+        /* an `exp2`'s fp32 words: read as loaded, not converted */
+        if let P::Leaf(Leaf::Raw { k, h }) = *x {
+            used[k as usize] |= 3 << (2 * h);
+            continue;
+        }
         let (lanes, pair) = match *x {
             P::Leaf(Leaf::Half { k, h, .. }) => ([(k, 2 * h), (k, 2 * h + 1)], true),
             P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, .. }) => ([(k, c), (k, c)], false),
@@ -8141,7 +8971,14 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     };
     let t = alu(p, Op::Atest, &[Src::of(Idx::Reg(60)), at, Src::of(Idx::Special(Special::AtestDatum, false))])?;
     let mut words = [Src::NULL; 2];
-    for (k, w) in words.iter_mut().enumerate().filter(|_| texel.is_none()) {
+    for k in (0..2).filter(|_| texel.is_none()) {
+        /* both words one packed value (`vec4(s)` of a computed scalar,
+         * gm2_fsmisc_4): the second the first's copy, `MOV.i32 r1, r0` */
+        if k == 1 && roots[1] == roots[0] && matches!(pr.nodes[roots[0] as usize], P::Leaf(Leaf::Pack { .. })) {
+            words[1] = Src::ssa(alu(p, Op::MovI32, &[words[0]])?);
+            continue;
+        }
+        let w = &mut words[k];
         *w = match pr.nodes[roots[k] as usize] {
             P::Leaf(Leaf::Mk { k: v, c, half }) => Src::ssa(mkvec(p, &lv, v, c, half, &mut rows)?),
             P::Leaf(Leaf::Lanes { k: v, c, e, d }) => Src::ssa(mkvec_lanes(p, &lv, [(v, c), (e, d)], &mut rows)?),
@@ -8166,7 +9003,14 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                 Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
             }
             P::Leaf(Leaf::Pack { x, y }) => {
-                let s = [operand(&pr, x, &lv, &val)?.swz(Swz::H00), operand(&pr, y, &lv, &val)?.swz(Swz::H00)];
+                /* each node's lane: a lane alone is its low half, a varying's
+                 * lane in its pair's conversion its own half (gm2_fsmisc_2's
+                 * `r0^.h1`) */
+                let half = |n: u8| match pr.nodes[n as usize] {
+                    P::Leaf(Leaf::Half { swz: Swz::H11, .. }) => Swz::H11,
+                    _ => Swz::H00,
+                };
+                let s = [operand(&pr, x, &lv, &val)?.swz(half(x)), operand(&pr, y, &lv, &val)?.swz(half(y))];
                 Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
             }
             P::Leaf(Leaf::Const(c)) => Src::of(Idx::Const(c)),
@@ -10500,6 +11344,11 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
         }
         P::Leaf(Leaf::Mk { .. } | Leaf::Lanes { .. } | Leaf::Zext(_) | Leaf::Lane { .. } | Leaf::Pack { .. })
         | P::Op(..) => val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?,
+        /* read by its `exp2` alone ([`op`]) */
+        P::Leaf(Leaf::Raw { .. }) => return Err(MaliError::Defect(Defect::IrIndex)),
+        P::Leaf(Leaf::Part { x, h }) => {
+            val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?.swz(if h == 0 { Swz::H00 } else { Swz::H11 })
+        }
     })
 }
 
@@ -10513,6 +11362,18 @@ fn op(
     rows: &mut u128,
 ) -> Result<(), MaliError> {
     let P::Op(a, srcs) = pr.nodes[x as usize] else { return Err(MaliError::Defect(Defect::IrIndex)) };
+    /* `exp2` of a load's two fp32 words ([`Leaf::Raw`]): each lane's
+     * expansion, then one narrowing of the two (gm2_fsmisc_5) */
+    if let P::Leaf(Leaf::Raw { k, h }) = pr.nodes[srcs[0] as usize] {
+        let word = |c: u8| lv.raw.get(k as usize).and_then(|r| r[c as usize & 3]);
+        let mut e = [Src::NULL; 2];
+        for (d, c) in e.iter_mut().zip([2 * h, 2 * h + 1]) {
+            let w = word(c).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            *d = Src::ssa(exp2_rows(p, Src::ssa(w), Src::of(Idx::Const(F32_ONE)))?);
+        }
+        val[x as usize] = Some(Src::ssa(row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 2 }, &e)?));
+        return Ok(());
+    }
     let mut s = [Src::NULL; 3];
     for (k, y) in srcs.iter().enumerate().take(a.arity()) {
         match pr.nodes[*y as usize] {
@@ -10537,13 +11398,30 @@ fn op(
          * both (fsvec_normalize_mediump's `FMA.v2f16 r0, r0^, r2.h00,
          * 0x0.neg` of the `frsq`, [`vectorise`]) */
         let splat = !pr.scalar[x as usize] && matches!(pr.nodes[*y as usize], P::Op(..)) && pr.scalar[*y as usize];
-        /* a select's mask is its compare's low half in both lanes (`r0.h00`) */
-        if (pr.scalar[x as usize] && lone) || splat || (a == Alu::Bcsel && k == 0) {
+        /* a select's mask is its compare's low half in both lanes (`r0.h00`)
+         * when the compare is of one lane; a compare of two is read whole
+         * (gm2_fsmisc_8) */
+        let one_mask = a == Alu::Bcsel && k == 0 && (pr.scalar[x as usize] || pr.scalar[*y as usize]);
+        if (pr.scalar[x as usize] && lone) || splat || one_mask {
             s[k] = s[k].swz(Swz::H00);
+        }
+        /* a two-lane select's constant side of equal halves is the 16-bit
+         * immediate in both (`bi_imm_u16`), so `va_lower_isel` leaves the
+         * `MUX` (gm2_fsmisc_8's `MUX.v2i16 r0, 0x0, r2^, r0^`) */
+        if let (Alu::Bcsel, 1 | 2, P::Leaf(Leaf::Const(c))) = (a, k, pr.nodes[*y as usize]) {
+            if !pr.scalar[x as usize] && c >> 16 == c & 0xffff {
+                s[k] = s[k].swz(Swz::H00);
+            }
         }
     }
     if is_transc(a) {
-        val[x as usize] = Some(Src::ssa(transc_rows(p, rows, a, s[0])?));
+        /* `pow`'s exponent: the fp32 constant itself, no half */
+        let k = match (a, pr.nodes[srcs[1] as usize]) {
+            (Alu::Fpow, P::Leaf(Leaf::Const(b))) => Src::of(Idx::Const(b)),
+            (Alu::Fpow, _) => return Err(MaliError::Defect(Defect::IrIndex)),
+            _ => Src::NULL,
+        };
+        val[x as usize] = Some(Src::ssa(transc_rows(p, rows, a, s[0], k)?));
         return Ok(());
     }
     /* a derivative reads its operand as one register word (`CLPER.i32`
@@ -10562,6 +11440,11 @@ fn op(
     Ok(())
 }
 
+/// [`super::emit::fexp2`] of the fp32 value `x`, scaled by `log2_base`.
+fn exp2_rows(p: &mut Prog<'_>, x: Src, log2_base: Src) -> Result<u16, MaliError> {
+    super::emit::fexp2(p, x, log2_base)
+}
+
 /// `bi_lower_fsincos_32`'s constants (bifrost_compile.c:2547-2549): the f32
 /// roundings of `2.0f / 3.14159f`, `-3.14159f / 2.0` and the bias that puts
 /// the argument's sixty-fourths of a quarter turn in the low bits.
@@ -10575,7 +11458,7 @@ const SINCOS_BIAS: u32 = 0x4940_0000;
 /// `bi_lower_fsincos_32` (bifrost_compile.c:2552) and `bi_flog2_32` (:2499),
 /// in their call order (fsarith_77_transc.expect.json words 0-28;
 /// docs/notes/mali-transcendentals.md).
-fn transc_rows(p: &mut Prog<'_>, rows: &mut u128, a: Alu, x: Src) -> Result<u16, MaliError> {
+fn transc_rows(p: &mut Prog<'_>, rows: &mut u128, a: Alu, x: Src, k: Src) -> Result<u16, MaliError> {
     let c = |bits: u32| Src::of(Idx::Const(bits));
     let neg = |s: Src| Src { neg: !s.neg, ..s };
     let neg_zero = neg(c(0));
@@ -10599,12 +11482,16 @@ fn transc_rows(p: &mut Prog<'_>, rows: &mut u128, a: Alu, x: Src) -> Result<u16,
             p.push(i)?;
             Src::ssa(alu(p, Op::FaddF32, &[Src::ssa(t), if cos { cosx } else { sinx }])?)
         }
+        Alu::Fexp2 => Src::ssa(exp2_rows(p, x, c(F32_ONE))?),
         _ => {
-            let e = ins(Op::FrexpeF32 { log: true }, &[x])?;
-            let ef = ins(Op::S32ToF32, &[e])?;
-            let add = ins(Op::FaddLscaleF32, &[neg(c(F32_ONE)), x])?;
-            let d = ins(Op::FlogdF32, &[x])?;
-            ins(Op::FmaF32, &[d, add, ef])?
+            let l = Src::ssa(super::emit::flog2(p, x)?);
+            /* `bi_fpow_32` (bifrost_compile.c:2523-2535): the exponent
+             * scaled by the log */
+            if a == Alu::Fpow {
+                Src::ssa(exp2_rows(p, k, l)?)
+            } else {
+                l
+            }
         }
     };
     row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &[r])

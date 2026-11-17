@@ -88,6 +88,7 @@ const fn mods(op: Op) -> (u8, u8) {
         | Op::FroundF32 { .. }
         | Op::FroundV2f16 { .. }
         | Op::F32ToS32
+        | Op::F32ToS32Rte
         | Op::FabsnegF32
         | Op::FabsnegV2f16 => (0b1, 0b1),
         _ => (0, 0),

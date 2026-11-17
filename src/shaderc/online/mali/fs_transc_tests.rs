@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! `sin`, `cos` and `log2` in a mediump fragment shader (gl_test case 77,
-//! docs/notes/mali-transcendentals.md) against Mesa 26.2.1's drm-shim
-//! program fsarith_77_transc. Its fourth lane, `exp2`, stays refused: Mesa's
-//! `F32_TO_S32` there has no rounding mode (word 33), an op bir.rs lacks, so
-//! the words up to that lane's are compared, from a program whose fourth
-//! lane is a `cos` (the same lanes before it, the same registers).
+//! `sin`, `cos`, `log2` and `exp2` in a mediump fragment shader (gl_test
+//! case 77, docs/notes/mali-transcendentals.md) against Mesa 26.2.1's
+//! drm-shim program fsarith_77_transc. The first tests were written while
+//! the fourth lane, `exp2`, was refused, and compare the words up to that
+//! lane's from a program whose fourth lane is a `cos` (the same lanes before
+//! it, the same registers); `exp2` (`F32_TO_S32` with no rounding mode, word
+//! 33; docs/notes/mali-fs-arith.md) makes the whole program Mesa's.
 
 use super::tests::{compile, region};
 use super::MaliError;
@@ -99,16 +100,15 @@ fn a_cos_in_the_fourth_lane_is_the_cos_rows_and_the_epilogue() {
     assert_eq!(ours.len(), 47);
 }
 
-/// `exp2` is refused where it stands (the gap this file's header names),
-/// so case 77's first program still meets the same refusal.
+/// Case 77's first program whole, its `exp2(u_a.w)` lane included
+/// (`FMA_RSCALE.f32`, `F32_TO_S32` with no rounding mode, `FEXP.f32`,
+/// words 30-35), byte for byte; vtransc's `inversesqrt` of a constant and
+/// of a uniform's lane stays refused (the mediump `FRSQ.f16` arm takes a
+/// computed or a varying's lane).
 #[test]
-fn exp2_is_still_refused() {
-    assert_eq!(verdict(TRANSC_FS), Some(MaliError::Arithmetic));
-    let e = "precision mediump float; uniform vec4 u_a; void main() \
-             { gl_FragColor = vec4(sin(u_a.x), exp2(u_a.y), 0.5, 1.0); }";
-    assert_eq!(verdict(e), Some(MaliError::Arithmetic));
-    /* vtransc: `inversesqrt` of a constant and of a uniform's lane (the
-     * mediump `FRSQ.f16` arm takes a computed lane only) */
+fn case_77_with_its_exp2_lane_is_byte_equal_to_mesa_26_2_1() {
+    let r = region(TRANSC_JSON, "fs.fragment").expect("fs.fragment");
+    assert_words(&fs_words(TRANSC_FS), &r.words);
     assert_eq!(verdict(VTRANSC_FS), Some(MaliError::Arithmetic));
 }
 

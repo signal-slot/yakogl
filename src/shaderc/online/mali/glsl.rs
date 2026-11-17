@@ -1657,6 +1657,15 @@ impl Tree<'_, '_> {
             if one && !clamped {
                 continue;
             }
+            /* a literal first in a mediump fragment shader (`-2.0 * d * d`,
+             * gm2_fsmisc_6): left as it is, to the walk, whose product of a
+             * negative constant is `fneg(fmul(c, x))` (nir_fs.rs `Fs::op`;
+             * `FADD.v2f16 r1, r0.h00, r0.h00`, `FMA.v2f16 r0, r1^.h00,
+             * r0^.h00, 0x0.neg`, `FADD.v2f16 r0, r0^.neg.h00, 0x0.neg`) */
+            let mediump_fragment = self.m.stage == crate::shaderc::SHC_STAGE_FRAGMENT && !self.highp_fragment;
+            if mediump_fragment && w == 1 && !placed && !clamped && !chain {
+                continue;
+            }
             if clamped || chain || !placed {
                 return Err(MaliError::ArithConstant);
             }

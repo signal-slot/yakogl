@@ -430,3 +430,14 @@ pub fn assert_refused_ref(name: &str, text: &str) {
     let r = Reference::load(name);
     assert_refused(&r.vs, &r.fs, text);
 }
+
+/// What [`assert_refused_ref`] would panic with, or None: a pin table checks
+/// every reference and names each one that moved at once.
+pub fn refusal_change(name: &str, text: &str) -> Option<String> {
+    let r = Reference::load(name);
+    match compile_pair(&r.vs, &r.fs) {
+        Ok(_) => Some(format!("{name}: now compiles; remove its #[ignore] and its pin")),
+        Err(e) if e.contains(text) => None,
+        Err(e) => Some(format!("{name}: expected a refusal containing {text:?}, got: {e}")),
+    }
+}

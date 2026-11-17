@@ -332,3 +332,17 @@ ifelse_uint, gcops (items 1-4 below, split by op family).
 6. **fs-constvary** (97): fold the vertex stage's constants into the fragment
    shader at link (mali-varying-constants.md); mixprec_varyings15.
 7. **fs-dynidx** (dynidx): `Bcsel` on `Ieq` per lane; intloop_dynidx.
+
+## glmark2's fragment arithmetic (plan #367 lower-fs-arith)
+
+docs/notes/mali-fs-arith.md lowers the fragment ops of glmark2's shaders
+against `tools/mali/testdata/gm2_fsmisc_1..8` and `gm2_fsarith_1..2`
+(byte-equal, tests/mali_fs_arith.rs). For the table above it adds:
+`exp2` (`bi_fexp_32`: `FMA_RSCALE.f32`, `F32_TO_S32` with round 0 as the new
+`Op::F32ToS32Rte`, `FEXP.f32`; case 77's whole program is now byte-equal and
+`es100/transc.frag` compiles), `pow` (`bi_fpow_32`, at fp16 and fp32),
+mediump `fmax`/`fmin` (pairs and lanes, `fclamp_pos` and `fsat` folded into
+the producer), `sqrt` and `inversesqrt` of a varying's lane (`FRSQ.f16` /
+`FRCP.f16` of a high half, `.h11`), `step(e, x) * y` as `FCMP_OR.v2f16.ge.m1`
+and `MUX.v2i16`, and `frcp` of a constant folded. `log2` of a highp operand,
+`exp2` of a varying's lane alone and `pow` by 1.0 to 4.0 stay refused.

@@ -100,13 +100,13 @@ fn constop_cf_inf_fs() {
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float, lowered by lower-constop"]
+#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (past its constant operation since plan #367's lower-fs-arith), lowered by lower-constop"]
 fn constop_loops_for_basic_mediump_float_fs() {
     mali_ref::assert_matches("deqp_constop_loops_for_basic_mediump_float_fs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float, lowered by lower-constop"]
+#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (past its constant operation since plan #367's lower-fs-arith), lowered by lower-constop"]
 fn constop_loops_while_basic_highp_float_fs() {
     mali_ref::assert_matches("deqp_constop_loops_while_basic_highp_float_fs");
 }
@@ -183,6 +183,11 @@ fn constop_struct_param_out_vs() {
     mali_ref::assert_matches("deqp_constop_struct_param_out_vs");
 }
 
+/// Where the two loops references are refused since plan #367's
+/// lower-fs-arith lowered the fragment arithmetic in front of it: their
+/// constant operation is no longer the first refusal.
+const VARYING_LOAD: &str = "a fragment varying load or conversion of a form no reference draws";
+
 /// Every ignored reference above that is refused, and the refusal the compiler
 /// gives it now (`constop_ce_inversesqrt_vec4_fs` compiles but differs).
 const REFUSED: &[(&str, &str)] = &[
@@ -199,8 +204,8 @@ const REFUSED: &[(&str, &str)] = &[
     ("deqp_constop_ce_smoothstep_fs", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_constop_cf_denorm_fs", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_constop_cf_inf_fs", "a constant operation on or to a value that is not a finite normal float"),
-    ("deqp_constop_loops_for_basic_mediump_float_fs", "a constant operation on or to a value that is not a finite normal float"),
-    ("deqp_constop_loops_while_basic_highp_float_fs", "a constant operation on or to a value that is not a finite normal float"),
+    ("deqp_constop_loops_for_basic_mediump_float_fs", VARYING_LOAD),
+    ("deqp_constop_loops_while_basic_highp_float_fs", VARYING_LOAD),
     ("deqp_constop_mat3sub_vs", "a constant fp16 does not hold (past its normal range, or a highp colour or point size constant not exactly)"),
     ("deqp_constop_matrix_preinc_mediump_mat3_fs", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_constop_nz_local_cmp_fs", "a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there)"),
@@ -217,7 +222,6 @@ const REFUSED: &[(&str, &str)] = &[
 
 #[test]
 fn refusals_pinned() {
-    for (name, text) in REFUSED {
-        mali_ref::assert_refused_ref(name, text);
-    }
+    let changed: Vec<String> = REFUSED.iter().filter_map(|(name, text)| mali_ref::refusal_change(name, text)).collect();
+    assert!(changed.is_empty(), "{}", changed.join("\n"));
 }
