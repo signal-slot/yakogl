@@ -4584,6 +4584,27 @@ fn a_backend_gap_is_enotsup_and_counted() {
     with_platform(|p| p.fail_alloc_from = None);
 }
 
+/// submit_job asserts the job's tile state fits the pool instead of clamping
+/// it (a short buffer is a binner overrun): the jobs at the limit, 4096
+/// square at one RT (1x and 4x) and 2048 square at 4 RTs (4x4 of 32x32
+/// tiles), name a size within `g.tile_state_size` and the kick carries it
+/// whole (an assert fails the test otherwise).
+#[test]
+fn a_job_at_the_limit_gets_its_whole_tile_state() {
+    let rig = Rig::new();
+    rig.init();
+    for (i, samples) in [1u32, 4].into_iter().enumerate() {
+        let mut d = rig.draw();
+        (d.target_w, d.target_h, d.samples) = (4096, 4096, samples as _);
+        d.target_gpu = TARGET + 0x400_0000 * i as u64;
+        assert_eq!(draw(&d), 0, "{samples}x: {:?}", rig.gl.logs());
+        assert_eq!(v3d_flush(), 0);
+    }
+    let sizes: Vec<u32> = rig.kicks().iter().map(|k| k.tile_state_size).collect();
+    assert_eq!(sizes, [64 * 64 * 256, 128 * 128 * 256], "1x: 64x64 tiles; 4x: 32x32 tiles");
+    assert!(sizes.iter().all(|&s| s <= g().tile_state_size));
+}
+
 /// The tile memory is sized for 4096 a side (#1261): dEQP's shader executor
 /// draws 4096 x 2..6 targets, which every `precision` image was refused on
 /// at 2048. 4096 on either side is one job; 4097 is refused by its own name
