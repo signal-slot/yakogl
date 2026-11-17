@@ -27,20 +27,20 @@ shape and a later optimisation, not a prerequisite.
 
 | piece | where |
 |---|---|
-| block-only registers leave the constant file (`reg_of`, `NOT_IN_FILE`) | `src/shaderc/online/select.rs:1810-1853` (`uniform_block`) |
+| block-only registers leave the constant file (`reg_of`, `NOT_IN_FILE`) | `src/shaderc/online/select.rs:1810-1859` (`uniform_block`) |
 | `reads_block_memory(dword_off)` | `select.rs:1864-1866` |
-| the read: `mov t.x, imm(dword_off*4)`, `load.u32 got, t.x, u[ubo_addr]`, then `mov` with the narrower-uniform swizzle | `select.rs:1897-1940` (`block_read`), dispatched at `:2842-2844`; the constant-file path is kept for mixed registers at `:2109` |
+| the read: `mov t.x, imm(dword_off*4)`, `load.u32 got, t.x, u[ubo_addr]`, then `mov` with the narrower-uniform swizzle | `select.rs:1897-1934` (`block_read`), dispatched at `:2842-2844`; the constant-file path is kept for mixed registers at `:2109` |
 | run-time index: clamp, `imullo0`, `add`, `load.u32` | `select.rs:3014-3100` (`LoadUniformIdx`) |
 | the address slot, one per stage, `data` 0 | `select.rs:2753-2767` (`ubo_addr_reg`) |
-| `reads_ubo`, `ubo_copy` (whole stage array into the frame arena, +16 zero bytes) | `src/vivante/backend.rs:3007-3025`, called at `:3627-3638` |
-| slot value | `src/vivante/shader.rs:514-516` (`const_value`: `vs_ubo_gpu` / `fs_ubo_gpu`) |
-| a stage over 1280 dwords is handed over in place | `backend.rs:3100-3114` (`take_uniforms`), test `a_uniform_block_past_the_constant_registers_is_taken_whole` (`src/vivante/backend_tests.rs:5597-5620`) |
-| arena room for both copies, reserved from `gl.*_uniform_dwords` (a `u16`) | `backend.rs:2995-2999` |
+| `reads_ubo`, `ubo_copy` (whole stage array into the frame arena, +16 zero bytes) | `src/vivante/backend.rs:3131-3148`, called at `:3752-3763` |
+| slot value | `src/vivante/shader.rs:547-549` (`const_value`: `vs_ubo_gpu` / `fs_ubo_gpu`) |
+| a stage over 1280 dwords is handed over in place | `backend.rs:3224-3237` (`take_uniforms`), test `a_uniform_block_past_the_constant_registers_is_taken_whole` (`src/vivante/backend_tests.rs:5591-5611`) |
+| arena room for both copies, reserved from `gl.*_uniform_dwords` (a `u16`) | `backend.rs:3118-3122` |
 | host interpreter understands `load` with memory entries | `tests/common/mod.rs:274-300` |
 | unit test of the member read | `select.rs:6043` `block_members_are_loads_and_leave_the_constant_file` |
 
 Why one address is enough today: the GL core flattens every block into the
-stage's array behind the default rows (`program.rs:678` `fill_uniform_blocks`,
+stage's array behind the default rows (`program.rs:736` `fill_uniform_blocks`,
 `ubo-limits.md` §2), so block 0's "address" is the address of the whole
 array and a member is `dword_off * 4` from it. That is also the V3D's
 model (`context.rs:94-131`).
@@ -48,24 +48,24 @@ model (`context.rs:94-131`).
 ## 3. What must move from the constant file to `load` for a block over 1280 dwords
 
 The constant file is 320 vec4 = 1280 dwords, shared by both stages
-(`src/vivante/state.rs:24`, `shader.rs:666-667`).
+(`src/vivante/state.rs:24`, `shader.rs:699-700`).
 
 1. **Block members.** Every read of a block-member register. Already done by
    `uniform_block` when *all* real dwords of the register are members. A
    16384-byte block is 4096 dwords = 1024 registers, so only a read of one
    of the (at most two) boundary registers can mix members with default
    uniforms. Those registers stay in the file and `const_value` fills them
-   from the stage array (`shader.rs:517+`), which still works because the
+   from the stage array (`shader.rs:561+`), which still works because the
    array is in place (`take_uniforms`). Nothing to move, but **the file must
    hold the default rows and the boundary registers**: unchanged by size.
 2. **Run-time indices into a member array.** Already `LoadUniformIdx`.
 3. **Default-block uniforms stay in the file.** They are bounded by the
    384-row Appendix A budget (`MAX_UNIFORM_DWORDS`, stays 1536) but the
    GC's file is 320 registers for two stages: the existing
-   `constant_files_fit` refusal (`shader.rs:644`) keeps applying, and is
+   `constant_files_fit` refusal (`shader.rs:677`) keeps applying, and is
    unrelated to the block size. Do not change it.
 4. **Literals** are placed after the remaining uniform registers
-   (`first_literal`, `select.rs:1852`) and now cost nothing extra for
+   (`first_literal`, `select.rs:1851`) and now cost nothing extra for
    blocks.
 5. **Offsets.** `block_read` builds the offset with `imm_s20` (signed 20
    bits, +-524287 bytes): `dword_off` is a `u16`, so the largest offset is
@@ -85,11 +85,11 @@ kind, no new `GlesDraw` field, no `YakoglBackend` literal to chase. Costs:
 `ubo_copy` copies the whole array (up to 50688 dwords = 198 KiB a stage,
 396 KiB for both) into the 1 MiB frame arena every draw
 (`GC_ARENA_BYTES`, `backend.rs:90`); `staging_need` reserves the same
-(`:2995-2999`) and `full = ... arena_used + need > GC_ARENA_BYTES`
-(`:3322-3325`) ends the frame early, and `big` goes to `ensure_extra`
-(`:3322`). Programs that lay out little still copy little: the array is
-sized by what the stages lay out, not by the cap (`program.rs:1889`,
-`draw.rs:2336-2342`).
+(`:3118-3122`) and `full = ... arena_used + need > GC_ARENA_BYTES`
+(`:3447-3450`) ends the frame early, and `big` goes to `ensure_extra`
+(`:3476`). Programs that lay out little still copy little: the array is
+sized by what the stages lay out, not by the cap (`program.rs:1886`,
+`draw.rs:2527-2532`).
 
 **P (the Mesa shape, later): one address per bound block.** Mesa gives every
 user block its own `ETNA_UNIFORM_UBO_ADDR` whose value is the bound
@@ -107,8 +107,8 @@ UBO 0. For us P means:
   row from `dword_off` and pick its slot.
 - `GlesDraw` carries per stage and block the buffer GPU address and the
   offset (12 per stage), the GL core stops flattening for this GPU
-  (`fill_uniform_blocks`, `draw.rs:3908-3913`), and `const_value` reads
-  `data` (`shader.rs:514`).
+  (`fill_uniform_blocks`, `draw.rs:4097`), and `const_value` reads
+  `data` (`shader.rs:537`).
 - Gain: no per-draw copy of 16 KiB x 12; offsets stay under 16384 as
   Mesa's. Cost: a `GlesDraw` ABI change reaching every back end
   (`YakoglBackend`-style literals in `tests/`), the GL core and the host
@@ -123,18 +123,18 @@ which case P is the fix, since its offsets are the ones Mesa ships).
 Nothing for correctness; only checks and the cap:
 
 1. `take_uniforms` already has no size bound other than `u16`
-   (`backend.rs:3100`). Keep the null/unaligned refusal.
+   (`backend.rs:3224`). Keep the null/unaligned refusal.
 2. `ubo_copy` returns 0 when the arena cannot hold the copy, and the draw is
-   refused (`backend.rs:3627-3638`). With 396 KiB per draw the 1 MiB arena
-   holds two such draws a frame; `full` (`:3322-3325`) must flush before it,
+   refused (`backend.rs:3752-3763`). With 396 KiB per draw the 1 MiB arena
+   holds two such draws a frame; `full` (`:3447-3450`) must flush before it,
    and `staging_need` already counts the copy. Check that a draw needing
    more than the arena lands in `ensure_extra` rather than `return -1`
-   (the `big` path, `:3322-3335`): a 50688-dword stage plus attribute data
+   (the `big` path, `:3447-3476`): a 50688-dword stage plus attribute data
    can exceed `GC_ARENA_BYTES`. Test it (§7 item 4).
 3. Only the slot's reader is per draw: `reads_ubo` false means no copy, so
    a program with a default block and no member reads copies nothing.
-4. `src/gl/draw.rs:2336` sizes the program's staging buffer from the layout;
-   `uniforms_host_only: true` (`backend.rs:3887`) means the GC does not use
+4. `src/gl/draw.rs:2531` sizes the program's staging buffer from the layout;
+   `uniforms_host_only: true` (`backend.rs:4012`) means the GC does not use
    it, so a raised cap must not allocate it larger than the layout needs
    (it does not: `min(MAX_STAGE_UNIFORM_DWORDS)` is an upper bound only).
 
@@ -150,7 +150,7 @@ it releases it; steps 3 and 6 touch it (tests only in step 3).
    pins that §2 already holds at the real size.
 2. `src/shaderc/online/select.rs` only if step 1 finds a failure (for
    example the `arena.alloc_filled(regs * 4)` or `table` allocations of
-   `uniform_block`, `:1816-1835`, exceeding the selector's arena at 12672
+   `uniform_block`, `:1818-1836`, exceeding the selector's arena at 12672
    registers [U]); then a unit test beside `:6043`.
 3. `src/vivante/backend_tests.rs` (near `:5597`): a draw whose stage block
    is 4096 dwords: `ubo_copy` holds all of it, the slot names it, and the
@@ -162,8 +162,8 @@ it releases it; steps 3 and 6 touch it (tests only in step 3).
    `MAX_UNIFORM_BLOCK_SIZE` is 16384 and the combined components
    `limits.rs:40` `combined_uniform_components(1536, 12, 16384)` = 50688.
    `MAX_UNIFORM_DWORDS` and `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` stay
-   1536. The `u16` assert at `:135` already passes (50688 + blend consts <
-   65535). Its stale comment (`:104-107`, "the GC7000 holds the blocks in its
+   1536. The `u16` assert at `:134` already passes (50688 + blend consts <
+   65535). Its stale comment (`:104-108`, "the GC7000 holds the blocks in its
    constant file") is corrected in the same commit. This waits for the board
    run of step 7 (see §8) and for plan #375's `tests/es3_limits_ubo_unchanged.rs`.
 5. `tests/es3_limits_ubo_unchanged.rs` (GC rows of its `gpu-vivante`
@@ -232,7 +232,7 @@ offsets above 64 KiB fail, the fallback is P (§4), whose offsets Mesa ships
 ## 9. Risks
 
 - The silicon fact of §8 [U]; the 32-bit address (`d.vs_ubo_gpu as u32`,
-  `shader.rs:515`) is the GC's address space.
+  `shader.rs:548`) is the GC's address space.
 - Per-draw copy cost of F (up to 396 KiB) and the early frame flush it
   forces; measure on a frame that uses a full block, not on dEQP.
 - The selector's arena for a 12672-register table [U] (step 2 of §6).
