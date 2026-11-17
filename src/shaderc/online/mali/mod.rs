@@ -279,7 +279,6 @@ pub enum MaliError {
     /// rounded to nearest even, mixprec_hello.expect.json), or an inexact
     /// colour or point size constant of a highp shader or a vertex stage.
     Fp16Inexact,
-    FauPage,
     FauFull,
     Spill,
     /// More local variables than the selector's table (select.rs).
@@ -382,7 +381,6 @@ impl MaliError {
         MaliError::FsVaryingLoad,
         MaliError::ColourZeroHalf,
         MaliError::Fp16Inexact,
-        MaliError::FauPage,
         MaliError::FauFull,
         MaliError::Spill,
         MaliError::TooManyLocals,
@@ -530,7 +528,6 @@ impl MaliError {
             MaliError::Fp16Inexact => {
                 "Valhall: a constant fp16 does not hold (past its normal range, or a highp colour or point size constant not exactly) is not lowered yet"
             }
-            MaliError::FauPage => "Valhall: a push word past FAU page 0 is not lowered yet",
             MaliError::FauFull => "Valhall: a program whose sysvals overflow the FAU is not lowered yet",
             MaliError::Spill => {
                 "Valhall: a program needing more than the split file's 32 work registers (the full file, spilling) is not lowered yet"
