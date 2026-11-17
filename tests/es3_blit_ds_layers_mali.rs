@@ -25,6 +25,7 @@
 //!   - stencil into or out of a D24S8 texture: REFUSED_STENCIL (the copy
 //!     needs a renderbuffer on both sides, and this table has neither
 //!     `ds_write` nor `stencil_resolve` anyway).
+//!
 //! A refused call fails whole: exactly one GL_INVALID_OPERATION, nothing
 //! copied, the context usable.
 //!
