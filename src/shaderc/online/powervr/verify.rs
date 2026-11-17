@@ -197,6 +197,176 @@ fn check_cnd(meant: &SelGroup, m: MachineOp, g: &Group) -> Result<usize, Mismatc
     Ok(g.total)
 }
 
+/// A resolved [`SelOp::Ld`] read back: `ld` in form `ld_immbl` (pco's
+/// `group_map(O_LD)`), the burst asked for, DRC 0, cache mode normal, the
+/// address pair's first register in s0 (`srcseladd` s0), the destination
+/// run's first register in s3, no destination section (the backend writes
+/// it itself) and no write port.
+fn check_ld(meant: &SelGroup, burst: u8, g: &Group) -> Result<usize, Mismatch> {
+    let (op, r) = only_op(g)?;
+    if op != "ld" || r.variant().name != "ld_immbl" {
+        return Err(Mismatch::Operation { got: op, want: "ld" });
+    }
+    let normal = super::shapes::value(super::isa::BitSetId::Backend, "cachemode_ld", "normal")
+        .map_err(|_| Mismatch::Unresolved)?;
+    if r.get("burstlen") != Some(u32::from(burst))
+        || field_or_zero(r, "drc") != 0
+        || field_or_zero(r, "srcseladd") != 0
+        || field_or_zero(r, "cachemode_ld") != normal
+    {
+        return Err(Mismatch::Operation { got: op, want: "ld with the load's fields" });
+    }
+    let lo = g.lower.as_ref().map(srcs).unwrap_or([None; 6]);
+    let up = g.upper.as_ref().map(srcs).unwrap_or([None; 6]);
+    match meant.srcs[0] {
+        Some(SelSrc::Fixed { bank, reg, mods }) if mods == Mods::default() && same(lo[0], bank, reg) => {}
+        Some(SelSrc::Virtual { .. }) => return Err(Mismatch::Unresolved),
+        _ => return Err(Mismatch::Source { slot: 0 }),
+    }
+    match meant.dst {
+        Some(SelDst::Fixed { bank, reg }) if same(up[3], bank, reg) => {}
+        Some(SelDst::Virtual(_)) => return Err(Mismatch::Unresolved),
+        _ => return Err(Mismatch::Destination { slot: 0 }),
+    }
+    if g.dst.is_some() || field_or_zero(&g.hdr, "w0p") != 0 || field_or_zero(&g.hdr, "w1p") != 0 {
+        return Err(Mismatch::Destination { slot: 0 });
+    }
+    Ok(g.total)
+}
+
+/// A resolved [`SelOp::Add64`] read back: `add64_32` with `.s`, the low
+/// dword, high dword and offset in s0, s1 and s2, and the pair written
+/// through w0 and w1 to `dst`, `dst + 1`.
+fn check_add64(meant: &SelGroup, g: &Group) -> Result<usize, Mismatch> {
+    let (op, r) = only_op(g)?;
+    if op != "add64_32" {
+        return Err(Mismatch::Operation { got: op, want: "add64_32" });
+    }
+    if field_or_zero(r, "s") != 1 {
+        return Err(Mismatch::Operation { got: op, want: "add64_32.s" });
+    }
+    let lo = g.lower.as_ref().map(srcs).unwrap_or([None; 6]);
+    for (slot, s) in meant.srcs.iter().enumerate() {
+        match s {
+            Some(SelSrc::Fixed { bank, reg, mods }) if *mods == Mods::default() && same(lo[slot], *bank, *reg) => {}
+            Some(SelSrc::Virtual { .. }) => return Err(Mismatch::Unresolved),
+            _ => return Err(Mismatch::Source { slot: slot as u8 }),
+        }
+    }
+    let d = g.dst.as_ref().map(dsts).unwrap_or([None; 2]);
+    match meant.dst {
+        Some(SelDst::Fixed { bank, reg }) => {
+            if !same(d[0], bank, reg) {
+                return Err(Mismatch::Destination { slot: 0 });
+            }
+            if !same(d[1], bank, reg + 1) {
+                return Err(Mismatch::Destination { slot: 1 });
+            }
+        }
+        Some(SelDst::Virtual(_)) => return Err(Mismatch::Unresolved),
+        None => return Err(Mismatch::Destination { slot: 0 }),
+    }
+    Ok(g.total)
+}
+
+/// Why a program's `ld`s and waits are out of order.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LdWait {
+    /// Group `at` reads or writes a register of the `ld` at `ld` -- its
+    /// destination run or its address pair -- before the `wdf` that makes
+    /// the data land.
+    Early { ld: usize, at: usize },
+    /// The `ld` at `ld` reaches a loop or `if` edge, or the end of the
+    /// program, with no `wdf` after it.
+    NoWait { ld: usize },
+    /// More `ld`s waiting on one `wdf` than this check tracks.
+    TooMany { at: usize },
+}
+
+/// The first register of a run a pending `ld` holds: a virtual value or a
+/// temporary (the run's width travels beside it).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Held {
+    V(u32),
+    T(u32),
+}
+
+fn held_of(s: &SelSrc) -> Option<Held> {
+    match *s {
+        SelSrc::Virtual { v, .. } => Some(Held::V(v.0)),
+        SelSrc::Fixed { bank: super::sel::Bank::Temp, reg, .. } => Some(Held::T(u32::from(reg))),
+        _ => None,
+    }
+}
+
+fn held_dst(d: &SelDst) -> Option<Held> {
+    match *d {
+        SelDst::Virtual(v) => Some(Held::V(v.0)),
+        SelDst::Fixed { bank: super::sel::Bank::Temp, reg } => Some(Held::T(u32::from(reg))),
+        SelDst::Fixed { .. } => None,
+    }
+}
+
+fn overlaps((a, an): (Held, u32), (b, bn): (Held, u32)) -> bool {
+    match (a, b) {
+        (Held::V(x), Held::V(y)) | (Held::T(x), Held::T(y)) => x < y + bn && y < x + an,
+        _ => false,
+    }
+}
+
+/// The rule `docs/notes/pvr-ubo-memory-load.md` §4 sets for the allocator,
+/// checked on a program before or after allocation: an [`SelOp::Ld`]'s
+/// destination counts as written at the next [`SelOp::WaitData`], not at
+/// the `ld`. Between the two, no group reads or writes the destination run
+/// or the address pair the `ld` reads, and no loop or `if` edge (a
+/// [`SelOp::LoopBegin`], [`SelOp::LoopEnd`] or [`SelOp::Pred`]) and no end
+/// of program comes first. pco puts the `wdf` right after each `ld`
+/// (`pco_schedule.c`), and so does the sequence the selector emits; this
+/// holds every other order to the same rule.
+pub fn check_ld_waits(groups: &[SelGroup]) -> Result<(), LdWait> {
+    const MAX_PENDING: usize = 8;
+    /* (the ld's index, its register run) */
+    let mut pending: [Option<(usize, (Held, u32))>; 2 * MAX_PENDING] = [None; 2 * MAX_PENDING];
+    for (at, g) in groups.iter().enumerate() {
+        match g.op {
+            SelOp::WaitData => {
+                pending = [None; 2 * MAX_PENDING];
+                continue;
+            }
+            SelOp::LoopBegin | SelOp::LoopEnd | SelOp::Pred(_) => {
+                if let Some((ld, _)) = pending.iter().flatten().next() {
+                    return Err(LdWait::NoWait { ld: *ld });
+                }
+                continue;
+            }
+            _ => {}
+        }
+        let mut touched = g.dst.as_ref().and_then(held_dst).map(|h| (h, g.op.dst_width())).into_iter().chain(
+            g.srcs
+                .iter()
+                .enumerate()
+                .filter_map(|(slot, s)| s.as_ref().and_then(held_of).map(|h| (h, g.op.src_width(slot)))),
+        );
+        if let Some((ld, _)) = touched.find_map(|t| pending.iter().flatten().find(|(_, p)| overlaps(t, *p)).copied()) {
+            return Err(LdWait::Early { ld, at });
+        }
+        if let SelOp::Ld { .. } = g.op {
+            let regs = [
+                g.dst.as_ref().and_then(held_dst).map(|h| (h, g.op.dst_width())),
+                g.srcs[0].as_ref().and_then(held_of).map(|h| (h, g.op.src_width(0))),
+            ];
+            for r in regs.into_iter().flatten() {
+                let slot = pending.iter_mut().find(|p| p.is_none()).ok_or(LdWait::TooMany { at })?;
+                *slot = Some((at, r));
+            }
+        }
+    }
+    match pending.iter().flatten().next() {
+        Some((ld, _)) => Err(LdWait::NoWait { ld: *ld }),
+        None => Ok(()),
+    }
+}
+
 /// Check one built group against the resolved [`SelGroup`] it was built
 /// from. `want_op` is the operation the builder was to emit (the shape's
 /// single step, or `mbyp` for a copy). Returns the group's length.
@@ -209,6 +379,11 @@ pub fn check_group(meant: &SelGroup, want_op: &'static str, bytes: &[u8]) -> Res
         if m.is_cnd() {
             return check_cnd(meant, m, &g);
         }
+    }
+    match meant.op {
+        SelOp::Ld { burst } => return check_ld(meant, burst, &g),
+        SelOp::Add64 => return check_add64(meant, &g),
+        _ => {}
     }
     if let Some(t) = super::shapes::template_for(meant.op) {
         return check_template(t, meant, &g);
@@ -459,4 +634,121 @@ fn check_template(t: &super::shapes::Template, meant: &SelGroup, g: &Group) -> R
         }
     }
     Ok(g.total)
+}
+
+#[cfg(test)]
+mod ld_tests {
+    use super::super::assemble::build_group;
+    use super::super::encode::encode_group;
+    use super::super::sel::{Bank, OpType, PredArm, VReg};
+    use super::*;
+
+    fn t(r: u16) -> Option<SelSrc> {
+        Some(SelSrc::Fixed { bank: Bank::Temp, reg: r, mods: Mods::default() })
+    }
+    fn sh(r: u16) -> Option<SelSrc> {
+        Some(SelSrc::Fixed { bank: Bank::Shared, reg: r, mods: Mods::default() })
+    }
+    fn tdst(r: u16) -> Option<SelDst> {
+        Some(SelDst::Fixed { bank: Bank::Temp, reg: r })
+    }
+    fn add64(d: u16) -> SelGroup {
+        SelGroup { op: SelOp::Add64, ty: OpType::U32, dst: tdst(d), srcs: [sh(8), t(0), t(1)] }
+    }
+    fn ld(d: u16, burst: u8, a: u16) -> SelGroup {
+        SelGroup { op: SelOp::Ld { burst }, ty: OpType::U32, dst: tdst(d), srcs: [t(a), None, None] }
+    }
+    fn marker(op: SelOp) -> SelGroup {
+        SelGroup { op, ty: OpType::U32, dst: None, srcs: [None; 3] }
+    }
+    fn copy(d: u16, s: u16) -> SelGroup {
+        SelGroup { op: SelOp::Copy, ty: OpType::F32, dst: tdst(d), srcs: [t(s), None, None] }
+    }
+    fn bytes(g: &SelGroup) -> std::vec::Vec<u8> {
+        let b = build_group(g).expect("builds");
+        let mut out = std::vec![0u8; b.total];
+        encode_group(&b, &mut out, 0).expect("encodes");
+        out
+    }
+
+    #[test]
+    fn a_read_after_the_wait_is_in_order() {
+        let wdf = marker(SelOp::WaitData);
+        assert_eq!(check_ld_waits(&[add64(2), ld(4, 4, 2), wdf, copy(9, 7), copy(10, 2)]), Ok(()));
+    }
+
+    /// Before the `wdf`, the destination run (any lane of it) and the
+    /// address pair (either half) are the `ld`'s: neither read nor written.
+    #[test]
+    fn a_register_the_ld_holds_touched_before_the_wait_is_refused() {
+        let wdf = marker(SelOp::WaitData);
+        for (k, g) in [copy(9, 7), copy(9, 4), copy(5, 0), copy(3, 0), copy(9, 2)].into_iter().enumerate() {
+            assert_eq!(
+                check_ld_waits(&[add64(2), ld(4, 4, 2), g, wdf]),
+                Err(LdWait::Early { ld: 1, at: 2 }),
+                "case {k}: {g:?}"
+            );
+        }
+        /* outside both runs: fine */
+        assert_eq!(check_ld_waits(&[add64(2), ld(4, 4, 2), copy(9, 8), wdf]), Ok(()));
+        /* the same rule before allocation, on virtual values */
+        let v = |n| Some(SelSrc::Virtual { v: VReg(n), mods: Mods::default() });
+        let vld = SelGroup {
+            op: SelOp::Ld { burst: 2 },
+            ty: OpType::U32,
+            dst: Some(SelDst::Virtual(VReg(20))),
+            srcs: [v(10), None, None],
+        };
+        let read21 = SelGroup {
+            op: SelOp::Copy,
+            ty: OpType::F32,
+            dst: Some(SelDst::Virtual(VReg(30))),
+            srcs: [v(21), None, None],
+        };
+        assert_eq!(check_ld_waits(&[vld, read21, wdf]), Err(LdWait::Early { ld: 0, at: 1 }));
+        assert_eq!(check_ld_waits(&[vld, wdf, read21]), Ok(()));
+    }
+
+    /// A `wdf` must come before a loop or `if` edge and before the end.
+    #[test]
+    fn an_ld_with_no_wait_is_refused() {
+        assert_eq!(check_ld_waits(&[add64(2), ld(4, 1, 2)]), Err(LdWait::NoWait { ld: 1 }));
+        for m in [SelOp::LoopBegin, SelOp::LoopEnd, SelOp::Pred(PredArm::Then)] {
+            let g = [add64(2), ld(4, 1, 2), marker(m), marker(SelOp::WaitData)];
+            assert_eq!(check_ld_waits(&g), Err(LdWait::NoWait { ld: 1 }), "{m:?}");
+        }
+    }
+
+    /// The built `ld` and `add64_32` read back as what was meant, and a
+    /// different destination, address or burst does not.
+    #[test]
+    fn the_built_groups_read_back() {
+        let l = ld(4, 4, 2);
+        let b = bytes(&l);
+        assert_eq!(check_group(&l, "", &b), Ok(b.len()));
+        assert_eq!(check_group(&ld(5, 4, 2), "", &b), Err(Mismatch::Destination { slot: 0 }));
+        assert_eq!(check_group(&ld(4, 4, 3), "", &b), Err(Mismatch::Source { slot: 0 }));
+        assert!(matches!(check_group(&ld(4, 2, 2), "", &b), Err(Mismatch::Operation { .. })));
+        let a = add64(2);
+        let b = bytes(&a);
+        assert_eq!(check_group(&a, "", &b), Ok(b.len()));
+        assert_eq!(check_group(&add64(4), "", &b), Err(Mismatch::Destination { slot: 0 }));
+        let other = SelGroup { srcs: [sh(8), t(0), t(3)], ..a };
+        assert_eq!(check_group(&other, "", &b), Err(Mismatch::Source { slot: 2 }));
+        assert!(matches!(check_group(&l, "", &b), Err(Mismatch::Operation { .. })));
+    }
+
+    /// The builder refuses what `prepare` should have legalised: an
+    /// address that is not a temporary pair, an unresolved operand, a
+    /// burst past a vec4.
+    #[test]
+    fn the_builder_refuses_an_unlegalised_load() {
+        assert!(build_group(&SelGroup { srcs: [sh(8), None, None], ..ld(4, 1, 2) }).is_err());
+        assert!(build_group(&ld(4, 5, 2)).is_err());
+        let v =
+            SelGroup { srcs: [Some(SelSrc::Virtual { v: VReg(1), mods: Mods::default() }), None, None], ..ld(4, 1, 2) };
+        assert!(build_group(&v).is_err());
+        assert!(build_group(&SelGroup { srcs: [sh(8), t(0), Some(SelSrc::Imm(4))], ..add64(2) }).is_err());
+        assert!(build_group(&SelGroup { dst: Some(SelDst::Virtual(VReg(2))), ..add64(2) }).is_err());
+    }
 }

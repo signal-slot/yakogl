@@ -18,6 +18,7 @@
 //! Unit-test feature set: `host-test,gpu-powervr,shaderc-online` (not `report-es2`)
 //! (`cargo test --lib --features host-test,gpu-powervr,shaderc-online ubo_rows`).
 
+use super::sel::{Bank, Mods, OpType, SelDst, SelGroup, SelOp, SelSrc, VReg, MAX_LD_BURST};
 use crate::shaderc::online::arena::{Arena, ArenaError};
 use crate::shaderc::online::reflect::Reflection;
 
@@ -115,6 +116,294 @@ impl<'a> UboRows<'a> {
             }
         }
         Ok(first)
+    }
+}
+
+/// Whether, and from where, a stage reads its uniform-block members with
+/// `ld` (docs/notes/pvr-ubo-memory-load.md §2, §3, §8.4).
+///
+/// **Off by default, and nothing sets it yet.** Off, every uniform dword is
+/// a shared-register read as before and no [`SelOp::Ld`] or
+/// [`SelOp::Add64`] is ever made, so the compiler's output is unchanged.
+/// The chain turns it on (plan #378 item `ubo-chain`) once the record
+/// carries `ubo_addr_off1` and the back end writes the pair.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MemberLoads {
+    /// Read block members from memory.
+    pub on: bool,
+    /// The absolute shared register of the address pair's low dword,
+    /// `ubo_addr_off1 - 1` (the high dword is the next one; no alignment,
+    /// §3): `base + uniform_sh_dwords` in the §8.4 layout.
+    pub pair: u16,
+}
+
+/// The byte offset a member read adds to the block address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MemberOffset {
+    /// A constant read: the member's flat dword (its row's `dword_off` plus
+    /// the lane). The byte offset is `4 * dword`.
+    Dword(u32),
+    /// A run-time read: a 32-bit byte offset the selector computed (the
+    /// clamped index times the byte stride, plus `4 * base_dw`; §2).
+    Bytes(SelSrc),
+}
+
+impl MemberLoads {
+    /// The groups of one member read, §2's sequence: `add64_32` of the
+    /// shared pair and the byte offset into the pair `addr`, `addr + 1`;
+    /// `ld` of `burst` dwords into the run `dst` .. `dst + burst - 1`; and
+    /// the `wdf` after which the run holds the data. `addr` and `dst` must
+    /// be fresh values, `addr + 1` and the run's later registers too.
+    ///
+    /// `None` when the option is off, or for a burst outside
+    /// 1..=[`MAX_LD_BURST`] (a read wider than a vec4 is two reads).
+    pub fn load(self, offset: MemberOffset, burst: u8, addr: VReg, dst: VReg) -> Option<[SelGroup; 3]> {
+        if !self.on || !(1..=MAX_LD_BURST).contains(&burst) {
+            return None;
+        }
+        let sh = |reg: u16| Some(SelSrc::Fixed { bank: Bank::Shared, reg, mods: Mods::default() });
+        let off = match offset {
+            MemberOffset::Dword(d) => SelSrc::Imm(d.checked_mul(4)?),
+            MemberOffset::Bytes(s) => s,
+        };
+        Some([
+            SelGroup {
+                op: SelOp::Add64,
+                ty: OpType::U32,
+                dst: Some(SelDst::Virtual(addr)),
+                srcs: [sh(self.pair), sh(self.pair.checked_add(1)?), Some(off)],
+            },
+            SelGroup {
+                op: SelOp::Ld { burst },
+                ty: OpType::U32,
+                dst: Some(SelDst::Virtual(dst)),
+                srcs: [Some(SelSrc::Virtual { v: addr, mods: Mods::default() }), None, None],
+            },
+            SelGroup { op: SelOp::WaitData, ty: OpType::U32, dst: None, srcs: [None; 3] },
+        ])
+    }
+}
+
+#[cfg(test)]
+mod load_tests {
+    //! The member-read groups through the passes the chain runs them
+    //! through -- `prepare`, `index_high_shared`, the allocator, the
+    //! `ld`/`wdf` order check, the builder and the decode-back check --
+    //! with the emitted words pinned. Built directly: no selector routes a
+    //! read here yet. Feature set `host-test,gpu-powervr,shaderc-online`.
+    use super::*;
+    use crate::shaderc::online::powervr::alloc::{allocate, Boundary, Limits};
+    use crate::shaderc::online::powervr::assemble::build_group;
+    use crate::shaderc::online::powervr::encode::encode_group;
+    use crate::shaderc::online::powervr::prepare::{index_high_shared, prepare_counted};
+    use crate::shaderc::online::powervr::select::Selected;
+    use crate::shaderc::online::powervr::verify::{check_group, check_ld_waits};
+    use std::string::String;
+    use std::vec::Vec;
+
+    const LIMITS: Limits = Limits { temps: 64, shared: 2048, vtx_in: 32, coeff: 32 };
+
+    /// One built group: its listing (operands named, offsets left out) and
+    /// its bytes in hex.
+    type Built = (String, String);
+
+    /// `groups` through the passes, each built group checked against its
+    /// meaning on the way. `live_in` is written before the first group (a
+    /// run-time offset), `live_out` read after the last (the loaded lanes).
+    fn build(groups: &[SelGroup], live_in: &[VReg], live_out: &[VReg]) -> Vec<Built> {
+        let mut buf = std::vec![0u8; 1 << 20];
+        let a = Arena::new(&mut buf);
+        let sel = Selected {
+            groups: a.alloc_copy(groups).unwrap(),
+            vregs: 64,
+            outputs: &[],
+            inputs: &[],
+            discard: None,
+            alpha_to_one: None,
+        };
+        let (sel, _) = prepare_counted(&sel, &a).expect("prepares");
+        let sel = index_high_shared(&sel, &a).expect("indexes");
+        check_ld_waits(sel.groups).expect("waits, before allocation");
+        let al = allocate(sel.groups, LIMITS, [], Boundary { live_in, live_out }, &a).expect("allocates");
+        check_ld_waits(al.groups).expect("waits, after allocation");
+        let mut out = Vec::new();
+        for g in al.groups {
+            let b = build_group(g).unwrap_or_else(|e| panic!("{g:?}: {e:?}"));
+            let mut bytes = std::vec![0u8; b.total];
+            assert_eq!(encode_group(&b, &mut bytes, 0), Ok(b.total));
+            if g.op != SelOp::WaitData {
+                assert_eq!(check_group(g, "mbyp", &bytes), Ok(b.total), "{g:?}");
+            }
+            let mut text = String::new();
+            super::super::listing::group_text(&mut text, 0, &b).unwrap();
+            let text = text.trim().split_once(' ').map_or(String::new(), |(_, t)| t.trim().into());
+            out.push((text, bytes.iter().map(|x| std::format!("{x:02x}")).collect::<Vec<_>>().join(" ")));
+        }
+        out
+    }
+
+    const ON: MemberLoads = MemberLoads { on: true, pair: 8 };
+
+    fn seq(m: MemberLoads, off: MemberOffset, burst: u8) -> (Vec<SelGroup>, Vec<VReg>) {
+        let g = m.load(off, burst, VReg(10), VReg(20)).expect("on");
+        (g.to_vec(), (0..u32::from(burst)).map(|k| VReg(20 + k)).collect())
+    }
+
+    fn show(b: &[Built]) -> String {
+        b.iter().map(|(t, h)| std::format!("{t}\n    {h}\n")).collect()
+    }
+
+    #[test]
+    fn off_makes_no_groups() {
+        assert_eq!(MemberLoads::default().load(MemberOffset::Dword(0), 1, VReg(0), VReg(2)), None);
+        assert!(!MemberLoads::default().on);
+        assert_eq!(ON.load(MemberOffset::Dword(0), 5, VReg(0), VReg(2)), None);
+        assert_eq!(ON.load(MemberOffset::Dword(0), 0, VReg(0), VReg(2)), None);
+        assert_eq!(ON.load(MemberOffset::Dword(u32::MAX), 1, VReg(0), VReg(2)), None, "past 2^32 bytes");
+    }
+
+    /// The words of the groups, and each group's listing holding `facts`.
+    fn pinned(got: &[Built], want: &[(&[&str], &str)]) {
+        assert_eq!(got.len(), want.len(), "{}", show(got));
+        for ((text, hex), (facts, words)) in got.iter().zip(want) {
+            assert_eq!(hex, words, "{}", show(got));
+            for f in *facts {
+                assert!(text.contains(f), "`{f}` not in\n{text}");
+            }
+        }
+    }
+
+    /* Each read starts with the high dword of the pair sh8:sh9 moved to a
+     * temporary (`add64_32`'s s1 has no shared form,
+     * `legalise::mem_src_banks`): to t0, or to t1 when t0 is taken. */
+    const MOVE_SH9_T0: (&[&str], &str) =
+        (&["mbyp", "sb0=shared s0=9", "dbN=temp dN=0"], "35 82 00 87 89 08 00 00 00 40");
+    const MOVE_SH9_T1: (&[&str], &str) =
+        (&["mbyp", "sb0=shared s0=9", "dbN=temp dN=1"], "35 82 00 87 89 08 00 00 00 41");
+    /* `wdf` on DRC 0 (`fragment::wait_data`). */
+    const WDF: (&[&str], &str) = (&["ctrlop=wdf", "miscctl=0"], "02 80 6a ff");
+    /* `add64_32.s t2, t3 = sh8, t0, t1`: the high dword in t0, the byte
+     * offset in t1, the sum into the pair t2:t3. */
+    const ADD_SH8_T0_T1: (&[&str], &str) = (
+        &["add6432", "s=1", "sb0=shared s0=8", "sb1=temp s1=0", "sb2=temp s2=1", "d0=2", "d1=3"],
+        "37 8e 00 e8 88 60 80 41 08 00 c0 82 43 ff",
+    );
+    /* `add64_32.s t2, t3 = sh8, t1, t0`: the operands the other way round. */
+    const ADD_SH8_T1_T0: (&[&str], &str) = (
+        &["add6432", "s=1", "sb0=shared s0=8", "sb1=temp s1=1", "sb2=temp s2=0", "d0=2", "d1=3"],
+        "37 8e 00 e8 88 61 80 40 08 00 c0 82 43 ff",
+    );
+    /* `ld t0, drc0, 1, t2:t3`: the backend word f1 04 00 of the note's §1
+     * table (DRC 0, burst 1, s0, normal). */
+    const LD1_T2_T0: (&[&str], &str) = (
+        &["ld_immbl", "burstlen=1", "cachemode_ld=normal", "drc=0", "sb0=temp s0=2", "sb3=temp s3=0"],
+        "65 a0 00 f1 04 00 42 40 00 ff",
+    );
+
+    /// A 16384-byte block's first dword (byte 0): `add64_32` of sh8, sh9
+    /// and byte 0 -- special register 0, no move -- into t1:t2, then `ld`
+    /// burst 1 from the pair into t0 (free again once the sum read it) and
+    /// `wdf`.
+    #[test]
+    fn the_first_dword_of_a_16384_byte_block() {
+        let (g, out) = seq(ON, MemberOffset::Dword(0), 1);
+        pinned(
+            &build(&g, &[], &out),
+            &[
+                MOVE_SH9_T0,
+                (
+                    &["add6432", "s=1", "sb0=shared s0=8", "sb1=temp s1=0", "sb2=special s2=0", "d0=1", "d1=2"],
+                    "37 8e 00 e8 88 60 80 00 08 00 c0 81 42 ff",
+                ),
+                (&["ld_immbl", "burstlen=1", "sb0=temp s0=1", "sb3=temp s3=0"], "65 a0 00 f1 04 00 41 40 00 ff"),
+                WDF,
+            ],
+        );
+    }
+
+    /// Its last dword (byte 16380): the offset has no constant register, so
+    /// a `movi32` puts it in t1 for the `add64_32`.
+    #[test]
+    fn the_last_dword_of_a_16384_byte_block() {
+        let (g, out) = seq(ON, MemberOffset::Dword(4095), 1);
+        pinned(
+            &build(&g, &[], &out),
+            &[
+                MOVE_SH9_T0,
+                (&["bbyp0bm_imm32", "imm32=16380", "dN=1"], "86 92 40 13 fc 3f 00 00 00 00 41 ff"),
+                ADD_SH8_T0_T1,
+                LD1_T2_T0,
+                WDF,
+            ],
+        );
+    }
+
+    /// The last vec4 (dwords 4092..4095, byte 16368) in one 4-dword burst:
+    /// backend word f1 10 00 (§1's `ld drc0, 4, s0`). The run is t4..t7, not
+    /// t0..t3: the address pair t2:t3 stays live to the `wdf`.
+    #[test]
+    fn a_four_dword_burst_at_the_end_of_a_16384_byte_block() {
+        let (g, out) = seq(ON, MemberOffset::Dword(4092), 4);
+        pinned(
+            &build(&g, &[], &out),
+            &[
+                MOVE_SH9_T0,
+                (&["bbyp0bm_imm32", "imm32=16368", "dN=1"], "86 92 40 13 f0 3f 00 00 00 00 41 ff"),
+                ADD_SH8_T0_T1,
+                (&["ld_immbl", "burstlen=4", "sb0=temp s0=2", "sb3=temp s3=4"], "65 a0 00 f1 10 00 42 44 00 ff"),
+                WDF,
+            ],
+        );
+    }
+
+    /// A run-time byte offset (here a value written before the program, t0)
+    /// goes into the `add64_32` as it is.
+    #[test]
+    fn a_run_time_offset() {
+        let off = MemberOffset::Bytes(SelSrc::Virtual { v: VReg(5), mods: Mods::default() });
+        let (g, out) = seq(ON, off, 1);
+        pinned(&build(&g, &[VReg(5)], &out), &[MOVE_SH9_T1, ADD_SH8_T1_T0, LD1_T2_T0, WDF]);
+    }
+
+    /// The pair past sh255 (a 1536-dword default prefix puts it there):
+    /// both halves are read through `idx0`, each group setting it first
+    /// (`prepare::index_high_shared`, as pco's legalizer does): the move of
+    /// the high dword at idx0 = 301, the `add64_32`'s low dword at idx0 =
+    /// 300. A check of our rewrite, not of the hardware (§3).
+    #[test]
+    fn a_pair_past_sh255_is_read_through_idx0() {
+        let (g, out) = seq(MemberLoads { on: true, pair: 300 }, MemberOffset::Dword(4095), 1);
+        pinned(
+            &build(&g, &[], &out),
+            &[
+                (&["bbyp0bm_imm32", "imm32=301", "dbN=idx0 dN=5"], "86 92 40 13 2d 01 00 00 00 00 85 0c"),
+                (&["mbyp", "sb0=idx0 s0=3", "dbN=temp dN=0"], "35 82 00 87 83 0c 00 00 00 40"),
+                (&["bbyp0bm_imm32", "imm32=16380", "dN=1"], "86 92 40 13 fc 3f 00 00 00 00 41 ff"),
+                (&["bbyp0bm_imm32", "imm32=300", "dbN=idx0 dN=5"], "86 92 40 13 2c 01 00 00 00 00 85 0c"),
+                (
+                    &["add6432", "sb0=idx0 s0=3", "sb1=temp s1=0", "sb2=temp s2=1", "d0=2", "d1=3"],
+                    "37 8e 00 e8 83 60 90 41 0c 00 00 c0 82 43",
+                ),
+                LD1_T2_T0,
+                WDF,
+            ],
+        );
+    }
+
+    /// Two reads in a row: the second pair and run are placed apart from the
+    /// first's lanes, which are still live, and each `ld` waits for its own
+    /// `wdf`.
+    #[test]
+    fn two_reads_keep_their_runs_apart() {
+        let mut g = ON.load(MemberOffset::Dword(0), 4, VReg(10), VReg(20)).unwrap().to_vec();
+        g.extend(ON.load(MemberOffset::Dword(4092), 4, VReg(12), VReg(24)).unwrap());
+        let out: Vec<VReg> = (20..28).map(VReg).collect();
+        let b = build(&g, &[], &out);
+        let runs: Vec<&str> = b.iter().filter(|(t, _)| t.contains("ld_immbl")).map(|(t, _)| t.as_str()).collect();
+        assert_eq!(runs.len(), 2);
+        let s3 = |t: &str| t.split("sb3=temp s3=").nth(1).and_then(|x| x.split_whitespace().next()).unwrap().to_owned();
+        let (a, c): (u32, u32) = (s3(runs[0]).parse().unwrap(), s3(runs[1]).parse().unwrap());
+        assert!(a + 4 <= c || c + 4 <= a, "the runs t{a}.. and t{c}.. overlap\n{}", show(&b));
     }
 }
 

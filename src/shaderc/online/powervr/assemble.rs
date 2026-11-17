@@ -290,6 +290,35 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
             );
         }
         SelOp::WaitData => return super::fragment::wait_data(),
+        /* A uniform-block member read (`docs/notes/pvr-ubo-memory-load.md`
+         * §2): `ld` from the temporary pair an `add64_32` wrote, into the
+         * run of temporaries the allocator placed. */
+        SelOp::Ld { burst } => {
+            let (dst, addr) = mem_operands(g)?;
+            if !(1..=super::sel::MAX_LD_BURST).contains(&burst) {
+                return Err(BuildError::Unsupported("an ld burst outside 1..4 dwords"));
+            }
+            if addr.bank != super::sel::Bank::Temp.hw() {
+                return Err(BuildError::Unsupported("an ld address that is not a temporary pair"));
+            }
+            return build_ld(&Ld::imm(dst, addr, burst));
+        }
+        SelOp::Add64 => {
+            let Some(SelDst::Fixed { bank: super::sel::Bank::Temp, reg }) = g.dst else {
+                return Err(BuildError::Unsupported("an add64_32 not writing a temporary pair"));
+            };
+            let mut ops = [Operand { bank: 0, index: 0 }; 3];
+            for (o, s) in ops.iter_mut().zip(g.srcs.iter()) {
+                *o = match s {
+                    Some(SelSrc::Fixed { bank, reg, mods }) if *mods == Mods::default() => {
+                        Operand { bank: bank.hw(), index: u32::from(*reg) }
+                    }
+                    _ => return Err(BuildError::Unsupported("an add64_32 operand that is not a plain register")),
+                };
+            }
+            let dst = Operand { bank: super::sel::Bank::Temp.hw(), index: u32::from(reg) };
+            return build_add64_32(dst, ops[0], ops[1], ops[2]);
+        }
         /* The execution mask (`powervr::cf`), on the emc the allocator gave
          * a temporary: each reads it (special 0 for the set-up) and writes it
          * back. */
@@ -362,7 +391,7 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
      * phase 0; everything else comes from the shape table. */
     let steps: &[super::builtins::Step] = match g.op {
         SelOp::Copy => &[super::builtins::Step { op: "mbyp", phase: PH_0, corpus: 0 }],
-        SelOp::Sample { .. } | SelOp::WaitData => unreachable!("built above"),
+        SelOp::Sample { .. } | SelOp::WaitData | SelOp::Ld { .. } | SelOp::Add64 => unreachable!("built above"),
         /* the chain resolved every one into a copy (`expand_samples`) */
         SelOp::TexWord { .. } => return Err(BuildError::Unsupported("a texture state word that was not resolved")),
         SelOp::SampleZ { .. } => return Err(BuildError::Unsupported("a cube coordinate the chain did not consume")),
@@ -520,6 +549,22 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
 
     let parts = Parts { alutype: ALUTYPE_MAIN, instrs, lower, upper, iss, dst, align_pad: 0 };
     close(&parts, hdr).map_err(BuildError::Group)
+}
+
+/// A resolved [`super::sel::SelOp::Ld`]'s destination run and address pair,
+/// each its first register: a temporary destination and a plain address.
+fn mem_operands(g: &super::sel::SelGroup) -> Result<(Operand, Operand), BuildError> {
+    use super::sel::{Bank, Mods, SelDst, SelSrc};
+    let Some(SelDst::Fixed { bank: Bank::Temp, reg: d }) = g.dst else {
+        return Err(BuildError::Unsupported("an ld not writing temporaries"));
+    };
+    let Some(SelSrc::Fixed { bank, reg: a, mods }) = g.srcs[0] else {
+        return Err(BuildError::Unsupported("an ld whose address is not resolved"));
+    };
+    if mods != Mods::default() {
+        return Err(BuildError::Unsupported("an ld address with a modifier"));
+    }
+    Ok((Operand { bank: Bank::Temp.hw(), index: u32::from(d) }, Operand { bank: bank.hw(), index: u32::from(a) }))
 }
 
 /// The narrowest upper source section, for the placeholder every group needs.
