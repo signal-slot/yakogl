@@ -55,6 +55,10 @@ Gate rows (`tools/check.sh`, reached by a change under `tools/probes/` or
 - `zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot), -Werror on our C
   files`: builds `nanopc_t6/t6_fw`. It is a gap without `ZEPHYR_WS` or the
   CSF firmware header (made from the board's file first when one is given).
+- `zephyr  nanopc_t6 t6_submit image (Z4), -Werror on our C files`: builds
+  `nanopc_t6/t6_submit`. It is a gap without `ZEPHYR_WS` or the CSF firmware
+  header (`driver/src/fw/mali_csffw_blob.h`, made by `driver/tools/mkmalifw.sh`,
+  never committed).
 - `test    rpi_5 fdt_walk host test`: `rpi_5/common/fdt/test/run.sh` (host cc,
   ASan/UBSan, no Zephyr). Ok only with `dtc` on PATH and `fdt_walk: N checks,
   0 failed` without a SKIPPED line; without `dtc` it is a gap naming it. If it
