@@ -5761,18 +5761,21 @@ fn texture_units(
     out: &mut [V3dJobTmu; MAX_UNITS],
 ) -> Result<usize, Attempt> {
     /* a unit whose look-ups the program compiled for the 32-bit TMU output:
-     * P1's bit 0 (select.rs, LodKey::ret32) */
-    let ret32_units = streams.iter().fold(0u64, |m, &(u, count)| {
+     * P1's bit 0 (select.rs, LodKey::ret32); and a unit some look-up reads
+     * at all (a P0 or P1 word), which a unit only textureSize asks of (its
+     * size words alone, QUNIFORM_TEXTURE_WIDTH / _HEIGHT) is not */
+    let (ret32_units, looked_up) = streams.iter().fold((0u64, 0u64), |(m, l), &(u, count)| {
         let words: &[V3dUniform] = if u.is_null() || count == 0 {
             &[]
         } else {
             // SAFETY: a program's stream of `count` words, live for the draw.
             unsafe { core::slice::from_raw_parts(u, count as usize) }
         };
-        words
-            .iter()
-            .filter(|w| w.contents == V3D_QUNIFORM_TMU_CONFIG_P1 && w.data & 1 != 0 && w.data >> 24 < 64)
-            .fold(m, |m, w| m | 1 << (w.data >> 24))
+        words.iter().filter(|w| w.data >> 24 < 64).fold((m, l), |(m, l), w| match w.contents {
+            V3D_QUNIFORM_TMU_CONFIG_P1 if w.data & 1 != 0 => (m | 1 << (w.data >> 24), l | 1 << (w.data >> 24)),
+            V3D_QUNIFORM_TMU_CONFIG_P0 | V3D_QUNIFORM_TMU_CONFIG_P1 => (m, l | 1 << (w.data >> 24)),
+            _ => (m, l),
+        })
     });
     let mut n = 0;
     for b in binds.iter().take(MAX_UNITS) {
@@ -5781,7 +5784,12 @@ fn texture_units(
         }
         let ret32 = b.unit < 64 && ret32_units & (1 << b.unit) != 0;
         let tex_state = if b.incomplete == 0 {
-            tex_state_for(g, b, ret32)?
+            /* a unit no look-up reads has no TMU output for the format's
+             * return size to agree with (texture::refusal_for's
+             * RET16_OF_32 / RET32_OF_16): only its size words, from the
+             * width and height below. Every other refusal stands. */
+            let read = b.unit < 64 && looked_up & (1 << b.unit) != 0;
+            tex_state_for(g, b, if read { ret32 } else { texture::return_32(b) })?
         } else if ret32 || texture::format_is_integer(b.format) {
             black_typed_state(g, b, ret32)?
         } else {
