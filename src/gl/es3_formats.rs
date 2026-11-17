@@ -172,6 +172,23 @@ pub static FORMATS: [Es3Format; 35] = [
     f(GL_RGBA32I, "GL_RGBA32I", GL_RGBA_INTEGER, Class::Int, 4, &[GL_INT], I32_ST),
 ];
 
+/// GL_RGBA32F held in its own 16-byte class, on a back end that stores it so
+/// (`texture.rs` `rgba32f_own_class`: the GC7000UL, whose sampled mask holds
+/// the class, docs/notes/gc-128bit-swizzle.md). Not in [`FORMATS`], so
+/// [`find`] never returns it and the original tables keep GL_RGBA32F as
+/// halves everywhere else; a texture of the class records
+/// [`RGBA32F_OWN_INDEX`], so the rules of the rows above hold for it: table
+/// 3.2's one pair, not filterable, no glGenerateMipmap, a float copy source.
+pub static RGBA32F_OWN: Es3Format = Es3Format {
+    f32_texels: true,
+    ..f(GL_RGBA32F, "GL_RGBA32F", GL_RGBA, Class::Float, 4, &[GL_FLOAT], &[GLES_TEXFMT_RGBA32F])
+};
+
+/// What a texture of [`RGBA32F_OWN`] records (`GlTexture::es3_fmt`): the
+/// last value of the byte, clear of any row [`FORMATS`] can grow to (the
+/// index after its last stays None, tests/es3_sized_formats.rs).
+pub const RGBA32F_OWN_INDEX: u8 = u8::MAX;
+
 /// The record of `internalformat`: (index + 1, row). None for a name this
 /// module does not own, always under `report-es2`.
 pub fn find(internalformat: GLenum) -> Option<(u8, &'static Es3Format)> {
@@ -183,6 +200,9 @@ pub fn find(internalformat: GLenum) -> Option<(u8, &'static Es3Format)> {
 
 /// The row a texture recorded (`GlTexture::es3_fmt`), 0 being none.
 pub fn by_index(idx: u8) -> Option<&'static Es3Format> {
+    if idx == RGBA32F_OWN_INDEX {
+        return Some(&RGBA32F_OWN);
+    }
     (idx as usize).checked_sub(1).and_then(|i| FORMATS.get(i))
 }
 
