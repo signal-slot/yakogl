@@ -400,9 +400,6 @@ const COMPILER_REFUSED: &[&str] = &[
     "matrix_mul_mat2_attribute_vertex",
     "matrix_mul_mat4_attribute_vertex",
     "matrix_mixed_const_attribute_vertex",
-    // a uniform other than a float, vec2, vec3, vec4 or mat4
-    "matrix_mul_mat2_uniform_vertex",
-    "matrix_mul_mat3_uniform_vertex",
     // two varying lanes of equal value
     "conditionals_varying_one_path",
     // a varying lane computed from no attribute
