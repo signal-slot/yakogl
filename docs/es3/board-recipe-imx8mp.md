@@ -221,6 +221,15 @@ image recipes build what conformance needs`, the three console lines in `.config
 `38164 5b7a6123…b82f` (byte-identical to the `9bc82915` campaign's: the table has not changed), linker
 `RAM: 233860 KB 256 MB 89.21%`, dry run `footprint 239472640` (28,962,816 bytes below `board.sh`'s refusal).
 
+Built at `140791b1` (2026-11-17, 4 cores, `IMX8MP_CONSOLE=1`, a stage 1 in `$IMX8MP_OUT/deqp-stage1-gles3`: 453
+steps, `rc=0`, 2.0 GB, its two libraries `132944 2fff5184…b2e8` and `12732236 7b842c95…85cc`, the shas of the first
+three builds): image `rc=0`, `imx8mp: 133 table rows -> es3-140791b1.table.conf`, `check-deqp-images: the dEQP
+image recipes build what conformance needs`, the three console lines and `CONFIG_GC_BOARD_WDOG_SECONDS=600` in
+`.config`, both `REPORT_ES2` switches `is not set`. `zephyr.bin` 16,667,288 bytes (sha256 `67719f5f…eecd`),
+`zephyr.elf` 44,820,880 bytes, the table fragment `38164 5b7a6123…b82f`, linker `RAM: 233952 KB 256 MB 89.25%`,
+AArch64 header `image_size` 239,566,848 (28,868,608 bytes below the refusal). This is not a campaign image: the
+slices stay on `05769bf2`.
+
 **The footprint grows with `main`.** Same table, same stage 1, same board conf: 222,568 KB at `9bc82915`,
 233,912 KB at `e6e68ff7` — 11,344 KB more in the days between those commits, 84.90 % → 89.23 % of the region.
 `board.sh`'s refusal is at `image_size` past `0x70000000` (268,435,456 bytes), so a campaign started at a
