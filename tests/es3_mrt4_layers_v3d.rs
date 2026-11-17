@@ -433,8 +433,8 @@ fn check(kind: Kind) {
     let s = draw();
     assert_eq!(s.targets.len(), 4, "{kind:?}: four targets reach the back end");
     let a3_addr = s.targets[3].0;
-    for k in 0..3 {
-        assert_ne!(s.targets[k].0, a3_addr, "{kind:?}: target {k} is an image of its own");
+    for (k, target) in s.targets.iter().enumerate().take(3) {
+        assert_ne!(target.0, a3_addr, "{kind:?}: target {k} is an image of its own");
     }
     assert_eq!(
         read(r.fb, GL_COLOR_ATTACHMENT3, 3, 4),

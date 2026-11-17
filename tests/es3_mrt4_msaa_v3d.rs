@@ -540,8 +540,8 @@ fn the_state_layer_takes_a_4x_draw_of_four_targets() {
     (d.samples, d.prim, d.index_count, d.line_width) = (4, GLES_PRIM_TRIANGLES, 3, 1.0);
     (d.viewport, d.depth_range, d.color_mask, d.color_write) = ([0, 0, 8, 8], [0.0, 1.0], 0xf, true);
     d.num_targets = 4;
-    for i in 1..4 {
-        d.targets[i] = GlesDrawTarget {
+    for (i, target) in d.targets.iter_mut().enumerate().skip(1).take(3) {
+        *target = GlesDrawTarget {
             gpu: 0x0100_0000 + 0x1000 * i as u64,
             w: 8,
             h: 8,

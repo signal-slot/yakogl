@@ -642,8 +642,8 @@ fn glclear_of_four_draw_buffers_today_reaches_three() {
     assert_eq!(k.len(), 1, "one frame, one kick: {:?}", logs());
     let k = &k[0];
     assert_eq!(k.frag.num_rt, 3, "PVR_RENDER_MAX_RT clamps the frame to three targets");
-    for rt in 0..3 {
-        assert_ne!(k.frag.pbe_word[rt], [0, 0], "render target {rt} has its PBE state");
+    for (rt, word) in k.frag.pbe_word.iter().enumerate().take(3) {
+        assert_ne!(*word, [0, 0], "render target {rt} has its PBE state");
     }
     assert_eq!(attach3(k), [0, 0], "render target 3 has no PBE state");
     assert_eq!(
