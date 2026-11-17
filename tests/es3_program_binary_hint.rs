@@ -4,8 +4,8 @@
 //! state_query.shader.program_binary): glProgramParameteri sets it and
 //! glGetProgramiv answers it, GL_FALSE for a new program. Until 2026-11-07
 //! the hint was accepted and dropped, and the query always answered 0
-//! ("Expected 1; got 0"). No binary format exists (GL_NUM_PROGRAM_BINARY_
-//! FORMATS 0): the hint is stored and answered, nothing else.
+//! ("Expected 1; got 0"). The binary itself is tests/es3_program_binary.rs; this
+//! file pins only the hint.
 //!
 //! No GPU runs: the stand-in back end draws nothing.
 //!
