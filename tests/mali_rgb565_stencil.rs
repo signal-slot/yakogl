@@ -213,8 +213,8 @@ fn frames(from: usize) -> Vec<FrameOut> {
         let mut regs = [0u32; 128];
         let reg64 = |regs: &[u32; 128], r: usize| u64::from(regs[r]) | u64::from(regs[r + 1]) << 32;
         let mut draws = Vec::new();
-        for w in raw.chunks_exact(8) {
-            match Instr::decode(u64::from_le_bytes(w.try_into().unwrap())) {
+        for w in raw.as_chunks::<8>().0 {
+            match Instr::decode(u64::from_le_bytes(*w)) {
                 Ok(Instr::Move48(m)) => {
                     regs[m.destination as usize] = m.immediate as u32;
                     regs[m.destination as usize + 1] = (m.immediate >> 32) as u32;
