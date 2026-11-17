@@ -1191,6 +1191,7 @@ tools/cts/mali-kmsg-selftest.sh
 tools/cts/mali-slice-readme-selftest.sh
 tools/cts/mali-rerun-tree-selftest.sh
 tools/cts/mali-deqp-e2e-selftest.sh
+tools/cts/mali-deqp-run-selftest.sh   # refusals/<label>.txt and --per-case
 ```
 
 The gate runs all of them: `tools/check.sh` has its own row for
