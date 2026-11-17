@@ -9329,6 +9329,133 @@ fn a_draw_with_depth_texels_writes_them_into_its_buffer() {
     }
 }
 
+/* ---- ds_write / stencil_resolve: glBlitFramebuffer's depth and stencil ---- */
+
+/// The CPU view of buffer `b`'s level (the fakes' packed layout).
+fn zs_image(b: &ZsBuf) -> *mut u8 {
+    (b.mem.cpu as *mut u8).wrapping_add((u64::from(b.address) - b.mem.gpu) as usize)
+}
+
+/// `ds_write` into a D24S8 buffer whose depth is only cleared: the whole
+/// level takes the clear value (and stencil 0, its half Untouched) before
+/// the rectangle's depth goes in as unorm24, so the pixels outside it are
+/// defined; the depth becomes Stored and `depth_resolve` reads the
+/// rectangle back. The return codes: a probe (empty rectangle) 0; a plane
+/// no buffer holds, or an id with none, 1; another plane number or a
+/// rectangle outside the buffer -EINVAL.
+///
+/// Revert checks: leaving the depth Cleared answers the clear value from
+/// `depth_resolve`; skipping the fill leaves zeros outside the rectangle.
+#[test]
+fn ds_write_expands_a_cleared_depth_and_writes_the_rectangle() {
+    let rig = Rig::new();
+    rig.init();
+    let id = 0x4000_0068; /* a depth object's id form */
+    let b = depth_object_draw(&rig, id, Some(0.5));
+    assert_eq!((b.z, b.s), (ZsKnown::Cleared(0.5), ZsKnown::Untouched), "cleared only, no stencil object");
+    let probe = 0u32;
+    let p = &probe as *const u32 as *const c_void;
+    // SAFETY: an empty rectangle reads nothing.
+    unsafe {
+        assert_eq!(v3d_ds_write(id, DS_PLANE_DEPTH, p, 0, 0, 0, 0, 0), 0, "a probe of a writable buffer");
+        assert_eq!(v3d_ds_write(id, DS_PLANE_STENCIL, p, 0, 0, 0, 0, 0), 1, "no buffer holds its stencil");
+        assert_eq!(v3d_ds_write(0x4000_0999, DS_PLANE_DEPTH, p, 0, 0, 0, 0, 0), 1, "an id with no buffer");
+        assert_eq!(v3d_ds_write(id, 7, p, 0, 0, 0, 0, 0), -EINVAL, "no such plane");
+    }
+    let src = [0.0f32, 1.0, 9.0, 0.25, 0.75, 9.0];
+    let s = src.as_ptr() as *const c_void;
+    // SAFETY: 2 rows of 3 floats.
+    unsafe {
+        assert_eq!(v3d_ds_write(id, DS_PLANE_DEPTH, s, b.w - 1, 0, 2, 2, 3), -EINVAL, "past the right edge");
+        assert_eq!(v3d_ds_write(id, DS_PLANE_DEPTH, s, 3, 4, 2, 2, 3), 0);
+    }
+    let after = *g().zsbufs.iter().find(|z| z.live() && z.owners[0] == id).expect("the buffer");
+    assert_eq!((after.z, after.s), (ZsKnown::Stored, ZsKnown::Untouched), "the depth is Stored");
+    let l = texture::rt_layout(b.w, b.h, 1).expect("the buffer's layout");
+    let (w, h) = (b.w as usize, b.h as usize);
+    let mut words = std::vec![0u32; w * h];
+    // SAFETY: the buffer's live mapping holds the laid-out level; `words` is h rows of 4 * w bytes.
+    assert!(unsafe { v3d_tex_load_box(zs_image(&b), &l, 0, 0, 0, b.w, b.h, words.as_mut_ptr() as *mut u8, b.w * 4) });
+    for y in 0..h {
+        for x in 0..w {
+            let d = if (3..5).contains(&x) && (4..6).contains(&y) { src[(y - 4) * 3 + x - 3] } else { 0.5 };
+            assert_eq!(words[y * w + x], ds_retention::depth_unorm24(d) << 8, "({x}, {y})");
+        }
+    }
+    let mut t = [7.0f32; 6 * 6];
+    // SAFETY: 6 rows of 6 floats.
+    assert_eq!(unsafe { v3d_depth_resolve(id, t.as_mut_ptr(), 6, 6, 6) }, 0);
+    assert_eq!(t[4 * 6 + 3], 0.0);
+    assert_eq!(t[4 * 6 + 4], 1.0);
+    /* within one unorm24 step: 0.5 rounds to 0x800000, half a step above */
+    assert!((t[5 * 6 + 3] - 0.25).abs() <= 1.0 / 16_777_215.0);
+    assert!((t[0] - 0.5).abs() <= 1.0 / 16_777_215.0, "outside: the clear value");
+}
+
+/// With depth and stencil apart and S8 halves (femtovg's stencil-only
+/// layer): `stencil_resolve` reads the S8 buffer's bytes back through the
+/// S8 layout (the pitch's padding not written), `ds_write` writes a
+/// rectangle of them and keeps the rest, and has no depth to write for the
+/// stencil object. While the open job uses the buffer both answer -EBUSY.
+///
+/// Revert check: reading the S8 buffer through the D24S8 layout answers
+/// other bytes.
+#[test]
+fn ds_write_and_stencil_resolve_go_through_an_s8_buffer() {
+    let rig = Rig::new();
+    with_platform(|p| (p.split_zs, p.s8_stencil) = (Some(1), Some(1)));
+    rig.init();
+    let [clear, stencil, cover] = femtovg_layer(&rig, 0);
+    for d in [clear, stencil, cover] {
+        assert_eq!(draw(&d), 0);
+    }
+    assert_eq!(v3d_flush(), 0);
+    let id = cover.stencil_id;
+    let b = *g().zsbufs.iter().find(|z| z.live() && z.owners[1] == id).expect("the stencil's buffer");
+    assert!(b.s8 && b.s == ZsKnown::Stored && b.w >= 8 && b.h >= 8, "{b:?}");
+    let mut l = V3dTexLayout::default();
+    // SAFETY: a live layout to fill.
+    assert!(unsafe { v3d_tex_layout(b.w, b.h, 1, 1, &mut l) });
+    let (w, h) = (b.w as usize, b.h as usize);
+    let planted: Vec<u8> = (0..w * h).map(|i| (i * 7 + 3) as u8).collect();
+    // SAFETY: the buffer's live mapping holds the laid-out level; `planted` is h rows of w bytes.
+    unsafe { v3d_tex_store_level(zs_image(&b), &l, 0, planted.as_ptr(), b.w) };
+    let mut t = [0xeeu8; 9 * 8];
+    // SAFETY: 8 rows of 9 bytes.
+    assert_eq!(unsafe { v3d_stencil_resolve(id, t.as_mut_ptr(), 8, 8, 9) }, 0);
+    for y in 0..8 {
+        assert_eq!(t[y * 9..y * 9 + 8], planted[y * w..y * w + 8], "row {y}");
+        assert_eq!(t[y * 9 + 8], 0xee, "row {y}: the pitch's padding is not written");
+    }
+    let src = [0x10u8, 0x20, 0xff, 0x30, 0x40, 0xff];
+    let s = src.as_ptr() as *const c_void;
+    // SAFETY: 2 rows of 3 bytes.
+    unsafe {
+        assert_eq!(v3d_ds_write(id, DS_PLANE_DEPTH, s, 3, 4, 2, 2, 3), 1, "the stencil object has no depth");
+        assert_eq!(v3d_ds_write(id, DS_PLANE_STENCIL, s, 3, 4, 2, 2, 3), 0);
+    }
+    let mut bytes = std::vec![0u8; w * h];
+    // SAFETY: as above; `bytes` is h rows of w bytes.
+    assert!(unsafe { v3d_tex_load_box(zs_image(&b), &l, 0, 0, 0, b.w, b.h, bytes.as_mut_ptr(), b.w) });
+    for y in 0..h {
+        for x in 0..w {
+            let want =
+                if (3..5).contains(&x) && (4..6).contains(&y) { src[(y - 4) * 3 + x - 3] } else { planted[y * w + x] };
+            assert_eq!(bytes[y * w + x], want, "({x}, {y})");
+        }
+    }
+    /* a job open on the buffer: refused, not written under it */
+    let mut again = cover;
+    again.do_clear = false;
+    assert_eq!(draw(&again), 0);
+    // SAFETY: as above.
+    unsafe {
+        assert_eq!(v3d_ds_write(id, DS_PLANE_STENCIL, s, 3, 4, 2, 2, 3), -EBUSY);
+        assert_eq!(v3d_stencil_resolve(id, t.as_mut_ptr(), 8, 8, 9), -EBUSY);
+    }
+    assert_eq!(v3d_flush(), 0);
+}
+
 /// glmark2's shadow pass (gl_test case 177 zonly): a framebuffer whose only
 /// attachment is a depth texture reaches the backend with no colour target
 /// (`target_gpu` 0, `DRAWS_WITHOUT_COLOUR`). The job is opened at target

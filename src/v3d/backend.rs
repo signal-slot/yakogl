@@ -39,6 +39,11 @@ use crate::shaderc::online::v3d::select::{QUNIFORM_TEXTURE_HEIGHT, QUNIFORM_TEXT
 use crate::shaderc::{ShcShader, ShcV3dVs, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX, SHC_V3D_NO_RECORD};
 use crate::util::{Global, EBUSY, EINVAL, EIO, ENODEV, ENOMEM, ENOTSUP};
 
+/* the D24S8/S8 plane helpers of `v3d_ds_write` / `v3d_stencil_resolve`
+ * (src/v3d/mod.rs is left alone: the module is this file's) */
+#[path = "ds_plane.rs"]
+mod ds_plane;
+
 /* ---- memory ---------------------------------------------------------------- */
 
 /// This backend draws into a framebuffer with no colour attachment
@@ -5011,6 +5016,277 @@ pub unsafe extern "C" fn v3d_depth_resolve(id: u32, dst: *mut f32, w: u32, h: u3
     0
 }
 
+/// The slot of the buffer that holds the depth (`stencil` false: a D24S8
+/// buffer whose depth half `id` owns, as `v3d_depth_resolve` finds it) or
+/// the stencil (a D24S8 or S8 buffer whose stencil half `id` owns) of GL
+/// object `id`.
+fn zs_plane_buf(g: &V3dState, stencil: bool, id: u32) -> Option<usize> {
+    let half = usize::from(stencil);
+    g.zsbufs.iter().position(|b| b.live() && b.owners[half] == id && (stencil || !b.s8))
+}
+
+/// The CPU view of buffer `b`'s single level and its layout, as `zs_buf`
+/// laid it out: D24S8 (`texture::rt_layout`) or S8 (`v3d_tex_layout(w, h,
+/// 1, 1)`), the UIF XOR dropped. `None` when the layout refuses the size or
+/// the level does not fit the mapping; the caller refuses a 4x buffer and
+/// one with no CPU view first.
+fn zs_cpu_level(b: &ZsBuf) -> Option<(V3dTexLayout, *mut u8)> {
+    let l = if b.s8 {
+        let mut l = V3dTexLayout::default();
+        // SAFETY: `l` is a live layout to fill.
+        if !unsafe { v3d_tex_layout(b.w, b.h, 1, 1, &mut l) } {
+            return None;
+        }
+        if l.slices[0].tiling == V3D_TEX_TILING_UIF_XOR {
+            l.slices[0].tiling = V3D_TEX_TILING_UIF_NO_XOR;
+        }
+        l
+    } else {
+        texture::rt_layout(b.w, b.h, 1)?
+    };
+    if l.slices[0].offset != 0 {
+        return None;
+    }
+    let off = u64::from(b.address).checked_sub(b.mem.gpu)? as usize;
+    if b.mem.cpu.is_null() || off + l.size as usize > b.mem.size {
+        return None;
+    }
+    Some((l, (b.mem.cpu as *mut u8).wrapping_add(off)))
+}
+
+/// Whether the open job loads or stores buffer `i`.
+fn zs_in_open_job(g: &V3dState, i: usize) -> bool {
+    g.j.open && (g.j.zs == Some(i) || g.j.ss == Some(i))
+}
+
+/// Write a `w` x `h` rectangle at (`x`, `y`) of plane `plane`
+/// ([`DS_PLANE_DEPTH`]: f32 depth; [`DS_PLANE_STENCIL`]: u8) of GL object
+/// `id` into the buffer that holds it (`YakoglBackend::ds_write`): the CPU
+/// read-modify-write of docs/notes/v3d-fbo-blit.md 3.4.
+///
+/// The layout is the one [`v3d_depth_resolve`] and [`v3d_stencil_resolve`]
+/// read, rows top-down at GL's y 0. The whole level goes through a raster
+/// scratch copy as `seed_depth` writes it: a Stored half is loaded back
+/// (`v3d_tex_load_box`), a Cleared half takes its value, an Untouched one
+/// depth 1.0 or stencil 0, so the pixels outside the rectangle are defined;
+/// the rectangle's half of each pixel is written (`ds_plane`: a D24S8 word's
+/// depth bits 31..8 as unorm24, its stencil byte 7..0, or an S8 byte), and
+/// the level is stored back (`v3d_tex_store_box`). The plane becomes Stored,
+/// so the next job loads it; the other half keeps its history (its value is
+/// in the buffer either way).
+///
+/// 1 when no buffer holds the plane (nothing written: a history parked with
+/// its buffer is not written into); -EBUSY when the open job uses the
+/// buffer; -ENOTSUP for a 4x buffer or one with no CPU view; -EINVAL for a
+/// rectangle outside the buffer or a layout that does not fit it; -ENOMEM
+/// without scratch memory. An empty rectangle (`w` or `h` 0) is a probe:
+/// every check above runs, nothing is waited for or written, and 0 says the
+/// buffer can be written. Every submitted job is waited for before the CPU
+/// writes the buffer.
+///
+/// Unmeasured on the board: dEQP-GLES3 fbo.blit.depth_stencil on the Pi 4.
+///
+/// # Safety
+/// `src` holds `h` rows of `pitch` elements of the plane's type, `w <= pitch`.
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn v3d_ds_write(
+    id: u32,
+    plane: u32,
+    src: *const c_void,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    pitch: u32,
+) -> i32 {
+    let g = g();
+    if !g.inited || id == 0 || src.is_null() || w > pitch {
+        return 1;
+    }
+    let stencil = match plane {
+        DS_PLANE_DEPTH => false,
+        DS_PLANE_STENCIL => true,
+        _ => return -EINVAL,
+    };
+    let Some(i) = zs_plane_buf(g, stencil, id) else { return 1 };
+    if zs_in_open_job(g, i) {
+        return -EBUSY;
+    }
+    let b = g.zsbufs[i];
+    if b.msaa || b.mem.cpu.is_null() {
+        return -ENOTSUP;
+    }
+    let Some((l, image)) = zs_cpu_level(&b) else { return -EINVAL };
+    if x as u64 + w as u64 > b.w as u64 || y as u64 + h as u64 > b.h as u64 {
+        return -EINVAL;
+    }
+    if w == 0 || h == 0 {
+        return 0;
+    }
+    /* a submitted job may still load or store the buffer */
+    let rc = wait_in_flight(g);
+    if rc < 0 {
+        return rc;
+    }
+    let cpp: u32 = if b.s8 { 1 } else { 4 };
+    let n = b.w as usize * b.h as usize;
+    let mut scratch = OsalGpuMem::ZERO;
+    if osal::gpu_alloc(V3D_HEAP_DATA, n * cpp as usize, OSAL_MEM_DATA, &mut scratch) != 0 || scratch.cpu.is_null() {
+        osal::gpu_free(&mut scratch);
+        glog_once!("yakogl/v3d: no {} bytes to write a depth/stencil plane into its buffer", n * cpp as usize);
+        return -ENOMEM;
+    }
+    let rows = scratch.cpu as *mut u8;
+    /* `image` is the buffer's live CPU mapping, `l.size` bytes
+     * (zs_cpu_level), which no job uses: the open one does not (checked
+     * above), and every submitted one was waited for. `rows` holds `bh`
+     * rows of `bw * cpp` bytes. */
+    if b.z == ZsKnown::Stored || b.s == ZsKnown::Stored {
+        // SAFETY: see above.
+        unsafe { osal::cache_invd(image as *mut c_void, l.size as usize) };
+        // SAFETY: see above.
+        if !unsafe { v3d_tex_load_box(image, &l, 0, 0, 0, b.w, b.h, rows, b.w * cpp) } {
+            osal::gpu_free(&mut scratch);
+            return -EINVAL;
+        }
+    }
+    let stencil_else = match b.s {
+        ZsKnown::Cleared(v) => Some(v as u32 & 0xff),
+        ZsKnown::Stored => None,
+        _ => Some(0),
+    };
+    let src_len = (h as usize - 1) * pitch as usize + w as usize;
+    let written = if b.s8 {
+        // SAFETY: `rows` holds `n` bytes (allocated above).
+        let bytes = unsafe { core::slice::from_raw_parts_mut(rows, n) };
+        if let Some(v) = stencil_else {
+            bytes.fill(v as u8);
+        }
+        // SAFETY: the caller's contract: `h` rows of `pitch` bytes.
+        let src = unsafe { core::slice::from_raw_parts(src as *const u8, src_len) };
+        ds_plane::write_stencil_s8(bytes, b.w, b.h, src, x, y, w, h, pitch)
+    } else {
+        // SAFETY: `rows` holds `n` words (allocated above).
+        let words = unsafe { core::slice::from_raw_parts_mut(rows as *mut u32, n) };
+        let depth_else = match b.z {
+            ZsKnown::Cleared(v) => Some(ds_plane::depth_unorm24(v)),
+            ZsKnown::Stored => None,
+            _ => Some(0xff_ffff),
+        };
+        if depth_else.is_some() || stencil_else.is_some() {
+            for word in words.iter_mut() {
+                let d = depth_else.map_or(*word & 0xffff_ff00, |v| v << 8);
+                *word = d | stencil_else.unwrap_or(*word & 0xff);
+            }
+        }
+        if stencil {
+            // SAFETY: the caller's contract: `h` rows of `pitch` bytes.
+            let src = unsafe { core::slice::from_raw_parts(src as *const u8, src_len) };
+            ds_plane::write_stencil_d24s8(words, b.w, b.h, src, x, y, w, h, pitch)
+        } else {
+            // SAFETY: the caller's contract: `h` rows of `pitch` floats.
+            let src = unsafe { core::slice::from_raw_parts(src as *const f32, src_len) };
+            ds_plane::write_depth_d24s8(words, b.w, b.h, src, x, y, w, h, pitch)
+        }
+    };
+    if written.is_err() {
+        osal::gpu_free(&mut scratch);
+        return -EINVAL;
+    }
+    // SAFETY: see above.
+    let stored = unsafe { v3d_tex_store_box(image, &l, 0, 0, 0, b.w, b.h, rows, b.w * cpp) };
+    osal::gpu_free(&mut scratch);
+    if !stored {
+        return -EINVAL;
+    }
+    // SAFETY: the level just written, inside the mapping.
+    unsafe { osal::cache_flush(image as *mut c_void, l.size as usize) };
+    if stencil {
+        g.zsbufs[i].s = ZsKnown::Stored;
+    } else {
+        g.zsbufs[i].z = ZsKnown::Stored;
+    }
+    0
+}
+
+/// Write the stencil of GL object `id` into `w` x `h` bytes at `dst`,
+/// `pitch` bytes a row (`YakoglBackend::stencil_resolve`), as
+/// [`v3d_depth_resolve`] writes the depth. The buffer whose stencil half `id`
+/// owns:
+/// - Cleared(v): v at every byte;
+/// - Stored: the level read back through `v3d_tex_load_box` into a raster
+///   scratch, and its top-left part (clipped to the buffer) written: a D24S8
+///   word's bits 7..0 (Mesa's S8_UINT_Z24_UNORM, v3dx_format_table.c:149),
+///   or an S8 buffer's byte; row 0 is GL's y 0;
+/// - anything else (Untouched; a 4x buffer; no buffer) is 1: the bytes stay.
+///
+/// -EBUSY when the open job uses the buffer; -EINVAL when its layout does
+/// not fit it; -ENOMEM without scratch memory. The GL core has waited for
+/// the job that rendered it.
+///
+/// Unmeasured on the board: dEQP-GLES3 fbo.blit.depth_stencil on the Pi 4.
+///
+/// # Safety
+/// `dst` holds `h` rows of `pitch` bytes, `w <= pitch`.
+pub unsafe extern "C" fn v3d_stencil_resolve(id: u32, dst: *mut u8, w: u32, h: u32, pitch: u32) -> i32 {
+    let g = g();
+    if !g.inited || id == 0 || dst.is_null() || w > pitch {
+        return 1;
+    }
+    let Some(i) = zs_plane_buf(g, true, id) else { return 1 };
+    if zs_in_open_job(g, i) {
+        return -EBUSY;
+    }
+    let b = g.zsbufs[i];
+    match b.s {
+        ZsKnown::Cleared(v) => {
+            for y in 0..h as usize {
+                // SAFETY: the caller's contract: row `y` holds `w` bytes.
+                unsafe { core::ptr::write_bytes(dst.add(y * pitch as usize), v as u32 as u8, w as usize) };
+            }
+            return 0;
+        }
+        ZsKnown::Stored if !b.msaa && !b.mem.cpu.is_null() => {}
+        _ => return 1,
+    }
+    let Some((l, image)) = zs_cpu_level(&b) else { return -EINVAL };
+    let cpp: u32 = if b.s8 { 1 } else { 4 };
+    let n = b.w as usize * b.h as usize;
+    let mut scratch = OsalGpuMem::ZERO;
+    if osal::gpu_alloc(V3D_HEAP_DATA, n * cpp as usize, OSAL_MEM_DATA, &mut scratch) != 0 || scratch.cpu.is_null() {
+        osal::gpu_free(&mut scratch);
+        glog_once!("yakogl/v3d: no {} bytes to read a stencil plane out of its buffer", n * cpp as usize);
+        return -ENOMEM;
+    }
+    let rows = scratch.cpu as *mut u8;
+    // SAFETY: the buffer's live CPU mapping, `l.size` bytes from `image`
+    // (zs_cpu_level); no job uses it (the GL core waited, the open one
+    // does not).
+    unsafe { osal::cache_invd(image as *mut c_void, l.size as usize) };
+    // SAFETY: as above; `rows` holds `bh` rows of `bw * cpp` bytes.
+    if !unsafe { v3d_tex_load_box(image, &l, 0, 0, 0, b.w, b.h, rows, b.w * cpp) } {
+        osal::gpu_free(&mut scratch);
+        return -EINVAL;
+    }
+    let dst_len = if w == 0 || h == 0 { 0 } else { (h as usize - 1) * pitch as usize + w as usize };
+    // SAFETY: the caller's contract: `h` rows of `pitch` bytes.
+    let dst = unsafe { core::slice::from_raw_parts_mut(dst, dst_len) };
+    let read = if b.s8 {
+        // SAFETY: `rows` holds `n` bytes (allocated above).
+        let bytes = unsafe { core::slice::from_raw_parts(rows as *const u8, n) };
+        ds_plane::read_stencil_s8(bytes, b.w, b.h, dst, w, h, pitch)
+    } else {
+        // SAFETY: `rows` holds `n` words (allocated above).
+        let words = unsafe { core::slice::from_raw_parts(rows as *const u32, n) };
+        ds_plane::read_stencil_d24s8(words, b.w, b.h, dst, w, h, pitch)
+    };
+    osal::gpu_free(&mut scratch);
+    if read.is_err() {
+        return -EINVAL;
+    }
+    0
+}
+
 /// Depth textures and their rendered depth, since init (`V3dState`
 /// `depth_direct`, `depth_resolves`, `depth_refused`): the draw bindings
 /// that sampled a depth buffer directly (`depth_sample`), the CPU resolves
@@ -6747,8 +7023,10 @@ pub static yakogl_backend_v3d: YakoglBackend = YakoglBackend {
     return_mipmap_chain: Some(v3d_return_mipmap_chain),
     linear_row_align: 0,
     uniforms_host_only: true,
-    ds_write: None,
-    stencil_resolve: None,
+    /* the CPU read-modify-write of a ZsBuf (docs/notes/v3d-fbo-blit.md 3.4):
+     * glBlitFramebuffer's depth and stencil between renderbuffers */
+    ds_write: Some(v3d_ds_write),
+    stencil_resolve: Some(v3d_stencil_resolve),
 };
 
 #[cfg(test)]

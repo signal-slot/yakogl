@@ -6,8 +6,8 @@
 //! Run: `cargo test --no-default-features --features
 //! host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d_ds_plane` (the test file needs no feature itself, the module is
 //! included by path and does not depend on the crate; the features only let
-//! the crate build, which cargo does for any test; nothing wires the module
-//! into the back end yet).
+//! the crate build, which cargo does for any test). The back end includes
+//! the same file (src/v3d/backend.rs, `v3d_ds_write` / `v3d_stencil_resolve`).
 //!
 //! The expected values come from a model written apart from the module:
 //! `v3d_depth_resolve` reads a word's depth as `(word >> 8) as f32 /

@@ -9,12 +9,10 @@
 //! convert the UIF level to and from a raster scratch; these functions work on
 //! that scratch only, rows top-down in the layout `v3d_depth_resolve` reads.
 //!
-//! Not wired yet: until the item `v3d-ds-write` includes it from
-//! `src/v3d/backend.rs`, this file is compiled only by `tests/v3d_ds_plane.rs`
-//! (`cargo test --test v3d_ds_plane`). It names nothing of the crate.
-
-// Not every helper is used by the test binary alone.
-#![allow(dead_code)]
+//! `src/v3d/backend.rs` includes it (`#[path]`) for `v3d_ds_write` and
+//! `v3d_stencil_resolve`; `tests/v3d_ds_plane.rs` includes it the same way
+//! and tests it on its own (`cargo test --test v3d_ds_plane`). It names
+//! nothing of the crate.
 
 /// A rectangle or slice the helpers refuse; the wiring maps it to `-EINVAL`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
