@@ -1228,9 +1228,9 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
     });
     /* a cube look-up (fstex_cube_whole: `textureCube(u_s, v_dir)`, its
      * direction an attribute passed through): a complete cube of six faces
-     * is built; a unit with no texture, or an incomplete cube, would be GL's
-     * black texel as a 2D image under a `.cube` look-up, which has no
-     * reference: refused by name */
+     * is built, and so is a unit with no texture or an incomplete cube map:
+     * it reads Mesa's fallback cube of six black faces
+     * (`a_cube_look_up_without_a_cube_map_reads_a_six_face_black_cube`) */
     let cube_vs = "attribute vec4 a_pos; attribute vec3 a_dir; varying vec3 v_dir; \
                    void main() { v_dir = a_dir; gl_Position = a_pos; }";
     let cube_fs = include_str!("../../tools/mali/testdata/fstex_cube_whole.frag");
@@ -1260,8 +1260,8 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         incomplete.textures[0].incomplete = 1;
         let cases: Vec<Case> = vec![
             ("a complete cube map", why(&draw), built),
-            ("a cube look-up, no texture on its unit", why(&unbound), not_built(NOT_BUILT_CUBE_INCOMPLETE)),
-            ("a cube look-up, an incomplete cube map", why(&incomplete), not_built(NOT_BUILT_CUBE_INCOMPLETE)),
+            ("a cube look-up, no texture on its unit", why(&unbound), built),
+            ("a cube look-up, an incomplete cube map", why(&incomplete), built),
         ];
         for (what, got, want) in &cases {
             assert_eq!(got, want, "{what}");
@@ -1305,7 +1305,6 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         INVALID_TEXTURE_STORAGE,
         NOT_BUILT_TEXTURE_FEEDBACK,
         NOT_BUILT_VERTEX_TEXTURES,
-        NOT_BUILT_CUBE_INCOMPLETE,
         frame::INVALID_TEXTURE_ALIGN,
         frame::NOT_BUILT_TEXTURE_SIZE,
     ];
@@ -4562,14 +4561,57 @@ mod gl {
         );
     }
 
+    /// A cube look-up on a unit with no texture, or an incomplete cube map,
+    /// reads Mesa's fallback cube (`_mesa_get_fallback_texture`, Mesa 26.2.1
+    /// src/mesa/main/texobj.c): six 1x1 opaque black faces, one cube
+    /// descriptor like a complete map's, with the incomplete texture's wraps
+    /// and filters. A 2D look-up keeps its single black texel.
+    #[test]
+    fn a_cube_look_up_without_a_cube_map_reads_a_six_face_black_cube() {
+        let base = 0x20_0000u64;
+        let incomplete = backend::GlesTextureBind {
+            type_: backend::GLES_TEXTYPE_CUBE,
+            layers: 6,
+            incomplete: 1,
+            wrap_s: backend::GLES_WRAP_CLAMP_TO_EDGE,
+            wrap_t: backend::GLES_WRAP_MIRRORED_REPEAT,
+            min_linear: 1,
+            linear_filter: 1,
+            ..backend::GlesTextureBind::ZERO
+        };
+        for (what, bind) in [("no texture on the unit", None), ("an incomplete cube map", Some(&incomplete))] {
+            let mut data_m = vec![0u8; 0x1000];
+            let tex = {
+                let mut data = Pool::new("data", base, &mut data_m).unwrap();
+                black_texture(bind, true, &mut data).unwrap()
+            };
+            assert!(tex.is_cube(), "{what}");
+            assert_eq!((tex.width, tex.height, tex.faces, tex.levels), (1, 1, 6, 1), "{what}");
+            for face in 0..6 {
+                let at = (tex.face_gpu(face, 0) - base) as usize;
+                assert_eq!(data_m[at..at + 4], BLACK_TEXEL, "{what}: face {face}");
+            }
+            let (min_nearest, wrap_s, wrap_t) = match bind {
+                None => (true, WrapMode::REPEAT, WrapMode::REPEAT),
+                Some(_) => (false, WrapMode::CLAMP_TO_EDGE, WrapMode::MIRRORED_REPEAT),
+            };
+            assert_eq!((tex.min_nearest, tex.wrap_s, tex.wrap_t), (min_nearest, wrap_s, wrap_t), "{what}");
+        }
+        let mut data_m = vec![0u8; 0x1000];
+        let mut data = Pool::new("data", base, &mut data_m).unwrap();
+        let flat = black_texture(None, false, &mut data).unwrap();
+        assert!(!flat.is_cube());
+        assert_eq!((flat.width, flat.height, flat.faces), (1, 1, 1));
+    }
+
     /// A cube look-up through the GL core (gl_test's texcube pair,
     /// tools/mali/testdata/fstex_cube_whole): with a complete 1x1 cube map
     /// on unit 0 the draw is recorded (one `RUN_IDVS`); with face 5 never
-    /// specified the core marks the bind incomplete and the Mali draw
-    /// refuses it ([`NOT_BUILT_CUBE_INCOMPLETE`]): no `RUN_IDVS`, where a 2D
-    /// black texel through the cube descriptor would have been drawn.
+    /// specified the core marks the bind incomplete and the draw is recorded
+    /// too, reading the one-texel black cube (`black_texture`, Mesa's
+    /// `_mesa_get_fallback_texture`).
     #[test]
-    fn an_incomplete_cube_map_through_the_gl_core_is_refused_at_the_mali_draw() {
+    fn an_incomplete_cube_map_through_the_gl_core_draws_the_black_cube() {
         use crate::gl::program::{glGetAttribLocation, glGetUniformLocation, glUniform1i};
         use crate::gl::texture::{glActiveTexture, glTexParameteri};
         const QUAD: [f32; 12] = [-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
@@ -4616,7 +4658,7 @@ mod gl {
                         .iter()
                         .map(|f| f.iter().filter(|&&w| matches!(Instr::decode(w), Ok(Instr::RunIdvs(_)))).count())
                         .sum();
-                    assert_eq!(draws, usize::from(faces == 6), "{faces} faces specified: the draws recorded");
+                    assert_eq!(draws, 1, "{faces} faces specified: the draws recorded");
                 },
             );
         }

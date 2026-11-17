@@ -278,13 +278,6 @@ pub const NOT_BUILT_TEXTURE_FEEDBACK: &str =
 /// frame builds the vertex texture and sampler tables for one
 /// (`DrawCall::vs_texture`), and a look-up past it would read a descriptor
 /// out of the table (docs/notes/mali-vs-lookups.md §3.3 step 4).
-/// A cube map look-up (`TEX_SINGLE ... .cube`, [`MaliShader::cube_samplers`])
-/// whose unit has no complete cube map: GL reads (0, 0, 0, 1) there, which
-/// Mesa samples from a 1x1 cube of six faces (st/mesa's fallback texture,
-/// texobj.c `_mesa_get_fallback_texture`). This backend's black texel is a
-/// 2D image, and a cube look-up through a 2D descriptor has no reference.
-pub const NOT_BUILT_CUBE_INCOMPLETE: &str =
-    "mali: a cube map look-up whose unit has no complete cube map (GL's black texel as a cube) is not built yet";
 pub const NOT_BUILT_VERTEX_TEXTURES: &str = "mali: a vertex shader that reads more than one texture is not built yet";
 /// A frame starts from the old image and the preload program did not build
 /// at init (its log line says why).
@@ -2215,9 +2208,11 @@ fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option
 
 /// The texture at descriptor index `index` of the draw's fragment (or,
 /// `vertex`, vertex) shader, sampler binding `binding` ([`texture_of`]).
-/// A cube look-up needs a complete cube map on its unit: GL's black texel
-/// is bound as a 2D image here, so a unit with none, or an incomplete one,
-/// is refused by name ([`NOT_BUILT_CUBE_INCOMPLETE`]).
+/// A cube look-up on a unit with no texture, or an incomplete cube map,
+/// reads a one-texel black cube of six faces, as Mesa's fallback texture of
+/// the target's kind does (`_mesa_get_fallback_texture`, src/mesa/main/
+/// texobj.c, Mesa 26.2.1), through the same cube descriptor as a complete
+/// one ([`black_texture`]).
 fn stage_texture(
     d: &GlesDraw,
     vertex: bool,
@@ -2231,9 +2226,50 @@ fn stage_texture(
     let cubes = unsafe { sh.as_ref() }.and_then(MaliShader::of).map_or(0, |r| r.cube_samplers);
     let cube = cubes.checked_shr(index as u32).is_some_and(|c| c & 1 != 0);
     if cube && bind.is_none_or(|t| t.incomplete != 0) {
-        return Err(FrameError::NotBuilt(NOT_BUILT_CUBE_INCOMPLETE));
+        return black_texture(bind, true, data);
     }
     texture_of(bind, data)
+}
+
+/// The texture of a sampler with no texels: one opaque black texel, as a 2D
+/// image, or, `cube`, six faces of it stacked at the row pitch
+/// ([`frame::SampledTexture::face_gpu`]), with the GL state's wraps and
+/// filters when `bind` is an incomplete texture.
+fn black_texture(
+    bind: Option<&backend::GlesTextureBind>,
+    cube: bool,
+    data: &mut Pool,
+) -> Result<frame::SampledTexture, FrameError> {
+    let faces = if cube { 6 } else { 1 };
+    let mut texels = [0u8; 6 * TEXTURE_ROW_ALIGN as usize];
+    for face in 0..6 {
+        let at = face * TEXTURE_ROW_ALIGN as usize;
+        texels[at..at + 4].copy_from_slice(&BLACK_TEXEL);
+    }
+    let b = data.upload(&texels[..faces * TEXTURE_ROW_ALIGN as usize], u64::from(TEXTURE_ROW_ALIGN))?;
+    let mut level = [frame::TextureLevel::default(); frame::MAX_TEXTURE_LEVELS];
+    level[0] = frame::TextureLevel { gpu: b.gpu, row_stride: TEXTURE_ROW_ALIGN };
+    let f = texel_format(backend::GLES_TEXFMT_RGBA8).ok_or(FrameError::Invalid(INVALID_TEXTURE_STORAGE))?;
+    Ok(frame::SampledTexture {
+        width: 1,
+        height: 1,
+        level,
+        levels: 1,
+        faces: faces as u32,
+        array: false,
+        volume: false,
+        format: f.format,
+        clump: f.clump,
+        block_bytes: 0,
+        swizzle: f.swizzle,
+        min_nearest: bind.is_none_or(|t| t.min_linear == 0),
+        mag_nearest: bind.is_none_or(|t| t.linear_filter == 0),
+        mipmap: MipmapMode::NONE,
+        wrap_s: bind.map_or(WrapMode::REPEAT, |t| wrap_of(t.wrap_s)),
+        wrap_t: bind.map_or(WrapMode::REPEAT, |t| wrap_of(t.wrap_t)),
+        wrap_r: bind.map_or(WrapMode::REPEAT, |t| wrap_of(t.wrap_r)),
+        compare: bind.and_then(compare_of),
+    })
 }
 
 /// The texture a look-up of `bind` reads: its
@@ -2248,36 +2284,10 @@ pub(super) fn texture_of(
     data: &mut Pool,
 ) -> Result<frame::SampledTexture, FrameError> {
     let not_built = |why| Err(FrameError::NotBuilt(why));
-    let wrap = wrap_of;
     let t = match bind {
         Some(t) if t.incomplete == 0 => t,
         /* no texels: one black texel, the GL state's wraps and filters */
-        _ => {
-            let b = data.upload(&BLACK_TEXEL, u64::from(TEXTURE_ROW_ALIGN))?;
-            let mut level = [frame::TextureLevel::default(); frame::MAX_TEXTURE_LEVELS];
-            level[0] = frame::TextureLevel { gpu: b.gpu, row_stride: TEXTURE_ROW_ALIGN };
-            let f = texel_format(backend::GLES_TEXFMT_RGBA8).ok_or(FrameError::Invalid(INVALID_TEXTURE_STORAGE))?;
-            return Ok(frame::SampledTexture {
-                width: 1,
-                height: 1,
-                level,
-                levels: 1,
-                faces: 1,
-                array: false,
-                volume: false,
-                format: f.format,
-                clump: f.clump,
-                block_bytes: 0,
-                swizzle: f.swizzle,
-                min_nearest: bind.is_none_or(|t| t.min_linear == 0),
-                mag_nearest: bind.is_none_or(|t| t.linear_filter == 0),
-                mipmap: MipmapMode::NONE,
-                wrap_s: bind.map_or(WrapMode::REPEAT, |t| wrap(t.wrap_s)),
-                wrap_t: bind.map_or(WrapMode::REPEAT, |t| wrap(t.wrap_t)),
-                wrap_r: bind.map_or(WrapMode::REPEAT, |t| wrap(t.wrap_r)),
-                compare: bind.and_then(compare_of),
-            });
-        }
+        _ => return black_texture(bind, false, data),
     };
     let levels = levels_of(t);
     /* a cube map is six faces stacked in one image, `height` every face's

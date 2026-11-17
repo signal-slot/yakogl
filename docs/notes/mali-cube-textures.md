@@ -942,3 +942,43 @@ an ES 2.0 build, but the Mali compile entry points never apply it (inv-vcube's
 finding). Applying it is a change in `src/shaderc/online/mali/`, which this item
 does not make. The 138 fragment-stage cube cases are compile refusals today.
 Once compiled, they take the same sampler.
+
+## (j) A cube look-up without a complete cube map: Mesa's fallback cube
+
+ES 2.0 3.8.2: a sampler whose texture is incomplete, or whose unit has no
+texture object with images, samples (0, 0, 0, 1). Mesa 26.2.1 does it with a
+texture of the target's kind: `_mesa_get_fallback_texture`
+(src/mesa/main/texobj.c) makes a one-texel opaque black texture of the
+sampler's target, and for `GL_TEXTURE_CUBE_MAP` its six faces; st/mesa
+binds it in place of the incomplete object, and panfrost then emits an ordinary
+cube texture descriptor for it. Nothing in the shader changes.
+
+The Mali back end did the same for a 2D look-up (`BLACK_TEXEL`) but refused
+a cube look-up with `NOT_BUILT_CUBE_INCOMPLETE`, since a 2D image under a
+`.cube` look-up has no reference. That refusal and its constant are gone
+(the 16 `texture.completeness.cube.*` cases of docs/es2-cts-failures.md
+M.1 row 6, row `T6S1R11`). `stage_texture` (src/mali/backend.rs) now calls
+`black_texture(bind, cube, data)` for a cube sampler whose bind is None or
+incomplete: one RGBA8 texel `[0, 0, 0, 0xff]` per face, six faces stacked at
+the 64-byte row pitch (`SampledTexture::face_gpu`), 1x1, one level, six
+faces, so `SampledTexture::is_cube` holds and the descriptor is the one a
+complete cube gets (section (c)). The sampler words come from the GL state
+(wraps, filters) of an incomplete bind and the GL defaults for an unbound
+unit, as for the 2D black texel; there is no mipmap, as Mesa's fallback has
+one level.
+
+Tests:
+
+- `mali::backend::tests::a_cube_look_up_without_a_cube_map_reads_a_six_face_black_cube`
+  (src/mali/backend_tests.rs): the six faces' texels, the 1x1 extent, the
+  sampler state; the refusal table's cube rows now read "built", and
+  `an_incomplete_cube_map_through_the_gl_core_draws_the_black_cube` draws a
+  cube with face 5 never specified through the GL core.
+- `tests/mali_cube_complete.rs`: the GL sequences of
+  es2fTextureCompletenessTests.cpp's cube cases (size, format, missing and
+  extra level, empty object, no texture, the default cube texture's wrap
+  cases) through the GL core on the Mali mock; no draw is refused.
+
+No drm-shim descriptor of Mesa's fallback cube was compared: `MESA_PAN_TREE`
+was not set on the machine that made this change. The descriptor fields are
+those already compared for a complete cube (sections (a) and (e)).
