@@ -45,8 +45,9 @@ use super::fau;
 use super::select::{self, generic_layout, VaryingAt, MAX_VARYINGS};
 use super::{Defect, MaliError};
 use crate::gl::consts::{
-    GL_BOOL, GL_FLOAT, GL_FLOAT_MAT4, GL_FLOAT_VEC2, GL_FLOAT_VEC3, GL_FLOAT_VEC4, GL_INT, GL_INT_VEC2, GL_INT_VEC3,
-    GL_INT_VEC4, GL_UNSIGNED_INT, GL_UNSIGNED_INT_VEC2, GL_UNSIGNED_INT_VEC3, GL_UNSIGNED_INT_VEC4,
+    GL_BOOL, GL_BOOL_VEC2, GL_BOOL_VEC3, GL_BOOL_VEC4, GL_FLOAT, GL_FLOAT_MAT2, GL_FLOAT_MAT3, GL_FLOAT_MAT4,
+    GL_FLOAT_VEC2, GL_FLOAT_VEC3, GL_FLOAT_VEC4, GL_INT, GL_INT_VEC2, GL_INT_VEC3, GL_INT_VEC4, GL_UNSIGNED_INT,
+    GL_UNSIGNED_INT_VEC2, GL_UNSIGNED_INT_VEC3, GL_UNSIGNED_INT_VEC4,
 };
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::fold;
@@ -1028,6 +1029,15 @@ pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl
         GL_FLOAT_VEC3 => 3,
         GL_FLOAT_VEC4 => 4,
         GL_FLOAT_MAT4 => 16,
+        /* a mat2 or mat3: Mesa's packed columns, no padding (4 and 9 words,
+         * `glsl_count_dword_slots`; vsmat2_highp, vsmat3_highp), each
+         * column its own load ([`matrix_cols`]) */
+        GL_FLOAT_MAT2 => 4,
+        GL_FLOAT_MAT3 => 9,
+        /* a bvec's lanes are 32-bit words, as a bool's (vsbvec3) */
+        GL_BOOL_VEC2 => 2,
+        GL_BOOL_VEC3 => 3,
+        GL_BOOL_VEC4 => 4,
         /* an int or a bool is one 32-bit word a component, raw bits
          * (docs/notes/mali-int-uniforms.md: Mesa's packed block, a word
          * per component; intuni_ishr's `ivec2 v` at `u2.w0`, `u2.w1`) */
@@ -1041,6 +1051,19 @@ pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl
     Ok((u, comps))
 }
 
+/// A square float matrix's (columns, rows, front-end column stride): the
+/// front end strides a column to the alignment of a vector of its rows
+/// (reflect.rs `type_layout`: a mat2 column 2 dwords, a mat3's 4), Mesa's
+/// packed block does not ([`select::UboLayout`] lays one row a column).
+pub(super) fn matrix_cols(gl_type: u16) -> Option<(u16, u16, u16)> {
+    match gl_type as u32 {
+        GL_FLOAT_MAT2 => Some((2, 2, 2)),
+        GL_FLOAT_MAT3 => Some((3, 3, 4)),
+        GL_FLOAT_MAT4 => Some((4, 4, 4)),
+        _ => None,
+    }
+}
+
 /// Uniform `u` of a vertex shader is an fp16 uniform: a float, vec2, vec3,
 /// vec4 or mat4 that is no array, declared mediump or lowp (`fp16` names
 /// those). `lower_variables_visitor::visit(ir_variable)`
@@ -1052,7 +1075,10 @@ pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl
 /// Another type or an array of that precision has no reference: refused
 /// (mod.rs, [`MaliError::UniformPrecision`]).
 pub(super) fn fp16_uniform(u: &ir::UniformDecl<'_>, fp16: &dyn Fn(&str) -> bool) -> bool {
-    let float = matches!(u.gl_type as u32, GL_FLOAT | GL_FLOAT_VEC2 | GL_FLOAT_VEC3 | GL_FLOAT_VEC4 | GL_FLOAT_MAT4);
+    let float = matches!(
+        u.gl_type as u32,
+        GL_FLOAT | GL_FLOAT_VEC2 | GL_FLOAT_VEC3 | GL_FLOAT_VEC4 | GL_FLOAT_MAT2 | GL_FLOAT_MAT3 | GL_FLOAT_MAT4
+    );
     float && u.array_len <= 1 && fp16(u.name)
 }
 
@@ -2450,11 +2476,14 @@ fn vs_is_fmul(vs: &Nir<'_>, v: Val) -> bool {
 /// A front-end `ffma` is a matrix product's term (`mat_times_column` under
 /// `gpu-mali`): the column a uniform load of a mat4, the scale a splat lane.
 pub(super) fn is_mat_term(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
-    let col = match m.def(srcs[0].val) {
-        Some(IrOp::LoadUniform { dword_off, comps: 4 }) => *dword_off,
+    let (col, comps) = match m.def(srcs[0].val) {
+        Some(IrOp::LoadUniform { dword_off, comps }) => (*dword_off, u16::from(*comps)),
         _ => return false,
     };
-    let is_mat = uniform_of(m, col).is_ok_and(|(u, _)| u.gl_type as u32 == GL_FLOAT_MAT4);
+    /* a mat2's or mat3's column too (vsmat3_highp's `u_in1 * vec3`: the
+     * `FMA.f32` chain of each lane, the column's words in the FAU) */
+    let is_mat = uniform_of(m, col)
+        .is_ok_and(|(u, _)| matrix_cols(u.gl_type).is_some_and(|(_, rows, _)| rows == comps) && u.array_len <= 1);
     let splat = srcs[1].swizzle.iter().all(|&s| s == srcs[1].swizzle[0]);
     let acc = matches!(m.def(srcs[2].val), Some(IrOp::Alu(AluOp::Fmul | AluOp::Ffma, _)));
     is_mat && splat && acc
@@ -2587,9 +2616,9 @@ fn vs_dot_factored(
 /// 0 to 3.
 fn mat_column(m: &Module<'_>, srcs: &[ir::Src; 3]) -> Option<u16> {
     match m.def(srcs[0].val) {
-        Some(IrOp::LoadUniform { dword_off, .. }) => {
-            uniform_of(m, *dword_off).ok().map(|(u, _)| (*dword_off - u.dword_off) / 4)
-        }
+        Some(IrOp::LoadUniform { dword_off, .. }) => uniform_of(m, *dword_off)
+            .ok()
+            .and_then(|(u, _)| Some((*dword_off - u.dword_off) / matrix_cols(u.gl_type)?.2)),
         _ => None,
     }
 }
@@ -3065,7 +3094,9 @@ fn walk<'s>(
                 }
                 /* the load Mesa makes: the whole vector, or one column, or
                  * one element of a vec4 array */
-                let (base, size) = if total == 16 || u.array_len > 1 {
+                let (base, size) = if let Some((_, rows, stride)) = matrix_cols(u.gl_type) {
+                    (u.dword_off + (dword_off - u.dword_off) / stride * stride, rows)
+                } else if u.array_len > 1 {
                     (u.dword_off + (dword_off - u.dword_off) / 4 * 4, 4)
                 } else {
                     (u.dword_off, total)
@@ -3199,6 +3230,9 @@ fn walk<'s>(
                         {
                             return Err(MaliError::ArithConstant);
                         }
+                        /* a mat3's or mat2's column has no lane past its rows
+                         * (the front end's term is four lanes wide) */
+                        AluOp::Ffma if is_mat_term(m, &s) && (x(0) == Val::Undef || x(2) == Val::Undef) => Val::Undef,
                         AluOp::Ffma if is_mat_term(m, &s) => {
                             vs.note(Prod::MatProduct);
                             vs.alu(Alu::Ffma, x(0), x(1), x(2))?
@@ -4151,6 +4185,7 @@ fn shrink(vs: &mut Nir<'_>, m: &Module<'_>) -> Result<(), MaliError> {
             Kind::Uniform { dword, comps } => {
                 let (u, total) = uniform_of(m, dword)?;
                 let p = match total {
+                    _ if matrix_cols(u.gl_type).is_some() => Prod::UniformMat4Column,
                     _ if u.array_len > 1 => Prod::UniformVec4,
                     1 => Prod::UniformFloat,
                     2 => Prod::UniformVec2,
