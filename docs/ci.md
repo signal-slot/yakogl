@@ -327,9 +327,9 @@ The CI machine is 8 vCPU / 12 GB (`tools/env/yakogl-gate.yaml`), so a run
 gets 3 compiler slots (run 43372841985 printed "3 compiler slot(s) (11247 MB
 available, 3072 MB each, 8 cores)"). The size stays 12 GB because the hosts'
 real memory is the limit: on 2026-11-14, 39 CI machines filled every host
-(thinkcentre 0 GB free, system76 3 GB, n5max 7 GB, hx90-2 14 GB). A bigger
-machine adds no cores to the farm, it only lowers how many run at once; nuc
-and hx90 (15 GB hosts) cannot hold a 28 GB machine at all. The job count
+(the four hosts had 0, 3, 7 and 14 GB free). A bigger machine adds no cores
+to the farm, it only lowers how many run at once; the two 15 GB hosts cannot
+hold a 28 GB machine at all. The job count
 (half the cores, 4 on 8) is set by the job's first step in `gate.yml` from
 `nproc`.
 
