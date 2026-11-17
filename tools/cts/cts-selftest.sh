@@ -942,6 +942,11 @@ malicheck 51 mali-deqp-build-selftest.sh 29
 # 52: mali-family-tree.py builds the tree table of the compile-refused cases by family.
 malicheck 52 mali-family-tree-selftest.sh 16
 
+# 53: imx8mp-gles3-slice.py writes an i.MX8MP dEQP-GLES3 slice README from a
+# session's board.sh output; the committed 9bc82915 rows17-34 slice is rebuilt
+# and passes merge --check --partial and redact --check, bad input is refused.
+gl3check 53 imx8mp-gles3-slice-selftest.sh "a slice README rebuilt from verdict lines, bad input refused"
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
