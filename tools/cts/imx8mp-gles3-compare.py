@@ -7,8 +7,12 @@
       [--causes tools/cts/imx8mp-gles3-causes.tsv] [--table tools/cts/imx8mp-gles3-tree.txt]
       [--examples N] [--tsv]
 
-Inputs: "<outcome>\\t<case>[\\t<message>]" (docs/es3/am62p-gles3-notpass.tsv) or
-"[<record>:]<outcome> <case>" (the output of imx8mp-gles3-merge.py --notpass); '#' lines are headers.
+Inputs: "<outcome>\\t<case>[\\t<message>]" (docs/es3/am62p-gles3-notpass.tsv), the case-first
+"[<gpu>\\t]<case>\\t<outcome>[\\t...]" (docs/es3/host-gc-gles3-5454be1b/host-gc-gles3-notpass.tsv;
+its 'gpu\\tcase\\tstatus...' column row is skipped) or "[<record>:]<outcome> <case>" (the output of
+imx8mp-gles3-merge.py --notpass); '#' lines are headers. Each tab line's layout is told by its fields:
+the case starts with 'dEQP-GLES3.' and the outcome is a dEQP status word (STATUS_WORDS); a line that
+fits neither layout is refused with its file and line number.
 
 Verdict of each board case:
   host-predicted  the host list has the case with the same outcome, or both outcomes are
@@ -31,18 +35,37 @@ import sys
 LINE_RE = re.compile(r"^(?:(\S+?):)?([A-Za-z]+)\s+(dEQP-\S+)")
 FAIL_LIKE = {"fail", "crash", "timeout", "resourceerror", "internalerror", "hang", "watchdog"}
 VERDICTS = ("host-predicted", "host-other", "board-only")
+# imx8mp-gles3-merge.py's STATUSES, lower case, plus the fail-like words above
+STATUS_WORDS = {"pass", "fail", "notsupported", "qualitywarning", "compatibilitywarning",
+                "resourceerror", "internalerror", "crash", "timeout", "noresult"} | FAIL_LIKE
+CASE_PREFIX = "dEQP-GLES3."
+
+
+def parse_tab_row(path, n, line):
+    """(outcome, case, message) of a tab line, outcome-first or case-first; None for a column row."""
+    p = [x.strip() for x in line.split("\t")]
+    if len(p) > 1 and p[0].lower() in STATUS_WORDS and p[1].startswith(CASE_PREFIX):
+        return p[0], p[1], p[2] if len(p) > 2 else ""
+    for i in (0, 1):  # case-first, optionally behind a gpu column
+        if len(p) > i + 1 and p[i].startswith(CASE_PREFIX) and p[i + 1].lower() in STATUS_WORDS:
+            return p[i + 1], p[i], ""
+    if p[:3] == ["gpu", "case", "status"] or p[:2] == ["case", "status"]:
+        return None
+    sys.exit(f"{path}:{n}: neither '<outcome>\\t{CASE_PREFIX}...' nor "
+             f"'[<gpu>\\t]{CASE_PREFIX}...\\t<outcome>' (outcome a dEQP status word): {line[:100]}")
 
 
 def parse_notpass(path):
     rows = []
     with open(path, encoding="utf-8", errors="replace") as f:
-        for raw in f:
+        for n, raw in enumerate(f, 1):
             line = raw.rstrip("\n")
             if not line.strip() or line.startswith("#"):
                 continue
             if "\t" in line:
-                p = line.split("\t")
-                rows.append((p[0].strip(), p[1].strip(), p[2].strip() if len(p) > 2 else ""))
+                r = parse_tab_row(path, n, line)
+                if r:
+                    rows.append(r)
             else:
                 m = LINE_RE.match(line)
                 if not m:
