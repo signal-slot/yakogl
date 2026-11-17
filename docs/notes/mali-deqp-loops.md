@@ -631,22 +631,22 @@ characters dEQP writes (`\t` before a `while`/`do` counter) are kept.
 LLVM_DIR=/usr/lib/llvm-21 tools/mali/drm_shim_ref.sh build \
     $CONNECTED_DEPS_DIR/downloads/mesa-26.2.1.tar.xz $CONNECTED_DEPS_DIR/mesa-shim   # once
 tools/mali/drm_shim_ref.sh run $CONNECTED_DEPS_DIR/mesa-shim \
-    tools/mali/testdata/deqp_loops_<name>.vert tools/mali/testdata/deqp_loops_<name>.frag <out>/deqp_loops_<name>
+    tools/mali/testdata/deqp_loops_<name>.vert tools/mali/testdata/deqp_loops_<name>.frag <out>/deqp_loops_<name> \
+    --uniform-values
 python3 -I tools/mali/pan_ref_diff.py extract <out>/deqp_loops_<name>.trace --draw \
     > tools/mali/testdata/deqp_loops_<name>.expect.json
 ```
 
 The tarball's sha256 matches `third_party/mesa-26.2.1/UPSTREAM`. The draw
-is gl_ref.py's default: 64x64, triangles, **no `--uniform-values`**. That is
-how `gm2_intloop_*` were made: the build gives `gm2_intloop_uniform_fs` and
-`gm2_intloop_const_vs` again byte for byte, apart from the uniforms' FAU
-words when `--uniform-values` is passed. gl_ref.py does not set a `bool`
-uniform (`ub_true`), and a uniform's value does not change the program, so
-every uniform FAU word in these references is 0. The build was checked
+is 64x64, triangles, with `--uniform-values`, as `deqp_ref.sh` draws:
+gl_ref.py gives an `int` uniform its values as integers and a `bool` one
+(`ub_true`) true where its component is even. A uniform's value does not
+change the program: `gm2_intloop_*` were made without the flag, and the
+build gives `gm2_intloop_uniform_fs` and `gm2_intloop_const_vs` again byte
+for byte, apart from the uniforms' FAU words. The build was checked
 first: `gm2_cf_loop_uni_vs` and `gm2_cf_ifelse_fs`, made with
 `--uniform-values` as they were, are byte-identical. All 26 references were
 made twice, and the two sets of `expect.json` are byte-identical.
-`deqp_ref.sh` was not used, because it always passes `--uniform-values`.
 
 **Comparing.** A kept loop (`loops` 1 or 2 below) carries the pass counter
 the walk adds (`mali-loop-board-failures.md`), which these words do not

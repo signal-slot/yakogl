@@ -38,9 +38,8 @@ const VS_UNIFORM16: &str = "a vertex shader uniform that is not highp (Mesa's fp
 /// `vsstruct_rip` since plan #377's lower-intval-1 took the `isOk` result in
 /// the fragment colour, `bool_colour`; `fsmat4_mediump` since its constop
 /// lowering took a `vec4(.., 1.0)` colour lane beside a computed one;
-/// `fsmat2_mediump`, `vsbvec3`, `vsmat2_mediump` and `vsmat3_mediump` since
-/// lower-unitype: the mat2 columns' `vec16.rs` chunks, the bvec3 `all(==)`
-/// as `LSHIFT_OR.i32` of the words into one `CSEL.u32.eq`, and the vertex
+/// `fsmat2_mediump`, `vsmat2_mediump` and `vsmat3_mediump` since
+/// lower-unitype: the mat2 columns' `vec16.rs` chunks and the vertex
 /// walk's fp16 arithmetic of fp16 uniform words and narrowed mediump
 /// attributes, nir.rs `vs_alu16u`).
 const MATCHED: &[&str] = &[
@@ -52,7 +51,6 @@ const MATCHED: &[&str] = &[
     "vsstruct_partial",
     "vsstruct_rip",
     "fsmat2_mediump",
-    "vsbvec3",
     "vsmat2_mediump",
     "vsmat3_mediump",
 ];
@@ -75,7 +73,12 @@ const MATCHED: &[&str] = &[
 /// `depthrange_fs` since plan #377's constop lowering takes its colour:
 /// Mesa's `diff * 0.5 + 0.5` is an `FMA.f32` narrowed after, ours an
 /// `FMA.v2f16` of the narrowed `diff`.
-const DIFFERS: &[&str] = &["vsmat3_lowp", "vsapi_mat2", "vsapi_struct", "vsstruct_add", "depthrange_fs"];
+/// `vsbvec3` (the bvec3 `all(==)` as `LSHIFT_OR.i32` of the words into one
+/// `CSEL.u32.eq`, lower-unitype) has Mesa's program words, but not its FAU:
+/// Mesa's three uniform words start with `u_var.y` (0, `ffffffff`,
+/// `ffffffff` for the draw's true, false, true), ours are x, y, z. The
+/// reference drawn with every uniform 0 could not show it.
+const DIFFERS: &[&str] = &["vsmat3_lowp", "vsapi_mat2", "vsapi_struct", "vsstruct_add", "depthrange_fs", "vsbvec3"];
 
 /// Every refused reference with its refusal, without the `Valhall: `
 /// prefix and the ` is not lowered yet` suffix.
@@ -182,11 +185,11 @@ fn vsapi_struct() {
     mali_ref::assert_matches("deqp_unitype_vsapi_struct");
 }
 
-/// Drawn with its bool uniform unset (gl_ref.py's `--uniform-values` sets
-/// no bool): every uniform word 0.
+/// Drawn with `--uniform-values`: the bvec3 is true, false, true.
 #[test]
+#[ignore = "differs: Mesa's FAU holds the bvec3 uniform's y word first (the order its program reads them), ours x, y, z; the program words are equal"]
 fn vsbvec3() {
-    mali_ref::assert_matches_unset("deqp_unitype_vsbvec3");
+    mali_ref::assert_matches("deqp_unitype_vsbvec3");
 }
 
 #[test]

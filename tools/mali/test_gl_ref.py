@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""Tests of gl_ref.py's `--instances`/`--divisors` layout and of
-pan_ref_diff.py's `--instanced` extraction that need no Mesa build.
+"""Tests of gl_ref.py's `--uniform-values` values and `--instances`/
+`--divisors` layout and of pan_ref_diff.py's `--instanced` extraction that
+need no Mesa build.
 
     python3 -I tools/mali/test_gl_ref.py
 
@@ -79,6 +80,18 @@ Position FAU @7ffffffce000:
   Vertex offset: 0
   Instance offset: 0
 """
+
+
+class UniformValues(unittest.TestCase):
+    def test_values_by_type(self):
+        self.assertEqual(gl_ref.uniform_components(0, "vec2"), (True, [16.0, 17.0]))
+        self.assertEqual(gl_ref.uniform_components(1, "ivec3"), (False, [32, 33, 34]))
+        # a bool is true where its component is even: both values in a bvecN
+        self.assertEqual(gl_ref.uniform_components(2, "bool"), (False, [1]))
+        self.assertEqual(gl_ref.uniform_components(2, "bvec4"), (False, [1, 0, 1, 0]))
+
+    def test_a_type_without_values_is_named(self):
+        self.assertIsNone(gl_ref.uniform_components(0, "Light"))
 
 
 class InstanceLayout(unittest.TestCase):

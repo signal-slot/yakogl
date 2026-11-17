@@ -4,7 +4,7 @@
 //! program against an expect.json reference. Two references the compiler
 //! already matches (`tools/mali/testdata/cases.txt`: `tri` and
 //! `tri_varying`, every region `equal`), a changed shader that must differ,
-//! and one refused shape.
+//! one refused shape, and the uniform words of each GL type.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_ref_selftest
@@ -59,4 +59,22 @@ fn a_refused_shape_stays_refused() {
 fn a_pair_that_compiles_is_not_refused() {
     let r = mali_ref::Reference::load("tri");
     mali_ref::assert_refused(&r.vs, &r.fs, "anything");
+}
+
+/// The word `gl_ref.py --uniform-values` leaves in a reference follows the
+/// uniform's GL type, as Mesa uploads it (measured: the ivec3 of
+/// `deqp_intval_reslib_mixed_fs` is `00000010 00000011 00000012`, the bvec3
+/// of `deqp_intval_reslib_bvec_fs` is `ffffffff 00000000 ffffffff`).
+#[test]
+fn a_uniform_word_follows_its_gl_type() {
+    use yakogl::gl::consts as gl;
+    let ty = |t: u32| u16::try_from(t).expect("a GL type fits 16 bits");
+    let names = ["u_f".to_string(), "u_i".to_string(), "u_b".to_string()];
+    let rows = [
+        ("u_f".to_string(), 0, 2, ty(gl::GL_FLOAT_VEC2)),
+        ("u_i".to_string(), 2, 3, ty(gl::GL_INT_VEC3)),
+        ("u_b".to_string(), 5, 3, ty(gl::GL_BOOL_VEC3)),
+    ];
+    let words: Vec<u32> = (0..8).map(|d| mali_ref::uniform_value(&names, &rows, d)).collect();
+    assert_eq!(words, [16f32.to_bits(), 17f32.to_bits(), 32, 33, 34, u32::MAX, 0, u32::MAX]);
 }

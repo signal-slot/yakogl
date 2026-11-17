@@ -17,9 +17,11 @@
 //!   `link`), as `tests/mali_glmark2_corpus.rs` does.
 //! * [`assert_matches`] compares per region: the words (a differing word is
 //!   listed with both disassemblies), the facts, the FAU words (computed
-//!   for gl_ref.py's draw, a 64x64 target, and its `--uniform-values`;
-//!   [`assert_matches_unset`] for a reference drawn without that option,
-//!   every uniform word 0), the secondary offset and the zero padding.
+//!   for gl_ref.py's draw, a 64x64 target, and its `--uniform-values`),
+//!   the secondary offset and the zero padding. Every `deqp_*` reference
+//!   is compared this way. [`assert_matches_unset`] is for a reference of
+//!   another family drawn without that option (`gm2_*`, `varymerge_*`),
+//!   every uniform word 0; it refuses a `deqp_*` name.
 //! * [`assert_refused`] / [`assert_refused_ref`]: the pair still refuses,
 //!   with the code generator's `MaliError` text containing a given text.
 //!
@@ -60,8 +62,7 @@ pub struct Reference {
     /// The draw set the uniforms (gl_ref.py's `--uniform-values`, the
     /// default of `tools/mali/deqp_ref.sh`): each FAU word of a uniform is
     /// compared against that value. False for a reference drawn without it
-    /// (`drm_shim_ref.sh run` as the `deqp_intval_*` references were, whose
-    /// `bool` uniforms the option cannot set): every uniform word is 0.
+    /// ([`Reference::load_unset`]): every uniform word is 0.
     pub uniform_values: bool,
 }
 
@@ -81,8 +82,12 @@ impl Reference {
         }
     }
 
-    /// [`Reference::load`] of a reference drawn without `--uniform-values`.
+    /// [`Reference::load`] of a reference drawn without `--uniform-values`
+    /// (`drm_shim_ref.sh run`, as the `gm2_*` families are). Not for a
+    /// `deqp_*` reference: those are all drawn with the option, unless
+    /// they have a struct uniform, which [`differences`] sees by itself.
     pub fn load_unset(name: &str) -> Reference {
+        assert!(!name.starts_with("deqp_"), "{name}: a deqp_* reference is drawn with --uniform-values; use load");
         Reference { uniform_values: false, ..Reference::load(name) }
     }
 }
@@ -98,8 +103,8 @@ pub struct Stage {
     /// store (`MaliShader::no_psiz_offset`), which a draw of triangles runs.
     pub no_psiz: Option<u32>,
     pub fau: Vec<FauWord>,
-    /// The uniform rows (name, first dword, dwords).
-    pub uniforms: Vec<(String, u16, u16)>,
+    /// The uniform rows (name, first dword, dwords, GL type).
+    pub uniforms: Vec<(String, u16, u16, u16)>,
 }
 
 pub struct Pair {
@@ -148,7 +153,7 @@ fn stage_of(sh: &ShcShader) -> Stage {
         rows.iter()
             .map(|u| {
                 let b: Vec<u8> = u.name.iter().map(|&b| b as u8).take_while(|&b| b != 0).collect();
-                (String::from_utf8_lossy(&b).into_owned(), u.dword_off, u.dwords)
+                (String::from_utf8_lossy(&b).into_owned(), u.dword_off, u.dwords, u.gl_type)
             })
             .collect()
     };
@@ -281,11 +286,8 @@ pub fn word_diff(name: &str, ours: &[u64], theirs: &[u64]) -> Option<String> {
 
 /// The uniforms a program declares, in gl_ref.py's `uniforms()` order: the
 /// vertex shader's, then the fragment shader's not already declared.
-/// Each uniform declared, by name in declaration order, and whether its
-/// type is an `int`/`ivecN` (gl_ref.py's `INT_UNIFORM_COMPONENTS`, set
-/// with glUniform*iv: the value is the integer, not its float's bits).
-fn uniform_names(vs: &str, fs: &str) -> Vec<(String, bool)> {
-    let mut out: Vec<(String, bool)> = Vec::new();
+fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
     for text in [vs, fs] {
         let mut t = String::new();
         let mut rest = text;
@@ -302,12 +304,11 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<(String, bool)> {
                 continue;
             }
             let skip = if matches!(w.get(1), Some(&("lowp" | "mediump" | "highp"))) { 3 } else { 2 };
-            let int = matches!(w.get(skip - 1), Some(&("int" | "ivec2" | "ivec3" | "ivec4")));
             let names = w.get(skip..).unwrap_or(&[]).join(" ");
             for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
                 let name = name.to_string();
-                if !out.iter().any(|o| o.0 == name) {
-                    out.push((name, int));
+                if !out.contains(&name) {
+                    out.push(name);
                 }
             }
         }
@@ -316,28 +317,39 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<(String, bool)> {
 }
 
 /// The value gl_ref.py's `--uniform-values` gave uniform dword `d`
-/// (component c of uniform k: 16 (k + 1) + c), as fp32 bits; an array
-/// declarator gets none (its location lookup is -1), so 0.
-fn uniform_value(names: &[(String, bool)], rows: &[(String, u16, u16)], d: u16) -> u32 {
-    let (name, first, _) = rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
+/// (`uniform_components()`: component c of uniform k is 16 (k + 1) + c),
+/// as the word Mesa uploads: fp32 bits, the integer of an `int` / `ivecN`,
+/// and of a `bool` / `bvecN` (true where c is even) Mesa's true, all ones,
+/// or 0. An array declarator gets none (its location lookup is -1), so 0.
+pub fn uniform_value(names: &[String], rows: &[(String, u16, u16, u16)], d: u16) -> u32 {
+    use yakogl::gl::consts as gl;
+    let (name, first, _, ty) = rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
     /* the built-in's state, glDepthRangef(0, 1) by default: near, far, diff */
     match name.as_str() {
         "gl_DepthRange.near" => return 0f32.to_bits(),
         "gl_DepthRange.far" | "gl_DepthRange.diff" => return 1f32.to_bits(),
         _ => {}
     }
-    if names.iter().any(|(n, _)| n.strip_prefix(name.as_str()).is_some_and(|t| t.starts_with('['))) {
+    if names.iter().any(|n| n.strip_prefix(name.as_str()).is_some_and(|t| t.starts_with('['))) {
         return 0;
     }
-    let k = names.iter().position(|n| &n.0 == name).expect("the uniform is declared");
+    let k = names.iter().position(|n| n == name).expect("the uniform is declared");
     /* gl_ref.py counts a matrix's components packed; the front end strides
      * a mat3's columns to 4 dwords (its 12 dwords, no array here) */
-    let (_, _, count) = rows.iter().find(|r| &r.0 == name).expect("a uniform row holds the dword");
+    let (_, _, count, _) = rows.iter().find(|r| &r.0 == name).expect("a uniform row holds the dword");
     let c = if *count == 12 { (d - first) / 4 * 3 + (d - first) % 4 } else { d - first };
-    if names[k].1 {
-        return 16 * (k as u32 + 1) + c as u32;
+    let value = 16 * (k as u32 + 1) + u32::from(c);
+    match u32::from(*ty) {
+        gl::GL_INT | gl::GL_INT_VEC2 | gl::GL_INT_VEC3 | gl::GL_INT_VEC4 => value,
+        gl::GL_BOOL | gl::GL_BOOL_VEC2 | gl::GL_BOOL_VEC3 | gl::GL_BOOL_VEC4 => {
+            if c % 2 == 0 {
+                u32::MAX
+            } else {
+                0
+            }
+        }
+        _ => (value as f32).to_bits(),
     }
-    (16.0 * (k as f32 + 1.0) + c as f32).to_bits()
 }
 
 fn fau_values(f: &[FauWord], uv: &dyn Fn(u16) -> u32) -> Vec<u32> {
@@ -399,7 +411,7 @@ pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
     /* gl_ref.py sets no struct uniform: such a reference is drawn without
      * `--uniform-values`, every uniform 0 (deqp_unitype_vsstruct_*); so is
      * one loaded with [`Reference::load_unset`] (`uniform_values` false) */
-    let member = |r: &(String, u16, u16)| r.0.contains('.') && !r.0.starts_with("gl_");
+    let member = |r: &(String, u16, u16, u16)| r.0.contains('.') && !r.0.starts_with("gl_");
     let values = r.uniform_values && !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member);
     let uv_v = |x: u16| if values { uniform_value(&names, &pair.vs.uniforms, x) } else { 0 };
     let uv_f = |x: u16| if values { uniform_value(&names, &pair.fs.uniforms, x) } else { 0 };

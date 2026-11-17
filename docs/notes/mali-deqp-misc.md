@@ -479,18 +479,9 @@ LLVM_DIR=/usr/lib/llvm-21 tools/mali/deqp_ref.sh tools/mali/testdata/deqp_misc_<
 
 That is `drm_shim_ref.sh run ... --prim triangles --uniform-values`, then
 `pan_ref_diff.py extract <trace> --draw`. `cmp_notequal_vec2` has a `bool`
-uniform, and `gl_ref.py --uniform-values` refuses one ("does not set a bool
-uniform"), so it is the same two steps without `--uniform-values`:
-
-```sh
-tools/mali/drm_shim_ref.sh run "$CONNECTED_DEPS_DIR/mesa-shim" tools/mali/testdata/deqp_misc_cmp_notequal_vec2.vert \
-    tools/mali/testdata/deqp_misc_cmp_notequal_vec2.frag <scratch>/deqp_misc_cmp_notequal_vec2 --prim triangles
-python3 -I tools/mali/pan_ref_diff.py extract <scratch>/deqp_misc_cmp_notequal_vec2.trace --draw \
-    > tools/mali/testdata/deqp_misc_cmp_notequal_vec2.expect.json
-```
-
-`ref_out0` is then 0 (false); dEQP sets it true. The words do not depend on the
-value; the FAU word is the uniform the driver fills.
+uniform (`ref_out0`): gl_ref.py sets it true, the word `ffffffff`, as dEQP
+does. The words do not depend on the value; the FAU word is the uniform
+the driver fills.
 
 **Sources.** "verbatim" is the `tools/mali/testdata/deqp_shapes/misc_*` pair
 (the `.qpa` of `deqp-host-measure.sh`, VK-GL-CTS `93bca01`). "rebuilt" is that
@@ -551,8 +542,8 @@ each reference with `mali_ref::assert_matches`.
   the uniform's word itself, and `ieq(b, true)` of such a word is `b`
   (`alu32`'s lane arms, `bool_uniform32` in nir_fs.rs; the mediump arm
   already had both rules). dEQP's `isOk(true, ref_out0)` becomes the word,
-  with no compare. The test uses `assert_matches_unset`, because the
-  reference was drawn without `--uniform-values` (this note's References).
+  with no compare. The reference is drawn with `--uniform-values` (this
+  note's References): the word is Mesa's true, `ffffffff`.
 - `fragcoord_xyz`: in a mediump ES 1.00 shader, `gl_FragCoord.z` is the
   `FRAG_Z` special varying's fp32 lane, read the way a varying lane is
   (`frag_coord16`; `lane_tree`'s varying arm takes `FRAG_Z`). The colour

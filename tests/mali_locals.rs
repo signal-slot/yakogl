@@ -160,7 +160,7 @@ fn the_stack_of_a_compile_does_not_grow_with_the_cap() {
             names.sort();
             let mut worst = (0, String::new());
             for n in names {
-                let r = mali_ref::Reference::load_unset(&n);
+                let r = mali_ref::Reference::load(&n);
                 let (_, d) = depth_of(|| mali_ref::compile_pair(&r.vs, &r.fs).is_ok());
                 if d > worst.0 {
                     worst = (d, n);

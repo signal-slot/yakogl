@@ -4,8 +4,8 @@
 //! references `tools/mali/testdata/deqp_intval_*` (plan #377, family intval,
 //! `docs/notes/mali-deqp-intval.md` sections 5, 7 and 8), one test per
 //! reference. `tests/mali_ref` does the compare; the references were drawn
-//! without `--uniform-values` (gl_ref.py cannot set a `bool` uniform), so
-//! every uniform word of the FAU is 0 (`assert_matches_unset`).
+//! with `--uniform-values`, so each uniform word of the FAU is the value
+//! gl_ref.py set (an int as the integer, a true bool as `ffffffff`).
 //!
 //! The twelve fragment-walk references of step 1 (lower-intval-1) and nine
 //! vertex-walk references of step 2 (lower-intval-2) compile and are
@@ -83,131 +83,131 @@ const REFUSED: &[(&str, &str)] = &[
 
 #[test]
 fn opfs_add_int_mediump() {
-    mali_ref::assert_matches_unset("deqp_intval_opfs_add_int_mediump");
+    mali_ref::assert_matches("deqp_intval_opfs_add_int_mediump");
 }
 
 #[test]
 fn opfs_cmp_ivec3() {
-    mali_ref::assert_matches_unset("deqp_intval_opfs_cmp_ivec3");
+    mali_ref::assert_matches("deqp_intval_opfs_cmp_ivec3");
 }
 
 #[test]
 fn opfs_div_int_mediump() {
-    mali_ref::assert_matches_unset("deqp_intval_opfs_div_int_mediump");
+    mali_ref::assert_matches("deqp_intval_opfs_div_int_mediump");
 }
 
 #[test]
 fn opfs_equal_bvec2() {
-    mali_ref::assert_matches_unset("deqp_intval_opfs_equal_bvec2");
+    mali_ref::assert_matches("deqp_intval_opfs_equal_bvec2");
 }
 
 #[test]
 fn opfs_logical_xor() {
-    mali_ref::assert_matches_unset("deqp_intval_opfs_logical_xor");
+    mali_ref::assert_matches("deqp_intval_opfs_logical_xor");
 }
 
 #[test]
 fn opfs_mul_ivec4_highp() {
-    mali_ref::assert_matches_unset("deqp_intval_opfs_mul_ivec4_highp");
+    mali_ref::assert_matches("deqp_intval_opfs_mul_ivec4_highp");
 }
 
 #[test]
 fn opfs_not() {
-    mali_ref::assert_matches_unset("deqp_intval_opfs_not");
+    mali_ref::assert_matches("deqp_intval_opfs_not");
 }
 
 #[test]
 fn opfs_sub_assign_ivec2_lowp() {
-    mali_ref::assert_matches_unset("deqp_intval_opfs_sub_assign_ivec2_lowp");
+    mali_ref::assert_matches("deqp_intval_opfs_sub_assign_ivec2_lowp");
 }
 
 #[test]
 fn opvs_add_int_highp() {
-    mali_ref::assert_matches_unset("deqp_intval_opvs_add_int_highp");
+    mali_ref::assert_matches("deqp_intval_opvs_add_int_highp");
 }
 
 #[test]
 fn opvs_div_ivec2_highp() {
-    mali_ref::assert_matches_unset("deqp_intval_opvs_div_ivec2_highp");
+    mali_ref::assert_matches("deqp_intval_opvs_div_ivec2_highp");
 }
 
 #[test]
 fn opvs_less_ivec4() {
-    mali_ref::assert_matches_unset("deqp_intval_opvs_less_ivec4");
+    mali_ref::assert_matches("deqp_intval_opvs_less_ivec4");
 }
 
 #[test]
 #[ignore = "differs: Mesa compares the mediump attributes at fp16, the vertex walk at fp32 (mixprec's vertex side); pinned by refusals_pinned"]
 fn opvs_logical_and() {
-    mali_ref::assert_matches_unset("deqp_intval_opvs_logical_and");
+    mali_ref::assert_matches("deqp_intval_opvs_logical_and");
 }
 
 #[test]
 fn opvs_mul_ivec3_mediump() {
-    mali_ref::assert_matches_unset("deqp_intval_opvs_mul_ivec3_mediump");
+    mali_ref::assert_matches("deqp_intval_opvs_mul_ivec3_mediump");
 }
 
 #[test]
 #[ignore = "refused: arithmetic other than +, -, * ... (the `any` of two bvec3's `ine`, mixprec's vertex side)"]
 fn opvs_not_equal_bvec3() {
-    mali_ref::assert_matches_unset("deqp_intval_opvs_not_equal_bvec3");
+    mali_ref::assert_matches("deqp_intval_opvs_not_equal_bvec3");
 }
 
 #[test]
 fn opvs_post_increment_int() {
-    mali_ref::assert_matches_unset("deqp_intval_opvs_post_increment_int");
+    mali_ref::assert_matches("deqp_intval_opvs_post_increment_int");
 }
 
 #[test]
 fn reslib_bvec_fs() {
-    mali_ref::assert_matches_unset("deqp_intval_reslib_bvec_fs");
+    mali_ref::assert_matches("deqp_intval_reslib_bvec_fs");
 }
 
 #[test]
 fn reslib_float_fs() {
-    mali_ref::assert_matches_unset("deqp_intval_reslib_float_fs");
+    mali_ref::assert_matches("deqp_intval_reslib_float_fs");
 }
 
 #[test]
 fn reslib_int_fs() {
-    mali_ref::assert_matches_unset("deqp_intval_reslib_int_fs");
+    mali_ref::assert_matches("deqp_intval_reslib_int_fs");
 }
 
 #[test]
 #[ignore = "refused: an integer or boolean value is not lowered yet (its fragment shader's fp32 compares of the widened mediump atemp and their `&&`, mixprec's fragment side)"]
 fn reslib_int_vs() {
-    mali_ref::assert_matches_unset("deqp_intval_reslib_int_vs");
+    mali_ref::assert_matches("deqp_intval_reslib_int_vs");
 }
 
 #[test]
 fn reslib_mixed_fs() {
-    mali_ref::assert_matches_unset("deqp_intval_reslib_mixed_fs");
+    mali_ref::assert_matches("deqp_intval_reslib_mixed_fs");
 }
 
 #[test]
 #[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (its fragment shader reads the varyings Mesa's link removes as dead); not comparable by mali_ref"]
 fn rsg_cond_fs() {
-    mali_ref::assert_matches_unset("deqp_intval_rsg_cond_fs");
+    mali_ref::assert_matches("deqp_intval_rsg_cond_fs");
 }
 
 #[test]
 fn rsg_constbool_vs() {
-    mali_ref::assert_matches_unset("deqp_intval_rsg_constbool_vs");
+    mali_ref::assert_matches("deqp_intval_rsg_constbool_vs");
 }
 
 #[test]
 fn rsg_conv_vs() {
-    mali_ref::assert_matches_unset("deqp_intval_rsg_conv_vs");
+    mali_ref::assert_matches("deqp_intval_rsg_conv_vs");
 }
 
 #[test]
 fn uniapi_bool_initial_vs() {
-    mali_ref::assert_matches_unset("deqp_intval_uniapi_bool_initial_vs");
+    mali_ref::assert_matches("deqp_intval_uniapi_bool_initial_vs");
 }
 
 #[test]
 fn uniapi_bool_vs() {
-    mali_ref::assert_matches_unset("deqp_intval_uniapi_bool_vs");
+    mali_ref::assert_matches("deqp_intval_uniapi_bool_vs");
 }
 
 /// Each refused reference is refused with exactly its text in [`REFUSED`]
@@ -238,7 +238,7 @@ fn refusals_pinned() {
         }
     }
     for name in DIFFERS {
-        let r = mali_ref::Reference::load_unset(&format!("deqp_intval_{name}"));
+        let r = mali_ref::Reference::load(&format!("deqp_intval_{name}"));
         match mali_ref::compile_pair(&r.vs, &r.fs) {
             Ok(pair) => {
                 if mali_ref::differences(&r, &pair).is_empty() {

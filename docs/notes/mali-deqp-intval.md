@@ -339,13 +339,17 @@ transcribed as a scratch script (not committed), following the source:
 
 ```sh
 tools/mali/drm_shim_ref.sh run $CONNECTED_DEPS_DIR/mesa-shim \
-    tools/mali/testdata/deqp_intval_<name>.vert tools/mali/testdata/deqp_intval_<name>.frag out/deqp_intval_<name>
+    tools/mali/testdata/deqp_intval_<name>.vert tools/mali/testdata/deqp_intval_<name>.frag out/deqp_intval_<name> --uniform-values
 tools/mali/pan_ref_diff.py extract out/deqp_intval_<name>.trace --draw > tools/mali/testdata/deqp_intval_<name>.expect.json
 ```
 
-gl_ref.py's default draw: 64x64, triangles, no `--uniform-values`. gl_ref.py
-sets no `bool` uniform, and a uniform's value does not change the program.
-The 25 were drawn twice and the two sets of `expect.json` are byte-identical.
+The draw is 64x64, triangles, with `--uniform-values`, as `deqp_ref.sh`
+draws: gl_ref.py gives an `int` uniform its values as integers and a `bool`
+one true where its component is even. Mesa uploads a true `bool` as the
+word `ffffffff` (`uniapi_bool_vs`). A uniform's value does not change the
+program: against a draw without the flag only the uniforms' FAU words
+differ. The 25 were drawn twice and the two sets of `expect.json` are
+byte-identical.
 
 | reference | dEQP-GLES2 case (`functional.`) | source | what it pins |
 |---|---|---|---|
@@ -571,11 +575,10 @@ and `opfs_not`. The thirteen step-2 references stay refused with the same
 text and ignored; `rsg_cond_fs` is refused by its vertex shader's literals
 (`ConstBool`, step 2 item 1), not by its fragment shader.
 
-The references were drawn without `--uniform-values` (gl_ref.py cannot set a
-`bool` uniform), so their FAU holds 0 in every uniform word; `tests/mali_ref`
-got `Reference::load_unset` / `assert_matches_unset` for that (the uniform
-words compared as 0), beside the existing compare for references drawn with
-the option. `tools/mali/testdata/cases.txt` lists ten of the twelve as
+The references are drawn with `--uniform-values`, so their FAU holds the
+value gl_ref.py set in each uniform word (an int as the integer, a true bool
+as `ffffffff`), and `tests/mali_ref` compares each word against that value.
+`tools/mali/testdata/cases.txt` lists ten of the twelve as
 pan_shc-against-shim cases (every mediump fragment program and the passthrough
 vertex stage's mediump varyings `differs:mediump`, as the gm2_* rows);
 `reslib_mixed_fs` and `opfs_logical_xor` are left out: pan_shc's vertex

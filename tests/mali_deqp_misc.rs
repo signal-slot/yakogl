@@ -30,11 +30,11 @@ fn misc_cmp_ine0_hp() {
     mali_ref::assert_matches("deqp_misc_cmp_ine0_hp");
 }
 
-/// Drawn without `--uniform-values` (gl_ref.py sets no `bool` uniform): the
-/// FAU word of `ref_out0` is 0.
+/// Drawn with `--uniform-values`: the FAU word of the bool `ref_out0` is
+/// Mesa's true, `ffffffff`.
 #[test]
 fn misc_cmp_notequal_vec2() {
-    mali_ref::assert_matches_unset("deqp_misc_cmp_notequal_vec2");
+    mali_ref::assert_matches("deqp_misc_cmp_notequal_vec2");
 }
 
 #[test]
