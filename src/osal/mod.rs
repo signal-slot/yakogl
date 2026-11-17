@@ -636,8 +636,9 @@ pub fn log_epoch() -> u32 {
     LOG_EPOCH.load(core::sync::atomic::Ordering::Relaxed)
 }
 
-/// Every [`glog_once!`] site logs again (each test rig starts with this).
-#[cfg(test)]
+/// Every [`glog_once!`] site logs again (each test rig starts with this,
+/// the rig of an integration test under `tests/` too).
+#[cfg(any(test, feature = "host-test"))]
 pub fn new_log_epoch() {
     LOG_EPOCH.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
 }
