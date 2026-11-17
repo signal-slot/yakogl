@@ -117,9 +117,11 @@ change; the tests state the expectation per mask.
   `(v*255 + max/2)/max`, `max` 1023 for R/G/B and 3 for A (`read_pixels`,
   `framebuffer.rs`; `8428875e`). `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`_TYPE`
   answer `RGBA`/`UNSIGNED_INT_2_10_10_10_REV` for such a read buffer, as Mesa
-  does (`implementation_color_read`), and `glCopyTexImage2D`/
-  `glCopyTexSubImage2D` do not decode the surface yet. Builds that hold the
-  format as `RGBA8` are unchanged. The Pi 4 dEQP run is pending.
+  does (`implementation_color_read`). `glCopyTexImage2D`/
+  `glCopyTexSubImage2D` from such a surface into an `RGB10_A2` texture copy
+  the word unchanged, and into an `RGBA8` texture store the decoded bytes
+  (`texture_copy_from_fb`, `texture.rs`). Builds that hold the format as
+  `RGBA8` are unchanged. The Pi 4 dEQP run is pending.
 
 ## Float colour targets
 

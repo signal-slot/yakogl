@@ -24,9 +24,9 @@ use super::names::{self, Kind};
 use super::types::*;
 use super::{draw, framebuffer};
 use crate::backend::{
-    self, gles_texfmt_bytes, GLES_SURF_RGB565, GLES_SURF_XRGB8888, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB,
-    GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA, GLES_TEXFMT_L8, GLES_TEXFMT_LA8,
-    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGBA16F,
+    self, gles_texfmt_bytes, GLES_SURF_RGB10_A2, GLES_SURF_RGB565, GLES_SURF_XRGB8888, GLES_TEXFMT_A8,
+    GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA, GLES_TEXFMT_L8,
+    GLES_TEXFMT_LA8, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGBA16F,
     GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
@@ -2517,6 +2517,15 @@ unsafe fn texture_copy_from_fb(
     const CHUNK: u32 = 1024;
     let mut px = [0u8; CHUNK as usize * 4];
     let mut ok = true;
+    /* A 10/10/10/2 surface into a texture of the RGB10A2 class is copied as
+     * the packed word, unchanged: through RGBA8 it would lose the low bits
+     * (ES 3.0 4.3.2 reads it as UNSIGNED_INT_2_10_10_10_REV, table 3.2).
+     * Into an RGBA8 texture the decode to bytes stays. */
+    let exact = framebuffer::fb_target_format(c) == GLES_SURF_RGB10_A2
+        && c.objs_ref().textures[ti].texfmt == GLES_TEXFMT_RGB10A2;
+    let type_ = if exact { GL_UNSIGNED_INT_2_10_10_10_REV } else { GL_UNSIGNED_BYTE };
+    /* (the class is four-channel: nothing to drop) */
+    let format = if exact { GL_RGBA } else { format };
 
     /* Lost GPU work leaves the texture as it was, with no GL error: none in
      * ES 2.0/3.0 says it, and GL_OUT_OF_MEMORY (what `false` raises) would
@@ -2540,7 +2549,7 @@ unsafe fn texture_copy_from_fb(
                     n as GLsizei,
                     1,
                     GL_RGBA,
-                    GL_UNSIGNED_BYTE,
+                    type_,
                     px.as_mut_ptr() as *mut c_void,
                     false, /* synced once for the whole copy */
                     1,     /* a GL-to-GL copy never sees the pack state */
@@ -2578,7 +2587,7 @@ unsafe fn texture_copy_from_fb(
                 1,
                 px.as_ptr() as *const c_void,
                 GL_RGBA,
-                GL_UNSIGNED_BYTE,
+                type_,
             );
             x0 += CHUNK;
         }
@@ -9135,6 +9144,146 @@ mod tests {
             assert_eq!(s[(x * 4) as usize..][..4], surf_texel(x, 1), "texel ({x},0)");
             assert_eq!(s[((100 + x) * 4) as usize..][..4], surf_texel(x, 0), "texel ({x},1)");
         }
+    }
+
+    /// Holds the RGB10A2 class in (`GLES_SURF_RGB10_A2` drawable) or out of
+    /// the sampled mask for a test and puts both knobs back, also when an
+    /// assert panics. The knobs are process-wide: take it after
+    /// `TestGl::new` (the serial lock) and declare it after the context, so
+    /// it is dropped first, as `OwnClass` is.
+    #[cfg(not(feature = "report-es2"))]
+    struct Rgb10a2Class;
+    #[cfg(not(feature = "report-es2"))]
+    impl Rgb10a2Class {
+        fn set(sampled: bool) -> Rgb10a2Class {
+            use crate::backend::{gles_texfmt_bit, TEST_EXTRA_SAMPLED, TEST_HIDDEN_SAMPLED};
+            use core::sync::atomic::Ordering::Relaxed;
+            let bit = gles_texfmt_bit(GLES_TEXFMT_RGB10A2);
+            TEST_EXTRA_SAMPLED.store(if sampled { bit } else { 0 }, Relaxed);
+            TEST_HIDDEN_SAMPLED.store(if sampled { 0 } else { bit }, Relaxed);
+            Rgb10a2Class
+        }
+    }
+    #[cfg(not(feature = "report-es2"))]
+    impl Drop for Rgb10a2Class {
+        fn drop(&mut self) {
+            use crate::backend::{TEST_EXTRA_SAMPLED, TEST_HIDDEN_SAMPLED};
+            use core::sync::atomic::Ordering::Relaxed;
+            TEST_EXTRA_SAMPLED.store(0, Relaxed);
+            TEST_HIDDEN_SAMPLED.store(0, Relaxed);
+        }
+    }
+
+    /// The words of a 2 x 2 GL_RGB10_A2 renderbuffer made the read buffer
+    /// (row-major from GL row 0): 10-bit values that no byte holds.
+    #[cfg(not(feature = "report-es2"))]
+    const COPYTEX_WORDS: [u32; 4] = [
+        1 | 2 << 10 | 3 << 20 | 1 << 30,
+        1023 | 513 << 10 | 5 << 20 | 3 << 30,
+        0x156 | 0x2a9 << 10 | 0x3fe << 20,
+        7 | 1000 << 10 | 999 << 20 | 2 << 30,
+    ];
+
+    /// Make a 2 x 2 RGB10_A2 renderbuffer holding `COPYTEX_WORDS` (row-major
+    /// from GL row 0) the read framebuffer's colour attachment.
+    #[cfg(not(feature = "report-es2"))]
+    fn rgb10a2_read_buffer(gl: &TestGl) {
+        use crate::gl::framebuffer::{
+            glBindRenderbuffer, glFramebufferRenderbuffer, glGenRenderbuffers, glRenderbufferStorage,
+        };
+        let (mut fbo, mut rb) = (0, 0);
+        // SAFETY: room for one name each; plain GL calls.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB10_A2, 2, 2);
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let m = gl.ctx().objs().renderbuffers[rb as usize].mem;
+        let mut px = gl.gpu_bytes(m.gpu, m.size);
+        for (i, w) in COPYTEX_WORDS.iter().enumerate() {
+            px[i * 4..][..4].copy_from_slice(&w.to_le_bytes());
+        }
+        gl.gpu_render(m.gpu, &px);
+    }
+
+    /// The 2 x 2 level 0 of the bound texture, as words, GL row 0 first.
+    #[cfg(not(feature = "report-es2"))]
+    fn copytex_level_words(gl: &TestGl, name: GLuint) -> Vec<u32> {
+        let s = storage(gl, name);
+        s[..16].as_chunks::<4>().0.iter().map(|b| u32::from_le_bytes(*b)).collect()
+    }
+
+    /// glCopyTexImage2D from an RGB10_A2 read buffer into a GL_RGB10_A2
+    /// texture keeps the words; the same copy into GL_RGBA decodes to bytes.
+    #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn rgb10a2_copytex_image_keeps_the_words_in_the_class() {
+        let gl = TestGl::new(4, 4);
+        let _class = Rgb10a2Class::set(true);
+        rgb10a2_read_buffer(&gl);
+        let name = new_tex();
+        // SAFETY: plain GL call.
+        unsafe { glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB10_A2, 0, 0, 2, 2, 0) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(gl.ctx().objs().textures[name as usize].texfmt, GLES_TEXFMT_RGB10A2);
+        assert_eq!(copytex_level_words(&gl, name), COPYTEX_WORDS);
+
+        let name = new_tex();
+        // SAFETY: plain GL call.
+        unsafe { glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, 2, 2, 0) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let f = |v: u32, max: u32| ((v * 255 + max / 2) / max) as u8;
+        let w = COPYTEX_WORDS[1];
+        let want = [f(w & 0x3ff, 1023), f(w >> 10 & 0x3ff, 1023), f(w >> 20 & 0x3ff, 1023), f(w >> 30, 3)];
+        assert_eq!(storage(&gl, name)[4..8], want, "RGBA8 keeps the decode");
+    }
+
+    /// glCopyTexSubImage2D into an RGB10_A2 texture keeps the words of a
+    /// sub-rectangle, and leaves the rest alone.
+    #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn rgb10a2_copytex_sub_image_keeps_the_words_in_the_class() {
+        let gl = TestGl::new(4, 4);
+        let _class = Rgb10a2Class::set(true);
+        rgb10a2_read_buffer(&gl);
+        let name = new_tex();
+        let zero = [0u8; 16];
+        // SAFETY: `zero` holds the 2 x 2 RGB10_A2 words; plain GL calls.
+        unsafe {
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGB10_A2 as GLint,
+                2,
+                2,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_INT_2_10_10_10_REV,
+                zero.as_ptr() as *const c_void,
+            );
+            glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 1, 0, 0, 1, 1, 1);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(copytex_level_words(&gl, name), [0, COPYTEX_WORDS[2], 0, 0]);
+    }
+
+    /// Where the class is not stored (no sampled bit) an RGB10_A2 copy
+    /// destination is RGBA8 and the decoded bytes are what it holds.
+    #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn rgb10a2_copytex_stays_rgba8_without_the_class() {
+        let gl = TestGl::new(4, 4);
+        let _class = Rgb10a2Class::set(false);
+        fill_surface(&gl, 4, 4);
+        let name = new_tex();
+        // SAFETY: plain GL call.
+        unsafe { glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB10_A2, 0, 0, 2, 2, 0) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(gl.ctx().objs().textures[name as usize].texfmt, GLES_TEXFMT_RGBA8);
     }
 
     #[test]

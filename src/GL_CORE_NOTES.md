@@ -424,11 +424,12 @@ context lacks, each checked in the code:
   attachment, NEAREST and LINEAR (18d83492, 4082f91a, 019aa841), and
   `glReadPixels` with `GL_RGBA`/`GL_UNSIGNED_BYTE` decodes the little-endian
   word (R/G/B over 1023, A over 3; 8428875e). Where the class falls back to
-  RGBA8 (`report-es2`, PowerVR, GC7000UL) nothing changes. Still open:
-  `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`TYPE` answering
-  `GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV` for this buffer, and
-  `glCopyTex*Image2D` word copies into an RGB10_A2 destination. The Pi 4
-  run of this is pending (host tests only).
+  RGBA8 (`report-es2`, PowerVR, GC7000UL) nothing changes.
+  `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`TYPE` answer
+  `GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV` for this buffer (654b0620), and
+  `glCopyTex*Image2D` into an RGB10_A2 destination copies the word
+  unchanged (`texture_copy_from_fb`). The Pi 4 run of this is pending (host
+  tests only).
 - Transform feedback: the limits are 64 / 4 / 64 (interleaved components,
   separate attributes, separate components; ES 3.0 table 6.34 asks for at
   least 64 / 4 / 4; `gl/tf.rs`) outside
