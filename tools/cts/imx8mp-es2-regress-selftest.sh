@@ -41,12 +41,19 @@ for ln in open(base):
         resets = "1"
     if i == 14 and mode == "better14":
         p, ns, ot = p + 14, 0, 0
+    w0 = 0x594b08cc
     w1 = (fl << 16) | p
     w2 = (ot << 16) | ns
+    if i == 14 and mode == "swap14":
+        w2 = (ns << 16) | ot
+    if i == 3 and mode == "over3":
+        begun = p + fl + ns + ot - 1
+    if i == 3 and mode == "kind3":
+        w0 = 0x594b0ccc
     w3 = 0xffff0000 | begun
     lines.append("board.sh imx8mp e%02d rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled "
-                 "result=record:DEQP resets=%s record=594b08cc,%08x,%08x,%08x back_after=60s uptime=20s"
-                 % (i, resets, w1, w2, w3))
+                 "result=record:DEQP resets=%s record=%08x,%08x,%08x,%08x back_after=60s uptime=20s"
+                 % (i, resets, w0, w1, w2, w3))
     lines.append("board.sh imx8mp e%02d-p0 rc=0 verdict=done record=594b0a00,00000000,00000000,00000000" % i)
 open(out, "w").write("# synthetic\n" + "\n".join(lines) + "\n")
 PY
@@ -100,6 +107,15 @@ gen "$T/r.md" 0 28 reset3
 expect worse-reset 1 'e03 WORSE.*not clean' "$T/r.md"
 gen "$T/g.md" 0 28 better14
 expect better 0 'e14 better' "$T/g.md"
+
+# an encoding the tool cannot read fails loudly (exit 2), never WORSE/better:
+# w2 halves swapped (e14 has other=14), an unknown w0 kind, counts above begun
+gen "$T/s.md" 0 28 swap14
+expect swapped-w2 2 'e14.*halves look swapped.*unknown record encoding' "$T/s.md"
+gen "$T/k.md" 0 28 kind3
+expect bad-kind 2 'e03.*kind byte is 12.*unknown record encoding' "$T/k.md"
+gen "$T/o.md" 0 28 over3
+expect over-begun 2 'e03.*exceeds cases begun' "$T/o.md"
 
 # bad input
 expect no-args 2 'baseline' --help
