@@ -286,8 +286,16 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("cmpf", cmpf as u32)?.put("result_type", result as u32)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
-        Op::IcmpOrS32 { cmpf, result } | Op::IcmpOrU32 { cmpf, result } => {
-            f = Fill::new(if matches!(i.op, Op::IcmpOrS32 { .. }) { IsaOp::IcmpOrS32 } else { IsaOp::IcmpOrU32 });
+        Op::IcmpOrS32 { cmpf, result }
+        | Op::IcmpOrU32 { cmpf, result }
+        | Op::IcmpAndS32 { cmpf, result }
+        | Op::IcmpAndU32 { cmpf, result } => {
+            f = Fill::new(match i.op {
+                Op::IcmpOrS32 { .. } => IsaOp::IcmpOrS32,
+                Op::IcmpOrU32 { .. } => IsaOp::IcmpOrU32,
+                Op::IcmpAndS32 { .. } => IsaOp::IcmpAndS32,
+                _ => IsaOp::IcmpAndU32,
+            });
             for s in 0..2 {
                 f.put(["src0", "src1"][s], src_byte(&i.src[s])?)?
                     .put(["widen0", "widen1"][s], widen_int(i.src[s].swz)?)?;

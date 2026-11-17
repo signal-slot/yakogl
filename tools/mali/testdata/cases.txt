@@ -131,3 +131,18 @@ gm2_texswz_3                                     gm2_texswz_3.vert gm2_texswz_3.
 gm2_texswz_4                                     gm2_texswz_4.vert gm2_texswz_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
 gm2_texswz_5                                     gm2_texswz_5.vert gm2_texswz_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:29:c28df276edb3
 gm2_texswz_6                                     gm2_texswz_6.vert gm2_texswz_6.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:13:7d1d03e963f7
+# #377 lower-intval-1: the dEQP-GLES2 "integer or boolean value" fragment shapes (docs/notes/mali-deqp-intval.md section 7),
+# drawn without --uniform-values (gl_ref.py sets no bool uniform). Our compiler is byte-equal to each reference
+# (tests/mali_deqp_intval.rs). pan_shc's SPIR-V path has no lower_precision, so every mediump fragment program and the
+# passthrough vertex stage's mediump varyings differ (`mediump`). deqp_intval_reslib_mixed_fs and deqp_intval_opfs_logical_xor
+# are not listed: pan_shc's vertex position program has the reference's words but other facts, a result the list has no form for.
+deqp_intval_reslib_float_fs                      deqp_intval_reslib_float_fs.vert deqp_intval_reslib_float_fs.frag triangles vs.position=equal vs.varying=differs:mediump:9:4ac8a047f24b fs.fragment=differs:mediump:23:6ad5f9e76b17
+deqp_intval_reslib_int_fs                        deqp_intval_reslib_int_fs.vert deqp_intval_reslib_int_fs.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+deqp_intval_reslib_bvec_fs                       deqp_intval_reslib_bvec_fs.vert deqp_intval_reslib_bvec_fs.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:18:6f627c153e93
+deqp_intval_opfs_add_int_mediump                 deqp_intval_opfs_add_int_mediump.vert deqp_intval_opfs_add_int_mediump.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:6:b89a6f7f98f7
+deqp_intval_opfs_mul_ivec4_highp                 deqp_intval_opfs_mul_ivec4_highp.vert deqp_intval_opfs_mul_ivec4_highp.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:19:54d2e73f22ae
+deqp_intval_opfs_sub_assign_ivec2_lowp           deqp_intval_opfs_sub_assign_ivec2_lowp.vert deqp_intval_opfs_sub_assign_ivec2_lowp.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:9:ca4afad848b0
+deqp_intval_opfs_div_int_mediump                 deqp_intval_opfs_div_int_mediump.vert deqp_intval_opfs_div_int_mediump.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:6:fba6b9c109e6
+deqp_intval_opfs_cmp_ivec3                       deqp_intval_opfs_cmp_ivec3.vert deqp_intval_opfs_cmp_ivec3.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+deqp_intval_opfs_equal_bvec2                     deqp_intval_opfs_equal_bvec2.vert deqp_intval_opfs_equal_bvec2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:18:a35f38b32d4d
+deqp_intval_opfs_not                             deqp_intval_opfs_not.vert deqp_intval_opfs_not.frag triangles vs.position=equal vs.varying=differs:mediump:15:b9b940b9f09d fs.fragment=differs:mediump:3:f9ed8362c762

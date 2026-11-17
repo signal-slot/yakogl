@@ -3829,7 +3829,7 @@ fn walk<'s>(
      * (`nir_move_comparisons`, bifrost_nir.c:375-381; vsarith_188_predif's
      * `FCMP_OR.f32.lt.m1` after both sides' arithmetic) */
     if joined {
-        move_compares(&mut vs, scratch)?;
+        move_compares(&mut vs, scratch, false)?;
     }
     Ok(vs)
 }
@@ -4088,7 +4088,7 @@ impl Nir<'_> {
     }
 
     /// A node inserted into the order before position `k`; its id.
-    fn insert_before(&mut self, k: usize, nd: NirNode) -> Result<u16, MaliError> {
+    pub(super) fn insert_before(&mut self, k: usize, nd: NirNode) -> Result<u16, MaliError> {
         if self.n >= MAX_NODES {
             return Err(MaliError::TooManyValues);
         }
@@ -4220,8 +4220,31 @@ fn opt_move(vs: &mut Nir<'_>, scratch: &Arena<'_>) -> Result<(), MaliError> {
 /// come innermost first (cflow_71_deadloop.expect.json: `FCMP_OR.v2f16.ge`
 /// of pass 7 before its `MUX.v2i16`, the constants pushed in that order,
 /// `u3.w0` = (7.0, 7.0), `u3.w1` = (6.0, 6.0), `u4.w0` = (4.0, 5.0)).
-pub(super) fn move_compares(vs: &mut Nir<'_>, scratch: &Arena<'_>) -> Result<(), MaliError> {
-    move_before_users(vs, scratch, |k| matches!(k, Kind::Alu(Alu::Fcmp(_))))
+/// An integer compare moves the same way (`nir_alu_instr_is_comparison`,
+/// nir.c:3292-3314: `ilt`, `ult`, `ige`, `uge`, `ieq`, `ine` beside the
+/// float ones): deqp_intval_reslib_bvec_fs's `bvec3 == bvec3`, each
+/// `ICMP_OR.v2u16` right before the `LSHIFT_AND.v2i16` that reads it, and
+/// the `FCMP_OR.v2f16` of the pair before the first of those.
+/// A `b2i32` is a copy to the pass (nir_opt_sink.c:72, `nir_move_copies`)
+/// and moves the same way (deqp_intval_reslib_mixed_fs's `CSEL.u32.eq` right
+/// before the compare that reads it); so is a `vec2` of fp16 halves, moved
+/// with `copies` (deqp_intval_opfs_sub_assign_ivec2_lowp's `MKVEC.v2i16`
+/// right before the `FMA.v2f16` that reads it).
+///
+/// Mesa runs the pass twice on a fragment shader: at the link
+/// (bifrost_nir.c:889-890, on the linker's NIR) and at the compile (:380-381,
+/// after the bool lowering). Two compares that share a first user swap at
+/// each run (the later one is already in place and keeps its index, the
+/// earlier lands between), so the final order is the original one
+/// (deqp_intval_opfs_logical_xor's two `FCMP_OR.v2f16` before the
+/// `LSHIFT_XOR`, measured on Mesa 26.2.1's per-pass NIR with
+/// `NIR_DEBUG=print_fs`); a caller that models both runs calls this twice.
+pub(super) fn move_compares(vs: &mut Nir<'_>, scratch: &Arena<'_>, copies: bool) -> Result<(), MaliError> {
+    if copies {
+        move_before_users(vs, scratch, |k| matches!(k, Kind::Alu(Alu::Fcmp(_) | Alu::Icmp(_) | Alu::B2i | Alu::Vec2)))
+    } else {
+        move_before_users(vs, scratch, |k| matches!(k, Kind::Alu(Alu::Fcmp(_) | Alu::Icmp(_) | Alu::B2i)))
+    }
 }
 
 /// `nir_opt_move_block` of the instructions `movable` takes ([`opt_move`]).
@@ -4251,6 +4274,10 @@ fn move_before_users(vs: &mut Nir<'_>, scratch: &Arena<'_>, movable: fn(Kind) ->
             f -= 1;
         }
         if f > 0 && vs.order[f - 1] == id {
+            /* already before its user: it keeps its own index
+             * (nir_opt_move.c:91-92, `continue` before the index is taken),
+             * so an earlier instruction with the same user lands between it
+             * and the user */
             continue;
         }
         /* remove from `pos`, insert before `f` (f > pos) */
