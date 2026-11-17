@@ -25,30 +25,37 @@ const FS_MEDIUMP: &str = "a mediump fragment shader uniform other than a float, 
 /// fp16 compare, intval's `reslib_float_fs` too) or a matrix sum's lanes beside
 /// a constant stand once the uniform is taken.
 const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
-/// An int or bool value: the bvec `==` and the ivec `i2f` behind their loads
-/// (lower-intval).
+/// An int or bool value the walks do not take yet: `vsbvec3`'s bvec `==` in
+/// the vertex shader (lower-intval's vertex step), and `fsivec4`, whose
+/// `vec4(fTest).xy` is `i2f32` of the ivec uniform's words read into a colour
+/// pair beside a texel (no shape of plan #377's lower-intval-1).
 const INT_VALUE: &str = "an integer or boolean value";
 /// The `Light` array's loop stands before the array (lower-loops, then
 /// lower-uniarray).
 const VS_LOOP: &str = "a loop in a vertex shader";
 
-/// The references the lowering makes byte-equal.
-const MATCHED: &[&str] = &["vsmat2_highp", "vsmat3_highp", "fshighp_color", "depthrange_vs"];
+/// The references the lowering makes byte-equal (`vsstruct_partial` and
+/// `vsstruct_rip` since plan #377's lower-intval-1 took the `isOk` result in
+/// the fragment colour, `bool_colour`).
+const MATCHED: &[&str] =
+    &["vsmat2_highp", "vsmat3_highp", "fshighp_color", "depthrange_vs", "vsstruct_partial", "vsstruct_rip"];
 
 /// The references that compile with other words than Mesa's: Mesa computes
 /// a mediump VS expression of fp16 uniforms at 16 bits (`FADD.v2f16`,
 /// `FMA.v2f16`, `FCMP_OR.v2f16`), the vertex walk widens each lane first
 /// (`F16_TO_F32`) and computes at 32; `vsmat2_mediump` and `vsmat3_*` also
 /// keep a constant varying lane Mesa stores (`v_color.w`, varylink's).
-const DIFFERS: &[&str] = &["vsmat2_mediump", "vsmat3_mediump", "vsmat3_lowp", "vsapi_mat2", "vsapi_struct"];
+/// `vsstruct_add`'s `dummy` varying is computed from uniforms alone and
+/// cancels in the FS (`out0 + dummy - dummy`): Mesa's link drops it and the
+/// VS has no varying program, which `mali_ref` cannot reach (the unitype
+/// note's M5 risk 2); ours keeps the varying and its program.
+const DIFFERS: &[&str] =
+    &["vsmat2_mediump", "vsmat3_mediump", "vsmat3_lowp", "vsapi_mat2", "vsapi_struct", "vsstruct_add"];
 
 /// Every refused reference with its refusal, without the `Valhall: `
 /// prefix and the ` is not lowered yet` suffix.
 const REFUSED: &[(&str, &str)] = &[
     ("vsmat3_light", VS_LOOP),
-    ("vsstruct_partial", FRAGCOLOR_LANE),
-    ("vsstruct_add", FRAGCOLOR_LANE),
-    ("vsstruct_rip", FRAGCOLOR_LANE),
     ("vsbvec3", INT_VALUE),
     ("depthrange_fs", FRAGCOLOR_LANE),
     ("fsmat2_mediump", FS_MEDIUMP),
@@ -135,19 +142,17 @@ fn vsapi_mat2() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (the isOk result), lowered by lower-intval"]
 fn vsstruct_partial() {
     mali_ref::assert_matches("deqp_unitype_vsstruct_partial");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (the isOk result), lowered by lower-intval"]
+#[ignore = "differs: Mesa's link drops the uniform-only `dummy` varying (out0 + dummy - dummy cancels) and the VS has no varying program; ours keeps it (mali_ref cannot reach the link)"]
 fn vsstruct_add() {
     mali_ref::assert_matches("deqp_unitype_vsstruct_add");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (the isOk result), lowered by lower-intval"]
 fn vsstruct_rip() {
     mali_ref::assert_matches("deqp_unitype_vsstruct_rip");
 }

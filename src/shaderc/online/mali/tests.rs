@@ -1244,9 +1244,11 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
          * its constant lanes (gm2_arithconst_3) */
         (VS, "attribute vec4 p; attribute vec4 a; attribute vec4 b; varying vec2 v; varying vec2 w; void main(){ gl_Position = p; if (p.x > 0.0) { v = a.xy; w = a.xy; } else { v = b.xy; w = b.xy; } }", MaliError::VaryingDuplicate),
         (FS, "precision mediump float; varying float f; varying vec4 v; void main(){ gl_FragColor = f + v; }", MaliError::FsOperandForm),
+        /* `!=` of two run-time integers (plan #377's lower-intval-1 took
+         * `int(v.x)` and `float(i)`, the colour's `vec4(float(i))`) */
         (
             FS,
-            "precision mediump float; varying vec4 v; void main(){ int i = int(v.x); gl_FragColor = vec4(float(i)); }",
+            "precision mediump float; varying vec4 v; void main(){ int i = int(v.x); int j = int(v.y); gl_FragColor = vec4(float(i != j)); }",
             MaliError::IntValue,
         ),
         /* the same vertex look-up twice: one TEX_SINGLE in Mesa
@@ -2640,6 +2642,11 @@ fn fs_reference_sources() -> Vec<&'static str> {
     /* glmark2's fragment arithmetic (plan #367; tests/mali_fs_arith.rs) */
     srcs.extend(GM2_FS_ARITH);
     srcs.push(td!("gm2_fsarith_2.frag"));
+    /* dEQP's integer and boolean fragment shapes (plan #377 lower-intval-1;
+     * tests/mali_deqp_intval.rs): `^^` of two compares draws the 16-bit
+     * `ixor` row, `all(bvec == bvec)` and `int(bool)` the 16-bit equality
+     * and the widened `b2i32` */
+    srcs.extend([td!("deqp_intval_opfs_logical_xor.frag"), td!("deqp_intval_reslib_mixed_fs.frag")]);
     srcs
 }
 
@@ -3141,6 +3148,8 @@ fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
         O::FcmpOrV2f16 { .. } => "FCMP_OR_V2F16",
         O::IcmpOrS32 { .. } => "ICMP_OR_S32",
         O::IcmpOrU32 { .. } => "ICMP_OR_U32",
+        O::IcmpAndS32 { .. } => "ICMP_AND_S32",
+        O::IcmpAndU32 { .. } => "ICMP_AND_U32",
         O::IcmpOrV2u16 { .. } => "ICMP_OR_V2U16",
         /* `BI_MUX_BIT` is a mode of MUX.i32 */
         O::MuxI32 | O::MuxBitI32 => "MUX_I32",
@@ -3219,7 +3228,7 @@ fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
 
 /// Every op of [`bir::Op`], one value per variant (each width of LD_PKA);
 /// [`all_ops_holds_every_variant_of_op`] fails while a variant is missing.
-const ALL_OPS: [bir::Op; 98] = {
+const ALL_OPS: [bir::Op; 100] = {
     use bir::{Access, Cmpf, LodMode, Op as O, ResultType, Round, TexDim, VaryingName};
     let (cmpf, result) = (Cmpf::Eq, ResultType::M1);
     [
@@ -3246,6 +3255,8 @@ const ALL_OPS: [bir::Op; 98] = {
         O::FcmpOrV2f16 { cmpf, result },
         O::IcmpOrS32 { cmpf, result },
         O::IcmpOrU32 { cmpf, result },
+        O::IcmpAndS32 { cmpf, result },
+        O::IcmpAndU32 { cmpf, result },
         O::IcmpOrV2u16 { cmpf, result },
         O::MuxI32,
         O::MuxBitI32,
