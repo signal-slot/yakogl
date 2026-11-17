@@ -174,32 +174,69 @@ once descriptors are counted. **Not for this plan to edit**: `src/pvr/**` is
 
 ## 5. GC7000UL (i.MX8MP, `src/vivante`)
 
-**Read path today.** The constant file is 320 vec4 registers = 1280 dwords
+Study: `docs/notes/gc-ubo-block-raise.md` (read it first). Its verdict: the
+compiler path to a 16384-byte block is done. What is left is one board run
+and the `context.rs` arm. Line numbers below are the tip's.
+
+**Read path (done).** The constant file is 320 vec4 registers = 1280 dwords
 shared by both stages (`GC_MAX_UNIFORM_DWORDS`, `src/vivante/state.rs:24`;
 `NumberOfConstants` 0x140 in the NXP hwdb, `gc-ubo-const-limit.md` §2 item
-6). The back end writes the constant registers as command-stream words, so it
-copies each stage block to the CPU first (`take_uniforms`,
-`src/vivante/backend.rs:3084-3125`): a stage over 1280 dwords is *not*
-copied but handed over in place, and block members are read **from memory**
-with `load` from the block's copy `ubo_copy` (`backend.rs:3010,3623-3629`),
-the slot `SHC_VIV_CONST_UBO_ADDR`. This is `gc-ubo-const-limit.md` §7
-(option A, done on the host 2026-10-28): the compiler leaves block-only
-registers out of the constant file (`select.rs` `block_read`) and the back end
-no longer refuses a block over 1280 dwords. Room in the constant file for the
-two stages is `vs_room = GC_MAX_UNIFORM_DWORDS`, `fs_room = that - vs regs`
-(`src/vivante/shader.rs:666-667`).
+6). Block members are not read from it:
 
-**What is left.** The memory path has no size bound of its own other than the
-arena reserved for `ubo_copy` (`backend.rs:2193` reserve from
-`gl.*_uniform_dwords`, `u16`), so the limit is again the GL core's
-(`block_dwords`, `draw.rs:3908`). Mesa/etnaviv: `max_const_buffer0_size`
-16384 "so state tracker enables UBOs", `max_const_buffers = ETNA_MAX_CONST_BUF`
-(16) (`gc-ubo-const-limit.md` §2 item 5, `etnaviv_screen.c:164,183,196`), user
-blocks never go back to the constant file. So 16384 bytes and the formula's
-50688 are reachable by the GPU, provided `load.u32` at a constant offset works
-on silicon: it is **unproven on the board** (`gc-ubo-const-limit.md` §6-7:
-"not done: the i.MX8MP run of a constant-offset `load` from a user block").
-The GL-core raise on this GPU waits for that board run and for #335/#355.
+- `uniform_block` (`src/shaderc/online/select.rs:1810`) leaves a register out
+  of the file when all its dwords are block members;
+  `reads_block_memory` (`select.rs:1864`) says so.
+- `block_read` (`select.rs:1897`) reads such a member with `load.u32` from
+  the stage's address slot, `SHC_VIV_CONST_UBO_ADDR` (`ubo_addr_reg`,
+  `select.rs:2753`). A run-time index uses the same slot (`select.rs:3072`).
+- The back end copies the stage's whole array to the frame arena
+  (`ubo_copy`, `src/vivante/backend.rs:3137`, called at `:3753` and `:3759`)
+  and `const_value` puts its address in the slot
+  (`src/vivante/shader.rs:548`).
+- A stage over 1280 dwords is handed over in place, not copied to the
+  command stream (`take_uniforms`, `backend.rs:3224`; test
+  `a_uniform_block_past_the_constant_registers_is_taken_whole`,
+  `src/vivante/backend_tests.rs:5591`).
+- The arena room for both copies comes from `gl.*_uniform_dwords`, a `u16`
+  (`staging_need`, `backend.rs:3110`).
+
+This is `gc-ubo-const-limit.md` §7 (option A). One address per stage is
+enough: the GL core flattens every block into the stage's array, so a
+member is `dword_off * 4` from the slot's address. A per-block address (the
+Mesa shape) is a later option, not a need
+(`gc-ubo-block-raise.md` §4).
+
+**Why the report is still 6144 / 1536.** Only the GL core's constants. The
+cap `MAX_UNIFORM_BLOCK_SIZE` is `MAX_UNIFORM_DWORDS * 4` for every GPU but
+the V3D (`src/gl/context.rs:109-112`) and `MAX_STAGE_UNIFORM_DWORDS` is
+`MAX_UNIFORM_DWORDS` (`context.rs:124-131`). `block_dwords`
+(`src/gl/program.rs:1878`) and the draw's staging size (`src/gl/draw.rs:2531`)
+follow `MAX_STAGE_UNIFORM_DWORDS`. The comment at `context.rs:104-107`
+("the GC7000 holds the blocks in its constant file") is stale.
+
+**What is left.** Two steps, in this order:
+
+1. **Board proof, i.MX8MP.** A `load` at a constant offset from a user block
+   has never run on silicon (`gc-ubo-const-limit.md` §6-7). Only the
+   run-time-indexed loads are proven. A new gl_test case `ubo16k` reads a
+   16384-byte block at its first and last dwords, by constant and by
+   run-time index, in both stages, with a second block so the offset passes
+   64 KiB (`gc-ubo-block-raise.md` §8). If an offset above 64 KiB fails, the
+   fix is the per-block address. Boards are held by plan #347.
+2. **The `context.rs` arm.** Add `gpu-vivante` to the two `cfg` arms under
+   `not(report-es2)` (`context.rs:109`, `:124`): `MAX_UNIFORM_BLOCK_SIZE`
+   16384 and `MAX_STAGE_UNIFORM_DWORDS` from `combined_uniform_components`
+   (`src/gl/limits.rs:40`) = 1536 + 12 * 4096 = 50688.
+   `MAX_UNIFORM_DWORDS` and `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` stay
+   1536, and the ES 2.0 report must not change
+   (`tests/es2_report_guard.rs`). The same commit fixes the stale comment,
+   pins the GC rows in `tests/es3_limits_ubo_unchanged.rs` and adds
+   `tests/es3_limits_gc_ubo.rs`.
+
+The arm must not land before step 1 passes. Then `tests/es3_caps.rs`
+`known_gaps()`, `docs/es3-cts-failures.md` RC10 and `tools/cts/RESULTS.md`
+follow. The host tests, the backend test for a draw larger than the arena
+and the full list are `gc-ubo-block-raise.md` §6-7.
 
 ## 6. Mali (NanoPC-T6) and the others
 
