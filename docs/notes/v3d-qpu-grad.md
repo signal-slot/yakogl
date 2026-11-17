@@ -15,7 +15,7 @@ Mesa file names are relative to `src/` of the Mesa 26.2.1 tree
 (`third_party/mesa-26.2.1` holds only headers and the QPU tables; the
 compiler sources are in the full tree `tools/v3d/README.md` builds `v3d_shc`
 from). The TMU words themselves (P0/P1/P2, the TMUB / TMUSLOD / TMUSCM
-writes) are not repeated here; `docs/notes/v3d-tmu-es3.md` (item
+writes) are not repeated here; a separate TMU note (item
 `notes-v3d-tmu`) is not on main yet, and this note only uses the words that
 the explicit-level look-up already has.
 

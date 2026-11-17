@@ -51,7 +51,7 @@ difference. Neither candidate in the gap note explains it by what it changes:
   textures; a changed sampling would move text and image pixels, not one
   gradient probe by one level.
 - **femtovg pin**: pins the renderer's source
-  (`driver/samples/zephyr/nostd/README.md`); the replay of `c854e0ae`
+  (the README of the no-std Zephyr sample of that commit); the replay of `c854e0ae`
   (`tools/slint/replay/README.md`) shows the same draws
   per frame (475 first, 242-248 after) as the replay of `5f8fff01`, so the
   draw stream did not change.
@@ -103,7 +103,7 @@ files a Pi 4 image is built from (`git log --stat`):
 |---|---|---|
 | `7bf47fe9` | `tests/v3d_online_corpus.rs`, a list under `tools/shaders/` | no (host test) |
 | `dd28726c` | `driver/zephyr/lib/board/imx8mp/`, a Kconfig option that `depends on YAKOGL_BOARD_IMX8MP` | no |
-| `f511a720`, `f1367c9a` | `driver/samples/zephyr/host-replay/`, replay READMEs | no (host replay) |
+| `f511a720`, `f1367c9a` | the Zephyr host-replay sample, replay READMEs | no (host replay) |
 | `8662e5b2` | `tools/board.sh`: refuses a bad `BOARD_HDMI_TIMINGS` | no (host side) |
 | `1eb9783d` | EGL double buffer (`src/gl/egl.rs`, the OSAL `present` op, the samples ask for `EGL_SINGLE_BUFFER`) | yes, see below |
 

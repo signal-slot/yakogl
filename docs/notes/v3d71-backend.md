@@ -762,7 +762,7 @@ Negative controls, as the 4.2 files have: a mutant of each lowering (the
 `ldvary` C read placed one instruction early; W read from rf0 instead of rf3;
 the viewport pair left as `ffloor`+`ftoiz`) must fail sim71 or verify71.
 
-### The corpus (corpus71: `tests/v3d71_online_corpus.rs`)
+### The corpus (corpus71, a test file of its own)
 
 - **The es100 corpus the 4.2 back end is gated on**: the sources and pairs of
   `tests/v3d_online_corpus.rs` (`tools/shaders/`, 324 sources, es100

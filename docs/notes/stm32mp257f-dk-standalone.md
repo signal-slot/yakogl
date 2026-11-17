@@ -868,7 +868,7 @@ reset resource is not used to retry (step 8).
 grep -aE '^[[:alnum:]-]+ login: ?$' "$LOG/raw.log"           # OpenSTLinux is back: a login prompt
 tools/mp2s_record_check.py "$LOG/console.log" (pending)      # boots left 1, image, boots left 0, image, Linux
 tools/mp2s_reset_reason.py "$LOG/raw.log" (pending)          # BL2 'Reset reason:' per boot, supply first
-tools/mp2s_comeback_check.py (pending)                       # Linux is back: ssh, mounts, no mp2s_*
+tools/mp2s_comeback.sh                                        # Linux is back: ssh, mounts, no mp2s_*
 ssh "${MP2_SUDO-sudo -n }fw_printenv" > "$LOG/env-after.txt"
 tools/mp2s_env_diff.py "$LOG/env-before.txt" "$LOG/env-after.txt" (pending)
 python3 -I tools/mp2s_guard.py --for oneshot --printenv "$LOG/env-after.txt"
