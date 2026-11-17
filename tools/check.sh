@@ -4218,6 +4218,14 @@ if [ "$QUICK" -eq 0 ]; then
     scope vivante gltest drivers samples
     step "zephyr  imx8mp gl_test image, -Werror on our C files" zephyr_werror_image \
       verdin_imx8mp/mimx8ml8/a53 gl_test imx8mp -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
+    # gc_triangle (the three-apex read-back check) for the i.MX8MP and the
+    # STM32MP257F-DK, and the DK's gl_test image (its first case runs there).
+    step "zephyr  imx8mp gc_triangle image, -Werror on our C files" zephyr_werror_image \
+      verdin_imx8mp/mimx8ml8/a53 gc_triangle imx8mp-gc_triangle
+    step "zephyr  stm32mp257f-dk gc_triangle image, -Werror on our C files" zephyr_werror_image \
+      stm32mp257f_dk/stm32mp257fxx/a35 gc_triangle stm32mp257f-dk-gc_triangle
+    step "zephyr  stm32mp257f-dk gl_test image, -Werror on our C files" zephyr_werror_image \
+      stm32mp257f_dk/stm32mp257fxx/a35 gl_test stm32mp257f-dk-gl_test -DCONFIG_GL_TEST_MP2_SET_HEAD=y
     scope v3d gltest drivers samples
     step "zephyr  rpi4 gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b gl_test rpi4
     # The examples (examples/README.md): each one built for the three boards,
