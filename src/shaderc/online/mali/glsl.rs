@@ -1911,12 +1911,36 @@ impl Tree<'_, '_> {
                     _ => Err(MaliError::NegZeroShared),
                 }
             }
-            /* any other value that folds, or may fold, to -0.0 in a lane
-             * read (`-1.0 * 0.0`, a vector built of -0.0 lanes, a local
-             * holding one): Mesa compares with +0.0 there, and the IR has
-             * none at the compare */
+            /* any other value that folds to -0.0 (`const float z = -0.0;`,
+             * `vec2 z = vec2(-0.0);` also stored to the colour, `-1.0 *
+             * 0.0`) and that one compare reads: copy propagation and
+             * constant folding hand the rule a `load_const -0.0`
+             * (deqp_constop_nz_local_cmp_vs/fs, nz_prod_vs, negzero_const,
+             * negzero_local, negzero_local_store, negzero_folded: `.. 0x0`),
+             * which the builders read as +0.0 at the compare. One that may
+             * fold to -0.0 only (a local stored twice) is refused, no
+             * constant reaching the builders, and so is a local two compares
+             * read (`const vec2 z = vec2(-0.0)` in two selects,
+             * negzero_const_vector: the compares stand otherwise than
+             * Mesa's) */
             _ => {
                 let v = self.fold(s, 0, &Assumed::NONE);
+                let local = |x: ValueId| match self.instrs.get(x.0 as usize) {
+                    Some(&IrOp::LoadLocal { local, .. }) => Some(local),
+                    _ => None,
+                };
+                let reads = |x: ValueId| x == s.val || (local(s.val).is_some() && local(x) == local(s.val));
+                let compares = self
+                    .instrs
+                    .iter()
+                    .filter(|op| {
+                        matches!(op, IrOp::Alu(AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne, c)
+                            if c[..2].iter().any(|x| reads(x.val)))
+                    })
+                    .count();
+                if compares <= 1 && v[..w].iter().all(|l| *l == Lane::K(F32_NEG_ZERO)) {
+                    return Ok(Some(s));
+                }
                 if v[..w].iter().any(|l| l.may_be_neg0()) {
                     return Err(MaliError::NegZeroShared);
                 }

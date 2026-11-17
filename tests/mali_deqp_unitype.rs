@@ -19,12 +19,13 @@ mod mali_ref;
 
 /// A mediump fragment shader uniform of a type outside the supported list.
 const FS_MEDIUMP: &str = "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp";
-/// A gl_FragColor lane written from something else: where `fsmat4_mediump`
-/// is refused since plan #367's lower-fs-arith lowered the arithmetic in front
-/// of it, and where a shader-library result (`vec4(RES, RES, RES, 1.0)` of an
-/// fp16 compare, intval's `reslib_float_fs` too) or a matrix sum's lanes beside
-/// a constant stand once the uniform is taken.
+/// A gl_FragColor lane written from something else: where `fsmulti`'s
+/// colour stands once its uniforms are taken.
 const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
+/// An operand form the fragment walk has no reference for: `fsmat3_mediump`'s
+/// column sum, a lane alone first, since plan #377's constop lowering takes
+/// its colour lane beside 1.0.
+const FS_OPERAND: &str = "a fragment shader operand of a form or in a place no reference draws";
 /// An int or bool value the walks do not take yet: `vsbvec3`'s bvec `==` in
 /// the vertex shader (lower-intval's vertex step), and `fsivec4`, whose
 /// `vec4(fTest).xy` is `i2f32` of the ivec uniform's words read into a colour
@@ -36,9 +37,17 @@ const VS_LOOP: &str = "a loop in a vertex shader";
 
 /// The references the lowering makes byte-equal (`vsstruct_partial` and
 /// `vsstruct_rip` since plan #377's lower-intval-1 took the `isOk` result in
-/// the fragment colour, `bool_colour`).
-const MATCHED: &[&str] =
-    &["vsmat2_highp", "vsmat3_highp", "fshighp_color", "depthrange_vs", "vsstruct_partial", "vsstruct_rip"];
+/// the fragment colour, `bool_colour`; `fsmat4_mediump` since its constop
+/// lowering took a `vec4(.., 1.0)` colour lane beside a computed one).
+const MATCHED: &[&str] = &[
+    "vsmat2_highp",
+    "vsmat3_highp",
+    "fshighp_color",
+    "depthrange_vs",
+    "fsmat4_mediump",
+    "vsstruct_partial",
+    "vsstruct_rip",
+];
 
 /// The references that compile with other words than Mesa's: Mesa computes
 /// a mediump VS expression of fp16 uniforms at 16 bits (`FADD.v2f16`,
@@ -49,18 +58,19 @@ const MATCHED: &[&str] =
 /// cancels in the FS (`out0 + dummy - dummy`): Mesa's link drops it and the
 /// VS has no varying program, which `mali_ref` cannot reach (the unitype
 /// note's M5 risk 2); ours keeps the varying and its program.
+/// `depthrange_fs` since plan #377's constop lowering takes its colour:
+/// Mesa's `diff * 0.5 + 0.5` is an `FMA.f32` narrowed after, ours an
+/// `FMA.v2f16` of the narrowed `diff`.
 const DIFFERS: &[&str] =
-    &["vsmat2_mediump", "vsmat3_mediump", "vsmat3_lowp", "vsapi_mat2", "vsapi_struct", "vsstruct_add"];
+    &["vsmat2_mediump", "vsmat3_mediump", "vsmat3_lowp", "vsapi_mat2", "vsapi_struct", "vsstruct_add", "depthrange_fs"];
 
 /// Every refused reference with its refusal, without the `Valhall: `
 /// prefix and the ` is not lowered yet` suffix.
 const REFUSED: &[(&str, &str)] = &[
     ("vsmat3_light", VS_LOOP),
     ("vsbvec3", INT_VALUE),
-    ("depthrange_fs", FRAGCOLOR_LANE),
     ("fsmat2_mediump", FS_MEDIUMP),
-    ("fsmat3_mediump", FRAGCOLOR_LANE),
-    ("fsmat4_mediump", FRAGCOLOR_LANE),
+    ("fsmat3_mediump", FS_OPERAND),
     ("fsivec4", INT_VALUE),
     ("fsmulti", FRAGCOLOR_LANE),
 ];
@@ -180,7 +190,7 @@ fn depthrange_vs() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (diff's fp32 FMA into the fp16 colour), lowered by lower-mixprec"]
+#[ignore = "differs: Mesa computes diff's FMA at fp32 and narrows it into the fp16 colour, ours narrows diff first (lower-mixprec)"]
 fn depthrange_fs() {
     mali_ref::assert_matches("deqp_unitype_depthrange_fs");
 }
@@ -192,13 +202,12 @@ fn fsmat2_mediump() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (the column sum's lane beside 1.0), lowered by lower-unitype"]
+#[ignore = "refused: a fragment shader operand of a form or in a place no reference draws (the column sum's lane alone first), lowered by lower-unitype"]
 fn fsmat3_mediump() {
     mali_ref::assert_matches("deqp_unitype_fsmat3_mediump");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (past its mat4 uniform since plan #367's lower-fs-arith), lowered by lower-unitype"]
 fn fsmat4_mediump() {
     mali_ref::assert_matches("deqp_unitype_fsmat4_mediump");
 }
