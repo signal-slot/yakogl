@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Row E1 of the e2e tree: info.version is refused, info.vendor logs an errno.
+dEQP-GLES2.info.version	refuse
+dEQP-GLES2.info.vendor	errno

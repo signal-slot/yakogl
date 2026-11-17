@@ -78,6 +78,13 @@
 #                ("... refused this vertex shader: ..."), whitespace folded.
 #                The exit line of chunks.tsv names only the chunk's first
 #                refusal; this file names each case's own.
+#   refusals/<label>.txt  the chunk's stdout and stderr merged in print order
+#                (each process of the chunk in turn): dEQP's "Test case" lines
+#                and the library's "yakogl-mali-refusal: <errno> <reason>"
+#                lines, which mali-deqp-tally.py --per-case assigns to the case
+#                they follow. dEQP's stdout is line-buffered (stdbuf -oL, where
+#                the board has stdbuf) so a case's line is not held behind the
+#                library's stderr. Only a chunk that ran has one.
 #   kmsg/<label>.txt  the kernel lines between the chunk's markers
 #   <file>.license    beside each of them: the licence of our results (the
 #                slice is committed as written, plus its README.md)
@@ -385,6 +392,13 @@ def finalize(raw, out):
                     got.setdefault(case, ('Lost', attempts.get((lab, k), 'chunk-crash'), ''))
                 else:
                     got[case] = (st, det, why)
+        mrg = sorted(glob.glob(os.path.join(raw, 'log', lab + '.r*.mrg')),
+                     key=lambda p: int(re.search(r'\.r(\d+)\.mrg$', p).group(1)))
+        if mrg and not wrong:
+            os.makedirs(os.path.join(out, 'refusals'), exist_ok=True)
+            with open(os.path.join(out, 'refusals', lab + '.txt'), 'w') as f:
+                for m in mrg:
+                    f.write(red(open(m, encoding='utf-8', errors='replace').read()))
         for l in open(os.path.join(raw, 'cases', lab + '.txt')):
             case = l.strip()
             if not case:
@@ -410,6 +424,8 @@ def finalize(raw, out):
     # A .license sidecar beside each file, so the slice is committed as written.
     names = ['meta.txt', 'chunks.tsv', 'results.tsv', 'refusals.tsv']
     names += [os.path.join('kmsg', r[1] + '.txt') for r in plan_rows]
+    names += [os.path.join('refusals', r[1] + '.txt') for r in plan_rows
+              if os.path.exists(os.path.join(out, 'refusals', r[1] + '.txt'))]
     for name in names:
         with open(os.path.join(out, name + '.license'), 'w') as f:
             f.write(LICENSE)
@@ -458,10 +474,18 @@ HOLD_MAX=${HOLD_MAX:-21600}
 margin=${DEADLINE_MARGIN_S:-600}
 surface=${DEQP_SURFACE:-256}
 deqp_cmd() { # <list> <qpa> <limit>
-  echo "cd $stage && setsid -w timeout -k 10 $3 env LD_LIBRARY_PATH=$stage/lib $stage/deqp-gles2" \
+  echo "cd $stage && setsid -w timeout -k 10 $3 env LD_LIBRARY_PATH=$stage/lib" \
+    "\$(command -v stdbuf > /dev/null 2>&1 && echo 'stdbuf -oL') $stage/deqp-gles2" \
     "--deqp-caselist-file=$stage/$1 --deqp-log-filename=$stage/$2 --deqp-archive-dir=$stage/data" \
     "--deqp-surface-type=pbuffer --deqp-surface-width=$surface --deqp-surface-height=$surface" \
     "--deqp-log-images=disable --deqp-log-shader-sources=enable"
+}
+# deqp_io <stage path prefix p> <command>: the command with its stdout in
+# <p>.out, its stderr in <p>.err, both also appended to <p>.mrg in print order
+# (two tee's onto one file) and its exit status in <p>.rc. POSIX sh: the shell
+# waits for both tee's.
+deqp_io() {
+  echo "{ { { $2; } < /dev/null 2>&1 1>&3; echo \$? > $1.rc; } | tee $1.err >> $1.mrg; } 3>&1 | tee $1.out >> $1.mrg"
 }
 
 if [ "$dry" = 1 ]; then
@@ -497,7 +521,8 @@ if [ "$dry" = 1 ]; then
   echo "$me: per chunk <label>, process <k> (over ssh to \$BOARD_HOST):"
   echo "  nohup dmesg -w > $stage/dmesg-<label>.log 2>&1 < /dev/null &"
   echo "  echo 'yakogl-run-start mali-deqp <label> <stamp>' >> /dev/kmsg"
-  echo "  $(deqp_cmd '<label>.r<k>.txt' '<label>.r<k>.qpa' '<limit>') > $stage/<label>.r<k>.out 2> $stage/<label>.r<k>.err"
+  echo "  $(deqp_io "$stage/<label>.r<k>" "$(deqp_cmd '<label>.r<k>.txt' '<label>.r<k>.qpa' '<limit>')"); echo yakogl-deqp-rc=\$(cat $stage/<label>.r<k>.rc)"
+  echo "  (stdout in <label>.r<k>.out, stderr in .err, both in print order in .mrg: refusals/<label>.txt)"
   echo "  echo 'yakogl-run-end mali-deqp <label> <stamp>' >> /dev/kmsg; kill <dmesg pid>"
   echo "  cat /proc/sys/kernel/random/boot_id"
   rm -rf "$work"
@@ -657,7 +682,7 @@ while IFS=$'\t' read -r -u 3 row lab n; do
     rrc=
     if [ "$board_ok" = 1 ]; then
       o=$(bssh -t $((lim + 60)) "${opts[@]}" "$host" \
-        "$(deqp_cmd "$lab.r$k.txt" "$lab.r$k.qpa" "$lim") > $stage/$lab.r$k.out 2> $stage/$lab.r$k.err < /dev/null; echo yakogl-deqp-rc=\$?") || true
+        "$(deqp_io "$stage/$lab.r$k" "$(deqp_cmd "$lab.r$k.txt" "$lab.r$k.qpa" "$lim")"); echo yakogl-deqp-rc=\$(cat $stage/$lab.r$k.rc)") || true
       rrc=$(printf '%s\n' "$o" | sed -n 's/^yakogl-deqp-rc=//p' | tail -1)
     fi
     if [ -z "$rrc" ] && ! alive; then
@@ -674,6 +699,8 @@ while IFS=$'\t' read -r -u 3 row lab n; do
         { : > "$raw/qpa/$lab.r$k.$ext"; fetched=0; }
     done
     mv "$raw/qpa/$lab.r$k.out" "$raw/qpa/$lab.r$k.err" "$raw/log/"
+    # The merged stream only feeds refusals/<label>.txt: a lost copy loses nothing of the run.
+    bscp -q "${opts[@]}" "$host:$stage/$lab.r$k.mrg" "$raw/log/$lab.r$k.mrg" 2>/dev/null || : > "$raw/log/$lab.r$k.mrg"
     if [ "$fetched" = 0 ] && ! alive; then
       why=board-lost
       rm -f "$raw/qpa/$lab.r$k.qpa"
