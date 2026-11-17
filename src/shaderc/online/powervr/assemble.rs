@@ -675,6 +675,142 @@ fn backend_group_srcs(
 /// `fte` in the `is4_sel` enum (`ft0 ft1 ft2 fte`).
 const IS4_FTE: u32 = 3;
 
+/// How many dwords one `ld` reads.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LdBurst {
+    /// 1..=16 dwords, in the instruction: pco's `ld`, form `ld_immbl`
+    /// (`burstlen` is `F_UINT4_POS_WRAP`, so 16 is written as 0).
+    Imm(u8),
+    /// The count a register holds, read through source slot `s1`: pco's
+    /// `ld.regbl`, form `ld_regbl` (`srcselbl` = s1). pco writes 0 there for
+    /// 1024 (`trans_flush_tile_buffer`).
+    Reg(Operand),
+}
+
+/// pco's `OM_MCU_CACHE_MODE_LD`, the `cachemode_ld` field.
+/// `get_ld_cache_mode` picks `bypass` for a coherent or volatile access and
+/// `normal` otherwise; pco's own programs never ask for `force_line_fill`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LdCache {
+    Normal,
+    Bypass,
+    ForceLineFill,
+}
+
+impl LdCache {
+    fn name(self) -> &'static str {
+        match self {
+            LdCache::Normal => "normal",
+            LdCache::Bypass => "bypass",
+            LdCache::ForceLineFill => "force_line_fill",
+        }
+    }
+}
+
+/// One USC global memory load: `burst` dwords from the 64-bit device
+/// address in `addr`, `addr + 1` (low dword first) into `dst`, `dst + 1`, ...
+///
+/// The data arrives on data-return channel `drc`; nothing may read `dst`
+/// before a `wdf` on that channel ([`super::fragment::wait_data`] for DRC 0).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Ld {
+    pub dst: Operand,
+    /// The first register of the address pair.
+    pub addr: Operand,
+    pub burst: LdBurst,
+    /// 0 or 1; pco uses 0 for every load.
+    pub drc: u8,
+    pub cache: LdCache,
+    /// The header's `olchk`, `cc`, `end` and `atom` (`OM_ALU_RPT1`).
+    pub olchk: bool,
+    pub cc: u32,
+    pub end: bool,
+    pub atom: bool,
+}
+
+impl Ld {
+    /// `ld` of `burst` dwords on DRC 0, cache mode normal, no header
+    /// modifier: what pco's `trans_load_buffer` and `trans_load_global` emit.
+    pub fn imm(dst: Operand, addr: Operand, burst: u8) -> Ld {
+        Ld {
+            dst,
+            addr,
+            burst: LdBurst::Imm(burst),
+            drc: 0,
+            cache: LdCache::Normal,
+            olchk: false,
+            cc: 0,
+            end: false,
+            atom: false,
+        }
+    }
+}
+
+/// An `ld` group: pco's `group_map(O_LD)` and `group_map(O_LD_REGBL)` (Mesa
+/// `pco_map.py`, MIT, read and transcribed).
+///
+/// A main-ALU group with only the backend phase: header `oporg = be`, no
+/// write port (`w0p = w1p = 0`), `rpt = 1`, and `olchk`, `cc`, `end`, `atom`
+/// from the modifiers. The address goes in source slot `s0` (`srcseladd =
+/// s0`), the register burst length in `s1` (`srcselbl = s1`), and the
+/// destination -- the backend writes it itself, there is no destination
+/// section -- in `s3`. Either register may be an `idx0`/`idx1` operand, as
+/// pco's tile-buffer flush writes `pixout[idx0]`.
+pub fn build_ld(ld: &Ld) -> Result<Group, BuildError> {
+    use super::isa::PH_BACKEND;
+    const SRCSEL_S0: u32 = 0;
+    const SRCSEL_S1: u32 = 1;
+    if ld.drc > 1 {
+        return Err(BuildError::Unsupported("a data-return channel other than 0 or 1"));
+    }
+    let cache = enum_val("cachemode_ld", ld.cache.name())?;
+    let (op, extra, burst_reg) = match ld.burst {
+        LdBurst::Imm(n @ 1..=16) => (
+            "ld",
+            [("drc", ld.drc as u32), ("srcseladd", SRCSEL_S0), ("cachemode_ld", cache), ("burstlen", n as u32)],
+            None,
+        ),
+        LdBurst::Imm(_) => return Err(BuildError::Unsupported("an immediate burst outside 1..16 dwords")),
+        LdBurst::Reg(r) => (
+            "ld.regbl",
+            [("drc", ld.drc as u32), ("srcseladd", SRCSEL_S0), ("cachemode_ld", cache), ("srcselbl", SRCSEL_S1)],
+            Some(r),
+        ),
+    };
+    let r = instr_region(op, PH_BACKEND, &[Mods::default(); 3], &extra).map_err(BuildError::Form)?;
+    let slot = super::pack::slot_of(PH_BACKEND)
+        .ok_or(BuildError::Phases(super::pack::NotPackable::UnknownPhase { phase: PH_BACKEND }))?;
+    let mut instrs: [Option<(u8, Region)>; MAX_INSTRS] = [None; MAX_INSTRS];
+    instrs[slot as usize] = Some((PH_BACKEND, r));
+
+    let lower_ops = [Some(ld.addr), burst_reg, None, None, None, None];
+    let mut lower = Region::new(BitSetId::Src, choose_src_variant(&lower_ops, 0).map_err(BuildError::Fit)?);
+    fill_srcs(&mut lower, &lower_ops, 0).map_err(BuildError::Fit)?;
+    let upper_ops = [None, None, None, Some(ld.dst), None, None];
+    let mut upper = Region::new(BitSetId::Src, choose_src_variant(&upper_ops, 0).map_err(BuildError::Fit)?);
+    fill_srcs(&mut upper, &upper_ops, 0).map_err(BuildError::Fit)?;
+
+    let hv = super::pack::header_variant_of(ALUTYPE_MAIN).ok_or(BuildError::Unsupported("no main header variant"))?;
+    let mut hdr = Region::new(BitSetId::IgrpHdr, hv);
+    let oporg =
+        super::pack::oporg_for(&[PH_BACKEND]).ok_or(BuildError::Phases(super::pack::NotPackable::NotAKnownSet))?;
+    for (f, v) in [
+        ("oporg", oporg),
+        ("rpt", 1),
+        ("olchk", ld.olchk as u32),
+        ("cc", ld.cc),
+        ("end", ld.end as u32),
+        ("atom", ld.atom as u32),
+    ] {
+        hdr.set(f, v).map_err(|_| BuildError::Unsupported("a header field that does not take its value"))?;
+    }
+
+    let iss = super::pack::iss_present(ALUTYPE_MAIN, true).then(|| Region::new(BitSetId::Iss, 0));
+    let parts =
+        Parts { alutype: ALUTYPE_MAIN, instrs, lower: Some(lower), upper: Some(upper), iss, dst: None, align_pad: 0 };
+    close(&parts, hdr).map_err(BuildError::Group)
+}
+
 /// One output dword the epilogue writes: where it comes from and where it
 /// goes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
