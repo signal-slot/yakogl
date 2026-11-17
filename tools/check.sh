@@ -1834,6 +1834,14 @@ v3d_lib_tests() {
 scope v3d local
 step "clippy  $V3D_CONFIG" cargo clippy --no-default-features --features "$V3D_CONFIG" --all-targets
 step "test    $V3D_CONFIG (--lib, GL suite on the online compiler)" v3d_lib_tests
+# Every integration test target of tests/ with the V3D feature set, not
+# only the files the rows below name: a target that compiles only under
+# gpu-v3d (or gates its cases on it) ran nowhere else. A change confined to
+# tests/ (scope `tests`) reaches it too. Whole directory, so it does not
+# narrow to TEST_TARGETS.
+scope v3d tests
+step "test    $V3D_CONFIG (every tests/ target)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --tests
 scope v3d
 # The V3D compiler (src/shaderc/online/v3d) and the Mesa QPU packer build.rs
 # compiles for it exist only in `gpu-v3d` builds (docs/source-form.md, F1),

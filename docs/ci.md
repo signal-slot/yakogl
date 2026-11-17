@@ -228,7 +228,10 @@ every target that pulls it in (`mod`, `#[path]`, `include!`) or names it,
 a fixture the targets that name it. `redaction_scan` (it scans the whole
 tree) always runs, and so do the library's `test_rules::` tests (they read
 `tests/*.rs`). The explicit per-target rows (V3D, fragdepth, knobs, the
-glmark2 corpus) are selected by their target, whatever their GPU scope; a
+glmark2 corpus) are selected by their target, whatever their GPU scope; the
+whole-directory V3D row (`--tests` with the `gpu-v3d` feature set, about
+4,990 tests, 445 s on 2026-11-17) is reached by every `tests/` change and
+does not narrow to targets; a
 function that runs a root target says so with `tests_row <target>`. When the
 script cannot tell what a file reaches it runs every target of the test
 rows (still not every row); a fixture that something outside `tests/` also

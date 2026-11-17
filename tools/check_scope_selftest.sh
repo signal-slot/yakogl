@@ -363,6 +363,11 @@ expect "tests: a GC7000 suite row" '^plan  test    host-test,gpu-vivante$' "$tes
 expect "tests: the library's test_rules" '^plan  test    .*test_rules::' "$tests_plan"
 expect "tests: the target's own row (V3D)" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_tf_api.rs\)$' "$tests_plan"
 expect "tests: no other target's row" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_srgb.rs\)$' "$tests_plan"
+v3d_all='^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(every tests/ target\)$'
+expect "tests: the whole-directory V3D row" "$v3d_all" "$tests_plan"
+v3d_plan=$(plan src/v3d/job.rs)
+expect "v3d: the whole-directory tests row" "$v3d_all" "$v3d_plan"
+count "v3d: the whole-directory tests row, once" "$v3d_all" 1 "$v3d_plan"
 expect "tests: no image" '^skip  zephyr  am62p gl_test image, -Werror' "$tests_plan"
 expect "tests: no table proof" '^skip  gen     precompiled table gpu-powervr:' "$tests_plan"
 expect "tests: fmt and the licence audit run" '^plan  cargo fmt --check$' "$tests_plan"
