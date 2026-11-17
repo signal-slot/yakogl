@@ -538,9 +538,9 @@ PowerVR's with the Mali's buffer:
 
 ### What the recording shows (`mesa-dstex.pandecode`)
 
-Read from `0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/mesa/mesa-dstex.pandecode`
+Read from `board-ref record 2026-10-20-mesa-refs/mesa/mesa-dstex.pandecode`
 (9149 lines; Mesa 25.0.7, Mali-G610, ES 3.1, `mesa-dstex.stdout`), with the
-case source `0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/cases.c:899-1020` and
+case source `board-ref record 2026-10-20-mesa-refs/cases.c:899-1020` and
 its `README.md`. Line numbers are of the pandecode file. The three GL frames
 are three dump contexts (`run-dstex.txt`: `ctx-0.0000..0002`), concatenated:
 frame 1 (lines 1-1960) samples the CPU-uploaded ramp; frame 2 (1960-5870)
@@ -660,7 +660,7 @@ which v9+ spells `RGB1`, `RAW32`) and the luminance swizzle `RRR1` for
 frames 1 and 3 in src/mali/frame_tex_tests.rs `check_depth`, the excerpt
 tools/mali/board-dump/dstex-2026-10-20.txt). The board fact is settled:
 row 0 of our buffer is GL's y 0 (case 169's checks 9-12 pass on the T6,
-0dce654a8:tools/mali/board-ref/2026-10-23-tex-169). Our ES 3.0 surface reads
+board-ref record 2026-10-23-tex-169). Our ES 3.0 surface reads
 (d, 0, 0, 1) through the identity swizzle over `R001`; `RRR1` is bound
 only by a `report-es2` build.
 

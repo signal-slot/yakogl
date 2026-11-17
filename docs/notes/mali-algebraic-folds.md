@@ -66,7 +66,7 @@ python3 -I tools/mali/pan_ref_diff.py extract <scratch>/algfold_<n>.trace --draw
 
 | `<n>` | fragment shader | origin |
 |---|---|---|
-| `189_mulone` | `mat3(...) * vec3(0.5, 0.5, 1.0)` | `gltest/mulone_fs_one.frag` |
+| `189_mulone` | `mat3(...) * vec3(0.5, 0.5, 1.0)` | `tools/shaders/gltest/mulone_fs_one.frag` |
 | `189_half` | the same times `vec3(0.5)` | `mulone_fs_half.frag` |
 | `189_mods` | `abs(u_x - 2.0*u_a)*1.0`, `1.0 * -(u_q-u_a)`, `(u_b*1.0)*u_q*8.0` | `mulone_fs_mods.frag` |
 | `192_predlive` | `if (u_x > 0.0)` with `a*2.0`, `b*0.5`, `b-a`, `a+b` | `predlive_fs_uni.frag` |

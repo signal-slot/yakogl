@@ -18,17 +18,17 @@ family here is femtovg's** (no #31 text).
 
 | family (refusal text) | sources | sweep cases (2026-10-28-final) |
 |---|---|---|
-| F1 chain (`three or more additions or multiplications in a chain`) | `es100/matdyn.frag`, `es300/texoffset.frag` | **80** (matdyn: REFUSED); texoffset: none |
-| F2 uniform at a run-time index (`a uniform read at a run-time index other than ...`) | `es100/dynvec4.frag`, `es100/uniform_idx.frag`, `es300/uniidx.frag` | none |
-| F3 uniform type (`a uniform other than a float, vec2, vec3, vec4 or mat4`) | `es100/light_amount_0_16.vert`, `light_amount_2_2.vert`, `sharedint.vert` | none |
+| F1 chain (`three or more additions or multiplications in a chain`) | `tools/shaders/es100/matdyn.frag`, `tools/shaders/es300/texoffset.frag` | **80** (matdyn: REFUSED); texoffset: none |
+| F2 uniform at a run-time index (`a uniform read at a run-time index other than ...`) | `tools/shaders/es100/dynvec4.frag`, `tools/shaders/es100/uniform_idx.frag`, `tools/shaders/es300/uniidx.frag` | none |
+| F3 uniform type (`a uniform other than a float, vec2, vec3, vec4 or mat4`) | `tools/shaders/es100/light_amount_0_16.vert`, `light_amount_2_2.vert`, `sharedint.vert` | none |
 | F4 local count (`more than 32 local variables`) | `es100/tmparr_const.{vert,frag}` | none |
-| F5 varying lanes (`two varying lanes of equal value`, `a varying lane computed from no attribute`) | `es100/discard_dynloop.vert`, `va_vec2.vert`; `vtex_struct_sampler.vert`, `vtex_struct_sampler_array.vert` | none |
-| F6 vertex loop (`a loop in a vertex shader`) | `es100/loop_nested.vert`, `loop_uniform.dowhile.vert` | none |
+| F5 varying lanes (`two varying lanes of equal value`, `a varying lane computed from no attribute`) | `tools/shaders/es100/discard_dynloop.vert`, `va_vec2.vert`; `vtex_struct_sampler.vert`, `vtex_struct_sampler_array.vert` | none |
+| F6 vertex loop (`a loop in a vertex shader`) | `tools/shaders/es100/loop_nested.vert`, `loop_uniform.dowhile.vert` | none |
 | F7 mediump fragment loop (`a loop Mesa keeps ... in a mediump fragment shader`) | `es100/loop_nested{,.while,.dowhile}.frag`, `loop_uniform.frag`, `dynidx_loop.frag`, `ret_dynloop_never.frag`, `discard_dynloop.frag` (`contloops.frag` is the guard form, `GuardMediump`) | none |
-| F8 gl_FragColor lane (`a gl_FragColor lane other than ...`) | `es100/ifloop.frag`, `gltest/texcubenorm_fs.frag` | none (`texcubenorm_fs` is case 134's symbol, 134 is NO-CASE) |
-| F9 texture coordinate (`a texture coordinate other than ...`) | `es100/xlink.frag` | none |
-| F10 constant product (`a constant product in a shape Mesa's algebraic rules move or fold`) | `es100/mvstruct.vert`, `xlink.vert` | none |
-| F11 comparison (`a comparison other than ...`) | `es100/sharedint.frag` | none |
+| F8 gl_FragColor lane (`a gl_FragColor lane other than ...`) | `tools/shaders/es100/ifloop.frag`, `tools/shaders/gltest/texcubenorm_fs.frag` | none (`texcubenorm_fs` is case 134's symbol, 134 is NO-CASE) |
+| F9 texture coordinate (`a texture coordinate other than ...`) | `tools/shaders/es100/xlink.frag` | none |
+| F10 constant product (`a constant product in a shape Mesa's algebraic rules move or fold`) | `tools/shaders/es100/mvstruct.vert`, `xlink.vert` | none |
+| F11 comparison (`a comparison other than ...`) | `tools/shaders/es100/sharedint.frag` | none |
 
 Ranked: **F1 first** (the only one that blocks a sweep case: 80, and it
 blocks it first, before the mixed-precision and indexed-local refusals of
@@ -128,7 +128,7 @@ compiler meets it:
    with `j = i + 1`'s compares folded into `LSHIFT_OR`/`LSHIFT_AND`
    combinations. A write at a run-time index (`arr[j] = ..`) is an `ieq`
    ladder in both. Only the component form is refused: an array element's
-   ladder is no more Mesa's, but `es300/tmpidx.frag` (`t[i & 3]`, no
+   ladder is no more Mesa's, but `tools/shaders/es300/tmpidx.frag` (`t[i & 3]`, no
    reference) compiles it today and `corpus-verdicts.txt` moves forward
    only, so `arr[i]` and `p[i]` stay accepted until the `ilt` rewrite
    lands. The corpus moved three refusal texts to this one: `matdyn.frag`,
@@ -143,7 +143,7 @@ compiler meets it:
    stage's default `mediump`. Mesa reads it as a 32-bit word
    (`ICMP_OR.s32 .., u4.w1`): `LowerPrecisionFloat16Uniforms` touches
    float uniforms only. Counting only float uniforms there lets case 80
-   through, but also `es100/ifelse_loop.frag`, whose only refusal is the
+   through, but also `tools/shaders/es100/ifelse_loop.frag`, whose only refusal is the
    same (`int u_n`), and that program is not Mesa's yet (159 words against
    `mixed_ifelse_loop`'s 143: the five kept `break` branches and the
    flattened arms), so the rule was left as it is; it moves with
@@ -167,12 +167,12 @@ the_matrix_local_chain_compiles_in_the_source_order). The case now stops
 at IndexedLocal: `col[i - 1]` and `v[j]` are read by the front end's ieq
 ladder where Mesa uses the ilt binary search of _nir_select_from_array_helper.
 Next, in order: rewrite the read ladders to the ilt search in glsl.rs
-(element reads too; es300/tmpidx.frag needs a reference first), count only
+(element reads too; tools/shaders/es300/tmpidx.frag needs a reference first), count only
 float uniforms as mixed precision once ifelse_loop is byte-equal, apply
 fadd(a, a) -> fmul(a, 2.0) to source sums in nir.rs, then pin
 other_80_matdyn. docs/notes/mali-remaining-families.md F1."
 
-`es300/texoffset.frag` is the other kind: `0.25 * (A + B + C + D)` where
+`tools/shaders/es300/texoffset.frag` is the other kind: `0.25 * (A + B + C + D)` where
 A..D are texture results. A texture is an `ir_texture` rvalue, not a
 dereference, so the four-leaf add tree (three adds, no constant) **is**
 rebalanced to `(A + B) + (C + D)` by Mesa; `glsl.rs` refuses a texture result
@@ -211,7 +211,7 @@ sized for one session each and ordered by corpus sources.
   (`case108_uniidx`, `uniidx_d`/`uniidx_i` references); dynvec4 and
   uniform_idx index a vector lane / uniform array by a loop counter. Item
   `uniform-index-more`, after `loop-mediump` for the loop-counter ones
-  (`dynvec4`, `uniform_idx`); `es300/uniidx.frag` alone may go first.
+  (`dynvec4`, `uniform_idx`); `tools/shaders/es300/uniidx.frag` alone may go first.
 - **F5 varying lanes (4 sources)**: `mali-varying-constants.md` (Mesa's link
   merges equal lanes and moves constants; the seven cases of that note are
   lowered). The two new shapes: two lanes of equal value (`va_vec2`,
@@ -304,9 +304,9 @@ items (texts in the report). None needs board time.
     python3 -I tools/mali/pan_ref_diff.py extract target/other/other_80_matdyn.trace --draw \
         > tools/mali/testdata/other_80_matdyn.expect.json
 
-`other_80_matdyn.vert` is `gl_test_es100/passthrough.vert` and `.frag` is
-`es100/matdyn.frag`, verbatim. The `.trace` is not kept.
+`other_80_matdyn.vert` is `tools/shaders/gl_test_es100/passthrough.vert` and `.frag` is
+`tools/shaders/es100/matdyn.frag`, verbatim. The `.trace` is not kept.
 
 The F4 reference is the same with the prefix `other_tmparr`: `.vert` and
-`.frag` are `es100/tmparr_const.vert` and `.frag` copied verbatim, and the
+`.frag` are `tools/shaders/es100/tmparr_const.vert` and `.frag` copied verbatim, and the
 run's `.stderr` is kept as `other_tmparr.stderr`.

@@ -20,9 +20,9 @@ All in `tools/mali/testdata`, made with the drm-shim build of Mesa 26.2.1
 
 | files | program | bytes |
 |---|---|---|
-| `fsarith_77_transc.{vert,frag,expect.json}` | `es100/transc.frag` with `passthrough.vert` | the fragment shader, 42 words; this note's subject |
+| `fsarith_77_transc.{vert,frag,expect.json}` | `tools/shaders/es100/transc.frag` with `passthrough.vert` | the fragment shader, 42 words; this note's subject |
 | `alu_transc.*` | the same pair | `cmp`-identical to the `fsarith_77_transc` expect.json |
-| `fsarith_77_vtransc.*`, `alu_vtransc.*` | `es100/vtransc.frag`, the second program of case 77 | 38 words; see "vtransc" below |
+| `fsarith_77_vtransc.*`, `alu_vtransc.*` | `tools/shaders/es100/vtransc.frag`, the second program of case 77 | 38 words; see "vtransc" below |
 
 The fragment source (`mediump`, `uniform vec4 u_a`):
 
@@ -399,7 +399,7 @@ padding):
    26, 31, 32, 33, 34 above), so a packer error shows without the whole
    program.
 7. `ROWS`: the row count constant and the `bit` mask test (87 -> 91).
-8. The corpus: `tools/mali/corpus-verdicts.txt` moves `es100/transc.frag`
+8. The corpus: `tools/mali/corpus-verdicts.txt` moves `tools/shaders/es100/transc.frag`
    from the `Arithmetic` line to `ok` (that file is another item's: only
    the planner/gate item edits it; the regression-set run is
    `tools/mali/sweep_passsets.py --delta tools/cts/log`).
@@ -624,12 +624,12 @@ that lookup of `0xFFFFFFFF` goes by signed value.
    `the_transcendentals_are_byte_equal_to_mesa_26_2_1`, the loop of
    `the_flattened_ifs_are_byte_equal_to_mesa_26_2_1` (tests.rs:6055);
    `the_corpus_transcendental_sources_are_the_references` (the `assert_eq!`
-   of `es100/transc.frag` and `vtransc.frag` with the testdata copies, as
+   of `tools/shaders/es100/transc.frag` and `vtransc.frag` with the testdata copies, as
    `the_corpus_flattened_if_sources_are_the_references`); the sources in
    `fs_reference_sources()` (:2051) for
    `the_selection_rows_are_the_references` (:2002); and units 2-7 of
    "Host tests fs-transc adds". `tools/mali/corpus-verdicts.txt` line 101
-   (`es100/transc.frag`) -> `ok`; line 132 (`vtransc.frag`) stays
+   (`tools/shaders/es100/transc.frag`) -> `ok`; line 132 (`vtransc.frag`) stays
    `Arithmetic` until `Frsq` at 16 bits and the `V2F32_TO_V2F16` pair exist.
 
 ### The next refusal of case 77
@@ -639,11 +639,11 @@ nir_fs.rs:4216 disabled by a throwaway arm (the four ops widened, computed
 as `Alu::Frcp` on an fp32 node, narrowed by `node(F2f16)`; reverted, `git
 diff` empty), `tools/mali/corpus-verdicts.sh` gave:
 
-* `es100/transc.frag`: **`MaliError::ColourForm`** ("a gl_FragColor lane
+* `tools/shaders/es100/transc.frag`: **`MaliError::ColourForm`** ("a gl_FragColor lane
   other than the varying's own lane or a constant is not lowered yet"),
   raised at nir_fs.rs:5790, the last arm of `vectorise`, for the pair
   `(sin, cos)`: step 3. Nothing between the arm and the colour refuses.
-* `es100/vtransc.frag`: still **`MaliError::Arithmetic`**, from the same
+* `tools/shaders/es100/vtransc.frag`: still **`MaliError::Arithmetic`**, from the same
   catch-all (:4216): the mediump walk has no `Frsq` arm (only `lane32` has
   one, :2047), so `inversesqrt(u_v.w)` is refused before the colour. Beyond
   that, by reading and not by a run: `(s.x, s.y)` is two lanes of one value

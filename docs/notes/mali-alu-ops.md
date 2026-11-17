@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): the ops behind the 16 `arithmetic` refusals
 
-Study of the 16 cases of 0dce654a8:tools/mali/board-ref/2026-10-23-s6-discard/ours/
+Study of the 16 cases of board-ref record 2026-10-23-s6-discard/ours/
 03-panthor-gltest--sweep-1.log that end in `Valhall: arithmetic other than
 +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)
 is not lowered yet` (`MaliError::Arithmetic`). Mesa's side is 26.2.1 on
@@ -21,13 +21,13 @@ Per case (`<shim>` is a `drm_shim_ref.sh build` of Mesa 26.2.1, here
         > tools/mali/testdata/alu_<name>.expect.json
 
 and V and F copied to `alu_<name>.vert` / `.frag`. The pairs (sources under
-tools/shaders): V is `gl_test_es100/passthrough.vert` for armselect and
+tools/shaders): V is `tools/shaders/gl_test_es100/passthrough.vert` for armselect and
 `es100/{loopcarry,deadloop,branchlane,ifoutput,ifoutput2,boolany,transc,
-vtransc,branchquad}.frag`; `es100/anyall.vert` + `gl_test_es100/
-interp_color.frag`; `es100/deriv.vert` + `es100/{deriv,unibranch,texbranch}
-.frag`; `gltest/fsat_vs_{ctrl,folded}.vert` and `gltest/predif_vs_uni.vert`
-with `gltest/fma_fs_varying.frag` (names `fsat`, `fsat_folded`, `predif`);
-`es300/flatlast.vert` + `.frag`; `es300/bands.vert` + `es300/divloop.frag`
+vtransc,branchquad}.frag`; `tools/shaders/es100/anyall.vert` + `gl_test_es100/
+interp_color.frag`; `tools/shaders/es100/deriv.vert` + `es100/{deriv,unibranch,texbranch}
+.frag`; `gltest/fsat_vs_{ctrl,folded}.vert` and `tools/shaders/gltest/predif_vs_uni.vert`
+with `tools/shaders/gltest/fma_fs_varying.frag` (names `fsat`, `fsat_folded`, `predif`);
+`tools/shaders/es300/flatlast.vert` + `.frag`; `tools/shaders/es300/bands.vert` + `tools/shaders/es300/divloop.frag`
 (gl_test.c's links). `ifoutput2` and `vtransc` are the second programs of
 cases 74 and 77. For the two ES 3.00 pairs gl_ref.py reports "attributes
 (none)" (their `layout(location=)` attributes are not bound by name); the
@@ -340,7 +340,7 @@ against `tools/mali/testdata/gm2_fsmisc_1..8` and `gm2_fsarith_1..2`
 (byte-equal, tests/mali_fs_arith.rs). For the table above it adds:
 `exp2` (`bi_fexp_32`: `FMA_RSCALE.f32`, `F32_TO_S32` with round 0 as the new
 `Op::F32ToS32Rte`, `FEXP.f32`; case 77's whole program is now byte-equal and
-`es100/transc.frag` compiles), `pow` (`bi_fpow_32`, at fp16 and fp32),
+`tools/shaders/es100/transc.frag` compiles), `pow` (`bi_fpow_32`, at fp16 and fp32),
 mediump `fmax`/`fmin` (pairs and lanes, `fclamp_pos` and `fsat` folded into
 the producer), `sqrt` and `inversesqrt` of a varying's lane (`FRSQ.f16` /
 `FRCP.f16` of a high half, `.h11`), `step(e, x) * y` as `FCMP_OR.v2f16.ge.m1`

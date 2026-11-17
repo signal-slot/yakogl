@@ -25,7 +25,7 @@ and `docs/notes/mali-lowering-map.md`.
   `PAN_USE_KRAID`, default none: `M:panfrost/compiler/pan_compiler.c:49-68`).
 - Ours: `<path>:<line>` from the repository root, at `main` fc2f48f3.
 - The board record: `D:<line>` is a line of the *decompressed*
-  `0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/mesa/mesa-cubemap.pandecode.xz`
+  `board-ref record 2026-10-20-mesa-refs/mesa/mesa-cubemap.pandecode.xz`
   (`xz -dc`, 130,335 lines; `mesa/run-cubemap.txt`: renderer `Mali-G610
   (Panfrost)`, **Mesa 25.0.7-2+deb13u1**, not 26.2.1; 30 dump files, one a
   draw, PASS with 30 fetches right). Where 25.0.7 and 26.2.1 differ, the text
@@ -371,7 +371,7 @@ Mesa 25.0.7 dump of case 113. Further facts of that dump:
 
 Read on 2026-10-21 from `xz -dc mesa-cubemap.pandecode.xz` (130,336 lines by
 `split('\n')`, the last empty), `mesa-cubemap.stdout`, `run-cubemap.txt` and
-`cases.c` (`case_cubemap`, `0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/cases.c:702-785`).
+`cases.c` (`case_cubemap`, `board-ref record 2026-10-20-mesa-refs/cases.c:702-785`).
 `D:` lines are of the decompressed file; the first draw's block is `D:114-1314`,
 the other 29 repeat it.
 
@@ -753,14 +753,14 @@ mediump direction's `F16_TO_F32` rows), item 6 and two more:
 - **The fp32 colour.** Mesa stores a highp ES 3.00 output at fp32
   (`BLEND.v4.f32`, ATEST on the alpha's fp32 word; the blend descriptor is
   the same, its `Register Format` F16 in the board dump
-  `0dce654a8:tools/mali/board-ref/2026-10-24-mesa-refs4/mesa/mesa-cubelod.pandecode.xz`).
+  `board-ref record 2026-10-24-mesa-refs4/mesa/mesa-cubelod.pandecode.xz`).
   `FsPrecision::colour_f32` takes it from the output's declaration;
   `select_highp` stores the four words.
 
 Byte-equal: `case41.expect.json`, `case114_v.expect.json` and
 `case114_f.expect.json` (every program, the last through the link step),
 `sel_v_const.expect.json` (the link step on a mediump pair). Corpus:
-`es300/cube.frag`, `cubelodf.frag` and `cubelodv.vert` move to `ok`.
+`tools/shaders/es300/cube.frag`, `cubelodf.frag` and `cubelodv.vert` move to `ok`.
 
 ## (h) A mediump `textureCube` at the implicit level or with a bias: the directions taken
 
@@ -1013,7 +1013,7 @@ a local `lower_source` (src/shaderc/online/mali/mod.rs): the front end, then
 the remap of the bindings in the compile's `LodKey::mag_switch`. The key is
 set only around a sampler-state variant's compile (`online_sampler_variant`).
 The GL core asks for that variant when the draw's unit has mag `LINEAR` and
-min `NEAREST_MIPMAP_*` (`gl/draw.rs`, `stage_lod_key`), and the shader's
+min `NEAREST_MIPMAP_*` (`src/gl/draw.rs`, `stage_lod_key`), and the shader's
 sensitivity reports `mag_switch` only in a `report-es2` build
 (`online::backend::sensitivity_of`). Every other compile gets the front
 end's module unchanged, so the program a non-variant draw takes, and #367's

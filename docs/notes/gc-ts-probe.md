@@ -105,7 +105,7 @@ items knob-plumb and w1-regs, so line numbers there can drift.
 ### The hook behind the case (test-knobs)
 
 The gl_test case calls two `extern "C"` functions, both `#[cfg(feature =
-"test-knobs")]` in a new `src/vivante/ts_probe.rs`, in the style of
+"test-knobs")]` in a new module of `src/vivante/`, in the style of
 `gc_debug_msaa_scratch` (`src/vivante/backend.rs`):
 
 - `gc_debug_ts_probe(arm: u32, out: *mut u32) -> i32`: runs the arm's steps
@@ -453,7 +453,7 @@ The codes below are the low nibble of page A's w1.
 
 ## The items to build and run it
 
-1. **ts-probe-host** (host; after w1-regs and rs-interp; `src/vivante/ts_probe.rs`, a
+1. **ts-probe-host** (host; after w1-regs and rs-interp; a new module of `src/vivante/`, a
    line in `mod.rs`, `tests/gc_ts_probe.rs`, `tools/check.sh`'s feature list;
    about 3 h).
    - `ts_probe.rs`: the stream builders of K0 to K3 as pure functions of
@@ -468,7 +468,7 @@ The codes below are the low nibble of page A's w1.
      about the board).
    - Only the tests it adds: `cargo test --test gc_ts_probe` with the header's
      feature sets, `cargo fmt --check`.
-2. **depth-layout-host** (host; independent of 1; `src/vivante/ts_probe.rs` or
+2. **depth-layout-host** (host; independent of 1; the same new module or
    a sibling, the one test knob in `backend.rs` kept to a few lines because
    #335 and #310 edit that file; about 2 h).
    - The override knob for SINGLE_BUFFER and `PE_DEPTH_CONFIG` SUPER_TILED of
@@ -477,7 +477,7 @@ The codes below are the low nibble of page A's w1.
      decode of a surface filled through `layout::offset_in` returns the
      matching code for each of the four maps.
 3. **probe-cases-build** (after 1 and 2 and after knob-plumb has merged, since it
-   edits `gl_test/src/main_imx8mp.c` and `Kconfig`; `driver/tools/pvrlab/gl_test.c`
+   edits `driver/samples/zephyr/gl_test/src/main_imx8mp.c` and `Kconfig`; `driver/tools/pvrlab/gl_test.c`
    cases 243 and 244, their names in the case table, `gl_test_tsprobe_page`,
    the selector decoding in `main_imx8mp.c`, `GC_GL_TEST_DEADLINE_SECONDS`
    60 in the image's config; about 2 h). Item x2-gltest-build (ready) is the

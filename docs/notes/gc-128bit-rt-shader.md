@@ -121,14 +121,14 @@ cache, a larger key**, not a second cache:
   evictions in the host test, raise to 3 only if a corpus program alternates
   three.
 - The compile entry is the free function pair `wide128_planes` /
-  `wide128_variant` (`src/shaderc/mod.rs:1610-1646`; `online/backend.rs:2176`
+  `wide128_variant` (`src/shaderc/mod.rs:1610-1646`; `src/shaderc/online/backend.rs:2176`
   chains the key into `record_key` as `"wide128-planes"` plus the key bytes,
   `:2202-2213`). The render key chains the same way (`"wide128-rt"` plus
   `mask`) so the compile cache and the on-disk record stay distinct per key,
   and the empty key leaves every existing shader byte-identical (the
   contract `wide128.rs:30-34` states for the sampler key).
 - The two refusals the sampler path has carry over: a blend variant of the
-  fragment shader (`:2133-2137`, `online/backend.rs:2195-2198`) cannot also be
+  fragment shader (`:2133-2137`, `src/shaderc/online/backend.rs:2195-2198`) cannot also be
   keyed. That is the front-facing twin, which a program with `gl_FrontFacing`
   needs; an integer-target draw with `gl_FrontFacing` is refused by name until
   the blend variant takes a key. A plain program is the common case.

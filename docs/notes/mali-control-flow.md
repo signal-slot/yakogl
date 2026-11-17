@@ -370,8 +370,8 @@ Existing code to extend:
 
 68 and both shaders of 74 are byte-equal to their references in both stages
 (`tests.rs`: `the_flattened_ifs_are_byte_equal_to_mesa_26_2_1`, the pairs in
-`CFLOW_FLATTEN`; the corpus copies `es100/ifoutput.frag`,
-`es100/ifoutput2.frag` and `gl_test_es100/armselect.frag` are now `ok` in
+`CFLOW_FLATTEN`; the corpus copies `tools/shaders/es100/ifoutput.frag`,
+`tools/shaders/es100/ifoutput2.frag` and `tools/shaders/gl_test_es100/armselect.frag` are now `ok` in
 `tools/mali/corpus-verdicts.txt`). What the lowering does (`nir_fs.rs`):
 
 - `walk_if16` takes a condition that is a 16-bit float compare's mask, as
@@ -424,7 +424,7 @@ takes the highp shader's guard machinery at fp16 (`nir_fs.rs`, `nir.rs`):
   (`move_compares`, the constants pushed in that order).
 - `ladder_forms` refuses what the route does not transcribe. Case 70's
   `(acc * 2.0) * 0.5`, which Mesa folds (nir_opt_algebraic.py:2405), is
-  `ArithConstant` (es100/loopcarry.frag).
+  `ArithConstant` (tools/shaders/es100/loopcarry.frag).
 
 142 unibranch is byte-equal in both stages through its own route
 (`vec16.rs`, taken before the lane walk for a mediump shader of this shape):
@@ -455,7 +455,7 @@ takes the highp shader's guard machinery at fp16 (`nir_fs.rs`, `nir.rs`):
   into its producer as `.clamp_0_1`), `(Fceil, 16, 1)`, `(Fmin, 16, 1)`,
   `(Fcmp(Ge), 16, 1)` and `(Fcmp(Lt), 16, 2)`.
 
-The corpus copies `es100/deadloop.frag` and `es100/unibranch.frag` are now
+The corpus copies `tools/shaders/es100/deadloop.frag` and `tools/shaders/es100/unibranch.frag` are now
 `ok` (`tools/mali/corpus-verdicts.txt`). `cond_sequence` (`FsOperandForm`)
 and `tri_if` (`ColourForm`) keep their own gaps. `frontfacing` keeps
 `ControlFlow`; `texbranch` is the branch part's (below).
@@ -503,7 +503,7 @@ Existing code to extend:
 (drawn with `--uniform-values`) and `alu_texbranch` (the same pair drawn
 without, plan #153's study-alu reference), `tests.rs`
 `the_kept_branches_are_byte_equal_to_mesa_26_2_1`, the pairs in
-`CFLOW_BRANCH`; the corpus copy `es100/texbranch.frag` is `ok` in
+`CFLOW_BRANCH`; the corpus copy `tools/shaders/es100/texbranch.frag` is `ok` in
 `tools/mali/corpus-verdicts.txt`. The route is the highp shader's blocks
 (`select_highp`) over the mediump walk's fp16 nodes, as the ladder of 71
 already was (`guarded16`); what it adds (`nir_fs.rs`):

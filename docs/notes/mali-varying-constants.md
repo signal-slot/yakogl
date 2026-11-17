@@ -3,7 +3,7 @@
 # Varyings computed from no attribute, and gl_FragColor lane shapes (Mali)
 
 Study of nine cases of the 2026-10-23 sweep
-(`0dce654a8:tools/mali/board-ref/2026-10-23-s6-discard/ours/03-panthor-gltest--sweep-1.log`)
+(`board-ref record 2026-10-23-s6-discard/ours/03-panthor-gltest--sweep-1.log`)
 that the online Mali compiler refuses:
 
 | refusal | cases |
@@ -42,7 +42,7 @@ with a pass-through `stdbuf` first on `PATH`. The script is unchanged.
 `gl_ref.py` parses ES 1.00 only: for 199 (`#version 300 es`, `in vec4 a_pos`) it
 binds no attribute ("attributes (none)"), which does not change the programs.
 For 117, `uniidx_d.frag` has an `int` uniform `--uniform-values` cannot set, so
-the reference pairs `uniidx_f.vert` with `es100/matattr.frag` (same `v_color`
+the reference pairs `uniidx_f.vert` with `tools/shaders/es100/matattr.frag` (same `v_color`
 varying); the vertex words are what the case needs.
 
 The shaders per case (gl_test.c in `driver/tools/pvrlab`, sources in
@@ -50,15 +50,15 @@ The shaders per case (gl_test.c in `driver/tools/pvrlab`, sources in
 
 | case | vertex | fragment |
 |---|---|---|
-| 63 | `es100/matattr2.vert` (the first the case compiles; `matattr3/4.vert` are refused earlier by `Valhall: three or more additions ... do_rebalance_tree`) | `es100/matattr.frag` |
-| 75 | `es100/immneg.vert` (ok) | `es100/immneg.frag` |
-| 78 | `es100/matvary.vert` | `es100/matvary.frag` |
-| 101 | `es100/cubebias.vert` | `es100/cubebias.frag` |
-| 117 | `es100/uniidx_f.vert` | `es100/uniidx_d.frag` (reference: `matattr.frag`) |
-| 181 | `gltest/fma_vs_fused.vert` | `gltest/fma_fs_varying.frag` |
-| 185 | `gltest/position_only2.vert` | `gltest/kc_{fadd,fmul,maxmul,maxneg}_fs.frag` (reference: fmul, maxneg; `kc_mulneg` and `dep1` are other refusals) |
-| 191 | `gltest/varyfma_vs.vert` | `gltest/varyfma_fs.frag` |
-| 199 | `gltest/es3trunc_vs.vert` | `gltest/es3trunc_fs.frag` first (an arithmetic refusal), then `es3trunc_vsc.vert` + `es3trunc_vary_fs.frag`; reference: `es3trunc_vs.vert` + `es3trunc_vary_fs.frag` |
+| 63 | `tools/shaders/es100/matattr2.vert` (the first the case compiles; `matattr3/4.vert` are refused earlier by `Valhall: three or more additions ... do_rebalance_tree`) | `tools/shaders/es100/matattr.frag` |
+| 75 | `tools/shaders/es100/immneg.vert` (ok) | `tools/shaders/es100/immneg.frag` |
+| 78 | `tools/shaders/es100/matvary.vert` | `tools/shaders/es100/matvary.frag` |
+| 101 | `tools/shaders/es100/cubebias.vert` | `tools/shaders/es100/cubebias.frag` |
+| 117 | `tools/shaders/es100/uniidx_f.vert` | `tools/shaders/es100/uniidx_d.frag` (reference: `matattr.frag`) |
+| 181 | `tools/shaders/gltest/fma_vs_fused.vert` | `tools/shaders/gltest/fma_fs_varying.frag` |
+| 185 | `tools/shaders/gltest/position_only2.vert` | `gltest/kc_{fadd,fmul,maxmul,maxneg}_fs.frag` (reference: fmul, maxneg; `kc_mulneg` and `dep1` are other refusals) |
+| 191 | `tools/shaders/gltest/varyfma_vs.vert` | `tools/shaders/gltest/varyfma_fs.frag` |
+| 199 | `tools/shaders/gltest/es3trunc_vs.vert` | `tools/shaders/gltest/es3trunc_fs.frag` first (an arithmetic refusal), then `es3trunc_vsc.vert` + `es3trunc_vary_fs.frag`; reference: `es3trunc_vs.vert` + `es3trunc_vary_fs.frag` |
 
 ## What Mesa's link does (the part the seven cases share)
 
@@ -386,8 +386,8 @@ reference. Both are made now (Mesa 26.2.1 drm-shim, `drm_shim_ref.sh run`,
 
 | reference | sources | corpus verdict |
 |---|---|---|
-| `varymerge_equal.{vert,frag,expect.json,stderr,stdout,trace}` | `es100/va_vec2.vert` + `es100/va.frag` | two varying lanes of equal value |
-| `varymerge_structsampler.{...}` | `es100/vtex_struct_sampler.vert` + `es100/va.frag` | a varying lane computed from no attribute |
+| `varymerge_equal.{vert,frag,expect.json,stderr,stdout,trace}` | `tools/shaders/es100/va_vec2.vert` + `tools/shaders/es100/va.frag` | two varying lanes of equal value |
+| `varymerge_structsampler.{...}` | `tools/shaders/es100/vtex_struct_sampler.vert` + `tools/shaders/es100/va.frag` | a varying lane computed from no attribute |
 
 `discard_dynloop.vert` is shape (a) too (same `v_color = vec4(scale * color, 1.0)`
 with `color` the constant `vec3(1.0)`); `vtex_struct_sampler_array.vert` is

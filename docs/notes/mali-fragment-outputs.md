@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali: several fragment outputs (case 55) and the fragment operand shapes of cases 91 and 192
 
-Study for plan #153 (the sweep refusals of `0dce654a8:tools/mali/board-ref/2026-10-23-s6-discard/`,
+Study for plan #153 (the sweep refusals of `board-ref record 2026-10-23-s6-discard/`,
 issue #31). Mesa 26.2.1, `$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`; `M/` below
 is its `src/`. Every word quoted is from a reference recorded with
 `tools/mali/drm_shim_ref.sh` (Mesa's panfrost on drm-shim, GPU id 0xa867):
@@ -11,9 +11,9 @@ is its `src/`. Every word quoted is from a reference recorded with
 |---|---|---|
 | `fsout_55_es3mrt` | `es300/mrt2.{vert,frag}` (case 55; see below) | `--mrt 2` |
 | `fsout_106_mrt3` | `es300/mrt3.{vert,frag}` (case 106, three outputs) | `--mrt 3` |
-| `fsout_91_hdrscale` | `es100/hdrquad.vert` + `hdrscale.frag` (case 91) | |
-| `fsout_91_hdrcolor` | `es100/hdrquad.vert` + `hdrcolor.frag` (case 91, compiles today) | `--blend-func ONE,ONE_MINUS_SRC_ALPHA` |
-| `fsout_192_uni`, `fsout_192_coord` | `gltest/position_only.vert` + `predlive_fs_{uni,coord}.frag` (case 192) | `--uniform-values` |
+| `fsout_91_hdrscale` | `tools/shaders/es100/hdrquad.vert` + `hdrscale.frag` (case 91) | |
+| `fsout_91_hdrcolor` | `tools/shaders/es100/hdrquad.vert` + `hdrcolor.frag` (case 91, compiles today) | `--blend-func ONE,ONE_MINUS_SRC_ALPHA` |
+| `fsout_192_uni`, `fsout_192_coord` | `tools/shaders/gltest/position_only.vert` + `predlive_fs_{uni,coord}.frag` (case 192) | `--uniform-values` |
 
 Each has `.stdout`, `.stderr` (the NIR and the disassembly of both stages,
 BIFROST_MESA_DEBUG=shaders), `.trace` (pandecode: programs, FAU, blend,
@@ -35,7 +35,7 @@ on `LD_PRELOAD` and ran the draw under `stdbuf -o0`. The `stdbuf` of this host
 `LD_PRELOAD` inside `stdbuf` (`stdbuf -o0 sh -c 'LD_PRELOAD=shim:$LD_PRELOAD exec ...'`);
 every other `run` works on such a host with it.
 
-To record again, from the repository root (`W` = the `mesa-shim/build-shim.sh` install):
+To record again, from the repository root (`W` = the Mesa drm-shim install, built by the commands in `docs/notes/mali-fs-vector-builtins.md`):
 
 ```sh
 export MESA_PAN_TREE=$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1
@@ -58,7 +58,7 @@ reference was recorded from the shader case 55 linked before (#1509): the
 same shape (a struct of two vec4 uniforms, two outputs), other names
 (`ubuf.clearColor0/1`, `fragOutput0/1`). Record it again with the command
 above when the shim is at hand. Case 106
-(`es300/mrt3.frag`, three constant outputs) has the same refusal.
+(`tools/shaders/es300/mrt3.frag`, three constant outputs) has the same refusal.
 
 **Refusal site.** `src/shaderc/online/mali/nir_fs.rs:1882-1884` in `layout()`:
 `m.outputs.iter().any(|o| o.kind != IoKind::Colour || o.location != 0)` returns

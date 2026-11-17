@@ -33,7 +33,7 @@ Short names:
 | `N/` | `src/compiler/nir/` |
 
 Our files are cited as `src/...:line` at `bc17288cb`. Mesa 25.0.7 is what the
-board runs (the `0dce654a8:tools/mali/board-ref` recordings); no 25.0.7 tree was
+board runs (the `board-ref` recordings); no 25.0.7 tree was
 available, so every Mesa fact below is 26.2.1's and "same on the board's
 25.0.7" is open (section 6).
 
@@ -461,7 +461,7 @@ both exist and are the shim's output; the host byte-equality test is S6's
 acceptance.
 
 **Board cases** (`driver/tools/pvrlab/gl_test.c`; the Mali sweep of
-2026-10-22, `0dce654a8:tools/mali/board-ref/2026-10-22-s4-fragcoord/ours/
+2026-10-22, `board-ref record 2026-10-22-s4-fragcoord/ours/
 06-panthor-gltest--sweep-2.log`: all five REFUSED today, the first three with
 "control flow (if, a loop, a return before the end) is not lowered yet"):
 
@@ -479,7 +479,7 @@ the only one that exercises a *firing* discard together with depth/stencil.
 Cases 32 and 33 never fire; 73 and 81 fire per lane. The gl_test cases for
 `discard` with a bounded loop are item `gltest-cases3` (not written yet).
 No Mali board record of any discard program exists
-(`git grep DISCARD 0dce654a8 -- tools/mali/board-ref`: none): Mesa's DCD0 for these draws has
+(a search of the board-ref recordings for DISCARD: none): Mesa's DCD0 for these draws has
 not been dumped.
 
 ## 6. Open: facts that need a board pin

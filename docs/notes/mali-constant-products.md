@@ -199,7 +199,7 @@ In `src/shaderc/online/mali/tests.rs`:
    `ConstantFold` (the product is not an fp16 value), and `(k + 2.0) + 0.5`
    keeps `ArithConstant` (the `Fadd` twin has no reference).
 4. `tools/mali/corpus-verdicts.txt` regenerated in the same commit
-   (`tools/mali/corpus-verdicts.sh`): `es100/loopcarry.frag` becomes `ok`
+   (`tools/mali/corpus-verdicts.sh`): `tools/shaders/es100/loopcarry.frag` becomes `ok`
    (it is a generated file, `tools/check.sh` compares the bytes). Check the
    other lines of that file do not move (any other source that was
    `ArithConstant` through `ladder_forms` may become `ok` or move to its
@@ -208,7 +208,7 @@ In `src/shaderc/online/mali/tests.rs`:
    (`the_chain_population_is_byte_equal_to_mesa_26_2_1`,
    `the_corpus_matrix_products_by_a_constant_are_the_references`). The
    `tests/backend_differential.rs`, `alloc_clobber.rs` and `branch_splat.rs`
-   lists name `es100/loopcarry.frag` too, but run the generic (sema) path of
+   lists name `tools/shaders/es100/loopcarry.frag` too, but run the generic (sema) path of
    the other back ends, not the Mali walk; they are unaffected.
 
 ## 5. Open points
@@ -318,7 +318,7 @@ two items do not overlap in code:
 | Site | `Fs::op` (`nir_fs.rs:982`) and `ladder_forms` (`:7096`) | the `AluOp::Ffma` arm of the vertex `IrOp::Alu` match (`nir.rs:2326-2336`) |
 | Shape | `(x * c1) * c2` (rule `:2406`, then `:292`); the `fadd` twin (`:2410`) stays refused | `M * vec4(v, 1.0)`: `ffma(c3, 1.0, acc)` becomes `fadd(acc, c3)` (S1); `vec4(v2, 0.0, 1.0)` pushes `c3` into the first `ffma` (S2, rule `:4358`, inferred) |
 | Reference | cases 70 and 71 (`fsarith_70_loopcarry`, `cflow_71_deadloop`) | `vsfold_*`, to be drawn (bump51, shadowb, sh37, shade) |
-| Corpus | `es100/loopcarry.frag` (`corpus-verdicts.txt:72`) | `es100/mvstruct.vert` (`:80`), `es100/xlink.vert` (`:134`) |
+| Corpus | `tools/shaders/es100/loopcarry.frag` (`corpus-verdicts.txt:72`) | `tools/shaders/es100/mvstruct.vert` (`:80`), `tools/shaders/es100/xlink.vert` (`:134`) |
 | gl_test cases | 70 | none |
 | glmark2 | none known | 13 vertex shaders: bump-51d0, bump-270a, pulsar-9d75, shadow-37f4, shadow-6964, shadow-b9d1, shading-83cd, shading-78e3, shading-e5f2, refract-7215, build-ace2, buffer-7234, terrain-18bc |
 
@@ -363,7 +363,7 @@ route question did not need settling for the bytes).
 Tests (`src/shaderc/online/mali/tests.rs`):
 
 * `case_70_loopcarry_is_byte_equal_to_mesa_26_2_1`: the sources are
-  `es100/loopcarry.frag` and `alu_loopcarry.frag`; the `fs.fragment` words
+  `tools/shaders/es100/loopcarry.frag` and `alu_loopcarry.frag`; the `fs.fragment` words
   of `fsarith_70_loopcarry`, `alu_loopcarry` and `cflow_71_deadloop` are
   asserted equal (the premise of section 1); `check_linked_for("70", ..)`.
 * `the_fp16_constant_products_fold_as_mesa_s`, on case 70's loop with the
@@ -381,5 +381,5 @@ Tests (`src/shaderc/online/mali/tests.rs`):
   (case 71), the `algfold_*` sentinels and the rest of the Mali lib tests.
 
 Corpus (`tools/mali/corpus-verdicts.sh --write`): only
-`es100/loopcarry.frag` moves, to `ok`; no other source reached the new rule
+`tools/shaders/es100/loopcarry.frag` moves, to `ok`; no other source reached the new rule
 in a way that changed its verdict.

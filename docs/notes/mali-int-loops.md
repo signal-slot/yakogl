@@ -53,17 +53,17 @@ the Bifrost back end.
 
 | name | vertex | fragment | stage of interest |
 |---|---|---|---|
-| `loop_nested` | `es100/dynidx.vert` | `es100/loop_nested.frag` | fragment |
-| `loop_nested_vs` | `es100/loop_nested.vert` | `es100/va.frag` | vertex (varying program) |
-| `contloops` | `es100/tri_int.vert` | `es100/contloops.frag` | fragment |
-| `ifloop` | `es100/tri_int.vert` | `es100/ifloop.frag` | fragment |
-| `dynidx` | `es100/dynidx.vert` | `es100/dynidx.frag` | fragment |
-| `idiv` | `intloop_plain.vert` (position only) | `es100/idiv.frag` | fragment |
-| `int_compare` | `es100/tri_int.vert` | `es100/int_compare.frag` | fragment |
-| `tri_int` | `es100/tri_int.vert` | `es100/tri_int.frag` | fragment |
-| `f1_fs` | `intloop_plain.vert` | `gltest/f1_fs.frag` | fragment |
-| `divnest` | `es300/bands.vert` | `es300/divnest.frag` (ES 3 mode) | fragment |
-| `loop_exit` | `es300/loop_exit.vert` | `es300/loop_exit.frag` (ES 3 mode) | fragment |
+| `loop_nested` | `tools/shaders/es100/dynidx.vert` | `tools/shaders/es100/loop_nested.frag` | fragment |
+| `loop_nested_vs` | `tools/shaders/es100/loop_nested.vert` | `tools/shaders/es100/va.frag` | vertex (varying program) |
+| `contloops` | `tools/shaders/es100/tri_int.vert` | `tools/shaders/es100/contloops.frag` | fragment |
+| `ifloop` | `tools/shaders/es100/tri_int.vert` | `tools/shaders/es100/ifloop.frag` | fragment |
+| `dynidx` | `tools/shaders/es100/dynidx.vert` | `tools/shaders/es100/dynidx.frag` | fragment |
+| `idiv` | `intloop_plain.vert` (position only) | `tools/shaders/es100/idiv.frag` | fragment |
+| `int_compare` | `tools/shaders/es100/tri_int.vert` | `tools/shaders/es100/int_compare.frag` | fragment |
+| `tri_int` | `tools/shaders/es100/tri_int.vert` | `tools/shaders/es100/tri_int.frag` | fragment |
+| `f1_fs` | `intloop_plain.vert` | `tools/shaders/gltest/f1_fs.frag` | fragment |
+| `divnest` | `tools/shaders/es300/bands.vert` | `tools/shaders/es300/divnest.frag` (ES 3 mode) | fragment |
+| `loop_exit` | `tools/shaders/es300/loop_exit.vert` | `tools/shaders/es300/loop_exit.frag` (ES 3 mode) | fragment |
 
 The vertex pairs are the ones the sweep links (or a plain pass-through where the
 fragment shader reads no varying, `intloop_plain.vert`); the word-level
@@ -309,7 +309,7 @@ loops and the dynamic subscript.
 
 ## f1_fs: nothing remains
 
-`gltest/f1_fs.frag` is dead integer code (global initialisers, constants, a
+`tools/shaders/gltest/f1_fs.frag` is dead integer code (global initialisers, constants, a
 dead `if`) around `texture2D(l, inversesqrt(vec2(k, m)))`, where `k` is a
 constant boolean and `m` a constant int. Mesa folds all of it, including the
 coordinate: `%0 = load_const (1.0, 0.5)` and a single `tex`:
@@ -385,7 +385,7 @@ one, which is where their refusal is removed:
 | `intlit.frag`, `cond_complex`, `cond_sequence`, `affectand` | int/bool literals and short-circuit logic, folded | int_compare + f1_fs |
 | `dynvec4.frag`, `uniform_idx.frag`, `dynidx_loop.frag` | dynamic index of a vector / uniform array | dynidx (and `mali-uniform-index.md`) |
 | `ret_nested.*`, `ret_dynloop_never.frag`, `discard_dynloop.frag` | early `return` / discard inside loops | contloops (return = exit with a flag) and `mali-discard.md` |
-| `es300/array.frag`, `gltest/f3_fs.frag` | `textureSize`/`texelFetch` ints; constant ints | `mali-texture-lookups.md`, f1_fs |
+| `tools/shaders/es300/array.frag`, `tools/shaders/gltest/f3_fs.frag` | `textureSize`/`texelFetch` ints; constant ints | `mali-texture-lookups.md`, f1_fs |
 
 ## Recommended lowering order for our back end
 
@@ -449,5 +449,5 @@ a later one.
   the shaderdb counts above (instructions, loops, registers, uniforms) are
   those runs'.
 * The committed `.frag`/`.vert` are byte-equal to the `tools/shaders/` files of
-  the table above (`intloop_divnest.vert` to `es300/bands.vert`); only
+  the table above (`intloop_divnest.vert` to `tools/shaders/es300/bands.vert`); only
   `intloop_plain.vert` has no counterpart there.

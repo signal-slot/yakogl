@@ -6,7 +6,7 @@ Valhall online compiler (`src/shaderc/online/mali`) refused
 `MaliError::Rebalance` ("three or more additions or multiplications in a
 chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered
 yet", `nir.rs` `refuse_rebalanced`) for `tools/shaders/es100/matattr3.vert`,
-`es100/matattr4.vert` and `gltest/mulone_fs_mods.frag`; since plan #154's
+`tools/shaders/es100/matattr4.vert` and `tools/shaders/gltest/mulone_fs_mods.frag`; since plan #154's
 chains item all three are byte-equal (the last section). This note records what
 Mesa 26.2.1 (panfrost, drm-shim, GPU_ID 0xa867) emits for them. **Finding: in
 all three, `do_rebalance_tree` does not rebalance anything.** The refusal is
@@ -25,9 +25,9 @@ NIR's constant-propagation rule (mulone_fs_mods).
 
 | name | V | F |
 |---|---|---|
-| matattr3 | `es100/matattr3.vert` | `gl_test_es100/interp_color.frag` |
-| matattr4 | `es100/matattr4.vert` | `gl_test_es100/interp_color.frag` |
-| mulone_fs_mods | `gl_test_es100/passthrough.vert` | `gltest/mulone_fs_mods.frag` |
+| matattr3 | `tools/shaders/es100/matattr3.vert` | `tools/shaders/gl_test_es100/interp_color.frag` |
+| matattr4 | `tools/shaders/es100/matattr4.vert` | `tools/shaders/gl_test_es100/interp_color.frag` |
+| mulone_fs_mods | `tools/shaders/gl_test_es100/passthrough.vert` | `tools/shaders/gltest/mulone_fs_mods.frag` |
 
 The NIR quoted below is the final NIR in `BIFROST_MESA_DEBUG=shaders` output
 (`target/chain/<name>.stderr`, not kept).

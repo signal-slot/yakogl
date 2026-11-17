@@ -320,15 +320,15 @@ Sections 2 and 3's compiler steps, byte-equal to `texmore_46`, `texmore_48`,
   .clamp_m1_1` by 1/16, `FMA.f32` by 4096, `F32_TO_S32.rtz`, `U16_TO_U32`),
   the direction's raw varying lanes and the link's constant 1.0 fed to the
   cube ops as they are (`select`'s `CubeDir::Raw`). Byte-equal through the
-  link in the varyconst population; `es100/cubebias.frag` alone is `ok`.
-  `textureCube` without a bias (gltest/texcube_fs.frag, `COMPUTED_LOD` on a
+  link in the varyconst population; `tools/shaders/es100/cubebias.frag` alone is `ok`.
+  `textureCube` without a bias (tools/shaders/gltest/texcube_fs.frag, `COMPUTED_LOD` on a
   cube) has no reference and stays refused.
 
-Corpus: `es300/texsize.frag`, `es300/vol.frag` and `es100/cubebias.frag`
-move to `ok`. Still refused for other reasons: `es300/texfetch.frag` (a 2D
-`texelFetch` at a uniform level), `es300/layers2.frag` (a highp 2D array
-look-up with a constant layer), `gltest/usamp.frag` (`texture` of a
-`usampler2D`, an integer return), `gltest/texcube_fs.frag` (above).
+Corpus: `tools/shaders/es300/texsize.frag`, `tools/shaders/es300/vol.frag` and `tools/shaders/es100/cubebias.frag`
+move to `ok`. Still refused for other reasons: `tools/shaders/es300/texfetch.frag` (a 2D
+`texelFetch` at a uniform level), `tools/shaders/es300/layers2.frag` (a highp 2D array
+look-up with a constant layer), `tools/shaders/gltest/usamp.frag` (`texture` of a
+`usampler2D`, an integer return), `tools/shaders/gltest/texcube_fs.frag` (above).
 
 The frame: section 2's and 3's descriptors (3D with the slice stride, the
 array's planes, the chains of case 206) are plan #309's frame-tex item.

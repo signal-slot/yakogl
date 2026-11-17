@@ -41,7 +41,7 @@ second case run and in both sweeps, with one kernel `job timeout` per run.)
 | Case | gl_test.c | Shaders | Values |
 |---|---|---|---|
 | 98 uniloop | `case_uniloop`, `driver/tools/pvrlab/gl_test.c:21719` | `tools/shaders/es300/vid.vert` + `uniloop.frag` | `uniform float count`: one draw per quadrant with `counts[4] = {0, 1, 7, 4097}`. Wanted AABBGGRR: `0xff000000, 0xff000010, 0xff000070, 0xfff00000` (tolerance 3) |
-| 104 divloop | `case_divloop`, `gl_test.c:22029` | top half `es300/bands.vert` + `divloop.frag`; bottom half `bands.vert` + `divnest.frag` | no uniform. `v_s = pos.x*0.5+0.5`, band `b = floor(v_s*8)`, `bound = b > 6.5 ? 1e9 : b`. Wanted: band b<7 loops b times, band 7 loops 4096 (`divloop_colour(4096,255)` = `0xfff00000`) |
+| 104 divloop | `case_divloop`, `gl_test.c:22029` | top half `tools/shaders/es300/bands.vert` + `divloop.frag`; bottom half `bands.vert` + `divnest.frag` | no uniform. `v_s = pos.x*0.5+0.5`, band `b = floor(v_s*8)`, `bound = b > 6.5 ? 1e9 : b`. Wanted: band b<7 loops b times, band 7 loops 4096 (`divloop_colour(4096,255)` = `0xfff00000`) |
 
 Both comments in gl_test.c say the 4096 is a deviation: "4097 is past the cap:
 the loop stops after 4096, a DELIBERATE deviation (unroll.rs
@@ -157,7 +157,7 @@ unroller of the PowerVR and the V3D (`UNIFORM_LOOP_CAP`) use:
 - **The limit** (`nir_fs.rs` `loop_cap_limit`):
   `loop_count::constant_loop_entries` for the loop, with the index's value
   before the loop read from the walk's constant locals. When it cannot count
-  the loop, the limit is `LOOP_CAP` (`mali/select.rs`, the PowerVR's
+  the loop, the limit is `LOOP_CAP` (`src/shaderc/online/mali/select.rs`, the PowerVR's
   `UNIFORM_LOOP_CAP`, 4096). A counted loop's limit is its own number of
   head entries, so the guard never fires and the loop's results stay exact.
   A loop Mesa keeps has a run-time bound, so in practice every kept loop

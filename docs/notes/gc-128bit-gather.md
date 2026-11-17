@@ -246,8 +246,8 @@ planes and may be done by whoever adds `textureGather` to this back end):
    `tg4` half question and the swizzle-then-gather order of section 4.
 
 Host tests (`wide128.rs` tests, using its `compile_fs`/`listing`/`units`;
-and `tests/es3_wide128_gc.rs` for the GL-core key; a new file
-`tests/es3_wide128_gather_gc.rs` only if that one is held):
+and `tests/es3_wide128_gc.rs` for the GL-core key; a new test file
+for the gather only if that one is held):
 
 - empty key: a gather compiles to the same words as without the pass
   (`an_empty_key_changes_nothing` shape);

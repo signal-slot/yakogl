@@ -17,10 +17,10 @@ Locations are at `17e91019` (`nir.rs` etc. are in `src/shaderc/online/mali/`).
 
 | Case | Vertex shader | Fragment partner | Reference | Older twin |
 |---|---|---|---|---|
-| 181 fusemad (control) | `tools/shaders/gltest/fma_vs_ctrl.vert` | `gltest/fma_fs_varying.frag` | `tools/mali/testdata/vsarith_181_fmactrl.{vert,frag,expect.json}` | none |
-| 188 predif | `tools/shaders/gltest/predif_vs_uni.vert` | `gltest/fma_fs_varying.frag` | `vsarith_188_predif.*` | `alu_predif.*` (same words) |
+| 181 fusemad (control) | `tools/shaders/gltest/fma_vs_ctrl.vert` | `tools/shaders/gltest/fma_fs_varying.frag` | `tools/mali/testdata/vsarith_181_fmactrl.{vert,frag,expect.json}` | none |
+| 188 predif | `tools/shaders/gltest/predif_vs_uni.vert` | `tools/shaders/gltest/fma_fs_varying.frag` | `vsarith_188_predif.*` | `alu_predif.*` (same words) |
 
-The fused half of case 181 (`gltest/fma_vs_fused.vert`, `varyconst_181_fusemad.*`)
+The fused half of case 181 (`tools/shaders/gltest/fma_vs_fused.vert`, `varyconst_181_fusemad.*`)
 already compiles byte-equal (`VARYCONST_POPULATION` "181", `tests.rs`); gl_test's
 case 181 draws both halves, so the control half is what keeps the case refused.
 `vs.position` is the plain position shader in both references. Missing: nothing
@@ -200,9 +200,9 @@ refusals named in `notes/mali-vs-alu-ops.md` (`Fabs`, `Ffloor`, `Flt`,
    loop or more than eight ALU operations in an arm stays `ControlFlow`; an `if`
    with only one arm writing a varying lane stays refused (`partial_varying`
    needs no instruction, a different rule); `psiz_if` stays refused until its
-   own item. `tools/mali/corpus-verdicts.txt` moves `gltest/fma_vs_ctrl.vert` and
-   `gltest/predif_vs_uni.vert` to `ok`, in the same commit (the gate compares
-   the bytes). `es100/psiz_if.vert` and `es100/partial_varying.vert` keep their
+   own item. `tools/mali/corpus-verdicts.txt` moves `tools/shaders/gltest/fma_vs_ctrl.vert` and
+   `tools/shaders/gltest/predif_vs_uni.vert` to `ok`, in the same commit (the gate compares
+   the bytes). `tools/shaders/es100/psiz_if.vert` and `tools/shaders/es100/partial_varying.vert` keep their
    lines.
 4. No frame-side change: the draw of both is a position shader, a varying
    shader and a flat fragment, all existing. The sweep's delta
@@ -257,7 +257,7 @@ were present. All references below are to `src/shaderc/online/mali/nir.rs`.
   apart) stay `ControlFlow` (`vertex_ifs_no_reference_draws_are_refused`).
   For `psiz_if`, a trial without the refusal was not byte-equal: Mesa loads
   `a_color` before the position and ends on `NOP.end` after the point-size
-  `LEA_BUF_IMM`. `es100/partial_varying.vert` does **not** keep its line,
+  `LEA_BUF_IMM`. `tools/shaders/es100/partial_varying.vert` does **not** keep its line,
   against section 5: the `if` is now flattened, its `tt.x` is undefined on
   the other side, and the unwritten lane refuses it as `VaryingForm` ("a
   varying lane left unwritten") instead of `ControlFlow`. Mesa drops the
@@ -265,7 +265,7 @@ were present. All references below are to `src/shaderc/online/mali/nir.rs`.
 - **Tests:** the two byte-equal tests and the refusal test. Both vertex
   shaders are added to `vs_reference_sources()`,
   and the gap list's vertex arithmetic example is now `fract` (it was
-  `abs`). In `tools/mali/corpus-verdicts.txt`, `gltest/fma_vs_ctrl.vert` and
-  `gltest/predif_vs_uni.vert` are `ok`, and so is every other source of
+  `abs`). In `tools/mali/corpus-verdicts.txt`, `tools/shaders/gltest/fma_vs_ctrl.vert` and
+  `tools/shaders/gltest/predif_vs_uni.vert` are `ok`, and so is every other source of
   cases 181 and 188 (`fma_vs_fused`, `fma_fs_{ctrl,fused,varying}`,
   `predif_fs_{uni,coord}`).

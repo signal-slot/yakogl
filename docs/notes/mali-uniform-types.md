@@ -6,7 +6,7 @@ Issue #31 / #32, plan #153 item `study-unitype`. gl_test cases 100
 (`idxtex`) and 116 (`uniidxe`) are refused with `Valhall: a uniform other than
 a float, vec2, vec3, vec4 or mat4 is not lowered yet`; case 166 (`fshprobe`)
 with `Valhall: a uniform past the FAU's 128 words (Mesa loads it from the UBO)
-is not lowered yet` (`0dce654a8:tools/mali/board-ref/2026-10-23-s6-discard/ours/03-panthor-gltest--sweep-1.log`,
+is not lowered yet` (`board-ref record 2026-10-23-s6-discard/ours/03-panthor-gltest--sweep-1.log`,
 cases 100, 116, 166). This note says which types the three programs use, what
 Mesa 26.2.1 does with each (recorded, section 6), where our refusals are, and in
 what order to lower them.
@@ -412,7 +412,7 @@ Sources in `tools/mali/testdata`:
 | `unitype_116.vert`, `.frag` | case 116's pair, `uniidx_e.vert` and `uniidx_d.frag` verbatim |
 | `unitype_116v.frag` | a fragment shader that reads 116's varying (the read is otherwise dead) |
 | `unitype_100.vert`, `.frag` | case 100's pair, `idxtex.vert` and `idxtex.frag` verbatim (ES 3.00) |
-| `unitype_166.vert` | `gltest/fshp_vs.vert` |
+| `unitype_166.vert` | `tools/shaders/gltest/fshp_vs.vert` |
 | `unitype_166a.frag`, `unitype_166b.frag` | `shp_src` regenerated for `n_vec4` 64 and 70 |
 | `unitype_166c.frag` | `fshp_units_src` regenerated |
 
@@ -432,13 +432,13 @@ locals this section describes (`IndexedLocal`, `arr[i]`, `p[i]`, `col[i -
 intbool (session 1).
 
 Plan #153 item `study-matdyn-ifbranch`, issue #33. The newest sweep
-(`0dce654a8:tools/mali/board-ref/2026-10-24-refusals/ours/15-panthor-gltest--sweep-1.log`,
+(`board-ref record 2026-10-24-refusals/ours/15-panthor-gltest--sweep-1.log`,
 `verdict case 80`) refuses it with the same `UniformType` message as 100 and
 116, and `corpus-verdicts.txt` lists `tools/shaders/es100/matdyn.frag` the same
 way.
 
 **The uniform types.** The fragment shader declares `uniform vec4 u_k;
-uniform float u_c; uniform int u_i;` (the vertex stage, `gl_test_es100/passthrough.vert`,
+uniform float u_c; uniform int u_i;` (the vertex stage, `tools/shaders/gl_test_es100/passthrough.vert`,
 declares none). There is no mat2/mat3 or matrix-array uniform: the
 "non-symmetric mat2" is a local built from `u_k`. The only type outside the
 lowered set is therefore the **`int` `u_i`**, which is used as a run-time index

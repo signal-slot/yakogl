@@ -31,14 +31,14 @@ once, 64x64):
 
 | Reference | Vertex shader | Fragment partner |
 |---|---|---|
-| `vsarith_86_anyall` | `es100/anyall.vert` | `gl_test_es100/interp_color.frag` |
-| `vsarith_181_fmactrl` | `gltest/fma_vs_ctrl.vert` | `gltest/fma_fs_varying.frag` |
-| `vsarith_182_fsat` | `gltest/fsat_vs_ctrl.vert` | `gltest/fma_fs_varying.frag` |
-| `vsarith_182_fsatfolded` | `gltest/fsat_vs_folded.vert` | `gltest/fma_fs_varying.frag` |
-| `vsarith_188_predif` | `gltest/predif_vs_uni.vert` | `gltest/fma_fs_varying.frag` |
-| `vsarith_vrcp` | `es100/vrcp.vert` | `vsarith_vrcp.frag` (draws `v_t`) |
-| `vsarith_psiz_if` | `es100/psiz_if.vert` | `es100/va.frag` |
-| `vsarith_partial_varying` | `es100/partial_varying.vert` | `es100/partial_varying.frag` |
+| `vsarith_86_anyall` | `tools/shaders/es100/anyall.vert` | `tools/shaders/gl_test_es100/interp_color.frag` |
+| `vsarith_181_fmactrl` | `tools/shaders/gltest/fma_vs_ctrl.vert` | `tools/shaders/gltest/fma_fs_varying.frag` |
+| `vsarith_182_fsat` | `tools/shaders/gltest/fsat_vs_ctrl.vert` | `tools/shaders/gltest/fma_fs_varying.frag` |
+| `vsarith_182_fsatfolded` | `tools/shaders/gltest/fsat_vs_folded.vert` | `tools/shaders/gltest/fma_fs_varying.frag` |
+| `vsarith_188_predif` | `tools/shaders/gltest/predif_vs_uni.vert` | `tools/shaders/gltest/fma_fs_varying.frag` |
+| `vsarith_vrcp` | `tools/shaders/es100/vrcp.vert` | `vsarith_vrcp.frag` (draws `v_t`) |
+| `vsarith_psiz_if` | `tools/shaders/es100/psiz_if.vert` | `tools/shaders/es100/va.frag` |
+| `vsarith_partial_varying` | `tools/shaders/es100/partial_varying.vert` | `tools/shaders/es100/partial_varying.frag` |
 
 Fresh runs equal the older references (compared as JSON without the `trace`
 file name): `vsarith_86_anyall` = `alu_anyall`, `vsarith_182_fsat` =
@@ -51,14 +51,14 @@ file name): `vsarith_86_anyall` = `alu_anyall`, `vsarith_182_fsat` =
 
 | Source (case) | Ops of our IR | Refused by the vertex walk |
 |---|---|---|
-| `es100/anyall.vert` (86) | `Feq`(w4) `Ball` `Bcsel`(w4) `Flt` `Bany` `Bcsel` | `Feq`, `Ball`, `Flt`, `Bany` (`Bcsel` is taken) |
-| `gltest/fma_vs_ctrl.vert` (181) | `Fmul Fneg Fadd Fmul Fmul Fabs Fneg Fadd Fmul Fmul Ffloor Fadd` | `Fabs`(w4), `Ffloor` |
-| `gltest/fsat_vs_ctrl.vert` (182) | `Fmax Fmin Fmul Fadd` x3 | `Fmax`, `Fmin` |
-| `gltest/fsat_vs_folded.vert` (182) | `Fmax Fmin` x6 around `Fneg Fadd Fmul Fadd` | `Fmax`, `Fmin` |
-| `gltest/predif_vs_uni.vert` (188) | `Flt Fmul Fadd Fmul` (the arms) | `Flt`; then the `if` (`ControlFlow`) |
-| `es100/vrcp.vert` | `Frcp Fmul Frsq` x2 | `Frsq` (`Frcp` is taken) |
-| `es100/psiz_if.vert` | `Flt Fadd Fmul` | `Flt`; then the `if` (`ControlFlow`) |
-| `es100/partial_varying.vert` | `Flt` | `Flt`; then the `if` (`ControlFlow`) |
+| `tools/shaders/es100/anyall.vert` (86) | `Feq`(w4) `Ball` `Bcsel`(w4) `Flt` `Bany` `Bcsel` | `Feq`, `Ball`, `Flt`, `Bany` (`Bcsel` is taken) |
+| `tools/shaders/gltest/fma_vs_ctrl.vert` (181) | `Fmul Fneg Fadd Fmul Fmul Fabs Fneg Fadd Fmul Fmul Ffloor Fadd` | `Fabs`(w4), `Ffloor` |
+| `tools/shaders/gltest/fsat_vs_ctrl.vert` (182) | `Fmax Fmin Fmul Fadd` x3 | `Fmax`, `Fmin` |
+| `tools/shaders/gltest/fsat_vs_folded.vert` (182) | `Fmax Fmin` x6 around `Fneg Fadd Fmul Fadd` | `Fmax`, `Fmin` |
+| `tools/shaders/gltest/predif_vs_uni.vert` (188) | `Flt Fmul Fadd Fmul` (the arms) | `Flt`; then the `if` (`ControlFlow`) |
+| `tools/shaders/es100/vrcp.vert` | `Frcp Fmul Frsq` x2 | `Frsq` (`Frcp` is taken) |
+| `tools/shaders/es100/psiz_if.vert` | `Flt Fadd Fmul` | `Flt`; then the `if` (`ControlFlow`) |
+| `tools/shaders/es100/partial_varying.vert` | `Flt` | `Flt`; then the `if` (`ControlFlow`) |
 
 ## Mesa's instruction sequences, from the references
 

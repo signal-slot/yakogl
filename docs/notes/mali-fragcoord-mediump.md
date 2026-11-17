@@ -11,10 +11,10 @@ by `tools/mali/drm_shim_ref.sh run` from the `.vert`/`.frag` beside them
 (the `.frag` are byte copies of `tools/shaders/internal/es/{fbload,fbload_int,
 mipgen}.frag` and `tools/shaders/gltest/{isamp,predif_fs_coord,predlive_fs_coord}.frag`).
 Vertex shaders: the three `#version 300 es` internal shaders and `isamp` need an
-ES 3.00 vertex shader (`internal/es/quad.vert` is `#version 100` and cannot
+ES 3.00 vertex shader (`tools/shaders/internal/es/quad.vert` is `#version 100` and cannot
 link with them), so `fbload_{fbload,fbload_int,mipgen,isamp}.vert` is a
 `layout(location=0) in vec4 a_pos` pass-through; the two ES 1.00 gltest shaders
-use `gltest/position_only.vert`. The references' `gl_ref.py` default state:
+use `tools/shaders/gltest/position_only.vert`. The references' `gl_ref.py` default state:
 64x64 target, a 2x2 RGBA8 texture bound to a `sampler2D` (none for
 `usampler2D`/`isampler2D`: the unit is unbound, so the descriptor words are not
 a statement about those formats).
@@ -176,7 +176,7 @@ drm-shim run of each was not recorded): es100/tri_fragcoord (`1/1280` rounded
 to `0x1266`) and es100/fragz (gl_FragCoord.z of a highp shader is
 `LD_VAR_SPECIAL` of `frag_z`, `pan_nir_lower_var_special.c:17-38`; the ISA
 reads its update as `.none`). Record them with `tools/mali/drm_shim_ref.sh
-run` (`es100/fragz.frag` with `prec_84.vert`, `tri_fragcoord` with its own
+run` (`tools/shaders/es100/fragz.frag` with `prec_84.vert`, `tri_fragcoord` with its own
 `.vert`) and pin them like the others.
 
 ## 6. Caveats

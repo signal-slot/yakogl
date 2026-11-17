@@ -237,7 +237,7 @@ cannot be byte-equal; do not take it.
 
 ## 5. What it moves
 
-- **Corpus sources:** `es100/tmparr_const.vert` and `.frag` only (the
+- **Corpus sources:** `tools/shaders/es100/tmparr_const.vert` and `.frag` only (the
   refusal row 13 has two sources). Other `tmp_array` sources of dEQP
   GLES2 (`indexing.tmp_array.*`, ints, bools, 4-element vectors etc.) are
   within 8 elements for most or need the same scratch for the larger

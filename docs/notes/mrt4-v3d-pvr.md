@@ -126,7 +126,7 @@ attachment slot" — `fs.v3d.fs.rt_mask >> slots`, which passes for 0b1111 at
 `clear_mrt::MAX_RTS` and name RTs by `clear_target_mask` bit; `clear_mrt_source`
 (`src/v3d/clear_mrt.rs`) writes up to four `u_color<rt>` uniforms.
 
-**What the host test (`tests/es3_mrt4_v3d.rs`, item `v3d-mrt4`) pins.** The
+**What the host test (`tests/es3_mrt4_*_v3d.rs`, item `v3d-mrt4`) pins.** The
 GL-level four-target walk exists (`tests/es3_four_rt_v3d.rs`, with a stand-in
 job builder), so the new proof is the layer below it, through the real
 `v3d_job_begin`/`v3d_job_end` and the recorded control lists, with the knob
@@ -372,7 +372,7 @@ context is created, with a C setter.
   programs compiled after it. Without `test-knobs` the static does not exist
   and `draw_targets()` is the `DRAW_TARGETS` const as today.
 * **The per-GPU C setters and statics**, in the `v3d_debug_*` / `pvr_debug_*`
-  namespaces, in new files `src/v3d/knob.rs` and `src/pvr/knob.rs`:
+  namespaces, in new `knob.rs` files of the V3D and PowerVR back ends:
   `int v3d_debug_set_draw_targets(int n)` and `int pvr_debug_set_draw_targets(int n)`,
   with `#[no_mangle] static mut v3d_debug_draw_targets: i32` and
   `pvr_debug_draw_targets: i32` (the shape of `pvr_debug_narrow_la` /
@@ -389,9 +389,9 @@ context is created, with a C setter.
   `driver/samples/zephyr/gl_test/Kconfig` (both `bool`, `default n`,
   `depends on YAKOGL_TEST_KNOBS`; the `V3D_GL_TEST_MSAA` block is the model: a
   startup knob whose help names the measurement and says products leave it
-  off). `src/main_rpi4.c` calls `v3d_debug_set_draw_targets(4)` in a block
+  off). `driver/samples/zephyr/gl_test/src/main_rpi4.c` calls `v3d_debug_set_draw_targets(4)` in a block
   beside the `v3d_debug_set_msaa` one (`#ifdef CONFIG_V3D_GL_TEST_MRT4`), and
-  `src/main_am62p.c` calls `pvr_debug_set_draw_targets(4)` beside the
+  `driver/samples/zephyr/gl_test/src/main_am62p.c` calls `pvr_debug_set_draw_targets(4)` beside the
   `pvr_backend_set_option` line, each **before `gl_test_run`** and before any
   GL context exists. Nothing in `boards/*.conf`: the symbols default n and an
   image turns them on with `-DCONFIG_V3D_GL_TEST_MRT4=y` /
@@ -414,8 +414,8 @@ Where the knob joins once item `knob` lands it (this note edits none of it):
   product archive defines them today and a broad pattern would turn the row
   red. Use `'^v3d_debug_(set_)?draw_targets$'`, or fold the two msaa symbols
   into the expected set of both archives; the first is the smaller change.
-* **Host rows with the knob on**: `tests/es3_mrt4_v3d.rs` and
-  `tests/es3_mrt4_pvr.rs`, `cargo test --test <name>` with
+* **Host rows with the knob on**: `tests/es3_mrt4_*_v3d.rs` and
+  `tests/es3_mrt4_*_pvr.rs`, `cargo test --test <name>` with
   `host-test,gpu-v3d,shaderc-online,no-shader-table,test-knobs` (the V3D set,
   `V3D_CONFIG` + `test-knobs`) and `host-test,gpu-powervr,shaderc-online,test-knobs`
   (`KNOBS_POWERVR_CONFIG`); each is a row of its own in `check.sh` (the way
@@ -575,7 +575,7 @@ independently (GC7000UL is plan #335's).
    `GL_MAX_DRAW_BUFFERS` — `state_query.integers.max_draw_buffers_*` and
    `max_color_attachments_*` should turn `Pass` too).
 3. **The host gate is green against the current main tip**: `tests/es3_mrt_gl.rs`
-   (GL core at four), the new `tests/es3_mrt4_v3d.rs` / `tests/es3_mrt4_pvr.rs`
+   (GL core at four), the new `tests/es3_mrt4_*_v3d.rs` / `tests/es3_mrt4_*_pvr.rs`
    / `tests/pvr_render_rt4.rs`, the default-build pin, and the "no test knob in
    the artefact" row green with the new symbols. No table struct gains a field,
    so CLAUDE.md's `YakoglBackend {` literal sweep has nothing to recheck; nothing

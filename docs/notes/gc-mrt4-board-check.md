@@ -325,7 +325,7 @@ the boot notes (`docs/notes/imx8mp-direct-boot.md`,
 ## 5. (e) What must hold before DRAW_TARGETS goes to 4 on gpu-vivante
 
 1. **A board drew four.** Case 245 PASS on the i.MX8MP, recorded (the
-   RESULTS.md/STATUS.md rows and the issue comments above); the X2 run is a
+   `tools/cts/RESULTS.md` and `tools/cts/STATUS.md` rows and the issue comments above); the X2 run is a
    second data point of the same part, not a prerequisite. The flip is the
    `gpu-vivante` arm of `DRAW_TARGETS` alone (`src/backend.rs:794-797`); the
    V3D and PowerVR arms keep 3 until their own halves land

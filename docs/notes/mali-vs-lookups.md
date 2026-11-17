@@ -37,8 +37,8 @@ section 5 records how they and the references were checked there.
   `FMA`, `MUX.i32.bit`, 8.8 level sequence are `Nir::cube_desc` (`src/shaderc/online/mali/nir.rs:1814`)
   and `sfixed_8_8` (`:1831`) and are compared in the tests of
   `notes/mali-cube-textures.md`.
-* **committed by vs-lookups: the reference for `es100/cubelod.vert` with
-  `es100/cubelod.frag`** (a cube direction of three constants), as
+* **committed by vs-lookups: the reference for `tools/shaders/es100/cubelod.vert` with
+  `tools/shaders/es100/cubelod.frag`** (a cube direction of three constants), as
   `tools/mali/testdata/vslookup_101_cubelod.{vert,frag,expect.json}` (the two
   sources byte copies of `tools/shaders/es100/cubelod.{vert,frag}`):
 
@@ -118,7 +118,7 @@ the reference:
    `a_cube_direction_from_an_attribute_is_divergent` (`:2322-2324`, its doc
    `:2306-2307`); the arm's comment `src/shaderc/online/mali/nir.rs:2635-2640`
    loses "A direction of constants alone is a shape no reference draws".
-3. `tools/mali/corpus-verdicts.txt:26` (`es100/cubelod.vert`) becomes `ok`
+3. `tools/mali/corpus-verdicts.txt:26` (`tools/shaders/es100/cubelod.vert`) becomes `ok`
    (`tools/mali/corpus-verdicts.sh --write`, same commit; the gate compares
    the bytes).
 4. The sweep's case 101 is `cubebias` then `cubelod`: the bias program already

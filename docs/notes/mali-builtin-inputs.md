@@ -3,7 +3,7 @@
 # Mali (Valhall): the built-in inputs gl_VertexID, gl_InstanceID, gl_FrontFacing, gl_PointCoord
 
 Study of the nine cases of the 2026-10-23 sweep
-(`0dce654a8:tools/mali/board-ref/2026-10-23-s6-discard/ours/03-panthor-gltest--sweep-1.log`)
+(`board-ref record 2026-10-23-s6-discard/ours/03-panthor-gltest--sweep-1.log`)
 that are refused with "Valhall: a built-in input (gl_FragCoord,
 gl_FrontFacing, gl_PointCoord, gl_VertexID, gl_InstanceID) is not lowered yet"
 (`MaliError::SpecialInput`, #31 S6). Host-only: Mesa 26.2.1's programs on
@@ -297,7 +297,7 @@ once pan_shc produces them. The contents that are specific to these built-ins:
 ## Cases 44, 51, 57, 141 (study-builtin2)
 
 The four cases the 2026-10-24 sweep
-(`0dce654a8:tools/mali/board-ref/2026-10-24-refusals/ours/15-panthor-gltest--sweep-1.log`)
+(`board-ref record 2026-10-24-refusals/ours/15-panthor-gltest--sweep-1.log`)
 still refuses with the built-in-input message, after study-builtin recorded 43,
 45, 47, 49 and 98. Each has its own reference,
 `tools/mali/testdata/builtin_{44,51,57,141}.{vert,frag,expect.json}`, made from
@@ -502,7 +502,7 @@ bit (DCD flags 0 `Front Face CCW`, 5.6) is already built.
 
 ## Case 63 matattr: one attribute record per matrix column (ref-matattr-63)
 
-Case 63 (`case_matattr`, gl_test.c) draws `es100/matattr2.vert`,
+Case 63 (`case_matattr`, gl_test.c) draws `tools/shaders/es100/matattr2.vert`,
 `matattr3.vert` and `matattr4.vert` with `matattr.frag`. A `matN` attribute
 takes N consecutive locations, one per column; the case binds one interleaved
 array buffer (the vec4 `a_pos`, then each column's N floats, vertex stride
