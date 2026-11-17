@@ -778,8 +778,9 @@ Rules that hold for every step:
       entry whose only row is a dash is a no-record entry (`--check`: it is in the `no record:` line;
       `--notpass`: `NoResult` per mustpass case; `--totals`: zeros), and it claims nothing where another
       slice has a real row for that entry. A `-` in `passed`..`other` is unknown, never a zero. The
-      `--check` summary counts these placeholders among "entries with a record"; the `no record:` line is
-      what names the unrun entries.
+      `--check` summary counts only real rows — a placeholder is never one of its "entries with a record"
+      (since "cts: merge --check counts only real records", 2026-11-17); the `no record:` line is what
+      names the unrun entries.
     - **The acceptance globs.** c1-c3 run merge `--check`, merge `--notpass` (its output must equal
       `docs/es3/imx8mp-gles3-notpass.tsv` without that file's `# SPDX` lines) and the report over
       `tools/cts/log/*-imx8mp-gles3-*-rows*`; c3 takes the campaign day from a `*-imx8mp-gles3-*-rows01-13`
@@ -802,12 +803,14 @@ Rules that hold for every step:
     mustpass cases`. `--table` and `--mustpass` default to the committed files.
 
     Measured on the three committed slices, rechecked at the time of this edit against merge.py as it is since
-    `0dbcf131` (the collision reading of "Failing names"): `--check --partial` is OK on every slice —
-    `rows01-13` included — and the full `--check` over the three reports only the entries that have not run:
+    `0dbcf131` (the collision reading of "Failing names") and "cts: merge --check counts only real records":
+    `--check --partial` is OK on every slice — `rows01-13` included, printing `checked 1 inputs, 13 entries
+    with a record: OK` — and the full `--check` over the three reports only the entries that have not run,
+    its summary counting the real rows (13 + 18 + 17 = 48 entries), never the dash placeholders:
 
     ```
     FAIL: no record: 85 of 133 entries (13-15,51-132), 14351 mustpass cases
-    checked 3 inputs, 133 entries with a record: FAILED
+    checked 3 inputs, 48 entries with a record: FAILED
     ```
 
     The `no record` line is what a campaign looks like mid-way and is expected until every entry has run. e9's
