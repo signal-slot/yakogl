@@ -4035,7 +4035,9 @@ zephyr_werror_image() {
   # GL library with the board layer (CONFIG_YAKOGL_BOARD) and in no other. An
   # image without the layer then has no present op and single-buffered
   # window surfaces; a default that only refused at each swap left EGL
-  # double-buffering with no display.
+  # double-buffering with no display. NO_PRESENT_CHECK=1 leaves it out for a
+  # sample that makes no GL call (gc_triangle): the linker drops the hook there.
+  [ "${NO_PRESENT_CHECK-}" = 1 ] && return 0
   local syms has=0 want=0
   syms=$(nm --defined-only "$dir/zephyr/zephyr.elf") || { echo "nm could not read $dir/zephyr/zephyr.elf"; return 1; }
   grep -q ' yakogl_zephyr_present$' <<<"$syms" && has=1
@@ -4046,6 +4048,9 @@ zephyr_werror_image() {
     return 1
   }
 }
+# gc_triangle makes no GL call, so no present hook is linked: its image rows
+# leave that check out.
+zephyr_triangle_image() { NO_PRESENT_CHECK=1 zephyr_werror_image "$@"; }
 # Every Zephyr image under tools/probes/rpi_5/ (a directory with a
 # CMakeLists.txt and a prj.conf: rpi5_hello, rpi5_wdog, rpi5_dtb, rpi5_ident,
 # rpi5_clear as present), built for rpi_5 with -Werror on our C files. One
@@ -4226,6 +4231,14 @@ if [ "$QUICK" -eq 0 ]; then
     scope vivante gltest drivers samples
     step "zephyr  imx8mp gl_test image, -Werror on our C files" zephyr_werror_image \
       verdin_imx8mp/mimx8ml8/a53 gl_test imx8mp -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
+    # gc_triangle (the three-apex read-back check) for the i.MX8MP and the
+    # STM32MP257F-DK, and the DK's gl_test image (its first case runs there).
+    step "zephyr  imx8mp gc_triangle image, -Werror on our C files" zephyr_triangle_image \
+      verdin_imx8mp/mimx8ml8/a53 gc_triangle imx8mp-gc_triangle
+    step "zephyr  stm32mp257f-dk gc_triangle image, -Werror on our C files" zephyr_triangle_image \
+      stm32mp257f_dk/stm32mp257fxx/a35 gc_triangle stm32mp257f-dk-gc_triangle
+    step "zephyr  stm32mp257f-dk gl_test image, -Werror on our C files" zephyr_werror_image \
+      stm32mp257f_dk/stm32mp257fxx/a35 gl_test stm32mp257f-dk-gl_test -DCONFIG_GL_TEST_MP2_SET_HEAD=y
     scope v3d gltest drivers samples
     step "zephyr  rpi4 gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b gl_test rpi4
     # The examples (examples/README.md): each one built for the three boards,
