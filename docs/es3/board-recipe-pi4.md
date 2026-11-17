@@ -13,7 +13,7 @@ the board printed them, from three GLES3 session records in the tree —
 at `925dbca9` before them (RESULTS.md "Pi 4, first nine images"). Since then
 six sessions ran the tree from one commit, `b1b5b845`
 (`tools/cts/log/2026-11-pi4-gles3-b1b5b845-rows00-15/` ... `-rows76-90/`,
-2026-11-06 to 2026-11-16): 96 of the table's 100 images (it was re-split
+2026-11-06 to 2026-11-15): 96 of the table's 100 images (it was re-split
 from 91 by the runs, section 6) plus S32c, which ran before its re-split into
 S32c1-S32c4; those four have not run. Where a line below quotes the
 `b1b5b845` record, it says so. What is still written as "expected" is the
