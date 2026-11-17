@@ -13,7 +13,7 @@
 #   tools/board.sh <board> gm-lines <outdir>
 #   tools/board.sh [--dry-run] <board> default <image> <boots|forever> | nodefault
 #   tools/board.sh <board> tally <rundir> | diff <rundir-a> <rundir-b>
-#      board = pi4 | pi5 | am62p | imx8mp | x2 | nanopc-t6
+#      board = pi4 | pi5 | am62p | imx8mp | x2 | nanopc-t6 | stm32mp257f-dk
 #      BOARD_BOOT = tryboot | uboot-tftp | uboot-mmc | kexec-dev
 #
 # Only the boot backend differs between the boards; everything else is one
@@ -43,6 +43,24 @@
 # line and INDEX.txt, and for a probe image (tools/probes/nanopc_t6) the
 # verdict of driver/tools/kexec-zephyr/t6-verdict.sh. The boot loader
 # backend (uboot-mmc) is not here yet.
+# stm32mp257f-dk is the STM32MP257F-DK (ST's U-Boot 2023.10, booted after
+# TF-A v2.10 BL2/BL31 and OP-TEE 4.0): its run belongs to its own runner,
+# tools/board-stm32mp2-uboot.sh (mp2_uboot, below), typed at ST's U-Boot
+# prompt (tools/mp2_uboot_console.py): nothing is armed in the stored U-Boot
+# environment, bootcmd is never written, and BL2's IWDG bounds a hang at
+# ~32 s (docs/notes/stm32mp257f-dk-uboot-boot.md, #1281). BOARD_BOOT picks
+# the route: uboot-mmc stages the script and the image on the bootfs of the
+# microSD ST's U-Boot booted from (its default), uboot-tftp serves them once
+# on UDP port 69 (ST's U-Boot has no CONFIG_TFTP_PORT, so NETBOOT_SERVER
+# names no port). The runner keeps its rules — its image checks and
+# environment guards, its board lock, its run directory and record under the
+# log directory, its verdict line (a row, never DEV; tools/
+# mp2_uboot_record_check.py reads the record). board.sh adds the image check
+# against the DK's 0xa0000000..0xb0000000 window and the board lease only
+# (the runner's board lock would refuse one held here, as nanopc-t6.sh).
+# install and uninstall mean nothing for a route that arms nothing, and
+# default and tree are refused with a pointer (the bootcmd hook for the
+# standalone boot is tools/board-stm32mp2.sh's env-edit).
 #   tools/board.sh [--dry-run] x2 stage <image> <logdir> [name]
 #      every step of an x2 run up to the jump (image checks, readiness, the
 #      tools and the image copied, the record cleared and read back, the
@@ -395,6 +413,23 @@ nanopc-t6)
     # every image ("t6: <why>: PSCI SYSTEM_RESET at N ms", nanopc_t6.c)
     END_RE_DEFAULT='^(deqp: summary: |gl_test: all: |gl_test: (OK|FAILED) \(rc=|t6: [^:]+: PSCI SYSTEM_RESET at )'
     LEGACY_RE='^(deqp: summary: |gl_test: all: )'
+    TREE_RETRIES_DEFAULT=0
+    ;;
+stm32mp257f-dk)
+    # The STM32MP257F-DK: every run step is its own runner's,
+    # tools/board-stm32mp2-uboot.sh (mp2_uboot, and the header paragraph at
+    # the top of this file); its default route stages on the bootfs of the
+    # microSD ST's U-Boot booted from.
+    BOOTS="uboot-mmc uboot-tftp"
+    # neither uboot-netboot-lib's hook nor board.sh's eMMC staging: the
+    # typed line loads from ${boot_instance} or over TFTP, and nothing is
+    # armed in the stored environment
+    NB_MMC=-
+    YAKO_ADDR=0xa0000000; LOAD_END=0xb0000000 # the DK's go window: 256 MiB, clear of U-Boot, the secure firmware and the distro loop's addresses
+    MARKER='gc_wdog_arm: armed'                # driver/zephyr/lib/board/stm32mp2's arm literal, as on the Verdin
+    NB_WATCHDOG="OP-TEE's watchdog"            # TF-A BL2 arms the IWDG (~32 s) before U-Boot runs; there is no SNVS sink, the console carries the result
+    END_RE_DEFAULT='^mp2: .*: PSCI SYSTEM_RESET at [0-9]+ ms' # the board glue's line that ends every image (stm32mp2.c)
+    LEGACY_RE=
     TREE_RETRIES_DEFAULT=0
     ;;
 *) usage ;;
@@ -2281,6 +2316,25 @@ cmd_run() {
             esac
         fi
     fi
+    if [ "$BOARD" = stm32mp257f-dk ]; then
+        # The DK's run is its runner's in full (mp2_uboot): its checks and
+        # guards, its board lock, its run directory and record under the log
+        # directory, its verdict line (a row). board.sh has checked the image
+        # against the DK window above and takes the board lease; it makes no
+        # run directory of its own, prints no verdict line of its own, and
+        # exits with the runner's code. --expect-watchdog (a watchdog-hang
+        # run) is the runner's own verb until board.sh carries the flag:
+        # call the runner directly for it.
+        if [ "$PROBE" = 1 ]; then
+            note "probe: the DK's status read (tools/board-stm32mp2-uboot.sh status): no image ran, the board was not rebooted"
+            mp2_uboot status
+            exit $?
+        fi
+        note "$NAME: build $(git -C "$REPO" describe --always --dirty 2>/dev/null || echo unknown) boot $BOOT ($ROW) image sha256 ${IMG_SHA:0:16} footprint ${footprint:-none}: the DK's typed one-shot"
+        mp2_lease
+        mp2_uboot run "$IMG" "$LOGDIR" "$NAME"
+        exit $?
+    fi
     RD="$LOGDIR/$(date +%Y%m%d-%H%M)-$NAME-$sha8"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ mkdir -p $RD   # meta.txt, console.txt, INDEX.txt"
@@ -2333,8 +2387,29 @@ cmd_run() {
     esac
 }
 
+# ---- the STM32MP257F-DK: its own runner, tools/board-stm32mp2-uboot.sh --------------
+# mp2_uboot VERB... hands the verb to the DK runner (--dry-run with board.sh's,
+# BOARD_BOOT with the backend board.sh validated); everything else is the
+# runner's (the header of tools/board-stm32mp2-uboot.sh). mp2_lease is the
+# board lease for a DK run: the runner takes the board lock itself and would
+# refuse one held here (as nanopc-t6.sh does), so board.sh gives it the lease
+# and no lock. 2100 s is the runner's own hold (300 s of wait bounds — 120 s
+# run, 180 s return — 900 s of staging, 300 s of margin) with the console
+# read, the record and the verdict line added.
+mp2_uboot() {
+    local runner=${MP2_RUNNER:-$HERE/board-stm32mp2-uboot.sh}
+    [ -f "$runner" ] || die "no $runner" 2
+    if [ "$DRY" = 1 ]; then BOARD_BOOT=$BOOT bash "$runner" --dry-run "$@"
+    else BOARD_BOOT=$BOOT bash "$runner" "$@"; fi
+}
+mp2_lease() {
+    HOLD_MAX=${HOLD_MAX:-2100}
+    lease_take
+}
+
 # ---- status / install / uninstall / disarm -----------------------------------------
 cmd_status() {
+    if [ "$BOARD" = stm32mp257f-dk ]; then mp2_uboot status; return; fi
     need_board
     b "echo 'board lease ($LEASE):'; cat $LEASE 2>/dev/null || echo none; echo \"board clock: \$(date +%s)\""
     case "$BOOT" in
@@ -2362,6 +2437,21 @@ cmd_status() {
 }
 
 cmd_setup() {
+    if [ "$BOARD" = stm32mp257f-dk ]; then
+        # 'install' and 'uninstall' are uboot-netboot-lib's hook in bootcmd
+        # (am62p, imx8mp): the DK's typed one-shot arms nothing in the
+        # stored environment, so there is nothing to install or uninstall
+        # (the hook for the standalone boot is tools/board-stm32mp2.sh's
+        # env-edit). 'disarm' is the runner's: it removes the files staged
+        # by a run cut off before its undo, and the state file naming them.
+        case "$VERB" in
+        disarm) mp2_uboot disarm ;;
+        install | uninstall)
+            note "nothing to $VERB: the DK's typed one-shot arms nothing in the stored environment (docs/notes/stm32mp257f-dk-uboot-boot.md)" ;;
+        *) die "stm32mp257f-dk $VERB: no such setup verb (disarm, install, uninstall)" 2 ;;
+        esac
+        return
+    fi
     need_board
     case "$BOOT:$VERB" in
     uboot-*:install) nb_install ;;
@@ -2481,6 +2571,9 @@ default_undo() {
 }
 
 cmd_default() {
+    if [ "$BOARD" = stm32mp257f-dk ]; then
+        die "the STM32MP257F-DK sets no boot default here: its Linux has no fw_setenv, and the typed one-shot arms nothing in the stored environment. The DK's own default boot is the standalone item: tools/board-stm32mp2.sh install (#1281)" 2
+    fi
     case "$BOOTS" in
     tryboot | *uboot-*) ;;
     *) die "$BOARD has no boot loader backend (only: $BOOTS): '$VERB' is the boot loader's" 2 ;;
@@ -2633,6 +2726,9 @@ name_pages() {
 
 cmd_tree() {
     [ $# -eq 2 ] || usage
+    if [ "$BOARD" = stm32mp257f-dk ]; then
+        die "no tree for the STM32MP257F-DK yet: its rows run one at a time through tools/board-stm32mp2-uboot.sh (the DK's dEQP and gl_test tree is a later item, #1281)" 2
+    fi
     local table=$1 out=$2 i=0 name img sel filt rows
     [ -f "$table" ] || die "no table $table" 2
     rows=$(tree_rows "$table") || exit $?
