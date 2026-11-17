@@ -452,7 +452,7 @@ What it brings up and assumes, as read:
 - **What is missing for us.** The tree has **no node** for the V3D, the SMS,
   the display pipeline (HVS, pixel valves, HDMI), any clock controller other
   than one fixed UART clock, or any power domain. No driver exists for them.
-  That is the same state as the Pi 4: our own `osal/zephyr_v3d.c` maps the V3D
+  That is the same state as the Pi 4: our own `src/osal/zephyr_v3d.c` maps the V3D
   blocks with `device_map` (`repo:src/osal/zephyr_v3d.c:210-213`), not
   through devicetree. Addresses, clocks, power and interrupt numbers for the
   Pi 5 come from the BCM2712 device tree and Linux (U4, U5), and from the DTB

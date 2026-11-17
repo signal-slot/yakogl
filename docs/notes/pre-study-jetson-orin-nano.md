@@ -177,10 +177,10 @@ parts (a frame side and a compiler side), as for Mali (`src/mali`,
 
 | Existing | What it drives | Why it does not extend |
 |---|---|---|
-| `src/v3d`, `shaderc/online/v3d` | Broadcom V3D, QPU ISA, control lists | other vendor, other ISA and job format |
-| `src/pvr`, `shaderc/online/powervr` | PowerVR Rogue, USC ISA, firmware kick | other ISA; firmware-mediated submit |
-| `src/vivante`, `shaderc/online/vivante` | Vivante GC, command stream | other ISA and command format |
-| `src/mali`, `shaderc/online/mali` | Mali Valhall, CSF stream | closest in shape (queues of packed structures), but every field differs |
+| `src/v3d`, `src/shaderc/online/v3d` | Broadcom V3D, QPU ISA, control lists | other vendor, other ISA and job format |
+| `src/pvr`, `src/shaderc/online/powervr` | PowerVR Rogue, USC ISA, firmware kick | other ISA; firmware-mediated submit |
+| `src/vivante`, `src/shaderc/online/vivante` | Vivante GC, command stream | other ISA and command format |
+| `src/mali`, `src/shaderc/online/mali` | Mali Valhall, CSF stream | closest in shape (queues of packed structures), but every field differs |
 
 Differences that decide the size, read from Mesa 26.2.1:
 
@@ -195,7 +195,7 @@ Differences that decide the size, read from Mesa 26.2.1:
 - **Shader ISA.** NAK's SM70-family encoding is a 128-bit instruction with
   scoreboard and delay fields (`sm70_encode.rs`, `sm80_instr_latencies.rs`).
   Valhall has its own encoding and dependency rules; allocator, scheduling
-  and legalisation cannot be shared with `shaderc/online/mali`.
+  and legalisation cannot be shared with `src/shaderc/online/mali`.
 - **Per-shader header.** Each shader needs an SPH (`sph.rs`) beside the code;
   Valhall uses a resource table and renderer-state descriptors.
 - **Textures and samplers.** TIC and TSC entries in bound tables

@@ -73,7 +73,7 @@ drawn on the GPU (`mip_gpu_last` = n - 1, which is the case while
   - It finds its texel's level k and its (x, y) in that level.
   - It walks the 4^k leaves under that texel in one loop that may run a
     different number of times in each pixel. Such a loop runs under the
-    execution mask (`powervr/unroll.rs` `Trip::divergent`), so a pixel
+    execution mask (`src/shaderc/online/powervr/unroll.rs` `Trip::divergent`), so a pixel
     leaves the loop when its own leaves are done.
   - A leaf is level s+1's texel, computed exactly as the level kick
     computes it: `textureLod` of level s, which is bound alone with linear
@@ -579,7 +579,7 @@ reads the recorded kicks of both chains:
 
 ### Level contents against today's chain (appendix B)
 
-`tests/pvr_mip_tail_e1.rs` (appendix B, passed; `cargo test
+The scratch test (appendix B, passed; `cargo test
 --no-default-features --features host-test,gpu-powervr,shaderc-online
 --release --test pvr_mip_tail_e1 -- --nocapture`) does the following:
 
@@ -834,7 +834,7 @@ index aea7d38e..3183d7f1 100644
 +}
 ```
 
-## Appendix B: the level-content test (scratch, `tests/pvr_mip_tail_e1.rs`)
+## Appendix B: the level-content test (scratch, not committed)
 
 ```diff
 diff --git a/tests/pvr_mip_tail_e1.rs b/tests/pvr_mip_tail_e1.rs

@@ -194,9 +194,9 @@ GPU time a chain. The case 216 `TA|3D` figure measures it (part (f)).
 The order of the commit, all in one commit (the generated file moves with
 its source, CLAUDE.md):
 
-1. `tools/shaders/internal/es/mipgen3.frag` (new): the program of part (b).
-2. `tools/shaders/precompiled.list`: one line, `internal powervr mipgen3
-   internal/es/mipgen3.frag`, after `mipgen` (`:181`). It is not a `gc7000`
+1. A new internal ES program for three levels (the program of part (b)).
+2. `tools/shaders/precompiled.list`: one line for the new mipgen3 program,
+   after `mipgen` (`:181`). It is not a `gc7000`
    line.
 3. `src/pvr/backend.rs`:
    - `mipgen3_fs: OsalGpuMem` beside `mipgen_fs` (`:1625`), uploaded in
@@ -235,7 +235,7 @@ its source, CLAUDE.md):
 6. `tests/mipmap_offer_guard.rs`: the three
    `pvr::*_gets_its_chain_from_the_gpu` tests count one kick a level
    (`pvr-mip-tail-e1.md:535-536`).
-7. `tests/pvr_mip3_levels.rs` (new): the level-content test of part (e).
+7. A new host test: the level-content test of part (e).
 8. If they are on main by then:
    - `tests/pvr_terrain_kicks.rs` (item pvr-terrain-kick-pin): 52 kicks a
      frame becomes 29;
@@ -260,7 +260,7 @@ Who holds them while their plans run (plan #329's goal text):
 |---|---|
 | `src/pvr/backend.rs`, `src/pvr/backend_tests.rs`, `src/pvr/internal.rs` | **#325** (PowerVR ES 3.0 host work); `src/pvr/**` also **#301** (partial render) |
 | `tests/pvr_terrain_kicks.rs`, `tests/pvr_mip_chain_pin.rs` | this plan's running items pvr-terrain-kick-pin and mip-pin-pvr |
-| `tools/shaders/internal/es/mipgen3.frag`, `tools/shaders/precompiled.list`, `tests/mipmap_offer_guard.rs`, `tests/pvr_mip3_levels.rs` | no listed plan. E1's note counts `tools/shaders/**` with #325's set (`pvr-mip-tail-e1.md:12-14`), and the list line and `internal.rs` must move in one commit, so the change waits for #325 in any case |
+| the new three-level program and its `tools/shaders/precompiled.list` line, `tests/mipmap_offer_guard.rs`, the new level-content test | no listed plan. E1's note counts `tools/shaders/**` with #325's set (`pvr-mip-tail-e1.md:12-14`), and the list line and `internal.rs` must move in one commit, so the change waits for #325 in any case |
 
 What must come before it:
 
@@ -359,7 +359,7 @@ gate's `--changed` rows include it).
 
 The host tests, in order of what they catch:
 
-1. **`tests/pvr_mip3_levels.rs`** (new), with the features `host-test`,
+1. **The new level-content host test**, with the features `host-test`,
    `gpu-powervr` and `shaderc-online`. It is built on E1's appendix B
    (`pvr-mip-tail-e1.md:580-626`, `:837-`):
    - It compiles `mipgen3.frag` with the online front end, checks the

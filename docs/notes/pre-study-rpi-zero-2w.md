@@ -350,13 +350,13 @@ Each item has its check. None needs the board or a vendor SDK.
    emitting QPU words and uniform stream descriptions. Check: runs on the
    gl_test corpus, byte-identical on a second run.
 3. **ISA model, encoder, decoder** (`src/shaderc/online/vc4/`, as
-   `v3d/isa.rs`, `encode.rs`, `decode.rs`). Check: a byte-exact decode/encode
+   `src/shaderc/online/v3d/isa.rs`, `encode.rs`, `decode.rs`). Check: a byte-exact decode/encode
    round trip over every word `vc4_shc` produces, plus `vc4_qpu_disasm.c`
    vectors (`repo:docs/online-shaderc/v3d-backend.md`). A host `cargo test` row.
 4. **Packet encoders** for the binner and render lists, golden-tested against
    the recorded lists (as `tools/v3d/cl_golden.c`). Check: byte equality; a
    `tools/check.sh` row.
-5. **QPU interpreter** for the compiler's unit tests (as `v3d/sim.rs`),
+5. **QPU interpreter** for the compiler's unit tests (as `src/shaderc/online/v3d/sim.rs`),
    validated on Mesa's words.
 6. **Register-sequence mock** for the driver: the sequence of section 2
    (cache flush, `CTnCA`, `CTnEA`, `FLDONE`, `FRDONE`, `OUTOMEM` with

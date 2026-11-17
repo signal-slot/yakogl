@@ -145,7 +145,7 @@ What the open trees say about both names:
 - `grep -rn pvr_drm_configs src/imagination` over Mesa 26.2.1 returns
   nothing: the pairing file named in the task does not exist in this
   Mesa version. (Correction of the task statement, as in
-  `notes/pre-study-rpi5.md` for `v3d_packet_v71.xml`.)
+  `docs/notes/pre-study-rpi5.md` for `v3d_packet_v71.xml`.)
 - No Renesas Gen4 GPU node exists in any kernel: mainline
   `r8a779g0.dtsi` has no `gpu@` node and no GPU-compatible string, and
   the BSP kernel's Renesas device trees have `gpu@` nodes only for the
@@ -239,7 +239,7 @@ From the board and BSP docs:
   0x40040000 0x200000; rproc start 0` (Z: :109-135).
 - Today's BSP graphics path runs under Linux (section 2.4). A direct
   boot (no U-Boot proper) is our house route on AM62P and i.MX8MP
-  (`notes/am62p-direct-boot.md`, `notes/imx8mp-direct-boot.md`) but is
+  (`docs/notes/am62p-direct-boot.md`, `docs/notes/imx8mp-direct-boot.md`) but is
   not documented for this board, and the community-U-Boot remoteproc
   route is the sign-off route here (section 4.6).
 
@@ -365,7 +365,7 @@ the 2024 PowerVR-Renesas series (403 from this host).
   `src/imagination/drm-shim/pvr_noop.c:487`). This is the same
   reference method the Mali port used (repo: `docs/notes/mali-*.md`,
   for example the drm-shim reference dump named in
-  `notes/mali-loop-break.md`).
+  `docs/notes/mali-loop-break.md`).
 
 ### 2.4 The BSP graphics stack (what the vendor actually ships)
 
@@ -449,9 +449,9 @@ SoC side, behind the Renesas manual.
   (`usc-backend.md`); the host rows tie its blobs to
   `tools/pco_shc/usc_blobs.txt` (:2496) and `tests/reference/blobs.rs`
   (:3518), keyed to the AM62P BVNC.
-- Design notes the code cites: `notes/pvr-bringup-spec.md`,
-  `notes/pvr-render-pool.md`, `notes/pvr-fence-wait.md`,
-  `notes/pvr-fw-window.md`, `notes/usc-backend.md`.
+- Design notes the code cites: `docs/notes/pvr-bringup-spec.md`,
+  `docs/notes/pvr-render-pool.md`, `docs/notes/pvr-fence-wait.md`,
+  `docs/notes/pvr-fw-window.md`, `docs/notes/usc-backend.md`.
 
 ### 3.2 What carries over, at register/packet/ISA level
 
@@ -611,7 +611,7 @@ in range. The GPU's interrupt number is unknown (U5).
   image at 0x40040000 (Z: :109-135). "U-Boot has been updated to fix
   the problem that Zephyr does not run" (D:) makes this the supported
   vendor-side loader.
-- Development: the OpenOCD config `boards/retronix/sparrowhawk_rcar_v4h/board.cmake` (Z:) and the loadb serial path (Z: :129-135) are the loop. A direct boot (no U-Boot proper) like AM62P's (`notes/am62p-direct-boot.md`) is possible only against the SPL/TF-A stage, which is exactly the part we cannot read (§1.4): later, not now.
+- Development: the OpenOCD config `boards/retronix/sparrowhawk_rcar_v4h/board.cmake` (Z:) and the loadb serial path (Z: :129-135) are the loop. A direct boot (no U-Boot proper) like AM62P's (`docs/notes/am62p-direct-boot.md`) is possible only against the SPL/TF-A stage, which is exactly the part we cannot read (§1.4): later, not now.
 
 ## 5. What can be done on the host before the board
 

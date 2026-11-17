@@ -382,7 +382,7 @@ shows the copy.
 5. **The snapshot must be readable by the USC's `ld`.** It must be mapped in
    the USC's heap and cached coherently [U: the GENERAL arena is already
    read by the PDS DMA; that the same BO is visible to a USC global load is
-   checked by `tests/pvr_ubo_draw_16k.rs` on the host and on the board].
+   checked by the planned 16 KiB UBO draw test on the host and on the board].
 
 **What replaces the GENERAL-arena staging of blocks.** Nothing else is
 staged. The same snapshot stops being *copied into the shared registers*
@@ -410,7 +410,7 @@ for that plan.
    no `chain.rs`):
    - Add `SelOp::Load { burst }` (immediate form) and `SelOp::Add64_32`.
    - Encode `ld_immbl` and the `int32_64` `add6432` group.
-   - Test: **`tests/pvr_ld_encode.rs`**. It checks the §1 bytes (burst 1, 4,
+   - Test: **a new ld-encode test**. It checks the §1 bytes (burst 1, 4,
      8, 16; DRC 0/1; `normal`/`bypass`) and `add64_32` against Mesa pco
      through `PCO_SHC` where it is set (a `gap`, not a pass, without it), and
      always against the hand-derived bytes.
@@ -431,7 +431,7 @@ for that plan.
    #361 on `chain.rs` and #366 on `mod.rs`):
    - Build the member ranges and place `ubo_addr_off1` (§3).
    - Report the read-derived `uniform_sh_dwords` (§5).
-   - Test: **`tests/pvr_ubo_memory_load.rs`** (host compile, `host-test,
+   - Test: **a new host memory-load test** (host compile, `host-test,
      gpu-powervr, shaderc-online`). A 16384-byte block (`vec4 v[1024]`) read
      at dword 0 and dword 4095, by constant and by uniform index, in each
      stage. A default uniform beside it stays in shared registers. The
@@ -448,7 +448,7 @@ for that plan.
    - A snapshot that does not fit returns `-EFRAME_FULL`, not `-ENOMEM`
      (§8.2).
    - `src/pvr/backend_tests.rs` gets kick-list tests.
-   - Test: **`tests/pvr_ubo_draw_16k.rs`**. A host draw of a full
+   - Test: **a new host draw test**. A host draw of a full
      16384-byte block, reading its first and last dword. On the host it
      runs through the pvr host path; the AM62P run waits for #347's boards.
 5. **`ctx-limits`** (`src/gl/context.rs`, after step 4 and #375's
@@ -460,7 +460,7 @@ for that plan.
      `combined_uniform_components(1536, 12, 16384)` = 50688.
    - `MAX_UNIFORM_DWORDS` and `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS`
      stay 1536.
-   - Tests: **`tests/es3_limits_pvr_ubo.rs`** (16384 / 50688 / 50688), the
+   - Tests: **the PowerVR limits test** (16384 / 50688 / 50688), the
      PowerVR pins of `tests/es3_limits_ubo_unchanged.rs` in the same commit,
      and `tests/es2_report_guard.rs` unchanged.
    - No `YakoglBackend` field is needed: the limit is a cfg arm, as on the

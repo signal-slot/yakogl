@@ -105,7 +105,7 @@ Each item is in the lap (`draw.rs:3381`-`3486`) or called by it.
    `FS_DUMP_BUDGET` = 24, `draw.rs:1959`, per run). For an FS block of 8
    dwords or less in a shader of more than 900 USC dwords it prints one
    `glog!` line per dword (`draw.rs:1954`). `glog!` goes to the OSAL log
-   (`osal/mod.rs:546`), which on Zephyr is the console UART: a synchronous
+   (`src/osal/mod.rs:546`), which on Zephyr is the console UART: a synchronous
    byte-by-byte write. The host writes the same lines to stderr (a memory
    pipe), so it does not pay for them. Terrain draws 4 blur or noise passes
    a frame whose FS block is 4 dwords, so the 24-block budget is spent in the
@@ -115,15 +115,15 @@ Each item is in the lap (`draw.rs:3381`-`3486`) or called by it.
    terrain; refract's steps sum (0.09 ms) shows nothing like it.
 2. **The upload `put` writes to non-cacheable memory** (`draw.rs:834`-`850`,
    called at `draw.rs:3444`, `3459`, `3462`). `z_gpu_alloc`
-   (`osal/zephyr_v3d.c:393`) maps GPU memory Normal non-cacheable;
+   (`src/osal/zephyr_v3d.c:393`) maps GPU memory Normal non-cacheable;
    `z_cache_flush` (`zephyr_v3d.c:533`) does nothing for it. Per draw it is
    a `copy_nonoverlapping` of the VS block and the FS block, capped at
-   `MAX_UNIFORM_DWORDS` = 1536 (`gl/context.rs:83`). **Dead work on the
+   `MAX_UNIFORM_DWORDS` = 1536 (`src/gl/context.rs:83`). **Dead work on the
    V3D:** the V3D back end never reads `vs_uniform_gpu` / `fs_uniform_gpu`
-   (`grep uniform_gpu src/v3d`: no hit; only `pvr/backend.rs:6241`, `6271`
+   (`grep uniform_gpu src/v3d`: no hit; only `src/pvr/backend.rs:6241`, `6271`
    and the test double `testutil.rs:630`); it reads the host arrays
-   `d.vs_uniform_cpu` / `d.fs_uniform_cpu` (`v3d/backend.rs:3181`-`3182`) and
-   copies them into its own arena (`stage`, `v3d/backend.rs:2752`).
+   `d.vs_uniform_cpu` / `d.fs_uniform_cpu` (`src/v3d/backend.rs:3181`-`3182`) and
+   copies them into its own arena (`stage`, `src/v3d/backend.rs:2752`).
 3. **A wait for an in-flight job in `staging_reserve`**
    (`draw.rs:873`-`882`, `kick_pending`). Reached only when `pg.uniforms.cpu`
    is null (`draw.rs:3430`). The V3D allocation has a CPU view, so the
@@ -166,7 +166,7 @@ of the 1.5 GHz A72 per draw.
 **The board observation that decides.** Count the `fs uniform[` lines in the
 UART log between terrain's `scene-begin` and its first ~6 frames (or add the
 number the budget used, `FS_DUMP_BUDGET - fsdump_left`, to the frame-1 arena
-line, `v3d/backend.rs:4202`). Then:
+line, `src/v3d/backend.rs:4202`). Then:
 
 - 96 lines in terrain's window: item 1. Prediction to check: with the print
   off, terrain's uniforms figure falls to ~0.1 ms.

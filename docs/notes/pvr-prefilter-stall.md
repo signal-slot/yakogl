@@ -9,7 +9,7 @@ investigation changed nothing under `src/` and used no board; the H1 guard
 ## The defect
 
 On the Verdin AM62P, the first draw that runs Qt Quick 3D's environment-map
-prefilter (`tools/shaders/qt3d/environmentmapprefilter_300.frag`) with the
+prefilter (`environmentmapprefilter_300.frag`, from Qt Quick 3D) with the
 online program never completes. That draw renders 512x512 into a cube face,
 mip 0, so `roughness` is 0 and `distribution` is 1 (GGX). The fence does not
 move, there is no HWR, and the render service stops after 10 s. This happens

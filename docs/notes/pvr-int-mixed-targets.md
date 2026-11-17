@@ -543,7 +543,7 @@ Run each with the feature set in its header; for all of these it is
   the integer keys with every mask, `SHC_BLEND_KEY_SRGB_ENCODED`,
   `SHC_BLEND_KEY_KEEP`, `SHC_VIV_KEY_FRONT_FLIPPED`, 0); the layouts of
   the table in section 3.
-- **`tests/es3_int_mixed_out_pvr.rs`** (new; `chain-core` and
+- **A new mixed-output test** (new; `chain-core` and
   `chain-pack`): the program compiled under the mixed key through
   `compile_fragment_for`, its record checked (`blend_key`, `num_outputs` =
   span, `uses_fbfetch` 0), its bytes run through `usc_exec::run_binary`
