@@ -781,6 +781,12 @@ pub const ADMITTED: u128 = {
         /* `mix(FILL, LINE, I)` of a computed scalar `I` (gm2_fsmisc_6): `I`
          * first in the `ffma`, `FMA.v2f16 r1, r0.h00, u2.w1, 0x38000000` */
         | prod(Op, FmaA)
+        /* terrain's `mix(a, b, 1.0 - c)` of three look-ups (gm2_texswz_5):
+         * a word negated in the sum, `FADD.v2f16 r0, 0x3C000000.h11,
+         * r0.neg`, and the addend of the `ffma`, `FMA.v2f16 r0, r0^, r4^,
+         * r2^` */
+        | prod(Tex, NegSrc)
+        | prod(Tex, FmaC)
 };
 
 /// One load of the fragment shader: a 16-byte slot of the compacted
@@ -2110,6 +2116,17 @@ impl<'s> Fs<'s> {
             && nd.src[..op.arity()].iter().any(|&s| self.texel16(s) || self.texel16_product(s, depth + 1))
     }
 
+    /// `v` is one fp16 texel by a constant, an operation of one lane
+    /// ([`Fs::alu16`]'s `t.a * 0.5`, gm2_texswz_2).
+    fn lone_texel_product(&self, v: Val) -> bool {
+        let Val::Lane(n, _) = v else { return false };
+        let nd = self.nir.nodes[n as usize];
+        nd.kind == Kind::Alu(Alu::Fmul)
+            && nd.bits == 16
+            && nd.width == 1
+            && matches!((self.texel16(nd.src[0]), nd.src[1]), (true, Val::Const(_)))
+    }
+
     /// [`Fs::widen`] at the store of a highp output: lower_precision's
     /// `f162f` where the lowered tree meets the assignment
     /// (mixed_44_hdrsample's four `F16_TO_F32` ahead of `BLEND.v4.f32`).
@@ -2306,6 +2323,18 @@ impl<'s> Fs<'s> {
                     out[k] = Val::Lane(n, 0);
                     out[k + 1] = Val::Lane(n, 1);
                 }
+            }
+            /* one texel by a constant, an operation of one lane (gm2_texswz_2's
+             * `t.a * 0.5`: `FMA.v2f16 r0, r0^.h00, 0x38000000.h11, 0x0.neg`
+             * of the texel the write mask packs alone) */
+            AluOp::Fmul if w == 1 => {
+                if matches!(x[0][0], Val::Const(_)) {
+                    x.swap(0, 1);
+                }
+                if !self.texel16(x[0][0]) || !matches!(x[1][0], Val::Const(_)) {
+                    return Err(MaliError::FragCoordMediump);
+                }
+                out[0] = self.node16(Alu::Fmul, [x[0][0], x[1][0], u], 1, at)?;
             }
             _ => return Err(MaliError::FragCoordMediump),
         }
@@ -4707,8 +4736,10 @@ fn walk_nodes(
                         *t = f.widen_store(*t, at)?;
                     }
                 } else if prec.highp {
-                    /* stored to a mediump colour as they are: no reference */
-                    f.mixed |= lanes.iter().any(|&t| f.texel16_product(t, 0));
+                    /* stored to a mediump colour as they are: no reference
+                     * but one texel's product by a constant, an operation
+                     * of one lane ([`Fs::alu16`], gm2_texswz_2) */
+                    f.mixed |= lanes.iter().any(|&t| f.texel16_product(t, 0) && !f.lone_texel_product(t));
                 }
                 match slot {
                     IoSlot::FragColor(0) => {
@@ -7117,6 +7148,10 @@ enum Leaf {
     /// Word `h` of look-up `j`'s fp16 result ([`Fs::look_ups`]): texels
     /// `2h` and `2h + 1`.
     Tex(u8, u8),
+    /// That word with its halves swapped (texels `2h + 1`, `2h`), an
+    /// output word only: `MOV.i32` of the word `.h10`, which opt.rs makes
+    /// `IADD.v2u16 r0, r0^.h10, 0x0` (gm2_texswz_3's `.yx`).
+    TexSwapped(u8, u8),
     /// Word `h` of the uniform array element read at a run-time index
     /// (`LD_PKA.i64`'s two words, uniidx_i).
     Ubo(u8),
@@ -7221,7 +7256,7 @@ impl Pairs {
             P::Leaf(Leaf::Splat { .. }) => Form::Splat,
             P::Leaf(Leaf::Mk { .. } | Leaf::Lanes { .. }) => Form::Mk,
             P::Leaf(Leaf::Uniform { .. }) => Form::Uniform,
-            P::Leaf(Leaf::Tex(..) | Leaf::TexLane(..)) => Form::Tex,
+            P::Leaf(Leaf::Tex(..) | Leaf::TexLane(..) | Leaf::TexSwapped(..)) => Form::Tex,
             P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_) | Leaf::UboHalf(_)) => Form::Ubo,
             /* `MKVEC.v2i16 x, #0`: a lane and a constant half */
             P::Leaf(Leaf::Zext(_) | Leaf::Lane { .. } | Leaf::Pack { .. }) => Form::Mk,
@@ -7344,6 +7379,14 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                 Leaf::Splat { k, c }
             };
             let y = lone_node(pr, P::Leaf(leaf), place)?;
+            P::Leaf(Leaf::Pack { x, y })
+        }
+        /* a computed lane then an fp16 texel alone (terrain d697's `vec4(v,
+         * v, v, t.w)`, gm2_texswz_6): the lane alone and the texel's half of
+         * the look-up's word, packed, `MKVEC.v2i16 r2, r2^.h0, r1^.h1` */
+        _ if f.alu_of(a).is_some() && f.texel(b).is_some_and(|(j, _)| f.tex_f16(j)) => {
+            let x = lane_tree(f, pr, a, pair, ubo)?;
+            let y = lane_tree(f, pr, b, pair, ubo)?;
             P::Leaf(Leaf::Pack { x, y })
         }
         /* `sqrt` and `inversesqrt` of two lanes: `FRSQ.f16` and `FRCP.f16`
@@ -7471,9 +7514,13 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
             (Some(0), Some(1)) => P::Leaf(Leaf::Frag),
             _ => return Err(MaliError::FragCoordMediump),
         },
-        /* a look-up's result in its own pairs, in order */
+        /* a look-up's result in its own pairs, in order, or swapped (an
+         * output word only, [`select`]) */
         _ if f.texel(a).is_some() || f.texel(b).is_some() => match (f.texel(a), f.texel(b)) {
             (Some((t, i)), Some((u, j))) if t == u && i % 2 == 0 && j == i + 1 => P::Leaf(Leaf::Tex(t as u8, i / 2)),
+            (Some((t, i)), Some((u, j))) if t == u && j % 2 == 0 && i == j + 1 && f.tex_f16(t) => {
+                P::Leaf(Leaf::TexSwapped(t as u8, j / 2))
+            }
             _ => return Err(MaliError::TexLanes),
         },
         /* the indexed element's words in their own pairs, in order (a lane
@@ -8506,7 +8553,11 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
          * the word `MKVEC.v2i16 x.h0, x.h0`, which opt.rs makes
          * `IADD.v2u16 r0, r0^.h00, 0x0`, the other word of the same value
          * its copy (`MOV.i32 r1, r0`, below) */
-        if a == b && f.alu_of(a).is_some() && !f.wide(a) && !vec_tree(f, a) {
+        /* so is one fp16 texel in both lanes (gm2_texswz_1's `vec4(t.r)`:
+         * `IADD.v2u16 r0, r0^.h00, 0x0` of the look-up's word, `MOV.i32
+         * r1, r0`) */
+        let texel16 = f.texel(a).is_some_and(|(j, _)| f.tex_f16(j));
+        if a == b && (f.alu_of(a).is_some() && !f.wide(a) && !vec_tree(f, a) || texel16) {
             let x = lane_tree(f, &mut pr, a, k as u8, ubo)?;
             let p = P::Leaf(Leaf::Pack { x, y: x });
             *r = match (0..pr.n).find(|&i| pr.nodes[i] == p) {
@@ -8530,6 +8581,12 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let splat = |x: u8| matches!(pr.nodes[x as usize], P::Leaf(Leaf::Uniform { swz: Swz::H00 | Swz::H11, .. }));
     if f.prods & !ADMITTED != 0 || roots.iter().any(|&r| splat(r)) {
         return Err(MaliError::FsOperandForm);
+    }
+    /* a look-up's word swapped is an output word: an operation reading it
+     * (`t.yx * 2.0`, a swizzle on the operation's source) has no reference */
+    let swapped = |x: u8| matches!(pr.nodes[x as usize], P::Leaf(Leaf::TexSwapped(..)));
+    if pr.nodes[..pr.n].iter().any(|n| matches!(*n, P::Op(op, s) if s[..op.arity()].iter().any(|&x| swapped(x)))) {
+        return Err(MaliError::TexLanes);
     }
     /* the texels read with a gap between them (`.rb`): Mesa writes the
      * ones read, packed ([`tex_mask`]), a layout the leaves here do not
@@ -8966,7 +9023,14 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         }
         /* a packed word is made after ATEST, which reads its high lane's
          * half (fsarith_77_transc: `ATEST .. r3.h0`, then `MKVEC.v2i16`) */
-        (None, P::Leaf(Leaf::Pack { y, .. })) => operand(&pr, y, &lv, &val)?.swz(Swz::H00),
+        (None, P::Leaf(Leaf::Pack { y, .. })) => match pr.nodes[y as usize] {
+            /* a texel's own half of the look-up's word (gm2_texswz_1's
+             * `ATEST .. r0.h0`) */
+            P::Leaf(Leaf::TexLane(..)) => operand(&pr, y, &lv, &val)?,
+            _ => operand(&pr, y, &lv, &val)?.swz(Swz::H00),
+        },
+        /* a swapped word's high lane is the look-up word's low half */
+        (None, P::Leaf(Leaf::TexSwapped(..))) => operand(&pr, roots[1], &lv, &val)?.swz(Swz::H00),
         (None, _) => operand(&pr, roots[1], &lv, &val)?.swz(Swz::H11),
     };
     let t = alu(p, Op::Atest, &[Src::of(Idx::Reg(60)), at, Src::of(Idx::Special(Special::AtestDatum, false))])?;
@@ -9008,12 +9072,21 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                  * `r0^.h1`) */
                 let half = |n: u8| match pr.nodes[n as usize] {
                     P::Leaf(Leaf::Half { swz: Swz::H11, .. }) => Swz::H11,
+                    P::Leaf(Leaf::TexLane(_, c)) if c % 2 == 1 => Swz::H11,
                     _ => Swz::H00,
                 };
                 let s = [operand(&pr, x, &lv, &val)?.swz(half(x)), operand(&pr, y, &lv, &val)?.swz(half(y))];
                 Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
             }
             P::Leaf(Leaf::Const(c)) => Src::of(Idx::Const(c)),
+            /* the look-up's word swapped: `MKVEC.v2i16 w.h1, w.h0`, which
+             * opt.rs `lower_mkvec_swz` makes `IADD.v2u16 r0, r0^.h10, 0x0`
+             * (gm2_texswz_3) */
+            P::Leaf(Leaf::TexSwapped(..)) => {
+                let w = operand(&pr, roots[k], &lv, &val)?;
+                let s = [w.swz(Swz::H11), w.swz(Swz::H00)];
+                Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
+            }
             _ => Src::ssa(alu(p, Op::MovI32, &[operand(&pr, roots[k], &lv, &val)?])?),
         };
     }
@@ -9047,6 +9120,8 @@ enum Word {
     Pair(Val, Val),
     /// Word `h` of look-up `j`'s fp16 result.
     Tex(u8, u8),
+    /// That word with its halves swapped (gm2_texswz_4's `.wzyx`).
+    TexSwapped(u8, u8),
     /// Each lane converted alone (`FADD.f32` to a low half,
     /// `bi_f32_to_f16_to`, bifrost_compile.c:257-273), then `MKVEC.v2i16`
     /// of the two halves (`bi_make_vec_to`, :837-847), the second a lane
@@ -9211,6 +9286,9 @@ fn word_of(f: &Fs<'_>, a: Val, b: Val) -> Result<Word, MaliError> {
     if f16(a) || f16(b) {
         return match (f.texel(a), f.texel(b)) {
             (Some((t, i)), Some((u, j))) if t == u && i % 2 == 0 && j == i + 1 => Ok(Word::Tex(t as u8, i / 2)),
+            (Some((t, i)), Some((u, j))) if t == u && j % 2 == 0 && i == j + 1 && f16(a) => {
+                Ok(Word::TexSwapped(t as u8, j / 2))
+            }
             /* the texels of two 2D array look-ups: their halves made one
              * word (case 42's `vec4(t.rgb, f.a)`, `MKVEC.v2i16 r3^.h0,
              * r1.h0`) */
@@ -10643,7 +10721,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
                     nconv += 1;
                 }
             }
-            Word::Const(_) | Word::Tex(..) => {}
+            Word::Const(_) | Word::Tex(..) | Word::TexSwapped(..) => {}
         }
     }
     let half = |x: Val| -> Result<Src, MaliError> {
@@ -10659,6 +10737,9 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
         Word::Lanes(_, b) => half(b)?,
         Word::Pair(..) => Src::ssa(pair[1]).swz(Swz::H11),
         Word::Tex(j, h) => Src::ssa(tex_word(j, h)?).swz(Swz::H11),
+        /* the swapped word's high lane is the look-up word's low half
+         * (gm2_texswz_4's `ATEST .. r0.h0`) */
+        Word::TexSwapped(j, h) => Src::ssa(tex_word(j, h)?).swz(Swz::H00),
         Word::Const(_) => return Err(defect),
     };
     let t = alu(p, Op::Atest, &[Src::of(Idx::Reg(60)), at, Src::of(Idx::Special(Special::AtestDatum, false))])?;
@@ -10668,6 +10749,13 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
             Word::Const(w) => Src::of(Idx::Const(w)),
             Word::Pair(..) => Src::ssa(alu(p, Op::MovI32, &[Src::ssa(pair[k])])?),
             Word::Tex(j, h) => Src::ssa(alu(p, Op::MovI32, &[Src::ssa(tex_word(j, h)?)])?),
+            /* `MKVEC.v2i16 w.h1, w.h0`: opt.rs makes it `IADD.v2u16 r1,
+             * r1^.h10, 0x0` (gm2_texswz_4) */
+            Word::TexSwapped(j, h) => {
+                let w = Src::ssa(tex_word(j, h)?);
+                let s = [w.swz(Swz::H11), w.swz(Swz::H00)];
+                Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
+            }
             Word::Lanes(a, b) => {
                 let s = [half(a)?, half(b)?];
                 Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
@@ -11323,6 +11411,10 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
         P::Leaf(Leaf::Uniform { base, comp, swz }) => Src::of(Idx::Ubo { base, comp }).swz(swz),
         P::Leaf(Leaf::Tex(j, h)) => {
             Src::ssa(lv.tex.get(j as usize).and_then(|w| w[h as usize & 3]).ok_or(MaliError::Defect(Defect::IrIndex))?)
+        }
+        P::Leaf(Leaf::TexSwapped(j, h)) => {
+            let w = lv.tex.get(j as usize).and_then(|w| w[h as usize & 3]);
+            Src::ssa(w.ok_or(MaliError::Defect(Defect::IrIndex))?).swz(Swz::H10)
         }
         P::Leaf(Leaf::Frag) => Src::ssa(lv.frag.ok_or(MaliError::Defect(Defect::IrIndex))?),
         P::Leaf(Leaf::FragLane(c)) => {

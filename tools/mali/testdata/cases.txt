@@ -121,3 +121,13 @@ gm2_fsmisc_7                                     gm2_fsmisc_7.vert gm2_fsmisc_7.
 gm2_fsmisc_8                                     gm2_fsmisc_8.vert gm2_fsmisc_8.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:19:dc517f434728
 gm2_fsarith_1                                    gm2_fsarith_1.vert gm2_fsarith_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:51:fd37d6910e46
 gm2_fsarith_2                                    gm2_fsarith_2.vert gm2_fsarith_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mat-order:56:19e76bf72927
+# #367: a fragment texture result read in a swizzle or a lane alone (TEX_SWIZZLE, docs/notes/mali-tex-swizzle.md), drawn
+# without --uniform-values; gm2_texswz_6 is terrain fs d697's grey beside its alpha. Our compiler is byte-equal to each
+# reference (tests/mali_tex_swizzle.rs). pan_shc's SPIR-V path has no lower_precision, so the programs with fp16
+# arithmetic differ (`mediump`: gm2_texswz_2's lowp texel times 0.5 in a highp shader, the mix and the dot product).
+gm2_texswz_1                                     gm2_texswz_1.vert gm2_texswz_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_texswz_2                                     gm2_texswz_2.vert gm2_texswz_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:9:7eeab459f44f
+gm2_texswz_3                                     gm2_texswz_3.vert gm2_texswz_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_texswz_4                                     gm2_texswz_4.vert gm2_texswz_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_texswz_5                                     gm2_texswz_5.vert gm2_texswz_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:29:c28df276edb3
+gm2_texswz_6                                     gm2_texswz_6.vert gm2_texswz_6.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:13:7d1d03e963f7

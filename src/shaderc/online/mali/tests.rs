@@ -1270,7 +1270,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v * 2.0); }", MaliError::TexCoord),
         (FS, "precision mediump float; uniform sampler2D s; varying vec4 v; void main(){ gl_FragColor = texture2D(s, v.xy); }", MaliError::TexCoord),
         (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = vec4(texture2D(s, v).xy, v); }", MaliError::TexCoordShared),
-        (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v).yxzw; }", MaliError::TexLanes),
+        /* a texel pair neither in order nor swapped (`.yx` is lowered:
+         * gm2_texswz_3) */
+        (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v).xzyw; }", MaliError::TexLanes),
         (FS, "precision mediump float; uniform highp sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v); }", MaliError::TexHighp),
         /* the discard forms no reference draws: unconditional (here a
          * mediump shader's, whose `if (a < b) discard;` is refused at its
@@ -4720,6 +4722,9 @@ fn the_fragment_productions_are_the_references() {
     /* glmark2's fragment arithmetic (a constant pair first in a fused
      * product, gm2_fsarith_1) */
     fs.extend(GM2_FS_ARITH);
+    /* terrain's `mix(a, b, 1.0 - c)` of three look-ups: a look-up's word
+     * negated and the `ffma`'s addend (gm2_texswz_5) */
+    fs.push(td!("gm2_texswz_5.frag"));
     /* built for their vertex shaders' link constants and equal lanes: one
      * lane in both halves of an output word (gm2_arithconst_3's three
      * equal colour lanes) */
