@@ -1,18 +1,31 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# V3D targets past 2048: the cause of the Pi 4 precision-group abort
+# V3D targets up to 4096: the cause of the Pi 4 precision-group abort and the fix
 
-Issue #1261. Images S03-S08 of `tools/cts/pi4-gles3-tree.txt` (192 / 201 /
-202 / 204 / 206 / 142 cases, 1,147 in all) each stop at their first
+Issue #1261. The V3D back end takes render targets up to 4096 pixels a side
+(`MAX_TARGET`, `src/v3d/backend.rs` line 440), the size the GL core reports
+for `GL_MAX_RENDERBUFFER_SIZE`, `GL_MAX_TEXTURE_SIZE` and
+`GL_MAX_VIEWPORT_DIMS`. Before commit `6d2e7d0d` (plan #376 item fix-v3d) the
+limit was 2048, and that caused the abort of images S03-S08 of
+`tools/cts/pi4-gles3-tree.txt` (192 / 201 / 202 / 204 / 206 / 142 cases,
+1,147 in all): each stopped at its first
 `shaders.builtin_functions.precision.<fn>.highp_fragment.scalar` case (S03
-`abs`, S04 `cosh`, S05 `fract`, S06 `mix`, S07 `reflect`, S08 `sub`). 1,142
-mustpass cases never began. This note records the cause as far as the code and
-the records show it; the fix (commit `6d2e7d0d`, plan #376 item fix-v3d) is
-the last section.
+`abs`, S04 `cosh`, S05 `fract`, S06 `mix`, S07 `reflect`, S08 `sub`) and
+1,142 mustpass cases never began.
 
-Line numbers are those of the tree at commit `9e1220dd`.
+The cause: dEQP's shader executor (`glsShaderExecUtil.cpp`) sizes its
+framebuffer from the limits the GL core reports (4096), about 4096 pixels
+wide by 2-6 rows. The V3D refused every target past 2048, the draw returned
+an error that the GL core reported as `GL_OUT_OF_MEMORY`, and dEQP recorded a
+`ResourceError` and stopped the run (`ABORTED`).
 
-## The refusal
+What the fix changed and which refusals remain are in the last section; the
+sections between record the cause as far as the code and the records show it,
+as the tree stood before the fix.
+
+Line numbers in those sections are those of the tree at commit `9e1220dd`.
+
+## The refusal before the fix
 
 `src/v3d/backend.rs`:
 
@@ -20,7 +33,7 @@ Line numbers are those of the tree at commit `9e1220dd`.
   tile memory is sized for at init". `MAX_JOB_TILES` (line 441) is derived from
   it, and so is the tile-state sizing at line 5910.
 - In the draw path (lines 6287-6293) one text, `PAST_2048` ("a target larger
-  than the tile memory is sized for (2048x2048), or empty"), answers two arms:
+  than the tile memory is sized for (2048x2048), or empty"), answered two arms:
   - `d.target_w == 0 || d.target_h == 0` goes through `refuse()` (line 1532):
     `-EINVAL`.
   - a side `> MAX_TARGET` goes through `refuse_unsupported()` (line 1540):
@@ -28,7 +41,7 @@ Line numbers are those of the tree at commit `9e1220dd`.
 - The back end prints `yakogl/v3d: draw refused: <text>` the first time a text
   is seen (`count_refusal`).
 
-The cap is below what the GL core reports (`src/gl/state.rs`):
+The cap was below what the GL core reports (`src/gl/state.rs`):
 
 | query | reported | line |
 |---|---|---|
@@ -37,7 +50,7 @@ The cap is below what the GL core reports (`src/gl/state.rs`):
 | `GL_MAX_VIEWPORT_DIMS` | 4096 x 4096 | 1216-1219 (`MAX_VIEWPORT_DIM`, line 293) |
 
 So a 4096-wide renderbuffer or texture attachment is legal GL (ES 3.0 asks for
-2048 at least) and the V3D back end cannot draw to it.
+2048 at least) and the V3D back end could not draw to it.
 
 ## The error chain
 
@@ -59,7 +72,7 @@ was not read for this note). On the host only
 `shaders.builtin_functions.precision` reaches the refusal: 1,030 of its 1,147
 cases, at 4096 x 2-6 targets.
 
-## A caution: which arm the board hit
+## A caution: which arm the board hit (before the fix)
 
 The board records show `-22` (`-EINVAL`) and `GL error 0x505`
 (`GL_OUT_OF_MEMORY`). With the code of this tree a side past 2048 is `-ENOTSUP`
@@ -91,9 +104,10 @@ does not help the V3D: one draw still binds one 4096-wide target.
 - `tools/cts/log/2026-11-pi4-gles3-b/README.md` (8990a5cc): the same, "Why
   S03-S08 stopped early".
 - `docs/notes/v3d-refusals.md` row A5 said this refusal fired 0 times; it
-  now names the cause and the fix.
+  now names the cause and the fix, and row A1 the tile-count limit that
+  moved with `MAX_TARGET`.
 
-## Possible fixes (fix-v3d's)
+## The options that were weighed (fix-v3d)
 
 - Size the tile memory for 4096 (raise `MAX_TARGET`; `MAX_JOB_TILES` is a
   square, so it would grow 4x, while a 4096 x 6 target bins far fewer tiles:
@@ -130,6 +144,14 @@ The first option was taken: the tile memory is sized for 4096 a side
   A1): 4096 square at two RTs of a 128-bpp format bins 32,768 tiles and is
   refused by that name; 2048 square of the same draws.
 - `rt_texture` (line 1879) takes a render image up to 4096 a side.
+
+The refusals that remain, each by its own name: an empty target (0 pixels on
+a side), `-EINVAL`; a side past 4096, `-ENOTSUP` (a guard, no GL call
+reaches it); a 64- or 128-bpp job over 16,384 tiles (A1), `-ENOTSUP`. The GL
+core turns `-ENOTSUP` into `GL_INVALID_OPERATION` and any other negative
+value into `GL_OUT_OF_MEMORY` (`submit_draw`, `src/gl/draw.rs`), so only the
+empty-target arm, a malformed draw no GL call produces, would still reach
+dEQP as `GL_OUT_OF_MEMORY`.
 
 What the executor's targets take now: 4096 x 2-6 at 1-3 RTs is one row of
 64x64 to 16x16 tiles (64 to 256 tiles, 128-bpp outputs included), one job
