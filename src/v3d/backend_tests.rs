@@ -1417,9 +1417,10 @@ fn init_refuses_a_vpm_the_programs_are_not_compiled_for() {
     ] {
         assert!(m.gpu != 0 && m.gpu <= u32::MAX as u64 && !m.cpu.is_null());
     }
-    /* sized from the tiling of the largest target with the smallest tiles a
-     * job can have (4 render targets: 32x32, so 64 x 64 of them) */
-    assert_eq!((g.tile_alloc_size, g.tile_state_size), (64 * 64 * 128 + 8192, 64 * 64 * 256));
+    /* sized from the tiling of the largest target (4096 a side) with the
+     * smallest tiles a job can have (4 render targets: 32x32, so 128 x 128
+     * of them) */
+    assert_eq!((g.tile_alloc_size, g.tile_state_size), (128 * 128 * 128 + 8192, 128 * 128 * 256));
 }
 
 #[test]
@@ -1483,7 +1484,8 @@ fn a_clear_only_draw_is_a_job_with_a_tlb_clear_and_no_draw() {
 /// 60 x 23. Before, every kick named the allocation, which MRT step 3
 /// sized for four RTs at 2048x2048 (1 MiB): the OSAL zeroed it every job,
 /// DEMO15's "prep" 76 -> 307 us (glue, from the record). Revert check:
-/// the kick's size back to `g.tile_state_size` reads 1,048,576 here.
+/// the kick's size back to `g.tile_state_size` reads 4,194,304 here (the
+/// allocation sized for 4096 a side since #1261).
 #[test]
 fn a_kick_zeroes_the_tile_state_of_its_own_tiles() {
     let rig = Rig::new();
@@ -1500,7 +1502,7 @@ fn a_kick_zeroes_the_tile_state_of_its_own_tiles() {
     assert_eq!(v3d_flush(), 0);
     let sizes: Vec<u32> = rig.kicks().iter().map(|k| k.tile_state_size).collect();
     assert_eq!(sizes, [30 * 12 * 256, 60 * 23 * 256], "1x then 4x, 1920x720");
-    assert_eq!(g().tile_state_size, 64 * 64 * 256, "the allocation stays the largest");
+    assert_eq!(g().tile_state_size, 128 * 128 * 256, "the allocation stays the largest");
 }
 
 /// An odd-width target is written at the GL core's row pitch, whole pixel
@@ -4537,7 +4539,7 @@ fn a_backend_gap_is_enotsup_and_counted() {
     gap(&d, "colour attachments of different sizes");
     let mut d = rig.draw();
     (d.target_w, d.target_h) = (MAX_TARGET + 1, 16);
-    gap(&d, "a target larger than the tile memory is sized for (2048x2048), or empty");
+    gap(&d, "a target larger than the tile memory is sized for (4096x4096)");
     let rt2 = program_writing(0b101);
     gap(&mrt_draw(&rig, &rt2, 2), "a colour output with no attachment slot");
     let mut d = mrt_draw(&rig, &two, 2);
@@ -4547,9 +4549,9 @@ fn a_backend_gap_is_enotsup_and_counted() {
     (d.target_format, d.samples) = (GLES_SURF_RGBA16F, 4);
     gap(&d, "4x multisampling of an ES 3.0 colour format");
     let mut d = mrt_draw(&rig, &two, 2);
-    (d.target_w, d.target_h) = (2048, 2048);
-    (d.targets[0].w, d.targets[0].h) = (2048, 2048);
-    (d.targets[1].w, d.targets[1].h) = (2048, 2048);
+    (d.target_w, d.target_h) = (4096, 4096);
+    (d.targets[0].w, d.targets[0].h) = (4096, 4096);
+    (d.targets[1].w, d.targets[1].h) = (4096, 4096);
     d.targets[1].format = GLES_SURF_RGBA32UI;
     gap(&d, "a 64- or 128-bpp colour target with more tiles than the job pools hold");
     let mut d = rig.draw();
@@ -4564,7 +4566,8 @@ fn a_backend_gap_is_enotsup_and_counted() {
     let base = v3d_refused_draws();
     let mut d = rig.draw();
     d.target_w = 0;
-    assert_eq!(draw(&d), -EINVAL, "an empty target, under the 2048 refusal's name");
+    assert_eq!(draw(&d), -EINVAL, "an empty target");
+    assert_eq!(rig.logs_with("an empty target (0 pixels on a side)"), 1, "named by its own cause");
     let mut d = mrt_draw(&rig, &two, 2);
     d.targets[1].format = 99;
     assert_eq!(draw(&d), -EINVAL, "a surface number none names");
@@ -4579,6 +4582,48 @@ fn a_backend_gap_is_enotsup_and_counted() {
     (d.do_clear_depth, d.clear_depth) = (true, 1.0);
     assert_eq!(draw(&d), -ENOMEM, "{:?}", rig.gl.logs());
     with_platform(|p| p.fail_alloc_from = None);
+}
+
+/// The tile memory is sized for 4096 a side (#1261): dEQP's shader executor
+/// draws 4096 x 2..6 targets, which every `precision` image was refused on
+/// at 2048. 4096 on either side is one job; 4097 is refused by its own name
+/// (-ENOTSUP), an empty target by its own (-EINVAL), and a 128-bpp pair of
+/// targets whose 32x16 tiles fit the pools (2048x2048: 8192 of 16384) is
+/// taken.
+#[test]
+fn a_target_of_4096_a_side_is_one_job() {
+    let rig = Rig::new();
+    rig.init();
+    for (w, h) in [(4096, 6), (6, 4096), (4096, 4096)] {
+        let mut d = rig.draw();
+        (d.target_w, d.target_h) = (w, h);
+        assert_eq!(draw(&d), 0, "{w}x{h}: {:?}", rig.gl.logs());
+        assert_eq!(v3d_flush(), 0);
+        let jobs = rig.jobs();
+        let t = jobs.last().expect("a job").target;
+        assert_eq!((t.width, t.height), (w, h), "the job is the whole target");
+    }
+    assert_eq!(rig.jobs().len(), 3, "one job each");
+    assert_eq!(rig.logs_with("draw refused"), 0, "{:?}", rig.gl.logs());
+    let two = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &two, 2);
+    (d.target_w, d.target_h) = (2048, 2048);
+    (d.targets[0].w, d.targets[0].h) = (2048, 2048);
+    (d.targets[1].w, d.targets[1].h) = (2048, 2048);
+    d.targets[1].format = GLES_SURF_RGBA32UI;
+    assert_eq!(draw(&d), 0, "32x16 tiles over 2048x2048: {:?}", rig.gl.logs());
+    for (w, h) in [(MAX_TARGET + 1, 6), (6, MAX_TARGET + 1)] {
+        let mut d = rig.draw();
+        (d.target_w, d.target_h) = (w, h);
+        assert_eq!(draw(&d), -ENOTSUP, "{w}x{h}");
+    }
+    assert_eq!(rig.logs_with("a target larger than the tile memory is sized for (4096x4096)"), 1, "logged once");
+    for (w, h) in [(0, 6), (6, 0)] {
+        let mut d = rig.draw();
+        (d.target_w, d.target_h) = (w, h);
+        assert_eq!(draw(&d), -EINVAL, "{w}x{h}");
+    }
+    assert_eq!(rig.logs_with("an empty target (0 pixels on a side)"), 1, "logged once");
 }
 
 #[test]
@@ -6927,11 +6972,11 @@ fn what_a_typed_job_cannot_take_is_refused_by_name() {
     assert_eq!(draw(&d), -ENOTSUP, "4x of an integer format, with a quad clear (the same refusal, logged once)");
     let p = program_writing(0b11);
     let mut d = mrt_draw(&rig, &p, 2);
-    (d.target_w, d.target_h) = (2048, 2048);
-    (d.targets[0].w, d.targets[0].h) = (2048, 2048);
-    (d.targets[1].w, d.targets[1].h) = (2048, 2048);
+    (d.target_w, d.target_h) = (4096, 4096);
+    (d.targets[0].w, d.targets[0].h) = (4096, 4096);
+    (d.targets[1].w, d.targets[1].h) = (4096, 4096);
     d.targets[1].format = GLES_SURF_RGBA32UI;
-    assert_eq!(draw(&d), -ENOTSUP, "32x16 tiles over 2048x2048: 8192 tiles");
+    assert_eq!(draw(&d), -ENOTSUP, "32x16 tiles over 4096x4096: 32768 tiles, the pools hold 16384");
     assert_eq!(rig.logs_with("more tiles than the job pools hold"), 1);
     assert!(rig.draws().is_empty() && rig.jobs().is_empty(), "nothing was recorded");
 }

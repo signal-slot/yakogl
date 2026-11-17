@@ -431,8 +431,13 @@ impl RtImage {
     }
 }
 
-/// The largest target the tile memory is sized for at init.
-pub const MAX_TARGET: u32 = 2048;
+/// The largest target the tile memory is sized for at init: 4096 a side,
+/// what the GL core reports for GL_MAX_RENDERBUFFER_SIZE,
+/// GL_MAX_TEXTURE_SIZE and GL_MAX_VIEWPORT_DIMS (src/gl/state.rs). dEQP's
+/// shader executor draws 4096 x 2..6 targets; at 2048 every
+/// `shaders.builtin_functions.precision` image was refused (#1261,
+/// docs/notes/v3d-large-targets.md).
+pub const MAX_TARGET: u32 = 4096;
 /// The most tiles one job may bin: what the pools hold, sized at init for
 /// `MAX_TARGET` square at four 32-bpp render targets (32x32 tiles). A typed
 /// job (an ES 3.0 colour format at 64 or 128 bpp) bins smaller tiles
@@ -6281,15 +6286,15 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
             None => return refuse_unsupported(g, "the target is outside the V3D's 32-bit address space"),
         }
     };
-    /* one name for both: an empty target is a malformed draw (-EINVAL), one
-     * past 2048 a side is legal GL (GL_MAX_RENDERBUFFER_SIZE is 4096) that
-     * the tile memory cannot take (-ENOTSUP) */
-    const PAST_2048: state::Refusal = "a target larger than the tile memory is sized for (2048x2048), or empty";
+    /* an empty target is a malformed draw (-EINVAL); one past MAX_TARGET a
+     * side is past every size the GL core reports, so only a target the GL
+     * core did not size reaches it, and the tile memory cannot take it
+     * (-ENOTSUP). Too many tiles at 64 or 128 bpp is begin_job's own name. */
     if d.target_w == 0 || d.target_h == 0 {
-        return refuse(g, PAST_2048);
+        return refuse(g, "an empty target (0 pixels on a side)");
     }
     if d.target_w > MAX_TARGET || d.target_h > MAX_TARGET {
-        return refuse_unsupported(g, PAST_2048);
+        return refuse_unsupported(g, "a target larger than the tile memory is sized for (4096x4096)");
     }
     let (rts, rt, rt_format) = match extra_targets(d) {
         Ok(x) => x,
