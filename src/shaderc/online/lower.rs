@@ -4320,7 +4320,7 @@ impl<'a> Lower<'_, 'a> {
                 *a = (src.val.0, comps);
             }
         }
-        let mut sink = Sink { l: self, out, width, look_up, start, args, steps: AVec::new() };
+        let mut sink = Sink { l: self, out, width, look_up, start, args, steps: AVec::new(), consts: AVec::new() };
         let lowered = match builtin_call::lower_call(&mut sink, name, ops, want) {
             None if es3 => builtin_call::lower_es3(&mut sink, name, ops),
             r => r,
@@ -9139,13 +9139,19 @@ struct Sink<'s, 'x, 'a> {
     /// Each step of the expansion and the lanes it holds distinct values
     /// in: 1 for a step whose lanes all hold one scalar.
     steps: AVec<'a, (u32, u8)>,
+    /// Each constant the expansion asked for ([`builtin_call::Emit::
+    /// constant`]). It may stand before `start`: the block shares equal
+    /// constants ([`Lower::const_value`]), so atan's `1.0` is the shader's
+    /// earlier `1.0`.
+    consts: AVec<'a, u32>,
 }
 
 impl Sink<'_, '_, '_> {
     /// How many lanes of distinct values `alu` over `srcs` makes: the
     /// widest source's, a reduction's one, `None` where a source's is not
     /// known. A splat of a one-lane value is one lane, whatever lanes it
-    /// fills; a constant of the expansion's own takes any width.
+    /// fills; a constant of the expansion's own ([`Sink::own_const`])
+    /// takes any width.
     fn distinct(&self, alu: ir::AluOp, srcs: &[Src; 3]) -> Option<u8> {
         if alu.result_comps(4) == 1 {
             return Some(1);
@@ -9155,7 +9161,7 @@ impl Sink<'_, '_, '_> {
         for s in &srcs[..alu.arity()] {
             let id = s.val.0;
             let w = match instrs.get(id as usize) {
-                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) if id >= self.start => continue,
+                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) if self.own_const(id) => continue,
                 _ => {
                     if let Some(&(_, w)) = self.steps.as_slice().iter().find(|x| x.0 == id) {
                         w
@@ -9169,6 +9175,15 @@ impl Sink<'_, '_, '_> {
             t = t.max(w);
         }
         Some(if t == 0 { self.width } else { t })
+    }
+
+    /// The constant `id` is the expansion's own: made by it, or asked for
+    /// by it and found among the block's earlier ones. One that is also
+    /// an argument (`atan(y, 1.0)` shares atan's `1.0`) counts as the
+    /// argument, with the argument's width: the two reads cannot be told
+    /// apart by the value.
+    fn own_const(&self, id: u32) -> bool {
+        id >= self.start || (self.consts.as_slice().contains(&id) && !self.args.iter().any(|x| x.0 == id))
     }
 
     /// The width an `Alu` of the expansion over `srcs` records. One lane
@@ -9186,7 +9201,7 @@ impl Sink<'_, '_, '_> {
         for s in &srcs[..alu.arity()] {
             match instrs.get(s.val.0 as usize) {
                 /* a constant of the expansion's own (smoothstep's 3.0) */
-                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) if s.val.0 >= self.start => continue,
+                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) if self.own_const(s.val.0) => continue,
                 /* lane i read from lane i of a one-lane value: only lane 0
                  * is one (a splat read serves every lane, as refract's
                  * `splat(dot)` chain does) */
@@ -9246,7 +9261,9 @@ impl<'a> builtin_call::Emit<'a> for Sink<'_, '_, 'a> {
         }
         let r = self.l.const_value(lanes, self.out);
         self.l.cur = outer;
-        r
+        let r = r?;
+        self.consts.push(self.l.a, r.val.0)?;
+        Ok(r)
     }
 
     fn vertex(&self) -> bool {
@@ -12850,6 +12867,40 @@ mod value_width_tests {
         );
         assert_eq!(all_comps_of(&l2.module, ir::AluOp::Fadd), [3], "the difference is three lanes");
         assert_eq!(all_comps_of(&l2.module, ir::AluOp::Fdot3), [1], "its dot is one");
+    }
+
+    /// A constant an expansion asks for is its own even when the block
+    /// already holds an equal one, which the block shares: atan's `1.0` is
+    /// then the shader's, made before the call. Counted as a four-lane
+    /// value it left atan's quadrant select and every step after it without
+    /// an exact width (femtovg's conic gradient: a reader of the exact
+    /// width's lanes then met steps of an unknown one). The same constant
+    /// as an argument (`vec2(1.0)`) has the argument's width.
+    #[test]
+    fn a_constant_shared_with_the_shader_is_still_the_expansion_s_own() {
+        let steps = [ir::AluOp::Bcsel, ir::AluOp::Fmin, ir::AluOp::Flt];
+        let mut buf = [0u8; 1 << 19];
+        let l = ir(
+            &mut buf,
+            "precision mediump float;\n\
+             varying vec2 v;\n\
+             void main(){ float k = v.x + 1.0; gl_FragColor = vec4(atan(v.y, k)); }",
+        );
+        for op in steps {
+            let w = all_comps_of(&l.module, op);
+            assert!(!w.is_empty() && w.iter().all(|&c| c == 1), "{op:?} of atan(float, float) is one lane: {w:?}");
+        }
+        let mut b2 = [0u8; 1 << 19];
+        let l2 = ir(
+            &mut b2,
+            "precision mediump float;\n\
+             varying vec2 v;\n\
+             void main(){ gl_FragColor = vec4(atan(v, vec2(1.0)), v + 1.0); }",
+        );
+        for op in steps {
+            let w = all_comps_of(&l2.module, op);
+            assert!(!w.is_empty() && w.iter().all(|&c| c == 2), "{op:?} of atan(vec2, vec2) is two lanes: {w:?}");
+        }
     }
 
     /// A step after a reduction is one lane: `length`'s and `distance`'s

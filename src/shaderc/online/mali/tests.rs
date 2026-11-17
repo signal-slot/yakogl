@@ -6125,6 +6125,25 @@ fn the_fsvec_population_is_byte_equal_to_mesa_26_2_1() {
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), FSVEC_POPULATION.len(), failed.join("\n"));
 }
 
+/* ---- a built-in's exact width (issue #4509) ---------------------------- */
+
+/// dEQP's `shaders.operator.exponential.inversesqrt.mediump_vec3_fragment`
+/// (`tools/mali/deqp_ref.sh --instrument shim`): `inversesqrt` of three
+/// lanes of a mediump varying, stored into `color.xyz`. The walk reads the
+/// width the front end records for the built-in's steps
+/// ([`ir::Module::lanes_of`], three); read as the four of `comps`, the
+/// fourth lane had no value and the program was refused as a colour form.
+/// Every program is the shim's to the byte, the pair compiled through the
+/// link.
+#[test]
+fn a_builtin_of_three_lanes_is_byte_equal_to_mesa_26_2_1() {
+    check_linked(
+        td!("deqp_width_inversesqrt_vec3_fs.vert"),
+        td!("deqp_width_inversesqrt_vec3_fs.frag"),
+        td!("deqp_width_inversesqrt_vec3_fs.expect.json"),
+    );
+}
+
 /* ---- derivatives (plan #336 fs-deriv, docs/notes/mali-derivatives.md) -- */
 
 /// Case 138's deriv, drawn twice on the shim (name, VS, FS, expect.json):
