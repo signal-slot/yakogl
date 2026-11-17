@@ -8,11 +8,9 @@
 //! (`GLES_SURF_RGB10_A2`): a pixel is the little-endian 10/10/10/2 word, red
 //! in bits 0..9, alpha in 30..31. glReadPixels decodes it (each field becomes
 //! (v * 255 + max / 2) / max, max 1023 or 3), and glCopyTex* reads through
-//! glReadPixels RGBA/UNSIGNED_BYTE, so a copy into an RGBA8 texture already
-//! holds the decoded bytes (those rows run). A copy into an RGB10_A2 texture
-//! is lossy today (the words come back at 8-bit precision): item
-//! copytex-rgb10a2 makes it exact, and those two rows are `#[ignore]`d with
-//! that cause and carry the exact words they expect. The error rows run.
+//! glReadPixels, so a copy into an RGBA8 texture holds the decoded bytes. A
+//! copy into an RGB10_A2 texture reads the surface as RGBA/
+//! UNSIGNED_INT_2_10_10_10_REV and keeps the words unchanged.
 //!
 //! The read buffer is an RGB10_A2 renderbuffer or an RGB10_A2 texture
 //! attachment. Its words are put there by a texture upload (texture) or by a
@@ -361,7 +359,6 @@ fn copy_tex_sub_image_into_rgba8_decodes() {
 /// inside the class), read back as GL_UNSIGNED_INT_2_10_10_10_REV; a
 /// sub-rectangle lands where it is addressed.
 #[test]
-#[ignore = "copytex-rgb10a2: glCopyTex* copies through RGBA8, so an RGB10_A2 destination loses the low bits"]
 fn copy_tex_sub_image_into_rgb10a2_keeps_words() {
     let _g = context();
     let w = src_words();
@@ -395,7 +392,6 @@ fn copy_tex_sub_image_into_rgb10a2_keeps_words() {
 /// glCopyTexImage2D into an RGB10_A2 internalformat is a copy inside the
 /// class: the words survive.
 #[test]
-#[ignore = "copytex-rgb10a2: glCopyTex* copies through RGBA8, so an RGB10_A2 destination loses the low bits"]
 fn copy_tex_image_into_rgb10a2_keeps_words() {
     let _g = context();
     let w = src_words();
