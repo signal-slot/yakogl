@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The ES 3.0 attachment and renderbuffer queries of GL_RGB10_A2 where the
-//! build has no class for it, through the GL entry points only (plan #370
-//! item rgb10a2-query-api, the fallback half of tests/es3_rgb10a2_queries_v3d.rs).
+//! build has no class for it, through the GL entry points only. Plan #370:
+//! the class half is tests/es3_rgb10a2_queries_v3d.rs (item
+//! rgb10a2-query-api); this file is the fallback half (item
+//! queries-fallback-pin).
 //!
 //! On the V3D 4.2 build GL_RGB10_A2 is the 10/10/10/2 surface and answers
 //! 10/10/10/2 there (src/gl/framebuffer.rs `rgb10a2_surface`,
@@ -20,7 +22,17 @@
 //! - an ES 2.0-reporting build names no GL_RGB10_A2 at all: neither the
 //!   renderbuffer nor the texture is allocated (as tests/es3_rgb10a2_fallback.rs
 //!   holds), the queries see a renderbuffer with no data store, and the ES
-//!   3.0 attachment pnames are unknown here (GL_INVALID_ENUM).
+//!   3.0 attachment pnames are unknown here (GL_INVALID_ENUM);
+//! - `glGetInternalformativ` (6.1.15) takes the GL_RGB10_A2 name on every
+//!   fallback build, the ES 2.0-reporting one included (where no storage
+//!   allocates under it), and answers the build's single sample count, 1,
+//!   as `GL_RGBA8` does: `msaa::backend_max_samples` is 0 there.
+//!
+//! ES 3.0 table 3.13 makes GL_RGB10_A2 10/10/10/2 bits, and the PowerVR and
+//! GC7000 builds report ES 3.0 and do allocate the name: the eight bits a
+//! channel they answer is a discrepancy from that table, pinned here as
+//! these builds' current answer (new-issue text from item
+//! queries-fallback-pin).
 //!
 //! The rows say what these builds answer today, matching or not; what the
 //! spec asks is in the messages.
@@ -362,6 +374,27 @@ mod es3 {
             }
         }
     }
+
+    /// 6.1.15: `glGetInternalformativ` takes the GL_RGB10_A2 name even though
+    /// the build keeps no class for it, and answers the back end's single
+    /// sample count, 1 (`msaa::backend_max_samples` is 0), the same list
+    /// `GL_RGBA8` gets; only the first bufSize slot is written.
+    #[test]
+    fn internalformat_sample_counts_are_one() {
+        let _g = context();
+        for fmt in [GL_RGB10_A2, GL_RGBA8] {
+            let mut v = [-1; 4];
+            // SAFETY: room for four values; plain GL calls.
+            unsafe {
+                glGetInternalformativ(GL_RENDERBUFFER, fmt, GL_NUM_SAMPLE_COUNTS, 4, v.as_mut_ptr());
+                assert_eq!(err(), GL_NO_ERROR, "{fmt:#x} NUM_SAMPLE_COUNTS");
+                assert_eq!((v[0], v[1]), (1, -1), "{fmt:#x}: the count list has one entry");
+                glGetInternalformativ(GL_RENDERBUFFER, fmt, GL_SAMPLES, 4, v.as_mut_ptr());
+                assert_eq!(err(), GL_NO_ERROR, "{fmt:#x} SAMPLES");
+            }
+            assert_eq!(v, [1, -1, -1, -1], "{fmt:#x}: the single count is 1");
+        }
+    }
 }
 
 /* ---- the ES 2.0 report: GL_RGB10_A2 is no format ------------------------ */
@@ -518,5 +551,24 @@ mod es2 {
             glBindRenderbuffer(GL_RENDERBUFFER, 0);
             glDeleteRenderbuffers(1, &rb);
         }
+    }
+
+    /// The 6.1.15 entry is not gated to the ES 3.0 report here: it takes the
+    /// GL_RGB10_A2 name and answers its single sample count, 1, with no
+    /// error, while `glRenderbufferStorage` refuses that very name, so the
+    /// format exists for the query and nowhere else. Recorded as it is.
+    #[test]
+    fn internalformativ_knows_the_name_storage_rejects() {
+        let _g = context();
+        let mut v = [-1; 4];
+        // SAFETY: room for four values; plain GL calls.
+        unsafe {
+            glGetInternalformativ(GL_RENDERBUFFER, GL_RGB10_A2, GL_NUM_SAMPLE_COUNTS, 4, v.as_mut_ptr());
+            assert_eq!(err(), GL_NO_ERROR, "the entry runs on the ES 2.0 report");
+            assert_eq!((v[0], v[1]), (1, -1), "one count, rest unwritten");
+            glGetInternalformativ(GL_RENDERBUFFER, GL_RGB10_A2, GL_SAMPLES, 4, v.as_mut_ptr());
+            assert_eq!(err(), GL_NO_ERROR);
+        }
+        assert_eq!(v, [1, -1, -1, -1], "the single count is 1, as on the ES 3.0 fallback builds");
     }
 }
