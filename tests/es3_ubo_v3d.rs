@@ -16,31 +16,31 @@
 //! Every case is `layout(std140) uniform Data0 { highp vec4 v0[64]; highp
 //! vec4 v1[64]; ... };`: N = size / 16 vec4 in arrays of CHUNK (64) --
 //! std140 lays consecutive arrays of vec4 out back to back, so the block is
-//! the flat vec4 array of N elements. (A single `vec4 v[N]` with N > 255 does
-//! not compile: `fit_u8` of the array length in src/shaderc/online/reflect.rs
-//! refuses it, "too many of this kind of declaration"; 6144 bytes are 384
-//! vec4 already. The 16384-byte block is a vec4[1024] in the dEQP cases
-//! (`ubo.2_level_array`, `max_block_size`), so the front end has to carry it
-//! (it does not yet): the ignored
-//! `a_single_vec4_array_of_1024_elements_compiles` pins that.) A distinct
-//! float in every component (`value`, below 1024), bound with glUniformBlockBinding and
-//! glBindBufferRange. The element is a constant index (the last element, N - 1,
-//! always among them), not a `uniform int` set per draw as the task asked:
-//! the GL core keeps block members in the stage's default uniform block, which
-//! is MAX_UNIFORM_DWORDS (1536 dwords = 6144 bytes) long, so a block of the
-//! reported size leaves no dword for a second uniform ("uniform dword 1536 of
-//! a block of 1536 dwords"). Plan #359's ubo-v3d has to move the blocks out
-//! of that budget (the memory loads of docs/notes/ubo-limits.md); the
-//! ignored run-time-index test below is the check that it did.
+//! the flat vec4 array of N elements. (A single `vec4 v[N]` with N > 255 did
+//! not compile while `UniformRow::array_len` was a u8: `fit_u8` in
+//! src/shaderc/online/reflect.rs refused it, "too many of this kind of
+//! declaration"; 6144 bytes are 384 vec4 already. The 16384-byte block is a
+//! vec4[1024] in the dEQP cases (`ubo.2_level_array`, `max_block_size`); the
+//! 16-bit `array_len` of 005f5803 lets the front end carry it, and the
+//! ignored `a_single_vec4_array_of_1024_elements_compiles` waits on ldunifa
+//! only.) A distinct float in every component (`value`, below 1024), bound
+//! with glUniformBlockBinding and glBindBufferRange. The element is a
+//! constant index (the last element, N - 1, always among them), not a
+//! `uniform int` set per draw as the task asked: a run-time index into an
+//! array longer than the selection chain (64 vec4) is what ldunifa is for
+//! (src/shaderc/online/v3d/prepare.rs, "no ldunifa yet"). The V3D build
+//! reports MAX_UNIFORM_BLOCK_SIZE 16384 and reads every dword of a stage's
+//! array through the uniform stream (cb52fae8, docs/notes/v3d-ubo-path.md),
+//! so a block of the reported size no longer leaves the default block
+//! without room.
 //!
-//! - the live tests use the size the build reports (6144 today) and follow
-//!   the limit when it moves;
+//! - the live tests use the size the build reports (16384 on the V3D) and
+//!   follow the limit when it moves;
 //! - the ES 3.0 tests state exactly 16384 bytes (1024 vec4, the last one
-//!   included) and two blocks of one program whose sizes sum past 16384. They
-//!   run: the V3D reports and carries 16384 now. Two tests stay `#[ignore]`d:
-//!   the vec4[1024] case waits on `UniformRow::array_len` being wider than u8
-//!   (tests/v3d_ubo_array_len_limit.rs pins that limit), and the run-time
-//!   index over 128 vec4 waits on ldunifa.
+//!   included) and two blocks of one program whose sizes sum past 16384.
+//!   They run (773be1b1). Two tests stay `#[ignore]`d, both waiting on
+//!   ldunifa: the run-time index into vec4[1024] and the run-time index over
+//!   128 vec4.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_ubo_v3d
