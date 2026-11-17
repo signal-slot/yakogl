@@ -177,7 +177,6 @@ fn bind_name(b: &GlAttribBind) -> &[u8] {
 ///
 /// # Safety
 /// `inputs.vs_src` and `inputs.fs_src` are null or NUL-terminated.
-#[cfg_attr(not(all(test, feature = "shaderc-online")), allow(dead_code))] /* g7-state wires the glLinkProgram call */
 pub(super) unsafe fn capture(c: &GlContext, program: GLuint, inputs: &LinkInputs) {
     let Some(p) = c.program_ref(program) else {
         return;
@@ -204,7 +203,6 @@ pub(super) unsafe fn capture(c: &GlContext, program: GLuint, inputs: &LinkInputs
 
 /// `GL_PROGRAM_BINARY_LENGTH`: the kept binary's length when linked, else 0
 /// (Table 6.18).
-#[cfg_attr(not(all(test, feature = "shaderc-online")), allow(dead_code))] /* g7-state wires the glGetProgramiv answer */
 pub(super) fn length(c: &GlContext, program: GLuint) -> GLint {
     if !c.program_ref(program).is_some_and(|p| p.linked) {
         return 0;
