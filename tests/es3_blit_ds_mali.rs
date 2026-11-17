@@ -10,7 +10,7 @@
 //!
 //! The Mali's table (`yakogl_backend_mali`, src/mali/backend.rs) has
 //! `depth_resolve` (`mali_depth_resolve`, docs/notes/mali-depth-only.md) but
-//! no `ds_write` and no `stencil_resolve` (src/mali/backend.rs:3731-3732).
+//! no `ds_write` and no `stencil_resolve` (its `YakoglBackend` literal).
 //! src/gl/blit.rs therefore refuses a blit that writes depth
 //! (REFUSED_DEPTH_DST) or touches stencil (REFUSED_STENCIL) between
 //! renderbuffers: GL_INVALID_OPERATION, said once in the log, nothing
@@ -380,8 +380,8 @@ fn check_readback(s: Shape) {
 #[test]
 fn the_mali_table_has_neither_entry() {
     assert!(yakogl_backend_mali.depth_resolve.is_some());
-    assert!(yakogl_backend_mali.ds_write.is_none(), "src/mali/backend.rs:3731");
-    assert!(yakogl_backend_mali.stencil_resolve.is_none(), "src/mali/backend.rs:3732");
+    assert!(yakogl_backend_mali.ds_write.is_none(), "the Mali table has a ds_write");
+    assert!(yakogl_backend_mali.stencil_resolve.is_none(), "the Mali table has a stencil_resolve");
     assert_eq!(BACKEND.ds_write.is_some(), yakogl_backend_mali.ds_write.is_some());
     assert_eq!(BACKEND.stencil_resolve.is_some(), yakogl_backend_mali.stencil_resolve.is_some());
 }
