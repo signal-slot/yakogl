@@ -51,7 +51,7 @@ packages, versions and sha256 in the script) unpacked once into
 `$YAKOGL_MALI_SYSROOT`, else `$CONNECTED_DEPS_DIR/debian-trixie-arm64-sysroot`.
 `check.sh` (host, no board) proves the result: AArch64 shared objects with
 their SONAMEs, the `RUNPATH`, the constructor, every one of the 186 names of
-`src/deqp-entry-points.txt` (44 EGL, 142 ES 2.0) defined, and **no version
+`tools/mali/panthor-gles/src/deqp-entry-points.txt` (44 EGL, 142 ES 2.0) defined, and **no version
 need above `GLIBC_2.41` or `GLIBCXX_3.4.33`**. It exits 0 when all pass; a
 library that needs a newer glibc than the board's fails to load on the board,
 so a build is not used before this check is green.
