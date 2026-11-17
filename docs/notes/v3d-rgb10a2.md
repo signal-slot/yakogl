@@ -106,20 +106,22 @@ hides it with `TEST_HIDDEN_SAMPLED` (`:265`), both already in use. No
 back end can never sample the class without rendering it. That is the rule
 ES 3.0 sets for `GL_RGB10_A2` anyway (colour-renderable and filterable).
 
-Each site below assumes today that RGB10A2 is held as RGBA8:
+State on main (ea40c2b7): each site below assumed RGB10A2 was held as
+RGBA8. The last column says what main does at the site now, with the
+current `file:line` and the commit.
 
-| site | today | after the bit |
+| site | was | main now |
 |---|---|---|
-| `src/v3d/texture.rs:98` `refusal_for` (message at `:111`) | refuses the class by name | passes it; the message names ETC2 only |
-| `src/gl/es3_formats.rs:633` upload conversion | already packs the 10/10/10/2 word | reached on the V3D for the first time |
-| `src/gl/framebuffer.rs:432` `attachment_storage`, the clause at `:487-489` | an es3 class other than RGBA8 that has no integer surface is no attachment | needs a branch that maps the class to `GLES_SURF_RGB10_A2`, the way `integer_texture_surface` (`:411`) maps the integer classes; otherwise the texture stops being a render target, which the RGBA8 fallback is today |
-| `src/gl/framebuffer.rs:579` `is_color_format` (`GL_RGB10_A2` at `:609`), `:2490` `is_renderable_format`, `:3698` renderbuffer storage | renderbuffer `GL_RGB10_A2` is accepted and held as RGBA8 | its surface is `GLES_SURF_RGB10_A2` when `rt_format_drawable` says so, RGBA8 otherwise |
-| `src/gl/framebuffer.rs:2017-2020` renderbuffer bits; `:2113` `es3_texture_bits` (`:2129`) | the renderbuffer says 8/8/8/8; the texture bits already say 10/10/10/2 for the class | the renderbuffer says 10/10/10/2 under the same condition as its surface |
-| `src/gl/texture.rs:4181-4190`, in `glGenerateMipmap` (`:4141`) | `INVALID_OPERATION` unless the texture is in the RGBA8 fallback | accepts the class (see (d)) |
-| `src/gl/texture.rs:4191-4196` `filtered`, and the CPU box filter from `:4310` | RGBA8, sRGB, F16 and F32 texels and the narrow L/A classes | needs a 10/10/10/2 arm (see (d)) |
-| `src/gl/texture.rs:4264-4266`, the call to `backend::generate_mipmap` at `:4274` | only `GLES_TEXFMT_RGBA8` with `es3_fmt == 0` | not reached by the class (see (d)) |
-| `src/v3d/backend.rs:1780` `rt_texture` (`:1784`) | a texture rendered into must be `GLES_TEXFMT_RGBA8` | left alone until the TFU commit. The class's render image is a 4-byte image like RGBA8's (`texture::rt_layout`, `src/v3d/texture.rs:374`), but sampling it through `rt_texture` would bind it with RGBA8's TMU row |
-| `src/gl/tf_capture.rs:1146` | already decodes the class | none |
+| `refusal_for` (`src/v3d/texture.rs:375`, the format test in `refusal_in` at `:398`) | refused the class by name | passes it: `V3D_SAMPLED_TEXFMTS` (`src/backend.rs:277`) lists `GLES_TEXFMT_RGB10A2` (`:286`) and the TMU row is `src/v3d/texture.rs:508`; 03f4bbd9. The `NOT_SAMPLED` text (`:349`) is generic now (its doc comment still names the class) |
+| `src/gl/es3_formats.rs:617` `encode` (the class's arm at `:647`) | already packed the 10/10/10/2 word | reached on the V3D, which keeps the class (03f4bbd9) instead of the RGBA8 fallback; the arm is unchanged since 381b0f09 |
+| `src/gl/framebuffer.rs:476` `attachment_storage`; `rgb10a2` at `:519`, in the format test at `:530` and the es3 clause at `:537` | an es3 class other than RGBA8 that has no integer surface was no attachment | a branch maps the class to `GLES_SURF_RGB10_A2` through `rgb10a2_texture_surface` (`:446`), the way `integer_texture_surface` (`:451`) maps the integer classes, gated by `rgb10a2_surface` (`:438`: not `REPORT_ES2`, and `rt_format_drawable` says yes); the framebuffer's colour surface asks the same helper at `:967`; 089cf587 (surface 735e24e8, gate open from 03f4bbd9) |
+| `src/gl/framebuffer.rs:628` `is_color_format` (the name at `:659`), `:2604` `is_renderable_format`, `:2670` `renderbuffer_storage` (bytes from `renderbuffer_surf_format` at `:2697`) | renderbuffer `GL_RGB10_A2` was accepted and held as RGBA8 | accepted as before; `renderbuffer_surf_format` (`:745`, the arm at `:755`) answers `GLES_SURF_RGB10_A2` when `rgb10a2_surface` says so, RGBA8888 otherwise; 089cf587 |
+| `src/gl/framebuffer.rs:2111` `renderbuffer_bits` (the arms at `:2123-2124`); `:2217` `es3_texture_bits` (the class at `:2243`) | the renderbuffer said 8/8/8/8; the texture bits already said 10/10/10/2 for the class | the renderbuffer says 10/10/10/2 under the same condition as its surface, 8/8/8/8 on the fallback; 089cf587 |
+| `src/gl/texture.rs:4596` `glGenerateMipmap` (the es3 check at `:4645`) | `INVALID_OPERATION` unless the texture was in the RGBA8 fallback | accepts the class and the RGBA8 fallback alike (see (d)); 089cf587 |
+| `src/gl/texture.rs:4650` `filtered` (the class at `:4658`), the CPU box filter | RGBA8, sRGB, F16 and F32 texels and the narrow L/A classes | has a 10/10/10/2 arm: `box_average_rgb10a2` (`:5013`), called at `:4840` and at `:4982` in `generate_mipmap_3d` (`:4923`), averages each field on its own and packs the word again (see (d)); 089cf587 |
+| `src/gl/texture.rs:4729-4731`, the call to `backend::generate_mipmap` at `:4738` | only `GLES_TEXFMT_RGBA8` with `es3_fmt == 0` | unchanged, and not reached by the class: its chain is the CPU's (see (d)) |
+| `src/v3d/backend.rs:1875` `rt_texture` | a texture rendered into must be `GLES_TEXFMT_RGBA8` | still open, left alone until the TFU commit. The class's render image is a 4-byte image like RGBA8's (`texture::rt_layout`, `src/v3d/texture.rs:842`), but sampling it through `rt_texture` would bind it with RGBA8's TMU row |
+| `src/gl/tf_capture.rs:1120` `decode` (the class at `:1154`) | already decoded the class | none; unchanged since 381b0f09 |
 
 ## (b) The render-target words
 
