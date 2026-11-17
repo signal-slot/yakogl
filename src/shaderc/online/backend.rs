@@ -2111,8 +2111,10 @@ const SAMPLE_KILL_VARIANTS: bool = !cfg!(not(feature = "gpu-powervr"));
 /// and in a build that reports ES 2.0 both
 /// stages to their cube bindings ([`LodKey::cube_noseam`]) and the vertex
 /// stage's explicit-level cube look-ups to the c = 0.5 switch
-/// ([`LodKey::mag_switch`]). [`LodKey::NONE`] for a source the front end
-/// cannot run again here.
+/// ([`LodKey::mag_switch`]); either stage also to the depth format of every
+/// binding below 16 a shadow look-up reads ([`LodKey::fixed_depth`]: a
+/// fixed-point depth clamps the reference). [`LodKey::NONE`] for a source
+/// the front end cannot run again here.
 fn sensitivity_of(rec: &Base) -> LodKey {
     #[cfg(feature = "gpu-v3d")]
     if rec.blend_key == V3D_PROGRAM_KEY && rec.stage == SHC_STAGE_FRAGMENT {
@@ -2171,14 +2173,15 @@ fn sensitivity_of(rec: &Base) -> LodKey {
         #[cfg(not(feature = "gpu-powervr"))]
         let mip_free = 0;
         let sample_kill = kill && !m.instrs.iter().any(|op| matches!(op, ir::Op::Discard));
-        LodKey { mip_free, mag_switch, sample_kill, ret32: 0, cube_noseam: 0 }
+        LodKey { mip_free, mag_switch, sample_kill, ret32: 0, cube_noseam: 0, fixed_depth: 0 }
     })
     .unwrap_or(LodKey::NONE)
 }
 
 /// A V3D stage's [`LodKey`] sensitivity (see [`sensitivity_of`]): of
 /// either stage, the bindings below 16 it reads with a look-up
-/// ([`LodKey::ret32`]), and in an ES 2.0 build the cube bindings below 15
+/// ([`LodKey::ret32`]), those of them it reads with a shadow look-up
+/// ([`LodKey::fixed_depth`]), and in an ES 2.0 build the cube bindings below 15
 /// ([`LodKey::cube_noseam`]); of the vertex stage also those cube bindings
 /// read at an explicit level ([`LodKey::mag_switch`]).
 #[cfg(feature = "gpu-v3d")]
@@ -2199,11 +2202,14 @@ fn v3d_sensitivity(source: &[u8], stage: super::sema::Stage) -> LodKey {
         let Ok(l) = super::lower::compile_to_ir(a, stage, text) else {
             return LodKey::NONE;
         };
-        let (mut ret32, mut cube) = (0u32, 0u32);
+        let (mut ret32, mut cube, mut fixed_depth) = (0u32, 0u32, 0u32);
         for op in l.module.instrs.iter() {
-            if let ir::Op::Tex { sampler, dim, .. } = *op {
+            if let ir::Op::Tex { sampler, dim, shadow, .. } = *op {
                 if sampler < 16 {
                     ret32 |= 1 << sampler;
+                    if shadow {
+                        fixed_depth |= 1 << sampler;
+                    }
                 }
                 if dim == ir::TexDim::Cube && sampler < 15 && crate::REPORT_ES2 {
                     cube |= 1 << sampler;
@@ -2211,7 +2217,7 @@ fn v3d_sensitivity(source: &[u8], stage: super::sema::Stage) -> LodKey {
             }
         }
         let mag_switch = if !fragment && switch { super::lodkey::mag_switch_sensitivity(&l.module) & cube } else { 0 };
-        LodKey { ret32, cube_noseam: cube, mag_switch, ..LodKey::NONE }
+        LodKey { ret32, cube_noseam: cube, mag_switch, fixed_depth, ..LodKey::NONE }
     })
     .unwrap_or(LodKey::NONE)
 }
@@ -2562,7 +2568,8 @@ unsafe extern "C" fn online_sampler_variant(
     /* The V3D: the program record's variant is its fragment stage compiled
      * with the key, which the caller links to the vertex shader as any
      * fragment variant (lod_variant_for); the link builds the program with
-     * the stage's key (`link_program`). Only `ret32` is a V3D key. */
+     * the stage's key (`link_program`). `ret32` and `fixed_depth` are its
+     * keys (`mip_free` shares `fixed_depth`'s bits, LodKey::bits). */
     #[cfg(feature = "gpu-v3d")]
     if base.blend_key == V3D_PROGRAM_KEY {
         use core::sync::atomic::Ordering::Relaxed;
@@ -3384,9 +3391,9 @@ void main (void)
         assert_eq!(cfg(&keyed), [(40, 0xf), (41, 0x5)], "the variant: a word per channel, Output Type 32-bit");
         assert_ne!(keyed.priv_, prog.priv_, "a program record of its own");
         let mut bad = ShcShader::ZERO;
-        for other in
-            [LodKey { mip_free: 1, ..key }, LodKey { mag_switch: 1, ..key }, LodKey { sample_kill: true, ..key }]
-        {
+        /* `mip_free` has no bits of its own in a V3D build: they are
+         * `fixed_depth`'s (LodKey::bits), a key the V3D takes */
+        for other in [LodKey { mag_switch: 1, ..key }, LodKey { sample_kill: true, ..key }] {
             // SAFETY: as above.
             assert_eq!(
                 unsafe { online_sampler_variant(&prog, other.bits(), &mut bad, core::ptr::null_mut(), 0) },
@@ -3394,7 +3401,7 @@ void main (void)
                 "{other:?}"
             );
         }
-        assert_eq!(v3d_sampler_variants(), (built + 1, refused + 3), "each refused key is counted refused");
+        assert_eq!(v3d_sampler_variants(), (built + 1, refused + 2), "each refused key is counted refused");
         release(&keyed);
         release(&prog);
         assert_eq!(store::keep_in_use(), before, "the records went with their holders");
@@ -3883,7 +3890,8 @@ void main (void)
 
     /* ---- sampler-state variants (shaderc::LodKey) ---- */
 
-    /// The C ABI's `uint64_t` of a [`LodKey`]: `mip_free` bits 0..15,
+    /// The C ABI's `uint64_t` of a [`LodKey`]: `mip_free` bits 0..15 (in a
+    /// V3D build `fixed_depth`, and `mip_free` is not carried),
     /// `ret32` 16..31, `mag_switch` 32..47, `cube_noseam` 48..62, `sample_kill` 63. Bindings 16
     /// and up of `mip_free` and `ret32` are not carried: the GL core keys
     /// bindings below CAP_SAMPLERS, 16, which this test also pins (a larger
@@ -3891,7 +3899,11 @@ void main (void)
     #[test]
     fn the_lod_key_layout_is_pinned() {
         let n = LodKey::NONE;
-        assert_eq!(LodKey { mip_free: 1, ..n }.bits(), 1);
+        let v3d = cfg!(feature = "gpu-v3d");
+        assert_eq!(LodKey { mip_free: 1, ..n }.bits(), u64::from(!v3d));
+        assert_eq!(LodKey { fixed_depth: 1, ..n }.bits(), u64::from(v3d));
+        assert_eq!(LodKey { fixed_depth: 0x8000, ..n }.bits(), if v3d { 1 << 15 } else { 0 });
+        assert!(!LodKey { fixed_depth: 1, ..n }.is_none());
         assert_eq!(LodKey { ret32: 1, ..n }.bits(), 1 << 16);
         assert_eq!(LodKey { ret32: 0x8000, ..n }.bits(), 1 << 31);
         assert_eq!(LodKey { mag_switch: 1, ..n }.bits(), 1 << 32);
@@ -3900,9 +3912,21 @@ void main (void)
         assert_eq!(LodKey { cube_noseam: 0x4000, ..n }.bits(), 1 << 62);
         assert_eq!(LodKey { cube_noseam: 0x8000, ..n }.bits(), 0, "binding 15 is not keyed for the cube rule");
         assert_eq!(LodKey { sample_kill: true, ..n }.bits(), 1 << 63);
-        let k = LodKey { mip_free: 0x8001, ret32: 0x4002, mag_switch: 0x8003, sample_kill: true, cube_noseam: 0x4005 };
+        let low = 0x8001;
+        let k = LodKey {
+            mip_free: if v3d { 0 } else { low },
+            ret32: 0x4002,
+            mag_switch: 0x8003,
+            sample_kill: true,
+            cube_noseam: 0x4005,
+            fixed_depth: if v3d { low } else { 0 },
+        };
         assert_eq!(LodKey::from_bits(k.bits()), k);
-        assert_eq!(LodKey { mip_free: 1 << 16, ret32: 1 << 16, ..n }.bits(), 0, "bindings 16 and up are not keyed");
+        assert_eq!(
+            LodKey { mip_free: 1 << 16, ret32: 1 << 16, fixed_depth: 1 << 16, ..n }.bits(),
+            0,
+            "bindings 16 and up are not keyed"
+        );
         assert!(!LodKey { ret32: 1, ..n }.is_none() && n.is_none());
         assert_eq!(crate::gl::context::CAP_SAMPLERS, 16, "the bindings the key carries");
     }
@@ -3939,7 +3963,7 @@ void main (void)
         let es2 = u32::from(crate::REPORT_ES2);
         assert_eq!(
             sensitivity(&vs),
-            LodKey { mip_free: 0, mag_switch: es2, sample_kill: false, ret32: 0, cube_noseam: 0 }
+            LodKey { mip_free: 0, mag_switch: es2, sample_kill: false, ret32: 0, cube_noseam: 0, fixed_depth: 0 }
         );
         let plain = compile_out(SHC_STAGE_FRAGMENT, FS_READS_V);
         /* the PowerVR's fragment shaders are all sensitive to the sample
@@ -3951,7 +3975,7 @@ void main (void)
             let fs = compile_out(SHC_STAGE_FRAGMENT, FS_SAMPLES_UV);
             assert_eq!(
                 sensitivity(&fs),
-                LodKey { mip_free: 1, mag_switch: 0, sample_kill: true, ret32: 0, cube_noseam: 0 }
+                LodKey { mip_free: 1, mag_switch: 0, sample_kill: true, ret32: 0, cube_noseam: 0, fixed_depth: 0 }
             );
             crate::shaderc::shc_set_lod_variants(0, -1);
             assert_eq!(sensitivity(&fs), LodKey { sample_kill: true, ..LodKey::NONE }, "switch (a) off");
@@ -4036,8 +4060,7 @@ void main (void)
         let same = sampler_variant(&fs, LodKey::NONE);
         assert_eq!(same.usc, fs.usc, "key 0: the input");
         release(&same);
-        let v =
-            sampler_variant(&fs, LodKey { mip_free: 1, mag_switch: 0, sample_kill: false, ret32: 0, cube_noseam: 0 });
+        let v = sampler_variant(&fs, LodKey { mip_free: 1, ..LodKey::NONE });
         assert_eq!(code_of(&v), off_code, "mip-free: the switch-off program");
         assert_eq!(v.num_varyings, fs.num_varyings);
         assert_eq!(v.uniform_dwords, fs.uniform_dwords);
@@ -4052,8 +4075,7 @@ void main (void)
         assert_eq!(code_of(&linked), off_code, "the link keeps the key");
         release(&linked);
         /* a key for a binding the shader does not read: the gradients stay */
-        let other =
-            sampler_variant(&fs, LodKey { mip_free: 2, mag_switch: 0, sample_kill: false, ret32: 0, cube_noseam: 0 });
+        let other = sampler_variant(&fs, LodKey { mip_free: 2, ..LodKey::NONE });
         assert_eq!(code_of(&other), code_of(&fs));
         release(&other);
         release(&fs);
@@ -4069,8 +4091,7 @@ void main (void)
     fn a_mag_switch_variant_remaps_the_level_and_keeps_the_layout() {
         let _serial = test_lock();
         let vs = compile_out(SHC_STAGE_VERTEX, VS_CUBE_LOD);
-        let v =
-            sampler_variant(&vs, LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0, cube_noseam: 0 });
+        let v = sampler_variant(&vs, LodKey { mag_switch: 1, ..LodKey::NONE });
         assert_ne!(v.usc_words(), vs.usc_words(), "the remap is code");
         /* what it costs this GPU (--nocapture) */
         std::println!(
@@ -4084,8 +4105,7 @@ void main (void)
         assert_eq!(v.uniform_dwords, vs.uniform_dwords);
         assert_eq!(v.num_attribs, vs.num_attribs);
         /* the same key twice: the cached record */
-        let again =
-            sampler_variant(&vs, LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0, cube_noseam: 0 });
+        let again = sampler_variant(&vs, LodKey { mag_switch: 1, ..LodKey::NONE });
         assert_eq!(again.usc, v.usc);
         release(&again);
         release(&v);
@@ -4115,7 +4135,7 @@ void main (void)
         assert_eq!(rc, 0);
         let lv = sampler_variant(
             &linked,
-            LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0, cube_noseam: 0 },
+            LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0, cube_noseam: 0, fixed_depth: 0 },
         );
         let loc = |s: &ShcShader| s.attribs[..s.num_attribs as usize].iter().map(|a| a.location).collect::<Vec<_>>();
         assert_eq!(loc(&lv), loc(&linked), "the map's locations");

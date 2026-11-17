@@ -36,7 +36,7 @@ use super::prepare::{fragment_inputs, prepare_fragment_with, prepare_vertex_with
 use super::qpu_ffi::Gen;
 use super::sched71::{pack71, Sched71Error};
 use super::sched71_cf::{branches_are_structured71, schedule71, Scheduled71};
-use super::select::{select_fragment, select_vertex, tmu_input_writes, Pressure, SelectError, Selected, VOp};
+use super::select::{select_fragment, select_vertex_keyed, tmu_input_writes, Pressure, SelectError, Selected, VOp};
 use super::select71::{select71, Select71Error};
 use super::verify71::{registers_fit_threads71, verify71, VerifyError};
 use super::vop71::{Instr71, Op71, Uniform};
@@ -283,10 +283,10 @@ fn vertex71<'a>(
     p: &Prepared<'_>,
     records: &[u8],
     coord: bool,
-    ret32: u32,
+    key: crate::shaderc::LodKey,
     a: &Arena<'a>,
 ) -> Result<(Selected<'a>, (Code71<'a>, u32)), V3d71Error> {
-    under_pressure71(&PRESSURES, |pr| select_vertex(p, records, coord, ret32, pr, a), true, a)
+    under_pressure71(&PRESSURES, |pr| select_vertex_keyed(p, records, coord, key, pr, a), true, a)
 }
 
 /* chain-hook replaces this: chain.rs:324-347 `vpm_fields`
@@ -450,8 +450,8 @@ pub fn compile_program71_keyed<'a>(
         false,
         a,
     )?;
-    let (vsel, vs_code) = vertex71(&vsp, records, false, vs_key.ret32, a)?;
-    let (csel, cs_code) = vertex71(&csp, records, true, vs_key.ret32, a)?;
+    let (vsel, vs_code) = vertex71(&vsp, records, false, vs_key, a)?;
+    let (csel, cs_code) = vertex71(&csp, records, true, vs_key, a)?;
 
     /* chain-hook replaces this: chain.rs:515-553, the prog_data. */
     let slots = a.alloc_filled(inputs.len(), (0u8, 0u8))?;
