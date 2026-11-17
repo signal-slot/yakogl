@@ -59,7 +59,29 @@ def read_tsv(path):
     return out
 
 
-def read_text(path):
+def check_words(name, w, tb, p, f, n, o, b):
+    """Refuse a record the fixed word layout cannot explain (ValueError)."""
+    where = "%s: record=%s: " % (name, ",".join("%08x" % x for x in w))
+    if (w[0] >> 8) & 0xFF != 8:
+        raise ValueError(where + "w0 kind byte is %d, not 8 (DEQP): "
+                         "unknown record encoding" % ((w[0] >> 8) & 0xFF))
+    if tb is not None and p + f + n + o > tb:
+        raise ValueError(where + "passed+failed+notsup+other = %d exceeds "
+                         "cases begun %d: unknown record encoding" %
+                         (p + f + n + o, tb))
+    # a halves swap (w1 or w2) keeps every sum; the baseline gives it away:
+    # the swapped reading equals the baseline where the fixed one does not
+    if b is not None:
+        for what, got, swp, want in (
+                ("w1 (passed/failed)", (p, f), (f, p), (b["passed"], b["failed"])),
+                ("w2 (notsup/other)", (n, o), (o, n), (b["notsup"], b["other"]))):
+            if got != want and swp == want:
+                raise ValueError(where + "%s halves look swapped (read %s, "
+                                 "the baseline has %s): unknown record "
+                                 "encoding" % (what, got, want))
+
+
+def read_text(path, bl=None):
     out = {}
     for ln in open(path, errors="replace"):
         m = LINE.search(ln)
@@ -75,13 +97,16 @@ def read_text(path):
             continue
         w = [int(x, 16) for x in r.group(1).split(",")]
         tb = (w[3] & 0xFFFF) if len(w) > 3 else None
-        c = counts(tb, w[1] & 0xFFFF, w[1] >> 16, w[2] & 0xFFFF, w[2] >> 16)
+        p, f, n, o = w[1] & 0xFFFF, w[1] >> 16, w[2] & 0xFFFF, w[2] >> 16
+        check_words("%s e%02d" % (path, i), w, tb, p, f, n, o,
+                    (bl or {}).get(i))
+        c = counts(tb, p, f, n, o)
         c["clean"] = clean
         out[i] = c
     return out
 
 
-def read_path(p):
+def read_path(p, bl=None):
     if os.path.isdir(p):
         for n in ("README.md", "verdicts.txt", "results.tsv"):
             if os.path.isfile(os.path.join(p, n)):
@@ -89,7 +114,7 @@ def read_path(p):
                 break
         else:
             raise OSError("no README.md, verdicts.txt or results.tsv in " + p)
-    return read_tsv(p) if p.endswith(".tsv") else read_text(p)
+    return read_tsv(p) if p.endswith(".tsv") else read_text(p, bl)
 
 
 def bad(c):
@@ -116,7 +141,7 @@ def main(argv):
         bl = read_tsv(base)
         got = {}
         for p in args:
-            got.update(read_path(p))
+            got.update(read_path(p, bl))
     except (OSError, ValueError) as e:
         print("es2 regress: " + str(e), file=sys.stderr)
         return 2
