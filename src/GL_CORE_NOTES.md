@@ -299,8 +299,34 @@ Each backend keeps `ds_retention::DS_SLOTS` (32) buffers, so that GPU memory,
 not the slot count, is what runs out. With every one holding contents, or no
 memory for the buffer, a draw that needs another is `GL_OUT_OF_MEMORY` with one
 line naming it (gl_test 162); a buffer that held nothing given to another
-target is counted on the exit line ("ds given up"). `glReadPixels` accepts only
-RGBA/UNSIGNED_BYTE (`GL_IMPLEMENTATION_COLOR_READ_*`) and flushes the frame first.
+target is counted on the exit line ("ds given up").
+
+`glReadPixels` takes the pairs of the surface the read buffer's target is
+stored as (`read_pixels`, over `fb_target_format`'s answer):
+
+- `GL_RGBA`/`GL_UNSIGNED_BYTE` for every read buffer that is not an integer
+  one: an RGB565 window surface expands to 8 bits a channel, an XRGB8888 or
+  BGRA scan-out surface swaps to R,G,B,A, an RGB10_A2 buffer decodes its
+  10/10/10/2 word (8428875e), a float surface comes back clamped;
+- `GL_RGBA`/`GL_FLOAT` for a float surface (`GLES_SURF_RGBA16F`,
+  `GLES_SURF_R16F`, `GLES_SURF_R32F`; `read_float_row`);
+- `GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV` for a buffer stored as the
+  RGB10_A2 word -- `GLES_SURF_RGB10_A2`, where `rgb10a2_surface()` is true,
+  the V3D build (the class is RGBA8888 elsewhere, `report-es2` included) --
+  the word handed back unchanged;
+- `GL_RGBA_INTEGER` with `GL_INT` for a signed and `GL_UNSIGNED_INT` for an
+  unsigned integer surface, and only so (`read_int_row`; the ES 2.0-reporting
+  build has no colour format of the integer classes).
+
+A known enum in a combination the read buffer does not take is
+`GL_INVALID_OPERATION`, an unknown one `GL_INVALID_ENUM`.
+`GL_IMPLEMENTATION_COLOR_READ_FORMAT` and `_TYPE` answer the integer pair for
+an integer read buffer and `GL_RGBA`/`GL_UNSIGNED_BYTE` for every other, the
+RGB10_A2 buffer among them (`implementation_color_read`); answering
+`GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV` for an RGB10_A2 buffer is open, as
+the ES 3.0 list below says. A read with pixels to write flushes and finishes
+first and brings the target into the CPU's view (`read_pixels_sync`); a read
+the arguments leave nothing to read does not stall the GPU.
 
 Stack budget: the GL core runs on kernel/RTOS thread stacks (16 KiB in the Linux
 harness, less on Zephyr). `glTexImage2D` converts through a 256-byte chunk buffer;
@@ -345,8 +371,10 @@ That is also why such a texture is a colour attachment like any other
 (`is_color_format`), while renderbuffer storage still refuses it: the
 extension adds a texture format, not renderbuffer storage, which GL names
 with a sized format. `GL_EXT_read_format_bgra` is a **separate** extension
-for `glReadPixels` and is not claimed, so
-`GL_IMPLEMENTATION_COLOR_READ_FORMAT` stays `GL_RGBA`, which GL allows.
+for `glReadPixels` and is not claimed: `GL_IMPLEMENTATION_COLOR_READ_FORMAT`
+takes no BGRA name and stays `GL_RGBA` for the buffers read as RGBA, which GL
+allows (integer read buffers answer `GL_RGBA_INTEGER` instead,
+`implementation_color_read`).
 
 `tests/negative_api` runs dEQP-GLES2's 246 `functional.negative_api` cases
 against this build on a host (`tests/README.md`); those check only which error
