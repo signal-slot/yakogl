@@ -38,9 +38,15 @@ How to read the row counts:
   `msaa` = v3d-msaa-es3-note), plan 308 (texture look-ups, `v3d-qpu-array-3d`,
   `v3d-vs-ret32`). "none" = no item and no issue known to this census.
 
-## A. The ten `refuse(g, "...")` literals of `backend.rs`
+## A. The ten draw refusals of `backend.rs`
 
-`grep -c 'refuse(g, "' src/v3d/*.rs` is 10; one row each.
+Ten rows (A1-A10), one per refusal. At the read commit `a8e79b52` the ten
+were `grep -c 'refuse(g, "' src/v3d/*.rs` — 10 literals, one row each.
+They are not that anymore: b7c1484e moved the refusals of legal GL state to
+`refuse_unsupported(g, "...")` with the same words, 7fa02269 removed A8's
+string, and #1261 (6d2e7d0d) split A5's one string into `refuse` and
+`refuse_unsupported`. The heading counts the ten rows of this section, not
+the code's literals.
 
 | # | Line | String | ES 3.0 feature | Owner | Rows it likely costs |
 | --- | --- | --- | --- | --- | --- |
