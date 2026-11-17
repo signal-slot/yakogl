@@ -4,7 +4,7 @@
 
 Roadmap stage 4 (ES 3.0, host first), plans #147 and #748. Code:
 `src/gl/native_vol.rs`, the `Sample`/`SampleZ { vol }` arms in
-`src/shaderc/online/powervr/select.rs`, `pvr/backend.rs` (the
+`src/shaderc/online/powervr/select.rs`, `src/pvr/backend.rs` (the
 `GLES_TEXTYPE_3D_TWIDDLED` descriptor). Tests: `tests/es3_pvr_3d.rs`,
 `gl::native_vol::tests`, `gl::draw::tests::a_native_3d_program_binds_*`,
 `pvr::backend::tests::a_3d_descriptor_*`.

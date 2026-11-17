@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # YakoGL on the Raspberry Pi 4 (V3D 4.2): backend plan
 
-Status: finished record, moved here from `driver/docs/rpi4-v3d-backend-plan.md` on 2026-10-11. M1 to M6 passed on the board on 2026-09-24. The design facts that are still true are driver/docs/rpi4-v3d.md; how an image boots is docs/standalone-boot.md, Raspberry Pi 4.
+Status: finished record, moved here from the driver docs on 2026-10-11. M1 to M6 passed on the board on 2026-09-24. The design facts that are still true are driver/docs/rpi4-v3d.md; how an image boots is docs/standalone-boot.md, Raspberry Pi 4.
 
 Status: started 2026-09-23. Board: **Raspberry Pi 4 Model B, 8 GB** (bootloader 2226a853,
 2025/12/08), HDMI on the lab capture card, microSD through the microSD OTA bridge
@@ -26,7 +26,7 @@ References (read on the lab host):
   driver (`/firmware`, rpi_fw). Its ISR drains every reply from MAIL0 while our
   `rpi_mbox.c` polls MAIL0, so every call of ours timed out (-116): no
   framebuffer and no V3D clock raise. **fps recorded on af17c0c8 before the
-  commit that disables both nodes (`common/rpi_4b_sram.dtsi`) were at the
+  commit that disables both nodes (`driver/samples/zephyr/common/rpi_4b_sram.dtsi`) were at the
   firmware's default V3D clock and headless**; pass/fail results were not
   affected (the full tree at 29460f96 equals sweep 30 case by case). Measured
   2026-10-03 with three tryboots (records in `records/pi4/mbox-29460f96/`): the
@@ -197,7 +197,7 @@ Order:
 - Boot: `start4.elf`, `fixup4.dat`, the dtb, `config.txt` with `arm_64bit=1`,
   `kernel=zephyr.bin`, `enable_uart=1`. The microSD bridge replaces the kexec route:
   the image is written over USB and the Pi rebooted.
-- A Linux harness (`driver/tools/v3dlab/`, like gclab) is possible on Raspberry Pi OS by
+- A Linux harness (like gclab) is possible on Raspberry Pi OS by
   unbinding `v3d` (`brcm,2711-v3d`); the display stays with `vc4`. A plain unbind may let
   genpd power the domain off, so the harness binds with `driver_override` and keeps it.
 
@@ -219,7 +219,7 @@ Raspberry Pi 4 Model B 8GB (bootloader 2025/12/08), the card in the Pi's own slo
 microSD bridge is not used). Linux (Raspberry Pi OS trixie, kernel 6.12.62+rpt-rpi-v8,
 Mesa 25.0.7) stays the default boot; each Zephyr image is booted once with the
 firmware's tryboot (`/boot/firmware/tryboot.txt`, `sudo reboot "0 tryboot"`) and ends
-with a PM watchdog reset (`v3d_clear/src/rpi_wdog.c`, about 60 s after boot), which
+with a PM watchdog reset (`driver/zephyr/lib/board/rpi4/rpi_wdog.c`, about 60 s after boot), which
 brings the board back into Linux with nobody at the power switch.
 
 Measured under Linux first (debugfs `v3d_ident` / `v3d_regs`, `vcgencmd`):
@@ -363,8 +363,8 @@ succeeds either way).
   outcomes. `tools/v3d/hw_mock_test.c`: 38 of 38 checks against a register model.
 - `driver/samples/zephyr/v3d_clear/`: M1..M4 in one Zephyr image for `rpi_4b`
   (Zephyr 4.4.1 workspace, SDK 1.0.1). It asks the firmware for a 1280x720
-  framebuffer through the property mailbox (`src/rpi_mbox.c`), prints to the top
-  half (`src/fbcon.c`, the panel console's font), powers the V3D, maps its buffers
+  framebuffer through the property mailbox (`driver/zephyr/lib/board/rpi4/rpi_mbox.c`), prints to the top
+  half (`driver/zephyr/lib/board/rpi4/fbcon.c`, the panel console's font), powers the V3D, maps its buffers
   and the framebuffer, has the V3D clear the bottom half to green, and reads every
   pixel of it back plus a guard row above it. Builds with 0 warnings, 49 KiB
   `zephyr.bin`; `boards/rpi_4b.overlay` gives it 32 MiB of RAM. Not run yet.

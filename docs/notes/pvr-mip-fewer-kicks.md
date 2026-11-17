@@ -172,8 +172,7 @@ kick and costs 4x that thread. That trade is measured, not assumed.
 - **Bit-identical:** levels 1..3 (unchanged kicks) and level 4 (the first
   level of the tail kick, `Q(T(L_3))`) by construction. Levels 5..9 only if
   E1 reads zero. Those are the smallest levels: 450 texels and fewer.
-- **Code size, an estimate:** `tools/shaders/internal/es/mipgen_tail.frag`
-  (about 70 lines) and its line in `tools/shaders/precompiled.list`;
+- **Code size, an estimate:** the tail program (about 70 lines) and its line in `tools/shaders/precompiled.list`;
   regenerated `src/pvr/internal.rs` and `tests/reference/pvr_internal.rs`;
   `src/pvr/backend.rs` about 120 lines (tail range and P x R choice, one
   `record_mip_tail`, the remainder emit); `src/pvr/backend_tests.rs` about

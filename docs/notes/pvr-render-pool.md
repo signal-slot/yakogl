@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The PowerVR render pool
 
-Status: finished record, moved here from `driver/docs/pvr-render-pool.md` on 2026-10-11. Runs and designs of 2026-10-03 to 10-05 on the AM62P. The pool's policy as it is now (free lists in gpu::pvr::pool, the top region, reclaim, frame sets) is driver/docs/pvr-render.md. The files its opening cites, driver/src/pvr_render_pool.h and tools/pvr/render_pool_check.c, are gone; the pool is driver/rust/src/gpu/pvr/pool.rs.
+Status: finished record, moved here from the driver docs on 2026-10-11. Runs and designs of 2026-10-03 to 10-05 on the AM62P. The pool's policy as it is now (free lists in gpu::pvr::pool, the top region, reclaim, frame sets) is driver/docs/pvr-render.md. The files its opening cites, driver/src/pvr_render_pool.h and tools/pvr/render_pool_check.c, are gone; the pool is driver/rust/src/gpu/pvr/pool.rs.
 
 Account of the render pool on the AM62P at 5398fb14. It was written for the
 glmark2 item (`build/glmark2-am62p-20261003-230937` in the main checkout:
@@ -295,7 +295,7 @@ gap is printed as "unaccounted".
   16 pairs): freeing a pair whose size has not been used for a while.
 - **The carveout.** 64 MiB at 0x97800000 (`verdin_am62p_am62p54_a53.dts:75`);
   the pool is 59200 KiB of it. dEQP's overlay already takes 256 MiB at
-  0xa0000000 (`deqp/boards/verdin_am62p_am62p54_a53.overlay`). Note the
+  0xa0000000 (`driver/samples/zephyr/deqp/boards/verdin_am62p_am62p54_a53.overlay`). Note the
   `big_pb` threshold (`pvr_render.c:556`): at >= 128 MiB, a quarter of the
   carveout becomes the freelist grow pool and the lists start at 2048
   pages. So 128 MiB gives a scene about 128 - 6 - (32 + 16) - 23 = ~51 MiB,
@@ -3095,7 +3095,7 @@ words at the frame's colour targets, `isp_zlsctl` :5957, the EOT data
   Mesa pco the table generator uses (tools/glsl2usc.sh ->
   pco_shc), for our one configuration (1 output dword, 1 sample, no tile
   buffers). Commit it as a table entry beside the offline shader table
-  (src/shaderc/blobs.rs's form), with the generator script and its Mesa
+  (tests/reference/blobs.rs's form), with the generator script and its Mesa
   version. The PDS program comes from our PDS generators (the bg kick and
   DMA programs, backend.rs :1136-:2249).
 - **Depth/stencil:** the PR stores depth and stencil, and the resumed
@@ -5233,7 +5233,7 @@ out of scope for the benchmark plan. This is the smaller change.
 
 **Cost and limits:**
 - `struct yd_pvr_km` grows by 16 bytes (`pool_top_above`, `pool_top`,
-  `pool_top_hw`, `pad`), at its end; `include/yakogl_drivers.h` and the
+  `pool_top_hw`, `pad`), at its end; `driver/rust/include/yakogl_drivers.h` and the
   Rust layout asserts move together.
 - Page-table pages: the top region's VA span equals its physical span, so
   at most one 4 KiB table per 2 MiB of the carveout (32 for 64 MiB), plus
@@ -5260,7 +5260,7 @@ to 8.5 MiB unnamed, below), and the golden trace would differ at its last
 1 MiB request. At 1 MiB, ranges below first was the weaker order: a large
 block in a hole below, once freed, is split by small ones.
 
-### The host replay (`pool/tests/replay.rs`)
+### The host replay (`driver/rust/src/gpu/pvr/pool/tests/replay.rs`)
 
 The real pool and bump on the AM62P's layout (64 MiB carveout, the pool
 its last 59200 KiB). The board prints no per-allocation trace, so the
@@ -5303,7 +5303,7 @@ board held that the reconstruction does not name.
   another; the PDS arenas and the tables come from the bump as before.
 - **The golden trace** (2769 operations of the C pool): equal with the
   region off and with it on at 256 KiB; the region is never used by it.
-- The top region's own tests (`pool/tests.rs`): placement and mapping,
+- The top region's own tests (`driver/rust/src/gpu/pvr/pool/tests.rs`): placement and mapping,
   merging and giving back in any order, reuse before the floor moves, the
   bump stopping at the floor and a small request falling back to a top
   range, frees outside the region dropped and counted, and a random run of

@@ -688,7 +688,7 @@ media, with OP-TEE staying resident so the SCMI server answers (the Mali
 port ran its SCMI clock request from U-Boot, `driver/docs/nanopc-t6-mali.md`
 "The GPU clock without Linux"). A jump from Linux (kexec) would be
 development only. A direct route that replaces U-Boot proper, as
-`notes/am62p-direct-boot.md` and `notes/imx8mp-direct-boot.md` did with the
+`docs/notes/am62p-direct-boot.md` and `docs/notes/imx8mp-direct-boot.md` did with the
 second-stage loader `driver/samples/zephyr/boot_stage2`, is a later item
 and needs the ST chain; its facts are now in section 1 (U-Boot's flow) and
 the return trial records the rest (Q8). Whether the image may start at the
