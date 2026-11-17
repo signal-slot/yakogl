@@ -987,7 +987,11 @@ clean — `rc=0`, `verdict=done`, `resets` absent or 0), `missing` (no verdict l
 the entry; pages are ignored, the last line of an entry wins). It prints one line per entry and the summary
 `es2 regress: <n>/29 entries, <w> worse, <m> missing`, and exits 0 only when all 29 entries are present
 with none worse. A pass is therefore `es2 regress: 29/29 entries, 0 worse, 0 missing` — the baseline's 34
-NotSupported and 19 other cases stay expected, as does its 0 fail.
+NotSupported and 19 other cases stay expected, as does its 0 fail. The record words are printed bare, so the
+tool checks them before it reads them: a `record=` that is not three or four hex words, a `w0` that is not a
+DEQP record on a clean row, counts above the cases begun or the entry's total, or a `w1`/`w2` whose halves
+read swapped against the baseline stops it with exit 2 and the entry named (an unknown encoding, never a
+`better` or `WORSE` verdict); fix the reader or the capture, then compare again.
 
 ```sh
 DEQP_STAGE1=<gles2 stage 1> tools/cts/imx8mp-deqp-build.sh wt-$HEAD8 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt
