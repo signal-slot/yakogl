@@ -431,14 +431,20 @@ impl RtImage {
     }
 }
 
-/// The largest target the tile memory is sized for at init.
-pub const MAX_TARGET: u32 = 2048;
-/// The most tiles one job may bin: what the pools hold, sized at init for
-/// `MAX_TARGET` square at four 32-bpp render targets (32x32 tiles). A typed
-/// job (an ES 3.0 colour format at 64 or 128 bpp) bins smaller tiles
-/// (`v3d_frame_tiling_bpp`); one with more tiles than this is refused by
+/// The largest side of a target: the hardware's and Mesa's
+/// (v3d_limits.h V3D_MAX_IMAGE_DIMENSION 4096), which the GL core reports as
+/// GL_MAX_RENDERBUFFER_SIZE. The tile memory limits a target by its tile
+/// count (`MAX_JOB_TILES`), not by its side (docs/notes/v3d-large-targets.md).
+pub const MAX_TARGET: u32 = 4096;
+/// The square the tile pools are sized for at init, at four 32-bpp render
+/// targets (32x32 tiles): 4096 tiles.
+pub const POOL_TARGET: u32 = 2048;
+/// The most tiles one job may bin: what the pools hold. The tile size
+/// follows the RT count, 4x and the bpp (`v3d_frame_tiling_bpp`), so a
+/// 4096-square target fits at one 32-bpp RT (64x64 tiles) and not at two,
+/// at 4x or at 64/128 bpp; a job with more tiles than this is refused by
 /// name rather than run past the tile state.
-const MAX_JOB_TILES: u32 = (MAX_TARGET / 32) * (MAX_TARGET / 32);
+const MAX_JOB_TILES: u32 = (POOL_TARGET / 32) * (POOL_TARGET / 32);
 
 /// Device-VA heap labels (the OSAL maps its carve-out whole; the labels only
 /// say which pool a request came from).
@@ -1847,8 +1853,9 @@ fn ms_buf(g: &mut V3dState, target: u64, w: u32, h: u32) -> Option<usize> {
 /* ---- render images ----------------------------------------------------------- */
 
 /// Is binding `b` a texture a render image can stand for (`RtImage`)? A
-/// stamped 2D RGBA8 texture at the GL core's pitch, not an EGLImage's, of a
-/// size a target can have. Named, the textures that keep the tiled copy:
+/// stamped 2D RGBA8 texture at the GL core's pitch, not an EGLImage's, at
+/// most `POOL_TARGET` a side (the render images stay as they were when that
+/// was a target's limit). Named, the textures that keep the tiled copy:
 /// - a cube map or an array (a render goes into one face; the TMU reads
 ///   every layer of one image);
 /// - a depth texture (R32F storage) whose rendered depth is not read from
@@ -1871,8 +1878,8 @@ fn rt_texture(b: &GlesTextureBind) -> bool {
         && b.stride_texels == target_pitch(b.width)
         && b.width != 0
         && b.height != 0
-        && b.width <= MAX_TARGET
-        && b.height <= MAX_TARGET
+        && b.width <= POOL_TARGET
+        && b.height <= POOL_TARGET
 }
 
 /// Can a draw sample binding `b` from a render image? [`rt_texture`], and
@@ -2633,6 +2640,24 @@ pub extern "C" fn v3d_split_zs(on: bool) -> bool {
 /// loaded unless a clear replaces it, and depth/stencil started from what the
 /// history says they hold.
 fn begin_job(g: &mut V3dState, target: Target) -> i32 {
+    /* the job's tiles, at the tile size its RT count, 4x and bpp give (the
+     * job builder's v3d_frame_tiling_bpp): one with more than the pools hold
+     * is refused by name, typed or not, before anything is set up for it */
+    let mut tiling = V3dTiling::default();
+    // SAFETY: plain computations on the out-parameter given.
+    unsafe {
+        v3d_frame_tiling_bpp(
+            target.w,
+            target.h,
+            u32::from(target.rts.max(1)),
+            target.msaa,
+            target.max_bpp(),
+            &mut tiling,
+        )
+    };
+    if tiling.tiles_x * tiling.tiles_y > MAX_JOB_TILES {
+        return refuse_unsupported(g, "a target with more tiles than the tile memory holds (4096)");
+    }
     let rc = choose_arenas(g);
     if rc < 0 {
         return rc;
@@ -2672,18 +2697,9 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
     /* ES 3.0 colour formats (int-rt-v3d, `state::rt_format`): the job
      * builder's typed render targets, each RT loaded and stored in its own
      * image format at its own bytes a pixel, and smaller tiles for 64- and
-     * 128-bpp tile buffers; a job whose tiles outnumber what the pools hold
-     * is refused by name. The ES 2.0 formats keep the untyped job, byte for
-     * byte as before. */
+     * 128-bpp tile buffers (their tile count is checked at the top). The
+     * ES 2.0 formats keep the untyped job, byte for byte as before. */
     let (typed, max_bpp, formats) = (target.typed(), target.max_bpp(), target.formats());
-    if typed {
-        let mut tiling = V3dTiling::default();
-        // SAFETY: plain computations on the out-parameter given.
-        unsafe { v3d_frame_tiling_bpp(w, h, u32::from(target.rts.max(1)), msaa, max_bpp, &mut tiling) };
-        if tiling.tiles_x * tiling.tiles_y > MAX_JOB_TILES {
-            return refuse_unsupported(g, "a 64- or 128-bpp colour target with more tiles than the job pools hold");
-        }
-    }
     let (bcl_cpu, bcl_gpu) = (g.arenas.bcl.cpu as *mut u8, g.arenas.bcl.gpu as u32);
     let (rcl_cpu, rcl_gpu) = (g.arenas.rcl.cpu as *mut u8, g.arenas.rcl.gpu as u32);
     let (ind_cpu, ind_gpu) = (g.arenas.ind.cpu as *mut u8, g.arenas.ind.gpu as u32);
@@ -5907,7 +5923,7 @@ pub extern "C" fn v3d_init() -> i32 {
     unsafe {
         /* the smallest tiles a job can have (4 render targets: 32x32), so
          * the pool holds the most tiles any job bins */
-        v3d_frame_tiling_rts(MAX_TARGET, MAX_TARGET, 4, &mut t);
+        v3d_frame_tiling_rts(POOL_TARGET, POOL_TARGET, 4, &mut t);
         /* Mesa's rule for the same draw budget: at this target size the
          * pool reaches its 512 KiB cap from 1024 draws; a binner that needs
          * more gets the OSAL's overflow blocks (v3d_wait_bin), and a job
@@ -6281,15 +6297,15 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
             None => return refuse_unsupported(g, "the target is outside the V3D's 32-bit address space"),
         }
     };
-    /* one name for both: an empty target is a malformed draw (-EINVAL), one
-     * past 2048 a side is legal GL (GL_MAX_RENDERBUFFER_SIZE is 4096) that
-     * the tile memory cannot take (-ENOTSUP) */
-    const PAST_2048: state::Refusal = "a target larger than the tile memory is sized for (2048x2048), or empty";
+    /* an empty target is a malformed draw (-EINVAL); a side past 4096 is past
+     * what the GL core reports (GL_MAX_RENDERBUFFER_SIZE) and the hardware
+     * takes (-ENOTSUP). Up to 4096 a side the tile count decides
+     * (`begin_job`, MAX_JOB_TILES). */
     if d.target_w == 0 || d.target_h == 0 {
-        return refuse(g, PAST_2048);
+        return refuse(g, "an empty target (0 pixels on a side)");
     }
     if d.target_w > MAX_TARGET || d.target_h > MAX_TARGET {
-        return refuse_unsupported(g, PAST_2048);
+        return refuse_unsupported(g, "a target past 4096 pixels on a side");
     }
     let (rts, rt, rt_format) = match extra_targets(d) {
         Ok(x) => x,

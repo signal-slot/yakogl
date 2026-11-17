@@ -4537,7 +4537,14 @@ fn a_backend_gap_is_enotsup_and_counted() {
     gap(&d, "colour attachments of different sizes");
     let mut d = rig.draw();
     (d.target_w, d.target_h) = (MAX_TARGET + 1, 16);
-    gap(&d, "a target larger than the tile memory is sized for (2048x2048), or empty");
+    gap(&d, "a target past 4096 pixels on a side");
+    let mut d = mrt_draw(&rig, &two, 2);
+    (d.target_w, d.target_h) = (4096, 4096);
+    (d.targets[0].w, d.targets[0].h) = (4096, 4096);
+    (d.targets[1].w, d.targets[1].h) = (4096, 4096);
+    /* untyped, 64x32 tiles: 8192 (a typed 128-bpp one is refused by the same
+     * name: what_a_typed_job_cannot_take_is_refused_by_name) */
+    gap(&d, "a target with more tiles than the tile memory holds (4096)");
     let rt2 = program_writing(0b101);
     gap(&mrt_draw(&rig, &rt2, 2), "a colour output with no attachment slot");
     let mut d = mrt_draw(&rig, &two, 2);
@@ -4546,12 +4553,6 @@ fn a_backend_gap_is_enotsup_and_counted() {
     let mut d = rig.draw();
     (d.target_format, d.samples) = (GLES_SURF_RGBA16F, 4);
     gap(&d, "4x multisampling of an ES 3.0 colour format");
-    let mut d = mrt_draw(&rig, &two, 2);
-    (d.target_w, d.target_h) = (2048, 2048);
-    (d.targets[0].w, d.targets[0].h) = (2048, 2048);
-    (d.targets[1].w, d.targets[1].h) = (2048, 2048);
-    d.targets[1].format = GLES_SURF_RGBA32UI;
-    gap(&d, "a 64- or 128-bpp colour target with more tiles than the job pools hold");
     let mut d = rig.draw();
     d.index_count2 = 3;
     gap(&d, "a second index list in one draw is not implemented");
@@ -4564,7 +4565,8 @@ fn a_backend_gap_is_enotsup_and_counted() {
     let base = v3d_refused_draws();
     let mut d = rig.draw();
     d.target_w = 0;
-    assert_eq!(draw(&d), -EINVAL, "an empty target, under the 2048 refusal's name");
+    assert_eq!(draw(&d), -EINVAL, "an empty target");
+    assert_eq!(rig.logs_with("an empty target (0 pixels on a side)"), 1, "named");
     let mut d = mrt_draw(&rig, &two, 2);
     d.targets[1].format = 99;
     assert_eq!(draw(&d), -EINVAL, "a surface number none names");
@@ -4614,6 +4616,38 @@ fn addresses_the_v3d_cannot_hold_are_refused() {
     d.target_w = MAX_TARGET + 1;
     assert_eq!(draw(&d), -ENOTSUP);
     assert!(rig.draws().is_empty());
+}
+
+/// A target is limited by its tiles, not by a side of 2048 (#1261): the
+/// dEQP shader executor's 4096 x a few rows (glsShaderExecUtil.cpp, as wide
+/// as GL_MAX_RENDERBUFFER_SIZE) and a 4096 square at one 32-bpp RT (64x64
+/// tiles: the 4096 the pools hold) are drawn, each job at its own size. Two
+/// RTs at 4096 square (64x32 tiles, 8192) are refused by name, -ENOTSUP.
+#[test]
+fn a_target_up_to_4096_a_side_draws_while_its_tiles_fit() {
+    let rig = Rig::new();
+    rig.init();
+    let base = v3d_refused_draws();
+    let sizes = [(4096u32, 6u32), (6, 4096), (4096, 4096)];
+    for (w, h) in sizes {
+        let mut d = rig.draw();
+        (d.target_w, d.target_h) = (w, h);
+        d.viewport = [0, 0, w as i32, h as i32];
+        assert_eq!(draw(&d), 0, "{w}x{h}: {:?}", rig.gl.logs());
+    }
+    assert_eq!(v3d_refused_draws(), base, "none refused");
+    assert_eq!(rig.draws().len(), 3);
+    let jobs = rig.jobs();
+    let seen: Vec<(u32, u32)> = jobs.iter().map(|j| (j.target.width, j.target.height)).collect();
+    assert_eq!(seen, sizes, "one job a size, at that size");
+    let two = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &two, 2);
+    (d.target_w, d.target_h) = (4096, 4096);
+    (d.targets[0].w, d.targets[0].h) = (4096, 4096);
+    (d.targets[1].w, d.targets[1].h) = (4096, 4096);
+    assert_eq!(draw(&d), -ENOTSUP);
+    assert_eq!(rig.logs_with("a target with more tiles than the tile memory holds (4096)"), 1);
+    assert_eq!(rig.draws().len(), 3, "the refused draw was not recorded");
 }
 
 #[test]
@@ -6932,7 +6966,7 @@ fn what_a_typed_job_cannot_take_is_refused_by_name() {
     (d.targets[1].w, d.targets[1].h) = (2048, 2048);
     d.targets[1].format = GLES_SURF_RGBA32UI;
     assert_eq!(draw(&d), -ENOTSUP, "32x16 tiles over 2048x2048: 8192 tiles");
-    assert_eq!(rig.logs_with("more tiles than the job pools hold"), 1);
+    assert_eq!(rig.logs_with("more tiles than the tile memory holds"), 1);
     assert!(rig.draws().is_empty() && rig.jobs().is_empty(), "nothing was recorded");
 }
 

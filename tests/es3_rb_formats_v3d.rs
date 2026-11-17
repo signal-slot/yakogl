@@ -855,6 +855,23 @@ mod trampolines {
             .collect()
     }
 
+    /// The formats whose tile buffer is 64 or 128 bpp (src/v3d/state.rs
+    /// `rt_row`: RGB10_A2 and sRGB over 16F as Mesa, R16F at 64 bpp): at 4096
+    /// square they bin more tiles than the V3D's tile memory holds.
+    const WIDE_TILE_BUFFER: &[&str] = &[
+        "RGB10_A2",
+        "SRGB8_ALPHA8",
+        "RGB10_A2UI",
+        "RG32I",
+        "RG32UI",
+        "RGBA16I",
+        "RGBA16UI",
+        "RGBA32I",
+        "RGBA32UI",
+        "RGBA16F",
+        "R16F",
+    ];
+
     fn all_formats() -> impl Iterator<Item = &'static (&'static str, GLenum, Kind)> {
         FORMATS.iter().chain(ext_formats())
     }
@@ -904,48 +921,51 @@ mod trampolines {
         assert_eq!(p.clear, GL_INVALID_FRAMEBUFFER_OPERATION);
     }
 
-    /// The largest sizes. The V3D's tile memory is sized for 2048 on a side
-    /// (`v3d::backend::MAX_TARGET`) while GL_MAX_RENDERBUFFER_SIZE is 4096
-    /// (src/gl/state.rs): the storage is taken, the framebuffer is complete,
-    /// the clear is taken, and the draw is refused with -ENOTSUP, which the
-    /// GL core answers as GL_INVALID_OPERATION (v3d-refuse-enotsup; before
-    /// it, -EINVAL and GL_OUT_OF_MEMORY). Pinned for every format.
+    /// The largest sizes: GL_MAX_RENDERBUFFER_SIZE (4096) a side
+    /// (src/gl/state.rs). The storage is taken, the framebuffer is complete
+    /// and the clear is taken. Since #1261 the V3D limits a target by its
+    /// tiles, not by a side of 2048 (`v3d::backend::MAX_TARGET` is 4096, the
+    /// tile memory holds 4096 tiles): a 4096 square whose tile buffer is 32
+    /// bpp (64x64 tiles) draws; one at 64 or 128 bpp (64x32 or 32x32 tiles,
+    /// 8192 or 16384) is refused with -ENOTSUP, which the GL core answers as
+    /// GL_INVALID_OPERATION. Pinned for every format.
     #[test]
-    fn pinned_draw_past_2048_a_side_is_invalid_operation() {
+    fn pinned_draw_at_4096_a_side_by_tile_count() {
         let _g = rig();
-        let mut seen = 0;
+        let (mut drawn, mut refused) = (Vec::new(), Vec::new());
         for &(name, f, k) in all_formats() {
             let (w, h) = sizes(f, k)[3];
-            assert!(w >= 2048, "{name}: {w}");
+            assert_eq!((w, h), (4096, 4096), "{name}");
             let p = probe(f, k, w, h, 0);
             assert_eq!((p.storage, p.status, p.clear), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE, GL_NO_ERROR), "{name}");
-            if w > 2048 {
-                assert_eq!(p.draw, GL_INVALID_OPERATION, "{name} {w}x{h}: the refusal of a legal state");
-                seen += 1;
-            } else {
-                assert_eq!(p.draw, GL_NO_ERROR, "{name} {w}x{h}");
+            match p.draw {
+                GL_NO_ERROR => drawn.push(name),
+                GL_INVALID_OPERATION => refused.push(name),
+                e => panic!("{name} {w}x{h}: draw 0x{e:x} {:?}", logs()),
             }
         }
-        assert!(seen > 20, "{seen} formats reach 4096");
+        assert_eq!(refused, WIDE_TILE_BUFFER, "the 64- and 128-bpp tile buffers are refused, by their tiles");
+        assert!(drawn.len() > 20, "{} formats draw at 4096 square: {drawn:?}", drawn.len());
     }
 
-    /// The edge: 2048 a side draws, 2049 or 4096 on one side does not.
+    /// The edge: 4096 a side draws (one 32-bpp RT: 64x64 tiles, the 4096 the
+    /// tile memory holds); past it the storage is GL_INVALID_VALUE.
     #[test]
-    fn pinned_the_2048_edge_in_each_dimension() {
+    fn pinned_the_4096_edge_in_each_dimension() {
         let _g = rig();
         let ok = |w, h| probe(GL_RGBA8, Kind::Float, w, h, 0).letter();
-        assert_eq!((ok(2048, 16), ok(16, 2048), ok(2048, 2048)), ('C', 'C', 'C'));
-        assert_eq!((ok(2049, 16), ok(16, 2049), ok(4096, 1)), ('E', 'E', 'E'));
+        assert_eq!((ok(2049, 16), ok(4096, 6), ok(16, 4096), ok(4096, 4096)), ('C', 'C', 'C', 'C'));
+        let past = probe(GL_RGBA8, Kind::Float, 4097, 16, 0);
+        assert_eq!(past.storage, GL_INVALID_VALUE, "past GL_MAX_RENDERBUFFER_SIZE: {past:?}");
     }
 
     /// What a legal state the V3D cannot do must be: not GL_OUT_OF_MEMORY
     /// (dEQP aborts the session on it), GL_FRAMEBUFFER_UNSUPPORTED or
-    /// GL_INVALID_OPERATION. The V3D refuses past 2048 with -ENOTSUP
-    /// (v3d-refuse-enotsup), which src/gl/draw.rs turns into
-    /// GL_INVALID_OPERATION; the GL core's 4096 limit against the V3D's 2048
-    /// is its own item (report 2048 for GL_MAX_RENDERBUFFER_SIZE on the V3D).
+    /// GL_INVALID_OPERATION. The V3D refuses a target with more tiles than
+    /// its tile memory holds with -ENOTSUP (v3d-refuse-enotsup, #1261), which
+    /// src/gl/draw.rs turns into GL_INVALID_OPERATION.
     #[test]
-    fn draw_past_2048_a_side_is_not_out_of_memory() {
+    fn draw_at_4096_a_side_is_not_out_of_memory() {
         let _g = rig();
         for &(name, f, k) in all_formats() {
             let (w, h) = sizes(f, k)[3];

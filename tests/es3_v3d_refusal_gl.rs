@@ -515,15 +515,21 @@ fn still_usable() {
 
 /* ---- the refusals: each returns the error the application sees ---- */
 
-/// "a target larger than the tile memory is sized for (2048x2048), or empty":
-/// a 4096 x 16 renderbuffer is legal (GL_MAX_RENDERBUFFER_SIZE is 4096), and a
-/// clear of it is refused with -ENOTSUP.
-fn refused_target_larger_than_2048() -> GLenum {
-    let fb = fbo(&[GL_RGBA8], 4096, 16);
+/// "a target with more tiles than the tile memory holds (4096)": two RGBA8
+/// colour attachments of 4096 x 4096 (GL_MAX_RENDERBUFFER_SIZE) both drawn,
+/// whose 64x32 tiles are 8192, twice what the pools hold; refused with
+/// -ENOTSUP. (Up to #1261 any side past 2048 was refused: a 4096 x 16 clear.)
+fn refused_target_with_too_many_tiles() -> GLenum {
+    let fb = fbo(&[GL_RGBA8, GL_RGBA8], 4096, 4096);
+    program(FS2);
     // SAFETY: plain GL calls.
     unsafe {
-        glClearColor(1.0, 0.0, 0.0, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT);
+        let list = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1];
+        glDrawBuffers(2, list.as_ptr());
+    }
+    draw_triangle();
+    // SAFETY: plain GL calls.
+    unsafe {
         glFinish();
         let e = err();
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -574,10 +580,41 @@ fn refused_draw_buffer_zero_none() -> GLenum {
 /* ---- refused with -ENOTSUP since v3d-refuse-enotsup (GL_OUT_OF_MEMORY before) ---- */
 
 #[test]
-fn a_target_over_2048_is_invalid_operation() {
+fn a_target_with_too_many_tiles_is_invalid_operation() {
     let _g = rig();
-    assert_eq!(refused_target_larger_than_2048(), GL_INVALID_OPERATION, "{:?}", log_lines());
+    assert_eq!(refused_target_with_too_many_tiles(), GL_INVALID_OPERATION, "{:?}", log_lines());
+    let named = "draw refused: a target with more tiles than the tile memory holds (4096)";
+    assert!(log_lines().iter().any(|l| l.contains(named)), "the cause is named: {:?}", log_lines());
     still_usable();
+}
+
+/// #1261: the dEQP shader executor's framebuffer (glsShaderExecUtil.cpp:
+/// as wide as GL_MAX_RENDERBUFFER_SIZE, 4096, and a few rows; the precision
+/// groups of Pi 4 images S03-S08) is cleared and drawn with no error and no
+/// refusal, as are a 4096 x 16 target and a 4096 square at one RGBA8
+/// attachment (64x64 tiles: the 4096 the tile memory holds). Until #1261
+/// the V3D refused every side past 2048.
+#[test]
+fn a_target_up_to_4096_a_side_draws() {
+    let _g = rig();
+    for (w, h) in [(4096, 6), (4096, 16), (6, 4096), (4096, 4096)] {
+        let fb = fbo(&[GL_RGBA8], w, h);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glClearColor(1.0, 0.0, 0.0, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        program(FS1);
+        draw_triangle();
+        // SAFETY: plain GL calls.
+        unsafe {
+            glFinish();
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fb);
+        }
+        assert_eq!(err(), GL_NO_ERROR, "{w}x{h}: {:?}", log_lines());
+    }
+    assert!(!log_lines().iter().any(|l| l.contains("draw refused")), "{:?}", log_lines());
 }
 
 #[test]

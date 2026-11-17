@@ -102,3 +102,79 @@ does not help the V3D: one draw still binds one 4096-wide target.
 - Report smaller limits (2048 for renderbuffer, texture and viewport), which
   is plan #375's ground (RC10 limits) and would refuse textures and
   attachments the V3D samples today.
+
+## After the fix (fix-v3d, plan #376)
+
+The tile memory limits a target by its tile count, not by its side: the
+binner's tile pool and the tile state are sized at init for 4,096 tiles (2048
+square at four 32-bpp RTs, 32x32 tiles: tile alloc 1,056,768 bytes, tile state
+1,048,576), and the hardware, Mesa (`v3d_limits.h` 4096 a side) and the packet
+fields take 4096 a side. So the buffers stay as they were and only the checks
+moved (`src/v3d/backend.rs`, line numbers of the fix commit):
+
+- `MAX_TARGET` is 4096 (line 438), the side the GL core reports for
+  `GL_MAX_RENDERBUFFER_SIZE`, `GL_MAX_TEXTURE_SIZE` and `GL_MAX_VIEWPORT_DIMS`
+  (unchanged, src/gl is not touched). `POOL_TARGET` (2048, line 441) sizes the
+  pools at init and `MAX_JOB_TILES` (4,096, line 447); `rt_texture` keeps its
+  2048 limit for render images through it.
+- The draw path names each cause: "an empty target (0 pixels on a side)"
+  (`refuse`, `-EINVAL`, a malformed draw) and "a target past 4096 pixels on a
+  side" (`refuse_unsupported`, `-ENOTSUP`; the GL core makes no larger
+  storage, so it is a guard).
+- `begin_job` checks every job's tiles before it sets anything up, at the tile
+  size the job builder picks for the RT count, 4x and bpp
+  (`v3d_frame_tiling_bpp`): "a target with more tiles than the tile memory
+  holds (4096)" (`-ENOTSUP`). Before, only a typed (ES 3.0 format) job was
+  checked, under "a 64- or 128-bpp colour target with more tiles than the job
+  pools hold"; an untyped job could not exceed the pools while its side was
+  2048.
+- `-ENOTSUP` reaches the application as `GL_INVALID_OPERATION`
+  (`src/gl/draw.rs` `submit_draw`), and the back end logs `yakogl/v3d: draw
+  refused: <cause>` the first time a cause is seen.
+
+What a 4096 side takes now:
+
+| target | tile size | tiles | result |
+|---|---|---:|---|
+| the executor's 4096 x 2-6, one 32-bpp RT | 64x64 | 64 | drawn |
+| the same at 4 RTs and 128 bpp, the smallest tiles | 16x16 | 256 | within the tile memory (by the tile count; not a host test) |
+| 4096 x 4096, one 32-bpp RT | 64x64 | 4,096 | drawn |
+| 4096 x 4096, 2 RTs | 64x32 | 8,192 | refused, tile count |
+| 4096 x 4096, 4x, or 64/128 bpp (RGB10_A2, sRGB, R16F, RGBA16F, RG32, RGBA16, RGBA32 and their integer forms) | 32x32 to 16x16 | 8,192-16,384 | refused, tile count |
+| a side of 4097 | - | - | `GL_INVALID_VALUE` at storage (the core); the back end's guard |
+
+Host tests (feature sets in their headers): `src/v3d/backend_tests.rs`
+`a_target_up_to_4096_a_side_draws_while_its_tiles_fit` and the re-pinned
+`a_backend_gap_is_enotsup_and_counted`; `tests/es3_v3d_refusal_gl.rs`
+`a_target_up_to_4096_a_side_draws` (4096 x 6, 4096 x 16, 6 x 4096 and 4096
+square through the GL core: no error, no refusal) and
+`a_target_with_too_many_tiles_is_invalid_operation`;
+`tests/es3_rb_formats_v3d.rs` `pinned_draw_at_4096_a_side_by_tile_count`
+(every renderable format at 4096 square: the eleven 64/128-bpp ones are
+refused by their tiles, the rest draw) and
+`pinned_the_4096_edge_in_each_dimension`; `tests/v3d_es2ctx_refusals.rs`
+`a_4096_target_is_accepted`, no longer `#[ignore]`d.
+
+Host run (HOST-ONLY: every pixel reads black, so a render verdict means
+nothing): `MODULE=gles3 GPU=v3d tools/cts/host-deqp-run.sh
+dEQP-GLES3.functional.shaders.builtin_functions.precision.` at the fix
+commit, VK-GL-CTS 93bca01, with a temporary log of every draw's target past
+2048 (not committed). All 1,147 cases of S03-S08 began and ended, no chunk
+stopped, and the back end refused no draw. The executor's targets were 4096 x
+2, 4, 5 or 6 at 1 to 3 colour targets, single-sampled (1,035 draws). Per
+image (QualityWarning is the black-pixel precision verdict):
+
+| image | cases | Pass | QualityWarning | Fail |
+|---|---:|---:|---:|---:|
+| S03 | 192 | 24 | 168 | 0 |
+| S04 | 201 | 32 | 169 | 0 |
+| S05 | 202 | 10 | 174 | 18 |
+| S06 | 204 | 24 | 162 | 18 |
+| S07 | 206 | 32 | 174 | 0 |
+| S08 | 142 | 16 | 108 | 18 |
+
+The 54 Fail are one message, "Failed to set up framebuffer object:
+glGetError() returned GL_INVALID_ENUM" (glFramebufferRenderbuffer, `GL error
+0x500`): the matrix-output cases' fourth colour attachment, not the target
+size; inv-enum-mrt of plan #376 has it. No ResourceError and no
+`GL_OUT_OF_MEMORY` at framebuffer setup appeared in this run (inv-oom-fb).
