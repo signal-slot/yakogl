@@ -2467,6 +2467,41 @@ fn equal_varying_lanes_are_merged_as_mesa_26_2_1() {
     }
 }
 
+/// dEQP's result check over lanes the link merged (nir_fs.rs
+/// `convert_inputs16`). A varying whose lanes read are all one lane is one
+/// conversion (deqp_varylink_swz_xx, byte-equal in
+/// tests/mali_deqp_varylink.rs). Equal lanes beside another lane read
+/// (`in0.xxy`) and equal lanes of two varyings have no reference: the
+/// fragment shader is refused by name, and compiles where the vertex
+/// shader stores no equal lanes.
+#[test]
+fn merged_lanes_of_a_result_check_without_a_reference_are_refused() {
+    const VS_XYZ: &str = "attribute highp vec4 p; attribute mediump vec3 in0; varying mediump vec3 out0; void main(){ out0 = in0; gl_Position = p; }";
+    const VS_XXY: &str = "attribute highp vec4 p; attribute mediump vec3 in0; varying mediump vec3 out0; void main(){ out0 = in0.xxy; gl_Position = p; }";
+    const FS_ONE: &str = "precision mediump float; bool isOk (vec3 a, vec3 b, float eps) { return all(lessThanEqual(abs(a-b), (eps*abs(b) + eps))); } varying vec3 out0; uniform vec3 ref_out0; void main(){ bool RES = isOk(out0, ref_out0, 0.05); gl_FragColor = vec4(RES, RES, RES, 1.0); }";
+    const VS_APART: &str = "attribute highp vec4 p; attribute mediump vec4 in0; varying mediump vec2 out0; varying mediump vec2 out1; void main(){ out0 = in0.xy; out1 = in0.zw; gl_Position = p; }";
+    const VS_SAME: &str = "attribute highp vec4 p; attribute mediump vec4 in0; varying mediump vec2 out0; varying mediump vec2 out1; void main(){ out0 = in0.xy; out1 = in0.xy; gl_Position = p; }";
+    const FS_TWO: &str = "precision mediump float; bool isOk (vec4 a, vec4 b, float eps) { return all(lessThanEqual(abs(a-b), (eps*abs(b) + eps))); } varying vec2 out0; varying vec2 out1; uniform vec4 ref_out0; void main(){ bool RES = isOk(vec4(out0, out1), ref_out0, 0.05); gl_FragColor = vec4(RES, RES, RES, 1.0); }";
+    let _k = store::test_keep();
+    let compile = |vs: &str, fs: &str| {
+        let consts = store::with_scratch(|s| super::fs_constants(vs.as_bytes(), fs.as_bytes(), s))
+            .expect("the scratch arena is free")
+            .expect("the vertex shader's constant lanes")
+            .unwrap_or_default();
+        store::with_scratch(|s| super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|_| ()))
+            .expect("the scratch arena is free")
+    };
+    for (name, apart, merged, fs) in [("xxy", VS_XYZ, VS_XXY, FS_ONE), ("two varyings", VS_APART, VS_SAME, FS_TWO)] {
+        compile(apart, fs).unwrap_or_else(|e| panic!("{name}: the fragment shader of lanes apart is refused: {e:?}"));
+        match compile(merged, fs) {
+            Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => {
+                assert_eq!(e, MaliError::VaryingDuplicate, "{name}")
+            }
+            other => panic!("{name}: the fragment shader of merged lanes is not refused by name: {other:?}"),
+        }
+    }
+}
+
 const SEL_U_FAU65: &str = td!("sel_u_fau65.vert");
 const SEL_U_FAU130: &str = td!("sel_u_fau130.vert");
 const SEL_U_REBALANCE: &str = td!("sel_u_rebalance.vert");

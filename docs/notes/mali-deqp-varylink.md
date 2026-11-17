@@ -693,7 +693,11 @@ and compare tags in `lane_at` (`nir.rs:3515`) and in `seen` (`:3647`).
 reference stays refused. E1 and E2 share the `seen` change and land
 together. `swz_xx` may still differ in the fragment words (the study: pan_shc's
 fragment differs in "the mediump gap", the `isOk` compare), so it may move
-to another pin instead of turning green. `draw_single` is the cleanest: the
+to another pin instead of turning green. (`swz_xx` is green since the
+fragment walk lowers the `isOk` check, `docs/notes/mali-deqp-intval.md`
+section 7: the two lanes of `out0` are one lane after the link, so their
+`f2fmp` is one conversion of that lane alone, `nir_fs.rs`
+`convert_inputs16`.) `draw_single` is the cleanest: the
 study's table says the pan_shc words are byte-equal and only the format
 differs.
 
