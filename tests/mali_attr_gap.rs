@@ -15,17 +15,17 @@
 //! draw, that the draw was not refused (`draws_refused`) and that the OSAL
 //! log holds no refusal line. No pixels are checked.
 //!
-//! Cases that draw today are active: the control, and an unread attribute
-//! last or between read ones (the compiler already numbers those records
-//! 0..n). The cases that need the fix are `#[ignore]`d with the reason: a
-//! `mat2`/`mat3` column read beyond column 0, whose location the program's
-//! reflection does not list as an attribute (the loop over `sc.attributes` in
-//! src/shaderc/online/mali/mod.rs skips it). The item `attrgap-fix` removes
-//! the ignores.
+//! Every case draws: the control, an unread or inactive attribute last or
+//! between read ones (the compiler numbers those records 0..n), and a
+//! `mat2`/`mat3` column read beyond column 0. Before `attrgap-fix` the last
+//! were refused: the column's location is not a location the program's
+//! reflection lists, so the loop over `sc.attributes` in
+//! src/shaderc/online/mali/mod.rs (`record`) left the matrix out of the
+//! record's rows and the GL core staged nothing for it. The record now lists
+//! the matrix once at its base location (docs/notes/mali-attribute-records.md).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_attr_gap
-//! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_attr_gap -- --ignored
 //! ```
 
 #![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-mali", not(feature = "report-es2")))]
@@ -288,8 +288,8 @@ fn unread_attribute_last_draws() {
     );
 }
 
-/// (1) `a0` and `a2` read, `a1` declared and unread between them. Draws
-/// today: the compiler numbers the records of the read locations 0..n
+/// (1) `a0` and `a2` read, `a1` declared and unread between them. The
+/// compiler numbers the records of the read locations 0..n
 /// (Mesa's `vsattr_between`).
 #[test]
 fn unread_attribute_between_read_ones_draws() {
@@ -310,7 +310,6 @@ fn unread_attribute_between_read_ones_draws() {
 /// (Mesa's `vsattr_matcol`): column 0's location is the unread slot before it;
 /// a third attribute follows at 3.
 #[test]
-#[ignore = "needs attrgap-fix (NOT_BUILT_ATTRIBUTE_RECORDS); attrgap-fix removes this ignore"]
 fn mat2_attribute_one_column_read_draws() {
     let _g = context();
     draw(
@@ -329,7 +328,6 @@ fn mat2_attribute_one_column_read_draws() {
 /// with `glVertexAttrib4f` on each column; only column 2 is read, columns 0
 /// and 1 are the unread slots before it.
 #[test]
-#[ignore = "needs attrgap-fix (NOT_BUILT_ATTRIBUTE_RECORDS); attrgap-fix removes this ignore"]
 fn mat3_attribute_default_value_draws() {
     let _g = context();
     draw(
@@ -340,6 +338,42 @@ fn mat3_attribute_default_value_draws() {
             binds: &[(c"a_pos", 0), (c"a_m", 1)],
             arrays: &[0],
             defaults: &[1, 2, 3],
+        },
+    );
+}
+
+/// (4) A `mat3` attribute (locations 1..3) with columns 1 and 2 read and a
+/// tail attribute after it at 4: column 0 is the unread slot, and the two
+/// columns read leave one row for the matrix, not two.
+#[test]
+fn mat3_attribute_two_columns_read_and_a_tail_draws() {
+    let _g = context();
+    draw(
+        "mat3 columns 1 and 2, tail",
+        &Case {
+            vs: "attribute vec4 a_pos;\nattribute mat3 a_m;\nattribute vec4 a_tail;\nvarying vec4 v_c;\n\
+                 void main() { gl_Position = a_pos; v_c = vec4(a_m[1] + a_m[2], a_tail.x); }\n",
+            binds: &[(c"a_pos", 0), (c"a_m", 1), (c"a_tail", 4)],
+            arrays: &[0, 1, 2, 3, 4],
+            defaults: &[],
+        },
+    );
+}
+
+/// (5) An attribute read in the source but dead in the program, between read
+/// ones: `a1`'s value is stored to `v_c` and overwritten, so the compiler
+/// drops the read and `a1` has no record; `a2` after it still draws.
+#[test]
+fn inactive_attribute_between_read_ones_draws() {
+    let _g = context();
+    draw(
+        "a0 a1(inactive) a2",
+        &Case {
+            vs: "attribute vec4 a0;\nattribute vec4 a1;\nattribute vec4 a2;\nvarying vec4 v_c;\n\
+                 void main() { gl_Position = a0; v_c = a1; v_c = a2; }\n",
+            binds: &[(c"a0", 0), (c"a1", 1), (c"a2", 2)],
+            arrays: &[0, 2],
+            defaults: &[1],
         },
     );
 }

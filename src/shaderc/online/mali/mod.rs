@@ -1594,7 +1594,22 @@ fn record(
     if stage == SHC_STAGE_VERTEX {
         let mut n = 0usize;
         for &(loc, _) in &sc.attributes[..sc.nattr] {
-            let Some(a) = l.reflection.attribs.iter().find(|a| a.location == loc) else { continue };
+            /* a matrix is one row at its base location, the GL core stages
+             * each column at vi_reg + k (gl/draw.rs `vertex_inputs`): a column
+             * read beyond column 0 finds its matrix by the column range, and a
+             * matrix with two columns read is listed once
+             * (docs/notes/mali-attribute-records.md) */
+            let Some(a) = l
+                .reflection
+                .attribs
+                .iter()
+                .find(|a| (a.location..a.location.saturating_add(glsl::columns(a.gl_type))).contains(&loc))
+            else {
+                continue;
+            };
+            if sh.attribs[..n].iter().any(|d| d.location == a.location) {
+                continue;
+            }
             let dst = sh.attribs.get_mut(n).ok_or(refused(MaliError::Defect(Defect::IrIndex)))?;
             crate::util::set_name(&mut dst.name, a.name.as_bytes());
             dst.location = a.location;

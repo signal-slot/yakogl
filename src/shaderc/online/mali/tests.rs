@@ -8953,3 +8953,69 @@ fn es300_layersunused_step_is_byte_equal_to_mesa_26_2_1() {
     assert_eq!(include_str!("../../../../tools/shaders/es300/layersunused.frag"), fs);
     check_program_for("layersunused", vs, fs, json, false);
 }
+
+/* ---- attribute records: an unread attribute between read ones --------- */
+
+/// A record's attribute row as the tests read it: `(name, location, vi_reg)`.
+type AttribRowOf = (String, u8, u8);
+
+/// The record's attribute rows and its `(location, record)` pairs
+/// (docs/notes/mali-attribute-records.md).
+fn attribute_rows(vs: &str) -> (Vec<AttribRowOf>, Vec<(u8, u8)>) {
+    let _k = store::test_keep();
+    store::with_scratch(|s| {
+        codegen::compile_linked_blocks(SHC_STAGE_VERTEX, vs.as_bytes(), 0, &[], s, store::keep()).map(|(sh, _)| {
+            let rows = sh.attribs[..sh.num_attribs as usize]
+                .iter()
+                .map(|a| {
+                    let name: Vec<u8> = a.name.iter().map(|&b| b as u8).take_while(|&b| b != 0).collect();
+                    (String::from_utf8_lossy(&name).into_owned(), a.location, a.vi_reg)
+                })
+                .collect();
+            (rows, MaliShader::of(&sh).expect("a Mali record").attributes.to_vec())
+        })
+    })
+    .expect("the scratch arena is free")
+    .expect("the vertex shader compiles")
+}
+
+/// A matrix attribute whose read columns are not column 0 is one row at its
+/// base location, `vi_reg` the base (the GL core stages column k at
+/// `vi_reg + k`); two columns read leave one row, not two; an unread `vec4`
+/// between read ones has no row. Every location a record reads lies in the
+/// column range of a row, so the back end finds a staged attribute for each
+/// (`vertex_attributes`, NOT_BUILT_ATTRIBUTE_RECORDS before this).
+#[test]
+fn attribute_rows_cover_the_matrix_columns_read() {
+    let _serial = store::test_lock();
+    const HEAD: &str = "attribute vec4 a_pos;\nattribute vec4 a_tail;\nvarying vec4 v_c;\n";
+    let mat2 =
+        format!("{HEAD}attribute mat2 a_m;\nvoid main() {{ gl_Position = a_pos; v_c = vec4(a_m[1], a_tail.xy); }}\n");
+    let mat3 = format!(
+        "{HEAD}attribute mat3 a_m;\nvoid main() {{ gl_Position = a_pos; v_c = vec4(a_m[1] + a_m[2], a_tail.x); }}\n"
+    );
+    let vec4s = "attribute vec4 a0;\nattribute vec4 a1;\nattribute vec4 a2;\nvarying vec4 v_c;\nvoid main() { gl_Position = a0; v_c = a2; }\n";
+    let cases: [(&str, &[(&str, u8)]); 3] = [
+        (&mat2, &[("a_pos", 1), ("a_m", 2), ("a_tail", 1)]),
+        (&mat3, &[("a_pos", 1), ("a_m", 3), ("a_tail", 1)]),
+        (vec4s, &[("a0", 1), ("a2", 1)]),
+    ];
+    for (vs, want) in cases {
+        let (rows, records) = attribute_rows(vs);
+        let mut names: Vec<&str> = rows.iter().map(|r| r.0.as_str()).collect();
+        names.sort_unstable();
+        let mut want_names: Vec<&str> = want.iter().map(|w| w.0).collect();
+        want_names.sort_unstable();
+        assert_eq!(names, want_names, "one row per attribute read:\n{vs}");
+        for (name, loc, vi_reg) in &rows {
+            assert_eq!(loc, vi_reg, "{name}: vi_reg is the base location");
+        }
+        for &(loc, rec) in &records {
+            let covered = rows.iter().any(|(name, base, _)| {
+                let cols = want.iter().find(|w| w.0 == name).expect("a named row").1;
+                (*base..base + cols).contains(&loc)
+            });
+            assert!(covered, "record {rec} reads location {loc}, which no row covers: {rows:?}\n{vs}");
+        }
+    }
+}
