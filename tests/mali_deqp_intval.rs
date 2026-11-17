@@ -30,13 +30,14 @@ const REFUSED: &str = "Valhall: an integer or boolean value is not lowered yet";
 /// refusal. `opfs_not`'s `!(v.z > 0.0)` is the mediump `fge` that plan #367's
 /// lower-fs-arith takes from `inot(flt)` (gm2_fsmisc_8's `step`), and
 /// `reslib_float_fs`'s `lessThanEqual` of mediump values passes its 16-bit
-/// compares too; the boolean each writes to a `gl_FragColor` lane is refused
-/// next.
+/// compares too. lower-mixprec takes the `b2f16` of a 16-bit compare as a
+/// `gl_FragColor` lane (deqp_mixprec_cmpf), so `opfs_not` is refused next at
+/// its `(x, 0.0)` word and `reslib_float_fs` at its sum's operand order.
 const MOVED: &[(&str, &str)] = &[
-    ("opfs_not", "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet"),
+    ("opfs_not", "Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) is not lowered yet"),
     (
         "reslib_float_fs",
-        "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet",
+        "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet",
     ),
 ];
 

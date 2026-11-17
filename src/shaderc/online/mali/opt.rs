@@ -251,10 +251,10 @@ fn is_const(s: &Src, v: u32) -> bool {
 ///   producer (`|=`: the clamps are bit fields) and takes its destination;
 /// * `bi_optimizer_result_type` (:324-369): a `MUX.i32` between 0 and 1.0
 ///   on the instruction's result (`bi_is_fixed_mux`: a `b2f`'s `bcsel`)
-///   folds into an `FCMP.f32`'s `.f1` result type. Mesa does the same for
-///   a 16-bit compare and `MUX.v2i16` (with a swizzled mask composed into
-///   the compare's sources); this port's compares are 32-bit only
-///   (`FcmpOrF32`), so only the 32-bit pair is matched here.
+///   folds into an `FCMP.f32`'s `.f1` result type; a `MUX.v2i16` between
+///   0 and 1.0h on a 16-bit compare's low half folds into the
+///   `FCMP.v2f16`'s, the `.h00` composed into the compare's sources (a
+///   `b2f16` of a one-lane compare, deqp_mixprec_cmpf).
 ///
 /// The use is removed in both cases.
 pub fn mod_prop_backward(p: &mut Prog<'_>) {
@@ -287,6 +287,29 @@ pub fn mod_prop_backward(p: &mut Prog<'_>) {
             }
             if let Op::FcmpOrF32 { cmpf, .. } = p.ins[k].op {
                 p.ins[k].op = Op::FcmpOrF32 { cmpf, result: ResultType::F1 };
+            }
+            true
+        } else if use_.op == Op::MuxV2i16
+            && sz == 16
+            && is_const(&use_.src[0], 0)
+            && is_const(&use_.src[1], 0x3c00)
+            && use_.src[1].swz == Swz::H00
+            && use_.src[2].swz == Swz::H00
+            && matches!(i.op, Op::FcmpOrV2f16 { .. })
+        {
+            /* the 16-bit pair: a `b2f16` of a one-lane compare's low half,
+             * the `.h00` composed into the compare's sources (each reads
+             * its low half in both lanes; deqp_mixprec_cmpf's
+             * `FCMP_OR.v2f16.lt.f1 r0, r0.abs.h00, u3.w0`) */
+            if let Op::FcmpOrV2f16 { cmpf, .. } = p.ins[k].op {
+                p.ins[k].op = Op::FcmpOrV2f16 { cmpf, result: ResultType::F1 };
+            }
+            for s in p.ins[k].src[..2].iter_mut() {
+                s.swz = match s.swz {
+                    Swz::H01 | Swz::H00 => Swz::H00,
+                    Swz::H10 | Swz::H11 => Swz::H11,
+                    other => other,
+                };
             }
             true
         } else if use_.op == Op::MuxI32

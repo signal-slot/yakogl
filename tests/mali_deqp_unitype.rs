@@ -33,22 +33,24 @@ const INT_VALUE: &str = "an integer or boolean value";
 const VS_LOOP: &str = "a loop in a vertex shader";
 
 /// The references the lowering makes byte-equal.
-const MATCHED: &[&str] = &["vsmat2_highp", "vsmat3_highp", "fshighp_color", "depthrange_vs"];
+/// `vsstruct_partial` and `vsstruct_rip` since lower-mixprec took the `b2f16`
+/// of an fp16 compare as a colour lane.
+const MATCHED: &[&str] =
+    &["vsmat2_highp", "vsmat3_highp", "fshighp_color", "depthrange_vs", "vsstruct_partial", "vsstruct_rip"];
 
 /// The references that compile with other words than Mesa's: Mesa computes
 /// a mediump VS expression of fp16 uniforms at 16 bits (`FADD.v2f16`,
 /// `FMA.v2f16`, `FCMP_OR.v2f16`), the vertex walk widens each lane first
 /// (`F16_TO_F32`) and computes at 32; `vsmat2_mediump` and `vsmat3_*` also
 /// keep a constant varying lane Mesa stores (`v_color.w`, varylink's).
-const DIFFERS: &[&str] = &["vsmat2_mediump", "vsmat3_mediump", "vsmat3_lowp", "vsapi_mat2", "vsapi_struct"];
+/// `vsstruct_add`'s fragment program is not Mesa's either.
+const DIFFERS: &[&str] =
+    &["vsmat2_mediump", "vsmat3_mediump", "vsmat3_lowp", "vsapi_mat2", "vsapi_struct", "vsstruct_add"];
 
 /// Every refused reference with its refusal, without the `Valhall: `
 /// prefix and the ` is not lowered yet` suffix.
 const REFUSED: &[(&str, &str)] = &[
     ("vsmat3_light", VS_LOOP),
-    ("vsstruct_partial", FRAGCOLOR_LANE),
-    ("vsstruct_add", FRAGCOLOR_LANE),
-    ("vsstruct_rip", FRAGCOLOR_LANE),
     ("vsbvec3", INT_VALUE),
     ("depthrange_fs", FRAGCOLOR_LANE),
     ("fsmat2_mediump", FS_MEDIUMP),
@@ -135,19 +137,17 @@ fn vsapi_mat2() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (the isOk result), lowered by lower-intval"]
 fn vsstruct_partial() {
     mali_ref::assert_matches("deqp_unitype_vsstruct_partial");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (the isOk result), lowered by lower-intval"]
+#[ignore = "differs: the fragment program (18 words, Mesa's 13, from word 0) and the vertex FAU words; the isOk colour compiles since lower-mixprec"]
 fn vsstruct_add() {
     mali_ref::assert_matches("deqp_unitype_vsstruct_add");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (the isOk result), lowered by lower-intval"]
 fn vsstruct_rip() {
     mali_ref::assert_matches("deqp_unitype_vsstruct_rip");
 }

@@ -5,12 +5,12 @@
 //! mixprec, `docs/notes/mali-deqp-mixprec.md`), one test per reference.
 //! `tests/mali_ref` does the compare.
 //!
-//! All eight references are refused at the tip, so each test is `#[ignore]`d
-//! until the lowering named in its reason lifts it. `refusals_pinned` runs
-//! now and asserts the exact refusal of each ignored reference (the VS's when
-//! the VS refuses, otherwise the FS's, without the `Valhall: ` prefix and the
-//! ` is not lowered yet` suffix): a lowering that lifts one must remove its
-//! `#[ignore]` and its pin in the same commit.
+//! The references in [`MATCHED`] compile byte-equal. Every reference
+//! compiles now; the ones in [`DIFFERS`] compile with other words than
+//! Mesa's, so their tests are `#[ignore]`d with the difference named.
+//! `differences_pinned` runs now and asserts that each of them still
+//! differs: a change that makes one byte-equal moves it to [`MATCHED`] and
+//! removes its `#[ignore]` in the same commit.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_mixprec
@@ -18,86 +18,74 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// Every ignored reference below, without the `deqp_mixprec_` prefix, with
-/// the refusal it gets at the tip.
-const PINNED: &[(&str, &str)] = &[
-    ("cmpf", "a gl_FragColor lane other than the varying's own lane or a constant"),
-    ("cmpmat2", "a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16)"),
-    ("cmptex", "a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16)"),
-    ("cmpv2", "a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16)"),
-    ("cmpv3", "a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16)"),
-    ("cmpv4", "a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16)"),
-    ("rot1", "a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order)"),
-    ("rot3", "a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order)"),
-];
+/// The references that compile byte-equal (their tests run).
+const MATCHED: &[&str] = &["cmpf", "cmpv2", "rot1", "rot3"];
+
+/// The references that compile with other words than Mesa's: the `FMAX`
+/// tree of the compare chain in another operand order (Mesa's `iand` order
+/// follows which `b2f` nir_opt_algebraic rewrote first) and, for `cmpv4`
+/// and `cmptex`, not rebalanced (GLSL rebalances the `return` expression of
+/// `compare_vec4` before inlining).
+const DIFFERS: &[&str] = &["cmpmat2", "cmptex", "cmpv3", "cmpv4"];
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant, lowered by plan #367's FRAGCOLOR_LANE lowering, then lower-mixprec"]
 fn cmpf() {
     mali_ref::assert_matches("deqp_mixprec_cmpf");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16), lowered by lower-mixprec"]
+#[ignore = "differs: the column maxima's order (Mesa computes column 0's FADD_IMM and FMAX before column 1's)"]
 fn cmpmat2() {
     mali_ref::assert_matches("deqp_mixprec_cmpmat2");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16), lowered by lower-mixprec"]
+#[ignore = "differs: the texel lanes' differences are not paired, and the product chain is not rebalanced"]
 fn cmptex() {
     mali_ref::assert_matches("deqp_mixprec_cmptex");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16), lowered by lower-mixprec"]
 fn cmpv2() {
     mali_ref::assert_matches("deqp_mixprec_cmpv2");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16), lowered by lower-mixprec"]
+#[ignore = "differs: the last FMAX's operand order (Mesa's `FMAX r0, r1.abs.h00, r0.h00`, z first)"]
 fn cmpv3() {
     mali_ref::assert_matches("deqp_mixprec_cmpv3");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16), lowered by lower-mixprec"]
+#[ignore = "differs: the product chain is not rebalanced, and the FMAX operand order (Mesa's (w, z), then (zw, xy))"]
 fn cmpv4() {
     mali_ref::assert_matches("deqp_mixprec_cmpv4");
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order), lowered by lower-mixprec"]
 fn rot1() {
     mali_ref::assert_matches("deqp_mixprec_rot1");
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order), lowered by lower-mixprec"]
 fn rot3() {
     mali_ref::assert_matches("deqp_mixprec_rot3");
 }
 
 #[test]
-fn refusals_pinned() {
+fn differences_pinned() {
     let mut on_disk: Vec<String> = std::fs::read_dir("tools/mali/testdata")
         .expect("tools/mali/testdata")
         .filter_map(|e| e.ok()?.file_name().into_string().ok())
         .filter_map(|n| n.strip_prefix("deqp_mixprec_")?.strip_suffix(".expect.json").map(str::to_string))
         .collect();
     on_disk.sort();
-    let named: Vec<&str> = PINNED.iter().map(|p| p.0).collect();
+    let mut named: Vec<&str> = MATCHED.iter().chain(DIFFERS).copied().collect();
+    named.sort();
     assert_eq!(on_disk, named, "a deqp_mixprec_* reference has no test here");
-    for (name, want) in PINNED {
+    for name in DIFFERS {
         let r = mali_ref::Reference::load(&format!("deqp_mixprec_{name}"));
-        match mali_ref::compile_pair(&r.vs, &r.fs) {
-            Ok(_) => panic!("{name}: now compiles; remove its #[ignore] and its pin"),
-            Err(e) => {
-                let e = e.strip_prefix("Valhall: ").unwrap_or(&e);
-                let e = e.strip_suffix(" is not lowered yet").unwrap_or(e);
-                assert_eq!(e, *want, "{name}: the refusal changed");
-            }
-        }
+        let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: refused: {e}"));
+        assert!(!mali_ref::differences(&r, &pair).is_empty(), "{name}: now byte-equal; move it to MATCHED");
     }
 }
