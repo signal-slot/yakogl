@@ -389,6 +389,18 @@ context lacks, each checked in the code:
   back ends) but refuses a depth or stencil copy with `GL_INVALID_OPERATION`:
   the back ends keep depth/stencil in buffers of their own with no CPU
   write path.
+- `GL_RGB10_A2` on the V3D 4.2 class build (texture class
+  `GLES_TEXFMT_RGB10A2`, render surface `GLES_SURF_RGB10_A2`, gated by
+  `rgb10a2_surface()` in `gl/framebuffer.rs`): the CPU colour blit decodes
+  and encodes the 10/10/10/2 word for a renderbuffer and for a texture
+  attachment, NEAREST and LINEAR (18d83492, 4082f91a, 019aa841), and
+  `glReadPixels` with `GL_RGBA`/`GL_UNSIGNED_BYTE` decodes the little-endian
+  word (R/G/B over 1023, A over 3; 8428875e). Where the class falls back to
+  RGBA8 (`report-es2`, PowerVR, GC7000UL) nothing changes. Still open:
+  `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`TYPE` answering
+  `GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV` for this buffer, and
+  `glCopyTex*Image2D` word copies into an RGB10_A2 destination. The Pi 4
+  run of this is pending (host tests only).
 - Transform feedback: the limits are 64 / 4 / 64 (interleaved components,
   separate attributes, separate components; ES 3.0 table 6.34 asks for at
   least 64 / 4 / 4; `gl/tf.rs`) outside
