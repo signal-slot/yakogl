@@ -1,0 +1,4 @@
+12:03:00 boot
+12:03:01 deqp: Fail dEQP-GLES3.e.x
+12:03:02 deqp: fatal: dEQP ended the run (die()); later cases did not run
+12:03:03 deqp: summary: 1 cases begun, 1 with a result, 0 without

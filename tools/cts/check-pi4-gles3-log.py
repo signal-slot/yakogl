@@ -204,6 +204,22 @@ def self_test():
                     "both", "fixed in commit %s\ncommit: %s\n" % (other, good),
                     True)
 
+        # The dEQP version is dotted like an address; only an address is
+        # private (tools/board.sh's redaction once took the version for one).
+        def console_case(name, tag, line, want_ok):
+            d = session("c-" + tag, good, ["C3"])
+            with open(os.path.join(d, "C3.console.txt"), "w", encoding="utf-8") as f:
+                f.write(line + "\n")
+            rc, out = run(tree, [d1, d])
+            expect(name, (rc == 0) == want_ok
+                   and ("private detail" in out) != want_ok)
+
+        console_case("the 'vulkan-cts-<dotted version>' of dEQP Core passes", "version",
+                     "dEQP Core vulkan-cts-1.4.6.2-555-g93bca018 (0x93bca018) starting..",
+                     True)
+        console_case("an IPv4 address in a console fails as a private detail", "address",
+                     "eth0: 198.51.100.7 up", False)
+
     print("check-pi4-gles3-log self-test: %d of %d cases ok"
           % (len(cases) - len(fails), len(cases)))
     return 1 if fails else 0

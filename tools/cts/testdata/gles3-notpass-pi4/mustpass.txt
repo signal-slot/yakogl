@@ -6,3 +6,5 @@ dEQP-GLES3.b.never
 dEQP-GLES3.c.unsupported
 dEQP-GLES3.c.pass
 dEQP-GLES3.d.pass
+dEQP-GLES3.e.x
+dEQP-GLES3.e.y

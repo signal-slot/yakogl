@@ -55,7 +55,11 @@ directories is refused. The rows are "<LABEL>.console.txt:<Status> <case>",
 sorted by case name, for every mustpass case of the image's tree line
 (tools/cts/pi4-gles3-tree.txt, --tree) that is not Pass: the raw status
 word, or NoResult for a case without a result line. The header names the
-commit and the images run out of the tree's images.
+commit and the images run out of the tree's images. A console whose label
+the tree no longer has because the image was re-split after the run
+(docs/es3/board-recipe-pi4.md section 6: S32c -> S32c1..S32c4) reads the
+cases of its parts, the labels <LABEL><letter> or <LABEL><number>; its rows
+keep the label it ran under and the header names the re-split.
 
 stdout (or -o OUT): the header naming the build, the board and the run date,
 then every mustpass case (tools/cts/gles3-mustpass.txt) that is not Pass, in
@@ -343,11 +347,21 @@ def uart_tally():
     return mod
 
 
+def resplit_parts(label, tree):
+    """The tree images a label not in the tree was re-split into after its
+    run (board-recipe-pi4.md section 6: S32 -> S32a..S32d, S32c ->
+    S32c1..S32c4): the labels <label><letter> or <label><number>, in tree
+    order; [] if there are none."""
+    rx = re.compile(re.escape(label) + r"(?:[a-z]|[0-9]+)")
+    return [l for l, _ in tree if rx.fullmatch(l)]
+
+
 def pi4_rows(dirs, mustpass, tree):
     """(header+rows text, run labels, stopped labels) for the session dirs."""
     commit = pi4_commit(dirs)
     tally = uart_tally()
     filters = dict(tree)
+    resplit = {}   # label run before a re-split -> the tree images it became
     got, where = {}, {}
     for d in dirs:
         consoles = sorted(glob.glob(os.path.join(d, "*.console.txt")))
@@ -356,17 +370,34 @@ def pi4_rows(dirs, mustpass, tree):
         for c in consoles:
             label = os.path.basename(c)[:-len(".console.txt")]
             if label not in filters:
-                raise NotpassError("%s: image %s is not in the tree" % (c, label))
+                parts = resplit_parts(label, tree)
+                if not parts:
+                    raise NotpassError("%s: image %s is not in the tree" % (c, label))
+                resplit[label] = parts
             if label in got:
                 raise NotpassError("image %s is in both %s and %s" % (label, where[label], d))
             with open(c, encoding="utf-8", errors="replace") as f:
                 got[label] = tally.scan(f.read())["got"]
             where[label] = d
-    rows, stopped = [], []
+    parent = {}
+    for label, parts in resplit.items():
+        for p in parts:
+            if p in got:
+                raise NotpassError("image %s is run twice: as %s (%s) and in %s (%s), re-split since"
+                                   % (p, p, where[p], label, where[label]))
+            parent[p] = label
+    # The images run, in tree order; a re-split one at its first part, with
+    # the cases of all its parts.
+    order = []
     for label, _ in tree:
-        if label not in got:
-            continue
-        rx = tally.filter_regex(filters[label])
+        if label in got:
+            order.append((label, filters[label]))
+        elif label in parent and parent[label] not in [l for l, _ in order]:
+            order.append((parent[label],
+                          [f for p in resplit[parent[label]] for f in filters[p]]))
+    rows, stopped = [], []
+    for label, filt in order:
+        rx = tally.filter_regex(filt)
         none = 0
         for case in mustpass:
             if not rx.match(case):
@@ -378,14 +409,17 @@ def pi4_rows(dirs, mustpass, tree):
                 rows.append((case, "%s.console.txt:%s %s\n" % (label, st, case)))
         if none:
             stopped.append(label)
-    run = [l for l, _ in tree if l in got]
+    run = [l for l, _ in order]
+    covered = len([l for l, _ in tree if l in got or l in parent])
     head = ("# Pi 4 dEQP-GLES3 at %s: every case that is not Pass, per image of tools/cts/pi4-gles3-tree.txt\n"
             "# rows: <record>:<status> <case>, sorted by case name   (<image>.console.txt = the UART console of the image, "
             "the records of %s; NoResult = the case never began)\n"
-            "# images run (%d of %d): %s%s\n"
+            "# images run (%d of %d): %s%s%s\n"
             % (commit, ", ".join(sorted(os.path.basename(os.path.normpath(d)) for d in dirs)),
-               len(run), len(tree), " ".join(l + ("*" if l in stopped else "") for l in run),
-               " (*: cases of the image never began)" if stopped else ""))
+               covered, len(tree), " ".join(l + ("*" if l in stopped else "") for l in run),
+               " (*: cases of the image never began)" if stopped else "",
+               "".join("; %s ran as one image, re-split since into %s" % (l, " ".join(resplit[l]))
+                       for l in run if l in resplit)))
     return head + "".join(r for _, r in sorted(rows)), run, stopped
 
 
@@ -515,6 +549,20 @@ def pi4_self_test(check):
                         "--mustpass", must_path, lo, hi], capture_output=True, text=True)
     check("pi4: the CLI form prints the same", r.returncode == 0 and r.stdout == want,
           "(rc %d, %s)" % (r.returncode, r.stderr[:200]))
+    rtree = read_tree(os.path.join(d, "resplit-tree.txt"))
+    rs = os.path.join(d, "s3-resplit")
+    text, run, stopped = pi4_rows([rs], must, rtree)
+    check("pi4: an image re-split after its run (E1 -> E1a E1b) reads the cases of its parts",
+          "E1.console.txt:Fail dEQP-GLES3.e.x\nE1.console.txt:NoResult dEQP-GLES3.e.y\n" in text
+          and run == ["E1"] and stopped == ["E1"]
+          and "# images run (2 of 3): E1* (*: cases of the image never began); "
+              "E1 ran as one image, re-split since into E1a E1b\n" in text, "(%s)" % text)
+    try:
+        pi4_rows([rs, bad("resplit-twice")], must, rtree)
+        check("pi4: a part run beside the image it was re-split from is refused", False, "(no error)")
+    except NotpassError as e:
+        check("pi4: a part run beside the image it was re-split from is refused",
+              "E1a is run twice" in str(e), "(%s)" % e)
 
 
 def main():

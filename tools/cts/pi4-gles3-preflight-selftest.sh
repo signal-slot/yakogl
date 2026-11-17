@@ -74,8 +74,12 @@ mk "$W/h"; echo "A1 rc=0 sha256=$SUM build=unknown" > "$W/h/img/A1.built"
 run "$W/h" "$UARTVAL" gles3 --commit "$SHA" --rows 0-2
 expect "commit not recorded" 1 "FAIL commit not recorded for: A1"
 
-run "$W/a" "$UARTVAL" gles3 --commit "$SHA" --rows 80-95
-expect "rows past the table end" 1 "FAIL rows 80-95 reach past the table end"
+# The range starts inside the table and ends past it, whatever its length (a
+# re-split adds images: 91, then 97, then 100).
+N=$(grep -c '^# image ' "$HERE/pi4-gles3-tree.txt")
+PAST="$((N - 5))-$((N + 10))"
+run "$W/a" "$UARTVAL" gles3 --commit "$SHA" --rows "$PAST"
+expect "rows past the table end" 1 "FAIL rows $PAST reach past the table end (rows 0-$((N - 1)))"
 
 mk "$W/e"
 run "$W/e" "" gles3 --commit "$SHA" --rows 0-2

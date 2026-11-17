@@ -31,6 +31,11 @@
 # mali-slice-readme-selftest.sh, 48 mali-rerun-tree-selftest.sh, 49
 # mali-rerun-e2e-selftest.sh, 50 mali-fail-triage-selftest.sh, 51
 # mali-deqp-build-selftest.sh, 52 mali-family-tree-selftest.sh.
+# Checks 53-58 gate the Pi 4 dEQP-GLES3 session tools (docs/es3/
+# board-recipe-pi4.md): 53 pi4-console-scan.py, 54 pi4-session-readme.py, 55
+# pi4-gles3-report.py, 56 pi4-gles3-preflight-selftest.sh, 57
+# pi4-session-tally-selftest.sh, and 58 docs/es3/pi4-gles3-fails.tsv against
+# gles3-notpass.py --pi4 over the session directories its header names.
 set -u
 
 HERE=$(dirname "$0")
@@ -941,6 +946,59 @@ malicheck 50 mali-fail-triage-selftest.sh 11
 malicheck 51 mali-deqp-build-selftest.sh 29
 # 52: mali-family-tree.py builds the tree table of the compile-refused cases by family.
 malicheck 52 mali-family-tree-selftest.sh 16
+
+# 53-55: the Pi 4 dEQP-GLES3 session tools' Python self-tests: the console
+# scan (recoveries, hangs, faults and the end line), the session README
+# writer, and the results-doc drafter. Each must exit 0 and print its own
+# passing line.
+pi4py() { # number, tool, the line its passing self-test prints (a fixed string)
+    local out
+    echo
+    echo "== $1. $2 --self-test"
+    if out=$(cd "$gl3tmp" && TMPDIR="$gl3tmp" python3 -I "$ROOT/tools/cts/$2" --self-test 2>&1) \
+       && printf '%s\n' "$out" | grep -qF "$3"; then
+        ok "$2: $(printf '%s\n' "$out" | grep -F "$3" | tail -1)"
+    else
+        bad "$2 --self-test failed"
+        printf '%s\n' "$out" | grep -E 'FAIL' | head -3 | sed 's/^/        | /'
+        printf '%s\n' "$out" | tail -3 | sed 's/^/        | /'
+    fi
+}
+pi4py 53 pi4-console-scan.py "self-test: ok"
+pi4py 54 pi4-session-readme.py "pi4-session-readme self-test: 0 failed"
+pi4py 55 pi4-gles3-report.py "pi4-gles3-report self-test: " # "N of N cases ok"; a failing case exits 1
+# 56: pi4-gles3-preflight.sh on fake layouts (env -i; BOARD_UART's value never
+# printed, nothing written).
+gl3check 56 pi4-gles3-preflight-selftest.sh "the preflight's verdicts on fake layouts"
+# 57: pi4-session-tally.sh writes the tallies of a session and refuses an
+# unknown label.
+gl3check 57 pi4-session-tally-selftest.sh "the session tallies written, an unknown label refused"
+
+# 58: docs/es3/pi4-gles3-fails.tsv is what gles3-notpass.py --pi4 writes from
+# the session directories its header names (tools/cts/log/<dir>): the commit
+# line and every row. The 'images run' line is left out, so a later re-split
+# of the tree (which renames no console) does not turn this red.
+echo
+echo "== 58. docs/es3/pi4-gles3-fails.tsv == gles3-notpass.py --pi4 over its sessions"
+pf=$ROOT/docs/es3/pi4-gles3-fails.tsv
+pf_dirs=()
+for n in $(sed -n '2s/.*the records of \([^;]*\);.*/\1/p' "$pf" | tr -d ','); do
+    pf_dirs+=("$ROOT/tools/cts/log/$n")
+done
+if [ "${#pf_dirs[@]}" -eq 0 ]; then
+    bad "pi4-gles3-fails.tsv: line 2 names no session directory ('the records of ...;')"
+elif pf_out=$(python3 -I "$HERE/gles3-notpass.py" --pi4 "${pf_dirs[@]}" 2>&1 >"$gl3tmp/pi4-fails.tsv"); then
+    if [ "$(head -1 "$gl3tmp/pi4-fails.tsv")" != "$(head -1 "$pf")" ]; then
+        bad "pi4-gles3-fails.tsv: line 1 is not what gles3-notpass.py --pi4 writes"
+    elif ! pf_diff=$(diff <(grep -v '^#' "$pf") <(grep -v '^#' "$gl3tmp/pi4-fails.tsv")); then
+        bad "pi4-gles3-fails.tsv: $(printf '%s\n' "$pf_diff" | grep -c '^[<>]') row(s) differ from gles3-notpass.py --pi4 (regenerate it)"
+        printf '%s\n' "$pf_diff" | head -4 | sed 's/^/        | /'
+    else
+        ok "pi4-gles3-fails.tsv: $(grep -vc '^#' "$pf") rows from ${#pf_dirs[@]} session(s), as gles3-notpass.py --pi4 writes them"
+    fi
+else
+    bad "gles3-notpass.py --pi4 over the sessions of pi4-gles3-fails.tsv failed: $(printf '%s\n' "$pf_out" | tail -1)"
+fi
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
