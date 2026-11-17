@@ -11,12 +11,18 @@
 //! and the fragment shader runs in sim71 (`run71_stream`, the program's own
 //! uniform stream resolved below) to the shape's colour in every lane.
 //!
-//! A shape that does not compile yet is an expected refusal pinned by its
-//! exact error, never a skip: when the stage that refuses it lands, the pin
-//! fails and is replaced by the checks above.
+//! All four compile: a refusal of any of them fails its test.
 //!
-//! The comparison with v3d_shc's 7.1 output for the same GLSL is not here
-//! yet (plan #365 item corpus71 adds it).
+//! Then each shape's fragment shader is compared with Mesa's for the same
+//! GLSL (`v3d_shc --device 71`, `tests/v3d71_ref`) by `tests/v3d71_compare`:
+//! both programs, each with its own uniform stream built from the shape's
+//! values, run in sim71 on the shape's own inputs and on random ones, and
+//! must give the same TLB writes, VPM rows and multisample flags. The
+//! instruction, thread-switch, ldvary, uniform and TMU counts are printed,
+//! not enforced. Without `V3D_SHC` / `MESA_V3D_TREE` (tools/v3d/README.md),
+//! or without the tools the reference needs, each shape prints
+//! `gap: V3D_SHC ...` naming what is missing and compares nothing: a gap,
+//! never a pass.
 //!
 //! Feature set:
 //!
@@ -27,9 +33,13 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-v3d"))]
 
 mod v3d71_common;
+mod v3d71_compare;
+mod v3d71_ref;
 
 use std::sync::Mutex;
 use v3d71_common::*;
+use v3d71_compare::{compare, random_fs_cases, Case, Policy, Side};
+use v3d71_ref::{compile71, find_v3d_shc};
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::v3d::chain::Prim;
 use yakogl::shaderc::online::v3d::chain71::{compile_program71, Code71, V3d71Error, V3dProgram71, TARGET71};
@@ -37,13 +47,19 @@ use yakogl::shaderc::online::v3d::codec71::{decode71, encode71, same_instr71};
 use yakogl::shaderc::online::v3d::select::{
     QUNIFORM_CONSTANT, QUNIFORM_TMU_CONFIG_P0, QUNIFORM_TMU_CONFIG_P1, QUNIFORM_UNIFORM,
 };
+use yakogl::shaderc::online::v3d::sim::{Env, FsInputs, Inputs, Sampler, Varying, LANES};
 use yakogl::shaderc::online::v3d::verify71::{registers_fit_threads71, verify71};
 use yakogl::shaderc::online::{lower, store};
 
 /// What compiling a shape at 7.1 gave: the checked fragment shader's run, or
 /// the refusal.
 enum Got {
-    Ran { fs_words: usize, threads: u32, out: Box<Outputs> },
+    /// `fs`: the fragment shader's words and its resolved uniform stream.
+    Ran {
+        fs: Side,
+        threads: u32,
+        out: Box<Outputs>,
+    },
     Refused(V3d71Error),
 }
 
@@ -105,21 +121,92 @@ fn compile(shape: &Shape) -> Got {
         assert!(!p.fs.single_seg, "{name}: a fragment shader starts in the first thread section");
         let mut s = shape.clone();
         s.threads = p.fs.threads;
-        let out = run71_stream(p.fs.code.words, &stream(&p, &s), &s).unwrap_or_else(|e| panic!("{e}"));
-        Got::Ran { fs_words: p.fs.code.words.len(), threads: p.fs.threads, out: Box::new(out) }
+        let fs = Side { words: p.fs.code.words.to_vec(), uniforms: stream(&p, &s) };
+        let out = run71_stream(&fs.words, &fs.uniforms, &s).unwrap_or_else(|e| panic!("{e}"));
+        Got::Ran { fs, threads: p.fs.threads, out: Box::new(out) }
     })
     .expect("scratch")
 }
 
-/// The shape compiles at 7.1, passes every check and gives its colour.
+/// The shape's own fragment inputs (W 1, the shape's varyings: what
+/// `v3d71_common::run71_stream` runs) and four random cases with the
+/// shape's varying count, all with the shape's texture.
+fn cases(shape: &Shape) -> Vec<Case> {
+    let one = 1.0f32.to_bits();
+    let env = Env {
+        textures: shape.texture.iter().cloned().collect(),
+        samplers: shape.texture.iter().map(Sampler::of).collect(),
+        threads: 1,
+        ..Env::default()
+    };
+    let own = FsInputs {
+        w: [one; LANES],
+        w_centroid: [one; LANES],
+        z: [0.5f32.to_bits(); LANES],
+        x: core::array::from_fn(|l| ((l % 4) as f32 + 0.5).to_bits()),
+        y: core::array::from_fn(|l| ((l / 4) as f32 + 0.5).to_bits()),
+        back_facing: [false; LANES],
+        varyings: shape.varyings.iter().map(|v| Varying { vary: v.map(f32::to_bits), c: [0; LANES] }).collect(),
+    };
+    let mut out = vec![Case { name: "own".into(), inputs: Inputs::Fragment(Box::new(own)), env: env.clone() }];
+    for mut c in random_fs_cases(0x71 + shape.name.len() as u64, shape.varyings.len(), 4) {
+        c.env = env.clone();
+        out.push(c);
+    }
+    out
+}
+
+/// Our fragment shader against Mesa's 7.1 one for the same GLSL, or the
+/// named gap (printed, nothing compared).
+fn compare_with_mesa(shape: &Shape, ours: &Side) {
+    let name = shape.name;
+    let shc = match find_v3d_shc() {
+        Ok(p) => p,
+        Err(g) => return println!("gap: V3D_SHC v3d71_shapes {name}: {}", g.0),
+    };
+    let m = match compile71(&shc, shape) {
+        Err(g) => return println!("gap: V3D_SHC v3d71_shapes {name}: {}", g.0),
+        Ok(Err(e)) => panic!("{name}: Mesa's 7.1 reference did not compile: {e}"),
+        Ok(Ok(m)) => m,
+    };
+    assert_eq!(m.ver, 71, "{name}: v3d_shc --device 71 reports gpu.ver {}", m.ver);
+    let mesa = Side { words: m.fs.code.clone(), uniforms: m.fs_stream(shape).unwrap_or_else(|e| panic!("{e}")) };
+    let v = compare(ours, &mesa, &cases(shape), Policy::default());
+    let (o, t) = (v.ours, v.mesa);
+    println!(
+        "compare v3d_shc 7.1 {name}: {} on {} cases; fs ours/mesa: instructions {}/{}, thrsw {}/{}, \
+         ldvary {}/{}, uniforms {}/{}, TMU {}/{}",
+        if v.matches() { "same outputs" } else { "DIFFERENT outputs" },
+        v.cases_run,
+        o.instructions,
+        t.instructions,
+        o.thrsw,
+        t.thrsw,
+        o.ldvary,
+        t.ldvary,
+        o.uniform_len,
+        t.uniform_len,
+        o.tmu_accesses,
+        t.tmu_accesses
+    );
+    assert!(v.matches(), "{name}: our 7.1 fs and Mesa's differ:\n{}", v.diffs.join("\n"));
+}
+
+/// The shape compiles at 7.1, passes every check, gives its colour and,
+/// with the reference, Mesa's outputs.
 fn compiles_and_runs(shape: Shape) {
     match compile(&shape) {
-        Got::Ran { fs_words, threads, out } => {
+        Got::Ran { fs, threads, out } => {
             println!(
-                "{}: fs {fs_words} words at {threads} threads, {} instructions run, {} TMU look-ups, lane 0 {:?}",
-                shape.name, out.instructions, out.tmu_lookups, out.colour[0]
+                "{}: fs {} words at {threads} threads, {} instructions run, {} TMU look-ups, lane 0 {:?}",
+                shape.name,
+                fs.words.len(),
+                out.instructions,
+                out.tmu_lookups,
+                out.colour[0]
             );
             assert!(!out.approximate, "{}: sim71 approximated an operation", shape.name);
+            compare_with_mesa(&shape, &fs);
         }
         Got::Refused(e) => panic!("{}: refused at 7.1: {e:?}", shape.name),
     }
