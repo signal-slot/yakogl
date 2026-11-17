@@ -131,6 +131,45 @@ python3 "$REPORT" --apply "$work/r3" "${S[@]}" > "$work/dup.out" 2>&1; rc=$?
 cmp -s "$work/r3/ROADMAP.md" "$work/r3.orig/ROADMAP.md" && cmp -s "$work/r3/tools/cts/RESULTS.md" "$ROOT/tools/cts/RESULTS.md" \
 	&& cmp -s "$work/r3/tools/cts/STATUS.md" "$ROOT/tools/cts/STATUS.md"; expect "duplicate anchor: nothing written" $?
 
+cat > "$work/gen1.py" <<'PY'
+# one record rerunning entry <i>: begun and passed k+<add> times (k = its mustpass cases), same commit
+import importlib.util, os, sys
+d, here, commit, i, add = sys.argv[1:6]
+i, add = int(i), int(add)
+spec = importlib.util.spec_from_file_location('merge', os.path.join(here, 'imx8mp-gles3-merge.py'))
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+table = m.load_table(os.path.join(here, 'imx8mp-gles3-tree.txt'))
+per = m.entry_cases(table, os.path.join(here, 'gles3-mustpass.txt'))
+k = len(per[i])
+os.makedirs(d)
+with open(os.path.join(d, 'README.md'), 'w') as f:
+    f.write('# rerun of entry %d (synthetic)\n\norigin/main %s\n' % (i, commit))
+    f.write('board.sh imx8mp e%02d rc=0 verdict=done resets=absent\n' % i)
+with open(os.path.join(d, 'results.tsv'), 'w') as f:
+    f.write('# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names\n')
+    f.write('\t'.join(str(x) for x in (i, table[i], k + add, k + add, 0, 0, 0, 0, '-')) + '\n')
+PY
+
+echo "== an entry in two slices, begun counted once"
+python3 -I "$work/gen1.py" "$work/dup1" "$HERE" "$C1" 46 500 || { echo "rerun generator failed" >&2; exit 2; }
+python3 "$REPORT" --date 2026-11-10 "${S[@]}" "$work/dup1" > "$work/dup.out" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && grep -q PARTIAL "$work/dup.out" && grep -q 'entry 46 is in both' "$work/dup.out"; }
+expect "entry in two slices: exit 1, PARTIAL, entry 46 named" $?
+grep -Fq 'Totals (42,810 of 42,810 mustpass cases begun)' "$work/dup.out"
+expect "the rerun is not summed into begun (42,810, not 43,310 of 42,810)" $?
+
+echo "== a constructed overcount is named, never printed silently"
+python3 -I "$work/gen1.py" "$work/dup2" "$HERE" "$C1" 46 5000 || { echo "rerun generator failed" >&2; exit 2; }
+python3 "$REPORT" --date 2026-11-10 "$work/dup2" "${S[@]}" > "$work/over.out" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && grep -q PARTIAL "$work/over.out" && grep -qF '47,810' "$work/over.out" && grep -q 'exceeds mustpass' "$work/over.out"; }
+expect "overcount: exit 1, PARTIAL, the raw begun 47,810 named as exceeding 42,810" $?
+grep -Fq '42,810 mustpass cases (42,810 begun)' "$work/over.out"
+expect "RESULTS.md draft: begun never above its mustpass count" $?
+grep -Fq 'Totals (42,810 of 42,810 mustpass cases begun)' "$work/over.out"
+expect "issue comment: each mustpass case counted once (the 5,000-case excess not printed as begun)" $?
+grep -q 'begun counts each mustpass case once' "$work/over.out"
+expect "the cap is stated in the output and in the RESULTS draft" $?
+
 python3 "$REPORT" --help > /dev/null; expect "--help works" $?
 
 if [ "$fails" = 0 ]; then echo "report selftest: OK"; exit 0; fi
