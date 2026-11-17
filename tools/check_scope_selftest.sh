@@ -233,6 +233,8 @@ expect "rpi_5 probe: the probe images row" '^plan  zephyr  rpi_5 probe images' "
 expect "rpi_5 probe: the fdt_walk host row (or its dtc gap)" '^(plan  test    rpi_5 fdt_walk host test|gap   rpi_5 fdt_walk host test: dtc is not on PATH)' "$out"
 out=$(plan driver/zephyr/lib/board/rpi5/rpi_wdog.c)
 expect "board layer: the rpi_5 probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
+out=$(plan driver/src/vivante/mod.rs)
+expect "vivante: the stm32mp257f_dk probe images row" '^plan  zephyr  stm32mp257f_dk probe images' "$out"
 # The licence audit reads every tracked file: any added or changed path reaches
 # its row, whatever scope the path has (7bd8a8e94 added data under tools/v3d
 # and no row that audits licences ran).

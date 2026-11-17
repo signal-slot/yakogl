@@ -3983,6 +3983,31 @@ zephyr_rpi5_probe_images() {
   done
   [ "$n" -gt 0 ] || { echo "no rpi_5 probe image under tools/probes/rpi_5/"; return 1; }
 }
+# The STM32MP257F-DK probes (plan #322, issues #7 and #1281) that carry the
+# port's checks, built for stm32mp257f_dk/stm32mp257fxx/a35 with -Werror on our
+# C files: mp2_hello and mp2_identify (the watchdog marker, the OP-TEE
+# arm,smc-wdt arming the DK runner needs, is in mp2_identify's zephyr.bin and
+# not in mp2_hello's) and mp2_gpu (a GPU probe). Three images, not every probe
+# directory: all eight build in about 2.5 minutes on a warm host (measured
+# 2026-11-17), so time is no reason to cut but three cover the checks. The
+# marker is searched in `strings` as the
+# nanopc_t6 row does, and must be there at least once (a toolchain may place a
+# format string twice; none at all is the defect).
+zephyr_stm32mp257f_dk_probe_images() {
+  local name d bin n
+  for name in mp2_hello mp2_identify mp2_gpu; do
+    d=tools/probes/stm32mp257f_dk/$name
+    [ -f "$d/CMakeLists.txt" ] && [ -f "$d/prj.conf" ] || { echo "no probe $d"; return 1; }
+    zephyr_werror_image stm32mp257f_dk/stm32mp257fxx/a35 "$d" "stm32mp257f_dk-$name" ||
+      { echo "stm32mp257f_dk probe $name did not build"; return 1; }
+    bin="build/zephyr-werror/stm32mp257f_dk-$name/zephyr/zephyr.bin"
+    n=$(strings -n 20 "$bin" | grep -c 'gc_wdog_arm: armed OP-TEE arm,smc-wdt') || true
+    case "$name" in
+      mp2_identify) [ "${n:-0}" -ge 1 ] || { echo "$bin does not carry the watchdog marker"; return 1; } ;;
+      mp2_hello) [ "${n:-0}" = 0 ] || { echo "$bin carries the watchdog marker $n times, not at all"; return 1; } ;;
+    esac
+  done
+}
 # The FDT walker's host test. Without dtc it prints a SKIPPED line and passes
 # on 10 checks only, so the row is ok only with dtc and "fdt_walk: N checks,
 # 0 failed" without a SKIPPED line. If it fails, test/test_fdt.c lines 211 to
@@ -4205,6 +4230,9 @@ if [ "$QUICK" -eq 0 ]; then
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
+    scope vivante drivers samples
+    step "zephyr  stm32mp257f_dk probe images (mp2_hello, mp2_identify, mp2_gpu), -Werror on our C files" \
+      zephyr_stm32mp257f_dk_probe_images
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
   fi
