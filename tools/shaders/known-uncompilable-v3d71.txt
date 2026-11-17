@@ -1,0 +1,277 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# Programs the V3D 7.1 online back end (chain71::compile_program71) refuses.
+#
+# tests/v3d71_online_corpus.rs compares its run against this file: `<key>:
+# <exact message>`, the format of known-uncompilable-v3d.txt. A key is an es100
+# source (`es100/<name>`, compiled with es100_ref71.sh's stub of the other stage)
+# or a qpu_corpus_71 program (`<vertex> + <fragment>`, as
+# tools/v3d/qpu_corpus_71_sources.tsv names it). The message is the front end's
+# (`front end <source>: <message>`) or V3d71Error's Debug form. A refusal not
+# listed, a message that changed, and a listed entry that now compiles all fail
+# the test, so the list stays exact.
+
+# es100: the 7.1 allocator has no spilling yet (alloc71.rs). The values of this
+# fragment shader (15 varying vec4s) fit neither 4 nor 2 threads' registers at any
+# selection pressure. Mesa compiles it at 7.1 (es100_counts_71.tsv).
+es100/varyings15.frag: Alloc(DoesNotFit)
+
+# qpu_corpus_71: the same fragment shader in its program, no spilling yet.
+es100/varyings15.vert + es100/varyings15.frag: Alloc(DoesNotFit)
+
+# qpu_corpus_71: color_uv.vert is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 30 program(s).
+color_uv.vert + color_uv.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/absadd.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/attrib.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/cond_complex.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/cond_sequence.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/contloops.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/dynvec4.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/f2b.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/fragz.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/ifelse_loop.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/ifloop.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/int_compare.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/int_div.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/light_amount.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/loop_full.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/selects.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/swizzled_broadcast.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/uniform_idx.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es100/va.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es300/ifelse_uint.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es300/ishr.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es300/texfetch.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es300/texoffset.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es300/tmpidx.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + es300/uops.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + internal/es/clear.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + internal/es/fbload.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + internal/es/fbload_int.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + internal/es/mipgen.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert + uniform_color.frag: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+
+# qpu_corpus_71: internal/clear.vert is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 1 program(s).
+internal/clear.vert + internal/clear.frag: front end internal/clear.vert: desktop GLSL source; this is an OpenGL ES compiler
+
+# qpu_corpus_71: internal/fbload.vert is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 1 program(s).
+internal/fbload.vert + internal/fbload.frag: front end internal/fbload.vert: desktop GLSL source; this is an OpenGL ES compiler
+
+# qpu_corpus_71: interp_color.frag is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 4 program(s).
+es100/anyall.vert + interp_color.frag: front end interp_color.frag: desktop GLSL source; this is an OpenGL ES compiler
+es100/ioswap.vert + interp_color.frag: front end interp_color.frag: desktop GLSL source; this is an OpenGL ES compiler
+gltest/psizvpm_plain_vs.vert + interp_color.frag: front end interp_color.frag: desktop GLSL source; this is an OpenGL ES compiler
+gltest/psizvpm_word_vs.vert + interp_color.frag: front end interp_color.frag: desktop GLSL source; this is an OpenGL ES compiler
+
+# qpu_corpus_71: mvp.vert is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 17 program(s).
+mvp.vert + es100/absadd.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es100/dynvec4.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es100/fragz.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es100/ifelse_loop.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es100/selects.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es100/swizzled_broadcast.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es300/ifelse_uint.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es300/ishr.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es300/texfetch.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es300/texoffset.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es300/tmpidx.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + es300/uops.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + internal/es/clear.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + internal/es/fbload.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + internal/es/fbload_int.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + internal/es/mipgen.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert + uniform_color.frag: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+
+# qpu_corpus_71: mvp_color.vert is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 29 program(s).
+mvp_color.vert + es100/absadd.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/attrib.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/cond_complex.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/cond_sequence.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/contloops.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/dynvec4.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/f2b.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/fragz.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/ifelse_loop.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/ifloop.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/int_compare.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/int_div.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/light_amount.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/loop_full.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/selects.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/swizzled_broadcast.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/uniform_idx.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es100/va.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es300/ifelse_uint.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es300/ishr.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es300/texfetch.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es300/texoffset.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es300/tmpidx.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + es300/uops.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + internal/es/clear.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + internal/es/fbload.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + internal/es/fbload_int.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + internal/es/mipgen.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert + interp_color.frag: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+
+# qpu_corpus_71: passthrough.vert is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 55 program(s).
+passthrough.vert + armselect.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/absadd.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/affectand.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/attrib.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/boolany.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/branchlane.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/branchquad.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/cond_complex.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/cond_sequence.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/contloops.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/databreak.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/deadloop.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/dynvec4.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/f2b.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/fragcentre.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/fragcoord.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/fragz.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/idiv.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/ifelse_loop.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/ifloop.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/ifoutput.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/ifoutput2.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/int_compare.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/int_div.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/intlit.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/light_amount.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/loop_full.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/loopcarry.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/matdyn.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/selects.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/swizzled_broadcast.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/transc.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/uniform_idx.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/uniidx_a.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/uniidx_b.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/uniidx_c.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/uniidx_d.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/uniidx_g.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/uniidx_h.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/uniidx_i.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/uniidx_j.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/va.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es100/vtransc.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es300/ifelse_uint.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es300/ishr.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es300/texfetch.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es300/texoffset.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es300/tmpidx.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + es300/uops.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + internal/es/clear.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + internal/es/fbload.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + internal/es/fbload_int.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + internal/es/mipgen.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + interp_color.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert + uniform_color.frag: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+
+# qpu_corpus_71: points.vert is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 31 program(s).
+points.vert + es100/absadd.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/attrib.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/cond_complex.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/cond_sequence.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/contloops.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/dynvec4.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/f2b.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/fragz.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/ifelse_loop.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/ifloop.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/int_compare.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/int_div.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/light_amount.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/loop_full.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/pointcoord.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/pointcoordvary.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/selects.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/swizzled_broadcast.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/uniform_idx.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es100/va.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es300/ifelse_uint.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es300/ishr.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es300/texfetch.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es300/texoffset.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es300/tmpidx.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + es300/uops.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + internal/es/clear.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + internal/es/fbload.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + internal/es/fbload_int.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + internal/es/mipgen.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert + interp_color.frag: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+
+# qpu_corpus_71: uv.vert is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 19 program(s).
+uv.vert + compact.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es100/absadd.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es100/dynvec4.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es100/fragz.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es100/ifelse_loop.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es100/selects.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es100/swizzled_broadcast.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es300/ifelse_uint.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es300/ishr.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es300/texfetch.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es300/texoffset.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es300/tmpidx.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + es300/uops.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + internal/es/clear.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + internal/es/fbload.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + internal/es/fbload_int.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + internal/es/mipgen.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + texture.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert + texture2.frag: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+
+# qpu_corpus_71: zorder.vert is desktop GLSL (`#version 1xx`) and the front end is an
+# OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
+# compiled these from glsl2v3d.py's translation. 29 program(s).
+zorder.vert + es100/absadd.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/attrib.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/cond_complex.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/cond_sequence.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/contloops.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/dynvec4.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/f2b.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/fragz.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/ifelse_loop.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/ifloop.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/int_compare.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/int_div.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/light_amount.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/loop_full.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/selects.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/swizzled_broadcast.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/uniform_idx.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es100/va.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es300/ifelse_uint.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es300/ishr.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es300/texfetch.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es300/texoffset.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es300/tmpidx.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + es300/uops.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + internal/es/clear.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + internal/es/fbload.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + internal/es/fbload_int.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + internal/es/mipgen.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert + interp_color.frag: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
