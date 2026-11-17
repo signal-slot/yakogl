@@ -189,8 +189,14 @@ Four-target knobs (measurements, off by default, gated by
 make the image call `v3d_debug_set_draw_targets(4)` /
 `pvr_debug_set_draw_targets(4)` at startup, before the first context, so
 `GL_MAX_DRAW_BUFFERS` and `GL_MAX_COLOR_ATTACHMENTS` answer 4 instead of 3.
-Products leave them off. The C wiring in `main_rpi4.c` and `main_am62p.c`
-follows in a later item (`docs/notes/mrt4-v3d-pvr.md`, "The image knobs").
+Products leave them off. Build with `-DCONFIG_V3D_GL_TEST_MRT4=y` (Pi 4) or
+`-DCONFIG_PVR_GL_TEST_MRT4=y` (AM62P) and also `-DCONFIG_YAKOGL_TEST_KNOBS=y`,
+which they depend on. The image prints one line naming the setter and its
+return value; case 245 (`mrt4`) then runs instead of printing SKIP (it
+prints SKIP unless `GL_MAX_DRAW_BUFFERS` is 4). The setters are the Rust
+`knob` item's (`src/v3d/knob.rs`, `src/pvr/knob.rs`): an image with a knob on
+links once they have merged; default images never reference them
+(`docs/notes/mrt4-v3d-pvr.md`, "The image knobs").
 
 ## NanoPC-T6 (Mali-G610)
 

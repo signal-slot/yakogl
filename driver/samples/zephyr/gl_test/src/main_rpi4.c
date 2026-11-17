@@ -252,6 +252,16 @@ static void run(void)
 		printk("v3d_gl_test: v3d_debug_msaa=1 (the 4x EGL config on)\n");
 	}
 #endif
+#ifdef CONFIG_V3D_GL_TEST_MRT4
+	{
+		extern int v3d_debug_set_draw_targets(int n);
+
+		/* four draw buffers and colour attachments, before any context */
+		int ret = v3d_debug_set_draw_targets(4);
+
+		printk("v3d_gl_test: v3d_debug_set_draw_targets(4)=%d (the 4-target knob on)\n", ret);
+	}
+#endif
 	int gl_case = CONFIG_V3D_GL_TEST_CASE;
 	if (gl_case < 0) {
 		static int list[MAX_CASES];

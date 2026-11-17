@@ -159,9 +159,9 @@ config PVR_GL_TEST_MRT4
 	help
 	  The image calls pvr_debug_set_draw_targets(4) at startup, before
 	  the first context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS
-	  answer 4 instead of 3. A measurement: products leave it off. The C
-	  wiring in main_am62p.c follows in a later item
-	  (docs/notes/mrt4-v3d-pvr.md, "The image knobs").
+	  answer 4 instead of 3. A measurement: products leave it off.
+	  (docs/notes/mrt4-v3d-pvr.md, "The image knobs"). Test case 245 (mrt4)
+	  then runs instead of printing SKIP.
 
 endmenu
 
@@ -471,9 +471,9 @@ config V3D_GL_TEST_MRT4
 	help
 	  The image calls v3d_debug_set_draw_targets(4) at startup, before
 	  the first context, so GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS
-	  answer 4 instead of 3. A measurement: products leave it off. The C
-	  wiring in main_rpi4.c follows in a later item
-	  (docs/notes/mrt4-v3d-pvr.md, "The image knobs").
+	  answer 4 instead of 3. A measurement: products leave it off.
+	  (docs/notes/mrt4-v3d-pvr.md, "The image knobs"). Test case 245 (mrt4)
+	  then runs instead of printing SKIP.
 
 config V3D_GL_TEST_VTL_PASSES
 	int "Case 129 (vstexlod): run only its first N passes (0: all)"
