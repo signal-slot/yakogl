@@ -16,13 +16,15 @@
 //! writes, `targets[0].out_shift` says how many leading draw buffers it
 //! dropped, later gaps are `gpu` 0 targets. The V3D back end draws a list
 //! whose draw buffer 0 is written (`{ATT0, NONE, NONE, ATT3}`: four RTs, RT 1
-//! and RT 2 configured with address 0, RT 3 stored into attachment 3) and
-//! REFUSES every list with a non-zero `out_shift` by name, a clear as well as
-//! a draw (`state::refusal`, src/v3d/state.rs: "draw buffer 0 is GL_NONE
-//! while a later draw buffer is written"). So three of the four shapes do not
-//! draw today, and a framebuffer whose only colour attachment is 3 cannot be
-//! drawn into at all. The plain tests pin this; the `#[ignore]`d ones hold ES
-//! 3.0's answer, each named `defect: ...`.
+//! and RT 2 configured with address 0, RT 3 stored into attachment 3). It
+//! clears a list with a non-zero `out_shift` (a clear has no fragment
+//! outputs, so the job's RT k is the list's k-th target) and REFUSES a draw
+//! into one by name (`state::unsupported`, src/v3d/state.rs: "draw buffer 0
+//! is GL_NONE while a later draw buffer is written"): the shader writes
+//! output i to RT i, and mapping the job's RTs back to draw-buffer order is
+//! `src/v3d/backend.rs`'s (`extra_targets`, `Target`). So three of the four
+//! shapes are cleared but not drawn today. The plain tests pin this; the
+//! `#[ignore]`d one holds ES 3.0's answer, named `defect: ...`.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_mrt4_gaps_v3d
@@ -514,7 +516,7 @@ struct Shape {
 
 /// The one list with a written draw buffer 0 that the V3D draws today.
 const GAP_AT_0_3: Shape = Shape { name: "{A0,NONE,NONE,A3}", attached: &[0, 1, 2, 3], list: [A[0], N, N, A[3]] };
-/// The lists the V3D refuses today (`out_shift` 3, 1 and 3).
+/// The lists whose draw the V3D refuses today (`out_shift` 3, 1 and 3); their clears are drawn.
 const SHIFTED_LISTS: [Shape; 3] = [
     Shape { name: "{NONE,NONE,NONE,A3}", attached: &[0, 1, 2, 3], list: [N, N, N, A[3]] },
     Shape { name: "{NONE,A1,NONE,A3}", attached: &[0, 1, 2, 3], list: [N, A[1], N, A[3]] },
@@ -807,7 +809,7 @@ fn a0_none_none_a3_clearbuffer_of_a_none_slot_clears_nothing() {
     }
 }
 
-/* ---- the lists that start at a later attachment: refused today ---------- */
+/* ---- the lists that start at a later attachment: cleared, draw refused -- */
 
 /// `{NONE,NONE,NONE,A3}`, `{NONE,A1,NONE,A3}` and a framebuffer whose only
 /// colour attachment is 3 have `out_shift` 3, 1 and 3: the back end refuses
@@ -828,20 +830,63 @@ fn lists_with_draw_buffer_0_none_refuse_the_draw() {
     }
 }
 
-/// The same refusal reaches a clear of draw buffer 3 and a glClear: a
-/// shifted list cannot be cleared either.
+/// A clear of a shifted list is not refused (a clear has no fragment
+/// outputs, so the job's RT k is the list's k-th target): glClear clears the
+/// attachments the list writes and leaves the others alone, glClearBuffer of
+/// a GL_NONE draw buffer clears nothing.
 #[test]
-fn lists_with_draw_buffer_0_none_refuse_the_clears() {
+fn lists_with_draw_buffer_0_none_clear_their_draw_buffers() {
     let _g = rig();
     for sh in &SHIFTED_LISTS {
         let fb = Fb::new(sh.attached);
         fb.list(&sh.list);
-        let r = capture(|| clear_buffer(3));
-        assert_eq!((r.refused, r.error, r.seen.clears.len()), (1, GL_INVALID_OPERATION, 0), "{}: clearbuffer", sh.name);
+        let r = capture(|| clear_buffer(0));
+        assert_eq!((r.refused, r.error), (0, GL_NO_ERROR), "{}: clearbuffer 0: {:?}", sh.name, r.seen.log);
+        for &att in sh.attached {
+            assert_eq!(read(att), [0; 4], "{}: clearbuffer of NONE draw buffer 0, attachment {att}", sh.name);
+        }
         let r = capture(clear_all);
-        assert_eq!((r.refused, r.error, r.seen.clears.len()), (1, GL_INVALID_OPERATION, 0), "{}: glClear", sh.name);
-        assert_eq!(read(3), [0; 4], "{}: attachment 3 untouched", sh.name);
+        assert_eq!((r.refused, r.error), (0, GL_NO_ERROR), "{}: glClear: {:?}", sh.name, r.seen.log);
+        assert_eq!((r.seen.jobs.len(), r.seen.clears.len()), (1, 1), "{}: one clear", sh.name);
+        for &att in sh.attached {
+            let want = if sh.list[att] == A[att] { clear_bytes() } else { [0; 4] };
+            assert_eq!(read(att), want, "{}: glClear, attachment {att}", sh.name);
+        }
+        /* scissored: the clear quad (`clear_mrt`, one output per RT of the
+         * job), not refused either. The stand-in GPU does not run draws, so
+         * only that it is recorded is checked here. */
+        let r = capture(|| {
+            // SAFETY: plain GL calls.
+            unsafe {
+                glEnable(GL_SCISSOR_TEST);
+                glScissor(1, 1, 2, 2);
+            }
+            clear_all();
+            // SAFETY: plain GL call.
+            unsafe { glDisable(GL_SCISSOR_TEST) };
+        });
+        assert_eq!((r.refused, r.error), (0, GL_NO_ERROR), "{}: scissored glClear: {:?}", sh.name, r.seen.log);
+        assert_eq!(r.seen.draws.len(), 1, "{}: the clear quad", sh.name);
     }
+}
+
+/// A glClear left pending and then a draw into a shifted list: the GL core
+/// fuses the clear into the draw, and the back end refuses the draw (R-09),
+/// so the fused clear goes with it. Pins today's answer until the draw is
+/// drawn (`defect_shifted_lists_draw_attachment_3`).
+#[test]
+fn a_clear_fused_into_a_refused_shifted_draw_is_refused_with_it() {
+    let _g = rig();
+    let sh = &SHIFTED_LISTS[0];
+    let fb = Fb::new(sh.attached);
+    fb.list(&sh.list);
+    let p = program(&[3]);
+    let r = capture(|| {
+        clear_all();
+        draw(p);
+    });
+    assert_eq!((r.refused, r.error, r.seen.draws.len()), (1, GL_INVALID_OPERATION, 0), "{:?}", r.seen.log);
+    assert_eq!(read(3), [0; 4], "the fused clear was not recorded");
 }
 
 /* ---- ES 3.0's answer for those lists ------------------------------------ */
@@ -849,7 +894,7 @@ fn lists_with_draw_buffer_0_none_refuse_the_clears() {
 /// ES 3.0 4.2.1: a draw into `{NONE,NONE,NONE,A3}` writes attachment 3, the
 /// fragment's `location = 3` output. The job stores attachment 3.
 #[test]
-#[ignore = "defect: the V3D refuses a glDrawBuffers list whose draw buffer 0 is GL_NONE (src/v3d/state.rs refusal, review R-09; the compiler would also have to move the outputs by out_shift)"]
+#[ignore = "defect: the V3D refuses a draw into a glDrawBuffers list whose draw buffer 0 is GL_NONE (src/v3d/state.rs refusal, review R-09; the job's RTs must be remapped to draw-buffer order in src/v3d/backend.rs extra_targets/Target first)"]
 fn defect_shifted_lists_draw_attachment_3() {
     let _g = rig();
     for sh in &SHIFTED_LISTS {
@@ -871,8 +916,7 @@ fn defect_shifted_lists_draw_attachment_3() {
 /// ES 3.0 4.2.3: glClearBuffer of draw buffer 3 clears attachment 3, and
 /// glReadBuffer(GL_COLOR_ATTACHMENT3) reads the colour back.
 #[test]
-#[ignore = "defect: the V3D refuses a clear of a glDrawBuffers list whose draw buffer 0 is GL_NONE (src/v3d/state.rs refusal, review R-09)"]
-fn defect_shifted_lists_clear_and_read_back_attachment_3() {
+fn shifted_lists_clear_and_read_back_attachment_3() {
     let _g = rig();
     for sh in &SHIFTED_LISTS {
         let fb = Fb::new(sh.attached);
