@@ -914,14 +914,14 @@ mod trampolines {
         assert_eq!(p.clear, GL_INVALID_FRAMEBUFFER_OPERATION);
     }
 
-    /// The largest sizes. The V3D's tile memory is sized for 2048 on a side
-    /// (`v3d::backend::MAX_TARGET`) while GL_MAX_RENDERBUFFER_SIZE is 4096
+    /// The largest sizes. The V3D's tile memory is sized for 4096 on a side
+    /// (`v3d::backend::MAX_TARGET`, #1261), GL_MAX_RENDERBUFFER_SIZE's value
     /// (src/gl/state.rs): the storage is taken, the framebuffer is complete,
-    /// the clear is taken, and the draw is refused with -ENOTSUP, which the
-    /// GL core answers as GL_INVALID_OPERATION (v3d-refuse-enotsup; before
-    /// it, -EINVAL and GL_OUT_OF_MEMORY). Pinned for every format.
+    /// and the clear and the draw are taken. Before #1261 the tile memory
+    /// stopped at 2048 and a draw past it was GL_INVALID_OPERATION (-ENOTSUP;
+    /// before v3d-refuse-enotsup, -EINVAL and GL_OUT_OF_MEMORY).
     #[test]
-    fn pinned_draw_past_2048_a_side_is_invalid_operation() {
+    fn a_draw_at_the_largest_size_is_taken() {
         let _g = rig();
         let mut seen = 0;
         for &(name, f, k) in all_formats() {
@@ -929,33 +929,33 @@ mod trampolines {
             assert!(w >= 2048, "{name}: {w}");
             let p = probe(f, k, w, h, 0);
             assert_eq!((p.storage, p.status, p.clear), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE, GL_NO_ERROR), "{name}");
-            if w > 2048 {
-                assert_eq!(p.draw, GL_INVALID_OPERATION, "{name} {w}x{h}: the refusal of a legal state");
-                seen += 1;
-            } else {
-                assert_eq!(p.draw, GL_NO_ERROR, "{name} {w}x{h}");
-            }
+            assert_eq!(p.draw, GL_NO_ERROR, "{name} {w}x{h}");
+            seen += usize::from(w > 2048);
         }
         assert!(seen > 20, "{seen} formats reach 4096");
     }
 
-    /// The edge: 2048 a side draws, 2049 or 4096 on one side does not.
+    /// The edge: 4096 a side draws (2048 was the edge before #1261); 4097 on
+    /// one side is past GL_MAX_RENDERBUFFER_SIZE, GL_INVALID_VALUE at the
+    /// storage, so the GL API makes no target past the tile memory's size.
     #[test]
-    fn pinned_the_2048_edge_in_each_dimension() {
+    fn the_4096_edge_in_each_dimension() {
         let _g = rig();
         let ok = |w, h| probe(GL_RGBA8, Kind::Float, w, h, 0).letter();
-        assert_eq!((ok(2048, 16), ok(16, 2048), ok(2048, 2048)), ('C', 'C', 'C'));
-        assert_eq!((ok(2049, 16), ok(16, 2049), ok(4096, 1)), ('E', 'E', 'E'));
+        assert_eq!((ok(2049, 16), ok(4096, 16), ok(16, 4096), ok(4096, 4096)), ('C', 'C', 'C', 'C'));
+        for (w, h) in [(4097, 16), (16, 4097)] {
+            let p = probe(GL_RGBA8, Kind::Float, w, h, 0);
+            assert_eq!(p.storage, GL_INVALID_VALUE, "{w}x{h}: {p:?}");
+        }
     }
 
     /// What a legal state the V3D cannot do must be: not GL_OUT_OF_MEMORY
     /// (dEQP aborts the session on it), GL_FRAMEBUFFER_UNSUPPORTED or
-    /// GL_INVALID_OPERATION. The V3D refuses past 2048 with -ENOTSUP
-    /// (v3d-refuse-enotsup), which src/gl/draw.rs turns into
-    /// GL_INVALID_OPERATION; the GL core's 4096 limit against the V3D's 2048
-    /// is its own item (report 2048 for GL_MAX_RENDERBUFFER_SIZE on the V3D).
+    /// GL_INVALID_OPERATION. Every format at its largest size is taken today
+    /// (`a_draw_at_the_largest_size_is_taken`); this is the weaker contract,
+    /// kept for a format a later change refuses.
     #[test]
-    fn draw_past_2048_a_side_is_not_out_of_memory() {
+    fn a_draw_at_the_largest_size_is_not_out_of_memory() {
         let _g = rig();
         for &(name, f, k) in all_formats() {
             let (w, h) = sizes(f, k)[3];

@@ -11,8 +11,9 @@
 //! (src/gl/draw.rs `submit_draw`). The V3D's `refuse()` answers `-EINVAL`
 //! for a malformed draw; `refuse_unsupported()` answers `-ENOTSUP` for
 //! legal GL state it cannot render yet, which since v3d-refuse-enotsup is
-//! every case here (they were `-EINVAL`, GL_OUT_OF_MEMORY, before). Every
-//! case then draws legally, to show the context is still usable.
+//! every case here (they were `-EINVAL`, GL_OUT_OF_MEMORY, before), but the
+//! 4096-wide target, taken since #1261. Every case then draws legally, to
+//! show the context is still usable.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_v3d_refusal_gl
@@ -515,10 +516,11 @@ fn still_usable() {
 
 /* ---- the refusals: each returns the error the application sees ---- */
 
-/// "a target larger than the tile memory is sized for (2048x2048), or empty":
-/// a 4096 x 16 renderbuffer is legal (GL_MAX_RENDERBUFFER_SIZE is 4096), and a
-/// clear of it is refused with -ENOTSUP.
-fn refused_target_larger_than_2048() -> GLenum {
+/// A 4096 x 16 renderbuffer is legal (GL_MAX_RENDERBUFFER_SIZE is 4096). A
+/// clear of it was refused with -ENOTSUP while the tile memory stopped at
+/// 2048 ("a target larger than the tile memory is sized for (2048x2048), or
+/// empty"); since #1261 it is sized for 4096 and the clear is taken.
+fn clear_of_a_4096_target() -> GLenum {
     let fb = fbo(&[GL_RGBA8], 4096, 16);
     // SAFETY: plain GL calls.
     unsafe {
@@ -573,10 +575,13 @@ fn refused_draw_buffer_zero_none() -> GLenum {
 
 /* ---- refused with -ENOTSUP since v3d-refuse-enotsup (GL_OUT_OF_MEMORY before) ---- */
 
+/// No longer a refusal (#1261): the 4096-wide clear raises nothing and logs
+/// no refusal. tests/es3_large_target_v3d.rs reads such targets back.
 #[test]
-fn a_target_over_2048_is_invalid_operation() {
+fn a_4096_target_is_no_longer_refused() {
     let _g = rig();
-    assert_eq!(refused_target_larger_than_2048(), GL_INVALID_OPERATION, "{:?}", log_lines());
+    assert_eq!(clear_of_a_4096_target(), GL_NO_ERROR, "{:?}", log_lines());
+    assert!(!log_lines().iter().any(|l| l.contains("draw refused")), "{:?}", log_lines());
     still_usable();
 }
 

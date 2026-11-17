@@ -19,10 +19,10 @@
 //! | --- | --- | --- |
 //! | draw_call: 4x multisampling, no colour target | no: the core makes no multisampled renderbuffer (glRenderbufferStorageMultisample is ES 3.0) and dEQP-GLES2 asks for a 0-sample surface | - |
 //! | draw_call: target outside the 32-bit address space | no: a guard (needs a target above 4 GiB) | - |
-//! | draw_call: target past 2048 a side | by the API yes (GL_MAX_RENDERBUFFER_SIZE), by dEQP-GLES2 no (no case clears or draws a target past 256 a side) | `a_2048_target_is_accepted`; the 4096 one is #[ignore] |
+//! | draw_call: target past 2048 a side (past 4096 since #1261) | past 2048: by the API yes (GL_MAX_RENDERBUFFER_SIZE), by dEQP-GLES2 no (no case clears or draws a target past 256 a side), taken since #1261; past 4096: no, GL_INVALID_VALUE at the storage | `a_2048_target_is_accepted`, `a_4096_target_is_accepted` |
 //! | extra_targets: attachments of different sizes / past the 32-bit space / 4x several attachments / 4x an ES 3.0 format | no: ES 2.0 has one colour attachment (no GL_EXT_draw_buffers) and no 4x target | - |
 //! | draw_call: a colour output with no attachment slot | no: gl_FragColor / gl_FragData[0] are output 0, the slot every target has | `fragcolor_and_fragdata_zero_have_a_slot` |
-//! | begin_job: a 64/128-bpp target with more tiles than the pools hold | no: the 64-bit target (GL_EXT_color_buffer_half_float) is only reachable past 2048 a side, which the 2048 cap already stops | `a_half_float_target_draws` |
+//! | begin_job: a 64/128-bpp target with more tiles than the pools hold | no: the 64-bit target (GL_EXT_color_buffer_half_float) has 64x32 tiles, 8,192 at 4096x4096, under the pools' 16,384 | `a_half_float_target_draws` |
 //! | state::unsupported: a second index list in one draw | no: the GL core never sets `index_count2` | - |
 //! | record: depth/stencil read an earlier job wrote, no buffer to keep it | yes: a depth or stencil test in a second job | `depth_and_stencil_across_jobs` |
 //! | record: gl_InstanceID of an instance drawn alone | no: GLSL ES 1.00 has no gl_InstanceID, and no instanced draw | - |
@@ -681,8 +681,8 @@ fn fragcolor_and_fragdata_zero_have_a_slot() {
     }
 }
 
-/// The 2048 a side the tile memory is sized for: the largest target that is
-/// accepted.
+/// 2048 a side, the largest target that was accepted before #1261 (the
+/// tile memory is sized for 4096 since: `a_4096_target_is_accepted`).
 #[test]
 fn a_2048_target_is_accepted() {
     let _g = rig();
@@ -697,13 +697,13 @@ fn a_2048_target_is_accepted() {
 }
 
 /// The ES 2.0 API takes a target of GL_MAX_RENDERBUFFER_SIZE (4096) a side,
-/// which the back end refuses (-ENOTSUP, GL_INVALID_OPERATION; before
-/// b7c1484e -EINVAL, GL_OUT_OF_MEMORY, ending a dEQP session). No
-/// dEQP-GLES2 case clears or draws such a target (the fbo.* cases are 1 to 257
-/// a side, the texture.size ones render into the 256x256 surface), so this is
-/// no Pi 4 tree risk: kept as the pin of a known gap.
+/// which the back end refused while its tile memory stopped at 2048
+/// (-ENOTSUP, GL_INVALID_OPERATION; before b7c1484e -EINVAL,
+/// GL_OUT_OF_MEMORY). Since #1261 the tile memory is sized for 4096 and the
+/// clear is taken. No dEQP-GLES2 case clears or draws such a target (the
+/// fbo.* cases are 1 to 257 a side, the texture.size ones render into the
+/// 256x256 surface).
 #[test]
-#[ignore = "a 4096-wide renderbuffer is refused by the V3D (past the 2048 tile memory): GL_INVALID_OPERATION; no dEQP-GLES2 case draws one"]
 fn a_4096_target_is_accepted() {
     let _g = rig();
     let fb = bind_fbo();
