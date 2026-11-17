@@ -111,6 +111,20 @@ fresh c4
 printf 'the GC7000UL board run is pending, see 0123abcd\n' >"$R/docs/es3-cts-failures.md"
 run_case "c4 pending" 1 "c4"
 
+fresh c4b
+printf 'the GC7000UL board run at 05769bf2\n' >"$R/docs/es3-cts-failures.md"
+run_case "c4 stale commit" 1 "c4"
+
+fresh c3c
+# noise before and after the drafts, exit 0, no PARTIAL: ok
+printf 'import sys\nprint("warning: a stray line")\nprint("drafts")\nprint("note: done", file=sys.stderr)\nprint("trailer")\n' >"$R/tools/cts/imx8mp-gles3-report.py"
+run_case "c3 noise around the report is not a failure" 0 ""
+
+fresh c3d
+# PARTIAL in the middle of the output, a clean last line, exit 0: FAIL
+printf 'print("*** PARTIAL: merge failed ***")\nprint("drafts")\nprint("ok")\n' >"$R/tools/cts/imx8mp-gles3-report.py"
+run_case "c3 PARTIAL above a clean last line" 1 "c3"
+
 fresh c5
 echo "nothing has run on the board yet; rows01-13" >"$R/docs/es3/board-recipe-imx8mp.md"
 run_case "c5 recipe still says nothing has run" 1 "c5"
