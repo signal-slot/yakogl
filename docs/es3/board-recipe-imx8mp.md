@@ -126,7 +126,14 @@ modules/gles3/libdeqp-gles3-package.a`), and the two libraries' shas are the sam
 (`132944 2fff5184…b2e8`, `12732236 7b842c95…85cc`): the stage 1 is host-portable for one VK-GL-CTS pin. A
 fourth build (this file's figures rechecked at `e6e68ff7`, 2026-11-16) took 453 steps and 685 s on a 4-core /
 7 GiB worker, `rc=0`, `$IMX8MP_OUT/deqp-stage1-gles3` 2.1 GB — the CTS checkout and its externals are most of
-that weight, so the "~1.9 GB" of the heading is the libraries plus the checkout copy. One caveat for a rebuild
+that weight, so the "~1.9 GB" of the heading is the libraries plus the checkout copy. A fifth build, for the
+campaign commit `05769bf2` (2026-11-17, 4 cores), took 453 steps and 264 s, `rc=0`, 2.0 GB, in a stage 1
+directory of another path (`$DEQP_STAGE1_GLES3` set outside `$IMX8MP_OUT`), and its two libraries came out
+**different**: `132928 161bc82a…fe5d` and `12731580 5c31af15…2d37`. The libraries carry the absolute path of
+their copied sources (`__FILE__` strings such as `<stage 1>/cts/modules/gles3/tes3InfoTests.cpp`), and the
+table image links them in: that build's `zephyr.bin` holds its stage 1 path 81 times. So the shas above are
+the same for one VK-GL-CTS pin **and one stage 1 directory path**; on a host whose path differs, the
+libraries and `zephyr.bin` differ by those strings, and a slice README quotes its own shas. One caveat for a rebuild
 after a killed run: `cts-build-zephyr.sh` discards west's output (it never lands in the log), and a `flags/` directory left
 half-written by a run killed during the devicetree step makes the next configure die in `gen_defines.py`
 (`EOFError: Ran out of input` from `edt.pickle`) with no explanation in the log. Remove
@@ -205,6 +212,14 @@ Rebuilt at `e6e68ff7` (2026-11-16, to recheck these figures against current main
 `# CONFIG_YAKOGL_REPORT_ES2 is not set`, `CONFIG_GC_BOARD_WDOG_SECONDS=600` — `zephyr.bin` 16,642,712 bytes
 (sha256 `76fe4a4f…5b28`), `zephyr.elf` 44,557,320 bytes, the table fragment byte-identical to the campaign's,
 linker `RAM: 233912 KB 256 MB 89.23%`, dry run `footprint 239525888`.
+
+Built at the campaign commit `05769bf2` (2026-11-17, `IMX8MP_CONSOLE=1`, the stage 1 of section 1's fifth
+build): image `rc=0` in 103 s, `imx8mp: 133 table rows -> es3-05769bf2.table.conf`, `check-deqp-images: the dEQP
+image recipes build what conformance needs`, the three console lines in `.config`, both `REPORT_ES2` switches
+`is not set`, configure stamp `pvr sample build: tree 05769bf2 table 6c5b8a70`. `zephyr.bin` 16,589,464 bytes
+(sha256 `48c45b52…58f0`, path-dependent: section 1), `zephyr.elf` 43,918,584 bytes, the table fragment
+`38164 5b7a6123…b82f` (byte-identical to the `9bc82915` campaign's: the table has not changed), linker
+`RAM: 233860 KB 256 MB 89.21%`, dry run `footprint 239472640` (28,962,816 bytes below `board.sh`'s refusal).
 
 **The footprint grows with `main`.** Same table, same stage 1, same board conf: 222,568 KB at `9bc82915`,
 233,912 KB at `e6e68ff7` — 11,344 KB more in the days between those commits, 84.90 % → 89.23 % of the region.
@@ -580,7 +595,11 @@ Rules that hold for every step:
    (its debug paths), so a README quotes the elf sha of its own build. `imx8mp-gles3-artefacts.sh` matches the
    linker's indented `Memory region`/`RAM:`/`FLASH:` rows (the linker right-aligns the region names; earlier
    versions anchored the grep at the line start and printed the header with no `RAM:` row, seen in slice
-   rows17-34). The dry run's `footprint <bytes>` line is the fallback when the build log is absent.
+   rows17-34). The dry run's `footprint <bytes>` line is the fallback when the build log is absent. That fix
+   (`aaaaab0f`) is **not in the campaign commit `05769bf2`**: a worktree of `05769bf2` runs the old script, which
+   printed the header and no `RAM:` row for the `05769bf2` image. Run the script of a `main` that has the fix
+   against the same `$IMX8MP_OUT` (it reads only the build's files; measured: the same five lines, then `FLASH:` and
+   `RAM: 233860 KB 256 MB 89.21%`), or quote the `RAM:` row of `$IMX8MP_OUT/es3-$HEAD8.log`.
 
 6. **Plan the slices** (host only):
    ```sh
@@ -613,7 +632,9 @@ Rules that hold for every step:
    The last line is `preflight: all ok` (exit 0) or `preflight: <n> check(s) FAILED` (exit 1); a bad option exits
    2. `--commit` defaults to `git rev-parse origin/main`, so pass the campaign commit once main has moved. Run
    it before every slice. Run against the real build three times it printed nine `ok` lines and
-   `preflight: all ok` (its selftest covers stub files only). `DEQP_STAGE1` must name the gles3 stage 1 (step
+   `preflight: all ok` (its selftest covers stub files only). At `05769bf2`, with `BOARD_UART` unset: eight `ok`
+   lines (`table image exists (es3-05769bf2)`, `image es3-05769bf2 is commit 05769bf2`), `FAIL BOARD_UART is
+   unset` and `preflight: 1 check(s) FAILED`, the expected shape of a session without a console. `DEQP_STAGE1` must name the gles3 stage 1 (step
    2): the `stage 1 package` line is the only one that reads the gles3 path, so a gles2 `DEQP_STAGE1` gives two
    `FAIL` lines (`DEQP_STAGE1 is set, directory does not exist` and `stage 1 package missing …`) and seven `ok`,
    which reads like a broken image rather than a wrong variable. In a checkout where `origin/main` does not
