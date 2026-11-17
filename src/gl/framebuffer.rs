@@ -1781,11 +1781,13 @@ pub fn read_framebuffer(c: &GlContext) -> GLuint {
 /// GL_IMPLEMENTATION_COLOR_READ_FORMAT and _TYPE of the READ framebuffer's
 /// read buffer (ES 3.0 6.1.7): the pair glReadPixels takes for it besides
 /// RGBA/UNSIGNED_BYTE -- an integer buffer's only one, RGBA_INTEGER with INT
-/// (signed) or UNSIGNED_INT (unsigned) -- and RGBA/UNSIGNED_BYTE for every
-/// other.
+/// (signed) or UNSIGNED_INT (unsigned), a 10/10/10/2 buffer's RGBA with
+/// UNSIGNED_INT_2_10_10_10_REV (as Mesa's `_mesa_get_color_read_type`, only
+/// where [`rgb10a2_surface`] stores the class) -- and RGBA/UNSIGNED_BYTE for
+/// every other.
 pub fn implementation_color_read(c: &GlContext) -> (GLenum, GLenum) {
     let read = read_framebuffer(c);
-    let kind = c
+    let (kind, packed) = c
         .framebuffer_ref(read)
         .filter(|_| read != 0)
         .and_then(|fb| match fb.read_index as usize {
@@ -1794,7 +1796,10 @@ pub fn implementation_color_read(c: &GlContext) -> (GLenum, GLenum) {
             _ => None,
         })
         .and_then(|a| attachment_storage(c, a))
-        .map_or(ColorKind::Float, |s| color_kind(s.internalformat));
+        .map_or((ColorKind::Float, false), |s| (color_kind(s.internalformat), s.internalformat == GL_RGB10_A2));
+    if packed && rgb10a2_surface() {
+        return (GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV);
+    }
     match kind {
         ColorKind::Int => (GL_RGBA_INTEGER, GL_INT),
         ColorKind::Uint => (GL_RGBA_INTEGER, GL_UNSIGNED_INT),
