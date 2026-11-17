@@ -2001,6 +2001,12 @@ impl<'s> Nir<'s> {
 
     /// The same at the value's bit size `bits`.
     fn alu_sized(&mut self, op: Alu, bits: u8, a: Val, b: Val, c: Val) -> Result<Val, MaliError> {
+        /* a compare reads a -0.0 operand as +0.0: the rules of
+         * nir_opt_algebraic.py:771-776 make a new 0.0 for the compare, and
+         * the IR's sides are already where those rules put them
+         * (glsl.rs `neg_zero_compares`) */
+        let pz = |v: Val| if v == Val::Const(F32_NEG_ZERO) { Val::Const(F32_ZERO) } else { v };
+        let (a, b) = if matches!(op, Alu::Fcmp(_)) && bits == 32 { (pz(a), pz(b)) } else { (a, b) };
         let srcs = [a, b, c];
         if srcs[..op.arity()].contains(&Val::Undef) {
             return Err(MaliError::PositionLane);
@@ -2030,16 +2036,64 @@ impl<'s> Nir<'s> {
             if op == Alu::Fabs {
                 return Ok(Val::Const(consts[0].unwrap_or(0) & !F32_NEG_ZERO));
             }
+            let k = |i: usize| consts[i].unwrap_or(0);
+            /* the boolean operands (0 / ~0, a NaN pattern as a float):
+             * `bcsel` of a constant condition is the arm it takes, `b2f`
+             * is 1.0 or 0.0 (nir_opt_constant_folding; the GLSL front end
+             * folds `c ? a : b` of constants the same) */
+            match op {
+                Alu::Bcsel => {
+                    let r = if k(0) != 0 { k(1) } else { k(2) };
+                    self.note_user(Prod::Folded);
+                    return Ok(Val::Const(r));
+                }
+                Alu::B2f => {
+                    self.note_user(Prod::Folded);
+                    return Ok(Val::Const(if k(0) != 0 { F32_ONE } else { F32_ZERO }));
+                }
+                _ => {}
+            }
             let f = |k: usize| f32::from_bits(consts[k].unwrap_or(0));
             if consts[..op.arity()].iter().any(|c| !plain(c.unwrap_or(0))) {
                 return Err(MaliError::ConstantFold);
             }
+            /* exact, from the shared fold (no libm): what the GLSL front
+             * end's `floorf`, `ceilf`, `truncf` and compares give
+             * (ir_expression_operation.py:561-563, :642-645) */
+            let exact = |a: AluOp| fold::fold_float(a, k(0), k(1), 0).ok_or(MaliError::ConstantFold);
             let r = match op {
                 Alu::Fadd => f(0) + f(1),
                 Alu::Fmul => f(0) * f(1),
-                /* a fused rounding: no_std has no fma, and no shape here
-                 * makes one */
-                Alu::Ffma => return Err(MaliError::ConstantFold),
+                /* unfused, `a * b` then `+ c`: a constant `ffma` is the
+                 * front end's expansion of a built-in on constants
+                 * (`smoothstep`, `mod`, `dot`), which Mesa's GLSL front end
+                 * folds as `a * b + c` with two roundings
+                 * (ir_expression_operation.py:755; deqp_constop_ce_mod's
+                 * 0x40233340 against the fused 0x40233335) */
+                Alu::Ffma => f(0) * f(1) + f(2),
+                Alu::Ffloor => f32::from_bits(exact(AluOp::Ffloor)?),
+                Alu::Fceil => f32::from_bits(exact(AluOp::Fceil)?),
+                Alu::Ftrunc => f32::from_bits(exact(AluOp::Ftrunc)?),
+                /* `fmin(fmax(a, lo), hi)` of the clamp's bounds */
+                Alu::Fclamp(m) => match m {
+                    clamp::ZERO_INF => f(0).max(0.0),
+                    clamp::M1_1 => f(0).clamp(-1.0, 1.0),
+                    clamp::ZERO_ONE => f(0).clamp(0.0, 1.0),
+                    _ => f(0),
+                },
+                Alu::Fcmp(c) => {
+                    let (x, y) = (f(0), f(1));
+                    let t = match c {
+                        Cmpf::Eq => x == y,
+                        Cmpf::Gt => x > y,
+                        Cmpf::Ge => x >= y,
+                        Cmpf::Ne => x != y,
+                        Cmpf::Lt => x < y,
+                        Cmpf::Le => x <= y,
+                    };
+                    self.note_user(Prod::Folded);
+                    return Ok(Val::Const(if t { u32::MAX } else { 0 }));
+                }
                 Alu::Frcp => 1.0 / f(0),
                 Alu::Fmax => f(0).max(f(1)),
                 Alu::Fmin => f(0).min(f(1)),
@@ -2053,14 +2107,7 @@ impl<'s> Nir<'s> {
                 },
                 /* the front end folds a constant expression: a constant
                  * operand here comes from a shape no reference draws */
-                Alu::Fclamp(_)
-                | Alu::Ffloor
-                | Alu::Fceil
-                | Alu::Ftrunc
-                | Alu::Fcmp(_)
-                | Alu::Icmp(_)
-                | Alu::B2f
-                | Alu::Bcsel
+                Alu::Icmp(_)
                 | Alu::F2i
                 | Alu::I2f
                 | Alu::U2f32
@@ -2097,6 +2144,8 @@ impl<'s> Nir<'s> {
                 | Alu::Fddx
                 | Alu::Fddy => return Err(MaliError::ConstantFold),
                 Alu::F2f16
+                | Alu::Bcsel
+                | Alu::B2f
                 | Alu::Fneg
                 | Alu::Fabs
                 | Alu::Vec2
@@ -2106,7 +2155,14 @@ impl<'s> Nir<'s> {
                 | Alu::CubeSsel
                 | Alu::CubeTsel => return Err(MaliError::Defect(Defect::IrIndex)),
             };
-            if !plain(r.to_bits()) {
+            /* an overflow to infinity or a denormal of `+`, `*`, `min`, `max`
+             * stays as IEEE gives it: the GL path sets no float controls, so
+             * `nir_eval_const_opcode` neither flushes nor rounds toward zero
+             * (nir_constant_expressions.py:97-98; deqp_constop_cf_inf_fs's
+             * 0x7f800000, cf_denorm_fs's 0x00000001). A NaN and the
+             * reciprocals' (`rcp(0.0)`) have no reference */
+            let ieee = matches!(op, Alu::Fadd | Alu::Fmul | Alu::Fmin | Alu::Fmax) && !r.is_nan();
+            if !plain(r.to_bits()) && !ieee {
                 return Err(MaliError::ConstantFold);
             }
             self.note_user(Prod::Folded);
@@ -2704,6 +2760,35 @@ fn vs_reduce(vs: &mut Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: ir::Sr
         Some(&IrOp::Alu(op, cs)) => (op, cs),
         _ => return Err(MaliError::Arithmetic),
     };
+    /* a compare of two constant vectors folds, lane by lane, then the
+     * reduction (`nir_opt_constant_folding` of the `ball_fequal3` GLSL's
+     * `==` of vectors makes; deqp_constop_struct_param_out_vs: `s.red ==
+     * vec3(1.0, 0.0, 0.0)` of an `out` struct's constant members, no
+     * instruction left) */
+    let konst = |k: usize, i: usize| match lane(w, cs[k], s.swizzle[i] as usize) {
+        Val::Const(c) => Some(f32::from_bits(c)),
+        _ => None,
+    };
+    if (0..n).all(|i| konst(0, i).is_some() && konst(1, i).is_some()) {
+        let t = |i: usize| {
+            let (x, y) = (konst(0, i).unwrap_or(0.0), konst(1, i).unwrap_or(0.0));
+            match op {
+                AluOp::Feq => Some(x == y),
+                AluOp::Fne => Some(x != y),
+                AluOp::Flt => Some(x < y),
+                AluOp::Fle => Some(x <= y),
+                _ => None,
+            }
+        };
+        let r = match a {
+            AluOp::Ball => (0..n).try_fold(true, |acc, i| t(i).map(|b| acc && b)),
+            AluOp::Bany => (0..n).try_fold(false, |acc, i| t(i).map(|b| acc || b)),
+            _ => None,
+        };
+        if let Some(r) = r {
+            return Ok(Val::Const(if r { u32::MAX } else { 0 }));
+        }
+    }
     /* lane i of the reduction: the compare's lane, of one vector's lane i
      * against a constant on the side `side` */
     let side = |k: usize| -> Option<[Val; 4]> {
@@ -3408,6 +3493,17 @@ fn walk<'s>(
                                 vs.alu(op, s0, s1, Val::Undef)?
                             }
                         },
+                        /* one of constants folds as NIR's ([`fold_int`]):
+                         * the `&&` of two compares of constants
+                         * (deqp_constop_struct_param_out_vs's `s.red ==
+                         * vec3(1.0, 0.0, 0.0) && s.blue == ..`) */
+                        AluOp::Iand | AluOp::Ixor | AluOp::Inot | AluOp::Bnot
+                            if matches!(fold_int(a, x(0), x(1)), Some(Val::Const(_)))
+                                && matches!(x(0), Val::Const(_))
+                                && (matches!(a, AluOp::Inot | AluOp::Bnot) || matches!(x(1), Val::Const(_))) =>
+                        {
+                            fold_int(a, x(0), x(1)).ok_or(MaliError::Defect(Defect::IrIndex))?
+                        }
                         /* the other integer operations and conversions
                          * (intbool) */
                         AluOp::Imul
