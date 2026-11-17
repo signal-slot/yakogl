@@ -31,6 +31,11 @@
 # mali-slice-readme-selftest.sh, 48 mali-rerun-tree-selftest.sh, 49
 # mali-rerun-e2e-selftest.sh, 50 mali-fail-triage-selftest.sh, 51
 # mali-deqp-build-selftest.sh, 52 mali-family-tree-selftest.sh.
+# Checks 53-56 run the Pi 4 GLES3 session tools' self-tests (31 and 41-42
+# already run gles3-notpass.py, check-pi4-gles3-log.py and the acceptance
+# self-test): 53 pi4-console-scan.py, 54 pi4-session-readme.py, 55
+# pi4-gles3-preflight-selftest.sh, 56 pi4-session-tally-selftest.sh. None of
+# them reads DEQP_WORK, ZEPHYR_WS or the board environment.
 set -u
 
 HERE=$(dirname "$0")
@@ -941,6 +946,35 @@ malicheck 50 mali-fail-triage-selftest.sh 11
 malicheck 51 mali-deqp-build-selftest.sh 29
 # 52: mali-family-tree.py builds the tree table of the compile-refused cases by family.
 malicheck 52 mali-family-tree-selftest.sh 16
+
+# 53-54: the Pi 4 GLES3 session tools' Python self-tests, run isolated like
+# check 41 and judged by their exit status: pi4-console-scan.py on the
+# consoles of testdata/pi4-console-scan/ (GPU recoveries, hangs, resets and run
+# times per image), pi4-session-readme.py on a synthetic session directory
+# (the 'commit: <sha>' line, counts and verdicts, check-pi4-gles3-log.py
+# accepting what it wrote).
+pi4py() { # number, script, ok text
+    local out
+    echo
+    echo "== $1. $2 --self-test"
+    if out=$(cd "$gl3tmp" && TMPDIR="$gl3tmp" python3 -I "$ROOT/tools/cts/$2" --self-test 2>&1); then
+        ok "$2: $3"
+    else
+        bad "$2 --self-test failed"
+        printf '%s\n' "$out" | tail -8 | sed 's/^/        | /'
+    fi
+}
+pi4py 53 pi4-console-scan.py "recoveries, hangs, resets and run times read from fixture consoles"
+pi4py 54 pi4-session-readme.py "a session README with its commit line, counts and verdicts"
+
+# 55: pi4-gles3-preflight.sh on a fake layout (stage 1, images named after a
+# fake commit, the table's rows), the board environment replaced by stubs.
+gl3check 55 pi4-gles3-preflight-selftest.sh "the Pi 4 session preflight on a fake layout, refusals named, read-only"
+
+# 56: pi4-session-tally.sh on a synthetic session directory: every console
+# tallied with relative paths, an aborted image named, an unknown label
+# refused before any tally is written.
+gl3check 56 pi4-session-tally-selftest.sh "a Pi 4 session directory tallied, aborts named, unknown labels refused"
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
