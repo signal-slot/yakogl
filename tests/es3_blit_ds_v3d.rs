@@ -8,26 +8,27 @@
 //!
 //! tests/es3_blit_ds.rs is the GL core's half on a stand-in back end that
 //! has `ds_write`/`stencil_resolve`; this file is the V3D's, whose table has
-//! neither (`ds_write: None, stencil_resolve: None`, src/v3d/backend.rs).
+//! both (`v3d_ds_write`, `v3d_stencil_resolve`, src/v3d/backend.rs: a CPU
+//! read-modify-write of the `ZsBuf` through `v3d_tex_load_box` /
+//! `v3d_tex_store_box` and src/v3d/ds_plane.rs, issue draft 1).
 //!
 //! Per shape, in a module of its own: `depth_component16_basic` ..
 //! `stencil_index8_scale` (depth_component16/24/32f basic and scale;
 //! depth24_stencil8 and depth32f_stencil8 basic, scale, depth_only,
-//! stencil_only; stencil_index8 basic and scale):
-//! * `is_refused_today` pins the answer of today's V3D: GL_INVALID_OPERATION
-//!   (src/gl/blit.rs REFUSED_DEPTH_DST for a depth blit into a renderbuffer,
-//!   REFUSED_STENCIL for a stencil one), one error, the destination left as
-//!   cleared, the context usable;
-//! * `reads_back_the_source` (`#[ignore]`d) holds what a working blit leaves:
-//!   each destination pixel takes the nearest source pixel in the planes the
-//!   mask names, the others keep their clear; the planes are read through
-//!   `v3d_depth_resolve` and the table's `stencil_resolve`. It runs when the
-//!   two table entries exist (issue draft 1: a CPU read-modify-write of the
-//!   `ZsBuf` through `v3d_tex_load_box`/`v3d_tex_store_box`).
+//! stencil_only; stencil_index8 basic and scale), `reads_back_the_source`
+//! holds what the blit leaves: no GL error, each destination pixel takes the
+//! nearest source pixel in the planes the mask names, the others keep their
+//! clear; the planes are read through `v3d_depth_resolve` and the table's
+//! `stencil_resolve`.
+//!
+//! The rig answers no OSAL setting, so depth and stencil share one D24S8
+//! buffer (`split_zs` off): the S8 path of the entries is
+//! src/v3d/backend_tests.rs's.
 //!
 //! Open in the note and left open here: D32F is a 24-bit round trip (the
-//! buffer is D24S8); the ignored test pins that the round trip is exact in
-//! 24 bits, not that dEQP's tolerance accepts it (not measured).
+//! buffer is D24S8); the test pins that the round trip is exact in 24 bits,
+//! not that dEQP's tolerance accepts it (not measured). Nothing here ran on
+//! a Pi 4.
 //!
 //! The sources are filled by the fake GPU (`depth_word`: a depth per texel,
 //! stencil byte 0x3c) after a clear; the destinations are clear-only.
@@ -763,10 +764,9 @@ fn read_depth(rb: GLuint, w: i32, h: i32) -> Vec<f32> {
     v
 }
 
-/// The stencil plane through the back end's `stencil_resolve` entry, which
-/// the V3D table lacks today (`None`: the assertion is what stands between).
+/// The stencil plane through the back end's `stencil_resolve` entry.
 fn read_stencil(rb: GLuint, w: i32, h: i32) -> Vec<u8> {
-    let f = yakogl_backend_v3d.stencil_resolve.expect("the V3D table has a stencil_resolve entry (None today)");
+    let f = yakogl_backend_v3d.stencil_resolve.expect("the V3D table has a stencil_resolve entry");
     let mut v = vec![0xffu8; (w * h) as usize];
     // SAFETY: `h` rows of `w` bytes.
     let r = unsafe { f(ds_id(rb), v.as_mut_ptr(), w as u32, h as u32, w as u32) };
@@ -787,34 +787,6 @@ fn scaled<T: Copy>(src: &[T], s: &Shape) -> Vec<T> {
         .flat_map(|y| (0..dw).map(move |x| (x, y)))
         .map(|(x, y)| src[(src_of(y, sh, dh) * sw + src_of(x, sw, dw)) as usize])
         .collect()
-}
-
-/// What the V3D answers today to all 16 shapes: GL_INVALID_OPERATION,
-/// nothing copied, the context usable. `ds_write` and `stencil_resolve` are
-/// `None` in the V3D table (src/v3d/backend.rs), so src/gl/blit.rs refuses a
-/// depth blit whose destination is a renderbuffer (REFUSED_DEPTH_DST) and a
-/// stencil blit between renderbuffers (REFUSED_STENCIL), before any plane is
-/// read or written.
-fn check_refused(s: Shape) {
-    let _g = rig();
-    let p = pair(&s);
-    let ((_, _), (dw, dh)) = s.sizes();
-    assert!(yakogl_backend_v3d.ds_write.is_none() && yakogl_backend_v3d.stencil_resolve.is_none());
-    assert_eq!(blit(&s), GL_INVALID_OPERATION);
-    assert_eq!(err(), GL_NO_ERROR, "one error, raised once");
-    /* nothing was copied: the destination still holds its clear */
-    if s.mask & DEPTH != 0 {
-        assert!(read_depth(p.dst_rb, dw, dh).iter().all(|&d| d == DST_CLEAR.0), "the destination depth is as cleared");
-    }
-    /* the context is usable: a clear and a read of the next framebuffer work */
-    // SAFETY: plain GL calls.
-    unsafe {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glFinish();
-    }
-    assert_eq!(err(), GL_NO_ERROR, "{:?}", logs());
-    release(&p);
 }
 
 /// What a blit that works leaves in the destination: every destination
@@ -861,11 +833,6 @@ macro_rules! shapes {
             use super::*;
             const S: Shape = Shape { format: $format, point: $point, mask: $mask, scale: $scale };
             #[test]
-            fn is_refused_today() {
-                check_refused(S);
-            }
-            #[test]
-            #[ignore = "ds_write and stencil_resolve are None in the V3D table (docs/notes/v3d-fbo-blit.md 3.4)"]
             fn reads_back_the_source() {
                 check_readback(S);
             }
@@ -896,34 +863,32 @@ shapes! {
     stencil_index8_scale: GL_STENCIL_INDEX8, GL_STENCIL_ATTACHMENT, STENCIL, true;
 }
 
-/// The refusal is named in the log, once per cause, not once per call:
-/// a depth blit into a renderbuffer says `REFUSED_DEPTH_DST`, a stencil one
-/// `REFUSED_STENCIL` (src/gl/blit.rs `refuse_ds`).
+/// A depth and a stencil blit between renderbuffers name no refusal of
+/// src/gl/blit.rs (`refuse_ds`: REFUSED_DEPTH_DST, REFUSED_STENCIL,
+/// REFUSED_DS_UNHELD) in the log: the V3D table has both entries.
 #[test]
-fn each_refusal_is_named_once_in_the_log() {
+fn no_refusal_is_named_in_the_log() {
     let _g = rig();
     let depth = Shape { format: GL_DEPTH_COMPONENT24, point: D, mask: DEPTH, scale: false };
     let stencil = Shape { format: GL_STENCIL_INDEX8, point: GL_STENCIL_ATTACHMENT, mask: STENCIL, scale: false };
     for s in [depth, stencil] {
-        for _ in 0..2 {
-            let p = pair(&s);
-            assert_eq!(blit(&s), GL_INVALID_OPERATION);
-            release(&p);
-        }
+        let p = pair(&s);
+        assert_eq!(blit(&s), GL_NO_ERROR, "{:?}", logs());
+        release(&p);
     }
-    let said = |what: &str| logs().iter().filter(|l| l.starts_with("glBlitFramebuffer:") && l.contains(what)).count();
-    assert_eq!(said("a depth blit into the window or into a renderbuffer of a back end without the ds_write entry"), 1);
-    assert_eq!(said("a stencil blit other than between renderbuffers"), 1);
+    let said = logs().iter().filter(|l| l.starts_with("glBlitFramebuffer:")).cloned().collect::<Vec<_>>();
+    assert!(said.is_empty(), "{said:?}");
 }
 
-/// "Nothing is copied, the colour neither" (src/gl/blit.rs): a blit of
-/// colour and depth whose depth half is refused fails whole (the colour
-/// blit alone, between the same framebuffers, is fine). The colour pixels are
-/// not read back: the faked job builder draws and clears nothing.
+/// A blit of colour and depth between framebuffers of a colour and a
+/// D24S8 renderbuffer copies the depth (the colour half is not refused
+/// either). The colour pixels are not read back: the faked job builder
+/// draws and clears nothing. The destination's stencil, not in the mask,
+/// keeps its clear.
 #[test]
-fn a_refused_depth_half_fails_the_colour_half_too() {
+fn a_colour_and_depth_blit_copies_the_depth() {
     let _g = rig();
-    let make = |clear: [f32; 4]| {
+    let make = |clear: [f32; 4], depth: f32| {
         let (mut fb, mut cb, mut zb) = (0, 0, 0);
         // SAFETY: room for one name each; plain GL calls.
         unsafe {
@@ -939,24 +904,28 @@ fn a_refused_depth_half_fails_the_colour_half_too() {
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, zb);
             assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
             glClearColor(clear[0], clear[1], clear[2], clear[3]);
-            glClearDepthf(0.5);
+            glClearDepthf(depth);
+            glClearStencil(0x21);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
             glFinish();
         }
         (fb, cb, zb)
     };
-    let (sfb, scb, szb) = make([1.0, 0.0, 0.0, 1.0]);
-    let (dfb, dcb, dzb) = make([0.0, 0.0, 1.0, 1.0]);
+    let (sfb, scb, szb) = make([1.0, 0.0, 0.0, 1.0], 0.25);
+    let (dfb, dcb, dzb) = make([0.0, 0.0, 1.0, 1.0], 0.5);
     // SAFETY: plain GL calls on live names.
     unsafe {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, sfb);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dfb);
         while glGetError() != GL_NO_ERROR {}
         glBlitFramebuffer(0, 0, 16, 16, 0, 0, 16, 16, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-        assert_eq!(glGetError(), GL_INVALID_OPERATION);
-        /* the colour half alone is not refused: the refusal is the depth plane's */
-        glBlitFramebuffer(0, 0, 16, 16, 0, 0, 16, 16, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+    }
+    let want = 0.25f32;
+    assert!(read_depth(dzb, 16, 16).iter().all(|&d| (d - want).abs() <= 0.5 / 16_777_215.0), "the source's depth");
+    assert!(read_stencil(dzb, 16, 16).iter().all(|&s| s == 0x21), "the stencil, not in the mask, as cleared");
+    // SAFETY: plain GL calls on live names.
+    unsafe {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(2, [sfb, dfb].as_ptr());
         glDeleteRenderbuffers(4, [scb, szb, dcb, dzb].as_ptr());
