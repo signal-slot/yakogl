@@ -67,6 +67,8 @@ mod frame_tex_tests;
 #[cfg(test)]
 mod frame_ubo_tests;
 #[cfg(test)]
+mod frame_uniarray_tests;
+#[cfg(test)]
 mod frame_zs_tests;
 #[cfg(test)]
 mod trace;
