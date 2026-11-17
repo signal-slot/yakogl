@@ -118,6 +118,12 @@ ext-draw-buffers-indexed	dEQP-GLES3.functional.negative_api.fragment.blend_*i*	G
 t6-instanced-mixed	dEQP-GLES3.functional.instanced.*.mixed.*	T6 instancing with a divisor and gl_InstanceID (docs/es3-cts-failures.md Appendix A, T6: GC7000UL board check open)
 astc-not-supported	dEQP-GLES3.functional.texture.compressed.astc.*	ASTC refused by name: NotSupported, not a failure (docs/es3/texture-failure-map.md section 3, hgc4 README)
 astc-not-supported	dEQP-GLES3.functional.texture.wrap.astc*	ASTC refused by name: NotSupported, not a failure (docs/es3/texture-failure-map.md section 3, hgc4 README)
+# Added by causes3 for groups of the final HOST-ONLY list (docs/es3/host-gc-gles3-5454be1b/host-gc-gles3-notpass.tsv) that only an 'unexplained' row held.
+rc13-shader-compiler	dEQP-GLES3.functional.uniform_api.random.83	RC13 shader compiler refusals (docs/es3-cts-failures.md uniform_api row: random.83 compile, RC13)
+ovr-multiview-not-supported	dEQP-GLES3.functional.fbo.multiview.*	Multiview NotSupported: the library has no OVR_multiview, allowed for ES 3.0 (host list message 'Multiview is not supported'; docs/es3-cts-failures.md lists 3 fbo.multiview, no cause)
+rc2-sized-formats	dEQP-GLES3.functional.texture.units.*	RC2 sized texture formats: unit tests upload every ES 3.0 colour format, 'Set <target> image data' GL_INVALID_OPERATION (docs/es3/texture-failure-map.md units row: sized-formats-gl)
+ext-texture-srgb-r8-rg8	dEQP-GLES3.functional.texture.filtering.*.formats.srgb_r8_*	GL_EXT_texture_sRGB_R8 / _RG8 NotSupported: optional extension not claimed, not a failure (docs/es3/texture-host-repro.md, docs/es3/srgb.md)
+ext-texture-srgb-r8-rg8	dEQP-GLES3.functional.texture.filtering.*.formats.srgb_rg8_*	GL_EXT_texture_sRGB_R8 / _RG8 NotSupported: optional extension not claimed, not a failure (docs/es3/texture-host-repro.md, docs/es3/srgb.md)
 unexplained-fbo-color-format	dEQP-GLES3.functional.fbo.color.*	unexplained: fbo.color non-integer rows (blend, sampled repeated_clear, rgb16f, rgb565, r8, rg8): no doc names them
 unexplained-fbo-color-format	dEQP-GLES3.functional.fbo.render.*	unexplained: fbo.render recreate_color / resize rows of rbo and texture formats (rgb16f, rgb565, r8, rg8, rgb8): no doc names them
 unexplained-fbo-color-format	dEQP-GLES3.functional.fbo.invalidate.*	unexplained: fbo.invalidate format rows: no doc names them
