@@ -1,0 +1,483 @@
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+check.sh: --changed origin/main: 9 path(s), scopes: docs tools v3d v3d71 
+check.sh: 2 compiler slot(s) (7272 MB available, 3072 MB each, 4 cores)
+[32mok    cargo fmt --check [15s][0m
+[32mok    build   yakogl-capi (no_std) [45s][0m
+[2mskip  clippy  host-test,gpu-powervr[0m
+[2mskip  test    host-test,gpu-powervr[0m
+[2mskip  clippy  host-test,gpu-powervr,report-es2[0m
+[2mskip  test    host-test,gpu-powervr,report-es2[0m
+[2mskip  clippy  host-test,gpu-vivante[0m
+[2mskip  test    host-test,gpu-vivante[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online,report-es2[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online,report-es2[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online,report-es2[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,report-es2[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online,precompiled-shaders[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online,precompiled-shaders[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,precompiled-shaders[0m
+[2mskip  clippy  host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler; lib and its tests)[0m
+[2mskip  test    host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled)[0m
+[2mskip  clippy  host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler; lib and its tests)[0m
+[2mskip  test    host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled)[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS)[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS)[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online,test-knobs[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,test-knobs (--lib, 17 knob tests by name)[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/gc_kick_diff.rs, every declared test)[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/gc_tiled_rt.rs, every declared test)[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online,test-knobs,report-es2 (tests/gc_scene_kicks_tiled_rt.rs)[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,test-knobs,report-es2 (tests/gc_scene_kicks_tiled_rt.rs, every declared test)[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online,test-knobs[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online,test-knobs (--lib, 9 knob tests by name)[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online (tests/es3_fragdepth_gc.rs)[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online (tests/es3_fragdepth_cases.rs)[0m
+[2mleft  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table (clippy: left to the nightly)[0m
+      host-test,gpu-v3d,shaderc-online,no-shader-table: 4 ignored test(s), listed in build/check/v3d-ignored.txt:
+      ignored	gl::tf_capture_tests::capture_cost	a measurement, run by hand
+      ignored	shaderc::online::v3d::chain::tests::a_builtin_on_a_vec2_records_two_lanes	front-end gap: built-in widths unrecorded (comps 0 -> fallback 4); costs lanes, not pixels; see v3d-backend.md
+      ignored	shaderc::online::v3d::mesa_ref::decoder_agrees_with_mesa_on_every_field_combination	needs V3D_QPU_REF, the tools/v3d/qpu_ref.c binary
+      ignored	shaderc::online::v3d::roundtrip::listing_matches_mesa_on_the_corpus	needs V3D_KEEP_DIR, the --keep output of tools/v3d/glsl2v3d.py
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (--lib, GL suite on the online compiler) [373s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_sim_mesa.rs) [443s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_cube_noseamless.rs) [93s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_clear.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_glmark2_mem.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_rt_sample.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/depth_resolve_v3d.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/mipmap_offer_guard.rs) [6s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_host.rs) [6s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_mipmap_nowait.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_wait_time.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/gl_settle_order_pin.rs) [7s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_lazy_raster_readers.rs) [8s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_depth_storage.rs) [8s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_uniform_host.rs) [7s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt_v3d.rs) [10s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_half_float_rt_v3d.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_formats_v3d.rs) [12s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_color_buffer_float_v3d.rs) [10s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_shaderc_v3d.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_tf_api.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_srgb.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_occlusion_gl.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_mrt_gl.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_float_target.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_float32_rt_off.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_color_buffer_float.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_half_float_clearbuffer.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/egl_bench_configs.rs) [93s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_vertex_arrays.rs) [105s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_2darray.rs) [26s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs) [16s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs) [4s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_texsize.rs) [8s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs) [8s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_fragdepth_v3d.rs) [6s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_fragdepth_v3d_state.rs) [26s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_fragdepth_v3d_sim.rs) [28s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_fragdepth_cases.rs) [9s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_msaa_gl.rs) [3s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_msaa_pvr.rs) [95s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online (tests/es3_msaa_gc.rs) [99s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_flatshade_guard.rs) [11s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online (tests/es3_flatshade_guard.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_v3d_varyings.rs) [14s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_varyings_compile.rs) [6s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_ubo_v3d.rs) [4s][0m
+[32mok    check   msaa-fbo on the four GPUs' host configurations [121s][0m
+[32mok    check   color-buffer-float on the four GPUs' host configurations [140s][0m
+[2mleft  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (clippy: left to the nightly)[0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib shaderc::online::v3d) [286s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib v3d::backend_tests, separate depth/stencil) [264s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_sim_mesa.rs) [117s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_cube_noseamless.rs) [112s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_clear.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_int_rt.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_tf_api.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_srgb.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_occlusion_gl.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_mrt_gl.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_es2ctx_refusals.rs) [7s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es2_report_limits.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es2_compressed_list.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es2_program_binary_report.rs) [2s][0m
+[2mskip  clippy  host-test,gpu-mali,shaderc-online,no-shader-table[0m
+[2mskip  test    host-test,gpu-mali,shaderc-online,no-shader-table (--lib mali::, every declared test: packers and ISA vs Mesa and the board)[0m
+[2mskip  test    host-test,gpu-mali,shaderc-online,no-shader-table (tests/es3_msaa_mali.rs)[0m
+[2mskip  gen     src/mali/genxml == tools/mali/gen_pack_rs.py on third_party v10.xml[0m
+[2mskip  gen     src/shaderc/online/mali/isa/v10.rs == tools/mali/gen_isa_rs.py on third_party[0m
+[32mok    gen     driver/src/v3d/generated == Mesa's generators on third_party [1s][0m
+[2mskip  gen     driver/src/pvr/generated == Mesa's csbgen on third_party[0m
+[32mok    sha256  third_party files are the upstream files (UPSTREAM) [0s][0m
+[32mok    cc      v3d FFI layout pins [0s][0m
+[32mok    cc      v3d job builder [0s][0m
+[32mok    cc      v3d textures [0s][0m
+[32mok    run     v3d tex_filter_ref_check (dEQP's filters, the LINEAR plan) [1s][0m
+[32mok    run     v3d tex_tiling_bench_check (the tiling-time harness) [1s][0m
+[32mok    run     v3d tfu_case_check (the TFU probe, case 140) [1s][0m
+[2mskip  run     pvr vdm_field_check (VDM/PPP fields refuse, never mask)[0m
+[2mskip  run     pvr render_regs_check (csbgen register words = the former literals)[0m
+[2mskip  run     pvr ddk_abi_check (FWIF numbers = the vendored DDK 25.2 headers)[0m
+[32mok    run     v3d hw_mock_test (v3d_hw.c against the register model) [0s][0m
+[2mskip  run     pvr rgxlayer_check (DDK RGXStart/RGXStop/image loader on the Rust rgxlayer)[0m
+[2mskip  run     pvr km_check (the Rust kernel side = the C it replaced; layouts = the DDK headers)[0m
+[32mok    run     v3d tex_upload_check (eager copy = lazy copy) [1s][0m
+[32mok    run     v3d osal_frees_check (frees back at once with no job open) [0s][0m
+[32mok    run     v3d osal_granules_check (the carve-out's first fit, small blocks from the top, the STRESS1D replay) [1s][0m
+[2mskip  run     osal pending_frees_check (a full queue waits, never leaks silently)[0m
+[2mskip  run     gc7000 osal_frees_check (frees back at once with no frame open)[0m
+[2mskip  run     osal_bounds_check + gc_cache_range_check (wrapped ranges refused; cache skipped only inside the carve-out)[0m
+[2mskip  run     osal_log_check (a 255-byte log line survives the Zephyr OSAL buffer)[0m
+[2mskip  run     baremetal_config_check (init refuses without a complete board)[0m
+[2mskip  run     linux osal linux_heap_check (finite range, reuse, no overlap)[0m
+[32mok    build   v3d mesa reference (tools/v3d/mesa_ref.sh) [4s][0m
+[32mok    run     v3d tex_check (against Mesa 26.2.1) [6s][0m
+[32mok    run     v3d cl_golden (against Mesa 26.2.1) [2s][0m
+[32mok    run     v3d job_check (against Mesa 26.2.1) [2s][0m
+[32mok    run     v3d71 host checks (tools/v3d/check71.sh) [51s][0m
+[2mskip  run     mali pan_ref_diff and ref_cases self-test (no Mesa tree)[0m
+[2mskip  run     mali sweep_passsets self-test[0m
+[2mskip  run     mali valhall_src_info self-test[0m
+[2mskip  run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair, the blend references, blend_nir_rules.rs (MESA_PAN_TREE)[0m
+[2mskip  cc      gl_test.c -DGL_TEST_HOST=1[0m
+[2mskip  cc      gl_test.c -DGL_TEST_HOST=1 -DYAKOGL_TEST_KNOBS=1[0m
+[2mskip  cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1[0m
+[2mskip  cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 -DYAKOGL_TEST_KNOBS=1[0m
+[2mskip  run     gl_test case 44 probe decode[0m
+[2mskip  run     backend.h yakogl_heap_base without a heap_base (0, as the Rust side)[0m
+[2mskip  gen     gl_test_shaders{,_es100}.h == gen_gl_test_shaders.py on tools/shaders[0m
+[2mskip  test    pvr render pool (Rust; the C pool's golden trace replayed, 38 tests)[0m
+[32mok    run     am62p rti_arm_check (60 s preload per reported RTI clock rate) [0s][0m
+[2mskip  clippy  yakogl-gltest-runner[0m
+[2mskip  test    yakogl-gltest-runner (gl_test's lines and count)[0m
+[2mskip  clippy  osal-zephyr,gpu-vivante,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)[0m
+[2mskip  clippy  osal-zephyr,gpu-powervr,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)[0m
+[2mleft  clippy  osal-zephyr,gpu-v3d,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test) (clippy: left to the nightly)[0m
+[2mskip  clippy  osal-zephyr,gpu-mali,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)[0m
+[2mskip  clippy  yakogl-gltest-runner (aarch64-unknown-none)[0m
+[2mskip  check   osal-zephyr,gpu-powervr,precompiled-shaders (aarch64-unknown-none, no compiler)[0m
+[32mok    tools   fault-record decoder self-test [0s][0m
+[32mok    tools   fault-record matches its writer [0s][0m
+[32mok    tools   shader-table generator guards [1s][0m
+[32mok    tools   gl_test shader sources have table rows [0s][0m
+[2mskip  tools   precompiled.list gl_test pairs == what gl_test.c links[0m
+[2mskip  gen     driver/src/pvr_usc_*_blob.h == tools/pco_shc/usc_blobs.txt[0m
+[2mskip  gen     tools/pco_shc/spm_load: usc-dis decodes the words, metadata holds[0m
+[32mok    tools   deqp-uart-tally log verdicts [0s][0m
+[32mok    tools   common-tally row verdicts [78s][0m
+[32mok    tools   qpa-from-uart rebuild verdicts [0s][0m
+[2mskip  tools   am62p netboot TFTP server (passed on main b1d26da92298ef689f5cb690054e820171aa37e5)[0m
+        PASS  16 MiB+1, blksize 1468, windowsize 16: bytes equal (0.24 s, err=None)
+        PASS  one-shot: renamed to .served after the final ACK
+        PASS  one-shot: the second request gets 'File not found' (File not found)
+        PASS  size a multiple of blksize: bytes equal (None)
+        PASS  no options: plain RFC 1350 (None)
+        PASS  three DATA packets lost: the window is resent (None)
+        PASS  block numbers wrap past 65535 (None)
+        PASS  refused outside the root: '../etc/passwd' (Access violation)
+        PASS  refused outside the root: '/etc/passwd' (Access violation)
+        PASS  refused outside the root: 'yakogl/../../x' (Access violation)
+        PASS  refused outside the root: 'a\\b' (Access violation)
+        PASS  staged 301 s ago (max age 300): refused, not served (File not found)
+        PASS  missing file: 'File not found' at once
+        PASS  write request refused
+        PASS  one 'done' per offered file, each once: 5 of 5 []
+        PASS  'done' carries rate and sha256
+        PASS  no 'failed' event
+      tftp_oneshot self-test: PASS
+[2mskip  tools   am62p netboot UART phases (passed on main 93f9925be4e3a7562b2c0a36b95dec1b12e3150c)[0m
+        PASS  full cycle: done, 16107024 bytes (done)
+        PASS  stamped log: done, with times
+        PASS  report: times relative to SPL (i_armed=+15.0s reset=+19.0s linux=+23.0s)
+        PASS  another run's token: wrong_token
+        PASS  no hook line: not_armed
+        PASS  hook, no cleared: not_cleared
+        PASS  TFTP refused: fetch_failed
+        PASS  eMMC cycle: done, 16107024 bytes read (done)
+        PASS  eMMC file absent: load_failed, the bootcmd's later load not counted, back (load_failed, None)
+        PASS  jump, no banner: no_zephyr
+        PASS  Zephyr, no reset: no_reset
+        PASS  reset, no Linux: no_linux
+        PASS  hook twice: looped
+        PASS  fetch failed, Linux booted: kernel_after_spl set
+        PASS  Zephyr still running: kernel_after_spl clear
+        PASS  empty log: empty, not a pass
+        PASS  blank lines only: empty
+        PASS  no rti_arm line: done, and rti_armed reported absent
+        PASS  banner before the hook: not counted
+        PASS  typed: autoboot stopped, the line run once, scan fetch_failed (rc 0, ran 1, fetch_failed)
+        PASS  typed: events name the prompt and the exact echo
+        PASS  typed: a lost byte gets Ctrl-C and a second try, never a wrong line (ran ['echo yakogl-netboot:'])
+        PASS  typed: autoboot not stopped: MISSED, nothing typed, Linux boots (not_armed)
+        PASS  typed: no SPL within the bound: EXPIRED, a later boot is not stopped (ran 0)
+        PASS  typed: unreachable bridge: rc 4
+        PASS  typed: a line with a newline is refused: rc 2
+        PASS  real probe capture: fetch_failed, one hook, the kernel start found, back (netboot-scan: verdict=fetch_failed back=yes lines=125 hooks=)
+        PASS  scan --back on the real probe: exit 0 (the runner stops waiting)
+        PASS  scan --back before the kernel start: exit 1 (the runner keeps waiting)
+        PASS  am62p-netboot-rtiproof-20261003.uart.ts: done, back, every phase matched (missing none)
+        PASS  am62p-netboot-rtiproof-20261003.uart.ts: rti_armed has its timestamp, from the line '...fed for 0 s'
+        PASS  am62p-netboot-rtiproof-20261003.uart.ts: the capture has rti_arm BEFORE the banner (the case the old scan lost)
+        PASS  am62p-netboot-rtiproof-20261003.uart.ts: the verdict line carries rti_armed
+        PASS  am62p-netboot-selfarm-20261003.uart.ts: done, back, every phase matched (missing none)
+        PASS  am62p-netboot-selfarm-20261003.uart.ts: rti_armed has its timestamp, from the line '...fed for 150 s'
+        PASS  am62p-netboot-selfarm-20261003.uart.ts: the capture has rti_arm BEFORE the banner (the case the old scan lost)
+        PASS  am62p-netboot-selfarm-20261003.uart.ts: the verdict line carries rti_armed
+        PASS  rti_arm.c has exactly one 'rti_arm: armed' LOG_INF (found 1)
+        PASS  RTI_ARMED matches what the format string prints: 'rti_arm: armed preload 0x7 rate 7 Hz: expiry 7 ms, fed for 7 s'
+        PASS  tools/board.sh's am62p MARKER is matched by RTI_ARMED
+        PASS  capture: RAW == the bytes the bridge sent (5096 of 5096, rc 0)
+        PASS  capture: STAMPED rows == the cleaned lines, last partial line kept (6 of 6)
+        PASS  probe: quiet bridge 0, refused 3, busy 4, closed at once 5 (got [0, 3, 4, 5])
+        PASS  probe: no message names the address
+        PASS  feed: listens
+        PASS  feed: probe answers ok (rc 0)
+        PASS  feed: a second client gets busy (probe rc 4)
+        PASS  feed: the busy answer does not reach the first client (got b'')
+        PASS  feed: bytes a client sends land in FILE.tx
+        PASS  feed: capture ends on SIGTERM, rc 0
+        PASS  feed: capture reads the appended bytes only (b'U-Boot SPL 2024\r\npartial')
+        PASS  feed: a client reads what is appended after a truncate
+        PASS  feed: a stop ends the bridge
+        PASS  feed: the port is free after the stop
+        PASS  feed: the process runs until SIGTERM, then exits 0 (no stray process)
+      am62p_netboot_uart self-test: PASS
+[32mok    tools   am62p-mkboot u-boot.img and boot partition [1s][0m
+[32mok    tools   am62p second stage: mkboot images (stored, deflate, LZ4) decoded by the loader's Rust [23s][0m
+[32mok    tools   gles3-mustpass: 42,810 cases, sorted, unique, all GLES3 [0s][0m
+[2mskip  tools   am62p-gles3-tree: generator self-test and table check (passed on main 93f9925be4e3a7562b2c0a36b95dec1b12e3150c)[0m
+      gen-am62p-gles3-tree self-test ok
+      46 images, 42810 cases, 0 problems
+[32mok    tools   cts-selftest.sh (the CTS tools' checks, images-selftest included) [399s][0m
+[32mok    tools   mali-deqp-selftest.sh (NanoPC-T6 dEQP-GLES2 runner, fake board) [26s][0m
+[32mok    tools   mali-kmsg-selftest.sh (panthor kernel message classifier) [0s][0m
+[32mok    tools   es2-cts-failures.md's Mali block equals the tally of its slices [1s][0m
+[32mok    tools   mali-glmark2-build-selftest.sh (NanoPC-T6 glmark2-es2 build recipe, dry run) [6s][0m
+[32mok    tools   glmark2-mali-tally-selftest.sh (Mali glmark2 per-scene tally) [13s][0m
+[32mok    tools   glmark2-mali-symbols-selftest.sh (glmark2-es2 symbols against the panthor-gles pair) [3s][0m
+[32mok    tools   mali-glmark2-selftest.sh (NanoPC-T6 glmark2-es2 runner, fake board) [40s][0m
+[31mFAIL  tools   mali-glmark2-preflight-selftest.sh (NanoPC-T6 glmark2 preflight, fake ssh) [1s][0m
+--- egl.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+preflight: ssh: FAIL board not reachable over ssh (not probing further)
+preflight: summary: 0 ok, 1 FAIL, 0 warn
+--- good.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+preflight: ssh: FAIL board not reachable over ssh (not probing further)
+preflight: summary: 0 ok, 1 FAIL, 0 warn
+--- lost.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+preflight: ssh: FAIL board not reachable over ssh (not probing further)
+preflight: summary: 0 ok, 1 FAIL, 0 warn
+--- mut-modprobe.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+preflight: ssh: FAIL board not reachable over ssh (not probing further)
+preflight: summary: 0 ok, 1 FAIL, 0 warn
+--- mut-redirect.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+preflight: ssh: FAIL board not reachable over ssh (not probing further)
+preflight: summary: 0 ok, 1 FAIL, 0 warn
+--- mut-rm.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+preflight: ssh: FAIL board not reachable over ssh (not probing further)
+preflight: summary: 0 ok, 1 FAIL, 0 warn
+--- nohost.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+mali-glmark2-preflight.sh: set BOARD_HOST=<user@host> (the target:nanopc-t6 lease) or --host
+--- nonode.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+preflight: ssh: FAIL board not reachable over ssh (not probing further)
+preflight: summary: 0 ok, 1 FAIL, 0 warn
+--- old.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+preflight: ssh: FAIL board not reachable over ssh (not probing further)
+preflight: summary: 0 ok, 1 FAIL, 0 warn
+--- wrongdrv.out
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+preflight: ssh: FAIL board not reachable over ssh (not probing further)
+preflight: summary: 0 ok, 1 FAIL, 0 warn
+mali-glmark2-preflight-selftest: 21 checks passed, 34 failed
+(whole output: build/check-fail/2290/1.log)
+[32mok    tools   mali-board-state-selftest.sh (NanoPC-T6 /boot, U-Boot env and module snapshot, fake ssh) [1s][0m
+[31mFAIL  tools   mali-glmark2-session-selftest.sh (NanoPC-T6 glmark2 session wrapper, fake board) [1s][0m
+  FAIL  boot-changed: last line
+mali-glmark2-session-selftest: module added during the run
+  FAIL  module-added: exit 3
+  FAIL  module-added: modules CHANGED line
+  FAIL  module-added: /boot unchanged
+  FAIL  module-added: lines verbatim
+  FAIL  module-added: last line
+mali-glmark2-session-selftest: board rebooted (boot_id changed)
+  FAIL  rebooted: exit 3
+  FAIL  rebooted: compare says the board rebooted
+  FAIL  rebooted: reachability line says changed
+  FAIL  rebooted: last line
+mali-glmark2-session-selftest: ssh lost after the run
+  FAIL  ssh-lost: exit 4
+  FAIL  ssh-lost: the second snapshot failed
+  ok    ssh-lost: no state-after.txt
+  FAIL  ssh-lost: final line says NOT reachable
+  FAIL  ssh-lost: the runner's run was tallied
+  FAIL  ssh-lost: last line
+  FAIL  ssh-lost: nothing retried (one state-ok after the run)
+mali-glmark2-session-selftest: preflight fails
+  ok    preflight-fails: exit 5
+  ok    preflight-fails: preflight FAIL printed
+  ok    preflight-fails: stopped
+  ok    preflight-fails: last line
+  ok    preflight-fails: no snapshot, no runner
+mali-glmark2-session-selftest: usage and dry run
+  ok    dry-run: bare exit 0
+  ok    dry-run: prints the plan
+  ok    dry-run: with a build and an outdir, exit 0
+  ok    dry-run: runner options passed through in the plan
+  ok    dry-run: ssh and scp never called
+  ok    dry-run: nothing written
+  ok    no BOARD_HOST: exit 2, says so
+  ok    unknown option: exit 2
+mali-glmark2-session-selftest: the wrapper's text
+  ok    script text has no write, sudo, module, tailscale or sshd verb
+  ok    script text has no address or UART path
+  ok    script is executable
+mali-glmark2-session-selftest: 19 checks passed
+(whole output: build/check-fail/2290/2.log)
+[31mFAIL  tools   glmark2-mali-e2e-selftest.sh (Mali glmark2 build, runner and tally end to end) [31s][0m
+== 6. write /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out (through /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part), check it, rename it
++ rm -rf /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part
++ mkdir -p /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part/bin /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part/lib /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part/share/glmark2
++ cp /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/none/build/meson/src/glmark2-es2-pbuffer /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part/bin/glmark2-es2-mali
++ cp /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/none/build/gles/libGLESv2.so.2 /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/none/build/gles/libEGL.so.1 /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part/lib/
++ ln -s libGLESv2.so.2 /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part/lib/libGLESv2.so
++ ln -s libEGL.so.1 /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part/lib/libEGL.so
++ cp -r /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/none/build/glmark2/data/shaders /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/none/build/glmark2/data/models /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/none/build/glmark2/data/textures /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part/share/glmark2/
++ check /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part (readelf: AArch64, RUNPATH $ORIGIN/../lib, NEEDED within libc.so.6 libm.so.6 libstdc++.so.6 libgcc_s.so.1 ld-linux-aarch64.so.1, the pair, GLIBC_2.41 GLIBCXX_3.4.33 CXXABI_1.3.15)
++ write /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part/BUILD-INFO (commit=36ff64955947080fe86f68e98deab43726622458 dev=no glmark2=22c527cb0556f3a1ac4445aaa52cc532760928d5 flavour=pbuffer glibc_max= glibcxx_max= cxxabi_max=)
++ check /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part with its BUILD-INFO (--check)
++ mv /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out.part /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/build-out
+--- clean/run.txt
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+mali-glmark2-run: scene 32: ok, ms/frame 0.800, kmsg 0, rc 0
+mali-glmark2-run: scene 33/33 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+mali-glmark2-run: scene 33: ok, ms/frame 0.800, kmsg 0, rc 0
+mali-glmark2-run: boot_id after 5a1e0000-0000-4000-8000-00000000b007; run directory /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/clean/out (raw files /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/clean/raw, never committed)
+mali-glmark2: 33/33 scenes ok, failed 0, commit 36ff6495
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+--- faults/run.txt
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+mali-glmark2-run: scene 32: ok, ms/frame 0.800, kmsg 0, rc 0
+mali-glmark2-run: scene 33/33 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+mali-glmark2-run: scene 33: ok, ms/frame 0.800, kmsg 0, rc 0
+mali-glmark2-run: boot_id after 5a1e0000-0000-4000-8000-00000000b007; run directory /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/faults/out (raw files /home/orion/connected-work/01a1e814-e45c-708d-8773-dc5b22cf2199.tmp/glmark2-mali-e2e-selftest-dPlurI/faults/raw, never committed)
+mali-glmark2: 29/33 scenes ok, failed 4 (gpu-fault 3, hang 1), commit 36ff6495
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+--- clean/table.err
+--- faults/table.err
+(whole output: build/check-fail/2290/3.log)
+[32mok    tools   licence audit (SPDX header or allowlist row for every tracked file) [5s][0m
+[32mok    tools   redaction scan (self-test, then public classes over HEAD) [71s][0m
+[32mok    tools   glmark2 compare-selftest.sh (before/after profile table) [0s][0m
+[32mok    tools   api_coverage.py self-test [0s][0m
+[32mok    tools   api coverage: gl2.h + egl.h vs exported vs eglGetProcAddress [1s][0m
+[32mok    tools   api coverage: 0 ES 2.0 core + 0 EGL 1.x core entry points missing from the exports [0s][0m
+[32mok    tools   board-sudo-setup.sh --dry-run runs from a clean environment [0s][0m
+[2mskip  no table in the artefact[0m
+[32mok    gen     precompiled tables for the tier configurations [148s][0m
+[32mok    no Mesa reference in the artefact [1118s][0m
+[2mskip  no test knob in the artefact[0m
+[2mskip  clippy  yakogl-tools[0m
+[2mskip  test    yakogl-tools[0m
+[2mskip  clippy  yakogl-mali-panthor[0m
+[2mskip  test    yakogl-mali-panthor[0m
+[2mskip  clippy  yakogl-mali-panthor (aarch64-unknown-linux-gnu)[0m
+[2mskip  clippy  yakogl-precompile gpu-powervr[0m
+[2mskip  clippy  yakogl-precompile gpu-vivante[0m
+[2mskip  clippy  yakogl-precompile gpu-powervr,report-es2[0m
+[2mskip  clippy  yakogl-precompile gpu-vivante,report-es2[0m
+[2mskip  test    yakogl-precompile gpu-powervr[0m
+[2mskip  test    yakogl-precompile gpu-vivante[0m
+[2mskip  gen     src/pvr/internal.rs == yakogl-precompile --internal (our compiler)[0m
+[2mskip  gen     src/vivante/internal.rs == yakogl-precompile --internal (our compiler)[0m
+[32mok    tools   board.sh dry-run matrix and replays [72s][0m
+[32mok    tools   board-stm32mp2.sh dry-run matrix, env edits and replays [114s][0m
+[32mok    tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits [90s][0m
+[2mskip  tools   t6-verdict.sh: the predicted records pass, each altered record is named[0m
+[2mskip  host    imx8mp latch model: waits per swap[0m
+[2mskip  host    glmark2 PERF page: packed and decoded by yakogl-tools record[0m
+[32mok    tools   check.sh --changed: the path-to-scope map and four plans [123s][0m
+[31mFAIL  tools   check.sh test cache: record, skip, run again on a new key [87s][0m
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+FAIL a test names a path outside the tree key:
+    tests/pvr_ld_encode.rs:65 tools/pco_shc/usc_blobs.txt
+    tests/v3d71_mesa_corpus.rs:40 tools/v3d/es100_counts_71.tsv
+    tests/v3d71_mesa_corpus.rs:98 tools/v3d/es100_ref71.sh
+check_testcache_selftest: 288 checks run (planned 288), 1 failed
+(whole output: build/check-fail/2290/4.log)
+[32mok    tools   check.sh --jobs: the log in order, the counts, a lane [38s][0m
+[2mskip  gen     src/pvr/csbgen.rs + csbgen_wrap.c == bindgen[0m
+[2mskip  clippy  yakogl-slint-check[0m
+[2mskip  test    yakogl-slint-check[0m
+[2mskip  clippy  yakogl-triangle-check[0m
+[2mskip  test    yakogl-triangle-check[0m
+[2mskip  clippy  yakogl-femtovg-check[0m
+[2mskip  test    yakogl-femtovg-check[0m
+[2mskip  clippy  yakogl-drivers[0m
+[2mskip  clippy  yakogl-drivers, each shipped feature arm (-D warnings)[0m
+[2mskip  test    yakogl-drivers (register model)[0m
+[2mskip  test    yakogl-drivers gpu::mali on the board's mali_csffw.bin (MALI_CSFFW, 2 tests by name)[0m
+[2mskip  check   yakogl-drivers (aarch64-unknown-none-softfloat)[0m
+[2mskip  clippy  yakogl-boot-stage2[0m
+[2mskip  test    yakogl-boot-stage2[0m
+[2mskip  clippy  yakogl-boot-stage2 (aarch64-unknown-none-softfloat)[0m
+[2mskip  cc      boot_stage2.h layout pins[0m
+[2mskip  cc      yakogl_drivers.h layout pins[0m
+[2mskip  zephyr  am62p gl_test image, -Werror on our C files[0m
+[2mskip  zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror[0m
+[2mskip  zephyr  imx8mp gl_test image, -Werror on our C files[0m
+[32mok    zephyr  rpi4 gl_test image, -Werror on our C files [128s][0m
+[2mskip  zephyr  am62p examples/triangle image, -Werror on our C files[0m
+[2mskip  zephyr  imx8mp examples/triangle image, -Werror on our C files[0m
+[32mok    zephyr  rpi4 examples/triangle image, -Werror on our C files [115s][0m
+[2mskip  zephyr  am62p examples/triangle-rust image, -Werror on our C files, the Rust main[0m
+[2mskip  zephyr  imx8mp examples/triangle-rust image, -Werror on our C files, the Rust main[0m
+[32mok    zephyr  rpi4 examples/triangle-rust image, -Werror on our C files, the Rust main [119s][0m
+[32mok    zephyr  direct-boot images: am62p and imx8mp triangle (direct variants), boot_stage2 for both, -Werror [290s][0m
+[2mskip  zephyr  nanopc_t6 t6_hello image (Z1, the watchdog glue), -Werror on our C files[0m
+[2mskip  zephyr  nanopc_t6 t6_gpu image (Z1, GPU power-on), -Werror on our C files[0m
+[2mskip  zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush), -Werror on our C files[0m
+[2mskip  zephyr  nanopc_t6 t6_display image (D2, the display adopt), -Werror on our C files[0m
+[2mskip  zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot), -Werror on our C files[0m
+[2mskip  zephyr  nanopc_t6 t6_submit image (Z4), -Werror on our C files[0m
+[2mskip  zephyr  nanopc_t6 gl_test image (Mali), -Werror on our C files, fits the kexec window[0m
+[2mskip  zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files[0m
+[2mskip  test    rpi_5 fdt_walk host test (ASan/UBSan, dtc-built tree)[0m
+[2mskip  gen     precompiled table gpu-powervr: deterministic, rows == fresh compiles, counts pinned, compiles[0m
+[2mskip  gen     precompiled table gpu-vivante: deterministic, rows == fresh compiles, counts pinned, compiles[0m
+[2mskip  gen     precompiled table gpu-powervr,report-es2: deterministic, rows == fresh compiles, counts pinned, compiles[0m
+[2mskip  gen     precompiled table gpu-vivante,report-es2: deterministic, rows == fresh compiles, counts pinned, compiles[0m
+[2mskip  gen     tests/reference/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)[0m
+[2mskip  gen     tools/pco_shc/spm_load == gen_spm_load.py capture (capture_spm_load of PCO_SHC's build)[0m
+[32mok    test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs) [154s][0m
+[32mok    tools   hal-nxp gen_regs self-test [0s][0m
+[2mskip  gen     driver/rust imx8mp regs.rs == gen_regs.py on hal_nxp 1e91007b[0m
+[2mskip  gen     driver/rust am62p ti_pr114866.rs == gen_dphy_data.py on third_party[0m
+[2mskip  gen     driver/compat/pvr_rgx_core.h == gen_rgx_core.py[0m
+
+check.sh: 123 ok, 4 failed, 0 gap(s) (a gap was not run: it is not a pass), 133 skipped (--changed origin/main, scopes: docs tools v3d v3d71 ), 3 clippy rows left to the nightly, 3 not run (passed on main) in 3711s; test binaries: 62 run, 0 skipped (passed on main); runner: cargo-nextest 0.9.148 (cd1d6d546 2026-10-07) (the rows that read libtest's output run the binaries concurrently)
+[31mcheck.sh: fix the above before pushing[0m
