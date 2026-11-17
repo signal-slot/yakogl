@@ -18,7 +18,17 @@
 //!
 //! The buffers are filled by uploading words into a texture and blitting
 //! them in (class to class keeps the words, see `es3_rgb10a2_blit_v3d`).
-//! GL_IMPLEMENTATION_COLOR_READ_FORMAT/TYPE is not asserted here.
+//!
+//! `GL_IMPLEMENTATION_COLOR_READ_FORMAT/TYPE` of such a read buffer answers
+//! GL_RGBA/GL_UNSIGNED_INT_2_10_10_10_REV, the pair Mesa answers for a
+//! normalized fixed-point 10/10/10/2 buffer and ES 3.0 6.1.7 allows, and
+//! glReadPixels with the answered pair returns the words unchanged.
+//! `implementation_color_read` (src/gl/framebuffer.rs) still answers
+//! GL_RGBA/GL_UNSIGNED_BYTE for RGB10_A2 on this tip, so the two rows
+//! `renderbuffer_read_pair_is_the_word_pair` and
+//! `texture_read_pair_is_the_word_pair` are #[ignore]d ("needs readback:
+//! implementation read pair for RGB10_A2") until the src change lands;
+//! the other rows run.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_rgb10a2_readback_v3d
@@ -333,4 +343,52 @@ fn texture_reads_words_and_decoded_bytes() {
     let _g = context();
     let w = edge_words();
     check(&filled_texture(&w), &w);
+}
+
+/// GL_IMPLEMENTATION_COLOR_READ_FORMAT/TYPE with `b` as the read buffer.
+fn read_pair(b: &Buf) -> (GLenum, GLenum) {
+    let (mut format, mut ty) = (0, 0);
+    // SAFETY: plain GL calls; one GLint of room each.
+    unsafe {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, b.att.fb);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &mut format);
+        glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &mut ty);
+    }
+    assert_eq!(err(), GL_NO_ERROR, "glGetIntegerv read pair");
+    (format as GLenum, ty as GLenum)
+}
+
+/// The implementation answers the word pair for `b`, and glReadPixels with
+/// that answered pair returns the words unchanged. Both are 4-byte pairs,
+/// so `read` keeps working for either.
+fn check_pair(b: &Buf, words: &[u32]) {
+    let (format, ty) = read_pair(b);
+    assert_eq!(
+        (format, ty),
+        (GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV),
+        "the implementation read pair of an RGB10_A2 read buffer"
+    );
+    let (px, e) = read(b, format, ty, 4);
+    assert_eq!(e, GL_NO_ERROR, "glReadPixels with the answered pair");
+    let got: Vec<u32> = px.chunks(4).map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
+    assert_eq!(got, words, "the answered pair returns the words unchanged");
+}
+
+#[test]
+#[ignore = "needs readback: implementation read pair for RGB10_A2"]
+fn renderbuffer_read_pair_is_the_word_pair() {
+    let _g = context();
+    let w = edge_words();
+    let b = filled_renderbuffer(&w);
+    check_pair(&b, &w);
+}
+
+#[test]
+#[ignore = "needs readback: implementation read pair for RGB10_A2"]
+fn texture_read_pair_is_the_word_pair() {
+    let _g = context();
+    let w = edge_words();
+    let b = filled_texture(&w);
+    check_pair(&b, &w);
 }
