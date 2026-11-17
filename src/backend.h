@@ -95,12 +95,16 @@ static inline uint32_t gles_texfmt_bytes(uint8_t f)
  * ones are FBO textures (RGBA16F probes, R16F/R32F shadow maps): the PBE
  * packs them from a fragment shader variant compiled for that class. */
 enum gles_surf_format { GLES_SURF_RGBA8888 = 0, GLES_SURF_XRGB8888, GLES_SURF_RGB565,
-			GLES_SURF_RGBA16F, GLES_SURF_R16F, GLES_SURF_R32F };
+			GLES_SURF_RGBA16F, GLES_SURF_R16F, GLES_SURF_R32F,
+			/* 6..26: the integer, sRGB and RGB10_A2 surfaces (backend.rs only) */
+			/* GL_EXT_color_buffer_float's surfaces: no back end draws them yet */
+			GLES_SURF_RG32F = 27, GLES_SURF_RGBA32F = 28, GLES_SURF_R11F_G11F_B10F = 29 };
 
 static inline uint32_t gles_surf_bytes_per_pixel(uint8_t format)
 {
 	return format == GLES_SURF_RGB565 || format == GLES_SURF_R16F ? 2u :
-	       format == GLES_SURF_RGBA16F ? 8u : 4u;
+	       format == GLES_SURF_RGBA16F || format == GLES_SURF_RG32F ? 8u :
+	       format == GLES_SURF_RGBA32F ? 16u : 4u;
 }
 
 /* The render target class (SHC_RT_*) a fragment shader must be compiled for. */
