@@ -376,3 +376,323 @@ Not made:
   waits for `measure`.
 - The `_both` variants, struct, array and samplerCube cases: other families'
   vertex and layout refusals come first (section 2.1).
+
+## 7. Lowering map
+
+Item `map-mixprec` (plan #377), 2026-11-17, for `lower-mixprec`. Read at
+the integration tip `bd421fef367d3b75995f4c0fb621832302d5e261`. Every file
+line below is at that commit (sections 1 to 6 quote 38ad30eb: `nir_fs.rs`
+moved by about +5 lines in the part this family uses). Status of the
+evidence: the eight first refusals in 7.1 were run
+(`cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_mixprec -- --include-ignored`:
+all eight reference tests fail with exactly the pinned texts, and
+`refusals_pinned` passes). **The code site of each refusal and "what comes
+next" were read from the code, not run under a probe**: this session could
+not add a log line to the compiler, so each site is a trace of the walk
+over the reference source. A site the trace could not settle is marked
+*(read)*. The first `lower-mixprec` run should confirm each with a
+temporary `eprintln!` of `line!()` at the sites named here.
+
+### 7.1 Per reference: refusal, site, what is behind it
+
+Files are in `src/shaderc/online/mali/`. All refusals are fragment-side;
+every reference's vertex shader compiles.
+
+**Which compile refuses.** `tests/mali_ref::compile_pair` compiles the
+fragment shader alone first (what glCompileShader does, `compile_lowered`
+with `FsConsts::NONE`, mod.rs:1642), and returns that error. The refusals
+below are that standalone compile, and so are the board's `refusals.tsv`
+lines. In a real program the link then recompiles the fragment shader
+with the vertex shader's constant lanes folded in (backend.rs:1152,
+`codegen::compile_fs_for_vs`, mod.rs:1757), which is the form Mesa's
+reference is made from (`v_vtxOut = 1.0` folds, no varying program: the
+`cmp*` references have no `vs.varying` region and a null
+`secondary_offset`). **Both forms must compile**, and only the folded one
+can equal the reference.
+
+| Ref | Today's first refusal (pinned) | Site | Behind it |
+|---|---|---|---|
+| `rot3` `(w,x,y,1.0)` | `FsVaryingLoad` | `nir_fs.rs:conversion_order` :7049 (`same` false, :7047) | below |
+| `rot1` `(y,z,w,1.0)` | `FsVaryingLoad` | the same :7049 | below |
+| `cmpv2`, `cmpv3`, `cmpv4`, `cmpmat2`, `cmptex` | `MixedPrecision` | `nir_fs.rs:walk_nodes` :4507, the `Fmul`/`Fadd` arm :4492-4511 (`ok`, :4505) | below |
+| `cmpf` | `ColourForm` | `nir_fs.rs:vectorise` last arm :6924 *(read)* | below |
+
+**rot3 and rot1.** The colour pair `(w, x)` is a `Leaf::Lanes` (:6875; the
+varying is kept whole, so :6871 holds), `(y, 1.0)` a `Leaf::Mk`
+(:6891-6898). `select` (:7798-7814) gives each lane the conversion form of
+its leaf: `Lanes` and `Mk` are "alone" (`pair = false`), so
+`conv_form[k]` is three single conversions and `ours` in
+`conversion_order` (:7027-7044) is `(x) (y) (w)`. Mesa's order from the
+colour's lanes (:7004-7025) is `[w, x, y]`, which groups as `(w)`,
+`(x, y)`: two instructions. `nm != no`, so :7049. rot1: order `[y, z, w]`
+groups `(y)`, `(z, w)`.
+*If :7049 were lifted* nothing else refuses: `used` is lanes {x, y, w} and
+the load is `whole` (:7847 passes), `alpha` is the constant 1.0h, and
+`conversion` (:10295) and `convert` (:10235) emit what `conv_form` says.
+The next defect is not a refusal but wrong bytes or a `Defect::IrIndex`:
+`conv_of` (:10455), `mkvec` (:10460) and `mkvec_lanes` (:10466) read a
+converted lane as `.h0` of the register of the lane's own index, and
+`lv.conv[k][c]` is set only at a conversion's first lane (`conversion`).
+The odd lane of a pair (`y` of rot3's `(x, y)`, `w` of rot1's `(z, w)`)
+finds no register.
+
+**cmpv2, cmpv3, cmpv4, cmpmat2, cmptex (standalone).** Each
+`compare_float` is `bcsel(flt(|a - b|, 0.05), 1.0, 0.0)`. The walk makes
+the compare an fp16 `Fcmp` mask (:4587-4610, `mask16`) and the `bcsel` of
+the mask and the constants 1.0 / 0.0 a 32-bit `B2f` (the arm at :4736,
+:4752; `select32`, :1504). A product of two such selects takes the fp32
+arm (:4492, `select32(x) && select32(y)`), and a third and fourth factor
+too (`fp32_lane`, :1807: a 32-bit `Fmul`). The last product, `result *=
+chain` with `result = v_vtxOut`, reads a raw varying lane (`Kind::Input`,
+32-bit) beside the fp32 chain. The arm is taken because `fp32_lane(chain)`,
+and `ok(x)` (:4505) is false for the varying: :4507. (cmpv2's chain is one
+product of two selects; cmptex's `a.x - b.x` are fp16 `Fadd`s of fp16
+texel lanes, :4533, so its chain is the same.)
+*If :4507 were lifted* (standalone, raw `v_vtxOut`): `op32` (:1424) widens
+nothing and `f.mixed` stays false; `mask_colour` (:8528) is false (the
+16-bit `Fadd`/`Fabs` nodes are neither compares nor `paired`), so
+mod.rs:1471 takes `select` (:7669). Its colour pair `(r, r)` reaches
+`vectorise` `(Fmul, Fmul)` (:6829), then `vectorise(B2f, B2f)`, which has
+no arm and ends at :6924 `ColourForm`: the refusal `cmpf` already has.
+
+**cmpv2 and the others (linked form).** With `v_vtxOut` the constant 1.0,
+the walk meets `Fmul(1.0, chain)`: the :4492 arm again (`fp32_lane(chain)`),
+not refused at :4507, and `op32` folds the `fmul` by 1.0. The colour is
+the fp32 chain, and the next refusal is the same :6924. So the
+`MixedPrecision` text goes from M1 only when the compare chain is
+rewritten (7.3 step 2), and **the first refusal after step 2 alone is
+`ColourForm` :6924, which belongs to steps 3 and 4**.
+
+**cmpf.** Standalone: `Fmul(v_vtxOut, B2f)` has no `fp32_lane` operand and
+is not two selects, so it is not the :4492 arm; it falls to the generic
+fp16 `Fmul` (:4533, `Fs::op` :1101) with a 32-bit `B2f` operand and no
+widen. The colour pair `(r, r)` is `lane_word`'s `None` (:7223: `b` is no
+constant), then `vectorise` :6829 `(Fmul, Fmul)`, whose `vectorise(B2f,
+B2f)` ends at :6924. The folded form (`r` is the `B2f` itself, rule
+`IdentityFirst`, :4563) ends at the same line. The test's `#[ignore]`
+reason names plan #367's `FRAGCOLOR_LANE` lowering first: the `(r, r)`
+and `(r, 1.0)` words of a *computed* lane.
+
+### 7.2 What Mesa emits, per reference (from the expect.json)
+
+Instruction forms as `bir.rs` / `emit.rs` name them: `FADD.v2f16` is
+`row(Alu::Fadd, 16, 2)` (`FADD_IMM.v2f16`, `Op::FaddImmV2f16`, comes from
+it by `opt::fuse_add_imm` when one source is a constant pair and the other
+`H01`); `FMAX.v2f16` is `row(Fmax, 16, 1)` (emit.rs:238, both sources
+`.h00` / `.h11` of a pair register); `FCMP_OR.v2f16.lt.f1` is
+`Op::FcmpOrV2f16 { cmpf: Lt, result: ResultType::F1 }`; `MKVEC.v2i16` is
+`row(Vec2, 16, 2)`; `IADD.v2u16 r, x.h00, 0` is `Vec2(x, x)` after
+`lower_mkvec_swz`.
+
+- **rot3** (`(w, x, y, 1.0)`): `LD_VAR_BUF_IMM.f32.v4` (r0..r3);
+  `FADD.f32 r2.h0, r3, 0x0.neg` (w alone: `row(F2f16, 16, 1)`);
+  `V2F32_TO_V2F16 r0, r0, r1` (x, y: `row(F2f16, 16, 2)`, x low); `ATEST`
+  on the constant alpha 1.0h; `MKVEC.v2i16 r1, r2.h0, r0.h0` (w, x);
+  `MKVEC.v2i16 r2, r0.h1, u2.w0.h0` (y, 1.0h); the two `MOV` that make
+  `BLEND`'s sources contiguous; 11 words. The lone conversion comes
+  **first**, then the pair, at the pair's own first lane.
+- **rot1** (`(y, z, w, 1.0)`): `FADD.f32 r0.h0, r1, 0x0.neg` (y alone,
+  first), `V2F32_TO_V2F16 r1, r2, r3` (z low, w high), `ATEST`, `MKVEC r0,
+  r0.h0, r1.h0` (y, z), `MKVEC r1, r1.h1, 1.0h` (w, 1.0); 9 words.
+  So the colour's lanes group into the load's aligned lane pairs where
+  both lanes of the pair are colour lanes, whatever their leaf form; the
+  odd lane is read as `.h1` of the pair's register; a lane whose partner
+  is not read stays alone. These groups are what `conversion_order`'s
+  `mesa` array already computes (:7015-7025, the `c ^ 1` pairing); only
+  `ours` disagrees.
+- **cmpf**: `FADD.v2f16 r0, u2.w0.h00, u2.w1` (the fp16 uniform and the
+  literal -2.16, FAU `40524052`), `FCMP_OR.v2f16.lt.f1 r0, r0.abs.h00,
+  u3.w0` against 0.05h (FAU `2a662a66`), `ATEST`, `IADD.v2u16 r1, r0.h00,
+  0` (the `(r, r)` word), `MKVEC.v2i16 r2, r0.h0, u3.w1.h0` (`(r, 1.0)`),
+  the two `MOV`, `BLEND`; 10 words. No `FMAX`, no `b2f`: the compare's
+  `.f1` result is the 1.0h / 0.0h itself.
+- **cmpv2**: `FADD_IMM.v2f16 r0, u2.w0, #0xC7CF359A` (both differences, the
+  constants packed), `FMAX.v2f16 r0, r0.abs.h00, r0.abs.h11`,
+  `FCMP_OR.v2f16.lt.f1 r0, r0.h00, u2.w1`, then cmpf's colour; 11 words.
+- **cmpv3**: `FADD_IMM.v2f16 r0, u2.w0, #imm` (x, y); z alone: `MOV.i32 r1,
+  u3.w0` (the pushed -3.12h pair) and `FADD.v2f16 r1, u2.w1.h00, r1`;
+  `FMAX r0, r0.abs.h00, r0.abs.h11` (x, y); `FMAX r0, r1.abs.h00, r0.h00`
+  (z first, then the (x, y) maximum); `FCMP_OR.lt.f1`; colour; 14 words.
+- **cmpv4**: two `FADD_IMM.v2f16` ((x, y) and (z, w)); `FMAX r0, r0.abs.h00,
+  r0.abs.h11` (x, y); `FMAX r1, r1.abs.h11, r1.abs.h00` (**w, z**: the
+  high half first); `FMAX r0, r1.h00, r0.h00` (the (z, w) maximum first);
+  `FCMP_OR.lt.f1 r0, r0.h00, u3.w0`; colour; 14 words. The tree is
+  GLSL's: `do_rebalance_tree` (glsl.rs already ports it for products)
+  makes `(x*y)*(z*w)` of the four-factor product, and NIR's
+  `iand(flt(a, c), flt(b, c))` to `flt(fmax(a, b), c)`
+  (nir_opt_algebraic.py:1159) with `fmul(b2f(a), b2f(b))` to
+  `b2f(iand(a, b))` (:1679) turn it into this.
+- **cmpmat2**: column 0's `FADD_IMM` + `FMAX(|.h00|, |.h11|)`, column 1's,
+  then `FMAX r0, r0.h00, r1.h00` (column 0 first: the opposite operand
+  order to cmpv4); `FCMP_OR.lt.f1`; colour; 14 words.
+- **cmptex**: `MOV r0, 0; MOV r1, 0; MOV r2, u2.w0; MOV r3, 0`;
+  `TEX_SINGLE.16.2d.computed @r0:r1` at (0, 0) (the existing `tex`
+  emission); the texel words go through cmpv4's chain (`FADD_IMM.v2f16 r0,
+  r0, #imm` on the texel register itself); 19 words.
+
+### 7.3 Ordered lowering steps
+
+Counts are the families note's section 9: `fs_uniform_compare_harness`
+186 Fail (FS side only: 100 `_fragment`, 72 `_both`, 14
+`uniform_api.random`; the `_both` cases also need their vertex shader,
+other families), `fs_varying_rgb_one` 54 (13 Fail, 41 NotSupported), and 11
+further cases with no reference (M2 2, M3 4, V2 2, V3 3). "Unblocks" means
+the fragment compile no longer refuses there; a dEQP verdict also needs
+the board draw.
+
+**Step 0 (harness, before step 2).** The `cmp*` references cannot be
+byte-compared by `tests/mali_ref::compile_pair`: it compiles the fragment
+shader alone, with `v_vtxOut` a varying (a `vs.varying` region and a
+varying load the reference lacks), like the intval note's `rsg_constbool_vs`
+(`mali-deqp-intval.md`, risks (e)). Compare them with the unit tests'
+`check_linked` (`tests.rs:525` `compile_linked`: `fs_constants`,
+`compile_fs_for_vs`, `compile_vs_for_reads`) added to
+`src/shaderc/online/mali/tests.rs`, and keep `tests/mali_deqp_mixprec.rs`'s
+`cmp*` tests `#[ignore]`d with that reason (their pin still names the
+standalone refusal, which moves with step 2). Add a unit assertion that the
+standalone compile of each `cmp*` fragment shader no longer refuses (that
+is what glCompileShader, and so the dEQP case, needs). `rot1` and `rot3`
+need none of this (no constant varying) and compare in
+`tests/mali_deqp_mixprec.rs` as they are.
+
+1. **V1: the rotated colour's conversions.** Turns byte-equal: `rot1`,
+   `rot3`. Unblocks 54 cases (13 Fail + 41 NotSupported). Functions
+   (`nir_fs.rs`): `select` :7798-7815 (derive `conv_form` from the `mesa`
+   grouping instead of the leaf kind), `conversion_order` :6951 (return the
+   grouping; keep :6993 (two varyings), and keep refusing as today when a
+   pair's first lane is odd (swap_yx, no reference) or any lane of the
+   pair is a tree lane (`tree[k]`, :6969): `fsload_mk_pair` and
+   `fsload_disc_col` have no reference), `conversion` :10295 and `convert`
+   :10235 (the pair at the even lane, the other lane read through the
+   pair's register), `conv_of` :10455, `mkvec` :10460, `mkvec_lanes`
+   :10466, `operand`'s `Splat` arm (:10474) and `select`'s ATEST arm
+   :8132 (read a lane as `.h0` or `.h1` of its group's register). The
+   existing references that must stay byte-equal: `fsconv_cpq`,
+   `fsconv_discw`, `fsconv_alpha3`, `intloop_ifloop` (`(z, w, x, 1.0)`: the
+   pair first, then x), `fsload_*`, `varyconst_78` (`Lanes`). Remove the
+   two `#[ignore]` and the two `PINNED` rows in the same commit.
+   **glmark2 / #367:** no glmark2 verdict has this text
+   (`tests/fixtures/mali_glmark2_verdicts.txt` has no `fragment varying
+   load` line); `tools/mali/corpus-verdicts.txt:121`
+   (`tools/shaders/es100/uniidx_j.frag`) has it and may move: re-run its
+   writer. The change reaches every mediump fragment shader that loads a
+   varying, so the glmark2 `ok` rows are in scope for a byte change
+   (`tests/mali_glmark2_corpus.rs` pins verdicts only; the byte-compare is
+   the references above). #367's `FRAGCOLOR_LANE` and fragment `ARITH`
+   items edit `vectorise` / `word_of` near the same arms
+   (`mali-varying-constants.md`, "gl_FragColor lane shapes"); re-read
+   `conversion_order` on the latest main first. Same file as
+   `lower-intval-1` and `lower-loops-1`. Rewrite the doc comment of
+   `conversion_order` (:6931-6950), which names the old rule.
+
+2. **M1: fold the compare chain (the walk).** Alone it turns nothing
+   byte-equal (steps 3 and 4 finish the colour); it removes the
+   `MixedPrecision` refusal of the 186. Functions: `walk_nodes` (:4094):
+   the `Bcsel` arm :4736 and the `Fmul` arm :4492-4511, which must not
+   take a product of selects of fp16 compares as an fp32 chain in a
+   shader with no fp32 value (the `intbool_76_boolany` and `intbig_case79`
+   shapes keep it). Add Mesa's two rules at node level: `fmul(b2f(a),
+   b2f(b))` is `b2f(iand(a, b))` (`Fs::mask_op` :1532: two `mask16`s make
+   a 16-bit `Iand`) and `iand(flt(x, c), flt(y, c))` is `flt(fmax(x, y),
+   c)` for 16-bit compares of one constant `c` (a rewrite in `mask_op`,
+   with a 16-bit `Alu::Fmax`). The last `result *= ...` with a raw mediump
+   varying (the standalone form) is the generic fp16 `Fmul` of the varying
+   and a 16-bit `B2f` (Mesa's `f2fmp(b2f32(a))` is `b2f16(a)`,
+   nir_opt_algebraic.py:1980; `row(B2f, 16, 1)` exists, emit.rs:67); with
+   the constant 1.0 it is the identity (`IdentityFirst`). :4505's `ok` and
+   `select32` (:1504) stay for the fp32 shapes. **Overlap:** `mask_op` and
+   `int_lane` are where `lower-intval-1` adds its arms
+   (`mali-deqp-intval.md`); the `Fmul`/`Fadd` arms are #367's fragment
+   `ARITH` and `INT_VALUE` ground (`mali-int-loops.md`: `tri_int` needs the
+   same fp32-beside-fp16 colour). Keep the `intbool_76` and
+   `mixprec_tests.rs` verdicts as they are. glmark2: a glmark2 fragment
+   shader whose colour is a mediump select of a compare would move; none
+   is `MixedPrecision` in the fixture, so a changed `ok` row would be
+   new: compare `tests/fixtures/mali_glmark2_verdicts.txt` and
+   `tools/mali/corpus-verdicts.txt` after the change and move them in the
+   same commit.
+
+3. **M1: the pair graph for the tree and the colour words.** Turns
+   byte-equal, with steps 2 and 4: `cmpv2`, `cmpv3`, `cmpv4`, `cmpmat2`,
+   `cmptex`, and `cmpf` (which also needs #367's `FRAGCOLOR_LANE` words:
+   check whether it landed, else build the `(r, r)` and `(r, 1.0)` words
+   here). Functions: `vectorise` :6751 (a new arm for `Fmax` of the two
+   halves of one pair operation; the `FADD_IMM` pairs of uniform and texel
+   pairs the `(Fadd, Fadd)` arm :6806 and the texel arm :6851 already
+   make), `lane_tree` :7368, `lane_word` :7222 and `lone_tree` :7246 (the
+   colour's `(r, 1.0)` and the `(r, r)` word of a 16-bit compare lane),
+   `late_rules` :7622 if the `FMAX` order needs one, `op` :10507 (a scalar
+   `Fmax` reads `.h00` / `.h11` of its pair operands; `lone` and `splat`
+   there do not cover a half of a vector operation), `ADMITTED` and
+   `Pairs::note` :6719 (a production not admitted is `FsOperandForm`,
+   :7706). The operand order is the reference's (7.2): cmpv3 z first,
+   cmpv4 (w, z) then (z, w) before (x, y), cmpmat2 column 0 first. Confirm
+   that glsl.rs's `do_rebalance_tree` gives that tree and no `Rebalance`
+   refusal stands first. The vertex side and `mask_colour` (:8528) are not
+   touched: the chain is fp16 nodes, and `select` is the path (mod.rs:1476).
+   Reference coverage: vec2 14, vec3 14, vec4 25, mat2 5, sampler2D 36 = 94
+   of the 186 (no float case is in the 186: `cmpf`'s text is `ColourForm`,
+   so it is counted elsewhere). **No reference covers** mat3 5, mat4 10,
+   mat4_mat2 7, sampler2D_samplerCube 56 (two samplers, one a cube) and the
+   14 `uniform_api.random` cases: 92 cases that only the same code reaches.
+   Ask for `cmpmat4` and `cmpcube` references before claiming them; the
+   cube one is the largest.
+
+4. **M1: the 16-bit `.f1` fold (`opt.rs`).** Function
+   `opt::mod_prop_backward` (opt.rs:253-300): its doc says Mesa folds a
+   16-bit compare and its `MUX.v2i16` into `FCMP.v2f16 .f1` "with a
+   swizzled mask composed into the compare's sources", and that this port's
+   compares are 32-bit only. The `cmp*` references need it
+   (`FCMP_OR.v2f16.lt.f1`, no `MUX`): `MuxV2i16 0, 1.0h, mask.h00` on a
+   `FcmpOrV2f16` result. It touches every fragment program that makes a
+   16-bit `b2f` of a compare, so it can change glmark2 words (verdicts do
+   not move). Run the existing references that hold `.f1` / `MUX.v2i16`
+   (`fbload_predif_fs_coord`, `s4_flt`, `s4_b2f`, `cflow_68`, `cflow_74`,
+   `intbool_76`).
+
+5. **The misleading text (optional, last).** M1's shaders mix nothing,
+   and the refusal text says they do. After steps 2-4 no M1 shape reaches
+   :4507; the line stays reachable for a real mix (a highp varying beside
+   an fp32 select). Give it its own `MaliError` (a variant in mod.rs:146's
+   list, :343's table and :427's text, with a `GAPS` line) so the tally
+   tells the two apart. The pins in `tests/mali_deqp_*.rs`,
+   `tools/cts/mali-family-refusals.txt` and the `refusals.tsv` readers
+   (`mali-deqp-tally.py`, owned by plan #373) name the old text: **do not add
+   a variant unless those move in the same commit**. No case unblocked.
+
+M2, M3, V2, V3 (11 cases) have no reference and no generated pair in
+`tools/mali/testdata/deqp_shapes/` beyond the four `mixprec_*` pairs
+there (7.1's shapes). Leave them to a later reference.
+
+### 7.4 Overlap with plan #367 and the glmark2 verdicts
+
+- **FRAGCOLOR_LANE** (`mali-varying-constants.md`, "gl_FragColor lane
+  shapes", the `(x, x)` and `(x, 1.0)` words): `cmpf` and the colour of
+  every `cmp*` is `vec4(r, r, r, 1.0)` of a *computed* lane (`IADD.v2u16
+  r.h00, 0`, `MKVEC r.h0, 1.0h`). That is #367's item, and the `cmpf` test
+  says so in its `#[ignore]` reason. Step 3 builds the words here only if
+  #367 has not.
+- **Fragment ARITH / INT_VALUE** (`mali-int-loops.md`,
+  `mali-deqp-intval.md`): the `Fmul`/`Fadd` arm at :4492 and `mask_op` are
+  shared ground; the fp32 select beside an fp16 colour (`tri_int`) must keep
+  refusing.
+- **Varying link rules** (`mali-varying-constants.md`,
+  `mali-deqp-varylink.md`): the `cmp*` pairs depend on the link's
+  `v_vtxOut = 1.0` fold (`FsConsts`); step 0's `check_linked` takes the
+  path varylink's does, and `lower-varylink` changes `fs_constants` /
+  `VaryingConsts` (link.rs, mod.rs:1679-1740). The folded reference has no
+  varying program; if `lower-varylink` lands first, re-read.
+- **glmark2 verdicts** (`tests/fixtures/mali_glmark2_verdicts.txt`, compared
+  with `tools/mali/corpus-verdicts.txt`): the fixture has no
+  `MixedPrecision` and no `FsVaryingLoad` line; 8 of its 97 lines are the
+  `ColourForm` text of `FRAGCOLOR_LANE` (:15-90). Steps 1, 3 and 4 edit code
+  that passing glmark2 fragment shaders run through, so re-run the
+  corpus writer (`MALI_GLMARK2_WRITE=1`) once per step and move the fixture
+  only if a verdict changes. `corpus-verdicts.txt:121` (`uniidx_j.frag`)
+  is the one line with the `FsVaryingLoad` text; step 1 may lift it.
+- **Tests that pin what this map changes:**
+  `src/shaderc/online/mali/mixprec_tests.rs` (three `MixedPrecision`
+  verdicts, all on a highp shader: they stay) and
+  `tests/mali_deqp_mixprec.rs` (`PINNED` and the `#[ignore]`s; item
+  `map-misc` re-pins the eight family tests, so read the file at the
+  latest main).
