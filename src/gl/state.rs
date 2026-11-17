@@ -1115,7 +1115,7 @@ fn es3_only_pname(pname: GLenum) -> bool {
 
 /// The body of glGetIntegerv: fills `out` and returns how many values pname
 /// wrote (0 for an unknown pname, after recording GL_INVALID_ENUM, and for
-/// the empty GL_PROGRAM_BINARY_FORMATS list).
+/// the empty GL_PROGRAM_BINARY_FORMATS list of a report-es2 build).
 fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; STATE_VALUES]) -> usize {
     let mut f = [0.0; STATE_VALUES];
     let n = get_floatv(c, pname, &mut f);
@@ -1305,7 +1305,8 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; STATE_VALUES
         GL_MAX_DRAW_BUFFERS => context::max_draw_buffers() as GLint,
         GL_MAX_COLOR_ATTACHMENTS => context::max_color_attachments() as GLint,
         GL_MAX_SAMPLES => msaa::max_samples_query(msaa::backend_max_samples()),
-        GL_NUM_PROGRAM_BINARY_FORMATS => 0,
+        /* G7: the one format of program_binary.rs; report-es2 has none */
+        GL_NUM_PROGRAM_BINARY_FORMATS => (!crate::REPORT_ES2) as GLint,
         GL_MAX_ARRAY_TEXTURE_LAYERS => 256,
         GL_MAX_3D_TEXTURE_SIZE => 256,
         GL_MAX_ELEMENT_INDEX => 0xFF_FFFF,
@@ -1329,7 +1330,15 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; STATE_VALUES
         GL_MIN_PROGRAM_TEXEL_OFFSET => MIN_PROGRAM_TEXEL_OFFSET as GLint,
         GL_MAX_PROGRAM_TEXEL_OFFSET => MAX_PROGRAM_TEXEL_OFFSET as GLint,
         GL_MAX_SERVER_WAIT_TIMEOUT => 0,
-        GL_PROGRAM_BINARY_FORMATS => return 0,
+        GL_PROGRAM_BINARY_FORMATS => {
+            #[cfg(not(feature = "report-es2"))]
+            {
+                out[0] = super::program_binary::GL_PROGRAM_BINARY_FORMAT_YAKOGL as GLint;
+                return 1;
+            }
+            #[cfg(feature = "report-es2")]
+            return 0;
+        }
         GL_READ_FRAMEBUFFER_BINDING => {
             names::name_of(c, Kind::Framebuffer, super::framebuffer::read_framebuffer(c)) as GLint
         }
@@ -3366,10 +3375,11 @@ mod tests {
 
     #[test]
     #[cfg(not(feature = "report-es2"))]
-    fn program_binary_formats_is_an_empty_list() {
+    fn program_binary_formats_lists_the_one_format() {
         let gl = TestGl::new(8, 8);
-        assert_eq!(geti1(GL_NUM_PROGRAM_BINARY_FORMATS), 0);
-        assert_eq!(geti(GL_PROGRAM_BINARY_FORMATS), [UNSET; 4], "nothing written");
+        assert_eq!(geti1(GL_NUM_PROGRAM_BINARY_FORMATS), 1);
+        let format = super::super::program_binary::GL_PROGRAM_BINARY_FORMAT_YAKOGL as GLint;
+        assert_eq!(geti(GL_PROGRAM_BINARY_FORMATS), [format, UNSET, UNSET, UNSET], "one token");
         assert_eq!(geti1(GL_NUM_SHADER_BINARY_FORMATS), 0);
         assert_eq!(getb(GL_SHADER_COMPILER)[0], 1);
         assert_eq!(gl.error(), GL_NO_ERROR);
@@ -3483,7 +3493,8 @@ mod tests {
         assert_eq!(gl.error(), GL_INVALID_ENUM);
         assert_eq!(getb(0xBAD), [0xEE; 4]);
         assert_eq!(gl.error(), GL_INVALID_ENUM);
-        assert_eq!(getf(GL_PROGRAM_BINARY_FORMATS), [-777.0; 4], "an empty list writes nothing either");
+        let format = super::super::program_binary::GL_PROGRAM_BINARY_FORMAT_YAKOGL as f32;
+        assert_eq!(getf(GL_PROGRAM_BINARY_FORMATS), [format, -777.0, -777.0, -777.0], "one token, nothing past it");
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
