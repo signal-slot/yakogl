@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Shader back ends — flow, ABI mapping, and how to add shaders
 
-This directory holds the shader back ends (layer 5a of `yakogl/DESIGN.md`). There
+This directory holds the shader back ends (layer 5a of `DESIGN.md`). There
 are three, and a build starts with one of them as `g_shaderc` (`mod.rs` picks it
 from the features):
 
@@ -26,7 +26,7 @@ from the features):
 |---|---|
 | `mod.rs` | the shader ABI of `include/gles_shaderc.h` as `#[repr(C)]` (`ShcShader`, `ShcVarying`, `ShcAttrib`, `ShcUniform`, `ShcBackend`); defines `g_shaderc` (initially the offline back end in a build with the Mesa reference, the compiler otherwise); the table's row types `ShcBlob` (sha, name, stage, `blend_key`, shader; the name is NUL-terminated so `shc_shader_source_name()` can hand C a pointer into the table, and `ShcBlob::source_name()` drops the NUL) and `ShcSource` (name, GLSL text) |
 | `offline.rs` | implements `struct shc_backend` (`compile`, `link`, `blend_variant`) as `SHC_OFFLINE`; `shc_offline_register()`; `gles_offline_shader_source()` (`include/gles_offline.h`) |
-| `link.rs` | the PowerVR link rule itself (pair the FS inputs with the VS outputs by name, bounds-check them against the VS output vector), shared by both back ends: it is about the `ShcShader` pair, not about where the shaders came from. Only the prefix the log carries differs, so the caller passes it. This is the port's `shc_link.c` |
+| `link.rs` | the PowerVR link rule itself (pair the FS inputs with the VS outputs by name, bounds-check them against the VS output vector), shared by both back ends: it is about the `ShcShader` pair, not about where the shaders came from. Only the prefix the log carries differs, so the caller passes it. This is the port of the C library's `shc_link.c` |
 | `sha256.rs` | self-contained SHA-256 (no dependency) — links on Zephyr/baremetal |
 | `precompiled.rs` | the precompiled back end (`SHC_PRECOMPILED`) and the tier's look-up in front of the compiler |
 | `record_key.rs` | the record key: the source's SHA-256 chained with everything else a compile reads; how the compiler's cache and the precompiled table find a compiled shader |
@@ -81,7 +81,7 @@ Mesa's 128 words (Mesa's UBO load, `UboFallback`) and a chain of three
 additions GLSL's `do_rebalance_tree` reassociates (`Rebalance`). The frame
 builder fills the uniform push words from the draw's GL uniform storage, a
 fragment shader's as fp16 (`frame::f32_to_f16`, round to nearest even);
-`backend_tests.rs` `gl_uniforms_reach_the_push_words_in_fau_order` checks
+`src/mali/backend_tests.rs` `gl_uniforms_reach_the_push_words_in_fau_order` checks
 it through glUniformMatrix4fv and glUniform4f. On the Mali build the front
 end's matrix product is Mesa's GLSL order (`lower.rs` `mat_times_column`).
 Varyings (L3, 2026-10-19): a vertex shader writes several varyings, each
@@ -111,7 +111,7 @@ the ones the references draw (`ADMITTED`, `nir_fs.rs:162`, pinned by
 `FsOperandForm`. Measured: 13 vertex programs (26 regions) and 20 whole
 programs (60 regions) byte-equal to the shim (`tools/mali/testdata/sel_v_*`),
 and on the board gl_test's color_uv pair equal to its per-pixel prediction
-at all 4096 pixels (`0dce654a8:tools/mali/board-ref/2026-10-19-l3-varyings/`).
+at all 4096 pixels (`board-ref record 2026-10-19-l3-varyings/`).
 Textures (L3, 2026-10-19): `texture2D(sampler2D, v)` in a fragment
 shader, `v` a vec2 varying read whole, its result the colour
 (`nir_fs.rs` `walk` :590, `layout` :735; was `frag.rs` `P::Tex` at da18ff68): the coordinate loaded as fp32 into TEX_SINGLE's two
@@ -125,7 +125,7 @@ FAU words and facts (`tests.rs` `TEXTURE_POPULATION`), the one op they add
 TEX_SINGLE. The record names the sampler binding read
 (`MaliShader::sampler`); the frame builder's descriptors are pinned to the
 board's Mesa (src/mali/frame_tex_tests.rs) and the pixels to tex.c on the
-board (0dce654a8:tools/mali/board-ref/2026-10-19-texture). Refused by name: a
+board (`board-ref record 2026-10-19-texture`). Refused by name: a
 vertex shader look-up (`TexVertex`), a bias, a level, a projection, a
 cube map or a size query (`TexKind`), a second look-up (`TexCount`), a
 coordinate other than a vec2 varying read whole (`TexCoord`), a varying
@@ -186,15 +186,15 @@ there on 2026-10-04 (e835c0dc, record `594b010e 006cff01 00000001 00000000`).
 **`gl_VertexID` / `gl_InstanceID` on the GC7000 (online).** Both arrive in
 one register after the attribute registers, the vertex id in `.x` and the
 instance id in `.y`, reported as `vs_id_in_reg`; the driver feeds it as one
-more vertex input and programs `FE_HALTI5_ID_CONFIG` (`vivante/shader.rs`).
+more vertex input and programs `FE_HALTI5_ID_CONFIG` (`src/vivante/shader.rs`).
 This is Mesa's etnaviv (`etnaviv_nir.c`, `etnaviv_compiler_nir_ra.c`) and
-the reference compiler's choice for gl_test's `es300/vid.vert` (register 1
-after `pos` in register 0). Pinned by `codegen.rs` `lowered_ops`
+the reference compiler's choice for gl_test's `tools/shaders/es300/vid.vert` (register 1
+after `pos` in register 0). Pinned by `online/codegen.rs` `lowered_ops`
 (`gl_vertex_id_is_x_of_the_register_after_the_attributes` and the two after
 it). Until this the online compiler refused the shader with "this built-in
 input is not selected yet" (GitHub issue #11), so gl_test cases 43, 44, 45,
 49, 57 and 98 failed in an online image. The PowerVR online selector had it
-already (`powervr/select.rs`, `vs_vertex_id_reg1`).
+already (`online/powervr/select.rs`, `vs_vertex_id_reg1`).
 
 **ES 3.00 look-ups on the GC7000 (online).** `texelFetch` on a 2D, 3D or
 2D array sampler is one `txf` (level as a float in SRC1, 0x1100 in SRC2),
@@ -202,11 +202,11 @@ already (`powervr/select.rs`, `vs_vertex_id_reg1`).
 `texldl` with a three-lane coordinate, and `textureSize(s, 0)` reads the
 `TEXTURE_WIDTH` / `_HEIGHT` / `_DEPTH` constants the driver fills for the
 sampler's unit. All three are Mesa's etnaviv and the reference compiler's
-choices for gl_test's `es300/array.frag`, `vol.frag` and `texsize.frag`
-(cases 42, 48, 46), pinned by `codegen.rs` `lowered_ops`
+choices for gl_test's `tools/shaders/es300/array.frag`, `tools/shaders/es300/vol.frag`
+and `tools/shaders/es300/texsize.frag` (cases 42, 48, 46), pinned by `online/codegen.rs` `lowered_ops`
 (`texel_fetch_is_the_reference_txf` and the two after it). Not selected,
 refused by name: `textureSize` at another level, shadow samplers, integer
-results, gradients, offsets. `es300/texsize.frag` declared a
+results, gradients, offsets. `tools/shaders/es300/texsize.frag` declared a
 `sampler2DArray` with no precision, which GLSL ES 3.00 4.5.4 does not
 allow; it now says `precision mediump sampler2DArray;`.
 
@@ -226,7 +226,7 @@ emitted, because no reference program contains one.
                sha256(text) → search SHC_BLOB_TABLE by {stage, digest}
                hit  → *out = blob.shader  (out->usc points at the embedded array), return 0
                miss → helpful log ("… not in offline table; add it to glsl2usc …"), -ENOENT
-                      (gl/shader.rs then reports COMPILE_STATUS true and flags the
+                      (src/gl/shader.rs then reports COMPILE_STATUS true and flags the
                        shader `missing`: the application compiles its other stage too,
                        both texts are logged as `shsrc` chunks, and glLinkProgram refuses
                        the pair)
@@ -275,7 +275,7 @@ never wrote.
 ### What it does to the committed table — measured, not yet on silicon
 
 Translating the *preprocessed* text instead of the raw text changes what the
-compiler sees, so `blobs.rs` is due a rebuild. It was run on 2026-09-22
+compiler sees, so `tests/reference/blobs.rs` is due a rebuild. It was run on 2026-09-22
 (`tools/glsl2usc.sh`, `pco_shc` from `mesa-26.2.1`) and diffed against the
 committed table:
 
@@ -421,11 +421,11 @@ printed table, cell for cell) and its "always fails" cases. A plain row count
 would have refused `varying float a; varying float b;`, which packs into one
 row; this does not. Each class is fed from where its types are known:
 
-- Uniforms, every back end: the GL link (`gl/program.rs`
+- Uniforms, every back end: the GL link (`src/gl/program.rs`
   `check_uniform_packing`) packs each stage's uniform reflection
   (`gl_type`, `array_len`, a table's flattened struct-array rows as one
   variable per outer element) against `MAX_VERTEX_UNIFORM_VECTORS` /
-  `MAX_FRAGMENT_UNIFORM_VECTORS` (`gl/context.rs`, which `glGetIntegerv` and
+  `MAX_FRAGMENT_UNIFORM_VECTORS` (`src/gl/context.rs`, which `glGetIntegerv` and
   the shader's `gl_Max*UniformVectors` read too). Samplers take texture units,
   not rows (`check_sampler_counts`). Literal constants are not counted: the
   algorithm is a minimum, and counting fewer only accepts more.
@@ -462,7 +462,7 @@ What is still not covered, and why:
   `a_vertex_shader_with_sixteen_outputs_is_refused_by_the_gc7000_code_generator`,
   so the four grid-filling varying link tests run on the PowerVR and V3D rows only);
   and the PowerVR online vertex shader has room for 32 output-write
-  groups (`powervr/assemble.rs` `build_shader`), so eight vec4 varyings each
+  groups (`online/powervr/assemble.rs` `build_shader`), so eight vec4 varyings each
   written from constants are refused at compile ("more output-write groups
   than the caller made room for"), although they fit `MAX_VARYING_VECTORS`.
 
@@ -585,7 +585,7 @@ is known:
   record's `vi_reg` names them. Sixteen declared attributes fill the 64 registers
   (`chain::LIMITS.vtx_in`); the aliased seventeenth needs register 64.
 - GC7000: `Abi(TooManyIo { got: 32, max: 16 })` (i.MX8MP rows). There the 16 is
-  the front end's vertex ELEMENTS (`GC_MAX_VERTEX_ELEMENTS`, shader.rs VS_INPUT): an
+  the front end's vertex ELEMENTS (`GC_MAX_VERTEX_ELEMENTS`, `src/vivante/shader.rs` VS_INPUT): an
   element writes one whole vec4 temporary, so 16 active GL locations is the hardware
   limit, no component packing exists, and a matrix is one element per column. Two
   aliased attributes compiled to two input registers cannot both be fed from one
@@ -681,7 +681,7 @@ The generated table and `offline.rs` match `struct shc_shader` / `shc_varying` /
    rewrites the colour store into a fetch of the on-chip pixel output plus the
    blend arithmetic (`uses_fbfetch`). So the table holds, per fragment shader,
    the plain binary (`blend_key = 0`) and one variant per `--blend` spec given to
-   `glsl2usc.sh` (`SHC_BLEND_KEY`, gles_shaderc.h). `g_shaderc->blend_variant()`
+   `tools/glsl2usc.sh` (`SHC_BLEND_KEY`, `include/gles_shaderc.h`). `g_shaderc->blend_variant()`
    finds the variant for the draw's blend state; when it cannot (not
    precompiled, the online compiler refused it, it does not link or fit) the
    GL core REFUSES the draw, logs the cause once and counts it
@@ -700,7 +700,7 @@ The generated table and `offline.rs` match `struct shc_shader` / `shc_varying` /
    program's FS copy; unnamed (explicit-location) varyings keep the
    location-based layout.
 
-### The 307: `blobs.rs` and this host's `pco_shc` disagree
+### The 307: `tests/reference/blobs.rs` and this host's `pco_shc` disagree
 
 Rebuilt with this host's `pco_shc`, 307 rows of the table differ. Every one
 is a *fragment* shader, and the rebuilt USC is always the shorter: 62 are plain shaders (`blend 0x0`), the rest are the float
@@ -718,11 +718,11 @@ source tree, but the `pco_usclib.spv` both local builds link does not have it
 compare nor a branch), and that host cannot regenerate the usclib — its Mesa
 build graph needs an LLVM it does not have, so `build_pco_shc.sh` only
 recompiles `pco_shc.c` and relinks. `tools/README.md`, "The pco_shc this host
-has", records the full evidence. **Do not regenerate `blobs.rs` to close the
+has", records the full evidence. **Do not regenerate `tests/reference/blobs.rs` to close the
 gap**: that would drop the patch and bring back the `textureSize()` bug on
 mipmapped linear textures it exists to fix.
 
-## Regenerating `blobs.rs`
+## Regenerating `tests/reference/blobs.rs`
 
 ```sh
 tools/glsl2usc.sh           # from tools/shaders/*  (deterministic)
@@ -740,14 +740,14 @@ Host tests (`tests/sha256.rs`, `tests/blob_table.rs`;
 source text in `SHC_SOURCE_TABLE` hashes to a blob row of the same name, the offline
 back end finds every source, and the table can be dumped as JSON
 (`YAKOGL_DUMP_BLOBS=out.json`) in the format of the dumper used when the table was
-converted from `shader_blobs.c`, so the two can be diffed.
+converted from the C library's `shader_blobs.c`, so the two can be diffed.
 
 ## Current table
 
 `tools/glsl2usc.sh` compiles the `src` lines of `tools/shaders/precompiled.list` — the
 starter set below, the FemtoVG and `fvgtest_*` sources, and the Qt Quick, Qt Quick 3D and
 ES 3.00 sets — once plain and once per blend/mask/render-target variant the list's `blend`
-and `for` lines name. The committed `blobs.rs` holds **554 source texts and 2476 table entries**
+and `for` lines name. The committed `tests/reference/blobs.rs` holds **554 source texts and 2476 table entries**
 (`SHC_SOURCE_TABLE`, `SHC_BLOB_TABLE`; a fragment shader typically has 18 rows, one plain
 and one per `--blend` spec). `yakogl-tools glsl2usc --list <files>` prints each shader's
 stage and SHA-256 without emitting the table. Qt shaders `pco_shc` cannot build are left
@@ -755,7 +755,7 @@ out rather than failing the whole run (`--skip-failures`), so the entry count is
 below the file count.
 
 One thing the port does differently from the C library here: `uniform_dwords` stays what
-the shader reads (it is the upload size handed to the backend), but `gl/program.rs` sizes
+the shader reads (it is the upload size handed to the backend), but `src/gl/program.rs` sizes
 the program's uniform block to `max(uniform_dwords, max(dword_off + dwords))` over the
 block's members. The reflection can place a uniform past `uniform_dwords` — every FemtoVG
 discard fragment shader does — and sizing the block to `uniform_dwords` alone made
