@@ -55,7 +55,12 @@ directories is refused. The rows are "<LABEL>.console.txt:<Status> <case>",
 sorted by case name, for every mustpass case of the image's tree line
 (tools/cts/pi4-gles3-tree.txt, --tree) that is not Pass: the raw status
 word, or NoResult for a case without a result line. The header names the
-commit and the images run out of the tree's images.
+commit, the images run out of the tree's images and the images not run.
+A console whose label the tree no longer has because the image was
+re-split after the run (S32c into S32c1..S32c4: every tree label that is
+the console's label plus a letter or a number) is read over the union of
+its parts' lines under the label it ran as; the parts count as not run,
+and a part with a console of its own beside it is refused.
 
 stdout (or -o OUT): the header naming the build, the board and the run date,
 then every mustpass case (tools/cts/gles3-mustpass.txt) that is not Pass, in
@@ -348,7 +353,7 @@ def pi4_rows(dirs, mustpass, tree):
     commit = pi4_commit(dirs)
     tally = uart_tally()
     filters = dict(tree)
-    got, where = {}, {}
+    got, where, parts = {}, {}, {}
     for d in dirs:
         consoles = sorted(glob.glob(os.path.join(d, "*.console.txt")))
         if not consoles:
@@ -356,16 +361,29 @@ def pi4_rows(dirs, mustpass, tree):
         for c in consoles:
             label = os.path.basename(c)[:-len(".console.txt")]
             if label not in filters:
-                raise NotpassError("%s: image %s is not in the tree" % (c, label))
+                split = [l for l, _ in tree if re.fullmatch(re.escape(label) + r"(?:[a-z]|[0-9]+)", l)]
+                if not split:
+                    raise NotpassError("%s: image %s is not in the tree" % (c, label))
+                parts[label] = split
             if label in got:
                 raise NotpassError("image %s is in both %s and %s" % (label, where[label], d))
             with open(c, encoding="utf-8", errors="replace") as f:
                 got[label] = tally.scan(f.read())["got"]
             where[label] = d
-    rows, stopped = [], []
+    for parent, split in parts.items():
+        twice = [l for l in split if l in got]
+        if twice:
+            raise NotpassError("image %s ran both as %s (%s) and re-split as %s (%s)"
+                               % (twice[0], parent, where[parent], twice[0], where[twice[0]]))
+        filters[parent] = [p for l in split for p in filters[l]]
+    order, seen = [], set()   # the tree's order; a re-split parent at its first part
     for label, _ in tree:
-        if label not in got:
-            continue
+        owner = next((p for p, split in parts.items() if label in split), label)
+        if owner in got and owner not in seen:
+            order.append(owner)
+            seen.add(owner)
+    rows, stopped = [], []
+    for label in order:
         rx = tally.filter_regex(filters[label])
         none = 0
         for case in mustpass:
@@ -379,13 +397,17 @@ def pi4_rows(dirs, mustpass, tree):
         if none:
             stopped.append(label)
     run = [l for l, _ in tree if l in got]
+    missing = [l for l, _ in tree if l not in got]
+    resplit = "".join("; %s%s ran before its re-split into %s" % (p, "*" if p in stopped else "", " ".join(parts[p]))
+                      for p in order if p in parts)
     head = ("# Pi 4 dEQP-GLES3 at %s: every case that is not Pass, per image of tools/cts/pi4-gles3-tree.txt\n"
             "# rows: <record>:<status> <case>, sorted by case name   (<image>.console.txt = the UART console of the image, "
             "the records of %s; NoResult = the case never began)\n"
-            "# images run (%d of %d): %s%s\n"
+            "# images run (%d of %d): %s%s%s%s\n"
             % (commit, ", ".join(sorted(os.path.basename(os.path.normpath(d)) for d in dirs)),
                len(run), len(tree), " ".join(l + ("*" if l in stopped else "") for l in run),
-               " (*: cases of the image never began)" if stopped else ""))
+               " (*: cases of the image never began)" if stopped else "", resplit,
+               "; not run: " + " ".join(missing) if missing else ""))
     return head + "".join(r for _, r in sorted(rows)), run, stopped
 
 
@@ -515,6 +537,18 @@ def pi4_self_test(check):
                         "--mustpass", must_path, lo, hi], capture_output=True, text=True)
     check("pi4: the CLI form prints the same", r.returncode == 0 and r.stdout == want,
           "(rc %d, %s)" % (r.returncode, r.stderr[:200]))
+    split_tree = read_tree(os.path.join(d, "resplit-tree.txt"))
+    text2, run2, stopped2 = pi4_rows([lo, hi], must, split_tree)
+    check("pi4: a console re-split after its run keeps its rows, its parts are not run",
+          text2.splitlines()[3:] == want.splitlines()[3:] and run2 == ["A1", "C1"] and stopped2 == ["B1"]
+          and "# images run (2 of 5): A1 C1 (*: cases of the image never began); "
+              "B1* ran before its re-split into B1a B1b; not run: B1a B1b D1\n" in text2,
+          "(%s)" % text2.splitlines()[2])
+    try:
+        pi4_rows([lo, bad("resplit-twice")], must, split_tree)
+        check("pi4: a re-split part run beside its parent is refused", False, "(no error)")
+    except NotpassError as e:
+        check("pi4: a re-split part run beside its parent is refused", "B1a" in str(e), "(%s)" % e)
 
 
 def main():
