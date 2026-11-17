@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# tools/cts/host-deqp-run.sh --gpu=v3d --module=gles3 --cts=<VK-GL-CTS 93bca018> --jobs=4 at b1e4c0f5,
+# its stdout and stderr (<repo> is the checkout). HOST-ONLY: a render verdict here means nothing.
+host-deqp-run: library and harness from b1e4c0f5, GPU v3d, gles3 (HOST-ONLY: compile/link outcomes only)
+host-deqp-run: YAKOGL_V3D_TILED_COPIES_BYTES=16777216 (the Pi 4 image uses 16777216)
+host-deqp-run: 42810 of 42810 cases began; process exits (a resumed chunk has several):
+     61 exit=0
+    381 exit=1
+host-deqp-run: chunk c_107: exits 1 x2; 100 of 100 began; stopped: after dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4; after dEQP-GLES3.functional.shaders.builtin_functions.precision.min.mediump_fragment.vec3; never began: 0
+host-deqp-run: chunk c_109: exits 1 x2; 100 of 100 began; stopped: after dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat2; after dEQP-GLES3.functional.shaders.builtin_functions.precision.radians.lowp_vertex.vec3; never began: 0
+host-deqp-run: chunk c_344: exits 1 x11; 100 of 100 began; stopped: after dEQP-GLES3.functional.texture.units.8_units.mixed.7; after dEQP-GLES3.functional.texture.units.8_units.only_cube.1; after dEQP-GLES3.functional.texture.units.8_units.only_cube.2; after dEQP-GLES3.functional.texture.units.8_units.only_cube.3; after dEQP-GLES3.functional.texture.units.8_units.only_cube.4; after dEQP-GLES3.functional.texture.units.8_units.only_cube.5; after dEQP-GLES3.functional.texture.units.8_units.only_cube.6; after dEQP-GLES3.functional.texture.units.8_units.only_cube.7; after dEQP-GLES3.functional.texture.units.8_units.only_cube.8; after dEQP-GLES3.functional.texture.units.8_units.only_cube.9; after dEQP-GLES3.functional.texture.units.all_units.only_3d.0; never began: 0
+host-deqp-run: chunk c_345: exits 1 x2; 100 of 100 began; stopped: after dEQP-GLES3.functional.texture.units.all_units.only_cube.0; after dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_linear_nearest_mirror; never began: 0
+442 .qpa file(s), 2033 compile refusal(s), 141 distinct reason(s)
+  on cases dEQP FAILED (real gaps)        : 2  in 1 reason(s)
+  on cases dEQP NOT SUPPORTED (excused)   : 0
+  on cases dEQP PASSED (correct refusals) : 2031  in 140 reason(s)
+
+=== THE WORK LIST: refusals on cases dEQP failed or excused, most first ===
+    2  the code generator refused this program (vertex + fragment): Program(Select(OutOfScratch))
+         dEQP-GLES3.functional.shaders.metamorphic.synthetic.variant_3
+         dEQP-GLES3.functional.uniform_api.random.83
+
+=== NOT WORK ITEMS: reasons seen only where dEQP PASSED ===
+These are negative tests: the case hands the compiler illegal GLSL
+and passes because we reject it. Implementing one of these turns
+its passing cases into failures.
+  796  no implicit conversion in GLSL ES 1.00
+  150  expected a name
+  126  reserved for future use
+  116  no form of this texture look-up takes these arguments (section 8.8)
+   96  not enough arguments for this constructor
+   77  expected a type
+   28  unexpected keyword in an expression
+   26  extra tokens at the end of the directive
+   26  undefined identifier in a preprocessor expression
+   24  redeclared in the same scope
+   22  invalid suffix on an integer constant
+   20  macro redefined with a different definition
+         ... and 128 more reason(s)
+host-deqp-run: groups, failures by message: <repo>/build/host-deqp/run-b1e4c0f5-v3d-gles3/summary.txt
+host-deqp-run: results in <repo>/build/host-deqp/run-b1e4c0f5-v3d-gles3 (HOST-ONLY: never quote a render verdict from them)
