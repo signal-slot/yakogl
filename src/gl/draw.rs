@@ -13073,6 +13073,8 @@ mod tests {
         let prog = es3_prog(&gl, "cube.frag");
         let plain = draw_strip(&gl).draw;
         assert!(core::ptr::eq(plain.fs, &gl.ctx().objs_ref().programs[obj_index(prog)].rfs));
+        /* R32F as GL_EXT_color_buffer_float makes it */
+        crate::gl::framebuffer::HOST_R32F_RT.store(true, core::sync::atomic::Ordering::Relaxed);
         for (internal, cls) in [(GL_RGBA16F, 1u32), (GL_R16F, 2), (GL_R32F, 3)] {
             let tex = bind_new_tex(GL_TEXTURE_2D);
             let mut fbo: GLuint = 0;

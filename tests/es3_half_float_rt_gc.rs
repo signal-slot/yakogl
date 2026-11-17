@@ -257,6 +257,8 @@ fn on_gc7000(case: impl FnOnce()) {
         assert_eq!(yakogl::vivante::backend::gc_init(), 0, "gc_init");
         let c = yakogl::gl::context::gl_context_create(64, 64);
         assert!(!c.is_null(), "context pool exhausted");
+        /* R32F as GL_EXT_color_buffer_float makes it (unlisted in the build) */
+        yakogl::gl::framebuffer::HOST_R32F_RT.store(true, core::sync::atomic::Ordering::Relaxed);
         c
     };
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(case));

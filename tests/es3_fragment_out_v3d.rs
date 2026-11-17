@@ -15,8 +15,9 @@
 //! - a draw of a float, an unsigned and a signed integer output into
 //!   RGBA8 + RGBA32UI + RG16I (the 782 passing rows' mixed shapes);
 //! - the `rt_format` rows and `clear_words` of the 16F and 8-bit formats;
-//! - what the note's G1-G3 (RG32F, RGBA32F, R11F_G11F_B10F), G4 (RG16F at an
-//!   attachment past the first) and G5 (four draw buffers) rows do now.
+//! - what the note's G1-G3 (RG32F, RGBA32F, R11F_G11F_B10F) and G5 (four
+//!   draw buffers) rows do now, and G4 (RG16F at an attachment past the
+//!   first) as RGBA16F, its expected class.
 //!
 //! `#[ignore]`d tests hold the expected result, each naming the note section
 //! and the layer whose step is missing (src/gl, src/shaderc, src/v3d). They
@@ -457,24 +458,10 @@ fn three_rgba16f_attachments_are_taken() {
 
 /* ---- G4: RG16F at an attachment past the first ----------------------------- */
 
-/// Note G4 (`array.float.rg16f_*`): attachment 0 maps RG16F to RGBA16F, the
-/// `fb_target_n` of attachments 1.. does not and hands RGBA8888. Pinned as it
-/// is; the expected class is the next test.
+/// Note G4 (`array.float.rg16f_*`): RGBA16F storage at attachments 1 and 2
+/// as at attachment 0 (`fb_target_n` maps GL_RG16F and GL_RGB16F as
+/// `renderbuffer_surf_format` does; it used to hand RGBA8888).
 #[test]
-fn rg16f_past_the_first_attachment_is_handed_as_rgba8_today() {
-    let _g = context(0);
-    let s = drawn(&[GL_RG16F; 3], &["vec2", "vec2", "vec2"]);
-    assert_eq!(s.refused, None);
-    let f = surfs(&s);
-    assert_eq!(f[0], GLES_SURF_RGBA16F, "attachment 0 goes through renderbuffer_surf_format");
-    assert_eq!(f[1..], [GLES_SURF_RGBA8888; 2], "G4: the fall-through arm of fb_target_n (src/gl/framebuffer.rs)");
-}
-
-/// Expected: RGBA16F storage at attachments 1 and 2 as well. Owner: src/gl
-/// (note "Groups", G4 and the order table step 1: one match arm in
-/// `fb_target_n`).
-#[test]
-#[ignore = "note G4, step 1: src/gl, fb_target_n maps GL_RG16F/GL_RGB16F to RGBA16F"]
 fn rg16f_past_the_first_attachment_is_rgba16f() {
     let _g = context(0);
     let s = drawn(&[GL_RG16F; 3], &["vec2", "vec2", "vec2"]);
