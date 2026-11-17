@@ -45,8 +45,16 @@ were `grep -c 'refuse(g, "' src/v3d/*.rs` — 10 literals, one row each.
 They are not that anymore: b7c1484e moved the refusals of legal GL state to
 `refuse_unsupported(g, "...")` with the same words, 7fa02269 removed A8's
 string, and #1261 (6d2e7d0d) split A5's one string into `refuse` and
-`refuse_unsupported`. The heading counts the ten rows of this section, not
-the code's literals.
+`refuse_unsupported`. bf80c82a (tile-guard) adds no row: `submit_job` clamped
+the kick's `tile_state_size` to the pool with `min()`, and bf80c82a made that
+clamp a `debug_assert!` (`backend.rs:3345-3356`) naming A1's and A5's
+refusals and the pool's sizing as the checks that keep a short tile state
+unreachable — clamping instead would be a binner overrun with no message; a
+job violating the bound panics in debug and host-test builds and is submitted
+unclamped in release builds, and `a_job_at_the_limit_gets_its_whole_tile_state`
+(`backend_tests.rs:4593`) pins the jobs at the limit (4096 square, 1x and 4x)
+as carrying their whole tile state. The heading counts the ten rows of this
+section, not the code's literals.
 
 | # | Line | String | ES 3.0 feature | Owner | Rows it likely costs |
 | --- | --- | --- | --- | --- | --- |
